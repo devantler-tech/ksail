@@ -1,12 +1,12 @@
 package kwokprovisioner
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"os"
-	"strings"
+
+	"github.com/spf13/pflag"
 
 	runner "github.com/devantler-tech/ksail/v6/pkg/runner"
 	"github.com/devantler-tech/ksail/v6/pkg/svc/provider"
@@ -14,9 +14,13 @@ import (
 	"sigs.k8s.io/kwok/pkg/config"
 	createcluster "sigs.k8s.io/kwok/pkg/kwokctl/cmd/create/cluster"
 	deletecluster "sigs.k8s.io/kwok/pkg/kwokctl/cmd/delete/cluster"
-	getclusters "sigs.k8s.io/kwok/pkg/kwokctl/cmd/get/clusters"
 	startcluster "sigs.k8s.io/kwok/pkg/kwokctl/cmd/start/cluster"
 	stopcluster "sigs.k8s.io/kwok/pkg/kwokctl/cmd/stop/cluster"
+	kwokruntime "sigs.k8s.io/kwok/pkg/kwokctl/runtime"
+	kwoklog "sigs.k8s.io/kwok/pkg/log"
+
+	// Register the Docker compose runtime so kwokctl can find it.
+	_ "sigs.k8s.io/kwok/pkg/kwokctl/runtime/compose"
 )
 
 // Provisioner manages KWOK clusters using kwokctl's Cobra commands.
@@ -48,6 +52,43 @@ func NewProvisioner(
 	}
 }
 
+// kwokControllerImageVersion is the released KWOK image version to use.
+// We pin to v0.7.0 because our Go dependency uses a main-branch
+// pseudo-version whose embedded version (v0.8.0) has no published images.
+const kwokControllerImageVersion = "v0.7.0"
+
+// kwokControllerImage is the full image reference for the KWOK controller.
+const kwokControllerImage = "registry.k8s.io/kwok/kwok:" + kwokControllerImageVersion
+
+// initContext initializes a Go context compatible with kwokctl's internal
+// expectations. kwokctl stores configuration objects inside the context via
+// config.InitFlags / log.InitFlags, both of which read os.Args directly.
+// We temporarily override os.Args so that the kwokctl flag parsers receive
+// only the flags relevant to KWOK (e.g. --config <path>).
+func (p *Provisioner) initContext(ctx context.Context) (context.Context, error) {
+	origArgs := os.Args
+	defer func() { os.Args = origArgs }()
+
+	args := []string{"kwokctl"}
+	if p.configPath != "" {
+		args = append(args, "--config", p.configPath)
+	}
+	os.Args = args
+
+	flagset := pflag.NewFlagSet("kwokctl", pflag.ContinueOnError)
+	flagset.ParseErrorsWhitelist.UnknownFlags = true
+	flagset.Usage = func() {}
+
+	ctx, _ = kwoklog.InitFlags(ctx, flagset)
+
+	ctx, err := config.InitFlags(ctx, flagset)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize kwokctl config: %w", err)
+	}
+
+	return ctx, nil
+}
+
 // SetProvider sets the infrastructure provider for node operations.
 func (p *Provisioner) SetProvider(prov provider.Provider) {
 	p.infraProvider = prov
@@ -57,15 +98,23 @@ func (p *Provisioner) SetProvider(prov provider.Provider) {
 func (p *Provisioner) Create(ctx context.Context, name string) error {
 	target := p.resolveName(name)
 
-	config.DefaultCluster = target
-	cmd := createcluster.NewCommand(ctx)
+	kwokCtx, err := p.initContext(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to create KWOK cluster: %w", err)
+	}
 
-	args := []string{"--runtime", "docker"}
+	config.DefaultCluster = target
+	cmd := createcluster.NewCommand(kwokCtx)
+
+	args := []string{
+		"--runtime", "docker",
+		"--kwok-controller-image", kwokControllerImage,
+	}
 	if p.configPath != "" {
 		args = append(args, "--config", p.configPath)
 	}
 
-	_, err := p.runner.Run(ctx, cmd, args)
+	_, err = p.runner.Run(kwokCtx, cmd, args)
 	if err != nil {
 		return fmt.Errorf("failed to create KWOK cluster: %w", err)
 	}
@@ -77,7 +126,12 @@ func (p *Provisioner) Create(ctx context.Context, name string) error {
 func (p *Provisioner) Delete(ctx context.Context, name string) error {
 	target := p.resolveName(name)
 
-	exists, err := p.Exists(ctx, target)
+	kwokCtx, err := p.initContext(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to delete KWOK cluster: %w", err)
+	}
+
+	exists, err := p.existsWithContext(kwokCtx, target)
 	if err != nil {
 		return fmt.Errorf("failed to check cluster existence: %w", err)
 	}
@@ -87,9 +141,9 @@ func (p *Provisioner) Delete(ctx context.Context, name string) error {
 	}
 
 	config.DefaultCluster = target
-	cmd := deletecluster.NewCommand(ctx)
+	cmd := deletecluster.NewCommand(kwokCtx)
 
-	_, err = p.runner.Run(ctx, cmd, nil)
+	_, err = p.runner.Run(kwokCtx, cmd, []string{})
 	if err != nil {
 		return fmt.Errorf("failed to delete KWOK cluster: %w", err)
 	}
@@ -101,10 +155,15 @@ func (p *Provisioner) Delete(ctx context.Context, name string) error {
 func (p *Provisioner) Start(ctx context.Context, name string) error {
 	target := p.resolveName(name)
 
-	config.DefaultCluster = target
-	cmd := startcluster.NewCommand(ctx)
+	kwokCtx, err := p.initContext(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to start KWOK cluster: %w", err)
+	}
 
-	_, err := p.runner.Run(ctx, cmd, nil)
+	config.DefaultCluster = target
+	cmd := startcluster.NewCommand(kwokCtx)
+
+	_, err = p.runner.Run(kwokCtx, cmd, []string{})
 	if err != nil {
 		return fmt.Errorf("failed to start KWOK cluster: %w", err)
 	}
@@ -116,10 +175,15 @@ func (p *Provisioner) Start(ctx context.Context, name string) error {
 func (p *Provisioner) Stop(ctx context.Context, name string) error {
 	target := p.resolveName(name)
 
-	config.DefaultCluster = target
-	cmd := stopcluster.NewCommand(ctx)
+	kwokCtx, err := p.initContext(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to stop KWOK cluster: %w", err)
+	}
 
-	_, err := p.runner.Run(ctx, cmd, nil)
+	config.DefaultCluster = target
+	cmd := stopcluster.NewCommand(kwokCtx)
+
+	_, err = p.runner.Run(kwokCtx, cmd, []string{})
 	if err != nil {
 		return fmt.Errorf("failed to stop KWOK cluster: %w", err)
 	}
@@ -129,24 +193,35 @@ func (p *Provisioner) Stop(ctx context.Context, name string) error {
 
 // List returns all KWOK cluster names.
 func (p *Provisioner) List(ctx context.Context) ([]string, error) {
-	var outBuf bytes.Buffer
-	quietRunner := runner.NewCobraCommandRunner(&outBuf, os.Stderr)
-
-	cmd := getclusters.NewCommand(ctx)
-
-	_, err := quietRunner.Run(ctx, cmd, nil)
+	kwokCtx, err := p.initContext(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list KWOK clusters: %w", err)
 	}
 
-	return parseClusterList(outBuf.String()), nil
+	return p.listWithContext(kwokCtx)
 }
 
 // Exists checks if a KWOK cluster exists.
 func (p *Provisioner) Exists(ctx context.Context, name string) (bool, error) {
-	target := p.resolveName(name)
+	kwokCtx, err := p.initContext(ctx)
+	if err != nil {
+		return false, fmt.Errorf("failed to check cluster existence: %w", err)
+	}
 
-	clusters, err := p.List(ctx)
+	return p.existsWithContext(kwokCtx, p.resolveName(name))
+}
+
+func (p *Provisioner) listWithContext(kwokCtx context.Context) ([]string, error) {
+	clusters, err := kwokruntime.ListClusters(kwokCtx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list KWOK clusters: %w", err)
+	}
+
+	return clusters, nil
+}
+
+func (p *Provisioner) existsWithContext(kwokCtx context.Context, target string) (bool, error) {
+	clusters, err := p.listWithContext(kwokCtx)
 	if err != nil {
 		return false, err
 	}
@@ -166,17 +241,4 @@ func (p *Provisioner) resolveName(name string) string {
 	}
 
 	return p.name
-}
-
-func parseClusterList(output string) []string {
-	var clusters []string
-
-	for _, line := range strings.Split(output, "\n") {
-		trimmed := strings.TrimSpace(line)
-		if trimmed != "" {
-			clusters = append(clusters, trimmed)
-		}
-	}
-
-	return clusters
 }

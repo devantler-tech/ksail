@@ -10,6 +10,7 @@ import (
 	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/clustererr"
 	k3dprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/k3d"
 	kindprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/kind"
+	kwokprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/kwok"
 	talosprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/talos"
 	vclusterprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/vcluster"
 	k3dtypes "github.com/k3d-io/k3d/v5/pkg/config/types"
@@ -39,6 +40,7 @@ func supportedDistributions() []v1alpha1.Distribution {
 		v1alpha1.DistributionK3s,
 		v1alpha1.DistributionTalos,
 		v1alpha1.DistributionVCluster,
+		v1alpha1.DistributionKWOK,
 	}
 }
 
@@ -225,6 +227,9 @@ func CreateMinimalProvisioner(
 		}
 
 		return provisioner, nil
+
+	case v1alpha1.DistributionKWOK:
+		return kwokprovisioner.NewProvisioner(clusterName, "", nil), nil
 
 	default:
 		return nil, fmt.Errorf("%w: %s", ErrUnsupportedDistribution, dist)

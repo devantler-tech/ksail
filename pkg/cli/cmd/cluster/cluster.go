@@ -1898,6 +1898,7 @@ func detectClusterDistribution(resolved *lifecycle.ResolvedClusterInfo) *cluster
 		"kind-",
 		"k3d-",
 		"vcluster-docker_",
+		"kwok-",
 	}
 
 	for _, prefix := range prefixes {
@@ -3269,6 +3270,7 @@ func allDistributions() []v1alpha1.Distribution {
 		v1alpha1.DistributionK3s,
 		v1alpha1.DistributionTalos,
 		v1alpha1.DistributionVCluster,
+		v1alpha1.DistributionKWOK,
 	}
 }
 

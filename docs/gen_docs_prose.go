@@ -179,7 +179,8 @@ const distributionDetails = `See [Distributions](/concepts/#distributions) for d
 - ` + bt + `Vanilla` + bt + ` (default) – Standard upstream Kubernetes via [Kind](https://kind.sigs.k8s.io/)
 - ` + bt + `K3s` + bt + ` – Lightweight Kubernetes via [K3d](https://k3d.io/)
 - ` + bt + `Talos` + bt + ` – [Talos Linux](https://www.talos.dev/) in Docker containers or Hetzner Cloud servers
-- ` + bt + `VCluster` + bt + ` – Virtual clusters via [vCluster](https://www.vcluster.com/)`
+- ` + bt + `VCluster` + bt + ` – Virtual clusters via [vCluster](https://www.vcluster.com/)
+- ` + bt + `KWOK` + bt + ` – Simulated clusters via [KWOK](https://kwok.sigs.k8s.io/) (control-plane only, no real workloads)`
 
 // providerDetails provides prose after the provider enum list.
 const providerDetails = `See [Providers](/concepts/#providers) for more details.
