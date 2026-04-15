@@ -897,7 +897,11 @@ func ValidateExportedTar(tarPath string) error {
 				return nil
 			}
 
-			return fmt.Errorf("%w: tar archive is truncated or corrupted: %w", ErrBlobIntegrityFailed, err)
+			return fmt.Errorf(
+				"%w: tar archive is truncated or corrupted: %w",
+				ErrBlobIntegrityFailed,
+				err,
+			)
 		}
 
 		entriesSeen = true
@@ -930,7 +934,6 @@ func validateBlobDigest(header *tar.Header, tarReader *tar.Reader) error {
 	expectedDigest := strings.TrimPrefix(header.Name, blobSHA256Prefix)
 	hasher := sha256.New()
 
-	//nolint:gosec // G110: read is bounded by the OCI blob's declared header.Size.
 	bytesRead, copyErr := io.Copy(hasher, io.LimitReader(tarReader, header.Size))
 	if copyErr != nil {
 		return fmt.Errorf(
