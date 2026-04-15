@@ -1599,7 +1599,7 @@ func TestScaffoldKWOK_CreatesConfigFile(t *testing.T) {
 	}
 
 	// Verify kwok.yaml contains expected CRD kinds
-	kwokContent, err := os.ReadFile(filepath.Join(tempDir, scaffolder.KWOKConfigFile)) //nolint:gosec // Test file path is safe
+	kwokContent, err := os.ReadFile(filepath.Join(tempDir, scaffolder.KWOKConfigFile)) //nolint:gosec // Test path
 	require.NoError(t, err)
 	assert.Contains(t, string(kwokContent), "kind: ClusterLogs")
 	assert.Contains(t, string(kwokContent), "kind: ClusterExec")

@@ -24,11 +24,21 @@ import (
 	_ "sigs.k8s.io/kwok/pkg/kwokctl/runtime/compose"
 )
 
-// kwokGlobalMu serialises access to process-global state that kwokctl
+// kwokControllerImageVersion is the released KWOK image version to use.
+// We pin to v0.7.0 because our Go dependency uses a main-branch
+// pseudo-version whose embedded version (v0.8.0) has no published images.
+const kwokControllerImageVersion = "v0.7.0"
+
+// kwokControllerImage is the full image reference for the KWOK controller.
+const kwokControllerImage = "registry.k8s.io/kwok/kwok:" + kwokControllerImageVersion
+
+// globalMu serialises access to process-global state that kwokctl
 // reads/writes (os.Args, config.DefaultCluster). Without this, concurrent
 // provisioner calls (e.g. parallel tests or multi-cluster operations)
 // could race on these globals.
-var kwokGlobalMu sync.Mutex
+//
+//nolint:gochecknoglobals // kwokctl reads/writes os.Args and config.DefaultCluster at init time; a process-wide mutex is unavoidable.
+var globalMu sync.Mutex
 
 // Provisioner manages KWOK clusters using kwokctl's Cobra commands.
 // It uses the docker (compose) runtime which runs etcd + kube-apiserver +
@@ -59,77 +69,9 @@ func NewProvisioner(
 	}
 }
 
-// kwokControllerImageVersion is the released KWOK image version to use.
-// We pin to v0.7.0 because our Go dependency uses a main-branch
-// pseudo-version whose embedded version (v0.8.0) has no published images.
-const kwokControllerImageVersion = "v0.7.0"
-
-// kwokControllerImage is the full image reference for the KWOK controller.
-const kwokControllerImage = "registry.k8s.io/kwok/kwok:" + kwokControllerImageVersion
-
-// initContext initializes a Go context compatible with kwokctl's internal
-// expectations. kwokctl stores configuration objects inside the context via
-// config.InitFlags / log.InitFlags, both of which read os.Args directly.
-// We temporarily override os.Args so that the kwokctl flag parsers receive
-// only the flags relevant to KWOK (e.g. --config <path>).
-//
-// The caller must hold kwokGlobalMu.
-func (p *Provisioner) initContext(ctx context.Context) (context.Context, error) {
-	origArgs := os.Args
-	defer func() { os.Args = origArgs }()
-
-	args := []string{"kwokctl"}
-	if p.configPath != "" {
-		args = append(args, "--config", p.configPath)
-	}
-	os.Args = args
-
-	flagset := pflag.NewFlagSet("kwokctl", pflag.ContinueOnError)
-	flagset.ParseErrorsAllowlist.UnknownFlags = true
-	flagset.Usage = func() {}
-
-	ctx, _ = kwoklog.InitFlags(ctx, flagset)
-
-	ctx, err := config.InitFlags(ctx, flagset)
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize kwokctl config: %w", err)
-	}
-
-	return ctx, nil
-}
-
-// setDefaultCluster sets config.DefaultCluster and returns a function that
-// restores the previous value. The caller must hold kwokGlobalMu.
-func setDefaultCluster(name string) func() {
-	prev := config.DefaultCluster
-	config.DefaultCluster = name
-
-	return func() { config.DefaultCluster = prev }
-}
-
 // SetProvider sets the infrastructure provider for node operations.
 func (p *Provisioner) SetProvider(prov provider.Provider) {
 	p.infraProvider = prov
-}
-
-// withCluster acquires kwokGlobalMu, initializes the kwokctl context,
-// sets config.DefaultCluster for the duration of fn, and restores it on return.
-func (p *Provisioner) withCluster(
-	ctx context.Context,
-	target string,
-	action func(kwokCtx context.Context) error,
-) error {
-	kwokGlobalMu.Lock()
-	defer kwokGlobalMu.Unlock()
-
-	kwokCtx, err := p.initContext(ctx)
-	if err != nil {
-		return err
-	}
-
-	defer setDefaultCluster(target)()
-
-	return action(kwokCtx)
 }
 
 // Create creates a KWOK cluster using kwokctl's create command.
@@ -160,8 +102,8 @@ func (p *Provisioner) Create(ctx context.Context, name string) error {
 func (p *Provisioner) Delete(ctx context.Context, name string) error {
 	target := p.resolveName(name)
 
-	kwokGlobalMu.Lock()
-	defer kwokGlobalMu.Unlock()
+	globalMu.Lock()
+	defer globalMu.Unlock()
 
 	kwokCtx, err := p.initContext(ctx)
 	if err != nil {
@@ -217,40 +159,93 @@ func (p *Provisioner) Stop(ctx context.Context, name string) error {
 	})
 }
 
-// withLock acquires kwokGlobalMu and initializes the kwokctl context.
-func (p *Provisioner) withLock(ctx context.Context) (context.Context, error) {
-	kwokGlobalMu.Lock()
-
-	kwokCtx, err := p.initContext(ctx)
-	if err != nil {
-		kwokGlobalMu.Unlock()
-
-		return nil, err
-	}
-
-	return kwokCtx, nil
-}
-
 // List returns all KWOK cluster names.
 func (p *Provisioner) List(ctx context.Context) ([]string, error) {
-	kwokCtx, err := p.withLock(ctx)
+	kwokCtx, err := p.lockAndInit(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list KWOK clusters: %w", err)
 	}
-	defer kwokGlobalMu.Unlock()
+	defer globalMu.Unlock()
 
 	return p.listWithContext(kwokCtx)
 }
 
 // Exists checks if a KWOK cluster exists.
 func (p *Provisioner) Exists(ctx context.Context, name string) (bool, error) {
-	kwokCtx, err := p.withLock(ctx)
+	kwokCtx, err := p.lockAndInit(ctx)
 	if err != nil {
 		return false, fmt.Errorf("failed to check cluster existence: %w", err)
 	}
-	defer kwokGlobalMu.Unlock()
+	defer globalMu.Unlock()
 
 	return p.existsWithContext(kwokCtx, p.resolveName(name))
+}
+
+// initContext initializes a Go context compatible with kwokctl's internal
+// expectations. kwokctl stores configuration objects inside the context via
+// config.InitFlags / log.InitFlags, both of which read os.Args directly.
+// We temporarily override os.Args so that the kwokctl flag parsers receive
+// only the flags relevant to KWOK (e.g. --config <path>).
+//
+// The caller must hold globalMu.
+func (p *Provisioner) initContext(ctx context.Context) (context.Context, error) {
+	origArgs := os.Args
+	defer func() { os.Args = origArgs }()
+
+	args := []string{"kwokctl"}
+	if p.configPath != "" {
+		args = append(args, "--config", p.configPath)
+	}
+	os.Args = args
+
+	flagset := pflag.NewFlagSet("kwokctl", pflag.ContinueOnError)
+	flagset.ParseErrorsAllowlist.UnknownFlags = true
+	flagset.Usage = func() {}
+
+	ctx, _ = kwoklog.InitFlags(ctx, flagset)
+
+	ctx, err := config.InitFlags(ctx, flagset)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize kwokctl config: %w", err)
+	}
+
+	return ctx, nil
+}
+
+// withCluster acquires globalMu, initializes the kwokctl context,
+// sets config.DefaultCluster for the duration of action, and restores it
+// on return.
+func (p *Provisioner) withCluster(
+	ctx context.Context,
+	target string,
+	action func(kwokCtx context.Context) error,
+) error {
+	globalMu.Lock()
+	defer globalMu.Unlock()
+
+	kwokCtx, err := p.initContext(ctx)
+	if err != nil {
+		return err
+	}
+
+	defer setDefaultCluster(target)()
+
+	return action(kwokCtx)
+}
+
+// lockAndInit acquires globalMu and initializes the kwokctl context.
+// The caller must defer globalMu.Unlock().
+func (p *Provisioner) lockAndInit(ctx context.Context) (context.Context, error) {
+	globalMu.Lock()
+
+	kwokCtx, err := p.initContext(ctx)
+	if err != nil {
+		globalMu.Unlock()
+
+		return nil, err
+	}
+
+	return kwokCtx, nil
 }
 
 func (p *Provisioner) listWithContext(kwokCtx context.Context) ([]string, error) {
@@ -283,4 +278,13 @@ func (p *Provisioner) resolveName(name string) string {
 	}
 
 	return p.name
+}
+
+// setDefaultCluster sets config.DefaultCluster and returns a function that
+// restores the previous value. The caller must hold globalMu.
+func setDefaultCluster(name string) func() {
+	prev := config.DefaultCluster
+	config.DefaultCluster = name
+
+	return func() { config.DefaultCluster = prev }
 }

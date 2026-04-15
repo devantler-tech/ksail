@@ -185,53 +185,68 @@ func CreateMinimalProvisioner(
 
 	switch dist {
 	case v1alpha1.DistributionVanilla:
-		kindConfig := &v1alpha4.Cluster{Name: clusterName}
-
-		provisioner, err := kindprovisioner.CreateProvisioner(kindConfig, "")
-		if err != nil {
-			return nil, fmt.Errorf("failed to create Kind provisioner: %w", err)
-		}
-
-		return provisioner, nil
-
+		return createMinimalKindProvisioner(clusterName)
 	case v1alpha1.DistributionK3s:
-		k3dConfig := &k3dv1alpha5.SimpleConfig{
-			ObjectMeta: k3dtypes.ObjectMeta{Name: clusterName},
-		}
-
-		return k3dprovisioner.CreateProvisioner(k3dConfig, ""), nil
-
+		return createMinimalK3dProvisioner(clusterName), nil
 	case v1alpha1.DistributionTalos:
-		talosConfig := &talosconfigmanager.Configs{Name: clusterName}
-
-		provisioner, err := talosprovisioner.CreateProvisioner(
-			talosConfig,
-			kubeconfigPath,
-			"",
-			providerType,
-			v1alpha1.OptionsTalos{},
-			v1alpha1.OptionsHetzner{},
-			v1alpha1.OptionsOmni{},
-			false,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create Talos provisioner: %w", err)
-		}
-
-		return provisioner, nil
-
+		return createMinimalTalosProvisioner(clusterName, kubeconfigPath, providerType)
 	case v1alpha1.DistributionVCluster:
-		provisioner, err := vclusterprovisioner.CreateProvisioner(clusterName, "", false)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create VCluster provisioner: %w", err)
-		}
-
-		return provisioner, nil
-
+		return createMinimalVClusterProvisioner(clusterName)
 	case v1alpha1.DistributionKWOK:
 		return kwokprovisioner.NewProvisioner(clusterName, "", nil), nil
-
 	default:
 		return nil, fmt.Errorf("%w: %s", ErrUnsupportedDistribution, dist)
 	}
+}
+
+func createMinimalKindProvisioner(clusterName string) (Provisioner, error) {
+	kindConfig := &v1alpha4.Cluster{Name: clusterName}
+
+	provisioner, err := kindprovisioner.CreateProvisioner(kindConfig, "")
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Kind provisioner: %w", err)
+	}
+
+	return provisioner, nil
+}
+
+func createMinimalK3dProvisioner(clusterName string) Provisioner {
+	k3dConfig := &k3dv1alpha5.SimpleConfig{
+		ObjectMeta: k3dtypes.ObjectMeta{Name: clusterName},
+	}
+
+	return k3dprovisioner.CreateProvisioner(k3dConfig, "")
+}
+
+func createMinimalTalosProvisioner(
+	clusterName string,
+	kubeconfigPath string,
+	providerType v1alpha1.Provider,
+) (Provisioner, error) {
+	talosConfig := &talosconfigmanager.Configs{Name: clusterName}
+
+	provisioner, err := talosprovisioner.CreateProvisioner(
+		talosConfig,
+		kubeconfigPath,
+		"",
+		providerType,
+		v1alpha1.OptionsTalos{},
+		v1alpha1.OptionsHetzner{},
+		v1alpha1.OptionsOmni{},
+		false,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Talos provisioner: %w", err)
+	}
+
+	return provisioner, nil
+}
+
+func createMinimalVClusterProvisioner(clusterName string) (Provisioner, error) {
+	provisioner, err := vclusterprovisioner.CreateProvisioner(clusterName, "", false)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create VCluster provisioner: %w", err)
+	}
+
+	return provisioner, nil
 }

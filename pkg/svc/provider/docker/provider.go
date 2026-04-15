@@ -47,6 +47,11 @@ const (
 	DefaultStopTimeout  = 60 * time.Second
 )
 
+// Node role constants used across label schemes.
+const (
+	roleControlPlane = "control-plane"
+)
+
 // Provider implements provider.Provider for Docker-based clusters.
 type Provider struct {
 	client      client.APIClient
@@ -362,7 +367,7 @@ func (p *Provider) extractRole(ctr container.Summary) string {
 		if len(ctr.Names) > 0 {
 			name := strings.TrimPrefix(ctr.Names[0], "/")
 			if strings.Contains(name, "control-plane") {
-				return "control-plane"
+				return roleControlPlane
 			}
 
 			if strings.Contains(name, "worker") {
@@ -478,7 +483,7 @@ func extractVClusterRole(ctr container.Summary) string {
 		name := strings.TrimPrefix(rawName, "/")
 
 		if strings.HasPrefix(name, vclusterCPPrefix) {
-			return "control-plane"
+			return roleControlPlane
 		}
 
 		if strings.HasPrefix(name, vclusterNodePrefix) {
@@ -498,17 +503,19 @@ func extractVClusterRole(ctr container.Summary) string {
 // kwok-<cluster>-kwok-controller, etc.
 const kwokContainerPrefix = "kwok-"
 
-// kwokComponentSuffixes lists the known component suffixes used by kwokctl.
-var kwokComponentSuffixes = []string{
-	"-etcd",
-	"-kube-apiserver",
-	"-kube-controller-manager",
-	"-kube-scheduler",
-	"-kwok-controller",
-	"-prometheus",
-	"-jaeger",
-	"-dashboard",
-	"-metrics-server",
+// kwokComponentSuffixes returns the known component suffixes used by kwokctl.
+func kwokComponentSuffixes() []string {
+	return []string{
+		"-etcd",
+		"-kube-apiserver",
+		"-kube-controller-manager",
+		"-kube-scheduler",
+		"-kwok-controller",
+		"-prometheus",
+		"-jaeger",
+		"-dashboard",
+		"-metrics-server",
+	}
 }
 
 // listKWOKContainers lists containers by KWOK name prefix.
@@ -534,7 +541,7 @@ func extractKWOKClusterName(ctr container.Summary) string {
 	for _, rawName := range ctr.Names {
 		name := strings.TrimPrefix(rawName, "/")
 		if rest, ok := strings.CutPrefix(name, kwokContainerPrefix); ok {
-			for _, suffix := range kwokComponentSuffixes {
+			for _, suffix := range kwokComponentSuffixes() {
 				if trimmed, found := strings.CutSuffix(rest, suffix); found && trimmed != "" {
 					return trimmed
 				}
@@ -554,7 +561,7 @@ func extractKWOKRole(ctr container.Summary) string {
 		case strings.HasSuffix(name, "-kube-apiserver"),
 			strings.HasSuffix(name, "-kube-controller-manager"),
 			strings.HasSuffix(name, "-kube-scheduler"):
-			return "control-plane"
+			return roleControlPlane
 		case strings.HasSuffix(name, "-etcd"):
 			return "etcd"
 		case strings.HasSuffix(name, "-kwok-controller"):

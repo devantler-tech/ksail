@@ -20,6 +20,7 @@ type Validator struct {
 	k3dConfig      *k3dapi.SimpleConfig
 	talosConfig    *talosconfigmanager.Configs
 	vclusterConfig *clusterprovisioner.VClusterConfig
+	kwokConfig     *clusterprovisioner.KWOKConfig
 }
 
 // NewValidator creates a new KSail configuration validator without distribution configuration.
@@ -57,6 +58,14 @@ func NewValidatorForTalos(talosConfig *talosconfigmanager.Configs) *Validator {
 func NewValidatorForVCluster(vclusterConfig *clusterprovisioner.VClusterConfig) *Validator {
 	return &Validator{
 		vclusterConfig: vclusterConfig,
+	}
+}
+
+// NewValidatorForKWOK creates a new KSail configuration validator with KWOK distribution configuration.
+// The KWOK config is used for cross-configuration validation (name consistency).
+func NewValidatorForKWOK(kwokConfig *clusterprovisioner.KWOKConfig) *Validator {
+	return &Validator{
+		kwokConfig: kwokConfig,
 	}
 }
 
@@ -204,6 +213,8 @@ func (v *Validator) getExpectedContextName(config *v1alpha1.Cluster) string {
 		return "admin@" + distributionName
 	case v1alpha1.DistributionVCluster:
 		return "vcluster-docker_" + distributionName
+	case v1alpha1.DistributionKWOK:
+		return "kwok-" + distributionName
 	default:
 		return ""
 	}
@@ -220,6 +231,8 @@ func (v *Validator) getDistributionConfigName(distribution v1alpha1.Distribution
 		return v.getTalosConfigName()
 	case v1alpha1.DistributionVCluster:
 		return v.getVClusterConfigName()
+	case v1alpha1.DistributionKWOK:
+		return v.getKWOKConfigName()
 	default:
 		return ""
 	}
@@ -269,6 +282,16 @@ func (v *Validator) getVClusterConfigName() string {
 	return ""
 }
 
+// getKWOKConfigName returns the KWOK configuration cluster name if available.
+// Returns empty string if no KWOK config is provided to the validator.
+func (v *Validator) getKWOKConfigName() string {
+	if v.kwokConfig != nil && v.kwokConfig.Name != "" {
+		return v.kwokConfig.Name
+	}
+
+	return ""
+}
+
 // validateCNIAlignment validates that the distribution configuration aligns with the CNI setting.
 // When Cilium CNI is requested, the distribution config must have CNI disabled.
 // When Default CNI is used, the distribution config must NOT have CNI disabled.
@@ -301,8 +324,9 @@ func (v *Validator) validateCiliumCNI(
 		v.validateK3dCiliumCNIAlignment(result)
 	case v1alpha1.DistributionTalos:
 		v.validateTalosCiliumCNIAlignment(result)
-	case v1alpha1.DistributionVCluster:
-		// VCluster manages its own CNI internally; no alignment check needed.
+	case v1alpha1.DistributionVCluster, v1alpha1.DistributionKWOK:
+		// VCluster manages its own CNI internally; KWOK simulates all pods.
+		// No alignment check needed.
 	}
 }
 

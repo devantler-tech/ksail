@@ -1690,25 +1690,36 @@ func resolveClusterNameFromContext(ctx *localregistry.Context) string {
 	case v1alpha1.DistributionTalos:
 		return talosconfigmanager.ResolveClusterName(ctx.ClusterCfg, ctx.TalosConfig)
 	case v1alpha1.DistributionVCluster:
-		if ctx.VClusterConfig != nil && ctx.VClusterConfig.Name != "" {
-			return ctx.VClusterConfig.Name
-		}
-
-		return "vcluster-default"
+		return resolveVClusterName(ctx)
 	case v1alpha1.DistributionKWOK:
-		if ctx.KWOKConfig != nil && ctx.KWOKConfig.Name != "" {
-			return ctx.KWOKConfig.Name
-		}
-
-		return "kwok-default"
+		return resolveKWOKName(ctx)
 	default:
-		// Fallback to context name or default
-		if name := strings.TrimSpace(ctx.ClusterCfg.Spec.Cluster.Connection.Context); name != "" {
-			return name
-		}
-
-		return "ksail"
+		return resolveFallbackName(ctx)
 	}
+}
+
+func resolveVClusterName(ctx *localregistry.Context) string {
+	if ctx.VClusterConfig != nil && ctx.VClusterConfig.Name != "" {
+		return ctx.VClusterConfig.Name
+	}
+
+	return "vcluster-default"
+}
+
+func resolveKWOKName(ctx *localregistry.Context) string {
+	if ctx.KWOKConfig != nil && ctx.KWOKConfig.Name != "" {
+		return ctx.KWOKConfig.Name
+	}
+
+	return "kwok-default"
+}
+
+func resolveFallbackName(ctx *localregistry.Context) string {
+	if name := strings.TrimSpace(ctx.ClusterCfg.Spec.Cluster.Connection.Context); name != "" {
+		return name
+	}
+
+	return "ksail"
 }
 
 // maybeWaitForTTL parses the --ttl flag and, if set, blocks to auto-destroy the cluster
