@@ -50,8 +50,8 @@ style: |
   img.diagram {
     display: block;
     margin: 0 auto;
-    max-height: 70%;
-    max-width: 100%;
+    max-height: 100%;
+    max-width: 95%;
     object-fit: contain;
   }
 html: true
@@ -108,21 +108,21 @@ A **Go CLI** and SDK for spinning up local Kubernetes clusters with GitOps built
 
 🖥️ A **Mac Mini runs 24/7 at home**, firing scheduled prompts that trigger agents to work on KSail autonomously.
 
-### What I actually do:
-
 - ✅ **Promote PRs** from Draft → In Review *(the main gate)*
 - 👀 **Occasional check-ins** to review agent decisions
 - 🛠️ **Build things myself** when I want to — I hook into the same process
 
-### What the agents handle:
+> The workflow is designed so **nothing merges without my approval**.
+
+---
+
+# What the Agents Handle
 
 - 🗺️ Roadmap creation and competitive analysis
 - 📋 Issue creation and prioritization
 - 💻 Code changes, tests, and documentation
 - 🔄 CI failure investigation and resolution
 - 🧹 Stale content cleanup
-
-> The workflow is designed so **nothing merges without my approval**.
 
 ---
 
