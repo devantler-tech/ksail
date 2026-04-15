@@ -50,8 +50,8 @@ style: |
   img.diagram {
     display: block;
     margin: 0 auto;
-    max-height: 100%;
-    max-width: 95%;
+    width: 95%;
+    max-height: 80%;
     object-fit: contain;
   }
 html: true
