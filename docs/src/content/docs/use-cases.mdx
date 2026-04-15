@@ -118,7 +118,7 @@ jobs:
         id: cluster
         uses: devantler-tech/ksail/.github/actions/ksail-cluster@v5.59.0
         with:
-          distribution: K3s   # Vanilla, K3s, Talos, VCluster
+          distribution: K3s   # Vanilla, K3s, Talos, VCluster, KWOK
           sops-age-key: ${{ secrets.SOPS_AGE_KEY }}  # optional: import SOPS key + create sops-age secret
           delete: true         # delete cluster at the end (runs even on failure)
 

@@ -7,12 +7,13 @@ KSail supports multiple Kubernetes distributions, providers, and components. Thi
 
 ## Distribution × Provider Matrix
 
-| Distribution    | Docker | Hetzner | Omni |
-| --------------- | ------ | ------- | ---- |
-| Vanilla (Kind)  | ✅     | ❌      | ❌   |
-| K3s (K3d)       | ✅     | ❌      | ❌   |
-| Talos           | ✅     | ✅      | ✅   |
-| VCluster (Vind) | ✅     | ❌      | ❌   |
+| Distribution     | Docker | Hetzner | Omni |
+| ---------------- | ------ | ------- | ---- |
+| Vanilla (Kind)   | ✅     | ❌      | ❌   |
+| K3s (K3d)        | ✅     | ❌      | ❌   |
+| Talos            | ✅     | ✅      | ✅   |
+| VCluster (Vind)  | ✅     | ❌      | ❌   |
+| KWOK (kwokctl)   | ✅     | ❌      | ❌   |
 
 **Notes:**
 
@@ -20,37 +21,38 @@ KSail supports multiple Kubernetes distributions, providers, and components. Thi
 - Hetzner provider requires `HCLOUD_TOKEN` environment variable and a Talos ISO uploaded to your Hetzner account (x86: `122630`, ARM: `122629` — see [Talos options](/configuration/declarative-configuration/#distribution-and-tool-options)) — see [Hetzner Provider](/providers/hetzner/) for setup details
 - Omni provider requires a [Sidero Omni](https://www.siderolabs.com/platform/saas-for-kubernetes/) account, an `OMNI_SERVICE_ACCOUNT_KEY` environment variable, and an Omni API endpoint configured via `spec.provider.omni.endpoint` in your KSail configuration — see [Omni Provider](/providers/omni/) for setup details
 - VCluster uses the [Vind](https://github.com/loft-sh/vcluster) Docker driver to run the control plane and optional worker nodes directly as Docker containers
+- KWOK uses the kwokctl Docker runtime to run etcd, kube-apiserver, and kwok-controller as Docker containers — nodes and pods are simulated at the API level
 
 ## Component × Distribution Matrix
 
-| Component                     | Vanilla | K3s      | Talos               | VCluster |
-| ----------------------------- | ------- | -------- | ------------------- | -------- |
+| Component                     | Vanilla | K3s      | Talos               | VCluster | KWOK     |
+| ----------------------------- | ------- | -------- | ------------------- | -------- | -------- |
 | **CNI**                       |
-| Cilium                        | ✅      | ✅       | ✅                  | N/A¹     |
-| Calico                        | ✅      | ✅       | ✅                  | N/A¹     |
+| Cilium                        | ✅      | ✅       | ✅                  | N/A¹     | Sim⁷     |
+| Calico                        | ✅      | ✅       | ✅                  | N/A¹     | Sim⁷     |
 | **CSI**                       |
-| Local Path Provisioner        | ✅      | Built-in | ✅ (Docker)         | N/A²     |
-| Hetzner CSI Driver            | ❌      | ❌       | ✅ (Hetzner)        | ❌       |
+| Local Path Provisioner        | ✅      | Built-in | ✅ (Docker)         | N/A²     | Sim⁷     |
+| Hetzner CSI Driver            | ❌      | ❌       | ✅ (Hetzner)        | ❌       | ❌       |
 | **LoadBalancer**              |
-| LoadBalancer Support          | ✅      | Built-in | ✅ (Docker/Hetzner) | N/A³     |
-| Cloud Provider KIND           | ✅      | ❌       | ❌                  | ❌       |
-| MetalLB                       | ❌      | ❌       | ✅ (Docker)         | ❌       |
-| Hetzner CCM                   | ❌      | ❌       | ✅ (Hetzner)        | ❌       |
+| LoadBalancer Support          | ✅      | Built-in | ✅ (Docker/Hetzner) | N/A³     | Sim⁷     |
+| Cloud Provider KIND           | ✅      | ❌       | ❌                  | ❌       | ❌       |
+| MetalLB                       | ❌      | ❌       | ✅ (Docker)         | ❌       | ❌       |
+| Hetzner CCM                   | ❌      | ❌       | ✅ (Hetzner)        | ❌       | ❌       |
 | **GitOps**                    |
-| Flux                          | ✅      | ✅       | ✅                  | ✅       |
-| ArgoCD                        | ✅      | ✅       | ✅                  | ✅       |
+| Flux                          | ✅      | ✅       | ✅                  | ✅       | Sim⁷     |
+| ArgoCD                        | ✅      | ✅       | ✅                  | ✅       | Sim⁷     |
 | **Observability**             |
-| Metrics Server                | ✅      | Built-in | ✅                  | N/A⁴     |
+| Metrics Server                | ✅      | Built-in | ✅                  | N/A⁴     | Sim⁷     |
 | **Security**                  |
-| cert-manager                  | ✅      | ✅       | ✅                  | ✅       |
-| Kyverno                       | ✅      | ✅       | ✅                  | ✅       |
-| Gatekeeper                    | ✅      | ✅       | ✅                  | ✅       |
+| cert-manager                  | ✅      | ✅       | ✅                  | ✅       | Sim⁷     |
+| Kyverno                       | ✅      | ✅       | ✅                  | ✅       | Sim⁷     |
+| Gatekeeper                    | ✅      | ✅       | ✅                  | ✅       | Sim⁷     |
 | **Registry**                  |
-| Local Registry                | ✅      | ✅       | ✅                  | ✅       |
-| Mirror Registries             | ✅      | ✅       | ✅                  | ✅       |
-| External Registries with Auth | ✅      | ✅       | ✅                  | ✅       |
+| Local Registry                | ✅      | ✅       | ✅                  | ✅       | Sim⁷     |
+| Mirror Registries             | ✅      | ✅       | ✅                  | ✅       | Sim⁷     |
+| External Registries with Auth | ✅      | ✅       | ✅                  | ✅       | Sim⁷     |
 | **Image Verification**        |
-| Image Verification            | ✅⁶     | ❌       | ✅ (1.13+)          | ❌       |
+| Image Verification            | ✅⁶     | ❌       | ✅ (1.13+)          | ❌       | ❌       |
 
 **Notes:**
 
@@ -67,6 +69,7 @@ KSail supports multiple Kubernetes distributions, providers, and components. Thi
   - ² CSI is managed internally by vCluster — no separate CSI driver needed
   - ³ LoadBalancer is delegated to the host cluster by vCluster — `spec.cluster.loadBalancer` has no effect on VCluster and KSail does not install any LoadBalancer controller
   - ⁴ Metrics Server is managed internally by vCluster
+- **⁷ KWOK Simulation**: Components are installed as API objects and their pods appear Running via KWOK's Stage simulation. They do not execute real workloads — KWOK simulates pod lifecycle at the API level. See [KWOK Distribution](/distributions/kwok/) for details.
 
 ## Secret Management × Provider Matrix
 
@@ -97,24 +100,24 @@ KSail supports multiple Kubernetes distributions, providers, and components. Thi
 The `ksail cluster update` command applies configuration changes to a running cluster.
 Changes are classified by impact: **in-place** (no disruption), **reboot-required** (node restart needed), or **recreate-required** (full cluster recreation).
 
-| Change                   | Vanilla (Kind) | K3s (K3d) | Talos    | VCluster (Vind) |
-| ------------------------ | -------------- | --------- | -------- | --------------- |
-| Distribution             | Recreate       | Recreate  | Recreate | Recreate        |
-| Provider                 | Recreate       | Recreate  | Recreate | Recreate        |
-| CNI                      | In-place       | In-place  | In-place | N/A             |
-| CSI                      | N/A⁵           | In-place  | In-place | N/A             |
-| Metrics Server           | In-place       | In-place  | In-place | N/A             |
-| Load Balancer            | In-place       | In-place  | N/A¹     | N/A             |
-| cert-manager             | In-place       | In-place  | In-place | In-place        |
-| Policy Engine            | In-place       | In-place  | In-place | In-place        |
-| GitOps Engine            | In-place       | In-place  | In-place | In-place        |
-| Local Registry           | Recreate       | In-place  | In-place | In-place        |
-| Mirrors Dir              | Recreate       | N/A       | N/A      | N/A             |
-| Control Planes           | Recreate       | Recreate  | In-place | Recreate        |
-| Workers                  | Recreate       | In-place  | In-place | N/A             |
-| Hetzner Server Type (CP) | N/A            | N/A       | Recreate | N/A             |
-| Hetzner Location         | N/A            | N/A       | Recreate | N/A             |
-| Hetzner Network          | N/A            | N/A       | Recreate | N/A             |
+| Change                   | Vanilla (Kind) | K3s (K3d) | Talos    | VCluster (Vind) | KWOK (kwokctl) |
+| ------------------------ | -------------- | --------- | -------- | --------------- | -------------- |
+| Distribution             | Recreate       | Recreate  | Recreate | Recreate        | Recreate       |
+| Provider                 | Recreate       | Recreate  | Recreate | Recreate        | Recreate       |
+| CNI                      | In-place       | In-place  | In-place | N/A             | Sim⁷           |
+| CSI                      | N/A⁵           | In-place  | In-place | N/A             | Sim⁷           |
+| Metrics Server           | In-place       | In-place  | In-place | N/A             | Sim⁷           |
+| Load Balancer            | In-place       | In-place  | N/A¹     | N/A             | Sim⁷           |
+| cert-manager             | In-place       | In-place  | In-place | In-place        | Sim⁷           |
+| Policy Engine            | In-place       | In-place  | In-place | In-place        | Sim⁷           |
+| GitOps Engine            | In-place       | In-place  | In-place | In-place        | Sim⁷           |
+| Local Registry           | Recreate       | In-place  | In-place | In-place        | Sim⁷           |
+| Mirrors Dir              | Recreate       | N/A       | N/A      | N/A             | N/A            |
+| Control Planes           | Recreate       | Recreate  | In-place | Recreate        | Recreate       |
+| Workers                  | Recreate       | In-place  | In-place | N/A             | N/A            |
+| Hetzner Server Type (CP) | N/A            | N/A       | Recreate | N/A             | N/A            |
+| Hetzner Location         | N/A            | N/A       | Recreate | N/A             | N/A            |
+| Hetzner Network          | N/A            | N/A       | Recreate | N/A             | N/A            |
 
 **Notes:**
 
@@ -159,6 +162,7 @@ KSail embeds specific versions of Kubernetes tooling:
 | Kind         | Latest            | Vanilla clusters           |
 | K3d          | Latest            | K3s clusters               |
 | vCluster SDK | v0.33.1           | VCluster virtual clusters  |
+| kwokctl      | Latest            | KWOK simulated clusters    |
 | Flux         | Latest            | GitOps toolkit             |
 | ArgoCD       | Latest            | GitOps continuous delivery |
 | SOPS         | Latest            | Secret encryption          |

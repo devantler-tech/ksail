@@ -1,0 +1,160 @@
+---
+title: KWOK
+description: Learn how to create and manage simulated Kubernetes clusters with KSail using the KWOK distribution.
+---
+
+KWOK creates ultra-fast simulated Kubernetes clusters for control-plane-level testing. This guide walks you through creating your first KWOK cluster, understanding when to use it, and exploring common use cases.
+
+## What is KWOK?
+
+[KWOK](https://kwok.sigs.k8s.io/) (Kubernetes WithOut Kubelet) is a toolkit that enables simulating thousands of Kubernetes nodes and pods without running actual containers. KSail uses kwokctl's Docker runtime to run etcd, kube-apiserver, and the kwok-controller as Docker containers. Nodes and pods are simulated at the API level — they appear Ready and Running but consume no compute resources.
+
+## When to Use KWOK
+
+KWOK excels at **control-plane testing** (validating API operations, RBAC, and admission webhooks), **CI/CD speed optimization** (clusters start in seconds with minimal resource usage), **scale testing** (simulate thousands of nodes/pods without real infrastructure), and **tooling validation** (testing kubectl, Helm, and GitOps workflows against a real API server).
+
+Consider other distributions for workloads that need real containers (Vanilla, K3s), production-grade immutable infrastructure (Talos), or isolated virtual clusters (VCluster).
+
+## Quick Start
+
+### 1. Initialize a KWOK Project
+
+Create a new KWOK configuration:
+
+````bash
+mkdir my-kwok-cluster
+cd my-kwok-cluster
+
+ksail cluster init \
+  --name dev-cluster \
+  --distribution KWOK \
+  --gitops-engine Flux
+````
+
+This generates:
+- `ksail.yaml` — KSail cluster configuration
+- `kwok.yaml` — KWOK simulation CRDs (ClusterLogs, ClusterExec, ClusterAttach, ClusterPortForward)
+- `k8s/kustomization.yaml` — Directory for Kubernetes manifests
+
+### 2. Create the Cluster
+
+````bash
+ksail cluster create
+````
+
+KSail creates Docker containers for the control plane (etcd, kube-apiserver, kwok-controller), configures simulation CRDs, and sets up kubectl automatically.
+
+### 3. Verify the Cluster
+
+````bash
+# Check cluster info
+ksail cluster info
+
+# List running containers
+docker ps | grep kwok
+
+# Test kubectl access
+kubectl get nodes
+kubectl get pods --all-namespaces
+````
+
+### 4. Deploy an Application
+
+````bash
+# Create a deployment — pods are simulated as Running
+kubectl create deployment nginx --image=nginx:1.25
+kubectl get pods -w  # Pods transition to Running via KWOK Stage simulation
+
+# Logs work via ClusterLogs CRD
+kubectl logs deploy/nginx
+````
+
+### 5. Clean Up
+
+````bash
+ksail cluster delete
+````
+
+## Configuration
+
+For general KSail YAML options, see the [Configuration Reference](/configuration/). The `kwok.yaml` file contains KWOK-specific CRDs that enable simulation of kubectl operations:
+
+````yaml
+# ClusterLogs — enables kubectl logs
+apiVersion: kwok.x-k8s.io/v1alpha1
+kind: ClusterLogs
+metadata:
+  name: default-logs
+spec:
+  selector: {}
+  logs:
+    - containers:
+        - name: '*'
+      logsFile: /dev/null
+
+# ClusterExec — enables kubectl exec
+---
+apiVersion: kwok.x-k8s.io/v1alpha1
+kind: ClusterExec
+metadata:
+  name: default-exec
+spec:
+  selector: {}
+  execs:
+    - containers:
+        - name: '*'
+      command:
+        - /bin/sh
+````
+
+See the [KWOK documentation](https://kwok.sigs.k8s.io/docs/user/) for all available CRDs and configuration options.
+
+## How KWOK Simulation Works
+
+KWOK provides default Stage configurations that automatically transition pods and nodes:
+- **Nodes**: Transition to `Ready` status immediately
+- **Pods**: Transition through `Pending` → `Running` → `Succeeded` lifecycle
+
+The `kwok.yaml` scaffolded by KSail adds four Cluster-level CRDs not provided by default:
+- **ClusterLogs**: Enables `kubectl logs` to return configurable output
+- **ClusterExec**: Enables `kubectl exec` to run commands
+- **ClusterAttach**: Enables `kubectl attach`
+- **ClusterPortForward**: Enables `kubectl port-forward`
+
+All Kubernetes API operations (create, get, describe, delete, scale, apply) work against the real API server. Helm charts install and their pods appear Running. GitOps controllers are deployed and simulated as Running.
+
+## Comparison with Other Distributions
+
+For a full comparison across all distributions and supported components, see the [Support Matrix](/support-matrix/).
+
+## Troubleshooting
+
+### Cluster Won't Start
+
+**Symptom:** `ksail cluster create` fails.
+
+````bash
+docker ps          # Docker must be running
+docker info        # Ensure Docker daemon is healthy
+````
+
+### kubectl Commands Fail
+
+**Symptom:** `kubectl get nodes` returns connection errors.
+
+````bash
+kubectl config current-context    # Should show kwok-<cluster-name>
+kubectl config use-context kwok-dev-cluster  # Switch if needed
+````
+
+### Pods Not Transitioning to Running
+
+**Symptom:** Pods stay in `Pending` state.
+
+This typically means KWOK's Stage configurations are missing. Ensure `kwok.yaml` is present or recreate the cluster:
+
+````bash
+ksail cluster delete
+ksail cluster init --distribution KWOK
+ksail cluster create
+````
