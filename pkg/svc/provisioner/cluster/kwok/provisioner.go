@@ -78,6 +78,15 @@ func (p *Provisioner) SetProvider(prov provider.Provider) {
 func (p *Provisioner) Create(ctx context.Context, name string) error {
 	target := p.resolveName(name)
 
+	configPath, cleanup, err := p.resolveConfigPath()
+	if err != nil {
+		return fmt.Errorf("failed to create KWOK cluster: %w", err)
+	}
+
+	if cleanup != nil {
+		defer cleanup()
+	}
+
 	return p.withCluster(ctx, target, func(kwokCtx context.Context) error {
 		cmd := createcluster.NewCommand(kwokCtx)
 
@@ -85,8 +94,8 @@ func (p *Provisioner) Create(ctx context.Context, name string) error {
 			"--runtime", "docker",
 			"--kwok-controller-image", kwokControllerImage,
 		}
-		if p.configPath != "" {
-			args = append(args, "--config", p.configPath)
+		if configPath != "" {
+			args = append(args, "--config", configPath)
 		}
 
 		_, err := p.runner.Run(kwokCtx, cmd, args)
@@ -288,3 +297,82 @@ func setDefaultCluster(name string) func() {
 
 	return func() { config.DefaultCluster = prev }
 }
+
+// resolveConfigPath returns the config file path to pass to kwokctl.
+// If an explicit configPath was provided, it is returned as-is.
+// Otherwise a temporary file containing the default simulation CRDs
+// is created and a cleanup function is returned that removes it.
+func (p *Provisioner) resolveConfigPath() (string, func(), error) {
+	if p.configPath != "" {
+		return p.configPath, nil, nil
+	}
+
+	tmpFile, err := os.CreateTemp("", "kwok-default-*.yaml")
+	if err != nil {
+		return "", nil, fmt.Errorf("failed to create temp config: %w", err)
+	}
+
+	if _, err := tmpFile.WriteString(defaultSimulationConfig); err != nil {
+		tmpFile.Close()
+		os.Remove(tmpFile.Name())
+
+		return "", nil, fmt.Errorf("failed to write temp config: %w", err)
+	}
+
+	if err := tmpFile.Close(); err != nil {
+		os.Remove(tmpFile.Name())
+
+		return "", nil, fmt.Errorf("failed to close temp config: %w", err)
+	}
+
+	cleanup := func() { os.Remove(tmpFile.Name()) }
+
+	return tmpFile.Name(), cleanup, nil
+}
+
+// defaultSimulationConfig contains the KWOK simulation CRDs that are NOT
+// provided by KWOK by default. These enable kubectl logs, exec, attach,
+// and port-forward to work out of the box on simulated pods.
+const defaultSimulationConfig = `apiVersion: kwok.x-k8s.io/v1alpha1
+kind: ClusterLogs
+metadata:
+  name: default-logs
+spec:
+  selector: {}
+  logs:
+    - containers:
+        - name: '*'
+      logsFile: /dev/null
+---
+apiVersion: kwok.x-k8s.io/v1alpha1
+kind: ClusterExec
+metadata:
+  name: default-exec
+spec:
+  selector: {}
+  execs:
+    - containers:
+        - name: '*'
+      command:
+        - /bin/sh
+---
+apiVersion: kwok.x-k8s.io/v1alpha1
+kind: ClusterAttach
+metadata:
+  name: default-attach
+spec:
+  selector: {}
+  attaches:
+    - containers:
+        - name: '*'
+---
+apiVersion: kwok.x-k8s.io/v1alpha1
+kind: ClusterPortForward
+metadata:
+  name: default-port-forward
+spec:
+  selector: {}
+  forwards:
+    - ports:
+        - name: '*'
+`
