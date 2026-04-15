@@ -131,7 +131,7 @@ jobs:
 
 | Input                 | Description                                             | Required | Default                |
 |-----------------------|---------------------------------------------------------|----------|------------------------|
-| `distribution`        | Kubernetes distribution (Vanilla, K3s, Talos, VCluster) | Yes      | -                      |
+| `distribution`        | Kubernetes distribution (Vanilla, K3s, Talos, VCluster, KWOK) | Yes      | -                      |
 | `provider`            | Infrastructure provider (Docker, Hetzner, Omni)         | No       | `Docker`               |
 | `args`                | Additional arguments for cluster init/create            | No       | `""`                   |
 | `init`                | Run `ksail cluster init` before create                  | No       | `false`                |

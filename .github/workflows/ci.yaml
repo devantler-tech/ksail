@@ -681,7 +681,7 @@ jobs:
       fail-fast: true
       max-parallel: 20
       matrix:
-        distribution: [Vanilla, K3s, Talos, VCluster]
+        distribution: [Vanilla, K3s, Talos, VCluster, KWOK]
         provider: [Docker]
         init: [true, false]
         args:
