@@ -79,6 +79,8 @@ func (m *ConfigManager) createDistributionValidator() (*ksailvalidator.Validator
 		return m.createTalosValidator()
 	case v1alpha1.DistributionVCluster:
 		return m.createVClusterValidator()
+	case v1alpha1.DistributionKWOK:
+		return m.createKWOKValidator()
 	default:
 		return ksailvalidator.NewValidator(), nil
 	}
@@ -132,6 +134,17 @@ func (m *ConfigManager) createTalosValidator() (*ksailvalidator.Validator, error
 func (m *ConfigManager) createVClusterValidator() (*ksailvalidator.Validator, error) {
 	if m.DistributionConfig != nil && m.DistributionConfig.VCluster != nil {
 		return ksailvalidator.NewValidatorForVCluster(m.DistributionConfig.VCluster), nil
+	}
+
+	return ksailvalidator.NewValidator(), nil
+}
+
+// createKWOKValidator returns a validator with the cached KWOK config.
+// KWOK config doesn't require loading from disk (it's derived from the KSail config),
+// so this uses the already-cached distribution config if available.
+func (m *ConfigManager) createKWOKValidator() (*ksailvalidator.Validator, error) {
+	if m.DistributionConfig != nil && m.DistributionConfig.KWOK != nil {
+		return ksailvalidator.NewValidatorForKWOK(m.DistributionConfig.KWOK), nil
 	}
 
 	return ksailvalidator.NewValidator(), nil

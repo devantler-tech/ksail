@@ -342,8 +342,8 @@ func (v *Validator) validateDefaultCNI(
 		v.validateK3dDefaultCNIAlignment(result)
 	case v1alpha1.DistributionTalos:
 		v.validateTalosDefaultCNIAlignment(result)
-	case v1alpha1.DistributionVCluster:
-		// VCluster manages its own CNI internally; no alignment check needed.
+	case v1alpha1.DistributionVCluster, v1alpha1.DistributionKWOK:
+		// VCluster and KWOK manage CNI internally; no alignment check needed.
 	}
 }
 

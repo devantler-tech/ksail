@@ -37,7 +37,7 @@ const kwokControllerImage = "registry.k8s.io/kwok/kwok:" + kwokControllerImageVe
 // provisioner calls (e.g. parallel tests or multi-cluster operations)
 // could race on these globals.
 //
-//nolint:gochecknoglobals // kwokctl reads/writes os.Args and config.DefaultCluster at init time; a process-wide mutex is unavoidable.
+//nolint:gochecknoglobals // kwokctl mutates os.Args and config.DefaultCluster; process-wide mutex required.
 var globalMu sync.Mutex
 
 // Provisioner manages KWOK clusters using kwokctl's Cobra commands.
