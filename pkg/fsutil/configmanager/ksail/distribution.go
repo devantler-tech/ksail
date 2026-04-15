@@ -122,6 +122,8 @@ func (m *ConfigManager) loadAndCacheDistributionConfig() error {
 		return m.cacheTalosConfig()
 	case v1alpha1.DistributionVCluster:
 		return m.cacheVClusterConfig()
+	case v1alpha1.DistributionKWOK:
+		return m.cacheKWOKConfig()
 	default:
 		return nil
 	}
@@ -271,4 +273,43 @@ func (m *ConfigManager) resolveVClusterName() string {
 	}
 
 	return "vcluster-default"
+}
+
+func (m *ConfigManager) cacheKWOKConfig() error {
+	configPath := m.Config.Spec.Cluster.DistributionConfig
+	resolvedPath := ""
+
+	if configPath != "" {
+		_, err := os.Stat(configPath)
+		if err == nil {
+			resolvedPath = configPath
+		} else if !os.IsNotExist(err) {
+			return fmt.Errorf("failed to stat KWOK config file: %w", err)
+		}
+	}
+
+	clusterName := m.resolveKWOKName()
+
+	m.DistributionConfig.KWOK = &clusterprovisioner.KWOKConfig{
+		Name:       clusterName,
+		ConfigPath: resolvedPath,
+	}
+
+	return nil
+}
+
+// resolveKWOKName extracts the cluster name from the configured context
+// or falls back to the default KWOK cluster name.
+func (m *ConfigManager) resolveKWOKName() string {
+	ctx := m.Config.Spec.Cluster.Connection.Context
+	if ctx != "" {
+		// KWOK context pattern: "kwok-<cluster-name>"
+		const prefix = "kwok-"
+
+		if name, ok := strings.CutPrefix(ctx, prefix); ok && name != "" {
+			return name
+		}
+	}
+
+	return "kwok-default"
 }

@@ -15,6 +15,7 @@ import (
 	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/clustererr"
 	k3dprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/k3d"
 	kindprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/kind"
+	kwokprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/kwok"
 	talosprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/talos"
 	vclusterprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/vcluster"
 	k3dv1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
@@ -49,6 +50,16 @@ type DistributionConfig struct {
 	Talos *talosconfigmanager.Configs
 	// VCluster holds the pre-loaded vCluster configuration.
 	VCluster *VClusterConfig
+	// KWOK holds the pre-loaded KWOK configuration.
+	KWOK *KWOKConfig
+}
+
+// KWOKConfig holds KWOK-specific configuration.
+type KWOKConfig struct {
+	// Name is the cluster name.
+	Name string
+	// ConfigPath is the optional path to a kwok.yaml configuration file.
+	ConfigPath string
 }
 
 // VClusterConfig holds vCluster-specific configuration.
@@ -116,6 +127,8 @@ func (f DefaultFactory) Create(
 		return f.createTalosProvisioner(cluster)
 	case v1alpha1.DistributionVCluster:
 		return f.createVClusterProvisioner(cluster)
+	case v1alpha1.DistributionKWOK:
+		return f.createKWOKProvisioner(cluster)
 	default:
 		return nil, "", fmt.Errorf(
 			"%w: %s",
@@ -370,6 +383,27 @@ func (f DefaultFactory) createVClusterProvisioner(
 	}
 
 	return provisioner, vclusterConfig, nil
+}
+
+func (f DefaultFactory) createKWOKProvisioner(
+	_ *v1alpha1.Cluster,
+) (Provisioner, any, error) {
+	if f.DistributionConfig.KWOK == nil {
+		return nil, nil, fmt.Errorf(
+			"kwok config is required for KWOK distribution: %w",
+			ErrMissingDistributionConfig,
+		)
+	}
+
+	kwokConfig := f.DistributionConfig.KWOK
+
+	provisioner := kwokprovisioner.NewProvisioner(
+		kwokConfig.Name,
+		kwokConfig.ConfigPath,
+		nil,
+	)
+
+	return provisioner, kwokConfig, nil
 }
 
 // writeK3dConfigToTempFile writes the in-memory k3d config to a temporary file.

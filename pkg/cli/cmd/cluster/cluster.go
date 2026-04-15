@@ -1694,6 +1694,12 @@ func resolveClusterNameFromContext(ctx *localregistry.Context) string {
 		}
 
 		return "vcluster-default"
+	case v1alpha1.DistributionKWOK:
+		if ctx.KWOKConfig != nil && ctx.KWOKConfig.Name != "" {
+			return ctx.KWOKConfig.Name
+		}
+
+		return "kwok-default"
 	default:
 		// Fallback to context name or default
 		if name := strings.TrimSpace(ctx.ClusterCfg.Spec.Cluster.Connection.Context); name != "" {
@@ -3632,6 +3638,10 @@ func createEmptyDistributionConfig(
 	case v1alpha1.DistributionVCluster:
 		return &clusterprovisioner.DistributionConfig{
 			VCluster: &clusterprovisioner.VClusterConfig{},
+		}
+	case v1alpha1.DistributionKWOK:
+		return &clusterprovisioner.DistributionConfig{
+			KWOK: &clusterprovisioner.KWOKConfig{},
 		}
 	default:
 		return &clusterprovisioner.DistributionConfig{

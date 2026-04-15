@@ -29,7 +29,7 @@ var (
 
 	// ErrUnknownContextPattern indicates the context name doesn't match any known distribution pattern.
 	ErrUnknownContextPattern = errors.New(
-		"unknown distribution: context does not match kind-, k3d-, admin@, or vcluster-docker_ pattern",
+		"unknown distribution: context does not match kind-, k3d-, admin@, vcluster-docker_, or kwok- pattern",
 	)
 
 	// ErrEmptyClusterName is returned when cluster name detection results in an empty string.
@@ -207,6 +207,17 @@ func DetectDistributionFromContext(contextName string) (v1alpha1.Distribution, s
 		return v1alpha1.DistributionVCluster, clusterName, nil
 	}
 
+	// KWOK: kwok-<cluster-name>
+	if clusterName, ok := strings.CutPrefix(contextName, "kwok-"); ok {
+		if clusterName == "" {
+			return "", "", fmt.Errorf(
+				"%w: context %q has empty cluster name", ErrEmptyClusterName, contextName,
+			)
+		}
+
+		return v1alpha1.DistributionKWOK, clusterName, nil
+	}
+
 	return "", "", fmt.Errorf("%w: %s", ErrUnknownContextPattern, contextName)
 }
 
@@ -256,10 +267,11 @@ func detectProviderFromEndpoint(
 	serverURL string,
 	clusterName string,
 ) (v1alpha1.Provider, error) {
-	// Kind, K3d, and VCluster always use Docker
+	// Kind, K3d, VCluster, and KWOK always use Docker
 	if distribution == v1alpha1.DistributionVanilla ||
 		distribution == v1alpha1.DistributionK3s ||
-		distribution == v1alpha1.DistributionVCluster {
+		distribution == v1alpha1.DistributionVCluster ||
+		distribution == v1alpha1.DistributionKWOK {
 		return v1alpha1.ProviderDocker, nil
 	}
 

@@ -50,6 +50,7 @@ func ValidDistributions() []Distribution {
 		DistributionK3s,
 		DistributionTalos,
 		DistributionVCluster,
+		DistributionKWOK,
 	}
 }
 

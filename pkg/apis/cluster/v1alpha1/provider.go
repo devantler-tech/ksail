@@ -62,7 +62,7 @@ func (p *Provider) ValidValues() []string {
 // supportedProviders returns the valid providers for a given distribution.
 func supportedProviders(distribution Distribution) []Provider {
 	switch distribution {
-	case DistributionVanilla, DistributionK3s, DistributionVCluster:
+	case DistributionVanilla, DistributionK3s, DistributionVCluster, DistributionKWOK:
 		return []Provider{ProviderDocker}
 	case DistributionTalos:
 		return []Provider{ProviderDocker, ProviderHetzner, ProviderOmni}
