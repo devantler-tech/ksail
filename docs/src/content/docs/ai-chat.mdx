@@ -48,7 +48,7 @@ The chat assistant supports multiple authentication methods via environment vari
 - `COPILOT_TOKEN` - General Copilot token
 - GitHub Copilot CLI authentication (default)
 
-**Note:** `GITHUB_TOKEN` and `GH_TOKEN` are intentionally filtered as they are general-purpose personal access tokens that may lack Copilot-specific scopes, which can cause authentication errors.
+**Note:** `GITHUB_TOKEN`, `GH_TOKEN`, and `COPILOT_GITHUB_TOKEN` are intentionally filtered from the Copilot CLI child process. `GITHUB_TOKEN` and `GH_TOKEN` are general-purpose GitHub tokens that may lack Copilot-specific scopes. `COPILOT_GITHUB_TOKEN`, if set by a parent process (e.g., a GitHub App) with a token lacking Copilot scopes, causes immediate startup failure — KSail filters it so the Copilot SDK can manage auth via its own mechanism. User-configurable vars like `COPILOT_CUSTOM_INSTRUCTIONS_DIRS` are preserved.
 
 ## Slash Commands
 
@@ -203,7 +203,7 @@ Press **Ctrl+N** to start a fresh conversation. Previous sessions are automatica
 
 **Timeout errors:** Increase timeout for complex operations (`--timeout 15m`).
 
-**Authentication errors:** Authenticate Copilot CLI (`copilot auth login`), use `KSAIL_COPILOT_TOKEN` or `COPILOT_TOKEN` environment variables, and avoid `GITHUB_TOKEN`/`GH_TOKEN` (may lack Copilot scopes). KSail automatically retries transient auth failures (HTTP 429, 500–504, network errors) up to 3 times with exponential backoff — `auth status check failed after N/3 attempts` messages indicate a persistent issue requiring action.
+**Authentication errors:** Authenticate Copilot CLI (`copilot auth login`) and use `KSAIL_COPILOT_TOKEN` or `COPILOT_TOKEN` environment variables for KSail chat authentication. KSail strips `GITHUB_TOKEN`, `GH_TOKEN`, and `COPILOT_GITHUB_TOKEN` from the child Copilot CLI process, so do not rely on them for `ksail chat` auth; they may still lack Copilot scopes or cause startup failures if you invoke `copilot` directly outside KSail. KSail automatically retries transient auth failures (HTTP 429, 500–504, network errors) up to 3 times with exponential backoff — `auth status check failed after N/3 attempts` messages indicate a persistent issue requiring action.
 
 ## See Also
 
