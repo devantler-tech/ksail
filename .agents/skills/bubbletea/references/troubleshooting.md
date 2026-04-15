@@ -335,7 +335,7 @@ Different terminals calculate emoji width differently (1 vs 2 cells).
    ```
 
 4. **Terminal-specific settings**
-   For WezTerm, see project's `docs/EMOJI_WIDTH_FIX.md`.
+   For WezTerm, see `references/emoji-width-fix.md`.
 
 ## Keyboard Issues
 

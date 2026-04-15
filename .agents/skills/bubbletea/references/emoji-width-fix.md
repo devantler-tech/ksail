@@ -246,7 +246,7 @@ From TFE project (reference implementation):
 - **file_operations.go:1237-1246** - `padIconToWidth()` function
 - **model.go:187-197** - Terminal type detection
 
-Full debugging session: `TFE/docs/EMOJI_DEBUG_SESSION_2.md`
+Original debugging session notes existed in the TFE project at `TFE/docs/EMOJI_DEBUG_SESSION_2.md`, but that file is not included here. This document is the self-contained reference for the relevant findings and implementation details.
 
 ---
 
