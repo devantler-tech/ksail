@@ -92,16 +92,32 @@ func WaitForInClusterAPIConnectivity(
 		deleteConnectivityPod(cleanupCtx, clientset)
 	}()
 
+	// Track the last image pull error so we can surface it specifically if
+	// all retries are exhausted. Image pull failures (e.g. Docker Hub
+	// rate-limiting, transient registry outages) are retried automatically
+	// instead of aborting immediately.
+	var lastImagePullErr error
+
 	pollErr := PollForReadiness(ctx, deadline, func(pollCtx context.Context) (bool, error) {
-		return runConnectivityTestPod(pollCtx, clientset, apiServerIP)
+		succeeded, err := runConnectivityTestPod(pollCtx, clientset, apiServerIP)
+		if err != nil && errors.Is(err, errImagePullFailure) {
+			lastImagePullErr = err
+
+			return false, nil // treat as transient; retry with a new pod
+		}
+
+		return succeeded, err
 	})
 	if pollErr != nil {
-		// If the underlying cause is an image pull failure, surface that
-		// directly without the misleading "API server not reachable" wrapper.
-		if errors.Is(pollErr, errImagePullFailure) {
+		// If polling timed out and image pull errors were observed, surface
+		// the image pull error specifically instead of the misleading "not
+		// reachable" message. When a different fatal error stopped polling
+		// (e.g. Forbidden), prefer that error over a stale image pull error.
+		if lastImagePullErr != nil &&
+			(errors.Is(pollErr, context.DeadlineExceeded) || errors.Is(pollErr, context.Canceled)) {
 			return fmt.Errorf(
 				"in-cluster API connectivity pre-flight check aborted: %w",
-				pollErr,
+				lastImagePullErr,
 			)
 		}
 

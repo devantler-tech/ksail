@@ -323,12 +323,12 @@ func TestWaitForInClusterAPIConnectivity_ImagePullFailure(t *testing.T) {
 		{
 			name:    "ImagePullBackOff",
 			reason:  "ImagePullBackOff",
-			message: "Back-off pulling image \"busybox:stable\"",
+			message: "Back-off pulling image \"busybox:1.36.1\"",
 		},
 		{
 			name:    "ErrImagePull",
 			reason:  "ErrImagePull",
-			message: "failed to pull image \"busybox:stable\"",
+			message: "failed to pull image \"busybox:1.36.1\"",
 		},
 	}
 
@@ -338,20 +338,78 @@ func TestWaitForInClusterAPIConnectivity_ImagePullFailure(t *testing.T) {
 
 			clientset := newClientsetWithImagePullFailure(testCase.reason, testCase.message)
 
+			// Image pull failures are retried until the deadline, so use a
+			// short deadline to keep the test fast.
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 
-			err := readiness.WaitForInClusterAPIConnectivity(ctx, clientset, 5*time.Second)
+			err := readiness.WaitForInClusterAPIConnectivity(ctx, clientset, 3*time.Second)
 
 			require.Error(t, err)
 			require.Contains(t, err.Error(), "image pull failed")
 			require.Contains(t, err.Error(), testCase.reason)
 			require.Contains(t, err.Error(), testCase.message)
-			require.Contains(t, err.Error(), "busybox:stable")
+			require.Contains(t, err.Error(), "busybox:1.36.1")
 			// Should NOT contain the misleading "not reachable" message.
 			require.NotContains(t, err.Error(), "not reachable from pods")
 		})
 	}
+}
+
+// TestWaitForInClusterAPIConnectivity_ImagePullRetrySucceeds verifies that
+// transient image pull failures are retried and the connectivity check
+// succeeds once the image pull succeeds on a subsequent attempt.
+func TestWaitForInClusterAPIConnectivity_ImagePullRetrySucceeds(t *testing.T) {
+	t.Parallel()
+
+	clientset := fake.NewClientset(newKubernetesService())
+
+	createCount := 0
+
+	clientset.PrependReactor(
+		"create",
+		"pods",
+		func(action k8stesting.Action) (bool, runtime.Object, error) {
+			createAction, isCreateAction := action.(k8stesting.CreateAction)
+			if !isCreateAction {
+				return false, nil, nil
+			}
+
+			pod, isPod := createAction.GetObject().(*corev1.Pod)
+			if !isPod {
+				return false, nil, nil
+			}
+
+			createCount++
+
+			if createCount <= 2 {
+				// First two attempts: simulate image pull failure.
+				pod.Status.Phase = corev1.PodPending
+				pod.Status.ContainerStatuses = []corev1.ContainerStatus{{
+					Name:  "check",
+					Image: "busybox:1.36.1",
+					State: corev1.ContainerState{
+						Waiting: &corev1.ContainerStateWaiting{
+							Reason:  "ErrImagePull",
+							Message: "transient registry error",
+						},
+					},
+				}}
+			} else {
+				// Subsequent attempts: succeed.
+				pod.Status.Phase = corev1.PodSucceeded
+			}
+
+			return false, nil, nil
+		},
+	)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	err := readiness.WaitForInClusterAPIConnectivity(ctx, clientset, 15*time.Second)
+
+	require.NoError(t, err, "transient image pull failures should be retried and succeed")
 }
 
 // newClientsetWithImagePullFailure returns a fake clientset pre-configured to
@@ -376,7 +434,7 @@ func newClientsetWithImagePullFailure(reason, message string) *fake.Clientset {
 			pod.Status.Phase = corev1.PodPending
 			pod.Status.ContainerStatuses = []corev1.ContainerStatus{{
 				Name:  "check",
-				Image: "busybox:stable",
+				Image: "busybox:1.36.1",
 				State: corev1.ContainerState{
 					Waiting: &corev1.ContainerStateWaiting{
 						Reason:  reason,
