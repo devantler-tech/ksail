@@ -59,41 +59,30 @@ kind: ClusterLogs
 metadata:
   name: default-logs
 spec:
-  selector: {}
   logs:
-    - containers:
-        - name: '*'
-      logsFile: /dev/null
+    - logsFile: /dev/null
 ---
 apiVersion: kwok.x-k8s.io/v1alpha1
 kind: ClusterExec
 metadata:
   name: default-exec
 spec:
-  selector: {}
   execs:
-    - containers:
-        - name: '*'
-      command:
-        - /bin/sh
+    - local: {}
 ---
 apiVersion: kwok.x-k8s.io/v1alpha1
 kind: ClusterAttach
 metadata:
   name: default-attach
 spec:
-  selector: {}
   attaches:
-    - containers:
-        - name: '*'
+    - {}
 ---
 apiVersion: kwok.x-k8s.io/v1alpha1
 kind: ClusterPortForward
 metadata:
   name: default-port-forward
 spec:
-  selector: {}
   forwards:
-    - ports:
-        - name: '*'
+    - {}
 `
