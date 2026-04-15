@@ -87,29 +87,13 @@ A **Go CLI** and SDK for spinning up local Kubernetes clusters with GitOps built
 
 # How It All Connects
 
-```mermaid
-flowchart TD
-    A["🗺️ Weekly Strategy\nMarket research → Now / Next / Later Roadmap"] --> B
-    B["📋 Repo Assist\nRoadmap → Issues → Draft PRs"] --> C
-    C["⚙️ CI Pipeline\nLint → Build → Unit Tests → E2E → Benchmarks"] --> D
-    D["👨‍💻 Me: Promote Draft → In Review"] --> E
-    E["🤖 Agent Merge via Skills\nRebase, fix CI, address review, merge"]
-```
+![Pipeline](https://mermaid.ink/img/Zmxvd2NoYXJ0IFRECiAgICBBWyJXZWVrbHkgU3RyYXRlZ3k8YnI-TWFya2V0IHJlc2VhcmNoIC0gTm93IC8gTmV4dCAvIExhdGVyIFJvYWRtYXAiXSAtLT4gQgogICAgQlsiUmVwbyBBc3Npc3Q8YnI-Um9hZG1hcCAtIElzc3VlcyAtIERyYWZ0IFBScyJdIC0tPiBDCiAgICBDWyJDSSBQaXBlbGluZTxicj5MaW50IC0gQnVpbGQgLSBVbml0IFRlc3RzIC0gRTJFIC0gQmVuY2htYXJrcyJdIC0tPiBECiAgICBEWyJNZTogUHJvbW90ZSBEcmFmdCB0byBJbiBSZXZpZXciXSAtLT4gRQogICAgRVsiQWdlbnQgTWVyZ2UgdmlhIFNraWxsczxicj5SZWJhc2UsIGZpeCBDSSwgYWRkcmVzcyByZXZpZXcsIG1lcmdlIl0=)
 
 ---
 
 # AI Guardrails
 
-```mermaid
-flowchart TD
-    A["🚨 Agent opens PR"] --> B
-    B["🛡️ GHAS Security & CodeQL\n(vulnerability scanning)"] --> C
-    C["🔒 StepSecurity\n(egress policy auditing)"] --> D
-    D["🧹 Linting\nMegaLinter + golangci-lint"] --> E
-    E["🧪 Unit Test Suite\ngo test ./... + Codecov"] --> F
-    F["🚀 E2E / System Test Suite\nKind × K3d × Talos × VCluster"] --> G
-    G["✅ Agent Merge via Skills\nRebase, fix, merge"]
-```
+![Guardrails](https://mermaid.ink/img/Zmxvd2NoYXJ0IFRECiAgICBBWyJBZ2VudCBvcGVucyBQUiJdIC0tPiBCCiAgICBCWyJHSEFTIFNlY3VyaXR5IGFuZCBDb2RlUUw8YnI-dnVsbmVyYWJpbGl0eSBzY2FubmluZyJdIC0tPiBDCiAgICBDWyJTdGVwU2VjdXJpdHk8YnI-ZWdyZXNzIHBvbGljeSBhdWRpdGluZyJdIC0tPiBECiAgICBEWyJMaW50aW5nPGJyPk1lZ2FMaW50ZXIgKyBnb2xhbmdjaS1saW50Il0gLS0-IEUKICAgIEVbIlVuaXQgVGVzdCBTdWl0ZTxicj5nbyB0ZXN0IC4vLi4uICsgQ29kZWNvdiJdIC0tPiBGCiAgICBGWyJFMkUgLyBTeXN0ZW0gVGVzdCBTdWl0ZTxicj5LaW5kIHggSzNkIHggVGFsb3MgeCBWQ2x1c3RlciJdIC0tPiBHCiAgICBHWyJBZ2VudCBNZXJnZSB2aWEgU2tpbGxzPGJyPlJlYmFzZSwgZml4LCBtZXJnZSJd)
 
 *Every layer must pass before an agent PR can merge.*
 
