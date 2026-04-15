@@ -301,13 +301,13 @@ func (m *ConfigManager) cacheKWOKConfig() error {
 // resolveKWOKName extracts the cluster name from the configured context
 // or falls back to the default KWOK cluster name.
 func (m *ConfigManager) resolveKWOKName() string {
-	ctx := m.Config.Spec.Cluster.Connection.Context
+	ctx := strings.TrimSpace(m.Config.Spec.Cluster.Connection.Context)
 	if ctx != "" {
 		// KWOK context pattern: "kwok-<cluster-name>"
 		const prefix = "kwok-"
 
 		if name, ok := strings.CutPrefix(ctx, prefix); ok && name != "" {
-			return name
+			return strings.TrimSpace(name)
 		}
 	}
 

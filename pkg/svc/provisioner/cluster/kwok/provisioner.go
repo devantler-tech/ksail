@@ -3,7 +3,6 @@ package kwokprovisioner
 import (
 	"context"
 	"fmt"
-	"io"
 	"os"
 	"slices"
 	"sync"
@@ -49,8 +48,6 @@ type Provisioner struct {
 	configPath    string
 	infraProvider provider.Provider
 	runner        runner.CommandRunner
-	stdout        io.Writer
-	stderr        io.Writer
 }
 
 // NewProvisioner creates a new KWOK provisioner.
@@ -65,8 +62,6 @@ func NewProvisioner(
 		configPath:    configPath,
 		infraProvider: infraProvider,
 		runner:        runner.NewCobraCommandRunner(os.Stdout, os.Stderr),
-		stdout:        os.Stdout,
-		stderr:        os.Stderr,
 	}
 }
 

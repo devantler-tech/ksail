@@ -506,7 +506,7 @@ const kwokContainerPrefix = "kwok-"
 // kwokComponentSuffixes lists the known component suffixes used by kwokctl.
 //
 //nolint:gochecknoglobals // read-only lookup table; avoids per-call allocation.
-var kwokComponentSuffixes = [...]string{
+var kwokComponentSuffixes = []string{
 	"-etcd",
 	"-kube-apiserver",
 	"-kube-controller-manager",
