@@ -75,13 +75,15 @@ func resolveClusterName(
 		}
 
 		return "vcluster-default"
-	default:
+	case v1alpha1.DistributionKWOK:
 		if name := strings.TrimSpace(clusterCfg.Spec.Cluster.Connection.Context); name != "" {
-			return name
+			return strings.TrimPrefix(name, "kwok-")
 		}
 
-		return "ksail"
+		return "kwok-default"
 	}
+
+	return "ksail"
 }
 
 func resolveNetworkName(
@@ -112,6 +114,13 @@ func resolveNetworkName(
 		}
 
 		return "vcluster." + trimmed
+	case v1alpha1.DistributionKWOK:
+		trimmed := strings.TrimSpace(clusterName)
+		if trimmed == "" {
+			trimmed = "kwok-default"
+		}
+
+		return "kwok-" + trimmed
 	default:
 		return ""
 	}

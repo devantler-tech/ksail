@@ -77,7 +77,7 @@ const (
 // the network flapping seen in cloud environments.
 func apiServerStabilitySuccesses(dist v1alpha1.Distribution, prov v1alpha1.Provider) int {
 	switch dist {
-	case v1alpha1.DistributionVanilla, v1alpha1.DistributionK3s:
+	case v1alpha1.DistributionVanilla, v1alpha1.DistributionK3s, v1alpha1.DistributionKWOK:
 		return apiServerStabilitySuccessesFast
 	case v1alpha1.DistributionTalos:
 		if prov == v1alpha1.ProviderDocker || prov == "" {

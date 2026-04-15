@@ -39,10 +39,10 @@ func TestResolveClusterName(t *testing.T) {
 			expected:     "k3d-default",
 		},
 		{
-			name:         "default fallback uses context",
+			name:         "default fallback with unknown distribution returns ksail",
 			distribution: v1alpha1.Distribution("unsupported"),
 			context:      "my-context",
-			expected:     "my-context",
+			expected:     "ksail",
 		},
 		{
 			name:         "default fallback with empty context returns ksail",
