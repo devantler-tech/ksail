@@ -206,6 +206,28 @@ func startCopilotClient(ctx context.Context) (*copilot.Client, error) {
 		Env:      filterEnvVars(os.Environ(), filteredEnvVars),
 	}
 
+	// Resolve CLI path explicitly so we get a clear error if it's missing,
+	// rather than the opaque "CLI process exited: exit status 1" from the SDK.
+	// This checks COPILOT_CLI_PATH, the SDK cache directory, and system PATH.
+	//
+	// When COPILOT_CLI_PATH is explicitly set, errors are fatal: the user
+	// expects that specific binary to be used. Otherwise, resolution failures
+	// are ignored so the SDK can try its own resolution (embedded CLI → PATH
+	// fallback) for forward compatibility.
+	cliPath, pathErr := resolveCopilotCLIPath()
+	if pathErr != nil && os.Getenv("COPILOT_CLI_PATH") != "" {
+		return nil, pathErr
+	}
+
+	if pathErr == nil {
+		verifyErr := verifyCopilotCLI(ctx, cliPath, opts.Env)
+		if verifyErr != nil {
+			return nil, verifyErr
+		}
+
+		opts.CLIPath = cliPath
+	}
+
 	cwd, cwdErr := os.Getwd()
 	if cwdErr == nil {
 		opts.Cwd = cwd
@@ -226,12 +248,41 @@ func startCopilotClient(ctx context.Context) (*copilot.Client, error) {
 		return nil, fmt.Errorf(
 			"failed to start Copilot client: %w\n\n"+
 				"To fix:\n"+
-				"  - Set KSAIL_COPILOT_TOKEN or COPILOT_TOKEN for token-based authentication",
+				"  - Set KSAIL_COPILOT_TOKEN or COPILOT_TOKEN for token-based authentication\n"+
+				"  - Install the Copilot CLI: npm install -g @github/copilot\n"+
+				"  - Verify the CLI works: copilot --version",
 			err,
 		)
 	}
 
 	return client, nil
+}
+
+// verifyCopilotCLI runs a quick version check on the resolved copilot binary
+// to catch common issues (missing binary, corrupt install, wrong binary)
+// before the SDK attempts a full startup. The provided env is used so the
+// pre-flight check matches the filtered environment the SDK will use.
+func verifyCopilotCLI(ctx context.Context, cliPath string, env []string) error {
+	const verifyTimeout = 5 * time.Second
+
+	verifyCtx, cancel := context.WithTimeout(ctx, verifyTimeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(verifyCtx, cliPath, "--version")
+	cmd.Env = env
+
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf(
+			"copilot CLI at %q failed pre-flight check: %w (output: %s)\n\n"+
+				"To fix:\n"+
+				"  - Install or reinstall the Copilot CLI: npm install -g @github/copilot\n"+
+				"  - Or set COPILOT_CLI_PATH to a working copilot binary",
+			cliPath, err, strings.TrimSpace(string(output)),
+		)
+	}
+
+	return nil
 }
 
 // filterEnvVars returns a copy of env with the specified variable names removed.
