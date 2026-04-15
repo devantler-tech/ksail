@@ -209,9 +209,16 @@ func startCopilotClient(ctx context.Context) (*copilot.Client, error) {
 	// Resolve CLI path explicitly so we get a clear error if it's missing,
 	// rather than the opaque "CLI process exited: exit status 1" from the SDK.
 	// This checks COPILOT_CLI_PATH, the SDK cache directory, and system PATH.
-	// If resolution fails, omit CLIPath and let the SDK try its own resolution
-	// (embedded CLI → PATH fallback) for forward compatibility.
+	//
+	// When COPILOT_CLI_PATH is explicitly set, errors are fatal: the user
+	// expects that specific binary to be used. Otherwise, resolution failures
+	// are ignored so the SDK can try its own resolution (embedded CLI → PATH
+	// fallback) for forward compatibility.
 	cliPath, pathErr := resolveCopilotCLIPath()
+	if pathErr != nil && os.Getenv("COPILOT_CLI_PATH") != "" {
+		return nil, pathErr
+	}
+
 	if pathErr == nil {
 		verifyErr := verifyCopilotCLI(ctx, cliPath)
 		if verifyErr != nil {
