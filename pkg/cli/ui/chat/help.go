@@ -21,6 +21,7 @@ const (
 	keyCtrlC     = "ctrl+c"
 	keyDown      = "down"
 	keyBackspace = "backspace"
+	keyTab       = "tab"
 
 	// UI dimension constants.
 	modalPadding   = 2 // border width subtracted from terminal width
