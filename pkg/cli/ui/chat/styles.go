@@ -9,6 +9,7 @@ import (
 // ANSI color constants for picker and modal styling.
 // These are standard terminal colors used as UI affordances (selected, warning, etc.).
 const (
+	ansiBlack  = 0
 	ansiGray   = 8
 	ansiGreen  = 10
 	ansiYellow = 11

@@ -37,6 +37,8 @@ func (m *Model) activeModalHeight() int {
 		return m.helpOverlayExtraHeight()
 	case m.pendingPermission != nil:
 		return m.permissionModalExtraHeight()
+	case m.pendingElicitation != nil:
+		return m.elicitationModalExtraHeight()
 	case m.showModelPicker || m.showSessionPicker || m.showReasoningPicker:
 		return m.pickerModalExtraHeight()
 	default:
@@ -53,6 +55,33 @@ func (m *Model) permissionModalExtraHeight() int {
 
 	if m.pendingPermission.arguments != "" {
 		contentLines++
+	}
+
+	if contentLines > inputHeight {
+		return contentLines - inputHeight
+	}
+
+	return 0
+}
+
+// elicitationModalExtraHeight calculates the extra height for the elicitation modal.
+func (m *Model) elicitationModalExtraHeight() int {
+	if m.pendingElicitation == nil {
+		return 0
+	}
+
+	// title (2) + message (2 if present) + URL (2 if present) + fields + field spacing + instructions (1) + border (2)
+	contentLines := 2 + 1 + pickerBorderLines //nolint:mnd // title+blank + instructions + border
+	if m.pendingElicitation.request.Message != "" {
+		contentLines += 2
+	}
+
+	if m.pendingElicitation.request.Mode == "url" && m.pendingElicitation.request.URL != "" {
+		contentLines += 2
+	}
+
+	if len(m.pendingElicitation.fields) > 0 {
+		contentLines += len(m.pendingElicitation.fields) + 1 // fields + trailing blank
 	}
 
 	if contentLines > inputHeight {
