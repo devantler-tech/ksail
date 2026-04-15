@@ -14,7 +14,7 @@
     "copilot-sdk": {
       "source": "github/awesome-copilot",
       "sourceType": "github",
-      "computedHash": "c18b24fbb034c7f2ef74ab9349bbb35d84d19480c1f5f8f7a5a81451816180f3"
+      "computedHash": "a20ada9f379ba4895ff36a53d9b390feab2c1b3ec8a2f14b62d9ef52c02567f0"
     },
     "find-skills": {
       "source": "vercel-labs/skills",
