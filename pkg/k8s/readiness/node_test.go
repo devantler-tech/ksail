@@ -41,7 +41,7 @@ func TestWaitForNodeReady_NodeNotReady(t *testing.T) {
 		},
 	})
 
-	err := readiness.WaitForNodeReady(context.Background(), clientset, 3*time.Second)
+	err := readiness.WaitForNodeReady(context.Background(), clientset, 100*time.Millisecond)
 	assert.Error(t, err)
 }
 
@@ -50,7 +50,7 @@ func TestWaitForNodeReady_NoNodes(t *testing.T) {
 
 	clientset := fake.NewClientset()
 
-	err := readiness.WaitForNodeReady(context.Background(), clientset, 3*time.Second)
+	err := readiness.WaitForNodeReady(context.Background(), clientset, 100*time.Millisecond)
 	assert.Error(t, err)
 }
 
@@ -63,5 +63,94 @@ func TestWaitForNodeReady_ContextCancelled(t *testing.T) {
 	cancel()
 
 	err := readiness.WaitForNodeReady(ctx, clientset, 5*time.Second)
+	assert.Error(t, err)
+}
+
+func TestWaitForAllNodesReady_AllReady(t *testing.T) {
+	t.Parallel()
+
+	clientset := fake.NewClientset(
+		&corev1.Node{
+			ObjectMeta: metav1.ObjectMeta{Name: "control-plane"},
+			Status: corev1.NodeStatus{
+				Conditions: []corev1.NodeCondition{
+					{Type: corev1.NodeReady, Status: corev1.ConditionTrue},
+				},
+			},
+		},
+		&corev1.Node{
+			ObjectMeta: metav1.ObjectMeta{Name: "worker-1"},
+			Status: corev1.NodeStatus{
+				Conditions: []corev1.NodeCondition{
+					{Type: corev1.NodeReady, Status: corev1.ConditionTrue},
+				},
+			},
+		},
+	)
+
+	err := readiness.WaitForAllNodesReady(context.Background(), clientset, 5*time.Second)
+	require.NoError(t, err)
+}
+
+func TestWaitForAllNodesReady_OneNotReady(t *testing.T) {
+	t.Parallel()
+
+	clientset := fake.NewClientset(
+		&corev1.Node{
+			ObjectMeta: metav1.ObjectMeta{Name: "control-plane"},
+			Status: corev1.NodeStatus{
+				Conditions: []corev1.NodeCondition{
+					{Type: corev1.NodeReady, Status: corev1.ConditionTrue},
+				},
+			},
+		},
+		&corev1.Node{
+			ObjectMeta: metav1.ObjectMeta{Name: "worker-1"},
+			Status: corev1.NodeStatus{
+				Conditions: []corev1.NodeCondition{
+					{Type: corev1.NodeReady, Status: corev1.ConditionFalse},
+				},
+			},
+		},
+	)
+
+	err := readiness.WaitForAllNodesReady(context.Background(), clientset, 100*time.Millisecond)
+	assert.Error(t, err)
+}
+
+func TestWaitForAllNodesReady_NoNodes(t *testing.T) {
+	t.Parallel()
+
+	clientset := fake.NewClientset()
+
+	err := readiness.WaitForAllNodesReady(context.Background(), clientset, 100*time.Millisecond)
+	assert.Error(t, err)
+}
+
+func TestWaitForAllNodesReady_SingleNode(t *testing.T) {
+	t.Parallel()
+
+	clientset := fake.NewClientset(&corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{Name: "kind-control-plane"},
+		Status: corev1.NodeStatus{
+			Conditions: []corev1.NodeCondition{
+				{Type: corev1.NodeReady, Status: corev1.ConditionTrue},
+			},
+		},
+	})
+
+	err := readiness.WaitForAllNodesReady(context.Background(), clientset, 5*time.Second)
+	require.NoError(t, err)
+}
+
+func TestWaitForAllNodesReady_ContextCancelled(t *testing.T) {
+	t.Parallel()
+
+	clientset := fake.NewClientset()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err := readiness.WaitForAllNodesReady(ctx, clientset, 5*time.Second)
 	assert.Error(t, err)
 }
