@@ -92,6 +92,75 @@ func TestMetricsServerInstallerInstallAddRepositoryError(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to add metrics-server repository")
 }
 
+func TestMetricsServerInstallerVClusterValuesYaml(t *testing.T) {
+	t.Parallel()
+
+	timeout := 5 * time.Second
+
+	client := helm.NewMockInterface(t)
+	installer := metricsserverinstaller.NewInstallerWithDistribution(client, timeout, v1alpha1.DistributionVCluster)
+	client.EXPECT().AddRepository(mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	client.EXPECT().
+		InstallOrUpgradeChart(mock.Anything, mock.MatchedBy(func(spec *helm.ChartSpec) bool {
+			assert.Contains(t, spec.ValuesYaml, "--kubelet-insecure-tls",
+				"VCluster should include kubelet-insecure-tls due to self-signed certificates")
+			assert.Contains(t, spec.ValuesYaml, "--kubelet-preferred-address-types=InternalIP",
+				"all distributions should use InternalIP for node communication")
+
+			return true
+		})).
+		Return(nil, nil)
+
+	err := installer.Install(context.Background())
+	require.NoError(t, err)
+}
+
+func TestMetricsServerInstallerVanillaValuesYaml(t *testing.T) {
+	t.Parallel()
+
+	timeout := 5 * time.Second
+
+	client := helm.NewMockInterface(t)
+	installer := metricsserverinstaller.NewInstallerWithDistribution(client, timeout, v1alpha1.DistributionVanilla)
+	client.EXPECT().AddRepository(mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	client.EXPECT().
+		InstallOrUpgradeChart(mock.Anything, mock.MatchedBy(func(spec *helm.ChartSpec) bool {
+			assert.NotContains(t, spec.ValuesYaml, "--kubelet-insecure-tls",
+				"Vanilla should not include kubelet-insecure-tls")
+			assert.Contains(t, spec.ValuesYaml, "--kubelet-preferred-address-types=InternalIP",
+				"all distributions should use InternalIP for node communication")
+
+			return true
+		})).
+		Return(nil, nil)
+
+	err := installer.Install(context.Background())
+	require.NoError(t, err)
+}
+
+func TestMetricsServerInstallerK3sValuesYaml(t *testing.T) {
+	t.Parallel()
+
+	timeout := 5 * time.Second
+
+	client := helm.NewMockInterface(t)
+	installer := metricsserverinstaller.NewInstallerWithDistribution(client, timeout, v1alpha1.DistributionK3s)
+	client.EXPECT().AddRepository(mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	client.EXPECT().
+		InstallOrUpgradeChart(mock.Anything, mock.MatchedBy(func(spec *helm.ChartSpec) bool {
+			assert.NotContains(t, spec.ValuesYaml, "--kubelet-insecure-tls",
+				"K3s should not include kubelet-insecure-tls")
+			assert.Contains(t, spec.ValuesYaml, "--kubelet-preferred-address-types=InternalIP",
+				"all distributions should use InternalIP for node communication")
+
+			return true
+		})).
+		Return(nil, nil)
+
+	err := installer.Install(context.Background())
+	require.NoError(t, err)
+}
+
 func newMetricsServerInstallerWithDefaults(
 	t *testing.T,
 ) (*metricsserverinstaller.Installer, *helm.MockInterface) {
