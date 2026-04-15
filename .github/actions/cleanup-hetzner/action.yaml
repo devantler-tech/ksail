@@ -1,7 +1,8 @@
 name: Cleanup Hetzner Resources
 description: |
-  Deletes all Hetzner Cloud resources labeled with ksail.owned=true to ensure clean slate
-  for next CI run, even if individual test jobs fail to clean up after themselves.
+  Deletes Hetzner Cloud resources matching the given label selector to ensure
+  clean slate for next CI run, even if individual test jobs fail to clean up
+  after themselves.
 
 inputs:
   label-selector:
