@@ -215,6 +215,10 @@ func ExtractClusterNameFromContext(context string, distribution v1alpha1.Distrib
 		if clusterName, ok := strings.CutPrefix(context, "vcluster-docker_"); ok {
 			return clusterName
 		}
+	case v1alpha1.DistributionKWOK:
+		if clusterName, ok := strings.CutPrefix(context, "kwok-"); ok {
+			return clusterName
+		}
 	}
 
 	return ""

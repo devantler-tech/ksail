@@ -62,6 +62,12 @@ type KWOKConfig struct {
 	ConfigPath string
 }
 
+// GetClusterName returns the KWOK cluster name.
+// This implements the ClusterNameProvider interface used by configmanager.GetClusterName.
+func (c *KWOKConfig) GetClusterName() string {
+	return c.Name
+}
+
 // VClusterConfig holds vCluster-specific configuration.
 type VClusterConfig struct {
 	// Name is the cluster name.
