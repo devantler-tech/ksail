@@ -26,7 +26,7 @@ func (s *Scaffolder) generateKWOKConfig(output string, force bool) error {
 		return nil
 	}
 
-	content := []byte(kwokDefaultConfig)
+	content := []byte(KWOKDefaultSimulationConfig)
 
 	err := os.WriteFile(configPath, content, filePerm)
 	if err != nil {
@@ -45,10 +45,12 @@ func (s *Scaffolder) generateKWOKConfig(output string, force bool) error {
 	return nil
 }
 
-// kwokDefaultConfig contains the default KWOK configuration YAML.
+// KWOKDefaultSimulationConfig contains the default KWOK configuration YAML.
 // It configures the four Cluster-level CRDs that KWOK does NOT provide by default,
 // enabling kubectl logs, exec, attach, and port-forward to work out of the box.
-const kwokDefaultConfig = `# KWOK cluster simulation configuration.
+// Used by both the scaffolder (ksail cluster init) and the provisioner (in-memory
+// fallback when no kwok.yaml is provided).
+const KWOKDefaultSimulationConfig = `# KWOK cluster simulation configuration.
 # These CRDs enable kubectl logs, exec, attach, and port-forward for simulated pods.
 # See https://kwok.sigs.k8s.io/docs/user/ for available options.
 ---

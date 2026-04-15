@@ -8,10 +8,12 @@ import (
 	"slices"
 	"sync"
 
+	"github.com/spf13/pflag"
+
+	"github.com/devantler-tech/ksail/v6/pkg/fsutil/scaffolder"
 	runner "github.com/devantler-tech/ksail/v6/pkg/runner"
 	"github.com/devantler-tech/ksail/v6/pkg/svc/provider"
 	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/clustererr"
-	"github.com/spf13/pflag"
 	"sigs.k8s.io/kwok/pkg/config"
 	createcluster "sigs.k8s.io/kwok/pkg/kwokctl/cmd/create/cluster"
 	deletecluster "sigs.k8s.io/kwok/pkg/kwokctl/cmd/delete/cluster"
@@ -325,7 +327,7 @@ func (p *Provisioner) resolveConfigPath() (string, func(), error) {
 
 	tmpName := tmpFile.Name()
 
-	_, writeErr := tmpFile.WriteString(defaultSimulationConfig)
+	_, writeErr := tmpFile.WriteString(scaffolder.KWOKDefaultSimulationConfig)
 	if writeErr != nil {
 		_ = tmpFile.Close()
 		_ = os.Remove(tmpName)
@@ -344,50 +346,3 @@ func (p *Provisioner) resolveConfigPath() (string, func(), error) {
 
 	return tmpName, cleanup, nil
 }
-
-// defaultSimulationConfig contains the KWOK simulation CRDs that are NOT
-// provided by KWOK by default. These enable kubectl logs, exec, attach,
-// and port-forward to work out of the box on simulated pods.
-const defaultSimulationConfig = `apiVersion: kwok.x-k8s.io/v1alpha1
-kind: ClusterLogs
-metadata:
-  name: default-logs
-spec:
-  selector: {}
-  logs:
-    - containers:
-        - name: '*'
-      logsFile: /dev/null
----
-apiVersion: kwok.x-k8s.io/v1alpha1
-kind: ClusterExec
-metadata:
-  name: default-exec
-spec:
-  selector: {}
-  execs:
-    - containers:
-        - name: '*'
-      command:
-        - /bin/sh
----
-apiVersion: kwok.x-k8s.io/v1alpha1
-kind: ClusterAttach
-metadata:
-  name: default-attach
-spec:
-  selector: {}
-  attaches:
-    - containers:
-        - name: '*'
----
-apiVersion: kwok.x-k8s.io/v1alpha1
-kind: ClusterPortForward
-metadata:
-  name: default-port-forward
-spec:
-  selector: {}
-  forwards:
-    - ports:
-        - name: '*'
-`

@@ -928,7 +928,7 @@ func generateDistributionContent(
 	case v1alpha1.DistributionVCluster:
 		// VCluster doesn't have a separate distribution config file to snapshot
 	case v1alpha1.DistributionKWOK:
-		// KWOK config is snapshoted via the scaffolder's kwok.yaml generation
+		// KWOK config is snapshotted via the scaffolder's kwok.yaml generation
 	}
 }
 
