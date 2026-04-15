@@ -109,9 +109,12 @@ func WaitForInClusterAPIConnectivity(
 		return succeeded, err
 	})
 	if pollErr != nil {
-		// If the last attempt failed because of an image pull error, surface
-		// that specifically instead of the misleading "not reachable" message.
-		if lastImagePullErr != nil {
+		// If polling timed out and image pull errors were observed, surface
+		// the image pull error specifically instead of the misleading "not
+		// reachable" message. When a different fatal error stopped polling
+		// (e.g. Forbidden), prefer that error over a stale image pull error.
+		if lastImagePullErr != nil &&
+			(errors.Is(pollErr, context.DeadlineExceeded) || errors.Is(pollErr, context.Canceled)) {
 			return fmt.Errorf(
 				"in-cluster API connectivity pre-flight check aborted: %w",
 				lastImagePullErr,

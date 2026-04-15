@@ -323,12 +323,12 @@ func TestWaitForInClusterAPIConnectivity_ImagePullFailure(t *testing.T) {
 		{
 			name:    "ImagePullBackOff",
 			reason:  "ImagePullBackOff",
-			message: "Back-off pulling image \"busybox:stable\"",
+			message: "Back-off pulling image \"busybox:1.36.1\"",
 		},
 		{
 			name:    "ErrImagePull",
 			reason:  "ErrImagePull",
-			message: "failed to pull image \"busybox:stable\"",
+			message: "failed to pull image \"busybox:1.36.1\"",
 		},
 	}
 
@@ -349,7 +349,7 @@ func TestWaitForInClusterAPIConnectivity_ImagePullFailure(t *testing.T) {
 			require.Contains(t, err.Error(), "image pull failed")
 			require.Contains(t, err.Error(), testCase.reason)
 			require.Contains(t, err.Error(), testCase.message)
-			require.Contains(t, err.Error(), "busybox:stable")
+			require.Contains(t, err.Error(), "busybox:1.36.1")
 			// Should NOT contain the misleading "not reachable" message.
 			require.NotContains(t, err.Error(), "not reachable from pods")
 		})
@@ -434,7 +434,7 @@ func newClientsetWithImagePullFailure(reason, message string) *fake.Clientset {
 			pod.Status.Phase = corev1.PodPending
 			pod.Status.ContainerStatuses = []corev1.ContainerStatus{{
 				Name:  "check",
-				Image: "busybox:stable",
+				Image: "busybox:1.36.1",
 				State: corev1.ContainerState{
 					Waiting: &corev1.ContainerStateWaiting{
 						Reason:  reason,
