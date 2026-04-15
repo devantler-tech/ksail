@@ -197,21 +197,15 @@ func (p *Provisioner) isDockerProvider() bool {
 	return ok
 }
 
-// dockerPreBootSequenceChecks returns a trimmed set of pre-boot sequence checks
-// optimized for Docker environments. It skips purely diagnostic checks
-// (AllNodesMemorySizes, AllNodesDiskSizes, NoDiagnostics) that add polling
-// overhead without catching real issues in Docker containers, where resources
-// are always consistent.
-func dockerPreBootSequenceChecks() []check.ClusterCheck {
+// dockerEtcdChecks returns the etcd-related pre-boot checks for Docker environments.
+func dockerEtcdChecks() []check.ClusterCheck {
+	cpTypes := check.WithNodeTypes(machine.TypeInit, machine.TypeControlPlane)
 	return []check.ClusterCheck{
 		func(cluster check.ClusterInfo) conditions.Condition {
 			return conditions.PollingCondition(
 				"etcd to be healthy",
 				func(ctx context.Context) error {
-					return check.ServiceHealthAssertion(
-						ctx, cluster, "etcd",
-						check.WithNodeTypes(machine.TypeInit, machine.TypeControlPlane),
-					)
+					return check.ServiceHealthAssertion(ctx, cluster, "etcd", cpTypes)
 				},
 				preBootPollInterval,
 			)
@@ -234,6 +228,18 @@ func dockerPreBootSequenceChecks() []check.ClusterCheck {
 				preBootPollInterval,
 			)
 		},
+	}
+}
+
+// dockerPreBootSequenceChecks returns a trimmed set of pre-boot sequence checks
+// optimized for Docker environments. It skips purely diagnostic checks
+// (AllNodesMemorySizes, AllNodesDiskSizes, NoDiagnostics) that add polling
+// overhead without catching real issues in Docker containers, where resources
+// are always consistent.
+func dockerPreBootSequenceChecks() []check.ClusterCheck {
+	allNodeTypes := check.WithNodeTypes(machine.TypeInit, machine.TypeControlPlane, machine.TypeWorker)
+	return append(
+		dockerEtcdChecks(),
 		func(cluster check.ClusterInfo) conditions.Condition {
 			return conditions.PollingCondition("apid to be ready", func(ctx context.Context) error {
 				return check.ApidReadyAssertion(ctx, cluster)
@@ -243,33 +249,16 @@ func dockerPreBootSequenceChecks() []check.ClusterCheck {
 		// AllNodesDiskSizes — skipped: diagnostic-only, Docker containers have consistent resources
 		// NoDiagnostics — skipped: informational-only, not a readiness gate
 		func(cluster check.ClusterInfo) conditions.Condition {
-			return conditions.PollingCondition(
-				"kubelet to be healthy",
-				func(ctx context.Context) error {
-					return check.ServiceHealthAssertion(
-						ctx,
-						cluster,
-						"kubelet",
-						check.WithNodeTypes(
-							machine.TypeInit,
-							machine.TypeControlPlane,
-							machine.TypeWorker,
-						),
-					)
-				},
-				preBootPollInterval,
-			)
+			return conditions.PollingCondition("kubelet to be healthy", func(ctx context.Context) error {
+				return check.ServiceHealthAssertion(ctx, cluster, "kubelet", allNodeTypes)
+			}, preBootPollInterval)
 		},
 		func(cluster check.ClusterInfo) conditions.Condition {
-			return conditions.PollingCondition(
-				"all nodes to finish boot sequence",
-				func(ctx context.Context) error {
-					return check.AllNodesBootedAssertion(ctx, cluster)
-				},
-				preBootPollInterval,
-			)
+			return conditions.PollingCondition("all nodes to finish boot sequence", func(ctx context.Context) error {
+				return check.AllNodesBootedAssertion(ctx, cluster)
+			}, preBootPollInterval)
 		},
-	}
+	)
 }
 
 // clusterReadinessChecks returns the appropriate set of cluster readiness checks
