@@ -92,6 +92,17 @@ func TestMetricsServerInstallerInstallAddRepositoryError(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to add metrics-server repository")
 }
 
+func TestMetricsServerInstallerInstallVClusterSuccess(t *testing.T) {
+	t.Parallel()
+
+	installer, client := newMetricsServerInstallerWithDistribution(t, v1alpha1.DistributionVCluster)
+	expectMetricsServerInstallVCluster(t, client, nil)
+
+	err := installer.Install(context.Background())
+
+	require.NoError(t, err)
+}
+
 func newMetricsServerInstallerWithDefaults(
 	t *testing.T,
 ) (*metricsserverinstaller.Installer, *helm.MockInterface) {
@@ -103,6 +114,24 @@ func newMetricsServerInstallerWithDefaults(
 	installer := metricsserverinstaller.NewInstaller(
 		client,
 		timeout,
+	)
+
+	return installer, client
+}
+
+func newMetricsServerInstallerWithDistribution(
+	t *testing.T,
+	distribution v1alpha1.Distribution,
+) (*metricsserverinstaller.Installer, *helm.MockInterface) {
+	t.Helper()
+
+	timeout := 5 * time.Second
+
+	client := helm.NewMockInterface(t)
+	installer := metricsserverinstaller.NewInstallerWithDistribution(
+		client,
+		timeout,
+		distribution,
 	)
 
 	return installer, client
@@ -146,6 +175,29 @@ func expectMetricsServerInstall(
 				assert.True(t, spec.Atomic)
 				assert.True(t, spec.Wait)
 				assert.True(t, spec.WaitForJobs)
+				assert.Contains(t, spec.ValuesYaml, "--authentication-tolerate-lookup-failure=true")
+				assert.NotContains(t, spec.ValuesYaml, "--kubelet-insecure-tls")
+
+				return true
+			}),
+		).
+		Return(nil, installErr)
+}
+
+func expectMetricsServerInstallVCluster(
+	t *testing.T,
+	client *helm.MockInterface,
+	installErr error,
+) {
+	t.Helper()
+	expectMetricsServerAddRepository(t, client, nil)
+	client.EXPECT().
+		InstallOrUpgradeChart(
+			mock.Anything,
+			mock.MatchedBy(func(spec *helm.ChartSpec) bool {
+				assert.Equal(t, "metrics-server", spec.ReleaseName)
+				assert.Contains(t, spec.ValuesYaml, "--authentication-tolerate-lookup-failure=true")
+				assert.Contains(t, spec.ValuesYaml, "--kubelet-insecure-tls")
 
 				return true
 			}),
