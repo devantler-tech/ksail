@@ -100,6 +100,14 @@ runs:
         # Source of truth: pkg/svc/installer/flux/Dockerfile.distribution
         grep '^FROM ' pkg/svc/installer/flux/Dockerfile.distribution | sed 's/^FROM //' >> "$IMAGES_FILE"
 
+        # Append KWOK control plane images pulled by kwokctl on the host Docker daemon.
+        # kwokctl calls "docker inspect <image>" first and skips the pull if the image
+        # already exists locally. Pre-pulling via mirror and saving with docker save/load
+        # ensures KWOK clusters are created without hitting registry.k8s.io rate limits
+        # when many KWOK system tests run in parallel. See issue #4058.
+        # Source of truth: pkg/svc/provisioner/cluster/kwok/Dockerfile.controlplane
+        grep '^FROM ' pkg/svc/provisioner/cluster/kwok/Dockerfile.controlplane | sed 's/^FROM //' >> "$IMAGES_FILE"
+
         # Append CI test workload images that are not part of any cluster component
         # but are used by ksail-test-workload, ksail-test-backup-restore,
         # ksail-test-workload-watch, and the in-cluster API connectivity pre-flight
@@ -171,9 +179,10 @@ runs:
           if [ -f "/tmp/mirror-cache/docker.io.tar" ] && \
              [ -f "/tmp/mirror-cache/ghcr.io.tar" ] && \
              [ -f "/tmp/mirror-cache/quay.io.tar" ] && \
-             [ -f "/tmp/mirror-cache/registry.k8s.io.tar" ]; then
+             [ -f "/tmp/mirror-cache/registry.k8s.io.tar" ] && \
+             [ -f "/tmp/mirror-cache/kwok-control-plane.tar" ]; then
             echo "complete=true" >> "$GITHUB_OUTPUT"
-            echo "✅ Cache complete with all 4 mirror volumes"
+            echo "✅ Cache complete with all 4 mirror volumes and KWOK control plane images"
           else
             echo "complete=false" >> "$GITHUB_OUTPUT"
             echo "⚠️ Cache incomplete, will re-warm"
@@ -340,6 +349,33 @@ runs:
           ls -lh /tmp/mirror-cache/
         fi
 
+    - name: 🐳 Save KWOK control plane images
+      id: save-kwok-images
+      if: steps.check-cache.outputs.complete != 'true'
+      shell: bash
+      run: |
+        echo "🐳 Saving KWOK control plane images for Docker pre-loading on test runners..."
+
+        # KWOK images were pulled through registry.k8s.io-mirror as localhost:5003/...
+        # Retag them to canonical registry.k8s.io/... so kwokctl's "docker inspect" finds them.
+        # kwokctl's EnsureImage() checks "docker inspect <image>" first; if found, no pull occurs.
+        while IFS= read -r image; do
+          mirror_ref="${image/registry.k8s.io\//localhost:5003/}"
+          if [ "$mirror_ref" != "$image" ]; then
+            docker tag "$mirror_ref" "$image" 2>/dev/null && echo "  ✅ Tagged: $image" || echo "  ⚠️ Failed to tag: $image"
+          fi
+        done < <(grep '^FROM ' pkg/svc/provisioner/cluster/kwok/Dockerfile.controlplane | sed 's/^FROM //')
+
+        # Save all KWOK control plane images as a single tar for docker load on test runners
+        KWOK_IMAGES=$(grep '^FROM ' pkg/svc/provisioner/cluster/kwok/Dockerfile.controlplane | awk '{print $2}' | tr '\n' ' ')
+        # shellcheck disable=SC2086
+        if docker save $KWOK_IMAGES -o /tmp/mirror-cache/kwok-control-plane.tar 2>/dev/null; then
+          SIZE=$(du -h /tmp/mirror-cache/kwok-control-plane.tar | cut -f1)
+          echo "✅ KWOK control plane images saved: $SIZE"
+        else
+          echo "⚠️ Failed to save KWOK control plane images (will fall back to live pull)"
+        fi
+
     - name: 🔍 Verify all mirror volumes exported
       id: verify-exports
       if: steps.check-cache.outputs.complete != 'true'
@@ -368,6 +404,14 @@ runs:
           echo "   See issue #2075 for context."
         else
           echo "✅ All 4 required mirror cache volumes exported successfully"
+        fi
+
+        # Verify KWOK control plane tar (non-fatal: kwokctl falls back to live pull if missing)
+        if [ -f "/tmp/mirror-cache/kwok-control-plane.tar" ]; then
+          SIZE=$(du -h "/tmp/mirror-cache/kwok-control-plane.tar" | cut -f1)
+          echo "  ✅ kwok-control-plane.tar ($SIZE)"
+        else
+          echo "  ⚠️ kwok-control-plane.tar - MISSING (KWOK tests will pull from registry.k8s.io)"
         fi
 
     - name: 🧹 Cleanup containers

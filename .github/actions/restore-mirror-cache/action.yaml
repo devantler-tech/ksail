@@ -57,6 +57,10 @@ runs:
         # Source of truth: pkg/svc/installer/flux/Dockerfile.distribution
         grep '^FROM ' pkg/svc/installer/flux/Dockerfile.distribution | sed 's/^FROM //' >> "$IMAGES_FILE"
 
+        # Append KWOK control plane images (must match warm-mirror-cache exactly).
+        # Source of truth: pkg/svc/provisioner/cluster/kwok/Dockerfile.controlplane
+        grep '^FROM ' pkg/svc/provisioner/cluster/kwok/Dockerfile.controlplane | sed 's/^FROM //' >> "$IMAGES_FILE"
+
         # Append CI test workload images (must match warm-mirror-cache exactly).
         # This also includes the API connectivity pre-flight pod image so mirror
         # restores cover that pull path too. See issue #3822 for related context.
@@ -141,6 +145,22 @@ runs:
             busybox:1.37@sha256:b3255e7dfbcd10cb367af0d409747d511aeb66dfac98cf30e97e87e4207dd76f \
             sh -c "cd /volume && tar -xf /backup/registry.k8s.io.tar" || echo "⚠️ Failed to import registry.k8s.io mirror"
           echo "✅ Restored registry.k8s.io mirror cache"
+        fi
+
+    - name: 🐳 Load KWOK control plane images
+      if: steps.restore-cache.outputs.cache-hit == 'true'
+      shell: bash
+      run: |
+        # Pre-load KWOK control plane images into Docker's local cache.
+        # kwokctl's EnsureImage() calls "docker inspect <image>" before pulling;
+        # if the image already exists locally, the pull is skipped entirely.
+        # This avoids Google Artifact Registry rate limits when many KWOK test
+        # jobs run in parallel. See issue #4058 for context.
+        if [ -f "/tmp/mirror-cache/kwok-control-plane.tar" ]; then
+          docker load -i /tmp/mirror-cache/kwok-control-plane.tar
+          echo "✅ KWOK control plane images pre-loaded (kwokctl will skip registry.k8s.io pulls)"
+        else
+          echo "⚠️ KWOK control plane images tar not found — kwokctl will pull from registry.k8s.io"
         fi
 
     - name: ℹ️ Cache miss notice
