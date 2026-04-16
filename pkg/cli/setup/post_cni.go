@@ -227,13 +227,22 @@ func GetComponentRequirements(clusterCfg *v1alpha1.Cluster) ComponentRequirement
 	needsKubeletCSRApprover := needsMetricsServer &&
 		clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionTalos
 
+	// KWOK simulates pod status but has no real network dataplane. Policy engines
+	// (Gatekeeper, Kyverno) register global MutatingWebhookConfigurations that
+	// intercept ALL Kubernetes API requests. On KWOK these webhook calls always
+	// time out because no real pod is serving the webhook endpoint, causing every
+	// subsequent Helm install (ArgoCD, cert-manager, etc.) to fail. Skip policy
+	// engine installation for KWOK entirely.
+	needsPolicyEngine := clusterCfg.Spec.Cluster.PolicyEngine != v1alpha1.PolicyEngineNone &&
+		clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionKWOK
+
 	return ComponentRequirements{
 		NeedsMetricsServer:      needsMetricsServer,
 		NeedsLoadBalancer:       NeedsLoadBalancerInstall(clusterCfg),
 		NeedsKubeletCSRApprover: needsKubeletCSRApprover,
 		NeedsCSI:                needsCSIInstall(clusterCfg),
 		NeedsCertManager:        clusterCfg.Spec.Cluster.CertManager == v1alpha1.CertManagerEnabled,
-		NeedsPolicyEngine:       clusterCfg.Spec.Cluster.PolicyEngine != v1alpha1.PolicyEngineNone,
+		NeedsPolicyEngine:       needsPolicyEngine,
 		NeedsArgoCD:             clusterCfg.Spec.Cluster.GitOpsEngine == v1alpha1.GitOpsEngineArgoCD,
 		NeedsFlux:               clusterCfg.Spec.Cluster.GitOpsEngine == v1alpha1.GitOpsEngineFlux,
 	}
