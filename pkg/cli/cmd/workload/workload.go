@@ -2099,7 +2099,17 @@ func executeReconciliation(
 		return err
 	}
 
-	if clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionKWOK {
+	// Check both config and detected distribution for KWOK.
+	// When no ksail.yaml exists (e.g. init=false), clusterCfg.Spec.Cluster.Distribution
+	// defaults to empty; fall back to detecting from the active kubeconfig context.
+	dist := clusterCfg.Spec.Cluster.Distribution
+	if dist != v1alpha1.DistributionKWOK {
+		if info, detectErr := clusterdetector.DetectInfo(kubeconfigPath, ""); detectErr == nil {
+			dist = info.Distribution
+		}
+	}
+
+	if dist == v1alpha1.DistributionKWOK {
 		notify.Warningf(cmd.OutOrStdout(), kwokReconcileSkipMsg)
 
 		return nil
