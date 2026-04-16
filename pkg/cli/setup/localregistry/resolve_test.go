@@ -56,6 +56,12 @@ func TestResolveClusterName(t *testing.T) {
 			expected:     "test-cluster",
 		},
 		{
+			name:         "KWOK trims whitespace from extracted cluster name",
+			distribution: v1alpha1.DistributionKWOK,
+			context:      "kwok- my-cluster",
+			expected:     "my-cluster",
+		},
+		{
 			name:         "KWOK with no context returns kwok-default",
 			distribution: v1alpha1.DistributionKWOK,
 			expected:     "kwok-default",

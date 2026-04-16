@@ -39,7 +39,7 @@ KSail supports multiple Kubernetes distributions, providers, and components. Thi
 | MetalLB                       | ❌      | ❌       | ✅ (Docker)         | ❌       | ❌       |
 | Hetzner CCM                   | ❌      | ❌       | ✅ (Hetzner)        | ❌       | ❌       |
 | **GitOps**                    |
-| Flux                          | ✅      | ✅       | ✅                  | ✅       | Sim⁷     |
+| Flux                          | ✅      | ✅       | ✅                  | ✅       | ❌⁹      |
 | ArgoCD                        | ✅      | ✅       | ✅                  | ✅       | Sim⁷     |
 | **Observability**             |
 | Metrics Server                | ✅      | Built-in | ✅                  | N/A⁴     | Sim⁷     |
@@ -71,6 +71,7 @@ KSail supports multiple Kubernetes distributions, providers, and components. Thi
   - ⁴ Metrics Server is managed internally by vCluster
 - **⁷ KWOK Simulation**: Components are installed as API objects and their pods appear Running via KWOK's Stage simulation. They do not execute real workloads — KWOK simulates pod lifecycle at the API level. See [KWOK Distribution](/distributions/kwok/) for details.
 - **⁸ KWOK Policy Engines**: Kyverno and Gatekeeper are not installed on KWOK. Both register global `MutatingWebhookConfigurations` that intercept all Kubernetes API requests. On KWOK, no real pod serves the webhook endpoint, so every webhook call times out — breaking all subsequent Helm installs. KSail silently skips policy engine installation when `spec.cluster.distribution: KWOK` is set and emits a warning at cluster creation time.
+- **⁹ KWOK Flux**: Flux is not installed on KWOK. The flux-operator pod is simulated by KWOK stages and appears Running, but it never registers Flux CRDs — Flux reconciliation is not functional. Use ArgoCD for GitOps workflows on KWOK.
 
 ## Secret Management × Provider Matrix
 

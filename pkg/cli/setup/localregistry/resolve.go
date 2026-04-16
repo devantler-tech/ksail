@@ -77,8 +77,10 @@ func resolveClusterName(
 		return "vcluster-default"
 	case v1alpha1.DistributionKWOK:
 		ctx := strings.TrimSpace(clusterCfg.Spec.Cluster.Connection.Context)
-		if name, ok := strings.CutPrefix(ctx, "kwok-"); ok && name != "" {
-			return name
+		if name, ok := strings.CutPrefix(ctx, "kwok-"); ok {
+			if name = strings.TrimSpace(name); name != "" {
+				return name
+			}
 		}
 
 		return "kwok-default"
