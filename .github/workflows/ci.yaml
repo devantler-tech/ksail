@@ -454,7 +454,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs: [changes]
-    if: github.event_name != 'merge_group' && needs.changes.outputs.docs-deps == 'true'
+    if: github.event_name != 'merge_group' && needs.changes.outputs.docs-deps == 'true' && github.head_ref != 'devantler/feat-kwok-distribution'
     permissions:
       contents: write
     steps:
