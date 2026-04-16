@@ -175,14 +175,15 @@ runs:
       run: |
         if [ -d "/tmp/mirror-cache" ] && [ -n "$(ls -A /tmp/mirror-cache 2>/dev/null)" ]; then
           echo "✅ Cache restored, checking completeness..."
-          # Check for all 4 mirror volumes (using KSail's naming convention)
+          # Check for all 4 mirror volumes (using KSail's naming convention).
+          # kwok-control-plane.tar is optional: its creation is non-fatal in the
+          # warm step, so its absence must not invalidate an otherwise complete cache.
           if [ -f "/tmp/mirror-cache/docker.io.tar" ] && \
              [ -f "/tmp/mirror-cache/ghcr.io.tar" ] && \
              [ -f "/tmp/mirror-cache/quay.io.tar" ] && \
-             [ -f "/tmp/mirror-cache/registry.k8s.io.tar" ] && \
-             [ -f "/tmp/mirror-cache/kwok-control-plane.tar" ]; then
+             [ -f "/tmp/mirror-cache/registry.k8s.io.tar" ]; then
             echo "complete=true" >> "$GITHUB_OUTPUT"
-            echo "✅ Cache complete: 4 mirror volumes + KWOK control plane images"
+            echo "✅ Cache complete: 4 mirror volumes present (kwok-control-plane.tar is optional)"
           else
             echo "complete=false" >> "$GITHUB_OUTPUT"
             echo "⚠️ Cache incomplete, will re-warm"

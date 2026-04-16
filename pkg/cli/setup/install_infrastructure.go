@@ -107,6 +107,13 @@ func NeedsLoadBalancerInstall(clusterCfg *v1alpha1.Cluster) bool {
 	provider := clusterCfg.Spec.Cluster.Provider
 	lbSetting := clusterCfg.Spec.Cluster.LoadBalancer
 
+	// KWOK is a simulation cluster with no real network dataplane. LoadBalancer
+	// installation is always a no-op on KWOK regardless of the setting, so skip it
+	// entirely to keep component counts and update diffs consistent.
+	if dist == v1alpha1.DistributionKWOK {
+		return false
+	}
+
 	// Special handling for Talos clusters on Hetzner:
 	// According to the distribution × provider matrix, hcloud-ccm must be
 	// installed by KSail for both Default and Enabled LoadBalancer settings.

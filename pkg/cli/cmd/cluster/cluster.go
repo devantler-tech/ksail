@@ -6508,6 +6508,14 @@ func applyDistributionSpecOverrides(spec *v1alpha1.ClusterSpec) {
 		// real network), so policy engines are always skipped at creation time.
 		// Treat PolicyEngine as None so the diff stays clean.
 		spec.PolicyEngine = v1alpha1.PolicyEngineNone
+
+		// The flux-operator pod is simulated and never installs Flux CRDs, so
+		// Flux is always skipped at creation time (GetComponentRequirements sets
+		// NeedsFlux=false for KWOK). Treat GitOpsEngine as None for Flux so that
+		// update dry-runs do not report spurious "install Flux" changes.
+		if spec.GitOpsEngine == v1alpha1.GitOpsEngineFlux {
+			spec.GitOpsEngine = v1alpha1.GitOpsEngineNone
+		}
 	}
 }
 
