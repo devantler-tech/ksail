@@ -96,7 +96,7 @@ The Gateway API request path is: **`GatewayClass` → `Gateway` → `HTTPRoute` 
    ```
 
    > [!NOTE]
-   > On Docker-based clusters (Vanilla, K3s, VCluster, KWOK) **without an external LoadBalancer** (such as MetalLB), KSail configures Cilium's Gateway API integration to use `hostNetwork` mode — the Gateway does not get its own external IP and traffic reaches it via the node's host ports. When you enable an external LoadBalancer, `hostNetwork` is not applied and Gateways may receive an IP via a `Service`. For Hetzner and Omni cloud providers, the Gateway receives a real external IP.
+   > On Docker-based clusters (Vanilla, K3s, VCluster) **without an external LoadBalancer** (such as MetalLB), KSail configures Cilium's Gateway API integration to use `hostNetwork` mode — the Gateway does not get its own external IP and traffic reaches it via the node's host ports. When you enable an external LoadBalancer, `hostNetwork` is not applied and Gateways may receive an IP via a `Service`. For Hetzner and Omni cloud providers, the Gateway receives a real external IP. KWOK has no real network dataplane, so Gateway API traffic routing does not function even though the configuration objects are accepted by the API server.
 
 3. **Create an HTTPRoute**
 

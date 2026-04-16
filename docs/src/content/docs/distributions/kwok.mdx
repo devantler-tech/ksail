@@ -11,7 +11,7 @@ KWOK creates ultra-fast simulated Kubernetes clusters for control-plane-level te
 
 ## When to Use KWOK
 
-KWOK excels at **control-plane testing** (validating API operations, RBAC, and admission webhooks), **CI/CD speed optimization** (clusters start in seconds with minimal resource usage), **scale testing** (simulate thousands of nodes/pods without real infrastructure), and **tooling validation** (testing kubectl, Helm, and GitOps workflows against a real API server).
+KWOK excels at **control-plane testing** (validating API operations, RBAC, and admission webhook *configuration* — webhook objects are accepted by the API server, but in-cluster webhook *execution* is not supported because no real pod serves the endpoint), **CI/CD speed optimization** (clusters start in seconds with minimal resource usage), **scale testing** (simulate thousands of nodes/pods without real infrastructure), and **tooling validation** (testing kubectl, Helm, and GitOps workflows against a real API server).
 
 Consider other distributions for workloads that need real containers (Vanilla, K3s), production-grade immutable infrastructure (Talos), or isolated virtual clusters (VCluster).
 

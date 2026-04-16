@@ -292,6 +292,14 @@ func InstallPostCNIComponents(
 ) error {
 	reqs := GetComponentRequirements(clusterCfg)
 
+	if clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionKWOK &&
+		clusterCfg.Spec.Cluster.PolicyEngine != v1alpha1.PolicyEngineNone {
+		notify.Warningf(cmd.OutOrStdout(),
+			"policy engine %q is not supported on KWOK: admission webhook calls always time out because no real pod serves the webhook endpoint — skipping policy engine installation",
+			clusterCfg.Spec.Cluster.PolicyEngine,
+		)
+	}
+
 	if reqs.Count() == 0 {
 		return nil
 	}
