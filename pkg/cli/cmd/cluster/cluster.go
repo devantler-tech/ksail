@@ -6516,6 +6516,11 @@ func applyDistributionSpecOverrides(spec *v1alpha1.ClusterSpec) {
 		if spec.GitOpsEngine == v1alpha1.GitOpsEngineFlux {
 			spec.GitOpsEngine = v1alpha1.GitOpsEngineNone
 		}
+
+		// NeedsLoadBalancerInstall always returns false for KWOK (no real network
+		// dataplane). Normalise LoadBalancer to Disabled so that the update diff
+		// sees Disabled on both sides and reports no change.
+		spec.LoadBalancer = v1alpha1.LoadBalancerDisabled
 	}
 }
 

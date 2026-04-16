@@ -278,6 +278,11 @@ func ExportIsKindClusterFromNodes(nodes []string, clusterName string) bool {
 	return isKindClusterFromNodes(nodes, clusterName)
 }
 
+// ExportApplyDistributionSpecOverrides exposes applyDistributionSpecOverrides for unit testing.
+func ExportApplyDistributionSpecOverrides(spec *v1alpha1.ClusterSpec) {
+	applyDistributionSpecOverrides(spec)
+}
+
 // ExportPickCluster exposes pickCluster for unit testing.
 func ExportPickCluster(cmd *cobra.Command, deps SwitchDeps) (string, error) {
 	return pickCluster(cmd, deps)
