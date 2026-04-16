@@ -1931,6 +1931,10 @@ const (
 	reconcileCmdLong              = "Trigger reconciliation/sync and wait for completion. " +
 		"For Flux, tracks the OCIRepository and each Kustomization individually. " +
 		"For ArgoCD, tracks each Application until synced and healthy."
+	// kwokReconcileSkipMsg is emitted when reconciliation is skipped for KWOK.
+	// KWOK simulates GitOps controller pods as Running at the API level, but the
+	// actual controller processes are not running and cannot sync any resources.
+	kwokReconcileSkipMsg = "KWOK distribution: GitOps controllers are simulated and cannot sync — reconciliation skipped"
 )
 
 // getKubeconfigPath returns the kubeconfig path from config or default.
@@ -2093,6 +2097,11 @@ func executeReconciliation(
 	kubeconfigPath, err := getKubeconfigPath(clusterCfg)
 	if err != nil {
 		return err
+	}
+
+	if clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionKWOK {
+		notify.Warningf(cmd.OutOrStdout(), kwokReconcileSkipMsg)
+		return nil
 	}
 
 	switch gitOpsEngine {

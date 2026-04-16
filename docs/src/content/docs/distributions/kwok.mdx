@@ -130,7 +130,7 @@ The `kwok.yaml` scaffolded by KSail adds four Cluster-level CRDs not provided by
 - **ClusterAttach**: Enables `kubectl attach`
 - **ClusterPortForward**: Enables `kubectl port-forward`
 
-All Kubernetes API operations (create, get, describe, delete, scale, apply) work against the real API server. Helm charts install and their pods appear Running. GitOps controllers are deployed and simulated as Running.
+All Kubernetes API operations (create, get, describe, delete, scale, apply) work against the real API server. Helm charts install and their pods appear Running. GitOps controllers are deployed and simulated as Running, but `ksail workload reconcile` is skipped for KWOK — controllers cannot actually sync resources because their container processes are not running.
 
 ## Comparison with Other Distributions
 
