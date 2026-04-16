@@ -156,12 +156,10 @@ runs:
         # if the image already exists locally, the pull is skipped entirely.
         # This avoids Google Artifact Registry rate limits when many KWOK test
         # jobs run in parallel. See issue #4058 for context.
-        if [ -f "/tmp/mirror-cache/kwok-control-plane.tar" ]; then
-          docker load -i /tmp/mirror-cache/kwok-control-plane.tar
-          echo "✅ KWOK control plane images pre-loaded (kwokctl will skip registry.k8s.io pulls)"
-        else
-          echo "⚠️ KWOK control plane images tar not found — kwokctl will pull from registry.k8s.io"
-        fi
+        # The kwok-control-plane.tar must be present — warm-mirror-cache's
+        # completeness gate guarantees it exists whenever cache-hit is true.
+        docker load -i /tmp/mirror-cache/kwok-control-plane.tar
+        echo "✅ KWOK control plane images pre-loaded (kwokctl will skip registry.k8s.io pulls)"
 
     - name: ℹ️ Cache miss notice
       if: steps.restore-cache.outputs.cache-hit != 'true'

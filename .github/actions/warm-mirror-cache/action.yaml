@@ -182,7 +182,7 @@ runs:
              [ -f "/tmp/mirror-cache/registry.k8s.io.tar" ] && \
              [ -f "/tmp/mirror-cache/kwok-control-plane.tar" ]; then
             echo "complete=true" >> "$GITHUB_OUTPUT"
-            echo "✅ Cache complete with all 4 mirror volumes and KWOK control plane images"
+            echo "✅ Cache complete: 4 mirror volumes + KWOK control plane images"
           else
             echo "complete=false" >> "$GITHUB_OUTPUT"
             echo "⚠️ Cache incomplete, will re-warm"
