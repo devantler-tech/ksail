@@ -201,10 +201,8 @@ jobs:
               - '.github/workflows/ci.yaml'
             docs-deps:
               - 'docs/package*.json'
-              - '.github/workflows/ci.yaml'
             vsce-deps:
               - 'vsce/package*.json'
-              - '.github/workflows/ci.yaml'
 
   ci-go:
     name: ✅ Validate Go Project
@@ -454,7 +452,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs: [changes]
-    if: github.event_name != 'merge_group' && needs.changes.outputs.docs-deps == 'true' && github.head_ref != 'devantler/feat-kwok-distribution'
+    if: github.event_name != 'merge_group' && needs.changes.outputs.docs-deps == 'true'
     permissions:
       contents: write
     steps:
