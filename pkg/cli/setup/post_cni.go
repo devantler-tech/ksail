@@ -28,6 +28,11 @@ const (
 	fluxResourcesActivity   = "applying custom resources"
 	argoCDResourcesActivity = "configuring argocd resources"
 
+	// kwokPolicyEngineWarning is emitted when a policy engine is configured but
+	// cannot be installed on KWOK (admission webhooks always time out).
+	kwokPolicyEngineWarning = "policy engine %q is not installed on KWOK: " +
+		"admission webhook calls always time out (no real pod serves the endpoint) — skipping"
+
 	// apiServerStabilityTimeout is the maximum time to wait for the API server
 	// to stabilize between infrastructure and GitOps installation phases.
 	// Infrastructure components (MetalLB, Kyverno, cert-manager, etc.) register
@@ -294,8 +299,7 @@ func InstallPostCNIComponents(
 
 	if clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionKWOK &&
 		clusterCfg.Spec.Cluster.PolicyEngine != v1alpha1.PolicyEngineNone {
-		notify.Warningf(cmd.OutOrStdout(),
-			"policy engine %q is not supported on KWOK: admission webhook calls always time out because no real pod serves the webhook endpoint — skipping policy engine installation",
+		notify.Warningf(cmd.OutOrStdout(), kwokPolicyEngineWarning,
 			clusterCfg.Spec.Cluster.PolicyEngine,
 		)
 	}
