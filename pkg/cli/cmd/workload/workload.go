@@ -2104,7 +2104,8 @@ func executeReconciliation(
 	// defaults to empty; fall back to detecting from the active kubeconfig context.
 	dist := clusterCfg.Spec.Cluster.Distribution
 	if dist != v1alpha1.DistributionKWOK {
-		if info, detectErr := clusterdetector.DetectInfo(kubeconfigPath, ""); detectErr == nil {
+		info, detectErr := clusterdetector.DetectInfo(kubeconfigPath, "")
+		if detectErr == nil {
 			dist = info.Distribution
 		}
 	}
