@@ -369,12 +369,9 @@ runs:
         # Save all KWOK control plane images as a single tar for docker load on test runners
         KWOK_IMAGES=$(grep '^FROM ' pkg/svc/provisioner/cluster/kwok/Dockerfile.controlplane | awk '{print $2}' | tr '\n' ' ')
         # shellcheck disable=SC2086
-        if docker save $KWOK_IMAGES -o /tmp/mirror-cache/kwok-control-plane.tar 2>/dev/null; then
-          SIZE=$(du -h /tmp/mirror-cache/kwok-control-plane.tar | cut -f1)
-          echo "✅ KWOK control plane images saved: $SIZE"
-        else
-          echo "⚠️ Failed to save KWOK control plane images (will fall back to live pull)"
-        fi
+        docker save $KWOK_IMAGES -o /tmp/mirror-cache/kwok-control-plane.tar
+        SIZE=$(du -h /tmp/mirror-cache/kwok-control-plane.tar | cut -f1)
+        echo "✅ KWOK control plane images saved: $SIZE"
 
     - name: 🔍 Verify all mirror volumes exported
       id: verify-exports
