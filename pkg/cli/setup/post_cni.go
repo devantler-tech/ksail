@@ -297,6 +297,26 @@ func needsCSIInstall(clusterCfg *v1alpha1.Cluster) bool {
 	return !dist.ProvidesCSIByDefault(provider)
 }
 
+// emitKWOKUnsupportedComponentWarnings emits user-visible warnings for components
+// that are configured but cannot be installed on KWOK (simulated pods never run real
+// controller logic). Called at the start of InstallPostCNIComponents to notify the
+// user about skipped components before installation begins.
+func emitKWOKUnsupportedComponentWarnings(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster) {
+	if clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionKWOK {
+		return
+	}
+
+	if clusterCfg.Spec.Cluster.PolicyEngine != v1alpha1.PolicyEngineNone {
+		notify.Warningf(cmd.OutOrStdout(), kwokPolicyEngineWarning,
+			clusterCfg.Spec.Cluster.PolicyEngine,
+		)
+	}
+
+	if clusterCfg.Spec.Cluster.GitOpsEngine == v1alpha1.GitOpsEngineFlux {
+		notify.Warningf(cmd.OutOrStdout(), kwokFluxWarning)
+	}
+}
+
 // InstallPostCNIComponents installs all post-CNI components in parallel.
 // This includes metrics-server, CSI, cert-manager, and GitOps engines (Flux/ArgoCD).
 // For Flux, the OCI artifact push and readiness wait happens after installation.
@@ -312,17 +332,7 @@ func InstallPostCNIComponents(
 ) error {
 	reqs := GetComponentRequirements(clusterCfg)
 
-	if clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionKWOK &&
-		clusterCfg.Spec.Cluster.PolicyEngine != v1alpha1.PolicyEngineNone {
-		notify.Warningf(cmd.OutOrStdout(), kwokPolicyEngineWarning,
-			clusterCfg.Spec.Cluster.PolicyEngine,
-		)
-	}
-
-	if clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionKWOK &&
-		clusterCfg.Spec.Cluster.GitOpsEngine == v1alpha1.GitOpsEngineFlux {
-		notify.Warningf(cmd.OutOrStdout(), kwokFluxWarning)
-	}
+	emitKWOKUnsupportedComponentWarnings(cmd, clusterCfg)
 
 	if reqs.Count() == 0 {
 		return nil
