@@ -105,13 +105,13 @@ ksail workload reconcile --timeout=5m
 
 After `ksail workload export`, KSail validates the SHA256 digest of every blob in the exported OCI tar archive. If a blob is truncated or corrupt — which `ctr export` can produce silently when containerd's content store has incomplete data (e.g., from an interrupted image pull or runner resource pressure) — you will see an error like:
 
-```
+```text
 blob integrity check failed: blob blobs/sha256/<hex>: computed SHA256 <actual> (read N of M bytes)
 ```
 
 or
 
-```
+```text
 blob integrity check failed: tar archive is truncated or corrupted: ...
 ```
 
