@@ -193,7 +193,7 @@ Press **Ctrl+N** to start a fresh conversation. Previous sessions are automatica
 
 **Timeout errors:** Increase timeout for complex operations (`--timeout 15m`).
 
-**Authentication errors:** Authenticate with `copilot auth login` and use `KSAIL_COPILOT_TOKEN` or `COPILOT_TOKEN` for KSail-specific auth. See [Authentication](#authentication) for details on token filtering. KSail automatically retries transient auth failures (HTTP 429, 500–504, network errors) up to 3 times with exponential backoff — `auth status check failed after N/3 attempts` messages indicate a persistent issue requiring action.
+**Authentication errors:** Authenticate with `copilot auth login` and use `KSAIL_COPILOT_TOKEN` or `COPILOT_TOKEN` for KSail-specific auth. See [Authentication](#authentication) for details on token filtering. KSail automatically retries transient auth failures (HTTP 429, 5xx responses, and network errors) up to 3 times with exponential backoff — `auth status check failed after N/3 attempts` messages indicate a persistent issue requiring action.
 
 ## See Also
 
