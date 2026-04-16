@@ -298,12 +298,45 @@ runs:
         CONFIG: ${{ inputs.config }}
       run: |
         set -euo pipefail
-        if [ "$INIT" = "true" ]; then
-          ksail ${CONFIG:+--config "$CONFIG"} cluster create
-        else
-          # shellcheck disable=SC2086
-          ksail ${CONFIG:+--config "$CONFIG"} cluster create --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS
+
+        # Retry cluster create up to 3 times with backoff.
+        # Transient failures include:
+        #   - KWOK / kwokctl: registry.k8s.io TOOMANYREQUESTS (GAR per-region rate limit)
+        #   - VCluster / Vind: exit status 22 (EINVAL), fetching blob denied, egress limit
+        #   - Network errors: i/o timeout, connection reset, TLS handshake timeout
+        create_cluster() {
+          if [ "$INIT" = "true" ]; then
+            ksail ${CONFIG:+--config "$CONFIG"} cluster create
+          else
+            # shellcheck disable=SC2086
+            ksail ${CONFIG:+--config "$CONFIG"} cluster create --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS
+          fi
+        }
+
+        create_succeeded=false
+        for attempt in 1 2 3; do
+          if create_output=$(create_cluster 2>&1); then
+            echo "$create_output"
+            create_succeeded=true
+            break
+          fi
+          echo "$create_output"
+          if [ "$attempt" -lt 3 ]; then
+            if echo "$create_output" | grep -qiE "TOOMANYREQUESTS|Quota exceeded|toomanyrequests|exit status 22|fetching blob.*denied|Egress is over|i/o timeout|connection reset|TLS handshake|no such host|temporary failure in name resolution"; then
+              DELAY=$((attempt * 30))
+              echo "⚠️ cluster create attempt $attempt failed with transient error, retrying in ${DELAY}s…"
+              sleep "$DELAY"
+            else
+              echo "❌ cluster create attempt $attempt failed with non-transient error, aborting"
+              exit 1
+            fi
+          fi
+        done
+        if [ "$create_succeeded" != "true" ]; then
+          echo "❌ cluster create failed after 3 attempts"
+          exit 1
         fi
+
         # Determine kubeconfig path: parse --kubeconfig from args, fall back to default
         KUBECONFIG_PATH="${HOME}/.kube/config"
         # shellcheck disable=SC2086
