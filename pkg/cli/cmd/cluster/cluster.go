@@ -2782,6 +2782,7 @@ func getDockerProviderStatus(
 			dockerprovider.LabelSchemeK3d,
 			dockerprovider.LabelSchemeTalos,
 			dockerprovider.LabelSchemeVCluster,
+			dockerprovider.LabelSchemeKWOK,
 		}
 
 		for _, scheme := range schemes {
