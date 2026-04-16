@@ -607,7 +607,13 @@ func waitForClusterStability(
 // pod-to-service routing is fully programmed. For non-Cilium CNIs (e.g.,
 // default (distribution-provided) CNI or Calico) this race condition does not
 // apply and the check is skipped, saving up to 2 minutes of wall-clock time.
+// KWOK simulates pod status but has no real network dataplane, so the check
+// is meaningless and will always fail on KWOK regardless of CNI.
 func needsInClusterConnectivityCheck(clusterCfg *v1alpha1.Cluster) bool {
+	if clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionKWOK {
+		return false
+	}
+
 	return clusterCfg.Spec.Cluster.CNI == v1alpha1.CNICilium
 }
 
