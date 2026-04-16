@@ -594,13 +594,18 @@ func TestProvider_ListNodes_KWOK(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.ElementsMatch(t, []provider.NodeInfo{
-		{Name: "kwok-" + testClusterName + "-etcd", ClusterName: testClusterName, Role: "etcd", State: "running"},
 		{
-			Name: "kwok-" + testClusterName + "-kube-apiserver",
+			Name:        "kwok-" + testClusterName + "-etcd",
+			ClusterName: testClusterName,
+			Role:        "etcd",
+			State:       "running",
+		},
+		{
+			Name:        "kwok-" + testClusterName + "-kube-apiserver",
 			ClusterName: testClusterName, Role: "control-plane", State: "running",
 		},
 		{
-			Name: "kwok-" + testClusterName + "-kwok-controller",
+			Name:        "kwok-" + testClusterName + "-kwok-controller",
 			ClusterName: testClusterName, Role: "controller", State: "running",
 		},
 	}, nodes)
