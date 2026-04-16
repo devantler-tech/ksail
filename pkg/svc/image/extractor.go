@@ -147,8 +147,18 @@ func NormalizeImageRef(ref string) string {
 	// - A dot (.) like docker.io, ghcr.io, registry.k8s.io
 	// - A colon (:) for port like localhost:5000 (but NOT for tag like nginx:1.25)
 	// - Is exactly "localhost"
-	parts := strings.Split(ref, "/")
-	firstPart := parts[0]
+	//
+	// Use IndexByte instead of Split to find the first '/' without allocating a slice;
+	// we only need the first segment and a multi-segment flag.
+	slashIdx := strings.IndexByte(ref, '/')
+	multiSegment := slashIdx >= 0
+
+	var firstPart string
+	if multiSegment {
+		firstPart = ref[:slashIdx]
+	} else {
+		firstPart = ref
+	}
 
 	// For registry detection, we need to check the part before any tag or digest
 	// Strip @sha256:... digest if present, then strip tag if present
@@ -163,14 +173,14 @@ func NormalizeImageRef(ref string) string {
 	hasRegistry := strings.Contains(firstPartBase, ".") ||
 		firstPartBase == "localhost" ||
 		strings.HasPrefix(firstPart, "localhost:") ||
-		hasHostPort(firstPart, len(parts) > 1)
+		hasHostPort(firstPart, multiSegment)
 
 	if hasRegistry {
 		// Already has registry, just ensure tag (unless it's a digest)
 		return ensureTag(ref)
 	}
 
-	if len(parts) == 1 {
+	if !multiSegment {
 		// Simple image name like "nginx" or "nginx:1.25" -> "docker.io/library/nginx"
 		return ensureTag("docker.io/library/" + ref)
 	}
