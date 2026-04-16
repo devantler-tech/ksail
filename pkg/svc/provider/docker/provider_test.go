@@ -593,13 +593,11 @@ func TestProvider_ListNodes_KWOK(t *testing.T) {
 	nodes, err := prov.ListNodes(ctx, testClusterName)
 
 	require.NoError(t, err)
-	require.Len(t, nodes, 3)
-	assert.Equal(t, "kwok-"+testClusterName+"-etcd", nodes[0].Name)
-	assert.Equal(t, "etcd", nodes[0].Role)
-	assert.Equal(t, "kwok-"+testClusterName+"-kube-apiserver", nodes[1].Name)
-	assert.Equal(t, "control-plane", nodes[1].Role)
-	assert.Equal(t, "kwok-"+testClusterName+"-kwok-controller", nodes[2].Name)
-	assert.Equal(t, "controller", nodes[2].Role)
+	assert.ElementsMatch(t, []provider.NodeInfo{
+		{Name: "kwok-" + testClusterName + "-etcd", ClusterName: testClusterName, Role: "etcd", State: "running"},
+		{Name: "kwok-" + testClusterName + "-kube-apiserver", ClusterName: testClusterName, Role: "control-plane", State: "running"},
+		{Name: "kwok-" + testClusterName + "-kwok-controller", ClusterName: testClusterName, Role: "controller", State: "running"},
+	}, nodes)
 }
 
 func TestProvider_ListAllClusters_KWOK(t *testing.T) {
