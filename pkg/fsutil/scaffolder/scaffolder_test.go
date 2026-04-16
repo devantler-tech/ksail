@@ -1754,6 +1754,12 @@ func TestWithClusterName_AppliesContextToKSailConfig(t *testing.T) {
 			clusterName:     "dev-cluster",
 			expectedContext: "vcluster-docker_dev-cluster",
 		},
+		{
+			name:            "kwok_sets_kwok_context",
+			distribution:    v1alpha1.DistributionKWOK,
+			clusterName:     "test-cluster",
+			expectedContext: "kwok-test-cluster",
+		},
 	}
 
 	for _, testCase := range tests {
