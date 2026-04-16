@@ -1,11 +1,11 @@
 {
-  "last_run": "2026-04-16T01:04:00Z",
-  "last_run_id": "24486349721",
-  "issue_backlog_cursor": 4060,
+  "last_run": "2026-04-16T12:39:00Z",
+  "last_run_id": "24510608677",
+  "issue_backlog_cursor": 4069,
   "monthly_activity_issue": 3605,
   "domain_alternation": {
-    "last_domain": "perf",
-    "next_domain": "refactor"
+    "last_domain": "refactor",
+    "next_domain": "perf"
   },
   "commented_issues": {
     "3572": "2026-04-04T12:24:00Z",
@@ -40,7 +40,8 @@
     "4039": "2026-04-15T12:38:00Z",
     "4040": "2026-04-15T12:38:00Z",
     "4060": "2026-04-16T01:04:00Z",
-    "4045": "2026-04-16T01:04:00Z"
+    "4045": "2026-04-16T01:04:00Z",
+    "4069": "2026-04-16T12:39:00Z"
   },
   "labelled_issues": {
     "3412": ["next"],
@@ -78,75 +79,29 @@
     "3908": ["blocked"]
   },
   "open_prs": {
-    "3956": "fix(chat): filter inherited COPILOT_GITHUB_TOKEN",
-    "3981": "chore(deps): Bump github/gh-aw-actions (Dependabot)",
-    "3991": {
-      "branch": "repo-assist/fix-gitops-stability-k3s-no-infra-a63447659b360fe1",
-      "title": "fix(setup): always wait for API server stability before GitOps installation",
-      "fixes": 3973,
-      "created": "2026-04-13T13:04:00Z"
-    },
-    "bundle-deps": {
-      "branch": "repo-assist/bundle-deps-go-containerregistry-copilot-sdk",
-      "title": "chore(deps): bundle Go dependency updates",
-      "closes": [3997, 3998],
-      "created": "2026-04-14T01:02:00Z"
-    },
-    "fix-image-export-3987": {
-      "branch": "repo-assist/fix-image-export-discard-unpacked-layers-3987",
-      "title": "fix(image): remove image ref before repair pull",
-      "fixes": 3987,
-      "created": "2026-04-14T12:38:00Z"
-    },
-    "fix-metricsserver-4029": {
-      "branch": "repo-assist/fix-metricsserver-auth-tolerate-4029",
-      "title": "fix(metricsserver): set --authentication-tolerate-lookup-failure=true",
-      "refs": 4029,
-      "created": "2026-04-15T01:02:00Z"
-    },
-    "refactor-ensure-oci": {
-      "branch": "repo-assist/refactor-ensure-oci-artifact-helper",
-      "title": "refactor(setup): extract callEnsureOCIArtifact helper",
-      "created": "2026-04-15T01:02:00Z"
-    },
-    "fix-assert-contains-4038": {
-      "branch": "repo-assist/fix-assert-contains-sigpipe-4038",
-      "title": "ci: fix assert_contains SIGPIPE race; test: add metricsserver ValuesYaml tests",
-      "fixes": 4038,
-      "created": "2026-04-15T12:38:00Z"
-    },
-    "fix-mdx-4035": {
+    "4061": {
       "branch": "repo-assist/fix-mdx-syntax-ai-chat-4035",
       "title": "docs(ai-chat): fix MDX JSX parse error in slash commands table",
       "fixes": 4035,
       "created": "2026-04-16T01:04:00Z"
     },
-    "perf-normalize-image-ref": {
+    "4062": {
       "branch": "repo-assist/perf-normalize-image-ref-no-split",
       "title": "perf(image): eliminate slice allocation in NormalizeImageRef",
       "created": "2026-04-16T01:04:00Z"
+    },
+    "refactor-k3d-factory-ci-create-retry": {
+      "branch": "repo-assist/refactor-k3d-node-counts-ci-create-retry",
+      "title": "refactor(factory): simplify applyK3dNodeCounts + ci(ksail-cluster): add retry on create",
+      "created": "2026-04-16T12:39:00Z"
     }
   },
   "nudged_prs": {},
   "fix_attempts": {
-    "3987": {
-      "branch": "repo-assist/fix-image-export-discard-unpacked-layers-3987",
-      "created": "2026-04-14T12:38:00Z",
-      "status": "open"
-    },
-    "4029": {
-      "branch": "repo-assist/fix-metricsserver-auth-tolerate-4029",
-      "created": "2026-04-15T01:02:00Z",
-      "status": "open"
-    },
-    "4038": {
-      "branch": "repo-assist/fix-assert-contains-sigpipe-4038",
-      "created": "2026-04-15T12:38:00Z",
-      "status": "open"
-    },
     "4035": {
       "branch": "repo-assist/fix-mdx-syntax-ai-chat-4035",
       "created": "2026-04-16T01:04:00Z",
+      "pr": 4061,
       "status": "open"
     }
   }
