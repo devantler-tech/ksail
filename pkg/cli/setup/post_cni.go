@@ -556,7 +556,9 @@ func waitForClusterStability(
 	//
 	// Skipped when CNI was just installed: waitForCNIReadiness already verified
 	// node readiness, so re-checking immediately would be redundant.
-	if !cniInstalled {
+	// Skipped for KWOK: KWOK has no real kubelet nodes (they are simulated on
+	// demand), so WaitForAllNodesReady would always time-out on a fresh cluster.
+	if !cniInstalled && clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionKWOK {
 		err = readiness.WaitForAllNodesReady(ctx, clientset, nodeReadinessTimeout)
 		if err != nil {
 			return fmt.Errorf("wait for all nodes to be ready: %w", err)
