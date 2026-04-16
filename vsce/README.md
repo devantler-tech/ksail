@@ -119,6 +119,10 @@ vsce/
 └── package.json              # Extension manifest
 ```
 
+## Documentation
+
+Full user documentation, screenshots, and detailed usage guides are available at **[ksail.devantler.tech/vscode-extension](https://ksail.devantler.tech/vscode-extension/)**.
+
 ## License
 
 Apache-2.0 - See [LICENSE](LICENSE) for details.
