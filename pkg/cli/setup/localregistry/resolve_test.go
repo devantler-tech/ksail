@@ -49,6 +49,17 @@ func TestResolveClusterName(t *testing.T) {
 			distribution: v1alpha1.Distribution("unsupported"),
 			expected:     "ksail",
 		},
+		{
+			name:         "KWOK strips kwok- prefix from context",
+			distribution: v1alpha1.DistributionKWOK,
+			context:      "kwok-test-cluster",
+			expected:     "test-cluster",
+		},
+		{
+			name:         "KWOK with no context returns kwok-default",
+			distribution: v1alpha1.DistributionKWOK,
+			expected:     "kwok-default",
+		},
 	}
 
 	for _, tc := range tests { //nolint:varnamelen
@@ -134,6 +145,18 @@ func TestResolveNetworkName(t *testing.T) {
 			distribution: v1alpha1.Distribution("unknown"),
 			clusterName:  "test",
 			expected:     "",
+		},
+		{
+			name:         "KWOK returns kwok-prefix",
+			distribution: v1alpha1.DistributionKWOK,
+			clusterName:  "my-cluster",
+			expected:     "kwok-my-cluster",
+		},
+		{
+			name:         "KWOK with empty name uses kwok-default fallback",
+			distribution: v1alpha1.DistributionKWOK,
+			clusterName:  "",
+			expected:     "kwok-kwok-default",
 		},
 	}
 
