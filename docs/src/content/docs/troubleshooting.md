@@ -99,6 +99,42 @@ ksail workload logs -n flux-system deployment/source-controller
 ksail workload reconcile --timeout=5m
 ```
 
+## Image Export Issues
+
+### Blob Integrity Check Failed
+
+After `ksail workload export`, KSail validates the SHA256 digest of every blob in the exported OCI tar archive. If a blob is truncated or corrupt — which `ctr export` can produce silently when containerd's content store has incomplete data (e.g., from an interrupted image pull or runner resource pressure) — you will see an error like:
+
+```text
+blob integrity check failed: blob blobs/sha256/<hex>: computed SHA256 <actual> (read N of M bytes)
+```
+
+or
+
+```text
+blob integrity check failed: tar archive is truncated or corrupted: ...
+```
+
+**Resolution**: The containerd content store on the node has an incomplete or corrupt blob for one of the exported images. Pull a fresh copy of the affected image locally and import it into the cluster to replace the corrupt data, then re-export:
+
+```bash
+# Pull a fresh copy of the affected image into your local Docker daemon
+docker pull <image>
+# Save it to a tar archive
+docker save <image> -o fresh.tar
+# Import the fresh image into the cluster
+ksail workload import fresh.tar
+# Re-export
+ksail workload export
+```
+
+If the error spans multiple images or you cannot identify the affected image from the blob SHA, recreate the cluster to force a full re-pull of all images:
+
+```bash
+ksail cluster delete && ksail cluster create
+ksail workload export
+```
+
 ## Component Installation Issues
 
 ### Installation Failures and Timeouts

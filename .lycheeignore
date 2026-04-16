@@ -29,6 +29,9 @@ https://codecov.io/gh/devantler-tech/ksail/graph/badge.svg
 # Intermittent Network Errors (star-history API returns 500/timeouts in CI)
 https://api.star-history.com/
 
+# Intermittent Network Errors (siderolabs.com returns 500 in CI)
+https://www.siderolabs.com/
+
 # Intermittent Network Errors (docs.astro.build returns network errors in CI; glob matches root and any subpaths)
 https://docs.astro.build/
 http://host.docker.internal:8765/
