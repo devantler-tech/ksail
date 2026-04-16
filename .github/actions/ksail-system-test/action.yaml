@@ -173,7 +173,7 @@ runs:
 
         FAILED=0
         assert_contains() {
-          if printf '%s\n' "$output" | grep -Fq -- "$1"; then
+          if grep -Fq -- "$1" <<< "$output"; then
             echo "  ✅ Found: $1"
           else
             echo "  ❌ Missing: $1"
