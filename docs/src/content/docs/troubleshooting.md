@@ -115,15 +115,21 @@ or
 blob integrity check failed: tar archive is truncated or corrupted: ...
 ```
 
-**Resolution**: The containerd content store on the node is missing data for that image. Re-pull the affected image inside the cluster and re-export:
+**Resolution**: The containerd content store on the node has incomplete data for that image. Force a fresh image pull by restarting the affected workload, then re-export:
 
 ```bash
-# Re-import the image into the cluster, then re-export
-ksail workload import images.tar
+# Restart the affected workload to trigger a fresh image pull
+ksail workload rollout restart deployment/<name> -n <namespace>
+# Wait for pods to come up healthy, then re-export
 ksail workload export
 ```
 
-If the error persists, the source image may be partially pulled in the cluster. Recreate the cluster or delete and redeploy the affected workload to force a fresh pull, then re-export.
+If the error persists across multiple workloads, or you cannot identify which workload owns the corrupted blob, recreate the cluster to force a full re-pull of all images:
+
+```bash
+ksail cluster delete && ksail cluster create
+ksail workload export
+```
 
 ## Component Installation Issues
 
