@@ -14,7 +14,7 @@ import (
 
 // TestResolveClusterName exercises cluster name resolution for each distribution.
 //
-
+//nolint:funlen // table-driven test
 func TestResolveClusterName(t *testing.T) {
 	t.Parallel()
 
