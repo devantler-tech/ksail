@@ -2101,6 +2101,7 @@ func executeReconciliation(
 
 	if clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionKWOK {
 		notify.Warningf(cmd.OutOrStdout(), kwokReconcileSkipMsg)
+
 		return nil
 	}
 
