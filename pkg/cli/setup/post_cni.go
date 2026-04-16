@@ -33,6 +33,13 @@ const (
 	kwokPolicyEngineWarning = "policy engine %q is not installed on KWOK: " +
 		"admission webhook calls always time out (no real pod serves the endpoint) — skipping"
 
+	// kwokFluxWarning is emitted when Flux is configured but cannot be fully set
+	// up on KWOK. The flux-operator pod is simulated and never actually runs, so
+	// it cannot process FluxInstance resources or register Flux CRDs. Waiting
+	// for source.toolkit.fluxcd.io/v1 would time out after 12 minutes.
+	kwokFluxWarning = "Flux is not configured on KWOK: " +
+		"flux-operator pod is simulated and never registers Flux CRDs — skipping"
+
 	// apiServerStabilityTimeout is the maximum time to wait for the API server
 	// to stabilize between infrastructure and GitOps installation phases.
 	// Infrastructure components (MetalLB, Kyverno, cert-manager, etc.) register
@@ -241,6 +248,14 @@ func GetComponentRequirements(clusterCfg *v1alpha1.Cluster) ComponentRequirement
 	needsPolicyEngine := clusterCfg.Spec.Cluster.PolicyEngine != v1alpha1.PolicyEngineNone &&
 		clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionKWOK
 
+	// KWOK simulates pod status but cannot run real controller logic. The
+	// flux-operator pod is simulated and never actually runs, so it cannot process
+	// FluxInstance resources or register Flux CRDs (source.toolkit.fluxcd.io/v1).
+	// SetupFluxInstance waits up to 12 minutes for those CRDs, which always times
+	// out on KWOK. Skip Flux installation for KWOK entirely.
+	needsFlux := clusterCfg.Spec.Cluster.GitOpsEngine == v1alpha1.GitOpsEngineFlux &&
+		clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionKWOK
+
 	return ComponentRequirements{
 		NeedsMetricsServer:      needsMetricsServer,
 		NeedsLoadBalancer:       NeedsLoadBalancerInstall(clusterCfg),
@@ -249,7 +264,7 @@ func GetComponentRequirements(clusterCfg *v1alpha1.Cluster) ComponentRequirement
 		NeedsCertManager:        clusterCfg.Spec.Cluster.CertManager == v1alpha1.CertManagerEnabled,
 		NeedsPolicyEngine:       needsPolicyEngine,
 		NeedsArgoCD:             clusterCfg.Spec.Cluster.GitOpsEngine == v1alpha1.GitOpsEngineArgoCD,
-		NeedsFlux:               clusterCfg.Spec.Cluster.GitOpsEngine == v1alpha1.GitOpsEngineFlux,
+		NeedsFlux:               needsFlux,
 	}
 }
 
@@ -302,6 +317,11 @@ func InstallPostCNIComponents(
 		notify.Warningf(cmd.OutOrStdout(), kwokPolicyEngineWarning,
 			clusterCfg.Spec.Cluster.PolicyEngine,
 		)
+	}
+
+	if clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionKWOK &&
+		clusterCfg.Spec.Cluster.GitOpsEngine == v1alpha1.GitOpsEngineFlux {
+		notify.Warningf(cmd.OutOrStdout(), kwokFluxWarning)
 	}
 
 	if reqs.Count() == 0 {
