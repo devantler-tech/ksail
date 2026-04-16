@@ -93,7 +93,7 @@ Use `--model auto` to let Copilot choose the best available model. The TUI shows
 
 ### Quota Tracking
 
-The TUI displays your premium request usage (e.g., `300/300 reqs · 0% · resets Jan 2`) or `∞ reqs` for unlimited entitlements.
+The TUI footer displays real-time premium request usage — for example, `45/100 reqs · 55% · resets Feb 15` — or `∞ reqs` for unlimited entitlements. The footer may be hidden on narrow terminals.
 
 ### MCP Tool Elicitation
 
@@ -107,7 +107,7 @@ Queue multiple prompts to run sequentially without waiting for each response. Wh
 
 ### Infinite Sessions
 
-Chat sessions support unlimited conversation length through automatic background compaction using a background compaction threshold of 80% (0.80) and a buffer exhaustion threshold of 95% (0.95) of the context window.
+Chat sessions support unlimited conversation length through automatic background compaction when the context window nears capacity.
 
 ## Keyboard Shortcuts
 
@@ -152,10 +152,6 @@ Read and URL operations are auto-approved without a prompt.
 - **Esc** — Close modals or cancel current operation
 - **Ctrl+C** — Force quit
 
-## Usage Tracking
-
-When available, the footer displays real-time quota information showing used/total requests, remaining percentage, and reset date (may be hidden on narrow terminals). Example: `45/100 reqs · 55% · resets Feb 15`. For unlimited premium quota, shows `∞ reqs` instead of numeric total.
-
 ## Mode Comparison
 
 | Feature | Interactive Mode | Plan Mode | Autopilot Mode |
@@ -189,12 +185,6 @@ Press **Ctrl+H** to open session history. Navigate with **↑/↓**, filter with
 
 Press **Ctrl+N** to start a fresh conversation. Previous sessions are automatically saved.
 
-## Tips
-
-- See [Auto Model Selection](#auto-model-selection) to have Copilot automatically choose a model and billing tier.
-- See [View Past Sessions](#view-past-sessions) to filter and resume past conversations.
-- See [Reasoning Effort](#reasoning-effort) to balance thoroughness against response time.
-
 ## Troubleshooting
 
 **Chat won't start:** Ensure GitHub Copilot CLI is installed (`which copilot`) and authenticated (`copilot auth login`).
@@ -203,7 +193,7 @@ Press **Ctrl+N** to start a fresh conversation. Previous sessions are automatica
 
 **Timeout errors:** Increase timeout for complex operations (`--timeout 15m`).
 
-**Authentication errors:** Authenticate Copilot CLI (`copilot auth login`) and use `KSAIL_COPILOT_TOKEN` or `COPILOT_TOKEN` environment variables for KSail chat authentication. KSail strips `GITHUB_TOKEN`, `GH_TOKEN`, and `COPILOT_GITHUB_TOKEN` from the child Copilot CLI process, so do not rely on them for `ksail chat` auth; they may still lack Copilot scopes or cause startup failures if you invoke `copilot` directly outside KSail. KSail automatically retries transient auth failures (HTTP 429, 500–504, network errors) up to 3 times with exponential backoff — `auth status check failed after N/3 attempts` messages indicate a persistent issue requiring action.
+**Authentication errors:** Authenticate with `copilot auth login` and use `KSAIL_COPILOT_TOKEN` or `COPILOT_TOKEN` for KSail-specific auth. See [Authentication](#authentication) for details on token filtering. KSail automatically retries transient auth failures (HTTP 429, 500–504, network errors) up to 3 times with exponential backoff — `auth status check failed after N/3 attempts` messages indicate a persistent issue requiring action.
 
 ## See Also
 
