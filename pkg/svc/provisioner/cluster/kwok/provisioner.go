@@ -89,9 +89,6 @@ func (p *Provisioner) Create(ctx context.Context, name string) error {
 			"--runtime", "docker",
 			"--kwok-controller-image", kwokControllerImage,
 		}
-		if configPath != "" {
-			args = append(args, "--config", configPath)
-		}
 
 		_, err := p.runner.Run(kwokCtx, cmd, args)
 		if err != nil {
