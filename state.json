@@ -1,10 +1,10 @@
 {
-  "last_run": "2026-04-15T12:38:00Z",
-  "last_run_id": "24454837717",
-  "issue_backlog_cursor": 4040,
+  "last_run": "2026-04-16T01:04:00Z",
+  "last_run_id": "24486349721",
+  "issue_backlog_cursor": 4060,
   "monthly_activity_issue": 3605,
   "domain_alternation": {
-    "last_domain": "test",
+    "last_domain": "perf",
     "next_domain": "refactor"
   },
   "commented_issues": {
@@ -38,7 +38,9 @@
     "4022": "2026-04-15T01:02:00Z",
     "4038": "2026-04-15T12:38:00Z",
     "4039": "2026-04-15T12:38:00Z",
-    "4040": "2026-04-15T12:38:00Z"
+    "4040": "2026-04-15T12:38:00Z",
+    "4060": "2026-04-16T01:04:00Z",
+    "4045": "2026-04-16T01:04:00Z"
   },
   "labelled_issues": {
     "3412": ["next"],
@@ -112,6 +114,17 @@
       "title": "ci: fix assert_contains SIGPIPE race; test: add metricsserver ValuesYaml tests",
       "fixes": 4038,
       "created": "2026-04-15T12:38:00Z"
+    },
+    "fix-mdx-4035": {
+      "branch": "repo-assist/fix-mdx-syntax-ai-chat-4035",
+      "title": "docs(ai-chat): fix MDX JSX parse error in slash commands table",
+      "fixes": 4035,
+      "created": "2026-04-16T01:04:00Z"
+    },
+    "perf-normalize-image-ref": {
+      "branch": "repo-assist/perf-normalize-image-ref-no-split",
+      "title": "perf(image): eliminate slice allocation in NormalizeImageRef",
+      "created": "2026-04-16T01:04:00Z"
     }
   },
   "nudged_prs": {},
@@ -129,6 +142,11 @@
     "4038": {
       "branch": "repo-assist/fix-assert-contains-sigpipe-4038",
       "created": "2026-04-15T12:38:00Z",
+      "status": "open"
+    },
+    "4035": {
+      "branch": "repo-assist/fix-mdx-syntax-ai-chat-4035",
+      "created": "2026-04-16T01:04:00Z",
       "status": "open"
     }
   }
