@@ -360,8 +360,9 @@ runs:
         # Retag them to canonical registry.k8s.io/... so kwokctl's "docker inspect" finds them.
         # kwokctl's EnsureImage() checks "docker inspect <image>" first; if found, no pull occurs.
         while IFS= read -r image; do
-          mirror_ref="${image/registry.k8s.io\//localhost:5003/}"
-          if [ "$mirror_ref" != "$image" ]; then
+          prefix_stripped="${image#registry.k8s.io/}"
+          if [ "$prefix_stripped" != "$image" ]; then
+            mirror_ref="localhost:5003/$prefix_stripped"
             docker tag "$mirror_ref" "$image" 2>/dev/null && echo "  ✅ Tagged: $image" || echo "  ⚠️ Failed to tag: $image"
           fi
         done < <(grep '^FROM ' pkg/svc/provisioner/cluster/kwok/Dockerfile.controlplane | sed 's/^FROM //')
