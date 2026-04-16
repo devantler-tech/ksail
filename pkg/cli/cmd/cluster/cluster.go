@@ -1615,6 +1615,11 @@ func applyClusterNameOverride(ctx *localregistry.Context, name string) error {
 		ctx.VClusterConfig.Name = name
 	}
 
+	// Update KWOK config
+	if ctx.KWOKConfig != nil {
+		ctx.KWOKConfig.Name = name
+	}
+
 	// Update the ksail.yaml context to match the distribution pattern
 	if ctx.ClusterCfg != nil {
 		dist := ctx.ClusterCfg.Spec.Cluster.Distribution
