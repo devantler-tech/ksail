@@ -6479,9 +6479,15 @@ func computeSpecOnlyDiff(
 		ctx.ClusterCfg.Spec.Cluster.Provider,
 	)
 
+	// Build the target spec, applying any distribution-specific overrides so
+	// the diff reflects what the distribution will actually install rather than
+	// what the user requested.  Copying avoids mutating the shared context.
+	targetSpec := ctx.ClusterCfg.Spec.Cluster
+	applyDistributionSpecOverrides(&targetSpec)
+
 	diff := diffEngine.ComputeDiff(
 		currentSpec,
-		&ctx.ClusterCfg.Spec.Cluster,
+		&targetSpec,
 		nil,
 		&ctx.ClusterCfg.Spec.Provider,
 	)
@@ -6490,6 +6496,19 @@ func computeSpecOnlyDiff(
 	checkWorkloadTagDrift(cmd, ctx, diffEngine, diff)
 
 	return diff
+}
+
+// applyDistributionSpecOverrides normalises a ClusterSpec by clearing fields
+// that the given distribution will never install, so that update dry-runs do
+// not report spurious "install X" changes for features that are silently skipped
+// at cluster-creation time.
+func applyDistributionSpecOverrides(spec *v1alpha1.ClusterSpec) {
+	if spec.Distribution == v1alpha1.DistributionKWOK {
+		// KWOK cannot run admission-webhook servers (simulated pods have no
+		// real network), so policy engines are always skipped at creation time.
+		// Treat PolicyEngine as None so the diff stays clean.
+		spec.PolicyEngine = v1alpha1.PolicyEngineNone
+	}
 }
 
 // checkWorkloadTagDrift queries the running GitOps sync resource for its current
