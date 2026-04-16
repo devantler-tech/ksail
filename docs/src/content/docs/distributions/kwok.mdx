@@ -80,31 +80,40 @@ ksail cluster delete
 For general KSail YAML options, see the [Configuration Reference](/configuration/). The `kwok.yaml` file contains KWOK-specific CRDs that enable simulation of kubectl operations:
 
 ````yaml
-# ClusterLogs — enables kubectl logs
+# KWOK cluster simulation configuration.
+# These CRDs enable kubectl logs, exec, attach, and port-forward for simulated pods.
+---
 apiVersion: kwok.x-k8s.io/v1alpha1
 kind: ClusterLogs
 metadata:
   name: default-logs
 spec:
-  selector: {}
   logs:
-    - containers:
-        - name: '*'
-      logsFile: /dev/null
-
-# ClusterExec — enables kubectl exec
+    - logsFile: /dev/null
 ---
 apiVersion: kwok.x-k8s.io/v1alpha1
 kind: ClusterExec
 metadata:
   name: default-exec
 spec:
-  selector: {}
   execs:
-    - containers:
-        - name: '*'
-      command:
-        - /bin/sh
+    - local: {}
+---
+apiVersion: kwok.x-k8s.io/v1alpha1
+kind: ClusterAttach
+metadata:
+  name: default-attach
+spec:
+  attaches:
+    - {}
+---
+apiVersion: kwok.x-k8s.io/v1alpha1
+kind: ClusterPortForward
+metadata:
+  name: default-port-forward
+spec:
+  forwards:
+    - {}
 ````
 
 See the [KWOK documentation](https://kwok.sigs.k8s.io/docs/user/) for all available CRDs and configuration options.
