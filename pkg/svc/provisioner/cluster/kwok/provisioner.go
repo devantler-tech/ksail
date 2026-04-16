@@ -15,6 +15,7 @@ import (
 	"sigs.k8s.io/kwok/pkg/config"
 	createcluster "sigs.k8s.io/kwok/pkg/kwokctl/cmd/create/cluster"
 	deletecluster "sigs.k8s.io/kwok/pkg/kwokctl/cmd/delete/cluster"
+	kwokscale "sigs.k8s.io/kwok/pkg/kwokctl/cmd/scale"
 	startcluster "sigs.k8s.io/kwok/pkg/kwokctl/cmd/start/cluster"
 	stopcluster "sigs.k8s.io/kwok/pkg/kwokctl/cmd/stop/cluster"
 	kwokruntime "sigs.k8s.io/kwok/pkg/kwokctl/runtime"
@@ -93,6 +94,15 @@ func (p *Provisioner) Create(ctx context.Context, name string) error {
 		_, err := p.runner.Run(kwokCtx, cmd, args)
 		if err != nil {
 			return fmt.Errorf("failed to create KWOK cluster: %w", err)
+		}
+
+		// Create one simulated node so the kube-scheduler can place pods
+		// and the kwok-controller simulates their Running/Ready state.
+		scaleCmd := kwokscale.NewCommand(kwokCtx)
+
+		_, err = p.runner.Run(kwokCtx, scaleCmd, []string{"node", "--replicas", "1"})
+		if err != nil {
+			return fmt.Errorf("failed to create simulated node in KWOK cluster: %w", err)
 		}
 
 		return nil
