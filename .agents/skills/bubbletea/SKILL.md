@@ -34,7 +34,7 @@ Full details and examples in `references/golden-rules.md`.
 
 ## Creating New Projects
 
-This project includes a production-ready template system. When using this skill for a new project, use the existing template structure as the starting point.
+This project includes a production-ready template system. When this skill is bundled with a new project (via `new_project.sh`), use the existing template structure as the starting point.
 
 ### Project Structure
 
@@ -84,7 +84,7 @@ Beautiful physics-based animations available in the template:
 - 🌈 **Rainbow Cycling** - Animated color gradients
 - 🎭 **Layer Compositor** - ANSI-aware multi-layer rendering
 
-See the bundled template implementation for usage examples and integration patterns.
+See `references/components.md` for usage examples and integration patterns.
 
 ## Layout Implementation Pattern
 
@@ -134,13 +134,11 @@ maxTextWidth := panelWidth - 4  // -2 borders, -2 padding
 title = truncateString(title, maxTextWidth)
 subtitle = truncateString(subtitle, maxTextWidth)
 
-// For full Unicode/emoji support, use runewidth.Truncate from
-// github.com/mattn/go-runewidth instead of byte-based slicing.
 func truncateString(s string, maxLen int) string {
     if runewidth.StringWidth(s) <= maxLen {
         return s
     }
-    return runewidth.Truncate(s, maxLen, "…")
+    return runewidth.Truncate(s, maxLen-1, "…")
 }
 ```
 
