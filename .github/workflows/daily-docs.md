@@ -148,12 +148,27 @@ Ensure every code-level change is mirrored by clear, accurate, and stylistically
    - Cross-reference the diff against your documentation inventory to find affected pages
    - Identify documentation gaps like failing tests: a "red build" until fixed
 
-3. **Synchronize Root Documentation Files**
+3. **Root File Audit (always runs, not gated on the diff)**
+
+   Root documentation files drift silently because most pushes don't touch them. Audit them on every Doc Sync run, independently of whether the current diff suggests a root-file change. If any check fails, fix it in the same PR as (or in addition to) diff-driven updates.
+
+   Checks to perform:
+
+   - **README length**: `wc -l README.md` must report ≤ 100 lines. If over, move detail into the canonical `docs/` page and replace with a link.
+   - **README scope**: `README.md` must NOT contain content that duplicates `docs/src/content/docs/index.mdx`. Specifically flag and remove: Mermaid architecture diagrams, full `ksail cluster init` flag reference, Native Configuration Files walkthroughs, Presentations lists, Blog Posts lists, verbose "Why KSail?" / "Key Features" bullet lists. These belong on `/architecture/`, `/cli-flags/cluster/cluster-init/`, `/configuration/`, and `/resources/`.
+   - **Distribution × Provider matrix parity**: The provider/distribution matrix in `README.md` must list the same distributions and providers as `docs/src/content/docs/index.mdx`. When a new distribution or provider is added (for example, when a new provisioner or provider package lands under `pkg/svc/provisioner/` or `pkg/svc/provider/`), both matrices must be updated in lockstep.
+   - **Top-level command parity**: If `README.md` names specific top-level commands, they must match the output of `go run . --help` (Available Commands section). New top-level commands (like `tenant`) must be reflected.
+   - **`vsce/README.md`**: must remain a concise marketplace description that links to `/vscode-extension/` — never a full docs page copy.
+   - **`CONTRIBUTING.md` and `.github/copilot-instructions.md`**: must not contain end-user tutorials or feature marketing; those belong in `docs/`.
+
+   If every root-file check passes and the diff surfaces no doc impact, call `noop` with a summary of what was checked. Do not claim `noop` without running these checks.
+
+4. **Synchronize Root Documentation Files**
 
    Each root file serves a different audience and medium. Do NOT duplicate content across them — link instead.
 
    - **README.md** (audience: end-user, medium: GitHub landing page)
-     - Keep under ~100 lines: badges, one-paragraph intro, feature bullet list, prerequisites table, and a prominent link to the docs site
+     - Keep under 100 lines (`wc -l README.md` ≤ 100): badges, one-paragraph intro, feature bullet list, prerequisites table, and a prominent link to the docs site
      - Do NOT include tutorials, detailed configuration, architecture internals, or content that duplicates `docs/src/content/docs/index.mdx`
      - Link to the docs site for anything beyond a quick overview (e.g., "See the [Installation Guide](https://ksail.devantler.tech/installation/)")
 
@@ -175,7 +190,7 @@ Ensure every code-level change is mirrored by clear, accurate, and stylistically
      - Architecture overview, build commands, project structure, and package layout for AI assistant guidance
      - **Do NOT add, maintain, or re-create a "Recent Changes" section** — this section has been intentionally removed
 
-4. **Create or Update Documentation**
+5. **Create or Update Documentation**
 
    Before writing or modifying any content, consult your **page ownership map** and documentation inventory.
 
@@ -186,7 +201,7 @@ Ensure every code-level change is mirrored by clear, accurate, and stylistically
    - Follow progressive disclosure: high-level concepts first, detailed examples second
    - Create clear, actionable documentation that serves both newcomers and power users
 
-5. **Sidebar & Structure Refinement**
+6. **Sidebar & Structure Refinement**
 
    Continuously evaluate and refine the sidebar navigation (`docs/astro.config.mjs`) and overall docs structure to keep them well-organized, easy to navigate, and holistic.
 
@@ -204,7 +219,7 @@ Ensure every code-level change is mirrored by clear, accurate, and stylistically
    - **Collapsed sections**: Use `collapsed: true` only for large reference sections (e.g., CLI flags). Keep primary navigation sections expanded.
    - **Holistic structure**: Step back and evaluate the overall docs structure. If the documentation has grown in a way that no longer makes sense (e.g., a section has too many pages, related topics are scattered across sections), propose reorganization — move pages, rename sections, or create new groupings as needed.
 
-6. **Coherence Review**
+7. **Coherence Review**
 
    After making changes, verify the full documentation set remains coherent:
 
@@ -216,15 +231,15 @@ Ensure every code-level change is mirrored by clear, accurate, and stylistically
      - **Concept/explanation pages**: Explain "why" and "what"; link to reference pages for "how"
      - **Guide pages**: Goal-oriented, complete workflow from start to finish; include troubleshooting tips
      - **Reference pages**: Exhaustive and scannable; prefer tables over prose; document every option
-     - **README.md**: Under ~100 lines, link-heavy, no tutorials or detailed configuration
+     - **README.md**: Under 100 lines (`wc -l README.md` ≤ 100), link-heavy, no tutorials or detailed configuration
    - End-user docs (`docs/`) do not contain contributor-only content (internal APIs, package paths, design decisions)
 
-7. **Quality Assurance**
+8. **Quality Assurance**
    - Check for broken links, missing images, or formatting issues
    - **Link verification**: Scan documentation files for HTTP(S) links and test them. For broken links, search for replacement URLs (try common variations like www, http vs https, archived pages). Fix broken links in-place. Use `cache-memory` to avoid re-checking links that were previously verified or confirmed unfixable.
    - Ensure code examples are accurate and functional
 
-8. **Output**
+9. **Output**
    - Create focused draft pull requests with clear descriptions
    - When triggered by a `push` event and no documentation changes are needed, call `noop` — do NOT call `add_comment` (there is no PR or issue context on push)
    - Exit if no code changes require documentation updates
@@ -279,8 +294,14 @@ find docs/src/content/docs -type f \( -name '*.md' -o -name '*.mdx' \) ! \( -pat
 
 #### 3. Find Candidate Files
 
+Candidates include **both** user-facing docs under `docs/` **and** root documentation files. Root files (`README.md`, `vsce/README.md`, `CONTRIBUTING.md`, `.github/copilot-instructions.md`) are scanned here because Doc Sync mode only runs on code pushes — the daily schedule is what catches root-file bloat.
+
 ```bash
+# User-facing docs (excluding auto-generated + blog)
 find docs/src/content/docs -path 'docs/src/content/docs/blog' -prune -o \( -name '*.md' -o -name '*.mdx' \) -type f ! -name 'frontmatter-full.md' -print
+
+# Root documentation files
+ls README.md vsce/README.md CONTRIBUTING.md .github/copilot-instructions.md 2>/dev/null
 ```
 
 **Exclude**:
@@ -290,6 +311,12 @@ find docs/src/content/docs -path 'docs/src/content/docs/blog' -prune -o \( -name
 - Files with `disable-agentic-editing: true` in frontmatter
 - All files under `docs/src/content/docs/cli-flags/*/` — auto-generated by `go generate`
 - `docs/src/content/docs/configuration/declarative-configuration.mdx` — auto-generated by `go generate`
+
+**Root-file specific checks** (apply when a root file is selected):
+
+- `README.md` — `wc -l README.md` must report ≤ 100 lines, must not duplicate `docs/src/content/docs/index.mdx` (no Mermaid diagrams, full init flag reference, Native Configuration Files walkthrough, Presentations list, Blog Posts list), and must keep its Distribution × Provider matrix in sync with `docs/index.mdx`.
+- `vsce/README.md` — concise marketplace description only; full usage belongs on `/vscode-extension/`.
+- `CONTRIBUTING.md` / `.github/copilot-instructions.md` — contributor content only; no end-user tutorials or marketing.
 
 {{#if ${{ github.event.pull_request.number }}}}
 **Pull Request Context**: Prioritize documentation files modified in PR #${{ github.event.pull_request.number }}.
