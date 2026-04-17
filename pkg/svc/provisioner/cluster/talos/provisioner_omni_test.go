@@ -445,3 +445,112 @@ users:
 	assert.Contains(t, string(result), "name: admin@devantler-dev")
 	assert.NotContains(t, string(result), "devantler-devantler-dev-ksail")
 }
+
+// TestRefreshOmniConfigsIfNeeded_NilInfraProvider verifies that when no infra
+// provider is set (infraProvider == nil) the refresh is skipped without error.
+// This covers the non-Omni fast-path for Docker/Hetzner provisioners.
+func TestRefreshOmniConfigsIfNeeded_NilInfraProvider(t *testing.T) {
+	t.Parallel()
+
+	// No WithInfraProvider call → infraProvider stays nil.
+	p := talosprovisioner.NewProvisioner(nil, nil)
+
+	err := p.RefreshOmniConfigsIfNeededForTest(context.Background(), "demo")
+
+	require.NoError(t, err, "nil infraProvider must be a no-op")
+}
+
+// TestRefreshOmniConfigsIfNeeded_NonOmniProvider verifies that when the infra
+// provider is not an *omniprovider.Provider the type assertion returns false and
+// the refresh is silently skipped, returning nil.
+func TestRefreshOmniConfigsIfNeeded_NonOmniProvider(t *testing.T) {
+	t.Parallel()
+
+	// provider.MockProvider satisfies the provider.Provider interface but is not
+	// *omniprovider.Provider, so the type assertion should return (nil, false).
+	mockProv := provider.NewMockProvider()
+
+	p := talosprovisioner.NewProvisioner(nil, nil).WithInfraProvider(mockProv)
+
+	err := p.RefreshOmniConfigsIfNeededForTest(context.Background(), "demo")
+
+	require.NoError(t, err, "non-Omni infraProvider must be a no-op")
+	// No calls should be made on the mock since the path is skipped.
+	mockProv.AssertNotCalled(t, "ListNodes")
+}
+
+// TestRefreshOmniConfigsIfNeeded_OmniProvider_NoPaths verifies that when the
+// infra provider IS an *omniprovider.Provider but no kubeconfig or talosconfig
+// output path is configured, saveOmniConfigs is effectively a no-op and returns nil.
+func TestRefreshOmniConfigsIfNeeded_OmniProvider_NoPaths(t *testing.T) {
+	t.Parallel()
+
+	// No output paths set; saveOmniConfigs will skip both branches and return nil.
+	omniProv := omniprovider.NewProvider(nil)
+
+	p := talosprovisioner.NewProvisioner(nil, nil).WithInfraProvider(omniProv)
+
+	err := p.RefreshOmniConfigsIfNeededForTest(context.Background(), "demo")
+
+	require.NoError(t, err, "Omni provider with no output paths must be a no-op")
+}
+
+// TestRefreshOmniConfigsIfNeeded_OmniProvider_WithKubeconfigPath verifies that
+// when the infra provider is an *omniprovider.Provider and a kubeconfig output
+// path is configured, refreshOmniConfigsIfNeeded forwards to saveOmniKubeconfig.
+// The nil-client Omni provider returns ErrProviderUnavailable, proving that the
+// refresh code path is reached rather than silently skipped.
+func TestRefreshOmniConfigsIfNeeded_OmniProvider_WithKubeconfigPath(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	omniProv := omniprovider.NewProvider(nil) // nil client → ErrProviderUnavailable
+
+	p := talosprovisioner.NewProvisioner(nil,
+		talosprovisioner.NewOptions().WithKubeconfigPath(filepath.Join(tmpDir, "kube.yaml")),
+	).WithInfraProvider(omniProv)
+
+	err := p.RefreshOmniConfigsIfNeededForTest(context.Background(), "demo")
+
+	require.Error(t, err, "expected an error from nil-client Omni provider")
+	require.ErrorIs(t, err, provider.ErrProviderUnavailable,
+		"error must propagate from saveOmniKubeconfig as ErrProviderUnavailable")
+}
+
+// TestRefreshOmniConfigsIfNeeded_OmniProvider_WithTalosconfigPath mirrors
+// TestRefreshOmniConfigsIfNeeded_OmniProvider_WithKubeconfigPath but for the
+// talosconfig output path, verifying both branches of saveOmniConfigs are reachable.
+func TestRefreshOmniConfigsIfNeeded_OmniProvider_WithTalosconfigPath(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	omniProv := omniprovider.NewProvider(nil)
+
+	p := talosprovisioner.NewProvisioner(nil,
+		talosprovisioner.NewOptions().WithTalosconfigPath(filepath.Join(tmpDir, "talos.yaml")),
+	).WithInfraProvider(omniProv)
+
+	err := p.RefreshOmniConfigsIfNeededForTest(context.Background(), "demo")
+
+	require.Error(t, err, "expected an error from nil-client Omni provider")
+	require.ErrorIs(t, err, provider.ErrProviderUnavailable,
+		"error must propagate from saveOmniTalosconfig as ErrProviderUnavailable")
+}
+
+// TestRefreshOmniConfigsIfNeeded_TypedNilOmniProvider verifies that when the
+// infra provider interface holds a typed-nil *omniprovider.Provider (ok==true,
+// omniProv==nil), refreshOmniConfigsIfNeeded treats it as a no-op and returns
+// nil rather than panicking with a nil-pointer dereference inside saveOmniConfigs.
+func TestRefreshOmniConfigsIfNeeded_TypedNilOmniProvider(t *testing.T) {
+	t.Parallel()
+
+	var typedNil *omniprovider.Provider // typed-nil: ok==true, omniProv==nil
+
+	p := talosprovisioner.NewProvisioner(nil,
+		talosprovisioner.NewOptions().WithKubeconfigPath("/tmp/should-not-be-written"),
+	).WithInfraProvider(typedNil)
+
+	err := p.RefreshOmniConfigsIfNeededForTest(context.Background(), "demo")
+
+	require.NoError(t, err, "typed-nil Omni provider must be treated as a no-op, not panic")
+}
