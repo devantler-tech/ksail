@@ -41,6 +41,7 @@ exclude_path = [
 # URL patterns to ignore (applied after successful URL construction).
 #   - ^/: root-relative paths (not real URLs).
 #   - %s: Go fmt.Sprintf template URLs (e.g. version placeholders).
+#   - \$%7B: shell variable template URLs (${VAR} URL-encoded, not real URLs).
 #   - siderolabs.com/platform/saas-for-kubernetes: intermittently returns
 #     HTTP 500 in CI environments; content is stable, link is not broken.
-exclude = ['^/', '%s', 'siderolabs\.com/platform/saas-for-kubernetes']
+exclude = ['^/', '%s', '\$%7B', 'siderolabs\.com/platform/saas-for-kubernetes']
