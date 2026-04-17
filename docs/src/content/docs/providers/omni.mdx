@@ -3,7 +3,7 @@ title: Omni Provider
 description: Set up and manage Talos Linux clusters through Sidero Omni with KSail for enterprise-grade immutable infrastructure.
 ---
 
-The Omni provider manages Talos Linux clusters through the [Sidero Omni](https://www.siderolabs.com/platform/saas-for-kubernetes/) SaaS platform. Omni handles machine lifecycle, cluster orchestration, and configuration distribution — KSail connects to the Omni API to create, manage, and tear down clusters using machines you've already registered in Omni.
+The Omni provider manages Talos Linux clusters through the [Sidero Omni](https://www.siderolabs.com/omni/) SaaS platform. Omni handles machine lifecycle, cluster orchestration, and configuration distribution — KSail connects to the Omni API to create, manage, and tear down clusters using machines you've already registered in Omni.
 
 ## When to Use the Omni Provider
 
@@ -19,7 +19,7 @@ The Omni provider is ideal when you:
 
 ## Prerequisites
 
-1. **Sidero Omni account** — Sign up at [siderolabs.com](https://www.siderolabs.com/platform/saas-for-kubernetes/)
+1. **Sidero Omni account** — Sign up at [siderolabs.com](https://www.siderolabs.com/omni/)
 2. **Registered machines** — At least one machine must be registered in your Omni instance and available for allocation (see [Omni docs: Register a Machine](https://omni.siderolabs.com/docs/how-to-guides/how-to-register-a-machine/)). Machines can be allocated dynamically via a machine class, statically by UUID list, or auto-discovered from the available pool when neither is configured.
 3. **Service account key** — Create one in the Omni web UI under **Settings → Service Accounts**; the key is a base64-encoded string
 4. **Omni API endpoint** — Your account-specific URL, typically `https://<account>.omni.siderolabs.io:443`
