@@ -50,7 +50,7 @@ your-app/
 ├── view.go              # View rendering & layouts
 ├── styles.go            # Lipgloss style definitions
 ├── config.go            # Configuration management
-└── .agents/skills/bubbletea/  # This skill (bundled)
+└── .claude/skills/bubbletea/  # This skill (bundled)
 ```
 
 ### Architecture Guidelines
@@ -84,7 +84,7 @@ Beautiful physics-based animations available in the template:
 - 🌈 **Rainbow Cycling** - Animated color gradients
 - 🎭 **Layer Compositor** - ANSI-aware multi-layer rendering
 
-See `references/components.md` for usage examples and integration patterns.
+See `references/effects.md` for usage examples and integration patterns.
 
 ## Layout Implementation Pattern
 
@@ -135,10 +135,10 @@ title = truncateString(title, maxTextWidth)
 subtitle = truncateString(subtitle, maxTextWidth)
 
 func truncateString(s string, maxLen int) string {
-    if runewidth.StringWidth(s) <= maxLen {
+    if len(s) <= maxLen {
         return s
     }
-    return runewidth.Truncate(s, maxLen-1, "…")
+    return s[:maxLen-1] + "…"
 }
 ```
 
