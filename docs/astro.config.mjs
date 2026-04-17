@@ -94,6 +94,7 @@ export default defineConfig({
             { label: "K3s (K3d)", link: "/distributions/k3s/" },
             { label: "Talos", link: "/distributions/talos/" },
             { label: "VCluster", link: "/distributions/vcluster/" },
+            { label: "KWOK (kwokctl)", link: "/distributions/kwok/" },
           ],
         },
         {
