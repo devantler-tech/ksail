@@ -29,7 +29,7 @@ var (
 
 	// ErrUnknownContextPattern indicates the context name doesn't match any known distribution pattern.
 	ErrUnknownContextPattern = errors.New(
-		"unknown distribution: context does not match kind-, k3d-, admin@, vcluster-docker_, or kwok- pattern",
+		"unknown distribution: context does not match kind-, k3d-, admin@, vcluster-docker_, kwok-, or *.eksctl.io pattern",
 	)
 
 	// ErrEmptyClusterName is returned when cluster name detection results in an empty string.
@@ -175,9 +175,20 @@ var contextPatterns = []struct { //nolint:gochecknoglobals // static lookup tabl
 //   - admin@<cluster-name> → Talos
 //   - vcluster-docker_<cluster-name> → VCluster
 //   - kwok-<cluster-name> → KWOK
+//   - <iam>@<name>.<region>.eksctl.io or <name>.eksctl.io → EKS
 //
 // Returns an error if the pattern is unrecognized or if the extracted cluster name is empty.
 func DetectDistributionFromContext(contextName string) (v1alpha1.Distribution, string, error) {
+	if clusterName, ok := extractEKSClusterName(contextName); ok {
+		if clusterName == "" {
+			return "", "", fmt.Errorf(
+				"%w: context %q has empty cluster name", ErrEmptyClusterName, contextName,
+			)
+		}
+
+		return v1alpha1.DistributionEKS, clusterName, nil
+	}
+
 	for _, pattern := range contextPatterns {
 		if clusterName, ok := strings.CutPrefix(contextName, pattern.prefix); ok {
 			if clusterName == "" {
@@ -191,6 +202,33 @@ func DetectDistributionFromContext(contextName string) (v1alpha1.Distribution, s
 	}
 
 	return "", "", fmt.Errorf("%w: %s", ErrUnknownContextPattern, contextName)
+}
+
+// eksContextSuffix is the DNS suffix eksctl appends to kubeconfig context names.
+const eksContextSuffix = ".eksctl.io"
+
+// extractEKSClusterName parses an eksctl context name into a cluster name.
+// Scaffold-time contexts look like "<name>.eksctl.io" and runtime contexts
+// look like "<iam>@<name>.<region>.eksctl.io". Returns the cluster name and
+// true when the context matches the eksctl suffix.
+func extractEKSClusterName(contextName string) (string, bool) {
+	trimmed, ok := strings.CutSuffix(contextName, eksContextSuffix)
+	if !ok {
+		return "", false
+	}
+
+	// Strip the IAM identity prefix ("<iam>@") if present.
+	if at := strings.LastIndex(trimmed, "@"); at >= 0 {
+		trimmed = trimmed[at+1:]
+	}
+
+	// Strip the trailing ".<region>" segment when present. The scaffold-time
+	// context omits the region, so a missing dot is expected.
+	if dot := strings.LastIndex(trimmed, "."); dot >= 0 {
+		trimmed = trimmed[:dot]
+	}
+
+	return trimmed, true
 }
 
 // detectFromServerURL infers distribution and cluster name from the server URL
@@ -245,6 +283,11 @@ func detectProviderFromEndpoint(
 		distribution == v1alpha1.DistributionVCluster ||
 		distribution == v1alpha1.DistributionKWOK {
 		return v1alpha1.ProviderDocker, nil
+	}
+
+	// EKS only runs on AWS.
+	if distribution == v1alpha1.DistributionEKS {
+		return v1alpha1.ProviderAWS, nil
 	}
 
 	// For Talos, analyze the server endpoint

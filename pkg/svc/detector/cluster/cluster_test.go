@@ -94,6 +94,26 @@ func TestDetectDistributionFromContext(t *testing.T) {
 			wantError:     true,
 			errorContains: "empty cluster name",
 		},
+		{
+			name:             "eks_scaffold_context",
+			contextName:      "eks-default.eksctl.io",
+			wantDistribution: v1alpha1.DistributionEKS,
+			wantClusterName:  "eks-default",
+			wantError:        false,
+		},
+		{
+			name:             "eks_runtime_context",
+			contextName:      "admin@eks-default.us-east-1.eksctl.io",
+			wantDistribution: v1alpha1.DistributionEKS,
+			wantClusterName:  "eks-default",
+			wantError:        false,
+		},
+		{
+			name:          "empty_eks_name",
+			contextName:   ".eksctl.io",
+			wantError:     true,
+			errorContains: "empty cluster name",
+		},
 	}
 
 	for _, testCase := range tests {
