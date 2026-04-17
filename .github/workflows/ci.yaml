@@ -739,14 +739,26 @@ jobs:
             provider: Docker
             init: false
             args: "--gitops-engine ArgoCD --local-registry ghcr.io/devantler-tech/ksail/system-test-manifests"
-          # KWOK suppresses Flux at creation time (flux-operator is simulated and never
-          # registers CRDs). Without Flux running, workload push cannot discover a
-          # registry via FluxInstance, and init=false provides no ksail.yaml with a
-          # local-registry fallback. Exclude this combination to avoid a spurious failure.
+          # KWOK: init=false primarily validates CLI flag parsing (same as other distributions).
+          # Additionally, KWOK suppresses Flux so workload push cannot discover a registry
+          # via FluxInstance, and init=false provides no ksail.yaml fallback.
+          # Exclude all non-default init=false args for KWOK, matching other distributions.
           - distribution: KWOK
             provider: Docker
             init: false
             args: "--name system-test-cluster --cni Cilium --csi Enabled --load-balancer Enabled --metrics-server Enabled --policy-engine Kyverno --cert-manager Enabled --gitops-engine Flux"
+          - distribution: KWOK
+            provider: Docker
+            init: false
+            args: "--cni Calico --csi Disabled --load-balancer Disabled --metrics-server Disabled --policy-engine Gatekeeper --gitops-engine ArgoCD"
+          - distribution: KWOK
+            provider: Docker
+            init: false
+            args: "--gitops-engine Flux --local-registry ghcr.io/devantler-tech/ksail/system-test-manifests"
+          - distribution: KWOK
+            provider: Docker
+            init: false
+            args: "--gitops-engine ArgoCD --local-registry ghcr.io/devantler-tech/ksail/system-test-manifests"
         include:
           - distribution: Talos
             provider: Docker
