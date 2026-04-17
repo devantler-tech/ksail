@@ -17,6 +17,8 @@ const (
 	ProviderHetzner Provider = "Hetzner"
 	// ProviderOmni runs cluster nodes managed by Sidero Omni.
 	ProviderOmni Provider = "Omni"
+	// ProviderAWS runs EKS managed Kubernetes clusters on AWS.
+	ProviderAWS Provider = "AWS"
 )
 
 // Set for Provider (pflag.Value interface).
@@ -30,12 +32,13 @@ func (p *Provider) Set(value string) error {
 	}
 
 	return fmt.Errorf(
-		"%w: %s (valid options: %s, %s, %s)",
+		"%w: %s (valid options: %s, %s, %s, %s)",
 		ErrInvalidProvider,
 		value,
 		ProviderDocker,
 		ProviderHetzner,
 		ProviderOmni,
+		ProviderAWS,
 	)
 }
 
@@ -56,7 +59,12 @@ func (p *Provider) Default() any {
 
 // ValidValues returns all valid Provider values as strings.
 func (p *Provider) ValidValues() []string {
-	return []string{string(ProviderDocker), string(ProviderHetzner), string(ProviderOmni)}
+	return []string{
+		string(ProviderDocker),
+		string(ProviderHetzner),
+		string(ProviderOmni),
+		string(ProviderAWS),
+	}
 }
 
 // supportedProviders returns the valid providers for a given distribution.
@@ -66,15 +74,17 @@ func supportedProviders(distribution Distribution) []Provider {
 		return []Provider{ProviderDocker}
 	case DistributionTalos:
 		return []Provider{ProviderDocker, ProviderHetzner, ProviderOmni}
+	case DistributionEKS:
+		return []Provider{ProviderAWS}
 	default:
 		return nil
 	}
 }
 
-// IsCloud returns true if the provider is a cloud provider (Hetzner or Omni).
+// IsCloud returns true if the provider is a cloud provider (Hetzner, Omni, or AWS).
 // Cloud providers run nodes on remote servers and cannot access local Docker infrastructure.
 func (p *Provider) IsCloud() bool {
-	return *p == ProviderHetzner || *p == ProviderOmni
+	return *p == ProviderHetzner || *p == ProviderOmni || *p == ProviderAWS
 }
 
 // ValidateForDistribution validates that the provider is valid for the given distribution.

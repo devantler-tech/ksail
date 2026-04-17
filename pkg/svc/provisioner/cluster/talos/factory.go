@@ -154,6 +154,10 @@ func configureInfraProvider(
 		// Store Omni options so the provisioner can route to Omni-specific logic
 		provisioner.WithOmniOptions(omniOpts)
 
+	case v1alpha1.ProviderAWS:
+		return fmt.Errorf("%w: %s (AWS is only supported with the EKS distribution)",
+			ErrUnsupportedProvider, providerType)
+
 	default:
 		return fmt.Errorf("%w: %s (supported: %s, %s, %s)",
 			ErrUnsupportedProvider, providerType,

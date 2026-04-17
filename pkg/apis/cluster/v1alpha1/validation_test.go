@@ -59,7 +59,8 @@ func TestValidDistributions_IncludesTalos(t *testing.T) {
 	assert.Contains(t, distributions, v1alpha1.DistributionTalos)
 	assert.Contains(t, distributions, v1alpha1.DistributionVCluster)
 	assert.Contains(t, distributions, v1alpha1.DistributionKWOK)
-	assert.Len(t, distributions, 5) // Vanilla, K3s, Talos, VCluster, KWOK
+	assert.Contains(t, distributions, v1alpha1.DistributionEKS)
+	assert.Len(t, distributions, 6) // Vanilla, K3s, Talos, VCluster, KWOK, EKS
 }
 
 func TestTalosProvidesMetricsServerByDefault_ReturnsFalse(t *testing.T) {
@@ -233,7 +234,8 @@ func TestValidProviders(t *testing.T) {
 	assert.Contains(t, providers, v1alpha1.ProviderDocker)
 	assert.Contains(t, providers, v1alpha1.ProviderHetzner)
 	assert.Contains(t, providers, v1alpha1.ProviderOmni)
-	assert.Len(t, providers, 3)
+	assert.Contains(t, providers, v1alpha1.ProviderAWS)
+	assert.Len(t, providers, 4)
 }
 
 func TestValidPlacementGroupStrategies(t *testing.T) {

@@ -192,13 +192,17 @@ func InstallLoadBalancerSilent(
 		case v1alpha1.ProviderOmni:
 			// Omni manages the machine lifecycle; MetalLB is not applicable
 			return nil
+		case v1alpha1.ProviderAWS:
+			// AWS is not a supported provider for Talos.
+			return nil
 		}
 	case v1alpha1.DistributionK3s:
 		// K3s already has ServiceLB (Klipper) by default, no installation needed
 		return nil
-	case v1alpha1.DistributionVCluster, v1alpha1.DistributionKWOK:
+	case v1alpha1.DistributionVCluster, v1alpha1.DistributionKWOK, v1alpha1.DistributionEKS:
 		// VCluster (Vind) handles LoadBalancer via its own networking.
-		// KWOK is a simulation cluster with no real network dataplane — LoadBalancer installation is not needed.
+		// KWOK is a simulation cluster with no real network dataplane.
+		// EKS relies on AWS Load Balancer Controller (installed separately).
 		return nil
 	}
 

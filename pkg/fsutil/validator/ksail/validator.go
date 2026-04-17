@@ -204,20 +204,31 @@ func (v *Validator) getExpectedContextName(config *v1alpha1.Cluster) string {
 		return ""
 	}
 
-	switch config.Spec.Cluster.Distribution {
-	case v1alpha1.DistributionVanilla:
-		return "kind-" + distributionName
-	case v1alpha1.DistributionK3s:
-		return "k3d-" + distributionName
-	case v1alpha1.DistributionTalos:
-		return "admin@" + distributionName
-	case v1alpha1.DistributionVCluster:
-		return "vcluster-docker_" + distributionName
-	case v1alpha1.DistributionKWOK:
-		return "kwok-" + distributionName
-	default:
-		return ""
+	return formatExpectedContextName(config.Spec.Cluster.Distribution, distributionName)
+}
+
+// formatExpectedContextName returns the canonical kubeconfig context name used
+// by a given distribution's tooling.
+func formatExpectedContextName(
+	distribution v1alpha1.Distribution,
+	distributionName string,
+) string {
+	prefixes := map[v1alpha1.Distribution]string{
+		v1alpha1.DistributionVanilla:  "kind-",
+		v1alpha1.DistributionK3s:      "k3d-",
+		v1alpha1.DistributionTalos:    "admin@",
+		v1alpha1.DistributionVCluster: "vcluster-docker_",
+		v1alpha1.DistributionKWOK:     "kwok-",
 	}
+	if prefix, ok := prefixes[distribution]; ok {
+		return prefix + distributionName
+	}
+
+	if distribution == v1alpha1.DistributionEKS {
+		return distributionName + ".eksctl.io"
+	}
+
+	return ""
 }
 
 // getDistributionConfigName extracts the cluster name from the distribution configuration.
@@ -233,6 +244,10 @@ func (v *Validator) getDistributionConfigName(distribution v1alpha1.Distribution
 		return v.getVClusterConfigName()
 	case v1alpha1.DistributionKWOK:
 		return v.getKWOKConfigName()
+	case v1alpha1.DistributionEKS:
+		// EKS config is not provided to the validator (eksctl manages it);
+		// skip distribution-level name validation.
+		return ""
 	default:
 		return ""
 	}
@@ -324,9 +339,9 @@ func (v *Validator) validateCiliumCNI(
 		v.validateK3dCiliumCNIAlignment(result)
 	case v1alpha1.DistributionTalos:
 		v.validateTalosCiliumCNIAlignment(result)
-	case v1alpha1.DistributionVCluster, v1alpha1.DistributionKWOK:
-		// VCluster manages its own CNI internally; KWOK simulates all pods.
-		// No alignment check needed.
+	case v1alpha1.DistributionVCluster, v1alpha1.DistributionKWOK, v1alpha1.DistributionEKS:
+		// VCluster manages its own CNI internally; KWOK simulates all pods;
+		// EKS uses AWS VPC CNI (managed by the cloud). No alignment check needed.
 	}
 }
 
@@ -342,8 +357,8 @@ func (v *Validator) validateDefaultCNI(
 		v.validateK3dDefaultCNIAlignment(result)
 	case v1alpha1.DistributionTalos:
 		v.validateTalosDefaultCNIAlignment(result)
-	case v1alpha1.DistributionVCluster, v1alpha1.DistributionKWOK:
-		// VCluster and KWOK manage CNI internally; no alignment check needed.
+	case v1alpha1.DistributionVCluster, v1alpha1.DistributionKWOK, v1alpha1.DistributionEKS:
+		// VCluster, KWOK, and EKS manage CNI internally; no alignment check needed.
 	}
 }
 

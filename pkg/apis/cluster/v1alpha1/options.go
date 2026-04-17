@@ -148,3 +148,34 @@ type OptionsOmni struct {
 	// available (unallocated) machines in Omni and uses them for node allocation.
 	Machines []string `json:"machines,omitzero"`
 }
+
+// --- AWS Options ---
+//
+// EKS cluster metadata (region, Kubernetes version, nodegroup shape, AMI
+// family, etc.) lives in eks.yaml (eksctl.io/v1alpha5 ClusterConfig), which is
+// the authoritative source of truth. KSail does not duplicate those fields in
+// ksail.yaml; the EKS provisioner loads the eksctl ClusterConfig directly.
+
+// OptionsAWS defines options specific to the AWS cloud provider.
+// Credentials are resolved via the standard AWS SDK v2 credential chain;
+// the *EnvVar fields let users point KSail at non-standard environment
+// variable names (mirrors the Hetzner/Omni pattern).
+type OptionsAWS struct {
+	// ProfileEnvVar is the environment variable containing the AWS shared-config profile name.
+	// Defaults to "AWS_PROFILE".
+	ProfileEnvVar string `default:"AWS_PROFILE" json:"profileEnvVar,omitzero"`
+	// RegionEnvVar is the environment variable containing the AWS region.
+	// When set, it overrides the region declared in eks.yaml.
+	// Defaults to "AWS_REGION".
+	RegionEnvVar string `default:"AWS_REGION" json:"regionEnvVar,omitzero"`
+	// AccessKeyIDEnvVar is the environment variable containing a static AWS access key ID.
+	// Defaults to "AWS_ACCESS_KEY_ID".
+	AccessKeyIDEnvVar string `default:"AWS_ACCESS_KEY_ID" json:"accessKeyIdEnvVar,omitzero"`
+	// SecretAccessKeyEnvVar is the environment variable containing a static AWS secret access key.
+	// Defaults to "AWS_SECRET_ACCESS_KEY".
+	SecretAccessKeyEnvVar string `default:"AWS_SECRET_ACCESS_KEY" json:"secretAccessKeyEnvVar,omitzero"`
+	// SessionTokenEnvVar is the environment variable containing an AWS session token
+	// (used with temporary credentials from STS).
+	// Defaults to "AWS_SESSION_TOKEN".
+	SessionTokenEnvVar string `default:"AWS_SESSION_TOKEN" json:"sessionTokenEnvVar,omitzero"`
+}

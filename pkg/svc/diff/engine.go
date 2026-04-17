@@ -145,7 +145,8 @@ func (e *Engine) scalarFieldRules() []fieldRule {
 				switch e.distribution {
 				case v1alpha1.DistributionK3s,
 					v1alpha1.DistributionVCluster,
-					v1alpha1.DistributionKWOK:
+					v1alpha1.DistributionKWOK,
+					v1alpha1.DistributionEKS:
 					return string(v1alpha1.CDIDisabled)
 				case v1alpha1.DistributionVanilla, v1alpha1.DistributionTalos:
 					return string(spec.CDI.EffectiveValue(e.distribution, e.provider))
@@ -298,13 +299,13 @@ func (e *Engine) checkLocalRegistryChange(
 				Category: clusterupdate.ChangeCategoryInPlace,
 				Reason:   reasons[e.distribution],
 			})
-		case v1alpha1.DistributionVCluster, v1alpha1.DistributionKWOK:
+		case v1alpha1.DistributionVCluster, v1alpha1.DistributionKWOK, v1alpha1.DistributionEKS:
 			result.InPlaceChanges = append(result.InPlaceChanges, clusterupdate.Change{
 				Field:    "cluster.localRegistry.registry",
 				OldValue: oldSpec.LocalRegistry.Registry,
 				NewValue: newSpec.LocalRegistry.Registry,
 				Category: clusterupdate.ChangeCategoryInPlace,
-				Reason:   "VCluster/KWOK manages registry independently via Docker networking",
+				Reason:   "VCluster/KWOK/EKS manage registry independently of the node OS",
 			})
 		}
 	}

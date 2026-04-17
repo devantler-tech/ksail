@@ -47,7 +47,8 @@
                 "K3s",
                 "Talos",
                 "VCluster",
-                "KWOK"
+                "KWOK",
+                "EKS"
               ]
             },
             "provider": {
@@ -55,7 +56,8 @@
               "enum": [
                 "Docker",
                 "Hetzner",
-                "Omni"
+                "Omni",
+                "AWS"
               ]
             },
             "cni": {
@@ -280,6 +282,27 @@
                     "type": "string"
                   },
                   "type": "array"
+                }
+              },
+              "additionalProperties": false,
+              "type": "object"
+            },
+            "aws": {
+              "properties": {
+                "profileEnvVar": {
+                  "type": "string"
+                },
+                "regionEnvVar": {
+                  "type": "string"
+                },
+                "accessKeyIdEnvVar": {
+                  "type": "string"
+                },
+                "secretAccessKeyEnvVar": {
+                  "type": "string"
+                },
+                "sessionTokenEnvVar": {
+                  "type": "string"
                 }
               },
               "additionalProperties": false,

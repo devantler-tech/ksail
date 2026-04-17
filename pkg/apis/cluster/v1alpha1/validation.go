@@ -51,6 +51,7 @@ func ValidDistributions() []Distribution {
 		DistributionTalos,
 		DistributionVCluster,
 		DistributionKWOK,
+		DistributionEKS,
 	}
 }
 
@@ -123,7 +124,7 @@ func ValidPolicyEngines() []PolicyEngine {
 
 // ValidProviders returns supported provider values.
 func ValidProviders() []Provider {
-	return []Provider{ProviderDocker, ProviderHetzner, ProviderOmni}
+	return []Provider{ProviderDocker, ProviderHetzner, ProviderOmni, ProviderAWS}
 }
 
 // ValidPlacementGroupStrategies returns supported placement group strategy values.
@@ -146,7 +147,7 @@ func ValidateMirrorRegistriesForProvider(provider Provider, mirrorRegistries []s
 	}
 
 	// Cloud providers cannot access local Docker containers as mirrors
-	if provider == ProviderHetzner || provider == ProviderOmni {
+	if provider == ProviderHetzner || provider == ProviderOmni || provider == ProviderAWS {
 		for _, spec := range mirrorRegistries {
 			if isLocalMirrorSpec(spec) {
 				return fmt.Errorf(
@@ -202,7 +203,8 @@ func ValidateLocalRegistryForProvider(provider Provider, registry LocalRegistry)
 	}
 
 	// Cloud providers require external registries with proper host configuration
-	if (provider == ProviderHetzner || provider == ProviderOmni) && !registry.IsExternal() {
+	if (provider == ProviderHetzner || provider == ProviderOmni || provider == ProviderAWS) &&
+		!registry.IsExternal() {
 		return ErrLocalRegistryNotSupported
 	}
 
