@@ -149,6 +149,18 @@ func (p *Provisioner) saveOmniConfigs(
 	return nil
 }
 
+// refreshOmniConfigsIfNeeded refreshes the on-disk kubeconfig and talosconfig
+// from the Omni API if the infra provider is an Omni provider. It is a no-op
+// for non-Omni providers, keeping Update's cyclomatic complexity low.
+func (p *Provisioner) refreshOmniConfigsIfNeeded(ctx context.Context, clusterName string) error {
+	omniProv, ok := p.infraProvider.(*omniprovider.Provider)
+	if !ok {
+		return nil
+	}
+
+	return p.saveOmniConfigs(ctx, omniProv, clusterName)
+}
+
 // buildOmniPatchInfos converts talosConfigs patches into the PatchInfo format used by the Omni template builder.
 // Patches that are incompatible with Omni are excluded:
 //   - cluster-name.yaml: Omni manages cluster names via its Cluster document
