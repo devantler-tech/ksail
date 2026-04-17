@@ -42,7 +42,8 @@ func (p *Provisioner) Update(
 	// Helm/K8s operations. cluster create always calls saveOmniConfigs, but
 	// cluster update did not, leaving the on-disk kubeconfig stale after token
 	// rotation or Omni-side reissuance (Fixes #3922).
-	if configErr := p.refreshOmniConfigsIfNeeded(ctx, clusterName); configErr != nil {
+	configErr := p.refreshOmniConfigsIfNeeded(ctx, clusterName)
+	if configErr != nil {
 		return result, fmt.Errorf("failed to refresh Omni configs before update: %w", configErr)
 	}
 
