@@ -536,3 +536,21 @@ func TestRefreshOmniConfigsIfNeeded_OmniProvider_WithTalosconfigPath(t *testing.
 	require.ErrorIs(t, err, provider.ErrProviderUnavailable,
 		"error must propagate from saveOmniTalosconfig as ErrProviderUnavailable")
 }
+
+// TestRefreshOmniConfigsIfNeeded_TypedNilOmniProvider verifies that when the
+// infra provider interface holds a typed-nil *omniprovider.Provider (ok==true,
+// omniProv==nil), refreshOmniConfigsIfNeeded treats it as a no-op and returns
+// nil rather than panicking with a nil-pointer dereference inside saveOmniConfigs.
+func TestRefreshOmniConfigsIfNeeded_TypedNilOmniProvider(t *testing.T) {
+	t.Parallel()
+
+	var typedNil *omniprovider.Provider // typed-nil: ok==true, omniProv==nil
+
+	p := talosprovisioner.NewProvisioner(nil,
+		talosprovisioner.NewOptions().WithKubeconfigPath("/tmp/should-not-be-written"),
+	).WithInfraProvider(typedNil)
+
+	err := p.RefreshOmniConfigsIfNeededForTest(context.Background(), "demo")
+
+	require.NoError(t, err, "typed-nil Omni provider must be treated as a no-op, not panic")
+}

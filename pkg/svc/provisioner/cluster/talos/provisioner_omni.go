@@ -155,7 +155,7 @@ func (p *Provisioner) saveOmniConfigs(
 // for non-Omni providers, keeping Update's cyclomatic complexity low.
 func (p *Provisioner) refreshOmniConfigsIfNeeded(ctx context.Context, clusterName string) error {
 	omniProv, ok := p.infraProvider.(*omniprovider.Provider)
-	if !ok {
+	if !ok || omniProv == nil {
 		return nil
 	}
 
