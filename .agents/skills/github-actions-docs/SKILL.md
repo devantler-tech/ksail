@@ -21,7 +21,7 @@ Use this skill when the request is about:
 Do not use this skill for:
 
 - A specific failing PR check, missing workflow log, or CI failure triage. Use the `gh-cli` skill.
-- General GitHub pull request, branch, or repository operations. Use the `github-issues` skill.
+- General GitHub pull request, branch, or repository operations. Use the `gh-cli` skill.
 - CodeQL-specific configuration or code scanning guidance. Search the GitHub docs directly.
 - Dependabot configuration, grouping, or dependency update strategy. Search the GitHub docs directly.
 

@@ -114,6 +114,9 @@ func truncateString(s string, maxLen int) string {
     if runewidth.StringWidth(s) <= maxLen {
         return s
     }
+    if maxLen < 1 {
+        return ""
+    }
     return runewidth.Truncate(s, maxLen-1, "…")
 }
 ```
