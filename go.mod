@@ -74,6 +74,7 @@ require (
 	github.com/siderolabs/omni/client v1.6.5
 	golang.org/x/text v0.36.0
 	gopkg.in/yaml.v3 v3.0.1
+	k8s.io/klog/v2 v2.140.0
 	sigs.k8s.io/kwok v0.7.1-0.20260414082732-bea15031f3ec
 )
 
@@ -776,7 +777,6 @@ require (
 	k8s.io/component-helpers v0.35.3 // indirect
 	k8s.io/cri-api v0.35.3 // indirect
 	k8s.io/cri-client v0.35.0 // indirect
-	k8s.io/klog/v2 v2.140.0 // indirect
 	k8s.io/kube-aggregator v0.35.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20260330154417-16be699c7b31 // indirect
 	k8s.io/kube-proxy v0.33.0 // indirect
