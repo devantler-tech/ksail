@@ -78,6 +78,8 @@ func TestCreateConnectCommandStructure(t *testing.T) {
 // client-go log messages do not leak onto the k9s TUI. This is the fix
 // for the garbled `ksail cluster connect` output caused by klog writing
 // to stderr while the alternate screen is active.
+//
+//nolint:paralleltest // Mutates process-global flag.CommandLine state.
 func TestSilenceKlog(t *testing.T) {
 	// Not parallel: mutates process-global flag state.
 	k9s.SilenceKlogForTest()

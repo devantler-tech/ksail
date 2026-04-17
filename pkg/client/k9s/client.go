@@ -11,6 +11,10 @@ import (
 )
 
 // silenceKlogOnce ensures klog is configured at most once per process.
+//
+// klog flag registration across any caller within the process.
+//
+//nolint:gochecknoglobals // sync.Once must be package-scoped to deduplicate
 var silenceKlogOnce sync.Once
 
 // silenceKlog redirects klog output away from stderr so client-go log lines
