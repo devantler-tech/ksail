@@ -8,6 +8,7 @@ import (
 	clusterprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/clustererr"
 	k3dprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/k3d"
+	kwokprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/kwok"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -29,6 +30,21 @@ func TestMultiProvisioner_Create_ReturnsErrCreateNotSupported(t *testing.T) {
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, clustererr.ErrCreateNotSupported)
+}
+
+func TestCreateMinimalProvisioner_KWOK_Succeeds(t *testing.T) {
+	t.Parallel()
+
+	provisioner, err := clusterprovisioner.CreateMinimalProvisioner(
+		v1alpha1.DistributionKWOK,
+		"test-kwok",
+		"",
+		"",
+	)
+
+	require.NoError(t, err)
+	require.NotNil(t, provisioner)
+	assert.IsType(t, &kwokprovisioner.Provisioner{}, provisioner)
 }
 
 func TestCreateMinimalProvisioner_K3s_Succeeds(t *testing.T) {

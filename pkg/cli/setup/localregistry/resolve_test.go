@@ -14,7 +14,7 @@ import (
 
 // TestResolveClusterName exercises cluster name resolution for each distribution.
 //
-
+//nolint:funlen // table-driven test
 func TestResolveClusterName(t *testing.T) {
 	t.Parallel()
 
@@ -39,15 +39,32 @@ func TestResolveClusterName(t *testing.T) {
 			expected:     "k3d-default",
 		},
 		{
-			name:         "default fallback uses context",
+			name:         "default fallback with unknown distribution returns ksail",
 			distribution: v1alpha1.Distribution("unsupported"),
 			context:      "my-context",
-			expected:     "my-context",
+			expected:     "ksail",
 		},
 		{
 			name:         "default fallback with empty context returns ksail",
 			distribution: v1alpha1.Distribution("unsupported"),
 			expected:     "ksail",
+		},
+		{
+			name:         "KWOK strips kwok- prefix from context",
+			distribution: v1alpha1.DistributionKWOK,
+			context:      "kwok-test-cluster",
+			expected:     "test-cluster",
+		},
+		{
+			name:         "KWOK trims whitespace from extracted cluster name",
+			distribution: v1alpha1.DistributionKWOK,
+			context:      "kwok- my-cluster",
+			expected:     "my-cluster",
+		},
+		{
+			name:         "KWOK with no context returns kwok-default",
+			distribution: v1alpha1.DistributionKWOK,
+			expected:     "kwok-default",
 		},
 	}
 
@@ -134,6 +151,18 @@ func TestResolveNetworkName(t *testing.T) {
 			distribution: v1alpha1.Distribution("unknown"),
 			clusterName:  "test",
 			expected:     "",
+		},
+		{
+			name:         "KWOK returns kwok-prefix",
+			distribution: v1alpha1.DistributionKWOK,
+			clusterName:  "my-cluster",
+			expected:     "kwok-my-cluster",
+		},
+		{
+			name:         "KWOK with empty name uses kwok-default fallback",
+			distribution: v1alpha1.DistributionKWOK,
+			clusterName:  "",
+			expected:     "kwok-kwok-default",
 		},
 	}
 

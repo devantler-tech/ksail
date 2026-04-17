@@ -5,7 +5,7 @@ description: KSail builds upon established Kubernetes technologies and patterns.
 
 ## Native Configuration Philosophy
 
-**KSail is a superset, not a replacement.** KSail works with native distribution configurations rather than creating proprietary formats. When you run `ksail cluster init`, KSail generates standard configuration files: `kind.yaml` ([Kind](https://kind.sigs.k8s.io/docs/user/configuration/)) for Vanilla, `k3d.yaml` ([K3d](https://k3d.io/stable/usage/configfile/)) for K3s, `talos/` patches ([Talos](https://www.talos.dev/latest/reference/configuration/)), and `vcluster.yaml` ([vCluster](https://www.vcluster.com/docs/vcluster/configure/vcluster-yaml/)) for VCluster.
+**KSail is a superset, not a replacement.** KSail works with native distribution configurations rather than creating proprietary formats. When you run `ksail cluster init`, KSail generates standard configuration files: `kind.yaml` ([Kind](https://kind.sigs.k8s.io/docs/user/configuration/)) for Vanilla, `k3d.yaml` ([K3d](https://k3d.io/stable/usage/configfile/)) for K3s, `talos/` patches ([Talos](https://www.talos.dev/latest/reference/configuration/)), `vcluster.yaml` ([vCluster](https://www.vcluster.com/docs/vcluster/configure/vcluster-yaml/)) for VCluster, and `kwok.yaml` ([KWOK](https://kwok.sigs.k8s.io/docs/user/)) for KWOK.
 
 **No vendor lock-in:** These files work directly with underlying tools without KSail, providing freedom to migrate, use native CLI tools alongside KSail, and maintain team flexibility. Your configurations match official documentation and remain valid even if you stop using KSail.
 
@@ -17,7 +17,7 @@ description: KSail builds upon established Kubernetes technologies and patterns.
 
 ## Distributions
 
-Kubernetes distributions package core components with additional tooling for specific use cases. KSail supports four distributions: Vanilla, K3s, Talos, and VCluster. All can run on Docker; Talos can also run on Hetzner Cloud and Sidero Omni.
+Kubernetes distributions package core components with additional tooling for specific use cases. KSail supports five distributions: Vanilla, K3s, Talos, VCluster, and KWOK. All can run on Docker; Talos can also run on Hetzner Cloud and Sidero Omni.
 
 ### Vanilla (Kind)
 
@@ -35,13 +35,17 @@ Vanilla uses [Kind](https://kind.sigs.k8s.io/) to run standard upstream Kubernet
 
 [vCluster](https://www.vcluster.com/) creates virtual Kubernetes clusters. KSail uses the [Vind](https://github.com/loft-sh/vcluster) Docker driver to run control plane and optional workers as containers, requiring only Docker. This enables fast creation with a small footprint. See [documentation](https://www.vcluster.com/docs/), [configuration](https://www.vcluster.com/docs/vcluster/configure/vcluster-yaml/), and [Vind driver](https://github.com/loft-sh/vcluster).
 
+### KWOK (kwokctl)
+
+[KWOK](https://kwok.sigs.k8s.io/) (Kubernetes WithOut Kubelet) creates simulated Kubernetes clusters where nodes and pods exist at the API level without running real containers. KSail uses kwokctl's Docker runtime to run etcd, kube-apiserver, and the kwok-controller as Docker containers. Ideal for control-plane testing, CI/CD speed optimization, and scale testing. See [documentation](https://kwok.sigs.k8s.io/docs/), [user guide](https://kwok.sigs.k8s.io/docs/user/), and [GitHub](https://github.com/kubernetes-sigs/kwok).
+
 ## Providers
 
 Providers are infrastructure backends that run cluster nodes. KSail abstracts provider-specific operations for consistent workflows.
 
 ### Docker
 
-Runs Kubernetes nodes as Docker containers locally. Default provider for all distributions, requires only Docker. **Supported distributions:** Vanilla, K3s, Talos, VCluster. See [Docker Provider](/providers/docker/), [Docker docs](https://docs.docker.com/), and [Docker Desktop](https://www.docker.com/products/docker-desktop/).
+Runs Kubernetes nodes as Docker containers locally. Default provider for all distributions, requires only Docker. **Supported distributions:** Vanilla, K3s, Talos, VCluster, KWOK. See [Docker Provider](/providers/docker/), [Docker docs](https://docs.docker.com/), and [Docker Desktop](https://www.docker.com/products/docker-desktop/).
 
 ### Hetzner
 

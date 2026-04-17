@@ -28,6 +28,18 @@ const (
 	fluxResourcesActivity   = "applying custom resources"
 	argoCDResourcesActivity = "configuring argocd resources"
 
+	// kwokPolicyEngineWarning is emitted when a policy engine is configured but
+	// cannot be installed on KWOK (admission webhooks always time out).
+	kwokPolicyEngineWarning = "policy engine %q is not installed on KWOK: " +
+		"admission webhook calls always time out (no real pod serves the endpoint) — skipping"
+
+	// kwokFluxWarning is emitted when Flux is configured but cannot be fully set
+	// up on KWOK. The flux-operator pod is simulated and never actually runs, so
+	// it cannot process FluxInstance resources or register Flux CRDs. Waiting
+	// for source.toolkit.fluxcd.io/v1 would time out after 12 minutes.
+	kwokFluxWarning = "Flux is not configured on KWOK: " +
+		"flux-operator pod is simulated and never registers Flux CRDs — skipping"
+
 	// apiServerStabilityTimeout is the maximum time to wait for the API server
 	// to stabilize between infrastructure and GitOps installation phases.
 	// Infrastructure components (MetalLB, Kyverno, cert-manager, etc.) register
@@ -77,7 +89,7 @@ const (
 // the network flapping seen in cloud environments.
 func apiServerStabilitySuccesses(dist v1alpha1.Distribution, prov v1alpha1.Provider) int {
 	switch dist {
-	case v1alpha1.DistributionVanilla, v1alpha1.DistributionK3s:
+	case v1alpha1.DistributionVanilla, v1alpha1.DistributionK3s, v1alpha1.DistributionKWOK:
 		return apiServerStabilitySuccessesFast
 	case v1alpha1.DistributionTalos:
 		if prov == v1alpha1.ProviderDocker || prov == "" {
@@ -227,15 +239,32 @@ func GetComponentRequirements(clusterCfg *v1alpha1.Cluster) ComponentRequirement
 	needsKubeletCSRApprover := needsMetricsServer &&
 		clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionTalos
 
+	// KWOK simulates pod status but has no real network dataplane. Policy engines
+	// (Gatekeeper, Kyverno) register global MutatingWebhookConfigurations that
+	// intercept ALL Kubernetes API requests. On KWOK these webhook calls always
+	// time out because no real pod is serving the webhook endpoint, causing every
+	// subsequent Helm install (ArgoCD, cert-manager, etc.) to fail. Skip policy
+	// engine installation for KWOK entirely.
+	needsPolicyEngine := clusterCfg.Spec.Cluster.PolicyEngine != v1alpha1.PolicyEngineNone &&
+		clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionKWOK
+
+	// KWOK simulates pod status but cannot run real controller logic. The
+	// flux-operator pod is simulated and never actually runs, so it cannot process
+	// FluxInstance resources or register Flux CRDs (source.toolkit.fluxcd.io/v1).
+	// SetupFluxInstance waits up to 12 minutes for those CRDs, which always times
+	// out on KWOK. Skip Flux installation for KWOK entirely.
+	needsFlux := clusterCfg.Spec.Cluster.GitOpsEngine == v1alpha1.GitOpsEngineFlux &&
+		clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionKWOK
+
 	return ComponentRequirements{
 		NeedsMetricsServer:      needsMetricsServer,
 		NeedsLoadBalancer:       NeedsLoadBalancerInstall(clusterCfg),
 		NeedsKubeletCSRApprover: needsKubeletCSRApprover,
 		NeedsCSI:                needsCSIInstall(clusterCfg),
 		NeedsCertManager:        clusterCfg.Spec.Cluster.CertManager == v1alpha1.CertManagerEnabled,
-		NeedsPolicyEngine:       clusterCfg.Spec.Cluster.PolicyEngine != v1alpha1.PolicyEngineNone,
+		NeedsPolicyEngine:       needsPolicyEngine,
 		NeedsArgoCD:             clusterCfg.Spec.Cluster.GitOpsEngine == v1alpha1.GitOpsEngineArgoCD,
-		NeedsFlux:               clusterCfg.Spec.Cluster.GitOpsEngine == v1alpha1.GitOpsEngineFlux,
+		NeedsFlux:               needsFlux,
 	}
 }
 
@@ -268,6 +297,26 @@ func needsCSIInstall(clusterCfg *v1alpha1.Cluster) bool {
 	return !dist.ProvidesCSIByDefault(provider)
 }
 
+// emitKWOKUnsupportedComponentWarnings emits user-visible warnings for components
+// that are configured but cannot be installed on KWOK (simulated pods never run real
+// controller logic). Called at the start of InstallPostCNIComponents to notify the
+// user about skipped components before installation begins.
+func emitKWOKUnsupportedComponentWarnings(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster) {
+	if clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionKWOK {
+		return
+	}
+
+	if clusterCfg.Spec.Cluster.PolicyEngine != v1alpha1.PolicyEngineNone {
+		notify.Warningf(cmd.OutOrStdout(), kwokPolicyEngineWarning,
+			clusterCfg.Spec.Cluster.PolicyEngine,
+		)
+	}
+
+	if clusterCfg.Spec.Cluster.GitOpsEngine == v1alpha1.GitOpsEngineFlux {
+		notify.Warningf(cmd.OutOrStdout(), kwokFluxWarning)
+	}
+}
+
 // InstallPostCNIComponents installs all post-CNI components in parallel.
 // This includes metrics-server, CSI, cert-manager, and GitOps engines (Flux/ArgoCD).
 // For Flux, the OCI artifact push and readiness wait happens after installation.
@@ -282,6 +331,8 @@ func InstallPostCNIComponents(
 	cniInstalled bool,
 ) error {
 	reqs := GetComponentRequirements(clusterCfg)
+
+	emitKWOKUnsupportedComponentWarnings(cmd, clusterCfg)
 
 	if reqs.Count() == 0 {
 		return nil
@@ -556,7 +607,9 @@ func waitForClusterStability(
 	//
 	// Skipped when CNI was just installed: waitForCNIReadiness already verified
 	// node readiness, so re-checking immediately would be redundant.
-	if !cniInstalled {
+	// Skipped for KWOK: KWOK has no real kubelet nodes (they are simulated on
+	// demand), so WaitForAllNodesReady would always time-out on a fresh cluster.
+	if !cniInstalled && clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionKWOK {
 		err = readiness.WaitForAllNodesReady(ctx, clientset, nodeReadinessTimeout)
 		if err != nil {
 			return fmt.Errorf("wait for all nodes to be ready: %w", err)
@@ -605,7 +658,13 @@ func waitForClusterStability(
 // pod-to-service routing is fully programmed. For non-Cilium CNIs (e.g.,
 // default (distribution-provided) CNI or Calico) this race condition does not
 // apply and the check is skipped, saving up to 2 minutes of wall-clock time.
+// KWOK simulates pod status but has no real network dataplane, so the check
+// is meaningless and will always fail on KWOK regardless of CNI.
 func needsInClusterConnectivityCheck(clusterCfg *v1alpha1.Cluster) bool {
+	if clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionKWOK {
+		return false
+	}
+
 	return clusterCfg.Spec.Cluster.CNI == v1alpha1.CNICilium
 }
 

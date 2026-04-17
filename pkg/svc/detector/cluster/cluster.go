@@ -29,7 +29,7 @@ var (
 
 	// ErrUnknownContextPattern indicates the context name doesn't match any known distribution pattern.
 	ErrUnknownContextPattern = errors.New(
-		"unknown distribution: context does not match kind-, k3d-, admin@, or vcluster-docker_ pattern",
+		"unknown distribution: context does not match kind-, k3d-, admin@, vcluster-docker_, or kwok- pattern",
 	)
 
 	// ErrEmptyClusterName is returned when cluster name detection results in an empty string.
@@ -152,6 +152,19 @@ func DetectInfo(kubeconfigPath, contextName string) (*Info, error) {
 	}, nil
 }
 
+// contextPatterns maps distribution context prefixes to their distributions.
+// Used by DetectDistributionFromContext to detect the distribution.
+var contextPatterns = []struct { //nolint:gochecknoglobals // static lookup table
+	prefix       string
+	distribution v1alpha1.Distribution
+}{
+	{"kind-", v1alpha1.DistributionVanilla},
+	{"k3d-", v1alpha1.DistributionK3s},
+	{"admin@", v1alpha1.DistributionTalos},
+	{"vcluster-docker_", v1alpha1.DistributionVCluster},
+	{"kwok-", v1alpha1.DistributionKWOK},
+}
+
 // DetectDistributionFromContext detects the Kubernetes distribution and cluster name
 // from the kubeconfig context name pattern.
 // Returns the distribution, cluster name, and any error.
@@ -160,51 +173,21 @@ func DetectInfo(kubeconfigPath, contextName string) (*Info, error) {
 //   - kind-<cluster-name> → Vanilla (Kind)
 //   - k3d-<cluster-name> → K3s (K3d)
 //   - admin@<cluster-name> → Talos
+//   - vcluster-docker_<cluster-name> → VCluster
+//   - kwok-<cluster-name> → KWOK
 //
 // Returns an error if the pattern is unrecognized or if the extracted cluster name is empty.
 func DetectDistributionFromContext(contextName string) (v1alpha1.Distribution, string, error) {
-	// Vanilla: kind-<cluster-name>
-	if clusterName, ok := strings.CutPrefix(contextName, "kind-"); ok {
-		if clusterName == "" {
-			return "", "", fmt.Errorf(
-				"%w: context %q has empty cluster name", ErrEmptyClusterName, contextName,
-			)
+	for _, pattern := range contextPatterns {
+		if clusterName, ok := strings.CutPrefix(contextName, pattern.prefix); ok {
+			if clusterName == "" {
+				return "", "", fmt.Errorf(
+					"%w: context %q has empty cluster name", ErrEmptyClusterName, contextName,
+				)
+			}
+
+			return pattern.distribution, clusterName, nil
 		}
-
-		return v1alpha1.DistributionVanilla, clusterName, nil
-	}
-
-	// K3s: k3d-<cluster-name>
-	if clusterName, ok := strings.CutPrefix(contextName, "k3d-"); ok {
-		if clusterName == "" {
-			return "", "", fmt.Errorf(
-				"%w: context %q has empty cluster name", ErrEmptyClusterName, contextName,
-			)
-		}
-
-		return v1alpha1.DistributionK3s, clusterName, nil
-	}
-
-	// Talos: admin@<cluster-name>
-	if clusterName, ok := strings.CutPrefix(contextName, "admin@"); ok {
-		if clusterName == "" {
-			return "", "", fmt.Errorf(
-				"%w: context %q has empty cluster name", ErrEmptyClusterName, contextName,
-			)
-		}
-
-		return v1alpha1.DistributionTalos, clusterName, nil
-	}
-
-	// VCluster: vcluster-docker_<cluster-name>
-	if clusterName, ok := strings.CutPrefix(contextName, "vcluster-docker_"); ok {
-		if clusterName == "" {
-			return "", "", fmt.Errorf(
-				"%w: context %q has empty cluster name", ErrEmptyClusterName, contextName,
-			)
-		}
-
-		return v1alpha1.DistributionVCluster, clusterName, nil
 	}
 
 	return "", "", fmt.Errorf("%w: %s", ErrUnknownContextPattern, contextName)
@@ -256,10 +239,11 @@ func detectProviderFromEndpoint(
 	serverURL string,
 	clusterName string,
 ) (v1alpha1.Provider, error) {
-	// Kind, K3d, and VCluster always use Docker
+	// Kind, K3d, VCluster, and KWOK always use Docker
 	if distribution == v1alpha1.DistributionVanilla ||
 		distribution == v1alpha1.DistributionK3s ||
-		distribution == v1alpha1.DistributionVCluster {
+		distribution == v1alpha1.DistributionVCluster ||
+		distribution == v1alpha1.DistributionKWOK {
 		return v1alpha1.ProviderDocker, nil
 	}
 

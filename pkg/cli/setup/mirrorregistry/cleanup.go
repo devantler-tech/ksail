@@ -99,6 +99,8 @@ func GetNetworkNameForDistribution(distribution v1alpha1.Distribution, clusterNa
 		return clusterName
 	case v1alpha1.DistributionVCluster:
 		return "vcluster." + clusterName
+	case v1alpha1.DistributionKWOK:
+		return "kwok-" + clusterName
 	default:
 		return clusterName
 	}

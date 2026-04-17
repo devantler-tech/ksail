@@ -104,6 +104,7 @@ type Context struct {
 	K3dConfig      *k3dv1alpha5.SimpleConfig
 	TalosConfig    *talosconfigmanager.Configs
 	VClusterConfig *clusterprovisioner.VClusterConfig
+	KWOKConfig     *clusterprovisioner.KWOKConfig
 }
 
 // NewContextFromConfigManager creates a Context from a config manager.
@@ -116,6 +117,7 @@ func NewContextFromConfigManager(cfgManager *ksailconfigmanager.ConfigManager) *
 		K3dConfig:      distConfig.K3d,
 		TalosConfig:    distConfig.Talos,
 		VClusterConfig: distConfig.VCluster,
+		KWOKConfig:     distConfig.KWOK,
 	}
 }
 

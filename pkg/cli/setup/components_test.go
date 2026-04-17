@@ -179,6 +179,13 @@ func TestNeedsLoadBalancerInstall(t *testing.T) {
 			loadBalancer: v1alpha1.LoadBalancerDisabled,
 			expected:     false,
 		},
+		{
+			name:         "KWOK × Docker + Enabled returns false (no real network dataplane)",
+			distribution: v1alpha1.DistributionKWOK,
+			provider:     v1alpha1.ProviderDocker,
+			loadBalancer: v1alpha1.LoadBalancerEnabled,
+			expected:     false,
+		},
 	}
 
 	for _, testCase := range tests {

@@ -257,6 +257,19 @@ func TestGetComponentRequirements(t *testing.T) {
 				NeedsCSI:          true,
 			},
 		},
+		{
+			name: "KWOK with Flux sets NeedsFlux to false",
+			clusterCfg: &v1alpha1.Cluster{
+				Spec: v1alpha1.Spec{
+					Cluster: v1alpha1.ClusterSpec{
+						Distribution: v1alpha1.DistributionKWOK,
+						GitOpsEngine: v1alpha1.GitOpsEngineFlux,
+					},
+				},
+			},
+			expectedCount: 0, // flux-operator pod is simulated; NeedsFlux is suppressed for KWOK
+			expected:      setup.ComponentRequirements{},
+		},
 	}
 
 	for _, testCase := range tests {

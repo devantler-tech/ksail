@@ -46,7 +46,8 @@
                 "Vanilla",
                 "K3s",
                 "Talos",
-                "VCluster"
+                "VCluster",
+                "KWOK"
               ]
             },
             "provider": {

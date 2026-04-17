@@ -24,6 +24,8 @@ const (
 	LabelSchemeTalos LabelScheme = "talos"
 	// LabelSchemeVCluster uses container name prefix "vcluster.cp.<cluster>" to identify nodes.
 	LabelSchemeVCluster LabelScheme = "vcluster"
+	// LabelSchemeKWOK uses container name prefix "kwok-<cluster>-" to identify nodes.
+	LabelSchemeKWOK LabelScheme = "kwok"
 )
 
 // Talos label constants.
@@ -43,6 +45,11 @@ const (
 const (
 	DefaultStartTimeout = 30 * time.Second
 	DefaultStopTimeout  = 60 * time.Second
+)
+
+// Node role constants used across label schemes.
+const (
+	roleControlPlane = "control-plane"
 )
 
 // Provider implements provider.Provider for Docker-based clusters.
@@ -247,6 +254,8 @@ func (p *Provider) listContainers(
 		return p.listTalosContainers(ctx, clusterName)
 	case LabelSchemeVCluster:
 		return p.listVClusterContainers(ctx, clusterName)
+	case LabelSchemeKWOK:
+		return p.listKWOKContainers(ctx, clusterName)
 	default:
 		return nil, fmt.Errorf("%w: %s", provider.ErrUnknownLabelScheme, p.labelScheme)
 	}
@@ -260,20 +269,9 @@ func (p *Provider) listKindContainers(
 	// Kind uses container names with format: <cluster>-control-plane, <cluster>-worker,
 	// etc. Mirror helper containers can share the same prefix, so keep only names that
 	// map back to the requested cluster via the Kind node naming rules.
-	containers, err := p.client.ContainerList(ctx, container.ListOptions{All: true})
-	if err != nil {
-		return nil, fmt.Errorf("failed to list containers: %w", err)
-	}
-
-	var result []container.Summary
-
-	for _, ctr := range containers {
-		if p.extractClusterName(ctr) == clusterName {
-			result = append(result, ctr)
-		}
-	}
-
-	return result, nil
+	return p.filterContainers(ctx, func(ctr container.Summary) bool {
+		return p.extractClusterName(ctr) == clusterName
+	})
 }
 
 // listContainersByLabels lists containers matching the given label filters.
@@ -355,6 +353,8 @@ func (p *Provider) extractClusterName(ctr container.Summary) string {
 		return ctr.Labels[LabelTalosClusterName]
 	case LabelSchemeVCluster:
 		return extractVClusterName(ctr)
+	case LabelSchemeKWOK:
+		return extractKWOKClusterName(ctr)
 	default:
 		return ""
 	}
@@ -367,7 +367,7 @@ func (p *Provider) extractRole(ctr container.Summary) string {
 		if len(ctr.Names) > 0 {
 			name := strings.TrimPrefix(ctr.Names[0], "/")
 			if strings.Contains(name, "control-plane") {
-				return "control-plane"
+				return roleControlPlane
 			}
 
 			if strings.Contains(name, "worker") {
@@ -382,6 +382,8 @@ func (p *Provider) extractRole(ctr container.Summary) string {
 		return ctr.Labels[LabelTalosType]
 	case LabelSchemeVCluster:
 		return extractVClusterRole(ctr)
+	case LabelSchemeKWOK:
+		return extractKWOKRole(ctr)
 	default:
 		return ""
 	}
@@ -403,26 +405,38 @@ func (p *Provider) listVClusterContainers(
 	ctx context.Context,
 	clusterName string,
 ) ([]container.Summary, error) {
+	cpPrefix := vclusterCPPrefix + clusterName
+	nodePrefix := vclusterNodePrefix + clusterName + "."
+	lbPrefix := vclusterLBPrefix + clusterName + "."
+
+	return p.filterContainers(ctx, func(ctr container.Summary) bool {
+		for _, rawName := range ctr.Names {
+			name := strings.TrimPrefix(rawName, "/")
+			if name == cpPrefix || strings.HasPrefix(name, nodePrefix) ||
+				strings.HasPrefix(name, lbPrefix) {
+				return true
+			}
+		}
+
+		return false
+	})
+}
+
+// filterContainers returns containers matching the given predicate.
+func (p *Provider) filterContainers(
+	ctx context.Context,
+	match func(container.Summary) bool,
+) ([]container.Summary, error) {
 	containers, err := p.client.ContainerList(ctx, container.ListOptions{All: true})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list containers: %w", err)
 	}
 
-	cpPrefix := vclusterCPPrefix + clusterName
-	nodePrefix := vclusterNodePrefix + clusterName + "."
-	lbPrefix := vclusterLBPrefix + clusterName + "."
-
 	var result []container.Summary
 
 	for _, ctr := range containers {
-		for _, name := range ctr.Names {
-			name = strings.TrimPrefix(name, "/")
-			if name == cpPrefix || strings.HasPrefix(name, nodePrefix) ||
-				strings.HasPrefix(name, lbPrefix) {
-				result = append(result, ctr)
-
-				break
-			}
+		if match(ctr) {
+			result = append(result, ctr)
 		}
 	}
 
@@ -469,7 +483,7 @@ func extractVClusterRole(ctr container.Summary) string {
 		name := strings.TrimPrefix(rawName, "/")
 
 		if strings.HasPrefix(name, vclusterCPPrefix) {
-			return "control-plane"
+			return roleControlPlane
 		}
 
 		if strings.HasPrefix(name, vclusterNodePrefix) {
@@ -478,6 +492,76 @@ func extractVClusterRole(ctr container.Summary) string {
 
 		if strings.HasPrefix(name, vclusterLBPrefix) {
 			return "load-balancer"
+		}
+	}
+
+	return ""
+}
+
+// KWOK container name prefix.
+// kwokctl names containers as: kwok-<cluster>-etcd, kwok-<cluster>-kube-apiserver,
+// kwok-<cluster>-kwok-controller, etc.
+const kwokContainerPrefix = "kwok-"
+
+// kwokSuffixRoles maps each known kwokctl container suffix to the node role it
+// represents.  It is the single source of truth for both cluster-name extraction
+// (which iterates the keys) and role classification (which looks up the value).
+//
+//nolint:gochecknoglobals // read-only lookup table; avoids per-call allocation.
+var kwokSuffixRoles = map[string]string{
+	"-etcd":                    "etcd",
+	"-kube-apiserver":          roleControlPlane,
+	"-kube-controller-manager": roleControlPlane,
+	"-kube-scheduler":          roleControlPlane,
+	"-kwok-controller":         "controller",
+	"-prometheus":              "addon",
+	"-jaeger":                  "addon",
+	"-dashboard":               "addon",
+	"-metrics-server":          "addon",
+}
+
+// listKWOKContainers lists containers by KWOK name prefix.
+func (p *Provider) listKWOKContainers(
+	ctx context.Context,
+	clusterName string,
+) ([]container.Summary, error) {
+	prefix := kwokContainerPrefix + clusterName + "-"
+
+	return p.filterContainers(ctx, func(ctr container.Summary) bool {
+		for _, rawName := range ctr.Names {
+			if strings.HasPrefix(strings.TrimPrefix(rawName, "/"), prefix) {
+				return true
+			}
+		}
+
+		return false
+	})
+}
+
+// extractKWOKClusterName extracts the cluster name from a KWOK container name.
+func extractKWOKClusterName(ctr container.Summary) string {
+	for _, rawName := range ctr.Names {
+		name := strings.TrimPrefix(rawName, "/")
+		if rest, ok := strings.CutPrefix(name, kwokContainerPrefix); ok {
+			for suffix := range kwokSuffixRoles {
+				if trimmed, found := strings.CutSuffix(rest, suffix); found && trimmed != "" {
+					return trimmed
+				}
+			}
+		}
+	}
+
+	return ""
+}
+
+// extractKWOKRole determines the role of a KWOK container from its name.
+func extractKWOKRole(ctr container.Summary) string {
+	for _, rawName := range ctr.Names {
+		name := strings.TrimPrefix(rawName, "/")
+		for suffix, role := range kwokSuffixRoles {
+			if strings.HasSuffix(name, suffix) {
+				return role
+			}
 		}
 	}
 

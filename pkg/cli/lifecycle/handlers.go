@@ -196,28 +196,26 @@ func extractClusterNameFromContext(clusterCfg *v1alpha1.Cluster) string {
 // For k3d clusters, contexts follow the pattern "k3d-<cluster-name>".
 // Returns empty string if the context doesn't match the expected pattern.
 func ExtractClusterNameFromContext(context string, distribution v1alpha1.Distribution) string {
-	switch distribution {
-	case v1alpha1.DistributionVanilla:
-		if clusterName, ok := strings.CutPrefix(context, "kind-"); ok {
-			return clusterName
-		}
-	case v1alpha1.DistributionK3s:
-		if clusterName, ok := strings.CutPrefix(context, "k3d-"); ok {
-			return clusterName
-		}
-	case v1alpha1.DistributionTalos:
-		// Talos uses admin@<cluster-name> context pattern
-		if clusterName, ok := strings.CutPrefix(context, "admin@"); ok {
-			return clusterName
-		}
-	case v1alpha1.DistributionVCluster:
-		// vCluster Docker driver uses vcluster-docker_<cluster-name> context pattern
-		if clusterName, ok := strings.CutPrefix(context, "vcluster-docker_"); ok {
-			return clusterName
-		}
+	prefix, ok := distributionContextPrefixes[distribution]
+	if !ok {
+		return ""
+	}
+
+	if clusterName, found := strings.CutPrefix(context, prefix); found {
+		return clusterName
 	}
 
 	return ""
+}
+
+// distributionContextPrefixes maps each distribution to the kubeconfig context
+// prefix it uses.
+var distributionContextPrefixes = map[v1alpha1.Distribution]string{ //nolint:gochecknoglobals // static lookup table
+	v1alpha1.DistributionVanilla:  "kind-",
+	v1alpha1.DistributionK3s:      "k3d-",
+	v1alpha1.DistributionTalos:    "admin@",
+	v1alpha1.DistributionVCluster: "vcluster-docker_",
+	v1alpha1.DistributionKWOK:     "kwok-",
 }
 
 // GetClusterNameFromConfig extracts the cluster name from the KSail cluster configuration.
