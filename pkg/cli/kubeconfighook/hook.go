@@ -77,36 +77,54 @@ func MaybeRefreshOmniKubeconfig(cmd *cobra.Command) {
 		return
 	}
 
-	kubeconfigContext := cfg.Spec.Cluster.Connection.Context
+	fileExists, shouldRefresh := evaluateKubeconfigRefresh(
+		canonicalPath,
+		cfg.Spec.Cluster.Connection.Context,
+	)
+	if !shouldRefresh {
+		return
+	}
 
+	performOmniKubeconfigRefresh(cmd, cfg, distCfg, canonicalPath, fileExists)
+}
+
+// evaluateKubeconfigRefresh determines whether the Omni kubeconfig at
+// canonicalPath needs to be (re)fetched. It returns whether the file currently
+// exists and whether a refresh should be triggered.
+func evaluateKubeconfigRefresh(canonicalPath, kubeconfigContext string) (bool, bool) {
 	_, statErr := os.Stat(canonicalPath)
-	fileExists := statErr == nil
-
-	var needsRefresh bool
 
 	switch {
-	case fileExists:
-		needsRefresh = IsTokenExpired(canonicalPath, kubeconfigContext)
+	case statErr == nil:
+		if IsTokenExpired(canonicalPath, kubeconfigContext) {
+			return true, true
+		}
+
 		// When the token is not expired, check if the credentials are still
 		// accepted by the API server. After cluster recreation the token may
 		// be structurally valid (not expired) but rejected by the new cluster.
-		if !needsRefresh {
-			needsRefresh = IsKubeconfigStale(canonicalPath, kubeconfigContext)
-		}
+		return true, IsKubeconfigStale(canonicalPath, kubeconfigContext)
 	case os.IsNotExist(statErr):
 		// Fresh runner: no kubeconfig yet. Fetch it from Omni so downstream
 		// operations (component detection, Helm, Flux) can connect.
-		needsRefresh = true
+		return false, true
 	default:
 		// Some other stat error (e.g. permission). Leave it alone — a later
 		// step will surface the real error.
-		return
+		return false, false
 	}
+}
 
-	if !needsRefresh {
-		return
-	}
-
+// performOmniKubeconfigRefresh runs the actual Omni refresh/fetch and reports
+// progress via cmd's output. It is only invoked after evaluateKubeconfigRefresh
+// has decided a refresh is warranted.
+func performOmniKubeconfigRefresh(
+	cmd *cobra.Command,
+	cfg *v1alpha1.Cluster,
+	distCfg *clusterprovisioner.DistributionConfig,
+	canonicalPath string,
+	fileExists bool,
+) {
 	clusterName := resolveClusterName(distCfg, canonicalPath)
 	if clusterName == "" {
 		if !fileExists {
@@ -119,7 +137,7 @@ func MaybeRefreshOmniKubeconfig(cmd *cobra.Command) {
 
 	// Determine the desired kubeconfig context name.
 	// If explicitly configured, use that; otherwise derive from the distribution convention.
-	desiredContext := kubeconfigContext
+	desiredContext := cfg.Spec.Cluster.Connection.Context
 	if desiredContext == "" {
 		desiredContext = cfg.Spec.Cluster.Distribution.ContextName(clusterName)
 	}
@@ -186,9 +204,19 @@ func resolveOmniKubeconfigPath(
 		return nil, nil, ""
 	}
 
+	// Canonicalize for containment-safety, but fall back to filepath.Abs when
+	// the parent directory does not exist yet (e.g. on a fresh CI runner where
+	// ~/.kube/ is still missing). EvalCanonicalPath requires the parent to
+	// exist, and without this fallback the initial-fetch branch would be
+	// silently skipped — the exact regression #4112 is about.
 	canonicalPath, canonErr := fsutil.EvalCanonicalPath(kubeconfigPath)
 	if canonErr != nil {
-		return nil, nil, ""
+		absPath, absErr := filepath.Abs(kubeconfigPath)
+		if absErr != nil {
+			return nil, nil, ""
+		}
+
+		canonicalPath = absPath
 	}
 
 	return cfg, cfgManager.DistributionConfig, canonicalPath

@@ -322,12 +322,13 @@ func TestMaybeRefreshOmniKubeconfig_InitialFetch_ExplicitKubeconfigSkipped(t *te
 	var out bytes.Buffer
 
 	cmd.SetOut(&out)
-	cmd.SetErr(io.Discard)
+	cmd.SetErr(&out)
 
 	kubeconfighook.MaybeRefreshOmniKubeconfig(cmd)
 
 	// Explicit --kubeconfig short-circuits before any Omni provider logic,
-	// so neither a fetch attempt nor any warning should be emitted.
+	// so neither a fetch attempt nor any warning should be emitted on either
+	// stdout or stderr.
 	assert.Empty(t, out.String(), "explicit --kubeconfig must skip the hook entirely")
 }
 
@@ -335,8 +336,6 @@ func TestMaybeRefreshOmniKubeconfig_InitialFetch_ExplicitKubeconfigSkipped(t *te
 // when the kubeconfig is missing and the Omni cluster name is resolvable, the
 // hook attempts a fetch and surfaces a warning when credentials are not set —
 // again proving the initial-fetch branch is reached instead of silent no-op.
-//
-//nolint:paralleltest // Cannot use t.Parallel() because t.Chdir()/t.Setenv are used.
 func TestMaybeRefreshOmniKubeconfig_InitialFetch_MissingCredentials(t *testing.T) {
 	tmpDir := t.TempDir()
 
@@ -370,15 +369,19 @@ func TestMaybeRefreshOmniKubeconfig_InitialFetch_MissingCredentials(t *testing.T
 
 	cmd := &cobra.Command{}
 
+	// The hook writes via cmd.OutOrStderr(). Route both Out and Err to the
+	// same buffer so the test captures whatever cobra chooses, without
+	// depending on the internal precedence rule.
 	var out bytes.Buffer
 
 	cmd.SetOut(&out)
-	cmd.SetErr(io.Discard)
+	cmd.SetErr(&out)
 
 	kubeconfighook.MaybeRefreshOmniKubeconfig(cmd)
 
 	assert.Contains(t, out.String(), "failed to refresh Omni kubeconfig",
 		"initial-fetch branch must be entered and surface credential errors")
+
 	_, statErr := os.Stat(kubeconfigPath)
 	assert.True(t, os.IsNotExist(statErr), "kubeconfig must not be created when fetch fails")
 }
