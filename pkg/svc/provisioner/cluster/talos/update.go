@@ -10,6 +10,7 @@ import (
 	"github.com/devantler-tech/ksail/v6/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/clustererr"
 	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/clusterupdate"
+	omniprovider "github.com/devantler-tech/ksail/v6/pkg/svc/provider/omni"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	machineapi "github.com/siderolabs/talos/pkg/machinery/api/machine"
@@ -37,6 +38,16 @@ func (p *Provisioner) Update(
 	}
 
 	clusterName := p.resolveClusterName(name)
+
+	// For Omni-managed clusters, refresh kubeconfig and talosconfig before any
+	// Helm/K8s operations. cluster create always calls saveOmniConfigs, but
+	// cluster update did not, leaving the on-disk kubeconfig stale after token
+	// rotation or Omni-side reissuance (Fixes #3922).
+	if omniProv, ok := p.infraProvider.(*omniprovider.Provider); ok {
+		if configErr := p.saveOmniConfigs(ctx, omniProv, clusterName); configErr != nil {
+			return result, fmt.Errorf("failed to refresh Omni configs before update: %w", configErr)
+		}
+	}
 
 	// Handle node scaling changes
 	scaleErr := p.applyNodeScalingChanges(ctx, clusterName, oldSpec, newSpec, result)
