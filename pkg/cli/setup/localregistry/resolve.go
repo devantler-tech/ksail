@@ -125,7 +125,7 @@ func resolveAuxDistributionName(
 
 		return "kwok-default"
 	case v1alpha1.DistributionEKS:
-		if name := strings.TrimSpace(clusterCfg.Spec.Cluster.Connection.Context); name != "" {
+		if name := parseEKSContext(clusterCfg.Spec.Cluster.Connection.Context); name != "" {
 			return name
 		}
 
@@ -169,6 +169,33 @@ func trimOrDefault(name, fallback string) string {
 	}
 
 	return trimmed
+}
+
+// parseEKSContext extracts the cluster name from an EKS kubeconfig context.
+// eksctl-produced contexts look like "<iam-identity>@<name>.<region>.eksctl.io";
+// bare "<name>.eksctl.io" contexts are also common. Returns an empty string
+// when the context is not recognisably an EKS context so the caller can fall
+// back to a default.
+func parseEKSContext(ctx string) string {
+	ctx = strings.TrimSpace(ctx)
+	if ctx == "" {
+		return ""
+	}
+
+	if idx := strings.LastIndex(ctx, "@"); idx >= 0 && idx+1 < len(ctx) {
+		ctx = ctx[idx+1:]
+	}
+
+	trimmed, ok := strings.CutSuffix(ctx, ".eksctl.io")
+	if !ok {
+		return ""
+	}
+
+	if idx := strings.Index(trimmed, "."); idx >= 0 {
+		trimmed = trimmed[:idx]
+	}
+
+	return strings.TrimSpace(trimmed)
 }
 
 func newCreateOptions(
