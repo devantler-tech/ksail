@@ -2102,8 +2102,10 @@ func executeReconciliation(
 	// Check both config and detected distribution for KWOK.
 	// When no ksail.yaml exists (e.g. init=false), clusterCfg.Spec.Cluster.Distribution
 	// defaults to empty; fall back to detecting from the active kubeconfig context.
+	// Only detect when dist is unspecified so an explicitly-configured distribution
+	// is never overridden by kubeconfig-based detection.
 	dist := clusterCfg.Spec.Cluster.Distribution
-	if dist != v1alpha1.DistributionKWOK {
+	if dist == "" {
 		info, detectErr := clusterdetector.DetectInfo(kubeconfigPath, "")
 		if detectErr == nil {
 			dist = info.Distribution
