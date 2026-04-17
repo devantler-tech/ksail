@@ -12,6 +12,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+var (
+	errExitStatus1   = errors.New("exit status 1")
+	errExitStatus127 = errors.New("exit status 127")
+)
+
 // fakeRunner captures calls and returns canned responses.
 type fakeRunner struct {
 	stdout []byte
@@ -30,6 +35,7 @@ func (f *fakeRunner) Run(
 	stdin io.Reader,
 ) ([]byte, []byte, error) {
 	f.lastName = name
+
 	f.lastArgs = append([]string(nil), args...)
 
 	if stdin != nil {
@@ -346,7 +352,7 @@ func TestExec_WrapsErrorWithFirstStderrLine(t *testing.T) {
 
 	runner := &fakeRunner{
 		stderr: []byte("Error: cluster \"missing\" not found\n\nstacktrace..."),
-		err:    errors.New("exit status 1"),
+		err:    errExitStatus1,
 	}
 	client := newTestClient(runner)
 
@@ -359,7 +365,7 @@ func TestExec_WrapsErrorWithFirstStderrLine(t *testing.T) {
 func TestExec_WrapsErrorWithoutStderr(t *testing.T) {
 	t.Parallel()
 
-	runner := &fakeRunner{err: errors.New("exit status 127")}
+	runner := &fakeRunner{err: errExitStatus127}
 	client := newTestClient(runner)
 
 	_, _, err := client.Exec(t.Context(), "version")

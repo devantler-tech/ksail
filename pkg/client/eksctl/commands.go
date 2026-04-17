@@ -9,7 +9,10 @@ import (
 )
 
 // ClusterSummary represents a single cluster entry returned by
-// `eksctl get cluster -o json`.
+// `eksctl get cluster -o json`. Field tags preserve eksctl's PascalCase
+// JSON keys (eksctl emits these names verbatim).
+//
+//nolint:tagliatelle // eksctl's JSON output uses PascalCase keys.
 type ClusterSummary struct {
 	Name   string `json:"Name"`
 	Region string `json:"Region"`
@@ -19,7 +22,10 @@ type ClusterSummary struct {
 }
 
 // NodegroupSummary represents a single managed nodegroup returned by
-// `eksctl get nodegroup --cluster <name> -o json`.
+// `eksctl get nodegroup --cluster <name> -o json`. Field tags preserve
+// eksctl's PascalCase JSON keys.
+//
+//nolint:tagliatelle // eksctl's JSON output uses PascalCase keys.
 type NodegroupSummary struct {
 	Cluster       string `json:"Cluster"`
 	Name          string `json:"Name"`

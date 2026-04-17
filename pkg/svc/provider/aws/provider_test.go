@@ -14,13 +14,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// errScriptedRunnerEmptyArgs is returned when the scripted runner is invoked
+// with no positional arguments (should never happen in real test cases).
+var errScriptedRunnerEmptyArgs = errors.New("scripted runner: empty args")
+
 // scriptedRunner replays canned responses keyed by the first argument
 // (`create`, `delete`, `get`, `scale`, `upgrade`). It records every call for
 // assertions.
 type scriptedRunner struct {
-	t        *testing.T
+	t         *testing.T
 	responses map[string][]response
-	calls    [][]string
+	calls     [][]string
 }
 
 type response struct {
@@ -40,7 +44,7 @@ func (s *scriptedRunner) Run(
 	s.calls = append(s.calls, append([]string(nil), args...))
 
 	if len(args) == 0 {
-		return nil, nil, errors.New("scripted runner: empty args")
+		return nil, nil, errScriptedRunnerEmptyArgs
 	}
 
 	key := args[0]
@@ -172,6 +176,7 @@ func TestStopNodes_ScalesAllToZero(t *testing.T) {
 	require.NoError(t, err)
 
 	var scales [][]string
+
 	for _, call := range runner.calls {
 		if len(call) >= 2 && call[0] == "scale" && call[1] == "nodegroup" {
 			scales = append(scales, call)
@@ -249,7 +254,9 @@ func TestGetClusterStatus_AggregatesNodegroupStatus(t *testing.T) {
 	t.Parallel()
 
 	prov, _ := newProvider(t, map[string][]response{
-		"get cluster":  {{stdout: []byte(`[{"Name":"demo","Region":"us-east-1","EksctlCreated":"True"}]`)}},
+		"get cluster": {
+			{stdout: []byte(`[{"Name":"demo","Region":"us-east-1","EksctlCreated":"True"}]`)},
+		},
 		"get nodegroup": {{stdout: []byte(`[
 			{"Cluster":"demo","Name":"ng-1","Status":"ACTIVE"},
 			{"Cluster":"demo","Name":"ng-2","Status":"CREATING"}
