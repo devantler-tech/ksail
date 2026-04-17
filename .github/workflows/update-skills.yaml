@@ -27,27 +27,28 @@ jobs:
         with:
           persist-credentials: true
 
-      - name: ⚙️ Setup Node.js
-        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
-        with:
-          node-version: "24"
-
       - name: 🔄 Update Copilot skills
         run: |
+          if ! gh skill --help >/dev/null 2>&1; then
+            echo "::error::Installed gh does not support 'gh skill'. Ensure the runner has a gh version with skill support."
+            exit 1
+          fi
+
           if [ ! -f skills-lock.json ]; then
             echo "::error::skills-lock.json not found"
             exit 1
           fi
-          jq_output=$(jq -e -r '.skills | to_entries[] | "\(.value.source)@\(.key)"' skills-lock.json)
+          jq_output=$(jq -e -c '.skills | to_entries[] | {"source": .value.source, "skillName": .key}' skills-lock.json)
           if [ -z "$jq_output" ]; then
             echo "::error::No skills found in skills-lock.json"
             exit 1
           fi
-          mapfile -t skills <<< "$jq_output"
-          for skill in "${skills[@]}"; do
-            echo "Updating $skill..."
-            npx skills add "$skill" -y --agent github-copilot
-          done
+          while IFS= read -r skill_entry; do
+            skill_source=$(jq -r '.source' <<< "$skill_entry")
+            skill_name=$(jq -r '.skillName' <<< "$skill_entry")
+            echo "Updating ${skill_source}/${skill_name}..."
+            gh skill install "$skill_source" "$skill_name" --agent github-copilot --scope user
+          done < <(printf '%s\n' "$jq_output")
 
       - name: 📦 Create pull request
         uses: peter-evans/create-pull-request@c0f553fe549906ede9cf27b5156039d195d2ece0 # v8.1.0

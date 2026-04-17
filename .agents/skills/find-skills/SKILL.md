@@ -18,16 +18,15 @@ Use this skill when the user:
 - Wants to search for tools, templates, or workflows
 - Mentions they wish they had help with a specific domain (design, testing, deployment, etc.)
 
-## What is the Skills CLI?
+## What is `gh skill`?
 
-The Skills CLI (`npx skills`) is the package manager for the open agent skills ecosystem. Skills are modular packages that extend agent capabilities with specialized knowledge, workflows, and tools.
+`gh skill` (a GitHub CLI extension) is the package manager for the open agent skills ecosystem. Skills are modular packages that extend agent capabilities with specialized knowledge, workflows, and tools.
 
 **Key commands:**
 
-- `npx skills find [query]` - Search for skills interactively or by keyword
-- `npx skills add <package>` - Install a skill from GitHub or other sources
-- `npx skills check` - Check for skill updates
-- `npx skills update` - Update all installed skills
+- `gh skill search [query]` - Search for skills by keyword
+- `gh skill install <owner/repository> <skill> --agent github-copilot --scope user` - Install a skill from GitHub for Copilot
+- `gh skill update` - Check for and apply skill updates
 
 **Browse skills at:** https://skills.sh/
 
@@ -54,14 +53,14 @@ For example, top skills for web development include:
 If the leaderboard doesn't cover the user's need, run the find command:
 
 ```bash
-npx skills find [query]
+gh skill search [query]
 ```
 
 For example:
 
-- User asks "how do I make my React app faster?" → `npx skills find react performance`
-- User asks "can you help me with PR reviews?" → `npx skills find pr review`
-- User asks "I need to create a changelog" → `npx skills find changelog`
+- User asks "how do I make my React app faster?" → `gh skill search react performance`
+- User asks "can you help me with PR reviews?" → `gh skill search pr review`
+- User asks "I need to create a changelog" → `gh skill search changelog`
 
 ### Step 4: Verify Quality Before Recommending
 
@@ -88,7 +87,7 @@ React and Next.js performance optimization guidelines from Vercel Engineering.
 (185K installs)
 
 To install it:
-npx skills add vercel-labs/agent-skills@react-best-practices
+gh skill install vercel-labs/agent-skills react-best-practices --agent github-copilot --scope user
 
 Learn more: https://skills.sh/vercel-labs/agent-skills/react-best-practices
 ```
@@ -98,10 +97,10 @@ Learn more: https://skills.sh/vercel-labs/agent-skills/react-best-practices
 If the user wants to proceed, you can install the skill for them:
 
 ```bash
-npx skills add <owner/repo@skill> -g -y
+gh skill install <owner/repository> <skill> --agent github-copilot --scope user
 ```
 
-The `-g` flag installs globally (user-level) and `-y` skips confirmation prompts.
+The `--scope user` flag installs for the user profile.
 
 ## Common Skill Categories
 
@@ -129,7 +128,7 @@ If no relevant skills exist:
 
 1. Acknowledge that no existing skill was found
 2. Offer to help with the task directly using your general capabilities
-3. Suggest the user could create their own skill with `npx skills init`
+3. Suggest the user could create their own skill following the Agent Skills specification
 
 Example:
 
@@ -137,6 +136,6 @@ Example:
 I searched for skills related to "xyz" but didn't find any matches.
 I can still help you with this task directly! Would you like me to proceed?
 
-If this is something you do often, you could create your own skill:
-npx skills init my-xyz-skill
+If this is something you do often, you could create your own skill by following:
+https://agentskills.io/specification
 ```
