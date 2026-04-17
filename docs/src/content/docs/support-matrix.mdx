@@ -7,21 +7,21 @@ KSail supports multiple Kubernetes distributions, providers, and components. Thi
 
 ## Distribution × Provider Matrix
 
-| Distribution     | Docker | Hetzner | Omni | AWS        |
-| ---------------- | ------ | ------- | ---- | ---------- |
-| Vanilla (Kind)   | ✅     | ❌      | ❌   | ❌         |
-| K3s (K3d)        | ✅     | ❌      | ❌   | ❌         |
-| Talos            | ✅     | ✅      | ✅   | ❌         |
-| VCluster (Vind)  | ✅     | ❌      | ❌   | ❌         |
-| KWOK (kwokctl)   | ✅     | ❌      | ❌   | ❌         |
-| EKS              | ❌     | ❌      | ❌   | 🚧 Planned |
+| Distribution     | Docker | Hetzner | Omni | AWS   |
+| ---------------- | ------ | ------- | ---- | ----- |
+| Vanilla (Kind)   | ✅     | ❌      | ❌   | ❌    |
+| K3s (K3d)        | ✅     | ❌      | ❌   | ❌    |
+| Talos            | ✅     | ✅      | ✅   | ❌    |
+| VCluster (Vind)  | ✅     | ❌      | ❌   | ❌    |
+| KWOK (kwokctl)   | ✅     | ❌      | ❌   | ❌    |
+| EKS              | ❌     | ❌      | ❌   | 🚧¹⁰ |
 
 **Notes:**
 
 - Docker provider requires Docker Desktop or Docker Engine installed locally — see [Docker Provider](/providers/docker/) for setup details
 - Hetzner provider requires `HCLOUD_TOKEN` environment variable and a Talos ISO uploaded to your Hetzner account (x86: `122630`, ARM: `122629` — see [Talos options](/configuration/declarative-configuration/#distribution-and-tool-options)) — see [Hetzner Provider](/providers/hetzner/) for setup details
 - Omni provider requires a [Sidero Omni](https://www.siderolabs.com/omni/) account, an `OMNI_SERVICE_ACCOUNT_KEY` environment variable, and an Omni API endpoint configured via `spec.provider.omni.endpoint` in your KSail configuration — see [Omni Provider](/providers/omni/) for setup details
-- AWS provider requires AWS credentials and an AWS account with EKS permissions — see [AWS Provider](/providers/aws/) for setup details; `ksail cluster create` is not yet functional for EKS
+- ¹⁰ AWS provider requires AWS credentials and an AWS account with EKS permissions — see [AWS Provider](/providers/aws/) for setup details; `ksail cluster create` is not yet functional for EKS
 - VCluster uses the [Vind](https://github.com/loft-sh/vcluster) Docker driver to run the control plane and optional worker nodes directly as Docker containers
 - KWOK uses the kwokctl Docker runtime to run etcd, kube-apiserver, and kwok-controller as Docker containers — nodes and pods are simulated at the API level
 
@@ -42,7 +42,7 @@ KSail supports multiple Kubernetes distributions, providers, and components. Thi
 | Cloud Provider KIND           | ✅      | ❌       | ❌                  | ❌       | ❌       | ❌               |
 | MetalLB                       | ❌      | ❌       | ✅ (Docker)         | ❌       | ❌       | ❌               |
 | Hetzner CCM                   | ❌      | ❌       | ✅ (Hetzner)        | ❌       | ❌       | ❌               |
-| AWS Load Balancer Controller  | ❌      | ❌       | ❌                  | ❌       | ❌       | 🚧¹⁰/❌         |
+| AWS Load Balancer Controller  | ❌      | ❌       | ❌                  | ❌       | ❌       | 🚧¹⁰            |
 | **GitOps**                    |
 | Flux                          | ✅      | ✅       | ✅                  | ✅       | ❌⁹      | 🚧¹⁰            |
 | ArgoCD                        | ✅      | ✅       | ✅                  | ✅       | Sim⁷     | 🚧¹⁰            |
