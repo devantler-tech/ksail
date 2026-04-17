@@ -12,6 +12,7 @@ import (
 	"github.com/devantler-tech/ksail/v6/pkg/k8s/readiness"
 	omniprovider "github.com/devantler-tech/ksail/v6/pkg/svc/provider/omni"
 	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/clustererr"
+	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/clusterupdate"
 )
 
 const (
@@ -159,6 +160,13 @@ func (p *Provisioner) refreshOmniConfigsIfNeeded(ctx context.Context, clusterNam
 	}
 
 	return p.saveOmniConfigs(ctx, omniProv, clusterName)
+}
+
+// shouldApplyInPlaceChanges reports whether in-place machine config changes
+// should be pushed directly to Talos nodes. Omni-managed clusters are excluded
+// because Omni owns node configuration via its own API.
+func (p *Provisioner) shouldApplyInPlaceChanges(diff *clusterupdate.UpdateResult) bool {
+	return diff.TotalChanges() > 0 && p.omniOpts == nil
 }
 
 // buildOmniPatchInfos converts talosConfigs patches into the PatchInfo format used by the Omni template builder.

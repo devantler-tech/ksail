@@ -58,7 +58,7 @@ func (p *Provisioner) Update(
 	// Omni manages node configuration through its own API; the diff for Omni clusters
 	// only ever contains node-count fields (controlPlanes/workers) which are already
 	// handled (and skipped) above, so direct Talos machine config pushes are not needed.
-	if diff.TotalChanges() > 0 && p.omniOpts == nil {
+	if p.shouldApplyInPlaceChanges(diff) {
 		cfgErr := p.applyInPlaceConfigChanges(ctx, clusterName, result)
 		if cfgErr != nil {
 			return result, fmt.Errorf("failed to apply in-place config changes: %w", cfgErr)
