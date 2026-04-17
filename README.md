@@ -42,26 +42,26 @@ That's it — zero to a running cluster in under a minute. Continue with the [Ge
 
 Replace `kind + k3d + kubectl + helm + kustomize + flux + argocd + sops + k9s + kubeconform + …` with one binary:
 
-| Category                 | Built-in Capabilities                                             |
-|--------------------------|-------------------------------------------------------------------|
-| Cluster Provisioning     | Kind, K3d, Talos, VCluster (Vind), KWOK (kwokctl)                 |
-| Container Orchestration  | kubectl, Helm, Kustomize                                          |
-| GitOps Engines           | Flux, ArgoCD                                                      |
-| Secrets Management       | SOPS with Age encryption                                          |
-| Manifest Validation      | Kubeconform                                                       |
-| Cluster Operations       | K9s, backup & restore, multi-tenancy (`ksail tenant`)             |
-| AI Integration           | Chat assistant (Copilot SDK), MCP server, VS Code extension       |
-| Infrastructure Providers | Docker (local), Hetzner Cloud, Sidero Omni                        |
+| Category                 | Built-in Capabilities                                       |
+|--------------------------|-------------------------------------------------------------|
+| Cluster Provisioning     | Kind, K3d, Talos, VCluster (Vind), KWOK (kwokctl)           |
+| Container Orchestration  | kubectl, Helm, Kustomize                                    |
+| GitOps Engines           | Flux, ArgoCD                                                |
+| Secrets Management       | SOPS with Age encryption                                    |
+| Manifest Validation      | Kubeconform                                                 |
+| Cluster Operations       | K9s, backup & restore, multi-tenancy (`ksail tenant`)       |
+| AI Integration           | Chat assistant (Copilot SDK), MCP server, VS Code extension |
+| Infrastructure Providers | Docker (local), Hetzner Cloud, Sidero Omni                  |
 
 See the [feature overview](https://ksail.devantler.tech/features/) and [architecture guide](https://ksail.devantler.tech/architecture/) for details.
 
 ## Supported Platforms
 
-| OS                                              | Architecture |
-|-------------------------------------------------|--------------|
-| 🐧 Linux                                        | amd64, arm64 |
-| 🍎 macOS                                        | arm64        |
-| ⊞ Windows (native untested; WSL2 recommended)   | amd64, arm64 |
+| OS                                            | Architecture |
+|-----------------------------------------------|--------------|
+| 🐧 Linux                                      | amd64, arm64 |
+| 🍎 macOS                                      | arm64        |
+| ⊞ Windows (native untested; WSL2 recommended) | amd64, arm64 |
 
 | Provider | Vanilla  | K3s     | Talos | VCluster | KWOK        |
 |----------|----------|---------|-------|----------|-------------|
