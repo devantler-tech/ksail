@@ -2443,7 +2443,7 @@ func TestIsKindClusterFromNodes(t *testing.T) {
 	}
 }
 
-func TestApplyDistributionSpecOverrides(t *testing.T) { //nolint:funlen // Table-driven test with multiple comprehensive struct cases
+func TestApplyDistributionSpecOverrides(t *testing.T) { //nolint:funlen
 	t.Parallel()
 
 	tests := []struct {
