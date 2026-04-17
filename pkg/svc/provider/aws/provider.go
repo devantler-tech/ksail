@@ -50,24 +50,24 @@ func (p *Provider) StartNodes(ctx context.Context, clusterName string) error {
 		return provider.ErrNoNodes
 	}
 
-	for _, ng := range nodegroups {
-		if ng.DesiredCap > 0 {
+	for _, nodegroup := range nodegroups {
+		if nodegroup.DesiredCap > 0 {
 			continue
 		}
 
-		target := max(ng.MinSize, 1)
+		target := max(nodegroup.MinSize, 1)
 
 		err = p.client.ScaleNodegroup(
 			ctx,
 			clusterName,
-			ng.Name,
+			nodegroup.Name,
 			p.region,
 			target,
-			ng.MinSize,
-			ng.MaxSize,
+			nodegroup.MinSize,
+			nodegroup.MaxSize,
 		)
 		if err != nil {
-			return fmt.Errorf("start nodes: scale nodegroup %s: %w", ng.Name, err)
+			return fmt.Errorf("start nodes: scale nodegroup %s: %w", nodegroup.Name, err)
 		}
 	}
 
@@ -87,18 +87,18 @@ func (p *Provider) StopNodes(ctx context.Context, clusterName string) error {
 		return provider.ErrNoNodes
 	}
 
-	for _, ng := range nodegroups {
+	for _, nodegroup := range nodegroups {
 		err = p.client.ScaleNodegroup(
 			ctx,
 			clusterName,
-			ng.Name,
+			nodegroup.Name,
 			p.region,
 			0,
 			0,
-			ng.MaxSize,
+			nodegroup.MaxSize,
 		)
 		if err != nil {
-			return fmt.Errorf("stop nodes: scale nodegroup %s: %w", ng.Name, err)
+			return fmt.Errorf("stop nodes: scale nodegroup %s: %w", nodegroup.Name, err)
 		}
 	}
 
@@ -119,12 +119,12 @@ func (p *Provider) ListNodes(ctx context.Context, clusterName string) ([]provide
 
 	nodes := make([]provider.NodeInfo, 0, len(nodegroups))
 
-	for _, ng := range nodegroups {
+	for _, nodegroup := range nodegroups {
 		nodes = append(nodes, provider.NodeInfo{
-			Name:        ng.Name,
+			Name:        nodegroup.Name,
 			ClusterName: clusterName,
-			Role:        classifyRole(ng.NodeGroupType),
-			State:       ng.Status,
+			Role:        classifyRole(nodegroup.NodeGroupType),
+			State:       nodegroup.Status,
 		})
 	}
 
@@ -140,8 +140,8 @@ func (p *Provider) ListAllClusters(ctx context.Context) ([]string, error) {
 	}
 
 	names := make([]string, 0, len(clusters))
-	for _, c := range clusters {
-		names = append(names, c.Name)
+	for _, cluster := range clusters {
+		names = append(names, cluster.Name)
 	}
 
 	return names, nil
@@ -149,7 +149,12 @@ func (p *Provider) ListAllClusters(ctx context.Context) ([]string, error) {
 
 // NodesExist returns true if the cluster has at least one managed nodegroup.
 func (p *Provider) NodesExist(ctx context.Context, clusterName string) (bool, error) {
-	return provider.CheckNodesExist(ctx, p, clusterName)
+	exists, err := provider.CheckNodesExist(ctx, p, clusterName)
+	if err != nil {
+		return false, fmt.Errorf("check eks nodegroups: %w", err)
+	}
+
+	return exists, nil
 }
 
 // DeleteNodes is a no-op for EKS: `eksctl delete cluster` deletes all owned

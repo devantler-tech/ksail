@@ -35,6 +35,8 @@ func (ExecRunner) Run(
 	args []string,
 	stdin io.Reader,
 ) ([]byte, []byte, error) {
+	// #nosec G204 -- name/args are constructed by our own eksctl client code;
+	// no untrusted user input flows into these values.
 	cmd := exec.CommandContext(ctx, name, args...)
 
 	var stdout, stderr bytes.Buffer
@@ -86,16 +88,16 @@ func WithRunner(runner Runner) Option {
 // NewClient returns a Client using the eksctl binary on PATH and the default
 // ExecRunner. Use the Options to override either.
 func NewClient(opts ...Option) *Client {
-	c := &Client{
+	client := &Client{
 		binary: DefaultBinary,
 		runner: ExecRunner{},
 	}
 
 	for _, opt := range opts {
-		opt(c)
+		opt(client)
 	}
 
-	return c
+	return client
 }
 
 // Binary returns the binary name this client will invoke.
@@ -150,7 +152,11 @@ func (c *Client) ExecWithStdin(
 // first line of stderr (if any) to produce actionable error messages without
 // leaking the full eksctl output into Go error strings.
 func wrapExecErr(args []string, stderr []byte, err error) error {
-	firstStderrLine := strings.SplitN(strings.TrimSpace(string(stderr)), "\n", 2)[0]
+	const (
+		firstLineParts = 2
+	)
+
+	firstStderrLine := strings.SplitN(strings.TrimSpace(string(stderr)), "\n", firstLineParts)[0]
 	if firstStderrLine == "" {
 		return fmt.Errorf("eksctl %s: %w", strings.Join(args, " "), err)
 	}
