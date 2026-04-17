@@ -1,6 +1,7 @@
 package kubeconfighook_test
 
 import (
+	"bytes"
 	"encoding/base64"
 	"io"
 	"os"
@@ -288,6 +289,98 @@ func TestMaybeRefreshOmniKubeconfig_NoConfig(t *testing.T) {
 
 	// Should not panic or produce errors
 	kubeconfighook.MaybeRefreshOmniKubeconfig(cmd)
+}
+
+// TestMaybeRefreshOmniKubeconfig_InitialFetch_ExplicitKubeconfigSkipped verifies
+// that even on a fresh runner, an explicit --kubeconfig flag still short-circuits
+// the hook (user is managing their own kubeconfig).
+//
+//nolint:paralleltest // Cannot use t.Parallel() because t.Chdir() is used.
+func TestMaybeRefreshOmniKubeconfig_InitialFetch_ExplicitKubeconfigSkipped(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	hookConfigDiscoveryMu.Lock()
+	t.Cleanup(hookConfigDiscoveryMu.Unlock)
+
+	t.Chdir(tmpDir)
+
+	kubeconfigPath := filepath.Join(tmpDir, "missing-kubeconfig")
+	ksailYAML := "apiVersion: ksail.io/v1alpha1\n" +
+		"kind: Cluster\n" +
+		"spec:\n" +
+		"  cluster:\n" +
+		"    distribution: Talos\n" +
+		"    provider: Omni\n" +
+		"    connection:\n" +
+		"      kubeconfig: " + kubeconfigPath + "\n"
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "ksail.yaml"), []byte(ksailYAML), 0o600))
+
+	cmd := &cobra.Command{}
+	cmd.Flags().String("kubeconfig", "", "")
+	require.NoError(t, cmd.Flags().Set("kubeconfig", kubeconfigPath))
+
+	var out bytes.Buffer
+
+	cmd.SetOut(&out)
+	cmd.SetErr(io.Discard)
+
+	kubeconfighook.MaybeRefreshOmniKubeconfig(cmd)
+
+	// Explicit --kubeconfig short-circuits before any Omni provider logic,
+	// so neither a fetch attempt nor any warning should be emitted.
+	assert.Empty(t, out.String(), "explicit --kubeconfig must skip the hook entirely")
+}
+
+// TestMaybeRefreshOmniKubeconfig_InitialFetch_MissingCredentials verifies that
+// when the kubeconfig is missing and the Omni cluster name is resolvable, the
+// hook attempts a fetch and surfaces a warning when credentials are not set —
+// again proving the initial-fetch branch is reached instead of silent no-op.
+//
+//nolint:paralleltest // Cannot use t.Parallel() because t.Chdir()/t.Setenv are used.
+func TestMaybeRefreshOmniKubeconfig_InitialFetch_MissingCredentials(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	hookConfigDiscoveryMu.Lock()
+	t.Cleanup(hookConfigDiscoveryMu.Unlock)
+
+	t.Chdir(tmpDir)
+
+	// Ensure no Omni credentials are present so the refresh attempt fails loudly.
+	t.Setenv("OMNI_ENDPOINT", "")
+	t.Setenv("OMNI_SERVICE_ACCOUNT_KEY", "")
+
+	// Provide a talos config file that yields a cluster name so
+	// resolveClusterName returns non-empty.
+	talosYAML := "version: v1alpha1\n" +
+		"machine:\n  type: controlplane\n" +
+		"cluster:\n  clusterName: my-cluster\n  controlPlane:\n    endpoint: https://example.test:6443\n"
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "talos.yaml"), []byte(talosYAML), 0o600))
+
+	kubeconfigPath := filepath.Join(tmpDir, "missing-kubeconfig")
+	ksailYAML := "apiVersion: ksail.io/v1alpha1\n" +
+		"kind: Cluster\n" +
+		"spec:\n" +
+		"  cluster:\n" +
+		"    distribution: Talos\n" +
+		"    provider: Omni\n" +
+		"    distributionConfig: talos.yaml\n" +
+		"    connection:\n" +
+		"      kubeconfig: " + kubeconfigPath + "\n"
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "ksail.yaml"), []byte(ksailYAML), 0o600))
+
+	cmd := &cobra.Command{}
+
+	var out bytes.Buffer
+
+	cmd.SetOut(&out)
+	cmd.SetErr(io.Discard)
+
+	kubeconfighook.MaybeRefreshOmniKubeconfig(cmd)
+
+	assert.Contains(t, out.String(), "failed to refresh Omni kubeconfig",
+		"initial-fetch branch must be entered and surface credential errors")
+	_, statErr := os.Stat(kubeconfigPath)
+	assert.True(t, os.IsNotExist(statErr), "kubeconfig must not be created when fetch fails")
 }
 
 // writeKubeconfigWithContext creates a kubeconfig with the given current context name.

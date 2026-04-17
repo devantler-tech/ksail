@@ -6379,6 +6379,26 @@ func createAndVerifyProvisioner(
 		if err != nil {
 			return nil, fmt.Errorf("failed to refresh kubeconfig: %w", err)
 		}
+
+		// Defense-in-depth (regression guard for #4112): for remote providers like
+		// Omni the refresh is mandatory, because subsequent Helm/GitOps operations
+		// require the kubeconfig file on disk. If RefreshKubeconfig returned nil
+		// but the file is still missing, something upstream silently skipped the
+		// fetch — fail loudly instead of demoting to a downstream "stat … no such
+		// file" warning.
+		if ctx.ClusterCfg.Spec.Cluster.Provider == v1alpha1.ProviderOmni {
+			kubeconfigPath, pathErr := kubeconfig.GetKubeconfigPathFromConfig(ctx.ClusterCfg)
+			if pathErr != nil {
+				return nil, fmt.Errorf("failed to resolve kubeconfig path: %w", pathErr)
+			}
+
+			if _, statErr := os.Stat(kubeconfigPath); statErr != nil {
+				return nil, fmt.Errorf(
+					"kubeconfig not available after Omni refresh at %q: %w",
+					kubeconfigPath, statErr,
+				)
+			}
+		}
 	}
 
 	// Build a ComponentDetector scoped to the running cluster.
