@@ -57,10 +57,9 @@ func TestGetToolName(t *testing.T) {
 	t.Run("returns tool name when present", func(t *testing.T) {
 		t.Parallel()
 
-		name := "my-tool"
 		event := copilot.SessionEvent{
-			Data: copilot.Data{
-				ToolName: &name,
+			Data: &copilot.ToolExecutionStartData{
+				ToolName: "my-tool",
 			},
 		}
 
@@ -70,9 +69,7 @@ func TestGetToolName(t *testing.T) {
 	t.Run("returns unknown when nil", func(t *testing.T) {
 		t.Parallel()
 
-		event := copilot.SessionEvent{
-			Data: copilot.Data{},
-		}
+		event := copilot.SessionEvent{}
 
 		assert.Equal(t, "unknown", getToolName(event))
 	})
@@ -119,7 +116,7 @@ func TestGetToolArgs(t *testing.T) {
 	t.Run("nil arguments returns empty", func(t *testing.T) {
 		t.Parallel()
 
-		event := copilot.SessionEvent{Data: copilot.Data{}}
+		event := copilot.SessionEvent{}
 		assert.Empty(t, getToolArgs(event))
 	})
 
@@ -127,7 +124,7 @@ func TestGetToolArgs(t *testing.T) {
 		t.Parallel()
 
 		event := copilot.SessionEvent{
-			Data: copilot.Data{Arguments: "string-arg"},
+			Data: &copilot.ToolExecutionStartData{Arguments: "string-arg"},
 		}
 		assert.Empty(t, getToolArgs(event))
 	})
@@ -136,7 +133,7 @@ func TestGetToolArgs(t *testing.T) {
 		t.Parallel()
 
 		event := copilot.SessionEvent{
-			Data: copilot.Data{Arguments: map[string]any{}},
+			Data: &copilot.ToolExecutionStartData{Arguments: map[string]any{}},
 		}
 		assert.Empty(t, getToolArgs(event))
 	})
@@ -145,7 +142,7 @@ func TestGetToolArgs(t *testing.T) {
 		t.Parallel()
 
 		event := copilot.SessionEvent{
-			Data: copilot.Data{
+			Data: &copilot.ToolExecutionStartData{
 				Arguments: map[string]any{"name": "cluster"},
 			},
 		}

@@ -451,14 +451,14 @@ func (m *Model) sessionEventsToMessages(
 		case copilot.SessionEventTypeUserMessage:
 			role = roleUser
 
-			if event.Data.Content != nil {
-				content = *event.Data.Content
+			if data, ok := event.Data.(*copilot.UserMessageData); ok {
+				content = data.Content
 			}
 		case copilot.SessionEventTypeAssistantMessage:
 			role = roleAssistant
 
-			if event.Data.Content != nil {
-				content = *event.Data.Content
+			if data, ok := event.Data.(*copilot.AssistantMessageData); ok {
+				content = data.Content
 			}
 		default:
 			continue

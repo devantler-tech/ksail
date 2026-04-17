@@ -3,7 +3,6 @@ package chat
 import (
 	"errors"
 	"fmt"
-	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	copilot "github.com/github/copilot-sdk/go"
@@ -17,6 +16,7 @@ var errStreamEvent = errors.New("stream event error")
 type sessionEventDispatcher struct {
 	eventChan       chan<- tea.Msg
 	commandBuilders map[string]CommandBuilder
+	toolNames       map[string]string // ToolCallID → toolName, for correlating start/complete
 }
 
 // newSessionEventDispatcher creates a dispatcher that routes events to the given channel.
@@ -27,6 +27,7 @@ func newSessionEventDispatcher(
 	return &sessionEventDispatcher{
 		eventChan:       eventChan,
 		commandBuilders: commandBuilders,
+		toolNames:       make(map[string]string),
 	}
 }
 
@@ -98,23 +99,27 @@ func (d *sessionEventDispatcher) handleTurnStart() {
 }
 
 func (d *sessionEventDispatcher) handleMessageDelta(event copilot.SessionEvent) {
-	if event.Data.DeltaContent != nil {
-		d.eventChan <- streamChunkMsg{content: *event.Data.DeltaContent}
+	if data, ok := event.Data.(*copilot.AssistantMessageDeltaData); ok {
+		d.eventChan <- streamChunkMsg{content: data.DeltaContent}
 	}
 }
 
 func (d *sessionEventDispatcher) handleMessage(event copilot.SessionEvent) {
-	if event.Data.Content != nil {
-		d.eventChan <- assistantMessageMsg{content: *event.Data.Content}
+	if data, ok := event.Data.(*copilot.AssistantMessageData); ok {
+		d.eventChan <- assistantMessageMsg{content: data.Content}
 	}
 }
 
 func (d *sessionEventDispatcher) handleReasoning(event copilot.SessionEvent) {
 	var content string
-	if event.Data.Content != nil {
-		content = *event.Data.Content
-	} else if event.Data.DeltaContent != nil {
-		content = *event.Data.DeltaContent
+
+	switch data := event.Data.(type) {
+	case *copilot.AssistantReasoningData:
+		content = data.Content
+	case *copilot.AssistantReasoningDeltaData:
+		content = data.DeltaContent
+	default:
+		return
 	}
 
 	d.eventChan <- reasoningMsg{
@@ -129,30 +134,34 @@ func (d *sessionEventDispatcher) handleAbort() {
 
 func (d *sessionEventDispatcher) handleSessionError(event copilot.SessionEvent) {
 	errMsg := unknownErrorMsg
-	if event.Data.Message != nil {
-		errMsg = *event.Data.Message
+
+	if data, ok := event.Data.(*copilot.SessionErrorData); ok {
+		errMsg = data.Message
 	}
 
 	d.eventChan <- streamErrMsg{err: fmt.Errorf("%w: %s", errStreamEvent, errMsg)}
 }
 
 func (d *sessionEventDispatcher) handleToolStart(event copilot.SessionEvent) {
-	toolName := unknownToolName
-	if event.Data.ToolName != nil {
-		toolName = *event.Data.ToolName
+	data, ok := event.Data.(*copilot.ToolExecutionStartData)
+	if !ok {
+		return
 	}
+
+	toolName := data.ToolName
+	toolID := data.ToolCallID
+	d.toolNames[toolID] = toolName
 
 	var mcpServerName, mcpToolName string
-	if event.Data.MCPServerName != nil {
-		mcpServerName = *event.Data.MCPServerName
+	if data.McpServerName != nil {
+		mcpServerName = *data.McpServerName
 	}
 
-	if event.Data.MCPToolName != nil {
-		mcpToolName = *event.Data.MCPToolName
+	if data.McpToolName != nil {
+		mcpToolName = *data.McpToolName
 	}
 
-	command := extractCommandFromArgs(toolName, event.Data.Arguments, d.commandBuilders)
-	toolID := fmt.Sprintf(toolIDFormat, time.Now().UnixNano())
+	command := extractCommandFromArgs(toolName, data.Arguments, d.commandBuilders)
 
 	d.eventChan <- toolStartMsg{
 		toolID:        toolID,
@@ -164,17 +173,21 @@ func (d *sessionEventDispatcher) handleToolStart(event copilot.SessionEvent) {
 }
 
 func (d *sessionEventDispatcher) handleToolComplete(event copilot.SessionEvent) {
-	toolName := unknownToolName
-	if event.Data.ToolName != nil {
-		toolName = *event.Data.ToolName
+	data, ok := event.Data.(*copilot.ToolExecutionCompleteData)
+	if !ok {
+		return
 	}
+
+	toolID := data.ToolCallID
+	toolName := d.toolNames[toolID]
+	delete(d.toolNames, toolID)
 
 	output := ""
-	if event.Data.Result != nil && event.Data.Result.Content != nil {
-		output = *event.Data.Result.Content
+	if data.Result != nil {
+		output = data.Result.Content
 	}
 
-	d.eventChan <- toolEndMsg{toolName: toolName, output: output, success: true}
+	d.eventChan <- toolEndMsg{toolID: toolID, toolName: toolName, output: output, success: data.Success}
 }
 
 func (d *sessionEventDispatcher) handleSnapshotRewind() {
@@ -182,28 +195,31 @@ func (d *sessionEventDispatcher) handleSnapshotRewind() {
 }
 
 func (d *sessionEventDispatcher) handleUsage(event copilot.SessionEvent) {
-	msg := usageMsg{}
-
-	if event.Data.Model != nil {
-		msg.model = *event.Data.Model
+	data, ok := event.Data.(*copilot.AssistantUsageData)
+	if !ok {
+		return
 	}
 
-	if event.Data.InputTokens != nil {
-		msg.inputTokens = *event.Data.InputTokens
+	msg := usageMsg{
+		model: data.Model,
 	}
 
-	if event.Data.OutputTokens != nil {
-		msg.outputTokens = *event.Data.OutputTokens
+	if data.InputTokens != nil {
+		msg.inputTokens = *data.InputTokens
 	}
 
-	if event.Data.Cost != nil {
-		msg.cost = *event.Data.Cost
+	if data.OutputTokens != nil {
+		msg.outputTokens = *data.OutputTokens
 	}
 
-	if len(event.Data.QuotaSnapshots) > 0 {
-		msg.quotaSnapshots = make(map[string]quotaSnapshot, len(event.Data.QuotaSnapshots))
+	if data.Cost != nil {
+		msg.cost = *data.Cost
+	}
 
-		for key, snapshot := range event.Data.QuotaSnapshots {
+	if len(data.QuotaSnapshots) > 0 {
+		msg.quotaSnapshots = make(map[string]quotaSnapshot, len(data.QuotaSnapshots))
+
+		for key, snapshot := range data.QuotaSnapshots {
 			resetStr := ""
 			if snapshot.ResetDate != nil {
 				resetStr = snapshot.ResetDate.Format("Jan 2")
@@ -229,98 +245,109 @@ func (d *sessionEventDispatcher) handleCompactionStart() {
 }
 
 func (d *sessionEventDispatcher) handleCompactionComplete(event copilot.SessionEvent) {
-	msg := compactionCompleteMsg{}
-
-	if event.Data.Success != nil {
-		msg.success = *event.Data.Success
+	data, ok := event.Data.(*copilot.SessionCompactionCompleteData)
+	if !ok {
+		return
 	}
 
-	if event.Data.PreCompactionTokens != nil {
-		msg.preCompactionTokens = *event.Data.PreCompactionTokens
+	msg := compactionCompleteMsg{
+		success: data.Success,
 	}
 
-	if event.Data.PostCompactionTokens != nil {
-		msg.postCompactionTokens = *event.Data.PostCompactionTokens
+	if data.PreCompactionTokens != nil {
+		msg.preCompactionTokens = *data.PreCompactionTokens
 	}
 
-	if event.Data.TokensRemoved != nil {
-		msg.tokensRemoved = *event.Data.TokensRemoved
+	if data.PostCompactionTokens != nil {
+		msg.postCompactionTokens = *data.PostCompactionTokens
+	}
+
+	if data.TokensRemoved != nil {
+		msg.tokensRemoved = *data.TokensRemoved
 	}
 
 	d.eventChan <- msg
 }
 
 func (d *sessionEventDispatcher) handleIntent(event copilot.SessionEvent) {
-	if event.Data.Content != nil {
-		d.eventChan <- intentMsg{content: *event.Data.Content}
+	if data, ok := event.Data.(*copilot.AssistantIntentData); ok {
+		d.eventChan <- intentMsg{content: data.Intent}
 	}
 }
 
 func (d *sessionEventDispatcher) handleModelChange(event copilot.SessionEvent) {
-	msg := modelChangeMsg{}
-
-	if event.Data.PreviousModel != nil {
-		msg.previousModel = *event.Data.PreviousModel
+	data, ok := event.Data.(*copilot.SessionModelChangeData)
+	if !ok {
+		return
 	}
 
-	if event.Data.NewModel != nil {
-		msg.newModel = *event.Data.NewModel
+	msg := modelChangeMsg{
+		newModel: data.NewModel,
+	}
+
+	if data.PreviousModel != nil {
+		msg.previousModel = *data.PreviousModel
 	}
 
 	d.eventChan <- msg
 }
 
 func (d *sessionEventDispatcher) handleShutdown(event copilot.SessionEvent) {
-	msg := shutdownMsg{}
-
-	if event.Data.ShutdownType != nil {
-		msg.shutdownType = string(*event.Data.ShutdownType)
+	data, ok := event.Data.(*copilot.SessionShutdownData)
+	if !ok {
+		return
 	}
 
-	d.eventChan <- msg
+	d.eventChan <- shutdownMsg{
+		shutdownType: string(data.ShutdownType),
+	}
 }
 
 func (d *sessionEventDispatcher) handleSystemNotification(event copilot.SessionEvent) {
-	msg := systemNotificationMsg{}
-
-	if event.Data.Message != nil {
-		msg.message = *event.Data.Message
+	data, ok := event.Data.(*copilot.SystemNotificationData)
+	if !ok {
+		return
 	}
 
-	if event.Data.InfoType != nil {
-		msg.infoType = *event.Data.InfoType
+	d.eventChan <- systemNotificationMsg{
+		message:  data.Content,
+		infoType: string(data.Kind.Type),
 	}
-
-	d.eventChan <- msg
 }
 
 func (d *sessionEventDispatcher) handleSessionWarning(event copilot.SessionEvent) {
-	msg := sessionWarningMsg{}
-
-	if event.Data.Message != nil {
-		msg.message = *event.Data.Message
+	data, ok := event.Data.(*copilot.SessionWarningData)
+	if !ok {
+		return
 	}
 
-	if event.Data.WarningType != nil {
-		msg.warningType = *event.Data.WarningType
+	d.eventChan <- sessionWarningMsg{
+		message:     data.Message,
+		warningType: data.WarningType,
 	}
-
-	d.eventChan <- msg
 }
 
 func (d *sessionEventDispatcher) handleToolProgress(event copilot.SessionEvent) {
-	if event.Data.ProgressMessage != nil && event.Data.ToolCallID != nil {
-		d.eventChan <- ToolProgressMsg{
-			ToolID:  *event.Data.ToolCallID,
-			Message: *event.Data.ProgressMessage,
-		}
+	data, ok := event.Data.(*copilot.ToolExecutionProgressData)
+	if !ok {
+		return
+	}
+
+	d.eventChan <- ToolProgressMsg{
+		ToolID:  data.ToolCallID,
+		Message: data.ProgressMessage,
 	}
 }
 
 func (d *sessionEventDispatcher) handleTaskComplete(event copilot.SessionEvent) {
+	data, ok := event.Data.(*copilot.SessionTaskCompleteData)
+	if !ok {
+		return
+	}
+
 	msg := ""
-	if event.Data.Summary != nil {
-		msg = *event.Data.Summary
+	if data.Summary != nil {
+		msg = *data.Summary
 	}
 
 	d.eventChan <- TaskCompleteMsg{Message: msg}

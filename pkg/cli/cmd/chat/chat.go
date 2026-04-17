@@ -943,12 +943,12 @@ func buildNonTUIOnEventHandler(writer io.Writer) copilot.SessionEventHandler {
 		//nolint:exhaustive // Only session-level events not in per-turn handler; rest ignored.
 		switch event.Type {
 		case copilot.SessionEventTypeToolExecutionProgress:
-			if event.Data.ProgressMessage != nil {
-				_, _ = fmt.Fprintf(writer, "  ⏳ %s\n", *event.Data.ProgressMessage)
+			if data, ok := event.Data.(*copilot.ToolExecutionProgressData); ok {
+				_, _ = fmt.Fprintf(writer, "  ⏳ %s\n", data.ProgressMessage)
 			}
 		case copilot.SessionEventTypeSessionTaskComplete:
-			if event.Data.Summary != nil {
-				_, _ = fmt.Fprintf(writer, "\n✅ %s\n", *event.Data.Summary)
+			if data, ok := event.Data.(*copilot.SessionTaskCompleteData); ok && data.Summary != nil {
+				_, _ = fmt.Fprintf(writer, "\n✅ %s\n", *data.Summary)
 			}
 		}
 	}
@@ -1006,14 +1006,14 @@ func computeStreamingOutput(event copilot.SessionEvent, state *streamingState) s
 	//nolint:exhaustive // Only a subset of ~30 SDK event types are relevant for streaming display.
 	switch event.Type {
 	case copilot.SessionEventTypeAssistantMessageDelta:
-		if event.Data.DeltaContent != nil {
-			return streamingOutput{action: actionDelta, text: *event.Data.DeltaContent}
+		if data, ok := event.Data.(*copilot.AssistantMessageDeltaData); ok {
+			return streamingOutput{action: actionDelta, text: data.DeltaContent}
 		}
 	case copilot.SessionEventTypeSessionIdle:
 		state.markDone()
 	case copilot.SessionEventTypeSessionError:
-		if event.Data.Message != nil {
-			state.responseErr = fmt.Errorf("%w: %s", errSessionError, *event.Data.Message)
+		if data, ok := event.Data.(*copilot.SessionErrorData); ok {
+			state.responseErr = fmt.Errorf("%w: %s", errSessionError, data.Message)
 		}
 
 		state.markDone()
@@ -1028,23 +1028,23 @@ func computeStreamingOutput(event copilot.SessionEvent, state *streamingState) s
 	case copilot.SessionEventTypeToolExecutionComplete:
 		return streamingOutput{action: actionToolComplete}
 	case copilot.SessionEventTypeSystemNotification:
-		if event.Data.Message != nil {
-			return streamingOutput{action: actionDelta, text: "\nℹ️ " + *event.Data.Message + "\n"}
+		if data, ok := event.Data.(*copilot.SystemNotificationData); ok {
+			return streamingOutput{action: actionDelta, text: "\nℹ️ " + data.Content + "\n"}
 		}
 	case copilot.SessionEventTypeSessionWarning:
-		if event.Data.Message != nil {
-			return streamingOutput{action: actionDelta, text: "\n⚠️ " + *event.Data.Message + "\n"}
+		if data, ok := event.Data.(*copilot.SessionWarningData); ok {
+			return streamingOutput{action: actionDelta, text: "\n⚠️ " + data.Message + "\n"}
 		}
 	case copilot.SessionEventTypeToolExecutionProgress:
-		if event.Data.ProgressMessage != nil {
+		if data, ok := event.Data.(*copilot.ToolExecutionProgressData); ok {
 			return streamingOutput{
 				action: actionDelta,
-				text:   "  ⏳ " + *event.Data.ProgressMessage + "\n",
+				text:   "  ⏳ " + data.ProgressMessage + "\n",
 			}
 		}
 	case copilot.SessionEventTypeSessionTaskComplete:
-		if event.Data.Summary != nil {
-			return streamingOutput{action: actionDelta, text: "\n✅ " + *event.Data.Summary + "\n"}
+		if data, ok := event.Data.(*copilot.SessionTaskCompleteData); ok && data.Summary != nil {
+			return streamingOutput{action: actionDelta, text: "\n✅ " + *data.Summary + "\n"}
 		}
 	default:
 		// Ignore other event types
@@ -1145,8 +1145,10 @@ func sendChatWithoutStreaming(
 			return fmt.Errorf("failed to send chat message: %w", chatResult.err)
 		}
 
-		if chatResult.response != nil && chatResult.response.Data.Content != nil {
-			_, _ = fmt.Fprintln(writer, *chatResult.response.Data.Content)
+		if chatResult.response != nil {
+			if data, ok := chatResult.response.Data.(*copilot.AssistantMessageData); ok {
+				_, _ = fmt.Fprintln(writer, data.Content)
+			}
 		}
 
 		return nil
@@ -1155,8 +1157,8 @@ func sendChatWithoutStreaming(
 
 // getToolName extracts the tool name from a session event.
 func getToolName(event copilot.SessionEvent) string {
-	if event.Data.ToolName != nil {
-		return *event.Data.ToolName
+	if data, ok := event.Data.(*copilot.ToolExecutionStartData); ok {
+		return data.ToolName
 	}
 
 	return "unknown"
@@ -1187,11 +1189,12 @@ func formatArgsMap(args map[string]any) string {
 
 // getToolArgs formats tool arguments for display with parentheses.
 func getToolArgs(event copilot.SessionEvent) string {
-	if event.Data.Arguments == nil {
+	data, ok := event.Data.(*copilot.ToolExecutionStartData)
+	if !ok || data.Arguments == nil {
 		return ""
 	}
 
-	args, ok := event.Data.Arguments.(map[string]any)
+	args, ok := data.Arguments.(map[string]any)
 	if !ok || len(args) == 0 {
 		return ""
 	}
@@ -1399,16 +1402,16 @@ func buildTUIOnEventHandler(eventChan chan<- tea.Msg) copilot.SessionEventHandle
 		//nolint:exhaustive // Only session-level events not in per-turn dispatcher; rest ignored.
 		switch event.Type {
 		case copilot.SessionEventTypeToolExecutionProgress:
-			if event.Data.ProgressMessage != nil && event.Data.ToolCallID != nil {
+			if data, ok := event.Data.(*copilot.ToolExecutionProgressData); ok {
 				eventChan <- chatui.ToolProgressMsg{
-					ToolID:  *event.Data.ToolCallID,
-					Message: *event.Data.ProgressMessage,
+					ToolID:  data.ToolCallID,
+					Message: data.ProgressMessage,
 				}
 			}
 		case copilot.SessionEventTypeSessionTaskComplete:
 			msg := ""
-			if event.Data.Summary != nil {
-				msg = *event.Data.Summary
+			if data, ok := event.Data.(*copilot.SessionTaskCompleteData); ok && data.Summary != nil {
+				msg = *data.Summary
 			}
 
 			eventChan <- chatui.TaskCompleteMsg{Message: msg}
