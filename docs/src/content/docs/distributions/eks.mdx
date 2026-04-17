@@ -7,7 +7,7 @@ import { Badge } from '@astrojs/starlight/components';
 
 <Badge text="Coming Soon" variant="caution" /> EKS cluster creation is scaffolded and the `init` command is available, but `ksail cluster create` is not yet functional for EKS. Full provisioner support is landing in a follow-up release.
 
-KSail supports [Amazon Elastic Kubernetes Service (EKS)](https://aws.amazon.com/eks/) as a managed Kubernetes distribution via [eksctl](https://eksctl.io/). `ksail cluster init` scaffolds a declarative `eks.yaml` (eksctl `ClusterConfig`) that you can edit and apply.
+KSail supports [Amazon Elastic Kubernetes Service (EKS)](https://aws.amazon.com/eks/) as a managed Kubernetes distribution via [eksctl](https://eksctl.io/). Today, `ksail cluster init` scaffolds a declarative `eks.yaml` (eksctl `ClusterConfig`) that you can review and customize; provisioning with eksctl, and later directly through KSail, will be documented as full EKS support lands.
 
 EKS is the only distribution that uses the [AWS provider](/providers/aws/). It is a cloud distribution — local mirror registries and local registry containers are not supported.
 
@@ -24,17 +24,17 @@ For local development and testing, consider the [Vanilla](/distributions/vanilla
 ## Prerequisites
 
 1. **AWS account** — with permissions to create EKS clusters, IAM roles, and VPCs
-2. **AWS credentials** — configure via `aws configure` or environment variables (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION`)
+2. **AWS credentials** — configure via `aws configure` or environment variables (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, `AWS_DEFAULT_REGION`)
 3. **Docker** — required locally for the `ksail` CLI
 
 ## What EKS Provides by Default
 
-| Component      | Status   | Details                            |
-| -------------- | -------- | ---------------------------------- |
-| CNI            | Built-in | Amazon VPC CNI (vpc-cni addon)     |
-| CSI            | Built-in | Amazon EBS CSI Driver addon        |
-| LoadBalancer   | Built-in | AWS Load Balancer Controller (ELB) |
-| Metrics Server | ❌       | Not provided by default            |
+| Component      | Status   | Details                                                             |
+| -------------- | -------- | ------------------------------------------------------------------- |
+| CNI            | Built-in | Amazon VPC CNI (vpc-cni addon)                                      |
+| CSI            | Built-in | Amazon EBS CSI Driver addon                                         |
+| LoadBalancer   | Built-in | AWS `Service` type `LoadBalancer` support via AWS cloud integration |
+| Metrics Server | ❌       | Not provided by default                                             |
 
 ## Quick Start
 

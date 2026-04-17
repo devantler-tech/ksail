@@ -7,7 +7,7 @@ import { Badge } from '@astrojs/starlight/components';
 
 <Badge text="Coming Soon" variant="caution" /> The AWS provider is scaffolded and `ksail cluster init` is available, but `ksail cluster create` is not yet functional. Full provisioner support is landing in a follow-up release.
 
-The AWS provider creates managed [Amazon EKS](https://aws.amazon.com/eks/) clusters via [eksctl](https://eksctl.io/). It is the only provider available for the [EKS distribution](/distributions/eks/).
+The AWS provider will create managed [Amazon EKS](https://aws.amazon.com/eks/) clusters via [eksctl](https://eksctl.io/) once full provisioner support lands. Today, it is available for scaffolding configuration via `ksail cluster init` and is the only provider available for the [EKS distribution](/distributions/eks/).
 
 > [!NOTE]
 > The AWS provider only supports the **EKS** distribution. For local Docker-based clusters, see the [Docker Provider](/providers/docker/).
@@ -19,8 +19,9 @@ The AWS provider creates managed [Amazon EKS](https://aws.amazon.com/eks/) clust
    ```bash
    export AWS_ACCESS_KEY_ID=your-access-key
    export AWS_SECRET_ACCESS_KEY=your-secret-key
-   export AWS_DEFAULT_REGION=us-east-1
+   export AWS_REGION=us-east-1
    ```
+   KSail defaults to reading the AWS region from `AWS_REGION`. If you also use other AWS tooling that expects `AWS_DEFAULT_REGION`, you may set both variables to the same value.
 3. **Docker** — required locally for the `ksail` CLI
 
 ## Configuration
@@ -43,15 +44,16 @@ All cluster-specific metadata (region, version, nodegroups, addons) lives in `ek
 
 ## Characteristics
 
-| Property            | Value                                      |
-| ------------------- | ------------------------------------------ |
-| Supported distribution | EKS                                     |
-| Infrastructure type | Cloud (managed AWS)                        |
-| Local registries    | ❌ Not supported                           |
-| Local mirrors       | ❌ Not supported (use external URLs)       |
-| CNI                 | Amazon VPC CNI (provided by default)       |
-| CSI                 | Amazon EBS CSI Driver (provided by default)|
-| LoadBalancer        | AWS Load Balancer Controller               |
+| Property                     | Value                                       |
+| ---------------------------- | ------------------------------------------- |
+| Supported distribution       | EKS                                         |
+| Infrastructure type          | Cloud (managed AWS)                         |
+| Local registries             | ❌ Not supported                            |
+| Local mirrors                | ❌ Not supported (use external URLs)        |
+| CNI                          | Amazon VPC CNI (provided by default)        |
+| CSI                          | Amazon EBS CSI Driver (provided by default) |
+| LoadBalancer support         | Built-in (AWS-managed)                      |
+| AWS Load Balancer Controller | 🚧 Optional / not installed by KSail        |
 
 ## Limitations
 
