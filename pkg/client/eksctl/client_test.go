@@ -80,12 +80,12 @@ func TestCreateCluster_InvokesCorrectArgs(t *testing.T) {
 	runner := &fakeRunner{}
 	client := newTestClient(runner)
 
-	err := client.CreateCluster(t.Context(), "eksctl.yaml", "us-east-1")
+	err := client.CreateCluster(t.Context(), "eks.yaml", "us-east-1")
 	require.NoError(t, err)
 
 	assert.Equal(t, "eksctl-under-test", runner.lastName)
 	assert.Equal(t,
-		[]string{"create", "cluster", "--config-file", "eksctl.yaml", "--region", "us-east-1"},
+		[]string{"create", "cluster", "--config-file", "eks.yaml", "--region", "us-east-1"},
 		runner.lastArgs,
 	)
 }
@@ -96,11 +96,11 @@ func TestCreateCluster_NoRegionOmitsFlag(t *testing.T) {
 	runner := &fakeRunner{}
 	client := newTestClient(runner)
 
-	err := client.CreateCluster(t.Context(), "eksctl.yaml", "")
+	err := client.CreateCluster(t.Context(), "eks.yaml", "")
 	require.NoError(t, err)
 
 	assert.Equal(t,
-		[]string{"create", "cluster", "--config-file", "eksctl.yaml"},
+		[]string{"create", "cluster", "--config-file", "eks.yaml"},
 		runner.lastArgs,
 	)
 }
@@ -139,11 +139,11 @@ func TestDeleteCluster_ByConfigFile(t *testing.T) {
 	runner := &fakeRunner{}
 	client := newTestClient(runner)
 
-	err := client.DeleteCluster(t.Context(), "", "", "eksctl.yaml", false)
+	err := client.DeleteCluster(t.Context(), "", "", "eks.yaml", false)
 	require.NoError(t, err)
 
 	assert.Equal(t,
-		[]string{"delete", "cluster", "--config-file", "eksctl.yaml"},
+		[]string{"delete", "cluster", "--config-file", "eks.yaml"},
 		runner.lastArgs,
 	)
 }
@@ -315,11 +315,11 @@ func TestUpgradeCluster_WithApprove(t *testing.T) {
 	runner := &fakeRunner{}
 	client := newTestClient(runner)
 
-	err := client.UpgradeCluster(t.Context(), "eksctl.yaml", true)
+	err := client.UpgradeCluster(t.Context(), "eks.yaml", true)
 	require.NoError(t, err)
 
 	assert.Equal(t,
-		[]string{"upgrade", "cluster", "--config-file", "eksctl.yaml", "--approve"},
+		[]string{"upgrade", "cluster", "--config-file", "eks.yaml", "--approve"},
 		runner.lastArgs,
 	)
 }
@@ -330,11 +330,11 @@ func TestUpgradeCluster_DryRunOmitsApprove(t *testing.T) {
 	runner := &fakeRunner{}
 	client := newTestClient(runner)
 
-	err := client.UpgradeCluster(t.Context(), "eksctl.yaml", false)
+	err := client.UpgradeCluster(t.Context(), "eks.yaml", false)
 	require.NoError(t, err)
 
 	assert.Equal(t,
-		[]string{"upgrade", "cluster", "--config-file", "eksctl.yaml"},
+		[]string{"upgrade", "cluster", "--config-file", "eks.yaml"},
 		runner.lastArgs,
 	)
 }

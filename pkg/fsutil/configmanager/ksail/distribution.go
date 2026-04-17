@@ -15,6 +15,7 @@ import (
 	clusterprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster"
 	k3dv1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	kindv1alpha4 "sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
+	"sigs.k8s.io/yaml"
 )
 
 // loadKindConfig loads the Kind distribution configuration if it exists.
@@ -125,9 +126,7 @@ func (m *ConfigManager) loadAndCacheDistributionConfig() error {
 	case v1alpha1.DistributionKWOK:
 		return m.cacheKWOKConfig()
 	case v1alpha1.DistributionEKS:
-		// EKS distribution config (eks.yaml) is loaded by the EKS
-		// provisioner directly and not cached on the ConfigManager.
-		return nil
+		return m.cacheEKSConfig()
 	default:
 		return nil
 	}
@@ -316,4 +315,86 @@ func (m *ConfigManager) resolveKWOKName() string {
 	}
 
 	return "kwok-default"
+}
+
+// cacheEKSConfig caches EKS configuration. The eks.yaml path comes from
+// spec.cluster.distributionConfig (defaulting to "eks.yaml"). The cluster
+// name and region are read from the eks.yaml metadata when present, with
+// the kubeconfig context as fallback for the name.
+func (m *ConfigManager) cacheEKSConfig() error {
+	configPath := strings.TrimSpace(m.Config.Spec.Cluster.DistributionConfig)
+	if configPath == "" {
+		configPath = "eks.yaml"
+	}
+
+	resolvedPath := ""
+	name := ""
+	region := ""
+
+	_, err := os.Stat(configPath)
+	if err == nil {
+		resolvedPath = configPath
+
+		data, readErr := os.ReadFile(configPath) //nolint:gosec // configPath comes from user spec
+		if readErr != nil {
+			return fmt.Errorf("failed to read EKS config file: %w", readErr)
+		}
+
+		var meta struct {
+			Metadata struct {
+				Name   string `json:"name"`
+				Region string `json:"region"`
+			} `json:"metadata"`
+		}
+
+		unmarshalErr := yaml.Unmarshal(data, &meta)
+		if unmarshalErr != nil {
+			return fmt.Errorf("failed to parse EKS config file: %w", unmarshalErr)
+		}
+
+		name = meta.Metadata.Name
+		if meta.Metadata.Region != "" {
+			region = meta.Metadata.Region
+		}
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("failed to stat EKS config file: %w", err)
+	}
+
+	if name == "" {
+		name = m.resolveEKSNameFromContext()
+	}
+
+	m.DistributionConfig.EKS = &clusterprovisioner.EKSConfig{
+		Name:       name,
+		Region:     region,
+		ConfigPath: resolvedPath,
+	}
+
+	return nil
+}
+
+// resolveEKSNameFromContext extracts the cluster name from an EKS kubeconfig
+// context of the form "<iam-identity>@<name>.<region>.eksctl.io", falling
+// back to "eks-default".
+func (m *ConfigManager) resolveEKSNameFromContext() string {
+	ctx := strings.TrimSpace(m.Config.Spec.Cluster.Connection.Context)
+	if ctx == "" {
+		return "eks-default"
+	}
+
+	if idx := strings.LastIndex(ctx, "@"); idx >= 0 && idx+1 < len(ctx) {
+		ctx = ctx[idx+1:]
+	}
+
+	if trimmed, ok := strings.CutSuffix(ctx, ".eksctl.io"); ok {
+		if dot := strings.LastIndex(trimmed, "."); dot > 0 {
+			trimmed = trimmed[:dot]
+		}
+
+		if trimmed != "" {
+			return trimmed
+		}
+	}
+
+	return "eks-default"
 }
