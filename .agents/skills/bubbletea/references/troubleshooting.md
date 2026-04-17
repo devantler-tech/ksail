@@ -61,18 +61,16 @@ for i := range contentLines {
 }
 ```
 
-**Helper function** (use `runewidth.Truncate` from `github.com/mattn/go-runewidth` for full Unicode/emoji support):
+**Helper function:**
 ```go
-import "github.com/mattn/go-runewidth"
-
 func truncateString(s string, maxLen int) string {
+    if len(s) <= maxLen {
+        return s
+    }
     if maxLen < 1 {
         return ""
     }
-    if runewidth.StringWidth(s) <= maxLen {
-        return s
-    }
-    return runewidth.Truncate(s, maxLen, "…")
+    return s[:maxLen-1] + "…"
 }
 ```
 
@@ -337,7 +335,7 @@ Different terminals calculate emoji width differently (1 vs 2 cells).
    ```
 
 4. **Terminal-specific settings**
-   For WezTerm, see `references/emoji-width-fix.md`.
+   For WezTerm, see project's `docs/EMOJI_WIDTH_FIX.md`.
 
 ## Keyboard Issues
 

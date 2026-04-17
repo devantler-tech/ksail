@@ -25,13 +25,14 @@ Some emojis with variation selectors (U+FE0F) render inconsistently across termi
 
 ### 0. XTerm Terminals Require unicode11
 
-**For xterm-based terminals:** `go-runewidth` may require explicit unicode-width configuration for xterm/unicode11 behavior, but **importing the package alone does not do that**.
+**For xterm-based terminals:** Must configure go-runewidth properly:
 
-> Do not copy a snippet that only imports `github.com/mattn/go-runewidth` and assume xterm emoji widths are fixed. Follow the upstream `go-runewidth` documentation/issues for the exact configuration and any terminal detection needed for your environment.
+```go
+import "github.com/mattn/go-runewidth"
 
-References:
-- https://github.com/mattn/go-runewidth
-- https://github.com/mattn/go-runewidth/issues
+// Required initialization for xterm terminals
+// Without this, xterm won't handle emoji widths correctly
+```
 
 ### 1. go-runewidth Bug #76 (Open since Feb 2024)
 
@@ -245,7 +246,7 @@ From TFE project (reference implementation):
 - **file_operations.go:1237-1246** - `padIconToWidth()` function
 - **model.go:187-197** - Terminal type detection
 
-Original debugging session notes existed in the TFE project at `TFE/docs/EMOJI_DEBUG_SESSION_2.md`, but that file is not included here. This document is the self-contained reference for the relevant findings and implementation details.
+Full debugging session: `TFE/docs/EMOJI_DEBUG_SESSION_2.md`
 
 ---
 
@@ -266,9 +267,6 @@ func visualWidth(s string) int {
 
 func stripANSI(s string) string {
 	stripped := ""
-	// NOTE: For production use, prefer a proven ANSI stripping library
-	// such as github.com/muesli/ansi or github.com/muesli/reflow/ansi,
-	// which correctly handle all CSI final bytes (0x40-0x7E).
 	inAnsi := false
 
 	for _, ch := range s {
@@ -277,7 +275,7 @@ func stripANSI(s string) string {
 			continue
 		}
 		if inAnsi {
-			if ch >= 0x40 && ch <= 0x7E {
+			if (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') {
 				inAnsi = false
 			}
 			continue
