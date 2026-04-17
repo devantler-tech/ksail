@@ -9,8 +9,9 @@ description: "Switch active cluster context"
 Switch the active kubeconfig context to the named cluster.
 
 This command accepts a cluster name and automatically resolves it to the
-correct kubeconfig context by checking all supported distribution prefixes
-(kind-, k3d-, admin@, vcluster-docker_).
+correct kubeconfig context by checking all supported distribution context
+naming conventions (kind-, k3d-, admin@, vcluster-docker_, kwok-, and
+*.eksctl.io).
 
 If multiple distributions have contexts for the same cluster name, the
 command returns an error listing the matching contexts.
