@@ -36,11 +36,9 @@ ksail cluster create               # spin up the cluster (Docker only)
 ksail cluster connect              # open K9s
 ```
 
-That's it — zero to a running cluster in under a minute. Continue with the [Getting Started guide](https://ksail.devantler.tech/) for GitOps, workload deployment, and multi-tenancy.
+Continue with the [Getting Started guide](https://ksail.devantler.tech/) for GitOps, workloads, and multi-tenancy.
 
 ## What KSail Bundles
-
-Replace `kind + k3d + kubectl + helm + kustomize + flux + argocd + sops + k9s + kubeconform + …` with one binary:
 
 | Category                 | Built-in Capabilities                                       |
 |--------------------------|-------------------------------------------------------------|
