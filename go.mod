@@ -1,6 +1,6 @@
 module github.com/devantler-tech/ksail/v6
 
-go 1.26.1
+go 1.26.2
 
 // Exclude the standalone google.golang.org/grpc/stats/opentelemetry module to avoid
 // ambiguous import errors. The opentelemetry stats package is included in the main
@@ -71,7 +71,7 @@ require (
 	github.com/siderolabs/gen v0.8.6
 	github.com/siderolabs/go-kubernetes v0.2.36
 	github.com/siderolabs/go-retry v0.3.3
-	github.com/siderolabs/omni/client v1.6.4
+	github.com/siderolabs/omni/client v1.6.5
 	golang.org/x/text v0.36.0
 	gopkg.in/yaml.v3 v3.0.1
 	sigs.k8s.io/kwok v0.7.1-0.20260414082732-bea15031f3ec
@@ -120,7 +120,7 @@ require (
 	github.com/CycloneDX/cyclonedx-go v0.10.0 // indirect
 	github.com/DataDog/zstd v1.5.7 // indirect
 	github.com/Djarvur/go-err113 v0.1.1 // indirect
-	github.com/GoogleCloudPlatform/opentelemetry-operations-go/detectors/gcp v1.30.0 // indirect
+	github.com/GoogleCloudPlatform/opentelemetry-operations-go/detectors/gcp v1.31.0 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/metric v0.55.0 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.55.0 // indirect
 	github.com/Intevation/gval v1.3.0 // indirect
@@ -310,7 +310,7 @@ require (
 	github.com/fluxcd/pkg/apis/kustomize v1.15.1 // indirect
 	github.com/fluxcd/pkg/ssa v0.70.0 // indirect
 	github.com/fvbommel/sortorder v1.1.0 // indirect
-	github.com/fxamacker/cbor/v2 v2.9.0 // indirect
+	github.com/fxamacker/cbor/v2 v2.9.1 // indirect
 	github.com/fzipp/gocyclo v0.6.0 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.13 // indirect
 	github.com/gdamore/encoding v1.0.1 // indirect
@@ -631,7 +631,7 @@ require (
 	github.com/siderolabs/go-procfs v0.1.2 // indirect
 	github.com/siderolabs/go-talos-support v0.1.4 // indirect
 	github.com/siderolabs/net v0.4.0 // indirect
-	github.com/siderolabs/proto-codec v0.1.3 // indirect
+	github.com/siderolabs/proto-codec v0.1.4 // indirect
 	github.com/siderolabs/protoenc v0.2.4 // indirect
 	github.com/sivchari/containedctx v1.0.3 // indirect
 	github.com/skeema/knownhosts v1.3.1 // indirect
@@ -752,12 +752,12 @@ require (
 	golang.org/x/tools v0.43.0 // indirect
 	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da // indirect
 	gomodules.xyz/jsonpatch/v2 v2.5.0 // indirect
-	gonum.org/v1/gonum v0.16.0 // indirect
+	gonum.org/v1/gonum v0.17.0 // indirect
 	google.golang.org/api v0.271.0 // indirect
 	google.golang.org/genproto v0.0.0-20260128011058-8636f8732409 // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20260311181403-84a4fc48630c // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260311181403-84a4fc48630c // indirect
-	google.golang.org/grpc v1.79.3 // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20260319201613-d00831a3d3e7 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260406210006-6f92a3bedf2d // indirect
+	google.golang.org/grpc v1.80.0 // indirect
 	google.golang.org/protobuf v1.36.12-0.20260120151049-f2248ac996af // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.13.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
@@ -777,13 +777,13 @@ require (
 	k8s.io/cri-client v0.35.0 // indirect
 	k8s.io/klog/v2 v2.140.0 // indirect
 	k8s.io/kube-aggregator v0.35.0 // indirect
-	k8s.io/kube-openapi v0.0.0-20260304202019-5b3e3fdb0acf // indirect
+	k8s.io/kube-openapi v0.0.0-20260330154417-16be699c7b31 // indirect
 	k8s.io/kube-proxy v0.33.0 // indirect
 	k8s.io/kube-scheduler v0.35.3 // indirect
 	k8s.io/kubelet v0.35.3 // indirect
 	k8s.io/kubernetes v1.35.0 // indirect
 	k8s.io/metrics v0.35.3 // indirect
-	k8s.io/utils v0.0.0-20260210185600-b8788abfbbc2 // indirect
+	k8s.io/utils v0.0.0-20260319190234-28399d86e0b5 // indirect
 	modernc.org/libc v1.67.6 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
