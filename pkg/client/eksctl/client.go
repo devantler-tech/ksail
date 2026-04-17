@@ -35,8 +35,10 @@ func (ExecRunner) Run(
 	args []string,
 	stdin io.Reader,
 ) ([]byte, []byte, error) {
-	// #nosec G204 -- name/args are constructed by our own eksctl client code;
-	// no untrusted user input flows into these values.
+	// #nosec G204 -- This uses os/exec directly with a program name and argv
+	// slice; it does not invoke a shell, so user-influenced values in args
+	// (cluster name, region, config file paths from ksail.yaml) are passed
+	// as literal arguments rather than shell-interpreted command text.
 	cmd := exec.CommandContext(ctx, name, args...)
 
 	var stdout, stderr bytes.Buffer

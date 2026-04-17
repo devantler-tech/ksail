@@ -41,13 +41,9 @@ func NewProvider(client *eksctlclient.Client, region string) (*Provider, error) 
 // that eksctl returned. The provisioner — which has the ksail.yaml spec — is
 // responsible for restoring the exact DesiredCapacity when needed.
 func (p *Provider) StartNodes(ctx context.Context, clusterName string) error {
-	nodegroups, err := p.client.ListNodegroups(ctx, clusterName, p.region)
+	nodegroups, err := p.listNodegroupsForScale(ctx, clusterName)
 	if err != nil {
-		return translateClientErr(err)
-	}
-
-	if len(nodegroups) == 0 {
-		return provider.ErrNoNodes
+		return err
 	}
 
 	for _, nodegroup := range nodegroups {
@@ -78,13 +74,9 @@ func (p *Provider) StartNodes(ctx context.Context, clusterName string) error {
 // cluster control plane remains running (EKS bills $0.10/hour for it) but
 // all node-hour costs stop.
 func (p *Provider) StopNodes(ctx context.Context, clusterName string) error {
-	nodegroups, err := p.client.ListNodegroups(ctx, clusterName, p.region)
+	nodegroups, err := p.listNodegroupsForScale(ctx, clusterName)
 	if err != nil {
-		return translateClientErr(err)
-	}
-
-	if len(nodegroups) == 0 {
-		return provider.ErrNoNodes
+		return err
 	}
 
 	for _, nodegroup := range nodegroups {
@@ -112,6 +104,10 @@ func (p *Provider) StopNodes(ctx context.Context, clusterName string) error {
 // NodeInfo whose Name is the nodegroup name. Downstream consumers that need
 // instance-level detail should call the AWS SDK directly.
 func (p *Provider) ListNodes(ctx context.Context, clusterName string) ([]provider.NodeInfo, error) {
+	if p.client == nil {
+		return nil, provider.ErrProviderUnavailable
+	}
+
 	nodegroups, err := p.client.ListNodegroups(ctx, clusterName, p.region)
 	if err != nil {
 		return nil, translateClientErr(err)
@@ -134,6 +130,10 @@ func (p *Provider) ListNodes(ctx context.Context, clusterName string) ([]provide
 // ListAllClusters returns the names of all EKS clusters visible in the
 // configured region (or the default region eksctl resolves when region is "").
 func (p *Provider) ListAllClusters(ctx context.Context) ([]string, error) {
+	if p.client == nil {
+		return nil, provider.ErrProviderUnavailable
+	}
+
 	clusters, err := p.client.ListClusters(ctx, p.region)
 	if err != nil {
 		return nil, translateClientErr(err)
@@ -170,6 +170,10 @@ func (p *Provider) GetClusterStatus(
 	ctx context.Context,
 	clusterName string,
 ) (*provider.ClusterStatus, error) {
+	if p.client == nil {
+		return nil, provider.ErrProviderUnavailable
+	}
+
 	_, err := p.client.GetCluster(ctx, clusterName, p.region)
 	if err != nil {
 		return nil, translateClientErr(err)
@@ -186,6 +190,29 @@ func (p *Provider) GetClusterStatus(
 // Region returns the AWS region this provider was configured with.
 func (p *Provider) Region() string {
 	return p.region
+}
+
+// listNodegroupsForScale is a shared prelude for StartNodes and StopNodes
+// that guards against nil clients, fetches nodegroups, and classifies the
+// empty result as provider.ErrNoNodes.
+func (p *Provider) listNodegroupsForScale(
+	ctx context.Context,
+	clusterName string,
+) ([]eksctlclient.NodegroupSummary, error) {
+	if p.client == nil {
+		return nil, provider.ErrProviderUnavailable
+	}
+
+	nodegroups, err := p.client.ListNodegroups(ctx, clusterName, p.region)
+	if err != nil {
+		return nil, translateClientErr(err)
+	}
+
+	if len(nodegroups) == 0 {
+		return nil, provider.ErrNoNodes
+	}
+
+	return nodegroups, nil
 }
 
 // classifyRole maps eksctl's NodeGroupType values ("managed", "unmanaged",

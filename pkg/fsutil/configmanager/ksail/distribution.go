@@ -4,9 +4,11 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v6/pkg/fsutil"
 	configmanagerinterface "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager"
 	k3dconfigmanager "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager/k3d"
 	kindconfigmanager "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager/kind"
@@ -327,37 +329,9 @@ func (m *ConfigManager) cacheEKSConfig() error {
 		configPath = "eks.yaml"
 	}
 
-	resolvedPath := ""
-	name := ""
-	region := ""
-
-	_, err := os.Stat(configPath)
-	if err == nil {
-		resolvedPath = configPath
-
-		data, readErr := os.ReadFile(configPath) //nolint:gosec // configPath comes from user spec
-		if readErr != nil {
-			return fmt.Errorf("failed to read EKS config file: %w", readErr)
-		}
-
-		var meta struct {
-			Metadata struct {
-				Name   string `json:"name"`
-				Region string `json:"region"`
-			} `json:"metadata"`
-		}
-
-		unmarshalErr := yaml.Unmarshal(data, &meta)
-		if unmarshalErr != nil {
-			return fmt.Errorf("failed to parse EKS config file: %w", unmarshalErr)
-		}
-
-		name = meta.Metadata.Name
-		if meta.Metadata.Region != "" {
-			region = meta.Metadata.Region
-		}
-	} else if !os.IsNotExist(err) {
-		return fmt.Errorf("failed to stat EKS config file: %w", err)
+	resolvedPath, name, region, err := readEKSConfigMetadata(configPath)
+	if err != nil {
+		return err
 	}
 
 	if name == "" {
@@ -371,6 +345,45 @@ func (m *ConfigManager) cacheEKSConfig() error {
 	}
 
 	return nil
+}
+
+// readEKSConfigMetadata reads the eksctl config file at configPath (if it
+// exists) and returns its canonical path plus the parsed metadata.name /
+// metadata.region fields. A missing file returns empty strings and no error
+// so callers can fall back to context-based defaults.
+func readEKSConfigMetadata(configPath string) (string, string, string, error) {
+	_, err := os.Stat(configPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", "", "", nil
+		}
+
+		return "", "", "", fmt.Errorf("failed to stat EKS config file: %w", err)
+	}
+
+	canonical, err := fsutil.EvalCanonicalPath(configPath)
+	if err != nil {
+		return "", "", "", fmt.Errorf("failed to canonicalize EKS config path: %w", err)
+	}
+
+	data, err := fsutil.ReadFileSafe(filepath.Dir(canonical), canonical)
+	if err != nil {
+		return "", "", "", fmt.Errorf("failed to read EKS config file: %w", err)
+	}
+
+	var meta struct {
+		Metadata struct {
+			Name   string `json:"name"`
+			Region string `json:"region"`
+		} `json:"metadata"`
+	}
+
+	err = yaml.Unmarshal(data, &meta)
+	if err != nil {
+		return "", "", "", fmt.Errorf("failed to parse EKS config file: %w", err)
+	}
+
+	return canonical, meta.Metadata.Name, meta.Metadata.Region, nil
 }
 
 // resolveEKSNameFromContext extracts the cluster name from an EKS kubeconfig
