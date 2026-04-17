@@ -1,6 +1,7 @@
 package diff_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
@@ -502,6 +503,30 @@ func TestEngine_TalosOptionsChange_SkippedForNonTalos(t *testing.T) {
 	for _, change := range result.AllChanges() {
 		if change.Field == "cluster.talos.controlPlanes" {
 			t.Fatal("Talos options should be ignored for non-Talos distributions")
+		}
+	}
+}
+
+// TestEngine_EKSOptionsChange verifies the EKS no-op diff behavior:
+// ksail.yaml has no EKS-specific fields (eks.yaml is the source of truth
+// for cluster metadata), so the diff engine must not emit any
+// cluster.eks.* changes. Drift between eks.yaml and the live cluster is
+// reconciled by eksctl itself during `ksail cluster update`.
+func TestEngine_EKSOptionsChange(t *testing.T) {
+	t.Parallel()
+
+	old := newBaseSpec()
+	old.Distribution = v1alpha1.DistributionEKS
+	old.Provider = v1alpha1.ProviderAWS
+
+	newer := clone(old)
+
+	engine := diff.NewEngine(v1alpha1.DistributionEKS, v1alpha1.ProviderAWS)
+	result := engine.ComputeDiff(old, newer, nil, nil)
+
+	for _, change := range result.AllChanges() {
+		if strings.HasPrefix(change.Field, "cluster.eks.") {
+			t.Fatalf("EKS diff should be a no-op; got %s", change.Field)
 		}
 	}
 }

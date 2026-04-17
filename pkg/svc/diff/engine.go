@@ -39,6 +39,7 @@ func (e *Engine) ComputeDiff(
 	e.checkLocalRegistryChange(oldSpec, newSpec, result)
 	e.checkVanillaOptionsChange(oldSpec, newSpec, result)
 	e.checkTalosOptionsChange(oldSpec, newSpec, result)
+	e.checkEKSOptionsChange(oldSpec, newSpec, result)
 	e.checkHetznerOptionsChange(oldProvider, newProvider, result)
 
 	return result
@@ -342,6 +343,17 @@ func (e *Engine) checkTalosOptionsChange(
 	}
 
 	e.applyFieldRules(oldSpec, newSpec, result, talosFieldRules)
+}
+
+// checkEKSOptionsChange is a no-op for EKS because eks.yaml (an eksctl
+// ClusterConfig) is the source of truth for all cluster metadata — ksail.yaml
+// intentionally does not duplicate those fields. Drift between the desired
+// eks.yaml and the live cluster is detected and reconciled by eksctl itself
+// during `ksail cluster update`.
+func (e *Engine) checkEKSOptionsChange(
+	_, _ *v1alpha1.ClusterSpec,
+	_ *clusterupdate.UpdateResult,
+) {
 }
 
 // talosFieldRules is the table of Talos-specific scalar field diff rules.
