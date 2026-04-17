@@ -446,6 +446,8 @@ func (f DefaultFactory) createEKSProvisioner(
 		)
 	}
 
+	eksprovisioner.EmitPreviewBanner(os.Stderr)
+
 	eksConfig := f.DistributionConfig.EKS
 	client := eksctlclient.NewClient()
 

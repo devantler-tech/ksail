@@ -59,6 +59,7 @@ import (
 	clusterprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/clustererr"
 	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/clusterupdate"
+	eksprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/eks"
 	"github.com/devantler-tech/ksail/v6/pkg/svc/state"
 	"github.com/devantler-tech/ksail/v6/pkg/svc/versionresolver"
 	"github.com/devantler-tech/ksail/v6/pkg/timer"
@@ -3199,6 +3200,10 @@ func HandleInitRunE(
 		return err
 	}
 
+	if clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionEKS {
+		eksprovisioner.EmitPreviewBanner(cmd.ErrOrStderr())
+	}
+
 	scaffolderInstance, targetPath, force, err := prepareScaffolder(cmd, cfgManager, clusterCfg)
 	if err != nil {
 		return err
@@ -5515,23 +5520,41 @@ func clusterNamesFromPath(kubeconfigPath string) []string {
 // returning the underlying cluster name. Returns empty string if the context name
 // does not match any known distribution prefix.
 func stripDistributionPrefix(contextName string) string {
+	if name := stripDistributionSuffix(contextName); name != "" {
+		return name
+	}
+
+	return stripDistributionPrefixOnly(contextName)
+}
+
+// stripDistributionSuffix matches suffix-style context templates (e.g., eksctl).
+// Must be tried before prefix matching because suffix templates (like eksctl's
+// "admin@<name>.<region>.eksctl.io") share the "admin@" prefix with Talos.
+func stripDistributionSuffix(contextName string) string {
 	const sentinel = "\x00"
 
-	// Suffix-style templates (e.g., "<name>.eksctl.io") must be checked before
-	// prefix templates because the eksctl runtime context also starts with
-	// "admin@", which would otherwise be stolen by the Talos prefix.
 	for _, dist := range v1alpha1.ValidDistributions() {
 		template := dist.ContextName(sentinel)
 		if template == "" {
 			continue
 		}
 
-		if before, after, ok := strings.Cut(template, sentinel); ok && before == "" {
-			if name := extractClusterNameFromSuffixContext(contextName, after); name != "" {
-				return name
-			}
+		before, after, ok := strings.Cut(template, sentinel)
+		if !ok || before != "" {
+			continue
+		}
+
+		if name := extractClusterNameFromSuffixContext(contextName, after); name != "" {
+			return name
 		}
 	}
+
+	return ""
+}
+
+// stripDistributionPrefixOnly matches prefix-style context templates.
+func stripDistributionPrefixOnly(contextName string) string {
+	const sentinel = "\x00"
 
 	for _, dist := range v1alpha1.ValidDistributions() {
 		template := dist.ContextName(sentinel)

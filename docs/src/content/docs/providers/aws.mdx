@@ -1,7 +1,10 @@
 ---
-title: AWS Provider
-description: Provision Amazon EKS clusters on AWS with KSail.
+title: AWS Provider (Preview)
+description: Provision Amazon EKS clusters on AWS with KSail. AWS support is a preview feature.
 ---
+
+> [!CAUTION]
+> **The AWS provider is a preview feature** that ships alongside the [EKS distribution](/distributions/eks/). Flags and defaults may change in minor releases and you should expect rough edges. Please file bugs and feedback at [devantler-tech/ksail issues](https://github.com/devantler-tech/ksail/issues/new?labels=eks,preview).
 
 The AWS provider lets KSail manage Kubernetes clusters on [Amazon Web Services](https://aws.amazon.com/). It exclusively powers the [EKS distribution](/distributions/eks/) — KSail drives [eksctl](https://eksctl.io/) to provision a real managed control plane and managed nodegroups backed by EC2.
 

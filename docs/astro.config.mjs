@@ -95,7 +95,7 @@ export default defineConfig({
             { label: "Talos", link: "/distributions/talos/" },
             { label: "VCluster", link: "/distributions/vcluster/" },
             { label: "KWOK (kwokctl)", link: "/distributions/kwok/" },
-            { label: "EKS (eksctl)", link: "/distributions/eks/" },
+            { label: "EKS (eksctl, Preview)", link: "/distributions/eks/" },
           ],
         },
         {
@@ -104,7 +104,7 @@ export default defineConfig({
             { label: "Docker", link: "/providers/docker/" },
             { label: "Hetzner", link: "/providers/hetzner/" },
             { label: "Omni (Sidero)", link: "/providers/omni/" },
-            { label: "AWS", link: "/providers/aws/" },
+            { label: "AWS (Preview)", link: "/providers/aws/" },
           ],
         },
         { label: "Support Matrix", link: "/support-matrix/" },

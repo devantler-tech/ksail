@@ -220,7 +220,11 @@ func TestStripDistributionPrefix_KnownPatterns(t *testing.T) {
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
-			assert.Equal(t, testCase.want, cluster.ExportStripDistributionPrefix(testCase.contextName))
+			assert.Equal(
+				t,
+				testCase.want,
+				cluster.ExportStripDistributionPrefix(testCase.contextName),
+			)
 		})
 	}
 }

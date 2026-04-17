@@ -1,7 +1,10 @@
 ---
-title: Amazon EKS
-description: Provision Amazon EKS clusters declaratively with KSail using eksctl.
+title: Amazon EKS (Preview)
+description: Provision Amazon EKS clusters declaratively with KSail using eksctl. EKS support is a preview feature.
 ---
+
+> [!CAUTION]
+> **EKS support is a preview feature.** The surface area (flags, scaffolded `eksctl.yaml` defaults, diff classification) may change in minor releases and you should expect rough edges. Please file bugs and feedback at [devantler-tech/ksail issues](https://github.com/devantler-tech/ksail/issues/new?labels=eks,preview) — reports from early users are how this graduates to GA.
 
 KSail can scaffold and manage [Amazon Elastic Kubernetes Service](https://aws.amazon.com/eks/) clusters through the [eksctl](https://eksctl.io/) CLI. The EKS distribution targets production-grade managed Kubernetes on AWS, with the cluster topology described in a declarative `eksctl.yaml` that ships alongside your `ksail.yaml`.
 

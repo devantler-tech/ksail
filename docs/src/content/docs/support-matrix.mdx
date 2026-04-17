@@ -14,7 +14,7 @@ KSail supports multiple Kubernetes distributions, providers, and components. Thi
 | Talos            | ✅     | ✅      | ✅   | ❌  |
 | VCluster (Vind)  | ✅     | ❌      | ❌   | ❌  |
 | KWOK (kwokctl)   | ✅     | ❌      | ❌   | ❌  |
-| EKS (eksctl)     | ❌     | ❌      | ❌   | ✅  |
+| EKS (eksctl) 🧪  | ❌     | ❌      | ❌   | 🧪  |
 
 **Notes:**
 
@@ -24,7 +24,7 @@ KSail supports multiple Kubernetes distributions, providers, and components. Thi
 - AWS provider requires the [eksctl](https://eksctl.io/installation/) binary on `PATH` and AWS credentials resolvable by the standard AWS SDK chain — see [AWS Provider](/providers/aws/) and [EKS Distribution](/distributions/eks/) for setup details
 - VCluster uses the [Vind](https://github.com/loft-sh/vcluster) Docker driver to run the control plane and optional worker nodes directly as Docker containers
 - KWOK uses the kwokctl Docker runtime to run etcd, kube-apiserver, and kwok-controller as Docker containers — nodes and pods are simulated at the API level
-- EKS delegates cluster lifecycle to the upstream `eksctl` CLI; cluster topology is declared in `eksctl.yaml` alongside `ksail.yaml`
+- EKS delegates cluster lifecycle to the upstream `eksctl` CLI; cluster topology is declared in `eksctl.yaml` alongside `ksail.yaml`. 🧪 **EKS and the AWS provider are preview features** — expect rough edges and please file feedback at [devantler-tech/ksail issues](https://github.com/devantler-tech/ksail/issues/new?labels=eks,preview).
 
 ## Component × Distribution Matrix
 
