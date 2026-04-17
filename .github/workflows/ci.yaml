@@ -1305,7 +1305,7 @@ jobs:
             | xargs go test -bench=. -benchmem -run='^$' -timeout=30m \
             | tee "$RUNNER_TEMP/bench.txt"
 
-      - name: 🔍 Filter sub-microsecond benchmarks
+      - name: 🔍 Prepare benchmark regression gate input
         if: steps.discover.outputs.skip == 'false'
         shell: bash
         run: |
@@ -1314,7 +1314,10 @@ jobs:
           # to avoid false positives from CPU clock jitter on shared CI runners
           # (see #3698). The original bench.txt is preserved for artifact upload
           # and historical storage.
+          # Exclude I/O-bound BenchmarkCreateTarball_*: timing is dominated by
+          # CI runner disk-cache state and can vary significantly between runs.
           awk '/^Benchmark/ && /ns\/op/ {
+            if ($1 ~ /^BenchmarkCreateTarball_/) next
             for (i = 1; i <= NF; i++) {
               if ($(i+1) == "ns/op" && $i + 0 < 100) next
             }
