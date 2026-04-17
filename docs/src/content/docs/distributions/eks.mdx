@@ -1,0 +1,133 @@
+---
+title: EKS
+description: Deploy managed Kubernetes clusters on Amazon EKS with KSail using the eksctl declarative configuration.
+---
+
+import { Badge } from '@astrojs/starlight/components';
+
+<Badge text="Coming Soon" variant="caution" /> EKS cluster creation is scaffolded and the `init` command is available, but `ksail cluster create` is not yet functional for EKS. Full provisioner support is landing in a follow-up release.
+
+KSail supports [Amazon Elastic Kubernetes Service (EKS)](https://aws.amazon.com/eks/) as a managed Kubernetes distribution via [eksctl](https://eksctl.io/). `ksail cluster init` scaffolds a declarative `eks.yaml` (eksctl `ClusterConfig`) that you can edit and apply.
+
+EKS is the only distribution that uses the [AWS provider](/providers/aws/). It is a cloud distribution — local mirror registries and local registry containers are not supported.
+
+## When to Use EKS
+
+EKS is ideal when you:
+
+- Need a managed AWS Kubernetes cluster with full cloud integrations (ELB, EBS, VPC, IAM OIDC)
+- Want to use the same KSail workflow (init → create → update → delete) for cloud clusters
+- Require GitOps workflows (Flux or ArgoCD) on managed AWS infrastructure
+
+For local development and testing, consider the [Vanilla](/distributions/vanilla/), [K3s](/distributions/k3s/), or [VCluster](/distributions/vcluster/) distributions instead.
+
+## Prerequisites
+
+1. **AWS account** — with permissions to create EKS clusters, IAM roles, and VPCs
+2. **AWS credentials** — configure via `aws configure` or environment variables (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION`)
+3. **Docker** — required locally for the `ksail` CLI
+
+## What EKS Provides by Default
+
+| Component      | Status   | Details                            |
+| -------------- | -------- | ---------------------------------- |
+| CNI            | Built-in | Amazon VPC CNI (vpc-cni addon)     |
+| CSI            | Built-in | Amazon EBS CSI Driver addon        |
+| LoadBalancer   | Built-in | AWS Load Balancer Controller (ELB) |
+| Metrics Server | ❌       | Not provided by default            |
+
+## Quick Start
+
+### 1. Initialize an EKS Project
+
+```bash
+mkdir my-eks-cluster
+cd my-eks-cluster
+
+ksail cluster init \
+  --name eks-default \
+  --distribution EKS \
+  --provider AWS
+```
+
+This generates:
+- `ksail.yaml` — KSail cluster configuration
+- `eks.yaml` — eksctl `ClusterConfig` (source of truth for cluster metadata)
+- `k8s/kustomization.yaml` — directory for Kubernetes manifests
+
+### 2. Review and Edit `eks.yaml`
+
+The scaffolded `eks.yaml` is a minimal starting point:
+
+```yaml
+# eksctl cluster configuration.
+# See https://eksctl.io/usage/schema/ for the full schema.
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+
+metadata:
+  name: eks-default
+  region: us-east-1
+  version: "1.31"
+
+iam:
+  withOIDC: true
+
+addons:
+  - name: vpc-cni
+  - name: kube-proxy
+  - name: coredns
+  - name: aws-ebs-csi-driver
+
+managedNodeGroups:
+  - name: default
+    instanceType: t3.medium
+    desiredCapacity: 2
+    minSize: 1
+    maxSize: 3
+    volumeSize: 20
+    amiFamily: AmazonLinux2023
+```
+
+Edit this file to match your AWS environment: region, Kubernetes version, instance types, nodegroup sizing, and addon configuration.
+
+### 3. Configure `ksail.yaml`
+
+The `ksail.yaml` references your EKS cluster. All cluster metadata lives in `eks.yaml` — do not duplicate it in `ksail.yaml`:
+
+```yaml
+# yaml-language-server: $schema=https://raw.githubusercontent.com/devantler-tech/ksail/main/schemas/ksail-config.schema.json
+apiVersion: ksail.io/v1alpha1
+kind: Cluster
+metadata:
+  name: eks-default
+spec:
+  cluster:
+    distribution: EKS
+    provider: AWS
+```
+
+### 4. Create the Cluster
+
+> [!NOTE]
+> `ksail cluster create` for EKS is not yet functional. Full provisioner support is landing in a follow-up release.
+
+```bash
+ksail cluster create  # Coming soon
+```
+
+## kubeconfig Context
+
+EKS contexts written by eksctl follow the format `<iam-identity>@<name>.<region>.eksctl.io`. Set `spec.cluster.connection.context` in `ksail.yaml` after cluster creation if you need to override the auto-detected context.
+
+## Limitations
+
+- EKS is a cloud distribution — **local mirror registries and local registry containers are not supported**. Use external registry URLs (e.g., `docker.io=https://registry-1.docker.io`)
+- EKS only supports the **AWS provider** — the Docker, Hetzner, and Omni providers are not available
+- Full `ksail cluster create / update / delete` support is in progress; see [Support Matrix](/support-matrix/)
+
+## Related
+
+- [AWS Provider](/providers/aws/)
+- [Support Matrix](/support-matrix/)
+- [Declarative Configuration](/configuration/declarative-configuration/)

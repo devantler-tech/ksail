@@ -1,0 +1,64 @@
+---
+title: AWS Provider
+description: Deploy managed Amazon EKS clusters with KSail using the AWS provider and eksctl.
+---
+
+import { Badge } from '@astrojs/starlight/components';
+
+<Badge text="Coming Soon" variant="caution" /> The AWS provider is scaffolded and `ksail cluster init` is available, but `ksail cluster create` is not yet functional. Full provisioner support is landing in a follow-up release.
+
+The AWS provider creates managed [Amazon EKS](https://aws.amazon.com/eks/) clusters via [eksctl](https://eksctl.io/). It is the only provider available for the [EKS distribution](/distributions/eks/).
+
+> [!NOTE]
+> The AWS provider only supports the **EKS** distribution. For local Docker-based clusters, see the [Docker Provider](/providers/docker/).
+
+## Prerequisites
+
+1. **AWS account** — with permissions to create EKS clusters, IAM roles, EC2 instances, and VPCs
+2. **AWS credentials** — configured via `aws configure`, environment variables, or an instance profile:
+   ```bash
+   export AWS_ACCESS_KEY_ID=your-access-key
+   export AWS_SECRET_ACCESS_KEY=your-secret-key
+   export AWS_DEFAULT_REGION=us-east-1
+   ```
+3. **Docker** — required locally for the `ksail` CLI
+
+## Configuration
+
+### ksail.yaml Reference
+
+```yaml
+# yaml-language-server: $schema=https://raw.githubusercontent.com/devantler-tech/ksail/main/schemas/ksail-config.schema.json
+apiVersion: ksail.io/v1alpha1
+kind: Cluster
+metadata:
+  name: eks-default
+spec:
+  cluster:
+    distribution: EKS
+    provider: AWS
+```
+
+All cluster-specific metadata (region, version, nodegroups, addons) lives in `eks.yaml` — not in `ksail.yaml`. See the [EKS distribution guide](/distributions/eks/) for the full `eks.yaml` configuration reference.
+
+## Characteristics
+
+| Property            | Value                                      |
+| ------------------- | ------------------------------------------ |
+| Supported distribution | EKS                                     |
+| Infrastructure type | Cloud (managed AWS)                        |
+| Local registries    | ❌ Not supported                           |
+| Local mirrors       | ❌ Not supported (use external URLs)       |
+| CNI                 | Amazon VPC CNI (provided by default)       |
+| CSI                 | Amazon EBS CSI Driver (provided by default)|
+| LoadBalancer        | AWS Load Balancer Controller               |
+
+## Limitations
+
+- Cloud provider — local Docker containers (mirrors, registries) are inaccessible from the cluster
+- Only one distribution is supported: **EKS**
+
+## Related
+
+- [EKS Distribution](/distributions/eks/)
+- [Support Matrix](/support-matrix/)

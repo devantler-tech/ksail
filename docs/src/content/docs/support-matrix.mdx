@@ -7,52 +7,57 @@ KSail supports multiple Kubernetes distributions, providers, and components. Thi
 
 ## Distribution × Provider Matrix
 
-| Distribution     | Docker | Hetzner | Omni |
-| ---------------- | ------ | ------- | ---- |
-| Vanilla (Kind)   | ✅     | ❌      | ❌   |
-| K3s (K3d)        | ✅     | ❌      | ❌   |
-| Talos            | ✅     | ✅      | ✅   |
-| VCluster (Vind)  | ✅     | ❌      | ❌   |
-| KWOK (kwokctl)   | ✅     | ❌      | ❌   |
+| Distribution     | Docker | Hetzner | Omni | AWS        |
+| ---------------- | ------ | ------- | ---- | ---------- |
+| Vanilla (Kind)   | ✅     | ❌      | ❌   | ❌         |
+| K3s (K3d)        | ✅     | ❌      | ❌   | ❌         |
+| Talos            | ✅     | ✅      | ✅   | ❌         |
+| VCluster (Vind)  | ✅     | ❌      | ❌   | ❌         |
+| KWOK (kwokctl)   | ✅     | ❌      | ❌   | ❌         |
+| EKS              | ❌     | ❌      | ❌   | 🚧 Planned |
 
 **Notes:**
 
 - Docker provider requires Docker Desktop or Docker Engine installed locally — see [Docker Provider](/providers/docker/) for setup details
 - Hetzner provider requires `HCLOUD_TOKEN` environment variable and a Talos ISO uploaded to your Hetzner account (x86: `122630`, ARM: `122629` — see [Talos options](/configuration/declarative-configuration/#distribution-and-tool-options)) — see [Hetzner Provider](/providers/hetzner/) for setup details
 - Omni provider requires a [Sidero Omni](https://www.siderolabs.com/omni/) account, an `OMNI_SERVICE_ACCOUNT_KEY` environment variable, and an Omni API endpoint configured via `spec.provider.omni.endpoint` in your KSail configuration — see [Omni Provider](/providers/omni/) for setup details
+- AWS provider requires AWS credentials and an AWS account with EKS permissions — see [AWS Provider](/providers/aws/) for setup details; `ksail cluster create` is not yet functional for EKS
 - VCluster uses the [Vind](https://github.com/loft-sh/vcluster) Docker driver to run the control plane and optional worker nodes directly as Docker containers
 - KWOK uses the kwokctl Docker runtime to run etcd, kube-apiserver, and kwok-controller as Docker containers — nodes and pods are simulated at the API level
 
 ## Component × Distribution Matrix
 
-| Component                     | Vanilla | K3s      | Talos               | VCluster | KWOK     |
-| ----------------------------- | ------- | -------- | ------------------- | -------- | -------- |
+| Component                     | Vanilla | K3s      | Talos               | VCluster | KWOK     | EKS              |
+| ----------------------------- | ------- | -------- | ------------------- | -------- | -------- | ---------------- |
 | **CNI**                       |
-| Cilium                        | ✅      | ✅       | ✅                  | N/A¹     | Sim⁷     |
-| Calico                        | ✅      | ✅       | ✅                  | N/A¹     | Sim⁷     |
+| Cilium                        | ✅      | ✅       | ✅                  | N/A¹     | Sim⁷     | ❌               |
+| Calico                        | ✅      | ✅       | ✅                  | N/A¹     | Sim⁷     | ❌               |
+| Amazon VPC CNI                | ❌      | ❌       | ❌                  | ❌       | ❌       | Built-in         |
 | **CSI**                       |
-| Local Path Provisioner        | ✅      | Built-in | ✅ (Docker)         | N/A²     | Sim⁷     |
-| Hetzner CSI Driver            | ❌      | ❌       | ✅ (Hetzner)        | ❌       | ❌       |
+| Local Path Provisioner        | ✅      | Built-in | ✅ (Docker)         | N/A²     | Sim⁷     | ❌               |
+| Hetzner CSI Driver            | ❌      | ❌       | ✅ (Hetzner)        | ❌       | ❌       | ❌               |
+| Amazon EBS CSI Driver         | ❌      | ❌       | ❌                  | ❌       | ❌       | Built-in         |
 | **LoadBalancer**              |
-| LoadBalancer Support          | ✅      | Built-in | ✅ (Docker/Hetzner) | N/A³     | Sim⁷     |
-| Cloud Provider KIND           | ✅      | ❌       | ❌                  | ❌       | ❌       |
-| MetalLB                       | ❌      | ❌       | ✅ (Docker)         | ❌       | ❌       |
-| Hetzner CCM                   | ❌      | ❌       | ✅ (Hetzner)        | ❌       | ❌       |
+| LoadBalancer Support          | ✅      | Built-in | ✅ (Docker/Hetzner) | N/A³     | Sim⁷     | Built-in         |
+| Cloud Provider KIND           | ✅      | ❌       | ❌                  | ❌       | ❌       | ❌               |
+| MetalLB                       | ❌      | ❌       | ✅ (Docker)         | ❌       | ❌       | ❌               |
+| Hetzner CCM                   | ❌      | ❌       | ✅ (Hetzner)        | ❌       | ❌       | ❌               |
+| AWS Load Balancer Controller  | ❌      | ❌       | ❌                  | ❌       | ❌       | Built-in         |
 | **GitOps**                    |
-| Flux                          | ✅      | ✅       | ✅                  | ✅       | ❌⁹      |
-| ArgoCD                        | ✅      | ✅       | ✅                  | ✅       | Sim⁷     |
+| Flux                          | ✅      | ✅       | ✅                  | ✅       | ❌⁹      | 🚧¹⁰            |
+| ArgoCD                        | ✅      | ✅       | ✅                  | ✅       | Sim⁷     | 🚧¹⁰            |
 | **Observability**             |
-| Metrics Server                | ✅      | Built-in | ✅                  | N/A⁴     | Sim⁷     |
+| Metrics Server                | ✅      | Built-in | ✅                  | N/A⁴     | Sim⁷     | 🚧¹⁰            |
 | **Security**                  |
-| cert-manager                  | ✅      | ✅       | ✅                  | ✅       | Sim⁷     |
-| Kyverno                       | ✅      | ✅       | ✅                  | ✅       | ❌⁸      |
-| Gatekeeper                    | ✅      | ✅       | ✅                  | ✅       | ❌⁸      |
+| cert-manager                  | ✅      | ✅       | ✅                  | ✅       | Sim⁷     | 🚧¹⁰            |
+| Kyverno                       | ✅      | ✅       | ✅                  | ✅       | ❌⁸      | 🚧¹⁰            |
+| Gatekeeper                    | ✅      | ✅       | ✅                  | ✅       | ❌⁸      | 🚧¹⁰            |
 | **Registry**                  |
-| Local Registry                | ✅      | ✅       | ✅                  | ✅       | Sim⁷     |
-| Mirror Registries             | ✅      | ✅       | ✅                  | ✅       | Sim⁷     |
-| External Registries with Auth | ✅      | ✅       | ✅                  | ✅       | Sim⁷     |
+| Local Registry                | ✅      | ✅       | ✅                  | ✅       | Sim⁷     | ❌               |
+| Mirror Registries             | ✅      | ✅       | ✅                  | ✅       | Sim⁷     | ❌               |
+| External Registries with Auth | ✅      | ✅       | ✅                  | ✅       | Sim⁷     | 🚧¹⁰            |
 | **Image Verification**        |
-| Image Verification            | ✅⁶     | ❌       | ✅ (1.13+)          | ❌       | ❌       |
+| Image Verification            | ✅⁶     | ❌       | ✅ (1.13+)          | ❌       | ❌       | ❌               |
 
 **Notes:**
 
@@ -72,6 +77,7 @@ KSail supports multiple Kubernetes distributions, providers, and components. Thi
 - **⁷ KWOK Simulation**: Components are installed as API objects and their pods appear Running via KWOK's Stage simulation. They do not execute real workloads — KWOK simulates pod lifecycle at the API level. See [KWOK Distribution](/distributions/kwok/) for details.
 - **⁸ KWOK Policy Engines**: Kyverno and Gatekeeper are not installed on KWOK. Both register global `MutatingWebhookConfigurations` that intercept all Kubernetes API requests. On KWOK, no real pod serves the webhook endpoint, so every webhook call times out — breaking all subsequent Helm installs. KSail silently skips policy engine installation when `spec.cluster.distribution: KWOK` is set and emits a warning at cluster creation time.
 - **⁹ KWOK Flux**: Flux is not installed on KWOK. The flux-operator pod is simulated by KWOK stages and appears Running, but it never registers Flux CRDs — Flux reconciliation is not functional. Use ArgoCD for GitOps workflows on KWOK.
+- **¹⁰ EKS (Planned)**: Full component installer support for EKS is in progress. `ksail cluster init` is available, but `ksail cluster create` is not yet functional. See [EKS Distribution](/distributions/eks/) for details.
 
 ## Secret Management × Provider Matrix
 
@@ -102,24 +108,24 @@ KSail supports multiple Kubernetes distributions, providers, and components. Thi
 The `ksail cluster update` command applies configuration changes to a running cluster.
 Changes are classified by impact: **in-place** (no disruption), **reboot-required** (node restart needed), or **recreate-required** (full cluster recreation).
 
-| Change                   | Vanilla (Kind) | K3s (K3d) | Talos    | VCluster (Vind) | KWOK (kwokctl) |
-| ------------------------ | -------------- | --------- | -------- | --------------- | -------------- |
-| Distribution             | Recreate       | Recreate  | Recreate | Recreate        | Recreate       |
-| Provider                 | Recreate       | Recreate  | Recreate | Recreate        | Recreate       |
-| CNI                      | In-place       | In-place  | In-place | N/A             | Sim⁷           |
-| CSI                      | N/A⁵           | In-place  | In-place | N/A             | Sim⁷           |
-| Metrics Server           | In-place       | In-place  | In-place | N/A             | Sim⁷           |
-| Load Balancer            | In-place       | In-place  | N/A¹     | N/A             | Sim⁷           |
-| cert-manager             | In-place       | In-place  | In-place | In-place        | Sim⁷           |
-| Policy Engine            | In-place       | In-place  | In-place | In-place        | ❌⁸            |
-| GitOps Engine            | In-place       | In-place  | In-place | In-place        | Sim⁷           |
-| Local Registry           | Recreate       | In-place  | In-place | In-place        | Sim⁷           |
-| Mirrors Dir              | Recreate       | N/A       | N/A      | N/A             | N/A            |
-| Control Planes           | Recreate       | Recreate  | In-place | Recreate        | Recreate       |
-| Workers                  | Recreate       | In-place  | In-place | N/A             | N/A            |
-| Hetzner Server Type (CP) | N/A            | N/A       | Recreate | N/A             | N/A            |
-| Hetzner Location         | N/A            | N/A       | Recreate | N/A             | N/A            |
-| Hetzner Network          | N/A            | N/A       | Recreate | N/A             | N/A            |
+| Change                   | Vanilla (Kind) | K3s (K3d) | Talos    | VCluster (Vind) | KWOK (kwokctl) | EKS        |
+| ------------------------ | -------------- | --------- | -------- | --------------- | -------------- | ---------- |
+| Distribution             | Recreate       | Recreate  | Recreate | Recreate        | Recreate       | 🚧¹⁰      |
+| Provider                 | Recreate       | Recreate  | Recreate | Recreate        | Recreate       | 🚧¹⁰      |
+| CNI                      | In-place       | In-place  | In-place | N/A             | Sim⁷           | 🚧¹⁰      |
+| CSI                      | N/A⁵           | In-place  | In-place | N/A             | Sim⁷           | 🚧¹⁰      |
+| Metrics Server           | In-place       | In-place  | In-place | N/A             | Sim⁷           | 🚧¹⁰      |
+| Load Balancer            | In-place       | In-place  | N/A¹     | N/A             | Sim⁷           | 🚧¹⁰      |
+| cert-manager             | In-place       | In-place  | In-place | In-place        | Sim⁷           | 🚧¹⁰      |
+| Policy Engine            | In-place       | In-place  | In-place | In-place        | ❌⁸            | 🚧¹⁰      |
+| GitOps Engine            | In-place       | In-place  | In-place | In-place        | Sim⁷           | 🚧¹⁰      |
+| Local Registry           | Recreate       | In-place  | In-place | In-place        | Sim⁷           | ❌         |
+| Mirrors Dir              | Recreate       | N/A       | N/A      | N/A             | N/A            | ❌         |
+| Control Planes           | Recreate       | Recreate  | In-place | Recreate        | Recreate       | 🚧¹⁰      |
+| Workers                  | Recreate       | In-place  | In-place | N/A             | N/A            | 🚧¹⁰      |
+| Hetzner Server Type (CP) | N/A            | N/A       | Recreate | N/A             | N/A            | N/A        |
+| Hetzner Location         | N/A            | N/A       | Recreate | N/A             | N/A            | N/A        |
+| Hetzner Network          | N/A            | N/A       | Recreate | N/A             | N/A            | N/A        |
 
 **Notes:**
 
