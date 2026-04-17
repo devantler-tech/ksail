@@ -27,7 +27,7 @@ Setting up and operating Kubernetes clusters often requires juggling multiple CL
 ## Key Features
 
 - 📦 **One Binary** — Embeds cluster provisioning, GitOps engines, and deployment tooling. No tool sprawl.
-- ☸️ **Simple Clusters** — Spin up Vanilla, K3s, Talos, VCluster, or KWOK clusters with one command. Same workflow across distributions.
+- ☸️ **Simple Clusters** — Spin up Vanilla, K3s, Talos, VCluster, KWOK, or EKS clusters with one command. Same workflow across distributions.
 - 🔓 **No Lock-In** — Uses native configs (`kind.yaml`, `k3d.yaml`, Talos patches, `vcluster.yaml`, `kwok.yaml`). Run clusters with or without KSail.
 - 📥 **Mirror Registries** — Avoid rate limits, and store images once. Same mirrors used by different clusters.
 - 📄 **Everything as Code** — Cluster settings, distribution configs, and workloads in version-controlled files.
@@ -53,11 +53,12 @@ KSail works on all major operating systems and CPU architectures:
 
 Supported distributions run on different infrastructure providers:
 
-| Provider | Vanilla | K3s | Talos | VCluster | KWOK |
-|----------|---------|-----|-------|----------|------|
-| Docker | ✅ (Kind) | ✅ (K3d) | ✅ | ✅ (Vind) | ✅ (kwokctl) |
-| Hetzner | — | — | ✅ | — | — |
-| Omni | — | — | ✅ | — | — |
+| Provider | Vanilla | K3s | Talos | VCluster | KWOK | EKS |
+|----------|---------|-----|-------|----------|------|-----|
+| Docker | ✅ (Kind) | ✅ (K3d) | ✅ | ✅ (Vind) | ✅ (kwokctl) | ❌ |
+| Hetzner | — | — | ✅ | — | — | — |
+| Omni | — | — | ✅ | — | — | — |
+| AWS | — | — | — | — | — | 🚧 |
 
 ## Quick Start
 
@@ -188,6 +189,12 @@ flowchart TD
   <Card title="VCluster (Vind)" icon="puzzle">
     Virtual Kubernetes clusters in Docker. Ideal for multi-tenancy, feature branches, and CI isolation. [Learn more →](/distributions/vcluster/)
   </Card>
+  <Card title="KWOK (kwokctl)" icon="setting">
+    Simulate large Kubernetes clusters at the API level with zero resource overhead. Ideal for controller development and scale testing. [Learn more →](/distributions/kwok/)
+  </Card>
+  <Card title="EKS" icon="external">
+    Managed Kubernetes on AWS via eksctl. Scaffolding is available; cluster provisioning support is coming soon. [Learn more →](/distributions/eks/)
+  </Card>
 </CardGrid>
 
 ## Providers
@@ -201,6 +208,9 @@ flowchart TD
   </Card>
   <Card title="Omni (Sidero)" icon="setting">
     Manage Talos clusters through the Sidero Omni SaaS platform. [Learn more →](/providers/omni/)
+  </Card>
+  <Card title="AWS" icon="external">
+    Run managed EKS clusters on Amazon Web Services. Requires AWS credentials and an AWS account with EKS permissions. [Learn more →](/providers/aws/)
   </Card>
 </CardGrid>
 
