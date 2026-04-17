@@ -18,6 +18,8 @@ const (
 	DistributionTalos Distribution = "Talos"
 	// DistributionVCluster is the vCluster distribution (uses Vind/Docker driver).
 	DistributionVCluster Distribution = "VCluster"
+	// DistributionKWOK is the KWOK distribution (simulated Kubernetes cluster).
+	DistributionKWOK Distribution = "KWOK"
 )
 
 // ProvidesCDIByDefault returns true if the distribution enables CDI by default.
@@ -27,7 +29,7 @@ func (d *Distribution) ProvidesCDIByDefault() bool {
 	switch *d {
 	case DistributionTalos:
 		return true
-	case DistributionVanilla, DistributionK3s, DistributionVCluster:
+	case DistributionVanilla, DistributionK3s, DistributionVCluster, DistributionKWOK:
 		return false
 	default:
 		return false
@@ -41,7 +43,7 @@ func (d *Distribution) ProvidesMetricsServerByDefault() bool {
 	switch *d {
 	case DistributionK3s:
 		return true
-	case DistributionVanilla, DistributionTalos, DistributionVCluster:
+	case DistributionVanilla, DistributionTalos, DistributionVCluster, DistributionKWOK:
 		return false
 	default:
 		return false
@@ -55,7 +57,7 @@ func (d *Distribution) ProvidesStorageByDefault() bool {
 	switch *d {
 	case DistributionK3s:
 		return true
-	case DistributionVanilla, DistributionTalos, DistributionVCluster:
+	case DistributionVanilla, DistributionTalos, DistributionVCluster, DistributionKWOK:
 		return false
 	default:
 		return false
@@ -74,8 +76,8 @@ func (d *Distribution) ProvidesCSIByDefault(provider Provider) bool {
 	case DistributionTalos:
 		// Talos × Hetzner provides Hetzner CSI by default
 		return provider == ProviderHetzner
-	case DistributionVanilla, DistributionVCluster:
-		// Vanilla (Kind) and VCluster (Vind with Distro: k8s) do not provide CSI by default
+	case DistributionVanilla, DistributionVCluster, DistributionKWOK:
+		// Vanilla (Kind), VCluster (Vind with Distro: k8s), and KWOK do not provide CSI by default
 		return false
 	default:
 		return false
@@ -99,8 +101,8 @@ func (d *Distribution) ProvidesLoadBalancerByDefault(provider Provider) bool {
 	case DistributionTalos:
 		// Talos × Hetzner: hcloud-ccm provides LB support (installed by KSail)
 		return provider == ProviderHetzner
-	case DistributionVanilla:
-		// Vanilla (Kind) does not provide LoadBalancer by default
+	case DistributionVanilla, DistributionKWOK:
+		// Vanilla (Kind) and KWOK do not provide LoadBalancer by default
 		return false
 	default:
 		return false
@@ -118,13 +120,14 @@ func (d *Distribution) Set(value string) error {
 	}
 
 	return fmt.Errorf(
-		"%w: %s (valid options: %s, %s, %s, %s)",
+		"%w: %s (valid options: %s, %s, %s, %s, %s)",
 		ErrInvalidDistribution,
 		value,
 		DistributionVanilla,
 		DistributionK3s,
 		DistributionTalos,
 		DistributionVCluster,
+		DistributionKWOK,
 	)
 }
 
@@ -155,6 +158,7 @@ func (d *Distribution) ValidValues() []string {
 		string(DistributionK3s),
 		string(DistributionTalos),
 		string(DistributionVCluster),
+		string(DistributionKWOK),
 	}
 }
 
@@ -179,6 +183,8 @@ func (d *Distribution) ContextName(clusterName string) string {
 		return "admin@" + clusterName
 	case DistributionVCluster:
 		return "vcluster-docker_" + clusterName
+	case DistributionKWOK:
+		return "kwok-" + clusterName
 	default:
 		return ""
 	}
@@ -201,6 +207,8 @@ func (d *Distribution) DefaultClusterName() string {
 		return "talos-default"
 	case DistributionVCluster:
 		return "vcluster-default"
+	case DistributionKWOK:
+		return "kwok-default"
 	default:
 		return "kind"
 	}

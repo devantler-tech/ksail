@@ -1236,6 +1236,7 @@ func newProvisionerFactory(ctx *localregistry.Context) clusterprovisioner.Factor
 			K3d:      ctx.K3dConfig,
 			Talos:    ctx.TalosConfig,
 			VCluster: ctx.VClusterConfig,
+			KWOK:     ctx.KWOKConfig,
 		},
 	}
 }
@@ -1614,6 +1615,11 @@ func applyClusterNameOverride(ctx *localregistry.Context, name string) error {
 		ctx.VClusterConfig.Name = name
 	}
 
+	// Update KWOK config
+	if ctx.KWOKConfig != nil {
+		ctx.KWOKConfig.Name = name
+	}
+
 	// Update the ksail.yaml context to match the distribution pattern
 	if ctx.ClusterCfg != nil {
 		dist := ctx.ClusterCfg.Spec.Cluster.Distribution
@@ -1689,19 +1695,36 @@ func resolveClusterNameFromContext(ctx *localregistry.Context) string {
 	case v1alpha1.DistributionTalos:
 		return talosconfigmanager.ResolveClusterName(ctx.ClusterCfg, ctx.TalosConfig)
 	case v1alpha1.DistributionVCluster:
-		if ctx.VClusterConfig != nil && ctx.VClusterConfig.Name != "" {
-			return ctx.VClusterConfig.Name
-		}
-
-		return "vcluster-default"
+		return resolveVClusterName(ctx)
+	case v1alpha1.DistributionKWOK:
+		return resolveKWOKName(ctx)
 	default:
-		// Fallback to context name or default
-		if name := strings.TrimSpace(ctx.ClusterCfg.Spec.Cluster.Connection.Context); name != "" {
-			return name
-		}
-
-		return "ksail"
+		return resolveFallbackName(ctx)
 	}
+}
+
+func resolveVClusterName(ctx *localregistry.Context) string {
+	if ctx.VClusterConfig != nil && ctx.VClusterConfig.Name != "" {
+		return ctx.VClusterConfig.Name
+	}
+
+	return "vcluster-default"
+}
+
+func resolveKWOKName(ctx *localregistry.Context) string {
+	if ctx.KWOKConfig != nil && ctx.KWOKConfig.Name != "" {
+		return ctx.KWOKConfig.Name
+	}
+
+	return "kwok-default"
+}
+
+func resolveFallbackName(ctx *localregistry.Context) string {
+	if name := strings.TrimSpace(ctx.ClusterCfg.Spec.Cluster.Connection.Context); name != "" {
+		return name
+	}
+
+	return "ksail"
 }
 
 // maybeWaitForTTL parses the --ttl flag and, if set, blocks to auto-destroy the cluster
@@ -1891,6 +1914,7 @@ func detectClusterDistribution(resolved *lifecycle.ResolvedClusterInfo) *cluster
 		"kind-",
 		"k3d-",
 		"vcluster-docker_",
+		"kwok-",
 	}
 
 	for _, prefix := range prefixes {
@@ -2763,6 +2787,7 @@ func getDockerProviderStatus(
 			dockerprovider.LabelSchemeK3d,
 			dockerprovider.LabelSchemeTalos,
 			dockerprovider.LabelSchemeVCluster,
+			dockerprovider.LabelSchemeKWOK,
 		}
 
 		for _, scheme := range schemes {
@@ -3262,6 +3287,7 @@ func allDistributions() []v1alpha1.Distribution {
 		v1alpha1.DistributionK3s,
 		v1alpha1.DistributionTalos,
 		v1alpha1.DistributionVCluster,
+		v1alpha1.DistributionKWOK,
 	}
 }
 
@@ -3632,6 +3658,10 @@ func createEmptyDistributionConfig(
 	case v1alpha1.DistributionVCluster:
 		return &clusterprovisioner.DistributionConfig{
 			VCluster: &clusterprovisioner.VClusterConfig{},
+		}
+	case v1alpha1.DistributionKWOK:
+		return &clusterprovisioner.DistributionConfig{
+			KWOK: &clusterprovisioner.KWOKConfig{},
 		}
 	default:
 		return &clusterprovisioner.DistributionConfig{
@@ -6299,6 +6329,7 @@ func createAndVerifyProvisioner(
 			K3d:      ctx.K3dConfig,
 			Talos:    ctx.TalosConfig,
 			VCluster: ctx.VClusterConfig,
+			KWOK:     ctx.KWOKConfig,
 		},
 	}
 
@@ -6448,9 +6479,15 @@ func computeSpecOnlyDiff(
 		ctx.ClusterCfg.Spec.Cluster.Provider,
 	)
 
+	// Build the target spec, applying any distribution-specific overrides so
+	// the diff reflects what the distribution will actually install rather than
+	// what the user requested.  Copying avoids mutating the shared context.
+	targetSpec := ctx.ClusterCfg.Spec.Cluster
+	applyDistributionSpecOverrides(&targetSpec)
+
 	diff := diffEngine.ComputeDiff(
 		currentSpec,
-		&ctx.ClusterCfg.Spec.Cluster,
+		&targetSpec,
 		nil,
 		&ctx.ClusterCfg.Spec.Provider,
 	)
@@ -6459,6 +6496,32 @@ func computeSpecOnlyDiff(
 	checkWorkloadTagDrift(cmd, ctx, diffEngine, diff)
 
 	return diff
+}
+
+// applyDistributionSpecOverrides normalises a ClusterSpec by clearing fields
+// that the given distribution will never install, so that update dry-runs do
+// not report spurious "install X" changes for features that are silently skipped
+// at cluster-creation time.
+func applyDistributionSpecOverrides(spec *v1alpha1.ClusterSpec) {
+	if spec.Distribution == v1alpha1.DistributionKWOK {
+		// KWOK cannot run admission-webhook servers (simulated pods have no
+		// real network), so policy engines are always skipped at creation time.
+		// Treat PolicyEngine as None so the diff stays clean.
+		spec.PolicyEngine = v1alpha1.PolicyEngineNone
+
+		// The flux-operator pod is simulated and never installs Flux CRDs, so
+		// Flux is always skipped at creation time (GetComponentRequirements sets
+		// NeedsFlux=false for KWOK). Treat GitOpsEngine as None for Flux so that
+		// update dry-runs do not report spurious "install Flux" changes.
+		if spec.GitOpsEngine == v1alpha1.GitOpsEngineFlux {
+			spec.GitOpsEngine = v1alpha1.GitOpsEngineNone
+		}
+
+		// NeedsLoadBalancerInstall always returns false for KWOK (no real network
+		// dataplane). Normalise LoadBalancer to Disabled so that the update diff
+		// sees Disabled on both sides and reports no change.
+		spec.LoadBalancer = v1alpha1.LoadBalancerDisabled
+	}
 }
 
 // checkWorkloadTagDrift queries the running GitOps sync resource for its current

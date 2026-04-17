@@ -18,7 +18,7 @@ description: |
 
 inputs:
   distribution:
-    description: Kubernetes distribution (Vanilla, K3s, Talos, VCluster)
+    description: Kubernetes distribution (Vanilla, K3s, Talos, VCluster, KWOK)
     required: true
   provider:
     description: Infrastructure provider (Docker, Hetzner, Omni)
@@ -173,7 +173,7 @@ runs:
 
         FAILED=0
         assert_contains() {
-          if printf '%s\n' "$output" | grep -Fq -- "$1"; then
+          if grep -Fq -- "$1" <<< "$output"; then
             echo "  ✅ Found: $1"
           else
             echo "  ❌ Missing: $1"

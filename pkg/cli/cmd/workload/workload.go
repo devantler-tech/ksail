@@ -337,7 +337,10 @@ func runHostDebug(cmd *cobra.Command, nodeName string, args []string) error {
 			debugImage,
 			args,
 		)
-	case v1alpha1.DistributionVanilla, v1alpha1.DistributionK3s, v1alpha1.DistributionVCluster:
+	case v1alpha1.DistributionVanilla,
+		v1alpha1.DistributionK3s,
+		v1alpha1.DistributionVCluster,
+		v1alpha1.DistributionKWOK:
 		if info.Provider != v1alpha1.ProviderDocker {
 			return fmt.Errorf(
 				"%w: %s with %s provider",
@@ -642,6 +645,8 @@ func distributionToLabelScheme(distribution v1alpha1.Distribution) dockerprovide
 		return dockerprovider.LabelSchemeTalos
 	case v1alpha1.DistributionVCluster:
 		return dockerprovider.LabelSchemeVCluster
+	case v1alpha1.DistributionKWOK:
+		return dockerprovider.LabelSchemeKWOK
 	default:
 		return dockerprovider.LabelSchemeKind
 	}
@@ -1926,6 +1931,10 @@ const (
 	reconcileCmdLong              = "Trigger reconciliation/sync and wait for completion. " +
 		"For Flux, tracks the OCIRepository and each Kustomization individually. " +
 		"For ArgoCD, tracks each Application until synced and healthy."
+	// kwokReconcileSkipMsg is emitted when reconciliation is skipped for KWOK.
+	// KWOK simulates GitOps controller pods as Running at the API level, but the
+	// actual controller processes are not running and cannot sync any resources.
+	kwokReconcileSkipMsg = "KWOK distribution: GitOps controllers are simulated and cannot sync — reconciliation skipped"
 )
 
 // getKubeconfigPath returns the kubeconfig path from config or default.
@@ -2088,6 +2097,25 @@ func executeReconciliation(
 	kubeconfigPath, err := getKubeconfigPath(clusterCfg)
 	if err != nil {
 		return err
+	}
+
+	// Check both config and detected distribution for KWOK.
+	// When no ksail.yaml exists (e.g. init=false), clusterCfg.Spec.Cluster.Distribution
+	// defaults to empty; fall back to detecting from the active kubeconfig context.
+	// Only detect when dist is unspecified so an explicitly-configured distribution
+	// is never overridden by kubeconfig-based detection.
+	dist := clusterCfg.Spec.Cluster.Distribution
+	if dist == "" {
+		info, detectErr := clusterdetector.DetectInfo(kubeconfigPath, "")
+		if detectErr == nil {
+			dist = info.Distribution
+		}
+	}
+
+	if dist == v1alpha1.DistributionKWOK {
+		notify.Warningf(cmd.OutOrStdout(), kwokReconcileSkipMsg)
+
+		return nil
 	}
 
 	switch gitOpsEngine {

@@ -27,6 +27,9 @@ var (
 	// ErrVClusterConfigGeneration wraps failures when creating vCluster configuration.
 	ErrVClusterConfigGeneration = errors.New("failed to generate vcluster configuration")
 
+	// ErrKWOKConfigGeneration wraps failures when creating KWOK configuration.
+	ErrKWOKConfigGeneration = errors.New("failed to generate kwok configuration")
+
 	// ErrKustomizationGeneration wraps failures when creating kustomization.yaml.
 	ErrKustomizationGeneration = errors.New("failed to generate kustomization configuration")
 

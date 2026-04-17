@@ -27,8 +27,8 @@ Setting up and operating Kubernetes clusters often requires juggling multiple CL
 ## Key Features
 
 - 📦 **One Binary** — Embeds cluster provisioning, GitOps engines, and deployment tooling. No tool sprawl.
-- ☸️ **Simple Clusters** — Spin up Vanilla, K3s, Talos, or VCluster clusters with one command. Same workflow across distributions.
-- 🔓 **No Lock-In** — Uses native configs (`kind.yaml`, `k3d.yaml`, Talos patches, `vcluster.yaml`). Run clusters with or without KSail.
+- ☸️ **Simple Clusters** — Spin up Vanilla, K3s, Talos, VCluster, or KWOK clusters with one command. Same workflow across distributions.
+- 🔓 **No Lock-In** — Uses native configs (`kind.yaml`, `k3d.yaml`, Talos patches, `vcluster.yaml`, `kwok.yaml`). Run clusters with or without KSail.
 - 📥 **Mirror Registries** — Avoid rate limits, and store images once. Same mirrors used by different clusters.
 - 📄 **Everything as Code** — Cluster settings, distribution configs, and workloads in version-controlled files.
 - 🔄 **GitOps Native** — Built-in Flux or ArgoCD support with bootstrap, push, and reconcile commands.
@@ -53,11 +53,11 @@ KSail works on all major operating systems and CPU architectures:
 
 Supported distributions run on different infrastructure providers:
 
-| Provider | Vanilla | K3s | Talos | VCluster |
-|----------|---------|-----|-------|----------|
-| Docker | ✅ (Kind) | ✅ (K3d) | ✅ | ✅ (Vind) |
-| Hetzner | — | — | ✅ | — |
-| Omni | — | — | ✅ | — |
+| Provider | Vanilla | K3s | Talos | VCluster | KWOK |
+|----------|---------|-----|-------|----------|------|
+| Docker | ✅ (Kind) | ✅ (K3d) | ✅ | ✅ (Vind) | ✅ (kwokctl) |
+| Hetzner | — | — | ✅ | — | — |
+| Omni | — | — | ✅ | — | — |
 
 ## Quick Start
 

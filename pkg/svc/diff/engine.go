@@ -141,15 +141,17 @@ func (e *Engine) scalarFieldRules() []fieldRule {
 				return clusterupdate.ChangeCategoryRebootRequired
 			},
 			getVal: func(spec *v1alpha1.ClusterSpec) string {
-				// K3s and VCluster have no CDI runtime wiring — suppress diffs.
+				// K3s, VCluster, and KWOK have no CDI runtime wiring — suppress diffs.
 				switch e.distribution {
-				case v1alpha1.DistributionK3s, v1alpha1.DistributionVCluster:
+				case v1alpha1.DistributionK3s,
+					v1alpha1.DistributionVCluster,
+					v1alpha1.DistributionKWOK:
 					return string(v1alpha1.CDIDisabled)
 				case v1alpha1.DistributionVanilla, v1alpha1.DistributionTalos:
 					return string(spec.CDI.EffectiveValue(e.distribution, e.provider))
-				default:
-					return string(spec.CDI.EffectiveValue(e.distribution, e.provider))
 				}
+
+				return string(spec.CDI.EffectiveValue(e.distribution, e.provider))
 			},
 		},
 		{
@@ -296,13 +298,13 @@ func (e *Engine) checkLocalRegistryChange(
 				Category: clusterupdate.ChangeCategoryInPlace,
 				Reason:   reasons[e.distribution],
 			})
-		case v1alpha1.DistributionVCluster:
+		case v1alpha1.DistributionVCluster, v1alpha1.DistributionKWOK:
 			result.InPlaceChanges = append(result.InPlaceChanges, clusterupdate.Change{
 				Field:    "cluster.localRegistry.registry",
 				OldValue: oldSpec.LocalRegistry.Registry,
 				NewValue: newSpec.LocalRegistry.Registry,
 				Category: clusterupdate.ChangeCategoryInPlace,
-				Reason:   "VCluster manages registry independently via Docker networking",
+				Reason:   "VCluster/KWOK manages registry independently via Docker networking",
 			})
 		}
 	}

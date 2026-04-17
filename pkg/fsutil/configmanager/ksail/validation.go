@@ -79,6 +79,8 @@ func (m *ConfigManager) createDistributionValidator() (*ksailvalidator.Validator
 		return m.createTalosValidator()
 	case v1alpha1.DistributionVCluster:
 		return m.createVClusterValidator()
+	case v1alpha1.DistributionKWOK:
+		return m.createKWOKValidator()
 	default:
 		return ksailvalidator.NewValidator(), nil
 	}
@@ -137,6 +139,17 @@ func (m *ConfigManager) createVClusterValidator() (*ksailvalidator.Validator, er
 	return ksailvalidator.NewValidator(), nil
 }
 
+// createKWOKValidator returns a validator with the cached KWOK config.
+// KWOK config doesn't require loading from disk (it's derived from the KSail config),
+// so this uses the already-cached distribution config if available.
+func (m *ConfigManager) createKWOKValidator() (*ksailvalidator.Validator, error) {
+	if m.DistributionConfig != nil && m.DistributionConfig.KWOK != nil {
+		return ksailvalidator.NewValidatorForKWOK(m.DistributionConfig.KWOK), nil
+	}
+
+	return ksailvalidator.NewValidator(), nil
+}
+
 // applyDistributionConfigDefaults sets the distribution config name based on the distribution.
 func (m *ConfigManager) applyDistributionConfigDefaults() {
 	if m.Config == nil {
@@ -165,6 +178,8 @@ func expectedDistributionConfigName(distribution v1alpha1.Distribution) string {
 		return "talos"
 	case v1alpha1.DistributionVCluster:
 		return "vcluster.yaml"
+	case v1alpha1.DistributionKWOK:
+		return "kwok.yaml"
 	default:
 		return ""
 	}
@@ -176,6 +191,7 @@ func distributionConfigIsOppositeDefault(current string, distribution v1alpha1.D
 		v1alpha1.DistributionK3s,
 		v1alpha1.DistributionTalos,
 		v1alpha1.DistributionVCluster,
+		v1alpha1.DistributionKWOK,
 	}
 
 	for _, d := range allDefaults {

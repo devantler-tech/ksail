@@ -2443,6 +2443,72 @@ func TestIsKindClusterFromNodes(t *testing.T) {
 	}
 }
 
+func TestApplyDistributionSpecOverrides(t *testing.T) { //nolint:funlen
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		input v1alpha1.ClusterSpec
+		want  v1alpha1.ClusterSpec
+	}{
+		{
+			name: "KWOK with Flux and Kyverno and LoadBalancer Enabled normalises all three",
+			input: v1alpha1.ClusterSpec{
+				Distribution: v1alpha1.DistributionKWOK,
+				GitOpsEngine: v1alpha1.GitOpsEngineFlux,
+				PolicyEngine: v1alpha1.PolicyEngineKyverno,
+				LoadBalancer: v1alpha1.LoadBalancerEnabled,
+			},
+			want: v1alpha1.ClusterSpec{
+				Distribution: v1alpha1.DistributionKWOK,
+				GitOpsEngine: v1alpha1.GitOpsEngineNone,
+				PolicyEngine: v1alpha1.PolicyEngineNone,
+				LoadBalancer: v1alpha1.LoadBalancerDisabled,
+			},
+		},
+		{
+			name: "KWOK with ArgoCD keeps GitOpsEngine unchanged",
+			input: v1alpha1.ClusterSpec{
+				Distribution: v1alpha1.DistributionKWOK,
+				GitOpsEngine: v1alpha1.GitOpsEngineArgoCD,
+				PolicyEngine: v1alpha1.PolicyEngineNone,
+				LoadBalancer: v1alpha1.LoadBalancerEnabled,
+			},
+			want: v1alpha1.ClusterSpec{
+				Distribution: v1alpha1.DistributionKWOK,
+				GitOpsEngine: v1alpha1.GitOpsEngineArgoCD,
+				PolicyEngine: v1alpha1.PolicyEngineNone,
+				LoadBalancer: v1alpha1.LoadBalancerDisabled,
+			},
+		},
+		{
+			name: "non-KWOK distribution is unchanged",
+			input: v1alpha1.ClusterSpec{
+				Distribution: v1alpha1.DistributionVanilla,
+				GitOpsEngine: v1alpha1.GitOpsEngineFlux,
+				PolicyEngine: v1alpha1.PolicyEngineKyverno,
+				LoadBalancer: v1alpha1.LoadBalancerEnabled,
+			},
+			want: v1alpha1.ClusterSpec{
+				Distribution: v1alpha1.DistributionVanilla,
+				GitOpsEngine: v1alpha1.GitOpsEngineFlux,
+				PolicyEngine: v1alpha1.PolicyEngineKyverno,
+				LoadBalancer: v1alpha1.LoadBalancerEnabled,
+			},
+		},
+	}
+
+	for _, tt := range tests { //nolint:varnamelen // tt is conventional for table-driven tests
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			spec := tt.input
+			cluster.ExportApplyDistributionSpecOverrides(&spec)
+			assert.Equal(t, tt.want, spec)
+		})
+	}
+}
+
 // fakeDeleteProvisioner is a fake provisioner for delete tests.
 type fakeDeleteProvisioner struct {
 	existsResult bool

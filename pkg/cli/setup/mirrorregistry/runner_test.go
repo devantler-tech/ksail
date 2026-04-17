@@ -242,6 +242,12 @@ func TestGetNetworkNameForDistribution(t *testing.T) {
 			expected:     "vcluster.my-cluster",
 		},
 		{
+			name:         "KWOK returns kwok-prefix",
+			distribution: v1alpha1.DistributionKWOK,
+			clusterName:  "my-cluster",
+			expected:     "kwok-my-cluster",
+		},
+		{
 			name:         "unknown distribution returns cluster name",
 			distribution: v1alpha1.Distribution("unknown"),
 			clusterName:  "my-cluster",

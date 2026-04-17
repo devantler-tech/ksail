@@ -9,6 +9,8 @@ const (
 	DefaultTalosDistributionConfig = "talos"
 	// DefaultVClusterDistributionConfig is the default VCluster distribution configuration filename.
 	DefaultVClusterDistributionConfig = "vcluster.yaml"
+	// DefaultKWOKDistributionConfig is the default KWOK distribution configuration filename.
+	DefaultKWOKDistributionConfig = "kwok.yaml"
 	// DefaultSourceDirectory is the default directory for Kubernetes manifests.
 	DefaultSourceDirectory = "k8s"
 	// DefaultKubeconfigPath is the default path to the kubeconfig file.
@@ -59,6 +61,8 @@ func ExpectedDistributionConfigName(distribution Distribution) string {
 		return DefaultTalosDistributionConfig
 	case DistributionVCluster:
 		return DefaultVClusterDistributionConfig
+	case DistributionKWOK:
+		return DefaultKWOKDistributionConfig
 	default:
 		return DefaultVanillaDistributionConfig
 	}
@@ -75,6 +79,8 @@ func ExpectedContextName(distribution Distribution) string {
 		return "admin@talos-default"
 	case DistributionVCluster:
 		return "vcluster-docker_vcluster-default"
+	case DistributionKWOK:
+		return "kwok-kwok-default"
 	default:
 		return ""
 	}
