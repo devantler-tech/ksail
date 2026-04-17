@@ -52,6 +52,7 @@ ksail cluster update --update-distribution --update-kubernetes
 | **Vanilla (Kind)** | Recreation | Cluster is deleted and recreated at the target version |
 | **K3s (K3d)** | Recreation | Cluster is deleted and recreated at the target version |
 | **VCluster** | Recreation | Cluster is deleted and recreated using KSail's embedded vCluster/Kubernetes defaults; versions only advance when those defaults change (for example, after updating KSail) |
+| **KWOK** | Not supported | `--update-kubernetes` and `--update-distribution` are not supported for KWOK; the controller image is pinned to the version bundled with KSail |
 
 For Talos (rolling upgrades), KSail steps through intermediate versions sequentially before reaching the final target. For recreation-based distributions, KSail skips intermediate versions and recreates the cluster once at the latest available target version. You will be prompted for confirmation before any recreation; pass `--force` or `--yes` (`-y`) to skip the prompt.
 
