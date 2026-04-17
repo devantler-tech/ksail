@@ -115,10 +115,11 @@ For local Docker-based clusters, this typically means running on the same machin
 
 ## Distribution Tips
 
-- **K3s** starts fastest and uses the fewest resources — good for quick debugging sessions.
+- **K3s** starts fast and uses few resources for a full-workload cluster — good for quick debugging sessions where you need to run actual workloads.
 - **Vanilla** (Kind) provides standard upstream Kubernetes — useful when you need exact API compatibility.
 - **Talos** is immutable and secure — ideal for reproducing production-like environments.
 - **VCluster** uses the [Vind](https://github.com/loft-sh/vcluster) Docker driver to run the control plane directly in Docker containers — no pre-existing host cluster required, useful for lightweight isolated environments.
+- **KWOK** starts in seconds and consumes minimal resources — ideal for control-plane testing and CI/CD pipelines that need a real Kubernetes API server without running actual workloads.
 
 ## CI/CD with the GitHub Action
 
