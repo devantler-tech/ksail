@@ -204,36 +204,6 @@
               },
               "additionalProperties": false,
               "type": "object"
-            },
-            "eks": {
-              "properties": {
-                "region": {
-                  "type": "string"
-                },
-                "kubernetesVersion": {
-                  "type": "string"
-                },
-                "nodeGroupName": {
-                  "type": "string"
-                },
-                "instanceType": {
-                  "type": "string"
-                },
-                "desiredCapacity": {
-                  "type": "integer"
-                },
-                "minSize": {
-                  "type": "integer"
-                },
-                "maxSize": {
-                  "type": "integer"
-                },
-                "amiFamily": {
-                  "type": "string"
-                }
-              },
-              "additionalProperties": false,
-              "type": "object"
             }
           },
           "additionalProperties": false,

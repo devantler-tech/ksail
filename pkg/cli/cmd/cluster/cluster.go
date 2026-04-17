@@ -1699,7 +1699,7 @@ func resolveClusterNameFromContext(ctx *localregistry.Context) string {
 	case v1alpha1.DistributionKWOK:
 		return resolveKWOKName(ctx)
 	case v1alpha1.DistributionEKS:
-		// EKS config is owned by eksctl (eksctl.yaml) and not cached on the
+		// EKS config is owned by eksctl (eks.yaml) and not cached on the
 		// local registry context; fall back to the cluster-level name.
 		return resolveFallbackName(ctx)
 	default:
@@ -3683,7 +3683,7 @@ func createEmptyDistributionConfig(
 			KWOK: &clusterprovisioner.KWOKConfig{},
 		}
 	case v1alpha1.DistributionEKS:
-		// EKS does not populate the shared DistributionConfig; eksctl.yaml is
+		// EKS does not populate the shared DistributionConfig; eks.yaml is
 		// owned by the EKS provisioner. Return an empty config so list
 		// operations do not NPE for EKS entries.
 		return &clusterprovisioner.DistributionConfig{}

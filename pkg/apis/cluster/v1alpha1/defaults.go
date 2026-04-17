@@ -13,7 +13,7 @@ const (
 	DefaultKWOKDistributionConfig = "kwok.yaml"
 	// DefaultEKSDistributionConfig is the default EKS distribution configuration filename
 	// (declarative eksctl ClusterConfig consumed by the eksctl CLI).
-	DefaultEKSDistributionConfig = "eksctl.yaml"
+	DefaultEKSDistributionConfig = "eks.yaml"
 	// DefaultSourceDirectory is the default directory for Kubernetes manifests.
 	DefaultSourceDirectory = "k8s"
 	// DefaultKubeconfigPath is the default path to the kubeconfig file.

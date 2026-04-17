@@ -206,7 +206,7 @@ Path to the distribution-specific configuration file or directory. This tells KS
 - ` + bt + `Talos` + bt + ` → ` + bt + `talos/` + bt + ` (directory)
 - ` + bt + `VCluster` + bt + ` → ` + bt + `vcluster.yaml` + bt + `
 - ` + bt + `KWOK` + bt + ` → ` + bt + `kwok.yaml` + bt + `
-- ` + bt + `EKS` + bt + ` → ` + bt + `eksctl.yaml` + bt + `
+- ` + bt + `EKS` + bt + ` → ` + bt + `eks.yaml` + bt + `
 
 See [Distribution Configuration](#distribution-configuration) below for details on each format.`
 

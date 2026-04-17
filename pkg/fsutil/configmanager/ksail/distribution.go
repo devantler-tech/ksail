@@ -125,7 +125,7 @@ func (m *ConfigManager) loadAndCacheDistributionConfig() error {
 	case v1alpha1.DistributionKWOK:
 		return m.cacheKWOKConfig()
 	case v1alpha1.DistributionEKS:
-		// EKS distribution config (eksctl.yaml) is loaded by the EKS
+		// EKS distribution config (eks.yaml) is loaded by the EKS
 		// provisioner directly and not cached on the ConfigManager.
 		return nil
 	default:

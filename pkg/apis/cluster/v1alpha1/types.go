@@ -62,7 +62,6 @@ type ClusterSpec struct {
 	// Distribution-specific options
 	Vanilla OptionsVanilla `json:"vanilla,omitzero"`
 	Talos   OptionsTalos   `json:"talos,omitzero"`
-	EKS     OptionsEKS     `json:"eks,omitzero"`
 }
 
 // WorkloadSpec defines workload-related configuration.

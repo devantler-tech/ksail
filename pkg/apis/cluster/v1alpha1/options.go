@@ -149,42 +149,12 @@ type OptionsOmni struct {
 	Machines []string `json:"machines,omitzero"`
 }
 
-// --- EKS / AWS Options ---
-
-// OptionsEKS defines options specific to the Amazon EKS distribution.
-// These options seed the default values used when scaffolding eksctl.yaml and
-// provide runtime overrides consumed by the EKS provisioner (nodegroup scale,
-// version upgrade).
+// --- AWS Options ---
 //
-// The authoritative, fully-expressive cluster definition lives in eksctl.yaml
-// (eksctl.io/v1alpha5 ClusterConfig). These fields are the minimum KSail needs
-// to render that file and reason about in-place updates.
-type OptionsEKS struct {
-	// Region is the AWS region for the EKS cluster (e.g., "us-east-1").
-	// Defaults to "us-east-1" via struct tag.
-	Region string `default:"us-east-1" json:"region,omitzero"`
-	// KubernetesVersion is the EKS-supported Kubernetes version (e.g., "1.30").
-	// When empty, eksctl picks the default supported version at create time.
-	KubernetesVersion string `json:"kubernetesVersion,omitzero"`
-	// NodeGroupName is the name of the default managed nodegroup.
-	// Defaults to "ng-default".
-	NodeGroupName string `default:"ng-default" json:"nodeGroupName,omitzero"`
-	// InstanceType is the EC2 instance type for the default managed nodegroup.
-	// Defaults to "t3.medium".
-	InstanceType string `default:"t3.medium" json:"instanceType,omitzero"`
-	// DesiredCapacity is the desired node count for the default managed nodegroup.
-	// Defaults to 2.
-	DesiredCapacity int32 `default:"2" json:"desiredCapacity,omitzero"`
-	// MinSize is the minimum node count for the default managed nodegroup.
-	// Defaults to 1.
-	MinSize int32 `default:"1" json:"minSize,omitzero"`
-	// MaxSize is the maximum node count for the default managed nodegroup.
-	// Defaults to 3.
-	MaxSize int32 `default:"3" json:"maxSize,omitzero"`
-	// AMIFamily selects the EKS-optimised AMI family (e.g., "AmazonLinux2023",
-	// "AmazonLinux2", "Bottlerocket"). Defaults to "AmazonLinux2023".
-	AMIFamily string `default:"AmazonLinux2023" json:"amiFamily,omitzero"`
-}
+// EKS cluster metadata (region, Kubernetes version, nodegroup shape, AMI
+// family, etc.) lives in eks.yaml (eksctl.io/v1alpha5 ClusterConfig), which is
+// the authoritative source of truth. KSail does not duplicate those fields in
+// ksail.yaml; the EKS provisioner loads the eksctl ClusterConfig directly.
 
 // OptionsAWS defines options specific to the AWS cloud provider.
 // Credentials are resolved via the standard AWS SDK v2 credential chain;
@@ -195,7 +165,7 @@ type OptionsAWS struct {
 	// Defaults to "AWS_PROFILE".
 	ProfileEnvVar string `default:"AWS_PROFILE" json:"profileEnvVar,omitzero"`
 	// RegionEnvVar is the environment variable containing the AWS region.
-	// Takes precedence over OptionsEKS.Region when set.
+	// When set, it overrides the region declared in eks.yaml.
 	// Defaults to "AWS_REGION".
 	RegionEnvVar string `default:"AWS_REGION" json:"regionEnvVar,omitzero"`
 	// AccessKeyIDEnvVar is the environment variable containing a static AWS access key ID.

@@ -930,7 +930,7 @@ func generateDistributionContent(
 	case v1alpha1.DistributionKWOK:
 		// KWOK config is snapshotted via the scaffolder's kwok.yaml generation
 	case v1alpha1.DistributionEKS:
-		// EKS config is snapshotted via the scaffolder's eksctl.yaml generation
+		// EKS config is snapshotted via the scaffolder's eks.yaml generation
 	}
 }
 
@@ -980,7 +980,7 @@ func minimalDistributionConfigFile(distribution v1alpha1.Distribution) string {
 	case v1alpha1.DistributionKWOK:
 		return "kwok.yaml"
 	case v1alpha1.DistributionEKS:
-		return "eksctl.yaml"
+		return "eks.yaml"
 	case v1alpha1.DistributionVanilla:
 		return ""
 	default:

@@ -83,7 +83,7 @@ func (m *ConfigManager) createDistributionValidator() (*ksailvalidator.Validator
 		return m.createKWOKValidator()
 	case v1alpha1.DistributionEKS:
 		// EKS does not yet participate in declarative config validation; the
-		// eksctl.yaml is validated by the EKS provisioner.
+		// eks.yaml is validated by the EKS provisioner.
 		return ksailvalidator.NewValidator(), nil
 	default:
 		return ksailvalidator.NewValidator(), nil
@@ -185,7 +185,7 @@ func expectedDistributionConfigName(distribution v1alpha1.Distribution) string {
 	case v1alpha1.DistributionKWOK:
 		return "kwok.yaml"
 	case v1alpha1.DistributionEKS:
-		return "eksctl.yaml"
+		return "eks.yaml"
 	default:
 		return ""
 	}
