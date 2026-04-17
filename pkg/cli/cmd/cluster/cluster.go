@@ -1237,6 +1237,7 @@ func newProvisionerFactory(ctx *localregistry.Context) clusterprovisioner.Factor
 			Talos:    ctx.TalosConfig,
 			VCluster: ctx.VClusterConfig,
 			KWOK:     ctx.KWOKConfig,
+			EKS:      ctx.EKSConfig,
 		},
 	}
 }
@@ -3683,10 +3684,9 @@ func createEmptyDistributionConfig(
 			KWOK: &clusterprovisioner.KWOKConfig{},
 		}
 	case v1alpha1.DistributionEKS:
-		// EKS does not populate the shared DistributionConfig; eks.yaml is
-		// owned by the EKS provisioner. Return an empty config so list
-		// operations do not NPE for EKS entries.
-		return &clusterprovisioner.DistributionConfig{}
+		return &clusterprovisioner.DistributionConfig{
+			EKS: &clusterprovisioner.EKSConfig{},
+		}
 	default:
 		return &clusterprovisioner.DistributionConfig{
 			Kind: &v1alpha4.Cluster{},

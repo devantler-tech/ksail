@@ -8,11 +8,14 @@ import (
 	"path/filepath"
 
 	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
+	eksctlclient "github.com/devantler-tech/ksail/v6/pkg/client/eksctl"
 	k3dconfigmanager "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager/k3d"
 	kindconfigmanager "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager/kind"
 	talosconfigmanager "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager/talos"
 	"github.com/devantler-tech/ksail/v6/pkg/svc/detector"
+	awsprovider "github.com/devantler-tech/ksail/v6/pkg/svc/provider/aws"
 	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/clustererr"
+	eksprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/eks"
 	k3dprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/k3d"
 	kindprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/kind"
 	kwokprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/kwok"
@@ -52,6 +55,25 @@ type DistributionConfig struct {
 	VCluster *VClusterConfig
 	// KWOK holds the pre-loaded KWOK configuration.
 	KWOK *KWOKConfig
+	// EKS holds the pre-loaded EKS configuration.
+	EKS *EKSConfig
+}
+
+// EKSConfig holds EKS-specific configuration.
+type EKSConfig struct {
+	// Name is the cluster name (mirrors eksctl.yaml metadata.name).
+	Name string
+	// Region is the AWS region.
+	Region string
+	// ConfigPath is the path to the declarative eksctl.yaml.
+	ConfigPath string
+}
+
+// GetClusterName returns the EKS cluster name.
+// This implements the ClusterNameProvider interface used by
+// configmanager.GetClusterName.
+func (c *EKSConfig) GetClusterName() string {
+	return c.Name
 }
 
 // KWOKConfig holds KWOK-specific configuration.
@@ -136,11 +158,7 @@ func (f DefaultFactory) Create(
 	case v1alpha1.DistributionKWOK:
 		return f.createKWOKProvisioner(cluster)
 	case v1alpha1.DistributionEKS:
-		return nil, nil, fmt.Errorf(
-			"%w: %s (EKS provisioner is added in a follow-up change)",
-			ErrUnsupportedDistribution,
-			cluster.Spec.Cluster.Distribution,
-		)
+		return f.createEKSProvisioner(cluster)
 	default:
 		return nil, "", fmt.Errorf(
 			"%w: %s",
@@ -416,6 +434,38 @@ func (f DefaultFactory) createKWOKProvisioner(
 	)
 
 	return provisioner, kwokConfig, nil
+}
+
+func (f DefaultFactory) createEKSProvisioner(
+	_ *v1alpha1.Cluster,
+) (Provisioner, any, error) {
+	if f.DistributionConfig.EKS == nil {
+		return nil, nil, fmt.Errorf(
+			"eks config is required for EKS distribution: %w",
+			ErrMissingDistributionConfig,
+		)
+	}
+
+	eksConfig := f.DistributionConfig.EKS
+	client := eksctlclient.NewClient()
+
+	infraProvider, err := awsprovider.NewProvider(client, eksConfig.Region)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create AWS provider: %w", err)
+	}
+
+	provisioner, err := eksprovisioner.NewProvisioner(
+		eksConfig.Name,
+		eksConfig.Region,
+		eksConfig.ConfigPath,
+		client,
+		infraProvider,
+	)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create EKS provisioner: %w", err)
+	}
+
+	return provisioner, eksConfig, nil
 }
 
 // writeK3dConfigToTempFile writes the in-memory k3d config to a temporary file.

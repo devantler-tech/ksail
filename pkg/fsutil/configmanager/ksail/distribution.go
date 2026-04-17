@@ -4,9 +4,11 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v6/pkg/fsutil"
 	configmanagerinterface "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager"
 	k3dconfigmanager "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager/k3d"
 	kindconfigmanager "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager/kind"
@@ -15,6 +17,7 @@ import (
 	clusterprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster"
 	k3dv1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	kindv1alpha4 "sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
+	"sigs.k8s.io/yaml"
 )
 
 // loadKindConfig loads the Kind distribution configuration if it exists.
@@ -125,9 +128,7 @@ func (m *ConfigManager) loadAndCacheDistributionConfig() error {
 	case v1alpha1.DistributionKWOK:
 		return m.cacheKWOKConfig()
 	case v1alpha1.DistributionEKS:
-		// EKS distribution config (eks.yaml) is loaded by the EKS
-		// provisioner directly and not cached on the ConfigManager.
-		return nil
+		return m.cacheEKSConfig()
 	default:
 		return nil
 	}
@@ -316,4 +317,97 @@ func (m *ConfigManager) resolveKWOKName() string {
 	}
 
 	return "kwok-default"
+}
+
+// cacheEKSConfig caches EKS configuration. The eks.yaml path comes from
+// spec.cluster.distributionConfig (defaulting to "eks.yaml"). The cluster
+// name and region are read from the eks.yaml metadata when present, with
+// the kubeconfig context as fallback for the name.
+func (m *ConfigManager) cacheEKSConfig() error {
+	configPath := strings.TrimSpace(m.Config.Spec.Cluster.DistributionConfig)
+	if configPath == "" {
+		configPath = "eks.yaml"
+	}
+
+	resolvedPath, name, region, err := readEKSConfigMetadata(configPath)
+	if err != nil {
+		return err
+	}
+
+	if name == "" {
+		name = m.resolveEKSNameFromContext()
+	}
+
+	m.DistributionConfig.EKS = &clusterprovisioner.EKSConfig{
+		Name:       name,
+		Region:     region,
+		ConfigPath: resolvedPath,
+	}
+
+	return nil
+}
+
+// readEKSConfigMetadata reads the eksctl config file at configPath (if it
+// exists) and returns its canonical path plus the parsed metadata.name /
+// metadata.region fields. A missing file returns empty strings and no error
+// so callers can fall back to context-based defaults.
+func readEKSConfigMetadata(configPath string) (string, string, string, error) {
+	_, err := os.Stat(configPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", "", "", nil
+		}
+
+		return "", "", "", fmt.Errorf("failed to stat EKS config file: %w", err)
+	}
+
+	canonical, err := fsutil.EvalCanonicalPath(configPath)
+	if err != nil {
+		return "", "", "", fmt.Errorf("failed to canonicalize EKS config path: %w", err)
+	}
+
+	data, err := fsutil.ReadFileSafe(filepath.Dir(canonical), canonical)
+	if err != nil {
+		return "", "", "", fmt.Errorf("failed to read EKS config file: %w", err)
+	}
+
+	var meta struct {
+		Metadata struct {
+			Name   string `json:"name"`
+			Region string `json:"region"`
+		} `json:"metadata"`
+	}
+
+	err = yaml.Unmarshal(data, &meta)
+	if err != nil {
+		return "", "", "", fmt.Errorf("failed to parse EKS config file: %w", err)
+	}
+
+	return canonical, meta.Metadata.Name, meta.Metadata.Region, nil
+}
+
+// resolveEKSNameFromContext extracts the cluster name from an EKS kubeconfig
+// context of the form "<iam-identity>@<name>.<region>.eksctl.io", falling
+// back to "eks-default".
+func (m *ConfigManager) resolveEKSNameFromContext() string {
+	ctx := strings.TrimSpace(m.Config.Spec.Cluster.Connection.Context)
+	if ctx == "" {
+		return "eks-default"
+	}
+
+	if idx := strings.LastIndex(ctx, "@"); idx >= 0 && idx+1 < len(ctx) {
+		ctx = ctx[idx+1:]
+	}
+
+	if trimmed, ok := strings.CutSuffix(ctx, ".eksctl.io"); ok {
+		if dot := strings.LastIndex(trimmed, "."); dot > 0 {
+			trimmed = trimmed[:dot]
+		}
+
+		if trimmed != "" {
+			return trimmed
+		}
+	}
+
+	return "eks-default"
 }
