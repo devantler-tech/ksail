@@ -1,24 +1,35 @@
 {
-  "last_run": "2026-04-16T21:50:00Z",
-  "last_run_id": "24542174125",
-  "issue_cursor": 4082,
-  "commented_issues": [
-    3414, 3572, 3574, 3591, 3592, 3596, 3609, 3625, 3675, 3673, 3730, 3729,
-    3765, 3783, 3865, 3912, 3917, 3922, 3936, 3942, 3973, 3987, 3999,
-    2261, 2810, 3772, 4022, 4029, 4038, 4039, 4040, 4045, 4060, 4067, 4069, 4080
-  ],
-  "open_prs": [],
+  "last_run": "2026-04-17T13:00:00Z",
+  "workflow_run_id": "24565319405",
+  "issue_cursor": 4093,
+  "pr_cursor": 4097,
   "code_quality_domain": "refactor",
-  "notes": [
-    "PR #4062 (perf NormalizeImageRef) merged",
-    "PR #4061 (docs ai-chat MDX fix) merged",
-    "PR #4058 (feat KWOK) still open in merge queue",
-    "Issue #4071: refactor+retry PR blocked by protected file rule — created as issue instead",
-    "DistributionKWOK only exists in PR #4058 branch, not main",
-    "New Omni fix PR created this run (fix Omni update saveOmniConfigs)",
-    "New KWOK parent issue created this run (aw_kwkpar2)",
-    "KWOK cascade sub-issues linked: #4060 #4063 #4066 #4067 #4068 #4079",
-    "Issue #4067 comment: InstallCNI needs KWOK guard + WaitForNamespaceDaemonSetsReady needs KWOK guard (both in PR #4058 branch)",
-    "Issue #4080 comment: CI passing on main since run #11096"
-  ]
+  "open_repo_assist_prs": [
+    {
+      "number": 4083,
+      "title": "fix(talos): refresh Omni kubeconfig/talosconfig on cluster update",
+      "branch": "repo-assist/fix-issue-3922-omni-update",
+      "status": "open",
+      "ci": "passing",
+      "note": "Fixes #3922, ready for maintainer review"
+    }
+  ],
+  "pending_issues_created_this_run": [
+    "chore: exclude I/O-bound BenchmarkCreateTarball from benchmark fail gate (refs #4090) - number TBD"
+  ],
+  "commented_issues": [
+    4086, 4090, 4091, 4068,
+    4067, 4080, 4069, 4060, 4045, 4038, 4039, 4040, 4029, 4022,
+    3999, 3987, 3942, 3936, 3922, 3912, 3917, 3772, 2261, 3865, 3783, 3765,
+    3730, 3729, 3738, 3675, 3673, 3625, 3572, 2810, 3591, 3592, 3596,
+    3609, 3414, 3574, 4080
+  ],
+  "notes": {
+    "kwok_exclusions_status": "PR #4058 merged (commit a131aff6) - all KWOK+init=false+local-registry exclusions now in main",
+    "k3s_blob_flake": "blob acd87f4 (traefik/whoami:v1.10) has appeared in #4011 and #4091 - persistent mirror cache corruption",
+    "vcluster_tls_bootstrap": "#4068 - issue appears to be in VCluster SDK v0.33.1 standalone mode, not ksail code",
+    "benchmark_ci_fix": "ci.yaml change to exclude BenchmarkCreateTarball from fail gate was committed to repo-assist/perf-exclude-io-benchmarks-from-gate - PR may be blocked by protected files rule",
+    "monthly_activity_issue": 3605,
+    "protected_files_note": ".github/workflows/ files cannot be modified via Repo Assist PRs - must create issues instead"
+  }
 }
