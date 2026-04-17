@@ -1317,7 +1317,7 @@ jobs:
           # Exclude I/O-bound BenchmarkCreateTarball_*: timing is dominated by
           # CI runner disk-cache state and can vary significantly between runs.
           awk '/^Benchmark/ && /ns\/op/ {
-            if ($1 ~ /^BenchmarkCreateTarball/) next
+            if ($1 ~ /^BenchmarkCreateTarball_/) next
             for (i = 1; i <= NF; i++) {
               if ($(i+1) == "ns/op" && $i + 0 < 100) next
             }
