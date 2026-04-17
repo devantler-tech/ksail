@@ -234,7 +234,10 @@ func RenameKubeconfigContextForTest(kubeconfigData []byte, desiredContext string
 }
 
 // RefreshOmniConfigsIfNeededForTest exposes refreshOmniConfigsIfNeeded for unit testing.
-func (p *Provisioner) RefreshOmniConfigsIfNeededForTest(ctx context.Context, clusterName string) error {
+func (p *Provisioner) RefreshOmniConfigsIfNeededForTest(
+	ctx context.Context,
+	clusterName string,
+) error {
 	return p.refreshOmniConfigsIfNeeded(ctx, clusterName)
 }
 
