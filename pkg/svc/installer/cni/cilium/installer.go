@@ -179,8 +179,9 @@ func (c *Installer) getCiliumValues() map[string]string {
 	case v1alpha1.DistributionVanilla,
 		v1alpha1.DistributionK3s,
 		v1alpha1.DistributionVCluster,
-		v1alpha1.DistributionKWOK:
-		// Vanilla, K3s, VCluster, and KWOK use default values
+		v1alpha1.DistributionKWOK,
+		v1alpha1.DistributionEKS:
+		// Vanilla, K3s, VCluster, KWOK, and EKS use default values.
 	}
 
 	// Add provider-specific values.
@@ -194,8 +195,9 @@ func (c *Installer) getCiliumValues() map[string]string {
 		if effective != v1alpha1.LoadBalancerEnabled {
 			maps.Copy(values, dockerCiliumValues())
 		}
-	case v1alpha1.ProviderHetzner, v1alpha1.ProviderOmni:
-		// Hetzner and Omni use default values
+	case v1alpha1.ProviderHetzner, v1alpha1.ProviderOmni, v1alpha1.ProviderAWS:
+		// Hetzner, Omni, and AWS use default values (Cilium is not installed
+		// on EKS by KSail, but if selected it behaves like other cloud providers).
 	}
 
 	return values

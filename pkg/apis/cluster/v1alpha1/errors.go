@@ -59,3 +59,16 @@ var ErrLocalRegistryNotSupported = errors.New(
 	"cloud provider requires an external registry\n" +
 		"- use --local-registry with an internet-accessible registry (e.g., ghcr.io/myorg)",
 )
+
+// ErrAWSCredentialsMissing is returned when AWS credentials cannot be resolved via the SDK credential chain.
+var ErrAWSCredentialsMissing = errors.New(
+	"AWS credentials not found; configure them via 'aws configure', AWS_PROFILE, " +
+		"or static AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY",
+)
+
+// ErrEksctlBinaryMissing is returned when the eksctl CLI binary is not on PATH.
+// Cluster creation on the EKS distribution is delegated to eksctl; see
+// https://eksctl.io/installation/ for installation instructions.
+var ErrEksctlBinaryMissing = errors.New(
+	"eksctl binary not found on PATH; install from https://eksctl.io/installation/",
+)

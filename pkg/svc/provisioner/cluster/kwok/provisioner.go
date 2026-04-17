@@ -19,8 +19,7 @@ import (
 	startcluster "sigs.k8s.io/kwok/pkg/kwokctl/cmd/start/cluster"
 	stopcluster "sigs.k8s.io/kwok/pkg/kwokctl/cmd/stop/cluster"
 	kwokruntime "sigs.k8s.io/kwok/pkg/kwokctl/runtime"
-	// Register the Docker compose runtime so kwokctl can find it.
-	_ "sigs.k8s.io/kwok/pkg/kwokctl/runtime/compose"
+	_ "sigs.k8s.io/kwok/pkg/kwokctl/runtime/compose" // Register the Docker compose runtime so kwokctl can find it.
 	kwoklog "sigs.k8s.io/kwok/pkg/log"
 )
 

@@ -352,6 +352,8 @@ func (s *Scaffolder) generateDistributionConfig(output string, force bool) error
 		return s.generateVClusterConfig(output, force)
 	case v1alpha1.DistributionKWOK:
 		return s.generateKWOKConfig(output, force)
+	case v1alpha1.DistributionEKS:
+		return s.generateEKSConfig(output, force)
 	default:
 		return ErrUnknownDistribution
 	}

@@ -358,6 +358,15 @@ func CreateMinimalProvisionerForProvider(
 
 		return provisioner, nil
 
+	case v1alpha1.ProviderAWS:
+		// AWS only supports EKS, which is not a docker-based distribution
+		// and therefore cannot be produced by the minimal multi-provisioner
+		// path. EKS lifecycle operations go through the factory-driven path.
+		return nil, fmt.Errorf(
+			"%w: AWS provider is only supported via the EKS distribution",
+			clusterprovisioner.ErrUnsupportedProvider,
+		)
+
 	default:
 		return nil, fmt.Errorf(
 			"%w: %s",

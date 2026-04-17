@@ -145,6 +145,8 @@ func ShowDeletionPreview(writer io.Writer, preview *DeletionPreview) {
 		writeHetznerResources(&previewText, preview)
 	case v1alpha1.ProviderOmni:
 		writeOmniResources(&previewText, preview)
+	case v1alpha1.ProviderAWS:
+		writeAWSResources(&previewText, preview)
 	}
 
 	notify.Warningf(writer, "%s", previewText.String())
@@ -210,6 +212,19 @@ func writeOmniResources(previewText *strings.Builder, preview *DeletionPreview) 
 
 		for _, machine := range preview.Servers {
 			previewText.WriteString("\n    - " + machine)
+		}
+	}
+}
+
+// writeAWSResources writes AWS/EKS-specific resources to the preview.
+// eksctl owns the underlying CloudFormation stacks so we only surface a
+// human-readable placeholder rather than individual AWS resource names.
+func writeAWSResources(previewText *strings.Builder, preview *DeletionPreview) {
+	if len(preview.Servers) > 0 {
+		previewText.WriteString("\n  EKS Resources:")
+
+		for _, resource := range preview.Servers {
+			previewText.WriteString("\n    - " + resource)
 		}
 	}
 }

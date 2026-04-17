@@ -30,6 +30,9 @@ var (
 	// ErrKWOKConfigGeneration wraps failures when creating KWOK configuration.
 	ErrKWOKConfigGeneration = errors.New("failed to generate kwok configuration")
 
+	// ErrEKSConfigGeneration wraps failures when creating EKS (eksctl) configuration.
+	ErrEKSConfigGeneration = errors.New("failed to generate eksctl configuration")
+
 	// ErrKustomizationGeneration wraps failures when creating kustomization.yaml.
 	ErrKustomizationGeneration = errors.New("failed to generate kustomization configuration")
 
