@@ -72,7 +72,7 @@ require (
 	github.com/siderolabs/go-kubernetes v0.2.36
 	github.com/siderolabs/go-retry v0.3.3
 	github.com/siderolabs/omni/client v1.6.4
-	golang.org/x/text v0.35.0
+	golang.org/x/text v0.36.0
 	gopkg.in/yaml.v3 v3.0.1
 	sigs.k8s.io/kwok v0.7.1-0.20260414082732-bea15031f3ec
 )
