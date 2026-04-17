@@ -23,6 +23,9 @@ https://x-access-token/
 https://githubnext.github.io/gh-aw/llms-create-agentic-workflows.txt
 https://githubnext.github.io/gh-aw/_llms-txt/agentic-workflows.txt
 
+# Intermittent Network Errors (siderolabs.com returns 500 occasionally in CI)
+https://www.siderolabs.com/
+
 # Intermittent Network Errors (codecov badge returns 502 occasionally)
 https://codecov.io/gh/devantler-tech/ksail/graph/badge.svg
 
