@@ -5215,8 +5215,9 @@ const switchKubeconfigFileMode = 0o600
 const switchLongDesc = `Switch the active kubeconfig context to the named cluster.
 
 This command accepts a cluster name and automatically resolves it to the
-correct kubeconfig context by checking all supported distribution prefixes
-(kind-, k3d-, admin@, vcluster-docker_).
+correct kubeconfig context by checking all supported distribution context
+naming conventions (kind-, k3d-, admin@, vcluster-docker_, kwok-, and
+*.eksctl.io).
 
 If multiple distributions have contexts for the same cluster name, the
 command returns an error listing the matching contexts.
@@ -5516,15 +5517,59 @@ func clusterNamesFromPath(kubeconfigPath string) []string {
 func stripDistributionPrefix(contextName string) string {
 	const sentinel = "\x00"
 
+	// Suffix-style templates (e.g., "<name>.eksctl.io") must be checked before
+	// prefix templates because the eksctl runtime context also starts with
+	// "admin@", which would otherwise be stolen by the Talos prefix.
 	for _, dist := range v1alpha1.ValidDistributions() {
-		prefix := strings.TrimSuffix(dist.ContextName(sentinel), sentinel)
+		template := dist.ContextName(sentinel)
+		if template == "" {
+			continue
+		}
 
+		if before, after, ok := strings.Cut(template, sentinel); ok && before == "" {
+			if name := extractClusterNameFromSuffixContext(contextName, after); name != "" {
+				return name
+			}
+		}
+	}
+
+	for _, dist := range v1alpha1.ValidDistributions() {
+		template := dist.ContextName(sentinel)
+		if template == "" {
+			continue
+		}
+
+		if before, _, ok := strings.Cut(template, sentinel); ok && before == "" {
+			continue
+		}
+
+		prefix := strings.TrimSuffix(template, sentinel)
 		if after, found := strings.CutPrefix(contextName, prefix); found {
 			return after
 		}
 	}
 
 	return ""
+}
+
+// extractClusterNameFromSuffixContext recovers a cluster name from a context
+// whose template is "<name><suffix>" or "<iam>@<name>.<region><suffix>".
+// Returns empty string when the context does not match.
+func extractClusterNameFromSuffixContext(contextName, suffix string) string {
+	trimmed, ok := strings.CutSuffix(contextName, suffix)
+	if !ok {
+		return ""
+	}
+
+	if at := strings.LastIndex(trimmed, "@"); at >= 0 {
+		trimmed = trimmed[at+1:]
+	}
+
+	if dot := strings.LastIndex(trimmed, "."); dot >= 0 {
+		trimmed = trimmed[:dot]
+	}
+
+	return trimmed
 }
 
 // resolveKubeconfigForSwitch resolves the kubeconfig path using the same priority

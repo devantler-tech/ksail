@@ -200,6 +200,31 @@ func TestStripDistributionPrefix_EmptyReturnsEmpty(t *testing.T) {
 	assert.Empty(t, cluster.ExportStripDistributionPrefix(""))
 }
 
+func TestStripDistributionPrefix_KnownPatterns(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		contextName string
+		want        string
+	}{
+		{"kind", "kind-dev", "dev"},
+		{"k3d", "k3d-dev", "dev"},
+		{"talos", "admin@prod", "prod"},
+		{"vcluster", "vcluster-docker_my-vc", "my-vc"},
+		{"kwok", "kwok-sim", "sim"},
+		{"eks scaffold", "eks-default.eksctl.io", "eks-default"},
+		{"eks runtime", "admin@eks-default.us-east-1.eksctl.io", "eks-default"},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, testCase.want, cluster.ExportStripDistributionPrefix(testCase.contextName))
+		})
+	}
+}
+
 // ===========================================================================
 // isEmptyYAML — empty YAML detection
 // ===========================================================================

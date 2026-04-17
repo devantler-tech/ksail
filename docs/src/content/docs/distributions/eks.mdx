@@ -1,0 +1,112 @@
+---
+title: Amazon EKS
+description: Provision Amazon EKS clusters declaratively with KSail using eksctl.
+---
+
+KSail can scaffold and manage [Amazon Elastic Kubernetes Service](https://aws.amazon.com/eks/) clusters through the [eksctl](https://eksctl.io/) CLI. The EKS distribution targets production-grade managed Kubernetes on AWS, with the cluster topology described in a declarative `eksctl.yaml` that ships alongside your `ksail.yaml`.
+
+## What is the EKS distribution?
+
+EKS is AWS's managed Kubernetes offering. KSail delegates cluster create/delete/list operations to the upstream `eksctl` binary so you get the full expressiveness of the [eksctl `ClusterConfig`](https://eksctl.io/usage/schema/) schema (managed nodegroups, IAM OIDC, addons, access entries, Karpenter, etc.) without KSail having to track the schema itself.
+
+> [!IMPORTANT]
+> The EKS distribution requires the `eksctl` binary on your `PATH`. Install it from [eksctl.io/installation](https://eksctl.io/installation/). This is the only KSail distribution that depends on an external CLI beyond Docker.
+
+## When to Use EKS
+
+EKS is the right choice when you need:
+
+- A production-grade managed Kubernetes control plane on AWS
+- Native AWS integrations (ALB/NLB, EBS, IAM for service accounts, VPC CNI)
+- Eksctl's declarative `ClusterConfig` as the single source of truth for cluster topology
+
+For local development or CI, prefer [Vanilla (Kind)](/distributions/vanilla/), [K3s](/distributions/k3s/), or [KWOK](/distributions/kwok/).
+
+## Prerequisites
+
+1. **AWS account** with permissions to create EKS clusters, CloudFormation stacks, IAM roles, and EC2 resources (the [eksctl minimum IAM policy](https://eksctl.io/usage/minimum-iam-policies/) is a good starting point).
+2. **AWS credentials** resolvable by the standard AWS SDK chain (`AWS_PROFILE`, `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`, SSO, or an IAM instance profile).
+3. **eksctl binary** on `PATH` — see [eksctl.io/installation](https://eksctl.io/installation/).
+4. **Docker** for the local KSail toolchain.
+
+## Quick Start
+
+### 1. Initialize an EKS Project
+
+```bash
+mkdir my-eks-cluster
+cd my-eks-cluster
+
+ksail cluster init \
+  --distribution EKS \
+  --provider AWS
+```
+
+This generates:
+
+- `ksail.yaml` — KSail cluster configuration (distribution = `EKS`, provider = `AWS`)
+- `eksctl.yaml` — eksctl `ClusterConfig` (cluster metadata, managed nodegroup, VPC CNI and EBS CSI addons)
+- `k8s/kustomization.yaml` — directory for your workloads
+
+### 2. Create the Cluster
+
+```bash
+ksail cluster create
+```
+
+KSail shells out to `eksctl create cluster -f eksctl.yaml`. Expect 15–20 minutes for CloudFormation to finish.
+
+### 3. Verify the Cluster
+
+```bash
+ksail cluster info
+kubectl get nodes
+```
+
+## ksail.yaml Reference
+
+`spec.cluster.eks` seeds the scaffolded `eksctl.yaml` and drives diff classification for `ksail cluster update`:
+
+```yaml
+apiVersion: ksail.io/v1alpha1
+kind: Cluster
+spec:
+  cluster:
+    distribution: EKS
+    provider: AWS
+    distributionConfig: eksctl.yaml
+    eks:
+      region: us-east-1
+      kubernetesVersion: "1.31"
+      nodeGroupName: ng-default
+      instanceType: t3.medium
+      desiredCapacity: 2
+      minSize: 1
+      maxSize: 3
+      amiFamily: AmazonLinux2023
+```
+
+## Update Semantics
+
+KSail's diff engine classifies `spec.cluster.eks` changes as follows:
+
+| Field | Impact |
+|-------|--------|
+| `kubernetesVersion` | in-place — eksctl upgrades the control plane and rolls managed nodegroups |
+| `desiredCapacity` / `minSize` / `maxSize` | in-place — managed nodegroup Auto Scaling group update |
+| `region` | recreate — an existing EKS cluster cannot change regions |
+| `nodeGroupName` | recreate — renaming invalidates the managed nodegroup |
+| `instanceType` | recreate — EC2 instance type is immutable on an existing nodegroup |
+| `amiFamily` | recreate — AMI family is immutable on an existing nodegroup |
+
+## Limitations (v1)
+
+- Managed nodegroups only — Fargate profiles, self-managed nodegroups, and Karpenter are out of scope for the first release.
+- KSail's optional installers for CNI, CSI, LoadBalancer, and metrics-server are **skipped** for EKS because the scaffolded `eksctl.yaml` already provisions [Amazon VPC CNI](https://docs.aws.amazon.com/eks/latest/userguide/managing-vpc-cni.html), the [Amazon EBS CSI addon](https://docs.aws.amazon.com/eks/latest/userguide/ebs-csi.html), and the [AWS Load Balancer Controller](https://docs.aws.amazon.com/eks/latest/userguide/aws-load-balancer-controller.html) via eksctl addons.
+- Importing pre-existing, non-eksctl-managed EKS clusters is not supported.
+
+## See Also
+
+- [AWS Provider](/providers/aws/)
+- [eksctl documentation](https://eksctl.io/)
+- [EKS documentation](https://docs.aws.amazon.com/eks/)
