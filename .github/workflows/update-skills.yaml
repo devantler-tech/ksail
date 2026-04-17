@@ -27,27 +27,46 @@ jobs:
         with:
           persist-credentials: true
 
-      - name: ⚙️ Setup Node.js
-        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
-        with:
-          node-version: "24"
+      # Ensure gh >= 2.90.0 (required for `gh skill`, introduced in v2.90.0).
+      # The ubuntu-latest runner image currently ships gh 2.89.0, and the
+      # upstream setup-copilot-skills action's in-place /usr/local/bin install
+      # is masked by bash's hash cache, so we prepend a fresh gh to PATH here.
+      - name: 🔧 Install gh >= 2.90.0
+        shell: bash
+        env:
+          GH_VERSION: "2.90.0"
+        run: |
+          set -euo pipefail
+          case "$(uname -m)" in
+            x86_64|amd64) arch=amd64 ;;
+            arm64|aarch64) arch=arm64 ;;
+            *) echo "::error::Unsupported arch: $(uname -m)"; exit 1 ;;
+          esac
+          tarball="gh_${GH_VERSION}_linux_${arch}.tar.gz"
+          tmp="${RUNNER_TEMP:-/tmp}/gh-${GH_VERSION}"
+          mkdir -p "$tmp"
+          base_url="https://github.com/cli/cli/releases/download/v${GH_VERSION}"
+          curl -fsSL "${base_url}/${tarball}" -o "${tmp}/${tarball}"
+          curl -fsSL "${base_url}/gh_${GH_VERSION}_checksums.txt" \
+            | grep "${tarball}" \
+            | sha256sum --check --status
+          tar -xzC "$tmp" -f "${tmp}/${tarball}"
+          echo "${tmp}/gh_${GH_VERSION}_linux_${arch}/bin" >> "$GITHUB_PATH"
+
+      - name: ✅ Verify gh skill is available
+        shell: bash
+        run: |
+          if ! gh skill --help > /dev/null 2>&1; then
+            echo "::error::gh skill command not available — upgrade gh to >= 2.90.0"
+            exit 1
+          fi
 
       - name: 🔄 Update Copilot skills
-        run: |
-          if [ ! -f skills-lock.json ]; then
-            echo "::error::skills-lock.json not found"
-            exit 1
-          fi
-          jq_output=$(jq -e -r '.skills | to_entries[] | "\(.value.source)@\(.key)"' skills-lock.json)
-          if [ -z "$jq_output" ]; then
-            echo "::error::No skills found in skills-lock.json"
-            exit 1
-          fi
-          mapfile -t skills <<< "$jq_output"
-          for skill in "${skills[@]}"; do
-            echo "Updating $skill..."
-            npx skills add "$skill" -y --agent github-copilot
-          done
+        uses: devantler-tech/actions/setup-copilot-skills@538d7103ed24531647941b3a460393b5ac7ed756 # v2.2.0
+        with:
+          skills-lock: skills-lock.json
+          agent: github-copilot
+          scope: user
 
       - name: 📦 Create pull request
         uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
