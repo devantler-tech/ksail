@@ -7,21 +7,24 @@ KSail supports multiple Kubernetes distributions, providers, and components. Thi
 
 ## Distribution × Provider Matrix
 
-| Distribution     | Docker | Hetzner | Omni |
-| ---------------- | ------ | ------- | ---- |
-| Vanilla (Kind)   | ✅     | ❌      | ❌   |
-| K3s (K3d)        | ✅     | ❌      | ❌   |
-| Talos            | ✅     | ✅      | ✅   |
-| VCluster (Vind)  | ✅     | ❌      | ❌   |
-| KWOK (kwokctl)   | ✅     | ❌      | ❌   |
+| Distribution     | Docker | Hetzner | Omni | AWS |
+| ---------------- | ------ | ------- | ---- | --- |
+| Vanilla (Kind)   | ✅     | ❌      | ❌   | ❌  |
+| K3s (K3d)        | ✅     | ❌      | ❌   | ❌  |
+| Talos            | ✅     | ✅      | ✅   | ❌  |
+| VCluster (Vind)  | ✅     | ❌      | ❌   | ❌  |
+| KWOK (kwokctl)   | ✅     | ❌      | ❌   | ❌  |
+| EKS (eksctl) 🧪  | ❌     | ❌      | ❌   | 🧪  |
 
 **Notes:**
 
 - Docker provider requires Docker Desktop or Docker Engine installed locally — see [Docker Provider](/providers/docker/) for setup details
 - Hetzner provider requires `HCLOUD_TOKEN` environment variable and a Talos ISO uploaded to your Hetzner account (x86: `122630`, ARM: `122629` — see [Talos options](/configuration/declarative-configuration/#distribution-and-tool-options)) — see [Hetzner Provider](/providers/hetzner/) for setup details
 - Omni provider requires a [Sidero Omni](https://www.siderolabs.com/platform/saas-for-kubernetes/) account, an `OMNI_SERVICE_ACCOUNT_KEY` environment variable, and an Omni API endpoint configured via `spec.provider.omni.endpoint` in your KSail configuration — see [Omni Provider](/providers/omni/) for setup details
+- AWS provider requires the [eksctl](https://eksctl.io/installation/) binary on `PATH` and AWS credentials resolvable by the standard AWS SDK chain — see [AWS Provider](/providers/aws/) and [EKS Distribution](/distributions/eks/) for setup details
 - VCluster uses the [Vind](https://github.com/loft-sh/vcluster) Docker driver to run the control plane and optional worker nodes directly as Docker containers
 - KWOK uses the kwokctl Docker runtime to run etcd, kube-apiserver, and kwok-controller as Docker containers — nodes and pods are simulated at the API level
+- EKS delegates cluster lifecycle to the upstream `eksctl` CLI; cluster topology is declared in `eksctl.yaml` alongside `ksail.yaml`. 🧪 **EKS and the AWS provider are preview features** — expect rough edges and please file feedback at [devantler-tech/ksail issues](https://github.com/devantler-tech/ksail/issues/new?labels=eks,preview).
 
 ## Component × Distribution Matrix
 
@@ -102,24 +105,27 @@ KSail supports multiple Kubernetes distributions, providers, and components. Thi
 The `ksail cluster update` command applies configuration changes to a running cluster.
 Changes are classified by impact: **in-place** (no disruption), **reboot-required** (node restart needed), or **recreate-required** (full cluster recreation).
 
-| Change                   | Vanilla (Kind) | K3s (K3d) | Talos    | VCluster (Vind) | KWOK (kwokctl) |
-| ------------------------ | -------------- | --------- | -------- | --------------- | -------------- |
-| Distribution             | Recreate       | Recreate  | Recreate | Recreate        | Recreate       |
-| Provider                 | Recreate       | Recreate  | Recreate | Recreate        | Recreate       |
-| CNI                      | In-place       | In-place  | In-place | N/A             | Sim⁷           |
-| CSI                      | N/A⁵           | In-place  | In-place | N/A             | Sim⁷           |
-| Metrics Server           | In-place       | In-place  | In-place | N/A             | Sim⁷           |
-| Load Balancer            | In-place       | In-place  | N/A¹     | N/A             | Sim⁷           |
-| cert-manager             | In-place       | In-place  | In-place | In-place        | Sim⁷           |
-| Policy Engine            | In-place       | In-place  | In-place | In-place        | ❌⁸            |
-| GitOps Engine            | In-place       | In-place  | In-place | In-place        | Sim⁷           |
-| Local Registry           | Recreate       | In-place  | In-place | In-place        | Sim⁷           |
-| Mirrors Dir              | Recreate       | N/A       | N/A      | N/A             | N/A            |
-| Control Planes           | Recreate       | Recreate  | In-place | Recreate        | Recreate       |
-| Workers                  | Recreate       | In-place  | In-place | N/A             | N/A            |
-| Hetzner Server Type (CP) | N/A            | N/A       | Recreate | N/A             | N/A            |
-| Hetzner Location         | N/A            | N/A       | Recreate | N/A             | N/A            |
-| Hetzner Network          | N/A            | N/A       | Recreate | N/A             | N/A            |
+| Change                   | Vanilla (Kind) | K3s (K3d) | Talos    | VCluster (Vind) | KWOK (kwokctl) | EKS (eksctl) |
+| ------------------------ | -------------- | --------- | -------- | --------------- | -------------- | ------------ |
+| Distribution             | Recreate       | Recreate  | Recreate | Recreate        | Recreate       | Recreate     |
+| Provider                 | Recreate       | Recreate  | Recreate | Recreate        | Recreate       | Recreate     |
+| CNI                      | In-place       | In-place  | In-place | N/A             | Sim⁷           | N/A¹⁰        |
+| CSI                      | N/A⁵           | In-place  | In-place | N/A             | Sim⁷           | N/A¹⁰        |
+| Metrics Server           | In-place       | In-place  | In-place | N/A             | Sim⁷           | In-place     |
+| Load Balancer            | In-place       | In-place  | N/A¹     | N/A             | Sim⁷           | N/A¹⁰        |
+| cert-manager             | In-place       | In-place  | In-place | In-place        | Sim⁷           | In-place     |
+| Policy Engine            | In-place       | In-place  | In-place | In-place        | ❌⁸            | In-place     |
+| GitOps Engine            | In-place       | In-place  | In-place | In-place        | Sim⁷           | In-place     |
+| Local Registry           | Recreate       | In-place  | In-place | In-place        | Sim⁷           | N/A          |
+| Mirrors Dir              | Recreate       | N/A       | N/A      | N/A             | N/A            | N/A          |
+| Control Planes           | Recreate       | Recreate  | In-place | Recreate        | Recreate       | N/A¹¹        |
+| Workers                  | Recreate       | In-place  | In-place | N/A             | N/A            | In-place¹²   |
+| Hetzner Server Type (CP) | N/A            | N/A       | Recreate | N/A             | N/A            | N/A          |
+| Hetzner Location         | N/A            | N/A       | Recreate | N/A             | N/A            | N/A          |
+| Hetzner Network          | N/A            | N/A       | Recreate | N/A             | N/A            | N/A          |
+| EKS Region               | N/A            | N/A       | N/A      | N/A             | N/A            | Recreate     |
+| EKS Kubernetes Version   | N/A            | N/A       | N/A      | N/A             | N/A            | In-place     |
+| EKS Instance Type / AMI  | N/A            | N/A       | N/A      | N/A             | N/A            | Recreate     |
 
 **Notes:**
 
@@ -133,6 +139,9 @@ Changes are classified by impact: **in-place** (no disruption), **reboot-require
 - **¹ Load Balancer for Talos**: For Talos, the provider determines which LoadBalancer implementation is used (MetalLB on Docker, Hetzner Cloud Controller Manager on Hetzner). The `spec.cluster.loadBalancer` setting controls whether KSail installs LoadBalancer support. See [FAQ](/faq/#which-distributions-support-loadbalancer-services) for details.
 - **⁵ CSI for Vanilla (Kind)**: Kind bundles local-path-provisioner by default. KSail's detector reports it as `CSIEnabled` but cannot distinguish Kind's bundled CSI from a KSail-installed CSI driver, so CSI comparison is skipped entirely during `ksail cluster update`. To change CSI settings on a Vanilla cluster, recreate it with `ksail cluster delete && ksail cluster create`.
 - **⁶ Image Verification for Vanilla (Kind)**: Uses the containerd `io.containerd.image-verifier.v1.bindir` plugin (requires containerd 2.x / Kind `v0.31.0+` / `kindest/node:v1.35.1+`). Verifier binaries (e.g., Cosign, Notation) must be pre-installed in a custom Kind node image at `/opt/image-verifier/bin`. See [Vanilla Image Verification](/distributions/vanilla/#image-verification).
+- **¹⁰ EKS managed components**: EKS provisions [Amazon VPC CNI](https://docs.aws.amazon.com/eks/latest/userguide/managing-vpc-cni.html), the [Amazon EBS CSI addon](https://docs.aws.amazon.com/eks/latest/userguide/ebs-csi.html), and the [AWS Load Balancer Controller](https://docs.aws.amazon.com/eks/latest/userguide/aws-load-balancer-controller.html) through `eksctl` addons declared in `eksctl.yaml`. KSail's optional installers for CNI/CSI/LB are skipped on EKS.
+- **¹¹ EKS Control Plane**: The EKS control plane is fully managed by AWS and has no user-configurable node count. The `spec.cluster.controlPlanes` field is ignored for EKS.
+- **¹² EKS Workers**: Workers translate to the `desiredCapacity`/`minSize`/`maxSize` of the default managed nodegroup. Scaling is in-place via Auto Scaling. Changing `instanceType`, `amiFamily`, or `nodeGroupName` requires recreating the nodegroup — see [EKS Distribution](/distributions/eks/#update-semantics).
 
 ## Platform Requirements
 

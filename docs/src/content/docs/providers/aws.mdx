@@ -1,0 +1,91 @@
+---
+title: AWS Provider (Preview)
+description: Provision Amazon EKS clusters on AWS with KSail. AWS support is a preview feature.
+---
+
+> [!CAUTION]
+> **The AWS provider is a preview feature** that ships alongside the [EKS distribution](/distributions/eks/). Flags and defaults may change in minor releases and you should expect rough edges. Please file bugs and feedback at [devantler-tech/ksail issues](https://github.com/devantler-tech/ksail/issues/new?labels=eks,preview).
+
+The AWS provider lets KSail manage Kubernetes clusters on [Amazon Web Services](https://aws.amazon.com/). It exclusively powers the [EKS distribution](/distributions/eks/) — KSail drives [eksctl](https://eksctl.io/) to provision a real managed control plane and managed nodegroups backed by EC2.
+
+## When to Use the AWS Provider
+
+Choose AWS when you need:
+
+- A production-grade managed Kubernetes control plane
+- Native AWS integrations (ALB/NLB, EBS, IAM for service accounts, VPC CNI)
+- Declarative cluster topology via the full [eksctl `ClusterConfig`](https://eksctl.io/usage/schema/) schema
+
+> [!NOTE]
+> The AWS provider only supports the **EKS** distribution. For local Docker-based clusters, see the [Docker Provider](/providers/docker/).
+
+## Prerequisites
+
+1. **AWS account** with permissions to create EKS clusters, CloudFormation stacks, IAM roles, and EC2 resources. Start from the [eksctl minimum IAM policy](https://eksctl.io/usage/minimum-iam-policies/).
+2. **eksctl binary** on `PATH` — install from [eksctl.io/installation](https://eksctl.io/installation/).
+3. **AWS credentials** resolvable by the standard AWS SDK chain (env vars, shared config, SSO, or instance profile).
+4. **Docker** for the local KSail toolchain.
+
+## Credential Resolution
+
+KSail does not read AWS credentials directly. Credentials are resolved by `eksctl` (and the AWS SDK) via the standard chain, in order:
+
+1. Environment variables — `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, optional `AWS_SESSION_TOKEN`
+2. `AWS_PROFILE` + shared config (`~/.aws/config`, `~/.aws/credentials`)
+3. SSO sessions from `aws sso login`
+4. EC2/ECS/EKS instance profiles
+
+### Customising the Environment Variable Names
+
+If your organisation uses non-standard env var names (for example, a wrapper that injects assumed-role credentials), point KSail at them in `ksail.yaml`:
+
+```yaml
+apiVersion: ksail.io/v1alpha1
+kind: Cluster
+spec:
+  cluster:
+    distribution: EKS
+    provider: AWS
+  provider:
+    aws:
+      profileEnvVar: AWS_PROFILE
+      regionEnvVar: AWS_REGION
+      accessKeyIdEnvVar: AWS_ACCESS_KEY_ID
+      secretAccessKeyEnvVar: AWS_SECRET_ACCESS_KEY
+      sessionTokenEnvVar: AWS_SESSION_TOKEN
+```
+
+The defaults match the AWS SDK defaults — override only when you need to.
+
+## ksail.yaml Reference
+
+```yaml
+apiVersion: ksail.io/v1alpha1
+kind: Cluster
+spec:
+  cluster:
+    distribution: EKS
+    provider: AWS
+    distributionConfig: eksctl.yaml
+```
+
+The provider is wired into the [EKS distribution](/distributions/eks/), which owns the cluster-specific options in `spec.cluster.eks`.
+
+## Lifecycle
+
+- **create** — shells out to `eksctl create cluster -f eksctl.yaml`
+- **delete** — shells out to `eksctl delete cluster --name <name> --region <region>`
+- **start / stop** — scales the default managed nodegroup up/down to stop paying for EC2 while preserving the control plane
+- **list / exists** — queries `eksctl get clusters`
+
+## Limitations
+
+- Managed nodegroups only in v1 (no Fargate, no self-managed, no Karpenter)
+- No cross-account or multi-region orchestration
+- Importing pre-existing, non-eksctl-managed EKS clusters is not supported
+
+## See Also
+
+- [EKS Distribution](/distributions/eks/)
+- [eksctl documentation](https://eksctl.io/)
+- [AWS CLI configuration](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-configure.html)
