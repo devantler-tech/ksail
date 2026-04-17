@@ -1305,7 +1305,7 @@ jobs:
             | xargs go test -bench=. -benchmem -run='^$' -timeout=30m \
             | tee "$RUNNER_TEMP/bench.txt"
 
-      - name: 🔍 Filter sub-microsecond benchmarks
+      - name: 🔍 Prepare benchmark regression gate input
         if: steps.discover.outputs.skip == 'false'
         shell: bash
         run: |
