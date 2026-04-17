@@ -28,7 +28,8 @@ func TestDistribution_ValidValues(t *testing.T) {
 	assert.Contains(t, values, "Talos")
 	assert.Contains(t, values, "VCluster")
 	assert.Contains(t, values, "KWOK")
-	assert.Len(t, values, 5)
+	assert.Contains(t, values, "EKS")
+	assert.Len(t, values, 6)
 }
 
 func TestCNI_Default(t *testing.T) {
@@ -355,7 +356,8 @@ func TestProvider_ValidValues(t *testing.T) {
 	assert.Contains(t, values, "Docker")
 	assert.Contains(t, values, "Hetzner")
 	assert.Contains(t, values, "Omni")
-	assert.Len(t, values, 3)
+	assert.Contains(t, values, "AWS")
+	assert.Len(t, values, 4)
 }
 
 func TestProvider_IsCloud(t *testing.T) {
@@ -369,6 +371,7 @@ func TestProvider_IsCloud(t *testing.T) {
 		{"docker", v1alpha1.ProviderDocker, false},
 		{"hetzner", v1alpha1.ProviderHetzner, true},
 		{"omni", v1alpha1.ProviderOmni, true},
+		{"aws", v1alpha1.ProviderAWS, true},
 		{"empty", v1alpha1.Provider(""), false},
 	}
 

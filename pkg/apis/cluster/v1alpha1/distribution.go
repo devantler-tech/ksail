@@ -20,6 +20,10 @@ const (
 	DistributionVCluster Distribution = "VCluster"
 	// DistributionKWOK is the KWOK distribution (simulated Kubernetes cluster).
 	DistributionKWOK Distribution = "KWOK"
+	// DistributionEKS is the Amazon EKS distribution (managed Kubernetes on AWS).
+	// Cluster creation is delegated to the eksctl CLI; Upgrade, Delete and nodegroup
+	// scaling are handled via the embedded eksctl Go libraries.
+	DistributionEKS Distribution = "EKS"
 )
 
 // ProvidesCDIByDefault returns true if the distribution enables CDI by default.
@@ -29,7 +33,7 @@ func (d *Distribution) ProvidesCDIByDefault() bool {
 	switch *d {
 	case DistributionTalos:
 		return true
-	case DistributionVanilla, DistributionK3s, DistributionVCluster, DistributionKWOK:
+	case DistributionVanilla, DistributionK3s, DistributionVCluster, DistributionKWOK, DistributionEKS:
 		return false
 	default:
 		return false
@@ -38,12 +42,12 @@ func (d *Distribution) ProvidesCDIByDefault() bool {
 
 // ProvidesMetricsServerByDefault returns true if the distribution includes metrics-server by default.
 // K3s includes metrics-server.
-// Vanilla, Talos, and VCluster (Vind with Distro: k8s) do not.
+// Vanilla, Talos, VCluster, KWOK, and EKS do not.
 func (d *Distribution) ProvidesMetricsServerByDefault() bool {
 	switch *d {
 	case DistributionK3s:
 		return true
-	case DistributionVanilla, DistributionTalos, DistributionVCluster, DistributionKWOK:
+	case DistributionVanilla, DistributionTalos, DistributionVCluster, DistributionKWOK, DistributionEKS:
 		return false
 	default:
 		return false
@@ -51,11 +55,12 @@ func (d *Distribution) ProvidesMetricsServerByDefault() bool {
 }
 
 // ProvidesStorageByDefault returns true if the distribution includes a storage provisioner by default.
-// K3s includes local-path-provisioner.
-// Vanilla, Talos, and VCluster (Vind with Distro: k8s) do not have a default storage class.
+// K3s includes local-path-provisioner; EKS includes the Amazon EBS CSI addon by default
+// when scaffolded via eksctl.
+// Vanilla, Talos, VCluster (Vind with Distro: k8s), and KWOK do not have a default storage class.
 func (d *Distribution) ProvidesStorageByDefault() bool {
 	switch *d {
-	case DistributionK3s:
+	case DistributionK3s, DistributionEKS:
 		return true
 	case DistributionVanilla, DistributionTalos, DistributionVCluster, DistributionKWOK:
 		return false
@@ -76,6 +81,9 @@ func (d *Distribution) ProvidesCSIByDefault(provider Provider) bool {
 	case DistributionTalos:
 		// Talos × Hetzner provides Hetzner CSI by default
 		return provider == ProviderHetzner
+	case DistributionEKS:
+		// EKS × AWS: Amazon EBS CSI driver is scaffolded as an eksctl addon
+		return provider == ProviderAWS
 	case DistributionVanilla, DistributionVCluster, DistributionKWOK:
 		// Vanilla (Kind), VCluster (Vind with Distro: k8s), and KWOK do not provide CSI by default
 		return false
@@ -101,6 +109,9 @@ func (d *Distribution) ProvidesLoadBalancerByDefault(provider Provider) bool {
 	case DistributionTalos:
 		// Talos × Hetzner: hcloud-ccm provides LB support (installed by KSail)
 		return provider == ProviderHetzner
+	case DistributionEKS:
+		// EKS × AWS: AWS Load Balancer Controller + native ELB Service integration
+		return provider == ProviderAWS
 	case DistributionVanilla, DistributionKWOK:
 		// Vanilla (Kind) and KWOK do not provide LoadBalancer by default
 		return false
@@ -120,7 +131,7 @@ func (d *Distribution) Set(value string) error {
 	}
 
 	return fmt.Errorf(
-		"%w: %s (valid options: %s, %s, %s, %s, %s)",
+		"%w: %s (valid options: %s, %s, %s, %s, %s, %s)",
 		ErrInvalidDistribution,
 		value,
 		DistributionVanilla,
@@ -128,6 +139,7 @@ func (d *Distribution) Set(value string) error {
 		DistributionTalos,
 		DistributionVCluster,
 		DistributionKWOK,
+		DistributionEKS,
 	)
 }
 
@@ -159,6 +171,7 @@ func (d *Distribution) ValidValues() []string {
 		string(DistributionTalos),
 		string(DistributionVCluster),
 		string(DistributionKWOK),
+		string(DistributionEKS),
 	}
 }
 
@@ -185,6 +198,11 @@ func (d *Distribution) ContextName(clusterName string) string {
 		return "vcluster-docker_" + clusterName
 	case DistributionKWOK:
 		return "kwok-" + clusterName
+	case DistributionEKS:
+		// eksctl writes kubeconfig contexts as <iam-user-or-role>@<cluster>.<region>.eksctl.io
+		// We cannot know the IAM identity at scaffold time, so we return the suffix only.
+		// Callers that need the full context should query the kubeconfig after cluster creation.
+		return clusterName + ".eksctl.io"
 	default:
 		return ""
 	}
@@ -209,6 +227,8 @@ func (d *Distribution) DefaultClusterName() string {
 		return "vcluster-default"
 	case DistributionKWOK:
 		return "kwok-default"
+	case DistributionEKS:
+		return "eks-default"
 	default:
 		return "kind"
 	}

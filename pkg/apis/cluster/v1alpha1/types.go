@@ -38,6 +38,7 @@ type Spec struct {
 type ProviderSpec struct {
 	Hetzner OptionsHetzner `json:"hetzner,omitzero"`
 	Omni    OptionsOmni    `json:"omni,omitzero"`
+	AWS     OptionsAWS     `json:"aws,omitzero"`
 }
 
 // ClusterSpec defines cluster-related configuration.
@@ -61,6 +62,7 @@ type ClusterSpec struct {
 	// Distribution-specific options
 	Vanilla OptionsVanilla `json:"vanilla,omitzero"`
 	Talos   OptionsTalos   `json:"talos,omitzero"`
+	EKS     OptionsEKS     `json:"eks,omitzero"`
 }
 
 // WorkloadSpec defines workload-related configuration.

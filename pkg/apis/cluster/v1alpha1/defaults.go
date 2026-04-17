@@ -11,6 +11,9 @@ const (
 	DefaultVClusterDistributionConfig = "vcluster.yaml"
 	// DefaultKWOKDistributionConfig is the default KWOK distribution configuration filename.
 	DefaultKWOKDistributionConfig = "kwok.yaml"
+	// DefaultEKSDistributionConfig is the default EKS distribution configuration filename
+	// (declarative eksctl ClusterConfig consumed by the eksctl CLI).
+	DefaultEKSDistributionConfig = "eksctl.yaml"
 	// DefaultSourceDirectory is the default directory for Kubernetes manifests.
 	DefaultSourceDirectory = "k8s"
 	// DefaultKubeconfigPath is the default path to the kubeconfig file.
@@ -63,6 +66,8 @@ func ExpectedDistributionConfigName(distribution Distribution) string {
 		return DefaultVClusterDistributionConfig
 	case DistributionKWOK:
 		return DefaultKWOKDistributionConfig
+	case DistributionEKS:
+		return DefaultEKSDistributionConfig
 	default:
 		return DefaultVanillaDistributionConfig
 	}
@@ -81,6 +86,11 @@ func ExpectedContextName(distribution Distribution) string {
 		return "vcluster-docker_vcluster-default"
 	case DistributionKWOK:
 		return "kwok-kwok-default"
+	case DistributionEKS:
+		// eksctl generates kubeconfig contexts as <iam-identity>@<name>.<region>.eksctl.io;
+		// the identity segment is only known after AWS credentials resolve at create time.
+		// Scaffolding falls back to the region-less suffix so ksail.yaml remains deterministic.
+		return "eks-default.eksctl.io"
 	default:
 		return ""
 	}

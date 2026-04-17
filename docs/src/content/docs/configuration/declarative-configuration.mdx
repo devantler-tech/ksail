@@ -202,6 +202,7 @@ Editor command for interactive workflows (e.g., `code --wait`, `vim`). Falls bac
 | `importImages` | string | – | Path to tar archive with container images to import after cluster creation but before component installation |
 | `vanilla` | OptionsVanilla | – |  |
 | `talos` | OptionsTalos | – |  |
+| `eks` | OptionsEKS | – |  |
 
 #### distribution
 
@@ -212,6 +213,7 @@ See [Distributions](/concepts/#distributions) for detailed information.
 - `Talos` – [Talos Linux](https://www.talos.dev/) in Docker containers or Hetzner Cloud servers
 - `VCluster` – Virtual clusters via [vCluster](https://www.vcluster.com/)
 - `KWOK` – Simulated clusters via [KWOK](https://kwok.sigs.k8s.io/) (control-plane only, no real workloads)
+- `EKS` – Amazon Elastic Kubernetes Service via [eksctl](https://eksctl.io/) (requires AWS credentials and the `eksctl` CLI on `PATH`)
 
 #### provider
 
@@ -220,9 +222,10 @@ See [Providers](/concepts/#providers) for more details.
 - `Docker` (default) – Run nodes as Docker containers (local development)
 - `Hetzner` – Run nodes on Hetzner Cloud servers (requires `HCLOUD_TOKEN`)
 - `Omni` – Manage Talos cluster nodes through [Sidero Omni](https://omni.siderolabs.com/)
+- `AWS` – Manage EKS clusters on Amazon Web Services (requires standard AWS SDK credentials)
 
 > [!NOTE]
-> Hetzner and Omni providers are only supported with the `Talos` distribution.
+> Hetzner and Omni providers are only supported with the `Talos` distribution. The AWS provider is only supported with the `EKS` distribution.
 
 #### distributionConfig
 
@@ -235,6 +238,7 @@ Path to the distribution-specific configuration file or directory. This tells KS
 - `Talos` → `talos/` (directory)
 - `VCluster` → `vcluster.yaml`
 - `KWOK` → `kwok.yaml`
+- `EKS` → `eksctl.yaml`
 
 See [Distribution Configuration](#distribution-configuration) below for details on each format.
 

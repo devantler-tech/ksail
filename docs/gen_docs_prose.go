@@ -180,7 +180,8 @@ const distributionDetails = `See [Distributions](/concepts/#distributions) for d
 - ` + bt + `K3s` + bt + ` – Lightweight Kubernetes via [K3d](https://k3d.io/)
 - ` + bt + `Talos` + bt + ` – [Talos Linux](https://www.talos.dev/) in Docker containers or Hetzner Cloud servers
 - ` + bt + `VCluster` + bt + ` – Virtual clusters via [vCluster](https://www.vcluster.com/)
-- ` + bt + `KWOK` + bt + ` – Simulated clusters via [KWOK](https://kwok.sigs.k8s.io/) (control-plane only, no real workloads)`
+- ` + bt + `KWOK` + bt + ` – Simulated clusters via [KWOK](https://kwok.sigs.k8s.io/) (control-plane only, no real workloads)
+- ` + bt + `EKS` + bt + ` – Amazon Elastic Kubernetes Service via [eksctl](https://eksctl.io/) (requires AWS credentials and the ` + bt + `eksctl` + bt + ` CLI on ` + bt + `PATH` + bt + `)`
 
 // providerDetails provides prose after the provider enum list.
 const providerDetails = `See [Providers](/concepts/#providers) for more details.
@@ -188,9 +189,10 @@ const providerDetails = `See [Providers](/concepts/#providers) for more details.
 - ` + bt + `Docker` + bt + ` (default) – Run nodes as Docker containers (local development)
 - ` + bt + `Hetzner` + bt + ` – Run nodes on Hetzner Cloud servers (requires ` + bt + `HCLOUD_TOKEN` + bt + `)
 - ` + bt + `Omni` + bt + ` – Manage Talos cluster nodes through [Sidero Omni](https://omni.siderolabs.com/)
+- ` + bt + `AWS` + bt + ` – Manage EKS clusters on Amazon Web Services (requires standard AWS SDK credentials)
 
 > [!NOTE]
-> Hetzner and Omni providers are only supported with the ` + bt + `Talos` + bt + ` distribution.`
+> Hetzner and Omni providers are only supported with the ` + bt + `Talos` + bt + ` distribution. The AWS provider is only supported with the ` + bt + `EKS` + bt + ` distribution.`
 
 // configDistributionProse describes the distributionConfig field.
 const configDistributionProse = `#### distributionConfig
@@ -204,6 +206,7 @@ Path to the distribution-specific configuration file or directory. This tells KS
 - ` + bt + `Talos` + bt + ` → ` + bt + `talos/` + bt + ` (directory)
 - ` + bt + `VCluster` + bt + ` → ` + bt + `vcluster.yaml` + bt + `
 - ` + bt + `KWOK` + bt + ` → ` + bt + `kwok.yaml` + bt + `
+- ` + bt + `EKS` + bt + ` → ` + bt + `eksctl.yaml` + bt + `
 
 See [Distribution Configuration](#distribution-configuration) below for details on each format.`
 
