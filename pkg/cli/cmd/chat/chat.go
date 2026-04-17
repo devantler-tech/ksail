@@ -947,7 +947,8 @@ func buildNonTUIOnEventHandler(writer io.Writer) copilot.SessionEventHandler {
 				_, _ = fmt.Fprintf(writer, "  ⏳ %s\n", data.ProgressMessage)
 			}
 		case copilot.SessionEventTypeSessionTaskComplete:
-			if data, ok := event.Data.(*copilot.SessionTaskCompleteData); ok && data.Summary != nil {
+			data, isTaskComplete := event.Data.(*copilot.SessionTaskCompleteData)
+			if isTaskComplete && data.Summary != nil {
 				_, _ = fmt.Fprintf(writer, "\n✅ %s\n", *data.Summary)
 			}
 		}
@@ -1189,13 +1190,13 @@ func formatArgsMap(args map[string]any) string {
 
 // getToolArgs formats tool arguments for display with parentheses.
 func getToolArgs(event copilot.SessionEvent) string {
-	data, ok := event.Data.(*copilot.ToolExecutionStartData)
-	if !ok || data.Arguments == nil {
+	startData, isStartData := event.Data.(*copilot.ToolExecutionStartData)
+	if !isStartData || startData.Arguments == nil {
 		return ""
 	}
 
-	args, ok := data.Arguments.(map[string]any)
-	if !ok || len(args) == 0 {
+	args, isMap := startData.Arguments.(map[string]any)
+	if !isMap || len(args) == 0 {
 		return ""
 	}
 
@@ -1410,7 +1411,9 @@ func buildTUIOnEventHandler(eventChan chan<- tea.Msg) copilot.SessionEventHandle
 			}
 		case copilot.SessionEventTypeSessionTaskComplete:
 			msg := ""
-			if data, ok := event.Data.(*copilot.SessionTaskCompleteData); ok && data.Summary != nil {
+
+			data, isTaskComplete := event.Data.(*copilot.SessionTaskCompleteData)
+			if isTaskComplete && data.Summary != nil {
 				msg = *data.Summary
 			}
 

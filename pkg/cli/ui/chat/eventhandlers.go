@@ -3,6 +3,7 @@ package chat
 import (
 	"errors"
 	"fmt"
+	"sync"
 
 	tea "github.com/charmbracelet/bubbletea"
 	copilot "github.com/github/copilot-sdk/go"
@@ -14,9 +15,10 @@ var errStreamEvent = errors.New("stream event error")
 // sessionEventDispatcher routes SDK session events to the appropriate tea.Msg channel.
 // It converts Copilot SDK events into chat-specific messages for the TUI.
 type sessionEventDispatcher struct {
+	mu              sync.Mutex
+	toolNames       map[string]string // ToolCallID → toolName, guarded by mu
 	eventChan       chan<- tea.Msg
 	commandBuilders map[string]CommandBuilder
-	toolNames       map[string]string // ToolCallID → toolName, for correlating start/complete
 }
 
 // newSessionEventDispatcher creates a dispatcher that routes events to the given channel.
@@ -150,7 +152,10 @@ func (d *sessionEventDispatcher) handleToolStart(event copilot.SessionEvent) {
 
 	toolName := data.ToolName
 	toolID := data.ToolCallID
+
+	d.mu.Lock()
 	d.toolNames[toolID] = toolName
+	d.mu.Unlock()
 
 	var mcpServerName, mcpToolName string
 	if data.McpServerName != nil {
@@ -179,8 +184,15 @@ func (d *sessionEventDispatcher) handleToolComplete(event copilot.SessionEvent) 
 	}
 
 	toolID := data.ToolCallID
-	toolName := d.toolNames[toolID]
+
+	d.mu.Lock()
+	toolName, recorded := d.toolNames[toolID]
 	delete(d.toolNames, toolID)
+	d.mu.Unlock()
+
+	if !recorded {
+		toolName = unknownToolName
+	}
 
 	output := ""
 	if data.Result != nil {
