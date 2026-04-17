@@ -5,10 +5,63 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	v1alpha1 "github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
 )
 
 // EKSConfigFile is the default eksctl configuration filename.
 const EKSConfigFile = "eksctl.yaml"
+
+// eksConfigDefaults holds resolved defaults for the scaffolded eksctl.yaml.
+// Zero and empty values from the user's KSail configuration are replaced with
+// sensible starting points so the scaffolded file is ready to apply.
+type eksConfigDefaults struct {
+	clusterName     string
+	region          string
+	version         string
+	nodeGroupName   string
+	instanceType    string
+	amiFamily       string
+	desiredCapacity int32
+	minSize         int32
+	maxSize         int32
+}
+
+func firstNonEmpty(value, fallback string) string {
+	if v := strings.TrimSpace(value); v != "" {
+		return v
+	}
+
+	return fallback
+}
+
+func firstPositiveInt32(value, fallback int32) int32 {
+	if value > 0 {
+		return value
+	}
+
+	return fallback
+}
+
+const (
+	defaultEKSDesiredCapacity int32 = 2
+	defaultEKSMinSize         int32 = 1
+	defaultEKSMaxSize         int32 = 3
+)
+
+func resolveEKSDefaults(opts v1alpha1.OptionsEKS) eksConfigDefaults {
+	return eksConfigDefaults{
+		clusterName:     "eks-default",
+		region:          firstNonEmpty(opts.Region, "us-east-1"),
+		version:         firstNonEmpty(opts.KubernetesVersion, "1.31"),
+		nodeGroupName:   firstNonEmpty(opts.NodeGroupName, "default"),
+		instanceType:    firstNonEmpty(opts.InstanceType, "t3.medium"),
+		amiFamily:       firstNonEmpty(opts.AMIFamily, "AmazonLinux2023"),
+		desiredCapacity: firstPositiveInt32(opts.DesiredCapacity, defaultEKSDesiredCapacity),
+		minSize:         firstPositiveInt32(opts.MinSize, defaultEKSMinSize),
+		maxSize:         firstPositiveInt32(opts.MaxSize, defaultEKSMaxSize),
+	}
+}
 
 // generateEKSConfig generates the eksctl.yaml configuration file.
 // It scaffolds a minimal declarative eksctl `ClusterConfig` with a single
@@ -27,59 +80,19 @@ func (s *Scaffolder) generateEKSConfig(output string, force bool) error {
 		return nil
 	}
 
-	clusterName := "eks-default"
+	defaults := resolveEKSDefaults(s.KSailConfig.Spec.Cluster.EKS)
 
-	region := strings.TrimSpace(s.KSailConfig.Spec.Cluster.EKS.Region)
-	if region == "" {
-		region = "us-east-1"
-	}
-
-	version := strings.TrimSpace(s.KSailConfig.Spec.Cluster.EKS.KubernetesVersion)
-	if version == "" {
-		version = "1.31"
-	}
-
-	nodeGroupName := strings.TrimSpace(s.KSailConfig.Spec.Cluster.EKS.NodeGroupName)
-	if nodeGroupName == "" {
-		nodeGroupName = "default"
-	}
-
-	instanceType := strings.TrimSpace(s.KSailConfig.Spec.Cluster.EKS.InstanceType)
-	if instanceType == "" {
-		instanceType = "t3.medium"
-	}
-
-	desiredCapacity := s.KSailConfig.Spec.Cluster.EKS.DesiredCapacity
-	if desiredCapacity <= 0 {
-		desiredCapacity = 2
-	}
-
-	minSize := s.KSailConfig.Spec.Cluster.EKS.MinSize
-	if minSize <= 0 {
-		minSize = 1
-	}
-
-	maxSize := s.KSailConfig.Spec.Cluster.EKS.MaxSize
-	if maxSize <= 0 {
-		maxSize = 3
-	}
-
-	amiFamily := strings.TrimSpace(s.KSailConfig.Spec.Cluster.EKS.AMIFamily)
-	if amiFamily == "" {
-		amiFamily = "AmazonLinux2023"
-	}
-
-	content := []byte(fmt.Sprintf(eksDefaultConfigTemplate,
-		clusterName,
-		region,
-		version,
-		nodeGroupName,
-		instanceType,
-		desiredCapacity,
-		minSize,
-		maxSize,
-		amiFamily,
-	))
+	content := fmt.Appendf(nil, eksDefaultConfigTemplate,
+		defaults.clusterName,
+		defaults.region,
+		defaults.version,
+		defaults.nodeGroupName,
+		defaults.instanceType,
+		defaults.desiredCapacity,
+		defaults.minSize,
+		defaults.maxSize,
+		defaults.amiFamily,
+	)
 
 	err := os.WriteFile(configPath, content, filePerm)
 	if err != nil {

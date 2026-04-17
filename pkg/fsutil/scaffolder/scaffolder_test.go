@@ -929,6 +929,8 @@ func generateDistributionContent(
 		// VCluster doesn't have a separate distribution config file to snapshot
 	case v1alpha1.DistributionKWOK:
 		// KWOK config is snapshotted via the scaffolder's kwok.yaml generation
+	case v1alpha1.DistributionEKS:
+		// EKS config is snapshotted via the scaffolder's eksctl.yaml generation
 	}
 }
 
@@ -945,53 +947,44 @@ func createMinimalClusterForSnapshot(
 		},
 	}
 
-	// Only add spec fields if they differ from defaults to match original hardcoded output
+	// For Kind, the original hardcoded output had no spec.
+	if distribution == v1alpha1.DistributionVanilla {
+		return minimalCluster
+	}
+
+	configFile := minimalDistributionConfigFile(distribution)
+	if configFile == "" {
+		return minimalCluster
+	}
+
+	minimalCluster.Spec = v1alpha1.Spec{
+		Cluster: v1alpha1.ClusterSpec{
+			Distribution:       distribution,
+			DistributionConfig: configFile,
+		},
+	}
+
+	return minimalCluster
+}
+
+// minimalDistributionConfigFile returns the scaffolded distribution config
+// filename for a given distribution, or empty when no config file applies.
+func minimalDistributionConfigFile(distribution v1alpha1.Distribution) string {
 	switch distribution {
-	case v1alpha1.DistributionVanilla:
-		// For Kind, the original hardcoded output had no spec, so return minimal cluster
-		return minimalCluster
 	case v1alpha1.DistributionK3s:
-		// For K3d, the original hardcoded output included distribution and distributionConfig
-		minimalCluster.Spec = v1alpha1.Spec{
-			Cluster: v1alpha1.ClusterSpec{
-				Distribution:       v1alpha1.DistributionK3s,
-				DistributionConfig: "k3d.yaml",
-			},
-		}
-
-		return minimalCluster
+		return "k3d.yaml"
 	case v1alpha1.DistributionTalos:
-		// For Talos, include distribution and distributionConfig
-		minimalCluster.Spec = v1alpha1.Spec{
-			Cluster: v1alpha1.ClusterSpec{
-				Distribution:       v1alpha1.DistributionTalos,
-				DistributionConfig: "talos",
-			},
-		}
-
-		return minimalCluster
+		return "talos"
 	case v1alpha1.DistributionVCluster:
-		// For VCluster, include distribution and distributionConfig
-		minimalCluster.Spec = v1alpha1.Spec{
-			Cluster: v1alpha1.ClusterSpec{
-				Distribution:       v1alpha1.DistributionVCluster,
-				DistributionConfig: "vcluster.yaml",
-			},
-		}
-
-		return minimalCluster
+		return "vcluster.yaml"
 	case v1alpha1.DistributionKWOK:
-		// For KWOK, include distribution and distributionConfig
-		minimalCluster.Spec = v1alpha1.Spec{
-			Cluster: v1alpha1.ClusterSpec{
-				Distribution:       v1alpha1.DistributionKWOK,
-				DistributionConfig: "kwok.yaml",
-			},
-		}
-
-		return minimalCluster
+		return "kwok.yaml"
+	case v1alpha1.DistributionEKS:
+		return "eksctl.yaml"
+	case v1alpha1.DistributionVanilla:
+		return ""
 	default:
-		return minimalCluster
+		return ""
 	}
 }
 

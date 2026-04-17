@@ -351,6 +351,10 @@ func runHostDebug(cmd *cobra.Command, nodeName string, args []string) error {
 		}
 
 		return runDockerHostDebug(cmd, info, nodeName, args)
+	case v1alpha1.DistributionEKS:
+		// Host-level debug on EKS nodes is not supported via KSail's host-debug
+		// path; users should use SSM/SSH directly against the EC2 instances.
+		return fmt.Errorf("%w: %s", ErrUnsupportedHostDebug, info.Distribution)
 	default:
 		return fmt.Errorf("%w: %s", ErrUnsupportedHostDebug, info.Distribution)
 	}
@@ -406,6 +410,10 @@ func resolveTalosNodeEndpoint(
 			nodeName,
 			info.Provider,
 		)
+	case v1alpha1.ProviderAWS:
+		// EKS host-level debug is not supported: nodes are AWS EC2 instances
+		// reachable only via SSM/SSH, not via Talos or Docker host debug paths.
+		return "", fmt.Errorf("%w: %s", ErrUnsupportedHostDebug, info.Provider)
 	default:
 		return "", fmt.Errorf("%w: %s", ErrUnsupportedHostDebug, info.Provider)
 	}
@@ -647,6 +655,10 @@ func distributionToLabelScheme(distribution v1alpha1.Distribution) dockerprovide
 		return dockerprovider.LabelSchemeVCluster
 	case v1alpha1.DistributionKWOK:
 		return dockerprovider.LabelSchemeKWOK
+	case v1alpha1.DistributionEKS:
+		// EKS nodes are EC2 instances without Docker labels; fall back to the
+		// default scheme — this path is not used for EKS in practice.
+		return dockerprovider.LabelSchemeKind
 	default:
 		return dockerprovider.LabelSchemeKind
 	}

@@ -273,6 +273,9 @@ func createValidKSailConfig(distribution v1alpha1.Distribution) *v1alpha1.Cluste
 	case v1alpha1.DistributionKWOK:
 		distributionConfigFile = "kwok.yaml"
 		contextName = "kwok-kwok-default" // Sample context name
+	case v1alpha1.DistributionEKS:
+		distributionConfigFile = "eksctl.yaml"
+		contextName = "eks-default.eksctl.io" // Sample context name
 	default:
 		distributionConfigFile = "cluster.yaml"
 		contextName = "ksail"

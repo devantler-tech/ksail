@@ -60,13 +60,53 @@ func resolveClusterName(
 	talosConfig *talosconfigmanager.Configs,
 	vclusterConfig *clusterprovisioner.VClusterConfig,
 ) string {
-	switch clusterCfg.Spec.Cluster.Distribution {
+	distribution := clusterCfg.Spec.Cluster.Distribution
+	if name, handled := resolveCoreDistributionName(
+		distribution,
+		clusterCfg,
+		kindConfig,
+		k3dConfig,
+		talosConfig,
+	); handled {
+		return name
+	}
+
+	return resolveAuxDistributionName(distribution, clusterCfg, vclusterConfig)
+}
+
+// resolveCoreDistributionName handles the distributions that delegate name
+// resolution to their respective configmanager packages.
+func resolveCoreDistributionName(
+	distribution v1alpha1.Distribution,
+	clusterCfg *v1alpha1.Cluster,
+	kindConfig *kindv1alpha4.Cluster,
+	k3dConfig *k3dv1alpha5.SimpleConfig,
+	talosConfig *talosconfigmanager.Configs,
+) (string, bool) {
+	switch distribution {
 	case v1alpha1.DistributionVanilla:
-		return kindconfigmanager.ResolveClusterName(clusterCfg, kindConfig)
+		return kindconfigmanager.ResolveClusterName(clusterCfg, kindConfig), true
 	case v1alpha1.DistributionK3s:
-		return k3dconfigmanager.ResolveClusterName(clusterCfg, k3dConfig)
+		return k3dconfigmanager.ResolveClusterName(clusterCfg, k3dConfig), true
 	case v1alpha1.DistributionTalos:
-		return talosconfigmanager.ResolveClusterName(clusterCfg, talosConfig)
+		return talosconfigmanager.ResolveClusterName(clusterCfg, talosConfig), true
+	case v1alpha1.DistributionVCluster,
+		v1alpha1.DistributionKWOK,
+		v1alpha1.DistributionEKS:
+		return "", false
+	}
+
+	return "", false
+}
+
+// resolveAuxDistributionName handles distributions without a dedicated
+// configmanager name resolver.
+func resolveAuxDistributionName(
+	distribution v1alpha1.Distribution,
+	clusterCfg *v1alpha1.Cluster,
+	vclusterConfig *clusterprovisioner.VClusterConfig,
+) string {
+	switch distribution {
 	case v1alpha1.DistributionVCluster:
 		if vclusterConfig != nil {
 			if name := strings.TrimSpace(vclusterConfig.GetClusterName()); name != "" {
@@ -84,6 +124,16 @@ func resolveClusterName(
 		}
 
 		return "kwok-default"
+	case v1alpha1.DistributionEKS:
+		if name := strings.TrimSpace(clusterCfg.Spec.Cluster.Connection.Context); name != "" {
+			return name
+		}
+
+		return "eks-default"
+	case v1alpha1.DistributionVanilla,
+		v1alpha1.DistributionK3s,
+		v1alpha1.DistributionTalos:
+		return "ksail"
 	}
 
 	return "ksail"
@@ -104,6 +154,9 @@ func resolveNetworkName(
 		return "vcluster." + trimOrDefault(clusterName, "vcluster-default")
 	case v1alpha1.DistributionKWOK:
 		return "kwok-" + trimOrDefault(clusterName, "kwok-default")
+	case v1alpha1.DistributionEKS:
+		// EKS does not use a local Docker network.
+		return ""
 	default:
 		return ""
 	}

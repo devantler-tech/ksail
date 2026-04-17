@@ -176,8 +176,9 @@ func (c *Installer) getCalicoValues() map[string]string {
 	case v1alpha1.DistributionVanilla,
 		v1alpha1.DistributionK3s,
 		v1alpha1.DistributionVCluster,
-		v1alpha1.DistributionKWOK:
-		// Vanilla, K3s, VCluster, and KWOK use default values
+		v1alpha1.DistributionKWOK,
+		v1alpha1.DistributionEKS:
+		// Vanilla, K3s, VCluster, KWOK, and EKS use default values.
 	}
 
 	return values

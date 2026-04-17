@@ -33,7 +33,11 @@ func (d *Distribution) ProvidesCDIByDefault() bool {
 	switch *d {
 	case DistributionTalos:
 		return true
-	case DistributionVanilla, DistributionK3s, DistributionVCluster, DistributionKWOK, DistributionEKS:
+	case DistributionVanilla,
+		DistributionK3s,
+		DistributionVCluster,
+		DistributionKWOK,
+		DistributionEKS:
 		return false
 	default:
 		return false
@@ -47,7 +51,11 @@ func (d *Distribution) ProvidesMetricsServerByDefault() bool {
 	switch *d {
 	case DistributionK3s:
 		return true
-	case DistributionVanilla, DistributionTalos, DistributionVCluster, DistributionKWOK, DistributionEKS:
+	case DistributionVanilla,
+		DistributionTalos,
+		DistributionVCluster,
+		DistributionKWOK,
+		DistributionEKS:
 		return false
 	default:
 		return false

@@ -62,7 +62,8 @@ var ErrLocalRegistryNotSupported = errors.New(
 
 // ErrAWSCredentialsMissing is returned when AWS credentials cannot be resolved via the SDK credential chain.
 var ErrAWSCredentialsMissing = errors.New(
-	"AWS credentials not found; configure them via 'aws configure', AWS_PROFILE, or static AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY",
+	"AWS credentials not found; configure them via 'aws configure', AWS_PROFILE, " +
+		"or static AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY",
 )
 
 // ErrEksctlBinaryMissing is returned when the eksctl CLI binary is not on PATH.

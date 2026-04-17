@@ -194,6 +194,11 @@ func CreateMinimalProvisioner(
 		return createMinimalVClusterProvisioner(clusterName)
 	case v1alpha1.DistributionKWOK:
 		return kwokprovisioner.NewProvisioner(clusterName, "", nil), nil
+	case v1alpha1.DistributionEKS:
+		return nil, fmt.Errorf(
+			"%w: EKS does not support the multi-provisioner path",
+			ErrUnsupportedDistribution,
+		)
 	default:
 		return nil, fmt.Errorf("%w: %s", ErrUnsupportedDistribution, dist)
 	}

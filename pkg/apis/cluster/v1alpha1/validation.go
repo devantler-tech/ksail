@@ -203,7 +203,8 @@ func ValidateLocalRegistryForProvider(provider Provider, registry LocalRegistry)
 	}
 
 	// Cloud providers require external registries with proper host configuration
-	if (provider == ProviderHetzner || provider == ProviderOmni || provider == ProviderAWS) && !registry.IsExternal() {
+	if (provider == ProviderHetzner || provider == ProviderOmni || provider == ProviderAWS) &&
+		!registry.IsExternal() {
 		return ErrLocalRegistryNotSupported
 	}
 

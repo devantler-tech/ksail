@@ -135,6 +135,12 @@ func (f DefaultFactory) Create(
 		return f.createVClusterProvisioner(cluster)
 	case v1alpha1.DistributionKWOK:
 		return f.createKWOKProvisioner(cluster)
+	case v1alpha1.DistributionEKS:
+		return nil, nil, fmt.Errorf(
+			"%w: %s (EKS provisioner is added in a follow-up change)",
+			ErrUnsupportedDistribution,
+			cluster.Spec.Cluster.Distribution,
+		)
 	default:
 		return nil, "", fmt.Errorf(
 			"%w: %s",

@@ -1698,6 +1698,10 @@ func resolveClusterNameFromContext(ctx *localregistry.Context) string {
 		return resolveVClusterName(ctx)
 	case v1alpha1.DistributionKWOK:
 		return resolveKWOKName(ctx)
+	case v1alpha1.DistributionEKS:
+		// EKS config is owned by eksctl (eksctl.yaml) and not cached on the
+		// local registry context; fall back to the cluster-level name.
+		return resolveFallbackName(ctx)
 	default:
 		return resolveFallbackName(ctx)
 	}
@@ -2131,6 +2135,11 @@ func buildDeletionPreview(
 		// For Omni, the cluster resource will be destroyed which deallocates all machines
 		machinePlaceholder := "(all machines allocated to cluster: " + resolved.ClusterName + ")"
 		preview.Servers = []string{machinePlaceholder}
+	case v1alpha1.ProviderAWS:
+		// For AWS/EKS, deletion is delegated to eksctl which tears down the
+		// CloudFormation stacks owning the control plane and managed nodegroups.
+		eksPlaceholder := "(EKS cluster and managed nodegroups for: " + resolved.ClusterName + ")"
+		preview.Servers = []string{eksPlaceholder}
 	}
 
 	return preview
@@ -2769,6 +2778,11 @@ func getProviderStatus(
 		return getHetznerProviderStatus(cmd.Context(), clusterName)
 	case v1alpha1.ProviderOmni:
 		return getOmniProviderStatus(cmd.Context(), clusterName, omniOpts)
+	case v1alpha1.ProviderAWS:
+		// AWS/EKS status is derived from the EKS API through the provisioner,
+		// not from local container inspection. Return a minimal stub so callers
+		// that rely on this helper do not fail for EKS.
+		return &provider.ClusterStatus{Phase: "unknown"}, nil
 	default:
 		return nil, fmt.Errorf("%w: %s", errUnsupportedProvider, prov)
 	}
@@ -3475,6 +3489,11 @@ func getProviderClusters(
 		return getHetznerClusters(ctx, deps)
 	case v1alpha1.ProviderOmni:
 		return getOmniClusters(ctx, deps)
+	case v1alpha1.ProviderAWS:
+		// EKS cluster listing goes through the EKS API; not yet implemented
+		// in the local list path. Return an empty slice so `cluster list`
+		// does not error when AWS is configured in a profile.
+		return nil, nil
 	default:
 		return nil, fmt.Errorf("%w: %s", ErrUnsupportedProvider, provider)
 	}
@@ -3663,6 +3682,11 @@ func createEmptyDistributionConfig(
 		return &clusterprovisioner.DistributionConfig{
 			KWOK: &clusterprovisioner.KWOKConfig{},
 		}
+	case v1alpha1.DistributionEKS:
+		// EKS does not populate the shared DistributionConfig; eksctl.yaml is
+		// owned by the EKS provisioner. Return an empty config so list
+		// operations do not NPE for EKS entries.
+		return &clusterprovisioner.DistributionConfig{}
 	default:
 		return &clusterprovisioner.DistributionConfig{
 			Kind: &v1alpha4.Cluster{},
