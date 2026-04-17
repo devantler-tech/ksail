@@ -299,7 +299,7 @@ To test the Omni provider locally, you need:
 - **`OMNI_SERVICE_ACCOUNT_KEY`** – A Sidero Omni service account key with cluster management permissions. The environment variable name is configurable via `spec.provider.omni.serviceAccountKeyEnvVar` in `ksail.yaml`.
 - **Omni endpoint** – The URL of your Sidero Omni instance, configured via `spec.provider.omni.endpoint` in `ksail.yaml` (there is no CLI flag for this value).
 
-**Note:** Omni requires a [Sidero Omni](https://www.siderolabs.com/platform/saas-for-kubernetes/) account and does not run locally. Omni manages the Talos machine lifecycle; `StartNodes` and `StopNodes` are no-ops in the Omni provider.
+**Note:** Omni requires a [Sidero Omni](https://www.siderolabs.com/omni/) account and does not run locally. Omni manages the Talos machine lifecycle; `StartNodes` and `StopNodes` are no-ops in the Omni provider.
 
 **CI integration:** Omni system tests run as part of the `system-test` matrix in `.github/workflows/ci.yaml` alongside Docker and Hetzner tests. They execute the same broader system-test workflow against a live Omni endpoint, including cluster lifecycle, workload, backup/restore, and start/stop validation steps. Omni test failures **block merge** (they are not optional). The following repository secret and variable must be configured for CI:
 
