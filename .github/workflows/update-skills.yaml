@@ -12,78 +12,11 @@ permissions: {}
 
 jobs:
   update-copilot-skills:
-    runs-on: ubuntu-latest
     permissions:
       contents: write
       pull-requests: write
-    steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@f808768d1510423e83855289c910610ca9b43176 # v2.17.0
-        with:
-          egress-policy: audit
-
-      - name: 📄 Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: true
-
-      # Ensure gh >= 2.90.0 (required for `gh skill`, introduced in v2.90.0).
-      # The ubuntu-latest runner image currently ships gh 2.89.0, and the
-      # upstream setup-copilot-skills action's in-place /usr/local/bin install
-      # is masked by bash's hash cache, so we prepend a fresh gh to PATH here.
-      - name: 🔧 Install gh >= 2.90.0
-        shell: bash
-        env:
-          GH_VERSION: "2.90.0"
-        run: |
-          set -euo pipefail
-          case "$(uname -m)" in
-            x86_64|amd64) arch=amd64 ;;
-            arm64|aarch64) arch=arm64 ;;
-            *) echo "::error::Unsupported arch: $(uname -m)"; exit 1 ;;
-          esac
-          tarball="gh_${GH_VERSION}_linux_${arch}.tar.gz"
-          tmp="${RUNNER_TEMP:-/tmp}/gh-${GH_VERSION}"
-          mkdir -p "$tmp"
-          base_url="https://github.com/cli/cli/releases/download/v${GH_VERSION}"
-          curl -fsSL "${base_url}/${tarball}" -o "${tmp}/${tarball}"
-          curl -fsSL "${base_url}/gh_${GH_VERSION}_checksums.txt" -o "${tmp}/gh_${GH_VERSION}_checksums.txt"
-          (
-            cd "$tmp"
-            grep " ${tarball}$" "gh_${GH_VERSION}_checksums.txt" | sha256sum --check --status
-          )
-          tar -xzC "$tmp" -f "${tmp}/${tarball}"
-          echo "${tmp}/gh_${GH_VERSION}_linux_${arch}/bin" >> "$GITHUB_PATH"
-
-      - name: ✅ Verify gh skill is available
-        shell: bash
-        run: |
-          if ! gh skill --help > /dev/null 2>&1; then
-            echo "::error::gh skill command not available — upgrade gh to >= 2.90.0"
-            exit 1
-          fi
-
-      - name: 🔄 Update Copilot skills
-        uses: devantler-tech/actions/setup-copilot-skills@538d7103ed24531647941b3a460393b5ac7ed756 # v2.2.0
-        with:
-          skills-lock: skills-lock.json
-          agent: github-copilot
-          # `user` scope writes to ~/.copilot/skills on the runner (outside
-          # GITHUB_WORKSPACE), so the working tree never changes and no PR
-          # is opened. Use `repo` scope so installs land inside the repo and
-          # peter-evans/create-pull-request can detect and commit the diff.
-          scope: repo
-
-      - name: 📦 Create pull request
-        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
-        with:
-          commit-message: "chore(deps): update copilot skills"
-          title: "chore(deps): update copilot skills"
-          body: |
-            Automated update of skills for GitHub Copilot to their latest versions.
-
-            Picks up any drift in installed skill content (resolved by
-            `gh skill install --scope repo` from `skills-lock.json`).
-          branch: deps/copilot-skills-update
-          labels: dependencies,automation
-          delete-branch: true
+    uses: devantler-tech/reusable-workflows/.github/workflows/update-copilot-skills.yaml@6eea016969bceed84f4fb38c8e79fb04a2cadc31 # main @ 2026-04-18
+    with:
+      skills-lock: skills-lock.json
+      agent: github-copilot
+      scope: project
