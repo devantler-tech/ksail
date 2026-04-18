@@ -465,7 +465,11 @@ func (p *Provisioner) applyConfigToNode(
 		}
 	}
 
-	return fmt.Errorf("failed to apply configuration for %s: %w", server.Name, errors.Join(errRetriesExhausted, lastErr))
+	return fmt.Errorf(
+		"failed to apply configuration for %s: %w",
+		server.Name,
+		errors.Join(errRetriesExhausted, lastErr),
+	)
 }
 
 // attemptApplyConfig creates a single-use insecure Talos client and attempts to
