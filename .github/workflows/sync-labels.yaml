@@ -14,6 +14,7 @@ permissions:
 jobs:
   sync-labels:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@f808768d1510423e83855289c910610ca9b43176 # v2.17.0
