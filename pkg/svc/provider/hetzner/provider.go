@@ -127,33 +127,9 @@ func (p *Provider) waitForServersStatus(
 				ctx.Err(),
 			)
 		case <-ticker.C:
-			allReady := true
-
-			nodes, err := p.ListNodes(ctx, clusterName)
+			allReady, err := p.allServersAtStatus(ctx, clusterName, desiredStatus)
 			if err != nil {
-				return fmt.Errorf("failed to list nodes: %w", err)
-			}
-
-			for _, node := range nodes {
-				server, err := retryTransientHetznerOperation(
-					ctx,
-					DefaultTransientRetryCount,
-					p.calculateRetryDelay,
-					func() (*hcloud.Server, error) {
-						server, _, err := p.client.Server.GetByName(ctx, node.Name)
-
-						return server, err
-					},
-				)
-				if err != nil {
-					return fmt.Errorf("failed to get server %s: %w", node.Name, err)
-				}
-
-				if server != nil && server.Status != desiredStatus {
-					allReady = false
-
-					break
-				}
+				return err
 			}
 
 			if allReady {
@@ -161,6 +137,43 @@ func (p *Provider) waitForServersStatus(
 			}
 		}
 	}
+}
+
+//nolint:funcorder // Helper for waitForServersStatus, grouped for logical code organization
+func (p *Provider) allServersAtStatus(
+	ctx context.Context,
+	clusterName string,
+	desiredStatus hcloud.ServerStatus,
+) (bool, error) {
+	nodes, err := p.ListNodes(ctx, clusterName)
+	if err != nil {
+		return false, fmt.Errorf("failed to list nodes: %w", err)
+	}
+
+	for _, node := range nodes {
+		server, err := retryTransientHetznerOperation(
+			ctx,
+			DefaultTransientRetryCount,
+			p.calculateRetryDelay,
+			func() (*hcloud.Server, error) {
+				server, _, err := p.client.Server.GetByName(ctx, node.Name)
+				if err != nil {
+					return nil, fmt.Errorf("failed to get server %s: %w", node.Name, err)
+				}
+
+				return server, nil
+			},
+		)
+		if err != nil {
+			return false, err
+		}
+
+		if server != nil && server.Status != desiredStatus {
+			return false, nil
+		}
+	}
+
+	return true, nil
 }
 
 // ListNodes returns all nodes for the given cluster based on labels.
@@ -172,20 +185,9 @@ func (p *Provider) ListNodes(ctx context.Context, clusterName string) ([]provide
 	// Use label selector to filter servers
 	labelSelector := fmt.Sprintf("%s=true,%s=%s", LabelOwned, LabelClusterName, clusterName)
 
-	servers, err := retryTransientHetznerOperation(
-		ctx,
-		DefaultTransientRetryCount,
-		p.calculateRetryDelay,
-		func() ([]*hcloud.Server, error) {
-			return p.client.Server.AllWithOpts(ctx, hcloud.ServerListOpts{
-				ListOpts: hcloud.ListOpts{
-					LabelSelector: labelSelector,
-				},
-			})
-		},
-	)
+	servers, err := p.listServersByLabelSelector(ctx, labelSelector)
 	if err != nil {
-		return nil, fmt.Errorf("failed to list servers: %w", err)
+		return nil, err
 	}
 
 	nodes := make([]provider.NodeInfo, 0, len(servers))
@@ -213,20 +215,9 @@ func (p *Provider) ListAllClusters(ctx context.Context) ([]string, error) {
 	// Use label selector to filter KSail-owned servers
 	labelSelector := LabelOwned + "=true"
 
-	servers, err := retryTransientHetznerOperation(
-		ctx,
-		DefaultTransientRetryCount,
-		p.calculateRetryDelay,
-		func() ([]*hcloud.Server, error) {
-			return p.client.Server.AllWithOpts(ctx, hcloud.ServerListOpts{
-				ListOpts: hcloud.ListOpts{
-					LabelSelector: labelSelector,
-				},
-			})
-		},
-	)
+	servers, err := p.listServersByLabelSelector(ctx, labelSelector)
 	if err != nil {
-		return nil, fmt.Errorf("failed to list servers: %w", err)
+		return nil, err
 	}
 
 	return k8s.UniqueLabelValues(
@@ -505,12 +496,15 @@ func (p *Provider) executeServerAction(
 		p.calculateRetryDelay,
 		func() (*hcloud.Server, error) {
 			server, _, err := p.client.Server.GetByName(ctx, nodeName)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get server %s: %w", nodeName, err)
+			}
 
-			return server, err
+			return server, nil
 		},
 	)
 	if serverErr != nil {
-		return fmt.Errorf("failed to get server %s: %w", nodeName, serverErr)
+		return serverErr
 	}
 
 	if server == nil {
@@ -554,6 +548,29 @@ func (p *Provider) waitForAction(ctx context.Context, action *hcloud.Action) err
 	}
 
 	return nil
+}
+
+func (p *Provider) listServersByLabelSelector(
+	ctx context.Context,
+	labelSelector string,
+) ([]*hcloud.Server, error) {
+	servers, err := retryTransientHetznerOperation(
+		ctx,
+		DefaultTransientRetryCount,
+		p.calculateRetryDelay,
+		func() ([]*hcloud.Server, error) {
+			return p.client.Server.AllWithOpts(ctx, hcloud.ServerListOpts{
+				ListOpts: hcloud.ListOpts{
+					LabelSelector: labelSelector,
+				},
+			})
+		},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list servers: %w", err)
+	}
+
+	return servers, nil
 }
 
 func retryTransientHetznerOperation[T any](

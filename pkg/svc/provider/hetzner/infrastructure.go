@@ -242,8 +242,15 @@ func (p *Provider) deletePlacementGroup(ctx context.Context, clusterName string)
 		p.calculateRetryDelay,
 		func() (*hcloud.PlacementGroup, error) {
 			placementGroup, _, err := p.client.PlacementGroup.GetByName(ctx, placementGroupName)
+			if err != nil {
+				return nil, fmt.Errorf(
+					"failed to get placement group %s: %w",
+					placementGroupName,
+					err,
+				)
+			}
 
-			return placementGroup, err
+			return placementGroup, nil
 		},
 	)
 	if err != nil {
@@ -275,8 +282,11 @@ func (p *Provider) deleteFirewallWithRetry(ctx context.Context, clusterName stri
 			p.calculateRetryDelay,
 			func() (*hcloud.Firewall, error) {
 				firewall, _, err := p.client.Firewall.GetByName(ctx, firewallName)
+				if err != nil {
+					return nil, fmt.Errorf("failed to get firewall %s: %w", firewallName, err)
+				}
 
-				return firewall, err
+				return firewall, nil
 			},
 		)
 		if err != nil {
@@ -319,8 +329,11 @@ func (p *Provider) deleteNetwork(ctx context.Context, clusterName string) error 
 		p.calculateRetryDelay,
 		func() (*hcloud.Network, error) {
 			network, _, err := p.client.Network.GetByName(ctx, networkName)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get network %s: %w", networkName, err)
+			}
 
-			return network, err
+			return network, nil
 		},
 	)
 	if err != nil {
