@@ -7,3 +7,8 @@ import "context"
 func (c *Installer) SetAPIServerCheckerForTest(fn func(ctx context.Context) error) {
 	c.apiServerChecker = fn
 }
+
+// SetRetryBackoffForTest overrides the retry backoff function for unit testing.
+func (c *Installer) SetRetryBackoffForTest(fn func(ctx context.Context) error) {
+	c.retryBackoff = fn
+}

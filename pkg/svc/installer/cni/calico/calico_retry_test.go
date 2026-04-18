@@ -18,6 +18,11 @@ var errCalicoRetryNoMatchesInstallation = errors.New(
 	`no matches for kind "Installation" in version "v1"`,
 )
 
+var errCalicoRetryAPIServerUnavailable = errors.New(
+	"cluster reachability check failed: kubernetes cluster unreachable: " +
+		"the server is currently unable to handle the request",
+)
+
 // TestInstaller_Install_TalosDistribution_Values verifies Talos-specific Calico values
 // are passed through the Helm install, including kubeletVolumePluginPath and NFTables.
 func TestInstaller_Install_TalosDistribution_Values(t *testing.T) {
@@ -101,4 +106,93 @@ func TestInstaller_Install_ContextCanceled_Vanilla(t *testing.T) {
 
 	err := installer.Install(ctx)
 	require.Error(t, err)
+}
+
+func TestInstaller_Install_K3s_APIServerUnavailableRetrySucceeds(t *testing.T) {
+	t.Parallel()
+
+	client := helm.NewMockInterface(t)
+	installer := calicoinstaller.NewInstallerWithDistribution(
+		client,
+		"/path/to/kubeconfig",
+		"test-context",
+		2*time.Minute,
+		v1alpha1.DistributionK3s,
+	)
+	installer.SetAPIServerCheckerForTest(func(_ context.Context) error { return nil })
+	installer.SetRetryBackoffForTest(func(_ context.Context) error { return nil })
+
+	client.EXPECT().
+		AddRepository(mock.Anything, mock.Anything, mock.Anything).
+		Return(nil)
+
+	client.EXPECT().
+		InstallOrUpgradeChart(mock.Anything, mock.Anything).
+		Return(nil, errCalicoRetryAPIServerUnavailable).
+		Once()
+	client.EXPECT().
+		InstallOrUpgradeChart(mock.Anything, mock.Anything).
+		Return(nil, nil).
+		Once()
+
+	err := installer.Install(context.Background())
+	require.NoError(t, err)
+}
+
+func TestInstaller_Install_K3s_APIServerUnavailableRetryExhausted(t *testing.T) {
+	t.Parallel()
+
+	client := helm.NewMockInterface(t)
+	installer := calicoinstaller.NewInstallerWithDistribution(
+		client,
+		"/path/to/kubeconfig",
+		"test-context",
+		2*time.Minute,
+		v1alpha1.DistributionK3s,
+	)
+	installer.SetAPIServerCheckerForTest(func(_ context.Context) error { return nil })
+	installer.SetRetryBackoffForTest(func(_ context.Context) error { return nil })
+
+	client.EXPECT().
+		AddRepository(mock.Anything, mock.Anything, mock.Anything).
+		Return(nil)
+
+	client.EXPECT().
+		InstallOrUpgradeChart(mock.Anything, mock.Anything).
+		Return(nil, errCalicoRetryAPIServerUnavailable).
+		Times(3)
+
+	err := installer.Install(context.Background())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "install or upgrade calico")
+}
+
+// TestInstaller_Install_Vanilla_NoRetryOnAPIServerUnavailable verifies that
+// non-K3s distributions do not retry on API-server-unavailable errors, since
+// those indicate a genuine cluster problem rather than a transient bootstrap race.
+func TestInstaller_Install_Vanilla_NoRetryOnAPIServerUnavailable(t *testing.T) {
+	t.Parallel()
+
+	client := helm.NewMockInterface(t)
+	installer := calicoinstaller.NewInstallerWithDistribution(
+		client,
+		"/path/to/kubeconfig",
+		"test-context",
+		2*time.Minute,
+		v1alpha1.DistributionVanilla,
+	)
+
+	client.EXPECT().
+		AddRepository(mock.Anything, mock.Anything, mock.Anything).
+		Return(nil)
+
+	// Vanilla must NOT retry — InstallOrUpgradeChart is called exactly once.
+	client.EXPECT().
+		InstallOrUpgradeChart(mock.Anything, mock.Anything).
+		Return(nil, errCalicoRetryAPIServerUnavailable).
+		Once()
+
+	err := installer.Install(context.Background())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "install or upgrade calico")
 }

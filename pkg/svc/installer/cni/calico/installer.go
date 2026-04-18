@@ -28,21 +28,29 @@ type Installer struct {
 	// is stable. It defaults to WaitForAPIServerStability and can be overridden
 	// in tests to avoid needing a real cluster.
 	apiServerChecker func(ctx context.Context) error
+	// retryBackoff waits between transient API-unavailable Helm install retries.
+	// It defaults to a fixed delay and can be overridden in tests.
+	retryBackoff func(ctx context.Context) error
 }
+
+const (
+	calicoInstallRetryAttempts = 3
+	calicoInstallRetryBackoff  = 5 * time.Second
+)
 
 // NewInstaller creates a new Calico installer instance.
 func NewInstaller(
 	client helm.Interface,
-	kubeconfig, context string,
+	kubeconfig, kubeContext string,
 	timeout time.Duration,
 ) *Installer {
-	return NewInstallerWithDistribution(client, kubeconfig, context, timeout, "")
+	return NewInstallerWithDistribution(client, kubeconfig, kubeContext, timeout, "")
 }
 
 // NewInstallerWithDistribution creates a new Calico installer with distribution-specific configuration.
 func NewInstallerWithDistribution(
 	client helm.Interface,
-	kubeconfig, context string,
+	kubeconfig, kubeContext string,
 	timeout time.Duration,
 	distribution v1alpha1.Distribution,
 ) *Installer {
@@ -52,10 +60,21 @@ func NewInstallerWithDistribution(
 	calicoInstaller.InstallerBase = cni.NewInstallerBase(
 		client,
 		kubeconfig,
-		context,
+		kubeContext,
 		timeout,
 	)
 	calicoInstaller.apiServerChecker = calicoInstaller.WaitForAPIServerStability
+	calicoInstaller.retryBackoff = func(ctx context.Context) error {
+		timer := time.NewTimer(calicoInstallRetryBackoff)
+		defer timer.Stop()
+
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("context done while waiting for retry backoff: %w", ctx.Err())
+		case <-timer.C:
+			return nil
+		}
+	}
 
 	return calicoInstaller
 }
@@ -130,35 +149,84 @@ func (c *Installer) helmInstallOrUpgradeCalico(ctx context.Context) error {
 		return fmt.Errorf("get helm client: %w", err)
 	}
 
-	repoConfig := helm.RepoConfig{
-		Name:     "projectcalico",
-		URL:      "https://docs.tigera.io/calico/charts",
-		RepoName: "calico",
+	// Add the Calico Helm repository once before any install attempts to avoid
+	// repeating the AddRepository call on every outer retry iteration.
+	repoEntry := &helm.RepositoryEntry{
+		Name: "projectcalico",
+		URL:  "https://docs.tigera.io/calico/charts",
 	}
 
-	chartConfig := helm.ChartConfig{
-		ReleaseName:     "calico",
-		ChartName:       "projectcalico/tigera-operator",
-		Namespace:       "tigera-operator",
-		Version:         chartVersion(),
-		RepoURL:         "https://docs.tigera.io/calico/charts",
-		CreateNamespace: true,
-		SetJSONVals:     c.getCalicoValues(),
-		SkipWait:        true,
+	addErr := client.AddRepository(ctx, repoEntry, c.GetTimeout())
+	if addErr != nil {
+		return fmt.Errorf("add calico repository: %w", addErr)
 	}
 
-	err = helm.InstallOrUpgradeChart(ctx, client, repoConfig, chartConfig, c.GetTimeout())
-	if err != nil && isAPIDiscoveryError(err) {
-		waitErr := c.waitForCalicoCRDs(ctx)
-		if waitErr != nil {
-			return fmt.Errorf("wait for calico CRDs: %w", waitErr)
+	spec := c.chartSpec()
+	spec.Atomic = true
+	spec.Silent = true
+	spec.UpgradeCRDs = true
+	spec.Wait = false
+	spec.WaitForJobs = false
+
+	// K3s can have transient API-unavailable failures during bootstrap even
+	// after the pre-install stability check passes, due to K3s's bootstrap
+	// sequence. Retry with backoff for K3s only; a single attempt is correct
+	// for other distributions where such errors indicate a genuine problem.
+	maxAttempts := 1
+	if c.distribution == v1alpha1.DistributionK3s {
+		maxAttempts = calicoInstallRetryAttempts
+	}
+
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		err = c.attemptCalicoInstall(ctx, client, spec)
+		if err == nil {
+			return nil
 		}
 
-		err = helm.InstallOrUpgradeChart(ctx, client, repoConfig, chartConfig, c.GetTimeout())
+		if !isAPIServerUnavailableError(err) || attempt == maxAttempts {
+			break
+		}
+
+		waitErr := c.retryBackoff(ctx)
+		if waitErr != nil {
+			return fmt.Errorf("wait before calico install retry: %w", waitErr)
+		}
 	}
 
-	if err != nil {
-		return fmt.Errorf("install or upgrade calico: %w", err)
+	return fmt.Errorf("install or upgrade calico: %w", err)
+}
+
+// attemptCalicoInstall performs a single Helm install attempt. If the install
+// fails with an API discovery error (CRDs not yet registered), it waits for
+// the CRDs to become established and retries once before returning.
+func (c *Installer) attemptCalicoInstall(
+	ctx context.Context,
+	client helm.Interface,
+	spec *helm.ChartSpec,
+) error {
+	installCtx, cancel := context.WithTimeout(ctx, c.GetTimeout()+helm.ContextTimeoutBuffer)
+	defer cancel()
+
+	err := helm.InstallChartWithRetry(installCtx, client, spec, "calico")
+	if err == nil {
+		return nil
+	}
+
+	if !isAPIDiscoveryError(err) {
+		return fmt.Errorf("helm install calico: %w", err)
+	}
+
+	waitErr := c.waitForCalicoCRDs(ctx)
+	if waitErr != nil {
+		return fmt.Errorf("wait for calico CRDs: %w", waitErr)
+	}
+
+	retryCtx, retryCancel := context.WithTimeout(ctx, c.GetTimeout()+helm.ContextTimeoutBuffer)
+	defer retryCancel()
+
+	retryErr := helm.InstallChartWithRetry(retryCtx, client, spec, "calico")
+	if retryErr != nil {
+		return fmt.Errorf("helm install calico after CRD wait: %w", retryErr)
 	}
 
 	return nil
@@ -259,6 +327,18 @@ func isAPIDiscoveryError(err error) bool {
 
 	return strings.Contains(errMsg, "no matches for kind") ||
 		strings.Contains(errMsg, "could not find the requested resource")
+}
+
+func isAPIServerUnavailableError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	errMsg := err.Error()
+
+	return strings.Contains(errMsg, "cluster reachability check failed") ||
+		strings.Contains(errMsg, "kubernetes cluster unreachable") ||
+		strings.Contains(errMsg, "the server is currently unable to handle the request")
 }
 
 func isCRDEstablished(crd *apiextensionsv1.CustomResourceDefinition) bool {
