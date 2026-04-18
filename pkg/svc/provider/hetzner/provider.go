@@ -582,5 +582,5 @@ func retryTransientHetznerOperation[T any](
 		}
 	}
 
-	return zeroValue, nil
+	return zeroValue, errors.New("retry loop exhausted without terminal result")
 }
