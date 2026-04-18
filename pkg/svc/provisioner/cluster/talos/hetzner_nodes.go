@@ -448,17 +448,11 @@ func (p *Provisioner) applyConfigToNode(
 				err,
 			)
 
-			timer := time.NewTimer(delay)
-			select {
-			case <-ctx.Done():
-				if !timer.Stop() {
-					<-timer.C
-				}
-
-				return fmt.Errorf("failed to apply configuration: %w", ctx.Err())
-			case <-timer.C:
-				continue
+			if err = sleepWithContext(ctx, delay); err != nil {
+				return fmt.Errorf("failed to apply configuration: %w", err)
 			}
+
+			continue
 		}
 
 		// Apply configuration
@@ -491,19 +485,27 @@ func (p *Provisioner) applyConfigToNode(
 			err,
 		)
 
-		timer := time.NewTimer(delay)
-		select {
-		case <-ctx.Done():
-			if !timer.Stop() {
-				<-timer.C
-			}
-
-			return fmt.Errorf("failed to apply configuration: %w", ctx.Err())
-		case <-timer.C:
+		if err = sleepWithContext(ctx, delay); err != nil {
+			return fmt.Errorf("failed to apply configuration: %w", err)
 		}
 	}
 
 	return fmt.Errorf("failed to apply configuration: retries exhausted for %s", server.Name)
+}
+
+// sleepWithContext waits for d to elapse, returning ctx.Err() early if the context is cancelled.
+func sleepWithContext(ctx context.Context, d time.Duration) error {
+	timer := time.NewTimer(d)
+	select {
+	case <-ctx.Done():
+		if !timer.Stop() {
+			<-timer.C
+		}
+
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
 }
 
 func isRetryableTalosApplyConfigError(err error) bool {
