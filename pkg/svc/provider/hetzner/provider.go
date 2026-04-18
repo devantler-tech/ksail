@@ -35,6 +35,8 @@ const (
 	DefaultRetryBaseDelay = 2 * time.Second
 	// DefaultRetryMaxDelay is the maximum delay between retry attempts.
 	DefaultRetryMaxDelay = 10 * time.Second
+	// DefaultTransientRetryCount is the number of retries for transient Hetzner API errors.
+	DefaultTransientRetryCount = 3
 )
 
 // ErrHetznerActionFailed indicates that a Hetzner action failed.
@@ -133,7 +135,16 @@ func (p *Provider) waitForServersStatus(
 			}
 
 			for _, node := range nodes {
-				server, _, err := p.client.Server.GetByName(ctx, node.Name)
+				server, err := retryTransientHetznerOperation(
+					ctx,
+					DefaultTransientRetryCount,
+					p.calculateRetryDelay,
+					func() (*hcloud.Server, error) {
+						server, _, err := p.client.Server.GetByName(ctx, node.Name)
+
+						return server, err
+					},
+				)
 				if err != nil {
 					return fmt.Errorf("failed to get server %s: %w", node.Name, err)
 				}
@@ -161,11 +172,18 @@ func (p *Provider) ListNodes(ctx context.Context, clusterName string) ([]provide
 	// Use label selector to filter servers
 	labelSelector := fmt.Sprintf("%s=true,%s=%s", LabelOwned, LabelClusterName, clusterName)
 
-	servers, err := p.client.Server.AllWithOpts(ctx, hcloud.ServerListOpts{
-		ListOpts: hcloud.ListOpts{
-			LabelSelector: labelSelector,
+	servers, err := retryTransientHetznerOperation(
+		ctx,
+		DefaultTransientRetryCount,
+		p.calculateRetryDelay,
+		func() ([]*hcloud.Server, error) {
+			return p.client.Server.AllWithOpts(ctx, hcloud.ServerListOpts{
+				ListOpts: hcloud.ListOpts{
+					LabelSelector: labelSelector,
+				},
+			})
 		},
-	})
+	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list servers: %w", err)
 	}
@@ -195,11 +213,18 @@ func (p *Provider) ListAllClusters(ctx context.Context) ([]string, error) {
 	// Use label selector to filter KSail-owned servers
 	labelSelector := LabelOwned + "=true"
 
-	servers, err := p.client.Server.AllWithOpts(ctx, hcloud.ServerListOpts{
-		ListOpts: hcloud.ListOpts{
-			LabelSelector: labelSelector,
+	servers, err := retryTransientHetznerOperation(
+		ctx,
+		DefaultTransientRetryCount,
+		p.calculateRetryDelay,
+		func() ([]*hcloud.Server, error) {
+			return p.client.Server.AllWithOpts(ctx, hcloud.ServerListOpts{
+				ListOpts: hcloud.ListOpts{
+					LabelSelector: labelSelector,
+				},
+			})
 		},
-	})
+	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list servers: %w", err)
 	}
@@ -474,7 +499,16 @@ func (p *Provider) executeServerAction(
 	nodeName string,
 	action func(*hcloud.Server) (*hcloud.Action, error),
 ) error {
-	server, _, serverErr := p.client.Server.GetByName(ctx, nodeName)
+	server, serverErr := retryTransientHetznerOperation(
+		ctx,
+		DefaultTransientRetryCount,
+		p.calculateRetryDelay,
+		func() (*hcloud.Server, error) {
+			server, _, err := p.client.Server.GetByName(ctx, nodeName)
+
+			return server, err
+		},
+	)
 	if serverErr != nil {
 		return fmt.Errorf("failed to get server %s: %w", nodeName, serverErr)
 	}
@@ -520,4 +554,33 @@ func (p *Provider) waitForAction(ctx context.Context, action *hcloud.Action) err
 	}
 
 	return nil
+}
+
+func retryTransientHetznerOperation[T any](
+	ctx context.Context,
+	retryCount int,
+	delayFunc func(int) time.Duration,
+	operation func() (T, error),
+) (T, error) {
+	var zeroValue T
+
+	for retryAttempt := range retryCount + 1 {
+		result, err := operation()
+		if err == nil {
+			return result, nil
+		}
+
+		if !IsRetryableHetznerError(err) || retryAttempt >= retryCount {
+			return zeroValue, err
+		}
+
+		delay := delayFunc(retryAttempt + 1)
+		select {
+		case <-ctx.Done():
+			return zeroValue, fmt.Errorf("context cancelled during retry: %w", ctx.Err())
+		case <-time.After(delay):
+		}
+	}
+
+	return zeroValue, nil
 }

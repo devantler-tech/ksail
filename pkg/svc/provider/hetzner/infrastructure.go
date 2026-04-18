@@ -236,7 +236,16 @@ func (p *Provider) deleteInfrastructure(ctx context.Context, clusterName string)
 func (p *Provider) deletePlacementGroup(ctx context.Context, clusterName string) error {
 	placementGroupName := clusterName + PlacementGroupSuffix
 
-	placementGroup, _, err := p.client.PlacementGroup.GetByName(ctx, placementGroupName)
+	placementGroup, err := retryTransientHetznerOperation(
+		ctx,
+		DefaultTransientRetryCount,
+		p.calculateRetryDelay,
+		func() (*hcloud.PlacementGroup, error) {
+			placementGroup, _, err := p.client.PlacementGroup.GetByName(ctx, placementGroupName)
+
+			return placementGroup, err
+		},
+	)
 	if err != nil {
 		// Log error but don't fail - resource may not exist
 		return nil //nolint:nilerr // Ignoring lookup error - resource may not exist
@@ -260,7 +269,16 @@ func (p *Provider) deleteFirewallWithRetry(ctx context.Context, clusterName stri
 	firewallName := clusterName + FirewallSuffix
 
 	for attempt := range MaxDeleteRetries {
-		firewall, _, err := p.client.Firewall.GetByName(ctx, firewallName)
+		firewall, err := retryTransientHetznerOperation(
+			ctx,
+			DefaultTransientRetryCount,
+			p.calculateRetryDelay,
+			func() (*hcloud.Firewall, error) {
+				firewall, _, err := p.client.Firewall.GetByName(ctx, firewallName)
+
+				return firewall, err
+			},
+		)
 		if err != nil {
 			return nil //nolint:nilerr // Ignoring lookup error - resource may not exist
 		}
@@ -295,7 +313,16 @@ func (p *Provider) deleteFirewallWithRetry(ctx context.Context, clusterName stri
 func (p *Provider) deleteNetwork(ctx context.Context, clusterName string) error {
 	networkName := clusterName + NetworkSuffix
 
-	network, _, err := p.client.Network.GetByName(ctx, networkName)
+	network, err := retryTransientHetznerOperation(
+		ctx,
+		DefaultTransientRetryCount,
+		p.calculateRetryDelay,
+		func() (*hcloud.Network, error) {
+			network, _, err := p.client.Network.GetByName(ctx, networkName)
+
+			return network, err
+		},
+	)
 	if err != nil {
 		return nil //nolint:nilerr // Ignoring lookup error - resource may not exist
 	}
