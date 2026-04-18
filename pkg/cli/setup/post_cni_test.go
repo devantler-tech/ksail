@@ -407,23 +407,35 @@ func TestNeedsInClusterConnectivityCheck(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name     string
-		cni      v1alpha1.CNI
-		expected bool
+		name       string
+		clusterCfg *v1alpha1.Cluster
+		expected   bool
 	}{
 		{
-			name:     "Cilium requires connectivity check",
-			cni:      v1alpha1.CNICilium,
-			expected: true,
+			name:       "Cilium requires connectivity check",
+			clusterCfg: setup.ClusterWithCNI(v1alpha1.CNICilium),
+			expected:   true,
 		},
 		{
-			name:     "Calico skips connectivity check",
-			cni:      v1alpha1.CNICalico,
-			expected: false,
+			name:       "Calico skips connectivity check",
+			clusterCfg: setup.ClusterWithCNI(v1alpha1.CNICalico),
+			expected:   false,
 		},
 		{
-			name:     "Default CNI skips connectivity check",
-			cni:      v1alpha1.CNIDefault,
+			name:       "Default CNI skips connectivity check",
+			clusterCfg: setup.ClusterWithCNI(v1alpha1.CNIDefault),
+			expected:   false,
+		},
+		{
+			name: "KWOK with Cilium skips connectivity check",
+			clusterCfg: &v1alpha1.Cluster{
+				Spec: v1alpha1.Spec{
+					Cluster: v1alpha1.ClusterSpec{
+						Distribution: v1alpha1.DistributionKWOK,
+						CNI:          v1alpha1.CNICilium,
+					},
+				},
+			},
 			expected: false,
 		},
 	}
@@ -432,8 +444,7 @@ func TestNeedsInClusterConnectivityCheck(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			clusterCfg := setup.ClusterWithCNI(testCase.cni)
-			assert.Equal(t, testCase.expected, setup.NeedsInClusterConnectivityCheck(clusterCfg))
+			assert.Equal(t, testCase.expected, setup.NeedsInClusterConnectivityCheck(testCase.clusterCfg))
 		})
 	}
 }
