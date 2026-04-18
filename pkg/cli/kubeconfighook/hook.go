@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -204,13 +206,19 @@ func resolveOmniKubeconfigPath(
 		return nil, nil, ""
 	}
 
-	// Canonicalize for containment-safety, but fall back to filepath.Abs when
-	// the parent directory does not exist yet (e.g. on a fresh CI runner where
-	// ~/.kube/ is still missing). EvalCanonicalPath requires the parent to
-	// exist, and without this fallback the initial-fetch branch would be
-	// silently skipped — the exact regression #4112 is about.
+	// Canonicalize for containment-safety, but fall back to filepath.Abs only
+	// when the parent directory does not exist yet (e.g. on a fresh CI runner
+	// where ~/.kube/ is still missing). EvalCanonicalPath requires the parent
+	// to exist, and without this fallback the initial-fetch branch would be
+	// silently skipped — the exact regression #4112 is about. For any other
+	// error (permission denied, I/O error, etc.) we bail out rather than
+	// bypass canonicalization on a non-canonical path.
 	canonicalPath, canonErr := fsutil.EvalCanonicalPath(kubeconfigPath)
 	if canonErr != nil {
+		if !errors.Is(canonErr, fs.ErrNotExist) {
+			return nil, nil, ""
+		}
+
 		absPath, absErr := filepath.Abs(kubeconfigPath)
 		if absErr != nil {
 			return nil, nil, ""
