@@ -252,12 +252,7 @@ func (p *Provisioner) ClusterReadinessChecksCountForTest() int {
 	return len(p.clusterReadinessChecks())
 }
 
-// TalosAPIWaitTimeoutForTest exposes talosAPIWaitTimeout for unit testing.
-func TalosAPIWaitTimeoutForTest() time.Duration {
-	return talosAPIWaitTimeout
-}
-
-// K8sNodesReportedWaitTimeoutForTest exposes k8sNodesReportedWaitTimeout for unit testing.
-func K8sNodesReportedWaitTimeoutForTest() time.Duration {
-	return k8sNodesReportedWaitTimeout
+// K8sNodesPollIntervalForTest exposes k8sNodesPollInterval for unit testing.
+func K8sNodesPollIntervalForTest() time.Duration {
+	return k8sNodesPollInterval
 }

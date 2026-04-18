@@ -54,14 +54,12 @@ func TestIsDockerProvider(t *testing.T) {
 	}
 }
 
-func TestK8sNodesReportedWaitTimeout_IsLongerThanTalosAPIWaitTimeout(t *testing.T) {
+func TestK8sNodesPollInterval_MatchesUpstreamTalosSDK(t *testing.T) {
 	t.Parallel()
 
-	assert.Equal(t, 10*time.Minute, talosprovisioner.K8sNodesReportedWaitTimeoutForTest())
-	assert.Greater(t,
-		talosprovisioner.K8sNodesReportedWaitTimeoutForTest(),
-		talosprovisioner.TalosAPIWaitTimeoutForTest(),
-	)
+	// The upstream Talos SDK (pkg/cluster/check/default.go) uses 30s for
+	// "all k8s nodes to report" to allow time for kubeconfig build/cache.
+	assert.Equal(t, 30*time.Second, talosprovisioner.K8sNodesPollIntervalForTest())
 }
 
 // --- clusterReadinessChecks provider selection ---
