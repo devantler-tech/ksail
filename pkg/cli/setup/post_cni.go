@@ -645,8 +645,11 @@ func waitForClusterStability(
 		return fmt.Errorf("wait for API server stability: %w", err)
 	}
 
-	// KWOK simulates nodes and DaemonSet pods; none of them converge for real.
-	// After API server stability is confirmed, there is nothing left to wait for.
+	// KWOK simulates nodes and DaemonSets as scheduled/running but never
+	// executes real binaries. WaitForAllNodesReadyAndSchedulable would time out
+	// because no real kubelet reports node status, and
+	// WaitForNamespaceDaemonSetsReady would time out because simulated pods
+	// never converge to a truly ready state. Skip both and return here.
 	if clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionKWOK {
 		return nil
 	}
