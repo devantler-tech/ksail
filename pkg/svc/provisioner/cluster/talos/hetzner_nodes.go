@@ -7,7 +7,9 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/devantler-tech/ksail/v6/pkg/client/netretry"
 	"github.com/devantler-tech/ksail/v6/pkg/svc/provider/hetzner"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"github.com/siderolabs/go-retry/retry"
@@ -16,11 +18,20 @@ import (
 	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
 	"github.com/siderolabs/talos/pkg/machinery/config/bundle"
 	"golang.org/x/sync/errgroup"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // maxConcurrentHetznerOps caps the number of Hetzner API operations executed in parallel.
 // A value of 3 balances throughput and API rate-limit headroom.
 const maxConcurrentHetznerOps = 3
+
+// Apply-configuration retry defaults for transient Talos API handshake races.
+const (
+	talosApplyConfigMaxRetries    = 3
+	talosApplyConfigRetryBaseWait = 5 * time.Second
+	talosApplyConfigRetryMaxWait  = 20 * time.Second
+)
 
 // hetznerNodeCreationResult holds the outcome of a single Hetzner server creation attempt.
 type hetznerNodeCreationResult struct {
@@ -410,28 +421,102 @@ func (p *Provisioner) applyConfigToNode(
 		return fmt.Errorf("failed to marshal config: %w", err)
 	}
 
-	// Create insecure client for maintenance mode
-	insecureClient, err := talosclient.New(ctx,
-		talosclient.WithEndpoints(serverIP),
-		talosclient.WithTLSConfig(&tls.Config{
-			InsecureSkipVerify: true, //nolint:gosec // Required for maintenance mode
-		}),
-	)
-	if err != nil {
-		return fmt.Errorf("failed to create Talos client: %w", err)
+	for attempt := 1; attempt <= talosApplyConfigMaxRetries; attempt++ {
+		// Create insecure client for maintenance mode
+		insecureClient, err := talosclient.New(ctx,
+			talosclient.WithEndpoints(serverIP),
+			talosclient.WithTLSConfig(&tls.Config{
+				InsecureSkipVerify: true, //nolint:gosec // Required for maintenance mode
+			}),
+		)
+		if err != nil {
+			if !isRetryableTalosApplyConfigError(err) || attempt == talosApplyConfigMaxRetries {
+				return fmt.Errorf("failed to create Talos client: %w", err)
+			}
+
+			delay := netretry.ExponentialDelay(
+				attempt,
+				talosApplyConfigRetryBaseWait,
+				talosApplyConfigRetryMaxWait,
+			)
+
+			p.logf(
+				"  Talos client creation attempt %d failed on %s (retrying in %s): %v\n",
+				attempt,
+				server.Name,
+				delay,
+				err,
+			)
+
+			timer := time.NewTimer(delay)
+			select {
+			case <-ctx.Done():
+				if !timer.Stop() {
+					<-timer.C
+				}
+
+				return fmt.Errorf("failed to apply configuration: %w", ctx.Err())
+			case <-timer.C:
+				continue
+			}
+		}
+
+		// Apply configuration
+		_, err = insecureClient.ApplyConfiguration(ctx, &machineapi.ApplyConfigurationRequest{
+			Data: cfgBytes,
+		})
+		insecureClient.Close() //nolint:errcheck
+
+		if err == nil {
+			p.logf("  ✓ Config applied to %s\n", server.Name)
+
+			return nil
+		}
+
+		if !isRetryableTalosApplyConfigError(err) || attempt == talosApplyConfigMaxRetries {
+			return fmt.Errorf("failed to apply configuration: %w", err)
+		}
+
+		delay := netretry.ExponentialDelay(
+			attempt,
+			talosApplyConfigRetryBaseWait,
+			talosApplyConfigRetryMaxWait,
+		)
+
+		p.logf(
+			"  Config apply attempt %d failed on %s (retrying in %s): %v\n",
+			attempt,
+			server.Name,
+			delay,
+			err,
+		)
+
+		timer := time.NewTimer(delay)
+		select {
+		case <-ctx.Done():
+			if !timer.Stop() {
+				<-timer.C
+			}
+
+			return fmt.Errorf("failed to apply configuration: %w", ctx.Err())
+		case <-timer.C:
+		}
 	}
 
-	defer insecureClient.Close() //nolint:errcheck
+	return fmt.Errorf("failed to apply configuration: retries exhausted for %s", server.Name)
+}
 
-	// Apply configuration
-	_, err = insecureClient.ApplyConfiguration(ctx, &machineapi.ApplyConfigurationRequest{
-		Data: cfgBytes,
-	})
-	if err != nil {
-		return fmt.Errorf("failed to apply configuration: %w", err)
+func isRetryableTalosApplyConfigError(err error) bool {
+	if err == nil {
+		return false
 	}
 
-	p.logf("  ✓ Config applied to %s\n", server.Name)
+	if status.Code(err) == codes.Unavailable {
+		return true
+	}
 
-	return nil
+	errMsg := strings.ToLower(err.Error())
+
+	return strings.Contains(errMsg, "rpc error: code = unavailable") ||
+		strings.Contains(errMsg, "authentication handshake failed")
 }
