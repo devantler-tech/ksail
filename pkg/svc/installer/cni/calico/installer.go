@@ -161,34 +161,29 @@ func (c *Installer) helmInstallOrUpgradeCalico(ctx context.Context) error {
 		return fmt.Errorf("add calico repository: %w", addErr)
 	}
 
-	spec := &helm.ChartSpec{
-		ReleaseName:     "calico",
-		ChartName:       "projectcalico/tigera-operator",
-		Namespace:       "tigera-operator",
-		Version:         chartVersion(),
-		RepoURL:         "https://docs.tigera.io/calico/charts",
-		CreateNamespace: true,
-		Atomic:          true,
-		Silent:          true,
-		UpgradeCRDs:     true,
-		Timeout:         c.GetTimeout(),
-		Wait:            false,
-		WaitForJobs:     false,
-		SetJSONVals:     c.getCalicoValues(),
+	spec := c.chartSpec()
+	spec.Atomic = true
+	spec.Silent = true
+	spec.UpgradeCRDs = true
+	spec.Wait = false
+	spec.WaitForJobs = false
+
+	// K3s can have transient API-unavailable failures during bootstrap even
+	// after the pre-install stability check passes, due to K3s's bootstrap
+	// sequence. Retry with backoff for K3s only; a single attempt is correct
+	// for other distributions where such errors indicate a genuine problem.
+	maxAttempts := 1
+	if c.distribution == v1alpha1.DistributionK3s {
+		maxAttempts = calicoInstallRetryAttempts
 	}
 
-	// Outer retry loop for transient API-unavailable failures during K3s bootstrap.
-	// Uses attemptCalicoInstall directly (after a single repo add above) so
-	// AddRepository is not repeated and the inner netretry loop remains a single
-	// independent layer for network errors (429/5xx), keeping the two retry
-	// predicates non-overlapping and the total attempt count predictable.
-	for attempt := 1; attempt <= calicoInstallRetryAttempts; attempt++ {
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
 		err = c.attemptCalicoInstall(ctx, client, spec)
 		if err == nil {
 			return nil
 		}
 
-		if !isAPIServerUnavailableError(err) || attempt == calicoInstallRetryAttempts {
+		if !isAPIServerUnavailableError(err) || attempt == maxAttempts {
 			break
 		}
 

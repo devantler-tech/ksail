@@ -108,7 +108,7 @@ func TestInstaller_Install_ContextCanceled_Vanilla(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestInstaller_Install_APIServerUnavailableRetrySucceeds(t *testing.T) {
+func TestInstaller_Install_K3s_APIServerUnavailableRetrySucceeds(t *testing.T) {
 	t.Parallel()
 
 	client := helm.NewMockInterface(t)
@@ -117,8 +117,9 @@ func TestInstaller_Install_APIServerUnavailableRetrySucceeds(t *testing.T) {
 		"/path/to/kubeconfig",
 		"test-context",
 		2*time.Minute,
-		v1alpha1.DistributionVanilla,
+		v1alpha1.DistributionK3s,
 	)
+	installer.SetAPIServerCheckerForTest(func(_ context.Context) error { return nil })
 	installer.SetRetryBackoffForTest(func(_ context.Context) error { return nil })
 
 	client.EXPECT().
@@ -138,7 +139,7 @@ func TestInstaller_Install_APIServerUnavailableRetrySucceeds(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestInstaller_Install_APIServerUnavailableRetryExhausted(t *testing.T) {
+func TestInstaller_Install_K3s_APIServerUnavailableRetryExhausted(t *testing.T) {
 	t.Parallel()
 
 	client := helm.NewMockInterface(t)
@@ -147,8 +148,9 @@ func TestInstaller_Install_APIServerUnavailableRetryExhausted(t *testing.T) {
 		"/path/to/kubeconfig",
 		"test-context",
 		2*time.Minute,
-		v1alpha1.DistributionVanilla,
+		v1alpha1.DistributionK3s,
 	)
+	installer.SetAPIServerCheckerForTest(func(_ context.Context) error { return nil })
 	installer.SetRetryBackoffForTest(func(_ context.Context) error { return nil })
 
 	client.EXPECT().
@@ -159,6 +161,36 @@ func TestInstaller_Install_APIServerUnavailableRetryExhausted(t *testing.T) {
 		InstallOrUpgradeChart(mock.Anything, mock.Anything).
 		Return(nil, errCalicoRetryAPIServerUnavailable).
 		Times(3)
+
+	err := installer.Install(context.Background())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "install or upgrade calico")
+}
+
+// TestInstaller_Install_Vanilla_NoRetryOnAPIServerUnavailable verifies that
+// non-K3s distributions do not retry on API-server-unavailable errors, since
+// those indicate a genuine cluster problem rather than a transient bootstrap race.
+func TestInstaller_Install_Vanilla_NoRetryOnAPIServerUnavailable(t *testing.T) {
+	t.Parallel()
+
+	client := helm.NewMockInterface(t)
+	installer := calicoinstaller.NewInstallerWithDistribution(
+		client,
+		"/path/to/kubeconfig",
+		"test-context",
+		2*time.Minute,
+		v1alpha1.DistributionVanilla,
+	)
+
+	client.EXPECT().
+		AddRepository(mock.Anything, mock.Anything, mock.Anything).
+		Return(nil)
+
+	// Vanilla must NOT retry — InstallOrUpgradeChart is called exactly once.
+	client.EXPECT().
+		InstallOrUpgradeChart(mock.Anything, mock.Anything).
+		Return(nil, errCalicoRetryAPIServerUnavailable).
+		Once()
 
 	err := installer.Install(context.Background())
 	require.Error(t, err)
