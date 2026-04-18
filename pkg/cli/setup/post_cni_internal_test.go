@@ -1,0 +1,115 @@
+package setup
+
+import (
+	"context"
+	"errors"
+	"io"
+	"testing"
+
+	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v6/pkg/notify"
+	"github.com/devantler-tech/ksail/v6/pkg/timer"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestRunGitOpsPhase_AlwaysChecksClusterStabilityBeforeInstallingGitOps(t *testing.T) {
+	t.Parallel()
+
+	clusterCfg := &v1alpha1.Cluster{
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				GitOpsEngine: v1alpha1.GitOpsEngineFlux,
+			},
+		},
+	}
+
+	var (
+		stabilityChecked bool
+		cniInstalledArg  bool
+		taskRan          bool
+		order            []string
+	)
+
+	t.Cleanup(SetClusterStabilityCheckForTests(
+		func(_ context.Context, _ *v1alpha1.Cluster, cniInstalled bool) error {
+			stabilityChecked = true
+			cniInstalledArg = cniInstalled
+			order = append(order, "stability-check")
+
+			return nil
+		},
+	))
+
+	gitopsTasks := []notify.ProgressTask{
+		{
+			Name: "flux",
+			Fn: func(context.Context) error {
+				taskRan = true
+				order = append(order, "gitops-install")
+
+				return nil
+			},
+		},
+	}
+
+	tmr := timer.New()
+	err := runGitOpsPhase(
+		context.Background(),
+		clusterCfg,
+		io.Discard,
+		notify.InstallingLabels(),
+		tmr,
+		nil,
+		gitopsTasks,
+	)
+	require.NoError(t, err)
+	assert.True(t, stabilityChecked)
+	assert.False(t, cniInstalledArg, "GitOps phase must run full stability check")
+	assert.True(t, taskRan)
+	assert.Equal(t, []string{"stability-check", "gitops-install"}, order)
+}
+
+func TestRunGitOpsPhase_ReturnsErrorBeforeGitOpsInstallWhenStabilityCheckFails(t *testing.T) {
+	t.Parallel()
+
+	clusterCfg := &v1alpha1.Cluster{
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				GitOpsEngine: v1alpha1.GitOpsEngineArgoCD,
+			},
+		},
+	}
+
+	var taskRan bool
+	t.Cleanup(SetClusterStabilityCheckForTests(
+		func(context.Context, *v1alpha1.Cluster, bool) error {
+			return errors.New("not stable")
+		},
+	))
+
+	gitopsTasks := []notify.ProgressTask{
+		{
+			Name: "argocd",
+			Fn: func(context.Context) error {
+				taskRan = true
+
+				return nil
+			},
+		},
+	}
+
+	tmr := timer.New()
+	err := runGitOpsPhase(
+		context.Background(),
+		clusterCfg,
+		io.Discard,
+		notify.InstallingLabels(),
+		tmr,
+		nil,
+		gitopsTasks,
+	)
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "cluster not stable before GitOps installation")
+	assert.False(t, taskRan, "GitOps installation must not start when stability check fails")
+}
