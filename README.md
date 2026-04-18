@@ -61,12 +61,12 @@ See the [feature overview](https://ksail.devantler.tech/features/) and [architec
 | 🍎 macOS                                      | arm64        |
 | ⊞ Windows (native untested; WSL2 recommended) | amd64, arm64 |
 
-| Provider | Vanilla  | K3s     | Talos | VCluster | KWOK        | EKS  |
-|----------|----------|---------|-------|----------|-------------|------|
+| Provider | Vanilla  | K3s     | Talos | VCluster | KWOK        | EKS |
+|----------|----------|---------|-------|----------|-------------|-----|
 | Docker   | ✅ (Kind) | ✅ (K3d) | ✅     | ✅ (Vind) | ✅ (kwokctl) | ❌   |
-| Hetzner  | —        | —       | ✅     | —        | —           | —    |
-| Omni     | —        | —       | ✅     | —        | —           | —    |
-| AWS      | —        | —       | —     | —        | —           | 🚧   |
+| Hetzner  | —        | —       | ✅     | —        | —           | —   |
+| Omni     | —        | —       | ✅     | —        | —           | —   |
+| AWS      | —        | —       | —     | —        | —           | 🚧  |
 
 ## Community & Support
 
