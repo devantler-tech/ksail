@@ -18,6 +18,11 @@ var errCalicoRetryNoMatchesInstallation = errors.New(
 	`no matches for kind "Installation" in version "v1"`,
 )
 
+var errCalicoRetryAPIServerUnavailable = errors.New(
+	"cluster reachability check failed: kubernetes cluster unreachable: " +
+		"the server is currently unable to handle the request",
+)
+
 // TestInstaller_Install_TalosDistribution_Values verifies Talos-specific Calico values
 // are passed through the Helm install, including kubeletVolumePluginPath and NFTables.
 func TestInstaller_Install_TalosDistribution_Values(t *testing.T) {
@@ -101,4 +106,61 @@ func TestInstaller_Install_ContextCanceled_Vanilla(t *testing.T) {
 
 	err := installer.Install(ctx)
 	require.Error(t, err)
+}
+
+func TestInstaller_Install_APIServerUnavailableRetrySucceeds(t *testing.T) {
+	t.Parallel()
+
+	client := helm.NewMockInterface(t)
+	installer := calicoinstaller.NewInstallerWithDistribution(
+		client,
+		"/path/to/kubeconfig",
+		"test-context",
+		2*time.Minute,
+		v1alpha1.DistributionVanilla,
+	)
+	installer.SetRetryBackoffForTest(func(_ context.Context) error { return nil })
+
+	client.EXPECT().
+		AddRepository(mock.Anything, mock.Anything, mock.Anything).
+		Return(nil)
+
+	client.EXPECT().
+		InstallOrUpgradeChart(mock.Anything, mock.Anything).
+		Return(nil, errCalicoRetryAPIServerUnavailable).
+		Once()
+	client.EXPECT().
+		InstallOrUpgradeChart(mock.Anything, mock.Anything).
+		Return(nil, nil).
+		Once()
+
+	err := installer.Install(context.Background())
+	require.NoError(t, err)
+}
+
+func TestInstaller_Install_APIServerUnavailableRetryExhausted(t *testing.T) {
+	t.Parallel()
+
+	client := helm.NewMockInterface(t)
+	installer := calicoinstaller.NewInstallerWithDistribution(
+		client,
+		"/path/to/kubeconfig",
+		"test-context",
+		2*time.Minute,
+		v1alpha1.DistributionVanilla,
+	)
+	installer.SetRetryBackoffForTest(func(_ context.Context) error { return nil })
+
+	client.EXPECT().
+		AddRepository(mock.Anything, mock.Anything, mock.Anything).
+		Return(nil)
+
+	client.EXPECT().
+		InstallOrUpgradeChart(mock.Anything, mock.Anything).
+		Return(nil, errCalicoRetryAPIServerUnavailable).
+		Times(3)
+
+	err := installer.Install(context.Background())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "install or upgrade calico")
 }

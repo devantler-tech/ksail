@@ -28,21 +28,29 @@ type Installer struct {
 	// is stable. It defaults to WaitForAPIServerStability and can be overridden
 	// in tests to avoid needing a real cluster.
 	apiServerChecker func(ctx context.Context) error
+	// retryBackoff waits between transient API-unavailable Helm install retries.
+	// It defaults to a fixed delay and can be overridden in tests.
+	retryBackoff func(ctx context.Context) error
 }
+
+const (
+	calicoInstallRetryAttempts = 3
+	calicoInstallRetryBackoff  = 5 * time.Second
+)
 
 // NewInstaller creates a new Calico installer instance.
 func NewInstaller(
 	client helm.Interface,
-	kubeconfig, context string,
+	kubeconfig, kubeContext string,
 	timeout time.Duration,
 ) *Installer {
-	return NewInstallerWithDistribution(client, kubeconfig, context, timeout, "")
+	return NewInstallerWithDistribution(client, kubeconfig, kubeContext, timeout, "")
 }
 
 // NewInstallerWithDistribution creates a new Calico installer with distribution-specific configuration.
 func NewInstallerWithDistribution(
 	client helm.Interface,
-	kubeconfig, context string,
+	kubeconfig, kubeContext string,
 	timeout time.Duration,
 	distribution v1alpha1.Distribution,
 ) *Installer {
@@ -52,10 +60,21 @@ func NewInstallerWithDistribution(
 	calicoInstaller.InstallerBase = cni.NewInstallerBase(
 		client,
 		kubeconfig,
-		context,
+		kubeContext,
 		timeout,
 	)
 	calicoInstaller.apiServerChecker = calicoInstaller.WaitForAPIServerStability
+	calicoInstaller.retryBackoff = func(ctx context.Context) error {
+		timer := time.NewTimer(calicoInstallRetryBackoff)
+		defer timer.Stop()
+
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("context done while waiting for retry backoff: %w", ctx.Err())
+		case <-timer.C:
+			return nil
+		}
+	}
 
 	return calicoInstaller
 }
@@ -147,21 +166,32 @@ func (c *Installer) helmInstallOrUpgradeCalico(ctx context.Context) error {
 		SkipWait:        true,
 	}
 
-	err = helm.InstallOrUpgradeChart(ctx, client, repoConfig, chartConfig, c.GetTimeout())
-	if err != nil && isAPIDiscoveryError(err) {
-		waitErr := c.waitForCalicoCRDs(ctx)
-		if waitErr != nil {
-			return fmt.Errorf("wait for calico CRDs: %w", waitErr)
+	for attempt := 1; attempt <= calicoInstallRetryAttempts; attempt++ {
+		err = helm.InstallOrUpgradeChart(ctx, client, repoConfig, chartConfig, c.GetTimeout())
+		if err != nil && isAPIDiscoveryError(err) {
+			waitErr := c.waitForCalicoCRDs(ctx)
+			if waitErr != nil {
+				return fmt.Errorf("wait for calico CRDs: %w", waitErr)
+			}
+
+			err = helm.InstallOrUpgradeChart(ctx, client, repoConfig, chartConfig, c.GetTimeout())
 		}
 
-		err = helm.InstallOrUpgradeChart(ctx, client, repoConfig, chartConfig, c.GetTimeout())
+		if err == nil {
+			return nil
+		}
+
+		if !isAPIServerUnavailableError(err) || attempt == calicoInstallRetryAttempts {
+			break
+		}
+
+		waitErr := c.retryBackoff(ctx)
+		if waitErr != nil {
+			return fmt.Errorf("wait before calico install retry: %w", waitErr)
+		}
 	}
 
-	if err != nil {
-		return fmt.Errorf("install or upgrade calico: %w", err)
-	}
-
-	return nil
+	return fmt.Errorf("install or upgrade calico: %w", err)
 }
 
 // getCalicoValues returns the Helm values for Calico based on the distribution.
@@ -259,6 +289,18 @@ func isAPIDiscoveryError(err error) bool {
 
 	return strings.Contains(errMsg, "no matches for kind") ||
 		strings.Contains(errMsg, "could not find the requested resource")
+}
+
+func isAPIServerUnavailableError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	errMsg := err.Error()
+
+	return strings.Contains(errMsg, "cluster reachability check failed") ||
+		strings.Contains(errMsg, "kubernetes cluster unreachable") ||
+		strings.Contains(errMsg, "the server is currently unable to handle the request")
 }
 
 func isCRDEstablished(crd *apiextensionsv1.CustomResourceDefinition) bool {
