@@ -25,6 +25,7 @@ jobs:
   goreleaser:
     name: Release with GoReleaser
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: write
       packages: write
@@ -85,6 +86,7 @@ jobs:
   vscode-extension:
     name: 🧩 Release VSCode Extension
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: [goreleaser]
     permissions:
       contents: write
@@ -146,6 +148,7 @@ jobs:
   mcp-publish:
     name: 📤 Publish to MCP Registry
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: [goreleaser]
     permissions:
       id-token: write
@@ -281,6 +284,7 @@ jobs:
   publish-release:
     name: 📢 Publish Release
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     needs: [goreleaser, vscode-extension, mcp-publish, pages-deploy]
     permissions:
       contents: write
