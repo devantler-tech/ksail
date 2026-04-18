@@ -230,10 +230,15 @@ KSail detects the Omni provider automatically from the server URL (`*.omni.sider
 
 ### Kubeconfig Tokens
 
-KSail automatically refreshes your Omni kubeconfig token before it expires. Tokens have a **30-day TTL** and are renewed transparently before any CLI command runs (when the token has 5 minutes or less remaining). No manual action is required.
+KSail manages your Omni kubeconfig automatically:
+
+- **Initial fetch** — If no kubeconfig exists (e.g., a fresh CI runner), KSail fetches it from Omni before running any command. The parent directory (`~/.kube/`) is created if needed.
+- **Token refresh** — Tokens have a **30-day TTL** and are renewed transparently before any CLI command runs (when the token has 5 minutes or less remaining).
+
+No manual action is required in either case.
 
 > [!NOTE]
-> Auto-refresh is skipped when you pass `--kubeconfig` explicitly. In that case, you are managing the kubeconfig yourself and KSail will not modify it.
+> Automatic kubeconfig management is skipped when you pass `--kubeconfig` explicitly. In that case, you are managing the kubeconfig yourself and KSail will not modify it.
 
 ## Troubleshooting
 
