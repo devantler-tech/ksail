@@ -56,6 +56,10 @@ const (
 	clusterReadinessTimeout = 20 * time.Minute
 	// talosAPIWaitTimeout is the timeout for waiting for Talos API to be reachable.
 	talosAPIWaitTimeout = 5 * time.Minute
+	// k8sNodesReportedWaitTimeout is the timeout for bootstrap-phase polling of
+	// Kubernetes node discovery ("all k8s nodes to report"). This is intentionally
+	// longer than talosAPIWaitTimeout to tolerate transient early API EOFs on CI runners.
+	k8sNodesReportedWaitTimeout = 10 * time.Minute
 	// bootstrapTimeout is the timeout for bootstrap operations.
 	bootstrapTimeout = 2 * time.Minute
 	// preBootPollInterval is the polling interval for pre-boot sequence checks.

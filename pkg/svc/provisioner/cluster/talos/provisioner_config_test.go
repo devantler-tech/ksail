@@ -2,6 +2,7 @@ package talosprovisioner_test
 
 import (
 	"testing"
+	"time"
 
 	dockerprovider "github.com/devantler-tech/ksail/v6/pkg/svc/provider/docker"
 	hetzner "github.com/devantler-tech/ksail/v6/pkg/svc/provider/hetzner"
@@ -51,6 +52,16 @@ func TestIsDockerProvider(t *testing.T) {
 			assert.Equal(t, tc.want, tc.prov().IsDockerProviderForTest())
 		})
 	}
+}
+
+func TestK8sNodesReportedWaitTimeout_IsLongerThanTalosAPIWaitTimeout(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, 10*time.Minute, talosprovisioner.K8sNodesReportedWaitTimeoutForTest())
+	assert.Greater(t,
+		talosprovisioner.K8sNodesReportedWaitTimeoutForTest(),
+		talosprovisioner.TalosAPIWaitTimeoutForTest(),
+	)
 }
 
 // --- clusterReadinessChecks provider selection ---
