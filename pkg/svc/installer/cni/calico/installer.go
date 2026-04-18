@@ -149,32 +149,51 @@ func (c *Installer) helmInstallOrUpgradeCalico(ctx context.Context) error {
 		return fmt.Errorf("get helm client: %w", err)
 	}
 
-	repoConfig := helm.RepoConfig{
-		Name:     "projectcalico",
-		URL:      "https://docs.tigera.io/calico/charts",
-		RepoName: "calico",
+	// Add the Calico Helm repository once before any install attempts to avoid
+	// repeating the AddRepository call on every outer retry iteration.
+	repoEntry := &helm.RepositoryEntry{
+		Name: "projectcalico",
+		URL:  "https://docs.tigera.io/calico/charts",
+	}
+	if addErr := client.AddRepository(ctx, repoEntry, c.GetTimeout()); addErr != nil {
+		return fmt.Errorf("add calico repository: %w", addErr)
 	}
 
-	chartConfig := helm.ChartConfig{
+	spec := &helm.ChartSpec{
 		ReleaseName:     "calico",
 		ChartName:       "projectcalico/tigera-operator",
 		Namespace:       "tigera-operator",
 		Version:         chartVersion(),
 		RepoURL:         "https://docs.tigera.io/calico/charts",
 		CreateNamespace: true,
+		Atomic:          true,
+		Silent:          true,
+		UpgradeCRDs:     true,
+		Timeout:         c.GetTimeout(),
+		Wait:            false,
+		WaitForJobs:     false,
 		SetJSONVals:     c.getCalicoValues(),
-		SkipWait:        true,
 	}
 
+	// Outer retry loop for transient API-unavailable failures during K3s bootstrap.
+	// Uses helm.InstallChartWithRetry directly (after a single repo add above) so
+	// AddRepository is not repeated and the inner netretry loop remains a single
+	// independent layer for network errors (429/5xx), keeping the two retry
+	// predicates non-overlapping and the total attempt count predictable.
 	for attempt := 1; attempt <= calicoInstallRetryAttempts; attempt++ {
-		err = helm.InstallOrUpgradeChart(ctx, client, repoConfig, chartConfig, c.GetTimeout())
+		installCtx, cancel := context.WithTimeout(ctx, c.GetTimeout()+helm.ContextTimeoutBuffer)
+		err = helm.InstallChartWithRetry(installCtx, client, spec, "calico")
+		cancel()
+
 		if err != nil && isAPIDiscoveryError(err) {
 			waitErr := c.waitForCalicoCRDs(ctx)
 			if waitErr != nil {
 				return fmt.Errorf("wait for calico CRDs: %w", waitErr)
 			}
 
-			err = helm.InstallOrUpgradeChart(ctx, client, repoConfig, chartConfig, c.GetTimeout())
+			installCtx, cancel = context.WithTimeout(ctx, c.GetTimeout()+helm.ContextTimeoutBuffer)
+			err = helm.InstallChartWithRetry(installCtx, client, spec, "calico")
+			cancel()
 		}
 
 		if err == nil {
