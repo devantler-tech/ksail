@@ -35,6 +35,7 @@ func TestRunGitOpsPhase_AlwaysChecksClusterStabilityBeforeInstallingGitOps(t *te
 		func(_ context.Context, _ *v1alpha1.Cluster, cniInstalled bool) error {
 			stabilityChecked = true
 			cniInstalledArg = cniInstalled
+
 			order = append(order, "stability-check")
 
 			return nil
@@ -46,6 +47,7 @@ func TestRunGitOpsPhase_AlwaysChecksClusterStabilityBeforeInstallingGitOps(t *te
 			Name: "flux",
 			Fn: func(context.Context) error {
 				taskRan = true
+
 				order = append(order, "gitops-install")
 
 				return nil
@@ -80,6 +82,7 @@ func TestRunGitOpsPhase_ReturnsErrorBeforeGitOpsInstallWhenStabilityCheckFails(t
 	}
 
 	var taskRan bool
+
 	t.Cleanup(SetClusterStabilityCheckForTests(
 		func(context.Context, *v1alpha1.Cluster, bool) error {
 			return errNotStable
