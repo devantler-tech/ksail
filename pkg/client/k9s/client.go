@@ -1,11 +1,53 @@
 package k9s
 
 import (
+	"flag"
 	"os"
+	"sync"
 
 	k9scmd "github.com/derailed/k9s/cmd"
 	"github.com/spf13/cobra"
+	"k8s.io/klog/v2"
 )
+
+// silenceKlogOnce ensures klog is configured at most once per process.
+//
+// klog flag registration across any caller within the process.
+//
+//nolint:gochecknoglobals // sync.Once must be package-scoped to deduplicate
+var silenceKlogOnce sync.Once
+
+// silenceKlog redirects klog output away from stderr so client-go log lines
+// (e.g. reflector "Failed to watch" errors) do not corrupt the k9s TUI.
+//
+// The upstream k9s binary performs the same setup from its own main.go
+// init(). Because ksail embeds only the k9s cmd/ subpackage, that init is
+// never executed and klog writes directly to stderr while the alternate
+// screen is active, producing the garbled output reported in
+// `ksail cluster connect`.
+//
+// See github.com/derailed/k9s/main.go for the reference implementation.
+func silenceKlog() {
+	silenceKlogOnce.Do(func() {
+		// klog.InitFlags panics if its flags are already registered on the
+		// default flag.CommandLine (e.g. by another dependency). Only bind
+		// klog's flags if they aren't already present.
+		if flag.Lookup("logtostderr") == nil {
+			klog.InitFlags(nil)
+		}
+
+		for name, value := range map[string]string{
+			"logtostderr":     "false",
+			"alsologtostderr": "false",
+			"stderrthreshold": "fatal",
+			"v":               "-10",
+		} {
+			// Errors here would only occur if klog's flag names change upstream.
+			// Ignore to keep the TUI launch path side-effect free.
+			_ = flag.Set(name, value)
+		}
+	})
+}
 
 // Client wraps k9s command functionality.
 type Client struct{}
@@ -56,6 +98,9 @@ func (c *Client) runK9s(kubeConfigPath, context string, args []string) error {
 
 	// Set os.Args for k9s to parse
 	os.Args = k9sArgs
+
+	// Prevent client-go klog messages from leaking onto the TUI.
+	silenceKlog()
 
 	// Execute k9s.
 	k9scmd.Execute()

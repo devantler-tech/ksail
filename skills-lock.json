@@ -2,79 +2,64 @@
   "version": 1,
   "skills": {
     "astro": {
-      "source": "astrolicious/agent-skills",
-      "sourceType": "github",
-      "computedHash": "ebefe26b231d32379c14e41a46c2de7b4b0184543bedab7febdabe4fb21fba4e"
+      "source": "devantler-tech/skills",
+      "sourceType": "github"
     },
     "bubbletea": {
-      "source": "ggprompts/tfe",
-      "sourceType": "github",
-      "computedHash": "a06df850cbd8282da9c362bd5585150119c87032bb07417a141b71b6f0b966ba"
+      "source": "devantler-tech/skills",
+      "sourceType": "github"
     },
     "copilot-instructions-blueprint-generator": {
-      "source": "github/awesome-copilot",
-      "sourceType": "github",
-      "computedHash": "45fd25e507349b05f80a0cafc159109071ed6c24ac5f014b9c749fd6846bd62b"
+      "source": "devantler-tech/skills",
+      "sourceType": "github"
     },
     "copilot-sdk": {
-      "source": "github/awesome-copilot",
-      "sourceType": "github",
-      "computedHash": "16beed1bc9cddb25e0b0af8afedbdac70ba90debaa9d490fa9921e3eddce020e"
+      "source": "devantler-tech/skills",
+      "sourceType": "github"
     },
     "find-skills": {
-      "source": "vercel-labs/skills",
-      "sourceType": "github",
-      "computedHash": "9e1c8b3103f92fa8092568a44fe64858de7c5c9dc65ce4bea8f168080e889cfd"
+      "source": "devantler-tech/skills",
+      "sourceType": "github"
     },
     "frontend-design": {
-      "source": "anthropics/skills",
-      "sourceType": "github",
-      "computedHash": "063a0e6448123cd359ad0044cc46b0e490cc7964d45ef4bb9fd842bd2ffbca67"
+      "source": "devantler-tech/skills",
+      "sourceType": "github"
     },
     "gh-cli": {
-      "source": "github/awesome-copilot",
-      "sourceType": "github",
-      "computedHash": "cbe644b0c6760ae2a1eaafa39133920d889331327065d92a131675a665273e56"
+      "source": "devantler-tech/skills",
+      "sourceType": "github"
     },
     "gh-stack": {
-      "source": "github/gh-stack",
-      "sourceType": "github",
-      "computedHash": "8b9495442dbade69f5adf375b50f93542bbc35314255bcdd94637df6a77bca1e"
+      "source": "devantler-tech/skills",
+      "sourceType": "github"
     },
     "git-commit": {
-      "source": "github/awesome-copilot",
-      "sourceType": "github",
-      "computedHash": "2607fc60629b82b257136dd2a7a373f0a4466c0b49df7746d845d59313c99b21"
+      "source": "devantler-tech/skills",
+      "sourceType": "github"
     },
     "github-actions-docs": {
-      "source": "xixu-me/skills",
-      "sourceType": "github",
-      "computedHash": "e9ac24e79715ef3060bd4ae376052f8d863b830604e69cb513b39764bf47ee53"
+      "source": "devantler-tech/skills",
+      "sourceType": "github"
     },
     "github-issues": {
-      "source": "github/awesome-copilot",
-      "sourceType": "github",
-      "computedHash": "3a752d99ddc3178f443fe242d490800398b2b42030a9d221b298b9486d90cc87"
+      "source": "devantler-tech/skills",
+      "sourceType": "github"
     },
     "golang-pro": {
-      "source": "jeffallan/claude-skills",
-      "sourceType": "github",
-      "computedHash": "c90a0798a12ea2d9191508439ec3191dd96713310615260ebe82ec5a09a4a434"
+      "source": "devantler-tech/skills",
+      "sourceType": "github"
     },
     "refactor": {
-      "source": "github/awesome-copilot",
-      "sourceType": "github",
-      "computedHash": "87789a786b96f99ba0680e89345a975106e10e7db1071c7cdc2e76d507c449d6"
+      "source": "devantler-tech/skills",
+      "sourceType": "github"
     },
     "test-driven-development": {
-      "source": "obra/superpowers",
-      "sourceType": "github",
-      "computedHash": "126f1ebf6ccd414f42544f6e83d8cc5adb089e1108eaffb7c400701e37eecd9f"
+      "source": "devantler-tech/skills",
+      "sourceType": "github"
     },
     "web-design-guidelines": {
-      "source": "vercel-labs/agent-skills",
-      "sourceType": "github",
-      "computedHash": "f3bc47f890f42a44db1007ab390709ec368e4b8c089baee6b0007182236ac474"
+      "source": "devantler-tech/skills",
+      "sourceType": "github"
     }
   }
 }

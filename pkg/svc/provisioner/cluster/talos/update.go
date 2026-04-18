@@ -38,6 +38,15 @@ func (p *Provisioner) Update(
 
 	clusterName := p.resolveClusterName(name)
 
+	// For Omni-managed clusters, refresh kubeconfig and talosconfig before any
+	// Helm/K8s operations. cluster create always calls saveOmniConfigs, but
+	// cluster update did not, leaving the on-disk kubeconfig stale after token
+	// rotation or Omni-side reissuance (Fixes #3922).
+	configErr := p.refreshOmniConfigsIfNeeded(ctx, clusterName)
+	if configErr != nil {
+		return result, fmt.Errorf("failed to refresh Omni configs before update: %w", configErr)
+	}
+
 	// Handle node scaling changes
 	scaleErr := p.applyNodeScalingChanges(ctx, clusterName, oldSpec, newSpec, result)
 	if scaleErr != nil {
@@ -50,7 +59,7 @@ func (p *Provisioner) Update(
 	// Omni manages node configuration through its own API; the diff for Omni clusters
 	// only ever contains node-count fields (controlPlanes/workers) which are already
 	// handled (and skipped) above, so direct Talos machine config pushes are not needed.
-	if diff.TotalChanges() > 0 && p.omniOpts == nil {
+	if p.shouldApplyInPlaceChanges(diff) {
 		cfgErr := p.applyInPlaceConfigChanges(ctx, clusterName, result)
 		if cfgErr != nil {
 			return result, fmt.Errorf("failed to apply in-place config changes: %w", cfgErr)

@@ -163,7 +163,7 @@ func (v *Validator) validateDistribution(
 			Field:         "spec.cluster.distribution",
 			Message:       message,
 			CurrentValue:  distribution,
-			ExpectedValue: "one of: Vanilla, K3s, Talos, VCluster, KWOK",
+			ExpectedValue: "one of: Vanilla, K3s, Talos, VCluster, KWOK, EKS",
 			FixSuggestion: fixSuggestion,
 		})
 	}

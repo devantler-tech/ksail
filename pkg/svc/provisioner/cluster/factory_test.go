@@ -11,6 +11,7 @@ import (
 	k3dconfigmanager "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager/k3d"
 	talosconfigmanager "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager/talos"
 	clusterprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster"
+	eksprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/eks"
 	k3dprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/k3d"
 	kindprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/kind"
 	talosprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/talos"
@@ -67,6 +68,26 @@ func TestCreateProvisioner_WithDistributionConfig(t *testing.T) {
 			},
 			expectedType: &talosprovisioner.Provisioner{},
 			expectError:  false,
+		},
+		{
+			name:         "eks with pre-loaded config",
+			distribution: v1alpha1.DistributionEKS,
+			distributionConfig: &clusterprovisioner.DistributionConfig{
+				EKS: &clusterprovisioner.EKSConfig{
+					Name:       "test-eks",
+					Region:     "us-east-1",
+					ConfigPath: "/tmp/eksctl.yaml",
+				},
+			},
+			expectedType: &eksprovisioner.Provisioner{},
+			expectError:  false,
+		},
+		{
+			name:               "eks without config returns error",
+			distribution:       v1alpha1.DistributionEKS,
+			distributionConfig: &clusterprovisioner.DistributionConfig{},
+			expectError:        true,
+			errorIs:            clusterprovisioner.ErrMissingDistributionConfig,
 		},
 		{
 			name:         "unsupported distribution returns error",
