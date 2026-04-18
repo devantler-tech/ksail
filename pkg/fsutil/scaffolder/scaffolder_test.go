@@ -25,8 +25,8 @@ import (
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	v1alpha4 "sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
-	kwokconfig "sigs.k8s.io/kwok/pkg/config"
 	ktypes "sigs.k8s.io/kustomize/api/types"
+	kwokconfig "sigs.k8s.io/kwok/pkg/config"
 )
 
 var errGenerateFailure = errors.New("generate failure")
@@ -1638,7 +1638,12 @@ func TestKWOKDefaultSimulationConfig_ValidAgainstKwokctlTypes(t *testing.T) {
 
 	objs, err := kwokconfig.Load(context.Background(), tmpFile)
 	require.NoError(t, err, "KWOKDefaultSimulationConfig must parse against kwokctl Go types")
-	assert.Len(t, objs, 4, "expected 4 CRD objects: ClusterLogs, ClusterExec, ClusterAttach, ClusterPortForward")
+	assert.Len(
+		t,
+		objs,
+		4,
+		"expected 4 CRD objects: ClusterLogs, ClusterExec, ClusterAttach, ClusterPortForward",
+	)
 }
 
 // GitOps scaffolding tests.
