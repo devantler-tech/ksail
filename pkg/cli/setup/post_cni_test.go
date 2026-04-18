@@ -444,7 +444,11 @@ func TestNeedsInClusterConnectivityCheck(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			assert.Equal(t, testCase.expected, setup.NeedsInClusterConnectivityCheck(testCase.clusterCfg))
+			assert.Equal(
+				t,
+				testCase.expected,
+				setup.NeedsInClusterConnectivityCheck(testCase.clusterCfg),
+			)
 		})
 	}
 }
