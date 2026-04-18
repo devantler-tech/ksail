@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -33,6 +35,10 @@ const (
 	// kubeconfigFileMode is the file mode for kubeconfig files.
 	kubeconfigFileMode = 0o600
 
+	// kubeconfigDirMode is the directory mode used when creating the parent
+	// directory for the kubeconfig on initial fetch (e.g. fresh CI runners).
+	kubeconfigDirMode = 0o700
+
 	// jwtParts is the expected number of dot-separated segments in a JWT
 	// (header.payload.signature). Requiring exactly 3 prevents non-JWT
 	// bearer tokens that happen to contain a dot from being parsed.
@@ -45,55 +51,107 @@ const (
 
 // MaybeRefreshOmniKubeconfig checks whether the current kubeconfig's service-account
 // token is expired or stale for Omni-managed clusters and transparently refreshes it.
+// It also performs an initial fetch when the kubeconfig file does not yet exist
+// (e.g. on a fresh CI runner) so downstream Helm/Flux/GitOps operations have a
+// kubeconfig to work against.
 //
 // This function is designed to be called from Cobra PersistentPreRunE hooks.
 // It is a fast no-op when:
 //   - No KSail config is found or the provider is not Omni
-//   - The kubeconfig file does not exist yet (e.g., before cluster create)
+//   - The user passed --kubeconfig explicitly (they manage it themselves)
 //
-// For Omni clusters with an existing kubeconfig, this function first checks
-// JWT token expiry (~1ms, local-only). If the token is still valid, a
-// lightweight API server probe (up to staleCheckTimeout) detects credentials
-// that are structurally valid but rejected by a recreated cluster.
+// When the kubeconfig file exists, this function first checks JWT token expiry
+// (~1ms, local-only). If the token is still valid, a lightweight API server
+// probe (up to staleCheckTimeout) detects credentials that are structurally
+// valid but rejected by a recreated cluster.
 //
 // Refresh is triggered when:
+//   - The kubeconfig file does not yet exist (initial fetch)
 //   - The JWT token in the kubeconfig is expired or about to expire
 //   - The kubeconfig credentials are rejected by the API server (e.g., after
 //     cluster recreation with the same name)
 //
 // On refresh failure, a warning is logged but the error is not propagated —
-// the command proceeds with the existing kubeconfig.
+// the command proceeds with whatever (if any) kubeconfig is on disk.
 func MaybeRefreshOmniKubeconfig(cmd *cobra.Command) {
 	cfg, distCfg, canonicalPath := resolveOmniKubeconfigPath(cmd)
 	if cfg == nil {
 		return
 	}
 
-	kubeconfigContext := cfg.Spec.Cluster.Connection.Context
-
-	needsRefresh := IsTokenExpired(canonicalPath, kubeconfigContext)
-
-	// When the token is not expired, check if the credentials are still
-	// accepted by the API server. After cluster recreation the token may
-	// be structurally valid (not expired) but rejected by the new cluster.
-	if !needsRefresh {
-		needsRefresh = IsKubeconfigStale(canonicalPath, kubeconfigContext)
-	}
-
-	if !needsRefresh {
+	fileExists, shouldRefresh := evaluateKubeconfigRefresh(
+		canonicalPath,
+		cfg.Spec.Cluster.Connection.Context,
+	)
+	if !shouldRefresh {
 		return
 	}
 
+	performOmniKubeconfigRefresh(cmd, cfg, distCfg, canonicalPath, fileExists)
+}
+
+// evaluateKubeconfigRefresh determines whether the Omni kubeconfig at
+// canonicalPath needs to be (re)fetched. It returns whether the file currently
+// exists and whether a refresh should be triggered.
+func evaluateKubeconfigRefresh(canonicalPath, kubeconfigContext string) (bool, bool) {
+	_, statErr := os.Stat(canonicalPath)
+
+	switch {
+	case statErr == nil:
+		if IsTokenExpired(canonicalPath, kubeconfigContext) {
+			return true, true
+		}
+
+		// When the token is not expired, check if the credentials are still
+		// accepted by the API server. After cluster recreation the token may
+		// be structurally valid (not expired) but rejected by the new cluster.
+		return true, IsKubeconfigStale(canonicalPath, kubeconfigContext)
+	case os.IsNotExist(statErr):
+		// Fresh runner: no kubeconfig yet. Fetch it from Omni so downstream
+		// operations (component detection, Helm, Flux) can connect.
+		return false, true
+	default:
+		// Some other stat error (e.g. permission). Leave it alone — a later
+		// step will surface the real error.
+		return false, false
+	}
+}
+
+// performOmniKubeconfigRefresh runs the actual Omni refresh/fetch and reports
+// progress via cmd's output. It is only invoked after evaluateKubeconfigRefresh
+// has decided a refresh is warranted.
+func performOmniKubeconfigRefresh(
+	cmd *cobra.Command,
+	cfg *v1alpha1.Cluster,
+	distCfg *clusterprovisioner.DistributionConfig,
+	canonicalPath string,
+	fileExists bool,
+) {
 	clusterName := resolveClusterName(distCfg, canonicalPath)
 	if clusterName == "" {
+		if !fileExists {
+			notify.Warningf(cmd.OutOrStderr(),
+				"cannot auto-fetch Omni kubeconfig: unable to determine cluster name from config")
+		}
+
 		return
 	}
 
 	// Determine the desired kubeconfig context name.
-	// If explicitly configured, use that; otherwise derive from the Talos convention.
-	desiredContext := kubeconfigContext
+	// If explicitly configured, use that; otherwise derive from the distribution convention.
+	desiredContext := cfg.Spec.Cluster.Connection.Context
 	if desiredContext == "" {
 		desiredContext = cfg.Spec.Cluster.Distribution.ContextName(clusterName)
+	}
+
+	if !fileExists {
+		mkErr := os.MkdirAll(filepath.Dir(canonicalPath), kubeconfigDirMode)
+		if mkErr != nil {
+			notify.Warningf(cmd.OutOrStderr(),
+				"failed to create kubeconfig directory: %v", mkErr)
+
+			return
+		}
 	}
 
 	refreshErr := refreshKubeconfig(
@@ -105,13 +163,24 @@ func MaybeRefreshOmniKubeconfig(cmd *cobra.Command) {
 	)
 	if refreshErr != nil {
 		notify.Warningf(cmd.OutOrStderr(), "failed to refresh Omni kubeconfig: %v", refreshErr)
+
+		return
+	}
+
+	if !fileExists {
+		notify.Activityf(cmd.OutOrStderr(),
+			"fetched Omni kubeconfig to %s", canonicalPath)
 	}
 }
 
 // resolveOmniKubeconfigPath loads the KSail config, verifies the provider is
 // Omni, and returns the canonicalized kubeconfig path together with the
-// cluster config and distribution config. Returns nils when a refresh is not
-// applicable (non-Omni provider, missing config, missing kubeconfig file).
+// cluster config and distribution config.
+//
+// Returns nils when a refresh/fetch is not applicable: non-Omni provider,
+// missing config, or path resolution failure. Does NOT skip when the
+// kubeconfig file is absent — callers decide whether to trigger an initial
+// fetch in that case.
 func resolveOmniKubeconfigPath(
 	cmd *cobra.Command,
 ) (*v1alpha1.Cluster, *clusterprovisioner.DistributionConfig, string) {
@@ -137,14 +206,25 @@ func resolveOmniKubeconfigPath(
 		return nil, nil, ""
 	}
 
+	// Canonicalize for containment-safety, but fall back to filepath.Abs only
+	// when the parent directory does not exist yet (e.g. on a fresh CI runner
+	// where ~/.kube/ is still missing). EvalCanonicalPath requires the parent
+	// to exist, and without this fallback the initial-fetch branch would be
+	// silently skipped — the exact regression #4112 is about. For any other
+	// error (permission denied, I/O error, etc.) we bail out rather than
+	// bypass canonicalization on a non-canonical path.
 	canonicalPath, canonErr := fsutil.EvalCanonicalPath(kubeconfigPath)
 	if canonErr != nil {
-		return nil, nil, ""
-	}
+		if !errors.Is(canonErr, fs.ErrNotExist) {
+			return nil, nil, ""
+		}
 
-	_, statErr := os.Stat(canonicalPath)
-	if os.IsNotExist(statErr) {
-		return nil, nil, ""
+		absPath, absErr := filepath.Abs(kubeconfigPath)
+		if absErr != nil {
+			return nil, nil, ""
+		}
+
+		canonicalPath = absPath
 	}
 
 	return cfg, cfgManager.DistributionConfig, canonicalPath

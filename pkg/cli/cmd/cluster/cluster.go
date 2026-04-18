@@ -6374,10 +6374,11 @@ func createAndVerifyProvisioner(
 	// Refresh kubeconfig from the remote provider if supported.
 	// This ensures the kubeconfig is available for component detection
 	// and subsequent Helm operations (CNI, GitOps installation).
-	if refresher, ok := provisioner.(clusterprovisioner.KubeconfigRefresher); ok {
-		err := refresher.RefreshKubeconfig(cmd.Context(), clusterName)
+	refresher, ok := provisioner.(clusterprovisioner.KubeconfigRefresher)
+	if ok {
+		err = refreshAndVerifyKubeconfig(cmd.Context(), refresher, ctx.ClusterCfg, clusterName)
 		if err != nil {
-			return nil, fmt.Errorf("failed to refresh kubeconfig: %w", err)
+			return nil, err
 		}
 	}
 
@@ -6392,7 +6393,43 @@ func createAndVerifyProvisioner(
 	return provisioner, nil
 }
 
-// buildComponentDetector creates a ComponentDetector using the cluster's
+// refreshAndVerifyKubeconfig invokes the provisioner's KubeconfigRefresher and,
+// for Omni providers, ensures the kubeconfig file actually exists on disk after
+// the refresh. This is a defense-in-depth guard (regression #4112): if any
+// upstream step silently no-ops the fetch, downstream Helm/GitOps calls would
+// otherwise only surface a cryptic "stat <path>: no such file or directory"
+// warning. Failing here produces a clear, actionable error.
+func refreshAndVerifyKubeconfig(
+	ctx context.Context,
+	refresher clusterprovisioner.KubeconfigRefresher,
+	clusterCfg *v1alpha1.Cluster,
+	clusterName string,
+) error {
+	err := refresher.RefreshKubeconfig(ctx, clusterName)
+	if err != nil {
+		return fmt.Errorf("failed to refresh kubeconfig: %w", err)
+	}
+
+	if clusterCfg.Spec.Cluster.Provider != v1alpha1.ProviderOmni {
+		return nil
+	}
+
+	kubeconfigPath, pathErr := kubeconfig.GetKubeconfigPathFromConfig(clusterCfg)
+	if pathErr != nil {
+		return fmt.Errorf("failed to resolve kubeconfig path: %w", pathErr)
+	}
+
+	_, statErr := os.Stat(kubeconfigPath)
+	if statErr != nil {
+		return fmt.Errorf(
+			"kubeconfig not available after Omni refresh at %q: %w",
+			kubeconfigPath, statErr,
+		)
+	}
+
+	return nil
+}
+
 // kubeconfig and Docker client. Returns nil when clients cannot be created
 // (the provisioner will fall back to static defaults).
 func buildComponentDetector(
