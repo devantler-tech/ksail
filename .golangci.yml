@@ -24,6 +24,10 @@ linters:
       - ".*mocks.*\\.go$"
       - "^vsce/node_modules/.*\\.go$"
     rules:
+      # Tests that mutate shared global state (SetClusterStabilityCheckForTests) cannot run in parallel
+      - linters:
+          - paralleltest
+        path: pkg/cli/setup/post_cni_internal_test.go
       # Tests that modify env vars cannot run in parallel
       - linters:
           - paralleltest
