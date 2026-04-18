@@ -16,8 +16,6 @@ import (
 var errNotStable = errors.New("not stable")
 
 func TestRunGitOpsPhase_AlwaysChecksClusterStabilityBeforeInstallingGitOps(t *testing.T) {
-	t.Parallel()
-
 	clusterCfg := &v1alpha1.Cluster{
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{
@@ -73,8 +71,6 @@ func TestRunGitOpsPhase_AlwaysChecksClusterStabilityBeforeInstallingGitOps(t *te
 }
 
 func TestRunGitOpsPhase_ReturnsErrorBeforeGitOpsInstallWhenStabilityCheckFails(t *testing.T) {
-	t.Parallel()
-
 	clusterCfg := &v1alpha1.Cluster{
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{
