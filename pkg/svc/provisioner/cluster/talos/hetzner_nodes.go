@@ -426,16 +426,22 @@ func (p *Provisioner) applyConfigToNode(
 		return fmt.Errorf("failed to marshal config: %w", err)
 	}
 
+	var lastErr error
+
 	for attempt := 1; attempt <= talosApplyConfigMaxRetries; attempt++ {
-		err = attemptApplyConfig(ctx, serverIP, cfgBytes)
-		if err == nil {
+		lastErr = attemptApplyConfig(ctx, serverIP, cfgBytes)
+		if lastErr == nil {
 			p.logf("  ✓ Config applied to %s\n", server.Name)
 
 			return nil
 		}
 
-		if shouldAbortRetry(err, attempt) {
-			return fmt.Errorf("failed to apply configuration: %w", err)
+		if !isRetryableTalosApplyConfigError(lastErr) {
+			return fmt.Errorf("failed to apply configuration: %w", lastErr)
+		}
+
+		if attempt == talosApplyConfigMaxRetries {
+			break
 		}
 
 		delay := netretry.ExponentialDelay(
@@ -449,12 +455,12 @@ func (p *Provisioner) applyConfigToNode(
 			attempt,
 			server.Name,
 			delay,
-			err,
+			lastErr,
 		)
 
-		err = sleepWithContext(ctx, delay)
-		if err != nil {
-			return fmt.Errorf("failed to apply configuration: %w", err)
+		lastErr = sleepWithContext(ctx, delay)
+		if lastErr != nil {
+			return fmt.Errorf("retry backoff interrupted: %w", lastErr)
 		}
 	}
 
@@ -485,12 +491,6 @@ func attemptApplyConfig(ctx context.Context, serverIP string, cfgBytes []byte) e
 	}
 
 	return nil
-}
-
-// shouldAbortRetry returns true when the error is non-retryable or the maximum
-// number of attempts has been reached.
-func shouldAbortRetry(err error, attempt int) bool {
-	return !isRetryableTalosApplyConfigError(err) || attempt == talosApplyConfigMaxRetries
 }
 
 // sleepWithContext waits for d to elapse, returning ctx.Err() early if the context is cancelled.
