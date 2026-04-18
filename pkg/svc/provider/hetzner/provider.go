@@ -564,23 +564,22 @@ func retryTransientHetznerOperation[T any](
 ) (T, error) {
 	var zeroValue T
 
-	for retryAttempt := range retryCount + 1 {
-		result, err := operation()
-		if err == nil {
-			return result, nil
-		}
+	if retryCount < 0 {
+		retryCount = 0
+	}
 
-		if !IsRetryableHetznerError(err) || retryAttempt >= retryCount {
-			return zeroValue, err
-		}
+	result, err := operation()
+	for attempt := 0; err != nil && IsRetryableHetznerError(err) && attempt < retryCount; attempt++ {
+		delay := delayFunc(attempt + 1)
 
-		delay := delayFunc(retryAttempt + 1)
 		select {
 		case <-ctx.Done():
 			return zeroValue, fmt.Errorf("context cancelled during retry: %w", ctx.Err())
 		case <-time.After(delay):
 		}
+
+		result, err = operation()
 	}
 
-	return zeroValue, errors.New("retry loop exhausted without terminal result")
+	return result, err
 }
