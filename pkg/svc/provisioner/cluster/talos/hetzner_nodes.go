@@ -480,7 +480,6 @@ func attemptApplyConfig(ctx context.Context, serverIP string, cfgBytes []byte) e
 	_, err = insecureClient.ApplyConfiguration(ctx, &machineapi.ApplyConfigurationRequest{
 		Data: cfgBytes,
 	})
-
 	if err != nil {
 		return fmt.Errorf("apply configuration: %w", err)
 	}

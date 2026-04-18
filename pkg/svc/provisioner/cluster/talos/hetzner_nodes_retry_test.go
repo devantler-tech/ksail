@@ -14,7 +14,9 @@ var (
 		`rpc error: code = Unavailable desc = connection error: desc = ` +
 			`"transport: authentication handshake failed: context deadline exceeded"`,
 	)
-	errHandshakeFailed  = errors.New("transport: authentication handshake failed: context deadline exceeded")
+	errHandshakeFailed = errors.New(
+		"transport: authentication handshake failed: context deadline exceeded",
+	)
 	errPermissionDenied = errors.New("permission denied")
 )
 
