@@ -37,8 +37,9 @@ const kwokControllerImage = "registry.k8s.io/kwok/kwok:" + kwokControllerImageVe
 // transient infrastructure failures. The KWOK Docker runtime pulls real
 // control-plane images from registry.k8s.io; running many KWOK jobs in
 // parallel (e.g. CI matrix) can hit Google Artifact Registry per-region
-// per-minute rate limits. Three attempts with backoff handles the typical
-// ~60-second quota reset window.
+// per-minute rate limits. Three attempts with 30-second delays provide
+// a total retry window of ~60 seconds, sufficient for the per-minute
+// quota to reset.
 const createMaxAttempts = 3
 
 // createRetryDelay is the delay between create retry attempts, giving the

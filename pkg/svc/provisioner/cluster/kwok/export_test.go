@@ -6,9 +6,3 @@ var IsTransientCreateErrorForTest = isTransientCreateError
 
 // CreateWithRetryForTest exposes createWithRetry for unit testing.
 var CreateWithRetryForTest = createWithRetry
-
-// KwokCreateFnForTest exposes the kwokCreateFn type for unit testing.
-type KwokCreateFnForTest = kwokCreateFn
-
-// KwokCleanupFnForTest exposes the kwokCleanupFn type for unit testing.
-type KwokCleanupFnForTest = kwokCleanupFn
