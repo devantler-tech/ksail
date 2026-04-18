@@ -13,6 +13,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+var errNotStable = errors.New("not stable")
+
 func TestRunGitOpsPhase_AlwaysChecksClusterStabilityBeforeInstallingGitOps(t *testing.T) {
 	t.Parallel()
 
@@ -84,7 +86,7 @@ func TestRunGitOpsPhase_ReturnsErrorBeforeGitOpsInstallWhenStabilityCheckFails(t
 	var taskRan bool
 	t.Cleanup(SetClusterStabilityCheckForTests(
 		func(context.Context, *v1alpha1.Cluster, bool) error {
-			return errors.New("not stable")
+			return errNotStable
 		},
 	))
 
@@ -110,6 +112,6 @@ func TestRunGitOpsPhase_ReturnsErrorBeforeGitOpsInstallWhenStabilityCheckFails(t
 		gitopsTasks,
 	)
 	require.Error(t, err)
-	assert.ErrorContains(t, err, "cluster not stable before GitOps installation")
+	require.ErrorContains(t, err, "cluster not stable before GitOps installation")
 	assert.False(t, taskRan, "GitOps installation must not start when stability check fails")
 }
