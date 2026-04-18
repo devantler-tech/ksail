@@ -68,7 +68,11 @@ jobs:
         with:
           skills-lock: skills-lock.json
           agent: github-copilot
-          scope: user
+          # `user` scope writes to ~/.copilot/skills on the runner (outside
+          # GITHUB_WORKSPACE), so the working tree never changes and no PR
+          # is opened. Use `repo` scope so installs land inside the repo and
+          # peter-evans/create-pull-request can detect and commit the diff.
+          scope: repo
 
       - name: 📦 Create pull request
         uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
@@ -78,9 +82,8 @@ jobs:
           body: |
             Automated update of skills for GitHub Copilot to their latest versions.
 
-            Updated files:
-            - `skills-lock.json`
-            - `.agents/skills/`
+            Picks up any drift in installed skill content (resolved by
+            `gh skill install --scope repo` from `skills-lock.json`).
           branch: deps/copilot-skills-update
           labels: dependencies,automation
           delete-branch: true
