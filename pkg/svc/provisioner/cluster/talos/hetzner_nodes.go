@@ -421,53 +421,13 @@ func (p *Provisioner) applyConfigToNode(
 
 	p.logf("  Applying config to %s (%s)...\n", server.Name, serverIP)
 
-	// Get config bytes
 	cfgBytes, err := config.Bytes()
 	if err != nil {
 		return fmt.Errorf("failed to marshal config: %w", err)
 	}
 
 	for attempt := 1; attempt <= talosApplyConfigMaxRetries; attempt++ {
-		// Create insecure client for maintenance mode
-		insecureClient, err := talosclient.New(ctx,
-			talosclient.WithEndpoints(serverIP),
-			talosclient.WithTLSConfig(&tls.Config{
-				InsecureSkipVerify: true, //nolint:gosec // Required for maintenance mode
-			}),
-		)
-		if err != nil {
-			if shouldAbortRetry(err, attempt) {
-				return fmt.Errorf("failed to create Talos client: %w", err)
-			}
-
-			delay := netretry.ExponentialDelay(
-				attempt,
-				talosApplyConfigRetryBaseWait,
-				talosApplyConfigRetryMaxWait,
-			)
-
-			p.logf(
-				"  Talos client creation attempt %d failed on %s (retrying in %s): %v\n",
-				attempt,
-				server.Name,
-				delay,
-				err,
-			)
-
-			err = sleepWithContext(ctx, delay)
-			if err != nil {
-				return fmt.Errorf("failed to apply configuration: %w", err)
-			}
-
-			continue
-		}
-
-		// Apply configuration
-		_, err = insecureClient.ApplyConfiguration(ctx, &machineapi.ApplyConfigurationRequest{
-			Data: cfgBytes,
-		})
-		insecureClient.Close() //nolint:errcheck,gosec
-
+		err = attemptApplyConfig(ctx, serverIP, cfgBytes)
 		if err == nil {
 			p.logf("  ✓ Config applied to %s\n", server.Name)
 
@@ -499,6 +459,29 @@ func (p *Provisioner) applyConfigToNode(
 	}
 
 	return fmt.Errorf("failed to apply configuration for %s: %w", server.Name, errRetriesExhausted)
+}
+
+// attemptApplyConfig creates a single-use insecure Talos client and attempts to
+// apply cfgBytes to the node at serverIP. The client is always closed before
+// returning.
+func attemptApplyConfig(ctx context.Context, serverIP string, cfgBytes []byte) error {
+	insecureClient, err := talosclient.New(ctx,
+		talosclient.WithEndpoints(serverIP),
+		talosclient.WithTLSConfig(&tls.Config{
+			InsecureSkipVerify: true, //nolint:gosec // Required for maintenance mode
+		}),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create Talos client: %w", err)
+	}
+
+	defer insecureClient.Close() //nolint:errcheck,gosec
+
+	_, err = insecureClient.ApplyConfiguration(ctx, &machineapi.ApplyConfigurationRequest{
+		Data: cfgBytes,
+	})
+
+	return err
 }
 
 // shouldAbortRetry returns true when the error is non-retryable or the maximum
