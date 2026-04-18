@@ -155,7 +155,9 @@ func (c *Installer) helmInstallOrUpgradeCalico(ctx context.Context) error {
 		Name: "projectcalico",
 		URL:  "https://docs.tigera.io/calico/charts",
 	}
-	if addErr := client.AddRepository(ctx, repoEntry, c.GetTimeout()); addErr != nil {
+
+	addErr := client.AddRepository(ctx, repoEntry, c.GetTimeout())
+	if addErr != nil {
 		return fmt.Errorf("add calico repository: %w", addErr)
 	}
 
@@ -176,26 +178,12 @@ func (c *Installer) helmInstallOrUpgradeCalico(ctx context.Context) error {
 	}
 
 	// Outer retry loop for transient API-unavailable failures during K3s bootstrap.
-	// Uses helm.InstallChartWithRetry directly (after a single repo add above) so
+	// Uses attemptCalicoInstall directly (after a single repo add above) so
 	// AddRepository is not repeated and the inner netretry loop remains a single
 	// independent layer for network errors (429/5xx), keeping the two retry
 	// predicates non-overlapping and the total attempt count predictable.
 	for attempt := 1; attempt <= calicoInstallRetryAttempts; attempt++ {
-		installCtx, cancel := context.WithTimeout(ctx, c.GetTimeout()+helm.ContextTimeoutBuffer)
-		err = helm.InstallChartWithRetry(installCtx, client, spec, "calico")
-		cancel()
-
-		if err != nil && isAPIDiscoveryError(err) {
-			waitErr := c.waitForCalicoCRDs(ctx)
-			if waitErr != nil {
-				return fmt.Errorf("wait for calico CRDs: %w", waitErr)
-			}
-
-			installCtx, cancel = context.WithTimeout(ctx, c.GetTimeout()+helm.ContextTimeoutBuffer)
-			err = helm.InstallChartWithRetry(installCtx, client, spec, "calico")
-			cancel()
-		}
-
+		err = c.attemptCalicoInstall(ctx, client, spec)
 		if err == nil {
 			return nil
 		}
@@ -211,6 +199,42 @@ func (c *Installer) helmInstallOrUpgradeCalico(ctx context.Context) error {
 	}
 
 	return fmt.Errorf("install or upgrade calico: %w", err)
+}
+
+// attemptCalicoInstall performs a single Helm install attempt. If the install
+// fails with an API discovery error (CRDs not yet registered), it waits for
+// the CRDs to become established and retries once before returning.
+func (c *Installer) attemptCalicoInstall(
+	ctx context.Context,
+	client helm.Interface,
+	spec *helm.ChartSpec,
+) error {
+	installCtx, cancel := context.WithTimeout(ctx, c.GetTimeout()+helm.ContextTimeoutBuffer)
+	defer cancel()
+
+	err := helm.InstallChartWithRetry(installCtx, client, spec, "calico")
+	if err == nil {
+		return nil
+	}
+
+	if !isAPIDiscoveryError(err) {
+		return fmt.Errorf("helm install calico: %w", err)
+	}
+
+	waitErr := c.waitForCalicoCRDs(ctx)
+	if waitErr != nil {
+		return fmt.Errorf("wait for calico CRDs: %w", waitErr)
+	}
+
+	retryCtx, retryCancel := context.WithTimeout(ctx, c.GetTimeout()+helm.ContextTimeoutBuffer)
+	defer retryCancel()
+
+	retryErr := helm.InstallChartWithRetry(retryCtx, client, spec, "calico")
+	if retryErr != nil {
+		return fmt.Errorf("helm install calico after CRD wait: %w", retryErr)
+	}
+
+	return nil
 }
 
 // getCalicoValues returns the Helm values for Calico based on the distribution.
