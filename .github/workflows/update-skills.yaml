@@ -47,9 +47,11 @@ jobs:
           mkdir -p "$tmp"
           base_url="https://github.com/cli/cli/releases/download/v${GH_VERSION}"
           curl -fsSL "${base_url}/${tarball}" -o "${tmp}/${tarball}"
-          curl -fsSL "${base_url}/gh_${GH_VERSION}_checksums.txt" \
-            | grep "${tarball}" \
-            | sha256sum --check --status
+          curl -fsSL "${base_url}/gh_${GH_VERSION}_checksums.txt" -o "${tmp}/gh_${GH_VERSION}_checksums.txt"
+          (
+            cd "$tmp"
+            grep " ${tarball}$" "gh_${GH_VERSION}_checksums.txt" | sha256sum --check --status
+          )
           tar -xzC "$tmp" -f "${tmp}/${tarball}"
           echo "${tmp}/gh_${GH_VERSION}_linux_${arch}/bin" >> "$GITHUB_PATH"
 
