@@ -27,7 +27,7 @@ const maxConcurrentHetznerOps = 3
 
 // Apply-configuration retry defaults for transient Talos API handshake races.
 const (
-	talosApplyConfigMaxRetries    = 3
+	talosApplyConfigMaxAttempts   = 3
 	talosApplyConfigRetryBaseWait = 5 * time.Second
 	talosApplyConfigRetryMaxWait  = 20 * time.Second
 
@@ -428,7 +428,7 @@ func (p *Provisioner) applyConfigToNode(
 
 	var lastErr error
 
-	for attempt := 1; attempt <= talosApplyConfigMaxRetries; attempt++ {
+	for attempt := 1; attempt <= talosApplyConfigMaxAttempts; attempt++ {
 		lastErr = attemptApplyConfig(ctx, serverIP, cfgBytes)
 		if lastErr == nil {
 			p.logf("  ✓ Config applied to %s\n", server.Name)
@@ -440,7 +440,7 @@ func (p *Provisioner) applyConfigToNode(
 			return fmt.Errorf("failed to apply configuration: %w", lastErr)
 		}
 
-		if attempt == talosApplyConfigMaxRetries {
+		if attempt == talosApplyConfigMaxAttempts {
 			break
 		}
 
@@ -451,8 +451,9 @@ func (p *Provisioner) applyConfigToNode(
 		)
 
 		p.logf(
-			"  Config apply attempt %d failed on %s (retrying in %s): %v\n",
+			"  Config apply attempt %d/%d failed on %s (retrying in %s): %v\n",
 			attempt,
+			talosApplyConfigMaxAttempts,
 			server.Name,
 			delay,
 			lastErr,
@@ -464,7 +465,7 @@ func (p *Provisioner) applyConfigToNode(
 		}
 	}
 
-	return fmt.Errorf("failed to apply configuration for %s: %w", server.Name, errRetriesExhausted)
+	return fmt.Errorf("failed to apply configuration for %s: %w", server.Name, errors.Join(errRetriesExhausted, lastErr))
 }
 
 // attemptApplyConfig creates a single-use insecure Talos client and attempts to
