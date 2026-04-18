@@ -172,6 +172,11 @@ runs:
         fi
 
         FAILED=0
+        # Use a here-string instead of printf | grep to avoid a SIGPIPE race
+        # under `set -o pipefail`: if grep exits early after a match, the
+        # upstream writer receives SIGPIPE and the pipe's exit status propagates
+        # as a failure even when the string was found.  Here-strings bypass the
+        # pipe entirely and are not subject to that race.
         assert_contains() {
           if grep -Fq -- "$1" <<< "$output"; then
             echo "  ✅ Found: $1"
