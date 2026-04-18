@@ -150,7 +150,7 @@ func TestTimeoutConstants(t *testing.T) {
 
 	t.Run("talos_install_timeout", func(t *testing.T) {
 		t.Parallel()
-		assert.Equal(t, 5*time.Minute, installer.TalosInstallTimeout)
+		assert.Equal(t, 8*time.Minute, installer.TalosInstallTimeout)
 	})
 
 	t.Run("calico_install_timeout", func(t *testing.T) {

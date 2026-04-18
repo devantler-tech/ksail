@@ -1,6 +1,7 @@
 package certmanagerinstaller
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/devantler-tech/ksail/v6/pkg/client/helm"
@@ -38,9 +39,22 @@ func NewInstaller(client helm.Interface, timeout time.Duration) *Installer {
 				Timeout:         timeout,
 				SetValues: map[string]string{
 					"installCRDs":             "true",
-					"startupapicheck.timeout": "5m",
+					"startupapicheck.timeout": startupAPICheckTimeout(timeout),
 				},
 			},
 		),
 	}
+}
+
+// startupAPICheckTimeout returns the startupapicheck timeout as a duration string
+// that scales with the overall install timeout. On resource-constrained runners
+// (e.g., Talos on GitHub Actions), the webhook certificate can take longer to
+// provision, so the startup check needs proportionally more time.
+// See: https://github.com/devantler-tech/ksail/issues/4040
+func startupAPICheckTimeout(installTimeout time.Duration) string {
+	const minStartupCheckTimeout = 5 * time.Minute
+
+	checkTimeout := max(installTimeout, minStartupCheckTimeout)
+
+	return fmt.Sprintf("%dm", int(checkTimeout.Minutes()))
 }
