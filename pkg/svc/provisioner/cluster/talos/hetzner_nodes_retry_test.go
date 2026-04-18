@@ -1,11 +1,21 @@
-package talosprovisioner
+package talosprovisioner_test
 
 import (
 	"errors"
 	"testing"
 
+	talosprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/talos"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+)
+
+var (
+	errUnavailableMessage = errors.New(
+		`rpc error: code = Unavailable desc = connection error: desc = ` +
+			`"transport: authentication handshake failed: context deadline exceeded"`,
+	)
+	errHandshakeFailed  = errors.New("transport: authentication handshake failed: context deadline exceeded")
+	errPermissionDenied = errors.New("permission denied")
 )
 
 func TestIsRetryableTalosApplyConfigError(t *testing.T) {
@@ -28,14 +38,12 @@ func TestIsRetryableTalosApplyConfigError(t *testing.T) {
 		},
 		{
 			name: "UnavailableMessage",
-			err: errors.New(
-				`rpc error: code = Unavailable desc = connection error: desc = "transport: authentication handshake failed: context deadline exceeded"`,
-			),
+			err:  errUnavailableMessage,
 			want: true,
 		},
 		{
 			name: "HandshakeFailedMessage",
-			err:  errors.New("transport: authentication handshake failed: context deadline exceeded"),
+			err:  errHandshakeFailed,
 			want: true,
 		},
 		{
@@ -45,7 +53,7 @@ func TestIsRetryableTalosApplyConfigError(t *testing.T) {
 		},
 		{
 			name: "NonRetryableError",
-			err:  errors.New("permission denied"),
+			err:  errPermissionDenied,
 			want: false,
 		},
 	}
@@ -54,9 +62,9 @@ func TestIsRetryableTalosApplyConfigError(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := isRetryableTalosApplyConfigError(testCase.err)
+			got := talosprovisioner.IsRetryableTalosApplyConfigError(testCase.err)
 			if got != testCase.want {
-				t.Fatalf("isRetryableTalosApplyConfigError() = %v, want %v", got, testCase.want)
+				t.Fatalf("IsRetryableTalosApplyConfigError() = %v, want %v", got, testCase.want)
 			}
 		})
 	}

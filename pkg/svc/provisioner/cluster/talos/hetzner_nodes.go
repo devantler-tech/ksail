@@ -3,6 +3,7 @@ package talosprovisioner
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"net"
 	"strconv"
@@ -18,8 +19,6 @@ import (
 	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
 	"github.com/siderolabs/talos/pkg/machinery/config/bundle"
 	"golang.org/x/sync/errgroup"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 // maxConcurrentHetznerOps caps the number of Hetzner API operations executed in parallel.
@@ -31,7 +30,14 @@ const (
 	talosApplyConfigMaxRetries    = 3
 	talosApplyConfigRetryBaseWait = 5 * time.Second
 	talosApplyConfigRetryMaxWait  = 20 * time.Second
+
+	// grpcUnavailable is the numeric gRPC status code for Unavailable (14).
+	// Using the raw constant avoids importing google.golang.org/grpc directly.
+	grpcUnavailable = 14
 )
+
+// errRetriesExhausted is returned when all retry attempts for config apply have been used.
+var errRetriesExhausted = errors.New("retries exhausted")
 
 // hetznerNodeCreationResult holds the outcome of a single Hetzner server creation attempt.
 type hetznerNodeCreationResult struct {
@@ -430,7 +436,7 @@ func (p *Provisioner) applyConfigToNode(
 			}),
 		)
 		if err != nil {
-			if !isRetryableTalosApplyConfigError(err) || attempt == talosApplyConfigMaxRetries {
+			if shouldAbortRetry(err, attempt) {
 				return fmt.Errorf("failed to create Talos client: %w", err)
 			}
 
@@ -448,7 +454,8 @@ func (p *Provisioner) applyConfigToNode(
 				err,
 			)
 
-			if err = sleepWithContext(ctx, delay); err != nil {
+			err = sleepWithContext(ctx, delay)
+			if err != nil {
 				return fmt.Errorf("failed to apply configuration: %w", err)
 			}
 
@@ -459,7 +466,7 @@ func (p *Provisioner) applyConfigToNode(
 		_, err = insecureClient.ApplyConfiguration(ctx, &machineapi.ApplyConfigurationRequest{
 			Data: cfgBytes,
 		})
-		insecureClient.Close() //nolint:errcheck
+		insecureClient.Close() //nolint:errcheck,gosec
 
 		if err == nil {
 			p.logf("  ✓ Config applied to %s\n", server.Name)
@@ -467,7 +474,7 @@ func (p *Provisioner) applyConfigToNode(
 			return nil
 		}
 
-		if !isRetryableTalosApplyConfigError(err) || attempt == talosApplyConfigMaxRetries {
+		if shouldAbortRetry(err, attempt) {
 			return fmt.Errorf("failed to apply configuration: %w", err)
 		}
 
@@ -485,12 +492,19 @@ func (p *Provisioner) applyConfigToNode(
 			err,
 		)
 
-		if err = sleepWithContext(ctx, delay); err != nil {
+		err = sleepWithContext(ctx, delay)
+		if err != nil {
 			return fmt.Errorf("failed to apply configuration: %w", err)
 		}
 	}
 
-	return fmt.Errorf("failed to apply configuration: retries exhausted for %s", server.Name)
+	return fmt.Errorf("failed to apply configuration for %s: %w", server.Name, errRetriesExhausted)
+}
+
+// shouldAbortRetry returns true when the error is non-retryable or the maximum
+// number of attempts has been reached.
+func shouldAbortRetry(err error, attempt int) bool {
+	return !isRetryableTalosApplyConfigError(err) || attempt == talosApplyConfigMaxRetries
 }
 
 // sleepWithContext waits for d to elapse, returning ctx.Err() early if the context is cancelled.
@@ -502,7 +516,7 @@ func sleepWithContext(ctx context.Context, d time.Duration) error {
 			<-timer.C
 		}
 
-		return ctx.Err()
+		return fmt.Errorf("%w", ctx.Err())
 	case <-timer.C:
 		return nil
 	}
@@ -513,7 +527,7 @@ func isRetryableTalosApplyConfigError(err error) bool {
 		return false
 	}
 
-	if status.Code(err) == codes.Unavailable {
+	if talosclient.StatusCode(err) == grpcUnavailable {
 		return true
 	}
 
