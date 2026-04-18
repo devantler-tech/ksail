@@ -631,11 +631,17 @@ func waitForClusterStability(
 	// WaitForNamespaceDaemonSetsReady does not retry transient transport errors
 	// (e.g. connection refused/reset); starting it before the API server is
 	// confirmed stable would cause spurious failures.
-	err = readiness.WaitForNamespaceDaemonSetsReady(
-		ctx, clientset, "kube-system", daemonSetStabilityTimeout,
-	)
-	if err != nil {
-		return fmt.Errorf("wait for kube-system DaemonSets to be ready: %w", err)
+	//
+	// Skipped for KWOK: KWOK simulates DaemonSet pods as Running but they
+	// never execute real binaries, so CNI/kube-proxy DaemonSets may never
+	// converge to the ready state expected by this check.
+	if clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionKWOK {
+		err = readiness.WaitForNamespaceDaemonSetsReady(
+			ctx, clientset, "kube-system", daemonSetStabilityTimeout,
+		)
+		if err != nil {
+			return fmt.Errorf("wait for kube-system DaemonSets to be ready: %w", err)
+		}
 	}
 
 	// Pre-flight in-cluster connectivity check: verify that the API server

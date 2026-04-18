@@ -438,6 +438,32 @@ func TestNeedsInClusterConnectivityCheck(t *testing.T) {
 	}
 }
 
+func TestNeedsInClusterConnectivityCheck_KWOKAlwaysFalse(t *testing.T) {
+	t.Parallel()
+
+	// KWOK has no real network dataplane, so the connectivity check is
+	// meaningless and must be skipped regardless of the configured CNI.
+	for _, cni := range []v1alpha1.CNI{
+		v1alpha1.CNICilium,
+		v1alpha1.CNICalico,
+		v1alpha1.CNIDefault,
+	} {
+		t.Run(string(cni), func(t *testing.T) {
+			t.Parallel()
+
+			clusterCfg := &v1alpha1.Cluster{
+				Spec: v1alpha1.Spec{
+					Cluster: v1alpha1.ClusterSpec{
+						Distribution: v1alpha1.DistributionKWOK,
+						CNI:          cni,
+					},
+				},
+			}
+			assert.False(t, setup.NeedsInClusterConnectivityCheck(clusterCfg))
+		})
+	}
+}
+
 func TestAPIServerStabilitySuccesses(t *testing.T) {
 	t.Parallel()
 
