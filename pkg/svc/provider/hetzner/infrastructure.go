@@ -236,7 +236,23 @@ func (p *Provider) deleteInfrastructure(ctx context.Context, clusterName string)
 func (p *Provider) deletePlacementGroup(ctx context.Context, clusterName string) error {
 	placementGroupName := clusterName + PlacementGroupSuffix
 
-	placementGroup, _, err := p.client.PlacementGroup.GetByName(ctx, placementGroupName)
+	placementGroup, err := retryTransientHetznerOperation(
+		ctx,
+		DefaultTransientRetryCount,
+		p.calculateRetryDelay,
+		func() (*hcloud.PlacementGroup, error) {
+			placementGroup, _, err := p.client.PlacementGroup.GetByName(ctx, placementGroupName)
+			if err != nil {
+				return nil, fmt.Errorf(
+					"failed to get placement group %s: %w",
+					placementGroupName,
+					err,
+				)
+			}
+
+			return placementGroup, nil
+		},
+	)
 	if err != nil {
 		// Log error but don't fail - resource may not exist
 		return nil //nolint:nilerr // Ignoring lookup error - resource may not exist
@@ -260,7 +276,19 @@ func (p *Provider) deleteFirewallWithRetry(ctx context.Context, clusterName stri
 	firewallName := clusterName + FirewallSuffix
 
 	for attempt := range MaxDeleteRetries {
-		firewall, _, err := p.client.Firewall.GetByName(ctx, firewallName)
+		firewall, err := retryTransientHetznerOperation(
+			ctx,
+			DefaultTransientRetryCount,
+			p.calculateRetryDelay,
+			func() (*hcloud.Firewall, error) {
+				firewall, _, err := p.client.Firewall.GetByName(ctx, firewallName)
+				if err != nil {
+					return nil, fmt.Errorf("failed to get firewall %s: %w", firewallName, err)
+				}
+
+				return firewall, nil
+			},
+		)
 		if err != nil {
 			return nil //nolint:nilerr // Ignoring lookup error - resource may not exist
 		}
@@ -295,7 +323,19 @@ func (p *Provider) deleteFirewallWithRetry(ctx context.Context, clusterName stri
 func (p *Provider) deleteNetwork(ctx context.Context, clusterName string) error {
 	networkName := clusterName + NetworkSuffix
 
-	network, _, err := p.client.Network.GetByName(ctx, networkName)
+	network, err := retryTransientHetznerOperation(
+		ctx,
+		DefaultTransientRetryCount,
+		p.calculateRetryDelay,
+		func() (*hcloud.Network, error) {
+			network, _, err := p.client.Network.GetByName(ctx, networkName)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get network %s: %w", networkName, err)
+			}
+
+			return network, nil
+		},
+	)
 	if err != nil {
 		return nil //nolint:nilerr // Ignoring lookup error - resource may not exist
 	}

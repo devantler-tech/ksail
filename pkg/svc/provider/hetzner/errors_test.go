@@ -88,6 +88,30 @@ func TestIsRetryableHetznerError(t *testing.T) {
 			wantRetry: true,
 		},
 		{
+			name: "ServiceError",
+			err: hcloud.Error{
+				Code:    hcloud.ErrorCodeServiceError,
+				Message: "service error",
+			},
+			wantRetry: true,
+		},
+		{
+			name: "ServerError",
+			err: hcloud.Error{
+				Code:    hcloud.ErrorCodeServerError,
+				Message: "server error",
+			},
+			wantRetry: true,
+		},
+		{
+			name: "Maintenance",
+			err: hcloud.Error{
+				Code:    hcloud.ErrorCodeMaintenance,
+				Message: "maintenance",
+			},
+			wantRetry: true,
+		},
+		{
 			name: "RobotUnavailable",
 			err: hcloud.Error{
 				Code:    hcloud.ErrorCodeRobotUnavailable,
@@ -305,5 +329,10 @@ func TestRetryConstants(t *testing.T) {
 		t.Parallel()
 		assert.Positive(t, hetzner.DefaultRetryMaxDelay)
 		assert.GreaterOrEqual(t, hetzner.DefaultRetryMaxDelay, hetzner.DefaultRetryBaseDelay)
+	})
+
+	t.Run("DefaultTransientRetryCount", func(t *testing.T) {
+		t.Parallel()
+		assert.Equal(t, 3, hetzner.DefaultTransientRetryCount)
 	})
 }

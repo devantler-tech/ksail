@@ -27,6 +27,9 @@ var retryableErrorCodes = []hcloud.ErrorCode{
 	hcloud.ErrorCodeConflict,            // Resource changed during request
 	hcloud.ErrorCodeTimeout,             // Request timed out
 	hcloud.ErrorCodeRateLimitExceeded,   // Rate limit hit
+	hcloud.ErrorCodeServiceError,        // Generic service error
+	hcloud.ErrorCodeServerError,         // API backend/server error
+	hcloud.ErrorCodeMaintenance,         // Service under maintenance
 	hcloud.ErrorCodeRobotUnavailable,    // Robot service unavailable
 	hcloud.ErrorCodeLocked,              // Resource locked by another action
 }
