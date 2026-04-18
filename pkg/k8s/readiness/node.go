@@ -71,6 +71,38 @@ func waitForNodes(
 	})
 }
 
+// WaitForAllNodesReadyAndSchedulable polls until every node in the cluster has
+// condition Ready=True and at least one node is schedulable (has no NoSchedule
+// taints). This prevents deploying workloads before the control-plane
+// NoSchedule taint has been removed on single-node clusters, avoiding the
+// FailedScheduling race condition where Kind marks a node Ready but the
+// node-role.kubernetes.io/control-plane:NoSchedule taint still lingers.
+func WaitForAllNodesReadyAndSchedulable(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	deadline time.Duration,
+) error {
+	return waitForNodes(ctx, clientset, deadline, func(nodes []corev1.Node) bool {
+		if len(nodes) == 0 {
+			return false
+		}
+
+		hasSchedulable := false
+
+		for i := range nodes {
+			if !isNodeReady(&nodes[i]) {
+				return false
+			}
+
+			if isNodeSchedulable(&nodes[i]) {
+				hasSchedulable = true
+			}
+		}
+
+		return hasSchedulable
+	})
+}
+
 // isNodeReady returns true if the node has condition Ready=True.
 func isNodeReady(node *corev1.Node) bool {
 	for _, cond := range node.Status.Conditions {
@@ -80,4 +112,16 @@ func isNodeReady(node *corev1.Node) bool {
 	}
 
 	return false
+}
+
+// isNodeSchedulable returns true if the node has no NoSchedule taints.
+// This is used to detect whether workload pods can be scheduled on the node.
+func isNodeSchedulable(node *corev1.Node) bool {
+	for _, taint := range node.Spec.Taints {
+		if taint.Effect == corev1.TaintEffectNoSchedule {
+			return false
+		}
+	}
+
+	return true
 }
