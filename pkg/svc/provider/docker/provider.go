@@ -24,7 +24,7 @@ const (
 	LabelSchemeTalos LabelScheme = "talos"
 	// LabelSchemeVCluster uses container name prefix "vcluster.cp.<cluster>" to identify nodes.
 	LabelSchemeVCluster LabelScheme = "vcluster"
-	// LabelSchemeKWOK uses container name prefix "kwok-<cluster>-" to identify nodes.
+	// LabelSchemeKWOK uses container name prefix "<cluster>-" to identify nodes.
 	LabelSchemeKWOK LabelScheme = "kwok"
 )
 
@@ -498,14 +498,11 @@ func extractVClusterRole(ctr container.Summary) string {
 	return ""
 }
 
-// KWOK container name prefix.
-// kwokctl names containers as: kwok-<cluster>-etcd, kwok-<cluster>-kube-apiserver,
-// kwok-<cluster>-kwok-controller, etc.
-const kwokContainerPrefix = "kwok-"
-
 // kwokSuffixRoles maps each known kwokctl container suffix to the node role it
 // represents.  It is the single source of truth for both cluster-name extraction
 // (which iterates the keys) and role classification (which looks up the value).
+// kwokctl names containers as: <cluster>-etcd, <cluster>-kube-apiserver,
+// <cluster>-kwok-controller, etc. (no extra prefix — the cluster name is used directly).
 //
 //nolint:gochecknoglobals // read-only lookup table; avoids per-call allocation.
 var kwokSuffixRoles = map[string]string{
@@ -520,12 +517,14 @@ var kwokSuffixRoles = map[string]string{
 	"-metrics-server":          "addon",
 }
 
-// listKWOKContainers lists containers by KWOK name prefix.
+// listKWOKContainers lists containers by KWOK cluster name prefix.
+// kwokctl names containers as <cluster-name>-<component>, so the prefix
+// is simply the cluster name followed by a dash.
 func (p *Provider) listKWOKContainers(
 	ctx context.Context,
 	clusterName string,
 ) ([]container.Summary, error) {
-	prefix := kwokContainerPrefix + clusterName + "-"
+	prefix := clusterName + "-"
 
 	return p.filterContainers(ctx, func(ctr container.Summary) bool {
 		for _, rawName := range ctr.Names {
@@ -539,14 +538,14 @@ func (p *Provider) listKWOKContainers(
 }
 
 // extractKWOKClusterName extracts the cluster name from a KWOK container name.
+// kwokctl names containers as <cluster-name>-<component>, so the cluster name
+// is derived by stripping known component suffixes.
 func extractKWOKClusterName(ctr container.Summary) string {
 	for _, rawName := range ctr.Names {
 		name := strings.TrimPrefix(rawName, "/")
-		if rest, ok := strings.CutPrefix(name, kwokContainerPrefix); ok {
-			for suffix := range kwokSuffixRoles {
-				if trimmed, found := strings.CutSuffix(rest, suffix); found && trimmed != "" {
-					return trimmed
-				}
+		for suffix := range kwokSuffixRoles {
+			if trimmed, found := strings.CutSuffix(name, suffix); found && trimmed != "" {
+				return trimmed
 			}
 		}
 	}

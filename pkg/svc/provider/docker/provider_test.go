@@ -77,21 +77,22 @@ func newTalosContainers(clusterName string) []container.Summary {
 }
 
 // newKWOKContainers creates test containers with KWOK naming convention.
+// kwokctl names containers as <cluster-name>-<component>.
 func newKWOKContainers(clusterName string) []container.Summary {
 	return []container.Summary{
 		{
 			ID:    "etcd1",
-			Names: []string{"/kwok-" + clusterName + "-etcd"},
+			Names: []string{"/" + clusterName + "-etcd"},
 			State: "running",
 		},
 		{
 			ID:    "api1",
-			Names: []string{"/kwok-" + clusterName + "-kube-apiserver"},
+			Names: []string{"/" + clusterName + "-kube-apiserver"},
 			State: "running",
 		},
 		{
 			ID:    "ctrl1",
-			Names: []string{"/kwok-" + clusterName + "-kwok-controller"},
+			Names: []string{"/" + clusterName + "-kwok-controller"},
 			State: "running",
 		},
 	}
@@ -595,17 +596,17 @@ func TestProvider_ListNodes_KWOK(t *testing.T) {
 	require.NoError(t, err)
 	assert.ElementsMatch(t, []provider.NodeInfo{
 		{
-			Name:        "kwok-" + testClusterName + "-etcd",
+			Name:        testClusterName + "-etcd",
 			ClusterName: testClusterName,
 			Role:        "etcd",
 			State:       "running",
 		},
 		{
-			Name:        "kwok-" + testClusterName + "-kube-apiserver",
+			Name:        testClusterName + "-kube-apiserver",
 			ClusterName: testClusterName, Role: "control-plane", State: "running",
 		},
 		{
-			Name:        "kwok-" + testClusterName + "-kwok-controller",
+			Name:        testClusterName + "-kwok-controller",
 			ClusterName: testClusterName, Role: "controller", State: "running",
 		},
 	}, nodes)
@@ -633,5 +634,5 @@ func TestProvider_ListAllClusters_KWOK(t *testing.T) {
 	clusters, err := prov.ListAllClusters(ctx)
 
 	require.NoError(t, err)
-	assert.ElementsMatch(t, []string{"cluster1", "cluster2"}, clusters)
+	assert.ElementsMatch(t, []string{"kwok-cluster1", "kwok-cluster2"}, clusters)
 }
