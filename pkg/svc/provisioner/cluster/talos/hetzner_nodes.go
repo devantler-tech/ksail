@@ -475,13 +475,17 @@ func attemptApplyConfig(ctx context.Context, serverIP string, cfgBytes []byte) e
 		return fmt.Errorf("failed to create Talos client: %w", err)
 	}
 
-	defer insecureClient.Close() //nolint:errcheck,gosec
+	defer insecureClient.Close() //nolint:errcheck
 
 	_, err = insecureClient.ApplyConfiguration(ctx, &machineapi.ApplyConfigurationRequest{
 		Data: cfgBytes,
 	})
 
-	return err
+	if err != nil {
+		return fmt.Errorf("apply configuration: %w", err)
+	}
+
+	return nil
 }
 
 // shouldAbortRetry returns true when the error is non-retryable or the maximum
