@@ -63,7 +63,7 @@ See the [feature overview](https://ksail.devantler.tech/features/) and [architec
 
 | Provider | Vanilla  | K3s     | Talos | VCluster | KWOK        | EKS |
 |----------|----------|---------|-------|----------|-------------|-----|
-| Docker   | ✅ (Kind) | ✅ (K3d) | ✅     | ✅ (Vind) | ✅ (kwokctl) | ❌   |
+| Docker   | ✅ (Kind) | ✅ (K3d) | ✅     | ✅ (Vind) | ✅ (kwokctl) | —   |
 | Hetzner  | —        | —       | ✅     | —        | —           | —   |
 | Omni     | —        | —       | ✅     | —        | —           | —   |
 | AWS      | —        | —       | —     | —        | —           | 🚧  |
