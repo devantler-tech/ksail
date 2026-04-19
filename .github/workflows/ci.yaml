@@ -676,10 +676,7 @@ jobs:
       contents: read
       packages: write
     strategy:
-      # Disable fail-fast so that a single flaky job (e.g., Talos full-stack under
-      # runner resource pressure) does not cancel all sibling matrix jobs.
-      # See: https://github.com/devantler-tech/ksail/issues/4096
-      fail-fast: false
+      fail-fast: true
       max-parallel: 20
       matrix:
         distribution: [KWOK, Vanilla, K3s, VCluster, Talos]
