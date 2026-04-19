@@ -596,13 +596,13 @@ func TestProvider_ListNodes_KWOK(t *testing.T) {
 		{"kwok-prefixed-name", "kwok-default"},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			ctx := context.Background()
 			client := dockerclient.NewMockAPIClient(t)
-			containers := newKWOKContainers(tc.clusterName)
+			containers := newKWOKContainers(testCase.clusterName)
 
 			client.EXPECT().
 				ContainerList(ctx, container.ListOptions{All: true}).
@@ -610,23 +610,23 @@ func TestProvider_ListNodes_KWOK(t *testing.T) {
 
 			prov := docker.NewProvider(client, docker.LabelSchemeKWOK)
 
-			nodes, err := prov.ListNodes(ctx, tc.clusterName)
+			nodes, err := prov.ListNodes(ctx, testCase.clusterName)
 
 			require.NoError(t, err)
 			assert.ElementsMatch(t, []provider.NodeInfo{
 				{
-					Name:        "kwok-" + tc.clusterName + "-etcd",
-					ClusterName: tc.clusterName,
+					Name:        "kwok-" + testCase.clusterName + "-etcd",
+					ClusterName: testCase.clusterName,
 					Role:        "etcd",
 					State:       "running",
 				},
 				{
-					Name:        "kwok-" + tc.clusterName + "-kube-apiserver",
-					ClusterName: tc.clusterName, Role: "control-plane", State: "running",
+					Name:        "kwok-" + testCase.clusterName + "-kube-apiserver",
+					ClusterName: testCase.clusterName, Role: "control-plane", State: "running",
 				},
 				{
-					Name:        "kwok-" + tc.clusterName + "-kwok-controller",
-					ClusterName: tc.clusterName, Role: "controller", State: "running",
+					Name:        "kwok-" + testCase.clusterName + "-kwok-controller",
+					ClusterName: testCase.clusterName, Role: "controller", State: "running",
 				},
 			}, nodes)
 		})
