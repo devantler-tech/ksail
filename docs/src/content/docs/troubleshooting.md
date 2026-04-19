@@ -88,6 +88,16 @@ ksail cluster delete && ksail cluster create
 
 If the error mentions `connectivity check pod image pull failed` with `ImagePullBackOff` or `ErrImagePull`, the connectivity check pod could not pull its `busybox:stable` image. This is typically a transient Docker Hub rate-limit or network issue — not an actual API server connectivity failure. Verify Docker Hub reachability (`curl -I https://registry-1.docker.io/v2/`) and retry with `ksail cluster delete && ksail cluster create`. If a docker.io mirror registry is configured, ensure it is healthy and reachable from within the cluster.
 
+### Flux Reconciliation Fails Immediately
+
+`ksail workload reconcile` fails fast (without waiting for the timeout) when a Flux Kustomization encounters a permanent error:
+
+- **Build failure** — Kustomize cannot render your manifests (invalid YAML, missing patches, schema errors). Fix the manifests and re-push.
+- **Health check failure** — A deployed workload failed its readiness/liveness probe. Check pod logs for the affected workload.
+- **Upstream dependency failure** — A Kustomization that another depends on failed permanently; dependent Kustomizations fail immediately to surface the root cause rather than timing out.
+
+Run `ksail workload get kustomization -n flux-system` and `ksail workload get pods -A | grep -v Running` to identify the failing resource and its error message.
+
 ### Flux/ArgoCD Not Reconciling
 
 If changes don't appear after `ksail workload reconcile`, check status and logs:
