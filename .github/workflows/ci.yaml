@@ -376,6 +376,7 @@ jobs:
         || needs.generate-docs.result == 'success')
     permissions:
       contents: write
+      pull-requests: write
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@f808768d1510423e83855289c910610ca9b43176 # v2.17.0
@@ -439,13 +440,30 @@ jobs:
             fi
           done
 
-      - name: 📤 Commit and push generated changes
+      - name: 📤 Commit and push generated changes (PR branch)
+        if: github.event_name == 'pull_request'
         uses: stefanzweifel/git-auto-commit-action@04702edda442b2e678b25b537cec683a1493fcb9 # v7.1.0
         with:
           commit_message: "chore: sync modules and update generated files"
           commit_user_name: generator-bot
           commit_user_email: generator-bot@users.noreply.github.com
-          branch: ${{ github.head_ref || github.ref_name }}
+          branch: ${{ github.head_ref }}
+
+      - name: 📤 Open PR for generated changes (protected branch)
+        if: github.event_name != 'pull_request'
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+        with:
+          token: ${{ steps.generate-token.outputs.token }}
+          commit-message: "chore: sync modules and update generated files"
+          committer: "generator-bot <generator-bot@users.noreply.github.com>"
+          branch: chore/sync-generated-files/${{ github.ref_name }}
+          base: ${{ github.ref_name }}
+          title: "chore: sync modules and update generated files"
+          body: |
+            Auto-generated changes detected on `${{ github.ref_name }}`.
+            This PR updates generated files (schemas, docs, etc.) that were
+            not included in the originating commit.
+          delete-branch: true
 
   audit-docs:
     name: 🔍 Audit Docs Dependencies
