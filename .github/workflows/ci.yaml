@@ -677,7 +677,7 @@ jobs:
       packages: write
     strategy:
       fail-fast: true
-      max-parallel: 20
+      max-parallel: 15
       matrix:
         distribution: [KWOK, Vanilla, K3s, VCluster, Talos]
         provider: [Docker]
