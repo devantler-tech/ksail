@@ -39,10 +39,11 @@ const (
 	// In VCluster environments with layered stacks (e.g., Calico + Gatekeeper + ArgoCD),
 	// ArgoCD can take significantly longer to stabilize because each component runs
 	// inside the virtual cluster and inherits both the VCluster networking overhead and
-	// the latency imposed by active admission-webhook policies. 20 minutes provides
+	// the latency imposed by active admission-webhook policies. 25 minutes provides
 	// sufficient headroom while keeping feedback reasonable for actual failures.
 	// See: https://github.com/devantler-tech/ksail/issues/2899
-	ArgoCDInstallTimeout = 20 * time.Minute
+	// See: https://github.com/devantler-tech/ksail/issues/4119
+	ArgoCDInstallTimeout = 25 * time.Minute
 	// VClusterInstallTimeout is the base timeout for component installs inside a VCluster
 	// distribution. VCluster adds ~20-30% overhead relative to a native-node cluster
 	// because every API call is forwarded through an extra hop (syncer) and admission
