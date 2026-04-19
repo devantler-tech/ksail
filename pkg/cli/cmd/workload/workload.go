@@ -2320,7 +2320,8 @@ func pollUntilKustomizationReady(
 
 	for {
 		// Fail-fast: check if any dependency has permanently failed.
-		if depErr := failed.checkDependencies(dependsOn); depErr != nil {
+		depErr := failed.checkDependencies(dependsOn)
+		if depErr != nil {
 			// Record cascaded failure so further dependents also fail-fast.
 			failed.record(name, depErr)
 
