@@ -129,19 +129,19 @@ jobs:
 
 ## Inputs
 
-| Input                 | Description                                                   | Required | Default                |
-|-----------------------|---------------------------------------------------------------|----------|------------------------|
-| `distribution`        | Kubernetes distribution (Vanilla, K3s, Talos, VCluster, KWOK) | Yes      | -                      |
-| `provider`            | Infrastructure provider (Docker, Hetzner, Omni)               | No       | `Docker`               |
-| `args`                | Additional arguments for cluster init/create                  | No       | `""`                   |
-| `init`                | Run `ksail cluster init` before create                        | No       | `false`                |
-| `test-workload-image` | Image for workload create test                                | No       | `nginx:alpine`         |
-| `test-workload-name`  | Name for test workload deployment                             | No       | `whoami`               |
-| `apply-overlay-path`  | Path to kustomize overlay for apply test                      | No       | `""`                   |
-| `gitops-path`         | Path for GitOps push                                          | No       | `k8s`                  |
-| `workload-timeout`    | Timeout for workload wait operations                          | No       | `600s`                 |
-| `ghcr-user`           | GitHub Container Registry username                            | No       | `""`                   |
-| `ghcr-token`          | GitHub Container Registry token                               | No       | `""`                   |
+| Input                 | Description                                                   | Required | Default        |
+|-----------------------|---------------------------------------------------------------|----------|----------------|
+| `distribution`        | Kubernetes distribution (Vanilla, K3s, Talos, VCluster, KWOK) | Yes      | -              |
+| `provider`            | Infrastructure provider (Docker, Hetzner, Omni)               | No       | `Docker`       |
+| `args`                | Additional arguments for cluster init/create                  | No       | `""`           |
+| `init`                | Run `ksail cluster init` before create                        | No       | `false`        |
+| `test-workload-image` | Image for workload create test                                | No       | `nginx:alpine` |
+| `test-workload-name`  | Name for test workload deployment                             | No       | `whoami`       |
+| `apply-overlay-path`  | Path to kustomize overlay for apply test                      | No       | `""`           |
+| `gitops-path`         | Path for GitOps push                                          | No       | `k8s`          |
+| `workload-timeout`    | Timeout for workload wait operations                          | No       | `600s`         |
+| `ghcr-user`           | GitHub Container Registry username                            | No       | `""`           |
+| `ghcr-token`          | GitHub Container Registry token                               | No       | `""`           |
 
 ## Prerequisites
 
