@@ -1,21 +1,21 @@
 {
-  "last_run": "2026-04-18T00:56:00Z",
-  "workflow_run_id": "24593073235",
-  "issue_cursor": 4119,
-  "pr_cursor": 4120,
-  "code_quality_domain": "refactor",
+  "last_run": "2026-04-19T01:04:28Z",
+  "workflow_run_id": "24617769160",
+  "issue_cursor": 4135,
+  "pr_cursor": 4152,
+  "code_quality_domain": "performance",
   "open_repo_assist_prs": [
     {
-      "number": 4083,
-      "title": "fix(talos): refresh Omni kubeconfig/talosconfig on cluster update",
-      "branch": "repo-assist/fix-issue-3922-omni-update",
+      "number": "TBD",
+      "title": "perf(image): skip scanner.Text() allocation for non-image lines",
+      "branch": "repo-assist/perf-image-extractor-bytes-prefilter",
       "status": "open",
-      "ci": "passing",
-      "note": "Fixes #3922, ready for maintainer review"
+      "ci": "pending",
+      "note": "Bytes pre-filter eliminates scanner.Text() alloc on non-image lines; -37%/-53% ns/op, -48%/-66% allocs"
     }
   ],
   "commented_issues": [
-    4119, 4086, 4090, 4091, 4068,
+    4135, 4119, 4086, 4090, 4091, 4068,
     4067, 4080, 4069, 4060, 4045, 4038, 4039, 4040, 4029, 4022,
     3999, 3987, 3942, 3936, 3922, 3912, 3917, 3772, 2261, 3865, 3783, 3765,
     3730, 3729, 3738, 3675, 3673, 3625, 3572, 2810, 3591, 3592, 3596,
@@ -30,15 +30,16 @@
     ]
   },
   "notes": {
-    "kwok_exclusions_status": "PR #4058 merged (commit a131aff6) - all KWOK+init=false+local-registry exclusions now in main",
+    "kwok_exclusions_status": "PR #4058 merged - all KWOK+init=false+local-registry exclusions now in main",
     "k3s_blob_flake": "blob acd87f4 (traefik/whoami:v1.10) has appeared in #4011 and #4091 - persistent mirror cache corruption",
     "vcluster_tls_bootstrap": "#4068 - issue appears to be in VCluster SDK v0.33.1 standalone mode, not ksail code",
     "vcluster_calico_argocd": "#4119 - new variant: VCluster+Calico+ArgoCD+init=true fails after ~21min, likely ArgoCD install timeout under runner pressure",
     "benchmark_ci_fix": "BenchmarkCreateTarball benchmark CI fix: issue created (refs #4090) - needs manual CI change as .github/workflows are protected",
     "monthly_activity_issue": 3605,
     "protected_files_note": ".github/workflows/ files cannot be modified via Repo Assist PRs - must create issues instead",
-    "loft_sh_log_upstream": "loft-sh/log PR #3 still OPEN as of 2026-04-18 - go.mod comment saying merged is incorrect, replace directive still needed",
-    "argocd_applicationset_docs": "Issue #3731 was closed 2026-04-08 as completed, but roadmap Apr-13 still lists as Now - fresh issue created this run",
-    "dependabot_pr_4120": "go-git/go-git v5.17.1->v5.18.0 - auto-merged by ksail-bot on 2026-04-18T00:48"
+    "loft_sh_log_upstream": "loft-sh/log PR #3 still OPEN - go.mod comment saying merged is incorrect, replace directive still needed",
+    "talos_polling_fix": "PR #4125 merged 2026-04-18T23:43Z - k8sNodesReportedWaitTimeout->k8sNodesPollInterval(30s) fix in provisioner_config.go - issue #4135",
+    "omni_update_fix": "PR #4083 merged 2026-04-17T21:31Z - saveOmniConfigs on cluster update - Fixes #3922",
+    "copilot_prs_open": "Many Copilot PRs open as of 2026-04-19: #4144,#4145,#4146,#4148,#4149,#4150,#4151,#4152 - all KWOK/Talos/VCluster CI fixes"
   }
 }
