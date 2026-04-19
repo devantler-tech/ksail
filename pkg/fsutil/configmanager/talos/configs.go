@@ -175,7 +175,14 @@ func (c *Configs) WithName(name string) (*Configs, error) {
 	}
 
 	// Regenerate the bundle with the new cluster name
-	return newConfigsWithEndpoint(name, kubernetesVersion, networkCIDR, c.endpoint, c.patches, c.versionContract)
+	return newConfigsWithEndpoint(
+		name,
+		kubernetesVersion,
+		networkCIDR,
+		c.endpoint,
+		c.patches,
+		c.versionContract,
+	)
 }
 
 // WithEndpoint creates a new Configs with a specific endpoint IP for the Talos API and Kubernetes API.
@@ -408,7 +415,10 @@ func resolveControlPlaneIP(endpointIP, networkCIDR string) (string, error) {
 // generate fields unknown to the 1.11.2 machined (e.g. machine.install.grubUseUKICmdline),
 // causing config apply to fail with "unknown keys found during decoding".
 // Update this default when Hetzner publishes a newer Talos bootstrap ISO.
-func buildBaseGenOptions(controlPlaneIP string, versionContract *talosconfig.VersionContract) []generate.Option {
+func buildBaseGenOptions(
+	controlPlaneIP string,
+	versionContract *talosconfig.VersionContract,
+) []generate.Option {
 	if versionContract == nil {
 		versionContract = talosconfig.TalosVersion1_11
 	}
