@@ -1302,7 +1302,7 @@ jobs:
         run: |
           set -euo pipefail
           echo "$PACKAGES" \
-            | xargs go test -bench=. -benchmem -run='^$' -timeout=30m \
+            | xargs go test -bench=. -benchmem -run='^$' -count=5 -timeout=30m \
             | tee "$RUNNER_TEMP/bench.txt"
 
       - name: 🔍 Prepare benchmark regression gate input
@@ -1315,17 +1315,15 @@ jobs:
           # (see #3698). The original bench.txt is preserved for artifact upload
           # and historical storage.
           # Exclude I/O-bound BenchmarkCreateTarball_*: timing is dominated by
-          # CI runner disk-cache state and can vary significantly between runs.
+          # CI runner disk-cache state and can vary 4-5x between runs, causing
+          # false-positive CI gate failures unrelated to any code change
+          # (see #4090). Raw data is still captured in bench.txt for historical
+          # storage.
           awk '/^Benchmark/ && /ns\/op/ {
             if ($1 ~ /^BenchmarkCreateTarball_/) next
             for (i = 1; i <= NF; i++) {
               if ($(i+1) == "ns/op" && $i + 0 < 100) next
             }
-            # Exclude I/O-bound benchmarks: their timing is dominated by CI runner
-            # disk-cache state and can vary 4-5x between runs, causing false-positive
-            # CI gate failures unrelated to any code change (see #4090).
-            # Raw data is still captured in bench.txt for historical storage.
-            if ($1 ~ /^BenchmarkCreateTarball_/) next
           } {print}' "$RUNNER_TEMP/bench.txt" > "$RUNNER_TEMP/bench-filtered.txt"
 
       - name: 📊 Compare benchmark results
