@@ -22,6 +22,7 @@ import (
 	registryhelpers "github.com/devantler-tech/ksail/v6/pkg/svc/registryresolver"
 	"github.com/devantler-tech/ksail/v6/pkg/timer"
 	"github.com/spf13/cobra"
+	"k8s.io/client-go/kubernetes"
 )
 
 const (
@@ -603,39 +604,9 @@ func waitForClusterStability(
 		return fmt.Errorf("wait for API server stability: %w", err)
 	}
 
-	// Wait for all nodes to reach Ready state. After Kind/K3d cluster creation
-	// or infrastructure installations, control-plane nodes may briefly carry a
-	// NotReady taint that prevents workload scheduling. Without this check,
-	// pods deployed immediately after stability checks pass can hit
-	// FailedScheduling errors.
-	//
-	// Skipped when CNI was just installed: waitForCNIReadiness already verified
-	// node readiness, so re-checking immediately would be redundant.
-	// Skipped for KWOK: KWOK has no real kubelet nodes (they are simulated on
-	// demand), so WaitForAllNodesReady would always time-out on a fresh cluster.
-	if !cniInstalled && clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionKWOK {
-		err = readiness.WaitForAllNodesReady(ctx, clientset, nodeReadinessTimeout)
-		if err != nil {
-			return fmt.Errorf("wait for all nodes to be ready: %w", err)
-		}
-	}
-
-	// Wait for all kube-system DaemonSets (including the CNI, e.g. Cilium)
-	// to be fully ready. This ensures the CNI dataplane has re-converged
-	// after infrastructure installations and that pod-to-service routing
-	// (e.g. to the API server ClusterIP) is functional. Without this check,
-	// GitOps operator pods can start before Cilium has programmed the eBPF
-	// rules for service routing, causing CrashLoopBackOff with i/o timeout
-	// errors when connecting to kubernetes.default.svc:443.
-	// Note: this runs sequentially after API server stability because
-	// WaitForNamespaceDaemonSetsReady does not retry transient transport errors
-	// (e.g. connection refused/reset); starting it before the API server is
-	// confirmed stable would cause spurious failures.
-	err = readiness.WaitForNamespaceDaemonSetsReady(
-		ctx, clientset, "kube-system", daemonSetStabilityTimeout,
-	)
+	err = waitForNodeAndDaemonSetReadiness(ctx, clusterCfg, clientset, cniInstalled)
 	if err != nil {
-		return fmt.Errorf("wait for kube-system DaemonSets to be ready: %w", err)
+		return err
 	}
 
 	// Pre-flight in-cluster connectivity check: verify that the API server
@@ -651,6 +622,52 @@ func waitForClusterStability(
 		if err != nil {
 			return fmt.Errorf("in-cluster API connectivity pre-flight check: %w", err)
 		}
+	}
+
+	return nil
+}
+
+// waitForNodeAndDaemonSetReadiness waits for all nodes to reach Ready state
+// and for all kube-system DaemonSets (including the CNI) to be fully ready.
+//
+// Node readiness is skipped when cniInstalled is true because waitForCNIReadiness
+// already verified node readiness moments ago, so re-checking is redundant.
+//
+// Both checks are skipped for KWOK: KWOK has no real kubelet nodes (they are
+// simulated on demand) and simulates DaemonSet pods at the API level only —
+// the pods never actually run, so both readiness checks would always time out.
+func waitForNodeAndDaemonSetReadiness(
+	ctx context.Context,
+	clusterCfg *v1alpha1.Cluster,
+	clientset *kubernetes.Clientset,
+	cniInstalled bool,
+) error {
+	if clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionKWOK {
+		return nil
+	}
+
+	if !cniInstalled {
+		err := readiness.WaitForAllNodesReady(ctx, clientset, nodeReadinessTimeout)
+		if err != nil {
+			return fmt.Errorf("wait for all nodes to be ready: %w", err)
+		}
+	}
+
+	// Wait for all kube-system DaemonSets (including the CNI, e.g. Cilium)
+	// to be fully ready. This ensures the CNI dataplane has re-converged
+	// after infrastructure installations and that pod-to-service routing
+	// (e.g. to the API server ClusterIP) is functional. Without this check,
+	// GitOps operator pods can start before Cilium has programmed the eBPF
+	// rules for service routing, causing CrashLoopBackOff with i/o timeout
+	// errors when connecting to kubernetes.default.svc:443.
+	// Note: this runs sequentially after API server stability (called by the
+	// parent) because WaitForNamespaceDaemonSetsReady does not retry transient
+	// transport errors (e.g. connection refused/reset).
+	err := readiness.WaitForNamespaceDaemonSetsReady(
+		ctx, clientset, "kube-system", daemonSetStabilityTimeout,
+	)
+	if err != nil {
+		return fmt.Errorf("wait for kube-system DaemonSets to be ready: %w", err)
 	}
 
 	return nil

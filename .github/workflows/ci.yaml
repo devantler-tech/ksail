@@ -677,7 +677,7 @@ jobs:
       packages: write
     strategy:
       fail-fast: true
-      max-parallel: 20
+      max-parallel: 15
       matrix:
         distribution: [KWOK, Vanilla, K3s, VCluster, Talos]
         provider: [Docker]
@@ -739,6 +739,18 @@ jobs:
             provider: Docker
             init: false
             args: "--gitops-engine ArgoCD --local-registry ghcr.io/devantler-tech/ksail/system-test-manifests"
+          # VCluster: --name system-test-cluster triggers a kubelet TLS bootstrap
+          # bug in the vCluster Vind SDK v0.33.1 standalone mode where the kubelet
+          # falls back to system:anonymous instead of using a valid bootstrap token.
+          # Excluded until the upstream SDK issue is resolved. See #4068.
+          - distribution: VCluster
+            provider: Docker
+            init: true
+            args: "--name system-test-cluster --cni Cilium --csi Enabled --load-balancer Enabled --metrics-server Enabled --policy-engine Kyverno --cert-manager Enabled --gitops-engine Flux"
+          - distribution: VCluster
+            provider: Docker
+            init: false
+            args: "--name system-test-cluster --cni Cilium --csi Enabled --load-balancer Enabled --metrics-server Enabled --policy-engine Kyverno --cert-manager Enabled --gitops-engine Flux"
           # KWOK: init=false primarily validates CLI flag parsing (same as other distributions).
           # Additionally, KWOK suppresses Flux so workload push cannot discover a registry
           # via FluxInstance, and init=false provides no ksail.yaml fallback.
