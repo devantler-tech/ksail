@@ -40,12 +40,6 @@ const (
 	kwokFluxWarning = "Flux is not configured on KWOK: " +
 		"flux-operator pod is simulated and never registers Flux CRDs — skipping"
 
-	// kwokCNIWarning is emitted when a non-default CNI is configured but cannot
-	// be installed on KWOK. KWOK simulates pods with no real network dataplane so
-	// CNI Helm charts would be deployed but never function.
-	kwokCNIWarning = "CNI %q is not installed on KWOK: " +
-		"simulated pods have no real network dataplane — skipping"
-
 	// kwokCSIWarning is emitted when CSI is configured but cannot be installed
 	// on KWOK. KWOK simulates pod status at the API level only — no container
 	// binary runs, so CSI node-plugin DaemonSet pods would never become Ready
@@ -58,6 +52,7 @@ const (
 	// never runs real TLS logic; calls to the admission webhook always time out.
 	kwokCertManagerWarning = "cert-manager is not installed on KWOK: " +
 		"webhook pod is simulated and admission webhook calls always time out — skipping"
+
 
 	// apiServerStabilityTimeout is the maximum time to wait for the API server
 	// to stabilize between infrastructure and GitOps installation phases.
@@ -653,6 +648,12 @@ func waitForClusterStability(
 		return fmt.Errorf("wait for API server stability: %w", err)
 	}
 
+	// KWOK simulates nodes and DaemonSet pods; none of them converge for real.
+	// After API server stability is confirmed, there is nothing left to wait for.
+	if clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionKWOK {
+		return nil
+	}
+
 	// Wait for all nodes to reach Ready state and for at least one node to
 	// be schedulable. After Kind/K3d cluster creation or infrastructure
 	// installations, control-plane nodes may briefly carry a NoSchedule taint
@@ -662,9 +663,7 @@ func waitForClusterStability(
 	// Skipped when CNI was just installed: waitForCNIReadiness already verified
 	// both node readiness and schedulability, so re-checking immediately would
 	// be redundant.
-	// Skipped for KWOK: KWOK has no real kubelet nodes (they are simulated on
-	// demand), so WaitForAllNodesReadyAndSchedulable would always time-out on a fresh cluster.
-	if !cniInstalled && clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionKWOK {
+	if !cniInstalled {
 		err = readiness.WaitForAllNodesReadyAndSchedulable(ctx, clientset, nodeReadinessTimeout)
 		if err != nil {
 			return fmt.Errorf("wait for all nodes to be ready and schedulable: %w", err)
@@ -682,15 +681,11 @@ func waitForClusterStability(
 	// WaitForNamespaceDaemonSetsReady does not retry transient transport errors
 	// (e.g. connection refused/reset); starting it before the API server is
 	// confirmed stable would cause spurious failures.
-	// Skipped for KWOK: kube-system DaemonSet pods are simulated and never
-	// converge — waiting would always time out.
-	if clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionKWOK {
-		err = readiness.WaitForNamespaceDaemonSetsReady(
-			ctx, clientset, "kube-system", daemonSetStabilityTimeout,
-		)
-		if err != nil {
-			return fmt.Errorf("wait for kube-system DaemonSets to be ready: %w", err)
-		}
+	err = readiness.WaitForNamespaceDaemonSetsReady(
+		ctx, clientset, "kube-system", daemonSetStabilityTimeout,
+	)
+	if err != nil {
+		return fmt.Errorf("wait for kube-system DaemonSets to be ready: %w", err)
 	}
 
 	// Pre-flight in-cluster connectivity check: verify that the API server
