@@ -21,7 +21,11 @@ func TestInstallCNI_KWOKSkipsCNIInstallation(t *testing.T) {
 	}{
 		{name: "KWOK with Cilium skips CNI and warns", cni: v1alpha1.CNICilium, wantWarning: true},
 		{name: "KWOK with Calico skips CNI and warns", cni: v1alpha1.CNICalico, wantWarning: true},
-		{name: "KWOK with Default skips CNI silently", cni: v1alpha1.CNIDefault, wantWarning: false},
+		{
+			name:        "KWOK with Default skips CNI silently",
+			cni:         v1alpha1.CNIDefault,
+			wantWarning: false,
+		},
 		{name: "KWOK with empty CNI skips CNI silently", cni: "", wantWarning: false},
 	}
 
@@ -30,6 +34,7 @@ func TestInstallCNI_KWOKSkipsCNIInstallation(t *testing.T) {
 			t.Parallel()
 
 			var buf bytes.Buffer
+
 			cmd := &cobra.Command{}
 			cmd.SetOut(&buf)
 
