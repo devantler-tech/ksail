@@ -2,10 +2,9 @@
 description: Create distinctive, production-grade frontend interfaces with high design quality. Use this skill when the user asks to build web components, pages, artifacts, posters, or applications (examples include websites, landing pages, dashboards, React components, HTML/CSS layouts, or when styling/beautifying any web UI). Generates creative, polished code and UI design that avoids generic AI aesthetics.
 license: Complete terms in LICENSE.txt
 metadata:
-    github-path: frontend-design
-    github-pinned: 6d50a7587e0ff372277dc4a33ccb8b8ea2ff7470
-    github-ref: 6d50a7587e0ff372277dc4a33ccb8b8ea2ff7470
-    github-repo: https://github.com/devantler-tech/skills
+    github-path: skills/frontend-design
+    github-ref: refs/heads/main
+    github-repo: https://github.com/anthropics/skills
     github-tree-sha: 928950704df8a8b885c03de5da626331e6f29cf8
 name: frontend-design
 ---

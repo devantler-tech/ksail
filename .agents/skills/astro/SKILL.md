@@ -3,10 +3,9 @@ description: Skill for building with the Astro web framework. Helps create Astro
 license: MIT
 metadata:
     authors: Astro Team
-    github-path: astro
-    github-pinned: 6d50a7587e0ff372277dc4a33ccb8b8ea2ff7470
-    github-ref: 6d50a7587e0ff372277dc4a33ccb8b8ea2ff7470
-    github-repo: https://github.com/devantler-tech/skills
+    github-path: skills/astro
+    github-ref: refs/heads/main
+    github-repo: https://github.com/astrolicious/agent-skills
     github-tree-sha: 81d96cec5008970ed8fbecb23f7fb48536102b84
     version: 0.0.1
 name: astro

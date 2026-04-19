@@ -1,10 +1,9 @@
 ---
 description: Create, update, and manage GitHub issues using MCP tools. Use this skill when users want to create bug reports, feature requests, or task issues, update existing issues, add labels/assignees/milestones, set issue fields (dates, priority, custom fields), set issue types, manage issue workflows, link issues, add dependencies, or track blocked-by/blocking relationships. Triggers on requests like "create an issue", "file a bug", "request a feature", "update issue X", "set the priority", "set the start date", "link issues", "add dependency", "blocked by", "blocking", or any GitHub issue management task.
 metadata:
-    github-path: github-issues
-    github-pinned: 6d50a7587e0ff372277dc4a33ccb8b8ea2ff7470
-    github-ref: 6d50a7587e0ff372277dc4a33ccb8b8ea2ff7470
-    github-repo: https://github.com/devantler-tech/skills
+    github-path: skills/github-issues
+    github-ref: refs/heads/main
+    github-repo: https://github.com/github/awesome-copilot
     github-tree-sha: 44219c182a1435252a1751313b99fb0a79882bb5
 name: github-issues
 ---

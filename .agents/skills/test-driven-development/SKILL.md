@@ -1,11 +1,10 @@
 ---
 description: Use when implementing any feature or bugfix, before writing implementation code
 metadata:
-    github-path: test-driven-development
-    github-pinned: 6d50a7587e0ff372277dc4a33ccb8b8ea2ff7470
-    github-ref: 6d50a7587e0ff372277dc4a33ccb8b8ea2ff7470
-    github-repo: https://github.com/devantler-tech/skills
-    github-tree-sha: 61939b456845d75979423c855829d05cbf2c304d
+    github-path: skills/test-driven-development
+    github-ref: refs/tags/v5.0.7
+    github-repo: https://github.com/obra/superpowers
+    github-tree-sha: 98904a7d8e0e04b9bd46220b9b17298f45fe0b72
 name: test-driven-development
 ---
 # Test-Driven Development (TDD)
@@ -361,7 +360,7 @@ Never fix bugs without a test.
 
 ## Testing Anti-Patterns
 
-When adding mocks or test utilities, read [testing-anti-patterns.md](testing-anti-patterns.md) to avoid common pitfalls:
+When adding mocks or test utilities, read @testing-anti-patterns.md to avoid common pitfalls:
 - Testing mock behavior instead of real behavior
 - Adding test-only methods to production classes
 - Mocking without understanding dependencies

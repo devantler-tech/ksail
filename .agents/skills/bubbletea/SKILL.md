@@ -2,11 +2,10 @@
 description: Build terminal user interfaces with Go and Bubbletea framework. Use for creating TUI apps with the Elm architecture, dual-pane layouts, accordion modes, mouse/keyboard handling, Lipgloss styling, and reusable components. Includes production-ready templates, effects library, and battle-tested layout patterns from real projects.
 license: MIT
 metadata:
-    github-path: bubbletea
-    github-pinned: 6d50a7587e0ff372277dc4a33ccb8b8ea2ff7470
-    github-ref: 6d50a7587e0ff372277dc4a33ccb8b8ea2ff7470
-    github-repo: https://github.com/devantler-tech/skills
-    github-tree-sha: ae6cd98895cf54415bf82f3a870715076038eff4
+    github-path: .claude/skills/bubbletea
+    github-ref: refs/tags/v1.0.3
+    github-repo: https://github.com/ggprompts/tfe
+    github-tree-sha: b3dceb6065a02f1960f92483d9f44a1c2e4e36aa
 name: bubbletea
 ---
 # Bubbletea TUI Development
@@ -55,7 +54,7 @@ your-app/
 ├── view.go              # View rendering & layouts
 ├── styles.go            # Lipgloss style definitions
 ├── config.go            # Configuration management
-└── .agents/skills/bubbletea/  # This skill (bundled)
+└── .claude/skills/bubbletea/  # This skill (bundled)
 ```
 
 ### Architecture Guidelines
@@ -89,7 +88,7 @@ Beautiful physics-based animations available in the template:
 - 🌈 **Rainbow Cycling** - Animated color gradients
 - 🎭 **Layer Compositor** - ANSI-aware multi-layer rendering
 
-See `references/components.md` for usage examples and integration patterns.
+See `references/effects.md` for usage examples and integration patterns.
 
 ## Layout Implementation Pattern
 
@@ -140,10 +139,10 @@ title = truncateString(title, maxTextWidth)
 subtitle = truncateString(subtitle, maxTextWidth)
 
 func truncateString(s string, maxLen int) string {
-    if runewidth.StringWidth(s) <= maxLen {
+    if len(s) <= maxLen {
         return s
     }
-    return runewidth.Truncate(s, maxLen-1, "…")
+    return s[:maxLen-1] + "…"
 }
 ```
 

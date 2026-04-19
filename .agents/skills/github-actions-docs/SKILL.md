@@ -1,11 +1,10 @@
 ---
 description: Use when users ask how to write, explain, customize, migrate, secure, or troubleshoot GitHub Actions workflows, workflow syntax, triggers, matrices, runners, reusable workflows, artifacts, caching, secrets, OIDC, deployments, custom actions, or Actions Runner Controller, especially when they need official GitHub documentation, exact links, or docs-grounded YAML guidance.
 metadata:
-    github-path: github-actions-docs
-    github-pinned: 6d50a7587e0ff372277dc4a33ccb8b8ea2ff7470
-    github-ref: 6d50a7587e0ff372277dc4a33ccb8b8ea2ff7470
-    github-repo: https://github.com/devantler-tech/skills
-    github-tree-sha: 3b0e64e871f9e83cb394e3ffff8cb9f6bda99deb
+    github-path: skills/github-actions-docs
+    github-ref: refs/heads/main
+    github-repo: https://github.com/xixu-me/skills
+    github-tree-sha: 518c85da555f91c346813aa5bb3cc62f9db8bfb3
 name: github-actions-docs
 ---
 GitHub Actions questions are easy to answer from stale memory. Use this skill to ground answers in official GitHub documentation and return the closest authoritative page instead of generic CI/CD advice.
@@ -25,10 +24,10 @@ Use this skill when the request is about:
 
 Do not use this skill for:
 
-- A specific failing PR check, missing workflow log, or CI failure triage. Use the `gh-cli` skill.
-- General GitHub pull request, branch, or repository operations. Use the `gh-cli` skill.
-- CodeQL-specific configuration or code scanning guidance. Search the GitHub docs directly.
-- Dependabot configuration, grouping, or dependency update strategy. Search the GitHub docs directly.
+- A specific failing PR check, missing workflow log, or CI failure triage. Use `gh-fix-ci`.
+- General GitHub pull request, branch, or repository operations. Use `github`.
+- CodeQL-specific configuration or code scanning guidance. Use `codeql`.
+- Dependabot configuration, grouping, or dependency update strategy. Use `dependabot`.
 
 ## Workflow
 
@@ -95,8 +94,8 @@ Keep citations close to the claim they support.
 - Linking the GitHub Actions docs landing page when a narrower page exists
 - Mixing up reusable workflows and composite actions
 - Suggesting long-lived cloud credentials when OIDC is the better documented path
-- Treating repo-specific CI debugging as a documentation question when it should be handed to `gh-cli`
-- Letting adjacent domains absorb the request when a more focused search of GitHub docs is the sharper fit
+- Treating repo-specific CI debugging as a documentation question when it should be handed to `gh-fix-ci`
+- Letting adjacent domains absorb the request when `codeql` or `dependabot` is the sharper fit
 
 ## Bundled Reference
 

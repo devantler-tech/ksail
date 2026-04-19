@@ -111,13 +111,10 @@ for i := 0; i < availableContentLines && i < len(content); i++ {
 
 // Helper function
 func truncateString(s string, maxLen int) string {
-    if runewidth.StringWidth(s) <= maxLen {
+    if len(s) <= maxLen {
         return s
     }
-    if maxLen < 1 {
-        return ""
-    }
-    return runewidth.Truncate(s, maxLen-1, "…")
+    return s[:maxLen-1] + "…"
 }
 ```
 

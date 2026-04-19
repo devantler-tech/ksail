@@ -25,21 +25,14 @@ Some emojis with variation selectors (U+FE0F) render inconsistently across termi
 
 ### 0. XTerm Terminals Require unicode11
 
-**For xterm-based terminals:** Initialize go-runewidth at startup to use Unicode 11 ambiguous-width handling:
+**For xterm-based terminals:** Must configure go-runewidth properly:
 
 ```go
 import "github.com/mattn/go-runewidth"
 
-func init() {
-    // Disable east-asian wide character treatment for xterm.
-    // Without this, xterm may misreport widths for ambiguous-width runes.
-    runewidth.DefaultCondition.EastAsianWidth = false
-    // Enable Unicode 11 strict-width handling (treats ambiguous chars as narrow)
-    runewidth.DefaultCondition.StrictEmojiNeutral = true
-}
+// Required initialization for xterm terminals
+// Without this, xterm won't handle emoji widths correctly
 ```
-
-See the [go-runewidth README](https://github.com/mattn/go-runewidth#configuration) for the full list of `Condition` fields.
 
 ### 1. go-runewidth Bug #76 (Open since Feb 2024)
 
@@ -253,11 +246,7 @@ From TFE project (reference implementation):
 - **file_operations.go:1237-1246** - `padIconToWidth()` function
 - **model.go:187-197** - Terminal type detection
 
-Debugging session summary:
-- The alignment issue was reproduced in WezTerm and Termux, but not in Windows Terminal.
-- Root cause: go-runewidth bug #76 reports variation selector width = 1 instead of 0.
-- Fix: strip variation selectors (U+FE0F, U+FE0E) before width calculations and before display in affected terminals.
-- Trade-off: emoji appear less colorful in WezTerm/Termux, but column alignment is correct.
+Full debugging session: `TFE/docs/EMOJI_DEBUG_SESSION_2.md`
 
 ---
 
@@ -286,8 +275,7 @@ func stripANSI(s string) string {
 			continue
 		}
 		if inAnsi {
-			// ANSI control sequences end with a final byte in the 0x40-0x7E range.
-			if ch >= 0x40 && ch <= 0x7E {
+			if (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') {
 				inAnsi = false
 			}
 			continue
