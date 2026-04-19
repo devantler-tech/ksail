@@ -245,10 +245,12 @@ spec:
 
 ## SOPS Age Integration
 
-KSail provides native SOPS Age parity for ArgoCD, matching the Flux integration. When SOPS is enabled (or auto-detected), KSail automatically:
+KSail provides native SOPS Age parity for ArgoCD, matching the Flux integration. When SOPS is enabled (or auto-detected) **and an Age key can be resolved**, KSail automatically:
 
 1. Creates a `sops-age` Secret in the `argocd` namespace containing your Age private key
 2. Installs a [Config Management Plugin](https://argo-cd.readthedocs.io/en/stable/operator-manual/config-management-plugins/) (CMP) sidecar on the ArgoCD repo-server that decrypts SOPS-encrypted manifests before rendering
+
+Key resolution requires either the `SOPS_AGE_KEY` environment variable to be set or a valid Age key file to exist. If neither is available, the `sops-age` Secret is not created and SOPS decryption is skipped.
 
 This means encrypted secrets in your source directory are decrypted transparently during sync — no manual plugin setup required.
 
@@ -264,7 +266,7 @@ spec:
   cluster:
     gitOpsEngine: ArgoCD
     sops:
-      ageKeyEnvVar: SOPS_AGE_KEY  # default; set empty to disable env lookup
+      ageKeyEnvVar: SOPS_AGE_KEY  # default; set to "" to disable env lookup
       # enabled: true             # explicit; omit for auto-detect
 ```
 
