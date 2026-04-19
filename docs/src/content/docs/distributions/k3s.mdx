@@ -9,51 +9,16 @@ K3s (K3d) is ideal for quick local development, CI/CD pipelines with ephemeral c
 
 ## Quick Start
 
-### Prerequisites
-
-- Docker Desktop or Docker Engine installed and running
-- `docker ps` command works
-
-### Step 1: Initialize Project
+Requires Docker ([installation prerequisites](/installation/)).
 
 ```bash
-ksail cluster init \
-  --name my-cluster \
-  --distribution K3s \
-  --control-planes 1 \
-  --workers 2
-```
-
-This creates:
-- `ksail.yaml` — KSail configuration
-- `k3d.yaml` — K3d-specific cluster configuration
-
-### Step 2: Create Cluster
-
-```bash
+ksail cluster init --name my-cluster --distribution K3s --control-planes 1 --workers 2
 ksail cluster create
+ksail cluster info && kubectl get nodes  # verify
+ksail cluster delete                     # cleanup
 ```
 
-### Step 3: Verify Cluster
-
-```bash
-ksail cluster info
-kubectl get nodes
-```
-
-### Step 4: Deploy Sample Application
-
-```bash
-kubectl create deployment nginx --image=nginx
-kubectl expose deployment nginx --port=80 --type=LoadBalancer
-kubectl get svc nginx  # EXTERNAL-IP appears within seconds via ServiceLB
-```
-
-### Step 5: Cleanup
-
-```bash
-ksail cluster delete
-```
+`ksail cluster init` creates `ksail.yaml` (KSail config) and `k3d.yaml` (K3d cluster config).
 
 ## Configuration
 
