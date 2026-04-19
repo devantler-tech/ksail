@@ -270,6 +270,13 @@ func (d *ComponentDetector) detectLoadBalancer(
 		return d.detectMetalLB(ctx)
 	}
 
+	// KWOK: simulated pods have no real network dataplane, so LoadBalancer is
+	// never installed. Return Disabled to match applyDistributionSpecOverrides
+	// and prevent false-positive diffs in update dry-runs.
+	if distribution == v1alpha1.DistributionKWOK {
+		return v1alpha1.LoadBalancerDisabled, nil
+	}
+
 	return v1alpha1.LoadBalancerDefault, nil
 }
 
