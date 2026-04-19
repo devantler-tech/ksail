@@ -23,6 +23,12 @@ import (
 // ErrUnsupportedCNI is returned when an unsupported CNI type is encountered.
 var ErrUnsupportedCNI = errors.New("unsupported CNI type")
 
+// kwokCNIWarning is emitted when a non-default CNI is configured but cannot be
+// installed on KWOK. Simulated pods never execute real binaries, so a CNI
+// installation provides no value — CNI setup is skipped entirely for KWOK.
+const kwokCNIWarning = "CNI %q is not installed on KWOK: " +
+	"KWOK skips CNI installation entirely — skipping"
+
 // ErrCNIReadinessTimeout is returned when nodes fail to become ready after CNI installation.
 var ErrCNIReadinessTimeout = errors.New("CNI node readiness timed out")
 
@@ -51,6 +57,10 @@ func InstallCNI(
 	tmr timer.Timer,
 ) (bool, error) {
 	if clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionKWOK {
+		if clusterCfg.Spec.Cluster.CNI != v1alpha1.CNIDefault && clusterCfg.Spec.Cluster.CNI != "" {
+			notify.Warningf(cmd.OutOrStdout(), kwokCNIWarning, clusterCfg.Spec.Cluster.CNI)
+		}
+
 		return false, nil
 	}
 

@@ -603,6 +603,15 @@ func waitForClusterStability(
 		return fmt.Errorf("wait for API server stability: %w", err)
 	}
 
+	// KWOK simulates nodes and DaemonSets as scheduled/running but never
+	// executes real binaries. WaitForAllNodesReady would time out because no
+	// real kubelet reports node status, and WaitForNamespaceDaemonSetsReady
+	// would time out because simulated pods never converge to a truly ready
+	// state. Skip both and return here.
+	if clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionKWOK {
+		return nil
+	}
+
 	// Wait for all nodes to reach Ready state. After Kind/K3d cluster creation
 	// or infrastructure installations, control-plane nodes may briefly carry a
 	// NotReady taint that prevents workload scheduling. Without this check,
@@ -611,9 +620,7 @@ func waitForClusterStability(
 	//
 	// Skipped when CNI was just installed: waitForCNIReadiness already verified
 	// node readiness, so re-checking immediately would be redundant.
-	// Skipped for KWOK: KWOK has no real kubelet nodes (they are simulated on
-	// demand), so WaitForAllNodesReady would always time-out on a fresh cluster.
-	if !cniInstalled && clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionKWOK {
+	if !cniInstalled {
 		err = readiness.WaitForAllNodesReady(ctx, clientset, nodeReadinessTimeout)
 		if err != nil {
 			return fmt.Errorf("wait for all nodes to be ready: %w", err)
@@ -631,17 +638,11 @@ func waitForClusterStability(
 	// WaitForNamespaceDaemonSetsReady does not retry transient transport errors
 	// (e.g. connection refused/reset); starting it before the API server is
 	// confirmed stable would cause spurious failures.
-	//
-	// Skipped for KWOK: KWOK simulates DaemonSet pods as Running but they
-	// never execute real binaries, so CNI/kube-proxy DaemonSets may never
-	// converge to the ready state expected by this check.
-	if clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionKWOK {
-		err = readiness.WaitForNamespaceDaemonSetsReady(
-			ctx, clientset, "kube-system", daemonSetStabilityTimeout,
-		)
-		if err != nil {
-			return fmt.Errorf("wait for kube-system DaemonSets to be ready: %w", err)
-		}
+	err = readiness.WaitForNamespaceDaemonSetsReady(
+		ctx, clientset, "kube-system", daemonSetStabilityTimeout,
+	)
+	if err != nil {
+		return fmt.Errorf("wait for kube-system DaemonSets to be ready: %w", err)
 	}
 
 	// Pre-flight in-cluster connectivity check: verify that the API server
