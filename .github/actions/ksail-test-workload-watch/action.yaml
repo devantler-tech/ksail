@@ -126,7 +126,7 @@ runs:
             spec:
               containers:
                 - name: test
-                  image: traefik/whoami:v1.10
+                  image: nginx:alpine
         EOF
         cat > "$WATCH_DIR/kustomization.yaml" <<'EOF'
         apiVersion: kustomize.config.k8s.io/v1beta1

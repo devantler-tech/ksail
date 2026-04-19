@@ -12,7 +12,7 @@ inputs:
   test-workload-image:
     description: Image to use for workload create test
     required: false
-    default: "traefik/whoami:v1.10"
+    default: "nginx:alpine"
   workload-timeout:
     description: |
       Timeout for workload wait operations. Set to 10 minutes to handle

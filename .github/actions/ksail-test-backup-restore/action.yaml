@@ -28,7 +28,7 @@ runs:
       run: |
         create_succeeded=false
         for attempt in 1 2 3; do
-          if ksail workload create deployment backup-test --image=traefik/whoami:v1.10; then
+          if ksail workload create deployment backup-test --image=nginx:alpine; then
             create_succeeded=true
             break
           fi

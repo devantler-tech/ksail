@@ -11,7 +11,7 @@ inputs:
     description: |
       Version salt for cache key. Must match warm-mirror-cache.
     required: false
-    default: "v1"
+    default: "v2"
 
 outputs:
   cache-hit:
@@ -64,7 +64,7 @@ runs:
         # Append CI test workload images (must match warm-mirror-cache exactly).
         # This also includes the API connectivity pre-flight pod image so mirror
         # restores cover that pull path too. See issue #3822 for related context.
-        echo "docker.io/traefik/whoami:v1.10" >> "$IMAGES_FILE"
+        echo "docker.io/library/nginx:alpine" >> "$IMAGES_FILE"
         echo "docker.io/library/busybox:1.36.1" >> "$IMAGES_FILE"
 
         # Deduplicate and sort (must match warm-mirror-cache exactly)
