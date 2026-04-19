@@ -59,6 +59,6 @@ Follow the conventions established in the existing benchmark files:
 
 **No baseline data yet:** The first push to `main` after enabling the workflow auto-pushes the initial baseline to the `benchmark-data` branch. PRs opened before that will skip the comparison.
 
-**Benchmark times are inconsistent:** CI runs each benchmark 5 times (`-count=5`) and uses the last result for comparison to reduce runner noise. The 200% fail threshold is intentionally generous to further avoid false positives. I/O-bound benchmarks (`BenchmarkCreateTarball_*`) are excluded from the regression gate since their timing is dominated by disk-cache state rather than algorithmic complexity.
+**Benchmark times are inconsistent:** CI runs each benchmark 5 times (`-count=5`) to provide multiple samples for statistical comparison, reducing the effect of runner noise on the result. The 200% fail threshold is intentionally generous to further avoid false positives. I/O-bound benchmarks (`BenchmarkCreateTarball_*`) are excluded from the regression gate since their timing is dominated by disk-cache state rather than algorithmic complexity.
 
 **Benchmark jobs skipped:** The workflow runs on all PRs, but benchmark jobs are skipped when no Go source files (`**/*.go`, `go.mod`, `go.sum`) changed. In the merge queue, benchmark jobs are always skipped.
