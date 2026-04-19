@@ -456,7 +456,8 @@ jobs:
           token: ${{ steps.generate-token.outputs.token }}
           commit-message: "chore: sync modules and update generated files"
           committer: "generator-bot <generator-bot@users.noreply.github.com>"
-          branch: chore/sync-generated-files
+          branch: chore/sync-generated-files/${{ github.ref_name }}
+          base: ${{ github.ref_name }}
           title: "chore: sync modules and update generated files"
           body: |
             Auto-generated changes detected on `${{ github.ref_name }}`.
