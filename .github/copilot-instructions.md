@@ -367,6 +367,7 @@ For a deeper dive into KSail's design and internals, refer to:
 ## Daily Docs Workflow Behavior
 
 The Daily Docs agentic workflow (`daily-docs.lock.yml`) is designed to fill documentation gaps:
+
 - When a push to main already includes documentation changes alongside code changes, the agent may correctly call `noop` — no additional PR is needed
 - When the agent calls `noop`, the `agent` job is marked as `failure` by the gh-aw framework (this is expected behavior, not a real error)
 - The `update_cache_memory` job is skipped on agent failure — subsequent runs will rebuild the page ownership map cache automatically
