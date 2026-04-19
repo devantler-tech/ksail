@@ -23,6 +23,12 @@ import (
 // ErrUnsupportedCNI is returned when an unsupported CNI type is encountered.
 var ErrUnsupportedCNI = errors.New("unsupported CNI type")
 
+// kwokCNIWarning is emitted when an explicit CNI is configured but cannot be
+// installed on KWOK (Helm-deployed pods are simulated and never run real
+// binaries; readiness checks would always time out).
+const kwokCNIWarning = "CNI %q is not installed on KWOK: " +
+	"Helm-deployed pods are simulated and never run real binaries — skipping"
+
 // ErrCNIReadinessTimeout is returned when nodes fail to become ready after CNI installation.
 var ErrCNIReadinessTimeout = errors.New("CNI node readiness timed out")
 
@@ -39,12 +45,25 @@ type cniSetupResult struct {
 }
 
 // InstallCNI installs the configured CNI for the cluster.
-// Returns true if a CNI was installed, false if using default/none.
+// Returns true if a CNI was installed, false if using default/none or when
+// installation is skipped (e.g. for KWOK where pods are simulated).
+//
+// KWOK simulates pods at the API level without running real binaries, so CNI
+// installation is skipped entirely: Helm chart deploys would create simulated
+// pods that never converge, and readiness checks would always time out.
 func InstallCNI(
 	cmd *cobra.Command,
 	clusterCfg *v1alpha1.Cluster,
 	tmr timer.Timer,
 ) (bool, error) {
+	if clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionKWOK {
+		if clusterCfg.Spec.Cluster.CNI != v1alpha1.CNIDefault && clusterCfg.Spec.Cluster.CNI != "" {
+			notify.Warningf(cmd.OutOrStdout(), kwokCNIWarning, clusterCfg.Spec.Cluster.CNI)
+		}
+
+		return false, nil
+	}
+
 	switch clusterCfg.Spec.Cluster.CNI {
 	case v1alpha1.CNICilium:
 		err := installCNIOnly(cmd, clusterCfg, tmr, installCiliumCNI)
