@@ -309,24 +309,26 @@ runs:
         }
 
         is_transient() {
-          local output="$1"
-          echo "$output" | grep -qiE 'TOOMANYREQUESTS|exit status 22|fetching blob: denied|i/o timeout|connection reset|TLS handshake timeout|connection refused|unexpected EOF|server misbehaving|no such host'
+          local output_file="$1"
+          grep -qiE 'TOOMANYREQUESTS|exit status 22|fetching blob: denied|i/o timeout|connection reset|TLS handshake timeout|connection refused|unexpected EOF|server misbehaving|no such host' "$output_file"
         }
 
         MAX_ATTEMPTS=3
         BACKOFFS=(30 60)
         for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
-          if output=$(create_cluster 2>&1); then
-            echo "$output"
+          output_file=$(mktemp)
+          if create_cluster 2>&1 | tee "$output_file" >&2; then
+            rm -f "$output_file"
             break
           else
-            rc=$?
-            echo "$output"
-            if [ "$attempt" -lt "$MAX_ATTEMPTS" ] && is_transient "$output"; then
+            rc=${PIPESTATUS[0]}
+            if [ "$attempt" -lt "$MAX_ATTEMPTS" ] && is_transient "$output_file"; then
               delay=${BACKOFFS[$((attempt - 1))]}
               echo "⚠️ Cluster create attempt $attempt/$MAX_ATTEMPTS failed with transient error (rc=$rc), retrying in ${delay}s…"
+              rm -f "$output_file"
               sleep "$delay"
             else
+              rm -f "$output_file"
               exit "$rc"
             fi
           fi
