@@ -36,7 +36,9 @@ var (
 	errTLSTimeout     = errors.New("net/http: TLS handshake timeout")
 	errNoSuchHost     = errors.New("dial tcp: lookup ghcr.io: no such host")
 	errDNSTransient   = errors.New("dial tcp: lookup ghcr.io: temporary failure in name resolution")
-	errNodeJoinFailed = errors.New("failed to start vCluster standalone. Node couldn't join: signal: killed")
+	errNodeJoinFailed = errors.New(
+		"failed to start vCluster standalone. Node couldn't join: signal: killed",
+	)
 )
 
 func newTestLogger() loftlog.Logger {
