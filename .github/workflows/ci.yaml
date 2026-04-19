@@ -676,7 +676,7 @@ jobs:
       contents: read
       packages: write
     strategy:
-      fail-fast: false
+      fail-fast: true
       max-parallel: 20
       matrix:
         distribution: [KWOK, Vanilla, K3s, VCluster, Talos]
