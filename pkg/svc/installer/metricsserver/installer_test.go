@@ -92,6 +92,33 @@ func TestMetricsServerInstallerInstallAddRepositoryError(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to add metrics-server repository")
 }
 
+func TestBuildValuesYaml_VCluster(t *testing.T) {
+	t.Parallel()
+
+	yaml := metricsserverinstaller.BuildValuesYaml(v1alpha1.DistributionVCluster)
+
+	assert.Contains(t, yaml, "--kubelet-preferred-address-types=InternalIP")
+	assert.Contains(t, yaml, "--kubelet-insecure-tls")
+}
+
+func TestBuildValuesYaml_Vanilla(t *testing.T) {
+	t.Parallel()
+
+	yaml := metricsserverinstaller.BuildValuesYaml(v1alpha1.DistributionVanilla)
+
+	assert.Contains(t, yaml, "--kubelet-preferred-address-types=InternalIP")
+	assert.NotContains(t, yaml, "--kubelet-insecure-tls")
+}
+
+func TestBuildValuesYaml_K3s(t *testing.T) {
+	t.Parallel()
+
+	yaml := metricsserverinstaller.BuildValuesYaml(v1alpha1.DistributionK3s)
+
+	assert.Contains(t, yaml, "--kubelet-preferred-address-types=InternalIP")
+	assert.NotContains(t, yaml, "--kubelet-insecure-tls")
+}
+
 func TestMetricsServerInstallerInstallVClusterSuccess(t *testing.T) {
 	t.Parallel()
 
