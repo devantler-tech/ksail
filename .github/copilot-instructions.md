@@ -364,6 +364,10 @@ For a deeper dive into KSail's design and internals, refer to:
 - When the detection model's own `reasons` array contradicts the boolean verdict, the reasons text takes precedence for human review.
 - Agents should avoid phrasing like "ignoring policy" or "suppressing" in their reasoning; prefer "no action required" or "no changes needed."
 
+## Benchmark Pipeline Consistency
+
+When changing `-count` in the `go test -bench` command in CI, always update the awk deduplication/filtering step in "Prepare benchmark regression gate input" to handle multiple output lines per benchmark (one per count). Failing to do so causes false-positive performance regression alerts for all benchmarks, even ones unrelated to the PR. The comparison tool (`github-action-benchmark`) compares each output line individually against the stored single-run baseline. See [docs/BENCHMARK-REGRESSION.md](../docs/BENCHMARK-REGRESSION.md) for details.
+
 ## Active Technologies
 
 - Go 1.26.1+ (see `go.mod`)
