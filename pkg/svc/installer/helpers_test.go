@@ -165,7 +165,7 @@ func TestTimeoutConstants(t *testing.T) {
 
 	t.Run("argocd_install_timeout", func(t *testing.T) {
 		t.Parallel()
-		assert.Equal(t, 20*time.Minute, installer.ArgoCDInstallTimeout)
+		assert.Equal(t, 25*time.Minute, installer.ArgoCDInstallTimeout)
 	})
 
 	t.Run("vcluster_install_timeout", func(t *testing.T) {
