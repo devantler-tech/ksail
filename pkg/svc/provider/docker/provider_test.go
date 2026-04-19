@@ -77,21 +77,25 @@ func newTalosContainers(clusterName string) []container.Summary {
 }
 
 // newKWOKContainers creates test containers with KWOK naming convention.
+// kwokctl prepends "kwok-" to the cluster name via config.ClusterName(), so
+// containers are named kwok-<cluster-name>-<component>.
 func newKWOKContainers(clusterName string) []container.Summary {
+	fullName := "kwok-" + clusterName
+
 	return []container.Summary{
 		{
 			ID:    "etcd1",
-			Names: []string{"/kwok-" + clusterName + "-etcd"},
+			Names: []string{"/" + fullName + "-etcd"},
 			State: "running",
 		},
 		{
 			ID:    "api1",
-			Names: []string{"/kwok-" + clusterName + "-kube-apiserver"},
+			Names: []string{"/" + fullName + "-kube-apiserver"},
 			State: "running",
 		},
 		{
 			ID:    "ctrl1",
-			Names: []string{"/kwok-" + clusterName + "-kwok-controller"},
+			Names: []string{"/" + fullName + "-kwok-controller"},
 			State: "running",
 		},
 	}
@@ -618,10 +622,13 @@ func TestProvider_ListAllClusters_KWOK(t *testing.T) {
 	client := dockerclient.NewMockAPIClient(t)
 
 	allContainers := []container.Summary{
-		{ID: "1", Names: []string{"/kwok-cluster1-etcd"}},
-		{ID: "2", Names: []string{"/kwok-cluster1-kube-apiserver"}},
-		{ID: "3", Names: []string{"/kwok-cluster2-kwok-controller"}},
-		{ID: "4", Names: []string{"/other-container"}},
+		{
+			ID:    "1",
+			Names: []string{"/kwok-cluster1-etcd"},
+		}, // common suffix — must NOT produce a false positive
+		{ID: "2", Names: []string{"/kwok-cluster1-kwok-controller"}}, // KWOK-distinctive suffix
+		{ID: "3", Names: []string{"/kwok-cluster2-kwok-controller"}}, // KWOK-distinctive suffix
+		{ID: "4", Names: []string{"/other-container"}},               // unrelated container
 	}
 
 	client.EXPECT().
