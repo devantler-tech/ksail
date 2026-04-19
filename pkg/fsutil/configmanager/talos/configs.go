@@ -47,6 +47,8 @@ type Configs struct {
 	endpoint string
 	// patches is stored for regeneration with a new name.
 	patches []Patch
+	// versionContract is stored for regeneration to preserve version contract across WithName/WithEndpoint calls.
+	versionContract *talosconfig.VersionContract
 }
 
 // NewDefaultConfigs creates a new Talos Configs with default settings.
@@ -70,6 +72,7 @@ func NewDefaultConfigs() (*Configs, error) {
 		DefaultKubernetesVersion,
 		DefaultNetworkCIDR,
 		[]Patch{allowSchedulingPatch},
+		nil,
 	)
 }
 
@@ -96,6 +99,7 @@ func NewDefaultConfigsWithPatches(additionalPatches []Patch) (*Configs, error) {
 		DefaultKubernetesVersion,
 		DefaultNetworkCIDR,
 		patches,
+		nil,
 	)
 }
 
@@ -171,7 +175,7 @@ func (c *Configs) WithName(name string) (*Configs, error) {
 	}
 
 	// Regenerate the bundle with the new cluster name
-	return newConfigsWithEndpoint(name, kubernetesVersion, networkCIDR, c.endpoint, c.patches)
+	return newConfigsWithEndpoint(name, kubernetesVersion, networkCIDR, c.endpoint, c.patches, c.versionContract)
 }
 
 // WithEndpoint creates a new Configs with a specific endpoint IP for the Talos API and Kubernetes API.
@@ -218,6 +222,7 @@ func (c *Configs) WithEndpoint(endpointIP string) (*Configs, error) {
 		endpointIP,
 		c.patches,
 		existingSecrets,
+		c.versionContract,
 	)
 }
 
@@ -331,11 +336,14 @@ func (c *Configs) NetworkCIDR() string {
 
 // newConfigs creates Configs from patches with the given cluster parameters.
 // The endpoint is calculated from the network CIDR.
+// If versionContract is nil, it defaults to TalosVersion1_11 for compatibility with Hetzner
+// bootstrap ISOs.
 func newConfigs(
 	clusterName string,
 	kubernetesVersion string,
 	networkCIDR string,
 	patches []Patch,
+	versionContract *talosconfig.VersionContract,
 ) (*Configs, error) {
 	return newConfigsWithEndpointAndSecrets(
 		clusterName,
@@ -344,18 +352,21 @@ func newConfigs(
 		"",
 		patches,
 		nil,
+		versionContract,
 	)
 }
 
 // newConfigsWithEndpoint creates Configs with an optional explicit endpoint IP.
 // If endpointIP is empty, the endpoint is calculated from the network CIDR.
 // If endpointIP is provided (e.g., for Hetzner public IPs), it is used as the endpoint.
+// If versionContract is nil, it defaults to TalosVersion1_11.
 func newConfigsWithEndpoint(
 	clusterName string,
 	kubernetesVersion string,
 	networkCIDR string,
 	endpointIP string,
 	patches []Patch,
+	versionContract *talosconfig.VersionContract,
 ) (*Configs, error) {
 	return newConfigsWithEndpointAndSecrets(
 		clusterName,
@@ -364,6 +375,7 @@ func newConfigsWithEndpoint(
 		endpointIP,
 		patches,
 		nil,
+		versionContract,
 	)
 }
 
@@ -389,11 +401,22 @@ func resolveControlPlaneIP(endpointIP, networkCIDR string) (string, error) {
 }
 
 // buildBaseGenOptions creates the base generate options for Talos config generation.
-func buildBaseGenOptions(controlPlaneIP string) []generate.Option {
+// If versionContract is nil, it defaults to TalosVersion1_11.
+//
+// TalosVersion1_11 is the conservative default because the Hetzner bootstrap ISO
+// (ID 122630) runs Talos 1.11.2 in maintenance mode. Version contracts greater than 1.11
+// generate fields unknown to the 1.11.2 machined (e.g. machine.install.grubUseUKICmdline),
+// causing config apply to fail with "unknown keys found during decoding".
+// Update this default when Hetzner publishes a newer Talos bootstrap ISO.
+func buildBaseGenOptions(controlPlaneIP string, versionContract *talosconfig.VersionContract) []generate.Option {
+	if versionContract == nil {
+		versionContract = talosconfig.TalosVersion1_11
+	}
+
 	return []generate.Option{
 		generate.WithEndpointList([]string{controlPlaneIP}),
 		generate.WithAdditionalSubjectAltNames([]string{"127.0.0.1"}),
-		generate.WithVersionContract(talosconfig.TalosVersion1_13),
+		generate.WithVersionContract(versionContract),
 		// Install disk is required for bare metal installations (Hetzner, etc.)
 		// For Docker-in-Docker, this setting is ignored as there's no actual disk.
 		// /dev/sda is the standard disk for Hetzner VPS and most cloud providers.
@@ -438,6 +461,7 @@ func buildBundleOptions(
 // newConfigsWithEndpointAndSecrets creates Configs with an explicit endpoint IP while preserving
 // an existing secrets bundle. This is used by WithEndpoint to regenerate configs with a new
 // endpoint without regenerating the PKI (CA, keys, tokens), which would cause certificate mismatches.
+// If versionContract is nil, it defaults to TalosVersion1_11.
 func newConfigsWithEndpointAndSecrets(
 	clusterName string,
 	kubernetesVersion string,
@@ -445,6 +469,7 @@ func newConfigsWithEndpointAndSecrets(
 	endpointIP string,
 	patches []Patch,
 	existingSecrets *secrets.Bundle,
+	versionContract *talosconfig.VersionContract,
 ) (*Configs, error) {
 	// Categorize patches by scope
 	clusterPatches, controlPlanePatches, workerPatches, err := categorizePatchesByScope(patches)
@@ -461,7 +486,7 @@ func newConfigsWithEndpointAndSecrets(
 	controlPlaneEndpoint := "https://" + net.JoinHostPort(controlPlaneIP, "6443")
 
 	// Build generate options
-	genOptions := buildBaseGenOptions(controlPlaneIP)
+	genOptions := buildBaseGenOptions(controlPlaneIP, versionContract)
 
 	// If we have existing secrets, reuse them to preserve PKI across endpoint changes
 	if existingSecrets != nil {
@@ -492,6 +517,7 @@ func newConfigsWithEndpointAndSecrets(
 		networkCIDR:       networkCIDR,
 		endpoint:          endpointIP,
 		patches:           patches,
+		versionContract:   versionContract,
 	}, nil
 }
 

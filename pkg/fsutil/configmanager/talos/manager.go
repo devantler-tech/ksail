@@ -8,6 +8,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v6/pkg/envvar"
 	configmanager "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager"
+	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
 	"sigs.k8s.io/yaml"
 )
 
@@ -48,6 +49,9 @@ type ConfigManager struct {
 	configLoaded      bool
 	// additionalPatches are runtime patches added programmatically.
 	additionalPatches []Patch
+	// versionContract controls which Talos version-gated config fields are generated.
+	// Defaults to TalosVersion1_11 for compatibility with Hetzner bootstrap ISOs.
+	versionContract *talosconfig.VersionContract
 }
 
 // NewConfigManager creates a new configuration manager for Talos patches.
@@ -77,7 +81,22 @@ func NewConfigManager(
 		kubernetesVersion: kubernetesVersion,
 		networkCIDR:       networkCIDR,
 		configLoaded:      false,
+		versionContract:   talosconfig.TalosVersion1_11,
 	}
+}
+
+// WithVersionContract sets the Talos version contract used during config generation.
+// The version contract controls which version-gated fields are included in the generated
+// machine config. Use this to opt into features introduced in newer Talos versions.
+//
+// The default is TalosVersion1_11, which is safe for Hetzner bootstrap ISOs (currently
+// Talos 1.11.2). Version contracts greater than 1.11 generate fields unknown to the
+// 1.11.2 machined (e.g. machine.install.grubUseUKICmdline), causing bootstrap failures.
+// Set a higher contract only when all bootstrap paths support the required Talos version.
+func (m *ConfigManager) WithVersionContract(contract *talosconfig.VersionContract) *ConfigManager {
+	m.versionContract = contract
+
+	return m
 }
 
 // WithAdditionalPatches adds runtime patches to be applied after file patches.
@@ -112,6 +131,7 @@ func (m *ConfigManager) Load(_ configmanager.LoadOptions) (*Configs, error) {
 		m.kubernetesVersion,
 		m.networkCIDR,
 		patches,
+		m.versionContract,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Talos configs: %w", err)
