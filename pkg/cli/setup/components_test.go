@@ -454,3 +454,22 @@ func TestInstallCNI_KWOKNonDefaultCNIWarnsAndSkips(t *testing.T) {
 	assert.False(t, installed, "KWOK should not install CNI even when Cilium is configured")
 	assert.Contains(t, buf.String(), "not installed on KWOK")
 }
+
+func TestInstallCNI_KWOKUnsupportedCNIReturnsError(t *testing.T) {
+	t.Parallel()
+
+	cmd := &cobra.Command{}
+	clusterCfg := &v1alpha1.Cluster{
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				Distribution: v1alpha1.DistributionKWOK,
+				CNI:          "unsupported-cni",
+			},
+		},
+	}
+
+	installed, err := setup.InstallCNI(cmd, clusterCfg, nil)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, setup.ErrUnsupportedCNI, "KWOK should still return ErrUnsupportedCNI for unknown CNI values")
+	assert.False(t, installed)
+}

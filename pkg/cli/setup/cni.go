@@ -53,7 +53,8 @@ func InstallCNI(
 	tmr timer.Timer,
 ) (bool, error) {
 	// KWOK simulated pods have no real network dataplane, so CNI installation
-	// is skipped entirely. Warn the user if a non-default CNI was requested.
+	// is skipped entirely. Still validate the configured CNI so unsupported
+	// values do not get silently accepted.
 	if clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionKWOK {
 		switch clusterCfg.Spec.Cluster.CNI {
 		case v1alpha1.CNIDefault, "":
