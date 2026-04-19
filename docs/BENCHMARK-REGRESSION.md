@@ -17,12 +17,14 @@ On pushes to `main`, benchmark results are auto-pushed to the `benchmark-data` b
 
 The workflow uses threshold-based regression detection:
 
-| Setting           | Value | Meaning                                                                                                   |
-|-------------------|-------|-----------------------------------------------------------------------------------------------------------|
-| `alert-threshold` | 150%  | Marks benchmarks as regressed in the PR comment and fails pull request CI when ≥1.5× slower than baseline |
-| `fail-threshold`  | 200%  | Fails CI on non-PR runs such as pushes to `main` when a benchmark is ≥2× slower than baseline             |
+| Setting           | Value | Meaning                                                                                                          |
+|-------------------|-------|------------------------------------------------------------------------------------------------------------------|
+| `alert-threshold` | 150%  | Marks benchmarks as regressed and posts a PR comment when ≥1.5× slower than baseline                            |
+| `fail-threshold`  | 200%  | Fails CI on non-PR runs (pushes to `main`, merge queue) when a benchmark is ≥2× slower than baseline            |
 
-On pull requests where benchmarks run and benchmark functions are discovered, the action posts a comment with the full benchmark comparison. If the alert threshold is exceeded, the regressed benchmarks are highlighted in the comment.
+On pull requests, the benchmark gate is **informational only**: results are posted as a PR comment when the alert threshold is exceeded, but CI never blocks on it. This is intentional — shared GitHub Actions runners have hardware variance of 2–5× between runs, making per-PR blocking gates unreliable. Real regressions are caught on pushes to `main`.
+
+On push or merge-queue events, `fail-threshold` is active: a ≥2× regression fails CI, protecting `main` from persistent algorithmic regressions.
 
 ## Historical Results
 
@@ -59,6 +61,6 @@ Follow the conventions established in the existing benchmark files:
 
 **No baseline data yet:** The first push to `main` after enabling the workflow auto-pushes the initial baseline to the `benchmark-data` branch. PRs opened before that will skip the comparison.
 
-**Benchmark times are inconsistent:** CI runs each benchmark 5 times (`-count=5`) to provide multiple samples for statistical comparison, reducing the effect of runner noise on the result. The 200% fail threshold is intentionally generous to further avoid false positives. I/O-bound benchmarks (`BenchmarkCreateTarball_*`) are excluded from the regression gate since their timing is dominated by disk-cache state rather than algorithmic complexity.
+**Benchmark times are inconsistent:** CI runs each benchmark 5 times (`-count=5`). The 5 samples are averaged into a single representative value before comparison, giving a stable 1:1 comparison against the stored baseline. On pull requests, the benchmark gate is informational only — shared CI runners can vary 2–5× in hardware speed between runs, so per-PR blocking would produce too many false positives. I/O-bound benchmarks (`BenchmarkCreateTarball_*`) are excluded from the regression gate entirely since their timing is dominated by disk-cache state rather than algorithmic complexity.
 
 **Benchmark jobs skipped:** The workflow runs on all PRs, but benchmark jobs are skipped when no Go source files (`**/*.go`, `go.mod`, `go.sum`) changed. In the merge queue, benchmark jobs are always skipped.

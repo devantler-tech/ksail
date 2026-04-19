@@ -15,8 +15,8 @@ KSail includes automated benchmark regression testing to detect performance chan
 
 | Setting           | Value | Meaning                                                                                              |
 |-------------------|-------|------------------------------------------------------------------------------------------------------|
-| `alert-threshold` | 150%  | Marks benchmarks as regressed in the PR comment and fails pull request CI when ≥1.5× slower than baseline |
-| `fail-threshold`  | 200%  | Fails CI on non-PR runs such as pushes to `main` when a benchmark is ≥2× slower than baseline      |
+| `alert-threshold` | 150%  | Marks benchmarks as regressed and posts a PR comment when ≥1.5× slower than baseline (never blocks CI on PRs) |
+| `fail-threshold`  | 200%  | Fails CI on non-PR runs (pushes to `main`, merge queue) when a benchmark is ≥2× slower than baseline         |
 
 On pull requests where benchmarks run and benchmark functions are discovered, a comment is posted only when the alert threshold is exceeded, highlighting the regressed benchmarks.
 

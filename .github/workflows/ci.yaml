@@ -1310,21 +1310,58 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # Create a filtered copy excluding benchmark lines with ns/op < 100
-          # to avoid false positives from CPU clock jitter on shared CI runners
-          # (see #3698). The original bench.txt is preserved for artifact upload
-          # and historical storage.
-          # Exclude I/O-bound BenchmarkCreateTarball_*: timing is dominated by
-          # CI runner disk-cache state and can vary 4-5x between runs, causing
-          # false-positive CI gate failures unrelated to any code change
-          # (see #4090). Raw data is still captured in bench.txt for historical
+          # Filter excluded benchmarks and average -count=N duplicate samples into
+          # a single representative value per benchmark.
+          #
+          # Excluded: BenchmarkCreateTarball_* — I/O-bound; timing is dominated by
+          # CI runner disk-cache state and can vary 4-5x between runs (see #4090).
+          # Excluded: benchmarks with ns/op < 100 — too fast for reliable measurement
+          # on shared runners with CPU clock jitter (see #3698).
+          #
+          # Averaging: go test -count=N emits N lines per benchmark. Without
+          # averaging, github-action-benchmark would compare each of the N lines
+          # individually against the single stored baseline, generating N alerts
+          # instead of one and skewing the history chart. Averaging collapses them
+          # to a single geometric-mean-like value for a clean 1:1 comparison.
+          #
+          # The original bench.txt is preserved for artifact upload and historical
           # storage.
-          awk '/^Benchmark/ && /ns\/op/ {
-            if ($1 ~ /^BenchmarkCreateTarball_/) next
-            for (i = 1; i <= NF; i++) {
-              if ($(i+1) == "ns/op" && $i + 0 < 100) next
+          awk '
+            { lines[NR] = $0 }
+            /^Benchmark/ && /ns\/op/ {
+              if ($1 ~ /^BenchmarkCreateTarball_/) next
+              for (i = 1; i <= NF; i++) {
+                if ($(i+1) == "ns/op" && $i + 0 < 100) next
+              }
+              name = $1; count[name]++; iters[name] += $2
+              for (i = 3; i <= NF; i++) {
+                if ($i == "ns/op")     ns[name]    += $(i-1)
+                if ($i == "B/op")      bop[name]   += $(i-1)
+                if ($i == "allocs/op") alloc[name] += $(i-1)
+              }
             }
-          } {print}' "$RUNNER_TEMP/bench.txt" > "$RUNNER_TEMP/bench-filtered.txt"
+            END {
+              for (i = 1; i <= NR; i++) {
+                line = lines[i]
+                if (line !~ /^Benchmark/ || line !~ /ns\/op/) { print line; continue }
+                split(line, f)
+                nm = f[1]
+                if (nm ~ /^BenchmarkCreateTarball_/) continue
+                skip = 0
+                for (j = 1; j < length(f); j++) {
+                  if (f[j+1] == "ns/op" && f[j] + 0 < 100) { skip = 1; break }
+                }
+                if (skip) continue
+                if (!emitted[nm]) {
+                  emitted[nm] = 1; n = count[nm]
+                  out = nm "\t" int(iters[nm]/n) "\t" int(ns[nm]/n) " ns/op"
+                  if (nm in bop)   out = out "   " int(bop[nm]/n)   " B/op"
+                  if (nm in alloc) out = out "   " int(alloc[nm]/n) " allocs/op"
+                  print out
+                }
+              }
+            }
+          ' "$RUNNER_TEMP/bench.txt" > "$RUNNER_TEMP/bench-filtered.txt"
 
       - name: 📊 Compare benchmark results
         if: steps.discover.outputs.skip == 'false'
@@ -1337,8 +1374,8 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           auto-push: false
           alert-threshold: "150%"
-          fail-threshold: "200%"
-          fail-on-alert: ${{ github.event_name == 'pull_request' }}
+          fail-threshold: ${{ github.event_name != 'pull_request' && '200%' || '' }}
+          fail-on-alert: false
           comment-on-alert: ${{ github.event_name == 'pull_request' }}
           summary-always: true
 
