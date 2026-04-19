@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"strings"
 	"sync"
+	"time"
 
 	"github.com/devantler-tech/ksail/v6/pkg/fsutil/scaffolder"
 	runner "github.com/devantler-tech/ksail/v6/pkg/runner"
@@ -30,6 +32,106 @@ const kwokControllerImageVersion = "v0.7.0"
 
 // kwokControllerImage is the full image reference for the KWOK controller.
 const kwokControllerImage = "registry.k8s.io/kwok/kwok:" + kwokControllerImageVersion
+
+// createMaxAttempts is the number of times to retry cluster creation for
+// transient infrastructure failures. The KWOK Docker runtime pulls real
+// control-plane images from registry.k8s.io; running many KWOK jobs in
+// parallel (e.g. CI matrix) can hit Google Artifact Registry per-region
+// per-minute rate limits. Three attempts with 30-second delays provide
+// a total retry window of ~60 seconds, sufficient for the per-minute
+// quota to reset.
+const createMaxAttempts = 3
+
+// createRetryDelay is the delay between create retry attempts, giving the
+// registry rate limit time to reset.
+const createRetryDelay = 30 * time.Second
+
+// transientCreateErrors returns error substrings that indicate transient
+// infrastructure failures during KWOK cluster creation.
+// "toomanyrequests" / "TOOMANYREQUESTS" are returned by Docker / Google
+// Artifact Registry when per-region per-minute quota is exceeded.
+// "Quota exceeded" appears in the Google Artifact Registry error detail.
+// Network-level errors cover transient infrastructure conditions on CI runners.
+func transientCreateErrors() []string {
+	return []string{
+		"toomanyrequests",
+		"TOOMANYREQUESTS",
+		"Quota exceeded",
+		"i/o timeout",
+		"connection reset by peer",
+		"TLS handshake timeout",
+		"no such host",
+		"temporary failure in name resolution",
+	}
+}
+
+// isTransientCreateError returns true when the error message contains a known
+// transient error substring that may succeed on retry.
+func isTransientCreateError(err error) bool {
+	msg := err.Error()
+
+	for _, s := range transientCreateErrors() {
+		if strings.Contains(msg, s) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// kwokCreateFn is the function that performs the actual kwokctl create operation.
+type kwokCreateFn func(ctx context.Context) error
+
+// kwokCleanupFn is called between retry attempts to delete a partially-created cluster.
+type kwokCleanupFn func(ctx context.Context)
+
+// createWithRetry calls create and retries on transient errors. Between
+// attempts, cleanup is called to remove the partially-created cluster,
+// followed by a delay to allow rate limits to reset.
+func createWithRetry(
+	ctx context.Context,
+	retryDelay time.Duration,
+	create kwokCreateFn,
+	cleanup kwokCleanupFn,
+) error {
+	var lastErr error
+
+	for attempt := range createMaxAttempts {
+		if attempt > 0 {
+			fmt.Fprintf(os.Stderr,
+				"Retrying KWOK cluster create (attempt %d/%d)...\n",
+				attempt+1, createMaxAttempts,
+			)
+
+			cleanup(ctx)
+
+			select {
+			case <-ctx.Done():
+				return fmt.Errorf("context cancelled during create retry: %w", ctx.Err())
+			case <-time.After(retryDelay):
+			}
+		}
+
+		lastErr = create(ctx)
+		if lastErr == nil {
+			return nil
+		}
+
+		if !isTransientCreateError(lastErr) {
+			return lastErr
+		}
+
+		fmt.Fprintf(os.Stderr,
+			"KWOK cluster create attempt %d/%d failed (transient): %v\n",
+			attempt+1, createMaxAttempts, lastErr,
+		)
+	}
+
+	return fmt.Errorf(
+		"failed to create KWOK cluster after %d attempts: %w",
+		createMaxAttempts, lastErr,
+	)
+}
 
 // globalMu serialises access to process-global state that kwokctl
 // reads/writes (os.Args, config.DefaultCluster). Without this, concurrent
@@ -70,6 +172,7 @@ func (p *Provisioner) SetProvider(prov provider.Provider) {
 }
 
 // Create creates a KWOK cluster using kwokctl's create command.
+// It retries on transient errors (e.g. registry rate limits) with backoff.
 func (p *Provisioner) Create(ctx context.Context, name string) error {
 	target := p.resolveName(name)
 
@@ -83,16 +186,45 @@ func (p *Provisioner) Create(ctx context.Context, name string) error {
 	}
 
 	return p.withCluster(ctx, target, configPath, func(kwokCtx context.Context) error {
-		cmd := createcluster.NewCommand(kwokCtx)
+		create := func(_ context.Context) error {
+			cmd := createcluster.NewCommand(kwokCtx)
 
-		args := []string{
-			"--runtime", "docker",
-			"--kwok-controller-image", kwokControllerImage,
+			args := []string{
+				"--runtime", "docker",
+				"--kwok-controller-image", kwokControllerImage,
+			}
+
+			_, err := p.runner.Run(kwokCtx, cmd, args)
+			if err != nil {
+				return fmt.Errorf("failed to create KWOK cluster: %w", err)
+			}
+
+			return nil
 		}
 
-		_, err := p.runner.Run(kwokCtx, cmd, args)
+		cleanupFailed := func(cleanupCtx context.Context) {
+			const cleanupTimeout = 30 * time.Second
+
+			cleanupCtx = context.WithoutCancel(cleanupCtx)
+
+			cleanupCtx, cancel := context.WithTimeout(cleanupCtx, cleanupTimeout)
+			defer cancel()
+
+			cmd := deletecluster.NewCommand(cleanupCtx)
+
+			_, err := p.runner.Run(cleanupCtx, cmd, []string{})
+			if err != nil {
+				_, _ = fmt.Fprintf(
+					os.Stderr,
+					"failed to clean up KWOK cluster after create failure: %v\n",
+					err,
+				)
+			}
+		}
+
+		err := createWithRetry(kwokCtx, createRetryDelay, create, cleanupFailed)
 		if err != nil {
-			return fmt.Errorf("failed to create KWOK cluster: %w", err)
+			return err
 		}
 
 		// Create one simulated node so the kube-scheduler can place pods
