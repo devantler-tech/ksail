@@ -21,9 +21,9 @@ var imagePattern = regexp.MustCompile(`^\s*-?\s*image:\s*["']?([^\s"'#]+)["']?\s
 // imageKeyword is the byte sequence used to pre-filter lines before applying
 // the full regex. Most lines in a Kubernetes manifest don't contain "image:",
 // so this check avoids the scanner.Text() string allocation for those lines.
-var imageKeyword = []byte(
-	"image:",
-) //nolint:gochecknoglobals // avoids per-scanner-iteration re-alloc
+//
+//nolint:gochecknoglobals // avoids per-scanner-iteration re-alloc
+var imageKeyword = []byte("image:")
 
 // ExtractImagesFromManifest extracts all container image references from rendered Kubernetes manifests.
 // It parses YAML documents and extracts images from containers, initContainers, and ephemeralContainers.
