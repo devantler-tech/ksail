@@ -95,6 +95,9 @@ runs:
         LOG_TAIL_LINES: ${{ inputs.log-tail-lines }}
       run: |
         # shellcheck shell=bash
+        mkdir -p /tmp/ksail-system-test-logs
+        LOG_FILE="/tmp/ksail-system-test-logs/debug-kubernetes-failure.log"
+        {
         # Helper function for section headers
         print_section() {
           echo ""
@@ -561,3 +564,4 @@ runs:
         fi
 
         print_section "DEBUG OUTPUT COMPLETE"
+        } 2>&1 | tee "$LOG_FILE"

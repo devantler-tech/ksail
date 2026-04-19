@@ -134,6 +134,15 @@ runs:
         fi
         echo "args=$RESOLVED_ARGS" >> "$GITHUB_OUTPUT"
 
+    - name: 📁 Initialize test log directory
+      shell: bash
+      env:
+        TAG: ${{ steps.generate-tag.outputs.tag }}
+      run: |
+        mkdir -p /tmp/ksail-system-test-logs
+        echo "System test started at $(date -u +%Y-%m-%dT%H:%M:%SZ)" > /tmp/ksail-system-test-logs/test-timeline.log
+        echo "Tag: $TAG" >> /tmp/ksail-system-test-logs/test-timeline.log
+
     # ── Phase 2 — Offline tests ──────────────────────────────────────
 
     - name: 🧪 Gen & Smoke Tests
@@ -159,6 +168,8 @@ runs:
     - name: 🧪 ksail cluster info
       shell: bash
       run: |
+        LOG_FILE="/tmp/ksail-system-test-logs/cluster-info.log"
+        {
         if output=$(ksail cluster info 2>&1); then
           status=0
         else
@@ -207,16 +218,17 @@ runs:
           exit 1
         fi
         echo "✅ All cluster info assertions passed"
+        } 2>&1 | tee "$LOG_FILE"
 
     - name: 🧪 ksail cluster connect --help
       shell: bash
       run: |
-        ksail cluster connect --help
+        ksail cluster connect --help 2>&1 | tee /tmp/ksail-system-test-logs/cluster-connect-help.log
 
     - name: 🧪 ksail cluster list
       shell: bash
       run: |
-        ksail cluster list
+        ksail cluster list 2>&1 | tee /tmp/ksail-system-test-logs/cluster-list.log
 
     # ── Phase 4 — Online tests ───────────────────────────────────────
 
@@ -252,6 +264,8 @@ runs:
       id: online-gen
       shell: bash
       run: |
+        LOG_FILE="/tmp/ksail-system-test-logs/workload-gen.log"
+        {
         FAILED=0
         GEN_DIR=$(mktemp -d)
 
@@ -288,6 +302,7 @@ runs:
           exit 1
         fi
         echo "✅ All API-dependent workload gen tests passed"
+        } 2>&1 | tee "$LOG_FILE"
 
     - name: 🧪 Backup & Restore Tests
       id: backup-restore-tests
@@ -307,10 +322,10 @@ runs:
         # Strip init-only flags that cluster update does not accept
         UPDATE_ARGS=$(echo "$ARGS" | sed 's/--image-verification [^ ]*//')
         # shellcheck disable=SC2086
-        ksail cluster update --dry-run --distribution "$DISTRIBUTION" --provider "$PROVIDER" $UPDATE_ARGS | tee /tmp/update-dry-run-output.txt
+        ksail cluster update --dry-run --distribution "$DISTRIBUTION" --provider "$PROVIDER" $UPDATE_ARGS 2>&1 | tee /tmp/ksail-system-test-logs/cluster-update-dry-run.log
         # Fail early if the dry run detects unexpected changes.
         # The cluster was just created with the same config, so zero changes are expected.
-        if ! grep -qE "No changes detected|Would apply 0 in-place, 0 reboot-required, 0 recreate-required" /tmp/update-dry-run-output.txt; then
+        if ! grep -qE "No changes detected|Would apply 0 in-place, 0 reboot-required, 0 recreate-required" /tmp/ksail-system-test-logs/cluster-update-dry-run.log; then
           echo "❌ ERROR: Unexpected changes detected in dry run after cluster creation"
           echo "This indicates a regression — the cluster was just created with the same configuration."
           exit 1
@@ -329,10 +344,10 @@ runs:
         # Strip init-only flags that cluster update does not accept
         UPDATE_ARGS=$(echo "$ARGS" | sed 's/--image-verification [^ ]*//')
         # shellcheck disable=SC2086
-        ksail cluster update --force --distribution "$DISTRIBUTION" --provider "$PROVIDER" $UPDATE_ARGS | tee /tmp/update-output.txt
+        ksail cluster update --force --distribution "$DISTRIBUTION" --provider "$PROVIDER" $UPDATE_ARGS 2>&1 | tee /tmp/ksail-system-test-logs/cluster-update.log
         # Fail early if the update detects unexpected changes.
         # The cluster was just created with the same config, so zero changes are expected.
-        if ! grep -q "No changes detected" /tmp/update-output.txt; then
+        if ! grep -q "No changes detected" /tmp/ksail-system-test-logs/cluster-update.log; then
           echo "❌ ERROR: Unexpected changes detected during update after cluster creation"
           echo "This indicates a regression — the cluster was just created with the same configuration."
           exit 1
@@ -355,12 +370,14 @@ runs:
         PROVIDER: ${{ inputs.provider }}
         ARGS: ${{ steps.resolve-args.outputs.args }}
       run: |
+        {
         CLUSTER_NAME=$(echo "$ARGS" | grep -oP '(?<=--name\s)\S+' || true)
         if [ -n "$CLUSTER_NAME" ]; then
           ksail cluster stop --provider "$PROVIDER" --name "$CLUSTER_NAME"
         else
           ksail cluster stop
         fi
+        } 2>&1 | tee /tmp/ksail-system-test-logs/cluster-stop.log
 
     - name: 🧪 ksail cluster start
       shell: bash
@@ -368,6 +385,7 @@ runs:
         PROVIDER: ${{ inputs.provider }}
         ARGS: ${{ steps.resolve-args.outputs.args }}
       run: |
+        {
         CLUSTER_NAME=$(echo "$ARGS" | grep -oP '(?<=--name\s)\S+' || true)
         start_succeeded=false
         for attempt in 1 2 3; do
@@ -391,6 +409,7 @@ runs:
           echo "❌ cluster start failed after 3 attempts"
           exit 1
         fi
+        } 2>&1 | tee /tmp/ksail-system-test-logs/cluster-start.log
 
     - name: 🧪 ksail cluster switch
       shell: bash
@@ -398,6 +417,7 @@ runs:
         PROVIDER: ${{ inputs.provider }}
         ARGS: ${{ steps.resolve-args.outputs.args }}
       run: |
+        {
         # Prefer the explicit --name from ARGS (avoids picking up stale
         # clusters from other concurrent test runs, especially on Omni).
         CLUSTER_NAME=$(echo "$ARGS" | grep -oP '(?<=--name\s)\S+' || true)
@@ -415,6 +435,7 @@ runs:
         else
           echo "⚠️ Could not determine cluster name for switch test, skipping"
         fi
+        } 2>&1 | tee /tmp/ksail-system-test-logs/cluster-switch.log
 
     # ── Phase 7 — Cleanup ────────────────────────────────────────────
 
@@ -425,6 +446,7 @@ runs:
         PROVIDER: ${{ inputs.provider }}
         ARGS: ${{ steps.resolve-args.outputs.args }}
       run: |
+        {
         # Extract --name value from args for reliable cleanup even when no kubeconfig exists
         CLUSTER_NAME=$(echo "$ARGS" | grep -oP '(?<=--name\s)\S+' || true)
         if [ -n "$CLUSTER_NAME" ]; then
@@ -434,3 +456,19 @@ runs:
           ksail cluster delete \
             || echo "⚠️ ksail cluster delete failed (cluster may not have been created)"
         fi
+        } 2>&1 | tee /tmp/ksail-system-test-logs/cluster-delete.log
+
+    - name: 📝 Finalize test timeline
+      if: always()
+      shell: bash
+      run: |
+        echo "System test completed at $(date -u +%Y-%m-%dT%H:%M:%SZ)" >> /tmp/ksail-system-test-logs/test-timeline.log
+
+    - name: 📤 Upload system test logs
+      if: always()
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+      with:
+        name: system-test-logs-${{ steps.generate-tag.outputs.tag }}
+        path: /tmp/ksail-system-test-logs/
+        retention-days: 7
+        if-no-files-found: ignore

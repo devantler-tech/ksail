@@ -277,8 +277,9 @@ runs:
         ARGS: ${{ inputs.args }}
         CONFIG: ${{ inputs.config }}
       run: |
+        mkdir -p /tmp/ksail-system-test-logs
         # shellcheck disable=SC2086
-        ksail ${CONFIG:+--config "$CONFIG"} cluster init --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS --force
+        ksail ${CONFIG:+--config "$CONFIG"} cluster init --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS --force 2>&1 | tee /tmp/ksail-system-test-logs/cluster-init.log
 
     - name: 🧹 Validate manifests
       if: inputs.validate == 'true'
@@ -298,12 +299,15 @@ runs:
         CONFIG: ${{ inputs.config }}
       run: |
         set -euo pipefail
+        mkdir -p /tmp/ksail-system-test-logs
+        {
         if [ "$INIT" = "true" ]; then
           ksail ${CONFIG:+--config "$CONFIG"} cluster create
         else
           # shellcheck disable=SC2086
           ksail ${CONFIG:+--config "$CONFIG"} cluster create --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS
         fi
+        } 2>&1 | tee /tmp/ksail-system-test-logs/cluster-create.log
         # Determine kubeconfig path: parse --kubeconfig from args, fall back to default
         KUBECONFIG_PATH="${HOME}/.kube/config"
         # shellcheck disable=SC2086
