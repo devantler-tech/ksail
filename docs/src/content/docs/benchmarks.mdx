@@ -41,3 +41,4 @@ go test -bench=. -benchmem -run='^$' ./pkg/k8s/readiness/...
 - Use table-driven scenarios to cover multiple input sizes
 - Fail fast with `b.Fatalf` on unexpected errors
 - Avoid `time.Sleep()` inside benchmark loops — measure real CPU work, not timers
+- For I/O-bound benchmarks (e.g. tarball creation), run a warmup iteration before `b.ResetTimer()` to prime the OS page cache

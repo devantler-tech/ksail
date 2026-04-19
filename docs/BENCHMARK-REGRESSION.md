@@ -53,11 +53,12 @@ Follow the conventions established in the existing benchmark files:
 - Use table-driven scenarios to cover multiple input sizes
 - Fail fast with `b.Fatalf` on unexpected errors
 - Avoid `time.Sleep()` inside benchmark loops — measure real CPU work, not timers
+- For I/O-bound benchmarks (e.g. tarball creation), run a warmup iteration before `b.ResetTimer()` to prime the OS page cache
 
 ## Troubleshooting
 
 **No baseline data yet:** The first push to `main` after enabling the workflow auto-pushes the initial baseline to the `benchmark-data` branch. PRs opened before that will skip the comparison.
 
-**Benchmark times are inconsistent:** CI runners share hardware, so some variance is expected. The 200% fail threshold is intentionally generous to avoid false positives from runner noise.
+**Benchmark times are inconsistent:** CI runs each benchmark 5 times (`-count=5`) and uses the last result for comparison to reduce runner noise. The 200% fail threshold is intentionally generous to further avoid false positives. I/O-bound benchmarks (`BenchmarkCreateTarball_*`) are excluded from the regression gate since their timing is dominated by disk-cache state rather than algorithmic complexity.
 
 **Benchmark jobs skipped:** The workflow runs on all PRs, but benchmark jobs are skipped when no Go source files (`**/*.go`, `go.mod`, `go.sum`) changed. In the merge queue, benchmark jobs are always skipped.
