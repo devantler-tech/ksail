@@ -340,11 +340,7 @@ func applyK3dNodeCounts(k3dConfig *k3dv1alpha5.SimpleConfig, opts v1alpha1.Optio
 	}
 
 	// Apply agent (worker) count - 0 is valid when control-planes is set
-	if opts.ControlPlanes > 0 {
-		k3dConfig.Agents = int(opts.Workers)
-	} else if opts.Workers > 0 {
-		k3dConfig.Agents = int(opts.Workers)
-	}
+	k3dConfig.Agents = int(opts.Workers)
 }
 
 func (f DefaultFactory) createTalosProvisioner(

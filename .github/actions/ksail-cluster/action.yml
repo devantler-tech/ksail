@@ -298,12 +298,40 @@ runs:
         CONFIG: ${{ inputs.config }}
       run: |
         set -euo pipefail
-        if [ "$INIT" = "true" ]; then
-          ksail ${CONFIG:+--config "$CONFIG"} cluster create
-        else
-          # shellcheck disable=SC2086
-          ksail ${CONFIG:+--config "$CONFIG"} cluster create --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS
-        fi
+
+        create_cluster() {
+          if [ "$INIT" = "true" ]; then
+            ksail ${CONFIG:+--config "$CONFIG"} cluster create
+          else
+            # shellcheck disable=SC2086
+            ksail ${CONFIG:+--config "$CONFIG"} cluster create --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS
+          fi
+        }
+
+        is_transient() {
+          local output="$1"
+          echo "$output" | grep -qiE 'TOOMANYREQUESTS|exit status 22|fetching blob: denied|i/o timeout|connection reset|TLS handshake timeout|connection refused|unexpected EOF|server misbehaving|no such host'
+        }
+
+        MAX_ATTEMPTS=3
+        BACKOFFS=(30 60)
+        for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
+          if output=$(create_cluster 2>&1); then
+            echo "$output"
+            break
+          else
+            rc=$?
+            echo "$output"
+            if [ "$attempt" -lt "$MAX_ATTEMPTS" ] && is_transient "$output"; then
+              delay=${BACKOFFS[$((attempt - 1))]}
+              echo "⚠️ Cluster create attempt $attempt/$MAX_ATTEMPTS failed with transient error (rc=$rc), retrying in ${delay}s…"
+              sleep "$delay"
+            else
+              exit "$rc"
+            fi
+          fi
+        done
+
         # Determine kubeconfig path: parse --kubeconfig from args, fall back to default
         KUBECONFIG_PATH="${HOME}/.kube/config"
         # shellcheck disable=SC2086
