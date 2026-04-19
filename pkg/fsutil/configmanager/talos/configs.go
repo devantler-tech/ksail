@@ -393,7 +393,7 @@ func buildBaseGenOptions(controlPlaneIP string) []generate.Option {
 	return []generate.Option{
 		generate.WithEndpointList([]string{controlPlaneIP}),
 		generate.WithAdditionalSubjectAltNames([]string{"127.0.0.1"}),
-		generate.WithVersionContract(talosconfig.TalosVersion1_11),
+		generate.WithVersionContract(talosconfig.TalosVersion1_13),
 		// Install disk is required for bare metal installations (Hetzner, etc.)
 		// For Docker-in-Docker, this setting is ignored as there's no actual disk.
 		// /dev/sda is the standard disk for Hetzner VPS and most cloud providers.
