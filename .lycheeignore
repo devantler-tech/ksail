@@ -36,7 +36,7 @@ https://api.star-history.com/
 # Intermittent Network Errors (siderolabs.com returns 500 in CI)
 https://www.siderolabs.com/
 
-# GitHub repo endpoints that return 503/504 during GitHub maintenance windows
+# GitHub pages that return 503/504 during GitHub maintenance windows
 https://github.com/devantler-tech/ksail/stargazers
 https://github.com/devantler-tech/ksail/fork
 https://github.com/devantler-tech/ksail/issues/new/choose
