@@ -584,35 +584,53 @@ func TestProvider_ListNodes_UnknownLabelScheme(t *testing.T) {
 func TestProvider_ListNodes_KWOK(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
-	client := dockerclient.NewMockAPIClient(t)
-	containers := newKWOKContainers(testClusterName)
+	tests := []struct {
+		name        string
+		clusterName string
+	}{
+		// Generic cluster name: containers are "kwok-test-cluster-*".
+		{"generic-cluster", testClusterName},
+		// KSail's default KWOK cluster name already starts with "kwok-".
+		// kwokctl's config.ClusterName("kwok-default") returns "kwok-kwok-default",
+		// so containers are named "kwok-kwok-default-*" (double-prefix is intentional).
+		{"kwok-prefixed-name", "kwok-default"},
+	}
 
-	client.EXPECT().
-		ContainerList(ctx, container.ListOptions{All: true}).
-		Return(containers, nil)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 
-	prov := docker.NewProvider(client, docker.LabelSchemeKWOK)
+			ctx := context.Background()
+			client := dockerclient.NewMockAPIClient(t)
+			containers := newKWOKContainers(tc.clusterName)
 
-	nodes, err := prov.ListNodes(ctx, testClusterName)
+			client.EXPECT().
+				ContainerList(ctx, container.ListOptions{All: true}).
+				Return(containers, nil)
 
-	require.NoError(t, err)
-	assert.ElementsMatch(t, []provider.NodeInfo{
-		{
-			Name:        "kwok-" + testClusterName + "-etcd",
-			ClusterName: testClusterName,
-			Role:        "etcd",
-			State:       "running",
-		},
-		{
-			Name:        "kwok-" + testClusterName + "-kube-apiserver",
-			ClusterName: testClusterName, Role: "control-plane", State: "running",
-		},
-		{
-			Name:        "kwok-" + testClusterName + "-kwok-controller",
-			ClusterName: testClusterName, Role: "controller", State: "running",
-		},
-	}, nodes)
+			prov := docker.NewProvider(client, docker.LabelSchemeKWOK)
+
+			nodes, err := prov.ListNodes(ctx, tc.clusterName)
+
+			require.NoError(t, err)
+			assert.ElementsMatch(t, []provider.NodeInfo{
+				{
+					Name:        "kwok-" + tc.clusterName + "-etcd",
+					ClusterName: tc.clusterName,
+					Role:        "etcd",
+					State:       "running",
+				},
+				{
+					Name:        "kwok-" + tc.clusterName + "-kube-apiserver",
+					ClusterName: tc.clusterName, Role: "control-plane", State: "running",
+				},
+				{
+					Name:        "kwok-" + tc.clusterName + "-kwok-controller",
+					ClusterName: tc.clusterName, Role: "controller", State: "running",
+				},
+			}, nodes)
+		})
+	}
 }
 
 func TestProvider_ListAllClusters_KWOK(t *testing.T) {
@@ -628,7 +646,12 @@ func TestProvider_ListAllClusters_KWOK(t *testing.T) {
 		}, // common suffix — must NOT produce a false positive
 		{ID: "2", Names: []string{"/kwok-cluster1-kwok-controller"}}, // KWOK-distinctive suffix
 		{ID: "3", Names: []string{"/kwok-cluster2-kwok-controller"}}, // KWOK-distinctive suffix
-		{ID: "4", Names: []string{"/other-container"}},               // unrelated container
+		// KSail's default KWOK cluster is "kwok-default"; kwokctl's config.ClusterName("kwok-default")
+		// returns "kwok-kwok-default", so Docker containers carry the double-prefix "kwok-kwok-default-*".
+		// extractKWOKClusterName strips the kwokctl-added "kwok-" prefix, returning the correct
+		// KSail cluster name "kwok-default" (strings.TrimPrefix only removes one occurrence).
+		{ID: "5", Names: []string{"/kwok-kwok-default-kwok-controller"}}, // double-prefix: default KSail KWOK cluster
+		{ID: "4", Names: []string{"/other-container"}},                   // unrelated container
 	}
 
 	client.EXPECT().
@@ -640,5 +663,5 @@ func TestProvider_ListAllClusters_KWOK(t *testing.T) {
 	clusters, err := prov.ListAllClusters(ctx)
 
 	require.NoError(t, err)
-	assert.ElementsMatch(t, []string{"cluster1", "cluster2"}, clusters)
+	assert.ElementsMatch(t, []string{"cluster1", "cluster2", "kwok-default"}, clusters)
 }
