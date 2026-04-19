@@ -17,10 +17,10 @@ On pushes to `main`, benchmark results are auto-pushed to the `benchmark-data` b
 
 The workflow uses threshold-based regression detection:
 
-| Setting           | Value | Meaning                                                                                                          |
-|-------------------|-------|------------------------------------------------------------------------------------------------------------------|
-| `alert-threshold` | 150%  | Marks benchmarks as regressed and posts a PR comment when ≥1.5× slower than baseline                            |
-| `fail-threshold`  | 200%  | Fails CI on non-PR runs (pushes to `main`, merge queue) when a benchmark is ≥2× slower than baseline            |
+| Setting           | Value | Meaning                                                                                              |
+|-------------------|-------|------------------------------------------------------------------------------------------------------|
+| `alert-threshold` | 150%  | Marks benchmarks as regressed and posts a PR comment when ≥1.5× slower than baseline                 |
+| `fail-threshold`  | 200%  | Fails CI on non-PR runs (pushes to `main`, merge queue) when a benchmark is ≥2× slower than baseline |
 
 On pull requests, the benchmark gate is **informational only**: results are posted as a PR comment when the alert threshold is exceeded, but CI never blocks on it. This is intentional — shared GitHub Actions runners have hardware variance of 2–5× between runs, making per-PR blocking gates unreliable. Real regressions are caught on pushes to `main`.
 
