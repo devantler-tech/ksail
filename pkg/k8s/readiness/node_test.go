@@ -290,10 +290,11 @@ func TestWaitForAllNodesReadyAndSchedulable_ContextCancelled(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestWaitForAllNodesReadyAndSchedulable_NoExecuteTaintAllowed(t *testing.T) {
+func TestWaitForAllNodesReadyAndSchedulable_NoExecuteTaintBlocks(t *testing.T) {
 	t.Parallel()
 
-	// NoExecute taints don't block scheduling, only NoSchedule does
+	// NoExecute taints block scheduling: the scheduler rejects new pods that
+	// have no matching toleration, just as it does for NoSchedule.
 	clientset := fake.NewClientset(
 		&corev1.Node{
 			ObjectMeta: metav1.ObjectMeta{Name: "node-1"},
@@ -314,7 +315,31 @@ func TestWaitForAllNodesReadyAndSchedulable_NoExecuteTaintAllowed(t *testing.T) 
 	)
 
 	err := readiness.WaitForAllNodesReadyAndSchedulable(
-		context.Background(), clientset, 5*time.Second,
+		context.Background(), clientset, 100*time.Millisecond,
 	)
-	require.NoError(t, err, "NoExecute taints should not block schedulability check")
+	assert.Error(t, err, "should time out when only node has NoExecute taint")
+}
+
+func TestWaitForAllNodesReadyAndSchedulable_CordonedNodeBlocks(t *testing.T) {
+	t.Parallel()
+
+	// Cordoned nodes (spec.unschedulable=true) reject new pod scheduling.
+	clientset := fake.NewClientset(
+		&corev1.Node{
+			ObjectMeta: metav1.ObjectMeta{Name: "node-1"},
+			Spec: corev1.NodeSpec{
+				Unschedulable: true,
+			},
+			Status: corev1.NodeStatus{
+				Conditions: []corev1.NodeCondition{
+					{Type: corev1.NodeReady, Status: corev1.ConditionTrue},
+				},
+			},
+		},
+	)
+
+	err := readiness.WaitForAllNodesReadyAndSchedulable(
+		context.Background(), clientset, 100*time.Millisecond,
+	)
+	assert.Error(t, err, "should time out when only node is cordoned")
 }

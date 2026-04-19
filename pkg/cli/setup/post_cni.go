@@ -575,8 +575,9 @@ func buildGitOpsTasks(
 // GitOps operators from entering CrashLoopBackOff due to transient API server
 // connectivity issues after infrastructure components register webhooks).
 //
-// When cniInstalled is true, the WaitForAllNodesReady check is skipped because
-// waitForCNIReadiness already verified node readiness moments ago.
+// When cniInstalled is true, the WaitForAllNodesReadyAndSchedulable check is
+// skipped because waitForCNIReadiness already verified node readiness and
+// schedulability moments ago.
 func waitForClusterStability(
 	ctx context.Context,
 	clusterCfg *v1alpha1.Cluster,
@@ -613,7 +614,8 @@ func waitForClusterStability(
 	// immediately after stability checks pass can hit FailedScheduling errors.
 	//
 	// Skipped when CNI was just installed: waitForCNIReadiness already verified
-	// node readiness, so re-checking immediately would be redundant.
+	// both node readiness and schedulability, so re-checking immediately would
+	// be redundant.
 	// Skipped for KWOK: KWOK has no real kubelet nodes (they are simulated on
 	// demand), so WaitForAllNodesReadyAndSchedulable would always time-out on a fresh cluster.
 	if !cniInstalled && clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionKWOK {

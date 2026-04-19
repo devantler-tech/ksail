@@ -72,11 +72,11 @@ func waitForNodes(
 }
 
 // WaitForAllNodesReadyAndSchedulable polls until every node in the cluster has
-// condition Ready=True and at least one node is schedulable (has no NoSchedule
-// taints). This prevents deploying workloads before the control-plane
-// NoSchedule taint has been removed on single-node clusters, avoiding the
-// FailedScheduling race condition where Kind marks a node Ready but the
-// node-role.kubernetes.io/control-plane:NoSchedule taint still lingers.
+// condition Ready=True and at least one node is schedulable (not cordoned, and
+// carries no NoSchedule or NoExecute taints). This prevents deploying workloads
+// before the control-plane taint has been removed on single-node clusters,
+// avoiding the FailedScheduling race condition where Kind marks a node Ready
+// but the node-role.kubernetes.io/control-plane:NoSchedule taint still lingers.
 func WaitForAllNodesReadyAndSchedulable(
 	ctx context.Context,
 	clientset kubernetes.Interface,
@@ -114,11 +114,23 @@ func isNodeReady(node *corev1.Node) bool {
 	return false
 }
 
-// isNodeSchedulable returns true if the node has no NoSchedule taints.
-// This is used to detect whether workload pods can be scheduled on the node.
+// isNodeSchedulable returns true if workload pods without any tolerations can
+// be scheduled onto the node. A node is considered unschedulable when any of
+// the following conditions hold:
+//   - The node is cordoned (spec.unschedulable=true)
+//   - The node carries a NoSchedule taint (scheduler rejects pods without a
+//     matching toleration)
+//   - The node carries a NoExecute taint (scheduler rejects pods without a
+//     matching toleration — eviction of already-running pods is a separate
+//     concern, but new pods are not admitted either)
 func isNodeSchedulable(node *corev1.Node) bool {
+	if node.Spec.Unschedulable {
+		return false
+	}
+
 	for _, taint := range node.Spec.Taints {
-		if taint.Effect == corev1.TaintEffectNoSchedule {
+		if taint.Effect == corev1.TaintEffectNoSchedule ||
+			taint.Effect == corev1.TaintEffectNoExecute {
 			return false
 		}
 	}
