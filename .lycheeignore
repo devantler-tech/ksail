@@ -3,6 +3,7 @@
 
 # Upstream image registries (uses HTTP API V2 and don't respond to bare GET requests)
 https://registry-1.docker.io/
+https://ghcr.io/
 
 # GitHub repository paths used in kustomize (not web URLs)
 https://github.com/stefanprodan/podinfo//kustomize
@@ -34,6 +35,12 @@ https://api.star-history.com/
 
 # Intermittent Network Errors (siderolabs.com returns 500 in CI)
 https://www.siderolabs.com/
+
+# GitHub pages that return 503/504 during GitHub maintenance windows
+https://github.com/devantler-tech/ksail/stargazers
+https://github.com/devantler-tech/ksail/fork
+https://github.com/devantler-tech/ksail/issues/new/choose
+https://github.com/mcp
 
 # Intermittent Network Errors (docs.astro.build returns network errors in CI; glob matches root and any subpaths)
 https://docs.astro.build/
