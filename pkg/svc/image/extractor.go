@@ -2,6 +2,7 @@ package image
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"io"
 	"regexp"
@@ -16,6 +17,13 @@ import (
 // Pre-compiled at package level to avoid repeated regex compilation overhead
 // on every ExtractImagesFromManifest call.
 var imagePattern = regexp.MustCompile(`^\s*-?\s*image:\s*["']?([^\s"'#]+)["']?\s*(?:#.*)?$`)
+
+// imageKeyword is the byte sequence used to pre-filter lines before applying
+// the full regex. Most lines in a Kubernetes manifest don't contain "image:",
+// so this check avoids the scanner.Text() string allocation for those lines.
+//
+//nolint:gochecknoglobals // avoids per-scanner-iteration re-alloc
+var imageKeyword = []byte("image:")
 
 // ExtractImagesFromManifest extracts all container image references from rendered Kubernetes manifests.
 // It parses YAML documents and extracts images from containers, initContainers, and ephemeralContainers.
@@ -57,6 +65,14 @@ func extractImagesFromReader(reader io.Reader, seen map[string]struct{}) ([]stri
 	scanner.Buffer(make([]byte, 0, initialBufSize), maxTokenSize)
 
 	for scanner.Scan() {
+		// Pre-filter: skip scanner.Text() allocation for lines that can't match.
+		// Most lines in a Kubernetes manifest don't contain "image:", so this
+		// bytes.Contains check (zero allocation) avoids the string conversion cost
+		// for the vast majority of lines.
+		if !bytes.Contains(scanner.Bytes(), imageKeyword) {
+			continue
+		}
+
 		line := scanner.Text()
 
 		matches := imagePattern.FindStringSubmatch(line)
