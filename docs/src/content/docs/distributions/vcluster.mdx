@@ -135,6 +135,8 @@ For a full comparison across all distributions and supported components, see the
 
 KSail automatically retries transient VCluster startup failures: up to 5 attempts (5-second delays) during create, and up to 3 attempts (3-minute timeout each) during the readiness check. Log messages like `Retrying vCluster create (attempt 2/5)...` are expected — wait for completion before investigating.
 
+**D-Bus startup errors** (`Failed to connect to bus`) are a known race condition in which systemd inside the VCluster container hasn't finished initializing D-Bus before the install script runs. KSail detects this error, waits up to 30 seconds for D-Bus to become available, then retries. This is common on CI runners (GitHub Actions) and is handled automatically — no user action is required.
+
 **Persistent failures — common causes:**
 
 ````bash
