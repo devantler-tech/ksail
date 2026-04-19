@@ -276,6 +276,7 @@ func BenchmarkCreateTarball_Small(b *testing.B) {
 	// Warm the OS page cache so the first timed iteration doesn't incur a
 	// cold-cache penalty on shared CI runners (see #4090).
 	warmupOut := filepath.Join(outDir, "warmup.tar.gz")
+
 	err := cluster.ExportCreateTarball(srcDir, warmupOut, 6)
 	if err != nil {
 		b.Fatalf("warmup: %v", err)
@@ -307,6 +308,7 @@ func BenchmarkCreateTarball_Medium(b *testing.B) {
 	// Warm the OS page cache so the first timed iteration doesn't incur a
 	// cold-cache penalty on shared CI runners (see #4090).
 	warmupOut := filepath.Join(outDir, "warmup.tar.gz")
+
 	err := cluster.ExportCreateTarball(srcDir, warmupOut, 6)
 	if err != nil {
 		b.Fatalf("warmup: %v", err)
