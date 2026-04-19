@@ -10,9 +10,11 @@ const (
 	// DefaultInstallTimeout is the default timeout (5 minutes) for component installation.
 	DefaultInstallTimeout = 5 * time.Minute
 	// TalosInstallTimeout is the timeout (8 minutes) for Talos component installation.
-	// Talos clusters take longer to bootstrap due to the immutable OS design and
-	// heavier resource requirements, especially on shared CI runners.
-	// See: https://github.com/devantler-tech/ksail/issues/4040
+	// Talos clusters take longer to bootstrap due to the immutable OS design, and
+	// on resource-constrained CI runners the full add-on stack (Cilium + cert-manager +
+	// Kyverno + Flux + metrics-server) can push lightweight components past a 5-minute
+	// window. 8 minutes provides sufficient margin while keeping feedback fast.
+	// See: https://github.com/devantler-tech/ksail/issues/4096
 	TalosInstallTimeout = 8 * time.Minute
 	// CalicoInstallTimeout is the timeout for Calico CNI installs, which often take longer
 	// due to multiple components needing to become ready (tigera-operator, calico-node
