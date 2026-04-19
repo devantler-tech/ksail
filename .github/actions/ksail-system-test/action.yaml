@@ -169,14 +169,15 @@ runs:
       shell: bash
       run: |
         LOG_FILE="/tmp/ksail-system-test-logs/cluster-info.log"
-        {
-        if output=$(ksail cluster info 2>&1); then
-          status=0
-        else
-          status=$?
-        fi
-        echo "$output"
+        # Tee directly so output streams in real-time and lands in the artifact.
+        # PIPESTATUS[0] captures ksail's own exit code through the pipeline.
+        _info_tmp=$(mktemp)
+        ksail cluster info 2>&1 | tee "$_info_tmp" | tee "$LOG_FILE"
+        status=${PIPESTATUS[0]}
+        output=$(cat "$_info_tmp")
+        rm -f "$_info_tmp"
 
+        {
         if [ "$status" -ne 0 ]; then
           echo "❌ ksail cluster info failed with exit code $status"
           exit "$status"
@@ -218,7 +219,7 @@ runs:
           exit 1
         fi
         echo "✅ All cluster info assertions passed"
-        } 2>&1 | tee "$LOG_FILE"
+        } 2>&1 | tee -a "$LOG_FILE"
 
     - name: 🧪 ksail cluster connect --help
       shell: bash

@@ -277,6 +277,7 @@ runs:
         ARGS: ${{ inputs.args }}
         CONFIG: ${{ inputs.config }}
       run: |
+        set -o pipefail
         mkdir -p /tmp/ksail-system-test-logs
         # shellcheck disable=SC2086
         ksail ${CONFIG:+--config "$CONFIG"} cluster init --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS --force 2>&1 | tee /tmp/ksail-system-test-logs/cluster-init.log
