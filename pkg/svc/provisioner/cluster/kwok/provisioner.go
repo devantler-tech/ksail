@@ -210,7 +210,8 @@ func (p *Provisioner) Create(ctx context.Context, name string) error {
 			defer cancel()
 
 			cmd := deletecluster.NewCommand(cleanupCtx)
-			if _, err := p.runner.Run(cleanupCtx, cmd, []string{}); err != nil {
+			_, err := p.runner.Run(cleanupCtx, cmd, []string{})
+			if err != nil {
 				_, _ = fmt.Fprintf(os.Stderr, "failed to clean up KWOK cluster after create failure: %v\n", err)
 			}
 		}
