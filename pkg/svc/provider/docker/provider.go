@@ -499,8 +499,7 @@ func extractVClusterRole(ctr container.Summary) string {
 }
 
 // kwokSuffixRoles maps each known kwokctl container suffix to the node role it
-// represents.  It is the single source of truth for both cluster-name extraction
-// (which iterates the keys) and role classification (which looks up the value).
+// represents.  Used for role classification.
 // kwokctl names containers as: <cluster>-etcd, <cluster>-kube-apiserver,
 // <cluster>-kwok-controller, etc. (no extra prefix — the cluster name is used directly).
 //
@@ -516,6 +515,13 @@ var kwokSuffixRoles = map[string]string{
 	"-dashboard":               "addon",
 	"-metrics-server":          "addon",
 }
+
+// kwokDistinctiveSuffixes are container-name suffixes unique to KWOK.  Only these
+// are used when extracting cluster names from a global container scan to avoid
+// false-positive matches on generic components like etcd or prometheus.
+//
+//nolint:gochecknoglobals // read-only; avoids per-call allocation.
+var kwokDistinctiveSuffixes = []string{"-kwok-controller"}
 
 // listKWOKContainers lists containers by KWOK cluster name prefix.
 // kwokctl names containers as <cluster-name>-<component>, so the prefix
@@ -538,12 +544,12 @@ func (p *Provider) listKWOKContainers(
 }
 
 // extractKWOKClusterName extracts the cluster name from a KWOK container name.
-// kwokctl names containers as <cluster-name>-<component>, so the cluster name
-// is derived by stripping known component suffixes.
+// Only containers with KWOK-distinctive suffixes (e.g. -kwok-controller) are
+// recognised, preventing false-positive matches on generic components like etcd.
 func extractKWOKClusterName(ctr container.Summary) string {
 	for _, rawName := range ctr.Names {
 		name := strings.TrimPrefix(rawName, "/")
-		for suffix := range kwokSuffixRoles {
+		for _, suffix := range kwokDistinctiveSuffixes {
 			if trimmed, found := strings.CutSuffix(name, suffix); found && trimmed != "" {
 				return trimmed
 			}

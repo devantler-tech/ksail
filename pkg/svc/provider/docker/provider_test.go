@@ -619,10 +619,10 @@ func TestProvider_ListAllClusters_KWOK(t *testing.T) {
 	client := dockerclient.NewMockAPIClient(t)
 
 	allContainers := []container.Summary{
-		{ID: "1", Names: []string{"/kwok-cluster1-etcd"}},
-		{ID: "2", Names: []string{"/kwok-cluster1-kube-apiserver"}},
-		{ID: "3", Names: []string{"/kwok-cluster2-kwok-controller"}},
-		{ID: "4", Names: []string{"/other-container"}},
+		{ID: "1", Names: []string{"/cluster1-etcd"}},            // common suffix — must NOT produce a false positive
+		{ID: "2", Names: []string{"/cluster1-kwok-controller"}}, // KWOK-distinctive suffix
+		{ID: "3", Names: []string{"/cluster2-kwok-controller"}}, // KWOK-distinctive suffix
+		{ID: "4", Names: []string{"/other-container"}},          // unrelated container
 	}
 
 	client.EXPECT().
@@ -634,5 +634,5 @@ func TestProvider_ListAllClusters_KWOK(t *testing.T) {
 	clusters, err := prov.ListAllClusters(ctx)
 
 	require.NoError(t, err)
-	assert.ElementsMatch(t, []string{"kwok-cluster1", "kwok-cluster2"}, clusters)
+	assert.ElementsMatch(t, []string{"cluster1", "cluster2"}, clusters)
 }
