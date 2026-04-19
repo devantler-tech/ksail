@@ -172,7 +172,7 @@ func (p *Provisioner) SetProvider(prov provider.Provider) {
 }
 
 // Create creates a KWOK cluster using kwokctl's create command.
-// It retries on transient errors (e.g. registry rate limits) with backoff.
+// It retries on transient errors (e.g. registry rate limits) with a fixed delay between attempts.
 func (p *Provisioner) Create(ctx context.Context, name string) error {
 	target := p.resolveName(name)
 
@@ -276,15 +276,15 @@ func (p *Provisioner) Exists(ctx context.Context, name string) (bool, error) {
 // doCreate performs the actual cluster creation with retry and node scaling
 // inside an already-initialised kwokctl context.
 func (p *Provisioner) doCreate(kwokCtx context.Context) error {
-	create := func(_ context.Context) error {
-		cmd := createcluster.NewCommand(kwokCtx)
+	create := func(ctx context.Context) error {
+		cmd := createcluster.NewCommand(ctx)
 
 		args := []string{
 			"--runtime", "docker",
 			"--kwok-controller-image", kwokControllerImage,
 		}
 
-		_, err := p.runner.Run(kwokCtx, cmd, args)
+		_, err := p.runner.Run(ctx, cmd, args)
 		if err != nil {
 			return fmt.Errorf("failed to create KWOK cluster: %w", err)
 		}
