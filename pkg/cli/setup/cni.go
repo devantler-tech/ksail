@@ -40,11 +40,19 @@ type cniSetupResult struct {
 
 // InstallCNI installs the configured CNI for the cluster.
 // Returns true if a CNI was installed, false if using default/none.
+//
+// KWOK simulates pods at the API level without running real binaries, so CNI
+// installation is skipped entirely: Helm chart deploys would create simulated
+// pods that never converge, and readiness checks would always time out.
 func InstallCNI(
 	cmd *cobra.Command,
 	clusterCfg *v1alpha1.Cluster,
 	tmr timer.Timer,
 ) (bool, error) {
+	if clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionKWOK {
+		return false, nil
+	}
+
 	switch clusterCfg.Spec.Cluster.CNI {
 	case v1alpha1.CNICilium:
 		err := installCNIOnly(cmd, clusterCfg, tmr, installCiliumCNI)
