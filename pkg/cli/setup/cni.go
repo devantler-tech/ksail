@@ -41,24 +41,31 @@ type cniSetupResult struct {
 // InstallCNI installs the configured CNI for the cluster.
 // Returns true if a CNI was installed, false if using the default (no explicit CNI),
 // or if the distribution does not support CNI installation (e.g. KWOK).
+//
+// For KWOK, known CNI types (Cilium, Calico) are skipped since KWOK has no
+// real network dataplane. Unknown values still return ErrUnsupportedCNI so
+// misconfiguration is caught regardless of distribution.
 func InstallCNI(
 	cmd *cobra.Command,
 	clusterCfg *v1alpha1.Cluster,
 	tmr timer.Timer,
 ) (bool, error) {
-	// KWOK simulates pods with no real network dataplane. CNI plugins are
-	// never functional on KWOK and their Helm releases would skew the
-	// component detector, so skip installation entirely.
-	if clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionKWOK {
-		return false, nil
-	}
+	isKWOK := clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionKWOK
 
 	switch clusterCfg.Spec.Cluster.CNI {
 	case v1alpha1.CNICilium:
+		if isKWOK {
+			return false, nil
+		}
+
 		err := installCNIOnly(cmd, clusterCfg, tmr, installCiliumCNI)
 
 		return true, err
 	case v1alpha1.CNICalico:
+		if isKWOK {
+			return false, nil
+		}
+
 		err := installCNIOnly(cmd, clusterCfg, tmr, installCalicoCNI)
 
 		return true, err

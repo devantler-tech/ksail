@@ -656,7 +656,7 @@ func waitForClusterStability(
 func waitForNodeAndDaemonSetReadiness(
 	ctx context.Context,
 	clusterCfg *v1alpha1.Cluster,
-	clientset *kubernetes.Clientset,
+	clientset kubernetes.Interface,
 	cniInstalled bool,
 ) error {
 	if clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionKWOK {
