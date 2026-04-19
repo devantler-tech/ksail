@@ -31,11 +31,12 @@ var (
 	errEgressLimit = errors.New(
 		"copying blob sha256:fa365: fetching blob: received unexpected HTTP status: 503 Egress is over the account limit",
 	)
-	errIOTimeout    = errors.New("dial tcp 1.2.3.4:443: i/o timeout")
-	errConnReset    = errors.New("read tcp 10.0.0.1:54321->1.2.3.4:443: connection reset by peer")
-	errTLSTimeout   = errors.New("net/http: TLS handshake timeout")
-	errNoSuchHost   = errors.New("dial tcp: lookup ghcr.io: no such host")
-	errDNSTransient = errors.New("dial tcp: lookup ghcr.io: temporary failure in name resolution")
+	errIOTimeout      = errors.New("dial tcp 1.2.3.4:443: i/o timeout")
+	errConnReset      = errors.New("read tcp 10.0.0.1:54321->1.2.3.4:443: connection reset by peer")
+	errTLSTimeout     = errors.New("net/http: TLS handshake timeout")
+	errNoSuchHost     = errors.New("dial tcp: lookup ghcr.io: no such host")
+	errDNSTransient   = errors.New("dial tcp: lookup ghcr.io: temporary failure in name resolution")
+	errNodeJoinFailed = errors.New("failed to start vCluster standalone. Node couldn't join: signal: killed")
 )
 
 func newTestLogger() loftlog.Logger {
@@ -64,6 +65,7 @@ func TestIsTransientCreateError(t *testing.T) {
 		{"tls_handshake_timeout_is_transient", errTLSTimeout, true},
 		{"no_such_host_is_transient", errNoSuchHost, true},
 		{"dns_temporary_failure_is_transient", errDNSTransient, true},
+		{"node_join_failed_is_transient", errNodeJoinFailed, true},
 		{"empty_error_is_not_transient", errEmpty, false},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
