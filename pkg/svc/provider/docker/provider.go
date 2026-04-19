@@ -24,7 +24,7 @@ const (
 	LabelSchemeTalos LabelScheme = "talos"
 	// LabelSchemeVCluster uses container name prefix "vcluster.cp.<cluster>" to identify nodes.
 	LabelSchemeVCluster LabelScheme = "vcluster"
-	// LabelSchemeKWOK uses container name prefix "<cluster>-" to identify nodes.
+	// LabelSchemeKWOK uses container name prefix "kwok-<cluster>-" to identify nodes.
 	LabelSchemeKWOK LabelScheme = "kwok"
 )
 
