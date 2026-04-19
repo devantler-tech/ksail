@@ -2223,10 +2223,13 @@ func (f *failedKustomizations) record(name string, err error) {
 func (f *failedKustomizations) checkDependencies(dependsOn []string) error {
 	for _, dep := range dependsOn {
 		if val, ok := f.m.Load(dep); ok {
-			depErr, _ := val.(error)
+			depErr, ok := val.(error)
+			if !ok {
+				continue
+			}
 
 			return fmt.Errorf(
-				"dependency %q failed: %w — fix the upstream kustomization first",
+				"dependency %q failed: %w - fix the upstream kustomization first",
 				dep, depErr,
 			)
 		}
