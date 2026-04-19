@@ -118,9 +118,14 @@ func fetchGatewayAPICRDsWithRetry(
 	maxRetries int,
 	baseWait, maxWait time.Duration,
 ) ([]apiextensionsv1.CustomResourceDefinition, error) {
+	transport := &http.Transport{}
+	if t, ok := http.DefaultTransport.(*http.Transport); ok {
+		transport = t.Clone()
+	}
+
 	httpClient := &http.Client{
 		Timeout:   timeout,
-		Transport: http.DefaultTransport.(*http.Transport).Clone(),
+		Transport: transport,
 	}
 
 	retries := max(maxRetries, 1)
