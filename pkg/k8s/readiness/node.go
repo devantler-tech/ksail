@@ -39,19 +39,24 @@ func WaitForAllNodesReady(
 	clientset kubernetes.Interface,
 	deadline time.Duration,
 ) error {
-	return waitForNodes(ctx, clientset, deadline, func(nodes []corev1.Node) bool {
-		if len(nodes) == 0 {
+	return waitForNodes(ctx, clientset, deadline, allNodesReady)
+}
+
+// allNodesReady returns true when the node list is non-empty and every node
+// has condition Ready=True. It is used as a building block by both
+// WaitForAllNodesReady and WaitForAllNodesReadyAndSchedulable.
+func allNodesReady(nodes []corev1.Node) bool {
+	if len(nodes) == 0 {
+		return false
+	}
+
+	for i := range nodes {
+		if !isNodeReady(&nodes[i]) {
 			return false
 		}
+	}
 
-		for i := range nodes {
-			if !isNodeReady(&nodes[i]) {
-				return false
-			}
-		}
-
-		return true
-	})
+	return true
 }
 
 // waitForNodes polls nodes and passes them to the check function until it returns true.
@@ -83,23 +88,17 @@ func WaitForAllNodesReadyAndSchedulable(
 	deadline time.Duration,
 ) error {
 	return waitForNodes(ctx, clientset, deadline, func(nodes []corev1.Node) bool {
-		if len(nodes) == 0 {
+		if !allNodesReady(nodes) {
 			return false
 		}
 
-		hasSchedulable := false
-
 		for i := range nodes {
-			if !isNodeReady(&nodes[i]) {
-				return false
-			}
-
 			if isNodeSchedulable(&nodes[i]) {
-				hasSchedulable = true
+				return true
 			}
 		}
 
-		return hasSchedulable
+		return false
 	})
 }
 

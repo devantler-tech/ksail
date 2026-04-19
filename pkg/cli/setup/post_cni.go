@@ -65,11 +65,11 @@ const (
 
 	// nodeReadinessTimeout is the maximum time to wait for all cluster nodes
 	// to reach condition Ready=True and for at least one node to become
-	// schedulable (no NoSchedule taints). After Kind/K3d cluster creation,
-	// control-plane nodes may briefly carry a NoSchedule taint, causing
-	// FailedScheduling for workload pods if they are deployed before the taint
-	// clears. Two minutes accommodates CI runners with variable scheduling
-	// latency.
+	// schedulable (no NoSchedule or NoExecute taints, and not cordoned). After
+	// Kind/K3d cluster creation, control-plane nodes may briefly carry a
+	// NoSchedule taint, causing FailedScheduling for workload pods if they are
+	// deployed before the taint clears. Two minutes accommodates CI runners
+	// with variable scheduling latency.
 	nodeReadinessTimeout = 2 * time.Minute
 
 	// inClusterConnectivityTimeout is the maximum time to wait for a test pod
