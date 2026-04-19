@@ -32,8 +32,46 @@ func TestInstallSuccess(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestInstallRepoError(t *testing.T) {
+func TestInstallSuccessWithScaledTimeout(t *testing.T) {
 	t.Parallel()
+
+	client := helm.NewMockInterface(t)
+	installer := certmanagerinstaller.NewInstaller(client, 10*time.Minute)
+	client.EXPECT().
+		AddRepository(
+			mock.Anything,
+			mock.MatchedBy(func(entry *helm.RepositoryEntry) bool {
+				return entry != nil && entry.Name == "jetstack" &&
+					entry.URL == "https://charts.jetstack.io"
+			}),
+			mock.Anything,
+		).
+		Return(nil)
+	client.EXPECT().
+		InstallOrUpgradeChart(
+			mock.Anything,
+			mock.MatchedBy(func(spec *helm.ChartSpec) bool {
+				if spec == nil {
+					return false
+				}
+
+				assert.Equal(t, 10*time.Minute, spec.Timeout)
+				assert.Equal(t, map[string]string{
+					"installCRDs":             "true",
+					"startupapicheck.timeout": "10m0s",
+				}, spec.SetValues)
+
+				return true
+			}),
+		).
+		Return(nil, nil)
+
+	err := installer.Install(context.Background())
+
+	require.NoError(t, err)
+}
+
+func TestInstallRepoError(t *testing.T) {
 
 	installer, client := newInstallerWithDefaults(t)
 	client.EXPECT().
@@ -127,7 +165,7 @@ func expectCertManagerInstall(t *testing.T, client *helm.MockInterface, installE
 				assert.Equal(t, 2*time.Minute, spec.Timeout)
 				assert.Equal(t, map[string]string{
 					"installCRDs":             "true",
-					"startupapicheck.timeout": "5m",
+					"startupapicheck.timeout": "5m0s",
 				}, spec.SetValues)
 
 				return true

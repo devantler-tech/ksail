@@ -1,7 +1,6 @@
 package certmanagerinstaller
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/devantler-tech/ksail/v6/pkg/client/helm"
@@ -56,5 +55,5 @@ func startupAPICheckTimeout(installTimeout time.Duration) string {
 
 	checkTimeout := max(installTimeout, minStartupCheckTimeout)
 
-	return fmt.Sprintf("%dm", int(checkTimeout.Minutes()))
+	return checkTimeout.String()
 }
