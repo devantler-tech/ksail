@@ -206,13 +206,19 @@ func (p *Provisioner) Create(ctx context.Context, name string) error {
 			const cleanupTimeout = 30 * time.Second
 
 			cleanupCtx = context.WithoutCancel(cleanupCtx)
+
 			cleanupCtx, cancel := context.WithTimeout(cleanupCtx, cleanupTimeout)
 			defer cancel()
 
 			cmd := deletecluster.NewCommand(cleanupCtx)
+
 			_, err := p.runner.Run(cleanupCtx, cmd, []string{})
 			if err != nil {
-				_, _ = fmt.Fprintf(os.Stderr, "failed to clean up KWOK cluster after create failure: %v\n", err)
+				_, _ = fmt.Fprintf(
+					os.Stderr,
+					"failed to clean up KWOK cluster after create failure: %v\n",
+					err,
+				)
 			}
 		}
 

@@ -25,10 +25,12 @@ var (
 	errConnReset    = errors.New("read tcp 10.0.0.1:54321->1.2.3.4:443: connection reset by peer")
 	errTLSTimeout   = errors.New("net/http: TLS handshake timeout")
 	errNoSuchHost   = errors.New("dial tcp: lookup registry.k8s.io: no such host")
-	errDNSTransient = errors.New("dial tcp: lookup registry.k8s.io: temporary failure in name resolution")
-	errExitStatus1  = errors.New("exit status 1")
-	errPermission   = errors.New("permission denied")
-	errEmpty        = errors.New("")
+	errDNSTransient = errors.New(
+		"dial tcp: lookup registry.k8s.io: temporary failure in name resolution",
+	)
+	errExitStatus1 = errors.New("exit status 1")
+	errPermission  = errors.New("permission denied")
+	errEmpty       = errors.New("")
 )
 
 // --- isTransientCreateError tests ---
