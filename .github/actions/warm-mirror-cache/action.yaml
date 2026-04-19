@@ -20,7 +20,7 @@ inputs:
     description: |
       Version salt for cache key. Bump this to invalidate all caches.
     required: false
-    default: "v1"
+    default: "v2"
 
 outputs:
   cache-hit:
@@ -113,7 +113,7 @@ runs:
         # ksail-test-workload-watch, and the in-cluster API connectivity pre-flight
         # pod. Without pre-warming, transient Docker Hub or proxy registry errors can
         # cause ImagePullBackOff timeouts in system tests (see issue #3822).
-        echo "docker.io/traefik/whoami:v1.10" >> "$IMAGES_FILE"
+        echo "docker.io/library/nginx:alpine" >> "$IMAGES_FILE"
         echo "docker.io/library/busybox:1.36.1" >> "$IMAGES_FILE"
 
         # Deduplicate and sort
