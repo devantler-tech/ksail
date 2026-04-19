@@ -650,8 +650,11 @@ func TestProvider_ListAllClusters_KWOK(t *testing.T) {
 		// returns "kwok-kwok-default", so Docker containers carry the double-prefix "kwok-kwok-default-*".
 		// extractKWOKClusterName strips the kwokctl-added "kwok-" prefix, returning the correct
 		// KSail cluster name "kwok-default" (strings.TrimPrefix only removes one occurrence).
-		{ID: "5", Names: []string{"/kwok-kwok-default-kwok-controller"}}, // double-prefix: default KSail KWOK cluster
-		{ID: "4", Names: []string{"/other-container"}},                   // unrelated container
+		{
+			ID:    "5",
+			Names: []string{"/kwok-kwok-default-kwok-controller"},
+		}, // double-prefix: default KSail KWOK cluster
+		{ID: "4", Names: []string{"/other-container"}}, // unrelated container
 	}
 
 	client.EXPECT().
