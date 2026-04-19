@@ -173,6 +173,7 @@ func (p *Provisioner) SetProvider(prov provider.Provider) {
 
 // Create creates a KWOK cluster using kwokctl's create command.
 // It retries on transient errors (e.g. registry rate limits) with a fixed delay between attempts.
+// globalMu is held only for the duration of each kwokctl command; the retry sleep runs unlocked.
 func (p *Provisioner) Create(ctx context.Context, name string) error {
 	target := p.resolveName(name)
 
@@ -185,7 +186,33 @@ func (p *Provisioner) Create(ctx context.Context, name string) error {
 		defer cleanup()
 	}
 
-	return p.withCluster(ctx, target, configPath, p.doCreate)
+	createAttempt := func(ctx context.Context) error {
+		return p.withCluster(ctx, target, configPath, p.runCreateCommand)
+	}
+
+	cleanupAttempt := func(ctx context.Context) {
+		cleanupCtx := context.WithoutCancel(ctx)
+
+		const cleanupTimeout = 30 * time.Second
+
+		cleanupCtx, cancel := context.WithTimeout(cleanupCtx, cleanupTimeout)
+		defer cancel()
+
+		if err := p.withCluster(cleanupCtx, target, configPath, p.runDeleteCommand); err != nil {
+			_, _ = fmt.Fprintf(
+				os.Stderr,
+				"failed to clean up KWOK cluster after create failure: %v\n",
+				err,
+			)
+		}
+	}
+
+	err = createWithRetry(ctx, createRetryDelay, createAttempt, cleanupAttempt)
+	if err != nil {
+		return err
+	}
+
+	return p.withCluster(ctx, target, configPath, p.runScaleCommand)
 }
 
 // Delete deletes a KWOK cluster using kwokctl's delete command.
@@ -273,55 +300,43 @@ func (p *Provisioner) Exists(ctx context.Context, name string) (bool, error) {
 	return p.existsWithContext(kwokCtx, p.resolveName(name))
 }
 
-// doCreate performs the actual cluster creation with retry and node scaling
-// inside an already-initialised kwokctl context.
-func (p *Provisioner) doCreate(kwokCtx context.Context) error {
-	create := func(ctx context.Context) error {
-		cmd := createcluster.NewCommand(ctx)
+// runCreateCommand executes the kwokctl create-cluster command.
+// Must be called with globalMu held (via withCluster).
+func (p *Provisioner) runCreateCommand(kwokCtx context.Context) error {
+	cmd := createcluster.NewCommand(kwokCtx)
 
-		args := []string{
-			"--runtime", "docker",
-			"--kwok-controller-image", kwokControllerImage,
-		}
-
-		_, err := p.runner.Run(ctx, cmd, args)
-		if err != nil {
-			return fmt.Errorf("failed to create KWOK cluster: %w", err)
-		}
-
-		return nil
+	args := []string{
+		"--runtime", "docker",
+		"--kwok-controller-image", kwokControllerImage,
 	}
 
-	cleanupFailed := func(cleanupCtx context.Context) {
-		const cleanupTimeout = 30 * time.Second
-
-		cleanupCtx = context.WithoutCancel(cleanupCtx)
-
-		cleanupCtx, cancel := context.WithTimeout(cleanupCtx, cleanupTimeout)
-		defer cancel()
-
-		cmd := deletecluster.NewCommand(cleanupCtx)
-
-		_, err := p.runner.Run(cleanupCtx, cmd, []string{})
-		if err != nil {
-			_, _ = fmt.Fprintf(
-				os.Stderr,
-				"failed to clean up KWOK cluster after create failure: %v\n",
-				err,
-			)
-		}
-	}
-
-	err := createWithRetry(kwokCtx, createRetryDelay, create, cleanupFailed)
+	_, err := p.runner.Run(kwokCtx, cmd, args)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create KWOK cluster: %w", err)
 	}
 
-	// Create one simulated node so the kube-scheduler can place pods
-	// and the kwok-controller simulates their Running/Ready state.
-	scaleCmd := kwokscale.NewCommand(kwokCtx)
+	return nil
+}
 
-	_, err = p.runner.Run(kwokCtx, scaleCmd, []string{"node", "--replicas", "1"})
+// runDeleteCommand executes the kwokctl delete-cluster command.
+// Must be called with globalMu held (via withCluster).
+func (p *Provisioner) runDeleteCommand(kwokCtx context.Context) error {
+	cmd := deletecluster.NewCommand(kwokCtx)
+
+	_, err := p.runner.Run(kwokCtx, cmd, []string{})
+	if err != nil {
+		return fmt.Errorf("failed to delete KWOK cluster: %w", err)
+	}
+
+	return nil
+}
+
+// runScaleCommand creates one simulated node so the kube-scheduler can place pods.
+// Must be called with globalMu held (via withCluster).
+func (p *Provisioner) runScaleCommand(kwokCtx context.Context) error {
+	cmd := kwokscale.NewCommand(kwokCtx)
+
+	_, err := p.runner.Run(kwokCtx, cmd, []string{"node", "--replicas", "1"})
 	if err != nil {
 		return fmt.Errorf("failed to create simulated node in KWOK cluster: %w", err)
 	}
