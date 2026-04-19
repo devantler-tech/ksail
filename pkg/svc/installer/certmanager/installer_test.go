@@ -72,6 +72,7 @@ func TestInstallSuccessWithScaledTimeout(t *testing.T) {
 }
 
 func TestInstallRepoError(t *testing.T) {
+	t.Parallel()
 
 	installer, client := newInstallerWithDefaults(t)
 	client.EXPECT().
