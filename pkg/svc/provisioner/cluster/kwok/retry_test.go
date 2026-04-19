@@ -13,13 +13,13 @@ import (
 
 var (
 	errRateLimit = errors.New(
-		"Error response from daemon: toomanyrequests: Quota exceeded for quota metric",
+		"error response from daemon: toomanyrequests: Quota exceeded for quota metric",
 	)
 	errQuotaExceeded = errors.New(
 		"TOOMANYREQUESTS: Quota exceeded for quota metric 'Requests per project per region'",
 	)
 	errQuotaDetail = errors.New(
-		"Quota exceeded for service 'artifactregistry.googleapis.com'",
+		"failed to pull image: Quota exceeded for service 'artifactregistry.googleapis.com'",
 	)
 	errIOTimeout    = errors.New("dial tcp 1.2.3.4:443: i/o timeout")
 	errConnReset    = errors.New("read tcp 10.0.0.1:54321->1.2.3.4:443: connection reset by peer")

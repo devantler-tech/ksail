@@ -202,12 +202,21 @@ func (p *Provisioner) Create(ctx context.Context, name string) error {
 			return nil
 		}
 
-		cleanupFailed := func(_ context.Context) {
-			cmd := deletecluster.NewCommand(kwokCtx)
-			_, _ = p.runner.Run(kwokCtx, cmd, []string{})
+		cleanupFailed := func(cleanupCtx context.Context) {
+			const cleanupTimeout = 30 * time.Second
+
+			cleanupCtx = context.WithoutCancel(cleanupCtx)
+			cleanupCtx, cancel := context.WithTimeout(cleanupCtx, cleanupTimeout)
+			defer cancel()
+
+			cmd := deletecluster.NewCommand(cleanupCtx)
+			if _, err := p.runner.Run(cleanupCtx, cmd, []string{}); err != nil {
+				_, _ = fmt.Fprintf(os.Stderr, "failed to clean up KWOK cluster after create failure: %v\n", err)
+			}
 		}
 
-		if err := createWithRetry(kwokCtx, createRetryDelay, create, cleanupFailed); err != nil {
+		err := createWithRetry(kwokCtx, createRetryDelay, create, cleanupFailed)
+		if err != nil {
 			return err
 		}
 
@@ -215,7 +224,7 @@ func (p *Provisioner) Create(ctx context.Context, name string) error {
 		// and the kwok-controller simulates their Running/Ready state.
 		scaleCmd := kwokscale.NewCommand(kwokCtx)
 
-		_, err := p.runner.Run(kwokCtx, scaleCmd, []string{"node", "--replicas", "1"})
+		_, err = p.runner.Run(kwokCtx, scaleCmd, []string{"node", "--replicas", "1"})
 		if err != nil {
 			return fmt.Errorf("failed to create simulated node in KWOK cluster: %w", err)
 		}
