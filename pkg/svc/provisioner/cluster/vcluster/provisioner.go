@@ -82,10 +82,8 @@ const dbusErrorSubstring = "Failed to connect to bus"
 // Network-level errors (i/o timeout, connection reset, TLS failures, DNS
 // failures) cover transient infrastructure conditions on CI runners.
 // "Node couldn't join" covers the vCluster standalone node join timeout
-// (3 minutes) where the kubelet's TLS bootstrap fails to complete. This can
-// happen when the kube-apiserver inside the container isn't fully ready or
-// when systemd/D-Bus timing prevents proper bootstrap token authentication.
-// Retrying with a fresh container typically resolves this.
+// (3 minutes) where the kubelet's TLS bootstrap fails to complete on slow
+// CI runners. Retrying with a fresh container typically resolves this.
 func transientCreateErrors() []string {
 	return []string{
 		"exit status 22",
