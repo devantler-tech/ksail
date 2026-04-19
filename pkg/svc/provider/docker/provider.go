@@ -500,8 +500,8 @@ func extractVClusterRole(ctr container.Summary) string {
 
 // kwokSuffixRoles maps each known kwokctl container suffix to the node role it
 // represents.  Used for role classification.
-// kwokctl names containers as: <cluster>-etcd, <cluster>-kube-apiserver,
-// <cluster>-kwok-controller, etc. (no extra prefix — the cluster name is used directly).
+// kwokctl names containers as: kwok-<cluster>-etcd, kwok-<cluster>-kube-apiserver,
+// kwok-<cluster>-kwok-controller, etc. (kwokctl prepends "kwok-" via config.ClusterName).
 //
 //nolint:gochecknoglobals // read-only lookup table; avoids per-call allocation.
 var kwokSuffixRoles = map[string]string{
@@ -524,13 +524,15 @@ var kwokSuffixRoles = map[string]string{
 var kwokDistinctiveSuffixes = []string{"-kwok-controller"}
 
 // listKWOKContainers lists containers by KWOK cluster name prefix.
-// kwokctl names containers as <cluster-name>-<component>, so the prefix
-// is simply the cluster name followed by a dash.
+// kwokctl prepends "kwok-" to the user-facing cluster name via config.ClusterName()
+// before naming containers, so the prefix is "kwok-<clusterName>-".
 func (p *Provider) listKWOKContainers(
 	ctx context.Context,
 	clusterName string,
 ) ([]container.Summary, error) {
-	prefix := clusterName + "-"
+	// kwokctl's config.ClusterName(name) returns "kwok-"+name, so containers
+	// are named "kwok-<clusterName>-<component>".
+	prefix := "kwok-" + clusterName + "-"
 
 	return p.filterContainers(ctx, func(ctr container.Summary) bool {
 		for _, rawName := range ctr.Names {
@@ -546,12 +548,16 @@ func (p *Provider) listKWOKContainers(
 // extractKWOKClusterName extracts the cluster name from a KWOK container name.
 // Only containers with KWOK-distinctive suffixes (e.g. -kwok-controller) are
 // recognised, preventing false-positive matches on generic components like etcd.
+// kwokctl prepends "kwok-" to the user-facing cluster name, so that prefix is
+// stripped before returning.
 func extractKWOKClusterName(ctr container.Summary) string {
 	for _, rawName := range ctr.Names {
 		name := strings.TrimPrefix(rawName, "/")
 		for _, suffix := range kwokDistinctiveSuffixes {
 			if trimmed, found := strings.CutSuffix(name, suffix); found && trimmed != "" {
-				return trimmed
+				// kwokctl prepends "kwok-" via config.ClusterName(); strip it back
+				// so the returned name matches the short name in ksail config.
+				return strings.TrimPrefix(trimmed, "kwok-")
 			}
 		}
 	}

@@ -77,22 +77,24 @@ func newTalosContainers(clusterName string) []container.Summary {
 }
 
 // newKWOKContainers creates test containers with KWOK naming convention.
-// kwokctl names containers as <cluster-name>-<component>.
+// kwokctl prepends "kwok-" to the cluster name via config.ClusterName(), so
+// containers are named kwok-<cluster-name>-<component>.
 func newKWOKContainers(clusterName string) []container.Summary {
+	fullName := "kwok-" + clusterName
 	return []container.Summary{
 		{
 			ID:    "etcd1",
-			Names: []string{"/" + clusterName + "-etcd"},
+			Names: []string{"/" + fullName + "-etcd"},
 			State: "running",
 		},
 		{
 			ID:    "api1",
-			Names: []string{"/" + clusterName + "-kube-apiserver"},
+			Names: []string{"/" + fullName + "-kube-apiserver"},
 			State: "running",
 		},
 		{
 			ID:    "ctrl1",
-			Names: []string{"/" + clusterName + "-kwok-controller"},
+			Names: []string{"/" + fullName + "-kwok-controller"},
 			State: "running",
 		},
 	}
@@ -596,17 +598,17 @@ func TestProvider_ListNodes_KWOK(t *testing.T) {
 	require.NoError(t, err)
 	assert.ElementsMatch(t, []provider.NodeInfo{
 		{
-			Name:        testClusterName + "-etcd",
+			Name:        "kwok-" + testClusterName + "-etcd",
 			ClusterName: testClusterName,
 			Role:        "etcd",
 			State:       "running",
 		},
 		{
-			Name:        testClusterName + "-kube-apiserver",
+			Name:        "kwok-" + testClusterName + "-kube-apiserver",
 			ClusterName: testClusterName, Role: "control-plane", State: "running",
 		},
 		{
-			Name:        testClusterName + "-kwok-controller",
+			Name:        "kwok-" + testClusterName + "-kwok-controller",
 			ClusterName: testClusterName, Role: "controller", State: "running",
 		},
 	}, nodes)
@@ -619,13 +621,10 @@ func TestProvider_ListAllClusters_KWOK(t *testing.T) {
 	client := dockerclient.NewMockAPIClient(t)
 
 	allContainers := []container.Summary{
-		{
-			ID:    "1",
-			Names: []string{"/cluster1-etcd"},
-		}, // common suffix — must NOT produce a false positive
-		{ID: "2", Names: []string{"/cluster1-kwok-controller"}}, // KWOK-distinctive suffix
-		{ID: "3", Names: []string{"/cluster2-kwok-controller"}}, // KWOK-distinctive suffix
-		{ID: "4", Names: []string{"/other-container"}},          // unrelated container
+		{ID: "1", Names: []string{"/kwok-cluster1-etcd"}},            // common suffix — must NOT produce a false positive
+		{ID: "2", Names: []string{"/kwok-cluster1-kwok-controller"}}, // KWOK-distinctive suffix
+		{ID: "3", Names: []string{"/kwok-cluster2-kwok-controller"}}, // KWOK-distinctive suffix
+		{ID: "4", Names: []string{"/other-container"}},               // unrelated container
 	}
 
 	client.EXPECT().
