@@ -2945,6 +2945,17 @@ func TestOutputJSON(t *testing.T) {
 	assert.Contains(t, output, "[")
 }
 
+// Sentinel errors used by the failedKustomizations and poll fail-fast tests.
+// Using package-level variables satisfies the err113 (goerr113) linter rule
+// that forbids inline errors.New() calls in non-test code and test assertions.
+var (
+	errUpstreamValidation    = errors.New("upstream validation error")
+	errFluxSystemReconcile   = errors.New("flux-system: reconciliation failed")
+	errInfraReconcile        = errors.New("infra: reconciliation failed")
+	errInfraPermanentFailure = errors.New("infra: permanent failure")
+	errGenericFailed         = errors.New("failed")
+)
+
 // =============================================================================
 // failedKustomizations — cascade fail-fast tracker
 // =============================================================================
@@ -2964,13 +2975,12 @@ func TestFailedKustomizationsCheckDependenciesDirectFailure(t *testing.T) {
 
 	var tracker workload.ExportFailedKustomizations
 
-	upstream := errors.New("upstream validation error")
-	workload.ExportRecordKustomizationFailure(&tracker, "infra", upstream)
+	workload.ExportRecordKustomizationFailure(&tracker, "infra", errUpstreamValidation)
 
 	err := workload.ExportCheckKustomizationDependencies(&tracker, []string{"infra"})
 
 	require.Error(t, err)
-	assert.ErrorIs(t, err, upstream)
+	require.ErrorIs(t, err, errUpstreamValidation)
 	assert.Contains(t, err.Error(), "infra")
 }
 
@@ -2981,8 +2991,7 @@ func TestFailedKustomizationsCheckDependenciesTransitivePropagation(t *testing.T
 	// → apps detects infra failed.
 	var tracker workload.ExportFailedKustomizations
 
-	rootErr := errors.New("flux-system: reconciliation failed")
-	workload.ExportRecordKustomizationFailure(&tracker, "flux-system", rootErr)
+	workload.ExportRecordKustomizationFailure(&tracker, "flux-system", errFluxSystemReconcile)
 
 	// infra depends on flux-system: it detects the failure…
 	infraDepErr := workload.ExportCheckKustomizationDependencies(&tracker, []string{"flux-system"})
@@ -2995,7 +3004,7 @@ func TestFailedKustomizationsCheckDependenciesTransitivePropagation(t *testing.T
 	appDepErr := workload.ExportCheckKustomizationDependencies(&tracker, []string{"infra"})
 
 	require.Error(t, appDepErr)
-	assert.ErrorIs(t, appDepErr, infraDepErr)
+	require.ErrorIs(t, appDepErr, infraDepErr)
 	assert.Contains(t, appDepErr.Error(), "infra")
 }
 
@@ -3004,7 +3013,7 @@ func TestFailedKustomizationsCheckDependenciesNoDeps(t *testing.T) {
 
 	var tracker workload.ExportFailedKustomizations
 
-	workload.ExportRecordKustomizationFailure(&tracker, "infra", errors.New("failed"))
+	workload.ExportRecordKustomizationFailure(&tracker, "infra", errGenericFailed)
 
 	// A kustomization with no dependencies is unaffected by tracked failures.
 	err := workload.ExportCheckKustomizationDependencies(&tracker, nil)
@@ -3017,8 +3026,7 @@ func TestPollUntilKustomizationReadyFailsFastOnDependencyFailure(t *testing.T) {
 
 	var tracker workload.ExportFailedKustomizations
 
-	depErr := errors.New("infra: reconciliation failed")
-	workload.ExportRecordKustomizationFailure(&tracker, "infra", depErr)
+	workload.ExportRecordKustomizationFailure(&tracker, "infra", errInfraReconcile)
 
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
@@ -3034,7 +3042,6 @@ func TestPollUntilKustomizationReadyFailsFastOnDependencyFailure(t *testing.T) {
 	)
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "apps")
 	assert.Contains(t, err.Error(), "infra")
 }
 
@@ -3043,8 +3050,7 @@ func TestPollUntilKustomizationReadyRecordsCascadeFailure(t *testing.T) {
 
 	var tracker workload.ExportFailedKustomizations
 
-	depErr := errors.New("infra: permanent failure")
-	workload.ExportRecordKustomizationFailure(&tracker, "infra", depErr)
+	workload.ExportRecordKustomizationFailure(&tracker, "infra", errInfraPermanentFailure)
 
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()

@@ -2325,7 +2325,7 @@ func pollUntilKustomizationReady(
 			// Record cascaded failure so further dependents also fail-fast.
 			failed.record(name, depErr)
 
-			return fmt.Errorf("kustomization %q: %w", name, depErr)
+			return depErr
 		}
 
 		ready, status, err := fluxReconciler.CheckNamedKustomizationReady(ctx, name)
