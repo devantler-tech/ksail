@@ -364,6 +364,15 @@ For a deeper dive into KSail's design and internals, refer to:
 - When the detection model's own `reasons` array contradicts the boolean verdict, the reasons text takes precedence for human review.
 - Agents should avoid phrasing like "ignoring policy" or "suppressing" in their reasoning; prefer "no action required" or "no changes needed."
 
+## Daily Docs Workflow Behavior
+
+The Daily Docs agentic workflow (`daily-docs.lock.yml`) is designed to fill documentation gaps:
+
+- When a push to `main` already includes documentation changes alongside code changes, the agent may correctly call `noop` — no additional PR is needed
+- When the agent calls `noop`, the `agent` job is marked as `failure` by the gh-aw framework (this is expected behavior, not a real error)
+- The `update_cache_memory` job is skipped on agent failure — subsequent runs will rebuild the page ownership map cache automatically
+- This pattern is particularly common for commits that combine code dependency updates with documentation fixes
+
 ## Active Technologies
 
 - Go 1.26.1+ (see `go.mod`)

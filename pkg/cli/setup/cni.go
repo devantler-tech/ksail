@@ -182,8 +182,9 @@ func runCNIInstallation(
 	return nil
 }
 
-// waitForCNIReadiness waits for all nodes to become Ready after CNI installation.
-// On timeout, it diagnoses pod failures in the CNI namespaces to provide actionable errors.
+// waitForCNIReadiness waits for all nodes to become Ready and schedulable after
+// CNI installation. On timeout, it diagnoses pod failures in the CNI namespaces
+// to provide actionable errors.
 func waitForCNIReadiness(
 	ctx context.Context,
 	setup *cniSetupResult,
@@ -198,7 +199,7 @@ func waitForCNIReadiness(
 		return fmt.Errorf("create kubernetes client: %w", err)
 	}
 
-	err = readiness.WaitForAllNodesReady(ctx, clientset, setup.timeout)
+	err = readiness.WaitForAllNodesReadyAndSchedulable(ctx, clientset, setup.timeout)
 	if err != nil {
 		diag := k8s.DiagnosePodFailures(ctx, clientset, cniNamespaces)
 		if diag != "" {

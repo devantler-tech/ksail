@@ -68,6 +68,12 @@ const dbusWaitInterval = 500 * time.Millisecond
 // dbusErrorSubstring identifies the D-Bus startup race condition error.
 // The SDK's install-standalone.sh runs "systemctl restart systemd-journald"
 // which fails when D-Bus hasn't initialized yet inside the privileged container.
+//
+// Audited against vCluster v0.33.2-rc3 (April 2026): the upstream SDK's
+// systemd readiness loop (systemctl is-system-running, up to 60s) does NOT
+// eliminate this race — when the loop times out, the install script still
+// executes and can hit the D-Bus error. KSail's recoverFromDBusError
+// workaround remains necessary.
 const dbusErrorSubstring = "Failed to connect to bus"
 
 // transientCreateErrors returns error substrings that indicate potentially
@@ -576,6 +582,10 @@ func (p *Provisioner) Exists(ctx context.Context, name string) (bool, error) {
 // systemd inside the container hasn't initialized D-Bus yet. The container
 // is already running at this point — we wait for D-Bus and re-run the
 // install script that the SDK originally attempted.
+//
+// Audited against vCluster v0.33.2-rc3 (April 2026): the upstream SDK
+// added a systemd readiness loop but it can still time out on slow CI
+// runners, so this workaround is still required.
 func recoverFromDBusError(
 	ctx context.Context,
 	globalFlags *flags.GlobalFlags,

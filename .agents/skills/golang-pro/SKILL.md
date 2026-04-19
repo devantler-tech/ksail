@@ -4,10 +4,9 @@ license: MIT
 metadata:
     author: https://github.com/Jeffallan
     domain: language
-    github-path: golang-pro
-    github-pinned: 6d50a7587e0ff372277dc4a33ccb8b8ea2ff7470
-    github-ref: 6d50a7587e0ff372277dc4a33ccb8b8ea2ff7470
-    github-repo: https://github.com/devantler-tech/skills
+    github-path: skills/golang-pro
+    github-ref: refs/tags/v0.4.11
+    github-repo: https://github.com/Jeffallan/claude-skills
     github-tree-sha: 21c16cca0eaf425259a5aebc2de99ee64807b500
     output-format: code
     related-skills: devops-engineer, microservices-architect, test-master

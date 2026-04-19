@@ -1,11 +1,10 @@
 ---
 description: Build agentic applications with GitHub Copilot SDK. Use when embedding AI agents in apps, creating custom tools, implementing streaming responses, managing sessions, connecting to MCP servers, or creating custom agents. Triggers on Copilot SDK, GitHub SDK, agentic app, embed Copilot, programmable agent, MCP server, custom agent.
 metadata:
-    github-path: copilot-sdk
-    github-pinned: 6d50a7587e0ff372277dc4a33ccb8b8ea2ff7470
-    github-ref: 6d50a7587e0ff372277dc4a33ccb8b8ea2ff7470
-    github-repo: https://github.com/devantler-tech/skills
-    github-tree-sha: ea588ae8da9c27637be389e26fe6ae1a647f8c27
+    github-path: skills/copilot-sdk
+    github-ref: refs/heads/main
+    github-repo: https://github.com/github/awesome-copilot
+    github-tree-sha: 03696d18ae6c8e50683f4c66dc7e9bf0d51d9214
 name: copilot-sdk
 ---
 # GitHub Copilot SDK
@@ -582,8 +581,8 @@ session, _ := client.CreateSession(&copilot.SessionConfig{
     Model: "gpt-4.1",
     MCPServers: map[string]copilot.MCPServerConfig{
         "github": {
-            Type: "http",
-            Url: "https://api.githubcopilot.com/mcp/",
+            "type": "http",
+            "url": "https://api.githubcopilot.com/mcp/",
         },
     },
 })

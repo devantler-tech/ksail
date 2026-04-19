@@ -1,11 +1,10 @@
 ---
 description: Helps users discover and install agent skills when they ask questions like "how do I do X", "find a skill for X", "is there a skill that can...", or express interest in extending capabilities. This skill should be used when the user is looking for functionality that might exist as an installable skill.
 metadata:
-    github-path: find-skills
-    github-pinned: 6d50a7587e0ff372277dc4a33ccb8b8ea2ff7470
-    github-ref: 6d50a7587e0ff372277dc4a33ccb8b8ea2ff7470
-    github-repo: https://github.com/devantler-tech/skills
-    github-tree-sha: 9d01b3f7405bfefe19fa4e343c1841303f91889d
+    github-path: skills/find-skills
+    github-ref: refs/tags/v1.5.1
+    github-repo: https://github.com/vercel-labs/skills
+    github-tree-sha: 3013fdeb8a11b10b1eb795ec3ae8bfca38f7c26d
 name: find-skills
 ---
 # Find Skills
@@ -23,15 +22,16 @@ Use this skill when the user:
 - Wants to search for tools, templates, or workflows
 - Mentions they wish they had help with a specific domain (design, testing, deployment, etc.)
 
-## What is `gh skill`?
+## What is the Skills CLI?
 
-`gh skill` (a GitHub CLI extension) is the package manager for the open agent skills ecosystem. Skills are modular packages that extend agent capabilities with specialized knowledge, workflows, and tools.
+The Skills CLI (`npx skills`) is the package manager for the open agent skills ecosystem. Skills are modular packages that extend agent capabilities with specialized knowledge, workflows, and tools.
 
 **Key commands:**
 
-- `gh skill search [query]` - Search for skills by keyword
-- `gh skill install <owner/repository> <skill> --agent github-copilot --scope user` - Install a skill from GitHub for Copilot
-- `gh skill update` - Check for and apply skill updates
+- `npx skills find [query]` - Search for skills interactively or by keyword
+- `npx skills add <package>` - Install a skill from GitHub or other sources
+- `npx skills check` - Check for skill updates
+- `npx skills update` - Update all installed skills
 
 **Browse skills at:** https://skills.sh/
 
@@ -58,14 +58,14 @@ For example, top skills for web development include:
 If the leaderboard doesn't cover the user's need, run the find command:
 
 ```bash
-gh skill search [query]
+npx skills find [query]
 ```
 
 For example:
 
-- User asks "how do I make my React app faster?" → `gh skill search react performance`
-- User asks "can you help me with PR reviews?" → `gh skill search pr review`
-- User asks "I need to create a changelog" → `gh skill search changelog`
+- User asks "how do I make my React app faster?" → `npx skills find react performance`
+- User asks "can you help me with PR reviews?" → `npx skills find pr review`
+- User asks "I need to create a changelog" → `npx skills find changelog`
 
 ### Step 4: Verify Quality Before Recommending
 
@@ -92,7 +92,7 @@ React and Next.js performance optimization guidelines from Vercel Engineering.
 (185K installs)
 
 To install it:
-gh skill install vercel-labs/agent-skills react-best-practices --agent github-copilot --scope user
+npx skills add vercel-labs/agent-skills@react-best-practices
 
 Learn more: https://skills.sh/vercel-labs/agent-skills/react-best-practices
 ```
@@ -102,10 +102,10 @@ Learn more: https://skills.sh/vercel-labs/agent-skills/react-best-practices
 If the user wants to proceed, you can install the skill for them:
 
 ```bash
-gh skill install <owner/repository> <skill> --agent github-copilot --scope user
+npx skills add <owner/repo@skill> -g -y
 ```
 
-The `--scope user` flag installs for the user profile.
+The `-g` flag installs globally (user-level) and `-y` skips confirmation prompts.
 
 ## Common Skill Categories
 
@@ -133,7 +133,7 @@ If no relevant skills exist:
 
 1. Acknowledge that no existing skill was found
 2. Offer to help with the task directly using your general capabilities
-3. Suggest the user could create their own skill following the Agent Skills specification
+3. Suggest the user could create their own skill with `npx skills init`
 
 Example:
 
@@ -141,6 +141,6 @@ Example:
 I searched for skills related to "xyz" but didn't find any matches.
 I can still help you with this task directly! Would you like me to proceed?
 
-If this is something you do often, you could create your own skill by following:
-https://agentskills.io/specification
+If this is something you do often, you could create your own skill:
+npx skills init my-xyz-skill
 ```

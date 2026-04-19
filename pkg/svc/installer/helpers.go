@@ -9,9 +9,11 @@ import (
 const (
 	// DefaultInstallTimeout is the default timeout (5 minutes) for component installation.
 	DefaultInstallTimeout = 5 * time.Minute
-	// TalosInstallTimeout is the timeout (5 minutes) for Talos component installation.
-	// Talos clusters take longer to bootstrap due to the immutable OS design.
-	TalosInstallTimeout = 5 * time.Minute
+	// TalosInstallTimeout is the timeout (8 minutes) for Talos component installation.
+	// Talos clusters take longer to bootstrap due to the immutable OS design and
+	// heavier resource requirements, especially on shared CI runners.
+	// See: https://github.com/devantler-tech/ksail/issues/4040
+	TalosInstallTimeout = 8 * time.Minute
 	// CalicoInstallTimeout is the timeout for Calico CNI installs, which often take longer
 	// due to multiple components needing to become ready (tigera-operator, calico-node
 	// DaemonSet, and calico-kube-controllers Deployment).
@@ -39,10 +41,11 @@ const (
 	// In VCluster environments with layered stacks (e.g., Calico + Gatekeeper + ArgoCD),
 	// ArgoCD can take significantly longer to stabilize because each component runs
 	// inside the virtual cluster and inherits both the VCluster networking overhead and
-	// the latency imposed by active admission-webhook policies. 20 minutes provides
+	// the latency imposed by active admission-webhook policies. 25 minutes provides
 	// sufficient headroom while keeping feedback reasonable for actual failures.
 	// See: https://github.com/devantler-tech/ksail/issues/2899
-	ArgoCDInstallTimeout = 20 * time.Minute
+	// See: https://github.com/devantler-tech/ksail/issues/4119
+	ArgoCDInstallTimeout = 25 * time.Minute
 	// VClusterInstallTimeout is the base timeout for component installs inside a VCluster
 	// distribution. VCluster adds ~20-30% overhead relative to a native-node cluster
 	// because every API call is forwarded through an extra hop (syncer) and admission
@@ -55,7 +58,7 @@ const (
 
 // GetInstallTimeout determines the timeout for component installation.
 // Uses cluster connection timeout if configured, otherwise defaults to:
-//   - TalosInstallTimeout (5m) for Talos distribution
+//   - TalosInstallTimeout (8m) for Talos distribution
 //   - VClusterInstallTimeout (8m) for VCluster distribution
 //   - DefaultInstallTimeout (5m) for all other distributions
 //

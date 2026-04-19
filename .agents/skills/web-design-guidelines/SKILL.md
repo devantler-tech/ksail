@@ -3,10 +3,9 @@ description: Review UI code for Web Interface Guidelines compliance. Use when as
 metadata:
     argument-hint: <file-or-pattern>
     author: vercel
-    github-path: web-design-guidelines
-    github-pinned: 6d50a7587e0ff372277dc4a33ccb8b8ea2ff7470
-    github-ref: 6d50a7587e0ff372277dc4a33ccb8b8ea2ff7470
-    github-repo: https://github.com/devantler-tech/skills
+    github-path: skills/web-design-guidelines
+    github-ref: refs/heads/main
+    github-repo: https://github.com/vercel-labs/agent-skills
     github-tree-sha: 3116f3e62dbd02b44a598b1aa690d2a8938e8f89
     version: 1.0.0
 name: web-design-guidelines

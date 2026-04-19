@@ -1,10 +1,9 @@
 ---
 description: GitHub CLI (gh) comprehensive reference for repositories, issues, pull requests, Actions, projects, releases, gists, codespaces, organizations, extensions, and all GitHub operations from the command line.
 metadata:
-    github-path: gh-cli
-    github-pinned: 6d50a7587e0ff372277dc4a33ccb8b8ea2ff7470
-    github-ref: 6d50a7587e0ff372277dc4a33ccb8b8ea2ff7470
-    github-repo: https://github.com/devantler-tech/skills
+    github-path: skills/gh-cli
+    github-ref: refs/heads/main
+    github-repo: https://github.com/github/awesome-copilot
     github-tree-sha: 437437f7f20bcdbbdb3081cf164435a388c0a39a
 name: gh-cli
 ---

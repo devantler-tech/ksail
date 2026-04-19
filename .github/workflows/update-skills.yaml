@@ -15,8 +15,6 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
-    uses: devantler-tech/reusable-workflows/.github/workflows/update-copilot-skills.yaml@6eea016969bceed84f4fb38c8e79fb04a2cadc31 # main @ 2026-04-18
+    uses: devantler-tech/reusable-workflows/.github/workflows/update-copilot-skills.yaml@5a334687e73feec66012e62db518716a8618417a # v1.39.0+ (post skills-lock refactor)
     with:
-      skills-lock: skills-lock.json
-      agent: github-copilot
-      scope: project
+      dir: .agents/skills

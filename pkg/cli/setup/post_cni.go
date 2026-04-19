@@ -64,10 +64,13 @@ const (
 	daemonSetStabilityTimeout = 3 * time.Minute
 
 	// nodeReadinessTimeout is the maximum time to wait for all cluster nodes
-	// to reach condition Ready=True. After Kind/K3d cluster creation, control-
-	// plane nodes may briefly carry a NotReady taint, causing FailedScheduling
-	// for workload pods if they are deployed before the taint clears.
-	nodeReadinessTimeout = 1 * time.Minute
+	// to reach condition Ready=True and for at least one node to become
+	// schedulable (no NoSchedule or NoExecute taints, and not cordoned). After
+	// Kind/K3d cluster creation, control-plane nodes may briefly carry a
+	// NoSchedule taint, causing FailedScheduling for workload pods if they are
+	// deployed before the taint clears. Two minutes accommodates CI runners
+	// with variable scheduling latency.
+	nodeReadinessTimeout = 2 * time.Minute
 
 	// inClusterConnectivityTimeout is the maximum time to wait for a test pod
 	// to successfully reach the API server ClusterIP from within the cluster.
@@ -572,8 +575,9 @@ func buildGitOpsTasks(
 // GitOps operators from entering CrashLoopBackOff due to transient API server
 // connectivity issues after infrastructure components register webhooks).
 //
-// When cniInstalled is true, the WaitForAllNodesReady check is skipped because
-// waitForCNIReadiness already verified node readiness moments ago.
+// When cniInstalled is true, the WaitForAllNodesReadyAndSchedulable check is
+// skipped because waitForCNIReadiness already verified node readiness and
+// schedulability moments ago.
 func waitForClusterStability(
 	ctx context.Context,
 	clusterCfg *v1alpha1.Cluster,
@@ -603,20 +607,21 @@ func waitForClusterStability(
 		return fmt.Errorf("wait for API server stability: %w", err)
 	}
 
-	// Wait for all nodes to reach Ready state. After Kind/K3d cluster creation
-	// or infrastructure installations, control-plane nodes may briefly carry a
-	// NotReady taint that prevents workload scheduling. Without this check,
-	// pods deployed immediately after stability checks pass can hit
-	// FailedScheduling errors.
+	// Wait for all nodes to reach Ready state and for at least one node to
+	// be schedulable. After Kind/K3d cluster creation or infrastructure
+	// installations, control-plane nodes may briefly carry a NoSchedule taint
+	// that prevents workload scheduling. Without this check, pods deployed
+	// immediately after stability checks pass can hit FailedScheduling errors.
 	//
 	// Skipped when CNI was just installed: waitForCNIReadiness already verified
-	// node readiness, so re-checking immediately would be redundant.
+	// both node readiness and schedulability, so re-checking immediately would
+	// be redundant.
 	// Skipped for KWOK: KWOK has no real kubelet nodes (they are simulated on
-	// demand), so WaitForAllNodesReady would always time-out on a fresh cluster.
+	// demand), so WaitForAllNodesReadyAndSchedulable would always time-out on a fresh cluster.
 	if !cniInstalled && clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionKWOK {
-		err = readiness.WaitForAllNodesReady(ctx, clientset, nodeReadinessTimeout)
+		err = readiness.WaitForAllNodesReadyAndSchedulable(ctx, clientset, nodeReadinessTimeout)
 		if err != nil {
-			return fmt.Errorf("wait for all nodes to be ready: %w", err)
+			return fmt.Errorf("wait for all nodes to be ready and schedulable: %w", err)
 		}
 	}
 
