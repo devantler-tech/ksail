@@ -23,16 +23,14 @@ func TestInstallCNI_KWOKSkipsCNI(t *testing.T) {
 	}
 
 	for _, testCase := range tests {
-		tc := testCase
-
-		t.Run(tc.name, func(t *testing.T) {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			clusterCfg := &v1alpha1.Cluster{
 				Spec: v1alpha1.Spec{
 					Cluster: v1alpha1.ClusterSpec{
 						Distribution: v1alpha1.DistributionKWOK,
-						CNI:          tc.cni,
+						CNI:          testCase.cni,
 					},
 				},
 			}
