@@ -61,3 +61,9 @@ Follow the conventions established in the existing benchmark files:
 **Benchmark times are inconsistent:** CI runners share hardware, so some variance is expected. The 200% fail threshold is intentionally generous to avoid false positives from runner noise.
 
 **Benchmark jobs skipped:** The workflow runs on all PRs, but benchmark jobs are skipped when no Go source files (`**/*.go`, `go.mod`, `go.sum`) changed. In the merge queue, benchmark jobs are always skipped.
+
+## Pipeline Implementation Notes
+
+The CI runs benchmarks with `-count=5` for statistical stability. The awk filter in the "Prepare benchmark regression gate input" step deduplicates the output by keeping only the last occurrence of each benchmark name. This is necessary because `github-action-benchmark` compares each output line individually against the stored single-run baseline — without deduplication, `-count=N` would create N comparison pairs per benchmark, amplifying the chance of false-positive regression alerts.
+
+When changing `-count` in the `go test -bench` command, always verify that the awk deduplication step in CI handles the resulting multi-line output correctly.
