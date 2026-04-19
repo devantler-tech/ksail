@@ -1,6 +1,7 @@
 package workload
 
 import (
+	"context"
 	"time"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
@@ -223,4 +224,31 @@ func ExportOutputPlain(cmd *cobra.Command, images []string) error {
 // ExportOutputJSON exposes outputJSON for testing.
 func ExportOutputJSON(cmd *cobra.Command, images []string) error {
 	return outputJSON(cmd, images, nil)
+}
+
+// ExportFailedKustomizations is an exported type alias for the unexported
+// failedKustomizations struct. It lets test code hold and manipulate the
+// shared failure tracker without accessing unexported fields directly.
+type ExportFailedKustomizations = failedKustomizations
+
+// ExportRecordKustomizationFailure records a permanent failure for name in the tracker.
+func ExportRecordKustomizationFailure(f *ExportFailedKustomizations, name string, err error) {
+	f.record(name, err)
+}
+
+// ExportCheckKustomizationDependencies returns an error if any listed
+// dependency has permanently failed in the tracker.
+func ExportCheckKustomizationDependencies(f *ExportFailedKustomizations, dependsOn []string) error {
+	return f.checkDependencies(dependsOn)
+}
+
+// ExportPollUntilKustomizationReady exposes pollUntilKustomizationReady for testing.
+func ExportPollUntilKustomizationReady(
+	ctx context.Context,
+	fluxReconciler *flux.Reconciler,
+	name string,
+	dependsOn []string,
+	failed *ExportFailedKustomizations,
+) error {
+	return pollUntilKustomizationReady(ctx, fluxReconciler, name, dependsOn, failed)
 }

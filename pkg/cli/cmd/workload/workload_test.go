@@ -2944,3 +2944,119 @@ func TestOutputJSON(t *testing.T) {
 	assert.Contains(t, output, "redis:7")
 	assert.Contains(t, output, "[")
 }
+
+// =============================================================================
+// failedKustomizations — cascade fail-fast tracker
+// =============================================================================
+
+func TestFailedKustomizationsCheckDependenciesNoneRecorded(t *testing.T) {
+	t.Parallel()
+
+	var tracker workload.ExportFailedKustomizations
+
+	err := workload.ExportCheckKustomizationDependencies(&tracker, []string{"infra", "config"})
+
+	require.NoError(t, err)
+}
+
+func TestFailedKustomizationsCheckDependenciesDirectFailure(t *testing.T) {
+	t.Parallel()
+
+	var tracker workload.ExportFailedKustomizations
+
+	upstream := errors.New("upstream validation error")
+	workload.ExportRecordKustomizationFailure(&tracker, "infra", upstream)
+
+	err := workload.ExportCheckKustomizationDependencies(&tracker, []string{"infra"})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, upstream)
+	assert.Contains(t, err.Error(), "infra")
+}
+
+func TestFailedKustomizationsCheckDependenciesTransitivePropagation(t *testing.T) {
+	t.Parallel()
+
+	// Simulate: flux-system fails → infra detects it and records itself failed
+	// → apps detects infra failed.
+	var tracker workload.ExportFailedKustomizations
+
+	rootErr := errors.New("flux-system: reconciliation failed")
+	workload.ExportRecordKustomizationFailure(&tracker, "flux-system", rootErr)
+
+	// infra depends on flux-system: it detects the failure…
+	infraDepErr := workload.ExportCheckKustomizationDependencies(&tracker, []string{"flux-system"})
+	require.Error(t, infraDepErr)
+
+	// …and records itself as failed (cascade).
+	workload.ExportRecordKustomizationFailure(&tracker, "infra", infraDepErr)
+
+	// apps depends on infra: it should also fail promptly.
+	appDepErr := workload.ExportCheckKustomizationDependencies(&tracker, []string{"infra"})
+
+	require.Error(t, appDepErr)
+	assert.ErrorIs(t, appDepErr, infraDepErr)
+	assert.Contains(t, appDepErr.Error(), "infra")
+}
+
+func TestFailedKustomizationsCheckDependenciesNoDeps(t *testing.T) {
+	t.Parallel()
+
+	var tracker workload.ExportFailedKustomizations
+
+	workload.ExportRecordKustomizationFailure(&tracker, "infra", errors.New("failed"))
+
+	// A kustomization with no dependencies is unaffected by tracked failures.
+	err := workload.ExportCheckKustomizationDependencies(&tracker, nil)
+
+	require.NoError(t, err)
+}
+
+func TestPollUntilKustomizationReadyFailsFastOnDependencyFailure(t *testing.T) {
+	t.Parallel()
+
+	var tracker workload.ExportFailedKustomizations
+
+	depErr := errors.New("infra: reconciliation failed")
+	workload.ExportRecordKustomizationFailure(&tracker, "infra", depErr)
+
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+
+	// Pass a nil reconciler — the dependency check must short-circuit before any
+	// API call is made, so the nil pointer is never dereferenced.
+	err := workload.ExportPollUntilKustomizationReady(
+		ctx,
+		nil, // *flux.Reconciler — must not be called
+		"apps",
+		[]string{"infra"},
+		&tracker,
+	)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "apps")
+	assert.Contains(t, err.Error(), "infra")
+}
+
+func TestPollUntilKustomizationReadyRecordsCascadeFailure(t *testing.T) {
+	t.Parallel()
+
+	var tracker workload.ExportFailedKustomizations
+
+	depErr := errors.New("infra: permanent failure")
+	workload.ExportRecordKustomizationFailure(&tracker, "infra", depErr)
+
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+
+	// "apps" depends on "infra" (already failed).
+	_ = workload.ExportPollUntilKustomizationReady(
+		ctx, nil, "apps", []string{"infra"}, &tracker,
+	)
+
+	// "apps" itself should now be recorded as failed, enabling further cascade.
+	err := workload.ExportCheckKustomizationDependencies(&tracker, []string{"apps"})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "apps")
+}

@@ -2303,9 +2303,9 @@ func reconcileFluxKustomizationsWithProgress(
 // actionable error including the resource name and failure reason, and records
 // the failure in the shared tracker so dependents can fail-fast.
 //
-// When DependencyNotReady is detected and the dependency has permanently failed
-// (tracked via the shared failedKustomizations), the polling stops immediately
-// instead of waiting for the timeout.
+// On each poll iteration, it first checks whether any dependency has already
+// permanently failed (tracked via the shared failedKustomizations). If so, the
+// polling stops immediately instead of waiting for the timeout.
 func pollUntilKustomizationReady(
 	ctx context.Context,
 	fluxReconciler *flux.Reconciler,

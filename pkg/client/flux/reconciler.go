@@ -573,9 +573,9 @@ func evaluateKustomizationConditions(conditions []any) (bool, string, error) {
 	// Permanent failure reasons for Flux Kustomization.
 	// Note: DependencyNotReady is intentionally excluded — it is a transient state
 	// that resolves once upstream kustomizations in the dependency chain become ready.
-	// The polling loop in workload.go handles dependency-cascade failures by checking
-	// a shared failure tracker: when an upstream kustomization fails permanently, all
-	// dependents fail immediately instead of waiting for the timeout.
+	// Dependency-cascade handling is expected to be implemented by the caller:
+	// when an upstream kustomization fails permanently, all downstream dependents
+	// should fail promptly instead of waiting for the timeout.
 	permanentFailureReasons := []string{
 		"ReconciliationFailed",
 		"ValidationFailed",
