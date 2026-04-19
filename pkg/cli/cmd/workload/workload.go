@@ -2205,10 +2205,44 @@ func reconcileFlux(
 	return nil
 }
 
+// failedKustomizations tracks kustomizations that have permanently failed
+// during reconciliation. This enables fail-fast for dependent kustomizations:
+// when an upstream kustomization fails, all dependents fail immediately
+// instead of waiting for the full timeout.
+type failedKustomizations struct {
+	m sync.Map
+}
+
+// record stores a permanent failure for the named kustomization.
+func (f *failedKustomizations) record(name string, err error) {
+	f.m.Store(name, err)
+}
+
+// checkDependencies returns an error if any dependency has permanently failed.
+// Returns nil if all dependencies are still healthy or pending.
+func (f *failedKustomizations) checkDependencies(dependsOn []string) error {
+	for _, dep := range dependsOn {
+		if val, ok := f.m.Load(dep); ok {
+			depErr, _ := val.(error)
+
+			return fmt.Errorf(
+				"dependency %q failed: %w — fix the upstream kustomization first",
+				dep, depErr,
+			)
+		}
+	}
+
+	return nil
+}
+
 // reconcileFluxKustomizationsWithProgress lists all Flux Kustomizations, sorts
 // them in topological (dependency) order, and monitors each individually using
 // a ProgressGroup. Flux's controller handles the actual dependency-driven
 // triggering; we just poll and display status.
+//
+// A shared failure tracker propagates permanent failures to dependents: when an
+// upstream kustomization fails, all downstream dependents fail immediately
+// instead of waiting for the full timeout.
 func reconcileFluxKustomizationsWithProgress(
 	deadlineCtx context.Context,
 	cmd *cobra.Command,
@@ -2226,13 +2260,17 @@ func reconcileFluxKustomizationsWithProgress(
 
 	sorted := topologicalSortKustomizations(kustomizations)
 
+	var failed failedKustomizations
+
 	tasks := make([]notify.ProgressTask, 0, len(sorted))
 	for _, kustomization := range sorted {
 		name := kustomization.Name
+		deps := kustomization.DependsOn
+
 		tasks = append(tasks, notify.ProgressTask{
 			Name: name,
 			Fn: func(ctx context.Context) error {
-				return pollUntilKustomizationReady(ctx, fluxReconciler, name)
+				return pollUntilKustomizationReady(ctx, fluxReconciler, name, deps, &failed)
 			},
 		})
 	}
@@ -2259,13 +2297,18 @@ func reconcileFluxKustomizationsWithProgress(
 
 // pollUntilKustomizationReady polls a named Flux Kustomization until it is
 // ready or the context's deadline expires. On permanent failure, it returns an
-// actionable error including the resource name and failure reason.
-// The caller is expected to provide a context with a deadline (shared across all
-// kustomization tasks) so that the total reconcile time is bounded.
+// actionable error including the resource name and failure reason, and records
+// the failure in the shared tracker so dependents can fail-fast.
+//
+// When DependencyNotReady is detected and the dependency has permanently failed
+// (tracked via the shared failedKustomizations), the polling stops immediately
+// instead of waiting for the timeout.
 func pollUntilKustomizationReady(
 	ctx context.Context,
 	fluxReconciler *flux.Reconciler,
 	name string,
+	dependsOn []string,
+	failed *failedKustomizations,
 ) error {
 	ticker := time.NewTicker(fluxKustomizationPollInterval)
 	defer ticker.Stop()
@@ -2273,6 +2316,14 @@ func pollUntilKustomizationReady(
 	var lastStatus string
 
 	for {
+		// Fail-fast: check if any dependency has permanently failed.
+		if depErr := failed.checkDependencies(dependsOn); depErr != nil {
+			// Record cascaded failure so further dependents also fail-fast.
+			failed.record(name, depErr)
+
+			return fmt.Errorf("kustomization %q: %w", name, depErr)
+		}
+
 		ready, status, err := fluxReconciler.CheckNamedKustomizationReady(ctx, name)
 		if err != nil {
 			if reconcilerclient.IsContextError(err) {
@@ -2282,6 +2333,9 @@ func pollUntilKustomizationReady(
 
 				return kustomizationReadinessTimeoutError(name, lastStatus)
 			}
+
+			// Record permanent failure so dependents can fail-fast.
+			failed.record(name, err)
 
 			return fmt.Errorf("permanent failure: %w", err)
 		}

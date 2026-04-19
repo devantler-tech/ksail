@@ -370,6 +370,42 @@ func TestCheckNamedKustomizationReady(t *testing.T) {
 			wantErrMsg:  "ArtifactFailed",
 		},
 		{
+			name:   "failed kustomization with BuildFailed",
+			ksName: "build-fail",
+			objects: []runtime.Object{
+				newFakeKustomization(
+					"build-fail",
+					"./build-fail",
+					nil,
+					"False",
+					"BuildFailed",
+					"kustomize build failed: invalid overlay",
+				),
+			},
+			wantReady:   false,
+			wantErr:     true,
+			wantErrType: flux.ErrKustomizationFailed,
+			wantErrMsg:  "BuildFailed",
+		},
+		{
+			name:   "failed kustomization with HealthCheckFailed",
+			ksName: "health-fail",
+			objects: []runtime.Object{
+				newFakeKustomization(
+					"health-fail",
+					"./health-fail",
+					nil,
+					"False",
+					"HealthCheckFailed",
+					"health check timed out for deployment/nginx",
+				),
+			},
+			wantReady:   false,
+			wantErr:     true,
+			wantErrType: flux.ErrKustomizationFailed,
+			wantErrMsg:  "HealthCheckFailed",
+		},
+		{
 			name:       "not-found kustomization returns error",
 			ksName:     "nonexistent",
 			objects:    nil,
