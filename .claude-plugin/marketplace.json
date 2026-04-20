@@ -1,0 +1,19 @@
+{
+  "name": "ksail",
+  "owner": {
+    "name": "devantler-tech",
+    "url": "https://github.com/devantler-tech"
+  },
+  "metadata": {
+    "description": "KSail — Kubernetes SDK for local GitOps development. Plugin exposing the ksail MCP server and an expert skill.",
+    "version": "0.0.0"
+  },
+  "plugins": [
+    {
+      "name": "ksail",
+      "description": "KSail MCP server + expertise skill",
+      "version": "0.0.0",
+      "source": "./copilot-plugin"
+    }
+  ]
+}
