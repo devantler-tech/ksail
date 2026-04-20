@@ -57,10 +57,15 @@ func (c *cachedHelmClient) ReleaseExists(ctx context.Context, name, namespace st
 	// Delegate to the wrapped client for invalid inputs so that validation
 	// errors (e.g., ErrReleaseNameRequired for an empty name) are preserved.
 	if name == "" || namespace == "" {
-		return c.Interface.ReleaseExists(ctx, name, namespace)
+		exists, err := c.Interface.ReleaseExists(ctx, name, namespace)
+		if err != nil {
+			return false, fmt.Errorf("release exists check: %w", err)
+		}
+
+		return exists, nil
 	}
 
-	_, ok := c.set[releaseKey{name, namespace}]
+	_, ok := c.set[releaseKey{name: name, namespace: namespace}]
 
 	return ok, nil
 }
@@ -85,7 +90,7 @@ func (d *ComponentDetector) DetectComponents(
 
 	releaseIndex := make(releaseSet, len(releases))
 	for _, r := range releases {
-		releaseIndex[releaseKey{r.Name, r.Namespace}] = struct{}{}
+		releaseIndex[releaseKey{name: r.Name, namespace: r.Namespace}] = struct{}{}
 	}
 
 	cached := &ComponentDetector{

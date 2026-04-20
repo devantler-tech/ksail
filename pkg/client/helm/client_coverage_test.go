@@ -113,6 +113,20 @@ func TestListReleases_CancelledContext(t *testing.T) {
 	assert.Nil(t, releases)
 }
 
+func TestListReleases_TemplateOnlyClient(t *testing.T) {
+	t.Parallel()
+
+	// NewTemplateOnlyClient sets actionConfig.Releases = nil, so ListReleases
+	// must return the unsupported sentinel rather than panicking.
+	client, err := helm.NewTemplateOnlyClient()
+	require.NoError(t, err)
+
+	_, err = client.ListReleases(context.Background())
+
+	require.Error(t, err)
+	require.ErrorIs(t, err, helm.ErrListReleasesUnsupported)
+}
+
 // ---------------------------------------------------------------------------
 // InstallChart / InstallOrUpgradeChart nil spec
 // ---------------------------------------------------------------------------

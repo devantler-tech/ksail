@@ -237,6 +237,10 @@ func (c *Client) ListReleases(ctx context.Context) ([]ReleaseInfo, error) {
 		return nil, fmt.Errorf("list releases context cancelled: %w", err)
 	}
 
+	if c.actionConfig == nil || c.actionConfig.Releases == nil {
+		return nil, errListReleasesUnsupported
+	}
+
 	listClient := helmv4action.NewList(c.actionConfig)
 	listClient.AllNamespaces = true
 	listClient.All = true
