@@ -569,22 +569,12 @@ func TestDetectComponents_Success(t *testing.T) {
 	helmClient := helm.NewMockInterface(t)
 	k8sClientset := fake.NewClientset()
 
-	helmClient.On("ReleaseExists", ctx, detector.ReleaseCilium, detector.NamespaceCilium).
-		Return(true, nil)
-	helmClient.On("ReleaseExists", ctx, detector.ReleaseMetricsServer, detector.NamespaceMetricsServer).
-		Return(true, nil)
-	helmClient.On("ReleaseExists", ctx, detector.ReleaseCertManager, detector.NamespaceCertManager).
-		Return(false, nil)
-	helmClient.On("ReleaseExists", ctx, detector.ReleaseKyverno, detector.NamespaceKyverno).
-		Return(false, nil)
-	helmClient.On("ReleaseExists", ctx, detector.ReleaseGatekeeper, detector.NamespaceGatekeeper).
-		Return(false, nil)
-	helmClient.On("ReleaseExists", ctx, detector.ReleaseFluxOperator, detector.NamespaceFluxOperator).
-		Return(false, nil)
-	helmClient.On("ReleaseExists", ctx, detector.ReleaseArgoCD, detector.NamespaceArgoCD).
-		Return(false, nil)
-	helmClient.On("ReleaseExists", ctx, detector.ReleaseMetalLB, detector.NamespaceMetalLB).
-		Return(false, nil)
+	// DetectComponents calls ListReleases once to build an in-memory release set.
+	// The test returns Cilium and metrics-server as installed releases.
+	helmClient.On("ListReleases", ctx).Return([]helm.ReleaseInfo{
+		{Name: detector.ReleaseCilium, Namespace: detector.NamespaceCilium},
+		{Name: detector.ReleaseMetricsServer, Namespace: detector.NamespaceMetricsServer},
+	}, nil)
 
 	d := detector.NewComponentDetector(helmClient, k8sClientset, nil)
 	spec, err := d.DetectComponents(ctx, v1alpha1.DistributionTalos, v1alpha1.ProviderDocker)
@@ -597,21 +587,20 @@ func TestDetectComponents_Success(t *testing.T) {
 	assert.Equal(t, v1alpha1.MetricsServerEnabled, spec.MetricsServer)
 }
 
-func TestDetectComponents_ErrorOnCNI(t *testing.T) {
+func TestDetectComponents_ListReleasesError(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
 	helmClient := helm.NewMockInterface(t)
 	k8sClientset := fake.NewClientset()
 
-	helmClient.On("ReleaseExists", ctx, detector.ReleaseCilium, detector.NamespaceCilium).
-		Return(false, errHelm)
+	helmClient.On("ListReleases", ctx).Return(nil, errHelm)
 
 	d := detector.NewComponentDetector(helmClient, k8sClientset, nil)
 	_, err := d.DetectComponents(ctx, v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "detect CNI")
+	assert.Contains(t, err.Error(), "list helm releases")
 }
 
 func TestDeploymentExists_Found(t *testing.T) {

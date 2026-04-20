@@ -375,6 +375,66 @@ func (_c *MockInterface_TemplateChart_Call) RunAndReturn(run func(ctx context.Co
 	return _c
 }
 
+// ListReleases provides a mock function for the type MockInterface
+func (_mock *MockInterface) ListReleases(ctx context.Context) ([]ReleaseInfo, error) {
+	ret := _mock.Called(ctx)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ListReleases")
+	}
+
+	var r0 []ReleaseInfo
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context) ([]ReleaseInfo, error)); ok {
+		return returnFunc(ctx)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context) []ReleaseInfo); ok {
+		r0 = returnFunc(ctx)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]ReleaseInfo)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context) error); ok {
+		r1 = returnFunc(ctx)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockInterface_ListReleases_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListReleases'
+type MockInterface_ListReleases_Call struct {
+	*mock.Call
+}
+
+// ListReleases is a helper method to define mock.On call
+//   - ctx context.Context
+func (_e *MockInterface_Expecter) ListReleases(ctx interface{}) *MockInterface_ListReleases_Call {
+	return &MockInterface_ListReleases_Call{Call: _e.mock.On("ListReleases", ctx)}
+}
+
+func (_c *MockInterface_ListReleases_Call) Run(run func(ctx context.Context)) *MockInterface_ListReleases_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		run(arg0)
+	})
+	return _c
+}
+
+func (_c *MockInterface_ListReleases_Call) Return(releases []ReleaseInfo, err error) *MockInterface_ListReleases_Call {
+	_c.Call.Return(releases, err)
+	return _c
+}
+
+func (_c *MockInterface_ListReleases_Call) RunAndReturn(run func(ctx context.Context) ([]ReleaseInfo, error)) *MockInterface_ListReleases_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // UninstallRelease provides a mock function for the type MockInterface
 func (_mock *MockInterface) UninstallRelease(ctx context.Context, releaseName string, namespace string) error {
 	ret := _mock.Called(ctx, releaseName, namespace)

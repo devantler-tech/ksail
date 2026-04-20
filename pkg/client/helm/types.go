@@ -85,4 +85,7 @@ type Interface interface {
 	AddRepository(ctx context.Context, entry *RepositoryEntry, timeout time.Duration) error
 	TemplateChart(ctx context.Context, spec *ChartSpec) (string, error)
 	ReleaseExists(ctx context.Context, releaseName, namespace string) (bool, error)
+	// ListReleases returns all deployed Helm releases across all namespaces.
+	// Use this for bulk release detection to avoid N separate ReleaseExists roundtrips.
+	ListReleases(ctx context.Context) ([]ReleaseInfo, error)
 }

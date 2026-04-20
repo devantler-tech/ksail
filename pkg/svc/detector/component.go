@@ -35,10 +35,63 @@ func NewComponentDetector(
 	}
 }
 
+// releaseSet is an in-memory index of deployed Helm releases keyed by
+// name+namespace for O(1) existence checks after a single ListReleases call.
+type releaseSet map[releaseKey]struct{}
+
+type releaseKey struct {
+	name      string
+	namespace string
+}
+
+// cachedHelmClient wraps a helm.Interface and serves ReleaseExists lookups from
+// a pre-fetched in-memory releaseSet, eliminating per-call API roundtrips while
+// delegating all other operations to the underlying client.
+type cachedHelmClient struct {
+	helm.Interface
+	set releaseSet
+}
+
+func (c *cachedHelmClient) ReleaseExists(_ context.Context, name, namespace string) (bool, error) {
+	_, ok := c.set[releaseKey{name, namespace}]
+	return ok, nil
+}
+
 // DetectComponents probes the running cluster to populate a ClusterSpec that
 // reflects the actual installed components. Distribution and provider are set
 // from the caller's known values; all other fields are detected.
+//
+// A single ListReleases call fetches all Helm releases across namespaces
+// upfront, replacing N sequential ReleaseExists roundtrips with one.
 func (d *ComponentDetector) DetectComponents(
+	ctx context.Context,
+	distribution v1alpha1.Distribution,
+	provider v1alpha1.Provider,
+) (*v1alpha1.ClusterSpec, error) {
+	// Fetch all releases in a single API call, then use an in-memory cache for
+	// the individual detect functions to avoid N separate Helm roundtrips.
+	releases, err := d.helmClient.ListReleases(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list helm releases: %w", err)
+	}
+
+	rs := make(releaseSet, len(releases))
+	for _, r := range releases {
+		rs[releaseKey{r.Name, r.Namespace}] = struct{}{}
+	}
+
+	cached := &ComponentDetector{
+		helmClient:   &cachedHelmClient{Interface: d.helmClient, set: rs},
+		k8sClientset: d.k8sClientset,
+		dockerClient: d.dockerClient,
+	}
+
+	return cached.detectAllComponents(ctx, distribution, provider)
+}
+
+// detectAllComponents runs all individual detection functions using the receiver's
+// helmClient (expected to be a cachedHelmClient when called from DetectComponents).
+func (d *ComponentDetector) detectAllComponents(
 	ctx context.Context,
 	distribution v1alpha1.Distribution,
 	provider v1alpha1.Provider,
