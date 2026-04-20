@@ -40,6 +40,12 @@ const (
 	kwokFluxWarning = "Flux is not configured on KWOK: " +
 		"flux-operator pod is simulated and never registers Flux CRDs — skipping"
 
+	// kwokCNIWarning is emitted when a non-default CNI is configured but cannot
+	// be installed on KWOK. KWOK simulates pods with no real network dataplane so
+	// CNI Helm charts would be deployed but never function.
+	kwokCNIWarning = "CNI %q is not installed on KWOK: " +
+		"simulated pods have no real network dataplane — skipping"
+
 	// apiServerStabilityTimeout is the maximum time to wait for the API server
 	// to stabilize between infrastructure and GitOps installation phases.
 	// Infrastructure components (MetalLB, Kyverno, cert-manager, etc.) register
@@ -318,6 +324,12 @@ func emitKWOKUnsupportedComponentWarnings(cmd *cobra.Command, clusterCfg *v1alph
 
 	if clusterCfg.Spec.Cluster.GitOpsEngine == v1alpha1.GitOpsEngineFlux {
 		notify.Warningf(cmd.OutOrStdout(), kwokFluxWarning)
+	}
+
+	if clusterCfg.Spec.Cluster.CNI != v1alpha1.CNIDefault && clusterCfg.Spec.Cluster.CNI != "" {
+		notify.Warningf(cmd.OutOrStdout(), kwokCNIWarning,
+			clusterCfg.Spec.Cluster.CNI,
+		)
 	}
 }
 

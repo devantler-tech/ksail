@@ -45,6 +45,13 @@ func InstallCNI(
 	clusterCfg *v1alpha1.Cluster,
 	tmr timer.Timer,
 ) (bool, error) {
+	// KWOK simulates pods with no real network dataplane. CNI plugins are
+	// never functional on KWOK and their Helm releases would skew the
+	// component detector, so skip installation entirely.
+	if clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionKWOK {
+		return false, nil
+	}
+
 	switch clusterCfg.Spec.Cluster.CNI {
 	case v1alpha1.CNICilium:
 		err := installCNIOnly(cmd, clusterCfg, tmr, installCiliumCNI)
