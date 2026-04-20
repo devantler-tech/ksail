@@ -1548,6 +1548,7 @@ jobs:
         generate-docs,
         auto-commit,
         warm-helm-cache,
+        warm-mirror-cache,
         system-test-docker,
         system-test-hetzner-init,
         system-test-hetzner-noinit,
@@ -1580,6 +1581,7 @@ jobs:
             ${{ needs.generate-docs.result }}
             ${{ needs.auto-commit.result }}
             ${{ needs.warm-helm-cache.result }}
+            ${{ needs.warm-mirror-cache.result }}
             ${{ needs.system-test-docker.result }}
             ${{ needs.system-test-hetzner-init.result }}
             ${{ needs.system-test-hetzner-noinit.result }}
