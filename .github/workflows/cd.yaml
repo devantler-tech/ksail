@@ -182,16 +182,15 @@ jobs:
           VERSION: ${{ steps.get_version.outputs.version }}
         run: |
           set -euo pipefail
-          # shellcheck disable=SC2016 # $v refers to the jq variable, not a shell variable
           bump() {
             local file="$1" filter="$2"
             jq --arg v "$VERSION" "$filter" "$file" > "$file.tmp"
             mv "$file.tmp" "$file"
           }
-          bump copilot-plugin/plugin.json '.version = $v'
-          bump copilot-plugin/.claude-plugin/plugin.json '.version = $v'
-          bump .github/plugin/marketplace.json '.metadata.version = $v | .plugins[0].version = $v'
-          bump .claude-plugin/marketplace.json '.metadata.version = $v | .plugins[0].version = $v'
+          bump copilot-plugin/plugin.json ".version = \$v"
+          bump copilot-plugin/.claude-plugin/plugin.json ".version = \$v"
+          bump .github/plugin/marketplace.json ".metadata.version = \$v | .plugins[0].version = \$v"
+          bump .claude-plugin/marketplace.json ".metadata.version = \$v | .plugins[0].version = \$v"
 
       - name: 📤 Commit + push version bump
         env:

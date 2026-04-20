@@ -41,7 +41,7 @@ copilot plugin install ksail
 
 **Claude Code:**
 
-```
+```text
 /plugin marketplace add devantler-tech/ksail
 /plugin install ksail@ksail
 ```
