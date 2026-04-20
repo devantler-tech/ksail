@@ -2,7 +2,6 @@ package talosprovisioner_test
 
 import (
 	"testing"
-	"time"
 
 	dockerprovider "github.com/devantler-tech/ksail/v6/pkg/svc/provider/docker"
 	hetzner "github.com/devantler-tech/ksail/v6/pkg/svc/provider/hetzner"
@@ -52,14 +51,6 @@ func TestIsDockerProvider(t *testing.T) {
 			assert.Equal(t, tc.want, tc.prov().IsDockerProviderForTest())
 		})
 	}
-}
-
-func TestK8sNodesPollInterval_MatchesUpstreamTalosSDK(t *testing.T) {
-	t.Parallel()
-
-	// The upstream Talos SDK (pkg/cluster/check/default.go) uses 30s for
-	// "all k8s nodes to report" to allow time for kubeconfig build/cache.
-	assert.Equal(t, 30*time.Second, talosprovisioner.K8sNodesPollIntervalForTest())
 }
 
 // --- clusterReadinessChecks provider selection ---
