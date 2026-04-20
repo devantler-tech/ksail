@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/netip"
-	"time"
 
 	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v6/pkg/k8s"
@@ -250,9 +249,4 @@ func (p *Provisioner) IsDockerProviderForTest() bool {
 // ClusterReadinessChecksCountForTest returns the number of checks from clusterReadinessChecks for unit testing.
 func (p *Provisioner) ClusterReadinessChecksCountForTest() int {
 	return len(p.clusterReadinessChecks())
-}
-
-// K8sNodesPollIntervalForTest exposes k8sNodesPollInterval for unit testing.
-func K8sNodesPollIntervalForTest() time.Duration {
-	return k8sNodesPollInterval
 }
