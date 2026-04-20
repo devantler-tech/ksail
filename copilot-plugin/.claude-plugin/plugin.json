@@ -1,0 +1,27 @@
+{
+  "name": "ksail",
+  "version": "0.0.0",
+  "description": "KSail MCP server + expertise skill — spin up and manage local Kubernetes clusters (Kind/K3d/Talos/vCluster) and GitOps workloads declaratively.",
+  "author": {
+    "name": "devantler-tech",
+    "url": "https://github.com/devantler-tech"
+  },
+  "license": "Apache-2.0",
+  "homepage": "https://ksail.devantler.tech",
+  "repository": "https://github.com/devantler-tech/ksail",
+  "keywords": [
+    "kubernetes",
+    "k8s",
+    "gitops",
+    "ksail",
+    "kind",
+    "k3d",
+    "talos",
+    "vcluster",
+    "flux",
+    "argocd",
+    "mcp"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json"
+}

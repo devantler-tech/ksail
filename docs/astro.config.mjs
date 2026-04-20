@@ -121,7 +121,7 @@ export default defineConfig({
           items: [
             { label: "AI Chat Assistant", link: "/ai-chat/" },
             { label: "MCP Server", link: "/mcp/" },
-            { label: "Copilot CLI Plugin", link: "/copilot-cli-plugin/" },
+            { label: "AI Assistant Plugins", link: "/ai-plugins/" },
             { label: "Using KSail with AI Assistants", link: "/guides/ai-mcp/" },
           ],
         },

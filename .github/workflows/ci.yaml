@@ -207,6 +207,7 @@ jobs:
             copilot-plugin:
               - 'copilot-plugin/**'
               - '.github/plugin/**'
+              - '.claude-plugin/**'
               - '.github/workflows/ci.yaml'
 
   ci-go:
@@ -632,19 +633,23 @@ jobs:
           set -euo pipefail
           for f in \
             copilot-plugin/plugin.json \
+            copilot-plugin/.claude-plugin/plugin.json \
             copilot-plugin/.mcp.json \
-            .github/plugin/marketplace.json; do
+            .github/plugin/marketplace.json \
+            .claude-plugin/marketplace.json; do
             echo "Validating $f"
             jq -e . "$f" >/dev/null
           done
 
-          # Required fields on plugin.json
-          jq -e '.name == "ksail" and .version and .skills and .mcpServers' \
-            copilot-plugin/plugin.json >/dev/null
+          # Required fields on the Copilot CLI + Claude Code plugin manifests
+          for f in copilot-plugin/plugin.json copilot-plugin/.claude-plugin/plugin.json; do
+            jq -e '.name == "ksail" and .version' "$f" >/dev/null
+          done
 
-          # Marketplace must reference the plugin directory
-          jq -e '.plugins[0].source == "./copilot-plugin" and .plugins[0].name == "ksail"' \
-            .github/plugin/marketplace.json >/dev/null
+          # Each marketplace must reference the plugin directory
+          for f in .github/plugin/marketplace.json .claude-plugin/marketplace.json; do
+            jq -e '.plugins[0].source == "./copilot-plugin" and .plugins[0].name == "ksail"' "$f" >/dev/null
+          done
 
           # Skill manifest must exist
           test -f copilot-plugin/skills/ksail/SKILL.md

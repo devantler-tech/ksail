@@ -181,14 +181,15 @@ jobs:
           VERSION: ${{ steps.get_version.outputs.version }}
         run: |
           set -euo pipefail
-          jq --arg v "$VERSION" '.version = $v' \
-            copilot-plugin/plugin.json > copilot-plugin/plugin.json.tmp
-          mv copilot-plugin/plugin.json.tmp copilot-plugin/plugin.json
-
-          jq --arg v "$VERSION" \
-            '.metadata.version = $v | .plugins[0].version = $v' \
-            .github/plugin/marketplace.json > .github/plugin/marketplace.json.tmp
-          mv .github/plugin/marketplace.json.tmp .github/plugin/marketplace.json
+          bump() {
+            local file="$1" filter="$2"
+            jq --arg v "$VERSION" "$filter" "$file" > "$file.tmp"
+            mv "$file.tmp" "$file"
+          }
+          bump copilot-plugin/plugin.json '.version = $v'
+          bump copilot-plugin/.claude-plugin/plugin.json '.version = $v'
+          bump .github/plugin/marketplace.json '.metadata.version = $v | .plugins[0].version = $v'
+          bump .claude-plugin/marketplace.json '.metadata.version = $v | .plugins[0].version = $v'
 
       - name: 📤 Commit + push version bump
         env:
@@ -202,7 +203,8 @@ jobs:
           fi
           git config user.name "devantler-tech-bot[bot]"
           git config user.email "devantler-tech-bot[bot]@users.noreply.github.com"
-          git add copilot-plugin/plugin.json .github/plugin/marketplace.json
+          git add copilot-plugin/plugin.json copilot-plugin/.claude-plugin/plugin.json \
+            .github/plugin/marketplace.json .claude-plugin/marketplace.json
           git commit -m "chore(copilot-plugin): release v${VERSION}"
 
           # Retry to tolerate concurrent tag releases or main advancing mid-run.
