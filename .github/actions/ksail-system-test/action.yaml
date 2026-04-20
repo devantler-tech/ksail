@@ -438,6 +438,44 @@ runs:
         fi
         } 2>&1 | tee /tmp/ksail-system-test-logs/cluster-switch.log
 
+    # ── Diagnostic artifact upload (on failure) ─────────────────────
+    # Captures cluster state before cleanup so failures are diagnosable
+    # even when HardenRunner telemetry fills the job log tail.
+
+    - name: 📋 Save system test diagnostics
+      if: failure()
+      shell: bash
+      run: |
+        mkdir -p /tmp/system-test-diagnostics
+        {
+          echo "=== System Test Failure Diagnostics ==="
+          echo "Timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          echo ""
+          echo "=== Docker Containers ==="
+          docker ps -a 2>&1 || true
+          echo ""
+          echo "=== Cluster Info ==="
+          ksail cluster info 2>&1 || true
+          echo ""
+          echo "=== Pod Status (all namespaces) ==="
+          ksail workload get pods -A 2>&1 || true
+          echo ""
+          echo "=== Recent Events ==="
+          ksail workload get events -A --sort-by=.lastTimestamp 2>&1 || true
+          echo ""
+          echo "=== Node Status ==="
+          ksail workload get nodes -o wide 2>&1 || true
+        } > /tmp/system-test-diagnostics/diagnostics.log 2>&1
+
+    - name: 📤 Upload system test diagnostics
+      if: failure()
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+      with:
+        name: system-test-diagnostics-${{ steps.generate-tag.outputs.tag }}
+        path: /tmp/system-test-diagnostics/
+        retention-days: 7
+        if-no-files-found: ignore
+
     # ── Phase 7 — Cleanup ────────────────────────────────────────────
 
     - name: 🧪 ksail cluster delete
