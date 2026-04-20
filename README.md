@@ -30,23 +30,7 @@ See the [Installation Guide](https://ksail.devantler.tech/installation/) for bin
 
 ## AI Assistant Plugins
 
-Install the ksail plugin for [GitHub Copilot CLI](https://docs.github.com/en/copilot/how-tos/copilot-cli) or [Claude Code](https://docs.claude.com/en/docs/claude-code/plugins) to auto-register ksail's MCP server and a ksail expertise skill.
-
-**Copilot CLI:**
-
-```bash
-copilot plugin marketplace add devantler-tech/ksail
-copilot plugin install ksail
-```
-
-**Claude Code:**
-
-```text
-/plugin marketplace add devantler-tech/ksail
-/plugin install ksail@ksail
-```
-
-Requires `ksail` on `PATH`.
+Install the ksail plugin for [GitHub Copilot CLI](https://docs.github.com/en/copilot/how-tos/copilot-cli) or [Claude Code](https://docs.claude.com/en/docs/claude-code/plugins) to auto-register ksail's MCP server and a ksail expertise skill. See the [AI Plugins guide](https://ksail.devantler.tech/ai-plugins/) for install commands.
 
 ## Quick Start
 
@@ -100,20 +84,4 @@ See the [feature overview](https://ksail.devantler.tech/features/) and [architec
 
 Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for the development process, coding standards, and PR guidelines. Start with issues labeled [`good first issue`](https://github.com/devantler-tech/ksail/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22).
 
-## Related Projects
 
-| Project                                                               | Description         | Type     |
-|-----------------------------------------------------------------------|---------------------|----------|
-| [devantler-tech/platform](https://github.com/devantler-tech/platform) | My personal homelab | Platform |
-
-Using KSail in your project? Open a PR to add it here.
-
-## Star History
-
-<a href="https://www.star-history.com/#devantler-tech/ksail&type=timeline&legend=top-left">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=devantler-tech/ksail&type=timeline&theme=dark&legend=top-left" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=devantler-tech/ksail&type=timeline&legend=top-left" />
-   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=devantler-tech/ksail&type=timeline&legend=top-left" />
- </picture>
-</a>
