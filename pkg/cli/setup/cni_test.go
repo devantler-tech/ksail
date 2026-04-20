@@ -40,6 +40,7 @@ func TestInstallCNI_KWOKSkipsCNIInstallation(t *testing.T) {
 			t.Parallel()
 
 			var buf bytes.Buffer
+
 			cmd := &cobra.Command{}
 			cmd.SetOut(&buf)
 
