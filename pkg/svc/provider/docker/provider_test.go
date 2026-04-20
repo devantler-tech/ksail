@@ -597,6 +597,8 @@ func TestProvider_ListNodes_KWOK(t *testing.T) {
 	}
 
 	for _, testCase := range tests {
+		testCase := testCase // rebind for parallel subtest closure
+
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
