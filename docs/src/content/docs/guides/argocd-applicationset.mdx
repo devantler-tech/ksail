@@ -280,26 +280,9 @@ ksail cipher encrypt k8s/apps/backend/secret.yaml
 
 When the ApplicationSet syncs the `backend` Application, the CMP sidecar detects the `sops:` metadata block and decrypts the file before applying it to the cluster.
 
-### How the CMP Works
-
-The CMP sidecar (`kustomize-sops`) runs alongside the ArgoCD repo-server:
-
-1. **Discover** — scans for files containing a `sops:` metadata block
-2. **Decrypt** — runs `sops --decrypt --in-place` on each encrypted file using the Age key from the `sops-age` Secret
-3. **Render** — if a `kustomization.yaml` is present, runs `kustomize build`; otherwise concatenates all YAML files
-
-> [!NOTE]
-> The SOPS binary is copied from the official `ghcr.io/getsops/sops` image via an init container — no runtime network downloads required.
-
 See [Secret Management](/features/secret-management/) for the full SOPS configuration reference and [Declarative Configuration](/configuration/declarative-configuration/#sops-sops) for `spec.cluster.sops` options.
 
 ## Tips
-
-- **Inspect the bootstrap Application** to get the correct `repoURL` and `targetRevision` values for your ApplicationSet templates:
-
-  ```bash
-  ksail workload get application ksail -n argocd -o yaml
-  ```
 
 - **Use `ksail workload push` and `ksail workload reconcile`** to deploy ApplicationSet manifests — they flow through the same OCI push pipeline as regular manifests.
 
