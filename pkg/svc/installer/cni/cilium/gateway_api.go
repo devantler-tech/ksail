@@ -118,7 +118,21 @@ func fetchGatewayAPICRDsWithRetry(
 	maxRetries int,
 	baseWait, maxWait time.Duration,
 ) ([]apiextensionsv1.CustomResourceDefinition, error) {
-	httpClient := &http.Client{Timeout: timeout}
+	// Clone the default transport to get an isolated connection pool.
+	// This prevents CloseIdleConnections() calls on http.DefaultTransport
+	// (e.g. from parallel tests or other goroutines) from breaking our
+	// retry loop with "http: CloseIdleConnections called".
+	// If http.DefaultTransport has been replaced with a custom RoundTripper,
+	// fall back to it directly so that application-level overrides are respected.
+	transport := http.DefaultTransport
+	if t, ok := http.DefaultTransport.(*http.Transport); ok {
+		transport = t.Clone()
+	}
+
+	httpClient := &http.Client{
+		Timeout:   timeout,
+		Transport: transport,
+	}
 
 	retries := max(maxRetries, 1)
 
