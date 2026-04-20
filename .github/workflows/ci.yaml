@@ -1569,11 +1569,10 @@ jobs:
         with:
           egress-policy: audit
 
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - uses: devantler-tech/actions/require-checks-in-pr@61ae89ec83b943bd3a486fdcaf91cb66fd6b8760 # feat/require-checks-in-pr
         with:
-          persist-credentials: false
-      - uses: ./.github/actions/summarize-workflow
-        with:
+          check-name: CI - KSail
           job-results: >-
             ${{ needs.rate-limit-gate.result }}
             ${{ needs.changes.result }}
