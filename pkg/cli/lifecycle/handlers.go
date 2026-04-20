@@ -6,14 +6,14 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v6/pkg/cli/flags"
-	"github.com/devantler-tech/ksail/v6/pkg/di"
-	configmanager "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager"
-	ksailconfigmanager "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager/ksail"
-	"github.com/devantler-tech/ksail/v6/pkg/notify"
-	clusterprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster"
-	"github.com/devantler-tech/ksail/v6/pkg/timer"
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/flags"
+	"github.com/devantler-tech/ksail/v7/pkg/di"
+	configmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager"
+	ksailconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/ksail"
+	"github.com/devantler-tech/ksail/v7/pkg/notify"
+	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
+	"github.com/devantler-tech/ksail/v7/pkg/timer"
 	"github.com/spf13/cobra"
 )
 

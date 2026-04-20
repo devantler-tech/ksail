@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
-	fluxclient "github.com/devantler-tech/ksail/v6/pkg/client/flux"
-	"github.com/devantler-tech/ksail/v6/pkg/svc/installer/internal/sopsutil"
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	fluxclient "github.com/devantler-tech/ksail/v7/pkg/client/flux"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/installer/internal/sopsutil"
 	"k8s.io/client-go/rest"
 )
 

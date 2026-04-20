@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	configmanager "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager"
-	"github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager/k3d"
+	configmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager"
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/k3d"
 	v1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

@@ -27,7 +27,7 @@ For a deeper dive into KSail's design and internals, refer to:
 
 ### Code Documentation
 
-For detailed package and API documentation, refer to the Go documentation at [pkg.go.dev/github.com/devantler-tech/ksail/v6](https://pkg.go.dev/github.com/devantler-tech/ksail/v6). This provides comprehensive documentation for all exported packages, types, functions, and methods.
+For detailed package and API documentation, refer to the Go documentation at [pkg.go.dev/github.com/devantler-tech/ksail/v7](https://pkg.go.dev/github.com/devantler-tech/ksail/v7). This provides comprehensive documentation for all exported packages, types, functions, and methods.
 
 ### Prerequisites
 
@@ -72,7 +72,7 @@ go build ./...
 go build -ldflags="-s -w" -o ksail-optimized
 ```
 
-> **Note:** Release builds use `-ldflags="-s -w -X github.com/devantler-tech/ksail/v6/internal/buildmeta.Version=... -X .../buildmeta.Commit=... -X .../buildmeta.Date=..."`, where `-s -w` strips debug symbols and the `-X` flags inject version metadata. The `-s -w` options can significantly reduce binary size (in some cases by ~25–35%; see [#2095](https://github.com/devantler-tech/ksail/pull/2095) for an example benchmark where Darwin/AMD64 binaries went from 302MB → 217MB, ~28%), while the metadata flags themselves may slightly increase size compared to a build that only uses `-s -w`. Actual size varies by OS/arch, Go version, and dependencies. Development builds include debug symbols for a better debugging experience.
+> **Note:** Release builds use `-ldflags="-s -w -X github.com/devantler-tech/ksail/v7/internal/buildmeta.Version=... -X .../buildmeta.Commit=... -X .../buildmeta.Date=..."`, where `-s -w` strips debug symbols and the `-X` flags inject version metadata. The `-s -w` options can significantly reduce binary size (in some cases by ~25–35%; see [#2095](https://github.com/devantler-tech/ksail/pull/2095) for an example benchmark where Darwin/AMD64 binaries went from 302MB → 217MB, ~28%), while the metadata flags themselves may slightly increase size compared to a build that only uses `-s -w`. Actual size varies by OS/arch, Go version, and dependencies. Development builds include debug symbols for a better debugging experience.
 
 ### Test
 
@@ -223,7 +223,7 @@ KSail separates infrastructure management from distribution configuration:
 
 This project strives to be fully open-source friendly. All core functionality is implemented in the `pkg/` directory so external projects can import and use any package under `pkg/`. The `internal/` directory is intentionally minimal — it holds only `internal/buildmeta`, which carries build-time version metadata injected via ldflags (not useful to external consumers).
 
-For detailed package and API documentation, refer to [pkg.go.dev/github.com/devantler-tech/ksail/v6](https://pkg.go.dev/github.com/devantler-tech/ksail/v6).
+For detailed package and API documentation, refer to [pkg.go.dev/github.com/devantler-tech/ksail/v7](https://pkg.go.dev/github.com/devantler-tech/ksail/v7).
 
 ## CI
 

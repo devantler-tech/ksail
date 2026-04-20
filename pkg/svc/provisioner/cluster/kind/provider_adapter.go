@@ -3,7 +3,7 @@ package kindprovisioner
 import (
 	"fmt"
 
-	"github.com/devantler-tech/ksail/v6/pkg/client/docker"
+	"github.com/devantler-tech/ksail/v7/pkg/client/docker"
 	"github.com/docker/docker/client"
 	"sigs.k8s.io/kind/pkg/cluster"
 )

@@ -3,7 +3,7 @@ package diff
 import (
 	"strings"
 
-	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/clusterupdate"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 )
 
 // clusterFieldPrefix is the prefix used by Engine for ClusterSpec-level fields.

@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	vclusterconfigmanager "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager/vcluster"
+	vclusterconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/vcluster"
 )
 
 // VClusterConfigFile is the default vCluster configuration filename.

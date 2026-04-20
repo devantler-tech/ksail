@@ -44,7 +44,7 @@ The update method depends on how you installed it:
 
 ```bash
 brew upgrade devantler-tech/tap/ksail                  # Homebrew
-go install github.com/devantler-tech/ksail/v6@latest   # Go install
+go install github.com/devantler-tech/ksail/v7@latest   # Go install
 # Binary: https://github.com/devantler-tech/ksail/releases
 ```
 

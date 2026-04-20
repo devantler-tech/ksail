@@ -9,11 +9,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v6/pkg/client/kubectl"
-	"github.com/devantler-tech/ksail/v6/pkg/k8s"
-	"github.com/devantler-tech/ksail/v6/pkg/k8s/readiness"
-	"github.com/devantler-tech/ksail/v6/pkg/svc/image"
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v7/pkg/client/kubectl"
+	"github.com/devantler-tech/ksail/v7/pkg/k8s"
+	"github.com/devantler-tech/ksail/v7/pkg/k8s/readiness"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/image"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/cli-runtime/pkg/genericiooptions"
 )

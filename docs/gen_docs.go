@@ -25,8 +25,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v6/pkg/cli/cmd"
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd"
 	"github.com/spf13/cobra"
 )
 

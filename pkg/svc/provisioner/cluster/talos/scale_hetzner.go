@@ -6,8 +6,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/devantler-tech/ksail/v6/pkg/svc/provider/hetzner"
-	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/clusterupdate"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/hetzner"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"golang.org/x/sync/errgroup"
 )

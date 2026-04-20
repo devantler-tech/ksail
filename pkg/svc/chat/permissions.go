@@ -7,8 +7,8 @@ import (
 	"os"
 	"strings"
 
-	chatui "github.com/devantler-tech/ksail/v6/pkg/cli/ui/chat"
-	"github.com/devantler-tech/ksail/v6/pkg/notify"
+	chatui "github.com/devantler-tech/ksail/v7/pkg/cli/ui/chat"
+	"github.com/devantler-tech/ksail/v7/pkg/notify"
 	copilot "github.com/github/copilot-sdk/go"
 )
 

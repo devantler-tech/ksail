@@ -5,9 +5,9 @@ import (
 	"errors"
 	"testing"
 
-	dockerclient "github.com/devantler-tech/ksail/v6/pkg/client/docker"
-	"github.com/devantler-tech/ksail/v6/pkg/svc/provider"
-	"github.com/devantler-tech/ksail/v6/pkg/svc/provider/docker"
+	dockerclient "github.com/devantler-tech/ksail/v7/pkg/client/docker"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/docker"
 	"github.com/docker/docker/api/types/container"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"

@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/devantler-tech/ksail/v6/pkg/client/helm"
-	hcloudccminstaller "github.com/devantler-tech/ksail/v6/pkg/svc/installer/hcloudccm"
+	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
+	hcloudccminstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/hcloudccm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

@@ -6,7 +6,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/devantler-tech/ksail/v6/pkg/cli/ui/chat"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/ui/chat"
 )
 
 // TestAddToPromptHistory_UniqueEntries tests that only unique prompts are added.

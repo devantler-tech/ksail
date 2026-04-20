@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
-	configmanagerinterface "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager"
-	configmanager "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager/ksail"
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	configmanagerinterface "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager"
+	configmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/ksail"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"

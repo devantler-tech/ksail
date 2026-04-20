@@ -3,8 +3,8 @@ package di
 import (
 	"fmt"
 
-	clusterprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster"
-	"github.com/devantler-tech/ksail/v6/pkg/timer"
+	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
+	"github.com/devantler-tech/ksail/v7/pkg/timer"
 	"github.com/samber/do/v2"
 	"github.com/spf13/cobra"
 )

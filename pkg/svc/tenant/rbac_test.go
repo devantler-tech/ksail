@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	snapshottest "github.com/devantler-tech/ksail/v6/internal/testutil/snapshottest"
-	"github.com/devantler-tech/ksail/v6/pkg/svc/tenant"
+	snapshottest "github.com/devantler-tech/ksail/v7/internal/testutil/snapshottest"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/tenant"
 	"github.com/gkampitakis/go-snaps/snaps"
 	"github.com/stretchr/testify/require"
 )

@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/devantler-tech/ksail/v6/pkg/client/netretry"
-	"github.com/devantler-tech/ksail/v6/pkg/envvar"
+	"github.com/devantler-tech/ksail/v7/pkg/client/netretry"
+	"github.com/devantler-tech/ksail/v7/pkg/envvar"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/mount"

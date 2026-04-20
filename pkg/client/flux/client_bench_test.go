@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/devantler-tech/ksail/v6/pkg/client/flux"
+	"github.com/devantler-tech/ksail/v7/pkg/client/flux"
 	helmv2 "github.com/fluxcd/helm-controller/api/v2"
 	kustomizev1 "github.com/fluxcd/kustomize-controller/api/v1"
 	meta "github.com/fluxcd/pkg/apis/meta"

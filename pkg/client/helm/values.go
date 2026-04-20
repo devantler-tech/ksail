@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/devantler-tech/ksail/v6/pkg/fsutil"
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	helmv4strvals "helm.sh/helm/v4/pkg/strvals"
 	"sigs.k8s.io/yaml"
 )

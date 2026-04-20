@@ -7,8 +7,8 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/devantler-tech/ksail/v6/pkg/notify"
-	"github.com/devantler-tech/ksail/v6/pkg/timer"
+	"github.com/devantler-tech/ksail/v7/pkg/notify"
+	"github.com/devantler-tech/ksail/v7/pkg/timer"
 	fcolor "github.com/fatih/color"
 )
 

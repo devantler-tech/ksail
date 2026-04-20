@@ -3,8 +3,8 @@ package flags_test
 import (
 	"testing"
 
-	"github.com/devantler-tech/ksail/v6/pkg/cli/flags"
-	"github.com/devantler-tech/ksail/v6/pkg/timer"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/flags"
+	"github.com/devantler-tech/ksail/v7/pkg/timer"
 	"github.com/gkampitakis/go-snaps/snaps"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"

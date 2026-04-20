@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/devantler-tech/ksail/v6/pkg/k8s/readiness"
+	"github.com/devantler-tech/ksail/v7/pkg/k8s/readiness"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"

@@ -3,7 +3,7 @@ package dockerutil
 import (
 	"fmt"
 
-	"github.com/devantler-tech/ksail/v6/pkg/notify"
+	"github.com/devantler-tech/ksail/v7/pkg/notify"
 	"github.com/docker/docker/client"
 	"github.com/spf13/cobra"
 )

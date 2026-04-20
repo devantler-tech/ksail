@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 	"sort"
 
-	"github.com/devantler-tech/ksail/v6/pkg/fsutil"
-	kustomizationgenerator "github.com/devantler-tech/ksail/v6/pkg/fsutil/generator/kustomization"
-	yamlgenerator "github.com/devantler-tech/ksail/v6/pkg/fsutil/generator/yaml"
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
+	kustomizationgenerator "github.com/devantler-tech/ksail/v7/pkg/fsutil/generator/kustomization"
+	yamlgenerator "github.com/devantler-tech/ksail/v7/pkg/fsutil/generator/yaml"
 	ktypes "sigs.k8s.io/kustomize/api/types"
 )
 

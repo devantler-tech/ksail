@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/devantler-tech/ksail/v6/pkg/svc/provider/hetzner"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/hetzner"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

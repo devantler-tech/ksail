@@ -3,10 +3,10 @@ package ksail_test
 import (
 	"testing"
 
-	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
-	talosconfigmanager "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager/talos"
-	ksailvalidator "github.com/devantler-tech/ksail/v6/pkg/fsutil/validator/ksail"
-	clusterprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster"
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
+	ksailvalidator "github.com/devantler-tech/ksail/v7/pkg/fsutil/validator/ksail"
+	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

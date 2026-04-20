@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	talosconfigmanager "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager/talos"
+	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
 )
 
 var (

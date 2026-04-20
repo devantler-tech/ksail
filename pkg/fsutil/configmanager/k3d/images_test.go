@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	k3d "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager/k3d"
+	k3d "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/k3d"
 )
 
 func TestK3sImage(t *testing.T) {

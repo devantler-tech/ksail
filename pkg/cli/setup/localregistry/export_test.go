@@ -1,9 +1,9 @@
 package localregistry
 
 import (
-	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v6/pkg/client/oci"
-	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/registry"
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v7/pkg/client/oci"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/registry"
 )
 
 // ResolveClusterNameForTest exports resolveClusterName for testing.

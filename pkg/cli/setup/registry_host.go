@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
-	dockerclient "github.com/devantler-tech/ksail/v6/pkg/client/docker"
-	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/registry"
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	dockerclient "github.com/devantler-tech/ksail/v7/pkg/client/docker"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/registry"
 )
 
 // vclusterNetworkPrefix is the Docker network name prefix used by VCluster.

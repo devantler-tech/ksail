@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/devantler-tech/ksail/v6/pkg/client/helm"
-	argocdinstaller "github.com/devantler-tech/ksail/v6/pkg/svc/installer/argocd"
+	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
+	argocdinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/argocd"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"

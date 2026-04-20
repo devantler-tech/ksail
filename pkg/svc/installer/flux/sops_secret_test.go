@@ -3,8 +3,8 @@ package fluxinstaller_test
 import (
 	"testing"
 
-	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
-	fluxinstaller "github.com/devantler-tech/ksail/v6/pkg/svc/installer/flux"
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	fluxinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/flux"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"

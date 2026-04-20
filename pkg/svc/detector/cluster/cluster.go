@@ -9,9 +9,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v6/pkg/fsutil"
-	"github.com/devantler-tech/ksail/v6/pkg/svc/provider/hetzner"
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/hetzner"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"k8s.io/client-go/tools/clientcmd"
 )

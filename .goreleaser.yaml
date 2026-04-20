@@ -21,7 +21,7 @@ builds:
     flags:
       - -trimpath
     ldflags:
-      - -s -w -X github.com/devantler-tech/ksail/v6/internal/buildmeta.Version={{.Version}} -X github.com/devantler-tech/ksail/v6/internal/buildmeta.Commit={{.Commit}} -X github.com/devantler-tech/ksail/v6/internal/buildmeta.Date={{.Date}}
+      - -s -w -X github.com/devantler-tech/ksail/v7/internal/buildmeta.Version={{.Version}} -X github.com/devantler-tech/ksail/v7/internal/buildmeta.Commit={{.Commit}} -X github.com/devantler-tech/ksail/v7/internal/buildmeta.Date={{.Date}}
     hooks:
       pre:
         - go tool bundler --platform {{ .Os }}/{{ .Arch }} --cli-version 1.0.10
@@ -113,7 +113,7 @@ release:
     **Go Install**:
 
     ```bash
-    go install github.com/devantler-tech/ksail/v6@{{ .Tag }}
+    go install github.com/devantler-tech/ksail/v7@{{ .Tag }}
     ```
 
     **Download Binary**: Choose your platform from the assets above

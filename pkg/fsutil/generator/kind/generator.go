@@ -3,9 +3,9 @@ package kindgenerator
 import (
 	"fmt"
 
-	"github.com/devantler-tech/ksail/v6/pkg/fsutil"
-	yamlgenerator "github.com/devantler-tech/ksail/v6/pkg/fsutil/generator/yaml"
-	"github.com/devantler-tech/ksail/v6/pkg/fsutil/marshaller"
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
+	yamlgenerator "github.com/devantler-tech/ksail/v7/pkg/fsutil/generator/yaml"
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil/marshaller"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
 

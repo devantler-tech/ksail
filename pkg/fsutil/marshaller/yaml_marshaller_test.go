@@ -6,7 +6,7 @@ package marshaller_test
 import (
 	"testing"
 
-	"github.com/devantler-tech/ksail/v6/pkg/fsutil/marshaller"
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil/marshaller"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

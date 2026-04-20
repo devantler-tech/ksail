@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/devantler-tech/ksail/v6/pkg/cli/annotations"
-	mcpcmd "github.com/devantler-tech/ksail/v6/pkg/cli/cmd/mcp"
-	"github.com/devantler-tech/ksail/v6/pkg/di"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
+	mcpcmd "github.com/devantler-tech/ksail/v7/pkg/cli/cmd/mcp"
+	"github.com/devantler-tech/ksail/v7/pkg/di"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/assert"

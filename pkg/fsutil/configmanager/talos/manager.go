@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/devantler-tech/ksail/v6/pkg/envvar"
-	configmanager "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager"
+	"github.com/devantler-tech/ksail/v7/pkg/envvar"
+	configmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager"
 	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
 	"sigs.k8s.io/yaml"
 )

@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/devantler-tech/ksail/v6/pkg/client/eksctl"
-	"github.com/devantler-tech/ksail/v6/pkg/svc/provider"
-	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/clustererr"
+	"github.com/devantler-tech/ksail/v7/pkg/client/eksctl"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
 )
 
 // Provisioner manages Amazon EKS clusters via the eksctl CLI.

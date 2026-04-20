@@ -9,8 +9,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/devantler-tech/ksail/v6/pkg/fsutil"
-	"github.com/devantler-tech/ksail/v6/pkg/svc/tenant/gitprovider"
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/tenant/gitprovider"
 )
 
 // DeliverPROptions holds options for PR delivery.

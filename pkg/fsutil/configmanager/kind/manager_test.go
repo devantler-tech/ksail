@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	configmanager "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager"
-	"github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager/kind"
+	configmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager"
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/kind"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	v1alpha4 "sigs.k8s.io/kind/pkg/apis/config/v1alpha4"

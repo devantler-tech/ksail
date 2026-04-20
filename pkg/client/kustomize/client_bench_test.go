@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/devantler-tech/ksail/v6/pkg/client/kustomize"
+	"github.com/devantler-tech/ksail/v7/pkg/client/kustomize"
 )
 
 // Package-level constants for medium kustomization benchmark YAML content.

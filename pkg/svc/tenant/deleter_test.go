@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/devantler-tech/ksail/v6/pkg/svc/tenant"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/tenant"
 	"github.com/stretchr/testify/require"
 	"sigs.k8s.io/yaml"
 )

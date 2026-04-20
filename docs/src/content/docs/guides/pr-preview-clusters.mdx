@@ -189,7 +189,7 @@ You can also set it globally for all subsequent steps:
 ## Tips
 
 - **K3s starts fastest** — use `distribution: K3s` for PRs where spin-up time matters.
-- **Pin the action version** using a tag (e.g. `@v5.73.0`) for reproducible CI, or `@main` for bleeding-edge.
+- **Pin the action version** using a tag (e.g. `@v7.2.2`) for reproducible CI, or `@main` for bleeding-edge.
 - **Cache hits speed up CI significantly** — the `cache: true` default restores Helm charts and mirror registry volumes, avoiding repeated Docker Hub pulls.
 - **Combine with path filters** (`paths:` in `on.pull_request`) to skip the preview cluster when only non-Kubernetes files changed.
 - **Validate early** — set `validate: true` to fail fast on invalid manifests before spending time on cluster provisioning.

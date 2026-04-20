@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/devantler-tech/ksail/v6/pkg/cli/ui/chat"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/ui/chat"
 )
 
 // TestViewport_AssistantMessageWithSuccessTool tests rendering an assistant message with a success tool.

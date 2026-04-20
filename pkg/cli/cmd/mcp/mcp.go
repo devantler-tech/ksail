@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/devantler-tech/ksail/v6/pkg/cli/annotations"
-	"github.com/devantler-tech/ksail/v6/pkg/di"
-	mcpsvc "github.com/devantler-tech/ksail/v6/pkg/svc/mcp"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
+	"github.com/devantler-tech/ksail/v7/pkg/di"
+	mcpsvc "github.com/devantler-tech/ksail/v7/pkg/svc/mcp"
 	"github.com/spf13/cobra"
 )
 

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/devantler-tech/ksail/v6/pkg/client/reconciler"
+	"github.com/devantler-tech/ksail/v7/pkg/client/reconciler"
 	"github.com/stretchr/testify/assert"
 )
 

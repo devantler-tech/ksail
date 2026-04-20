@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"filippo.io/age"
-	sopsclient "github.com/devantler-tech/ksail/v6/pkg/client/sops"
+	sopsclient "github.com/devantler-tech/ksail/v7/pkg/client/sops"
 	"github.com/getsops/sops/v3"
 	sopsage "github.com/getsops/sops/v3/age"
 	"github.com/getsops/sops/v3/keys"

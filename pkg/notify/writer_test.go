@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/devantler-tech/ksail/v6/pkg/notify"
+	"github.com/devantler-tech/ksail/v7/pkg/notify"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

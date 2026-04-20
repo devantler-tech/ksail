@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/devantler-tech/ksail/v6/pkg/cli/ui/chat"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/ui/chat"
 	copilot "github.com/github/copilot-sdk/go"
 )
 

@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"context"
 
-	"github.com/devantler-tech/ksail/v6/pkg/cli/lifecycle"
-	"github.com/devantler-tech/ksail/v6/pkg/timer"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/lifecycle"
+	"github.com/devantler-tech/ksail/v7/pkg/timer"
 	"github.com/spf13/cobra"
 )
 

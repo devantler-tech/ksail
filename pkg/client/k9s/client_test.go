@@ -4,7 +4,7 @@ import (
 	"flag"
 	"testing"
 
-	"github.com/devantler-tech/ksail/v6/pkg/client/k9s"
+	"github.com/devantler-tech/ksail/v7/pkg/client/k9s"
 	"github.com/stretchr/testify/require"
 )
 

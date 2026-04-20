@@ -2,7 +2,7 @@
 //
 // These variables are set at build time using:
 //
-//	go build -ldflags="-X github.com/devantler-tech/ksail/v6/internal/buildmeta.Version=v1.0.0 ..."
+//	go build -ldflags="-X github.com/devantler-tech/ksail/v7/internal/buildmeta.Version=v1.0.0 ..."
 //
 //nolint:gochecknoglobals
 package buildmeta

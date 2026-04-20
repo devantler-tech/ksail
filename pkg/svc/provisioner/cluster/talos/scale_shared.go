@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/clusterupdate"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 )
 
 // nextNodeIndexFromNames scans a slice of node names that share a common prefix

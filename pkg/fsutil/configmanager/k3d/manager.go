@@ -3,9 +3,9 @@ package k3d
 import (
 	"fmt"
 
-	configmanager "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager"
-	"github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager/loader"
-	k3dvalidator "github.com/devantler-tech/ksail/v6/pkg/fsutil/validator/k3d"
+	configmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager"
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/loader"
+	k3dvalidator "github.com/devantler-tech/ksail/v7/pkg/fsutil/validator/k3d"
 	"github.com/k3d-io/k3d/v5/pkg/config/types"
 	v1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 )

@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/devantler-tech/ksail/v6/pkg/cli/cmd/workload/gen"
-	"github.com/devantler-tech/ksail/v6/pkg/di"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/workload/gen"
+	"github.com/devantler-tech/ksail/v7/pkg/di"
 	"github.com/gkampitakis/go-snaps/snaps"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"

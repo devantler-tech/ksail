@@ -3,7 +3,7 @@ package flux_test
 import (
 	"testing"
 
-	"github.com/devantler-tech/ksail/v6/pkg/client/flux"
+	"github.com/devantler-tech/ksail/v7/pkg/client/flux"
 	helmv2 "github.com/fluxcd/helm-controller/api/v2"
 	kustomizev1 "github.com/fluxcd/kustomize-controller/api/v1"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"

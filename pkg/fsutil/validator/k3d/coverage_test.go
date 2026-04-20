@@ -3,7 +3,7 @@ package k3d_test
 import (
 	"testing"
 
-	k3dvalidator "github.com/devantler-tech/ksail/v6/pkg/fsutil/validator/k3d"
+	k3dvalidator "github.com/devantler-tech/ksail/v7/pkg/fsutil/validator/k3d"
 	configtypes "github.com/k3d-io/k3d/v5/pkg/config/types"
 	k3dapi "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/stretchr/testify/assert"

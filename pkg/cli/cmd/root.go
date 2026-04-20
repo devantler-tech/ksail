@@ -3,17 +3,17 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/devantler-tech/ksail/v6/pkg/cli/cmd/chat"
-	"github.com/devantler-tech/ksail/v6/pkg/cli/cmd/cipher"
-	cluster "github.com/devantler-tech/ksail/v6/pkg/cli/cmd/cluster"
-	"github.com/devantler-tech/ksail/v6/pkg/cli/cmd/mcp"
-	"github.com/devantler-tech/ksail/v6/pkg/cli/cmd/tenant"
-	"github.com/devantler-tech/ksail/v6/pkg/cli/cmd/workload"
-	"github.com/devantler-tech/ksail/v6/pkg/cli/flags"
-	"github.com/devantler-tech/ksail/v6/pkg/cli/kubeconfighook"
-	"github.com/devantler-tech/ksail/v6/pkg/cli/ui/asciiart"
-	"github.com/devantler-tech/ksail/v6/pkg/cli/ui/errorhandler"
-	"github.com/devantler-tech/ksail/v6/pkg/di"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/chat"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/cipher"
+	cluster "github.com/devantler-tech/ksail/v7/pkg/cli/cmd/cluster"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/mcp"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/tenant"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/workload"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/flags"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/kubeconfighook"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/ui/asciiart"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/ui/errorhandler"
+	"github.com/devantler-tech/ksail/v7/pkg/di"
 	"github.com/spf13/cobra"
 )
 

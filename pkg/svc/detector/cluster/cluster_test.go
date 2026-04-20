@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
-	cluster "github.com/devantler-tech/ksail/v6/pkg/svc/detector/cluster"
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	cluster "github.com/devantler-tech/ksail/v7/pkg/svc/detector/cluster"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

@@ -5,14 +5,14 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
-	talosconfigmanager "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager/talos"
-	"github.com/devantler-tech/ksail/v6/pkg/svc/provider"
-	"github.com/devantler-tech/ksail/v6/pkg/svc/provider/docker"
-	"github.com/devantler-tech/ksail/v6/pkg/svc/provider/hetzner"
-	"github.com/devantler-tech/ksail/v6/pkg/svc/provider/omni"
-	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/clustererr"
-	kindprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/kind"
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/docker"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/hetzner"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/omni"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
+	kindprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/kind"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 )
 

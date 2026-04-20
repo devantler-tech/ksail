@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	docker "github.com/devantler-tech/ksail/v6/pkg/client/docker"
+	docker "github.com/devantler-tech/ksail/v7/pkg/client/docker"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"

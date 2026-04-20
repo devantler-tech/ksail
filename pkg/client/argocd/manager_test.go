@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/devantler-tech/ksail/v6/pkg/client/argocd"
+	"github.com/devantler-tech/ksail/v7/pkg/client/argocd"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

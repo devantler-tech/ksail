@@ -3,9 +3,9 @@ package k3dgenerator
 import (
 	"fmt"
 
-	"github.com/devantler-tech/ksail/v6/pkg/fsutil"
-	yamlgenerator "github.com/devantler-tech/ksail/v6/pkg/fsutil/generator/yaml"
-	"github.com/devantler-tech/ksail/v6/pkg/fsutil/marshaller"
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
+	yamlgenerator "github.com/devantler-tech/ksail/v7/pkg/fsutil/generator/yaml"
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil/marshaller"
 	v1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 )
 

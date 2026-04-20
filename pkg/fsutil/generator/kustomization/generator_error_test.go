@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	kustomizationgenerator "github.com/devantler-tech/ksail/v6/pkg/fsutil/generator/kustomization"
-	yamlgenerator "github.com/devantler-tech/ksail/v6/pkg/fsutil/generator/yaml"
+	kustomizationgenerator "github.com/devantler-tech/ksail/v7/pkg/fsutil/generator/kustomization"
+	yamlgenerator "github.com/devantler-tech/ksail/v7/pkg/fsutil/generator/yaml"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	ktypes "sigs.k8s.io/kustomize/api/types"

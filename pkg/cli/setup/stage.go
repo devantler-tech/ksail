@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 
-	dockerhelpers "github.com/devantler-tech/ksail/v6/pkg/cli/dockerutil"
-	"github.com/devantler-tech/ksail/v6/pkg/cli/flags"
-	"github.com/devantler-tech/ksail/v6/pkg/notify"
-	"github.com/devantler-tech/ksail/v6/pkg/timer"
+	dockerhelpers "github.com/devantler-tech/ksail/v7/pkg/cli/dockerutil"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/flags"
+	"github.com/devantler-tech/ksail/v7/pkg/notify"
+	"github.com/devantler-tech/ksail/v7/pkg/timer"
 	"github.com/docker/docker/client"
 	"github.com/spf13/cobra"
 )

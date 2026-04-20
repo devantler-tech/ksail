@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"strings"
 
-	dockerclient "github.com/devantler-tech/ksail/v6/pkg/client/docker"
-	"github.com/devantler-tech/ksail/v6/pkg/envvar"
+	dockerclient "github.com/devantler-tech/ksail/v7/pkg/client/docker"
+	"github.com/devantler-tech/ksail/v7/pkg/envvar"
 )
 
 // MirrorSpec represents a parsed mirror registry specification entry.

@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/devantler-tech/ksail/v6/pkg/svc/chat"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/chat"
 )
 
 func TestIsPathWithinDirectory(t *testing.T) {

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/devantler-tech/ksail/v6/pkg/fsutil"
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	"github.com/getsops/sops/v3"
 	"github.com/getsops/sops/v3/stores/json"
 	"github.com/getsops/sops/v3/stores/yaml"

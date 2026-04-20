@@ -3,8 +3,8 @@ package configmanager_test
 import (
 	"testing"
 
-	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
-	configmanager "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager/ksail"
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	configmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/ksail"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

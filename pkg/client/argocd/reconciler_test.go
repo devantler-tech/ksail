@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/devantler-tech/ksail/v6/pkg/client/argocd"
-	"github.com/devantler-tech/ksail/v6/pkg/client/reconciler"
+	"github.com/devantler-tech/ksail/v7/pkg/client/argocd"
+	"github.com/devantler-tech/ksail/v7/pkg/client/reconciler"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"

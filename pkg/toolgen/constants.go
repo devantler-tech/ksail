@@ -3,7 +3,7 @@ package toolgen
 import (
 	"errors"
 
-	"github.com/devantler-tech/ksail/v6/pkg/cli/annotations"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
 )
 
 // Re-export annotation constants from pkg/cli/annotations for backward compatibility.

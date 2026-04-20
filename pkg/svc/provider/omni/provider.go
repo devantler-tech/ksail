@@ -12,7 +12,7 @@ import (
 	"github.com/cosi-project/runtime/pkg/resource"
 	"github.com/cosi-project/runtime/pkg/safe"
 	"github.com/cosi-project/runtime/pkg/state"
-	"github.com/devantler-tech/ksail/v6/pkg/svc/provider"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
 	"github.com/siderolabs/omni/client/api/omni/specs"
 	omniclient "github.com/siderolabs/omni/client/pkg/client"
 	"github.com/siderolabs/omni/client/pkg/client/management"

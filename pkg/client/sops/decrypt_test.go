@@ -3,7 +3,7 @@ package sops_test
 import (
 	"testing"
 
-	sopsclient "github.com/devantler-tech/ksail/v6/pkg/client/sops"
+	sopsclient "github.com/devantler-tech/ksail/v7/pkg/client/sops"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

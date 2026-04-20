@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	omniprovider "github.com/devantler-tech/ksail/v6/pkg/svc/provider/omni"
-	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/clusterupdate"
+	omniprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/omni"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 )
 
 // scaleOmniByRole adjusts node counts for an Omni-managed Talos cluster by

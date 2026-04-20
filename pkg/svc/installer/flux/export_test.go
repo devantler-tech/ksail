@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
-	fluxclient "github.com/devantler-tech/ksail/v6/pkg/client/flux"
-	"github.com/devantler-tech/ksail/v6/pkg/svc/installer/internal/sopsutil"
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	fluxclient "github.com/devantler-tech/ksail/v7/pkg/client/flux"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/installer/internal/sopsutil"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"

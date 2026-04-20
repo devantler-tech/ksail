@@ -7,7 +7,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/devantler-tech/ksail/v6/pkg/toolgen"
+	"github.com/devantler-tech/ksail/v7/pkg/toolgen"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/spf13/cobra"
 )

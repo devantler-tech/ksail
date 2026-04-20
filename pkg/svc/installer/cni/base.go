@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"time"
 
-	v1alpha1 "github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v6/pkg/client/helm"
-	"github.com/devantler-tech/ksail/v6/pkg/k8s"
-	"github.com/devantler-tech/ksail/v6/pkg/k8s/readiness"
-	"github.com/devantler-tech/ksail/v6/pkg/svc/installer/internal/helmutil"
+	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
+	"github.com/devantler-tech/ksail/v7/pkg/k8s"
+	"github.com/devantler-tech/ksail/v7/pkg/k8s/readiness"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/installer/internal/helmutil"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 )

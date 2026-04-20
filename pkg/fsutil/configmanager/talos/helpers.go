@@ -3,7 +3,7 @@ package talos
 import (
 	"strings"
 
-	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 )
 
 // ResolveClusterName returns the effective cluster name from Talos config or cluster config.

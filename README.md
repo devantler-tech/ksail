@@ -1,9 +1,9 @@
 <!-- mcp-name: io.github.devantler-tech/ksail -->
 [![GitHub Stars](https://img.shields.io/github/stars/devantler-tech/ksail?style=flat)](https://github.com/devantler-tech/ksail/stargazers)
 [![Latest Release](https://img.shields.io/github/v/release/devantler-tech/ksail)](https://github.com/devantler-tech/ksail/releases/latest)
-[![Go Report Card](https://goreportcard.com/badge/github.com/devantler-tech/ksail/v6)](https://goreportcard.com/report/github.com/devantler-tech/ksail/v6)
+[![Go Report Card](https://goreportcard.com/badge/github.com/devantler-tech/ksail/v7)](https://goreportcard.com/report/github.com/devantler-tech/ksail/v7)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/license/apache-2-0)
-[![Go Reference](https://pkg.go.dev/badge/github.com/devantler-tech/ksail/v6.svg)](https://pkg.go.dev/github.com/devantler-tech/ksail/v6)
+[![Go Reference](https://pkg.go.dev/badge/github.com/devantler-tech/ksail/v7.svg)](https://pkg.go.dev/github.com/devantler-tech/ksail/v7)
 [![codecov](https://codecov.io/gh/devantler-tech/ksail/graph/badge.svg?token=HSUfhaiXwq)](https://app.codecov.io/gh/devantler-tech/ksail)
 [![CI - KSail](https://github.com/devantler-tech/ksail/actions/workflows/ci.yaml/badge.svg)](https://github.com/devantler-tech/ksail/actions/workflows/ci.yaml)
 [![MCP Registry](https://img.shields.io/badge/MCP_Registry-io.github.devantler--tech/ksail-blue?logo=github)](https://github.com/mcp)
@@ -23,7 +23,7 @@ KSail bundles common Kubernetes tooling into a single binary. Spin up local clus
 brew install --cask devantler-tech/tap/ksail
 
 # Go (1.26.1+)
-go install github.com/devantler-tech/ksail/v6@latest
+go install github.com/devantler-tech/ksail/v7@latest
 ```
 
 See the [Installation Guide](https://ksail.devantler.tech/installation/) for binary downloads and more options.

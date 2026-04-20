@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	talosprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/talos"
+	talosprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/talos"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

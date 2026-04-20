@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/devantler-tech/ksail/v6/pkg/client/helm"
+	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
 	"github.com/stretchr/testify/assert"
 	helmv4kube "helm.sh/helm/v4/pkg/kube"
 )

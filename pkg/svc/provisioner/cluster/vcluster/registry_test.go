@@ -6,9 +6,9 @@ import (
 	"io"
 	"testing"
 
-	dockerclient "github.com/devantler-tech/ksail/v6/pkg/client/docker"
-	vclusterprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/vcluster"
-	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/registry"
+	dockerclient "github.com/devantler-tech/ksail/v7/pkg/client/docker"
+	vclusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/vcluster"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/registry"
 	"github.com/docker/docker/api/types/container"
 	testifymock "github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"

@@ -7,9 +7,9 @@ import (
 	"path/filepath"
 	"slices"
 
-	"github.com/devantler-tech/ksail/v6/pkg/fsutil"
-	"github.com/devantler-tech/ksail/v6/pkg/k8s"
-	dockerprovider "github.com/devantler-tech/ksail/v6/pkg/svc/provider/docker"
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
+	"github.com/devantler-tech/ksail/v7/pkg/k8s"
+	dockerprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/docker"
 	"github.com/siderolabs/talos/pkg/cluster/check"
 	"github.com/siderolabs/talos/pkg/conditions"
 	clientconfig "github.com/siderolabs/talos/pkg/machinery/client/config"

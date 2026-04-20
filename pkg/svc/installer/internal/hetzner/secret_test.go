@@ -6,7 +6,7 @@ import (
 	"sync"
 	"testing"
 
-	hetzner "github.com/devantler-tech/ksail/v6/pkg/svc/installer/internal/hetzner"
+	hetzner "github.com/devantler-tech/ksail/v7/pkg/svc/installer/internal/hetzner"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"

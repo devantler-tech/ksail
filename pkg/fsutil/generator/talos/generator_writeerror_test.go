@@ -8,9 +8,9 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/devantler-tech/ksail/v6/internal/testutil/rootcheck"
-	talosgenerator "github.com/devantler-tech/ksail/v6/pkg/fsutil/generator/talos"
-	yamlgenerator "github.com/devantler-tech/ksail/v6/pkg/fsutil/generator/yaml"
+	"github.com/devantler-tech/ksail/v7/internal/testutil/rootcheck"
+	talosgenerator "github.com/devantler-tech/ksail/v7/pkg/fsutil/generator/talos"
+	yamlgenerator "github.com/devantler-tech/ksail/v7/pkg/fsutil/generator/yaml"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

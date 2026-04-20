@@ -3,7 +3,7 @@ package talos
 import (
 	_ "embed"
 
-	"github.com/devantler-tech/ksail/v6/pkg/svc/image/parser"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/image/parser"
 )
 
 // Embedded Dockerfile containing image references (updated by Dependabot).

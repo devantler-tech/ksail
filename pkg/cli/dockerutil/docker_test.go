@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/devantler-tech/ksail/v6/pkg/cli/dockerutil"
-	dockerpkg "github.com/devantler-tech/ksail/v6/pkg/client/docker"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/dockerutil"
+	dockerpkg "github.com/devantler-tech/ksail/v7/pkg/client/docker"
 	"github.com/docker/docker/client"
 	"github.com/gkampitakis/go-snaps/snaps"
 	"github.com/spf13/cobra"

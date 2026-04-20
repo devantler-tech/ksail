@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/devantler-tech/ksail/v6/pkg/client/netretry"
+	"github.com/devantler-tech/ksail/v7/pkg/client/netretry"
 	"github.com/stretchr/testify/assert"
 )
 

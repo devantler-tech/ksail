@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/devantler-tech/ksail/v6/pkg/svc/provider/hetzner"
-	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/clustererr"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/hetzner"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 )
 
