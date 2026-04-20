@@ -885,7 +885,7 @@ jobs:
           # Keep in sync with cleanup-hetzner label-selector values below.
           job-to-wait-for: "🧪 System Test (Hetzner/init)"
           poll-interval-seconds: 30
-          abort-after-seconds: 3600
+          abort-after-seconds: 5400
 
       - name: 🏁 Mark test as started (past turnstyle)
         id: test-started
@@ -989,7 +989,7 @@ jobs:
           # Keep in sync with cleanup-hetzner label-selector values below.
           job-to-wait-for: "🧪 System Test (Hetzner/noinit)"
           poll-interval-seconds: 30
-          abort-after-seconds: 3600
+          abort-after-seconds: 5400
 
       - name: 🏁 Mark test as started (past turnstyle)
         id: test-started
@@ -1097,7 +1097,7 @@ jobs:
           # Keep in sync with cleanup-omni cluster-names input below.
           job-to-wait-for: "🧪 System Test (Omni/init)"
           poll-interval-seconds: 30
-          abort-after-seconds: 3600
+          abort-after-seconds: 5400
 
       - name: 🏁 Mark test as started (past turnstyle)
         id: test-started
@@ -1198,7 +1198,7 @@ jobs:
           # Keep in sync with cleanup-omni cluster-names input below.
           job-to-wait-for: "🧪 System Test (Omni/noinit)"
           poll-interval-seconds: 30
-          abort-after-seconds: 3600
+          abort-after-seconds: 5400
 
       - name: 🏁 Mark test as started (past turnstyle)
         id: test-started
