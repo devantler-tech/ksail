@@ -53,7 +53,6 @@ const (
 	kwokCertManagerWarning = "cert-manager is not installed on KWOK: " +
 		"webhook pod is simulated and admission webhook calls always time out — skipping"
 
-
 	// apiServerStabilityTimeout is the maximum time to wait for the API server
 	// to stabilize between infrastructure and GitOps installation phases.
 	// Infrastructure components (MetalLB, Kyverno, cert-manager, etc.) register
@@ -357,7 +356,6 @@ func emitKWOKUnsupportedComponentWarnings(cmd *cobra.Command, clusterCfg *v1alph
 	if clusterCfg.Spec.Cluster.CertManager == v1alpha1.CertManagerEnabled {
 		notify.Warningf(cmd.OutOrStdout(), kwokCertManagerWarning)
 	}
-
 }
 
 // InstallPostCNIComponents installs all post-CNI components in parallel.
