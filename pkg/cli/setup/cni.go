@@ -56,11 +56,16 @@ func InstallCNI(
 	// never functional on KWOK and their Helm releases would skew the
 	// component detector, so skip installation entirely.
 	if clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionKWOK {
-		if clusterCfg.Spec.Cluster.CNI != v1alpha1.CNIDefault && clusterCfg.Spec.Cluster.CNI != "" {
+		switch clusterCfg.Spec.Cluster.CNI {
+		case v1alpha1.CNIDefault, "":
+			return false, nil
+		case v1alpha1.CNICilium, v1alpha1.CNICalico:
 			notify.Warningf(cmd.OutOrStdout(), kwokCNIWarning, clusterCfg.Spec.Cluster.CNI)
-		}
 
-		return false, nil
+			return false, nil
+		default:
+			return false, fmt.Errorf("%w: %s", ErrUnsupportedCNI, clusterCfg.Spec.Cluster.CNI)
+		}
 	}
 
 	switch clusterCfg.Spec.Cluster.CNI {

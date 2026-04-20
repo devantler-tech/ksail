@@ -2,6 +2,7 @@ package setup_test
 
 import (
 	"bytes"
+	"errors"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
@@ -18,6 +19,7 @@ func TestInstallCNI_KWOKSkipsCNIInstallation(t *testing.T) {
 		name        string
 		cni         v1alpha1.CNI
 		wantWarning bool
+		wantErr     error
 	}{
 		{name: "KWOK with Cilium skips CNI and warns", cni: v1alpha1.CNICilium, wantWarning: true},
 		{name: "KWOK with Calico skips CNI and warns", cni: v1alpha1.CNICalico, wantWarning: true},
@@ -27,6 +29,11 @@ func TestInstallCNI_KWOKSkipsCNIInstallation(t *testing.T) {
 			wantWarning: false,
 		},
 		{name: "KWOK with empty CNI skips CNI silently", cni: "", wantWarning: false},
+		{
+			name:    "KWOK with unsupported CNI returns error",
+			cni:     "unsupported-cni",
+			wantErr: setup.ErrUnsupportedCNI,
+		},
 	}
 
 	for _, testCase := range tests {
@@ -48,6 +55,15 @@ func TestInstallCNI_KWOKSkipsCNIInstallation(t *testing.T) {
 			}
 
 			installed, err := setup.InstallCNI(cmd, clusterCfg, nil)
+
+			if testCase.wantErr != nil {
+				require.Error(t, err)
+				assert.True(t, errors.Is(err, testCase.wantErr), "expected error %v, got %v", testCase.wantErr, err)
+				assert.False(t, installed, "CNI should not be installed for KWOK")
+
+				return
+			}
+
 			require.NoError(t, err)
 			assert.False(t, installed, "CNI should not be installed for KWOK")
 
