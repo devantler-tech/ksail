@@ -7,12 +7,14 @@ import (
 )
 
 var (
-	errReleaseNameRequired      = errors.New("helm: release name is required")
-	errChartSpecRequired        = errors.New("helm: chart spec is required")
-	errUnexpectedReleaseType    = errors.New("helm: unexpected release type")
-	errUnexpectedChartType      = errors.New("helm: unexpected chart type")
-	errUnsupportedClientType    = errors.New("helm: unsupported client type for OCI chart")
-	errListReleasesUnsupported = errors.New("helm: ListReleases not supported on template-only client")
+	errReleaseNameRequired     = errors.New("helm: release name is required")
+	errChartSpecRequired       = errors.New("helm: chart spec is required")
+	errUnexpectedReleaseType   = errors.New("helm: unexpected release type")
+	errUnexpectedChartType     = errors.New("helm: unexpected chart type")
+	errUnsupportedClientType   = errors.New("helm: unsupported client type for OCI chart")
+	errListReleasesUnsupported = errors.New(
+		"helm: ListReleases not supported on template-only client",
+	)
 )
 
 // ChartSpec mirrors the mittwald chart specification while keeping KSail
