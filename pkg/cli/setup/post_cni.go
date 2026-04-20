@@ -46,6 +46,19 @@ const (
 	kwokCNIWarning = "CNI %q is not installed on KWOK: " +
 		"simulated pods have no real network dataplane — skipping"
 
+	// kwokCSIWarning is emitted when CSI is configured but cannot be installed
+	// on KWOK. KWOK simulates pod status at the API level only — no container
+	// binary runs, so CSI node-plugin DaemonSet pods would never become Ready
+	// and the readiness wait would time out.
+	kwokCSIWarning = "CSI is not installed on KWOK: " +
+		"CSI node-plugin pods are simulated and never become Ready — skipping"
+
+	// kwokCertManagerWarning is emitted when cert-manager is configured but
+	// cannot be installed on KWOK. The cert-manager webhook pod is simulated and
+	// never runs real TLS logic; calls to the admission webhook always time out.
+	kwokCertManagerWarning = "cert-manager is not installed on KWOK: " +
+		"webhook pod is simulated and admission webhook calls always time out — skipping"
+
 	// apiServerStabilityTimeout is the maximum time to wait for the API server
 	// to stabilize between infrastructure and GitOps installation phases.
 	// Infrastructure components (MetalLB, Kyverno, cert-manager, etc.) register
@@ -269,12 +282,25 @@ func GetComponentRequirements(clusterCfg *v1alpha1.Cluster) ComponentRequirement
 	needsFlux := clusterCfg.Spec.Cluster.GitOpsEngine == v1alpha1.GitOpsEngineFlux &&
 		clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionKWOK
 
+	// KWOK simulates pod status at the API level only — no container binary runs.
+	// CSI node-plugin DaemonSet pods are simulated and never become Ready, so
+	// any readiness wait would time out. Skip CSI installation for KWOK entirely.
+	needsCSI := needsCSIInstall(clusterCfg) &&
+		clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionKWOK
+
+	// KWOK simulates pod status but cannot run real webhook logic. cert-manager
+	// registers an admission webhook that intercepts certificate-related API
+	// requests; on KWOK these calls always time out because no real pod serves
+	// the webhook endpoint. Skip cert-manager installation for KWOK entirely.
+	needsCertManager := clusterCfg.Spec.Cluster.CertManager == v1alpha1.CertManagerEnabled &&
+		clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionKWOK
+
 	return ComponentRequirements{
 		NeedsMetricsServer:      needsMetricsServer,
 		NeedsLoadBalancer:       NeedsLoadBalancerInstall(clusterCfg),
 		NeedsKubeletCSRApprover: needsKubeletCSRApprover,
-		NeedsCSI:                needsCSIInstall(clusterCfg),
-		NeedsCertManager:        clusterCfg.Spec.Cluster.CertManager == v1alpha1.CertManagerEnabled,
+		NeedsCSI:                needsCSI,
+		NeedsCertManager:        needsCertManager,
 		NeedsPolicyEngine:       needsPolicyEngine,
 		NeedsArgoCD:             clusterCfg.Spec.Cluster.GitOpsEngine == v1alpha1.GitOpsEngineArgoCD,
 		NeedsFlux:               needsFlux,
@@ -333,6 +359,14 @@ func emitKWOKUnsupportedComponentWarnings(cmd *cobra.Command, clusterCfg *v1alph
 		notify.Warningf(cmd.OutOrStdout(), kwokCNIWarning,
 			clusterCfg.Spec.Cluster.CNI,
 		)
+	}
+
+	if clusterCfg.Spec.Cluster.CSI == v1alpha1.CSIEnabled {
+		notify.Warningf(cmd.OutOrStdout(), kwokCSIWarning)
+	}
+
+	if clusterCfg.Spec.Cluster.CertManager == v1alpha1.CertManagerEnabled {
+		notify.Warningf(cmd.OutOrStdout(), kwokCertManagerWarning)
 	}
 }
 

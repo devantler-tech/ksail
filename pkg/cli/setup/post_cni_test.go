@@ -270,6 +270,33 @@ func TestGetComponentRequirements(t *testing.T) {
 			expectedCount: 0, // flux-operator pod is simulated; NeedsFlux is suppressed for KWOK
 			expected:      setup.ComponentRequirements{},
 		},
+		{
+			name: "KWOK with CSI Enabled sets NeedsCSI to false",
+			clusterCfg: &v1alpha1.Cluster{
+				Spec: v1alpha1.Spec{
+					Cluster: v1alpha1.ClusterSpec{
+						Distribution: v1alpha1.DistributionKWOK,
+						Provider:     v1alpha1.ProviderDocker,
+						CSI:          v1alpha1.CSIEnabled,
+					},
+				},
+			},
+			expectedCount: 0, // CSI node-plugin pods are simulated and never become Ready on KWOK
+			expected:      setup.ComponentRequirements{},
+		},
+		{
+			name: "KWOK with CertManager Enabled sets NeedsCertManager to false",
+			clusterCfg: &v1alpha1.Cluster{
+				Spec: v1alpha1.Spec{
+					Cluster: v1alpha1.ClusterSpec{
+						Distribution: v1alpha1.DistributionKWOK,
+						CertManager:  v1alpha1.CertManagerEnabled,
+					},
+				},
+			},
+			expectedCount: 0, // cert-manager webhook pod is simulated; admission calls always time out on KWOK
+			expected:      setup.ComponentRequirements{},
+		},
 	}
 
 	for _, testCase := range tests {

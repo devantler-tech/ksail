@@ -53,7 +53,7 @@ ksail cluster init --local-registry '${REG_USER}:${REG_TOKEN}@registry.example.c
 - `registry access denied` — credentials lack write permission
 - `registry is unreachable` — DNS failure, firewall, or registry down
 
-Registry containers have a built-in health check (polls `/v2/` every 10 s, marks `unhealthy` after 3 consecutive failures). To diagnose mirror errors:
+To diagnose mirror registry health:
 
 ```bash
 docker ps --filter label=io.ksail.registry --format 'table {{.Names}}\t{{.Status}}'
@@ -71,12 +71,10 @@ kubectl get crd <crd-name> -o jsonpath='{.status.conditions[?(@.type=="Establish
 
 ### Cluster Stability Check Failures
 
-KSail performs cluster stability checks at two points during installation to prevent race conditions:
+KSail checks cluster stability at two points during installation:
 
-- **Before infrastructure components** (Cilium CNI only): Ensures the Cilium eBPF dataplane has finished programming pod-to-service routing before deploying components like metrics-server that depend on ClusterIP connectivity.
-- **Before GitOps engines**: Always runs before Flux or ArgoCD are installed to ensure the API server is fully ready. This is especially important for K3s/K3d clusters, which report creation success before the API server is ready to serve requests. On setups with infrastructure components (MetalLB, Kyverno, cert-manager), it also ensures API connectivity has recovered after those components register webhooks and CRDs.
-
-Each check performs up to three steps: (1) 5 consecutive successful API server health checks, (2) all kube-system DaemonSets ready, and (3) a short-lived busybox pod confirms TCP connectivity to the API server ClusterIP (Cilium CNI only). The in-cluster connectivity check allows up to **3 minutes for VCluster** (vs 2 minutes for other distributions), since VCluster + Cilium eBPF needs extra time to stabilize atop the host cluster's network layer.
+- **Before infrastructure components** (Cilium CNI only): Ensures the eBPF dataplane is ready before deploying components (like metrics-server) that depend on ClusterIP connectivity.
+- **Before GitOps engines**: Ensures the API server is fully ready — especially important for K3s/K3d clusters, which report creation success before the API server can serve requests.
 
 If you see `cluster not stable before infrastructure installation`, `cluster not stable after infrastructure installation`, or `in-cluster API connectivity check failed`, check resources and optionally recreate with fewer components:
 
@@ -86,7 +84,7 @@ ksail workload get pods -A | grep -v Running
 ksail cluster delete && ksail cluster create
 ```
 
-If the error mentions `connectivity check pod image pull failed` with `ImagePullBackOff` or `ErrImagePull`, the connectivity check pod could not pull its `busybox:stable` image. This is typically a transient Docker Hub rate-limit or network issue — not an actual API server connectivity failure. Verify Docker Hub reachability (`curl -I https://registry-1.docker.io/v2/`) and retry with `ksail cluster delete && ksail cluster create`. If a docker.io mirror registry is configured, ensure it is healthy and reachable from within the cluster.
+If the error mentions `connectivity check pod image pull failed` with `ImagePullBackOff` or `ErrImagePull`, the check pod could not pull `busybox:stable` — typically a transient Docker Hub rate-limit or network issue. Verify reachability (`curl -I https://registry-1.docker.io/v2/`) and retry with `ksail cluster delete && ksail cluster create`.
 
 ### Flux Reconciliation Fails Immediately
 
