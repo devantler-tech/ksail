@@ -2487,6 +2487,8 @@ func TestApplyDistributionSpecOverrides(t *testing.T) { //nolint:funlen
 				PolicyEngine: v1alpha1.PolicyEngineNone,
 				LoadBalancer: v1alpha1.LoadBalancerDisabled,
 				CNI:          v1alpha1.CNIDefault,
+				CSI:          v1alpha1.CSIDisabled,
+				CertManager:  v1alpha1.CertManagerDisabled,
 			},
 		},
 		{
@@ -2503,6 +2505,8 @@ func TestApplyDistributionSpecOverrides(t *testing.T) { //nolint:funlen
 				PolicyEngine: v1alpha1.PolicyEngineNone,
 				LoadBalancer: v1alpha1.LoadBalancerDisabled,
 				CNI:          v1alpha1.CNIDefault,
+				CSI:          v1alpha1.CSIDisabled,
+				CertManager:  v1alpha1.CertManagerDisabled,
 			},
 		},
 		{
@@ -2516,6 +2520,8 @@ func TestApplyDistributionSpecOverrides(t *testing.T) { //nolint:funlen
 				PolicyEngine: v1alpha1.PolicyEngineNone,
 				LoadBalancer: v1alpha1.LoadBalancerDisabled,
 				CNI:          v1alpha1.CNIDefault,
+				CSI:          v1alpha1.CSIDisabled,
+				CertManager:  v1alpha1.CertManagerDisabled,
 			},
 		},
 		{

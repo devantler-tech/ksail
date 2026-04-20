@@ -6587,6 +6587,15 @@ func applyDistributionSpecOverrides(spec *v1alpha1.ClusterSpec) {
 		// (Calico, Cilium, etc.) are never installed at creation time. Normalise CNI
 		// to Default so that update dry-runs do not report spurious CNI change diffs.
 		spec.CNI = v1alpha1.CNIDefault
+
+		// CSI node-plugin pods are simulated and never become Ready on KWOK.
+		// Normalise CSI to Disabled so update dry-runs do not report a spurious
+		// "install CSI" change for a feature that is silently skipped at creation.
+		spec.CSI = v1alpha1.CSIDisabled
+
+		// cert-manager admission webhook pods are simulated on KWOK and never run
+		// real TLS logic. Normalise CertManager to Disabled for the same reason.
+		spec.CertManager = v1alpha1.CertManagerDisabled
 	}
 }
 
