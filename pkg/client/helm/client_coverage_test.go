@@ -94,6 +94,26 @@ func TestReleaseExists_EmptyName(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// ListReleases edge cases
+// ---------------------------------------------------------------------------
+
+func TestListReleases_CancelledContext(t *testing.T) {
+	t.Parallel()
+
+	client, err := helm.NewTemplateOnlyClient()
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	releases, err := client.ListReleases(ctx)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "list releases context cancelled")
+	assert.Nil(t, releases)
+}
+
+// ---------------------------------------------------------------------------
 // InstallChart / InstallOrUpgradeChart nil spec
 // ---------------------------------------------------------------------------
 

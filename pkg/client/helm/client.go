@@ -228,10 +228,14 @@ func (c *Client) ReleaseExists(
 	return len(releases) > 0, nil
 }
 
-// ListReleases returns all deployed Helm releases across all namespaces in a
+// ListReleases returns Helm releases across all namespaces for all statuses in a
 // single Kubernetes API call. Use this instead of multiple ReleaseExists calls
 // to reduce API roundtrips when detecting many components at once.
-func (c *Client) ListReleases(_ context.Context) ([]ReleaseInfo, error) {
+func (c *Client) ListReleases(ctx context.Context) ([]ReleaseInfo, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("list releases context cancelled: %w", err)
+	}
+
 	listClient := helmv4action.NewList(c.actionConfig)
 	listClient.AllNamespaces = true
 	listClient.All = true
@@ -246,7 +250,7 @@ func (c *Client) ListReleases(_ context.Context) ([]ReleaseInfo, error) {
 	for _, rel := range releases {
 		accessor, accErr := helmv4release.NewAccessor(rel)
 		if accErr != nil {
-			continue
+			return nil, fmt.Errorf("failed to access helm release from list result: %w", accErr)
 		}
 
 		result = append(result, ReleaseInfo{
