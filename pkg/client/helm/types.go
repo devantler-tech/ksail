@@ -86,6 +86,8 @@ type Interface interface {
 	TemplateChart(ctx context.Context, spec *ChartSpec) (string, error)
 	ReleaseExists(ctx context.Context, releaseName, namespace string) (bool, error)
 	// ListReleases returns Helm releases across all namespaces for all statuses.
-	// Use this for bulk release detection to avoid N separate ReleaseExists roundtrips.
+	// Only the Name and Namespace fields of each ReleaseInfo are guaranteed to be
+	// populated; all other fields (Status, Revision, etc.) are left at their zero
+	// values. Use this for bulk release detection to avoid N separate ReleaseExists roundtrips.
 	ListReleases(ctx context.Context) ([]ReleaseInfo, error)
 }

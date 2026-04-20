@@ -53,7 +53,13 @@ type cachedHelmClient struct {
 	set releaseSet
 }
 
-func (c *cachedHelmClient) ReleaseExists(_ context.Context, name, namespace string) (bool, error) {
+func (c *cachedHelmClient) ReleaseExists(ctx context.Context, name, namespace string) (bool, error) {
+	// Delegate to the wrapped client for invalid inputs so that validation
+	// errors (e.g., ErrReleaseNameRequired for an empty name) are preserved.
+	if name == "" || namespace == "" {
+		return c.Interface.ReleaseExists(ctx, name, namespace)
+	}
+
 	_, ok := c.set[releaseKey{name, namespace}]
 
 	return ok, nil
