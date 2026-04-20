@@ -345,7 +345,7 @@ func (p *Provisioner) k8sComponentsReadinessChecksWithoutStaticPodStatus() []che
 				func(ctx context.Context) error {
 					return check.K8sAllNodesReportedAssertion(ctx, cluster)
 				},
-				k8sNodesPollInterval,
+				preBootPollInterval,
 			)
 		},
 
