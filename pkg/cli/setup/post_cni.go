@@ -350,12 +350,6 @@ func emitKWOKUnsupportedComponentWarnings(cmd *cobra.Command, clusterCfg *v1alph
 		notify.Warningf(cmd.OutOrStdout(), kwokFluxWarning)
 	}
 
-	if clusterCfg.Spec.Cluster.CNI != v1alpha1.CNIDefault && clusterCfg.Spec.Cluster.CNI != "" {
-		notify.Warningf(cmd.OutOrStdout(), kwokCNIWarning,
-			clusterCfg.Spec.Cluster.CNI,
-		)
-	}
-
 	if clusterCfg.Spec.Cluster.CSI == v1alpha1.CSIEnabled {
 		notify.Warningf(cmd.OutOrStdout(), kwokCSIWarning)
 	}
@@ -363,6 +357,7 @@ func emitKWOKUnsupportedComponentWarnings(cmd *cobra.Command, clusterCfg *v1alph
 	if clusterCfg.Spec.Cluster.CertManager == v1alpha1.CertManagerEnabled {
 		notify.Warningf(cmd.OutOrStdout(), kwokCertManagerWarning)
 	}
+
 }
 
 // InstallPostCNIComponents installs all post-CNI components in parallel.
