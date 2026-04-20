@@ -23,9 +23,8 @@ func TestInstallCNI_KWOKSkipsCNIInstallation(t *testing.T) {
 		{name: "KWOK with Cilium skips CNI and warns", cni: v1alpha1.CNICilium, wantWarning: true},
 		{name: "KWOK with Calico skips CNI and warns", cni: v1alpha1.CNICalico, wantWarning: true},
 		{
-			name:        "KWOK with Default skips CNI silently",
-			cni:         v1alpha1.CNIDefault,
-			wantWarning: false,
+			name: "KWOK with Default skips CNI silently",
+			cni:  v1alpha1.CNIDefault,
 		},
 		{name: "KWOK with empty CNI skips CNI silently", cni: "", wantWarning: false},
 		{
@@ -55,15 +54,12 @@ func TestInstallCNI_KWOKSkipsCNIInstallation(t *testing.T) {
 
 			installed, err := setup.InstallCNI(cmd, clusterCfg, nil)
 
-			if testCase.wantErr != nil {
-				require.ErrorIs(t, err, testCase.wantErr)
-				assert.False(t, installed, "CNI should not be installed for KWOK")
+			require.ErrorIs(t, err, testCase.wantErr)
+			assert.False(t, installed, "CNI should not be installed for KWOK")
 
+			if testCase.wantErr != nil {
 				return
 			}
-
-			require.NoError(t, err)
-			assert.False(t, installed, "CNI should not be installed for KWOK")
 
 			if testCase.wantWarning {
 				assert.Contains(t, buf.String(), "not installed on KWOK",
