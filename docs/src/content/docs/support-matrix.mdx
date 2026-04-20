@@ -30,8 +30,8 @@ KSail supports multiple Kubernetes distributions, providers, and components. Thi
 | Component                     | Vanilla | K3s      | Talos               | VCluster | KWOK     | EKS              |
 | ----------------------------- | ------- | -------- | ------------------- | -------- | -------- | ---------------- |
 | **CNI**                       |
-| Cilium                        | ✅      | ✅       | ✅                  | N/A¹     | Sim⁷     | ❌               |
-| Calico                        | ✅      | ✅       | ✅                  | N/A¹     | Sim⁷     | ❌               |
+| Cilium                        | ✅      | ✅       | ✅                  | N/A¹     | ❌¹¹     | ❌               |
+| Calico                        | ✅      | ✅       | ✅                  | N/A¹     | ❌¹¹     | ❌               |
 | Amazon VPC CNI                | ❌      | ❌       | ❌                  | ❌       | ❌       | Built-in         |
 | **CSI**                       |
 | Local Path Provisioner        | ✅      | Built-in | ✅ (Docker)         | N/A²     | Sim⁷     | ❌               |
@@ -78,6 +78,7 @@ KSail supports multiple Kubernetes distributions, providers, and components. Thi
 - **⁸ KWOK Policy Engines**: Kyverno and Gatekeeper are not installed on KWOK. Both register global `MutatingWebhookConfigurations` that intercept all Kubernetes API requests. On KWOK, no real pod serves the webhook endpoint, so every webhook call times out — breaking all subsequent Helm installs. KSail silently skips policy engine installation when `spec.cluster.distribution: KWOK` is set and emits a warning at cluster creation time.
 - **⁹ KWOK Flux**: Flux is not installed on KWOK. The flux-operator pod is simulated by KWOK stages and appears Running, but it never registers Flux CRDs — Flux reconciliation is not functional. Use ArgoCD for GitOps workflows on KWOK.
 - **¹⁰ EKS (Planned)**: Full component installer support for EKS is in progress. `ksail cluster init` is available, but `ksail cluster create` is not yet functional. See [EKS Distribution](/distributions/eks/) for details.
+- **¹¹ KWOK CNI**: Cilium and Calico are not installed on KWOK. KWOK runs simulated pods with no real network dataplane, so CNI plugins are never functional and are always skipped. If a non-default CNI is configured in `ksail.yaml` for a KWOK cluster, KSail emits a warning and skips installation. The `spec.cluster.cni` setting has no effect on KWOK clusters.
 
 ## Secret Management × Provider Matrix
 
@@ -112,7 +113,7 @@ Changes are classified by impact: **in-place** (no disruption), **reboot-require
 | ------------------------ | -------------- | --------- | -------- | --------------- | -------------- | ---------- |
 | Distribution             | Recreate       | Recreate  | Recreate | Recreate        | Recreate       | 🚧¹⁰      |
 | Provider                 | Recreate       | Recreate  | Recreate | Recreate        | Recreate       | 🚧¹⁰      |
-| CNI                      | In-place       | In-place  | In-place | N/A             | Sim⁷           | 🚧¹⁰      |
+| CNI                      | In-place       | In-place  | In-place | N/A             | N/A¹¹          | 🚧¹⁰      |
 | CSI                      | N/A⁵           | In-place  | In-place | N/A             | Sim⁷           | 🚧¹⁰      |
 | Metrics Server           | In-place       | In-place  | In-place | N/A             | Sim⁷           | 🚧¹⁰      |
 | Load Balancer            | In-place       | In-place  | N/A¹     | N/A             | Sim⁷           | 🚧¹⁰      |
