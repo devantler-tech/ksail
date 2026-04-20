@@ -132,6 +132,12 @@ The `kwok.yaml` scaffolded by KSail adds four Cluster-level CRDs not provided by
 
 All Kubernetes API operations (create, get, describe, delete, scale, apply) work against the real API server. Helm charts install and their pods appear Running. GitOps controllers are deployed and simulated as Running, but `ksail workload reconcile` is skipped for KWOK — controllers cannot actually sync resources because their container processes are not running.
 
+**Components not installed on KWOK:**
+
+- **CNI (Cilium, Calico)**: KWOK has no real network dataplane, so CNI plugins are skipped entirely. If a non-default CNI is configured in `ksail.yaml`, KSail emits a warning and skips installation. The `spec.cluster.cni` setting has no effect on KWOK clusters.
+- **Policy Engines (Kyverno, Gatekeeper)**: Both register `MutatingWebhookConfigurations` that intercept all API requests. On KWOK, no real pod serves the webhook endpoint, causing timeouts. See [Support Matrix](/support-matrix/) for details.
+- **Flux**: KSail skips Flux installation and configuration on KWOK (with a warning) because Flux cannot function there. Use ArgoCD for GitOps workflows on KWOK.
+
 ## Comparison with Other Distributions
 
 For a full comparison across all distributions and supported components, see the [Support Matrix](/support-matrix/).
