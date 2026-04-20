@@ -44,6 +44,4 @@ exclude_path = [
 #   - \$%7B: shell variable template URLs (${VAR} URL-encoded, not real URLs).
 #   - siderolabs.com/platform/saas-for-kubernetes: intermittently returns
 #     HTTP 500 in CI environments; content is stable, link is not broken.
-#   - ksail.devantler.tech/ai-plugins: new docs page; the link is stable and
-#     will resolve once the next docs deploy lands on main.
-exclude = ['^/', '%s', '\$%7B', 'siderolabs\.com/platform/saas-for-kubernetes', 'ksail\.devantler\.tech/ai-plugins']
+exclude = ['^/', '%s', '\$%7B', 'siderolabs\.com/platform/saas-for-kubernetes']

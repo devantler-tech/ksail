@@ -177,45 +177,49 @@ jobs:
         id: get_version
         run: echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
 
-      - name: 📝 Bump plugin + marketplace version
-        env:
-          VERSION: ${{ steps.get_version.outputs.version }}
-        run: |
-          set -euo pipefail
-          bump() {
-            local file="$1" filter="$2"
-            jq --arg v "$VERSION" "$filter" "$file" > "$file.tmp"
-            mv "$file.tmp" "$file"
-          }
-          bump copilot-plugin/plugin.json ".version = \$v"
-          bump copilot-plugin/.claude-plugin/plugin.json ".version = \$v"
-          bump .github/plugin/marketplace.json ".metadata.version = \$v | .plugins[0].version = \$v"
-          bump .claude-plugin/marketplace.json ".metadata.version = \$v | .plugins[0].version = \$v"
-
       - name: 📤 Commit + push version bump
         env:
           VERSION: ${{ steps.get_version.outputs.version }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           set -euo pipefail
-          if git diff --quiet; then
-            echo "No version change to commit"
-            exit 0
-          fi
+
+          bump() {
+            local file="$1" filter="$2"
+            jq --arg v "$VERSION" "$filter" "$file" > "$file.tmp"
+            mv "$file.tmp" "$file"
+          }
+
           git config user.name "devantler-tech-bot[bot]"
           git config user.email "devantler-tech-bot[bot]@users.noreply.github.com"
-          git add copilot-plugin/plugin.json copilot-plugin/.claude-plugin/plugin.json \
-            .github/plugin/marketplace.json .claude-plugin/marketplace.json
-          git commit -m "chore(copilot-plugin): release v${VERSION}"
 
           # Retry to tolerate concurrent tag releases or main advancing mid-run.
+          # Each attempt regenerates the version bump on top of the latest
+          # origin/${DEFAULT_BRANCH} so we never try to rebase a stale commit
+          # that conflicts with a concurrent release.
           for attempt in 1 2 3; do
+            git fetch origin "${DEFAULT_BRANCH}"
+            git reset --hard "origin/${DEFAULT_BRANCH}"
+
+            bump copilot-plugin/plugin.json ".version = \$v"
+            bump copilot-plugin/.claude-plugin/plugin.json ".version = \$v"
+            bump .github/plugin/marketplace.json ".metadata.version = \$v | .plugins[0].version = \$v"
+            bump .claude-plugin/marketplace.json ".metadata.version = \$v | .plugins[0].version = \$v"
+
+            if git diff --quiet; then
+              echo "No version change to commit"
+              exit 0
+            fi
+
+            git add copilot-plugin/plugin.json copilot-plugin/.claude-plugin/plugin.json \
+              .github/plugin/marketplace.json .claude-plugin/marketplace.json
+            git commit -m "chore(copilot-plugin): release v${VERSION}"
+
             if git push origin "HEAD:${DEFAULT_BRANCH}"; then
               exit 0
             fi
-            echo "Push failed (attempt ${attempt}); rebasing on origin/${DEFAULT_BRANCH} and retrying"
-            git fetch origin "${DEFAULT_BRANCH}"
-            git pull --rebase origin "${DEFAULT_BRANCH}"
+
+            echo "Push failed (attempt ${attempt}); refreshing from origin/${DEFAULT_BRANCH} and retrying"
             sleep 2
           done
           echo "Failed to push version bump after 3 attempts" >&2

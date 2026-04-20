@@ -46,7 +46,7 @@ copilot plugin install ksail
 /plugin install ksail@ksail
 ```
 
-Requires `ksail` on `PATH`. See [AI Assistant Plugins](https://ksail.devantler.tech/ai-plugins/) for details.
+Requires `ksail` on `PATH`.
 
 ## Quick Start
 
