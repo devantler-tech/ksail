@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "ksail": {
+      "command": "ksail",
+      "args": ["mcp"]
+    }
+  }
+}

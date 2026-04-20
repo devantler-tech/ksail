@@ -1,0 +1,63 @@
+---
+title: AI Assistant Plugins
+description: Install the ksail plugin for GitHub Copilot CLI or Claude Code to auto-register the ksail MCP server and a ksail expertise skill.
+---
+
+KSail ships a first-party plugin distributed for both [GitHub Copilot CLI](https://docs.github.com/en/copilot/how-tos/copilot-cli) and [Claude Code](https://docs.claude.com/en/docs/claude-code/plugins). The plugin:
+
+- Registers the `ksail` [MCP server](/mcp/) (via `ksail mcp`), giving the assistant direct access to consolidated `cluster_*`, `workload_*`, and `cipher_*` tools.
+- Adds a **ksail** skill so the assistant knows when to reach for ksail and links back to this documentation site instead of guessing at flag semantics.
+
+A single plugin directory (`copilot-plugin/`) is exposed through two marketplace manifests — `.github/plugin/marketplace.json` for Copilot CLI and `.claude-plugin/marketplace.json` for Claude Code — so both clients install the same skill and MCP server configuration.
+
+## Install
+
+### GitHub Copilot CLI
+
+```bash
+copilot plugin marketplace add devantler-tech/ksail
+copilot plugin install ksail
+```
+
+Verify with `copilot plugin list`, or inside an interactive session:
+
+```
+/plugin list
+/skills list
+```
+
+See the official [installing plugins guide](https://docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/plugins-marketplace).
+
+### Claude Code
+
+```bash
+/plugin marketplace add devantler-tech/ksail
+/plugin install ksail@ksail
+```
+
+See the official [Claude Code plugins overview](https://docs.claude.com/en/docs/claude-code/plugins) and [marketplace docs](https://docs.claude.com/en/docs/claude-code/plugin-marketplaces).
+
+## Prerequisites
+
+- `ksail` available on `PATH` — see the [Installation Guide](/installation/).
+- Docker running (required for all local cluster providers).
+
+## What it contains
+
+See the plugin source in the repo: [`copilot-plugin/`](https://github.com/devantler-tech/ksail/tree/main/copilot-plugin).
+
+| File | Purpose |
+|------|---------|
+| `plugin.json` | Copilot CLI plugin manifest |
+| `.claude-plugin/plugin.json` | Claude Code plugin manifest |
+| `.mcp.json` | Registers the `ksail` MCP server (`command: ksail`, `args: ["mcp"]`) |
+| `skills/ksail/SKILL.md` | ksail expertise skill |
+
+## Versioning
+
+The plugin version tracks ksail releases. Each `v*` tag triggers [`cd.yaml`](https://github.com/devantler-tech/ksail/blob/main/.github/workflows/cd.yaml), which rewrites the `version` field in both plugin manifests and both marketplace files and commits the bump back to `main`. Marketplace `add` commands read the default branch, so installs always see the latest version.
+
+## Further reading
+
+- Copilot CLI: [about plugins](https://docs.github.com/en/copilot/concepts/agents/copilot-cli/about-cli-plugins) · [creating a plugin](https://docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/plugins-creating) · [reference](https://docs.github.com/en/copilot/reference/cli-plugin-reference)
+- Claude Code: [plugins overview](https://docs.claude.com/en/docs/claude-code/plugins) · [plugin marketplaces](https://docs.claude.com/en/docs/claude-code/plugin-marketplaces) · [reference](https://docs.claude.com/en/docs/claude-code/plugins-reference)
