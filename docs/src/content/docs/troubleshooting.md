@@ -73,7 +73,7 @@ kubectl get crd <crd-name> -o jsonpath='{.status.conditions[?(@.type=="Establish
 
 KSail checks cluster stability at two points during installation:
 
-- **Before Cilium CNI components**: Ensures the eBPF dataplane is ready before deploying components (like metrics-server) that depend on ClusterIP connectivity.
+- **Before infrastructure components** (Cilium CNI only): Ensures the eBPF dataplane is ready before deploying components (like metrics-server) that depend on ClusterIP connectivity.
 - **Before GitOps engines**: Ensures the API server is fully ready — especially important for K3s/K3d clusters, which report creation success before the API server can serve requests.
 
 If you see `cluster not stable before infrastructure installation`, `cluster not stable after infrastructure installation`, or `in-cluster API connectivity check failed`, check resources and optionally recreate with fewer components:
