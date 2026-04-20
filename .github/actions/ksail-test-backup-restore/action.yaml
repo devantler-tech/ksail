@@ -28,7 +28,7 @@ runs:
       run: |
         create_succeeded=false
         for attempt in 1 2 3; do
-          if ksail workload create deployment backup-test --image=nginx:alpine; then
+          if ksail workload create deployment backup-test --image=nginx:1.27-alpine; then
             create_succeeded=true
             break
           fi

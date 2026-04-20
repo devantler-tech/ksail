@@ -64,7 +64,7 @@ runs:
         # Append CI test workload images (must match warm-mirror-cache exactly).
         # This also includes the API connectivity pre-flight pod image so mirror
         # restores cover that pull path too. See issue #3822 for related context.
-        echo "docker.io/library/nginx:alpine" >> "$IMAGES_FILE"
+        echo "docker.io/library/nginx:1.27-alpine" >> "$IMAGES_FILE"
         echo "docker.io/library/busybox:1.36.1" >> "$IMAGES_FILE"
 
         # Deduplicate and sort (must match warm-mirror-cache exactly)
