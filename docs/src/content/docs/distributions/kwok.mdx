@@ -136,7 +136,7 @@ All Kubernetes API operations (create, get, describe, delete, scale, apply) work
 
 - **CNI (Cilium, Calico)**: KWOK has no real network dataplane, so CNI plugins are skipped entirely. If a non-default CNI is configured in `ksail.yaml`, KSail emits a warning and skips installation. The `spec.cluster.cni` setting has no effect on KWOK clusters.
 - **Policy Engines (Kyverno, Gatekeeper)**: Both register `MutatingWebhookConfigurations` that intercept all API requests. On KWOK, no real pod serves the webhook endpoint, causing timeouts. See [Support Matrix](/support-matrix/) for details.
-- **Flux**: The flux-operator pod is simulated as Running, but it never registers Flux CRDs. Use ArgoCD for GitOps workflows on KWOK.
+- **Flux**: KSail skips Flux installation and configuration on KWOK (with a warning) because Flux cannot function there. Use ArgoCD for GitOps workflows on KWOK.
 
 ## Comparison with Other Distributions
 
