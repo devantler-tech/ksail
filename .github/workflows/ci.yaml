@@ -141,6 +141,7 @@ jobs:
       docs: ${{ steps.filter.outputs.docs }}
       docs-deps: ${{ steps.filter.outputs.docs-deps }}
       vsce-deps: ${{ steps.filter.outputs.vsce-deps }}
+      copilot-plugin: ${{ steps.filter.outputs.copilot-plugin }}
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@f808768d1510423e83855289c910610ca9b43176 # v2.17.0
@@ -203,6 +204,11 @@ jobs:
               - 'docs/package*.json'
             vsce-deps:
               - 'vsce/package*.json'
+            copilot-plugin:
+              - 'copilot-plugin/**'
+              - '.github/plugin/**'
+              - '.claude-plugin/**'
+              - '.github/workflows/ci.yaml'
 
   ci-go:
     name: ✅ Validate Go Project
@@ -602,6 +608,54 @@ jobs:
           name: ksail-vsix
           path: ksail.vsix
           retention-days: 7
+
+  copilot-plugin:
+    name: 🧩 Copilot CLI Plugin
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [changes]
+    if: github.event_name != 'merge_group' && needs.changes.outputs.copilot-plugin == 'true'
+    permissions:
+      contents: read
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@f808768d1510423e83855289c910610ca9b43176 # v2.17.0
+        with:
+          egress-policy: audit
+
+      - name: 📄 Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: 🧪 Validate plugin manifests
+        run: |
+          set -euo pipefail
+          for f in \
+            copilot-plugin/plugin.json \
+            copilot-plugin/.claude-plugin/plugin.json \
+            copilot-plugin/.mcp.json \
+            .github/plugin/marketplace.json \
+            .claude-plugin/marketplace.json; do
+            echo "Validating $f"
+            jq -e . "$f" >/dev/null
+          done
+
+          # Required fields on the Copilot CLI + Claude Code plugin manifests
+          for f in copilot-plugin/plugin.json copilot-plugin/.claude-plugin/plugin.json; do
+            jq -e '.name == "ksail" and .version' "$f" >/dev/null
+          done
+
+          # Each marketplace must reference the plugin directory
+          for f in .github/plugin/marketplace.json .claude-plugin/marketplace.json; do
+            jq -e '.plugins[0].source == "./copilot-plugin" and .plugins[0].name == "ksail"' "$f" >/dev/null
+          done
+
+          # Skill manifest must exist
+          test -f copilot-plugin/skills/ksail/SKILL.md
+
+          # MCP server must point at the ksail binary
+          jq -e '.mcpServers.ksail.command == "ksail"' copilot-plugin/.mcp.json >/dev/null
 
   warm-helm-cache:
     name: 🔥 Warm Helm Cache
@@ -1535,7 +1589,7 @@ jobs:
           OMNI_ENDPOINT: ${{ vars.OMNI_ENDPOINT }}
 
   status:
-    name: CI - KSail
+    name: CI - Required Checks
     runs-on: ubuntu-latest
     timeout-minutes: 5
     needs:
@@ -1559,6 +1613,7 @@ jobs:
         audit-vsce,
         build-docs,
         vscode-extension,
+        copilot-plugin,
         benchmark,
         benchmark-store,
       ]
@@ -1569,10 +1624,7 @@ jobs:
         with:
           egress-policy: audit
 
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: false
-      - uses: ./.github/actions/summarize-workflow
+      - uses: devantler-tech/actions/require-checks-in-pr@61ae89ec83b943bd3a486fdcaf91cb66fd6b8760 # feat/require-checks-in-pr
         with:
           job-results: >-
             ${{ needs.rate-limit-gate.result }}
@@ -1594,5 +1646,6 @@ jobs:
             ${{ needs.audit-vsce.result }}
             ${{ needs.build-docs.result }}
             ${{ needs.vscode-extension.result }}
+            ${{ needs.copilot-plugin.result }}
             ${{ needs.benchmark.result }}
             ${{ needs.benchmark-store.result }}

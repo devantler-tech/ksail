@@ -145,6 +145,86 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  copilot-plugin:
+    name: 🧩 Release Copilot CLI Plugin
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [goreleaser]
+    environment: ci
+    permissions:
+      contents: write
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@f808768d1510423e83855289c910610ca9b43176 # v2.17.0
+        with:
+          egress-policy: audit
+
+      - name: 🔑 Generate GitHub App Token
+        uses: actions/create-github-app-token@29824e69f54612133e76f7eaac726eef6c875baf # v2.2.1
+        id: generate-token
+        with:
+          app-id: ${{ vars.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - name: 📑 Checkout main
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          token: ${{ steps.generate-token.outputs.token }}
+          persist-credentials: true
+
+      - name: 🏷️ Extract version from tag
+        id: get_version
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+
+      - name: 📤 Commit + push version bump
+        env:
+          VERSION: ${{ steps.get_version.outputs.version }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+
+          bump() {
+            local file="$1" filter="$2"
+            jq --arg v "$VERSION" "$filter" "$file" > "$file.tmp"
+            mv "$file.tmp" "$file"
+          }
+
+          git config user.name "devantler-tech-bot[bot]"
+          git config user.email "devantler-tech-bot[bot]@users.noreply.github.com"
+
+          # Retry to tolerate concurrent tag releases or main advancing mid-run.
+          # Each attempt regenerates the version bump on top of the latest
+          # origin/${DEFAULT_BRANCH} so we never try to rebase a stale commit
+          # that conflicts with a concurrent release.
+          for attempt in 1 2 3; do
+            git fetch origin "${DEFAULT_BRANCH}"
+            git reset --hard "origin/${DEFAULT_BRANCH}"
+
+            bump copilot-plugin/plugin.json ".version = \$v"
+            bump copilot-plugin/.claude-plugin/plugin.json ".version = \$v"
+            bump .github/plugin/marketplace.json ".metadata.version = \$v | .plugins[0].version = \$v"
+            bump .claude-plugin/marketplace.json ".metadata.version = \$v | .plugins[0].version = \$v"
+
+            if git diff --quiet; then
+              echo "No version change to commit"
+              exit 0
+            fi
+
+            git add copilot-plugin/plugin.json copilot-plugin/.claude-plugin/plugin.json \
+              .github/plugin/marketplace.json .claude-plugin/marketplace.json
+            git commit -m "chore(copilot-plugin): release v${VERSION}"
+
+            if git push origin "HEAD:${DEFAULT_BRANCH}"; then
+              exit 0
+            fi
+
+            echo "Push failed (attempt ${attempt}); refreshing from origin/${DEFAULT_BRANCH} and retrying"
+            sleep 2
+          done
+          echo "Failed to push version bump after 3 attempts" >&2
+          exit 1
+
   mcp-publish:
     name: 📤 Publish to MCP Registry
     runs-on: ubuntu-latest
@@ -285,7 +365,8 @@ jobs:
     name: 📢 Publish Release
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    needs: [goreleaser, vscode-extension, mcp-publish, pages-deploy]
+    needs:
+      [goreleaser, vscode-extension, mcp-publish, pages-deploy, copilot-plugin]
     permissions:
       contents: write
     steps:
