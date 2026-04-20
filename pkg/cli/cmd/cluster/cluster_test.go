@@ -2464,6 +2464,7 @@ func TestApplyDistributionSpecOverrides(t *testing.T) { //nolint:funlen
 				GitOpsEngine: v1alpha1.GitOpsEngineNone,
 				PolicyEngine: v1alpha1.PolicyEngineNone,
 				LoadBalancer: v1alpha1.LoadBalancerDisabled,
+				CNI:          v1alpha1.CNIDefault,
 			},
 		},
 		{
@@ -2479,6 +2480,20 @@ func TestApplyDistributionSpecOverrides(t *testing.T) { //nolint:funlen
 				GitOpsEngine: v1alpha1.GitOpsEngineArgoCD,
 				PolicyEngine: v1alpha1.PolicyEngineNone,
 				LoadBalancer: v1alpha1.LoadBalancerDisabled,
+				CNI:          v1alpha1.CNIDefault,
+			},
+		},
+		{
+			name: "KWOK with Calico normalises CNI to Default",
+			input: v1alpha1.ClusterSpec{
+				Distribution: v1alpha1.DistributionKWOK,
+				CNI:          v1alpha1.CNICalico,
+			},
+			want: v1alpha1.ClusterSpec{
+				Distribution: v1alpha1.DistributionKWOK,
+				PolicyEngine: v1alpha1.PolicyEngineNone,
+				LoadBalancer: v1alpha1.LoadBalancerDisabled,
+				CNI:          v1alpha1.CNIDefault,
 			},
 		},
 		{

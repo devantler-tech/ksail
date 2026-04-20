@@ -6582,6 +6582,11 @@ func applyDistributionSpecOverrides(spec *v1alpha1.ClusterSpec) {
 		// dataplane). Normalise LoadBalancer to Disabled so that the update diff
 		// sees Disabled on both sides and reports no change.
 		spec.LoadBalancer = v1alpha1.LoadBalancerDisabled
+
+		// KWOK runs simulated pods with no real network dataplane, so CNI plugins
+		// (Calico, Cilium, etc.) are never installed at creation time. Normalise CNI
+		// to Default so that update dry-runs do not report spurious CNI change diffs.
+		spec.CNI = v1alpha1.CNIDefault
 	}
 }
 
