@@ -3,13 +3,11 @@ package talos_test
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
-
-	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
 
 	configmanager "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager"
 	"github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager/talos"
+	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -258,57 +256,57 @@ func TestConfigManager_ValidateConfigs_NonExistentPatchDir(t *testing.T) {
 }
 
 func TestConfigManager_WithVersionContract_PropagatesContractToGeneratedConfig(t *testing.T) {
-t.Parallel()
+	t.Parallel()
 
-tmpDir := t.TempDir()
+	tmpDir := t.TempDir()
 
-// Default contract (TalosVersion1_11) must not emit grubUseUKICmdline.
-managerDefault := talos.NewConfigManager(tmpDir, "test-cluster", "1.32.0", "10.5.0.0/24")
-configsDefault, err := managerDefault.Load(configmanager.LoadOptions{})
-require.NoError(t, err)
+	// Default contract (TalosVersion1_11) must not emit grubUseUKICmdline.
+	managerDefault := talos.NewConfigManager(tmpDir, "test-cluster", "1.32.0", "10.5.0.0/24")
+	configsDefault, err := managerDefault.Load(configmanager.LoadOptions{})
+	require.NoError(t, err)
 
-cpDefault := configsDefault.ControlPlane()
-require.NotNil(t, cpDefault)
+	cpDefault := configsDefault.ControlPlane()
+	require.NotNil(t, cpDefault)
 
-cfgYAMLDefault, err := cpDefault.EncodeString()
-require.NoError(t, err)
-assert.NotContains(t, cfgYAMLDefault, "grubUseUKICmdline",
-"TalosVersion1_11 should not emit grubUseUKICmdline")
+	cfgYAMLDefault, err := cpDefault.EncodeString()
+	require.NoError(t, err)
+	assert.NotContains(t, cfgYAMLDefault, "grubUseUKICmdline",
+		"TalosVersion1_11 should not emit grubUseUKICmdline")
 
-// TalosVersion1_13 contract must emit grubUseUKICmdline.
-manager113 := talos.NewConfigManager(tmpDir, "test-cluster", "1.32.0", "10.5.0.0/24").
-WithVersionContract(talosconfig.TalosVersion1_13)
-configs113, err := manager113.Load(configmanager.LoadOptions{})
-require.NoError(t, err)
+	// TalosVersion1_13 contract must emit grubUseUKICmdline.
+	manager113 := talos.NewConfigManager(tmpDir, "test-cluster", "1.32.0", "10.5.0.0/24").
+		WithVersionContract(talosconfig.TalosVersion1_13)
+	configs113, err := manager113.Load(configmanager.LoadOptions{})
+	require.NoError(t, err)
 
-cp113 := configs113.ControlPlane()
-require.NotNil(t, cp113)
+	cp113 := configs113.ControlPlane()
+	require.NotNil(t, cp113)
 
-cfgYAML113, err := cp113.EncodeString()
-require.NoError(t, err)
-assert.True(t, strings.Contains(cfgYAML113, "grubUseUKICmdline"),
-"TalosVersion1_13 should emit grubUseUKICmdline; got:\n%s", cfgYAML113)
+	cfgYAML113, err := cp113.EncodeString()
+	require.NoError(t, err)
+	assert.Contains(t, cfgYAML113, "grubUseUKICmdline",
+		"TalosVersion1_13 should emit grubUseUKICmdline; got:\n%s", cfgYAML113)
 }
 
 func TestConfigManager_WithVersionContract_InvalidatesCachedConfig(t *testing.T) {
-t.Parallel()
+	t.Parallel()
 
-tmpDir := t.TempDir()
+	tmpDir := t.TempDir()
 
-manager := talos.NewConfigManager(tmpDir, "test-cluster", "1.32.0", "10.5.0.0/24")
+	manager := talos.NewConfigManager(tmpDir, "test-cluster", "1.32.0", "10.5.0.0/24")
 
-// First load caches the config.
-configs1, err := manager.Load(configmanager.LoadOptions{})
-require.NoError(t, err)
-require.NotNil(t, configs1)
+	// First load caches the config.
+	configs1, err := manager.Load(configmanager.LoadOptions{})
+	require.NoError(t, err)
+	require.NotNil(t, configs1)
 
-// Changing the version contract must invalidate the cache.
-manager.WithVersionContract(talosconfig.TalosVersion1_13)
+	// Changing the version contract must invalidate the cache.
+	manager.WithVersionContract(talosconfig.TalosVersion1_13)
 
-configs2, err := manager.Load(configmanager.LoadOptions{})
-require.NoError(t, err)
-require.NotNil(t, configs2)
+	configs2, err := manager.Load(configmanager.LoadOptions{})
+	require.NoError(t, err)
+	require.NotNil(t, configs2)
 
-assert.NotSame(t, configs1, configs2,
-"WithVersionContract should invalidate the cached config so Load regenerates it")
+	assert.NotSame(t, configs1, configs2,
+		"WithVersionContract should invalidate the cached config so Load regenerates it")
 }
