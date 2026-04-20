@@ -217,6 +217,10 @@ func clusterNameFromDistConfig(distCfg *clusterprovisioner.DistributionConfig) s
 		return distCfg.VCluster.Name
 	}
 
+	if distCfg.KWOK != nil {
+		return distCfg.KWOK.Name
+	}
+
 	return ""
 }
 
