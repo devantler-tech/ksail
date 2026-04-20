@@ -1402,7 +1402,9 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: bench-results
-          path: ${{ runner.temp }}/bench.txt
+          path: |
+            ${{ runner.temp }}/bench.txt
+            ${{ runner.temp }}/bench-filtered.txt
           retention-days: 1
 
   benchmark-store:
@@ -1437,7 +1439,7 @@ jobs:
         uses: benchmark-action/github-action-benchmark@a60cea5bc7b49e15c1f58f411161f99e0df48372 # v1.22.0
         with:
           tool: go
-          output-file-path: ${{ runner.temp }}/bench.txt
+          output-file-path: ${{ runner.temp }}/bench-filtered.txt
           gh-pages-branch: benchmark-data
           benchmark-data-dir-path: dev/bench
           github-token: ${{ secrets.GITHUB_TOKEN }}
