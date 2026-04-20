@@ -12,7 +12,7 @@ var (
 	errUnexpectedReleaseType    = errors.New("helm: unexpected release type")
 	errUnexpectedChartType      = errors.New("helm: unexpected chart type")
 	errUnsupportedClientType    = errors.New("helm: unsupported client type for OCI chart")
-	errListReleasesUnsupported  = errors.New("helm: ListReleases is not supported on a template-only client (no storage backend configured)")
+	errListReleasesUnsupported = errors.New("helm: ListReleases not supported on template-only client")
 )
 
 // ChartSpec mirrors the mittwald chart specification while keeping KSail
