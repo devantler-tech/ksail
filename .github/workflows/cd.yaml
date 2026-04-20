@@ -361,7 +361,8 @@ jobs:
     name: 📢 Publish Release
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    needs: [goreleaser, vscode-extension, mcp-publish, pages-deploy, copilot-plugin]
+    needs:
+      [goreleaser, vscode-extension, mcp-publish, pages-deploy, copilot-plugin]
     permissions:
       contents: write
     steps:
