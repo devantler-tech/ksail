@@ -75,13 +75,13 @@ func (d *ComponentDetector) DetectComponents(
 		return nil, fmt.Errorf("list helm releases: %w", err)
 	}
 
-	rs := make(releaseSet, len(releases))
+	releaseIndex := make(releaseSet, len(releases))
 	for _, r := range releases {
-		rs[releaseKey{r.Name, r.Namespace}] = struct{}{}
+		releaseIndex[releaseKey{r.Name, r.Namespace}] = struct{}{}
 	}
 
 	cached := &ComponentDetector{
-		helmClient:   &cachedHelmClient{Interface: d.helmClient, set: rs},
+		helmClient:   &cachedHelmClient{Interface: d.helmClient, set: releaseIndex},
 		k8sClientset: d.k8sClientset,
 		dockerClient: d.dockerClient,
 	}

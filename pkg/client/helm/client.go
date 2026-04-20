@@ -232,7 +232,8 @@ func (c *Client) ReleaseExists(
 // single Kubernetes API call. Use this instead of multiple ReleaseExists calls
 // to reduce API roundtrips when detecting many components at once.
 func (c *Client) ListReleases(ctx context.Context) ([]ReleaseInfo, error) {
-	if err := ctx.Err(); err != nil {
+	err := ctx.Err()
+	if err != nil {
 		return nil, fmt.Errorf("list releases context cancelled: %w", err)
 	}
 
