@@ -1,5 +1,4 @@
 {
-  "$schema": "https://raw.githubusercontent.com/github/copilot-cli/main/schemas/marketplace.schema.json",
   "name": "ksail",
   "owner": {
     "name": "devantler-tech",

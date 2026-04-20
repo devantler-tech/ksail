@@ -182,6 +182,7 @@ jobs:
           VERSION: ${{ steps.get_version.outputs.version }}
         run: |
           set -euo pipefail
+          # shellcheck disable=SC2016 # $v refers to the jq variable, not a shell variable
           bump() {
             local file="$1" filter="$2"
             jq --arg v "$VERSION" "$filter" "$file" > "$file.tmp"
