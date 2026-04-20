@@ -49,11 +49,13 @@ type releaseKey struct {
 // delegating all other operations to the underlying client.
 type cachedHelmClient struct {
 	helm.Interface
+
 	set releaseSet
 }
 
 func (c *cachedHelmClient) ReleaseExists(_ context.Context, name, namespace string) (bool, error) {
 	_, ok := c.set[releaseKey{name, namespace}]
+
 	return ok, nil
 }
 
