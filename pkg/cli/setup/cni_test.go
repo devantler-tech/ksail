@@ -2,7 +2,6 @@ package setup_test
 
 import (
 	"bytes"
-	"errors"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
@@ -41,7 +40,6 @@ func TestInstallCNI_KWOKSkipsCNIInstallation(t *testing.T) {
 			t.Parallel()
 
 			var buf bytes.Buffer
-
 			cmd := &cobra.Command{}
 			cmd.SetOut(&buf)
 
@@ -57,8 +55,7 @@ func TestInstallCNI_KWOKSkipsCNIInstallation(t *testing.T) {
 			installed, err := setup.InstallCNI(cmd, clusterCfg, nil)
 
 			if testCase.wantErr != nil {
-				require.Error(t, err)
-				assert.True(t, errors.Is(err, testCase.wantErr), "expected error %v, got %v", testCase.wantErr, err)
+				require.ErrorIs(t, err, testCase.wantErr)
 				assert.False(t, installed, "CNI should not be installed for KWOK")
 
 				return
