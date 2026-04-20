@@ -10,7 +10,26 @@ permissions:
   issues: write
 
 jobs:
+  validate-secrets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@f808768d1510423e83855289c910610ca9b43176 # v2.17.0
+        with:
+          egress-policy: audit
+
+      - name: 🔐 Validate APP_PRIVATE_KEY
+        env:
+          HAS_KEY: ${{ secrets.APP_PRIVATE_KEY != '' }}
+        run: |
+          if [ "$HAS_KEY" != "true" ]; then
+            echo "::error::APP_PRIVATE_KEY secret is not configured. Set it in Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+
   todos:
+    needs: validate-secrets
     uses: devantler-tech/reusable-workflows/.github/workflows/scan-for-todo-comments.yaml@c46f75962deb2dab6619de8a379b47b929f40d15 # v2.3.0
     secrets:
       APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
