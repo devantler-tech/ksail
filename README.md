@@ -28,6 +28,17 @@ go install github.com/devantler-tech/ksail/v6@latest
 
 See the [Installation Guide](https://ksail.devantler.tech/installation/) for binary downloads and more options.
 
+## GitHub Copilot CLI Plugin
+
+Install the [Copilot CLI](https://docs.github.com/en/copilot/how-tos/copilot-cli) plugin to auto-register ksail's MCP server and a ksail expertise skill:
+
+```bash
+copilot plugin marketplace add devantler-tech/ksail
+copilot plugin install ksail
+```
+
+Requires `ksail` on `PATH`. See [About CLI plugins](https://docs.github.com/en/copilot/concepts/agents/copilot-cli/about-cli-plugins).
+
 ## Quick Start
 
 ```bash
