@@ -616,6 +616,10 @@ func buildGitOpsTasks(
 // GitOps operators from entering CrashLoopBackOff due to transient API server
 // connectivity issues after infrastructure components register webhooks).
 //
+// For KWOK clusters, the function returns early after API server stability: KWOK
+// simulates pods without running real DaemonSets or nodes, so the node-readiness
+// and kube-system DaemonSet checks are not applicable and are skipped.
+//
 // When cniInstalled is true, the WaitForAllNodesReadyAndSchedulable check is
 // skipped because waitForCNIReadiness already verified node readiness and
 // schedulability moments ago.
