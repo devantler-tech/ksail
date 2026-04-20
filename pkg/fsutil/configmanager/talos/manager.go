@@ -95,6 +95,8 @@ func NewConfigManager(
 // Set a higher contract only when all bootstrap paths support the required Talos version.
 func (m *ConfigManager) WithVersionContract(contract *talosconfig.VersionContract) *ConfigManager {
 	m.versionContract = contract
+	m.config = nil
+	m.configLoaded = false
 
 	return m
 }

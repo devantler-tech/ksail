@@ -481,6 +481,14 @@ func newConfigsWithEndpointAndSecrets(
 	existingSecrets *secrets.Bundle,
 	versionContract *talosconfig.VersionContract,
 ) (*Configs, error) {
+	// Normalise nil to the effective default so that the stored contract
+	// and the one used for generation are always identical. This prevents
+	// silent behaviour changes if the default ever changes and ensures that
+	// WithName/WithEndpoint regeneration produces the same config.
+	if versionContract == nil {
+		versionContract = talosconfig.TalosVersion1_11
+	}
+
 	// Categorize patches by scope
 	clusterPatches, controlPlanePatches, workerPatches, err := categorizePatchesByScope(patches)
 	if err != nil {

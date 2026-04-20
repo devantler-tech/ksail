@@ -39,7 +39,8 @@ type cniSetupResult struct {
 }
 
 // InstallCNI installs the configured CNI for the cluster.
-// Returns true if a CNI was installed, false if using default/none.
+// Returns true if a CNI was installed, false if using the default (no explicit CNI),
+// or if the distribution does not support CNI installation (e.g. KWOK).
 func InstallCNI(
 	cmd *cobra.Command,
 	clusterCfg *v1alpha1.Cluster,
