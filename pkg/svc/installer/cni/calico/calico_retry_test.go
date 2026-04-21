@@ -160,7 +160,7 @@ func TestInstaller_Install_K3s_APIServerUnavailableRetryExhausted(t *testing.T) 
 	client.EXPECT().
 		InstallOrUpgradeChart(mock.Anything, mock.Anything).
 		Return(nil, errCalicoRetryAPIServerUnavailable).
-		Times(3)
+		Times(5)
 
 	err := installer.Install(context.Background())
 	require.Error(t, err)
