@@ -574,7 +574,7 @@ func TestDetectComponents_Success(t *testing.T) {
 	helmClient.On("ListReleases", ctx).Return([]helm.ReleaseInfo{
 		{Name: detector.ReleaseCilium, Namespace: detector.NamespaceCilium},
 		{Name: detector.ReleaseMetricsServer, Namespace: detector.NamespaceMetricsServer},
-	}, nil)
+	}, nil).Once()
 
 	d := detector.NewComponentDetector(helmClient, k8sClientset, nil)
 	spec, err := d.DetectComponents(ctx, v1alpha1.DistributionTalos, v1alpha1.ProviderDocker)
@@ -590,17 +590,37 @@ func TestDetectComponents_Success(t *testing.T) {
 func TestDetectComponents_ListReleasesError(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // Cancel immediately so ctx.Err() is non-nil; error is propagated, not silenced.
 	helmClient := helm.NewMockInterface(t)
 	k8sClientset := fake.NewClientset()
 
-	helmClient.On("ListReleases", ctx).Return(nil, errHelm)
+	helmClient.On("ListReleases", ctx).Return(nil, errHelm).Once()
 
 	d := detector.NewComponentDetector(helmClient, k8sClientset, nil)
 	_, err := d.DetectComponents(ctx, v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "list helm releases")
+}
+
+func TestDetectComponents_ListReleasesRBACFallback(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	helmClient := helm.NewMockInterface(t)
+	k8sClientset := fake.NewClientset()
+
+	// ListReleases fails (e.g., restricted RBAC). DetectComponents falls back to
+	// per-release ReleaseExists calls on the underlying client.
+	helmClient.On("ListReleases", ctx).Return(nil, errHelm).Once()
+	helmClient.On("ReleaseExists", ctx, mock.Anything, mock.Anything).Return(false, nil)
+
+	d := detector.NewComponentDetector(helmClient, k8sClientset, nil)
+	spec, err := d.DetectComponents(ctx, v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
+
+	require.NoError(t, err)
+	assert.NotNil(t, spec)
 }
 
 func TestDeploymentExists_Found(t *testing.T) {

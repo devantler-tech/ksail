@@ -40,7 +40,7 @@ func TestDetectComponents_AllReleasesFromCache(t *testing.T) {
 		{Name: detector.ReleaseCertManager, Namespace: detector.NamespaceCertManager},
 		{Name: detector.ReleaseKyverno, Namespace: detector.NamespaceKyverno},
 		{Name: detector.ReleaseFluxOperator, Namespace: detector.NamespaceFluxOperator},
-	}, nil)
+	}, nil).Once()
 
 	d := detector.NewComponentDetector(helmClient, k8sClientset, nil)
 	spec, err := d.DetectComponents(ctx, v1alpha1.DistributionK3s, v1alpha1.ProviderDocker)
@@ -65,7 +65,7 @@ func TestDetectComponents_LoadBalancerError(t *testing.T) {
 	dockerClient := docker.NewMockAPIClient(t)
 
 	// ListReleases is called once; no releases installed.
-	helmClient.On("ListReleases", ctx).Return([]helm.ReleaseInfo{}, nil)
+	helmClient.On("ListReleases", ctx).Return([]helm.ReleaseInfo{}, nil).Once()
 	// LoadBalancer: Vanilla with Docker client that returns error.
 	dockerClient.On("ContainerList", ctx, mock.AnythingOfType("container.ListOptions")).
 		Return([]container.Summary{}, errDetectorDocker)

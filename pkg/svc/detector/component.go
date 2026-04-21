@@ -35,7 +35,7 @@ func NewComponentDetector(
 	}
 }
 
-// releaseSet is an in-memory index of deployed Helm releases keyed by
+// releaseSet is an in-memory index of Helm releases keyed by
 // name+namespace for O(1) existence checks after a single ListReleases call.
 type releaseSet map[releaseKey]struct{}
 
@@ -88,7 +88,14 @@ func (d *ComponentDetector) DetectComponents(
 	// the individual detect functions to avoid N separate Helm roundtrips.
 	releases, err := d.helmClient.ListReleases(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("list helm releases: %w", err)
+		// If the context was cancelled or timed out, propagate the error.
+		if ctx.Err() != nil {
+			return nil, fmt.Errorf("list helm releases: %w", err)
+		}
+
+		// Otherwise (e.g., restricted RBAC), fall back to per-release checks so
+		// that detection still works with namespaced Helm access.
+		return d.detectAllComponents(ctx, distribution, provider)
 	}
 
 	releaseIndex := make(releaseSet, len(releases))
