@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"testing"
 
-	calicoinstaller "github.com/devantler-tech/ksail/v6/pkg/svc/installer/cni/calico"
+	calicoinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/cni/calico"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"

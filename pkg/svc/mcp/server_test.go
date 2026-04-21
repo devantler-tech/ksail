@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/devantler-tech/ksail/v6/pkg/svc/mcp"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/mcp"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/devantler-tech/ksail/v6/pkg/client/reconciler"
+	"github.com/devantler-tech/ksail/v7/pkg/client/reconciler"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"

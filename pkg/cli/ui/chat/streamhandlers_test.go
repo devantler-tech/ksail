@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/devantler-tech/ksail/v6/pkg/cli/ui/chat"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/ui/chat"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

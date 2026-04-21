@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	v1alpha1 "github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v6/pkg/svc/installer"
+	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/installer"
 	"github.com/stretchr/testify/assert"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )

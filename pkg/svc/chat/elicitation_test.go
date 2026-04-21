@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/devantler-tech/ksail/v6/pkg/svc/chat"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/chat"
 	copilot "github.com/github/copilot-sdk/go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

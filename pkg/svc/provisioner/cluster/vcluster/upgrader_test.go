@@ -5,10 +5,10 @@ import (
 	"errors"
 	"testing"
 
-	vclusterconfigmanager "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager/vcluster"
-	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/clustererr"
-	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/clusterupdate"
-	vclusterprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/vcluster"
+	vclusterconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/vcluster"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
+	vclusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/vcluster"
 )
 
 // Compile-time check that Provisioner implements Upgrader.

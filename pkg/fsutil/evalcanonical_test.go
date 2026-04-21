@@ -6,8 +6,8 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/devantler-tech/ksail/v6/internal/testutil/rootcheck"
-	"github.com/devantler-tech/ksail/v6/pkg/fsutil"
+	"github.com/devantler-tech/ksail/v7/internal/testutil/rootcheck"
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

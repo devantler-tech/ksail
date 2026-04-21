@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
-	clusterprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster"
-	vclusterprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/vcluster"
-	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/registry"
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
+	vclusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/vcluster"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/registry"
 	"github.com/docker/docker/client"
 )
 

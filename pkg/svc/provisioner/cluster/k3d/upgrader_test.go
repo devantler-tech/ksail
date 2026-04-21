@@ -5,9 +5,9 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/clustererr"
-	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/clusterupdate"
-	k3dprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/k3d"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
+	k3dprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/k3d"
 	v1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 )
 

@@ -6,8 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
-	fluxclient "github.com/devantler-tech/ksail/v6/pkg/client/flux"
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	fluxclient "github.com/devantler-tech/ksail/v7/pkg/client/flux"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/devantler-tech/ksail/v6/pkg/fsutil/generator"
-	yamlgenerator "github.com/devantler-tech/ksail/v6/pkg/fsutil/generator/yaml"
-	"github.com/devantler-tech/ksail/v6/pkg/svc/detector/gitops"
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil/generator"
+	yamlgenerator "github.com/devantler-tech/ksail/v7/pkg/fsutil/generator/yaml"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/detector/gitops"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 

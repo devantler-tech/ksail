@@ -3,7 +3,7 @@ package talosprovisioner_test
 import (
 	"testing"
 
-	talosprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/talos"
+	talosprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/talos"
 	"github.com/stretchr/testify/assert"
 )
 

@@ -4,11 +4,11 @@ import (
 	"context"
 	"testing"
 
-	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
-	clusterprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster"
-	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/clustererr"
-	k3dprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/k3d"
-	kwokprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/kwok"
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
+	k3dprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/k3d"
+	kwokprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/kwok"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

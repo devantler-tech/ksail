@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/devantler-tech/ksail/v6/pkg/client/netretry"
-	"github.com/devantler-tech/ksail/v6/pkg/svc/provider/hetzner"
+	"github.com/devantler-tech/ksail/v7/pkg/client/netretry"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/hetzner"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"github.com/siderolabs/go-retry/retry"
 	machineapi "github.com/siderolabs/talos/pkg/machinery/api/machine"

@@ -9,8 +9,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	cluster "github.com/devantler-tech/ksail/v6/pkg/cli/cmd/cluster"
-	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/clusterupdate"
+	cluster "github.com/devantler-tech/ksail/v7/pkg/cli/cmd/cluster"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

@@ -3,7 +3,7 @@ package kubectl_test
 import (
 	"testing"
 
-	"github.com/devantler-tech/ksail/v6/pkg/client/kubectl"
+	"github.com/devantler-tech/ksail/v7/pkg/client/kubectl"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

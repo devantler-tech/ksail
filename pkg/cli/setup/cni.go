@@ -7,21 +7,27 @@ import (
 	"strings"
 	"time"
 
-	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v6/pkg/cli/flags"
-	"github.com/devantler-tech/ksail/v6/pkg/client/helm"
-	"github.com/devantler-tech/ksail/v6/pkg/k8s"
-	"github.com/devantler-tech/ksail/v6/pkg/k8s/readiness"
-	"github.com/devantler-tech/ksail/v6/pkg/notify"
-	"github.com/devantler-tech/ksail/v6/pkg/svc/installer"
-	calicoinstaller "github.com/devantler-tech/ksail/v6/pkg/svc/installer/cni/calico"
-	ciliuminstaller "github.com/devantler-tech/ksail/v6/pkg/svc/installer/cni/cilium"
-	"github.com/devantler-tech/ksail/v6/pkg/timer"
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/flags"
+	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
+	"github.com/devantler-tech/ksail/v7/pkg/k8s"
+	"github.com/devantler-tech/ksail/v7/pkg/k8s/readiness"
+	"github.com/devantler-tech/ksail/v7/pkg/notify"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/installer"
+	calicoinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/cni/calico"
+	ciliuminstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/cni/cilium"
+	"github.com/devantler-tech/ksail/v7/pkg/timer"
 	"github.com/spf13/cobra"
 )
 
 // ErrUnsupportedCNI is returned when an unsupported CNI type is encountered.
 var ErrUnsupportedCNI = errors.New("unsupported CNI type")
+
+// kwokCNIWarning is emitted when an explicit CNI is configured but cannot be
+// installed on KWOK (Helm-deployed pods are simulated and never run real
+// binaries; readiness checks would always time out).
+const kwokCNIWarning = "CNI %q is not installed on KWOK: " +
+	"Helm-deployed pods are simulated and never run real binaries — skipping"
 
 // ErrCNIReadinessTimeout is returned when nodes fail to become ready after CNI installation.
 var ErrCNIReadinessTimeout = errors.New("CNI node readiness timed out")
@@ -46,11 +52,20 @@ func InstallCNI(
 	clusterCfg *v1alpha1.Cluster,
 	tmr timer.Timer,
 ) (bool, error) {
-	// KWOK simulates pods with no real network dataplane. CNI plugins are
-	// never functional on KWOK and their Helm releases would skew the
-	// component detector, so skip installation entirely.
+	// KWOK simulated pods have no real network dataplane, so CNI installation
+	// is skipped entirely. Still validate the configured CNI so unsupported
+	// values do not get silently accepted.
 	if clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionKWOK {
-		return false, nil
+		switch clusterCfg.Spec.Cluster.CNI {
+		case v1alpha1.CNIDefault, "":
+			return false, nil
+		case v1alpha1.CNICilium, v1alpha1.CNICalico:
+			notify.Warningf(cmd.OutOrStdout(), kwokCNIWarning, clusterCfg.Spec.Cluster.CNI)
+
+			return false, nil
+		default:
+			return false, fmt.Errorf("%w: %s", ErrUnsupportedCNI, clusterCfg.Spec.Cluster.CNI)
+		}
 	}
 
 	switch clusterCfg.Spec.Cluster.CNI {

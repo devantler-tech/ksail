@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"strings"
 
-	eksctlclient "github.com/devantler-tech/ksail/v6/pkg/client/eksctl"
-	"github.com/devantler-tech/ksail/v6/pkg/svc/provider"
+	eksctlclient "github.com/devantler-tech/ksail/v7/pkg/client/eksctl"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
 )
 
 // NodegroupStatusActive is the EKS nodegroup status that indicates the

@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	snapshottest "github.com/devantler-tech/ksail/v6/internal/testutil/snapshottest"
-	"github.com/devantler-tech/ksail/v6/pkg/client/kustomize"
+	snapshottest "github.com/devantler-tech/ksail/v7/internal/testutil/snapshottest"
+	"github.com/devantler-tech/ksail/v7/pkg/client/kustomize"
 	"github.com/gkampitakis/go-snaps/snaps"
 )
 

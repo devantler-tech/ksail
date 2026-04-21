@@ -3,7 +3,7 @@ package vclusterprovisioner
 import (
 	"errors"
 
-	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/registry"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/registry"
 )
 
 // Static errors for the vcluster provisioner package.

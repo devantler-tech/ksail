@@ -3,8 +3,8 @@ package yamlgenerator
 import (
 	"fmt"
 
-	"github.com/devantler-tech/ksail/v6/pkg/fsutil"
-	"github.com/devantler-tech/ksail/v6/pkg/fsutil/marshaller"
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil/marshaller"
 )
 
 // Options defines options for YAML generators when emitting files.

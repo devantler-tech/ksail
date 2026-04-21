@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/devantler-tech/ksail/v6/pkg/client/kubeconform"
+	"github.com/devantler-tech/ksail/v7/pkg/client/kubeconform"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

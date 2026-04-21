@@ -5,10 +5,10 @@ import (
 	"testing"
 	"time"
 
-	v1alpha1 "github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v6/pkg/client/docker"
-	"github.com/devantler-tech/ksail/v6/pkg/client/helm"
-	"github.com/devantler-tech/ksail/v6/pkg/svc/installer"
+	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v7/pkg/client/docker"
+	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/installer"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

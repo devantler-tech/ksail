@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/devantler-tech/ksail/v6/pkg/svc/provider"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/client"

@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/devantler-tech/ksail/v6/pkg/svc/tenant/gitprovider"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/tenant/gitprovider"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

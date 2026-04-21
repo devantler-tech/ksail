@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	hetzner "github.com/devantler-tech/ksail/v6/pkg/svc/installer/internal/hetzner"
+	hetzner "github.com/devantler-tech/ksail/v7/pkg/svc/installer/internal/hetzner"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"

@@ -3,7 +3,7 @@ package mirrorregistry_test
 import (
 	"testing"
 
-	"github.com/devantler-tech/ksail/v6/pkg/cli/setup/mirrorregistry"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/setup/mirrorregistry"
 	"github.com/stretchr/testify/assert"
 )
 

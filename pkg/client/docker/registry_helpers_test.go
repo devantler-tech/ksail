@@ -8,7 +8,7 @@ import (
 	"errors"
 	"testing"
 
-	docker "github.com/devantler-tech/ksail/v6/pkg/client/docker"
+	docker "github.com/devantler-tech/ksail/v7/pkg/client/docker"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/api/types/network"

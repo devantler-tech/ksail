@@ -3,8 +3,8 @@ package detector
 import (
 	"context"
 
-	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v6/pkg/client/helm"
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
 )
 
 // ExportDetectCNI exposes detectCNI for testing.

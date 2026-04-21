@@ -7,7 +7,7 @@ import (
 	"net"
 	"os"
 
-	"github.com/devantler-tech/ksail/v6/pkg/notify"
+	"github.com/devantler-tech/ksail/v7/pkg/notify"
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
 )

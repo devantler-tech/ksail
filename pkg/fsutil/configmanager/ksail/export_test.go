@@ -2,7 +2,7 @@
 package configmanager
 
 import (
-	talosconfigmanager "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager/talos"
+	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
 	mapstructure "github.com/go-viper/mapstructure/v2"
 )
 

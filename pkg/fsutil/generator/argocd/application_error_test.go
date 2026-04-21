@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/devantler-tech/ksail/v6/pkg/fsutil/generator/argocd"
-	yamlgenerator "github.com/devantler-tech/ksail/v6/pkg/fsutil/generator/yaml"
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil/generator/argocd"
+	yamlgenerator "github.com/devantler-tech/ksail/v7/pkg/fsutil/generator/yaml"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

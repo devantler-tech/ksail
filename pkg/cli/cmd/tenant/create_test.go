@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/devantler-tech/ksail/v6/pkg/cli/annotations"
-	tenantpkg "github.com/devantler-tech/ksail/v6/pkg/cli/cmd/tenant"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
+	tenantpkg "github.com/devantler-tech/ksail/v7/pkg/cli/cmd/tenant"
 	"github.com/stretchr/testify/require"
 )
 

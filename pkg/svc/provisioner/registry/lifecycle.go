@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"io"
 
-	dockerclient "github.com/devantler-tech/ksail/v6/pkg/client/docker"
-	"github.com/devantler-tech/ksail/v6/pkg/notify"
+	dockerclient "github.com/devantler-tech/ksail/v7/pkg/client/docker"
+	"github.com/devantler-tech/ksail/v7/pkg/notify"
 	"github.com/docker/docker/client"
 )
 

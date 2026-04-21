@@ -11,7 +11,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/devantler-tech/ksail/v6/pkg/fsutil"
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	"github.com/siderolabs/gen/channel"
 	"github.com/siderolabs/talos/pkg/machinery/api/common"
 	"github.com/siderolabs/talos/pkg/machinery/api/machine"

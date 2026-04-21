@@ -3,7 +3,7 @@ package k8s_test
 import (
 	"testing"
 
-	"github.com/devantler-tech/ksail/v6/pkg/k8s"
+	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	"github.com/stretchr/testify/assert"
 )
 

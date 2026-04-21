@@ -12,8 +12,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/devantler-tech/ksail/v6/pkg/client/netretry"
-	"github.com/devantler-tech/ksail/v6/pkg/svc/image/parser"
+	"github.com/devantler-tech/ksail/v7/pkg/client/netretry"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/image/parser"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apiextensionsclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

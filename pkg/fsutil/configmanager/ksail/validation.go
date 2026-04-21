@@ -6,11 +6,11 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager/loader"
-	"github.com/devantler-tech/ksail/v6/pkg/fsutil/validator"
-	ksailvalidator "github.com/devantler-tech/ksail/v6/pkg/fsutil/validator/ksail"
-	"github.com/devantler-tech/ksail/v6/pkg/notify"
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/loader"
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil/validator"
+	ksailvalidator "github.com/devantler-tech/ksail/v7/pkg/fsutil/validator/ksail"
+	"github.com/devantler-tech/ksail/v7/pkg/notify"
 )
 
 // validateConfig runs validation on the loaded configuration.

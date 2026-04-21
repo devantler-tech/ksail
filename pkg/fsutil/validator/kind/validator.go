@@ -1,7 +1,7 @@
 package kind
 
 import (
-	"github.com/devantler-tech/ksail/v6/pkg/fsutil/validator"
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil/validator"
 	kindapi "sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
 

@@ -10,17 +10,17 @@ import (
 	"sync"
 	"time"
 
-	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v6/pkg/cli/kubeconfig"
-	"github.com/devantler-tech/ksail/v6/pkg/client/oci"
-	kindconfigmanager "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager/kind"
-	"github.com/devantler-tech/ksail/v6/pkg/k8s"
-	"github.com/devantler-tech/ksail/v6/pkg/k8s/readiness"
-	"github.com/devantler-tech/ksail/v6/pkg/notify"
-	clusterdetector "github.com/devantler-tech/ksail/v6/pkg/svc/detector/cluster"
-	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/registry"
-	registryhelpers "github.com/devantler-tech/ksail/v6/pkg/svc/registryresolver"
-	"github.com/devantler-tech/ksail/v6/pkg/timer"
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/kubeconfig"
+	"github.com/devantler-tech/ksail/v7/pkg/client/oci"
+	kindconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/kind"
+	"github.com/devantler-tech/ksail/v7/pkg/k8s"
+	"github.com/devantler-tech/ksail/v7/pkg/k8s/readiness"
+	"github.com/devantler-tech/ksail/v7/pkg/notify"
+	clusterdetector "github.com/devantler-tech/ksail/v7/pkg/svc/detector/cluster"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/registry"
+	registryhelpers "github.com/devantler-tech/ksail/v7/pkg/svc/registryresolver"
+	"github.com/devantler-tech/ksail/v7/pkg/timer"
 	"github.com/spf13/cobra"
 )
 
@@ -39,12 +39,6 @@ const (
 	// for source.toolkit.fluxcd.io/v1 would time out after 12 minutes.
 	kwokFluxWarning = "Flux is not configured on KWOK: " +
 		"flux-operator pod is simulated and never registers Flux CRDs — skipping"
-
-	// kwokCNIWarning is emitted when a non-default CNI is configured but cannot
-	// be installed on KWOK. KWOK simulates pods with no real network dataplane so
-	// CNI Helm charts would be deployed but never function.
-	kwokCNIWarning = "CNI %q is not installed on KWOK: " +
-		"simulated pods have no real network dataplane — skipping"
 
 	// kwokCSIWarning is emitted when CSI is configured but cannot be installed
 	// on KWOK. KWOK simulates pod status at the API level only — no container
@@ -355,12 +349,6 @@ func emitKWOKUnsupportedComponentWarnings(cmd *cobra.Command, clusterCfg *v1alph
 		notify.Warningf(cmd.OutOrStdout(), kwokFluxWarning)
 	}
 
-	if clusterCfg.Spec.Cluster.CNI != v1alpha1.CNIDefault && clusterCfg.Spec.Cluster.CNI != "" {
-		notify.Warningf(cmd.OutOrStdout(), kwokCNIWarning,
-			clusterCfg.Spec.Cluster.CNI,
-		)
-	}
-
 	if clusterCfg.Spec.Cluster.CSI == v1alpha1.CSIEnabled {
 		notify.Warningf(cmd.OutOrStdout(), kwokCSIWarning)
 	}
@@ -621,6 +609,10 @@ func buildGitOpsTasks(
 // GitOps operators from entering CrashLoopBackOff due to transient API server
 // connectivity issues after infrastructure components register webhooks).
 //
+// For KWOK clusters, the function returns early after API server stability: KWOK
+// simulates pods without running real DaemonSets or nodes, so the node-readiness
+// and kube-system DaemonSet checks are not applicable and are skipped.
+//
 // When cniInstalled is true, the WaitForAllNodesReadyAndSchedulable check is
 // skipped because waitForCNIReadiness already verified node readiness and
 // schedulability moments ago.
@@ -653,6 +645,12 @@ func waitForClusterStability(
 		return fmt.Errorf("wait for API server stability: %w", err)
 	}
 
+	// KWOK simulates nodes and DaemonSet pods; none of them converge for real.
+	// After API server stability is confirmed, there is nothing left to wait for.
+	if clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionKWOK {
+		return nil
+	}
+
 	// Wait for all nodes to reach Ready state and for at least one node to
 	// be schedulable. After Kind/K3d cluster creation or infrastructure
 	// installations, control-plane nodes may briefly carry a NoSchedule taint
@@ -662,9 +660,7 @@ func waitForClusterStability(
 	// Skipped when CNI was just installed: waitForCNIReadiness already verified
 	// both node readiness and schedulability, so re-checking immediately would
 	// be redundant.
-	// Skipped for KWOK: KWOK has no real kubelet nodes (they are simulated on
-	// demand), so WaitForAllNodesReadyAndSchedulable would always time-out on a fresh cluster.
-	if !cniInstalled && clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionKWOK {
+	if !cniInstalled {
 		err = readiness.WaitForAllNodesReadyAndSchedulable(ctx, clientset, nodeReadinessTimeout)
 		if err != nil {
 			return fmt.Errorf("wait for all nodes to be ready and schedulable: %w", err)

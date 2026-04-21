@@ -7,9 +7,9 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
-	configmanagerinterface "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager"
-	configmanager "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager/ksail"
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	configmanagerinterface "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager"
+	configmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/ksail"
 )
 
 // Package-level sinks prevent the compiler from optimizing away benchmark calls.

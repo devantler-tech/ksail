@@ -7,11 +7,11 @@ import (
 	"strings"
 	"testing"
 
-	snapshottest "github.com/devantler-tech/ksail/v6/internal/testutil/snapshottest"
-	"github.com/devantler-tech/ksail/v6/pkg/cli/cmd"
-	"github.com/devantler-tech/ksail/v6/pkg/cli/flags"
-	"github.com/devantler-tech/ksail/v6/pkg/notify"
-	"github.com/devantler-tech/ksail/v6/pkg/timer"
+	snapshottest "github.com/devantler-tech/ksail/v7/internal/testutil/snapshottest"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/flags"
+	"github.com/devantler-tech/ksail/v7/pkg/notify"
+	"github.com/devantler-tech/ksail/v7/pkg/timer"
 	"github.com/gkampitakis/go-snaps/snaps"
 	"github.com/spf13/cobra"
 )

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/devantler-tech/ksail/v6/pkg/fsutil/marshaller"
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil/marshaller"
 )
 
 // BenchmarkYAMLMarshaller_Marshal_Simple benchmarks simple model marshalling.

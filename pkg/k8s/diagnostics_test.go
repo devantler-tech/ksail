@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/devantler-tech/ksail/v6/pkg/k8s"
+	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

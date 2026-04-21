@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/devantler-tech/ksail/v6/pkg/di"
+	"github.com/devantler-tech/ksail/v7/pkg/di"
 	"github.com/samber/do/v2"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"

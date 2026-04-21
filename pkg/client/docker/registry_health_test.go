@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	docker "github.com/devantler-tech/ksail/v6/pkg/client/docker"
+	docker "github.com/devantler-tech/ksail/v7/pkg/client/docker"
 	"github.com/docker/docker/api/types/container"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"

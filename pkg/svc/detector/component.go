@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v6/pkg/client/helm"
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	dockerclient "github.com/docker/docker/client"
@@ -344,6 +344,13 @@ func (d *ComponentDetector) detectLoadBalancer(
 	// Talos × Hetzner also resolves correctly via ProvidesLoadBalancerByDefault).
 	if distribution == v1alpha1.DistributionTalos {
 		return d.detectMetalLB(ctx)
+	}
+
+	// KWOK: simulated pods have no real network dataplane, so LoadBalancer is
+	// never installed. Return Disabled to match applyDistributionSpecOverrides
+	// and prevent false-positive diffs in update dry-runs.
+	if distribution == v1alpha1.DistributionKWOK {
+		return v1alpha1.LoadBalancerDisabled, nil
 	}
 
 	return v1alpha1.LoadBalancerDefault, nil

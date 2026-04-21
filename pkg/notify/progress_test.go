@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	snapshottest "github.com/devantler-tech/ksail/v6/internal/testutil/snapshottest"
-	"github.com/devantler-tech/ksail/v6/pkg/notify"
+	snapshottest "github.com/devantler-tech/ksail/v7/internal/testutil/snapshottest"
+	"github.com/devantler-tech/ksail/v7/pkg/notify"
 	"github.com/gkampitakis/go-snaps/snaps"
 )
 

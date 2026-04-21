@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/devantler-tech/ksail/v6/pkg/k8s/readiness"
+	"github.com/devantler-tech/ksail/v7/pkg/k8s/readiness"
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/version"
 	"k8s.io/client-go/discovery"

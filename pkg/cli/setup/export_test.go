@@ -1,8 +1,8 @@
 package setup
 
 import (
-	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
-	argocdgitops "github.com/devantler-tech/ksail/v6/pkg/client/argocd"
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	argocdgitops "github.com/devantler-tech/ksail/v7/pkg/client/argocd"
 )
 
 // NeedsInClusterConnectivityCheck exports needsInClusterConnectivityCheck for testing.

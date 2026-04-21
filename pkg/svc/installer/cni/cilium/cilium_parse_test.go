@@ -3,7 +3,7 @@ package ciliuminstaller_test
 import (
 	"testing"
 
-	ciliuminstaller "github.com/devantler-tech/ksail/v6/pkg/svc/installer/cni/cilium"
+	ciliuminstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/cni/cilium"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

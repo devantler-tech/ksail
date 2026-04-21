@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	fluxclient "github.com/devantler-tech/ksail/v6/pkg/client/flux"
+	fluxclient "github.com/devantler-tech/ksail/v7/pkg/client/flux"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

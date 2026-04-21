@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/devantler-tech/ksail/v6/pkg/fsutil"
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 )
 
 func TestExpandHomePath(t *testing.T) {

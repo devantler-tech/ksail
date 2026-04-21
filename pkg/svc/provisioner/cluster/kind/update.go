@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/clusterupdate"
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 )
 
 // Update attempts to apply configuration changes to a running Kind cluster.

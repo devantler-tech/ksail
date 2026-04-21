@@ -3,9 +3,9 @@ package kind
 import (
 	"fmt"
 
-	configmanager "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager"
-	"github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager/loader"
-	kindvalidator "github.com/devantler-tech/ksail/v6/pkg/fsutil/validator/kind"
+	configmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager"
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/loader"
+	kindvalidator "github.com/devantler-tech/ksail/v7/pkg/fsutil/validator/kind"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
 

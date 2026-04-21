@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/devantler-tech/ksail/v6/pkg/fsutil"
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	clientconfig "github.com/siderolabs/talos/pkg/machinery/client/config"
 	"github.com/siderolabs/talos/pkg/provision"
 	"github.com/siderolabs/talos/pkg/provision/access"

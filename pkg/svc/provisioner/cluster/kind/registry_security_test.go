@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	docker "github.com/devantler-tech/ksail/v6/pkg/client/docker"
-	kindprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/kind"
-	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/registry"
+	docker "github.com/devantler-tech/ksail/v7/pkg/client/docker"
+	kindprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/kind"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/registry"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/stretchr/testify/assert"

@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"testing"
 
-	kindprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/kind"
+	kindprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/kind"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"sigs.k8s.io/kind/pkg/log"

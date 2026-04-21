@@ -7,5 +7,5 @@
 // Note: This package shares the "configmanager" package name with its parent directory
 // (pkg/fsutil/configmanager). Import with an alias for clarity:
 //
-//	import ksailconfigmanager "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager/ksail"
+//	import ksailconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/ksail"
 package configmanager

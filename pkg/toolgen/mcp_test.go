@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/devantler-tech/ksail/v6/pkg/toolgen"
+	"github.com/devantler-tech/ksail/v7/pkg/toolgen"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

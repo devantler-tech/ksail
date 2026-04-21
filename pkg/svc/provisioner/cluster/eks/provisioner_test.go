@@ -6,9 +6,9 @@ import (
 	"io"
 	"testing"
 
-	eksctlclient "github.com/devantler-tech/ksail/v6/pkg/client/eksctl"
-	"github.com/devantler-tech/ksail/v6/pkg/svc/provider"
-	eksprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/eks"
+	eksctlclient "github.com/devantler-tech/ksail/v7/pkg/client/eksctl"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
+	eksprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/eks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

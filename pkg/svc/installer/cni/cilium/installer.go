@@ -7,9 +7,9 @@ import (
 	"maps"
 	"time"
 
-	v1alpha1 "github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v6/pkg/client/helm"
-	"github.com/devantler-tech/ksail/v6/pkg/svc/installer/cni"
+	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/installer/cni"
 )
 
 // errGatewayAPICRDInstallerNil is returned when the Gateway API CRD installer is not configured.

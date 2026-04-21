@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/devantler-tech/ksail/v6/pkg/client/helm"
+	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
 )
 
 // BenchmarkChartSpec measures the performance of ChartSpec struct initialization.

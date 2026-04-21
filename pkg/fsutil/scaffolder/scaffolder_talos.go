@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
-	talosgenerator "github.com/devantler-tech/ksail/v6/pkg/fsutil/generator/talos"
-	yamlgenerator "github.com/devantler-tech/ksail/v6/pkg/fsutil/generator/yaml"
-	"github.com/devantler-tech/ksail/v6/pkg/notify"
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	talosgenerator "github.com/devantler-tech/ksail/v7/pkg/fsutil/generator/talos"
+	yamlgenerator "github.com/devantler-tech/ksail/v7/pkg/fsutil/generator/yaml"
+	"github.com/devantler-tech/ksail/v7/pkg/notify"
 )
 
 // generateTalosConfig generates the Talos patches directory structure.

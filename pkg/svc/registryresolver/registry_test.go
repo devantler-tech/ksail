@@ -3,7 +3,7 @@ package registryresolver_test
 import (
 	"testing"
 
-	"github.com/devantler-tech/ksail/v6/pkg/svc/registryresolver"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/registryresolver"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

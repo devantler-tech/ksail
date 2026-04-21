@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	dockerclient "github.com/devantler-tech/ksail/v6/pkg/client/docker"
+	dockerclient "github.com/devantler-tech/ksail/v7/pkg/client/docker"
 )
 
 // SanitizeHostIdentifier converts a registry host string into a Docker-safe identifier while keeping dots intact

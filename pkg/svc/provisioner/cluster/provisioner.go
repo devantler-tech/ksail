@@ -3,10 +3,10 @@ package clusterprovisioner
 import (
 	"context"
 
-	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v6/pkg/svc/detector"
-	"github.com/devantler-tech/ksail/v6/pkg/svc/provider"
-	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/clusterupdate"
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/detector"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 )
 
 // Provisioner defines methods for managing Kubernetes clusters.

@@ -4,7 +4,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/devantler-tech/ksail/v6/pkg/envvar"
+	"github.com/devantler-tech/ksail/v7/pkg/envvar"
 )
 
 // ParsedRegistry contains the parsed components of a registry specification.

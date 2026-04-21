@@ -7,9 +7,9 @@ import (
 	"strconv"
 	"strings"
 
-	v1alpha1 "github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
-	dockerclient "github.com/devantler-tech/ksail/v6/pkg/client/docker"
-	registrypkg "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/registry"
+	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	dockerclient "github.com/devantler-tech/ksail/v7/pkg/client/docker"
+	registrypkg "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/registry"
 	"github.com/spf13/viper"
 )
 

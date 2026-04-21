@@ -3,7 +3,7 @@ package toolgen_test
 import (
 	"testing"
 
-	"github.com/devantler-tech/ksail/v6/pkg/toolgen"
+	"github.com/devantler-tech/ksail/v7/pkg/toolgen"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/assert"

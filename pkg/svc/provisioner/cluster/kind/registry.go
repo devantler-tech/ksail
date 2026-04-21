@@ -6,8 +6,8 @@ import (
 	"io"
 	"strings"
 
-	kindconfigmanager "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager/kind"
-	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/registry"
+	kindconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/kind"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/registry"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"

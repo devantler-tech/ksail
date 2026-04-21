@@ -3,8 +3,8 @@ package hcloudccminstaller
 import (
 	"time"
 
-	"github.com/devantler-tech/ksail/v6/pkg/client/helm"
-	"github.com/devantler-tech/ksail/v6/pkg/svc/installer/internal/hetzner"
+	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/installer/internal/hetzner"
 )
 
 // ErrHetznerTokenNotSet is returned when the HCLOUD_TOKEN environment variable is not set.

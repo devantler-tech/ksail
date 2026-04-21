@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	snapshottest "github.com/devantler-tech/ksail/v6/internal/testutil/snapshottest"
-	generator "github.com/devantler-tech/ksail/v6/pkg/fsutil/generator/k3d"
-	yamlgenerator "github.com/devantler-tech/ksail/v6/pkg/fsutil/generator/yaml"
+	snapshottest "github.com/devantler-tech/ksail/v7/internal/testutil/snapshottest"
+	generator "github.com/devantler-tech/ksail/v7/pkg/fsutil/generator/k3d"
+	yamlgenerator "github.com/devantler-tech/ksail/v7/pkg/fsutil/generator/yaml"
 	"github.com/gkampitakis/go-snaps/snaps"
 	"github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/stretchr/testify/assert"

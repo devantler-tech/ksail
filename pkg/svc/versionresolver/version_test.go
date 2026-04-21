@@ -3,7 +3,7 @@ package versionresolver_test
 import (
 	"testing"
 
-	"github.com/devantler-tech/ksail/v6/pkg/svc/versionresolver"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/versionresolver"
 )
 
 //nolint:cyclop,funlen // table-driven test with many assertions per case

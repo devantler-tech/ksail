@@ -3,8 +3,8 @@ package diff_test
 import (
 	"testing"
 
-	"github.com/devantler-tech/ksail/v6/pkg/svc/diff"
-	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/clusterupdate"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/diff"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 )
 
 //nolint:funlen // Table-driven test with multiple sub-tests is clearer as single function

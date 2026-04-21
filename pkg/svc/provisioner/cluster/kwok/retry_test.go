@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	kwokprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/kwok"
+	kwokprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/kwok"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

@@ -1,7 +1,7 @@
 package kubeconfighook
 
 import (
-	clusterprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster"
+	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 )
 
 // ResolveClusterNameForTest exports resolveClusterName for testing.

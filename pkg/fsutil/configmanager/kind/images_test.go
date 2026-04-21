@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	kind "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager/kind"
+	kind "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/kind"
 )
 
 func TestKindNodeImage(t *testing.T) {

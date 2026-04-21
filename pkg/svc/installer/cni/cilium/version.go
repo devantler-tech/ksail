@@ -3,7 +3,7 @@ package ciliuminstaller
 import (
 	_ "embed"
 
-	"github.com/devantler-tech/ksail/v6/pkg/svc/image/parser"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/image/parser"
 )
 
 //go:embed Dockerfile

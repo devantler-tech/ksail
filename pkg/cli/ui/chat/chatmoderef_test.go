@@ -4,7 +4,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/devantler-tech/ksail/v6/pkg/cli/ui/chat"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/ui/chat"
 )
 
 // TestChatModeRef tests the thread-safe chat mode reference.

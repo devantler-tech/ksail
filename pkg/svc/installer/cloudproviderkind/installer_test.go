@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	dockerclient "github.com/devantler-tech/ksail/v6/pkg/client/docker"
-	cloudproviderkindinstaller "github.com/devantler-tech/ksail/v6/pkg/svc/installer/cloudproviderkind"
+	dockerclient "github.com/devantler-tech/ksail/v7/pkg/client/docker"
+	cloudproviderkindinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/cloudproviderkind"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/network"

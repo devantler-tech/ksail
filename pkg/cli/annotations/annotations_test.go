@@ -3,7 +3,7 @@ package annotations_test
 import (
 	"testing"
 
-	"github.com/devantler-tech/ksail/v6/pkg/cli/annotations"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
 )
 
 func TestAnnotationConstants_AreNonEmpty(t *testing.T) {

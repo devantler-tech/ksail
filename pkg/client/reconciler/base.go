@@ -3,7 +3,7 @@ package reconciler
 import (
 	"fmt"
 
-	"github.com/devantler-tech/ksail/v6/pkg/k8s"
+	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	"k8s.io/client-go/dynamic"
 )
 

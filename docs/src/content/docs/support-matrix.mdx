@@ -34,7 +34,7 @@ KSail supports multiple Kubernetes distributions, providers, and components. Thi
 | Calico                        | ✅      | ✅       | ✅                  | N/A¹     | ❌¹¹     | ❌               |
 | Amazon VPC CNI                | ❌      | ❌       | ❌                  | ❌       | ❌       | Built-in         |
 | **CSI**                       |
-| Local Path Provisioner        | ✅      | Built-in | ✅ (Docker)         | N/A²     | Sim⁷     | ❌               |
+| Local Path Provisioner        | ✅      | Built-in | ✅ (Docker)         | N/A²     | ❌¹²     | ❌               |
 | Hetzner CSI Driver            | ❌      | ❌       | ✅ (Hetzner)        | ❌       | ❌       | ❌               |
 | Amazon EBS CSI Driver         | ❌      | ❌       | ❌                  | ❌       | ❌       | Built-in         |
 | **LoadBalancer**              |
@@ -49,7 +49,7 @@ KSail supports multiple Kubernetes distributions, providers, and components. Thi
 | **Observability**             |
 | Metrics Server                | ✅      | Built-in | ✅                  | N/A⁴     | Sim⁷     | 🚧¹⁰            |
 | **Security**                  |
-| cert-manager                  | ✅      | ✅       | ✅                  | ✅       | Sim⁷     | 🚧¹⁰            |
+| cert-manager                  | ✅      | ✅       | ✅                  | ✅       | ❌¹²     | 🚧¹⁰            |
 | Kyverno                       | ✅      | ✅       | ✅                  | ✅       | ❌⁸      | 🚧¹⁰            |
 | Gatekeeper                    | ✅      | ✅       | ✅                  | ✅       | ❌⁸      | 🚧¹⁰            |
 | **Registry**                  |
@@ -76,9 +76,10 @@ KSail supports multiple Kubernetes distributions, providers, and components. Thi
   - ⁴ Metrics Server is managed internally by vCluster
 - **⁷ KWOK Simulation**: Components are installed as API objects and their pods appear Running via KWOK's Stage simulation. They do not execute real workloads — KWOK simulates pod lifecycle at the API level. See [KWOK Distribution](/distributions/kwok/) for details.
 - **⁸ KWOK Policy Engines**: Kyverno and Gatekeeper are not installed on KWOK. Both register global `MutatingWebhookConfigurations` that intercept all Kubernetes API requests. On KWOK, no real pod serves the webhook endpoint, so every webhook call times out — breaking all subsequent Helm installs. KSail silently skips policy engine installation when `spec.cluster.distribution: KWOK` is set and emits a warning at cluster creation time.
-- **⁹ KWOK Flux**: Flux is not installed on KWOK. The flux-operator pod is simulated by KWOK stages and appears Running, but it never registers Flux CRDs — Flux reconciliation is not functional. Use ArgoCD for GitOps workflows on KWOK.
+- **⁹ KWOK Flux**: Flux is not installed on KWOK. KSail skips Flux installation and configuration entirely (with a warning) because Flux cannot function on KWOK. GitOps reconciliation is not functional on KWOK, including with ArgoCD, because controller pods are only simulated and cannot sync resources. Use a non-KWOK distribution for real GitOps syncing, or use `ksail workload apply` on KWOK for non-GitOps manifest application.
 - **¹⁰ EKS (Planned)**: Full component installer support for EKS is in progress. `ksail cluster init` is available, but `ksail cluster create` is not yet functional. See [EKS Distribution](/distributions/eks/) for details.
 - **¹¹ KWOK CNI**: Cilium and Calico are not installed on KWOK. KWOK runs simulated pods with no real network dataplane, so CNI plugins are never functional and are always skipped. If a non-default CNI is configured in `ksail.yaml` for a KWOK cluster, KSail emits a warning and skips installation. The `spec.cluster.cni` setting has no effect on KWOK clusters.
+- **¹² KWOK CSI and cert-manager**: Local Path Provisioner (CSI) and cert-manager are not installed on KWOK. The Local Path Provisioner Deployment pod and cert-manager webhook pods require real container processes that KWOK does not provide, so readiness never becomes true and installation would time out. KSail skips installation of these components when `spec.cluster.distribution: KWOK` is set and emits a warning at cluster creation time.
 
 ## Secret Management × Provider Matrix
 
@@ -114,10 +115,10 @@ Changes are classified by impact: **in-place** (no disruption), **reboot-require
 | Distribution             | Recreate       | Recreate  | Recreate | Recreate        | Recreate       | 🚧¹⁰      |
 | Provider                 | Recreate       | Recreate  | Recreate | Recreate        | Recreate       | 🚧¹⁰      |
 | CNI                      | In-place       | In-place  | In-place | N/A             | N/A¹¹          | 🚧¹⁰      |
-| CSI                      | N/A⁵           | In-place  | In-place | N/A             | Sim⁷           | 🚧¹⁰      |
+| CSI                      | N/A⁵           | In-place  | In-place | N/A             | ❌¹²           | 🚧¹⁰      |
 | Metrics Server           | In-place       | In-place  | In-place | N/A             | Sim⁷           | 🚧¹⁰      |
 | Load Balancer            | In-place       | In-place  | N/A¹     | N/A             | Sim⁷           | 🚧¹⁰      |
-| cert-manager             | In-place       | In-place  | In-place | In-place        | Sim⁷           | 🚧¹⁰      |
+| cert-manager             | In-place       | In-place  | In-place | In-place        | ❌¹²           | 🚧¹⁰      |
 | Policy Engine            | In-place       | In-place  | In-place | In-place        | ❌⁸            | 🚧¹⁰      |
 | GitOps Engine            | In-place       | In-place  | In-place | In-place        | Sim⁷           | 🚧¹⁰      |
 | Local Registry           | Recreate       | In-place  | In-place | In-place        | Sim⁷           | ❌         |

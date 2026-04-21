@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	vclusterconfigmanager "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager/vcluster"
-	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/clustererr"
-	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/clusterupdate"
+	vclusterconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/vcluster"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 )
 
 // Compile-time interface compliance check.

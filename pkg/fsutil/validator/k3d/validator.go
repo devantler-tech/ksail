@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/devantler-tech/ksail/v6/pkg/fsutil/validator"
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil/validator"
 	"github.com/jinzhu/copier"
 	k3dconfig "github.com/k3d-io/k3d/v5/pkg/config"
 	k3dapi "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"

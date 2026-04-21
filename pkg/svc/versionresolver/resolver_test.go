@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/devantler-tech/ksail/v6/pkg/svc/versionresolver"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/versionresolver"
 )
 
 // mockResolver implements Resolver for testing without OCI registry access.

@@ -5,10 +5,10 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v6/pkg/client/docker"
-	"github.com/devantler-tech/ksail/v6/pkg/client/helm"
-	"github.com/devantler-tech/ksail/v6/pkg/svc/detector"
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v7/pkg/client/docker"
+	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/detector"
 	"github.com/docker/docker/api/types/container"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -416,6 +416,24 @@ func TestDetectLoadBalancer_Talos_MetalLB_Default(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, v1alpha1.LoadBalancerDefault, loadBalancer)
+}
+
+func TestDetectLoadBalancer_KWOK_Disabled(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	helmClient := helm.NewMockInterface(t)
+	k8sClientset := fake.NewClientset()
+
+	d := detector.NewComponentDetector(helmClient, k8sClientset, nil)
+	loadBalancer, err := d.ExportDetectLoadBalancer(
+		ctx,
+		v1alpha1.DistributionKWOK,
+		v1alpha1.ProviderDocker,
+	)
+
+	require.NoError(t, err)
+	assert.Equal(t, v1alpha1.LoadBalancerDisabled, loadBalancer)
 }
 
 func TestDetectCertManager_Enabled(t *testing.T) {

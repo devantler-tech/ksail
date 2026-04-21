@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"net/netip"
 
-	"github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v6/pkg/k8s"
-	omniprovider "github.com/devantler-tech/ksail/v6/pkg/svc/provider/omni"
-	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/clusterupdate"
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v7/pkg/k8s"
+	omniprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/omni"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	"github.com/docker/docker/api/types/container"
 )
 

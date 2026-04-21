@@ -7,10 +7,10 @@ import (
 	"os"
 	"time"
 
-	v1alpha1 "github.com/devantler-tech/ksail/v6/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v6/pkg/client/netretry"
-	"github.com/devantler-tech/ksail/v6/pkg/client/oci"
-	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/registry"
+	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v7/pkg/client/netretry"
+	"github.com/devantler-tech/ksail/v7/pkg/client/oci"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/registry"
 )
 
 // ErrExternalRegistryCredentialsIncomplete is returned when an external registry

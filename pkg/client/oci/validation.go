@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/devantler-tech/ksail/v6/pkg/k8s"
+	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 )
 
 // ErrRepositoryRequired indicates that the repository is required for empty artifacts.

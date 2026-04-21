@@ -5,9 +5,9 @@ import (
 	"os"
 	"testing"
 
-	snapshottest "github.com/devantler-tech/ksail/v6/internal/testutil/snapshottest"
-	"github.com/devantler-tech/ksail/v6/pkg/cli/annotations"
-	tenantpkg "github.com/devantler-tech/ksail/v6/pkg/cli/cmd/tenant"
+	snapshottest "github.com/devantler-tech/ksail/v7/internal/testutil/snapshottest"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
+	tenantpkg "github.com/devantler-tech/ksail/v7/pkg/cli/cmd/tenant"
 	"github.com/gkampitakis/go-snaps/snaps"
 	"github.com/stretchr/testify/require"
 )

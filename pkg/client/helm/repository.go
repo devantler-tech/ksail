@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/devantler-tech/ksail/v6/pkg/client/netretry"
+	"github.com/devantler-tech/ksail/v7/pkg/client/netretry"
 	helmv4cli "helm.sh/helm/v4/pkg/cli"
 	helmv4getter "helm.sh/helm/v4/pkg/getter"
 	repov1 "helm.sh/helm/v4/pkg/repo/v1"

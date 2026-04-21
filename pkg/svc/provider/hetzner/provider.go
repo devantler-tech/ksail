@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/devantler-tech/ksail/v6/pkg/k8s"
-	"github.com/devantler-tech/ksail/v6/pkg/svc/provider"
+	"github.com/devantler-tech/ksail/v7/pkg/k8s"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 )
 

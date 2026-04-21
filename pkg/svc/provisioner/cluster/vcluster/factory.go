@@ -3,8 +3,8 @@ package vclusterprovisioner
 import (
 	"fmt"
 
-	"github.com/devantler-tech/ksail/v6/pkg/client/docker"
-	dockerprovider "github.com/devantler-tech/ksail/v6/pkg/svc/provider/docker"
+	"github.com/devantler-tech/ksail/v7/pkg/client/docker"
+	dockerprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/docker"
 )
 
 // CreateProvisioner creates a Provisioner from the given configuration.

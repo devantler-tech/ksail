@@ -116,7 +116,7 @@ jobs:
 
       - name: Provision KSail cluster
         id: cluster
-        uses: devantler-tech/ksail/.github/actions/ksail-cluster@v5.59.0
+        uses: devantler-tech/ksail/.github/actions/ksail-cluster@v7.2.2
         with:
           distribution: K3s   # Vanilla, K3s, Talos, VCluster, KWOK
           sops-age-key: ${{ secrets.SOPS_AGE_KEY }}  # optional: import SOPS key + create sops-age secret

@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/devantler-tech/ksail/v6/pkg/fsutil/generator"
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil/generator"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"

@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	vclusterprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/vcluster"
+	vclusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/vcluster"
 	loftlog "github.com/loft-sh/log"
 	"github.com/loft-sh/vcluster/pkg/cli"
 	"github.com/loft-sh/vcluster/pkg/cli/flags"

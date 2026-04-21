@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/devantler-tech/ksail/v6/pkg/fsutil"
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	"github.com/spf13/viper"
 )
 

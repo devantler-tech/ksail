@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/devantler-tech/ksail/v6/pkg/svc/provider"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
 )
 
 // RunProviderOp executes a provider operation with a nil check and standardised error wrapping.

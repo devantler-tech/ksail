@@ -7,9 +7,9 @@ import (
 	"strconv"
 	"strings"
 
-	dockerclient "github.com/devantler-tech/ksail/v6/pkg/client/docker"
-	k3dconfigmanager "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager/k3d"
-	"github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/registry"
+	dockerclient "github.com/devantler-tech/ksail/v7/pkg/client/docker"
+	k3dconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/k3d"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/registry"
 	"github.com/docker/docker/client"
 	k3dv1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"sigs.k8s.io/yaml"

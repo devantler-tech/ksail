@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/devantler-tech/ksail/v6/pkg/client/argocd"
+	"github.com/devantler-tech/ksail/v7/pkg/client/argocd"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/devantler-tech/ksail/v6/pkg/client/netretry"
+	"github.com/devantler-tech/ksail/v7/pkg/client/netretry"
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/v1/remote"

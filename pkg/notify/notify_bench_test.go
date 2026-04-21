@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	notify "github.com/devantler-tech/ksail/v6/pkg/notify"
+	notify "github.com/devantler-tech/ksail/v7/pkg/notify"
 )
 
 // BenchmarkWriteMessage_SingleLine benchmarks a simple single-line message with no format args.

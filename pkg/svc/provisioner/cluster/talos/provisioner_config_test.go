@@ -3,9 +3,9 @@ package talosprovisioner_test
 import (
 	"testing"
 
-	dockerprovider "github.com/devantler-tech/ksail/v6/pkg/svc/provider/docker"
-	hetzner "github.com/devantler-tech/ksail/v6/pkg/svc/provider/hetzner"
-	talosprovisioner "github.com/devantler-tech/ksail/v6/pkg/svc/provisioner/cluster/talos"
+	dockerprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/docker"
+	hetzner "github.com/devantler-tech/ksail/v7/pkg/svc/provider/hetzner"
+	talosprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/talos"
 	"github.com/stretchr/testify/assert"
 )
 

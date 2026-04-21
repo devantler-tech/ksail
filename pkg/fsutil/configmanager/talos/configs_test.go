@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"testing"
 
-	configmanager "github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager"
-	"github.com/devantler-tech/ksail/v6/pkg/fsutil/configmanager/talos"
+	configmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager"
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
