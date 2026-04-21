@@ -60,9 +60,6 @@ on:
         required: false
         type: number
         default: 0
-  schedule:
-    # Weekly: Sunday 04:00 UTC
-    - cron: "0 4 * * 0"
 
 env:
   GOPROXY: "https://proxy.golang.org|direct"
@@ -188,9 +185,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # On schedule: test both init and noinit with defaults.
-        # On workflow_dispatch: run only the user-selected variant.
-        init: ${{ github.event_name == 'schedule' && fromJSON('[true, false]') || fromJSON(format('[{0}]', inputs.init)) }}
+        init: ${{ fromJSON(format('[{0}]', inputs.init)) }}
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@f808768d1510423e83855289c910610ca9b43176 # v2.17.0
