@@ -135,9 +135,9 @@ All Kubernetes API operations (create, get, describe, delete, scale, apply) work
 The following components are **not installed** on KWOK clusters:
 
 - **CNI (Cilium, Calico)** — KWOK has no real network dataplane, so CNI plugins are skipped entirely. If a non-default CNI is configured in `ksail.yaml`, KSail emits a warning and skips installation. The `spec.cluster.cni` setting has no effect on KWOK clusters.
-- **CSI (Local Path Provisioner)** — the local-path-provisioner pods and helpers require real container execution; on KWOK they never become truly ready and installation waits time out.
-- **cert-manager** — cert-manager webhook pods must serve real TLS endpoints; they time out on KWOK.
-- **Flux** — the flux-operator pod is simulated but never registers Flux CRDs; use ArgoCD instead.
+- **CSI (Local Path Provisioner)** — KSail skips local-path-provisioner on KWOK because its pods and helper containers require real container execution and would never become truly ready.
+- **cert-manager** — KSail skips cert-manager on KWOK because its webhook pods must serve real TLS endpoints and would never become ready.
+- **Flux** — KSail skips Flux on KWOK because the simulated flux-operator pod never registers the Flux CRDs; use ArgoCD instead.
 - **Policy engines (Kyverno, Gatekeeper)** — both register global `MutatingWebhookConfigurations` whose endpoints are never served on KWOK, breaking all subsequent Helm installs.
 
 KSail emits a warning and skips installation for each of these components when `spec.cluster.distribution: KWOK` is set. For a full compatibility overview, see the [Support Matrix](/support-matrix/).
