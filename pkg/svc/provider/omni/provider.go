@@ -402,6 +402,67 @@ func (p *Provider) GetClusterStatus(
 	}, nil
 }
 
+// CleanupOrphanedMachineSetNodes removes MachineSetNode resources whose parent
+// cluster no longer exists in Omni. This is a best-effort pre-flight cleanup
+// that prevents AlreadyExists errors during template sync when a machine was
+// partially allocated in a prior failed cluster creation attempt.
+// Returns the count of successfully removed MachineSetNode resources.
+func (p *Provider) CleanupOrphanedMachineSetNodes(ctx context.Context) (int, error) {
+	if p.st == nil {
+		return 0, provider.ErrProviderUnavailable
+	}
+
+	nodes, err := safe.StateListAll[*omnires.MachineSetNode](ctx, p.st)
+	if err != nil {
+		return 0, fmt.Errorf("failed to list MachineSetNode resources: %w", err)
+	}
+
+	if nodes.Len() == 0 {
+		return 0, nil
+	}
+
+	clusters, err := p.ListAllClusters(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("failed to list clusters for orphan check: %w", err)
+	}
+
+	clusterSet := make(map[string]struct{}, len(clusters))
+
+	for _, c := range clusters {
+		clusterSet[c] = struct{}{}
+	}
+
+	cleaned := 0
+
+	for node := range nodes.All() {
+		clusterName, ok := node.Metadata().Labels().Get(omnires.LabelCluster)
+		if !ok {
+			continue
+		}
+
+		if _, exists := clusterSet[clusterName]; exists {
+			// Cluster still exists — not orphaned.
+			continue
+		}
+
+		// Cluster no longer exists — destroy the orphaned MachineSetNode.
+		err := p.st.Destroy(ctx, node.Metadata())
+		if err != nil {
+			if state.IsNotFoundError(err) {
+				// Already gone — count as cleaned.
+				cleaned++
+			}
+
+			// Skip on other errors (e.g., resource has active finalizers).
+			continue
+		}
+
+		cleaned++
+	}
+
+	return cleaned, nil
+}
+
 // ListAvailableMachines queries Omni for machines that are available (not allocated
 // to any cluster) and returns exactly count machine UUIDs on success.
 // Returns ErrInsufficientAvailableMachines when fewer than count machines are available.

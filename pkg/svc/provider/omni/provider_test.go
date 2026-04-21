@@ -546,3 +546,125 @@ func TestListAvailableMachines_ZeroCount(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, machines)
 }
+
+// newMachineSetNodeForTest creates a MachineSetNode in the given state with the
+// LabelCluster label set to clusterName. It creates a temporary MachineSet as
+// the required owner of the MachineSetNode.
+func newMachineSetNodeForTest(
+	t *testing.T,
+	testState state.State,
+	machineID, machineSetID, clusterName string,
+) *omnires.MachineSet {
+	t.Helper()
+
+	machineSet := omnires.NewMachineSet(machineSetID)
+	machineSet.Metadata().Labels().Set(omnires.LabelCluster, clusterName)
+
+	require.NoError(t, testState.Create(context.Background(), machineSet))
+
+	node := omnires.NewMachineSetNode(machineID, machineSet)
+
+	require.NoError(t, testState.Create(context.Background(), node))
+
+	return machineSet
+}
+
+func TestCleanupOrphanedMachineSetNodes_NilState(t *testing.T) {
+	t.Parallel()
+
+	prov := omni.NewProvider(nil)
+
+	cleaned, err := prov.CleanupOrphanedMachineSetNodes(context.Background())
+
+	require.Error(t, err)
+	require.ErrorIs(t, err, provider.ErrProviderUnavailable)
+	assert.Zero(t, cleaned)
+}
+
+func TestCleanupOrphanedMachineSetNodes_NoNodes(t *testing.T) {
+	t.Parallel()
+
+	prov := omni.NewProviderWithState(newInMemState())
+
+	cleaned, err := prov.CleanupOrphanedMachineSetNodes(context.Background())
+
+	require.NoError(t, err)
+	assert.Zero(t, cleaned)
+}
+
+func TestCleanupOrphanedMachineSetNodes_AllNodesBelongToActiveClusters(t *testing.T) {
+	t.Parallel()
+
+	testState := newInMemState()
+	prov := omni.NewProviderWithState(testState)
+
+	// Create an active cluster.
+	cluster := omnires.NewCluster("active-cluster")
+	require.NoError(t, testState.Create(context.Background(), cluster))
+
+	// Create a MachineSetNode bound to the active cluster.
+	newMachineSetNodeForTest(t, testState, "machine-uuid", "active-cluster-control-planes", "active-cluster")
+
+	cleaned, err := prov.CleanupOrphanedMachineSetNodes(context.Background())
+
+	require.NoError(t, err)
+	assert.Zero(t, cleaned, "no nodes should be cleaned when cluster exists")
+}
+
+func TestCleanupOrphanedMachineSetNodes_RemovesOrphanedNodes(t *testing.T) {
+	t.Parallel()
+
+	testState := newInMemState()
+	prov := omni.NewProviderWithState(testState)
+
+	// No active clusters — the MachineSetNode is orphaned.
+	newMachineSetNodeForTest(t, testState, "stale-machine-uuid", "deleted-cluster-control-planes", "deleted-cluster")
+
+	cleaned, err := prov.CleanupOrphanedMachineSetNodes(context.Background())
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, cleaned, "orphaned node should be removed")
+}
+
+func TestCleanupOrphanedMachineSetNodes_MixedActiveAndOrphaned(t *testing.T) {
+	t.Parallel()
+
+	testState := newInMemState()
+	prov := omni.NewProviderWithState(testState)
+
+	// Create an active cluster.
+	cluster := omnires.NewCluster("active-cluster")
+	require.NoError(t, testState.Create(context.Background(), cluster))
+
+	// Active node — should NOT be cleaned.
+	newMachineSetNodeForTest(t, testState, "active-machine", "active-cluster-control-planes", "active-cluster")
+
+	// Orphaned node (cluster doesn't exist) — SHOULD be cleaned.
+	newMachineSetNodeForTest(t, testState, "orphaned-machine", "dead-cluster-control-planes", "dead-cluster")
+
+	cleaned, err := prov.CleanupOrphanedMachineSetNodes(context.Background())
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, cleaned, "only the orphaned node should be removed")
+}
+
+func TestCleanupOrphanedMachineSetNodes_SkipsNodesWithNoClusterLabel(t *testing.T) {
+	t.Parallel()
+
+	testState := newInMemState()
+	prov := omni.NewProviderWithState(testState)
+
+	// Create a MachineSet without a cluster label.
+	machineSet := omnires.NewMachineSet("unlabeled-machine-set")
+	require.NoError(t, testState.Create(context.Background(), machineSet))
+
+	// Create a MachineSetNode with the unlabeled MachineSet as owner.
+	node := omnires.NewMachineSetNode("unlabeled-machine", machineSet)
+	require.NoError(t, testState.Create(context.Background(), node))
+
+	cleaned, err := prov.CleanupOrphanedMachineSetNodes(context.Background())
+
+	require.NoError(t, err)
+	assert.Zero(t, cleaned, "nodes without cluster label should be skipped")
+}
+

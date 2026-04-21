@@ -63,6 +63,23 @@ func (p *Provisioner) createOmniCluster(ctx context.Context, clusterName string)
 		return fmt.Errorf("failed to resolve versions: %w", err)
 	}
 
+	// Best-effort cleanup: remove stale MachineSetNode bindings from previous
+	// failed cluster creation attempts. Orphaned bindings cause AlreadyExists
+	// errors during template sync even when the machine reports as available.
+	if cleaned, cleanupErr := omniProv.CleanupOrphanedMachineSetNodes(ctx); cleanupErr != nil {
+		_, _ = fmt.Fprintf(
+			p.logWriter,
+			"  Warning: failed to clean up stale MachineSetNode bindings: %v\n",
+			cleanupErr,
+		)
+	} else if cleaned > 0 {
+		_, _ = fmt.Fprintf(
+			p.logWriter,
+			"  Cleaned up %d stale MachineSetNode binding(s)\n",
+			cleaned,
+		)
+	}
+
 	// Resolve machine allocation: auto-discover available machines when neither
 	// machineClass nor machines is configured.
 	machines, err := p.resolveOmniMachines(ctx, omniProv)
