@@ -154,7 +154,7 @@ Ensure every code-level change is mirrored by clear, accurate, and stylistically
 
    Checks to perform:
 
-   - **README length**: `wc -l README.md` must report ≤ 100 lines. If over, move detail into the canonical `docs/` page and replace with a link.
+   - **README length**: `wc -l README.md` must report ≤ 250 lines. If over, move detail into the canonical `docs/` page and replace with a link.
    - **README scope**: `README.md` must NOT contain content that duplicates `docs/src/content/docs/index.mdx`. Specifically flag and remove: Mermaid architecture diagrams, full `ksail cluster init` flag reference, Native Configuration Files walkthroughs, Presentations lists, Blog Posts lists, verbose "Why KSail?" / "Key Features" bullet lists. These belong on `/architecture/`, `/cli-flags/cluster/cluster-init/`, `/configuration/`, and `/resources/`.
    - **Distribution × Provider matrix parity**: The provider/distribution matrix in `README.md` must list the same distributions and providers as `docs/src/content/docs/index.mdx`. When a new distribution or provider is added (for example, when a new provisioner or provider package lands under `pkg/svc/provisioner/` or `pkg/svc/provider/`), both matrices must be updated in lockstep.
    - **Top-level command parity**: If `README.md` names specific top-level commands, they must match the output of `go run . --help` (Available Commands section). New top-level commands (like `tenant`) must be reflected.
@@ -168,7 +168,7 @@ Ensure every code-level change is mirrored by clear, accurate, and stylistically
    Each root file serves a different audience and medium. Do NOT duplicate content across them — link instead.
 
    - **README.md** (audience: end-user, medium: GitHub landing page)
-     - Keep under 100 lines (`wc -l README.md` ≤ 100): badges, one-paragraph intro, feature bullet list, prerequisites table, and a prominent link to the docs site
+     - Keep under 250 lines (`wc -l README.md` ≤ 250): badges, one-paragraph intro, feature bullet list, prerequisites table, and a prominent link to the docs site
      - Do NOT include tutorials, detailed configuration, architecture internals, or content that duplicates `docs/src/content/docs/index.mdx`
      - Link to the docs site for anything beyond a quick overview (e.g., "See the [Installation Guide](https://ksail.devantler.tech/installation/)")
 
@@ -231,7 +231,7 @@ Ensure every code-level change is mirrored by clear, accurate, and stylistically
      - **Concept/explanation pages**: Explain "why" and "what"; link to reference pages for "how"
      - **Guide pages**: Goal-oriented, complete workflow from start to finish; include troubleshooting tips
      - **Reference pages**: Exhaustive and scannable; prefer tables over prose; document every option
-     - **README.md**: Under 100 lines (`wc -l README.md` ≤ 100), link-heavy, no tutorials or detailed configuration
+     - **README.md**: Under 250 lines (`wc -l README.md` ≤ 250), link-heavy, no tutorials or detailed configuration
    - End-user docs (`docs/`) do not contain contributor-only content (internal APIs, package paths, design decisions)
 
 8. **Quality Assurance**
@@ -314,7 +314,7 @@ ls README.md vsce/README.md CONTRIBUTING.md .github/copilot-instructions.md 2>/d
 
 **Root-file specific checks** (apply when a root file is selected):
 
-- `README.md` — `wc -l README.md` must report ≤ 100 lines, must not duplicate `docs/src/content/docs/index.mdx` (no Mermaid diagrams, full init flag reference, Native Configuration Files walkthrough, Presentations list, Blog Posts list), and must keep its Distribution × Provider matrix in sync with `docs/index.mdx`.
+- `README.md` — `wc -l README.md` must report ≤ 250 lines, must not duplicate `docs/src/content/docs/index.mdx` (no Mermaid diagrams, full init flag reference, Native Configuration Files walkthrough, Presentations list, Blog Posts list), and must keep its Distribution × Provider matrix in sync with `docs/index.mdx`.
 - `vsce/README.md` — concise marketplace description only; full usage belongs on `/vscode-extension/`.
 - `CONTRIBUTING.md` / `.github/copilot-instructions.md` — contributor content only; no end-user tutorials or marketing.
 
