@@ -469,6 +469,11 @@ func TestInstallCNI_KWOKUnsupportedCNIReturnsError(t *testing.T) {
 	}
 
 	installed, err := setup.InstallCNI(cmd, clusterCfg, nil)
-	require.ErrorIs(t, err, setup.ErrUnsupportedCNI, "KWOK should still return ErrUnsupportedCNI for unknown CNI values")
+	require.ErrorIs(
+		t,
+		err,
+		setup.ErrUnsupportedCNI,
+		"KWOK should still return ErrUnsupportedCNI for unknown CNI values",
+	)
 	assert.False(t, installed)
 }
