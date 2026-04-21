@@ -4,6 +4,7 @@
 # Upstream image registries (uses HTTP API V2 and don't respond to bare GET requests)
 https://registry-1.docker.io/
 https://ghcr.io/
+https://quay.io/
 
 # GitHub repository paths used in kustomize (not web URLs)
 https://github.com/stefanprodan/podinfo//kustomize
