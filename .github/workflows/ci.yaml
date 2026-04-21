@@ -748,7 +748,7 @@ jobs:
       contents: read
       packages: write
     strategy:
-      fail-fast: true
+      fail-fast: false
       max-parallel: 15
       matrix:
         distribution: [KWOK, Vanilla, K3s, VCluster, Talos]
@@ -879,6 +879,26 @@ jobs:
         uses: ./.github/actions/restore-mirror-cache
 
       - name: 🧪 Run KSail System Test
+        id: system-test
+        # KWOK tests are known to have transient infrastructure flakes (e.g. KWOK+Cilium+full-stack).
+        # Allow the first attempt to fail without failing the job so the retry step can run.
+        continue-on-error: ${{ matrix.distribution == 'KWOK' }}
+        uses: ./.github/actions/ksail-system-test
+        with:
+          distribution: ${{ matrix.distribution }}
+          provider: ${{ matrix.provider }}
+          init: ${{ matrix.init }}
+          args: ${{ matrix.args }}
+          apply-overlay-path: ".github/fixtures/podinfo-overlay"
+
+          ghcr-user: ${{ github.actor }}
+          ghcr-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 🔄 Retry KSail System Test (KWOK transient flake guard)
+        # Retry once on failure for KWOK distributions only. The composite action's cleanup
+        # step (if: always()) deletes the cluster after the first attempt, so the retry
+        # starts from a clean state. Non-KWOK distributions are not retried.
+        if: matrix.distribution == 'KWOK' && steps.system-test.outcome == 'failure'
         uses: ./.github/actions/ksail-system-test
         with:
           distribution: ${{ matrix.distribution }}
