@@ -69,7 +69,9 @@ func (p *Provisioner) createOmniCluster(ctx context.Context, clusterName string)
 	if cleaned, cleanupErr := omniProv.CleanupOrphanedMachineSetNodes(ctx); cleanupErr != nil {
 		_, _ = fmt.Fprintf(
 			p.logWriter,
-			"  Warning: failed to clean up stale MachineSetNode bindings: %v\n",
+			"  Warning: failed to clean up stale MachineSetNode bindings: %v\n"+
+				"  This may cause AlreadyExists errors during machine allocation — retry cluster creation\n"+
+				"  or manually remove stale MachineSetNode resources in the Omni dashboard.\n",
 			cleanupErr,
 		)
 	} else if cleaned > 0 {

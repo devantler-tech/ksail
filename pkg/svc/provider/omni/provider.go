@@ -447,17 +447,11 @@ func (p *Provider) CleanupOrphanedMachineSetNodes(ctx context.Context) (int, err
 
 		// Cluster no longer exists — destroy the orphaned MachineSetNode.
 		err := p.st.Destroy(ctx, node.Metadata())
-		if err != nil {
-			if state.IsNotFoundError(err) {
-				// Already gone — count as cleaned.
-				cleaned++
-			}
-
-			// Skip on other errors (e.g., resource has active finalizers).
-			continue
+		if err == nil || state.IsNotFoundError(err) {
+			// Successful destroy, or already gone — count as cleaned.
+			cleaned++
 		}
-
-		cleaned++
+		// On other errors (e.g., resource has active finalizers), skip silently.
 	}
 
 	return cleaned, nil
