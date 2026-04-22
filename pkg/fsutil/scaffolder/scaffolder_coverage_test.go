@@ -495,3 +495,80 @@ func TestScaffold_GetKindMirrorsDir(t *testing.T) {
 
 	assert.NotEmpty(t, result, "GetKindMirrorsDir should return non-empty path")
 }
+
+// TestScaffoldTalos_HetznerExternalCloudProvider tests that the external cloud provider
+// patch is generated when scaffolding for the Hetzner provider.
+func TestScaffoldTalos_HetznerExternalCloudProvider(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	cluster := v1alpha1.Cluster{
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				Distribution:       v1alpha1.DistributionTalos,
+				DistributionConfig: scaffolder.TalosConfigDir,
+				Provider:           v1alpha1.ProviderHetzner,
+			},
+			Workload: v1alpha1.WorkloadSpec{
+				SourceDirectory: "k8s",
+			},
+		},
+	}
+
+	scaffolderInstance := scaffolder.NewScaffolder(cluster, io.Discard, nil)
+
+	err := scaffolderInstance.Scaffold(tempDir, true)
+	require.NoError(t, err)
+
+	// Verify external-cloud-provider.yaml was created
+	patchPath := filepath.Join(
+		tempDir,
+		scaffolder.TalosConfigDir,
+		"cluster",
+		"external-cloud-provider.yaml",
+	)
+	content, readErr := os.ReadFile(patchPath) //nolint:gosec // test file
+	require.NoError(t, readErr)
+	assert.Contains(t, string(content), "externalCloudProvider:")
+	assert.Contains(t, string(content), "enabled: true")
+	assert.Contains(t, string(content), "cloud-provider: external")
+}
+
+// TestScaffoldTalos_DockerNoExternalCloudProvider tests that the external cloud provider
+// patch is NOT generated when scaffolding for the Docker provider.
+func TestScaffoldTalos_DockerNoExternalCloudProvider(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	cluster := v1alpha1.Cluster{
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				Distribution:       v1alpha1.DistributionTalos,
+				DistributionConfig: scaffolder.TalosConfigDir,
+				Provider:           v1alpha1.ProviderDocker,
+			},
+			Workload: v1alpha1.WorkloadSpec{
+				SourceDirectory: "k8s",
+			},
+		},
+	}
+
+	scaffolderInstance := scaffolder.NewScaffolder(cluster, io.Discard, nil)
+
+	err := scaffolderInstance.Scaffold(tempDir, true)
+	require.NoError(t, err)
+
+	// Verify external-cloud-provider.yaml was NOT created
+	patchPath := filepath.Join(
+		tempDir,
+		scaffolder.TalosConfigDir,
+		"cluster",
+		"external-cloud-provider.yaml",
+	)
+	_, err = os.Stat(patchPath)
+	assert.True(
+		t,
+		os.IsNotExist(err),
+		"expected external-cloud-provider.yaml to not exist for Docker provider",
+	)
+}

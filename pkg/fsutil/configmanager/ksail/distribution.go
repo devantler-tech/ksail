@@ -101,6 +101,13 @@ func (m *ConfigManager) loadTalosConfig() (*talosconfigmanager.Configs, error) {
 		"", // Use default network CIDR
 	)
 
+	// Add external cloud provider patch when using Hetzner provider.
+	// This enables CCM to initialize nodes with a providerID and write node labels
+	// required by the CSI DaemonSet.
+	if m.Config.Spec.Cluster.Provider == v1alpha1.ProviderHetzner {
+		talosManager.WithAdditionalPatches(externalCloudProviderPatches())
+	}
+
 	config, err := talosManager.Load(configmanagerinterface.LoadOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to load Talos config: %w", err)
@@ -232,6 +239,13 @@ func (m *ConfigManager) getDefaultTalosPatches() []talosconfigmanager.Patch {
 `),
 		}
 		patches = append(patches, kubeletCSRApproverPatch)
+	}
+
+	// When using Hetzner provider, enable external cloud provider so that the
+	// Cloud Controller Manager can initialize nodes with a providerID and write
+	// node labels required by the CSI DaemonSet.
+	if m.Config.Spec.Cluster.Provider == v1alpha1.ProviderHetzner {
+		patches = append(patches, externalCloudProviderPatches()...)
 	}
 
 	return patches
@@ -410,4 +424,21 @@ func (m *ConfigManager) resolveEKSNameFromContext() string {
 	}
 
 	return "eks-default"
+}
+
+// externalCloudProviderPatches returns Talos patches that enable the external cloud provider.
+// This configures both the cluster-level externalCloudProvider and the kubelet cloud-provider
+// flag, which are required for cloud controller managers (e.g., Hetzner CCM) to:
+//  1. Initialize nodes with a providerID (spec.providerID)
+//  2. Write node labels that CSI DaemonSets require for scheduling
+//
+// See: https://www.talos.dev/latest/kubernetes-guides/configuration/cloud-provider/
+func externalCloudProviderPatches() []talosconfigmanager.Patch {
+	return []talosconfigmanager.Patch{
+		{
+			Path:    "external-cloud-provider",
+			Scope:   talosconfigmanager.PatchScopeCluster,
+			Content: []byte(talosgenerator.ExternalCloudProviderPatchYAML),
+		},
+	}
 }

@@ -687,3 +687,64 @@ func TestGenerator_Generate_NoImageVerificationPatchWhenFalse(t *testing.T) {
 	_, err = os.Stat(patchPath)
 	assert.True(t, os.IsNotExist(err), "expected image-verification.yaml to not exist")
 }
+
+// TestGenerator_Generate_ExternalCloudProvider tests that external-cloud-provider.yaml
+// is generated when EnableExternalCloudProvider is true.
+func TestGenerator_Generate_ExternalCloudProvider(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	gen := talosgenerator.NewGenerator()
+
+	config := &talosgenerator.Config{
+		PatchesDir:                  "talos",
+		EnableExternalCloudProvider: true,
+		WorkerNodes:                 1, // Prevents allow-scheduling patch
+	}
+	opts := yamlgenerator.Options{
+		Output: tempDir,
+	}
+
+	result, err := gen.Generate(config, opts)
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(tempDir, "talos"), result)
+
+	// Verify external-cloud-provider.yaml was created
+	patchPath := filepath.Join(tempDir, "talos", "cluster", "external-cloud-provider.yaml")
+	content, err := os.ReadFile(patchPath) //nolint:gosec // Test file path is safe
+	require.NoError(t, err)
+	assert.Contains(t, string(content), "externalCloudProvider:")
+	assert.Contains(t, string(content), "enabled: true")
+	assert.Contains(t, string(content), "cloud-provider: external")
+
+	// Verify .gitkeep was NOT created in cluster/ since we have a patch there
+	gitkeepPath := filepath.Join(tempDir, "talos", "cluster", ".gitkeep")
+	_, err = os.Stat(gitkeepPath)
+	assert.True(t, os.IsNotExist(err), "expected .gitkeep to not exist when patches are generated")
+}
+
+// TestGenerator_Generate_ExternalCloudProviderDisabled tests that external-cloud-provider.yaml
+// is NOT generated when EnableExternalCloudProvider is false.
+func TestGenerator_Generate_ExternalCloudProviderDisabled(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	gen := talosgenerator.NewGenerator()
+
+	config := &talosgenerator.Config{
+		PatchesDir:                  "talos",
+		WorkerNodes:                 1,
+		EnableExternalCloudProvider: false,
+	}
+	opts := yamlgenerator.Options{
+		Output: tempDir,
+	}
+
+	_, err := gen.Generate(config, opts)
+	require.NoError(t, err)
+
+	// Verify external-cloud-provider.yaml was NOT created
+	patchPath := filepath.Join(tempDir, "talos", "cluster", "external-cloud-provider.yaml")
+	_, err = os.Stat(patchPath)
+	assert.True(t, os.IsNotExist(err), "expected external-cloud-provider.yaml to not exist")
+}
