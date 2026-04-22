@@ -23,59 +23,39 @@ var (
 	errDetectorDocker = errors.New("docker error")
 )
 
-// TestDetectComponents_CSIError verifies that DetectComponents returns an
-// error when CSI detection fails.
-func TestDetectComponents_CSIError(t *testing.T) {
+// TestDetectComponents_AllReleasesFromCache verifies that DetectComponents
+// correctly detects multiple installed components via a single ListReleases call,
+// confirming the in-memory cache serves all subsequent lookups.
+func TestDetectComponents_AllReleasesFromCache(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
 	helmClient := helm.NewMockInterface(t)
 	k8sClientset := fake.NewClientset()
 
-	// CNI succeeds (no Cilium or Calico)
-	helmClient.On("ReleaseExists", ctx, detector.ReleaseCilium, detector.NamespaceCilium).
-		Return(false, nil)
-	helmClient.On("ReleaseExists", ctx, detector.ReleaseCalico, detector.NamespaceCalico).
-		Return(false, nil)
-	// CSI: Talos+Hetzner triggers ReleaseExists for hcloud-csi which errors
-	helmClient.On("ReleaseExists", ctx, detector.ReleaseHCloudCSI, detector.NamespaceHCloudCSI).
-		Return(false, errDetectorHelm)
+	// All installed releases are returned in a single ListReleases call.
+	helmClient.On("ListReleases", ctx).Return([]helm.ReleaseInfo{
+		{Name: detector.ReleaseCilium, Namespace: detector.NamespaceCilium},
+		{Name: detector.ReleaseMetricsServer, Namespace: detector.NamespaceMetricsServer},
+		{Name: detector.ReleaseCertManager, Namespace: detector.NamespaceCertManager},
+		{Name: detector.ReleaseKyverno, Namespace: detector.NamespaceKyverno},
+		{Name: detector.ReleaseFluxOperator, Namespace: detector.NamespaceFluxOperator},
+	}, nil).Once()
 
 	d := detector.NewComponentDetector(helmClient, k8sClientset, nil)
-	_, err := d.DetectComponents(ctx, v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
+	spec, err := d.DetectComponents(ctx, v1alpha1.DistributionK3s, v1alpha1.ProviderDocker)
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "detect CSI")
-}
-
-// TestDetectComponents_MetricsServerError verifies that DetectComponents returns
-// an error when MetricsServer detection fails.
-func TestDetectComponents_MetricsServerError(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	helmClient := helm.NewMockInterface(t)
-	k8sClientset := fake.NewClientset()
-
-	// CNI succeeds
-	helmClient.On("ReleaseExists", ctx, detector.ReleaseCilium, detector.NamespaceCilium).
-		Return(false, nil)
-	helmClient.On("ReleaseExists", ctx, detector.ReleaseCalico, detector.NamespaceCalico).
-		Return(false, nil)
-	// CSI succeeds (Vanilla distribution, no local-path-provisioner found)
-	// MetricsServer errors
-	helmClient.On("ReleaseExists", ctx, detector.ReleaseMetricsServer, detector.NamespaceMetricsServer).
-		Return(false, errDetectorHelm)
-
-	d := detector.NewComponentDetector(helmClient, k8sClientset, nil)
-	_, err := d.DetectComponents(ctx, v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "detect MetricsServer")
+	require.NoError(t, err)
+	assert.Equal(t, v1alpha1.CNICilium, spec.CNI)
+	assert.Equal(t, v1alpha1.MetricsServerEnabled, spec.MetricsServer)
+	assert.Equal(t, v1alpha1.CertManagerEnabled, spec.CertManager)
+	assert.Equal(t, v1alpha1.PolicyEngineKyverno, spec.PolicyEngine)
+	assert.Equal(t, v1alpha1.GitOpsEngineFlux, spec.GitOpsEngine)
 }
 
 // TestDetectComponents_LoadBalancerError verifies DetectComponents wraps load
-// balancer detection errors properly.
+// balancer detection errors properly. The Docker client error occurs after the
+// single ListReleases call, validating non-Helm error propagation.
 func TestDetectComponents_LoadBalancerError(t *testing.T) {
 	t.Parallel()
 
@@ -84,16 +64,9 @@ func TestDetectComponents_LoadBalancerError(t *testing.T) {
 	k8sClientset := fake.NewClientset()
 	dockerClient := docker.NewMockAPIClient(t)
 
-	// CNI succeeds
-	helmClient.On("ReleaseExists", ctx, detector.ReleaseCilium, detector.NamespaceCilium).
-		Return(false, nil)
-	helmClient.On("ReleaseExists", ctx, detector.ReleaseCalico, detector.NamespaceCalico).
-		Return(false, nil)
-	// CSI succeeds (Vanilla, no deployment)
-	// MetricsServer succeeds
-	helmClient.On("ReleaseExists", ctx, detector.ReleaseMetricsServer, detector.NamespaceMetricsServer).
-		Return(false, nil)
-	// LoadBalancer: Vanilla with Docker client that returns error
+	// ListReleases is called once; no releases installed.
+	helmClient.On("ListReleases", ctx).Return([]helm.ReleaseInfo{}, nil).Once()
+	// LoadBalancer: Vanilla with Docker client that returns error.
 	dockerClient.On("ContainerList", ctx, mock.AnythingOfType("container.ListOptions")).
 		Return([]container.Summary{}, errDetectorDocker)
 
@@ -104,105 +77,28 @@ func TestDetectComponents_LoadBalancerError(t *testing.T) {
 	assert.Contains(t, err.Error(), "detect LoadBalancer")
 }
 
-// TestDetectComponents_CertManagerError verifies DetectComponents wraps
-// cert-manager detection errors.
-func TestDetectComponents_CertManagerError(t *testing.T) {
+// TestDetectComponents_FallbackPropagatesError verifies that when ListReleases fails
+// with a non-context error (RBAC fallback), DetectComponents wraps downstream
+// ReleaseExists errors with the correct "detect <Component>" context string.
+func TestDetectComponents_FallbackPropagatesError(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
 	helmClient := helm.NewMockInterface(t)
 	k8sClientset := fake.NewClientset()
 
-	// CNI succeeds
+	// ListReleases fails (RBAC restriction) → fall back to per-release checks.
+	helmClient.On("ListReleases", ctx).Return(nil, errDetectorHelm).Once()
+	// The first per-release check is detectCNI → Cilium. Return an error so the
+	// failure surfaces as a wrapped "detect CNI" error.
 	helmClient.On("ReleaseExists", ctx, detector.ReleaseCilium, detector.NamespaceCilium).
-		Return(false, nil)
-	helmClient.On("ReleaseExists", ctx, detector.ReleaseCalico, detector.NamespaceCalico).
-		Return(false, nil)
-	// CSI succeeds (K3s without deployment)
-	// MetricsServer succeeds
-	helmClient.On("ReleaseExists", ctx, detector.ReleaseMetricsServer, detector.NamespaceMetricsServer).
-		Return(false, nil)
-	// LoadBalancer succeeds (K3s, no svclb daemonsets, no traefik)
-	// CertManager errors
-	helmClient.On("ReleaseExists", ctx, detector.ReleaseCertManager, detector.NamespaceCertManager).
 		Return(false, errDetectorHelm)
 
 	d := detector.NewComponentDetector(helmClient, k8sClientset, nil)
-	_, err := d.DetectComponents(ctx, v1alpha1.DistributionK3s, v1alpha1.ProviderDocker)
+	_, err := d.DetectComponents(ctx, v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "detect CertManager")
-}
-
-// TestDetectComponents_PolicyEngineError verifies DetectComponents wraps
-// policy engine detection errors.
-func TestDetectComponents_PolicyEngineError(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	helmClient := helm.NewMockInterface(t)
-	k8sClientset := fake.NewClientset()
-
-	// CNI succeeds
-	helmClient.On("ReleaseExists", ctx, detector.ReleaseCilium, detector.NamespaceCilium).
-		Return(false, nil)
-	helmClient.On("ReleaseExists", ctx, detector.ReleaseCalico, detector.NamespaceCalico).
-		Return(false, nil)
-	// CSI succeeds
-	// MetricsServer succeeds
-	helmClient.On("ReleaseExists", ctx, detector.ReleaseMetricsServer, detector.NamespaceMetricsServer).
-		Return(false, nil)
-	// LoadBalancer succeeds
-	// CertManager succeeds
-	helmClient.On("ReleaseExists", ctx, detector.ReleaseCertManager, detector.NamespaceCertManager).
-		Return(false, nil)
-	// PolicyEngine errors
-	helmClient.On("ReleaseExists", ctx, detector.ReleaseKyverno, detector.NamespaceKyverno).
-		Return(false, errDetectorHelm)
-
-	d := detector.NewComponentDetector(helmClient, k8sClientset, nil)
-	_, err := d.DetectComponents(ctx, v1alpha1.DistributionK3s, v1alpha1.ProviderDocker)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "detect PolicyEngine")
-}
-
-// TestDetectComponents_GitOpsEngineError verifies DetectComponents wraps
-// gitops engine detection errors.
-func TestDetectComponents_GitOpsEngineError(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	helmClient := helm.NewMockInterface(t)
-	k8sClientset := fake.NewClientset()
-
-	// CNI succeeds
-	helmClient.On("ReleaseExists", ctx, detector.ReleaseCilium, detector.NamespaceCilium).
-		Return(false, nil)
-	helmClient.On("ReleaseExists", ctx, detector.ReleaseCalico, detector.NamespaceCalico).
-		Return(false, nil)
-	// CSI succeeds
-	// MetricsServer succeeds
-	helmClient.On("ReleaseExists", ctx, detector.ReleaseMetricsServer, detector.NamespaceMetricsServer).
-		Return(false, nil)
-	// LoadBalancer succeeds
-	// CertManager succeeds
-	helmClient.On("ReleaseExists", ctx, detector.ReleaseCertManager, detector.NamespaceCertManager).
-		Return(false, nil)
-	// PolicyEngine succeeds
-	helmClient.On("ReleaseExists", ctx, detector.ReleaseKyverno, detector.NamespaceKyverno).
-		Return(false, nil)
-	helmClient.On("ReleaseExists", ctx, detector.ReleaseGatekeeper, detector.NamespaceGatekeeper).
-		Return(false, nil)
-	// GitOpsEngine errors
-	helmClient.On("ReleaseExists", ctx, detector.ReleaseFluxOperator, detector.NamespaceFluxOperator).
-		Return(false, errDetectorHelm)
-
-	d := detector.NewComponentDetector(helmClient, k8sClientset, nil)
-	_, err := d.DetectComponents(ctx, v1alpha1.DistributionK3s, v1alpha1.ProviderDocker)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "detect GitOpsEngine")
+	assert.Contains(t, err.Error(), "detect CNI")
 }
 
 // TestDetectCSI_VClusterWithCSI verifies CSI detection for VCluster distribution

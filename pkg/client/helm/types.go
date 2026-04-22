@@ -7,11 +7,14 @@ import (
 )
 
 var (
-	errReleaseNameRequired   = errors.New("helm: release name is required")
-	errChartSpecRequired     = errors.New("helm: chart spec is required")
-	errUnexpectedReleaseType = errors.New("helm: unexpected release type")
-	errUnexpectedChartType   = errors.New("helm: unexpected chart type")
-	errUnsupportedClientType = errors.New("helm: unsupported client type for OCI chart")
+	errReleaseNameRequired     = errors.New("helm: release name is required")
+	errChartSpecRequired       = errors.New("helm: chart spec is required")
+	errUnexpectedReleaseType   = errors.New("helm: unexpected release type")
+	errUnexpectedChartType     = errors.New("helm: unexpected chart type")
+	errUnsupportedClientType   = errors.New("helm: unsupported client type for OCI chart")
+	errListReleasesUnsupported = errors.New(
+		"helm: ListReleases not supported on template-only client",
+	)
 )
 
 // ChartSpec mirrors the mittwald chart specification while keeping KSail
@@ -85,4 +88,9 @@ type Interface interface {
 	AddRepository(ctx context.Context, entry *RepositoryEntry, timeout time.Duration) error
 	TemplateChart(ctx context.Context, spec *ChartSpec) (string, error)
 	ReleaseExists(ctx context.Context, releaseName, namespace string) (bool, error)
+	// ListReleases returns Helm releases across all namespaces for all statuses.
+	// Only the Name and Namespace fields of each ReleaseInfo are guaranteed to be
+	// populated; all other fields (Status, Revision, etc.) are left at their zero
+	// values. Use this for bulk release detection to avoid N separate ReleaseExists roundtrips.
+	ListReleases(ctx context.Context) ([]ReleaseInfo, error)
 }

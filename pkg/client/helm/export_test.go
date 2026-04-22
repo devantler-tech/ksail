@@ -35,6 +35,7 @@ var (
 	ErrRepositoryNameRequired  = errRepositoryNameRequired
 	ErrRepositoryCacheUnset    = errRepositoryCacheUnset
 	ErrRepositoryConfigUnset   = errRepositoryConfigUnset
+	ErrListReleasesUnsupported = errListReleasesUnsupported
 	//nolint:gochecknoglobals // export_test.go exposes package internals as globals for tests.
 	ConvertRepositoryEntry = convertRepositoryEntry
 	//nolint:gochecknoglobals // export_test.go exposes package internals as globals for tests.

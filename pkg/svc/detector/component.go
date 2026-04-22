@@ -35,10 +35,90 @@ func NewComponentDetector(
 	}
 }
 
+// releaseSet is an in-memory index of Helm releases keyed by
+// name+namespace for O(1) existence checks after a single ListReleases call.
+type releaseSet map[releaseKey]struct{}
+
+type releaseKey struct {
+	name      string
+	namespace string
+}
+
+// cachedHelmClient wraps a helm.Interface and serves ReleaseExists lookups from
+// a pre-fetched in-memory releaseSet, eliminating per-call API roundtrips while
+// delegating all other operations to the underlying client.
+type cachedHelmClient struct {
+	helm.Interface
+
+	set releaseSet
+}
+
+func (c *cachedHelmClient) ReleaseExists(
+	ctx context.Context,
+	name, namespace string,
+) (bool, error) {
+	// Delegate to the wrapped client for invalid inputs so that validation
+	// errors (e.g., ErrReleaseNameRequired for an empty name) are preserved.
+	if name == "" || namespace == "" {
+		exists, err := c.Interface.ReleaseExists(ctx, name, namespace)
+		if err != nil {
+			return false, fmt.Errorf("release exists check: %w", err)
+		}
+
+		return exists, nil
+	}
+
+	_, ok := c.set[releaseKey{name: name, namespace: namespace}]
+
+	return ok, nil
+}
+
 // DetectComponents probes the running cluster to populate a ClusterSpec that
 // reflects the actual installed components. Distribution and provider are set
 // from the caller's known values; all other fields are detected.
+//
+// A single ListReleases call fetches all Helm releases across namespaces
+// upfront, replacing N sequential ReleaseExists roundtrips with one.
 func (d *ComponentDetector) DetectComponents(
+	ctx context.Context,
+	distribution v1alpha1.Distribution,
+	provider v1alpha1.Provider,
+) (*v1alpha1.ClusterSpec, error) {
+	// Fetch all releases in a single API call, then use an in-memory cache for
+	// the individual detect functions to avoid N separate Helm roundtrips.
+	releases, err := d.helmClient.ListReleases(ctx)
+	if err != nil {
+		// If the context was cancelled or timed out, propagate the context
+		// error so callers see context.Canceled/DeadlineExceeded rather than
+		// a potentially misleading RBAC or network error.
+		if ctx.Err() != nil {
+			return nil, fmt.Errorf("list helm releases: %w", ctx.Err())
+		}
+
+		// Otherwise (e.g., restricted RBAC), fall back to per-release checks so
+		// that detection still works with namespaced Helm access.
+		return d.detectAllComponents(ctx, distribution, provider)
+	}
+
+	releaseIndex := make(releaseSet, len(releases))
+	for _, r := range releases {
+		releaseIndex[releaseKey{name: r.Name, namespace: r.Namespace}] = struct{}{}
+	}
+
+	cached := &ComponentDetector{
+		helmClient:   &cachedHelmClient{Interface: d.helmClient, set: releaseIndex},
+		k8sClientset: d.k8sClientset,
+		dockerClient: d.dockerClient,
+	}
+
+	return cached.detectAllComponents(ctx, distribution, provider)
+}
+
+// detectAllComponents runs all individual detection functions using the receiver's
+// helmClient. When called from DetectComponents the helmClient is a cachedHelmClient
+// if ListReleases succeeded, or the original client when DetectComponents falls back
+// to per-release checks (e.g., restricted RBAC).
+func (d *ComponentDetector) detectAllComponents(
 	ctx context.Context,
 	distribution v1alpha1.Distribution,
 	provider v1alpha1.Provider,
@@ -268,6 +348,13 @@ func (d *ComponentDetector) detectLoadBalancer(
 	// Talos × Hetzner also resolves correctly via ProvidesLoadBalancerByDefault).
 	if distribution == v1alpha1.DistributionTalos {
 		return d.detectMetalLB(ctx)
+	}
+
+	// KWOK: simulated pods have no real network dataplane, so LoadBalancer is
+	// never installed. Return Disabled to match applyDistributionSpecOverrides
+	// and prevent false-positive diffs in update dry-runs.
+	if distribution == v1alpha1.DistributionKWOK {
+		return v1alpha1.LoadBalancerDisabled, nil
 	}
 
 	return v1alpha1.LoadBalancerDefault, nil

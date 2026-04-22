@@ -94,6 +94,40 @@ func TestReleaseExists_EmptyName(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// ListReleases edge cases
+// ---------------------------------------------------------------------------
+
+func TestListReleases_CancelledContext(t *testing.T) {
+	t.Parallel()
+
+	client, err := helm.NewTemplateOnlyClient()
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	releases, err := client.ListReleases(ctx)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "list releases context cancelled")
+	assert.Nil(t, releases)
+}
+
+func TestListReleases_TemplateOnlyClient(t *testing.T) {
+	t.Parallel()
+
+	// NewTemplateOnlyClient sets actionConfig.Releases = nil, so ListReleases
+	// must return the unsupported sentinel rather than panicking.
+	client, err := helm.NewTemplateOnlyClient()
+	require.NoError(t, err)
+
+	_, err = client.ListReleases(context.Background())
+
+	require.Error(t, err)
+	require.ErrorIs(t, err, helm.ErrListReleasesUnsupported)
+}
+
+// ---------------------------------------------------------------------------
 // InstallChart / InstallOrUpgradeChart nil spec
 // ---------------------------------------------------------------------------
 

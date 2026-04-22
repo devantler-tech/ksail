@@ -228,6 +228,66 @@ func (c *Client) ReleaseExists(
 	return len(releases) > 0, nil
 }
 
+// ListReleases returns Helm releases across all namespaces for all statuses in a
+// single Kubernetes API call. Use this instead of multiple ReleaseExists calls
+// to reduce API roundtrips when detecting many components at once.
+func (c *Client) ListReleases(ctx context.Context) ([]ReleaseInfo, error) {
+	err := ctx.Err()
+	if err != nil {
+		return nil, fmt.Errorf("list releases context cancelled: %w", err)
+	}
+
+	if c.actionConfig == nil || c.actionConfig.Releases == nil {
+		return nil, errListReleasesUnsupported
+	}
+
+	// Helm v4's List.AllNamespaces field is declared but never referenced in
+	// Run(), so setting it has no effect. The only way to query releases across
+	// all namespaces is to reinitialise the action configuration with an empty
+	// namespace, which causes the underlying Secrets storage driver to call
+	// client.CoreV1().Secrets("") — equivalent to v1.NamespaceAll.
+	previousNamespace := c.settings.Namespace()
+	c.settings.SetNamespace("")
+
+	initErr := c.actionConfig.Init(c.settings.RESTClientGetter(), "", os.Getenv("HELM_DRIVER"))
+	if initErr != nil {
+		c.settings.SetNamespace(previousNamespace)
+
+		return nil, fmt.Errorf("failed to list helm releases: %w", initErr)
+	}
+
+	defer func() {
+		restoreErr := c.restoreNamespace(previousNamespace)
+		if restoreErr != nil {
+			c.debugLog("failed to restore helm namespace after listing releases: %v", restoreErr)
+		}
+	}()
+
+	listClient := helmv4action.NewList(c.actionConfig)
+	listClient.All = true
+
+	releases, err := listClient.Run()
+	if err != nil {
+		return nil, fmt.Errorf("failed to list helm releases: %w", err)
+	}
+
+	result := make([]ReleaseInfo, 0, len(releases))
+
+	for _, rel := range releases {
+		accessor, accErr := helmv4release.NewAccessor(rel)
+		if accErr != nil {
+			return nil, fmt.Errorf("failed to access helm release from list result: %w", accErr)
+		}
+
+		result = append(result, ReleaseInfo{
+			Name:      accessor.Name(),
+			Namespace: accessor.Namespace(),
+		})
+	}
+
+	return result, nil
+}
+
 func (c *Client) installRelease(
 	ctx context.Context,
 	spec *ChartSpec,
