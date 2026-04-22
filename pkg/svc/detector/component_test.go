@@ -610,6 +610,7 @@ func TestDetectComponents_ListReleasesError(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Cancel immediately so ctx.Err() is non-nil; error is propagated, not silenced.
+
 	helmClient := helm.NewMockInterface(t)
 	k8sClientset := fake.NewClientset()
 
