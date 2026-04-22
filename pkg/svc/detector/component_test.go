@@ -435,6 +435,7 @@ func TestDetectLoadBalancer_Vanilla_ContextCancelled(t *testing.T) {
 	dockerClient := docker.NewMockAPIClient(t)
 
 	// First call returns empty, then cancel context before retry.
+	// Using .Once() ensures testify fails if a second call is attempted.
 	dockerClient.On("ContainerList", mock.Anything, mock.Anything).
 		Run(func(_ mock.Arguments) { cancel() }).
 		Return([]container.Summary{}, nil).Once()
@@ -448,6 +449,7 @@ func TestDetectLoadBalancer_Vanilla_ContextCancelled(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, v1alpha1.LoadBalancerDefault, loadBalancer)
+	dockerClient.AssertNumberOfCalls(t, "ContainerList", 1)
 }
 
 func TestDetectLoadBalancer_Talos_MetalLB_Enabled(t *testing.T) {
