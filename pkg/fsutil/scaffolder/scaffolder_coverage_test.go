@@ -521,7 +521,12 @@ func TestScaffoldTalos_HetznerExternalCloudProvider(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify external-cloud-provider.yaml was created
-	patchPath := filepath.Join(tempDir, scaffolder.TalosConfigDir, "cluster", "external-cloud-provider.yaml")
+	patchPath := filepath.Join(
+		tempDir,
+		scaffolder.TalosConfigDir,
+		"cluster",
+		"external-cloud-provider.yaml",
+	)
 	content, readErr := os.ReadFile(patchPath) //nolint:gosec // test file
 	require.NoError(t, readErr)
 	assert.Contains(t, string(content), "externalCloudProvider:")
@@ -554,7 +559,16 @@ func TestScaffoldTalos_DockerNoExternalCloudProvider(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify external-cloud-provider.yaml was NOT created
-	patchPath := filepath.Join(tempDir, scaffolder.TalosConfigDir, "cluster", "external-cloud-provider.yaml")
+	patchPath := filepath.Join(
+		tempDir,
+		scaffolder.TalosConfigDir,
+		"cluster",
+		"external-cloud-provider.yaml",
+	)
 	_, err = os.Stat(patchPath)
-	assert.True(t, os.IsNotExist(err), "expected external-cloud-provider.yaml to not exist for Docker provider")
+	assert.True(
+		t,
+		os.IsNotExist(err),
+		"expected external-cloud-provider.yaml to not exist for Docker provider",
+	)
 }
