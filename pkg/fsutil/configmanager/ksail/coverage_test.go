@@ -357,4 +357,59 @@ func TestGetDefaultTalosPatches(t *testing.T) {
 		assert.Contains(t, string(patches[0].Content), "rotate-server-certificates")
 		assert.Contains(t, string(patches[1].Content), "kubelet-serving-cert-approver")
 	})
+
+	t.Run("hetzner provider returns external cloud provider patch", func(t *testing.T) {
+		t.Parallel()
+
+		mgr := configmanager.NewConfigManager(nil, "ksail.yaml")
+		mgr.Config = &v1alpha1.Cluster{
+			Spec: v1alpha1.Spec{
+				Cluster: v1alpha1.ClusterSpec{
+					Provider: v1alpha1.ProviderHetzner,
+				},
+			},
+		}
+
+		patches := mgr.GetDefaultTalosPatchesForTest()
+		require.Len(t, patches, 1)
+		assert.Contains(t, string(patches[0].Content), "externalCloudProvider")
+		assert.Contains(t, string(patches[0].Content), "enabled: true")
+		assert.Contains(t, string(patches[0].Content), "cloud-provider: external")
+	})
+
+	t.Run("docker provider does not return external cloud provider patch", func(t *testing.T) {
+		t.Parallel()
+
+		mgr := configmanager.NewConfigManager(nil, "ksail.yaml")
+		mgr.Config = &v1alpha1.Cluster{
+			Spec: v1alpha1.Spec{
+				Cluster: v1alpha1.ClusterSpec{
+					Provider: v1alpha1.ProviderDocker,
+				},
+			},
+		}
+
+		patches := mgr.GetDefaultTalosPatchesForTest()
+		assert.Empty(t, patches)
+	})
+
+	t.Run("hetzner with metrics server returns both patches", func(t *testing.T) {
+		t.Parallel()
+
+		mgr := configmanager.NewConfigManager(nil, "ksail.yaml")
+		mgr.Config = &v1alpha1.Cluster{
+			Spec: v1alpha1.Spec{
+				Cluster: v1alpha1.ClusterSpec{
+					Provider:      v1alpha1.ProviderHetzner,
+					MetricsServer: v1alpha1.MetricsServerEnabled,
+				},
+			},
+		}
+
+		patches := mgr.GetDefaultTalosPatchesForTest()
+		require.Len(t, patches, 3)
+		assert.Contains(t, string(patches[0].Content), "rotate-server-certificates")
+		assert.Contains(t, string(patches[1].Content), "kubelet-serving-cert-approver")
+		assert.Contains(t, string(patches[2].Content), "externalCloudProvider")
+	})
 }
