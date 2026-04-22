@@ -187,10 +187,11 @@ jobs:
       packages: write
     strategy:
       fail-fast: false
+      max-parallel: 1
       matrix:
-        # On schedule: test both init and noinit with defaults.
-        # On workflow_dispatch: run only the user-selected variant.
-        init: ${{ github.event_name == 'schedule' && fromJSON('[true, false]') || fromJSON(format('[{0}]', inputs.init)) }}
+        # On schedule: run all important configurations sequentially for broad E2E coverage.
+        # On workflow_dispatch: run a single user-selected configuration.
+        include: ${{ github.event_name == 'schedule' && fromJSON('[{"init":true,"suffix":"default-init","args":""},{"init":false,"suffix":"default-noinit","args":""},{"init":true,"suffix":"fullstack","args":"--cni Cilium --csi Enabled --load-balancer Enabled --metrics-server Enabled --policy-engine Kyverno --cert-manager Enabled --gitops-engine Flux"},{"init":true,"suffix":"altstack","args":"--cni Calico --csi Disabled --load-balancer Disabled --metrics-server Disabled --policy-engine Gatekeeper --gitops-engine ArgoCD"},{"init":true,"suffix":"flux-reg","args":"--gitops-engine Flux --local-registry ghcr.io/devantler-tech/ksail/system-test-manifests"},{"init":true,"suffix":"argocd-reg","args":"--gitops-engine ArgoCD --local-registry ghcr.io/devantler-tech/ksail/system-test-manifests"}]') || fromJSON(format('[{"init":{0},"suffix":"dispatch","args":""}]', inputs.init)) }}
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@6c3c2f2c1c457b00c10c4848d6f5491db3b629df # v2.18.0
@@ -253,20 +254,23 @@ jobs:
         id: args
         shell: bash
         run: |
-          ARGS="--name st-omni-${{ matrix.init && 'init' || 'noinit' }}-${{ github.run_id }}"
+          ARGS="--name st-omni-${{ matrix.suffix }}-${{ github.run_id }}"
 
-          # Component configurations (only add non-default values)
-          [[ "${{ inputs.cni }}" != "Default" && -n "${{ inputs.cni }}" ]] && ARGS+=" --cni ${{ inputs.cni }}"
-          [[ "${{ inputs.csi }}" != "Default" && -n "${{ inputs.csi }}" ]] && ARGS+=" --csi ${{ inputs.csi }}"
-          [[ "${{ inputs.load_balancer }}" != "Default" && -n "${{ inputs.load_balancer }}" ]] && ARGS+=" --load-balancer ${{ inputs.load_balancer }}"
-          [[ "${{ inputs.metrics_server }}" != "Default" && -n "${{ inputs.metrics_server }}" ]] && ARGS+=" --metrics-server ${{ inputs.metrics_server }}"
-          [[ "${{ inputs.policy_engine }}" != "None" && -n "${{ inputs.policy_engine }}" ]] && ARGS+=" --policy-engine ${{ inputs.policy_engine }}"
-          [[ "${{ inputs.cert_manager }}" != "Disabled" && -n "${{ inputs.cert_manager }}" ]] && ARGS+=" --cert-manager ${{ inputs.cert_manager }}"
-          [[ "${{ inputs.gitops_engine }}" != "None" && -n "${{ inputs.gitops_engine }}" ]] && ARGS+=" --gitops-engine ${{ inputs.gitops_engine }}"
-
-          # Scale
-          [[ "${{ inputs.control_planes }}" != "1" && -n "${{ inputs.control_planes }}" ]] && ARGS+=" --control-planes ${{ inputs.control_planes }}"
-          [[ "${{ inputs.workers }}" != "0" && -n "${{ inputs.workers }}" ]] && ARGS+=" --workers ${{ inputs.workers }}"
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            # Build from user-selected inputs
+            [[ "${{ inputs.cni }}" != "Default" && -n "${{ inputs.cni }}" ]] && ARGS+=" --cni ${{ inputs.cni }}"
+            [[ "${{ inputs.csi }}" != "Default" && -n "${{ inputs.csi }}" ]] && ARGS+=" --csi ${{ inputs.csi }}"
+            [[ "${{ inputs.load_balancer }}" != "Default" && -n "${{ inputs.load_balancer }}" ]] && ARGS+=" --load-balancer ${{ inputs.load_balancer }}"
+            [[ "${{ inputs.metrics_server }}" != "Default" && -n "${{ inputs.metrics_server }}" ]] && ARGS+=" --metrics-server ${{ inputs.metrics_server }}"
+            [[ "${{ inputs.policy_engine }}" != "None" && -n "${{ inputs.policy_engine }}" ]] && ARGS+=" --policy-engine ${{ inputs.policy_engine }}"
+            [[ "${{ inputs.cert_manager }}" != "Disabled" && -n "${{ inputs.cert_manager }}" ]] && ARGS+=" --cert-manager ${{ inputs.cert_manager }}"
+            [[ "${{ inputs.gitops_engine }}" != "None" && -n "${{ inputs.gitops_engine }}" ]] && ARGS+=" --gitops-engine ${{ inputs.gitops_engine }}"
+            [[ "${{ inputs.control_planes }}" != "1" && -n "${{ inputs.control_planes }}" ]] && ARGS+=" --control-planes ${{ inputs.control_planes }}"
+            [[ "${{ inputs.workers }}" != "0" && -n "${{ inputs.workers }}" ]] && ARGS+=" --workers ${{ inputs.workers }}"
+          else
+            # Use pre-defined matrix args for scheduled runs
+            ARGS+=" ${{ matrix.args }}"
+          fi
 
           echo "value=${ARGS}" >> "$GITHUB_OUTPUT"
           echo "Args: ${ARGS}"
@@ -332,7 +336,7 @@ jobs:
       - name: 🧹 Cleanup KSail test clusters from Omni
         uses: ./.github/actions/cleanup-omni
         with:
-          cluster-names: "st-omni-init-${{ github.run_id }} st-omni-noinit-${{ github.run_id }}"
+          cluster-names: "st-omni-default-init-${{ github.run_id }} st-omni-default-noinit-${{ github.run_id }} st-omni-fullstack-${{ github.run_id }} st-omni-altstack-${{ github.run_id }} st-omni-flux-reg-${{ github.run_id }} st-omni-argocd-reg-${{ github.run_id }} st-omni-dispatch-${{ github.run_id }}"
         env:
           OMNI_SERVICE_ACCOUNT_KEY: ${{ secrets.OMNI_SERVICE_ACCOUNT_KEY }}
           OMNI_ENDPOINT: ${{ vars.OMNI_ENDPOINT }}
