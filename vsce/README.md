@@ -34,55 +34,7 @@ Search for "KSail" in the VSCode Extensions Marketplace, or type `@mcp` in the E
 
 Full user documentation, commands reference, and configuration options are available at **[ksail.devantler.tech/vscode-extension](https://ksail.devantler.tech/vscode-extension/)**.
 
-## Development
-
-### Building
-
-```bash
-cd vsce
-npm ci
-npm run compile
-```
-
-### Packaging
-
-```bash
-npx @vscode/vsce package --no-dependencies
-```
-
-### Testing locally
-
-1. Open the `vsce` folder in VSCode
-2. Press `F5` to launch Extension Development Host
-3. Test commands from the Command Palette
-
-## Architecture
-
-```text
-vsce/
-├── src/
-│   ├── extension.ts          # Entry point, command registration
-│   ├── commands/
-│   │   ├── index.ts          # Command handlers (command registry)
-│   │   └── prompts.ts        # Interactive wizard implementations
-│   ├── ksail/
-│   │   ├── clusters.ts       # KSail CLI wrapper functions
-│   │   ├── binary.ts         # KSail binary discovery and execution
-│   │   ├── kubectl.ts        # kubectl wrapper for cluster status queries
-│   │   └── index.ts          # Module exports
-│   ├── kubernetes/
-│   │   ├── cloudProvider.ts          # Cloud Explorer tree provider (KSail clusters in Clouds view)
-│   │   ├── clusterExplorerContributor.ts  # Annotates KSail contexts in Cluster Explorer
-│   │   ├── clusterProvider.ts        # Create Cluster wizard (HTML-based)
-│   │   ├── contextNames.ts           # Shared helpers for parsing kubeconfig context names
-│   │   └── index.ts                  # Module exports
-│   └── mcp/
-│       ├── serverProvider.ts # MCP server definition provider
-│       ├── schemaClient.ts   # MCP schema client for KSail
-│       └── index.ts          # Module exports
-├── dist/                     # Compiled output
-└── package.json              # Extension manifest
-```
+For contributor documentation (build commands, architecture, and development workflows), see [CONTRIBUTING.md](../CONTRIBUTING.md).
 
 ## License
 

@@ -180,7 +180,35 @@ npx @vscode/vsce package --no-dependencies
 2. Press `F5` to launch Extension Development Host
 3. Test commands from the Command Palette (`Cmd+Shift+P` / `Ctrl+Shift+P`)
 
-See [vsce/README.md](vsce/README.md) for full extension documentation including features, architecture, and development workflows.
+The extension source is organized as follows:
+
+```text
+vsce/
+├── src/
+│   ├── extension.ts          # Entry point, command registration
+│   ├── commands/
+│   │   ├── index.ts          # Command handlers (command registry)
+│   │   └── prompts.ts        # Interactive wizard implementations
+│   ├── ksail/
+│   │   ├── clusters.ts       # KSail CLI wrapper functions
+│   │   ├── binary.ts         # KSail binary discovery and execution
+│   │   ├── kubectl.ts        # kubectl wrapper for cluster status queries
+│   │   └── index.ts          # Module exports
+│   ├── kubernetes/
+│   │   ├── cloudProvider.ts              # Cloud Explorer tree provider (KSail clusters in Clouds view)
+│   │   ├── clusterExplorerContributor.ts # Annotates KSail contexts in Cluster Explorer
+│   │   ├── clusterProvider.ts            # Create Cluster wizard (HTML-based)
+│   │   ├── contextNames.ts               # Shared helpers for parsing kubeconfig context names
+│   │   └── index.ts                      # Module exports
+│   └── mcp/
+│       ├── serverProvider.ts  # MCP server definition provider
+│       ├── schemaClient.ts    # MCP schema client for KSail
+│       └── index.ts           # Module exports
+├── dist/                      # Compiled output
+└── package.json               # Extension manifest
+```
+
+See [vsce/README.md](vsce/README.md) for end-user feature documentation, or [ksail.devantler.tech/vscode-extension](https://ksail.devantler.tech/vscode-extension/) for the full docs site page.
 
 ## Project Structure
 
