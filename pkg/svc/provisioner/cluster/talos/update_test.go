@@ -163,17 +163,14 @@ func TestUpdateSkipsOmniInPlaceConfigApply(t *testing.T) {
 // implicitly attempt Talos OS version upgrades. Version upgrades are only
 // triggered via the explicit --update-distribution flag which goes through
 // the UpgradeDistribution() path (not Update()).
+// The provisioner is instantiated WITHOUT Omni options so any accidental
+// reintroduction of an upgrade step would surface as a failure (no Omni
+// guard to silently skip it).
 // See: https://github.com/devantler-tech/ksail/issues/4260
 func TestUpdateDoesNotAttemptVersionUpgrade(t *testing.T) {
 	t.Parallel()
 
-	talosConfigs, err := talosconfigmanager.NewDefaultConfigs()
-	if err != nil {
-		t.Fatalf("NewDefaultConfigs() error = %v", err)
-	}
-
-	provisioner := talosprovisioner.NewProvisioner(talosConfigs, nil).
-		WithOmniOptions(v1alpha1.OptionsOmni{}).
+	provisioner := talosprovisioner.NewProvisioner(nil, nil).
 		WithLogWriter(io.Discard)
 
 	// Identical specs: no scaling/config changes — verifies that Update()
