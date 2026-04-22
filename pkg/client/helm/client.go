@@ -241,8 +241,25 @@ func (c *Client) ListReleases(ctx context.Context) ([]ReleaseInfo, error) {
 		return nil, errListReleasesUnsupported
 	}
 
+	// Helm v4's List.AllNamespaces field is declared but never referenced in
+	// Run(), so setting it has no effect. The only way to query releases across
+	// all namespaces is to reinitialise the action configuration with an empty
+	// namespace, which causes the underlying Secrets storage driver to call
+	// client.CoreV1().Secrets("") — equivalent to v1.NamespaceAll.
+	previousNamespace := c.settings.Namespace()
+	c.settings.SetNamespace("")
+
+	if initErr := c.actionConfig.Init(c.settings.RESTClientGetter(), "", os.Getenv("HELM_DRIVER")); initErr != nil {
+		c.settings.SetNamespace(previousNamespace)
+		return nil, fmt.Errorf("failed to list helm releases: %w", initErr)
+	}
+
+	defer func() {
+		c.settings.SetNamespace(previousNamespace)
+		_ = c.actionConfig.Init(c.settings.RESTClientGetter(), previousNamespace, os.Getenv("HELM_DRIVER"))
+	}()
+
 	listClient := helmv4action.NewList(c.actionConfig)
-	listClient.AllNamespaces = true
 	listClient.All = true
 
 	releases, err := listClient.Run()
