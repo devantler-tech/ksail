@@ -32,6 +32,8 @@ const (
 	imageVerificationFileName = "image-verification.yaml"
 	// disableCDIFileName is the name of the CDI disable patch file.
 	disableCDIFileName = "disable-cdi.yaml"
+	// externalCloudProviderFileName is the name of the external cloud provider patch file.
+	externalCloudProviderFileName = "external-cloud-provider.yaml"
 )
 
 // KubeletServingCertApproverManifestURL is the URL for the kubelet-serving-cert-approver manifest.
@@ -78,6 +80,13 @@ type Config struct {
 	// When true, generates a disable-cdi.yaml patch to set machine.features.enableCDI to false.
 	// Talos 1.13+ enables CDI by default, so this patch is only needed when CDI should be turned off.
 	DisableCDI bool
+	// EnableExternalCloudProvider indicates whether to enable the external cloud provider.
+	// When true, generates an external-cloud-provider.yaml patch that sets
+	// cluster.externalCloudProvider.enabled to true and machine.kubelet.extraArgs.cloud-provider
+	// to "external". This is required for Hetzner Cloud so that the Cloud Controller Manager
+	// can initialize nodes with a providerID and the CSI driver can schedule.
+	// See: https://www.talos.dev/latest/kubernetes-guides/configuration/cloud-provider/
+	EnableExternalCloudProvider bool
 }
 
 // Generator generates the Talos directory structure.
@@ -173,6 +182,11 @@ func (g *Generator) getDirectoriesWithPatches(
 		dirs["cluster"] = true
 	}
 
+	// External cloud provider patch goes to cluster/
+	if model.EnableExternalCloudProvider {
+		dirs["cluster"] = true
+	}
+
 	return dirs
 }
 
@@ -242,6 +256,14 @@ func (g *Generator) generateConditionalPatches(
 	// Generate disable-cdi patch when CDI should be turned off
 	if model.DisableCDI {
 		err := g.generateDisableCDIPatch(rootPath, force)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Generate external cloud provider patch when cloud provider integration is needed
+	if model.EnableExternalCloudProvider {
+		err := g.generateExternalCloudProviderPatch(rootPath, force)
 		if err != nil {
 			return err
 		}
@@ -593,6 +615,45 @@ func (g *Generator) generateDisableCDIPatch(
 	err := os.WriteFile(patchPath, []byte(patchContent), filePerm)
 	if err != nil {
 		return fmt.Errorf("failed to create disable-cdi patch: %w", err)
+	}
+
+	return nil
+}
+
+// generateExternalCloudProviderPatch creates a Talos patch file to enable the external
+// cloud provider. This is required for cloud providers like Hetzner Cloud so that the
+// Cloud Controller Manager (CCM) can:
+//  1. Initialize nodes with a providerID (spec.providerID)
+//  2. Write node labels that the CSI DaemonSet requires for scheduling
+//
+// Without this patch, nodes come up Ready but without providerID, and CSI pods never
+// schedule because their node affinity depends on labels written by CCM.
+//
+// See: https://www.talos.dev/latest/kubernetes-guides/configuration/cloud-provider/
+func (g *Generator) generateExternalCloudProviderPatch(
+	rootPath string,
+	force bool,
+) error {
+	patchPath := filepath.Join(rootPath, "cluster", externalCloudProviderFileName)
+
+	// Check if file already exists
+	_, statErr := os.Stat(patchPath)
+	if statErr == nil && !force {
+		return nil
+	}
+
+	patchContent := `cluster:
+  externalCloudProvider:
+    enabled: true
+machine:
+  kubelet:
+    extraArgs:
+      cloud-provider: external
+`
+
+	err := os.WriteFile(patchPath, []byte(patchContent), filePerm)
+	if err != nil {
+		return fmt.Errorf("failed to create external-cloud-provider patch: %w", err)
 	}
 
 	return nil

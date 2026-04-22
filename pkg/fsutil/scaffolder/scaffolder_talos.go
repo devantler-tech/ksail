@@ -31,20 +31,26 @@ func (s *Scaffolder) generateTalosConfig(output string, force bool) error {
 	// so we only need a patch when CDI should be turned off.
 	disableCDI := s.KSailConfig.Spec.Cluster.CDI == v1alpha1.CDIDisabled
 
+	// Enable external cloud provider when using a cloud provider (e.g., Hetzner) that
+	// requires the CCM to initialize nodes with a providerID and write node labels.
+	enableExternalCloudProvider := s.KSailConfig.Spec.Cluster.Provider == v1alpha1.ProviderHetzner
+
 	// Mirror the conditions in generator.getDirectoriesWithPatches() exactly so
 	// .gitkeep notifications match the files the generator actually writes.
 	clusterHasPatches := workers == 0 || len(s.MirrorRegistries) > 0 || disableDefaultCNI ||
-		enableKubeletCertRotation || s.ClusterName != "" || enableImageVerification || disableCDI
+		enableKubeletCertRotation || s.ClusterName != "" || enableImageVerification || disableCDI ||
+		enableExternalCloudProvider
 
 	config := &talosgenerator.Config{
-		PatchesDir:                TalosConfigDir,
-		MirrorRegistries:          s.MirrorRegistries,
-		WorkerNodes:               workers,
-		DisableDefaultCNI:         disableDefaultCNI,
-		EnableKubeletCertRotation: enableKubeletCertRotation,
-		ClusterName:               s.ClusterName,
-		EnableImageVerification:   enableImageVerification,
-		DisableCDI:                disableCDI,
+		PatchesDir:                  TalosConfigDir,
+		MirrorRegistries:            s.MirrorRegistries,
+		WorkerNodes:                 workers,
+		DisableDefaultCNI:           disableDefaultCNI,
+		EnableKubeletCertRotation:   enableKubeletCertRotation,
+		ClusterName:                 s.ClusterName,
+		EnableImageVerification:     enableImageVerification,
+		DisableCDI:                  disableCDI,
+		EnableExternalCloudProvider: enableExternalCloudProvider,
 	}
 
 	opts := yamlgenerator.Options{
@@ -63,6 +69,7 @@ func (s *Scaffolder) generateTalosConfig(output string, force bool) error {
 		enableKubeletCertRotation,
 		enableImageVerification,
 		disableCDI,
+		enableExternalCloudProvider,
 		clusterHasPatches,
 	)
 
@@ -72,7 +79,8 @@ func (s *Scaffolder) generateTalosConfig(output string, force bool) error {
 // notifyTalosGenerated sends notifications about generated Talos files.
 func (s *Scaffolder) notifyTalosGenerated(
 	workers int,
-	disableDefaultCNI, enableKubeletCertRotation, enableImageVerification, disableCDI bool,
+	disableDefaultCNI, enableKubeletCertRotation, enableImageVerification, disableCDI,
+	enableExternalCloudProvider bool,
 	clusterHasPatches bool,
 ) {
 	// Notify about .gitkeep files only for directories without patches
@@ -100,6 +108,7 @@ func (s *Scaffolder) notifyTalosGenerated(
 		{s.ClusterName != "", "cluster", "cluster-name.yaml"},
 		{enableImageVerification, "cluster", "image-verification.yaml"},
 		{disableCDI, "cluster", "disable-cdi.yaml"},
+		{enableExternalCloudProvider, "cluster", "external-cloud-provider.yaml"},
 	}
 
 	for _, patch := range patches {
