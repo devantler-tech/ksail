@@ -64,8 +64,8 @@ func WaitForDeploymentReady(
 // If it exists, this function waits for it to be fully ready using the same criteria
 // as WaitForDeploymentReady.
 //
-// The initial existence check is bounded by the same deadline to prevent indefinite
-// blocking if the API server is slow or unresponsive.
+// A single deadline bounds the total wall-clock time for both the initial existence
+// check and the subsequent readiness polling.
 //
 // Returns nil if the deployment does not exist (including when the namespace does not exist).
 // Returns an error if the deployment exists but is not ready within the deadline.
@@ -75,12 +75,12 @@ func WaitForDeploymentReadyIfExists(
 	namespace, name string,
 	deadline time.Duration,
 ) error {
-	checkCtx, cancel := context.WithTimeout(ctx, deadline)
+	deadlineCtx, cancel := context.WithTimeout(ctx, deadline)
 	defer cancel()
 
 	_, err := clientset.AppsV1().
 		Deployments(namespace).
-		Get(checkCtx, name, metav1.GetOptions{})
+		Get(deadlineCtx, name, metav1.GetOptions{})
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			return nil
@@ -89,5 +89,30 @@ func WaitForDeploymentReadyIfExists(
 		return fmt.Errorf("failed to check deployment %s/%s: %w", namespace, name, err)
 	}
 
-	return WaitForDeploymentReady(ctx, clientset, namespace, name, deadline)
+	return PollForReadiness(deadlineCtx, deadline, func(ctx context.Context) (bool, error) {
+		deployment, err := clientset.AppsV1().
+			Deployments(namespace).
+			Get(ctx, name, metav1.GetOptions{})
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				return false, nil
+			}
+
+			return false, fmt.Errorf("failed to get deployment %s/%s: %w", namespace, name, err)
+		}
+
+		if deployment.Status.Replicas == 0 {
+			return false, nil
+		}
+
+		if deployment.Status.UpdatedReplicas < deployment.Status.Replicas {
+			return false, nil
+		}
+
+		if deployment.Status.AvailableReplicas < deployment.Status.Replicas {
+			return false, nil
+		}
+
+		return true, nil
+	})
 }
