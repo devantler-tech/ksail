@@ -77,6 +77,30 @@ func TestDetectComponents_LoadBalancerError(t *testing.T) {
 	assert.Contains(t, err.Error(), "detect LoadBalancer")
 }
 
+// TestDetectComponents_FallbackPropagatesError verifies that when ListReleases fails
+// with a non-context error (RBAC fallback), DetectComponents wraps downstream
+// ReleaseExists errors with the correct "detect <Component>" context string.
+func TestDetectComponents_FallbackPropagatesError(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	helmClient := helm.NewMockInterface(t)
+	k8sClientset := fake.NewClientset()
+
+	// ListReleases fails (RBAC restriction) → fall back to per-release checks.
+	helmClient.On("ListReleases", ctx).Return(nil, errDetectorHelm).Once()
+	// The first per-release check is detectCNI → Cilium. Return an error so the
+	// failure surfaces as a wrapped "detect CNI" error.
+	helmClient.On("ReleaseExists", ctx, detector.ReleaseCilium, detector.NamespaceCilium).
+		Return(false, errDetectorHelm)
+
+	d := detector.NewComponentDetector(helmClient, k8sClientset, nil)
+	_, err := d.DetectComponents(ctx, v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "detect CNI")
+}
+
 // TestDetectCSI_VClusterWithCSI verifies CSI detection for VCluster distribution
 // with local-path-provisioner present.
 func TestDetectCSI_VClusterWithCSI(t *testing.T) {

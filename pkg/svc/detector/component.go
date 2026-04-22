@@ -88,9 +88,11 @@ func (d *ComponentDetector) DetectComponents(
 	// the individual detect functions to avoid N separate Helm roundtrips.
 	releases, err := d.helmClient.ListReleases(ctx)
 	if err != nil {
-		// If the context was cancelled or timed out, propagate the error.
+		// If the context was cancelled or timed out, propagate the context
+		// error so callers see context.Canceled/DeadlineExceeded rather than
+		// a potentially misleading RBAC or network error.
 		if ctx.Err() != nil {
-			return nil, fmt.Errorf("list helm releases: %w", err)
+			return nil, fmt.Errorf("list helm releases: %w", ctx.Err())
 		}
 
 		// Otherwise (e.g., restricted RBAC), fall back to per-release checks so
@@ -113,7 +115,9 @@ func (d *ComponentDetector) DetectComponents(
 }
 
 // detectAllComponents runs all individual detection functions using the receiver's
-// helmClient (expected to be a cachedHelmClient when called from DetectComponents).
+// helmClient. When called from DetectComponents the helmClient is a cachedHelmClient
+// if ListReleases succeeded, or the original client when DetectComponents falls back
+// to per-release checks (e.g., restricted RBAC).
 func (d *ComponentDetector) detectAllComponents(
 	ctx context.Context,
 	distribution v1alpha1.Distribution,
