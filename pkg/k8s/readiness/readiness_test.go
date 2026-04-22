@@ -412,100 +412,109 @@ func pollForReadinessWithDefaultTimeout(
 func TestWaitForDeploymentReadyIfExists(t *testing.T) {
 	t.Parallel()
 
-	t.Run("DeploymentDoesNotExist_ReturnsNilImmediately", func(t *testing.T) {
-		t.Parallel()
+	t.Run("DeploymentDoesNotExist_ReturnsNilImmediately", testIfExistsDeploymentAbsent)
+	t.Run("DeploymentExistsAndReady_ReturnsNil", testIfExistsDeploymentReady)
+	t.Run("DeploymentExistsNotReady_TimesOut", testIfExistsDeploymentNotReady)
+	t.Run("APIError_PropagatesImmediately", testIfExistsAPIError)
+}
 
-		client := fake.NewClientset()
+func testIfExistsDeploymentAbsent(t *testing.T) {
+	t.Helper()
+	t.Parallel()
 
-		ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
-		defer cancel()
+	client := fake.NewClientset()
 
-		err := readiness.WaitForDeploymentReadyIfExists(
-			ctx, client, "nonexistent-ns", "nonexistent-deploy", 200*time.Millisecond,
-		)
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
 
-		expectNoError(t, err, "WaitForDeploymentReadyIfExists with absent deployment")
+	err := readiness.WaitForDeploymentReadyIfExists(
+		ctx, client, "nonexistent-ns", "nonexistent-deploy", 200*time.Millisecond,
+	)
+
+	expectNoError(t, err, "WaitForDeploymentReadyIfExists with absent deployment")
+}
+
+func testIfExistsDeploymentReady(t *testing.T) {
+	t.Helper()
+	t.Parallel()
+
+	const (
+		namespace = "kubelet-serving-cert-approver"
+		name      = "kubelet-serving-cert-approver"
+	)
+
+	client := fake.NewClientset(&appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+		Status: appsv1.DeploymentStatus{
+			Replicas:          1,
+			UpdatedReplicas:   1,
+			AvailableReplicas: 1,
+		},
 	})
 
-	t.Run("DeploymentExistsAndReady_ReturnsNil", func(t *testing.T) {
-		t.Parallel()
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
 
-		const (
-			namespace = "kubelet-serving-cert-approver"
-			name      = "kubelet-serving-cert-approver"
-		)
+	err := readiness.WaitForDeploymentReadyIfExists(
+		ctx, client, namespace, name, 200*time.Millisecond,
+	)
 
-		client := fake.NewClientset(&appsv1.Deployment{
-			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
-			Status: appsv1.DeploymentStatus{
-				Replicas:          1,
-				UpdatedReplicas:   1,
-				AvailableReplicas: 1,
-			},
-		})
+	expectNoError(t, err, "WaitForDeploymentReadyIfExists with ready deployment")
+}
 
-		ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
-		defer cancel()
+func testIfExistsDeploymentNotReady(t *testing.T) {
+	t.Helper()
+	t.Parallel()
 
-		err := readiness.WaitForDeploymentReadyIfExists(
-			ctx, client, namespace, name, 200*time.Millisecond,
-		)
+	const (
+		namespace = "kubelet-serving-cert-approver"
+		name      = "kubelet-serving-cert-approver"
+	)
 
-		expectNoError(t, err, "WaitForDeploymentReadyIfExists with ready deployment")
+	client := fake.NewClientset(&appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+		Status: appsv1.DeploymentStatus{
+			Replicas:          1,
+			UpdatedReplicas:   0,
+			AvailableReplicas: 0,
+		},
 	})
 
-	t.Run("DeploymentExistsNotReady_TimesOut", func(t *testing.T) {
-		t.Parallel()
+	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+	defer cancel()
 
-		const (
-			namespace = "kubelet-serving-cert-approver"
-			name      = "kubelet-serving-cert-approver"
-		)
+	err := readiness.WaitForDeploymentReadyIfExists(
+		ctx, client, namespace, name, 150*time.Millisecond,
+	)
 
-		client := fake.NewClientset(&appsv1.Deployment{
-			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
-			Status: appsv1.DeploymentStatus{
-				Replicas:          1,
-				UpdatedReplicas:   0,
-				AvailableReplicas: 0,
-			},
-		})
+	expectErrorContains(
+		t, err, "failed to poll for readiness",
+		"WaitForDeploymentReadyIfExists with not-ready deployment",
+	)
+}
 
-		ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
-		defer cancel()
+func testIfExistsAPIError(t *testing.T) {
+	t.Helper()
+	t.Parallel()
 
-		err := readiness.WaitForDeploymentReadyIfExists(
-			ctx, client, namespace, name, 150*time.Millisecond,
-		)
+	client := fake.NewClientset()
+	client.PrependReactor(
+		"get",
+		"deployments",
+		func(_ k8stesting.Action) (bool, runtime.Object, error) {
+			return true, nil, errDeploymentFail
+		},
+	)
 
-		expectErrorContains(
-			t, err, "failed to poll for readiness",
-			"WaitForDeploymentReadyIfExists with not-ready deployment",
-		)
-	})
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
 
-	t.Run("APIError_PropagatesImmediately", func(t *testing.T) {
-		t.Parallel()
+	err := readiness.WaitForDeploymentReadyIfExists(
+		ctx, client, "test-ns", "test-deploy", 200*time.Millisecond,
+	)
 
-		client := fake.NewClientset()
-		client.PrependReactor(
-			"get",
-			"deployments",
-			func(_ k8stesting.Action) (bool, runtime.Object, error) {
-				return true, nil, errDeploymentFail
-			},
-		)
-
-		ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
-		defer cancel()
-
-		err := readiness.WaitForDeploymentReadyIfExists(
-			ctx, client, "test-ns", "test-deploy", 200*time.Millisecond,
-		)
-
-		expectErrorContains(
-			t, err, "failed to check deployment",
-			"WaitForDeploymentReadyIfExists with API error",
-		)
-	})
+	expectErrorContains(
+		t, err, "failed to check deployment",
+		"WaitForDeploymentReadyIfExists with API error",
+	)
 }
