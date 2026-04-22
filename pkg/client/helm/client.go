@@ -249,14 +249,20 @@ func (c *Client) ListReleases(ctx context.Context) ([]ReleaseInfo, error) {
 	previousNamespace := c.settings.Namespace()
 	c.settings.SetNamespace("")
 
-	if initErr := c.actionConfig.Init(c.settings.RESTClientGetter(), "", os.Getenv("HELM_DRIVER")); initErr != nil {
+	initErr := c.actionConfig.Init(c.settings.RESTClientGetter(), "", os.Getenv("HELM_DRIVER"))
+	if initErr != nil {
 		c.settings.SetNamespace(previousNamespace)
+
 		return nil, fmt.Errorf("failed to list helm releases: %w", initErr)
 	}
 
 	defer func() {
 		c.settings.SetNamespace(previousNamespace)
-		_ = c.actionConfig.Init(c.settings.RESTClientGetter(), previousNamespace, os.Getenv("HELM_DRIVER"))
+		_ = c.actionConfig.Init(
+			c.settings.RESTClientGetter(),
+			previousNamespace,
+			os.Getenv("HELM_DRIVER"),
+		)
 	}()
 
 	listClient := helmv4action.NewList(c.actionConfig)
