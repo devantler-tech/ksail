@@ -257,7 +257,8 @@ func (c *Client) ListReleases(ctx context.Context) ([]ReleaseInfo, error) {
 	}
 
 	defer func() {
-		if restoreErr := c.restoreNamespace(previousNamespace); restoreErr != nil {
+		restoreErr := c.restoreNamespace(previousNamespace)
+		if restoreErr != nil {
 			c.debugLog("failed to restore helm namespace after listing releases: %v", restoreErr)
 		}
 	}()
