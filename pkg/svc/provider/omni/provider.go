@@ -435,23 +435,9 @@ func (p *Provider) CleanupOrphanedMachineSetNodes(ctx context.Context) (int, err
 	cleaned := 0
 
 	for node := range nodes.All() {
-		clusterName, ok := node.Metadata().Labels().Get(omnires.LabelCluster)
-		if !ok {
-			continue
-		}
-
-		if _, exists := clusterSet[clusterName]; exists {
-			// Cluster still exists — not orphaned.
-			continue
-		}
-
-		// Cluster no longer exists — destroy the orphaned MachineSetNode.
-		err := p.st.Destroy(ctx, node.Metadata())
-		if err == nil || state.IsNotFoundError(err) {
-			// Successful destroy, or already gone — count as cleaned.
+		if p.destroyIfOrphaned(ctx, node, clusterSet) {
 			cleaned++
 		}
-		// On other errors (e.g., resource has active finalizers), skip silently.
 	}
 
 	return cleaned, nil
@@ -502,6 +488,28 @@ func (p *Provider) ListAvailableMachines(ctx context.Context, count int) ([]stri
 	}
 
 	return ids, nil
+}
+
+// destroyIfOrphaned destroys a MachineSetNode whose parent cluster no longer exists.
+// Returns true if the node was successfully removed or was already gone, false otherwise.
+func (p *Provider) destroyIfOrphaned(
+	ctx context.Context,
+	node *omnires.MachineSetNode,
+	clusterSet map[string]struct{},
+) bool {
+	clusterName, ok := node.Metadata().Labels().Get(omnires.LabelCluster)
+	if !ok {
+		return false
+	}
+
+	if _, exists := clusterSet[clusterName]; exists {
+		return false
+	}
+
+	// Cluster no longer exists — destroy the orphaned MachineSetNode.
+	err := p.st.Destroy(ctx, node.Metadata())
+
+	return err == nil || state.IsNotFoundError(err)
 }
 
 // clusterStatusFields holds the parsed COSI cluster status fields.

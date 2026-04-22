@@ -66,21 +66,7 @@ func (p *Provisioner) createOmniCluster(ctx context.Context, clusterName string)
 	// Best-effort cleanup: remove stale MachineSetNode bindings from previous
 	// failed cluster creation attempts. Orphaned bindings cause AlreadyExists
 	// errors during template sync even when the machine reports as available.
-	if cleaned, cleanupErr := omniProv.CleanupOrphanedMachineSetNodes(ctx); cleanupErr != nil {
-		_, _ = fmt.Fprintf(
-			p.logWriter,
-			"  Warning: failed to clean up stale MachineSetNode bindings: %v\n"+
-				"  This may cause AlreadyExists errors during machine allocation — retry cluster creation\n"+
-				"  or manually remove stale MachineSetNode resources in the Omni dashboard.\n",
-			cleanupErr,
-		)
-	} else if cleaned > 0 {
-		_, _ = fmt.Fprintf(
-			p.logWriter,
-			"  Cleaned up %d stale MachineSetNode binding(s)\n",
-			cleaned,
-		)
-	}
+	p.cleanupOrphanedMachineSetNodes(ctx, omniProv)
 
 	// Resolve machine allocation: auto-discover available machines when neither
 	// machineClass nor machines is configured.
@@ -110,6 +96,34 @@ func (p *Provisioner) createOmniCluster(ctx context.Context, clusterName string)
 	}
 
 	return p.verifyOmniAPIServerReachable(ctx, clusterName)
+}
+
+// cleanupOrphanedMachineSetNodes runs a best-effort cleanup of stale MachineSetNode
+// bindings left by prior failed cluster creation attempts. Non-fatal: logs outcome and returns.
+func (p *Provisioner) cleanupOrphanedMachineSetNodes(
+	ctx context.Context,
+	omniProv *omniprovider.Provider,
+) {
+	cleaned, err := omniProv.CleanupOrphanedMachineSetNodes(ctx)
+	if err != nil {
+		_, _ = fmt.Fprintf(
+			p.logWriter,
+			"  Warning: failed to clean up stale MachineSetNode bindings: %v\n"+
+				"  This may cause AlreadyExists errors during machine allocation — retry cluster creation\n"+
+				"  or manually remove stale MachineSetNode resources in the Omni dashboard.\n",
+			err,
+		)
+
+		return
+	}
+
+	if cleaned > 0 {
+		_, _ = fmt.Fprintf(
+			p.logWriter,
+			"  Cleaned up %d stale MachineSetNode binding(s)\n",
+			cleaned,
+		)
+	}
 }
 
 // verifyOmniAPIServerReachable checks that the API server is reachable through
