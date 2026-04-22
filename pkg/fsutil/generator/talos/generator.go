@@ -46,6 +46,25 @@ const (
 //nolint:lll // URL cannot be shortened
 const KubeletServingCertApproverManifestURL = "https://raw.githubusercontent.com/alex1989hu/kubelet-serving-cert-approver/main/deploy/standalone-install.yaml"
 
+// ExternalCloudProviderPatchYAML is the Talos machine config patch YAML that enables
+// the external cloud provider. This is the single source of truth for the patch content,
+// shared between the generator (file-based scaffolding) and the runtime config manager
+// (in-memory patch injection for existing projects).
+//
+// It enables both the cluster-level externalCloudProvider and the kubelet cloud-provider
+// flag, which are required for cloud controller managers (e.g., Hetzner CCM) to initialize
+// nodes with a providerID and write node labels.
+//
+// See: https://www.talos.dev/latest/kubernetes-guides/configuration/cloud-provider/
+const ExternalCloudProviderPatchYAML = `cluster:
+  externalCloudProvider:
+    enabled: true
+machine:
+  kubelet:
+    extraArgs:
+      cloud-provider: external
+`
+
 // ErrConfigRequired is returned when a nil config is provided.
 var ErrConfigRequired = errors.New("talos config is required")
 
@@ -642,16 +661,7 @@ func (g *Generator) generateExternalCloudProviderPatch(
 		return nil
 	}
 
-	patchContent := `cluster:
-  externalCloudProvider:
-    enabled: true
-machine:
-  kubelet:
-    extraArgs:
-      cloud-provider: external
-`
-
-	err := os.WriteFile(patchPath, []byte(patchContent), filePerm)
+	err := os.WriteFile(patchPath, []byte(ExternalCloudProviderPatchYAML), filePerm)
 	if err != nil {
 		return fmt.Errorf("failed to create external-cloud-provider patch: %w", err)
 	}

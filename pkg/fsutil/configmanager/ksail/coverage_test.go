@@ -395,7 +395,7 @@ func TestGetDefaultTalosPatches(t *testing.T) {
 		assert.Empty(t, patches)
 	})
 
-	t.Run("hetzner with metrics server returns both patches", func(t *testing.T) {
+	t.Run("hetzner with metrics server returns all three patches", func(t *testing.T) {
 		t.Parallel()
 
 		mgr := configmanager.NewConfigManager(nil, "ksail.yaml")

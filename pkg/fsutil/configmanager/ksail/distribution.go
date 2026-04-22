@@ -436,16 +436,9 @@ func (m *ConfigManager) resolveEKSNameFromContext() string {
 func externalCloudProviderPatches() []talosconfigmanager.Patch {
 	return []talosconfigmanager.Patch{
 		{
-			Path:  "external-cloud-provider",
-			Scope: talosconfigmanager.PatchScopeCluster,
-			Content: []byte(`cluster:
-  externalCloudProvider:
-    enabled: true
-machine:
-  kubelet:
-    extraArgs:
-      cloud-provider: external
-`),
+			Path:    "external-cloud-provider",
+			Scope:   talosconfigmanager.PatchScopeCluster,
+			Content: []byte(talosgenerator.ExternalCloudProviderPatchYAML),
 		},
 	}
 }
