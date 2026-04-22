@@ -17,6 +17,7 @@ rules:
     disable: true
   template-injection:
     ignore:
+      - agentics-maintenance.yml
       - ci-doctor.lock.yml
       - daily-docs.lock.yml
       - daily-workflow-maintenance.lock.yml
