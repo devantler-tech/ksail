@@ -34,8 +34,13 @@ type Installer struct {
 }
 
 const (
-	calicoInstallRetryAttempts = 3
-	calicoInstallRetryBackoff  = 5 * time.Second
+	// calicoInstallRetryAttempts is the number of install attempts for K3s.
+	// K3s may experience transient API-unavailable errors during bootstrap even
+	// after the pre-install stability check passes, due to K3s's bootstrap sequence.
+	// Five attempts with 10s backoff (up to 40s of additional wait) is sufficient
+	// to cover the observed K3s stabilization window in CI (see recurring issue #4196).
+	calicoInstallRetryAttempts = 5
+	calicoInstallRetryBackoff  = 10 * time.Second
 )
 
 // NewInstaller creates a new Calico installer instance.

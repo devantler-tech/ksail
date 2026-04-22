@@ -2510,6 +2510,21 @@ func TestApplyDistributionSpecOverrides(t *testing.T) { //nolint:funlen
 			},
 		},
 		{
+			name: "KWOK with Cilium CNI normalises CNI to Default",
+			input: v1alpha1.ClusterSpec{
+				Distribution: v1alpha1.DistributionKWOK,
+				CNI:          v1alpha1.CNICilium,
+			},
+			want: v1alpha1.ClusterSpec{
+				Distribution: v1alpha1.DistributionKWOK,
+				CNI:          v1alpha1.CNIDefault,
+				PolicyEngine: v1alpha1.PolicyEngineNone,
+				LoadBalancer: v1alpha1.LoadBalancerDisabled,
+				CSI:          v1alpha1.CSIDisabled,
+				CertManager:  v1alpha1.CertManagerDisabled,
+			},
+		},
+		{
 			name: "KWOK with Calico normalises CNI to Default",
 			input: v1alpha1.ClusterSpec{
 				Distribution: v1alpha1.DistributionKWOK,
