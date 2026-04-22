@@ -16,9 +16,7 @@ on:
     workflows:
       - "CI - KSail"
       - "CD"
-      - "Publish - Pages"
       - "Release"
-      - "Benchmark Regression"
       - "Maintenance"
       - "Sync labels"
       - "TODOs"
@@ -26,6 +24,8 @@ on:
       - "Daily Docs"
       - "Daily Workflow Maintenance"
       - "Weekly Strategy"
+      - "System Test - Hetzner"
+      - "System Test - Omni"
     types:
       - completed
     branches:
