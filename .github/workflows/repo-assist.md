@@ -449,8 +449,9 @@ Organize issue hierarchies and auto-close completed parents.
 **Linking:**
 
 1. Analyze open issues for parent-child relationships: feature with tasks, epic patterns, bug with root cause, orphan clusters (5+ related issues).
-2. Link sub-issues using `link_sub_issue`. Only link when confident. Maximum 20 links per run.
-3. Create parent issues for orphan clusters of 5+ related issues (title prefix: `[Parent]`). Maximum 5 parent issues per run. Note: shares the global create-issue budget (max 10) with other tasks.
+2. Before calling `link_sub_issue`, use `get_sub_issues` on the parent issue to check whether the sub-issue is already linked. The `link_sub_issue` handler is **not idempotent** — it will fail if the sub-issue is already linked, causing the entire `safe_outputs` job to fail. Skip any sub-issue that is already linked.
+3. Link sub-issues using `link_sub_issue`. Only link when confident. Maximum 20 links per run.
+4. Create parent issues for orphan clusters of 5+ related issues (title prefix: `[Parent]`). Maximum 5 parent issues per run. Note: shares the global create-issue budget (max 10) with other tasks.
 
 **Auto-closing:**
 
