@@ -34,7 +34,7 @@ Search for "KSail" in the VSCode Extensions Marketplace, or type `@mcp` in the E
 
 Full user documentation, commands reference, and configuration options are available at **[ksail.devantler.tech/vscode-extension](https://ksail.devantler.tech/vscode-extension/)**.
 
-For contributor documentation (build commands, architecture, and development workflows), see [CONTRIBUTING.md](../CONTRIBUTING.md).
+For contributor documentation (build commands, architecture, and development workflows), see [CONTRIBUTING.md](https://github.com/devantler-tech/ksail/blob/main/CONTRIBUTING.md).
 
 ## License
 
