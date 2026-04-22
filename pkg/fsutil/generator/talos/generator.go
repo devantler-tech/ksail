@@ -192,7 +192,7 @@ func (g *Generator) getDirectoriesWithPatches(
 
 // generateConditionalPatches generates optional patches based on the configuration.
 //
-//nolint:cyclop // Sequential conditional patch generation - each condition is independent and simple.
+//nolint:cyclop,funlen // Sequential conditional patch generation - each condition is independent and simple.
 func (g *Generator) generateConditionalPatches(
 	rootPath string,
 	model *Config,

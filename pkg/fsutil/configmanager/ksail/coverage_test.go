@@ -321,6 +321,8 @@ func TestResolveVClusterName(t *testing.T) {
 }
 
 // TestGetDefaultTalosPatches tests the default Talos patches generation.
+//
+//nolint:funlen // Table-driven test with multiple sub-tests is naturally long.
 func TestGetDefaultTalosPatches(t *testing.T) {
 	t.Parallel()
 
