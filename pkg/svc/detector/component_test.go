@@ -365,7 +365,7 @@ func TestDetectLoadBalancer_Vanilla_Disabled(t *testing.T) {
 
 	dockerClient.On("ContainerList", ctx, mock.Anything).Return([]container.Summary{}, nil)
 
-	d := detector.NewComponentDetector(helmClient, k8sClientset, dockerClient)
+	d := detector.NewComponentDetector(helmClient, k8sClientset, dockerClient).WithRetryDelay(0)
 	loadBalancer, err := d.ExportDetectLoadBalancer(
 		ctx,
 		v1alpha1.DistributionVanilla,
@@ -390,7 +390,7 @@ func TestDetectLoadBalancer_Vanilla_RetryFindsContainer(t *testing.T) {
 	dockerClient.On("ContainerList", ctx, mock.Anything).
 		Return([]container.Summary{{Names: []string{"/ksail-cloud-provider-kind"}}}, nil).Once()
 
-	d := detector.NewComponentDetector(helmClient, k8sClientset, dockerClient)
+	d := detector.NewComponentDetector(helmClient, k8sClientset, dockerClient).WithRetryDelay(0)
 	loadBalancer, err := d.ExportDetectLoadBalancer(
 		ctx,
 		v1alpha1.DistributionVanilla,
@@ -415,7 +415,7 @@ func TestDetectLoadBalancer_Vanilla_RetryAfterTransientError(t *testing.T) {
 	dockerClient.On("ContainerList", ctx, mock.Anything).
 		Return([]container.Summary{{Names: []string{"/ksail-cloud-provider-kind"}}}, nil).Once()
 
-	d := detector.NewComponentDetector(helmClient, k8sClientset, dockerClient)
+	d := detector.NewComponentDetector(helmClient, k8sClientset, dockerClient).WithRetryDelay(0)
 	loadBalancer, err := d.ExportDetectLoadBalancer(
 		ctx,
 		v1alpha1.DistributionVanilla,
@@ -440,7 +440,7 @@ func TestDetectLoadBalancer_Vanilla_ContextCancelled(t *testing.T) {
 		Run(func(_ mock.Arguments) { cancel() }).
 		Return([]container.Summary{}, nil).Once()
 
-	d := detector.NewComponentDetector(helmClient, k8sClientset, dockerClient)
+	d := detector.NewComponentDetector(helmClient, k8sClientset, dockerClient).WithRetryDelay(0)
 	loadBalancer, err := d.ExportDetectLoadBalancer(
 		ctx,
 		v1alpha1.DistributionVanilla,

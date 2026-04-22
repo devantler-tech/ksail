@@ -2,6 +2,7 @@ package detector
 
 import (
 	"context"
+	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
@@ -81,6 +82,14 @@ func (d *ComponentDetector) ExportContainerExists(
 	containerName string,
 ) (bool, error) {
 	return d.containerExists(ctx, containerName)
+}
+
+// WithRetryDelay overrides the delay between container-check retry attempts.
+// Use in tests to avoid real sleeps (pass 0 for instant retries).
+func (d *ComponentDetector) WithRetryDelay(delay time.Duration) *ComponentDetector {
+	d.retryDelay = delay
+
+	return d
 }
 
 // ReleaseMappingForTest is the exported alias of releaseMapping for testing.

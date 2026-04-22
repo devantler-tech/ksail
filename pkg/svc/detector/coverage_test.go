@@ -359,7 +359,7 @@ func TestDetectLoadBalancer_VanillaDockerError(t *testing.T) {
 	dockerClient.On("ContainerList", ctx, mock.AnythingOfType("container.ListOptions")).
 		Return([]container.Summary{}, errDetectorDocker)
 
-	d := detector.NewComponentDetector(helmClient, k8sClientset, dockerClient)
+	d := detector.NewComponentDetector(helmClient, k8sClientset, dockerClient).WithRetryDelay(0)
 	_, err := d.ExportDetectLoadBalancer(ctx, v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
 
 	require.Error(t, err)
