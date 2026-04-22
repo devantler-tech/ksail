@@ -64,6 +64,9 @@ func WaitForDeploymentReady(
 // If it exists, this function waits for it to be fully ready using the same criteria
 // as WaitForDeploymentReady.
 //
+// The initial existence check is bounded by the same deadline to prevent indefinite
+// blocking if the API server is slow or unresponsive.
+//
 // Returns nil if the deployment does not exist (including when the namespace does not exist).
 // Returns an error if the deployment exists but is not ready within the deadline.
 func WaitForDeploymentReadyIfExists(
@@ -72,9 +75,12 @@ func WaitForDeploymentReadyIfExists(
 	namespace, name string,
 	deadline time.Duration,
 ) error {
+	checkCtx, cancel := context.WithTimeout(ctx, deadline)
+	defer cancel()
+
 	_, err := clientset.AppsV1().
 		Deployments(namespace).
-		Get(ctx, name, metav1.GetOptions{})
+		Get(checkCtx, name, metav1.GetOptions{})
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			return nil
