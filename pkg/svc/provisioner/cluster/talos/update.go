@@ -74,11 +74,13 @@ func (p *Provisioner) Update(
 		}
 	}
 
-	// Handle Talos OS version upgrade (skipped internally for Omni clusters).
-	upgradeErr := p.applyTalosVersionUpgrade(ctx, clusterName, result)
-	if upgradeErr != nil {
-		return result, fmt.Errorf("failed to apply Talos version upgrade: %w", upgradeErr)
-	}
+	// Talos OS version upgrades are NOT performed here. They are only triggered
+	// explicitly via `ksail cluster update --update-distribution`, which goes
+	// through the UpgradeDistribution() path. Running applyTalosVersionUpgrade()
+	// unconditionally would silently attempt to change the Talos version to
+	// KSail's baked-in default, which may differ from what the cluster is
+	// actually running (e.g., booted from a Hetzner ISO at a different version).
+	// See: https://github.com/devantler-tech/ksail/issues/4260
 
 	return result, nil
 }
@@ -279,99 +281,6 @@ func (p *Provisioner) applyNodeConfig(
 			Reason:   node.Role + " config applied successfully",
 		})
 	}
-}
-
-// applyTalosVersionUpgrade checks whether any node's running Talos version
-// differs from the desired version (derived from Options.TalosImage) and
-// performs a rolling upgrade of all mismatched nodes.
-// Omni-managed clusters are skipped since Omni handles upgrades externally.
-func (p *Provisioner) applyTalosVersionUpgrade(
-	ctx context.Context,
-	clusterName string,
-	result *clusterupdate.UpdateResult,
-) error {
-	// Omni manages Talos upgrades through its own API.
-	if p.omniOpts != nil {
-		return nil
-	}
-
-	desiredTag := extractTagFromImage(p.options.TalosImage)
-	if desiredTag == "" {
-		return nil // No tag to compare — skip
-	}
-
-	nodes, err := p.getNodesByRole(ctx, clusterName)
-	if err != nil {
-		return fmt.Errorf("listing nodes for version check: %w", err)
-	}
-
-	needsUpgrade, firstRunningTag, err := p.checkNodesNeedUpgrade(ctx, nodes, desiredTag)
-	if err != nil {
-		return err
-	}
-
-	if !needsUpgrade {
-		return nil // All nodes at desired version
-	}
-
-	_, _ = fmt.Fprintf(p.logWriter,
-		"  Talos version mismatch detected (desired %s) — starting rolling upgrade\n",
-		desiredTag,
-	)
-
-	installerImage := installerImageFromTag(desiredTag)
-
-	upgradeErr := p.rollingUpgradeNodes(ctx, clusterName, installerImage, desiredTag)
-	if upgradeErr != nil {
-		result.FailedChanges = append(result.FailedChanges, clusterupdate.Change{
-			Field:    "talos.version",
-			OldValue: firstRunningTag,
-			NewValue: desiredTag,
-			Category: clusterupdate.ChangeCategoryRebootRequired,
-			Reason:   "Talos OS version upgrade via LifecycleService failed: " + upgradeErr.Error(),
-		})
-
-		return fmt.Errorf("rolling upgrade: %w", upgradeErr)
-	}
-
-	result.AppliedChanges = append(result.AppliedChanges, clusterupdate.Change{
-		Field:    "talos.version",
-		OldValue: firstRunningTag,
-		NewValue: desiredTag,
-		Category: clusterupdate.ChangeCategoryRebootRequired,
-		Reason:   "Talos OS upgraded via LifecycleService API",
-	})
-
-	return nil
-}
-
-// checkNodesNeedUpgrade checks all nodes for version mismatch to handle partial upgrades.
-// Returns the first mismatched tag so the update result accurately reflects the old version.
-func (p *Provisioner) checkNodesNeedUpgrade(
-	ctx context.Context,
-	nodes []nodeWithRole,
-	desiredTag string,
-) (bool, string, error) {
-	if len(nodes) == 0 {
-		return false, "", nil
-	}
-
-	for _, node := range nodes {
-		tag, versionErr := p.getRunningTalosVersion(ctx, node.IP)
-		if versionErr != nil {
-			return false, "", fmt.Errorf(
-				"checking running Talos version on %s: %w",
-				node.IP,
-				versionErr,
-			)
-		}
-
-		if tag != desiredTag {
-			return true, tag, nil
-		}
-	}
-
-	return false, desiredTag, nil
 }
 
 // applyRebootRequiredChanges applies changes that require node reboots.
