@@ -85,17 +85,7 @@ Return errors explicitly (no panic in library code). Wrap errors with `fmt.Error
 
 ### Security: Path Handling
 
-All user-supplied file path arguments in CLI commands must be canonicalized with `fsutil.EvalCanonicalPath` before use. This resolves symlinks and produces an absolute path, preventing symlink-escape attacks in CI pipelines that process external manifests.
-
-````go
-canonPath, err := fsutil.EvalCanonicalPath(inputPath)
-if err != nil {
-    return fmt.Errorf("canonicalizing path %q: %w", inputPath, err)
-}
-// use canonPath for all subsequent file operations
-````
-
-When canonicalizing an **output** path that may not yet exist (e.g., `--output`), first create the *parent directory* of the output path with `os.MkdirAll(filepath.Dir(outputPath), <mode>)`, then call `EvalCanonicalPath` on the output path. For safe path-constrained reads, use `fsutil.ReadFileSafe` instead of reimplementing containment checks.
+All user-supplied file path arguments in CLI commands must be canonicalized before use to resolve symlinks and prevent path-escape attacks. See [CONTRIBUTING.md](https://github.com/devantler-tech/ksail/blob/main/CONTRIBUTING.md) for the required pattern.
 
 ### Testing Patterns
 
@@ -115,23 +105,9 @@ func TestMyFunction(t *testing.T) {
 }
 ````
 
-#### DI Override Pattern for Command Tests
-
-Cluster command tests that depend on installer factories use an override pattern: each `Set*ForTests` helper applies a factory override against shared global state and returns a restore function. Register the restore function with `t.Cleanup(restore)` so overrides are always reset:
-
-````go
-restore := cluster.Set<Component>InstallerFactoryForTests(
-    func(_ *v1alpha1.Cluster) (installer.Installer, error) { return mockInstaller, nil },
-)
-t.Cleanup(restore)
-// test logic...
-````
-
-> **Note:** These helpers mutate shared global state, so tests that use them **must not** run in parallel (annotate with `//nolint:paralleltest` and do not call `t.Parallel()`). Search for `Set*ForTests` in `pkg/cli/cmd/cluster/` for all available helpers.
-
 #### Mocking with Testify
 
-KSail uses [mockery v3.5+](https://vektra.github.io/mockery/v3.5/) for generating mocks via `//go:generate mockery`. Call `mockProv.AssertExpectations(t)` at the end of each test.
+KSail uses [mockery](https://vektra.github.io/mockery/) for generating mocks. Call `mockProv.AssertExpectations(t)` at the end of each test to verify all expected calls were made. For DI override patterns and integration test conventions, see [CONTRIBUTING.md](https://github.com/devantler-tech/ksail/blob/main/CONTRIBUTING.md).
 
 #### Benchmarks
 
@@ -147,13 +123,13 @@ Document all exported types, functions, and constants with complete sentences st
 
 All new components follow the same pattern: create a package under the relevant `pkg/svc/` subdirectory, implement the corresponding interface, register in the factory, add tests, and update documentation.
 
-| Task | Package path | Interface | Factory |
-|------|-------------|-----------|---------|
-| New Provider | `pkg/svc/provider/newprovider/` | `Provider` | `pkg/svc/provider/factory.go` |
-| New Provisioner | `pkg/svc/provisioner/cluster/newdist/` | `Provisioner` | `pkg/svc/provisioner/cluster/factory.go` |
-| New Installer | `pkg/svc/installer/newcomponent/` | `Installer` | `pkg/cli/setup/` |
+| Task | Notes |
+|------|-------|
+| New Provider | Implement the `Provider` interface and register in the provider factory |
+| New Provisioner | Implement the `Provisioner` interface; add a distribution guide under `docs/distributions/` |
+| New Installer | Implement the `Installer` interface; add configuration fields to the API types |
 
-For a new Provisioner, also add a distribution guide in `docs/src/content/docs/distributions/`. For a new Installer, also add configuration to `pkg/apis/cluster/v1alpha1/`.
+For a new Provisioner, also add a distribution guide in `docs/distributions/`. For a new Installer, also add configuration fields to the API types and update the JSON schema.
 
 ### Updating Dependencies
 
