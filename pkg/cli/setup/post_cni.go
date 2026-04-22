@@ -95,6 +95,13 @@ const (
 	// (e.g. VCluster) where Cilium eBPF stabilization takes longer because the
 	// virtual cluster runs atop a host cluster's network layer.
 	inClusterConnectivityTimeoutSlow = 3 * time.Minute
+
+	// csrApproverReadinessTimeout is the maximum time to wait for the
+	// kubelet-serving-cert-approver deployment (from Talos extraManifests) to
+	// become ready. After CNI is installed, the approver pod needs to be
+	// scheduled, pull its image, start, and begin approving kubelet serving
+	// CSRs. Two minutes accommodates image pulls on fresh cloud nodes.
+	csrApproverReadinessTimeout = 2 * time.Minute
 )
 
 // apiServerStabilitySuccesses returns the number of consecutive successful
@@ -174,6 +181,47 @@ func SetClusterStabilityCheckForTests(
 		clusterStabilityCheckOverride = previous
 
 		clusterStabilityCheckMu.Unlock()
+	}
+}
+
+var (
+	//nolint:gochecknoglobals // dependency injection for tests
+	csrApproverWaitMu sync.RWMutex
+	//nolint:gochecknoglobals // dependency injection for tests
+	csrApproverWaitOverride func(context.Context, *v1alpha1.Cluster) error
+)
+
+// getWaitForCSRApproverFn returns the CSR approver wait function,
+// using the test override if one is set.
+func getWaitForCSRApproverFn() func(context.Context, *v1alpha1.Cluster) error {
+	csrApproverWaitMu.RLock()
+	defer csrApproverWaitMu.RUnlock()
+
+	if csrApproverWaitOverride != nil {
+		return csrApproverWaitOverride
+	}
+
+	return waitForKubeletCSRApprover
+}
+
+// SetCSRApproverWaitForTests overrides the CSR approver wait function for testing.
+// Returns a cleanup function that restores the previous function.
+func SetCSRApproverWaitForTests(
+	fn func(context.Context, *v1alpha1.Cluster) error,
+) func() {
+	csrApproverWaitMu.Lock()
+
+	previous := csrApproverWaitOverride
+	csrApproverWaitOverride = fn
+
+	csrApproverWaitMu.Unlock()
+
+	return func() {
+		csrApproverWaitMu.Lock()
+
+		csrApproverWaitOverride = previous
+
+		csrApproverWaitMu.Unlock()
 	}
 }
 
@@ -425,7 +473,9 @@ func installComponentsInPhases(
 
 	infraTasks := buildInfrastructureTasks(clusterCfg, factories, reqs)
 	if len(infraTasks) > 0 {
-		err := runInfraPhase(ctx, clusterCfg, writer, labels, tmr, infraTasks, cniInstalled)
+		needsCSRApproverWait := reqs.NeedsMetricsServer &&
+			clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionTalos
+		err := runInfraPhase(ctx, clusterCfg, writer, labels, tmr, infraTasks, cniInstalled, needsCSRApproverWait)
 		if err != nil {
 			return err
 		}
@@ -450,6 +500,10 @@ func installComponentsInPhases(
 // has programmed pod-to-service routing before components are deployed.
 // cniInstalled indicates whether CNI was just installed — when true, the node
 // readiness check in the stability pre-flight is skipped.
+// needsCSRApproverWait indicates whether to wait for the kubelet-serving-cert-approver
+// deployment (from Talos extraManifests) to be ready before starting the parallel
+// infrastructure installations. This prevents the race condition where metrics-server
+// starts before kubelet serving CSRs are approved.
 func runInfraPhase(
 	ctx context.Context,
 	clusterCfg *v1alpha1.Cluster,
@@ -458,12 +512,22 @@ func runInfraPhase(
 	tmr timer.Timer,
 	infraTasks []notify.ProgressTask,
 	cniInstalled bool,
+	needsCSRApproverWait bool,
 ) error {
 	if needsInClusterConnectivityCheck(clusterCfg) {
 		err := getClusterStabilityCheckFn()(ctx, clusterCfg, cniInstalled)
 		if err != nil {
 			return fmt.Errorf(
 				"cluster not stable before infrastructure installation: %w", err,
+			)
+		}
+	}
+
+	if needsCSRApproverWait {
+		err := getWaitForCSRApproverFn()(ctx, clusterCfg)
+		if err != nil {
+			return fmt.Errorf(
+				"kubelet CSR approver not ready before infrastructure installation: %w", err,
 			)
 		}
 	}
@@ -720,6 +784,48 @@ func needsInClusterConnectivityCheck(clusterCfg *v1alpha1.Cluster) bool {
 	}
 
 	return clusterCfg.Spec.Cluster.CNI == v1alpha1.CNICilium
+}
+
+// waitForKubeletCSRApprover waits for the kubelet-serving-cert-approver deployment
+// (installed via Talos extraManifests) to be ready before starting infrastructure
+// component installations.
+//
+// On Talos clusters with rotate-server-certificates enabled, kubelets submit CSRs
+// for their serving certificates. These CSRs must be approved by a cert approver
+// before metrics-server can TLS-handshake with kubelets. When CNI is managed by
+// KSail (e.g., Cilium), the extraManifests-installed approver pods can't start
+// until after CNI is installed. Without this wait, metrics-server races the
+// approver startup and fails with TLS errors.
+//
+// If the deployment does not exist (user didn't include the extraManifests patch),
+// this function returns nil immediately — it is a no-op in that case.
+func waitForKubeletCSRApprover(
+	ctx context.Context,
+	clusterCfg *v1alpha1.Cluster,
+) error {
+	kubeconfigPath, err := kubeconfig.GetKubeconfigPathFromConfig(clusterCfg)
+	if err != nil {
+		return fmt.Errorf("get kubeconfig path for CSR approver check: %w", err)
+	}
+
+	clientset, err := k8s.NewClientset(
+		kubeconfigPath, clusterCfg.Spec.Cluster.Connection.Context,
+	)
+	if err != nil {
+		return fmt.Errorf("create clientset for CSR approver check: %w", err)
+	}
+
+	err = readiness.WaitForDeploymentReadyIfExists(
+		ctx, clientset,
+		"kubelet-serving-cert-approver",
+		"kubelet-serving-cert-approver",
+		csrApproverReadinessTimeout,
+	)
+	if err != nil {
+		return fmt.Errorf("wait for kubelet-serving-cert-approver: %w", err)
+	}
+
+	return nil
 }
 
 type silentInstallFunc func(ctx context.Context, cfg *v1alpha1.Cluster, f *InstallerFactories) error

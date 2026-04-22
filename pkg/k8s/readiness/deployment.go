@@ -55,3 +55,33 @@ func WaitForDeploymentReady(
 		return true, nil
 	})
 }
+
+// WaitForDeploymentReadyIfExists waits for a Deployment to be ready, but returns
+// immediately if the deployment does not exist.
+//
+// This is useful when a component may or may not be installed (e.g., kubelet-serving-cert-approver
+// via Talos extraManifests). If the deployment is absent, there is nothing to wait for.
+// If it exists, this function waits for it to be fully ready using the same criteria
+// as WaitForDeploymentReady.
+//
+// Returns nil if the deployment does not exist (including when the namespace does not exist).
+// Returns an error if the deployment exists but is not ready within the deadline.
+func WaitForDeploymentReadyIfExists(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	namespace, name string,
+	deadline time.Duration,
+) error {
+	_, err := clientset.AppsV1().
+		Deployments(namespace).
+		Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil
+		}
+
+		return fmt.Errorf("failed to check deployment %s/%s: %w", namespace, name, err)
+	}
+
+	return WaitForDeploymentReady(ctx, clientset, namespace, name, deadline)
+}
