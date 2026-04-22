@@ -257,12 +257,9 @@ func (c *Client) ListReleases(ctx context.Context) ([]ReleaseInfo, error) {
 	}
 
 	defer func() {
-		c.settings.SetNamespace(previousNamespace)
-		_ = c.actionConfig.Init(
-			c.settings.RESTClientGetter(),
-			previousNamespace,
-			os.Getenv("HELM_DRIVER"),
-		)
+		if restoreErr := c.restoreNamespace(previousNamespace); restoreErr != nil {
+			c.debugLog("failed to restore helm namespace after listing releases: %v", restoreErr)
+		}
 	}()
 
 	listClient := helmv4action.NewList(c.actionConfig)
