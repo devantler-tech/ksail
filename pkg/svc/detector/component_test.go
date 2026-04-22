@@ -605,6 +605,27 @@ func TestDetectComponents_Success(t *testing.T) {
 	assert.Equal(t, v1alpha1.MetricsServerEnabled, spec.MetricsServer)
 }
 
+func TestDetectComponents_ArgoCD(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	helmClient := helm.NewMockInterface(t)
+	k8sClientset := fake.NewClientset()
+
+	// Regression test: ArgoCD release (name "argocd" in namespace "argocd")
+	// must be detected correctly via ListReleases → releaseSet lookup.
+	helmClient.On("ListReleases", ctx).Return([]helm.ReleaseInfo{
+		{Name: detector.ReleaseArgoCD, Namespace: detector.NamespaceArgoCD},
+	}, nil).Once()
+
+	d := detector.NewComponentDetector(helmClient, k8sClientset, nil)
+	spec, err := d.DetectComponents(ctx, v1alpha1.DistributionKWOK, v1alpha1.ProviderDocker)
+
+	require.NoError(t, err)
+	assert.NotNil(t, spec)
+	assert.Equal(t, v1alpha1.GitOpsEngineArgoCD, spec.GitOpsEngine)
+}
+
 func TestDetectComponents_ListReleasesError(t *testing.T) {
 	t.Parallel()
 
