@@ -74,11 +74,13 @@ func (p *Provisioner) Update(
 		}
 	}
 
-	// Handle Talos OS version upgrade (skipped internally for Omni clusters).
-	upgradeErr := p.applyTalosVersionUpgrade(ctx, clusterName, result)
-	if upgradeErr != nil {
-		return result, fmt.Errorf("failed to apply Talos version upgrade: %w", upgradeErr)
-	}
+	// Talos OS version upgrades are NOT performed here. They are only triggered
+	// explicitly via `ksail cluster update --update-distribution`, which goes
+	// through the UpgradeDistribution() path. Running applyTalosVersionUpgrade()
+	// unconditionally would silently attempt to change the Talos version to
+	// KSail's baked-in default, which may differ from what the cluster is
+	// actually running (e.g., booted from a Hetzner ISO at a different version).
+	// See: https://github.com/devantler-tech/ksail/issues/4260
 
 	return result, nil
 }

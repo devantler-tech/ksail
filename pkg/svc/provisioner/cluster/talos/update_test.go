@@ -159,10 +159,12 @@ func TestUpdateSkipsOmniInPlaceConfigApply(t *testing.T) {
 	}
 }
 
-// TestUpdateSkipsOmniVersionUpgrade verifies the omniOpts guard in applyTalosVersionUpgrade
-// prevents Talos OS upgrade attempts on Omni-managed clusters.
-// Without the guard, Update() would try to query node versions via the Talos API and fail.
-func TestUpdateSkipsOmniVersionUpgrade(t *testing.T) {
+// TestUpdateDoesNotAttemptVersionUpgrade verifies that Update() does not
+// implicitly attempt Talos OS version upgrades. Version upgrades are only
+// triggered via the explicit --update-distribution flag which goes through
+// the UpgradeDistribution() path (not Update()).
+// See: https://github.com/devantler-tech/ksail/issues/4260
+func TestUpdateDoesNotAttemptVersionUpgrade(t *testing.T) {
 	t.Parallel()
 
 	talosConfigs, err := talosconfigmanager.NewDefaultConfigs()
@@ -174,7 +176,8 @@ func TestUpdateSkipsOmniVersionUpgrade(t *testing.T) {
 		WithOmniOptions(v1alpha1.OptionsOmni{}).
 		WithLogWriter(io.Discard)
 
-	// Identical specs: only the version upgrade step runs (no scaling/config changes).
+	// Identical specs: no scaling/config changes — verifies that Update()
+	// completes without attempting a version upgrade.
 	spec := &v1alpha1.ClusterSpec{}
 	spec.Talos.ControlPlanes = 1
 
