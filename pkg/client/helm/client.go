@@ -249,11 +249,18 @@ func (c *Client) ListReleases(ctx context.Context) ([]ReleaseInfo, error) {
 	previousNamespace := c.settings.Namespace()
 	c.settings.SetNamespace("")
 
-	initErr := c.actionConfig.Init(c.settings.RESTClientGetter(), "", os.Getenv("HELM_DRIVER"))
-	if initErr != nil {
-		c.settings.SetNamespace(previousNamespace)
+	reinitErr := c.actionConfig.Init(
+		c.settings.RESTClientGetter(),
+		"",
+		os.Getenv("HELM_DRIVER"),
+	)
+	if reinitErr != nil {
+		restoreErr := c.restoreNamespace(previousNamespace)
+		if restoreErr != nil {
+			c.debugLog("failed to restore helm namespace after list init failure: %v", restoreErr)
+		}
 
-		return nil, fmt.Errorf("failed to list helm releases: %w", initErr)
+		return nil, fmt.Errorf("failed to list helm releases: %w", reinitErr)
 	}
 
 	defer func() {
