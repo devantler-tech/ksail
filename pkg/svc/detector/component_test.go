@@ -376,6 +376,80 @@ func TestDetectLoadBalancer_Vanilla_Disabled(t *testing.T) {
 	assert.Equal(t, v1alpha1.LoadBalancerDefault, loadBalancer)
 }
 
+func TestDetectLoadBalancer_Vanilla_RetryFindsContainer(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	helmClient := helm.NewMockInterface(t)
+	k8sClientset := fake.NewClientset()
+	dockerClient := docker.NewMockAPIClient(t)
+
+	// First call returns empty (container not yet visible), second call finds it.
+	dockerClient.On("ContainerList", ctx, mock.Anything).
+		Return([]container.Summary{}, nil).Once()
+	dockerClient.On("ContainerList", ctx, mock.Anything).
+		Return([]container.Summary{{Names: []string{"/ksail-cloud-provider-kind"}}}, nil).Once()
+
+	d := detector.NewComponentDetector(helmClient, k8sClientset, dockerClient)
+	loadBalancer, err := d.ExportDetectLoadBalancer(
+		ctx,
+		v1alpha1.DistributionVanilla,
+		v1alpha1.ProviderDocker,
+	)
+
+	require.NoError(t, err)
+	assert.Equal(t, v1alpha1.LoadBalancerEnabled, loadBalancer)
+}
+
+func TestDetectLoadBalancer_Vanilla_RetryAfterTransientError(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	helmClient := helm.NewMockInterface(t)
+	k8sClientset := fake.NewClientset()
+	dockerClient := docker.NewMockAPIClient(t)
+
+	// First call returns a transient error, second call succeeds.
+	dockerClient.On("ContainerList", ctx, mock.Anything).
+		Return([]container.Summary{}, errDocker).Once()
+	dockerClient.On("ContainerList", ctx, mock.Anything).
+		Return([]container.Summary{{Names: []string{"/ksail-cloud-provider-kind"}}}, nil).Once()
+
+	d := detector.NewComponentDetector(helmClient, k8sClientset, dockerClient)
+	loadBalancer, err := d.ExportDetectLoadBalancer(
+		ctx,
+		v1alpha1.DistributionVanilla,
+		v1alpha1.ProviderDocker,
+	)
+
+	require.NoError(t, err)
+	assert.Equal(t, v1alpha1.LoadBalancerEnabled, loadBalancer)
+}
+
+func TestDetectLoadBalancer_Vanilla_ContextCancelled(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	helmClient := helm.NewMockInterface(t)
+	k8sClientset := fake.NewClientset()
+	dockerClient := docker.NewMockAPIClient(t)
+
+	// First call returns empty, then cancel context before retry.
+	dockerClient.On("ContainerList", mock.Anything, mock.Anything).
+		Run(func(_ mock.Arguments) { cancel() }).
+		Return([]container.Summary{}, nil).Once()
+
+	d := detector.NewComponentDetector(helmClient, k8sClientset, dockerClient)
+	loadBalancer, err := d.ExportDetectLoadBalancer(
+		ctx,
+		v1alpha1.DistributionVanilla,
+		v1alpha1.ProviderDocker,
+	)
+
+	require.NoError(t, err)
+	assert.Equal(t, v1alpha1.LoadBalancerDefault, loadBalancer)
+}
+
 func TestDetectLoadBalancer_Talos_MetalLB_Enabled(t *testing.T) {
 	t.Parallel()
 
