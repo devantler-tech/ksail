@@ -1,6 +1,7 @@
 package setup_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/cli/setup"
 	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/installer"
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -411,4 +413,67 @@ func TestInstallFluxSilent_InstallError(t *testing.T) {
 	err := setup.InstallFluxSilent(context.Background(), &v1alpha1.Cluster{}, factories)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "flux install failed")
+}
+
+func TestInstallCNI_KWOKDefaultCNIReturnsFalse(t *testing.T) {
+	t.Parallel()
+
+	cmd := &cobra.Command{}
+	clusterCfg := &v1alpha1.Cluster{
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				Distribution: v1alpha1.DistributionKWOK,
+				CNI:          v1alpha1.CNIDefault,
+			},
+		},
+	}
+
+	installed, err := setup.InstallCNI(cmd, clusterCfg, nil)
+	require.NoError(t, err)
+	assert.False(t, installed, "KWOK should not install CNI")
+}
+
+func TestInstallCNI_KWOKNonDefaultCNIWarnsAndSkips(t *testing.T) {
+	t.Parallel()
+
+	buf := &bytes.Buffer{}
+	cmd := &cobra.Command{}
+	cmd.SetOut(buf)
+
+	clusterCfg := &v1alpha1.Cluster{
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				Distribution: v1alpha1.DistributionKWOK,
+				CNI:          v1alpha1.CNICilium,
+			},
+		},
+	}
+
+	installed, err := setup.InstallCNI(cmd, clusterCfg, nil)
+	require.NoError(t, err)
+	assert.False(t, installed, "KWOK should not install CNI even when Cilium is configured")
+	assert.Contains(t, buf.String(), "not installed on KWOK")
+}
+
+func TestInstallCNI_KWOKUnsupportedCNIReturnsError(t *testing.T) {
+	t.Parallel()
+
+	cmd := &cobra.Command{}
+	clusterCfg := &v1alpha1.Cluster{
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				Distribution: v1alpha1.DistributionKWOK,
+				CNI:          "unsupported-cni",
+			},
+		},
+	}
+
+	installed, err := setup.InstallCNI(cmd, clusterCfg, nil)
+	require.ErrorIs(
+		t,
+		err,
+		setup.ErrUnsupportedCNI,
+		"KWOK should still return ErrUnsupportedCNI for unknown CNI values",
+	)
+	assert.False(t, installed)
 }

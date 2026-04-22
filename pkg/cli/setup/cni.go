@@ -52,9 +52,9 @@ func InstallCNI(
 	clusterCfg *v1alpha1.Cluster,
 	tmr timer.Timer,
 ) (bool, error) {
-	// KWOK simulates pods with no real network dataplane. CNI plugins are
-	// never functional on KWOK and their Helm releases would skew the
-	// component detector, so skip installation entirely.
+	// KWOK simulated pods have no real network dataplane, so CNI installation
+	// is skipped entirely. Still validate the configured CNI so unsupported
+	// values do not get silently accepted.
 	if clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionKWOK {
 		switch clusterCfg.Spec.Cluster.CNI {
 		case v1alpha1.CNIDefault, "":
