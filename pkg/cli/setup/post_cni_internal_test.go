@@ -14,7 +14,7 @@ import (
 )
 
 var (
-	errNotStable       = errors.New("not stable")
+	errNotStable        = errors.New("not stable")
 	errApproverNotReady = errors.New("approver not ready")
 )
 
@@ -143,6 +143,7 @@ func TestRunInfraPhase_WaitsForCSRApproverBeforeInfraTasks(t *testing.T) {
 	t.Cleanup(SetCSRApproverWaitForTests(
 		func(_ context.Context, _ *v1alpha1.Cluster) error {
 			approverWaitCalled = true
+
 			order = append(order, "csr-approver-wait")
 
 			return nil
@@ -154,6 +155,7 @@ func TestRunInfraPhase_WaitsForCSRApproverBeforeInfraTasks(t *testing.T) {
 			Name: "metrics-server",
 			Fn: func(context.Context) error {
 				taskRan = true
+
 				order = append(order, "infra-install")
 
 				return nil

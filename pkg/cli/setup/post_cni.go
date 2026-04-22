@@ -475,7 +475,17 @@ func installComponentsInPhases(
 	if len(infraTasks) > 0 {
 		needsCSRApproverWait := reqs.NeedsMetricsServer &&
 			clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionTalos
-		err := runInfraPhase(ctx, clusterCfg, writer, labels, tmr, infraTasks, cniInstalled, needsCSRApproverWait)
+
+		err := runInfraPhase(
+			ctx,
+			clusterCfg,
+			writer,
+			labels,
+			tmr,
+			infraTasks,
+			cniInstalled,
+			needsCSRApproverWait,
+		)
 		if err != nil {
 			return err
 		}
