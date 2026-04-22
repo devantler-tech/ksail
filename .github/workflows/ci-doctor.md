@@ -147,9 +147,9 @@ Before any investigation, check the **Conclusion** listed in the Current Context
 
 ### Phase 4b: KSail-Specific Context
 
-When investigating failures from **CI - KSail** or **Benchmark Regression** workflows, apply this domain knowledge:
+When investigating failures from **CI - KSail**, **System Test - Hetzner**, or **System Test - Omni** workflows, apply this domain knowledge:
 
-1. **System test matrix**: System tests run only in merge queue and test combinations of Distribution × Provider × Init × Args:
+1. **System test matrix**: System tests run only in merge queue (Docker) or on a weekly schedule (Hetzner, Omni), testing combinations of Distribution × Provider × Init × Args:
    - Distributions: Vanilla (Kind), K3s (K3d), Talos, VCluster (Vind)
    - Providers: Docker (local), Hetzner (cloud), Omni (cloud)
 2. **Go-specific failures**: Check for:
@@ -159,9 +159,9 @@ When investigating failures from **CI - KSail** or **Benchmark Regression** work
    - `go mod tidy` inconsistencies
 3. **Auto-generated files**: If failures involve `schemas/ksail-config.schema.json`, `docs/src/content/docs/cli-flags/`, or `docs/src/content/docs/configuration/declarative-configuration.mdx`, the likely fix is `go generate`, not manual edits
 
-### Phase 5: Benchmark Regression Analysis (for Benchmark Regression workflow failures)
+### Phase 5: Benchmark Regression Analysis (for 📊 Benchmark job failures in CI - KSail)
 
-When investigating a **Benchmark Regression** workflow failure, apply this specialized analysis:
+Benchmarks run as the **📊 Benchmark** job inside **CI - KSail** — there is no separate "Benchmark Regression" workflow. When that job fails, apply this specialized analysis:
 
 1. **Extract benchstat output** from the workflow logs — it contains the full comparison between main and PR branches
 2. **Identify regressed benchmarks**: Look for lines with positive deltas like `+XX%` or `+XX.XX%` in the sec/op, B/op, or allocs/op sections where the change is ≥20%. Sub-microsecond sec/op benchmarks (values shown with `n` unit) are excluded from the gate as they measure CPU clock jitter, not real work.
