@@ -28,7 +28,7 @@ require (
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/samber/do/v2 v2.0.0
 	github.com/siderolabs/talos v1.13.0-beta.1
-	github.com/siderolabs/talos/pkg/machinery v1.13.0-beta.1
+	github.com/siderolabs/talos/pkg/machinery v1.13.0-rc.0
 	github.com/sirupsen/logrus v1.9.4
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
@@ -626,7 +626,7 @@ require (
 	github.com/segmentio/encoding v0.5.4 // indirect
 	github.com/sergi/go-diff v1.4.0 // indirect
 	github.com/shopspring/decimal v1.4.0 // indirect
-	github.com/siderolabs/crypto v0.6.4 // indirect
+	github.com/siderolabs/crypto v0.6.5 // indirect
 	github.com/siderolabs/go-api-signature v0.3.12 // indirect
 	github.com/siderolabs/go-blockdevice/v2 v2.0.27 // indirect
 	github.com/siderolabs/go-cmd v0.2.0 // indirect

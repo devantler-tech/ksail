@@ -1012,6 +1012,7 @@ func NewClusterCmd(runtimeContainer *di.Runtime) *cobra.Command {
 	cmd.AddCommand(NewStopCmd(runtimeContainer))
 	cmd.AddCommand(NewListCmd(runtimeContainer))
 	cmd.AddCommand(NewInfoCmd(runtimeContainer))
+	cmd.AddCommand(NewDiagnoseCmd(runtimeContainer))
 	cmd.AddCommand(NewConnectCmd(runtimeContainer))
 	cmd.AddCommand(NewBackupCmd(runtimeContainer))
 	cmd.AddCommand(NewRestoreCmd(runtimeContainer))
@@ -2675,6 +2676,107 @@ func NewInfoCmd(_ *di.Runtime) *cobra.Command {
 	)
 
 	return cmd
+}
+
+// diagnoseLongDesc describes the `ksail cluster diagnose` command.
+const diagnoseLongDesc = `Surface failing Kubernetes resources for the ` +
+	`current cluster.
+
+This command inspects the live cluster via the Kubernetes API and reports
+any pods that are not running successfully and any nodes that are not Ready.
+It is distribution-agnostic and works with Vanilla, K3s, Talos, and
+VCluster.
+
+The output is intentionally compact so it can be consumed directly by users
+or by the KSail AI chat assistant (ksail chat) and MCP server, which expose
+this command as part of the cluster_read tool. When used from the AI
+assistant the output is fed back as context so Copilot can explain the root
+cause and suggest remediation.
+
+The cluster is resolved in the following priority order:
+  1. From --name flag
+  2. From ksail.yaml config file (if present)
+  3. From current kubeconfig context
+
+Exit code 0 is returned even when pod or node failures are reported.
+A non-zero exit code indicates the Kubernetes API could not be queried
+(e.g., the cluster is unreachable or the credentials lack sufficient
+permissions).`
+
+// NewDiagnoseCmd creates the diagnose command for clusters.
+func NewDiagnoseCmd(_ *di.Runtime) *cobra.Command {
+	var (
+		nameFlag     string
+		providerFlag v1alpha1.Provider
+	)
+
+	cmd := &cobra.Command{
+		Use:          "diagnose",
+		Short:        "Diagnose failing cluster resources",
+		Long:         diagnoseLongDesc,
+		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return runDiagnoseCmd(cmd, nameFlag, providerFlag)
+		},
+	}
+
+	cmd.Flags().StringVarP(
+		&nameFlag,
+		"name",
+		"n",
+		"",
+		"Name of the cluster to target",
+	)
+
+	cmd.Flags().VarP(
+		&providerFlag,
+		"provider",
+		"p",
+		fmt.Sprintf("Provider to use (%s)", providerFlag.ValidValues()),
+	)
+
+	return cmd
+}
+
+// runDiagnoseCmd inspects the live cluster via the Kubernetes API and writes
+// a human-readable diagnostic report to the command's stdout. When every
+// resource looks healthy the command writes a short "all healthy" banner.
+func runDiagnoseCmd(
+	cmd *cobra.Command,
+	nameFlag string,
+	providerFlag v1alpha1.Provider,
+) error {
+	resolved, err := lifecycle.ResolveClusterInfo(cmd, nameFlag, providerFlag, "")
+	if err != nil {
+		return fmt.Errorf("resolve cluster info: %w", err)
+	}
+
+	clientset, err := k8s.NewClientset(resolved.KubeconfigPath, "")
+	if err != nil {
+		return fmt.Errorf("build kubernetes client: %w", err)
+	}
+
+	report, err := k8s.DiagnoseCluster(cmd.Context(), clientset)
+	if err != nil {
+		return fmt.Errorf("diagnose cluster %q: %w", resolved.ClusterName, err)
+	}
+
+	writer := cmd.OutOrStdout()
+
+	if report == "" {
+		_, _ = fmt.Fprintf(
+			writer,
+			"Cluster %q looks healthy — no failing pods or NotReady nodes detected.\n",
+			resolved.ClusterName,
+		)
+
+		return nil
+	}
+
+	_, _ = fmt.Fprintf(writer, "Diagnostics for cluster %q:\n", resolved.ClusterName)
+	_, _ = fmt.Fprintln(writer, report)
+
+	return nil
 }
 
 // runInfoCmd orchestrates the cluster info command flow:

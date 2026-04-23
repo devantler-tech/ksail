@@ -7,6 +7,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -405,4 +406,99 @@ func objectsToRuntimeObjects(pods []corev1.Pod) []runtime.Object {
 	}
 
 	return objects
+}
+
+func TestDiagnoseCluster_HealthyClusterReturnsEmpty(t *testing.T) {
+	t.Parallel()
+
+	clientset := k8sfake.NewClientset(
+		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
+		&corev1.Node{
+			ObjectMeta: metav1.ObjectMeta{Name: "node-1"},
+			Status: corev1.NodeStatus{Conditions: []corev1.NodeCondition{
+				{Type: corev1.NodeReady, Status: corev1.ConditionTrue},
+			}},
+		},
+		&corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{Name: "healthy", Namespace: "default"},
+			Status: corev1.PodStatus{
+				Phase:             corev1.PodRunning,
+				ContainerStatuses: []corev1.ContainerStatus{{Ready: true}},
+			},
+		},
+	)
+
+	report, err := k8s.DiagnoseCluster(context.Background(), clientset)
+
+	require.NoError(t, err)
+	assert.Empty(t, report)
+}
+
+func TestDiagnoseCluster_ReportsNotReadyNodesAndFailingPods(t *testing.T) {
+	t.Parallel()
+
+	clientset := k8sfake.NewClientset(
+		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
+		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "kube-system"}},
+		&corev1.Node{
+			ObjectMeta: metav1.ObjectMeta{Name: "node-broken"},
+			Status: corev1.NodeStatus{Conditions: []corev1.NodeCondition{
+				{
+					Type:    corev1.NodeReady,
+					Status:  corev1.ConditionFalse,
+					Reason:  "KubeletNotReady",
+					Message: "container runtime not ready",
+				},
+			}},
+		},
+		&corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{Name: "boom", Namespace: "default"},
+			Status:     corev1.PodStatus{Phase: corev1.PodFailed},
+		},
+	)
+
+	report, err := k8s.DiagnoseCluster(context.Background(), clientset)
+
+	require.NoError(t, err)
+	assert.Contains(t, report, "Not-Ready nodes:")
+	assert.Contains(t, report, "node-broken")
+	assert.Contains(t, report, "container runtime not ready")
+	assert.Contains(t, report, "Failing pods in default")
+	assert.Contains(t, report, "boom")
+}
+
+func TestDiagnoseCluster_NamespaceListErrorIsSurfaced(t *testing.T) {
+	t.Parallel()
+
+	clientset := k8sfake.NewClientset()
+	clientset.PrependReactor(
+		"list",
+		"namespaces",
+		func(_ k8stesting.Action) (bool, runtime.Object, error) {
+			return true, nil, errConnectionRefused
+		},
+	)
+
+	_, err := k8s.DiagnoseCluster(context.Background(), clientset)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "list namespaces")
+}
+
+func TestDiagnoseCluster_NodeListErrorIsSurfaced(t *testing.T) {
+	t.Parallel()
+
+	clientset := k8sfake.NewClientset()
+	clientset.PrependReactor(
+		"list",
+		"nodes",
+		func(_ k8stesting.Action) (bool, runtime.Object, error) {
+			return true, nil, errConnectionRefused
+		},
+	)
+
+	_, err := k8s.DiagnoseCluster(context.Background(), clientset)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "list nodes")
 }

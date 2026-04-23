@@ -6498,3 +6498,46 @@ func TestClassifyRestoreError_FallbackToErrMsg(t *testing.T) {
 		})
 	}
 }
+
+// TestNewDiagnoseCmd verifies that NewDiagnoseCmd registers the expected
+// command with the correct basic shape and flags.
+func TestNewDiagnoseCmd(t *testing.T) {
+	t.Parallel()
+
+	diagnoseCmd := cluster.NewDiagnoseCmd(nil)
+	require.NotNil(t, diagnoseCmd)
+
+	assert.Equal(t, "diagnose", diagnoseCmd.Name())
+	assert.Equal(t, "Diagnose failing cluster resources", diagnoseCmd.Short)
+	assert.True(t, diagnoseCmd.SilenceUsage)
+
+	nameFlag := diagnoseCmd.Flags().Lookup("name")
+	require.NotNil(t, nameFlag)
+	assert.Equal(t, "n", nameFlag.Shorthand)
+
+	providerFlag := diagnoseCmd.Flags().Lookup("provider")
+	require.NotNil(t, providerFlag)
+	assert.Equal(t, "p", providerFlag.Shorthand)
+}
+
+// TestClusterCmd_RegistersDiagnoseSubcommand verifies that NewClusterCmd wires
+// the diagnose subcommand into the cluster command tree so that toolgen can
+// expose it as part of the cluster_read tool.
+func TestClusterCmd_RegistersDiagnoseSubcommand(t *testing.T) {
+	t.Parallel()
+
+	clusterCmd := cluster.NewClusterCmd(nil)
+	require.NotNil(t, clusterCmd)
+
+	var diagnoseCmd *cobra.Command
+
+	for _, sub := range clusterCmd.Commands() {
+		if sub.Name() == "diagnose" {
+			diagnoseCmd = sub
+
+			break
+		}
+	}
+
+	require.NotNil(t, diagnoseCmd, "expected 'diagnose' subcommand to be registered")
+}
