@@ -207,6 +207,7 @@ ksail cluster delete                   # Destroy cluster and resources
 ksail cluster start                    # Start existing cluster
 ksail cluster stop                     # Stop running cluster
 ksail cluster info                     # Show cluster status
+ksail cluster diagnose                 # Report failing pods and NotReady nodes
 ksail cluster list [--all]             # List clusters
 ksail cluster connect                  # Connect to cluster with K9s
 ksail cluster switch [cluster-name]    # Switch active kubeconfig context (interactive picker if no arg)
