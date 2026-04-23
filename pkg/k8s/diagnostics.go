@@ -10,6 +10,111 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
+// DiagnoseCluster produces a combined human-readable diagnostic report for
+// a running Kubernetes cluster. It enumerates every namespace, surfaces any
+// failing pods via DiagnosePodFailures, and reports any nodes that are not
+// Ready. When everything appears healthy, the returned string is empty.
+//
+// The diagnostic is intentionally distribution-agnostic — it only relies on
+// the Kubernetes API and therefore works for Vanilla, K3s, Talos, and
+// VCluster alike. It is consumed by the `ksail cluster diagnose` command
+// and surfaced to the Copilot chat/MCP tooling via the auto-generated
+// `cluster_read` tool so AI assistants can reason over the output.
+func DiagnoseCluster(ctx context.Context, clientset kubernetes.Interface) (string, error) {
+	var builder strings.Builder
+
+	nodeReport, err := diagnoseNodes(ctx, clientset)
+	if err != nil {
+		return "", err
+	}
+
+	if nodeReport != "" {
+		builder.WriteString(nodeReport)
+	}
+
+	namespaces, err := listNamespaceNames(ctx, clientset)
+	if err != nil {
+		return "", err
+	}
+
+	podReport := DiagnosePodFailures(ctx, clientset, namespaces)
+	if podReport != "" {
+		if builder.Len() > 0 {
+			builder.WriteString("\n")
+		}
+
+		builder.WriteString(podReport)
+	}
+
+	return strings.Trim(builder.String(), "\n"), nil
+}
+
+// listNamespaceNames returns the names of every namespace in the cluster.
+func listNamespaceNames(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+) ([]string, error) {
+	nsList, err := clientset.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("list namespaces: %w", err)
+	}
+
+	names := make([]string, 0, len(nsList.Items))
+	for i := range nsList.Items {
+		names = append(names, nsList.Items[i].Name)
+	}
+
+	return names, nil
+}
+
+// diagnoseNodes returns a human-readable summary of any nodes that are not
+// Ready. Returns an empty string when all nodes are Ready.
+func diagnoseNodes(ctx context.Context, clientset kubernetes.Interface) (string, error) {
+	nodes, err := clientset.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return "", fmt.Errorf("list nodes: %w", err)
+	}
+
+	var builder strings.Builder
+
+	for i := range nodes.Items {
+		node := &nodes.Items[i]
+		if reason := describeNotReadyNode(node); reason != "" {
+			if builder.Len() == 0 {
+				builder.WriteString("Not-Ready nodes:")
+			}
+
+			builder.WriteString("\n  ")
+			builder.WriteString(reason)
+		}
+	}
+
+	return builder.String(), nil
+}
+
+// describeNotReadyNode returns a one-line description when a node's Ready
+// condition is not True, or an empty string when the node is Ready.
+func describeNotReadyNode(node *corev1.Node) string {
+	for _, cond := range node.Status.Conditions {
+		if cond.Type != corev1.NodeReady {
+			continue
+		}
+
+		if cond.Status == corev1.ConditionTrue {
+			return ""
+		}
+
+		message := cond.Message
+		if message == "" {
+			message = cond.Reason
+		}
+
+		return fmt.Sprintf("%s: Ready=%s (%s)", node.Name, cond.Status, message)
+	}
+
+	return node.Name + ": Ready condition missing"
+}
+
 // DiagnosePodFailures checks pods in the given namespaces and returns a
 // human-readable summary of any pods that are not running successfully.
 // If all pods are healthy or no pods exist, it returns an empty string.

@@ -185,6 +185,30 @@ Press **Ctrl+H** to open session history. Navigate with **↑/↓**, filter with
 
 Press **Ctrl+N** to start a fresh conversation. Previous sessions are automatically saved.
 
+## Diagnosing a Misbehaving Cluster
+
+Ask the assistant natural-language questions like "why is my cluster broken?" and it will call the `cluster_read` tool with the `diagnose` subcommand, which surfaces any failing pods and NotReady nodes via the Kubernetes API. Copilot then explains the root cause and suggests remediation.
+
+You can also run the underlying command directly:
+
+```bash
+ksail cluster diagnose
+```
+
+Example output:
+
+```text
+Diagnostics for cluster "my-app":
+Not-Ready nodes:
+  node-1: Ready=False (container runtime not ready)
+
+Failing pods in default namespace:
+  web-0: ImagePullBackOff for ghcr.io/acme/web:latest
+  db-0: CrashLoopBackOff for postgres:16 (5 restarts)
+```
+
+The command is distribution-agnostic and works with Vanilla, K3s, Talos, and VCluster. It exits 0 even when failures are reported; a non-zero exit code is reserved for unreachable clusters.
+
 ## Troubleshooting
 
 **Chat won't start:** Ensure GitHub Copilot CLI is installed (`which copilot`) and authenticated (`copilot auth login`).
