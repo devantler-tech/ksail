@@ -55,7 +55,7 @@ See the plugin source in the repo: [`copilot-plugin/`](https://github.com/devant
 
 ## Versioning
 
-The plugin version tracks ksail releases. Each `v*` tag triggers [`cd.yaml`](https://github.com/devantler-tech/ksail/blob/main/.github/workflows/cd.yaml), which rewrites the `version` field in both plugin manifests and both marketplace files and commits the bump back to `main`. Marketplace `add` commands read the default branch, so installs always see the latest version.
+The plugin version tracks ksail releases. Each `v*` tag triggers [`cd.yaml`](https://github.com/devantler-tech/ksail/blob/main/.github/workflows/cd.yaml), which rewrites the `version` field in both plugin manifests and both marketplace files and opens an auto-merging PR to `main`. Marketplace `add` commands read the default branch, so installs always see the latest version.
 
 ## Further reading
 
