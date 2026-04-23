@@ -46,7 +46,7 @@ func DiagnoseCluster(ctx context.Context, clientset kubernetes.Interface) (strin
 		builder.WriteString(podReport)
 	}
 
-	return strings.TrimSpace(builder.String()), nil
+	return strings.Trim(builder.String(), "\n"), nil
 }
 
 // listNamespaceNames returns the names of every namespace in the cluster.

@@ -122,7 +122,7 @@ const ksailInstructions = `<instructions>
 - Reference the documentation when helping with ksail.yaml configuration
 - Use the troubleshooting tips for diagnosing issues
 - When the user reports a cluster problem or asks why something is failing,
-  call the cluster_read tool with subcommand "diagnose" to fetch the current
+  call the cluster_read tool with command="diagnose" to fetch the current
   list of failing pods and NotReady nodes, then explain each failure's
   likely root cause and suggest concrete remediation steps.
 - Be concise but thorough in explanations
