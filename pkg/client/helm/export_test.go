@@ -5,6 +5,7 @@ import (
 
 	helmv4action "helm.sh/helm/v4/pkg/action"
 	chartv2 "helm.sh/helm/v4/pkg/chart/v2"
+	helmv4cli "helm.sh/helm/v4/pkg/cli"
 	helmv4kube "helm.sh/helm/v4/pkg/kube"
 	releasecommon "helm.sh/helm/v4/pkg/release/common"
 	v1 "helm.sh/helm/v4/pkg/release/v1"
@@ -103,5 +104,16 @@ func NewTestRelease(
 				AppVersion: appVersion,
 			},
 		},
+	}
+}
+
+// NewClientFromParts creates a Client directly from an already-initialized
+// actionConfig and settings. Intended for unit tests that pre-seed Helm state
+// (e.g., into a memory storage driver) before exercising Client methods.
+func NewClientFromParts(cfg *helmv4action.Configuration, settings *helmv4cli.EnvSettings) *Client {
+	return &Client{
+		actionConfig: cfg,
+		settings:     settings,
+		debugLog:     func(string, ...any) {},
 	}
 }

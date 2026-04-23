@@ -2,14 +2,22 @@ package helm_test
 
 import (
 	"context"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	helmv4action "helm.sh/helm/v4/pkg/action"
+	helmv4cli "helm.sh/helm/v4/pkg/cli"
 	helmv4kube "helm.sh/helm/v4/pkg/kube"
 	releasecommon "helm.sh/helm/v4/pkg/release/common"
+	helmv4driver "helm.sh/helm/v4/pkg/storage/driver"
 )
 
 // ---------------------------------------------------------------------------
@@ -125,6 +133,86 @@ func TestListReleases_TemplateOnlyClient(t *testing.T) {
 
 	require.Error(t, err)
 	require.ErrorIs(t, err, helm.ErrListReleasesUnsupported)
+}
+
+// TestListReleases_ReturnsAllNamespaces is a regression test for the Helm v4
+// AllNamespaces scoping bug: when actionConfig is initialized with a specific
+// namespace (e.g., "default"), only releases from that namespace are visible.
+// ListReleases must re-initialize with namespace "" to return releases from all
+// namespaces — otherwise an ArgoCD release in the "argocd" namespace is missed.
+//
+// A minimal fake Kubernetes API server is used to satisfy the IsReachable()
+// check performed by helmv4action.List.Run(), since this test exercises the
+// real Client.ListReleases path (not a mock). The test cannot run in parallel
+// because it sets the HELM_DRIVER env var.
+func TestListReleases_ReturnsAllNamespaces(t *testing.T) {
+	t.Setenv("HELM_DRIVER", "memory")
+
+	// Fake Kubernetes API server — only /version is needed for IsReachable().
+	srv := httptest.NewServer(http.HandlerFunc(func(resp http.ResponseWriter, req *http.Request) {
+		if req.URL.Path == "/version" {
+			resp.Header().Set("Content-Type", "application/json")
+			_, _ = fmt.Fprint(resp, `{"major":"1","minor":"29","gitVersion":"v1.29.0"}`)
+
+			return
+		}
+
+		http.NotFound(resp, req)
+	}))
+	t.Cleanup(srv.Close)
+
+	// Write a kubeconfig pointing to the fake server.
+	kubeconfig := fmt.Sprintf(`apiVersion: v1
+clusters:
+- cluster:
+    server: %s
+  name: fake
+contexts:
+- context:
+    cluster: fake
+    user: fake
+  name: fake
+current-context: fake
+users:
+- name: fake
+  user: {}
+`, srv.URL)
+	kubeconfigPath := filepath.Join(t.TempDir(), "kubeconfig")
+	require.NoError(t, os.WriteFile(kubeconfigPath, []byte(kubeconfig), 0o600))
+
+	settings := helmv4cli.New()
+	settings.KubeConfig = kubeconfigPath
+	settings.SetNamespace("default")
+
+	cfg := new(helmv4action.Configuration)
+	// Initialize at "default" namespace — simulates a client scoped to a single
+	// namespace, which would miss releases in other namespaces without the fix.
+	err := cfg.Init(settings.RESTClientGetter(), "default", "memory")
+	require.NoError(t, err)
+
+	// Seed a release in the "argocd" namespace. Memory.Create uses the release's
+	// own Namespace field to determine where to store it.
+	rel := helm.NewTestRelease(
+		"argo-cd", "argocd", "argo-cd", "v2.10.0", "",
+		releasecommon.StatusDeployed, 1, time.Now(),
+	)
+	err = cfg.Releases.Create(rel)
+	require.NoError(t, err)
+
+	// After Create the memory driver namespace is "argocd"; reset it to "default"
+	// to reproduce the regression: without the re-init in ListReleases the driver
+	// stays scoped to "default" and the "argocd" release would be invisible.
+	memDriver, ok := cfg.Releases.Driver.(*helmv4driver.Memory)
+	require.True(t, ok, "expected memory driver after HELM_DRIVER=memory init")
+	memDriver.SetNamespace("default")
+
+	client := helm.NewClientFromParts(cfg, settings)
+	releases, err := client.ListReleases(context.Background())
+
+	require.NoError(t, err)
+	require.Len(t, releases, 1, "expected release from non-default namespace to be visible")
+	assert.Equal(t, "argo-cd", releases[0].Name)
+	assert.Equal(t, "argocd", releases[0].Namespace)
 }
 
 // ---------------------------------------------------------------------------
