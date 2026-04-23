@@ -20,7 +20,7 @@ func ShouldEnableSOPS(sops v1alpha1.SOPS) bool {
 		return true
 	}
 
-	// Auto-detect: check if key is available
+	// Auto-detect: check if any key is available
 	key, err := sopsutil.ResolveAgeKey(sops)
 
 	return err == nil && key != ""

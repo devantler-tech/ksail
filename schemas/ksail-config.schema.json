@@ -139,6 +139,30 @@
                 },
                 "enabled": {
                   "type": "boolean"
+                },
+                "env": {
+                  "properties": {
+                    "var": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": false,
+                  "type": "object"
+                },
+                "extract": {
+                  "properties": {
+                    "file": {
+                      "type": "string"
+                    },
+                    "publicKeys": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "additionalProperties": false,
+                  "type": "object"
                 }
               },
               "additionalProperties": false,

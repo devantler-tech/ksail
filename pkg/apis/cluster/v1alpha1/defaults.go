@@ -25,7 +25,7 @@ const (
 // SOPS default values — canonical source for SOPS struct tag defaults.
 const (
 	// DefaultSOPSAgeKeyEnvVar is the default environment variable name
-	// for the Age private key (matches `default:"SOPS_AGE_KEY"` struct tag).
+	// for the Age private key (matches `default:"SOPS_AGE_KEY"` on SOPS.AgeKeyEnvVar).
 	DefaultSOPSAgeKeyEnvVar = "SOPS_AGE_KEY"
 )
 
