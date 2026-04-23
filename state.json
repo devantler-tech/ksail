@@ -1,7 +1,8 @@
 {
-  "last_run": "2026-04-22T12:37:57Z",
-  "workflow_run_id": "24778583065",
+  "last_run": "2026-04-23T01:03:32Z",
+  "workflow_run_id": "24810840780",
   "commented_issues": {
+    "4282": "2026-04-23",
     "4250": "2026-04-22",
     "4247": "2026-04-22",
     "4238": "2026-04-22",
@@ -21,8 +22,11 @@
   "open_prs": {
     "4248": "[Repo Assist] perf(notify): use strings.Builder in indentMultilineContent",
     "4246": "fix: add retry logic to Vanilla LoadBalancer container detection (Copilot)",
-    "new_test_argocd": "test(detector): add ArgoCD multi-namespace detection regression test (branch: repo-assist/test-detect-components-argocd-regression)",
-    "new_flux_upgrade": "chore(deps): upgrade Flux to v2.8.6 (branch: repo-assist/chore-flux-upgrade-v2.8.6)"
+    "4253": "[Repo Assist] test(detector): add ArgoCD multi-namespace detection regression test",
+    "4277": "fix(cd): use PR flow for copilot plugin version bump instead of direct push",
+    "new_flux_upgrade": "chore(deps): upgrade Flux to v2.8.6 (branch: repo-assist/chore-flux-upgrade-v2.8.6)",
+    "new_todos_fix": "[Repo Assist] fix(ci): update todos workflow to reusable-workflows v2.5.1 (branch: repo-assist/fix-todos-workflow-reusable-sha)",
+    "new_sopsutil_test": "[Repo Assist] test(sopsutil): add ResolveAgeKey tests for Extract.PublicKeys filter path (branch: repo-assist/test-sopsutil-publickeys-filter)"
   },
   "merged_prs": {
     "4233": "fix(installer): K3s Calico retries 3->5, backoff 5s->10s - merged ~2026-04-21",
@@ -33,7 +37,7 @@
     "4153": "perf(image): skip scanner.Text() allocation - merged 2026-04-19"
   },
   "last_code_quality_domain": "test",
-  "issue_backlog_cursor": "4250",
+  "issue_backlog_cursor": "4282",
   "created_issues": {
     "4249": "[Repo Assist] [chore]: upgrade embedded Flux library to v2.8.5 (superseded by v2.8.6 PR)"
   },
@@ -61,11 +65,8 @@
   },
   "notes": [
     "link_sub_issue is NOT idempotent - always verify sub-issue not already linked before calling",
-    "PR #4244 (Copilot fix for ListReleases namespace) has merge conflicts - likely superseded by PR #4199 merged state",
-    "ListReleases namespace fix IS in main (PR #4199 final merged state includes correct actionConfig re-init with empty namespace)",
-    "Flux v2.8.6 upgrade PR created 2026-04-22 (branch: repo-assist/chore-flux-upgrade-v2.8.6), closes #4249",
-    "ArgoCD regression test PR created 2026-04-22 (branch: repo-assist/test-detect-components-argocd-regression), relates to #4250",
-    "perf/notify PR #4248 and Vanilla LoadBalancer retry PR #4246 both have CI passing - awaiting review",
-    "domain alternation: last was 'test' (added ArgoCD multi-namespace regression test)"
+    "todos.yaml fixed: updated to reusable-workflows v2.5.1 (SHA 59dd29e7) - was v2.3.0 using wrong APP_PRIVATE_KEY input name to create-github-app-token action",
+    "PR #4253 (ArgoCD regression test) and PR #4248 (perf/notify) both have CI passing - awaiting review",
+    "domain alternation: last was 'test' (added sopsutil PublicKeys filter tests) - next should be 'refactor'"
   ]
 }
