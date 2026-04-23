@@ -422,7 +422,9 @@ func TestWaitForAllNodesReadyAndSchedulableIgnoringTaints_NonIgnoredTaintStillBl
 	assert.Error(t, err, "should time out when node has a non-ignored NoSchedule taint")
 }
 
-func TestWaitForAllNodesReadyAndSchedulableIgnoringTaints_MixedTaintsIgnoredAndBlocking(t *testing.T) {
+func TestWaitForAllNodesReadyAndSchedulableIgnoringTaints_MixedTaintsIgnoredAndBlocking(
+	t *testing.T,
+) {
 	t.Parallel()
 
 	// Node has both an ignored taint and a blocking taint — should block.
@@ -453,10 +455,16 @@ func TestWaitForAllNodesReadyAndSchedulableIgnoringTaints_MixedTaintsIgnoredAndB
 		context.Background(), clientset, 100*time.Millisecond,
 		readiness.TaintExternalCloudProviderUninitialized,
 	)
-	assert.Error(t, err, "should time out when node has both ignored and non-ignored NoSchedule taints")
+	assert.Error(
+		t,
+		err,
+		"should time out when node has both ignored and non-ignored NoSchedule taints",
+	)
 }
 
-func TestWaitForAllNodesReadyAndSchedulableIgnoringTaints_NoIgnoredTaintsBehavesLikeOriginal(t *testing.T) {
+func TestWaitForAllNodesReadyAndSchedulableIgnoringTaints_NoIgnoredTaintsBehavesLikeOriginal(
+	t *testing.T,
+) {
 	t.Parallel()
 
 	// No ignored taints — should behave like WaitForAllNodesReadyAndSchedulable.
