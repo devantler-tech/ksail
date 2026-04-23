@@ -24,8 +24,10 @@ The cluster is resolved in the following priority order:
   2. From ksail.yaml config file (if present)
   3. From current kubeconfig context
 
-Exit code 0 is returned even when failures are reported. A non-zero exit
-code is reserved for cases where the cluster cannot be reached.
+Exit code 0 is returned even when pod or node failures are reported.
+A non-zero exit code indicates the Kubernetes API could not be queried
+(e.g., the cluster is unreachable or the credentials lack sufficient
+permissions).
 
 Usage:
   ksail cluster diagnose [flags]
