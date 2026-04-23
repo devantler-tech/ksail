@@ -112,7 +112,7 @@ func describeNotReadyNode(node *corev1.Node) string {
 		return fmt.Sprintf("%s: Ready=%s (%s)", node.Name, cond.Status, message)
 	}
 
-	return fmt.Sprintf("%s: Ready condition missing", node.Name)
+	return node.Name + ": Ready condition missing"
 }
 
 // DiagnosePodFailures checks pods in the given namespaces and returns a
