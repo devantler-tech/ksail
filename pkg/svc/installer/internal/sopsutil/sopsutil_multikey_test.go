@@ -226,3 +226,72 @@ func TestResolveAgeKey_MultiKeyFileReturnsAll(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, key1+"\n"+key2, got)
 }
+
+// ---------------------------------------------------------------------------
+// ResolveAgeKey: Extract.PublicKeys filtering
+// ---------------------------------------------------------------------------
+
+// TestResolveAgeKey_PublicKeysFilter verifies that Extract.PublicKeys narrows
+// the set of private keys returned from a multi-key file. This exercises the
+// filterAndJoin → FilterKeysByPublicKeys path introduced with the multi-key
+// extraction feature.
+func TestResolveAgeKey_PublicKeysFilter(t *testing.T) {
+	t.Parallel()
+
+	id1, err := age.GenerateX25519Identity()
+	require.NoError(t, err)
+
+	id2, err := age.GenerateX25519Identity()
+	require.NoError(t, err)
+
+	dir := t.TempDir()
+	keyPath := filepath.Join(dir, "keys.txt")
+	content := "# key 1\n" + id1.String() + "\n# key 2\n" + id2.String() + "\n"
+	err = os.WriteFile(keyPath, []byte(content), 0o600)
+	require.NoError(t, err)
+
+	t.Run("single public key selects matching private key", func(t *testing.T) {
+		t.Parallel()
+
+		sops := v1alpha1.SOPS{
+			Extract: v1alpha1.SOPSExtract{
+				File:       keyPath,
+				PublicKeys: []string{id1.Recipient().String()},
+			},
+		}
+		got, resolveErr := sopsutil.ResolveAgeKey(sops)
+		require.NoError(t, resolveErr)
+		assert.Equal(t, id1.String(), got)
+	})
+
+	t.Run("multiple public keys selects matching private keys", func(t *testing.T) {
+		t.Parallel()
+
+		sops := v1alpha1.SOPS{
+			Extract: v1alpha1.SOPSExtract{
+				File:       keyPath,
+				PublicKeys: []string{id1.Recipient().String(), id2.Recipient().String()},
+			},
+		}
+		got, resolveErr := sopsutil.ResolveAgeKey(sops)
+		require.NoError(t, resolveErr)
+		assert.Equal(t, id1.String()+"\n"+id2.String(), got)
+	})
+
+	t.Run("no matching public key returns ErrNoMatchingAgeKey", func(t *testing.T) {
+		t.Parallel()
+
+		other, genErr := age.GenerateX25519Identity()
+		require.NoError(t, genErr)
+
+		sops := v1alpha1.SOPS{
+			Extract: v1alpha1.SOPSExtract{
+				File:       keyPath,
+				PublicKeys: []string{other.Recipient().String()},
+			},
+		}
+		_, resolveErr := sopsutil.ResolveAgeKey(sops)
+		require.Error(t, resolveErr)
+		assert.ErrorIs(t, resolveErr, sopsutil.ErrNoMatchingAgeKey)
+	})
+}
