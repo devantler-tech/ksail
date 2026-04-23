@@ -153,7 +153,6 @@ jobs:
     environment: ci
     permissions:
       contents: write
-      pull-requests: write
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@6c3c2f2c1c457b00c10c4848d6f5491db3b629df # v2.18.0
@@ -198,6 +197,15 @@ jobs:
           git config user.name "devantler-tech-bot[bot]"
           git config user.email "devantler-tech-bot[bot]@users.noreply.github.com"
 
+          # Skip if the repo already carries an equal-or-newer version to
+          # prevent a slow-merging older-tag PR from downgrading the plugin.
+          CURRENT_VERSION="$(jq -r '.version' copilot-plugin/plugin.json)"
+          HIGHEST="$(printf '%s\n%s\n' "$CURRENT_VERSION" "$VERSION" | sort -V | tail -1)"
+          if [ "$HIGHEST" != "$VERSION" ]; then
+            echo "Skipping: repo is already at v${CURRENT_VERSION}, which is newer than target v${VERSION}"
+            exit 0
+          fi
+
           bump copilot-plugin/plugin.json ".version = \$v"
           bump copilot-plugin/.claude-plugin/plugin.json ".version = \$v"
           bump .github/plugin/marketplace.json ".metadata.version = \$v | .plugins[0].version = \$v"
@@ -214,7 +222,9 @@ jobs:
           git add copilot-plugin/plugin.json copilot-plugin/.claude-plugin/plugin.json \
             .github/plugin/marketplace.json .claude-plugin/marketplace.json
           git commit -m "chore(copilot-plugin): release v${VERSION}"
-          git push origin "${BRANCH}"
+          # --force-with-lease makes re-runs safe: if a previous attempt of this
+          # job already pushed the branch, this will overwrite it cleanly.
+          git push --force-with-lease origin "${BRANCH}"
 
           # Create PR if one doesn't already exist for this branch.
           EXISTING_PR="$(gh pr list --head "${BRANCH}" --json number --jq '.[0].number // empty')"
