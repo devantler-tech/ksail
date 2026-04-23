@@ -263,20 +263,52 @@ func handleNotifyError(err error) {
 // indentMultilineContent indents subsequent lines of multi-line content using the
 // precomputed indent string from messageConfig. This ensures that multi-line messages
 // are properly aligned with the first line's symbol.
+//
+// Uses strings.Builder with pre-allocated capacity to avoid the intermediate slice
+// and per-line string allocations produced by strings.Split + concatenation + strings.Join.
 func indentMultilineContent(content, indent string) string {
 	if indent == "" || !strings.Contains(content, "\n") {
 		return content
 	}
 
-	lines := strings.Split(content, "\n")
+	// Pre-allocate: at most one indent per newline.
+	var builder strings.Builder
 
-	for i := 1; i < len(lines); i++ {
-		if lines[i] == "" {
-			continue
+	builder.Grow(len(content) + strings.Count(content, "\n")*len(indent))
+
+	first := true
+	remaining := content
+
+	for {
+		newlinePos := strings.Index(remaining, "\n")
+		if newlinePos == -1 {
+			// Last segment (no trailing newline): indent if non-empty and not first.
+			if !first && remaining != "" {
+				builder.WriteString(indent)
+			}
+
+			builder.WriteString(remaining)
+
+			break
 		}
 
-		lines[i] = indent + lines[i]
+		line := remaining[:newlinePos]
+		remaining = remaining[newlinePos+1:]
+
+		if first {
+			builder.WriteString(line)
+			builder.WriteByte('\n')
+
+			first = false
+		} else {
+			if line != "" {
+				builder.WriteString(indent)
+			}
+
+			builder.WriteString(line)
+			builder.WriteByte('\n')
+		}
 	}
 
-	return strings.Join(lines, "\n")
+	return builder.String()
 }
