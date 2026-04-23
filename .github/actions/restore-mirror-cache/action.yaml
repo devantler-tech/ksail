@@ -180,6 +180,13 @@ runs:
         # already exists locally, the provisioner skips the upstream pull,
         # avoiding Docker Hub / GHCR rate limits during high-concurrency CI.
         # See issue #4301 for context.
+        #
+        # docker load restores tag-based lookups but NOT repo digest mappings.
+        # The provisioners/config managers use digest-pinned references from
+        # pkg/fsutil/configmanager/{k3d,kind,talos}/Dockerfile. After loading,
+        # we verify each exact digest reference and re-pull if needed so Docker
+        # records the repo digest mapping. Since layers are already present
+        # from docker load, the re-pull is a lightweight manifest fetch only.
         for name in k3s-node kind-node talos-node; do
           if [ -f "/tmp/mirror-cache/${name}.tar" ]; then
             if docker load -i "/tmp/mirror-cache/${name}.tar"; then
@@ -189,6 +196,61 @@ runs:
             fi
           else
             echo "⚠️ ${name}.tar not found — provisioner will pull from upstream registry"
+          fi
+        done
+
+        # Verify exact digest-pinned references resolve after docker load.
+        # If they don't (expected — docker load only restores tags), re-pull
+        # the exact reference. Layers are already present locally so this is
+        # just a manifest download to register the digest mapping.
+        DOCKERFILES=(
+          "pkg/fsutil/configmanager/k3d/Dockerfile"
+          "pkg/fsutil/configmanager/kind/Dockerfile"
+          "pkg/fsutil/configmanager/talos/Dockerfile"
+        )
+
+        for dockerfile in "${DOCKERFILES[@]}"; do
+          if [ ! -f "$dockerfile" ]; then
+            echo "⚠️ Expected Dockerfile not found: $dockerfile"
+            continue
+          fi
+
+          # Extract image reference (skip --platform flags, handle AS stage)
+          from_line=$(grep '^FROM ' "$dockerfile" | head -1)
+          # shellcheck disable=SC2086
+          set -- $from_line
+          shift  # remove FROM
+          while [ $# -gt 0 ] && [[ "$1" == --* ]]; do shift; done
+          image_ref="$1"
+
+          if [ -z "$image_ref" ]; then
+            echo "⚠️ No image reference found in $dockerfile"
+            continue
+          fi
+
+          # Only verify digest-pinned references (tag-only refs work fine after load)
+          if [[ "$image_ref" != *"@"* ]]; then
+            echo "✅ Tag-only reference, no digest verification needed: $image_ref"
+            continue
+          fi
+
+          if docker image inspect "$image_ref" >/dev/null 2>&1; then
+            echo "✅ Exact digest reference available: $image_ref"
+            continue
+          fi
+
+          echo "ℹ️ Digest reference missing after docker load: $image_ref"
+          echo "   Re-pulling to register digest mapping (layers already present)..."
+          if docker pull "$image_ref" --quiet 2>/dev/null; then
+            if docker image inspect "$image_ref" >/dev/null 2>&1; then
+              echo "✅ Digest reference registered: $image_ref"
+            else
+              echo "⚠️ Pull succeeded but digest still not resolvable: $image_ref"
+              echo "   Provisioner will attempt its own pull at cluster creation time."
+            fi
+          else
+            echo "⚠️ Failed to re-pull digest reference: $image_ref"
+            echo "   Provisioner will attempt its own pull at cluster creation time."
           fi
         done
 

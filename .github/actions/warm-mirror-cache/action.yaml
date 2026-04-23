@@ -483,6 +483,20 @@ runs:
           else
             echo "  ⚠️ Failed to save $description image — provisioner will pull at test time"
             rm -f "/tmp/mirror-cache/${tar_name}.tar"
+            return
+          fi
+
+          # Verify the full digest-pinned reference resolves locally.
+          # docker save only exports by tag; on the restore side, docker load
+          # restores tags but NOT repo digest mappings. The restore step will
+          # need to re-pull exact digest refs to register them with Docker.
+          if [[ "$NORMALIZED" == *"@"* ]]; then
+            if docker image inspect "$NORMALIZED" >/dev/null 2>&1; then
+              echo "  ✅ Full digest reference verified: $NORMALIZED"
+            else
+              echo "  ℹ️ Digest ref not resolvable by tag-only tar (expected)."
+              echo "     Restore step will re-pull to register the digest mapping."
+            fi
           fi
         }
 
