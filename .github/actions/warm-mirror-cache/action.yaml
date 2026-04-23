@@ -268,30 +268,35 @@ runs:
           CURRENT=$((CURRENT + 1))
 
           # Determine which mirror to use based on registry.
-          # Images without a recognized registry prefix (ghcr.io, quay.io,
-          # registry.k8s.io) are assumed to be on Docker Hub — this matches
-          # Docker's own resolution behavior. This ensures images like
-          # rancher/k3s and kindest/node are routed through the docker.io
-          # mirror instead of being pulled directly. See issue #4301.
+          # Images whose first path component contains a dot (.) or colon (:)
+          # or equals "localhost" are treated as having an explicit registry
+          # host (Docker's own resolution heuristic). Known registries are
+          # routed through their respective mirrors; unknown registries are
+          # pulled directly. Everything else is Docker Hub. See issue #4301.
+          FIRST_COMPONENT="${image%%/*}"
           if [[ "$image" == ghcr.io/* ]]; then
             PULL_REF="${image/ghcr.io\//localhost:5001/}"
           elif [[ "$image" == quay.io/* ]]; then
             PULL_REF="${image/quay.io\//localhost:5002/}"
           elif [[ "$image" == registry.k8s.io/* ]]; then
             PULL_REF="${image/registry.k8s.io\//localhost:5003/}"
+          elif [[ "$image" == docker.io/* ]]; then
+            PULL_REF="${image/docker.io\//localhost:5000/}"
+          elif [[ "$FIRST_COMPONENT" == *"."* ]] || [[ "$FIRST_COMPONENT" == *":"* ]] || [[ "$FIRST_COMPONENT" == "localhost" ]]; then
+            # Unknown registry (e.g., mcr.microsoft.com, gcr.io) — pull directly
+            echo "[$CURRENT/$TOTAL] Pulling directly: $image"
+            docker pull "$image" --quiet 2>/dev/null || {
+              echo "  ⚠️ Failed: $image"
+              FAILED=$((FAILED + 1))
+            }
+            continue
+          elif [[ "$image" == library/* ]]; then
+            PULL_REF="localhost:5000/$image"
+          elif [[ "$image" != */* ]]; then
+            PULL_REF="localhost:5000/library/$image"
           else
-            # docker.io image — normalize and route through docker.io mirror
-            if [[ "$image" == docker.io/* ]]; then
-              IMAGE_REF="$image"
-            elif [[ "$image" == library/* ]]; then
-              IMAGE_REF="docker.io/$image"
-            elif [[ "$image" != */* ]]; then
-              IMAGE_REF="docker.io/library/$image"
-            else
-              # Images like rancher/k3s, kindest/node — Docker Hub without prefix
-              IMAGE_REF="docker.io/$image"
-            fi
-            PULL_REF="${IMAGE_REF/docker.io\//localhost:5000/}"
+            # Docker Hub org/image without prefix (e.g., rancher/k3s, kindest/node)
+            PULL_REF="localhost:5000/$image"
           fi
 
           echo "[$CURRENT/$TOTAL] Pulling via mirror: $image"
@@ -407,17 +412,33 @@ runs:
           local dockerfile="$1"
           local tar_name="$2"
           local description="$3"
+          local IMAGE NORMALIZED TAG_TARGET MIRROR_TAG SIZE from_line
 
-          IMAGE=$(grep '^FROM ' "$dockerfile" | head -1 | awk '{print $2}')
+          # Robust FROM parsing: skip optional --platform=... flags and
+          # ignore trailing AS <stage>. Handles both simple and multi-stage
+          # Dockerfiles (we only care about the first FROM).
+          from_line=$(grep '^FROM ' "$dockerfile" | head -1)
+          # shellcheck disable=SC2086
+          set -- $from_line
+          shift # remove FROM
+          while [ $# -gt 0 ] && [[ "$1" == --* ]]; do
+            shift
+          done
+          IMAGE="$1"
+
           if [ -z "$IMAGE" ]; then
             echo "  ⚠️ No image found in $dockerfile"
             return
           fi
 
-          # Normalize the image reference for Docker Hub (add docker.io/ prefix)
-          if [[ "$IMAGE" == ghcr.io/* ]] || [[ "$IMAGE" == quay.io/* ]] || [[ "$IMAGE" == registry.k8s.io/* ]]; then
+          # Normalize the image reference for Docker Hub (add docker.io/ prefix).
+          # Detect real registry hosts using Docker's heuristic: first path
+          # component contains "." or ":" or equals "localhost".
+          local FIRST_COMPONENT="${IMAGE%%/*}"
+          if [[ "$IMAGE" == docker.io/* ]]; then
             NORMALIZED="$IMAGE"
-          elif [[ "$IMAGE" == docker.io/* ]]; then
+          elif [[ "$FIRST_COMPONENT" == *"."* ]] || [[ "$FIRST_COMPONENT" == *":"* ]] || [[ "$FIRST_COMPONENT" == "localhost" ]]; then
+            # Image with an explicit registry host (ghcr.io, quay.io, etc.)
             NORMALIZED="$IMAGE"
           elif [[ "$IMAGE" == library/* ]]; then
             NORMALIZED="docker.io/$IMAGE"
@@ -427,8 +448,8 @@ runs:
             NORMALIZED="docker.io/$IMAGE"
           fi
 
-          # Strip digest for docker save (uses repo:tag, not @sha256:...)
-          TAG_TARGET="${NORMALIZED%%@sha256:*}"
+          # Strip digest generically (handles any algorithm, not just sha256)
+          TAG_TARGET="${NORMALIZED%%@*}"
 
           # The image was pulled in the "Pull images through mirrors" step.
           # Try to find it either under the mirror ref or the canonical name.
@@ -445,7 +466,7 @@ runs:
             else
               MIRROR_TAG=""
             fi
-            MIRROR_TAG="${MIRROR_TAG%%@sha256:*}"
+            MIRROR_TAG="${MIRROR_TAG%%@*}"
             if [ -n "$MIRROR_TAG" ]; then
               docker tag "$MIRROR_TAG" "$TAG_TARGET" 2>/dev/null || true
             fi
