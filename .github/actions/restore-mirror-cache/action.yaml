@@ -182,8 +182,11 @@ runs:
         # See issue #4301 for context.
         for name in k3s-node kind-node talos-node; do
           if [ -f "/tmp/mirror-cache/${name}.tar" ]; then
-            docker load -i "/tmp/mirror-cache/${name}.tar"
-            echo "✅ ${name} image pre-loaded"
+            if docker load -i "/tmp/mirror-cache/${name}.tar"; then
+              echo "✅ ${name} image pre-loaded"
+            else
+              echo "⚠️ Failed to load ${name}.tar — provisioner will pull from upstream registry"
+            fi
           else
             echo "⚠️ ${name}.tar not found — provisioner will pull from upstream registry"
           fi
