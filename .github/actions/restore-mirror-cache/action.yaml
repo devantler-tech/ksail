@@ -61,6 +61,12 @@ runs:
         # Source of truth: pkg/svc/provisioner/cluster/kwok/Dockerfile.controlplane
         grep '^FROM ' pkg/svc/provisioner/cluster/kwok/Dockerfile.controlplane | sed 's/^FROM //' >> "$IMAGES_FILE"
 
+        # Append distribution node images (must match warm-mirror-cache exactly).
+        # Source of truth: pkg/fsutil/configmanager/*/Dockerfile
+        grep '^FROM ' pkg/fsutil/configmanager/k3d/Dockerfile | sed 's/^FROM //' >> "$IMAGES_FILE"
+        grep '^FROM ' pkg/fsutil/configmanager/kind/Dockerfile | sed 's/^FROM //' >> "$IMAGES_FILE"
+        grep '^FROM ' pkg/fsutil/configmanager/talos/Dockerfile | sed 's/^FROM //' >> "$IMAGES_FILE"
+
         # Append CI test workload images (must match warm-mirror-cache exactly).
         # This also includes the API connectivity pre-flight pod image so mirror
         # restores cover that pull path too. See issue #3822 for related context.
@@ -163,6 +169,25 @@ runs:
           echo "⚠️ KWOK control plane tar not found in cache. KWOK tests will pull from registry.k8s.io."
           echo "   This may hit rate limits if many KWOK tests run in parallel."
         fi
+
+    - name: 🐳 Load distribution node images
+      if: steps.restore-cache.outputs.cache-hit == 'true'
+      shell: bash
+      run: |
+        # Pre-load distribution node images (K3s, Kind, Talos) into Docker's
+        # local cache. These images are pulled by the host Docker daemon during
+        # cluster creation — not through containerd mirrors. If the image
+        # already exists locally, the provisioner skips the upstream pull,
+        # avoiding Docker Hub / GHCR rate limits during high-concurrency CI.
+        # See issue #4301 for context.
+        for name in k3s-node kind-node talos-node; do
+          if [ -f "/tmp/mirror-cache/${name}.tar" ]; then
+            docker load -i "/tmp/mirror-cache/${name}.tar"
+            echo "✅ ${name} image pre-loaded"
+          else
+            echo "⚠️ ${name}.tar not found — provisioner will pull from upstream registry"
+          fi
+        done
 
     - name: ℹ️ Cache miss notice
       if: steps.restore-cache.outputs.cache-hit != 'true'

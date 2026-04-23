@@ -108,6 +108,16 @@ runs:
         # Source of truth: pkg/svc/provisioner/cluster/kwok/Dockerfile.controlplane
         grep '^FROM ' pkg/svc/provisioner/cluster/kwok/Dockerfile.controlplane | sed 's/^FROM //' >> "$IMAGES_FILE"
 
+        # Append distribution node images pulled by the host Docker daemon during
+        # cluster creation. These are NOT discovered by `ksail workload images`
+        # (which only lists component/installer images). Without pre-warming,
+        # Docker Hub / GHCR pulls can hit rate limits under high CI concurrency,
+        # causing extended cluster creation times or timeouts. See issue #4301.
+        # Source of truth: pkg/fsutil/configmanager/*/Dockerfile
+        grep '^FROM ' pkg/fsutil/configmanager/k3d/Dockerfile | sed 's/^FROM //' >> "$IMAGES_FILE"
+        grep '^FROM ' pkg/fsutil/configmanager/kind/Dockerfile | sed 's/^FROM //' >> "$IMAGES_FILE"
+        grep '^FROM ' pkg/fsutil/configmanager/talos/Dockerfile | sed 's/^FROM //' >> "$IMAGES_FILE"
+
         # Append CI test workload images that are not part of any cluster component
         # but are used by ksail-test-workload, ksail-test-backup-restore,
         # ksail-test-workload-watch, and the in-cluster API connectivity pre-flight
@@ -257,33 +267,31 @@ runs:
         while IFS= read -r image; do
           CURRENT=$((CURRENT + 1))
 
-          # Determine which mirror to use based on registry
-          if [[ "$image" == docker.io/* ]] || [[ "$image" == library/* ]] || [[ "$image" != */* ]]; then
-            # Normalize image reference for docker.io
-            if [[ "$image" != docker.io/* ]]; then
-              if [[ "$image" == library/* ]]; then
-                IMAGE_REF="docker.io/$image"
-              else
-                IMAGE_REF="docker.io/library/$image"
-              fi
-            else
-              IMAGE_REF="$image"
-            fi
-            PULL_REF="${IMAGE_REF/docker.io\//localhost:5000/}"
-          elif [[ "$image" == ghcr.io/* ]]; then
+          # Determine which mirror to use based on registry.
+          # Images without a recognized registry prefix (ghcr.io, quay.io,
+          # registry.k8s.io) are assumed to be on Docker Hub — this matches
+          # Docker's own resolution behavior. This ensures images like
+          # rancher/k3s and kindest/node are routed through the docker.io
+          # mirror instead of being pulled directly. See issue #4301.
+          if [[ "$image" == ghcr.io/* ]]; then
             PULL_REF="${image/ghcr.io\//localhost:5001/}"
           elif [[ "$image" == quay.io/* ]]; then
             PULL_REF="${image/quay.io\//localhost:5002/}"
           elif [[ "$image" == registry.k8s.io/* ]]; then
             PULL_REF="${image/registry.k8s.io\//localhost:5003/}"
           else
-            # Unknown registry, try direct pull
-            echo "[$CURRENT/$TOTAL] Pulling directly: $image"
-            docker pull "$image" --quiet 2>/dev/null || {
-              echo "  ⚠️ Failed: $image"
-              FAILED=$((FAILED + 1))
-            }
-            continue
+            # docker.io image — normalize and route through docker.io mirror
+            if [[ "$image" == docker.io/* ]]; then
+              IMAGE_REF="$image"
+            elif [[ "$image" == library/* ]]; then
+              IMAGE_REF="docker.io/$image"
+            elif [[ "$image" != */* ]]; then
+              IMAGE_REF="docker.io/library/$image"
+            else
+              # Images like rancher/k3s, kindest/node — Docker Hub without prefix
+              IMAGE_REF="docker.io/$image"
+            fi
+            PULL_REF="${IMAGE_REF/docker.io\//localhost:5000/}"
           fi
 
           echo "[$CURRENT/$TOTAL] Pulling via mirror: $image"
@@ -381,6 +389,86 @@ runs:
           rm -f /tmp/mirror-cache/kwok-control-plane.tar
         fi
 
+    - name: 🐳 Save distribution node images
+      id: save-distribution-images
+      if: steps.check-cache.outputs.complete != 'true'
+      shell: bash
+      run: |
+        echo "🐳 Saving distribution node images for Docker pre-loading on test runners..."
+
+        # Distribution node images are pulled by the host Docker daemon during
+        # cluster creation (K3d, Kind, Talos). They are NOT pulled through
+        # containerd mirrors, so the mirror volumes alone do not prevent upstream
+        # registry pulls. By docker-saving them here and docker-loading them on
+        # test runners, Docker finds them locally and skips the pull entirely.
+        # See issue #4301 for context.
+
+        save_image() {
+          local dockerfile="$1"
+          local tar_name="$2"
+          local description="$3"
+
+          IMAGE=$(grep '^FROM ' "$dockerfile" | head -1 | awk '{print $2}')
+          if [ -z "$IMAGE" ]; then
+            echo "  ⚠️ No image found in $dockerfile"
+            return
+          fi
+
+          # Normalize the image reference for Docker Hub (add docker.io/ prefix)
+          if [[ "$IMAGE" == ghcr.io/* ]] || [[ "$IMAGE" == quay.io/* ]] || [[ "$IMAGE" == registry.k8s.io/* ]]; then
+            NORMALIZED="$IMAGE"
+          elif [[ "$IMAGE" == docker.io/* ]]; then
+            NORMALIZED="$IMAGE"
+          elif [[ "$IMAGE" == library/* ]]; then
+            NORMALIZED="docker.io/$IMAGE"
+          elif [[ "$IMAGE" != */* ]]; then
+            NORMALIZED="docker.io/library/$IMAGE"
+          else
+            NORMALIZED="docker.io/$IMAGE"
+          fi
+
+          # Strip digest for docker save (uses repo:tag, not @sha256:...)
+          TAG_TARGET="${NORMALIZED%%@sha256:*}"
+
+          # The image was pulled in the "Pull images through mirrors" step.
+          # Try to find it either under the mirror ref or the canonical name.
+          if ! docker image inspect "$TAG_TARGET" >/dev/null 2>&1; then
+            # Retag from mirror ref
+            if [[ "$NORMALIZED" == docker.io/* ]]; then
+              MIRROR_TAG="${NORMALIZED/docker.io\//localhost:5000/}"
+            elif [[ "$NORMALIZED" == ghcr.io/* ]]; then
+              MIRROR_TAG="${NORMALIZED/ghcr.io\//localhost:5001/}"
+            elif [[ "$NORMALIZED" == quay.io/* ]]; then
+              MIRROR_TAG="${NORMALIZED/quay.io\//localhost:5002/}"
+            elif [[ "$NORMALIZED" == registry.k8s.io/* ]]; then
+              MIRROR_TAG="${NORMALIZED/registry.k8s.io\//localhost:5003/}"
+            else
+              MIRROR_TAG=""
+            fi
+            MIRROR_TAG="${MIRROR_TAG%%@sha256:*}"
+            if [ -n "$MIRROR_TAG" ]; then
+              docker tag "$MIRROR_TAG" "$TAG_TARGET" 2>/dev/null || true
+            fi
+          fi
+
+          if ! docker image inspect "$TAG_TARGET" >/dev/null 2>&1; then
+            echo "  ⚠️ $description image not available locally: $TAG_TARGET"
+            return
+          fi
+
+          if docker save "$TAG_TARGET" -o "/tmp/mirror-cache/${tar_name}.tar" 2>/dev/null; then
+            SIZE=$(du -h "/tmp/mirror-cache/${tar_name}.tar" | cut -f1)
+            echo "  ✅ $description image saved: $TAG_TARGET ($SIZE)"
+          else
+            echo "  ⚠️ Failed to save $description image — provisioner will pull at test time"
+            rm -f "/tmp/mirror-cache/${tar_name}.tar"
+          fi
+        }
+
+        save_image "pkg/fsutil/configmanager/k3d/Dockerfile"  "k3s-node"   "K3s"
+        save_image "pkg/fsutil/configmanager/kind/Dockerfile"  "kind-node"  "Kind"
+        save_image "pkg/fsutil/configmanager/talos/Dockerfile" "talos-node" "Talos"
+
     - name: 🔍 Verify all mirror volumes exported
       id: verify-exports
       if: steps.check-cache.outputs.complete != 'true'
@@ -418,6 +506,16 @@ runs:
         else
           echo "  ⚠️ kwok-control-plane.tar - MISSING (KWOK tests will pull from registry.k8s.io)"
         fi
+
+        # Verify distribution node tars (non-fatal: provisioners fall back to live pull if missing)
+        for name in k3s-node kind-node talos-node; do
+          if [ -f "/tmp/mirror-cache/${name}.tar" ]; then
+            SIZE=$(du -h "/tmp/mirror-cache/${name}.tar" | cut -f1)
+            echo "  ✅ ${name}.tar ($SIZE)"
+          else
+            echo "  ⚠️ ${name}.tar - MISSING (provisioner will pull from upstream registry)"
+          fi
+        done
 
     - name: 🧹 Cleanup containers
       if: always() && steps.check-cache.outputs.complete != 'true'
