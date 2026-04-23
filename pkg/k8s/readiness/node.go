@@ -140,21 +140,17 @@ func isNodeReady(node *corev1.Node) bool {
 	return false
 }
 
-// isNodeSchedulable returns true if workload pods without any tolerations can
-// be scheduled onto the node. A node is considered unschedulable when any of
-// the following conditions hold:
+// isNodeSchedulableIgnoringTaints returns true if workload pods without any
+// tolerations can be scheduled onto the node, skipping taints whose keys are in
+// the ignored set. A node is considered unschedulable when any of the following
+// conditions hold:
 //   - The node is cordoned (spec.unschedulable=true)
 //   - The node carries a NoSchedule taint (scheduler rejects pods without a
-//     matching toleration)
+//     matching toleration) that is not in the ignored set
 //   - The node carries a NoExecute taint (scheduler rejects pods without a
 //     matching toleration — eviction of already-running pods is a separate
-//     concern, but new pods are not admitted either)
-func isNodeSchedulable(node *corev1.Node) bool {
-	return isNodeSchedulableIgnoringTaints(node, nil)
-}
-
-// isNodeSchedulableIgnoringTaints is like isNodeSchedulable but skips taints
-// whose keys are in the ignored set.
+//     concern, but new pods are not admitted either) that is not in the ignored
+//     set
 func isNodeSchedulableIgnoringTaints(node *corev1.Node, ignored map[string]struct{}) bool {
 	if node.Spec.Unschedulable {
 		return false

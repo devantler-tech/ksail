@@ -205,9 +205,9 @@ func runCNIInstallation(
 	return nil
 }
 
-// waitForCNIReadiness waits for all nodes to become Ready and schedulable after
-// CNI installation. On timeout, it diagnoses pod failures in the CNI namespaces
-// to provide actionable errors.
+// waitForCNIReadiness waits for all nodes to become Ready and for at least one
+// node to be schedulable after CNI installation. On timeout, it diagnoses pod
+// failures in the CNI namespaces to provide actionable errors.
 //
 // On clusters with an external cloud provider (e.g. Hetzner), nodes carry the
 // node.cloudprovider.kubernetes.io/uninitialized taint until the CCM is
