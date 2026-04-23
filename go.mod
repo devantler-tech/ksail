@@ -27,7 +27,7 @@ require (
 	github.com/mitchellh/go-wordwrap v1.0.1
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/samber/do/v2 v2.0.0
-	github.com/siderolabs/talos v1.13.0-beta.1
+	github.com/siderolabs/talos v1.13.0-rc.0
 	github.com/siderolabs/talos/pkg/machinery v1.13.0-rc.0
 	github.com/sirupsen/logrus v1.9.4
 	github.com/spf13/cobra v1.10.2
@@ -333,8 +333,8 @@ require (
 	github.com/go-jose/go-jose/v4 v4.1.4 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
-	github.com/go-openapi/jsonpointer v0.22.4 // indirect
-	github.com/go-openapi/jsonreference v0.21.4 // indirect
+	github.com/go-openapi/jsonpointer v0.22.5 // indirect
+	github.com/go-openapi/jsonreference v0.21.5 // indirect
 	github.com/go-openapi/swag v0.25.5 // indirect
 	github.com/go-openapi/swag/cmdutils v0.25.5 // indirect
 	github.com/go-openapi/swag/conv v0.25.5 // indirect
@@ -381,7 +381,7 @@ require (
 	github.com/goodhosts/hostsfile v0.1.7 // indirect
 	github.com/google/btree v1.1.3 // indirect
 	github.com/google/cel-go v0.27.0 // indirect
-	github.com/google/gnostic-models v0.7.0 // indirect
+	github.com/google/gnostic-models v0.7.1 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/go-github/v30 v30.1.0 // indirect
 	github.com/google/go-github/v53 v53.2.1-0.20230815134205-bb00f570d301 // indirect
@@ -628,11 +628,11 @@ require (
 	github.com/shopspring/decimal v1.4.0 // indirect
 	github.com/siderolabs/crypto v0.6.5 // indirect
 	github.com/siderolabs/go-api-signature v0.3.12 // indirect
-	github.com/siderolabs/go-blockdevice/v2 v2.0.27 // indirect
+	github.com/siderolabs/go-blockdevice/v2 v2.0.28 // indirect
 	github.com/siderolabs/go-cmd v0.2.0 // indirect
 	github.com/siderolabs/go-pointer v1.0.1 // indirect
 	github.com/siderolabs/go-procfs v0.1.2 // indirect
-	github.com/siderolabs/go-talos-support v0.1.4 // indirect
+	github.com/siderolabs/go-talos-support v0.2.1 // indirect
 	github.com/siderolabs/net v0.4.0 // indirect
 	github.com/siderolabs/proto-codec v0.1.4 // indirect
 	github.com/siderolabs/protoenc v0.2.4 // indirect
