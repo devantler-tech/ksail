@@ -87,13 +87,40 @@ func WaitForAllNodesReadyAndSchedulable(
 	clientset kubernetes.Interface,
 	deadline time.Duration,
 ) error {
+	return WaitForAllNodesReadyAndSchedulableIgnoringTaints(ctx, clientset, deadline)
+}
+
+// TaintExternalCloudProviderUninitialized is the well-known taint key applied by
+// kubelet when started with --cloud-provider=external. The external cloud
+// controller manager (CCM) removes this taint after initializing the node with
+// a providerID and cloud-specific labels. During CNI readiness checks this taint
+// should be tolerated because it is an expected transient state, not a CNI failure.
+const TaintExternalCloudProviderUninitialized = "node.cloudprovider.kubernetes.io/uninitialized"
+
+// WaitForAllNodesReadyAndSchedulableIgnoringTaints is like
+// WaitForAllNodesReadyAndSchedulable but tolerates taints whose keys appear in
+// ignoredTaintKeys. This is used during CNI readiness checks on clusters with
+// an external cloud provider, where nodes carry the
+// node.cloudprovider.kubernetes.io/uninitialized taint until the CCM is
+// installed (which happens after CNI installation).
+func WaitForAllNodesReadyAndSchedulableIgnoringTaints(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	deadline time.Duration,
+	ignoredTaintKeys ...string,
+) error {
+	ignored := make(map[string]struct{}, len(ignoredTaintKeys))
+	for _, k := range ignoredTaintKeys {
+		ignored[k] = struct{}{}
+	}
+
 	return waitForNodes(ctx, clientset, deadline, func(nodes []corev1.Node) bool {
 		if !allNodesReady(nodes) {
 			return false
 		}
 
 		for i := range nodes {
-			if isNodeSchedulable(&nodes[i]) {
+			if isNodeSchedulableIgnoringTaints(&nodes[i], ignored) {
 				return true
 			}
 		}
@@ -123,11 +150,21 @@ func isNodeReady(node *corev1.Node) bool {
 //     matching toleration — eviction of already-running pods is a separate
 //     concern, but new pods are not admitted either)
 func isNodeSchedulable(node *corev1.Node) bool {
+	return isNodeSchedulableIgnoringTaints(node, nil)
+}
+
+// isNodeSchedulableIgnoringTaints is like isNodeSchedulable but skips taints
+// whose keys are in the ignored set.
+func isNodeSchedulableIgnoringTaints(node *corev1.Node, ignored map[string]struct{}) bool {
 	if node.Spec.Unschedulable {
 		return false
 	}
 
 	for _, taint := range node.Spec.Taints {
+		if _, ok := ignored[taint.Key]; ok {
+			continue
+		}
+
 		if taint.Effect == corev1.TaintEffectNoSchedule ||
 			taint.Effect == corev1.TaintEffectNoExecute {
 			return false

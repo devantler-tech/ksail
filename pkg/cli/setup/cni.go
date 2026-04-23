@@ -208,6 +208,12 @@ func runCNIInstallation(
 // waitForCNIReadiness waits for all nodes to become Ready and schedulable after
 // CNI installation. On timeout, it diagnoses pod failures in the CNI namespaces
 // to provide actionable errors.
+//
+// On clusters with an external cloud provider (e.g. Hetzner), nodes carry the
+// node.cloudprovider.kubernetes.io/uninitialized taint until the CCM is
+// installed — which happens after CNI installation. The readiness check
+// tolerates this taint to avoid a deadlock where CNI readiness waits for the
+// taint to be removed while CCM installation waits for CNI readiness.
 func waitForCNIReadiness(
 	ctx context.Context,
 	setup *cniSetupResult,
@@ -222,7 +228,14 @@ func waitForCNIReadiness(
 		return fmt.Errorf("create kubernetes client: %w", err)
 	}
 
-	err = readiness.WaitForAllNodesReadyAndSchedulable(ctx, clientset, setup.timeout)
+	var ignoredTaints []string
+	if clusterCfg.Spec.Cluster.Provider.IsCloud() {
+		ignoredTaints = append(ignoredTaints, readiness.TaintExternalCloudProviderUninitialized)
+	}
+
+	err = readiness.WaitForAllNodesReadyAndSchedulableIgnoringTaints(
+		ctx, clientset, setup.timeout, ignoredTaints...,
+	)
 	if err != nil {
 		diag := k8s.DiagnosePodFailures(ctx, clientset, cniNamespaces)
 		if diag != "" {
