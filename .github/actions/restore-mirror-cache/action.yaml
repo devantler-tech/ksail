@@ -241,7 +241,7 @@ runs:
 
           echo "ℹ️ Digest reference missing after docker load: $image_ref"
           echo "   Re-pulling to register digest mapping (layers already present)..."
-          if docker pull "$image_ref" --quiet 2>/dev/null; then
+          if docker pull "$image_ref" --quiet; then
             if docker image inspect "$image_ref" >/dev/null 2>&1; then
               echo "✅ Digest reference registered: $image_ref"
             else
