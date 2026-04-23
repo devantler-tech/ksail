@@ -177,10 +177,14 @@ jobs:
         id: get_version
         run: echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
 
-      - name: 📤 Commit + push version bump
+      # Instead of pushing directly to main (which is blocked by the required
+      # "✅ Validate Go Project" workflow rule), open a PR so CI can run on the
+      # version bump commit and auto-merge once checks pass.
+      - name: 📤 Create version bump PR
         env:
           VERSION: ${{ steps.get_version.outputs.version }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
         run: |
           set -euo pipefail
 
@@ -193,37 +197,50 @@ jobs:
           git config user.name "devantler-tech-bot[bot]"
           git config user.email "devantler-tech-bot[bot]@users.noreply.github.com"
 
-          # Retry to tolerate concurrent tag releases or main advancing mid-run.
-          # Each attempt regenerates the version bump on top of the latest
-          # origin/${DEFAULT_BRANCH} so we never try to rebase a stale commit
-          # that conflicts with a concurrent release.
-          for attempt in 1 2 3; do
-            git fetch origin "${DEFAULT_BRANCH}"
-            git reset --hard "origin/${DEFAULT_BRANCH}"
+          # Skip if the repo already carries an equal-or-newer version to
+          # prevent a slow-merging older-tag PR from downgrading the plugin.
+          CURRENT_VERSION="$(jq -r '.version' copilot-plugin/plugin.json)"
+          HIGHEST="$(printf '%s\n%s\n' "$CURRENT_VERSION" "$VERSION" | sort -V | tail -1)"
+          if [ "$HIGHEST" != "$VERSION" ]; then
+            echo "Skipping: repo is already at v${CURRENT_VERSION}, which is newer than target v${VERSION}"
+            exit 0
+          fi
 
-            bump copilot-plugin/plugin.json ".version = \$v"
-            bump copilot-plugin/.claude-plugin/plugin.json ".version = \$v"
-            bump .github/plugin/marketplace.json ".metadata.version = \$v | .plugins[0].version = \$v"
-            bump .claude-plugin/marketplace.json ".metadata.version = \$v | .plugins[0].version = \$v"
+          bump copilot-plugin/plugin.json ".version = \$v"
+          bump copilot-plugin/.claude-plugin/plugin.json ".version = \$v"
+          bump .github/plugin/marketplace.json ".metadata.version = \$v | .plugins[0].version = \$v"
+          bump .claude-plugin/marketplace.json ".metadata.version = \$v | .plugins[0].version = \$v"
 
-            if git diff --quiet; then
-              echo "No version change to commit"
-              exit 0
-            fi
+          if git diff --quiet; then
+            echo "No version change to commit"
+            exit 0
+          fi
 
-            git add copilot-plugin/plugin.json copilot-plugin/.claude-plugin/plugin.json \
-              .github/plugin/marketplace.json .claude-plugin/marketplace.json
-            git commit -m "chore(copilot-plugin): release v${VERSION}"
+          BRANCH="chore/copilot-plugin-v${VERSION}"
 
-            if git push origin "HEAD:${DEFAULT_BRANCH}"; then
-              exit 0
-            fi
+          git checkout -b "${BRANCH}"
+          git add copilot-plugin/plugin.json copilot-plugin/.claude-plugin/plugin.json \
+            .github/plugin/marketplace.json .claude-plugin/marketplace.json
+          git commit -m "chore(copilot-plugin): release v${VERSION}"
+          # --force-with-lease makes re-runs safe: if a previous attempt of this
+          # job already pushed the branch, this will overwrite it cleanly.
+          git push --force-with-lease origin "${BRANCH}"
 
-            echo "Push failed (attempt ${attempt}); refreshing from origin/${DEFAULT_BRANCH} and retrying"
-            sleep 2
-          done
-          echo "Failed to push version bump after 3 attempts" >&2
-          exit 1
+          # Create PR if one doesn't already exist for this branch.
+          EXISTING_PR="$(gh pr list --head "${BRANCH}" --json number --jq '.[0].number // empty')"
+          if [ -n "${EXISTING_PR}" ]; then
+            echo "PR #${EXISTING_PR} already exists for ${BRANCH}"
+          else
+            gh pr create \
+              --base "${DEFAULT_BRANCH}" \
+              --head "${BRANCH}" \
+              --title "chore(copilot-plugin): release v${VERSION}" \
+              --body "Automated version bump for copilot plugin manifests to v${VERSION}."
+          fi
+
+          if ! gh pr merge "${BRANCH}" --auto --squash --delete-branch; then
+            echo "::warning::Auto-merge could not be enabled; the PR must be merged manually or auto-merge must be enabled in repository settings."
+          fi
 
   mcp-publish:
     name: 📤 Publish to MCP Registry
