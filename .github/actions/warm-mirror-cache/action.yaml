@@ -282,8 +282,11 @@ runs:
             PULL_REF="${image/registry.k8s.io\//localhost:5003/}"
           elif [[ "$image" == docker.io/* ]]; then
             PULL_REF="${image/docker.io\//localhost:5000/}"
-          elif [[ "$FIRST_COMPONENT" == *"."* ]] || [[ "$FIRST_COMPONENT" == *":"* ]] || [[ "$FIRST_COMPONENT" == "localhost" ]]; then
+          elif [[ "$image" == */* ]] && { [[ "$FIRST_COMPONENT" == *"."* ]] || [[ "$FIRST_COMPONENT" == *":"* ]] || [[ "$FIRST_COMPONENT" == "localhost" ]]; }; then
             # Unknown registry (e.g., mcr.microsoft.com, gcr.io) — pull directly
+            # Guard: only apply when image contains "/" (host/path split).
+            # Single-segment refs like "nginx:latest" have no "/" so the ":"
+            # is a tag separator, not a port — those are Docker Hub images.
             echo "[$CURRENT/$TOTAL] Pulling directly: $image"
             docker pull "$image" --quiet 2>/dev/null || {
               echo "  ⚠️ Failed: $image"
@@ -437,8 +440,10 @@ runs:
           local FIRST_COMPONENT="${IMAGE%%/*}"
           if [[ "$IMAGE" == docker.io/* ]]; then
             NORMALIZED="$IMAGE"
-          elif [[ "$FIRST_COMPONENT" == *"."* ]] || [[ "$FIRST_COMPONENT" == *":"* ]] || [[ "$FIRST_COMPONENT" == "localhost" ]]; then
+          elif [[ "$IMAGE" == */* ]] && { [[ "$FIRST_COMPONENT" == *"."* ]] || [[ "$FIRST_COMPONENT" == *":"* ]] || [[ "$FIRST_COMPONENT" == "localhost" ]]; }; then
             # Image with an explicit registry host (ghcr.io, quay.io, etc.)
+            # Guard: only when "/" is present (host/path split); single-segment
+            # refs like "nginx:latest" are Docker Hub, not a registry with port.
             NORMALIZED="$IMAGE"
           elif [[ "$IMAGE" == library/* ]]; then
             NORMALIZED="docker.io/$IMAGE"
