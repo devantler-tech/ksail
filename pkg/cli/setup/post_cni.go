@@ -22,6 +22,8 @@ import (
 	registryhelpers "github.com/devantler-tech/ksail/v7/pkg/svc/registryresolver"
 	"github.com/devantler-tech/ksail/v7/pkg/timer"
 	"github.com/spf13/cobra"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 )
 
 const (
@@ -100,8 +102,9 @@ const (
 	// kubelet-serving-cert-approver deployment (from Talos inlineManifests) to
 	// become ready. After CNI is installed, the approver pod needs to be
 	// scheduled, pull its image, start, and begin approving kubelet serving
-	// CSRs. Two minutes accommodates image pulls on fresh cloud nodes.
-	csrApproverReadinessTimeout = 2 * time.Minute
+	// CSRs. Five minutes accommodates cold image pulls on fresh cloud nodes
+	// and GitHub Actions runners under high concurrency.
+	csrApproverReadinessTimeout = 5 * time.Minute
 )
 
 // apiServerStabilitySuccesses returns the number of consecutive successful
@@ -832,10 +835,58 @@ func waitForKubeletCSRApprover(
 		csrApproverReadinessTimeout,
 	)
 	if err != nil {
-		return fmt.Errorf("wait for kubelet-serving-cert-approver: %w", err)
+		// Gather pod diagnostics to surface image-pull or scheduling issues.
+		diag := csrApproverPodDiagnostics(ctx, clientset)
+
+		return fmt.Errorf("wait for kubelet-serving-cert-approver: %w%s", err, diag)
 	}
 
 	return nil
+}
+
+// csrApproverPodDiagnostics gathers pod-level status information for the
+// kubelet-serving-cert-approver namespace. The returned string is empty when
+// diagnostics cannot be retrieved (best-effort). When non-empty it starts
+// with a newline so it can be appended directly to an error message.
+func csrApproverPodDiagnostics(ctx context.Context, clientset kubernetes.Interface) string {
+	// Use a short independent timeout so diagnostics don't hang.
+	diagCtx, cancel := context.WithTimeout(ctx, 10*time.Second) //nolint:mnd // diagnostic timeout
+	defer cancel()
+
+	pods, listErr := clientset.CoreV1().
+		Pods("kubelet-serving-cert-approver").
+		List(diagCtx, metav1.ListOptions{})
+	if listErr != nil || len(pods.Items) == 0 {
+		return ""
+	}
+
+	var b strings.Builder
+
+	b.WriteString("\n--- CSR approver pod diagnostics ---")
+
+	for podIdx := range pods.Items {
+		pod := &pods.Items[podIdx]
+		b.WriteString(fmt.Sprintf("\npod %s: phase=%s", pod.Name, pod.Status.Phase))
+
+		for csIdx := range pod.Status.ContainerStatuses {
+			cs := &pod.Status.ContainerStatuses[csIdx]
+
+			switch {
+			case cs.State.Waiting != nil:
+				b.WriteString(fmt.Sprintf(
+					" container=%s waiting (reason=%s, message=%s)",
+					cs.Name, cs.State.Waiting.Reason, cs.State.Waiting.Message,
+				))
+			case cs.State.Terminated != nil:
+				b.WriteString(fmt.Sprintf(
+					" container=%s terminated (reason=%s, exit=%d)",
+					cs.Name, cs.State.Terminated.Reason, cs.State.Terminated.ExitCode,
+				))
+			}
+		}
+	}
+
+	return b.String()
 }
 
 type silentInstallFunc func(ctx context.Context, cfg *v1alpha1.Cluster, f *InstallerFactories) error

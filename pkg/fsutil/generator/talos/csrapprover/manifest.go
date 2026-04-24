@@ -1,18 +1,16 @@
 // Package csrapprover provides the kubelet-serving-cert-approver manifest
 // for embedding in Talos machine configs via cluster.inlineManifests.
 //
-// The upstream project (alex1989hu/kubelet-serving-cert-approver) recommends
-// the :main image tag for deployments. Versioned images stopped at 0.6.1 in
-// GHCR, but the :main tag receives continuous updates. The Dockerfile in this
-// package tracks the image for documentation; Dependabot will update it if
-// versioned images resume.
+// The image reference is pinned to the :main tag with a @sha256 digest for
+// supply-chain safety and reproducible CI builds. Dependabot tracks the
+// Dockerfile in this package and will propose PRs when the digest changes.
 //
 // See: https://github.com/alex1989hu/kubelet-serving-cert-approver
 package csrapprover
 
 // manifestTemplate is the kubelet-serving-cert-approver standalone deployment manifest.
 // Derived from https://github.com/alex1989hu/kubelet-serving-cert-approver/blob/main/deploy/standalone-install.yaml
-// Uses the upstream-recommended :main image tag.
+// The image is pinned with a @sha256 digest; the Dockerfile tracks updates via Dependabot.
 const manifestTemplate = `apiVersion: v1
 kind: Namespace
 metadata:
@@ -173,7 +171,7 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
-        image: ghcr.io/alex1989hu/kubelet-serving-cert-approver:main
+        image: ghcr.io/alex1989hu/kubelet-serving-cert-approver:main@sha256:3eb599765ba736a7d87343d8b8909d57939208501f01f8ed8b4a8111773015ea
         livenessProbe:
           httpGet:
             path: /healthz
@@ -226,7 +224,7 @@ spec:
 `
 
 // Manifest returns the kubelet-serving-cert-approver manifest YAML.
-// The manifest uses the upstream-recommended :main image tag.
+// The image is digest-pinned for reproducibility; see the Dockerfile for Dependabot tracking.
 func Manifest() string {
 	return manifestTemplate
 }

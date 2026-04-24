@@ -24,9 +24,9 @@ func TestManifest(t *testing.T) {
 	assert.Contains(t, manifest, "kind: Deployment")
 	assert.Contains(t, manifest, "kubelet-serving-cert-approver")
 
-	// Verify the manifest contains the expected image reference
-	assert.Contains(t, manifest, "ghcr.io/alex1989hu/kubelet-serving-cert-approver:main",
-		"manifest should use upstream :main image tag")
+	// Verify the manifest contains the expected image reference (digest-pinned)
+	assert.Contains(t, manifest, "ghcr.io/alex1989hu/kubelet-serving-cert-approver:main@sha256:",
+		"manifest should use digest-pinned :main image tag")
 }
 
 func TestManifest_MultipleDocuments(t *testing.T) {

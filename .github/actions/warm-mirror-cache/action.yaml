@@ -118,6 +118,12 @@ runs:
         grep '^FROM ' pkg/fsutil/configmanager/kind/Dockerfile | sed 's/^FROM //' >> "$IMAGES_FILE"
         grep '^FROM ' pkg/fsutil/configmanager/talos/Dockerfile | sed 's/^FROM //' >> "$IMAGES_FILE"
 
+        # Append kubelet-serving-cert-approver image deployed via Talos
+        # inlineManifests. Without pre-warming, the approver pod must cold-pull
+        # from GHCR after CNI is installed, racing the readiness timeout.
+        # Source of truth: pkg/fsutil/generator/talos/csrapprover/Dockerfile
+        grep '^FROM ' pkg/fsutil/generator/talos/csrapprover/Dockerfile | sed 's/^FROM //' >> "$IMAGES_FILE"
+
         # Append CI test workload images that are not part of any cluster component
         # but are used by ksail-test-workload, ksail-test-backup-restore,
         # ksail-test-workload-watch, and the in-cluster API connectivity pre-flight

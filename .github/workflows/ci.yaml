@@ -1105,7 +1105,7 @@ jobs:
         with:
           egress-policy: audit
 
-      - uses: devantler-tech/actions/require-checks-in-pr@61ae89ec83b943bd3a486fdcaf91cb66fd6b8760 # feat/require-checks-in-pr
+      - uses: devantler-tech/actions/require-checks-in-pr@55e9a09c265e68c601e22c44be8b9ec8d817cabb # v3.2.1
         with:
           job-results: >-
             ${{ needs.rate-limit-gate.result }}
