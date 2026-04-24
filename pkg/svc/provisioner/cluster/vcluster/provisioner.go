@@ -74,6 +74,11 @@ const dbusWaitInterval = 500 * time.Millisecond
 // eliminate this race — when the loop times out, the install script still
 // executes and can hit the D-Bus error. KSail's recoverFromDBusError
 // workaround remains necessary.
+//
+// Audited against vCluster v0.34.0-alpha.2 (April 2026): no changes to
+// the D-Bus initialization path; the race condition persists. v0.34 adds
+// snapshot/restore support for the Docker driver (PR loft-sh/vcluster#3790)
+// and SecurityContext config for AutoUpgrade — neither affects this error.
 const dbusErrorSubstring = "Failed to connect to bus"
 
 // transientCreateErrors returns error substrings that indicate potentially
@@ -586,6 +591,11 @@ func (p *Provisioner) Exists(ctx context.Context, name string) (bool, error) {
 // Audited against vCluster v0.33.2-rc3 (April 2026): the upstream SDK
 // added a systemd readiness loop but it can still time out on slow CI
 // runners, so this workaround is still required.
+//
+// Audited against vCluster v0.34.0-alpha.2 (April 2026): CreateDocker,
+// ConnectDocker, DeleteDocker signatures and option structs are unchanged
+// from v0.33.1. The D-Bus race persists — this workaround is still required.
+// go.mod update deferred until v0.34 reaches stable.
 func recoverFromDBusError(
 	ctx context.Context,
 	globalFlags *flags.GlobalFlags,
