@@ -96,6 +96,10 @@ func TestCreatePortForwardCommand(t *testing.T) {
 	assert.Equal(t, "forward", cmd.Use)
 	assert.Contains(t, cmd.Short, "Forward")
 	assert.NotEmpty(t, cmd.Long)
+	assert.Contains(t, cmd.Example, "ksail workload forward",
+		"examples should reference 'ksail workload forward', not 'port-forward'")
+	assert.NotContains(t, cmd.Example, "port-forward",
+		"examples should not contain the original 'port-forward' name")
 }
 
 func TestCreatePortForwardCommandHasFlags(t *testing.T) {

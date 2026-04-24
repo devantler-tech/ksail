@@ -2,6 +2,7 @@ package kubectl
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
@@ -350,6 +351,10 @@ func (c *Client) CreatePortForwardCommand(kubeConfigPath string) *cobra.Command 
 			"command is needed to resume forwarding.",
 		configFlags,
 	)
+
+	// The upstream examples use "port-forward" which customizeCommand turns into
+	// "ksail workload port-forward". Fix to match the renamed "forward" subcommand.
+	forwardCmd.Example = strings.ReplaceAll(forwardCmd.Example, "port-forward", "forward")
 
 	return forwardCmd
 }
