@@ -30,7 +30,7 @@ func TestEnsureSecret_CreateError(t *testing.T) {
 		},
 	)
 
-	err := hetzner.EnsureSecretForTest(context.Background(), clientset, "some-token")
+	err := hetzner.EnsureSecretForTest(context.Background(), clientset, "some-token", nil)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to create secret")
@@ -61,7 +61,7 @@ func TestEnsureSecret_UpdateError(t *testing.T) {
 		},
 	)
 
-	err := hetzner.EnsureSecretForTest(context.Background(), clientset, "new-token")
+	err := hetzner.EnsureSecretForTest(context.Background(), clientset, "new-token", nil)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to update secret")
@@ -84,7 +84,7 @@ func TestEnsureSecret_DifferentToken_SuccessfulUpdate(t *testing.T) {
 	clientset := fake.NewClientset(existing)
 
 	newToken := "brand-new-token"
-	err := hetzner.EnsureSecretForTest(context.Background(), clientset, newToken)
+	err := hetzner.EnsureSecretForTest(context.Background(), clientset, newToken, nil)
 
 	require.NoError(t, err)
 
@@ -128,7 +128,7 @@ func TestEnsureSecret_AlreadyExists_GetFails(t *testing.T) {
 		},
 	)
 
-	err := hetzner.EnsureSecretForTest(context.Background(), clientset, "some-token")
+	err := hetzner.EnsureSecretForTest(context.Background(), clientset, "some-token", nil)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to get existing secret")

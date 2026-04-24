@@ -59,7 +59,7 @@ func TestInstaller_Install_TokenNotSet(t *testing.T) {
 func TestEnsureSecret_InvalidKubeconfig(t *testing.T) {
 	t.Setenv(hetzner.TokenEnvVar, "test-token-value")
 
-	err := hetzner.EnsureSecret(t.Context(), "/nonexistent/kubeconfig", "test-context")
+	err := hetzner.EnsureSecret(t.Context(), "/nonexistent/kubeconfig", "test-context", nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to create kubernetes client")
 }

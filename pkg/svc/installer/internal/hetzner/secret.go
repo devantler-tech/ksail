@@ -37,7 +37,11 @@ var ErrTokenNotSet = fmt.Errorf("environment variable %s is not set", TokenEnvVa
 // EnsureSecret creates or updates the Hetzner Cloud API token secret in
 // kube-system. Both the hcloud-ccm and hetzner-csi installers share this
 // secret, so the logic lives here to avoid duplication.
-func EnsureSecret(ctx context.Context, kubeconfig, kubeContext string) error {
+//
+// extraData contains additional key-value pairs to store alongside the token
+// (e.g. "network" for CCM). These are merged into the existing secret data
+// so that concurrent installers don't overwrite each other's keys.
+func EnsureSecret(ctx context.Context, kubeconfig, kubeContext string, extraData map[string][]byte) error {
 	token := os.Getenv(TokenEnvVar)
 	if token == "" {
 		return ErrTokenNotSet
@@ -48,20 +52,26 @@ func EnsureSecret(ctx context.Context, kubeconfig, kubeContext string) error {
 		return fmt.Errorf("failed to create kubernetes client: %w", err)
 	}
 
-	return ensureSecret(ctx, clientset, token)
+	return ensureSecret(ctx, clientset, token, extraData)
 }
 
 // ensureSecret is the testable core of EnsureSecret. It accepts an injected
 // kubernetes.Interface so that unit tests can substitute a fake clientset.
-func ensureSecret(ctx context.Context, client kubernetes.Interface, token string) error {
+func ensureSecret(ctx context.Context, client kubernetes.Interface, token string, extraData map[string][]byte) error {
+	desiredData := map[string][]byte{
+		"token": []byte(token),
+	}
+
+	for k, v := range extraData {
+		desiredData[k] = v
+	}
+
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      SecretName,
 			Namespace: Namespace,
 		},
-		Data: map[string][]byte{
-			"token": []byte(token),
-		},
+		Data: desiredData,
 	}
 
 	secretsClient := client.CoreV1().Secrets(Namespace)
@@ -106,16 +116,18 @@ func createOrUpdateOnConflict(
 	return nil
 }
 
-// updateSecretIfNeeded skips the update when the existing token already matches
-// the desired value. Otherwise it uses retry.RetryOnConflict to handle 409
-// Conflict errors that arise under concurrent updaters.
+// updateSecretIfNeeded merges the desired keys into the existing secret data.
+// It skips the update when all desired keys already match. Otherwise it uses
+// retry.RetryOnConflict to handle 409 Conflict errors from concurrent updaters.
+// Merging (rather than replacing) ensures that concurrent installers (e.g. CCM
+// writing "network" and CSI writing only "token") don't overwrite each other's keys.
 func updateSecretIfNeeded(
 	ctx context.Context,
 	client kubernetes.Interface,
 	existingSecret *corev1.Secret,
 	desiredData map[string][]byte,
 ) error {
-	if bytes.Equal(existingSecret.Data["token"], desiredData["token"]) {
+	if desiredDataMatches(existingSecret.Data, desiredData) {
 		return nil
 	}
 
@@ -127,11 +139,18 @@ func updateSecretIfNeeded(
 			return fmt.Errorf("failed to get secret for update: %w", err)
 		}
 
-		if bytes.Equal(latest.Data["token"], desiredData["token"]) {
+		if desiredDataMatches(latest.Data, desiredData) {
 			return nil
 		}
 
-		latest.Data = desiredData
+		if latest.Data == nil {
+			latest.Data = make(map[string][]byte, len(desiredData))
+		}
+
+		for k, v := range desiredData {
+			latest.Data[k] = v
+		}
+
 		latest.StringData = nil
 
 		_, err = secretsClient.Update(ctx, latest, metav1.UpdateOptions{})
@@ -148,14 +167,29 @@ func updateSecretIfNeeded(
 	return nil
 }
 
+// desiredDataMatches returns true when every key in desiredData exists in
+// existing with an equal value.
+func desiredDataMatches(existing, desiredData map[string][]byte) bool {
+	for k, v := range desiredData {
+		if !bytes.Equal(existing[k], v) {
+			return false
+		}
+	}
+
+	return true
+}
+
 // InstallWithSecret ensures the Hetzner Cloud API token secret exists and then
 // installs or upgrades a Helm chart via the given helmutil.Base.
+// extraData contains additional key-value pairs to store in the secret
+// alongside the token (e.g. "network" for CCM).
 func InstallWithSecret(
 	ctx context.Context,
 	base *helmutil.Base,
 	kubeconfig, kubeContext string,
+	extraData map[string][]byte,
 ) error {
-	err := EnsureSecret(ctx, kubeconfig, kubeContext)
+	err := EnsureSecret(ctx, kubeconfig, kubeContext, extraData)
 	if err != nil {
 		return fmt.Errorf("failed to create hetzner secret: %w", err)
 	}
@@ -177,6 +211,7 @@ type Installer struct {
 	kubeconfig string
 	context    string
 	name       string
+	secretData map[string][]byte
 }
 
 // ChartConfig holds the chart-specific parameters that differ between Hetzner installers.
@@ -191,6 +226,11 @@ type ChartConfig struct {
 	Version string
 	// ValuesYaml is optional Helm values YAML to pass to the chart.
 	ValuesYaml string
+	// SecretData contains additional key-value pairs to store in the shared
+	// "hcloud" Kubernetes secret alongside the API token. For example, CCM
+	// stores {"network": "<name>"} so the chart's default valueFrom.secretKeyRef
+	// can read it.
+	SecretData map[string][]byte
 }
 
 // NewInstaller creates a standard Hetzner Cloud installer with the shared
@@ -228,13 +268,14 @@ func NewInstaller(
 		kubeconfig: kubeconfig,
 		context:    kubeContext,
 		name:       cfg.Name,
+		secretData: cfg.SecretData,
 	}
 }
 
 // Install creates the required Hetzner Cloud API token secret and then
 // installs or upgrades the component via its Helm chart.
 func (h *Installer) Install(ctx context.Context) error {
-	err := InstallWithSecret(ctx, h.Base, h.kubeconfig, h.context)
+	err := InstallWithSecret(ctx, h.Base, h.kubeconfig, h.context, h.secretData)
 	if err != nil {
 		return fmt.Errorf("install %s: %w", h.name, err)
 	}

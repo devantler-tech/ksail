@@ -52,7 +52,7 @@ func TestEnsureSecret_ValidKubeconfig_NoCluster(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	err := hetzner.EnsureSecret(ctx, kubeconfig, "test")
+	err := hetzner.EnsureSecret(ctx, kubeconfig, "test", nil)
 	// Should create k8s client OK but fail when trying to interact with cluster.
 	require.Error(t, err)
 	assert.NotContains(t, err.Error(), "failed to create kubernetes client")

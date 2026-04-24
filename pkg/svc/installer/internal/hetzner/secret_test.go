@@ -15,7 +15,7 @@ import (
 func TestEnsureSecret_TokenNotSet(t *testing.T) {
 	t.Setenv(hetzner.TokenEnvVar, "")
 
-	err := hetzner.EnsureSecret(context.Background(), "", "")
+	err := hetzner.EnsureSecret(context.Background(), "", "", nil)
 	if !errors.Is(err, hetzner.ErrTokenNotSet) {
 		t.Errorf("expected ErrTokenNotSet, got %v", err)
 	}
@@ -28,7 +28,7 @@ func TestEnsureSecret_CreateWhenNotFound(t *testing.T) {
 
 	clientset := fake.NewClientset()
 
-	err := hetzner.EnsureSecretForTest(context.Background(), clientset, token)
+	err := hetzner.EnsureSecretForTest(context.Background(), clientset, token, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -63,7 +63,7 @@ func TestEnsureSecret_UpdatePreservesResourceVersion(t *testing.T) {
 
 	clientset := fake.NewClientset(existing)
 
-	err := hetzner.EnsureSecretForTest(context.Background(), clientset, updatedToken)
+	err := hetzner.EnsureSecretForTest(context.Background(), clientset, updatedToken, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -99,7 +99,7 @@ func TestEnsureSecret_ConcurrentCreation(t *testing.T) {
 		waitGroup.Go(func() {
 			<-startCh
 
-			errs[goroutineIdx] = hetzner.EnsureSecretForTest(context.Background(), clientset, token)
+			errs[goroutineIdx] = hetzner.EnsureSecretForTest(context.Background(), clientset, token, nil)
 		})
 	}
 

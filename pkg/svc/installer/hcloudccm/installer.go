@@ -35,6 +35,10 @@ const DefaultClusterCIDR = "10.244.0.0/16"
 // The networkName parameter specifies the Hetzner Cloud private network name
 // that CCM uses to look up servers by their private IPs. If empty, networking
 // support is not enabled in the CCM chart values.
+//
+// When networkName is set, the network name is stored in the shared "hcloud"
+// Kubernetes secret (key "network") so the chart's default
+// valueFrom.secretKeyRef can read it as HCLOUD_NETWORK.
 func NewInstaller(
 	client helm.Interface,
 	kubeconfig, context string,
@@ -47,13 +51,28 @@ func NewInstaller(
 		ChartName:   "hcloud/hcloud-cloud-controller-manager",
 		Version:     chartVersion(),
 		ValuesYaml:  buildValuesYaml(networkName),
+		SecretData:  buildSecretData(networkName),
 	})
+}
+
+// buildSecretData returns extra key-value pairs for the shared "hcloud" secret.
+// When networkName is set, it includes the "network" key so the chart's default
+// valueFrom.secretKeyRef reads it as HCLOUD_NETWORK.
+func buildSecretData(networkName string) map[string][]byte {
+	if networkName == "" {
+		return nil
+	}
+
+	return map[string][]byte{
+		"network": []byte(networkName),
+	}
 }
 
 // buildValuesYaml generates the Helm values YAML for the hcloud-ccm chart.
 // When networkName is set, it enables the chart's networking section so that
-// HCLOUD_NETWORK is injected into the CCM pod, allowing it to match Kubernetes
-// nodes to Hetzner Cloud servers by their private network IPs.
+// HCLOUD_NETWORK is injected into the CCM pod. The network name itself is
+// stored in the "hcloud" Kubernetes secret (key "network") and read by the
+// chart's default valueFrom.secretKeyRef — no inline value override is needed.
 func buildValuesYaml(networkName string) string {
 	if networkName == "" {
 		return ""
@@ -61,7 +80,5 @@ func buildValuesYaml(networkName string) string {
 
 	return fmt.Sprintf(`networking:
   enabled: true
-  clusterCIDR: %s
-  network:
-    value: %q`, DefaultClusterCIDR, networkName)
+  clusterCIDR: %s`, DefaultClusterCIDR)
 }
