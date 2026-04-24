@@ -209,7 +209,7 @@ func TestWriteMessage_WithTimer(t *testing.T) {
 		t.Fatalf("output should start with success line and timing block, got %q", got)
 	}
 
-	if !strings.Contains(got, "\n  total:  ") {
+	if !strings.Contains(got, "\ntotal:     ") {
 		t.Fatalf("output should include total timing line, got %q", got)
 	}
 }
@@ -243,7 +243,7 @@ func TestWriteMessage_SuccessType_RendersTimingBlock_FormatAndPlacement(t *testi
 
 	got := out.String()
 
-	want := "✔ completion message\n⏲ current: 500ms\n  total:  3s\n"
+	want := "✔ completion message\n⏲ current: 500ms\ntotal:     3s\n"
 	if got != want {
 		t.Fatalf("output mismatch. want %q, got %q", want, got)
 	}
@@ -596,7 +596,7 @@ func TestSuccessWithTimerf(t *testing.T) {
 	notify.SuccessWithTimerf(&buf, tmr, "operation %s complete", "deploy")
 
 	got := buf.String()
-	want := "✔ operation deploy complete\n⏲ current: 2s\n  total:  5s\n"
+	want := "✔ operation deploy complete\n⏲ current: 2s\ntotal:     5s\n"
 
 	if got != want {
 		t.Errorf("SuccessWithTimerf() = %q, want %q", got, want)
