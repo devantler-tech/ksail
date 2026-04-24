@@ -169,4 +169,3 @@ updates:
       default-days: 7
     schedule:
       interval: daily
-
