@@ -72,7 +72,13 @@ func ensureSecret(
 		"token": []byte(token),
 	}
 
-	maps.Copy(desiredData, extraData)
+	for k, v := range extraData {
+		if k == "token" {
+			continue
+		}
+
+		desiredData[k] = v
+	}
 
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
