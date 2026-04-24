@@ -2,6 +2,7 @@ package hetznercsiinstaller_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -103,5 +104,53 @@ func TestHetznerCSIInstaller_Uninstall(t *testing.T) {
 	err := installer.Uninstall(context.Background())
 
 	require.NoError(t, err)
+	mockClient.AssertExpectations(t)
+}
+
+// TestHetznerCSIInstaller_Install_WaitsForCCMLabels verifies that Install
+// invokes the CCM node-label wait with the installer's kubeconfig, context,
+// and timeout before any Helm work, and that it aborts when the wait fails —
+// preventing the csi-node DaemonSet from starting before nodes are labeled.
+func TestHetznerCSIInstaller_Install_WaitsForCCMLabels(t *testing.T) {
+	mockClient := helm.NewMockInterface(t)
+	timeout := 5 * time.Minute
+
+	waitErr := errors.New("simulated CCM label timeout")
+
+	var (
+		gotKubeconfig, gotContext string
+		gotDeadline               time.Duration
+		called                    bool
+	)
+
+	restore := hetznercsiinstaller.SetWaitForCCMNodeLabelsFnForTest(
+		func(_ context.Context, kubeconfig, kubeContext string, deadline time.Duration) error {
+			called = true
+			gotKubeconfig = kubeconfig
+			gotContext = kubeContext
+			gotDeadline = deadline
+
+			return waitErr
+		},
+	)
+	defer restore()
+
+	installer := hetznercsiinstaller.NewInstaller(
+		mockClient,
+		"/tmp/kubeconfig",
+		"test-context",
+		timeout,
+	)
+
+	err := installer.Install(context.Background())
+
+	require.Error(t, err)
+	require.ErrorIs(t, err, waitErr)
+	assert.True(t, called, "CCM label wait must be invoked before Install")
+	assert.Equal(t, "/tmp/kubeconfig", gotKubeconfig)
+	assert.Equal(t, "test-context", gotContext)
+	assert.Equal(t, timeout, gotDeadline)
+
+	// Helm must not be touched when the wait fails.
 	mockClient.AssertExpectations(t)
 }

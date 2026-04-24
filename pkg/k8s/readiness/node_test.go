@@ -484,3 +484,64 @@ func TestWaitForAllNodesReadyAndSchedulableIgnoringTaints_NoIgnoredTaintsBehaves
 	)
 	require.NoError(t, err, "should succeed when no taints and no ignored taints")
 }
+
+func TestWaitForAllNodesLabeled_AllLabeled(t *testing.T) {
+	t.Parallel()
+
+	const labelKey = "instance.hetzner.cloud/provided-by"
+
+	clientset := fake.NewClientset(
+		&corev1.Node{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:   "control-plane",
+				Labels: map[string]string{labelKey: "cloud"},
+			},
+		},
+		&corev1.Node{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:   "worker-1",
+				Labels: map[string]string{labelKey: "cloud"},
+			},
+		},
+	)
+
+	err := readiness.WaitForAllNodesLabeled(
+		context.Background(), clientset, labelKey, 5*time.Second,
+	)
+	require.NoError(t, err)
+}
+
+func TestWaitForAllNodesLabeled_OneMissing(t *testing.T) {
+	t.Parallel()
+
+	const labelKey = "instance.hetzner.cloud/provided-by"
+
+	clientset := fake.NewClientset(
+		&corev1.Node{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:   "control-plane",
+				Labels: map[string]string{labelKey: "cloud"},
+			},
+		},
+		&corev1.Node{
+			ObjectMeta: metav1.ObjectMeta{Name: "worker-1"},
+		},
+	)
+
+	err := readiness.WaitForAllNodesLabeled(
+		context.Background(), clientset, labelKey, 100*time.Millisecond,
+	)
+	assert.Error(t, err)
+}
+
+func TestWaitForAllNodesLabeled_NoNodes(t *testing.T) {
+	t.Parallel()
+
+	clientset := fake.NewClientset()
+
+	err := readiness.WaitForAllNodesLabeled(
+		context.Background(), clientset,
+		"instance.hetzner.cloud/provided-by", 100*time.Millisecond,
+	)
+	assert.Error(t, err)
+}

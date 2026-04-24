@@ -1,6 +1,8 @@
 package hetznercsiinstaller
 
 import (
+	"context"
+	"fmt"
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
@@ -12,12 +14,27 @@ var ErrHetznerTokenNotSet = hetzner.ErrTokenNotSet
 
 // Installer installs or upgrades the Hetzner Cloud CSI driver.
 //
-// It delegates to hetzner.Installer which handles the shared Hetzner lifecycle:
-// creating the HCLOUD_TOKEN secret and installing the Helm chart.
+// It delegates to [hetzner.Installer] which handles the shared Hetzner
+// lifecycle (HCLOUD_TOKEN secret + Helm chart install), and adds a pre-install
+// gate that waits for the Hetzner Cloud Controller Manager (hcloud-ccm) to
+// label every node with [ProvidedByLabel]. This ordering is critical because
+// the hcloud-csi node driver registers topology segments from node labels at
+// start-up; if the CCM-applied label is missing at that moment, the CSI
+// provisioner later reports incomplete topology and PVCs with
+// allowedTopologies (e.g. from `global.enableProvidedByTopology: true`) fail
+// to bind. See issue #2... for details.
 //
 // Prerequisites:
 //   - HCLOUD_TOKEN environment variable must be set with a valid Hetzner Cloud API token
-type Installer = hetzner.Installer
+//   - hcloud-ccm must be installed (it runs in parallel; the pre-install gate
+//     blocks CSI until CCM has finished initializing nodes)
+type Installer struct {
+	*hetzner.Installer
+
+	kubeconfig  string
+	kubeContext string
+	waitTimeout time.Duration
+}
 
 // NewInstaller creates a new Hetzner CSI installer instance.
 //
@@ -37,13 +54,37 @@ func NewInstaller(
 	timeout time.Duration,
 	networkName string,
 ) *Installer {
-	return hetzner.NewInstaller(client, kubeconfig, context, timeout, hetzner.ChartConfig{
+	base := hetzner.NewInstaller(client, kubeconfig, context, timeout, hetzner.ChartConfig{
 		Name:        "hetzner-csi",
 		ReleaseName: "hcloud-csi",
 		ChartName:   "hcloud/hcloud-csi",
 		Version:     chartVersion(),
 		SecretData:  buildSecretData(networkName),
 	})
+
+	return &Installer{
+		Installer:   base,
+		kubeconfig:  kubeconfig,
+		kubeContext: context,
+		waitTimeout: timeout,
+	}
+}
+
+// Install waits for hcloud-ccm to initialize all nodes (i.e. apply the
+// [ProvidedByLabel] label) and then installs the Hetzner CSI driver.
+//
+// The wait is required because CSI and CCM install concurrently during the
+// infrastructure phase. Without this gate, the csi-node DaemonSet can start
+// before CCM has labeled nodes, causing the driver to register an incomplete
+// topology and breaking PVC provisioning for StorageClasses that rely on
+// `csi.hetzner.cloud/location` + `instance.hetzner.cloud/provided-by`.
+func (h *Installer) Install(ctx context.Context) error {
+	err := waitForCCMNodeLabelsFn(ctx, h.kubeconfig, h.kubeContext, h.waitTimeout)
+	if err != nil {
+		return fmt.Errorf("wait for hcloud-ccm node initialization: %w", err)
+	}
+
+	return h.Installer.Install(ctx)
 }
 
 // buildSecretData returns extra key-value pairs for the shared "hcloud" secret.
