@@ -343,3 +343,144 @@ func TestWaitForAllNodesReadyAndSchedulable_CordonedNodeBlocks(t *testing.T) {
 	)
 	assert.Error(t, err, "should time out when only node is cordoned")
 }
+
+func TestWaitForAllNodesReadyAndSchedulableIgnoringTaints_ToleratesIgnoredTaint(t *testing.T) {
+	t.Parallel()
+
+	// All nodes have the external cloud provider uninitialized taint, which is
+	// expected on Hetzner before CCM is installed. Ignoring this taint should
+	// let the readiness check pass.
+	clientset := fake.NewClientset(
+		&corev1.Node{
+			ObjectMeta: metav1.ObjectMeta{Name: "control-plane"},
+			Spec: corev1.NodeSpec{
+				Taints: []corev1.Taint{
+					{
+						Key:    readiness.TaintExternalCloudProviderUninitialized,
+						Effect: corev1.TaintEffectNoSchedule,
+					},
+				},
+			},
+			Status: corev1.NodeStatus{
+				Conditions: []corev1.NodeCondition{
+					{Type: corev1.NodeReady, Status: corev1.ConditionTrue},
+				},
+			},
+		},
+		&corev1.Node{
+			ObjectMeta: metav1.ObjectMeta{Name: "worker-1"},
+			Spec: corev1.NodeSpec{
+				Taints: []corev1.Taint{
+					{
+						Key:    readiness.TaintExternalCloudProviderUninitialized,
+						Effect: corev1.TaintEffectNoSchedule,
+					},
+				},
+			},
+			Status: corev1.NodeStatus{
+				Conditions: []corev1.NodeCondition{
+					{Type: corev1.NodeReady, Status: corev1.ConditionTrue},
+				},
+			},
+		},
+	)
+
+	err := readiness.WaitForAllNodesReadyAndSchedulableIgnoringTaints(
+		context.Background(), clientset, 5*time.Second,
+		readiness.TaintExternalCloudProviderUninitialized,
+	)
+	require.NoError(t, err, "should succeed when only taint is the ignored cloud provider taint")
+}
+
+func TestWaitForAllNodesReadyAndSchedulableIgnoringTaints_NonIgnoredTaintStillBlocks(t *testing.T) {
+	t.Parallel()
+
+	// Node has a non-ignored NoSchedule taint — should still block.
+	clientset := fake.NewClientset(
+		&corev1.Node{
+			ObjectMeta: metav1.ObjectMeta{Name: "node-1"},
+			Spec: corev1.NodeSpec{
+				Taints: []corev1.Taint{
+					{
+						Key:    "some-other-taint",
+						Effect: corev1.TaintEffectNoSchedule,
+					},
+				},
+			},
+			Status: corev1.NodeStatus{
+				Conditions: []corev1.NodeCondition{
+					{Type: corev1.NodeReady, Status: corev1.ConditionTrue},
+				},
+			},
+		},
+	)
+
+	err := readiness.WaitForAllNodesReadyAndSchedulableIgnoringTaints(
+		context.Background(), clientset, 100*time.Millisecond,
+		readiness.TaintExternalCloudProviderUninitialized,
+	)
+	assert.Error(t, err, "should time out when node has a non-ignored NoSchedule taint")
+}
+
+func TestWaitForAllNodesReadyAndSchedulableIgnoringTaints_MixedTaintsIgnoredAndBlocking(
+	t *testing.T,
+) {
+	t.Parallel()
+
+	// Node has both an ignored taint and a blocking taint — should block.
+	clientset := fake.NewClientset(
+		&corev1.Node{
+			ObjectMeta: metav1.ObjectMeta{Name: "node-1"},
+			Spec: corev1.NodeSpec{
+				Taints: []corev1.Taint{
+					{
+						Key:    readiness.TaintExternalCloudProviderUninitialized,
+						Effect: corev1.TaintEffectNoSchedule,
+					},
+					{
+						Key:    "node-role.kubernetes.io/control-plane",
+						Effect: corev1.TaintEffectNoSchedule,
+					},
+				},
+			},
+			Status: corev1.NodeStatus{
+				Conditions: []corev1.NodeCondition{
+					{Type: corev1.NodeReady, Status: corev1.ConditionTrue},
+				},
+			},
+		},
+	)
+
+	err := readiness.WaitForAllNodesReadyAndSchedulableIgnoringTaints(
+		context.Background(), clientset, 100*time.Millisecond,
+		readiness.TaintExternalCloudProviderUninitialized,
+	)
+	assert.Error(
+		t,
+		err,
+		"should time out when node has both ignored and non-ignored NoSchedule taints",
+	)
+}
+
+func TestWaitForAllNodesReadyAndSchedulableIgnoringTaints_NoIgnoredTaintsBehavesLikeOriginal(
+	t *testing.T,
+) {
+	t.Parallel()
+
+	// No ignored taints — should behave like WaitForAllNodesReadyAndSchedulable.
+	clientset := fake.NewClientset(
+		&corev1.Node{
+			ObjectMeta: metav1.ObjectMeta{Name: "node-1"},
+			Status: corev1.NodeStatus{
+				Conditions: []corev1.NodeCondition{
+					{Type: corev1.NodeReady, Status: corev1.ConditionTrue},
+				},
+			},
+		},
+	)
+
+	err := readiness.WaitForAllNodesReadyAndSchedulableIgnoringTaints(
+		context.Background(), clientset, 5*time.Second,
+	)
+	require.NoError(t, err, "should succeed when no taints and no ignored taints")
+}
