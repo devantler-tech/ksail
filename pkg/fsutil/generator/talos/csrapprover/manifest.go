@@ -1,36 +1,21 @@
 // Package csrapprover provides the kubelet-serving-cert-approver manifest
 // for embedding in Talos machine configs via cluster.inlineManifests.
 //
-// The image version is tracked via a Dockerfile that Dependabot updates.
-// At runtime, the image reference is extracted from the embedded Dockerfile
-// and substituted into the manifest template, ensuring the deployed approver
-// uses a pinned, known-good version rather than the mutable :main tag.
+// The upstream project (alex1989hu/kubelet-serving-cert-approver) recommends
+// the :main image tag for deployments. Versioned images stopped at 0.6.1 in
+// GHCR, but the :main tag receives continuous updates. The Dockerfile in this
+// package tracks the image for documentation; Dependabot will update it if
+// versioned images resume.
 //
 // See: https://github.com/alex1989hu/kubelet-serving-cert-approver
 package csrapprover
 
 import (
 	_ "embed"
-	"strings"
-
-	"github.com/devantler-tech/ksail/v7/pkg/svc/image/parser"
 )
 
 //go:embed Dockerfile
 var dockerfile string
-
-// imageRef returns the full image reference (e.g. "ghcr.io/alex1989hu/kubelet-serving-cert-approver:0.6.1@sha256:...")
-// from the Dependabot-tracked Dockerfile.
-func imageRef() string {
-	return parser.ParseImageFromDockerfile(
-		dockerfile,
-		`FROM\s+(ghcr\.io/alex1989hu/kubelet-serving-cert-approver:[^\s]+)`,
-		"kubelet-serving-cert-approver",
-	)
-}
-
-// manifestImagePlaceholder is the image reference used in the upstream standalone-install.yaml.
-const manifestImagePlaceholder = "ghcr.io/alex1989hu/kubelet-serving-cert-approver:main"
 
 // manifestTemplate is the kubelet-serving-cert-approver standalone deployment manifest.
 // Derived from https://github.com/alex1989hu/kubelet-serving-cert-approver/blob/main/deploy/standalone-install.yaml
@@ -247,8 +232,8 @@ spec:
         operator: Exists
 `
 
-// Manifest returns the kubelet-serving-cert-approver manifest YAML with the
-// image reference pinned to the Dependabot-tracked version.
+// Manifest returns the kubelet-serving-cert-approver manifest YAML.
+// The manifest uses the upstream-recommended :main image tag.
 func Manifest() string {
-	return strings.Replace(manifestTemplate, manifestImagePlaceholder, imageRef(), 1)
+	return manifestTemplate
 }

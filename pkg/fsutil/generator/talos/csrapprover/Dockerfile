@@ -1,8 +1,13 @@
-# This file is the source of truth for the kubelet-serving-cert-approver image version
-# used in the inline manifest embedded in Go code.
-# Dependabot updates this file, and Go code reads from it via go:embed.
+# This file documents the kubelet-serving-cert-approver image used in the
+# inline manifest embedded in Go code.
+#
+# NOTE: The upstream project (alex1989hu/kubelet-serving-cert-approver) does not
+# publish versioned container images beyond 0.6.1 in GHCR. The upstream
+# standalone-install.yaml uses the :main tag. We follow the same convention.
+# Dependabot cannot meaningfully track the :main tag, but it is retained here
+# for documentation and to enable future tracking if versioned images resume.
 #
 # Image mappings:
-# - ghcr.io/alex1989hu/kubelet-serving-cert-approver → image reference in inline manifest
+# - ghcr.io/alex1989hu/kubelet-serving-cert-approver:main → image reference in inline manifest
 
-FROM ghcr.io/alex1989hu/kubelet-serving-cert-approver:0.6.1@sha256:4f0e794f3afc58bcda8224e049703ab58cc6e661702b2394af178d59e12311fa
+FROM ghcr.io/alex1989hu/kubelet-serving-cert-approver:main
