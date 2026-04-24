@@ -62,128 +62,7 @@ func TestBuildValuesYaml(t *testing.T) {
 func TestResolveHetznerNetworkName(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name     string
-		cfg      *v1alpha1.Cluster
-		expected string
-	}{
-		{
-			name: "context-derived name takes precedence over explicit",
-			cfg: &v1alpha1.Cluster{
-				Spec: v1alpha1.Spec{
-					Cluster: v1alpha1.ClusterSpec{
-						Connection: v1alpha1.Connection{
-							Context: "admin@dev",
-						},
-					},
-					Provider: v1alpha1.ProviderSpec{
-						Hetzner: v1alpha1.OptionsHetzner{
-							NetworkName: "custom-network",
-						},
-					},
-				},
-			},
-			expected: "dev-network",
-		},
-		{
-			name: "falls back to explicit name when context cannot be derived",
-			cfg: &v1alpha1.Cluster{
-				Spec: v1alpha1.Spec{
-					Cluster: v1alpha1.ClusterSpec{
-						Connection: v1alpha1.Connection{
-							Context: "kind-local",
-						},
-					},
-					Provider: v1alpha1.ProviderSpec{
-						Hetzner: v1alpha1.OptionsHetzner{
-							NetworkName: "custom-network",
-						},
-					},
-				},
-			},
-			expected: "custom-network",
-		},
-		{
-			name: "derives from Talos context when no explicit name",
-			cfg: &v1alpha1.Cluster{
-				Spec: v1alpha1.Spec{
-					Cluster: v1alpha1.ClusterSpec{
-						Connection: v1alpha1.Connection{
-							Context: "admin@dev",
-						},
-					},
-				},
-			},
-			expected: "dev-network",
-		},
-		{
-			name: "derives from Talos context with hyphenated cluster name",
-			cfg: &v1alpha1.Cluster{
-				Spec: v1alpha1.Spec{
-					Cluster: v1alpha1.ClusterSpec{
-						Connection: v1alpha1.Connection{
-							Context: "admin@my-production-cluster",
-						},
-					},
-				},
-			},
-			expected: "my-production-cluster-network",
-		},
-		{
-			name: "empty context returns empty",
-			cfg: &v1alpha1.Cluster{
-				Spec: v1alpha1.Spec{
-					Cluster: v1alpha1.ClusterSpec{
-						Connection: v1alpha1.Connection{
-							Context: "",
-						},
-					},
-				},
-			},
-			expected: "",
-		},
-		{
-			name: "non-Talos context without explicit name returns empty",
-			cfg: &v1alpha1.Cluster{
-				Spec: v1alpha1.Spec{
-					Cluster: v1alpha1.ClusterSpec{
-						Connection: v1alpha1.Connection{
-							Context: "kind-local",
-						},
-					},
-				},
-			},
-			expected: "",
-		},
-		{
-			name: "trims whitespace from context",
-			cfg: &v1alpha1.Cluster{
-				Spec: v1alpha1.Spec{
-					Cluster: v1alpha1.ClusterSpec{
-						Connection: v1alpha1.Connection{
-							Context: "  admin@dev  ",
-						},
-					},
-				},
-			},
-			expected: "dev-network",
-		},
-		{
-			name: "admin@ with no cluster name returns empty",
-			cfg: &v1alpha1.Cluster{
-				Spec: v1alpha1.Spec{
-					Cluster: v1alpha1.ClusterSpec{
-						Connection: v1alpha1.Connection{
-							Context: "admin@",
-						},
-					},
-				},
-			},
-			expected: "",
-		},
-	}
-
-	for _, testCase := range tests {
+	for _, testCase := range resolveNetworkNameTestCases() {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -191,5 +70,69 @@ func TestResolveHetznerNetworkName(t *testing.T) {
 
 			require.Equal(t, testCase.expected, result)
 		})
+	}
+}
+
+type resolveNetworkNameTestCase struct {
+	name     string
+	cfg      *v1alpha1.Cluster
+	expected string
+}
+
+func resolveNetworkNameTestCases() []resolveNetworkNameTestCase {
+	return []resolveNetworkNameTestCase{
+		{
+			name:     "context-derived name takes precedence over explicit",
+			cfg:      clusterCfg("admin@dev", "custom-network"),
+			expected: "dev-network",
+		},
+		{
+			name:     "falls back to explicit name when context cannot be derived",
+			cfg:      clusterCfg("kind-local", "custom-network"),
+			expected: "custom-network",
+		},
+		{
+			name:     "derives from Talos context when no explicit name",
+			cfg:      clusterCfg("admin@dev", ""),
+			expected: "dev-network",
+		},
+		{
+			name:     "derives from Talos context with hyphenated cluster name",
+			cfg:      clusterCfg("admin@my-production-cluster", ""),
+			expected: "my-production-cluster-network",
+		},
+		{
+			name:     "empty context returns empty",
+			cfg:      clusterCfg("", ""),
+			expected: "",
+		},
+		{
+			name:     "non-Talos context without explicit name returns empty",
+			cfg:      clusterCfg("kind-local", ""),
+			expected: "",
+		},
+		{
+			name:     "trims whitespace from context",
+			cfg:      clusterCfg("  admin@dev  ", ""),
+			expected: "dev-network",
+		},
+		{
+			name:     "admin@ with no cluster name returns empty",
+			cfg:      clusterCfg("admin@", ""),
+			expected: "",
+		},
+	}
+}
+
+func clusterCfg(context, networkName string) *v1alpha1.Cluster {
+	return &v1alpha1.Cluster{
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				Connection: v1alpha1.Connection{Context: context},
+			},
+			Provider: v1alpha1.ProviderSpec{
+				Hetzner: v1alpha1.OptionsHetzner{NetworkName: networkName},
+			},
+		},
 	}
 }
