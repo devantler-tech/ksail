@@ -52,7 +52,7 @@ func getCLIHelp() string {
 		return ""
 	}
 
-	const cliHelpTimeout = 10 * time.Second
+	const cliHelpTimeout = 3 * time.Second
 
 	ctx, cancel := context.WithTimeout(context.Background(), cliHelpTimeout)
 	defer cancel()
@@ -115,7 +115,7 @@ const ksailInstructions = `<instructions>
 - When suggesting commands, explain what they do before running them
 - For write operations (creating clusters, applying workloads, deleting resources),
   the user will be prompted to confirm unless YOLO mode is enabled (Ctrl+Y in TUI)
-- ALWAYS use the registered KSail tools (e.g., cluster_write, cluster_read, workload_apply)
+- ALWAYS use the registered KSail tools (e.g., cluster_write, cluster_read, workload_write with command="apply")
   instead of running ksail commands through bash, shell, or terminal tools.
   The registered tools handle confirmation prompts and force flags automatically.
   Running ksail commands through bash will block on interactive prompts.
@@ -128,7 +128,7 @@ const ksailInstructions = `<instructions>
 - Be concise but thorough in explanations
 - If a ksail.yaml exists in the working directory, reference it when relevant
 - When generating configuration, follow the ksail.yaml schema
-- For cluster operations, verify the cluster exists first with 'ksail cluster list'
+- For cluster operations, verify the cluster exists first with cluster_read using command="list"
 - IMPORTANT: Do NOT call the same tool multiple times with the same arguments.
 - If a command returns "No clusters found", respond to the user accordingly - do not retry.
 - When asked to delete/modify clusters but none exist, inform the user there are no clusters to act on.
