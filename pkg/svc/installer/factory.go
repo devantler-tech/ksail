@@ -65,7 +65,7 @@ func (f *Factory) CreateInstallersForConfig(cfg *v1alpha1.Cluster) map[string]In
 	f.addCertManagerInstaller(installers, spec)
 	f.addMetricsServerInstaller(installers, spec)
 	f.addCSIInstallers(installers, spec)
-	f.addLoadBalancerInstaller(installers, spec)
+	f.addLoadBalancerInstaller(installers, cfg)
 
 	return installers
 }
@@ -204,8 +204,10 @@ func (f *Factory) addCSIInstallers(installers map[string]Installer, spec v1alpha
 
 func (f *Factory) addLoadBalancerInstaller(
 	installers map[string]Installer,
-	spec v1alpha1.ClusterSpec,
+	cfg *v1alpha1.Cluster,
 ) {
+	spec := cfg.Spec.Cluster
+
 	if f.needsCloudProviderKind(spec) && f.dockerClient != nil {
 		installers["cloud-provider-kind"] = cloudproviderkindinstaller.NewInstaller(
 			f.dockerClient,
@@ -223,11 +225,13 @@ func (f *Factory) addLoadBalancerInstaller(
 	}
 
 	if f.needsHcloudCCM(spec) {
+		networkName := hcloudccminstaller.ResolveHetznerNetworkName(cfg)
 		installers["hcloud-ccm"] = hcloudccminstaller.NewInstaller(
 			f.helmClient,
 			f.kubeconfig,
 			f.kubecontext,
 			f.timeout,
+			networkName,
 		)
 	}
 }

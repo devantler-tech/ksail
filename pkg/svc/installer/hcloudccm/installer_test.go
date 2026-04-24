@@ -13,39 +13,7 @@ import (
 func TestNewInstaller(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name        string
-		kubeconfig  string
-		context     string
-		timeout     time.Duration
-		wantNil     bool
-		description string
-	}{
-		{
-			name:        "creates installer with valid parameters",
-			kubeconfig:  "/path/to/kubeconfig",
-			context:     "test-context",
-			timeout:     5 * time.Minute,
-			wantNil:     false,
-			description: "Should successfully create an installer instance",
-		},
-		{
-			name:        "creates installer with empty kubeconfig",
-			kubeconfig:  "",
-			context:     "test-context",
-			timeout:     5 * time.Minute,
-			wantNil:     false,
-			description: "Empty kubeconfig should still create installer",
-		},
-		{
-			name:        "creates installer with zero timeout",
-			kubeconfig:  "/path/to/kubeconfig",
-			context:     "test-context",
-			timeout:     0,
-			wantNil:     false,
-			description: "Zero timeout should still create installer",
-		},
-	}
+	tests := newInstallerTestCases()
 
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -54,6 +22,7 @@ func TestNewInstaller(t *testing.T) {
 			mockClient := helm.NewMockInterface(t)
 			installer := hcloudccminstaller.NewInstaller(
 				mockClient, testCase.kubeconfig, testCase.context, testCase.timeout,
+				testCase.networkName,
 			)
 
 			if testCase.wantNil {
@@ -62,6 +31,37 @@ func TestNewInstaller(t *testing.T) {
 				require.NotNil(t, installer, testCase.description)
 			}
 		})
+	}
+}
+
+type installerTestCase struct {
+	name, kubeconfig, context, networkName, description string
+	timeout                                             time.Duration
+	wantNil                                             bool
+}
+
+func newInstallerTestCases() []installerTestCase {
+	return []installerTestCase{
+		{
+			name: "creates installer with valid parameters", kubeconfig: "/path/to/kubeconfig",
+			context: "test-context", timeout: 5 * time.Minute, networkName: "dev-network",
+			description: "Should successfully create an installer instance",
+		},
+		{
+			name: "creates installer with empty kubeconfig", kubeconfig: "",
+			context: "test-context", timeout: 5 * time.Minute, networkName: "dev-network",
+			description: "Empty kubeconfig should still create installer",
+		},
+		{
+			name: "creates installer with zero timeout", kubeconfig: "/path/to/kubeconfig",
+			context: "test-context", networkName: "dev-network",
+			description: "Zero timeout should still create installer",
+		},
+		{
+			name: "creates installer with empty network name", kubeconfig: "/path/to/kubeconfig",
+			context: "test-context", timeout: 5 * time.Minute,
+			description: "Empty network name should still create installer",
+		},
 	}
 }
 
