@@ -37,8 +37,9 @@ const (
 	// calicoInstallRetryAttempts is the number of install attempts for K3s.
 	// K3s may experience transient API-unavailable errors during bootstrap even
 	// after the pre-install stability check passes, due to K3s's bootstrap sequence.
-	// Eight attempts with 15s backoff (up to ~90s of additional wait) covers the
-	// observed K3s stabilization window in CI (see recurring issues #4196, #4315).
+	// Eight attempts with 15s backoff applies up to 7 waits between attempts,
+	// for a maximum of 105s ((8-1)×15s) of additional waiting.
+	// This covers the observed K3s stabilization window in CI (see recurring issues #4196, #4315).
 	// The previous 5×10s (40s) window proved insufficient after 5+ occurrences.
 	calicoInstallRetryAttempts = 8
 	calicoInstallRetryBackoff  = 15 * time.Second
