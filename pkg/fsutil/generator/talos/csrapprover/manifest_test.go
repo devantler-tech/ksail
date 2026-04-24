@@ -44,7 +44,7 @@ func TestManifest_MultipleDocuments(t *testing.T) {
 		"manifest should contain multiple YAML documents")
 
 	// Verify each non-empty document is parseable YAML
-	for i, doc := range docs {
+	for docIdx, doc := range docs {
 		trimmed := strings.TrimSpace(doc)
 		if trimmed == "" {
 			continue
@@ -52,6 +52,6 @@ func TestManifest_MultipleDocuments(t *testing.T) {
 
 		var parsed map[string]interface{}
 		err := yaml.Unmarshal([]byte(trimmed), &parsed)
-		assert.NoError(t, err, "document %d should be valid YAML", i)
+		assert.NoError(t, err, "document %d should be valid YAML", docIdx)
 	}
 }
