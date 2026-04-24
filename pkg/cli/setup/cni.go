@@ -258,5 +258,6 @@ func ignoredTaintsForCNIReadiness(clusterCfg *v1alpha1.Cluster) []string {
 	if clusterCfg.Spec.Cluster.Provider.IsCloud() {
 		return []string{readiness.TaintExternalCloudProviderUninitialized}
 	}
+
 	return nil
 }
