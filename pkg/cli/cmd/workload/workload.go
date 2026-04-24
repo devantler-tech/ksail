@@ -1480,6 +1480,13 @@ func wrapWithKubeconfigResolution(cmd *cobra.Command) {
 	cmd.PersistentPreRun = nil
 }
 
+// NewForwardCmd creates the workload forward command.
+func NewForwardCmd() *cobra.Command {
+	return newKubectlCommand(func(client *kubectl.Client, kubeconfigPath string) *cobra.Command {
+		return client.CreatePortForwardCommand(kubeconfigPath)
+	})
+}
+
 // NewLogsCmd creates the workload logs command.
 func NewLogsCmd() *cobra.Command {
 	return newKubectlCommand(func(client *kubectl.Client, kubeconfigPath string) *cobra.Command {
@@ -4685,6 +4692,7 @@ func NewWorkloadCmd(runtimeContainer *di.Runtime) *cobra.Command {
 			"  describe  - Show detailed resource info including events, conditions, and error details\n" +
 			"  logs      - Print container logs (use --tail=N, --previous for crash diagnostics)\n" +
 			"  explain   - Show API documentation for a resource kind\n" +
+			"  forward   - Forward one or more local ports to a pod\n" +
 			"  images    - List container images required by cluster components\n" +
 			"  wait      - Wait for a specific condition on resources\n\n" +
 			"Write operations:\n" +
@@ -4718,6 +4726,7 @@ func NewWorkloadCmd(runtimeContainer *di.Runtime) *cobra.Command {
 	cmd.AddCommand(NewExplainCmd())
 	cmd.AddCommand(NewExportCmd(runtimeContainer))
 	cmd.AddCommand(NewExposeCmd())
+	cmd.AddCommand(NewForwardCmd())
 	cmd.AddCommand(NewGetCmd())
 	cmd.AddCommand(gen.NewGenCmd(runtimeContainer))
 	cmd.AddCommand(NewImagesCmd())

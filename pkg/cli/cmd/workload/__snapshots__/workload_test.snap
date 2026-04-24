@@ -54,6 +54,7 @@ Read operations:
   describe  - Show detailed resource info including events, conditions, and error details
   logs      - Print container logs (use --tail=N, --previous for crash diagnostics)
   explain   - Show API documentation for a resource kind
+  forward   - Forward one or more local ports to a pod
   images    - List container images required by cluster components
   wait      - Wait for a specific condition on resources
 
@@ -78,6 +79,7 @@ Available Commands:
   explain     Get documentation for a resource
   export      Export container images from the cluster
   expose      Expose a resource as a service
+  forward     Forward one or more local ports to a pod
   gen         Generate Kubernetes resource manifests
   get         Get resources
   help        Help about any command
@@ -1170,6 +1172,7 @@ Read operations:
   describe  - Show detailed resource info including events, conditions, and error details
   logs      - Print container logs (use --tail=N, --previous for crash diagnostics)
   explain   - Show API documentation for a resource kind
+  forward   - Forward one or more local ports to a pod
   images    - List container images required by cluster components
   wait      - Wait for a specific condition on resources
 
@@ -1193,6 +1196,7 @@ Available Commands:
   explain     Get documentation for a resource
   export      Export container images from the cluster
   expose      Expose a resource as a service
+  forward     Forward one or more local ports to a pod
   gen         Generate Kubernetes resource manifests
   get         Get resources
   images      List container images required by cluster components
@@ -1490,6 +1494,68 @@ Flags:
   -h, --help            help for watch
       --initial-apply   Apply all workloads once immediately on startup before entering the watch loop
       --path string     Directory to watch for changes (default: k8s/ or spec.workload.sourceDirectory from ksail.yaml)
+
+Global Flags:
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
+
+---
+
+[TestWorkloadHelpSnapshots/forward - 1]
+Forward one or more local ports to a pod.
+
+Use resource type/name such as deployment/mydeployment to select a pod. Resource type defaults to 'pod' if omitted.
+
+If there are multiple pods matching the criteria, a pod will be selected automatically. The forwarding session ends when the selected pod terminates, and a rerun of the command is needed to resume forwarding.
+
+Usage:
+  ksail workload forward
+
+Examples:
+  # Listen on ports 5000 and 6000 locally, forwarding data to/from ports 5000 and 6000 in the pod
+  ksail workload port-forward pod/mypod 5000 6000
+  
+  # Listen on ports 5000 and 6000 locally, forwarding data to/from ports 5000 and 6000 in a pod selected by the deployment
+  ksail workload port-forward deployment/mydeployment 5000 6000
+  
+  # Listen on port 8443 locally, forwarding to the targetPort of the service's port named "https" in a pod selected by the service
+  ksail workload port-forward service/myservice 8443:https
+  
+  # Listen on port 8888 locally, forwarding to 5000 in the pod
+  ksail workload port-forward pod/mypod 8888:5000
+  
+  # Listen on port 8888 on all addresses, forwarding to 5000 in the pod
+  ksail workload port-forward --address 0.0.0.0 pod/mypod 8888:5000
+  
+  # Listen on port 8888 on localhost and selected IP, forwarding to 5000 in the pod
+  ksail workload port-forward --address localhost,10.19.21.23 pod/mypod 8888:5000
+  
+  # Listen on a random port locally, forwarding to 5000 in the pod
+  ksail workload port-forward pod/mypod :5000
+
+Flags:
+      --address strings                Addresses to listen on (comma separated). Only accepts IP addresses or localhost as a value. When localhost is supplied, kubectl will try to bind on both 127.0.0.1 and ::1 and will fail if neither of these addresses are available to bind. (default [localhost])
+      --as string                      Username to impersonate for the operation. User could be a regular user or a service account in a namespace.
+      --as-group stringArray           Group to impersonate for the operation, this flag can be repeated to specify multiple groups.
+      --as-uid string                  UID to impersonate for the operation.
+      --as-user-extra stringArray      User extras to impersonate for the operation, this flag can be repeated to specify multiple values for the same key.
+      --cache-dir string               Default cache directory (default "$HOME/.kube/cache")
+      --certificate-authority string   Path to a cert file for the certificate authority
+      --client-certificate string      Path to a client certificate file for TLS
+      --client-key string              Path to a client key file for TLS
+      --cluster string                 The name of the kubeconfig cluster to use
+      --context string                 The name of the kubeconfig context to use
+      --disable-compression            If true, opt-out of response compression for all requests to the server
+  -h, --help                           help for forward
+      --insecure-skip-tls-verify       If true, the server's certificate will not be checked for validity. This will make your HTTPS connections insecure
+      --kubeconfig string              Path to the kubeconfig file to use for CLI requests. (default "$HOME/.kube/config")
+  -n, --namespace string               If present, the namespace scope for this CLI request
+      --pod-running-timeout duration   The length of time (like 5s, 2m, or 3h, higher than zero) to wait until at least one pod is running (default 1m0s)
+      --request-timeout string         The length of time to wait before giving up on a single server request. Non-zero values should contain a corresponding time unit (e.g. 1s, 2m, 3h). A value of zero means don't timeout requests. (default "0")
+  -s, --server string                  The address and port of the Kubernetes API server
+      --tls-server-name string         Server name to use for server certificate validation. If it is not provided, the hostname used to contact the server is used
+      --token string                   Bearer token for authentication to the API server
+      --user string                    The name of the kubeconfig user to use
 
 Global Flags:
       --benchmark       Show per-activity benchmark output

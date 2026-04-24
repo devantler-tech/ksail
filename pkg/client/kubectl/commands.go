@@ -18,6 +18,7 @@ import (
 	"k8s.io/kubectl/pkg/cmd/expose"
 	"k8s.io/kubectl/pkg/cmd/get"
 	"k8s.io/kubectl/pkg/cmd/logs"
+	"k8s.io/kubectl/pkg/cmd/portforward"
 	"k8s.io/kubectl/pkg/cmd/rollout"
 	"k8s.io/kubectl/pkg/cmd/scale"
 	cmdutil "k8s.io/kubectl/pkg/cmd/util"
@@ -327,6 +328,30 @@ func (c *Client) CreateExecCommand(kubeConfigPath string) *cobra.Command {
 	)
 
 	return execCmd
+}
+
+// CreatePortForwardCommand creates a kubectl port-forward command with all its flags and behavior.
+func (c *Client) CreatePortForwardCommand(kubeConfigPath string) *cobra.Command {
+	fatalMu.RLock()
+	defer fatalMu.RUnlock()
+
+	factory, configFlags := c.createFactory(kubeConfigPath)
+	forwardCmd := portforward.NewCmdPortForward(factory, c.ioStreams)
+
+	c.customizeCommand(
+		forwardCmd,
+		"forward",
+		"Forward one or more local ports to a pod",
+		"Forward one or more local ports to a pod.\n\n"+
+			"Use resource type/name such as deployment/mydeployment to select a pod. "+
+			"Resource type defaults to 'pod' if omitted.\n\n"+
+			"If there are multiple pods matching the criteria, a pod will be selected automatically. "+
+			"The forwarding session ends when the selected pod terminates, and a rerun of the "+
+			"command is needed to resume forwarding.",
+		configFlags,
+	)
+
+	return forwardCmd
 }
 
 // CreateWaitCommand creates a kubectl wait command with all its flags and behavior.
