@@ -423,7 +423,7 @@ func TestScaffoldK3d_CalicoCNI(t *testing.T) {
 	hasDisableNetworkPolicy := false
 
 	for _, arg := range config.Options.K3sOptions.ExtraArgs {
-		if arg.Arg == "--flannel-backend=none" { //nolint:goconst // Test string matching production value
+		if arg.Arg == "--flannel-backend=none" {
 			hasFlannel = true
 		}
 
