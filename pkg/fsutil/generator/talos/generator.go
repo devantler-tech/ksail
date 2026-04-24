@@ -547,11 +547,7 @@ func indentManifest(manifest, indent string) string {
 	indented := make([]string, 0, len(lines))
 
 	for _, line := range lines {
-		if line == "" {
-			indented = append(indented, "")
-		} else {
-			indented = append(indented, indent+line)
-		}
+		indented = append(indented, indent+line)
 	}
 
 	return strings.Join(indented, "\n")
