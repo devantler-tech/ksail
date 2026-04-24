@@ -115,7 +115,9 @@ func (m *ConfigManager) loadTalosConfig() (*talosconfigmanager.Configs, error) {
 	// ensures the approver is always present without duplicating patches.
 	if m.Config.Spec.Cluster.MetricsServer == v1alpha1.MetricsServerEnabled {
 		csrApproverPatch := filepath.Join(patchesDir, "cluster", "kubelet-csr-approver.yaml")
-		if _, statErr := os.Stat(csrApproverPatch); os.IsNotExist(statErr) {
+		_, statErr := os.Stat(csrApproverPatch)
+
+		if os.IsNotExist(statErr) {
 			talosManager.WithAdditionalPatches(kubeletCertRotationAndApproverPatches())
 		}
 	}
