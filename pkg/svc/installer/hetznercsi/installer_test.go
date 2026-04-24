@@ -15,17 +15,62 @@ import (
 func TestNewInstaller(t *testing.T) {
 	t.Parallel()
 
-	mockClient := helm.NewMockInterface(t)
-	timeout := 5 * time.Minute
+	tests := []struct {
+		name        string
+		networkName string
+	}{
+		{name: "without network name", networkName: ""},
+		{name: "with network name", networkName: "dev-network"},
+	}
 
-	installer := hetznercsiinstaller.NewInstaller(
-		mockClient,
-		"~/.kube/config",
-		"test-context",
-		timeout,
-	)
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
 
-	assert.NotNil(t, installer)
+			mockClient := helm.NewMockInterface(t)
+			timeout := 5 * time.Minute
+
+			installer := hetznercsiinstaller.NewInstaller(
+				mockClient,
+				"~/.kube/config",
+				"test-context",
+				timeout,
+				testCase.networkName,
+			)
+
+			assert.NotNil(t, installer)
+		})
+	}
+}
+
+func TestBuildSecretData(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		networkName string
+		wantNil     bool
+		wantValue   string
+	}{
+		{name: "empty network name returns nil", networkName: "", wantNil: true},
+		{name: "network name stored in secret data", networkName: "dev-network", wantValue: "dev-network"},
+		{name: "custom network name stored in secret data", networkName: "my-custom-net", wantValue: "my-custom-net"},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			result := hetznercsiinstaller.BuildSecretDataForTest(testCase.networkName)
+
+			if testCase.wantNil {
+				assert.Nil(t, result)
+			} else {
+				require.NotNil(t, result)
+				assert.Equal(t, testCase.wantValue, string(result["network"]))
+			}
+		})
+	}
 }
 
 func TestHetznerCSIInstaller_Uninstall(t *testing.T) {
@@ -45,6 +90,7 @@ func TestHetznerCSIInstaller_Uninstall(t *testing.T) {
 		"~/.kube/config",
 		"test-context",
 		timeout,
+		"",
 	)
 	err := installer.Uninstall(context.Background())
 
