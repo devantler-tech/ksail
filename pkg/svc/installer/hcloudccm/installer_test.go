@@ -18,6 +18,7 @@ func TestNewInstaller(t *testing.T) {
 		kubeconfig  string
 		context     string
 		timeout     time.Duration
+		networkName string
 		wantNil     bool
 		description string
 	}{
@@ -26,6 +27,7 @@ func TestNewInstaller(t *testing.T) {
 			kubeconfig:  "/path/to/kubeconfig",
 			context:     "test-context",
 			timeout:     5 * time.Minute,
+			networkName: "dev-network",
 			wantNil:     false,
 			description: "Should successfully create an installer instance",
 		},
@@ -34,6 +36,7 @@ func TestNewInstaller(t *testing.T) {
 			kubeconfig:  "",
 			context:     "test-context",
 			timeout:     5 * time.Minute,
+			networkName: "dev-network",
 			wantNil:     false,
 			description: "Empty kubeconfig should still create installer",
 		},
@@ -42,8 +45,18 @@ func TestNewInstaller(t *testing.T) {
 			kubeconfig:  "/path/to/kubeconfig",
 			context:     "test-context",
 			timeout:     0,
+			networkName: "dev-network",
 			wantNil:     false,
 			description: "Zero timeout should still create installer",
+		},
+		{
+			name:        "creates installer with empty network name",
+			kubeconfig:  "/path/to/kubeconfig",
+			context:     "test-context",
+			timeout:     5 * time.Minute,
+			networkName: "",
+			wantNil:     false,
+			description: "Empty network name should still create installer",
 		},
 	}
 
@@ -54,6 +67,7 @@ func TestNewInstaller(t *testing.T) {
 			mockClient := helm.NewMockInterface(t)
 			installer := hcloudccminstaller.NewInstaller(
 				mockClient, testCase.kubeconfig, testCase.context, testCase.timeout,
+				testCase.networkName,
 			)
 
 			if testCase.wantNil {

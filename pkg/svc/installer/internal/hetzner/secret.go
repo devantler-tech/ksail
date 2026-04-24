@@ -189,6 +189,8 @@ type ChartConfig struct {
 	ChartName string
 	// Version is the pinned chart version.
 	Version string
+	// ValuesYaml is optional Helm values YAML to pass to the chart.
+	ValuesYaml string
 }
 
 // NewInstaller creates a standard Hetzner Cloud installer with the shared
@@ -220,6 +222,7 @@ func NewInstaller(
 				Wait:            true,
 				WaitForJobs:     true,
 				Timeout:         timeout,
+				ValuesYaml:      cfg.ValuesYaml,
 			},
 		),
 		kubeconfig: kubeconfig,
