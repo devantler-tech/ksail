@@ -12,6 +12,8 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 )
 
+const testNetworkName = "dev-network"
+
 func TestEnsureSecret_TokenNotSet(t *testing.T) {
 	t.Setenv(hetzner.TokenEnvVar, "")
 
@@ -135,7 +137,7 @@ func TestEnsureSecret_MergesExtraDataIntoSecret(t *testing.T) {
 
 	token := "test-token"
 	extraData := map[string][]byte{
-		"network": []byte("dev-network"),
+		"network": []byte(testNetworkName),
 	}
 
 	clientset := fake.NewClientset()
@@ -156,8 +158,9 @@ func TestEnsureSecret_MergesExtraDataIntoSecret(t *testing.T) {
 		t.Errorf("expected token %q, got %q", token, string(got.Data["token"]))
 	}
 
-	if string(got.Data["network"]) != "dev-network" {
-		t.Errorf("expected network %q, got %q", "dev-network", string(got.Data["network"]))
+	if string(got.Data["network"]) != testNetworkName {
+		t.Errorf("expected network %q, got %q",
+			testNetworkName, string(got.Data["network"]))
 	}
 }
 
@@ -173,7 +176,7 @@ func TestEnsureSecret_PreservesExistingKeysOnMerge(t *testing.T) {
 		},
 		Data: map[string][]byte{
 			"token":   []byte("old-token"),
-			"network": []byte("dev-network"),
+			"network": []byte(testNetworkName),
 		},
 	}
 
@@ -196,25 +199,26 @@ func TestEnsureSecret_PreservesExistingKeysOnMerge(t *testing.T) {
 		t.Errorf("expected token %q, got %q", "new-token", string(got.Data["token"]))
 	}
 
-	if string(got.Data["network"]) != "dev-network" {
-		t.Errorf("expected network key to be preserved as %q, got %q", "dev-network", string(got.Data["network"]))
+	if string(got.Data["network"]) != testNetworkName {
+		t.Errorf("expected network key to be preserved as %q, got %q",
+			testNetworkName, string(got.Data["network"]))
 	}
 }
 
 func TestEnsureSecret_ExtraDataCannotOverrideToken(t *testing.T) {
 	t.Parallel()
 
-	realToken := "real-hcloud-token"
+	envToken := "real-hcloud-token" //nolint:gosec // Test value, not a real credential.
 
 	// Attempt to sneak a different token value via extraData.
 	extraData := map[string][]byte{
 		"token":   []byte("malicious-override"),
-		"network": []byte("dev-network"),
+		"network": []byte(testNetworkName),
 	}
 
 	clientset := fake.NewClientset()
 
-	err := hetzner.EnsureSecretForTest(context.Background(), clientset, realToken, extraData)
+	err := hetzner.EnsureSecretForTest(context.Background(), clientset, envToken, extraData)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -227,11 +231,13 @@ func TestEnsureSecret_ExtraDataCannotOverrideToken(t *testing.T) {
 	}
 
 	// The "token" key must always come from the HCLOUD_TOKEN env var, not extraData.
-	if string(got.Data["token"]) != realToken {
-		t.Errorf("expected token from env var %q, got %q (extraData should not override token)", realToken, string(got.Data["token"]))
+	if string(got.Data["token"]) != envToken {
+		t.Errorf("expected token from env var %q, got %q",
+			envToken, string(got.Data["token"]))
 	}
 
-	if string(got.Data["network"]) != "dev-network" {
-		t.Errorf("expected network %q, got %q", "dev-network", string(got.Data["network"]))
+	if string(got.Data["network"]) != testNetworkName {
+		t.Errorf("expected network %q, got %q",
+			testNetworkName, string(got.Data["network"]))
 	}
 }
