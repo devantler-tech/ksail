@@ -95,7 +95,12 @@ See [documentation](https://docs.cilium.io/), [Gateway API guide](https://docs.c
 
 ## Kubelet CSR Approver
 
-[Kubelet CSR Approver](https://github.com/postfinance/kubelet-csr-approver) automatically approves Certificate Signing Requests for kubelet serving certificates. When `serverTLSBootstrap: true` is enabled, kubelets request proper TLS certificates via CSR instead of self-signed certificates. This controller approves those requests, enabling secure TLS communication with metrics-server. KSail auto-installs this on Vanilla and Talos when metrics-server is enabled. See [GitHub](https://github.com/postfinance/kubelet-csr-approver), [TLS bootstrapping](https://kubernetes.io/docs/reference/access-authn-authz/kubelet-tls-bootstrapping/), and [CSRs](https://kubernetes.io/docs/reference/access-authn-authz/certificate-signing-requests/).
+KSail automatically approves Certificate Signing Requests (CSRs) for kubelet serving certificates when metrics-server is enabled. When `serverTLSBootstrap: true` is active, kubelets request proper TLS certificates via CSR instead of self-signed certificates, enabling secure TLS communication with metrics-server. KSail uses different implementations per distribution:
+
+- **Vanilla**: installs [postfinance/kubelet-csr-approver](https://github.com/postfinance/kubelet-csr-approver) via Helm
+- **Talos**: embeds [alex1989hu/kubelet-serving-cert-approver](https://github.com/alex1989hu/kubelet-serving-cert-approver) via `cluster.inlineManifests` during bootstrap
+
+See [TLS bootstrapping](https://kubernetes.io/docs/reference/access-authn-authz/kubelet-tls-bootstrapping/) and [CSRs](https://kubernetes.io/docs/reference/access-authn-authz/certificate-signing-requests/).
 
 ## cert-manager
 
