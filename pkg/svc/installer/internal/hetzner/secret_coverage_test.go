@@ -72,7 +72,7 @@ func TestEnsureSecret_UpdateWithSameToken(t *testing.T) {
 
 	clientset := fake.NewClientset(existing)
 
-	err := hetzner.EnsureSecretForTest(context.Background(), clientset, token)
+	err := hetzner.EnsureSecretForTest(context.Background(), clientset, token, nil)
 	require.NoError(t, err)
 
 	got, err := clientset.CoreV1().Secrets(hetzner.Namespace).Get(
@@ -87,7 +87,7 @@ func TestEnsureSecret_UpdateWithSameToken(t *testing.T) {
 func TestEnsureSecret_EmptyToken(t *testing.T) {
 	t.Setenv(hetzner.TokenEnvVar, "")
 
-	err := hetzner.EnsureSecret(context.Background(), "", "")
+	err := hetzner.EnsureSecret(context.Background(), "", "", nil)
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, hetzner.ErrTokenNotSet)
@@ -105,7 +105,7 @@ func TestEnsureSecret_GetError(t *testing.T) {
 		},
 	)
 
-	err := hetzner.EnsureSecretForTest(context.Background(), clientset, "some-token")
+	err := hetzner.EnsureSecretForTest(context.Background(), clientset, "some-token", nil)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to get secret")

@@ -23,7 +23,7 @@ func TestEnsureSecret_CreateOnNotFound(t *testing.T) {
 
 	clientset := fake.NewClientset()
 
-	err := hetzner.EnsureSecretForTest(context.Background(), clientset, "new-token")
+	err := hetzner.EnsureSecretForTest(context.Background(), clientset, "new-token", nil)
 	require.NoError(t, err)
 
 	got, err := clientset.CoreV1().Secrets(hetzner.Namespace).Get(
@@ -51,7 +51,7 @@ func TestEnsureSecret_UpdateWithDifferentToken(t *testing.T) {
 
 	clientset := fake.NewClientset(existing)
 
-	err := hetzner.EnsureSecretForTest(context.Background(), clientset, "new-token")
+	err := hetzner.EnsureSecretForTest(context.Background(), clientset, "new-token", nil)
 	require.NoError(t, err)
 
 	got, err := clientset.CoreV1().Secrets(hetzner.Namespace).Get(
@@ -110,6 +110,6 @@ func TestEnsureSecret_CreateConflictThenUpdate(t *testing.T) {
 		},
 	)
 
-	err := hetzner.EnsureSecretForTest(context.Background(), clientset, "updated-token")
+	err := hetzner.EnsureSecretForTest(context.Background(), clientset, "updated-token", nil)
 	require.NoError(t, err)
 }

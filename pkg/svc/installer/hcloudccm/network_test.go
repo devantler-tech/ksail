@@ -13,10 +13,11 @@ func TestBuildValuesYaml(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name        string
-		networkName string
-		wantEmpty   bool
-		wantContain []string
+		name           string
+		networkName    string
+		wantEmpty      bool
+		wantContain    []string
+		wantNotContain []string
 	}{
 		{
 			name:        "empty network name returns empty values",
@@ -24,20 +25,16 @@ func TestBuildValuesYaml(t *testing.T) {
 			wantEmpty:   true,
 		},
 		{
-			name:        "network name generates networking values",
+			name:        "network name enables networking without inline value",
 			networkName: "dev-network",
 			wantContain: []string{
 				"networking:",
 				"enabled: true",
 				"clusterCIDR: " + hcloudccminstaller.DefaultClusterCIDR,
-				`value: "dev-network"`,
 			},
-		},
-		{
-			name:        "custom network name is properly quoted",
-			networkName: "my-custom-net",
-			wantContain: []string{
-				`value: "my-custom-net"`,
+			wantNotContain: []string{
+				"value:",
+				"network:",
 			},
 		},
 	}
@@ -54,6 +51,55 @@ func TestBuildValuesYaml(t *testing.T) {
 				for _, s := range testCase.wantContain {
 					assert.Contains(t, result, s)
 				}
+
+				for _, s := range testCase.wantNotContain {
+					assert.NotContains(t, result, s)
+				}
+			}
+		})
+	}
+}
+
+func TestBuildSecretData(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		networkName string
+		wantNil     bool
+		wantKey     string
+		wantValue   string
+	}{
+		{
+			name:        "empty network name returns nil",
+			networkName: "",
+			wantNil:     true,
+		},
+		{
+			name:        "network name stored in secret data",
+			networkName: "dev-network",
+			wantKey:     "network",
+			wantValue:   "dev-network",
+		},
+		{
+			name:        "custom network name stored in secret data",
+			networkName: "my-custom-net",
+			wantKey:     "network",
+			wantValue:   "my-custom-net",
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			result := hcloudccminstaller.BuildSecretDataForTest(testCase.networkName)
+
+			if testCase.wantNil {
+				assert.Nil(t, result)
+			} else {
+				require.NotNil(t, result)
+				assert.Equal(t, testCase.wantValue, string(result[testCase.wantKey]))
 			}
 		})
 	}

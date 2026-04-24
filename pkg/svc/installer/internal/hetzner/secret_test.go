@@ -12,10 +12,12 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 )
 
+const testNetworkName = "dev-network"
+
 func TestEnsureSecret_TokenNotSet(t *testing.T) {
 	t.Setenv(hetzner.TokenEnvVar, "")
 
-	err := hetzner.EnsureSecret(context.Background(), "", "")
+	err := hetzner.EnsureSecret(context.Background(), "", "", nil)
 	if !errors.Is(err, hetzner.ErrTokenNotSet) {
 		t.Errorf("expected ErrTokenNotSet, got %v", err)
 	}
@@ -28,7 +30,7 @@ func TestEnsureSecret_CreateWhenNotFound(t *testing.T) {
 
 	clientset := fake.NewClientset()
 
-	err := hetzner.EnsureSecretForTest(context.Background(), clientset, token)
+	err := hetzner.EnsureSecretForTest(context.Background(), clientset, token, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -63,7 +65,7 @@ func TestEnsureSecret_UpdatePreservesResourceVersion(t *testing.T) {
 
 	clientset := fake.NewClientset(existing)
 
-	err := hetzner.EnsureSecretForTest(context.Background(), clientset, updatedToken)
+	err := hetzner.EnsureSecretForTest(context.Background(), clientset, updatedToken, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -99,7 +101,12 @@ func TestEnsureSecret_ConcurrentCreation(t *testing.T) {
 		waitGroup.Go(func() {
 			<-startCh
 
-			errs[goroutineIdx] = hetzner.EnsureSecretForTest(context.Background(), clientset, token)
+			errs[goroutineIdx] = hetzner.EnsureSecretForTest(
+				context.Background(),
+				clientset,
+				token,
+				nil,
+			)
 		})
 	}
 
@@ -122,5 +129,115 @@ func TestEnsureSecret_ConcurrentCreation(t *testing.T) {
 
 	if string(got.Data["token"]) != token {
 		t.Errorf("expected token %q, got %q", token, string(got.Data["token"]))
+	}
+}
+
+func TestEnsureSecret_MergesExtraDataIntoSecret(t *testing.T) {
+	t.Parallel()
+
+	token := "test-token"
+	extraData := map[string][]byte{
+		"network": []byte(testNetworkName),
+	}
+
+	clientset := fake.NewClientset()
+
+	err := hetzner.EnsureSecretForTest(context.Background(), clientset, token, extraData)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	got, err := clientset.CoreV1().Secrets(hetzner.Namespace).Get(
+		context.Background(), hetzner.SecretName, metav1.GetOptions{},
+	)
+	if err != nil {
+		t.Fatalf("failed to get secret: %v", err)
+	}
+
+	if string(got.Data["token"]) != token {
+		t.Errorf("expected token %q, got %q", token, string(got.Data["token"]))
+	}
+
+	if string(got.Data["network"]) != testNetworkName {
+		t.Errorf("expected network %q, got %q",
+			testNetworkName, string(got.Data["network"]))
+	}
+}
+
+func TestEnsureSecret_PreservesExistingKeysOnMerge(t *testing.T) {
+	t.Parallel()
+
+	// Simulate CCM having already written "network" into the secret.
+	existing := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            hetzner.SecretName,
+			Namespace:       hetzner.Namespace,
+			ResourceVersion: "1",
+		},
+		Data: map[string][]byte{
+			"token":   []byte("old-token"),
+			"network": []byte(testNetworkName),
+		},
+	}
+
+	clientset := fake.NewClientset(existing)
+
+	// CSI installer writes only "token" (no extraData). The "network" key must survive.
+	err := hetzner.EnsureSecretForTest(context.Background(), clientset, "new-token", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	got, err := clientset.CoreV1().Secrets(hetzner.Namespace).Get(
+		context.Background(), hetzner.SecretName, metav1.GetOptions{},
+	)
+	if err != nil {
+		t.Fatalf("failed to get secret: %v", err)
+	}
+
+	if string(got.Data["token"]) != "new-token" {
+		t.Errorf("expected token %q, got %q", "new-token", string(got.Data["token"]))
+	}
+
+	if string(got.Data["network"]) != testNetworkName {
+		t.Errorf("expected network key to be preserved as %q, got %q",
+			testNetworkName, string(got.Data["network"]))
+	}
+}
+
+func TestEnsureSecret_ExtraDataCannotOverrideToken(t *testing.T) {
+	t.Parallel()
+
+	envToken := "real-hcloud-token" //nolint:gosec // Test value, not a real credential.
+
+	// Attempt to sneak a different token value via extraData.
+	extraData := map[string][]byte{
+		"token":   []byte("malicious-override"),
+		"network": []byte(testNetworkName),
+	}
+
+	clientset := fake.NewClientset()
+
+	err := hetzner.EnsureSecretForTest(context.Background(), clientset, envToken, extraData)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	got, err := clientset.CoreV1().Secrets(hetzner.Namespace).Get(
+		context.Background(), hetzner.SecretName, metav1.GetOptions{},
+	)
+	if err != nil {
+		t.Fatalf("failed to get secret: %v", err)
+	}
+
+	// The "token" key must always come from the HCLOUD_TOKEN env var, not extraData.
+	if string(got.Data["token"]) != envToken {
+		t.Errorf("expected token from env var %q, got %q",
+			envToken, string(got.Data["token"]))
+	}
+
+	if string(got.Data["network"]) != testNetworkName {
+		t.Errorf("expected network %q, got %q",
+			testNetworkName, string(got.Data["network"]))
 	}
 }
