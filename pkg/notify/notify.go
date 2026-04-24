@@ -193,14 +193,27 @@ func WriteMessage(msg Message) {
 
 		currentLabel := "⏲ current:"
 		totalLabel := "total:"
+
 		labelWidth := utf8.RuneCountInString(currentLabel)
 		if w := utf8.RuneCountInString(totalLabel); w > labelWidth {
 			labelWidth = w
 		}
 
-		_, err = config.color.Fprintf(msg.Writer, "%-*s %s\n", labelWidth, currentLabel, stage.String())
+		_, err = config.color.Fprintf(
+			msg.Writer,
+			"%-*s %s\n",
+			labelWidth,
+			currentLabel,
+			stage.String(),
+		)
 		handleNotifyError(err)
-		_, err = config.color.Fprintf(msg.Writer, "%-*s %s\n", labelWidth, totalLabel, total.String())
+		_, err = config.color.Fprintf(
+			msg.Writer,
+			"%-*s %s\n",
+			labelWidth,
+			totalLabel,
+			total.String(),
+		)
 		handleNotifyError(err)
 	}
 }

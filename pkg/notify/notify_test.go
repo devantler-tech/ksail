@@ -31,6 +31,7 @@ func buildTimingLines(stage, total string) string {
 	if w := utf8.RuneCountInString(timingTotalLabel); w > labelWidth {
 		labelWidth = w
 	}
+
 	return fmt.Sprintf("%-*s %s\n%-*s %s\n",
 		labelWidth, timingCurrentLabel, stage,
 		labelWidth, timingTotalLabel, total)
