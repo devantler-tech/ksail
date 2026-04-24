@@ -68,12 +68,30 @@ func TestResolveHetznerNetworkName(t *testing.T) {
 		expected string
 	}{
 		{
-			name: "explicit network name takes precedence",
+			name: "context-derived name takes precedence over explicit",
 			cfg: &v1alpha1.Cluster{
 				Spec: v1alpha1.Spec{
 					Cluster: v1alpha1.ClusterSpec{
 						Connection: v1alpha1.Connection{
 							Context: "admin@dev",
+						},
+					},
+					Provider: v1alpha1.ProviderSpec{
+						Hetzner: v1alpha1.OptionsHetzner{
+							NetworkName: "custom-network",
+						},
+					},
+				},
+			},
+			expected: "dev-network",
+		},
+		{
+			name: "falls back to explicit name when context cannot be derived",
+			cfg: &v1alpha1.Cluster{
+				Spec: v1alpha1.Spec{
+					Cluster: v1alpha1.ClusterSpec{
+						Connection: v1alpha1.Connection{
+							Context: "kind-local",
 						},
 					},
 					Provider: v1alpha1.ProviderSpec{
@@ -125,7 +143,7 @@ func TestResolveHetznerNetworkName(t *testing.T) {
 			expected: "",
 		},
 		{
-			name: "non-Talos context returns empty",
+			name: "non-Talos context without explicit name returns empty",
 			cfg: &v1alpha1.Cluster{
 				Spec: v1alpha1.Spec{
 					Cluster: v1alpha1.ClusterSpec{
@@ -136,6 +154,19 @@ func TestResolveHetznerNetworkName(t *testing.T) {
 				},
 			},
 			expected: "",
+		},
+		{
+			name: "trims whitespace from context",
+			cfg: &v1alpha1.Cluster{
+				Spec: v1alpha1.Spec{
+					Cluster: v1alpha1.ClusterSpec{
+						Connection: v1alpha1.Connection{
+							Context: "  admin@dev  ",
+						},
+					},
+				},
+			},
+			expected: "dev-network",
 		},
 		{
 			name: "admin@ with no cluster name returns empty",
