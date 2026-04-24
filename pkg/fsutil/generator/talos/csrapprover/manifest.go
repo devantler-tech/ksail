@@ -19,12 +19,12 @@ import (
 //go:embed Dockerfile
 var dockerfile string
 
-// imageRef returns the full image reference (e.g. "ghcr.io/alex1989hu/kubelet-serving-cert-approver:v0.10.3")
+// imageRef returns the full image reference (e.g. "ghcr.io/alex1989hu/kubelet-serving-cert-approver:0.6.1@sha256:...")
 // from the Dependabot-tracked Dockerfile.
 func imageRef() string {
 	return parser.ParseImageFromDockerfile(
 		dockerfile,
-		`FROM\s+(ghcr\.io/alex1989hu/kubelet-serving-cert-approver:[^\s@]+(?:@sha256:[a-f0-9]+)?)`,
+		`FROM\s+(ghcr\.io/alex1989hu/kubelet-serving-cert-approver:[^\s]+)`,
 		"kubelet-serving-cert-approver",
 	)
 }

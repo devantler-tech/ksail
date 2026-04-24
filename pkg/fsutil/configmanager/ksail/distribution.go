@@ -109,11 +109,15 @@ func (m *ConfigManager) loadTalosConfig() (*talosconfigmanager.Configs, error) {
 	}
 
 	// Inject kubelet cert rotation + CSR approver patches at runtime when
-	// metrics-server is enabled. This ensures the approver is always present
-	// even for projects initialized before these patches were added.
-	// The inlineManifests approach eliminates external URL dependencies.
+	// metrics-server is enabled AND the patch files don't already exist on disk.
+	// Projects initialized with v7.4.0+ have the patch files; older projects
+	// or manually-managed talos/ directories may not. The runtime injection
+	// ensures the approver is always present without duplicating patches.
 	if m.Config.Spec.Cluster.MetricsServer == v1alpha1.MetricsServerEnabled {
-		talosManager.WithAdditionalPatches(kubeletCertRotationAndApproverPatches())
+		csrApproverPatch := filepath.Join(patchesDir, "cluster", "kubelet-csr-approver.yaml")
+		if _, statErr := os.Stat(csrApproverPatch); os.IsNotExist(statErr) {
+			talosManager.WithAdditionalPatches(kubeletCertRotationAndApproverPatches())
+		}
 	}
 
 	config, err := talosManager.Load(configmanagerinterface.LoadOptions{})

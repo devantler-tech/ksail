@@ -26,8 +26,10 @@ func TestManifest(t *testing.T) {
 	// Verify the image tag is pinned (not :main)
 	assert.NotContains(t, manifest, "kubelet-serving-cert-approver:main",
 		"manifest should use pinned image, not :main tag")
-	assert.Contains(t, manifest, "ghcr.io/alex1989hu/kubelet-serving-cert-approver:v",
+	assert.Contains(t, manifest, "ghcr.io/alex1989hu/kubelet-serving-cert-approver:",
 		"manifest should contain versioned image reference")
+	assert.Contains(t, manifest, "@sha256:",
+		"manifest should contain digest-pinned image reference")
 }
 
 func TestManifest_ValidYAML(t *testing.T) {

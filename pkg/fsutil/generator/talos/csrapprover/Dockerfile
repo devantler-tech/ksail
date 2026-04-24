@@ -5,4 +5,4 @@
 # Image mappings:
 # - ghcr.io/alex1989hu/kubelet-serving-cert-approver → image reference in inline manifest
 
-FROM ghcr.io/alex1989hu/kubelet-serving-cert-approver:v0.10.3
+FROM ghcr.io/alex1989hu/kubelet-serving-cert-approver:0.6.1@sha256:4f0e794f3afc58bcda8224e049703ab58cc6e661702b2394af178d59e12311fa
