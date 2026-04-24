@@ -528,7 +528,7 @@ func (g *Generator) generateKubeletCSRApproverPatch(
 
 // KubeletCSRApproverInlineManifestPatchYAML returns the Talos machine config patch YAML
 // that installs the kubelet-serving-cert-approver via cluster.inlineManifests.
-// The manifest content is embedded in the Go binary with a Dependabot-tracked image version.
+// The manifest uses the upstream-recommended :main image tag.
 func KubeletCSRApproverInlineManifestPatchYAML() string {
 	manifest := csrapprover.Manifest()
 	// Indent manifest content for YAML embedding under contents: |

@@ -10,16 +10,9 @@
 // See: https://github.com/alex1989hu/kubelet-serving-cert-approver
 package csrapprover
 
-import (
-	_ "embed"
-)
-
-//go:embed Dockerfile
-var dockerfile string
-
 // manifestTemplate is the kubelet-serving-cert-approver standalone deployment manifest.
 // Derived from https://github.com/alex1989hu/kubelet-serving-cert-approver/blob/main/deploy/standalone-install.yaml
-// with the image reference replaced by manifestImagePlaceholder for substitution.
+// Uses the upstream-recommended :main image tag.
 const manifestTemplate = `apiVersion: v1
 kind: Namespace
 metadata:
