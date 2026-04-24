@@ -70,7 +70,7 @@ func WaitForDeploymentReady(
 // immediately if the deployment does not exist.
 //
 // This is useful when a component may or may not be installed (e.g., kubelet-serving-cert-approver
-// via Talos extraManifests). If the deployment is absent, there is nothing to wait for.
+// via Talos inlineManifests). If the deployment is absent, there is nothing to wait for.
 // If it exists, this function waits for it to be fully ready using the same criteria
 // as WaitForDeploymentReady.
 //

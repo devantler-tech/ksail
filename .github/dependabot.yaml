@@ -169,3 +169,11 @@ updates:
       default-days: 7
     schedule:
       interval: daily
+
+  - package-ecosystem: docker
+    registries: [ghcr]
+    directory: /pkg/fsutil/generator/talos/csrapprover # kubelet-serving-cert-approver inline manifest image
+    cooldown:
+      default-days: 7
+    schedule:
+      interval: daily

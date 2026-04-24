@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil/generator/talos/csrapprover"
 	yamlgenerator "github.com/devantler-tech/ksail/v7/pkg/fsutil/generator/yaml"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/registry"
 )
@@ -42,6 +43,9 @@ const (
 // manifest URL suitable for extraManifests. For non-Talos distributions, we use
 // postfinance/kubelet-csr-approver via Helm which offers more features and configurability.
 // See: https://docs.siderolabs.com/kubernetes-guides/monitoring-and-observability/deploy-metrics-server/
+//
+// Deprecated: Use csrapprover.Manifest() with inlineManifests instead of this URL.
+// This constant is retained for backward compatibility with existing patch files.
 //
 //nolint:lll // URL cannot be shortened
 const KubeletServingCertApproverManifestURL = "https://raw.githubusercontent.com/alex1989hu/kubelet-serving-cert-approver/main/deploy/standalone-install.yaml"
@@ -242,7 +246,7 @@ func (g *Generator) generateConditionalPatches(
 	}
 
 	// Generate kubelet-cert-rotation patch for secure metrics-server TLS.
-	// The kubelet-csr-approver is installed via extraManifests during bootstrap.
+	// The kubelet-csr-approver is installed via inlineManifests during bootstrap.
 	if model.EnableKubeletCertRotation {
 		err := g.generateKubeletCertRotationPatch(rootPath, force)
 		if err != nil {
@@ -497,7 +501,8 @@ func (g *Generator) generateKubeletCertRotationPatch(
 // 2. The CSR must be approved before the kubelet can serve its API (including to metrics-server)
 // 3. Without an approver, the cluster bootstrap times out waiting for static pods
 //
-// This patch adds cluster.extraManifests with the kubelet-serving-cert-approver manifest URL.
+// This patch uses cluster.inlineManifests to embed the manifest content directly,
+// eliminating the external URL dependency that was previously required with extraManifests.
 // See: https://docs.siderolabs.com/kubernetes-guides/monitoring-and-observability/deploy-metrics-server/
 func (g *Generator) generateKubeletCSRApproverPatch(
 	rootPath string,
@@ -511,10 +516,7 @@ func (g *Generator) generateKubeletCSRApproverPatch(
 		return nil
 	}
 
-	patchContent := `cluster:
-  extraManifests:
-    - ` + KubeletServingCertApproverManifestURL + `
-`
+	patchContent := KubeletCSRApproverInlineManifestPatchYAML()
 
 	err := os.WriteFile(patchPath, []byte(patchContent), filePerm)
 	if err != nil {
@@ -522,6 +524,37 @@ func (g *Generator) generateKubeletCSRApproverPatch(
 	}
 
 	return nil
+}
+
+// KubeletCSRApproverInlineManifestPatchYAML returns the Talos machine config patch YAML
+// that installs the kubelet-serving-cert-approver via cluster.inlineManifests.
+// The manifest content is embedded in the Go binary with a Dependabot-tracked image version.
+func KubeletCSRApproverInlineManifestPatchYAML() string {
+	manifest := csrapprover.Manifest()
+	// Indent manifest content for YAML embedding under contents: |
+	indented := indentManifest(manifest, "        ")
+
+	return `cluster:
+  inlineManifests:
+    - name: kubelet-serving-cert-approver
+      contents: |
+` + indented + "\n"
+}
+
+// indentManifest prepends the given indent to each line of the manifest.
+func indentManifest(manifest, indent string) string {
+	lines := strings.Split(manifest, "\n")
+	indented := make([]string, 0, len(lines))
+
+	for _, line := range lines {
+		if line == "" {
+			indented = append(indented, "")
+		} else {
+			indented = append(indented, indent+line)
+		}
+	}
+
+	return strings.Join(indented, "\n")
 }
 
 // generateClusterNamePatch creates a Talos patch file to set a custom cluster name.
