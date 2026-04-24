@@ -47,3 +47,8 @@ func BuildArgoCDEnsureOptions(
 ) argocdgitops.EnsureOptions {
 	return buildArgoCDEnsureOptions(clusterCfg, clusterName, registryHost)
 }
+
+// IgnoredTaintsForCNIReadiness exports ignoredTaintsForCNIReadiness for testing.
+func IgnoredTaintsForCNIReadiness(clusterCfg *v1alpha1.Cluster) []string {
+	return ignoredTaintsForCNIReadiness(clusterCfg)
+}

@@ -228,13 +228,8 @@ func waitForCNIReadiness(
 		return fmt.Errorf("create kubernetes client: %w", err)
 	}
 
-	var ignoredTaints []string
-	if clusterCfg.Spec.Cluster.Provider.IsCloud() {
-		ignoredTaints = append(ignoredTaints, readiness.TaintExternalCloudProviderUninitialized)
-	}
-
 	err = readiness.WaitForAllNodesReadyAndSchedulableIgnoringTaints(
-		ctx, clientset, setup.timeout, ignoredTaints...,
+		ctx, clientset, setup.timeout, ignoredTaintsForCNIReadiness(clusterCfg)...,
 	)
 	if err != nil {
 		diag := k8s.DiagnosePodFailures(ctx, clientset, cniNamespaces)
@@ -251,5 +246,17 @@ func waitForCNIReadiness(
 		return fmt.Errorf("wait for node readiness after CNI install: %w", err)
 	}
 
+	return nil
+}
+
+// ignoredTaintsForCNIReadiness returns the taint keys that should be tolerated
+// when checking node readiness after CNI installation.
+// Cloud providers (Hetzner, Omni, AWS) carry the external-cloud-provider
+// uninitialized taint until the CCM is installed — which happens after CNI —
+// so that taint must be ignored to avoid a deadlock.
+func ignoredTaintsForCNIReadiness(clusterCfg *v1alpha1.Cluster) []string {
+	if clusterCfg.Spec.Cluster.Provider.IsCloud() {
+		return []string{readiness.TaintExternalCloudProviderUninitialized}
+	}
 	return nil
 }
