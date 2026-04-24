@@ -184,8 +184,36 @@ runs:
           echo "kind: Kustomization" >> "$GITOPS_PATH/kustomization.yaml"
           echo "resources: []" >> "$GITOPS_PATH/kustomization.yaml"
         fi
-        ksail workload push --path "$GITOPS_PATH/"
-        ksail workload reconcile
+        push_succeeded=false
+        for attempt in 1 2 3; do
+          if ksail workload push --path "$GITOPS_PATH/"; then
+            push_succeeded=true
+            break
+          fi
+          if [ "$attempt" -lt 3 ]; then
+            echo "⚠️ workload push attempt $attempt failed, retrying in 10s…"
+            sleep 10
+          fi
+        done
+        if [ "$push_succeeded" != "true" ]; then
+          echo "❌ workload push failed after 3 attempts"
+          exit 1
+        fi
+        reconcile_succeeded=false
+        for attempt in 1 2 3; do
+          if ksail workload reconcile; then
+            reconcile_succeeded=true
+            break
+          fi
+          if [ "$attempt" -lt 3 ]; then
+            echo "⚠️ workload reconcile attempt $attempt failed, retrying in 10s…"
+            sleep 10
+          fi
+        done
+        if [ "$reconcile_succeeded" != "true" ]; then
+          echo "❌ workload reconcile failed after 3 attempts"
+          exit 1
+        fi
 
     - name: 🧪 ksail workload delete
       shell: bash
