@@ -7,6 +7,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil/generator/talos/csrapprover"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"sigs.k8s.io/yaml"
 )
 
 func TestManifest(t *testing.T) {
@@ -32,7 +33,7 @@ func TestManifest(t *testing.T) {
 		"manifest should contain digest-pinned image reference")
 }
 
-func TestManifest_ValidYAML(t *testing.T) {
+func TestManifest_MultipleDocuments(t *testing.T) {
 	t.Parallel()
 
 	manifest := csrapprover.Manifest()
@@ -41,4 +42,16 @@ func TestManifest_ValidYAML(t *testing.T) {
 	docs := strings.Split(manifest, "---")
 	assert.GreaterOrEqual(t, len(docs), 6,
 		"manifest should contain multiple YAML documents")
+
+	// Verify each non-empty document is parseable YAML
+	for i, doc := range docs {
+		trimmed := strings.TrimSpace(doc)
+		if trimmed == "" {
+			continue
+		}
+
+		var parsed map[string]interface{}
+		err := yaml.Unmarshal([]byte(trimmed), &parsed)
+		assert.NoError(t, err, "document %d should be valid YAML", i)
+	}
 }
