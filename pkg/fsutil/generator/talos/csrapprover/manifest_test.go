@@ -50,7 +50,8 @@ func TestManifest_MultipleDocuments(t *testing.T) {
 			continue
 		}
 
-		var parsed map[string]interface{}
+		var parsed map[string]any
+
 		err := yaml.Unmarshal([]byte(trimmed), &parsed)
 		assert.NoError(t, err, "document %d should be valid YAML", docIdx)
 	}
