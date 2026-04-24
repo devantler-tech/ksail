@@ -99,7 +99,12 @@ func TestEnsureSecret_ConcurrentCreation(t *testing.T) {
 		waitGroup.Go(func() {
 			<-startCh
 
-			errs[goroutineIdx] = hetzner.EnsureSecretForTest(context.Background(), clientset, token, nil)
+			errs[goroutineIdx] = hetzner.EnsureSecretForTest(
+				context.Background(),
+				clientset,
+				token,
+				nil,
+			)
 		})
 	}
 

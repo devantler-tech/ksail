@@ -1,7 +1,6 @@
 package hcloudccminstaller
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
@@ -78,7 +77,5 @@ func buildValuesYaml(networkName string) string {
 		return ""
 	}
 
-	return fmt.Sprintf(`networking:
-  enabled: true
-  clusterCIDR: %s`, DefaultClusterCIDR)
+	return "networking:\n  enabled: true\n  clusterCIDR: " + DefaultClusterCIDR
 }

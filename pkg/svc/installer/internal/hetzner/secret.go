@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"maps"
 	"os"
 	"time"
 
@@ -41,7 +42,11 @@ var ErrTokenNotSet = fmt.Errorf("environment variable %s is not set", TokenEnvVa
 // extraData contains additional key-value pairs to store alongside the token
 // (e.g. "network" for CCM). These are merged into the existing secret data
 // so that concurrent installers don't overwrite each other's keys.
-func EnsureSecret(ctx context.Context, kubeconfig, kubeContext string, extraData map[string][]byte) error {
+func EnsureSecret(
+	ctx context.Context,
+	kubeconfig, kubeContext string,
+	extraData map[string][]byte,
+) error {
 	token := os.Getenv(TokenEnvVar)
 	if token == "" {
 		return ErrTokenNotSet
@@ -57,14 +62,17 @@ func EnsureSecret(ctx context.Context, kubeconfig, kubeContext string, extraData
 
 // ensureSecret is the testable core of EnsureSecret. It accepts an injected
 // kubernetes.Interface so that unit tests can substitute a fake clientset.
-func ensureSecret(ctx context.Context, client kubernetes.Interface, token string, extraData map[string][]byte) error {
+func ensureSecret(
+	ctx context.Context,
+	client kubernetes.Interface,
+	token string,
+	extraData map[string][]byte,
+) error {
 	desiredData := map[string][]byte{
 		"token": []byte(token),
 	}
 
-	for k, v := range extraData {
-		desiredData[k] = v
-	}
+	maps.Copy(desiredData, extraData)
 
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -147,9 +155,7 @@ func updateSecretIfNeeded(
 			latest.Data = make(map[string][]byte, len(desiredData))
 		}
 
-		for k, v := range desiredData {
-			latest.Data[k] = v
-		}
+		maps.Copy(latest.Data, desiredData)
 
 		latest.StringData = nil
 
