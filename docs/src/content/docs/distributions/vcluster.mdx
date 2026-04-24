@@ -87,8 +87,9 @@ For general KSail YAML options, see the [Configuration Reference](/configuration
 # Control plane configuration
 controlPlane:
   distro:
-    k3s:
-      enabled: true
+    k8s:
+      image:
+        tag: v1.35.3
   statefulSet:
     resources:
       limits:
@@ -174,22 +175,31 @@ Increase Docker resources (4 GB RAM, 2 CPUs minimum) in Docker Desktop settings,
 
 ## Advanced Topics
 
-### Worker Nodes
+### Multiple Control-Plane Replicas
 
-By default, workload pods are scheduled onto the control-plane node, which runs as a Docker container. For more realistic multi-node scenarios, enable worker nodes:
+For high-availability scenarios, run multiple control-plane replicas:
 
 ````yaml
 # vcluster.yaml
-nodes:
-  enabled: true
-  count: 3
+controlPlane:
+  statefulSet:
+    highAvailability:
+      replicas: 3
 ````
 
-This creates separate Docker containers acting as worker nodes.
+See the [vCluster high-availability docs](https://www.vcluster.com/docs/vcluster/configure/vcluster-yaml/control-plane/stateful-set/high-availability) for details.
 
 ### Custom Distributions
 
-VCluster supports `k3s` (default), `k8s`, and `k0s` as internal distributions. Set `controlPlane.distro.<name>.enabled: true` in `vcluster.yaml`.
+VCluster supports `k8s` (default), `k0s`, and `k3s` as internal distributions. Set the active distro under `controlPlane.distro` in `vcluster.yaml`:
+
+````yaml
+# vcluster.yaml — switch to k0s
+controlPlane:
+  distro:
+    k0s:
+      enabled: true
+````
 
 ### Resource Limits
 
