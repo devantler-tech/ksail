@@ -23,6 +23,7 @@ func timingLabelWidth() int {
 	if tw := utf8.RuneCountInString(timingTotalLabel); tw > w {
 		return tw
 	}
+
 	return w
 }
 

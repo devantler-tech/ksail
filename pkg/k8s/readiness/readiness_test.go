@@ -16,9 +16,9 @@ import (
 )
 
 var (
-	errDaemonSetOperationFailed  = errors.New("daemonset operation failed")
-	errDeploymentFail = errors.New("fail")
-	errPollOperationFailed       = errors.New("poll operation failed")
+	errDaemonSetOperationFailed = errors.New("daemonset operation failed")
+	errDeploymentFail           = errors.New("fail")
+	errPollOperationFailed      = errors.New("poll operation failed")
 )
 
 func expectNoError(t *testing.T, err error, description string) {
