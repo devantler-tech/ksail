@@ -97,7 +97,7 @@ const (
 	inClusterConnectivityTimeoutSlow = 3 * time.Minute
 
 	// csrApproverReadinessTimeout is the maximum time to wait for the
-	// kubelet-serving-cert-approver deployment (from Talos extraManifests) to
+	// kubelet-serving-cert-approver deployment (from Talos inlineManifests) to
 	// become ready. After CNI is installed, the approver pod needs to be
 	// scheduled, pull its image, start, and begin approving kubelet serving
 	// CSRs. Two minutes accommodates image pulls on fresh cloud nodes.
@@ -302,7 +302,7 @@ func (r ComponentRequirements) Count() int {
 func GetComponentRequirements(clusterCfg *v1alpha1.Cluster) ComponentRequirements {
 	needsMetricsServer := NeedsMetricsServerInstall(clusterCfg)
 
-	// For Talos, the kubelet-serving-cert-approver is installed during bootstrap via extraManifests,
+	// For Talos, the kubelet-serving-cert-approver is installed during bootstrap via inlineManifests,
 	// so we skip the Helm-based installation. For other distributions, we use postfinance/kubelet-csr-approver via Helm.
 	needsKubeletCSRApprover := needsMetricsServer &&
 		clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionTalos
@@ -511,7 +511,7 @@ func installComponentsInPhases(
 // cniInstalled indicates whether CNI was just installed — when true, the node
 // readiness check in the stability pre-flight is skipped.
 // needsCSRApproverWait indicates whether to wait for the kubelet-serving-cert-approver
-// deployment (from Talos extraManifests) to be ready before starting the parallel
+// deployment (from Talos inlineManifests) to be ready before starting the parallel
 // infrastructure installations. This prevents the race condition where metrics-server
 // starts before kubelet serving CSRs are approved.
 func runInfraPhase(
@@ -797,17 +797,17 @@ func needsInClusterConnectivityCheck(clusterCfg *v1alpha1.Cluster) bool {
 }
 
 // waitForKubeletCSRApprover waits for the kubelet-serving-cert-approver deployment
-// (installed via Talos extraManifests) to be ready before starting infrastructure
+// (installed via Talos inlineManifests) to be ready before starting infrastructure
 // component installations.
 //
 // On Talos clusters with rotate-server-certificates enabled, kubelets submit CSRs
 // for their serving certificates. These CSRs must be approved by a cert approver
 // before metrics-server can TLS-handshake with kubelets. When CNI is managed by
-// KSail (e.g., Cilium), the extraManifests-installed approver pods can't start
+// KSail (e.g., Cilium), the inlineManifests-installed approver pods can't start
 // until after CNI is installed. Without this wait, metrics-server races the
 // approver startup and fails with TLS errors.
 //
-// If the deployment does not exist (user didn't include the extraManifests patch),
+// If the deployment does not exist (user didn't include the inlineManifests patch),
 // this function returns nil immediately — it is a no-op in that case.
 func waitForKubeletCSRApprover(
 	ctx context.Context,

@@ -366,7 +366,7 @@ func TestKubeletCSRApproverLinkedToMetricsServer(t *testing.T) {
 
 	// This test verifies the kubelet-csr-approver installation logic:
 	// - For Kind: kubelet-csr-approver is installed via Helm when metrics-server needs installation
-	// - For Talos: kubelet-csr-approver is installed during bootstrap via extraManifests,
+	// - For Talos: kubelet-csr-approver is installed during bootstrap via inlineManifests,
 	//   so Helm installation is skipped (NeedsKubeletCSRApprover = false)
 	// - For K3d: metrics-server is built-in, so neither is needed
 
@@ -399,11 +399,11 @@ func TestKubeletCSRApproverLinkedToMetricsServer(t *testing.T) {
 			expectKubeletCSRApprover: false,
 		},
 		{
-			name:                     "Talos with metrics-server enabled: metrics via Helm, CSR approver via extraManifests",
+			name:                     "Talos with metrics-server enabled: metrics via Helm, CSR approver via inlineManifests",
 			distribution:             v1alpha1.DistributionTalos,
 			metricsServer:            v1alpha1.MetricsServerEnabled,
 			expectMetricsServer:      true,
-			expectKubeletCSRApprover: false, // Installed during bootstrap via extraManifests
+			expectKubeletCSRApprover: false, // Installed during bootstrap via inlineManifests
 		},
 	}
 

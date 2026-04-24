@@ -403,8 +403,8 @@ func TestGenerator_Generate_KubeletCertRotation(t *testing.T) {
 	csrContent, err := os.ReadFile(csrApproverPath) //nolint:gosec // Test file path is safe
 	require.NoError(t, err)
 	assert.Contains(t, string(csrContent), "cluster:")
-	assert.Contains(t, string(csrContent), "extraManifests:")
-	assert.Contains(t, string(csrContent), talosgenerator.KubeletServingCertApproverManifestURL)
+	assert.Contains(t, string(csrContent), "inlineManifests:")
+	assert.Contains(t, string(csrContent), "kubelet-serving-cert-approver")
 }
 
 func TestGenerator_Generate_NoKubeletCertRotationPatchWhenFalse(t *testing.T) {
