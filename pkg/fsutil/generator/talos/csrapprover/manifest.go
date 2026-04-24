@@ -2,8 +2,8 @@
 // for embedding in Talos machine configs via cluster.inlineManifests.
 //
 // The image version is tracked via a Dockerfile that Dependabot updates.
-// At build time, the image reference is extracted from the Dockerfile and
-// substituted into the manifest template, ensuring the deployed approver
+// At runtime, the image reference is extracted from the embedded Dockerfile
+// and substituted into the manifest template, ensuring the deployed approver
 // uses a pinned, known-good version rather than the mutable :main tag.
 //
 // See: https://github.com/alex1989hu/kubelet-serving-cert-approver
