@@ -1,7 +1,8 @@
 {
-  "last_run": "2026-04-23T12:38:01Z",
-  "workflow_run_id": "24835552748",
+  "last_run": "2026-04-24T01:04:00Z",
+  "workflow_run_id": "24866793916",
   "commented_issues": {
+    "4293": "2026-04-24",
     "4287": "2026-04-23",
     "3984": "2026-04-23",
     "4282": "2026-04-23",
@@ -35,12 +36,12 @@
     "4153": "perf(image): skip scanner.Text() allocation - merged 2026-04-19"
   },
   "last_code_quality_domain": "test",
-  "issue_backlog_cursor": "4287",
+  "issue_backlog_cursor": "4293",
   "created_issues": {
-    "4249": "[Repo Assist] [chore]: upgrade embedded Flux library to v2.8.5 (superseded by v2.8.6 PR)",
+    "4291": "[Repo Assist] [chore]: audit VCluster v0.34 alpha compatibility for Vind provisioner",
     "new_argocd34": "[Repo Assist] [chore]: verify KSail compatibility with ArgoCD v3.4 stable and update embedded client",
-    "new_vclus34": "[Repo Assist] [chore]: audit VCluster v0.34 alpha compatibility for Vind provisioner",
-    "new_ciphrot": "[Repo Assist] [feature]: add ksail cipher rotate for Age key rotation across all encrypted secrets"
+    "new_ciphrot": "[Repo Assist] [feature]: add ksail cipher rotate for Age key rotation across all encrypted secrets",
+    "new_talosenv": "[Repo Assist] [chore]: migrate Talos scaffolding to EnvironmentConfig (WARNING: may duplicate #4124 closed as completed - maintainer verify)"
   },
   "sub_issues_linked": {
     "4084": ["4067", "4172", "4192"],
@@ -66,10 +67,12 @@
   },
   "notes": [
     "link_sub_issue is NOT idempotent - always verify sub-issue not already linked before calling",
-    "PR #4248 merged 2026-04-23 (perf/notify strings.Builder)",
-    "PR #4253 (ArgoCD regression test) and PR #4284 (sopsutil PublicKeys filter tests) both have CI passing - awaiting review",
-    "Copilot has PRs #4278 (cluster diagnose), #4288 (fail-fast: false), #4286 (todos workflow fix)",
+    "PR #4253 (ArgoCD regression test) and PR #4284 (sopsutil PublicKeys filter tests) both CI passing - awaiting review",
+    "PR #4294 (Copilot): fix: tolerate external cloud provider taint during CNI readiness check - fixes #4293, clean and mergeable",
+    "PR #4299: chore: audit VCluster v0.34 alpha (relates to issue #4291)",
+    "Talos EnvironmentConfig: #3795 closed not_planned (Apr 9), #4124 closed completed (Apr 20) - this work is done, do NOT create again",
+    "ArgoCD v3.4 and cipher rotate issues created this run (numbers unknown - search index lag)",
     "domain alternation: last was 'test' - next should be 'refactor'",
-    "New roadmap backlog issues created this run: ArgoCD v3.4, VCluster v0.34, ksail cipher rotate"
+    "WaitForAllNodesReadyAndSchedulableIgnoringTaints is being added by PR #4294, not yet in main"
   ]
 }
