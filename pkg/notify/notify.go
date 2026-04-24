@@ -11,6 +11,21 @@ import (
 	fcolor "github.com/fatih/color"
 )
 
+// timingCurrentLabel is the label for the current-stage timing line.
+const timingCurrentLabel = "⏲ current:"
+
+// timingTotalLabel is the label for the total timing line.
+const timingTotalLabel = "total:"
+
+// timingLabelWidth returns the column width needed to align both timing labels.
+func timingLabelWidth() int {
+	w := utf8.RuneCountInString(timingCurrentLabel)
+	if tw := utf8.RuneCountInString(timingTotalLabel); tw > w {
+		return tw
+	}
+	return w
+}
+
 // Message type constants.
 // Each type determines the message styling (color and symbol).
 const (
@@ -191,19 +206,13 @@ func WriteMessage(msg Message) {
 	if msg.Type == SuccessType && msg.Timer != nil {
 		total, stage := msg.Timer.GetTiming()
 
-		currentLabel := "⏲ current:"
-		totalLabel := "total:"
-
-		labelWidth := utf8.RuneCountInString(currentLabel)
-		if w := utf8.RuneCountInString(totalLabel); w > labelWidth {
-			labelWidth = w
-		}
+		labelWidth := timingLabelWidth()
 
 		_, err = config.color.Fprintf(
 			msg.Writer,
 			"%-*s %s\n",
 			labelWidth,
-			currentLabel,
+			timingCurrentLabel,
 			stage.String(),
 		)
 		handleNotifyError(err)
@@ -211,7 +220,7 @@ func WriteMessage(msg Message) {
 			msg.Writer,
 			"%-*s %s\n",
 			labelWidth,
-			totalLabel,
+			timingTotalLabel,
 			total.String(),
 		)
 		handleNotifyError(err)
