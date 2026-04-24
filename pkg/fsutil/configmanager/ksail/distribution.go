@@ -108,6 +108,18 @@ func (m *ConfigManager) loadTalosConfig() (*talosconfigmanager.Configs, error) {
 		talosManager.WithAdditionalPatches(externalCloudProviderPatches())
 	}
 
+	// Inject kubelet cert rotation + CSR approver patches at runtime when
+	// metrics-server is enabled AND both patch files don't already exist on disk.
+	// Projects initialized with v7.4.0+ have the patch files; older projects
+	// or manually-managed talos/ directories may not. The runtime injection
+	// ensures the approver is always present without duplicating patches.
+	// If stat fails for any reason other than the file not existing
+	// (e.g., permissions), we inject the patches as a fail-safe.
+	if m.Config.Spec.Cluster.MetricsServer == v1alpha1.MetricsServerEnabled &&
+		!kubeletPatchFilesExist(patchesDir) {
+		talosManager.WithAdditionalPatches(kubeletCertRotationAndApproverPatches())
+	}
+
 	config, err := talosManager.Load(configmanagerinterface.LoadOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to load Talos config: %w", err)
@@ -209,36 +221,18 @@ func (m *ConfigManager) getDefaultTalosPatches() []talosconfigmanager.Patch {
 
 	// When metrics-server is enabled on Talos, we need two patches:
 	// 1. Enable kubelet certificate rotation (rotate-server-certificates: true)
-	// 2. Install kubelet-serving-cert-approver via extraManifests to approve the CSRs
+	// 2. Install kubelet-serving-cert-approver via inlineManifests to approve the CSRs
 	//
 	// Note: We use alex1989hu/kubelet-serving-cert-approver for Talos because it provides
-	// a single manifest URL suitable for extraManifests during bootstrap. For non-Talos
-	// distributions, postfinance/kubelet-csr-approver is used via Helm post-bootstrap.
+	// a lightweight standalone manifest. For non-Talos distributions,
+	// postfinance/kubelet-csr-approver is used via Helm post-bootstrap.
+	//
+	// The manifest is embedded in the binary via inlineManifests (not fetched from a URL)
+	// to eliminate external network dependencies during Talos bootstrap.
 	//
 	// See: https://docs.siderolabs.com/kubernetes-guides/monitoring-and-observability/deploy-metrics-server/
 	if m.Config.Spec.Cluster.MetricsServer == v1alpha1.MetricsServerEnabled {
-		// Patch 1: Enable kubelet certificate rotation
-		kubeletCertRotationPatch := talosconfigmanager.Patch{
-			Path:  "kubelet-cert-rotation",
-			Scope: talosconfigmanager.PatchScopeCluster,
-			Content: []byte(`machine:
-  kubelet:
-    extraArgs:
-      rotate-server-certificates: "true"
-`),
-		}
-		patches = append(patches, kubeletCertRotationPatch)
-
-		// Patch 2: Install kubelet-serving-cert-approver during bootstrap
-		kubeletCSRApproverPatch := talosconfigmanager.Patch{
-			Path:  "kubelet-csr-approver-extramanifest",
-			Scope: talosconfigmanager.PatchScopeCluster,
-			Content: []byte(`cluster:
-  extraManifests:
-    - ` + talosgenerator.KubeletServingCertApproverManifestURL + `
-`),
-		}
-		patches = append(patches, kubeletCSRApproverPatch)
+		patches = append(patches, kubeletCertRotationAndApproverPatches()...)
 	}
 
 	// When using Hetzner provider, enable external cloud provider so that the
@@ -249,6 +243,44 @@ func (m *ConfigManager) getDefaultTalosPatches() []talosconfigmanager.Patch {
 	}
 
 	return patches
+}
+
+// kubeletCertRotationAndApproverPatches returns the patches for enabling kubelet
+// certificate rotation and installing the CSR approver via inlineManifests.
+func kubeletCertRotationAndApproverPatches() []talosconfigmanager.Patch {
+	// Patch 1: Enable kubelet certificate rotation
+	kubeletCertRotationPatch := talosconfigmanager.Patch{
+		Path:  "kubelet-cert-rotation",
+		Scope: talosconfigmanager.PatchScopeCluster,
+		Content: []byte(`machine:
+  kubelet:
+    extraArgs:
+      rotate-server-certificates: "true"
+`),
+	}
+
+	// Patch 2: Install kubelet-serving-cert-approver via inlineManifests
+	kubeletCSRApproverPatch := talosconfigmanager.Patch{
+		Path:    "kubelet-csr-approver-inlinemanifest",
+		Scope:   talosconfigmanager.PatchScopeCluster,
+		Content: []byte(talosgenerator.KubeletCSRApproverInlineManifestPatchYAML()),
+	}
+
+	return []talosconfigmanager.Patch{kubeletCertRotationPatch, kubeletCSRApproverPatch}
+}
+
+// kubeletPatchFilesExist returns true when BOTH kubelet cert rotation and
+// CSR approver patch files exist on disk. If either file is missing or
+// stat fails for any reason (permissions, broken symlinks), returns false
+// so that runtime patches are injected as a fail-safe.
+func kubeletPatchFilesExist(patchesDir string) bool {
+	certRotation := filepath.Join(patchesDir, "cluster", "kubelet-cert-rotation.yaml")
+	csrApprover := filepath.Join(patchesDir, "cluster", "kubelet-csr-approver.yaml")
+
+	_, err1 := os.Stat(certRotation)
+	_, err2 := os.Stat(csrApprover)
+
+	return err1 == nil && err2 == nil
 }
 
 func (m *ConfigManager) cacheVClusterConfig() error {

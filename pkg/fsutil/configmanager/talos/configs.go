@@ -78,7 +78,7 @@ func NewDefaultConfigs() (*Configs, error) {
 
 // NewDefaultConfigsWithPatches creates a new Talos Configs with default settings plus additional patches.
 // This is used when no scaffolded project exists but additional runtime patches are needed
-// (e.g., kubelet-csr-approver extraManifests when metrics-server is enabled).
+// (e.g., kubelet-csr-approver inlineManifests when metrics-server is enabled).
 //
 // The additional patches are applied after the default allowSchedulingOnControlPlanes patch.
 func NewDefaultConfigsWithPatches(additionalPatches []Patch) (*Configs, error) {
