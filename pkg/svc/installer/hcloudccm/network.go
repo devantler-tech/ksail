@@ -11,30 +11,29 @@ import (
 // for the CCM from the cluster configuration.
 //
 // Resolution order:
-//  1. Extract the cluster name from the kubeconfig context
+//  1. If spec.provider.hetzner.networkName is explicitly set, use that.
+//     This matches the API contract: "If empty, a network named
+//     '<cluster-name>-network' will be created."
+//  2. Otherwise, extract the cluster name from the kubeconfig context
 //     (e.g., "admin@dev" → "dev") and append the standard network suffix
 //     ("-network") to match what hetzner.Provider.EnsureNetwork creates.
-//  2. If the effective created network name cannot be derived from the
-//     context, fall back to spec.provider.hetzner.networkName if set.
 //
 // Returns empty string if the network name cannot be determined.
 func ResolveHetznerNetworkName(cfg *v1alpha1.Cluster) string {
-	// Derive the effective network name used by the Hetzner provider.
-	// For Talos the context is "admin@<clusterName>".
-	clusterName := extractClusterNameFromTalosContext(
-		cfg.Spec.Cluster.Connection.Context,
-	)
-	if clusterName != "" {
-		return clusterName + hetznerProvider.NetworkSuffix
-	}
-
-	// Fall back to an explicitly configured name only when the effective
-	// provider-created network name cannot be derived.
+	// Explicit network name takes precedence per the API contract.
 	if nn := cfg.Spec.Provider.Hetzner.NetworkName; nn != "" {
 		return nn
 	}
 
-	return ""
+	// Derive from context: for Talos the context is "admin@<clusterName>".
+	clusterName := extractClusterNameFromTalosContext(
+		cfg.Spec.Cluster.Connection.Context,
+	)
+	if clusterName == "" {
+		return ""
+	}
+
+	return clusterName + hetznerProvider.NetworkSuffix
 }
 
 // extractClusterNameFromTalosContext extracts the cluster name from a Talos

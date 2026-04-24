@@ -82,9 +82,9 @@ type resolveNetworkNameTestCase struct {
 func resolveNetworkNameTestCases() []resolveNetworkNameTestCase {
 	return []resolveNetworkNameTestCase{
 		{
-			name:     "context-derived name takes precedence over explicit",
+			name:     "explicit name takes precedence over context-derived name",
 			cfg:      clusterCfg("admin@dev", "custom-network"),
-			expected: "dev-network",
+			expected: "custom-network",
 		},
 		{
 			name:     "falls back to explicit name when context cannot be derived",
