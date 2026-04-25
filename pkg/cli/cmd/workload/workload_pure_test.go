@@ -881,6 +881,7 @@ func TestRetryOnTransientError_SuccessFirstAttempt(t *testing.T) {
 
 	cmd := &cobra.Command{}
 	cmd.SetOut(io.Discard)
+
 	calls := 0
 
 	err := workload.ExportRetryOnTransientError(
@@ -901,6 +902,7 @@ func TestRetryOnTransientError_NonRetryableError(t *testing.T) {
 
 	cmd := &cobra.Command{}
 	cmd.SetOut(io.Discard)
+
 	calls := 0
 
 	err := workload.ExportRetryOnTransientError(
@@ -921,6 +923,7 @@ func TestRetryOnTransientError_RetryableExhausted(t *testing.T) {
 
 	cmd := &cobra.Command{}
 	cmd.SetOut(io.Discard)
+
 	calls := 0
 
 	err := workload.ExportRetryOnTransientError(
@@ -942,6 +945,7 @@ func TestRetryOnTransientError_SucceedsAfterRetry(t *testing.T) {
 
 	cmd := &cobra.Command{}
 	cmd.SetOut(io.Discard)
+
 	calls := 0
 
 	err := workload.ExportRetryOnTransientError(
@@ -966,6 +970,7 @@ func TestRetryOnTransientError_ContextCancelled(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cmd := &cobra.Command{}
 	cmd.SetOut(io.Discard)
+
 	calls := 0
 
 	err := workload.ExportRetryOnTransientError(
@@ -988,6 +993,7 @@ func TestRetryOnTransientError_ZeroMaxAttemptsClampedToOne(t *testing.T) {
 
 	cmd := &cobra.Command{}
 	cmd.SetOut(io.Discard)
+
 	calls := 0
 
 	err := workload.ExportRetryOnTransientError(
