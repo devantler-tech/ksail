@@ -282,6 +282,19 @@ func TestEnsurePlacementGroupNilClient(t *testing.T) {
 	})
 }
 
+func TestSyncFirewallRulesNilClient(t *testing.T) {
+	t.Parallel()
+
+	prov := hetzner.NewProvider(nil)
+	require.NotNil(t, prov)
+
+	// Should return error when client is nil
+	err := prov.SyncFirewallRules(context.TODO(), "test-cluster")
+
+	require.Error(t, err)
+	require.ErrorIs(t, err, provider.ErrProviderUnavailable)
+}
+
 func TestResourceLabelsConsistency(t *testing.T) {
 	t.Parallel()
 

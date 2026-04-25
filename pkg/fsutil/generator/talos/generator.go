@@ -35,6 +35,10 @@ const (
 	disableCDIFileName = "disable-cdi.yaml"
 	// externalCloudProviderFileName is the name of the external cloud provider patch file.
 	externalCloudProviderFileName = "external-cloud-provider.yaml"
+	// ingressFirewallDefaultActionFileName is the name of the ingress firewall default action document file.
+	ingressFirewallDefaultActionFileName = "ingress-firewall-default-action.yaml"
+	// ingressFirewallRulesFileName is the name of the ingress firewall rules document file.
+	ingressFirewallRulesFileName = "ingress-firewall-rules.yaml"
 )
 
 // KubeletServingCertApproverManifestURL is the URL for the kubelet-serving-cert-approver manifest.
@@ -110,6 +114,17 @@ type Config struct {
 	// can initialize nodes with a providerID and the CSI driver can schedule.
 	// See: https://www.talos.dev/latest/kubernetes-guides/configuration/cloud-provider/
 	EnableExternalCloudProvider bool
+	// EnableIngressFirewall indicates whether to generate Talos ingress firewall documents.
+	// When true, generates NetworkDefaultActionConfig (ingress: block) and per-role
+	// NetworkRuleConfig documents for defense-in-depth at the OS level.
+	// Requires the NetworkCIDR and CNIPort fields to be set.
+	// See: https://www.talos.dev/latest/talos-guides/network/ingress-firewall/
+	EnableIngressFirewall bool
+	// NetworkCIDR is the cluster's private network CIDR, used to restrict
+	// ingress firewall rules to cluster-internal traffic (e.g., "10.0.0.0/16").
+	NetworkCIDR string
+	// CNIPort is the CNI encapsulation port (e.g., 8472 for Cilium VXLAN, 4789 for Flannel/Calico).
+	CNIPort int
 }
 
 // Generator generates the Talos directory structure.
@@ -210,6 +225,13 @@ func (g *Generator) getDirectoriesWithPatches(
 		dirs["cluster"] = true
 	}
 
+	// Ingress firewall patches go to cluster/, control-planes/, and workers/
+	if model.EnableIngressFirewall {
+		dirs["cluster"] = true
+		dirs["control-planes"] = true
+		dirs["workers"] = true
+	}
+
 	return dirs
 }
 
@@ -287,6 +309,14 @@ func (g *Generator) generateConditionalPatches(
 	// Generate external cloud provider patch when cloud provider integration is needed
 	if model.EnableExternalCloudProvider {
 		err := g.generateExternalCloudProviderPatch(rootPath, force)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Generate ingress firewall documents when enabled (Hetzner defense-in-depth)
+	if model.EnableIngressFirewall {
+		err := g.generateIngressFirewallPatches(rootPath, model, force)
 		if err != nil {
 			return err
 		}
@@ -693,6 +723,171 @@ func (g *Generator) generateExternalCloudProviderPatch(
 	err := os.WriteFile(patchPath, []byte(ExternalCloudProviderPatchYAML), filePerm)
 	if err != nil {
 		return fmt.Errorf("failed to create external-cloud-provider patch: %w", err)
+	}
+
+	return nil
+}
+
+// IngressFirewallDefaultActionYAML is the Talos NetworkDefaultActionConfig document
+// that blocks all ingress traffic by default. Individual NetworkRuleConfig documents
+// selectively allow required ports.
+const IngressFirewallDefaultActionYAML = `apiVersion: v1alpha1
+kind: NetworkDefaultActionConfig
+ingress: block
+`
+
+// IngressFirewallCPRulesYAML returns the Talos NetworkRuleConfig documents for control-plane
+// nodes. The networkCIDR and cniPort parameters are injected at generation time.
+//
+// This is the single source of truth for the CP rules content, shared between the
+// generator (file-based scaffolding) and the runtime config manager (in-memory injection).
+func IngressFirewallCPRulesYAML(networkCIDR string, cniPort int) string {
+	return fmt.Sprintf(`apiVersion: v1alpha1
+kind: NetworkRuleConfig
+name: kubelet
+portSelector:
+  ports:
+    - 10250
+  protocol: tcp
+ingress:
+  - subnet: %[1]s
+---
+apiVersion: v1alpha1
+kind: NetworkRuleConfig
+name: apid
+portSelector:
+  ports:
+    - 50000
+  protocol: tcp
+ingress:
+  - subnet: 0.0.0.0/0
+  - subnet: ::/0
+---
+apiVersion: v1alpha1
+kind: NetworkRuleConfig
+name: kubernetes-api
+portSelector:
+  ports:
+    - 6443
+  protocol: tcp
+ingress:
+  - subnet: 0.0.0.0/0
+  - subnet: ::/0
+---
+apiVersion: v1alpha1
+kind: NetworkRuleConfig
+name: trustd
+portSelector:
+  ports:
+    - 50001
+  protocol: tcp
+ingress:
+  - subnet: %[1]s
+---
+apiVersion: v1alpha1
+kind: NetworkRuleConfig
+name: etcd
+portSelector:
+  ports:
+    - 2379-2380
+  protocol: tcp
+ingress:
+  - subnet: %[1]s
+---
+apiVersion: v1alpha1
+kind: NetworkRuleConfig
+name: cni-vxlan
+portSelector:
+  ports:
+    - %[2]d
+  protocol: udp
+ingress:
+  - subnet: %[1]s
+`, networkCIDR, cniPort)
+}
+
+// IngressFirewallWorkerRulesYAML returns the Talos NetworkRuleConfig documents for worker
+// nodes. Workers expose fewer ports than control-plane nodes.
+func IngressFirewallWorkerRulesYAML(networkCIDR string, cniPort int) string {
+	return fmt.Sprintf(`apiVersion: v1alpha1
+kind: NetworkRuleConfig
+name: kubelet
+portSelector:
+  ports:
+    - 10250
+  protocol: tcp
+ingress:
+  - subnet: %[1]s
+---
+apiVersion: v1alpha1
+kind: NetworkRuleConfig
+name: apid
+portSelector:
+  ports:
+    - 50000
+  protocol: tcp
+ingress:
+  - subnet: %[1]s
+---
+apiVersion: v1alpha1
+kind: NetworkRuleConfig
+name: cni-vxlan
+portSelector:
+  ports:
+    - %[2]d
+  protocol: udp
+ingress:
+  - subnet: %[1]s
+`, networkCIDR, cniPort)
+}
+
+// generateIngressFirewallPatches creates the Talos ingress firewall config documents.
+// This generates three files:
+//   - cluster/ingress-firewall-default-action.yaml — blocks all ingress by default
+//   - control-planes/ingress-firewall-rules.yaml — allows required CP ports
+//   - workers/ingress-firewall-rules.yaml — allows required worker ports
+//
+// See: https://www.talos.dev/latest/talos-guides/network/ingress-firewall/
+func (g *Generator) generateIngressFirewallPatches(
+	rootPath string,
+	model *Config,
+	force bool,
+) error {
+	// Generate default action (ingress: block) for all nodes
+	defaultActionPath := filepath.Join(rootPath, "cluster", ingressFirewallDefaultActionFileName)
+
+	_, statErr := os.Stat(defaultActionPath)
+	if statErr != nil || force {
+		err := os.WriteFile(defaultActionPath, []byte(IngressFirewallDefaultActionYAML), filePerm)
+		if err != nil {
+			return fmt.Errorf("failed to create ingress firewall default action: %w", err)
+		}
+	}
+
+	// Generate control-plane rules
+	cpRulesPath := filepath.Join(rootPath, "control-planes", ingressFirewallRulesFileName)
+
+	_, statErr = os.Stat(cpRulesPath)
+	if statErr != nil || force {
+		cpContent := IngressFirewallCPRulesYAML(model.NetworkCIDR, model.CNIPort)
+
+		err := os.WriteFile(cpRulesPath, []byte(cpContent), filePerm)
+		if err != nil {
+			return fmt.Errorf("failed to create ingress firewall CP rules: %w", err)
+		}
+	}
+
+	// Generate worker rules
+	workerRulesPath := filepath.Join(rootPath, "workers", ingressFirewallRulesFileName)
+
+	_, statErr = os.Stat(workerRulesPath)
+	if statErr != nil || force {
+		workerContent := IngressFirewallWorkerRulesYAML(model.NetworkCIDR, model.CNIPort)
+
+		err := os.WriteFile(workerRulesPath, []byte(workerContent), filePerm)
+		if err != nil {
+			return fmt.Errorf("failed to create ingress firewall worker rules: %w", err)
+		}
 	}
 
 	return nil

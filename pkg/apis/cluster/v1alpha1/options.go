@@ -105,6 +105,12 @@ type OptionsHetzner struct {
 	// When true and placement fails, retries server creation without a placement group.
 	// Defaults to false to preserve HA guarantees; set to true for best-effort provisioning.
 	PlacementGroupFallbackToNone bool `json:"placementGroupFallbackToNone,omitzero"`
+	// IngressFirewall controls the Talos OS-level ingress firewall configuration.
+	// When Enabled (default), KSail generates NetworkDefaultActionConfig and NetworkRuleConfig
+	// documents as Talos machine config patches, providing defense-in-depth at the node level
+	// independent of the Hetzner Cloud Firewall.
+	// See: https://www.talos.dev/latest/talos-guides/network/ingress-firewall/
+	IngressFirewall IngressFirewall `default:"Enabled" json:"ingressFirewall,omitzero"`
 }
 
 // OptionsOmni defines options specific to the Sidero Omni provider.

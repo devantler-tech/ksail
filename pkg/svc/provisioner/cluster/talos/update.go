@@ -38,6 +38,16 @@ func (p *Provisioner) Update(
 
 	clusterName := p.resolveClusterName(name)
 
+	// Sync Hetzner Cloud Firewall rules to the hardened set.
+	// This migrates existing clusters that were created with insecure rules
+	// (etcd, kubelet, trustd exposed to 0.0.0.0/0) to the secure configuration.
+	if p.hetznerOpts != nil {
+		syncErr := p.syncHetznerFirewallRules(ctx, clusterName)
+		if syncErr != nil {
+			return result, fmt.Errorf("failed to sync firewall rules: %w", syncErr)
+		}
+	}
+
 	// For Omni-managed clusters, refresh kubeconfig and talosconfig before any
 	// Helm/K8s operations. cluster create always calls saveOmniConfigs, but
 	// cluster update did not, leaving the on-disk kubeconfig stale after token
@@ -611,4 +621,18 @@ func countNodeRoles(nodes []nodeWithRole) (int32, int32) {
 	}
 
 	return controlPlanes, workers
+}
+
+// syncHetznerFirewallRules synchronizes the Hetzner Cloud Firewall rules to the
+// hardened set, migrating clusters created with the old insecure rules.
+func (p *Provisioner) syncHetznerFirewallRules(
+	ctx context.Context,
+	clusterName string,
+) error {
+	hzProvider, err := p.hetznerProvider()
+	if err != nil {
+		return err
+	}
+
+	return hzProvider.SyncFirewallRules(ctx, clusterName)
 }

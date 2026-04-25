@@ -35,11 +35,26 @@ func (s *Scaffolder) generateTalosConfig(output string, force bool) error {
 	// requires the CCM to initialize nodes with a providerID and write node labels.
 	enableExternalCloudProvider := s.KSailConfig.Spec.Cluster.Provider == v1alpha1.ProviderHetzner
 
+	// Enable ingress firewall for Hetzner clusters when not explicitly disabled.
+	enableIngressFirewall := s.KSailConfig.Spec.Cluster.Provider == v1alpha1.ProviderHetzner &&
+		s.KSailConfig.Spec.Provider.Hetzner.IngressFirewall != v1alpha1.IngressFirewallDisabled
+
+	// Determine CNI VXLAN port based on CNI selection
+	cniPort := 4789 // Default (Flannel) and Calico use VXLAN port 4789
+	if s.KSailConfig.Spec.Cluster.CNI == v1alpha1.CNICilium {
+		cniPort = 8472 // Cilium uses VXLAN port 8472
+	}
+
+	networkCIDR := s.KSailConfig.Spec.Provider.Hetzner.NetworkCIDR
+	if networkCIDR == "" {
+		networkCIDR = v1alpha1.DefaultHetznerNetworkCIDR
+	}
+
 	// Mirror the conditions in generator.getDirectoriesWithPatches() exactly so
 	// .gitkeep notifications match the files the generator actually writes.
 	clusterHasPatches := workers == 0 || len(s.MirrorRegistries) > 0 || disableDefaultCNI ||
 		enableKubeletCertRotation || s.ClusterName != "" || enableImageVerification || disableCDI ||
-		enableExternalCloudProvider
+		enableExternalCloudProvider || enableIngressFirewall
 
 	config := &talosgenerator.Config{
 		PatchesDir:                  TalosConfigDir,
@@ -51,6 +66,9 @@ func (s *Scaffolder) generateTalosConfig(output string, force bool) error {
 		EnableImageVerification:     enableImageVerification,
 		DisableCDI:                  disableCDI,
 		EnableExternalCloudProvider: enableExternalCloudProvider,
+		EnableIngressFirewall:       enableIngressFirewall,
+		NetworkCIDR:                 networkCIDR,
+		CNIPort:                     cniPort,
 	}
 
 	opts := yamlgenerator.Options{
@@ -70,6 +88,7 @@ func (s *Scaffolder) generateTalosConfig(output string, force bool) error {
 		enableImageVerification,
 		disableCDI,
 		enableExternalCloudProvider,
+		enableIngressFirewall,
 		clusterHasPatches,
 	)
 
@@ -80,7 +99,7 @@ func (s *Scaffolder) generateTalosConfig(output string, force bool) error {
 func (s *Scaffolder) notifyTalosGenerated(
 	workers int,
 	disableDefaultCNI, enableKubeletCertRotation, enableImageVerification, disableCDI,
-	enableExternalCloudProvider bool,
+	enableExternalCloudProvider, enableIngressFirewall bool,
 	clusterHasPatches bool,
 ) {
 	// Notify about .gitkeep files only for directories without patches
@@ -109,6 +128,9 @@ func (s *Scaffolder) notifyTalosGenerated(
 		{enableImageVerification, "cluster", "image-verification.yaml"},
 		{disableCDI, "cluster", "disable-cdi.yaml"},
 		{enableExternalCloudProvider, "cluster", "external-cloud-provider.yaml"},
+		{enableIngressFirewall, "cluster", "ingress-firewall-default-action.yaml"},
+		{enableIngressFirewall, "control-planes", "ingress-firewall-rules.yaml"},
+		{enableIngressFirewall, "workers", "ingress-firewall-rules.yaml"},
 	}
 
 	for _, patch := range patches {

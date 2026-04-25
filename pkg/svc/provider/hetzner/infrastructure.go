@@ -108,6 +108,78 @@ func (p *Provider) EnsureFirewall(
 	return result.Firewall, nil
 }
 
+// SyncFirewallRules updates an existing firewall's rules to match the current secure
+// rule set. This migrates already-created clusters to the hardened configuration
+// on the next `ksail cluster update`.
+func (p *Provider) SyncFirewallRules(
+	ctx context.Context,
+	clusterName string,
+) error {
+	if p.client == nil {
+		return provider.ErrProviderUnavailable
+	}
+
+	firewallName := clusterName + FirewallSuffix
+
+	firewall, _, err := p.client.Firewall.GetByName(ctx, firewallName)
+	if err != nil {
+		return fmt.Errorf("failed to get firewall %s: %w", firewallName, err)
+	}
+
+	if firewall == nil {
+		return nil // No firewall to sync
+	}
+
+	desiredRules := buildFirewallRules()
+
+	// Skip update if rules already match
+	if firewallRulesMatch(firewall.Rules, desiredRules) {
+		return nil
+	}
+
+	_, _, err = p.client.Firewall.SetRules(ctx, firewall, hcloud.FirewallSetRulesOpts{
+		Rules: desiredRules,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to sync firewall rules for %s: %w", firewallName, err)
+	}
+
+	return nil
+}
+
+// firewallRulesMatch returns true if existing and desired rules are equivalent.
+func firewallRulesMatch(existing, desired []hcloud.FirewallRule) bool {
+	if len(existing) != len(desired) {
+		return false
+	}
+
+	for i := range existing {
+		if existing[i].Protocol != desired[i].Protocol {
+			return false
+		}
+
+		if existing[i].Direction != desired[i].Direction {
+			return false
+		}
+
+		existingPort := ""
+		if existing[i].Port != nil {
+			existingPort = *existing[i].Port
+		}
+
+		desiredPort := ""
+		if desired[i].Port != nil {
+			desiredPort = *desired[i].Port
+		}
+
+		if existingPort != desiredPort {
+			return false
+		}
+	}
+
+	return true
+}
+
 // EnsurePlacementGroup ensures a placement group exists for the cluster.
 // If strategy is None, returns nil without creating a placement group.
 // If customName is provided, uses that name; otherwise uses "<clusterName>-placement".
@@ -156,13 +228,21 @@ func (p *Provider) EnsurePlacementGroup(
 	return result.PlacementGroup, nil
 }
 
-// buildFirewallRules creates the firewall rules required for Talos.
+// buildFirewallRules creates the firewall rules for the public interface.
+// Only ports that need public access are included (Talos API, Kubernetes API, ICMP).
+// Cluster-internal ports (etcd, kubelet, trustd) are omitted because Hetzner Cloud
+// Firewalls only filter public traffic — private network traffic is unfiltered.
 func buildFirewallRules() []hcloud.FirewallRule {
 	anyIP := []net.IPNet{
 		{IP: net.ParseIP("0.0.0.0"), Mask: net.CIDRMask(0, IPv4CIDRBits)},
 		{IP: net.ParseIP("::"), Mask: net.CIDRMask(0, IPv6CIDRBits)},
 	}
 
+	// Only expose ports that legitimately need public internet access.
+	// Cluster-internal ports (etcd, kubelet, trustd) are NOT included because
+	// Hetzner Cloud Firewalls only filter public interface traffic — inter-node
+	// communication flows through the private Hetzner Cloud Network unfiltered.
+	// See: https://docs.hetzner.com/cloud/firewalls/faq/#do-firewalls-filter-traffic-between-servers-on-the-same-private-network
 	return []hcloud.FirewallRule{
 		// Talos API (apid) - required for talosctl
 		{
@@ -179,30 +259,6 @@ func buildFirewallRules() []hcloud.FirewallRule {
 			Port:        new("6443"),
 			SourceIPs:   anyIP,
 			Description: new("Kubernetes API"),
-		},
-		// Talos trustd (for machine config)
-		{
-			Direction:   hcloud.FirewallRuleDirectionIn,
-			Protocol:    hcloud.FirewallRuleProtocolTCP,
-			Port:        new("50001"),
-			SourceIPs:   anyIP,
-			Description: new("Talos trustd"),
-		},
-		// etcd
-		{
-			Direction:   hcloud.FirewallRuleDirectionIn,
-			Protocol:    hcloud.FirewallRuleProtocolTCP,
-			Port:        new("2379-2380"),
-			SourceIPs:   anyIP,
-			Description: new("etcd"),
-		},
-		// Kubelet
-		{
-			Direction:   hcloud.FirewallRuleDirectionIn,
-			Protocol:    hcloud.FirewallRuleProtocolTCP,
-			Port:        new("10250"),
-			SourceIPs:   anyIP,
-			Description: new("Kubelet API"),
 		},
 		// ICMP (ping)
 		{

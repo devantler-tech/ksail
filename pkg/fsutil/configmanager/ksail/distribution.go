@@ -108,6 +108,24 @@ func (m *ConfigManager) loadTalosConfig() (*talosconfigmanager.Configs, error) {
 		talosManager.WithAdditionalPatches(externalCloudProviderPatches())
 	}
 
+	// Add ingress firewall patches when using Hetzner provider and not explicitly disabled.
+	// This configures NetworkDefaultActionConfig (ingress: block) and per-role
+	// NetworkRuleConfig documents for defense-in-depth at the OS level.
+	if m.Config.Spec.Cluster.Provider == v1alpha1.ProviderHetzner &&
+		m.Config.Spec.Provider.Hetzner.IngressFirewall != v1alpha1.IngressFirewallDisabled {
+		networkCIDR := m.Config.Spec.Provider.Hetzner.NetworkCIDR
+		if networkCIDR == "" {
+			networkCIDR = v1alpha1.DefaultHetznerNetworkCIDR
+		}
+
+		cniPort := 4789 // Default (Flannel) and Calico
+		if m.Config.Spec.Cluster.CNI == v1alpha1.CNICilium {
+			cniPort = 8472 // Cilium VXLAN
+		}
+
+		talosManager.WithAdditionalPatches(ingressFirewallPatches(networkCIDR, cniPort))
+	}
+
 	// Inject kubelet cert rotation + CSR approver patches at runtime when
 	// metrics-server is enabled AND both patch files don't already exist on disk.
 	// Projects initialized with v7.4.0+ have the patch files; older projects
@@ -471,6 +489,30 @@ func externalCloudProviderPatches() []talosconfigmanager.Patch {
 			Path:    "external-cloud-provider",
 			Scope:   talosconfigmanager.PatchScopeCluster,
 			Content: []byte(talosgenerator.ExternalCloudProviderPatchYAML),
+		},
+	}
+}
+
+// ingressFirewallPatches returns Talos patches that configure the OS-level ingress firewall.
+// This generates three patches: a default action (ingress: block) for all nodes, plus
+// per-role NetworkRuleConfig documents for control-plane and worker nodes.
+// See: https://www.talos.dev/latest/talos-guides/network/ingress-firewall/
+func ingressFirewallPatches(networkCIDR string, cniPort int) []talosconfigmanager.Patch {
+	return []talosconfigmanager.Patch{
+		{
+			Path:    "ingress-firewall-default-action",
+			Scope:   talosconfigmanager.PatchScopeCluster,
+			Content: []byte(talosgenerator.IngressFirewallDefaultActionYAML),
+		},
+		{
+			Path:    "ingress-firewall-cp-rules",
+			Scope:   talosconfigmanager.PatchScopeControlPlane,
+			Content: []byte(talosgenerator.IngressFirewallCPRulesYAML(networkCIDR, cniPort)),
+		},
+		{
+			Path:    "ingress-firewall-worker-rules",
+			Scope:   talosconfigmanager.PatchScopeWorker,
+			Content: []byte(talosgenerator.IngressFirewallWorkerRulesYAML(networkCIDR, cniPort)),
 		},
 	}
 }

@@ -748,3 +748,202 @@ func TestGenerator_Generate_ExternalCloudProviderDisabled(t *testing.T) {
 	_, err = os.Stat(patchPath)
 	assert.True(t, os.IsNotExist(err), "expected external-cloud-provider.yaml to not exist")
 }
+
+// TestGenerator_Generate_IngressFirewall tests that ingress firewall documents
+// are generated when EnableIngressFirewall is true.
+func TestGenerator_Generate_IngressFirewall(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	gen := talosgenerator.NewGenerator()
+
+	config := &talosgenerator.Config{
+		PatchesDir:            "talos",
+		EnableIngressFirewall: true,
+		NetworkCIDR:           "10.0.0.0/16",
+		CNIPort:               8472,
+		WorkerNodes:           1, // Prevents allow-scheduling patch
+	}
+	opts := yamlgenerator.Options{
+		Output: tempDir,
+	}
+
+	result, err := gen.Generate(config, opts)
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(tempDir, "talos"), result)
+
+	// Verify ingress-firewall-default-action.yaml was created in cluster/
+	defaultActionPath := filepath.Join(tempDir, "talos", "cluster", "ingress-firewall-default-action.yaml")
+	defaultActionContent, err := os.ReadFile(defaultActionPath) //nolint:gosec // Test file path is safe
+	require.NoError(t, err)
+	assert.Contains(t, string(defaultActionContent), "kind: NetworkDefaultActionConfig")
+	assert.Contains(t, string(defaultActionContent), "ingress: block")
+
+	// Verify control-plane ingress-firewall-rules.yaml was created
+	cpRulesPath := filepath.Join(tempDir, "talos", "control-planes", "ingress-firewall-rules.yaml")
+	cpContent, err := os.ReadFile(cpRulesPath) //nolint:gosec // Test file path is safe
+	require.NoError(t, err)
+	cpStr := string(cpContent)
+	assert.Contains(t, cpStr, "name: etcd")
+	assert.Contains(t, cpStr, "name: trustd")
+	assert.Contains(t, cpStr, "name: kubernetes-api")
+	assert.Contains(t, cpStr, "name: apid")
+	assert.Contains(t, cpStr, "name: kubelet")
+	assert.Contains(t, cpStr, "name: cni-vxlan")
+	assert.Contains(t, cpStr, "8472")
+	assert.Contains(t, cpStr, "10.0.0.0/16")
+
+	// Verify worker ingress-firewall-rules.yaml was created
+	workerRulesPath := filepath.Join(tempDir, "talos", "workers", "ingress-firewall-rules.yaml")
+	workerContent, err := os.ReadFile(workerRulesPath) //nolint:gosec // Test file path is safe
+	require.NoError(t, err)
+	workerStr := string(workerContent)
+	assert.Contains(t, workerStr, "name: kubelet")
+	assert.Contains(t, workerStr, "name: apid")
+	assert.Contains(t, workerStr, "name: cni-vxlan")
+	assert.NotContains(t, workerStr, "name: etcd")
+	assert.NotContains(t, workerStr, "name: trustd")
+	assert.NotContains(t, workerStr, "name: kubernetes-api")
+	assert.Contains(t, workerStr, "10.0.0.0/16")
+
+	// Verify .gitkeep was NOT created in cluster/ since we have a patch there
+	gitkeepPath := filepath.Join(tempDir, "talos", "cluster", ".gitkeep")
+	_, err = os.Stat(gitkeepPath)
+	assert.True(t, os.IsNotExist(err), "expected .gitkeep to not exist when patches are generated")
+}
+
+// TestGenerator_Generate_IngressFirewallDisabled tests that ingress firewall documents
+// are NOT generated when EnableIngressFirewall is false.
+func TestGenerator_Generate_IngressFirewallDisabled(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	gen := talosgenerator.NewGenerator()
+
+	config := &talosgenerator.Config{
+		PatchesDir:            "talos",
+		WorkerNodes:           1,
+		EnableIngressFirewall: false,
+	}
+	opts := yamlgenerator.Options{
+		Output: tempDir,
+	}
+
+	_, err := gen.Generate(config, opts)
+	require.NoError(t, err)
+
+	// Verify none of the ingress firewall files were created
+	defaultActionPath := filepath.Join(tempDir, "talos", "cluster", "ingress-firewall-default-action.yaml")
+	_, err = os.Stat(defaultActionPath)
+	assert.True(t, os.IsNotExist(err), "expected ingress-firewall-default-action.yaml to not exist")
+
+	cpRulesPath := filepath.Join(tempDir, "talos", "control-planes", "ingress-firewall-rules.yaml")
+	_, err = os.Stat(cpRulesPath)
+	assert.True(t, os.IsNotExist(err), "expected control-planes/ingress-firewall-rules.yaml to not exist")
+
+	workerRulesPath := filepath.Join(tempDir, "talos", "workers", "ingress-firewall-rules.yaml")
+	_, err = os.Stat(workerRulesPath)
+	assert.True(t, os.IsNotExist(err), "expected workers/ingress-firewall-rules.yaml to not exist")
+}
+
+// TestGenerator_Generate_IngressFirewallFlannelPort tests that the CNI VXLAN port
+// is correctly set when using Flannel's default port (4789).
+func TestGenerator_Generate_IngressFirewallFlannelPort(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	gen := talosgenerator.NewGenerator()
+
+	config := &talosgenerator.Config{
+		PatchesDir:            "talos",
+		EnableIngressFirewall: true,
+		NetworkCIDR:           "10.0.0.0/16",
+		CNIPort:               4789,
+		WorkerNodes:           1,
+	}
+	opts := yamlgenerator.Options{
+		Output: tempDir,
+	}
+
+	_, err := gen.Generate(config, opts)
+	require.NoError(t, err)
+
+	// Verify CP rules contain port 4789
+	cpRulesPath := filepath.Join(tempDir, "talos", "control-planes", "ingress-firewall-rules.yaml")
+	cpContent, err := os.ReadFile(cpRulesPath) //nolint:gosec // Test file path is safe
+	require.NoError(t, err)
+	assert.Contains(t, string(cpContent), "4789")
+
+	// Verify worker rules contain port 4789
+	workerRulesPath := filepath.Join(tempDir, "talos", "workers", "ingress-firewall-rules.yaml")
+	workerContent, err := os.ReadFile(workerRulesPath) //nolint:gosec // Test file path is safe
+	require.NoError(t, err)
+	assert.Contains(t, string(workerContent), "4789")
+}
+
+// TestIngressFirewallCPRulesYAML tests the exported CP rules YAML function directly.
+func TestIngressFirewallCPRulesYAML(t *testing.T) {
+	t.Parallel()
+
+	result := talosgenerator.IngressFirewallCPRulesYAML("10.0.0.0/16", 8472)
+
+	// Verify all expected rule names are present
+	assert.Contains(t, result, "name: kubelet")
+	assert.Contains(t, result, "name: apid")
+	assert.Contains(t, result, "name: kubernetes-api")
+	assert.Contains(t, result, "name: trustd")
+	assert.Contains(t, result, "name: etcd")
+	assert.Contains(t, result, "name: cni-vxlan")
+
+	// Verify network CIDR is injected in restricted rules
+	assert.Contains(t, result, "subnet: 10.0.0.0/16")
+
+	// Verify CNI port is injected
+	assert.Contains(t, result, "8472")
+
+	// Verify apid and kubernetes-api are open to all (0.0.0.0/0 and ::/0)
+	assert.Contains(t, result, "subnet: 0.0.0.0/0")
+	assert.Contains(t, result, "subnet: ::/0")
+
+	// Verify correct protocols
+	assert.Contains(t, result, "protocol: tcp")
+	assert.Contains(t, result, "protocol: udp")
+
+	// Verify known ports
+	assert.Contains(t, result, "10250")  // kubelet
+	assert.Contains(t, result, "50000")  // apid
+	assert.Contains(t, result, "6443")   // kubernetes-api
+	assert.Contains(t, result, "50001")  // trustd
+	assert.Contains(t, result, "2379-2380") // etcd
+}
+
+// TestIngressFirewallWorkerRulesYAML tests the exported worker rules YAML function directly.
+func TestIngressFirewallWorkerRulesYAML(t *testing.T) {
+	t.Parallel()
+
+	result := talosgenerator.IngressFirewallWorkerRulesYAML("192.168.0.0/24", 4789)
+
+	// Verify expected rule names are present
+	assert.Contains(t, result, "name: kubelet")
+	assert.Contains(t, result, "name: apid")
+	assert.Contains(t, result, "name: cni-vxlan")
+
+	// Verify CP-only rules are NOT present
+	assert.NotContains(t, result, "name: etcd")
+	assert.NotContains(t, result, "name: trustd")
+	assert.NotContains(t, result, "name: kubernetes-api")
+
+	// Verify network CIDR is injected
+	assert.Contains(t, result, "subnet: 192.168.0.0/24")
+
+	// Verify CNI port is injected
+	assert.Contains(t, result, "4789")
+
+	// Verify worker rules are restricted to the network CIDR (no 0.0.0.0/0)
+	assert.NotContains(t, result, "subnet: 0.0.0.0/0")
+	assert.NotContains(t, result, "subnet: ::/0")
+
+	// Verify known ports
+	assert.Contains(t, result, "10250") // kubelet
+	assert.Contains(t, result, "50000") // apid
+}
