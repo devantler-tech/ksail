@@ -810,13 +810,13 @@ func TestProvisioner_Delete_OmniProvider(t *testing.T) {
 
 // RefreshKubeconfig tests — verify routing for Docker, Hetzner, and Omni.
 
-func TestProvisioner_RefreshKubeconfig_DockerNoOp(t *testing.T) {
+func TestProvisioner_RefreshKubeconfig_DefaultNoOp(t *testing.T) {
 	t.Parallel()
 
 	configs := createTestTalosConfigs(t, "docker-cluster")
 	provisioner := talosprovisioner.NewProvisioner(configs, nil).
 		WithDockerClient(docker.NewMockAPIClient(t))
-	// Docker provisioner: no hetznerOpts, no omniOpts → no-op
+	// No hetznerOpts, no omniOpts → default no-op path
 
 	ctx := context.Background()
 	err := provisioner.RefreshKubeconfig(ctx, "")
@@ -824,12 +824,12 @@ func TestProvisioner_RefreshKubeconfig_DockerNoOp(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestProvisioner_RefreshKubeconfig_DockerNoClient(t *testing.T) {
+func TestProvisioner_RefreshKubeconfig_NoClientNoOp(t *testing.T) {
 	t.Parallel()
 
 	configs := createTestTalosConfigs(t, "docker-cluster")
 	provisioner := talosprovisioner.NewProvisioner(configs, nil)
-	// No Docker client, no Hetzner/Omni opts → still a no-op (Docker default path)
+	// No Docker client, no Hetzner/Omni opts → still a no-op (default path)
 
 	ctx := context.Background()
 	err := provisioner.RefreshKubeconfig(ctx, "")
@@ -852,6 +852,65 @@ func TestProvisioner_RefreshKubeconfig_HetznerNilInfraProvider(t *testing.T) {
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, talosprovisioner.ErrNoControlPlaneForRefresh)
+}
+
+// mockKubeconfigFetcher satisfies KubeconfigFetcherForTest for unit testing
+// fetchAndWriteKubeconfigForCP without a real Talos control-plane.
+type mockKubeconfigFetcher struct {
+	kubeconfig []byte
+	fetchErr   error
+}
+
+func (m *mockKubeconfigFetcher) Kubeconfig(_ context.Context) ([]byte, error) {
+	return m.kubeconfig, m.fetchErr
+}
+
+func (m *mockKubeconfigFetcher) Close() error {
+	return nil
+}
+
+func TestProvisioner_RefreshKubeconfig_HetznerFetchAndWrite(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	kubeconfigPath := tmpDir + "/kube.yaml"
+
+	// A minimal but valid kubeconfig: rewriteKubeconfigEndpoint uses clientcmd.Load,
+	// which requires at least one cluster entry to rewrite.
+	minimalKubeconfig := []byte(`apiVersion: v1
+kind: Config
+clusters:
+- cluster:
+    server: https://0.0.0.0:6443
+  name: test
+contexts:
+- context:
+    cluster: test
+    user: admin@test
+  name: admin@test
+current-context: admin@test
+users:
+- name: admin@test
+  user: {}
+`)
+
+	configs := createTestTalosConfigs(t, "hetzner-cluster")
+	opts := talosprovisioner.NewOptions().WithKubeconfigPath(kubeconfigPath)
+	provisioner := talosprovisioner.NewProvisioner(configs, opts).
+		WithHetznerOptions(v1alpha1.OptionsHetzner{}).
+		WithLogWriter(io.Discard).
+		WithTalosClientFactoryForTest(func(_ context.Context, _ string) (talosprovisioner.KubeconfigFetcherForTest, error) {
+			return &mockKubeconfigFetcher{kubeconfig: minimalKubeconfig}, nil
+		})
+
+	ctx := context.Background()
+	err := provisioner.FetchAndWriteKubeconfigForCPForTest(ctx, "1.2.3.4")
+
+	require.NoError(t, err)
+
+	data, readErr := os.ReadFile(kubeconfigPath)
+	require.NoError(t, readErr)
+	assert.Contains(t, string(data), "https://1.2.3.4:6443")
 }
 
 func TestProvisioner_RefreshKubeconfig_OmniRoutes(t *testing.T) {

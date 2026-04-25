@@ -208,6 +208,24 @@ func ContainerNameForTest(ctr container.Summary) string {
 	return containerName(ctr)
 }
 
+// KubeconfigFetcherForTest is the exported alias of kubeconfigFetcher for testing.
+type KubeconfigFetcherForTest = kubeconfigFetcher
+
+// WithTalosClientFactoryForTest sets the talosClientFactory for testing,
+// allowing injection of a mock that returns known kubeconfig bytes.
+func (p *Provisioner) WithTalosClientFactoryForTest(
+	f func(ctx context.Context, ip string) (KubeconfigFetcherForTest, error),
+) *Provisioner {
+	p.talosClientFactory = f
+
+	return p
+}
+
+// FetchAndWriteKubeconfigForCPForTest exposes fetchAndWriteKubeconfigForCP for testing.
+func (p *Provisioner) FetchAndWriteKubeconfigForCPForTest(ctx context.Context, cpIP string) error {
+	return p.fetchAndWriteKubeconfigForCP(ctx, cpIP)
+}
+
 // NthIPInNetworkForTest exposes nthIPInNetwork for unit testing.
 func NthIPInNetworkForTest(prefix netip.Prefix, offset int) (netip.Addr, error) {
 	return nthIPInNetwork(prefix, offset)
