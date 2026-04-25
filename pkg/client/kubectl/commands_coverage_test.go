@@ -85,3 +85,46 @@ func TestCreateWaitCommand_WithKubeconfig(t *testing.T) {
 	cmd2 := client.CreateWaitCommand("/path/to/kubeconfig")
 	require.NotNil(t, cmd2)
 }
+
+func TestCreatePortForwardCommand(t *testing.T) {
+	t.Parallel()
+
+	client := kubectl.NewClient(createTestIOStreams())
+	cmd := client.CreatePortForwardCommand("")
+
+	require.NotNil(t, cmd)
+	assert.Equal(t, "forward", cmd.Use)
+	assert.Contains(t, cmd.Short, "Forward")
+	assert.NotEmpty(t, cmd.Long)
+	assert.Contains(t, cmd.Example, "ksail workload forward",
+		"examples should reference 'ksail workload forward', not 'port-forward'")
+	assert.NotContains(t, cmd.Example, "port-forward",
+		"examples should not contain the original 'port-forward' name")
+}
+
+func TestCreatePortForwardCommandHasFlags(t *testing.T) {
+	t.Parallel()
+
+	client := kubectl.NewClient(createTestIOStreams())
+	cmd := client.CreatePortForwardCommand("/tmp/kubeconfig")
+
+	require.NotNil(t, cmd)
+	flags := cmd.Flags()
+	require.NotNil(t, flags)
+	assert.NotNil(t, flags.Lookup("address"), "expected --address flag")
+	assert.NotNil(t, flags.Lookup("kubeconfig"), "expected --kubeconfig flag")
+}
+
+func TestCreatePortForwardCommand_WithKubeconfig(t *testing.T) {
+	t.Parallel()
+
+	client := kubectl.NewClient(createTestIOStreams())
+
+	// With empty kubeconfig
+	cmd1 := client.CreatePortForwardCommand("")
+	require.NotNil(t, cmd1)
+
+	// With a kubeconfig path
+	cmd2 := client.CreatePortForwardCommand("/path/to/kubeconfig")
+	require.NotNil(t, cmd2)
+}
