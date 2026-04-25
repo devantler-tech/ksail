@@ -170,7 +170,7 @@ func NewProvisioner(
 		options = NewOptions()
 	}
 
-	p := &Provisioner{ //nolint:varnamelen
+	prov := &Provisioner{
 		talosConfigs: talosConfigs,
 		options:      options,
 		provisionerFactory: func(ctx context.Context) (provision.Provisioner, error) {
@@ -180,11 +180,11 @@ func NewProvisioner(
 		imagePullRetry: defaultImagePullRetryConfig(),
 	}
 
-	p.talosClientFactory = func(ctx context.Context, ip string) (kubeconfigFetcher, error) {
-		return p.createTalosClient(ctx, ip)
+	prov.talosClientFactory = func(ctx context.Context, ip string) (kubeconfigFetcher, error) {
+		return prov.createTalosClient(ctx, ip)
 	}
 
-	return p
+	return prov
 }
 
 // WithDockerClient sets the Docker client for container operations.
@@ -282,15 +282,15 @@ func (p *Provisioner) SetComponentDetector(d *detector.ComponentDetector) {
 func (p *Provisioner) RefreshKubeconfig(ctx context.Context, name string) error {
 	clusterName := p.resolveClusterName(name)
 
-	// Omni: prefer the Omni SaaS API; fall back to Talos API on failure.
+	// Omni: use the Omni SaaS API (Talos API fallback is not viable because
+	// getOmniNodesByRole returns machine IDs, not reachable IPs).
 	if p.omniOpts != nil {
 		omniProv, err := p.omniProvider()
-		if err == nil {
-			if saveErr := p.saveOmniKubeconfig(ctx, omniProv, clusterName); saveErr == nil {
-				return nil
-			}
+		if err != nil {
+			return fmt.Errorf("omni provider for kubeconfig refresh: %w", err)
 		}
-		// Fall through to the Talos API path.
+
+		return p.saveOmniKubeconfig(ctx, omniProv, clusterName)
 	}
 
 	return p.refreshKubeconfigFromTalosAPI(ctx, clusterName)

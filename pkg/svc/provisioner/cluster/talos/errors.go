@@ -41,6 +41,6 @@ var (
 	// ErrEmptyVersionResponse is returned when a Talos node returns an empty version response.
 	ErrEmptyVersionResponse = errors.New("empty version response from node")
 	// ErrNoControlPlaneForRefresh is returned when no control-plane node can be found
-	// for kubeconfig refresh on cloud providers (Hetzner).
+	// for kubeconfig refresh.
 	ErrNoControlPlaneForRefresh = errors.New("no control-plane node found for kubeconfig refresh")
 )

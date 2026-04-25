@@ -222,7 +222,10 @@ func (p *Provisioner) WithTalosClientFactoryForTest(
 }
 
 // FetchAndWriteKubeconfigForCPForTest exposes fetchAndWriteKubeconfigForCP for testing.
-func (p *Provisioner) FetchAndWriteKubeconfigForCPForTest(ctx context.Context, talosEndpoint, k8sEndpoint string) error {
+func (p *Provisioner) FetchAndWriteKubeconfigForCPForTest(
+	ctx context.Context,
+	talosEndpoint, k8sEndpoint string,
+) error {
 	return p.fetchAndWriteKubeconfigForCP(ctx, talosEndpoint, k8sEndpoint)
 }
 
