@@ -30,11 +30,6 @@ jobs:
       contents: write
       packages: write
     steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@6c3c2f2c1c457b00c10c4848d6f5491db3b629df # v2.18.0
-        with:
-          egress-policy: audit
-
       - name: 📑 Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -94,11 +89,6 @@ jobs:
       run:
         working-directory: vsce
     steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@6c3c2f2c1c457b00c10c4848d6f5491db3b629df # v2.18.0
-        with:
-          egress-policy: audit
-
       - name: 📄 Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -154,11 +144,6 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@6c3c2f2c1c457b00c10c4848d6f5491db3b629df # v2.18.0
-        with:
-          egress-policy: audit
-
       - name: 🔑 Generate GitHub App Token
         uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3.1.1
         id: generate-token
@@ -251,11 +236,6 @@ jobs:
       id-token: write
       contents: read
     steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@6c3c2f2c1c457b00c10c4848d6f5491db3b629df # v2.18.0
-        with:
-          egress-policy: audit
-
       - name: 📑 Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -299,11 +279,6 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@6c3c2f2c1c457b00c10c4848d6f5491db3b629df # v2.18.0
-        with:
-          egress-policy: audit
-
       - name: 📑 Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -369,11 +344,6 @@ jobs:
       pages: write
       id-token: write
     steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@6c3c2f2c1c457b00c10c4848d6f5491db3b629df # v2.18.0
-        with:
-          egress-policy: audit
-
       - name: 🚀 Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0
@@ -387,11 +357,6 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@6c3c2f2c1c457b00c10c4848d6f5491db3b629df # v2.18.0
-        with:
-          egress-policy: audit
-
       - name: 🏷️ Extract version from tag
         id: get_version
         run: echo "version=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"

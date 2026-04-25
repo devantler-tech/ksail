@@ -82,11 +82,6 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@6c3c2f2c1c457b00c10c4848d6f5491db3b629df # v2.18.0
-        with:
-          egress-policy: audit
-
       - name: 📄 Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -113,11 +108,6 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@6c3c2f2c1c457b00c10c4848d6f5491db3b629df # v2.18.0
-        with:
-          egress-policy: audit
-
       - name: 📄 Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -148,11 +138,6 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@6c3c2f2c1c457b00c10c4848d6f5491db3b629df # v2.18.0
-        with:
-          egress-policy: audit
-
       - name: 📄 Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -193,11 +178,6 @@ jobs:
         # On workflow_dispatch: run a single user-selected configuration.
         include: ${{ github.event_name == 'schedule' && fromJSON('[{"init":true,"suffix":"default-init","args":""},{"init":false,"suffix":"default-noinit","args":""},{"init":true,"suffix":"fullstack","args":"--cni Cilium --csi Enabled --load-balancer Enabled --metrics-server Enabled --policy-engine Kyverno --cert-manager Enabled --gitops-engine Flux --local-registry ghcr.io/devantler-tech/ksail/system-test-manifests"},{"init":true,"suffix":"altstack","args":"--cni Calico --csi Disabled --load-balancer Disabled --metrics-server Disabled --policy-engine Gatekeeper --gitops-engine ArgoCD --local-registry ghcr.io/devantler-tech/ksail/system-test-manifests"}]') || fromJSON(format('[{"init":{0},"suffix":"dispatch","args":""}]', inputs.init)) }}
     steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@6c3c2f2c1c457b00c10c4848d6f5491db3b629df # v2.18.0
-        with:
-          egress-policy: audit
-
       - name: 📄 Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -308,11 +288,6 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@6c3c2f2c1c457b00c10c4848d6f5491db3b629df # v2.18.0
-        with:
-          egress-policy: audit
-
       - name: 📄 Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:

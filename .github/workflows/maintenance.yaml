@@ -19,11 +19,6 @@ jobs:
       actions: write
       contents: read
     steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@6c3c2f2c1c457b00c10c4848d6f5491db3b629df # v2.18.0
-        with:
-          egress-policy: audit
-
       - name: Delete old workflow runs
         uses: Mattraks/delete-workflow-runs@b3018382ca039b53d238908238bd35d1fb14f8ee # v2.1.0
         with:
@@ -40,11 +35,6 @@ jobs:
     permissions:
       packages: write
     steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@6c3c2f2c1c457b00c10c4848d6f5491db3b629df # v2.18.0
-        with:
-          egress-policy: audit
-
       - name: Delete old package versions
         uses: actions/delete-package-versions@e5bc658cc4c965c472efe991f8beea3981499c55 # v5.0.0
         with:
