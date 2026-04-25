@@ -292,7 +292,11 @@ func (f *Factory) needsMetalLB(spec v1alpha1.ClusterSpec) bool {
 }
 
 // needsHcloudCCM determines if Hetzner Cloud Controller Manager is needed.
-// hcloud-ccm provides LoadBalancer support for Talos clusters running on Hetzner Cloud.
+// hcloud-ccm provides LoadBalancer support for Talos clusters running on Hetzner Cloud,
+// and is also required for CSI topology labeling: the CCM applies the
+// `instance.hetzner.cloud/provided-by` node label that the hcloud-csi driver
+// reads at start-up to register topology segments. Therefore CCM must be
+// installed whenever Hetzner CSI is enabled.
 func (f *Factory) needsHcloudCCM(spec v1alpha1.ClusterSpec) bool {
 	if spec.Distribution != v1alpha1.DistributionTalos {
 		return false
@@ -303,5 +307,6 @@ func (f *Factory) needsHcloudCCM(spec v1alpha1.ClusterSpec) bool {
 	}
 
 	return spec.LoadBalancer == v1alpha1.LoadBalancerDefault ||
-		spec.LoadBalancer == v1alpha1.LoadBalancerEnabled
+		spec.LoadBalancer == v1alpha1.LoadBalancerEnabled ||
+		spec.CSI != v1alpha1.CSIDisabled
 }

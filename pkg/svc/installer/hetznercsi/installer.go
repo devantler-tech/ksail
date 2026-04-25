@@ -86,7 +86,7 @@ func (h *Installer) Install(ctx context.Context) error {
 
 	err = h.Installer.Install(ctx)
 	if err != nil {
-		return fmt.Errorf("install hcloud-csi: %w", err)
+		return err
 	}
 
 	return nil

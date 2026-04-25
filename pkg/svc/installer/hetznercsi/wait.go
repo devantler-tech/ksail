@@ -37,7 +37,7 @@ var waitForCCMNodeLabelsFn = func(
 	err = readiness.WaitForAllNodesLabeled(ctx, clientset, ProvidedByLabel, deadline)
 	if err != nil {
 		return fmt.Errorf(
-			"timed out waiting for hcloud-ccm to label all nodes with %q: %w",
+			"failed waiting for hcloud-ccm to label all nodes with %q: %w",
 			ProvidedByLabel, err,
 		)
 	}
