@@ -84,7 +84,11 @@ func (h *Installer) Install(ctx context.Context) error {
 		return fmt.Errorf("wait for hcloud-ccm node initialization: %w", err)
 	}
 
-	return h.Installer.Install(ctx)
+	if err := h.Installer.Install(ctx); err != nil {
+		return fmt.Errorf("install hcloud-csi: %w", err)
+	}
+
+	return nil
 }
 
 // buildSecretData returns extra key-value pairs for the shared "hcloud" secret.

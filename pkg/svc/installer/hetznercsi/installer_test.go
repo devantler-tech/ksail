@@ -13,6 +13,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+var errSimulatedCCMLabelTimeout = errors.New("simulated CCM label timeout")
+
 func TestNewInstaller(t *testing.T) {
 	t.Parallel()
 
@@ -117,7 +119,7 @@ func TestHetznerCSIInstaller_Install_WaitsForCCMLabels(t *testing.T) {
 	mockClient := helm.NewMockInterface(t)
 	timeout := 5 * time.Minute
 
-	waitErr := errors.New("simulated CCM label timeout")
+	waitErr := errSimulatedCCMLabelTimeout
 
 	var (
 		gotKubeconfig, gotContext string
