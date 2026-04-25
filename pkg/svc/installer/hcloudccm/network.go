@@ -14,31 +14,43 @@ import (
 //  1. If spec.provider.hetzner.networkName is explicitly set, use that.
 //     This matches the API contract: "If empty, a network named
 //     '<cluster-name>-network' will be created."
-//  2. Otherwise, extract the cluster name from the kubeconfig context
+//  2. Extract the cluster name from the kubeconfig context
 //     (e.g., "admin@dev" → "dev") and append the standard network suffix
 //     ("-network") to match what hetzner.Provider.EnsureNetwork creates.
+//  3. Use the provided clusterName fallback (from the CLI / provisioner) and
+//     append the network suffix. This ensures the installer always matches
+//     the network that hetzner.Provider.EnsureNetwork creates, even when
+//     Connection.Context is empty or doesn't follow the "admin@<name>" pattern.
 //
 // Returns empty string if the network name cannot be determined.
-func ResolveHetznerNetworkName(cfg *v1alpha1.Cluster) string {
+func ResolveHetznerNetworkName(cfg *v1alpha1.Cluster, clusterName string) string {
 	// Explicit network name takes precedence per the API contract.
 	if nn := cfg.Spec.Provider.Hetzner.NetworkName; nn != "" {
 		return nn
 	}
 
 	// Derive from context: for Talos the context is "admin@<clusterName>".
-	clusterName := extractClusterNameFromTalosContext(
+	contextName := ExtractClusterNameFromTalosContext(
 		cfg.Spec.Cluster.Connection.Context,
 	)
-	if clusterName == "" {
-		return ""
+	if contextName != "" {
+		return contextName + hetznerProvider.NetworkSuffix
 	}
 
-	return clusterName + hetznerProvider.NetworkSuffix
+	// Fallback: use the directly-provided cluster name. This matches the
+	// value passed to hetzner.Provider.EnsureNetwork, guaranteeing the
+	// installer and provider agree on the network name.
+	clusterName = strings.TrimSpace(clusterName)
+	if clusterName != "" {
+		return clusterName + hetznerProvider.NetworkSuffix
+	}
+
+	return ""
 }
 
-// extractClusterNameFromTalosContext extracts the cluster name from a Talos
+// ExtractClusterNameFromTalosContext extracts the cluster name from a Talos
 // kubeconfig context string. Talos contexts follow the pattern "admin@<name>".
-func extractClusterNameFromTalosContext(context string) string {
+func ExtractClusterNameFromTalosContext(context string) string {
 	const talosPrefix = "admin@"
 
 	context = strings.TrimSpace(context)

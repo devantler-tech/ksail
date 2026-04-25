@@ -194,7 +194,10 @@ func (f *Factory) addCSIInstallers(installers map[string]Installer, cfg *v1alpha
 	}
 
 	if f.needsHetznerCSI(spec) {
-		networkName := hcloudccminstaller.ResolveHetznerNetworkName(cfg)
+		networkName := hcloudccminstaller.ResolveHetznerNetworkName(
+			cfg,
+			hcloudccminstaller.ExtractClusterNameFromTalosContext(f.kubecontext),
+		)
 		installers["hetzner-csi"] = hetznercsiinstaller.NewInstaller(
 			f.helmClient, f.kubeconfig, f.kubecontext, f.timeout, networkName,
 		)
@@ -228,7 +231,10 @@ func (f *Factory) addLoadBalancerInstaller(
 	}
 
 	if f.needsHcloudCCM(spec) {
-		networkName := hcloudccminstaller.ResolveHetznerNetworkName(cfg)
+		networkName := hcloudccminstaller.ResolveHetznerNetworkName(
+			cfg,
+			hcloudccminstaller.ExtractClusterNameFromTalosContext(f.kubecontext),
+		)
 		installers["hcloud-ccm"] = hcloudccminstaller.NewInstaller(
 			f.helmClient,
 			f.kubeconfig,

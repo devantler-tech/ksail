@@ -127,7 +127,12 @@ func csiFactory(
 		// For Talos × Hetzner, use the Hetzner CSI driver
 		if clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionTalos &&
 			clusterCfg.Spec.Cluster.Provider == v1alpha1.ProviderHetzner {
-			networkName := hcloudccminstaller.ResolveHetznerNetworkName(clusterCfg)
+			networkName := hcloudccminstaller.ResolveHetznerNetworkName(
+				clusterCfg,
+				hcloudccminstaller.ExtractClusterNameFromTalosContext(
+					clusterCfg.Spec.Cluster.Connection.Context,
+				),
+			)
 
 			return hetznercsiinstaller.NewInstaller(
 				helmClient,
