@@ -1220,7 +1220,11 @@ func TestIngressFirewall_Set(t *testing.T) { //nolint:dupl // enum pattern
 		{name: "enabled_mixed_case", input: "Enabled", expected: v1alpha1.IngressFirewallEnabled},
 		{name: "enabled_uppercase", input: "ENABLED", expected: v1alpha1.IngressFirewallEnabled},
 		{name: "disabled_lowercase", input: "disabled", expected: v1alpha1.IngressFirewallDisabled},
-		{name: "disabled_mixed_case", input: "Disabled", expected: v1alpha1.IngressFirewallDisabled},
+		{
+			name:     "disabled_mixed_case",
+			input:    "Disabled",
+			expected: v1alpha1.IngressFirewallDisabled,
+		},
 		{name: "disabled_uppercase", input: "DISABLED", expected: v1alpha1.IngressFirewallDisabled},
 		{name: "invalid_value", input: "invalid", wantError: true},
 	}
