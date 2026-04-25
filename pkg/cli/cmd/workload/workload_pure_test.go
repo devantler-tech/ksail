@@ -867,7 +867,7 @@ func TestFindKustomizationDir_FileInRoot(t *testing.T) {
 
 // Test sentinel errors for retryOnTransientError tests.
 //
-//nolint:gochecknoglobals // test sentinel errors follow the same pattern as pkg/svc/registryresolver/oci_test.go
+
 var (
 	errRetryNotTransient     = errors.New("not a transient error")
 	errRetryConnectionReset  = errors.New("connection reset by peer")
@@ -885,6 +885,7 @@ func TestRetryOnTransientError_SuccessFirstAttempt(t *testing.T) {
 		t.Context(), cmd, 3, 0, 0,
 		func() error {
 			calls++
+
 			return nil
 		},
 	)
@@ -903,6 +904,7 @@ func TestRetryOnTransientError_NonRetryableError(t *testing.T) {
 		t.Context(), cmd, 3, 0, 0,
 		func() error {
 			calls++
+
 			return errRetryNotTransient
 		},
 	)
@@ -921,6 +923,7 @@ func TestRetryOnTransientError_RetryableExhausted(t *testing.T) {
 		t.Context(), cmd, 3, 0, 0,
 		func() error {
 			calls++
+
 			return errRetryConnectionReset
 		},
 	)
@@ -943,6 +946,7 @@ func TestRetryOnTransientError_SucceedsAfterRetry(t *testing.T) {
 			if calls < 3 {
 				return errRetryServiceUnavail
 			}
+
 			return nil
 		},
 	)
@@ -962,7 +966,9 @@ func TestRetryOnTransientError_ContextCancelled(t *testing.T) {
 		ctx, cmd, 5, time.Millisecond, time.Millisecond,
 		func() error {
 			calls++
+
 			cancel()
+
 			return errRetryDeadlineExceeded
 		},
 	)
@@ -981,6 +987,7 @@ func TestRetryOnTransientError_ZeroMaxAttemptsClampedToOne(t *testing.T) {
 		t.Context(), cmd, 0, 0, 0,
 		func() error {
 			calls++
+
 			return nil
 		},
 	)
