@@ -779,9 +779,9 @@ func TestGenerator_Generate_IngressFirewall(t *testing.T) {
 		"cluster",
 		"ingress-firewall-default-action.yaml",
 	)
-	defaultActionContent, err := os.ReadFile(
+	defaultActionContent, err := os.ReadFile( //nolint:gosec // Test file path is safe
 		defaultActionPath,
-	) //nolint:gosec // Test file path is safe
+	)
 	require.NoError(t, err)
 	assert.Contains(t, string(defaultActionContent), "kind: NetworkDefaultActionConfig")
 	assert.Contains(t, string(defaultActionContent), "ingress: block")
