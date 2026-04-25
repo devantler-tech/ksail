@@ -1,7 +1,9 @@
 package workload_test
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,6 +13,7 @@ import (
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/workload"
 	dockerprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/docker"
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -856,4 +859,124 @@ func TestFindKustomizationDir_FileInRoot(t *testing.T) {
 
 	result := workload.ExportFindKustomizationDir(testFile, dir)
 	assert.Equal(t, dir, result)
+}
+
+// ===========================================================================
+// retryOnTransientError — retry helper behavior
+// ===========================================================================
+
+func TestRetryOnTransientError_SuccessFirstAttempt(t *testing.T) {
+	t.Parallel()
+
+	cmd := &cobra.Command{}
+	calls := 0
+
+	err := workload.ExportRetryOnTransientError(
+		t.Context(), cmd, 3, 0, 0,
+		func() error {
+			calls++
+			return nil
+		},
+	)
+
+	assert.NoError(t, err)
+	assert.Equal(t, 1, calls)
+}
+
+func TestRetryOnTransientError_NonRetryableError(t *testing.T) {
+	t.Parallel()
+
+	cmd := &cobra.Command{}
+	calls := 0
+	sentinel := errors.New("not a transient error")
+
+	err := workload.ExportRetryOnTransientError(
+		t.Context(), cmd, 3, 0, 0,
+		func() error {
+			calls++
+			return sentinel
+		},
+	)
+
+	assert.ErrorIs(t, err, sentinel)
+	assert.Equal(t, 1, calls, "non-retryable error should not be retried")
+}
+
+func TestRetryOnTransientError_RetryableExhausted(t *testing.T) {
+	t.Parallel()
+
+	cmd := &cobra.Command{}
+	calls := 0
+	transient := errors.New("connection reset by peer")
+
+	err := workload.ExportRetryOnTransientError(
+		t.Context(), cmd, 3, 0, 0,
+		func() error {
+			calls++
+			return transient
+		},
+	)
+
+	require.Error(t, err)
+	assert.Equal(t, 3, calls, "should retry until maxAttempts exhausted")
+	assert.ErrorContains(t, err, "failed after 3 attempts")
+}
+
+func TestRetryOnTransientError_SucceedsAfterRetry(t *testing.T) {
+	t.Parallel()
+
+	cmd := &cobra.Command{}
+	calls := 0
+
+	err := workload.ExportRetryOnTransientError(
+		t.Context(), cmd, 3, 0, 0,
+		func() error {
+			calls++
+			if calls < 3 {
+				return errors.New("Service Unavailable")
+			}
+			return nil
+		},
+	)
+
+	assert.NoError(t, err)
+	assert.Equal(t, 3, calls)
+}
+
+func TestRetryOnTransientError_ContextCancelled(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cmd := &cobra.Command{}
+	calls := 0
+
+	err := workload.ExportRetryOnTransientError(
+		ctx, cmd, 5, time.Millisecond, time.Millisecond,
+		func() error {
+			calls++
+			cancel()
+			return errors.New("context deadline exceeded")
+		},
+	)
+
+	require.Error(t, err)
+	assert.Equal(t, 1, calls, "context cancel should stop retries")
+}
+
+func TestRetryOnTransientError_ZeroMaxAttemptsClampedToOne(t *testing.T) {
+	t.Parallel()
+
+	cmd := &cobra.Command{}
+	calls := 0
+
+	err := workload.ExportRetryOnTransientError(
+		t.Context(), cmd, 0, 0, 0,
+		func() error {
+			calls++
+			return nil
+		},
+	)
+
+	assert.NoError(t, err)
+	assert.Equal(t, 1, calls, "maxAttempts=0 should be clamped to 1 so fn is always called")
 }

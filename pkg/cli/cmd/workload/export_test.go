@@ -253,20 +253,49 @@ func ExportPollUntilKustomizationReady(
 	return pollUntilKustomizationReady(ctx, fluxReconciler, name, dependsOn, failed)
 }
 
-// ExportPushMaxRetryAttempts allows tests to override the push retry attempt count.
-var ExportPushMaxRetryAttempts = &pushMaxRetryAttempts //nolint:gochecknoglobals // test export
+// SetPushRetryParamsForTests overrides push retry parameters for a test and
+// returns a cleanup function that restores the previous values.
+func SetPushRetryParamsForTests(maxAttempts int, baseWait, maxWait time.Duration) func() {
+	prevMaxAttempts := pushMaxRetryAttempts
+	prevBaseWait := pushRetryBaseWait
+	prevMaxWait := pushRetryMaxWait
 
-// ExportPushRetryBaseWait allows tests to override the push retry base wait duration.
-var ExportPushRetryBaseWait = &pushRetryBaseWait //nolint:gochecknoglobals // test export
+	pushMaxRetryAttempts = maxAttempts
+	pushRetryBaseWait = baseWait
+	pushRetryMaxWait = maxWait
 
-// ExportPushRetryMaxWait allows tests to override the push retry max wait duration.
-var ExportPushRetryMaxWait = &pushRetryMaxWait //nolint:gochecknoglobals // test export
+	return func() {
+		pushMaxRetryAttempts = prevMaxAttempts
+		pushRetryBaseWait = prevBaseWait
+		pushRetryMaxWait = prevMaxWait
+	}
+}
 
-// ExportReconcileMaxRetryAttempts allows tests to override the reconcile retry attempt count.
-var ExportReconcileMaxRetryAttempts = &reconcileMaxRetryAttempts //nolint:gochecknoglobals // test export
+// SetReconcileRetryParamsForTests overrides reconcile retry parameters for a
+// test and returns a cleanup function that restores the previous values.
+func SetReconcileRetryParamsForTests(maxAttempts int, baseWait, maxWait time.Duration) func() {
+	prevMaxAttempts := reconcileMaxRetryAttempts
+	prevBaseWait := reconcileRetryBaseWait
+	prevMaxWait := reconcileRetryMaxWait
 
-// ExportReconcileRetryBaseWait allows tests to override the reconcile retry base wait duration.
-var ExportReconcileRetryBaseWait = &reconcileRetryBaseWait //nolint:gochecknoglobals // test export
+	reconcileMaxRetryAttempts = maxAttempts
+	reconcileRetryBaseWait = baseWait
+	reconcileRetryMaxWait = maxWait
 
-// ExportReconcileRetryMaxWait allows tests to override the reconcile retry max wait duration.
-var ExportReconcileRetryMaxWait = &reconcileRetryMaxWait //nolint:gochecknoglobals // test export
+	return func() {
+		reconcileMaxRetryAttempts = prevMaxAttempts
+		reconcileRetryBaseWait = prevBaseWait
+		reconcileRetryMaxWait = prevMaxWait
+	}
+}
+
+// ExportRetryOnTransientError exposes retryOnTransientError for unit testing.
+func ExportRetryOnTransientError(
+	ctx context.Context,
+	cmd *cobra.Command,
+	maxAttempts int,
+	baseWait, maxWait time.Duration,
+	fn func() error,
+) error {
+	return retryOnTransientError(ctx, cmd, maxAttempts, baseWait, maxWait, fn)
+}

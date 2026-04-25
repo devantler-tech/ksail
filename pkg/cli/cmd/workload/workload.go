@@ -1995,6 +1995,10 @@ func retryOnTransientError(
 	baseWait, maxWait time.Duration,
 	fn func() error,
 ) error {
+	if maxAttempts < 1 {
+		maxAttempts = 1
+	}
+
 	var lastErr error
 
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
