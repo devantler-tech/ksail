@@ -99,5 +99,5 @@ func WaitForDeploymentReadyIfExists(
 		return fmt.Errorf("failed to check deployment %s/%s: %w", namespace, name, err)
 	}
 
-	return PollForReadiness(deadlineCtx, deadline, deploymentReadyCheck(clientset, namespace, name))
+	return PollForReadiness(deadlineCtx, 0, deploymentReadyCheck(clientset, namespace, name))
 }
