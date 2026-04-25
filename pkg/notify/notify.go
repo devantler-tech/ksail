@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/devantler-tech/ksail/v7/pkg/timer"
 	fcolor "github.com/fatih/color"
@@ -190,9 +191,29 @@ func WriteMessage(msg Message) {
 	if msg.Type == SuccessType && msg.Timer != nil {
 		total, stage := msg.Timer.GetTiming()
 
-		_, err = config.color.Fprintf(msg.Writer, "⏲ current: %s\n", stage.String())
+		currentLabel := "⏲ current:"
+		totalLabel := "total:"
+
+		labelWidth := utf8.RuneCountInString(currentLabel)
+		if w := utf8.RuneCountInString(totalLabel); w > labelWidth {
+			labelWidth = w
+		}
+
+		_, err = config.color.Fprintf(
+			msg.Writer,
+			"%-*s %s\n",
+			labelWidth,
+			currentLabel,
+			stage.String(),
+		)
 		handleNotifyError(err)
-		_, err = config.color.Fprintf(msg.Writer, "  total:  %s\n", total.String())
+		_, err = config.color.Fprintf(
+			msg.Writer,
+			"%-*s %s\n",
+			labelWidth,
+			totalLabel,
+			total.String(),
+		)
 		handleNotifyError(err)
 	}
 }

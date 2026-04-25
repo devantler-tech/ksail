@@ -16,9 +16,9 @@ import (
 )
 
 var (
-	errDaemonSetBoom  = errors.New("boom")
+	errDaemonSetBoom  = errors.New("daemonset operation failed")
 	errDeploymentFail = errors.New("fail")
-	errPollBoom       = errors.New("boom")
+	errPollBoom       = errors.New("poll operation failed")
 )
 
 func expectNoError(t *testing.T, err error, description string) {
@@ -44,12 +44,12 @@ func expectErrorContains(t *testing.T, err error, substr, description string) {
 func TestWaitForDaemonSetReady(t *testing.T) {
 	t.Parallel()
 
-	t.Run("ReadyOnFirstPoll", testWaitForDaemonSetReadyReady)
+	t.Run("ReadyOnFirstPoll", testWaitForDaemonSetReady)
 	t.Run("PropagatesAPIError", testWaitForDaemonSetReadyAPIError)
 	t.Run("TimesOutWhenNotReady", testWaitForDaemonSetReadyTimeout)
 }
 
-func testWaitForDaemonSetReadyReady(t *testing.T) {
+func testWaitForDaemonSetReady(t *testing.T) {
 	t.Helper()
 	t.Parallel()
 
@@ -101,7 +101,7 @@ func testWaitForDaemonSetReadyAPIError(t *testing.T) {
 	expectErrorContains(
 		t,
 		err,
-		"failed to get daemonset observability/test-agent: boom",
+		"failed to get daemonset observability/test-agent: daemonset operation failed",
 		"waitForDaemonSetReady api error",
 	)
 }
@@ -270,7 +270,7 @@ func testNamespaceDSNonTransientError(t *testing.T) {
 	expectErrorContains(
 		t,
 		err,
-		"failed to list daemonsets in namespace kube-system: boom",
+		"failed to list daemonsets in namespace kube-system: daemonset operation failed",
 		"namespace daemonsets non-transient error",
 	)
 }
@@ -390,7 +390,7 @@ func TestPollForReadiness(t *testing.T) {
 		expectErrorContains(
 			t,
 			err,
-			"failed to poll for readiness: boom",
+			"failed to poll for readiness: poll operation failed",
 			"pollForReadiness error wrap",
 		)
 	})

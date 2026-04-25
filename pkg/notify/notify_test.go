@@ -3,16 +3,39 @@ package notify_test
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"strings"
 	"testing"
 	"time"
 	"unicode"
+	"unicode/utf8"
 
 	notify "github.com/devantler-tech/ksail/v7/pkg/notify"
 	"github.com/devantler-tech/ksail/v7/pkg/timer"
 )
+
+// timingCurrentLabel and timingTotalLabel mirror the label strings used in WriteMessage.
+// If the production labels change, these constants must be updated to match.
+const (
+	timingCurrentLabel = "⏲ current:"
+	timingTotalLabel   = "total:"
+)
+
+// buildTimingLines returns the two timing lines produced by WriteMessage
+// for the given stage and total duration strings, using the same padding
+// logic as the production code.
+func buildTimingLines(stage, total string) string {
+	labelWidth := utf8.RuneCountInString(timingCurrentLabel)
+	if w := utf8.RuneCountInString(timingTotalLabel); w > labelWidth {
+		labelWidth = w
+	}
+
+	return fmt.Sprintf("%-*s %s\n%-*s %s\n",
+		labelWidth, timingCurrentLabel, stage,
+		labelWidth, timingTotalLabel, total)
+}
 
 func TestWriteMessage_ErrorType(t *testing.T) {
 	t.Parallel()
@@ -209,7 +232,7 @@ func TestWriteMessage_WithTimer(t *testing.T) {
 		t.Fatalf("output should start with success line and timing block, got %q", got)
 	}
 
-	if !strings.Contains(got, "\n  total:  ") {
+	if !strings.Contains(got, "\n"+timingTotalLabel) {
 		t.Fatalf("output should include total timing line, got %q", got)
 	}
 }
@@ -243,7 +266,7 @@ func TestWriteMessage_SuccessType_RendersTimingBlock_FormatAndPlacement(t *testi
 
 	got := out.String()
 
-	want := "✔ completion message\n⏲ current: 500ms\n  total:  3s\n"
+	want := "✔ completion message\n" + buildTimingLines("500ms", "3s")
 	if got != want {
 		t.Fatalf("output mismatch. want %q, got %q", want, got)
 	}
@@ -596,7 +619,7 @@ func TestSuccessWithTimerf(t *testing.T) {
 	notify.SuccessWithTimerf(&buf, tmr, "operation %s complete", "deploy")
 
 	got := buf.String()
-	want := "✔ operation deploy complete\n⏲ current: 2s\n  total:  5s\n"
+	want := "✔ operation deploy complete\n" + buildTimingLines("2s", "5s")
 
 	if got != want {
 		t.Errorf("SuccessWithTimerf() = %q, want %q", got, want)
