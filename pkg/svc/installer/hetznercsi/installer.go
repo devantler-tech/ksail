@@ -84,7 +84,8 @@ func (h *Installer) Install(ctx context.Context) error {
 		return fmt.Errorf("wait for hcloud-ccm node initialization: %w", err)
 	}
 
-	if err := h.Installer.Install(ctx); err != nil {
+	err = h.Installer.Install(ctx)
+	if err != nil {
 		return fmt.Errorf("install hcloud-csi: %w", err)
 	}
 
