@@ -827,6 +827,7 @@ func tasksFromEntries(
 	entries []componentTask,
 ) []notify.ProgressTask {
 	var tasks []notify.ProgressTask
+
 	for _, e := range entries {
 		if e.needed {
 			tasks = append(tasks, newTask(e.name, cfg, factories, e.fn))
