@@ -84,7 +84,7 @@ func (h *Installer) Install(ctx context.Context) error {
 		return fmt.Errorf("wait for hcloud-ccm node initialization: %w", err)
 	}
 
-	err = h.Installer.Install(ctx)
+	err = h.Installer.Install(ctx) //nolint:wrapcheck // embedded hetzner.Installer already wraps errors with component context; double-wrapping produces redundant messages
 	if err != nil {
 		return err
 	}
