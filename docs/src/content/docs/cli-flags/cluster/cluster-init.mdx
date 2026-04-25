@@ -35,6 +35,7 @@ Flags:
       --policy-engine PolicyEngine             Policy engine (None: skip, Kyverno: install Kyverno, Gatekeeper: install Gatekeeper)
       --provider Provider                      Infrastructure provider backend (e.g., Docker)
   -s, --source-directory string                Directory containing workloads to deploy (default "k8s")
+      --unknown NodeAutoscaling                Node autoscaling (Enabled: defer node scaling to an external autoscaler, Disabled: KSail manages node counts)
       --workers int32                          Number of worker nodes
 
 Global Flags:
