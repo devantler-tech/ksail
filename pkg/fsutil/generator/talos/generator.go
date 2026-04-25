@@ -908,7 +908,8 @@ func (g *Generator) generateIngressFirewallPatches(
 	}
 
 	workerRulesPath := filepath.Join(rootPath, "workers", ingressFirewallRulesFileName)
-	err = writeFirewallFile(workerRulesPath, []byte(IngressFirewallWorkerRulesYAML(model.NetworkCIDR, model.CNIPort)), force)
+	workerContent := []byte(IngressFirewallWorkerRulesYAML(model.NetworkCIDR, model.CNIPort))
+	err = writeFirewallFile(workerRulesPath, workerContent, force)
 	if err != nil {
 		return fmt.Errorf("failed to create ingress firewall worker rules: %w", err)
 	}
