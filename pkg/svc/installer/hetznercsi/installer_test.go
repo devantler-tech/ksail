@@ -144,6 +144,7 @@ func TestHetznerCSIInstaller_Install_WaitsForCCMLabels(t *testing.T) {
 		"/tmp/kubeconfig",
 		"test-context",
 		timeout,
+		"",
 	)
 
 	err := installer.Install(context.Background())
