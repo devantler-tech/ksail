@@ -50,11 +50,11 @@ type Installer struct {
 // installers (e.g. CCM) don't overwrite each other's values.
 func NewInstaller(
 	client helm.Interface,
-	kubeconfig, context string,
+	kubeconfig, kubeContext string,
 	timeout time.Duration,
 	networkName string,
 ) *Installer {
-	base := hetzner.NewInstaller(client, kubeconfig, context, timeout, hetzner.ChartConfig{
+	base := hetzner.NewInstaller(client, kubeconfig, kubeContext, timeout, hetzner.ChartConfig{
 		Name:        "hetzner-csi",
 		ReleaseName: "hcloud-csi",
 		ChartName:   "hcloud/hcloud-csi",
@@ -65,7 +65,7 @@ func NewInstaller(
 	return &Installer{
 		Installer:   base,
 		kubeconfig:  kubeconfig,
-		kubeContext: context,
+		kubeContext: kubeContext,
 		waitTimeout: timeout,
 	}
 }
@@ -84,9 +84,9 @@ func (h *Installer) Install(ctx context.Context) error {
 		return fmt.Errorf("wait for hcloud-ccm node initialization: %w", err)
 	}
 
-	err = h.Installer.Install(ctx) //nolint:wrapcheck // embedded hetzner.Installer already wraps errors with component context; double-wrapping produces redundant messages
+	err = h.Installer.Install(ctx)
 	if err != nil {
-		return err
+		return err //nolint:wrapcheck // hetzner.Installer already wraps errors with component context
 	}
 
 	return nil
