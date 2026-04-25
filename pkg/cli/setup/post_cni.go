@@ -830,7 +830,7 @@ func tasksFromEntries(
 	factories *InstallerFactories,
 	entries []componentTask,
 ) []notify.ProgressTask {
-	tasks := make([]notify.ProgressTask, 0, len(entries))
+	var tasks []notify.ProgressTask
 	for _, e := range entries {
 		if e.needed {
 			tasks = append(tasks, newTask(e.name, cfg, factories, e.fn))
