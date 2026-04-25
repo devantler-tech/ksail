@@ -821,7 +821,11 @@ func newTask(
 
 // tasksFromEntries converts a slice of componentTask entries into ProgressTasks,
 // including only the entries whose needed field is true.
-func tasksFromEntries(cfg *v1alpha1.Cluster, factories *InstallerFactories, entries []componentTask) []notify.ProgressTask {
+func tasksFromEntries(
+	cfg *v1alpha1.Cluster,
+	factories *InstallerFactories,
+	entries []componentTask,
+) []notify.ProgressTask {
 	var tasks []notify.ProgressTask
 	for _, e := range entries {
 		if e.needed {
