@@ -896,19 +896,26 @@ func (g *Generator) generateIngressFirewallPatches(
 	}
 
 	defaultActionPath := filepath.Join(rootPath, "cluster", ingressFirewallDefaultActionFileName)
+
 	err = writeFirewallFile(defaultActionPath, []byte(IngressFirewallDefaultActionYAML), force)
 	if err != nil {
 		return fmt.Errorf("failed to create ingress firewall default action: %w", err)
 	}
 
 	cpRulesPath := filepath.Join(rootPath, "control-planes", ingressFirewallRulesFileName)
-	err = writeFirewallFile(cpRulesPath, []byte(IngressFirewallCPRulesYAML(model.NetworkCIDR, model.CNIPort)), force)
+
+	err = writeFirewallFile(
+		cpRulesPath,
+		[]byte(IngressFirewallCPRulesYAML(model.NetworkCIDR, model.CNIPort)),
+		force,
+	)
 	if err != nil {
 		return fmt.Errorf("failed to create ingress firewall CP rules: %w", err)
 	}
 
 	workerRulesPath := filepath.Join(rootPath, "workers", ingressFirewallRulesFileName)
 	workerContent := []byte(IngressFirewallWorkerRulesYAML(model.NetworkCIDR, model.CNIPort))
+
 	err = writeFirewallFile(workerRulesPath, workerContent, force)
 	if err != nil {
 		return fmt.Errorf("failed to create ingress firewall worker rules: %w", err)

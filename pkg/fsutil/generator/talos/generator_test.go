@@ -773,8 +773,15 @@ func TestGenerator_Generate_IngressFirewall(t *testing.T) {
 	assert.Equal(t, filepath.Join(tempDir, "talos"), result)
 
 	// Verify ingress-firewall-default-action.yaml was created in cluster/
-	defaultActionPath := filepath.Join(tempDir, "talos", "cluster", "ingress-firewall-default-action.yaml")
-	defaultActionContent, err := os.ReadFile(defaultActionPath) //nolint:gosec // Test file path is safe
+	defaultActionPath := filepath.Join(
+		tempDir,
+		"talos",
+		"cluster",
+		"ingress-firewall-default-action.yaml",
+	)
+	defaultActionContent, err := os.ReadFile(
+		defaultActionPath,
+	) //nolint:gosec // Test file path is safe
 	require.NoError(t, err)
 	assert.Contains(t, string(defaultActionContent), "kind: NetworkDefaultActionConfig")
 	assert.Contains(t, string(defaultActionContent), "ingress: block")
@@ -783,6 +790,7 @@ func TestGenerator_Generate_IngressFirewall(t *testing.T) {
 	cpRulesPath := filepath.Join(tempDir, "talos", "control-planes", "ingress-firewall-rules.yaml")
 	cpContent, err := os.ReadFile(cpRulesPath) //nolint:gosec // Test file path is safe
 	require.NoError(t, err)
+
 	cpStr := string(cpContent)
 	assert.Contains(t, cpStr, "name: etcd")
 	assert.Contains(t, cpStr, "name: trustd")
@@ -797,6 +805,7 @@ func TestGenerator_Generate_IngressFirewall(t *testing.T) {
 	workerRulesPath := filepath.Join(tempDir, "talos", "workers", "ingress-firewall-rules.yaml")
 	workerContent, err := os.ReadFile(workerRulesPath) //nolint:gosec // Test file path is safe
 	require.NoError(t, err)
+
 	workerStr := string(workerContent)
 	assert.Contains(t, workerStr, "name: kubelet")
 	assert.Contains(t, workerStr, "name: apid")
@@ -833,13 +842,22 @@ func TestGenerator_Generate_IngressFirewallDisabled(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify none of the ingress firewall files were created
-	defaultActionPath := filepath.Join(tempDir, "talos", "cluster", "ingress-firewall-default-action.yaml")
+	defaultActionPath := filepath.Join(
+		tempDir,
+		"talos",
+		"cluster",
+		"ingress-firewall-default-action.yaml",
+	)
 	_, err = os.Stat(defaultActionPath)
 	assert.True(t, os.IsNotExist(err), "expected ingress-firewall-default-action.yaml to not exist")
 
 	cpRulesPath := filepath.Join(tempDir, "talos", "control-planes", "ingress-firewall-rules.yaml")
 	_, err = os.Stat(cpRulesPath)
-	assert.True(t, os.IsNotExist(err), "expected control-planes/ingress-firewall-rules.yaml to not exist")
+	assert.True(
+		t,
+		os.IsNotExist(err),
+		"expected control-planes/ingress-firewall-rules.yaml to not exist",
+	)
 
 	workerRulesPath := filepath.Join(tempDir, "talos", "workers", "ingress-firewall-rules.yaml")
 	_, err = os.Stat(workerRulesPath)
@@ -910,10 +928,10 @@ func TestIngressFirewallCPRulesYAML(t *testing.T) {
 	assert.Contains(t, result, "protocol: udp")
 
 	// Verify known ports
-	assert.Contains(t, result, "10250")  // kubelet
-	assert.Contains(t, result, "50000")  // apid
-	assert.Contains(t, result, "6443")   // kubernetes-api
-	assert.Contains(t, result, "50001")  // trustd
+	assert.Contains(t, result, "10250")     // kubelet
+	assert.Contains(t, result, "50000")     // apid
+	assert.Contains(t, result, "6443")      // kubernetes-api
+	assert.Contains(t, result, "50001")     // trustd
 	assert.Contains(t, result, "2379-2380") // etcd
 }
 

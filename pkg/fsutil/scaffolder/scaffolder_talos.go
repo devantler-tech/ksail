@@ -147,7 +147,11 @@ func (s *Scaffolder) hetznerIngressFirewallConfig() (bool, string, int) {
 	enabled := s.KSailConfig.Spec.Cluster.Provider == v1alpha1.ProviderHetzner &&
 		s.KSailConfig.Spec.Provider.Hetzner.IngressFirewall != v1alpha1.IngressFirewallDisabled
 
-	return enabled, v1alpha1.HetznerNetworkCIDR(s.KSailConfig.Spec), v1alpha1.HetznerCNIPort(s.KSailConfig.Spec)
+	return enabled, v1alpha1.HetznerNetworkCIDR(
+			s.KSailConfig.Spec,
+		), v1alpha1.HetznerCNIPort(
+			s.KSailConfig.Spec,
+		)
 }
 
 // talosClusterHasPatches returns true when at least one patch file will be written

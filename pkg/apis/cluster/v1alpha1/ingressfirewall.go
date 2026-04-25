@@ -1,6 +1,7 @@
 package v1alpha1
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 )
@@ -20,7 +21,7 @@ const (
 )
 
 // ErrInvalidIngressFirewall is returned when an invalid ingress firewall option is specified.
-var ErrInvalidIngressFirewall = fmt.Errorf("invalid ingress firewall")
+var ErrInvalidIngressFirewall = errors.New("invalid ingress firewall")
 
 // Set for IngressFirewall (pflag.Value interface).
 func (f *IngressFirewall) Set(value string) error {
