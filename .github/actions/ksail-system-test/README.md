@@ -189,6 +189,13 @@ jobs:
           remove_dotnet: true
           remove_haskell: true
           remove_tool_cache: true
+          remove_swap: true
+          remove_packages: "azure-cli google-cloud-cli microsoft-edge-stable google-chrome-stable firefox postgresql* temurin-* *llvm* mysql* dotnet-sdk-*"
+          remove_packages_one_command: true
+          remove_folders: "/usr/share/swift /usr/share/miniconda /usr/share/az* /usr/local/lib/node_modules /usr/local/share/chromium /usr/local/share/powershell /usr/local/julia /usr/local/aws-cli /usr/local/aws-sam-cli /usr/share/gradle"
+
+      - name: Prune Docker
+        run: docker system prune -af --volumes || true
 
       - name: Setup Go
         uses: actions/setup-go@v5
