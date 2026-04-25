@@ -230,7 +230,10 @@ func (p *Provisioner) FetchAndWriteKubeconfigForCPForTest(
 }
 
 // GetMappedK8sAPIEndpointForTest exposes getMappedK8sAPIEndpoint for testing.
-func (p *Provisioner) GetMappedK8sAPIEndpointForTest(ctx context.Context, clusterName string) (string, error) {
+func (p *Provisioner) GetMappedK8sAPIEndpointForTest(
+	ctx context.Context,
+	clusterName string,
+) (string, error) {
 	return p.getMappedK8sAPIEndpoint(ctx, clusterName)
 }
 

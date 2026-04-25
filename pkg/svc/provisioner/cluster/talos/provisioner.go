@@ -530,7 +530,11 @@ func (p *Provisioner) Stop(ctx context.Context, name string) error {
 func (p *Provisioner) refreshKubeconfigFromTalosAPI(ctx context.Context, clusterName string) error {
 	nodes, err := p.getNodesByRole(ctx, clusterName)
 	if err != nil {
-		return fmt.Errorf("failed to list nodes for kubeconfig refresh for cluster %q: %w", clusterName, err)
+		return fmt.Errorf(
+			"failed to list nodes for kubeconfig refresh for cluster %q: %w",
+			clusterName,
+			err,
+		)
 	}
 
 	var cpIP string
@@ -574,7 +578,10 @@ func (p *Provisioner) refreshKubeconfigFromTalosAPI(ctx context.Context, cluster
 // rewrites the server endpoint to k8sEndpoint, and writes the result to disk.
 // Docker clusters pass mapped host ports for both endpoints; other providers pass the
 // raw control-plane IP (with k8sEndpoint as https://cpIP:6443).
-func (p *Provisioner) fetchAndWriteKubeconfigForCP(ctx context.Context, talosEndpoint, k8sEndpoint string) error {
+func (p *Provisioner) fetchAndWriteKubeconfigForCP(
+	ctx context.Context,
+	talosEndpoint, k8sEndpoint string,
+) error {
 	talosClient, err := p.talosClientFactory(ctx, talosEndpoint)
 	if err != nil {
 		return fmt.Errorf("failed to create Talos client for kubeconfig refresh: %w", err)
