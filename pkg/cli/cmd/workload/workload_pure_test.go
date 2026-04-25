@@ -871,7 +871,7 @@ func TestFindKustomizationDir_FileInRoot(t *testing.T) {
 var (
 	errRetryNotTransient     = errors.New("not a transient error")
 	errRetryConnectionReset  = errors.New("connection reset by peer")
-	errRetryServiceUnavail   = errors.New("Service Unavailable")
+	errRetryServiceUnavail   = errors.New("503 Service Unavailable")
 	errRetryDeadlineExceeded = errors.New("context deadline exceeded")
 )
 
