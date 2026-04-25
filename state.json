@@ -1,7 +1,9 @@
 {
-  "last_run": "2026-04-25T00:58:48Z",
-  "workflow_run_id": "24918634979",
+  "last_run": "2026-04-25T12:28:00Z",
+  "workflow_run_id": "24930880882",
   "commented_issues": {
+    "4357": "2026-04-25",
+    "4341": "2026-04-25",
     "4322": "2026-04-24",
     "4293": "2026-04-24",
     "4287": "2026-04-23",
@@ -19,35 +21,29 @@
     "4135": "2026-04-19",
     "4119": "2026-04-18",
     "4086": "2026-04-17",
-    "4090": "2026-04-17",
-    "4091": "2026-04-17",
-    "4068": "2026-04-17"
+    "4091": "2026-04-17"
   },
   "open_prs": {
-    "4253": "[Repo Assist] test(detector): add ArgoCD multi-namespace detection regression test",
-    "4284": "[Repo Assist] test(sopsutil): add ResolveAgeKey tests for Extract.PublicKeys filter path",
-    "4327": "[Repo Assist] fix(calico): increase K3s retry attempts 5→8, backoff 10s→15s",
-    "new_refactor": "[Repo Assist] refactor(setup): replace repeated if-append with table-driven loop in build*Tasks"
+    "4352": "[Repo Assist] refactor(setup): replace repeated if-append with table-driven loop in build*Tasks",
+    "new_perf_notify_spinner": "[Repo Assist] perf(notify): eliminate per-tick spinner and map allocations in progress renderer"
   },
   "merged_prs": {
-    "4248": "perf(notify): use strings.Builder in indentMultilineContent - merged 2026-04-23",
+    "4327": "fix(calico): increase K3s retry attempts 5→8, backoff 10s→15s - merged ~2026-04-25",
+    "4284": "test(sopsutil): add ResolveAgeKey tests for Extract.PublicKeys filter path - merged 2026-04-24",
+    "4253": "test(detector): add ArgoCD multi-namespace detection regression test - merged 2026-04-24",
+    "4248": "perf(notify): use strings.Builder - merged 2026-04-23",
     "4233": "fix(installer): K3s Calico retries 3->5, backoff 5s->10s - merged ~2026-04-21",
     "4199": "perf(detector): single ListReleases call - merged 2026-04-22",
     "4193": "fix(setup): KWOK CSI and cert-manager guards - merged 2026-04-20",
     "4174": "fix(ci): benchmark awk deduplication - merged 2026-04-20",
-    "4153": "perf(image): skip scanner.Text() allocation - merged 2026-04-19",
-    "4294": "fix: tolerate external cloud provider taint during CNI readiness check - merged 2026-04-24",
-    "4299": "chore: audit VCluster v0.34 alpha - merged 2026-04-24",
-    "4308": "docs(talos): improve Talos guide - merged 2026-04-24",
-    "4269": "chore: upgrade Flux to v2.8.6 - merged ~2026-04-22"
+    "4153": "perf(image): skip scanner.Text() allocation - merged 2026-04-19"
   },
-  "last_code_quality_domain": "refactor",
-  "issue_backlog_cursor": "4344",
+  "last_code_quality_domain": "perf",
+  "issue_backlog_cursor": "4357",
   "created_issues": {
-    "4291": "[Repo Assist] [chore]: audit VCluster v0.34 alpha compatibility for Vind provisioner - CLOSED",
     "4316": "[Repo Assist] [chore]: verify KSail compatibility with ArgoCD v3.4 stable and update embedded client",
     "4317": "[Repo Assist] [feature]: add ksail cipher rotate for Age key rotation across all encrypted secrets",
-    "4318": "[Repo Assist] [chore]: migrate Talos scaffolding to EnvironmentConfig (WARNING: may duplicate #4124 - maintainer verify)",
+    "4318": "[Repo Assist] [chore]: migrate Talos scaffolding to EnvironmentConfig (WARNING: may duplicate #4124)",
     "4328": "[Repo Assist] [chore]: complete AWS EKS provider",
     "new_turnstyle": "[Repo Assist] [chore]: investigate dedicated cloud E2E pool or extended Turnstyle timeout",
     "new_kwok07": "[Repo Assist] [chore]: leverage KWOK v0.7.0 CEL stage support and Kustomize config loading"
@@ -56,36 +52,16 @@
     "4084": ["4067", "4172", "4192"],
     "4085": ["4060", "4063", "4066", "4067", "4068", "4079", "4192"]
   },
-  "labels_applied": {
-    "3605": ["automation"],
-    "3983": ["automation"],
-    "3984": ["automation"],
-    "4067": ["automation", "ci"],
-    "4071": ["automation"],
-    "4084": ["automation", "ci"],
-    "4085": ["automation", "ci"],
-    "4091": ["automation", "ci"],
-    "4135": ["automation", "ci"],
-    "4137": ["automation"],
-    "4138": ["automation"],
-    "4139": ["automation"],
-    "4172": ["automation", "ci"],
-    "4189": ["automation", "ci"],
-    "4192": ["automation", "ci"],
-    "4195": ["automation", "ci"]
-  },
   "notes": [
     "link_sub_issue is NOT idempotent - always verify sub-issue not already linked before calling",
-    "PR #4253 (ArgoCD regression test) and PR #4284 (sopsutil PublicKeys filter tests) both CI passing - awaiting review",
-    "PR #4327 (calico retries 5->8, backoff 10->15s) open - awaiting review",
-    "New refactor PR created this run: table-driven buildInfrastructureTasks/buildGitOpsTasks",
-    "Cipher rotate already implemented (PR #4297 closed #4292) - #4317 may be a duplicate",
-    "Talos EnvironmentConfig: #3795 closed not_planned (Apr 9), #4124 closed completed (Apr 20) - #4318 may be duplicate",
-    "domain alternation: last was 'refactor' - next should be 'performance'",
-    "VCluster v0.34 audit issue #4291 closed as completed April 24",
+    "PR #4352 (refactor setup table-driven) open - awaiting review; mega-linter failure appears infrastructure flake (golangci-lint passes)",
+    "perf PR created this run: perf(notify): eliminate per-tick spinner and map allocations - no PR number yet (created via safeoutputs)",
+    "domain alternation: last was 'perf' - next should be 'test'",
+    "New CI Doctor issues: #4357 (Vanilla+Cilium+Kyverno+CertManager flake - addressed by PR #4358), #4341 (K3s+Flux+local-registry flake - addressed by PR #4356)",
     "Workload forward feature already implemented (PR #4331+#4351 docs) - any issue created is obsolete",
-    "Two new Hetzner bugs filed by maintainer: #4343 (hcloud Secret network=default) and #4344 (CSI topology races CCM) - both have PRs (#4347, #4346)",
-    "Cloud E2E Turnstyle optimization issue created this run (no prior tracking issue existed)",
-    "KWOK v0.7.0 CEL stage support issue created this run (Later roadmap gap)"
+    "Two Hetzner bugs by maintainer: #4343 (hcloud Secret network=default PR #4347) and #4344 (CSI topology races CCM PR #4346)",
+    "Cipher rotate already implemented (PR #4297 closed #4292) - #4317 is likely a duplicate",
+    "Cloud E2E Turnstyle and KWOK v0.7.0 roadmap issues created prior run",
+    "Task 4 (engineering): no open Dependabot PRs to bundle; no CI fixes needed; PR #4352 mega-linter is infra-flake"
   ]
 }
