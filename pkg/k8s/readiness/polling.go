@@ -26,19 +26,24 @@ const (
 // The poll function should return (false, nil) to continue polling,
 // (true, nil) when the resource is ready, or (false, error) on errors.
 //
+// When deadline is 0, polling is bounded solely by ctx (e.g. a context
+// created with context.WithTimeout by the caller). When deadline is
+// non-zero, polling uses deadline as a timeout duration, unless ctx is
+// canceled or reaches its own deadline sooner.
+//
 // Returns an error if polling times out or if the poll function returns an error.
 func PollForReadiness(
 	ctx context.Context,
 	deadline time.Duration,
 	poll func(context.Context) (bool, error),
 ) error {
-	pollErr := wait.PollUntilContextTimeout(
-		ctx,
-		readinessPollInterval,
-		deadline,
-		true,
-		poll,
-	)
+	var pollErr error
+	if deadline == 0 {
+		pollErr = wait.PollUntilContextCancel(ctx, readinessPollInterval, true, poll)
+	} else {
+		pollErr = wait.PollUntilContextTimeout(ctx, readinessPollInterval, deadline, true, poll)
+	}
+
 	if pollErr != nil {
 		return fmt.Errorf("failed to poll for readiness: %w", pollErr)
 	}

@@ -76,6 +76,34 @@ func waitForNodes(
 	})
 }
 
+// WaitForAllNodesLabeled polls until every node in the cluster has the given
+// label key set (any non-empty value is accepted). This is used to gate
+// components that depend on labels applied asynchronously by an external
+// controller — for example, the Hetzner cloud controller manager applies
+// `instance.hetzner.cloud/provided-by` after initializing each node, and the
+// Hetzner CSI node driver must wait for that label before registering topology
+// keys with the kubelet CSI plugin.
+func WaitForAllNodesLabeled(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	labelKey string,
+	deadline time.Duration,
+) error {
+	return waitForNodes(ctx, clientset, deadline, func(nodes []corev1.Node) bool {
+		if len(nodes) == 0 {
+			return false
+		}
+
+		for i := range nodes {
+			if nodes[i].Labels[labelKey] == "" {
+				return false
+			}
+		}
+
+		return true
+	})
+}
+
 // WaitForAllNodesReadyAndSchedulable polls until every node in the cluster has
 // condition Ready=True and at least one node is schedulable (not cordoned, and
 // carries no NoSchedule or NoExecute taints). This prevents deploying workloads

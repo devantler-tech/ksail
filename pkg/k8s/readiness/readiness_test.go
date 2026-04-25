@@ -16,9 +16,9 @@ import (
 )
 
 var (
-	errDaemonSetBoom  = errors.New("daemonset operation failed")
-	errDeploymentFail = errors.New("fail")
-	errPollBoom       = errors.New("poll operation failed")
+	errDaemonSetOperationFailed = errors.New("daemonset operation failed")
+	errDeploymentFail           = errors.New("fail")
+	errPollOperationFailed      = errors.New("poll operation failed")
 )
 
 func expectNoError(t *testing.T, err error, description string) {
@@ -89,7 +89,7 @@ func testWaitForDaemonSetReadyAPIError(t *testing.T) {
 		"get",
 		"daemonsets",
 		func(_ k8stesting.Action) (bool, runtime.Object, error) {
-			return true, nil, errDaemonSetBoom
+			return true, nil, errDaemonSetOperationFailed
 		},
 	)
 
@@ -258,7 +258,7 @@ func testNamespaceDSNonTransientError(t *testing.T) {
 		"list",
 		"daemonsets",
 		func(_ k8stesting.Action) (bool, runtime.Object, error) {
-			return true, nil, errDaemonSetBoom
+			return true, nil, errDaemonSetOperationFailed
 		},
 	)
 
@@ -384,7 +384,7 @@ func TestPollForReadiness(t *testing.T) {
 		t.Parallel()
 
 		err := pollForReadinessWithDefaultTimeout(t, func(context.Context) (bool, error) {
-			return false, errPollBoom
+			return false, errPollOperationFailed
 		})
 
 		expectErrorContains(
