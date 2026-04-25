@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -879,6 +880,7 @@ func TestRetryOnTransientError_SuccessFirstAttempt(t *testing.T) {
 	t.Parallel()
 
 	cmd := &cobra.Command{}
+	cmd.SetOut(io.Discard)
 	calls := 0
 
 	err := workload.ExportRetryOnTransientError(
@@ -898,6 +900,7 @@ func TestRetryOnTransientError_NonRetryableError(t *testing.T) {
 	t.Parallel()
 
 	cmd := &cobra.Command{}
+	cmd.SetOut(io.Discard)
 	calls := 0
 
 	err := workload.ExportRetryOnTransientError(
@@ -917,6 +920,7 @@ func TestRetryOnTransientError_RetryableExhausted(t *testing.T) {
 	t.Parallel()
 
 	cmd := &cobra.Command{}
+	cmd.SetOut(io.Discard)
 	calls := 0
 
 	err := workload.ExportRetryOnTransientError(
@@ -937,6 +941,7 @@ func TestRetryOnTransientError_SucceedsAfterRetry(t *testing.T) {
 	t.Parallel()
 
 	cmd := &cobra.Command{}
+	cmd.SetOut(io.Discard)
 	calls := 0
 
 	err := workload.ExportRetryOnTransientError(
@@ -960,6 +965,7 @@ func TestRetryOnTransientError_ContextCancelled(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(t.Context())
 	cmd := &cobra.Command{}
+	cmd.SetOut(io.Discard)
 	calls := 0
 
 	err := workload.ExportRetryOnTransientError(
@@ -981,6 +987,7 @@ func TestRetryOnTransientError_ZeroMaxAttemptsClampedToOne(t *testing.T) {
 	t.Parallel()
 
 	cmd := &cobra.Command{}
+	cmd.SetOut(io.Discard)
 	calls := 0
 
 	err := workload.ExportRetryOnTransientError(

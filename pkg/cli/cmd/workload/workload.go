@@ -1964,9 +1964,8 @@ const (
 )
 
 // Retry configuration for the push command.
-// Package-level vars allow test overrides via export_test.go.
 //
-//nolint:gochecknoglobals // package-level vars allow test overrides via export_test.go
+//nolint:gochecknoglobals // package-level vars for retry configuration
 var (
 	pushMaxRetryAttempts = 3
 	pushRetryBaseWait    = 5 * time.Second
@@ -1974,9 +1973,8 @@ var (
 )
 
 // Retry configuration for the reconcile command.
-// Package-level vars allow test overrides via export_test.go.
 //
-//nolint:gochecknoglobals // package-level vars allow test overrides via export_test.go
+//nolint:gochecknoglobals // package-level vars for retry configuration
 var (
 	reconcileMaxRetryAttempts = 3
 	reconcileRetryBaseWait    = 5 * time.Second
@@ -2118,6 +2116,10 @@ func runReconcile(cmd *cobra.Command) error {
 
 	tmr.NewStage()
 
+	// --timeout is a per-attempt bound: each retry attempt creates a fresh
+	// context.WithTimeout(timeout) inside executeReconciliation, so total
+	// runtime can be up to reconcileMaxRetryAttempts*timeout + cumulative
+	// backoff. This is intentional: each attempt deserves the full window.
 	err = retryOnTransientError(
 		cmd.Context(), cmd,
 		reconcileMaxRetryAttempts, reconcileRetryBaseWait, reconcileRetryMaxWait,
