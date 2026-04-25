@@ -227,3 +227,14 @@ func ImageVerificationFieldSelector() FieldSelector[v1alpha1.Cluster] {
 		DefaultValue: v1alpha1.ImageVerificationDisabled,
 	}
 }
+
+// NodeAutoscalingFieldSelector creates a field selector for node autoscaling.
+func NodeAutoscalingFieldSelector() FieldSelector[v1alpha1.Cluster] {
+	return FieldSelector[v1alpha1.Cluster]{
+		Selector: func(c *v1alpha1.Cluster) any {
+			return &c.Spec.Cluster.NodeAutoscaling
+		},
+		Description:  "Node autoscaling (Enabled: defer node scaling to an external autoscaler, Disabled: KSail manages node counts)",
+		DefaultValue: v1alpha1.NodeAutoscalingDisabled,
+	}
+}

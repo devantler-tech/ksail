@@ -168,6 +168,13 @@
               "additionalProperties": false,
               "type": "object"
             },
+            "nodeAutoscaling": {
+              "type": "string",
+              "enum": [
+                "Enabled",
+                "Disabled"
+              ]
+            },
             "importImages": {
               "type": "string",
               "description": "Path to tar archive with container images to import after cluster creation but before component installation"

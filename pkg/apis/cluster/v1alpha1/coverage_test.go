@@ -1065,3 +1065,66 @@ func TestValidateMirrorRegistriesForProvider_Omni(t *testing.T) {
 		})
 	}
 }
+
+// ---------------------------------------------------------------------------
+// NodeAutoscaling.Set() — parsing coverage
+// ---------------------------------------------------------------------------
+
+//nolint:funlen // Table-driven enum parsing cases are easier to read inline.
+func TestNodeAutoscaling_Set(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		input     string
+		wantValue v1alpha1.NodeAutoscaling
+		wantError bool
+	}{
+		{
+			name:      "sets_enabled",
+			input:     "Enabled",
+			wantValue: v1alpha1.NodeAutoscalingEnabled,
+		},
+		{
+			name:      "sets_disabled",
+			input:     "Disabled",
+			wantValue: v1alpha1.NodeAutoscalingDisabled,
+		},
+		{
+			name:      "case_insensitive_enabled",
+			input:     "enabled",
+			wantValue: v1alpha1.NodeAutoscalingEnabled,
+		},
+		{
+			name:      "case_insensitive_disabled",
+			input:     "DISABLED",
+			wantValue: v1alpha1.NodeAutoscalingDisabled,
+		},
+		{
+			name:      "invalid_value_returns_error",
+			input:     "Invalid",
+			wantError: true,
+		},
+		{
+			name:      "empty_string_returns_error",
+			input:     "",
+			wantError: true,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			var got v1alpha1.NodeAutoscaling
+
+			err := got.Set(testCase.input)
+			if testCase.wantError {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, testCase.wantValue, got)
+			}
+		})
+	}
+}

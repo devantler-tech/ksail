@@ -341,7 +341,12 @@ func (e *Engine) checkTalosOptionsChange(
 		return
 	}
 
-	e.applyFieldRules(oldSpec, newSpec, result, talosFieldRules)
+	rules := talosFieldRules
+	if newSpec.NodeAutoscaling == v1alpha1.NodeAutoscalingEnabled {
+		rules = talosFieldRulesNoScaling
+	}
+
+	e.applyFieldRules(oldSpec, newSpec, result, rules)
 }
 
 // talosFieldRules is the table of Talos-specific scalar field diff rules.
@@ -361,12 +366,25 @@ var talosFieldRules = []fieldRule{
 		reason:   "Talos supports adding/removing worker nodes via provider",
 		getVal:   func(s *v1alpha1.ClusterSpec) string { return strconv.Itoa(int(s.Talos.Workers)) },
 	},
-	{
-		field:    "cluster.talos.iso",
-		category: clusterupdate.ChangeCategoryInPlace,
-		reason:   "ISO change only affects newly provisioned nodes",
-		getVal:   func(s *v1alpha1.ClusterSpec) string { return strconv.FormatInt(s.Talos.ISO, 10) },
-	},
+	talosISORule,
+}
+
+// talosFieldRulesNoScaling is used when node autoscaling is enabled.
+// It excludes controlPlanes and workers rules to avoid conflicts with the external autoscaler.
+//
+//nolint:gochecknoglobals // Immutable field-rule table; avoids per-call heap allocation.
+var talosFieldRulesNoScaling = []fieldRule{
+	talosISORule,
+}
+
+// talosISORule is the shared ISO field rule used by both talosFieldRules and talosFieldRulesNoScaling.
+//
+//nolint:gochecknoglobals // Immutable field-rule; avoids per-call heap allocation.
+var talosISORule = fieldRule{
+	field:    "cluster.talos.iso",
+	category: clusterupdate.ChangeCategoryInPlace,
+	reason:   "ISO change only affects newly provisioned nodes",
+	getVal:   func(s *v1alpha1.ClusterSpec) string { return strconv.FormatInt(s.Talos.ISO, 10) },
 }
 
 // checkHetznerOptionsChange checks Hetzner-specific option changes.

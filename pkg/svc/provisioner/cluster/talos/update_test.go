@@ -334,3 +334,52 @@ func TestApplyNodeScalingChanges_BelowMinimumControlPlanes(t *testing.T) {
 	require.Error(t, err)
 	assert.ErrorIs(t, err, talosprovisioner.ErrMinimumControlPlanes)
 }
+
+// TestDiffConfig_SkipsNodeCountsWhenAutoscalingEnabled verifies that DiffConfig
+// returns no in-place changes for controlPlanes and workers when autoscaling is enabled.
+func TestDiffConfig_SkipsNodeCountsWhenAutoscalingEnabled(t *testing.T) {
+	t.Parallel()
+
+	provisioner := talosprovisioner.NewProvisioner(nil, nil).WithLogWriter(io.Discard)
+
+	oldSpec := &v1alpha1.ClusterSpec{}
+	oldSpec.Talos.ControlPlanes = 1
+	oldSpec.Talos.Workers = 0
+
+	newSpec := &v1alpha1.ClusterSpec{}
+	newSpec.Talos.ControlPlanes = 5
+	newSpec.Talos.Workers = 3
+	newSpec.NodeAutoscaling = v1alpha1.NodeAutoscalingEnabled
+
+	result, err := provisioner.DiffConfig(context.Background(), "test", oldSpec, newSpec)
+	require.NoError(t, err)
+	assert.Empty(t, result.InPlaceChanges, "node count diffs should be suppressed when autoscaling is enabled")
+}
+
+// TestApplyNodeScalingChanges_SkipsWhenAutoscalingEnabled verifies that
+// applyNodeScalingChanges is a no-op when autoscaling is enabled.
+func TestApplyNodeScalingChanges_SkipsWhenAutoscalingEnabled(t *testing.T) {
+	t.Parallel()
+
+	provisioner := talosprovisioner.NewProvisioner(nil, nil).WithLogWriter(io.Discard)
+	result := clusterupdate.NewEmptyUpdateResult()
+
+	oldSpec := &v1alpha1.ClusterSpec{}
+	oldSpec.Talos.ControlPlanes = 1
+	oldSpec.Talos.Workers = 0
+
+	newSpec := &v1alpha1.ClusterSpec{}
+	newSpec.Talos.ControlPlanes = 5
+	newSpec.Talos.Workers = 3
+	newSpec.NodeAutoscaling = v1alpha1.NodeAutoscalingEnabled
+
+	err := provisioner.ApplyNodeScalingChangesForTest(
+		context.Background(),
+		"test",
+		oldSpec,
+		newSpec,
+		result,
+	)
+	require.NoError(t, err)
+	assert.Equal(t, 0, result.TotalChanges(), "no scaling changes expected when autoscaling is enabled")
+}

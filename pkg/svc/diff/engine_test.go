@@ -956,3 +956,41 @@ func assertWorkloadTagChange(
 		t.Errorf("expected new value %q, got %q", newTag, change.NewValue)
 	}
 }
+
+func TestEngine_TalosNodeCountSuppressed_WhenAutoscalingEnabled(t *testing.T) {
+	t.Parallel()
+
+	old := newBaseSpec()
+	newer := clone(old)
+	newer.Talos.ControlPlanes = 5
+	newer.Talos.Workers = 3
+	newer.NodeAutoscaling = v1alpha1.NodeAutoscalingEnabled
+
+	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderDocker)
+	result := engine.ComputeDiff(old, newer, nil, nil)
+
+	for _, change := range result.AllChanges() {
+		if change.Field == "cluster.talos.controlPlanes" || change.Field == "cluster.talos.workers" {
+			t.Errorf("node count field %q should be suppressed when autoscaling is enabled", change.Field)
+		}
+	}
+}
+
+func TestEngine_TalosISOStillDetected_WhenAutoscalingEnabled(t *testing.T) {
+	t.Parallel()
+
+	old := newBaseSpec()
+	newer := clone(old)
+	newer.Talos.ISO = 999999
+	newer.NodeAutoscaling = v1alpha1.NodeAutoscalingEnabled
+
+	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderDocker)
+	result := engine.ComputeDiff(old, newer, nil, nil)
+
+	if !result.HasInPlaceChanges() {
+		t.Fatal("ISO change should still be detected when autoscaling is enabled")
+	}
+
+	assertSingleChange(t, result.InPlaceChanges, "cluster.talos.iso",
+		"122630", "999999", clusterupdate.ChangeCategoryInPlace)
+}

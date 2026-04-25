@@ -132,6 +132,11 @@ func ValidPlacementGroupStrategies() []PlacementGroupStrategy {
 	return []PlacementGroupStrategy{PlacementGroupStrategyNone, PlacementGroupStrategySpread}
 }
 
+// ValidNodeAutoscalings returns supported node autoscaling values.
+func ValidNodeAutoscalings() []NodeAutoscaling {
+	return []NodeAutoscaling{NodeAutoscalingEnabled, NodeAutoscalingDisabled}
+}
+
 // ValidateMirrorRegistriesForProvider validates that mirror registries are compatible with the provider.
 // Cloud providers (like Hetzner) cannot access local Docker containers running as mirror registries.
 // For cloud providers, mirror registries must point to external, internet-accessible registries.
