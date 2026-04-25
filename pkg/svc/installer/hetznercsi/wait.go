@@ -19,9 +19,9 @@ import (
 // See: https://github.com/hetznercloud/csi-driver
 const ProvidedByLabel = "instance.hetzner.cloud/provided-by"
 
-// waitForCCMNodeLabelsFn is the production implementation of
-// [Installer.waitForCCMNodeLabels]. It is held in a package-level variable so
-// that tests can substitute a fake without constructing a real clientset.
+// waitForCCMNodeLabelsFn is the production node-label wait used by Installer.
+// It is held in a package-level variable so that tests can substitute a fake
+// without constructing a real clientset.
 //
 //nolint:gochecknoglobals // test seam for the readiness wait
 var waitForCCMNodeLabelsFn = func(

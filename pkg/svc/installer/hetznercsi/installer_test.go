@@ -111,6 +111,8 @@ func TestHetznerCSIInstaller_Uninstall(t *testing.T) {
 // invokes the CCM node-label wait with the installer's kubeconfig, context,
 // and timeout before any Helm work, and that it aborts when the wait fails —
 // preventing the csi-node DaemonSet from starting before nodes are labeled.
+//
+//nolint:paralleltest // Mutates package-level wait seam via SetWaitForCCMNodeLabelsFnForTest.
 func TestHetznerCSIInstaller_Install_WaitsForCCMLabels(t *testing.T) {
 	mockClient := helm.NewMockInterface(t)
 	timeout := 5 * time.Minute

@@ -22,7 +22,7 @@ var ErrHetznerTokenNotSet = hetzner.ErrTokenNotSet
 // start-up; if the CCM-applied label is missing at that moment, the CSI
 // provisioner later reports incomplete topology and PVCs with
 // allowedTopologies (e.g. from `global.enableProvidedByTopology: true`) fail
-// to bind. See issue #2... for details.
+// to bind.
 //
 // Prerequisites:
 //   - HCLOUD_TOKEN environment variable must be set with a valid Hetzner Cloud API token
