@@ -611,48 +611,18 @@ func buildInfrastructureTasks(
 	factories *InstallerFactories,
 	reqs ComponentRequirements,
 ) []notify.ProgressTask {
-	var tasks []notify.ProgressTask
-
-	if reqs.NeedsMetricsServer {
-		tasks = append(
-			tasks,
-			newTask("metrics-server", clusterCfg, factories, InstallMetricsServerSilent),
-		)
-	}
-
-	if reqs.NeedsLoadBalancer {
-		tasks = append(
-			tasks,
-			newTask("load-balancer", clusterCfg, factories, InstallLoadBalancerSilent),
-		)
-	}
-
-	if reqs.NeedsKubeletCSRApprover {
-		tasks = append(
-			tasks,
-			newTask("kubelet-csr-approver", clusterCfg, factories, installKubeletCSRApproverSilent),
-		)
-	}
-
-	if reqs.NeedsCSI {
-		tasks = append(tasks, newTask("csi", clusterCfg, factories, InstallCSISilent))
-	}
-
-	if reqs.NeedsCertManager {
-		tasks = append(
-			tasks,
-			newTask("cert-manager", clusterCfg, factories, InstallCertManagerSilent),
-		)
-	}
-
-	if reqs.NeedsPolicyEngine {
-		tasks = append(
-			tasks,
-			newTask("policy-engine", clusterCfg, factories, InstallPolicyEngineSilent),
-		)
-	}
-
-	return tasks
+	return tasksFromEntries(clusterCfg, factories, []componentTask{
+		{needed: reqs.NeedsMetricsServer, name: "metrics-server", fn: InstallMetricsServerSilent},
+		{needed: reqs.NeedsLoadBalancer, name: "load-balancer", fn: InstallLoadBalancerSilent},
+		{
+			needed: reqs.NeedsKubeletCSRApprover,
+			name:   "kubelet-csr-approver",
+			fn:     installKubeletCSRApproverSilent,
+		},
+		{needed: reqs.NeedsCSI, name: "csi", fn: InstallCSISilent},
+		{needed: reqs.NeedsCertManager, name: "cert-manager", fn: InstallCertManagerSilent},
+		{needed: reqs.NeedsPolicyEngine, name: "policy-engine", fn: InstallPolicyEngineSilent},
+	})
 }
 
 // buildGitOpsTasks returns tasks for GitOps engines that should be installed
@@ -662,17 +632,10 @@ func buildGitOpsTasks(
 	factories *InstallerFactories,
 	reqs ComponentRequirements,
 ) []notify.ProgressTask {
-	var tasks []notify.ProgressTask
-
-	if reqs.NeedsArgoCD {
-		tasks = append(tasks, newTask("argocd", clusterCfg, factories, InstallArgoCDSilent))
-	}
-
-	if reqs.NeedsFlux {
-		tasks = append(tasks, newTask("flux", clusterCfg, factories, InstallFluxSilent))
-	}
-
-	return tasks
+	return tasksFromEntries(clusterCfg, factories, []componentTask{
+		{needed: reqs.NeedsArgoCD, name: "argocd", fn: InstallArgoCDSilent},
+		{needed: reqs.NeedsFlux, name: "flux", fn: InstallFluxSilent},
+	})
 }
 
 // waitForClusterStability waits for the Kubernetes API server to respond
@@ -840,6 +803,14 @@ func waitForKubeletCSRApprover(
 
 type silentInstallFunc func(ctx context.Context, cfg *v1alpha1.Cluster, f *InstallerFactories) error
 
+// componentTask pairs a "needed" gate with a component name and its install function.
+// It is used to build the install-task lists in buildInfrastructureTasks and buildGitOpsTasks.
+type componentTask struct {
+	needed bool
+	name   string
+	fn     silentInstallFunc
+}
+
 func newTask(
 	name string,
 	cfg *v1alpha1.Cluster,
@@ -850,6 +821,24 @@ func newTask(
 		Name: name,
 		Fn:   func(ctx context.Context) error { return fn(ctx, cfg, factories) },
 	}
+}
+
+// tasksFromEntries converts a slice of componentTask entries into ProgressTasks,
+// including only the entries whose needed field is true.
+func tasksFromEntries(
+	cfg *v1alpha1.Cluster,
+	factories *InstallerFactories,
+	entries []componentTask,
+) []notify.ProgressTask {
+	var tasks []notify.ProgressTask
+
+	for _, e := range entries {
+		if e.needed {
+			tasks = append(tasks, newTask(e.name, cfg, factories, e.fn))
+		}
+	}
+
+	return tasks
 }
 
 func configureGitOpsResources(
