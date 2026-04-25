@@ -709,8 +709,21 @@ func (pg *ProgressGroup) printFinalSummary() {
 func (pg *ProgressGroup) printTiming() {
 	total, stage := pg.timer.GetTiming()
 	successColor := fcolor.New(fcolor.FgGreen)
-	_, _ = successColor.Fprintf(pg.writer, "⏲ current: %s\n", stage.String())
-	_, _ = successColor.Fprintf(pg.writer, "  total:  %s\n", total.String())
+	labelWidth := timingLabelWidth()
+	_, _ = successColor.Fprintf(
+		pg.writer,
+		"%-*s %s\n",
+		labelWidth,
+		timingCurrentLabel,
+		stage.String(),
+	)
+	_, _ = successColor.Fprintf(
+		pg.writer,
+		"%-*s %s\n",
+		labelWidth,
+		timingTotalLabel,
+		total.String(),
+	)
 }
 
 // setTaskState safely updates a task's state and tracks start order and timing.

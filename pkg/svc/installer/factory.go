@@ -64,7 +64,7 @@ func (f *Factory) CreateInstallersForConfig(cfg *v1alpha1.Cluster) map[string]In
 	f.addPolicyEngineInstaller(installers, spec)
 	f.addCertManagerInstaller(installers, spec)
 	f.addMetricsServerInstaller(installers, spec)
-	f.addCSIInstallers(installers, spec)
+	f.addCSIInstallers(installers, cfg)
 	f.addLoadBalancerInstaller(installers, cfg)
 
 	return installers
@@ -184,7 +184,9 @@ func (f *Factory) addMetricsServerInstaller(
 	}
 }
 
-func (f *Factory) addCSIInstallers(installers map[string]Installer, spec v1alpha1.ClusterSpec) {
+func (f *Factory) addCSIInstallers(installers map[string]Installer, cfg *v1alpha1.Cluster) {
+	spec := cfg.Spec.Cluster
+
 	if f.needsLocalPathStorage(spec) {
 		installers["local-path-storage"] = localpathstorageinstaller.NewInstaller(
 			f.kubeconfig, f.kubecontext, f.timeout, f.distribution,
@@ -192,8 +194,9 @@ func (f *Factory) addCSIInstallers(installers map[string]Installer, spec v1alpha
 	}
 
 	if f.needsHetznerCSI(spec) {
+		networkName := hcloudccminstaller.ResolveHetznerNetworkName(cfg)
 		installers["hetzner-csi"] = hetznercsiinstaller.NewInstaller(
-			f.helmClient, f.kubeconfig, f.kubecontext, f.timeout,
+			f.helmClient, f.kubeconfig, f.kubecontext, f.timeout, networkName,
 		)
 		installers["kubelet-csr-approver"] = kubeletcsrapproverinstaller.NewInstaller(
 			f.helmClient,
@@ -289,7 +292,11 @@ func (f *Factory) needsMetalLB(spec v1alpha1.ClusterSpec) bool {
 }
 
 // needsHcloudCCM determines if Hetzner Cloud Controller Manager is needed.
-// hcloud-ccm provides LoadBalancer support for Talos clusters running on Hetzner Cloud.
+// hcloud-ccm provides LoadBalancer support for Talos clusters running on Hetzner Cloud,
+// and is also required for CSI topology labeling: the CCM applies the
+// `instance.hetzner.cloud/provided-by` node label that the hcloud-csi driver
+// reads at start-up to register topology segments. Therefore CCM must be
+// installed whenever Hetzner CSI is enabled.
 func (f *Factory) needsHcloudCCM(spec v1alpha1.ClusterSpec) bool {
 	if spec.Distribution != v1alpha1.DistributionTalos {
 		return false
@@ -300,5 +307,6 @@ func (f *Factory) needsHcloudCCM(spec v1alpha1.ClusterSpec) bool {
 	}
 
 	return spec.LoadBalancer == v1alpha1.LoadBalancerDefault ||
-		spec.LoadBalancer == v1alpha1.LoadBalancerEnabled
+		spec.LoadBalancer == v1alpha1.LoadBalancerEnabled ||
+		spec.CSI != v1alpha1.CSIDisabled
 }

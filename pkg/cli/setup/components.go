@@ -14,6 +14,7 @@ import (
 	certmanagerinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/certmanager"
 	fluxinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/flux"
 	gatekeeperinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/gatekeeper"
+	hcloudccminstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/hcloudccm"
 	hetznercsiinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/hetznercsi"
 	kubeletcsrapproverinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/kubeletcsrapprover"
 	kyvernoinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/kyverno"
@@ -126,11 +127,14 @@ func csiFactory(
 		// For Talos × Hetzner, use the Hetzner CSI driver
 		if clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionTalos &&
 			clusterCfg.Spec.Cluster.Provider == v1alpha1.ProviderHetzner {
+			networkName := hcloudccminstaller.ResolveHetznerNetworkName(clusterCfg)
+
 			return hetznercsiinstaller.NewInstaller(
 				helmClient,
 				kubeconfig,
 				clusterCfg.Spec.Cluster.Connection.Context,
 				timeout,
+				networkName,
 			), nil
 		}
 

@@ -143,7 +143,7 @@ func TestFilterKeysByPublicKeys_MixedKeys(t *testing.T) {
 func TestResolveAgeKey_EnvVarOverride(t *testing.T) {
 	const testKey = "AGE-SECRET-KEY-1ENVVAR00000000000000000000000000000000000000000000000000"
 
-	t.Run("env.var takes priority over ageKeyEnvVar", func(t *testing.T) {
+	t.Run("Env.Var takes priority over ageKeyEnvVar", func(t *testing.T) {
 		t.Setenv("TEST_SOPSUTIL_ENV_VAR_NEW", testKey)
 		t.Setenv(
 			"TEST_SOPSUTIL_ENV_VAR_OLD",
@@ -160,7 +160,7 @@ func TestResolveAgeKey_EnvVarOverride(t *testing.T) {
 		assert.Equal(t, testKey, got)
 	})
 
-	t.Run("falls back to ageKeyEnvVar when env.var empty", func(t *testing.T) {
+	t.Run("falls back to ageKeyEnvVar when Env.Var empty", func(t *testing.T) {
 		t.Setenv("TEST_SOPSUTIL_ENV_VAR_FALLBACK", testKey)
 		noKeyFileEnv(t)
 
@@ -180,7 +180,7 @@ func TestResolveAgeKey_EnvVarOverride(t *testing.T) {
 func TestResolveAgeKey_ExtractFileOverride(t *testing.T) {
 	const testKey = "AGE-SECRET-KEY-1CUSTOM00000000000000000000000000000000000000000000000000"
 
-	t.Run("extract.file specifies custom key file", func(t *testing.T) {
+	t.Run("Extract.File specifies custom key file", func(t *testing.T) {
 		dir := t.TempDir()
 		keyPath := filepath.Join(dir, "custom-keys.txt")
 		err := os.WriteFile(keyPath, []byte("# custom\n"+testKey+"\n"), 0o600)
