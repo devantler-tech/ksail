@@ -534,7 +534,11 @@ func (p *Provisioner) Stop(ctx context.Context, name string) error {
 func (p *Provisioner) refreshHetznerKubeconfig(ctx context.Context, clusterName string) error {
 	nodes, err := p.getHetznerNodesByRole(ctx, clusterName)
 	if err != nil {
-		return fmt.Errorf("failed to list Hetzner nodes for kubeconfig refresh for cluster %q: %w", clusterName, err)
+		return fmt.Errorf(
+			"failed to list Hetzner nodes for kubeconfig refresh for cluster %q: %w",
+			clusterName,
+			err,
+		)
 	}
 
 	// Find the first control-plane node
