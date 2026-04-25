@@ -3,6 +3,7 @@ package kyvernoinstaller
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s/readiness"
@@ -32,13 +33,24 @@ var newClientsetFn = func(kubeconfig, context string) (kubernetes.Interface, err
 // Running/Ready, but the controller has not yet initialised its TLS certificate and
 // injected it into the webhook configuration. Any workload operation that triggers
 // the webhook before the caBundle is set will fail.
+//
+// The polling deadline is derived from the context so that the Helm install and
+// webhook wait share a single overall timeout budget.
 func (i *Installer) waitForWebhookReady(ctx context.Context) error {
+	remaining := i.timeout // fallback when ctx has no deadline
+	if dl, ok := ctx.Deadline(); ok {
+		remaining = time.Until(dl)
+		if remaining <= 0 {
+			return fmt.Errorf("no time remaining for webhook readiness check")
+		}
+	}
+
 	clientset, err := newClientsetFn(i.kubeconfig, i.context)
 	if err != nil {
 		return fmt.Errorf("creating clientset for Kyverno webhook readiness check: %w", err)
 	}
 
-	return readiness.PollForReadiness(ctx, i.timeout, func(ctx context.Context) (bool, error) {
+	return readiness.PollForReadiness(ctx, remaining, func(ctx context.Context) (bool, error) {
 		webhook, err := clientset.AdmissionregistrationV1().
 			MutatingWebhookConfigurations().
 			Get(ctx, kyvernoResourceWebhookName, metav1.GetOptions{})

@@ -67,12 +67,18 @@ func NewInstaller(client helm.Interface, timeout time.Duration, kubeconfig, cont
 // race condition where Helm reports install success but the webhook server has
 // not yet populated its caBundle, causing transient admission failures for the
 // first workload operations after cluster setup.
+//
+// A single overall deadline governs both the Helm install and the webhook
+// readiness poll so the total wall time stays within timeout + buffer.
 func (i *Installer) Install(ctx context.Context) error {
-	if err := i.Base.Install(ctx); err != nil {
+	overallCtx, cancel := context.WithTimeout(ctx, i.timeout+helm.ContextTimeoutBuffer)
+	defer cancel()
+
+	if err := i.Base.Install(overallCtx); err != nil {
 		return err
 	}
 
-	if err := i.waitForWebhookReady(ctx); err != nil {
+	if err := i.waitForWebhookReady(overallCtx); err != nil {
 		return fmt.Errorf("kyverno webhook not ready after install: %w", err)
 	}
 

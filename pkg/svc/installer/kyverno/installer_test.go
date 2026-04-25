@@ -156,3 +156,75 @@ func readyWebhookConfig() *admissionregistrationv1.MutatingWebhookConfiguration 
 		},
 	}
 }
+
+// unreadyWebhookConfig returns a MutatingWebhookConfiguration with an empty
+// caBundle, simulating a Kyverno admission controller that has not yet
+// initialised its TLS certificate.
+func unreadyWebhookConfig() *admissionregistrationv1.MutatingWebhookConfiguration {
+	return &admissionregistrationv1.MutatingWebhookConfiguration{
+		ObjectMeta: metav1.ObjectMeta{Name: "kyverno-resource-mutating-webhook-cfg"},
+		Webhooks: []admissionregistrationv1.MutatingWebhook{
+			{
+				Name:         "mutate.kyverno.svc",
+				ClientConfig: admissionregistrationv1.WebhookClientConfig{},
+			},
+		},
+	}
+}
+
+func TestInstallWebhookDelayedReadiness(t *testing.T) {
+	// Not parallel: overrides the package-level newClientsetFn var.
+	fakeClientset := k8sfake.NewClientset(unreadyWebhookConfig())
+	restore := kyvernoinstaller.SetNewClientsetFn(
+		func(_, _ string) (kubernetes.Interface, error) { return fakeClientset, nil },
+	)
+	defer restore()
+
+	// Populate caBundle after a short delay to simulate delayed TLS init.
+	go func() {
+		time.Sleep(500 * time.Millisecond)
+
+		cfg := readyWebhookConfig()
+		_, err := fakeClientset.AdmissionregistrationV1().
+			MutatingWebhookConfigurations().
+			Update(context.Background(), cfg, metav1.UpdateOptions{})
+		require.NoError(t, err)
+	}()
+
+	installer, client := newInstallerWithDefaults(t)
+	expectKyvernoInstall(t, client, nil)
+
+	err := installer.Install(context.Background())
+
+	require.NoError(t, err)
+}
+
+func TestInstallWebhookNeverReady(t *testing.T) {
+	// Not parallel: overrides the package-level newClientsetFn var.
+	fakeClientset := k8sfake.NewClientset(unreadyWebhookConfig())
+	restore := kyvernoinstaller.SetNewClientsetFn(
+		func(_, _ string) (kubernetes.Interface, error) { return fakeClientset, nil },
+	)
+	defer restore()
+
+	client := helm.NewMockInterface(t)
+	timeout := 3 * time.Second
+	installer := kyvernoinstaller.NewInstaller(client, timeout, "", "")
+
+	client.EXPECT().
+		AddRepository(mock.Anything, mock.Anything, mock.Anything).
+		Return(nil)
+	client.EXPECT().
+		InstallOrUpgradeChart(mock.Anything, mock.Anything).
+		Return(nil, nil)
+
+	// Use a parent context with a tight deadline so the overall budget
+	// (timeout + ContextTimeoutBuffer) is bounded by the parent.
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	err := installer.Install(ctx)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "kyverno webhook not ready after install")
+}
