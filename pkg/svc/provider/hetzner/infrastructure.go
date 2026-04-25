@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"slices"
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -148,39 +149,19 @@ func (p *Provider) SyncFirewallRules(
 }
 
 // firewallRulesMatch returns true if existing and desired rules are equivalent,
-// including protocol, direction, port, and source IPs.
+// regardless of ordering. Rules are normalized by sorting before comparison so
+// that rule ordering differences returned by the Hetzner API do not cause
+// unnecessary SetRules calls.
 func firewallRulesMatch(existing, desired []hcloud.FirewallRule) bool {
 	if len(existing) != len(desired) {
 		return false
 	}
 
-	for ruleIdx := range existing {
-		existingRule := existing[ruleIdx]
-		desiredRule := desired[ruleIdx]
+	sortedExisting := sortedFirewallRules(existing)
+	sortedDesired := sortedFirewallRules(desired)
 
-		if existingRule.Protocol != desiredRule.Protocol {
-			return false
-		}
-
-		if existingRule.Direction != desiredRule.Direction {
-			return false
-		}
-
-		existingPort := ""
-		if existingRule.Port != nil {
-			existingPort = *existingRule.Port
-		}
-
-		desiredPort := ""
-		if desiredRule.Port != nil {
-			desiredPort = *desiredRule.Port
-		}
-
-		if existingPort != desiredPort {
-			return false
-		}
-
-		if !sourceIPsEqual(existingRule.SourceIPs, desiredRule.SourceIPs) {
+	for ruleIdx := range sortedExisting {
+		if !firewallRulesEqual(sortedExisting[ruleIdx], sortedDesired[ruleIdx]) {
 			return false
 		}
 	}
@@ -188,14 +169,95 @@ func firewallRulesMatch(existing, desired []hcloud.FirewallRule) bool {
 	return true
 }
 
-// sourceIPsEqual returns true if two SourceIPs slices contain the same CIDRs in the same order.
+// firewallRulesEqual returns true if two firewall rules have identical fields.
+func firewallRulesEqual(left, right hcloud.FirewallRule) bool {
+	if left.Protocol != right.Protocol || left.Direction != right.Direction {
+		return false
+	}
+
+	leftPort := ""
+	if left.Port != nil {
+		leftPort = *left.Port
+	}
+
+	rightPort := ""
+	if right.Port != nil {
+		rightPort = *right.Port
+	}
+
+	return leftPort == rightPort && sourceIPsEqual(left.SourceIPs, right.SourceIPs)
+}
+
+// sortedFirewallRules returns a sorted copy of rules, ordered by Direction → Protocol → Port.
+func sortedFirewallRules(rules []hcloud.FirewallRule) []hcloud.FirewallRule {
+	sorted := slices.Clone(rules)
+	slices.SortFunc(sorted, compareFirewallRules)
+
+	return sorted
+}
+
+// compareFirewallRules provides a stable sort order for firewall rules.
+func compareFirewallRules(left, right hcloud.FirewallRule) int {
+	if left.Direction != right.Direction {
+		if left.Direction < right.Direction {
+			return -1
+		}
+
+		return 1
+	}
+
+	if left.Protocol != right.Protocol {
+		if left.Protocol < right.Protocol {
+			return -1
+		}
+
+		return 1
+	}
+
+	leftPort := ""
+	if left.Port != nil {
+		leftPort = *left.Port
+	}
+
+	rightPort := ""
+	if right.Port != nil {
+		rightPort = *right.Port
+	}
+
+	if leftPort < rightPort {
+		return -1
+	}
+
+	if leftPort > rightPort {
+		return 1
+	}
+
+	return 0
+}
+
+// sourceIPsEqual returns true if two SourceIPs slices contain the same CIDRs,
+// regardless of order.
 func sourceIPsEqual(existing, desired []net.IPNet) bool {
 	if len(existing) != len(desired) {
 		return false
 	}
 
-	for idx := range existing {
-		if existing[idx].String() != desired[idx].String() {
+	sortCIDRs := func(cidrs []net.IPNet) []string {
+		strs := make([]string, len(cidrs))
+		for i, c := range cidrs {
+			strs[i] = c.String()
+		}
+
+		slices.Sort(strs)
+
+		return strs
+	}
+
+	sortedExisting := sortCIDRs(existing)
+	sortedDesired := sortCIDRs(desired)
+
+	for idx := range sortedExisting {
+		if sortedExisting[idx] != sortedDesired[idx] {
 			return false
 		}
 	}
