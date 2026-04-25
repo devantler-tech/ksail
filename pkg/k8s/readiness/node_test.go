@@ -545,3 +545,22 @@ func TestWaitForAllNodesLabeled_NoNodes(t *testing.T) {
 	)
 	assert.Error(t, err)
 }
+
+func TestWaitForAllNodesLabeled_ContextCanceled(t *testing.T) {
+	t.Parallel()
+
+	const labelKey = "instance.hetzner.cloud/provided-by"
+
+	clientset := fake.NewClientset(
+		&corev1.Node{
+			ObjectMeta: metav1.ObjectMeta{Name: "worker-1"},
+		},
+	)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err := readiness.WaitForAllNodesLabeled(ctx, clientset, labelKey, 5*time.Second)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, context.Canceled)
+}
