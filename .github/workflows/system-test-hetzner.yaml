@@ -193,10 +193,6 @@ jobs:
           poll-interval-seconds: 30
           abort-after-seconds: 5400
 
-      - name: 🧹 Free disk space
-        if: steps.turnstyle.outcome == 'success'
-        uses: ./.github/actions/free-disk-space
-
       - name: 🔐 Login to Docker Hub
         if: steps.turnstyle.outcome == 'success' && vars.DOCKERHUB_USERNAME != ''
         uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
