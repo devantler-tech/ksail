@@ -35,26 +35,16 @@ func (s *Scaffolder) generateTalosConfig(output string, force bool) error {
 	// requires the CCM to initialize nodes with a providerID and write node labels.
 	enableExternalCloudProvider := s.KSailConfig.Spec.Cluster.Provider == v1alpha1.ProviderHetzner
 
-	// Enable ingress firewall for Hetzner clusters when not explicitly disabled.
-	enableIngressFirewall := s.KSailConfig.Spec.Cluster.Provider == v1alpha1.ProviderHetzner &&
-		s.KSailConfig.Spec.Provider.Hetzner.IngressFirewall != v1alpha1.IngressFirewallDisabled
-
-	// Determine CNI VXLAN port based on CNI selection
-	cniPort := 4789 // Default (Flannel) and Calico use VXLAN port 4789
-	if s.KSailConfig.Spec.Cluster.CNI == v1alpha1.CNICilium {
-		cniPort = 8472 // Cilium uses VXLAN port 8472
-	}
-
-	networkCIDR := s.KSailConfig.Spec.Provider.Hetzner.NetworkCIDR
-	if networkCIDR == "" {
-		networkCIDR = v1alpha1.DefaultHetznerNetworkCIDR
-	}
+	// Compute Hetzner ingress firewall settings (enabled flag + network CIDR + CNI port).
+	enableIngressFirewall, networkCIDR, cniPort := s.hetznerIngressFirewallConfig()
 
 	// Mirror the conditions in generator.getDirectoriesWithPatches() exactly so
 	// .gitkeep notifications match the files the generator actually writes.
-	clusterHasPatches := workers == 0 || len(s.MirrorRegistries) > 0 || disableDefaultCNI ||
-		enableKubeletCertRotation || s.ClusterName != "" || enableImageVerification || disableCDI ||
-		enableExternalCloudProvider || enableIngressFirewall
+	clusterHasPatches := talosClusterHasPatches(
+		workers, s.MirrorRegistries, disableDefaultCNI, enableKubeletCertRotation,
+		s.ClusterName, enableImageVerification, disableCDI, enableExternalCloudProvider,
+		enableIngressFirewall,
+	)
 
 	config := &talosgenerator.Config{
 		PatchesDir:                  TalosConfigDir,
@@ -149,4 +139,33 @@ func (s *Scaffolder) notifyTalosPatchCreated(subdir, filename string) {
 		Args:    []any{displayPath},
 		Writer:  s.Writer,
 	})
+}
+
+// hetznerIngressFirewallConfig returns whether the Talos ingress firewall should
+// be enabled for this cluster, along with the network CIDR and CNI VXLAN port.
+func (s *Scaffolder) hetznerIngressFirewallConfig() (bool, string, int) {
+	enabled := s.KSailConfig.Spec.Cluster.Provider == v1alpha1.ProviderHetzner &&
+		s.KSailConfig.Spec.Provider.Hetzner.IngressFirewall != v1alpha1.IngressFirewallDisabled
+
+	return enabled, v1alpha1.HetznerNetworkCIDR(s.KSailConfig.Spec), v1alpha1.HetznerCNIPort(s.KSailConfig.Spec)
+}
+
+// talosClusterHasPatches returns true when at least one patch file will be written
+// into the cluster/ directory (so the generator skips creating a .gitkeep there).
+func talosClusterHasPatches(
+	workers int,
+	mirrorRegistries []string,
+	disableDefaultCNI, enableKubeletCertRotation bool,
+	clusterName string,
+	enableImageVerification, disableCDI, enableExternalCloudProvider, enableIngressFirewall bool,
+) bool {
+	return workers == 0 ||
+		len(mirrorRegistries) > 0 ||
+		disableDefaultCNI ||
+		enableKubeletCertRotation ||
+		clusterName != "" ||
+		enableImageVerification ||
+		disableCDI ||
+		enableExternalCloudProvider ||
+		enableIngressFirewall
 }

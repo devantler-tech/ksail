@@ -41,11 +41,8 @@ func (p *Provisioner) Update(
 	// Sync Hetzner Cloud Firewall rules to the hardened set.
 	// This migrates existing clusters that were created with insecure rules
 	// (etcd, kubelet, trustd exposed to 0.0.0.0/0) to the secure configuration.
-	if p.hetznerOpts != nil {
-		syncErr := p.syncHetznerFirewallRules(ctx, clusterName)
-		if syncErr != nil {
-			return result, fmt.Errorf("failed to sync firewall rules: %w", syncErr)
-		}
+	if err := p.syncHetznerFirewallRules(ctx, clusterName); err != nil {
+		return result, err
 	}
 
 	// For Omni-managed clusters, refresh kubeconfig and talosconfig before any
@@ -625,14 +622,23 @@ func countNodeRoles(nodes []nodeWithRole) (int32, int32) {
 
 // syncHetznerFirewallRules synchronizes the Hetzner Cloud Firewall rules to the
 // hardened set, migrating clusters created with the old insecure rules.
+// No-ops when the provisioner was not initialized with Hetzner opts.
 func (p *Provisioner) syncHetznerFirewallRules(
 	ctx context.Context,
 	clusterName string,
 ) error {
+	if p.hetznerOpts == nil {
+		return nil
+	}
+
 	hzProvider, err := p.hetznerProvider()
 	if err != nil {
 		return err
 	}
 
-	return hzProvider.SyncFirewallRules(ctx, clusterName)
+	if err := hzProvider.SyncFirewallRules(ctx, clusterName); err != nil {
+		return fmt.Errorf("failed to sync Hetzner firewall rules for %s: %w", clusterName, err)
+	}
+
+	return nil
 }

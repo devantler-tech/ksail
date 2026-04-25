@@ -736,13 +736,9 @@ kind: NetworkDefaultActionConfig
 ingress: block
 `
 
-// IngressFirewallCPRulesYAML returns the Talos NetworkRuleConfig documents for control-plane
-// nodes. The networkCIDR and cniPort parameters are injected at generation time.
-//
-// This is the single source of truth for the CP rules content, shared between the
-// generator (file-based scaffolding) and the runtime config manager (in-memory injection).
-func IngressFirewallCPRulesYAML(networkCIDR string, cniPort int) string {
-	return fmt.Sprintf(`apiVersion: v1alpha1
+// ingressFirewallCPRulesTemplate is the Talos NetworkRuleConfig YAML template for
+// control-plane nodes. %[1]s is substituted with the network CIDR, %[2]d with the CNI VXLAN port.
+const ingressFirewallCPRulesTemplate = `apiVersion: v1alpha1
 kind: NetworkRuleConfig
 name: kubelet
 portSelector:
@@ -803,7 +799,15 @@ portSelector:
   protocol: udp
 ingress:
   - subnet: %[1]s
-`, networkCIDR, cniPort)
+`
+
+// IngressFirewallCPRulesYAML returns the Talos NetworkRuleConfig documents for control-plane
+// nodes. The networkCIDR and cniPort parameters are injected at generation time.
+//
+// This is the single source of truth for the CP rules content, shared between the
+// generator (file-based scaffolding) and the runtime config manager (in-memory injection).
+func IngressFirewallCPRulesYAML(networkCIDR string, cniPort int) string {
+	return fmt.Sprintf(ingressFirewallCPRulesTemplate, networkCIDR, cniPort)
 }
 
 // IngressFirewallWorkerRulesYAML returns the Talos NetworkRuleConfig documents for worker
@@ -841,6 +845,20 @@ ingress:
 `, networkCIDR, cniPort)
 }
 
+// validateIngressFirewallModel returns an error if the config fields required by
+// ingress firewall patch generation are missing.
+func validateIngressFirewallModel(model *Config) error {
+	if model.NetworkCIDR == "" {
+		return fmt.Errorf("networkCIDR is required when ingress firewall is enabled")
+	}
+
+	if model.CNIPort == 0 {
+		return fmt.Errorf("cniPort is required when ingress firewall is enabled")
+	}
+
+	return nil
+}
+
 // generateIngressFirewallPatches creates the Talos ingress firewall config documents.
 // This generates three files:
 //   - cluster/ingress-firewall-default-action.yaml — blocks all ingress by default
@@ -853,39 +871,29 @@ func (g *Generator) generateIngressFirewallPatches(
 	model *Config,
 	force bool,
 ) error {
-	// Generate default action (ingress: block) for all nodes
-	defaultActionPath := filepath.Join(rootPath, "cluster", ingressFirewallDefaultActionFileName)
+	if err := validateIngressFirewallModel(model); err != nil {
+		return err
+	}
 
-	_, statErr := os.Stat(defaultActionPath)
-	if statErr != nil || force {
-		err := os.WriteFile(defaultActionPath, []byte(IngressFirewallDefaultActionYAML), filePerm)
-		if err != nil {
+	defaultActionPath := filepath.Join(rootPath, "cluster", ingressFirewallDefaultActionFileName)
+	if _, statErr := os.Stat(defaultActionPath); statErr != nil || force {
+		if err := os.WriteFile(defaultActionPath, []byte(IngressFirewallDefaultActionYAML), filePerm); err != nil {
 			return fmt.Errorf("failed to create ingress firewall default action: %w", err)
 		}
 	}
 
-	// Generate control-plane rules
 	cpRulesPath := filepath.Join(rootPath, "control-planes", ingressFirewallRulesFileName)
-
-	_, statErr = os.Stat(cpRulesPath)
-	if statErr != nil || force {
+	if _, statErr := os.Stat(cpRulesPath); statErr != nil || force {
 		cpContent := IngressFirewallCPRulesYAML(model.NetworkCIDR, model.CNIPort)
-
-		err := os.WriteFile(cpRulesPath, []byte(cpContent), filePerm)
-		if err != nil {
+		if err := os.WriteFile(cpRulesPath, []byte(cpContent), filePerm); err != nil {
 			return fmt.Errorf("failed to create ingress firewall CP rules: %w", err)
 		}
 	}
 
-	// Generate worker rules
 	workerRulesPath := filepath.Join(rootPath, "workers", ingressFirewallRulesFileName)
-
-	_, statErr = os.Stat(workerRulesPath)
-	if statErr != nil || force {
+	if _, statErr := os.Stat(workerRulesPath); statErr != nil || force {
 		workerContent := IngressFirewallWorkerRulesYAML(model.NetworkCIDR, model.CNIPort)
-
-		err := os.WriteFile(workerRulesPath, []byte(workerContent), filePerm)
-		if err != nil {
+		if err := os.WriteFile(workerRulesPath, []byte(workerContent), filePerm); err != nil {
 			return fmt.Errorf("failed to create ingress firewall worker rules: %w", err)
 		}
 	}

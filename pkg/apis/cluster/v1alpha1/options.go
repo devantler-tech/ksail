@@ -162,6 +162,26 @@ type OptionsOmni struct {
 // the authoritative source of truth. KSail does not duplicate those fields in
 // ksail.yaml; the EKS provisioner loads the eksctl ClusterConfig directly.
 
+// HetznerNetworkCIDR returns the configured private-network CIDR for the
+// given spec, falling back to DefaultHetznerNetworkCIDR when none is set.
+func HetznerNetworkCIDR(spec Spec) string {
+	if spec.Provider.Hetzner.NetworkCIDR != "" {
+		return spec.Provider.Hetzner.NetworkCIDR
+	}
+
+	return DefaultHetznerNetworkCIDR
+}
+
+// HetznerCNIPort returns the VXLAN encapsulation UDP port for the configured CNI.
+// Cilium uses port 8472; Flannel and Calico use 4789.
+func HetznerCNIPort(spec Spec) int {
+	if spec.Cluster.CNI == CNICilium {
+		return 8472
+	}
+
+	return 4789
+}
+
 // OptionsAWS defines options specific to the AWS cloud provider.
 // Credentials are resolved via the standard AWS SDK v2 credential chain;
 // the *EnvVar fields let users point KSail at non-standard environment

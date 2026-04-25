@@ -101,30 +101,8 @@ func (m *ConfigManager) loadTalosConfig() (*talosconfigmanager.Configs, error) {
 		"", // Use default network CIDR
 	)
 
-	// Add external cloud provider patch when using Hetzner provider.
-	// This enables CCM to initialize nodes with a providerID and write node labels
-	// required by the CSI DaemonSet.
-	if m.Config.Spec.Cluster.Provider == v1alpha1.ProviderHetzner {
-		talosManager.WithAdditionalPatches(externalCloudProviderPatches())
-	}
-
-	// Add ingress firewall patches when using Hetzner provider and not explicitly disabled.
-	// This configures NetworkDefaultActionConfig (ingress: block) and per-role
-	// NetworkRuleConfig documents for defense-in-depth at the OS level.
-	if m.Config.Spec.Cluster.Provider == v1alpha1.ProviderHetzner &&
-		m.Config.Spec.Provider.Hetzner.IngressFirewall != v1alpha1.IngressFirewallDisabled {
-		networkCIDR := m.Config.Spec.Provider.Hetzner.NetworkCIDR
-		if networkCIDR == "" {
-			networkCIDR = v1alpha1.DefaultHetznerNetworkCIDR
-		}
-
-		cniPort := 4789 // Default (Flannel) and Calico
-		if m.Config.Spec.Cluster.CNI == v1alpha1.CNICilium {
-			cniPort = 8472 // Cilium VXLAN
-		}
-
-		talosManager.WithAdditionalPatches(ingressFirewallPatches(networkCIDR, cniPort))
-	}
+	// Add Hetzner-specific patches (external cloud provider + ingress firewall).
+	m.addHetznerPatches(talosManager)
 
 	// Inject kubelet cert rotation + CSR approver patches at runtime when
 	// metrics-server is enabled AND both patch files don't already exist on disk.
@@ -133,10 +111,7 @@ func (m *ConfigManager) loadTalosConfig() (*talosconfigmanager.Configs, error) {
 	// ensures the approver is always present without duplicating patches.
 	// If stat fails for any reason other than the file not existing
 	// (e.g., permissions), we inject the patches as a fail-safe.
-	if m.Config.Spec.Cluster.MetricsServer == v1alpha1.MetricsServerEnabled &&
-		!kubeletPatchFilesExist(patchesDir) {
-		talosManager.WithAdditionalPatches(kubeletCertRotationAndApproverPatches())
-	}
+	m.addKubeletCertRotationPatches(talosManager, patchesDir)
 
 	config, err := talosManager.Load(configmanagerinterface.LoadOptions{})
 	if err != nil {
@@ -144,6 +119,36 @@ func (m *ConfigManager) loadTalosConfig() (*talosconfigmanager.Configs, error) {
 	}
 
 	return config, nil
+}
+
+// addHetznerPatches injects Hetzner-specific runtime patches into talosManager:
+//   - external cloud provider patch (always, for CCM node initialization)
+//   - ingress firewall patches (when IngressFirewall is not Disabled)
+func (m *ConfigManager) addHetznerPatches(talosManager *talosconfigmanager.ConfigManager) {
+	if m.Config.Spec.Cluster.Provider != v1alpha1.ProviderHetzner {
+		return
+	}
+
+	talosManager.WithAdditionalPatches(externalCloudProviderPatches())
+
+	if m.Config.Spec.Provider.Hetzner.IngressFirewall != v1alpha1.IngressFirewallDisabled {
+		talosManager.WithAdditionalPatches(ingressFirewallPatches(
+			v1alpha1.HetznerNetworkCIDR(m.Config.Spec),
+			v1alpha1.HetznerCNIPort(m.Config.Spec),
+		))
+	}
+}
+
+// addKubeletCertRotationPatches injects kubelet cert-rotation and CSR-approver patches
+// at runtime when MetricsServer is enabled and the patch files do not exist on disk.
+func (m *ConfigManager) addKubeletCertRotationPatches(
+	talosManager *talosconfigmanager.ConfigManager,
+	patchesDir string,
+) {
+	if m.Config.Spec.Cluster.MetricsServer == v1alpha1.MetricsServerEnabled &&
+		!kubeletPatchFilesExist(patchesDir) {
+		talosManager.WithAdditionalPatches(kubeletCertRotationAndApproverPatches())
+	}
 }
 
 // loadAndCacheDistributionConfig loads the distribution-specific configuration based on

@@ -147,32 +147,55 @@ func (p *Provider) SyncFirewallRules(
 	return nil
 }
 
-// firewallRulesMatch returns true if existing and desired rules are equivalent.
+// firewallRulesMatch returns true if existing and desired rules are equivalent,
+// including protocol, direction, port, and source IPs.
 func firewallRulesMatch(existing, desired []hcloud.FirewallRule) bool {
 	if len(existing) != len(desired) {
 		return false
 	}
 
-	for i := range existing {
-		if existing[i].Protocol != desired[i].Protocol {
+	for ruleIdx := range existing {
+		existingRule := existing[ruleIdx]
+		desiredRule := desired[ruleIdx]
+
+		if existingRule.Protocol != desiredRule.Protocol {
 			return false
 		}
 
-		if existing[i].Direction != desired[i].Direction {
+		if existingRule.Direction != desiredRule.Direction {
 			return false
 		}
 
 		existingPort := ""
-		if existing[i].Port != nil {
-			existingPort = *existing[i].Port
+		if existingRule.Port != nil {
+			existingPort = *existingRule.Port
 		}
 
 		desiredPort := ""
-		if desired[i].Port != nil {
-			desiredPort = *desired[i].Port
+		if desiredRule.Port != nil {
+			desiredPort = *desiredRule.Port
 		}
 
 		if existingPort != desiredPort {
+			return false
+		}
+
+		if !sourceIPsEqual(existingRule.SourceIPs, desiredRule.SourceIPs) {
+			return false
+		}
+	}
+
+	return true
+}
+
+// sourceIPsEqual returns true if two SourceIPs slices contain the same CIDRs in the same order.
+func sourceIPsEqual(a, b []net.IPNet) bool {
+	if len(a) != len(b) {
+		return false
+	}
+
+	for idx := range a {
+		if a[idx].String() != b[idx].String() {
 			return false
 		}
 	}
@@ -242,7 +265,8 @@ func buildFirewallRules() []hcloud.FirewallRule {
 	// Cluster-internal ports (etcd, kubelet, trustd) are NOT included because
 	// Hetzner Cloud Firewalls only filter public interface traffic — inter-node
 	// communication flows through the private Hetzner Cloud Network unfiltered.
-	// See: https://docs.hetzner.com/cloud/firewalls/faq/#do-firewalls-filter-traffic-between-servers-on-the-same-private-network
+	// See: https://docs.hetzner.com/cloud/firewalls/faq/
+	// #do-firewalls-filter-traffic-between-servers-on-the-same-private-network
 	return []hcloud.FirewallRule{
 		// Talos API (apid) - required for talosctl
 		{
