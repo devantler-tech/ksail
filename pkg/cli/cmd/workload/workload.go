@@ -32,6 +32,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/client/kubeconform"
 	"github.com/devantler-tech/ksail/v7/pkg/client/kubectl"
 	"github.com/devantler-tech/ksail/v7/pkg/client/kustomize"
+	"github.com/devantler-tech/ksail/v7/pkg/client/netretry"
 	"github.com/devantler-tech/ksail/v7/pkg/client/oci"
 	reconcilerclient "github.com/devantler-tech/ksail/v7/pkg/client/reconciler"
 	"github.com/devantler-tech/ksail/v7/pkg/di"
@@ -1628,7 +1629,13 @@ func runPushCommand(
 		}
 	}
 
-	return buildAndPushArtifact(cmd, params, outputTimer)
+	return retryOnTransientError(
+		cmd.Context(), cmd,
+		pushMaxRetryAttempts, pushRetryBaseWait, pushRetryMaxWait,
+		func() error {
+			return buildAndPushArtifact(cmd, params, outputTimer)
+		},
+	)
 }
 
 // validateManifests runs manifest validation and reports progress.
@@ -1956,6 +1963,80 @@ const (
 	kwokReconcileSkipMsg = "KWOK distribution: GitOps controllers are simulated and cannot sync — reconciliation skipped"
 )
 
+// Retry configuration for the push command.
+// Package-level vars allow test overrides via export_test.go.
+//
+//nolint:gochecknoglobals // package-level vars allow test overrides via export_test.go
+var (
+	pushMaxRetryAttempts = 3
+	pushRetryBaseWait    = 5 * time.Second
+	pushRetryMaxWait     = 30 * time.Second
+)
+
+// Retry configuration for the reconcile command.
+// Package-level vars allow test overrides via export_test.go.
+//
+//nolint:gochecknoglobals // package-level vars allow test overrides via export_test.go
+var (
+	reconcileMaxRetryAttempts = 3
+	reconcileRetryBaseWait    = 5 * time.Second
+	reconcileRetryMaxWait     = 30 * time.Second
+)
+
+// retryOnTransientError retries fn up to maxAttempts times when the returned
+// error is transient according to netretry.IsRetryable. It uses exponential
+// backoff between attempts and emits a warning notification on each retry so
+// the user can see what is happening. Returns nil on the first successful
+// attempt, or the last error once all attempts are exhausted.
+func retryOnTransientError(
+	ctx context.Context,
+	cmd *cobra.Command,
+	maxAttempts int,
+	baseWait, maxWait time.Duration,
+	fn func() error,
+) error {
+	var lastErr error
+
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		err := fn()
+		if err == nil {
+			return nil
+		}
+
+		lastErr = err
+
+		if !netretry.IsRetryable(lastErr) || attempt == maxAttempts {
+			break
+		}
+
+		delay := netretry.ExponentialDelay(attempt, baseWait, maxWait)
+
+		notify.Warningf(
+			cmd.OutOrStdout(),
+			"attempt %d/%d failed (retrying in %s): %v",
+			attempt, maxAttempts, delay, lastErr,
+		)
+
+		t := time.NewTimer(delay)
+
+		select {
+		case <-ctx.Done():
+			if !t.Stop() {
+				<-t.C
+			}
+
+			return fmt.Errorf("retry cancelled: %w", ctx.Err())
+		case <-t.C:
+		}
+	}
+
+	if !netretry.IsRetryable(lastErr) {
+		return lastErr
+	}
+
+	return fmt.Errorf("failed after %d attempts: %w", maxAttempts, lastErr)
+}
+
 // getKubeconfigPath returns the kubeconfig path from config or default.
 func getKubeconfigPath(clusterCfg *v1alpha1.Cluster) (string, error) {
 	kubeconfigPath := strings.TrimSpace(clusterCfg.Spec.Cluster.Connection.Kubeconfig)
@@ -2033,7 +2114,13 @@ func runReconcile(cmd *cobra.Command) error {
 
 	tmr.NewStage()
 
-	err = executeReconciliation(cmd, clusterCfg, gitOpsEngine, timeout, outputTimer)
+	err = retryOnTransientError(
+		cmd.Context(), cmd,
+		reconcileMaxRetryAttempts, reconcileRetryBaseWait, reconcileRetryMaxWait,
+		func() error {
+			return executeReconciliation(cmd, clusterCfg, gitOpsEngine, timeout, outputTimer)
+		},
+	)
 	if err != nil {
 		return err
 	}

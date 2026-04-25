@@ -252,3 +252,21 @@ func ExportPollUntilKustomizationReady(
 ) error {
 	return pollUntilKustomizationReady(ctx, fluxReconciler, name, dependsOn, failed)
 }
+
+// ExportPushMaxRetryAttempts allows tests to override the push retry attempt count.
+var ExportPushMaxRetryAttempts = &pushMaxRetryAttempts //nolint:gochecknoglobals // test export
+
+// ExportPushRetryBaseWait allows tests to override the push retry base wait duration.
+var ExportPushRetryBaseWait = &pushRetryBaseWait //nolint:gochecknoglobals // test export
+
+// ExportPushRetryMaxWait allows tests to override the push retry max wait duration.
+var ExportPushRetryMaxWait = &pushRetryMaxWait //nolint:gochecknoglobals // test export
+
+// ExportReconcileMaxRetryAttempts allows tests to override the reconcile retry attempt count.
+var ExportReconcileMaxRetryAttempts = &reconcileMaxRetryAttempts //nolint:gochecknoglobals // test export
+
+// ExportReconcileRetryBaseWait allows tests to override the reconcile retry base wait duration.
+var ExportReconcileRetryBaseWait = &reconcileRetryBaseWait //nolint:gochecknoglobals // test export
+
+// ExportReconcileRetryMaxWait allows tests to override the reconcile retry max wait duration.
+var ExportReconcileRetryMaxWait = &reconcileRetryMaxWait //nolint:gochecknoglobals // test export
