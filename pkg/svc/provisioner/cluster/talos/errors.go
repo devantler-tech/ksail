@@ -40,4 +40,7 @@ var (
 	ErrNodeNotReady = errors.New("node did not become ready within timeout")
 	// ErrEmptyVersionResponse is returned when a Talos node returns an empty version response.
 	ErrEmptyVersionResponse = errors.New("empty version response from node")
+	// ErrNoControlPlaneForRefresh is returned when no control-plane node can be found
+	// for kubeconfig refresh.
+	ErrNoControlPlaneForRefresh = errors.New("no control-plane node found for kubeconfig refresh")
 )

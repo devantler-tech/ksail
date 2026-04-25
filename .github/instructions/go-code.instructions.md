@@ -19,6 +19,7 @@ applyTo: "**/*.go"
 ## Dependency Guard
 
 `.golangci.yml` enforces a strict import allowlist via `depguard`. Adding a new dependency requires:
+
 1. Adding it to the `allow` list in `.golangci.yml`
 2. Running `golangci-lint run` to verify
 

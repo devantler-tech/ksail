@@ -36,6 +36,12 @@ func (p *Provisioner) writeKubeconfig(kubeconfig []byte) error {
 		}
 	}
 
+	// Canonicalize the path (resolve symlinks) before writing
+	kubeconfigPath, err = fsutil.EvalCanonicalPath(kubeconfigPath)
+	if err != nil {
+		return fmt.Errorf("failed to canonicalize kubeconfig path: %w", err)
+	}
+
 	// Write kubeconfig to file
 	err = os.WriteFile(kubeconfigPath, kubeconfig, kubeconfigFileMode)
 	if err != nil {

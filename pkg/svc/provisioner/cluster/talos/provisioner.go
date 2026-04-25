@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"sync"
 	"time"
@@ -121,6 +122,13 @@ func defaultImagePullRetryConfig() imagePullRetryConfig {
 	}
 }
 
+// kubeconfigFetcher abstracts the Talos client methods needed for kubeconfig refresh.
+// Using an interface allows test doubles without requiring real Talos API connectivity.
+type kubeconfigFetcher interface {
+	Kubeconfig(ctx context.Context) ([]byte, error)
+	Close() error
+}
+
 // Provisioner implements ClusterProvisioner for Talos-in-Docker clusters.
 type Provisioner struct {
 	// talosConfigs holds the loaded Talos machine configurations with all patches applied.
@@ -139,6 +147,9 @@ type Provisioner struct {
 	// omniOpts holds Omni-specific options when using the Omni provider.
 	omniOpts           *v1alpha1.OptionsOmni
 	provisionerFactory func(ctx context.Context) (provision.Provisioner, error)
+	// talosClientFactory creates a Talos client for the given node IP.
+	// Tests can override this via export_test.go to inject a mock.
+	talosClientFactory func(ctx context.Context, ip string) (kubeconfigFetcher, error)
 	logWriter          io.Writer
 	logMu              sync.Mutex
 	componentDetector  *detector.ComponentDetector
@@ -159,7 +170,7 @@ func NewProvisioner(
 		options = NewOptions()
 	}
 
-	return &Provisioner{
+	prov := &Provisioner{
 		talosConfigs: talosConfigs,
 		options:      options,
 		provisionerFactory: func(ctx context.Context) (provision.Provisioner, error) {
@@ -168,6 +179,12 @@ func NewProvisioner(
 		logWriter:      os.Stdout,
 		imagePullRetry: defaultImagePullRetryConfig(),
 	}
+
+	prov.talosClientFactory = func(ctx context.Context, ip string) (kubeconfigFetcher, error) {
+		return prov.createTalosClient(ctx, ip)
+	}
+
+	return prov
 }
 
 // WithDockerClient sets the Docker client for container operations.
@@ -256,22 +273,27 @@ func (p *Provisioner) SetComponentDetector(d *detector.ComponentDetector) {
 }
 
 // RefreshKubeconfig fetches and saves the kubeconfig for a running cluster.
-// For Omni clusters, the kubeconfig is retrieved from the Omni API.
-// For Docker and Hetzner clusters, kubeconfig is expected to persist from creation.
+// For Omni clusters, the kubeconfig is first retrieved from the Omni API;
+// if that fails, it falls back to the Talos API via a control-plane node.
+// For all other providers (Docker, Hetzner), the kubeconfig is fetched
+// from the Talos control-plane API. Docker uses mapped host ports; Hetzner
+// uses the node's public IP directly.
 // This implements the KubeconfigRefresher interface.
 func (p *Provisioner) RefreshKubeconfig(ctx context.Context, name string) error {
-	if p.omniOpts == nil {
-		return nil
-	}
-
 	clusterName := p.resolveClusterName(name)
 
-	omniProv, err := p.omniProvider()
-	if err != nil {
-		return err
+	// Omni: use the Omni SaaS API (Talos API fallback is not viable because
+	// getOmniNodesByRole returns machine IDs, not reachable IPs).
+	if p.omniOpts != nil {
+		omniProv, err := p.omniProvider()
+		if err != nil {
+			return fmt.Errorf("omni provider for kubeconfig refresh: %w", err)
+		}
+
+		return p.saveOmniKubeconfig(ctx, omniProv, clusterName)
 	}
 
-	return p.saveOmniKubeconfig(ctx, omniProv, clusterName)
+	return p.refreshKubeconfigFromTalosAPI(ctx, clusterName)
 }
 
 // Options returns the current runtime options.
@@ -500,6 +522,87 @@ func (p *Provisioner) Stop(ctx context.Context, name string) error {
 	_, _ = fmt.Fprintf(p.logWriter, "Successfully stopped Talos cluster %q\n", clusterName)
 
 	return nil
+}
+
+// refreshKubeconfigFromTalosAPI discovers a control-plane node, connects to its
+// Talos API, fetches the kubeconfig, and writes it to disk. For Docker clusters
+// it resolves mapped host ports; for Hetzner/Omni it uses the node IP directly.
+func (p *Provisioner) refreshKubeconfigFromTalosAPI(ctx context.Context, clusterName string) error {
+	nodes, err := p.getNodesByRole(ctx, clusterName)
+	if err != nil {
+		return fmt.Errorf(
+			"failed to list nodes for kubeconfig refresh for cluster %q: %w",
+			clusterName,
+			err,
+		)
+	}
+
+	var cpIP string
+
+	for _, node := range nodes {
+		if node.Role == RoleControlPlane {
+			cpIP = node.IP
+
+			break
+		}
+	}
+
+	if cpIP == "" {
+		return fmt.Errorf(
+			"%w: no control-plane nodes found for cluster %q",
+			ErrNoControlPlaneForRefresh, clusterName,
+		)
+	}
+
+	talosEndpoint := cpIP
+	k8sEndpoint := "https://" + net.JoinHostPort(cpIP, "6443")
+
+	if p.isDockerProvider() {
+		talosEndpoint, err = p.getMappedTalosAPIEndpoint(ctx, clusterName)
+		if err != nil {
+			return fmt.Errorf("failed to resolve mapped Talos API endpoint: %w", err)
+		}
+
+		mappedK8sHost, mappedErr := p.getMappedK8sAPIEndpoint(ctx, clusterName)
+		if mappedErr != nil {
+			return fmt.Errorf("failed to resolve mapped K8s API endpoint: %w", mappedErr)
+		}
+
+		k8sEndpoint = "https://" + mappedK8sHost
+	}
+
+	return p.fetchAndWriteKubeconfigForCP(ctx, talosEndpoint, k8sEndpoint)
+}
+
+// fetchAndWriteKubeconfigForCP fetches the kubeconfig from the Talos API at talosEndpoint,
+// rewrites the server endpoint to k8sEndpoint, and writes the result to disk.
+// Docker clusters pass mapped host ports for both endpoints; other providers pass the
+// raw control-plane IP (with k8sEndpoint as https://cpIP:6443).
+func (p *Provisioner) fetchAndWriteKubeconfigForCP(
+	ctx context.Context,
+	talosEndpoint, k8sEndpoint string,
+) error {
+	talosClient, err := p.talosClientFactory(ctx, talosEndpoint)
+	if err != nil {
+		return fmt.Errorf("failed to create Talos client for kubeconfig refresh: %w", err)
+	}
+
+	defer talosClient.Close() //nolint:errcheck
+
+	kubeconfig, err := talosClient.Kubeconfig(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to fetch kubeconfig from Talos API: %w", err)
+	}
+
+	kubeconfig, err = rewriteKubeconfigEndpoint(
+		kubeconfig,
+		k8sEndpoint,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to rewrite kubeconfig endpoint: %w", err)
+	}
+
+	return p.writeKubeconfig(kubeconfig)
 }
 
 // resolveClusterName returns the provided name if non-empty, otherwise the cluster name from configs.
