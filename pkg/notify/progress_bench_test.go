@@ -5,6 +5,7 @@ import (
 	"context"
 	"io"
 	"runtime"
+	"strconv"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
@@ -439,4 +440,58 @@ func BenchmarkProgressGroup_VaryingTaskDurations(b *testing.B) {
 			b.Fatal(err)
 		}
 	}
+}
+
+// BenchmarkFormatTaskLine_Running benchmarks the spinner hot path: formatting a
+// running task line. This exercises both getSpinnerFrames() and fcolor calls and
+// is representative of what redrawAllLines() does on every ticker tick.
+func BenchmarkFormatTaskLine_Running(b *testing.B) {
+pg := notify.NewProgressGroup("bench", "", bytes.NewBuffer(nil))
+pgTest := notify.NewProgressGroupForTest(pg)
+pgTest.AddTaskOrderForTest("task-1")
+pgTest.SetTaskStatusForTest("task-1", notify.TaskRunningForTest)
+pgTest.AddTaskStartOrderForTest("task-1")
+
+var lineSink string
+
+b.ReportAllocs()
+b.ResetTimer()
+
+for range b.N {
+lineSink = pgTest.FormatTaskLine("task-1", notify.TaskRunningForTest)
+}
+
+runtime.KeepAlive(lineSink)
+}
+
+// BenchmarkGetDisplayOrder_MixedTasks benchmarks getDisplayOrder with a realistic
+// mix of started and pending tasks. This is called on every spinner tick in the
+// interactive TTY path, so keeping it allocation-free matters.
+func BenchmarkGetDisplayOrder_MixedTasks(b *testing.B) {
+pg := notify.NewProgressGroup("bench", "", bytes.NewBuffer(nil))
+pgTest := notify.NewProgressGroupForTest(pg)
+
+// Simulate 4 started + 4 pending tasks (realistic cluster install scenario)
+for i := range 8 {
+name := "task-" + strconv.Itoa(i)
+pgTest.AddTaskOrderForTest(name)
+pgTest.SetTaskStatusForTest(name, notify.TaskPendingForTest)
+}
+
+for i := range 4 {
+name := "task-" + strconv.Itoa(i)
+pgTest.SetTaskStatusForTest(name, notify.TaskRunningForTest)
+pgTest.AddTaskStartOrderForTest(name)
+}
+
+var orderSink []string
+
+b.ReportAllocs()
+b.ResetTimer()
+
+for range b.N {
+orderSink = pgTest.GetDisplayOrder()
+}
+
+runtime.KeepAlive(orderSink)
 }

@@ -165,10 +165,12 @@ const (
 	truncationHalvingDivisor = 2
 )
 
+//nolint:gochecknoglobals // Immutable slice — safe to share; avoids per-tick allocation in the spinner hot path.
+var spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+
 // getSpinnerFrames returns the spinner animation frames.
-// Using a function instead of a global variable satisfies gochecknoglobals.
 func getSpinnerFrames() []string {
-	return []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+	return spinnerFrames
 }
 
 // Clock provides the current time for per-task duration tracking.
@@ -1001,19 +1003,14 @@ func (pg *ProgressGroup) redrawAllLines() {
 // getDisplayOrder returns tasks ordered by start time, with pending tasks at the end.
 // Must be called with mutex held.
 func (pg *ProgressGroup) getDisplayOrder() []string {
-	// Create a set of started tasks for quick lookup
-	startedSet := make(map[string]bool, len(pg.taskStartOrder))
-	for _, name := range pg.taskStartOrder {
-		startedSet[name] = true
-	}
-
-	// Build result: started tasks first (in start order), then pending
+	// Build result: started tasks first (in start order), then pending.
+	// Use taskStatus instead of a separate startedSet map to avoid per-call allocation;
+	// pending tasks are exactly those whose status is still taskPending.
 	result := make([]string, 0, len(pg.taskOrder))
 	result = append(result, pg.taskStartOrder...)
 
-	// Add pending tasks (maintain original order among pending)
 	for _, name := range pg.taskOrder {
-		if !startedSet[name] {
+		if pg.taskStatus[name] == taskPending {
 			result = append(result, name)
 		}
 	}
