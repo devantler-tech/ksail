@@ -183,7 +183,12 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Free disk space
-        uses: ./.github/actions/free-disk-space
+        uses: endersonmenezes/free-disk-space@7901478139cff6e9d44df5972fd8ab8fcade4db1 # v3.2.2
+        with:
+          remove_android: true
+          remove_dotnet: true
+          remove_haskell: true
+          remove_tool_cache: true
 
       - name: Setup Go
         uses: actions/setup-go@v5
