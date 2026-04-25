@@ -53,8 +53,16 @@ func TestBuildSecretData(t *testing.T) {
 		wantValue   string
 	}{
 		{name: "empty network name returns nil", networkName: "", wantNil: true},
-		{name: "network name stored in secret data", networkName: "dev-network", wantValue: "dev-network"},
-		{name: "custom network name stored in secret data", networkName: "my-custom-net", wantValue: "my-custom-net"},
+		{
+			name:        "network name stored in secret data",
+			networkName: "dev-network",
+			wantValue:   "dev-network",
+		},
+		{
+			name:        "custom network name stored in secret data",
+			networkName: "my-custom-net",
+			wantValue:   "my-custom-net",
+		},
 	}
 
 	for _, testCase := range tests {
