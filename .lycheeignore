@@ -43,7 +43,8 @@ https://github.com/devantler-tech/ksail/fork
 https://github.com/devantler-tech/ksail/issues/new/choose
 https://github.com/mcp
 
-# Intermittent Network Errors (docs.astro.build returns network errors in CI; glob matches root and any subpaths)
+# Intermittent Network Errors (astro.build and docs.astro.build return network errors in CI; glob matches root and any subpaths)
+https://astro.build/
 https://docs.astro.build/
 http://host.docker.internal:8765/
 http://localhost:8765/
