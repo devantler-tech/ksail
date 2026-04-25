@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"sync"
 	"time"
@@ -257,21 +258,80 @@ func (p *Provisioner) SetComponentDetector(d *detector.ComponentDetector) {
 
 // RefreshKubeconfig fetches and saves the kubeconfig for a running cluster.
 // For Omni clusters, the kubeconfig is retrieved from the Omni API.
-// For Docker and Hetzner clusters, kubeconfig is expected to persist from creation.
+// For Hetzner clusters, the kubeconfig is fetched from the Talos control-plane
+// API via a control-plane node's public IP. This is needed on ephemeral CI runners
+// where the kubeconfig from cluster create does not persist between runs.
+// For Docker clusters, kubeconfig is expected to persist from creation (local).
 // This implements the KubeconfigRefresher interface.
 func (p *Provisioner) RefreshKubeconfig(ctx context.Context, name string) error {
-	if p.omniOpts == nil {
-		return nil
-	}
-
 	clusterName := p.resolveClusterName(name)
 
-	omniProv, err := p.omniProvider()
+	switch {
+	case p.omniOpts != nil:
+		omniProv, err := p.omniProvider()
+		if err != nil {
+			return err
+		}
+
+		return p.saveOmniKubeconfig(ctx, omniProv, clusterName)
+
+	case p.hetznerOpts != nil:
+		return p.refreshHetznerKubeconfig(ctx, clusterName)
+
+	default:
+		return nil
+	}
+}
+
+// refreshHetznerKubeconfig fetches the kubeconfig from a Hetzner control-plane
+// node's Talos API and writes it to the configured kubeconfig path.
+// This enables `cluster update` on ephemeral CI runners where the kubeconfig
+// generated during `cluster create` does not persist (Fixes #4369).
+func (p *Provisioner) refreshHetznerKubeconfig(ctx context.Context, clusterName string) error {
+	nodes, err := p.getHetznerNodesByRole(ctx, clusterName)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to list Hetzner nodes for kubeconfig refresh: %w", err)
 	}
 
-	return p.saveOmniKubeconfig(ctx, omniProv, clusterName)
+	// Find the first control-plane node
+	var cpIP string
+
+	for _, node := range nodes {
+		if node.Role == RoleControlPlane {
+			cpIP = node.IP
+
+			break
+		}
+	}
+
+	if cpIP == "" {
+		return fmt.Errorf(
+			"%w: no control-plane nodes found for cluster %q",
+			ErrNoControlPlaneForRefresh, clusterName,
+		)
+	}
+
+	talosClient, err := p.createTalosClient(ctx, cpIP)
+	if err != nil {
+		return fmt.Errorf("failed to create Talos client for kubeconfig refresh: %w", err)
+	}
+
+	defer talosClient.Close() //nolint:errcheck
+
+	kubeconfig, err := talosClient.Kubeconfig(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to fetch kubeconfig from Talos API: %w", err)
+	}
+
+	kubeconfig, err = rewriteKubeconfigEndpoint(
+		kubeconfig,
+		"https://"+net.JoinHostPort(cpIP, "6443"),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to rewrite kubeconfig endpoint: %w", err)
+	}
+
+	return p.writeKubeconfig(kubeconfig)
 }
 
 // Options returns the current runtime options.

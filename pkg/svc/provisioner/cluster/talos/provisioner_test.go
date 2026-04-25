@@ -807,3 +807,69 @@ func TestProvisioner_Delete_OmniProvider(t *testing.T) {
 	require.NotErrorIs(t, err, talosprovisioner.ErrDockerNotAvailable)
 	assert.ErrorIs(t, err, provider.ErrProviderUnavailable)
 }
+
+// RefreshKubeconfig tests — verify routing for Docker, Hetzner, and Omni.
+
+func TestProvisioner_RefreshKubeconfig_DockerNoOp(t *testing.T) {
+	t.Parallel()
+
+	configs := createTestTalosConfigs(t, "docker-cluster")
+	provisioner := talosprovisioner.NewProvisioner(configs, nil).
+		WithDockerClient(docker.NewMockAPIClient(t))
+	// Docker provisioner: no hetznerOpts, no omniOpts → no-op
+
+	ctx := context.Background()
+	err := provisioner.RefreshKubeconfig(ctx, "")
+
+	require.NoError(t, err)
+}
+
+func TestProvisioner_RefreshKubeconfig_DockerNoClient(t *testing.T) {
+	t.Parallel()
+
+	configs := createTestTalosConfigs(t, "docker-cluster")
+	provisioner := talosprovisioner.NewProvisioner(configs, nil)
+	// No Docker client, no Hetzner/Omni opts → still a no-op (Docker default path)
+
+	ctx := context.Background()
+	err := provisioner.RefreshKubeconfig(ctx, "")
+
+	require.NoError(t, err)
+}
+
+func TestProvisioner_RefreshKubeconfig_HetznerNilInfraProvider(t *testing.T) {
+	t.Parallel()
+
+	configs := createTestTalosConfigs(t, "hetzner-cluster")
+	provisioner := talosprovisioner.NewProvisioner(configs, nil).
+		WithHetznerOptions(v1alpha1.OptionsHetzner{}).
+		WithLogWriter(io.Discard)
+	// Hetzner opts set but no infra provider → getHetznerNodesByRole returns nil nodes
+	// → ErrNoControlPlaneForRefresh
+
+	ctx := context.Background()
+	err := provisioner.RefreshKubeconfig(ctx, "")
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, talosprovisioner.ErrNoControlPlaneForRefresh)
+}
+
+func TestProvisioner_RefreshKubeconfig_OmniRoutes(t *testing.T) {
+	t.Parallel()
+
+	omniProv := omni.NewProvider(nil)
+
+	configs := createTestTalosConfigs(t, "omni-cluster")
+	provisioner := talosprovisioner.NewProvisioner(configs, nil).
+		WithInfraProvider(omniProv).
+		WithOmniOptions(v1alpha1.OptionsOmni{Endpoint: "https://test.omni.example.com"}).
+		WithLogWriter(io.Discard)
+
+	ctx := context.Background()
+	err := provisioner.RefreshKubeconfig(ctx, "")
+
+	// Should attempt Omni path and fail with provider error (nil client),
+	// NOT return nil (which would mean the Docker no-op path was taken).
+	require.Error(t, err)
+	assert.ErrorIs(t, err, provider.ErrProviderUnavailable)
+}

@@ -6512,7 +6512,11 @@ func refreshAndVerifyKubeconfig(
 		return fmt.Errorf("failed to refresh kubeconfig: %w", err)
 	}
 
-	if clusterCfg.Spec.Cluster.Provider != v1alpha1.ProviderOmni {
+	// Verify kubeconfig exists on disk for all cloud providers.
+	// Cloud providers (Omni, Hetzner) fetch kubeconfig from remote APIs;
+	// if the fetch silently no-ops, downstream Helm/GitOps calls would fail
+	// with a cryptic "stat <path>: no such file or directory" error.
+	if !clusterCfg.Spec.Cluster.Provider.IsCloud() {
 		return nil
 	}
 
@@ -6524,8 +6528,8 @@ func refreshAndVerifyKubeconfig(
 	_, statErr := os.Stat(kubeconfigPath)
 	if statErr != nil {
 		return fmt.Errorf(
-			"kubeconfig not available after Omni refresh at %q: %w",
-			kubeconfigPath, statErr,
+			"kubeconfig not available after refresh for %s provider at %q: %w",
+			clusterCfg.Spec.Cluster.Provider, kubeconfigPath, statErr,
 		)
 	}
 
