@@ -845,15 +845,34 @@ ingress:
 `, networkCIDR, cniPort)
 }
 
+var (
+	errMissingNetworkCIDR = errors.New("networkCIDR is required when ingress firewall is enabled")
+	errMissingCNIPort     = errors.New("cniPort is required when ingress firewall is enabled")
+)
+
 // validateIngressFirewallModel returns an error if the config fields required by
 // ingress firewall patch generation are missing.
 func validateIngressFirewallModel(model *Config) error {
 	if model.NetworkCIDR == "" {
-		return fmt.Errorf("networkCIDR is required when ingress firewall is enabled")
+		return errMissingNetworkCIDR
 	}
 
 	if model.CNIPort == 0 {
-		return fmt.Errorf("cniPort is required when ingress firewall is enabled")
+		return errMissingCNIPort
+	}
+
+	return nil
+}
+
+// writeFirewallFile writes content to path if the file does not already exist,
+// or if force is true. Skips the write when the file already exists and force is false.
+func writeFirewallFile(path string, content []byte, force bool) error {
+	_, statErr := os.Stat(path)
+	if statErr != nil || force {
+		err := os.WriteFile(path, content, filePerm)
+		if err != nil {
+			return fmt.Errorf("failed to write %s: %w", filepath.Base(path), err)
+		}
 	}
 
 	return nil
@@ -871,31 +890,27 @@ func (g *Generator) generateIngressFirewallPatches(
 	model *Config,
 	force bool,
 ) error {
-	if err := validateIngressFirewallModel(model); err != nil {
+	err := validateIngressFirewallModel(model)
+	if err != nil {
 		return err
 	}
 
 	defaultActionPath := filepath.Join(rootPath, "cluster", ingressFirewallDefaultActionFileName)
-	if _, statErr := os.Stat(defaultActionPath); statErr != nil || force {
-		if err := os.WriteFile(defaultActionPath, []byte(IngressFirewallDefaultActionYAML), filePerm); err != nil {
-			return fmt.Errorf("failed to create ingress firewall default action: %w", err)
-		}
+	err = writeFirewallFile(defaultActionPath, []byte(IngressFirewallDefaultActionYAML), force)
+	if err != nil {
+		return fmt.Errorf("failed to create ingress firewall default action: %w", err)
 	}
 
 	cpRulesPath := filepath.Join(rootPath, "control-planes", ingressFirewallRulesFileName)
-	if _, statErr := os.Stat(cpRulesPath); statErr != nil || force {
-		cpContent := IngressFirewallCPRulesYAML(model.NetworkCIDR, model.CNIPort)
-		if err := os.WriteFile(cpRulesPath, []byte(cpContent), filePerm); err != nil {
-			return fmt.Errorf("failed to create ingress firewall CP rules: %w", err)
-		}
+	err = writeFirewallFile(cpRulesPath, []byte(IngressFirewallCPRulesYAML(model.NetworkCIDR, model.CNIPort)), force)
+	if err != nil {
+		return fmt.Errorf("failed to create ingress firewall CP rules: %w", err)
 	}
 
 	workerRulesPath := filepath.Join(rootPath, "workers", ingressFirewallRulesFileName)
-	if _, statErr := os.Stat(workerRulesPath); statErr != nil || force {
-		workerContent := IngressFirewallWorkerRulesYAML(model.NetworkCIDR, model.CNIPort)
-		if err := os.WriteFile(workerRulesPath, []byte(workerContent), filePerm); err != nil {
-			return fmt.Errorf("failed to create ingress firewall worker rules: %w", err)
-		}
+	err = writeFirewallFile(workerRulesPath, []byte(IngressFirewallWorkerRulesYAML(model.NetworkCIDR, model.CNIPort)), force)
+	if err != nil {
+		return fmt.Errorf("failed to create ingress firewall worker rules: %w", err)
 	}
 
 	return nil

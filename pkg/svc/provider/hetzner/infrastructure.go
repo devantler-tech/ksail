@@ -189,13 +189,13 @@ func firewallRulesMatch(existing, desired []hcloud.FirewallRule) bool {
 }
 
 // sourceIPsEqual returns true if two SourceIPs slices contain the same CIDRs in the same order.
-func sourceIPsEqual(a, b []net.IPNet) bool {
-	if len(a) != len(b) {
+func sourceIPsEqual(existing, desired []net.IPNet) bool {
+	if len(existing) != len(desired) {
 		return false
 	}
 
-	for idx := range a {
-		if a[idx].String() != b[idx].String() {
+	for idx := range existing {
+		if existing[idx].String() != desired[idx].String() {
 			return false
 		}
 	}

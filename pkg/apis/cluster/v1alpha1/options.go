@@ -172,14 +172,20 @@ func HetznerNetworkCIDR(spec Spec) string {
 	return DefaultHetznerNetworkCIDR
 }
 
+// ciliumVXLANPort is the UDP port used by Cilium for VXLAN encapsulation.
+const ciliumVXLANPort = 8472
+
+// defaultVXLANPort is the UDP port used by Flannel and Calico for VXLAN encapsulation.
+const defaultVXLANPort = 4789
+
 // HetznerCNIPort returns the VXLAN encapsulation UDP port for the configured CNI.
 // Cilium uses port 8472; Flannel and Calico use 4789.
 func HetznerCNIPort(spec Spec) int {
 	if spec.Cluster.CNI == CNICilium {
-		return 8472
+		return ciliumVXLANPort
 	}
 
-	return 4789
+	return defaultVXLANPort
 }
 
 // OptionsAWS defines options specific to the AWS cloud provider.
