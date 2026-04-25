@@ -690,18 +690,22 @@ func (p *Provisioner) buildNodeRequests(
 // talosAPIPort is the Talos apid service port.
 const talosAPIPort = 50000
 
-// getMappedTalosAPIEndpoint finds the control plane container and returns the mapped
-// Talos API endpoint. On macOS and other non-Linux systems, Docker runs in a VM,
-// so we need to use the mapped port via 127.0.0.1 instead of the container's internal IP.
-func (p *Provisioner) getMappedTalosAPIEndpoint(
+// k8sAPIPort is the Kubernetes API server port.
+const k8sAPIPort = 6443
+
+// getMappedPortEndpoint inspects the first control-plane container for the given
+// cluster and returns a 127.0.0.1:<hostPort> endpoint for the specified container port.
+// On macOS and other non-Linux systems Docker runs in a VM, so we need to use the
+// mapped port via 127.0.0.1 instead of the container's internal IP.
+func (p *Provisioner) getMappedPortEndpoint(
 	ctx context.Context,
 	clusterName string,
+	containerPort int,
 ) (string, error) {
 	if p.dockerClient == nil {
 		return "", ErrDockerNotAvailable
 	}
 
-	// Find the control plane container for this cluster
 	containers, err := p.listDockerNodesByRole(ctx, clusterName, RoleControlPlane)
 	if err != nil {
 		return "", fmt.Errorf("failed to list control-plane containers: %w", err)
@@ -711,25 +715,33 @@ func (p *Provisioner) getMappedTalosAPIEndpoint(
 		return "", fmt.Errorf("%w for cluster %s", ErrNoControlPlane, clusterName)
 	}
 
-	// Get the first control plane container (they all have the same port mapping)
-	containerID := containers[0].ID
-
-	// Inspect the container to get port mappings
-	inspect, err := p.dockerClient.ContainerInspect(ctx, containerID)
+	inspect, err := p.dockerClient.ContainerInspect(ctx, containers[0].ID)
 	if err != nil {
 		return "", fmt.Errorf("failed to inspect container: %w", err)
 	}
 
-	// Find the mapped port for Talos API (50000/tcp)
-	portKey := nat.Port(fmt.Sprintf("%d/tcp", talosAPIPort))
+	portKey := nat.Port(fmt.Sprintf("%d/tcp", containerPort))
 
 	bindings, ok := inspect.NetworkSettings.Ports[portKey]
 	if !ok || len(bindings) == 0 {
-		return "", fmt.Errorf("%w for Talos API port %d", ErrNoPortMapping, talosAPIPort)
+		return "", fmt.Errorf("%w for port %d", ErrNoPortMapping, containerPort)
 	}
 
-	// Use the first binding's host port
-	hostPort := bindings[0].HostPort
+	return net.JoinHostPort("127.0.0.1", bindings[0].HostPort), nil
+}
 
-	return net.JoinHostPort("127.0.0.1", hostPort), nil
+// getMappedTalosAPIEndpoint returns the host-mapped endpoint for the Talos API (port 50000).
+func (p *Provisioner) getMappedTalosAPIEndpoint(
+	ctx context.Context,
+	clusterName string,
+) (string, error) {
+	return p.getMappedPortEndpoint(ctx, clusterName, talosAPIPort)
+}
+
+// getMappedK8sAPIEndpoint returns the host-mapped endpoint for the Kubernetes API (port 6443).
+func (p *Provisioner) getMappedK8sAPIEndpoint(
+	ctx context.Context,
+	clusterName string,
+) (string, error) {
+	return p.getMappedPortEndpoint(ctx, clusterName, k8sAPIPort)
 }

@@ -6495,12 +6495,12 @@ func createAndVerifyProvisioner(
 	return provisioner, nil
 }
 
-// refreshAndVerifyKubeconfig invokes the provisioner's KubeconfigRefresher and,
-// for Omni providers, ensures the kubeconfig file actually exists on disk after
-// the refresh. This is a defense-in-depth guard (regression #4112): if any
-// upstream step silently no-ops the fetch, downstream Helm/GitOps calls would
-// otherwise only surface a cryptic "stat <path>: no such file or directory"
-// warning. Failing here produces a clear, actionable error.
+// refreshAndVerifyKubeconfig invokes the provisioner's KubeconfigRefresher and
+// ensures the kubeconfig file actually exists on disk after the refresh.
+// This is a defense-in-depth guard (regression #4112): if any upstream step
+// silently no-ops the fetch, downstream Helm/GitOps calls would otherwise only
+// surface a cryptic "stat <path>: no such file or directory" warning.
+// Failing here produces a clear, actionable error.
 func refreshAndVerifyKubeconfig(
 	ctx context.Context,
 	refresher clusterprovisioner.KubeconfigRefresher,
@@ -6510,14 +6510,6 @@ func refreshAndVerifyKubeconfig(
 	err := refresher.RefreshKubeconfig(ctx, clusterName)
 	if err != nil {
 		return fmt.Errorf("failed to refresh kubeconfig: %w", err)
-	}
-
-	// Verify kubeconfig exists on disk for all cloud providers.
-	// Cloud providers (Omni, Hetzner) fetch kubeconfig from remote APIs;
-	// if the fetch silently no-ops, downstream Helm/GitOps calls would fail
-	// with a cryptic "stat <path>: no such file or directory" error.
-	if !clusterCfg.Spec.Cluster.Provider.IsCloud() {
-		return nil
 	}
 
 	kubeconfigPath, pathErr := kubeconfig.GetKubeconfigPathFromConfig(clusterCfg)

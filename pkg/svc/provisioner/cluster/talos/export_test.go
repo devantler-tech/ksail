@@ -222,8 +222,13 @@ func (p *Provisioner) WithTalosClientFactoryForTest(
 }
 
 // FetchAndWriteKubeconfigForCPForTest exposes fetchAndWriteKubeconfigForCP for testing.
-func (p *Provisioner) FetchAndWriteKubeconfigForCPForTest(ctx context.Context, cpIP string) error {
-	return p.fetchAndWriteKubeconfigForCP(ctx, cpIP)
+func (p *Provisioner) FetchAndWriteKubeconfigForCPForTest(ctx context.Context, talosEndpoint, k8sEndpoint string) error {
+	return p.fetchAndWriteKubeconfigForCP(ctx, talosEndpoint, k8sEndpoint)
+}
+
+// GetMappedK8sAPIEndpointForTest exposes getMappedK8sAPIEndpoint for testing.
+func (p *Provisioner) GetMappedK8sAPIEndpointForTest(ctx context.Context, clusterName string) (string, error) {
+	return p.getMappedK8sAPIEndpoint(ctx, clusterName)
 }
 
 // NthIPInNetworkForTest exposes nthIPInNetwork for unit testing.

@@ -42,5 +42,5 @@ var (
 	ErrEmptyVersionResponse = errors.New("empty version response from node")
 	// ErrNoControlPlaneForRefresh is returned when no control-plane node can be found
 	// for kubeconfig refresh on cloud providers (Hetzner).
-	ErrNoControlPlaneForRefresh = errors.New("kubeconfig refresh failed")
+	ErrNoControlPlaneForRefresh = errors.New("no control-plane node found for kubeconfig refresh")
 )

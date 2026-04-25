@@ -18,6 +18,8 @@ import (
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/image"
+	"github.com/docker/docker/api/types/network"
+	"github.com/docker/go-connections/nat"
 	"github.com/siderolabs/talos/pkg/provision"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -810,31 +812,37 @@ func TestProvisioner_Delete_OmniProvider(t *testing.T) {
 
 // RefreshKubeconfig tests — verify routing for Docker, Hetzner, and Omni.
 
-func TestProvisioner_RefreshKubeconfig_DefaultNoOp(t *testing.T) {
+func TestProvisioner_RefreshKubeconfig_DockerNoContainers(t *testing.T) {
 	t.Parallel()
+
+	mockClient := docker.NewMockAPIClient(t)
+	mockClient.EXPECT().
+		ContainerList(mock.Anything, mock.Anything).
+		Return([]container.Summary{}, nil)
 
 	configs := createTestTalosConfigs(t, "docker-cluster")
 	provisioner := talosprovisioner.NewProvisioner(configs, nil).
-		WithDockerClient(docker.NewMockAPIClient(t))
-	// No hetznerOpts, no omniOpts → default no-op path
+		WithDockerClient(mockClient)
 
 	ctx := context.Background()
 	err := provisioner.RefreshKubeconfig(ctx, "")
 
-	require.NoError(t, err)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, talosprovisioner.ErrNoControlPlaneForRefresh)
 }
 
-func TestProvisioner_RefreshKubeconfig_NoClientNoOp(t *testing.T) {
+func TestProvisioner_RefreshKubeconfig_NoProviderError(t *testing.T) {
 	t.Parallel()
 
 	configs := createTestTalosConfigs(t, "docker-cluster")
 	provisioner := talosprovisioner.NewProvisioner(configs, nil)
-	// No Docker client, no Hetzner/Omni opts → still a no-op (default path)
+	// No Docker client, no Hetzner/Omni opts → getNodesByRole returns error
 
 	ctx := context.Background()
 	err := provisioner.RefreshKubeconfig(ctx, "")
 
-	require.NoError(t, err)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, talosprovisioner.ErrDockerNotAvailable)
 }
 
 func TestProvisioner_RefreshKubeconfig_HetznerNilInfraProvider(t *testing.T) {
@@ -904,7 +912,7 @@ users:
 		})
 
 	ctx := context.Background()
-	err := provisioner.FetchAndWriteKubeconfigForCPForTest(ctx, "1.2.3.4")
+	err := provisioner.FetchAndWriteKubeconfigForCPForTest(ctx, "1.2.3.4", "https://1.2.3.4:6443")
 
 	require.NoError(t, err)
 
@@ -927,8 +935,103 @@ func TestProvisioner_RefreshKubeconfig_OmniRoutes(t *testing.T) {
 	ctx := context.Background()
 	err := provisioner.RefreshKubeconfig(ctx, "")
 
-	// Should attempt Omni path and fail with provider error (nil client),
-	// NOT return nil (which would mean the Docker no-op path was taken).
+	// Omni API fails (nil client → ErrProviderUnavailable), then falls back to
+	// Talos API path via getNodesByRole. getOmniNodesByRole also fails because
+	// the Omni provider has no real client. The important thing is that it
+	// does NOT return nil (which would mean no refresh was attempted).
 	require.Error(t, err)
-	assert.ErrorIs(t, err, provider.ErrProviderUnavailable)
+}
+
+func TestProvisioner_RefreshKubeconfig_DockerFetchAndWrite(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	kubeconfigPath := tmpDir + "/kube.yaml"
+
+	minimalKubeconfig := []byte(`apiVersion: v1
+kind: Config
+clusters:
+- cluster:
+    server: https://0.0.0.0:6443
+  name: test
+contexts:
+- context:
+    cluster: test
+    user: admin@test
+  name: admin@test
+current-context: admin@test
+users:
+- name: admin@test
+  user: {}
+`)
+	containerID := "docker-cp-container-1"
+	clusterName := "docker-cluster"
+
+	cpContainer := container.Summary{
+		ID:    containerID,
+		Names: []string{"/" + clusterName + "-controlplane-1"},
+		Labels: map[string]string{
+			talosprovisioner.LabelTalosOwned:       "true",
+			talosprovisioner.LabelTalosClusterName: clusterName,
+		},
+		NetworkSettings: &container.NetworkSettingsSummary{
+			Networks: map[string]*network.EndpointSettings{
+				"talos-net": {IPAddress: "10.5.0.2"},
+			},
+		},
+	}
+
+	// ContainerInspect response with port mappings for both Talos API and K8s API.
+	inspectResp := container.InspectResponse{
+		NetworkSettings: &container.NetworkSettings{
+			NetworkSettingsBase: container.NetworkSettingsBase{
+				Ports: nat.PortMap{
+					"50000/tcp": []nat.PortBinding{{HostIP: "0.0.0.0", HostPort: "33333"}},
+					"6443/tcp":  []nat.PortBinding{{HostIP: "0.0.0.0", HostPort: "44444"}},
+				},
+			},
+		},
+	}
+
+	mockClient := docker.NewMockAPIClient(t)
+	// getDockerNodesByRole calls ContainerList
+	mockClient.EXPECT().
+		ContainerList(mock.Anything, mock.Anything).
+		Return([]container.Summary{cpContainer}, nil)
+	// getMappedTalosAPIEndpoint calls listDockerNodesByRole + ContainerInspect
+	mockClient.EXPECT().
+		ContainerList(mock.Anything, mock.Anything).
+		Return([]container.Summary{cpContainer}, nil)
+	mockClient.EXPECT().
+		ContainerInspect(mock.Anything, containerID).
+		Return(inspectResp, nil)
+	// getMappedK8sAPIEndpoint calls listDockerNodesByRole + ContainerInspect
+	mockClient.EXPECT().
+		ContainerList(mock.Anything, mock.Anything).
+		Return([]container.Summary{cpContainer}, nil)
+	mockClient.EXPECT().
+		ContainerInspect(mock.Anything, containerID).
+		Return(inspectResp, nil)
+
+	configs := createTestTalosConfigs(t, clusterName)
+	opts := talosprovisioner.NewOptions().WithKubeconfigPath(kubeconfigPath)
+	provisioner := talosprovisioner.NewProvisioner(configs, opts).
+		WithDockerClient(mockClient).
+		WithLogWriter(io.Discard).
+		WithTalosClientFactoryForTest(func(_ context.Context, endpoint string) (talosprovisioner.KubeconfigFetcherForTest, error) {
+			// Verify the Talos client receives the mapped endpoint, not the container IP
+			assert.Equal(t, "127.0.0.1:33333", endpoint)
+
+			return &mockKubeconfigFetcher{kubeconfig: minimalKubeconfig}, nil
+		})
+
+	ctx := context.Background()
+	err := provisioner.RefreshKubeconfig(ctx, "")
+
+	require.NoError(t, err)
+
+	data, readErr := os.ReadFile(kubeconfigPath) //nolint:gosec
+	require.NoError(t, readErr)
+	// kubeconfig endpoint should be rewritten to the mapped K8s API port
+	assert.Contains(t, string(data), "https://127.0.0.1:44444")
 }
