@@ -170,7 +170,7 @@ func NewProvisioner(
 		options = NewOptions()
 	}
 
-	p := &Provisioner{
+	p := &Provisioner{ //nolint:varnamelen
 		talosConfigs: talosConfigs,
 		options:      options,
 		provisionerFactory: func(ctx context.Context) (provision.Provisioner, error) {

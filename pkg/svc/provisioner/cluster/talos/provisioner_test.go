@@ -908,7 +908,7 @@ users:
 
 	require.NoError(t, err)
 
-	data, readErr := os.ReadFile(kubeconfigPath)
+	data, readErr := os.ReadFile(kubeconfigPath) //nolint:gosec
 	require.NoError(t, readErr)
 	assert.Contains(t, string(data), "https://1.2.3.4:6443")
 }
