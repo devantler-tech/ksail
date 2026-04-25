@@ -614,7 +614,11 @@ func buildInfrastructureTasks(
 	return tasksFromEntries(clusterCfg, factories, []componentTask{
 		{needed: reqs.NeedsMetricsServer, name: "metrics-server", fn: InstallMetricsServerSilent},
 		{needed: reqs.NeedsLoadBalancer, name: "load-balancer", fn: InstallLoadBalancerSilent},
-		{needed: reqs.NeedsKubeletCSRApprover, name: "kubelet-csr-approver", fn: installKubeletCSRApproverSilent},
+		{
+			needed: reqs.NeedsKubeletCSRApprover,
+			name:   "kubelet-csr-approver",
+			fn:     installKubeletCSRApproverSilent,
+		},
 		{needed: reqs.NeedsCSI, name: "csi", fn: InstallCSISilent},
 		{needed: reqs.NeedsCertManager, name: "cert-manager", fn: InstallCertManagerSilent},
 		{needed: reqs.NeedsPolicyEngine, name: "policy-engine", fn: InstallPolicyEngineSilent},
