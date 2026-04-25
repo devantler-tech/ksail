@@ -2017,16 +2017,16 @@ func retryOnTransientError(
 			attempt, maxAttempts, delay, lastErr,
 		)
 
-		t := time.NewTimer(delay)
+		retryTimer := time.NewTimer(delay)
 
 		select {
 		case <-ctx.Done():
-			if !t.Stop() {
-				<-t.C
+			if !retryTimer.Stop() {
+				<-retryTimer.C
 			}
 
 			return fmt.Errorf("retry cancelled: %w", ctx.Err())
-		case <-t.C:
+		case <-retryTimer.C:
 		}
 	}
 
