@@ -253,49 +253,13 @@ func ExportPollUntilKustomizationReady(
 	return pollUntilKustomizationReady(ctx, fluxReconciler, name, dependsOn, failed)
 }
 
-// SetPushRetryParamsForTests overrides push retry parameters for a test and
-// returns a cleanup function that restores the previous values.
-func SetPushRetryParamsForTests(maxAttempts int, baseWait, maxWait time.Duration) func() {
-	prevMaxAttempts := pushMaxRetryAttempts
-	prevBaseWait := pushRetryBaseWait
-	prevMaxWait := pushRetryMaxWait
-
-	pushMaxRetryAttempts = maxAttempts
-	pushRetryBaseWait = baseWait
-	pushRetryMaxWait = maxWait
-
-	return func() {
-		pushMaxRetryAttempts = prevMaxAttempts
-		pushRetryBaseWait = prevBaseWait
-		pushRetryMaxWait = prevMaxWait
-	}
-}
-
-// SetReconcileRetryParamsForTests overrides reconcile retry parameters for a
-// test and returns a cleanup function that restores the previous values.
-func SetReconcileRetryParamsForTests(maxAttempts int, baseWait, maxWait time.Duration) func() {
-	prevMaxAttempts := reconcileMaxRetryAttempts
-	prevBaseWait := reconcileRetryBaseWait
-	prevMaxWait := reconcileRetryMaxWait
-
-	reconcileMaxRetryAttempts = maxAttempts
-	reconcileRetryBaseWait = baseWait
-	reconcileRetryMaxWait = maxWait
-
-	return func() {
-		reconcileMaxRetryAttempts = prevMaxAttempts
-		reconcileRetryBaseWait = prevBaseWait
-		reconcileRetryMaxWait = prevMaxWait
-	}
-}
-
 // ExportRetryOnTransientError exposes retryOnTransientError for unit testing.
 func ExportRetryOnTransientError(
 	ctx context.Context,
 	cmd *cobra.Command,
 	maxAttempts int,
 	baseWait, maxWait time.Duration,
-	fn func() error,
+	operation func() error,
 ) error {
-	return retryOnTransientError(ctx, cmd, maxAttempts, baseWait, maxWait, fn)
+	return retryOnTransientError(ctx, cmd, maxAttempts, baseWait, maxWait, operation)
 }

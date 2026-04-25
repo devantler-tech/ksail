@@ -1993,7 +1993,7 @@ func retryOnTransientError(
 	cmd *cobra.Command,
 	maxAttempts int,
 	baseWait, maxWait time.Duration,
-	fn func() error,
+	operation func() error,
 ) error {
 	if maxAttempts < 1 {
 		maxAttempts = 1
@@ -2002,7 +2002,7 @@ func retryOnTransientError(
 	var lastErr error
 
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
-		err := fn()
+		err := operation()
 		if err == nil {
 			return nil
 		}

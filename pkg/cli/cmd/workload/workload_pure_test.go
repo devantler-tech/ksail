@@ -865,6 +865,16 @@ func TestFindKustomizationDir_FileInRoot(t *testing.T) {
 // retryOnTransientError — retry helper behavior
 // ===========================================================================
 
+// Test sentinel errors for retryOnTransientError tests.
+//
+//nolint:gochecknoglobals // test sentinel errors follow the same pattern as pkg/svc/registryresolver/oci_test.go
+var (
+	errRetryNotTransient     = errors.New("not a transient error")
+	errRetryConnectionReset  = errors.New("connection reset by peer")
+	errRetryServiceUnavail   = errors.New("Service Unavailable")
+	errRetryDeadlineExceeded = errors.New("context deadline exceeded")
+)
+
 func TestRetryOnTransientError_SuccessFirstAttempt(t *testing.T) {
 	t.Parallel()
 
@@ -879,7 +889,7 @@ func TestRetryOnTransientError_SuccessFirstAttempt(t *testing.T) {
 		},
 	)
 
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, 1, calls)
 }
 
@@ -888,17 +898,16 @@ func TestRetryOnTransientError_NonRetryableError(t *testing.T) {
 
 	cmd := &cobra.Command{}
 	calls := 0
-	sentinel := errors.New("not a transient error")
 
 	err := workload.ExportRetryOnTransientError(
 		t.Context(), cmd, 3, 0, 0,
 		func() error {
 			calls++
-			return sentinel
+			return errRetryNotTransient
 		},
 	)
 
-	assert.ErrorIs(t, err, sentinel)
+	require.ErrorIs(t, err, errRetryNotTransient)
 	assert.Equal(t, 1, calls, "non-retryable error should not be retried")
 }
 
@@ -907,13 +916,12 @@ func TestRetryOnTransientError_RetryableExhausted(t *testing.T) {
 
 	cmd := &cobra.Command{}
 	calls := 0
-	transient := errors.New("connection reset by peer")
 
 	err := workload.ExportRetryOnTransientError(
 		t.Context(), cmd, 3, 0, 0,
 		func() error {
 			calls++
-			return transient
+			return errRetryConnectionReset
 		},
 	)
 
@@ -933,13 +941,13 @@ func TestRetryOnTransientError_SucceedsAfterRetry(t *testing.T) {
 		func() error {
 			calls++
 			if calls < 3 {
-				return errors.New("Service Unavailable")
+				return errRetryServiceUnavail
 			}
 			return nil
 		},
 	)
 
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, 3, calls)
 }
 
@@ -955,7 +963,7 @@ func TestRetryOnTransientError_ContextCancelled(t *testing.T) {
 		func() error {
 			calls++
 			cancel()
-			return errors.New("context deadline exceeded")
+			return errRetryDeadlineExceeded
 		},
 	)
 
@@ -977,6 +985,6 @@ func TestRetryOnTransientError_ZeroMaxAttemptsClampedToOne(t *testing.T) {
 		},
 	)
 
-	assert.NoError(t, err)
-	assert.Equal(t, 1, calls, "maxAttempts=0 should be clamped to 1 so fn is always called")
+	require.NoError(t, err)
+	assert.Equal(t, 1, calls, "maxAttempts=0 should be clamped to 1 so operation is always called")
 }
