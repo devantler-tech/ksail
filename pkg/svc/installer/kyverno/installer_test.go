@@ -10,19 +10,28 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
+	k8sfake "k8s.io/client-go/kubernetes/fake"
 )
 
 func TestNewInstaller(t *testing.T) {
 	t.Parallel()
 
 	client := helm.NewMockInterface(t)
-	installer := kyvernoinstaller.NewInstaller(client, 5*time.Second)
+	installer := kyvernoinstaller.NewInstaller(client, 5*time.Second, "", "")
 
 	assert.NotNil(t, installer)
 }
 
 func TestInstallSuccess(t *testing.T) {
-	t.Parallel()
+	// Not parallel: overrides the package-level newClientsetFn var.
+	fakeClientset := k8sfake.NewClientset(readyWebhookConfig())
+	restore := kyvernoinstaller.SetNewClientsetFn(
+		func(_, _ string) (kubernetes.Interface, error) { return fakeClientset, nil },
+	)
+	defer restore()
 
 	installer, client := newInstallerWithDefaults(t)
 	expectKyvernoInstall(t, client, nil)
@@ -89,7 +98,7 @@ func newInstallerWithDefaults(
 	t.Helper()
 
 	client := helm.NewMockInterface(t)
-	installer := kyvernoinstaller.NewInstaller(client, 2*time.Minute)
+	installer := kyvernoinstaller.NewInstaller(client, 2*time.Minute, "", "")
 
 	return installer, client
 }
@@ -130,4 +139,20 @@ func expectKyvernoInstall(t *testing.T, client *helm.MockInterface, installErr e
 			}),
 		).
 		Return(nil, installErr)
+}
+
+// readyWebhookConfig returns a MutatingWebhookConfiguration with a populated
+// caBundle, simulating a fully-initialised Kyverno admission controller.
+func readyWebhookConfig() *admissionregistrationv1.MutatingWebhookConfiguration {
+	return &admissionregistrationv1.MutatingWebhookConfiguration{
+		ObjectMeta: metav1.ObjectMeta{Name: "kyverno-resource-mutating-webhook-cfg"},
+		Webhooks: []admissionregistrationv1.MutatingWebhook{
+			{
+				Name: "mutate.kyverno.svc",
+				ClientConfig: admissionregistrationv1.WebhookClientConfig{
+					CABundle: []byte("fake-ca-bundle"),
+				},
+			},
+		},
+	}
 }

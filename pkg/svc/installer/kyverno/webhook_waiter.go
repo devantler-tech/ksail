@@ -1,0 +1,66 @@
+package kyvernoinstaller
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/devantler-tech/ksail/v7/pkg/k8s"
+	"github.com/devantler-tech/ksail/v7/pkg/k8s/readiness"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
+)
+
+const (
+	// kyvernoResourceWebhookName is the MutatingWebhookConfiguration that intercepts
+	// all resource operations (create/update/delete). Kyverno populates its caBundle
+	// once the admission controller has initialised its TLS certificate — a non-empty
+	// caBundle is therefore a reliable signal that the webhook is ready to serve.
+	kyvernoResourceWebhookName = "kyverno-resource-mutating-webhook-cfg"
+)
+
+// newClientsetFn is the factory used to create a Kubernetes clientset.
+//
+//nolint:gochecknoglobals // allows overriding in tests
+var newClientsetFn = func(kubeconfig, context string) (kubernetes.Interface, error) {
+	return k8s.NewClientset(kubeconfig, context)
+}
+
+// waitForWebhookReady polls the Kyverno MutatingWebhookConfiguration until every
+// webhook entry has a non-empty caBundle. This guards against the race condition
+// where Helm reports the chart as installed and the admission controller pods are
+// Running/Ready, but the controller has not yet initialised its TLS certificate and
+// injected it into the webhook configuration. Any workload operation that triggers
+// the webhook before the caBundle is set will fail.
+func (i *Installer) waitForWebhookReady(ctx context.Context) error {
+	clientset, err := newClientsetFn(i.kubeconfig, i.context)
+	if err != nil {
+		return fmt.Errorf("creating clientset for Kyverno webhook readiness check: %w", err)
+	}
+
+	return readiness.PollForReadiness(ctx, i.timeout, func(ctx context.Context) (bool, error) {
+		webhook, err := clientset.AdmissionregistrationV1().
+			MutatingWebhookConfigurations().
+			Get(ctx, kyvernoResourceWebhookName, metav1.GetOptions{})
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				// Not yet created — keep polling
+				return false, nil
+			}
+
+			return false, fmt.Errorf("getting MutatingWebhookConfiguration %q: %w", kyvernoResourceWebhookName, err)
+		}
+
+		if len(webhook.Webhooks) == 0 {
+			return false, nil
+		}
+
+		for _, wh := range webhook.Webhooks {
+			if len(wh.ClientConfig.CABundle) == 0 {
+				return false, nil
+			}
+		}
+
+		return true, nil
+	})
+}

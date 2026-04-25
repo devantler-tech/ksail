@@ -88,7 +88,7 @@ func policyEngineFactory(
 			return nil, ErrPolicyEngineDisabled
 		}
 
-		helmClient, _, err := factories.HelmClientFactory(clusterCfg)
+		helmClient, kubeconfig, err := factories.HelmClientFactory(clusterCfg)
 		if err != nil {
 			return nil, err
 		}
@@ -100,7 +100,7 @@ func policyEngineFactory(
 		case v1alpha1.PolicyEngineKyverno:
 			timeout = max(timeout, installer.KyvernoInstallTimeout)
 
-			return kyvernoinstaller.NewInstaller(helmClient, timeout), nil
+			return kyvernoinstaller.NewInstaller(helmClient, timeout, kubeconfig, clusterCfg.Spec.Cluster.Connection.Context), nil
 		case v1alpha1.PolicyEngineGatekeeper:
 			timeout = max(timeout, installer.GatekeeperInstallTimeout)
 

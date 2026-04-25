@@ -148,7 +148,7 @@ func (f *Factory) addPolicyEngineInstaller(
 	switch spec.PolicyEngine {
 	case v1alpha1.PolicyEngineKyverno:
 		installers["kyverno"] = kyvernoinstaller.NewInstaller(
-			f.helmClient, max(f.timeout, KyvernoInstallTimeout),
+			f.helmClient, max(f.timeout, KyvernoInstallTimeout), f.kubeconfig, f.kubecontext,
 		)
 	case v1alpha1.PolicyEngineGatekeeper:
 		installers["gatekeeper"] = gatekeeperinstaller.NewInstaller(
