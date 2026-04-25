@@ -612,12 +612,12 @@ func buildInfrastructureTasks(
 	reqs ComponentRequirements,
 ) []notify.ProgressTask {
 	return tasksFromEntries(clusterCfg, factories, []componentTask{
-		{reqs.NeedsMetricsServer, "metrics-server", InstallMetricsServerSilent},
-		{reqs.NeedsLoadBalancer, "load-balancer", InstallLoadBalancerSilent},
-		{reqs.NeedsKubeletCSRApprover, "kubelet-csr-approver", installKubeletCSRApproverSilent},
-		{reqs.NeedsCSI, "csi", InstallCSISilent},
-		{reqs.NeedsCertManager, "cert-manager", InstallCertManagerSilent},
-		{reqs.NeedsPolicyEngine, "policy-engine", InstallPolicyEngineSilent},
+		{needed: reqs.NeedsMetricsServer, name: "metrics-server", fn: InstallMetricsServerSilent},
+		{needed: reqs.NeedsLoadBalancer, name: "load-balancer", fn: InstallLoadBalancerSilent},
+		{needed: reqs.NeedsKubeletCSRApprover, name: "kubelet-csr-approver", fn: installKubeletCSRApproverSilent},
+		{needed: reqs.NeedsCSI, name: "csi", fn: InstallCSISilent},
+		{needed: reqs.NeedsCertManager, name: "cert-manager", fn: InstallCertManagerSilent},
+		{needed: reqs.NeedsPolicyEngine, name: "policy-engine", fn: InstallPolicyEngineSilent},
 	})
 }
 
@@ -629,8 +629,8 @@ func buildGitOpsTasks(
 	reqs ComponentRequirements,
 ) []notify.ProgressTask {
 	return tasksFromEntries(clusterCfg, factories, []componentTask{
-		{reqs.NeedsArgoCD, "argocd", InstallArgoCDSilent},
-		{reqs.NeedsFlux, "flux", InstallFluxSilent},
+		{needed: reqs.NeedsArgoCD, name: "argocd", fn: InstallArgoCDSilent},
+		{needed: reqs.NeedsFlux, name: "flux", fn: InstallFluxSilent},
 	})
 }
 
@@ -826,8 +826,7 @@ func tasksFromEntries(
 	factories *InstallerFactories,
 	entries []componentTask,
 ) []notify.ProgressTask {
-	var tasks []notify.ProgressTask
-
+	tasks := make([]notify.ProgressTask, 0, len(entries))
 	for _, e := range entries {
 		if e.needed {
 			tasks = append(tasks, newTask(e.name, cfg, factories, e.fn))
