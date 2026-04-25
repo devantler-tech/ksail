@@ -1,6 +1,6 @@
 {
-  "last_run": "2026-04-24T12:37:14Z",
-  "workflow_run_id": "24889786872",
+  "last_run": "2026-04-25T00:58:48Z",
+  "workflow_run_id": "24918634979",
   "commented_issues": {
     "4322": "2026-04-24",
     "4293": "2026-04-24",
@@ -26,7 +26,8 @@
   "open_prs": {
     "4253": "[Repo Assist] test(detector): add ArgoCD multi-namespace detection regression test",
     "4284": "[Repo Assist] test(sopsutil): add ResolveAgeKey tests for Extract.PublicKeys filter path",
-    "new_calico_retry": "[Repo Assist] fix(calico): increase K3s retry attempts 5→8, backoff 10s→15s (branch: repo-assist/fix-k3s-calico-timing-race-#4315)"
+    "4327": "[Repo Assist] fix(calico): increase K3s retry attempts 5→8, backoff 10s→15s",
+    "new_refactor": "[Repo Assist] refactor(setup): replace repeated if-append with table-driven loop in build*Tasks"
   },
   "merged_prs": {
     "4248": "perf(notify): use strings.Builder in indentMultilineContent - merged 2026-04-23",
@@ -40,15 +41,16 @@
     "4308": "docs(talos): improve Talos guide - merged 2026-04-24",
     "4269": "chore: upgrade Flux to v2.8.6 - merged ~2026-04-22"
   },
-  "last_code_quality_domain": "test",
-  "issue_backlog_cursor": "4326",
+  "last_code_quality_domain": "refactor",
+  "issue_backlog_cursor": "4344",
   "created_issues": {
-    "4291": "[Repo Assist] [chore]: audit VCluster v0.34 alpha compatibility for Vind provisioner",
+    "4291": "[Repo Assist] [chore]: audit VCluster v0.34 alpha compatibility for Vind provisioner - CLOSED",
     "4316": "[Repo Assist] [chore]: verify KSail compatibility with ArgoCD v3.4 stable and update embedded client",
     "4317": "[Repo Assist] [feature]: add ksail cipher rotate for Age key rotation across all encrypted secrets",
     "4318": "[Repo Assist] [chore]: migrate Talos scaffolding to EnvironmentConfig (WARNING: may duplicate #4124 - maintainer verify)",
-    "new_eks": "[Repo Assist] [chore]: complete AWS EKS provider",
-    "new_forward": "[Repo Assist] [feature]: add ksail workload forward for in-cluster port forwarding"
+    "4328": "[Repo Assist] [chore]: complete AWS EKS provider",
+    "new_turnstyle": "[Repo Assist] [chore]: investigate dedicated cloud E2E pool or extended Turnstyle timeout",
+    "new_kwok07": "[Repo Assist] [chore]: leverage KWOK v0.7.0 CEL stage support and Kustomize config loading"
   },
   "sub_issues_linked": {
     "4084": ["4067", "4172", "4192"],
@@ -75,13 +77,15 @@
   "notes": [
     "link_sub_issue is NOT idempotent - always verify sub-issue not already linked before calling",
     "PR #4253 (ArgoCD regression test) and PR #4284 (sopsutil PublicKeys filter tests) both CI passing - awaiting review",
-    "New calico retry PR (fix-k3s-calico-timing-race-#4315) created: increases calicoInstallRetryAttempts 5->8, backoff 10s->15s",
-    "Flux v2.8.6 already merged (#4269) - no longer needs tracking",
+    "PR #4327 (calico retries 5->8, backoff 10->15s) open - awaiting review",
+    "New refactor PR created this run: table-driven buildInfrastructureTasks/buildGitOpsTasks",
     "Cipher rotate already implemented (PR #4297 closed #4292) - #4317 may be a duplicate",
-    "Talos EnvironmentConfig: #3795 closed not_planned (Apr 9), #4124 closed completed (Apr 20) - #4318 may be duplicate - maintainer should verify",
-    "domain alternation: last was 'test' - next should be 'refactor'",
-    "K3s+Calico timing race: calicoInstallRetryAttempts raised to 8, backoff to 15s in PR created this run",
-    "kubelet-serving CSR approver issue #4322: uses extraManifests URL from alex1989hu/kubelet-serving-cert-approver/main - URL instability may be root cause",
-    "EKS provider issue and workload forward issue created this run as Later roadmap backlog items"
+    "Talos EnvironmentConfig: #3795 closed not_planned (Apr 9), #4124 closed completed (Apr 20) - #4318 may be duplicate",
+    "domain alternation: last was 'refactor' - next should be 'performance'",
+    "VCluster v0.34 audit issue #4291 closed as completed April 24",
+    "Workload forward feature already implemented (PR #4331+#4351 docs) - any issue created is obsolete",
+    "Two new Hetzner bugs filed by maintainer: #4343 (hcloud Secret network=default) and #4344 (CSI topology races CCM) - both have PRs (#4347, #4346)",
+    "Cloud E2E Turnstyle optimization issue created this run (no prior tracking issue existed)",
+    "KWOK v0.7.0 CEL stage support issue created this run (Later roadmap gap)"
   ]
 }
