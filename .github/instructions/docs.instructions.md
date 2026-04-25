@@ -16,6 +16,7 @@ CI uses Node.js 24. Documentation builds in ~2-3 seconds.
 ## Content Structure
 
 Documentation follows the [Diátaxis framework](https://diataxis.fr/):
+
 - **Tutorials** — Learning-oriented walkthroughs
 - **How-to guides** — Task-oriented procedures
 - **Reference** — CLI flags, API types, configuration schemas
