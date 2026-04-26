@@ -44,8 +44,8 @@ See [Declarative Configuration](/configuration/declarative-configuration/) for t
 
 Both `workload push` and `workload reconcile` automatically retry on transient failures:
 
-- **Up to 3 attempts** with exponential backoff (5–30s between attempts)
-- **Retryable conditions**: HTTP 429 (rate-limit), 5xx server errors, TCP resets, and context deadline exceeded (common under CI load)
+- **Up to 3 attempts** with exponential backoff starting at 5s (capped at 30s); with the current 3-attempt limit, retries wait 5s after the first failure and 10s after the second
+- **Retryable conditions** are determined by the shared `netretry.IsRetryable` predicate, including examples such as HTTP 429 (rate-limit), 5xx server errors, connection refused, i/o timeout, unexpected EOF, no such host, redirect limit, TCP resets, and context deadline exceeded
 - A warning is printed on each retry attempt so you can follow progress
 
 `workload push` previously only retried low-level OCI writes; command-level retries now wrap the full build-and-push cycle. `workload reconcile` previously had no retry at all.
