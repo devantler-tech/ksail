@@ -52,7 +52,7 @@ go install github.com/devantler-tech/ksail/v7@latest   # Go install
 
 ### Which Kubernetes distributions does KSail support?
 
-KSail supports **Vanilla** (Kind), **K3s** (K3d), **Talos**, **VCluster** (Vind), **KWOK** (kwokctl, simulated), and **EKS** (planned). See the [Support Matrix](/support-matrix/) for provider compatibility.
+KSail currently supports **Vanilla** (Kind), **K3s** (K3d), **Talos**, **VCluster** (Vind), and **KWOK** (kwokctl, simulated). **EKS** is **Coming Soon**. See the [Support Matrix](/support-matrix/) for current provider compatibility and feature status.
 
 ### Can I create multiple clusters?
 
