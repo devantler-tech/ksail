@@ -159,7 +159,8 @@ func showTitle(cmd *cobra.Command, emoji, content string) {
 
 // getClusterNameFromConfigOrContext extracts the cluster name, preferring the context if set.
 // When a context is explicitly provided (e.g., "kind-my-cluster"), it derives the cluster name
-// from it (e.g., "my-cluster"). Otherwise, it falls back to the distribution config name.
+// from it (e.g., "my-cluster"). Otherwise, it checks metadata.name, then falls back to
+// the distribution config name.
 func getClusterNameFromConfigOrContext(
 	distributionConfig any,
 	clusterCfg *v1alpha1.Cluster,
@@ -167,6 +168,13 @@ func getClusterNameFromConfigOrContext(
 	// If context is explicitly set, derive cluster name from it
 	if clusterName := extractClusterNameFromContext(clusterCfg); clusterName != "" {
 		return clusterName, nil
+	}
+
+	// Check metadata.name (skip if invalid, fall through to other sources)
+	if clusterCfg != nil && clusterCfg.Metadata.Name != "" {
+		if v1alpha1.ValidateClusterName(clusterCfg.Metadata.Name) == nil {
+			return clusterCfg.Metadata.Name, nil
+		}
 	}
 
 	// Fall back to distribution config name
@@ -234,6 +242,13 @@ func GetClusterNameFromConfig(
 	// If context is explicitly set, derive cluster name from it
 	if clusterName := extractClusterNameFromContext(clusterCfg); clusterName != "" {
 		return clusterName, nil
+	}
+
+	// Check metadata.name (skip if invalid, fall through to other sources)
+	if clusterCfg.Metadata.Name != "" {
+		if v1alpha1.ValidateClusterName(clusterCfg.Metadata.Name) == nil {
+			return clusterCfg.Metadata.Name, nil
+		}
 	}
 
 	// Fall back to distribution config name

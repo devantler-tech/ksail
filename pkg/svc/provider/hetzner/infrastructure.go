@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"slices"
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -108,6 +109,162 @@ func (p *Provider) EnsureFirewall(
 	return result.Firewall, nil
 }
 
+// SyncFirewallRules updates an existing firewall's rules to match the current secure
+// rule set. This migrates already-created clusters to the hardened configuration
+// on the next `ksail cluster update`.
+func (p *Provider) SyncFirewallRules(
+	ctx context.Context,
+	clusterName string,
+) error {
+	if p.client == nil {
+		return provider.ErrProviderUnavailable
+	}
+
+	firewallName := clusterName + FirewallSuffix
+
+	firewall, _, err := p.client.Firewall.GetByName(ctx, firewallName)
+	if err != nil {
+		return fmt.Errorf("failed to get firewall %s: %w", firewallName, err)
+	}
+
+	if firewall == nil {
+		return nil // No firewall to sync
+	}
+
+	desiredRules := buildFirewallRules()
+
+	// Skip update if rules already match
+	if firewallRulesMatch(firewall.Rules, desiredRules) {
+		return nil
+	}
+
+	_, _, err = p.client.Firewall.SetRules(ctx, firewall, hcloud.FirewallSetRulesOpts{
+		Rules: desiredRules,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to sync firewall rules for %s: %w", firewallName, err)
+	}
+
+	return nil
+}
+
+// firewallRulesMatch returns true if existing and desired rules are equivalent,
+// regardless of ordering. Rules are normalized by sorting before comparison so
+// that rule ordering differences returned by the Hetzner API do not cause
+// unnecessary SetRules calls.
+func firewallRulesMatch(existing, desired []hcloud.FirewallRule) bool {
+	if len(existing) != len(desired) {
+		return false
+	}
+
+	sortedExisting := sortedFirewallRules(existing)
+	sortedDesired := sortedFirewallRules(desired)
+
+	for ruleIdx := range sortedExisting {
+		if !firewallRulesEqual(sortedExisting[ruleIdx], sortedDesired[ruleIdx]) {
+			return false
+		}
+	}
+
+	return true
+}
+
+// firewallRulesEqual returns true if two firewall rules have identical fields.
+func firewallRulesEqual(left, right hcloud.FirewallRule) bool {
+	if left.Protocol != right.Protocol || left.Direction != right.Direction {
+		return false
+	}
+
+	leftPort := ""
+	if left.Port != nil {
+		leftPort = *left.Port
+	}
+
+	rightPort := ""
+	if right.Port != nil {
+		rightPort = *right.Port
+	}
+
+	return leftPort == rightPort && sourceIPsEqual(left.SourceIPs, right.SourceIPs)
+}
+
+// sortedFirewallRules returns a sorted copy of rules, ordered by Direction → Protocol → Port.
+func sortedFirewallRules(rules []hcloud.FirewallRule) []hcloud.FirewallRule {
+	sorted := slices.Clone(rules)
+	slices.SortFunc(sorted, compareFirewallRules)
+
+	return sorted
+}
+
+// compareFirewallRules provides a stable sort order for firewall rules.
+func compareFirewallRules(left, right hcloud.FirewallRule) int {
+	if left.Direction != right.Direction {
+		if left.Direction < right.Direction {
+			return -1
+		}
+
+		return 1
+	}
+
+	if left.Protocol != right.Protocol {
+		if left.Protocol < right.Protocol {
+			return -1
+		}
+
+		return 1
+	}
+
+	leftPort := ""
+	if left.Port != nil {
+		leftPort = *left.Port
+	}
+
+	rightPort := ""
+	if right.Port != nil {
+		rightPort = *right.Port
+	}
+
+	if leftPort < rightPort {
+		return -1
+	}
+
+	if leftPort > rightPort {
+		return 1
+	}
+
+	return 0
+}
+
+// sourceIPsEqual returns true if two SourceIPs slices contain the same CIDRs,
+// regardless of order.
+func sourceIPsEqual(existing, desired []net.IPNet) bool {
+	if len(existing) != len(desired) {
+		return false
+	}
+
+	sortCIDRs := func(cidrs []net.IPNet) []string {
+		strs := make([]string, len(cidrs))
+		for i, c := range cidrs {
+			strs[i] = c.String()
+		}
+
+		slices.Sort(strs)
+
+		return strs
+	}
+
+	sortedExisting := sortCIDRs(existing)
+	sortedDesired := sortCIDRs(desired)
+
+	for idx := range sortedExisting {
+		if sortedExisting[idx] != sortedDesired[idx] {
+			return false
+		}
+	}
+
+	return true
+}
+
 // EnsurePlacementGroup ensures a placement group exists for the cluster.
 // If strategy is None, returns nil without creating a placement group.
 // If customName is provided, uses that name; otherwise uses "<clusterName>-placement".
@@ -156,13 +313,22 @@ func (p *Provider) EnsurePlacementGroup(
 	return result.PlacementGroup, nil
 }
 
-// buildFirewallRules creates the firewall rules required for Talos.
+// buildFirewallRules creates the firewall rules for the public interface.
+// Only ports that need public access are included (Talos API, Kubernetes API, ICMP).
+// Cluster-internal ports (etcd, kubelet, trustd) are omitted because Hetzner Cloud
+// Firewalls only filter public traffic — private network traffic is unfiltered.
 func buildFirewallRules() []hcloud.FirewallRule {
 	anyIP := []net.IPNet{
 		{IP: net.ParseIP("0.0.0.0"), Mask: net.CIDRMask(0, IPv4CIDRBits)},
 		{IP: net.ParseIP("::"), Mask: net.CIDRMask(0, IPv6CIDRBits)},
 	}
 
+	// Only expose ports that legitimately need public internet access.
+	// Cluster-internal ports (etcd, kubelet, trustd) are NOT included because
+	// Hetzner Cloud Firewalls only filter public interface traffic — inter-node
+	// communication flows through the private Hetzner Cloud Network unfiltered.
+	// See: https://docs.hetzner.com/cloud/firewalls/faq/
+	// #do-firewalls-filter-traffic-between-servers-on-the-same-private-network
 	return []hcloud.FirewallRule{
 		// Talos API (apid) - required for talosctl
 		{
@@ -179,30 +345,6 @@ func buildFirewallRules() []hcloud.FirewallRule {
 			Port:        new("6443"),
 			SourceIPs:   anyIP,
 			Description: new("Kubernetes API"),
-		},
-		// Talos trustd (for machine config)
-		{
-			Direction:   hcloud.FirewallRuleDirectionIn,
-			Protocol:    hcloud.FirewallRuleProtocolTCP,
-			Port:        new("50001"),
-			SourceIPs:   anyIP,
-			Description: new("Talos trustd"),
-		},
-		// etcd
-		{
-			Direction:   hcloud.FirewallRuleDirectionIn,
-			Protocol:    hcloud.FirewallRuleProtocolTCP,
-			Port:        new("2379-2380"),
-			SourceIPs:   anyIP,
-			Description: new("etcd"),
-		},
-		// Kubelet
-		{
-			Direction:   hcloud.FirewallRuleDirectionIn,
-			Protocol:    hcloud.FirewallRuleProtocolTCP,
-			Port:        new("10250"),
-			SourceIPs:   anyIP,
-			Description: new("Kubelet API"),
 		},
 		// ICMP (ping)
 		{

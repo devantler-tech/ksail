@@ -1742,7 +1742,13 @@ func resolveKWOKName(ctx *localregistry.Context) string {
 }
 
 func resolveFallbackName(ctx *localregistry.Context) string {
+	// Connection context takes priority because --name flag updates it via applyClusterNameOverride
 	if name := strings.TrimSpace(ctx.ClusterCfg.Spec.Cluster.Connection.Context); name != "" {
+		return name
+	}
+
+	// Fall back to metadata.name from ksail.yaml
+	if name := strings.TrimSpace(ctx.ClusterCfg.Metadata.Name); name != "" {
 		return name
 	}
 
@@ -5122,12 +5128,16 @@ func loadAndValidateClusterConfig(
 		return nil, "", err
 	}
 
-	// Apply cluster name override from --name flag if provided
+	// Apply cluster name override: --name flag takes priority, then metadata.name
 	nameOverride := cfgManager.Viper.GetString("name")
+	if nameOverride == "" {
+		nameOverride = ctx.ClusterCfg.Metadata.Name
+	}
+
 	if nameOverride != "" {
 		validationErr := v1alpha1.ValidateClusterName(nameOverride)
 		if validationErr != nil {
-			return nil, "", fmt.Errorf("invalid --name flag: %w", validationErr)
+			return nil, "", fmt.Errorf("invalid cluster name %q: %w", nameOverride, validationErr)
 		}
 
 		err = applyClusterNameOverride(ctx, nameOverride)

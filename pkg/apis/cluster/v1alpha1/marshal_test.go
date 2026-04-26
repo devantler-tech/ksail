@@ -162,6 +162,29 @@ func TestCluster_MarshalYAML(t *testing.T) {
 			},
 			wantContains: []string{"editor: vim"},
 		},
+		{
+			name: "cluster with metadata name includes metadata",
+			cluster: v1alpha1.Cluster{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       v1alpha1.Kind,
+					APIVersion: v1alpha1.APIVersion,
+				},
+				Metadata: v1alpha1.Metadata{
+					Name: "my-cluster",
+				},
+			},
+			wantContains: []string{"metadata:", "name: my-cluster"},
+		},
+		{
+			name: "cluster without metadata name omits metadata",
+			cluster: v1alpha1.Cluster{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       v1alpha1.Kind,
+					APIVersion: v1alpha1.APIVersion,
+				},
+			},
+			wantExcludes: []string{"metadata:"},
+		},
 	}
 
 	for _, testCase := range tests {
@@ -258,6 +281,9 @@ func TestCluster_MarshalRoundTrip(t *testing.T) {
 			Kind:       v1alpha1.Kind,
 			APIVersion: v1alpha1.APIVersion,
 		},
+		Metadata: v1alpha1.Metadata{
+			Name: "roundtrip-cluster",
+		},
 		Spec: v1alpha1.Spec{
 			Editor: "nano",
 			Cluster: v1alpha1.ClusterSpec{
@@ -291,6 +317,7 @@ func TestCluster_MarshalRoundTrip(t *testing.T) {
 	// Verify key fields are preserved
 	assert.Equal(t, original.Kind, restored.Kind)
 	assert.Equal(t, original.APIVersion, restored.APIVersion)
+	assert.Equal(t, original.Metadata.Name, restored.Metadata.Name)
 	assert.Equal(t, original.Spec.Editor, restored.Spec.Editor)
 	assert.Equal(t, original.Spec.Cluster.Distribution, restored.Spec.Cluster.Distribution)
 	assert.Equal(t, original.Spec.Cluster.CNI, restored.Spec.Cluster.CNI)

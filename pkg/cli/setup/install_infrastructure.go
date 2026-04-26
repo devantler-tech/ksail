@@ -278,7 +278,10 @@ func installHcloudCCM(
 		return fmt.Errorf("failed to setup helm client for hcloud-ccm: %w", err)
 	}
 
-	networkName := hcloudccminstaller.ResolveHetznerNetworkName(clusterCfg)
+	networkName := hcloudccminstaller.ResolveHetznerNetworkName(
+		clusterCfg,
+		resolveClusterNameFromContext(clusterCfg),
+	)
 
 	ccmInstaller := hcloudccminstaller.NewInstaller(
 		helmClient,
