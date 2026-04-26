@@ -25,9 +25,10 @@ func TestNewInstaller(t *testing.T) {
 	assert.NotNil(t, installer)
 }
 
+//nolint:paralleltest // Mutates shared test seams exposed by export_test.go.
 func TestInstallSuccess(
 	t *testing.T,
-) { //nolint:paralleltest // Mutates shared test seams exposed by export_test.go.
+) {
 	// Not parallel: overrides the package-level newClientsetFn var.
 	fakeClientset := k8sfake.NewClientset(readyWebhookConfig())
 
