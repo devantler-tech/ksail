@@ -35,11 +35,16 @@ func (s *Scaffolder) generateTalosConfig(output string, force bool) error {
 	// requires the CCM to initialize nodes with a providerID and write node labels.
 	enableExternalCloudProvider := s.KSailConfig.Spec.Cluster.Provider == v1alpha1.ProviderHetzner
 
+	// Compute Hetzner ingress firewall settings (enabled flag + network CIDR + CNI port).
+	enableIngressFirewall, networkCIDR, cniPort := s.hetznerIngressFirewallConfig()
+
 	// Mirror the conditions in generator.getDirectoriesWithPatches() exactly so
 	// .gitkeep notifications match the files the generator actually writes.
-	clusterHasPatches := workers == 0 || len(s.MirrorRegistries) > 0 || disableDefaultCNI ||
-		enableKubeletCertRotation || s.ClusterName != "" || enableImageVerification || disableCDI ||
-		enableExternalCloudProvider
+	clusterHasPatches := talosClusterHasPatches(
+		workers, s.MirrorRegistries, disableDefaultCNI, enableKubeletCertRotation,
+		s.ClusterName, enableImageVerification, disableCDI, enableExternalCloudProvider,
+		enableIngressFirewall,
+	)
 
 	config := &talosgenerator.Config{
 		PatchesDir:                  TalosConfigDir,
@@ -51,6 +56,9 @@ func (s *Scaffolder) generateTalosConfig(output string, force bool) error {
 		EnableImageVerification:     enableImageVerification,
 		DisableCDI:                  disableCDI,
 		EnableExternalCloudProvider: enableExternalCloudProvider,
+		EnableIngressFirewall:       enableIngressFirewall,
+		NetworkCIDR:                 networkCIDR,
+		CNIPort:                     cniPort,
 	}
 
 	opts := yamlgenerator.Options{
@@ -70,6 +78,7 @@ func (s *Scaffolder) generateTalosConfig(output string, force bool) error {
 		enableImageVerification,
 		disableCDI,
 		enableExternalCloudProvider,
+		enableIngressFirewall,
 		clusterHasPatches,
 	)
 
@@ -80,7 +89,7 @@ func (s *Scaffolder) generateTalosConfig(output string, force bool) error {
 func (s *Scaffolder) notifyTalosGenerated(
 	workers int,
 	disableDefaultCNI, enableKubeletCertRotation, enableImageVerification, disableCDI,
-	enableExternalCloudProvider bool,
+	enableExternalCloudProvider, enableIngressFirewall bool,
 	clusterHasPatches bool,
 ) {
 	// Notify about .gitkeep files only for directories without patches
@@ -109,6 +118,9 @@ func (s *Scaffolder) notifyTalosGenerated(
 		{enableImageVerification, "cluster", "image-verification.yaml"},
 		{disableCDI, "cluster", "disable-cdi.yaml"},
 		{enableExternalCloudProvider, "cluster", "external-cloud-provider.yaml"},
+		{enableIngressFirewall, "cluster", "ingress-firewall-default-action.yaml"},
+		{enableIngressFirewall, "control-planes", "ingress-firewall-rules.yaml"},
+		{enableIngressFirewall, "workers", "ingress-firewall-rules.yaml"},
 	}
 
 	for _, patch := range patches {
@@ -127,4 +139,35 @@ func (s *Scaffolder) notifyTalosPatchCreated(subdir, filename string) {
 		Args:    []any{displayPath},
 		Writer:  s.Writer,
 	})
+}
+
+// hetznerIngressFirewallConfig returns whether the Talos ingress firewall should
+// be enabled for this cluster, along with the network CIDR and CNI VXLAN port.
+func (s *Scaffolder) hetznerIngressFirewallConfig() (bool, string, int) {
+	enabled := s.KSailConfig.Spec.Cluster.Provider == v1alpha1.ProviderHetzner &&
+		s.KSailConfig.Spec.Provider.Hetzner.IngressFirewall != v1alpha1.IngressFirewallDisabled
+
+	return enabled,
+		v1alpha1.HetznerNetworkCIDR(s.KSailConfig.Spec),
+		v1alpha1.HetznerCNIPort(s.KSailConfig.Spec)
+}
+
+// talosClusterHasPatches returns true when at least one patch file will be written
+// into the cluster/ directory (so the generator skips creating a .gitkeep there).
+func talosClusterHasPatches(
+	workers int,
+	mirrorRegistries []string,
+	disableDefaultCNI, enableKubeletCertRotation bool,
+	clusterName string,
+	enableImageVerification, disableCDI, enableExternalCloudProvider, enableIngressFirewall bool,
+) bool {
+	return workers == 0 ||
+		len(mirrorRegistries) > 0 ||
+		disableDefaultCNI ||
+		enableKubeletCertRotation ||
+		clusterName != "" ||
+		enableImageVerification ||
+		disableCDI ||
+		enableExternalCloudProvider ||
+		enableIngressFirewall
 }

@@ -38,6 +38,9 @@ var ErrInvalidNodeAutoscaling = errors.New("invalid node autoscaling")
 // ErrInvalidProvider is returned when an invalid provider is specified.
 var ErrInvalidProvider = errors.New("invalid provider")
 
+// ErrInvalidIngressFirewall is returned when an invalid ingress firewall option is specified.
+var ErrInvalidIngressFirewall = errors.New("invalid ingress firewall")
+
 // ErrInvalidPlacementGroupStrategy is returned when an invalid placement group strategy is specified.
 var ErrInvalidPlacementGroupStrategy = errors.New("invalid placement group strategy")
 

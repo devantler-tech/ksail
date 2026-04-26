@@ -995,7 +995,7 @@ func TestImageVerification_ValidValues(t *testing.T) {
 	assert.Len(t, values, 2)
 }
 
-func TestImageVerification_Set(t *testing.T) {
+func TestImageVerification_Set(t *testing.T) { //nolint:dupl // enum pattern
 	t.Parallel()
 
 	tests := []struct {
@@ -1187,4 +1187,70 @@ func TestCDI_EffectiveValue(t *testing.T) { //nolint:dupl,funlen // enum pattern
 			assert.Equal(t, testCase.expected, result)
 		})
 	}
+}
+
+func TestIngressFirewall_Default(t *testing.T) {
+	t.Parallel()
+
+	var ingressFirewall v1alpha1.IngressFirewall
+	assert.Equal(t, v1alpha1.IngressFirewallEnabled, ingressFirewall.Default())
+}
+
+func TestIngressFirewall_ValidValues(t *testing.T) {
+	t.Parallel()
+
+	var ingressFirewall v1alpha1.IngressFirewall
+
+	values := ingressFirewall.ValidValues()
+	assert.Contains(t, values, "Enabled")
+	assert.Contains(t, values, "Disabled")
+	assert.Len(t, values, 2)
+}
+
+func TestIngressFirewall_Set(t *testing.T) { //nolint:dupl // enum pattern
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		input     string
+		expected  v1alpha1.IngressFirewall
+		wantError bool
+	}{
+		{name: "enabled_lowercase", input: "enabled", expected: v1alpha1.IngressFirewallEnabled},
+		{name: "enabled_mixed_case", input: "Enabled", expected: v1alpha1.IngressFirewallEnabled},
+		{name: "enabled_uppercase", input: "ENABLED", expected: v1alpha1.IngressFirewallEnabled},
+		{name: "disabled_lowercase", input: "disabled", expected: v1alpha1.IngressFirewallDisabled},
+		{
+			name:     "disabled_mixed_case",
+			input:    "Disabled",
+			expected: v1alpha1.IngressFirewallDisabled,
+		},
+		{name: "disabled_uppercase", input: "DISABLED", expected: v1alpha1.IngressFirewallDisabled},
+		{name: "invalid_value", input: "invalid", wantError: true},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			var ingressFirewall v1alpha1.IngressFirewall
+
+			err := ingressFirewall.Set(testCase.input)
+			if testCase.wantError {
+				require.Error(t, err)
+				require.ErrorIs(t, err, v1alpha1.ErrInvalidIngressFirewall)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, testCase.expected, ingressFirewall)
+			}
+		})
+	}
+}
+
+func TestIngressFirewall_StringAndType(t *testing.T) {
+	t.Parallel()
+
+	ingressFirewall := v1alpha1.IngressFirewallEnabled
+	assert.Equal(t, "Enabled", ingressFirewall.String())
+	assert.Equal(t, "IngressFirewall", ingressFirewall.Type())
 }

@@ -457,6 +457,13 @@ var hetznerFieldRules = []providerFieldRule{
 		reason:   "SSH key change only affects newly provisioned servers",
 		getVal:   func(s *v1alpha1.ProviderSpec) string { return s.Hetzner.SSHKeyName },
 	},
+	{
+		field:      "provider.hetzner.ingressFirewall",
+		category:   clusterupdate.ChangeCategoryInPlace,
+		reason:     "ingress firewall config is applied via Talos machine config patches",
+		getVal:     func(s *v1alpha1.ProviderSpec) string { return string(s.Hetzner.IngressFirewall) },
+		defaultVal: string(v1alpha1.IngressFirewallEnabled),
+	},
 }
 
 // applyProviderFieldRules evaluates each provider field rule and appends changes to the result.
