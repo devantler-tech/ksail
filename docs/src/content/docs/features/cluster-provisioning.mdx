@@ -34,12 +34,14 @@ ksail cluster update --dry-run --output json | jq .recreateRequired
 
 ## Node Autoscaling
 
-When an external node autoscaler (such as [cluster-autoscaler](https://github.com/kubernetes/autoscaler/tree/master/cluster-autoscaler), [Karpenter](https://karpenter.sh/), or [Omni dynamic allocation](https://omni.siderolabs.com/)) manages your node counts, set `spec.cluster.nodeAutoscaling: Enabled` to prevent `ksail cluster update` from interfering.
+When an external node autoscaler (such as [cluster-autoscaler](https://github.com/kubernetes/autoscaler/tree/master/cluster-autoscaler), [Karpenter](https://karpenter.sh/), or [Omni dynamic allocation](https://omni.siderolabs.com/)) manages your node counts, set `spec.cluster.nodeAutoscaling: Enabled` in `ksail.yaml` to prevent `ksail cluster update` from interfering.
 
-With autoscaling enabled, `ksail cluster update` skips `controlPlanes` and `workers` diffs and does not issue any scaling operations — the external autoscaler remains the single source of truth for node counts. `ksail cluster create` is unaffected; initial node counts are still applied on first provision.
+With autoscaling enabled, `ksail cluster update` skips diffs for the Talos node-count fields `spec.cluster.talos.controlPlanes` and `spec.cluster.talos.workers` (the same values configured by `ksail cluster init --control-planes` and `--workers`) and does not issue any scaling operations — the external autoscaler remains the single source of truth for node counts. `ksail cluster create` is unaffected; initial node counts are still applied on first provision.
 
-```bash
-ksail cluster init --node-autoscaling Enabled
+```yaml
+spec:
+  cluster:
+    nodeAutoscaling: Enabled
 ```
 
 > **Talos only**: Other distributions currently ignore this setting.
