@@ -334,6 +334,11 @@ func TestGenerateFlagName(t *testing.T) {
 			&manager.Config.Spec.Cluster.LocalRegistry.Registry,
 			"local-registry",
 		},
+		{
+			"NodeAutoscaling field",
+			&manager.Config.Spec.Cluster.NodeAutoscaling,
+			"node-autoscaling",
+		},
 	}
 
 	runFlagNameGenerationTests(t, manager, tests)

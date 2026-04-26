@@ -227,3 +227,16 @@ func ImageVerificationFieldSelector() FieldSelector[v1alpha1.Cluster] {
 		DefaultValue: v1alpha1.ImageVerificationDisabled,
 	}
 }
+
+// NodeAutoscalingFieldSelector creates a field selector for node autoscaling.
+func NodeAutoscalingFieldSelector() FieldSelector[v1alpha1.Cluster] {
+	return FieldSelector[v1alpha1.Cluster]{
+		Selector: func(c *v1alpha1.Cluster) any {
+			return &c.Spec.Cluster.NodeAutoscaling
+		},
+		Description: "Node autoscaling " +
+			"(Talos: Enabled defers worker and control-plane scaling to an external autoscaler, " +
+			"Disabled lets KSail manage node counts; other distributions currently ignore this setting)",
+		DefaultValue: v1alpha1.NodeAutoscalingDisabled,
+	}
+}

@@ -196,6 +196,9 @@ func (m *ConfigManager) getFieldMappings() map[any]string {
 		&m.Config.Spec.Cluster.Talos.ControlPlanes:     "control-planes",
 		&m.Config.Spec.Cluster.Talos.Workers:           "workers",
 		&m.Config.Spec.Cluster.Talos.ImageVerification: "image-verification",
+
+		// Cross-distribution options
+		&m.Config.Spec.Cluster.NodeAutoscaling: "node-autoscaling",
 	}
 }
 
