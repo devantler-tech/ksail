@@ -170,13 +170,11 @@ func getClusterNameFromConfigOrContext(
 		return clusterName, nil
 	}
 
-	// Check metadata.name
+	// Check metadata.name (skip if invalid, fall through to other sources)
 	if clusterCfg != nil && clusterCfg.Metadata.Name != "" {
-		if err := v1alpha1.ValidateClusterName(clusterCfg.Metadata.Name); err != nil {
-			return "", fmt.Errorf("invalid metadata.name: %w", err)
+		if v1alpha1.ValidateClusterName(clusterCfg.Metadata.Name) == nil {
+			return clusterCfg.Metadata.Name, nil
 		}
-
-		return clusterCfg.Metadata.Name, nil
 	}
 
 	// Fall back to distribution config name
@@ -246,13 +244,11 @@ func GetClusterNameFromConfig(
 		return clusterName, nil
 	}
 
-	// Check metadata.name
+	// Check metadata.name (skip if invalid, fall through to other sources)
 	if clusterCfg.Metadata.Name != "" {
-		if err := v1alpha1.ValidateClusterName(clusterCfg.Metadata.Name); err != nil {
-			return "", fmt.Errorf("invalid metadata.name: %w", err)
+		if v1alpha1.ValidateClusterName(clusterCfg.Metadata.Name) == nil {
+			return clusterCfg.Metadata.Name, nil
 		}
-
-		return clusterCfg.Metadata.Name, nil
 	}
 
 	// Fall back to distribution config name
