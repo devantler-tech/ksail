@@ -24,7 +24,8 @@ const (
 	// extra time for multiple deployments and CRDs to become ready (admission-controller,
 	// background-controller, cleanup-controller, reports-controller, and policy CRDs), and
 	// for cert-manager's cainjector to populate the MutatingWebhookConfiguration caBundle.
-	KyvernoInstallTimeout = 15 * time.Minute
+	// K3s distributions with CNI+CSI enabled take longer due to additional resource pressure.
+	KyvernoInstallTimeout = 20 * time.Minute
 	// CertManagerInstallTimeout is the timeout for cert-manager installs, which need
 	// extra time for multiple deployments and webhook configurations to become ready.
 	CertManagerInstallTimeout = 10 * time.Minute
