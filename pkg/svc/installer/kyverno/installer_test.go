@@ -189,10 +189,12 @@ func TestInstallWebhookDelayedReadiness(t *testing.T) {
 	// Populate caBundle after a short delay to simulate delayed TLS init.
 	// Use a buffered channel so the goroutine never blocks if Install returns first.
 	updateErrCh := make(chan error, 1)
+
 	go func() {
 		time.Sleep(500 * time.Millisecond)
 
 		cfg := readyWebhookConfig()
+
 		_, err := fakeClientset.AdmissionregistrationV1().
 			MutatingWebhookConfigurations().
 			Update(context.Background(), cfg, metav1.UpdateOptions{})
