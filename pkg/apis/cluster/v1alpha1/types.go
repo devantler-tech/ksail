@@ -43,22 +43,22 @@ type ProviderSpec struct {
 
 // ClusterSpec defines cluster-related configuration.
 type ClusterSpec struct {
-	DistributionConfig string        `json:"distributionConfig,omitzero"`
-	Connection         Connection    `json:"connection,omitzero"`
-	Distribution       Distribution  `json:"distribution,omitzero"`
-	Provider           Provider      `json:"provider,omitzero"`
-	CNI                CNI           `json:"cni,omitzero"`
-	CSI                CSI           `json:"csi,omitzero"`
-	CDI                CDI           `json:"cdi,omitzero"`
-	MetricsServer      MetricsServer `json:"metricsServer,omitzero"`
-	LoadBalancer       LoadBalancer  `json:"loadBalancer,omitzero"`
-	CertManager        CertManager   `json:"certManager,omitzero"`
-	PolicyEngine       PolicyEngine  `json:"policyEngine,omitzero"`
-	LocalRegistry      LocalRegistry `json:"localRegistry,omitzero"`
-	GitOpsEngine       GitOpsEngine  `json:"gitOpsEngine,omitzero"`
-	SOPS               SOPS          `json:"sops,omitzero"`
+	DistributionConfig string          `json:"distributionConfig,omitzero"`
+	Connection         Connection      `json:"connection,omitzero"`
+	Distribution       Distribution    `json:"distribution,omitzero"`
+	Provider           Provider        `json:"provider,omitzero"`
+	CNI                CNI             `json:"cni,omitzero"`
+	CSI                CSI             `json:"csi,omitzero"`
+	CDI                CDI             `json:"cdi,omitzero"`
+	MetricsServer      MetricsServer   `json:"metricsServer,omitzero"`
+	LoadBalancer       LoadBalancer    `json:"loadBalancer,omitzero"`
+	CertManager        CertManager     `json:"certManager,omitzero"`
+	PolicyEngine       PolicyEngine    `json:"policyEngine,omitzero"`
+	LocalRegistry      LocalRegistry   `json:"localRegistry,omitzero"`
+	GitOpsEngine       GitOpsEngine    `json:"gitOpsEngine,omitzero"`
+	SOPS               SOPS            `json:"sops,omitzero"`
 	NodeAutoscaling    NodeAutoscaling `json:"nodeAutoscaling,omitzero"`
-	ImportImages       string        `json:"importImages,omitzero"       jsonschema:"description=Path to tar archive with container images to import after cluster creation but before component installation"` //nolint:lll // Long description required for JSON schema
+	ImportImages       string          `json:"importImages,omitzero"       jsonschema:"description=Path to tar archive with container images to import after cluster creation but before component installation"` //nolint:lll // Long description required for JSON schema
 
 	// Distribution-specific options
 	Vanilla OptionsVanilla `json:"vanilla,omitzero"`

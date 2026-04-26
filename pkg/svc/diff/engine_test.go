@@ -970,8 +970,12 @@ func TestEngine_TalosNodeCountSuppressed_WhenAutoscalingEnabled(t *testing.T) {
 	result := engine.ComputeDiff(old, newer, nil, nil)
 
 	for _, change := range result.AllChanges() {
-		if change.Field == "cluster.talos.controlPlanes" || change.Field == "cluster.talos.workers" {
-			t.Errorf("node count field %q should be suppressed when autoscaling is enabled", change.Field)
+		if change.Field == "cluster.talos.controlPlanes" ||
+			change.Field == "cluster.talos.workers" {
+			t.Errorf(
+				"node count field %q should be suppressed when autoscaling is enabled",
+				change.Field,
+			)
 		}
 	}
 }

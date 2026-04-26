@@ -353,7 +353,11 @@ func TestDiffConfig_SkipsNodeCountsWhenAutoscalingEnabled(t *testing.T) {
 
 	result, err := provisioner.DiffConfig(context.Background(), "test", oldSpec, newSpec)
 	require.NoError(t, err)
-	assert.Empty(t, result.InPlaceChanges, "node count diffs should be suppressed when autoscaling is enabled")
+	assert.Empty(
+		t,
+		result.InPlaceChanges,
+		"node count diffs should be suppressed when autoscaling is enabled",
+	)
 }
 
 // TestDiffConfig_StillValidatesMinimumControlPlanesWhenAutoscalingEnabled verifies that
@@ -400,5 +404,10 @@ func TestApplyNodeScalingChanges_SkipsWhenAutoscalingEnabled(t *testing.T) {
 		result,
 	)
 	require.NoError(t, err)
-	assert.Equal(t, 0, result.TotalChanges(), "no scaling changes expected when autoscaling is enabled")
+	assert.Equal(
+		t,
+		0,
+		result.TotalChanges(),
+		"no scaling changes expected when autoscaling is enabled",
+	)
 }

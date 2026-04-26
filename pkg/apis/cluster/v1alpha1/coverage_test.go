@@ -1070,7 +1070,6 @@ func TestValidateMirrorRegistriesForProvider_Omni(t *testing.T) {
 // NodeAutoscaling.Set() — parsing coverage
 // ---------------------------------------------------------------------------
 
-//nolint:funlen // Table-driven enum parsing cases are easier to read inline.
 func TestNodeAutoscaling_Set(t *testing.T) {
 	t.Parallel()
 
