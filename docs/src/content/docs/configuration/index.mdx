@@ -50,19 +50,23 @@ Use declarative configuration for:
 
 - **Project-wide defaults** that should be version-controlled
 - **Team consistency** so everyone uses the same settings
-- **Cluster identity** (distribution, CNI, GitOps engine)
+- **Cluster identity** (name, distribution, CNI, GitOps engine)
 - **Reproducible environments** across machines
 
 ```yaml
 # yaml-language-server: $schema=https://raw.githubusercontent.com/devantler-tech/ksail/main/schemas/ksail-config.schema.json
 apiVersion: ksail.io/v1alpha1
 kind: Cluster
+metadata:
+  name: my-cluster
 spec:
   cluster:
     distribution: Vanilla
     cni: Cilium
     gitOpsEngine: Flux
 ```
+
+Set `metadata.name` to pin the cluster name in version control. This takes priority over the distribution config name but is overridden by the `--name` CLI flag.
 
 ### CLI Flags
 
