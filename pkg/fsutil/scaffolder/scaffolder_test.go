@@ -596,7 +596,7 @@ func TestGenerateK3dConfigHandlesCNI(t *testing.T) {
 		{
 			name:        "CiliumCNI",
 			cni:         v1alpha1.CNICilium,
-			expectArgs:  2,
+			expectArgs:  3,
 			expectValue: "--flannel-backend=none",
 		},
 	}
