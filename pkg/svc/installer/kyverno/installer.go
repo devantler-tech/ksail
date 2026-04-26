@@ -25,7 +25,11 @@ type Installer struct {
 // NewInstaller creates a new Kyverno installer instance.
 // kubeconfig and context are used after Helm install to wait for the Kyverno
 // admission webhook to be ready before returning.
-func NewInstaller(client helm.Interface, timeout time.Duration, kubeconfig, context string) *Installer {
+func NewInstaller(
+	client helm.Interface,
+	timeout time.Duration,
+	kubeconfig, context string,
+) *Installer {
 	return &Installer{
 		Base: helmutil.NewBase(
 			"kyverno",
@@ -74,11 +78,13 @@ func (i *Installer) Install(ctx context.Context) error {
 	overallCtx, cancel := context.WithTimeout(ctx, i.timeout+helm.ContextTimeoutBuffer)
 	defer cancel()
 
-	if err := i.Base.Install(overallCtx); err != nil {
+	err := i.Base.Install(overallCtx)
+	if err != nil {
 		return fmt.Errorf("installing kyverno base chart: %w", err)
 	}
 
-	if err := i.waitForWebhookReady(overallCtx); err != nil {
+	err := i.waitForWebhookReady(overallCtx)
+	if err != nil {
 		return fmt.Errorf("kyverno webhook not ready after install: %w", err)
 	}
 

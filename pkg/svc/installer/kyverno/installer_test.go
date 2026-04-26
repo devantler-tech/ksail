@@ -25,9 +25,12 @@ func TestNewInstaller(t *testing.T) {
 	assert.NotNil(t, installer)
 }
 
-func TestInstallSuccess(t *testing.T) { //nolint:paralleltest // Mutates shared test seams exposed by export_test.go.
+func TestInstallSuccess(
+	t *testing.T,
+) { //nolint:paralleltest // Mutates shared test seams exposed by export_test.go.
 	// Not parallel: overrides the package-level newClientsetFn var.
 	fakeClientset := k8sfake.NewClientset(readyWebhookConfig())
+
 	restore := kyvernoinstaller.SetNewClientsetFn(
 		func(_, _ string) (kubernetes.Interface, error) { return fakeClientset, nil },
 	)
@@ -176,6 +179,7 @@ func unreadyWebhookConfig() *admissionregistrationv1.MutatingWebhookConfiguratio
 func TestInstallWebhookDelayedReadiness(t *testing.T) {
 	// Not parallel: overrides the package-level newClientsetFn var.
 	fakeClientset := k8sfake.NewClientset(unreadyWebhookConfig())
+
 	restore := kyvernoinstaller.SetNewClientsetFn(
 		func(_, _ string) (kubernetes.Interface, error) { return fakeClientset, nil },
 	)
@@ -204,6 +208,7 @@ func TestInstallWebhookDelayedReadiness(t *testing.T) {
 func TestInstallWebhookNeverReady(t *testing.T) {
 	// Not parallel: overrides the package-level newClientsetFn var.
 	fakeClientset := k8sfake.NewClientset(unreadyWebhookConfig())
+
 	restore := kyvernoinstaller.SetNewClientsetFn(
 		func(_, _ string) (kubernetes.Interface, error) { return fakeClientset, nil },
 	)

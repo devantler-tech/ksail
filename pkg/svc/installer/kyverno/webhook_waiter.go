@@ -65,7 +65,11 @@ func (i *Installer) waitForWebhookReady(ctx context.Context) error {
 				return false, nil
 			}
 
-			return false, fmt.Errorf("getting MutatingWebhookConfiguration %q: %w", kyvernoResourceWebhookName, err)
+			return false, fmt.Errorf(
+				"getting MutatingWebhookConfiguration %q: %w",
+				kyvernoResourceWebhookName,
+				err,
+			)
 		}
 
 		if len(webhook.Webhooks) == 0 {
