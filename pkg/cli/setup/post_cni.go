@@ -98,10 +98,13 @@ const (
 
 	// csrApproverReadinessTimeout is the maximum time to wait for the
 	// kubelet-serving-cert-approver deployment (from Talos inlineManifests) to
-	// become ready. After CNI is installed, the approver pod needs to be
-	// scheduled, pull its image, start, and begin approving kubelet serving
-	// CSRs. Two minutes accommodates image pulls on fresh cloud nodes.
-	csrApproverReadinessTimeout = 2 * time.Minute
+	// become ready. The approver pod starts at cluster creation (before CNI),
+	// so it enters CrashLoopBackOff while CNI is unavailable. When a
+	// sequential pre-phase (e.g. cert-manager) precedes the main infra phase,
+	// the pod may be in an 80–160 s backoff cycle by the time the wait starts.
+	// Five minutes covers up to two additional CrashLoopBackOff cycles after
+	// the pre-phase completes and CNI is available.
+	csrApproverReadinessTimeout = 5 * time.Minute
 )
 
 // apiServerStabilitySuccesses returns the number of consecutive successful
