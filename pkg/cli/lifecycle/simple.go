@@ -184,6 +184,11 @@ func resolveFromConfig(
 		*clusterName = clusterNameFromDistConfig(distCfg)
 	}
 
+	// Fall back to metadata.name from ksail.yaml
+	if *clusterName == "" && cfg.Metadata.Name != "" {
+		*clusterName = cfg.Metadata.Name
+	}
+
 	if *provider == "" && cfg.Spec.Cluster.Provider != "" {
 		*provider = cfg.Spec.Cluster.Provider
 	}

@@ -15,12 +15,19 @@ const (
 
 // --- Core Types ---
 
+// Metadata holds standard Kubernetes-style metadata for KSail resources.
+// Only the Name field is supported; namespace, labels, and annotations are not used.
+type Metadata struct {
+	Name string `json:"name,omitzero" jsonschema:"description=Cluster name used for container names and kubeconfig context (DNS-1123 compliant)"`
+}
+
 // Cluster represents a KSail cluster configuration including API metadata and desired state.
 // It contains TypeMeta for API versioning information and Spec for the cluster specification.
 type Cluster struct {
 	metav1.TypeMeta `json:",inline" mapstructure:",squash"`
 
-	Spec Spec `json:"spec,omitzero" mapstructure:"spec,omitempty"`
+	Metadata Metadata `json:"metadata,omitzero" mapstructure:"metadata,omitempty"`
+	Spec     Spec     `json:"spec,omitzero"     mapstructure:"spec,omitempty"`
 }
 
 // Spec defines the desired state of a KSail cluster.

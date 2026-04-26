@@ -149,6 +149,11 @@ func (s *Scaffolder) Scaffold(output string, force bool) error {
 func (s *Scaffolder) applyKSailConfigDefaults() v1alpha1.Cluster {
 	config := s.KSailConfig
 
+	// Set metadata.name if a cluster name override was provided
+	if s.ClusterName != "" {
+		config.Metadata.Name = s.ClusterName
+	}
+
 	// Set the expected context if it's empty, based on the distribution and cluster name
 	if config.Spec.Cluster.Connection.Context == "" {
 		var expectedContext string

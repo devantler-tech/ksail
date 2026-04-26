@@ -13,6 +13,16 @@
         "ksail.io/v1alpha1"
       ]
     },
+    "metadata": {
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Cluster name used for container names and kubeconfig context (DNS-1123 compliant)"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
     "spec": {
       "properties": {
         "editor": {
