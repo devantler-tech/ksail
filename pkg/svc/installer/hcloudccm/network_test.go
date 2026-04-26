@@ -112,7 +112,9 @@ func TestResolveHetznerNetworkName(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			result := hcloudccminstaller.ResolveHetznerNetworkName(testCase.cfg)
+			result := hcloudccminstaller.ResolveHetznerNetworkName(
+				testCase.cfg, testCase.clusterName,
+			)
 
 			require.Equal(t, testCase.expected, result)
 		})
@@ -120,52 +122,112 @@ func TestResolveHetznerNetworkName(t *testing.T) {
 }
 
 type resolveNetworkNameTestCase struct {
-	name     string
-	cfg      *v1alpha1.Cluster
-	expected string
+	name        string
+	cfg         *v1alpha1.Cluster
+	clusterName string
+	expected    string
 }
 
 func resolveNetworkNameTestCases() []resolveNetworkNameTestCase {
+	return append(resolveNetworkNameCoreCases(), resolveNetworkNameEdgeCases()...)
+}
+
+func resolveNetworkNameCoreCases() []resolveNetworkNameTestCase {
 	return []resolveNetworkNameTestCase{
 		{
-			name:     "explicit name takes precedence over context-derived name",
-			cfg:      clusterCfg("admin@dev", "custom-network"),
-			expected: "custom-network",
+			name:        "explicit name takes precedence over context-derived name",
+			cfg:         clusterCfg("admin@dev", "custom-network"),
+			clusterName: "dev",
+			expected:    "custom-network",
 		},
 		{
-			name:     "falls back to explicit name when context cannot be derived",
-			cfg:      clusterCfg("kind-local", "custom-network"),
-			expected: "custom-network",
+			name:        "falls back to explicit name when context cannot be derived",
+			cfg:         clusterCfg("kind-local", "custom-network"),
+			clusterName: "",
+			expected:    "custom-network",
 		},
 		{
-			name:     "derives from Talos context when no explicit name",
-			cfg:      clusterCfg("admin@dev", ""),
-			expected: "dev-network",
+			name:        "derives from Talos context when no explicit name",
+			cfg:         clusterCfg("admin@dev", ""),
+			clusterName: "",
+			expected:    "dev-network",
 		},
 		{
-			name:     "derives from Talos context with hyphenated cluster name",
-			cfg:      clusterCfg("admin@my-production-cluster", ""),
-			expected: "my-production-cluster-network",
+			name:        "derives from Talos context with hyphenated cluster name",
+			cfg:         clusterCfg("admin@my-production-cluster", ""),
+			clusterName: "",
+			expected:    "my-production-cluster-network",
 		},
 		{
-			name:     "empty context returns empty",
-			cfg:      clusterCfg("", ""),
-			expected: "",
+			name:        "context parsing takes precedence over cluster name fallback",
+			cfg:         clusterCfg("admin@dev", ""),
+			clusterName: "other",
+			expected:    "dev-network",
 		},
 		{
-			name:     "non-Talos context without explicit name returns empty",
-			cfg:      clusterCfg("kind-local", ""),
-			expected: "",
+			name:        "falls back to cluster name when context is empty",
+			cfg:         clusterCfg("", ""),
+			clusterName: "dev",
+			expected:    "dev-network",
 		},
 		{
-			name:     "trims whitespace from context",
-			cfg:      clusterCfg("  admin@dev  ", ""),
-			expected: "dev-network",
+			name:        "falls back to cluster name when context is non-Talos",
+			cfg:         clusterCfg("kind-local", ""),
+			clusterName: "dev",
+			expected:    "dev-network",
 		},
 		{
-			name:     "admin@ with no cluster name returns empty",
-			cfg:      clusterCfg("admin@", ""),
-			expected: "",
+			name:        "falls back to cluster name when context is raw name without admin prefix",
+			cfg:         clusterCfg("default", ""),
+			clusterName: "dev",
+			expected:    "dev-network",
+		},
+	}
+}
+
+func resolveNetworkNameEdgeCases() []resolveNetworkNameTestCase {
+	return []resolveNetworkNameTestCase{
+		{
+			name:        "empty context and empty cluster name returns empty",
+			cfg:         clusterCfg("", ""),
+			clusterName: "",
+			expected:    "",
+		},
+		{
+			name:        "non-Talos context without explicit name or cluster name returns empty",
+			cfg:         clusterCfg("kind-local", ""),
+			clusterName: "",
+			expected:    "",
+		},
+		{
+			name:        "trims whitespace from context",
+			cfg:         clusterCfg("  admin@dev  ", ""),
+			clusterName: "",
+			expected:    "dev-network",
+		},
+		{
+			name:        "admin@ with no cluster name falls back to cluster name param",
+			cfg:         clusterCfg("admin@", ""),
+			clusterName: "dev",
+			expected:    "dev-network",
+		},
+		{
+			name:        "admin@ with no cluster name and no fallback returns empty",
+			cfg:         clusterCfg("admin@", ""),
+			clusterName: "",
+			expected:    "",
+		},
+		{
+			name:        "trims whitespace from cluster name fallback",
+			cfg:         clusterCfg("", ""),
+			clusterName: "  dev  ",
+			expected:    "dev-network",
+		},
+		{
+			name:        "explicit name takes precedence over cluster name fallback",
+			cfg:         clusterCfg("", "custom-network"),
+			clusterName: "dev",
+			expected:    "custom-network",
 		},
 	}
 }

@@ -105,6 +105,12 @@ type OptionsHetzner struct {
 	// When true and placement fails, retries server creation without a placement group.
 	// Defaults to false to preserve HA guarantees; set to true for best-effort provisioning.
 	PlacementGroupFallbackToNone bool `json:"placementGroupFallbackToNone,omitzero"`
+	// IngressFirewall controls the Talos OS-level ingress firewall configuration.
+	// When Enabled (default), KSail generates NetworkDefaultActionConfig and NetworkRuleConfig
+	// documents as Talos machine config patches, providing defense-in-depth at the node level
+	// independent of the Hetzner Cloud Firewall.
+	// See: https://www.talos.dev/latest/talos-guides/network/ingress-firewall/
+	IngressFirewall IngressFirewall `default:"Enabled" json:"ingressFirewall,omitzero"`
 }
 
 // OptionsOmni defines options specific to the Sidero Omni provider.
@@ -155,6 +161,32 @@ type OptionsOmni struct {
 // family, etc.) lives in eks.yaml (eksctl.io/v1alpha5 ClusterConfig), which is
 // the authoritative source of truth. KSail does not duplicate those fields in
 // ksail.yaml; the EKS provisioner loads the eksctl ClusterConfig directly.
+
+// HetznerNetworkCIDR returns the configured private-network CIDR for the
+// given spec, falling back to DefaultHetznerNetworkCIDR when none is set.
+func HetznerNetworkCIDR(spec Spec) string {
+	if spec.Provider.Hetzner.NetworkCIDR != "" {
+		return spec.Provider.Hetzner.NetworkCIDR
+	}
+
+	return DefaultHetznerNetworkCIDR
+}
+
+// ciliumVXLANPort is the UDP port used by Cilium for VXLAN encapsulation.
+const ciliumVXLANPort = 8472
+
+// defaultVXLANPort is the UDP port used by Flannel and Calico for VXLAN encapsulation.
+const defaultVXLANPort = 4789
+
+// HetznerCNIPort returns the VXLAN encapsulation UDP port for the configured CNI.
+// Cilium uses port 8472; Flannel and Calico use 4789.
+func HetznerCNIPort(spec Spec) int {
+	if spec.Cluster.CNI == CNICilium {
+		return ciliumVXLANPort
+	}
+
+	return defaultVXLANPort
+}
 
 // OptionsAWS defines options specific to the AWS cloud provider.
 // Credentials are resolved via the standard AWS SDK v2 credential chain;
