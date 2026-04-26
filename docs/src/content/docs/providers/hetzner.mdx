@@ -195,7 +195,7 @@ KSail applies two independent firewall layers for Hetzner Talos clusters:
 2. **Talos OS-level ingress firewall** — Defense-in-depth at the node level, enabled by default (`spec.provider.hetzner.ingressFirewall: Enabled`). Blocks all ingress by default; opens only the ports required for each node role (control plane vs worker), restricted to the cluster subnet where appropriate. Disable with `ingressFirewall: Disabled` if you manage node-level firewall rules yourself.
 
 > [!NOTE]
-> **Upgrading from older KSail versions**: Hetzner Cloud Firewall rules were reduced from 6 to 3 in KSail v0.x (etcd, kubelet, and trustd rules removed). Running `ksail cluster update` automatically migrates existing clusters to the new rule set.
+> **Upgrading from older KSail versions**: Clusters created before the firewall hardening change used 6 Hetzner Cloud Firewall rules. KSail now manages 3 rules (Talos API, Kubernetes API, and ICMP), with etcd, kubelet, and trustd access kept on the private Hetzner Cloud Network. Running `ksail cluster update` automatically migrates existing clusters to the current rule set.
 
 ## Operations
 
