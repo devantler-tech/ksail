@@ -435,6 +435,7 @@ func TestEngine_VanillaOptionsChange_SkippedForNonVanilla(t *testing.T) {
 	}
 }
 
+//nolint:dupl // Structural similarity with HetznerOptionsChange table-driven test is intentional.
 func TestEngine_TalosOptionsChange(t *testing.T) {
 	t.Parallel()
 
@@ -513,6 +514,7 @@ func TestEngine_TalosOptionsChange_SkippedForNonTalos(t *testing.T) {
 	}
 }
 
+//nolint:dupl // Structural similarity with TalosOptionsChange table-driven test is intentional.
 func TestEngine_HetznerOptionsChange_RecreateRequired(t *testing.T) {
 	t.Parallel()
 

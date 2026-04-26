@@ -105,13 +105,10 @@ func (m *ConfigManager) loadTalosConfig() (*talosconfigmanager.Configs, error) {
 
 	// Align the version contract with the pinned Talos version so that
 	// generated machine configs only use fields the target version supports.
-	if m.Config.Spec.Cluster.Talos.Version != "" {
-		contract, contractErr := talosconfig.ParseContractFromVersion(
-			m.Config.Spec.Cluster.Talos.Version,
-		)
-		if contractErr == nil {
-			talosManager.WithVersionContract(contract)
-		}
+	if contractErr := applyPinnedVersionContract(
+		m.Config.Spec.Cluster.Talos.Version, talosManager,
+	); contractErr != nil {
+		return nil, contractErr
 	}
 
 	// Add Hetzner-specific patches (external cloud provider + ingress firewall).
@@ -595,4 +592,29 @@ func ingressFirewallPatches(networkCIDR string, cniPort int) ([]talosconfigmanag
 			Content: []byte(talosgenerator.IngressFirewallWorkerRulesYAML(normalizedCIDR, cniPort)),
 		},
 	}, nil
+}
+
+// applyPinnedVersionContract sets the version contract on the Talos config manager
+// when a pinned Talos version is specified. Returns an error if the version cannot
+// be parsed. Does nothing when pinnedVersion is empty.
+func applyPinnedVersionContract(
+	pinnedVersion string,
+	talosManager *talosconfigmanager.ConfigManager,
+) error {
+	if pinnedVersion == "" {
+		return nil
+	}
+
+	if !strings.HasPrefix(pinnedVersion, "v") {
+		pinnedVersion = "v" + pinnedVersion
+	}
+
+	contract, err := talosconfig.ParseContractFromVersion(pinnedVersion)
+	if err != nil {
+		return fmt.Errorf("parse Talos version contract for pinned version %q: %w", pinnedVersion, err)
+	}
+
+	talosManager.WithVersionContract(contract)
+
+	return nil
 }
