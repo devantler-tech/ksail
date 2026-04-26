@@ -97,15 +97,15 @@ func (p *Provisioner) DiffConfig(
 		return result, nil
 	}
 
-	// When node autoscaling is enabled, skip node-count diffs to avoid
-	// conflicts with the external autoscaler.
-	if newSpec.NodeAutoscaling == v1alpha1.NodeAutoscalingEnabled {
-		return result, nil
-	}
-
-	// Guard: control-plane count must remain >= 1
+	// Guard: control-plane count must remain >= 1 regardless of autoscaling.
 	if newSpec.Talos.ControlPlanes < 1 {
 		return nil, ErrMinimumControlPlanes
+	}
+
+	// When node autoscaling is enabled, skip node-count diff entries to avoid
+	// conflicts with the external autoscaler, but still validate the spec above.
+	if newSpec.NodeAutoscaling == v1alpha1.NodeAutoscalingEnabled {
+		return result, nil
 	}
 
 	// Compare control plane count

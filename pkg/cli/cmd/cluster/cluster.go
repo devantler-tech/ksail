@@ -5056,6 +5056,7 @@ func defaultClusterMutationFieldSelectors() []ksailconfigmanager.FieldSelector[v
 		ksailconfigmanager.DefaultImportImagesFieldSelector(),
 		ksailconfigmanager.ControlPlanesFieldSelector(),
 		ksailconfigmanager.WorkersFieldSelector(),
+		ksailconfigmanager.NodeAutoscalingFieldSelector(),
 	)
 }
 

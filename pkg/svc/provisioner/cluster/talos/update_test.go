@@ -356,6 +356,25 @@ func TestDiffConfig_SkipsNodeCountsWhenAutoscalingEnabled(t *testing.T) {
 	assert.Empty(t, result.InPlaceChanges, "node count diffs should be suppressed when autoscaling is enabled")
 }
 
+// TestDiffConfig_StillValidatesMinimumControlPlanesWhenAutoscalingEnabled verifies that
+// the controlPlanes >= 1 guard is enforced even when autoscaling is enabled.
+func TestDiffConfig_StillValidatesMinimumControlPlanesWhenAutoscalingEnabled(t *testing.T) {
+	t.Parallel()
+
+	provisioner := talosprovisioner.NewProvisioner(nil, nil).WithLogWriter(io.Discard)
+
+	oldSpec := &v1alpha1.ClusterSpec{}
+	oldSpec.Talos.ControlPlanes = 1
+
+	newSpec := &v1alpha1.ClusterSpec{}
+	newSpec.Talos.ControlPlanes = 0 // invalid
+	newSpec.NodeAutoscaling = v1alpha1.NodeAutoscalingEnabled
+
+	_, err := provisioner.DiffConfig(context.Background(), "test", oldSpec, newSpec)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, talosprovisioner.ErrMinimumControlPlanes)
+}
+
 // TestApplyNodeScalingChanges_SkipsWhenAutoscalingEnabled verifies that
 // applyNodeScalingChanges is a no-op when autoscaling is enabled.
 func TestApplyNodeScalingChanges_SkipsWhenAutoscalingEnabled(t *testing.T) {
