@@ -112,7 +112,9 @@ func TestResolveHetznerNetworkName(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			result := hcloudccminstaller.ResolveHetznerNetworkName(testCase.cfg, testCase.clusterName)
+			result := hcloudccminstaller.ResolveHetznerNetworkName(
+				testCase.cfg, testCase.clusterName,
+			)
 
 			require.Equal(t, testCase.expected, result)
 		})
@@ -127,6 +129,10 @@ type resolveNetworkNameTestCase struct {
 }
 
 func resolveNetworkNameTestCases() []resolveNetworkNameTestCase {
+	return append(resolveNetworkNameCoreCases(), resolveNetworkNameEdgeCases()...)
+}
+
+func resolveNetworkNameCoreCases() []resolveNetworkNameTestCase {
 	return []resolveNetworkNameTestCase{
 		{
 			name:        "explicit name takes precedence over context-derived name",
@@ -176,6 +182,11 @@ func resolveNetworkNameTestCases() []resolveNetworkNameTestCase {
 			clusterName: "dev",
 			expected:    "dev-network",
 		},
+	}
+}
+
+func resolveNetworkNameEdgeCases() []resolveNetworkNameTestCase {
+	return []resolveNetworkNameTestCase{
 		{
 			name:        "empty context and empty cluster name returns empty",
 			cfg:         clusterCfg("", ""),

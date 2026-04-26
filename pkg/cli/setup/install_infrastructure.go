@@ -280,9 +280,7 @@ func installHcloudCCM(
 
 	networkName := hcloudccminstaller.ResolveHetznerNetworkName(
 		clusterCfg,
-		hcloudccminstaller.ExtractClusterNameFromTalosContext(
-			clusterCfg.Spec.Cluster.Connection.Context,
-		),
+		resolveClusterNameFromContext(clusterCfg),
 	)
 
 	ccmInstaller := hcloudccminstaller.NewInstaller(

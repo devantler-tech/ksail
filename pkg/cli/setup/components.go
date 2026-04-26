@@ -129,9 +129,7 @@ func csiFactory(
 			clusterCfg.Spec.Cluster.Provider == v1alpha1.ProviderHetzner {
 			networkName := hcloudccminstaller.ResolveHetznerNetworkName(
 				clusterCfg,
-				hcloudccminstaller.ExtractClusterNameFromTalosContext(
-					clusterCfg.Spec.Cluster.Connection.Context,
-				),
+				resolveClusterNameFromContext(clusterCfg),
 			)
 
 			return hetznercsiinstaller.NewInstaller(
