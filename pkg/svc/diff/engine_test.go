@@ -446,6 +446,13 @@ func TestEngine_TalosOptionsChange(t *testing.T) {
 		newValue string
 	}{
 		{
+			name:     "version pin change",
+			mutate:   func(s *v1alpha1.ClusterSpec) { s.Talos.Version = "v1.12.0" },
+			field:    "cluster.talos.version",
+			oldValue: "",
+			newValue: "v1.12.0",
+		},
+		{
 			name:     "control plane count change",
 			mutate:   func(s *v1alpha1.ClusterSpec) { s.Talos.ControlPlanes = 3 },
 			field:    "cluster.talos.controlPlanes",

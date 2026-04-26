@@ -92,6 +92,16 @@ func newProvisionerFromOptions(
 		WithTalosconfigPath(talosconfigPath).
 		WithSkipCNIChecks(skipCNIChecks)
 
+	// Override the default Talos container image when a version pin is set.
+	if opts.Version != "" {
+		version := opts.Version
+		if version[0] != 'v' {
+			version = "v" + version
+		}
+
+		options.WithTalosImage(talosImageRepository + ":" + version)
+	}
+
 	if opts.ControlPlanes > 0 {
 		options.WithControlPlaneNodes(int(opts.ControlPlanes))
 	}

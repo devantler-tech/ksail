@@ -6207,18 +6207,67 @@ func handleVersionUpgrades(
 
 	// Distribution upgrades first (runtime must support K8s version).
 	if updateDist { //nolint:nestif // sequential phase with version refresh guard
-		stepRecreated, err := executeVersionUpgrade(
-			cmd, cfgManager, ctx, deps, upgrader, resolver, clusterName,
-			"distribution", upgrader.DistributionImageRef(),
-			currentVersions.DistributionVersion, upgrader.VersionSuffix(),
-			upgrader.UpgradeDistribution, force, dryRun,
-		)
-		if err != nil {
-			return false, err
-		}
+		// Respect Talos version pin: when spec.cluster.talos.version is set,
+		// cap the distribution upgrade at the pinned version instead of
+		// discovering the latest from OCI. Skip entirely if already at the pin.
+		if ctx.ClusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionTalos &&
+			ctx.ClusterCfg.Spec.Cluster.Talos.Version != "" {
+			pinnedVersion := ctx.ClusterCfg.Spec.Cluster.Talos.Version
+			if pinnedVersion[0] != 'v' {
+				pinnedVersion = "v" + pinnedVersion
+			}
 
-		if stepRecreated {
-			recreated = true
+			if currentVersions.DistributionVersion == pinnedVersion {
+				notify.Infof(cmd.OutOrStdout(),
+					"distribution is already at pinned version %s", pinnedVersion)
+			} else {
+				notify.WriteMessage(notify.Message{
+					Type:  notify.InfoType,
+					Emoji: "📌",
+					Content: fmt.Sprintf(
+						"distribution upgrade capped at pinned version %s (current: %s)",
+						pinnedVersion, currentVersions.DistributionVersion,
+					),
+					Writer: cmd.OutOrStdout(),
+				})
+
+				if !dryRun {
+					upgradeErr := upgrader.UpgradeDistribution(
+						cmd.Context(), clusterName,
+						currentVersions.DistributionVersion, pinnedVersion,
+					)
+					if upgradeErr != nil {
+						return false, fmt.Errorf(
+							"distribution upgrade to pinned version %s failed: %w",
+							pinnedVersion, upgradeErr,
+						)
+					}
+
+					notify.WriteMessage(notify.Message{
+						Type:    notify.SuccessType,
+						Content: fmt.Sprintf("distribution upgraded to pinned version %s", pinnedVersion),
+						Writer:  cmd.OutOrStdout(),
+					})
+				} else {
+					notify.Infof(cmd.OutOrStdout(),
+						"Dry run complete. Would upgrade distribution to pinned version %s.",
+						pinnedVersion)
+				}
+			}
+		} else {
+			stepRecreated, err := executeVersionUpgrade(
+				cmd, cfgManager, ctx, deps, upgrader, resolver, clusterName,
+				"distribution", upgrader.DistributionImageRef(),
+				currentVersions.DistributionVersion, upgrader.VersionSuffix(),
+				upgrader.UpgradeDistribution, force, dryRun,
+			)
+			if err != nil {
+				return false, err
+			}
+
+			if stepRecreated {
+				recreated = true
+			}
 		}
 
 		// Re-fetch versions after distribution upgrade since recreation may

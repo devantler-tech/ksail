@@ -355,6 +355,12 @@ func (e *Engine) checkTalosOptionsChange(
 //nolint:gochecknoglobals // Immutable field-rule table; avoids per-call heap allocation.
 var talosFieldRules = []fieldRule{
 	{
+		field:    "cluster.talos.version",
+		category: clusterupdate.ChangeCategoryInPlace,
+		reason:   "version pin change only affects future operations (image selection, upgrade cap)",
+		getVal:   func(s *v1alpha1.ClusterSpec) string { return s.Talos.Version },
+	},
+	{
 		field:    "cluster.talos.controlPlanes",
 		category: clusterupdate.ChangeCategoryInPlace,
 		reason:   "Talos supports adding/removing control-plane nodes via provider",

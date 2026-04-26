@@ -288,6 +288,7 @@ func TestCluster_MarshalJSON_TalosNonDefaultsKept(t *testing.T) {
 				Talos: v1alpha1.OptionsTalos{
 					ControlPlanes: 3,
 					Workers:       5,
+					Version:       "v1.11.2",
 					Config:        "/custom/talosconfig",
 					ISO:           999999,
 				},
@@ -314,6 +315,7 @@ func TestCluster_MarshalJSON_TalosNonDefaultsKept(t *testing.T) {
 
 	assert.InDelta(t, 3, talos["controlPlanes"], 0)
 	assert.InDelta(t, 5, talos["workers"], 0)
+	assert.Equal(t, "v1.11.2", talos["version"])
 	assert.Equal(t, "/custom/talosconfig", talos["config"])
 	assert.InDelta(t, 999999, talos["iso"], 0)
 }

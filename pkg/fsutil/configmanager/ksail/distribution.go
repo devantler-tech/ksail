@@ -17,6 +17,7 @@ import (
 	talosgenerator "github.com/devantler-tech/ksail/v7/pkg/fsutil/generator/talos"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	k3dv1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
+	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
 	kindv1alpha4 "sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 	"sigs.k8s.io/yaml"
 )
@@ -101,6 +102,17 @@ func (m *ConfigManager) loadTalosConfig() (*talosconfigmanager.Configs, error) {
 		"", // Use default Kubernetes version
 		"", // Use default network CIDR
 	)
+
+	// Align the version contract with the pinned Talos version so that
+	// generated machine configs only use fields the target version supports.
+	if m.Config.Spec.Cluster.Talos.Version != "" {
+		contract, contractErr := talosconfig.ParseContractFromVersion(
+			m.Config.Spec.Cluster.Talos.Version,
+		)
+		if contractErr == nil {
+			talosManager.WithVersionContract(contract)
+		}
+	}
 
 	// Add Hetzner-specific patches (external cloud provider + ingress firewall).
 	err = m.addHetznerPatches(talosManager, patchesDir)
