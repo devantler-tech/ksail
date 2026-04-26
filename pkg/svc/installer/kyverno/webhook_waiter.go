@@ -28,8 +28,8 @@ var errNoTimeRemaining = errors.New("no time remaining for webhook readiness che
 // newClientsetFn is the factory used to create a Kubernetes clientset.
 //
 //nolint:gochecknoglobals // allows overriding in tests
-var newClientsetFn = func(kubeconfig, context string) (kubernetes.Interface, error) {
-	return k8s.NewClientset(kubeconfig, context)
+var newClientsetFn = func(kubeconfig, kubecontext string) (kubernetes.Interface, error) {
+	return k8s.NewClientset(kubeconfig, kubecontext)
 }
 
 // waitForWebhookReady polls the Kyverno MutatingWebhookConfiguration until every
