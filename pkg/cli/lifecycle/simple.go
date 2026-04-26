@@ -180,6 +180,12 @@ func resolveFromConfig(
 		return
 	}
 
+	if *clusterName == "" && cfg.Metadata.Name != "" {
+		if v1alpha1.ValidateClusterName(cfg.Metadata.Name) == nil {
+			*clusterName = cfg.Metadata.Name
+		}
+	}
+
 	if *clusterName == "" {
 		*clusterName = clusterNameFromDistConfig(distCfg)
 	}
