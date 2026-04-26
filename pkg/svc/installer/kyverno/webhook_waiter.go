@@ -50,7 +50,7 @@ func (i *Installer) waitForWebhookReady(ctx context.Context) error {
 		}
 	}
 
-	clientset, err := newClientsetFn(i.kubeconfig, i.context)
+	clientset, err := newClientsetFn(i.kubeconfig, i.kubecontext)
 	if err != nil {
 		return fmt.Errorf("creating clientset for Kyverno webhook readiness check: %w", err)
 	}

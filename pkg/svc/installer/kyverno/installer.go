@@ -17,18 +17,18 @@ import (
 type Installer struct {
 	*helmutil.Base
 
-	kubeconfig string
-	context    string
-	timeout    time.Duration
+	kubeconfig  string
+	kubecontext string
+	timeout     time.Duration
 }
 
 // NewInstaller creates a new Kyverno installer instance.
-// kubeconfig and context are used after Helm install to wait for the Kyverno
+// kubeconfig and kubecontext are used after Helm install to wait for the Kyverno
 // admission webhook to be ready before returning.
 func NewInstaller(
 	client helm.Interface,
 	timeout time.Duration,
-	kubeconfig, context string,
+	kubeconfig, kubecontext string,
 ) *Installer {
 	return &Installer{
 		Base: helmutil.NewBase(
@@ -60,9 +60,9 @@ func NewInstaller(
 				},
 			},
 		),
-		kubeconfig: kubeconfig,
-		context:    context,
-		timeout:    timeout,
+		kubeconfig:  kubeconfig,
+		kubecontext: kubecontext,
+		timeout:     timeout,
 	}
 }
 
