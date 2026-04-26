@@ -3,6 +3,7 @@ package talosgenerator
 import (
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -847,18 +848,32 @@ ingress:
 
 var (
 	errMissingNetworkCIDR = errors.New("networkCIDR is required when ingress firewall is enabled")
+	errInvalidNetworkCIDR = errors.New("networkCIDR is not a valid CIDR")
 	errMissingCNIPort     = errors.New("cniPort is required when ingress firewall is enabled")
+	errInvalidCNIPort     = errors.New("cniPort must be between 1 and 65535")
 )
 
 // validateIngressFirewallModel returns an error if the config fields required by
-// ingress firewall patch generation are missing.
+// ingress firewall patch generation are missing or invalid.
 func validateIngressFirewallModel(model *Config) error {
-	if model.NetworkCIDR == "" {
+	cidr := strings.TrimSpace(model.NetworkCIDR)
+	if cidr == "" {
 		return errMissingNetworkCIDR
 	}
 
+	_, _, err := net.ParseCIDR(cidr)
+	if err != nil {
+		return fmt.Errorf("%w: %w", errInvalidNetworkCIDR, err)
+	}
+
+	model.NetworkCIDR = cidr
+
 	if model.CNIPort == 0 {
 		return errMissingCNIPort
+	}
+
+	if model.CNIPort < 1 || model.CNIPort > 65535 {
+		return fmt.Errorf("%w: got %d", errInvalidCNIPort, model.CNIPort)
 	}
 
 	return nil
@@ -866,13 +881,22 @@ func validateIngressFirewallModel(model *Config) error {
 
 // writeFirewallFile writes content to path if the file does not already exist,
 // or if force is true. Skips the write when the file already exists and force is false.
+// Unexpected stat errors (e.g. permissions) are propagated when force is false.
 func writeFirewallFile(path string, content []byte, force bool) error {
-	_, statErr := os.Stat(path)
-	if statErr != nil || force {
-		err := os.WriteFile(path, content, filePerm)
-		if err != nil {
-			return fmt.Errorf("failed to write %s: %w", filepath.Base(path), err)
+	if !force {
+		_, statErr := os.Stat(path)
+		if statErr == nil {
+			return nil
 		}
+
+		if !os.IsNotExist(statErr) {
+			return fmt.Errorf("failed to stat %s: %w", filepath.Base(path), statErr)
+		}
+	}
+
+	err := os.WriteFile(path, content, filePerm)
+	if err != nil {
+		return fmt.Errorf("failed to write %s: %w", filepath.Base(path), err)
 	}
 
 	return nil
