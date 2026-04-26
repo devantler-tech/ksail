@@ -319,16 +319,12 @@ func TestResourceLabelsConsistency(t *testing.T) {
 	assert.Len(t, nodeLabels, len(resourceLabels)+2, "Node labels should have 2 additional fields")
 }
 
-// strPtr returns a pointer to the given string, used to populate
-// *string fields in hcloud.FirewallRule test fixtures.
-func strPtr(s string) *string { return &s }
-
 // makeTCPRule constructs a minimal inbound TCP FirewallRule for test fixtures.
 func makeTCPRule(port string, sourceIPs []net.IPNet) hcloud.FirewallRule {
 	return hcloud.FirewallRule{
 		Direction: hcloud.FirewallRuleDirectionIn,
 		Protocol:  hcloud.FirewallRuleProtocolTCP,
-		Port:      strPtr(port),
+		Port:      &port,
 		SourceIPs: sourceIPs,
 	}
 }
