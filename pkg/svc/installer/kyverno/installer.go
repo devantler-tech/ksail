@@ -83,7 +83,7 @@ func (i *Installer) Install(ctx context.Context) error {
 		return fmt.Errorf("installing kyverno base chart: %w", err)
 	}
 
-	err := i.waitForWebhookReady(overallCtx)
+	err = i.waitForWebhookReady(overallCtx)
 	if err != nil {
 		return fmt.Errorf("kyverno webhook not ready after install: %w", err)
 	}
