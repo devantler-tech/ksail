@@ -105,9 +105,10 @@ func (m *ConfigManager) loadTalosConfig() (*talosconfigmanager.Configs, error) {
 
 	// Align the version contract with the pinned Talos version so that
 	// generated machine configs only use fields the target version supports.
-	if contractErr := applyPinnedVersionContract(
+	contractErr := applyPinnedVersionContract(
 		m.Config.Spec.Cluster.Talos.Version, talosManager,
-	); contractErr != nil {
+	)
+	if contractErr != nil {
 		return nil, contractErr
 	}
 
@@ -611,7 +612,11 @@ func applyPinnedVersionContract(
 
 	contract, err := talosconfig.ParseContractFromVersion(pinnedVersion)
 	if err != nil {
-		return fmt.Errorf("parse Talos version contract for pinned version %q: %w", pinnedVersion, err)
+		return fmt.Errorf(
+			"parse Talos version contract for pinned version %q: %w",
+			pinnedVersion,
+			err,
+		)
 	}
 
 	talosManager.WithVersionContract(contract)

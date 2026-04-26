@@ -6491,6 +6491,7 @@ func executePinnedDistributionUpgrade(
 	if skipReason == pinnedVersionAlreadyAtIt {
 		notify.Infof(cmd.OutOrStdout(),
 			"distribution is already at pinned version %s", pinnedVersion)
+
 		return nil
 	}
 
@@ -6498,6 +6499,7 @@ func executePinnedDistributionUpgrade(
 		notify.Infof(cmd.OutOrStdout(),
 			"cluster is at %s which is newer than pinned version %s; skipping downgrade",
 			currentVersion, pinnedVersion)
+
 		return nil
 	}
 
@@ -6512,6 +6514,7 @@ func executePinnedDistributionUpgrade(
 	if dryRun {
 		notify.Infof(cmd.OutOrStdout(),
 			"Dry run complete. Would upgrade distribution to pinned version %s.", pinnedVersion)
+
 		return nil
 	}
 
@@ -6521,15 +6524,17 @@ func executePinnedDistributionUpgrade(
 	if upgradeErr != nil {
 		if errors.Is(upgradeErr, clustererr.ErrUpgradeSkipped) {
 			notify.Infof(cmd.OutOrStdout(), "distribution upgrade skipped: %v", upgradeErr)
+
 			return nil
 		}
+
 		return fmt.Errorf("distribution upgrade to pinned version %s failed: %w",
 			pinnedVersion, upgradeErr)
 	}
 
 	notify.WriteMessage(notify.Message{
 		Type:    notify.SuccessType,
-		Content: fmt.Sprintf("distribution upgraded to pinned version %s", pinnedVersion),
+		Content: "distribution upgraded to pinned version " + pinnedVersion,
 		Writer:  cmd.OutOrStdout(),
 	})
 
