@@ -6548,6 +6548,7 @@ func executePinnedDistributionUpgrade(
 func normalizePinnedVersion(
 	rawPinnedVersion, currentVersion string,
 ) (string, pinnedVersionSkipReason, error) {
+	rawPinnedVersion = strings.TrimSpace(rawPinnedVersion)
 	if rawPinnedVersion == "" {
 		return "", pinnedVersionProceed, ErrEmptyPinnedVersion
 	}

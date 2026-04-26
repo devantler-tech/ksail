@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
@@ -94,8 +95,8 @@ func newProvisionerFromOptions(
 
 	// Override the default Talos container image when a version pin is set.
 	if opts.Version != "" {
-		version := opts.Version
-		if version[0] != 'v' {
+		version := strings.TrimSpace(opts.Version)
+		if !strings.HasPrefix(version, "v") {
 			version = "v" + version
 		}
 

@@ -602,6 +602,7 @@ func applyPinnedVersionContract(
 	pinnedVersion string,
 	talosManager *talosconfigmanager.ConfigManager,
 ) error {
+	pinnedVersion = strings.TrimSpace(pinnedVersion)
 	if pinnedVersion == "" {
 		return nil
 	}
