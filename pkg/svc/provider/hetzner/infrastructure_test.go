@@ -333,7 +333,7 @@ func makeTCPRule(port string, sourceIPs []net.IPNet) hcloud.FirewallRule {
 	}
 }
 
-func TestFirewallRulesMatch(t *testing.T) {
+func TestFirewallRulesMatch(t *testing.T) { //nolint:funlen // table-driven test requires many cases
 	t.Parallel()
 
 	anyIP := []net.IPNet{

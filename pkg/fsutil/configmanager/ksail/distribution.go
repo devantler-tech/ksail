@@ -103,7 +103,8 @@ func (m *ConfigManager) loadTalosConfig() (*talosconfigmanager.Configs, error) {
 	)
 
 	// Add Hetzner-specific patches (external cloud provider + ingress firewall).
-	if err := m.addHetznerPatches(talosManager, patchesDir); err != nil {
+	err = m.addHetznerPatches(talosManager, patchesDir)
+	if err != nil {
 		return nil, fmt.Errorf("failed to add Hetzner patches: %w", err)
 	}
 
