@@ -293,6 +293,13 @@
                 },
                 "placementGroupFallbackToNone": {
                   "type": "boolean"
+                },
+                "ingressFirewall": {
+                  "type": "string",
+                  "enum": [
+                    "Enabled",
+                    "Disabled"
+                  ]
                 }
               },
               "additionalProperties": false,

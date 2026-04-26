@@ -8,6 +8,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/hetzner"
+	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -282,6 +283,19 @@ func TestEnsurePlacementGroupNilClient(t *testing.T) {
 	})
 }
 
+func TestSyncFirewallRulesNilClient(t *testing.T) {
+	t.Parallel()
+
+	prov := hetzner.NewProvider(nil)
+	require.NotNil(t, prov)
+
+	// Should return error when client is nil
+	err := prov.SyncFirewallRules(context.TODO(), "test-cluster")
+
+	require.Error(t, err)
+	require.ErrorIs(t, err, provider.ErrProviderUnavailable)
+}
+
 func TestResourceLabelsConsistency(t *testing.T) {
 	t.Parallel()
 
@@ -303,4 +317,176 @@ func TestResourceLabelsConsistency(t *testing.T) {
 
 	// Node labels should have additional fields
 	assert.Len(t, nodeLabels, len(resourceLabels)+2, "Node labels should have 2 additional fields")
+}
+
+// makeTCPRule constructs a minimal inbound TCP FirewallRule for test fixtures.
+func makeTCPRule(port string, sourceIPs []net.IPNet) hcloud.FirewallRule {
+	return hcloud.FirewallRule{
+		Direction: hcloud.FirewallRuleDirectionIn,
+		Protocol:  hcloud.FirewallRuleProtocolTCP,
+		Port:      &port,
+		SourceIPs: sourceIPs,
+	}
+}
+
+func TestFirewallRulesMatch(t *testing.T) { //nolint:funlen // table-driven test requires many cases
+	t.Parallel()
+
+	anyIP := []net.IPNet{
+		{IP: net.ParseIP("0.0.0.0"), Mask: net.CIDRMask(0, hetzner.IPv4CIDRBits)},
+		{IP: net.ParseIP("::"), Mask: net.CIDRMask(0, hetzner.IPv6CIDRBits)},
+	}
+
+	ruleA := makeTCPRule("50000", anyIP)
+	ruleB := makeTCPRule("6443", anyIP)
+
+	tests := []struct {
+		name     string
+		existing []hcloud.FirewallRule
+		desired  []hcloud.FirewallRule
+		want     bool
+	}{
+		{
+			name:     "EmptySlices",
+			existing: []hcloud.FirewallRule{},
+			desired:  []hcloud.FirewallRule{},
+			want:     true,
+		},
+		{
+			name:     "IdenticalSingleRule",
+			existing: []hcloud.FirewallRule{ruleA},
+			desired:  []hcloud.FirewallRule{ruleA},
+			want:     true,
+		},
+		{
+			name:     "IdenticalOrderPreserved",
+			existing: []hcloud.FirewallRule{ruleA, ruleB},
+			desired:  []hcloud.FirewallRule{ruleA, ruleB},
+			want:     true,
+		},
+		{
+			name:     "OrderIndependent",
+			existing: []hcloud.FirewallRule{ruleB, ruleA},
+			desired:  []hcloud.FirewallRule{ruleA, ruleB},
+			want:     true,
+		},
+		{
+			name:     "DifferentCount",
+			existing: []hcloud.FirewallRule{ruleA},
+			desired:  []hcloud.FirewallRule{ruleA, ruleB},
+			want:     false,
+		},
+		{
+			name:     "DifferentPort",
+			existing: []hcloud.FirewallRule{makeTCPRule("8080", anyIP)},
+			desired:  []hcloud.FirewallRule{makeTCPRule("9090", anyIP)},
+			want:     false,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := hetzner.FirewallRulesMatchForTest(testCase.existing, testCase.desired)
+			assert.Equal(t, testCase.want, got)
+		})
+	}
+}
+
+func TestSourceIPsEqual(t *testing.T) {
+	t.Parallel()
+
+	cidrA := net.IPNet{IP: net.ParseIP("0.0.0.0"), Mask: net.CIDRMask(0, hetzner.IPv4CIDRBits)}
+	cidrB := net.IPNet{IP: net.ParseIP("::"), Mask: net.CIDRMask(0, hetzner.IPv6CIDRBits)}
+	cidrC := net.IPNet{IP: net.ParseIP("10.0.0.0"), Mask: net.CIDRMask(16, hetzner.IPv4CIDRBits)}
+
+	tests := []struct {
+		name     string
+		existing []net.IPNet
+		desired  []net.IPNet
+		want     bool
+	}{
+		{
+			name:     "EmptySlices",
+			existing: []net.IPNet{},
+			desired:  []net.IPNet{},
+			want:     true,
+		},
+		{
+			name:     "SingleCIDRMatch",
+			existing: []net.IPNet{cidrA},
+			desired:  []net.IPNet{cidrA},
+			want:     true,
+		},
+		{
+			name:     "OrderIndependent",
+			existing: []net.IPNet{cidrB, cidrA},
+			desired:  []net.IPNet{cidrA, cidrB},
+			want:     true,
+		},
+		{
+			name:     "DifferentCIDR",
+			existing: []net.IPNet{cidrA},
+			desired:  []net.IPNet{cidrC},
+			want:     false,
+		},
+		{
+			name:     "DifferentCount",
+			existing: []net.IPNet{cidrA},
+			desired:  []net.IPNet{cidrA, cidrB},
+			want:     false,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := hetzner.SourceIPsEqualForTest(testCase.existing, testCase.desired)
+			assert.Equal(t, testCase.want, got)
+		})
+	}
+}
+
+func TestBuildFirewallRulesSecureSet(t *testing.T) {
+	t.Parallel()
+
+	rules := hetzner.BuildFirewallRulesForTest()
+
+	// Only Talos API, Kubernetes API, and ICMP should be exposed publicly.
+	// Cluster-internal ports (etcd 2379-2380, kubelet 10250, trustd 50001)
+	// must NOT appear in the secure rule set.
+	require.Len(t, rules, 3, "secure rule set must have exactly 3 rules")
+
+	ports := make(map[string]bool)
+	protocols := make(map[hcloud.FirewallRuleProtocol]bool)
+
+	for _, rule := range rules {
+		assert.Equal(t, hcloud.FirewallRuleDirectionIn, rule.Direction, "all rules must be inbound")
+
+		if rule.Port != nil {
+			ports[*rule.Port] = true
+		}
+
+		protocols[rule.Protocol] = true
+
+		// Every rule must be open to 0.0.0.0/0 and ::/0
+		require.Len(
+			t,
+			rule.SourceIPs,
+			2,
+			"each rule must list both IPv4 and IPv6 any-address CIDRs",
+		)
+	}
+
+	assert.True(t, ports["50000"], "Talos API port 50000 must be present")
+	assert.True(t, ports["6443"], "Kubernetes API port 6443 must be present")
+	assert.True(t, protocols[hcloud.FirewallRuleProtocolICMP], "ICMP must be present for ping")
+
+	// Ensure no insecure internal ports are exposed
+	assert.False(t, ports["2379"], "etcd port 2379 must NOT be exposed publicly")
+	assert.False(t, ports["2380"], "etcd port 2380 must NOT be exposed publicly")
+	assert.False(t, ports["10250"], "kubelet port 10250 must NOT be exposed publicly")
+	assert.False(t, ports["50001"], "trustd port 50001 must NOT be exposed publicly")
 }
