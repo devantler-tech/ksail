@@ -861,12 +861,12 @@ func validateIngressFirewallModel(model *Config) error {
 		return errMissingNetworkCIDR
 	}
 
-	_, _, err := net.ParseCIDR(cidr)
+	_, ipNet, err := net.ParseCIDR(cidr)
 	if err != nil {
 		return fmt.Errorf("%w: %w", errInvalidNetworkCIDR, err)
 	}
 
-	model.NetworkCIDR = cidr
+	model.NetworkCIDR = ipNet.String()
 
 	if model.CNIPort == 0 {
 		return errMissingCNIPort
