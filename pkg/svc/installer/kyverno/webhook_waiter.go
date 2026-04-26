@@ -39,8 +39,8 @@ var newClientsetFn = func(kubeconfig, context string) (kubernetes.Interface, err
 // injected it into the webhook configuration. Any workload operation that triggers
 // the webhook before the caBundle is set will fail.
 //
-// The polling deadline is derived from the context so that the Helm install and
-// webhook wait share a single overall timeout budget.
+// ctx should carry its own independent deadline (typically timeout) so that the
+// webhook wait does not compete with the Helm install for the same budget.
 func (i *Installer) waitForWebhookReady(ctx context.Context) error {
 	remaining := i.timeout // fallback when ctx has no deadline
 	if dl, ok := ctx.Deadline(); ok {

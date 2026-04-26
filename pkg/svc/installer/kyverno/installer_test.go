@@ -229,8 +229,9 @@ func TestInstallWebhookNeverReady(t *testing.T) {
 		InstallOrUpgradeChart(mock.Anything, mock.Anything).
 		Return(nil, nil)
 
-	// Use a parent context with a tight deadline so the overall budget
-	// (timeout + 2*ContextTimeoutBuffer) is bounded by the parent.
+	// Use a parent context with a deadline longer than i.timeout as a safety
+	// net; the webhook wait uses its own independent context of i.timeout (3 s)
+	// derived from ctx, so the test runs for at most 3 s.
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 

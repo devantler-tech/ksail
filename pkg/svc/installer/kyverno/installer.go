@@ -72,20 +72,20 @@ func NewInstaller(
 // not yet populated its caBundle, causing transient admission failures for the
 // first workload operations after cluster setup.
 //
-// A single overall deadline governs both the Helm install and the webhook
-// readiness poll. The budget is timeout + 2×buffer: the inner Base.Install call
-// creates its own context with timeout + buffer, so Helm consumes at most that
-// window; the second buffer is reserved for the webhook readiness poll.
+// Base.Install manages its own context deadline (timeout + buffer) internally,
+// so ctx is passed through as-is. The webhook readiness poll gets a separate,
+// independent deadline of timeout to avoid competing for the same budget as
+// the Helm install.
 func (i *Installer) Install(ctx context.Context) error {
-	overallCtx, cancel := context.WithTimeout(ctx, i.timeout+2*helm.ContextTimeoutBuffer)
-	defer cancel()
-
-	err := i.Base.Install(overallCtx)
+	err := i.Base.Install(ctx)
 	if err != nil {
 		return fmt.Errorf("installing kyverno base chart: %w", err)
 	}
 
-	err = i.waitForWebhookReady(overallCtx)
+	webhookCtx, webhookCancel := context.WithTimeout(ctx, i.timeout)
+	defer webhookCancel()
+
+	err = i.waitForWebhookReady(webhookCtx)
 	if err != nil {
 		return fmt.Errorf("kyverno webhook not ready after install: %w", err)
 	}
