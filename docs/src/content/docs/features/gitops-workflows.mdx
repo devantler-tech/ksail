@@ -50,7 +50,7 @@ Both `workload push` and `workload reconcile` automatically retry on transient f
 
 `workload push` previously only retried low-level OCI writes; command-level retries now wrap the full build-and-push cycle. `workload reconcile` previously had no retry at all.
 
-The `--timeout` flag (if set) is a **per-attempt** bound — total runtime can reach up to `maxAttempts × timeout` plus backoff.
+For `ksail workload reconcile`, the `--timeout` flag (if set) is a **per-attempt** bound — total runtime can reach up to `maxAttempts × timeout` plus backoff.
 
 ## Related
 
