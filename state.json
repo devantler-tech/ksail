@@ -1,6 +1,6 @@
 {
-  "last_run": "2026-04-25T12:28:00Z",
-  "workflow_run_id": "24930880882",
+  "last_run": "2026-04-26T01:06:44Z",
+  "workflow_run_id": "24944848520",
   "commented_issues": {
     "4357": "2026-04-25",
     "4341": "2026-04-25",
@@ -24,12 +24,13 @@
     "4091": "2026-04-17"
   },
   "open_prs": {
-    "4352": "[Repo Assist] refactor(setup): replace repeated if-append with table-driven loop in build*Tasks",
-    "new_perf_notify_spinner": "[Repo Assist] perf(notify): eliminate per-tick spinner and map allocations in progress renderer"
+    "4359": "[Repo Assist] perf(notify): eliminate per-tick spinner and map allocations in progress renderer",
+    "new_fail_fast": "[Repo Assist] ci: set fail-fast: false for system test Docker matrix"
   },
   "merged_prs": {
-    "4327": "fix(calico): increase K3s retry attempts 5→8, backoff 10s→15s - merged ~2026-04-25",
-    "4284": "test(sopsutil): add ResolveAgeKey tests for Extract.PublicKeys filter path - merged 2026-04-24",
+    "4352": "refactor(setup): replace repeated if-append with table-driven loop - merged 2026-04-25",
+    "4327": "fix(calico): increase K3s retry attempts 5->8, backoff 10s->15s - merged ~2026-04-25",
+    "4284": "test(sopsutil): add ResolveAgeKey tests - merged 2026-04-24",
     "4253": "test(detector): add ArgoCD multi-namespace detection regression test - merged 2026-04-24",
     "4248": "perf(notify): use strings.Builder - merged 2026-04-23",
     "4233": "fix(installer): K3s Calico retries 3->5, backoff 5s->10s - merged ~2026-04-21",
@@ -42,11 +43,12 @@
   "issue_backlog_cursor": "4357",
   "created_issues": {
     "4316": "[Repo Assist] [chore]: verify KSail compatibility with ArgoCD v3.4 stable and update embedded client",
-    "4317": "[Repo Assist] [feature]: add ksail cipher rotate for Age key rotation across all encrypted secrets",
-    "4318": "[Repo Assist] [chore]: migrate Talos scaffolding to EnvironmentConfig (WARNING: may duplicate #4124)",
+    "4317": "[Repo Assist] [feature]: add `ksail cipher rotate` for Age key rotation across all encrypted secrets",
+    "4318": "[Repo Assist] [chore]: migrate Talos scaffolding to EnvironmentConfig",
     "4328": "[Repo Assist] [chore]: complete AWS EKS provider",
-    "new_turnstyle": "[Repo Assist] [chore]: investigate dedicated cloud E2E pool or extended Turnstyle timeout",
-    "new_kwok07": "[Repo Assist] [chore]: leverage KWOK v0.7.0 CEL stage support and Kustomize config loading"
+    "4353": "[Repo Assist] [chore]: investigate dedicated cloud E2E pool or extended Turnstyle timeout",
+    "4354": "[Repo Assist] [chore]: leverage KWOK v0.7.0 CEL stage support and Kustomize config loading",
+    "new_topo": "[Repo Assist] [feature]: add `ksail cluster graph` for multi-cluster topology visualization"
   },
   "sub_issues_linked": {
     "4084": ["4067", "4172", "4192"],
@@ -54,14 +56,17 @@
   },
   "notes": [
     "link_sub_issue is NOT idempotent - always verify sub-issue not already linked before calling",
-    "PR #4352 (refactor setup table-driven) open - awaiting review; mega-linter failure appears infrastructure flake (golangci-lint passes)",
-    "perf PR created this run: perf(notify): eliminate per-tick spinner and map allocations - no PR number yet (created via safeoutputs)",
+    "PR #4352 (refactor setup table-driven) MERGED 2026-04-25",
+    "PR #4359 open - perf(notify): eliminate per-tick spinner allocs",
+    "PR #4374 open (Copilot) - ci: update reusable workflows v2.4.0 -> v3.1.3 (StepSecurity fix)",
     "domain alternation: last was 'perf' - next should be 'test'",
-    "New CI Doctor issues: #4357 (Vanilla+Cilium+Kyverno+CertManager flake - addressed by PR #4358), #4341 (K3s+Flux+local-registry flake - addressed by PR #4356)",
-    "Workload forward feature already implemented (PR #4331+#4351 docs) - any issue created is obsolete",
-    "Two Hetzner bugs by maintainer: #4343 (hcloud Secret network=default PR #4347) and #4344 (CSI topology races CCM PR #4346)",
-    "Cipher rotate already implemented (PR #4297 closed #4292) - #4317 is likely a duplicate",
-    "Cloud E2E Turnstyle and KWOK v0.7.0 roadmap issues created prior run",
-    "Task 4 (engineering): no open Dependabot PRs to bundle; no CI fixes needed; PR #4352 mega-linter is infra-flake"
+    "fail-fast PR created this run: ci: set fail-fast: false for system test matrix",
+    "Multi-cluster topology issue created this run (aw_topo001)",
+    "Issue #4091 (K3s blob integrity) - closed not_planned by maintainer 2026-04-22",
+    "Issue #4196 (K3s+Calico API race) - closed completed by maintainer 2026-04-21 (fix was API server stability check in CNI installer)",
+    "Bug #4343 has maintainer PR #4362; bug #4363 has maintainer PR #4366",
+    "VCluster+ArgoCD flake: ArgoCD timeout is already 25min, issue is resource contention not timeout",
+    "Cipher rotate: issue #4317 may be duplicate of already-implemented PR #4297/#4292",
+    "Workload forward: issue #4329 was closed (feature already implemented via PR #4331+#4351)"
   ]
 }
