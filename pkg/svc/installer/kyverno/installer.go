@@ -73,9 +73,11 @@ func NewInstaller(
 // first workload operations after cluster setup.
 //
 // A single overall deadline governs both the Helm install and the webhook
-// readiness poll so the total wall time stays within timeout + buffer.
+// readiness poll. The budget is timeout + 2×buffer: the inner Base.Install call
+// creates its own context with timeout + buffer, so Helm consumes at most that
+// window; the second buffer is reserved for the webhook readiness poll.
 func (i *Installer) Install(ctx context.Context) error {
-	overallCtx, cancel := context.WithTimeout(ctx, i.timeout+helm.ContextTimeoutBuffer)
+	overallCtx, cancel := context.WithTimeout(ctx, i.timeout+2*helm.ContextTimeoutBuffer)
 	defer cancel()
 
 	err := i.Base.Install(overallCtx)

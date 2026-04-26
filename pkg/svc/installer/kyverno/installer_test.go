@@ -230,7 +230,7 @@ func TestInstallWebhookNeverReady(t *testing.T) {
 		Return(nil, nil)
 
 	// Use a parent context with a tight deadline so the overall budget
-	// (timeout + ContextTimeoutBuffer) is bounded by the parent.
+	// (timeout + 2*ContextTimeoutBuffer) is bounded by the parent.
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
