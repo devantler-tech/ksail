@@ -187,6 +187,8 @@ func TestInstallWebhookDelayedReadiness(t *testing.T) {
 	defer restore()
 
 	// Populate caBundle after a short delay to simulate delayed TLS init.
+	// Use a buffered channel so the goroutine never blocks if Install returns first.
+	updateErrCh := make(chan error, 1)
 	go func() {
 		time.Sleep(500 * time.Millisecond)
 
@@ -194,7 +196,7 @@ func TestInstallWebhookDelayedReadiness(t *testing.T) {
 		_, err := fakeClientset.AdmissionregistrationV1().
 			MutatingWebhookConfigurations().
 			Update(context.Background(), cfg, metav1.UpdateOptions{})
-		assert.NoError(t, err)
+		updateErrCh <- err
 	}()
 
 	installer, client := newInstallerWithDefaults(t)
@@ -203,6 +205,7 @@ func TestInstallWebhookDelayedReadiness(t *testing.T) {
 	err := installer.Install(context.Background())
 
 	require.NoError(t, err)
+	require.NoError(t, <-updateErrCh, "webhook Update in goroutine failed")
 }
 
 //nolint:paralleltest // Mutates shared test seams exposed by export_test.go.
