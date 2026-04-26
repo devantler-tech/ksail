@@ -49,6 +49,7 @@ Flags:
       --output string                  Output format: text (default) or json (machine-readable, for CI/MCP) (default "text")
       --policy-engine PolicyEngine     Policy engine (None: skip, Kyverno: install Kyverno, Gatekeeper: install Gatekeeper)
       --provider Provider              Infrastructure provider backend (e.g., Docker)
+      --unknown NodeAutoscaling        Node autoscaling (Enabled: defer node scaling to an external autoscaler, Disabled: KSail manages node counts)
       --update-distribution            Upgrade the distribution to the latest stable version available in the OCI registry
       --update-kubernetes              Upgrade Kubernetes to the latest stable version available in the OCI registry
       --workers int32                  Number of worker nodes
