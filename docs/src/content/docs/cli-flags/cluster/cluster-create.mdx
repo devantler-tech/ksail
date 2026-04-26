@@ -12,27 +12,27 @@ Usage:
   ksail cluster create [flags]
 
 Flags:
-      --cdi CDI                            Container Device Interface (Default: use distribution, Enabled: enable CDI, Disabled: disable CDI)
-      --cert-manager CertManager           Cert-Manager configuration (Enabled: install, Disabled: skip)
-      --cni CNI                            Container Network Interface (CNI) to use
-  -c, --context string                     Kubernetes context of cluster
-      --control-planes int32               Number of control-plane nodes (default 1)
-      --csi CSI                            Container Storage Interface (Default: use distribution, Enabled: install CSI, Disabled: skip CSI)
-  -d, --distribution Distribution          Kubernetes distribution to use
-      --distribution-config string         Configuration file for the distribution
-  -g, --gitops-engine GitOpsEngine         GitOps engine to use (None disables GitOps, Flux installs Flux controllers, ArgoCD installs Argo CD) (default None)
-      --import-images string               Path to tar archive with container images to import after cluster creation but before component installation
-  -k, --kubeconfig string                  Path to kubeconfig file (default "~/.kube/config")
-      --load-balancer LoadBalancer         LoadBalancer support (Default: use distribution × provider, Enabled: install, Disabled: uninstall)
-      --local-registry string              Local registry specification: [user:pass@]host[:port][/path] (e.g., localhost:5050, ghcr.io/myorg, ${USER}:${PASS}@ghcr.io:443/org)
-      --metrics-server MetricsServer       Metrics Server (Default: use distribution, Enabled: install, Disabled: uninstall)
-      --mirror-registry strings            Configure mirror registries with optional authentication. Format: [user:pass@]host[=upstream]. Credentials support environment variables using ${VAR} syntax (quote placeholders so KSail can expand them). Examples: docker.io=https://registry-1.docker.io, '${USER}:${TOKEN}@ghcr.io=https://ghcr.io'
-  -n, --name string                        Cluster name used for container names, registry names, and kubeconfig context
-      --node-autoscaling NodeAutoscaling   Node autoscaling (Enabled: defer node scaling to an external autoscaler, Disabled: KSail manages node counts)
-      --policy-engine PolicyEngine         Policy engine (None: skip, Kyverno: install Kyverno, Gatekeeper: install Gatekeeper)
-      --provider Provider                  Infrastructure provider backend (e.g., Docker)
-      --ttl string                         Auto-destroy cluster after duration (e.g. 1h, 30m, 2h30m). If not set, cluster persists indefinitely.
-      --workers int32                      Number of worker nodes
+      --cdi CDI                        Container Device Interface (Default: use distribution, Enabled: enable CDI, Disabled: disable CDI)
+      --cert-manager CertManager       Cert-Manager configuration (Enabled: install, Disabled: skip)
+      --cni CNI                        Container Network Interface (CNI) to use
+  -c, --context string                 Kubernetes context of cluster
+      --control-planes int32           Number of control-plane nodes (default 1)
+      --csi CSI                        Container Storage Interface (Default: use distribution, Enabled: install CSI, Disabled: skip CSI)
+  -d, --distribution Distribution      Kubernetes distribution to use
+      --distribution-config string     Configuration file for the distribution
+  -g, --gitops-engine GitOpsEngine     GitOps engine to use (None disables GitOps, Flux installs Flux controllers, ArgoCD installs Argo CD) (default None)
+      --import-images string           Path to tar archive with container images to import after cluster creation but before component installation
+  -k, --kubeconfig string              Path to kubeconfig file (default "~/.kube/config")
+      --load-balancer LoadBalancer     LoadBalancer support (Default: use distribution × provider, Enabled: install, Disabled: uninstall)
+      --local-registry string          Local registry specification: [user:pass@]host[:port][/path] (e.g., localhost:5050, ghcr.io/myorg, ${USER}:${PASS}@ghcr.io:443/org)
+      --metrics-server MetricsServer   Metrics Server (Default: use distribution, Enabled: install, Disabled: uninstall)
+      --mirror-registry strings        Configure mirror registries with optional authentication. Format: [user:pass@]host[=upstream]. Credentials support environment variables using ${VAR} syntax (quote placeholders so KSail can expand them). Examples: docker.io=https://registry-1.docker.io, '${USER}:${TOKEN}@ghcr.io=https://ghcr.io'
+  -n, --name string                    Cluster name used for container names, registry names, and kubeconfig context
+      --policy-engine PolicyEngine     Policy engine (None: skip, Kyverno: install Kyverno, Gatekeeper: install Gatekeeper)
+      --provider Provider              Infrastructure provider backend (e.g., Docker)
+      --ttl string                     Auto-destroy cluster after duration (e.g. 1h, 30m, 2h30m). If not set, cluster persists indefinitely.
+      --node-autoscaling NodeAutoscaling   Node autoscaling (Talos: Enabled defers worker and control-plane scaling to an external autoscaler, Disabled lets KSail manage node counts; other distributions currently ignore this setting)
+      --workers int32                  Number of worker nodes
 
 Global Flags:
       --benchmark       Show per-activity benchmark output
