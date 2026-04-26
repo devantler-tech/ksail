@@ -76,6 +76,8 @@ spec:
       # placementGroup: "my-placement"  # defaults to <cluster>-placement
       # fallbackLocations: ["nbg1", "hel1"]
       # placementGroupFallbackToNone: false
+      # Talos OS-level ingress firewall (default: Enabled — provides defense-in-depth)
+      # ingressFirewall: "Enabled"  # or "Disabled"
 ```
 
 | Field | Type | Default | Description |
@@ -91,6 +93,7 @@ spec:
 | `hetzner.placementGroup` | string | `<cluster>-placement` | Placement group name |
 | `hetzner.fallbackLocations` | list | `["nbg1", "hel1"]` | Alternative locations if primary is unavailable |
 | `hetzner.placementGroupFallbackToNone` | bool | `false` | Fall back to no placement group on capacity issues |
+| `hetzner.ingressFirewall` | string | `Enabled` | Talos OS-level ingress firewall (`Enabled` or `Disabled`). Generates `NetworkDefaultActionConfig` + `NetworkRuleConfig` patches as defense-in-depth alongside the Hetzner Cloud Firewall. |
 
 ### Talos options for Hetzner clusters
 
@@ -183,6 +186,16 @@ When using the Hetzner provider, KSail automatically installs:
 - **Hetzner Cloud Controller Manager** — Provisions Hetzner Cloud Load Balancers for `type: LoadBalancer` services
 - **Hetzner CSI Driver** — Provisions Hetzner Block Storage volumes for `PersistentVolumeClaim` resources
 - **Placement groups** — Distributes servers across physical hosts for high availability (configurable)
+
+### Firewall Layers
+
+KSail applies two independent firewall layers for Hetzner Talos clusters:
+
+1. **Hetzner Cloud Firewall** — Restricts external traffic at the network perimeter. KSail manages three rules: Talos API (50000/tcp), Kubernetes API (6443/tcp), and Talos Kubespan (51820/udp). Ports for cluster-internal communication (etcd, kubelet, trustd) are not exposed because nodes communicate over the private Hetzner Cloud Network.
+2. **Talos OS-level ingress firewall** — Defense-in-depth at the node level, enabled by default (`spec.provider.hetzner.ingressFirewall: Enabled`). Blocks all ingress by default; opens only the ports required for each node role (control plane vs worker), restricted to the cluster subnet where appropriate. Disable with `ingressFirewall: Disabled` if you manage node-level firewall rules yourself.
+
+> [!NOTE]
+> **Upgrading from older KSail versions**: Hetzner Cloud Firewall rules were reduced from 6 to 3 in KSail v0.x (etcd, kubelet, and trustd rules removed). Running `ksail cluster update` automatically migrates existing clusters to the new rule set.
 
 ## Operations
 
