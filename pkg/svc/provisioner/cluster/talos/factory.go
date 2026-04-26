@@ -94,8 +94,7 @@ func newProvisionerFromOptions(
 		WithSkipCNIChecks(skipCNIChecks)
 
 	// Override the default Talos container image when a version pin is set.
-	if opts.Version != "" {
-		version := strings.TrimSpace(opts.Version)
+	if version := strings.TrimSpace(opts.Version); version != "" {
 		if !strings.HasPrefix(version, "v") {
 			version = "v" + version
 		}

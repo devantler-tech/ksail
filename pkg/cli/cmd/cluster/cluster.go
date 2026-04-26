@@ -6475,6 +6475,8 @@ const (
 // executePinnedDistributionUpgrade handles Talos distribution upgrades when a version pin is set.
 // It normalizes the pinned version, validates it is a parseable semver, guards against downgrades,
 // and either skips (already at pin), applies the upgrade, or reports a dry-run summary.
+//
+//nolint:funlen // Sequential upgrade orchestration with distinct skip/dry-run/apply phases.
 func executePinnedDistributionUpgrade(
 	cmd *cobra.Command,
 	upgrader clusterupdate.Upgrader,
