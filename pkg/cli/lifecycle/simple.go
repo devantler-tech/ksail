@@ -181,7 +181,9 @@ func resolveFromConfig(
 	}
 
 	if *clusterName == "" && cfg.Metadata.Name != "" {
-		*clusterName = cfg.Metadata.Name
+		if v1alpha1.ValidateClusterName(cfg.Metadata.Name) == nil {
+			*clusterName = cfg.Metadata.Name
+		}
 	}
 
 	if *clusterName == "" {
