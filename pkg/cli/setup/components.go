@@ -100,7 +100,9 @@ func policyEngineFactory(
 		case v1alpha1.PolicyEngineKyverno:
 			timeout = max(timeout, installer.KyvernoInstallTimeout)
 
-			return kyvernoinstaller.NewInstaller(helmClient, timeout, kubeconfig, clusterCfg.Spec.Cluster.Connection.Context), nil
+			return kyvernoinstaller.NewInstaller(
+				helmClient, timeout, kubeconfig, clusterCfg.Spec.Cluster.Connection.Context,
+			), nil
 		case v1alpha1.PolicyEngineGatekeeper:
 			timeout = max(timeout, installer.GatekeeperInstallTimeout)
 

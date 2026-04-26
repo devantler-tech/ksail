@@ -172,7 +172,8 @@ func unreadyWebhookConfig() *admissionregistrationv1.MutatingWebhookConfiguratio
 	}
 }
 
-func TestInstallWebhookDelayedReadiness(t *testing.T) { //nolint:paralleltest // Mutates shared test seams exposed by export_test.go.
+//nolint:paralleltest // Mutates shared test seams exposed by export_test.go.
+func TestInstallWebhookDelayedReadiness(t *testing.T) {
 	// Not parallel: overrides the package-level newClientsetFn var.
 	fakeClientset := k8sfake.NewClientset(unreadyWebhookConfig())
 	restore := kyvernoinstaller.SetNewClientsetFn(
@@ -199,7 +200,8 @@ func TestInstallWebhookDelayedReadiness(t *testing.T) { //nolint:paralleltest //
 	require.NoError(t, err)
 }
 
-func TestInstallWebhookNeverReady(t *testing.T) { //nolint:paralleltest // Mutates shared test seams exposed by export_test.go.
+//nolint:paralleltest // Mutates shared test seams exposed by export_test.go.
+func TestInstallWebhookNeverReady(t *testing.T) {
 	// Not parallel: overrides the package-level newClientsetFn var.
 	fakeClientset := k8sfake.NewClientset(unreadyWebhookConfig())
 	restore := kyvernoinstaller.SetNewClientsetFn(

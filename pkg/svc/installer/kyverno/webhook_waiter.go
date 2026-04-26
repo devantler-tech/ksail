@@ -55,7 +55,7 @@ func (i *Installer) waitForWebhookReady(ctx context.Context) error {
 		return fmt.Errorf("creating clientset for Kyverno webhook readiness check: %w", err)
 	}
 
-	if err := readiness.PollForReadiness(ctx, remaining, func(ctx context.Context) (bool, error) {
+	err = readiness.PollForReadiness(ctx, remaining, func(ctx context.Context) (bool, error) {
 		webhook, err := clientset.AdmissionregistrationV1().
 			MutatingWebhookConfigurations().
 			Get(ctx, kyvernoResourceWebhookName, metav1.GetOptions{})
@@ -79,7 +79,8 @@ func (i *Installer) waitForWebhookReady(ctx context.Context) error {
 		}
 
 		return true, nil
-	}); err != nil {
+	})
+	if err != nil {
 		return fmt.Errorf("polling Kyverno webhook readiness: %w", err)
 	}
 
