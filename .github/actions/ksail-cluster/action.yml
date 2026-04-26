@@ -323,27 +323,36 @@ runs:
 
         create_succeeded=false
         for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
-          if create_cluster 2>&1 | tee /tmp/ksail-system-test-logs/cluster-create.log; then
+          LOG_FILE="/tmp/ksail-system-test-logs/cluster-create-attempt-${attempt}.log"
+          if create_cluster 2>&1 | tee "$LOG_FILE"; then
             create_succeeded=true
+            # Copy the successful attempt log to the canonical name for other steps
+            cp "$LOG_FILE" /tmp/ksail-system-test-logs/cluster-create.log
             break
           fi
           if [ "$attempt" -lt "$MAX_ATTEMPTS" ]; then
             echo "⚠️ cluster create attempt $attempt failed, cleaning up before retry…"
+            CLEANUP_LOG="/tmp/ksail-system-test-logs/cluster-create-cleanup-${attempt}.log"
             # Remove the partially-created cluster so the next attempt starts clean
+            {
             if [ "$INIT" = "true" ]; then
-              ksail ${CONFIG:+--config "$CONFIG"} cluster delete --force 2>/dev/null || true
+              ksail ${CONFIG:+--config "$CONFIG"} cluster delete --force || true
             else
               # shellcheck disable=SC2086
-              ksail ${CONFIG:+--config "$CONFIG"} cluster delete --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS --force 2>/dev/null || true
+              ksail ${CONFIG:+--config "$CONFIG"} cluster delete --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS --force || true
             fi
             # Prune leftover containers/volumes from the failed attempt
-            docker system prune -f 2>/dev/null || true
+            docker system prune -f || true
+            } 2>&1 | tee "$CLEANUP_LOG"
             echo "⚠️ waiting 30s before retry…"
             sleep 30
           fi
         done
 
         if [ "$create_succeeded" != "true" ]; then
+          # Copy the last attempt log to the canonical name for diagnostic uploads
+          cp "/tmp/ksail-system-test-logs/cluster-create-attempt-${MAX_ATTEMPTS}.log" \
+            /tmp/ksail-system-test-logs/cluster-create.log 2>/dev/null || true
           echo "❌ cluster create failed after $MAX_ATTEMPTS attempts"
           exit 1
         fi
