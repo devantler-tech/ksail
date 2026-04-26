@@ -172,6 +172,10 @@ func getClusterNameFromConfigOrContext(
 
 	// Check metadata.name
 	if clusterCfg != nil && clusterCfg.Metadata.Name != "" {
+		if err := v1alpha1.ValidateClusterName(clusterCfg.Metadata.Name); err != nil {
+			return "", fmt.Errorf("invalid metadata.name: %w", err)
+		}
+
 		return clusterCfg.Metadata.Name, nil
 	}
 
@@ -244,6 +248,10 @@ func GetClusterNameFromConfig(
 
 	// Check metadata.name
 	if clusterCfg.Metadata.Name != "" {
+		if err := v1alpha1.ValidateClusterName(clusterCfg.Metadata.Name); err != nil {
+			return "", fmt.Errorf("invalid metadata.name: %w", err)
+		}
+
 		return clusterCfg.Metadata.Name, nil
 	}
 

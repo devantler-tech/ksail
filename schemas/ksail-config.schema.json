@@ -17,7 +17,7 @@
       "properties": {
         "name": {
           "type": "string",
-          "description": "Cluster name used for container names and kubeconfig context (DNS-1123 compliant)"
+          "description": "Cluster name for container names and kubeconfig context (DNS-1123 compliant)"
         }
       },
       "additionalProperties": false,

@@ -1726,12 +1726,13 @@ func resolveKWOKName(ctx *localregistry.Context) string {
 }
 
 func resolveFallbackName(ctx *localregistry.Context) string {
-	// Check metadata.name first
-	if name := strings.TrimSpace(ctx.ClusterCfg.Metadata.Name); name != "" {
+	// Connection context takes priority because --name flag updates it via applyClusterNameOverride
+	if name := strings.TrimSpace(ctx.ClusterCfg.Spec.Cluster.Connection.Context); name != "" {
 		return name
 	}
 
-	if name := strings.TrimSpace(ctx.ClusterCfg.Spec.Cluster.Connection.Context); name != "" {
+	// Fall back to metadata.name from ksail.yaml
+	if name := strings.TrimSpace(ctx.ClusterCfg.Metadata.Name); name != "" {
 		return name
 	}
 
