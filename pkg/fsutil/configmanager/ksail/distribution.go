@@ -3,6 +3,7 @@ package configmanager
 import (
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -102,7 +103,9 @@ func (m *ConfigManager) loadTalosConfig() (*talosconfigmanager.Configs, error) {
 	)
 
 	// Add Hetzner-specific patches (external cloud provider + ingress firewall).
-	m.addHetznerPatches(talosManager, patchesDir)
+	if err := m.addHetznerPatches(talosManager, patchesDir); err != nil {
+		return nil, fmt.Errorf("failed to add Hetzner patches: %w", err)
+	}
 
 	// Inject kubelet cert rotation + CSR approver patches at runtime when
 	// metrics-server is enabled AND both patch files don't already exist on disk.
@@ -128,20 +131,27 @@ func (m *ConfigManager) loadTalosConfig() (*talosconfigmanager.Configs, error) {
 func (m *ConfigManager) addHetznerPatches(
 	talosManager *talosconfigmanager.ConfigManager,
 	patchesDir string,
-) {
+) error {
 	if m.Config.Spec.Cluster.Provider != v1alpha1.ProviderHetzner {
-		return
+		return nil
 	}
 
 	talosManager.WithAdditionalPatches(externalCloudProviderPatches())
 
 	if m.Config.Spec.Provider.Hetzner.IngressFirewall != v1alpha1.IngressFirewallDisabled &&
 		!ingressFirewallPatchFilesExist(patchesDir) {
-		talosManager.WithAdditionalPatches(ingressFirewallPatches(
+		patches, err := ingressFirewallPatches(
 			v1alpha1.HetznerNetworkCIDR(m.Config.Spec),
 			v1alpha1.HetznerCNIPort(m.Config.Spec),
-		))
+		)
+		if err != nil {
+			return err
+		}
+
+		talosManager.WithAdditionalPatches(patches)
 	}
+
+	return nil
 }
 
 // addKubeletCertRotationPatches injects kubelet cert-rotation and CSR-approver patches
@@ -518,11 +528,31 @@ func externalCloudProviderPatches() []talosconfigmanager.Patch {
 	}
 }
 
+var (
+	errIngressFirewallMissingCIDR = errors.New("networkCIDR is required for ingress firewall patches")
+	errIngressFirewallInvalidCIDR = errors.New("networkCIDR is not a valid CIDR")
+	errIngressFirewallInvalidPort = errors.New("cniPort must be between 1 and 65535")
+)
+
 // ingressFirewallPatches returns Talos patches that configure the OS-level ingress firewall.
 // This generates three patches: a default action (ingress: block) for all nodes, plus
 // per-role NetworkRuleConfig documents for control-plane and worker nodes.
 // See: https://www.talos.dev/latest/talos-guides/network/ingress-firewall/
-func ingressFirewallPatches(networkCIDR string, cniPort int) []talosconfigmanager.Patch {
+func ingressFirewallPatches(networkCIDR string, cniPort int) ([]talosconfigmanager.Patch, error) {
+	cidr := strings.TrimSpace(networkCIDR)
+	if cidr == "" {
+		return nil, errIngressFirewallMissingCIDR
+	}
+
+	_, _, err := net.ParseCIDR(cidr)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", errIngressFirewallInvalidCIDR, err)
+	}
+
+	if cniPort < 1 || cniPort > 65535 {
+		return nil, fmt.Errorf("%w: got %d", errIngressFirewallInvalidPort, cniPort)
+	}
+
 	return []talosconfigmanager.Patch{
 		{
 			Path:    "ingress-firewall-default-action",
@@ -532,12 +562,12 @@ func ingressFirewallPatches(networkCIDR string, cniPort int) []talosconfigmanage
 		{
 			Path:    "ingress-firewall-cp-rules",
 			Scope:   talosconfigmanager.PatchScopeControlPlane,
-			Content: []byte(talosgenerator.IngressFirewallCPRulesYAML(networkCIDR, cniPort)),
+			Content: []byte(talosgenerator.IngressFirewallCPRulesYAML(cidr, cniPort)),
 		},
 		{
 			Path:    "ingress-firewall-worker-rules",
 			Scope:   talosconfigmanager.PatchScopeWorker,
-			Content: []byte(talosgenerator.IngressFirewallWorkerRulesYAML(networkCIDR, cniPort)),
+			Content: []byte(talosgenerator.IngressFirewallWorkerRulesYAML(cidr, cniPort)),
 		},
-	}
+	}, nil
 }
