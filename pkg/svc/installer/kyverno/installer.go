@@ -75,7 +75,7 @@ func (i *Installer) Install(ctx context.Context) error {
 	defer cancel()
 
 	if err := i.Base.Install(overallCtx); err != nil {
-		return err
+		return fmt.Errorf("installing kyverno base chart: %w", err)
 	}
 
 	if err := i.waitForWebhookReady(overallCtx); err != nil {

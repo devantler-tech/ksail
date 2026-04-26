@@ -2,6 +2,7 @@ package kyvernoinstaller
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -19,6 +20,10 @@ const (
 	// caBundle is therefore a reliable signal that the webhook is ready to serve.
 	kyvernoResourceWebhookName = "kyverno-resource-mutating-webhook-cfg"
 )
+
+// errNoTimeRemaining is returned when the context deadline has already elapsed
+// before the webhook readiness poll can begin.
+var errNoTimeRemaining = errors.New("no time remaining for webhook readiness check")
 
 // newClientsetFn is the factory used to create a Kubernetes clientset.
 //
@@ -41,7 +46,7 @@ func (i *Installer) waitForWebhookReady(ctx context.Context) error {
 	if dl, ok := ctx.Deadline(); ok {
 		remaining = time.Until(dl)
 		if remaining <= 0 {
-			return fmt.Errorf("no time remaining for webhook readiness check")
+			return errNoTimeRemaining
 		}
 	}
 
@@ -50,7 +55,7 @@ func (i *Installer) waitForWebhookReady(ctx context.Context) error {
 		return fmt.Errorf("creating clientset for Kyverno webhook readiness check: %w", err)
 	}
 
-	return readiness.PollForReadiness(ctx, remaining, func(ctx context.Context) (bool, error) {
+	if err := readiness.PollForReadiness(ctx, remaining, func(ctx context.Context) (bool, error) {
 		webhook, err := clientset.AdmissionregistrationV1().
 			MutatingWebhookConfigurations().
 			Get(ctx, kyvernoResourceWebhookName, metav1.GetOptions{})
@@ -74,5 +79,9 @@ func (i *Installer) waitForWebhookReady(ctx context.Context) error {
 		}
 
 		return true, nil
-	})
+	}); err != nil {
+		return fmt.Errorf("polling Kyverno webhook readiness: %w", err)
+	}
+
+	return nil
 }

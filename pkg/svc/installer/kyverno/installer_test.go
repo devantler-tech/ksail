@@ -25,7 +25,7 @@ func TestNewInstaller(t *testing.T) {
 	assert.NotNil(t, installer)
 }
 
-func TestInstallSuccess(t *testing.T) {
+func TestInstallSuccess(t *testing.T) { //nolint:paralleltest // Mutates shared test seams exposed by export_test.go.
 	// Not parallel: overrides the package-level newClientsetFn var.
 	fakeClientset := k8sfake.NewClientset(readyWebhookConfig())
 	restore := kyvernoinstaller.SetNewClientsetFn(
@@ -172,7 +172,7 @@ func unreadyWebhookConfig() *admissionregistrationv1.MutatingWebhookConfiguratio
 	}
 }
 
-func TestInstallWebhookDelayedReadiness(t *testing.T) {
+func TestInstallWebhookDelayedReadiness(t *testing.T) { //nolint:paralleltest // Mutates shared test seams exposed by export_test.go.
 	// Not parallel: overrides the package-level newClientsetFn var.
 	fakeClientset := k8sfake.NewClientset(unreadyWebhookConfig())
 	restore := kyvernoinstaller.SetNewClientsetFn(
@@ -188,7 +188,7 @@ func TestInstallWebhookDelayedReadiness(t *testing.T) {
 		_, err := fakeClientset.AdmissionregistrationV1().
 			MutatingWebhookConfigurations().
 			Update(context.Background(), cfg, metav1.UpdateOptions{})
-		require.NoError(t, err)
+		assert.NoError(t, err)
 	}()
 
 	installer, client := newInstallerWithDefaults(t)
@@ -199,7 +199,7 @@ func TestInstallWebhookDelayedReadiness(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestInstallWebhookNeverReady(t *testing.T) {
+func TestInstallWebhookNeverReady(t *testing.T) { //nolint:paralleltest // Mutates shared test seams exposed by export_test.go.
 	// Not parallel: overrides the package-level newClientsetFn var.
 	fakeClientset := k8sfake.NewClientset(unreadyWebhookConfig())
 	restore := kyvernoinstaller.SetNewClientsetFn(
