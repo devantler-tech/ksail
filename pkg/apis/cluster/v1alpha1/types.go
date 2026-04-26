@@ -18,7 +18,7 @@ const (
 // Metadata holds standard Kubernetes-style metadata for KSail resources.
 // Only the Name field is supported; namespace, labels, and annotations are not used.
 type Metadata struct {
-	Name string `json:"name,omitzero" jsonschema_description:"Cluster name for container names and kubeconfig context (DNS-1123 compliant)"`
+	Name string `json:"name,omitzero" jsonschema_description:"Cluster name (DNS-1123 compliant)"`
 }
 
 // Cluster represents a KSail cluster configuration including API metadata and desired state.
