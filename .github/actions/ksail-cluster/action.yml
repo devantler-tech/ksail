@@ -301,14 +301,53 @@ runs:
       run: |
         set -euo pipefail
         mkdir -p /tmp/ksail-system-test-logs
-        {
-        if [ "$INIT" = "true" ]; then
-          ksail ${CONFIG:+--config "$CONFIG"} cluster create
+
+        create_cluster() {
+          if [ "$INIT" = "true" ]; then
+            ksail ${CONFIG:+--config "$CONFIG"} cluster create
+          else
+            # shellcheck disable=SC2086
+            ksail ${CONFIG:+--config "$CONFIG"} cluster create --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS
+          fi
+        }
+
+        # Talos+Docker clusters may experience transient bootstrap failures
+        # (node-join timeouts, CNI/CSI initialization races on shared CI runners).
+        # Retry up to 3 times with cleanup between attempts.
+        # See: https://github.com/devantler-tech/ksail/issues/4289
+        if [ "$DISTRIBUTION" = "Talos" ] && [ "$PROVIDER" = "Docker" ]; then
+          MAX_ATTEMPTS=3
         else
-          # shellcheck disable=SC2086
-          ksail ${CONFIG:+--config "$CONFIG"} cluster create --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS
+          MAX_ATTEMPTS=1
         fi
-        } 2>&1 | tee /tmp/ksail-system-test-logs/cluster-create.log
+
+        create_succeeded=false
+        for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
+          if create_cluster 2>&1 | tee /tmp/ksail-system-test-logs/cluster-create.log; then
+            create_succeeded=true
+            break
+          fi
+          if [ "$attempt" -lt "$MAX_ATTEMPTS" ]; then
+            echo "⚠️ cluster create attempt $attempt failed, cleaning up before retry…"
+            # Remove the partially-created cluster so the next attempt starts clean
+            if [ "$INIT" = "true" ]; then
+              ksail ${CONFIG:+--config "$CONFIG"} cluster delete --force 2>/dev/null || true
+            else
+              # shellcheck disable=SC2086
+              ksail ${CONFIG:+--config "$CONFIG"} cluster delete --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS --force 2>/dev/null || true
+            fi
+            # Prune leftover containers/volumes from the failed attempt
+            docker system prune -f 2>/dev/null || true
+            echo "⚠️ waiting 30s before retry…"
+            sleep 30
+          fi
+        done
+
+        if [ "$create_succeeded" != "true" ]; then
+          echo "❌ cluster create failed after $MAX_ATTEMPTS attempts"
+          exit 1
+        fi
+
         # Determine kubeconfig path: parse --kubeconfig from args, fall back to default
         KUBECONFIG_PATH="${HOME}/.kube/config"
         # shellcheck disable=SC2086
