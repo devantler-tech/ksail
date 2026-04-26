@@ -40,6 +40,18 @@ See [Declarative Configuration](/configuration/declarative-configuration/) for t
 | `ksail workload push`      | Package and push manifests to registry |
 | `ksail workload reconcile` | Trigger GitOps sync and wait for completion — tracks each Flux Kustomization (with dependency ordering) and each ArgoCD Application individually; for Flux, fails immediately on permanent errors (build failures, health check failures, or upstream dependency failures) rather than waiting for the full timeout |
 
+### Automatic Retry
+
+Both `workload push` and `workload reconcile` automatically retry on transient failures:
+
+- **Up to 3 attempts** with exponential backoff (5–30s between attempts)
+- **Retryable conditions**: HTTP 429 (rate-limit), 5xx server errors, TCP resets, and context deadline exceeded (common under CI load)
+- A warning is printed on each retry attempt so you can follow progress
+
+`workload push` previously only retried low-level OCI writes; command-level retries now wrap the full build-and-push cycle. `workload reconcile` previously had no retry at all.
+
+The `--timeout` flag (if set) is a **per-attempt** bound — total runtime can reach up to `maxAttempts × timeout` plus backoff.
+
 ## Related
 
 - [ArgoCD ApplicationSet](/guides/argocd-applicationset/) — end-to-end guide for multi-environment GitOps with ArgoCD
