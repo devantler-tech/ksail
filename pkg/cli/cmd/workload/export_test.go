@@ -252,3 +252,14 @@ func ExportPollUntilKustomizationReady(
 ) error {
 	return pollUntilKustomizationReady(ctx, fluxReconciler, name, dependsOn, failed)
 }
+
+// ExportRetryOnTransientError exposes retryOnTransientError for unit testing.
+func ExportRetryOnTransientError(
+	ctx context.Context,
+	cmd *cobra.Command,
+	maxAttempts int,
+	baseWait, maxWait time.Duration,
+	operation func() error,
+) error {
+	return retryOnTransientError(ctx, cmd, maxAttempts, baseWait, maxWait, operation)
+}
