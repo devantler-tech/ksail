@@ -472,7 +472,12 @@ func TestBuildFirewallRulesSecureSet(t *testing.T) {
 		protocols[rule.Protocol] = true
 
 		// Every rule must be open to 0.0.0.0/0 and ::/0
-		require.Len(t, rule.SourceIPs, 2, "each rule must list both IPv4 and IPv6 any-address CIDRs")
+		require.Len(
+			t,
+			rule.SourceIPs,
+			2,
+			"each rule must list both IPv4 and IPv6 any-address CIDRs",
+		)
 	}
 
 	assert.True(t, ports["50000"], "Talos API port 50000 must be present")

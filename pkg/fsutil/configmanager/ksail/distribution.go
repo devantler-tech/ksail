@@ -530,7 +530,9 @@ func externalCloudProviderPatches() []talosconfigmanager.Patch {
 }
 
 var (
-	errIngressFirewallMissingCIDR = errors.New("networkCIDR is required for ingress firewall patches")
+	errIngressFirewallMissingCIDR = errors.New(
+		"networkCIDR is required for ingress firewall patches",
+	)
 	errIngressFirewallInvalidCIDR = errors.New("networkCIDR is not a valid CIDR")
 	errIngressFirewallInvalidPort = errors.New("cniPort must be between 1 and 65535")
 )
