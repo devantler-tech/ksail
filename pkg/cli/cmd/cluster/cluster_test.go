@@ -2198,7 +2198,12 @@ func TestSetupK3dCNI_CiliumDisablesFlannel(t *testing.T) {
 	cluster.ExportSetupK3dCNI(clusterCfg, k3dConfig)
 
 	args := k3dConfig.Options.K3sOptions.ExtraArgs
-	require.Len(t, args, 3, "Cilium should add flannel-backend=none, disable-network-policy, and disable=traefik")
+	require.Len(
+		t,
+		args,
+		3,
+		"Cilium should add flannel-backend=none, disable-network-policy, and disable=traefik",
+	)
 
 	argSet := make(map[string]bool, len(args))
 	for _, a := range args {
@@ -2206,7 +2211,11 @@ func TestSetupK3dCNI_CiliumDisablesFlannel(t *testing.T) {
 	}
 
 	require.True(t, argSet["--flannel-backend=none"], "--flannel-backend=none should be present")
-	require.True(t, argSet["--disable-network-policy"], "--disable-network-policy should be present")
+	require.True(
+		t,
+		argSet["--disable-network-policy"],
+		"--disable-network-policy should be present",
+	)
 	require.True(t, argSet["--disable=traefik"], "--disable=traefik should be present for Cilium")
 }
 
@@ -2256,7 +2265,12 @@ func TestSetupK3dCNI_CalicoDoesNotDisableTraefik(t *testing.T) {
 	cluster.ExportSetupK3dCNI(clusterCfg, k3dConfig)
 
 	for _, arg := range k3dConfig.Options.K3sOptions.ExtraArgs {
-		require.NotEqual(t, "--disable=traefik", arg.Arg, "--disable=traefik should NOT be added for Calico")
+		require.NotEqual(
+			t,
+			"--disable=traefik",
+			arg.Arg,
+			"--disable=traefik should NOT be added for Calico",
+		)
 	}
 }
 
