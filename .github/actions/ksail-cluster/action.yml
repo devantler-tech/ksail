@@ -341,7 +341,15 @@ runs:
               # shellcheck disable=SC2086
               ksail ${CONFIG:+--config "$CONFIG"} cluster delete --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS --force || true
             fi
-            # Prune any unused Docker resources left by the failed attempt (but not volumes)
+            # Remove any lingering mirror registry containers by name pattern.
+            # ksail cluster delete may not remove registry containers, leaving their
+            # Docker network endpoints alive. The next create attempt then fails with
+            # "endpoint with name <cluster>-<registry> already exists in network <cluster>".
+            for _reg_suffix in docker.io ghcr.io quay.io registry.k8s.io; do
+              docker ps -aq --filter "name=-${_reg_suffix}" \
+                | xargs -r docker rm -f 2>/dev/null || true
+            done
+            # Prune unused Docker resources (networks, stopped containers, dangling images)
             docker system prune -f || true
             } 2>&1 | tee "$CLEANUP_LOG"
             echo "⚠️ waiting 30s before retry…"
