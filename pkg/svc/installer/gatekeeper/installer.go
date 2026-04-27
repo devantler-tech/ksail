@@ -1,6 +1,8 @@
 package gatekeeperinstaller
 
 import (
+	"context"
+	"fmt"
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
@@ -10,13 +12,31 @@ import (
 // Installer installs or upgrades Gatekeeper.
 //
 // It embeds helmutil.Base to provide standard Helm chart lifecycle management.
+// After the Helm install succeeds it polls the ValidatingWebhookConfiguration
+// until every webhook entry has a non-empty caBundle, ensuring Gatekeeper's
+// admission webhook is fully initialised before workloads are deployed.
 type Installer struct {
 	*helmutil.Base
+
+	kubeconfig  string
+	kubeContext string
+	timeout     time.Duration
 }
 
 // NewInstaller creates a new Gatekeeper installer instance.
-func NewInstaller(client helm.Interface, timeout time.Duration) *Installer {
+//
+// kubeconfig and kubeContext are required for the post-install webhook-readiness
+// wait. Pass empty strings to disable webhook waiting (tests or environments
+// without cluster access).
+func NewInstaller(
+	client helm.Interface,
+	kubeconfig, kubeContext string,
+	timeout time.Duration,
+) *Installer {
 	return &Installer{
+		kubeconfig:  kubeconfig,
+		kubeContext: kubeContext,
+		timeout:     timeout,
 		Base: helmutil.NewBase(
 			"gatekeeper",
 			client,
@@ -56,4 +76,31 @@ func NewInstaller(client helm.Interface, timeout time.Duration) *Installer {
 			},
 		),
 	}
+}
+
+// Install runs the Helm chart install and then waits for Gatekeeper's
+// ValidatingWebhookConfiguration to have all caBundle fields populated.
+//
+// Helm reports success once the pods are Running/Ready, but the Gatekeeper
+// cert-controller injects the caBundle asynchronously. Any workload pod
+// created before the caBundle is set may experience a readiness-probe
+// context-cancellation error because the API server forwards the admission
+// request to an endpoint that has not yet completed its TLS handshake setup.
+//
+// If kubeconfig is empty (e.g. in unit tests), the webhook-readiness wait is
+// skipped and only the Helm install runs.
+func (g *Installer) Install(ctx context.Context) error {
+	if err := g.Base.Install(ctx); err != nil {
+		return err
+	}
+
+	if g.kubeconfig == "" {
+		return nil
+	}
+
+	if err := waitForWebhookReadyFn(ctx, g.kubeconfig, g.kubeContext, g.timeout); err != nil {
+		return fmt.Errorf("wait for gatekeeper webhook readiness: %w", err)
+	}
+
+	return nil
 }

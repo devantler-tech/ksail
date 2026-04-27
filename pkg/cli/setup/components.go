@@ -107,7 +107,7 @@ func policyEngineFactory(
 		case v1alpha1.PolicyEngineGatekeeper:
 			timeout = max(timeout, installer.GatekeeperInstallTimeout)
 
-			return gatekeeperinstaller.NewInstaller(helmClient, timeout), nil
+			return gatekeeperinstaller.NewInstaller(helmClient, kubeconfig, clusterCfg.Spec.Cluster.Connection.Context, timeout), nil
 		default:
 			return nil, fmt.Errorf("%w: unknown engine %q", ErrPolicyEngineDisabled, engine)
 		}

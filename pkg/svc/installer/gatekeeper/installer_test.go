@@ -16,7 +16,7 @@ func TestNewInstaller(t *testing.T) {
 	t.Parallel()
 
 	client := helm.NewMockInterface(t)
-	installer := gatekeeperinstaller.NewInstaller(client, 5*time.Second)
+	installer := gatekeeperinstaller.NewInstaller(client, "", "", 5*time.Second)
 
 	assert.NotNil(t, installer)
 }
@@ -30,6 +30,53 @@ func TestInstallSuccess(t *testing.T) {
 	err := installer.Install(context.Background())
 
 	require.NoError(t, err)
+}
+
+func TestInstallSuccessWithWebhookWait(t *testing.T) {
+	// Cannot run in parallel — modifies the package-level waitForWebhookReadyFn variable.
+
+	client := helm.NewMockInterface(t)
+	// Use a non-empty kubeconfig to trigger the webhook wait path.
+	installer := gatekeeperinstaller.NewInstaller(client, "/fake/kubeconfig", "", 2*time.Minute)
+
+	webhookWaitCalled := false
+	restore := gatekeeperinstaller.SetWaitForWebhookReadyFn(
+		func(_ context.Context, kubeconfig, _ string, _ time.Duration) error {
+			webhookWaitCalled = true
+			assert.Equal(t, "/fake/kubeconfig", kubeconfig)
+
+			return nil
+		},
+	)
+	defer restore()
+
+	expectGatekeeperInstall(t, client, nil)
+
+	err := installer.Install(context.Background())
+
+	require.NoError(t, err)
+	assert.True(t, webhookWaitCalled, "webhook readiness wait should have been called")
+}
+
+func TestInstallWebhookWaitError(t *testing.T) {
+	// Cannot run in parallel — modifies the package-level waitForWebhookReadyFn variable.
+
+	client := helm.NewMockInterface(t)
+	installer := gatekeeperinstaller.NewInstaller(client, "/fake/kubeconfig", "", 2*time.Minute)
+
+	restore := gatekeeperinstaller.SetWaitForWebhookReadyFn(
+		func(_ context.Context, _, _ string, _ time.Duration) error {
+			return assert.AnError
+		},
+	)
+	defer restore()
+
+	expectGatekeeperInstall(t, client, nil)
+
+	err := installer.Install(context.Background())
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "wait for gatekeeper webhook readiness")
 }
 
 func TestInstallRepoError(t *testing.T) {
@@ -89,7 +136,8 @@ func newInstallerWithDefaults(
 	t.Helper()
 
 	client := helm.NewMockInterface(t)
-	installer := gatekeeperinstaller.NewInstaller(client, 2*time.Minute)
+	// Pass empty kubeconfig so the webhook wait is skipped in unit tests.
+	installer := gatekeeperinstaller.NewInstaller(client, "", "", 2*time.Minute)
 
 	return installer, client
 }
