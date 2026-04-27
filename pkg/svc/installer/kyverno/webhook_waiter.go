@@ -47,11 +47,13 @@ var newClientsetFn = func(kubeconfig, kubecontext string) (kubernetes.Interface,
 // webhook entry has a non-empty caBundle. This guards against the race condition
 // where Helm reports the chart as installed and the admission controller pods are
 // Running/Ready, but the controller has not yet initialised its TLS certificate and
-// injected it into the webhook configuration. Any workload operation that triggers
-// the webhook before the caBundle is set will fail.
+// injected it into the webhook configuration. Workload operations that trigger the
+// webhook before the caBundle is populated are still admitted because the Kyverno
+// webhook is configured with failurePolicy: Ignore, but the caBundle check provides
+// an early signal that the controller is fully ready.
 //
-// ctx should carry its own independent deadline (typically timeout) so that the
-// webhook wait does not compete with the Helm install for the same budget.
+// ctx should carry an appropriate deadline so the check does not wait indefinitely.
+// Callers treat context.DeadlineExceeded as non-fatal (see Installer.Install).
 func (i *Installer) waitForWebhookReady(ctx context.Context) error {
 	remaining := i.timeout // fallback when ctx has no deadline
 	if dl, ok := ctx.Deadline(); ok {

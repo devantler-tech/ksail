@@ -80,20 +80,18 @@ func NewInstaller(
 // CI failures while still confirming readiness when the environment is fast.
 //
 // Base.Install manages its own context deadline (timeout + buffer) internally,
-// so ctx is passed through as-is. The webhook readiness poll is rooted at
-// context.Background() rather than ctx so it always receives a full independent
-// deadline of webhookReadinessTimeout, regardless of how much time the Helm
-// install consumed.
+// so ctx is passed through as-is. The webhook readiness poll derives from ctx
+// so it remains cancellable by the caller while still being capped at
+// webhookReadinessTimeout.
 func (i *Installer) Install(ctx context.Context) error {
 	err := i.Base.Install(ctx)
 	if err != nil {
 		return fmt.Errorf("installing kyverno base chart: %w", err)
 	}
 
-	webhookCtx, webhookCancel := context.WithTimeout(context.Background(), webhookReadinessTimeout)
+	webhookCtx, webhookCancel := context.WithTimeout(ctx, webhookReadinessTimeout)
 	defer webhookCancel()
 
-	//nolint:contextcheck // rooted at context.Background() for a fully independent deadline
 	err = i.waitForWebhookReady(webhookCtx)
 	if err != nil && !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, errNoTimeRemaining) {
 		return fmt.Errorf("kyverno webhook not ready after install: %w", err)
