@@ -85,7 +85,8 @@ func (i *Installer) Install(ctx context.Context) error {
 	webhookCtx, webhookCancel := context.WithTimeout(context.Background(), i.timeout)
 	defer webhookCancel()
 
-	err = i.waitForWebhookReady(webhookCtx) //nolint:contextcheck // intentionally uses context.Background() so the webhook waiter always gets a full independent budget after a long Helm install
+	//nolint:contextcheck // rooted at context.Background() for a fully independent deadline
+	err = i.waitForWebhookReady(webhookCtx)
 	if err != nil {
 		return fmt.Errorf("kyverno webhook not ready after install: %w", err)
 	}
