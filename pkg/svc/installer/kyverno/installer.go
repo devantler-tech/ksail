@@ -1,6 +1,9 @@
 package kyvernoinstaller
 
 import (
+	"context"
+	"errors"
+	"fmt"
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
@@ -9,13 +12,25 @@ import (
 
 // Installer installs or upgrades Kyverno.
 //
-// It embeds helmutil.Base to provide standard Helm chart lifecycle management.
+// It embeds helmutil.Base to provide standard Helm chart lifecycle management
+// and adds a post-install webhook readiness wait to ensure the admission
+// controller is accepting requests before returning.
 type Installer struct {
 	*helmutil.Base
+
+	kubeconfig  string
+	kubecontext string
+	timeout     time.Duration
 }
 
 // NewInstaller creates a new Kyverno installer instance.
-func NewInstaller(client helm.Interface, timeout time.Duration) *Installer {
+// kubeconfig and kubecontext are used after Helm install to wait for the Kyverno
+// admission webhook to be ready before returning.
+func NewInstaller(
+	client helm.Interface,
+	timeout time.Duration,
+	kubeconfig, kubecontext string,
+) *Installer {
 	return &Installer{
 		Base: helmutil.NewBase(
 			"kyverno",
@@ -46,5 +61,42 @@ func NewInstaller(client helm.Interface, timeout time.Duration) *Installer {
 				},
 			},
 		),
+		kubeconfig:  kubeconfig,
+		kubecontext: kubecontext,
+		timeout:     timeout,
 	}
+}
+
+// Install installs or upgrades Kyverno via its Helm chart, then performs a
+// best-effort wait for the admission webhook caBundle to be populated.
+//
+// The wait is best-effort: if the caBundle is not populated within
+// webhookReadinessTimeout, Install returns success rather than an error.
+// This is safe because the webhook is configured with failurePolicy: Ignore,
+// which means API operations succeed even when the webhook is not yet fully
+// initialised. In some environments (e.g. Cilium + cert-manager CI) the
+// Kyverno certmanager-controller informer cache sync takes longer than any
+// practical timeout, so treating the timeout as non-fatal avoids permanent
+// CI failures while still confirming readiness when the environment is fast.
+//
+// Base.Install manages its own context deadline (timeout + buffer) internally,
+// so ctx is passed through as-is. The webhook readiness poll derives from ctx
+// so it remains cancellable by the caller while still being capped at
+// webhookReadinessTimeout.
+func (i *Installer) Install(ctx context.Context) error {
+	err := i.Base.Install(ctx)
+	if err != nil {
+		return fmt.Errorf("installing kyverno base chart: %w", err)
+	}
+
+	webhookCtx, webhookCancel := context.WithTimeout(ctx, webhookReadinessTimeout)
+	defer webhookCancel()
+
+	err = i.waitForWebhookReady(webhookCtx)
+	if err != nil && !errors.Is(err, context.DeadlineExceeded) &&
+		!errors.Is(err, errNoTimeRemaining) {
+		return fmt.Errorf("kyverno webhook not ready after install: %w", err)
+	}
+
+	return nil
 }

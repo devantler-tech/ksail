@@ -4,11 +4,14 @@ import (
 	"context"
 	"errors"
 	"io"
+	"sync"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
+	installer "github.com/devantler-tech/ksail/v7/pkg/svc/installer"
 	"github.com/devantler-tech/ksail/v7/pkg/timer"
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -279,4 +282,90 @@ func TestRunInfraPhase_SkipsCSRApproverWaitWhenNotNeeded(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, approverWaitCalled,
 		"CSR approver wait should NOT be called when needsCSRApproverWait is false")
+}
+
+// mockInstaller is a minimal installer.Installer implementation for testing.
+type mockInstaller struct {
+	install func(ctx context.Context) error
+}
+
+func (m *mockInstaller) Install(ctx context.Context) error {
+	if m.install != nil {
+		return m.install(ctx)
+	}
+
+	return nil
+}
+
+func (m *mockInstaller) Uninstall(context.Context) error { return nil }
+
+func (m *mockInstaller) Images(context.Context) ([]string, error) { return nil, nil }
+
+var _ installer.Installer = (*mockInstaller)(nil)
+
+func TestInstallComponentsInPhases_CertManagerRunsBeforePolicyEngine(t *testing.T) {
+	// When both cert-manager and a policy engine are needed, cert-manager must be
+	// installed in a dedicated sequential pre-phase before the parallel infra phase
+	// that installs the policy engine. This prevents the cert-issuance race where
+	// Kyverno requests a TLS cert before cert-manager is ready.
+	clusterCfg := &v1alpha1.Cluster{
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				Distribution: v1alpha1.DistributionVanilla,
+				PolicyEngine: v1alpha1.PolicyEngineKyverno,
+				CertManager:  v1alpha1.CertManagerEnabled,
+			},
+		},
+	}
+
+	var (
+		orderMu sync.Mutex
+		order   []string
+	)
+
+	makeInstaller := func(name string) func(*v1alpha1.Cluster) (installer.Installer, error) {
+		return func(*v1alpha1.Cluster) (installer.Installer, error) {
+			return &mockInstaller{
+				install: func(context.Context) error {
+					orderMu.Lock()
+					defer orderMu.Unlock()
+
+					order = append(order, name)
+
+					return nil
+				},
+			}, nil
+		}
+	}
+
+	t.Cleanup(SetClusterStabilityCheckForTests(
+		func(context.Context, *v1alpha1.Cluster, bool) error {
+			return nil
+		},
+	))
+
+	cmd := &cobra.Command{Use: "test"}
+	cmd.SetOut(io.Discard)
+
+	factories := &InstallerFactories{
+		CertManager:  makeInstaller("cert-manager"),
+		PolicyEngine: makeInstaller("policy-engine"),
+	}
+
+	reqs := ComponentRequirements{
+		NeedsCertManager:  true,
+		NeedsPolicyEngine: true,
+	}
+
+	tmr := timer.New()
+	err := installComponentsInPhases(
+		context.Background(), cmd, clusterCfg, factories, tmr, reqs, false,
+	)
+	require.NoError(t, err)
+
+	require.Len(t, order, 2, "both cert-manager and policy-engine should have been installed")
+	assert.Equal(t, "cert-manager", order[0],
+		"cert-manager must be installed before policy-engine")
+	assert.Equal(t, "policy-engine", order[1],
+		"policy-engine must be installed after cert-manager")
 }
