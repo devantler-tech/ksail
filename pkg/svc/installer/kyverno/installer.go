@@ -90,10 +90,10 @@ func (i *Installer) Install(ctx context.Context) error {
 		return fmt.Errorf("installing kyverno base chart: %w", err)
 	}
 
-	//nolint:contextcheck // rooted at context.Background() for a fully independent deadline
 	webhookCtx, webhookCancel := context.WithTimeout(context.Background(), webhookReadinessTimeout)
 	defer webhookCancel()
 
+	//nolint:contextcheck // rooted at context.Background() for a fully independent deadline
 	err = i.waitForWebhookReady(webhookCtx)
 	if err != nil && !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, errNoTimeRemaining) {
 		return fmt.Errorf("kyverno webhook not ready after install: %w", err)
