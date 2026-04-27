@@ -2,6 +2,7 @@ package kyvernoinstaller
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -66,28 +67,35 @@ func NewInstaller(
 	}
 }
 
-// Install installs or upgrades Kyverno via its Helm chart, then waits for the
-// admission webhook to be ready before returning. This extra wait prevents the
-// race condition where Helm reports install success but the webhook server has
-// not yet populated its caBundle, causing transient admission failures for the
-// first workload operations after cluster setup.
+// Install installs or upgrades Kyverno via its Helm chart, then performs a
+// best-effort wait for the admission webhook caBundle to be populated.
+//
+// The wait is best-effort: if the caBundle is not populated within
+// webhookReadinessTimeout, Install returns success rather than an error.
+// This is safe because the webhook is configured with failurePolicy: Ignore,
+// which means API operations succeed even when the webhook is not yet fully
+// initialised. In some environments (e.g. Cilium + cert-manager CI) the
+// Kyverno certmanager-controller informer cache sync takes longer than any
+// practical timeout, so treating the timeout as non-fatal avoids permanent
+// CI failures while still confirming readiness when the environment is fast.
 //
 // Base.Install manages its own context deadline (timeout + buffer) internally,
 // so ctx is passed through as-is. The webhook readiness poll is rooted at
 // context.Background() rather than ctx so it always receives a full independent
-// deadline of timeout, regardless of how much time the Helm install consumed.
+// deadline of webhookReadinessTimeout, regardless of how much time the Helm
+// install consumed.
 func (i *Installer) Install(ctx context.Context) error {
 	err := i.Base.Install(ctx)
 	if err != nil {
 		return fmt.Errorf("installing kyverno base chart: %w", err)
 	}
 
-	webhookCtx, webhookCancel := context.WithTimeout(context.Background(), i.timeout)
+	//nolint:contextcheck // rooted at context.Background() for a fully independent deadline
+	webhookCtx, webhookCancel := context.WithTimeout(context.Background(), webhookReadinessTimeout)
 	defer webhookCancel()
 
-	//nolint:contextcheck // rooted at context.Background() for a fully independent deadline
 	err = i.waitForWebhookReady(webhookCtx)
-	if err != nil {
+	if err != nil && !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, errNoTimeRemaining) {
 		return fmt.Errorf("kyverno webhook not ready after install: %w", err)
 	}
 

@@ -25,6 +25,17 @@ const (
 // before the webhook readiness poll can begin.
 var errNoTimeRemaining = errors.New("no time remaining for webhook readiness check")
 
+// webhookReadinessTimeout is the independent deadline given to the webhook caBundle
+// readiness check after Helm install. The wait is best-effort: if the caBundle is not
+// populated within this window, Install returns success anyway because
+// failurePolicy: Ignore ensures API operations proceed even without a fully initialised
+// webhook. A dedicated constant (shorter than KyvernoInstallTimeout) prevents the
+// best-effort check from consuming an excessive share of the CI job's time budget in
+// environments where informer cache sync takes longer than expected.
+//
+//nolint:gochecknoglobals // allows overriding in tests via export_test.go
+var webhookReadinessTimeout = 5 * time.Minute
+
 // newClientsetFn is the factory used to create a Kubernetes clientset.
 //
 //nolint:gochecknoglobals // allows overriding in tests

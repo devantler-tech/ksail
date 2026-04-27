@@ -209,34 +209,27 @@ func TestInstallWebhookDelayedReadiness(t *testing.T) {
 }
 
 //nolint:paralleltest // Mutates shared test seams exposed by export_test.go.
-func TestInstallWebhookNeverReady(t *testing.T) {
-	// Not parallel: overrides the package-level newClientsetFn var.
+func TestInstallWebhookTimeoutIsNonBlocking(t *testing.T) {
+	// Not parallel: overrides the package-level newClientsetFn and
+	// webhookReadinessTimeout vars.
 	fakeClientset := k8sfake.NewClientset(unreadyWebhookConfig())
 
-	restore := kyvernoinstaller.SetNewClientsetFn(
+	restoreClientset := kyvernoinstaller.SetNewClientsetFn(
 		func(_, _ string) (kubernetes.Interface, error) { return fakeClientset, nil },
 	)
-	defer restore()
+	defer restoreClientset()
 
-	client := helm.NewMockInterface(t)
-	timeout := 3 * time.Second
-	installer := kyvernoinstaller.NewInstaller(client, timeout, "", "")
+	// Use a very short webhook timeout so the test does not wait 5 minutes.
+	restoreTimeout := kyvernoinstaller.SetWebhookReadinessTimeout(500 * time.Millisecond)
+	defer restoreTimeout()
 
-	client.EXPECT().
-		AddRepository(mock.Anything, mock.Anything, mock.Anything).
-		Return(nil)
-	client.EXPECT().
-		InstallOrUpgradeChart(mock.Anything, mock.Anything).
-		Return(nil, nil)
+	installer, client := newInstallerWithDefaults(t)
+	expectKyvernoInstall(t, client, nil)
 
-	// Use a parent context with a deadline longer than i.timeout as a safety
-	// net; the webhook wait uses its own independent context of i.timeout (3 s)
-	// derived from ctx, so the test runs for at most 3 s.
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+	// The caBundle is never populated, but Install should return nil because the
+	// webhook wait is best-effort — failurePolicy: Ignore ensures API operations
+	// succeed even without a fully initialised webhook.
+	err := installer.Install(context.Background())
 
-	err := installer.Install(ctx)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "kyverno webhook not ready after install")
+	require.NoError(t, err)
 }

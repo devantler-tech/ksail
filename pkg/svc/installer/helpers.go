@@ -22,9 +22,10 @@ const (
 	CalicoInstallTimeout = 10 * time.Minute
 	// KyvernoInstallTimeout is the timeout for Kyverno policy engine installs, which need
 	// extra time for multiple deployments and CRDs to become ready (admission-controller,
-	// background-controller, cleanup-controller, reports-controller, and policy CRDs), and
-	// for cert-manager's cainjector to populate the MutatingWebhookConfiguration caBundle.
+	// background-controller, cleanup-controller, reports-controller, and policy CRDs).
 	// K3s distributions with CNI+CSI enabled take longer due to additional resource pressure.
+	// Note: caBundle injection into the MutatingWebhookConfiguration is handled separately
+	// as a best-effort check with its own independent timeout (see webhookReadinessTimeout).
 	KyvernoInstallTimeout = 20 * time.Minute
 	// CertManagerInstallTimeout is the timeout for cert-manager installs, which need
 	// extra time for multiple deployments and webhook configurations to become ready.
