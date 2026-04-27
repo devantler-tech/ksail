@@ -1,9 +1,9 @@
 {
-  "last_run": "2026-04-26T12:29:48Z",
-  "workflow_run_id": "24956620353",
+  "last_run": "2026-04-27T00:00:00Z",
+  "workflow_run_id": "24971762629",
   "commented_issues": {
+    "4385": "2026-04-27",
     "4386": "2026-04-26",
-    "4385": "2026-04-26",
     "4357": "2026-04-25",
     "4341": "2026-04-25",
     "4322": "2026-04-24",
@@ -24,7 +24,9 @@
     "4119": "2026-04-18"
   },
   "open_prs": {
-    "new_traefik_fix": "[Repo Assist] fix(k3s): disable Traefik when using Cilium CNI to prevent Gateway API CRD conflict"
+    "traefik_fix_4388": "[Repo Assist] fix(k3s): disable Traefik when using Cilium CNI to prevent Gateway API CRD conflict",
+    "gatekeeper_fix": "[Repo Assist] fix(gatekeeper): wait for ValidatingWebhookConfiguration caBundle before returning from Install",
+    "diff_refactor": "[Repo Assist] refactor(diff): use appendChange helper in checkLocalRegistryChange and checkVanillaOptionsChange"
   },
   "merged_prs": {
     "4359": "perf(notify): eliminate per-tick spinner and map allocations - merged 2026-04-26",
@@ -40,7 +42,7 @@
     "4174": "fix(ci): benchmark awk deduplication - merged 2026-04-20",
     "4153": "perf(image): skip scanner.Text() allocation - merged 2026-04-19"
   },
-  "last_code_quality_domain": "test",
+  "last_code_quality_domain": "refactor",
   "issue_backlog_cursor": "4386",
   "created_issues": {
     "4316": "[Repo Assist] [chore]: verify KSail compatibility with ArgoCD v3.4 stable and update embedded client",
@@ -57,19 +59,21 @@
   },
   "notes": [
     "link_sub_issue is NOT idempotent - always verify sub-issue not already linked before calling",
-    "PR #4359 (perf/notify spinner allocs) MERGED ~2026-04-26",
-    "fail-fast CI PR MERGED ~2026-04-26",
+    "PR #4388 open (repo-assist) - fix K3s Cilium Traefik CRD conflict #4386",
+    "PR gatekeeper_fix open (repo-assist) - fix Gatekeeper webhook readiness #4385 - created run 24971762629",
+    "PR diff_refactor open (repo-assist) - refactor diff engine appendChange - created run 24971762629",
     "PR #4382 open (maintainer) - fix Talos version pin #4380",
     "PR #4383 open (maintainer) - feat metadata.name support",
     "PR #4358 open (maintainer) - fix kyverno webhook readiness",
     "PR #4362 open (maintainer) - fix hcloud network name #4343",
     "PR #4365 open (maintainer) - nodeAutoscaling guard",
     "PR #4366 open (maintainer) - hetzner firewall hardening #4363 #4364",
-    "PR new_traefik_fix open (repo-assist) - fix K3s Cilium Traefik CRD conflict #4386",
-    "domain alternation: last was 'test' - next should be 'refactor'",
+    "PR #4393 open (docs/daily-docs) - hetzner ingressFirewall docs",
+    "PR #4396 open (copilot) - fix(ci) Talos+Docker retry logic",
+    "domain alternation: last was 'refactor' - next should be 'performance'",
     "Issue #4384 (native node autoscaling Hetzner) - large feature, no sub-issues yet",
-    "Issue #4385 (Gatekeeper webhook warmup race) - suggested Kyverno-style webhook waiter fix",
-    "Issue #4386 (K3s+Cilium Traefik CRD conflict) - FIXED with PR this run",
+    "Issue #4385 (Gatekeeper webhook warmup race) - FIXED with gatekeeper_fix PR this run",
+    "Issue #4386 (K3s+Cilium Traefik CRD conflict) - FIXED with PR #4388",
     "Parent issues #4084 and #4085 are both closed (not_planned/completed)",
     "Issue #4091 (K3s blob integrity) - closed not_planned by maintainer 2026-04-22",
     "Issue #4196 (K3s+Calico API race) - closed completed by maintainer 2026-04-21"
