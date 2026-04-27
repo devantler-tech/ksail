@@ -100,11 +100,13 @@ const (
 	// kubelet-serving-cert-approver deployment (from Talos inlineManifests) to
 	// become ready. The approver pod starts at cluster creation (before CNI),
 	// so it enters CrashLoopBackOff while CNI is unavailable. When a
-	// sequential pre-phase (e.g. cert-manager) precedes the main infra phase,
-	// the pod may be in an 80–160 s backoff cycle by the time the wait starts.
-	// Five minutes covers up to two additional CrashLoopBackOff cycles after
-	// the pre-phase completes and CNI is available.
-	csrApproverReadinessTimeout = 5 * time.Minute
+	// sequential pre-phase (e.g. cert-manager) precedes the main infra phase
+	// and a slower CNI (e.g. Cilium) is used, the pod can be in a 160–300 s
+	// backoff cycle by the time the wait starts. Ten minutes provides enough
+	// headroom for the pod to exit CrashLoopBackOff, restart, and pass its
+	// readiness probe even in the worst-case combination of Cilium CNI and a
+	// cert-manager pre-phase.
+	csrApproverReadinessTimeout = 10 * time.Minute
 )
 
 // apiServerStabilitySuccesses returns the number of consecutive successful
