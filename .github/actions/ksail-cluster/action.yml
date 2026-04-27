@@ -341,7 +341,7 @@ runs:
               # shellcheck disable=SC2086
               ksail ${CONFIG:+--config "$CONFIG"} cluster delete --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS --force || true
             fi
-            # Prune leftover containers/volumes from the failed attempt
+            # Prune any unused Docker resources left by the failed attempt (but not volumes)
             docker system prune -f || true
             } 2>&1 | tee "$CLEANUP_LOG"
             echo "⚠️ waiting 30s before retry…"
