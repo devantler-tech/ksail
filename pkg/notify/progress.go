@@ -133,6 +133,15 @@ type ProgressGroup struct {
 	termWidth       int             // Terminal width in columns (0 = non-TTY or unknown)
 	countLabel      string          // Label for counts (e.g., "kustomizations", "files")
 	emitted         map[string]bool // tasks whose completion has been permanently printed (streaming mode)
+
+	// Pre-allocated color objects for the spinner hot path.
+	// fcolor.New allocates a Color struct on each call; caching them here
+	// eliminates per-tick allocations when formatTaskLine / buildCompactWindow
+	// / formatSummary are invoked on every 100 ms spinner tick.
+	colorHiBlack *fcolor.Color
+	colorCyan    *fcolor.Color
+	colorGreen   *fcolor.Color
+	colorRed     *fcolor.Color
 }
 
 // taskState represents the current state of a task.
@@ -301,6 +310,10 @@ func NewProgressGroup(
 		stopSpinner:    make(chan struct{}),
 		spinnerDone:    make(chan struct{}),
 		emitted:        make(map[string]bool),
+		colorHiBlack:   fcolor.New(fcolor.FgHiBlack),
+		colorCyan:      fcolor.New(fcolor.FgCyan),
+		colorGreen:     fcolor.New(fcolor.FgGreen),
+		colorRed:       fcolor.New(fcolor.FgRed),
 	}
 
 	// Apply options
@@ -624,7 +637,7 @@ func (pg *ProgressGroup) runCIWorker(
 			pg.setTaskState(task.Name, taskFailed)
 
 			pg.mu.Lock()
-			_, _ = fcolor.New(fcolor.FgRed).Fprintf(pg.writer, "✗ %s failed\n", task.Name)
+			_, _ = pg.colorRed.Fprintf(pg.writer, "✗ %s failed\n", task.Name)
 			pg.mu.Unlock()
 
 			if pg.continueOnError {
@@ -708,16 +721,15 @@ func (pg *ProgressGroup) printFinalSummary() {
 // printTiming prints the timing information.
 func (pg *ProgressGroup) printTiming() {
 	total, stage := pg.timer.GetTiming()
-	successColor := fcolor.New(fcolor.FgGreen)
 	labelWidth := timingLabelWidth()
-	_, _ = successColor.Fprintf(
+	_, _ = pg.colorGreen.Fprintf(
 		pg.writer,
 		"%-*s %s\n",
 		labelWidth,
 		timingCurrentLabel,
 		stage.String(),
 	)
-	_, _ = successColor.Fprintf(
+	_, _ = pg.colorGreen.Fprintf(
 		pg.writer,
 		"%-*s %s\n",
 		labelWidth,
@@ -858,7 +870,7 @@ func (pg *ProgressGroup) buildCompactWindow(buf *bytes.Buffer) int {
 		fmt.Fprintf(
 			buf,
 			"\033[K%s\n",
-			fcolor.New(fcolor.FgHiBlack).Sprintf("○ %d remaining", pendingCount),
+			pg.colorHiBlack.Sprintf("○ %d remaining", pendingCount),
 		)
 
 		lines++
@@ -885,13 +897,13 @@ func (pg *ProgressGroup) formatSummary() string {
 		if pg.countLabel != "" {
 			parts = append(
 				parts,
-				fcolor.New(fcolor.FgGreen).
+				pg.colorGreen.
 					Sprintf("✔ %d %s %s", pg.completedCount, pg.countLabel, pg.labels.Completed),
 			)
 		} else {
 			parts = append(
 				parts,
-				fcolor.New(fcolor.FgGreen).
+				pg.colorGreen.
 					Sprintf("✔ %d %s", pg.completedCount, pg.labels.Completed),
 			)
 		}
@@ -899,7 +911,7 @@ func (pg *ProgressGroup) formatSummary() string {
 
 	if pg.failedCount > 0 {
 		parts = append(parts,
-			fcolor.New(fcolor.FgRed).Sprintf("✗ %d failed", pg.failedCount))
+			pg.colorRed.Sprintf("✗ %d failed", pg.failedCount))
 	}
 
 	if len(parts) == 0 {
@@ -1039,22 +1051,22 @@ func (pg *ProgressGroup) formatTaskLine(name string, state taskState) string {
 
 	switch state {
 	case taskPending:
-		return fcolor.New(fcolor.FgHiBlack).Sprintf("○ %s %s", name, pg.labels.Pending)
+		return pg.colorHiBlack.Sprintf("○ %s %s", name, pg.labels.Pending)
 	case taskRunning:
 		spinner := frames[pg.spinnerIdx]
 
-		return fcolor.New(fcolor.FgCyan).Sprintf("%s %s %s", spinner, name, pg.labels.Running)
+		return pg.colorCyan.Sprintf("%s %s %s", spinner, name, pg.labels.Running)
 	case taskComplete:
 		if pg.timer != nil {
 			if d, ok := pg.taskDuration[name]; ok {
-				return fcolor.New(fcolor.FgGreen).
+				return pg.colorGreen.
 					Sprintf("✔ %s %s [%s]", name, pg.labels.Completed, d)
 			}
 		}
 
-		return fcolor.New(fcolor.FgGreen).Sprintf("✔ %s %s", name, pg.labels.Completed)
+		return pg.colorGreen.Sprintf("✔ %s %s", name, pg.labels.Completed)
 	case taskFailed:
-		return fcolor.New(fcolor.FgRed).Sprintf("✗ %s failed", name)
+		return pg.colorRed.Sprintf("✗ %s failed", name)
 	default:
 		return fmt.Sprintf("? %s unknown", name)
 	}
