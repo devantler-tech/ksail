@@ -285,11 +285,11 @@ func TestRunInfraPhase_SkipsCSRApproverWaitWhenNotNeeded(t *testing.T) {
 }
 
 // mockInstaller is a minimal installer.Installer implementation for testing.
-type mockInstallerType struct {
+type mockInstaller struct {
 	install func(ctx context.Context) error
 }
 
-func (m *mockInstallerType) Install(ctx context.Context) error {
+func (m *mockInstaller) Install(ctx context.Context) error {
 	if m.install != nil {
 		return m.install(ctx)
 	}
@@ -297,11 +297,11 @@ func (m *mockInstallerType) Install(ctx context.Context) error {
 	return nil
 }
 
-func (m *mockInstallerType) Uninstall(context.Context) error { return nil }
+func (m *mockInstaller) Uninstall(context.Context) error { return nil }
 
-func (m *mockInstallerType) Images(context.Context) ([]string, error) { return nil, nil }
+func (m *mockInstaller) Images(context.Context) ([]string, error) { return nil, nil }
 
-var _ installer.Installer = (*mockInstallerType)(nil)
+var _ installer.Installer = (*mockInstaller)(nil)
 
 func TestInstallComponentsInPhases_CertManagerRunsBeforePolicyEngine(t *testing.T) {
 	// When both cert-manager and a policy engine are needed, cert-manager must be
@@ -325,7 +325,7 @@ func TestInstallComponentsInPhases_CertManagerRunsBeforePolicyEngine(t *testing.
 
 	makeInstaller := func(name string) func(*v1alpha1.Cluster) (installer.Installer, error) {
 		return func(*v1alpha1.Cluster) (installer.Installer, error) {
-			return &mockInstallerType{
+			return &mockInstaller{
 				install: func(context.Context) error {
 					orderMu.Lock()
 					defer orderMu.Unlock()
