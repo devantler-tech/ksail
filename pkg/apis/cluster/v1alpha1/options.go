@@ -12,6 +12,12 @@ type OptionsVanilla struct {
 
 // OptionsTalos defines options specific to the Talos distribution.
 type OptionsTalos struct {
+	// Version pins the Talos OS version used for cluster creation and upgrades.
+	// When set, KSail uses this version as the Docker container image tag and
+	// caps `--update-distribution` upgrades at this version. Accepts values
+	// with or without the "v" prefix (e.g., "v1.11.2" or "1.11.2").
+	// When empty, KSail uses its built-in default version.
+	Version string `json:"version,omitzero"`
 	// ControlPlanes is the number of control-plane nodes (default: 1).
 	ControlPlanes int32 `default:"1" json:"controlPlanes,omitzero"`
 	// Workers is the number of worker nodes (default: 0).

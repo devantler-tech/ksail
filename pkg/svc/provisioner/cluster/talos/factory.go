@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
@@ -91,6 +92,15 @@ func newProvisionerFromOptions(
 		WithKubeconfigContext(kubeconfigContext).
 		WithTalosconfigPath(talosconfigPath).
 		WithSkipCNIChecks(skipCNIChecks)
+
+	// Override the default Talos container image when a version pin is set.
+	if version := strings.TrimSpace(opts.Version); version != "" {
+		if !strings.HasPrefix(version, "v") {
+			version = "v" + version
+		}
+
+		options.WithTalosImage(talosImageRepository + ":" + version)
+	}
 
 	if opts.ControlPlanes > 0 {
 		options.WithControlPlaneNodes(int(opts.ControlPlanes))

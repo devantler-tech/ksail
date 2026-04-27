@@ -435,6 +435,7 @@ func TestEngine_VanillaOptionsChange_SkippedForNonVanilla(t *testing.T) {
 	}
 }
 
+//nolint:dupl // Structural similarity with HetznerOptionsChange table-driven test is intentional.
 func TestEngine_TalosOptionsChange(t *testing.T) {
 	t.Parallel()
 
@@ -445,6 +446,13 @@ func TestEngine_TalosOptionsChange(t *testing.T) {
 		oldValue string
 		newValue string
 	}{
+		{
+			name:     "version pin change",
+			mutate:   func(s *v1alpha1.ClusterSpec) { s.Talos.Version = "v1.12.0" },
+			field:    "cluster.talos.version",
+			oldValue: "",
+			newValue: "v1.12.0",
+		},
 		{
 			name:     "control plane count change",
 			mutate:   func(s *v1alpha1.ClusterSpec) { s.Talos.ControlPlanes = 3 },
@@ -506,6 +514,7 @@ func TestEngine_TalosOptionsChange_SkippedForNonTalos(t *testing.T) {
 	}
 }
 
+//nolint:dupl // Structural similarity with TalosOptionsChange table-driven test is intentional.
 func TestEngine_HetznerOptionsChange_RecreateRequired(t *testing.T) {
 	t.Parallel()
 

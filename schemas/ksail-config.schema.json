@@ -200,6 +200,9 @@
             },
             "talos": {
               "properties": {
+                "version": {
+                  "type": "string"
+                },
                 "controlPlanes": {
                   "type": "integer"
                 },
