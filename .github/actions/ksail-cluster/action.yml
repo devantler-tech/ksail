@@ -347,6 +347,13 @@ runs:
             # fails with "cluster already exists" or "network '<cluster>' already exists".
             docker ps -aq --filter "label=talos.owned=true" \
               | xargs -r docker rm -f 2>/dev/null || true
+            # Remove any lingering Talos cluster state directories.
+            # ksail cluster delete --force may not clean up ~/.talos/clusters/<name>/.
+            # On the next attempt, the Talos provisioner checks for this directory and
+            # refuses to create with "state directory already exists, is the cluster
+            # already running?". Since this retry loop is only for Talos+Docker on a
+            # single-use CI runner, it is safe to remove all leftover Talos state.
+            rm -rf ~/.talos/clusters/ || true
             # Remove any lingering KSail-managed mirror registry containers.
             # ksail cluster delete may not remove registry containers, leaving their
             # Docker network endpoints alive. The next create attempt then fails with
