@@ -1,6 +1,6 @@
 {
-  "last_run": "2026-04-27T00:00:00Z",
-  "workflow_run_id": "24971762629",
+  "last_run": "2026-04-27T10:00:00Z",
+  "workflow_run_id": "24995908986",
   "commented_issues": {
     "4385": "2026-04-27",
     "4386": "2026-04-26",
@@ -24,11 +24,13 @@
     "4119": "2026-04-18"
   },
   "open_prs": {
-    "traefik_fix_4388": "[Repo Assist] fix(k3s): disable Traefik when using Cilium CNI to prevent Gateway API CRD conflict",
-    "gatekeeper_fix": "[Repo Assist] fix(gatekeeper): wait for ValidatingWebhookConfiguration caBundle before returning from Install",
-    "diff_refactor": "[Repo Assist] refactor(diff): use appendChange helper in checkLocalRegistryChange and checkVanillaOptionsChange"
+    "traefik_fix_4388": "[Repo Assist] fix(k3s): disable Traefik when using Cilium CNI - PR #4388",
+    "gatekeeper_fix_4397": "[Repo Assist] fix(gatekeeper): wait for ValidatingWebhookConfiguration caBundle - PR #4397",
+    "diff_refactor_4398": "[Repo Assist] refactor(diff): use appendChange helper - PR #4398",
+    "perf_notify_color": "[Repo Assist] perf(notify): cache color objects in ProgressGroup - created run 24995908986"
   },
   "merged_prs": {
+    "4396": "fix(ci): Talos+Docker retry logic - merged 2026-04-27",
     "4359": "perf(notify): eliminate per-tick spinner and map allocations - merged 2026-04-26",
     "fail_fast_pr": "ci: set fail-fast: false for system test Docker matrix - merged 2026-04-26",
     "4352": "refactor(setup): replace repeated if-append with table-driven loop - merged 2026-04-25",
@@ -42,8 +44,8 @@
     "4174": "fix(ci): benchmark awk deduplication - merged 2026-04-20",
     "4153": "perf(image): skip scanner.Text() allocation - merged 2026-04-19"
   },
-  "last_code_quality_domain": "refactor",
-  "issue_backlog_cursor": "4386",
+  "last_code_quality_domain": "performance",
+  "issue_backlog_cursor": "4399",
   "created_issues": {
     "4316": "[Repo Assist] [chore]: verify KSail compatibility with ArgoCD v3.4 stable and update embedded client",
     "4317": "[Repo Assist] [feature]: add `ksail cipher rotate` for Age key rotation across all encrypted secrets",
@@ -57,11 +59,18 @@
     "4084": ["4067", "4172", "4192"],
     "4085": ["4060", "4063", "4066", "4067", "4068", "4079", "4192"]
   },
+  "labels_applied": {
+    "4380": ["next"],
+    "3983": ["next"],
+    "4384": ["next"],
+    "4317": ["next"]
+  },
   "notes": [
     "link_sub_issue is NOT idempotent - always verify sub-issue not already linked before calling",
     "PR #4388 open (repo-assist) - fix K3s Cilium Traefik CRD conflict #4386",
-    "PR gatekeeper_fix open (repo-assist) - fix Gatekeeper webhook readiness #4385 - created run 24971762629",
-    "PR diff_refactor open (repo-assist) - refactor diff engine appendChange - created run 24971762629",
+    "PR #4397 open (repo-assist) - fix Gatekeeper webhook readiness #4385",
+    "PR #4398 open (repo-assist) - refactor diff engine appendChange",
+    "PR perf_notify_color open (repo-assist) - cache color objects - created run 24995908986, no PR number yet",
     "PR #4382 open (maintainer) - fix Talos version pin #4380",
     "PR #4383 open (maintainer) - feat metadata.name support",
     "PR #4358 open (maintainer) - fix kyverno webhook readiness",
@@ -69,13 +78,11 @@
     "PR #4365 open (maintainer) - nodeAutoscaling guard",
     "PR #4366 open (maintainer) - hetzner firewall hardening #4363 #4364",
     "PR #4393 open (docs/daily-docs) - hetzner ingressFirewall docs",
-    "PR #4396 open (copilot) - fix(ci) Talos+Docker retry logic",
-    "domain alternation: last was 'refactor' - next should be 'performance'",
-    "Issue #4384 (native node autoscaling Hetzner) - large feature, no sub-issues yet",
-    "Issue #4385 (Gatekeeper webhook warmup race) - FIXED with gatekeeper_fix PR this run",
+    "PR #4396 merged (copilot) - fix(ci) Talos+Docker retry logic - merged 2026-04-27",
+    "domain alternation: last was 'performance' - next should be 'test'",
+    "Issue #4384 (native node autoscaling Hetzner) - large feature, labelled next",
+    "Issue #4385 (Gatekeeper webhook warmup race) - FIXED with PR #4397",
     "Issue #4386 (K3s+Cilium Traefik CRD conflict) - FIXED with PR #4388",
-    "Parent issues #4084 and #4085 are both closed (not_planned/completed)",
-    "Issue #4091 (K3s blob integrity) - closed not_planned by maintainer 2026-04-22",
-    "Issue #4196 (K3s+Calico API race) - closed completed by maintainer 2026-04-21"
+    "Issue #4380 (Talos version pin bug) - has maintainer PR #4382, labelled next"
   ]
 }
