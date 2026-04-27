@@ -93,7 +93,8 @@ func (i *Installer) Install(ctx context.Context) error {
 	defer webhookCancel()
 
 	err = i.waitForWebhookReady(webhookCtx)
-	if err != nil && !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, errNoTimeRemaining) {
+	if err != nil && !errors.Is(err, context.DeadlineExceeded) &&
+		!errors.Is(err, errNoTimeRemaining) {
 		return fmt.Errorf("kyverno webhook not ready after install: %w", err)
 	}
 
