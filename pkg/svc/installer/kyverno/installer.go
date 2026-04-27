@@ -73,16 +73,16 @@ func NewInstaller(
 // first workload operations after cluster setup.
 //
 // Base.Install manages its own context deadline (timeout + buffer) internally,
-// so ctx is passed through as-is. The webhook readiness poll gets a separate,
-// independent deadline of timeout to avoid competing for the same budget as
-// the Helm install.
+// so ctx is passed through as-is. The webhook readiness poll is rooted at
+// context.Background() rather than ctx so it always receives a full independent
+// deadline of timeout, regardless of how much time the Helm install consumed.
 func (i *Installer) Install(ctx context.Context) error {
 	err := i.Base.Install(ctx)
 	if err != nil {
 		return fmt.Errorf("installing kyverno base chart: %w", err)
 	}
 
-	webhookCtx, webhookCancel := context.WithTimeout(ctx, i.timeout)
+	webhookCtx, webhookCancel := context.WithTimeout(context.Background(), i.timeout)
 	defer webhookCancel()
 
 	err = i.waitForWebhookReady(webhookCtx)
