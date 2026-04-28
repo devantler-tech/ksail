@@ -2,12 +2,12 @@ package configmanager_test
 
 import (
 	"bytes"
-	"errors"
-	"strings"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	configmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/ksail"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestMigrateDeprecatedNodeCounts_CopiesWhenNewUnset(t *testing.T) {
@@ -19,32 +19,18 @@ func TestMigrateDeprecatedNodeCounts_CopiesWhenNewUnset(t *testing.T) {
 
 	var out bytes.Buffer
 
-	err := configmanager.MigrateDeprecatedNodeCountsForTest(cfg, &out)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	require.NoError(t, configmanager.MigrateDeprecatedNodeCountsForTest(cfg, &out))
 
-	if cfg.Spec.Cluster.ControlPlanes != 3 {
-		t.Fatalf("expected ControlPlanes=3, got %d", cfg.Spec.Cluster.ControlPlanes)
-	}
-
-	if cfg.Spec.Cluster.Workers != 2 {
-		t.Fatalf("expected Workers=2, got %d", cfg.Spec.Cluster.Workers)
-	}
-
-	if cfg.Spec.Cluster.Talos.ControlPlanes != 0 || cfg.Spec.Cluster.Talos.Workers != 0 {
-		t.Fatalf("expected legacy fields to be zeroed after migration, got cp=%d workers=%d",
-			cfg.Spec.Cluster.Talos.ControlPlanes, cfg.Spec.Cluster.Talos.Workers)
-	}
+	assert.Equal(t, int32(3), cfg.Spec.Cluster.ControlPlanes)
+	assert.Equal(t, int32(2), cfg.Spec.Cluster.Workers)
+	assert.Zero(t, cfg.Spec.Cluster.Talos.ControlPlanes,
+		"legacy field should be zeroed after migration")
+	assert.Zero(t, cfg.Spec.Cluster.Talos.Workers,
+		"legacy field should be zeroed after migration")
 
 	warning := out.String()
-	if !strings.Contains(warning, "spec.cluster.talos.controlPlanes is deprecated") {
-		t.Fatalf("expected deprecation warning for controlPlanes, got %q", warning)
-	}
-
-	if !strings.Contains(warning, "spec.cluster.talos.workers is deprecated") {
-		t.Fatalf("expected deprecation warning for workers, got %q", warning)
-	}
+	assert.Contains(t, warning, "spec.cluster.talos.controlPlanes is deprecated")
+	assert.Contains(t, warning, "spec.cluster.talos.workers is deprecated")
 }
 
 func TestMigrateDeprecatedNodeCounts_NoOpWhenLegacyUnset(t *testing.T) {
@@ -55,18 +41,10 @@ func TestMigrateDeprecatedNodeCounts_NoOpWhenLegacyUnset(t *testing.T) {
 
 	var out bytes.Buffer
 
-	err := configmanager.MigrateDeprecatedNodeCountsForTest(cfg, &out)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	require.NoError(t, configmanager.MigrateDeprecatedNodeCountsForTest(cfg, &out))
 
-	if cfg.Spec.Cluster.ControlPlanes != 5 {
-		t.Fatalf("expected ControlPlanes=5, got %d", cfg.Spec.Cluster.ControlPlanes)
-	}
-
-	if out.Len() != 0 {
-		t.Fatalf("expected no warning output, got %q", out.String())
-	}
+	assert.Equal(t, int32(5), cfg.Spec.Cluster.ControlPlanes)
+	assert.Empty(t, out.String(), "no warning expected when legacy field unset")
 }
 
 func TestMigrateDeprecatedNodeCounts_ConflictReturnsError(t *testing.T) {
@@ -77,12 +55,10 @@ func TestMigrateDeprecatedNodeCounts_ConflictReturnsError(t *testing.T) {
 	cfg.Spec.Cluster.Talos.ControlPlanes = 5
 
 	err := configmanager.MigrateDeprecatedNodeCountsForTest(cfg, nil)
-	if !errors.Is(err, configmanager.ErrDeprecatedFieldConflict) {
-		t.Fatalf("expected ErrDeprecatedFieldConflict, got %v", err)
-	}
+	require.ErrorIs(t, err, configmanager.ErrDeprecatedFieldConflict)
 }
 
-func TestMigrateDeprecatedNodeCounts_MatchingValuesAreNotConflicts(t *testing.T) {
+func TestMigrateDeprecatedNodeCounts_MatchingValuesAreSilent(t *testing.T) {
 	t.Parallel()
 
 	cfg := v1alpha1.NewCluster()
@@ -91,20 +67,12 @@ func TestMigrateDeprecatedNodeCounts_MatchingValuesAreNotConflicts(t *testing.T)
 
 	var out bytes.Buffer
 
-	err := configmanager.MigrateDeprecatedNodeCountsForTest(cfg, &out)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	require.NoError(t, configmanager.MigrateDeprecatedNodeCountsForTest(cfg, &out))
 
-	if cfg.Spec.Cluster.ControlPlanes != 3 {
-		t.Fatalf("expected ControlPlanes=3, got %d", cfg.Spec.Cluster.ControlPlanes)
-	}
-
-	if cfg.Spec.Cluster.Talos.ControlPlanes != 0 {
-		t.Fatalf("expected legacy field zeroed, got %d", cfg.Spec.Cluster.Talos.ControlPlanes)
-	}
-
-	if !strings.Contains(out.String(), "deprecated") {
-		t.Fatalf("expected deprecation warning, got %q", out.String())
-	}
+	assert.Equal(t, int32(3), cfg.Spec.Cluster.ControlPlanes)
+	assert.Zero(t, cfg.Spec.Cluster.Talos.ControlPlanes,
+		"legacy field should be zeroed even when values match")
+	assert.Empty(t, out.String(),
+		"no warning expected when new and legacy values are equal (no copy needed)")
 }
+

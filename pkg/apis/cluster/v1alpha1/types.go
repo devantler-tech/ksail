@@ -69,12 +69,12 @@ type ClusterSpec struct {
 	// ControlPlanes is the number of control-plane nodes (default: 1).
 	// Provider/distribution-agnostic: applies to Vanilla (Kind), K3s (K3d), Talos, and VCluster.
 	// Supersedes spec.cluster.talos.controlPlanes (deprecated; aliased on load).
-	ControlPlanes int32 `default:"1" json:"controlPlanes,omitzero"`
+	ControlPlanes int32 `default:"1" json:"controlPlanes,omitzero" jsonschema:"description=Number of control-plane nodes to create for the cluster (provider/distribution-agnostic),minimum=0"` //nolint:lll
 	// Workers is the number of worker nodes (default: 0).
 	// Provider/distribution-agnostic: applies to Vanilla (Kind), K3s (K3d), Talos, and VCluster.
 	// When 0 on Talos, scheduling is allowed on control-plane nodes.
 	// Supersedes spec.cluster.talos.workers (deprecated; aliased on load).
-	Workers int32 `json:"workers,omitzero"`
+	Workers int32 `json:"workers,omitzero" jsonschema:"description=Number of worker nodes to create for the cluster (provider/distribution-agnostic),minimum=0"` //nolint:lll
 
 	// Distribution-specific options
 	Vanilla OptionsVanilla `json:"vanilla,omitzero"`

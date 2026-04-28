@@ -14,6 +14,7 @@ import (
 //
 // Migration rules per field:
 //   - new == 0 && old != 0 → copy old → new, warn.
+//   - new != 0 && old != 0 && old == new → silently zero old (no warning, no copy needed).
 //   - new != 0 && old != 0 && old != new → return an error (ambiguous configuration).
 //   - new != 0 && old == 0 → no-op (current canonical path).
 //   - new == 0 && old == 0 → no-op (downstream defaults will fill it in).
@@ -57,13 +58,14 @@ func migrateDeprecatedInt32(newField, oldField *int32, oldPath, newPath string, 
 		)
 	}
 
-	if *newField == 0 {
+	copied := *newField == 0
+	if copied {
 		*newField = *oldField
 	}
 
 	*oldField = 0
 
-	if out != nil {
+	if copied && out != nil {
 		_, _ = fmt.Fprintf(
 			out,
 			"warning: %s is deprecated; use %s. KSail migrated the value automatically.\n",
