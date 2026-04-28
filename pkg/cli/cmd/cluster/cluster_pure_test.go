@@ -22,6 +22,7 @@ import (
 var (
 	errClusterPureResourceAlreadyExists = errors.New("resource already exists")
 	errClusterPureGeneric               = errors.New("some error")
+	errClusterPureTalosConfigEmpty      = errors.New("talos config file is empty")
 )
 
 // ===========================================================================
@@ -726,11 +727,11 @@ func newTestCmd(t *testing.T) *cobra.Command {
 }
 
 // newTestClusterCfg returns a *v1alpha1.Cluster whose kubeconfig path is set to
-// the given absolute path and context to the given context name.
-func newTestClusterCfg(kubeconfigPath, kubeconfigContext string) *v1alpha1.Cluster {
+// the given absolute path with a fixed test context name.
+func newTestClusterCfg(kubeconfigPath string) *v1alpha1.Cluster {
 	cfg := &v1alpha1.Cluster{}
 	cfg.Spec.Cluster.Connection.Kubeconfig = kubeconfigPath
-	cfg.Spec.Cluster.Connection.Context = kubeconfigContext
+	cfg.Spec.Cluster.Connection.Context = "test-context"
 
 	return cfg
 }
@@ -738,8 +739,7 @@ func newTestClusterCfg(kubeconfigPath, kubeconfigContext string) *v1alpha1.Clust
 // TestRefreshAndVerifyKubeconfig_ValidKubeconfigSkipsRefresh verifies that when a
 // valid kubeconfig already exists (staleness check returns false), the refresh is
 // skipped entirely and no error is returned.
-func TestRefreshAndVerifyKubeconfig_ValidKubeconfigSkipsRefresh(t *testing.T) {
-	// Mutates the global isKubeconfigStaleFunc — cannot run in parallel.
+func TestRefreshAndVerifyKubeconfig_ValidKubeconfigSkipsRefresh(t *testing.T) { //nolint:paralleltest // Mutates the global isKubeconfigStaleFunc.
 	dir := t.TempDir()
 	kcPath := filepath.Join(dir, "config")
 	require.NoError(t, os.WriteFile(kcPath, []byte("placeholder"), 0o600))
@@ -751,7 +751,7 @@ func TestRefreshAndVerifyKubeconfig_ValidKubeconfigSkipsRefresh(t *testing.T) {
 	err := cluster.ExportRefreshAndVerifyKubeconfig(
 		newTestCmd(t),
 		refresher,
-		newTestClusterCfg(kcPath, "test-context"),
+		newTestClusterCfg(kcPath),
 		"test-cluster",
 	)
 
@@ -761,8 +761,7 @@ func TestRefreshAndVerifyKubeconfig_ValidKubeconfigSkipsRefresh(t *testing.T) {
 
 // TestRefreshAndVerifyKubeconfig_NoKubeconfigRefreshSucceeds verifies that when no
 // kubeconfig exists and the refresh succeeds (and creates the file), no error is returned.
-func TestRefreshAndVerifyKubeconfig_NoKubeconfigRefreshSucceeds(t *testing.T) {
-	// Mutates the global isKubeconfigStaleFunc — cannot run in parallel.
+func TestRefreshAndVerifyKubeconfig_NoKubeconfigRefreshSucceeds(t *testing.T) { //nolint:paralleltest // Mutates the global isKubeconfigStaleFunc.
 	dir := t.TempDir()
 	kcPath := filepath.Join(dir, "config")
 	// File does not exist yet.
@@ -780,7 +779,7 @@ func TestRefreshAndVerifyKubeconfig_NoKubeconfigRefreshSucceeds(t *testing.T) {
 	err := cluster.ExportRefreshAndVerifyKubeconfig(
 		newTestCmd(t),
 		refresher,
-		newTestClusterCfg(kcPath, "test-context"),
+		newTestClusterCfg(kcPath),
 		"test-cluster",
 	)
 
@@ -790,8 +789,7 @@ func TestRefreshAndVerifyKubeconfig_NoKubeconfigRefreshSucceeds(t *testing.T) {
 
 // TestRefreshAndVerifyKubeconfig_NoKubeconfigRefreshFails verifies that when no
 // kubeconfig exists and the refresh also fails, a hard error is returned.
-func TestRefreshAndVerifyKubeconfig_NoKubeconfigRefreshFails(t *testing.T) {
-	// Mutates the global isKubeconfigStaleFunc — cannot run in parallel.
+func TestRefreshAndVerifyKubeconfig_NoKubeconfigRefreshFails(t *testing.T) { //nolint:paralleltest // Mutates the global isKubeconfigStaleFunc.
 	dir := t.TempDir()
 	kcPath := filepath.Join(dir, "config")
 	// File does not exist.
@@ -799,27 +797,25 @@ func TestRefreshAndVerifyKubeconfig_NoKubeconfigRefreshFails(t *testing.T) {
 	restore := cluster.ExportSetIsKubeconfigStaleFunc(func(_, _ string) bool { return true })
 	defer restore()
 
-	refreshErr := errors.New("talos config file is empty")
-	refresher := &mockKubeconfigRefresher{err: refreshErr}
+	refresher := &mockKubeconfigRefresher{err: errClusterPureTalosConfigEmpty}
 
 	err := cluster.ExportRefreshAndVerifyKubeconfig(
 		newTestCmd(t),
 		refresher,
-		newTestClusterCfg(kcPath, "test-context"),
+		newTestClusterCfg(kcPath),
 		"test-cluster",
 	)
 
 	require.Error(t, err)
-	assert.ErrorContains(t, err, "failed to refresh kubeconfig")
-	assert.ErrorContains(t, err, "talos config file is empty")
+	require.ErrorContains(t, err, "failed to refresh kubeconfig")
+	require.ErrorContains(t, err, "talos config file is empty")
 	assert.True(t, refresher.called)
 }
 
 // TestRefreshAndVerifyKubeconfig_StaleKubeconfigRefreshFailsWarns verifies that when
 // a stale kubeconfig already exists and the refresh fails, the function warns but
 // returns nil so that downstream operations can still attempt to use the existing file.
-func TestRefreshAndVerifyKubeconfig_StaleKubeconfigRefreshFailsWarns(t *testing.T) {
-	// Mutates the global isKubeconfigStaleFunc — cannot run in parallel.
+func TestRefreshAndVerifyKubeconfig_StaleKubeconfigRefreshFailsWarns(t *testing.T) { //nolint:paralleltest // Mutates the global isKubeconfigStaleFunc.
 	dir := t.TempDir()
 	kcPath := filepath.Join(dir, "config")
 	require.NoError(t, os.WriteFile(kcPath, []byte("placeholder"), 0o600))
@@ -827,13 +823,12 @@ func TestRefreshAndVerifyKubeconfig_StaleKubeconfigRefreshFailsWarns(t *testing.
 	restore := cluster.ExportSetIsKubeconfigStaleFunc(func(_, _ string) bool { return true })
 	defer restore()
 
-	refreshErr := errors.New("talos config file is empty")
-	refresher := &mockKubeconfigRefresher{err: refreshErr}
+	refresher := &mockKubeconfigRefresher{err: errClusterPureTalosConfigEmpty}
 
 	err := cluster.ExportRefreshAndVerifyKubeconfig(
 		newTestCmd(t),
 		refresher,
-		newTestClusterCfg(kcPath, "test-context"),
+		newTestClusterCfg(kcPath),
 		"test-cluster",
 	)
 
@@ -844,15 +839,14 @@ func TestRefreshAndVerifyKubeconfig_StaleKubeconfigRefreshFailsWarns(t *testing.
 // TestRefreshAndVerifyKubeconfig_StatPermissionError verifies that non-ENOENT
 // os.Stat errors (e.g. permission denied) are returned immediately rather than
 // being misinterpreted as "file missing".
-func TestRefreshAndVerifyKubeconfig_StatPermissionError(t *testing.T) {
-	// Mutates the global isKubeconfigStaleFunc — cannot run in parallel.
+func TestRefreshAndVerifyKubeconfig_StatPermissionError(t *testing.T) { //nolint:paralleltest // Mutates the global isKubeconfigStaleFunc.
 	dir := t.TempDir()
 	// Create a directory that we can't read (os.Stat on a file inside it will
 	// fail with EACCES on most Unix systems).
 	noAccessDir := filepath.Join(dir, "noaccess")
-	require.NoError(t, os.MkdirAll(noAccessDir, 0o000))
+	require.NoError(t, os.MkdirAll(noAccessDir, 0o000)) //nolint:gosec // Intentionally restrictive for test.
 
-	t.Cleanup(func() { _ = os.Chmod(noAccessDir, 0o755) })
+	t.Cleanup(func() { _ = os.Chmod(noAccessDir, 0o750) })
 
 	kcPath := filepath.Join(noAccessDir, "config")
 
@@ -864,11 +858,11 @@ func TestRefreshAndVerifyKubeconfig_StatPermissionError(t *testing.T) {
 	err := cluster.ExportRefreshAndVerifyKubeconfig(
 		newTestCmd(t),
 		refresher,
-		newTestClusterCfg(kcPath, "test-context"),
+		newTestClusterCfg(kcPath),
 		"test-cluster",
 	)
 
 	require.Error(t, err)
-	assert.ErrorContains(t, err, "failed to stat kubeconfig")
+	require.ErrorContains(t, err, "failed to stat kubeconfig")
 	assert.False(t, refresher.called, "should not attempt refresh on permission error")
 }
