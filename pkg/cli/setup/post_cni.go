@@ -98,10 +98,15 @@ const (
 
 	// csrApproverReadinessTimeout is the maximum time to wait for the
 	// kubelet-serving-cert-approver deployment (from Talos inlineManifests) to
-	// become ready. After CNI is installed, the approver pod needs to be
-	// scheduled, pull its image, start, and begin approving kubelet serving
-	// CSRs. Two minutes accommodates image pulls on fresh cloud nodes.
-	csrApproverReadinessTimeout = 2 * time.Minute
+	// become ready. The approver pod starts at cluster creation (before CNI),
+	// so it enters CrashLoopBackOff while CNI is unavailable. When a
+	// sequential pre-phase (e.g. cert-manager) precedes the main infra phase
+	// and a slower CNI (e.g. Cilium) is used, the pod can be in a 160–300 s
+	// backoff cycle by the time the wait starts. Ten minutes provides enough
+	// headroom for the pod to exit CrashLoopBackOff, restart, and pass its
+	// readiness probe even in the worst-case combination of Cilium CNI and a
+	// cert-manager pre-phase.
+	csrApproverReadinessTimeout = 10 * time.Minute
 )
 
 // apiServerStabilitySuccesses returns the number of consecutive successful
@@ -471,6 +476,30 @@ func installComponentsInPhases(
 	writer := cmd.OutOrStdout()
 	labels := notify.InstallingLabels()
 
+	// When cert-manager and a policy engine are both needed, install cert-manager
+	// first in its own sequential phase before the parallel infrastructure phase.
+	// This ensures cert-manager is fully ready (webhook + cainjector up) when the
+	// policy engine starts — otherwise cert issuance for Kyverno's webhook TLS can
+	// take 15-20+ minutes because cert-manager is still initialising.
+	if reqs.NeedsCertManager && reqs.NeedsPolicyEngine {
+		certManagerTask := newTask("cert-manager", clusterCfg, factories, InstallCertManagerSilent)
+
+		err := runInfraPhase(
+			ctx, clusterCfg, writer, labels, tmr,
+			[]notify.ProgressTask{certManagerTask},
+			cniInstalled, false,
+		)
+		if err != nil {
+			return err
+		}
+
+		// cert-manager is installed; exclude it from the parallel infra phase below.
+		// Also clear cniInstalled so the main phase runs the full stability check
+		// (node readiness + kube-system DaemonSets) rather than the abbreviated one.
+		reqs.NeedsCertManager = false
+		cniInstalled = false
+	}
+
 	infraTasks := buildInfrastructureTasks(clusterCfg, factories, reqs)
 	if len(infraTasks) > 0 {
 		needsCSRApproverWait := reqs.NeedsMetricsServer &&
@@ -504,10 +533,11 @@ func installComponentsInPhases(
 	return nil
 }
 
-// runInfraPhase installs Phase 1 infrastructure components (metrics-server,
-// load-balancer, kubelet-csr-approver, CSI, cert-manager, policy-engine).
-// For Cilium CNI, a pre-flight stability check ensures the eBPF dataplane
-// has programmed pod-to-service routing before components are deployed.
+// runInfraPhase runs a set of infrastructure tasks in parallel, preceded by a
+// pre-flight stability check for Cilium CNI and an optional CSR approver wait.
+// It is safe to call multiple times (e.g., once for cert-manager, once for the
+// remaining components). The stability check completes quickly when the cluster
+// is already stable after a previous call.
 // cniInstalled indicates whether CNI was just installed — when true, the node
 // readiness check in the stability pre-flight is skipped.
 // needsCSRApproverWait indicates whether to wait for the kubelet-serving-cert-approver

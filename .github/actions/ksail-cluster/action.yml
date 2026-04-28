@@ -301,14 +301,89 @@ runs:
       run: |
         set -euo pipefail
         mkdir -p /tmp/ksail-system-test-logs
-        {
-        if [ "$INIT" = "true" ]; then
-          ksail ${CONFIG:+--config "$CONFIG"} cluster create
+
+        create_cluster() {
+          if [ "$INIT" = "true" ]; then
+            ksail ${CONFIG:+--config "$CONFIG"} cluster create
+          else
+            # shellcheck disable=SC2086
+            ksail ${CONFIG:+--config "$CONFIG"} cluster create --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS
+          fi
+        }
+
+        # Talos+Docker clusters may experience transient bootstrap failures
+        # (node-join timeouts, CNI/CSI initialization races on shared CI runners).
+        # Retry up to 3 times with cleanup between attempts.
+        # See: https://github.com/devantler-tech/ksail/issues/4289
+        if [ "$DISTRIBUTION" = "Talos" ] && [ "$PROVIDER" = "Docker" ]; then
+          MAX_ATTEMPTS=3
         else
-          # shellcheck disable=SC2086
-          ksail ${CONFIG:+--config "$CONFIG"} cluster create --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS
+          MAX_ATTEMPTS=1
         fi
-        } 2>&1 | tee /tmp/ksail-system-test-logs/cluster-create.log
+
+        create_succeeded=false
+        for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
+          LOG_FILE="/tmp/ksail-system-test-logs/cluster-create-attempt-${attempt}.log"
+          if create_cluster 2>&1 | tee "$LOG_FILE"; then
+            create_succeeded=true
+            # Copy the successful attempt log to the canonical name for other steps
+            cp "$LOG_FILE" /tmp/ksail-system-test-logs/cluster-create.log
+            break
+          fi
+          if [ "$attempt" -lt "$MAX_ATTEMPTS" ]; then
+            echo "⚠️ cluster create attempt $attempt failed, cleaning up before retry…"
+            CLEANUP_LOG="/tmp/ksail-system-test-logs/cluster-create-cleanup-${attempt}.log"
+            # Remove the partially-created cluster so the next attempt starts clean
+            {
+            if [ "$INIT" = "true" ]; then
+              ksail ${CONFIG:+--config "$CONFIG"} cluster delete --force || true
+            else
+              # shellcheck disable=SC2086
+              ksail ${CONFIG:+--config "$CONFIG"} cluster delete --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS --force || true
+            fi
+            # Remove any lingering Talos cluster node containers.
+            # ksail cluster delete --force may leave Talos Docker containers behind,
+            # keeping the cluster Docker network alive. The next create attempt then
+            # fails with "cluster already exists" or "network '<cluster>' already exists".
+            docker ps -aq --filter "label=talos.owned=true" \
+              | xargs -r docker rm -f 2>/dev/null || true
+            # Remove any lingering Talos cluster state directories.
+            # ksail cluster delete --force may not clean up ~/.talos/clusters/<name>/.
+            # On the next attempt, the Talos provisioner checks for this directory and
+            # refuses to create with "state directory already exists, is the cluster
+            # already running?". Since this retry loop is only for Talos+Docker on a
+            # single-use CI runner, it is safe to remove all leftover Talos state.
+            rm -rf ~/.talos/clusters/ || true
+            # Remove any lingering KSail-managed mirror registry containers.
+            # ksail cluster delete may not remove registry containers, leaving their
+            # Docker network endpoints alive. The next create attempt then fails with
+            # "endpoint with name <cluster>-<registry> already exists in network <cluster>".
+            # Filter by the KSail ownership label first, and keep the suffix match to
+            # limit cleanup to the known registry container naming scheme.
+            for _reg_suffix in docker.io ghcr.io quay.io registry.k8s.io; do
+              docker ps -aq \
+                --filter "label=io.ksail.registry" \
+                --filter "name=-${_reg_suffix}" \
+                | xargs -r docker rm -f 2>/dev/null || true
+            done
+            # Prune unused Docker resources (networks, stopped containers, dangling images).
+            # This will also remove any cluster Docker networks left behind after the
+            # container cleanup above.
+            docker system prune -f || true
+            } 2>&1 | tee "$CLEANUP_LOG"
+            echo "⚠️ waiting 30s before retry…"
+            sleep 30
+          fi
+        done
+
+        if [ "$create_succeeded" != "true" ]; then
+          # Copy the last attempt log to the canonical name for diagnostic uploads
+          cp "/tmp/ksail-system-test-logs/cluster-create-attempt-${MAX_ATTEMPTS}.log" \
+            /tmp/ksail-system-test-logs/cluster-create.log 2>/dev/null || true
+          echo "❌ cluster create failed after $MAX_ATTEMPTS attempts"
+          exit 1
+        fi
+
         # Determine kubeconfig path: parse --kubeconfig from args, fall back to default
         KUBECONFIG_PATH="${HOME}/.kube/config"
         # shellcheck disable=SC2086

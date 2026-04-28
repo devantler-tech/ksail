@@ -52,7 +52,7 @@ go install github.com/devantler-tech/ksail/v7@latest   # Go install
 
 ### Which Kubernetes distributions does KSail support?
 
-KSail supports four distributions: **Vanilla** (Kind), **K3s** (K3d), **Talos**, and **VCluster** (Vind). See the [Support Matrix](/support-matrix/) for provider compatibility.
+KSail currently supports **Vanilla** (Kind), **K3s** (K3d), **Talos**, **VCluster** (Vind), and **KWOK** (kwokctl, simulated). **EKS** is **Coming Soon**. See the [Support Matrix](/support-matrix/) for current provider compatibility and feature status.
 
 ### Can I create multiple clusters?
 
@@ -69,7 +69,7 @@ ksail cluster create --ttl 1h
 # Supported duration formats: 30m, 1h, 2h30m
 ```
 
-TTL is shown as a column in `ksail cluster list` output when any cluster has a TTL set (e.g., `59m` or `EXPIRED`). `ksail cluster info` also shows remaining TTL time for the current cluster context. See [`ksail cluster create` flags](/cli-flags/cluster/cluster-create/) for details. For usage patterns and tips, see [Ephemeral Clusters](/features/ephemeral-clusters/).
+For usage patterns and tips, see [Ephemeral Clusters](/features/ephemeral-clusters/).
 
 ### How do I switch between clusters?
 
@@ -92,13 +92,16 @@ Changing the distribution (e.g., Vanilla to Talos) or provider (e.g., Docker to 
 
 ### Which distributions support LoadBalancer services?
 
-All distributions provide LoadBalancer support:
+LoadBalancer support varies by distribution and provider:
 
 - **Vanilla**: cloud-provider-kind
 - **K3s**: built-in ServiceLB
-- **Talos/Docker**: MetalLB (pool 172.18.255.200-172.18.255.250)
-- **Talos/Hetzner**: Hetzner Cloud Load Balancer
+- **Talos/Docker**: MetalLB (pool 172.18.255.200-172.18.255.250); **Talos/Hetzner**: Hetzner Cloud Load Balancer
 - **VCluster**: delegates to host cluster (`spec.cluster.loadBalancer` has no effect)
+- **KWOK**: simulated via API (no real traffic routing)
+- **EKS**: built-in AWS Load Balancer Controller (planned)
+
+See the [Support Matrix](/support-matrix/#component--distribution-matrix) for the full compatibility table.
 
 ### Can I add nodes to an existing cluster?
 
