@@ -193,8 +193,8 @@ func (m *ConfigManager) getFieldMappings() map[any]string {
 		&m.Config.Spec.Cluster.ImportImages:           "import-images",
 
 		// Cluster-level node counts (apply across distributions).
-		&m.Config.Spec.Cluster.ControlPlanes:            "control-planes",
-		&m.Config.Spec.Cluster.Workers:                  "workers",
+		&m.Config.Spec.Cluster.ControlPlanes:           "control-planes",
+		&m.Config.Spec.Cluster.Workers:                 "workers",
 		&m.Config.Spec.Cluster.Talos.ImageVerification: "image-verification",
 
 		// Cross-distribution options

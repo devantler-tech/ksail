@@ -317,7 +317,8 @@ func (m *ConfigManager) unmarshalAndApplyDefaults(ignoreConfigFile bool) error {
 
 	// Migrate deprecated fields (e.g. spec.cluster.talos.{controlPlanes,workers})
 	// into their cluster-level replacements before applying field-selector defaults.
-	if err := migrateDeprecatedNodeCounts(m.Config, m.Writer); err != nil {
+	err = migrateDeprecatedNodeCounts(m.Config, m.Writer)
+	if err != nil {
 		return err
 	}
 
@@ -333,20 +334,25 @@ func (m *ConfigManager) unmarshalAndApplyDefaults(ignoreConfigFile bool) error {
 		}
 	}
 
-	// Make kubeconfig path absolute relative to config file directory
-	err = m.makeKubeconfigPathAbsolute()
+	// Make kubeconfig and source directory paths absolute relative to config file directory.
+	// Skip source directory when ignoreConfigFile is true (e.g., during init command scaffolding)
+	// because the path will be joined with an explicit output directory later.
+	return m.resolvePathDefaults(ignoreConfigFile)
+}
+
+func (m *ConfigManager) resolvePathDefaults(ignoreConfigFile bool) error {
+	err := m.makeKubeconfigPathAbsolute()
 	if err != nil {
 		return fmt.Errorf("failed to resolve kubeconfig path: %w", err)
 	}
 
-	// Make source directory path absolute relative to config file directory.
-	// Skip when ignoreConfigFile is true (e.g., during init command scaffolding)
-	// because the path will be joined with an explicit output directory later.
-	if !ignoreConfigFile {
-		err = m.makeSourceDirectoryAbsolute()
-		if err != nil {
-			return fmt.Errorf("failed to resolve source directory path: %w", err)
-		}
+	if ignoreConfigFile {
+		return nil
+	}
+
+	err = m.makeSourceDirectoryAbsolute()
+	if err != nil {
+		return fmt.Errorf("failed to resolve source directory path: %w", err)
 	}
 
 	return nil

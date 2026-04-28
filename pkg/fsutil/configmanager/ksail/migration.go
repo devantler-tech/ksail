@@ -9,8 +9,8 @@ import (
 
 // migrateDeprecatedNodeCounts copies legacy spec.cluster.talos.{controlPlanes,workers}
 // into the cluster-level spec.cluster.{controlPlanes,workers} when the new fields are
-// unset. Emits a deprecation notice to the supplied writer the first time a legacy
-// value is observed.
+// unset. Emits a deprecation notice to the supplied writer when a legacy value is
+// copied into the new field.
 //
 // Migration rules per field:
 //   - new == 0 && old != 0 → copy old → new, warn.
@@ -26,26 +26,31 @@ func migrateDeprecatedNodeCounts(cfg *v1alpha1.Cluster, out io.Writer) error {
 	cluster := &cfg.Spec.Cluster
 	talos := &cluster.Talos
 
-	if err := migrateDeprecatedInt32(
+	err := migrateDeprecatedInt32(
 		&cluster.ControlPlanes,
-		&talos.ControlPlanes,
+		&talos.ControlPlanes, //nolint:staticcheck // intentional: migration of deprecated field
 		"spec.cluster.talos.controlPlanes",
 		"spec.cluster.controlPlanes",
 		out,
-	); err != nil {
+	)
+	if err != nil {
 		return err
 	}
 
 	return migrateDeprecatedInt32(
 		&cluster.Workers,
-		&talos.Workers,
+		&talos.Workers, //nolint:staticcheck // intentional: migration of deprecated field
 		"spec.cluster.talos.workers",
 		"spec.cluster.workers",
 		out,
 	)
 }
 
-func migrateDeprecatedInt32(newField, oldField *int32, oldPath, newPath string, out io.Writer) error {
+func migrateDeprecatedInt32(
+	newField, oldField *int32,
+	oldPath, newPath string,
+	out io.Writer,
+) error {
 	if *oldField == 0 {
 		return nil
 	}

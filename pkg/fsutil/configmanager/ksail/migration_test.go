@@ -14,7 +14,9 @@ func TestMigrateDeprecatedNodeCounts_CopiesWhenNewUnset(t *testing.T) {
 	t.Parallel()
 
 	cfg := v1alpha1.NewCluster()
+	//nolint:staticcheck // testing migration of deprecated field
 	cfg.Spec.Cluster.Talos.ControlPlanes = 3
+	//nolint:staticcheck // testing migration of deprecated field
 	cfg.Spec.Cluster.Talos.Workers = 2
 
 	var out bytes.Buffer
@@ -23,8 +25,10 @@ func TestMigrateDeprecatedNodeCounts_CopiesWhenNewUnset(t *testing.T) {
 
 	assert.Equal(t, int32(3), cfg.Spec.Cluster.ControlPlanes)
 	assert.Equal(t, int32(2), cfg.Spec.Cluster.Workers)
+	//nolint:staticcheck // testing migration of deprecated field
 	assert.Zero(t, cfg.Spec.Cluster.Talos.ControlPlanes,
 		"legacy field should be zeroed after migration")
+	//nolint:staticcheck // testing migration of deprecated field
 	assert.Zero(t, cfg.Spec.Cluster.Talos.Workers,
 		"legacy field should be zeroed after migration")
 
@@ -52,6 +56,7 @@ func TestMigrateDeprecatedNodeCounts_ConflictReturnsError(t *testing.T) {
 
 	cfg := v1alpha1.NewCluster()
 	cfg.Spec.Cluster.ControlPlanes = 3
+	//nolint:staticcheck // testing migration of deprecated field
 	cfg.Spec.Cluster.Talos.ControlPlanes = 5
 
 	err := configmanager.MigrateDeprecatedNodeCountsForTest(cfg, nil)
@@ -63,6 +68,7 @@ func TestMigrateDeprecatedNodeCounts_MatchingValuesAreSilent(t *testing.T) {
 
 	cfg := v1alpha1.NewCluster()
 	cfg.Spec.Cluster.ControlPlanes = 3
+	//nolint:staticcheck // testing migration of deprecated field
 	cfg.Spec.Cluster.Talos.ControlPlanes = 3
 
 	var out bytes.Buffer
@@ -70,9 +76,9 @@ func TestMigrateDeprecatedNodeCounts_MatchingValuesAreSilent(t *testing.T) {
 	require.NoError(t, configmanager.MigrateDeprecatedNodeCountsForTest(cfg, &out))
 
 	assert.Equal(t, int32(3), cfg.Spec.Cluster.ControlPlanes)
+	//nolint:staticcheck // testing migration of deprecated field
 	assert.Zero(t, cfg.Spec.Cluster.Talos.ControlPlanes,
 		"legacy field should be zeroed even when values match")
 	assert.Empty(t, out.String(),
 		"no warning expected when new and legacy values are equal (no copy needed)")
 }
-

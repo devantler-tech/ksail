@@ -181,7 +181,11 @@ func (f DefaultFactory) createKindProvisioner(
 	kindConfig := f.DistributionConfig.Kind
 
 	// Apply node count overrides from CLI flags / cluster-level config.
-	applyKindNodeCounts(kindConfig, cluster.Spec.Cluster.ControlPlanes, cluster.Spec.Cluster.Workers)
+	applyKindNodeCounts(
+		kindConfig,
+		cluster.Spec.Cluster.ControlPlanes,
+		cluster.Spec.Cluster.Workers,
+	)
 
 	// Apply kubelet certificate rotation patches when metrics-server is enabled.
 	// This must happen AFTER applyKindNodeCounts since that function may replace the nodes slice.
@@ -361,8 +365,11 @@ func (f DefaultFactory) createTalosProvisioner(
 	skipCNIChecks := true
 
 	// Overlay cluster-level node counts onto Talos options for downstream consumers.
+	// Bridges the deprecated Talos-scoped fields during the migration window.
 	talosOpts := cluster.Spec.Cluster.Talos
+	//nolint:staticcheck // intentional: bridging deprecated field
 	talosOpts.ControlPlanes = cluster.Spec.Cluster.ControlPlanes
+	//nolint:staticcheck // intentional: bridging deprecated field
 	talosOpts.Workers = cluster.Spec.Cluster.Workers
 
 	provisioner, err := talosprovisioner.CreateProvisioner(
