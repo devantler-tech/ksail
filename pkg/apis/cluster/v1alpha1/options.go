@@ -23,14 +23,14 @@ type OptionsTalos struct {
 	// Deprecated: use spec.cluster.controlPlanes. This field is kept as a
 	// migration alias and emits a warning on load. Removal planned in a
 	// future minor release.
-	ControlPlanes int32 `json:"controlPlanes,omitzero" jsonschema:"description=DEPRECATED: use spec.cluster.controlPlanes instead"` //nolint:lll
+	ControlPlanes int32 `json:"controlPlanes,omitzero" jsonschema:"description=DEPRECATED: use spec.cluster.controlPlanes instead,minimum=0"` //nolint:lll
 	// Workers is the number of worker nodes (default: 0).
 	// When 0, scheduling is allowed on control-plane nodes.
 	//
 	// Deprecated: use spec.cluster.workers. This field is kept as a
 	// migration alias and emits a warning on load. Removal planned in a
 	// future minor release.
-	Workers int32 `json:"workers,omitzero" jsonschema:"description=DEPRECATED: use spec.cluster.workers instead"` //nolint:lll
+	Workers int32 `json:"workers,omitzero" jsonschema:"description=DEPRECATED: use spec.cluster.workers instead,minimum=0"` //nolint:lll
 	// Config is the path to the talosconfig file.
 	// Defaults to "~/.talos/config".
 	Config string `default:"~/.talos/config" json:"config,omitzero"`

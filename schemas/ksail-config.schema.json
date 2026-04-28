@@ -215,10 +215,12 @@
                 },
                 "controlPlanes": {
                   "type": "integer",
+                  "minimum": 0,
                   "description": "DEPRECATED: use spec.cluster.controlPlanes instead"
                 },
                 "workers": {
                   "type": "integer",
+                  "minimum": 0,
                   "description": "DEPRECATED: use spec.cluster.workers instead"
                 },
                 "config": {
