@@ -6654,9 +6654,12 @@ var isKubeconfigStaleFunc = kubeconfighook.IsKubeconfigStale
 // downstream Helm/GitOps operations. The refresh is best-effort:
 //
 //   - If a valid kubeconfig already exists at the expected path (file present and
-//     the K8s API server responds successfully), the refresh is skipped entirely.
-//     This handles CI runners where a kubeconfig is pre-loaded from a secret and
-//     the talosconfig is absent or empty.
+//     not rejected by the K8s API with an auth error), the refresh is skipped
+//     entirely. This handles CI runners where a kubeconfig is pre-loaded from a
+//     secret and the talosconfig is absent or empty. Note: the staleness check
+//     considers the kubeconfig valid when the API server is unreachable (timeout,
+//     connection refused) — this is intentional because the credentials may still
+//     be valid and refreshing would also fail in that scenario.
 //
 //   - If the kubeconfig is missing or stale, the provisioner's KubeconfigRefresher
 //     is called. A hard error is returned only when the refresh fails AND no file
@@ -6679,11 +6682,18 @@ func refreshAndVerifyKubeconfig(
 	kubeconfigContext := clusterCfg.Spec.Cluster.Connection.Context
 
 	_, statErr := os.Stat(kubeconfigPath)
+	if statErr != nil && !os.IsNotExist(statErr) {
+		return fmt.Errorf("failed to stat kubeconfig at %q: %w", kubeconfigPath, statErr)
+	}
+
 	fileExists := statErr == nil
 
-	// If the kubeconfig is present and the API server accepts it, skip the
-	// refresh. A working kubeconfig is sufficient; there is no need to
-	// round-trip through the Talos/Omni API.
+	// If the kubeconfig file is present and not stale (i.e., loadable and
+	// not rejected by the API server with an auth error), skip the refresh.
+	// Note: IsKubeconfigStale returns false when the API is unreachable
+	// (timeout, connection refused) — this is intentional because the
+	// kubeconfig credentials may still be valid; refreshing would also fail
+	// in that scenario.
 	if fileExists && !isKubeconfigStaleFunc(kubeconfigPath, kubeconfigContext) {
 		return nil
 	}

@@ -840,3 +840,35 @@ func TestRefreshAndVerifyKubeconfig_StaleKubeconfigRefreshFailsWarns(t *testing.
 	require.NoError(t, err, "should warn and proceed when stale file exists but refresh fails")
 	assert.True(t, refresher.called)
 }
+
+// TestRefreshAndVerifyKubeconfig_StatPermissionError verifies that non-ENOENT
+// os.Stat errors (e.g. permission denied) are returned immediately rather than
+// being misinterpreted as "file missing".
+func TestRefreshAndVerifyKubeconfig_StatPermissionError(t *testing.T) {
+	// Mutates the global isKubeconfigStaleFunc — cannot run in parallel.
+	dir := t.TempDir()
+	// Create a directory that we can't read (os.Stat on a file inside it will
+	// fail with EACCES on most Unix systems).
+	noAccessDir := filepath.Join(dir, "noaccess")
+	require.NoError(t, os.MkdirAll(noAccessDir, 0o000))
+
+	t.Cleanup(func() { _ = os.Chmod(noAccessDir, 0o755) })
+
+	kcPath := filepath.Join(noAccessDir, "config")
+
+	restore := cluster.ExportSetIsKubeconfigStaleFunc(func(_, _ string) bool { return true })
+	defer restore()
+
+	refresher := &mockKubeconfigRefresher{}
+
+	err := cluster.ExportRefreshAndVerifyKubeconfig(
+		newTestCmd(t),
+		refresher,
+		newTestClusterCfg(kcPath, "test-context"),
+		"test-cluster",
+	)
+
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "failed to stat kubeconfig")
+	assert.False(t, refresher.called, "should not attempt refresh on permission error")
+}
