@@ -25,6 +25,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/cli/editor"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/flags"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/kubeconfig"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/kubeconfighook"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/lifecycle"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/setup"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/setup/localregistry"
@@ -6629,7 +6630,7 @@ func createAndVerifyProvisioner(
 	// and subsequent Helm operations (CNI, GitOps installation).
 	refresher, ok := provisioner.(clusterprovisioner.KubeconfigRefresher)
 	if ok {
-		err = refreshAndVerifyKubeconfig(cmd.Context(), refresher, ctx.ClusterCfg, clusterName)
+		err = refreshAndVerifyKubeconfig(cmd, refresher, ctx.ClusterCfg, clusterName)
 		if err != nil {
 			return nil, err
 		}
@@ -6646,29 +6647,63 @@ func createAndVerifyProvisioner(
 	return provisioner, nil
 }
 
-// refreshAndVerifyKubeconfig invokes the provisioner's KubeconfigRefresher and
-// ensures the kubeconfig file actually exists on disk after the refresh.
-// This is a defense-in-depth guard (regression #4112): if any upstream step
-// silently no-ops the fetch, downstream Helm/GitOps calls would otherwise only
-// surface a cryptic "stat <path>: no such file or directory" warning.
-// Failing here produces a clear, actionable error.
+//nolint:gochecknoglobals // dependency injection for tests
+var isKubeconfigStaleFunc = kubeconfighook.IsKubeconfigStale
+
+// refreshAndVerifyKubeconfig ensures a valid kubeconfig is available for
+// downstream Helm/GitOps operations. The refresh is best-effort:
+//
+//   - If a valid kubeconfig already exists at the expected path (file present and
+//     the K8s API server responds successfully), the refresh is skipped entirely.
+//     This handles CI runners where a kubeconfig is pre-loaded from a secret and
+//     the talosconfig is absent or empty.
+//
+//   - If the kubeconfig is missing or stale, the provisioner's KubeconfigRefresher
+//     is called. A hard error is returned only when the refresh fails AND no file
+//     exists as a fallback. If a file already existed (even if stale), a warning is
+//     emitted and the command proceeds — the downstream operations may still succeed.
+//
+// The existence-and-validity check uses a lightweight K8s ServerVersion probe
+// (3 s timeout) so it never blocks meaningful work.
 func refreshAndVerifyKubeconfig(
-	ctx context.Context,
+	cmd *cobra.Command,
 	refresher clusterprovisioner.KubeconfigRefresher,
 	clusterCfg *v1alpha1.Cluster,
 	clusterName string,
 ) error {
-	err := refresher.RefreshKubeconfig(ctx, clusterName)
-	if err != nil {
-		return fmt.Errorf("failed to refresh kubeconfig: %w", err)
-	}
-
 	kubeconfigPath, pathErr := kubeconfig.GetKubeconfigPathFromConfig(clusterCfg)
 	if pathErr != nil {
 		return fmt.Errorf("failed to resolve kubeconfig path: %w", pathErr)
 	}
 
+	kubeconfigContext := clusterCfg.Spec.Cluster.Connection.Context
+
 	_, statErr := os.Stat(kubeconfigPath)
+	fileExists := statErr == nil
+
+	// If the kubeconfig is present and the API server accepts it, skip the
+	// refresh. A working kubeconfig is sufficient; there is no need to
+	// round-trip through the Talos/Omni API.
+	if fileExists && !isKubeconfigStaleFunc(kubeconfigPath, kubeconfigContext) {
+		return nil
+	}
+
+	err := refresher.RefreshKubeconfig(cmd.Context(), clusterName)
+	if err != nil {
+		if fileExists {
+			// The kubeconfig file was present before we tried (though possibly
+			// stale). We cannot refresh it (e.g., talosconfig is missing on an
+			// ephemeral CI runner), but the file may still work. Warn and let
+			// the downstream operations decide.
+			notify.Warningf(cmd.OutOrStderr(), "failed to refresh kubeconfig: %v", err)
+
+			return nil
+		}
+
+		return fmt.Errorf("failed to refresh kubeconfig: %w", err)
+	}
+
+	_, statErr = os.Stat(kubeconfigPath)
 	if statErr != nil {
 		return fmt.Errorf(
 			"kubeconfig not available after refresh for %s provider at %q: %w",

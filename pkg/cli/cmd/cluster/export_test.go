@@ -14,6 +14,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/cli/setup/localregistry"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/ksail"
 	clusterdetector "github.com/devantler-tech/ksail/v7/pkg/svc/detector/cluster"
+	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/state"
 	v1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
@@ -456,3 +457,22 @@ var ExportInitFieldSelectors = InitFieldSelectors
 //
 //nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
 var ExportIsClusterContainer = IsClusterContainer
+
+// ExportRefreshAndVerifyKubeconfig exports refreshAndVerifyKubeconfig for testing.
+func ExportRefreshAndVerifyKubeconfig(
+	cmd *cobra.Command,
+	refresher clusterprovisioner.KubeconfigRefresher,
+	clusterCfg *v1alpha1.Cluster,
+	clusterName string,
+) error {
+	return refreshAndVerifyKubeconfig(cmd, refresher, clusterCfg, clusterName)
+}
+
+// ExportSetIsKubeconfigStaleFunc overrides the isKubeconfigStaleFunc for testing.
+// The returned function restores the original.
+func ExportSetIsKubeconfigStaleFunc(fn func(string, string) bool) func() {
+	orig := isKubeconfigStaleFunc
+	isKubeconfigStaleFunc = fn
+
+	return func() { isKubeconfigStaleFunc = orig }
+}
