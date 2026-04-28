@@ -769,7 +769,7 @@ jobs:
         # job (with apt autoremove pulling in update-initramfs / man-db rebuilds).
         # Each directory removal is best-effort: missing paths are not an error.
         run: |
-          set -u
+          set -euo pipefail
           before=$(df --output=avail -BG / | tail -1 | tr -dc '0-9')
           # Largest offenders on ubuntu-latest (sizes from
           # https://github.com/actions/runner-images). Order by descending size.
