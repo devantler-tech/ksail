@@ -32,3 +32,9 @@ type Patch = talosconfigmanager.Patch
 
 // MigrateDeprecatedNodeCountsForTest exposes migrateDeprecatedNodeCounts for testing.
 var MigrateDeprecatedNodeCountsForTest = migrateDeprecatedNodeCounts
+
+// ExpectedDistributionConfigNameForTest exports expectedDistributionConfigName for testing.
+var ExpectedDistributionConfigNameForTest = expectedDistributionConfigName
+
+// DistributionConfigIsOppositeDefaultForTest exports distributionConfigIsOppositeDefault for testing.
+var DistributionConfigIsOppositeDefaultForTest = distributionConfigIsOppositeDefault
