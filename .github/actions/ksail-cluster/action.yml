@@ -341,7 +341,34 @@ runs:
               # shellcheck disable=SC2086
               ksail ${CONFIG:+--config "$CONFIG"} cluster delete --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS --force || true
             fi
-            # Prune any unused Docker resources left by the failed attempt (but not volumes)
+            # Remove any lingering Talos cluster node containers.
+            # ksail cluster delete --force may leave Talos Docker containers behind,
+            # keeping the cluster Docker network alive. The next create attempt then
+            # fails with "cluster already exists" or "network '<cluster>' already exists".
+            docker ps -aq --filter "label=talos.owned=true" \
+              | xargs -r docker rm -f 2>/dev/null || true
+            # Remove any lingering Talos cluster state directories.
+            # ksail cluster delete --force may not clean up ~/.talos/clusters/<name>/.
+            # On the next attempt, the Talos provisioner checks for this directory and
+            # refuses to create with "state directory already exists, is the cluster
+            # already running?". Since this retry loop is only for Talos+Docker on a
+            # single-use CI runner, it is safe to remove all leftover Talos state.
+            rm -rf ~/.talos/clusters/ || true
+            # Remove any lingering KSail-managed mirror registry containers.
+            # ksail cluster delete may not remove registry containers, leaving their
+            # Docker network endpoints alive. The next create attempt then fails with
+            # "endpoint with name <cluster>-<registry> already exists in network <cluster>".
+            # Filter by the KSail ownership label first, and keep the suffix match to
+            # limit cleanup to the known registry container naming scheme.
+            for _reg_suffix in docker.io ghcr.io quay.io registry.k8s.io; do
+              docker ps -aq \
+                --filter "label=io.ksail.registry" \
+                --filter "name=-${_reg_suffix}" \
+                | xargs -r docker rm -f 2>/dev/null || true
+            done
+            # Prune unused Docker resources (networks, stopped containers, dangling images).
+            # This will also remove any cluster Docker networks left behind after the
+            # container cleanup above.
             docker system prune -f || true
             } 2>&1 | tee "$CLEANUP_LOG"
             echo "⚠️ waiting 30s before retry…"
