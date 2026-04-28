@@ -854,11 +854,11 @@ func TestRefreshAndVerifyKubeconfig_StatPermissionError(t *testing.T) {
 	// Create a directory that we can't read (os.Stat on a file inside it will
 	// fail with EACCES on most Unix systems).
 	noAccessDir := filepath.Join(dir, "noaccess")
-	require.NoError(t, os.MkdirAll(noAccessDir, 0o000))
+	require.NoError(t, os.MkdirAll(noAccessDir, 0o000)) //nolint:gosec // Intentionally restrictive for test.
 
 	t.Cleanup(
-		func() { _ = os.Chmod(noAccessDir, 0o750) },
-	) //nolint:gosec // Restore access for cleanup.
+		func() { _ = os.Chmod(noAccessDir, 0o750) }, //nolint:gosec // Restore access for cleanup.
+	)
 
 	kcPath := filepath.Join(noAccessDir, "config")
 
