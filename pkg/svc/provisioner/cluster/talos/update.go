@@ -567,10 +567,8 @@ func (p *Provisioner) GetCurrentConfig(
 	// Introspect actual node counts from the running cluster
 	// to avoid false-positive diffs from hardcoded defaults.
 	controlPlanes, workers := p.introspectNodeCounts(ctx)
-	spec.Talos = v1alpha1.OptionsTalos{
-		ControlPlanes: controlPlanes,
-		Workers:       workers,
-	}
+	spec.ControlPlanes = controlPlanes
+	spec.Workers = workers
 
 	// Build provider spec if we have Hetzner options configured.
 	// Hetzner fields (server types, location, network, SSH key) cannot be
