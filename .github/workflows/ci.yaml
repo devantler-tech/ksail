@@ -599,7 +599,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     needs: [changes, build-artifact]
-    if: (github.event_name == 'pull_request' && needs.changes.outputs.system-test == 'true') || (github.event_name == 'workflow_dispatch' && inputs.run_system_tests == true)
+    if: >-
+      (github.event_name == 'pull_request'
+      && needs.changes.outputs.system-test == 'true'
+      && github.event.pull_request.head.repo.full_name == github.repository)
+      || (github.event_name == 'workflow_dispatch' && inputs.run_system_tests == true)
     permissions:
       contents: read
     outputs:
@@ -633,7 +637,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     needs: [changes, build-artifact]
-    if: (github.event_name == 'pull_request' && needs.changes.outputs.system-test == 'true') || (github.event_name == 'workflow_dispatch' && inputs.run_system_tests == true)
+    if: >-
+      (github.event_name == 'pull_request'
+      && needs.changes.outputs.system-test == 'true'
+      && github.event.pull_request.head.repo.full_name == github.repository)
+      || (github.event_name == 'workflow_dispatch' && inputs.run_system_tests == true)
     permissions:
       contents: read
     outputs:
@@ -669,8 +677,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     needs: [changes, build-artifact, warm-helm-cache, warm-mirror-cache]
-    if: (github.event_name == 'pull_request' && needs.changes.outputs.system-test == 'true') || (github.event_name == 'workflow_dispatch' && inputs.run_system_tests == true)
-    environment: ci
+    if: >-
+      (github.event_name == 'pull_request'
+      && needs.changes.outputs.system-test == 'true'
+      && github.event.pull_request.head.repo.full_name == github.repository)
+      || (github.event_name == 'workflow_dispatch' && inputs.run_system_tests == true)
     permissions:
       contents: read
       packages: write
