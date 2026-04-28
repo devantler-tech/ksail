@@ -739,7 +739,8 @@ func newTestClusterCfg(kubeconfigPath string) *v1alpha1.Cluster {
 // TestRefreshAndVerifyKubeconfig_ValidKubeconfigSkipsRefresh verifies that when a
 // valid kubeconfig already exists (staleness check returns false), the refresh is
 // skipped entirely and no error is returned.
-func TestRefreshAndVerifyKubeconfig_ValidKubeconfigSkipsRefresh(t *testing.T) { //nolint:paralleltest // Mutates the global isKubeconfigStaleFunc.
+//nolint:paralleltest // Mutates the global isKubeconfigStaleFunc.
+func TestRefreshAndVerifyKubeconfig_ValidKubeconfigSkipsRefresh(t *testing.T) {
 	dir := t.TempDir()
 	kcPath := filepath.Join(dir, "config")
 	require.NoError(t, os.WriteFile(kcPath, []byte("placeholder"), 0o600))
@@ -761,7 +762,8 @@ func TestRefreshAndVerifyKubeconfig_ValidKubeconfigSkipsRefresh(t *testing.T) { 
 
 // TestRefreshAndVerifyKubeconfig_NoKubeconfigRefreshSucceeds verifies that when no
 // kubeconfig exists and the refresh succeeds (and creates the file), no error is returned.
-func TestRefreshAndVerifyKubeconfig_NoKubeconfigRefreshSucceeds(t *testing.T) { //nolint:paralleltest // Mutates the global isKubeconfigStaleFunc.
+//nolint:paralleltest // Mutates the global isKubeconfigStaleFunc.
+func TestRefreshAndVerifyKubeconfig_NoKubeconfigRefreshSucceeds(t *testing.T) {
 	dir := t.TempDir()
 	kcPath := filepath.Join(dir, "config")
 	// File does not exist yet.
@@ -789,7 +791,8 @@ func TestRefreshAndVerifyKubeconfig_NoKubeconfigRefreshSucceeds(t *testing.T) { 
 
 // TestRefreshAndVerifyKubeconfig_NoKubeconfigRefreshFails verifies that when no
 // kubeconfig exists and the refresh also fails, a hard error is returned.
-func TestRefreshAndVerifyKubeconfig_NoKubeconfigRefreshFails(t *testing.T) { //nolint:paralleltest // Mutates the global isKubeconfigStaleFunc.
+//nolint:paralleltest // Mutates the global isKubeconfigStaleFunc.
+func TestRefreshAndVerifyKubeconfig_NoKubeconfigRefreshFails(t *testing.T) {
 	dir := t.TempDir()
 	kcPath := filepath.Join(dir, "config")
 	// File does not exist.
@@ -815,7 +818,8 @@ func TestRefreshAndVerifyKubeconfig_NoKubeconfigRefreshFails(t *testing.T) { //n
 // TestRefreshAndVerifyKubeconfig_StaleKubeconfigRefreshFailsWarns verifies that when
 // a stale kubeconfig already exists and the refresh fails, the function warns but
 // returns nil so that downstream operations can still attempt to use the existing file.
-func TestRefreshAndVerifyKubeconfig_StaleKubeconfigRefreshFailsWarns(t *testing.T) { //nolint:paralleltest // Mutates the global isKubeconfigStaleFunc.
+//nolint:paralleltest // Mutates the global isKubeconfigStaleFunc.
+func TestRefreshAndVerifyKubeconfig_StaleKubeconfigRefreshFailsWarns(t *testing.T) {
 	dir := t.TempDir()
 	kcPath := filepath.Join(dir, "config")
 	require.NoError(t, os.WriteFile(kcPath, []byte("placeholder"), 0o600))
@@ -839,14 +843,15 @@ func TestRefreshAndVerifyKubeconfig_StaleKubeconfigRefreshFailsWarns(t *testing.
 // TestRefreshAndVerifyKubeconfig_StatPermissionError verifies that non-ENOENT
 // os.Stat errors (e.g. permission denied) are returned immediately rather than
 // being misinterpreted as "file missing".
-func TestRefreshAndVerifyKubeconfig_StatPermissionError(t *testing.T) { //nolint:paralleltest // Mutates the global isKubeconfigStaleFunc.
+//nolint:paralleltest // Mutates the global isKubeconfigStaleFunc.
+func TestRefreshAndVerifyKubeconfig_StatPermissionError(t *testing.T) {
 	dir := t.TempDir()
 	// Create a directory that we can't read (os.Stat on a file inside it will
 	// fail with EACCES on most Unix systems).
 	noAccessDir := filepath.Join(dir, "noaccess")
 	require.NoError(t, os.MkdirAll(noAccessDir, 0o000)) //nolint:gosec // Intentionally restrictive for test.
 
-	t.Cleanup(func() { _ = os.Chmod(noAccessDir, 0o750) })
+	t.Cleanup(func() { _ = os.Chmod(noAccessDir, 0o750) }) //nolint:gosec // Restore access for cleanup.
 
 	kcPath := filepath.Join(noAccessDir, "config")
 
