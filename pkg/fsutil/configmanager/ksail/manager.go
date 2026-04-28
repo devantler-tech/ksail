@@ -23,6 +23,10 @@ import (
 // ErrDistributionConfigNotFound is returned when a distribution config file is not found.
 var ErrDistributionConfigNotFound = errors.New("distribution config file not found")
 
+// ErrDeprecatedFieldConflict is returned when both a deprecated field and its
+// replacement are set to different values during config load.
+var ErrDeprecatedFieldConflict = errors.New("deprecated field conflicts with its replacement")
+
 // ConfigManager implements configuration management for KSail v1alpha1.Cluster configurations.
 type ConfigManager struct {
 	Viper              *viper.Viper
@@ -310,6 +314,12 @@ func (m *ConfigManager) unmarshalAndApplyDefaults(ignoreConfigFile bool) error {
 
 	// Do NOT restore defaults for TypeMeta fields - they should be validated as-is.
 	// This ensures validation will catch incorrect/missing apiVersion and kind values.
+
+	// Migrate deprecated fields (e.g. spec.cluster.talos.{controlPlanes,workers})
+	// into their cluster-level replacements before applying field-selector defaults.
+	if err := migrateDeprecatedNodeCounts(m.Config, m.Writer); err != nil {
+		return err
+	}
 
 	// Track whether local-registry was explicitly set in config
 	m.localRegistryExplicit = m.Viper.IsSet("spec.cluster.localRegistry.registry") ||

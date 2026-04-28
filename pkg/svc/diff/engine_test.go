@@ -27,10 +27,10 @@ func newBaseSpec() *v1alpha1.ClusterSpec {
 		GitOpsEngine:  "None",
 		LocalRegistry: v1alpha1.LocalRegistry{Registry: "localhost:5050"},
 		Vanilla:       v1alpha1.OptionsVanilla{MirrorsDir: "kind/mirrors"},
+		ControlPlanes: 1,
+		Workers:       0,
 		Talos: v1alpha1.OptionsTalos{
-			ControlPlanes: 1,
-			Workers:       0,
-			ISO:           122630,
+			ISO: 122630,
 		},
 	}
 }
@@ -455,15 +455,15 @@ func TestEngine_TalosOptionsChange(t *testing.T) {
 		},
 		{
 			name:     "control plane count change",
-			mutate:   func(s *v1alpha1.ClusterSpec) { s.Talos.ControlPlanes = 3 },
-			field:    "cluster.talos.controlPlanes",
+			mutate:   func(s *v1alpha1.ClusterSpec) { s.ControlPlanes = 3 },
+			field:    "cluster.controlPlanes",
 			oldValue: "1",
 			newValue: "3",
 		},
 		{
 			name:     "worker count change",
-			mutate:   func(s *v1alpha1.ClusterSpec) { s.Talos.Workers = 2 },
-			field:    "cluster.talos.workers",
+			mutate:   func(s *v1alpha1.ClusterSpec) { s.Workers = 2 },
+			field:    "cluster.workers",
 			oldValue: "0",
 			newValue: "2",
 		},
@@ -502,7 +502,7 @@ func TestEngine_TalosOptionsChange_SkippedForNonTalos(t *testing.T) {
 
 	old := newBaseSpec()
 	newer := clone(old)
-	newer.Talos.ControlPlanes = 5
+	newer.ControlPlanes = 5
 
 	engine := diff.NewEngine(v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
 	result := engine.ComputeDiff(old, newer, nil, nil)
@@ -971,8 +971,8 @@ func TestEngine_TalosNodeCountSuppressed_WhenAutoscalingEnabled(t *testing.T) {
 
 	old := newBaseSpec()
 	newer := clone(old)
-	newer.Talos.ControlPlanes = 5
-	newer.Talos.Workers = 3
+	newer.ControlPlanes = 5
+	newer.Workers = 3
 	newer.NodeAutoscaling = v1alpha1.NodeAutoscalingEnabled
 
 	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderDocker)

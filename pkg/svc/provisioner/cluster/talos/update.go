@@ -106,7 +106,7 @@ func (p *Provisioner) DiffConfig(
 	}
 
 	// Guard: control-plane count must remain >= 1 regardless of autoscaling.
-	if newSpec.Talos.ControlPlanes < 1 {
+	if newSpec.ControlPlanes < 1 {
 		return nil, ErrMinimumControlPlanes
 	}
 
@@ -117,22 +117,22 @@ func (p *Provisioner) DiffConfig(
 	}
 
 	// Compare control plane count
-	if oldSpec.Talos.ControlPlanes != newSpec.Talos.ControlPlanes {
+	if oldSpec.ControlPlanes != newSpec.ControlPlanes {
 		result.InPlaceChanges = append(result.InPlaceChanges, clusterupdate.Change{
-			Field:    "talos.controlPlanes",
-			OldValue: strconv.Itoa(int(oldSpec.Talos.ControlPlanes)),
-			NewValue: strconv.Itoa(int(newSpec.Talos.ControlPlanes)),
+			Field:    "controlPlanes",
+			OldValue: strconv.Itoa(int(oldSpec.ControlPlanes)),
+			NewValue: strconv.Itoa(int(newSpec.ControlPlanes)),
 			Category: clusterupdate.ChangeCategoryInPlace,
 			Reason:   "control-plane nodes can be added/removed via provider",
 		})
 	}
 
 	// Compare worker count
-	if oldSpec.Talos.Workers != newSpec.Talos.Workers {
+	if oldSpec.Workers != newSpec.Workers {
 		result.InPlaceChanges = append(result.InPlaceChanges, clusterupdate.Change{
-			Field:    "talos.workers",
-			OldValue: strconv.Itoa(int(oldSpec.Talos.Workers)),
-			NewValue: strconv.Itoa(int(newSpec.Talos.Workers)),
+			Field:    "workers",
+			OldValue: strconv.Itoa(int(oldSpec.Workers)),
+			NewValue: strconv.Itoa(int(newSpec.Workers)),
 			Category: clusterupdate.ChangeCategoryInPlace,
 			Reason:   "worker nodes can be added/removed via provider",
 		})
@@ -163,15 +163,15 @@ func (p *Provisioner) applyNodeScalingChanges(
 		return nil
 	}
 
-	cpDelta := int(newSpec.Talos.ControlPlanes - oldSpec.Talos.ControlPlanes)
-	workerDelta := int(newSpec.Talos.Workers - oldSpec.Talos.Workers)
+	cpDelta := int(newSpec.ControlPlanes - oldSpec.ControlPlanes)
+	workerDelta := int(newSpec.Workers - oldSpec.Workers)
 
 	if cpDelta == 0 && workerDelta == 0 {
 		return nil
 	}
 
 	// Prevent scaling control-plane nodes below 1
-	if newSpec.Talos.ControlPlanes < 1 {
+	if newSpec.ControlPlanes < 1 {
 		return ErrMinimumControlPlanes
 	}
 
@@ -181,8 +181,8 @@ func (p *Provisioner) applyNodeScalingChanges(
 	if p.omniOpts != nil {
 		return p.scaleOmniByRole(
 			ctx, clusterName,
-			int(oldSpec.Talos.ControlPlanes), int(oldSpec.Talos.Workers),
-			int(newSpec.Talos.ControlPlanes), int(newSpec.Talos.Workers),
+			int(oldSpec.ControlPlanes), int(oldSpec.Workers),
+			int(newSpec.ControlPlanes), int(newSpec.Workers),
 			result,
 		)
 	}

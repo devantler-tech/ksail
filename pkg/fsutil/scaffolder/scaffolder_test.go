@@ -1489,7 +1489,7 @@ func TestScaffoldTalos_CreatesDirectoryStructure(t *testing.T) {
 	tempDir := t.TempDir()
 	cluster := createTalosCluster("talos-test")
 	// Set workers to 1 to avoid generating allow-scheduling patch (which would replace .gitkeep in cluster/)
-	cluster.Spec.Cluster.Talos.Workers = 1
+	cluster.Spec.Cluster.Workers = 1
 	scaffolderInstance := scaffolder.NewScaffolder(cluster, io.Discard, nil)
 
 	err := scaffolderInstance.Scaffold(tempDir, false)

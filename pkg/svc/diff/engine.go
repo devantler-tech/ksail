@@ -361,16 +361,16 @@ var talosFieldRules = []fieldRule{
 		getVal:   func(s *v1alpha1.ClusterSpec) string { return s.Talos.Version },
 	},
 	{
-		field:    "cluster.talos.controlPlanes",
+		field:    "cluster.controlPlanes",
 		category: clusterupdate.ChangeCategoryInPlace,
 		reason:   "Talos supports adding/removing control-plane nodes via provider",
-		getVal:   func(s *v1alpha1.ClusterSpec) string { return strconv.Itoa(int(s.Talos.ControlPlanes)) },
+		getVal:   func(s *v1alpha1.ClusterSpec) string { return strconv.Itoa(int(s.ControlPlanes)) },
 	},
 	{
-		field:    "cluster.talos.workers",
+		field:    "cluster.workers",
 		category: clusterupdate.ChangeCategoryInPlace,
 		reason:   "Talos supports adding/removing worker nodes via provider",
-		getVal:   func(s *v1alpha1.ClusterSpec) string { return strconv.Itoa(int(s.Talos.Workers)) },
+		getVal:   func(s *v1alpha1.ClusterSpec) string { return strconv.Itoa(int(s.Workers)) },
 	},
 	talosISORule,
 }

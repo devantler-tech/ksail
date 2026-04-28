@@ -255,11 +255,11 @@ func TestCluster_MarshalJSON_TalosDefaultsPruned(t *testing.T) {
 		},
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{
-				Distribution: v1alpha1.DistributionTalos,
+				Distribution:  v1alpha1.DistributionTalos,
+				ControlPlanes: 1, // default — should be pruned at cluster level
 				Talos: v1alpha1.OptionsTalos{
-					ControlPlanes: 1,                        // default — should be pruned
-					Config:        "~/.talos/config",        // default — should be pruned
-					ISO:           v1alpha1.DefaultTalosISO, // default — should be pruned
+					Config: "~/.talos/config",        // default — should be pruned
+					ISO:    v1alpha1.DefaultTalosISO, // default — should be pruned
 				},
 			},
 		},

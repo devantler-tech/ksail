@@ -180,8 +180,8 @@ func (f DefaultFactory) createKindProvisioner(
 
 	kindConfig := f.DistributionConfig.Kind
 
-	// Apply node count overrides from CLI flags (stored in Talos options)
-	applyKindNodeCounts(kindConfig, cluster.Spec.Cluster.Talos)
+	// Apply node count overrides from CLI flags / cluster-level config.
+	applyKindNodeCounts(kindConfig, cluster.Spec.Cluster.ControlPlanes, cluster.Spec.Cluster.Workers)
 
 	// Apply kubelet certificate rotation patches when metrics-server is enabled.
 	// This must happen AFTER applyKindNodeCounts since that function may replace the nodes slice.
@@ -217,26 +217,23 @@ func (f DefaultFactory) createKindProvisioner(
 	return provisioner, kindConfig, nil
 }
 
-// applyKindNodeCounts applies node count overrides from CLI flags to the Kind config.
-// This enables --control-planes and --workers CLI flags to override the kind.yaml at runtime.
-func applyKindNodeCounts(kindConfig *v1alpha4.Cluster, opts v1alpha1.OptionsTalos) {
-	// Only apply if explicitly set (non-zero values indicate override)
-	if opts.ControlPlanes <= 0 && opts.Workers <= 0 {
+// applyKindNodeCounts applies node count overrides from CLI flags / cluster-level
+// config to the Kind config. Enables --control-planes and --workers CLI flags to
+// override kind.yaml at runtime.
+func applyKindNodeCounts(kindConfig *v1alpha4.Cluster, controlPlanes, workers int32) {
+	if controlPlanes <= 0 && workers <= 0 {
 		return
 	}
 
-	// Calculate target node counts
-	targetCP := int(opts.ControlPlanes)
+	targetCP := int(controlPlanes)
 	if targetCP <= 0 {
 		targetCP = 1 // default to 1 control-plane
 	}
 
-	targetWorkers := int(opts.Workers)
+	targetWorkers := int(workers)
 
-	// Build new nodes slice based on target counts
 	newNodes := make([]v1alpha4.Node, 0, targetCP+targetWorkers)
 
-	// Add control-plane nodes with default image
 	for range targetCP {
 		newNodes = append(newNodes, v1alpha4.Node{
 			Role:  v1alpha4.ControlPlaneRole,
@@ -244,7 +241,6 @@ func applyKindNodeCounts(kindConfig *v1alpha4.Cluster, opts v1alpha1.OptionsTalo
 		})
 	}
 
-	// Add worker nodes with default image
 	for range targetWorkers {
 		newNodes = append(newNodes, v1alpha4.Node{
 			Role:  v1alpha4.WorkerRole,
@@ -267,8 +263,8 @@ func (f DefaultFactory) createK3dProvisioner(
 
 	k3dConfig := f.DistributionConfig.K3d
 
-	// Apply node count overrides from CLI flags (stored in Talos options)
-	applyK3dNodeCounts(k3dConfig, cluster.Spec.Cluster.Talos)
+	// Apply node count overrides from CLI flags / cluster-level config.
+	applyK3dNodeCounts(k3dConfig, cluster.Spec.Cluster.ControlPlanes, cluster.Spec.Cluster.Workers)
 
 	// Apply containerd image verifier plugin volume mount when image verification is enabled.
 	// This mounts the generated config.toml.tmpl into K3d node containers so K3s uses it
@@ -326,21 +322,19 @@ func (f DefaultFactory) createK3dProvisioner(
 	return provisioner, k3dConfig, nil
 }
 
-// applyK3dNodeCounts applies node count overrides from CLI flags to the K3d config.
-// This enables --control-planes and --workers CLI flags to override the k3d.yaml at runtime.
-func applyK3dNodeCounts(k3dConfig *k3dv1alpha5.SimpleConfig, opts v1alpha1.OptionsTalos) {
-	// Only apply if explicitly set (non-zero values indicate override)
-	if opts.ControlPlanes <= 0 && opts.Workers <= 0 {
+// applyK3dNodeCounts applies node count overrides from CLI flags / cluster-level
+// config to the K3d config. Enables --control-planes and --workers CLI flags to
+// override k3d.yaml at runtime.
+func applyK3dNodeCounts(k3dConfig *k3dv1alpha5.SimpleConfig, controlPlanes, workers int32) {
+	if controlPlanes <= 0 && workers <= 0 {
 		return
 	}
 
-	// Apply server (control-plane) count if explicitly set
-	if opts.ControlPlanes > 0 {
-		k3dConfig.Servers = int(opts.ControlPlanes)
+	if controlPlanes > 0 {
+		k3dConfig.Servers = int(controlPlanes)
 	}
 
-	// Apply agent (worker) count - 0 is valid when control-planes is set
-	k3dConfig.Agents = int(opts.Workers)
+	k3dConfig.Agents = int(workers)
 }
 
 func (f DefaultFactory) createTalosProvisioner(
@@ -366,12 +360,17 @@ func (f DefaultFactory) createTalosProvisioner(
 	// services will become ready shortly after bootstrap completes.
 	skipCNIChecks := true
 
+	// Overlay cluster-level node counts onto Talos options for downstream consumers.
+	talosOpts := cluster.Spec.Cluster.Talos
+	talosOpts.ControlPlanes = cluster.Spec.Cluster.ControlPlanes
+	talosOpts.Workers = cluster.Spec.Cluster.Workers
+
 	provisioner, err := talosprovisioner.CreateProvisioner(
 		f.DistributionConfig.Talos,
 		cluster.Spec.Cluster.Connection.Kubeconfig,
 		cluster.Spec.Cluster.Connection.Context,
 		cluster.Spec.Cluster.Provider,
-		cluster.Spec.Cluster.Talos,
+		talosOpts,
 		cluster.Spec.Provider.Hetzner,
 		cluster.Spec.Provider.Omni,
 		skipCNIChecks,
