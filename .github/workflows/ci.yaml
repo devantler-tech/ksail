@@ -148,9 +148,29 @@ jobs:
               - 'go.sum'
               - '.github/actions/**'
             benchmark:
-              - '**/*.go'
+              # Limit to packages that contain benchmarks plus module files.
+              # Avoids paying ~30 min of benchmark cost on PRs that touch only
+              # unrelated Go code. Keep this in sync with the package discovery
+              # step in the `benchmark` job (`grep -rl '^func Benchmark'`).
+              - 'pkg/apis/cluster/v1alpha1/**/*.go'
+              - 'pkg/cli/cmd/cipher/**/*.go'
+              - 'pkg/cli/cmd/cluster/**/*.go'
+              - 'pkg/client/argocd/**/*.go'
+              - 'pkg/client/docker/**/*.go'
+              - 'pkg/client/flux/**/*.go'
+              - 'pkg/client/helm/**/*.go'
+              - 'pkg/client/kubectl/**/*.go'
+              - 'pkg/client/kustomize/**/*.go'
+              - 'pkg/fsutil/configmanager/ksail/**/*.go'
+              - 'pkg/fsutil/marshaller/**/*.go'
+              - 'pkg/k8s/readiness/**/*.go'
+              - 'pkg/notify/**/*.go'
+              - 'pkg/svc/diff/**/*.go'
+              - 'pkg/svc/image/**/*.go'
+              - 'pkg/svc/registryresolver/**/*.go'
               - 'go.mod'
               - 'go.sum'
+              - '.github/workflows/ci.yaml'
             system-test:
               - '**/*.go'
               - '!**/*_test.go'
@@ -783,19 +803,39 @@ jobs:
           persist-credentials: false
 
       - name: 🧹 Free disk space
-        uses: endersonmenezes/free-disk-space@7901478139cff6e9d44df5972fd8ab8fcade4db1 # v3.2.2
-        with:
-          remove_android: true
-          remove_dotnet: true
-          remove_haskell: true
-          remove_tool_cache: true
-          remove_swap: true
-          remove_packages: "azure-cli google-cloud-cli microsoft-edge-stable google-chrome-stable firefox postgresql* temurin-* *llvm* mysql* dotnet-sdk-*"
-          remove_packages_one_command: true
-          remove_folders: "/usr/share/swift /usr/share/miniconda /usr/share/az* /usr/local/lib/node_modules /usr/local/share/chromium /usr/local/share/powershell /usr/local/julia /usr/local/aws-cli /usr/local/aws-sam-cli /usr/share/gradle"
-
-      - name: 🐳 Prune Docker
-        run: docker system prune -af --volumes || true
+        # Targeted `rm -rf` of large hosted-tooling directories that the system
+        # tests do not need. Avoids the slow `apt-get remove` path used by
+        # endersonmenezes/free-disk-space, which previously consumed 3–9 min per
+        # job (with apt autoremove pulling in update-initramfs / man-db rebuilds).
+        # Each directory removal is best-effort: missing paths are not an error.
+        run: |
+          set -u
+          before=$(df --output=avail -BG / | tail -1 | tr -dc '0-9')
+          # Largest offenders on ubuntu-latest (sizes from
+          # https://github.com/actions/runner-images). Order by descending size.
+          sudo rm -rf \
+            /usr/local/lib/android \
+            /usr/share/dotnet \
+            /opt/ghc \
+            /usr/local/share/boost \
+            /usr/share/swift \
+            /opt/hostedtoolcache/CodeQL \
+            /opt/hostedtoolcache/PyPy \
+            /opt/hostedtoolcache/Ruby \
+            /opt/hostedtoolcache/Python \
+            /opt/hostedtoolcache/node \
+            /usr/local/lib/node_modules \
+            /usr/local/share/chromium \
+            /usr/local/share/powershell \
+            /usr/local/julia* \
+            /usr/local/aws-cli \
+            /usr/local/aws-sam-cli \
+            /usr/share/gradle* \
+            /usr/share/az* \
+            /usr/share/miniconda || true
+          docker system prune -af --volumes || true
+          after=$(df --output=avail -BG / | tail -1 | tr -dc '0-9')
+          echo "Free disk space on /: ${before}G -> ${after}G (gained $((after - before))G)"
 
       - name: 🔐 Login to Docker Hub
         if: ${{ vars.DOCKERHUB_USERNAME != '' }}
@@ -885,10 +925,16 @@ jobs:
         shell: bash
         env:
           PACKAGES: ${{ steps.discover.outputs.packages }}
+          # Reduce -count on PRs (-count=3) to halve benchmark wall time while
+          # keeping enough samples for the awk averaging step in
+          # "Prepare benchmark regression gate input" to produce a stable signal.
+          # On push to main (which feeds benchmark-store / the historical chart),
+          # keep -count=5 for higher-quality baselines.
+          BENCH_COUNT: ${{ github.event_name == 'push' && '5' || '3' }}
         run: |
           set -euo pipefail
           echo "$PACKAGES" \
-            | xargs go test -bench=. -benchmem -run='^$' -count=5 -timeout=30m \
+            | xargs go test -bench=. -benchmem -run='^$' -count="${BENCH_COUNT}" -timeout=30m \
             | tee "$RUNNER_TEMP/bench.txt"
 
       - name: 🔍 Prepare benchmark regression gate input
