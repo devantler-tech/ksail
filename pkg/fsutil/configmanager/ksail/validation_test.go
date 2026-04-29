@@ -102,6 +102,13 @@ func TestDistributionConfigIsOppositeDefault(t *testing.T) {
 			want:         false,
 		},
 		{
+			// "k3d.yaml" is K3s's default — opposite of Vanilla
+			name:         "k3d.yaml_is_opposite_for_Vanilla",
+			current:      "k3d.yaml",
+			distribution: v1alpha1.DistributionVanilla,
+			want:         true,
+		},
+		{
 			// "vcluster.yaml" is opposite for Vanilla
 			name:         "vcluster.yaml_is_opposite_for_Vanilla",
 			current:      "vcluster.yaml",
