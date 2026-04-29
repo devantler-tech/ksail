@@ -100,6 +100,12 @@ var ErrInvalidCompressionLevel = errors.New(
 	"compression level out of range",
 )
 
+// ErrEmptyPinnedVersion is returned when spec.cluster.talos.version is set to
+// an empty string in a context where a pinned version is expected.
+var ErrEmptyPinnedVersion = errors.New(
+	"pinned distribution version is empty",
+)
+
 // BackupMetadata contains metadata about a backup.
 type BackupMetadata struct {
 	Version       string    `json:"version"`
@@ -6207,18 +6213,33 @@ func handleVersionUpgrades(
 
 	// Distribution upgrades first (runtime must support K8s version).
 	if updateDist { //nolint:nestif // sequential phase with version refresh guard
-		stepRecreated, err := executeVersionUpgrade(
-			cmd, cfgManager, ctx, deps, upgrader, resolver, clusterName,
-			"distribution", upgrader.DistributionImageRef(),
-			currentVersions.DistributionVersion, upgrader.VersionSuffix(),
-			upgrader.UpgradeDistribution, force, dryRun,
-		)
-		if err != nil {
-			return false, err
-		}
+		// Respect Talos version pin: when spec.cluster.talos.version is set,
+		// cap the distribution upgrade at the pinned version instead of
+		// discovering the latest from OCI. Skip entirely if already at the pin.
+		if ctx.ClusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionTalos &&
+			ctx.ClusterCfg.Spec.Cluster.Talos.Version != "" {
+			err := executePinnedDistributionUpgrade(
+				cmd, upgrader, clusterName,
+				ctx.ClusterCfg.Spec.Cluster.Talos.Version,
+				currentVersions.DistributionVersion, dryRun,
+			)
+			if err != nil {
+				return false, err
+			}
+		} else {
+			stepRecreated, err := executeVersionUpgrade(
+				cmd, cfgManager, ctx, deps, upgrader, resolver, clusterName,
+				"distribution", upgrader.DistributionImageRef(),
+				currentVersions.DistributionVersion, upgrader.VersionSuffix(),
+				upgrader.UpgradeDistribution, force, dryRun,
+			)
+			if err != nil {
+				return false, err
+			}
 
-		if stepRecreated {
-			recreated = true
+			if stepRecreated {
+				recreated = true
+			}
 		}
 
 		// Re-fetch versions after distribution upgrade since recreation may
@@ -6440,6 +6461,124 @@ func handleRecreationUpgrade(
 	})
 
 	return executeRecreateFlow(cmd, cfgManager, ctx, deps, clusterName, force)
+}
+
+// pinnedVersionSkipReason indicates why a pinned version upgrade was skipped.
+type pinnedVersionSkipReason int
+
+const (
+	pinnedVersionProceed     pinnedVersionSkipReason = iota // No skip — proceed with upgrade.
+	pinnedVersionAlreadyAtIt                                // Cluster is already at the pinned version.
+	pinnedVersionNewer                                      // Cluster is newer than the pinned version.
+)
+
+// executePinnedDistributionUpgrade handles Talos distribution upgrades when a version pin is set.
+// It normalizes the pinned version, validates it is a parseable semver, guards against downgrades,
+// and either skips (already at pin), applies the upgrade, or reports a dry-run summary.
+//
+//nolint:funlen // Sequential upgrade orchestration with distinct skip/dry-run/apply phases.
+func executePinnedDistributionUpgrade(
+	cmd *cobra.Command,
+	upgrader clusterupdate.Upgrader,
+	clusterName string,
+	rawPinnedVersion string,
+	currentVersion string,
+	dryRun bool,
+) error {
+	pinnedVersion, skipReason, err := normalizePinnedVersion(rawPinnedVersion, currentVersion)
+	if err != nil {
+		return err
+	}
+
+	if skipReason == pinnedVersionAlreadyAtIt {
+		notify.Infof(cmd.OutOrStdout(),
+			"distribution is already at pinned version %s", pinnedVersion)
+
+		return nil
+	}
+
+	if skipReason == pinnedVersionNewer {
+		notify.Infof(cmd.OutOrStdout(),
+			"cluster is at %s which is newer than pinned version %s; skipping downgrade",
+			currentVersion, pinnedVersion)
+
+		return nil
+	}
+
+	notify.WriteMessage(notify.Message{
+		Type:  notify.InfoType,
+		Emoji: "📌",
+		Content: fmt.Sprintf("distribution upgrade capped at pinned version %s (current: %s)",
+			pinnedVersion, currentVersion),
+		Writer: cmd.OutOrStdout(),
+	})
+
+	if dryRun {
+		notify.Infof(cmd.OutOrStdout(),
+			"Dry run complete. Would upgrade distribution to pinned version %s.", pinnedVersion)
+
+		return nil
+	}
+
+	upgradeErr := upgrader.UpgradeDistribution(
+		cmd.Context(), clusterName, currentVersion, pinnedVersion,
+	)
+	if upgradeErr != nil {
+		if errors.Is(upgradeErr, clustererr.ErrUpgradeSkipped) {
+			notify.Infof(cmd.OutOrStdout(), "distribution upgrade skipped: %v", upgradeErr)
+
+			return nil
+		}
+
+		return fmt.Errorf("distribution upgrade to pinned version %s failed: %w",
+			pinnedVersion, upgradeErr)
+	}
+
+	notify.WriteMessage(notify.Message{
+		Type:    notify.SuccessType,
+		Content: "distribution upgraded to pinned version " + pinnedVersion,
+		Writer:  cmd.OutOrStdout(),
+	})
+
+	return nil
+}
+
+// normalizePinnedVersion validates and normalizes a pinned Talos version.
+// Returns the normalized version string and a skip reason. When the skip reason
+// is pinnedVersionProceed, the caller should proceed with the upgrade.
+// Returns an error if the version is empty or not a valid semver tag.
+func normalizePinnedVersion(
+	rawPinnedVersion, currentVersion string,
+) (string, pinnedVersionSkipReason, error) {
+	rawPinnedVersion = strings.TrimSpace(rawPinnedVersion)
+	if rawPinnedVersion == "" {
+		return "", pinnedVersionProceed, ErrEmptyPinnedVersion
+	}
+
+	pinnedVersion := rawPinnedVersion
+	if !strings.HasPrefix(pinnedVersion, "v") {
+		pinnedVersion = "v" + pinnedVersion
+	}
+
+	// Validate the pinned version is a parseable semver tag.
+	pinned, pinErr := versionresolver.ParseVersion(pinnedVersion)
+	if pinErr != nil {
+		return "", pinnedVersionProceed, fmt.Errorf(
+			"invalid pinned Talos version %q: %w", rawPinnedVersion, pinErr,
+		)
+	}
+
+	if currentVersion == pinnedVersion {
+		return pinnedVersion, pinnedVersionAlreadyAtIt, nil
+	}
+
+	// Guard against downgrades: skip if the cluster is already newer than the pin.
+	current, curErr := versionresolver.ParseVersion(currentVersion)
+	if curErr == nil && pinned.Less(current) {
+		return pinnedVersion, pinnedVersionNewer, nil
+	}
+
+	return pinnedVersion, pinnedVersionProceed, nil
 }
 
 // createAndVerifyProvisioner creates a provisioner and verifies the cluster exists.

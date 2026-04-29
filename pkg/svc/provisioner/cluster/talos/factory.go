@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
@@ -92,11 +93,24 @@ func newProvisionerFromOptions(
 		WithTalosconfigPath(talosconfigPath).
 		WithSkipCNIChecks(skipCNIChecks)
 
+	// Override the default Talos container image when a version pin is set.
+	if version := strings.TrimSpace(opts.Version); version != "" {
+		if !strings.HasPrefix(version, "v") {
+			version = "v" + version
+		}
+
+		options.WithTalosImage(talosImageRepository + ":" + version)
+	}
+
+	//nolint:staticcheck // bridging deprecated field; consumed via overlay in factory.go
 	if opts.ControlPlanes > 0 {
+		//nolint:staticcheck // bridging deprecated field
 		options.WithControlPlaneNodes(int(opts.ControlPlanes))
 	}
 
+	//nolint:staticcheck // bridging deprecated field; consumed via overlay in factory.go
 	if opts.Workers > 0 {
+		//nolint:staticcheck // bridging deprecated field
 		options.WithWorkerNodes(int(opts.Workers))
 	}
 

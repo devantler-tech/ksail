@@ -12,11 +12,25 @@ type OptionsVanilla struct {
 
 // OptionsTalos defines options specific to the Talos distribution.
 type OptionsTalos struct {
+	// Version pins the Talos OS version used for cluster creation and upgrades.
+	// When set, KSail uses this version as the Docker container image tag and
+	// caps `--update-distribution` upgrades at this version. Accepts values
+	// with or without the "v" prefix (e.g., "v1.11.2" or "1.11.2").
+	// When empty, KSail uses its built-in default version.
+	Version string `json:"version,omitzero"`
 	// ControlPlanes is the number of control-plane nodes (default: 1).
-	ControlPlanes int32 `default:"1" json:"controlPlanes,omitzero"`
+	//
+	// Deprecated: use spec.cluster.controlPlanes. This field is kept as a
+	// migration alias and emits a warning on load. Removal planned in a
+	// future minor release.
+	ControlPlanes int32 `json:"controlPlanes,omitzero" jsonschema:"description=DEPRECATED: use spec.cluster.controlPlanes instead,minimum=0"` //nolint:lll
 	// Workers is the number of worker nodes (default: 0).
 	// When 0, scheduling is allowed on control-plane nodes.
-	Workers int32 `json:"workers,omitzero"`
+	//
+	// Deprecated: use spec.cluster.workers. This field is kept as a
+	// migration alias and emits a warning on load. Removal planned in a
+	// future minor release.
+	Workers int32 `json:"workers,omitzero" jsonschema:"description=DEPRECATED: use spec.cluster.workers instead,minimum=0"` //nolint:lll
 	// Config is the path to the talosconfig file.
 	// Defaults to "~/.talos/config".
 	Config string `default:"~/.talos/config" json:"config,omitzero"`
