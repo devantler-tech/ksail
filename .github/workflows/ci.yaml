@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
-  # merge_group:  # commented out — system tests moved to pull_request (re-enable if needed)
+  merge_group:
   workflow_dispatch:
     inputs:
       run_system_tests:
@@ -31,7 +31,7 @@ concurrency:
 permissions: {}
 
 jobs:
-  # cancel-stale-merge-queue — commented out: system tests moved to pull_request (re-enable if needed)
+  # cancel-stale-merge-queue — kept for future use when jobs are moved to merge_group
   # cancel-stale-merge-queue:
   #   name: 🧹 Cancel Stale Merge Queue Runs
   #   if: github.event_name == 'merge_group'
@@ -97,6 +97,7 @@ jobs:
   # Wait for sufficient GitHub API rate limit before proceeding
   rate-limit-gate:
     name: ⏳ Rate Limit Gate
+    if: github.event_name != 'merge_group'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -112,6 +113,7 @@ jobs:
   # Detect which file categories changed to conditionally run jobs
   changes:
     name: 🔍 Detect Changes
+    if: github.event_name != 'merge_group'
     needs: [rate-limit-gate]
     runs-on: ubuntu-latest
     timeout-minutes: 5
