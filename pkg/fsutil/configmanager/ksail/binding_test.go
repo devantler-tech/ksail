@@ -518,7 +518,7 @@ func TestAddFlagsFromFields_Int32Field(t *testing.T) {
 
 			selector := newFieldSelector(
 				func(c *v1alpha1.Cluster) any {
-					return &c.Spec.Cluster.Talos.ControlPlanes
+					return &c.Spec.Cluster.ControlPlanes
 				},
 				testCase.defaultValue,
 				"Number of control planes",
@@ -533,7 +533,7 @@ func TestAddFlagsFromFields_Int32Field(t *testing.T) {
 			require.NoError(t, cmd.Flags().Set("control-planes", testCase.setValue))
 			assert.Equal(
 				t, testCase.expected,
-				manager.Config.Spec.Cluster.Talos.ControlPlanes,
+				manager.Config.Spec.Cluster.ControlPlanes,
 			)
 		})
 	}

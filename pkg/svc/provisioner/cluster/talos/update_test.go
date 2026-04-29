@@ -107,12 +107,12 @@ func TestUpdateCallsOmniNodeScaling(t *testing.T) {
 		WithLogWriter(io.Discard)
 
 	oldSpec := &v1alpha1.ClusterSpec{}
-	oldSpec.Talos.ControlPlanes = 1
-	oldSpec.Talos.Workers = 1
+	oldSpec.ControlPlanes = 1
+	oldSpec.Workers = 1
 
 	newSpec := &v1alpha1.ClusterSpec{}
-	newSpec.Talos.ControlPlanes = 2
-	newSpec.Talos.Workers = 2
+	newSpec.ControlPlanes = 2
+	newSpec.Workers = 2
 
 	result, err := provisioner.Update(
 		context.Background(),
@@ -145,7 +145,7 @@ func TestUpdateSkipsOmniInPlaceConfigApply(t *testing.T) {
 	// Use identical specs so no scaling delta exists — this isolates the
 	// in-place config change guard for Omni clusters.
 	spec := &v1alpha1.ClusterSpec{}
-	spec.Talos.ControlPlanes = 1
+	spec.ControlPlanes = 1
 
 	_, err = provisioner.Update(
 		context.Background(),
@@ -176,7 +176,7 @@ func TestUpdateDoesNotAttemptVersionUpgrade(t *testing.T) {
 	// Identical specs: no scaling/config changes — verifies that Update()
 	// completes without attempting a version upgrade.
 	spec := &v1alpha1.ClusterSpec{}
-	spec.Talos.ControlPlanes = 1
+	spec.ControlPlanes = 1
 
 	result, err := provisioner.Update(
 		context.Background(),
@@ -245,12 +245,12 @@ func TestApplyNodeScalingChanges_NoDelta(t *testing.T) {
 	result := clusterupdate.NewEmptyUpdateResult()
 
 	oldSpec := &v1alpha1.ClusterSpec{}
-	oldSpec.Talos.ControlPlanes = 3
-	oldSpec.Talos.Workers = 2
+	oldSpec.ControlPlanes = 3
+	oldSpec.Workers = 2
 
 	newSpec := &v1alpha1.ClusterSpec{}
-	newSpec.Talos.ControlPlanes = 3
-	newSpec.Talos.Workers = 2
+	newSpec.ControlPlanes = 3
+	newSpec.Workers = 2
 
 	err := provisioner.ApplyNodeScalingChangesForTest(
 		context.Background(),
@@ -292,12 +292,12 @@ func TestApplyNodeScalingChanges_OmniScalingIsAttempted(t *testing.T) {
 	result := clusterupdate.NewEmptyUpdateResult()
 
 	oldSpec := &v1alpha1.ClusterSpec{}
-	oldSpec.Talos.ControlPlanes = 1
-	oldSpec.Talos.Workers = 0
+	oldSpec.ControlPlanes = 1
+	oldSpec.Workers = 0
 
 	newSpec := &v1alpha1.ClusterSpec{}
-	newSpec.Talos.ControlPlanes = 3
-	newSpec.Talos.Workers = 2
+	newSpec.ControlPlanes = 3
+	newSpec.Workers = 2
 
 	err := provisioner.ApplyNodeScalingChangesForTest(
 		context.Background(),
@@ -319,10 +319,10 @@ func TestApplyNodeScalingChanges_BelowMinimumControlPlanes(t *testing.T) {
 	result := clusterupdate.NewEmptyUpdateResult()
 
 	oldSpec := &v1alpha1.ClusterSpec{}
-	oldSpec.Talos.ControlPlanes = 1
+	oldSpec.ControlPlanes = 1
 
 	newSpec := &v1alpha1.ClusterSpec{}
-	newSpec.Talos.ControlPlanes = 0
+	newSpec.ControlPlanes = 0
 
 	err := provisioner.ApplyNodeScalingChangesForTest(
 		context.Background(),
@@ -343,12 +343,12 @@ func TestDiffConfig_SkipsNodeCountsWhenAutoscalingEnabled(t *testing.T) {
 	provisioner := talosprovisioner.NewProvisioner(nil, nil).WithLogWriter(io.Discard)
 
 	oldSpec := &v1alpha1.ClusterSpec{}
-	oldSpec.Talos.ControlPlanes = 1
-	oldSpec.Talos.Workers = 0
+	oldSpec.ControlPlanes = 1
+	oldSpec.Workers = 0
 
 	newSpec := &v1alpha1.ClusterSpec{}
-	newSpec.Talos.ControlPlanes = 5
-	newSpec.Talos.Workers = 3
+	newSpec.ControlPlanes = 5
+	newSpec.Workers = 3
 	newSpec.NodeAutoscaling = v1alpha1.NodeAutoscalingEnabled
 
 	result, err := provisioner.DiffConfig(context.Background(), "test", oldSpec, newSpec)
@@ -368,10 +368,10 @@ func TestDiffConfig_StillValidatesMinimumControlPlanesWhenAutoscalingEnabled(t *
 	provisioner := talosprovisioner.NewProvisioner(nil, nil).WithLogWriter(io.Discard)
 
 	oldSpec := &v1alpha1.ClusterSpec{}
-	oldSpec.Talos.ControlPlanes = 1
+	oldSpec.ControlPlanes = 1
 
 	newSpec := &v1alpha1.ClusterSpec{}
-	newSpec.Talos.ControlPlanes = 0 // invalid
+	newSpec.ControlPlanes = 0 // invalid
 	newSpec.NodeAutoscaling = v1alpha1.NodeAutoscalingEnabled
 
 	_, err := provisioner.DiffConfig(context.Background(), "test", oldSpec, newSpec)
@@ -388,12 +388,12 @@ func TestApplyNodeScalingChanges_SkipsWhenAutoscalingEnabled(t *testing.T) {
 	result := clusterupdate.NewEmptyUpdateResult()
 
 	oldSpec := &v1alpha1.ClusterSpec{}
-	oldSpec.Talos.ControlPlanes = 1
-	oldSpec.Talos.Workers = 0
+	oldSpec.ControlPlanes = 1
+	oldSpec.Workers = 0
 
 	newSpec := &v1alpha1.ClusterSpec{}
-	newSpec.Talos.ControlPlanes = 5
-	newSpec.Talos.Workers = 3
+	newSpec.ControlPlanes = 5
+	newSpec.Workers = 3
 	newSpec.NodeAutoscaling = v1alpha1.NodeAutoscalingEnabled
 
 	err := provisioner.ApplyNodeScalingChangesForTest(

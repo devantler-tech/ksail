@@ -189,6 +189,16 @@
               "type": "string",
               "description": "Path to tar archive with container images to import after cluster creation but before component installation"
             },
+            "controlPlanes": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Number of control-plane nodes to create for the cluster (provider/distribution-agnostic)"
+            },
+            "workers": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Number of worker nodes to create for the cluster (provider/distribution-agnostic)"
+            },
             "vanilla": {
               "properties": {
                 "mirrorsDir": {
@@ -204,10 +214,14 @@
                   "type": "string"
                 },
                 "controlPlanes": {
-                  "type": "integer"
+                  "type": "integer",
+                  "minimum": 0,
+                  "description": "DEPRECATED: use spec.cluster.controlPlanes instead"
                 },
                 "workers": {
-                  "type": "integer"
+                  "type": "integer",
+                  "minimum": 0,
+                  "description": "DEPRECATED: use spec.cluster.workers instead"
                 },
                 "config": {
                   "type": "string"
