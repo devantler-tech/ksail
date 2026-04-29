@@ -598,6 +598,9 @@ func TestGenerateK3dConfigHandlesCNI(t *testing.T) {
 			cni:         v1alpha1.CNICilium,
 			expectArgs:  3,
 			expectValue: "--flannel-backend=none",
+			expectContainsArgs: []k3dArgExpectation{
+				{arg: "--disable=traefik", nodeFilters: []string{"server:*"}},
+			},
 		},
 	}
 
@@ -609,11 +612,17 @@ func TestGenerateK3dConfigHandlesCNI(t *testing.T) {
 	}
 }
 
+type k3dArgExpectation struct {
+	arg         string
+	nodeFilters []string
+}
+
 type k3dCniCase struct {
-	name        string
-	cni         v1alpha1.CNI
-	expectArgs  int
-	expectValue string
+	name               string
+	cni                v1alpha1.CNI
+	expectArgs         int
+	expectValue        string
+	expectContainsArgs []k3dArgExpectation
 }
 
 func runK3dCniCase(t *testing.T, testCase k3dCniCase) {
@@ -629,6 +638,27 @@ func runK3dCniCase(t *testing.T, testCase k3dCniCase) {
 	if testCase.expectArgs > 0 {
 		if extraArgs[0].Arg != testCase.expectValue {
 			t.Fatalf("expected first arg %q, got %q", testCase.expectValue, extraArgs[0].Arg)
+		}
+	}
+
+	for _, expected := range testCase.expectContainsArgs {
+		found := false
+
+		for _, a := range extraArgs {
+			if a.Arg == expected.arg {
+				found = true
+
+				if expected.nodeFilters != nil {
+					require.Equal(t, expected.nodeFilters, a.NodeFilters,
+						"node filters for arg %q", expected.arg)
+				}
+
+				break
+			}
+		}
+
+		if !found {
+			t.Fatalf("expected arg %q to be present, but it was not found in extra args", expected.arg)
 		}
 	}
 }

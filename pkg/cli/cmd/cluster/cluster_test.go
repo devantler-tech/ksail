@@ -2182,7 +2182,7 @@ func TestSetupK3dCSI_DoesNothingWhenCSINotDisabled(t *testing.T) {
 	}
 }
 
-func TestSetupK3dCNI_CiliumDisablesFlannel(t *testing.T) {
+func TestSetupK3dCNI_CiliumDisablesFlannelNetworkPolicyAndTraefik(t *testing.T) {
 	t.Parallel()
 
 	clusterCfg := &v1alpha1.Cluster{
