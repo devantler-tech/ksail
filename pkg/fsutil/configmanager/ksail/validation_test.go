@@ -74,7 +74,7 @@ func TestDistributionConfigIsOppositeDefault(t *testing.T) {
 		want         bool
 	}{
 		{
-			// "kind.yaml" matches Vanilla — not opposite of K3s
+			// "kind.yaml" is Vanilla's default — opposite of K3s
 			name:         "kind.yaml_is_opposite_for_K3s",
 			current:      "kind.yaml",
 			distribution: v1alpha1.DistributionK3s,
@@ -105,6 +105,55 @@ func TestDistributionConfigIsOppositeDefault(t *testing.T) {
 			// "vcluster.yaml" is opposite for Vanilla
 			name:         "vcluster.yaml_is_opposite_for_Vanilla",
 			current:      "vcluster.yaml",
+			distribution: v1alpha1.DistributionVanilla,
+			want:         true,
+		},
+		{
+			// "vcluster.yaml" is VCluster's default — not opposite
+			name:         "vcluster.yaml_is_not_opposite_for_VCluster",
+			current:      "vcluster.yaml",
+			distribution: v1alpha1.DistributionVCluster,
+			want:         false,
+		},
+		{
+			// "talos" is Talos's default — not opposite
+			name:         "talos_is_not_opposite_for_Talos",
+			current:      "talos",
+			distribution: v1alpha1.DistributionTalos,
+			want:         false,
+		},
+		{
+			// "talos" is Talos's default — opposite of Vanilla
+			name:         "talos_is_opposite_for_Vanilla",
+			current:      "talos",
+			distribution: v1alpha1.DistributionVanilla,
+			want:         true,
+		},
+		{
+			// "kwok.yaml" is KWOK's default — not opposite
+			name:         "kwok.yaml_is_not_opposite_for_KWOK",
+			current:      "kwok.yaml",
+			distribution: v1alpha1.DistributionKWOK,
+			want:         false,
+		},
+		{
+			// "kwok.yaml" is KWOK's default — opposite of Vanilla
+			name:         "kwok.yaml_is_opposite_for_Vanilla",
+			current:      "kwok.yaml",
+			distribution: v1alpha1.DistributionVanilla,
+			want:         true,
+		},
+		{
+			// "eks.yaml" is EKS's default — not opposite
+			name:         "eks.yaml_is_not_opposite_for_EKS",
+			current:      "eks.yaml",
+			distribution: v1alpha1.DistributionEKS,
+			want:         false,
+		},
+		{
+			// "eks.yaml" is EKS's default — opposite of Vanilla
+			name:         "eks.yaml_is_opposite_for_Vanilla",
+			current:      "eks.yaml",
 			distribution: v1alpha1.DistributionVanilla,
 			want:         true,
 		},
