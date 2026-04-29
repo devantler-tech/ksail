@@ -71,8 +71,8 @@ func waitForGatekeeperWebhookReady(
 			return false, nil
 		}
 
-		for i := range webhookCfg.Webhooks {
-			if len(webhookCfg.Webhooks[i].ClientConfig.CABundle) == 0 {
+		for _, webhook := range webhookCfg.Webhooks {
+			if len(webhook.ClientConfig.CABundle) == 0 {
 				return false, nil
 			}
 		}
