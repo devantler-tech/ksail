@@ -199,7 +199,8 @@ Editor command for interactive workflows (e.g., `code --wait`, `vim`). Falls bac
 | `localRegistry` | LocalRegistry | – |  |
 | `gitOpsEngine` | enum | – |  |
 | `sops` | SOPS | – |  |
-| `nodeAutoscaling` | enum | – |  |
+| `nodeAutoscaling` | enum | – | **Deprecated** — migrated to `spec.cluster.autoscaler.node.enabled` on load |
+| `autoscaler` | AutoscalerConfig | – | Pod and node autoscaling configuration (see below) |
 | `importImages` | string | – | Path to tar archive with container images to import after cluster creation but before component installation |
 | `controlPlanes` | int32 | `1` | Number of control-plane nodes to create for the cluster (provider/distribution-agnostic) |
 | `workers` | int32 | – | Number of worker nodes to create for the cluster (provider/distribution-agnostic) |
@@ -336,26 +337,62 @@ GitOps engine for continuous deployment. See [GitOps](/concepts/#gitops). When s
 - `Flux` – Install [Flux CD](https://fluxcd.io/) and scaffold FluxInstance CR
 - `ArgoCD` – Install [Argo CD](https://argo-cd.readthedocs.io/) and scaffold Application CR
 
+#### autoscaler (AutoscalerConfig)
+
+Configuration for pod and node autoscaling. Supersedes the deprecated `spec.cluster.nodeAutoscaling` field.
+
+##### autoscaler.pod (PodAutoscalerConfig)
+
+| Field | Type | Default | Description |
+| ----- | ---- | ------- | ----------- |
+| `horizontal` | enum | `Disabled` | Enable [Horizontal Pod Autoscaling (HPA)](https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/). Requires `spec.cluster.metricsServer: Enabled` (or distribution-bundled metrics-server) |
+| `vertical` | enum | `Disabled` | Enable [Vertical Pod Autoscaling (VPA)](https://github.com/kubernetes/autoscaler/tree/master/vertical-pod-autoscaler). Installs the Fairwinds VPA Helm chart |
+
+##### autoscaler.node (NodeAutoscalerConfig)
+
+| Field | Type | Default | Description |
+| ----- | ---- | ------- | ----------- |
+| `enabled` | enum | `Disabled` | When `Enabled`, `ksail cluster update` skips `controlPlanes`/`workers` diffs; for Talos × Hetzner, also deploys Cluster Autoscaler |
+| `pools` | []NodePool | – | Node pools for Cluster Autoscaler (Talos × Hetzner only) |
+| `maxNodesTotal` | int32 | – | Maximum total nodes allowed across all pools |
+| `expander` | enum | `LeastWaste` | Expander strategy: `Price`, `LeastWaste`, `LeastNodes`, `Random` |
+| `scaleDownUnneededTime` | string | – | How long a node must be unneeded before becoming eligible for removal (e.g. `10m`) |
+
+Each `NodePool` entry:
+
+| Field | Type | Required | Description |
+| ----- | ---- | -------- | ----------- |
+| `name` | string | Yes | Unique pool identifier (DNS-1123 label) |
+| `serverType` | string | Yes | Hetzner server type (e.g. `cx23`, `cax11`, `cpx51`) |
+| `location` | string | Yes | Hetzner datacenter location (e.g. `fsn1`, `nbg1`, `hel1`) |
+| `min` | int32 | Yes | Minimum nodes in this pool |
+| `max` | int32 | Yes | Maximum nodes in this pool |
+
+> [!NOTE]
+> KSail validates that `controlPlanes + workers + sum(pool.max) ≤ spec.provider.hetzner.serverLimit` (default `10`). Increase `serverLimit` when configuring larger pool capacities.
+
 #### Distribution and Tool Options
 
 Advanced configuration options are direct fields under `spec.cluster`. See [Schema Support](#schema-support) for the complete structure.
 
 **Talos options (`spec.cluster.talos`):**
 
-- `controlPlanes` – Number of control-plane nodes (default: `1`)
-- `workers` – Number of worker nodes (default: `0`)
-- `config` – Path to talosconfig file (default: `~/.talos/config`)
-- `iso` – Cloud provider ISO/image ID for Talos Linux (default: `122630` for x86; use `122629` for ARM)
+- `controlPlanes` — **Deprecated**: use `spec.cluster.controlPlanes`. Kept as migration alias; emits a warning on load.
+- `workers` — **Deprecated**: use `spec.cluster.workers`. Kept as migration alias; emits a warning on load.
+- `version` — Pins the Talos OS version (e.g. `v1.11.2`). Caps `--update-distribution` upgrades at this version.
+- `config` — Path to talosconfig file (default: `~/.talos/config`)
+- `iso` — Cloud provider ISO/image ID for Talos Linux (default: `122630` for x86; use `122629` for ARM)
 
 **Hetzner options (`spec.provider.hetzner`):**
 
-- `controlPlaneServerType` – Server type for control-plane nodes (default: `cx23`)
-- `workerServerType` – Server type for worker nodes (default: `cx23`)
-- `location` – Datacenter location: `fsn1`, `nbg1`, `hel1` (default: `fsn1`)
-- `networkName` – Private network name (default: `<cluster>-network`)
-- `networkCidr` – Network CIDR block (default: `10.0.0.0/16`)
-- `sshKeyName` – SSH key name for server access (optional)
-- `tokenEnvVar` – Environment variable for API token (default: `HCLOUD_TOKEN`)
+- `controlPlaneServerType` — Server type for control-plane nodes (default: `cx23`)
+- `workerServerType` — Server type for worker nodes (default: `cx23`)
+- `location` — Datacenter location: `fsn1`, `nbg1`, `hel1` (default: `fsn1`)
+- `networkName` — Private network name (default: `<cluster>-network`)
+- `networkCidr` — Network CIDR block (default: `10.0.0.0/16`)
+- `sshKeyName` — SSH key name for server access (optional)
+- `tokenEnvVar` — Environment variable for API token (default: `HCLOUD_TOKEN`)
+- `serverLimit` — Maximum total Hetzner servers (control-planes + workers + autoscaler pool capacity) for this cluster (default: `10`). Used to guard against exceeding account/project server quotas.
 
 **Vanilla options (`spec.cluster.vanilla`):**
 
@@ -436,16 +473,15 @@ machine:
       max-pods: "250"
 ```
 
-See [Talos Configuration Reference](https://www.talos.dev/latest/reference/configuration/) for patch syntax. Use `spec.cluster.talos` to configure node counts:
+See [Talos Configuration Reference](https://www.talos.dev/latest/reference/configuration/) for patch syntax. Use `spec.cluster.controlPlanes` and `spec.cluster.workers` to configure node counts:
 
 ```yaml
 spec:
   cluster:
     distribution: Talos
     distributionConfig: talos
-    talos:
-      controlPlanes: 3
-      workers: 2
+    controlPlanes: 3
+    workers: 2
 ```
 
 #### Port Mappings (Docker Provider)
