@@ -337,7 +337,7 @@ func TestApplyNodeScalingChanges_BelowMinimumControlPlanes(t *testing.T) {
 
 // TestDiffConfig_SkipsNodeCountsWhenAutoscalingEnabled verifies that DiffConfig
 // returns no in-place changes for controlPlanes and workers when autoscaling is enabled.
-func TestDiffConfig_SkipsNodeCountsWhenAutoscalingEnabled(t *testing.T) {
+func TestDiffConfig_DetectsBaselineNodeCountsWhenAutoscalingEnabled(t *testing.T) {
 	t.Parallel()
 
 	provisioner := talosprovisioner.NewProvisioner(nil, nil).WithLogWriter(io.Discard)
@@ -353,11 +353,12 @@ func TestDiffConfig_SkipsNodeCountsWhenAutoscalingEnabled(t *testing.T) {
 
 	result, err := provisioner.DiffConfig(context.Background(), "test", oldSpec, newSpec)
 	require.NoError(t, err)
-	assert.Empty(
+	assert.NotEmpty(
 		t,
 		result.InPlaceChanges,
-		"node count diffs should be suppressed when autoscaling is enabled",
+		"baseline node count diffs should be detected when autoscaling is enabled",
 	)
+	assert.Len(t, result.InPlaceChanges, 2, "expected controlPlanes + workers changes")
 }
 
 // TestDiffConfig_StillValidatesMinimumControlPlanesWhenAutoscalingEnabled verifies that
@@ -377,37 +378,4 @@ func TestDiffConfig_StillValidatesMinimumControlPlanesWhenAutoscalingEnabled(t *
 	_, err := provisioner.DiffConfig(context.Background(), "test", oldSpec, newSpec)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, talosprovisioner.ErrMinimumControlPlanes)
-}
-
-// TestApplyNodeScalingChanges_SkipsWhenAutoscalingEnabled verifies that
-// applyNodeScalingChanges is a no-op when autoscaling is enabled.
-func TestApplyNodeScalingChanges_SkipsWhenAutoscalingEnabled(t *testing.T) {
-	t.Parallel()
-
-	provisioner := talosprovisioner.NewProvisioner(nil, nil).WithLogWriter(io.Discard)
-	result := clusterupdate.NewEmptyUpdateResult()
-
-	oldSpec := &v1alpha1.ClusterSpec{}
-	oldSpec.ControlPlanes = 1
-	oldSpec.Workers = 0
-
-	newSpec := &v1alpha1.ClusterSpec{}
-	newSpec.ControlPlanes = 5
-	newSpec.Workers = 3
-	newSpec.NodeAutoscaling = v1alpha1.NodeAutoscalingEnabled
-
-	err := provisioner.ApplyNodeScalingChangesForTest(
-		context.Background(),
-		"test",
-		oldSpec,
-		newSpec,
-		result,
-	)
-	require.NoError(t, err)
-	assert.Equal(
-		t,
-		0,
-		result.TotalChanges(),
-		"no scaling changes expected when autoscaling is enabled",
-	)
 }
