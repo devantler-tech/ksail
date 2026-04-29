@@ -675,7 +675,7 @@ jobs:
   system-test-docker:
     name: 🧪 System Test (Docker)
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     needs: [changes, build-artifact, warm-helm-cache, warm-mirror-cache]
     if: >-
       (github.event_name == 'pull_request'
