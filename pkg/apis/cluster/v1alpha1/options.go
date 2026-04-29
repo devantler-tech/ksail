@@ -38,7 +38,14 @@ type OptionsTalos struct {
 	// Only used when targeting cloud providers (e.g., Hetzner Cloud).
 	// For Hetzner: See https://docs.hetzner.cloud/changelog for available Talos ISOs.
 	// Defaults to 122630 (Talos Linux 1.11.2 x86). Use 122629 for ARM.
+	// When SchematicID is set, ISO is ignored in favour of a pre-built snapshot.
 	ISO int64 `default:"122630" json:"iso,omitzero"`
+	// SchematicID is the Talos factory schematic ID used to build a Hetzner snapshot image.
+	// When set, KSail uploads a Talos OS disk snapshot using this schematic ID and Version
+	// instead of booting from the cloud ISO specified in ISO.
+	// Obtain a schematic ID from https://factory.talos.dev.
+	// Only used when targeting cloud providers (e.g., Hetzner Cloud).
+	SchematicID string `json:"schematicId,omitzero"`
 	// ExtraPortMappings defines additional port mappings from Docker containers to the host.
 	// Only used with the Docker provider. Useful on macOS where MetalLB virtual IPs
 	// are not accessible from the host because Docker runs in a Linux VM.

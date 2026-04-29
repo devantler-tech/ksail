@@ -147,7 +147,7 @@ func configureInfraProvider(
 		infraProvider = docker.NewProvider(dockerClient, docker.LabelSchemeTalos)
 
 	case v1alpha1.ProviderHetzner:
-		hetznerProvider, err := createHetznerProvider(hetznerOpts)
+		hetznerProvider, hcloudClient, err := createHetznerProvider(hetznerOpts)
 		if err != nil {
 			return err
 		}
@@ -157,6 +157,10 @@ func configureInfraProvider(
 		provisioner.WithHetznerOptions(applyHetznerDefaults(hetznerOpts))
 		// Store Talos options with defaults applied (includes ISO)
 		provisioner.WithTalosOptions(applyTalosDefaults(opts))
+
+		// Wire the snapshot manager so EnsureTalosSnapshot / DeleteTalosSnapshots can be called.
+		snapshotManager := hetzner.NewSnapshotManager(hcloudClient, os.Stdout)
+		provisioner.WithSnapshotManager(snapshotManager)
 
 	case v1alpha1.ProviderOmni:
 		omniProvider, err := createOmniProvider(omniOpts)
@@ -183,8 +187,8 @@ func configureInfraProvider(
 	return nil
 }
 
-// createHetznerProvider creates a Hetzner provider from the given options.
-func createHetznerProvider(opts v1alpha1.OptionsHetzner) (*hetzner.Provider, error) {
+// createHetznerProvider creates a Hetzner provider and returns the underlying hcloud client.
+func createHetznerProvider(opts v1alpha1.OptionsHetzner) (*hetzner.Provider, *hcloud.Client, error) {
 	// Determine the token environment variable name
 	tokenEnvVar := opts.TokenEnvVar
 	if tokenEnvVar == "" {
@@ -194,7 +198,7 @@ func createHetznerProvider(opts v1alpha1.OptionsHetzner) (*hetzner.Provider, err
 	// Get the token from the environment
 	token := os.Getenv(tokenEnvVar)
 	if token == "" {
-		return nil, fmt.Errorf(
+		return nil, nil, fmt.Errorf(
 			"%w: environment variable %s is not set",
 			ErrMissingHetznerToken,
 			tokenEnvVar,
@@ -204,7 +208,7 @@ func createHetznerProvider(opts v1alpha1.OptionsHetzner) (*hetzner.Provider, err
 	// Create the Hetzner client and provider
 	client := hcloud.NewClient(hcloud.WithToken(token))
 
-	return hetzner.NewProvider(client), nil
+	return hetzner.NewProvider(client), client, nil
 }
 
 // applyTalosDefaults applies default values to Talos options.

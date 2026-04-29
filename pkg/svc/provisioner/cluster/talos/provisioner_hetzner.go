@@ -75,18 +75,27 @@ func (p *Provisioner) ensureHetznerInfra(
 }
 
 // createHetznerNodeGroups creates both control plane and worker node groups.
+// When imageID > 0 (snapshot-based), servers boot directly from the snapshot image.
+// When imageID == 0 (ISO-based, legacy), servers use the public Talos ISO.
 func (p *Provisioner) createHetznerNodeGroups(
 	ctx context.Context,
 	hzProvider *hetzner.Provider,
 	infra HetznerInfra,
 	clusterName string,
+	imageID int64,
 ) ([]*hcloud.Server, []*hcloud.Server, error) {
+	isoID := p.talosOpts.ISO
+	if imageID > 0 {
+		isoID = 0 // snapshot takes precedence; ISO is not used
+	}
+
 	controlPlaneServers, err := p.createHetznerNodes(ctx, hzProvider, infra, HetznerNodeGroupOpts{
 		ClusterName: clusterName,
 		Role:        RoleControlPlane,
 		Count:       p.options.ControlPlaneNodes,
 		ServerType:  p.hetznerOpts.ControlPlaneServerType,
-		ISOID:       p.talosOpts.ISO,
+		ISOID:       isoID,
+		ImageID:     imageID,
 		Location:    p.hetznerOpts.Location,
 	})
 	if err != nil {
@@ -98,7 +107,8 @@ func (p *Provisioner) createHetznerNodeGroups(
 		Role:        RoleWorker,
 		Count:       p.options.WorkerNodes,
 		ServerType:  p.hetznerOpts.WorkerServerType,
-		ISOID:       p.talosOpts.ISO,
+		ISOID:       isoID,
+		ImageID:     imageID,
 		Location:    p.hetznerOpts.Location,
 	})
 	if err != nil {
@@ -245,6 +255,23 @@ func (p *Provisioner) createHetznerCluster(ctx context.Context, clusterName stri
 		return fmt.Errorf("%w: %s", ErrClusterAlreadyExists, clusterName)
 	}
 
+	// Ensure a Talos snapshot image exists when a schematic ID is configured.
+	// This must happen before node creation so we can pass the image ID to servers.
+	var snapshotImageID int64
+	if p.snapshotManager != nil && p.talosOpts != nil && p.talosOpts.SchematicID != "" {
+		_, _ = fmt.Fprintf(p.logWriter, "Ensuring Talos snapshot image...\n")
+
+		snapshotImageID, err = p.snapshotManager.EnsureTalosSnapshot(
+			ctx,
+			clusterName,
+			p.talosOpts.Version,
+			p.talosOpts.SchematicID,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to ensure Talos snapshot: %w", err)
+		}
+	}
+
 	// Create infrastructure resources
 	infra, err := p.ensureHetznerInfra(ctx, hzProvider, clusterName)
 	if err != nil {
@@ -253,7 +280,7 @@ func (p *Provisioner) createHetznerCluster(ctx context.Context, clusterName stri
 
 	// Create node groups
 	controlPlaneServers, workerServers, err := p.createHetznerNodeGroups(
-		ctx, hzProvider, infra, clusterName,
+		ctx, hzProvider, infra, clusterName, snapshotImageID,
 	)
 	if err != nil {
 		return err
@@ -329,6 +356,13 @@ func (p *Provisioner) deleteHetznerCluster(ctx context.Context, clusterName stri
 	err = hetznerProv.DeleteNodes(ctx, clusterName)
 	if err != nil {
 		return fmt.Errorf("failed to delete Hetzner nodes: %w", err)
+	}
+
+	// Delete Talos snapshot images when --delete-storage is set
+	if p.deleteStorage && p.snapshotManager != nil {
+		if snapshotErr := p.snapshotManager.DeleteTalosSnapshots(ctx, clusterName); snapshotErr != nil {
+			return fmt.Errorf("failed to delete Talos snapshots: %w", snapshotErr)
+		}
 	}
 
 	// Clean up config files (kubeconfig and talosconfig)

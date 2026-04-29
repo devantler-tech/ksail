@@ -1,7 +1,12 @@
 //nolint:gochecknoglobals // export_test.go pattern requires global variables to expose internal functions
 package hetzner
 
-import "time"
+import (
+"io"
+"time"
+
+"github.com/hetznercloud/hcloud-go/v2/hcloud"
+)
 
 // FirewallRulesMatchForTest exports firewallRulesMatch for testing.
 var FirewallRulesMatchForTest = firewallRulesMatch
@@ -21,7 +26,21 @@ var ShouldDisablePlacementForTest = shouldDisablePlacement
 // CalculateRetryDelayForTest exposes calculateRetryDelay for testing via a nil-client provider.
 // Only the attempt number matters; the client field is unused by this method.
 func CalculateRetryDelayForTest(attempt int) time.Duration {
-	p := &Provider{}
+p := &Provider{}
 
-	return p.calculateRetryDelay(attempt)
+return p.calculateRetryDelay(attempt)
+}
+
+// NewSnapshotManagerWithUploaderForTest creates a SnapshotManager with a custom uploader,
+// allowing tests to inject a mock without hitting real Hetzner upload infrastructure.
+func NewSnapshotManagerWithUploaderForTest(
+hcloudClient *hcloud.Client,
+uploader snapshotUploader,
+logWriter io.Writer,
+) *SnapshotManager {
+return &SnapshotManager{
+hcloudClient: hcloudClient,
+uploader:     uploader,
+logWriter:    logWriter,
+}
 }
