@@ -1,6 +1,6 @@
 {
-  "last_run": "2026-04-28T00:00:00Z",
-  "workflow_run_id": "25053893440",
+  "last_run": "2026-04-29T01:00:00Z",
+  "workflow_run_id": "25085817978",
   "commented_issues": {
     "4385": "2026-04-27",
     "4386": "2026-04-26",
@@ -28,7 +28,8 @@
     "gatekeeper_fix_4397": "[Repo Assist] fix(gatekeeper): wait for ValidatingWebhookConfiguration caBundle - PR #4397",
     "diff_refactor_4398": "[Repo Assist] refactor(diff): use appendChange helper - PR #4398",
     "perf_notify_color_4401": "[Repo Assist] perf(notify): cache color objects in ProgressGroup - PR #4401",
-    "test_configmanager_validation": "[Repo Assist] test(configmanager): add unit tests for validation helpers - PR pending"
+    "test_configmanager_validation": "[Repo Assist] test(configmanager): add unit tests for validation helpers - PR pending",
+    "test_hetzner_retry": "[Repo Assist] test(hetzner): add unit tests for server retry logic - PR pending"
   },
   "merged_prs": {
     "4419": "fix(ci): remove stale registry containers between retries - merged 2026-04-28",
@@ -67,37 +68,129 @@
     "aw_watch1": "[Repo Assist] [feature]: add build pipeline hooks to `ksail workload watch` for hot-reload"
   },
   "sub_issues_linked": {
-    "4084": ["4067", "4172", "4192"],
-    "4085": ["4060", "4063", "4066", "4067", "4068", "4079", "4192"]
+    "4084": [
+      "4067",
+      "4172",
+      "4192"
+    ],
+    "4085": [
+      "4060",
+      "4063",
+      "4066",
+      "4067",
+      "4068",
+      "4079",
+      "4192"
+    ]
   },
   "labels_applied": {
-    "4380": ["next"],
-    "3983": ["next"],
-    "4384": ["next"],
-    "4317": ["next"],
-    "4399": ["automation", "ci"],
-    "4394": ["automation", "ci"],
-    "4389": ["automation", "ci"],
-    "4386": ["automation", "ci", "bug"],
-    "4385": ["automation", "ci", "bug"],
-    "4381": ["automation", "ci"],
-    "4379": ["automation", "ci"],
-    "4378": ["automation", "ci"],
-    "4375": ["automation", "repo-assist", "next"],
-    "4372": ["automation", "ci"],
-    "4371": ["automation", "ci"],
-    "4368": ["automation", "ci"],
-    "4367": ["automation", "ci"],
-    "4354": ["automation", "repo-assist"],
-    "4353": ["automation", "repo-assist"],
-    "4341": ["automation", "ci"],
-    "4328": ["automation", "repo-assist"],
-    "4326": ["automation", "ci"],
-    "4318": ["automation", "repo-assist"],
-    "4316": ["automation", "repo-assist"],
-    "4314": ["automation", "ci"],
-    "4300": ["automation", "ci"],
-    "3605": ["automation", "repo-assist"]
+    "4380": [
+      "next"
+    ],
+    "3983": [
+      "next"
+    ],
+    "4384": [
+      "next"
+    ],
+    "4317": [
+      "next"
+    ],
+    "4399": [
+      "automation",
+      "ci"
+    ],
+    "4394": [
+      "automation",
+      "ci"
+    ],
+    "4389": [
+      "automation",
+      "ci"
+    ],
+    "4386": [
+      "automation",
+      "ci",
+      "bug"
+    ],
+    "4385": [
+      "automation",
+      "ci",
+      "bug"
+    ],
+    "4381": [
+      "automation",
+      "ci"
+    ],
+    "4379": [
+      "automation",
+      "ci"
+    ],
+    "4378": [
+      "automation",
+      "ci"
+    ],
+    "4375": [
+      "automation",
+      "repo-assist",
+      "next"
+    ],
+    "4372": [
+      "automation",
+      "ci"
+    ],
+    "4371": [
+      "automation",
+      "ci"
+    ],
+    "4368": [
+      "automation",
+      "ci"
+    ],
+    "4367": [
+      "automation",
+      "ci"
+    ],
+    "4354": [
+      "automation",
+      "repo-assist"
+    ],
+    "4353": [
+      "automation",
+      "repo-assist"
+    ],
+    "4341": [
+      "automation",
+      "ci"
+    ],
+    "4328": [
+      "automation",
+      "repo-assist"
+    ],
+    "4326": [
+      "automation",
+      "ci"
+    ],
+    "4318": [
+      "automation",
+      "repo-assist"
+    ],
+    "4316": [
+      "automation",
+      "repo-assist"
+    ],
+    "4314": [
+      "automation",
+      "ci"
+    ],
+    "4300": [
+      "automation",
+      "ci"
+    ],
+    "3605": [
+      "automation",
+      "repo-assist"
+    ]
   },
   "notes": [
     "link_sub_issue is NOT idempotent - always verify sub-issue not already linked before calling",
@@ -107,11 +200,11 @@
     "PR #4401 open (repo-assist) - cache color objects perf - CI green",
     "PR #4419 closed/merged (maintainer) - fix CI registry container cleanup between retries",
     "PR #4420 open (bot) - update workflows 2026-04-27",
-    "PR #4418 open (dependabot) - omni/client 1.6.5->1.7.0",
-    "PR #4410 open (dependabot) - actions/setup-node 6.3.0->6.4.0",
     "domain alternation: last was 'test' - next should be 'refactor'",
-    "Task 4 skipped run 25053893440: only 2 Dependabot PRs (different types), loft-sh/log blocked upstream",
     "Created test PR (branch repo-assist/test-configmanager-validation-20260423): 15 tests for expectedDistributionConfigName and distributionConfigIsOppositeDefault",
-    "Created roadmap issues aw_diag1 (diagnose health scoring) and aw_watch1 (workload watch hot-reload)"
+    "Created roadmap issues aw_diag1 (diagnose health scoring) and aw_watch1 (workload watch hot-reload)",
+    "No Dependabot PRs open as of 2026-04-29 - all merged",
+    "Created PR test(hetzner): server retry unit tests (shouldRetryError, shouldDisablePlacement, calculateRetryDelay)",
+    "domain alternation: task 9 run again - stays test, next domain rotation from task 5 should be refactor"
   ]
 }
