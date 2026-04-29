@@ -60,6 +60,9 @@ var (
 	benchFilterExcludedSink []string
 )
 
+// disableTraefikArg is the K3s argument to disable the built-in Traefik ingress controller.
+const disableTraefikArg = "--disable=traefik"
+
 // podYAML is a minimal kubectl-style pod YAML used as benchmark input.
 const podYAML = `apiVersion: v1
 kind: Pod
@@ -2216,7 +2219,7 @@ func TestSetupK3dCNI_CiliumDisablesFlannelNetworkPolicyAndTraefik(t *testing.T) 
 		argSet["--disable-network-policy"],
 		"--disable-network-policy should be present",
 	)
-	require.True(t, argSet["--disable=traefik"], "--disable=traefik should be present for Cilium")
+	require.True(t, argSet[disableTraefikArg], "--disable=traefik should be present for Cilium")
 }
 
 func TestSetupK3dCNI_CiliumDisablesTraefik(t *testing.T) {
@@ -2237,7 +2240,7 @@ func TestSetupK3dCNI_CiliumDisablesTraefik(t *testing.T) {
 	found := false
 
 	for _, arg := range k3dConfig.Options.K3sOptions.ExtraArgs {
-		if arg.Arg == "--disable=traefik" {
+		if arg.Arg == disableTraefikArg {
 			found = true
 
 			require.Equal(t, []string{"server:*"}, arg.NodeFilters)
@@ -2267,7 +2270,7 @@ func TestSetupK3dCNI_CalicoDoesNotDisableTraefik(t *testing.T) {
 	for _, arg := range k3dConfig.Options.K3sOptions.ExtraArgs {
 		require.NotEqual(
 			t,
-			"--disable=traefik",
+			disableTraefikArg,
 			arg.Arg,
 			"--disable=traefik should NOT be added for Calico",
 		)
@@ -2289,7 +2292,7 @@ func TestSetupK3dCNI_DoesNotDuplicateTraefikFlag(t *testing.T) {
 		Options: v1alpha5.SimpleConfigOptions{
 			K3sOptions: v1alpha5.SimpleConfigOptionsK3s{
 				ExtraArgs: []v1alpha5.K3sArgWithNodeFilters{
-					{Arg: "--disable=traefik", NodeFilters: []string{"server:*"}},
+					{Arg: disableTraefikArg, NodeFilters: []string{"server:*"}},
 				},
 			},
 		},
@@ -2300,12 +2303,54 @@ func TestSetupK3dCNI_DoesNotDuplicateTraefikFlag(t *testing.T) {
 	count := 0
 
 	for _, arg := range k3dConfig.Options.K3sOptions.ExtraArgs {
-		if arg.Arg == "--disable=traefik" {
+		if arg.Arg == disableTraefikArg {
 			count++
 		}
 	}
 
 	require.Equal(t, 1, count, "--disable=traefik should not be duplicated")
+}
+
+func TestSetupK3dCNI_AgentScopedTraefikFlagDoesNotPreventServerScopedAdd(t *testing.T) {
+	t.Parallel()
+
+	clusterCfg := &v1alpha1.Cluster{
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				Distribution: v1alpha1.DistributionK3s,
+				CNI:          v1alpha1.CNICilium,
+			},
+		},
+	}
+	k3dConfig := &v1alpha5.SimpleConfig{
+		Options: v1alpha5.SimpleConfigOptions{
+			K3sOptions: v1alpha5.SimpleConfigOptionsK3s{
+				ExtraArgs: []v1alpha5.K3sArgWithNodeFilters{
+					{Arg: disableTraefikArg, NodeFilters: []string{"agent:*"}},
+				},
+			},
+		},
+	}
+
+	cluster.ExportSetupK3dCNI(clusterCfg, k3dConfig)
+
+	serverDisabled := false
+
+	for _, arg := range k3dConfig.Options.K3sOptions.ExtraArgs {
+		if arg.Arg == disableTraefikArg {
+			for _, f := range arg.NodeFilters {
+				if f == "server:*" {
+					serverDisabled = true
+				}
+			}
+		}
+	}
+
+	require.True(
+		t,
+		serverDisabled,
+		"--disable=traefik with server:* should be added even when an agent:* entry exists",
+	)
 }
 
 func TestSetupK3dCNI_DoesNothingForDefaultCNI(t *testing.T) {

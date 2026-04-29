@@ -1531,7 +1531,9 @@ func setupK3dCNI(clusterCfg *v1alpha1.Cluster, k3dConfig *v1alpha5.SimpleConfig)
 	// Cilium installs Gateway API CRDs (e.g. backendtlspolicies.gateway.networking.k8s.io)
 	// that conflict with K3s's built-in Traefik chart which claims ownership of the same CRDs.
 	// Disabling Traefik avoids the CRD ownership conflict and the resulting CrashLoopBackOff.
-	if cni == v1alpha1.CNICilium && !hasK3sArg(k3dConfig, k3sDisableTraefikFlag) {
+	// We check specifically for a server-scoped entry because an agent-scoped entry would not
+	// suppress Traefik on control-plane nodes.
+	if cni == v1alpha1.CNICilium && !hasK3sArgForServers(k3dConfig, k3sDisableTraefikFlag) {
 		k3dConfig.Options.K3sOptions.ExtraArgs = append(
 			k3dConfig.Options.K3sOptions.ExtraArgs,
 			v1alpha5.K3sArgWithNodeFilters{
@@ -1547,6 +1549,28 @@ func hasK3sArg(k3dConfig *v1alpha5.SimpleConfig, flag string) bool {
 	for _, arg := range k3dConfig.Options.K3sOptions.ExtraArgs {
 		if arg.Arg == flag {
 			return true
+		}
+	}
+
+	return false
+}
+
+// hasK3sArgForServers checks whether a K3s arg flag is already present in the K3d config
+// with node filters that apply to server nodes (empty filters cover all nodes, or "server:*").
+func hasK3sArgForServers(k3dConfig *v1alpha5.SimpleConfig, flag string) bool {
+	for _, arg := range k3dConfig.Options.K3sOptions.ExtraArgs {
+		if arg.Arg != flag {
+			continue
+		}
+
+		if len(arg.NodeFilters) == 0 {
+			return true
+		}
+
+		for _, f := range arg.NodeFilters {
+			if strings.HasPrefix(f, "server:") {
+				return true
+			}
 		}
 	}
 

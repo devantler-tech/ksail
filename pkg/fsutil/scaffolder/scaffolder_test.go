@@ -599,6 +599,7 @@ func TestGenerateK3dConfigHandlesCNI(t *testing.T) {
 			expectArgs:  3,
 			expectValue: "--flannel-backend=none",
 			expectContainsArgs: []k3dArgExpectation{
+				{arg: "--disable-network-policy", nodeFilters: []string{"server:*"}},
 				{arg: "--disable=traefik", nodeFilters: []string{"server:*"}},
 			},
 		},
@@ -649,7 +650,7 @@ func runK3dCniCase(t *testing.T, testCase k3dCniCase) {
 				found = true
 
 				if expected.nodeFilters != nil {
-					require.Equal(t, expected.nodeFilters, a.NodeFilters,
+					require.Equalf(t, expected.nodeFilters, a.NodeFilters,
 						"node filters for arg %q", expected.arg)
 				}
 

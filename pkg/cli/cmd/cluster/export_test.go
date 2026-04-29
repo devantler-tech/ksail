@@ -392,6 +392,11 @@ func ExportHasK3sArg(k3dConfig *v1alpha5.SimpleConfig, flag string) bool {
 	return hasK3sArg(k3dConfig, flag)
 }
 
+// ExportHasK3sArgForServers exports hasK3sArgForServers for testing.
+func ExportHasK3sArgForServers(k3dConfig *v1alpha5.SimpleConfig, flag string) bool {
+	return hasK3sArgForServers(k3dConfig, flag)
+}
+
 // ExportValidateOutputFormat exports validateOutputFormat for testing.
 func ExportValidateOutputFormat(cmd *cobra.Command) error {
 	return validateOutputFormat(cmd)
