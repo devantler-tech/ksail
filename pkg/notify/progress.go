@@ -1046,29 +1046,29 @@ func (pg *ProgressGroup) getDisplayOrder() []string {
 // formatTaskLine formats a task's status line for display.
 // Names are truncated to prevent line wrapping in TTY mode.
 func (pg *ProgressGroup) formatTaskLine(name string, state taskState) string {
-	name = pg.fitName(name, state)
+	displayName := pg.fitName(name, state)
 	frames := getSpinnerFrames()
 
 	switch state {
 	case taskPending:
-		return pg.colorHiBlack.Sprintf("○ %s %s", name, pg.labels.Pending)
+		return pg.colorHiBlack.Sprintf("○ %s %s", displayName, pg.labels.Pending)
 	case taskRunning:
 		spinner := frames[pg.spinnerIdx]
 
-		return pg.colorCyan.Sprintf("%s %s %s", spinner, name, pg.labels.Running)
+		return pg.colorCyan.Sprintf("%s %s %s", spinner, displayName, pg.labels.Running)
 	case taskComplete:
 		if pg.timer != nil {
 			if d, ok := pg.taskDuration[name]; ok {
 				return pg.colorGreen.
-					Sprintf("✔ %s %s [%s]", name, pg.labels.Completed, d)
+					Sprintf("✔ %s %s [%s]", displayName, pg.labels.Completed, d)
 			}
 		}
 
-		return pg.colorGreen.Sprintf("✔ %s %s", name, pg.labels.Completed)
+		return pg.colorGreen.Sprintf("✔ %s %s", displayName, pg.labels.Completed)
 	case taskFailed:
-		return pg.colorRed.Sprintf("✗ %s failed", name)
+		return pg.colorRed.Sprintf("✗ %s failed", displayName)
 	default:
-		return fmt.Sprintf("? %s unknown", name)
+		return fmt.Sprintf("? %s unknown", displayName)
 	}
 }
 
