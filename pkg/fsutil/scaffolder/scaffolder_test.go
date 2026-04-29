@@ -31,6 +31,8 @@ import (
 
 var errGenerateFailure = errors.New("generate failure")
 
+const flannelBackendNoneArg = "--flannel-backend=none"
+
 func TestMain(m *testing.M) {
 	os.Exit(snapshottest.Run(m, snaps.CleanOpts{Sort: true}))
 }
@@ -597,7 +599,7 @@ func TestGenerateK3dConfigHandlesCNI(t *testing.T) {
 			name:        "CiliumCNI",
 			cni:         v1alpha1.CNICilium,
 			expectArgs:  3,
-			expectValue: "--flannel-backend=none",
+			expectValue: flannelBackendNoneArg,
 			expectContainsArgs: []k3dArgExpectation{
 				{arg: "--disable-network-policy", nodeFilters: []string{"server:*"}},
 				{arg: "--disable=traefik", nodeFilters: []string{"server:*"}},
@@ -1269,7 +1271,6 @@ func TestCreateK3dConfig_MetricsServerEnabled(t *testing.T) {
 	}
 }
 
-//nolint:goconst // Repeated literals keep the test cases explicit.
 func TestCreateK3dConfig_MetricsServerDisabledWithCilium(t *testing.T) {
 	t.Parallel()
 
@@ -1291,7 +1292,7 @@ func TestCreateK3dConfig_MetricsServerDisabledWithCilium(t *testing.T) {
 	hasMetricsFlag := false
 
 	for _, arg := range config.Options.K3sOptions.ExtraArgs {
-		if arg.Arg == "--flannel-backend=none" {
+		if arg.Arg == flannelBackendNoneArg {
 			hasCNIFlag = true
 		}
 
@@ -1382,7 +1383,7 @@ func TestCreateK3dConfig_CSIDisabledWithCilium(t *testing.T) {
 	hasCSIFlag := false
 
 	for _, arg := range config.Options.K3sOptions.ExtraArgs {
-		if arg.Arg == "--flannel-backend=none" {
+		if arg.Arg == flannelBackendNoneArg {
 			hasCNIFlag = true
 		}
 
