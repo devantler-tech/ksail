@@ -193,7 +193,7 @@ func TestStandardFieldSelectors(t *testing.T) {
 			expectedDefault: int32(1),
 			assertPointer: func(t *testing.T, cluster *v1alpha1.Cluster, ptr any) {
 				t.Helper()
-				assertPointerSame(t, ptr, &cluster.Spec.Cluster.Talos.ControlPlanes)
+				assertPointerSame(t, ptr, &cluster.Spec.Cluster.ControlPlanes)
 			},
 		},
 		{
@@ -203,7 +203,7 @@ func TestStandardFieldSelectors(t *testing.T) {
 			expectedDefault: int32(0),
 			assertPointer: func(t *testing.T, cluster *v1alpha1.Cluster, ptr any) {
 				t.Helper()
-				assertPointerSame(t, ptr, &cluster.Spec.Cluster.Talos.Workers)
+				assertPointerSame(t, ptr, &cluster.Spec.Cluster.Workers)
 			},
 		},
 		{

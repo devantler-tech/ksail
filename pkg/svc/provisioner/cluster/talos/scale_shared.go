@@ -36,9 +36,9 @@ func nextNodeIndexFromNames(names []string, prefix string) int {
 
 // recordAppliedChange adds an applied change to the update result.
 func recordAppliedChange(result *clusterupdate.UpdateResult, role, nodeName, action string) {
-	field := "talos.workers"
+	field := "cluster.workers"
 	if role == RoleControlPlane {
-		field = "talos.controlPlanes"
+		field = "cluster.controlPlanes"
 	}
 
 	result.AppliedChanges = append(result.AppliedChanges, clusterupdate.Change{
@@ -51,9 +51,9 @@ func recordAppliedChange(result *clusterupdate.UpdateResult, role, nodeName, act
 
 // recordFailedChange adds a failed change to the update result.
 func recordFailedChange(result *clusterupdate.UpdateResult, role, nodeName string, err error) {
-	field := "talos.workers"
+	field := "cluster.workers"
 	if role == RoleControlPlane {
-		field = "talos.controlPlanes"
+		field = "cluster.controlPlanes"
 	}
 
 	result.FailedChanges = append(result.FailedChanges, clusterupdate.Change{

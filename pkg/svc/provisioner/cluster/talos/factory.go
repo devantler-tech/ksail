@@ -102,11 +102,15 @@ func newProvisionerFromOptions(
 		options.WithTalosImage(talosImageRepository + ":" + version)
 	}
 
+	//nolint:staticcheck // bridging deprecated field; consumed via overlay in factory.go
 	if opts.ControlPlanes > 0 {
+		//nolint:staticcheck // bridging deprecated field
 		options.WithControlPlaneNodes(int(opts.ControlPlanes))
 	}
 
+	//nolint:staticcheck // bridging deprecated field; consumed via overlay in factory.go
 	if opts.Workers > 0 {
+		//nolint:staticcheck // bridging deprecated field
 		options.WithWorkerNodes(int(opts.Workers))
 	}
 

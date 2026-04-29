@@ -105,8 +105,8 @@ func BenchmarkComputeDiff_TalosOptions(b *testing.B) {
 	oldSpec.Distribution = v1alpha1.DistributionTalos
 	newSpec := clone(oldSpec)
 
-	newSpec.Talos.ControlPlanes = 3
-	newSpec.Talos.Workers = 2
+	newSpec.ControlPlanes = 3
+	newSpec.Workers = 2
 	newSpec.Talos.ISO = 999999
 
 	b.ReportAllocs()
