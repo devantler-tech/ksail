@@ -267,12 +267,30 @@ var localRegistryReasonMap = map[v1alpha1.Distribution]struct {
 	reason   string
 	category clusterupdate.ChangeCategory
 }{
-	v1alpha1.DistributionVanilla:  {"Kind requires cluster recreate to change containerd registry config", clusterupdate.ChangeCategoryRecreateRequired},
-	v1alpha1.DistributionTalos:    {"Talos supports .machine.registries updates without reboot", clusterupdate.ChangeCategoryInPlace},
-	v1alpha1.DistributionK3s:      {"K3d supports registries.yaml updates", clusterupdate.ChangeCategoryInPlace},
-	v1alpha1.DistributionVCluster: {"VCluster/KWOK/EKS manage registry independently of the node OS", clusterupdate.ChangeCategoryInPlace},
-	v1alpha1.DistributionKWOK:     {"VCluster/KWOK/EKS manage registry independently of the node OS", clusterupdate.ChangeCategoryInPlace},
-	v1alpha1.DistributionEKS:      {"VCluster/KWOK/EKS manage registry independently of the node OS", clusterupdate.ChangeCategoryInPlace},
+	v1alpha1.DistributionVanilla: {
+		reason:   "Kind requires cluster recreate to change containerd registry config",
+		category: clusterupdate.ChangeCategoryRecreateRequired,
+	},
+	v1alpha1.DistributionTalos: {
+		reason:   "Talos supports .machine.registries updates without reboot",
+		category: clusterupdate.ChangeCategoryInPlace,
+	},
+	v1alpha1.DistributionK3s: {
+		reason:   "K3d supports registries.yaml updates",
+		category: clusterupdate.ChangeCategoryInPlace,
+	},
+	v1alpha1.DistributionVCluster: {
+		reason:   "VCluster/KWOK/EKS manage registry independently of the node OS",
+		category: clusterupdate.ChangeCategoryInPlace,
+	},
+	v1alpha1.DistributionKWOK: {
+		reason:   "VCluster/KWOK/EKS manage registry independently of the node OS",
+		category: clusterupdate.ChangeCategoryInPlace,
+	},
+	v1alpha1.DistributionEKS: {
+		reason:   "VCluster/KWOK/EKS manage registry independently of the node OS",
+		category: clusterupdate.ChangeCategoryInPlace,
+	},
 }
 
 // checkLocalRegistryChange checks if local registry config has changed.
