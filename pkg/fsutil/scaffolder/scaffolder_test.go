@@ -658,7 +658,10 @@ func runK3dCniCase(t *testing.T, testCase k3dCniCase) {
 		}
 
 		if !found {
-			t.Fatalf("expected arg %q to be present, but it was not found in extra args", expected.arg)
+			t.Fatalf(
+				"expected arg %q to be present, but it was not found in extra args",
+				expected.arg,
+			)
 		}
 	}
 }
