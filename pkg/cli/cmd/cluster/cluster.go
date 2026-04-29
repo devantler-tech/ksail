@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -1556,7 +1557,9 @@ func hasK3sArg(k3dConfig *v1alpha5.SimpleConfig, flag string) bool {
 }
 
 // hasK3sArgForServers checks whether a K3s arg flag is already present in the K3d config
-// with node filters that apply to server nodes (empty filters cover all nodes, or "server:*").
+// with node filters that cover all server nodes: either an empty filter list (applies to all
+// nodes) or a filter that is exactly "server:*". A filter like "server:0" is intentionally
+// excluded because it targets only a single server, not all servers.
 func hasK3sArgForServers(k3dConfig *v1alpha5.SimpleConfig, flag string) bool {
 	for _, arg := range k3dConfig.Options.K3sOptions.ExtraArgs {
 		if arg.Arg != flag {
@@ -1567,10 +1570,8 @@ func hasK3sArgForServers(k3dConfig *v1alpha5.SimpleConfig, flag string) bool {
 			return true
 		}
 
-		for _, f := range arg.NodeFilters {
-			if strings.HasPrefix(f, "server:") {
-				return true
-			}
+		if slices.Contains(arg.NodeFilters, "server:*") {
+			return true
 		}
 	}
 
