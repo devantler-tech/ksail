@@ -90,6 +90,16 @@ func NewInstaller(
 // If kubeconfig is empty (e.g. in unit tests), the webhook-readiness wait is
 // skipped and only the Helm install runs.
 func (g *Installer) Install(ctx context.Context) error {
+	// Wrap the entire Install in a single deadline so that the Helm install and
+	// the webhook readiness wait share one budget rather than each receiving a
+	// full g.timeout, which would allow the total to reach ~2×g.timeout.
+	if g.timeout > 0 {
+		var cancel context.CancelFunc
+
+		ctx, cancel = context.WithTimeout(ctx, g.timeout)
+		defer cancel()
+	}
+
 	err := g.Base.Install(ctx)
 	if err != nil {
 		return fmt.Errorf("install gatekeeper: %w", err)
@@ -99,7 +109,8 @@ func (g *Installer) Install(ctx context.Context) error {
 		return nil
 	}
 
-	err = waitForWebhookReadyFn(ctx, g.kubeconfig, g.kubeContext, g.timeout)
+	// deadline=0: the poll is bounded solely by the ctx timeout set above.
+	err = waitForWebhookReadyFn(ctx, g.kubeconfig, g.kubeContext, 0)
 	if err != nil {
 		return fmt.Errorf("wait for gatekeeper webhook readiness: %w", err)
 	}
