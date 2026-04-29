@@ -1,0 +1,201 @@
+package talosprovisioner_test
+
+import (
+	"context"
+	"encoding/base64"
+	"testing"
+
+	talosprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/talos"
+	"github.com/siderolabs/talos/pkg/machinery/config/configloader"
+	taloscontainer "github.com/siderolabs/talos/pkg/machinery/config/container"
+	"github.com/siderolabs/talos/pkg/machinery/config/types/v1alpha1"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes/fake"
+)
+
+// newTestWorkerProvider builds a minimal v1alpha1 Config wrapped in a Provider
+// for use across autoscaler worker config tests.
+func newTestWorkerProvider() *taloscontainer.Container {
+	falseVal := false
+
+	return taloscontainer.NewV1Alpha1(&v1alpha1.Config{
+		ConfigVersion: "v1alpha1",
+		MachineConfig: &v1alpha1.MachineConfig{
+			MachineInstall: &v1alpha1.InstallConfig{
+				InstallWipe: &falseVal,
+			},
+			MachineDisks: []*v1alpha1.MachineDisk{
+				{DeviceName: "/dev/sdb"},
+			},
+			MachineNodeLabels: map[string]string{
+				"node.longhorn.io/create-default-disk": "config",
+				"keep-this-label":                      "value",
+			},
+			MachineKubelet: &v1alpha1.KubeletConfig{
+				KubeletExtraMounts: []v1alpha1.ExtraMount{
+					{Destination: "/var/lib/longhorn"},
+				},
+			},
+		},
+	})
+}
+
+// --- GenerateAutoscalerWorkerConfig ---
+
+func TestGenerateAutoscalerWorkerConfig_StrippingLogic(t *testing.T) {
+	t.Parallel()
+
+	result, err := talosprovisioner.GenerateAutoscalerWorkerConfig(newTestWorkerProvider())
+	require.NoError(t, err)
+	require.NotEmpty(t, result)
+
+	parsed, err := configloader.NewFromBytes(result)
+	require.NoError(t, err)
+
+	rawCfg := parsed.RawV1Alpha1()
+	require.NotNil(t, rawCfg)
+	require.NotNil(t, rawCfg.MachineConfig)
+
+	t.Run("sets install.wipe to true", func(t *testing.T) {
+		t.Parallel()
+
+		require.NotNil(t, rawCfg.MachineConfig.MachineInstall)
+		require.NotNil(t, rawCfg.MachineConfig.MachineInstall.InstallWipe)
+		assert.True(t, *rawCfg.MachineConfig.MachineInstall.InstallWipe)
+	})
+
+	t.Run("removes machine.disks", func(t *testing.T) {
+		t.Parallel()
+
+		assert.Empty(t, rawCfg.MachineConfig.MachineDisks) //nolint:staticcheck // deprecated field
+	})
+
+	t.Run("removes longhorn node label", func(t *testing.T) {
+		t.Parallel()
+
+		assert.NotContains(
+			t,
+			rawCfg.MachineConfig.MachineNodeLabels,
+			"node.longhorn.io/create-default-disk",
+		)
+	})
+
+	t.Run("preserves other node labels", func(t *testing.T) {
+		t.Parallel()
+
+		assert.Contains(t, rawCfg.MachineConfig.MachineNodeLabels, "keep-this-label")
+	})
+
+	t.Run("preserves kubelet extra mounts", func(t *testing.T) {
+		t.Parallel()
+
+		require.NotNil(t, rawCfg.MachineConfig.MachineKubelet)
+		assert.NotEmpty(t, rawCfg.MachineConfig.MachineKubelet.KubeletExtraMounts)
+		assert.Equal(
+			t,
+			"/var/lib/longhorn",
+			rawCfg.MachineConfig.MachineKubelet.KubeletExtraMounts[0].Destination,
+		)
+	})
+}
+
+func TestGenerateAutoscalerWorkerConfig_NilInput(t *testing.T) {
+	t.Parallel()
+
+	_, err := talosprovisioner.GenerateAutoscalerWorkerConfig(nil)
+	require.ErrorIs(t, err, talosprovisioner.ErrNilWorkerConfig)
+}
+
+func TestGenerateAutoscalerWorkerConfig_InstallNilBeforePatch(t *testing.T) {
+	t.Parallel()
+
+	// Config with no MachineInstall set — the function should initialise it.
+	provider := taloscontainer.NewV1Alpha1(&v1alpha1.Config{
+		ConfigVersion: "v1alpha1",
+		MachineConfig: &v1alpha1.MachineConfig{},
+	})
+
+	result, err := talosprovisioner.GenerateAutoscalerWorkerConfig(provider)
+	require.NoError(t, err)
+
+	parsed, err := configloader.NewFromBytes(result)
+	require.NoError(t, err)
+
+	rawCfg := parsed.RawV1Alpha1()
+	require.NotNil(t, rawCfg)
+	require.NotNil(t, rawCfg.MachineConfig.MachineInstall)
+	require.NotNil(t, rawCfg.MachineConfig.MachineInstall.InstallWipe)
+	assert.True(t, *rawCfg.MachineConfig.MachineInstall.InstallWipe)
+}
+
+// --- ApplyAutoscalerConfigSecret ---
+
+func TestApplyAutoscalerConfigSecret_CreatesNewSecret(t *testing.T) {
+	t.Parallel()
+
+	clientset := fake.NewClientset()
+	snapshotID := "123456789"
+	workerConfig := []byte("machine:\n  type: worker\n")
+
+	err := talosprovisioner.ApplyAutoscalerConfigSecret(
+		context.Background(),
+		clientset,
+		snapshotID,
+		workerConfig,
+	)
+	require.NoError(t, err)
+
+	secret, err := clientset.CoreV1().Secrets("kube-system").Get(
+		context.Background(),
+		"cluster-autoscaler-config",
+		metav1.GetOptions{},
+	)
+	require.NoError(t, err)
+
+	assert.Equal(t, []byte(snapshotID), secret.Data["hcloud_image"])
+
+	wantEncoded := base64.StdEncoding.EncodeToString(workerConfig)
+	assert.Equal(t, []byte(wantEncoded), secret.Data["hcloud_cloud_init"])
+}
+
+func TestApplyAutoscalerConfigSecret_UpdatesExistingSecret(t *testing.T) {
+	t.Parallel()
+
+	existing := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "cluster-autoscaler-config",
+			Namespace: "kube-system",
+		},
+		Data: map[string][]byte{
+			"hcloud_image":      []byte("old-image-id"),
+			"hcloud_cloud_init": []byte("old-config"),
+		},
+	}
+	clientset := fake.NewClientset(existing)
+
+	snapshotID := "987654321"
+	workerConfig := []byte("machine:\n  type: worker\n  install:\n    wipe: true\n")
+
+	err := talosprovisioner.ApplyAutoscalerConfigSecret(
+		context.Background(),
+		clientset,
+		snapshotID,
+		workerConfig,
+	)
+	require.NoError(t, err)
+
+	secret, err := clientset.CoreV1().Secrets("kube-system").Get(
+		context.Background(),
+		"cluster-autoscaler-config",
+		metav1.GetOptions{},
+	)
+	require.NoError(t, err)
+
+	assert.Equal(t, []byte(snapshotID), secret.Data["hcloud_image"])
+
+	wantEncoded := base64.StdEncoding.EncodeToString(workerConfig)
+	assert.Equal(t, []byte(wantEncoded), secret.Data["hcloud_cloud_init"])
+}
