@@ -49,3 +49,6 @@ func DistributionConfigIsOppositeDefaultForTest(
 ) bool {
 	return distributionConfigIsOppositeDefault(current, distribution)
 }
+
+// MigrateDeprecatedNodeAutoscalingForTest exposes migrateDeprecatedNodeAutoscaling for testing.
+var MigrateDeprecatedNodeAutoscalingForTest = migrateDeprecatedNodeAutoscaling
