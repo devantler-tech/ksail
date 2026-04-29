@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s/readiness"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -31,7 +32,12 @@ var waitForWebhookReadyFn = func(
 	kubeconfig, kubeContext string,
 	deadline time.Duration,
 ) error {
-	clientset, err := k8s.NewClientset(kubeconfig, kubeContext)
+	canonical, err := fsutil.EvalCanonicalPath(kubeconfig)
+	if err != nil {
+		return fmt.Errorf("canonicalize kubeconfig path: %w", err)
+	}
+
+	clientset, err := k8s.NewClientset(canonical, kubeContext)
 	if err != nil {
 		return fmt.Errorf("create kubernetes client for gatekeeper webhook readiness: %w", err)
 	}
