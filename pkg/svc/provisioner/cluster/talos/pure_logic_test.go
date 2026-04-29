@@ -543,7 +543,7 @@ func TestRecordAppliedChange(t *testing.T) {
 			role:      talosprovisioner.RoleControlPlane,
 			nodeName:  "cp-1",
 			action:    "added",
-			wantField: "talos.controlPlanes",
+			wantField: "cluster.controlPlanes",
 			wantLen:   1,
 		},
 		{
@@ -551,7 +551,7 @@ func TestRecordAppliedChange(t *testing.T) {
 			role:      talosprovisioner.RoleWorker,
 			nodeName:  "worker-1",
 			action:    "removed",
-			wantField: "talos.workers",
+			wantField: "cluster.workers",
 			wantLen:   1,
 		},
 	}
@@ -591,14 +591,14 @@ func TestRecordFailedChange(t *testing.T) {
 			role:      talosprovisioner.RoleControlPlane,
 			nodeName:  "cp-1",
 			err:       errTalosDockerConnectionRefused,
-			wantField: "talos.controlPlanes",
+			wantField: "cluster.controlPlanes",
 		},
 		{
 			name:      "worker failure",
 			role:      talosprovisioner.RoleWorker,
 			nodeName:  "worker-3",
 			err:       errTalosTimeout,
-			wantField: "talos.workers",
+			wantField: "cluster.workers",
 		},
 	}
 

@@ -154,10 +154,8 @@ func TestScaffoldKind_NodeCounts(t *testing.T) {
 					Cluster: v1alpha1.ClusterSpec{
 						Distribution:       v1alpha1.DistributionVanilla,
 						DistributionConfig: scaffolder.KindConfigFile,
-						Talos: v1alpha1.OptionsTalos{
-							ControlPlanes: testCase.controlPlanes,
-							Workers:       testCase.workers,
-						},
+						ControlPlanes:      testCase.controlPlanes,
+						Workers:            testCase.workers,
 					},
 					Workload: v1alpha1.WorkloadSpec{
 						SourceDirectory: "k8s",
@@ -312,11 +310,9 @@ func TestScaffoldK3d_NodeCounts(t *testing.T) {
 			cluster := v1alpha1.Cluster{
 				Spec: v1alpha1.Spec{
 					Cluster: v1alpha1.ClusterSpec{
-						Distribution: v1alpha1.DistributionK3s,
-						Talos: v1alpha1.OptionsTalos{
-							ControlPlanes: testCase.controlPlanes,
-							Workers:       testCase.workers,
-						},
+						Distribution:  v1alpha1.DistributionK3s,
+						ControlPlanes: testCase.controlPlanes,
+						Workers:       testCase.workers,
 					},
 				},
 			}

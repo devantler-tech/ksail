@@ -12,8 +12,7 @@ import (
 
 // generateTalosConfig generates the Talos patches directory structure.
 func (s *Scaffolder) generateTalosConfig(output string, force bool) error {
-	// Get worker count from Talos options (default 0)
-	workers := int(s.KSailConfig.Spec.Cluster.Talos.Workers)
+	workers := int(s.KSailConfig.Spec.Cluster.Workers)
 
 	// Disable default CNI (Flannel) if using any non-default CNI (e.g., Cilium, Calico, None)
 	// Empty string is treated as default CNI (for imperative mode without config file)

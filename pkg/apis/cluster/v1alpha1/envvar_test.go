@@ -287,15 +287,15 @@ func TestCluster_ExpandEnvVars_PreservesStructure(t *testing.T) {
 
 	cluster := v1alpha1.NewCluster()
 	// Set some non-string fields
-	cluster.Spec.Cluster.Talos.ControlPlanes = 3
-	cluster.Spec.Cluster.Talos.Workers = 5
+	cluster.Spec.Cluster.ControlPlanes = 3
+	cluster.Spec.Cluster.Workers = 5
 	cluster.Spec.Workload.ValidateOnPush = true
 
 	cluster.ExpandEnvVars()
 
 	// Non-string fields should not be affected
-	assert.Equal(t, int32(3), cluster.Spec.Cluster.Talos.ControlPlanes)
-	assert.Equal(t, int32(5), cluster.Spec.Cluster.Talos.Workers)
+	assert.Equal(t, int32(3), cluster.Spec.Cluster.ControlPlanes)
+	assert.Equal(t, int32(5), cluster.Spec.Cluster.Workers)
 	assert.True(t, cluster.Spec.Workload.ValidateOnPush)
 }
 

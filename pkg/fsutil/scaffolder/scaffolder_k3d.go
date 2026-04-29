@@ -68,8 +68,8 @@ func (s *Scaffolder) CreateK3dConfig(output string) k3dv1alpha5.SimpleConfig {
 
 	// Apply node counts from CLI flags (stored in Talos options)
 	// These values are used across all distributions for consistency
-	controlPlanes := int(s.KSailConfig.Spec.Cluster.Talos.ControlPlanes)
-	workers := int(s.KSailConfig.Spec.Cluster.Talos.Workers)
+	controlPlanes := int(s.KSailConfig.Spec.Cluster.ControlPlanes)
+	workers := int(s.KSailConfig.Spec.Cluster.Workers)
 
 	if controlPlanes > 0 {
 		config.Servers = controlPlanes

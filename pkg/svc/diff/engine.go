@@ -257,6 +257,42 @@ func (e *Engine) applyFieldRules(
 	}
 }
 
+// localRegistryReasonMap maps each distribution to the reason and category for a local registry change.
+// For Kind, registry changes require recreate (containerd config is baked in).
+// For all other distributions, registry mirrors can be updated in-place.
+// Defined as a package-level variable to avoid reallocating the map on each call.
+//
+//nolint:gochecknoglobals // Immutable lookup table; avoids per-call heap allocation.
+var localRegistryReasonMap = map[v1alpha1.Distribution]struct {
+	reason   string
+	category clusterupdate.ChangeCategory
+}{
+	v1alpha1.DistributionVanilla: {
+		reason:   "Kind requires cluster recreate to change containerd registry config",
+		category: clusterupdate.ChangeCategoryRecreateRequired,
+	},
+	v1alpha1.DistributionTalos: {
+		reason:   "Talos supports .machine.registries updates without reboot",
+		category: clusterupdate.ChangeCategoryInPlace,
+	},
+	v1alpha1.DistributionK3s: {
+		reason:   "K3d supports registries.yaml updates",
+		category: clusterupdate.ChangeCategoryInPlace,
+	},
+	v1alpha1.DistributionVCluster: {
+		reason:   "VCluster/KWOK/EKS manage registry independently of the node OS",
+		category: clusterupdate.ChangeCategoryInPlace,
+	},
+	v1alpha1.DistributionKWOK: {
+		reason:   "VCluster/KWOK/EKS manage registry independently of the node OS",
+		category: clusterupdate.ChangeCategoryInPlace,
+	},
+	v1alpha1.DistributionEKS: {
+		reason:   "VCluster/KWOK/EKS manage registry independently of the node OS",
+		category: clusterupdate.ChangeCategoryInPlace,
+	},
+}
+
 // checkLocalRegistryChange checks if local registry config has changed.
 //
 // When the old registry is empty, the comparison is skipped because the
@@ -275,39 +311,10 @@ func (e *Engine) checkLocalRegistryChange(
 		return
 	}
 
-	if oldSpec.LocalRegistry.Registry != newSpec.LocalRegistry.Registry {
-		// For Kind, registry changes require recreate (containerd config is baked in)
-		// For Talos/K3d, registry mirrors can be updated in-place
-		switch e.distribution {
-		case v1alpha1.DistributionVanilla:
-			result.RecreateRequired = append(result.RecreateRequired, clusterupdate.Change{
-				Field:    "cluster.localRegistry.registry",
-				OldValue: oldSpec.LocalRegistry.Registry,
-				NewValue: newSpec.LocalRegistry.Registry,
-				Category: clusterupdate.ChangeCategoryRecreateRequired,
-				Reason:   "Kind requires cluster recreate to change containerd registry config",
-			})
-		case v1alpha1.DistributionTalos, v1alpha1.DistributionK3s:
-			reasons := map[v1alpha1.Distribution]string{
-				v1alpha1.DistributionTalos: "Talos supports .machine.registries updates without reboot",
-				v1alpha1.DistributionK3s:   "K3d supports registries.yaml updates",
-			}
-			result.InPlaceChanges = append(result.InPlaceChanges, clusterupdate.Change{
-				Field:    "cluster.localRegistry.registry",
-				OldValue: oldSpec.LocalRegistry.Registry,
-				NewValue: newSpec.LocalRegistry.Registry,
-				Category: clusterupdate.ChangeCategoryInPlace,
-				Reason:   reasons[e.distribution],
-			})
-		case v1alpha1.DistributionVCluster, v1alpha1.DistributionKWOK, v1alpha1.DistributionEKS:
-			result.InPlaceChanges = append(result.InPlaceChanges, clusterupdate.Change{
-				Field:    "cluster.localRegistry.registry",
-				OldValue: oldSpec.LocalRegistry.Registry,
-				NewValue: newSpec.LocalRegistry.Registry,
-				Category: clusterupdate.ChangeCategoryInPlace,
-				Reason:   "VCluster/KWOK/EKS manage registry independently of the node OS",
-			})
-		}
+	if rc, ok := localRegistryReasonMap[e.distribution]; ok {
+		appendChange(result, "cluster.localRegistry.registry",
+			oldSpec.LocalRegistry.Registry, newSpec.LocalRegistry.Registry,
+			"", rc.reason, rc.category)
 	}
 }
 
@@ -321,15 +328,10 @@ func (e *Engine) checkVanillaOptionsChange(
 	}
 
 	// MirrorsDir change requires recreate (containerd config is baked at creation)
-	if oldSpec.Vanilla.MirrorsDir != newSpec.Vanilla.MirrorsDir {
-		result.RecreateRequired = append(result.RecreateRequired, clusterupdate.Change{
-			Field:    "cluster.vanilla.mirrorsDir",
-			OldValue: oldSpec.Vanilla.MirrorsDir,
-			NewValue: newSpec.Vanilla.MirrorsDir,
-			Category: clusterupdate.ChangeCategoryRecreateRequired,
-			Reason:   "Kind containerd mirror config is baked at cluster creation",
-		})
-	}
+	appendChange(result, "cluster.vanilla.mirrorsDir",
+		oldSpec.Vanilla.MirrorsDir, newSpec.Vanilla.MirrorsDir,
+		"", "Kind containerd mirror config is baked at cluster creation",
+		clusterupdate.ChangeCategoryRecreateRequired)
 }
 
 // checkTalosOptionsChange checks Talos-specific option changes.
@@ -361,16 +363,16 @@ var talosFieldRules = []fieldRule{
 		getVal:   func(s *v1alpha1.ClusterSpec) string { return s.Talos.Version },
 	},
 	{
-		field:    "cluster.talos.controlPlanes",
+		field:    "cluster.controlPlanes",
 		category: clusterupdate.ChangeCategoryInPlace,
 		reason:   "Talos supports adding/removing control-plane nodes via provider",
-		getVal:   func(s *v1alpha1.ClusterSpec) string { return strconv.Itoa(int(s.Talos.ControlPlanes)) },
+		getVal:   func(s *v1alpha1.ClusterSpec) string { return strconv.Itoa(int(s.ControlPlanes)) },
 	},
 	{
-		field:    "cluster.talos.workers",
+		field:    "cluster.workers",
 		category: clusterupdate.ChangeCategoryInPlace,
 		reason:   "Talos supports adding/removing worker nodes via provider",
-		getVal:   func(s *v1alpha1.ClusterSpec) string { return strconv.Itoa(int(s.Talos.Workers)) },
+		getVal:   func(s *v1alpha1.ClusterSpec) string { return strconv.Itoa(int(s.Workers)) },
 	},
 	talosISORule,
 }
