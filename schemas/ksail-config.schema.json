@@ -229,6 +229,9 @@
                 "iso": {
                   "type": "integer"
                 },
+                "schematicId": {
+                  "type": "string"
+                },
                 "extraPortMappings": {
                   "items": {
                     "properties": {
