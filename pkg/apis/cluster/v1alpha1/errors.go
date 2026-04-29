@@ -78,3 +78,27 @@ var ErrAWSCredentialsMissing = errors.New(
 var ErrEksctlBinaryMissing = errors.New(
 	"eksctl binary not found on PATH; install from https://eksctl.io/installation/",
 )
+
+// ErrInvalidPodAutoscalerHorizontal is returned when an invalid pod horizontal autoscaler option is specified.
+var ErrInvalidPodAutoscalerHorizontal = errors.New("invalid pod horizontal autoscaler")
+
+// ErrInvalidPodAutoscalerVertical is returned when an invalid pod vertical autoscaler option is specified.
+var ErrInvalidPodAutoscalerVertical = errors.New("invalid pod vertical autoscaler")
+
+// ErrInvalidAutoscalerExpander is returned when an invalid autoscaler expander strategy is specified.
+var ErrInvalidAutoscalerExpander = errors.New("invalid autoscaler expander")
+
+// ErrInvalidPoolName is returned when a node pool name is not a valid DNS-1123 label.
+var ErrInvalidPoolName = errors.New("invalid pool name")
+
+// ErrPoolMinExceedsMax is returned when a node pool min count exceeds its max count.
+var ErrPoolMinExceedsMax = errors.New("pool min exceeds max")
+
+// ErrDuplicatePoolName is returned when two or more node pools share the same name.
+var ErrDuplicatePoolName = errors.New("duplicate pool name")
+
+// ErrAutoscalerExceedsServerLimit is returned when the total node capacity exceeds the
+// Hetzner server limit.
+var ErrAutoscalerExceedsServerLimit = errors.New(
+	"autoscaler configuration exceeds Hetzner server limit",
+)

@@ -137,6 +137,34 @@ func ValidNodeAutoscalings() []NodeAutoscaling {
 	return []NodeAutoscaling{NodeAutoscalingEnabled, NodeAutoscalingDisabled}
 }
 
+// ValidNodeAutoscalerEnableds returns supported NodeAutoscalerEnabled values.
+func ValidNodeAutoscalerEnableds() []NodeAutoscalerEnabled {
+	return []NodeAutoscalerEnabled{NodeAutoscalerEnabledEnabled, NodeAutoscalerEnabledDisabled}
+}
+
+// ValidAutoscalerExpanders returns supported AutoscalerExpander values.
+func ValidAutoscalerExpanders() []AutoscalerExpander {
+	return []AutoscalerExpander{
+		AutoscalerExpanderPrice,
+		AutoscalerExpanderLeastWaste,
+		AutoscalerExpanderLeastNodes,
+		AutoscalerExpanderRandom,
+	}
+}
+
+// ValidPodAutoscalerHorizontals returns supported PodAutoscalerHorizontal values.
+func ValidPodAutoscalerHorizontals() []PodAutoscalerHorizontal {
+	return []PodAutoscalerHorizontal{
+		PodAutoscalerHorizontalEnabled,
+		PodAutoscalerHorizontalDisabled,
+	}
+}
+
+// ValidPodAutoscalerVerticals returns supported PodAutoscalerVertical values.
+func ValidPodAutoscalerVerticals() []PodAutoscalerVertical {
+	return []PodAutoscalerVertical{PodAutoscalerVerticalEnabled, PodAutoscalerVerticalDisabled}
+}
+
 // ValidateMirrorRegistriesForProvider validates that mirror registries are compatible with the provider.
 // Cloud providers (like Hetzner) cannot access local Docker containers running as mirror registries.
 // For cloud providers, mirror registries must point to external, internet-accessible registries.
@@ -211,6 +239,96 @@ func ValidateLocalRegistryForProvider(provider Provider, registry LocalRegistry)
 	if (provider == ProviderHetzner || provider == ProviderOmni || provider == ProviderAWS) &&
 		!registry.IsExternal() {
 		return ErrLocalRegistryNotSupported
+	}
+
+	return nil
+}
+
+// poolNameRegex matches DNS-1123 label names: lowercase alphanumeric with optional hyphens.
+// Must start with a letter, end with alphanumeric, and be at most 63 characters.
+var poolNameRegex = regexp.MustCompile(`^[a-z][a-z0-9-]*[a-z0-9]$|^[a-z]$`)
+
+// validateNodePools checks each NodePool for name validity, min ≤ max, and uniqueness.
+func validateNodePools(pools []NodePool) error {
+	seen := make(map[string]struct{}, len(pools))
+
+	for idx, pool := range pools {
+		if !poolNameRegex.MatchString(pool.Name) {
+			return fmt.Errorf(
+				"%w: pool[%d] %q must be a DNS-1123 label "+
+					"(lowercase letters, numbers, and hyphens; must start with a letter; "+
+					"must not end with a hyphen)",
+				ErrInvalidPoolName, idx, pool.Name,
+			)
+		}
+
+		if pool.Min > pool.Max {
+			return fmt.Errorf(
+				"%w: pool %q has min=%d > max=%d",
+				ErrPoolMinExceedsMax, pool.Name, pool.Min, pool.Max,
+			)
+		}
+
+		if _, exists := seen[pool.Name]; exists {
+			return fmt.Errorf("%w: %q", ErrDuplicatePoolName, pool.Name)
+		}
+
+		seen[pool.Name] = struct{}{}
+	}
+
+	return nil
+}
+
+// ValidateAutoscalerConfig validates the autoscaler configuration within a ClusterSpec.
+// It checks pool-level constraints (name validity, min ≤ max, uniqueness) and, when
+// targeting Hetzner with node autoscaling enabled, enforces that the total server
+// capacity does not exceed the configured ServerLimit.
+//
+// Parameters:
+//   - cluster: The ClusterSpec containing autoscaler and node-count configuration.
+//   - provider: The ProviderSpec containing Hetzner-specific options (ServerLimit).
+//
+// Returns the first validation error encountered, or nil if the configuration is valid.
+func ValidateAutoscalerConfig(cluster *ClusterSpec, provider *ProviderSpec) error {
+	if cluster == nil {
+		return nil
+	}
+
+	autoscaler := &cluster.Autoscaler.Node
+
+	err := validateNodePools(autoscaler.Pools)
+	if err != nil {
+		return err
+	}
+
+	// Capacity guard: only applies when Hetzner provider and node autoscaler is enabled.
+	if provider == nil ||
+		cluster.Provider != ProviderHetzner ||
+		autoscaler.Enabled != NodeAutoscalerEnabledEnabled {
+		return nil
+	}
+
+	serverLimit := provider.Hetzner.ServerLimit
+	if serverLimit == 0 {
+		serverLimit = DefaultHetznerServerLimit
+	}
+
+	var poolCapacity int32
+	for _, pool := range autoscaler.Pools {
+		poolCapacity += pool.Max
+	}
+
+	total := cluster.ControlPlanes + cluster.Workers + poolCapacity
+	if total > serverLimit {
+		return fmt.Errorf(
+			"%w: controlPlanes(%d) + workers(%d) + poolCapacity(%d) = %d exceeds serverLimit(%d)",
+			ErrAutoscalerExceedsServerLimit,
+			cluster.ControlPlanes,
+			cluster.Workers,
+			poolCapacity,
+			total,
+			serverLimit,
+		)
 	}
 
 	return nil
