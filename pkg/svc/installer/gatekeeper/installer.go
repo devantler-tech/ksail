@@ -93,10 +93,13 @@ func (g *Installer) Install(ctx context.Context) error {
 	// Wrap the entire Install in a single deadline so that the Helm install and
 	// the webhook readiness wait share one budget rather than each receiving a
 	// full g.timeout, which would allow the total to reach ~2×g.timeout.
+	//
+	// Include Helm's timeout buffer in the outer deadline so Base.Install can
+	// retain its own child-context slack for post-apply readiness observation.
 	if g.timeout > 0 {
 		var cancel context.CancelFunc
 
-		ctx, cancel = context.WithTimeout(ctx, g.timeout)
+		ctx, cancel = context.WithTimeout(ctx, g.timeout+helm.ContextTimeoutBuffer)
 		defer cancel()
 	}
 
