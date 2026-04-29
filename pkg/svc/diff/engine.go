@@ -257,6 +257,24 @@ func (e *Engine) applyFieldRules(
 	}
 }
 
+// localRegistryReasonMap maps each distribution to the reason and category for a local registry change.
+// For Kind, registry changes require recreate (containerd config is baked in).
+// For all other distributions, registry mirrors can be updated in-place.
+// Defined as a package-level variable to avoid reallocating the map on each call.
+//
+//nolint:gochecknoglobals // Immutable lookup table; avoids per-call heap allocation.
+var localRegistryReasonMap = map[v1alpha1.Distribution]struct {
+	reason   string
+	category clusterupdate.ChangeCategory
+}{
+	v1alpha1.DistributionVanilla:  {"Kind requires cluster recreate to change containerd registry config", clusterupdate.ChangeCategoryRecreateRequired},
+	v1alpha1.DistributionTalos:    {"Talos supports .machine.registries updates without reboot", clusterupdate.ChangeCategoryInPlace},
+	v1alpha1.DistributionK3s:      {"K3d supports registries.yaml updates", clusterupdate.ChangeCategoryInPlace},
+	v1alpha1.DistributionVCluster: {"VCluster/KWOK/EKS manage registry independently of the node OS", clusterupdate.ChangeCategoryInPlace},
+	v1alpha1.DistributionKWOK:     {"VCluster/KWOK/EKS manage registry independently of the node OS", clusterupdate.ChangeCategoryInPlace},
+	v1alpha1.DistributionEKS:      {"VCluster/KWOK/EKS manage registry independently of the node OS", clusterupdate.ChangeCategoryInPlace},
+}
+
 // checkLocalRegistryChange checks if local registry config has changed.
 //
 // When the old registry is empty, the comparison is skipped because the
@@ -275,21 +293,7 @@ func (e *Engine) checkLocalRegistryChange(
 		return
 	}
 
-	// For Kind, registry changes require recreate (containerd config is baked in).
-	// For Talos/K3d/VCluster/KWOK/EKS, registry mirrors can be updated in-place.
-	localRegistryReasons := map[v1alpha1.Distribution]struct {
-		reason   string
-		category clusterupdate.ChangeCategory
-	}{
-		v1alpha1.DistributionVanilla:  {"Kind requires cluster recreate to change containerd registry config", clusterupdate.ChangeCategoryRecreateRequired},
-		v1alpha1.DistributionTalos:    {"Talos supports .machine.registries updates without reboot", clusterupdate.ChangeCategoryInPlace},
-		v1alpha1.DistributionK3s:      {"K3d supports registries.yaml updates", clusterupdate.ChangeCategoryInPlace},
-		v1alpha1.DistributionVCluster: {"VCluster/KWOK/EKS manage registry independently of the node OS", clusterupdate.ChangeCategoryInPlace},
-		v1alpha1.DistributionKWOK:     {"VCluster/KWOK/EKS manage registry independently of the node OS", clusterupdate.ChangeCategoryInPlace},
-		v1alpha1.DistributionEKS:      {"VCluster/KWOK/EKS manage registry independently of the node OS", clusterupdate.ChangeCategoryInPlace},
-	}
-
-	if rc, ok := localRegistryReasons[e.distribution]; ok {
+	if rc, ok := localRegistryReasonMap[e.distribution]; ok {
 		appendChange(result, "cluster.localRegistry.registry",
 			oldSpec.LocalRegistry.Registry, newSpec.LocalRegistry.Registry,
 			"", rc.reason, rc.category)
