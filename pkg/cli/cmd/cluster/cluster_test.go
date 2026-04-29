@@ -2208,18 +2208,22 @@ func TestSetupK3dCNI_CiliumDisablesFlannelNetworkPolicyAndTraefik(t *testing.T) 
 		"Cilium should add flannel-backend=none, disable-network-policy, and disable=traefik",
 	)
 
-	argSet := make(map[string]bool, len(args))
+	argMap := make(map[string]v1alpha5.K3sArgWithNodeFilters, len(args))
 	for _, a := range args {
-		argSet[a.Arg] = true
+		argMap[a.Arg] = a
 	}
 
-	require.True(t, argSet["--flannel-backend=none"], "--flannel-backend=none should be present")
-	require.True(
-		t,
-		argSet["--disable-network-policy"],
-		"--disable-network-policy should be present",
-	)
-	require.True(t, argSet[disableTraefikArg], "--disable=traefik should be present for Cilium")
+	for _, flag := range []string{"--flannel-backend=none", "--disable-network-policy", disableTraefikArg} {
+		a, ok := argMap[flag]
+		require.Truef(t, ok, "%q should be present", flag)
+		require.Equalf(
+			t,
+			[]string{"server:*"},
+			a.NodeFilters,
+			"node filters for %q should be [\"server:*\"]",
+			flag,
+		)
+	}
 }
 
 func TestSetupK3dCNI_CiliumDisablesTraefik(t *testing.T) {

@@ -1517,7 +1517,7 @@ func setupK3dCNI(clusterCfg *v1alpha1.Cluster, k3dConfig *v1alpha5.SimpleConfig)
 	}
 
 	for _, flag := range []string{k3sFlanelBackendNoneFlag, k3sDisableNetworkPolicyFlag} {
-		if !hasK3sArg(k3dConfig, flag) {
+		if !hasK3sArgForServers(k3dConfig, flag) {
 			k3dConfig.Options.K3sOptions.ExtraArgs = append(
 				k3dConfig.Options.K3sOptions.ExtraArgs,
 				v1alpha5.K3sArgWithNodeFilters{
