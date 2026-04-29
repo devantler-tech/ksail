@@ -185,7 +185,10 @@ func TestDistributionConfigIsOppositeDefault(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := configmanager.DistributionConfigIsOppositeDefaultForTest(testCase.current, testCase.distribution)
+			got := configmanager.DistributionConfigIsOppositeDefaultForTest(
+				testCase.current,
+				testCase.distribution,
+			)
 
 			assert.Equal(t, testCase.want, got)
 		})
