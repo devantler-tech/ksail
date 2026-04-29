@@ -90,15 +90,17 @@ func NewInstaller(
 // If kubeconfig is empty (e.g. in unit tests), the webhook-readiness wait is
 // skipped and only the Helm install runs.
 func (g *Installer) Install(ctx context.Context) error {
-	if err := g.Base.Install(ctx); err != nil {
-		return err
+	err := g.Base.Install(ctx)
+	if err != nil {
+		return fmt.Errorf("install gatekeeper: %w", err)
 	}
 
 	if g.kubeconfig == "" {
 		return nil
 	}
 
-	if err := waitForWebhookReadyFn(ctx, g.kubeconfig, g.kubeContext, g.timeout); err != nil {
+	err = waitForWebhookReadyFn(ctx, g.kubeconfig, g.kubeContext, g.timeout)
+	if err != nil {
 		return fmt.Errorf("wait for gatekeeper webhook readiness: %w", err)
 	}
 

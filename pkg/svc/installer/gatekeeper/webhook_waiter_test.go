@@ -17,7 +17,9 @@ func TestWaitForGatekeeperWebhookReadyImmediatelyReady(t *testing.T) {
 
 	fakeClientset := k8sfake.NewClientset(readyGatekeeperWebhookConfig())
 
-	err := gatekeeperinstaller.WaitForGatekeeperWebhookReady(context.Background(), fakeClientset, 5*time.Second)
+	err := gatekeeperinstaller.WaitForGatekeeperWebhookReady(
+		context.Background(), fakeClientset, 5*time.Second,
+	)
 
 	require.NoError(t, err)
 }
@@ -44,7 +46,9 @@ func TestWaitForGatekeeperWebhookReadyNotFoundThenReady(t *testing.T) {
 		createErrCh <- err
 	}()
 
-	err := gatekeeperinstaller.WaitForGatekeeperWebhookReady(context.Background(), fakeClientset, 10*time.Second)
+	err := gatekeeperinstaller.WaitForGatekeeperWebhookReady(
+		context.Background(), fakeClientset, 10*time.Second,
+	)
 
 	require.NoError(t, err)
 	require.NoError(t, <-createErrCh, "webhook Create in goroutine failed")
@@ -72,7 +76,9 @@ func TestWaitForGatekeeperWebhookReadyCaBundlePopulatedAfterDelay(t *testing.T) 
 		updateErrCh <- err
 	}()
 
-	err := gatekeeperinstaller.WaitForGatekeeperWebhookReady(context.Background(), fakeClientset, 10*time.Second)
+	err := gatekeeperinstaller.WaitForGatekeeperWebhookReady(
+		context.Background(), fakeClientset, 10*time.Second,
+	)
 
 	require.NoError(t, err)
 	require.NoError(t, <-updateErrCh, "webhook Update in goroutine failed")

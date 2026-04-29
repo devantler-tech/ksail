@@ -54,12 +54,10 @@ func waitForGatekeeperWebhookReady(
 	clientset kubernetes.Interface,
 	deadline time.Duration,
 ) error {
-	return readiness.PollForReadiness(ctx, deadline, func(ctx context.Context) (bool, error) {
-		wh, err := clientset.AdmissionregistrationV1().ValidatingWebhookConfigurations().Get(
-			ctx,
-			gatekeeperValidatingWebhookName,
-			metav1.GetOptions{},
-		)
+	err := readiness.PollForReadiness(ctx, deadline, func(ctx context.Context) (bool, error) {
+		vwcClient := clientset.AdmissionregistrationV1().ValidatingWebhookConfigurations()
+
+		webhookCfg, err := vwcClient.Get(ctx, gatekeeperValidatingWebhookName, metav1.GetOptions{})
 		if err != nil {
 			if k8serrors.IsNotFound(err) {
 				// Webhook config not yet created — keep polling.
@@ -69,16 +67,21 @@ func waitForGatekeeperWebhookReady(
 			return false, fmt.Errorf("get %s: %w", gatekeeperValidatingWebhookName, err)
 		}
 
-		if len(wh.Webhooks) == 0 {
+		if len(webhookCfg.Webhooks) == 0 {
 			return false, nil
 		}
 
-		for i := range wh.Webhooks {
-			if len(wh.Webhooks[i].ClientConfig.CABundle) == 0 {
+		for i := range webhookCfg.Webhooks {
+			if len(webhookCfg.Webhooks[i].ClientConfig.CABundle) == 0 {
 				return false, nil
 			}
 		}
 
 		return true, nil
 	})
+	if err != nil {
+		return fmt.Errorf("poll gatekeeper webhook readiness: %w", err)
+	}
+
+	return nil
 }
