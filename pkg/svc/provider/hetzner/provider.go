@@ -271,6 +271,51 @@ func (p *Provider) DeleteNodes(ctx context.Context, clusterName string) error {
 	return nil
 }
 
+// DeleteAutoscalerNodes deletes all servers created by the Kubernetes Cluster
+// Autoscaler for the given cluster. Autoscaler-managed servers are identified
+// by the hcloud/node-group label matching one of the configured pool names.
+//
+// The method is idempotent: servers that have already been deleted are silently
+// skipped. If poolNames is empty, the method returns nil without making any API
+// calls.
+func (p *Provider) DeleteAutoscalerNodes(
+	ctx context.Context,
+	clusterName string,
+	poolNames []string,
+) error {
+	if p.client == nil {
+		return provider.ErrProviderUnavailable
+	}
+
+	if len(poolNames) == 0 {
+		return nil
+	}
+
+	for _, poolName := range poolNames {
+		labelSelector := fmt.Sprintf("%s=%s", LabelAutoscalerNodeGroup, poolName)
+
+		servers, err := p.listServersByLabelSelector(ctx, labelSelector)
+		if err != nil {
+			return fmt.Errorf("failed to list autoscaler servers for pool %s: %w", poolName, err)
+		}
+
+		for _, server := range servers {
+			_, _, deleteErr := p.client.Server.DeleteWithResult(ctx, server)
+			if deleteErr != nil {
+				var hcloudErr *hcloud.Error
+				if errors.As(deleteErr, &hcloudErr) && hcloudErr.Code == hcloud.ErrorCodeNotFound {
+					continue
+				}
+
+				return fmt.Errorf("failed to delete autoscaler server %s (cluster %s, pool %s): %w",
+					server.Name, clusterName, poolName, deleteErr)
+			}
+		}
+	}
+
+	return nil
+}
+
 // GetClusterStatus returns the provider-level status of a Hetzner Cloud cluster.
 // It derives the cluster phase and readiness from individual server states.
 func (p *Provider) GetClusterStatus(

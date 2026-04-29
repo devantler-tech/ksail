@@ -1,9 +1,11 @@
 package hetzner_test
 
 import (
+	"context"
 	"net"
 	"testing"
 
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/hetzner"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"github.com/stretchr/testify/assert"
@@ -257,6 +259,7 @@ func TestConstantsAreDistinct(t *testing.T) {
 		hetzner.LabelClusterName,
 		hetzner.LabelNodeType,
 		hetzner.LabelNodeIndex,
+		hetzner.LabelAutoscalerNodeGroup,
 	}
 
 	seen := make(map[string]bool)
@@ -379,4 +382,41 @@ func TestCIDRMaskCreation(t *testing.T) {
 		assert.NotNil(t, ipNet.Mask)
 		assert.Equal(t, "::/0", ipNet.String())
 	})
+}
+
+func TestLabelAutoscalerNodeGroup(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, "hcloud/node-group", hetzner.LabelAutoscalerNodeGroup)
+}
+
+func TestDeleteAutoscalerNodes_NilClient(t *testing.T) {
+	t.Parallel()
+
+	prov := hetzner.NewProvider(nil)
+	err := prov.DeleteAutoscalerNodes(context.Background(), "my-cluster", []string{"my-cluster-workers"})
+
+	require.ErrorIs(t, err, provider.ErrProviderUnavailable)
+}
+
+func TestDeleteAutoscalerNodes_EmptyPoolNames(t *testing.T) {
+	t.Parallel()
+
+	client := hcloud.NewClient(hcloud.WithToken("test-token"))
+	prov := hetzner.NewProvider(client)
+
+	err := prov.DeleteAutoscalerNodes(context.Background(), "my-cluster", []string{})
+
+	require.NoError(t, err)
+}
+
+func TestDeleteAutoscalerNodes_NilPoolNames(t *testing.T) {
+	t.Parallel()
+
+	client := hcloud.NewClient(hcloud.WithToken("test-token"))
+	prov := hetzner.NewProvider(client)
+
+	err := prov.DeleteAutoscalerNodes(context.Background(), "my-cluster", nil)
+
+	require.NoError(t, err)
 }

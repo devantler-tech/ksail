@@ -20,6 +20,11 @@ const (
 	// LabelNodeIndex identifies the index of the node within its type.
 	// For example, "0" for the first control-plane node.
 	LabelNodeIndex = "ksail.node.index"
+
+	// LabelAutoscalerNodeGroup is applied by the Kubernetes Cluster Autoscaler
+	// (hcloud provider) to servers it creates. The value is the node group
+	// (pool) name configured in the autoscaler deployment.
+	LabelAutoscalerNodeGroup = "hcloud/node-group"
 )
 
 // Node type values for LabelNodeType.
