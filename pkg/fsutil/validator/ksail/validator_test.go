@@ -2029,3 +2029,66 @@ func TestKSailValidatorK3dDefaultCNIAlignment(t *testing.T) {
 		})
 	}
 }
+
+func TestValidatePodAutoscaler(t *testing.T) {
+	t.Parallel()
+
+	t.Run("hpa_enabled_and_metrics_server_disabled_emits_warning", func(t *testing.T) {
+		t.Parallel()
+
+		v := ksailvalidator.NewValidator()
+		config := createValidKSailConfig(v1alpha1.DistributionVanilla)
+		config.Spec.Cluster.Autoscaler.Pod.Horizontal = v1alpha1.PodAutoscalerHorizontalEnabled
+		config.Spec.Cluster.MetricsServer = v1alpha1.MetricsServerDisabled
+
+		result := v.Validate(config)
+
+		assert.True(t, result.Valid, "config should still be valid; this is only a warning")
+		require.Len(t, result.Warnings, 1)
+		assert.Equal(t, "spec.cluster.metricsServer", result.Warnings[0].Field)
+		assert.Contains(t, result.Warnings[0].Message, "metrics-server is disabled")
+		assert.Contains(t, result.Warnings[0].Message, "Horizontal Pod Autoscaler")
+	})
+
+	t.Run("hpa_enabled_and_metrics_server_enabled_no_warning", func(t *testing.T) {
+		t.Parallel()
+
+		v := ksailvalidator.NewValidator()
+		config := createValidKSailConfig(v1alpha1.DistributionVanilla)
+		config.Spec.Cluster.Autoscaler.Pod.Horizontal = v1alpha1.PodAutoscalerHorizontalEnabled
+		config.Spec.Cluster.MetricsServer = v1alpha1.MetricsServerEnabled
+
+		result := v.Validate(config)
+
+		assert.True(t, result.Valid)
+		assert.Empty(t, result.Warnings)
+	})
+
+	t.Run("hpa_enabled_and_metrics_server_default_no_warning", func(t *testing.T) {
+		t.Parallel()
+
+		v := ksailvalidator.NewValidator()
+		config := createValidKSailConfig(v1alpha1.DistributionVanilla)
+		config.Spec.Cluster.Autoscaler.Pod.Horizontal = v1alpha1.PodAutoscalerHorizontalEnabled
+		config.Spec.Cluster.MetricsServer = v1alpha1.MetricsServerDefault
+
+		result := v.Validate(config)
+
+		assert.True(t, result.Valid)
+		assert.Empty(t, result.Warnings)
+	})
+
+	t.Run("hpa_disabled_metrics_server_disabled_no_warning", func(t *testing.T) {
+		t.Parallel()
+
+		v := ksailvalidator.NewValidator()
+		config := createValidKSailConfig(v1alpha1.DistributionVanilla)
+		config.Spec.Cluster.Autoscaler.Pod.Horizontal = v1alpha1.PodAutoscalerHorizontalDisabled
+		config.Spec.Cluster.MetricsServer = v1alpha1.MetricsServerDisabled
+
+		result := v.Validate(config)
+
+		assert.True(t, result.Valid)
+		assert.Empty(t, result.Warnings)
+	})
+}

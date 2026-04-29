@@ -21,6 +21,7 @@ import (
 	localpathstorageinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/localpathstorage"
 	metallbinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/metallb"
 	metricsserverinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/metricsserver"
+	vpainstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/vpa"
 	"github.com/docker/docker/client"
 )
 
@@ -64,6 +65,7 @@ func (f *Factory) CreateInstallersForConfig(cfg *v1alpha1.Cluster) map[string]In
 	f.addPolicyEngineInstaller(installers, spec)
 	f.addCertManagerInstaller(installers, spec)
 	f.addMetricsServerInstaller(installers, spec)
+	f.addPodAutoscalerInstaller(installers, spec)
 	f.addCSIInstallers(installers, cfg)
 	f.addLoadBalancerInstaller(installers, cfg)
 
@@ -175,12 +177,19 @@ func (f *Factory) addMetricsServerInstaller(
 	installers map[string]Installer,
 	spec v1alpha1.ClusterSpec,
 ) {
-	if spec.MetricsServer == v1alpha1.MetricsServerEnabled ||
-		(spec.MetricsServer == v1alpha1.MetricsServerDefault &&
-			!spec.Distribution.ProvidesMetricsServerByDefault()) {
+	if f.needsMetricsServer(spec) {
 		installers["metrics-server"] = metricsserverinstaller.NewInstallerWithDistribution(
 			f.helmClient, f.timeout, f.distribution,
 		)
+	}
+}
+
+func (f *Factory) addPodAutoscalerInstaller(
+	installers map[string]Installer,
+	spec v1alpha1.ClusterSpec,
+) {
+	if spec.Autoscaler.Pod.Vertical == v1alpha1.PodAutoscalerVerticalEnabled {
+		installers["vpa"] = vpainstaller.NewInstaller(f.helmClient, f.timeout)
 	}
 }
 
@@ -319,4 +328,17 @@ func (f *Factory) needsHcloudCCM(spec v1alpha1.ClusterSpec) bool {
 	return spec.LoadBalancer == v1alpha1.LoadBalancerDefault ||
 		spec.LoadBalancer == v1alpha1.LoadBalancerEnabled ||
 		spec.CSI != v1alpha1.CSIDisabled
+}
+
+// needsMetricsServer determines if metrics-server is needed.
+// HPA (Horizontal Pod Autoscaler) requires metrics-server to function, so it is
+// auto-enabled when HPA is enabled regardless of the MetricsServer flag value.
+func (f *Factory) needsMetricsServer(spec v1alpha1.ClusterSpec) bool {
+	if spec.Autoscaler.Pod.Horizontal == v1alpha1.PodAutoscalerHorizontalEnabled {
+		return true
+	}
+
+	return spec.MetricsServer == v1alpha1.MetricsServerEnabled ||
+		(spec.MetricsServer == v1alpha1.MetricsServerDefault &&
+			!spec.Distribution.ProvidesMetricsServerByDefault())
 }

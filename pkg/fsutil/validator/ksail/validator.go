@@ -104,6 +104,7 @@ func (v *Validator) Validate(config *v1alpha1.Cluster) *validator.ValidationResu
 	v.validateCNIAlignment(config, result)
 	v.validateRegistry(config, result)
 	v.validateFlux(config, result)
+	v.validatePodAutoscaler(config, result)
 
 	return result
 }
@@ -591,4 +592,26 @@ func (v *Validator) validateFlux(
 ) {
 	// Flux-specific configuration is now handled via the FluxInstance CR.
 	// No additional validation required in the KSail config.
+}
+
+// validatePodAutoscaler validates pod autoscaler settings for cross-configuration consistency.
+// HPA requires metrics-server; if the user has explicitly disabled metrics-server while enabling
+// HPA, a warning is emitted because metrics-server will be auto-enabled at install time.
+func (v *Validator) validatePodAutoscaler(
+	config *v1alpha1.Cluster,
+	result *validator.ValidationResult,
+) {
+	if config.Spec.Cluster.Autoscaler.Pod.Horizontal != v1alpha1.PodAutoscalerHorizontalEnabled {
+		return
+	}
+
+	if config.Spec.Cluster.MetricsServer == v1alpha1.MetricsServerDisabled {
+		result.AddWarning(validator.ValidationError{
+			Field:         "spec.cluster.metricsServer",
+			Message:       "metrics-server is disabled but required by Horizontal Pod Autoscaler (HPA); it will be auto-enabled",
+			CurrentValue:  string(config.Spec.Cluster.MetricsServer),
+			ExpectedValue: string(v1alpha1.MetricsServerEnabled),
+			FixSuggestion: "Remove spec.cluster.metricsServer: Disabled or set it to Enabled/Default to suppress this warning",
+		})
+	}
 }

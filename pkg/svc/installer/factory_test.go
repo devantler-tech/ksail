@@ -495,6 +495,69 @@ func TestFactory_CreateInstallersForConfig_MultipleComponents(t *testing.T) {
 	assert.Contains(t, installers, "local-path-storage")
 }
 
+func TestFactory_CreateInstallersForConfig_VPA(t *testing.T) {
+	t.Parallel()
+
+	t.Run("vertical_enabled_creates_vpa_installer", func(t *testing.T) {
+		t.Parallel()
+
+		factory := newTestFactory(t, v1alpha1.DistributionVanilla)
+		cfg := newTestCluster(func(clusterSpec *v1alpha1.ClusterSpec) {
+			clusterSpec.Autoscaler.Pod.Vertical = v1alpha1.PodAutoscalerVerticalEnabled
+		})
+
+		installers := factory.CreateInstallersForConfig(cfg)
+
+		assert.Contains(t, installers, "vpa")
+	})
+
+	t.Run("vertical_disabled_no_vpa_installer", func(t *testing.T) {
+		t.Parallel()
+
+		factory := newTestFactory(t, v1alpha1.DistributionVanilla)
+		cfg := newTestCluster(func(clusterSpec *v1alpha1.ClusterSpec) {
+			clusterSpec.Autoscaler.Pod.Vertical = v1alpha1.PodAutoscalerVerticalDisabled
+		})
+
+		installers := factory.CreateInstallersForConfig(cfg)
+
+		assert.NotContains(t, installers, "vpa")
+	})
+}
+
+func TestFactory_CreateInstallersForConfig_HPA_AutoEnablesMetricsServer(t *testing.T) {
+	t.Parallel()
+
+	t.Run("hpa_enabled_installs_metrics_server_even_when_disabled", func(t *testing.T) {
+		t.Parallel()
+
+		factory := newTestFactory(t, v1alpha1.DistributionVanilla)
+		cfg := newTestCluster(func(clusterSpec *v1alpha1.ClusterSpec) {
+			clusterSpec.Autoscaler.Pod.Horizontal = v1alpha1.PodAutoscalerHorizontalEnabled
+			clusterSpec.MetricsServer = v1alpha1.MetricsServerDisabled
+		})
+
+		installers := factory.CreateInstallersForConfig(cfg)
+
+		assert.Contains(t, installers, "metrics-server",
+			"HPA requires metrics-server; it must be auto-enabled even when MetricsServer=Disabled")
+	})
+
+	t.Run("hpa_disabled_respects_metrics_server_disabled", func(t *testing.T) {
+		t.Parallel()
+
+		factory := newTestFactory(t, v1alpha1.DistributionVanilla)
+		cfg := newTestCluster(func(clusterSpec *v1alpha1.ClusterSpec) {
+			clusterSpec.Autoscaler.Pod.Horizontal = v1alpha1.PodAutoscalerHorizontalDisabled
+			clusterSpec.MetricsServer = v1alpha1.MetricsServerDisabled
+		})
+
+		installers := factory.CreateInstallersForConfig(cfg)
+
+		assert.NotContains(t, installers, "metrics-server")
+	})
+}
+
 // Tests for GetImagesFromInstallers.
 
 func TestGetImagesFromInstallers_EmptyMap(t *testing.T) {
