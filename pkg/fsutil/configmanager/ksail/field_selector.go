@@ -240,3 +240,16 @@ func NodeAutoscalingFieldSelector() FieldSelector[v1alpha1.Cluster] {
 		DefaultValue: v1alpha1.NodeAutoscalingDisabled,
 	}
 }
+
+// NodeAutoscalerEnabledFieldSelector creates a field selector for the node autoscaler enabled flag.
+func NodeAutoscalerEnabledFieldSelector() FieldSelector[v1alpha1.Cluster] {
+	return FieldSelector[v1alpha1.Cluster]{
+		Selector: func(c *v1alpha1.Cluster) any {
+			return &c.Spec.Cluster.Autoscaler.Node.Enabled
+		},
+		Description: "Node autoscaling " +
+			"(Talos: Enabled defers worker and control-plane scaling to an external autoscaler, " +
+			"Disabled lets KSail manage node counts; other distributions currently ignore this setting)",
+		DefaultValue: v1alpha1.NodeAutoscalerEnabledDisabled,
+	}
+}

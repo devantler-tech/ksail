@@ -125,6 +125,11 @@ type OptionsHetzner struct {
 	// independent of the Hetzner Cloud Firewall.
 	// See: https://www.talos.dev/latest/talos-guides/network/ingress-firewall/
 	IngressFirewall IngressFirewall `default:"Enabled" json:"ingressFirewall,omitzero"`
+	// ServerLimit is the maximum number of Hetzner servers (control-plane + worker + autoscaler
+	// pool capacity) permitted in this cluster. Used by ValidateAutoscalerConfig to prevent
+	// the configured autoscaler capacity from exceeding the account/project server quota.
+	// Defaults to DefaultHetznerServerLimit (10).
+	ServerLimit int32 `default:"10" json:"serverLimit,omitzero" jsonschema:"description=Maximum total Hetzner servers allowed for this cluster (control-planes + workers + autoscaler pool capacity),minimum=0"` //nolint:lll
 }
 
 // OptionsOmni defines options specific to the Sidero Omni provider.

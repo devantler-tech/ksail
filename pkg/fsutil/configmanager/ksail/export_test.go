@@ -32,3 +32,6 @@ type Patch = talosconfigmanager.Patch
 
 // MigrateDeprecatedNodeCountsForTest exposes migrateDeprecatedNodeCounts for testing.
 var MigrateDeprecatedNodeCountsForTest = migrateDeprecatedNodeCounts
+
+// MigrateDeprecatedNodeAutoscalingForTest exposes migrateDeprecatedNodeAutoscaling for testing.
+var MigrateDeprecatedNodeAutoscalingForTest = migrateDeprecatedNodeAutoscaling

@@ -322,6 +322,12 @@ func (m *ConfigManager) unmarshalAndApplyDefaults(ignoreConfigFile bool) error {
 		return err
 	}
 
+	// Migrate deprecated spec.cluster.nodeAutoscaling into spec.cluster.autoscaler.node.enabled.
+	err = migrateDeprecatedNodeAutoscaling(m.Config, m.Writer)
+	if err != nil {
+		return err
+	}
+
 	// Track whether local-registry was explicitly set in config
 	m.localRegistryExplicit = m.Viper.IsSet("spec.cluster.localRegistry.registry") ||
 		m.Viper.IsSet("local-registry")
