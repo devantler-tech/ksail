@@ -53,17 +53,18 @@ func TestExpectedDistributionConfigName(t *testing.T) {
 		},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := configmanager.ExpectedDistributionConfigNameForTest(tc.distribution)
+			got := configmanager.ExpectedDistributionConfigNameForTest(testCase.distribution)
 
-			assert.Equal(t, tc.want, got)
+			assert.Equal(t, testCase.want, got)
 		})
 	}
 }
 
+//nolint:funlen // Table-driven test coverage is naturally long.
 func TestDistributionConfigIsOppositeDefault(t *testing.T) {
 	t.Parallel()
 
@@ -180,13 +181,13 @@ func TestDistributionConfigIsOppositeDefault(t *testing.T) {
 		},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := configmanager.DistributionConfigIsOppositeDefaultForTest(tc.current, tc.distribution)
+			got := configmanager.DistributionConfigIsOppositeDefaultForTest(testCase.current, testCase.distribution)
 
-			assert.Equal(t, tc.want, got)
+			assert.Equal(t, testCase.want, got)
 		})
 	}
 }
