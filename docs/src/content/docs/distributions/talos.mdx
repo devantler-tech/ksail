@@ -229,9 +229,8 @@ Adjust control plane and worker nodes in your existing `ksail.yaml` (requires `d
 spec:
   cluster:
     distribution: Talos
-    talos:
-      controlPlanes: 3  # HA setup
-      workers: 5
+    controlPlanes: 3  # HA setup
+    workers: 5
 ```
 
 ### Port Mappings (Docker Provider)
