@@ -39,7 +39,7 @@ func TestMergeProvisionerDiff(t *testing.T) {
 		}
 
 		provisioner := &clusterupdate.UpdateResult{
-			InPlaceChanges:   []clusterupdate.Change{{Field: "talos.workers"}},
+			InPlaceChanges:   []clusterupdate.Change{{Field: "cluster.workers"}},
 			RebootRequired:   []clusterupdate.Change{{Field: "machine.install"}},
 			RecreateRequired: []clusterupdate.Change{},
 		}

@@ -92,8 +92,8 @@ func (s *Scaffolder) buildKindConfig(output string) *v1alpha4.Cluster {
 
 // applyKindNodeCounts sets up Kind nodes based on --control-planes and --workers CLI flags.
 func (s *Scaffolder) applyKindNodeCounts(kindConfig *v1alpha4.Cluster) {
-	controlPlanes := int(s.KSailConfig.Spec.Cluster.Talos.ControlPlanes)
-	workers := int(s.KSailConfig.Spec.Cluster.Talos.Workers)
+	controlPlanes := int(s.KSailConfig.Spec.Cluster.ControlPlanes)
+	workers := int(s.KSailConfig.Spec.Cluster.Workers)
 
 	// Only generate nodes if explicitly configured
 	if controlPlanes <= 0 && workers <= 0 {

@@ -182,7 +182,7 @@ func DefaultClusterFieldSelectors() []FieldSelector[v1alpha1.Cluster] {
 func ControlPlanesFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	return FieldSelector[v1alpha1.Cluster]{
 		Selector: func(c *v1alpha1.Cluster) any {
-			return &c.Spec.Cluster.Talos.ControlPlanes
+			return &c.Spec.Cluster.ControlPlanes
 		},
 		Description:  "Number of control-plane nodes",
 		DefaultValue: int32(1),
@@ -195,7 +195,7 @@ func ControlPlanesFieldSelector() FieldSelector[v1alpha1.Cluster] {
 func WorkersFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	return FieldSelector[v1alpha1.Cluster]{
 		Selector: func(c *v1alpha1.Cluster) any {
-			return &c.Spec.Cluster.Talos.Workers
+			return &c.Spec.Cluster.Workers
 		},
 		Description:  "Number of worker nodes",
 		DefaultValue: int32(0),

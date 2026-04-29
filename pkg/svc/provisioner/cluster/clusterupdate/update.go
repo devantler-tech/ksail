@@ -85,7 +85,7 @@ func (c ChangeCategory) String() string {
 
 // Change describes a single detected configuration change.
 type Change struct {
-	// Field is the configuration field path that changed (e.g., "cluster.cni", "talos.workers").
+	// Field is the configuration field path that changed (e.g., "cluster.cni", "cluster.workers").
 	Field string
 	// OldValue is the previous value (may be empty for additions).
 	OldValue string
