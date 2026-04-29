@@ -112,8 +112,17 @@ func (g *Installer) Install(ctx context.Context) error {
 		return nil
 	}
 
-	// deadline=0: the poll is bounded solely by the ctx timeout set above.
-	err = waitForWebhookReadyFn(ctx, g.kubeconfig, g.kubeContext, 0)
+	// When g.timeout > 0, pass it directly — PollForReadiness takes
+	// min(ctx_remaining, g.timeout), so the poll stays within the outer
+	// deadline. When g.timeout == 0 (no outer deadline was set), fall back
+	// to helm.ContextTimeoutBuffer so the poll is always bounded even when
+	// the caller provides an untimed context.
+	webhookDeadline := g.timeout
+	if webhookDeadline == 0 {
+		webhookDeadline = helm.ContextTimeoutBuffer
+	}
+
+	err = waitForWebhookReadyFn(ctx, g.kubeconfig, g.kubeContext, webhookDeadline)
 	if err != nil {
 		return fmt.Errorf("wait for gatekeeper webhook readiness: %w", err)
 	}
