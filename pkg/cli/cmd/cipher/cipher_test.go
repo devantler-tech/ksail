@@ -945,6 +945,11 @@ func TestNewRotateCmd(t *testing.T) {
 		t.Error("expected force flag to be registered")
 	}
 
+	dryRunFlag := cmd.Flags().Lookup("dry-run")
+	if dryRunFlag == nil {
+		t.Error("expected dry-run flag to be registered")
+	}
+
 	// Verify write permission annotation
 	if perm, ok := cmd.Annotations["ai.toolgen.permission"]; !ok || perm != "write" {
 		t.Error("expected write permission annotation")
@@ -1030,6 +1035,28 @@ func TestRotateCommandEmptyDir(t *testing.T) {
 	err := cipherCmd.Execute()
 	if err != nil {
 		t.Errorf("expected no error for empty dir, got: %v", err)
+	}
+
+	if !strings.Contains(out.String(), "no SOPS-encrypted files found") {
+		t.Errorf("expected 'no SOPS-encrypted files found' message, got: %s", out.String())
+	}
+}
+
+func TestRotateCommandDryRunEmptyDir(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+
+	rt := di.NewRuntime()
+	cipherCmd := cipher.NewCipherCmd(rt)
+
+	var out bytes.Buffer
+	cipherCmd.SetOut(&out)
+	cipherCmd.SetArgs([]string{"rotate", tmpDir, "--dry-run"})
+
+	err := cipherCmd.Execute()
+	if err != nil {
+		t.Errorf("expected no error for dry-run on empty dir, got: %v", err)
 	}
 
 	if !strings.Contains(out.String(), "no SOPS-encrypted files found") {
