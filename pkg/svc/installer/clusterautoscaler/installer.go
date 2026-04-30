@@ -51,7 +51,12 @@ func NewInstaller(
 	client helm.Interface,
 	timeout time.Duration,
 	nodeAutoscaler v1alpha1.NodeAutoscalerConfig,
-) *Installer {
+) (*Installer, error) {
+	valuesYaml, err := buildValuesYaml(nodeAutoscaler)
+	if err != nil {
+		return nil, fmt.Errorf("clusterautoscaler: failed to build chart values: %w", err)
+	}
+
 	return &Installer{
 		Base: helmutil.NewBase(
 			"cluster-autoscaler",
@@ -71,10 +76,10 @@ func NewInstaller(
 				Wait:        true,
 				WaitForJobs: true,
 				Timeout:     timeout,
-				ValuesYaml:  buildValuesYaml(nodeAutoscaler),
+				ValuesYaml:  valuesYaml,
 			},
 		),
-	}
+	}, nil
 }
 
 // chartValues mirrors the cluster-autoscaler Helm chart values schema.
@@ -156,7 +161,7 @@ type chartResources struct {
 // buildValuesYaml generates the Helm values YAML for the cluster-autoscaler chart
 // from the given NodeAutoscalerConfig. It uses a typed struct marshaled via
 // sigs.k8s.io/yaml to prevent YAML injection from user-supplied strings.
-func buildValuesYaml(cfg v1alpha1.NodeAutoscalerConfig) string {
+func buildValuesYaml(cfg v1alpha1.NodeAutoscalerConfig) (string, error) {
 	scaleDownTime := cfg.ScaleDownUnneededTime
 	if scaleDownTime == "" {
 		scaleDownTime = defaultScaleDownUnneededTime
@@ -211,12 +216,10 @@ func buildValuesYaml(cfg v1alpha1.NodeAutoscalerConfig) string {
 
 	out, err := yaml.Marshal(vals)
 	if err != nil {
-		// yaml.Marshal only fails for unmarshalable types (channels, funcs).
-		// Our struct only contains strings, ints, bools, slices, and maps.
-		panic(fmt.Sprintf("clusterautoscaler: failed to marshal chart values: %v", err))
+		return "", err
 	}
 
-	return string(out)
+	return string(out), nil
 }
 
 // buildAutoscalingGroups converts NodePool specs to autoscalingGroup chart values.

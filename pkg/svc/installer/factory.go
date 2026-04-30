@@ -56,7 +56,7 @@ func NewFactory(
 
 // CreateInstallersForConfig creates installers for all components specified in the cluster config.
 // Returns a map of component name to installer.
-func (f *Factory) CreateInstallersForConfig(cfg *v1alpha1.Cluster) map[string]Installer {
+func (f *Factory) CreateInstallersForConfig(cfg *v1alpha1.Cluster) (map[string]Installer, error) {
 	installers := make(map[string]Installer)
 	spec := cfg.Spec.Cluster
 
@@ -67,9 +67,12 @@ func (f *Factory) CreateInstallersForConfig(cfg *v1alpha1.Cluster) map[string]In
 	f.addMetricsServerInstaller(installers, spec)
 	f.addCSIInstallers(installers, cfg)
 	f.addLoadBalancerInstaller(installers, cfg)
-	f.addNodeAutoscalerInstaller(installers, spec)
 
-	return installers
+	if err := f.addClusterAutoscalerInstaller(installers, spec); err != nil {
+		return nil, err
+	}
+
+	return installers, nil
 }
 
 // GetImagesFromInstallers retrieves container images from all provided installers.
@@ -105,7 +108,10 @@ func (f *Factory) GetImagesForCluster(
 	ctx context.Context,
 	cfg *v1alpha1.Cluster,
 ) ([]string, error) {
-	installers := f.CreateInstallersForConfig(cfg)
+	installers, err := f.CreateInstallersForConfig(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create installers: %w", err)
+	}
 
 	return GetImagesFromInstallers(ctx, installers)
 }
@@ -325,21 +331,30 @@ func (f *Factory) needsHcloudCCM(spec v1alpha1.ClusterSpec) bool {
 		spec.CSI != v1alpha1.CSIDisabled
 }
 
-func (f *Factory) addNodeAutoscalerInstaller(
+func (f *Factory) addClusterAutoscalerInstaller(
 	installers map[string]Installer,
 	spec v1alpha1.ClusterSpec,
-) {
-	if needsClusterAutoscaler(spec) {
-		installers["cluster-autoscaler"] = clusterautoscalerinstaller.NewInstaller(
-			f.helmClient, f.timeout, spec.Autoscaler.Node,
-		)
+) error {
+	if !f.needsClusterAutoscaler(spec) {
+		return nil
 	}
+
+	inst, err := clusterautoscalerinstaller.NewInstaller(
+		f.helmClient, f.timeout, spec.Autoscaler.Node,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create cluster-autoscaler installer: %w", err)
+	}
+
+	installers["cluster-autoscaler"] = inst
+
+	return nil
 }
 
 // needsClusterAutoscaler determines if the Cluster Autoscaler is needed.
 // Cluster Autoscaler is only supported for Talos clusters on Hetzner Cloud
 // with node autoscaling explicitly enabled.
-func needsClusterAutoscaler(spec v1alpha1.ClusterSpec) bool {
+func (f *Factory) needsClusterAutoscaler(spec v1alpha1.ClusterSpec) bool {
 	return spec.Distribution == v1alpha1.DistributionTalos &&
 		spec.Provider == v1alpha1.ProviderHetzner &&
 		spec.Autoscaler.Node.Enabled == v1alpha1.NodeAutoscalerEnabledEnabled

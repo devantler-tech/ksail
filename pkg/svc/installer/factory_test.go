@@ -73,7 +73,8 @@ func TestFactory_CreateInstallersForConfig_EmptyConfig(t *testing.T) {
 	factory := newTestFactory(t, v1alpha1.DistributionVanilla)
 	cfg := newTestCluster()
 
-	installers := factory.CreateInstallersForConfig(cfg)
+	installers, err := factory.CreateInstallersForConfig(cfg)
+	require.NoError(t, err)
 
 	assert.Empty(t, installers, "empty config should produce no installers")
 }
@@ -107,7 +108,8 @@ func TestFactory_CreateInstallersForConfig_GitOpsEngine(t *testing.T) {
 				clusterSpec.GitOpsEngine = testCase.gitOpsEngine
 			})
 
-			installers := factory.CreateInstallersForConfig(cfg)
+			installers, err := factory.CreateInstallersForConfig(cfg)
+			require.NoError(t, err)
 
 			assert.Contains(t, installers, testCase.expectedKey)
 		})
@@ -122,7 +124,8 @@ func TestFactory_CreateInstallersForConfig_NoGitOpsEngine(t *testing.T) {
 		clusterSpec.GitOpsEngine = v1alpha1.GitOpsEngineNone
 	})
 
-	installers := factory.CreateInstallersForConfig(cfg)
+	installers, err := factory.CreateInstallersForConfig(cfg)
+	require.NoError(t, err)
 
 	assert.NotContains(t, installers, "flux")
 	assert.NotContains(t, installers, "argocd")
@@ -157,7 +160,8 @@ func TestFactory_CreateInstallersForConfig_CNI(t *testing.T) {
 				clusterSpec.CNI = testCase.cni
 			})
 
-			installers := factory.CreateInstallersForConfig(cfg)
+			installers, err := factory.CreateInstallersForConfig(cfg)
+			require.NoError(t, err)
 
 			assert.Contains(t, installers, testCase.expectedKey)
 		})
@@ -172,7 +176,8 @@ func TestFactory_CreateInstallersForConfig_DefaultCNI(t *testing.T) {
 		clusterSpec.CNI = v1alpha1.CNIDefault
 	})
 
-	installers := factory.CreateInstallersForConfig(cfg)
+	installers, err := factory.CreateInstallersForConfig(cfg)
+	require.NoError(t, err)
 
 	assert.NotContains(t, installers, "cilium")
 	assert.NotContains(t, installers, "calico")
@@ -207,7 +212,8 @@ func TestFactory_CreateInstallersForConfig_PolicyEngine(t *testing.T) {
 				clusterSpec.PolicyEngine = testCase.engine
 			})
 
-			installers := factory.CreateInstallersForConfig(cfg)
+			installers, err := factory.CreateInstallersForConfig(cfg)
+			require.NoError(t, err)
 
 			assert.Contains(t, installers, testCase.expectedKey)
 		})
@@ -222,7 +228,8 @@ func TestFactory_CreateInstallersForConfig_NoPolicyEngine(t *testing.T) {
 		clusterSpec.PolicyEngine = v1alpha1.PolicyEngineNone
 	})
 
-	installers := factory.CreateInstallersForConfig(cfg)
+	installers, err := factory.CreateInstallersForConfig(cfg)
+	require.NoError(t, err)
 
 	assert.NotContains(t, installers, "kyverno")
 	assert.NotContains(t, installers, "gatekeeper")
@@ -239,7 +246,8 @@ func TestFactory_CreateInstallersForConfig_CertManager(t *testing.T) {
 			clusterSpec.CertManager = v1alpha1.CertManagerEnabled
 		})
 
-		installers := factory.CreateInstallersForConfig(cfg)
+		installers, err := factory.CreateInstallersForConfig(cfg)
+		require.NoError(t, err)
 
 		assert.Contains(t, installers, "cert-manager")
 	})
@@ -252,7 +260,8 @@ func TestFactory_CreateInstallersForConfig_CertManager(t *testing.T) {
 			clusterSpec.CertManager = v1alpha1.CertManagerDisabled
 		})
 
-		installers := factory.CreateInstallersForConfig(cfg)
+		installers, err := factory.CreateInstallersForConfig(cfg)
+		require.NoError(t, err)
 
 		assert.NotContains(t, installers, "cert-manager")
 	})
@@ -269,7 +278,8 @@ func TestFactory_CreateInstallersForConfig_MetricsServer(t *testing.T) {
 			clusterSpec.MetricsServer = v1alpha1.MetricsServerEnabled
 		})
 
-		installers := factory.CreateInstallersForConfig(cfg)
+		installers, err := factory.CreateInstallersForConfig(cfg)
+		require.NoError(t, err)
 
 		assert.Contains(t, installers, "metrics-server")
 	})
@@ -282,7 +292,8 @@ func TestFactory_CreateInstallersForConfig_MetricsServer(t *testing.T) {
 			clusterSpec.MetricsServer = v1alpha1.MetricsServerDisabled
 		})
 
-		installers := factory.CreateInstallersForConfig(cfg)
+		installers, err := factory.CreateInstallersForConfig(cfg)
+		require.NoError(t, err)
 
 		assert.NotContains(t, installers, "metrics-server")
 	})
@@ -296,7 +307,8 @@ func TestFactory_CreateInstallersForConfig_MetricsServer(t *testing.T) {
 			clusterSpec.Distribution = v1alpha1.DistributionVanilla
 		})
 
-		installers := factory.CreateInstallersForConfig(cfg)
+		installers, err := factory.CreateInstallersForConfig(cfg)
+		require.NoError(t, err)
 
 		assert.Contains(t, installers, "metrics-server",
 			"Vanilla does not provide metrics-server by default, so Default should install it")
@@ -311,7 +323,8 @@ func TestFactory_CreateInstallersForConfig_MetricsServer(t *testing.T) {
 			clusterSpec.Distribution = v1alpha1.DistributionK3s
 		})
 
-		installers := factory.CreateInstallersForConfig(cfg)
+		installers, err := factory.CreateInstallersForConfig(cfg)
+		require.NoError(t, err)
 
 		assert.NotContains(t, installers, "metrics-server",
 			"K3s provides metrics-server by default, so Default should not install it")
@@ -331,7 +344,8 @@ func TestFactory_CreateInstallersForConfig_CSI(t *testing.T) {
 			clusterSpec.Distribution = v1alpha1.DistributionVanilla
 		})
 
-		installers := factory.CreateInstallersForConfig(cfg)
+		installers, err := factory.CreateInstallersForConfig(cfg)
+		require.NoError(t, err)
 
 		assert.Contains(t, installers, "local-path-storage")
 	})
@@ -345,7 +359,8 @@ func TestFactory_CreateInstallersForConfig_CSI(t *testing.T) {
 			clusterSpec.Distribution = v1alpha1.DistributionK3s
 		})
 
-		installers := factory.CreateInstallersForConfig(cfg)
+		installers, err := factory.CreateInstallersForConfig(cfg)
+		require.NoError(t, err)
 
 		assert.NotContains(t, installers, "local-path-storage",
 			"K3s has built-in storage")
@@ -361,7 +376,8 @@ func TestFactory_CreateInstallersForConfig_CSI(t *testing.T) {
 			clusterSpec.Provider = v1alpha1.ProviderHetzner
 		})
 
-		installers := factory.CreateInstallersForConfig(cfg)
+		installers, err := factory.CreateInstallersForConfig(cfg)
+		require.NoError(t, err)
 
 		assert.Contains(t, installers, "hetzner-csi")
 		assert.Contains(t, installers, "kubelet-csr-approver")
@@ -379,7 +395,8 @@ func TestFactory_CreateInstallersForConfig_CSI(t *testing.T) {
 			clusterSpec.Provider = v1alpha1.ProviderHetzner
 		})
 
-		installers := factory.CreateInstallersForConfig(cfg)
+		installers, err := factory.CreateInstallersForConfig(cfg)
+		require.NoError(t, err)
 
 		assert.NotContains(t, installers, "hetzner-csi")
 		assert.NotContains(t, installers, "local-path-storage")
@@ -396,7 +413,8 @@ func TestFactory_CreateInstallersForConfig_LoadBalancer_VanillaDocker(t *testing
 		clusterSpec.Provider = v1alpha1.ProviderDocker
 	})
 
-	installers := factory.CreateInstallersForConfig(cfg)
+	installers, err := factory.CreateInstallersForConfig(cfg)
+	require.NoError(t, err)
 
 	assert.Contains(t, installers, "cloud-provider-kind")
 	assert.NotContains(t, installers, "metallb",
@@ -413,7 +431,8 @@ func TestFactory_CreateInstallersForConfig_LoadBalancer_TalosDocker(t *testing.T
 		clusterSpec.Provider = v1alpha1.ProviderDocker
 	})
 
-	installers := factory.CreateInstallersForConfig(cfg)
+	installers, err := factory.CreateInstallersForConfig(cfg)
+	require.NoError(t, err)
 
 	assert.Contains(t, installers, "metallb")
 	assert.NotContains(t, installers, "cloud-provider-kind",
@@ -430,7 +449,8 @@ func TestFactory_CreateInstallersForConfig_LoadBalancer_TalosHetzner(t *testing.
 		clusterSpec.Provider = v1alpha1.ProviderHetzner
 	})
 
-	installers := factory.CreateInstallersForConfig(cfg)
+	installers, err := factory.CreateInstallersForConfig(cfg)
+	require.NoError(t, err)
 
 	assert.Contains(t, installers, "hcloud-ccm",
 		"Talos on Hetzner requires hcloud-ccm for LoadBalancer support")
@@ -448,7 +468,8 @@ func TestFactory_CreateInstallersForConfig_LoadBalancer_K3s(t *testing.T) {
 		clusterSpec.Distribution = v1alpha1.DistributionK3s
 	})
 
-	installers := factory.CreateInstallersForConfig(cfg)
+	installers, err := factory.CreateInstallersForConfig(cfg)
+	require.NoError(t, err)
 
 	assert.NotContains(t, installers, "metallb",
 		"K3s has built-in ServiceLB")
@@ -465,7 +486,8 @@ func TestFactory_CreateInstallersForConfig_LoadBalancer_Disabled(t *testing.T) {
 		clusterSpec.Provider = v1alpha1.ProviderDocker
 	})
 
-	installers := factory.CreateInstallersForConfig(cfg)
+	installers, err := factory.CreateInstallersForConfig(cfg)
+	require.NoError(t, err)
 
 	assert.NotContains(t, installers, "metallb")
 	assert.NotContains(t, installers, "cloud-provider-kind")
@@ -485,7 +507,8 @@ func TestFactory_CreateInstallersForConfig_MultipleComponents(t *testing.T) {
 		clusterSpec.Distribution = v1alpha1.DistributionVanilla
 	})
 
-	installers := factory.CreateInstallersForConfig(cfg)
+	installers, err := factory.CreateInstallersForConfig(cfg)
+	require.NoError(t, err)
 
 	assert.Contains(t, installers, "flux")
 	assert.Contains(t, installers, "cilium")
@@ -505,7 +528,8 @@ func TestFactory_CreateInstallersForConfig_ClusterAutoscaler_Enabled(t *testing.
 		clusterSpec.Autoscaler.Node.Enabled = v1alpha1.NodeAutoscalerEnabledEnabled
 	})
 
-	installers := factory.CreateInstallersForConfig(cfg)
+	installers, err := factory.CreateInstallersForConfig(cfg)
+	require.NoError(t, err)
 
 	assert.Contains(t, installers, "cluster-autoscaler")
 }
@@ -550,7 +574,8 @@ func TestFactory_CreateInstallersForConfig_ClusterAutoscaler_NotEnabled(t *testi
 				clusterSpec.Autoscaler.Node.Enabled = testCase.enabled
 			})
 
-			installers := factory.CreateInstallersForConfig(cfg)
+			installers, err := factory.CreateInstallersForConfig(cfg)
+			require.NoError(t, err)
 
 			assert.NotContains(t, installers, "cluster-autoscaler")
 		})

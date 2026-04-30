@@ -17,9 +17,10 @@ func TestNewInstaller(t *testing.T) {
 	t.Parallel()
 
 	client := helm.NewMockInterface(t)
-	installer := clusterautoscalerinstaller.NewInstaller(
+	installer, err := clusterautoscalerinstaller.NewInstaller(
 		client, 5*time.Minute, v1alpha1.NodeAutoscalerConfig{},
 	)
+	require.NoError(t, err)
 
 	assert.NotNil(t, installer)
 }
@@ -101,14 +102,30 @@ func TestClusterAutoscalerInstaller_ValuesYaml_NodePools(t *testing.T) {
 	}
 
 	client := helm.NewMockInterface(t)
-	installer := clusterautoscalerinstaller.NewInstaller(client, 5*time.Second, cfg)
-	require.NotNil(t, installer)
+	expectAddRepository(t, client, nil)
+	client.EXPECT().
+		InstallOrUpgradeChart(
+			mock.Anything,
+			mock.MatchedBy(func(spec *helm.ChartSpec) bool {
+				assert.Contains(t, spec.ValuesYaml, "name: workers")
+				assert.Contains(t, spec.ValuesYaml, "instanceType: cx23")
+				assert.Contains(t, spec.ValuesYaml, "region: fsn1")
+				assert.Contains(t, spec.ValuesYaml, "minSize: 1")
+				assert.Contains(t, spec.ValuesYaml, "maxSize: 5")
+				assert.Contains(t, spec.ValuesYaml, "name: highmem")
+				assert.Contains(t, spec.ValuesYaml, "instanceType: cax41")
+				assert.Contains(t, spec.ValuesYaml, "region: nbg1")
+				assert.Contains(t, spec.ValuesYaml, "maxSize: 3")
 
-	// Verify the installer was created (values are embedded inside the Base).
-	// We exercise the values indirectly by checking the chart spec via Install.
-	expectInstall(t, client, nil)
+				return true
+			}),
+		).
+		Return(nil, nil)
 
-	err := installer.Install(context.Background())
+	installer, err := clusterautoscalerinstaller.NewInstaller(client, 5*time.Second, cfg)
+	require.NoError(t, err)
+
+	err = installer.Install(context.Background())
 	require.NoError(t, err)
 }
 
@@ -185,10 +202,11 @@ func runExpanderTest(
 		).
 		Return(nil, nil)
 
-	installer := clusterautoscalerinstaller.NewInstaller(client, 5*time.Second, cfg)
+	installer, err := clusterautoscalerinstaller.NewInstaller(client, 5*time.Second, cfg)
+	require.NoError(t, err)
 	require.NotNil(t, installer)
 
-	err := installer.Install(context.Background())
+	err = installer.Install(context.Background())
 	require.NoError(t, err)
 }
 
@@ -250,8 +268,9 @@ func TestClusterAutoscalerInstaller_ValuesYaml_Contents(t *testing.T) {
 		).
 		Return(nil, nil)
 
-	installer := clusterautoscalerinstaller.NewInstaller(client, 5*time.Second, cfg)
-	err := installer.Install(context.Background())
+	installer, err := clusterautoscalerinstaller.NewInstaller(client, 5*time.Second, cfg)
+	require.NoError(t, err)
+	err = installer.Install(context.Background())
 	require.NoError(t, err)
 }
 
@@ -282,8 +301,9 @@ func TestClusterAutoscalerInstaller_ValuesYaml_DefaultScaleDownTime(t *testing.T
 		).
 		Return(nil, nil)
 
-	installer := clusterautoscalerinstaller.NewInstaller(client, 5*time.Second, cfg)
-	err := installer.Install(context.Background())
+	installer, err := clusterautoscalerinstaller.NewInstaller(client, 5*time.Second, cfg)
+	require.NoError(t, err)
+	err = installer.Install(context.Background())
 	require.NoError(t, err)
 }
 
@@ -314,8 +334,9 @@ func TestClusterAutoscalerInstaller_ValuesYaml_MaxNodesTotalOmittedWhenZero(t *t
 		).
 		Return(nil, nil)
 
-	installer := clusterautoscalerinstaller.NewInstaller(client, 5*time.Second, cfg)
-	err := installer.Install(context.Background())
+	installer, err := clusterautoscalerinstaller.NewInstaller(client, 5*time.Second, cfg)
+	require.NoError(t, err)
+	err = installer.Install(context.Background())
 	require.NoError(t, err)
 }
 
@@ -333,7 +354,8 @@ func newInstallerWithDefaults(t *testing.T) (
 		Expander:              v1alpha1.AutoscalerExpanderLeastWaste,
 		ScaleDownUnneededTime: "10m",
 	}
-	installer := clusterautoscalerinstaller.NewInstaller(client, 5*time.Second, cfg)
+	installer, err := clusterautoscalerinstaller.NewInstaller(client, 5*time.Second, cfg)
+	require.NoError(t, err)
 
 	return installer, client
 }

@@ -341,7 +341,7 @@ func TestValidateAutoscalerConfig(t *testing.T) {
 			errContains: "my_pool",
 		},
 		{
-			name: "pool name starts with number is invalid",
+			name: "pool name starts with number is valid",
 			cluster: &v1alpha1.ClusterSpec{
 				Autoscaler: v1alpha1.AutoscalerConfig{
 					Node: v1alpha1.NodeAutoscalerConfig{
@@ -351,7 +351,7 @@ func TestValidateAutoscalerConfig(t *testing.T) {
 					},
 				},
 			},
-			wantErr: v1alpha1.ErrInvalidPoolName,
+			wantErr: nil,
 		},
 		{
 			name: "pool min exceeds max",

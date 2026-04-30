@@ -245,8 +245,8 @@ func ValidateLocalRegistryForProvider(provider Provider, registry LocalRegistry)
 }
 
 // poolNameRegex matches DNS-1123 label names: lowercase alphanumeric with optional hyphens.
-// Must start with a letter, end with alphanumeric, and be at most 63 characters.
-var poolNameRegex = regexp.MustCompile(`^[a-z][a-z0-9-]*[a-z0-9]$|^[a-z]$`)
+// Must start and end with alphanumeric, and be at most 63 characters.
+var poolNameRegex = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*[a-z0-9]$|^[a-z0-9]$`)
 
 // PoolNameMaxLength is the maximum length for a node pool name (DNS-1123 label limit).
 const PoolNameMaxLength = 63
@@ -266,7 +266,7 @@ func validateNodePools(pools []NodePool) error {
 		if !poolNameRegex.MatchString(pool.Name) {
 			return fmt.Errorf(
 				"%w: pool[%d] %q must be a DNS-1123 label "+
-					"(lowercase letters, numbers, and hyphens; must start with a letter; "+
+					"(lowercase letters, numbers, and hyphens; must start and end with alphanumeric; "+
 					"must not end with a hyphen)",
 				ErrInvalidPoolName, idx, pool.Name,
 			)
