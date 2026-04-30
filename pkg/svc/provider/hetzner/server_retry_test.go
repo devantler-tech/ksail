@@ -58,18 +58,27 @@ func TestShouldRetryError(t *testing.T) { //nolint:funlen // Table-driven test w
 			wantRetry: true,
 		},
 		{
-			name:      "WrappedConflict",
-			err:       fmt.Errorf("create server: %w", hcloud.Error{Code: hcloud.ErrorCodeConflict}),
+			name: "WrappedConflict",
+			err: fmt.Errorf(
+				"create server: %w",
+				hcloud.Error{Code: hcloud.ErrorCodeConflict},
+			),
 			wantRetry: true,
 		},
 		{
-			name:      "WrappedRateLimit",
-			err:       fmt.Errorf("create server: %w", hcloud.Error{Code: hcloud.ErrorCodeRateLimitExceeded}),
+			name: "WrappedRateLimit",
+			err: fmt.Errorf(
+				"create server: %w",
+				hcloud.Error{Code: hcloud.ErrorCodeRateLimitExceeded},
+			),
 			wantRetry: true,
 		},
 		{
-			name:      "WrappedPlacementError",
-			err:       fmt.Errorf("create server: %w", hcloud.Error{Code: hcloud.ErrorCodePlacementError}),
+			name: "WrappedPlacementError",
+			err: fmt.Errorf(
+				"create server: %w",
+				hcloud.Error{Code: hcloud.ErrorCodePlacementError},
+			),
 			wantRetry: true,
 		},
 		{
@@ -156,15 +165,21 @@ func TestShouldDisablePlacement(t *testing.T) { //nolint:funlen // Table-driven 
 			wantDisable:      true,
 		},
 		{
-			name:             "WrappedPlacementError_WithFallbackAndGroup",
-			err:              fmt.Errorf("create server: %w", hcloud.Error{Code: hcloud.ErrorCodePlacementError}),
+			name: "WrappedPlacementError_WithFallbackAndGroup",
+			err: fmt.Errorf(
+				"create server: %w",
+				hcloud.Error{Code: hcloud.ErrorCodePlacementError},
+			),
 			allowFallback:    true,
 			placementGroupID: 123,
 			wantDisable:      true,
 		},
 		{
-			name:             "WrappedResourceUnavailable_WithFallbackAndGroup",
-			err:              fmt.Errorf("create server: %w", hcloud.Error{Code: hcloud.ErrorCodeResourceUnavailable}),
+			name: "WrappedResourceUnavailable_WithFallbackAndGroup",
+			err: fmt.Errorf(
+				"create server: %w",
+				hcloud.Error{Code: hcloud.ErrorCodeResourceUnavailable},
+			),
 			allowFallback:    true,
 			placementGroupID: 123,
 			wantDisable:      true,
