@@ -2,6 +2,7 @@ package diff
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -532,41 +533,86 @@ func (e *Engine) checkAutoscalerPoolChanges(
 	result *clusterupdate.UpdateResult,
 ) {
 	oldByName := make(map[string]v1alpha1.NodePool, len(oldPools))
+
 	for _, p := range oldPools {
 		oldByName[p.Name] = p
 	}
 
 	newByName := make(map[string]v1alpha1.NodePool, len(newPools))
+
 	for _, p := range newPools {
 		newByName[p.Name] = p
 	}
 
-	// Pools added.
+	e.checkAutoscalerPoolsAdded(oldByName, newByName, result)
+	e.checkAutoscalerPoolsRemoved(oldByName, newByName, result)
+	e.checkAutoscalerPoolsModified(oldByName, newByName, result)
+}
+
+// checkAutoscalerPoolsAdded emits in-place changes for pools present in new but absent in old.
+func (e *Engine) checkAutoscalerPoolsAdded(
+	oldByName, newByName map[string]v1alpha1.NodePool,
+	result *clusterupdate.UpdateResult,
+) {
+	addedNames := make([]string, 0, len(newByName))
+
 	for name := range newByName {
 		if _, exists := oldByName[name]; !exists {
-			appendChange(result, "cluster.autoscaler.node.pools",
-				"", "pool added: "+name,
-				"", "node pool added; will be applied in-place via Helm chart upgrade",
-				clusterupdate.ChangeCategoryInPlace)
+			addedNames = append(addedNames, name)
 		}
 	}
 
-	// Pools removed.
+	sort.Strings(addedNames)
+
+	for _, name := range addedNames {
+		appendChange(result, "cluster.autoscaler.node.pools",
+			"", "pool added: "+name,
+			"", "node pool added; will be applied in-place via Helm chart upgrade",
+			clusterupdate.ChangeCategoryInPlace)
+	}
+}
+
+// checkAutoscalerPoolsRemoved emits in-place changes for pools present in old but absent in new.
+func (e *Engine) checkAutoscalerPoolsRemoved(
+	oldByName, newByName map[string]v1alpha1.NodePool,
+	result *clusterupdate.UpdateResult,
+) {
+	removedNames := make([]string, 0, len(oldByName))
+
 	for name := range oldByName {
 		if _, exists := newByName[name]; !exists {
-			appendChange(result, "cluster.autoscaler.node.pools",
-				"pool removed: "+name, "",
-				"", "node pool removed; will be applied in-place via Helm chart upgrade",
-				clusterupdate.ChangeCategoryInPlace)
+			removedNames = append(removedNames, name)
 		}
 	}
 
-	// Pools modified (by name match).
-	for name, newPool := range newByName {
-		oldPool, exists := oldByName[name]
-		if !exists {
-			continue
+	sort.Strings(removedNames)
+
+	for _, name := range removedNames {
+		appendChange(result, "cluster.autoscaler.node.pools",
+			"pool removed: "+name, "",
+			"", "node pool removed; will be applied in-place via Helm chart upgrade",
+			clusterupdate.ChangeCategoryInPlace)
+	}
+}
+
+// checkAutoscalerPoolsModified emits field-level in-place changes for pools present in both old and new.
+func (e *Engine) checkAutoscalerPoolsModified(
+	oldByName, newByName map[string]v1alpha1.NodePool,
+	result *clusterupdate.UpdateResult,
+) {
+	modifiedNames := make([]string, 0, len(newByName))
+
+	for name := range newByName {
+		if _, exists := oldByName[name]; exists {
+			modifiedNames = append(modifiedNames, name)
 		}
+	}
+
+	sort.Strings(modifiedNames)
+
+	for _, name := range modifiedNames {
+		newPool := newByName[name]
+		oldPool := oldByName[name]
 
 		poolField := fmt.Sprintf("cluster.autoscaler.node.pools[%s]", name)
 
