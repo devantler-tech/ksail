@@ -334,9 +334,13 @@ func ValidateAutoscalerConfig(cluster *ClusterSpec, provider *ProviderSpec) erro
 	}
 
 	// Capacity guard: only applies when Hetzner provider and node autoscaler is enabled.
+	// The deprecated cluster.NodeAutoscaling field is also checked for backward compatibility
+	// during the deprecation window (before migration fully replaces it).
+	autoscalingEnabled := autoscaler.Enabled == NodeAutoscalerEnabledEnabled ||
+		cluster.NodeAutoscaling == NodeAutoscalingEnabled
 	if provider == nil ||
 		cluster.Provider != ProviderHetzner ||
-		autoscaler.Enabled != NodeAutoscalerEnabledEnabled {
+		!autoscalingEnabled {
 		return nil
 	}
 

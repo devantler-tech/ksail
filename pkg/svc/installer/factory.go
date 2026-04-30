@@ -356,7 +356,9 @@ func (f *Factory) addClusterAutoscalerInstaller(
 // Cluster Autoscaler is only supported for Talos clusters on Hetzner Cloud
 // with node autoscaling explicitly enabled.
 func (f *Factory) needsClusterAutoscaler(spec v1alpha1.ClusterSpec) bool {
+	autoscalingEnabled := spec.Autoscaler.Node.Enabled == v1alpha1.NodeAutoscalerEnabledEnabled ||
+		spec.NodeAutoscaling == v1alpha1.NodeAutoscalingEnabled
 	return spec.Distribution == v1alpha1.DistributionTalos &&
 		spec.Provider == v1alpha1.ProviderHetzner &&
-		spec.Autoscaler.Node.Enabled == v1alpha1.NodeAutoscalerEnabledEnabled
+		autoscalingEnabled
 }
