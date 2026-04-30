@@ -335,8 +335,8 @@ func TestApplyNodeScalingChanges_BelowMinimumControlPlanes(t *testing.T) {
 	assert.ErrorIs(t, err, talosprovisioner.ErrMinimumControlPlanes)
 }
 
-// TestDiffConfig_SkipsNodeCountsWhenAutoscalingEnabled verifies that DiffConfig
-// returns no in-place changes for controlPlanes and workers when autoscaling is enabled.
+// TestDiffConfig_DetectsBaselineNodeCountsWhenAutoscalingEnabled verifies that DiffConfig
+// detects in-place changes for controlPlanes and workers even when autoscaling is enabled.
 func TestDiffConfig_DetectsBaselineNodeCountsWhenAutoscalingEnabled(t *testing.T) {
 	t.Parallel()
 

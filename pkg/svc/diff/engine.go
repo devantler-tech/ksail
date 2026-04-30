@@ -370,7 +370,7 @@ var talosFieldRules = []fieldRule{
 	talosISORule,
 }
 
-// talosISORule is the shared ISO field rule used by both Talos rule sets.
+// talosISORule is the ISO field rule used by the Talos field rules.
 //
 //nolint:gochecknoglobals // Immutable field-rule; avoids per-call heap allocation.
 var talosISORule = fieldRule{
