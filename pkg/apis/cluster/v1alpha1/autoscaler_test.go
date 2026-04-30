@@ -529,6 +529,49 @@ func TestValidateAutoscalerConfig(t *testing.T) {
 			},
 			wantErr: nil,
 		},
+		{
+			// min = max is a valid configuration (pool always holds exactly N nodes).
+			name: "pool min equals max is valid",
+			cluster: &v1alpha1.ClusterSpec{
+				Autoscaler: v1alpha1.AutoscalerConfig{
+					Node: v1alpha1.NodeAutoscalerConfig{
+						Pools: []v1alpha1.NodePool{
+							{Name: "workers", ServerType: "cx23", Location: "fsn1", Min: 3, Max: 3},
+						},
+					},
+				},
+			},
+			wantErr: nil,
+		},
+		{
+			// min = max = 0 means the pool starts empty and never scales — still structurally valid.
+			name: "pool min zero max zero is valid",
+			cluster: &v1alpha1.ClusterSpec{
+				Autoscaler: v1alpha1.AutoscalerConfig{
+					Node: v1alpha1.NodeAutoscalerConfig{
+						Pools: []v1alpha1.NodePool{
+							{Name: "workers", ServerType: "cx23", Location: "fsn1", Min: 0, Max: 0},
+						},
+					},
+				},
+			},
+			wantErr: nil,
+		},
+		{
+			// Empty string does not match the DNS-1123 pool name regex.
+			name: "empty pool name is invalid",
+			cluster: &v1alpha1.ClusterSpec{
+				Autoscaler: v1alpha1.AutoscalerConfig{
+					Node: v1alpha1.NodeAutoscalerConfig{
+						Pools: []v1alpha1.NodePool{
+							{Name: "", ServerType: "cx23", Location: "fsn1", Min: 1, Max: 5},
+						},
+					},
+				},
+			},
+			wantErr:     v1alpha1.ErrInvalidPoolName,
+			errContains: `pool[0]`,
+		},
 	}
 
 	for _, testCase := range tests {
