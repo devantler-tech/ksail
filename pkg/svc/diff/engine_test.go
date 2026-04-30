@@ -1266,7 +1266,10 @@ func TestEngine_AutoscalerFullConfigChange(t *testing.T) {
 	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
 	result := engine.ComputeDiff(old, newer, nil, nil)
 
-	require.True(t, result.HasInPlaceChanges(), "full autoscaler config change should produce in-place changes")
+	require.True(
+		t, result.HasInPlaceChanges(),
+		"full autoscaler config change should produce in-place changes",
+	)
 
 	assertSingleChange(t, result.InPlaceChanges, "cluster.autoscaler.node.enabled",
 		"", "Enabled", clusterupdate.ChangeCategoryInPlace)
@@ -1301,7 +1304,10 @@ func TestEngine_WorkersAndAutoscalerPools_BothDetected_WhenAutoscalerDisabled(t 
 	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
 	result := engine.ComputeDiff(old, newer, nil, nil)
 
-	require.True(t, result.HasInPlaceChanges(), "workers and pool change should produce in-place changes")
+	require.True(
+		t, result.HasInPlaceChanges(),
+		"workers and pool change should produce in-place changes",
+	)
 
 	assertSingleChange(t, result.InPlaceChanges, testFieldWorkers,
 		"0", "2", clusterupdate.ChangeCategoryInPlace)
@@ -1329,7 +1335,10 @@ func TestEngine_AutoscalerToggle_NodeCountSuppressed_PoolsDetected(t *testing.T)
 	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
 	result := engine.ComputeDiff(old, newer, nil, nil)
 
-	require.True(t, result.HasInPlaceChanges(), "autoscaler toggle and pool addition should produce in-place changes")
+	require.True(
+		t, result.HasInPlaceChanges(),
+		"autoscaler toggle and pool addition should produce in-place changes",
+	)
 
 	assertSingleChange(t, result.InPlaceChanges, "cluster.autoscaler.node.enabled",
 		"", "Enabled", clusterupdate.ChangeCategoryInPlace)

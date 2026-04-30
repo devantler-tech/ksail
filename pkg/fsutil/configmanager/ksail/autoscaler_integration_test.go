@@ -97,6 +97,7 @@ spec:
 	require.NoError(t, os.WriteFile(configPath, []byte(yaml), 0o600))
 
 	var out bytes.Buffer
+
 	manager := configmanager.NewConfigManager(
 		&out, "",
 		configmanager.DefaultClusterFieldSelectors()...,
@@ -107,8 +108,11 @@ spec:
 	require.NoError(t, err)
 	require.NotNil(t, cluster)
 
-	assert.Equal(t, v1alpha1.NodeAutoscalerEnabledEnabled, cluster.Spec.Cluster.Autoscaler.Node.Enabled,
-		"migration should copy NodeAutoscaling=Enabled to Autoscaler.Node.Enabled")
+	assert.Equal(
+		t, v1alpha1.NodeAutoscalerEnabledEnabled,
+		cluster.Spec.Cluster.Autoscaler.Node.Enabled,
+		"migration should copy NodeAutoscaling=Enabled to Autoscaler.Node.Enabled",
+	)
 	assert.Empty(t, cluster.Spec.Cluster.NodeAutoscaling,
 		"migration should clear the deprecated nodeAutoscaling field")
 	assert.Contains(t, out.String(), "deprecated",
