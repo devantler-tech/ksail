@@ -1054,6 +1054,7 @@ func TestRotateCommandDryRunWithEncryptedFile(t *testing.T) {
 	// without requiring actual key material, which lets us test the dry-run
 	// preview path without setting up a real age identity.
 	const encryptedContent = "password: value\nsops:\n  version: \"3.7.3\"\n"
+
 	filePath := filepath.Join(tmpDir, "secret.yaml")
 
 	err := os.WriteFile(filePath, []byte(encryptedContent), 0o600)
