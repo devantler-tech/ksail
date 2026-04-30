@@ -925,29 +925,10 @@ func TestNewRotateCmd(t *testing.T) {
 	}
 
 	// Verify flags are registered
-	addKeyFlag := cmd.Flags().Lookup("add-key")
-	if addKeyFlag == nil {
-		t.Error("expected add-key flag to be registered")
-	}
-
-	removeKeyFlag := cmd.Flags().Lookup("remove-key")
-	if removeKeyFlag == nil {
-		t.Error("expected remove-key flag to be registered")
-	}
-
-	recursiveFlag := cmd.Flags().Lookup("recursive")
-	if recursiveFlag == nil {
-		t.Error("expected recursive flag to be registered")
-	}
-
-	forceFlag := cmd.Flags().Lookup("force")
-	if forceFlag == nil {
-		t.Error("expected force flag to be registered")
-	}
-
-	dryRunFlag := cmd.Flags().Lookup("dry-run")
-	if dryRunFlag == nil {
-		t.Error("expected dry-run flag to be registered")
+	for _, flagName := range []string{"add-key", "remove-key", "recursive", "force", "dry-run"} {
+		if cmd.Flags().Lookup(flagName) == nil {
+			t.Errorf("expected %s flag to be registered", flagName)
+		}
 	}
 
 	// Verify write permission annotation
@@ -1075,7 +1056,8 @@ func TestRotateCommandDryRunWithEncryptedFile(t *testing.T) {
 	const encryptedContent = "password: value\nsops:\n  version: \"3.7.3\"\n"
 	filePath := filepath.Join(tmpDir, "secret.yaml")
 
-	if err := os.WriteFile(filePath, []byte(encryptedContent), 0o600); err != nil {
+	err := os.WriteFile(filePath, []byte(encryptedContent), 0o600)
+	if err != nil {
 		t.Fatalf("failed to write test file: %v", err)
 	}
 
@@ -1086,7 +1068,7 @@ func TestRotateCommandDryRunWithEncryptedFile(t *testing.T) {
 	cipherCmd.SetOut(&out)
 	cipherCmd.SetArgs([]string{"rotate", tmpDir, "--dry-run"})
 
-	err := cipherCmd.Execute()
+	err = cipherCmd.Execute()
 	if err != nil {
 		t.Errorf("expected no error for dry-run with encrypted file, got: %v", err)
 	}
