@@ -79,6 +79,13 @@ func TestSecretDataContains_NoMatch(t *testing.T) {
 			existing:    nil,
 			desiredData: map[string][]byte{"a": []byte("1")},
 		},
+		{
+			// A nil desired value must not match a missing key (before the fix,
+			// existing[k] also returns nil for missing keys, causing a false positive).
+			name:        "nil desired value does not match missing key",
+			existing:    map[string][]byte{},
+			desiredData: map[string][]byte{"missing": nil},
+		},
 	}
 
 	for _, testCase := range tests {

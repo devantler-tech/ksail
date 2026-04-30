@@ -28,8 +28,13 @@ func MergeSecretData(secret *corev1.Secret, desiredData map[string][]byte) bool 
 // SecretDataContains returns true when every key in desiredData exists in
 // existing with an equal value.
 func SecretDataContains(existing, desiredData map[string][]byte) bool {
-	for k, v := range desiredData {
-		if !bytes.Equal(existing[k], v) {
+	for key, desiredValue := range desiredData {
+		existingValue, ok := existing[key]
+		if !ok {
+			return false
+		}
+
+		if !bytes.Equal(existingValue, desiredValue) {
 			return false
 		}
 	}
