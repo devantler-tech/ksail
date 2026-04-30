@@ -239,6 +239,26 @@ func (p *Provider) NodesExist(ctx context.Context, clusterName string) (bool, er
 	return exists, nil
 }
 
+// NetworkExists returns true if the KSail-owned private network for the given
+// cluster exists. This is a more robust cluster-existence check than
+// NodesExist because the network is part of the KSail-managed infrastructure
+// and remains present even when all nodes have been deleted by the cluster
+// autoscaler.
+func (p *Provider) NetworkExists(ctx context.Context, clusterName string) (bool, error) {
+	if p.client == nil {
+		return false, provider.ErrProviderUnavailable
+	}
+
+	networkName := clusterName + NetworkSuffix
+
+	network, _, err := p.client.Network.GetByName(ctx, networkName)
+	if err != nil {
+		return false, fmt.Errorf("hetzner: get network %s: %w", networkName, err)
+	}
+
+	return network != nil, nil
+}
+
 // DeleteNodes removes all servers for the given cluster.
 func (p *Provider) DeleteNodes(ctx context.Context, clusterName string) error {
 	if p.client == nil {
@@ -287,12 +307,12 @@ func (p *Provider) DeleteAutoscalerNodes(
 	clusterName string,
 	poolNames []string,
 ) error {
-	if p.client == nil {
-		return provider.ErrProviderUnavailable
-	}
-
 	if len(poolNames) == 0 {
 		return nil
+	}
+
+	if p.client == nil {
+		return provider.ErrProviderUnavailable
 	}
 
 	networkName := clusterName + NetworkSuffix
