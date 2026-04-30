@@ -1,6 +1,7 @@
 package diff_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -1191,8 +1192,7 @@ func TestEngine_AutoscalerNoChange(t *testing.T) {
 	result := engine.ComputeDiff(spec, newer, nil, nil)
 
 	for _, change := range result.AllChanges() {
-		if len(change.Field) > len("cluster.autoscaler") &&
-			change.Field[:len("cluster.autoscaler")] == "cluster.autoscaler" {
+		if strings.HasPrefix(change.Field, "cluster.autoscaler") {
 			t.Errorf(
 				"identical autoscaler config should produce no changes, got: %s %q -> %q",
 				change.Field, change.OldValue, change.NewValue,

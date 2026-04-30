@@ -535,13 +535,17 @@ func (e *Engine) checkAutoscalerPoolChanges(
 	oldByName := make(map[string]v1alpha1.NodePool, len(oldPools))
 
 	for _, p := range oldPools {
-		oldByName[p.Name] = p
+		if _, exists := oldByName[p.Name]; !exists {
+			oldByName[p.Name] = p
+		}
 	}
 
 	newByName := make(map[string]v1alpha1.NodePool, len(newPools))
 
 	for _, p := range newPools {
-		newByName[p.Name] = p
+		if _, exists := newByName[p.Name]; !exists {
+			newByName[p.Name] = p
+		}
 	}
 
 	e.checkAutoscalerPoolsAdded(oldByName, newByName, result)

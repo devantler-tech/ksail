@@ -117,5 +117,5 @@ func TestMigrateDeprecatedNodeAutoscaling_InvalidLegacyValueReturnsError(t *test
 	cfg.Spec.Cluster.NodeAutoscaling = v1alpha1.NodeAutoscaling("SomethingInvalid")
 
 	err := configmanager.MigrateDeprecatedNodeAutoscalingForTest(cfg, nil)
-	require.Error(t, err)
+	require.ErrorIs(t, err, v1alpha1.ErrInvalidNodeAutoscaling)
 }

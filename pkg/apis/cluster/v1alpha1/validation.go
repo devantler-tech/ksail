@@ -302,13 +302,16 @@ func ValidateAutoscalerConfig(cluster *ClusterSpec, provider *ProviderSpec) erro
 	}
 
 	// Capacity guard: only applies when Hetzner provider and node autoscaler is enabled.
-	if provider == nil ||
-		cluster.Provider != ProviderHetzner ||
+	if cluster.Provider != ProviderHetzner ||
 		autoscaler.Enabled != NodeAutoscalerEnabledEnabled {
 		return nil
 	}
 
-	serverLimit := provider.Hetzner.ServerLimit
+	var serverLimit int32
+	if provider != nil {
+		serverLimit = provider.Hetzner.ServerLimit
+	}
+
 	if serverLimit == 0 {
 		serverLimit = DefaultHetznerServerLimit
 	}

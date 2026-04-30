@@ -70,7 +70,7 @@ func mapNodeAutoscalingToEnabled(
 	default:
 		return "", fmt.Errorf(
 			"%w: spec.cluster.nodeAutoscaling=%q is not a valid value (valid: Enabled, Disabled)",
-			ErrDeprecatedFieldConflict,
+			v1alpha1.ErrInvalidNodeAutoscaling,
 			old,
 		)
 	}
