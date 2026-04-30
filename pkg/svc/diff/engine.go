@@ -343,12 +343,7 @@ func (e *Engine) checkTalosOptionsChange(
 		return
 	}
 
-	rules := talosFieldRules
-	if newSpec.NodeAutoscaling == v1alpha1.NodeAutoscalingEnabled {
-		rules = talosFieldRulesNoScaling
-	}
-
-	e.applyFieldRules(oldSpec, newSpec, result, rules)
+	e.applyFieldRules(oldSpec, newSpec, result, talosFieldRules)
 }
 
 // talosFieldRules is the table of Talos-specific scalar field diff rules.
@@ -377,15 +372,7 @@ var talosFieldRules = []fieldRule{
 	talosISORule,
 }
 
-// talosFieldRulesNoScaling is used when node autoscaling is enabled.
-// It excludes controlPlanes and workers rules to avoid conflicts with the external autoscaler.
-//
-//nolint:gochecknoglobals // Immutable field-rule table; avoids per-call heap allocation.
-var talosFieldRulesNoScaling = []fieldRule{
-	talosISORule,
-}
-
-// talosISORule is the shared ISO field rule used by both talosFieldRules and talosFieldRulesNoScaling.
+// talosISORule is the ISO field rule used by the Talos field rules.
 //
 //nolint:gochecknoglobals // Immutable field-rule; avoids per-call heap allocation.
 var talosISORule = fieldRule{
