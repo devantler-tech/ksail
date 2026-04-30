@@ -1063,3 +1063,55 @@ func TestRotateCommandDryRunEmptyDir(t *testing.T) {
 		t.Errorf("expected 'no SOPS-encrypted files found' message, got: %s", out.String())
 	}
 }
+
+func TestRotateCommandDryRunWithEncryptedFile(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+
+	// A YAML file with a top-level "sops:" key is detected as SOPS-encrypted
+	// without requiring actual key material, which lets us test the dry-run
+	// preview path without setting up a real age identity.
+	const encryptedContent = "password: value\nsops:\n  version: \"3.7.3\"\n"
+	filePath := filepath.Join(tmpDir, "secret.yaml")
+
+	if err := os.WriteFile(filePath, []byte(encryptedContent), 0o600); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	rt := di.NewRuntime()
+	cipherCmd := cipher.NewCipherCmd(rt)
+
+	var out bytes.Buffer
+	cipherCmd.SetOut(&out)
+	cipherCmd.SetArgs([]string{"rotate", tmpDir, "--dry-run"})
+
+	err := cipherCmd.Execute()
+	if err != nil {
+		t.Errorf("expected no error for dry-run with encrypted file, got: %v", err)
+	}
+
+	output := out.String()
+
+	if !strings.Contains(output, "dry run:") {
+		t.Errorf("expected 'dry run:' header in output, got: %s", output)
+	}
+
+	if !strings.Contains(output, filePath) {
+		t.Errorf("expected file path %q in dry-run output, got: %s", filePath, output)
+	}
+
+	if strings.Contains(output, `Type "yes" to confirm rotation:`) {
+		t.Errorf("expected no confirmation prompt in dry-run output, got: %s", output)
+	}
+
+	// Verify the file was not modified by the dry-run.
+	data, err := os.ReadFile(filePath) //nolint:gosec // test file under t.TempDir, safe to read
+	if err != nil {
+		t.Fatalf("failed to read file after dry-run: %v", err)
+	}
+
+	if string(data) != encryptedContent {
+		t.Errorf("expected file contents unchanged after dry-run, got: %s", string(data))
+	}
+}
