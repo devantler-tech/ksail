@@ -187,6 +187,13 @@ func TestDistributionConfigIsOppositeDefault(t *testing.T) {
 			distribution: v1alpha1.DistributionVanilla,
 			want:         false,
 		},
+		{
+			// Empty current — not a match for any default
+			name:         "empty_current_is_not_opposite",
+			current:      "",
+			distribution: v1alpha1.DistributionVanilla,
+			want:         false,
+		},
 	}
 
 	for _, testCase := range tests {
