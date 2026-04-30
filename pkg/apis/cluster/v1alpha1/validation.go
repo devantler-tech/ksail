@@ -383,13 +383,9 @@ func validateHetznerCapacity(
 		return fmt.Errorf("%w: got %d", ErrInvalidMaxNodesTotal, autoscaler.MaxNodesTotal)
 	}
 
-	serverLimit := provider.Hetzner.ServerLimit
-	if serverLimit < 0 {
-		return fmt.Errorf("%w: got %d", ErrInvalidServerLimit, serverLimit)
-	}
-
-	if serverLimit == 0 {
-		serverLimit = DefaultHetznerServerLimit
+	serverLimit, err := resolveServerLimit(provider.Hetzner.ServerLimit)
+	if err != nil {
+		return err
 	}
 
 	var poolCapacity int32
@@ -417,4 +413,18 @@ func validateHetznerCapacity(
 	}
 
 	return nil
+}
+
+// resolveServerLimit validates and normalises the configured Hetzner server limit.
+// A negative limit is rejected; zero falls back to DefaultHetznerServerLimit.
+func resolveServerLimit(limit int32) (int32, error) {
+	if limit < 0 {
+		return 0, fmt.Errorf("%w: got %d", ErrInvalidServerLimit, limit)
+	}
+
+	if limit == 0 {
+		return DefaultHetznerServerLimit, nil
+	}
+
+	return limit, nil
 }
