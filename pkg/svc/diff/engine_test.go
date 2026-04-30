@@ -1043,7 +1043,7 @@ func TestEngine_AutoscalerNodeEnabledChange(t *testing.T) {
 	}
 
 	assertSingleChange(t, result.InPlaceChanges, "cluster.autoscaler.node.enabled",
-		"", "Enabled", clusterupdate.ChangeCategoryInPlace)
+		"Disabled", "Enabled", clusterupdate.ChangeCategoryInPlace)
 }
 
 func TestEngine_AutoscalerExpanderChange(t *testing.T) {
@@ -1146,7 +1146,7 @@ func TestEngine_AutoscalerPodHorizontalChange(t *testing.T) {
 	}
 
 	assertSingleChange(t, result.InPlaceChanges, "cluster.autoscaler.pod.horizontal",
-		"", "Enabled", clusterupdate.ChangeCategoryInPlace)
+		"Disabled", "Enabled", clusterupdate.ChangeCategoryInPlace)
 }
 
 func TestEngine_AutoscalerPodVerticalChange(t *testing.T) {
@@ -1164,7 +1164,7 @@ func TestEngine_AutoscalerPodVerticalChange(t *testing.T) {
 	}
 
 	assertSingleChange(t, result.InPlaceChanges, "cluster.autoscaler.pod.vertical",
-		"", "Enabled", clusterupdate.ChangeCategoryInPlace)
+		"Disabled", "Enabled", clusterupdate.ChangeCategoryInPlace)
 }
 
 func TestEngine_AutoscalerNoChange(t *testing.T) {
