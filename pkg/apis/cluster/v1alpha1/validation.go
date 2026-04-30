@@ -352,9 +352,8 @@ func ValidateAutoscalerConfig(
 		return fmt.Errorf("%w: got %d", ErrNegativeServerLimit, provider.Hetzner.ServerLimit)
 	}
 
-	poolErr := validateNodePools(autoscaler.Pools)
-	if poolErr != nil {
-		return poolErr
+	if err := validateNodePools(autoscaler.Pools); err != nil {
+		return err
 	}
 
 	return validateHetznerCapacity(cluster, provider, autoscaler)
@@ -362,7 +361,11 @@ func ValidateAutoscalerConfig(
 
 // validateHetznerCapacity checks that controlPlanes+workers+effectivePoolCapacity ≤ serverLimit
 // when provider is Hetzner and node autoscaling is enabled.
-func validateHetznerCapacity(cluster *ClusterSpec, provider *ProviderSpec, autoscaler *NodeAutoscalerConfig) error {
+func validateHetznerCapacity(
+	cluster *ClusterSpec,
+	provider *ProviderSpec,
+	autoscaler *NodeAutoscalerConfig,
+) error {
 	if provider == nil ||
 		cluster.Provider != ProviderHetzner ||
 		autoscaler.Enabled != NodeAutoscalerEnabledEnabled {
