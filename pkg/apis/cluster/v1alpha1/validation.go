@@ -300,6 +300,13 @@ func validateNodePools(pools []NodePool) error {
 			)
 		}
 
+		if pool.Min < 0 || pool.Max < 0 {
+			return fmt.Errorf(
+				"%w: pool %q has negative min=%d or max=%d",
+				ErrInvalidPoolCapacity, pool.Name, pool.Min, pool.Max,
+			)
+		}
+
 		if pool.Min > pool.Max {
 			return fmt.Errorf(
 				"%w: pool %q has min=%d > max=%d",
@@ -372,7 +379,15 @@ func validateHetznerCapacity(
 		return nil
 	}
 
+	if autoscaler.MaxNodesTotal < 0 {
+		return fmt.Errorf("%w: got %d", ErrInvalidMaxNodesTotal, autoscaler.MaxNodesTotal)
+	}
+
 	serverLimit := provider.Hetzner.ServerLimit
+	if serverLimit < 0 {
+		return fmt.Errorf("%w: got %d", ErrInvalidServerLimit, serverLimit)
+	}
+
 	if serverLimit == 0 {
 		serverLimit = DefaultHetznerServerLimit
 	}
