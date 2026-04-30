@@ -20,7 +20,7 @@ type PodAutoscalerConfig struct {
 type NodeAutoscalerConfig struct {
 	Enabled               NodeAutoscalerEnabled `json:"enabled,omitzero"`
 	Pools                 []NodePool            `json:"pools,omitzero"`
-	MaxNodesTotal         int32                 `json:"maxNodesTotal,omitzero"         jsonschema:"description=Maximum total nodes allowed across all node pools,minimum=0"` //nolint:lll
+	MaxNodesTotal         int32                 `json:"maxNodesTotal,omitzero"         jsonschema:"description=Maximum total nodes allowed across all node pools. Set to 0 to disable the global cap; when disabled, the effective cap is the sum of all pool max values,minimum=0"` //nolint:lll
 	Expander              AutoscalerExpander    `json:"expander,omitzero"`
 	ScaleDownUnneededTime string                `json:"scaleDownUnneededTime,omitzero" jsonschema:"description=How long a node should be unneeded before it is eligible for scale down (e.g. 10m)"` //nolint:lll
 }
