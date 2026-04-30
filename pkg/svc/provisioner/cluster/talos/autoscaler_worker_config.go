@@ -144,20 +144,20 @@ func updateAutoscalerSecretIfNeeded(
 	secretsClient := client.CoreV1().Secrets(autoscalerConfigSecretNamespace)
 
 	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		latest, err := secretsClient.Get(ctx, autoscalerConfigSecretName, metav1.GetOptions{})
-		if err != nil {
-			return fmt.Errorf("get autoscaler config secret for update: %w", err)
+		latest, getErr := secretsClient.Get(ctx, autoscalerConfigSecretName, metav1.GetOptions{})
+		if getErr != nil {
+			return fmt.Errorf("get autoscaler config secret for update: %w", getErr)
 		}
 
 		if autoscalerSecretDataMatches(latest.Data, desiredData) {
 			return nil
 		}
 
-		if latest.Data == nil {
-			latest.Data = make(map[string][]byte, len(desiredData))
-		}
-
-		maps.Copy(latest.Data, desiredData)
+		// Build the merged data map, preserving any existing keys not in desiredData.
+		merged := make(map[string][]byte, len(latest.Data)+len(desiredData))
+		maps.Copy(merged, latest.Data)
+		maps.Copy(merged, desiredData)
+		latest.Data = merged
 		latest.StringData = nil
 
 		_, updateErr := secretsClient.Update(ctx, latest, metav1.UpdateOptions{})
