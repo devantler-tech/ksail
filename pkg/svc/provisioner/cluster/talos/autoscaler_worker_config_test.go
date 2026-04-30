@@ -12,8 +12,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes/fake"
+	k8stesting "k8s.io/client-go/testing"
 )
 
 // newTestWorkerProvider builds a minimal v1alpha1 Config wrapped in a Provider
@@ -262,4 +266,62 @@ func TestApplyAutoscalerConfigSecret_UpdatesExistingSecret(t *testing.T) {
 
 	wantEncoded := base64.StdEncoding.EncodeToString(workerConfig)
 	assert.Equal(t, []byte(wantEncoded), secret.Data["hcloud_cloud_init"])
+}
+
+func TestApplyAutoscalerConfigSecret_CreateConflictFallsBackToUpdate(t *testing.T) {
+	t.Parallel()
+
+	// Pre-create the secret so subsequent Gets (after AlreadyExists) succeed.
+	preExisting := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "cluster-autoscaler-config",
+			Namespace:       "kube-system",
+			ResourceVersion: "1",
+		},
+		Data: map[string][]byte{
+			"hcloud_image":      []byte("old-image"),
+			"hcloud_cloud_init": []byte("old-config"),
+		},
+	}
+	clientset := fake.NewClientset(preExisting)
+
+	getCallCount := 0
+
+	clientset.PrependReactor(
+		"get",
+		"secrets",
+		func(_ k8stesting.Action) (bool, runtime.Object, error) {
+			getCallCount++
+			if getCallCount == 1 {
+				// First Get: return NotFound to enter the create path.
+				return true, nil, apierrors.NewNotFound(
+					schema.GroupResource{Group: "", Resource: "secrets"},
+					"cluster-autoscaler-config",
+				)
+			}
+
+			// Subsequent Gets: pass through to the fake clientset.
+			return false, nil, nil
+		},
+	)
+
+	// Simulate a concurrent caller that created the Secret first.
+	clientset.PrependReactor(
+		"create",
+		"secrets",
+		func(_ k8stesting.Action) (bool, runtime.Object, error) {
+			return true, nil, apierrors.NewAlreadyExists(
+				schema.GroupResource{Group: "", Resource: "secrets"},
+				"cluster-autoscaler-config",
+			)
+		},
+	)
+
+	err := talosprovisioner.ApplyAutoscalerConfigSecret(
+		context.Background(),
+		clientset,
+		"new-image",
+		[]byte("new-config"),
+	)
+	require.NoError(t, err)
 }
