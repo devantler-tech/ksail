@@ -246,10 +246,10 @@ func ValidateLocalRegistryForProvider(provider Provider, registry LocalRegistry)
 }
 
 // poolNameRegex matches DNS-1123 label names: lowercase alphanumeric with optional hyphens.
-// Must start and end with alphanumeric, and be at most 63 characters.
-var poolNameRegex = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*[a-z0-9]$|^[a-z0-9]$`)
+// Must start with a letter, end with alphanumeric, and be at most 63 characters.
+var poolNameRegex = regexp.MustCompile(`^[a-z][a-z0-9-]*[a-z0-9]$|^[a-z]$`)
 
-// PoolNameMaxLength is the maximum length for a node pool name (DNS-1123 label limit).
+// PoolNameMaxLength is the maximum length for a pool name (DNS-1123 label limit).
 const PoolNameMaxLength = 63
 
 // validateAutoscalerEnumFields validates enum-typed fields on the autoscaler configuration.
@@ -286,39 +286,17 @@ func validateNodePools(pools []NodePool) error {
 	for idx, pool := range pools {
 		if len(pool.Name) > PoolNameMaxLength {
 			return fmt.Errorf(
-				"%w: pool[%d] %q exceeds the 63-character DNS-1123 label limit",
-				ErrInvalidPoolName, idx, pool.Name,
+				"%w: pool[%d] %q exceeds max %d characters (got %d)",
+				ErrInvalidPoolName, idx, pool.Name, PoolNameMaxLength, len(pool.Name),
 			)
 		}
 
 		if !poolNameRegex.MatchString(pool.Name) {
 			return fmt.Errorf(
 				"%w: pool[%d] %q must be a DNS-1123 label "+
-					"(lowercase letters, numbers, and hyphens; must start and end with alphanumeric; "+
+					"(lowercase letters, numbers, and hyphens; must start with a letter; "+
 					"must not end with a hyphen)",
 				ErrInvalidPoolName, idx, pool.Name,
-			)
-		}
-
-		if pool.ServerType == "" {
-			return fmt.Errorf("%w: pool[%d] %q", ErrPoolServerTypeEmpty, idx, pool.Name)
-		}
-
-		if pool.Location == "" {
-			return fmt.Errorf("%w: pool[%d] %q", ErrPoolLocationEmpty, idx, pool.Name)
-		}
-
-		if pool.Min < 0 {
-			return fmt.Errorf(
-				"%w: pool %q has min=%d",
-				ErrPoolNegativeMin, pool.Name, pool.Min,
-			)
-		}
-
-		if pool.Max < 0 {
-			return fmt.Errorf(
-				"%w: pool %q has max=%d",
-				ErrPoolNegativeMax, pool.Name, pool.Max,
 			)
 		}
 
@@ -380,57 +358,30 @@ func ValidateAutoscalerConfig(
 	}
 
 	// Capacity guard: only applies when Hetzner provider and node autoscaler is enabled.
-	// The deprecated cluster.NodeAutoscaling field is also checked for backward compatibility
-	// during the deprecation window (before migration fully replaces it).
-	autoscalingEnabled := autoscaler.Enabled == NodeAutoscalerEnabledEnabled ||
-		cluster.NodeAutoscaling == NodeAutoscalingEnabled
 	if provider == nil ||
 		cluster.Provider != ProviderHetzner ||
-		!autoscalingEnabled {
+		autoscaler.Enabled != NodeAutoscalerEnabledEnabled {
 		return nil
 	}
 
-	if len(autoscaler.Pools) == 0 {
-		return fmt.Errorf("%w: provider is %q", ErrAutoscalerEnabledNoPools, ProviderHetzner)
-	}
-
-	// serverLimit == 0 means "use default"; 0 is not an expressible explicit limit.
 	serverLimit := provider.Hetzner.ServerLimit
 	if serverLimit == 0 {
 		serverLimit = DefaultHetznerServerLimit
 	}
 
-	return validateServerCapacity(cluster, autoscaler, serverLimit)
-}
-
-// validateServerCapacity checks that controlPlanes + workers + effective pool capacity
-// does not exceed serverLimit. The effective pool capacity is sum(pool.Max) capped by
-// MaxNodesTotal when MaxNodesTotal > 0, because the autoscaler will not exceed that bound.
-func validateServerCapacity(
-	cluster *ClusterSpec,
-	autoscaler *NodeAutoscalerConfig,
-	serverLimit int32,
-) error {
 	var poolCapacity int32
 	for _, pool := range autoscaler.Pools {
 		poolCapacity += pool.Max
 	}
 
-	// When MaxNodesTotal is set and lower than the raw pool capacity, the autoscaler
-	// itself will never exceed MaxNodesTotal; use that as the effective capacity.
-	effectiveCapacity := poolCapacity
-	if autoscaler.MaxNodesTotal > 0 && autoscaler.MaxNodesTotal < poolCapacity {
-		effectiveCapacity = autoscaler.MaxNodesTotal
-	}
-
-	total := cluster.ControlPlanes + cluster.Workers + effectiveCapacity
+	total := cluster.ControlPlanes + cluster.Workers + poolCapacity
 	if total > serverLimit {
 		return fmt.Errorf(
 			"%w: controlPlanes(%d) + workers(%d) + poolCapacity(%d) = %d exceeds serverLimit(%d)",
 			ErrAutoscalerExceedsServerLimit,
 			cluster.ControlPlanes,
 			cluster.Workers,
-			effectiveCapacity,
+			poolCapacity,
 			total,
 			serverLimit,
 		)

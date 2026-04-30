@@ -1,6 +1,7 @@
 package v1alpha1_test
 
 import (
+	"strings"
 	"testing"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -327,7 +328,25 @@ func TestValidateAutoscalerConfig(t *testing.T) {
 			wantErr: nil,
 		},
 		{
-			name: "invalid pool name with underscore",
+			name: "pool name exceeds 63 characters",
+			cluster: &v1alpha1.ClusterSpec{
+				Autoscaler: v1alpha1.AutoscalerConfig{
+					Node: v1alpha1.NodeAutoscalerConfig{
+						Pools: []v1alpha1.NodePool{
+							{
+								Name:       "a" + strings.Repeat("b", 63),
+								ServerType: "cx23",
+								Location:   "fsn1",
+								Min:        1,
+								Max:        5,
+							},
+						},
+					},
+				},
+			},
+			wantErr: v1alpha1.ErrInvalidPoolName,
+		},
+		{
 			cluster: &v1alpha1.ClusterSpec{
 				Autoscaler: v1alpha1.AutoscalerConfig{
 					Node: v1alpha1.NodeAutoscalerConfig{
