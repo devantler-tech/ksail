@@ -373,7 +373,13 @@ func TestValidateAutoscalerConfig(t *testing.T) {
 				Autoscaler: v1alpha1.AutoscalerConfig{
 					Node: v1alpha1.NodeAutoscalerConfig{
 						Pools: []v1alpha1.NodePool{
-							{Name: "workers", ServerType: "cx23", Location: "fsn1", Min: -1, Max: 3},
+							{
+								Name:       "workers",
+								ServerType: "cx23",
+								Location:   "fsn1",
+								Min:        -1,
+								Max:        3,
+							},
 						},
 					},
 				},
@@ -387,7 +393,13 @@ func TestValidateAutoscalerConfig(t *testing.T) {
 				Autoscaler: v1alpha1.AutoscalerConfig{
 					Node: v1alpha1.NodeAutoscalerConfig{
 						Pools: []v1alpha1.NodePool{
-							{Name: "workers", ServerType: "cx23", Location: "fsn1", Min: 0, Max: -1},
+							{
+								Name:       "workers",
+								ServerType: "cx23",
+								Location:   "fsn1",
+								Min:        0,
+								Max:        -1,
+							},
 						},
 					},
 				},

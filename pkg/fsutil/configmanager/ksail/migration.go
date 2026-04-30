@@ -58,7 +58,9 @@ func migrateDeprecatedNodeCounts(cfg *v1alpha1.Cluster, out io.Writer) error {
 //   - both empty → no-op.
 //
 // mapNodeAutoscalingToEnabled maps the deprecated NodeAutoscaling enum to NodeAutoscalerEnabled.
-func mapNodeAutoscalingToEnabled(old v1alpha1.NodeAutoscaling) (v1alpha1.NodeAutoscalerEnabled, error) {
+func mapNodeAutoscalingToEnabled(
+	old v1alpha1.NodeAutoscaling,
+) (v1alpha1.NodeAutoscalerEnabled, error) {
 	switch old {
 	case v1alpha1.NodeAutoscalingEnabled:
 		return v1alpha1.NodeAutoscalerEnabledEnabled, nil

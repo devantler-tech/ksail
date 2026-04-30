@@ -68,7 +68,8 @@ func (f *Factory) CreateInstallersForConfig(cfg *v1alpha1.Cluster) (map[string]I
 	f.addCSIInstallers(installers, cfg)
 	f.addLoadBalancerInstaller(installers, cfg)
 
-	if err := f.addClusterAutoscalerInstaller(installers, spec); err != nil {
+	err := f.addClusterAutoscalerInstaller(installers, spec)
+	if err != nil {
 		return nil, err
 	}
 
