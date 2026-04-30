@@ -783,8 +783,6 @@ jobs:
             /opt/hostedtoolcache/PyPy \
             /opt/hostedtoolcache/Ruby \
             /opt/hostedtoolcache/Python \
-            /opt/hostedtoolcache/node \
-            /usr/local/lib/node_modules \
             /usr/local/share/chromium \
             /usr/local/share/powershell \
             /usr/local/julia* \
