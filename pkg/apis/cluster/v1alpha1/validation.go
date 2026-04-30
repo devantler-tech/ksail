@@ -328,7 +328,8 @@ func ValidateAutoscalerConfig(cluster *ClusterSpec, provider *ProviderSpec) erro
 
 	autoscaler := &cluster.Autoscaler.Node
 
-	if err := validateNodePools(autoscaler.Pools); err != nil {
+	err := validateNodePools(autoscaler.Pools)
+	if err != nil {
 		return err
 	}
 
@@ -359,7 +360,11 @@ func ValidateAutoscalerConfig(cluster *ClusterSpec, provider *ProviderSpec) erro
 // validateServerCapacity checks that controlPlanes + workers + effective pool capacity
 // does not exceed serverLimit. The effective pool capacity is sum(pool.Max) capped by
 // MaxNodesTotal when MaxNodesTotal > 0, because the autoscaler will not exceed that bound.
-func validateServerCapacity(cluster *ClusterSpec, autoscaler *NodeAutoscalerConfig, serverLimit int32) error {
+func validateServerCapacity(
+	cluster *ClusterSpec,
+	autoscaler *NodeAutoscalerConfig,
+	serverLimit int32,
+) error {
 	var poolCapacity int32
 	for _, pool := range autoscaler.Pools {
 		poolCapacity += pool.Max

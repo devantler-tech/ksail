@@ -597,7 +597,13 @@ func TestValidateAutoscalerConfig(t *testing.T) {
 						Pools: []v1alpha1.NodePool{
 							// Raw pool capacity = 50; capped by MaxNodesTotal = 3
 							// total = 3 + 2 + 3 = 8, within limit 10 → valid
-							{Name: "workers", ServerType: "cx23", Location: "fsn1", Min: 1, Max: 50},
+							{
+								Name:       "workers",
+								ServerType: "cx23",
+								Location:   "fsn1",
+								Min:        1,
+								Max:        50,
+							},
 						},
 					},
 				},
@@ -620,7 +626,13 @@ func TestValidateAutoscalerConfig(t *testing.T) {
 						Pools: []v1alpha1.NodePool{
 							// Raw pool capacity = 50; capped by MaxNodesTotal = 10
 							// total = 3 + 2 + 10 = 15, exceeds limit 10 → error
-							{Name: "workers", ServerType: "cx23", Location: "fsn1", Min: 1, Max: 50},
+							{
+								Name:       "workers",
+								ServerType: "cx23",
+								Location:   "fsn1",
+								Min:        1,
+								Max:        50,
+							},
 						},
 					},
 				},
