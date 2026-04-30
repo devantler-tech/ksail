@@ -18,47 +18,47 @@ func TestShouldRetryError(t *testing.T) {
 		wantRetry   bool
 	}{
 		{
-			name:      "nil_error",
+			name:      "NilError",
 			err:       nil,
 			wantRetry: false,
 		},
 		{
-			name:      "non_hcloud_error",
+			name:      "NonHcloudError",
 			err:       errTest,
 			wantRetry: false,
 		},
 		{
-			name:      "resource_unavailable",
+			name:      "ResourceUnavailable",
 			err:       hcloud.Error{Code: hcloud.ErrorCodeResourceUnavailable},
 			wantRetry: true,
 		},
 		{
-			name:      "conflict",
+			name:      "Conflict",
 			err:       hcloud.Error{Code: hcloud.ErrorCodeConflict},
 			wantRetry: true,
 		},
 		{
-			name:      "rate_limit_exceeded",
+			name:      "RateLimitExceeded",
 			err:       hcloud.Error{Code: hcloud.ErrorCodeRateLimitExceeded},
 			wantRetry: true,
 		},
 		{
-			name:      "locked",
+			name:      "Locked",
 			err:       hcloud.Error{Code: hcloud.ErrorCodeLocked},
 			wantRetry: true,
 		},
 		{
-			name:      "placement_error",
+			name:      "PlacementError",
 			err:       hcloud.Error{Code: hcloud.ErrorCodePlacementError},
 			wantRetry: true,
 		},
 		{
-			name:      "resource_limit_exceeded_not_retried",
+			name:      "ResourceLimitExceeded_NotRetried",
 			err:       hcloud.Error{Code: hcloud.ErrorCodeResourceLimitExceeded},
 			wantRetry: false,
 		},
 		{
-			name:      "forbidden_not_retried",
+			name:      "Forbidden_NotRetried",
 			err:       hcloud.Error{Code: hcloud.ErrorCodeForbidden},
 			wantRetry: false,
 		},
@@ -87,42 +87,42 @@ func TestShouldDisablePlacement(t *testing.T) {
 		wantDisable      bool
 	}{
 		{
-			name:             "placement_error_with_fallback_and_group",
+			name:             "PlacementError_WithFallbackAndGroup",
 			err:              placementErr,
 			allowFallback:    true,
 			placementGroupID: 123,
 			wantDisable:      true,
 		},
 		{
-			name:             "placement_error_fallback_disabled",
+			name:             "PlacementError_FallbackDisabled",
 			err:              placementErr,
 			allowFallback:    false,
 			placementGroupID: 123,
 			wantDisable:      false,
 		},
 		{
-			name:             "placement_error_no_group",
+			name:             "PlacementError_NoGroup",
 			err:              placementErr,
 			allowFallback:    true,
 			placementGroupID: 0,
 			wantDisable:      false,
 		},
 		{
-			name:             "non_placement_error",
+			name:             "NonPlacementError",
 			err:              errTest,
 			allowFallback:    true,
 			placementGroupID: 123,
 			wantDisable:      false,
 		},
 		{
-			name:             "nil_error",
+			name:             "NilError",
 			err:              nil,
 			allowFallback:    true,
 			placementGroupID: 123,
 			wantDisable:      false,
 		},
 		{
-			name:             "rate_limit_error_not_placement",
+			name:             "RateLimitError_NotPlacement",
 			err:              hcloud.Error{Code: hcloud.ErrorCodeRateLimitExceeded},
 			allowFallback:    true,
 			placementGroupID: 123,
@@ -150,27 +150,27 @@ func TestCalculateRetryDelay(t *testing.T) {
 		wantDelay time.Duration
 	}{
 		{
-			name:      "attempt_1_base_delay",
+			name:      "Attempt1_BaseDelay",
 			attempt:   1,
 			wantDelay: 2 * time.Second, // 2s * 2^0
 		},
 		{
-			name:      "attempt_2_doubled",
+			name:      "Attempt2_Doubled",
 			attempt:   2,
 			wantDelay: 4 * time.Second, // 2s * 2^1
 		},
 		{
-			name:      "attempt_3_quadrupled",
+			name:      "Attempt3_Quadrupled",
 			attempt:   3,
 			wantDelay: 8 * time.Second, // 2s * 2^2
 		},
 		{
-			name:      "attempt_4_capped_at_max",
+			name:      "Attempt4_CappedAtMax",
 			attempt:   4,
 			wantDelay: 10 * time.Second, // 2s * 2^3 = 16s, capped at 10s
 		},
 		{
-			name:      "attempt_10_still_capped",
+			name:      "Attempt10_StillCapped",
 			attempt:   10,
 			wantDelay: 10 * time.Second, // always capped at max
 		},
