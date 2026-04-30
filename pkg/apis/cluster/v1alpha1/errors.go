@@ -100,6 +100,18 @@ var ErrPoolMinExceedsMax = errors.New("pool min exceeds max")
 // ErrDuplicatePoolName is returned when two or more node pools share the same name.
 var ErrDuplicatePoolName = errors.New("duplicate pool name")
 
+// ErrPoolNegativeMin is returned when a node pool min count is negative.
+var ErrPoolNegativeMin = errors.New("pool min must be non-negative")
+
+// ErrPoolNegativeMax is returned when a node pool max count is negative.
+var ErrPoolNegativeMax = errors.New("pool max must be non-negative")
+
+// ErrPoolServerTypeEmpty is returned when a node pool serverType is empty.
+var ErrPoolServerTypeEmpty = errors.New("pool serverType must not be empty")
+
+// ErrPoolLocationEmpty is returned when a node pool location is empty.
+var ErrPoolLocationEmpty = errors.New("pool location must not be empty")
+
 // ErrAutoscalerExceedsServerLimit is returned when the total node capacity exceeds the
 // Hetzner server limit.
 var ErrAutoscalerExceedsServerLimit = errors.New(

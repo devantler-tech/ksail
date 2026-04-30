@@ -368,6 +368,62 @@ func TestValidateAutoscalerConfig(t *testing.T) {
 			errContains: "workers",
 		},
 		{
+			name: "pool negative min",
+			cluster: &v1alpha1.ClusterSpec{
+				Autoscaler: v1alpha1.AutoscalerConfig{
+					Node: v1alpha1.NodeAutoscalerConfig{
+						Pools: []v1alpha1.NodePool{
+							{Name: "workers", ServerType: "cx23", Location: "fsn1", Min: -1, Max: 3},
+						},
+					},
+				},
+			},
+			wantErr:     v1alpha1.ErrPoolNegativeMin,
+			errContains: "workers",
+		},
+		{
+			name: "pool negative max",
+			cluster: &v1alpha1.ClusterSpec{
+				Autoscaler: v1alpha1.AutoscalerConfig{
+					Node: v1alpha1.NodeAutoscalerConfig{
+						Pools: []v1alpha1.NodePool{
+							{Name: "workers", ServerType: "cx23", Location: "fsn1", Min: 0, Max: -1},
+						},
+					},
+				},
+			},
+			wantErr:     v1alpha1.ErrPoolNegativeMax,
+			errContains: "workers",
+		},
+		{
+			name: "pool empty serverType",
+			cluster: &v1alpha1.ClusterSpec{
+				Autoscaler: v1alpha1.AutoscalerConfig{
+					Node: v1alpha1.NodeAutoscalerConfig{
+						Pools: []v1alpha1.NodePool{
+							{Name: "workers", ServerType: "", Location: "fsn1", Min: 1, Max: 5},
+						},
+					},
+				},
+			},
+			wantErr:     v1alpha1.ErrPoolServerTypeEmpty,
+			errContains: "workers",
+		},
+		{
+			name: "pool empty location",
+			cluster: &v1alpha1.ClusterSpec{
+				Autoscaler: v1alpha1.AutoscalerConfig{
+					Node: v1alpha1.NodeAutoscalerConfig{
+						Pools: []v1alpha1.NodePool{
+							{Name: "workers", ServerType: "cx23", Location: "", Min: 1, Max: 5},
+						},
+					},
+				},
+			},
+			wantErr:     v1alpha1.ErrPoolLocationEmpty,
+			errContains: "workers",
+		},
+		{
 			name: "duplicate pool name",
 			cluster: &v1alpha1.ClusterSpec{
 				Autoscaler: v1alpha1.AutoscalerConfig{

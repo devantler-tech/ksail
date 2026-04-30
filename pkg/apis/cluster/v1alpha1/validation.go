@@ -272,6 +272,28 @@ func validateNodePools(pools []NodePool) error {
 			)
 		}
 
+		if pool.ServerType == "" {
+			return fmt.Errorf("%w: pool[%d] %q", ErrPoolServerTypeEmpty, idx, pool.Name)
+		}
+
+		if pool.Location == "" {
+			return fmt.Errorf("%w: pool[%d] %q", ErrPoolLocationEmpty, idx, pool.Name)
+		}
+
+		if pool.Min < 0 {
+			return fmt.Errorf(
+				"%w: pool %q has min=%d",
+				ErrPoolNegativeMin, pool.Name, pool.Min,
+			)
+		}
+
+		if pool.Max < 0 {
+			return fmt.Errorf(
+				"%w: pool %q has max=%d",
+				ErrPoolNegativeMax, pool.Name, pool.Max,
+			)
+		}
+
 		if pool.Min > pool.Max {
 			return fmt.Errorf(
 				"%w: pool %q has min=%d > max=%d",
