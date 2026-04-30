@@ -925,24 +925,10 @@ func TestNewRotateCmd(t *testing.T) {
 	}
 
 	// Verify flags are registered
-	addKeyFlag := cmd.Flags().Lookup("add-key")
-	if addKeyFlag == nil {
-		t.Error("expected add-key flag to be registered")
-	}
-
-	removeKeyFlag := cmd.Flags().Lookup("remove-key")
-	if removeKeyFlag == nil {
-		t.Error("expected remove-key flag to be registered")
-	}
-
-	recursiveFlag := cmd.Flags().Lookup("recursive")
-	if recursiveFlag == nil {
-		t.Error("expected recursive flag to be registered")
-	}
-
-	forceFlag := cmd.Flags().Lookup("force")
-	if forceFlag == nil {
-		t.Error("expected force flag to be registered")
+	for _, flagName := range []string{"add-key", "remove-key", "recursive", "force", "dry-run"} {
+		if cmd.Flags().Lookup(flagName) == nil {
+			t.Errorf("expected %s flag to be registered", flagName)
+		}
 	}
 
 	// Verify write permission annotation
@@ -1034,5 +1020,81 @@ func TestRotateCommandEmptyDir(t *testing.T) {
 
 	if !strings.Contains(out.String(), "no SOPS-encrypted files found") {
 		t.Errorf("expected 'no SOPS-encrypted files found' message, got: %s", out.String())
+	}
+}
+
+func TestRotateCommandDryRunEmptyDir(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+
+	rt := di.NewRuntime()
+	cipherCmd := cipher.NewCipherCmd(rt)
+
+	var out bytes.Buffer
+	cipherCmd.SetOut(&out)
+	cipherCmd.SetArgs([]string{"rotate", tmpDir, "--dry-run"})
+
+	err := cipherCmd.Execute()
+	if err != nil {
+		t.Errorf("expected no error for dry-run on empty dir, got: %v", err)
+	}
+
+	if !strings.Contains(out.String(), "no SOPS-encrypted files found") {
+		t.Errorf("expected 'no SOPS-encrypted files found' message, got: %s", out.String())
+	}
+}
+
+func TestRotateCommandDryRunWithEncryptedFile(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+
+	// A YAML file with a top-level "sops:" key is detected as SOPS-encrypted
+	// without requiring actual key material, which lets us test the dry-run
+	// preview path without setting up a real age identity.
+	const encryptedContent = "password: value\nsops:\n  version: \"3.7.3\"\n"
+
+	filePath := filepath.Join(tmpDir, "secret.yaml")
+
+	err := os.WriteFile(filePath, []byte(encryptedContent), 0o600)
+	if err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	rt := di.NewRuntime()
+	cipherCmd := cipher.NewCipherCmd(rt)
+
+	var out bytes.Buffer
+	cipherCmd.SetOut(&out)
+	cipherCmd.SetArgs([]string{"rotate", tmpDir, "--dry-run"})
+
+	err = cipherCmd.Execute()
+	if err != nil {
+		t.Errorf("expected no error for dry-run with encrypted file, got: %v", err)
+	}
+
+	output := out.String()
+
+	if !strings.Contains(output, "dry run:") {
+		t.Errorf("expected 'dry run:' header in output, got: %s", output)
+	}
+
+	if !strings.Contains(output, filePath) {
+		t.Errorf("expected file path %q in dry-run output, got: %s", filePath, output)
+	}
+
+	if strings.Contains(output, `Type "yes" to confirm rotation:`) {
+		t.Errorf("expected no confirmation prompt in dry-run output, got: %s", output)
+	}
+
+	// Verify the file was not modified by the dry-run.
+	data, err := os.ReadFile(filePath) //nolint:gosec // test file under t.TempDir, safe to read
+	if err != nil {
+		t.Fatalf("failed to read file after dry-run: %v", err)
+	}
+
+	if string(data) != encryptedContent {
+		t.Errorf("expected file contents unchanged after dry-run, got: %s", string(data))
 	}
 }
