@@ -244,8 +244,9 @@ func ValidateLocalRegistryForProvider(provider Provider, registry LocalRegistry)
 	return nil
 }
 
-// poolNameRegex matches DNS-1123 label names: lowercase alphanumeric with optional hyphens.
-// Must start with a letter, end with alphanumeric, and be at most 63 characters.
+// poolNameRegex matches pool names: must start with a lowercase letter, contain only lowercase
+// alphanumeric characters and hyphens, not end with a hyphen, and be ≤ 63 characters.
+// This is stricter than a full DNS-1123 label (which allows starting with a digit).
 var poolNameRegex = regexp.MustCompile(`^[a-z][a-z0-9-]*[a-z0-9]$|^[a-z]$`)
 
 // validateNodePools checks each NodePool for name validity, min ≤ max, and uniqueness.
@@ -253,12 +254,12 @@ func validateNodePools(pools []NodePool) error {
 	seen := make(map[string]struct{}, len(pools))
 
 	for idx, pool := range pools {
-		if len(pool.Name) > 63 || !poolNameRegex.MatchString(pool.Name) {
+		if len(pool.Name) > ClusterNameMaxLength || !poolNameRegex.MatchString(pool.Name) {
 			return fmt.Errorf(
-				"%w: pool[%d] %q must be a DNS-1123 label "+
-					"(lowercase letters, numbers, and hyphens; must start with a letter; "+
-					"must not end with a hyphen; at most 63 characters)",
-				ErrInvalidPoolName, idx, pool.Name,
+				"%w: pool[%d] %q must start with a lowercase letter, "+
+					"contain only lowercase letters, digits, and hyphens, "+
+					"not end with a hyphen, and be at most %d characters",
+				ErrInvalidPoolName, idx, pool.Name, ClusterNameMaxLength,
 			)
 		}
 
