@@ -25,8 +25,9 @@ type Installer struct {
 
 // NewInstaller creates a new Gatekeeper installer instance.
 //
-// kubeconfig and kubeContext are required for the post-install webhook-readiness
-// wait. Pass empty strings to disable webhook waiting (tests or environments
+// A non-empty kubeconfig is required for the post-install webhook-readiness
+// wait. kubeContext is optional; if empty, the current context is used. Pass
+// an empty kubeconfig to disable webhook waiting (tests or environments
 // without cluster access).
 func NewInstaller(
 	client helm.Interface,
