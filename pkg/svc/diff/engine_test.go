@@ -1081,8 +1081,8 @@ func TestEngine_AutoscalerPoolAdded(t *testing.T) {
 		t.Fatal("pool addition should produce an in-place change")
 	}
 
-	assertSingleChange(t, result.InPlaceChanges, "cluster.autoscaler.node.pools",
-		"", "pool added: workers-fsn1", clusterupdate.ChangeCategoryInPlace)
+	assertSingleChange(t, result.InPlaceChanges, "cluster.autoscaler.node.pools[workers-fsn1]",
+		"", "Added", clusterupdate.ChangeCategoryInPlace)
 }
 
 func TestEngine_AutoscalerPoolRemoved(t *testing.T) {
@@ -1102,8 +1102,8 @@ func TestEngine_AutoscalerPoolRemoved(t *testing.T) {
 		t.Fatal("pool removal should produce an in-place change")
 	}
 
-	assertSingleChange(t, result.InPlaceChanges, "cluster.autoscaler.node.pools",
-		"pool removed: workers-fsn1", "", clusterupdate.ChangeCategoryInPlace)
+	assertSingleChange(t, result.InPlaceChanges, "cluster.autoscaler.node.pools[workers-fsn1]",
+		"Removed", "", clusterupdate.ChangeCategoryInPlace)
 }
 
 func TestEngine_AutoscalerPoolModified(t *testing.T) {

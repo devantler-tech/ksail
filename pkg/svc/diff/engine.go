@@ -581,8 +581,8 @@ func (e *Engine) checkAutoscalerPoolsAdded(
 	sort.Strings(addedNames)
 
 	for _, name := range addedNames {
-		appendChange(result, "cluster.autoscaler.node.pools",
-			"", "pool added: "+name,
+		appendChange(result, "cluster.autoscaler.node.pools["+name+"]",
+			"", "Added",
 			"", "node pool added; will be applied in-place via Helm chart upgrade",
 			clusterupdate.ChangeCategoryInPlace)
 	}
@@ -604,8 +604,8 @@ func (e *Engine) checkAutoscalerPoolsRemoved(
 	sort.Strings(removedNames)
 
 	for _, name := range removedNames {
-		appendChange(result, "cluster.autoscaler.node.pools",
-			"pool removed: "+name, "",
+		appendChange(result, "cluster.autoscaler.node.pools["+name+"]",
+			"Removed", "",
 			"", "node pool removed; will be applied in-place via Helm chart upgrade",
 			clusterupdate.ChangeCategoryInPlace)
 	}

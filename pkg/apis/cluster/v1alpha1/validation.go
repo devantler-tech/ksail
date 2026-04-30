@@ -14,6 +14,9 @@ var clusterNameRegex = regexp.MustCompile(`^[a-z][a-z0-9-]*[a-z0-9]$|^[a-z]$`)
 // ClusterNameMaxLength is the maximum length for a cluster name.
 const ClusterNameMaxLength = 63
 
+// NodePoolNameMaxLength is the maximum length for a node pool name.
+const NodePoolNameMaxLength = 63
+
 // ValidateClusterName validates that a cluster name is DNS-1123 compliant.
 // Cluster names are used in Docker container names, Kubernetes contexts, and YAML fields,
 // which require DNS-1123 subdomain names (lowercase alphanumeric and dashes only).
@@ -245,7 +248,7 @@ func ValidateLocalRegistryForProvider(provider Provider, registry LocalRegistry)
 }
 
 // poolNameRegex matches pool names: must start with a lowercase letter, contain only lowercase
-// alphanumeric characters and hyphens, not end with a hyphen, and be ≤ 63 characters.
+// alphanumeric characters and hyphens, not end with a hyphen, and be ≤ NodePoolNameMaxLength characters.
 // This is stricter than a full DNS-1123 label (which allows starting with a digit).
 var poolNameRegex = regexp.MustCompile(`^[a-z][a-z0-9-]*[a-z0-9]$|^[a-z]$`)
 
@@ -254,12 +257,12 @@ func validateNodePools(pools []NodePool) error {
 	seen := make(map[string]struct{}, len(pools))
 
 	for idx, pool := range pools {
-		if len(pool.Name) > ClusterNameMaxLength || !poolNameRegex.MatchString(pool.Name) {
+		if len(pool.Name) > NodePoolNameMaxLength || !poolNameRegex.MatchString(pool.Name) {
 			return fmt.Errorf(
 				"%w: pool[%d] %q must start with a lowercase letter, "+
 					"contain only lowercase letters, digits, and hyphens, "+
 					"not end with a hyphen, and be at most %d characters",
-				ErrInvalidPoolName, idx, pool.Name, ClusterNameMaxLength,
+				ErrInvalidPoolName, idx, pool.Name, NodePoolNameMaxLength,
 			)
 		}
 
@@ -319,8 +322,8 @@ func ValidateAutoscalerConfig(cluster *ClusterSpec, provider *ProviderSpec) erro
 
 	effectivePoolCapacity := autoscalerEffectiveCapacity(autoscaler.Pools, autoscaler.MaxNodesTotal)
 
-	total := cluster.ControlPlanes + cluster.Workers + effectivePoolCapacity
-	if total > serverLimit {
+	total := int64(cluster.ControlPlanes) + int64(cluster.Workers) + effectivePoolCapacity
+	if total > int64(serverLimit) {
 		return fmt.Errorf(
 			"%w: controlPlanes(%d) + workers(%d) + effectivePoolCapacity(%d) = %d exceeds serverLimit(%d)",
 			ErrAutoscalerExceedsServerLimit,
@@ -337,15 +340,17 @@ func ValidateAutoscalerConfig(cluster *ClusterSpec, provider *ProviderSpec) erro
 
 // autoscalerEffectiveCapacity returns the effective autoscaler pool capacity as the tighter of
 // sum(pool.Max) and maxNodesTotal (when maxNodesTotal > 0 and less than the pool sum).
-func autoscalerEffectiveCapacity(pools []NodePool, maxNodesTotal int32) int32 {
-	var poolCapacity int32
+// Arithmetic is performed in int64 to avoid int32 overflow when summing large pool.Max values.
+func autoscalerEffectiveCapacity(pools []NodePool, maxNodesTotal int32) int64 {
+	var poolCapacity int64
 
 	for _, pool := range pools {
-		poolCapacity += pool.Max
+		poolCapacity += int64(pool.Max)
 	}
 
-	if maxNodesTotal > 0 && maxNodesTotal < poolCapacity {
-		return maxNodesTotal
+	mn := int64(maxNodesTotal)
+	if mn > 0 && mn < poolCapacity {
+		return mn
 	}
 
 	return poolCapacity
