@@ -131,6 +131,12 @@ type OptionsHetzner struct {
 	// When set to 0, KSail uses DefaultHetznerServerLimit instead of treating 0 as an explicit
 	// limit. Defaults to DefaultHetznerServerLimit (10).
 	ServerLimit int32 `default:"10" json:"serverLimit,omitzero" jsonschema:"description=Maximum total Hetzner servers allowed for this cluster (control-planes + workers + autoscaler pool capacity). Set to 0 to use the default limit of 10,minimum=0"` //nolint:lll
+	// AutoscalerNodePoolNames lists the node-group names configured in the
+	// Kubernetes Cluster Autoscaler for this cluster. When non-empty, KSail
+	// deletes servers labelled with hcloud/node-group=<name> during cluster
+	// deletion so that autoscaler-managed nodes are cleaned up alongside
+	// KSail-managed nodes.
+	AutoscalerNodePoolNames []string `json:"autoscalerNodePoolNames,omitzero"`
 }
 
 // OptionsOmni defines options specific to the Sidero Omni provider.
