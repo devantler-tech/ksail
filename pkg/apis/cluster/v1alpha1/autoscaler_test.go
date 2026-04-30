@@ -466,6 +466,21 @@ func TestValidateAutoscalerConfig(t *testing.T) {
 			errContains: "exceeds serverLimit",
 		},
 		{
+			name: "enabled with no pools returns error",
+			cluster: &v1alpha1.ClusterSpec{
+				Provider: v1alpha1.ProviderHetzner,
+				Autoscaler: v1alpha1.AutoscalerConfig{
+					Node: v1alpha1.NodeAutoscalerConfig{
+						Enabled: v1alpha1.NodeAutoscalerEnabledEnabled,
+						Pools:   []v1alpha1.NodePool{},
+					},
+				},
+			},
+			provider:    &v1alpha1.ProviderSpec{},
+			wantErr:     v1alpha1.ErrAutoscalerEnabledNoPools,
+			errContains: "Hetzner",
+		},
+		{
 			name: "capacity guard: total within server limit",
 			cluster: &v1alpha1.ClusterSpec{
 				Provider:      v1alpha1.ProviderHetzner,

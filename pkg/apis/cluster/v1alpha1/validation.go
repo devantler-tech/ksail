@@ -340,6 +340,10 @@ func ValidateAutoscalerConfig(cluster *ClusterSpec, provider *ProviderSpec) erro
 		return nil
 	}
 
+	if len(autoscaler.Pools) == 0 {
+		return fmt.Errorf("%w: provider is %q", ErrAutoscalerEnabledNoPools, ProviderHetzner)
+	}
+
 	// serverLimit == 0 means "use default"; 0 is not an expressible explicit limit.
 	serverLimit := provider.Hetzner.ServerLimit
 	if serverLimit == 0 {

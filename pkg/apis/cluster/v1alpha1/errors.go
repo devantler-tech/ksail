@@ -117,3 +117,8 @@ var ErrPoolLocationEmpty = errors.New("pool location must not be empty")
 var ErrAutoscalerExceedsServerLimit = errors.New(
 	"autoscaler configuration exceeds Hetzner server limit",
 )
+
+// ErrAutoscalerEnabledNoPools is returned when node autoscaler is enabled but no pools are configured.
+var ErrAutoscalerEnabledNoPools = errors.New(
+	"node autoscaler is enabled but no pools are configured",
+)
