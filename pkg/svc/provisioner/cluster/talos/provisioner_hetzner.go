@@ -312,11 +312,18 @@ func (p *Provisioner) createHetznerCluster(ctx context.Context, clusterName stri
 // ensureSnapshotImage ensures a Talos snapshot image exists when a schematic ID is configured.
 // It returns the snapshot image ID (0 when snapshot boot is not configured).
 func (p *Provisioner) ensureSnapshotImage(ctx context.Context, clusterName string) (int64, error) {
-	if p.snapshotManager == nil || p.talosOpts == nil || p.talosOpts.SchematicID == "" {
+	if p.snapshotManager == nil || p.talosOpts == nil {
 		return 0, nil
 	}
 
-	if p.talosOpts.Version == "" {
+	schematicID := strings.TrimSpace(p.talosOpts.SchematicID)
+	version := strings.TrimSpace(p.talosOpts.Version)
+
+	if schematicID == "" {
+		return 0, nil
+	}
+
+	if version == "" {
 		return 0, ErrSchematicRequiresVersion
 	}
 
@@ -330,8 +337,8 @@ func (p *Provisioner) ensureSnapshotImage(ctx context.Context, clusterName strin
 	snapshotImageID, err := p.snapshotManager.EnsureTalosSnapshot(
 		ctx,
 		clusterName,
-		p.talosOpts.Version,
-		p.talosOpts.SchematicID,
+		version,
+		schematicID,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("failed to ensure Talos snapshot: %w", err)
