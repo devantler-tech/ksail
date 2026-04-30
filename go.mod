@@ -63,7 +63,7 @@ require (
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/github/copilot-sdk/go v0.2.2
 	github.com/google/go-github/v72 v72.0.0
-	github.com/hetznercloud/hcloud-go/v2 v2.37.0
+	github.com/hetznercloud/hcloud-go/v2 v2.38.0
 	github.com/invopop/jsonschema v0.14.0
 	github.com/loft-sh/log v0.0.0-20240219160058-26d83ffb46ac
 	github.com/loft-sh/vcluster v0.33.1
