@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestShouldRetryError(t *testing.T) {
+func TestShouldRetryError(t *testing.T) { //nolint:funlen // Table-driven test with many cases
 	t.Parallel()
 
 	tests := []struct {
@@ -64,17 +64,17 @@ func TestShouldRetryError(t *testing.T) {
 		},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := hetzner.ShouldRetryErrorForTest(tc.err)
-			assert.Equal(t, tc.wantRetry, got)
+			got := hetzner.ShouldRetryErrorForTest(testCase.err)
+			assert.Equal(t, testCase.wantRetry, got)
 		})
 	}
 }
 
-func TestShouldDisablePlacement(t *testing.T) {
+func TestShouldDisablePlacement(t *testing.T) { //nolint:funlen // Table-driven test with many cases
 	t.Parallel()
 
 	placementErr := hcloud.Error{Code: hcloud.ErrorCodePlacementError}
@@ -130,13 +130,13 @@ func TestShouldDisablePlacement(t *testing.T) {
 		},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			opts := hetzner.ServerRetryOpts{AllowPlacementFallback: tc.allowFallback}
-			got := hetzner.ShouldDisablePlacementForTest(tc.err, opts, tc.placementGroupID)
-			assert.Equal(t, tc.wantDisable, got)
+			opts := hetzner.ServerRetryOpts{AllowPlacementFallback: testCase.allowFallback}
+			got := hetzner.ShouldDisablePlacementForTest(testCase.err, opts, testCase.placementGroupID)
+			assert.Equal(t, testCase.wantDisable, got)
 		})
 	}
 }
@@ -176,12 +176,12 @@ func TestCalculateRetryDelay(t *testing.T) {
 		},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := hetzner.CalculateRetryDelayForTest(tc.attempt)
-			assert.Equal(t, tc.wantDelay, got)
+			got := hetzner.CalculateRetryDelayForTest(testCase.attempt)
+			assert.Equal(t, testCase.wantDelay, got)
 		})
 	}
 }
