@@ -321,14 +321,21 @@ func ValidateAutoscalerConfig(cluster *ClusterSpec, provider *ProviderSpec) erro
 		poolCapacity += pool.Max
 	}
 
-	total := cluster.ControlPlanes + cluster.Workers + poolCapacity
+	// maxNodesTotal, when set, caps the autoscaler's total node count regardless of
+	// individual pool.Max values. Use the tighter of the two as the effective capacity.
+	effectivePoolCapacity := poolCapacity
+	if autoscaler.MaxNodesTotal > 0 && autoscaler.MaxNodesTotal < poolCapacity {
+		effectivePoolCapacity = autoscaler.MaxNodesTotal
+	}
+
+	total := cluster.ControlPlanes + cluster.Workers + effectivePoolCapacity
 	if total > serverLimit {
 		return fmt.Errorf(
-			"%w: controlPlanes(%d) + workers(%d) + poolCapacity(%d) = %d exceeds serverLimit(%d)",
+			"%w: controlPlanes(%d) + workers(%d) + effectivePoolCapacity(%d) = %d exceeds serverLimit(%d)",
 			ErrAutoscalerExceedsServerLimit,
 			cluster.ControlPlanes,
 			cluster.Workers,
-			poolCapacity,
+			effectivePoolCapacity,
 			total,
 			serverLimit,
 		)

@@ -410,6 +410,28 @@ func TestValidateAutoscalerConfig(t *testing.T) {
 			errContains: "exceeds serverLimit",
 		},
 		{
+			name: "capacity guard: maxNodesTotal caps effective pool capacity",
+			// pools sum to 20, but maxNodesTotal=5 caps them; effective total = 3+2+5 = 10 ≤ 10
+			cluster: &v1alpha1.ClusterSpec{
+				Provider:      v1alpha1.ProviderHetzner,
+				ControlPlanes: 3,
+				Workers:       2,
+				Autoscaler: v1alpha1.AutoscalerConfig{
+					Node: v1alpha1.NodeAutoscalerConfig{
+						Enabled:       v1alpha1.NodeAutoscalerEnabledEnabled,
+						MaxNodesTotal: 5,
+						Pools: []v1alpha1.NodePool{
+							{Name: "workers", ServerType: "cx23", Location: "fsn1", Min: 1, Max: 20},
+						},
+					},
+				},
+			},
+			provider: &v1alpha1.ProviderSpec{
+				Hetzner: v1alpha1.OptionsHetzner{ServerLimit: 10},
+			},
+			wantErr: nil,
+		},
+		{
 			name: "capacity guard: total within server limit",
 			cluster: &v1alpha1.ClusterSpec{
 				Provider:      v1alpha1.ProviderHetzner,
