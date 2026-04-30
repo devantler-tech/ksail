@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -1163,6 +1164,7 @@ const (
 	k3sDisableMetricsServerFlag = "--disable=metrics-server"
 	k3sDisableLocalStorageFlag  = "--disable=local-storage"
 	k3sDisableServiceLBFlag     = "--disable=servicelb"
+	k3sDisableTraefikFlag       = "--disable=traefik"
 	k3sFlanelBackendNoneFlag    = "--flannel-backend=none"
 	k3sDisableNetworkPolicyFlag = "--disable-network-policy"
 )
@@ -1504,6 +1506,8 @@ func maybeDisableK3dFeature(
 // setupK3dCNI configures K3d to disable flannel and network policy when a non-default
 // CNI (Cilium or Calico) is selected. Without this, K3s starts with flannel enabled,
 // causing conflicts when the custom CNI is installed post-creation.
+// When Cilium is selected, K3s's built-in Traefik is also disabled because Cilium
+// installs Gateway API CRDs that conflict with Traefik's CRD ownership on install.
 func setupK3dCNI(clusterCfg *v1alpha1.Cluster, k3dConfig *v1alpha5.SimpleConfig) {
 	if clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionK3s || k3dConfig == nil {
 		return
@@ -1515,7 +1519,7 @@ func setupK3dCNI(clusterCfg *v1alpha1.Cluster, k3dConfig *v1alpha5.SimpleConfig)
 	}
 
 	for _, flag := range []string{k3sFlanelBackendNoneFlag, k3sDisableNetworkPolicyFlag} {
-		if !hasK3sArg(k3dConfig, flag) {
+		if !hasK3sArgForServers(k3dConfig, flag) {
 			k3dConfig.Options.K3sOptions.ExtraArgs = append(
 				k3dConfig.Options.K3sOptions.ExtraArgs,
 				v1alpha5.K3sArgWithNodeFilters{
@@ -1525,12 +1529,49 @@ func setupK3dCNI(clusterCfg *v1alpha1.Cluster, k3dConfig *v1alpha5.SimpleConfig)
 			)
 		}
 	}
+
+	// Cilium installs Gateway API CRDs (e.g. backendtlspolicies.gateway.networking.k8s.io)
+	// that conflict with K3s's built-in Traefik chart which claims ownership of the same CRDs.
+	// Disabling Traefik avoids the CRD ownership conflict and the resulting CrashLoopBackOff.
+	// We check specifically for a server-scoped entry because an agent-scoped entry would not
+	// suppress Traefik on control-plane nodes.
+	if cni == v1alpha1.CNICilium && !hasK3sArgForServers(k3dConfig, k3sDisableTraefikFlag) {
+		k3dConfig.Options.K3sOptions.ExtraArgs = append(
+			k3dConfig.Options.K3sOptions.ExtraArgs,
+			v1alpha5.K3sArgWithNodeFilters{
+				Arg:         k3sDisableTraefikFlag,
+				NodeFilters: []string{"server:*"},
+			},
+		)
+	}
 }
 
 // hasK3sArg checks whether a K3s arg flag is already present in the K3d config.
 func hasK3sArg(k3dConfig *v1alpha5.SimpleConfig, flag string) bool {
 	for _, arg := range k3dConfig.Options.K3sOptions.ExtraArgs {
 		if arg.Arg == flag {
+			return true
+		}
+	}
+
+	return false
+}
+
+// hasK3sArgForServers checks whether a K3s arg flag is already present in the K3d config
+// with node filters that cover all server nodes: either an empty filter list (applies to all
+// nodes) or a filter that is exactly "server:*". A filter like "server:0" is intentionally
+// excluded because it targets only a single server, not all servers.
+func hasK3sArgForServers(k3dConfig *v1alpha5.SimpleConfig, flag string) bool {
+	for _, arg := range k3dConfig.Options.K3sOptions.ExtraArgs {
+		if arg.Arg != flag {
+			continue
+		}
+
+		if len(arg.NodeFilters) == 0 {
+			return true
+		}
+
+		if slices.Contains(arg.NodeFilters, "server:*") {
 			return true
 		}
 	}

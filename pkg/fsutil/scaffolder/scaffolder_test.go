@@ -31,6 +31,8 @@ import (
 
 var errGenerateFailure = errors.New("generate failure")
 
+const flannelBackendNoneArg = "--flannel-backend=none"
+
 func TestMain(m *testing.M) {
 	os.Exit(snapshottest.Run(m, snaps.CleanOpts{Sort: true}))
 }
@@ -596,8 +598,12 @@ func TestGenerateK3dConfigHandlesCNI(t *testing.T) {
 		{
 			name:        "CiliumCNI",
 			cni:         v1alpha1.CNICilium,
-			expectArgs:  2,
-			expectValue: "--flannel-backend=none",
+			expectArgs:  3,
+			expectValue: flannelBackendNoneArg,
+			expectContainsArgs: []k3dArgExpectation{
+				{arg: "--disable-network-policy", nodeFilters: []string{"server:*"}},
+				{arg: "--disable=traefik", nodeFilters: []string{"server:*"}},
+			},
 		},
 	}
 
@@ -609,11 +615,17 @@ func TestGenerateK3dConfigHandlesCNI(t *testing.T) {
 	}
 }
 
+type k3dArgExpectation struct {
+	arg         string
+	nodeFilters []string
+}
+
 type k3dCniCase struct {
-	name        string
-	cni         v1alpha1.CNI
-	expectArgs  int
-	expectValue string
+	name               string
+	cni                v1alpha1.CNI
+	expectArgs         int
+	expectValue        string
+	expectContainsArgs []k3dArgExpectation
 }
 
 func runK3dCniCase(t *testing.T, testCase k3dCniCase) {
@@ -629,6 +641,30 @@ func runK3dCniCase(t *testing.T, testCase k3dCniCase) {
 	if testCase.expectArgs > 0 {
 		if extraArgs[0].Arg != testCase.expectValue {
 			t.Fatalf("expected first arg %q, got %q", testCase.expectValue, extraArgs[0].Arg)
+		}
+	}
+
+	for _, expected := range testCase.expectContainsArgs {
+		found := false
+
+		for _, a := range extraArgs {
+			if a.Arg == expected.arg {
+				found = true
+
+				if expected.nodeFilters != nil {
+					require.Equalf(t, expected.nodeFilters, a.NodeFilters,
+						"node filters for arg %q", expected.arg)
+				}
+
+				break
+			}
+		}
+
+		if !found {
+			t.Fatalf(
+				"expected arg %q to be present, but it was not found in extra args",
+				expected.arg,
+			)
 		}
 	}
 }
@@ -1235,7 +1271,6 @@ func TestCreateK3dConfig_MetricsServerEnabled(t *testing.T) {
 	}
 }
 
-//nolint:goconst // Repeated literals keep the test cases explicit.
 func TestCreateK3dConfig_MetricsServerDisabledWithCilium(t *testing.T) {
 	t.Parallel()
 
@@ -1257,7 +1292,7 @@ func TestCreateK3dConfig_MetricsServerDisabledWithCilium(t *testing.T) {
 	hasMetricsFlag := false
 
 	for _, arg := range config.Options.K3sOptions.ExtraArgs {
-		if arg.Arg == "--flannel-backend=none" {
+		if arg.Arg == flannelBackendNoneArg {
 			hasCNIFlag = true
 		}
 
@@ -1348,7 +1383,7 @@ func TestCreateK3dConfig_CSIDisabledWithCilium(t *testing.T) {
 	hasCSIFlag := false
 
 	for _, arg := range config.Options.K3sOptions.ExtraArgs {
-		if arg.Arg == "--flannel-backend=none" {
+		if arg.Arg == flannelBackendNoneArg {
 			hasCNIFlag = true
 		}
 

@@ -139,6 +139,18 @@ func (s *Scaffolder) buildK3dExtraArgs() []k3dv1alpha5.K3sArgWithNodeFilters {
 		)
 	}
 
+	// Disable K3s built-in Traefik when using Cilium CNI. Cilium installs Gateway API CRDs
+	// (e.g. backendtlspolicies.gateway.networking.k8s.io) that conflict with Traefik's CRD
+	// ownership, causing helm-install-traefik to enter CrashLoopBackOff.
+	if s.KSailConfig.Spec.Cluster.CNI == v1alpha1.CNICilium {
+		extraArgs = append(extraArgs,
+			k3dv1alpha5.K3sArgWithNodeFilters{
+				Arg:         "--disable=traefik",
+				NodeFilters: []string{"server:*"},
+			},
+		)
+	}
+
 	// Disable metrics-server if explicitly disabled (K3s includes it by default)
 	if s.KSailConfig.Spec.Cluster.MetricsServer == v1alpha1.MetricsServerDisabled {
 		extraArgs = append(extraArgs,

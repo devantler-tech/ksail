@@ -335,12 +335,7 @@ runs:
             CLEANUP_LOG="/tmp/ksail-system-test-logs/cluster-create-cleanup-${attempt}.log"
             # Remove the partially-created cluster so the next attempt starts clean
             {
-            if [ "$INIT" = "true" ]; then
-              ksail ${CONFIG:+--config "$CONFIG"} cluster delete --force || true
-            else
-              # shellcheck disable=SC2086
-              ksail ${CONFIG:+--config "$CONFIG"} cluster delete --distribution "$DISTRIBUTION" --provider "$PROVIDER" $ARGS --force || true
-            fi
+            ksail ${CONFIG:+--config "$CONFIG"} cluster delete --force || true
             # Remove any lingering Talos cluster node containers.
             # ksail cluster delete --force may leave Talos Docker containers behind,
             # keeping the cluster Docker network alive. The next create attempt then
