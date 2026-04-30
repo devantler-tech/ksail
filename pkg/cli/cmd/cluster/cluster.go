@@ -2092,7 +2092,9 @@ func createDeleteProvisioner(
 		return provisioner, nil
 	}
 
-	provisioner, err := lifecycle.CreateMinimalProvisionerForProvider(clusterInfo, omniOpts, deleteStorage)
+	provisioner, err := lifecycle.CreateMinimalProvisionerForProvider(
+		clusterInfo, omniOpts, deleteStorage,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create provisioner for provider: %w", err)
 	}
