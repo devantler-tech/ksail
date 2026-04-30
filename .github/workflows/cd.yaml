@@ -259,6 +259,7 @@ jobs:
 
       - name: 📥 Install mcp-publisher
         run: |
+          set -euo pipefail
           curl -sLO "https://github.com/modelcontextprotocol/registry/releases/download/v1.7.6/mcp-publisher_linux_amd64.tar.gz"
           curl -sLO "https://github.com/modelcontextprotocol/registry/releases/download/v1.7.6/registry_1.7.6_checksums.txt"
           grep "mcp-publisher_linux_amd64.tar.gz$" registry_1.7.6_checksums.txt | sha256sum --check
