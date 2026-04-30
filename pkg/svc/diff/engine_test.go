@@ -1287,8 +1287,8 @@ func TestEngine_AutoscalerFullConfigChange(t *testing.T) {
 		"LeastWaste", "Price", clusterupdate.ChangeCategoryInPlace)
 	assertSingleChange(t, result.InPlaceChanges, "cluster.autoscaler.node.scaleDownUnneededTime",
 		"", "10m", clusterupdate.ChangeCategoryInPlace)
-	assertSingleChange(t, result.InPlaceChanges, "cluster.autoscaler.node.pools",
-		"", "pool added: workers-fsn1", clusterupdate.ChangeCategoryInPlace)
+	assertSingleChange(t, result.InPlaceChanges, "cluster.autoscaler.node.pools[workers-fsn1]",
+		"", "Added", clusterupdate.ChangeCategoryInPlace)
 	// "Disabled" is the defaultVal substituted when old spec has zero-value PodAutoscalerHorizontal.
 	assertSingleChange(t, result.InPlaceChanges, "cluster.autoscaler.pod.horizontal",
 		"Disabled", "Enabled", clusterupdate.ChangeCategoryInPlace)
@@ -1321,8 +1321,8 @@ func TestEngine_WorkersAndAutoscalerPools_BothDetected_WhenAutoscalerDisabled(t 
 
 	assertSingleChange(t, result.InPlaceChanges, testFieldWorkers,
 		"0", "2", clusterupdate.ChangeCategoryInPlace)
-	assertSingleChange(t, result.InPlaceChanges, "cluster.autoscaler.node.pools",
-		"", "pool added: workers-fsn1", clusterupdate.ChangeCategoryInPlace)
+	assertSingleChange(t, result.InPlaceChanges, "cluster.autoscaler.node.pools[workers-fsn1]",
+		"", "Added", clusterupdate.ChangeCategoryInPlace)
 }
 
 // TestEngine_AutoscalerToggle_NodeCountAlwaysDetected verifies that enabling the
@@ -1354,8 +1354,8 @@ func TestEngine_AutoscalerToggle_NodeCountAlwaysDetected(t *testing.T) {
 	// "Disabled" is the defaultVal substituted for zero-value NodeAutoscalerEnabled.
 	assertSingleChange(t, result.InPlaceChanges, "cluster.autoscaler.node.enabled",
 		"Disabled", "Enabled", clusterupdate.ChangeCategoryInPlace)
-	assertSingleChange(t, result.InPlaceChanges, "cluster.autoscaler.node.pools",
-		"", "pool added: workers-fsn1", clusterupdate.ChangeCategoryInPlace)
+	assertSingleChange(t, result.InPlaceChanges, "cluster.autoscaler.node.pools[workers-fsn1]",
+		"", "Added", clusterupdate.ChangeCategoryInPlace)
 
 	// Node-count diffs are always emitted for Talos regardless of autoscaler state.
 	assertSingleChange(t, result.InPlaceChanges, testFieldWorkers,
