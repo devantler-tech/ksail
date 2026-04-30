@@ -19,13 +19,16 @@ import (
 
 // mockUploader is a test-only snapshotUploader that returns a canned result.
 type mockUploader struct {
-	image *hcloudtest.Image
-	err   error
+	image  *hcloudtest.Image
+	err    error
+	called bool
 }
 
 func (m *mockUploader) Upload(
 	_ context.Context, _ hcloudimages.UploadOptions,
 ) (*hcloudtest.Image, error) {
+	m.called = true
+
 	return m.image, m.err
 }
 
@@ -106,8 +109,8 @@ func TestSnapshotManager_EnsureTalosSnapshot_ExistingFound(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, imageID, gotID)
-	// The uploader should not have been called.
-	assert.Nil(t, uploader.image)
+	// The uploader must not have been invoked when an existing snapshot was found.
+	assert.False(t, uploader.called)
 	assert.Contains(t, logBuf.String(), "Found existing Talos snapshot")
 }
 
@@ -298,6 +301,16 @@ func TestNewSnapshotManager(t *testing.T) {
 	var logBuf bytes.Buffer
 
 	sm := hetzner.NewSnapshotManager(client, &logBuf)
+
+	require.NotNil(t, sm)
+}
+
+func TestNewSnapshotManager_NilLogWriter(t *testing.T) {
+	t.Parallel()
+
+	client := hcloudtest.NewClient(hcloudtest.WithToken("test"))
+
+	sm := hetzner.NewSnapshotManager(client, nil)
 
 	require.NotNil(t, sm)
 }

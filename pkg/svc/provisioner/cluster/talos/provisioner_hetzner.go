@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/hetzner"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
@@ -181,12 +182,9 @@ func (p *Provisioner) bootstrapAndFinalize(
 	clusterName string,
 	controlPlaneServers, workerServers, allServers []*hcloud.Server,
 ) error {
-	// Detach ISOs and reboot
-	_, _ = fmt.Fprintf(p.logWriter, "Detaching ISOs and rebooting nodes...\n")
-
-	err := p.detachISOsAndReboot(ctx, hzProvider, allServers)
+	err := p.detachOrWaitForReboot(ctx, hzProvider, allServers)
 	if err != nil {
-		return fmt.Errorf("failed to detach ISOs: %w", err)
+		return err
 	}
 
 	// Bootstrap etcd cluster
@@ -234,6 +232,25 @@ func (p *Provisioner) bootstrapAndFinalize(
 	}
 
 	return nil
+}
+
+// detachOrWaitForReboot handles the post-config boot sequence.
+// For ISO-based boot: detaches ISOs from all servers and waits for auto-reboot.
+// For snapshot-based boot: no ISO is attached, so only wait for servers to be reachable.
+func (p *Provisioner) detachOrWaitForReboot(
+	ctx context.Context,
+	hzProvider *hetzner.Provider,
+	allServers []*hcloud.Server,
+) error {
+	if p.talosOpts != nil && p.talosOpts.SchematicID != "" {
+		_, _ = fmt.Fprintf(p.logWriter, "Waiting for nodes to be reachable after reboot...\n")
+
+		return p.waitForServersToBeReachable(ctx, allServers)
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "Detaching ISOs and rebooting nodes...\n")
+
+	return p.detachISOsAndReboot(ctx, hzProvider, allServers)
 }
 
 // createHetznerCluster creates a Talos cluster on Hetzner Cloud infrastructure.
@@ -297,6 +314,15 @@ func (p *Provisioner) createHetznerCluster(ctx context.Context, clusterName stri
 func (p *Provisioner) ensureSnapshotImage(ctx context.Context, clusterName string) (int64, error) {
 	if p.snapshotManager == nil || p.talosOpts == nil || p.talosOpts.SchematicID == "" {
 		return 0, nil
+	}
+
+	if p.talosOpts.Version == "" {
+		return 0, ErrSchematicRequiresVersion
+	}
+
+	if strings.HasPrefix(strings.ToLower(p.hetznerOpts.ControlPlaneServerType), "cax") ||
+		strings.HasPrefix(strings.ToLower(p.hetznerOpts.WorkerServerType), "cax") {
+		return 0, ErrARM64SnapshotNotSupported
 	}
 
 	_, _ = fmt.Fprintf(p.logWriter, "Ensuring Talos snapshot image...\n")

@@ -159,7 +159,7 @@ func configureInfraProvider(
 		provisioner.WithTalosOptions(applyTalosDefaults(opts))
 
 		// Wire the snapshot manager so EnsureTalosSnapshot / DeleteTalosSnapshots can be called.
-		snapshotManager := hetzner.NewSnapshotManager(hcloudClient, os.Stdout)
+		snapshotManager := hetzner.NewSnapshotManager(hcloudClient, provisioner.logWriter)
 		provisioner.WithSnapshotManager(snapshotManager)
 
 	case v1alpha1.ProviderOmni:

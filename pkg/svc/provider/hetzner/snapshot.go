@@ -30,7 +30,12 @@ type SnapshotManager struct {
 }
 
 // NewSnapshotManager creates a new SnapshotManager backed by the given Hetzner Cloud client.
+// A nil logWriter is silently replaced with io.Discard.
 func NewSnapshotManager(hcloudClient *hcloud.Client, logWriter io.Writer) *SnapshotManager {
+	if logWriter == nil {
+		logWriter = io.Discard
+	}
+
 	return &SnapshotManager{
 		hcloudClient: hcloudClient,
 		uploader:     hcloudimages.NewClient(hcloudClient),
