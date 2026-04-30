@@ -331,6 +331,26 @@ Edit the file to enforce your signature policy, then run `ksail cluster create`.
 
 See the [Talos image verification docs](https://www.talos.dev/v1.13/talos-guides/configuration/image-verification/) for the full rule schema.
 
+### Environment Variables (EnvironmentConfig)
+
+Talos 1.9 introduced the [`EnvironmentConfig`](https://www.talos.dev/v1.9/talos-guides/configuration/environment-variables/) resource as the preferred way to set environment variables for system services (kubelet, containerd, etc.). The legacy `.machine.env` field in `MachineConfig` is deprecated and will be removed in Talos 1.13.
+
+KSail does not generate `.machine.env` in any scaffolded patches. If you need to set environment variables (e.g. HTTP proxy settings, custom kubelet flags via env), create an `EnvironmentConfig` document in your Talos patches directory:
+
+```yaml
+apiVersion: v1alpha1
+kind: EnvironmentConfig
+environment:
+  HTTP_PROXY: "http://proxy.example.com:8080"
+  HTTPS_PROXY: "http://proxy.example.com:8080"
+  NO_PROXY: "10.0.0.0/8,192.168.0.0/16,localhost"
+```
+
+Place the file under your `talos/` patches directory (e.g. `talos/cluster/environment.yaml`) and KSail will apply it alongside other config documents during cluster creation.
+
+> [!NOTE]
+> Do not use `.machine.env` in custom patches — it is deprecated and will stop working in Talos 1.13+. Use `EnvironmentConfig` instead.
+
 ### GitOps Integration
 
 Enable Flux or ArgoCD for declarative workload management—see [GitOps Workflows](/features/gitops-workflows/).
