@@ -1,12 +1,11 @@
 package talosprovisioner
 
 import (
-	"bytes"
 	"context"
 	"encoding/base64"
 	"fmt"
-	"maps"
 
+	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
 	"github.com/siderolabs/talos/pkg/machinery/config/types/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
@@ -137,7 +136,7 @@ func updateAutoscalerSecretIfNeeded(
 	existing *corev1.Secret,
 	desiredData map[string][]byte,
 ) error {
-	if autoscalerSecretDataMatches(existing.Data, desiredData) {
+	if !k8s.MergeSecretData(existing, desiredData) {
 		return nil
 	}
 
@@ -149,16 +148,9 @@ func updateAutoscalerSecretIfNeeded(
 			return fmt.Errorf("get autoscaler config secret for update: %w", getErr)
 		}
 
-		if autoscalerSecretDataMatches(latest.Data, desiredData) {
+		if !k8s.MergeSecretData(latest, desiredData) {
 			return nil
 		}
-
-		// Build the merged data map, preserving any existing keys not in desiredData.
-		merged := make(map[string][]byte, len(latest.Data)+len(desiredData))
-		maps.Copy(merged, latest.Data)
-		maps.Copy(merged, desiredData)
-		latest.Data = merged
-		latest.StringData = nil
 
 		_, updateErr := secretsClient.Update(ctx, latest, metav1.UpdateOptions{})
 		if updateErr != nil {
@@ -172,16 +164,4 @@ func updateAutoscalerSecretIfNeeded(
 	}
 
 	return nil
-}
-
-// autoscalerSecretDataMatches returns true when every key in desiredData
-// exists in existing with an equal value.
-func autoscalerSecretDataMatches(existing, desiredData map[string][]byte) bool {
-	for k, v := range desiredData {
-		if !bytes.Equal(existing[k], v) {
-			return false
-		}
-	}
-
-	return true
 }
