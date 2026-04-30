@@ -21,7 +21,7 @@ The Hetzner provider is ideal when you:
 
 1. **Hetzner Cloud account** — Sign up at [hetzner.com/cloud](https://www.hetzner.com/cloud/)
 2. **API token** — Create one in the [Hetzner Cloud Console](https://console.hetzner.cloud/) → Project → Security → API Tokens (read/write permissions)
-3. **Talos ISO** — A Talos Linux ISO must be available in your Hetzner Cloud project (x86 default: `122630`, ARM: `122629` — see [Talos options](/configuration/declarative-configuration/#distribution-and-tool-options))
+3. **Talos ISO or Schematic** — Either a Talos Linux ISO must be available in your Hetzner Cloud project (x86 default: `122630`, ARM: `122629`), or a [Talos factory schematic ID](https://factory.talos.dev) can be provided via `spec.cluster.talos.schematicId` so KSail builds the snapshot automatically. See [Talos options](/configuration/declarative-configuration/#distribution-and-tool-options).
 4. **Docker** — Required locally for `ksail` CLI operations
 
 ## Configuration
@@ -56,7 +56,12 @@ spec:
       controlPlanes: 1
       workers: 2
       # ISO image ID for Hetzner (default: 122630 for x86, use 122629 for ARM)
+      # Ignored when schematicId is set — KSail builds a snapshot instead.
       iso: 122630
+      # Optional: Talos factory schematic ID. When set, KSail builds a Hetzner
+      # snapshot from the Talos factory URL and uses it instead of the ISO.
+      # Obtain a schematic ID from https://factory.talos.dev.
+      # schematicId: ""
   provider:
     hetzner:
       # Server types (default: cx23 for both)
@@ -99,7 +104,8 @@ spec:
 
 | Field | Type | Default | Description |
 | --- | --- | --- | --- |
-| `talos.iso` | int | `122630` | Hetzner Cloud ISO/image ID for Talos (use `122629` for ARM) |
+| `talos.iso` | int | `122630` | Hetzner Cloud ISO/image ID for Talos (use `122629` for ARM). Ignored when `schematicId` is set. |
+| `talos.schematicId` | string | _(empty)_ | [Talos factory](https://factory.talos.dev) schematic ID. When set, KSail automatically builds and manages a Hetzner snapshot image instead of booting from the ISO. The snapshot is deleted when `ksail cluster delete --delete-storage` is run. |
 
 ## Quick Start
 
@@ -197,7 +203,18 @@ KSail applies two independent firewall layers for Hetzner Talos clusters:
 > [!NOTE]
 > **Upgrading from older KSail versions**: Clusters created before the firewall hardening change used 6 Hetzner Cloud Firewall rules. KSail now manages 3 rules (Talos API, Kubernetes API, and ICMP), with etcd, kubelet, and trustd access kept on the private Hetzner Cloud Network. Running `ksail cluster update` automatically migrates existing clusters to the current rule set.
 
-## Operations
+### Talos Snapshot Lifecycle
+
+When `spec.cluster.talos.schematicId` is set, KSail manages a Hetzner Cloud **snapshot image** (instead of booting from the ISO) with the following lifecycle:
+
+- **Create** — `ksail cluster create` calls the [Talos factory](https://factory.talos.dev) to download the raw disk image for the specified schematic and Talos version, uploads it to Hetzner Cloud as a snapshot, and labels it with `ksail.io/talos-version`, `ksail.io/talos-schematic`, and `ksail.io/cluster`. If a matching snapshot already exists, it is reused.
+- **Reuse** — Subsequent `ksail cluster create` calls find the existing snapshot by label and skip the upload step.
+- **Delete** — `ksail cluster delete --delete-storage` removes the snapshot along with the cluster. Without `--delete-storage`, the snapshot is retained (useful when recreating the cluster).
+
+> [!NOTE]
+> Snapshots are scoped per cluster name, so deleting one cluster does not affect snapshots used by another cluster with the same schematic.
+
+
 
 ### List Clusters
 
