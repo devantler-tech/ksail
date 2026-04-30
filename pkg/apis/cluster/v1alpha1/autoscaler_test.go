@@ -584,6 +584,53 @@ func TestValidateAutoscalerConfig(t *testing.T) {
 			},
 			wantErr: nil,
 		},
+		{
+			name: "capacity guard: MaxNodesTotal caps pool capacity below limit",
+			cluster: &v1alpha1.ClusterSpec{
+				Provider:      v1alpha1.ProviderHetzner,
+				ControlPlanes: 3,
+				Workers:       2,
+				Autoscaler: v1alpha1.AutoscalerConfig{
+					Node: v1alpha1.NodeAutoscalerConfig{
+						Enabled:       v1alpha1.NodeAutoscalerEnabledEnabled,
+						MaxNodesTotal: 3,
+						Pools: []v1alpha1.NodePool{
+							// Raw pool capacity = 50; capped by MaxNodesTotal = 3
+							// total = 3 + 2 + 3 = 8, within limit 10 → valid
+							{Name: "workers", ServerType: "cx23", Location: "fsn1", Min: 1, Max: 50},
+						},
+					},
+				},
+			},
+			provider: &v1alpha1.ProviderSpec{
+				Hetzner: v1alpha1.OptionsHetzner{ServerLimit: 10},
+			},
+			wantErr: nil,
+		},
+		{
+			name: "capacity guard: MaxNodesTotal does not help when effective total still exceeds limit",
+			cluster: &v1alpha1.ClusterSpec{
+				Provider:      v1alpha1.ProviderHetzner,
+				ControlPlanes: 3,
+				Workers:       2,
+				Autoscaler: v1alpha1.AutoscalerConfig{
+					Node: v1alpha1.NodeAutoscalerConfig{
+						Enabled:       v1alpha1.NodeAutoscalerEnabledEnabled,
+						MaxNodesTotal: 10,
+						Pools: []v1alpha1.NodePool{
+							// Raw pool capacity = 50; capped by MaxNodesTotal = 10
+							// total = 3 + 2 + 10 = 15, exceeds limit 10 → error
+							{Name: "workers", ServerType: "cx23", Location: "fsn1", Min: 1, Max: 50},
+						},
+					},
+				},
+			},
+			provider: &v1alpha1.ProviderSpec{
+				Hetzner: v1alpha1.OptionsHetzner{ServerLimit: 10},
+			},
+			wantErr:     v1alpha1.ErrAutoscalerExceedsServerLimit,
+			errContains: "exceeds serverLimit",
+		},
 	}
 
 	for _, testCase := range tests {
