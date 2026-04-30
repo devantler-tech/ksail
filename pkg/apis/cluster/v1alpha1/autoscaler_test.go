@@ -134,7 +134,7 @@ func TestNodeAutoscalerEnabled_Set(t *testing.T) {
 			err := nodeEnabled.Set(testCase.input)
 			if testCase.wantError {
 				require.Error(t, err)
-				require.ErrorIs(t, err, v1alpha1.ErrInvalidNodeAutoscaling)
+				require.ErrorIs(t, err, v1alpha1.ErrInvalidNodeAutoscalerEnabled)
 			} else {
 				require.NoError(t, err)
 				assert.Equal(t, testCase.expected, nodeEnabled)

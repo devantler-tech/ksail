@@ -1201,7 +1201,7 @@ func TestEngine_AutoscalerNoChange(t *testing.T) {
 	}
 }
 
-func TestEngine_TalosNodeCountSuppressed_WhenAutoscalerNodeEnabled(t *testing.T) {
+func TestEngine_TalosNodeCountDetected_WhenAutoscalerNodeEnabled(t *testing.T) {
 	t.Parallel()
 
 	old := newBaseSpec()
@@ -1213,12 +1213,27 @@ func TestEngine_TalosNodeCountSuppressed_WhenAutoscalerNodeEnabled(t *testing.T)
 	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
 	result := engine.ComputeDiff(old, newer, nil, nil)
 
+	foundCP, foundWorkers := false, false
+
 	for _, change := range result.AllChanges() {
-		if change.Field == testFieldControlPlanes || change.Field == testFieldWorkers {
-			t.Errorf(
-				"node count field %q should be suppressed when autoscaler.node.enabled is set",
-				change.Field,
-			)
+		if change.Field == testFieldControlPlanes {
+			foundCP = true
 		}
+
+		if change.Field == testFieldWorkers {
+			foundWorkers = true
+		}
+	}
+
+	if !foundCP {
+		t.Error(
+			"baseline cluster.controlPlanes diff should be detected even when autoscaler.node.enabled is set",
+		)
+	}
+
+	if !foundWorkers {
+		t.Error(
+			"baseline cluster.workers diff should be detected even when autoscaler.node.enabled is set",
+		)
 	}
 }

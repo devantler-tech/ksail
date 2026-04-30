@@ -58,12 +58,22 @@ func migrateDeprecatedNodeCounts(cfg *v1alpha1.Cluster, out io.Writer) error {
 //   - both empty → no-op.
 //
 // mapNodeAutoscalingToEnabled maps the deprecated NodeAutoscaling enum to NodeAutoscalerEnabled.
-func mapNodeAutoscalingToEnabled(old v1alpha1.NodeAutoscaling) v1alpha1.NodeAutoscalerEnabled {
-	if old == v1alpha1.NodeAutoscalingEnabled {
-		return v1alpha1.NodeAutoscalerEnabledEnabled
+// Returns an error if the legacy value is not a recognised enum constant.
+func mapNodeAutoscalingToEnabled(
+	old v1alpha1.NodeAutoscaling,
+) (v1alpha1.NodeAutoscalerEnabled, error) {
+	switch old {
+	case v1alpha1.NodeAutoscalingEnabled:
+		return v1alpha1.NodeAutoscalerEnabledEnabled, nil
+	case v1alpha1.NodeAutoscalingDisabled:
+		return v1alpha1.NodeAutoscalerEnabledDisabled, nil
+	default:
+		return "", fmt.Errorf(
+			"%w: spec.cluster.nodeAutoscaling=%q is not a valid value (valid: Enabled, Disabled)",
+			ErrDeprecatedFieldConflict,
+			old,
+		)
 	}
-
-	return v1alpha1.NodeAutoscalerEnabledDisabled
 }
 
 func migrateDeprecatedNodeAutoscaling(cfg *v1alpha1.Cluster, out io.Writer) error {
@@ -78,7 +88,10 @@ func migrateDeprecatedNodeAutoscaling(cfg *v1alpha1.Cluster, out io.Writer) erro
 		return nil
 	}
 
-	mapped := mapNodeAutoscalingToEnabled(*old)
+	mapped, err := mapNodeAutoscalingToEnabled(*old)
+	if err != nil {
+		return err
+	}
 
 	if *newField != "" && *newField != mapped {
 		return fmt.Errorf(

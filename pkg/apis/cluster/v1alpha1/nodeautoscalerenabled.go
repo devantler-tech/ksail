@@ -28,7 +28,7 @@ func (n *NodeAutoscalerEnabled) Set(value string) error {
 
 	return fmt.Errorf(
 		"%w: %s (valid options: %s, %s)",
-		ErrInvalidNodeAutoscaling,
+		ErrInvalidNodeAutoscalerEnabled,
 		value,
 		NodeAutoscalerEnabledEnabled,
 		NodeAutoscalerEnabledDisabled,

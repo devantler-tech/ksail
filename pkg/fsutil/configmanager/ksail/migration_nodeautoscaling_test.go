@@ -109,3 +109,13 @@ func TestMigrateDeprecatedNodeAutoscaling_NilConfigReturnsNil(t *testing.T) {
 	err := configmanager.MigrateDeprecatedNodeAutoscalingForTest(nil, nil)
 	require.NoError(t, err)
 }
+
+func TestMigrateDeprecatedNodeAutoscaling_InvalidLegacyValueReturnsError(t *testing.T) {
+	t.Parallel()
+
+	cfg := v1alpha1.NewCluster()
+	cfg.Spec.Cluster.NodeAutoscaling = v1alpha1.NodeAutoscaling("SomethingInvalid")
+
+	err := configmanager.MigrateDeprecatedNodeAutoscalingForTest(cfg, nil)
+	require.Error(t, err)
+}

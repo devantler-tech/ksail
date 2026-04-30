@@ -253,11 +253,11 @@ func validateNodePools(pools []NodePool) error {
 	seen := make(map[string]struct{}, len(pools))
 
 	for idx, pool := range pools {
-		if !poolNameRegex.MatchString(pool.Name) {
+		if len(pool.Name) > 63 || !poolNameRegex.MatchString(pool.Name) {
 			return fmt.Errorf(
 				"%w: pool[%d] %q must be a DNS-1123 label "+
 					"(lowercase letters, numbers, and hyphens; must start with a letter; "+
-					"must not end with a hyphen)",
+					"must not end with a hyphen; at most 63 characters)",
 				ErrInvalidPoolName, idx, pool.Name,
 			)
 		}
