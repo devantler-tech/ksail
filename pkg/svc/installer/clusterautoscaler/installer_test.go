@@ -152,25 +152,44 @@ func TestClusterAutoscalerInstaller_ValuesYaml_Expanders(t *testing.T) {
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
-
-			cfg := v1alpha1.NodeAutoscalerConfig{
-				Expander: testCase.expander,
-			}
-
-			client := helm.NewMockInterface(t)
-			expectInstall(t, client, nil)
-
-			installer := clusterautoscalerinstaller.NewInstaller(client, 5*time.Second, cfg)
-			require.NotNil(t, installer)
-
-			// Verify expander value appears in the rendered values via chart spec.
-			err := installer.Install(context.Background())
-			require.NoError(t, err)
-			// The expectInstall mock captures the ChartSpec with a MatchedBy
-			// that asserts ValuesYaml contains the expected expander string.
-			_ = testCase.wantHelmValue
+			runExpanderTest(t, testCase.expander, testCase.wantHelmValue)
 		})
 	}
+}
+
+// runExpanderTest creates an installer with the given expander and asserts that
+// the rendered ValuesYaml contains wantHelmValue.
+func runExpanderTest(
+	t *testing.T,
+	expander v1alpha1.AutoscalerExpander,
+	wantHelmValue string,
+) {
+	t.Helper()
+
+	cfg := v1alpha1.NodeAutoscalerConfig{Expander: expander}
+	client := helm.NewMockInterface(t)
+	expectAddRepository(t, client, nil)
+	client.EXPECT().
+		InstallOrUpgradeChart(
+			mock.Anything,
+			mock.MatchedBy(func(spec *helm.ChartSpec) bool {
+				assert.Contains(
+					t,
+					spec.ValuesYaml,
+					wantHelmValue,
+					"ValuesYaml should contain the expander value",
+				)
+
+				return true
+			}),
+		).
+		Return(nil, nil)
+
+	installer := clusterautoscalerinstaller.NewInstaller(client, 5*time.Second, cfg)
+	require.NotNil(t, installer)
+
+	err := installer.Install(context.Background())
+	require.NoError(t, err)
 }
 
 // TestClusterAutoscalerInstaller_ValuesYaml_Contents verifies that the rendered

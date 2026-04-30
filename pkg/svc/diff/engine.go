@@ -342,7 +342,8 @@ func (e *Engine) checkTalosOptionsChange(
 	}
 
 	rules := talosFieldRules
-	if newSpec.NodeAutoscaling == v1alpha1.NodeAutoscalingEnabled {
+	if newSpec.NodeAutoscaling == v1alpha1.NodeAutoscalingEnabled ||
+		newSpec.Autoscaler.Node.Enabled == v1alpha1.NodeAutoscalerEnabledEnabled {
 		rules = talosFieldRulesNoScaling
 	}
 

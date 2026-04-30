@@ -2,12 +2,12 @@ package clusterautoscalerinstaller
 
 import (
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/installer/internal/helmutil"
+	"sigs.k8s.io/yaml"
 )
 
 const (
@@ -16,6 +16,20 @@ const (
 	namespace = "kube-system"
 
 	defaultScaleDownUnneededTime = "10m"
+	defaultOkTotalUnreadyCount   = 3
+
+	// AutoscalerConfigSecretName is the Kubernetes Secret containing per-cluster
+	// autoscaler parameters (cloud-init template, base image tag). It is created by
+	// the Talos provisioner's ApplyAutoscalerConfigSecret before the installer runs.
+	AutoscalerConfigSecretName = "cluster-autoscaler-config"
+
+	// AutoscalerConfigHcloudImageKey is the key in AutoscalerConfigSecretName that
+	// holds the Hetzner image name used when provisioning new autoscaler worker nodes.
+	AutoscalerConfigHcloudImageKey = "hcloud_image"
+
+	// AutoscalerConfigHcloudCloudInitKey is the key in AutoscalerConfigSecretName that
+	// holds the base64-encoded cloud-init user-data for new autoscaler worker nodes.
+	AutoscalerConfigHcloudCloudInitKey = "hcloud_cloud_init"
 )
 
 // Installer installs or upgrades the Kubernetes Cluster Autoscaler.
@@ -63,116 +77,163 @@ func NewInstaller(
 	}
 }
 
+// chartValues mirrors the cluster-autoscaler Helm chart values schema.
+// All user-supplied strings are embedded in struct fields so that
+// sigs.k8s.io/yaml handles escaping, preventing YAML injection.
+type chartValues struct {
+	CloudProvider     string               `json:"cloudProvider"`
+	AutoscalingGroups []autoscalingGroup   `json:"autoscalingGroups,omitempty"`
+	ExtraArgs         chartExtraArgs       `json:"extraArgs"`
+	ExtraEnvSecrets   chartExtraEnvSecrets `json:"extraEnvSecrets"`
+	Tolerations       []chartToleration    `json:"tolerations"`
+	NodeSelector      map[string]string    `json:"nodeSelector"`
+	RBAC              chartRBAC            `json:"rbac"`
+	Resources         chartResources       `json:"resources"`
+}
+
+type autoscalingGroup struct {
+	Name         string `json:"name"`
+	MinSize      int32  `json:"minSize"`
+	MaxSize      int32  `json:"maxSize"`
+	InstanceType string `json:"instanceType"`
+	Region       string `json:"region"`
+}
+
+//nolint:tagliatelle // Helm chart requires kebab-case keys for these extraArgs.
+type chartExtraArgs struct {
+	Expander              string `json:"expander"`
+	ScaleDownUnneededTime string `json:"scale-down-unneeded-time"`
+	MaxNodesTotal         int32  `json:"max-nodes-total,omitempty"`
+	ScaleDownAfterAdd     string `json:"scale-down-delay-after-add"`
+	ScaleDownAfterDelete  string `json:"scale-down-delay-after-delete"`
+	OkTotalUnreadyCount   int    `json:"ok-total-unready-count"`
+	V                     string `json:"v"`
+}
+
+type chartSecretRef struct {
+	Name string `json:"name"`
+	Key  string `json:"key"`
+}
+
+//nolint:tagliatelle // Helm chart requires UPPER_SNAKE_CASE env var keys.
+type chartExtraEnvSecrets struct {
+	HcloudToken     chartSecretRef `json:"HCLOUD_TOKEN"`
+	HcloudNetwork   chartSecretRef `json:"HCLOUD_NETWORK"`
+	HcloudImage     chartSecretRef `json:"HCLOUD_IMAGE"`
+	HcloudCloudInit chartSecretRef `json:"HCLOUD_CLOUD_INIT"`
+}
+
+type chartToleration struct {
+	Key      string `json:"key"`
+	Operator string `json:"operator"`
+	Effect   string `json:"effect"`
+}
+
+type chartRBACServiceAccount struct {
+	Create bool   `json:"create"`
+	Name   string `json:"name"`
+}
+
+type chartRBAC struct {
+	Create         bool                    `json:"create"`
+	ServiceAccount chartRBACServiceAccount `json:"serviceAccount"`
+}
+
+type chartResourceRequests struct {
+	CPU    string `json:"cpu,omitempty"`
+	Memory string `json:"memory"`
+}
+
+type chartResourceLimits struct {
+	Memory string `json:"memory"`
+}
+
+type chartResources struct {
+	Requests chartResourceRequests `json:"requests"`
+	Limits   chartResourceLimits   `json:"limits"`
+}
+
 // buildValuesYaml generates the Helm values YAML for the cluster-autoscaler chart
-// from the given NodeAutoscalerConfig.
+// from the given NodeAutoscalerConfig. It uses a typed struct marshaled via
+// sigs.k8s.io/yaml to prevent YAML injection from user-supplied strings.
 func buildValuesYaml(cfg v1alpha1.NodeAutoscalerConfig) string {
-	var buf strings.Builder
-
-	fmt.Fprintln(&buf, "cloudProvider: hetzner")
-
-	writeAutoscalingGroups(&buf, cfg.Pools)
-	writeExtraArgs(&buf, cfg)
-	writeExtraEnvSecrets(&buf)
-	writeTolerations(&buf)
-	writeNodeSelector(&buf)
-	writeRBAC(&buf)
-	writeResources(&buf)
-
-	return buf.String()
-}
-
-// writeAutoscalingGroups writes the autoscalingGroups section from the node pools.
-func writeAutoscalingGroups(buf *strings.Builder, pools []v1alpha1.NodePool) {
-	if len(pools) == 0 {
-		return
-	}
-
-	fmt.Fprintln(buf, "autoscalingGroups:")
-
-	for _, pool := range pools {
-		fmt.Fprintf(buf, "  - name: %s\n", pool.Name)
-		fmt.Fprintf(buf, "    minSize: %d\n", pool.Min)
-		fmt.Fprintf(buf, "    maxSize: %d\n", pool.Max)
-		fmt.Fprintf(buf, "    instanceType: %s\n", pool.ServerType)
-		fmt.Fprintf(buf, "    region: %s\n", pool.Location)
-	}
-}
-
-// writeExtraArgs writes the extraArgs section with autoscaler tuning parameters.
-func writeExtraArgs(buf *strings.Builder, cfg v1alpha1.NodeAutoscalerConfig) {
-	fmt.Fprintln(buf, "extraArgs:")
-	fmt.Fprintf(buf, "  expander: %s\n", expanderToHelmValue(cfg.Expander))
-
 	scaleDownTime := cfg.ScaleDownUnneededTime
 	if scaleDownTime == "" {
 		scaleDownTime = defaultScaleDownUnneededTime
 	}
 
-	fmt.Fprintf(buf, "  scale-down-unneeded-time: %s\n", scaleDownTime)
+	groups := buildAutoscalingGroups(cfg.Pools)
 
-	if cfg.MaxNodesTotal > 0 {
-		fmt.Fprintf(buf, "  max-nodes-total: %d\n", cfg.MaxNodesTotal)
+	vals := chartValues{
+		CloudProvider:     "hetzner",
+		AutoscalingGroups: groups,
+		ExtraArgs: chartExtraArgs{
+			Expander:              expanderToHelmValue(cfg.Expander),
+			ScaleDownUnneededTime: scaleDownTime,
+			MaxNodesTotal:         cfg.MaxNodesTotal,
+			ScaleDownAfterAdd:     "5m",
+			ScaleDownAfterDelete:  "2m",
+			OkTotalUnreadyCount:   defaultOkTotalUnreadyCount,
+			V:                     "4",
+		},
+		ExtraEnvSecrets: chartExtraEnvSecrets{
+			HcloudToken:   chartSecretRef{Name: "hcloud", Key: "token"},
+			HcloudNetwork: chartSecretRef{Name: "hcloud", Key: "network"},
+			HcloudImage: chartSecretRef{
+				Name: AutoscalerConfigSecretName,
+				Key:  AutoscalerConfigHcloudImageKey,
+			},
+			HcloudCloudInit: chartSecretRef{
+				Name: AutoscalerConfigSecretName,
+				Key:  AutoscalerConfigHcloudCloudInitKey,
+			},
+		},
+		Tolerations: []chartToleration{
+			{
+				Key:      "node-role.kubernetes.io/control-plane",
+				Operator: "Exists",
+				Effect:   "NoSchedule",
+			},
+		},
+		NodeSelector: map[string]string{"node-role.kubernetes.io/control-plane": ""},
+		RBAC: chartRBAC{
+			Create: true,
+			ServiceAccount: chartRBACServiceAccount{
+				Create: true,
+				Name:   "cluster-autoscaler",
+			},
+		},
+		Resources: chartResources{
+			Requests: chartResourceRequests{CPU: "50m", Memory: "128Mi"},
+			Limits:   chartResourceLimits{Memory: "256Mi"},
+		},
 	}
 
-	fmt.Fprintln(buf, "  scale-down-delay-after-add: 5m")
-	fmt.Fprintln(buf, "  scale-down-delay-after-delete: 2m")
-	fmt.Fprintln(buf, "  ok-total-unready-count: 3")
-	fmt.Fprintln(buf, `  v: "4"`)
+	out, err := yaml.Marshal(vals)
+	if err != nil {
+		// yaml.Marshal only fails for unmarshalable types (channels, funcs).
+		// Our struct only contains strings, ints, bools, slices, and maps.
+		panic(fmt.Sprintf("clusterautoscaler: failed to marshal chart values: %v", err))
+	}
+
+	return string(out)
 }
 
-// writeExtraEnvSecrets writes the extraEnvSecrets section referencing the
-// pre-existing "hcloud" and "cluster-autoscaler-config" Kubernetes secrets.
-func writeExtraEnvSecrets(buf *strings.Builder) {
-	fmt.Fprintln(buf, "extraEnvSecrets:")
-	fmt.Fprintln(buf, "  HCLOUD_TOKEN:")
-	fmt.Fprintln(buf, "    name: hcloud")
-	fmt.Fprintln(buf, "    key: token")
-	fmt.Fprintln(buf, "  HCLOUD_NETWORK:")
-	fmt.Fprintln(buf, "    name: hcloud")
-	fmt.Fprintln(buf, "    key: network")
-	fmt.Fprintln(buf, "  HCLOUD_IMAGE:")
-	fmt.Fprintln(buf, "    name: cluster-autoscaler-config")
-	fmt.Fprintln(buf, "    key: hcloud_image")
-	fmt.Fprintln(buf, "  HCLOUD_CLOUD_INIT:")
-	fmt.Fprintln(buf, "    name: cluster-autoscaler-config")
-	fmt.Fprintln(buf, "    key: hcloud_cloud_init")
-}
+// buildAutoscalingGroups converts NodePool specs to autoscalingGroup chart values.
+func buildAutoscalingGroups(pools []v1alpha1.NodePool) []autoscalingGroup {
+	groups := make([]autoscalingGroup, 0, len(pools))
 
-// writeTolerations writes the tolerations section to schedule the autoscaler
-// on control-plane nodes.
-func writeTolerations(buf *strings.Builder) {
-	fmt.Fprintln(buf, "tolerations:")
-	fmt.Fprintln(buf, "  - key: node-role.kubernetes.io/control-plane")
-	fmt.Fprintln(buf, "    operator: Exists")
-	fmt.Fprintln(buf, "    effect: NoSchedule")
-}
+	for _, pool := range pools {
+		groups = append(groups, autoscalingGroup{
+			Name:         pool.Name,
+			MinSize:      pool.Min,
+			MaxSize:      pool.Max,
+			InstanceType: pool.ServerType,
+			Region:       pool.Location,
+		})
+	}
 
-// writeNodeSelector writes the nodeSelector section to pin the autoscaler
-// to control-plane nodes.
-func writeNodeSelector(buf *strings.Builder) {
-	fmt.Fprintln(buf, "nodeSelector:")
-	fmt.Fprintln(buf, `  node-role.kubernetes.io/control-plane: ""`)
-}
-
-// writeRBAC writes the rbac section enabling RBAC resources and a dedicated
-// service account.
-func writeRBAC(buf *strings.Builder) {
-	fmt.Fprintln(buf, "rbac:")
-	fmt.Fprintln(buf, "  create: true")
-	fmt.Fprintln(buf, "  serviceAccount:")
-	fmt.Fprintln(buf, "    create: true")
-	fmt.Fprintln(buf, "    name: cluster-autoscaler")
-}
-
-// writeResources writes the resources section with conservative CPU/memory
-// requests and limits for the autoscaler pod.
-func writeResources(buf *strings.Builder) {
-	fmt.Fprintln(buf, "resources:")
-	fmt.Fprintln(buf, "  requests:")
-	fmt.Fprintln(buf, "    cpu: 50m")
-	fmt.Fprintln(buf, "    memory: 128Mi")
-	fmt.Fprintln(buf, "  limits:")
-	fmt.Fprintln(buf, "    memory: 256Mi")
+	return groups
 }
 
 // expanderToHelmValue converts an [v1alpha1.AutoscalerExpander] enum value to

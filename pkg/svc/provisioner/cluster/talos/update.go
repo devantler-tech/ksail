@@ -112,7 +112,8 @@ func (p *Provisioner) DiffConfig(
 
 	// When node autoscaling is enabled, skip node-count diff entries to avoid
 	// conflicts with the external autoscaler, but still validate the spec above.
-	if newSpec.NodeAutoscaling == v1alpha1.NodeAutoscalingEnabled {
+	if newSpec.NodeAutoscaling == v1alpha1.NodeAutoscalingEnabled ||
+		newSpec.Autoscaler.Node.Enabled == v1alpha1.NodeAutoscalerEnabledEnabled {
 		return result, nil
 	}
 
@@ -155,7 +156,8 @@ func (p *Provisioner) applyNodeScalingChanges(
 	}
 
 	// When node autoscaling is enabled, defer scaling to the external autoscaler.
-	if newSpec.NodeAutoscaling == v1alpha1.NodeAutoscalingEnabled {
+	if newSpec.NodeAutoscaling == v1alpha1.NodeAutoscalingEnabled ||
+		newSpec.Autoscaler.Node.Enabled == v1alpha1.NodeAutoscalerEnabledEnabled {
 		_, _ = fmt.Fprintf(p.logWriter,
 			"  ℹ Node autoscaling is enabled; skipping node scaling for cluster %q\n",
 			clusterName)

@@ -248,11 +248,21 @@ func ValidateLocalRegistryForProvider(provider Provider, registry LocalRegistry)
 // Must start with a letter, end with alphanumeric, and be at most 63 characters.
 var poolNameRegex = regexp.MustCompile(`^[a-z][a-z0-9-]*[a-z0-9]$|^[a-z]$`)
 
+// PoolNameMaxLength is the maximum length for a node pool name (DNS-1123 label limit).
+const PoolNameMaxLength = 63
+
 // validateNodePools checks each NodePool for name validity, min ≤ max, and uniqueness.
 func validateNodePools(pools []NodePool) error {
 	seen := make(map[string]struct{}, len(pools))
 
 	for idx, pool := range pools {
+		if len(pool.Name) > PoolNameMaxLength {
+			return fmt.Errorf(
+				"%w: pool[%d] %q exceeds the 63-character DNS-1123 label limit",
+				ErrInvalidPoolName, idx, pool.Name,
+			)
+		}
+
 		if !poolNameRegex.MatchString(pool.Name) {
 			return fmt.Errorf(
 				"%w: pool[%d] %q must be a DNS-1123 label "+

@@ -35,6 +35,9 @@ var ErrInvalidImageVerification = errors.New("invalid image verification")
 // ErrInvalidNodeAutoscaling is returned when an invalid node autoscaling option is specified.
 var ErrInvalidNodeAutoscaling = errors.New("invalid node autoscaling")
 
+// ErrInvalidNodeAutoscalerEnabled is returned when an invalid node autoscaler enabled value is specified.
+var ErrInvalidNodeAutoscalerEnabled = errors.New("invalid node autoscaler enabled")
+
 // ErrInvalidProvider is returned when an invalid provider is specified.
 var ErrInvalidProvider = errors.New("invalid provider")
 
