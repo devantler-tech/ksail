@@ -199,7 +199,7 @@ Editor command for interactive workflows (e.g., `code --wait`, `vim`). Falls bac
 | `localRegistry` | LocalRegistry | – |  |
 | `gitOpsEngine` | enum | – |  |
 | `sops` | SOPS | – |  |
-| `nodeAutoscaling` | enum | – | **Deprecated**: use `autoscaler.node.enabled` instead |
+| `nodeAutoscaling` | enum | – |  |
 | `autoscaler` | AutoscalerConfig | – |  |
 | `importImages` | string | – | Path to tar archive with container images to import after cluster creation but before component installation |
 | `controlPlanes` | int32 | `1` | Number of control-plane nodes to create for the cluster (provider/distribution-agnostic) |
@@ -343,21 +343,20 @@ Advanced configuration options are direct fields under `spec.cluster`. See [Sche
 
 **Talos options (`spec.cluster.talos`):**
 
-- `controlPlanes` — **Deprecated**: use `spec.cluster.controlPlanes`. Kept as migration alias; emits a warning on load.
-- `workers` — **Deprecated**: use `spec.cluster.workers`. Kept as migration alias; emits a warning on load.
-- `version` — Pins the Talos OS version (e.g. `v1.11.2`). Caps `--update-distribution` upgrades at this version.
-- `config` — Path to talosconfig file (default: `~/.talos/config`)
-- `iso` — Cloud provider ISO/image ID for Talos Linux (default: `122630` for x86; use `122629` for ARM)
+- `controlPlanes` – Number of control-plane nodes (default: `1`)
+- `workers` – Number of worker nodes (default: `0`)
+- `config` – Path to talosconfig file (default: `~/.talos/config`)
+- `iso` – Cloud provider ISO/image ID for Talos Linux (default: `122630` for x86; use `122629` for ARM)
 
 **Hetzner options (`spec.provider.hetzner`):**
 
-- `controlPlaneServerType` — Server type for control-plane nodes (default: `cx23`)
-- `workerServerType` — Server type for worker nodes (default: `cx23`)
-- `location` — Datacenter location: `fsn1`, `nbg1`, `hel1` (default: `fsn1`)
-- `networkName` — Private network name (default: `<cluster>-network`)
-- `networkCidr` — Network CIDR block (default: `10.0.0.0/16`)
-- `sshKeyName` — SSH key name for server access (optional)
-- `tokenEnvVar` — Environment variable for API token (default: `HCLOUD_TOKEN`)
+- `controlPlaneServerType` – Server type for control-plane nodes (default: `cx23`)
+- `workerServerType` – Server type for worker nodes (default: `cx23`)
+- `location` – Datacenter location: `fsn1`, `nbg1`, `hel1` (default: `fsn1`)
+- `networkName` – Private network name (default: `<cluster>-network`)
+- `networkCidr` – Network CIDR block (default: `10.0.0.0/16`)
+- `sshKeyName` – SSH key name for server access (optional)
+- `tokenEnvVar` – Environment variable for API token (default: `HCLOUD_TOKEN`)
 
 **Vanilla options (`spec.cluster.vanilla`):**
 
@@ -438,15 +437,16 @@ machine:
       max-pods: "250"
 ```
 
-See [Talos Configuration Reference](https://www.talos.dev/latest/reference/configuration/) for patch syntax. Use `spec.cluster.controlPlanes` and `spec.cluster.workers` to configure node counts:
+See [Talos Configuration Reference](https://www.talos.dev/latest/reference/configuration/) for patch syntax. Use `spec.cluster.talos` to configure node counts:
 
 ```yaml
 spec:
   cluster:
     distribution: Talos
     distributionConfig: talos
-    controlPlanes: 3
-    workers: 2
+    talos:
+      controlPlanes: 3
+      workers: 2
 ```
 
 #### Port Mappings (Docker Provider)
