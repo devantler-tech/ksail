@@ -340,6 +340,7 @@ func ValidateAutoscalerConfig(cluster *ClusterSpec, provider *ProviderSpec) erro
 		return nil
 	}
 
+	// serverLimit == 0 means "use default"; 0 is not an expressible explicit limit.
 	serverLimit := provider.Hetzner.ServerLimit
 	if serverLimit == 0 {
 		serverLimit = DefaultHetznerServerLimit
