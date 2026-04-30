@@ -421,7 +421,13 @@ func TestValidateAutoscalerConfig(t *testing.T) {
 						Enabled:       v1alpha1.NodeAutoscalerEnabledEnabled,
 						MaxNodesTotal: 5,
 						Pools: []v1alpha1.NodePool{
-							{Name: "workers", ServerType: "cx23", Location: "fsn1", Min: 1, Max: 20},
+							{
+								Name:       "workers",
+								ServerType: "cx23",
+								Location:   "fsn1",
+								Min:        1,
+								Max:        20,
+							},
 						},
 					},
 				},
