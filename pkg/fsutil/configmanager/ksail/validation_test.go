@@ -54,12 +54,13 @@ func TestExpectedDistributionConfigName(t *testing.T) {
 	}
 
 	for _, testCase := range tests {
-		t.Run(testCase.name, func(t *testing.T) {
+		caseData := testCase
+		t.Run(caseData.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := configmanager.ExpectedDistributionConfigNameForTest(testCase.distribution)
+			got := configmanager.ExpectedDistributionConfigNameForTest(caseData.distribution)
 
-			assert.Equal(t, testCase.want, got)
+			assert.Equal(t, caseData.want, got)
 		})
 	}
 }
@@ -173,24 +174,32 @@ func TestDistributionConfigIsOppositeDefault(t *testing.T) {
 			want:         false,
 		},
 		{
-			// Empty current — not opposite
-			name:         "empty_current_is_not_opposite",
-			current:      "",
+			// Path with directory prefix — not a literal match for any default
+			name:         "configs/kind.yaml_is_not_opposite_for_K3s",
+			current:      "configs/kind.yaml",
+			distribution: v1alpha1.DistributionK3s,
+			want:         false,
+		},
+		{
+			// Path with directory prefix — not a literal match for any default
+			name:         "configs/k3d.yaml_is_not_opposite_for_Vanilla",
+			current:      "configs/k3d.yaml",
 			distribution: v1alpha1.DistributionVanilla,
 			want:         false,
 		},
 	}
 
 	for _, testCase := range tests {
-		t.Run(testCase.name, func(t *testing.T) {
+		caseData := testCase
+		t.Run(caseData.name, func(t *testing.T) {
 			t.Parallel()
 
 			got := configmanager.DistributionConfigIsOppositeDefaultForTest(
-				testCase.current,
-				testCase.distribution,
+				caseData.current,
+				caseData.distribution,
 			)
 
-			assert.Equal(t, testCase.want, got)
+			assert.Equal(t, caseData.want, got)
 		})
 	}
 }
