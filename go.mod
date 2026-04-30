@@ -40,7 +40,7 @@ require (
 	helm.sh/helm/v4 v4.1.4
 	k8s.io/api v0.35.4
 	k8s.io/apiextensions-apiserver v0.35.4
-	k8s.io/apimachinery v0.35.4
+	k8s.io/apimachinery v0.36.0
 	k8s.io/cli-runtime v0.35.4
 	k8s.io/client-go v0.35.4
 	k8s.io/kubectl v0.35.4
@@ -549,7 +549,6 @@ require (
 	github.com/muesli/reflow v0.3.0 // indirect
 	github.com/muesli/termenv v0.16.0 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
-	github.com/mxk/go-flowrate v0.0.0-20140419014527-cca7078d478f // indirect
 	github.com/nakabonne/nestif v0.3.1 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
 	github.com/neticdk/go-stdlib v1.0.1 // indirect
@@ -784,6 +783,7 @@ require (
 	k8s.io/kubelet v0.35.3 // indirect
 	k8s.io/kubernetes v1.35.0 // indirect
 	k8s.io/metrics v0.35.4 // indirect
+	k8s.io/streaming v0.36.0 // indirect
 	k8s.io/utils v0.0.0-20260319190234-28399d86e0b5 // indirect
 	modernc.org/libc v1.67.6 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
