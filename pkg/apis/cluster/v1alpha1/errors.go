@@ -35,6 +35,9 @@ var ErrInvalidImageVerification = errors.New("invalid image verification")
 // ErrInvalidNodeAutoscaling is returned when an invalid node autoscaling option is specified.
 var ErrInvalidNodeAutoscaling = errors.New("invalid node autoscaling")
 
+// ErrInvalidNodeAutoscalerEnabled is returned when an invalid node autoscaler enabled value is specified.
+var ErrInvalidNodeAutoscalerEnabled = errors.New("invalid node autoscaler enabled")
+
 // ErrInvalidProvider is returned when an invalid provider is specified.
 var ErrInvalidProvider = errors.New("invalid provider")
 
@@ -77,4 +80,45 @@ var ErrAWSCredentialsMissing = errors.New(
 // https://eksctl.io/installation/ for installation instructions.
 var ErrEksctlBinaryMissing = errors.New(
 	"eksctl binary not found on PATH; install from https://eksctl.io/installation/",
+)
+
+// ErrInvalidPodAutoscalerHorizontal is returned when an invalid pod horizontal autoscaler option is specified.
+var ErrInvalidPodAutoscalerHorizontal = errors.New("invalid pod horizontal autoscaler")
+
+// ErrInvalidPodAutoscalerVertical is returned when an invalid pod vertical autoscaler option is specified.
+var ErrInvalidPodAutoscalerVertical = errors.New("invalid pod vertical autoscaler")
+
+// ErrInvalidAutoscalerExpander is returned when an invalid autoscaler expander strategy is specified.
+var ErrInvalidAutoscalerExpander = errors.New("invalid autoscaler expander")
+
+// ErrInvalidPoolName is returned when a node pool name is not a valid DNS-1123 label.
+var ErrInvalidPoolName = errors.New("invalid pool name")
+
+// ErrPoolMinExceedsMax is returned when a node pool min count exceeds its max count.
+var ErrPoolMinExceedsMax = errors.New("pool min exceeds max")
+
+// ErrDuplicatePoolName is returned when two or more node pools share the same name.
+var ErrDuplicatePoolName = errors.New("duplicate pool name")
+
+// ErrPoolNegativeMin is returned when a node pool min count is negative.
+var ErrPoolNegativeMin = errors.New("pool min must be non-negative")
+
+// ErrPoolNegativeMax is returned when a node pool max count is negative.
+var ErrPoolNegativeMax = errors.New("pool max must be non-negative")
+
+// ErrPoolServerTypeEmpty is returned when a node pool serverType is empty.
+var ErrPoolServerTypeEmpty = errors.New("pool serverType must not be empty")
+
+// ErrPoolLocationEmpty is returned when a node pool location is empty.
+var ErrPoolLocationEmpty = errors.New("pool location must not be empty")
+
+// ErrAutoscalerExceedsServerLimit is returned when the total node capacity exceeds the
+// Hetzner server limit.
+var ErrAutoscalerExceedsServerLimit = errors.New(
+	"autoscaler configuration exceeds Hetzner server limit",
+)
+
+// ErrAutoscalerEnabledNoPools is returned when node autoscaler is enabled but no pools are configured.
+var ErrAutoscalerEnabledNoPools = errors.New(
+	"node autoscaler is enabled but no pools are configured",
 )

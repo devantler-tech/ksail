@@ -104,6 +104,7 @@ func (v *Validator) Validate(config *v1alpha1.Cluster) *validator.ValidationResu
 	v.validateCNIAlignment(config, result)
 	v.validateRegistry(config, result)
 	v.validateFlux(config, result)
+	v.validateAutoscalerConfig(config, result)
 
 	return result
 }
@@ -591,4 +592,21 @@ func (v *Validator) validateFlux(
 ) {
 	// Flux-specific configuration is now handled via the FluxInstance CR.
 	// No additional validation required in the KSail config.
+}
+
+// validateAutoscalerConfig validates the autoscaler configuration, including
+// node pool constraints (name validity, min ≤ max, uniqueness) and the Hetzner
+// server limit guard when applicable.
+func (v *Validator) validateAutoscalerConfig(
+	config *v1alpha1.Cluster,
+	result *validator.ValidationResult,
+) {
+	err := v1alpha1.ValidateAutoscalerConfig(&config.Spec.Cluster, &config.Spec.Provider)
+	if err != nil {
+		result.AddError(validator.ValidationError{
+			Field:         "spec.cluster.autoscaler",
+			Message:       err.Error(),
+			FixSuggestion: "Review spec.cluster.autoscaler.node configuration",
+		})
+	}
 }
