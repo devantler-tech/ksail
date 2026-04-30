@@ -44,8 +44,9 @@ func NewSnapshotManager(hcloudClient *hcloud.Client, logWriter io.Writer) *Snaps
 }
 
 // EnsureTalosSnapshot ensures a Talos snapshot image exists for the given version and schematic.
-// It first looks up existing images by labels (ksail.io/talos-version + ksail.io/talos-schematic),
+// It first looks up existing images by labels (ksail.io/talos-version + ksail.io/talos-schematic + ksail.io/cluster),
 // and if not found, builds one using hcloud-upload-image from the Talos factory URL.
+// Snapshots are scoped per cluster so that deleting one cluster does not remove snapshots used by another.
 // The resulting snapshot is labeled with LabelTalosVersion, LabelTalosSchematic, and LabelTalosCluster.
 func (sm *SnapshotManager) EnsureTalosSnapshot(
 	ctx context.Context,
@@ -57,7 +58,7 @@ func (sm *SnapshotManager) EnsureTalosSnapshot(
 		talosVersion = "v" + talosVersion
 	}
 
-	imageID, err := sm.findExistingSnapshot(ctx, talosVersion, schematicID)
+	imageID, err := sm.findExistingSnapshot(ctx, clusterName, talosVersion, schematicID)
 	if err != nil {
 		return 0, err
 	}
@@ -131,19 +132,22 @@ func (sm *SnapshotManager) DeleteTalosSnapshots(ctx context.Context, clusterName
 	return nil
 }
 
-// findExistingSnapshot looks up an existing Talos snapshot by version and schematic labels.
-// Returns the image ID if found, or 0 if not found.
+// findExistingSnapshot looks up an existing Talos snapshot by cluster, version, and schematic labels.
+// Snapshots are scoped per cluster to prevent cross-cluster deletion side-effects.
+// Returns the first available image ID if found, or 0 if not found.
 func (sm *SnapshotManager) findExistingSnapshot(
 	ctx context.Context,
+	clusterName string,
 	talosVersion string,
 	schematicID string,
 ) (int64, error) {
 	images, err := sm.hcloudClient.Image.AllWithOpts(ctx, hcloud.ImageListOpts{
 		Type: []hcloud.ImageType{hcloud.ImageTypeSnapshot},
 		ListOpts: hcloud.ListOpts{
-			LabelSelector: fmt.Sprintf("%s=%s,%s=%s",
+			LabelSelector: fmt.Sprintf("%s=%s,%s=%s,%s=%s",
 				LabelTalosVersion, talosVersion,
 				LabelTalosSchematic, schematicID,
+				LabelTalosCluster, clusterName,
 			),
 		},
 	})
@@ -151,9 +155,11 @@ func (sm *SnapshotManager) findExistingSnapshot(
 		return 0, fmt.Errorf("failed to look up Talos snapshot: %w", err)
 	}
 
-	if len(images) == 0 {
-		return 0, nil
+	for _, image := range images {
+		if image.Status == hcloud.ImageStatusAvailable {
+			return image.ID, nil
+		}
 	}
 
-	return images[0].ID, nil
+	return 0, nil
 }

@@ -2,10 +2,10 @@
 package hetzner
 
 import (
-"io"
-"time"
+	"io"
+	"time"
 
-"github.com/hetznercloud/hcloud-go/v2/hcloud"
+	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 )
 
 // FirewallRulesMatchForTest exports firewallRulesMatch for testing.
@@ -26,21 +26,21 @@ var ShouldDisablePlacementForTest = shouldDisablePlacement
 // CalculateRetryDelayForTest exposes calculateRetryDelay for testing via a nil-client provider.
 // Only the attempt number matters; the client field is unused by this method.
 func CalculateRetryDelayForTest(attempt int) time.Duration {
-p := &Provider{}
+	p := &Provider{}
 
-return p.calculateRetryDelay(attempt)
+	return p.calculateRetryDelay(attempt)
 }
 
 // NewSnapshotManagerWithUploaderForTest creates a SnapshotManager with a custom uploader,
 // allowing tests to inject a mock without hitting real Hetzner upload infrastructure.
 func NewSnapshotManagerWithUploaderForTest(
-hcloudClient *hcloud.Client,
-uploader snapshotUploader,
-logWriter io.Writer,
+	hcloudClient *hcloud.Client,
+	uploader snapshotUploader,
+	logWriter io.Writer,
 ) *SnapshotManager {
-return &SnapshotManager{
-hcloudClient: hcloudClient,
-uploader:     uploader,
-logWriter:    logWriter,
-}
+	return &SnapshotManager{
+		hcloudClient: hcloudClient,
+		uploader:     uploader,
+		logWriter:    logWriter,
+	}
 }

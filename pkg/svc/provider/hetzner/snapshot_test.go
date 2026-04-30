@@ -89,6 +89,7 @@ func TestSnapshotManager_EnsureTalosSnapshot_ExistingFound(t *testing.T) {
 					Labels: map[string]string{
 						"ksail.io/talos-version":   version,
 						"ksail.io/talos-schematic": schematic,
+						"ksail.io/cluster":         clusterName,
 					},
 					Type:   "snapshot",
 					Status: "available",
@@ -325,4 +326,57 @@ func TestSnapshotManager_TalosImageURL(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "factory.talos.dev", parsed.Host)
 	assert.Equal(t, ".raw.xz", rawURL[len(rawURL)-7:])
+}
+
+func TestSnapshotManager_EnsureTalosSnapshot_SkipsNonAvailableSnapshot(t *testing.T) {
+	t.Parallel()
+
+	const (
+		clusterName = "test-cluster"
+		version     = "v1.9.0"
+		schematic   = "abc123"
+		builtID     = int64(77)
+	)
+
+	mux := http.NewServeMux()
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	// Simulate a snapshot in "creating" state — must not be returned as usable.
+	mux.HandleFunc("/images", func(responseWriter http.ResponseWriter, _ *http.Request) {
+		responseWriter.Header().Set("Content-Type", "application/json")
+
+		resp := hcloudImageListResponse{
+			Images: []hcloudImageSchema{
+				{
+					ID:     42,
+					Type:   "snapshot",
+					Status: "creating",
+					Labels: map[string]string{
+						"ksail.io/talos-version":   version,
+						"ksail.io/talos-schematic": schematic,
+						"ksail.io/cluster":         clusterName,
+					},
+				},
+			},
+		}
+		_, _ = responseWriter.Write(marshalJSON(t, resp))
+	})
+
+	client := newTestHcloudClient(srv.URL)
+	uploader := &mockUploader{image: &hcloudtest.Image{ID: builtID}}
+
+	var logBuf bytes.Buffer
+
+	sm := hetzner.NewSnapshotManagerWithUploaderForTest(client, uploader, &logBuf)
+
+	gotID, err := sm.EnsureTalosSnapshot(context.Background(), clusterName, version, schematic)
+
+	require.NoError(t, err)
+	assert.Equal(t, builtID, gotID)
+	assert.True(
+		t,
+		uploader.called,
+		"Upload should have been called when existing snapshot is not available",
+	)
 }
