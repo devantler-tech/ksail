@@ -1,22 +1,49 @@
 package gatekeeperinstaller
 
 import (
+	"context"
+	"fmt"
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/installer/internal/helmutil"
 )
 
+// defaultWebhookReadinessTimeout is the polling deadline used for the post-install
+// ValidatingWebhookConfiguration caBundle readiness wait when no explicit timeout
+// is configured. It is sized for slow cluster start-up scenarios and is intentionally
+// larger than helm.ContextTimeoutBuffer, which is slack for Helm's own kstatus wait.
+const defaultWebhookReadinessTimeout = 7 * time.Minute
+
 // Installer installs or upgrades Gatekeeper.
 //
 // It embeds helmutil.Base to provide standard Helm chart lifecycle management.
+// After the Helm install succeeds it polls the ValidatingWebhookConfiguration
+// until every webhook entry has a non-empty caBundle, ensuring Gatekeeper's
+// admission webhook is fully initialised before workloads are deployed.
 type Installer struct {
 	*helmutil.Base
+
+	kubeconfig  string
+	kubeContext string
+	timeout     time.Duration
 }
 
 // NewInstaller creates a new Gatekeeper installer instance.
-func NewInstaller(client helm.Interface, timeout time.Duration) *Installer {
+//
+// A non-empty kubeconfig is required for the post-install webhook-readiness
+// wait. kubeContext is optional; if empty, the current context is used. Pass
+// an empty kubeconfig to disable webhook waiting (tests or environments
+// without cluster access).
+func NewInstaller(
+	client helm.Interface,
+	kubeconfig, kubeContext string,
+	timeout time.Duration,
+) *Installer {
 	return &Installer{
+		kubeconfig:  kubeconfig,
+		kubeContext: kubeContext,
+		timeout:     timeout,
 		Base: helmutil.NewBase(
 			"gatekeeper",
 			client,
@@ -56,4 +83,56 @@ func NewInstaller(client helm.Interface, timeout time.Duration) *Installer {
 			},
 		),
 	}
+}
+
+// Install runs the Helm chart install and then waits for Gatekeeper's
+// ValidatingWebhookConfiguration to have all caBundle fields populated.
+//
+// Helm reports success once the pods are Running/Ready, but the Gatekeeper
+// cert-controller injects the caBundle asynchronously. Any workload pod
+// created before the caBundle is set may experience a readiness-probe
+// context-cancellation error because the API server forwards the admission
+// request to an endpoint that has not yet completed its TLS handshake setup.
+//
+// If kubeconfig is empty (e.g. in unit tests), the webhook-readiness wait is
+// skipped and only the Helm install runs.
+func (g *Installer) Install(ctx context.Context) error {
+	// Wrap the entire Install in a single deadline so that the Helm install and
+	// the webhook readiness wait share one budget rather than each receiving a
+	// full g.timeout, which would allow the total to reach ~2×g.timeout.
+	//
+	// Include Helm's timeout buffer in the outer deadline so Base.Install can
+	// retain its own child-context slack for post-apply readiness observation.
+	if g.timeout > 0 {
+		var cancel context.CancelFunc
+
+		ctx, cancel = context.WithTimeout(ctx, g.timeout+helm.ContextTimeoutBuffer)
+		defer cancel()
+	}
+
+	err := g.Base.Install(ctx)
+	if err != nil {
+		return fmt.Errorf("install gatekeeper: %w", err)
+	}
+
+	if g.kubeconfig == "" {
+		return nil
+	}
+
+	// When g.timeout > 0, pass it directly — PollForReadiness takes
+	// min(ctx_remaining, g.timeout), so the poll stays within the outer
+	// deadline. When g.timeout == 0 (no outer deadline was set), fall back
+	// to defaultWebhookReadinessTimeout so the poll is always bounded even
+	// when the caller provides an untimed context.
+	webhookDeadline := g.timeout
+	if webhookDeadline == 0 {
+		webhookDeadline = defaultWebhookReadinessTimeout
+	}
+
+	err = waitForWebhookReadyFn(ctx, g.kubeconfig, g.kubeContext, webhookDeadline)
+	if err != nil {
+		return fmt.Errorf("wait for gatekeeper webhook readiness: %w", err)
+	}
+
+	return nil
 }
