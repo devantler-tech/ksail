@@ -155,7 +155,9 @@ func (f *Factory) addPolicyEngineInstaller(
 	case v1alpha1.PolicyEngineGatekeeper:
 		installers["gatekeeper"] = gatekeeperinstaller.NewInstaller(
 			f.helmClient,
-			f.timeout,
+			f.kubeconfig,
+			f.kubecontext,
+			max(f.timeout, GatekeeperInstallTimeout),
 		)
 	case v1alpha1.PolicyEngineNone:
 		// No policy engine configured

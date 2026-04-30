@@ -110,13 +110,6 @@ func (p *Provisioner) DiffConfig(
 		return nil, ErrMinimumControlPlanes
 	}
 
-	// When node autoscaling is enabled, skip node-count diff entries to avoid
-	// conflicts with the external autoscaler, but still validate the spec above.
-	if newSpec.NodeAutoscaling == v1alpha1.NodeAutoscalingEnabled ||
-		newSpec.Autoscaler.Node.Enabled == v1alpha1.NodeAutoscalerEnabledEnabled {
-		return result, nil
-	}
-
 	// Compare control plane count
 	if oldSpec.ControlPlanes != newSpec.ControlPlanes {
 		result.InPlaceChanges = append(result.InPlaceChanges, clusterupdate.Change{
@@ -152,16 +145,6 @@ func (p *Provisioner) applyNodeScalingChanges(
 	result *clusterupdate.UpdateResult,
 ) error {
 	if oldSpec == nil || newSpec == nil {
-		return nil
-	}
-
-	// When node autoscaling is enabled, defer scaling to the external autoscaler.
-	if newSpec.NodeAutoscaling == v1alpha1.NodeAutoscalingEnabled ||
-		newSpec.Autoscaler.Node.Enabled == v1alpha1.NodeAutoscalerEnabledEnabled {
-		_, _ = fmt.Fprintf(p.logWriter,
-			"  ℹ Node autoscaling is enabled; skipping node scaling for cluster %q\n",
-			clusterName)
-
 		return nil
 	}
 

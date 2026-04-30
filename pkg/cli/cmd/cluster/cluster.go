@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -25,6 +26,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/cli/editor"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/flags"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/kubeconfig"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/kubeconfighook"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/lifecycle"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/setup"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/setup/localregistry"
@@ -1162,6 +1164,7 @@ const (
 	k3sDisableMetricsServerFlag = "--disable=metrics-server"
 	k3sDisableLocalStorageFlag  = "--disable=local-storage"
 	k3sDisableServiceLBFlag     = "--disable=servicelb"
+	k3sDisableTraefikFlag       = "--disable=traefik"
 	k3sFlanelBackendNoneFlag    = "--flannel-backend=none"
 	k3sDisableNetworkPolicyFlag = "--disable-network-policy"
 )
@@ -1503,6 +1506,8 @@ func maybeDisableK3dFeature(
 // setupK3dCNI configures K3d to disable flannel and network policy when a non-default
 // CNI (Cilium or Calico) is selected. Without this, K3s starts with flannel enabled,
 // causing conflicts when the custom CNI is installed post-creation.
+// When Cilium is selected, K3s's built-in Traefik is also disabled because Cilium
+// installs Gateway API CRDs that conflict with Traefik's CRD ownership on install.
 func setupK3dCNI(clusterCfg *v1alpha1.Cluster, k3dConfig *v1alpha5.SimpleConfig) {
 	if clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionK3s || k3dConfig == nil {
 		return
@@ -1514,7 +1519,7 @@ func setupK3dCNI(clusterCfg *v1alpha1.Cluster, k3dConfig *v1alpha5.SimpleConfig)
 	}
 
 	for _, flag := range []string{k3sFlanelBackendNoneFlag, k3sDisableNetworkPolicyFlag} {
-		if !hasK3sArg(k3dConfig, flag) {
+		if !hasK3sArgForServers(k3dConfig, flag) {
 			k3dConfig.Options.K3sOptions.ExtraArgs = append(
 				k3dConfig.Options.K3sOptions.ExtraArgs,
 				v1alpha5.K3sArgWithNodeFilters{
@@ -1524,12 +1529,49 @@ func setupK3dCNI(clusterCfg *v1alpha1.Cluster, k3dConfig *v1alpha5.SimpleConfig)
 			)
 		}
 	}
+
+	// Cilium installs Gateway API CRDs (e.g. backendtlspolicies.gateway.networking.k8s.io)
+	// that conflict with K3s's built-in Traefik chart which claims ownership of the same CRDs.
+	// Disabling Traefik avoids the CRD ownership conflict and the resulting CrashLoopBackOff.
+	// We check specifically for a server-scoped entry because an agent-scoped entry would not
+	// suppress Traefik on control-plane nodes.
+	if cni == v1alpha1.CNICilium && !hasK3sArgForServers(k3dConfig, k3sDisableTraefikFlag) {
+		k3dConfig.Options.K3sOptions.ExtraArgs = append(
+			k3dConfig.Options.K3sOptions.ExtraArgs,
+			v1alpha5.K3sArgWithNodeFilters{
+				Arg:         k3sDisableTraefikFlag,
+				NodeFilters: []string{"server:*"},
+			},
+		)
+	}
 }
 
 // hasK3sArg checks whether a K3s arg flag is already present in the K3d config.
 func hasK3sArg(k3dConfig *v1alpha5.SimpleConfig, flag string) bool {
 	for _, arg := range k3dConfig.Options.K3sOptions.ExtraArgs {
 		if arg.Arg == flag {
+			return true
+		}
+	}
+
+	return false
+}
+
+// hasK3sArgForServers checks whether a K3s arg flag is already present in the K3d config
+// with node filters that cover all server nodes: either an empty filter list (applies to all
+// nodes) or a filter that is exactly "server:*". A filter like "server:0" is intentionally
+// excluded because it targets only a single server, not all servers.
+func hasK3sArgForServers(k3dConfig *v1alpha5.SimpleConfig, flag string) bool {
+	for _, arg := range k3dConfig.Options.K3sOptions.ExtraArgs {
+		if arg.Arg != flag {
+			continue
+		}
+
+		if len(arg.NodeFilters) == 0 {
+			return true
+		}
+
+		if slices.Contains(arg.NodeFilters, "server:*") {
 			return true
 		}
 	}
@@ -6631,7 +6673,7 @@ func createAndVerifyProvisioner(
 	// and subsequent Helm operations (CNI, GitOps installation).
 	refresher, ok := provisioner.(clusterprovisioner.KubeconfigRefresher)
 	if ok {
-		err = refreshAndVerifyKubeconfig(cmd.Context(), refresher, ctx.ClusterCfg, clusterName)
+		err = refreshAndVerifyKubeconfig(cmd, refresher, ctx.ClusterCfg, clusterName)
 		if err != nil {
 			return nil, err
 		}
@@ -6648,29 +6690,73 @@ func createAndVerifyProvisioner(
 	return provisioner, nil
 }
 
-// refreshAndVerifyKubeconfig invokes the provisioner's KubeconfigRefresher and
-// ensures the kubeconfig file actually exists on disk after the refresh.
-// This is a defense-in-depth guard (regression #4112): if any upstream step
-// silently no-ops the fetch, downstream Helm/GitOps calls would otherwise only
-// surface a cryptic "stat <path>: no such file or directory" warning.
-// Failing here produces a clear, actionable error.
+//nolint:gochecknoglobals // dependency injection for tests
+var isKubeconfigStaleFunc = kubeconfighook.IsKubeconfigStale
+
+// refreshAndVerifyKubeconfig ensures a valid kubeconfig is available for
+// downstream Helm/GitOps operations. The refresh is best-effort:
+//
+//   - If a valid kubeconfig already exists at the expected path (file present and
+//     not rejected by the K8s API with an auth error), the refresh is skipped
+//     entirely. This handles CI runners where a kubeconfig is pre-loaded from a
+//     secret and the talosconfig is absent or empty. Note: the staleness check
+//     considers the kubeconfig valid when the API server is unreachable (timeout,
+//     connection refused) — this is intentional because the credentials may still
+//     be valid and refreshing would also fail in that scenario.
+//
+//   - If the kubeconfig is missing or stale, the provisioner's KubeconfigRefresher
+//     is called. A hard error is returned only when the refresh fails AND no file
+//     exists as a fallback. If a file already existed (even if stale), a warning is
+//     emitted and the command proceeds — the downstream operations may still succeed.
+//
+// The existence-and-validity check uses a lightweight K8s ServerVersion probe
+// (3 s timeout) so it never blocks meaningful work.
 func refreshAndVerifyKubeconfig(
-	ctx context.Context,
+	cmd *cobra.Command,
 	refresher clusterprovisioner.KubeconfigRefresher,
 	clusterCfg *v1alpha1.Cluster,
 	clusterName string,
 ) error {
-	err := refresher.RefreshKubeconfig(ctx, clusterName)
-	if err != nil {
-		return fmt.Errorf("failed to refresh kubeconfig: %w", err)
-	}
-
 	kubeconfigPath, pathErr := kubeconfig.GetKubeconfigPathFromConfig(clusterCfg)
 	if pathErr != nil {
 		return fmt.Errorf("failed to resolve kubeconfig path: %w", pathErr)
 	}
 
+	kubeconfigContext := clusterCfg.Spec.Cluster.Connection.Context
+
 	_, statErr := os.Stat(kubeconfigPath)
+	if statErr != nil && !os.IsNotExist(statErr) {
+		return fmt.Errorf("failed to stat kubeconfig at %q: %w", kubeconfigPath, statErr)
+	}
+
+	fileExists := statErr == nil
+
+	// If the kubeconfig file is present and not stale (i.e., loadable and
+	// not rejected by the API server with an auth error), skip the refresh.
+	// Note: IsKubeconfigStale returns false when the API is unreachable
+	// (timeout, connection refused) — this is intentional because the
+	// kubeconfig credentials may still be valid; refreshing would also fail
+	// in that scenario.
+	if fileExists && !isKubeconfigStaleFunc(kubeconfigPath, kubeconfigContext) {
+		return nil
+	}
+
+	err := refresher.RefreshKubeconfig(cmd.Context(), clusterName)
+	if err != nil {
+		if fileExists {
+			// The kubeconfig file was present before we tried (though possibly
+			// stale). We cannot refresh it (e.g., talosconfig is missing on an
+			// ephemeral CI runner), but the file may still work. Warn and let
+			// the downstream operations decide.
+			notify.Warningf(cmd.OutOrStderr(), "failed to refresh kubeconfig: %v", err)
+
+			return nil
+		}
+
+		return fmt.Errorf("failed to refresh kubeconfig: %w", err)
+	}
+
+	_, statErr = os.Stat(kubeconfigPath)
 	if statErr != nil {
 		return fmt.Errorf(
 			"kubeconfig not available after refresh for %s provider at %q: %w",
