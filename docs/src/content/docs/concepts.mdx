@@ -56,7 +56,7 @@ Creates nodes as Hetzner Cloud servers for production-grade clusters. **Supporte
 
 ### Omni
 
-Manages Talos clusters through the [Sidero Omni](https://www.siderolabs.com/omni/) SaaS platform API. **Supported distributions:** Talos. **Requirements:** a Sidero Omni account, a service account key provided via an environment variable (default name `OMNI_SERVICE_ACCOUNT_KEY`, configurable via `spec.provider.omni.serviceAccountKeyEnvVar`), and an Omni API endpoint configured via `spec.provider.omni.endpoint`. See [Omni Provider](/providers/omni/), [Omni docs](https://omni.siderolabs.com/docs/), and [Talos on Omni](https://omni.siderolabs.com/docs/how-to-guides/how-to-create-a-cluster/).
+Manages Talos clusters through the [Sidero Omni](https://www.siderolabs.com/omni/) SaaS platform API. **Supported distributions:** Talos. **Requirements:** a Sidero Omni account, a service account key, and an Omni API endpoint. See [Omni Provider](/providers/omni/), [Omni docs](https://omni.siderolabs.com/docs/), and [Talos on Omni](https://omni.siderolabs.com/docs/how-to-guides/how-to-create-a-cluster/).
 
 > [!NOTE]
 > Omni provider is only supported with the `Talos` distribution.
@@ -95,10 +95,7 @@ See [documentation](https://docs.cilium.io/), [Gateway API guide](https://docs.c
 
 ## Kubelet CSR Approver
 
-KSail automatically approves Certificate Signing Requests (CSRs) for kubelet serving certificates when metrics-server is enabled. When `serverTLSBootstrap: true` is active, kubelets request proper TLS certificates via CSR instead of self-signed certificates, enabling secure TLS communication with metrics-server. KSail uses different implementations per distribution:
-
-- **Vanilla**: installs [postfinance/kubelet-csr-approver](https://github.com/postfinance/kubelet-csr-approver) via Helm
-- **Talos**: embeds [alex1989hu/kubelet-serving-cert-approver](https://github.com/alex1989hu/kubelet-serving-cert-approver) via `cluster.inlineManifests` during bootstrap
+KSail automatically approves Certificate Signing Requests (CSRs) for kubelet serving certificates when metrics-server is enabled. When `serverTLSBootstrap: true` is active, kubelets request proper TLS certificates via CSR instead of self-signed certificates, enabling secure TLS communication with metrics-server. KSail handles this automatically using a distribution-appropriate implementation.
 
 See [TLS bootstrapping](https://kubernetes.io/docs/reference/access-authn-authz/kubelet-tls-bootstrapping/) and [CSRs](https://kubernetes.io/docs/reference/access-authn-authz/certificate-signing-requests/).
 
@@ -157,7 +154,5 @@ Policy engines enforce security, compliance, and best practices through admissio
 
 [Helm](https://helm.sh/) is the package manager for Kubernetes, using charts to define, install, and upgrade applications.
 
-### kstatus Wait Support
-
-KSail uses Helm v4 with [kstatus](https://github.com/kubernetes-sigs/cli-utils/blob/master/pkg/kstatus/README.md)-based waiting ([HIP-0022](https://helm.sh/community/hips/hip-0022/)) for reliable resource readiness checks, including custom resources and status conditions. See [Helm docs](https://helm.sh/docs/) and [Artifact Hub](https://artifacthub.io/).
+KSail uses Helm v4 with kstatus-based waiting for reliable resource readiness checks, including custom resources and status conditions. See [Helm docs](https://helm.sh/docs/) and [Artifact Hub](https://artifacthub.io/).
 
