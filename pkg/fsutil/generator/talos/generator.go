@@ -55,6 +55,19 @@ const (
 //nolint:lll // URL cannot be shortened
 const KubeletServingCertApproverManifestURL = "https://raw.githubusercontent.com/alex1989hu/kubelet-serving-cert-approver/main/deploy/standalone-install.yaml"
 
+// DisableDefaultCNIPatchYAML is the Talos machine config patch YAML that disables the
+// default CNI (Flannel). This is the single source of truth for the patch content,
+// shared between the generator (file-based scaffolding) and the runtime config manager
+// (in-memory patch injection when no scaffolded project exists).
+// Required when using an alternative CNI like Cilium or Calico.
+//
+// See: https://docs.siderolabs.com/kubernetes-guides/cni/deploying-cilium
+const DisableDefaultCNIPatchYAML = `cluster:
+  network:
+    cni:
+      name: none
+`
+
 // ExternalCloudProviderPatchYAML is the Talos machine config patch YAML that enables
 // the external cloud provider. This is the single source of truth for the patch content,
 // shared between the generator (file-based scaffolding) and the runtime config manager
@@ -482,13 +495,7 @@ func (g *Generator) generateDisableCNIPatch(
 		return nil
 	}
 
-	patchContent := `cluster:
-  network:
-    cni:
-      name: none
-`
-
-	err := os.WriteFile(patchPath, []byte(patchContent), filePerm)
+	err := os.WriteFile(patchPath, []byte(DisableDefaultCNIPatchYAML), filePerm)
 	if err != nil {
 		return fmt.Errorf("failed to create disable-default-cni patch: %w", err)
 	}

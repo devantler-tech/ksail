@@ -268,6 +268,14 @@ func (m *ConfigManager) cacheTalosConfig() error {
 func (m *ConfigManager) getDefaultTalosPatches() []talosconfigmanager.Patch {
 	var patches []talosconfigmanager.Patch
 
+	// When using a non-default CNI (e.g., Cilium, Calico), disable Talos's built-in
+	// Flannel CNI. Without this patch, Talos installs Flannel which conflicts with the
+	// custom CNI and prevents pods (including kubelet-serving-cert-approver) from
+	// networking correctly.
+	if m.Config.Spec.Cluster.CNI != v1alpha1.CNIDefault && m.Config.Spec.Cluster.CNI != "" {
+		patches = append(patches, disableDefaultCNIPatch())
+	}
+
 	// When metrics-server is enabled on Talos, we need two patches:
 	// 1. Enable kubelet certificate rotation (rotate-server-certificates: true)
 	// 2. Install kubelet-serving-cert-approver via inlineManifests to approve the CSRs
@@ -292,6 +300,17 @@ func (m *ConfigManager) getDefaultTalosPatches() []talosconfigmanager.Patch {
 	}
 
 	return patches
+}
+
+// disableDefaultCNIPatch returns a Talos machine config patch that disables the default
+// CNI (Flannel). Used for runtime injection when no scaffolded project exists (init=false)
+// and a non-default CNI (Cilium, Calico) is requested.
+func disableDefaultCNIPatch() talosconfigmanager.Patch {
+	return talosconfigmanager.Patch{
+		Path:    "disable-default-cni",
+		Scope:   talosconfigmanager.PatchScopeCluster,
+		Content: []byte(talosgenerator.DisableDefaultCNIPatchYAML),
+	}
 }
 
 // kubeletCertRotationAndApproverPatches returns the patches for enabling kubelet
