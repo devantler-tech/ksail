@@ -273,7 +273,11 @@ func (p *Provider) DeleteNodes(ctx context.Context, clusterName string) error {
 
 // DeleteAutoscalerNodes deletes all servers created by the Kubernetes Cluster
 // Autoscaler for the given cluster. Autoscaler-managed servers are identified
-// by the hcloud/node-group label matching one of the configured pool names.
+// by the hcloud/node-group label matching one of the configured pool names AND
+// by membership in the cluster's private network (<clusterName>-network).
+//
+// The network guard prevents accidental cross-cluster deletion when pool names
+// are reused across clusters in the same Hetzner project.
 //
 // The method is idempotent: servers that have already been deleted are silently
 // skipped. If poolNames is empty, the method returns nil without making any API
@@ -291,6 +295,8 @@ func (p *Provider) DeleteAutoscalerNodes(
 		return nil
 	}
 
+	networkName := clusterName + NetworkSuffix
+
 	for _, poolName := range poolNames {
 		labelSelector := fmt.Sprintf("%s=%s", LabelAutoscalerNodeGroup, poolName)
 
@@ -300,6 +306,13 @@ func (p *Provider) DeleteAutoscalerNodes(
 		}
 
 		for _, server := range servers {
+			// Guard: only delete servers that belong to this cluster's network to
+			// avoid accidentally deleting servers from another cluster that
+			// happens to use the same pool name in the same Hetzner project.
+			if !serverInNetwork(server, networkName) {
+				continue
+			}
+
 			_, _, deleteErr := p.client.Server.DeleteWithResult(ctx, server)
 			if deleteErr != nil {
 				var hcloudErr *hcloud.Error
@@ -314,6 +327,18 @@ func (p *Provider) DeleteAutoscalerNodes(
 	}
 
 	return nil
+}
+
+// serverInNetwork reports whether the given server is attached to the named
+// private network.
+func serverInNetwork(server *hcloud.Server, networkName string) bool {
+	for _, privateNet := range server.PrivateNet {
+		if privateNet.Network != nil && privateNet.Network.Name == networkName {
+			return true
+		}
+	}
+
+	return false
 }
 
 // GetClusterStatus returns the provider-level status of a Hetzner Cloud cluster.

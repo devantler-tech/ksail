@@ -299,15 +299,8 @@ func (p *Provisioner) deleteHetznerCluster(ctx context.Context, clusterName stri
 		return err
 	}
 
-	// Delete autoscaler-managed nodes first, before checking KSail-managed nodes,
-	// so that they are cleaned up even if KSail-managed nodes are already gone.
-	if len(p.hetznerOpts.AutoscalerNodePoolNames) > 0 {
-		if deleteErr := hetznerProv.DeleteAutoscalerNodes(ctx, clusterName, p.hetznerOpts.AutoscalerNodePoolNames); deleteErr != nil {
-			return fmt.Errorf("failed to delete autoscaler nodes: %w", deleteErr)
-		}
-	}
-
-	// Check if cluster exists
+	// Verify cluster exists before any destructive action to avoid
+	// accidentally deleting servers when the cluster name is wrong.
 	exists, err := hetznerProv.NodesExist(ctx, clusterName)
 	if err != nil {
 		return fmt.Errorf("failed to check if cluster exists: %w", err)
@@ -315,6 +308,16 @@ func (p *Provisioner) deleteHetznerCluster(ctx context.Context, clusterName stri
 
 	if !exists {
 		return fmt.Errorf("%w: %s", clustererr.ErrClusterNotFound, clusterName)
+	}
+
+	// Delete autoscaler-managed nodes before KSail-managed infrastructure.
+	if len(p.hetznerOpts.AutoscalerNodePoolNames) > 0 {
+		deleteErr := hetznerProv.DeleteAutoscalerNodes(
+			ctx, clusterName, p.hetznerOpts.AutoscalerNodePoolNames,
+		)
+		if deleteErr != nil {
+			return fmt.Errorf("failed to delete autoscaler nodes: %w", deleteErr)
+		}
 	}
 
 	// Delete all nodes and infrastructure

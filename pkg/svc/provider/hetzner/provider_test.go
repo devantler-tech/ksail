@@ -394,7 +394,9 @@ func TestDeleteAutoscalerNodes_NilClient(t *testing.T) {
 	t.Parallel()
 
 	prov := hetzner.NewProvider(nil)
-	err := prov.DeleteAutoscalerNodes(context.Background(), "my-cluster", []string{"my-cluster-workers"})
+	err := prov.DeleteAutoscalerNodes(
+		context.Background(), "my-cluster", []string{"my-cluster-workers"},
+	)
 
 	require.ErrorIs(t, err, provider.ErrProviderUnavailable)
 }
