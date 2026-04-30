@@ -27,6 +27,19 @@ const (
 	LabelAutoscalerNodeGroup = "hcloud/node-group"
 )
 
+// Label constants for Talos snapshot images.
+// These use the ksail.io/ prefix to distinguish them from server/infrastructure labels.
+const (
+	// LabelTalosVersion identifies the Talos version of the snapshot image.
+	LabelTalosVersion = "ksail.io/talos-version"
+
+	// LabelTalosSchematic identifies the Talos factory schematic ID of the snapshot image.
+	LabelTalosSchematic = "ksail.io/talos-schematic"
+
+	// LabelTalosCluster identifies which cluster created the snapshot image.
+	LabelTalosCluster = "ksail.io/cluster"
+)
+
 // Node type values for LabelNodeType.
 const (
 	// NodeTypeControlPlane indicates a control-plane node.
