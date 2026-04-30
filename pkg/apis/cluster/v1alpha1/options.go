@@ -125,6 +125,12 @@ type OptionsHetzner struct {
 	// independent of the Hetzner Cloud Firewall.
 	// See: https://www.talos.dev/latest/talos-guides/network/ingress-firewall/
 	IngressFirewall IngressFirewall `default:"Enabled" json:"ingressFirewall,omitzero"`
+	// AutoscalerNodePoolNames lists the node-group names configured in the
+	// Kubernetes Cluster Autoscaler for this cluster. When non-empty, KSail
+	// deletes servers labelled with hcloud/node-group=<name> during cluster
+	// deletion so that autoscaler-managed nodes are cleaned up alongside
+	// KSail-managed nodes.
+	AutoscalerNodePoolNames []string `json:"autoscalerNodePoolNames,omitzero"`
 }
 
 // OptionsOmni defines options specific to the Sidero Omni provider.
