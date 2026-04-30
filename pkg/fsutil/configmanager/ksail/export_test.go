@@ -2,6 +2,7 @@
 package configmanager
 
 import (
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
 	mapstructure "github.com/go-viper/mapstructure/v2"
 )
@@ -32,3 +33,16 @@ type Patch = talosconfigmanager.Patch
 
 // MigrateDeprecatedNodeCountsForTest exposes migrateDeprecatedNodeCounts for testing.
 var MigrateDeprecatedNodeCountsForTest = migrateDeprecatedNodeCounts
+
+// ExpectedDistributionConfigNameForTest exports expectedDistributionConfigName for testing.
+func ExpectedDistributionConfigNameForTest(distribution v1alpha1.Distribution) string {
+	return expectedDistributionConfigName(distribution)
+}
+
+// DistributionConfigIsOppositeDefaultForTest exports distributionConfigIsOppositeDefault for testing.
+func DistributionConfigIsOppositeDefaultForTest(
+	current string,
+	distribution v1alpha1.Distribution,
+) bool {
+	return distributionConfigIsOppositeDefault(current, distribution)
+}
