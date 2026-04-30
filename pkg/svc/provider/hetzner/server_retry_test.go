@@ -1,6 +1,7 @@
 package hetzner_test
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -8,6 +9,9 @@ import (
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"github.com/stretchr/testify/assert"
 )
+
+// errNonHcloud is a non-hcloud error used in server_retry tests.
+var errNonHcloud = errors.New("non-hcloud error")
 
 func TestShouldRetryError(t *testing.T) { //nolint:funlen // Table-driven test with many cases
 	t.Parallel()
@@ -24,7 +28,7 @@ func TestShouldRetryError(t *testing.T) { //nolint:funlen // Table-driven test w
 		},
 		{
 			name:      "NonHcloudError",
-			err:       errTest,
+			err:       errNonHcloud,
 			wantRetry: false,
 		},
 		{
@@ -109,7 +113,7 @@ func TestShouldDisablePlacement(t *testing.T) { //nolint:funlen // Table-driven 
 		},
 		{
 			name:             "NonPlacementError",
-			err:              errTest,
+			err:              errNonHcloud,
 			allowFallback:    true,
 			placementGroupID: 123,
 			wantDisable:      false,
@@ -156,27 +160,27 @@ func TestCalculateRetryDelay(t *testing.T) {
 		{
 			name:      "Attempt1_BaseDelay",
 			attempt:   1,
-			wantDelay: 2 * time.Second, // 2s * 2^0
+			wantDelay: hetzner.DefaultRetryBaseDelay, // base * 2^0
 		},
 		{
 			name:      "Attempt2_Doubled",
 			attempt:   2,
-			wantDelay: 4 * time.Second, // 2s * 2^1
+			wantDelay: hetzner.DefaultRetryBaseDelay * 2, // base * 2^1
 		},
 		{
 			name:      "Attempt3_Quadrupled",
 			attempt:   3,
-			wantDelay: 8 * time.Second, // 2s * 2^2
+			wantDelay: hetzner.DefaultRetryBaseDelay * 4, // base * 2^2
 		},
 		{
 			name:      "Attempt4_CappedAtMax",
 			attempt:   4,
-			wantDelay: 10 * time.Second, // 2s * 2^3 = 16s, capped at 10s
+			wantDelay: hetzner.DefaultRetryMaxDelay, // base * 2^3 = 16s > max, capped
 		},
 		{
 			name:      "Attempt10_StillCapped",
 			attempt:   10,
-			wantDelay: 10 * time.Second, // always capped at max
+			wantDelay: hetzner.DefaultRetryMaxDelay, // always capped at max
 		},
 	}
 
