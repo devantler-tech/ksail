@@ -374,13 +374,19 @@ func ValidateAutoscalerConfig(
 		poolCapacity += pool.Max
 	}
 
-	total := cluster.ControlPlanes + cluster.Workers + poolCapacity
+	effectivePoolCapacity := poolCapacity
+	if autoscaler.MaxNodesTotal > 0 && autoscaler.MaxNodesTotal < effectivePoolCapacity {
+		effectivePoolCapacity = autoscaler.MaxNodesTotal
+	}
+
+	total := cluster.ControlPlanes + cluster.Workers + effectivePoolCapacity
 	if total > serverLimit {
 		return fmt.Errorf(
-			"%w: controlPlanes(%d) + workers(%d) + poolCapacity(%d) = %d exceeds serverLimit(%d)",
+			"%w: controlPlanes(%d) + workers(%d) + effectivePoolCapacity(%d, from poolCapacity(%d)) = %d exceeds serverLimit(%d)",
 			ErrAutoscalerExceedsServerLimit,
 			cluster.ControlPlanes,
 			cluster.Workers,
+			effectivePoolCapacity,
 			poolCapacity,
 			total,
 			serverLimit,

@@ -183,7 +183,8 @@
               "enum": [
                 "Enabled",
                 "Disabled"
-              ]
+              ],
+              "description": "Deprecated. Use autoscaler.node.enabled instead. Do not set both nodeAutoscaling and autoscaler."
             },
             "autoscaler": {
               "properties": {
