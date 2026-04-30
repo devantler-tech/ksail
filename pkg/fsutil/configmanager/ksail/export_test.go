@@ -40,6 +40,9 @@ func ExpectedDistributionConfigNameForTest(distribution v1alpha1.Distribution) s
 }
 
 // DistributionConfigIsOppositeDefaultForTest exports distributionConfigIsOppositeDefault for testing.
-func DistributionConfigIsOppositeDefaultForTest(current string, distribution v1alpha1.Distribution) bool {
+func DistributionConfigIsOppositeDefaultForTest(
+	current string,
+	distribution v1alpha1.Distribution,
+) bool {
 	return distributionConfigIsOppositeDefault(current, distribution)
 }
