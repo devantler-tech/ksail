@@ -66,7 +66,7 @@ require (
 	github.com/hetznercloud/hcloud-go/v2 v2.37.0
 	github.com/invopop/jsonschema v0.14.0
 	github.com/loft-sh/log v0.0.0-20240219160058-26d83ffb46ac
-	github.com/loft-sh/vcluster v0.33.1
+	github.com/loft-sh/vcluster v0.33.2
 	github.com/modelcontextprotocol/go-sdk v1.5.0
 	github.com/siderolabs/gen v0.8.6
 	github.com/siderolabs/go-kubernetes v0.2.36
@@ -484,10 +484,10 @@ require (
 	github.com/liggitt/tabwriter v0.0.0-20181228230101-89fcab3d43de // indirect
 	github.com/lithammer/dedent v1.1.0 // indirect
 	github.com/lmittmann/tint v1.0.7 // indirect
-	github.com/loft-sh/admin-apis v0.0.0-20260219192040-a66d50310311 // indirect
-	github.com/loft-sh/agentapi/v4 v4.8.0-alpha.1 // indirect
+	github.com/loft-sh/admin-apis v0.0.0-20260311181619-506013b79ba0 // indirect
+	github.com/loft-sh/agentapi/v4 v4.8.2-rc.1 // indirect
 	github.com/loft-sh/analytics-client v0.0.0-20240219162240-2f4c64b2494e // indirect
-	github.com/loft-sh/api/v4 v4.8.0-alpha.1 // indirect
+	github.com/loft-sh/api/v4 v4.8.2-rc.1 // indirect
 	github.com/loft-sh/apiserver v0.0.0-20260113122925-594495a02e96 // indirect
 	github.com/loft-sh/image v0.0.0-20250818103249-5e7d53b59343 // indirect
 	github.com/loft-sh/utils v0.0.29 // indirect
