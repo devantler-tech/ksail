@@ -316,17 +316,7 @@ func ValidateAutoscalerConfig(cluster *ClusterSpec, provider *ProviderSpec) erro
 		serverLimit = DefaultHetznerServerLimit
 	}
 
-	var poolCapacity int32
-	for _, pool := range autoscaler.Pools {
-		poolCapacity += pool.Max
-	}
-
-	// maxNodesTotal, when set, caps the autoscaler's total node count regardless of
-	// individual pool.Max values. Use the tighter of the two as the effective capacity.
-	effectivePoolCapacity := poolCapacity
-	if autoscaler.MaxNodesTotal > 0 && autoscaler.MaxNodesTotal < poolCapacity {
-		effectivePoolCapacity = autoscaler.MaxNodesTotal
-	}
+	effectivePoolCapacity := autoscalerEffectiveCapacity(autoscaler.Pools, autoscaler.MaxNodesTotal)
 
 	total := cluster.ControlPlanes + cluster.Workers + effectivePoolCapacity
 	if total > serverLimit {
@@ -342,4 +332,20 @@ func ValidateAutoscalerConfig(cluster *ClusterSpec, provider *ProviderSpec) erro
 	}
 
 	return nil
+}
+
+// autoscalerEffectiveCapacity returns the effective autoscaler pool capacity as the tighter of
+// sum(pool.Max) and maxNodesTotal (when maxNodesTotal > 0 and less than the pool sum).
+func autoscalerEffectiveCapacity(pools []NodePool, maxNodesTotal int32) int32 {
+	var poolCapacity int32
+
+	for _, pool := range pools {
+		poolCapacity += pool.Max
+	}
+
+	if maxNodesTotal > 0 && maxNodesTotal < poolCapacity {
+		return maxNodesTotal
+	}
+
+	return poolCapacity
 }
