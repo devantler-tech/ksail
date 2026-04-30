@@ -22,5 +22,6 @@ var ShouldDisablePlacementForTest = shouldDisablePlacement
 // Only the attempt number matters; the client field is unused by this method.
 func CalculateRetryDelayForTest(attempt int) time.Duration {
 	p := &Provider{}
+
 	return p.calculateRetryDelay(attempt)
 }

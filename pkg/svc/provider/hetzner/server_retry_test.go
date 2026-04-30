@@ -13,9 +13,9 @@ func TestShouldRetryError(t *testing.T) { //nolint:funlen // Table-driven test w
 	t.Parallel()
 
 	tests := []struct {
-		name        string
-		err         error
-		wantRetry   bool
+		name      string
+		err       error
+		wantRetry bool
 	}{
 		{
 			name:      "NilError",
@@ -135,7 +135,11 @@ func TestShouldDisablePlacement(t *testing.T) { //nolint:funlen // Table-driven 
 			t.Parallel()
 
 			opts := hetzner.ServerRetryOpts{AllowPlacementFallback: testCase.allowFallback}
-			got := hetzner.ShouldDisablePlacementForTest(testCase.err, opts, testCase.placementGroupID)
+			got := hetzner.ShouldDisablePlacementForTest(
+				testCase.err,
+				opts,
+				testCase.placementGroupID,
+			)
 			assert.Equal(t, testCase.wantDisable, got)
 		})
 	}
