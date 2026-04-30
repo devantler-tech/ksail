@@ -148,7 +148,7 @@ jobs:
         uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3.1.1
         id: generate-token
         with:
-          app-id: ${{ vars.APP_ID }}
+          client-id: ${{ vars.APP_CLIENT_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
 
       - name: 📑 Checkout main
@@ -259,11 +259,11 @@ jobs:
 
       - name: 📥 Install mcp-publisher
         run: |
-          curl -sLO "https://github.com/modelcontextprotocol/registry/releases/download/v1.5.0/mcp-publisher_linux_amd64.tar.gz"
-          curl -sLO "https://github.com/modelcontextprotocol/registry/releases/download/v1.5.0/registry_1.5.0_checksums.txt"
-          grep "mcp-publisher_linux_amd64.tar.gz$" registry_1.5.0_checksums.txt | sha256sum --check
+          curl -sLO "https://github.com/modelcontextprotocol/registry/releases/download/v1.7.6/mcp-publisher_linux_amd64.tar.gz"
+          curl -sLO "https://github.com/modelcontextprotocol/registry/releases/download/v1.7.6/registry_1.7.6_checksums.txt"
+          grep "mcp-publisher_linux_amd64.tar.gz$" registry_1.7.6_checksums.txt | sha256sum --check
           tar -xzf mcp-publisher_linux_amd64.tar.gz mcp-publisher
-          rm mcp-publisher_linux_amd64.tar.gz registry_1.5.0_checksums.txt
+          rm mcp-publisher_linux_amd64.tar.gz registry_1.7.6_checksums.txt
 
       - name: 🔐 Authenticate with MCP Registry
         run: ./mcp-publisher login github-oidc

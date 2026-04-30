@@ -6,8 +6,8 @@ inputs:
   working-directory:
     description: Directory containing package.json (e.g., 'docs' or 'vsce').
     required: true
-  app-id:
-    description: GitHub App ID for generating commit token.
+  client-id:
+    description: GitHub App Client ID for generating commit token.
     required: false
   app-private-key:
     description: GitHub App private key for generating commit token.
@@ -37,11 +37,11 @@ runs:
   using: composite
   steps:
     - name: 🔑 Generate GitHub App Token
-      uses: actions/create-github-app-token@29824e69f54612133e76f7eaac726eef6c875baf # v2.2.1
+      uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3.1.1
       id: generate-token
-      if: ${{ inputs.app-id != '' && inputs.app-private-key != '' }}
+      if: ${{ inputs.client-id != '' && inputs.app-private-key != '' }}
       with:
-        app-id: ${{ inputs.app-id }}
+        client-id: ${{ inputs.client-id }}
         private-key: ${{ inputs.app-private-key }}
 
     - name: 📄 Checkout
