@@ -66,77 +66,9 @@ Commit types: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `perf`. Open a
 
 ## Coding Standards
 
-### Go Style
+For Go style, naming conventions, error handling, testing patterns, and implementation guidelines, see [CONTRIBUTING.md § Code Style](https://github.com/devantler-tech/ksail/blob/main/CONTRIBUTING.md#code-style).
 
-Follow [Effective Go](https://go.dev/doc/effective_go). Use `gofmt` for formatting, `goimports` for import order, and keep lines under 100 characters (enforced by golines).
-
-### Naming Conventions
-
-| Entity | Convention | Example |
-|--------|-----------|---------|
-| Packages | Lowercase, singular | `provider`, `installer` |
-| Types, Interfaces | PascalCase; interfaces often end in `-er` | `KindClusterProvisioner`, `Provider` |
-| Functions/Methods | PascalCase (exported), camelCase (unexported) | `Create`, `validateConfig` |
-| Variables, Constants | camelCase (unexported), PascalCase (exported) | `clusterName`, `DefaultTimeout` |
-
-### Error Handling
-
-Return errors explicitly (no panic in library code). Wrap errors with `fmt.Errorf("context: %w", err)` and use custom error types where appropriate. `golangci-lint` enforces that all errors are checked.
-
-### Security: Path Handling
-
-All user-supplied file path arguments in CLI commands must be canonicalized before use to resolve symlinks and prevent path-escape attacks. See [CONTRIBUTING.md](https://github.com/devantler-tech/ksail/blob/main/CONTRIBUTING.md) for the required pattern.
-
-### Testing Patterns
-
-#### Unit Tests
-
-Use table-driven tests with `t.Parallel()`:
-
-````go
-func TestMyFunction(t *testing.T) {
-    t.Parallel()
-    tests := []struct{ name string; wantErr bool }{
-        {"valid", false}, {"invalid", true},
-    }
-    for _, tc := range tests {
-        t.Run(tc.name, func(t *testing.T) { t.Parallel(); /* test body */ })
-    }
-}
-````
-
-#### Mocking with Testify
-
-KSail uses [mockery](https://vektra.github.io/mockery/) for generating mocks. Call `mockProv.AssertExpectations(t)` at the end of each test to verify all expected calls were made. For DI override patterns and integration test conventions, see [CONTRIBUTING.md](https://github.com/devantler-tech/ksail/blob/main/CONTRIBUTING.md).
-
-#### Benchmarks
-
-Use `for b.Loop()` style (Go 1.26+). PRs are auto-benchmarked against `main`; see [Benchmarks](/benchmarks/). Use `ksail cluster create --benchmark` for per-component timings.
-
-### Documentation
-
-Document all exported types, functions, and constants with complete sentences starting with the name being documented (e.g., `// Provider defines the interface for infrastructure providers.`). When adding features, update the relevant `.mdx` files in `docs/src/content/docs/`, `README.md` if needed, and CLI help text if adding commands.
-
-## Common Development Tasks
-
-All new components follow the same pattern: create a package under the relevant `pkg/svc/` subdirectory, implement the corresponding interface, register in the factory, add tests, and update documentation.
-
-| Task | Notes |
-|------|-------|
-| New Provider | Implement the `Provider` interface and register in the provider factory |
-| New Provisioner | Implement the `Provisioner` interface; add a distribution guide under `docs/src/content/docs/distributions/` |
-| New Installer | Implement the `Installer` interface; add configuration fields to the API types and update the JSON schema |
-
-### Updating Dependencies
-
-````bash
-go get -u ./...                          # update all
-go get -u github.com/some/package@latest # update specific
-go mod tidy && go mod verify             # tidy and verify
-go test ./...                            # verify
-````
-
-### Working on Documentation
+## Working on Documentation
 
 ````bash
 cd docs/
@@ -169,26 +101,9 @@ VSCode users can set breakpoints and press F5 with a `.vscode/launch.json` confi
 | "Import cycle not allowed" | Move shared types to `pkg/apis/` or a utility package. Avoid circular imports. |
 | "Linter failures" | Run `golangci-lint run --fix` to auto-fix. Check `.golangci.yml` for enabled linters; some issues require manual fixes. |
 
-## CI/CD
+## CI/CD and Releases
 
-### GitHub Actions Workflows
-
-- **`ci.yaml`** — Builds and caches the KSail binary, generates schemas/reference docs, validates documentation builds, audits docs/vsce dependencies, packages the VS Code extension, runs system tests, and runs benchmark regression tests (for example via merge queue and `workflow_dispatch`)
-- **`update-skills.yaml`** — Upgrades GitHub Copilot skills daily; opens a PR when updates are available
-- **`release.yaml`** — Creates the next semantic version tag on pushes to main
-- **`cd.yaml`** — Triggered on version tag pushes; runs GoReleaser, publishes the MCP registry entry, deploys documentation to GitHub Pages, publishes the VSCode extension, and opens a Homebrew tap PR
-
-### Agentic Workflows
-
-Five AI-powered workflows run on schedules or triggers (manageable via `gh aw`): `repo-assist`, `daily-workflow-maintenance`, `daily-docs`, `weekly-strategy`, and `ci-doctor`.
-
-## Release Process
-
-Releases are automated via `.goreleaser.yaml`, `.github/workflows/release.yaml` (tagging), and `.github/workflows/cd.yaml` (publishing):
-
-1. **Prepare:** Bump the version, update changelog, and open a PR targeting `main`.
-2. **Merge triggers tagging:** Push to `main` runs `.github/workflows/release.yaml`, which validates the release configuration and creates/pushes the version tag (for example, `v5.x.x`). The same tagging workflow can also be run manually via `workflow_dispatch` on `release.yaml` to create and push a release tag without a new `main` commit.
-3. **Tag-triggered CD:** Any push of a version tag triggers `.github/workflows/cd.yaml`, which publishes the release; see the `cd.yaml` workflow description above for the current list of release outputs and follow-up publishing jobs.
+CI runs on pull requests and merges to `main` (build, test, lint, benchmark regression). Releases are automated — push to `main` triggers tagging, which triggers GoReleaser publishing. For workflow details and the full release process, see [CONTRIBUTING.md](https://github.com/devantler-tech/ksail/blob/main/CONTRIBUTING.md).
 
 ## Getting Help
 
