@@ -2,6 +2,7 @@ package hetzner_test
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -54,6 +55,21 @@ func TestShouldRetryError(t *testing.T) { //nolint:funlen // Table-driven test w
 		{
 			name:      "PlacementError",
 			err:       hcloud.Error{Code: hcloud.ErrorCodePlacementError},
+			wantRetry: true,
+		},
+		{
+			name:      "WrappedConflict",
+			err:       fmt.Errorf("create server: %w", hcloud.Error{Code: hcloud.ErrorCodeConflict}),
+			wantRetry: true,
+		},
+		{
+			name:      "WrappedRateLimit",
+			err:       fmt.Errorf("create server: %w", hcloud.Error{Code: hcloud.ErrorCodeRateLimitExceeded}),
+			wantRetry: true,
+		},
+		{
+			name:      "WrappedPlacementError",
+			err:       fmt.Errorf("create server: %w", hcloud.Error{Code: hcloud.ErrorCodePlacementError}),
 			wantRetry: true,
 		},
 		{
@@ -131,6 +147,27 @@ func TestShouldDisablePlacement(t *testing.T) { //nolint:funlen // Table-driven 
 			allowFallback:    true,
 			placementGroupID: 123,
 			wantDisable:      false,
+		},
+		{
+			name:             "ResourceUnavailable_WithFallbackAndGroup",
+			err:              hcloud.Error{Code: hcloud.ErrorCodeResourceUnavailable},
+			allowFallback:    true,
+			placementGroupID: 123,
+			wantDisable:      true,
+		},
+		{
+			name:             "WrappedPlacementError_WithFallbackAndGroup",
+			err:              fmt.Errorf("create server: %w", hcloud.Error{Code: hcloud.ErrorCodePlacementError}),
+			allowFallback:    true,
+			placementGroupID: 123,
+			wantDisable:      true,
+		},
+		{
+			name:             "WrappedResourceUnavailable_WithFallbackAndGroup",
+			err:              fmt.Errorf("create server: %w", hcloud.Error{Code: hcloud.ErrorCodeResourceUnavailable}),
+			allowFallback:    true,
+			placementGroupID: 123,
+			wantDisable:      true,
 		},
 	}
 
