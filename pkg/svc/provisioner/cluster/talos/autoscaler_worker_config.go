@@ -1,9 +1,11 @@
 package talosprovisioner
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"fmt"
+	"maps"
 
 	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
 	"github.com/siderolabs/talos/pkg/machinery/config/types/v1alpha1"
@@ -30,6 +32,10 @@ func GenerateAutoscalerWorkerConfig(workerConfig talosconfig.Provider) ([]byte, 
 	}
 
 	patched, err := workerConfig.PatchV1Alpha1(func(cfg *v1alpha1.Config) error {
+		if cfg.MachineConfig == nil {
+			cfg.MachineConfig = &v1alpha1.MachineConfig{}
+		}
+
 		if cfg.MachineConfig.MachineInstall == nil {
 			cfg.MachineConfig.MachineInstall = &v1alpha1.InstallConfig{}
 		}
@@ -57,8 +63,8 @@ func GenerateAutoscalerWorkerConfig(workerConfig talosconfig.Provider) ([]byte, 
 
 // ApplyAutoscalerConfigSecret creates or updates the cluster-autoscaler-config
 // Secret in kube-system. The Secret holds the Hetzner snapshot image ID and a
-// base64-encoded Talos worker config that the node-autoscaler uses as
-// cloud-init user-data when provisioning new worker nodes.
+// base64-encoded Talos worker config that Kubernetes Cluster Autoscaler uses
+// as cloud-init user-data when provisioning new worker nodes.
 func ApplyAutoscalerConfigSecret(
 	ctx context.Context,
 	kubeclient kubernetes.Interface,
@@ -82,27 +88,76 @@ func ApplyAutoscalerConfigSecret(
 
 	secretsClient := kubeclient.CoreV1().Secrets(autoscalerConfigSecretNamespace)
 
-	_, err := secretsClient.Get(ctx, autoscalerConfigSecretName, metav1.GetOptions{})
+	existing, err := secretsClient.Get(ctx, autoscalerConfigSecretName, metav1.GetOptions{})
 	if err != nil {
 		if !apierrors.IsNotFound(err) {
 			return fmt.Errorf("get autoscaler config secret: %w", err)
 		}
 
-		_, createErr := secretsClient.Create(ctx, secret, metav1.CreateOptions{})
-		if createErr != nil {
-			return fmt.Errorf("create autoscaler config secret: %w", createErr)
+		return createOrUpdateAutoscalerSecretOnConflict(ctx, kubeclient, secret)
+	}
+
+	return updateAutoscalerSecretIfNeeded(ctx, kubeclient, existing, desiredData)
+}
+
+// createOrUpdateAutoscalerSecretOnConflict creates the Secret. If a concurrent
+// caller already created it between the outer Get and this Create, it falls
+// back to a merge-update to stay idempotent.
+func createOrUpdateAutoscalerSecretOnConflict(
+	ctx context.Context,
+	client kubernetes.Interface,
+	secret *corev1.Secret,
+) error {
+	secretsClient := client.CoreV1().Secrets(autoscalerConfigSecretNamespace)
+
+	_, err := secretsClient.Create(ctx, secret, metav1.CreateOptions{})
+	if err != nil {
+		if !apierrors.IsAlreadyExists(err) {
+			return fmt.Errorf("create autoscaler config secret: %w", err)
 		}
 
+		existing, getErr := secretsClient.Get(ctx, autoscalerConfigSecretName, metav1.GetOptions{})
+		if getErr != nil {
+			return fmt.Errorf("get autoscaler config secret after conflict: %w", getErr)
+		}
+
+		return updateAutoscalerSecretIfNeeded(ctx, client, existing, secret.Data)
+	}
+
+	return nil
+}
+
+// updateAutoscalerSecretIfNeeded merges the desired keys into the existing
+// Secret. It skips the update when all desired keys already match to avoid
+// unnecessary API calls. RetryOnConflict handles 409 responses from concurrent
+// updaters.
+func updateAutoscalerSecretIfNeeded(
+	ctx context.Context,
+	client kubernetes.Interface,
+	existing *corev1.Secret,
+	desiredData map[string][]byte,
+) error {
+	if autoscalerSecretDataMatches(existing.Data, desiredData) {
 		return nil
 	}
 
+	secretsClient := client.CoreV1().Secrets(autoscalerConfigSecretNamespace)
+
 	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		latest, getErr := secretsClient.Get(ctx, autoscalerConfigSecretName, metav1.GetOptions{})
-		if getErr != nil {
-			return fmt.Errorf("get autoscaler config secret for update: %w", getErr)
+		latest, err := secretsClient.Get(ctx, autoscalerConfigSecretName, metav1.GetOptions{})
+		if err != nil {
+			return fmt.Errorf("get autoscaler config secret for update: %w", err)
 		}
 
-		latest.Data = desiredData
+		if autoscalerSecretDataMatches(latest.Data, desiredData) {
+			return nil
+		}
+
+		if latest.Data == nil {
+			latest.Data = make(map[string][]byte, len(desiredData))
+		}
+
+		maps.Copy(latest.Data, desiredData)
 		latest.StringData = nil
 
 		_, updateErr := secretsClient.Update(ctx, latest, metav1.UpdateOptions{})
@@ -117,4 +172,16 @@ func ApplyAutoscalerConfigSecret(
 	}
 
 	return nil
+}
+
+// autoscalerSecretDataMatches returns true when every key in desiredData
+// exists in existing with an equal value.
+func autoscalerSecretDataMatches(existing, desiredData map[string][]byte) bool {
+	for k, v := range desiredData {
+		if !bytes.Equal(existing[k], v) {
+			return false
+		}
+	}
+
+	return true
 }

@@ -131,7 +131,27 @@ func TestGenerateAutoscalerWorkerConfig_InstallNilBeforePatch(t *testing.T) {
 	assert.True(t, *rawCfg.MachineConfig.MachineInstall.InstallWipe)
 }
 
-// --- ApplyAutoscalerConfigSecret ---
+func TestGenerateAutoscalerWorkerConfig_NilMachineConfig(t *testing.T) {
+	t.Parallel()
+
+	// Config with nil MachineConfig — the function should initialise it and not panic.
+	provider := taloscontainer.NewV1Alpha1(&v1alpha1.Config{
+		ConfigVersion: "v1alpha1",
+	})
+
+	result, err := talosprovisioner.GenerateAutoscalerWorkerConfig(provider)
+	require.NoError(t, err)
+
+	parsed, err := configloader.NewFromBytes(result)
+	require.NoError(t, err)
+
+	rawCfg := parsed.RawV1Alpha1()
+	require.NotNil(t, rawCfg)
+	require.NotNil(t, rawCfg.MachineConfig)
+	require.NotNil(t, rawCfg.MachineConfig.MachineInstall)
+	require.NotNil(t, rawCfg.MachineConfig.MachineInstall.InstallWipe)
+	assert.True(t, *rawCfg.MachineConfig.MachineInstall.InstallWipe)
+}
 
 func TestApplyAutoscalerConfigSecret_CreatesNewSecret(t *testing.T) {
 	t.Parallel()
@@ -159,6 +179,50 @@ func TestApplyAutoscalerConfigSecret_CreatesNewSecret(t *testing.T) {
 
 	wantEncoded := base64.StdEncoding.EncodeToString(workerConfig)
 	assert.Equal(t, []byte(wantEncoded), secret.Data["hcloud_cloud_init"])
+}
+
+func TestApplyAutoscalerConfigSecret_PreservesExtraKeysOnUpdate(t *testing.T) {
+	t.Parallel()
+
+	existing := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "cluster-autoscaler-config",
+			Namespace: "kube-system",
+		},
+		Data: map[string][]byte{
+			"hcloud_image":      []byte("old-image-id"),
+			"hcloud_cloud_init": []byte("old-config"),
+			"extra_key":         []byte("extra-value"),
+		},
+	}
+	clientset := fake.NewClientset(existing)
+
+	snapshotID := "111111111"
+	workerConfig := []byte("machine:\n  type: worker\n")
+
+	err := talosprovisioner.ApplyAutoscalerConfigSecret(
+		context.Background(),
+		clientset,
+		snapshotID,
+		workerConfig,
+	)
+	require.NoError(t, err)
+
+	secret, err := clientset.CoreV1().Secrets("kube-system").Get(
+		context.Background(),
+		"cluster-autoscaler-config",
+		metav1.GetOptions{},
+	)
+	require.NoError(t, err)
+
+	// Desired keys must be updated.
+	assert.Equal(t, []byte(snapshotID), secret.Data["hcloud_image"])
+
+	wantEncoded := base64.StdEncoding.EncodeToString(workerConfig)
+	assert.Equal(t, []byte(wantEncoded), secret.Data["hcloud_cloud_init"])
+
+	// Extra key must be preserved (merge, not replace).
+	assert.Equal(t, []byte("extra-value"), secret.Data["extra_key"])
 }
 
 func TestApplyAutoscalerConfigSecret_UpdatesExistingSecret(t *testing.T) {
