@@ -405,6 +405,12 @@
                     "Disabled"
                   ]
                 },
+                "autoscalerNodePoolNames": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
                 "serverLimit": {
                   "type": "integer",
                   "minimum": 0,
