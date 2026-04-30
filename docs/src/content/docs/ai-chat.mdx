@@ -69,17 +69,11 @@ Commands that accept arguments show an **option picker** after selection (e.g., 
 
 Press **Tab** to cycle between three modes, or use `/mode <interactive|plan|autopilot>` to switch directly:
 
-### Interactive Mode (`</>`)
-
-Executes both read and write operations. Write operations (create, modify, delete) require explicit confirmation. Use for cluster operations, deploying workloads, and configuration changes.
-
-### Plan Mode (`≡`)
-
-Blocks all tool execution and provides step-by-step explanations without making changes. Use for learning workflows or reviewing potential changes before execution.
-
-### Autopilot Mode (`⚡`)
-
-Executes all operations — read and write — without interruption. All permission prompts are automatically approved. Use for trusted, repetitive, or fully understood workflows where continuous approval is not needed.
+| Mode | Icon | Read Tools | Write Tools | Best For |
+|------|------|------------|-------------|----------|
+| **Interactive** | `</>` | ✅ Auto | ✅ With approval | Cluster operations, deploying workloads |
+| **Plan** | `≡` | ❌ None | ❌ None | Learning workflows, reviewing changes |
+| **Autopilot** | `⚡` | ✅ Auto | ✅ Auto (no prompts) | Trusted or repetitive workflows |
 
 ## Advanced Features
 
@@ -151,16 +145,6 @@ Read and URL operations are auto-approved without a prompt.
 - **F1** — Toggle help overlay
 - **Esc** — Close modals or cancel current operation
 - **Ctrl+C** — Force quit
-
-## Mode Comparison
-
-| Feature | Interactive Mode | Plan Mode | Autopilot Mode |
-|---------|-----------------|-----------|----------------|
-| **Icon** | `</>` | `≡` | `⚡` |
-| **Read Tools** | ✅ Auto | ❌ None | ✅ Auto |
-| **Write Tools** | ✅ With approval | ❌ None | ✅ Auto |
-| **Makes Changes** | Yes (approved) | No | Yes (unattended) |
-| **Best For** | Execution | Learning | Trusted workflows |
 
 ## Configuration
 
