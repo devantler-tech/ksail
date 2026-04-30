@@ -34,112 +34,18 @@ ksail cluster update --dry-run --output json | jq .recreateRequired
 
 ## Node Autoscaling
 
-KSail supports two complementary levels of autoscaling — pod autoscaling (HPA/VPA) and node autoscaling — configured under `spec.cluster.autoscaler`. For Talos × Hetzner, KSail also natively deploys [Cluster Autoscaler](https://github.com/kubernetes/autoscaler/tree/master/cluster-autoscaler) with heterogeneous node pools.
+When an external node autoscaler (such as [Cluster Autoscaler](https://github.com/kubernetes/autoscaler/tree/master/cluster-autoscaler), [Karpenter](https://karpenter.sh/), or [Omni dynamic allocation](https://omni.siderolabs.com/)) manages your node counts, set `spec.cluster.nodeAutoscaling: Enabled` in `ksail.yaml` to prevent `ksail cluster update` from interfering.
 
-### Pod Autoscaling
-
-- **Horizontal Pod Autoscaler (HPA)** — set `spec.cluster.autoscaler.pod.horizontal: Enabled`. Requires `spec.cluster.metricsServer: Enabled` (or distribution-bundled metrics-server).
-- **Vertical Pod Autoscaler (VPA)** — set `spec.cluster.autoscaler.pod.vertical: Enabled`. Installs the [Fairwinds VPA Helm chart](https://github.com/FairwindsOps/charts/tree/master/stable/vpa).
+By default (`Disabled`), KSail reconciles `spec.cluster.controlPlanes` and `spec.cluster.workers` on every `ksail cluster update`. With autoscaling enabled, those diffs are skipped — the external autoscaler is the single source of truth for node counts. `ksail cluster create` is unaffected; initial node counts are still applied on first provision.
 
 ```yaml
-spec:
-  cluster:
-    metricsServer: Enabled
-    autoscaler:
-      pod:
-        horizontal: Enabled
-        vertical: Enabled
-```
-
-### Node Autoscaling Architecture (Talos × Hetzner)
-
-KSail models cluster nodes in two tiers:
-
-| Tier | Managed by | Diffable | Purpose |
-|------|------------|----------|---------|
-| **Baseline nodes** | KSail (`spec.cluster.controlPlanes` / `workers`) | Yes — always diffed on `cluster update` | Control-planes and initial workers; sized for steady-state workloads |
-| **Autoscaler pools** | Cluster Autoscaler (`spec.cluster.autoscaler.node.pools`) | No — additive, compute-only | Burst capacity; provisioned and removed by the autoscaler |
-
-Baseline node counts continue to be diffed and reconciled by `ksail cluster update` even when node autoscaling is enabled. Only autoscaler-managed pool nodes are excluded from KSail's diff engine.
-
-### How It Works (Talos × Hetzner)
-
-When `spec.cluster.autoscaler.node.enabled: Enabled` and `spec.cluster.provider: Hetzner`:
-
-1. **Snapshot lifecycle** — KSail builds a Talos node snapshot in the Hetzner Cloud project that matches the cluster's boot ISO schematic. The snapshot is used by the Cluster Autoscaler to provision new nodes with the correct Talos image.
-2. **Worker config Secret** — KSail generates a stripped Talos machine configuration as a Kubernetes `Secret`. The Cluster Autoscaler presents this config to new nodes during bootstrap.
-3. **Cluster Autoscaler installation** — KSail deploys the [Cluster Autoscaler Helm chart](https://github.com/kubernetes/autoscaler/tree/master/charts/cluster-autoscaler) with the Hetzner cloud provider, wired to the configured node pools.
-
-### Node Pools
-
-Each pool targets a specific Hetzner server type and datacenter location, allowing heterogeneous scaling:
-
-```yaml
-spec:
-  cluster:
-    controlPlanes: 3
-    workers: 2
-    autoscaler:
-      node:
-        enabled: Enabled
-        pools:
-          - name: small-fsn1
-            serverType: cx23
-            location: fsn1
-            min: 0
-            max: 3
-          - name: large-nbg1
-            serverType: cpx51
-            location: nbg1
-            min: 0
-            max: 2
-        maxNodesTotal: 10
-        expander: Price
-        scaleDownUnneededTime: 10m
-  provider:
-    hetzner:
-      serverLimit: 15
-```
-
-KSail validates that `controlPlanes + workers + sum(pool.max) ≤ spec.provider.hetzner.serverLimit` (default `10`) before creating or updating the cluster.
-
-#### Expander strategies
-
-| Value | Behaviour |
-|-------|-----------|
-| `Price` | Selects the cheapest node group |
-| `LeastWaste` (default) | Selects the group with the least idle CPU/memory after scale-up |
-| `LeastNodes` | Selects the group that results in the fewest total nodes |
-| `Random` | Selects a group at random |
-
-### Lifecycle
-
-| Operation | Behaviour |
-|-----------|-----------|
-| `cluster create` | Creates baseline nodes and (when enabled) configures the Talos snapshot, worker Secret, and deploys Cluster Autoscaler |
-| `cluster update` | Diffs and applies baseline node counts; skips autoscaler pool nodes; updates Cluster Autoscaler config when pool definitions change |
-| `cluster delete` | Drains and removes autoscaler-managed nodes before tearing down the cluster; also removes the Talos snapshot from Hetzner Cloud |
-
-> [!NOTE]
-> Node autoscaling for Talos × Hetzner is the only natively supported configuration. For other distributions or providers, set `spec.cluster.autoscaler.node.enabled: Enabled` as the guard (so `cluster update` skips node-count diffs) and install an external autoscaler yourself.
-
-### Migrating from `nodeAutoscaling`
-
-`spec.cluster.nodeAutoscaling` is deprecated. On load, KSail automatically migrates it to `spec.cluster.autoscaler.node.enabled`. Update your `ksail.yaml`:
-
-```yaml
-# Before (deprecated)
 spec:
   cluster:
     nodeAutoscaling: Enabled
-
-# After
-spec:
-  cluster:
-    autoscaler:
-      node:
-        enabled: Enabled
 ```
+
+> [!NOTE]
+> Other distributions currently ignore this setting; it is only active for Talos.
 
 ## Version Upgrades
 
