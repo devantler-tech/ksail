@@ -9,6 +9,12 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/installer/internal/helmutil"
 )
 
+// defaultWebhookReadinessTimeout is the polling deadline used for the post-install
+// ValidatingWebhookConfiguration caBundle readiness wait when no explicit timeout
+// is configured. It is sized for slow cluster start-up scenarios and is intentionally
+// larger than helm.ContextTimeoutBuffer, which is slack for Helm's own kstatus wait.
+const defaultWebhookReadinessTimeout = 7 * time.Minute
+
 // Installer installs or upgrades Gatekeeper.
 //
 // It embeds helmutil.Base to provide standard Helm chart lifecycle management.
@@ -116,11 +122,11 @@ func (g *Installer) Install(ctx context.Context) error {
 	// When g.timeout > 0, pass it directly — PollForReadiness takes
 	// min(ctx_remaining, g.timeout), so the poll stays within the outer
 	// deadline. When g.timeout == 0 (no outer deadline was set), fall back
-	// to helm.ContextTimeoutBuffer so the poll is always bounded even when
-	// the caller provides an untimed context.
+	// to defaultWebhookReadinessTimeout so the poll is always bounded even
+	// when the caller provides an untimed context.
 	webhookDeadline := g.timeout
 	if webhookDeadline == 0 {
-		webhookDeadline = helm.ContextTimeoutBuffer
+		webhookDeadline = defaultWebhookReadinessTimeout
 	}
 
 	err = waitForWebhookReadyFn(ctx, g.kubeconfig, g.kubeContext, webhookDeadline)

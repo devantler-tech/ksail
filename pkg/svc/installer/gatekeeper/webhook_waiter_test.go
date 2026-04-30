@@ -36,7 +36,7 @@ func TestWaitForGatekeeperWebhookReadyNotFoundThenReady(t *testing.T) {
 	createErrCh := make(chan error, 1)
 
 	go func() {
-		time.Sleep(500 * time.Millisecond)
+		time.Sleep(50 * time.Millisecond)
 
 		cfg := readyGatekeeperWebhookConfig()
 
@@ -47,7 +47,7 @@ func TestWaitForGatekeeperWebhookReadyNotFoundThenReady(t *testing.T) {
 	}()
 
 	err := gatekeeperinstaller.WaitForGatekeeperWebhookReady(
-		context.Background(), fakeClientset, 10*time.Second,
+		context.Background(), fakeClientset, 3*time.Second,
 	)
 
 	require.NoError(t, err)
@@ -66,18 +66,33 @@ func TestWaitForGatekeeperWebhookReadyCaBundlePopulatedAfterDelay(t *testing.T) 
 	updateErrCh := make(chan error, 1)
 
 	go func() {
-		time.Sleep(500 * time.Millisecond)
+		time.Sleep(50 * time.Millisecond)
 
-		cfg := readyGatekeeperWebhookConfig()
+		desired := readyGatekeeperWebhookConfig()
 
-		_, err := fakeClientset.AdmissionregistrationV1().
+		cfg, err := fakeClientset.AdmissionregistrationV1().
+			ValidatingWebhookConfigurations().
+			Get(context.Background(), desired.Name, metav1.GetOptions{})
+		if err != nil {
+			updateErrCh <- err
+
+			return
+		}
+
+		for i := range cfg.Webhooks {
+			if i < len(desired.Webhooks) {
+				cfg.Webhooks[i].ClientConfig.CABundle = desired.Webhooks[i].ClientConfig.CABundle
+			}
+		}
+
+		_, err = fakeClientset.AdmissionregistrationV1().
 			ValidatingWebhookConfigurations().
 			Update(context.Background(), cfg, metav1.UpdateOptions{})
 		updateErrCh <- err
 	}()
 
 	err := gatekeeperinstaller.WaitForGatekeeperWebhookReady(
-		context.Background(), fakeClientset, 10*time.Second,
+		context.Background(), fakeClientset, 3*time.Second,
 	)
 
 	require.NoError(t, err)
