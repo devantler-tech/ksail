@@ -414,4 +414,76 @@ func TestGetDefaultTalosPatches(t *testing.T) {
 		assert.Contains(t, string(patches[1].Content), "kubelet-serving-cert-approver")
 		assert.Contains(t, string(patches[2].Content), "externalCloudProvider")
 	})
+
+	t.Run("cilium CNI returns disable CNI patch", func(t *testing.T) {
+		t.Parallel()
+
+		mgr := configmanager.NewConfigManager(nil, "ksail.yaml")
+		mgr.Config = &v1alpha1.Cluster{
+			Spec: v1alpha1.Spec{
+				Cluster: v1alpha1.ClusterSpec{
+					CNI: v1alpha1.CNICilium,
+				},
+			},
+		}
+
+		patches := mgr.GetDefaultTalosPatchesForTest()
+		require.Len(t, patches, 1)
+		assert.Contains(t, string(patches[0].Content), "cni")
+		assert.Contains(t, string(patches[0].Content), "name: none")
+	})
+
+	t.Run("calico CNI returns disable CNI patch", func(t *testing.T) {
+		t.Parallel()
+
+		mgr := configmanager.NewConfigManager(nil, "ksail.yaml")
+		mgr.Config = &v1alpha1.Cluster{
+			Spec: v1alpha1.Spec{
+				Cluster: v1alpha1.ClusterSpec{
+					CNI: v1alpha1.CNICalico,
+				},
+			},
+		}
+
+		patches := mgr.GetDefaultTalosPatchesForTest()
+		require.Len(t, patches, 1)
+		assert.Contains(t, string(patches[0].Content), "cni")
+		assert.Contains(t, string(patches[0].Content), "name: none")
+	})
+
+	t.Run("default CNI does not return disable CNI patch", func(t *testing.T) {
+		t.Parallel()
+
+		mgr := configmanager.NewConfigManager(nil, "ksail.yaml")
+		mgr.Config = &v1alpha1.Cluster{
+			Spec: v1alpha1.Spec{
+				Cluster: v1alpha1.ClusterSpec{
+					CNI: v1alpha1.CNIDefault,
+				},
+			},
+		}
+
+		patches := mgr.GetDefaultTalosPatchesForTest()
+		assert.Empty(t, patches)
+	})
+
+	t.Run("cilium CNI with metrics server returns disable CNI and kubelet patches", func(t *testing.T) {
+		t.Parallel()
+
+		mgr := configmanager.NewConfigManager(nil, "ksail.yaml")
+		mgr.Config = &v1alpha1.Cluster{
+			Spec: v1alpha1.Spec{
+				Cluster: v1alpha1.ClusterSpec{
+					CNI:           v1alpha1.CNICilium,
+					MetricsServer: v1alpha1.MetricsServerEnabled,
+				},
+			},
+		}
+
+		patches := mgr.GetDefaultTalosPatchesForTest()
+		require.Len(t, patches, 3)
+		assert.Contains(t, string(patches[0].Content), "name: none")
+		assert.Contains(t, string(patches[1].Content), "rotate-server-certificates")
+		assert.Contains(t, string(patches[2].Content), "kubelet-serving-cert-approver")
+	})
 }
