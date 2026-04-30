@@ -267,6 +267,7 @@ func TestFactory_CreateInstallersForConfig_CertManager(t *testing.T) {
 	})
 }
 
+//nolint:funlen // Table-driven test with multiple distribution-specific subtests.
 func TestFactory_CreateInstallersForConfig_MetricsServer(t *testing.T) {
 	t.Parallel()
 

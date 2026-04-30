@@ -3275,7 +3275,7 @@ func InitFieldSelectors() []ksailconfigmanager.FieldSelector[v1alpha1.Cluster] {
 	// Unified node count selectors for all distributions
 	selectors = append(selectors, ksailconfigmanager.ControlPlanesFieldSelector())
 	selectors = append(selectors, ksailconfigmanager.WorkersFieldSelector())
-	selectors = append(selectors, ksailconfigmanager.NodeAutoscalingFieldSelector())
+	selectors = append(selectors, ksailconfigmanager.NodeAutoscalingFieldSelector())    //nolint:staticcheck // intentionally kept for backward compat alongside NodeAutoscalerEnabledFieldSelector
 	selectors = append(selectors, ksailconfigmanager.NodeAutoscalerEnabledFieldSelector())
 	// Talos-specific selectors
 	selectors = append(selectors, ksailconfigmanager.ImageVerificationFieldSelector())
@@ -5111,7 +5111,7 @@ func defaultClusterMutationFieldSelectors() []ksailconfigmanager.FieldSelector[v
 		ksailconfigmanager.DefaultImportImagesFieldSelector(),
 		ksailconfigmanager.ControlPlanesFieldSelector(),
 		ksailconfigmanager.WorkersFieldSelector(),
-		ksailconfigmanager.NodeAutoscalingFieldSelector(),
+		ksailconfigmanager.NodeAutoscalingFieldSelector(), //nolint:staticcheck // intentionally kept for backward compat alongside NodeAutoscalerEnabledFieldSelector
 		ksailconfigmanager.NodeAutoscalerEnabledFieldSelector(),
 	)
 }

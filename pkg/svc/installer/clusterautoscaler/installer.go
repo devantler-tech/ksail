@@ -216,7 +216,7 @@ func buildValuesYaml(cfg v1alpha1.NodeAutoscalerConfig) (string, error) {
 
 	out, err := yaml.Marshal(vals)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to marshal Helm chart values: %w", err)
 	}
 
 	return string(out), nil

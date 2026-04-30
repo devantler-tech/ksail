@@ -292,7 +292,7 @@ func TestValidPodAutoscalerVerticals(t *testing.T) {
 
 // --- ValidateAutoscalerConfig ---
 
-//nolint:funlen // Table-driven test with comprehensive coverage.
+//nolint:funlen,maintidx // Table-driven test with comprehensive coverage across many validation cases.
 func TestValidateAutoscalerConfig(t *testing.T) {
 	t.Parallel()
 
