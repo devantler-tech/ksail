@@ -488,20 +488,34 @@ func (e *Engine) checkAutoscalerOptionsChange(
 	newNode := newSpec.Autoscaler.Node
 
 	// Node autoscaler scalar fields.
-	appendChange(result, "cluster.autoscaler.node.enabled",
-		string(oldNode.Enabled), string(newNode.Enabled), string(v1alpha1.NodeAutoscalerEnabledDisabled),
+	appendChange(
+		result,
+		"cluster.autoscaler.node.enabled",
+		string(
+			oldNode.Enabled,
+		),
+		string(newNode.Enabled),
+		string(v1alpha1.NodeAutoscalerEnabledDisabled),
 		"enabling/disabling the node autoscaler triggers Helm install/uninstall",
-		clusterupdate.ChangeCategoryInPlace)
+		clusterupdate.ChangeCategoryInPlace,
+	)
 
 	appendChange(result, "cluster.autoscaler.node.maxNodesTotal",
 		strconv.Itoa(int(oldNode.MaxNodesTotal)), strconv.Itoa(int(newNode.MaxNodesTotal)), "0",
 		"maxNodesTotal can be updated via Helm chart upgrade",
 		clusterupdate.ChangeCategoryInPlace)
 
-	appendChange(result, "cluster.autoscaler.node.expander",
-		string(oldNode.Expander), string(newNode.Expander), string(v1alpha1.AutoscalerExpanderLeastWaste),
+	appendChange(
+		result,
+		"cluster.autoscaler.node.expander",
+		string(
+			oldNode.Expander,
+		),
+		string(newNode.Expander),
+		string(v1alpha1.AutoscalerExpanderLeastWaste),
 		"expander strategy can be updated via Helm chart upgrade",
-		clusterupdate.ChangeCategoryInPlace)
+		clusterupdate.ChangeCategoryInPlace,
+	)
 
 	appendChange(result, "cluster.autoscaler.node.scaleDownUnneededTime",
 		oldNode.ScaleDownUnneededTime, newNode.ScaleDownUnneededTime, "",
@@ -512,15 +526,29 @@ func (e *Engine) checkAutoscalerOptionsChange(
 	oldPod := oldSpec.Autoscaler.Pod
 	newPod := newSpec.Autoscaler.Pod
 
-	appendChange(result, "cluster.autoscaler.pod.horizontal",
-		string(oldPod.Horizontal), string(newPod.Horizontal), string(v1alpha1.PodAutoscalerHorizontalDisabled),
+	appendChange(
+		result,
+		"cluster.autoscaler.pod.horizontal",
+		string(
+			oldPod.Horizontal,
+		),
+		string(newPod.Horizontal),
+		string(v1alpha1.PodAutoscalerHorizontalDisabled),
 		"enabling/disabling HPA affects metrics-server dependency; applied in-place",
-		clusterupdate.ChangeCategoryInPlace)
+		clusterupdate.ChangeCategoryInPlace,
+	)
 
-	appendChange(result, "cluster.autoscaler.pod.vertical",
-		string(oldPod.Vertical), string(newPod.Vertical), string(v1alpha1.PodAutoscalerVerticalDisabled),
+	appendChange(
+		result,
+		"cluster.autoscaler.pod.vertical",
+		string(
+			oldPod.Vertical,
+		),
+		string(newPod.Vertical),
+		string(v1alpha1.PodAutoscalerVerticalDisabled),
 		"enabling/disabling VPA triggers Helm chart install/uninstall",
-		clusterupdate.ChangeCategoryInPlace)
+		clusterupdate.ChangeCategoryInPlace,
+	)
 
 	// Node pool changes — diff by name.
 	e.checkAutoscalerPoolChanges(oldNode.Pools, newNode.Pools, result)
