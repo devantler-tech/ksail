@@ -255,21 +255,9 @@ func (p *Provisioner) createHetznerCluster(ctx context.Context, clusterName stri
 		return fmt.Errorf("%w: %s", ErrClusterAlreadyExists, clusterName)
 	}
 
-	// Ensure a Talos snapshot image exists when a schematic ID is configured.
-	// This must happen before node creation so we can pass the image ID to servers.
-	var snapshotImageID int64
-	if p.snapshotManager != nil && p.talosOpts != nil && p.talosOpts.SchematicID != "" {
-		_, _ = fmt.Fprintf(p.logWriter, "Ensuring Talos snapshot image...\n")
-
-		snapshotImageID, err = p.snapshotManager.EnsureTalosSnapshot(
-			ctx,
-			clusterName,
-			p.talosOpts.Version,
-			p.talosOpts.SchematicID,
-		)
-		if err != nil {
-			return fmt.Errorf("failed to ensure Talos snapshot: %w", err)
-		}
+	snapshotImageID, err := p.ensureSnapshotImage(ctx, clusterName)
+	if err != nil {
+		return err
 	}
 
 	// Create infrastructure resources
@@ -288,24 +276,8 @@ func (p *Provisioner) createHetznerCluster(ctx context.Context, clusterName stri
 
 	_, _ = fmt.Fprintf(p.logWriter, "\nInfrastructure created. Bootstrapping Talos cluster...\n")
 
-	// Update configs with correct endpoint
-	err = p.updateConfigsWithEndpoint(controlPlaneServers)
-	if err != nil {
-		return err
-	}
-
-	allServers := slices.Concat(controlPlaneServers, workerServers)
-
-	// Prepare and apply configs
-	err = p.prepareAndApplyConfigs(ctx, clusterName, controlPlaneServers, workerServers, allServers)
-	if err != nil {
-		return err
-	}
-
-	// Bootstrap, save configs, and wait for cluster readiness
-	err = p.bootstrapAndFinalize(
-		ctx, hzProvider, clusterName,
-		controlPlaneServers, workerServers, allServers,
+	err = p.applyConfigsAndBootstrap(
+		ctx, hzProvider, clusterName, controlPlaneServers, workerServers,
 	)
 	if err != nil {
 		return err
@@ -318,6 +290,54 @@ func (p *Provisioner) createHetznerCluster(ctx context.Context, clusterName stri
 	)
 
 	return nil
+}
+
+// ensureSnapshotImage ensures a Talos snapshot image exists when a schematic ID is configured.
+// It returns the snapshot image ID (0 when snapshot boot is not configured).
+func (p *Provisioner) ensureSnapshotImage(ctx context.Context, clusterName string) (int64, error) {
+	if p.snapshotManager == nil || p.talosOpts == nil || p.talosOpts.SchematicID == "" {
+		return 0, nil
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "Ensuring Talos snapshot image...\n")
+
+	snapshotImageID, err := p.snapshotManager.EnsureTalosSnapshot(
+		ctx,
+		clusterName,
+		p.talosOpts.Version,
+		p.talosOpts.SchematicID,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("failed to ensure Talos snapshot: %w", err)
+	}
+
+	return snapshotImageID, nil
+}
+
+// applyConfigsAndBootstrap updates machine configs with the correct endpoint,
+// applies them to all nodes, and bootstraps the Talos cluster.
+func (p *Provisioner) applyConfigsAndBootstrap(
+	ctx context.Context,
+	hzProvider *hetzner.Provider,
+	clusterName string,
+	controlPlaneServers, workerServers []*hcloud.Server,
+) error {
+	err := p.updateConfigsWithEndpoint(controlPlaneServers)
+	if err != nil {
+		return err
+	}
+
+	allServers := slices.Concat(controlPlaneServers, workerServers)
+
+	err = p.prepareAndApplyConfigs(ctx, clusterName, controlPlaneServers, workerServers, allServers)
+	if err != nil {
+		return err
+	}
+
+	return p.bootstrapAndFinalize(
+		ctx, hzProvider, clusterName,
+		controlPlaneServers, workerServers, allServers,
+	)
 }
 
 func (p *Provisioner) deleteHetznerCluster(ctx context.Context, clusterName string) error {
@@ -360,7 +380,8 @@ func (p *Provisioner) deleteHetznerCluster(ctx context.Context, clusterName stri
 
 	// Delete Talos snapshot images when --delete-storage is set
 	if p.deleteStorage && p.snapshotManager != nil {
-		if snapshotErr := p.snapshotManager.DeleteTalosSnapshots(ctx, clusterName); snapshotErr != nil {
+		snapshotErr := p.snapshotManager.DeleteTalosSnapshots(ctx, clusterName)
+		if snapshotErr != nil {
 			return fmt.Errorf("failed to delete Talos snapshots: %w", snapshotErr)
 		}
 	}

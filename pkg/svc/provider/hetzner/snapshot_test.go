@@ -23,7 +23,9 @@ type mockUploader struct {
 	err   error
 }
 
-func (m *mockUploader) Upload(_ context.Context, _ hcloudimages.UploadOptions) (*hcloudtest.Image, error) {
+func (m *mockUploader) Upload(
+	_ context.Context, _ hcloudimages.UploadOptions,
+) (*hcloudtest.Image, error) {
 	return m.image, m.err
 }
 
@@ -40,8 +42,8 @@ type hcloudImageSchema struct {
 	Status string            `json:"status"`
 }
 
-// hcloudDeleteResponse is the empty 200 response for image deletion.
-type hcloudDeleteResponse struct{}
+// errServerQuotaExceeded is a static sentinel used in uploader-error tests.
+var errServerQuotaExceeded = errors.New("server quota exceeded")
 
 // newTestHcloudClient creates an hcloud.Client pointing at a test HTTP server.
 func newTestHcloudClient(serverURL string) *hcloudtest.Client {
@@ -74,23 +76,28 @@ func TestSnapshotManager_EnsureTalosSnapshot_ExistingFound(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 
-	mux.HandleFunc("/images", func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
+	mux.HandleFunc("/images", func(responseWriter http.ResponseWriter, _ *http.Request) {
+		responseWriter.Header().Set("Content-Type", "application/json")
+
 		resp := hcloudImageListResponse{
 			Images: []hcloudImageSchema{
 				{
-					ID:     imageID,
-					Labels: map[string]string{"ksail.io/talos-version": version, "ksail.io/talos-schematic": schematic},
+					ID: imageID,
+					Labels: map[string]string{
+						"ksail.io/talos-version":   version,
+						"ksail.io/talos-schematic": schematic,
+					},
 					Type:   "snapshot",
 					Status: "available",
 				},
 			},
 		}
-		_, _ = w.Write(marshalJSON(t, resp))
+		_, _ = responseWriter.Write(marshalJSON(t, resp))
 	})
 
 	client := newTestHcloudClient(srv.URL)
 	uploader := &mockUploader{}
+
 	var logBuf bytes.Buffer
 
 	sm := hetzner.NewSnapshotManagerWithUploaderForTest(client, uploader, &logBuf)
@@ -128,6 +135,7 @@ func TestSnapshotManager_EnsureTalosSnapshot_BuildsNew(t *testing.T) {
 	uploader := &mockUploader{
 		image: &hcloudtest.Image{ID: builtID},
 	}
+
 	var logBuf bytes.Buffer
 
 	sm := hetzner.NewSnapshotManagerWithUploaderForTest(client, uploader, &logBuf)
@@ -149,19 +157,20 @@ func TestSnapshotManager_EnsureTalosSnapshot_UploaderError(t *testing.T) {
 		schematic   = "ghi789"
 	)
 
-	uploadErr := errors.New("server quota exceeded")
-
 	mux := http.NewServeMux()
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 
-	mux.HandleFunc("/images", func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write(marshalJSON(t, hcloudImageListResponse{Images: []hcloudImageSchema{}}))
+	mux.HandleFunc("/images", func(responseWriter http.ResponseWriter, _ *http.Request) {
+		responseWriter.Header().Set("Content-Type", "application/json")
+		_, _ = responseWriter.Write(
+			marshalJSON(t, hcloudImageListResponse{Images: []hcloudImageSchema{}}),
+		)
 	})
 
 	client := newTestHcloudClient(srv.URL)
-	uploader := &mockUploader{err: uploadErr}
+	uploader := &mockUploader{err: errServerQuotaExceeded}
+
 	var logBuf bytes.Buffer
 
 	sm := hetzner.NewSnapshotManagerWithUploaderForTest(client, uploader, &logBuf)
@@ -169,8 +178,56 @@ func TestSnapshotManager_EnsureTalosSnapshot_UploaderError(t *testing.T) {
 	_, err := sm.EnsureTalosSnapshot(context.Background(), clusterName, version, schematic)
 
 	require.Error(t, err)
-	assert.ErrorIs(t, err, hetzner.ErrSnapshotBuildFailed)
-	assert.ErrorIs(t, err, uploadErr)
+	require.ErrorIs(t, err, hetzner.ErrSnapshotBuildFailed)
+	assert.ErrorIs(t, err, errServerQuotaExceeded)
+}
+
+// registerDeleteTestHandlers wires the Hetzner mock endpoints for snapshot delete tests.
+func registerDeleteTestHandlers(
+	t *testing.T,
+	mux *http.ServeMux,
+	clusterName string,
+	deletedIDs chan<- int64,
+) {
+	t.Helper()
+
+	mux.HandleFunc("/images", func(responseWriter http.ResponseWriter, _ *http.Request) {
+		responseWriter.Header().Set("Content-Type", "application/json")
+
+		resp := hcloudImageListResponse{
+			Images: []hcloudImageSchema{
+				{
+					ID:     10,
+					Type:   "snapshot",
+					Status: "available",
+					Labels: map[string]string{"ksail.io/cluster": clusterName},
+				},
+				{
+					ID:     11,
+					Type:   "snapshot",
+					Status: "available",
+					Labels: map[string]string{"ksail.io/cluster": clusterName},
+				},
+			},
+		}
+		_, _ = responseWriter.Write(marshalJSON(t, resp))
+	})
+
+	mux.HandleFunc("/images/10", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodDelete {
+			deletedIDs <- 10
+
+			w.WriteHeader(http.StatusNoContent)
+		}
+	})
+
+	mux.HandleFunc("/images/11", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodDelete {
+			deletedIDs <- 11
+
+			w.WriteHeader(http.StatusNoContent)
+		}
+	})
 }
 
 func TestSnapshotManager_DeleteTalosSnapshots_DeletesImages(t *testing.T) {
@@ -179,38 +236,15 @@ func TestSnapshotManager_DeleteTalosSnapshots_DeletesImages(t *testing.T) {
 	const clusterName = "del-cluster"
 
 	deletedIDs := make(chan int64, 2)
-
 	mux := http.NewServeMux()
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 
-	mux.HandleFunc("/images", func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		resp := hcloudImageListResponse{
-			Images: []hcloudImageSchema{
-				{ID: 10, Type: "snapshot", Status: "available", Labels: map[string]string{"ksail.io/cluster": clusterName}},
-				{ID: 11, Type: "snapshot", Status: "available", Labels: map[string]string{"ksail.io/cluster": clusterName}},
-			},
-		}
-		_, _ = w.Write(marshalJSON(t, resp))
-	})
-
-	mux.HandleFunc("/images/10", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodDelete {
-			deletedIDs <- 10
-			w.WriteHeader(http.StatusNoContent)
-		}
-	})
-
-	mux.HandleFunc("/images/11", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodDelete {
-			deletedIDs <- 11
-			w.WriteHeader(http.StatusNoContent)
-		}
-	})
+	registerDeleteTestHandlers(t, mux, clusterName, deletedIDs)
 
 	client := newTestHcloudClient(srv.URL)
 	uploader := &mockUploader{}
+
 	var logBuf bytes.Buffer
 
 	sm := hetzner.NewSnapshotManagerWithUploaderForTest(client, uploader, &logBuf)
@@ -245,6 +279,7 @@ func TestSnapshotManager_DeleteTalosSnapshots_NoOp(t *testing.T) {
 
 	client := newTestHcloudClient(srv.URL)
 	uploader := &mockUploader{}
+
 	var logBuf bytes.Buffer
 
 	sm := hetzner.NewSnapshotManagerWithUploaderForTest(client, uploader, &logBuf)
@@ -259,6 +294,7 @@ func TestNewSnapshotManager(t *testing.T) {
 	t.Parallel()
 
 	client := hcloudtest.NewClient(hcloudtest.WithToken("test"))
+
 	var logBuf bytes.Buffer
 
 	sm := hetzner.NewSnapshotManager(client, &logBuf)

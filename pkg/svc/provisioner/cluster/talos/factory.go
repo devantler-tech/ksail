@@ -188,7 +188,9 @@ func configureInfraProvider(
 }
 
 // createHetznerProvider creates a Hetzner provider and returns the underlying hcloud client.
-func createHetznerProvider(opts v1alpha1.OptionsHetzner) (*hetzner.Provider, *hcloud.Client, error) {
+func createHetznerProvider(
+	opts v1alpha1.OptionsHetzner,
+) (*hetzner.Provider, *hcloud.Client, error) {
 	// Determine the token environment variable name
 	tokenEnvVar := opts.TokenEnvVar
 	if tokenEnvVar == "" {
