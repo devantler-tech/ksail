@@ -467,23 +467,26 @@ func TestGetDefaultTalosPatches(t *testing.T) {
 		assert.Empty(t, patches)
 	})
 
-	t.Run("cilium CNI with metrics server returns disable CNI and kubelet patches", func(t *testing.T) {
-		t.Parallel()
+	t.Run(
+		"cilium CNI with metrics server returns disable CNI and kubelet patches",
+		func(t *testing.T) {
+			t.Parallel()
 
-		mgr := configmanager.NewConfigManager(nil, "ksail.yaml")
-		mgr.Config = &v1alpha1.Cluster{
-			Spec: v1alpha1.Spec{
-				Cluster: v1alpha1.ClusterSpec{
-					CNI:           v1alpha1.CNICilium,
-					MetricsServer: v1alpha1.MetricsServerEnabled,
+			mgr := configmanager.NewConfigManager(nil, "ksail.yaml")
+			mgr.Config = &v1alpha1.Cluster{
+				Spec: v1alpha1.Spec{
+					Cluster: v1alpha1.ClusterSpec{
+						CNI:           v1alpha1.CNICilium,
+						MetricsServer: v1alpha1.MetricsServerEnabled,
+					},
 				},
-			},
-		}
+			}
 
-		patches := mgr.GetDefaultTalosPatchesForTest()
-		require.Len(t, patches, 3)
-		assert.Contains(t, string(patches[0].Content), "name: none")
-		assert.Contains(t, string(patches[1].Content), "rotate-server-certificates")
-		assert.Contains(t, string(patches[2].Content), "kubelet-serving-cert-approver")
-	})
+			patches := mgr.GetDefaultTalosPatchesForTest()
+			require.Len(t, patches, 3)
+			assert.Contains(t, string(patches[0].Content), "name: none")
+			assert.Contains(t, string(patches[1].Content), "rotate-server-certificates")
+			assert.Contains(t, string(patches[2].Content), "kubelet-serving-cert-approver")
+		},
+	)
 }
