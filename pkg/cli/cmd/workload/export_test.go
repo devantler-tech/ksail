@@ -263,3 +263,9 @@ func ExportRetryOnTransientError(
 ) error {
 	return retryOnTransientError(ctx, cmd, maxAttempts, baseWait, maxWait, operation)
 }
+
+// ExportRunWatch exposes runWatch for unit testing the early-exit path
+// validation that runs before config load.
+func ExportRunWatch(cmd *cobra.Command, pathFlag string, initialApply bool, debug bool) error {
+	return runWatch(cmd, pathFlag, initialApply, debug)
+}

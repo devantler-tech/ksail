@@ -3941,28 +3941,19 @@ func runWatch(cmd *cobra.Command, pathFlag string, initialApply bool, debug bool
 	// terminal and in CI logs.
 	cmd.SetErr(os.Stderr)
 
-	pathFlag = strings.TrimSpace(pathFlag)
-
-	// Validate an explicit --path flag before loading config so that the error
-	// is surfaced immediately. Config loading can take tens of seconds in CI
-	// (cluster validation, distribution config), causing a short test timeout
-	// to expire before "access watch directory" ever appears in the output.
-	if pathFlag != "" {
-		resolvedPath, err := fsutil.EvalCanonicalPath(pathFlag)
+	// Validate an explicitly supplied --path before loading config so that a
+	// missing or invalid path is reported immediately (before any expensive
+	// config loading or cluster connection).  The CI contract test
+	// (ksail-test-workload-watch) relies on this early-exit behaviour.
+	if dir := strings.TrimSpace(pathFlag); dir != "" {
+		info, err := os.Stat(dir)
 		if err != nil {
-			return fmt.Errorf("resolve watch directory %q: %w", pathFlag, err)
-		}
-
-		info, err := os.Stat(resolvedPath)
-		if err != nil {
-			return fmt.Errorf("access watch directory %q: %w", resolvedPath, err)
+			return fmt.Errorf("access watch directory %q: %w", dir, err)
 		}
 
 		if !info.IsDir() {
-			return fmt.Errorf("%q: %w", resolvedPath, errNotDirectory)
+			return fmt.Errorf("%q: %w", dir, errNotDirectory)
 		}
-
-		pathFlag = resolvedPath
 	}
 
 	cmdCtx, err := initCommandContext(cmd)
@@ -3972,8 +3963,7 @@ func runWatch(cmd *cobra.Command, pathFlag string, initialApply bool, debug bool
 
 	watchDir := resolveSourceDir(cmdCtx.ClusterCfg, pathFlag)
 
-	// Verify the directory exists (covers the case where watchDir was resolved
-	// from config or the default rather than an explicit flag).
+	// Verify the directory exists.
 	info, err := os.Stat(watchDir)
 	if err != nil {
 		return fmt.Errorf("access watch directory %q: %w", watchDir, err)
