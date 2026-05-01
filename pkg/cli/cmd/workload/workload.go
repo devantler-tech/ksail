@@ -3942,13 +3942,16 @@ func runWatch(cmd *cobra.Command, pathFlag string, initialApply bool, debug bool
 	cmd.SetErr(os.Stderr)
 
 	// Validate an explicitly supplied --path before loading config so that a
-	// missing directory is reported immediately (before any expensive config
-	// loading or cluster connection).  The CI contract test
+	// missing or invalid path is reported immediately (before any expensive
+	// config loading or cluster connection).  The CI contract test
 	// (ksail-test-workload-watch) relies on this early-exit behaviour.
 	if dir := strings.TrimSpace(pathFlag); dir != "" {
-		_, err := os.Stat(dir)
+		info, err := os.Stat(dir)
 		if err != nil {
 			return fmt.Errorf("access watch directory %q: %w", dir, err)
+		}
+		if !info.IsDir() {
+			return fmt.Errorf("%q: %w", dir, errNotDirectory)
 		}
 	}
 

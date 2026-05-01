@@ -1008,3 +1008,57 @@ func TestRetryOnTransientError_ZeroMaxAttemptsClampedToOne(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 1, calls, "maxAttempts=0 should be clamped to 1 so operation is always called")
 }
+
+// ===========================================================================
+// runWatch — early-exit path validation (pre-config-load)
+// ===========================================================================
+
+func TestRunWatchEarlyPathValidation(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		setup       func(t *testing.T) string
+		wantErrStr  string
+		wantNoErr   bool
+	}{
+		{
+			name: "non-existent path returns error containing 'access watch directory'",
+			setup: func(t *testing.T) string {
+				t.Helper()
+
+				return filepath.Join(t.TempDir(), "does-not-exist")
+			},
+			wantErrStr: "access watch directory",
+		},
+		{
+			name: "regular file returns errNotDirectory before config load",
+			setup: func(t *testing.T) string {
+				t.Helper()
+
+				f, err := os.CreateTemp(t.TempDir(), "notadir-*.txt")
+				require.NoError(t, err)
+				require.NoError(t, f.Close())
+
+				return f.Name()
+			},
+			wantErrStr: "watch path is not a directory",
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			cmd := &cobra.Command{}
+			cmd.SetOut(io.Discard)
+			cmd.SetErr(io.Discard)
+
+			path := testCase.setup(t)
+			err := workload.ExportRunWatch(cmd, path, false, false)
+
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), testCase.wantErrStr)
+		})
+	}
+}
