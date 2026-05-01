@@ -45,6 +45,17 @@ Before you begin developing, ensure you have the following installed:
 - [mega-linter](https://github.com/oxsecurity/megalinter/tree/main/mega-linter-runner#installation)
 - [Node.js (v24+)](https://nodejs.org/en/download/) — Required for building documentation (matches CI)
 
+### Code Style
+
+Follow standard Go conventions in this repository:
+
+- **Formatting:** Format code with `gofmt` and keep imports organized with `goimports` (or run `golangci-lint run --fix`). Keep lines under 100 characters (enforced by `golines`).
+- **Naming:** Exported identifiers use `PascalCase`; unexported identifiers use `camelCase`. Package names are short, lowercase, and singular (e.g., `provider`, `installer`). Interfaces often end in `-er` (e.g., `Provider`).
+- **Error handling:** Return errors explicitly — no `panic` in library code. Wrap errors with context using `fmt.Errorf("context: %w", err)`. All errors must be checked (`golangci-lint` enforces this).
+- **Testing:** Prefer table-driven tests with `t.Parallel()`. Keep tests focused on public behavior. Run `go test ./...` before opening a PR.
+- **Path safety:** Canonicalize all user-supplied file and directory paths with `fsutil.EvalCanonicalPath` before use (resolves symlinks, prevents path-escape attacks). Prefer `fsutil.ReadFileSafe` for constrained reads instead of reimplementing path-containment checks. For output paths that may not exist yet, create the parent directory with `os.MkdirAll` first, then canonicalize.
+- **Documentation:** Document all exported types, functions, and constants with complete sentences starting with the name being documented (e.g., `// Provider defines the interface for infrastructure providers.`).
+
 ### Lint
 
 KSail uses mega-linter with the go flavor, and uses a strict configuration to ensure code quality and consistency. You can run the linter with the following command:
