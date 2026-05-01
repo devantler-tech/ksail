@@ -266,7 +266,8 @@
                 }
               },
               "additionalProperties": false,
-              "type": "object"
+              "type": "object",
+              "description": "Pod and node autoscaling configuration (supersedes deprecated nodeAutoscaling)"
             },
             "importImages": {
               "type": "string",

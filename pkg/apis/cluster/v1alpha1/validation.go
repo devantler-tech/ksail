@@ -3,6 +3,7 @@ package v1alpha1
 import (
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 )
 
@@ -251,6 +252,33 @@ var poolNameRegex = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*[a-z0-9]$|^[a-z0-9]$`
 // PoolNameMaxLength is the maximum length for a node pool name (DNS-1123 label limit).
 const PoolNameMaxLength = 63
 
+// validateAutoscalerEnumFields validates enum-typed fields on the autoscaler configuration.
+// It returns an error if any field carries a value that is not in its valid set.
+func validateAutoscalerEnumFields(
+	autoscaler *NodeAutoscalerConfig,
+	pod *PodAutoscalerConfig,
+) error {
+	if autoscaler.Enabled != "" &&
+		!slices.Contains(ValidNodeAutoscalerEnableds(), autoscaler.Enabled) {
+		return fmt.Errorf("%w: %q", ErrInvalidNodeAutoscalerEnabled, autoscaler.Enabled)
+	}
+
+	if autoscaler.Expander != "" &&
+		!slices.Contains(ValidAutoscalerExpanders(), autoscaler.Expander) {
+		return fmt.Errorf("%w: %q", ErrInvalidAutoscalerExpander, autoscaler.Expander)
+	}
+
+	if pod.Horizontal != "" && !slices.Contains(ValidPodAutoscalerHorizontals(), pod.Horizontal) {
+		return fmt.Errorf("%w: %q", ErrInvalidPodAutoscalerHorizontal, pod.Horizontal)
+	}
+
+	if pod.Vertical != "" && !slices.Contains(ValidPodAutoscalerVerticals(), pod.Vertical) {
+		return fmt.Errorf("%w: %q", ErrInvalidPodAutoscalerVertical, pod.Vertical)
+	}
+
+	return nil
+}
+
 // validateNodePools checks each NodePool for name validity, min ≤ max, and uniqueness.
 func validateNodePools(pools []NodePool) error {
 	seen := make(map[string]struct{}, len(pools))
@@ -321,16 +349,34 @@ func validateNodePools(pools []NodePool) error {
 //   - provider: The ProviderSpec containing Hetzner-specific options (ServerLimit).
 //
 // Returns the first validation error encountered, or nil if the configuration is valid.
-func ValidateAutoscalerConfig(cluster *ClusterSpec, provider *ProviderSpec) error {
+//
+//nolint:cyclop // Guard clauses each check a single condition; extraction would obscure the flow.
+func ValidateAutoscalerConfig(
+	cluster *ClusterSpec,
+	provider *ProviderSpec,
+) error {
 	if cluster == nil {
 		return nil
 	}
 
 	autoscaler := &cluster.Autoscaler.Node
 
-	err := validateNodePools(autoscaler.Pools)
-	if err != nil {
-		return err
+	enumErr := validateAutoscalerEnumFields(autoscaler, &cluster.Autoscaler.Pod)
+	if enumErr != nil {
+		return enumErr
+	}
+
+	if autoscaler.MaxNodesTotal < 0 {
+		return fmt.Errorf("%w: got %d", ErrNegativeMaxNodesTotal, autoscaler.MaxNodesTotal)
+	}
+
+	if provider != nil && provider.Hetzner.ServerLimit < 0 {
+		return fmt.Errorf("%w: got %d", ErrNegativeServerLimit, provider.Hetzner.ServerLimit)
+	}
+
+	poolErr := validateNodePools(autoscaler.Pools)
+	if poolErr != nil {
+		return poolErr
 	}
 
 	// Capacity guard: only applies when Hetzner provider and node autoscaler is enabled.

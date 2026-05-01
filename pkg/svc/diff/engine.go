@@ -1,6 +1,8 @@
 package diff
 
 import (
+	"fmt"
+	"sort"
 	"strconv"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -40,6 +42,7 @@ func (e *Engine) ComputeDiff(
 	e.checkVanillaOptionsChange(oldSpec, newSpec, result)
 	e.checkTalosOptionsChange(oldSpec, newSpec, result)
 	e.checkHetznerOptionsChange(oldProvider, newProvider, result)
+	e.checkAutoscalerOptionsChange(oldSpec, newSpec, result)
 
 	return result
 }
@@ -471,5 +474,182 @@ func (e *Engine) applyProviderFieldRules(
 		appendChange(result, rule.field,
 			rule.getVal(oldProvider), rule.getVal(newProvider),
 			rule.defaultVal, rule.reason, rule.category)
+	}
+}
+
+// checkAutoscalerOptionsChange detects changes to autoscaler configuration and emits
+// appropriate in-place diff entries. All autoscaler changes are in-place because they
+// are applied via Helm chart upgrades or installs/uninstalls without node disruption.
+func (e *Engine) checkAutoscalerOptionsChange(
+	oldSpec, newSpec *v1alpha1.ClusterSpec,
+	result *clusterupdate.UpdateResult,
+) {
+	oldNode := oldSpec.Autoscaler.Node
+	newNode := newSpec.Autoscaler.Node
+
+	e.checkAutoscalerNodeScalarsChange(oldNode, newNode, result)
+	e.checkAutoscalerPodScalarsChange(oldSpec.Autoscaler.Pod, newSpec.Autoscaler.Pod, result)
+	e.checkAutoscalerPoolChanges(oldNode.Pools, newNode.Pools, result)
+}
+
+// checkAutoscalerNodeScalarsChange emits in-place changes for scalar node-autoscaler fields.
+func (e *Engine) checkAutoscalerNodeScalarsChange(
+	oldNode, newNode v1alpha1.NodeAutoscalerConfig,
+	result *clusterupdate.UpdateResult,
+) {
+	appendChange(result, "cluster.autoscaler.node.enabled",
+		string(oldNode.Enabled), string(newNode.Enabled),
+		string(v1alpha1.NodeAutoscalerEnabledDisabled),
+		"enabling/disabling the node autoscaler triggers Helm install/uninstall",
+		clusterupdate.ChangeCategoryInPlace)
+
+	appendChange(result, "cluster.autoscaler.node.maxNodesTotal",
+		strconv.Itoa(int(oldNode.MaxNodesTotal)), strconv.Itoa(int(newNode.MaxNodesTotal)), "0",
+		"maxNodesTotal can be updated via Helm chart upgrade",
+		clusterupdate.ChangeCategoryInPlace)
+
+	appendChange(result, "cluster.autoscaler.node.expander",
+		string(oldNode.Expander), string(newNode.Expander),
+		string(v1alpha1.AutoscalerExpanderLeastWaste),
+		"expander strategy can be updated via Helm chart upgrade",
+		clusterupdate.ChangeCategoryInPlace)
+
+	appendChange(result, "cluster.autoscaler.node.scaleDownUnneededTime",
+		oldNode.ScaleDownUnneededTime, newNode.ScaleDownUnneededTime, "",
+		"scaleDownUnneededTime can be updated via Helm chart upgrade",
+		clusterupdate.ChangeCategoryInPlace)
+}
+
+// checkAutoscalerPodScalarsChange emits in-place changes for scalar pod-autoscaler fields.
+func (e *Engine) checkAutoscalerPodScalarsChange(
+	oldPod, newPod v1alpha1.PodAutoscalerConfig,
+	result *clusterupdate.UpdateResult,
+) {
+	appendChange(result, "cluster.autoscaler.pod.horizontal",
+		string(oldPod.Horizontal), string(newPod.Horizontal),
+		string(v1alpha1.PodAutoscalerHorizontalDisabled),
+		"enabling/disabling HPA affects metrics-server dependency; applied in-place",
+		clusterupdate.ChangeCategoryInPlace)
+
+	appendChange(result, "cluster.autoscaler.pod.vertical",
+		string(oldPod.Vertical), string(newPod.Vertical),
+		string(v1alpha1.PodAutoscalerVerticalDisabled),
+		"VPA setting recorded; installer wiring is reserved for a future release",
+		clusterupdate.ChangeCategoryInPlace)
+}
+
+// checkAutoscalerPoolChanges compares old and new node pool slices by name and emits
+// in-place diff entries for each addition, removal, or field-level modification.
+func (e *Engine) checkAutoscalerPoolChanges(
+	oldPools, newPools []v1alpha1.NodePool,
+	result *clusterupdate.UpdateResult,
+) {
+	oldByName := make(map[string]v1alpha1.NodePool, len(oldPools))
+
+	for _, p := range oldPools {
+		if _, exists := oldByName[p.Name]; !exists {
+			oldByName[p.Name] = p
+		}
+	}
+
+	newByName := make(map[string]v1alpha1.NodePool, len(newPools))
+
+	for _, p := range newPools {
+		if _, exists := newByName[p.Name]; !exists {
+			newByName[p.Name] = p
+		}
+	}
+
+	e.checkAutoscalerPoolsAdded(oldByName, newByName, result)
+	e.checkAutoscalerPoolsRemoved(oldByName, newByName, result)
+	e.checkAutoscalerPoolsModified(oldByName, newByName, result)
+}
+
+// checkAutoscalerPoolsAdded emits in-place changes for pools present in new but absent in old.
+func (e *Engine) checkAutoscalerPoolsAdded(
+	oldByName, newByName map[string]v1alpha1.NodePool,
+	result *clusterupdate.UpdateResult,
+) {
+	addedNames := make([]string, 0, len(newByName))
+
+	for name := range newByName {
+		if _, exists := oldByName[name]; !exists {
+			addedNames = append(addedNames, name)
+		}
+	}
+
+	sort.Strings(addedNames)
+
+	for _, name := range addedNames {
+		appendChange(result, "cluster.autoscaler.node.pools["+name+"]",
+			"", "Added",
+			"", "node pool added; will be applied in-place via Helm chart upgrade",
+			clusterupdate.ChangeCategoryInPlace)
+	}
+}
+
+// checkAutoscalerPoolsRemoved emits in-place changes for pools present in old but absent in new.
+func (e *Engine) checkAutoscalerPoolsRemoved(
+	oldByName, newByName map[string]v1alpha1.NodePool,
+	result *clusterupdate.UpdateResult,
+) {
+	removedNames := make([]string, 0, len(oldByName))
+
+	for name := range oldByName {
+		if _, exists := newByName[name]; !exists {
+			removedNames = append(removedNames, name)
+		}
+	}
+
+	sort.Strings(removedNames)
+
+	for _, name := range removedNames {
+		appendChange(result, "cluster.autoscaler.node.pools["+name+"]",
+			"Removed", "",
+			"", "node pool removed; will be applied in-place via Helm chart upgrade",
+			clusterupdate.ChangeCategoryInPlace)
+	}
+}
+
+// checkAutoscalerPoolsModified emits field-level in-place changes for pools present in both old and new.
+func (e *Engine) checkAutoscalerPoolsModified(
+	oldByName, newByName map[string]v1alpha1.NodePool,
+	result *clusterupdate.UpdateResult,
+) {
+	modifiedNames := make([]string, 0, len(newByName))
+
+	for name := range newByName {
+		if _, exists := oldByName[name]; exists {
+			modifiedNames = append(modifiedNames, name)
+		}
+	}
+
+	sort.Strings(modifiedNames)
+
+	for _, name := range modifiedNames {
+		newPool := newByName[name]
+		oldPool := oldByName[name]
+
+		poolField := fmt.Sprintf("cluster.autoscaler.node.pools[%s]", name)
+
+		appendChange(result, poolField+".serverType",
+			oldPool.ServerType, newPool.ServerType, "",
+			"pool serverType can be updated in-place via Helm chart upgrade",
+			clusterupdate.ChangeCategoryInPlace)
+
+		appendChange(result, poolField+".location",
+			oldPool.Location, newPool.Location, "",
+			"pool location can be updated in-place via Helm chart upgrade",
+			clusterupdate.ChangeCategoryInPlace)
+
+		appendChange(result, poolField+".min",
+			strconv.Itoa(int(oldPool.Min)), strconv.Itoa(int(newPool.Min)), "",
+			"pool min can be updated in-place via Helm chart upgrade",
+			clusterupdate.ChangeCategoryInPlace)
+
+		appendChange(result, poolField+".max",
+			strconv.Itoa(int(oldPool.Max)), strconv.Itoa(int(newPool.Max)), "",
+			"pool max can be updated in-place via Helm chart upgrade",
+			clusterupdate.ChangeCategoryInPlace)
 	}
 }
