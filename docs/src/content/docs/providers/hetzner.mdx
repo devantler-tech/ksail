@@ -96,7 +96,7 @@ spec:
 | `hetzner.fallbackLocations` | list | `["nbg1", "hel1"]` | Alternative locations if primary is unavailable |
 | `hetzner.placementGroupFallbackToNone` | bool | `false` | Fall back to no placement group on capacity issues |
 | `hetzner.ingressFirewall` | string | `Enabled` | Talos OS-level ingress firewall (`Enabled` or `Disabled`). Generates `NetworkDefaultActionConfig` + `NetworkRuleConfig` patches as defense-in-depth alongside the Hetzner Cloud Firewall. |
-| `hetzner.serverLimit` | int | `10` | Maximum total Hetzner servers for this cluster (control-planes + workers + autoscaler pool capacity). KSail rejects autoscaler configurations that exceed this limit. Set to `0` to use the default of 10. |
+| `hetzner.serverLimit` | int | `10` | Maximum total Hetzner servers for this cluster. Validation checks `control-planes + workers + effective autoscaler capacity`, where effective autoscaler capacity is `sum(pool.max)` or, when `autoscaler.node.maxNodesTotal > 0`, `min(sum(pool.max), autoscaler.node.maxNodesTotal)`. KSail rejects autoscaler configurations that exceed this limit. Set to `0` to use the default of 10. |
 
 ### Talos options for Hetzner clusters
 
@@ -129,11 +129,11 @@ spec:
             min: 0
             max: 3
       pod:
-        horizontal: Disabled       # Enabled | Disabled (installs metrics-server)
-        vertical: Disabled         # Enabled | Disabled (installs VPA)
+        horizontal: Disabled       # Enabled | Disabled (pod autoscaler setting; metrics-server is configured separately)
+        vertical: Disabled         # Enabled | Disabled (reserved for future VPA support; not yet implemented)
   provider:
     hetzner:
-      serverLimit: 20              # Must be ≥ controlPlanes + workers + sum(pool.max)
+      serverLimit: 20              # Must be ≥ controlPlanes + workers + effective pool capacity (capped by maxNodesTotal when set)
 ```
 
 | Field | Type | Default | Description |
@@ -147,11 +147,11 @@ spec:
 | `autoscaler.node.pools[].location` | string | — | Hetzner datacenter location for this pool (e.g. `fsn1`) |
 | `autoscaler.node.pools[].min` | int | — | Minimum nodes in this pool |
 | `autoscaler.node.pools[].max` | int | — | Maximum nodes in this pool |
-| `autoscaler.pod.horizontal` | string | `Disabled` | `Enabled` installs [metrics-server](https://github.com/kubernetes-sigs/metrics-server) and activates HPA support |
-| `autoscaler.pod.vertical` | string | `Disabled` | `Enabled` installs the [Vertical Pod Autoscaler](https://github.com/kubernetes/autoscaler/tree/master/vertical-pod-autoscaler) |
+| `autoscaler.pod.horizontal` | string | `Disabled` | `Enabled` activates HPA support. Metrics-server is a prerequisite — configure it separately via `spec.cluster.metricsServer`. |
+| `autoscaler.pod.vertical` | string | `Disabled` | Reserved for future VPA support; not yet implemented. |
 
 > [!NOTE]
-> `spec.provider.hetzner.serverLimit` guards against exceeding your Hetzner Cloud project quota. KSail rejects configurations where `controlPlanes + workers + sum(pool.max)` exceeds `serverLimit`. Raise this limit to match your actual Hetzner project quota.
+> `spec.provider.hetzner.serverLimit` guards against exceeding your Hetzner Cloud project quota. KSail rejects configurations where `controlPlanes + workers + effectivePoolCapacity` exceeds `serverLimit`, where `effectivePoolCapacity` is `sum(pool.max)` capped by `autoscaler.node.maxNodesTotal` when that global cap is set. Raise this limit to match your actual Hetzner project quota.
 
 ## Quick Start
 
