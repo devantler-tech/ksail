@@ -183,7 +183,97 @@
               "enum": [
                 "Enabled",
                 "Disabled"
-              ]
+              ],
+              "description": "Deprecated. Use autoscaler.node.enabled instead. Do not set both nodeAutoscaling and autoscaler."
+            },
+            "autoscaler": {
+              "properties": {
+                "pod": {
+                  "properties": {
+                    "horizontal": {
+                      "type": "string",
+                      "enum": [
+                        "Enabled",
+                        "Disabled"
+                      ]
+                    },
+                    "vertical": {
+                      "type": "string",
+                      "enum": [
+                        "Enabled",
+                        "Disabled"
+                      ]
+                    }
+                  },
+                  "additionalProperties": false,
+                  "type": "object"
+                },
+                "node": {
+                  "properties": {
+                    "enabled": {
+                      "type": "string",
+                      "enum": [
+                        "Enabled",
+                        "Disabled"
+                      ]
+                    },
+                    "pools": {
+                      "items": {
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "maxLength": 63,
+                            "minLength": 1,
+                            "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+                          },
+                          "serverType": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "location": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "min": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "max": {
+                            "type": "integer",
+                            "minimum": 0
+                          }
+                        },
+                        "additionalProperties": false,
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "maxNodesTotal": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "description": "Maximum total nodes allowed across all node pools. Set to 0 to disable the global cap; when the global cap is disabled the effective cap is the sum of all pool max values"
+                    },
+                    "expander": {
+                      "type": "string",
+                      "enum": [
+                        "Price",
+                        "LeastWaste",
+                        "LeastNodes",
+                        "Random"
+                      ]
+                    },
+                    "scaleDownUnneededTime": {
+                      "type": "string",
+                      "description": "How long a node should be unneeded before it is eligible for scale down (e.g. 10m)"
+                    }
+                  },
+                  "additionalProperties": false,
+                  "type": "object"
+                }
+              },
+              "additionalProperties": false,
+              "type": "object",
+              "description": "Pod and node autoscaling configuration (supersedes deprecated nodeAutoscaling)"
             },
             "importImages": {
               "type": "string",
@@ -320,6 +410,11 @@
                     "Enabled",
                     "Disabled"
                   ]
+                },
+                "serverLimit": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "description": "Maximum total Hetzner servers allowed for this cluster (control-planes + workers + autoscaler pool capacity). Set to 0 to use the default limit of 10"
                 },
                 "autoscalerNodePoolNames": {
                   "items": {

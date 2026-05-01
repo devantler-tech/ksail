@@ -1,16 +1,20 @@
 package diff_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/diff"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
+	"github.com/stretchr/testify/require"
 )
 
 const (
-	testValueEnabled = "Enabled"
-	testRegistryAlt  = "localhost:6060"
+	testValueEnabled       = "Enabled"
+	testRegistryAlt        = "localhost:6060"
+	testFieldControlPlanes = "cluster.controlPlanes"
+	testFieldWorkers       = "cluster.workers"
 )
 
 func newBaseSpec() *v1alpha1.ClusterSpec {
@@ -53,6 +57,11 @@ func clone(spec *v1alpha1.ClusterSpec) *v1alpha1.ClusterSpec {
 	out.Vanilla = spec.Vanilla
 	out.Talos = spec.Talos
 	out.LocalRegistry = spec.LocalRegistry
+
+	if spec.Autoscaler.Node.Pools != nil {
+		out.Autoscaler.Node.Pools = make([]v1alpha1.NodePool, len(spec.Autoscaler.Node.Pools))
+		copy(out.Autoscaler.Node.Pools, spec.Autoscaler.Node.Pools)
+	}
 
 	return &out
 }
@@ -455,14 +464,14 @@ func TestEngine_TalosOptionsChange(t *testing.T) {
 		{
 			name:     "control plane count change",
 			mutate:   func(s *v1alpha1.ClusterSpec) { s.ControlPlanes = 3 },
-			field:    "cluster.controlPlanes",
+			field:    testFieldControlPlanes,
 			oldValue: "1",
 			newValue: "3",
 		},
 		{
 			name:     "worker count change",
 			mutate:   func(s *v1alpha1.ClusterSpec) { s.Workers = 2 },
-			field:    "cluster.workers",
+			field:    testFieldWorkers,
 			oldValue: "0",
 			newValue: "2",
 		},
@@ -507,7 +516,7 @@ func TestEngine_TalosOptionsChange_SkippedForNonTalos(t *testing.T) {
 	result := engine.ComputeDiff(old, newer, nil, nil)
 
 	for _, change := range result.AllChanges() {
-		if change.Field == "cluster.controlPlanes" {
+		if change.Field == testFieldControlPlanes {
 			t.Fatal("Talos options should be ignored for non-Talos distributions")
 		}
 	}
@@ -1018,4 +1027,337 @@ func TestEngine_TalosISOStillDetected_WhenAutoscalingEnabled(t *testing.T) {
 
 	assertSingleChange(t, result.InPlaceChanges, "cluster.talos.iso",
 		"122630", "999999", clusterupdate.ChangeCategoryInPlace)
+}
+
+func TestEngine_AutoscalerNodeEnabledChange(t *testing.T) {
+	t.Parallel()
+
+	old := newBaseSpec()
+	newer := clone(old)
+	newer.Autoscaler.Node.Enabled = v1alpha1.NodeAutoscalerEnabledEnabled
+
+	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
+	result := engine.ComputeDiff(old, newer, nil, nil)
+
+	if !result.HasInPlaceChanges() {
+		t.Fatal("autoscaler node enabled change should be in-place")
+	}
+
+	assertSingleChange(t, result.InPlaceChanges, "cluster.autoscaler.node.enabled",
+		"Disabled", "Enabled", clusterupdate.ChangeCategoryInPlace)
+}
+
+func TestEngine_AutoscalerExpanderChange(t *testing.T) {
+	t.Parallel()
+
+	old := newBaseSpec()
+	old.Autoscaler.Node.Expander = v1alpha1.AutoscalerExpanderLeastWaste
+	newer := clone(old)
+	newer.Autoscaler.Node.Expander = v1alpha1.AutoscalerExpanderPrice
+
+	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
+	result := engine.ComputeDiff(old, newer, nil, nil)
+
+	if !result.HasInPlaceChanges() {
+		t.Fatal("autoscaler expander change should be in-place")
+	}
+
+	assertSingleChange(t, result.InPlaceChanges, "cluster.autoscaler.node.expander",
+		"LeastWaste", "Price", clusterupdate.ChangeCategoryInPlace)
+}
+
+func TestEngine_AutoscalerPoolAdded(t *testing.T) {
+	t.Parallel()
+
+	old := newBaseSpec()
+	newer := clone(old)
+	newer.Autoscaler.Node.Pools = []v1alpha1.NodePool{
+		{Name: "workers-fsn1", ServerType: "cx23", Location: "fsn1", Min: 1, Max: 5},
+	}
+
+	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
+	result := engine.ComputeDiff(old, newer, nil, nil)
+
+	if !result.HasInPlaceChanges() {
+		t.Fatal("pool addition should produce an in-place change")
+	}
+
+	assertSingleChange(t, result.InPlaceChanges, "cluster.autoscaler.node.pools[workers-fsn1]",
+		"", "Added", clusterupdate.ChangeCategoryInPlace)
+}
+
+func TestEngine_AutoscalerPoolRemoved(t *testing.T) {
+	t.Parallel()
+
+	old := newBaseSpec()
+	old.Autoscaler.Node.Pools = []v1alpha1.NodePool{
+		{Name: "workers-fsn1", ServerType: "cx23", Location: "fsn1", Min: 1, Max: 5},
+	}
+	newer := clone(old)
+	newer.Autoscaler.Node.Pools = nil
+
+	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
+	result := engine.ComputeDiff(old, newer, nil, nil)
+
+	if !result.HasInPlaceChanges() {
+		t.Fatal("pool removal should produce an in-place change")
+	}
+
+	assertSingleChange(t, result.InPlaceChanges, "cluster.autoscaler.node.pools[workers-fsn1]",
+		"Removed", "", clusterupdate.ChangeCategoryInPlace)
+}
+
+func TestEngine_AutoscalerPoolModified(t *testing.T) {
+	t.Parallel()
+
+	old := newBaseSpec()
+	old.Autoscaler.Node.Pools = []v1alpha1.NodePool{
+		{Name: "workers-fsn1", ServerType: "cx23", Location: "fsn1", Min: 1, Max: 5},
+	}
+	newer := clone(old)
+	newer.Autoscaler.Node.Pools = []v1alpha1.NodePool{
+		{Name: "workers-fsn1", ServerType: "cx23", Location: "fsn1", Min: 2, Max: 10},
+	}
+
+	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
+	result := engine.ComputeDiff(old, newer, nil, nil)
+
+	if !result.HasInPlaceChanges() {
+		t.Fatal("pool modification should produce in-place changes")
+	}
+
+	assertSingleChange(t, result.InPlaceChanges, "cluster.autoscaler.node.pools[workers-fsn1].min",
+		"1", "2", clusterupdate.ChangeCategoryInPlace)
+	assertSingleChange(t, result.InPlaceChanges, "cluster.autoscaler.node.pools[workers-fsn1].max",
+		"5", "10", clusterupdate.ChangeCategoryInPlace)
+}
+
+func TestEngine_AutoscalerPodHorizontalChange(t *testing.T) {
+	t.Parallel()
+
+	old := newBaseSpec()
+	newer := clone(old)
+	newer.Autoscaler.Pod.Horizontal = v1alpha1.PodAutoscalerHorizontalEnabled
+
+	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
+	result := engine.ComputeDiff(old, newer, nil, nil)
+
+	if !result.HasInPlaceChanges() {
+		t.Fatal("HPA change should be in-place")
+	}
+
+	assertSingleChange(t, result.InPlaceChanges, "cluster.autoscaler.pod.horizontal",
+		"Disabled", "Enabled", clusterupdate.ChangeCategoryInPlace)
+}
+
+func TestEngine_AutoscalerPodVerticalChange(t *testing.T) {
+	t.Parallel()
+
+	old := newBaseSpec()
+	newer := clone(old)
+	newer.Autoscaler.Pod.Vertical = v1alpha1.PodAutoscalerVerticalEnabled
+
+	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
+	result := engine.ComputeDiff(old, newer, nil, nil)
+
+	if !result.HasInPlaceChanges() {
+		t.Fatal("VPA change should be in-place")
+	}
+
+	assertSingleChange(t, result.InPlaceChanges, "cluster.autoscaler.pod.vertical",
+		"Disabled", "Enabled", clusterupdate.ChangeCategoryInPlace)
+}
+
+func TestEngine_AutoscalerNoChange(t *testing.T) {
+	t.Parallel()
+
+	spec := newBaseSpec()
+	spec.Autoscaler = v1alpha1.AutoscalerConfig{
+		Node: v1alpha1.NodeAutoscalerConfig{
+			Enabled:               v1alpha1.NodeAutoscalerEnabledEnabled,
+			MaxNodesTotal:         20,
+			Expander:              v1alpha1.AutoscalerExpanderLeastWaste,
+			ScaleDownUnneededTime: "10m",
+			Pools: []v1alpha1.NodePool{
+				{Name: "workers-fsn1", ServerType: "cx23", Location: "fsn1", Min: 1, Max: 5},
+			},
+		},
+		Pod: v1alpha1.PodAutoscalerConfig{
+			Horizontal: v1alpha1.PodAutoscalerHorizontalEnabled,
+			Vertical:   v1alpha1.PodAutoscalerVerticalDisabled,
+		},
+	}
+	newer := clone(spec)
+
+	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
+	result := engine.ComputeDiff(spec, newer, nil, nil)
+
+	for _, change := range result.AllChanges() {
+		if strings.HasPrefix(change.Field, "cluster.autoscaler") {
+			t.Errorf(
+				"identical autoscaler config should produce no changes, got: %s %q -> %q",
+				change.Field, change.OldValue, change.NewValue,
+			)
+		}
+	}
+}
+
+func TestEngine_TalosNodeCountDetected_WhenAutoscalerNodeEnabled(t *testing.T) {
+	t.Parallel()
+
+	old := newBaseSpec()
+	newer := clone(old)
+	newer.ControlPlanes = 5
+	newer.Workers = 3
+	newer.Autoscaler.Node.Enabled = v1alpha1.NodeAutoscalerEnabledEnabled
+
+	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
+	result := engine.ComputeDiff(old, newer, nil, nil)
+
+	foundCP, foundWorkers := false, false
+
+	for _, change := range result.AllChanges() {
+		if change.Field == testFieldControlPlanes {
+			foundCP = true
+		}
+
+		if change.Field == testFieldWorkers {
+			foundWorkers = true
+		}
+	}
+
+	if !foundCP {
+		t.Error(
+			"baseline cluster.controlPlanes diff should be detected even when autoscaler.node.enabled is set",
+		)
+	}
+
+	if !foundWorkers {
+		t.Error(
+			"baseline cluster.workers diff should be detected even when autoscaler.node.enabled is set",
+		)
+	}
+}
+
+// TestEngine_AutoscalerFullConfigChange verifies that a single ComputeDiff call detects all
+// expected changes when transitioning from no autoscaler config to a fully-configured autoscaler.
+// This cross-cutting test exercises the entire autoscaler diff path in one operation.
+//
+// Default-value substitution: appendChange replaces empty-string old/new values with defaultVal
+// before comparing. Fields with a non-empty defaultVal will therefore show the default as OldValue
+// when the old spec has a zero-value field (e.g. NodeAutoscalerEnabledDisabled for "enabled").
+// Setting Expander to AutoscalerExpanderPrice (not the default LeastWaste) ensures that the
+// expander change is actually detectable.
+func TestEngine_AutoscalerFullConfigChange(t *testing.T) {
+	t.Parallel()
+
+	old := newBaseSpec()
+	newer := clone(old)
+	newer.Autoscaler = v1alpha1.AutoscalerConfig{
+		Node: v1alpha1.NodeAutoscalerConfig{
+			Enabled:               v1alpha1.NodeAutoscalerEnabledEnabled,
+			MaxNodesTotal:         20,
+			Expander:              v1alpha1.AutoscalerExpanderPrice,
+			ScaleDownUnneededTime: "10m",
+			Pools: []v1alpha1.NodePool{
+				{Name: "workers-fsn1", ServerType: "cx23", Location: "fsn1", Min: 1, Max: 5},
+			},
+		},
+		Pod: v1alpha1.PodAutoscalerConfig{
+			Horizontal: v1alpha1.PodAutoscalerHorizontalEnabled,
+			Vertical:   v1alpha1.PodAutoscalerVerticalEnabled,
+		},
+	}
+
+	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
+	result := engine.ComputeDiff(old, newer, nil, nil)
+
+	require.True(
+		t, result.HasInPlaceChanges(),
+		"full autoscaler config change should produce in-place changes",
+	)
+
+	// "Disabled" is the defaultVal substituted when old spec has zero-value NodeAutoscalerEnabled.
+	assertSingleChange(t, result.InPlaceChanges, "cluster.autoscaler.node.enabled",
+		"Disabled", "Enabled", clusterupdate.ChangeCategoryInPlace)
+	assertSingleChange(t, result.InPlaceChanges, "cluster.autoscaler.node.maxNodesTotal",
+		"0", "20", clusterupdate.ChangeCategoryInPlace)
+	// "LeastWaste" is the defaultVal; using Price ensures old("LeastWaste") != new("Price").
+	assertSingleChange(t, result.InPlaceChanges, "cluster.autoscaler.node.expander",
+		"LeastWaste", "Price", clusterupdate.ChangeCategoryInPlace)
+	assertSingleChange(t, result.InPlaceChanges, "cluster.autoscaler.node.scaleDownUnneededTime",
+		"", "10m", clusterupdate.ChangeCategoryInPlace)
+	assertSingleChange(t, result.InPlaceChanges, "cluster.autoscaler.node.pools[workers-fsn1]",
+		"", "Added", clusterupdate.ChangeCategoryInPlace)
+	// "Disabled" is the defaultVal substituted when old spec has zero-value PodAutoscalerHorizontal.
+	assertSingleChange(t, result.InPlaceChanges, "cluster.autoscaler.pod.horizontal",
+		"Disabled", "Enabled", clusterupdate.ChangeCategoryInPlace)
+	// "Disabled" is the defaultVal substituted when old spec has zero-value PodAutoscalerVertical.
+	assertSingleChange(t, result.InPlaceChanges, "cluster.autoscaler.pod.vertical",
+		"Disabled", "Enabled", clusterupdate.ChangeCategoryInPlace)
+}
+
+// TestEngine_WorkersAndAutoscalerPools_BothDetected_WhenAutoscalerDisabled verifies that
+// a workers node-count change and an autoscaler pool change are both detected independently
+// in a single ComputeDiff call when the node autoscaler is disabled (no suppression active).
+func TestEngine_WorkersAndAutoscalerPools_BothDetected_WhenAutoscalerDisabled(t *testing.T) {
+	t.Parallel()
+
+	old := newBaseSpec()
+	newer := clone(old)
+	newer.Workers = 2
+	newer.Autoscaler.Node.Pools = []v1alpha1.NodePool{
+		{Name: "workers-fsn1", ServerType: "cx23", Location: "fsn1", Min: 1, Max: 5},
+	}
+	// Autoscaler node enabled is NOT set → node count diffs must NOT be suppressed.
+
+	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
+	result := engine.ComputeDiff(old, newer, nil, nil)
+
+	require.True(
+		t, result.HasInPlaceChanges(),
+		"workers and pool change should produce in-place changes",
+	)
+
+	assertSingleChange(t, result.InPlaceChanges, testFieldWorkers,
+		"0", "2", clusterupdate.ChangeCategoryInPlace)
+	assertSingleChange(t, result.InPlaceChanges, "cluster.autoscaler.node.pools[workers-fsn1]",
+		"", "Added", clusterupdate.ChangeCategoryInPlace)
+}
+
+// TestEngine_AutoscalerToggle_NodeCountAlwaysDetected verifies that enabling the
+// node autoscaler in the same update that also changes workers and adds a pool results in:
+//   - the autoscaler.node.enabled change being detected,
+//   - the pool change being detected,
+//   - the workers node-count change being detected (node-count diffs are always emitted,
+//     regardless of autoscaler state — autoscaler manages node pools, not baseline counts).
+func TestEngine_AutoscalerToggle_NodeCountAlwaysDetected(t *testing.T) {
+	t.Parallel()
+
+	old := newBaseSpec()
+	old.Workers = 1
+	newer := clone(old)
+	newer.Workers = 5
+	newer.Autoscaler.Node.Enabled = v1alpha1.NodeAutoscalerEnabledEnabled
+	newer.Autoscaler.Node.Pools = []v1alpha1.NodePool{
+		{Name: "workers-fsn1", ServerType: "cx23", Location: "fsn1", Min: 1, Max: 5},
+	}
+
+	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
+	result := engine.ComputeDiff(old, newer, nil, nil)
+
+	require.True(
+		t, result.HasInPlaceChanges(),
+		"autoscaler toggle, workers change, and pool addition should produce in-place changes",
+	)
+
+	// "Disabled" is the defaultVal substituted for zero-value NodeAutoscalerEnabled.
+	assertSingleChange(t, result.InPlaceChanges, "cluster.autoscaler.node.enabled",
+		"Disabled", "Enabled", clusterupdate.ChangeCategoryInPlace)
+	assertSingleChange(t, result.InPlaceChanges, "cluster.autoscaler.node.pools[workers-fsn1]",
+		"", "Added", clusterupdate.ChangeCategoryInPlace)
+
+	// Node-count diffs are always emitted for Talos regardless of autoscaler state.
+	assertSingleChange(t, result.InPlaceChanges, testFieldWorkers,
+		"1", "5", clusterupdate.ChangeCategoryInPlace)
 }

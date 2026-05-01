@@ -205,6 +205,13 @@ func (m *ConfigManager) unmarshalWithFlagOverrides(ignoreConfigFile bool) error 
 		return err
 	}
 
+	// Re-run migration so that a --node-autoscaling CLI flag override
+	// (applied above) is propagated into the canonical autoscaler.node.enabled field.
+	err = migrateDeprecatedNodeAutoscaling(m.Config, m.Writer)
+	if err != nil {
+		return err
+	}
+
 	m.applyGitOpsAwareDefaults(flagOverrides)
 	m.applyDistributionConfigDefaults()
 
@@ -318,6 +325,12 @@ func (m *ConfigManager) unmarshalAndApplyDefaults(ignoreConfigFile bool) error {
 	// Migrate deprecated fields (e.g. spec.cluster.talos.{controlPlanes,workers})
 	// into their cluster-level replacements before applying field-selector defaults.
 	err = migrateDeprecatedNodeCounts(m.Config, m.Writer)
+	if err != nil {
+		return err
+	}
+
+	// Migrate deprecated spec.cluster.nodeAutoscaling into spec.cluster.autoscaler.node.enabled.
+	err = migrateDeprecatedNodeAutoscaling(m.Config, m.Writer)
 	if err != nil {
 		return err
 	}

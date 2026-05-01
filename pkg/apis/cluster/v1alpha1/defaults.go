@@ -43,6 +43,9 @@ const (
 	// DefaultHetznerTokenEnvVar is the default environment variable name
 	// for the Hetzner API token (matches `default:"HCLOUD_TOKEN"` struct tag).
 	DefaultHetznerTokenEnvVar = "HCLOUD_TOKEN"
+	// DefaultHetznerServerLimit is the default maximum number of Hetzner servers
+	// allowed for a cluster (matches `default:"10"` struct tag on ServerLimit).
+	DefaultHetznerServerLimit int32 = 10
 )
 
 // Talos default values — canonical source for OptionsTalos struct tag defaults.

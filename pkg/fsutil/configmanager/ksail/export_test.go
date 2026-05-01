@@ -34,6 +34,9 @@ type Patch = talosconfigmanager.Patch
 // MigrateDeprecatedNodeCountsForTest exposes migrateDeprecatedNodeCounts for testing.
 var MigrateDeprecatedNodeCountsForTest = migrateDeprecatedNodeCounts
 
+// MigrateDeprecatedNodeAutoscalingForTest exposes migrateDeprecatedNodeAutoscaling for testing.
+var MigrateDeprecatedNodeAutoscalingForTest = migrateDeprecatedNodeAutoscaling
+
 // ExpectedDistributionConfigNameForTest exports expectedDistributionConfigName for testing.
 func ExpectedDistributionConfigNameForTest(distribution v1alpha1.Distribution) string {
 	return expectedDistributionConfigName(distribution)

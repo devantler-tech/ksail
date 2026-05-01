@@ -148,7 +148,8 @@ func TestFactory_LoadBalancer_VanillaDocker_NilDockerClient(t *testing.T) {
 		},
 	}
 
-	installers := factory.CreateInstallersForConfig(cfg)
+	installers, err := factory.CreateInstallersForConfig(cfg)
+	require.NoError(t, err)
 
 	assert.NotContains(t, installers, "cloud-provider-kind",
 		"cloud-provider-kind requires a non-nil docker client")
@@ -177,7 +178,8 @@ func TestFactory_LoadBalancer_Default_TalosHetzner(t *testing.T) {
 		},
 	}
 
-	installers := factory.CreateInstallersForConfig(cfg)
+	installers, err := factory.CreateInstallersForConfig(cfg)
+	require.NoError(t, err)
 
 	assert.Contains(t, installers, "hcloud-ccm",
 		"Talos on Hetzner with Default LoadBalancer should install hcloud-ccm")
@@ -206,7 +208,8 @@ func TestFactory_CSI_TalosDocker(t *testing.T) {
 		},
 	}
 
-	installers := factory.CreateInstallersForConfig(cfg)
+	installers, err := factory.CreateInstallersForConfig(cfg)
+	require.NoError(t, err)
 
 	assert.Contains(t, installers, "local-path-storage",
 		"Talos on Docker with CSI enabled should use local-path-storage")
