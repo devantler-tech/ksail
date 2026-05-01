@@ -268,21 +268,11 @@ func TestApplyAutoscalerConfigSecret_UpdatesExistingSecret(t *testing.T) {
 	assert.Equal(t, []byte(wantEncoded), secret.Data["hcloud_cloud_init"])
 }
 
-func TestApplyAutoscalerConfigSecret_CreateConflictFallsBackToUpdate(t *testing.T) {
-	t.Parallel()
-
-	// Pre-create the secret so subsequent Gets (after AlreadyExists) succeed.
-	preExisting := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:            "cluster-autoscaler-config",
-			Namespace:       "kube-system",
-			ResourceVersion: "1",
-		},
-		Data: map[string][]byte{
-			"hcloud_image":      []byte("old-image"),
-			"hcloud_cloud_init": []byte("old-config"),
-		},
-	}
+// newConflictClientset returns a fake clientset pre-seeded with an existing
+// cluster-autoscaler-config Secret and reactors that simulate concurrent
+// creation: the first Get returns NotFound (entering the create path) and
+// Create returns AlreadyExists (simulating a concurrent writer).
+func newConflictClientset(preExisting *corev1.Secret) *fake.Clientset {
 	clientset := fake.NewClientset(preExisting)
 
 	getCallCount := 0
@@ -293,19 +283,16 @@ func TestApplyAutoscalerConfigSecret_CreateConflictFallsBackToUpdate(t *testing.
 		func(_ k8stesting.Action) (bool, runtime.Object, error) {
 			getCallCount++
 			if getCallCount == 1 {
-				// First Get: return NotFound to enter the create path.
 				return true, nil, apierrors.NewNotFound(
 					schema.GroupResource{Group: "", Resource: "secrets"},
 					"cluster-autoscaler-config",
 				)
 			}
 
-			// Subsequent Gets: pass through to the fake clientset.
 			return false, nil, nil
 		},
 	)
 
-	// Simulate a concurrent caller that created the Secret first.
 	clientset.PrependReactor(
 		"create",
 		"secrets",
@@ -317,19 +304,33 @@ func TestApplyAutoscalerConfigSecret_CreateConflictFallsBackToUpdate(t *testing.
 		},
 	)
 
+	return clientset
+}
+
+func TestApplyAutoscalerConfigSecret_CreateConflictFallsBackToUpdate(t *testing.T) {
+	t.Parallel()
+
+	preExisting := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "cluster-autoscaler-config",
+			Namespace:       "kube-system",
+			ResourceVersion: "1",
+		},
+		Data: map[string][]byte{
+			"hcloud_image":      []byte("old-image"),
+			"hcloud_cloud_init": []byte("old-config"),
+		},
+	}
+	clientset := newConflictClientset(preExisting)
+
 	err := talosprovisioner.ApplyAutoscalerConfigSecret(
-		context.Background(),
-		clientset,
-		"new-image",
-		[]byte("new-config"),
+		context.Background(), clientset, "new-image", []byte("new-config"),
 	)
 	require.NoError(t, err)
 
 	// Verify the Secret was actually updated with the new values (not a no-op).
 	updated, err := clientset.CoreV1().Secrets("kube-system").Get(
-		context.Background(),
-		"cluster-autoscaler-config",
-		metav1.GetOptions{},
+		context.Background(), "cluster-autoscaler-config", metav1.GetOptions{},
 	)
 	require.NoError(t, err)
 
