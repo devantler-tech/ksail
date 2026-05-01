@@ -300,55 +300,6 @@ kubectl get svc web --watch
 
 The `type: LoadBalancer` service provisions a real Hetzner Cloud Load Balancer with a public IP.
 
-## Node Autoscaler
-
-KSail supports the [Kubernetes Cluster Autoscaler](https://github.com/kubernetes/autoscaler) for Hetzner Talos clusters. When enabled, the autoscaler dynamically adds and removes worker nodes based on workload demand.
-
-Configure node pools and enable the autoscaler in `ksail.yaml`:
-
-```yaml
-spec:
-  cluster:
-    autoscaler:
-      node:
-        enabled: Enabled
-        expander: LeastWaste           # LeastWaste, MostPods, Random, Price
-        maxNodesTotal: 20              # hard cap across all pools
-        scaleDownUnneededTime: "10m"
-        pools:
-          - name: workers-fsn1
-            serverType: cx23
-            location: fsn1
-            min: 1
-            max: 5
-          - name: workers-nbg1
-            serverType: cx23
-            location: nbg1
-            min: 0
-            max: 5
-  provider:
-    hetzner:
-      serverLimit: 20   # must be ≥ controlPlanes + workers + sum(pool.Max) across all pools
-```
-
-| Field | Type | Default | Description |
-| --- | --- | --- | --- |
-| `autoscaler.node.enabled` | enum | `Disabled` | Enable node autoscaling (`Enabled` or `Disabled`) |
-| `autoscaler.node.expander` | enum | `LeastWaste` | Node selection strategy (`LeastWaste`, `MostPods`, `Random`, `Price`) |
-| `autoscaler.node.maxNodesTotal` | int | `0` (unlimited) | Hard cap on total nodes across all pools. When > 0, acts as a ceiling even if pool maximums sum higher. |
-| `autoscaler.node.scaleDownUnneededTime` | string | – | Duration a node must be unneeded before scale-down (e.g. `10m`) |
-| `autoscaler.node.pools[].name` | string | – | Unique pool identifier (letters, digits, hyphens; max 63 chars) |
-| `autoscaler.node.pools[].serverType` | string | – | Hetzner server type (e.g. `cx23`, `cax11`) |
-| `autoscaler.node.pools[].location` | string | – | Hetzner datacenter (e.g. `fsn1`, `nbg1`) |
-| `autoscaler.node.pools[].min` | int | – | Minimum nodes in the pool |
-| `autoscaler.node.pools[].max` | int | – | Maximum nodes in the pool |
-
-> [!NOTE]
-> `hetzner.serverLimit` (default `10`) is a safety cap on the total number of Hetzner servers KSail is allowed to provision. When using the autoscaler, set `serverLimit` to at least `controlPlanes + workers + sum(pool.Max)` to avoid validation errors.
-
-> [!NOTE]
-> Pod autoscaler fields (`autoscaler.pod.horizontal` and `autoscaler.pod.vertical`) are reserved for future use and have no effect in the current release.
-
 ## Troubleshooting
 
 **`hcloud token is not set`** — The `HCLOUD_TOKEN` environment variable is missing or empty. Run `echo $HCLOUD_TOKEN` to check. Re-export if needed. If you use a custom variable name, verify it matches `spec.provider.hetzner.tokenEnvVar` in `ksail.yaml`.
@@ -365,7 +316,7 @@ spec:
 
 **Placement group errors** — Hetzner limits spread placement groups to 10 servers per datacenter. Reduce your node count or set `placementGroupStrategy: "None"`. For best-effort HA, set `placementGroupFallbackToNone: true` to fall back automatically when spread placement fails.
 
-**`autoscaler pool capacity exceeds serverLimit`** — The sum of your autoscaler pool maximums (plus `controlPlanes` + `workers`) exceeds `hetzner.serverLimit`. Increase `serverLimit` or reduce your pool `max` values.
+**`autoscaler configuration exceeds Hetzner server limit`** — The total node capacity (`controlPlanes + workers + effectivePoolCapacity`) exceeds `hetzner.serverLimit`. Increase `serverLimit` or reduce your pool `max` values (or lower `maxNodesTotal` to cap the effective pool capacity).
 
 **`cloud provider requires an external registry`** — Hetzner Cloud servers cannot reach Docker-based local registries running on your machine. When `spec.cluster.localRegistry` is enabled, it must point to an internet-accessible registry (e.g., `ghcr.io/myorg`). KSail returns this error early if a non-external registry is configured.
 
