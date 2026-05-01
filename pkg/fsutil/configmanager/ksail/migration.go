@@ -50,12 +50,14 @@ func migrateDeprecatedNodeCounts(cfg *v1alpha1.Cluster, out io.Writer) error {
 // into spec.cluster.autoscaler.node.enabled when the new field is unset.
 // Emits a deprecation notice to the supplied writer when a legacy value is migrated.
 //
-// Migration rules:
-//   - new is empty && old is non-empty → copy mapping to new, zero old, warn.
-//   - new is non-empty && old is non-empty && equivalent → silently zero old.
-//   - new is non-empty && old is non-empty && different → return error (ambiguous).
-//   - new is non-empty && old is empty → no-op (canonical path).
-//   - both empty → no-op.
+// Migration rules (bool semantics — Go zero value for bool is false):
+//   - old is empty → no-op (canonical or already-migrated path).
+//   - old is non-empty && new=true  && mapped=true  → equivalent; silently zero old.
+//   - old is non-empty && new=true  && mapped=false → conflict; return error.
+//   - old is non-empty && new=false → copy mapping to new, zero old, warn.
+//     Note: because Go's bool zero value is false, "new=false" cannot distinguish
+//     "unset" from "explicitly false", so the warning is always emitted when old is
+//     set regardless of whether new was intentionally false (e.g. Disabled→false).
 //
 // mapNodeAutoscalingToEnabled maps the deprecated NodeAutoscaling enum to a bool.
 // Returns an error if the legacy value is not one of the recognized NodeAutoscaling values.
