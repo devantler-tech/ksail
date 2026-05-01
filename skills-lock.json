@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "ways-of-working": {
+      "source": "devantler-tech/skills",
+      "sourceType": "github",
+      "skillPath": "ways-of-working/SKILL.md",
+      "computedHash": "bc7d1c82bb68c3eb40146859c36cd526dd996407ba6a33472aad4f961b5fcb89"
+    }
+  }
+}
