@@ -188,7 +188,7 @@ Releases are automated via `.goreleaser.yaml`, `.github/workflows/release.yaml` 
 
 1. **Prepare:** Bump the version, update changelog, and open a PR targeting `main`.
 2. **Merge triggers tagging:** Push to `main` runs `.github/workflows/release.yaml`, which validates the release configuration and creates/pushes the version tag (for example, `v5.x.x`). The same tagging workflow can also be run manually via `workflow_dispatch` on `release.yaml` to create and push a release tag without a new `main` commit.
-3. **Tag-triggered CD:** Any push of a version tag triggers `.github/workflows/cd.yaml`, which builds and publishes binaries, creates the GitHub Release, deploys documentation, publishes the VSCode extension, and opens a Homebrew tap PR.
+3. **Tag-triggered CD:** Any push of a version tag triggers `.github/workflows/cd.yaml`, which publishes the release; see the `cd.yaml` workflow description above for the current list of release outputs and follow-up publishing jobs.
 
 ## Getting Help
 
