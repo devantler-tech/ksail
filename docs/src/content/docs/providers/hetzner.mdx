@@ -101,7 +101,7 @@ spec:
 | `hetzner.fallbackLocations` | list | `["nbg1", "hel1"]` | Alternative locations if primary is unavailable |
 | `hetzner.placementGroupFallbackToNone` | bool | `false` | Fall back to no placement group on capacity issues |
 | `hetzner.ingressFirewall` | string | `Enabled` | Talos OS-level ingress firewall (`Enabled` or `Disabled`). Generates `NetworkDefaultActionConfig` + `NetworkRuleConfig` patches as defense-in-depth alongside the Hetzner Cloud Firewall. |
-| `hetzner.serverLimit` | int | `10` | Maximum total Hetzner servers for this cluster. Validation checks `control-planes + workers + effective autoscaler capacity`, where effective autoscaler capacity is `sum(pool.max)` or, when `autoscaler.node.maxNodesTotal > 0`, `min(sum(pool.max), autoscaler.node.maxNodesTotal)`. KSail rejects autoscaler configurations that exceed this limit. Set to `0` to use the default of 10. |
+| `hetzner.serverLimit` | int | `10` | Maximum total Hetzner servers for this cluster. Validated only when Hetzner node autoscaling is enabled — checks `control-planes + workers + effective autoscaler capacity`, where effective autoscaler capacity is `sum(pool.max)` or, when `autoscaler.node.maxNodesTotal > 0`, `min(sum(pool.max), autoscaler.node.maxNodesTotal)`. Set to `0` to use the default of 10. |
 
 ### Talos options for Hetzner clusters
 
@@ -147,7 +147,7 @@ spec:
 | `autoscaler.node.enabled` | string | `Disabled` | `Enabled` — defer node scaling to an external autoscaler; `Disabled` — KSail manages node counts directly |
 | `autoscaler.node.expander` | string | `LeastWaste` | Expander strategy: `Price`, `LeastWaste`, `LeastNodes`, `Random` |
 | `autoscaler.node.maxNodesTotal` | int | `0` | Maximum total nodes across all pools. `0` disables the global cap. |
-| `autoscaler.node.scaleDownUnneededTime` | string | _(empty)_ | How long a node must be unneeded before it is eligible for scale-down (e.g. `10m`) |
+| `autoscaler.node.scaleDownUnneededTime` | string | `10m` | How long a node must be unneeded before it is eligible for scale-down (e.g. `10m`) |
 | `autoscaler.node.pools[].name` | string | — | Unique pool name (DNS-1123 label, max 63 chars) |
 | `autoscaler.node.pools[].serverType` | string | — | Hetzner server type for this pool (e.g. `cx23`, `cax11`) |
 | `autoscaler.node.pools[].location` | string | — | Hetzner datacenter location for this pool (e.g. `fsn1`) |
