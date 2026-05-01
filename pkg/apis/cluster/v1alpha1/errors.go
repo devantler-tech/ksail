@@ -131,5 +131,3 @@ var ErrAutoscalerExceedsServerLimit = errors.New(
 var ErrAutoscalerEnabledNoPools = errors.New(
 	"node autoscaler is enabled but no pools are configured",
 )
-
-

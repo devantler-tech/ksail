@@ -335,7 +335,7 @@ func validateNodePools(pools []NodePool) error {
 //
 // Returns the first validation error encountered, or nil if the configuration is valid.
 //
-//nolint:cyclop // Guard clauses each check a single condition; extraction would obscure the flow.
+
 func ValidateAutoscalerConfig(
 	cluster *ClusterSpec,
 	provider *ProviderSpec,
@@ -351,7 +351,8 @@ func ValidateAutoscalerConfig(
 		return enumErr
 	}
 
-	if err := validateNodePools(autoscaler.Pools); err != nil {
+	err := validateNodePools(autoscaler.Pools)
+	if err != nil {
 		return err
 	}
 
