@@ -78,6 +78,8 @@ spec:
       # placementGroupFallbackToNone: false
       # Talos OS-level ingress firewall (default: Enabled — provides defense-in-depth)
       # ingressFirewall: "Enabled"  # or "Disabled"
+      # Maximum Hetzner servers for this cluster (default: 10)
+      # serverLimit: 10
 ```
 
 | Field | Type | Default | Description |
@@ -94,12 +96,62 @@ spec:
 | `hetzner.fallbackLocations` | list | `["nbg1", "hel1"]` | Alternative locations if primary is unavailable |
 | `hetzner.placementGroupFallbackToNone` | bool | `false` | Fall back to no placement group on capacity issues |
 | `hetzner.ingressFirewall` | string | `Enabled` | Talos OS-level ingress firewall (`Enabled` or `Disabled`). Generates `NetworkDefaultActionConfig` + `NetworkRuleConfig` patches as defense-in-depth alongside the Hetzner Cloud Firewall. |
+| `hetzner.serverLimit` | int | `10` | Maximum total Hetzner servers for this cluster. Validation checks `control-planes + workers + effective autoscaler capacity`, where effective autoscaler capacity is `sum(pool.max)` or, when `autoscaler.node.maxNodesTotal > 0`, `min(sum(pool.max), autoscaler.node.maxNodesTotal)`. KSail rejects autoscaler configurations that exceed this limit. Set to `0` to use the default of 10. |
 
 ### Talos options for Hetzner clusters
 
 | Field | Type | Default | Description |
 | --- | --- | --- | --- |
 | `talos.iso` | int | `122630` | Hetzner Cloud ISO/image ID for Talos (use `122629` for ARM) |
+
+### Autoscaler Configuration
+
+KSail supports node and pod autoscaling for Hetzner clusters via `spec.cluster.autoscaler`. Node pools are Hetzner-specific and map directly to the [Kubernetes Cluster Autoscaler](https://github.com/kubernetes/autoscaler) node group format.
+
+```yaml
+spec:
+  cluster:
+    autoscaler:
+      node:
+        enabled: Enabled
+        expander: LeastWaste       # Price | LeastWaste | LeastNodes | Random
+        maxNodesTotal: 20          # 0 = no global cap (sum of pool maxes applies)
+        scaleDownUnneededTime: 10m
+        pools:
+          - name: workers-fsn1
+            serverType: cx23
+            location: fsn1
+            min: 1
+            max: 5
+          - name: workers-nbg1
+            serverType: cx33
+            location: nbg1
+            min: 0
+            max: 3
+      pod:
+        horizontal: Disabled       # Enabled | Disabled (pod autoscaler setting; metrics-server is configured separately)
+        vertical: Disabled         # Enabled | Disabled (reserved for future VPA support; not yet implemented)
+  provider:
+    hetzner:
+      serverLimit: 20              # Must be ≥ controlPlanes + workers + effective pool capacity (capped by maxNodesTotal when set)
+```
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `autoscaler.node.enabled` | string | `Disabled` | `Enabled` — defer node scaling to an external autoscaler; `Disabled` — KSail manages node counts directly |
+| `autoscaler.node.expander` | string | `LeastWaste` | Expander strategy: `Price`, `LeastWaste`, `LeastNodes`, `Random` |
+| `autoscaler.node.maxNodesTotal` | int | `0` | Maximum total nodes across all pools. `0` disables the global cap. |
+| `autoscaler.node.scaleDownUnneededTime` | string | _(empty)_ | How long a node must be unneeded before it is eligible for scale-down (e.g. `10m`) |
+| `autoscaler.node.pools[].name` | string | — | Unique pool name (DNS-1123 label, max 63 chars) |
+| `autoscaler.node.pools[].serverType` | string | — | Hetzner server type for this pool (e.g. `cx23`, `cax11`) |
+| `autoscaler.node.pools[].location` | string | — | Hetzner datacenter location for this pool (e.g. `fsn1`) |
+| `autoscaler.node.pools[].min` | int | — | Minimum nodes in this pool |
+| `autoscaler.node.pools[].max` | int | — | Maximum nodes in this pool |
+| `autoscaler.pod.horizontal` | string | `Disabled` | `Enabled` activates HPA support. Metrics-server is a prerequisite — configure it separately via `spec.cluster.metricsServer`. |
+| `autoscaler.pod.vertical` | string | `Disabled` | Reserved for future VPA support; not yet implemented. |
+
+> [!NOTE]
+> `spec.provider.hetzner.serverLimit` guards against exceeding your Hetzner Cloud project quota. KSail rejects configurations where `controlPlanes + workers + effectivePoolCapacity` exceeds `serverLimit`, where `effectivePoolCapacity` is `sum(pool.max)` capped by `autoscaler.node.maxNodesTotal` when that global cap is set. Raise this limit to match your actual Hetzner project quota.
 
 ## Quick Start
 
