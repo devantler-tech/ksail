@@ -132,8 +132,4 @@ var ErrAutoscalerEnabledNoPools = errors.New(
 	"node autoscaler is enabled but no pools are configured",
 )
 
-// ErrNegativeMaxNodesTotal is returned when cluster.autoscaler.node.maxNodesTotal is negative.
-var ErrNegativeMaxNodesTotal = errors.New("maxNodesTotal must be non-negative")
 
-// ErrNegativeServerLimit is returned when provider.hetzner.serverLimit is negative.
-var ErrNegativeServerLimit = errors.New("serverLimit must be non-negative")

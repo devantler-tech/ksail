@@ -351,14 +351,6 @@ func ValidateAutoscalerConfig(
 		return enumErr
 	}
 
-	if autoscaler.MaxNodesTotal < 0 {
-		return fmt.Errorf("%w: got %d", ErrNegativeMaxNodesTotal, autoscaler.MaxNodesTotal)
-	}
-
-	if provider != nil && provider.Hetzner.ServerLimit < 0 {
-		return fmt.Errorf("%w: got %d", ErrNegativeServerLimit, provider.Hetzner.ServerLimit)
-	}
-
 	if err := validateNodePools(autoscaler.Pools); err != nil {
 		return err
 	}
