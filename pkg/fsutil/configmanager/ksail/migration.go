@@ -57,18 +57,18 @@ func migrateDeprecatedNodeCounts(cfg *v1alpha1.Cluster, out io.Writer) error {
 //   - new is non-empty && old is empty → no-op (canonical path).
 //   - both empty → no-op.
 //
-// mapNodeAutoscalingToEnabled maps the deprecated NodeAutoscaling enum to NodeAutoscalerEnabled.
+// mapNodeAutoscalingToEnabled maps the deprecated NodeAutoscaling enum to a bool.
 // Returns an error if the legacy value is not one of the recognized NodeAutoscaling values.
 func mapNodeAutoscalingToEnabled(
 	old v1alpha1.NodeAutoscaling,
-) (v1alpha1.NodeAutoscalerEnabled, error) {
+) (bool, error) {
 	switch old {
 	case v1alpha1.NodeAutoscalingEnabled:
-		return v1alpha1.NodeAutoscalerEnabledEnabled, nil
+		return true, nil
 	case v1alpha1.NodeAutoscalingDisabled:
-		return v1alpha1.NodeAutoscalerEnabledDisabled, nil
+		return false, nil
 	default:
-		return "", fmt.Errorf(
+		return false, fmt.Errorf(
 			"%w: spec.cluster.nodeAutoscaling=%s is not a recognized value "+
 				"(valid options: %s, %s)",
 			v1alpha1.ErrInvalidNodeAutoscaling,
@@ -96,25 +96,27 @@ func migrateDeprecatedNodeAutoscaling(cfg *v1alpha1.Cluster, out io.Writer) erro
 		return err
 	}
 
-	if *newField != "" && *newField != mapped {
+	// Conflict: newField is explicitly true but legacy says Disabled.
+	// The reverse (newField=false, mapped=true) is not a conflict because false
+	// is the zero value and we cannot distinguish "unset" from "explicitly false".
+	if *newField && !mapped {
 		return fmt.Errorf(
 			"%w: spec.cluster.nodeAutoscaling=%s conflicts with "+
-				"spec.cluster.autoscaler.node.enabled=%s "+
+				"spec.cluster.autoscaler.node.enabled=true "+
 				"(set only spec.cluster.autoscaler.node.enabled)",
 			ErrDeprecatedFieldConflict,
 			*old,
-			*newField,
 		)
 	}
 
-	copied := *newField == ""
+	copied := !*newField
 	if copied {
 		*newField = mapped
 	}
 
 	*old = ""
 
-	if copied && out != nil {
+	if copied && mapped && out != nil {
 		_, _ = fmt.Fprintf(
 			out,
 			"warning: spec.cluster.nodeAutoscaling is deprecated; "+

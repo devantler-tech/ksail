@@ -84,76 +84,7 @@ func TestValidAutoscalerExpanders(t *testing.T) {
 	assert.Len(t, expanders, 4)
 }
 
-// --- NodeAutoscalerEnabled ---
-
-func TestNodeAutoscalerEnabled_Default(t *testing.T) {
-	t.Parallel()
-
-	var nodeEnabled v1alpha1.NodeAutoscalerEnabled
-	assert.Equal(t, v1alpha1.NodeAutoscalerEnabledDisabled, nodeEnabled.Default())
-}
-
-func TestNodeAutoscalerEnabled_ValidValues(t *testing.T) {
-	t.Parallel()
-
-	var nodeEnabled v1alpha1.NodeAutoscalerEnabled
-
-	values := nodeEnabled.ValidValues()
-	assert.Contains(t, values, "Enabled")
-	assert.Contains(t, values, "Disabled")
-	assert.Len(t, values, 2)
-}
-
-func TestNodeAutoscalerEnabled_StringAndType(t *testing.T) {
-	t.Parallel()
-
-	nodeEnabled := v1alpha1.NodeAutoscalerEnabledEnabled
-	assert.Equal(t, "Enabled", nodeEnabled.String())
-	assert.Equal(t, "NodeAutoscalerEnabled", nodeEnabled.Type())
-}
-
-func TestNodeAutoscalerEnabled_Set(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name      string
-		input     string
-		expected  v1alpha1.NodeAutoscalerEnabled
-		wantError bool
-	}{
-		{"enabled_lower", "enabled", v1alpha1.NodeAutoscalerEnabledEnabled, false},
-		{"disabled_mixed", "Disabled", v1alpha1.NodeAutoscalerEnabledDisabled, false},
-		{"invalid", "maybe", "", true},
-	}
-
-	for _, testCase := range tests {
-		t.Run(testCase.name, func(t *testing.T) {
-			t.Parallel()
-
-			var nodeEnabled v1alpha1.NodeAutoscalerEnabled
-
-			err := nodeEnabled.Set(testCase.input)
-			if testCase.wantError {
-				require.Error(t, err)
-				require.ErrorIs(t, err, v1alpha1.ErrInvalidNodeAutoscalerEnabled)
-			} else {
-				require.NoError(t, err)
-				assert.Equal(t, testCase.expected, nodeEnabled)
-			}
-		})
-	}
-}
-
-func TestValidNodeAutoscalerEnableds(t *testing.T) {
-	t.Parallel()
-
-	values := v1alpha1.ValidNodeAutoscalerEnableds()
-	assert.Contains(t, values, v1alpha1.NodeAutoscalerEnabledEnabled)
-	assert.Contains(t, values, v1alpha1.NodeAutoscalerEnabledDisabled)
-	assert.Len(t, values, 2)
-}
-
-// --- PodAutoscalerHorizontal ---
+// --- ValidateAutoscalerConfig ---
 
 func TestPodAutoscalerHorizontal_Default(t *testing.T) {
 	t.Parallel()
@@ -418,7 +349,7 @@ func TestValidateAutoscalerConfig(t *testing.T) {
 				Provider: v1alpha1.ProviderHetzner,
 				Autoscaler: v1alpha1.AutoscalerConfig{
 					Node: v1alpha1.NodeAutoscalerConfig{
-						Enabled: v1alpha1.NodeAutoscalerEnabledEnabled,
+						Enabled: true,
 						Pools:   []v1alpha1.NodePool{},
 					},
 				},
@@ -509,7 +440,7 @@ func TestValidateAutoscalerConfig(t *testing.T) {
 				Workers:       2,
 				Autoscaler: v1alpha1.AutoscalerConfig{
 					Node: v1alpha1.NodeAutoscalerConfig{
-						Enabled: v1alpha1.NodeAutoscalerEnabledEnabled,
+						Enabled: true,
 						Pools: []v1alpha1.NodePool{
 							{Name: "workers", ServerType: "cx23", Location: "fsn1", Min: 1, Max: 8},
 						},
@@ -530,7 +461,7 @@ func TestValidateAutoscalerConfig(t *testing.T) {
 				Workers:       2,
 				Autoscaler: v1alpha1.AutoscalerConfig{
 					Node: v1alpha1.NodeAutoscalerConfig{
-						Enabled: v1alpha1.NodeAutoscalerEnabledEnabled,
+						Enabled: true,
 						Pools: []v1alpha1.NodePool{
 							{Name: "workers", ServerType: "cx23", Location: "fsn1", Min: 1, Max: 5},
 						},
@@ -550,7 +481,7 @@ func TestValidateAutoscalerConfig(t *testing.T) {
 				Workers:       2,
 				Autoscaler: v1alpha1.AutoscalerConfig{
 					Node: v1alpha1.NodeAutoscalerConfig{
-						Enabled: v1alpha1.NodeAutoscalerEnabledDisabled,
+						Enabled: false,
 						Pools: []v1alpha1.NodePool{
 							{
 								Name:       "workers",
@@ -576,7 +507,7 @@ func TestValidateAutoscalerConfig(t *testing.T) {
 				Workers:       2,
 				Autoscaler: v1alpha1.AutoscalerConfig{
 					Node: v1alpha1.NodeAutoscalerConfig{
-						Enabled: v1alpha1.NodeAutoscalerEnabledEnabled,
+						Enabled: true,
 						Pools: []v1alpha1.NodePool{
 							{
 								Name:       "workers",
@@ -600,7 +531,7 @@ func TestValidateAutoscalerConfig(t *testing.T) {
 				Workers:       2,
 				Autoscaler: v1alpha1.AutoscalerConfig{
 					Node: v1alpha1.NodeAutoscalerConfig{
-						Enabled: v1alpha1.NodeAutoscalerEnabledEnabled,
+						Enabled: true,
 						Pools: []v1alpha1.NodePool{
 							{Name: "workers", ServerType: "cx23", Location: "fsn1", Min: 1, Max: 5},
 						},
@@ -622,7 +553,7 @@ func TestValidateAutoscalerConfig(t *testing.T) {
 				Workers:       1,
 				Autoscaler: v1alpha1.AutoscalerConfig{
 					Node: v1alpha1.NodeAutoscalerConfig{
-						Enabled:       v1alpha1.NodeAutoscalerEnabledEnabled,
+						Enabled:       true,
 						MaxNodesTotal: 3,
 						Pools: []v1alpha1.NodePool{
 							// pool.Max=10 but MaxNodesTotal=3 → effectivePoolCapacity=3
@@ -651,7 +582,7 @@ func TestValidateAutoscalerConfig(t *testing.T) {
 				Workers:       1,
 				Autoscaler: v1alpha1.AutoscalerConfig{
 					Node: v1alpha1.NodeAutoscalerConfig{
-						Enabled:       v1alpha1.NodeAutoscalerEnabledEnabled,
+						Enabled:       true,
 						MaxNodesTotal: -1,
 						Pools: []v1alpha1.NodePool{
 							{Name: "workers", ServerType: "cx23", Location: "fsn1", Min: 0, Max: 5},
@@ -672,7 +603,7 @@ func TestValidateAutoscalerConfig(t *testing.T) {
 				Workers:       1,
 				Autoscaler: v1alpha1.AutoscalerConfig{
 					Node: v1alpha1.NodeAutoscalerConfig{
-						Enabled: v1alpha1.NodeAutoscalerEnabledEnabled,
+						Enabled: true,
 						Pools: []v1alpha1.NodePool{
 							{Name: "workers", ServerType: "cx23", Location: "fsn1", Min: 0, Max: 5},
 						},

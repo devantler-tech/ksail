@@ -31,7 +31,7 @@ spec:
     distribution: Vanilla
     autoscaler:
       node:
-        enabled: Enabled
+        enabled: true
         maxNodesTotal: 20
         expander: LeastWaste
         scaleDownUnneededTime: 10m
@@ -60,7 +60,7 @@ spec:
 	require.NotNil(t, cluster)
 
 	node := cluster.Spec.Cluster.Autoscaler.Node
-	assert.Equal(t, v1alpha1.NodeAutoscalerEnabledEnabled, node.Enabled)
+	assert.Equal(t, true, node.Enabled)
 	assert.Equal(t, int32(20), node.MaxNodesTotal)
 	assert.Equal(t, v1alpha1.AutoscalerExpanderLeastWaste, node.Expander)
 	assert.Equal(t, "10m", node.ScaleDownUnneededTime)
@@ -110,7 +110,7 @@ spec:
 	require.NotNil(t, cluster)
 
 	assert.Equal(
-		t, v1alpha1.NodeAutoscalerEnabledEnabled,
+		t, true,
 		cluster.Spec.Cluster.Autoscaler.Node.Enabled,
 		"migration should copy NodeAutoscaling=Enabled to Autoscaler.Node.Enabled",
 	)
@@ -143,7 +143,7 @@ spec:
     distribution: Vanilla
     autoscaler:
       node:
-        enabled: Enabled
+        enabled: true
 `
 
 	configPath := filepath.Join(tempDir, "ksail.yaml")
@@ -165,7 +165,7 @@ spec:
 
 	assert.Equal(
 		t,
-		v1alpha1.NodeAutoscalerEnabledEnabled,
+		true,
 		cluster.Spec.Cluster.Autoscaler.Node.Enabled,
 		"autoscaler.node.enabled should be Enabled as specified in the config file",
 	)

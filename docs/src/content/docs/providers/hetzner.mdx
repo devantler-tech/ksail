@@ -144,7 +144,7 @@ spec:
 
 | Field | Type | Default | Description |
 | --- | --- | --- | --- |
-| `autoscaler.node.enabled` | string | `Disabled` | `Enabled` — defer node scaling to an external autoscaler; `Disabled` — KSail manages node counts directly |
+| `autoscaler.node.enabled` | bool | `false` | `true` — defer node scaling to an external autoscaler; `false` — KSail manages node counts directly |
 | `autoscaler.node.expander` | string | `LeastWaste` | Expander strategy: `Price`, `LeastWaste`, `LeastNodes`, `Random` |
 | `autoscaler.node.maxNodesTotal` | int | `0` | Maximum total nodes across all pools. `0` disables the global cap. |
 | `autoscaler.node.scaleDownUnneededTime` | string | `10m` | How long a node must be unneeded before it is eligible for scale-down (e.g. `10m`) |
