@@ -5,16 +5,16 @@ import (
 	"strings"
 )
 
-// NodeAutoscaling defines whether an external node autoscaler manages cluster node counts.
-// When Enabled, ksail cluster update skips controlPlanes and workers diffs and scaling
-// operations to avoid conflicts with the autoscaler.
+// NodeAutoscaling is reserved for future external autoscaler pool support.
+// Regardless of this setting, KSail always manages and diffs baseline node counts
+// (controlPlanes and workers) during cluster update operations.
 type NodeAutoscaling string
 
 const (
-	// NodeAutoscalingEnabled indicates an external autoscaler manages node counts.
-	// Update operations will not modify controlPlanes or workers.
+	// NodeAutoscalingEnabled is reserved for future external autoscaler pool support.
+	// Currently a no-op: KSail still manages and diffs baseline node counts regardless of this setting.
 	NodeAutoscalingEnabled NodeAutoscaling = "Enabled"
-	// NodeAutoscalingDisabled indicates KSail manages node counts directly.
+	// NodeAutoscalingDisabled is the default: KSail manages node counts directly.
 	NodeAutoscalingDisabled NodeAutoscaling = "Disabled"
 )
 

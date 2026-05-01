@@ -47,7 +47,7 @@ Flags:
       --mirror-registry strings                         Configure mirror registries with optional authentication. Format: [user:pass@]host[=upstream]. Credentials support environment variables using ${VAR} syntax (quote placeholders so KSail can expand them). Examples: docker.io=https://registry-1.docker.io, '${USER}:${TOKEN}@ghcr.io=https://ghcr.io'
   -n, --name string                                     Cluster name used for container names, registry names, and kubeconfig context
       --node-autoscaler-enabled NodeAutoscalerEnabled   Node autoscaling (Talos: Enabled defers worker and control-plane scaling to an external autoscaler, Disabled lets KSail manage node counts; other distributions currently ignore this setting)
-      --node-autoscaling NodeAutoscaling                [Deprecated: use autoscaler.node.enabled instead] Node autoscaling (Talos: Enabled defers worker and control-plane scaling to an external autoscaler, Disabled lets KSail manage node counts; other distributions currently ignore this setting)
+      --node-autoscaling NodeAutoscaling                [Deprecated: use autoscaler.node.enabled instead] Node autoscaling (Default: Disabled, Enabled: reserved for future external autoscaler pool support; baseline node counts in controlPlanes and workers are always reconciled by KSail regardless of this setting)
       --output string                                   Output format: text (default) or json (machine-readable, for CI/MCP) (default "text")
       --policy-engine PolicyEngine                      Policy engine (None: skip, Kyverno: install Kyverno, Gatekeeper: install Gatekeeper)
       --provider Provider                               Infrastructure provider backend (e.g., Docker)
