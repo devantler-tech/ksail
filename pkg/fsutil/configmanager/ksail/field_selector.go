@@ -231,6 +231,13 @@ func ImageVerificationFieldSelector() FieldSelector[v1alpha1.Cluster] {
 // NodeAutoscalingFieldSelector creates a field selector for node autoscaling.
 //
 // Deprecated: use [NodeAutoscalerEnabledFieldSelector] instead.
+//
+// DefaultValue is intentionally omitted: setting a default here would eagerly write
+// "Disabled" into the Config struct during AddFlagsFromFields (before any config file
+// is read). That causes migrateDeprecatedNodeAutoscaling to see old="Disabled" even
+// when the user only set the new autoscaler.node.enabled field, resulting in a false
+// conflict error. The migration's `if *old == ""` guard correctly skips the field when
+// it is left at its zero value.
 func NodeAutoscalingFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	return FieldSelector[v1alpha1.Cluster]{
 		Selector: func(c *v1alpha1.Cluster) any {
@@ -239,7 +246,6 @@ func NodeAutoscalingFieldSelector() FieldSelector[v1alpha1.Cluster] {
 		Description: "[Deprecated: use autoscaler.node.enabled instead] Node autoscaling " +
 			"(Talos: Enabled defers worker and control-plane scaling to an external autoscaler, " +
 			"Disabled lets KSail manage node counts; other distributions currently ignore this setting)",
-		DefaultValue: v1alpha1.NodeAutoscalingDisabled,
 	}
 }
 

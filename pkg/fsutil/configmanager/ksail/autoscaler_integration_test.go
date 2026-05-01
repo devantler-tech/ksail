@@ -10,6 +10,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	configmanagerinterface "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager"
 	configmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/ksail"
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -117,4 +118,53 @@ spec:
 		"migration should clear the deprecated nodeAutoscaling field")
 	assert.Contains(t, out.String(), "deprecated",
 		"migration should emit a deprecation warning")
+}
+
+// TestConfigManager_NewFieldOnlyDoesNotConflictWithDeprecatedDefault is a regression test for
+// https://github.com/devantler-tech/ksail/issues/4507.
+//
+// When a config file sets only spec.cluster.autoscaler.node.enabled (the canonical new field)
+// and does NOT set spec.cluster.nodeAutoscaling, loading the config through
+// NewCommandConfigManager must succeed without a "deprecated field conflicts" error.
+//
+// The bug: NodeAutoscalingFieldSelector previously declared DefaultValue: NodeAutoscalingDisabled.
+// AddFlagsFromFields called setPflagValueDefault which eagerly wrote "Disabled" into the Config
+// struct before any config file was read. When the config file then populated
+// autoscaler.node.enabled=Enabled, the migration saw old="Disabled" vs new="Enabled" → conflict.
+func TestConfigManager_NewFieldOnlyDoesNotConflictWithDeprecatedDefault(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+
+	const yaml = `apiVersion: ksail.io/v1alpha1
+kind: Cluster
+spec:
+  cluster:
+    distribution: Vanilla
+    autoscaler:
+      node:
+        enabled: Enabled
+`
+
+	configPath := filepath.Join(tempDir, "ksail.yaml")
+	require.NoError(t, os.WriteFile(configPath, []byte(yaml), 0o600))
+
+	// Use NewCommandConfigManager (via a Cobra command) so that AddFlagsFromFields runs,
+	// which is what triggers the eager default injection in the buggy code path.
+	cmd := &cobra.Command{Use: "test"}
+	selectors := []configmanager.FieldSelector[v1alpha1.Cluster]{
+		configmanager.NodeAutoscalingFieldSelector(), //nolint:staticcheck // backward-compat test
+		configmanager.NodeAutoscalerEnabledFieldSelector(),
+	}
+	mgr := configmanager.NewCommandConfigManager(cmd, selectors)
+	mgr.Viper.SetConfigFile(configPath)
+
+	cluster, err := mgr.Load(configmanagerinterface.LoadOptions{SkipValidation: true})
+	require.NoError(t, err, "loading a config with only autoscaler.node.enabled must not error")
+	require.NotNil(t, cluster)
+
+	assert.Equal(t, v1alpha1.NodeAutoscalerEnabledEnabled, cluster.Spec.Cluster.Autoscaler.Node.Enabled,
+		"autoscaler.node.enabled should be Enabled as specified in the config file")
+	assert.Empty(t, cluster.Spec.Cluster.NodeAutoscaling,
+		"deprecated nodeAutoscaling field should remain empty when not set in config")
 }
