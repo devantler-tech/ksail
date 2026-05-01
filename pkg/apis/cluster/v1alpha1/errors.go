@@ -32,9 +32,6 @@ var ErrInvalidPolicyEngine = errors.New("invalid policy engine")
 // ErrInvalidImageVerification is returned when an invalid image verification option is specified.
 var ErrInvalidImageVerification = errors.New("invalid image verification")
 
-// ErrInvalidNodeAutoscalerEnabled is returned when an invalid node autoscaler enabled option is specified.
-var ErrInvalidNodeAutoscalerEnabled = errors.New("invalid node autoscaler enabled")
-
 // ErrInvalidNodeAutoscaling is returned when an invalid node autoscaling option is specified.
 var ErrInvalidNodeAutoscaling = errors.New("invalid node autoscaling")
 

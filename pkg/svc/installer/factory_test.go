@@ -526,7 +526,7 @@ func TestFactory_CreateInstallersForConfig_ClusterAutoscaler_Enabled(t *testing.
 	cfg := newTestCluster(func(clusterSpec *v1alpha1.ClusterSpec) {
 		clusterSpec.Distribution = v1alpha1.DistributionTalos
 		clusterSpec.Provider = v1alpha1.ProviderHetzner
-		clusterSpec.Autoscaler.Node.Enabled = v1alpha1.NodeAutoscalerEnabledEnabled
+		clusterSpec.Autoscaler.Node.Enabled = true
 	})
 
 	installers, err := factory.CreateInstallersForConfig(cfg)
@@ -542,25 +542,25 @@ func TestFactory_CreateInstallersForConfig_ClusterAutoscaler_NotEnabled(t *testi
 		name         string
 		distribution v1alpha1.Distribution
 		provider     v1alpha1.Provider
-		enabled      v1alpha1.NodeAutoscalerEnabled
+		enabled      bool
 	}{
 		{
 			name:         "node_autoscaler_disabled",
 			distribution: v1alpha1.DistributionTalos,
 			provider:     v1alpha1.ProviderHetzner,
-			enabled:      v1alpha1.NodeAutoscalerEnabledDisabled,
+			enabled:      false,
 		},
 		{
 			name:         "vanilla_distribution",
 			distribution: v1alpha1.DistributionVanilla,
 			provider:     v1alpha1.ProviderHetzner,
-			enabled:      v1alpha1.NodeAutoscalerEnabledEnabled,
+			enabled:      true,
 		},
 		{
 			name:         "talos_docker_provider",
 			distribution: v1alpha1.DistributionTalos,
 			provider:     v1alpha1.ProviderDocker,
-			enabled:      v1alpha1.NodeAutoscalerEnabledEnabled,
+			enabled:      true,
 		},
 	}
 

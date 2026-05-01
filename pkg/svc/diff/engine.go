@@ -512,8 +512,8 @@ func (e *Engine) checkAutoscalerNodeScalarsChange(
 	result *clusterupdate.UpdateResult,
 ) {
 	appendChange(result, "cluster.autoscaler.node.enabled",
-		string(oldNode.Enabled), string(newNode.Enabled),
-		string(v1alpha1.NodeAutoscalerEnabledDisabled),
+		strconv.FormatBool(oldNode.Enabled), strconv.FormatBool(newNode.Enabled),
+		"false",
 		"enabling/disabling the node autoscaler triggers Helm install/uninstall",
 		clusterupdate.ChangeCategoryInPlace)
 

@@ -207,7 +207,11 @@ func (m *ConfigManager) unmarshalWithFlagOverrides(ignoreConfigFile bool) error 
 
 	// Re-run migration so that a --node-autoscaling CLI flag override
 	// (applied above) is propagated into the canonical autoscaler.node.enabled field.
-	err = migrateDeprecatedNodeAutoscaling(m.Config, m.Writer)
+	err = migrateDeprecatedNodeAutoscaling(
+		m.Config,
+		m.Viper.IsSet("spec.cluster.autoscaler.node.enabled"),
+		m.Writer,
+	)
 	if err != nil {
 		return err
 	}
@@ -330,7 +334,11 @@ func (m *ConfigManager) unmarshalAndApplyDefaults(ignoreConfigFile bool) error {
 	}
 
 	// Migrate deprecated spec.cluster.nodeAutoscaling into spec.cluster.autoscaler.node.enabled.
-	err = migrateDeprecatedNodeAutoscaling(m.Config, m.Writer)
+	err = migrateDeprecatedNodeAutoscaling(
+		m.Config,
+		m.Viper.IsSet("spec.cluster.autoscaler.node.enabled"),
+		m.Writer,
+	)
 	if err != nil {
 		return err
 	}

@@ -1034,7 +1034,7 @@ func TestEngine_AutoscalerNodeEnabledChange(t *testing.T) {
 
 	old := newBaseSpec()
 	newer := clone(old)
-	newer.Autoscaler.Node.Enabled = v1alpha1.NodeAutoscalerEnabledEnabled
+	newer.Autoscaler.Node.Enabled = true
 
 	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
 	result := engine.ComputeDiff(old, newer, nil, nil)
@@ -1044,7 +1044,7 @@ func TestEngine_AutoscalerNodeEnabledChange(t *testing.T) {
 	}
 
 	assertSingleChange(t, result.InPlaceChanges, "cluster.autoscaler.node.enabled",
-		"Disabled", "Enabled", clusterupdate.ChangeCategoryInPlace)
+		"false", "true", clusterupdate.ChangeCategoryInPlace)
 }
 
 func TestEngine_AutoscalerExpanderChange(t *testing.T) {
@@ -1174,7 +1174,7 @@ func TestEngine_AutoscalerNoChange(t *testing.T) {
 	spec := newBaseSpec()
 	spec.Autoscaler = v1alpha1.AutoscalerConfig{
 		Node: v1alpha1.NodeAutoscalerConfig{
-			Enabled:               v1alpha1.NodeAutoscalerEnabledEnabled,
+			Enabled:               true,
 			MaxNodesTotal:         20,
 			Expander:              v1alpha1.AutoscalerExpanderLeastWaste,
 			ScaleDownUnneededTime: "10m",
@@ -1209,7 +1209,7 @@ func TestEngine_TalosNodeCountDetected_WhenAutoscalerNodeEnabled(t *testing.T) {
 	newer := clone(old)
 	newer.ControlPlanes = 5
 	newer.Workers = 3
-	newer.Autoscaler.Node.Enabled = v1alpha1.NodeAutoscalerEnabledEnabled
+	newer.Autoscaler.Node.Enabled = true
 
 	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
 	result := engine.ComputeDiff(old, newer, nil, nil)
@@ -1245,7 +1245,7 @@ func TestEngine_TalosNodeCountDetected_WhenAutoscalerNodeEnabled(t *testing.T) {
 //
 // Default-value substitution: appendChange replaces empty-string old/new values with defaultVal
 // before comparing. Fields with a non-empty defaultVal will therefore show the default as OldValue
-// when the old spec has a zero-value field (e.g. NodeAutoscalerEnabledDisabled for "enabled").
+// when the old spec has a zero-value field (e.g. false for "enabled").
 // Setting Expander to AutoscalerExpanderPrice (not the default LeastWaste) ensures that the
 // expander change is actually detectable.
 func TestEngine_AutoscalerFullConfigChange(t *testing.T) {
@@ -1255,7 +1255,7 @@ func TestEngine_AutoscalerFullConfigChange(t *testing.T) {
 	newer := clone(old)
 	newer.Autoscaler = v1alpha1.AutoscalerConfig{
 		Node: v1alpha1.NodeAutoscalerConfig{
-			Enabled:               v1alpha1.NodeAutoscalerEnabledEnabled,
+			Enabled:               true,
 			MaxNodesTotal:         20,
 			Expander:              v1alpha1.AutoscalerExpanderPrice,
 			ScaleDownUnneededTime: "10m",
@@ -1277,9 +1277,9 @@ func TestEngine_AutoscalerFullConfigChange(t *testing.T) {
 		"full autoscaler config change should produce in-place changes",
 	)
 
-	// "Disabled" is the defaultVal substituted when old spec has zero-value NodeAutoscalerEnabled.
+	// "false" is the defaultVal substituted when old spec has zero-value bool.
 	assertSingleChange(t, result.InPlaceChanges, "cluster.autoscaler.node.enabled",
-		"Disabled", "Enabled", clusterupdate.ChangeCategoryInPlace)
+		"false", "true", clusterupdate.ChangeCategoryInPlace)
 	assertSingleChange(t, result.InPlaceChanges, "cluster.autoscaler.node.maxNodesTotal",
 		"0", "20", clusterupdate.ChangeCategoryInPlace)
 	// "LeastWaste" is the defaultVal; using Price ensures old("LeastWaste") != new("Price").
@@ -1338,7 +1338,7 @@ func TestEngine_AutoscalerToggle_NodeCountAlwaysDetected(t *testing.T) {
 	old.Workers = 1
 	newer := clone(old)
 	newer.Workers = 5
-	newer.Autoscaler.Node.Enabled = v1alpha1.NodeAutoscalerEnabledEnabled
+	newer.Autoscaler.Node.Enabled = true
 	newer.Autoscaler.Node.Pools = []v1alpha1.NodePool{
 		{Name: "workers-fsn1", ServerType: "cx23", Location: "fsn1", Min: 1, Max: 5},
 	}
@@ -1351,9 +1351,9 @@ func TestEngine_AutoscalerToggle_NodeCountAlwaysDetected(t *testing.T) {
 		"autoscaler toggle, workers change, and pool addition should produce in-place changes",
 	)
 
-	// "Disabled" is the defaultVal substituted for zero-value NodeAutoscalerEnabled.
+	// "false" is the defaultVal substituted for zero-value bool.
 	assertSingleChange(t, result.InPlaceChanges, "cluster.autoscaler.node.enabled",
-		"Disabled", "Enabled", clusterupdate.ChangeCategoryInPlace)
+		"false", "true", clusterupdate.ChangeCategoryInPlace)
 	assertSingleChange(t, result.InPlaceChanges, "cluster.autoscaler.node.pools[workers-fsn1]",
 		"", "Added", clusterupdate.ChangeCategoryInPlace)
 

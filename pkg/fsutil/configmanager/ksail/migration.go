@@ -50,25 +50,30 @@ func migrateDeprecatedNodeCounts(cfg *v1alpha1.Cluster, out io.Writer) error {
 // into spec.cluster.autoscaler.node.enabled when the new field is unset.
 // Emits a deprecation notice to the supplied writer when a legacy value is migrated.
 //
-// Migration rules:
-//   - new is empty && old is non-empty → copy mapping to new, zero old, warn.
-//   - new is non-empty && old is non-empty && equivalent → silently zero old.
-//   - new is non-empty && old is non-empty && different → return error (ambiguous).
-//   - new is non-empty && old is empty → no-op (canonical path).
-//   - both empty → no-op.
+// newFieldExplicit must be true when spec.cluster.autoscaler.node.enabled was explicitly
+// set by the user (e.g. via Viper.IsSet). When false, a zero new field is treated as
+// "unset" and the legacy value is copied over with a deprecation warning.
 //
-// mapNodeAutoscalingToEnabled maps the deprecated NodeAutoscaling enum to NodeAutoscalerEnabled.
+// Migration rules (bool semantics — Go zero value for bool is false):
+//   - old is empty → no-op (canonical or already-migrated path).
+//   - old non-empty && newFieldExplicit=true  && new=true  && mapped=true  → equivalent; silently zero old.
+//   - old non-empty && newFieldExplicit=true  && new=true  && mapped=false → conflict; return error.
+//   - old non-empty && newFieldExplicit=true  && new=false && mapped=true  → conflict; return error.
+//   - old non-empty && newFieldExplicit=true  && new=false && mapped=false → equivalent; silently zero old.
+//   - old non-empty && newFieldExplicit=false → copy mapping to new, zero old, warn.
+//
+// mapNodeAutoscalingToEnabled maps the deprecated NodeAutoscaling enum to a bool.
 // Returns an error if the legacy value is not one of the recognized NodeAutoscaling values.
 func mapNodeAutoscalingToEnabled(
 	old v1alpha1.NodeAutoscaling,
-) (v1alpha1.NodeAutoscalerEnabled, error) {
+) (bool, error) {
 	switch old {
 	case v1alpha1.NodeAutoscalingEnabled:
-		return v1alpha1.NodeAutoscalerEnabledEnabled, nil
+		return true, nil
 	case v1alpha1.NodeAutoscalingDisabled:
-		return v1alpha1.NodeAutoscalerEnabledDisabled, nil
+		return false, nil
 	default:
-		return "", fmt.Errorf(
+		return false, fmt.Errorf(
 			"%w: spec.cluster.nodeAutoscaling=%s is not a recognized value "+
 				"(valid options: %s, %s)",
 			v1alpha1.ErrInvalidNodeAutoscaling,
@@ -79,7 +84,11 @@ func mapNodeAutoscalingToEnabled(
 	}
 }
 
-func migrateDeprecatedNodeAutoscaling(cfg *v1alpha1.Cluster, out io.Writer) error {
+func migrateDeprecatedNodeAutoscaling(
+	cfg *v1alpha1.Cluster,
+	newFieldExplicit bool,
+	out io.Writer,
+) error {
 	if cfg == nil {
 		return nil
 	}
@@ -96,10 +105,11 @@ func migrateDeprecatedNodeAutoscaling(cfg *v1alpha1.Cluster, out io.Writer) erro
 		return err
 	}
 
-	if *newField != "" && *newField != mapped {
+	// Conflict: new field was explicitly set and disagrees with the legacy value.
+	if newFieldExplicit && *newField != mapped {
 		return fmt.Errorf(
 			"%w: spec.cluster.nodeAutoscaling=%s conflicts with "+
-				"spec.cluster.autoscaler.node.enabled=%s "+
+				"spec.cluster.autoscaler.node.enabled=%t "+
 				"(set only spec.cluster.autoscaler.node.enabled)",
 			ErrDeprecatedFieldConflict,
 			*old,
@@ -107,7 +117,8 @@ func migrateDeprecatedNodeAutoscaling(cfg *v1alpha1.Cluster, out io.Writer) erro
 		)
 	}
 
-	copied := *newField == ""
+	// Only copy and warn when the new field was not explicitly set.
+	copied := !newFieldExplicit
 	if copied {
 		*newField = mapped
 	}

@@ -138,11 +138,6 @@ func ValidNodeAutoscalings() []NodeAutoscaling {
 	return []NodeAutoscaling{NodeAutoscalingEnabled, NodeAutoscalingDisabled}
 }
 
-// ValidNodeAutoscalerEnableds returns supported NodeAutoscalerEnabled values.
-func ValidNodeAutoscalerEnableds() []NodeAutoscalerEnabled {
-	return []NodeAutoscalerEnabled{NodeAutoscalerEnabledEnabled, NodeAutoscalerEnabledDisabled}
-}
-
 // ValidAutoscalerExpanders returns supported AutoscalerExpander values.
 func ValidAutoscalerExpanders() []AutoscalerExpander {
 	return []AutoscalerExpander{
@@ -258,11 +253,6 @@ func validateAutoscalerEnumFields(
 	autoscaler *NodeAutoscalerConfig,
 	pod *PodAutoscalerConfig,
 ) error {
-	if autoscaler.Enabled != "" &&
-		!slices.Contains(ValidNodeAutoscalerEnableds(), autoscaler.Enabled) {
-		return fmt.Errorf("%w: %q", ErrInvalidNodeAutoscalerEnabled, autoscaler.Enabled)
-	}
-
 	if autoscaler.Expander != "" &&
 		!slices.Contains(ValidAutoscalerExpanders(), autoscaler.Expander) {
 		return fmt.Errorf("%w: %q", ErrInvalidAutoscalerExpander, autoscaler.Expander)
@@ -357,7 +347,7 @@ func ValidateAutoscalerConfig(
 		return enumErr
 	}
 
-	if autoscaler.Enabled == NodeAutoscalerEnabledEnabled && len(autoscaler.Pools) == 0 {
+	if autoscaler.Enabled && len(autoscaler.Pools) == 0 {
 		return ErrAutoscalerEnabledNoPools
 	}
 
@@ -378,7 +368,7 @@ func validateHetznerCapacity(
 ) error {
 	if provider == nil ||
 		cluster.Provider != ProviderHetzner ||
-		autoscaler.Enabled != NodeAutoscalerEnabledEnabled {
+		!autoscaler.Enabled {
 		return nil
 	}
 

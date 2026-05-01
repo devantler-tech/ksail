@@ -211,11 +211,7 @@
                 "node": {
                   "properties": {
                     "enabled": {
-                      "type": "string",
-                      "enum": [
-                        "Enabled",
-                        "Disabled"
-                      ]
+                      "type": "boolean"
                     },
                     "pools": {
                       "items": {
