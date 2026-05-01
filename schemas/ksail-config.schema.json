@@ -224,10 +224,12 @@
                             "type": "string"
                           },
                           "serverType": {
-                            "type": "string"
+                            "type": "string",
+                            "minLength": 1
                           },
                           "location": {
-                            "type": "string"
+                            "type": "string",
+                            "minLength": 1
                           },
                           "min": {
                             "type": "integer",
@@ -246,7 +248,7 @@
                     "maxNodesTotal": {
                       "type": "integer",
                       "minimum": 0,
-                      "description": "Maximum total nodes allowed across all node pools. Set to 0 to disable the global cap; when disabled"
+                      "description": "Maximum total nodes allowed across all node pools. Set to 0 to disable the global cap; when the global cap is disabled the effective cap is the sum of all pool max values"
                     },
                     "expander": {
                       "type": "string",

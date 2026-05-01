@@ -361,7 +361,7 @@ func TestValidateAutoscalerConfig(t *testing.T) {
 			errContains: "my_pool",
 		},
 		{
-			name: "pool name starts with number is invalid",
+			name: "pool name starts with number is valid (DNS-1123 allows digit start)",
 			cluster: &v1alpha1.ClusterSpec{
 				Autoscaler: v1alpha1.AutoscalerConfig{
 					Node: v1alpha1.NodeAutoscalerConfig{
@@ -371,7 +371,62 @@ func TestValidateAutoscalerConfig(t *testing.T) {
 					},
 				},
 			},
+			wantErr: nil,
+		},
+		{
+			name: "pool name starts with hyphen is invalid",
+			cluster: &v1alpha1.ClusterSpec{
+				Autoscaler: v1alpha1.AutoscalerConfig{
+					Node: v1alpha1.NodeAutoscalerConfig{
+						Pools: []v1alpha1.NodePool{
+							{Name: "-pool", ServerType: "cx23", Location: "fsn1", Min: 1, Max: 5},
+						},
+					},
+				},
+			},
 			wantErr: v1alpha1.ErrInvalidPoolName,
+		},
+		{
+			name: "pool serverType empty is invalid",
+			cluster: &v1alpha1.ClusterSpec{
+				Autoscaler: v1alpha1.AutoscalerConfig{
+					Node: v1alpha1.NodeAutoscalerConfig{
+						Pools: []v1alpha1.NodePool{
+							{Name: "workers", ServerType: "", Location: "fsn1", Min: 1, Max: 5},
+						},
+					},
+				},
+			},
+			wantErr: v1alpha1.ErrPoolServerTypeEmpty,
+		},
+		{
+			name: "pool location empty is invalid",
+			cluster: &v1alpha1.ClusterSpec{
+				Autoscaler: v1alpha1.AutoscalerConfig{
+					Node: v1alpha1.NodeAutoscalerConfig{
+						Pools: []v1alpha1.NodePool{
+							{Name: "workers", ServerType: "cx23", Location: "", Min: 1, Max: 5},
+						},
+					},
+				},
+			},
+			wantErr: v1alpha1.ErrPoolLocationEmpty,
+		},
+		{
+			name: "node autoscaler enabled with no pools is invalid",
+			cluster: &v1alpha1.ClusterSpec{
+				Provider: v1alpha1.ProviderHetzner,
+				Autoscaler: v1alpha1.AutoscalerConfig{
+					Node: v1alpha1.NodeAutoscalerConfig{
+						Enabled: v1alpha1.NodeAutoscalerEnabledEnabled,
+						Pools:   []v1alpha1.NodePool{},
+					},
+				},
+			},
+			provider: &v1alpha1.ProviderSpec{
+				Hetzner: v1alpha1.OptionsHetzner{ServerLimit: 10},
+			},
+			wantErr: v1alpha1.ErrAutoscalerEnabledNoPools,
 		},
 		{
 			name: "pool min exceeds max",

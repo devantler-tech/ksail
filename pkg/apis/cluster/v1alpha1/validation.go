@@ -246,8 +246,8 @@ func ValidateLocalRegistryForProvider(provider Provider, registry LocalRegistry)
 }
 
 // poolNameRegex matches DNS-1123 label names: lowercase alphanumeric with optional hyphens.
-// Must start with a letter, end with alphanumeric, and be at most 63 characters.
-var poolNameRegex = regexp.MustCompile(`^[a-z][a-z0-9-]*[a-z0-9]$|^[a-z]$`)
+// Must start and end with a lowercase alphanumeric character, and be at most 63 characters.
+var poolNameRegex = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$`)
 
 // PoolNameMaxLength is the maximum length for a pool name (DNS-1123 label limit).
 const PoolNameMaxLength = 63
@@ -294,10 +294,18 @@ func validateNodePools(pools []NodePool) error {
 		if !poolNameRegex.MatchString(pool.Name) {
 			return fmt.Errorf(
 				"%w: pool[%d] %q must be a DNS-1123 label "+
-					"(lowercase letters, numbers, and hyphens; must start with a letter; "+
-					"must not end with a hyphen)",
+					"(lowercase letters, numbers, and hyphens; "+
+					"must start and end with a lowercase alphanumeric character)",
 				ErrInvalidPoolName, idx, pool.Name,
 			)
+		}
+
+		if pool.ServerType == "" {
+			return fmt.Errorf("%w: pool[%d] %q", ErrPoolServerTypeEmpty, idx, pool.Name)
+		}
+
+		if pool.Location == "" {
+			return fmt.Errorf("%w: pool[%d] %q", ErrPoolLocationEmpty, idx, pool.Name)
 		}
 
 		if pool.Min < 0 || pool.Max < 0 {
@@ -334,8 +342,6 @@ func validateNodePools(pools []NodePool) error {
 //   - provider: The ProviderSpec containing Hetzner-specific options (ServerLimit).
 //
 // Returns the first validation error encountered, or nil if the configuration is valid.
-//
-
 func ValidateAutoscalerConfig(
 	cluster *ClusterSpec,
 	provider *ProviderSpec,
@@ -349,6 +355,10 @@ func ValidateAutoscalerConfig(
 	enumErr := validateAutoscalerEnumFields(autoscaler, &cluster.Autoscaler.Pod)
 	if enumErr != nil {
 		return enumErr
+	}
+
+	if autoscaler.Enabled == NodeAutoscalerEnabledEnabled && len(autoscaler.Pools) == 0 {
+		return ErrAutoscalerEnabledNoPools
 	}
 
 	err := validateNodePools(autoscaler.Pools)
