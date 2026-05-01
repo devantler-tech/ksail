@@ -50,14 +50,17 @@ func migrateDeprecatedNodeCounts(cfg *v1alpha1.Cluster, out io.Writer) error {
 // into spec.cluster.autoscaler.node.enabled when the new field is unset.
 // Emits a deprecation notice to the supplied writer when a legacy value is migrated.
 //
+// newFieldExplicit must be true when spec.cluster.autoscaler.node.enabled was explicitly
+// set by the user (e.g. via Viper.IsSet). When false, a zero new field is treated as
+// "unset" and the legacy value is copied over with a deprecation warning.
+//
 // Migration rules (bool semantics — Go zero value for bool is false):
 //   - old is empty → no-op (canonical or already-migrated path).
-//   - old is non-empty && new=true  && mapped=true  → equivalent; silently zero old.
-//   - old is non-empty && new=true  && mapped=false → conflict; return error.
-//   - old is non-empty && new=false → copy mapping to new, zero old, warn.
-//     Note: because Go's bool zero value is false, "new=false" cannot distinguish
-//     "unset" from "explicitly false", so the warning is always emitted when old is
-//     set regardless of whether new was intentionally false (e.g. Disabled→false).
+//   - old non-empty && newFieldExplicit=true  && new=true  && mapped=true  → equivalent; silently zero old.
+//   - old non-empty && newFieldExplicit=true  && new=true  && mapped=false → conflict; return error.
+//   - old non-empty && newFieldExplicit=true  && new=false && mapped=true  → conflict; return error.
+//   - old non-empty && newFieldExplicit=true  && new=false && mapped=false → equivalent; silently zero old.
+//   - old non-empty && newFieldExplicit=false → copy mapping to new, zero old, warn.
 //
 // mapNodeAutoscalingToEnabled maps the deprecated NodeAutoscaling enum to a bool.
 // Returns an error if the legacy value is not one of the recognized NodeAutoscaling values.
@@ -81,7 +84,7 @@ func mapNodeAutoscalingToEnabled(
 	}
 }
 
-func migrateDeprecatedNodeAutoscaling(cfg *v1alpha1.Cluster, out io.Writer) error {
+func migrateDeprecatedNodeAutoscaling(cfg *v1alpha1.Cluster, newFieldExplicit bool, out io.Writer) error {
 	if cfg == nil {
 		return nil
 	}
@@ -98,22 +101,20 @@ func migrateDeprecatedNodeAutoscaling(cfg *v1alpha1.Cluster, out io.Writer) erro
 		return err
 	}
 
-	// Conflict: newField is explicitly true but legacy says Disabled.
-	// Note: the reverse case (newField=false, mapped=true) cannot be detected
-	// because Go's bool zero value is false — we cannot distinguish "unset" from
-	// "explicitly false". In that case the migration silently copies mapped=true
-	// into newField, which is the safest behaviour (preserves the legacy intent).
-	if *newField && !mapped {
+	// Conflict: new field was explicitly set and disagrees with the legacy value.
+	if newFieldExplicit && *newField != mapped {
 		return fmt.Errorf(
 			"%w: spec.cluster.nodeAutoscaling=%s conflicts with "+
-				"spec.cluster.autoscaler.node.enabled=true "+
+				"spec.cluster.autoscaler.node.enabled=%t "+
 				"(set only spec.cluster.autoscaler.node.enabled)",
 			ErrDeprecatedFieldConflict,
 			*old,
+			*newField,
 		)
 	}
 
-	copied := !*newField
+	// Only copy and warn when the new field was not explicitly set.
+	copied := !newFieldExplicit
 	if copied {
 		*newField = mapped
 	}

@@ -19,7 +19,7 @@ func TestMigrateDeprecatedNodeAutoscaling_CopiesEnabledWhenNewUnset(t *testing.T
 
 	var out bytes.Buffer
 
-	require.NoError(t, configmanager.MigrateDeprecatedNodeAutoscalingForTest(cfg, &out))
+	require.NoError(t, configmanager.MigrateDeprecatedNodeAutoscalingForTest(cfg, false, &out))
 
 	assert.True(t, cfg.Spec.Cluster.Autoscaler.Node.Enabled)
 
@@ -42,7 +42,7 @@ func TestMigrateDeprecatedNodeAutoscaling_CopiesDisabledWhenNewUnset(t *testing.
 
 	var out bytes.Buffer
 
-	require.NoError(t, configmanager.MigrateDeprecatedNodeAutoscalingForTest(cfg, &out))
+	require.NoError(t, configmanager.MigrateDeprecatedNodeAutoscalingForTest(cfg, false, &out))
 
 	assert.False(
 		t,
@@ -64,7 +64,7 @@ func TestMigrateDeprecatedNodeAutoscaling_NoOpWhenLegacyUnset(t *testing.T) {
 
 	var out bytes.Buffer
 
-	require.NoError(t, configmanager.MigrateDeprecatedNodeAutoscalingForTest(cfg, &out))
+	require.NoError(t, configmanager.MigrateDeprecatedNodeAutoscalingForTest(cfg, true, &out))
 
 	assert.True(t, cfg.Spec.Cluster.Autoscaler.Node.Enabled)
 	assert.Empty(t, out.String(), "no warning expected when legacy field unset")
@@ -80,7 +80,7 @@ func TestMigrateDeprecatedNodeAutoscaling_MatchingValuesAreSilent(t *testing.T) 
 
 	var out bytes.Buffer
 
-	require.NoError(t, configmanager.MigrateDeprecatedNodeAutoscalingForTest(cfg, &out))
+	require.NoError(t, configmanager.MigrateDeprecatedNodeAutoscalingForTest(cfg, true, &out))
 
 	assert.Empty(
 		t,
@@ -98,7 +98,21 @@ func TestMigrateDeprecatedNodeAutoscaling_ConflictReturnsError(t *testing.T) {
 	cfg.Spec.Cluster.NodeAutoscaling = v1alpha1.NodeAutoscalingDisabled
 	cfg.Spec.Cluster.Autoscaler.Node.Enabled = true
 
-	err := configmanager.MigrateDeprecatedNodeAutoscalingForTest(cfg, nil)
+	err := configmanager.MigrateDeprecatedNodeAutoscalingForTest(cfg, true, nil)
+	require.ErrorIs(t, err, configmanager.ErrDeprecatedFieldConflict)
+}
+
+func TestMigrateDeprecatedNodeAutoscaling_ExplicitFalseVsEnabledReturnsError(t *testing.T) {
+	t.Parallel()
+
+	// autoscaler.node.enabled was explicitly set to false, but legacy nodeAutoscaling=Enabled.
+	// The migration must detect this as a conflict when newFieldExplicit=true.
+	cfg := v1alpha1.NewCluster()
+
+	cfg.Spec.Cluster.NodeAutoscaling = v1alpha1.NodeAutoscalingEnabled
+	// Enabled is the default zero value (false), but newFieldExplicit=true signals it was set.
+
+	err := configmanager.MigrateDeprecatedNodeAutoscalingForTest(cfg, true, nil)
 	require.ErrorIs(t, err, configmanager.ErrDeprecatedFieldConflict)
 }
 
@@ -108,13 +122,13 @@ func TestMigrateDeprecatedNodeAutoscaling_InvalidLegacyValueReturnsError(t *test
 	cfg := v1alpha1.NewCluster()
 	cfg.Spec.Cluster.NodeAutoscaling = "Foo"
 
-	err := configmanager.MigrateDeprecatedNodeAutoscalingForTest(cfg, nil)
+	err := configmanager.MigrateDeprecatedNodeAutoscalingForTest(cfg, false, nil)
 	require.ErrorIs(t, err, v1alpha1.ErrInvalidNodeAutoscaling)
 }
 
 func TestMigrateDeprecatedNodeAutoscaling_NilConfigReturnsNil(t *testing.T) {
 	t.Parallel()
 
-	err := configmanager.MigrateDeprecatedNodeAutoscalingForTest(nil, nil)
+	err := configmanager.MigrateDeprecatedNodeAutoscalingForTest(nil, false, nil)
 	require.NoError(t, err)
 }
