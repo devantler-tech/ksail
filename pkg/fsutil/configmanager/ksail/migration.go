@@ -84,7 +84,11 @@ func mapNodeAutoscalingToEnabled(
 	}
 }
 
-func migrateDeprecatedNodeAutoscaling(cfg *v1alpha1.Cluster, newFieldExplicit bool, out io.Writer) error {
+func migrateDeprecatedNodeAutoscaling(
+	cfg *v1alpha1.Cluster,
+	newFieldExplicit bool,
+	out io.Writer,
+) error {
 	if cfg == nil {
 		return nil
 	}
