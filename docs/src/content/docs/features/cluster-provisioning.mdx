@@ -34,7 +34,7 @@ ksail cluster update --dry-run --output json | jq .recreateRequired
 
 ## Node Autoscaling
 
-`spec.cluster.nodeAutoscaling` accepts `Enabled` or `Disabled` (default). This field is reserved for future external autoscaler pool support.
+`spec.cluster.nodeAutoscaling` is a deprecated alias for `spec.cluster.autoscaler.node.enabled`. When set to `Enabled`, it installs and enables the Cluster Autoscaler for node pool autoscaling (Talos + Hetzner only).
 
 Regardless of this setting, the baseline node counts configured in `spec.cluster.controlPlanes` and `spec.cluster.workers` (set via `ksail cluster init --control-planes` and `--workers`) are always managed and diffed by KSail. `ksail cluster update` will always reconcile these baseline node counts against the running cluster.
 
