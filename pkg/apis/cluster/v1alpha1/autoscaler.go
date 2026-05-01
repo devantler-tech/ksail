@@ -13,9 +13,10 @@ type PodAutoscalerConfig struct {
 }
 
 // NodeAutoscalerConfig defines configuration for node-level autoscaling.
-// When Enabled, KSail installs the Kubernetes Cluster Autoscaler and manages
-// node pools on the configured provider. Node count diffs (controlPlanes/workers)
-// are always detected by the diff engine regardless of this setting.
+// When Enabled, the Cluster Autoscaler manages worker node counts dynamically.
+// KSail-specified node counts serve as a baseline; the autoscaler adds and removes
+// workers based on workload demand. Node-count changes via ksail cluster update
+// are still applied to the Talos machine config and will take effect normally.
 type NodeAutoscalerConfig struct {
 	Enabled               NodeAutoscalerEnabled `json:"enabled,omitzero"`
 	Pools                 []NodePool            `json:"pools,omitzero"`

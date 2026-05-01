@@ -91,9 +91,7 @@ var ErrInvalidPodAutoscalerVertical = errors.New("invalid pod vertical autoscale
 // ErrInvalidAutoscalerExpander is returned when an invalid autoscaler expander strategy is specified.
 var ErrInvalidAutoscalerExpander = errors.New("invalid autoscaler expander")
 
-// ErrInvalidPoolName is returned when a node pool name does not satisfy pool-name constraints
-// (must start with a lowercase letter, contain only lowercase alphanumeric and hyphens,
-// not end with a hyphen, and be at most NodePoolNameMaxLength characters).
+// ErrInvalidPoolName is returned when a node pool name is not a valid DNS-1123 label.
 var ErrInvalidPoolName = errors.New("invalid pool name")
 
 // ErrPoolMinExceedsMax is returned when a node pool min count exceeds its max count.
@@ -102,17 +100,25 @@ var ErrPoolMinExceedsMax = errors.New("pool min exceeds max")
 // ErrDuplicatePoolName is returned when two or more node pools share the same name.
 var ErrDuplicatePoolName = errors.New("duplicate pool name")
 
-// ErrNegativePoolBound is returned when a node pool min or max count is negative.
-var ErrNegativePoolBound = errors.New("negative pool bound")
+// ErrPoolNegativeMin is returned when a node pool min count is negative.
+var ErrPoolNegativeMin = errors.New("pool min must be non-negative")
 
-// ErrNegativeMaxNodesTotal is returned when autoscaler.node.maxNodesTotal is negative.
-var ErrNegativeMaxNodesTotal = errors.New("negative maxNodesTotal")
+// ErrPoolNegativeMax is returned when a node pool max count is negative.
+var ErrPoolNegativeMax = errors.New("pool max must be non-negative")
 
-// ErrNegativeServerLimit is returned when the Hetzner server limit is negative.
-var ErrNegativeServerLimit = errors.New("negative server limit")
+// ErrPoolServerTypeEmpty is returned when a node pool serverType is empty.
+var ErrPoolServerTypeEmpty = errors.New("pool serverType must not be empty")
+
+// ErrPoolLocationEmpty is returned when a node pool location is empty.
+var ErrPoolLocationEmpty = errors.New("pool location must not be empty")
 
 // ErrAutoscalerExceedsServerLimit is returned when the total node capacity exceeds the
 // Hetzner server limit.
 var ErrAutoscalerExceedsServerLimit = errors.New(
 	"autoscaler configuration exceeds Hetzner server limit",
+)
+
+// ErrAutoscalerEnabledNoPools is returned when node autoscaler is enabled but no pools are configured.
+var ErrAutoscalerEnabledNoPools = errors.New(
+	"node autoscaler is enabled but no pools are configured",
 )

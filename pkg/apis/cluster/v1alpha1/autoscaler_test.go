@@ -292,7 +292,7 @@ func TestValidPodAutoscalerVerticals(t *testing.T) {
 
 // --- ValidateAutoscalerConfig ---
 
-//nolint:funlen,maintidx // Table-driven test with comprehensive coverage.
+//nolint:funlen,maintidx // Table-driven test with comprehensive coverage across many validation cases.
 func TestValidateAutoscalerConfig(t *testing.T) {
 	t.Parallel()
 
@@ -341,7 +341,7 @@ func TestValidateAutoscalerConfig(t *testing.T) {
 			errContains: "my_pool",
 		},
 		{
-			name: "pool name starts with number is invalid",
+			name: "pool name starts with number is valid",
 			cluster: &v1alpha1.ClusterSpec{
 				Autoscaler: v1alpha1.AutoscalerConfig{
 					Node: v1alpha1.NodeAutoscalerConfig{
@@ -351,7 +351,7 @@ func TestValidateAutoscalerConfig(t *testing.T) {
 					},
 				},
 			},
-			wantErr: v1alpha1.ErrInvalidPoolName,
+			wantErr: nil,
 		},
 		{
 			name: "pool min exceeds max",
@@ -365,6 +365,74 @@ func TestValidateAutoscalerConfig(t *testing.T) {
 				},
 			},
 			wantErr:     v1alpha1.ErrPoolMinExceedsMax,
+			errContains: "workers",
+		},
+		{
+			name: "pool negative min",
+			cluster: &v1alpha1.ClusterSpec{
+				Autoscaler: v1alpha1.AutoscalerConfig{
+					Node: v1alpha1.NodeAutoscalerConfig{
+						Pools: []v1alpha1.NodePool{
+							{
+								Name:       "workers",
+								ServerType: "cx23",
+								Location:   "fsn1",
+								Min:        -1,
+								Max:        3,
+							},
+						},
+					},
+				},
+			},
+			wantErr:     v1alpha1.ErrPoolNegativeMin,
+			errContains: "workers",
+		},
+		{
+			name: "pool negative max",
+			cluster: &v1alpha1.ClusterSpec{
+				Autoscaler: v1alpha1.AutoscalerConfig{
+					Node: v1alpha1.NodeAutoscalerConfig{
+						Pools: []v1alpha1.NodePool{
+							{
+								Name:       "workers",
+								ServerType: "cx23",
+								Location:   "fsn1",
+								Min:        0,
+								Max:        -1,
+							},
+						},
+					},
+				},
+			},
+			wantErr:     v1alpha1.ErrPoolNegativeMax,
+			errContains: "workers",
+		},
+		{
+			name: "pool empty serverType",
+			cluster: &v1alpha1.ClusterSpec{
+				Autoscaler: v1alpha1.AutoscalerConfig{
+					Node: v1alpha1.NodeAutoscalerConfig{
+						Pools: []v1alpha1.NodePool{
+							{Name: "workers", ServerType: "", Location: "fsn1", Min: 1, Max: 5},
+						},
+					},
+				},
+			},
+			wantErr:     v1alpha1.ErrPoolServerTypeEmpty,
+			errContains: "workers",
+		},
+		{
+			name: "pool empty location",
+			cluster: &v1alpha1.ClusterSpec{
+				Autoscaler: v1alpha1.AutoscalerConfig{
+					Node: v1alpha1.NodeAutoscalerConfig{
+						Pools: []v1alpha1.NodePool{
+							{Name: "workers", ServerType: "cx23", Location: "", Min: 1, Max: 5},
+						},
+					},
+				},
+			},
+			wantErr:     v1alpha1.ErrPoolLocationEmpty,
 			errContains: "workers",
 		},
 		{
@@ -410,32 +478,19 @@ func TestValidateAutoscalerConfig(t *testing.T) {
 			errContains: "exceeds serverLimit",
 		},
 		{
-			name: "capacity guard: maxNodesTotal caps effective pool capacity",
-			// pools sum to 20, but maxNodesTotal=5 caps them; effective total = 3+2+5 = 10 ≤ 10
+			name: "enabled with no pools returns error",
 			cluster: &v1alpha1.ClusterSpec{
-				Provider:      v1alpha1.ProviderHetzner,
-				ControlPlanes: 3,
-				Workers:       2,
+				Provider: v1alpha1.ProviderHetzner,
 				Autoscaler: v1alpha1.AutoscalerConfig{
 					Node: v1alpha1.NodeAutoscalerConfig{
-						Enabled:       v1alpha1.NodeAutoscalerEnabledEnabled,
-						MaxNodesTotal: 5,
-						Pools: []v1alpha1.NodePool{
-							{
-								Name:       "workers",
-								ServerType: "cx23",
-								Location:   "fsn1",
-								Min:        1,
-								Max:        20,
-							},
-						},
+						Enabled: v1alpha1.NodeAutoscalerEnabledEnabled,
+						Pools:   []v1alpha1.NodePool{},
 					},
 				},
 			},
-			provider: &v1alpha1.ProviderSpec{
-				Hetzner: v1alpha1.OptionsHetzner{ServerLimit: 10},
-			},
-			wantErr: nil,
+			provider:    &v1alpha1.ProviderSpec{},
+			wantErr:     v1alpha1.ErrAutoscalerEnabledNoPools,
+			errContains: "Hetzner",
 		},
 		{
 			name: "capacity guard: total within server limit",
@@ -530,47 +585,63 @@ func TestValidateAutoscalerConfig(t *testing.T) {
 			wantErr: nil,
 		},
 		{
-			// min = max is a valid configuration (pool always holds exactly N nodes).
-			name: "pool min equals max is valid",
+			name: "capacity guard: MaxNodesTotal caps pool capacity below limit",
 			cluster: &v1alpha1.ClusterSpec{
+				Provider:      v1alpha1.ProviderHetzner,
+				ControlPlanes: 3,
+				Workers:       2,
 				Autoscaler: v1alpha1.AutoscalerConfig{
 					Node: v1alpha1.NodeAutoscalerConfig{
+						Enabled:       v1alpha1.NodeAutoscalerEnabledEnabled,
+						MaxNodesTotal: 3,
 						Pools: []v1alpha1.NodePool{
-							{Name: "workers", ServerType: "cx23", Location: "fsn1", Min: 3, Max: 3},
+							// Raw pool capacity = 50; capped by MaxNodesTotal = 3
+							// total = 3 + 2 + 3 = 8, within limit 10 → valid
+							{
+								Name:       "workers",
+								ServerType: "cx23",
+								Location:   "fsn1",
+								Min:        1,
+								Max:        50,
+							},
 						},
 					},
 				},
+			},
+			provider: &v1alpha1.ProviderSpec{
+				Hetzner: v1alpha1.OptionsHetzner{ServerLimit: 10},
 			},
 			wantErr: nil,
 		},
 		{
-			// min = max = 0 means the pool starts empty and never scales — still structurally valid.
-			name: "pool min zero max zero is valid",
+			name: "capacity guard: MaxNodesTotal does not help when effective total still exceeds limit",
 			cluster: &v1alpha1.ClusterSpec{
+				Provider:      v1alpha1.ProviderHetzner,
+				ControlPlanes: 3,
+				Workers:       2,
 				Autoscaler: v1alpha1.AutoscalerConfig{
 					Node: v1alpha1.NodeAutoscalerConfig{
+						Enabled:       v1alpha1.NodeAutoscalerEnabledEnabled,
+						MaxNodesTotal: 10,
 						Pools: []v1alpha1.NodePool{
-							{Name: "workers", ServerType: "cx23", Location: "fsn1", Min: 0, Max: 0},
+							// Raw pool capacity = 50; capped by MaxNodesTotal = 10
+							// total = 3 + 2 + 10 = 15, exceeds limit 10 → error
+							{
+								Name:       "workers",
+								ServerType: "cx23",
+								Location:   "fsn1",
+								Min:        1,
+								Max:        50,
+							},
 						},
 					},
 				},
 			},
-			wantErr: nil,
-		},
-		{
-			// Empty string does not match the DNS-1123 pool name regex.
-			name: "empty pool name is invalid",
-			cluster: &v1alpha1.ClusterSpec{
-				Autoscaler: v1alpha1.AutoscalerConfig{
-					Node: v1alpha1.NodeAutoscalerConfig{
-						Pools: []v1alpha1.NodePool{
-							{Name: "", ServerType: "cx23", Location: "fsn1", Min: 1, Max: 5},
-						},
-					},
-				},
+			provider: &v1alpha1.ProviderSpec{
+				Hetzner: v1alpha1.OptionsHetzner{ServerLimit: 10},
 			},
-			wantErr:     v1alpha1.ErrInvalidPoolName,
-			errContains: `pool[0]`,
+			wantErr:     v1alpha1.ErrAutoscalerExceedsServerLimit,
+			errContains: "exceeds serverLimit",
 		},
 	}
 

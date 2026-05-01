@@ -205,6 +205,13 @@ func (m *ConfigManager) unmarshalWithFlagOverrides(ignoreConfigFile bool) error 
 		return err
 	}
 
+	// Re-run migration so that a --node-autoscaling CLI flag override
+	// (applied above) is propagated into the canonical autoscaler.node.enabled field.
+	err = migrateDeprecatedNodeAutoscaling(m.Config, m.Writer)
+	if err != nil {
+		return err
+	}
+
 	m.applyGitOpsAwareDefaults(flagOverrides)
 	m.applyDistributionConfigDefaults()
 

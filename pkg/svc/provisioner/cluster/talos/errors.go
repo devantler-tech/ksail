@@ -43,4 +43,13 @@ var (
 	// ErrNoControlPlaneForRefresh is returned when no control-plane node can be found
 	// for kubeconfig refresh.
 	ErrNoControlPlaneForRefresh = errors.New("no control-plane node found for kubeconfig refresh")
+	// ErrSchematicRequiresVersion is returned when a schematicId is set but talos.version is empty.
+	ErrSchematicRequiresVersion = errors.New(
+		"spec.cluster.talos.version must be set when spec.cluster.talos.schematicId is set",
+	)
+	// ErrARM64SnapshotNotSupported is returned when snapshot-based boot is requested with ARM64
+	// Hetzner server types (cax*). ARM64 snapshot support is not yet implemented.
+	ErrARM64SnapshotNotSupported = errors.New(
+		"snapshot-based boot (schematicId) does not support ARM64 server types (cax*) yet",
+	)
 )

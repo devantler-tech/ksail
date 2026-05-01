@@ -10,6 +10,7 @@ import (
 	argocdinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/argocd"
 	certmanagerinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/certmanager"
 	cloudproviderkindinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/cloudproviderkind"
+	clusterautoscalerinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/clusterautoscaler"
 	calicoinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/cni/calico"
 	ciliuminstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/cni/cilium"
 	fluxinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/flux"
@@ -55,7 +56,7 @@ func NewFactory(
 
 // CreateInstallersForConfig creates installers for all components specified in the cluster config.
 // Returns a map of component name to installer.
-func (f *Factory) CreateInstallersForConfig(cfg *v1alpha1.Cluster) map[string]Installer {
+func (f *Factory) CreateInstallersForConfig(cfg *v1alpha1.Cluster) (map[string]Installer, error) {
 	installers := make(map[string]Installer)
 	spec := cfg.Spec.Cluster
 
@@ -67,7 +68,12 @@ func (f *Factory) CreateInstallersForConfig(cfg *v1alpha1.Cluster) map[string]In
 	f.addCSIInstallers(installers, cfg)
 	f.addLoadBalancerInstaller(installers, cfg)
 
-	return installers
+	err := f.addClusterAutoscalerInstaller(installers, spec)
+	if err != nil {
+		return nil, err
+	}
+
+	return installers, nil
 }
 
 // GetImagesFromInstallers retrieves container images from all provided installers.
@@ -103,7 +109,10 @@ func (f *Factory) GetImagesForCluster(
 	ctx context.Context,
 	cfg *v1alpha1.Cluster,
 ) ([]string, error) {
-	installers := f.CreateInstallersForConfig(cfg)
+	installers, err := f.CreateInstallersForConfig(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create installers: %w", err)
+	}
 
 	return GetImagesFromInstallers(ctx, installers)
 }
@@ -321,4 +330,36 @@ func (f *Factory) needsHcloudCCM(spec v1alpha1.ClusterSpec) bool {
 	return spec.LoadBalancer == v1alpha1.LoadBalancerDefault ||
 		spec.LoadBalancer == v1alpha1.LoadBalancerEnabled ||
 		spec.CSI != v1alpha1.CSIDisabled
+}
+
+func (f *Factory) addClusterAutoscalerInstaller(
+	installers map[string]Installer,
+	spec v1alpha1.ClusterSpec,
+) error {
+	if !f.needsClusterAutoscaler(spec) {
+		return nil
+	}
+
+	inst, err := clusterautoscalerinstaller.NewInstaller(
+		f.helmClient, f.timeout, spec.Autoscaler.Node,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create cluster-autoscaler installer: %w", err)
+	}
+
+	installers["cluster-autoscaler"] = inst
+
+	return nil
+}
+
+// needsClusterAutoscaler determines if the Cluster Autoscaler is needed.
+// Cluster Autoscaler is only supported for Talos clusters on Hetzner Cloud
+// with node autoscaling explicitly enabled.
+func (f *Factory) needsClusterAutoscaler(spec v1alpha1.ClusterSpec) bool {
+	autoscalingEnabled := spec.Autoscaler.Node.Enabled == v1alpha1.NodeAutoscalerEnabledEnabled ||
+		spec.NodeAutoscaling == v1alpha1.NodeAutoscalingEnabled
+
+	return spec.Distribution == v1alpha1.DistributionTalos &&
+		spec.Provider == v1alpha1.ProviderHetzner &&
+		autoscalingEnabled
 }

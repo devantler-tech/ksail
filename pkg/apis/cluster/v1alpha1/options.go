@@ -38,7 +38,14 @@ type OptionsTalos struct {
 	// Only used when targeting cloud providers (e.g., Hetzner Cloud).
 	// For Hetzner: See https://docs.hetzner.cloud/changelog for available Talos ISOs.
 	// Defaults to 122630 (Talos Linux 1.11.2 x86). Use 122629 for ARM.
+	// When SchematicID is set, ISO is ignored in favour of a pre-built snapshot.
 	ISO int64 `default:"122630" json:"iso,omitzero"`
+	// SchematicID is the Talos factory schematic ID used to build a Hetzner snapshot image.
+	// When set, KSail uploads a Talos OS disk snapshot using this schematic ID and Version
+	// instead of booting from the cloud ISO specified in ISO.
+	// Obtain a schematic ID from https://factory.talos.dev.
+	// Only used when targeting cloud providers (e.g., Hetzner Cloud).
+	SchematicID string `json:"schematicId,omitzero"`
 	// ExtraPortMappings defines additional port mappings from Docker containers to the host.
 	// Only used with the Docker provider. Useful on macOS where MetalLB virtual IPs
 	// are not accessible from the host because Docker runs in a Linux VM.
@@ -125,6 +132,12 @@ type OptionsHetzner struct {
 	// independent of the Hetzner Cloud Firewall.
 	// See: https://www.talos.dev/latest/talos-guides/network/ingress-firewall/
 	IngressFirewall IngressFirewall `default:"Enabled" json:"ingressFirewall,omitzero"`
+	// ServerLimit is the maximum number of Hetzner servers (control-plane + worker + autoscaler
+	// pool capacity) permitted in this cluster. Used by ValidateAutoscalerConfig to prevent
+	// the configured autoscaler capacity from exceeding the account/project server quota.
+	// When set to 0, KSail uses DefaultHetznerServerLimit instead of treating 0 as an explicit
+	// limit. Defaults to DefaultHetznerServerLimit (10).
+	ServerLimit int32 `default:"10" json:"serverLimit,omitzero" jsonschema:"description=Maximum total Hetzner servers allowed for this cluster (control-planes + workers + autoscaler pool capacity). Set to 0 to use the default limit of 10,minimum=0"` //nolint:lll
 	// AutoscalerNodePoolNames lists the node-group names configured in the
 	// Kubernetes Cluster Autoscaler for this cluster. When non-empty, KSail
 	// deletes servers labelled with hcloud/node-group=<name> during cluster

@@ -53,6 +53,7 @@ require (
 
 require (
 	github.com/Masterminds/semver/v3 v3.4.0
+	github.com/apricote/hcloud-upload-image/hcloudimages v1.3.0
 	github.com/atotto/clipboard v0.1.4
 	github.com/charmbracelet/bubbles v1.0.0
 	github.com/charmbracelet/bubbletea v1.3.10
