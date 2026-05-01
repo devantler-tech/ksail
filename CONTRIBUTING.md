@@ -53,6 +53,7 @@ Follow standard Go conventions in this repository:
 - **Naming:** Exported identifiers use `PascalCase`; unexported identifiers use `camelCase`. Package names are short, lowercase, and singular (e.g., `provider`, `installer`). Interfaces often end in `-er` (e.g., `Provider`).
 - **Error handling:** Return errors explicitly — no `panic` in library code. Wrap errors with context using `fmt.Errorf("context: %w", err)`. All errors must be checked (`golangci-lint` enforces this).
 - **Testing:** Prefer table-driven tests with `t.Parallel()`. Keep tests focused on public behavior. Run `go test ./...` before opening a PR.
+- **Path safety:** Canonicalize all user-supplied file and directory paths with `fsutil.EvalCanonicalPath` before use (resolves symlinks, prevents path-escape attacks). Prefer `fsutil.ReadFileSafe` for constrained reads instead of reimplementing path-containment checks. For output paths that may not exist yet, create the parent directory with `os.MkdirAll` first, then canonicalize.
 - **Documentation:** Document all exported types, functions, and constants with complete sentences starting with the name being documented (e.g., `// Provider defines the interface for infrastructure providers.`).
 
 ### Lint
