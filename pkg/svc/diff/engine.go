@@ -21,13 +21,13 @@ type Engine struct {
 
 // NewEngine creates a new diff engine for the given distribution and provider.
 func NewEngine(distribution v1alpha1.Distribution, provider v1alpha1.Provider) *Engine {
-	e := &Engine{
+	engine := &Engine{
 		distribution: distribution,
 		provider:     provider,
 	}
-	e.rules = e.scalarFieldRules()
+	engine.rules = engine.scalarFieldRules()
 
-	return e
+	return engine
 }
 
 // ComputeDiff compares old and new ClusterSpec and ProviderSpec, and categorizes all changes.
