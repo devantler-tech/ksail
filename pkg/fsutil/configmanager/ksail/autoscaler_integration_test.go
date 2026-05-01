@@ -153,7 +153,7 @@ spec:
 	// which is what triggers the eager default injection in the buggy code path.
 	cmd := &cobra.Command{Use: "test"}
 	selectors := []configmanager.FieldSelector[v1alpha1.Cluster]{
-		configmanager.NodeAutoscalingFieldSelector(), //nolint:staticcheck // backward-compat test
+		configmanager.NodeAutoscalingFieldSelector(),
 		configmanager.NodeAutoscalerEnabledFieldSelector(),
 	}
 	mgr := configmanager.NewCommandConfigManager(cmd, selectors)
@@ -163,8 +163,12 @@ spec:
 	require.NoError(t, err, "loading a config with only autoscaler.node.enabled must not error")
 	require.NotNil(t, cluster)
 
-	assert.Equal(t, v1alpha1.NodeAutoscalerEnabledEnabled, cluster.Spec.Cluster.Autoscaler.Node.Enabled,
-		"autoscaler.node.enabled should be Enabled as specified in the config file")
+	assert.Equal(
+		t,
+		v1alpha1.NodeAutoscalerEnabledEnabled,
+		cluster.Spec.Cluster.Autoscaler.Node.Enabled,
+		"autoscaler.node.enabled should be Enabled as specified in the config file",
+	)
 	assert.Empty(t, cluster.Spec.Cluster.NodeAutoscaling,
 		"deprecated nodeAutoscaling field should remain empty when not set in config")
 }
