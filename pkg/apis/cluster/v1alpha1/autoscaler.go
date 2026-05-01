@@ -28,7 +28,7 @@ type NodeAutoscalerConfig struct {
 // NodePool defines a Hetzner node pool managed by the cluster autoscaler.
 type NodePool struct {
 	// Name is the unique identifier for this node pool (DNS-1123 label).
-	Name string `json:"name"`
+	Name string `json:"name" jsonschema:"minLength=1,maxLength=63,pattern=^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"`
 	// ServerType is the Hetzner server type for nodes in this pool (e.g. "cx23", "cax11").
 	ServerType string `json:"serverType" jsonschema:"minLength=1"`
 	// Location is the Hetzner datacenter location for this pool (e.g. "fsn1", "nbg1").
