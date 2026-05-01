@@ -1,31 +1,28 @@
 # Repo Assist Memory
 
 ## Last Run
-2026-05-01 01:13 UTC — Run #25197419696
+2026-05-01 12:36 UTC — Run #25214423101
 
 ## Monthly Activity Issue
-- April (#3605): CLOSED
-- May: Created (new issue, no number yet in memory — check by searching "[Repo Assist] Monthly Activity 2026-05")
+- May 2026: #4501 (open, updated this run)
 
 ## Open Repo Assist PRs
-- #aw_perf01: perf(diff): cache scalar field rules in Engine — created this run, awaiting review
-
-## Previously Open Repo Assist PRs (check if still open)
-- #4438: test(hetzner) — open, CI green
+- #aw_fix504: fix(workload): validate explicit --path before config load — created this run, Fixes #4504
+- #4500: perf(diff): cache scalar field rules in Engine — open, CI running
+- #4438: test(hetzner) — open, CI green (draft)
 - #4424: test(configmanager) — open, CI infrastructure flake
 - #4401: perf(notify) — open
 - #4388: fix(k3s) Traefik/Cilium — open, CI infrastructure flake
-- #4397: fix(gatekeeper) — may have merged (check)
-- #4398: refactor(diff) — may have merged (check)
 
 ## Issue Comments Made (with run)
+- #4504 (workload watch regression): 2026-05-01 run #25214423101
+- #4422 (diagnose health scoring): 2026-05-01 run #25197419696
 - #4384 (autoscaler): 2026-04-30 run #25142065694
-- #4422 (diagnose health scoring): 2026-05-01 run #25197419696 ← this run
 - #4385 (gatekeeper): 2026-04-27
 
 ## Issues Created This Run
-- Closed April monthly activity #3605
-- Created May monthly activity (search "[Repo Assist] Monthly Activity 2026-05")
+- #aw_gke1: [chore] GKE and AKS cloud providers (Later roadmap)
+- #aw_ci1: [feature] native ephemeral CI mode (Later roadmap)
 
 ## Issues Previously Created (last 4 weeks)
 - #4474: ksail cluster drift command
@@ -36,14 +33,16 @@
 - #4375: cluster graph topology
 
 ## Perf Work Domain Alternation
-- Last perf domain: diff engine (this run)
+- Last perf domain: diff engine (run #25197419696)
+- Last code fix: workload watch (run #25214423101)
 - Rotation: refactor → perf → test → refactor
 - Next expected: test coverage
 
-## Bugs Status
-All open "bug"-labelled issues are CI infrastructure flakes — no code fixes available.
-CI Doctor issues are generated automatically and track infrastructure flakiness.
-
 ## Backlog Cursor
-- Issues processed through #4497 (most recent)
-- Last Task 11 (Roadmap): Created drift/vCluster issues 2026-04-30
+- Issues processed through #4507 (most recent)
+- Last Task 11 (Roadmap): Created GKE/AKS and CI mode issues 2026-05-01
+- Roadmap Later gaps covered: cluster graph (#4375), drift (#4474), GKE/AKS (#aw_gke1), CI mode (#aw_ci1), service mirroring (not yet tracked)
+
+## Bugs Status
+- #4504 workload watch path validation regression: FIX PR created (#aw_fix504)
+- Other open bugs are CI infrastructure flakes — no code fixes available
