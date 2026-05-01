@@ -103,6 +103,16 @@ func TestMigrateDeprecatedNodeAutoscaling_ConflictReturnsError(t *testing.T) {
 	require.ErrorIs(t, err, configmanager.ErrDeprecatedFieldConflict)
 }
 
+func TestMigrateDeprecatedNodeAutoscaling_InvalidLegacyValueReturnsError(t *testing.T) {
+	t.Parallel()
+
+	cfg := v1alpha1.NewCluster()
+	cfg.Spec.Cluster.NodeAutoscaling = "Foo"
+
+	err := configmanager.MigrateDeprecatedNodeAutoscalingForTest(cfg, nil)
+	require.ErrorIs(t, err, v1alpha1.ErrInvalidNodeAutoscaling)
+}
+
 func TestMigrateDeprecatedNodeAutoscaling_NilConfigReturnsNil(t *testing.T) {
 	t.Parallel()
 
