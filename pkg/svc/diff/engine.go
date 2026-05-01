@@ -46,6 +46,7 @@ func (e *Engine) ComputeDiff(
 	if e.rules == nil {
 		e.rules = e.scalarFieldRules()
 	}
+
 	e.applyFieldRules(oldSpec, newSpec, result, e.rules)
 
 	// Check complex / distribution-specific changes
