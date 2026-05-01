@@ -3946,7 +3946,8 @@ func runWatch(cmd *cobra.Command, pathFlag string, initialApply bool, debug bool
 	// loading or cluster connection).  The CI contract test
 	// (ksail-test-workload-watch) relies on this early-exit behaviour.
 	if dir := strings.TrimSpace(pathFlag); dir != "" {
-		if _, err := os.Stat(dir); err != nil {
+		_, err := os.Stat(dir)
+		if err != nil {
 			return fmt.Errorf("access watch directory %q: %w", dir, err)
 		}
 	}
