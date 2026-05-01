@@ -64,10 +64,10 @@ type ClusterSpec struct {
 	LocalRegistry      LocalRegistry   `json:"localRegistry,omitzero"`
 	GitOpsEngine       GitOpsEngine    `json:"gitOpsEngine,omitzero"`
 	SOPS               SOPS            `json:"sops,omitzero"`
-	NodeAutoscaling    NodeAutoscaling `json:"nodeAutoscaling,omitzero"`
+	NodeAutoscaling    NodeAutoscaling `json:"nodeAutoscaling,omitzero"    jsonschema:"description=Deprecated. Use autoscaler.node.enabled instead. Do not set both nodeAutoscaling and autoscaler."` //nolint:lll
 	// Autoscaler defines pod and node autoscaling configuration.
 	// Supersedes spec.cluster.nodeAutoscaling (deprecated; aliased on load).
-	Autoscaler   AutoscalerConfig `json:"autoscaler,omitzero"`
+	Autoscaler   AutoscalerConfig `json:"autoscaler,omitzero"   jsonschema:"description=Pod and node autoscaling configuration (supersedes deprecated nodeAutoscaling)"`                               //nolint:lll // Long description required for JSON schema
 	ImportImages string           `json:"importImages,omitzero" jsonschema:"description=Path to tar archive with container images to import after cluster creation but before component installation"` //nolint:lll // Long description required for JSON schema
 	// ControlPlanes is the number of control-plane nodes (default: 1).
 	// Provider/distribution-agnostic: applies to Vanilla (Kind), K3s (K3d), Talos, and VCluster.

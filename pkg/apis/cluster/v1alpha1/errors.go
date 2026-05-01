@@ -32,11 +32,11 @@ var ErrInvalidPolicyEngine = errors.New("invalid policy engine")
 // ErrInvalidImageVerification is returned when an invalid image verification option is specified.
 var ErrInvalidImageVerification = errors.New("invalid image verification")
 
+// ErrInvalidNodeAutoscalerEnabled is returned when an invalid node autoscaler enabled option is specified.
+var ErrInvalidNodeAutoscalerEnabled = errors.New("invalid node autoscaler enabled")
+
 // ErrInvalidNodeAutoscaling is returned when an invalid node autoscaling option is specified.
 var ErrInvalidNodeAutoscaling = errors.New("invalid node autoscaling")
-
-// ErrInvalidNodeAutoscalerEnabled is returned when an invalid node autoscaler enabled value is specified.
-var ErrInvalidNodeAutoscalerEnabled = errors.New("invalid node autoscaler enabled")
 
 // ErrInvalidProvider is returned when an invalid provider is specified.
 var ErrInvalidProvider = errors.New("invalid provider")
@@ -111,6 +111,15 @@ var ErrPoolServerTypeEmpty = errors.New("pool serverType must not be empty")
 
 // ErrPoolLocationEmpty is returned when a node pool location is empty.
 var ErrPoolLocationEmpty = errors.New("pool location must not be empty")
+
+// ErrInvalidPoolCapacity is returned when a node pool has a negative min or max value.
+var ErrInvalidPoolCapacity = errors.New("invalid pool capacity")
+
+// ErrInvalidMaxNodesTotal is returned when MaxNodesTotal is negative.
+var ErrInvalidMaxNodesTotal = errors.New("invalid maxNodesTotal")
+
+// ErrInvalidServerLimit is returned when ServerLimit is negative.
+var ErrInvalidServerLimit = errors.New("invalid serverLimit")
 
 // ErrAutoscalerExceedsServerLimit is returned when the total node capacity exceeds the
 // Hetzner server limit.

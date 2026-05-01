@@ -3,6 +3,7 @@ package v1alpha1
 import (
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 )
 
@@ -245,11 +246,38 @@ func ValidateLocalRegistryForProvider(provider Provider, registry LocalRegistry)
 }
 
 // poolNameRegex matches DNS-1123 label names: lowercase alphanumeric with optional hyphens.
-// Must start and end with alphanumeric, and be at most 63 characters.
-var poolNameRegex = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*[a-z0-9]$|^[a-z0-9]$`)
+// Must start and end with a lowercase alphanumeric character, and be at most 63 characters.
+var poolNameRegex = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$`)
 
-// PoolNameMaxLength is the maximum length for a node pool name (DNS-1123 label limit).
+// PoolNameMaxLength is the maximum length for a pool name (DNS-1123 label limit).
 const PoolNameMaxLength = 63
+
+// validateAutoscalerEnumFields validates enum-typed fields on the autoscaler configuration.
+// It returns an error if any field carries a value that is not in its valid set.
+func validateAutoscalerEnumFields(
+	autoscaler *NodeAutoscalerConfig,
+	pod *PodAutoscalerConfig,
+) error {
+	if autoscaler.Enabled != "" &&
+		!slices.Contains(ValidNodeAutoscalerEnableds(), autoscaler.Enabled) {
+		return fmt.Errorf("%w: %q", ErrInvalidNodeAutoscalerEnabled, autoscaler.Enabled)
+	}
+
+	if autoscaler.Expander != "" &&
+		!slices.Contains(ValidAutoscalerExpanders(), autoscaler.Expander) {
+		return fmt.Errorf("%w: %q", ErrInvalidAutoscalerExpander, autoscaler.Expander)
+	}
+
+	if pod.Horizontal != "" && !slices.Contains(ValidPodAutoscalerHorizontals(), pod.Horizontal) {
+		return fmt.Errorf("%w: %q", ErrInvalidPodAutoscalerHorizontal, pod.Horizontal)
+	}
+
+	if pod.Vertical != "" && !slices.Contains(ValidPodAutoscalerVerticals(), pod.Vertical) {
+		return fmt.Errorf("%w: %q", ErrInvalidPodAutoscalerVertical, pod.Vertical)
+	}
+
+	return nil
+}
 
 // validateNodePools checks each NodePool for name validity, min ≤ max, and uniqueness.
 func validateNodePools(pools []NodePool) error {
@@ -258,16 +286,16 @@ func validateNodePools(pools []NodePool) error {
 	for idx, pool := range pools {
 		if len(pool.Name) > PoolNameMaxLength {
 			return fmt.Errorf(
-				"%w: pool[%d] %q exceeds the 63-character DNS-1123 label limit",
-				ErrInvalidPoolName, idx, pool.Name,
+				"%w: pool[%d] %q exceeds max %d characters (got %d)",
+				ErrInvalidPoolName, idx, pool.Name, PoolNameMaxLength, len(pool.Name),
 			)
 		}
 
 		if !poolNameRegex.MatchString(pool.Name) {
 			return fmt.Errorf(
 				"%w: pool[%d] %q must be a DNS-1123 label "+
-					"(lowercase letters, numbers, and hyphens; must start and end with alphanumeric; "+
-					"must not end with a hyphen)",
+					"(lowercase letters, numbers, and hyphens; "+
+					"must start and end with a lowercase alphanumeric character)",
 				ErrInvalidPoolName, idx, pool.Name,
 			)
 		}
@@ -280,17 +308,10 @@ func validateNodePools(pools []NodePool) error {
 			return fmt.Errorf("%w: pool[%d] %q", ErrPoolLocationEmpty, idx, pool.Name)
 		}
 
-		if pool.Min < 0 {
+		if pool.Min < 0 || pool.Max < 0 {
 			return fmt.Errorf(
-				"%w: pool %q has min=%d",
-				ErrPoolNegativeMin, pool.Name, pool.Min,
-			)
-		}
-
-		if pool.Max < 0 {
-			return fmt.Errorf(
-				"%w: pool %q has max=%d",
-				ErrPoolNegativeMax, pool.Name, pool.Max,
+				"%w: pool %q has negative min=%d or max=%d",
+				ErrInvalidPoolCapacity, pool.Name, pool.Min, pool.Max,
 			)
 		}
 
@@ -321,74 +342,92 @@ func validateNodePools(pools []NodePool) error {
 //   - provider: The ProviderSpec containing Hetzner-specific options (ServerLimit).
 //
 // Returns the first validation error encountered, or nil if the configuration is valid.
-func ValidateAutoscalerConfig(cluster *ClusterSpec, provider *ProviderSpec) error {
+func ValidateAutoscalerConfig(
+	cluster *ClusterSpec,
+	provider *ProviderSpec,
+) error {
 	if cluster == nil {
 		return nil
 	}
 
 	autoscaler := &cluster.Autoscaler.Node
 
+	enumErr := validateAutoscalerEnumFields(autoscaler, &cluster.Autoscaler.Pod)
+	if enumErr != nil {
+		return enumErr
+	}
+
+	if autoscaler.Enabled == NodeAutoscalerEnabledEnabled && len(autoscaler.Pools) == 0 {
+		return ErrAutoscalerEnabledNoPools
+	}
+
 	err := validateNodePools(autoscaler.Pools)
 	if err != nil {
 		return err
 	}
 
-	// Capacity guard: only applies when Hetzner provider and node autoscaler is enabled.
-	// The deprecated cluster.NodeAutoscaling field is also checked for backward compatibility
-	// during the deprecation window (before migration fully replaces it).
-	autoscalingEnabled := autoscaler.Enabled == NodeAutoscalerEnabledEnabled ||
-		cluster.NodeAutoscaling == NodeAutoscalingEnabled
+	return validateHetznerCapacity(cluster, provider, autoscaler)
+}
+
+// validateHetznerCapacity checks that controlPlanes+workers+effectivePoolCapacity ≤ serverLimit
+// when provider is Hetzner and node autoscaling is enabled.
+func validateHetznerCapacity(
+	cluster *ClusterSpec,
+	provider *ProviderSpec,
+	autoscaler *NodeAutoscalerConfig,
+) error {
 	if provider == nil ||
 		cluster.Provider != ProviderHetzner ||
-		!autoscalingEnabled {
+		autoscaler.Enabled != NodeAutoscalerEnabledEnabled {
 		return nil
 	}
 
-	if len(autoscaler.Pools) == 0 {
-		return fmt.Errorf("%w: provider is %q", ErrAutoscalerEnabledNoPools, ProviderHetzner)
+	if autoscaler.MaxNodesTotal < 0 {
+		return fmt.Errorf("%w: got %d", ErrInvalidMaxNodesTotal, autoscaler.MaxNodesTotal)
 	}
 
-	// serverLimit == 0 means "use default"; 0 is not an expressible explicit limit.
-	serverLimit := provider.Hetzner.ServerLimit
-	if serverLimit == 0 {
-		serverLimit = DefaultHetznerServerLimit
+	serverLimit, err := resolveServerLimit(provider.Hetzner.ServerLimit)
+	if err != nil {
+		return err
 	}
 
-	return validateServerCapacity(cluster, autoscaler, serverLimit)
-}
-
-// validateServerCapacity checks that controlPlanes + workers + effective pool capacity
-// does not exceed serverLimit. The effective pool capacity is sum(pool.Max) capped by
-// MaxNodesTotal when MaxNodesTotal > 0, because the autoscaler will not exceed that bound.
-func validateServerCapacity(
-	cluster *ClusterSpec,
-	autoscaler *NodeAutoscalerConfig,
-	serverLimit int32,
-) error {
 	var poolCapacity int32
 	for _, pool := range autoscaler.Pools {
 		poolCapacity += pool.Max
 	}
 
-	// When MaxNodesTotal is set and lower than the raw pool capacity, the autoscaler
-	// itself will never exceed MaxNodesTotal; use that as the effective capacity.
-	effectiveCapacity := poolCapacity
-	if autoscaler.MaxNodesTotal > 0 && autoscaler.MaxNodesTotal < poolCapacity {
-		effectiveCapacity = autoscaler.MaxNodesTotal
+	effectivePoolCapacity := poolCapacity
+	if autoscaler.MaxNodesTotal > 0 && autoscaler.MaxNodesTotal < effectivePoolCapacity {
+		effectivePoolCapacity = autoscaler.MaxNodesTotal
 	}
 
-	total := cluster.ControlPlanes + cluster.Workers + effectiveCapacity
+	total := cluster.ControlPlanes + cluster.Workers + effectivePoolCapacity
 	if total > serverLimit {
 		return fmt.Errorf(
-			"%w: controlPlanes(%d) + workers(%d) + poolCapacity(%d) = %d exceeds serverLimit(%d)",
+			"%w: controlPlanes(%d)+workers(%d)+effectivePoolCapacity(%d, poolCapacity(%d))=%d exceeds serverLimit(%d)", //nolint:lll
 			ErrAutoscalerExceedsServerLimit,
 			cluster.ControlPlanes,
 			cluster.Workers,
-			effectiveCapacity,
+			effectivePoolCapacity,
+			poolCapacity,
 			total,
 			serverLimit,
 		)
 	}
 
 	return nil
+}
+
+// resolveServerLimit validates and normalises the configured Hetzner server limit.
+// A negative limit is rejected; zero falls back to DefaultHetznerServerLimit.
+func resolveServerLimit(limit int32) (int32, error) {
+	if limit < 0 {
+		return 0, fmt.Errorf("%w: got %d", ErrInvalidServerLimit, limit)
+	}
+
+	if limit == 0 {
+		return DefaultHetznerServerLimit, nil
+	}
+
+	return limit, nil
 }

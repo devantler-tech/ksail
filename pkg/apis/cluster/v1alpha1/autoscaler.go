@@ -20,7 +20,7 @@ type PodAutoscalerConfig struct {
 type NodeAutoscalerConfig struct {
 	Enabled               NodeAutoscalerEnabled `json:"enabled,omitzero"`
 	Pools                 []NodePool            `json:"pools,omitzero"`
-	MaxNodesTotal         int32                 `json:"maxNodesTotal,omitzero"         jsonschema:"description=Maximum total nodes allowed across all node pools,minimum=0"` //nolint:lll
+	MaxNodesTotal         int32                 `json:"maxNodesTotal,omitzero"         jsonschema:"description=Maximum total nodes allowed across all node pools. Set to 0 to disable the global cap; when the global cap is disabled the effective cap is the sum of all pool max values,minimum=0"` //nolint:lll
 	Expander              AutoscalerExpander    `json:"expander,omitzero"`
 	ScaleDownUnneededTime string                `json:"scaleDownUnneededTime,omitzero" jsonschema:"description=How long a node should be unneeded before it is eligible for scale down (e.g. 10m)"` //nolint:lll
 }
@@ -28,11 +28,11 @@ type NodeAutoscalerConfig struct {
 // NodePool defines a Hetzner node pool managed by the cluster autoscaler.
 type NodePool struct {
 	// Name is the unique identifier for this node pool (DNS-1123 label).
-	Name string `json:"name"`
+	Name string `json:"name" jsonschema:"minLength=1,maxLength=63,pattern=^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"`
 	// ServerType is the Hetzner server type for nodes in this pool (e.g. "cx23", "cax11").
-	ServerType string `json:"serverType"`
+	ServerType string `json:"serverType" jsonschema:"minLength=1"`
 	// Location is the Hetzner datacenter location for this pool (e.g. "fsn1", "nbg1").
-	Location string `json:"location"`
+	Location string `json:"location" jsonschema:"minLength=1"`
 	// Min is the minimum number of nodes in this pool.
 	Min int32 `json:"min" jsonschema:"minimum=0"`
 	// Max is the maximum number of nodes in this pool.

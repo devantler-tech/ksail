@@ -199,8 +199,8 @@ Editor command for interactive workflows (e.g., `code --wait`, `vim`). Falls bac
 | `localRegistry` | LocalRegistry | – |  |
 | `gitOpsEngine` | enum | – |  |
 | `sops` | SOPS | – |  |
-| `nodeAutoscaling` | enum | – |  |
-| `autoscaler` | AutoscalerConfig | – |  |
+| `nodeAutoscaling` | enum | – | Deprecated. Use autoscaler.node.enabled instead. Do not set both nodeAutoscaling and autoscaler. |
+| `autoscaler` | AutoscalerConfig | – | Pod and node autoscaling configuration (supersedes deprecated nodeAutoscaling) |
 | `importImages` | string | – | Path to tar archive with container images to import after cluster creation but before component installation |
 | `controlPlanes` | int32 | `1` | Number of control-plane nodes to create for the cluster (provider/distribution-agnostic) |
 | `workers` | int32 | – | Number of worker nodes to create for the cluster (provider/distribution-agnostic) |
