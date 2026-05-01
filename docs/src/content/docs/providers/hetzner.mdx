@@ -101,7 +101,7 @@ spec:
 | `hetzner.fallbackLocations` | list | `["nbg1", "hel1"]` | Alternative locations if primary is unavailable |
 | `hetzner.placementGroupFallbackToNone` | bool | `false` | Fall back to no placement group on capacity issues |
 | `hetzner.ingressFirewall` | string | `Enabled` | Talos OS-level ingress firewall (`Enabled` or `Disabled`). Generates `NetworkDefaultActionConfig` + `NetworkRuleConfig` patches as defense-in-depth alongside the Hetzner Cloud Firewall. |
-| `hetzner.serverLimit` | int | `10` | Maximum total Hetzner servers for this cluster. Validation checks `control-planes + workers + effective autoscaler capacity`, where effective autoscaler capacity is `sum(pool.max)` or, when `autoscaler.node.maxNodesTotal > 0`, `min(sum(pool.max), autoscaler.node.maxNodesTotal)`. KSail rejects autoscaler configurations that exceed this limit. Set to `0` to use the default of 10. |
+| `hetzner.serverLimit` | int | `10` | Maximum total Hetzner servers for this cluster. Validated only when Hetzner node autoscaling is enabled — checks `control-planes + workers + effective autoscaler capacity`, where effective autoscaler capacity is `sum(pool.max)` or, when `autoscaler.node.maxNodesTotal > 0`, `min(sum(pool.max), autoscaler.node.maxNodesTotal)`. Set to `0` to use the default of 10. |
 
 ### Talos options for Hetzner clusters
 
@@ -147,7 +147,7 @@ spec:
 | `autoscaler.node.enabled` | string | `Disabled` | `Enabled` — defer node scaling to an external autoscaler; `Disabled` — KSail manages node counts directly |
 | `autoscaler.node.expander` | string | `LeastWaste` | Expander strategy: `Price`, `LeastWaste`, `LeastNodes`, `Random` |
 | `autoscaler.node.maxNodesTotal` | int | `0` | Maximum total nodes across all pools. `0` disables the global cap. |
-| `autoscaler.node.scaleDownUnneededTime` | string | _(empty)_ | How long a node must be unneeded before it is eligible for scale-down (e.g. `10m`) |
+| `autoscaler.node.scaleDownUnneededTime` | string | `10m` | How long a node must be unneeded before it is eligible for scale-down (e.g. `10m`) |
 | `autoscaler.node.pools[].name` | string | — | Unique pool name (DNS-1123 label, max 63 chars) |
 | `autoscaler.node.pools[].serverType` | string | — | Hetzner server type for this pool (e.g. `cx23`, `cax11`) |
 | `autoscaler.node.pools[].location` | string | — | Hetzner datacenter location for this pool (e.g. `fsn1`) |
@@ -244,46 +244,6 @@ When using the Hetzner provider, KSail automatically installs:
 - **Hetzner Cloud Controller Manager** — Provisions Hetzner Cloud Load Balancers for `type: LoadBalancer` services
 - **Hetzner CSI Driver** — Provisions Hetzner Block Storage volumes for `PersistentVolumeClaim` resources
 - **Placement groups** — Distributes servers across physical hosts for high availability (configurable)
-
-### Node Autoscaling
-
-KSail integrates the [Kubernetes Cluster Autoscaler](https://github.com/kubernetes/autoscaler) for Talos × Hetzner clusters. When enabled, the autoscaler dynamically adds and removes worker nodes based on workload demand.
-
-Enable node autoscaling in `ksail.yaml`:
-
-```yaml
-spec:
-  cluster:
-    autoscaler:
-      node:
-        enabled: Enabled
-        pools:
-          - name: workers-fsn1
-            serverType: cx23
-            location: fsn1
-            min: 1
-            max: 5
-        expander: LeastWaste          # Price | LeastWaste | LeastNodes | Random
-        scaleDownUnneededTime: 10m    # How long a node is unneeded before scale-down
-        maxNodesTotal: 20             # Optional: cap total nodes across all pools
-  provider:
-    hetzner:
-      serverLimit: 30                 # Must accommodate control-planes + max pool capacity
-```
-
-| Field | Type | Default | Description |
-| --- | --- | --- | --- |
-| `autoscaler.node.enabled` | string | `Disabled` | Enable node autoscaling (`Enabled` or `Disabled`) |
-| `autoscaler.node.pools` | list | — | Node pools managed by the autoscaler (Hetzner server type, location, min/max) |
-| `autoscaler.node.expander` | string | `LeastWaste` | Scale-out strategy: `Price`, `LeastWaste`, `LeastNodes`, or `Random` |
-| `autoscaler.node.maxNodesTotal` | int | — | Maximum total nodes across all pools (optional) |
-| `autoscaler.node.scaleDownUnneededTime` | string | — | Duration a node must be unneeded before scale-down (e.g. `10m`) |
-
-> [!NOTE]
-> Node autoscaling is only supported for the **Talos × Hetzner** combination. The Cluster Autoscaler is installed automatically when `autoscaler.node.enabled: Enabled`; it reuses the `HCLOUD_TOKEN` from the existing `hcloud-ccm` Secret.
-
-> [!TIP]
-> Set `spec.provider.hetzner.serverLimit` to at least `control-planes + workers + sum(pool.max)` to ensure KSail does not reject your configuration before creating the cluster.
 
 ### Firewall Layers
 
