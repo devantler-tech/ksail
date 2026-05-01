@@ -256,8 +256,8 @@ func NodeAutoscalerEnabledFieldSelector() FieldSelector[v1alpha1.Cluster] {
 			return &c.Spec.Cluster.Autoscaler.Node.Enabled
 		},
 		Description: "Node autoscaling " +
-			"(Talos: Enabled defers worker and control-plane scaling to an external autoscaler, " +
-			"Disabled lets KSail manage node counts; other distributions currently ignore this setting)",
+			"(Default: Disabled, Enabled: install and enable Cluster Autoscaler for node pool autoscaling " +
+			"(Talos + Hetzner only); baseline node counts in controlPlanes and workers are always reconciled by KSail regardless of this setting)",
 		DefaultValue: v1alpha1.NodeAutoscalerEnabledDisabled,
 	}
 }
