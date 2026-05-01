@@ -3941,6 +3941,20 @@ func runWatch(cmd *cobra.Command, pathFlag string, initialApply bool, debug bool
 	// terminal and in CI logs.
 	cmd.SetErr(os.Stderr)
 
+	// Validate an explicit --path flag before loading config so that the error
+	// is surfaced immediately. Config loading can take tens of seconds in CI
+	// (cluster validation, distribution config), causing a short test timeout
+	// to expire before "access watch directory" ever appears in the output.
+	if p := strings.TrimSpace(pathFlag); p != "" {
+		info, err := os.Stat(p)
+		if err != nil {
+			return fmt.Errorf("access watch directory %q: %w", p, err)
+		}
+		if !info.IsDir() {
+			return fmt.Errorf("%q: %w", p, errNotDirectory)
+		}
+	}
+
 	cmdCtx, err := initCommandContext(cmd)
 	if err != nil {
 		return err
@@ -3948,7 +3962,8 @@ func runWatch(cmd *cobra.Command, pathFlag string, initialApply bool, debug bool
 
 	watchDir := resolveSourceDir(cmdCtx.ClusterCfg, pathFlag)
 
-	// Verify the directory exists.
+	// Verify the directory exists (covers the case where watchDir was resolved
+	// from config or the default rather than an explicit flag).
 	info, err := os.Stat(watchDir)
 	if err != nil {
 		return fmt.Errorf("access watch directory %q: %w", watchDir, err)
