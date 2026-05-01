@@ -48,6 +48,7 @@ safe-outputs:
   create-issue:
     title-prefix: "${{ github.workflow }} - "
     close-older-issues: false
+    expires: 7d
     labels: [automation, ci]
   add-comment:
 
@@ -259,6 +260,10 @@ When creating an investigation issue, use this structure:
 ## Historical Context
 
 [Similar past failures and patterns]
+
+---
+
+> **For AI agents**: If you create a PR that fixes this issue, include `Fixes #<this-issue-number>` in the PR description to auto-close it on merge.
 ```
 
 ## Important Guidelines
