@@ -41,7 +41,11 @@ func (e *Engine) ComputeDiff(
 		return result
 	}
 
-	// Check simple scalar fields via table-driven rules
+	// Check simple scalar fields via table-driven rules.
+	// Lazily initialize rules in case Engine was constructed without NewEngine.
+	if e.rules == nil {
+		e.rules = e.scalarFieldRules()
+	}
 	e.applyFieldRules(oldSpec, newSpec, result, e.rules)
 
 	// Check complex / distribution-specific changes
