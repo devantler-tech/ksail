@@ -20,6 +20,24 @@ const (
 	// LabelNodeIndex identifies the index of the node within its type.
 	// For example, "0" for the first control-plane node.
 	LabelNodeIndex = "ksail.node.index"
+
+	// LabelAutoscalerNodeGroup is applied by the Kubernetes Cluster Autoscaler
+	// (hcloud provider) to servers it creates. The value is the node group
+	// (pool) name configured in the autoscaler deployment.
+	LabelAutoscalerNodeGroup = "hcloud/node-group"
+)
+
+// Label constants for Talos snapshot images.
+// These use the ksail.io/ prefix to distinguish them from server/infrastructure labels.
+const (
+	// LabelTalosVersion identifies the Talos version of the snapshot image.
+	LabelTalosVersion = "ksail.io/talos-version"
+
+	// LabelTalosSchematic identifies the Talos factory schematic ID of the snapshot image.
+	LabelTalosSchematic = "ksail.io/talos-schematic"
+
+	// LabelTalosCluster identifies which cluster created the snapshot image.
+	LabelTalosCluster = "ksail.io/cluster"
 )
 
 // Node type values for LabelNodeType.

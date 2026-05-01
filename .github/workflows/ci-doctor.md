@@ -60,7 +60,7 @@ tools:
 
 timeout-minutes: 60
 
-source: githubnext/agentics/workflows/ci-doctor.md@3de4e604a36b5190a1c7dc4719c7341500ba8a95
+source: githubnext/agentics/workflows/ci-doctor.md@ecb5fea6b3621f8ecd8bdc022176cee491745b69
 ---
 
 # CI Doctor

@@ -145,16 +145,7 @@ spec:
     cni: Cilium
 ```
 
-```yaml
-# k3d.yaml — disable built-in Flannel
-options:
-  k3s:
-    extraArgs:
-      - arg: --flannel-backend=none
-        nodeFilters: ["server:*"]
-      - arg: --disable-network-policy
-        nodeFilters: ["server:*"]
-```
+When `cni: Cilium` is set, KSail automatically passes `--flannel-backend=none`, `--disable-network-policy`, and `--disable=traefik` to the K3s server. Traefik is disabled because Cilium installs Gateway API CRDs (e.g. `backendtlspolicies.gateway.networking.k8s.io`) that conflict with Traefik's CRD ownership, causing the K3s `helm-install-traefik` pod to enter `CrashLoopBackOff`. You do **not** need to add these flags manually in `k3d.yaml`.
 
 ### Kubernetes Version
 

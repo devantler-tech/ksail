@@ -33,6 +33,11 @@ func ExportSetupK3dCSI(clusterCfg *v1alpha1.Cluster, k3dConfig *v1alpha5.SimpleC
 	setupK3dCSI(clusterCfg, k3dConfig)
 }
 
+// ExportSetupK3dCNI exports setupK3dCNI for testing.
+func ExportSetupK3dCNI(clusterCfg *v1alpha1.Cluster, k3dConfig *v1alpha5.SimpleConfig) {
+	setupK3dCNI(clusterCfg, k3dConfig)
+}
+
 // ExportResolveClusterNameFromContext exports resolveClusterNameFromContext for testing.
 func ExportResolveClusterNameFromContext(ctx *localregistry.Context) string {
 	return resolveClusterNameFromContext(ctx)

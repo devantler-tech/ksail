@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -1163,6 +1164,7 @@ const (
 	k3sDisableMetricsServerFlag = "--disable=metrics-server"
 	k3sDisableLocalStorageFlag  = "--disable=local-storage"
 	k3sDisableServiceLBFlag     = "--disable=servicelb"
+	k3sDisableTraefikFlag       = "--disable=traefik"
 	k3sFlanelBackendNoneFlag    = "--flannel-backend=none"
 	k3sDisableNetworkPolicyFlag = "--disable-network-policy"
 )
@@ -1504,6 +1506,8 @@ func maybeDisableK3dFeature(
 // setupK3dCNI configures K3d to disable flannel and network policy when a non-default
 // CNI (Cilium or Calico) is selected. Without this, K3s starts with flannel enabled,
 // causing conflicts when the custom CNI is installed post-creation.
+// When Cilium is selected, K3s's built-in Traefik is also disabled because Cilium
+// installs Gateway API CRDs that conflict with Traefik's CRD ownership on install.
 func setupK3dCNI(clusterCfg *v1alpha1.Cluster, k3dConfig *v1alpha5.SimpleConfig) {
 	if clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionK3s || k3dConfig == nil {
 		return
@@ -1515,7 +1519,7 @@ func setupK3dCNI(clusterCfg *v1alpha1.Cluster, k3dConfig *v1alpha5.SimpleConfig)
 	}
 
 	for _, flag := range []string{k3sFlanelBackendNoneFlag, k3sDisableNetworkPolicyFlag} {
-		if !hasK3sArg(k3dConfig, flag) {
+		if !hasK3sArgForServers(k3dConfig, flag) {
 			k3dConfig.Options.K3sOptions.ExtraArgs = append(
 				k3dConfig.Options.K3sOptions.ExtraArgs,
 				v1alpha5.K3sArgWithNodeFilters{
@@ -1525,12 +1529,49 @@ func setupK3dCNI(clusterCfg *v1alpha1.Cluster, k3dConfig *v1alpha5.SimpleConfig)
 			)
 		}
 	}
+
+	// Cilium installs Gateway API CRDs (e.g. backendtlspolicies.gateway.networking.k8s.io)
+	// that conflict with K3s's built-in Traefik chart which claims ownership of the same CRDs.
+	// Disabling Traefik avoids the CRD ownership conflict and the resulting CrashLoopBackOff.
+	// We check specifically for a server-scoped entry because an agent-scoped entry would not
+	// suppress Traefik on control-plane nodes.
+	if cni == v1alpha1.CNICilium && !hasK3sArgForServers(k3dConfig, k3sDisableTraefikFlag) {
+		k3dConfig.Options.K3sOptions.ExtraArgs = append(
+			k3dConfig.Options.K3sOptions.ExtraArgs,
+			v1alpha5.K3sArgWithNodeFilters{
+				Arg:         k3sDisableTraefikFlag,
+				NodeFilters: []string{"server:*"},
+			},
+		)
+	}
 }
 
 // hasK3sArg checks whether a K3s arg flag is already present in the K3d config.
 func hasK3sArg(k3dConfig *v1alpha5.SimpleConfig, flag string) bool {
 	for _, arg := range k3dConfig.Options.K3sOptions.ExtraArgs {
 		if arg.Arg == flag {
+			return true
+		}
+	}
+
+	return false
+}
+
+// hasK3sArgForServers checks whether a K3s arg flag is already present in the K3d config
+// with node filters that cover all server nodes: either an empty filter list (applies to all
+// nodes) or a filter that is exactly "server:*". A filter like "server:0" is intentionally
+// excluded because it targets only a single server, not all servers.
+func hasK3sArgForServers(k3dConfig *v1alpha5.SimpleConfig, flag string) bool {
+	for _, arg := range k3dConfig.Options.K3sOptions.ExtraArgs {
+		if arg.Arg != flag {
+			continue
+		}
+
+		if len(arg.NodeFilters) == 0 {
+			return true
+		}
+
+		if slices.Contains(arg.NodeFilters, "server:*") {
 			return true
 		}
 	}
@@ -1889,7 +1930,7 @@ func runDeleteAction(
 	}
 
 	// Create provisioner for the provider
-	provisioner, err := createDeleteProvisioner(clusterInfo, resolved.OmniOpts)
+	provisioner, err := createDeleteProvisioner(clusterInfo, resolved.OmniOpts, flags.storage)
 	if err != nil {
 		return fmt.Errorf("failed to create provisioner: %w", err)
 	}
@@ -2033,6 +2074,7 @@ func promptForDeletion(
 func createDeleteProvisioner(
 	clusterInfo *clusterdetector.Info,
 	omniOpts v1alpha1.OptionsOmni,
+	deleteStorage bool,
 ) (clusterprovisioner.Provisioner, error) {
 	// Check for test factory override
 	clusterProvisionerFactoryMu.RLock()
@@ -2050,7 +2092,9 @@ func createDeleteProvisioner(
 		return provisioner, nil
 	}
 
-	provisioner, err := lifecycle.CreateMinimalProvisionerForProvider(clusterInfo, omniOpts)
+	provisioner, err := lifecycle.CreateMinimalProvisionerForProvider(
+		clusterInfo, omniOpts, deleteStorage,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create provisioner for provider: %w", err)
 	}
@@ -3234,7 +3278,11 @@ func InitFieldSelectors() []ksailconfigmanager.FieldSelector[v1alpha1.Cluster] {
 	// Unified node count selectors for all distributions
 	selectors = append(selectors, ksailconfigmanager.ControlPlanesFieldSelector())
 	selectors = append(selectors, ksailconfigmanager.WorkersFieldSelector())
-	selectors = append(selectors, ksailconfigmanager.NodeAutoscalingFieldSelector())
+	selectors = append(
+		selectors,
+		ksailconfigmanager.NodeAutoscalingFieldSelector(), //nolint:staticcheck
+	)
+	selectors = append(selectors, ksailconfigmanager.NodeAutoscalerEnabledFieldSelector())
 	// Talos-specific selectors
 	selectors = append(selectors, ksailconfigmanager.ImageVerificationFieldSelector())
 
@@ -5069,7 +5117,8 @@ func defaultClusterMutationFieldSelectors() []ksailconfigmanager.FieldSelector[v
 		ksailconfigmanager.DefaultImportImagesFieldSelector(),
 		ksailconfigmanager.ControlPlanesFieldSelector(),
 		ksailconfigmanager.WorkersFieldSelector(),
-		ksailconfigmanager.NodeAutoscalingFieldSelector(),
+		ksailconfigmanager.NodeAutoscalingFieldSelector(), //nolint:staticcheck // backward compat
+		ksailconfigmanager.NodeAutoscalerEnabledFieldSelector(),
 	)
 }
 
@@ -5143,6 +5192,15 @@ func loadAndValidateClusterConfig(
 	)
 	if err != nil {
 		return nil, "", fmt.Errorf("invalid configuration: %w", err)
+	}
+
+	// Validate autoscaler configuration (pool names, min/max, server limit)
+	err = v1alpha1.ValidateAutoscalerConfig(
+		&ctx.ClusterCfg.Spec.Cluster,
+		&ctx.ClusterCfg.Spec.Provider,
+	)
+	if err != nil {
+		return nil, "", fmt.Errorf("invalid autoscaler configuration: %w", err)
 	}
 
 	clusterName := resolveClusterNameFromContext(ctx)
@@ -5893,7 +5951,7 @@ func autoDeleteCluster(
 		Provider:     clusterCfg.Spec.Cluster.Provider,
 	}
 
-	provisioner, err := createDeleteProvisioner(info, clusterCfg.Spec.Provider.Omni)
+	provisioner, err := createDeleteProvisioner(info, clusterCfg.Spec.Provider.Omni, false)
 	if err != nil {
 		return fmt.Errorf("TTL auto-delete: failed to create provisioner: %w", err)
 	}

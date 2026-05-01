@@ -492,6 +492,8 @@ By default, the command shows which files will be affected and prompts for
 confirmation. Use --force to skip the confirmation prompt. In non-interactive
 environments (no TTY), the prompt is automatically skipped.
 
+Use --dry-run to preview which files would be rotated without making changes.
+
 Key type is auto-detected from the key format:
   - Age keys (age1...)
 
@@ -515,7 +517,10 @@ Examples:
   ksail cipher rotate ./k8s --remove-key age1oldkey...
 
   # Replace a recipient (add new, remove old)
-  ksail cipher rotate ./k8s --add-key age1newkey... --remove-key age1oldkey...`
+  ksail cipher rotate ./k8s --add-key age1newkey... --remove-key age1oldkey...
+
+  # Preview which files would be rotated without making changes
+  ksail cipher rotate ./k8s --dry-run`
 
 // NewRotateCmd creates and returns the rotate command.
 func NewRotateCmd() *cobra.Command {
@@ -524,6 +529,7 @@ func NewRotateCmd() *cobra.Command {
 		removeKey string
 		recursive bool
 		force     bool
+		dryRun    bool
 	)
 
 	cmd := &cobra.Command{
@@ -533,7 +539,7 @@ func NewRotateCmd() *cobra.Command {
 		SilenceUsage: true,
 		Args:         cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return handleRotateRunE(cmd, args[0], addKey, removeKey, recursive, force)
+			return handleRotateRunE(cmd, args[0], addKey, removeKey, recursive, force, dryRun)
 		},
 		Annotations: map[string]string{
 			annotations.AnnotationPermission: "write",
@@ -547,6 +553,8 @@ func NewRotateCmd() *cobra.Command {
 		BoolVarP(&recursive, "recursive", "r", false, "scan subdirectories when target is a folder")
 	cmd.Flags().
 		BoolVarP(&force, "force", "f", false, "skip confirmation prompt and rotate immediately")
+	cmd.Flags().
+		BoolVar(&dryRun, "dry-run", false, "show which files would be rotated without making changes")
 
 	return cmd
 }
@@ -555,7 +563,7 @@ func NewRotateCmd() *cobra.Command {
 func handleRotateRunE(
 	cmd *cobra.Command,
 	target, addKey, removeKey string,
-	recursive, force bool,
+	recursive, force, dryRun bool,
 ) error {
 	writer := cmd.OutOrStdout()
 
@@ -575,6 +583,12 @@ func handleRotateRunE(
 	}
 
 	if files == nil {
+		return nil
+	}
+
+	if dryRun {
+		showDryRunPreview(writer, files, canonPath, isDir)
+
 		return nil
 	}
 
@@ -693,6 +707,29 @@ func showRotatePreview(writer io.Writer, files []string, scanPath string, isDir 
 	}
 
 	_, _ = fmt.Fprint(writer, `Type "yes" to confirm rotation: `)
+}
+
+// showDryRunPreview prints which files would be rotated without making changes.
+func showDryRunPreview(writer io.Writer, files []string, scanPath string, isDir bool) {
+	if isDir {
+		notify.WriteMessage(notify.Message{
+			Type:    notify.InfoType,
+			Content: "dry run: %d file(s) in %s would be rotated:",
+			Args:    []any{len(files), scanPath},
+			Writer:  writer,
+		})
+	} else {
+		notify.WriteMessage(notify.Message{
+			Type:    notify.InfoType,
+			Content: "dry run: the following file would be rotated:",
+			Args:    []any{},
+			Writer:  writer,
+		})
+	}
+
+	for _, file := range files {
+		_, _ = fmt.Fprintf(writer, "  %s\n", file)
+	}
 }
 
 // handleRotateApply performs the actual key rotation on all files.

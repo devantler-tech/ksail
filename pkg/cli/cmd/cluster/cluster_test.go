@@ -60,6 +60,9 @@ var (
 	benchFilterExcludedSink []string
 )
 
+// disableTraefikArg is the K3s argument to disable the built-in Traefik ingress controller.
+const disableTraefikArg = "--disable=traefik"
+
 // podYAML is a minimal kubectl-style pod YAML used as benchmark input.
 const podYAML = `apiVersion: v1
 kind: Pod
@@ -2180,6 +2183,214 @@ func TestSetupK3dCSI_DoesNothingWhenCSINotDisabled(t *testing.T) {
 			require.Empty(t, k3dConfig.Options.K3sOptions.ExtraArgs)
 		})
 	}
+}
+
+func TestSetupK3dCNI_CiliumDisablesFlannelNetworkPolicyAndTraefik(t *testing.T) {
+	t.Parallel()
+
+	clusterCfg := &v1alpha1.Cluster{
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				Distribution: v1alpha1.DistributionK3s,
+				CNI:          v1alpha1.CNICilium,
+			},
+		},
+	}
+	k3dConfig := &v1alpha5.SimpleConfig{}
+
+	cluster.ExportSetupK3dCNI(clusterCfg, k3dConfig)
+
+	args := k3dConfig.Options.K3sOptions.ExtraArgs
+	require.Len(
+		t,
+		args,
+		3,
+		"Cilium should add flannel-backend=none, disable-network-policy, and disable=traefik",
+	)
+
+	argMap := make(map[string]v1alpha5.K3sArgWithNodeFilters, len(args))
+	for _, a := range args {
+		argMap[a.Arg] = a
+	}
+
+	for _, flag := range []string{"--flannel-backend=none", "--disable-network-policy", disableTraefikArg} {
+		a, ok := argMap[flag]
+		require.Truef(t, ok, "%q should be present", flag)
+		require.Equalf(
+			t,
+			[]string{"server:*"},
+			a.NodeFilters,
+			"node filters for %q should be [\"server:*\"]",
+			flag,
+		)
+	}
+}
+
+func TestSetupK3dCNI_CiliumDisablesTraefik(t *testing.T) {
+	t.Parallel()
+
+	clusterCfg := &v1alpha1.Cluster{
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				Distribution: v1alpha1.DistributionK3s,
+				CNI:          v1alpha1.CNICilium,
+			},
+		},
+	}
+	k3dConfig := &v1alpha5.SimpleConfig{}
+
+	cluster.ExportSetupK3dCNI(clusterCfg, k3dConfig)
+
+	found := false
+
+	for _, arg := range k3dConfig.Options.K3sOptions.ExtraArgs {
+		if arg.Arg == disableTraefikArg {
+			found = true
+
+			require.Equal(t, []string{"server:*"}, arg.NodeFilters)
+
+			break
+		}
+	}
+
+	require.True(t, found, "--disable=traefik should be added when using Cilium CNI")
+}
+
+func TestSetupK3dCNI_CalicoDoesNotDisableTraefik(t *testing.T) {
+	t.Parallel()
+
+	clusterCfg := &v1alpha1.Cluster{
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				Distribution: v1alpha1.DistributionK3s,
+				CNI:          v1alpha1.CNICalico,
+			},
+		},
+	}
+	k3dConfig := &v1alpha5.SimpleConfig{}
+
+	cluster.ExportSetupK3dCNI(clusterCfg, k3dConfig)
+
+	for _, arg := range k3dConfig.Options.K3sOptions.ExtraArgs {
+		require.NotEqual(
+			t,
+			disableTraefikArg,
+			arg.Arg,
+			"--disable=traefik should NOT be added for Calico",
+		)
+	}
+}
+
+func TestSetupK3dCNI_DoesNotDuplicateTraefikFlag(t *testing.T) {
+	t.Parallel()
+
+	clusterCfg := &v1alpha1.Cluster{
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				Distribution: v1alpha1.DistributionK3s,
+				CNI:          v1alpha1.CNICilium,
+			},
+		},
+	}
+	k3dConfig := &v1alpha5.SimpleConfig{
+		Options: v1alpha5.SimpleConfigOptions{
+			K3sOptions: v1alpha5.SimpleConfigOptionsK3s{
+				ExtraArgs: []v1alpha5.K3sArgWithNodeFilters{
+					{Arg: disableTraefikArg, NodeFilters: []string{"server:*"}},
+				},
+			},
+		},
+	}
+
+	cluster.ExportSetupK3dCNI(clusterCfg, k3dConfig)
+
+	count := 0
+
+	for _, arg := range k3dConfig.Options.K3sOptions.ExtraArgs {
+		if arg.Arg == disableTraefikArg {
+			count++
+		}
+	}
+
+	require.Equal(t, 1, count, "--disable=traefik should not be duplicated")
+}
+
+func TestSetupK3dCNI_AgentScopedTraefikFlagDoesNotPreventServerScopedAdd(t *testing.T) {
+	t.Parallel()
+
+	clusterCfg := &v1alpha1.Cluster{
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				Distribution: v1alpha1.DistributionK3s,
+				CNI:          v1alpha1.CNICilium,
+			},
+		},
+	}
+	k3dConfig := &v1alpha5.SimpleConfig{
+		Options: v1alpha5.SimpleConfigOptions{
+			K3sOptions: v1alpha5.SimpleConfigOptionsK3s{
+				ExtraArgs: []v1alpha5.K3sArgWithNodeFilters{
+					{Arg: disableTraefikArg, NodeFilters: []string{"agent:*"}},
+				},
+			},
+		},
+	}
+
+	cluster.ExportSetupK3dCNI(clusterCfg, k3dConfig)
+
+	serverDisabled := false
+
+	for _, arg := range k3dConfig.Options.K3sOptions.ExtraArgs {
+		if arg.Arg == disableTraefikArg {
+			for _, f := range arg.NodeFilters {
+				if f == "server:*" {
+					serverDisabled = true
+				}
+			}
+		}
+	}
+
+	require.True(
+		t,
+		serverDisabled,
+		"--disable=traefik with server:* should be added even when an agent:* entry exists",
+	)
+}
+
+func TestSetupK3dCNI_DoesNothingForDefaultCNI(t *testing.T) {
+	t.Parallel()
+
+	clusterCfg := &v1alpha1.Cluster{
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				Distribution: v1alpha1.DistributionK3s,
+				CNI:          v1alpha1.CNIDefault,
+			},
+		},
+	}
+	k3dConfig := &v1alpha5.SimpleConfig{}
+
+	cluster.ExportSetupK3dCNI(clusterCfg, k3dConfig)
+
+	require.Empty(t, k3dConfig.Options.K3sOptions.ExtraArgs)
+}
+
+func TestSetupK3dCNI_DoesNothingForNonK3s(t *testing.T) {
+	t.Parallel()
+
+	clusterCfg := &v1alpha1.Cluster{
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				Distribution: v1alpha1.DistributionVanilla,
+				CNI:          v1alpha1.CNICilium,
+			},
+		},
+	}
+	k3dConfig := &v1alpha5.SimpleConfig{}
+
+	cluster.ExportSetupK3dCNI(clusterCfg, k3dConfig)
+
+	require.Empty(t, k3dConfig.Options.K3sOptions.ExtraArgs)
 }
 
 func TestResolveClusterNameFromContext_Vanilla(t *testing.T) {

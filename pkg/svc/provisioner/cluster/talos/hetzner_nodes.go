@@ -110,6 +110,7 @@ func (p *Provisioner) createHetznerNodes(
 				Name:             nodeName,
 				ServerType:       opts.ServerType,
 				ISOID:            opts.ISOID,
+				ImageID:          opts.ImageID,
 				Location:         opts.Location,
 				Labels:           hetzner.NodeLabels(opts.ClusterName, opts.Role, nodeIndex+1),
 				NetworkID:        infra.NetworkID,

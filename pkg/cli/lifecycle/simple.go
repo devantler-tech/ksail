@@ -290,7 +290,7 @@ func runSimpleLifecycleAction(
 		KubeconfigPath: resolved.KubeconfigPath,
 	}
 
-	provisioner, err := CreateMinimalProvisionerForProvider(clusterInfo, resolved.OmniOpts)
+	provisioner, err := CreateMinimalProvisionerForProvider(clusterInfo, resolved.OmniOpts, false)
 	if err != nil {
 		return fmt.Errorf("failed to create provisioner: %w", err)
 	}
@@ -335,6 +335,7 @@ func CreateMinimalProvisioner(
 func CreateMinimalProvisionerForProvider(
 	info *clusterdetector.Info,
 	omniOpts v1alpha1.OptionsOmni,
+	deleteStorage bool,
 ) (clusterprovisioner.Provisioner, error) {
 	switch info.Provider {
 	case v1alpha1.ProviderDocker, "":
@@ -365,6 +366,8 @@ func CreateMinimalProvisionerForProvider(
 		if err != nil {
 			return nil, fmt.Errorf("failed to create talos provisioner: %w", err)
 		}
+
+		provisioner.WithDeleteStorage(deleteStorage)
 
 		return provisioner, nil
 

@@ -16,6 +16,8 @@ var (
 	ErrAllLocationsFailed = errors.New("server creation failed in all locations")
 	// ErrAllRetriesExhausted indicates that all retry attempts failed for a location.
 	ErrAllRetriesExhausted = errors.New("all retry attempts failed")
+	// ErrSnapshotBuildFailed indicates that the Talos snapshot build process failed.
+	ErrSnapshotBuildFailed = errors.New("talos snapshot build failed")
 )
 
 // retryableErrorCodes are Hetzner API error codes that warrant a retry.

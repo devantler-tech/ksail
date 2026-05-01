@@ -2,10 +2,8 @@
 package hetzner
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"maps"
 	"os"
 	"time"
 
@@ -141,7 +139,7 @@ func updateSecretIfNeeded(
 	existingSecret *corev1.Secret,
 	desiredData map[string][]byte,
 ) error {
-	if desiredDataMatches(existingSecret.Data, desiredData) {
+	if !k8s.MergeSecretData(existingSecret, desiredData) {
 		return nil
 	}
 
@@ -153,17 +151,9 @@ func updateSecretIfNeeded(
 			return fmt.Errorf("failed to get secret for update: %w", err)
 		}
 
-		if desiredDataMatches(latest.Data, desiredData) {
+		if !k8s.MergeSecretData(latest, desiredData) {
 			return nil
 		}
-
-		if latest.Data == nil {
-			latest.Data = make(map[string][]byte, len(desiredData))
-		}
-
-		maps.Copy(latest.Data, desiredData)
-
-		latest.StringData = nil
 
 		_, err = secretsClient.Update(ctx, latest, metav1.UpdateOptions{})
 		if err != nil {
@@ -177,18 +167,6 @@ func updateSecretIfNeeded(
 	}
 
 	return nil
-}
-
-// desiredDataMatches returns true when every key in desiredData exists in
-// existing with an equal value.
-func desiredDataMatches(existing, desiredData map[string][]byte) bool {
-	for k, v := range desiredData {
-		if !bytes.Equal(existing[k], v) {
-			return false
-		}
-	}
-
-	return true
 }
 
 // InstallWithSecret ensures the Hetzner Cloud API token secret exists and then

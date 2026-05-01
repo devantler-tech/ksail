@@ -94,7 +94,8 @@ type HetznerNodeGroupOpts struct {
 	Role        string // "control-plane" or "worker"
 	Count       int
 	ServerType  string
-	ISOID       int64
+	ISOID       int64 // ISO ID (for Talos public ISOs) - mutually exclusive with ImageID
+	ImageID     int64 // snapshot image ID - mutually exclusive with ISOID
 	Location    string
 }
 
@@ -156,6 +157,12 @@ type Provisioner struct {
 	// imagePullRetry controls retry behavior for Docker image pulls.
 	// Tests can override this via WithImagePullRetryConfig to use near-zero delays.
 	imagePullRetry imagePullRetryConfig
+	// snapshotManager manages Talos snapshot images on Hetzner Cloud.
+	// Set when the Hetzner provider is configured and schematic-based snapshots are used.
+	snapshotManager *hetzner.SnapshotManager
+	// deleteStorage controls whether Talos snapshot images are deleted alongside the cluster.
+	// When true, DeleteTalosSnapshots is called during cluster deletion on Hetzner.
+	deleteStorage bool
 }
 
 // NewProvisioner creates a new Provisioner.
@@ -256,6 +263,21 @@ func (p *Provisioner) WithImagePullRetryConfig(
 		baseWait:   baseWait,
 		maxWait:    maxWait,
 	}
+
+	return p
+}
+
+// WithSnapshotManager sets the Hetzner snapshot manager used for Talos OS disk image lifecycle.
+func (p *Provisioner) WithSnapshotManager(sm *hetzner.SnapshotManager) *Provisioner {
+	p.snapshotManager = sm
+
+	return p
+}
+
+// WithDeleteStorage controls whether Talos snapshot images are deleted alongside the cluster.
+// When true, DeleteTalosSnapshots is called during cluster deletion on Hetzner.
+func (p *Provisioner) WithDeleteStorage(deleteStorage bool) *Provisioner {
+	p.deleteStorage = deleteStorage
 
 	return p
 }

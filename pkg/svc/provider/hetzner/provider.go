@@ -239,6 +239,26 @@ func (p *Provider) NodesExist(ctx context.Context, clusterName string) (bool, er
 	return exists, nil
 }
 
+// NetworkExists returns true if the KSail-owned private network for the given
+// cluster exists. This is a more robust cluster-existence check than
+// NodesExist because the network is part of the KSail-managed infrastructure
+// and remains present even when all nodes have been deleted by the cluster
+// autoscaler.
+func (p *Provider) NetworkExists(ctx context.Context, clusterName string) (bool, error) {
+	if p.client == nil {
+		return false, provider.ErrProviderUnavailable
+	}
+
+	networkName := clusterName + NetworkSuffix
+
+	network, _, err := p.client.Network.GetByName(ctx, networkName)
+	if err != nil {
+		return false, fmt.Errorf("hetzner: get network %s: %w", networkName, err)
+	}
+
+	return network != nil, nil
+}
+
 // DeleteNodes removes all servers for the given cluster.
 func (p *Provider) DeleteNodes(ctx context.Context, clusterName string) error {
 	if p.client == nil {
@@ -269,6 +289,76 @@ func (p *Provider) DeleteNodes(ctx context.Context, clusterName string) error {
 	}
 
 	return nil
+}
+
+// DeleteAutoscalerNodes deletes all servers created by the Kubernetes Cluster
+// Autoscaler for the given cluster. Autoscaler-managed servers are identified
+// by the hcloud/node-group label matching one of the configured pool names AND
+// by membership in the cluster's private network (<clusterName>-network).
+//
+// The network guard prevents accidental cross-cluster deletion when pool names
+// are reused across clusters in the same Hetzner project.
+//
+// The method is idempotent: servers that have already been deleted are silently
+// skipped. If poolNames is empty, the method returns nil without making any API
+// calls.
+func (p *Provider) DeleteAutoscalerNodes(
+	ctx context.Context,
+	clusterName string,
+	poolNames []string,
+) error {
+	if len(poolNames) == 0 {
+		return nil
+	}
+
+	if p.client == nil {
+		return provider.ErrProviderUnavailable
+	}
+
+	networkName := clusterName + NetworkSuffix
+
+	for _, poolName := range poolNames {
+		labelSelector := fmt.Sprintf("%s=%s", LabelAutoscalerNodeGroup, poolName)
+
+		servers, err := p.listServersByLabelSelector(ctx, labelSelector)
+		if err != nil {
+			return fmt.Errorf("failed to list autoscaler servers for pool %s: %w", poolName, err)
+		}
+
+		for _, server := range servers {
+			// Guard: only delete servers that belong to this cluster's network to
+			// avoid accidentally deleting servers from another cluster that
+			// happens to use the same pool name in the same Hetzner project.
+			if !serverInNetwork(server, networkName) {
+				continue
+			}
+
+			_, _, deleteErr := p.client.Server.DeleteWithResult(ctx, server)
+			if deleteErr != nil {
+				var hcloudErr *hcloud.Error
+				if errors.As(deleteErr, &hcloudErr) && hcloudErr.Code == hcloud.ErrorCodeNotFound {
+					continue
+				}
+
+				return fmt.Errorf("failed to delete autoscaler server %s (cluster %s, pool %s): %w",
+					server.Name, clusterName, poolName, deleteErr)
+			}
+		}
+	}
+
+	return nil
+}
+
+// serverInNetwork reports whether the given server is attached to the named
+// private network.
+func serverInNetwork(server *hcloud.Server, networkName string) bool {
+	for _, privateNet := range server.PrivateNet {
+		if privateNet.Network != nil && privateNet.Network.Name == networkName {
+			return true
+		}
+	}
+
+	return false
 }
 
 // GetClusterStatus returns the provider-level status of a Hetzner Cloud cluster.

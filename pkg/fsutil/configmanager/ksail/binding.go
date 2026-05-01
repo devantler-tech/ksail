@@ -198,7 +198,8 @@ func (m *ConfigManager) getFieldMappings() map[any]string {
 		&m.Config.Spec.Cluster.Talos.ImageVerification: "image-verification",
 
 		// Cross-distribution options
-		&m.Config.Spec.Cluster.NodeAutoscaling: "node-autoscaling",
+		&m.Config.Spec.Cluster.NodeAutoscaling:         "node-autoscaling",
+		&m.Config.Spec.Cluster.Autoscaler.Node.Enabled: "node-autoscaler-enabled",
 	}
 }
 
