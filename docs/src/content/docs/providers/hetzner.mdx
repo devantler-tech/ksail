@@ -245,6 +245,46 @@ When using the Hetzner provider, KSail automatically installs:
 - **Hetzner CSI Driver** — Provisions Hetzner Block Storage volumes for `PersistentVolumeClaim` resources
 - **Placement groups** — Distributes servers across physical hosts for high availability (configurable)
 
+### Node Autoscaling
+
+KSail integrates the [Kubernetes Cluster Autoscaler](https://github.com/kubernetes/autoscaler) for Talos × Hetzner clusters. When enabled, the autoscaler dynamically adds and removes worker nodes based on workload demand.
+
+Enable node autoscaling in `ksail.yaml`:
+
+```yaml
+spec:
+  cluster:
+    autoscaler:
+      node:
+        enabled: Enabled
+        pools:
+          - name: workers-fsn1
+            serverType: cx23
+            location: fsn1
+            min: 1
+            max: 5
+        expander: LeastWaste          # Price | LeastWaste | LeastNodes | Random
+        scaleDownUnneededTime: 10m    # How long a node is unneeded before scale-down
+        maxNodesTotal: 20             # Optional: cap total nodes across all pools
+  provider:
+    hetzner:
+      serverLimit: 30                 # Must accommodate control-planes + max pool capacity
+```
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `autoscaler.node.enabled` | string | `Disabled` | Enable node autoscaling (`Enabled` or `Disabled`) |
+| `autoscaler.node.pools` | list | — | Node pools managed by the autoscaler (Hetzner server type, location, min/max) |
+| `autoscaler.node.expander` | string | `LeastWaste` | Scale-out strategy: `Price`, `LeastWaste`, `LeastNodes`, or `Random` |
+| `autoscaler.node.maxNodesTotal` | int | — | Maximum total nodes across all pools (optional) |
+| `autoscaler.node.scaleDownUnneededTime` | string | — | Duration a node must be unneeded before scale-down (e.g. `10m`) |
+
+> [!NOTE]
+> Node autoscaling is only supported for the **Talos × Hetzner** combination. The Cluster Autoscaler is installed automatically when `autoscaler.node.enabled: Enabled`; it reuses the `HCLOUD_TOKEN` from the existing `hcloud-ccm` Secret.
+
+> [!TIP]
+> Set `spec.provider.hetzner.serverLimit` to at least `control-planes + workers + sum(pool.max)` to ensure KSail does not reject your configuration before creating the cluster.
+
 ### Firewall Layers
 
 KSail applies two independent firewall layers for Hetzner Talos clusters:
