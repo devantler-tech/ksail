@@ -324,4 +324,17 @@ func TestApplyAutoscalerConfigSecret_CreateConflictFallsBackToUpdate(t *testing.
 		[]byte("new-config"),
 	)
 	require.NoError(t, err)
+
+	// Verify the Secret was actually updated with the new values (not a no-op).
+	updated, err := clientset.CoreV1().Secrets("kube-system").Get(
+		context.Background(),
+		"cluster-autoscaler-config",
+		metav1.GetOptions{},
+	)
+	require.NoError(t, err)
+
+	assert.Equal(t, []byte("new-image"), updated.Data["hcloud_image"])
+
+	wantEncoded := base64.StdEncoding.EncodeToString([]byte("new-config"))
+	assert.Equal(t, []byte(wantEncoded), updated.Data["hcloud_cloud_init"])
 }
