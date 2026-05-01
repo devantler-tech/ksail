@@ -60,7 +60,7 @@ spec:
 	require.NotNil(t, cluster)
 
 	node := cluster.Spec.Cluster.Autoscaler.Node
-	assert.Equal(t, true, node.Enabled)
+	assert.True(t, node.Enabled)
 	assert.Equal(t, int32(20), node.MaxNodesTotal)
 	assert.Equal(t, v1alpha1.AutoscalerExpanderLeastWaste, node.Expander)
 	assert.Equal(t, "10m", node.ScaleDownUnneededTime)
@@ -109,9 +109,8 @@ spec:
 	require.NoError(t, err)
 	require.NotNil(t, cluster)
 
-	assert.Equal(
-		t, true,
-		cluster.Spec.Cluster.Autoscaler.Node.Enabled,
+	assert.True(
+		t, cluster.Spec.Cluster.Autoscaler.Node.Enabled,
 		"migration should copy NodeAutoscaling=Enabled to Autoscaler.Node.Enabled",
 	)
 	assert.Empty(t, cluster.Spec.Cluster.NodeAutoscaling,
@@ -163,9 +162,8 @@ spec:
 	require.NoError(t, err, "loading a config with only autoscaler.node.enabled must not error")
 	require.NotNil(t, cluster)
 
-	assert.Equal(
+	assert.True(
 		t,
-		true,
 		cluster.Spec.Cluster.Autoscaler.Node.Enabled,
 		"autoscaler.node.enabled should be Enabled as specified in the config file",
 	)

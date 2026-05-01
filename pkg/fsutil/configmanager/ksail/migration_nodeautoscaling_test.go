@@ -21,7 +21,7 @@ func TestMigrateDeprecatedNodeAutoscaling_CopiesEnabledWhenNewUnset(t *testing.T
 
 	require.NoError(t, configmanager.MigrateDeprecatedNodeAutoscalingForTest(cfg, &out))
 
-	assert.Equal(t, true, cfg.Spec.Cluster.Autoscaler.Node.Enabled)
+	assert.True(t, cfg.Spec.Cluster.Autoscaler.Node.Enabled)
 
 	assert.Empty(
 		t,
@@ -44,9 +44,8 @@ func TestMigrateDeprecatedNodeAutoscaling_CopiesDisabledWhenNewUnset(t *testing.
 
 	require.NoError(t, configmanager.MigrateDeprecatedNodeAutoscalingForTest(cfg, &out))
 
-	assert.Equal(
+	assert.False(
 		t,
-		false,
 		cfg.Spec.Cluster.Autoscaler.Node.Enabled,
 	)
 
@@ -67,7 +66,7 @@ func TestMigrateDeprecatedNodeAutoscaling_NoOpWhenLegacyUnset(t *testing.T) {
 
 	require.NoError(t, configmanager.MigrateDeprecatedNodeAutoscalingForTest(cfg, &out))
 
-	assert.Equal(t, true, cfg.Spec.Cluster.Autoscaler.Node.Enabled)
+	assert.True(t, cfg.Spec.Cluster.Autoscaler.Node.Enabled)
 	assert.Empty(t, out.String(), "no warning expected when legacy field unset")
 }
 

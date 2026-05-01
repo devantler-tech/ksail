@@ -18,11 +18,11 @@ type PodAutoscalerConfig struct {
 // workers based on workload demand. Node-count changes via ksail cluster update
 // are still applied to the Talos machine config and will take effect normally.
 type NodeAutoscalerConfig struct {
-	Enabled               bool                  `json:"enabled,omitzero"`
-	Pools                 []NodePool            `json:"pools,omitzero"`
-	MaxNodesTotal         int32                 `json:"maxNodesTotal,omitzero"         jsonschema:"description=Maximum total nodes allowed across all node pools. Set to 0 to disable the global cap; when the global cap is disabled the effective cap is the sum of all pool max values,minimum=0"` //nolint:lll
-	Expander              AutoscalerExpander    `json:"expander,omitzero"`
-	ScaleDownUnneededTime string                `json:"scaleDownUnneededTime,omitzero" jsonschema:"description=How long a node should be unneeded before it is eligible for scale down (e.g. 10m)"` //nolint:lll
+	Enabled               bool               `json:"enabled,omitzero"`
+	Pools                 []NodePool         `json:"pools,omitzero"`
+	MaxNodesTotal         int32              `json:"maxNodesTotal,omitzero"         jsonschema:"description=Maximum total nodes allowed across all node pools. Set to 0 to disable the global cap; when the global cap is disabled the effective cap is the sum of all pool max values,minimum=0"` //nolint:lll
+	Expander              AutoscalerExpander `json:"expander,omitzero"`
+	ScaleDownUnneededTime string             `json:"scaleDownUnneededTime,omitzero" jsonschema:"description=How long a node should be unneeded before it is eligible for scale down (e.g. 10m)"` //nolint:lll
 }
 
 // NodePool defines a Hetzner node pool managed by the cluster autoscaler.
