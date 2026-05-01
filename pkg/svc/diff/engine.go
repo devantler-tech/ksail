@@ -41,13 +41,14 @@ func (e *Engine) ComputeDiff(
 		return result
 	}
 
-	// Check simple scalar fields via table-driven rules.
-	// Lazily initialize rules in case Engine was constructed without NewEngine.
-	if e.rules == nil {
-		e.rules = e.scalarFieldRules()
+	// Fall back to a local rule table in case Engine was constructed without
+	// NewEngine. Avoid mutating e.rules here so ComputeDiff remains safe for
+	// concurrent callers even on incorrectly constructed Engine values.
+	rules := e.rules
+	if rules == nil {
+		rules = e.scalarFieldRules()
 	}
-
-	e.applyFieldRules(oldSpec, newSpec, result, e.rules)
+	e.applyFieldRules(oldSpec, newSpec, result, rules)
 
 	// Check complex / distribution-specific changes
 	e.checkLocalRegistryChange(oldSpec, newSpec, result)
