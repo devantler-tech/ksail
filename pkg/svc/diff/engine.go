@@ -11,14 +11,21 @@ import (
 type Engine struct {
 	distribution v1alpha1.Distribution
 	provider     v1alpha1.Provider
+	// rules is the pre-computed scalar field rule table. It is built once in
+	// NewEngine and reused across ComputeDiff calls to avoid per-call slice and
+	// closure allocations.
+	rules []fieldRule
 }
 
 // NewEngine creates a new diff engine for the given distribution and provider.
 func NewEngine(distribution v1alpha1.Distribution, provider v1alpha1.Provider) *Engine {
-	return &Engine{
+	e := &Engine{
 		distribution: distribution,
 		provider:     provider,
 	}
+	e.rules = e.scalarFieldRules()
+
+	return e
 }
 
 // ComputeDiff compares old and new ClusterSpec and ProviderSpec, and categorizes all changes.
@@ -33,7 +40,7 @@ func (e *Engine) ComputeDiff(
 	}
 
 	// Check simple scalar fields via table-driven rules
-	e.applyFieldRules(oldSpec, newSpec, result, e.scalarFieldRules())
+	e.applyFieldRules(oldSpec, newSpec, result, e.rules)
 
 	// Check complex / distribution-specific changes
 	e.checkLocalRegistryChange(oldSpec, newSpec, result)
