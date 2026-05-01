@@ -62,7 +62,7 @@ require (
 	github.com/cli/go-gh/v2 v2.13.0
 	github.com/cosi-project/runtime v1.14.1
 	github.com/fsnotify/fsnotify v1.9.0
-	github.com/github/copilot-sdk/go v0.2.2
+	github.com/github/copilot-sdk/go v0.3.0
 	github.com/google/go-github/v72 v72.0.0
 	github.com/hetznercloud/hcloud-go/v2 v2.38.0
 	github.com/invopop/jsonschema v0.14.0
