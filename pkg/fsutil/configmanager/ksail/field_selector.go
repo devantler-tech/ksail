@@ -257,7 +257,7 @@ func NodeAutoscalerEnabledFieldSelector() FieldSelector[v1alpha1.Cluster] {
 		},
 		Description: "Node autoscaling " +
 			"(Default: Disabled, Enabled: install and enable Cluster Autoscaler for node pool autoscaling " +
-			"(Talos + Hetzner only); baseline node counts in controlPlanes and workers are always reconciled by KSail regardless of this setting)",
+			"(Talos + Hetzner only); baseline node counts in controlPlanes and workers are always reconciled by KSail regardless of this setting)", //nolint:lll
 		DefaultValue: v1alpha1.NodeAutoscalerEnabledDisabled,
 	}
 }

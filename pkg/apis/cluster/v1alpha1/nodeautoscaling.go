@@ -9,8 +9,7 @@ import (
 // Setting NodeAutoscalingEnabled migrates to NodeAutoscalerEnabledEnabled at load time.
 // Regardless of this setting, KSail always manages and diffs baseline node counts
 // (controlPlanes and workers) during cluster update operations.
-//
-// Deprecated: use [NodeAutoscalerEnabled] / spec.cluster.autoscaler.node.enabled instead.
+// NOTE: Use spec.cluster.autoscaler.node.enabled ([NodeAutoscalerEnabled]) instead.
 type NodeAutoscaling string
 
 const (
@@ -18,8 +17,7 @@ const (
 	// When set, installs and enables Cluster Autoscaler for node pool autoscaling on supported
 	// configurations (Talos + Hetzner). Baseline node counts (controlPlanes/workers) are
 	// still reconciled by KSail regardless of this setting.
-	//
-	// Deprecated: use autoscaler.node.enabled instead.
+	// NOTE: Use autoscaler.node.enabled ([NodeAutoscalerEnabledEnabled]) instead.
 	NodeAutoscalingEnabled NodeAutoscaling = "Enabled"
 	// NodeAutoscalingDisabled is the default: KSail manages node counts directly.
 	NodeAutoscalingDisabled NodeAutoscaling = "Disabled"
