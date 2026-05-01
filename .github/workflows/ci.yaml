@@ -172,16 +172,12 @@ jobs:
               - 'go.sum'
               - '.github/workflows/ci.yaml'
             system-test:
+              # NOTE: Do not use negative patterns (!) here.
+              # dorny/paths-filter v4 uses picomatch where negated patterns
+              # like '!**/*_test.go' match ANY file that is not a test file
+              # (including .mdx, .json, etc.), causing docs-only PRs to
+              # falsely trigger system tests.
               - '**/*.go'
-              - '!**/*_test.go'
-              - '!pkg/cli/cmd/chat/**'
-              - '!pkg/cli/ui/chat/**'
-              - '!pkg/svc/chat/**'
-              - '!pkg/svc/mcp/**'
-              - '!pkg/toolgen/**'
-              - '!pkg/cli/cmd/cipher/**'
-              - '!docs/*.go'
-              - '!schemas/**/*.go'
               - 'go.mod'
               - 'go.sum'
               - '.github/actions/**'
@@ -201,8 +197,14 @@ jobs:
               - 'vsce/**'
               - '.github/workflows/ci.yaml'
             docs:
-              - 'docs/**'
-              - '!docs/*.go'
+              # Matches docs content (MDX, Astro, config) but not Go generators.
+              # Avoid negative patterns — see system-test comment above.
+              - 'docs/src/**'
+              - 'docs/public/**'
+              - 'docs/astro.config.*'
+              - 'docs/tsconfig.json'
+              - 'docs/package*.json'
+              - 'docs/.npmrc'
               - '.github/workflows/ci.yaml'
             docs-deps:
               - 'docs/package*.json'
