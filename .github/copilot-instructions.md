@@ -380,7 +380,7 @@ When changing `-count` in the `go test -bench` command in CI, always update the 
 
 ## CI Doctor Issue Linking
 
-The CI Doctor agentic workflow (`ci-doctor.lock.yml`) creates investigation issues (labelled `ci` + `automation`, title prefix `CI Doctor - `) when monitored CI workflows fail. These issues auto-expire after 7 days.
+The CI Doctor agentic workflow (`ci-doctor.lock.yml`) creates investigation issues (labelled `ci` + `automation`, title prefix `CI Doctor -`) when monitored CI workflows fail. These issues auto-expire after 7 days.
 
 When fixing a CI failure that has a corresponding CI Doctor issue:
 
