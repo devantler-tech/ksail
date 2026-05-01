@@ -52,4 +52,7 @@ var (
 	ErrARM64SnapshotNotSupported = errors.New(
 		"snapshot-based boot (schematicId) does not support ARM64 server types (cax*) yet",
 	)
+	// ErrNilWorkerConfig is returned when a nil worker config is passed to
+	// GenerateAutoscalerWorkerConfig.
+	ErrNilWorkerConfig = errors.New("worker config must not be nil")
 )
