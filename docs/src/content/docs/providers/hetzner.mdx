@@ -52,9 +52,9 @@ spec:
   cluster:
     distribution: Talos
     provider: Hetzner
+    controlPlanes: 1
+    workers: 2
     talos:
-      controlPlanes: 1
-      workers: 2
       # ISO image ID for Hetzner (default: 122630 for x86, use 122629 for ARM)
       # Ignored when schematicId is set — KSail builds a snapshot instead.
       iso: 122630
@@ -315,6 +315,8 @@ spec:
 ```
 
 **Placement group errors** — Hetzner limits spread placement groups to 10 servers per datacenter. Reduce your node count or set `placementGroupStrategy: "None"`. For best-effort HA, set `placementGroupFallbackToNone: true` to fall back automatically when spread placement fails.
+
+**`autoscaler configuration exceeds Hetzner server limit`** — The total node capacity (`controlPlanes + workers + effectivePoolCapacity`) exceeds `hetzner.serverLimit`. Increase `serverLimit` or reduce your pool `max` values (or lower `maxNodesTotal` to cap the effective pool capacity).
 
 **`cloud provider requires an external registry`** — Hetzner Cloud servers cannot reach Docker-based local registries running on your machine. When `spec.cluster.localRegistry` is enabled, it must point to an internet-accessible registry (e.g., `ghcr.io/myorg`). KSail returns this error early if a non-external registry is configured.
 
