@@ -177,7 +177,47 @@ jobs:
               # like '!**/*_test.go' match ANY file that is not a test file
               # (including .mdx, .json, etc.), causing docs-only PRs to
               # falsely trigger system tests.
-              - '**/*.go'
+              # Use an explicit allowlist of directories whose changes truly
+              # require system tests (cluster/workload code, providers,
+              # provisioners, installers, client libraries). Chat, MCP,
+              # cipher, toolgen, docs generators, and schema generators are
+              # intentionally omitted.
+              - 'main.go'
+              - 'internal/buildmeta/**'
+              - 'pkg/apis/**'
+              - 'pkg/cli/annotations/**'
+              - 'pkg/cli/cmd/cluster/**'
+              - 'pkg/cli/cmd/workload/**'
+              - 'pkg/cli/cmd/tenant/**'
+              - 'pkg/cli/dockerutil/**'
+              - 'pkg/cli/editor/**'
+              - 'pkg/cli/flags/**'
+              - 'pkg/cli/kubeconfig/**'
+              - 'pkg/cli/kubeconfighook/**'
+              - 'pkg/cli/lifecycle/**'
+              - 'pkg/cli/setup/**'
+              - 'pkg/cli/ui/asciiart/**'
+              - 'pkg/cli/ui/confirm/**'
+              - 'pkg/cli/ui/errorhandler/**'
+              - 'pkg/cli/ui/picker/**'
+              - 'pkg/client/**'
+              - 'pkg/di/**'
+              - 'pkg/envvar/**'
+              - 'pkg/fsutil/**'
+              - 'pkg/k8s/**'
+              - 'pkg/notify/**'
+              - 'pkg/runner/**'
+              - 'pkg/svc/detector/**'
+              - 'pkg/svc/diff/**'
+              - 'pkg/svc/image/**'
+              - 'pkg/svc/installer/**'
+              - 'pkg/svc/provider/**'
+              - 'pkg/svc/provisioner/**'
+              - 'pkg/svc/registryresolver/**'
+              - 'pkg/svc/state/**'
+              - 'pkg/svc/tenant/**'
+              - 'pkg/svc/versionresolver/**'
+              - 'pkg/timer/**'
               - 'go.mod'
               - 'go.sum'
               - '.github/actions/**'
