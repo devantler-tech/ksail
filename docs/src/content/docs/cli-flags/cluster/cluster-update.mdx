@@ -46,8 +46,8 @@ Flags:
       --metrics-server MetricsServer                    Metrics Server (Default: use distribution, Enabled: install, Disabled: uninstall)
       --mirror-registry strings                         Configure mirror registries with optional authentication. Format: [user:pass@]host[=upstream]. Credentials support environment variables using ${VAR} syntax (quote placeholders so KSail can expand them). Examples: docker.io=https://registry-1.docker.io, '${USER}:${TOKEN}@ghcr.io=https://ghcr.io'
   -n, --name string                                     Cluster name used for container names, registry names, and kubeconfig context
-      --node-autoscaler-enabled NodeAutoscalerEnabled   Node autoscaling (Talos: Enabled defers worker and control-plane scaling to an external autoscaler, Disabled lets KSail manage node counts; other distributions currently ignore this setting)
-      --node-autoscaling NodeAutoscaling                [Deprecated: use autoscaler.node.enabled instead] Node autoscaling (Talos: Enabled defers worker and control-plane scaling to an external autoscaler, Disabled lets KSail manage node counts; other distributions currently ignore this setting)
+      --node-autoscaler-enabled NodeAutoscalerEnabled   Node autoscaling (Default: Disabled; Enabled: install Cluster Autoscaler for node pool autoscaling (Talos+Hetzner); KSail always reconciles baseline controlPlanes/workers regardless of this setting)
+      --node-autoscaling NodeAutoscaling                [Deprecated: use autoscaler.node.enabled instead] Node autoscaling (legacy alias; Enabled installs Cluster Autoscaler for node pool autoscaling; KSail always reconciles baseline controlPlanes/workers regardless of this setting)
       --output string                                   Output format: text (default) or json (machine-readable, for CI/MCP) (default "text")
       --policy-engine PolicyEngine                      Policy engine (None: skip, Kyverno: install Kyverno, Gatekeeper: install Gatekeeper)
       --provider Provider                               Infrastructure provider backend (e.g., Docker)

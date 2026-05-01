@@ -5,16 +5,21 @@ import (
 	"strings"
 )
 
-// NodeAutoscaling defines whether an external node autoscaler manages cluster node counts.
-// When Enabled, ksail cluster update skips controlPlanes and workers diffs and scaling
-// operations to avoid conflicts with the autoscaler.
+// NodeAutoscaling is a deprecated alias for [NodeAutoscalerEnabled].
+// Setting NodeAutoscalingEnabled migrates to NodeAutoscalerEnabledEnabled at load time.
+// Regardless of this setting, KSail always manages and diffs baseline node counts
+// (controlPlanes and workers) during cluster update operations.
+// NOTE: Use spec.cluster.autoscaler.node.enabled ([NodeAutoscalerEnabled]) instead.
 type NodeAutoscaling string
 
 const (
-	// NodeAutoscalingEnabled indicates an external autoscaler manages node counts.
-	// Update operations will not modify controlPlanes or workers.
+	// NodeAutoscalingEnabled is a deprecated alias for [NodeAutoscalerEnabledEnabled].
+	// When set, installs and enables Cluster Autoscaler for node pool autoscaling on supported
+	// configurations (Talos + Hetzner). Baseline node counts (controlPlanes/workers) are
+	// still reconciled by KSail regardless of this setting.
+	// NOTE: Use autoscaler.node.enabled ([NodeAutoscalerEnabledEnabled]) instead.
 	NodeAutoscalingEnabled NodeAutoscaling = "Enabled"
-	// NodeAutoscalingDisabled indicates KSail manages node counts directly.
+	// NodeAutoscalingDisabled is the default: KSail manages node counts directly.
 	NodeAutoscalingDisabled NodeAutoscaling = "Disabled"
 )
 
