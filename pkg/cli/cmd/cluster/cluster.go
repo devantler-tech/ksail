@@ -5194,15 +5194,6 @@ func loadAndValidateClusterConfig(
 		return nil, "", fmt.Errorf("invalid configuration: %w", err)
 	}
 
-	// Validate autoscaler configuration (pool names, capacity limits, etc.)
-	err = v1alpha1.ValidateAutoscalerConfig(
-		&ctx.ClusterCfg.Spec.Cluster,
-		&ctx.ClusterCfg.Spec.Provider,
-	)
-	if err != nil {
-		return nil, "", fmt.Errorf("invalid autoscaler configuration: %w", err)
-	}
-
 	clusterName := resolveClusterNameFromContext(ctx)
 
 	return ctx, clusterName, nil

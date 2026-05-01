@@ -15,9 +15,6 @@ var clusterNameRegex = regexp.MustCompile(`^[a-z][a-z0-9-]*[a-z0-9]$|^[a-z]$`)
 // ClusterNameMaxLength is the maximum length for a cluster name.
 const ClusterNameMaxLength = 63
 
-// NodePoolNameMaxLength is the maximum length for a node pool name.
-const NodePoolNameMaxLength = 63
-
 // ValidateClusterName validates that a cluster name is DNS-1123 compliant.
 // Cluster names are used in Docker container names, Kubernetes contexts, and YAML fields,
 // which require DNS-1123 subdomain names (lowercase alphanumeric and dashes only).

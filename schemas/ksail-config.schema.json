@@ -266,7 +266,8 @@
                 }
               },
               "additionalProperties": false,
-              "type": "object"
+              "type": "object",
+              "description": "Pod and node autoscaling configuration (supersedes deprecated nodeAutoscaling)"
             },
             "importImages": {
               "type": "string",
@@ -414,11 +415,6 @@
                     "type": "string"
                   },
                   "type": "array"
-                },
-                "serverLimit": {
-                  "type": "integer",
-                  "minimum": 0,
-                  "description": "Maximum total Hetzner servers allowed for this cluster (control-planes + workers + autoscaler pool capacity)"
                 }
               },
               "additionalProperties": false,

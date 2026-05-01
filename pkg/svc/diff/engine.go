@@ -534,7 +534,7 @@ func (e *Engine) checkAutoscalerPodScalarsChange(
 	appendChange(result, "cluster.autoscaler.pod.vertical",
 		string(oldPod.Vertical), string(newPod.Vertical),
 		string(v1alpha1.PodAutoscalerVerticalDisabled),
-		"enabling/disabling VPA triggers Helm chart install/uninstall",
+		"VPA setting recorded; installer wiring is reserved for a future release",
 		clusterupdate.ChangeCategoryInPlace)
 }
 
