@@ -3948,14 +3948,21 @@ func runWatch(cmd *cobra.Command, pathFlag string, initialApply bool, debug bool
 	// (cluster validation, distribution config), causing a short test timeout
 	// to expire before "access watch directory" ever appears in the output.
 	if pathFlag != "" {
-		info, err := os.Stat(pathFlag)
+		resolvedPath, err := fsutil.EvalCanonicalPath(pathFlag)
 		if err != nil {
-			return fmt.Errorf("access watch directory %q: %w", pathFlag, err)
+			return fmt.Errorf("resolve watch directory %q: %w", pathFlag, err)
+		}
+
+		info, err := os.Stat(resolvedPath)
+		if err != nil {
+			return fmt.Errorf("access watch directory %q: %w", resolvedPath, err)
 		}
 
 		if !info.IsDir() {
-			return fmt.Errorf("%q: %w", pathFlag, errNotDirectory)
+			return fmt.Errorf("%q: %w", resolvedPath, errNotDirectory)
 		}
+
+		pathFlag = resolvedPath
 	}
 
 	cmdCtx, err := initCommandContext(cmd)
