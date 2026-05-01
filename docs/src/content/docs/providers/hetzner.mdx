@@ -105,7 +105,7 @@ spec:
 | Field | Type | Default | Description |
 | --- | --- | --- | --- |
 | `talos.iso` | int | `122630` | Hetzner Cloud ISO/image ID for Talos (use `122629` for ARM). Ignored when `schematicId` is set. |
-| `talos.schematicId` | string | _(empty)_ | [Talos factory](https://factory.talos.dev) schematic ID. When set, KSail automatically builds and manages a Hetzner snapshot image instead of booting from the ISO. The snapshot is deleted when `ksail cluster delete --delete-storage` is run. |
+| `talos.schematicId` | string | _(empty)_ | [Talos factory](https://factory.talos.dev) schematic ID. When set, KSail automatically builds and manages a Hetzner snapshot image instead of booting from the ISO. `spec.cluster.talos.version` must also be set. Not supported for ARM64 server types (`cax*`). The snapshot is deleted when `ksail cluster delete --delete-storage` is run. |
 
 ## Quick Start
 
@@ -203,6 +203,8 @@ KSail applies two independent firewall layers for Hetzner Talos clusters:
 > [!NOTE]
 > **Upgrading from older KSail versions**: Clusters created before the firewall hardening change used 6 Hetzner Cloud Firewall rules. KSail now manages 3 rules (Talos API, Kubernetes API, and ICMP), with etcd, kubelet, and trustd access kept on the private Hetzner Cloud Network. Running `ksail cluster update` automatically migrates existing clusters to the current rule set.
 
+## Operations
+
 ### Talos Snapshot Lifecycle
 
 When `spec.cluster.talos.schematicId` is set, KSail manages a Hetzner Cloud **snapshot image** (instead of booting from the ISO) with the following lifecycle:
@@ -213,8 +215,6 @@ When `spec.cluster.talos.schematicId` is set, KSail manages a Hetzner Cloud **sn
 
 > [!NOTE]
 > Snapshots are scoped per cluster name, so deleting one cluster does not affect snapshots used by another cluster with the same schematic.
-
-
 
 ### List Clusters
 
