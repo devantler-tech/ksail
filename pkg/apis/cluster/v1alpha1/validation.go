@@ -3,6 +3,7 @@ package v1alpha1
 import (
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 )
 
@@ -257,6 +258,13 @@ func validateNodePools(pools []NodePool) error {
 	seen := make(map[string]struct{}, len(pools))
 
 	for idx, pool := range pools {
+		if pool.Min < 0 || pool.Max < 0 {
+			return fmt.Errorf(
+				"%w: pool[%d] %q has min=%d, max=%d; both must be >= 0",
+				ErrNegativePoolBound, idx, pool.Name, pool.Min, pool.Max,
+			)
+		}
+
 		if len(pool.Name) > NodePoolNameMaxLength || !poolNameRegex.MatchString(pool.Name) {
 			return fmt.Errorf(
 				"%w: pool[%d] %q must start with a lowercase letter, "+
@@ -298,16 +306,55 @@ func ValidateAutoscalerConfig(cluster *ClusterSpec, provider *ProviderSpec) erro
 		return nil
 	}
 
-	autoscaler := &cluster.Autoscaler.Node
+	node := &cluster.Autoscaler.Node
 
-	err := validateNodePools(autoscaler.Pools)
-	if err != nil {
-		return err
+	if node.MaxNodesTotal < 0 {
+		return fmt.Errorf("%w: maxNodesTotal=%d must be >= 0",
+			ErrNegativeMaxNodesTotal, node.MaxNodesTotal)
 	}
 
-	// Capacity guard: only applies when Hetzner provider and node autoscaler is enabled.
-	if cluster.Provider != ProviderHetzner ||
-		autoscaler.Enabled != NodeAutoscalerEnabledEnabled {
+	enumErr := validateAutoscalerEnumFields(&cluster.Autoscaler)
+	if enumErr != nil {
+		return enumErr
+	}
+
+	poolErr := validateNodePools(node.Pools)
+	if poolErr != nil {
+		return poolErr
+	}
+
+	return validateHetznerCapacity(cluster, provider)
+}
+
+// validateAutoscalerEnumFields checks that non-empty autoscaler enum fields hold valid values.
+// Empty strings are the unset (zero) state and bypass validation.
+func validateAutoscalerEnumFields(cfg *AutoscalerConfig) error {
+	if cfg.Node.Enabled != "" && !slices.Contains(ValidNodeAutoscalerEnableds(), cfg.Node.Enabled) {
+		return fmt.Errorf("%w: %q", ErrInvalidNodeAutoscalerEnabled, cfg.Node.Enabled)
+	}
+
+	if cfg.Node.Expander != "" && !slices.Contains(ValidAutoscalerExpanders(), cfg.Node.Expander) {
+		return fmt.Errorf("%w: %q", ErrInvalidAutoscalerExpander, cfg.Node.Expander)
+	}
+
+	if cfg.Pod.Horizontal != "" &&
+		!slices.Contains(ValidPodAutoscalerHorizontals(), cfg.Pod.Horizontal) {
+		return fmt.Errorf("%w: %q", ErrInvalidPodAutoscalerHorizontal, cfg.Pod.Horizontal)
+	}
+
+	if cfg.Pod.Vertical != "" && !slices.Contains(ValidPodAutoscalerVerticals(), cfg.Pod.Vertical) {
+		return fmt.Errorf("%w: %q", ErrInvalidPodAutoscalerVertical, cfg.Pod.Vertical)
+	}
+
+	return nil
+}
+
+// validateHetznerCapacity enforces the server-limit capacity guard for Hetzner clusters
+// with node autoscaling enabled. It is a no-op for other provider/autoscaler combinations.
+func validateHetznerCapacity(cluster *ClusterSpec, provider *ProviderSpec) error {
+	node := &cluster.Autoscaler.Node
+
+	if cluster.Provider != ProviderHetzner || node.Enabled != NodeAutoscalerEnabledEnabled {
 		return nil
 	}
 
@@ -316,11 +363,15 @@ func ValidateAutoscalerConfig(cluster *ClusterSpec, provider *ProviderSpec) erro
 		serverLimit = provider.Hetzner.ServerLimit
 	}
 
+	if serverLimit < 0 {
+		return fmt.Errorf("%w: serverLimit=%d must be >= 0", ErrNegativeServerLimit, serverLimit)
+	}
+
 	if serverLimit == 0 {
 		serverLimit = DefaultHetznerServerLimit
 	}
 
-	effectivePoolCapacity := autoscalerEffectiveCapacity(autoscaler.Pools, autoscaler.MaxNodesTotal)
+	effectivePoolCapacity := autoscalerEffectiveCapacity(node.Pools, node.MaxNodesTotal)
 
 	total := int64(cluster.ControlPlanes) + int64(cluster.Workers) + effectivePoolCapacity
 	if total > int64(serverLimit) {
