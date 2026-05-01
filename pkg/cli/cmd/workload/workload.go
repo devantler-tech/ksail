@@ -3945,13 +3945,13 @@ func runWatch(cmd *cobra.Command, pathFlag string, initialApply bool, debug bool
 	// is surfaced immediately. Config loading can take tens of seconds in CI
 	// (cluster validation, distribution config), causing a short test timeout
 	// to expire before "access watch directory" ever appears in the output.
-	if p := strings.TrimSpace(pathFlag); p != "" {
-		info, err := os.Stat(p)
+	if watchPath := strings.TrimSpace(pathFlag); watchPath != "" {
+		info, err := os.Stat(watchPath)
 		if err != nil {
-			return fmt.Errorf("access watch directory %q: %w", p, err)
+			return fmt.Errorf("access watch directory %q: %w", watchPath, err)
 		}
 		if !info.IsDir() {
-			return fmt.Errorf("%q: %w", p, errNotDirectory)
+			return fmt.Errorf("%q: %w", watchPath, errNotDirectory)
 		}
 	}
 
