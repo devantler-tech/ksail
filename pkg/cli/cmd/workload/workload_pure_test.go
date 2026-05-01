@@ -1017,10 +1017,10 @@ func TestRunWatchEarlyPathValidation(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name        string
-		setup       func(t *testing.T) string
-		wantErrStr  string
-		wantNoErr   bool
+		name       string
+		setup      func(t *testing.T) string
+		wantErrStr string
+		wantNoErr  bool
 	}{
 		{
 			name: "non-existent path returns error containing 'access watch directory'",

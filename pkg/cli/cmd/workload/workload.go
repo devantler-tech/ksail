@@ -3950,6 +3950,7 @@ func runWatch(cmd *cobra.Command, pathFlag string, initialApply bool, debug bool
 		if err != nil {
 			return fmt.Errorf("access watch directory %q: %w", dir, err)
 		}
+
 		if !info.IsDir() {
 			return fmt.Errorf("%q: %w", dir, errNotDirectory)
 		}
