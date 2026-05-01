@@ -184,6 +184,7 @@ jobs:
               - 'docs/astro.config.*'
               - 'docs/tsconfig.json'
               - 'docs/package*.json'
+              - 'docs/.npmrc'
               - '.github/workflows/ci.yaml'
             docs-deps:
               - 'docs/package*.json'
