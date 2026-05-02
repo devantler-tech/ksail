@@ -31,6 +31,10 @@ func TestInstaller_Install_TalosDistribution(t *testing.T) {
 	installer.SetGatewayAPICRDInstaller(func(_ context.Context) error { return nil })
 
 	client.EXPECT().
+		GetReleaseStorageLabels(mock.Anything, "cilium", "kube-system").
+		Return(nil, nil)
+
+	client.EXPECT().
 		AddRepository(mock.Anything, mock.Anything, mock.Anything).
 		Return(nil)
 
@@ -73,6 +77,10 @@ func TestInstaller_Install_HetznerProvider(t *testing.T) {
 	)
 
 	installer.SetGatewayAPICRDInstaller(func(_ context.Context) error { return nil })
+
+	client.EXPECT().
+		GetReleaseStorageLabels(mock.Anything, "cilium", "kube-system").
+		Return(nil, nil)
 
 	client.EXPECT().
 		AddRepository(mock.Anything, mock.Anything, mock.Anything).
@@ -119,6 +127,10 @@ func TestInstaller_Install_TalosDockerWithLoadBalancer(t *testing.T) {
 
 	installer.SetAPIServerCheckerForTest(func(_ context.Context) error { return nil })
 	installer.SetGatewayAPICRDInstaller(func(_ context.Context) error { return nil })
+
+	client.EXPECT().
+		GetReleaseStorageLabels(mock.Anything, "cilium", "kube-system").
+		Return(nil, nil)
 
 	client.EXPECT().
 		AddRepository(mock.Anything, mock.Anything, mock.Anything).

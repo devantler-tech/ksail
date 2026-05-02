@@ -170,6 +170,10 @@ func TestInstaller_Install_DockerProvider(t *testing.T) {
 	})
 
 	client.EXPECT().
+		GetReleaseStorageLabels(mock.Anything, "cilium", "kube-system").
+		Return(nil, nil)
+
+	client.EXPECT().
 		AddRepository(mock.Anything, mock.Anything, mock.Anything).
 		Return(nil)
 
@@ -220,6 +224,10 @@ func TestInstaller_Install_DockerProviderWithLoadBalancer(t *testing.T) {
 	})
 
 	client.EXPECT().
+		GetReleaseStorageLabels(mock.Anything, "cilium", "kube-system").
+		Return(nil, nil)
+
+	client.EXPECT().
 		AddRepository(mock.Anything, mock.Anything, mock.Anything).
 		Return(nil)
 
@@ -267,6 +275,9 @@ func TestInstaller_Install_RepoError(t *testing.T) {
 	t.Parallel()
 
 	installer, client := newInstallerWithDistribution(t, v1alpha1.DistributionVanilla)
+	client.EXPECT().
+		GetReleaseStorageLabels(mock.Anything, "cilium", "kube-system").
+		Return(nil, nil)
 	client.EXPECT().
 		AddRepository(mock.Anything, mock.Anything, mock.Anything).
 		Return(assert.AnError)
@@ -432,6 +443,10 @@ func newInstallerWithDistribution(
 
 func expectCiliumInstall(t *testing.T, client *helm.MockInterface, installErr error) {
 	t.Helper()
+
+	client.EXPECT().
+		GetReleaseStorageLabels(mock.Anything, "cilium", "kube-system").
+		Return(nil, nil)
 
 	client.EXPECT().
 		AddRepository(

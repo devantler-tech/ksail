@@ -166,6 +166,9 @@ func TestInstaller_Install_RepoError(t *testing.T) {
 
 	installer, client := newInstallerWithDistribution(t, v1alpha1.DistributionVanilla)
 	client.EXPECT().
+		GetReleaseStorageLabels(mock.Anything, "calico", "tigera-operator").
+		Return(nil, nil)
+	client.EXPECT().
 		AddRepository(mock.Anything, mock.Anything, mock.Anything).
 		Return(assert.AnError)
 
@@ -270,6 +273,10 @@ func newInstallerWithDistribution(
 
 func expectCalicoInstall(t *testing.T, client *helm.MockInterface, installErr error) {
 	t.Helper()
+
+	client.EXPECT().
+		GetReleaseStorageLabels(mock.Anything, "calico", "tigera-operator").
+		Return(nil, nil)
 
 	client.EXPECT().
 		AddRepository(

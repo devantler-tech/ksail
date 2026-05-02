@@ -29,6 +29,9 @@ func TestBaseInstallSuccess(t *testing.T) {
 
 	base, client := newBaseWithDefaults(t)
 	client.EXPECT().
+		GetReleaseStorageLabels(mock.Anything, "test-release", "test-namespace").
+		Return(nil, nil)
+	client.EXPECT().
 		AddRepository(mock.Anything, mock.Anything, mock.Anything).
 		Return(nil)
 	client.EXPECT().
@@ -40,10 +43,105 @@ func TestBaseInstallSuccess(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestBaseInstallProceedsWhenNoReleaseSecrets(t *testing.T) {
+	t.Parallel()
+
+	base, client := newBaseWithDefaults(t)
+	client.EXPECT().
+		GetReleaseStorageLabels(mock.Anything, "test-release", "test-namespace").
+		Return(nil, helm.ErrNoReleaseStorage)
+	client.EXPECT().
+		AddRepository(mock.Anything, mock.Anything, mock.Anything).
+		Return(nil)
+	client.EXPECT().
+		InstallOrUpgradeChart(mock.Anything, mock.Anything).
+		Return(nil, nil)
+
+	err := base.Install(context.Background())
+
+	require.NoError(t, err)
+}
+
+func TestBaseInstallSkipsWhenFluxManaged(t *testing.T) {
+	t.Parallel()
+
+	base, client := newBaseWithDefaults(t)
+	client.EXPECT().
+		GetReleaseStorageLabels(mock.Anything, "test-release", "test-namespace").
+		Return(map[string]string{
+			"name":                             "test-release",
+			"owner":                            "helm",
+			"helm.toolkit.fluxcd.io/name":      "my-helmrelease",
+			"helm.toolkit.fluxcd.io/namespace": "flux-system",
+		}, nil)
+
+	// AddRepository and InstallOrUpgradeChart should NOT be called.
+	err := base.Install(context.Background())
+
+	require.NoError(t, err)
+}
+
+func TestBaseInstallSkipsWhenArgoCDManaged(t *testing.T) {
+	t.Parallel()
+
+	base, client := newBaseWithDefaults(t)
+	client.EXPECT().
+		GetReleaseStorageLabels(mock.Anything, "test-release", "test-namespace").
+		Return(map[string]string{
+			"name":                          "test-release",
+			"owner":                         "helm",
+			"argocd.argoproj.io/managed-by": "argocd",
+		}, nil)
+
+	err := base.Install(context.Background())
+
+	require.NoError(t, err)
+}
+
+func TestBaseInstallProceedsWhenNotManaged(t *testing.T) {
+	t.Parallel()
+
+	base, client := newBaseWithDefaults(t)
+	client.EXPECT().
+		GetReleaseStorageLabels(mock.Anything, "test-release", "test-namespace").
+		Return(map[string]string{
+			"name":    "test-release",
+			"owner":   "helm",
+			"version": "1",
+		}, nil)
+	client.EXPECT().
+		AddRepository(mock.Anything, mock.Anything, mock.Anything).
+		Return(nil)
+	client.EXPECT().
+		InstallOrUpgradeChart(mock.Anything, mock.Anything).
+		Return(nil, nil)
+
+	err := base.Install(context.Background())
+
+	require.NoError(t, err)
+}
+
+func TestBaseInstallOwnershipCheckError(t *testing.T) {
+	t.Parallel()
+
+	base, client := newBaseWithDefaults(t)
+	client.EXPECT().
+		GetReleaseStorageLabels(mock.Anything, "test-release", "test-namespace").
+		Return(nil, assert.AnError)
+
+	err := base.Install(context.Background())
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "check release ownership for test")
+}
+
 func TestBaseInstallRepoError(t *testing.T) {
 	t.Parallel()
 
 	base, client := newBaseWithDefaults(t)
+	client.EXPECT().
+		GetReleaseStorageLabels(mock.Anything, "test-release", "test-namespace").
+		Return(nil, nil)
 	client.EXPECT().
 		AddRepository(mock.Anything, mock.Anything, mock.Anything).
 		Return(assert.AnError)
@@ -58,6 +156,9 @@ func TestBaseInstallChartError(t *testing.T) {
 	t.Parallel()
 
 	base, client := newBaseWithDefaults(t)
+	client.EXPECT().
+		GetReleaseStorageLabels(mock.Anything, "test-release", "test-namespace").
+		Return(nil, nil)
 	client.EXPECT().
 		AddRepository(mock.Anything, mock.Anything, mock.Anything).
 		Return(nil)

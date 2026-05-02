@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"time"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -126,6 +127,38 @@ func (b *InstallerBase) RunAPIServerCheck(
 	}
 
 	return nil
+}
+
+// CheckGitOpsOwnership queries the Helm release Secret for the given release
+// and checks whether a GitOps controller (Flux or ArgoCD) manages it. Returns
+// true when the install should be skipped.
+func (b *InstallerBase) CheckGitOpsOwnership(
+	ctx context.Context,
+	componentName, releaseName, namespace string,
+) (bool, error) {
+	client, err := b.GetClient()
+	if err != nil {
+		return false, fmt.Errorf("get helm client: %w", err)
+	}
+
+	labels, err := client.GetReleaseStorageLabels(ctx, releaseName, namespace)
+	if err != nil && !errors.Is(err, helm.ErrNoReleaseStorage) {
+		return false, fmt.Errorf("check release ownership for %s: %w", componentName, err)
+	}
+
+	if controller, managed := helmutil.IsGitOpsManaged(labels); managed {
+		fmt.Fprintf(
+			os.Stderr,
+			"%s: skipping install — release %q is managed by %s\n",
+			componentName,
+			releaseName,
+			controller,
+		)
+
+		return true, nil
+	}
+
+	return false, nil
 }
 
 // WaitForAPIServerStability waits for the Kubernetes API server to be stable.

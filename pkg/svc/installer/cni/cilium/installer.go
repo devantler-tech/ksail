@@ -138,6 +138,15 @@ func (c *Installer) chartSpec() *helm.ChartSpec {
 // --- internals ---
 
 func (c *Installer) helmInstallOrUpgradeCilium(ctx context.Context) error {
+	skipped, err := c.CheckGitOpsOwnership(ctx, "cilium", "cilium", "kube-system")
+	if err != nil {
+		return fmt.Errorf("check cilium ownership: %w", err)
+	}
+
+	if skipped {
+		return nil
+	}
+
 	client, err := c.GetClient()
 	if err != nil {
 		return fmt.Errorf("get helm client: %w", err)

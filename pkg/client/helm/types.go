@@ -15,6 +15,11 @@ var (
 	errListReleasesUnsupported = errors.New(
 		"helm: ListReleases not supported on template-only client",
 	)
+
+	// ErrNoReleaseStorage is returned by GetReleaseStorageLabels when no
+	// Helm release storage objects (Secrets or ConfigMaps) exist for the
+	// given release name and namespace.
+	ErrNoReleaseStorage = errors.New("helm: no release storage objects found")
 )
 
 // ChartSpec mirrors the mittwald chart specification while keeping KSail
@@ -93,4 +98,14 @@ type Interface interface {
 	// populated; all other fields (Status, Revision, etc.) are left at their zero
 	// values. Use this for bulk release detection to avoid N separate ReleaseExists roundtrips.
 	ListReleases(ctx context.Context) ([]ReleaseInfo, error)
+	// GetReleaseStorageLabels returns the Kubernetes object labels from the
+	// latest Helm release storage object (Secret or ConfigMap, depending on
+	// HELM_DRIVER) for the given release name and namespace. Returns
+	// (nil, ErrNoReleaseStorage) when no matching objects exist. This is
+	// used to inspect labels added by external controllers (e.g. Flux
+	// helm-controller) to determine ownership.
+	GetReleaseStorageLabels(
+		ctx context.Context,
+		releaseName, namespace string,
+	) (map[string]string, error)
 }

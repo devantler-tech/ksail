@@ -84,6 +84,9 @@ func TestMetricsServerInstallerInstallAddRepositoryError(t *testing.T) {
 	t.Parallel()
 
 	installer, client := newMetricsServerInstallerWithDefaults(t)
+	client.EXPECT().
+		GetReleaseStorageLabels(mock.Anything, mock.Anything, mock.Anything).
+		Return(nil, nil)
 	expectMetricsServerAddRepository(t, client, assert.AnError)
 
 	err := installer.Install(context.Background())
@@ -190,6 +193,9 @@ func expectMetricsServerInstall(
 	installErr error,
 ) {
 	t.Helper()
+	client.EXPECT().
+		GetReleaseStorageLabels(mock.Anything, mock.Anything, mock.Anything).
+		Return(nil, nil)
 	expectMetricsServerAddRepository(t, client, nil)
 	client.EXPECT().
 		InstallOrUpgradeChart(
@@ -217,6 +223,9 @@ func expectMetricsServerInstallVCluster(
 	installErr error,
 ) {
 	t.Helper()
+	client.EXPECT().
+		GetReleaseStorageLabels(mock.Anything, mock.Anything, mock.Anything).
+		Return(nil, nil)
 	expectMetricsServerAddRepository(t, client, nil)
 	client.EXPECT().
 		InstallOrUpgradeChart(

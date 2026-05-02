@@ -151,6 +151,19 @@ func (c *Installer) chartSpec() *helm.ChartSpec {
 // --- internals ---
 
 func (c *Installer) helmInstallOrUpgradeCalico(ctx context.Context) error {
+	skipped, ownershipErr := c.CheckGitOpsOwnership(ctx, "calico", "calico", "tigera-operator")
+	if ownershipErr != nil {
+		return fmt.Errorf("check calico ownership: %w", ownershipErr)
+	}
+
+	if skipped {
+		return nil
+	}
+
+	return c.installCalico(ctx)
+}
+
+func (c *Installer) installCalico(ctx context.Context) error {
 	client, err := c.GetClient()
 	if err != nil {
 		return fmt.Errorf("get helm client: %w", err)

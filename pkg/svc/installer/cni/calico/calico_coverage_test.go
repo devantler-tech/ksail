@@ -180,6 +180,10 @@ func expectCovCalicoInstall(t *testing.T, client *helm.MockInterface, installErr
 	t.Helper()
 
 	client.EXPECT().
+		GetReleaseStorageLabels(mock.Anything, "calico", "tigera-operator").
+		Return(nil, nil)
+
+	client.EXPECT().
 		AddRepository(
 			mock.Anything,
 			mock.MatchedBy(func(entry *helm.RepositoryEntry) bool {
