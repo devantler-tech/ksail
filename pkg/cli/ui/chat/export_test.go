@@ -994,6 +994,34 @@ var ExportSetCommandOptions = func(m *Model, opts map[string]CommandOptionProvid
 	m.commandOptions = opts
 }
 
+// --- Auto mode switch test exports ---
+
+// ExportNewAutoModeSwitchRequestedMsg creates an autoModeSwitchRequestedMsg for testing.
+var ExportNewAutoModeSwitchRequestedMsg = func(requestID, errorCode string) tea.Msg {
+	return autoModeSwitchRequestedMsg{
+		requestID: requestID,
+		errorCode: errorCode,
+	}
+}
+
+// ExportNewAutoModeSwitchCompletedMsg creates an autoModeSwitchCompletedMsg for testing.
+var ExportNewAutoModeSwitchCompletedMsg = func(requestID, response string) tea.Msg {
+	return autoModeSwitchCompletedMsg{
+		requestID: requestID,
+		response:  response,
+	}
+}
+
+// ExportNewSessionEventDispatcher creates a sessionEventDispatcher for testing.
+var ExportNewSessionEventDispatcher = func(eventChan chan tea.Msg) *sessionEventDispatcher {
+	return newSessionEventDispatcher(eventChan, nil)
+}
+
+// ExportDispatch calls dispatch on a sessionEventDispatcher for testing.
+var ExportDispatch = func(d *sessionEventDispatcher, event copilot.SessionEvent) {
+	d.dispatch(event)
+}
+
 // --- Slash command dispatch test exports ---
 
 // ExportTryDispatchSlashCommand exposes tryDispatchSlashCommand for testing.

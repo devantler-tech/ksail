@@ -175,3 +175,16 @@ type ToolProgressMsg struct {
 type TaskCompleteMsg struct {
 	Message string
 }
+
+// autoModeSwitchRequestedMsg signals that the server is requesting a switch
+// to a different (usually cheaper) model due to rate limiting.
+type autoModeSwitchRequestedMsg struct {
+	requestID string
+	errorCode string
+}
+
+// autoModeSwitchCompletedMsg signals that an auto mode switch request has been resolved.
+type autoModeSwitchCompletedMsg struct {
+	requestID string
+	response  string // "yes", "yes_always", or "no"
+}

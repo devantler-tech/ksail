@@ -84,13 +84,13 @@ func readPermissionResponse(
 	//nolint:nilerr // I/O errors (EOF) treated as denial in non-interactive contexts
 	if readErr != nil {
 		return copilot.PermissionRequestResult{
-			Kind: copilot.PermissionRequestResultKindDeniedCouldNotRequestFromUser,
+			Kind: copilot.PermissionRequestResultKindUserNotAvailable,
 		}, nil
 	}
 
 	if strings.TrimSpace(line) == "" {
 		return copilot.PermissionRequestResult{
-			Kind: copilot.PermissionRequestResultKindDeniedInteractivelyByUser,
+			Kind: copilot.PermissionRequestResultKindRejected,
 		}, nil
 	}
 
@@ -115,7 +115,7 @@ func readPermissionResponse(
 	})
 
 	return copilot.PermissionRequestResult{
-		Kind: copilot.PermissionRequestResultKindDeniedInteractivelyByUser,
+		Kind: copilot.PermissionRequestResultKindRejected,
 	}, nil
 }
 

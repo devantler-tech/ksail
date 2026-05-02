@@ -612,3 +612,48 @@ func (m *Model) handleTaskComplete(msg TaskCompleteMsg) (tea.Model, tea.Cmd) {
 
 	return m, m.waitForEvent()
 }
+
+// injectStreamingNotice appends a blockquote notice into the current streaming
+// assistant message, if one is active.
+func (m *Model) injectStreamingNotice(notice string) {
+	if len(m.messages) > 0 {
+		last := &m.messages[len(m.messages)-1]
+		if last.role == roleAssistant && last.isStreaming {
+			m.currentResponse.WriteString("\n> " + notice + "\n")
+			last.content = m.currentResponse.String()
+			m.updateViewportContent()
+		}
+	}
+}
+
+// handleAutoModeSwitchRequested notifies the user that a model switch was requested
+// (typically due to rate limiting). The Go SDK does not yet expose a response API,
+// so this is informational only.
+func (m *Model) handleAutoModeSwitchRequested(msg autoModeSwitchRequestedMsg) (tea.Model, tea.Cmd) {
+	notice := "🔄 Auto model switch requested"
+	if msg.errorCode != "" {
+		notice += " (reason: " + msg.errorCode + ")"
+	}
+
+	m.injectStreamingNotice(notice)
+
+	return m, m.waitForEvent()
+}
+
+// handleAutoModeSwitchCompleted notifies the user of the auto mode switch outcome.
+func (m *Model) handleAutoModeSwitchCompleted(msg autoModeSwitchCompletedMsg) (tea.Model, tea.Cmd) {
+	var notice string
+
+	switch msg.response {
+	case "yes", "yes_always":
+		notice = "✅ Auto model switch accepted"
+	case "no":
+		notice = "❌ Auto model switch declined"
+	default:
+		notice = "ℹ️ Auto model switch resolved: " + msg.response
+	}
+
+	m.injectStreamingNotice(notice)
+
+	return m, m.waitForEvent()
+}

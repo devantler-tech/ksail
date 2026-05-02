@@ -557,3 +557,135 @@ func TestFilterEnabledModels_FiltersCorrectly(t *testing.T) {
 	assert.Equal(t, "gpt-4o", result[0].ID)
 	assert.Equal(t, "claude-3", result[1].ID)
 }
+
+// --- Auto mode switch event dispatcher tests ---
+
+func TestDispatch_AutoModeSwitchRequested_EmitsMessage(t *testing.T) {
+	t.Parallel()
+
+	eventChan := make(chan tea.Msg, 10)
+	dispatcher := chat.ExportNewSessionEventDispatcher(eventChan)
+
+	errorCode := "rate_limit_exceeded"
+	chat.ExportDispatch(dispatcher, copilot.SessionEvent{
+		Type: copilot.SessionEventTypeAutoModeSwitchRequested,
+		Data: &copilot.AutoModeSwitchRequestedData{
+			RequestID: "req-123",
+			ErrorCode: &errorCode,
+		},
+	})
+
+	require.Len(t, eventChan, 1)
+
+	msg := <-eventChan
+	// Verify the msg can be dispatched through Model.Update without panic
+	model := chat.NewModel(newTestParams())
+	chat.ExportSetStreaming(model, true)
+
+	chat.ExportSetMessages(model, []chat.MessageForTest{
+		chat.ExportNewStreamingAssistantMessage(""),
+	})
+
+	updated, _ := model.Update(msg)
+	m, ok := updated.(*chat.Model)
+	require.True(t, ok)
+
+	content := chat.ExportGetMessageContent(m, 0)
+	assert.Contains(t, content, "🔄 Auto model switch requested")
+	assert.Contains(t, content, "rate_limit_exceeded")
+}
+
+func TestDispatch_AutoModeSwitchRequested_NilErrorCode(t *testing.T) {
+	t.Parallel()
+
+	eventChan := make(chan tea.Msg, 10)
+	dispatcher := chat.ExportNewSessionEventDispatcher(eventChan)
+
+	chat.ExportDispatch(dispatcher, copilot.SessionEvent{
+		Type: copilot.SessionEventTypeAutoModeSwitchRequested,
+		Data: &copilot.AutoModeSwitchRequestedData{
+			RequestID: "req-456",
+			ErrorCode: nil,
+		},
+	})
+
+	require.Len(t, eventChan, 1)
+
+	msg := <-eventChan
+	model := chat.NewModel(newTestParams())
+	chat.ExportSetStreaming(model, true)
+
+	chat.ExportSetMessages(model, []chat.MessageForTest{
+		chat.ExportNewStreamingAssistantMessage(""),
+	})
+
+	updated, _ := model.Update(msg)
+	m, ok := updated.(*chat.Model)
+	require.True(t, ok)
+
+	content := chat.ExportGetMessageContent(m, 0)
+	assert.Contains(t, content, "🔄 Auto model switch requested")
+	assert.NotContains(t, content, "reason:")
+}
+
+func TestDispatch_AutoModeSwitchRequested_InvalidDataIgnored(t *testing.T) {
+	t.Parallel()
+
+	eventChan := make(chan tea.Msg, 10)
+	dispatcher := chat.ExportNewSessionEventDispatcher(eventChan)
+
+	// Wrong data type — dispatcher should silently ignore
+	chat.ExportDispatch(dispatcher, copilot.SessionEvent{
+		Type: copilot.SessionEventTypeAutoModeSwitchRequested,
+		Data: &copilot.AutoModeSwitchCompletedData{}, // wrong type
+	})
+
+	assert.Empty(t, eventChan)
+}
+
+func TestDispatch_AutoModeSwitchCompleted_EmitsMessage(t *testing.T) {
+	t.Parallel()
+
+	eventChan := make(chan tea.Msg, 10)
+	dispatcher := chat.ExportNewSessionEventDispatcher(eventChan)
+
+	chat.ExportDispatch(dispatcher, copilot.SessionEvent{
+		Type: copilot.SessionEventTypeAutoModeSwitchCompleted,
+		Data: &copilot.AutoModeSwitchCompletedData{
+			RequestID: "req-789",
+			Response:  "yes",
+		},
+	})
+
+	require.Len(t, eventChan, 1)
+
+	msg := <-eventChan
+	model := chat.NewModel(newTestParams())
+	chat.ExportSetStreaming(model, true)
+
+	chat.ExportSetMessages(model, []chat.MessageForTest{
+		chat.ExportNewStreamingAssistantMessage(""),
+	})
+
+	updated, _ := model.Update(msg)
+	m, ok := updated.(*chat.Model)
+	require.True(t, ok)
+
+	content := chat.ExportGetMessageContent(m, 0)
+	assert.Contains(t, content, "✅ Auto model switch accepted")
+}
+
+func TestDispatch_AutoModeSwitchCompleted_InvalidDataIgnored(t *testing.T) {
+	t.Parallel()
+
+	eventChan := make(chan tea.Msg, 10)
+	dispatcher := chat.ExportNewSessionEventDispatcher(eventChan)
+
+	// Wrong data type — dispatcher should silently ignore
+	chat.ExportDispatch(dispatcher, copilot.SessionEvent{
+		Type: copilot.SessionEventTypeAutoModeSwitchCompleted,
+		Data: &copilot.AutoModeSwitchRequestedData{}, // wrong type
+	})
+
+	assert.Empty(t, eventChan)
+}

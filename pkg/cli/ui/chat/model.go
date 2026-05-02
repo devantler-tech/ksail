@@ -110,16 +110,16 @@ func (m ChatMode) Next() ChatMode {
 }
 
 // ToSDKMode maps the KSail chat mode to the corresponding Copilot SDK RPC mode.
-func (m ChatMode) ToSDKMode() rpc.Mode {
+func (m ChatMode) ToSDKMode() rpc.SessionMode {
 	switch m {
 	case InteractiveMode:
-		return rpc.ModeInteractive
+		return rpc.SessionModeInteractive
 	case PlanMode:
-		return rpc.ModePlan
+		return rpc.SessionModePlan
 	case AutopilotMode:
-		return rpc.ModeAutopilot
+		return rpc.SessionModeAutopilot
 	default:
-		return rpc.ModeInteractive
+		return rpc.SessionModeInteractive
 	}
 }
 
@@ -495,7 +495,8 @@ func (m *Model) Update(
 		usageMsg, compactionStartMsg, compactionCompleteMsg,
 		intentMsg, modelChangeMsg, shutdownMsg,
 		systemNotificationMsg, sessionWarningMsg,
-		ToolProgressMsg, TaskCompleteMsg:
+		ToolProgressMsg, TaskCompleteMsg,
+		autoModeSwitchRequestedMsg, autoModeSwitchCompletedMsg:
 		return m.handleStreamEvent(msg)
 
 	case modeChangeRequestMsg:
@@ -687,6 +688,12 @@ func (m *Model) handleStreamEvent(
 
 	case TaskCompleteMsg:
 		return m.handleTaskComplete(msg)
+
+	case autoModeSwitchRequestedMsg:
+		return m.handleAutoModeSwitchRequested(msg)
+
+	case autoModeSwitchCompletedMsg:
+		return m.handleAutoModeSwitchCompleted(msg)
 
 	default:
 		return m, nil
@@ -1065,7 +1072,7 @@ func (m *Model) dropNextPendingPrompt() {
 // (e.g., blocking tools in plan mode).
 func (m *Model) applyMode(mode ChatMode) error {
 	if m.session != nil && m.session.RPC != nil {
-		_, err := m.session.RPC.Mode.Set(m.ctx, &rpc.SessionModeSetParams{
+		_, err := m.session.RPC.Mode.Set(m.ctx, &rpc.ModeSetRequest{
 			Mode: mode.ToSDKMode(),
 		})
 		if err != nil {

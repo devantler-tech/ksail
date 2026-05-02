@@ -320,11 +320,11 @@ func TestPermissionHandler_NilChatModeRef(t *testing.T) {
 	updatedModel, _ = updatedModel.Update(msg)
 	updatedModel, _ = updatedModel.Update(tea.KeyMsg{Type: tea.KeyEsc})
 
-	// Verify the handler goroutine returns "denied-interactively-by-user"
+	// Verify the handler goroutine returns rejected
 	select {
 	case result := <-resultChan:
-		if result.Kind != copilot.PermissionRequestResultKindDeniedInteractivelyByUser {
-			t.Errorf("expected 'denied-interactively-by-user', got %q", result.Kind)
+		if result.Kind != copilot.PermissionRequestResultKindRejected {
+			t.Errorf("expected %q, got %q", copilot.PermissionRequestResultKindRejected, result.Kind)
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("timed out waiting for permission handler result")
