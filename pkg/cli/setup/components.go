@@ -30,11 +30,13 @@ var (
 	ErrKubeletCSRApproverInstallerFactoryNil = errors.New(
 		"kubelet-csr-approver installer factory is nil",
 	)
-	ErrCSIInstallerFactoryNil                  = errors.New("CSI installer factory is nil")
-	ErrPolicyEngineInstallerFactoryNil         = errors.New("policy engine installer factory is nil")
-	ErrPolicyEngineDisabled                    = errors.New("policy engine is disabled")
-	ErrClusterConfigNil                        = errors.New("cluster config is nil")
-	ErrClusterAutoscalerInstallerFactoryNil    = errors.New("cluster-autoscaler installer factory is nil")
+	ErrCSIInstallerFactoryNil               = errors.New("CSI installer factory is nil")
+	ErrPolicyEngineInstallerFactoryNil      = errors.New("policy engine installer factory is nil")
+	ErrPolicyEngineDisabled                 = errors.New("policy engine is disabled")
+	ErrClusterConfigNil                     = errors.New("cluster config is nil")
+	ErrClusterAutoscalerInstallerFactoryNil = errors.New(
+		"cluster-autoscaler installer factory is nil",
+	)
 )
 
 // InstallerFactories holds factory functions for creating component installers.

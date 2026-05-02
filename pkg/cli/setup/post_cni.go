@@ -655,7 +655,11 @@ func buildInfrastructureTasks(
 		{needed: reqs.NeedsCSI, name: "csi", fn: InstallCSISilent},
 		{needed: reqs.NeedsCertManager, name: "cert-manager", fn: InstallCertManagerSilent},
 		{needed: reqs.NeedsPolicyEngine, name: "policy-engine", fn: InstallPolicyEngineSilent},
-		{needed: reqs.NeedsClusterAutoscaler, name: "cluster-autoscaler", fn: InstallClusterAutoscalerSilent},
+		{
+			needed: reqs.NeedsClusterAutoscaler,
+			name:   "cluster-autoscaler",
+			fn:     InstallClusterAutoscalerSilent,
+		},
 	})
 }
 

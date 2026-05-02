@@ -375,7 +375,7 @@ func (f DefaultFactory) createTalosProvisioner(
 	// Propagate autoscaler-enabled flag to Hetzner options so the provisioner
 	// can create the cluster-autoscaler-config Secret during bootstrap.
 	hetznerOpts := cluster.Spec.Provider.Hetzner
-	//nolint:staticcheck // bridging deprecated field
+
 	hetznerOpts.NodeAutoscalerEnabled = cluster.Spec.Cluster.Autoscaler.Node.Enabled ||
 		cluster.Spec.Cluster.NodeAutoscaling == v1alpha1.NodeAutoscalingEnabled
 
@@ -388,6 +388,7 @@ func (f DefaultFactory) createTalosProvisioner(
 			for i, pool := range pools {
 				names[i] = pool.Name
 			}
+
 			hetznerOpts.AutoscalerNodePoolNames = names
 		}
 	}
