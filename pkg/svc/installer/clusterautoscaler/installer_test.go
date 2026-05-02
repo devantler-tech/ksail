@@ -52,6 +52,9 @@ func TestClusterAutoscalerInstaller_InstallAddRepositoryError(t *testing.T) {
 	t.Parallel()
 
 	installer, client := newInstallerWithDefaults(t)
+	client.EXPECT().
+		GetReleaseSecretLabels(mock.Anything, mock.Anything, mock.Anything).
+		Return(nil, nil)
 	expectAddRepository(t, client, assert.AnError)
 
 	err := installer.Install(context.Background())
@@ -102,6 +105,9 @@ func TestClusterAutoscalerInstaller_ValuesYaml_NodePools(t *testing.T) {
 	}
 
 	client := helm.NewMockInterface(t)
+	client.EXPECT().
+		GetReleaseSecretLabels(mock.Anything, mock.Anything, mock.Anything).
+		Return(nil, nil)
 	expectAddRepository(t, client, nil)
 	client.EXPECT().
 		InstallOrUpgradeChart(
@@ -185,6 +191,9 @@ func runExpanderTest(
 
 	cfg := v1alpha1.NodeAutoscalerConfig{Expander: expander}
 	client := helm.NewMockInterface(t)
+	client.EXPECT().
+		GetReleaseSecretLabels(mock.Anything, mock.Anything, mock.Anything).
+		Return(nil, nil)
 	expectAddRepository(t, client, nil)
 	client.EXPECT().
 		InstallOrUpgradeChart(
@@ -227,6 +236,9 @@ func TestClusterAutoscalerInstaller_ValuesYaml_Contents(t *testing.T) {
 	}
 
 	client := helm.NewMockInterface(t)
+	client.EXPECT().
+		GetReleaseSecretLabels(mock.Anything, mock.Anything, mock.Anything).
+		Return(nil, nil)
 	expectAddRepository(t, client, nil)
 	client.EXPECT().
 		InstallOrUpgradeChart(
@@ -284,6 +296,9 @@ func TestClusterAutoscalerInstaller_ValuesYaml_DefaultScaleDownTime(t *testing.T
 	}
 
 	client := helm.NewMockInterface(t)
+	client.EXPECT().
+		GetReleaseSecretLabels(mock.Anything, mock.Anything, mock.Anything).
+		Return(nil, nil)
 	expectAddRepository(t, client, nil)
 	client.EXPECT().
 		InstallOrUpgradeChart(
@@ -317,6 +332,9 @@ func TestClusterAutoscalerInstaller_ValuesYaml_MaxNodesTotalOmittedWhenZero(t *t
 	}
 
 	client := helm.NewMockInterface(t)
+	client.EXPECT().
+		GetReleaseSecretLabels(mock.Anything, mock.Anything, mock.Anything).
+		Return(nil, nil)
 	expectAddRepository(t, client, nil)
 	client.EXPECT().
 		InstallOrUpgradeChart(
@@ -378,6 +396,9 @@ func expectAddRepository(t *testing.T, client *helm.MockInterface, err error) {
 
 func expectInstall(t *testing.T, client *helm.MockInterface, installErr error) {
 	t.Helper()
+	client.EXPECT().
+		GetReleaseSecretLabels(mock.Anything, mock.Anything, mock.Anything).
+		Return(nil, nil)
 	expectAddRepository(t, client, nil)
 	client.EXPECT().
 		InstallOrUpgradeChart(

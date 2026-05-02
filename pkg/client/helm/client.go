@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"time"
 
 	helmv4action "helm.sh/helm/v4/pkg/action"
@@ -14,6 +15,8 @@ import (
 	helmv4release "helm.sh/helm/v4/pkg/release"
 	v1 "helm.sh/helm/v4/pkg/release/v1"
 	helmv4driver "helm.sh/helm/v4/pkg/storage/driver"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 )
 
 const (
@@ -378,4 +381,52 @@ func (c *Client) upgradeRelease(ctx context.Context, spec *ChartSpec) (*v1.Relea
 	}
 
 	return executeAndExtractRelease(runFn)
+}
+
+// GetReleaseSecretLabels returns the labels from the latest Helm release Secret
+// for the given release name and namespace. Returns (nil, nil) when no matching
+// Secrets exist. Helm v4 stores each release revision as a Kubernetes Secret
+// with labels name=<release> and owner=helm.
+func (c *Client) GetReleaseSecretLabels(
+	ctx context.Context,
+	releaseName, namespace string,
+) (map[string]string, error) {
+	if releaseName == "" {
+		return nil, errReleaseNameRequired
+	}
+
+	restConfig, err := c.settings.RESTClientGetter().ToRESTConfig()
+	if err != nil {
+		return nil, fmt.Errorf("get REST config for release secret labels: %w", err)
+	}
+
+	clientset, err := kubernetes.NewForConfig(restConfig)
+	if err != nil {
+		return nil, fmt.Errorf("create kubernetes clientset for release secret labels: %w", err)
+	}
+
+	secretList, err := clientset.CoreV1().Secrets(namespace).List(ctx, metav1.ListOptions{
+		LabelSelector: fmt.Sprintf("name=%s,owner=helm", releaseName),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list helm release secrets for %q: %w", releaseName, err)
+	}
+
+	if len(secretList.Items) == 0 {
+		return nil, nil
+	}
+
+	// Find the latest revision (highest version label value).
+	bestIdx := 0
+	bestVersion := -1
+
+	for i := range secretList.Items {
+		v, _ := strconv.Atoi(secretList.Items[i].Labels["version"])
+		if v > bestVersion {
+			bestIdx = i
+			bestVersion = v
+		}
+	}
+
+	return secretList.Items[bestIdx].Labels, nil
 }

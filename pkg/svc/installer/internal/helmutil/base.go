@@ -3,6 +3,7 @@ package helmutil
 import (
 	"context"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
@@ -46,8 +47,23 @@ func NewBase(
 // It wraps the context with a deadline that includes [helm.ContextTimeoutBuffer]
 // beyond the chart timeout so that Helm's internal kstatus watchers can
 // observe resource readiness and report errors before the Go context expires.
+//
+// If the release Secret already exists and carries GitOps controller labels
+// (Flux or ArgoCD), the install is skipped to avoid overwriting externally
+// managed values.
 func (b *Base) Install(ctx context.Context) error {
-	err := b.client.AddRepository(ctx, b.repo, b.timeout)
+	labels, err := b.client.GetReleaseSecretLabels(ctx, b.spec.ReleaseName, b.spec.Namespace)
+	if err != nil {
+		return fmt.Errorf("check release ownership for %s: %w", b.name, err)
+	}
+
+	if controller, managed := IsGitOpsManaged(labels); managed {
+		log.Printf("%s: skipping install — release %q is managed by %s", b.name, b.spec.ReleaseName, controller)
+
+		return nil
+	}
+
+	err = b.client.AddRepository(ctx, b.repo, b.timeout)
 	if err != nil {
 		return fmt.Errorf("failed to add %s repository: %w", b.repo.Name, err)
 	}

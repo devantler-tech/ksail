@@ -61,6 +61,10 @@ func TestInstaller_Install_APIDiscoveryErrorRetry(t *testing.T) {
 		v1alpha1.DistributionVanilla,
 	)
 
+	client.EXPECT().
+		GetReleaseSecretLabels(mock.Anything, "calico", "tigera-operator").
+		Return(nil, nil)
+
 	// First call: repo add succeeds
 	client.EXPECT().
 		AddRepository(mock.Anything, mock.Anything, mock.Anything).
@@ -94,6 +98,10 @@ func TestInstaller_Install_ContextCanceled_Vanilla(t *testing.T) {
 	)
 
 	client.EXPECT().
+		GetReleaseSecretLabels(mock.Anything, "calico", "tigera-operator").
+		Return(nil, nil)
+
+	client.EXPECT().
 		AddRepository(mock.Anything, mock.Anything, mock.Anything).
 		Return(nil)
 
@@ -121,6 +129,10 @@ func TestInstaller_Install_K3s_APIServerUnavailableRetrySucceeds(t *testing.T) {
 	)
 	installer.SetAPIServerCheckerForTest(func(_ context.Context) error { return nil })
 	installer.SetRetryBackoffForTest(func(_ context.Context) error { return nil })
+
+	client.EXPECT().
+		GetReleaseSecretLabels(mock.Anything, "calico", "tigera-operator").
+		Return(nil, nil)
 
 	client.EXPECT().
 		AddRepository(mock.Anything, mock.Anything, mock.Anything).
@@ -154,6 +166,10 @@ func TestInstaller_Install_K3s_APIServerUnavailableRetryExhausted(t *testing.T) 
 	installer.SetRetryBackoffForTest(func(_ context.Context) error { return nil })
 
 	client.EXPECT().
+		GetReleaseSecretLabels(mock.Anything, "calico", "tigera-operator").
+		Return(nil, nil)
+
+	client.EXPECT().
 		AddRepository(mock.Anything, mock.Anything, mock.Anything).
 		Return(nil)
 
@@ -181,6 +197,10 @@ func TestInstaller_Install_Vanilla_NoRetryOnAPIServerUnavailable(t *testing.T) {
 		2*time.Minute,
 		v1alpha1.DistributionVanilla,
 	)
+
+	client.EXPECT().
+		GetReleaseSecretLabels(mock.Anything, "calico", "tigera-operator").
+		Return(nil, nil)
 
 	client.EXPECT().
 		AddRepository(mock.Anything, mock.Anything, mock.Anything).
