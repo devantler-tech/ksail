@@ -2734,6 +2734,9 @@ var errUnsupportedProvider = errors.New("unsupported provider")
 // errProviderNotConfigured is returned when provider credentials are missing.
 var errProviderNotConfigured = errors.New("provider not configured")
 
+// errContextNotFound is returned when a kubeconfig context cannot be found.
+var errContextNotFound = errors.New("context not found in kubeconfig")
+
 // NewInfoCmd creates the cluster info command.
 // The command queries the infrastructure provider API first, then attempts
 // kubectl cluster-info, and only fails if no information is available at all.
@@ -7667,7 +7670,7 @@ func resolveClusterEntryName(kubeconfigPath, contextName string) (string, error)
 
 	ctxEntry, ok := kubeConfig.Contexts[contextName]
 	if !ok || ctxEntry == nil {
-		return "", fmt.Errorf("context %q not found in kubeconfig", contextName)
+		return "", fmt.Errorf("%w: %s", errContextNotFound, contextName)
 	}
 
 	return ctxEntry.Cluster, nil
