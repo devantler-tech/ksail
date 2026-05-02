@@ -82,7 +82,7 @@ type ClusterSpec struct {
 	// OIDC defines OIDC authentication configuration.
 	// When issuerURL is set, KSail configures the API server with OIDC flags
 	// and sets up kubeconfig with exec-based OIDC credentials.
-	OIDC OIDCSpec `json:"oidc,omitzero"`
+	OIDC OIDCSpec `json:"oidc,omitzero" jsonschema:"description=OIDC authentication configuration for the API server and kubeconfig"` //nolint:lll
 
 	// Distribution-specific options
 	Vanilla OptionsVanilla `json:"vanilla,omitzero"`

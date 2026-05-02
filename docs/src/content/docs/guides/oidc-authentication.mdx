@@ -87,15 +87,17 @@ All OIDC settings live under `spec.cluster.oidc` in `ksail.yaml`. See the [Decla
 
 ### CLI Flags
 
-OIDC can also be configured via CLI flags on `ksail cluster init` and `ksail cluster create`:
+OIDC can also be configured via CLI flags on `ksail cluster init`, `ksail cluster create`, and `ksail cluster update`:
 
 ```
---oidc-issuer-url       OIDC provider issuer URL
---oidc-client-id        OIDC client ID
---oidc-extra-scope      Additional OIDC scopes (repeatable)
---oidc-username-claim   JWT claim for Kubernetes username
---oidc-groups-claim     JWT claim for Kubernetes groups
---oidc-ca-file          Path to CA certificate
+--oidc-issuer-url         OIDC provider issuer URL
+--oidc-client-id          OIDC client ID
+--oidc-extra-scope        Additional OIDC scopes (repeatable)
+--oidc-username-claim     JWT claim for Kubernetes username
+--oidc-username-prefix    Prefix for OIDC usernames
+--oidc-groups-claim       JWT claim for Kubernetes groups
+--oidc-groups-prefix      Prefix for OIDC groups
+--oidc-ca-file            Path to CA certificate
 ```
 
 ## How It Works

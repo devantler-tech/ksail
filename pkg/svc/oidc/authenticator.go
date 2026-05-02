@@ -181,7 +181,7 @@ func (a *Authenticator) newOIDCProvider(
 func (a *Authenticator) startCallbackServer(
 	ctx context.Context,
 ) (net.Listener, *http.Server, chan callbackResult, error) {
-	listener, port, err := a.listenOnRandomPort(ctx)
+	listener, port, err := a.listenOnCallbackPort(ctx)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -229,7 +229,7 @@ func (a *Authenticator) startCallbackServer(
 	return listener, server, resultCh, nil
 }
 
-func (a *Authenticator) listenOnRandomPort(ctx context.Context) (net.Listener, int, error) {
+func (a *Authenticator) listenOnCallbackPort(ctx context.Context) (net.Listener, int, error) {
 	listenCfg := net.ListenConfig{}
 
 	// Use a stable port so the redirect URI is deterministic — OIDC providers
