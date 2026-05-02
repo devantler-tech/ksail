@@ -195,6 +195,47 @@ func helmInstallerFactory(
 	}
 }
 
+// certManagerInstallerFactory creates a factory for the cert-manager installer
+// that derives haEnabled from the cluster node count.
+func certManagerInstallerFactory(
+	factories *InstallerFactories,
+) func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error) {
+	return func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error) {
+		helmClient, timeout, err := resolveHelmClientAndTimeout(
+			factories, clusterCfg,
+			installer.CertManagerInstallTimeout,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		return certmanagerinstaller.NewInstaller(
+			helmClient, timeout,
+			installer.IsHAEnabled(clusterCfg.Spec.Cluster.ControlPlanes+clusterCfg.Spec.Cluster.Workers),
+		), nil
+	}
+}
+
+// kubeletCSRApproverInstallerFactory creates a factory for the kubelet-csr-approver
+// installer that derives haEnabled from the cluster node count.
+func kubeletCSRApproverInstallerFactory(
+	factories *InstallerFactories,
+) func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error) {
+	return func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error) {
+		helmClient, timeout, err := resolveHelmClientAndTimeout(
+			factories, clusterCfg, 0,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		return kubeletcsrapproverinstaller.NewInstaller(
+			helmClient, timeout,
+			installer.IsHAEnabled(clusterCfg.Spec.Cluster.ControlPlanes+clusterCfg.Spec.Cluster.Workers),
+		), nil
+	}
+}
+
 // argoCDInstallerFactory creates a factory for the ArgoCD installer
 // that evaluates SOPS configuration from the cluster spec.
 func argoCDInstallerFactory(
@@ -231,21 +272,9 @@ func DefaultInstallerFactories() *InstallerFactories {
 		return fluxinstaller.NewInstaller(client, timeout)
 	}
 
-	factories.CertManager = helmInstallerFactory(
-		factories,
-		func(c helm.Interface, t time.Duration) installer.Installer {
-			return certmanagerinstaller.NewInstaller(c, t, false)
-		},
-		installer.CertManagerInstallTimeout,
-	)
+	factories.CertManager = certManagerInstallerFactory(factories)
 	factories.ArgoCD = argoCDInstallerFactory(factories)
-	factories.KubeletCSRApprover = helmInstallerFactory(
-		factories,
-		func(c helm.Interface, t time.Duration) installer.Installer {
-			return kubeletcsrapproverinstaller.NewInstaller(c, t, false)
-		},
-		0,
-	)
+	factories.KubeletCSRApprover = kubeletCSRApproverInstallerFactory(factories)
 	factories.CSI = csiFactory(factories)
 	factories.PolicyEngine = policyEngineFactory(factories)
 

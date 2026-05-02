@@ -124,6 +124,41 @@ func TestBuildValuesYaml_K3s(t *testing.T) {
 	assert.NotContains(t, yaml, "--kubelet-insecure-tls")
 }
 
+func TestBuildValuesYaml_HAEnabled(t *testing.T) {
+	t.Parallel()
+
+	yaml := metricsserverinstaller.BuildValuesYaml(v1alpha1.DistributionVanilla, true)
+
+	assert.Contains(t, yaml, "--kubelet-preferred-address-types=InternalIP")
+	assert.Contains(t, yaml, "topologySpreadConstraints")
+	assert.Contains(t, yaml, "kubernetes.io/hostname")
+	assert.Contains(t, yaml, "ScheduleAnyway")
+}
+
+func TestBuildValuesYaml_HADisabled(t *testing.T) {
+	t.Parallel()
+
+	yaml := metricsserverinstaller.BuildValuesYaml(v1alpha1.DistributionVanilla, false)
+
+	assert.NotContains(t, yaml, "topologySpreadConstraints")
+}
+
+func TestNewInstallerWithDistribution_HAEnabled(t *testing.T) {
+	t.Parallel()
+
+	timeout := 5 * time.Minute
+
+	client := helm.NewMockInterface(t)
+	inst := metricsserverinstaller.NewInstallerWithDistribution(
+		client,
+		timeout,
+		v1alpha1.DistributionVanilla,
+		true,
+	)
+
+	assert.NotNil(t, inst)
+}
+
 func TestMetricsServerInstallerInstallVClusterSuccess(t *testing.T) {
 	t.Parallel()
 
