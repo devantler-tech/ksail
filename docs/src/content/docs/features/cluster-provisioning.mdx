@@ -32,6 +32,33 @@ ksail cluster update --dry-run
 ksail cluster update --dry-run --output json | jq .recreateRequired
 ```
 
+## High Availability Component Defaults
+
+When a cluster has **3 or more nodes** (control planes + workers ≥ 3), KSail automatically applies HA defaults to all Helm-based component installers:
+
+- **Replicas ≥ 2** — fast failover for controller workloads
+- **PodDisruptionBudgets** — `minAvailable: 1` to prevent simultaneous evictions
+- **Topology spread constraints** — `ScheduleAnyway` by hostname to distribute pods across nodes
+
+Components that receive HA defaults automatically:
+
+| Component | HA Setting |
+|---|---|
+| cert-manager | controller + webhook replicas, PDB, topology spread |
+| metrics-server | replicas, PDB, topology spread |
+| Kyverno | admissionController replicas, PDB, topology spread |
+| Gatekeeper | replicas, PDB, topology spread |
+| ArgoCD | server + repoServer replicas, PDB |
+| Cilium | operator replicas |
+| Calico | Typha controlPlaneReplicas |
+| kubelet-csr-approver | replicas |
+| cluster-autoscaler | replicas |
+| hcloud-ccm | replicaCount |
+| hetzner-csi | controller replicaCount |
+
+> [!NOTE]
+> Flux Operator (single-replica with leader election), MetalLB controller (single-replica by design), and DaemonSet components are excluded — they are inherently HA or do not support replica scaling via Helm values.
+
 ## Node Autoscaling
 
 When an external node autoscaler (such as [Cluster Autoscaler](https://github.com/kubernetes/autoscaler/tree/master/cluster-autoscaler), [Karpenter](https://karpenter.sh/), or [Omni dynamic allocation](https://omni.siderolabs.com/)) manages your node counts, set `spec.cluster.autoscaler.node.enabled: true` in `ksail.yaml` to prevent `ksail cluster update` from interfering.
