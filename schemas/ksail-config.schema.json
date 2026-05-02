@@ -324,7 +324,8 @@
                 }
               },
               "additionalProperties": false,
-              "type": "object"
+              "type": "object",
+              "description": "OIDC authentication configuration for the API server and kubeconfig"
             },
             "vanilla": {
               "properties": {

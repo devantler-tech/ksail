@@ -90,11 +90,11 @@ func SaveCachedToken(cacheDir, key string, token *TokenResult) error {
 		Expiry:       token.Expiry,
 	}
 
-	data, err := json.MarshalIndent(
+	data, err := json.MarshalIndent( //nolint:gosec // G117: token caching is the purpose of this file
 		cached,
 		"",
 		"  ",
-	) //nolint:gosec // G117: token caching is the purpose of this file
+	)
 	if err != nil {
 		return fmt.Errorf("failed to marshal cached token: %w", err)
 	}

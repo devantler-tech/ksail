@@ -106,18 +106,17 @@ func buildVClusterOIDCArgs(oidc *v1alpha1.OIDCSpec) string {
 
 // buildVClusterOIDCVolumes generates the YAML fragment for VCluster volume mounts
 // that inject the OIDC CA certificate into the VCluster control plane pod.
-// Uses a hostPath volume because the host Kubernetes node (Kind/K3d) already has
-// the CA file mounted at OIDCCAContainerPath.
+// Uses controlPlane.statefulSet.persistence.addVolumeMounts/addVolumes per the
+// vCluster Helm values schema. A hostPath volume is used because the host
+// Kubernetes node (Kind/K3d) already has the CA file mounted at OIDCCAContainerPath.
 func buildVClusterOIDCVolumes() string {
 	return "  statefulSet:\n" +
-		"    pods:\n" +
-		"      containers:\n" +
-		"        - name: vcluster\n" +
-		"          volumeMounts:\n" +
-		"            - name: oidc-ca\n" +
-		"              mountPath: " + v1alpha1.OIDCCAContainerPath + "\n" +
-		"              readOnly: true\n" +
-		"      volumes:\n" +
+		"    persistence:\n" +
+		"      addVolumeMounts:\n" +
+		"        - name: oidc-ca\n" +
+		"          mountPath: " + v1alpha1.OIDCCAContainerPath + "\n" +
+		"          readOnly: true\n" +
+		"      addVolumes:\n" +
 		"        - name: oidc-ca\n" +
 		"          hostPath:\n" +
 		"            path: " + v1alpha1.OIDCCAContainerPath + "\n" +
