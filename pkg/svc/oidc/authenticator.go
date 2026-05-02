@@ -152,21 +152,12 @@ func (a *Authenticator) newOIDCProvider(ctx context.Context, redirectURL string)
 func (a *Authenticator) startCallbackServer(
 	ctx context.Context,
 ) (net.Listener, *http.Server, chan callbackResult, error) {
-	listenCfg := net.ListenConfig{}
-
-	listener, err := listenCfg.Listen(ctx, "tcp", "localhost:0")
+	listener, port, err := a.listenOnRandomPort(ctx)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("%w: failed to start callback server: %w", ErrAuthenticationFailed, err)
+		return nil, nil, nil, err
 	}
 
-	tcpAddr, ok := listener.Addr().(*net.TCPAddr)
-	if !ok {
-		_ = listener.Close()
-
-		return nil, nil, nil, fmt.Errorf("%w: unexpected listener address type", ErrAuthenticationFailed)
-	}
-
-	redirectURL := fmt.Sprintf("http://localhost:%d%s", tcpAddr.Port, callbackPath)
+	redirectURL := fmt.Sprintf("http://localhost:%d%s", port, callbackPath)
 
 	prov, err := a.newOIDCProvider(ctx, redirectURL)
 	if err != nil {
@@ -204,18 +195,44 @@ func (a *Authenticator) startCallbackServer(
 		ReadHeaderTimeout: shutdownTimeout,
 	}
 
-	authURL := prov.oauth2Config.AuthCodeURL(
+	a.promptBrowserVisit(ctx, prov.oauth2Config, state, codeChallenge)
+
+	return listener, server, resultCh, nil
+}
+
+func (a *Authenticator) listenOnRandomPort(ctx context.Context) (net.Listener, int, error) {
+	listenCfg := net.ListenConfig{}
+
+	listener, err := listenCfg.Listen(ctx, "tcp", "localhost:0")
+	if err != nil {
+		return nil, 0, fmt.Errorf("%w: failed to start callback server: %w", ErrAuthenticationFailed, err)
+	}
+
+	tcpAddr, ok := listener.Addr().(*net.TCPAddr)
+	if !ok {
+		_ = listener.Close()
+
+		return nil, 0, fmt.Errorf("%w: unexpected listener address type", ErrAuthenticationFailed)
+	}
+
+	return listener, tcpAddr.Port, nil
+}
+
+func (a *Authenticator) promptBrowserVisit(
+	ctx context.Context,
+	oauth2Config *oauth2.Config,
+	state, codeChallenge string,
+) {
+	authURL := oauth2Config.AuthCodeURL(
 		state,
 		oauth2.SetAuthURLParam("code_challenge", codeChallenge),
 		oauth2.SetAuthURLParam("code_challenge_method", "S256"),
 	)
 
-	err = openBrowser(ctx, authURL)
+	err := openBrowser(ctx, authURL)
 	if err != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "Failed to open browser automatically.\nPlease visit: %s\n", authURL)
 	}
-
-	return listener, server, resultCh, nil
 }
 
 func (a *Authenticator) awaitAuthResult(
