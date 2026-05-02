@@ -44,6 +44,7 @@ import (
 	clusterdetector "github.com/devantler-tech/ksail/v7/pkg/svc/detector/cluster"
 	imagesvc "github.com/devantler-tech/ksail/v7/pkg/svc/image"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/installer"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/reconcilediag"
 	dockerprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/docker"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/registry"
 	registryhelpers "github.com/devantler-tech/ksail/v7/pkg/svc/registryresolver"
@@ -2116,6 +2117,11 @@ func runReconcile(cmd *cobra.Command) error {
 
 	tmr.NewStage()
 
+	kubeconfigPath, kubeconfigErr := getKubeconfigPath(clusterCfg)
+	if kubeconfigErr != nil {
+		return kubeconfigErr
+	}
+
 	// --timeout is a per-attempt bound: each retry attempt creates a fresh
 	// context.WithTimeout(timeout) inside executeReconciliation, so total
 	// runtime can be up to reconcileMaxRetryAttempts*timeout + cumulative
@@ -2128,6 +2134,9 @@ func runReconcile(cmd *cobra.Command) error {
 		},
 	)
 	if err != nil {
+		// Collect and display targeted diagnostics before returning the error.
+		reconcilediag.Diagnose(cmd.Context(), cmd.OutOrStdout(), kubeconfigPath, gitOpsEngine)
+
 		return err
 	}
 
