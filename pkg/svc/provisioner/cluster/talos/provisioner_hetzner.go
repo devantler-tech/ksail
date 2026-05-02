@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 
+	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/hetzner"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
@@ -176,11 +178,15 @@ func (p *Provisioner) prepareAndApplyConfigs(
 }
 
 // bootstrapAndFinalize bootstraps etcd, saves configs, and waits for cluster readiness.
+// When the node autoscaler is enabled and a snapshot image was used, it also creates
+// the cluster-autoscaler-config Secret in kube-system so the Cluster Autoscaler chart
+// can provision new worker nodes via the Hetzner Cloud API.
 func (p *Provisioner) bootstrapAndFinalize(
 	ctx context.Context,
 	hzProvider *hetzner.Provider,
 	clusterName string,
 	controlPlaneServers, workerServers, allServers []*hcloud.Server,
+	snapshotImageID int64,
 ) error {
 	err := p.detachOrWaitForReboot(ctx, hzProvider, allServers)
 	if err != nil {
@@ -229,6 +235,34 @@ func (p *Provisioner) bootstrapAndFinalize(
 		}
 
 		_, _ = fmt.Fprintf(p.logWriter, "  ✓ Cluster is ready\n")
+	}
+
+	// Create the cluster-autoscaler-config Secret when the node autoscaler is
+	// enabled and bootstrap used a snapshot image (snapshotImageID > 0).
+	if p.hetznerOpts != nil && p.hetznerOpts.NodeAutoscalerEnabled && snapshotImageID > 0 {
+		_, _ = fmt.Fprintf(p.logWriter, "Applying cluster-autoscaler config secret...\n")
+
+		kubeclient, err := k8s.NewClientset(p.options.KubeconfigPath, "")
+		if err != nil {
+			return fmt.Errorf("creating kubeclient for autoscaler secret: %w", err)
+		}
+
+		workerConfigYAML, err := GenerateAutoscalerWorkerConfig(configBundle.Worker())
+		if err != nil {
+			return fmt.Errorf("generating autoscaler worker config: %w", err)
+		}
+
+		err = ApplyAutoscalerConfigSecret(
+			ctx,
+			kubeclient,
+			strconv.FormatInt(snapshotImageID, 10),
+			workerConfigYAML,
+		)
+		if err != nil {
+			return fmt.Errorf("applying autoscaler config secret: %w", err)
+		}
+
+		_, _ = fmt.Fprintf(p.logWriter, "  ✓ Cluster autoscaler config secret created\n")
 	}
 
 	return nil
@@ -304,7 +338,7 @@ func (p *Provisioner) createHetznerCluster(ctx context.Context, clusterName stri
 	_, _ = fmt.Fprintf(p.logWriter, "\nInfrastructure created. Bootstrapping Talos cluster...\n")
 
 	err = p.applyConfigsAndBootstrap(
-		ctx, hzProvider, clusterName, controlPlaneServers, workerServers,
+		ctx, hzProvider, clusterName, controlPlaneServers, workerServers, snapshotImageID,
 	)
 	if err != nil {
 		return err
@@ -372,6 +406,7 @@ func (p *Provisioner) applyConfigsAndBootstrap(
 	hzProvider *hetzner.Provider,
 	clusterName string,
 	controlPlaneServers, workerServers []*hcloud.Server,
+	snapshotImageID int64,
 ) error {
 	err := p.updateConfigsWithEndpoint(controlPlaneServers)
 	if err != nil {
@@ -388,6 +423,7 @@ func (p *Provisioner) applyConfigsAndBootstrap(
 	return p.bootstrapAndFinalize(
 		ctx, hzProvider, clusterName,
 		controlPlaneServers, workerServers, allServers,
+		snapshotImageID,
 	)
 }
 
