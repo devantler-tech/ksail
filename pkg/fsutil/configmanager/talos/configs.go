@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/netip"
 	"slices"
+	"strings"
 	"time"
 
 	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
@@ -49,6 +50,12 @@ type Configs struct {
 	patches []Patch
 	// versionContract is stored for regeneration to preserve version contract across WithName/WithEndpoint calls.
 	versionContract *talosconfig.VersionContract
+	// extensions is the list of Talos Image Factory official extension names.
+	// When non-empty, machine.install.image is patched to use a factory installer
+	// image and a schematic ID is computed.
+	extensions []string
+	// schematicID is the computed schematic ID from extensions.
+	schematicID string
 }
 
 // NewDefaultConfigs creates a new Talos Configs with default settings.
@@ -175,13 +182,15 @@ func (c *Configs) WithName(name string) (*Configs, error) {
 	}
 
 	// Regenerate the bundle with the new cluster name
-	return newConfigsWithEndpoint(
+	return newConfigsWithEndpointAndSecrets(
 		name,
 		kubernetesVersion,
 		networkCIDR,
 		c.endpoint,
 		c.patches,
+		nil,
 		c.versionContract,
+		c.extensions,
 	)
 }
 
@@ -230,6 +239,7 @@ func (c *Configs) WithEndpoint(endpointIP string) (*Configs, error) {
 		c.patches,
 		existingSecrets,
 		c.versionContract,
+		c.extensions,
 	)
 }
 
@@ -252,6 +262,24 @@ func (c *Configs) Patches() []Patch {
 
 	result := make([]Patch, len(c.patches))
 	copy(result, c.patches)
+
+	return result
+}
+
+// SchematicID returns the computed Talos Image Factory schematic ID.
+// Returns an empty string if no extensions are configured.
+func (c *Configs) SchematicID() string {
+	return c.schematicID
+}
+
+// Extensions returns a copy of the configured extensions list.
+func (c *Configs) Extensions() []string {
+	if c.extensions == nil {
+		return nil
+	}
+
+	result := make([]string, len(c.extensions))
+	copy(result, c.extensions)
 
 	return result
 }
@@ -352,6 +380,25 @@ func newConfigs(
 	patches []Patch,
 	versionContract *talosconfig.VersionContract,
 ) (*Configs, error) {
+	return newConfigsWithExtensions(
+		clusterName,
+		kubernetesVersion,
+		networkCIDR,
+		patches,
+		versionContract,
+		nil,
+	)
+}
+
+// newConfigsWithExtensions creates Configs from patches and optional extensions.
+func newConfigsWithExtensions(
+	clusterName string,
+	kubernetesVersion string,
+	networkCIDR string,
+	patches []Patch,
+	versionContract *talosconfig.VersionContract,
+	extensions []string,
+) (*Configs, error) {
 	return newConfigsWithEndpointAndSecrets(
 		clusterName,
 		kubernetesVersion,
@@ -360,29 +407,7 @@ func newConfigs(
 		patches,
 		nil,
 		versionContract,
-	)
-}
-
-// newConfigsWithEndpoint creates Configs with an optional explicit endpoint IP.
-// If endpointIP is empty, the endpoint is calculated from the network CIDR.
-// If endpointIP is provided (e.g., for Hetzner public IPs), it is used as the endpoint.
-// If versionContract is nil, it defaults to TalosVersion1_11.
-func newConfigsWithEndpoint(
-	clusterName string,
-	kubernetesVersion string,
-	networkCIDR string,
-	endpointIP string,
-	patches []Patch,
-	versionContract *talosconfig.VersionContract,
-) (*Configs, error) {
-	return newConfigsWithEndpointAndSecrets(
-		clusterName,
-		kubernetesVersion,
-		networkCIDR,
-		endpointIP,
-		patches,
-		nil,
-		versionContract,
+		extensions,
 	)
 }
 
@@ -480,41 +505,31 @@ func newConfigsWithEndpointAndSecrets(
 	patches []Patch,
 	existingSecrets *secrets.Bundle,
 	versionContract *talosconfig.VersionContract,
+	extensions []string,
 ) (*Configs, error) {
-	// Normalise nil to the effective default so that the stored contract
-	// and the one used for generation are always identical. This prevents
-	// silent behaviour changes if the default ever changes and ensures that
-	// WithName/WithEndpoint regeneration produces the same config.
+	// Default nil versionContract so the stored and generated values always match.
 	if versionContract == nil {
 		versionContract = talosconfig.TalosVersion1_11
 	}
 
-	// Categorize patches by scope
 	clusterPatches, controlPlanePatches, workerPatches, err := categorizePatchesByScope(patches)
 	if err != nil {
 		return nil, err
 	}
 
-	// Resolve the control plane IP
 	controlPlaneIP, err := resolveControlPlaneIP(endpointIP, networkCIDR)
 	if err != nil {
 		return nil, err
 	}
 
-	controlPlaneEndpoint := "https://" + net.JoinHostPort(controlPlaneIP, "6443")
-
-	// Build generate options
 	genOptions := buildBaseGenOptions(controlPlaneIP, versionContract)
-
-	// If we have existing secrets, reuse them to preserve PKI across endpoint changes
 	if existingSecrets != nil {
 		genOptions = append(genOptions, generate.WithSecretsBundle(existingSecrets))
 	}
 
-	// Build bundle options with patches
 	bundleOpts := buildBundleOptions(
 		clusterName,
-		controlPlaneEndpoint,
+		"https://"+net.JoinHostPort(controlPlaneIP, "6443"),
 		kubernetesVersion,
 		genOptions,
 		clusterPatches,
@@ -522,10 +537,14 @@ func newConfigsWithEndpointAndSecrets(
 		workerPatches,
 	)
 
-	// Create the bundle
 	configBundle, err := bundle.NewBundle(bundleOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create config bundle: %w", err)
+	}
+
+	schematicID, err := applySchematic(extensions, configBundle)
+	if err != nil {
+		return nil, err
 	}
 
 	return &Configs{
@@ -536,6 +555,8 @@ func newConfigsWithEndpointAndSecrets(
 		endpoint:          endpointIP,
 		patches:           patches,
 		versionContract:   versionContract,
+		extensions:        extensions,
+		schematicID:       schematicID,
 	}, nil
 }
 
@@ -660,4 +681,116 @@ func addRegistryAuth(cfg *v1alpha1.Config, mirror MirrorRegistry) {
 		RegistryUsername: mirror.Username,
 		RegistryPassword: mirror.Password,
 	}
+}
+
+// applySchematic computes a schematic ID from extensions and patches machine.install.image.
+// Returns an empty string if no extensions are configured (after normalization).
+func applySchematic(extensions []string, configBundle *bundle.Bundle) (string, error) {
+	normalized := NormalizeExtensions(extensions)
+	if len(normalized) == 0 {
+		return "", nil
+	}
+
+	schematic := NewSchematic(extensions)
+
+	schematicID, err := schematic.ID()
+	if err != nil {
+		return "", fmt.Errorf("failed to compute schematic ID: %w", err)
+	}
+
+	talosVersion := resolveInstallerVersion(configBundle)
+	installerImage := SchematicInstallerImage(schematicID, talosVersion)
+
+	err = applyInstallerImage(configBundle, installerImage)
+	if err != nil {
+		return "", fmt.Errorf("failed to apply installer image: %w", err)
+	}
+
+	return schematicID, nil
+}
+
+// resolveInstallerVersion determines the Talos version tag for the factory installer image.
+// It extracts the tag from the config bundle's existing machine.install.image (set during
+// bundle generation to match the configured Talos version). Falls back to DefaultTalosImage.
+func resolveInstallerVersion(configBundle *bundle.Bundle) string {
+	if image := controlPlaneInstallImage(configBundle); image != "" {
+		if tag := extractImageTag(image); tag != "" {
+			return tag
+		}
+	}
+
+	if tag := extractImageTag(DefaultTalosImage); tag != "" {
+		return tag
+	}
+
+	return "latest"
+}
+
+// extractImageTag extracts the tag from an OCI image reference.
+// Strips any @digest suffix first, then extracts the tag after the last ":"
+// only if it does not contain "/" (which would indicate a port, not a tag).
+func extractImageTag(image string) string {
+	if digestIdx := strings.Index(image, "@"); digestIdx >= 0 {
+		image = image[:digestIdx]
+	}
+
+	if colonIdx := strings.LastIndex(image, ":"); colonIdx >= 0 {
+		candidate := image[colonIdx+1:]
+		if !strings.Contains(candidate, "/") {
+			return candidate
+		}
+	}
+
+	return ""
+}
+
+// controlPlaneInstallImage returns the control plane machine.install.image, or empty string.
+func controlPlaneInstallImage(configBundle *bundle.Bundle) string {
+	if configBundle == nil {
+		return ""
+	}
+
+	cp := configBundle.ControlPlane()
+	if cp == nil || cp.Machine() == nil || cp.Machine().Install() == nil {
+		return ""
+	}
+
+	return cp.Machine().Install().Image()
+}
+
+// applyInstallerImage patches machine.install.image on both control-plane and worker configs.
+func applyInstallerImage(configBundle *bundle.Bundle, installerImage string) error {
+	patcher := func(cfg *v1alpha1.Config) error {
+		if cfg.MachineConfig == nil {
+			return nil
+		}
+
+		if cfg.MachineConfig.MachineInstall == nil {
+			cfg.MachineConfig.MachineInstall = &v1alpha1.InstallConfig{}
+		}
+
+		cfg.MachineConfig.MachineInstall.InstallImage = installerImage
+
+		return nil
+	}
+
+	if configBundle.ControlPlaneCfg != nil {
+		patched, err := configBundle.ControlPlaneCfg.PatchV1Alpha1(patcher)
+		if err != nil {
+			return fmt.Errorf("failed to patch control plane install image: %w", err)
+		}
+
+		configBundle.ControlPlaneCfg = patched
+	}
+
+	if configBundle.WorkerCfg != nil {
+		patched, err := configBundle.WorkerCfg.PatchV1Alpha1(patcher)
+		if err != nil {
+			return fmt.Errorf("failed to patch worker install image: %w", err)
+		}
+
+		configBundle.WorkerCfg = patched
+	}
+
+	return nil
 }

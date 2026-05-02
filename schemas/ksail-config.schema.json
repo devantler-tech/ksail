@@ -318,6 +318,12 @@
                 "schematicId": {
                   "type": "string"
                 },
+                "extensions": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
                 "extraPortMappings": {
                   "items": {
                     "properties": {

@@ -52,6 +52,9 @@ type ConfigManager struct {
 	// versionContract controls which Talos version-gated config fields are generated.
 	// Defaults to TalosVersion1_11 for compatibility with Hetzner bootstrap ISOs.
 	versionContract *talosconfig.VersionContract
+	// extensions is the list of Talos Image Factory official extension names.
+	// When non-empty, machine.install.image is patched to use a factory installer.
+	extensions []string
 }
 
 // NewConfigManager creates a new configuration manager for Talos patches.
@@ -109,6 +112,17 @@ func (m *ConfigManager) WithAdditionalPatches(patches []Patch) *ConfigManager {
 	return m
 }
 
+// WithExtensions sets the Talos Image Factory official extension names.
+// When non-empty, machine.install.image is patched to use a factory installer
+// image containing the specified extensions.
+func (m *ConfigManager) WithExtensions(extensions []string) *ConfigManager {
+	m.extensions = extensions
+	m.config = nil
+	m.configLoaded = false
+
+	return m
+}
+
 // Load loads Talos patches from directories and creates the config bundle.
 // Returns the loaded Configs, either freshly loaded or previously cached.
 // Timer, Silent, IgnoreConfigFile, and SkipValidation options are not currently used.
@@ -127,13 +141,14 @@ func (m *ConfigManager) Load(_ configmanager.LoadOptions) (*Configs, error) {
 	// Append additional runtime patches
 	patches = append(patches, m.additionalPatches...)
 
-	// Create Configs from patches
-	configs, err := newConfigs(
+	// Create Configs from patches (with extensions if configured)
+	configs, err := newConfigsWithExtensions(
 		m.clusterName,
 		m.kubernetesVersion,
 		m.networkCIDR,
 		patches,
 		m.versionContract,
+		m.extensions,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Talos configs: %w", err)

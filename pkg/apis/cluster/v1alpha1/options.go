@@ -46,6 +46,15 @@ type OptionsTalos struct {
 	// Obtain a schematic ID from https://factory.talos.dev.
 	// Only used when targeting cloud providers (e.g., Hetzner Cloud).
 	SchematicID string `json:"schematicId,omitzero"`
+	// Extensions lists Talos Image Factory official system extension names to include in the
+	// node image. KSail automatically computes the Image Factory schematic ID from this list
+	// and sets machine.install.image to factory.talos.dev/installer/{schematicID}:{version},
+	// where {version} is derived from the Talos config bundle's existing install image tag.
+	// For Hetzner, the schematic is also used for snapshot building.
+	// Extension names follow the Image Factory convention (e.g., "siderolabs/iscsi-tools").
+	// The Image Factory resolves extension versions automatically per Talos release.
+	// When SchematicID is also set, it takes precedence over Extensions.
+	Extensions []string `json:"extensions,omitzero"`
 	// ExtraPortMappings defines additional port mappings from Docker containers to the host.
 	// Only used with the Docker provider. Useful on macOS where MetalLB virtual IPs
 	// are not accessible from the host because Docker runs in a Linux VM.
