@@ -39,6 +39,7 @@ func TestNewInstaller(t *testing.T) {
 				"test-context",
 				timeout,
 				testCase.networkName,
+				false,
 			)
 
 			assert.NotNil(t, installer)
@@ -102,6 +103,7 @@ func TestHetznerCSIInstaller_Uninstall(t *testing.T) {
 		"test-context",
 		timeout,
 		"",
+		false,
 	)
 	err := installer.Uninstall(context.Background())
 
@@ -145,6 +147,7 @@ func TestHetznerCSIInstaller_Install_WaitsForCCMLabels(t *testing.T) {
 		"test-context",
 		timeout,
 		"",
+		false,
 	)
 
 	err := installer.Install(context.Background())

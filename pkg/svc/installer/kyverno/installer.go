@@ -26,11 +26,40 @@ type Installer struct {
 // NewInstaller creates a new Kyverno installer instance.
 // kubeconfig and kubecontext are used after Helm install to wait for the Kyverno
 // admission webhook to be ready before returning.
+// When haEnabled is true the chart is configured with HA defaults
+// (replicas, PDB, topology spread) for the admission controller.
 func NewInstaller(
 	client helm.Interface,
 	timeout time.Duration,
 	kubeconfig, kubecontext string,
+	haEnabled bool,
 ) *Installer {
+	setValues := map[string]string{
+		// Use Ignore so the admission webhook does not block
+		// API requests when webhook pods are temporarily
+		// unreachable (e.g. during bootstrap or CNI churn).
+		// The chart default is Fail, which can cause cascading
+		// failures for components installed in parallel.
+		"admissionController.webhookServer.failurePolicy": "Ignore",
+	}
+
+	var valuesYaml string
+
+	if haEnabled {
+		setValues["admissionController.replicas"] = "2"
+		setValues["admissionController.podDisruptionBudget.enabled"] = "true"
+		setValues["admissionController.podDisruptionBudget.minAvailable"] = "1"
+
+		valuesYaml = `admissionController:
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: kubernetes.io/hostname
+      whenUnsatisfiable: ScheduleAnyway
+      labelSelector:
+        matchLabels:
+          app.kubernetes.io/component: admission-controller`
+	}
+
 	return &Installer{
 		Base: helmutil.NewBase(
 			"kyverno",
@@ -51,14 +80,8 @@ func NewInstaller(
 				Wait:            true,
 				WaitForJobs:     true,
 				Timeout:         timeout,
-				SetValues: map[string]string{
-					// Use Ignore so the admission webhook does not block
-					// API requests when webhook pods are temporarily
-					// unreachable (e.g. during bootstrap or CNI churn).
-					// The chart default is Fail, which can cause cascading
-					// failures for components installed in parallel.
-					"admissionController.webhookServer.failurePolicy": "Ignore",
-				},
+				SetValues:       setValues,
+				ValuesYaml:      valuesYaml,
 			},
 		),
 		kubeconfig:  kubeconfig,

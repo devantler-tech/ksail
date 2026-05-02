@@ -20,7 +20,7 @@ func NewInstaller(
 	client helm.Interface,
 	timeout time.Duration,
 ) *Installer {
-	return NewInstallerWithDistribution(client, timeout, "")
+	return NewInstallerWithDistribution(client, timeout, "", false)
 }
 
 // NewInstallerWithDistribution creates a new metrics-server installer instance
@@ -32,12 +32,25 @@ func NewInstaller(
 // --authentication-tolerate-lookup-failure is always set to prevent metrics-server
 // from panicking when the API server is transiently unreachable at startup (e.g. Cilium
 // eBPF service map not yet fully programmed for the pod's network namespace).
+//
+// When haEnabled is true the chart is configured with HA defaults
+// (replicas, PDB, topology spread).
 func NewInstallerWithDistribution(
 	client helm.Interface,
 	timeout time.Duration,
 	distribution v1alpha1.Distribution,
+	haEnabled bool,
 ) *Installer {
-	valuesYaml := buildValuesYaml(distribution)
+	valuesYaml := buildValuesYaml(distribution, haEnabled)
+
+	var setValues map[string]string
+	if haEnabled {
+		setValues = map[string]string{
+			"replicas":                         "2",
+			"podDisruptionBudget.enabled":      "true",
+			"podDisruptionBudget.minAvailable": "1",
+		}
+	}
 
 	return &Installer{
 		Base: helmutil.NewBase(
@@ -58,6 +71,7 @@ func NewInstallerWithDistribution(
 				Wait:        true,
 				WaitForJobs: true,
 				Timeout:     timeout,
+				SetValues:   setValues,
 				ValuesYaml:  valuesYaml,
 			},
 		),
@@ -65,8 +79,8 @@ func NewInstallerWithDistribution(
 }
 
 // buildValuesYaml returns the Helm values YAML for metrics-server,
-// adjusted for the target distribution.
-func buildValuesYaml(distribution v1alpha1.Distribution) string {
+// adjusted for the target distribution and HA configuration.
+func buildValuesYaml(distribution v1alpha1.Distribution, haEnabled bool) string {
 	// Use InternalIP for node communication in local development clusters.
 	// Secure TLS is enabled by default - kubelet-csr-approver handles certificate approval.
 	// Tolerate transient auth lookup failures so metrics-server retries rather than
@@ -79,6 +93,17 @@ func buildValuesYaml(distribution v1alpha1.Distribution) string {
 	// self-signed TLS certificates that metrics-server cannot verify.
 	if distribution == v1alpha1.DistributionVCluster {
 		base += "\n  - --kubelet-insecure-tls"
+	}
+
+	if haEnabled {
+		base += `
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: kubernetes.io/hostname
+    whenUnsatisfiable: ScheduleAnyway
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/name: metrics-server`
 	}
 
 	return base

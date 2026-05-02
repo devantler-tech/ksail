@@ -23,6 +23,7 @@ func TestInstaller_Install_TalosDistribution(t *testing.T) {
 		"test-context",
 		2*time.Minute,
 		v1alpha1.DistributionTalos,
+		false,
 	)
 
 	installer.SetAPIServerCheckerForTest(func(_ context.Context) error { return nil })
@@ -67,6 +68,7 @@ func TestInstaller_Install_APIServerCheckerError(t *testing.T) {
 		"test-context",
 		2*time.Minute,
 		v1alpha1.DistributionK3s,
+		false,
 	)
 
 	installer.SetAPIServerCheckerForTest(func(_ context.Context) error {
@@ -89,6 +91,7 @@ func TestInstaller_Images_Success(t *testing.T) {
 		"test-context",
 		5*time.Minute,
 		v1alpha1.DistributionVanilla,
+		false,
 	)
 
 	manifest := `apiVersion: apps/v1
@@ -123,6 +126,7 @@ func TestInstaller_Images_NilClient(t *testing.T) {
 		"test-context",
 		5*time.Minute,
 		v1alpha1.DistributionVanilla,
+		false,
 	)
 
 	images, err := installer.Images(context.Background())
@@ -142,6 +146,7 @@ func TestInstaller_Uninstall_ContextCanceled(t *testing.T) {
 		"test-context",
 		2*time.Minute,
 		v1alpha1.DistributionVanilla,
+		false,
 	)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -171,6 +176,7 @@ func newCovInstallerWithDistribution(
 		"test-context",
 		2*time.Minute,
 		distribution,
+		false,
 	)
 
 	return installer, client

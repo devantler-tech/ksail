@@ -102,13 +102,25 @@ func policyEngineFactory(
 			timeout = max(timeout, installer.KyvernoInstallTimeout)
 
 			return kyvernoinstaller.NewInstaller(
-				helmClient, timeout, kubeconfig, clusterCfg.Spec.Cluster.Connection.Context,
+				helmClient,
+				timeout,
+				kubeconfig,
+				clusterCfg.Spec.Cluster.Connection.Context,
+				installer.IsHAEnabled(
+					clusterCfg.Spec.Cluster.ControlPlanes+clusterCfg.Spec.Cluster.Workers,
+				),
 			), nil
 		case v1alpha1.PolicyEngineGatekeeper:
 			timeout = max(timeout, installer.GatekeeperInstallTimeout)
 
 			return gatekeeperinstaller.NewInstaller(
-				helmClient, kubeconfig, clusterCfg.Spec.Cluster.Connection.Context, timeout,
+				helmClient,
+				kubeconfig,
+				clusterCfg.Spec.Cluster.Connection.Context,
+				timeout,
+				installer.IsHAEnabled(
+					clusterCfg.Spec.Cluster.ControlPlanes+clusterCfg.Spec.Cluster.Workers,
+				),
 			), nil
 		default:
 			return nil, fmt.Errorf("%w: unknown engine %q", ErrPolicyEngineDisabled, engine)
@@ -142,6 +154,9 @@ func csiFactory(
 				clusterCfg.Spec.Cluster.Connection.Context,
 				timeout,
 				networkName,
+				installer.IsHAEnabled(
+					clusterCfg.Spec.Cluster.ControlPlanes+clusterCfg.Spec.Cluster.Workers,
+				),
 			), nil
 		}
 
@@ -174,10 +189,12 @@ func resolveHelmClientAndTimeout(
 	return helmClient, timeout, nil
 }
 
-// helmInstallerFactory creates a factory function for helm-based installers.
-func helmInstallerFactory(
+// haHelmInstallerFactory creates a factory for Helm-based installers that
+// derive haEnabled from the cluster node count. The constructor receives
+// (helmClient, timeout, haEnabled).
+func haHelmInstallerFactory(
 	factories *InstallerFactories,
-	newInstaller func(client helm.Interface, timeout time.Duration) installer.Installer,
+	newInstaller func(client helm.Interface, timeout time.Duration, haEnabled bool) installer.Installer,
 	minTimeout time.Duration,
 ) func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error) {
 	return func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error) {
@@ -188,7 +205,11 @@ func helmInstallerFactory(
 			return nil, err
 		}
 
-		return newInstaller(helmClient, timeout), nil
+		haEnabled := installer.IsHAEnabled(
+			clusterCfg.Spec.Cluster.ControlPlanes + clusterCfg.Spec.Cluster.Workers,
+		)
+
+		return newInstaller(helmClient, timeout, haEnabled), nil
 	}
 }
 
@@ -211,7 +232,12 @@ func argoCDInstallerFactory(
 		)
 
 		return argocdinstaller.NewInstaller(
-			helmClient, timeout, sopsEnabled,
+			helmClient,
+			timeout,
+			sopsEnabled,
+			installer.IsHAEnabled(
+				clusterCfg.Spec.Cluster.ControlPlanes+clusterCfg.Spec.Cluster.Workers,
+			),
 		), nil
 	}
 }
@@ -227,18 +253,18 @@ func DefaultInstallerFactories() *InstallerFactories {
 		return fluxinstaller.NewInstaller(client, timeout)
 	}
 
-	factories.CertManager = helmInstallerFactory(
+	factories.CertManager = haHelmInstallerFactory(
 		factories,
-		func(c helm.Interface, t time.Duration) installer.Installer {
-			return certmanagerinstaller.NewInstaller(c, t)
+		func(c helm.Interface, t time.Duration, ha bool) installer.Installer {
+			return certmanagerinstaller.NewInstaller(c, t, ha)
 		},
 		installer.CertManagerInstallTimeout,
 	)
 	factories.ArgoCD = argoCDInstallerFactory(factories)
-	factories.KubeletCSRApprover = helmInstallerFactory(
+	factories.KubeletCSRApprover = haHelmInstallerFactory(
 		factories,
-		func(c helm.Interface, t time.Duration) installer.Installer {
-			return kubeletcsrapproverinstaller.NewInstaller(c, t)
+		func(c helm.Interface, t time.Duration, ha bool) installer.Installer {
+			return kubeletcsrapproverinstaller.NewInstaller(c, t, ha)
 		},
 		0,
 	)

@@ -35,11 +35,48 @@ type Installer struct {
 // wait. kubeContext is optional; if empty, the current context is used. Pass
 // an empty kubeconfig to disable webhook waiting (tests or environments
 // without cluster access).
+//
+// When haEnabled is true the chart is configured with HA defaults
+// (replicas, PDB, topology spread) for the controller-manager.
 func NewInstaller(
 	client helm.Interface,
 	kubeconfig, kubeContext string,
 	timeout time.Duration,
+	haEnabled bool,
 ) *Installer {
+	setValues := map[string]string{
+		// Disable the chart's CRD upgrade hooks. The hooks create
+		// a ServiceAccount that Helm v4's kstatus watcher cannot
+		// assess (ServiceAccounts have no .status field), causing
+		// the install to fail with "status: Unknown". CRDs are
+		// still managed natively by Helm via UpgradeCRDs above.
+		"upgradeCRDs.enabled": "false",
+		// Use Ignore so webhooks do not block API requests when
+		// webhook pods are temporarily unreachable (e.g. during
+		// CNI churn on freshly bootstrapped clusters). Both
+		// validating and mutating policies must be set explicitly
+		// to avoid intermittent kstatus watch timeouts in
+		// components installed in parallel (e.g. ArgoCD).
+		"webhook.failurePolicy":         "Ignore",
+		"mutatingWebhook.failurePolicy": "Ignore",
+	}
+
+	var valuesYaml string
+
+	if haEnabled {
+		setValues["replicas"] = "2"
+		setValues["pdb.controllerManager.minAvailable"] = "1"
+
+		valuesYaml = `controllerManager:
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: kubernetes.io/hostname
+      whenUnsatisfiable: ScheduleAnyway
+      labelSelector:
+        matchLabels:
+          app.kubernetes.io/name: gatekeeper`
+	}
+
 	return &Installer{
 		kubeconfig:  kubeconfig,
 		kubeContext: kubeContext,
@@ -64,22 +101,8 @@ func NewInstaller(
 				WaitForJobs:     true,
 				UpgradeCRDs:     true,
 				Timeout:         timeout,
-				SetValues: map[string]string{
-					// Disable the chart's CRD upgrade hooks. The hooks create
-					// a ServiceAccount that Helm v4's kstatus watcher cannot
-					// assess (ServiceAccounts have no .status field), causing
-					// the install to fail with "status: Unknown". CRDs are
-					// still managed natively by Helm via UpgradeCRDs above.
-					"upgradeCRDs.enabled": "false",
-					// Use Ignore so webhooks do not block API requests when
-					// webhook pods are temporarily unreachable (e.g. during
-					// CNI churn on freshly bootstrapped clusters). Both
-					// validating and mutating policies must be set explicitly
-					// to avoid intermittent kstatus watch timeouts in
-					// components installed in parallel (e.g. ArgoCD).
-					"webhook.failurePolicy":         "Ignore",
-					"mutatingWebhook.failurePolicy": "Ignore",
-				},
+				SetValues:       setValues,
+				ValuesYaml:      valuesYaml,
 			},
 		),
 	}

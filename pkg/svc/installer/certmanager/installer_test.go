@@ -12,11 +12,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const (
+	repoName = "jetstack"
+	repoURL  = "https://charts.jetstack.io"
+)
+
 func TestNewInstaller(t *testing.T) {
 	t.Parallel()
 
 	client := helm.NewMockInterface(t)
-	installer := certmanagerinstaller.NewInstaller(client, 5*time.Second)
+	installer := certmanagerinstaller.NewInstaller(client, 5*time.Second, false)
 
 	assert.NotNil(t, installer)
 }
@@ -36,7 +41,7 @@ func TestInstallSuccessWithScaledTimeout(t *testing.T) {
 	t.Parallel()
 
 	client := helm.NewMockInterface(t)
-	installer := certmanagerinstaller.NewInstaller(client, 10*time.Minute)
+	installer := certmanagerinstaller.NewInstaller(client, 10*time.Minute, false)
 	client.EXPECT().
 		GetReleaseStorageLabels(mock.Anything, mock.Anything, mock.Anything).
 		Return(nil, nil)
@@ -44,8 +49,8 @@ func TestInstallSuccessWithScaledTimeout(t *testing.T) {
 		AddRepository(
 			mock.Anything,
 			mock.MatchedBy(func(entry *helm.RepositoryEntry) bool {
-				return entry != nil && entry.Name == "jetstack" &&
-					entry.URL == "https://charts.jetstack.io"
+				return entry != nil && entry.Name == repoName &&
+					entry.URL == repoURL
 			}),
 			mock.Anything,
 		).
@@ -63,6 +68,63 @@ func TestInstallSuccessWithScaledTimeout(t *testing.T) {
 					"installCRDs":             "true",
 					"startupapicheck.timeout": "10m0s",
 				}, spec.SetValues)
+
+				return true
+			}),
+		).
+		Return(nil, nil)
+
+	err := installer.Install(context.Background())
+
+	require.NoError(t, err)
+}
+
+func TestNewInstaller_HAEnabled(t *testing.T) {
+	t.Parallel()
+
+	client := helm.NewMockInterface(t)
+	installer := certmanagerinstaller.NewInstaller(client, 5*time.Second, true)
+
+	require.NotNil(t, installer)
+}
+
+func TestInstallSuccess_HAEnabled(t *testing.T) {
+	t.Parallel()
+
+	client := helm.NewMockInterface(t)
+	installer := certmanagerinstaller.NewInstaller(client, 2*time.Minute, true)
+
+	client.EXPECT().
+		GetReleaseStorageLabels(mock.Anything, mock.Anything, mock.Anything).
+		Return(nil, nil)
+	client.EXPECT().
+		AddRepository(
+			mock.Anything,
+			mock.MatchedBy(func(entry *helm.RepositoryEntry) bool {
+				return entry != nil && entry.Name == repoName &&
+					entry.URL == repoURL
+			}),
+			mock.Anything,
+		).
+		Return(nil)
+
+	client.EXPECT().
+		InstallOrUpgradeChart(
+			mock.Anything,
+			mock.MatchedBy(func(spec *helm.ChartSpec) bool {
+				if spec == nil {
+					return false
+				}
+
+				assert.Equal(t, "cert-manager", spec.ReleaseName)
+				assert.Equal(t, "2", spec.SetValues["replicaCount"])
+				assert.Equal(t, "2", spec.SetValues["webhook.replicaCount"])
+				assert.Equal(t, "true", spec.SetValues["podDisruptionBudget.enabled"])
+				assert.Equal(t, "1", spec.SetValues["podDisruptionBudget.minAvailable"])
+				assert.Equal(t, "true", spec.SetValues["webhook.podDisruptionBudget.enabled"])
+				assert.Equal(t, "1", spec.SetValues["webhook.podDisruptionBudget.minAvailable"])
+				assert.Contains(t, spec.ValuesYaml, "topologySpreadConstraints")
+				assert.Contains(t, spec.ValuesYaml, "kubernetes.io/hostname")
 
 				return true
 			}),
@@ -134,7 +196,7 @@ func newInstallerWithDefaults(
 	t.Helper()
 
 	client := helm.NewMockInterface(t)
-	installer := certmanagerinstaller.NewInstaller(client, 2*time.Minute)
+	installer := certmanagerinstaller.NewInstaller(client, 2*time.Minute, false)
 
 	return installer, client
 }
@@ -149,8 +211,8 @@ func expectCertManagerInstall(t *testing.T, client *helm.MockInterface, installE
 		AddRepository(
 			mock.Anything,
 			mock.MatchedBy(func(entry *helm.RepositoryEntry) bool {
-				return entry != nil && entry.Name == "jetstack" &&
-					entry.URL == "https://charts.jetstack.io"
+				return entry != nil && entry.Name == repoName &&
+					entry.URL == repoURL
 			}),
 			mock.Anything,
 		).
@@ -167,7 +229,7 @@ func expectCertManagerInstall(t *testing.T, client *helm.MockInterface, installE
 				assert.Equal(t, "cert-manager", spec.ReleaseName)
 				assert.Equal(t, "jetstack/cert-manager", spec.ChartName)
 				assert.Equal(t, "cert-manager", spec.Namespace)
-				assert.Equal(t, "https://charts.jetstack.io", spec.RepoURL)
+				assert.Equal(t, repoURL, spec.RepoURL)
 				assert.True(t, spec.CreateNamespace)
 				assert.True(t, spec.Atomic)
 				assert.True(t, spec.Wait)

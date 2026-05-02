@@ -60,6 +60,16 @@ func TestTalosCiliumValues(t *testing.T) {
 	assert.NotContains(t, values["securityContext.capabilities.ciliumAgent"], "SYS_MODULE")
 }
 
+func TestDefaultCiliumValues_HAEnabled(t *testing.T) {
+	t.Parallel()
+
+	values := ciliuminstaller.DefaultCiliumValuesHAForTest()
+
+	require.NotEmpty(t, values, "HA cilium values should not be empty")
+	assert.Equal(t, "2", values["operator.replicas"])
+	assert.Equal(t, "true", values["gatewayAPI.enabled"])
+}
+
 func TestDockerCiliumValues(t *testing.T) {
 	t.Parallel()
 

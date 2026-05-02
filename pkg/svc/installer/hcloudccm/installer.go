@@ -1,6 +1,7 @@
 package hcloudccminstaller
 
 import (
+	"strings"
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
@@ -38,18 +39,22 @@ const DefaultClusterCIDR = "10.244.0.0/16"
 // When networkName is set, the network name is stored in the shared "hcloud"
 // Kubernetes secret (key "network") so the chart's default
 // valueFrom.secretKeyRef can read it as HCLOUD_NETWORK.
+//
+// When haEnabled is true the chart is configured with replicaCount=2
+// for fast failover via leader election.
 func NewInstaller(
 	client helm.Interface,
 	kubeconfig, context string,
 	timeout time.Duration,
 	networkName string,
+	haEnabled bool,
 ) *Installer {
 	return hetzner.NewInstaller(client, kubeconfig, context, timeout, hetzner.ChartConfig{
 		Name:        "hcloud-ccm",
 		ReleaseName: "hcloud-cloud-controller-manager",
 		ChartName:   "hcloud/hcloud-cloud-controller-manager",
 		Version:     chartVersion(),
-		ValuesYaml:  buildValuesYaml(networkName),
+		ValuesYaml:  buildValuesYaml(networkName, haEnabled),
 		SecretData:  buildSecretData(networkName),
 	})
 }
@@ -72,10 +77,21 @@ func buildSecretData(networkName string) map[string][]byte {
 // HCLOUD_NETWORK is injected into the CCM pod. The network name itself is
 // stored in the "hcloud" Kubernetes secret (key "network") and read by the
 // chart's default valueFrom.secretKeyRef — no inline value override is needed.
-func buildValuesYaml(networkName string) string {
-	if networkName == "" {
+// When haEnabled is true an extra standby replica is configured.
+func buildValuesYaml(networkName string, haEnabled bool) string {
+	var parts []string
+
+	if networkName != "" {
+		parts = append(parts, "networking:\n  enabled: true\n  clusterCIDR: "+DefaultClusterCIDR)
+	}
+
+	if haEnabled {
+		parts = append(parts, "replicaCount: 2")
+	}
+
+	if len(parts) == 0 {
 		return ""
 	}
 
-	return "networking:\n  enabled: true\n  clusterCIDR: " + DefaultClusterCIDR
+	return strings.Join(parts, "\n")
 }

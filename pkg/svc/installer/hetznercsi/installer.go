@@ -46,6 +46,10 @@ type Installer struct {
 // which is required by GitOps-managed CCM HelmReleases that read HCLOUD_NETWORK
 // from this secret via the chart's default valueFrom.secretKeyRef.
 //
+// When haEnabled is true the CSI controller Deployment is configured
+// with controller.replicaCount=2 for fast failover via leader election.
+// The node plugin DaemonSet is inherently HA and not affected.
+//
 // An empty networkName leaves the "network" key untouched so concurrent
 // installers (e.g. CCM) don't overwrite each other's values.
 func NewInstaller(
@@ -53,12 +57,19 @@ func NewInstaller(
 	kubeconfig, kubeContext string,
 	timeout time.Duration,
 	networkName string,
+	haEnabled bool,
 ) *Installer {
+	var valuesYaml string
+	if haEnabled {
+		valuesYaml = "controller:\n  replicaCount: 2"
+	}
+
 	base := hetzner.NewInstaller(client, kubeconfig, kubeContext, timeout, hetzner.ChartConfig{
 		Name:        "hetzner-csi",
 		ReleaseName: "hcloud-csi",
 		ChartName:   "hcloud/hcloud-csi",
 		Version:     chartVersion(),
+		ValuesYaml:  valuesYaml,
 		SecretData:  buildSecretData(networkName),
 	})
 

@@ -37,6 +37,15 @@ func TestDefaultCalicoValues(t *testing.T) {
 	assert.Empty(t, values, "default values should be empty map")
 }
 
+func TestDefaultCalicoValues_HAEnabled(t *testing.T) {
+	t.Parallel()
+
+	values := calicoinstaller.DefaultCalicoValuesHAForTest()
+
+	require.NotEmpty(t, values, "HA calico values should not be empty")
+	assert.Equal(t, "2", values["installation.controlPlaneReplicas"])
+}
+
 func TestCalicoCRDNames(t *testing.T) {
 	t.Parallel()
 

@@ -37,6 +37,7 @@ func TestNewInstallerWithDistribution(t *testing.T) {
 		client,
 		timeout,
 		v1alpha1.DistributionVCluster,
+		false,
 	)
 
 	assert.NotNil(t, installer)
@@ -52,6 +53,7 @@ func TestNewInstallerWithDistributionNonVCluster(t *testing.T) {
 		client,
 		timeout,
 		v1alpha1.DistributionVanilla,
+		false,
 	)
 
 	assert.NotNil(t, installer)
@@ -98,7 +100,7 @@ func TestMetricsServerInstallerInstallAddRepositoryError(t *testing.T) {
 func TestBuildValuesYaml_VCluster(t *testing.T) {
 	t.Parallel()
 
-	yaml := metricsserverinstaller.BuildValuesYaml(v1alpha1.DistributionVCluster)
+	yaml := metricsserverinstaller.BuildValuesYaml(v1alpha1.DistributionVCluster, false)
 
 	assert.Contains(t, yaml, "--kubelet-preferred-address-types=InternalIP")
 	assert.Contains(t, yaml, "--kubelet-insecure-tls")
@@ -107,7 +109,7 @@ func TestBuildValuesYaml_VCluster(t *testing.T) {
 func TestBuildValuesYaml_Vanilla(t *testing.T) {
 	t.Parallel()
 
-	yaml := metricsserverinstaller.BuildValuesYaml(v1alpha1.DistributionVanilla)
+	yaml := metricsserverinstaller.BuildValuesYaml(v1alpha1.DistributionVanilla, false)
 
 	assert.Contains(t, yaml, "--kubelet-preferred-address-types=InternalIP")
 	assert.NotContains(t, yaml, "--kubelet-insecure-tls")
@@ -116,10 +118,45 @@ func TestBuildValuesYaml_Vanilla(t *testing.T) {
 func TestBuildValuesYaml_K3s(t *testing.T) {
 	t.Parallel()
 
-	yaml := metricsserverinstaller.BuildValuesYaml(v1alpha1.DistributionK3s)
+	yaml := metricsserverinstaller.BuildValuesYaml(v1alpha1.DistributionK3s, false)
 
 	assert.Contains(t, yaml, "--kubelet-preferred-address-types=InternalIP")
 	assert.NotContains(t, yaml, "--kubelet-insecure-tls")
+}
+
+func TestBuildValuesYaml_HAEnabled(t *testing.T) {
+	t.Parallel()
+
+	yaml := metricsserverinstaller.BuildValuesYaml(v1alpha1.DistributionVanilla, true)
+
+	assert.Contains(t, yaml, "--kubelet-preferred-address-types=InternalIP")
+	assert.Contains(t, yaml, "topologySpreadConstraints")
+	assert.Contains(t, yaml, "kubernetes.io/hostname")
+	assert.Contains(t, yaml, "ScheduleAnyway")
+}
+
+func TestBuildValuesYaml_HADisabled(t *testing.T) {
+	t.Parallel()
+
+	yaml := metricsserverinstaller.BuildValuesYaml(v1alpha1.DistributionVanilla, false)
+
+	assert.NotContains(t, yaml, "topologySpreadConstraints")
+}
+
+func TestNewInstallerWithDistribution_HAEnabled(t *testing.T) {
+	t.Parallel()
+
+	timeout := 5 * time.Minute
+
+	client := helm.NewMockInterface(t)
+	inst := metricsserverinstaller.NewInstallerWithDistribution(
+		client,
+		timeout,
+		v1alpha1.DistributionVanilla,
+		true,
+	)
+
+	assert.NotNil(t, inst)
 }
 
 func TestMetricsServerInstallerInstallVClusterSuccess(t *testing.T) {
@@ -162,6 +199,7 @@ func newMetricsServerInstallerWithDistribution(
 		client,
 		timeout,
 		distribution,
+		false,
 	)
 
 	return installer, client

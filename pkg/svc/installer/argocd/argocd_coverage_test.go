@@ -45,7 +45,7 @@ func TestArgoCDInstallerImages_Error(t *testing.T) {
 	t.Parallel()
 
 	client := helm.NewMockInterface(t)
-	installer := argocdinstaller.NewInstaller(client, 5*time.Minute, false)
+	installer := argocdinstaller.NewInstaller(client, 5*time.Minute, false, false)
 
 	client.EXPECT().
 		TemplateChart(mock.Anything, mock.Anything).
@@ -62,7 +62,7 @@ func TestArgoCDInstallerImages_Success(t *testing.T) {
 	t.Parallel()
 
 	client := helm.NewMockInterface(t)
-	installer := argocdinstaller.NewInstaller(client, 5*time.Minute, false)
+	installer := argocdinstaller.NewInstaller(client, 5*time.Minute, false, false)
 
 	manifest := `apiVersion: apps/v1
 kind: Deployment
@@ -91,7 +91,7 @@ func TestNewInstaller_SOPSEnabled(t *testing.T) {
 	t.Parallel()
 
 	client := helm.NewMockInterface(t)
-	installer := argocdinstaller.NewInstaller(client, 5*time.Minute, true)
+	installer := argocdinstaller.NewInstaller(client, 5*time.Minute, true, false)
 
 	require.NotNil(t, installer)
 
@@ -103,7 +103,7 @@ func TestChartSpec_SOPSDisabled_NoValuesYaml(t *testing.T) {
 	t.Parallel()
 
 	client := helm.NewMockInterface(t)
-	installer := argocdinstaller.NewInstaller(client, 5*time.Minute, false)
+	installer := argocdinstaller.NewInstaller(client, 5*time.Minute, false, false)
 
 	spec := installer.ChartSpec()
 
@@ -120,7 +120,7 @@ func TestChartSpec_VersionNonEmpty(t *testing.T) {
 	t.Parallel()
 
 	client := helm.NewMockInterface(t)
-	installer := argocdinstaller.NewInstaller(client, 5*time.Minute, false)
+	installer := argocdinstaller.NewInstaller(client, 5*time.Minute, false, false)
 
 	spec := installer.ChartSpec()
 
@@ -131,7 +131,7 @@ func TestInstaller_Install_ContextCanceled(t *testing.T) {
 	t.Parallel()
 
 	client := helm.NewMockInterface(t)
-	installer := argocdinstaller.NewInstaller(client, 5*time.Second, false)
+	installer := argocdinstaller.NewInstaller(client, 5*time.Second, false, false)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
