@@ -1030,7 +1030,9 @@ func TestHandleAutoModeSwitchRequested_IncludesErrorCode(t *testing.T) {
 
 	var updated tea.Model = model
 
-	updated, _ = updated.Update(chat.ExportNewAutoModeSwitchRequestedMsg("req-2", "rate_limit_exceeded"))
+	updated, _ = updated.Update(
+		chat.ExportNewAutoModeSwitchRequestedMsg("req-2", "rate_limit_exceeded"),
+	)
 	m := requireModel(t, updated)
 
 	content := chat.ExportGetMessageContent(m, 0)
