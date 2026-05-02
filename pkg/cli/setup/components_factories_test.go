@@ -436,30 +436,7 @@ func TestClusterAutoscalerFactory(t *testing.T) {
 				}
 			}
 
-			clusterCfg := &v1alpha1.Cluster{
-				Spec: v1alpha1.Spec{
-					Cluster: v1alpha1.ClusterSpec{
-						Distribution: v1alpha1.DistributionTalos,
-						Provider:     v1alpha1.ProviderHetzner,
-						Autoscaler: v1alpha1.AutoscalerConfig{
-							Node: v1alpha1.NodeAutoscalerConfig{
-								Enabled: true,
-								Pools: []v1alpha1.NodePool{
-									{
-										Name:       "worker",
-										ServerType: "cx22",
-										Location:   "fsn1",
-										Min:        1,
-										Max:        5,
-									},
-								},
-							},
-						},
-					},
-				},
-			}
-
-			inst, err := factories.ClusterAutoscaler(clusterCfg)
+			inst, err := factories.ClusterAutoscaler(newAutoscalerClusterConfig())
 
 			if testCase.expectErr {
 				require.Error(t, err)
@@ -469,6 +446,31 @@ func TestClusterAutoscalerFactory(t *testing.T) {
 				assert.NotNil(t, inst)
 			}
 		})
+	}
+}
+
+func newAutoscalerClusterConfig() *v1alpha1.Cluster {
+	return &v1alpha1.Cluster{
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				Distribution: v1alpha1.DistributionTalos,
+				Provider:     v1alpha1.ProviderHetzner,
+				Autoscaler: v1alpha1.AutoscalerConfig{
+					Node: v1alpha1.NodeAutoscalerConfig{
+						Enabled: true,
+						Pools: []v1alpha1.NodePool{
+							{
+								Name:       "worker",
+								ServerType: "cx22",
+								Location:   "fsn1",
+								Min:        1,
+								Max:        5,
+							},
+						},
+					},
+				},
+			},
+		},
 	}
 }
 

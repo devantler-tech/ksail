@@ -33,7 +33,7 @@ func assertComponentRequirements(
 	assert.Equal(t, expected.NeedsFlux, result.NeedsFlux, "Flux")
 }
 
-//nolint:funlen // Table-driven test with comprehensive test cases
+//nolint:funlen,maintidx // Table-driven test with comprehensive test cases
 func TestGetComponentRequirements(t *testing.T) {
 	t.Parallel()
 

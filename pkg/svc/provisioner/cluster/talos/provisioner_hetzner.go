@@ -11,6 +11,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/hetzner"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
+	"github.com/siderolabs/talos/pkg/machinery/config/bundle"
 )
 
 // ensureHetznerInfra creates the network, firewall, placement group, and retrieves
@@ -237,33 +238,48 @@ func (p *Provisioner) bootstrapAndFinalize(
 		_, _ = fmt.Fprintf(p.logWriter, "  ✓ Cluster is ready\n")
 	}
 
-	// Create the cluster-autoscaler-config Secret when the node autoscaler is
-	// enabled and bootstrap used a snapshot image (snapshotImageID > 0).
-	if p.hetznerOpts != nil && p.hetznerOpts.NodeAutoscalerEnabled && snapshotImageID > 0 {
-		_, _ = fmt.Fprintf(p.logWriter, "Applying cluster-autoscaler config secret...\n")
-
-		kubeclient, err := k8s.NewClientset(p.options.KubeconfigPath, "")
-		if err != nil {
-			return fmt.Errorf("creating kubeclient for autoscaler secret: %w", err)
-		}
-
-		workerConfigYAML, err := GenerateAutoscalerWorkerConfig(configBundle.Worker())
-		if err != nil {
-			return fmt.Errorf("generating autoscaler worker config: %w", err)
-		}
-
-		err = ApplyAutoscalerConfigSecret(
-			ctx,
-			kubeclient,
-			strconv.FormatInt(snapshotImageID, 10),
-			workerConfigYAML,
-		)
-		if err != nil {
-			return fmt.Errorf("applying autoscaler config secret: %w", err)
-		}
-
-		_, _ = fmt.Fprintf(p.logWriter, "  ✓ Cluster autoscaler config secret created\n")
+	// Create the cluster-autoscaler-config Secret when applicable.
+	if err := p.ensureAutoscalerSecret(ctx, configBundle, snapshotImageID); err != nil {
+		return err
 	}
+
+	return nil
+}
+
+// ensureAutoscalerSecret creates the cluster-autoscaler-config Secret when the
+// node autoscaler is enabled and bootstrap used a snapshot image.
+func (p *Provisioner) ensureAutoscalerSecret(
+	ctx context.Context,
+	configBundle *bundle.Bundle,
+	snapshotImageID int64,
+) error {
+	if p.hetznerOpts == nil || !p.hetznerOpts.NodeAutoscalerEnabled || snapshotImageID <= 0 {
+		return nil
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "Applying cluster-autoscaler config secret...\n")
+
+	kubeclient, err := k8s.NewClientset(p.options.KubeconfigPath, "")
+	if err != nil {
+		return fmt.Errorf("creating kubeclient for autoscaler secret: %w", err)
+	}
+
+	workerConfigYAML, err := GenerateAutoscalerWorkerConfig(configBundle.Worker())
+	if err != nil {
+		return fmt.Errorf("generating autoscaler worker config: %w", err)
+	}
+
+	err = ApplyAutoscalerConfigSecret(
+		ctx,
+		kubeclient,
+		strconv.FormatInt(snapshotImageID, 10),
+		workerConfigYAML,
+	)
+	if err != nil {
+		return fmt.Errorf("applying autoscaler config secret: %w", err)
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "  ✓ Cluster autoscaler config secret created\n")
 
 	return nil
 }
