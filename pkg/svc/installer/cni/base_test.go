@@ -173,7 +173,7 @@ func testCheckGitOpsOwnershipSkipsWhenFluxManaged(t *testing.T) {
 
 	client := helm.NewMockInterface(t)
 	client.EXPECT().
-		GetReleaseSecretLabels(mock.Anything, "cilium", "kube-system").
+		GetReleaseStorageLabels(mock.Anything, "cilium", "kube-system").
 		Return(map[string]string{
 			"helm.toolkit.fluxcd.io/name": "cilium",
 		}, nil)
@@ -192,7 +192,7 @@ func testCheckGitOpsOwnershipProceedsWhenNotManaged(t *testing.T) {
 
 	client := helm.NewMockInterface(t)
 	client.EXPECT().
-		GetReleaseSecretLabels(mock.Anything, "cilium", "kube-system").
+		GetReleaseStorageLabels(mock.Anything, "cilium", "kube-system").
 		Return(map[string]string{
 			"name":  "cilium",
 			"owner": "helm",
@@ -212,8 +212,8 @@ func testCheckGitOpsOwnershipProceedsWhenNoRelease(t *testing.T) {
 
 	client := helm.NewMockInterface(t)
 	client.EXPECT().
-		GetReleaseSecretLabels(mock.Anything, "cilium", "kube-system").
-		Return(nil, helm.ErrNoReleaseSecrets)
+		GetReleaseStorageLabels(mock.Anything, "cilium", "kube-system").
+		Return(nil, helm.ErrNoReleaseStorage)
 
 	base := cni.NewInstallerBase(client, "", "", time.Second)
 
@@ -229,7 +229,7 @@ func testCheckGitOpsOwnershipReturnsErrorOnFailure(t *testing.T) {
 
 	client := helm.NewMockInterface(t)
 	client.EXPECT().
-		GetReleaseSecretLabels(mock.Anything, "cilium", "kube-system").
+		GetReleaseStorageLabels(mock.Anything, "cilium", "kube-system").
 		Return(nil, assert.AnError)
 
 	base := cni.NewInstallerBase(client, "", "", time.Second)

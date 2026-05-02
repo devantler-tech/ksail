@@ -141,8 +141,8 @@ func (b *InstallerBase) CheckGitOpsOwnership(
 		return false, fmt.Errorf("get helm client: %w", err)
 	}
 
-	labels, err := client.GetReleaseSecretLabels(ctx, releaseName, namespace)
-	if err != nil && !errors.Is(err, helm.ErrNoReleaseSecrets) {
+	labels, err := client.GetReleaseStorageLabels(ctx, releaseName, namespace)
+	if err != nil && !errors.Is(err, helm.ErrNoReleaseStorage) {
 		return false, fmt.Errorf("check release ownership for %s: %w", componentName, err)
 	}
 

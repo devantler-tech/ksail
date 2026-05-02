@@ -53,8 +53,8 @@ func NewBase(
 // (Flux or ArgoCD), the install is skipped to avoid overwriting externally
 // managed values.
 func (b *Base) Install(ctx context.Context) error {
-	labels, err := b.client.GetReleaseSecretLabels(ctx, b.spec.ReleaseName, b.spec.Namespace)
-	if err != nil && !errors.Is(err, helm.ErrNoReleaseSecrets) {
+	labels, err := b.client.GetReleaseStorageLabels(ctx, b.spec.ReleaseName, b.spec.Namespace)
+	if err != nil && !errors.Is(err, helm.ErrNoReleaseStorage) {
 		return fmt.Errorf("check release ownership for %s: %w", b.name, err)
 	}
 

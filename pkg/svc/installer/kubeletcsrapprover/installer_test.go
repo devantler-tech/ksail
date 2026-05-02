@@ -50,7 +50,7 @@ func TestKubeletCSRApproverInstallerInstallAddRepositoryError(t *testing.T) {
 
 	installer, client := newKubeletCSRApproverInstallerWithDefaults(t)
 	client.EXPECT().
-		GetReleaseSecretLabels(mock.Anything, mock.Anything, mock.Anything).
+		GetReleaseStorageLabels(mock.Anything, mock.Anything, mock.Anything).
 		Return(nil, nil)
 	expectKubeletCSRApproverAddRepository(t, client, assert.AnError)
 
@@ -126,7 +126,7 @@ func expectKubeletCSRApproverInstall(
 ) {
 	t.Helper()
 	client.EXPECT().
-		GetReleaseSecretLabels(mock.Anything, mock.Anything, mock.Anything).
+		GetReleaseStorageLabels(mock.Anything, mock.Anything, mock.Anything).
 		Return(nil, nil)
 	expectKubeletCSRApproverAddRepository(t, client, nil)
 	client.EXPECT().

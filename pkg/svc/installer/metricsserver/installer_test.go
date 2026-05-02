@@ -85,7 +85,7 @@ func TestMetricsServerInstallerInstallAddRepositoryError(t *testing.T) {
 
 	installer, client := newMetricsServerInstallerWithDefaults(t)
 	client.EXPECT().
-		GetReleaseSecretLabels(mock.Anything, mock.Anything, mock.Anything).
+		GetReleaseStorageLabels(mock.Anything, mock.Anything, mock.Anything).
 		Return(nil, nil)
 	expectMetricsServerAddRepository(t, client, assert.AnError)
 
@@ -194,7 +194,7 @@ func expectMetricsServerInstall(
 ) {
 	t.Helper()
 	client.EXPECT().
-		GetReleaseSecretLabels(mock.Anything, mock.Anything, mock.Anything).
+		GetReleaseStorageLabels(mock.Anything, mock.Anything, mock.Anything).
 		Return(nil, nil)
 	expectMetricsServerAddRepository(t, client, nil)
 	client.EXPECT().
@@ -224,7 +224,7 @@ func expectMetricsServerInstallVCluster(
 ) {
 	t.Helper()
 	client.EXPECT().
-		GetReleaseSecretLabels(mock.Anything, mock.Anything, mock.Anything).
+		GetReleaseStorageLabels(mock.Anything, mock.Anything, mock.Anything).
 		Return(nil, nil)
 	expectMetricsServerAddRepository(t, client, nil)
 	client.EXPECT().

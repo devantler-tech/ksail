@@ -298,11 +298,14 @@ func (c *Client) ListReleases(ctx context.Context) ([]ReleaseInfo, error) {
 	return result, nil
 }
 
-// GetReleaseSecretLabels returns the labels from the latest Helm release Secret
-// for the given release name and namespace. Returns ErrNoReleaseSecrets when no
-// matching Secrets exist. Helm v4 stores each release revision as a Kubernetes
-// Secret with labels name=<release> and owner=helm.
-func (c *Client) GetReleaseSecretLabels(
+// GetReleaseStorageLabels returns the Kubernetes object labels from the latest
+// Helm release storage object (Secret or ConfigMap) for the given release name
+// and namespace. The storage backend is determined by the HELM_DRIVER
+// environment variable: "configmap"/"configmaps" queries ConfigMaps, "memory"
+// always returns ErrNoReleaseStorage (no Kubernetes objects), and the default
+// queries Secrets. Returns (nil, ErrNoReleaseStorage) when no matching storage
+// objects exist.
+func (c *Client) GetReleaseStorageLabels(
 	ctx context.Context,
 	releaseName, namespace string,
 ) (map[string]string, error) {
@@ -314,45 +317,84 @@ func (c *Client) GetReleaseSecretLabels(
 		namespace = c.settings.Namespace()
 	}
 
+	driver := os.Getenv("HELM_DRIVER")
+	if driver == "memory" {
+		return nil, ErrNoReleaseStorage
+	}
+
 	restConfig, err := c.settings.RESTClientGetter().ToRESTConfig()
 	if err != nil {
-		return nil, fmt.Errorf("get REST config for release secret labels: %w", err)
+		return nil, fmt.Errorf("get REST config for release storage labels: %w", err)
 	}
 
 	clientset, err := kubernetes.NewForConfig(restConfig)
 	if err != nil {
-		return nil, fmt.Errorf("create kubernetes clientset for release secret labels: %w", err)
+		return nil, fmt.Errorf("create kubernetes clientset for release storage labels: %w", err)
 	}
 
-	secretList, err := clientset.CoreV1().Secrets(namespace).List(ctx, metav1.ListOptions{
-		LabelSelector: fmt.Sprintf("name=%s,owner=helm", releaseName),
-	})
-	if err != nil {
-		return nil, fmt.Errorf(
-			"list helm release secrets for %q in namespace %q: %w",
-			releaseName,
-			namespace,
-			err,
-		)
+	selector := fmt.Sprintf("name=%s,owner=helm", releaseName)
+
+	return c.fetchStorageLabels(ctx, clientset, driver, namespace, selector)
+}
+
+// fetchStorageLabels queries either ConfigMaps or Secrets (based on driver) and
+// returns labels from the storage object with the highest version.
+func (c *Client) fetchStorageLabels(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	driver, namespace, selector string,
+) (map[string]string, error) {
+	type labeledItem struct {
+		Labels map[string]string
 	}
 
-	if len(secretList.Items) == 0 {
-		return nil, ErrNoReleaseSecrets
+	var items []labeledItem
+
+	switch driver {
+	case "configmap", "configmaps":
+		cmList, err := clientset.CoreV1().ConfigMaps(namespace).List(ctx, metav1.ListOptions{
+			LabelSelector: selector,
+		})
+		if err != nil {
+			return nil, fmt.Errorf(
+				"list helm release configmaps in namespace %q: %w", namespace, err,
+			)
+		}
+
+		for i := range cmList.Items {
+			items = append(items, labeledItem{Labels: cmList.Items[i].Labels})
+		}
+	default:
+		secretList, err := clientset.CoreV1().Secrets(namespace).List(ctx, metav1.ListOptions{
+			LabelSelector: selector,
+		})
+		if err != nil {
+			return nil, fmt.Errorf(
+				"list helm release secrets in namespace %q: %w", namespace, err,
+			)
+		}
+
+		for i := range secretList.Items {
+			items = append(items, labeledItem{Labels: secretList.Items[i].Labels})
+		}
 	}
 
-	// Find the latest revision (highest version label value).
+	if len(items) == 0 {
+		return nil, ErrNoReleaseStorage
+	}
+
 	bestIdx := 0
 	bestVersion := -1
 
-	for i := range secretList.Items {
-		v, _ := strconv.Atoi(secretList.Items[i].Labels["version"])
+	for i, item := range items {
+		v, _ := strconv.Atoi(item.Labels["version"])
 		if v > bestVersion {
 			bestIdx = i
 			bestVersion = v
 		}
 	}
 
-	return secretList.Items[bestIdx].Labels, nil
+	return items[bestIdx].Labels, nil
 }
 
 func (c *Client) installRelease(

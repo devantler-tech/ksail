@@ -38,7 +38,7 @@ func TestInstallSuccessWithScaledTimeout(t *testing.T) {
 	client := helm.NewMockInterface(t)
 	installer := certmanagerinstaller.NewInstaller(client, 10*time.Minute)
 	client.EXPECT().
-		GetReleaseSecretLabels(mock.Anything, mock.Anything, mock.Anything).
+		GetReleaseStorageLabels(mock.Anything, mock.Anything, mock.Anything).
 		Return(nil, nil)
 	client.EXPECT().
 		AddRepository(
@@ -79,7 +79,7 @@ func TestInstallRepoError(t *testing.T) {
 
 	installer, client := newInstallerWithDefaults(t)
 	client.EXPECT().
-		GetReleaseSecretLabels(mock.Anything, mock.Anything, mock.Anything).
+		GetReleaseStorageLabels(mock.Anything, mock.Anything, mock.Anything).
 		Return(nil, nil)
 	client.EXPECT().
 		AddRepository(mock.Anything, mock.Anything, mock.Anything).
@@ -143,7 +143,7 @@ func expectCertManagerInstall(t *testing.T, client *helm.MockInterface, installE
 	t.Helper()
 
 	client.EXPECT().
-		GetReleaseSecretLabels(mock.Anything, mock.Anything, mock.Anything).
+		GetReleaseStorageLabels(mock.Anything, mock.Anything, mock.Anything).
 		Return(nil, nil)
 	client.EXPECT().
 		AddRepository(

@@ -62,7 +62,7 @@ func TestInstaller_Install_APIDiscoveryErrorRetry(t *testing.T) {
 	)
 
 	client.EXPECT().
-		GetReleaseSecretLabels(mock.Anything, "calico", "tigera-operator").
+		GetReleaseStorageLabels(mock.Anything, "calico", "tigera-operator").
 		Return(nil, nil)
 
 	// First call: repo add succeeds
@@ -98,7 +98,7 @@ func TestInstaller_Install_ContextCanceled_Vanilla(t *testing.T) {
 	)
 
 	client.EXPECT().
-		GetReleaseSecretLabels(mock.Anything, "calico", "tigera-operator").
+		GetReleaseStorageLabels(mock.Anything, "calico", "tigera-operator").
 		Return(nil, nil)
 
 	client.EXPECT().
@@ -131,7 +131,7 @@ func TestInstaller_Install_K3s_APIServerUnavailableRetrySucceeds(t *testing.T) {
 	installer.SetRetryBackoffForTest(func(_ context.Context) error { return nil })
 
 	client.EXPECT().
-		GetReleaseSecretLabels(mock.Anything, "calico", "tigera-operator").
+		GetReleaseStorageLabels(mock.Anything, "calico", "tigera-operator").
 		Return(nil, nil)
 
 	client.EXPECT().
@@ -166,7 +166,7 @@ func TestInstaller_Install_K3s_APIServerUnavailableRetryExhausted(t *testing.T) 
 	installer.SetRetryBackoffForTest(func(_ context.Context) error { return nil })
 
 	client.EXPECT().
-		GetReleaseSecretLabels(mock.Anything, "calico", "tigera-operator").
+		GetReleaseStorageLabels(mock.Anything, "calico", "tigera-operator").
 		Return(nil, nil)
 
 	client.EXPECT().
@@ -199,7 +199,7 @@ func TestInstaller_Install_Vanilla_NoRetryOnAPIServerUnavailable(t *testing.T) {
 	)
 
 	client.EXPECT().
-		GetReleaseSecretLabels(mock.Anything, "calico", "tigera-operator").
+		GetReleaseStorageLabels(mock.Anything, "calico", "tigera-operator").
 		Return(nil, nil)
 
 	client.EXPECT().

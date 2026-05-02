@@ -498,12 +498,12 @@ func (_c *MockInterface_UninstallRelease_Call) RunAndReturn(run func(ctx context
 	return _c
 }
 
-// GetReleaseSecretLabels provides a mock function for the type MockInterface
-func (_mock *MockInterface) GetReleaseSecretLabels(ctx context.Context, releaseName string, namespace string) (map[string]string, error) {
+// GetReleaseStorageLabels provides a mock function for the type MockInterface
+func (_mock *MockInterface) GetReleaseStorageLabels(ctx context.Context, releaseName string, namespace string) (map[string]string, error) {
 	ret := _mock.Called(ctx, releaseName, namespace)
 
 	if len(ret) == 0 {
-		panic("no return value specified for GetReleaseSecretLabels")
+		panic("no return value specified for GetReleaseStorageLabels")
 	}
 
 	var r0 map[string]string
@@ -526,20 +526,20 @@ func (_mock *MockInterface) GetReleaseSecretLabels(ctx context.Context, releaseN
 	return r0, r1
 }
 
-// MockInterface_GetReleaseSecretLabels_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetReleaseSecretLabels'
-type MockInterface_GetReleaseSecretLabels_Call struct {
+// MockInterface_GetReleaseStorageLabels_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetReleaseStorageLabels'
+type MockInterface_GetReleaseStorageLabels_Call struct {
 	*mock.Call
 }
 
-// GetReleaseSecretLabels is a helper method to define mock.On call
+// GetReleaseStorageLabels is a helper method to define mock.On call
 //   - ctx context.Context
 //   - releaseName string
 //   - namespace string
-func (_e *MockInterface_Expecter) GetReleaseSecretLabels(ctx interface{}, releaseName interface{}, namespace interface{}) *MockInterface_GetReleaseSecretLabels_Call {
-	return &MockInterface_GetReleaseSecretLabels_Call{Call: _e.mock.On("GetReleaseSecretLabels", ctx, releaseName, namespace)}
+func (_e *MockInterface_Expecter) GetReleaseStorageLabels(ctx interface{}, releaseName interface{}, namespace interface{}) *MockInterface_GetReleaseStorageLabels_Call {
+	return &MockInterface_GetReleaseStorageLabels_Call{Call: _e.mock.On("GetReleaseStorageLabels", ctx, releaseName, namespace)}
 }
 
-func (_c *MockInterface_GetReleaseSecretLabels_Call) Run(run func(ctx context.Context, releaseName string, namespace string)) *MockInterface_GetReleaseSecretLabels_Call {
+func (_c *MockInterface_GetReleaseStorageLabels_Call) Run(run func(ctx context.Context, releaseName string, namespace string)) *MockInterface_GetReleaseStorageLabels_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -562,12 +562,12 @@ func (_c *MockInterface_GetReleaseSecretLabels_Call) Run(run func(ctx context.Co
 	return _c
 }
 
-func (_c *MockInterface_GetReleaseSecretLabels_Call) Return(labels map[string]string, err error) *MockInterface_GetReleaseSecretLabels_Call {
+func (_c *MockInterface_GetReleaseStorageLabels_Call) Return(labels map[string]string, err error) *MockInterface_GetReleaseStorageLabels_Call {
 	_c.Call.Return(labels, err)
 	return _c
 }
 
-func (_c *MockInterface_GetReleaseSecretLabels_Call) RunAndReturn(run func(ctx context.Context, releaseName string, namespace string) (map[string]string, error)) *MockInterface_GetReleaseSecretLabels_Call {
+func (_c *MockInterface_GetReleaseStorageLabels_Call) RunAndReturn(run func(ctx context.Context, releaseName string, namespace string) (map[string]string, error)) *MockInterface_GetReleaseStorageLabels_Call {
 	_c.Call.Return(run)
 	return _c
 }

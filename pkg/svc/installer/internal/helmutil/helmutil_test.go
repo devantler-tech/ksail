@@ -29,7 +29,7 @@ func TestBaseInstallSuccess(t *testing.T) {
 
 	base, client := newBaseWithDefaults(t)
 	client.EXPECT().
-		GetReleaseSecretLabels(mock.Anything, "test-release", "test-namespace").
+		GetReleaseStorageLabels(mock.Anything, "test-release", "test-namespace").
 		Return(nil, nil)
 	client.EXPECT().
 		AddRepository(mock.Anything, mock.Anything, mock.Anything).
@@ -48,8 +48,8 @@ func TestBaseInstallProceedsWhenNoReleaseSecrets(t *testing.T) {
 
 	base, client := newBaseWithDefaults(t)
 	client.EXPECT().
-		GetReleaseSecretLabels(mock.Anything, "test-release", "test-namespace").
-		Return(nil, helm.ErrNoReleaseSecrets)
+		GetReleaseStorageLabels(mock.Anything, "test-release", "test-namespace").
+		Return(nil, helm.ErrNoReleaseStorage)
 	client.EXPECT().
 		AddRepository(mock.Anything, mock.Anything, mock.Anything).
 		Return(nil)
@@ -67,7 +67,7 @@ func TestBaseInstallSkipsWhenFluxManaged(t *testing.T) {
 
 	base, client := newBaseWithDefaults(t)
 	client.EXPECT().
-		GetReleaseSecretLabels(mock.Anything, "test-release", "test-namespace").
+		GetReleaseStorageLabels(mock.Anything, "test-release", "test-namespace").
 		Return(map[string]string{
 			"name":                             "test-release",
 			"owner":                            "helm",
@@ -86,7 +86,7 @@ func TestBaseInstallSkipsWhenArgoCDManaged(t *testing.T) {
 
 	base, client := newBaseWithDefaults(t)
 	client.EXPECT().
-		GetReleaseSecretLabels(mock.Anything, "test-release", "test-namespace").
+		GetReleaseStorageLabels(mock.Anything, "test-release", "test-namespace").
 		Return(map[string]string{
 			"name":                          "test-release",
 			"owner":                         "helm",
@@ -103,7 +103,7 @@ func TestBaseInstallProceedsWhenNotManaged(t *testing.T) {
 
 	base, client := newBaseWithDefaults(t)
 	client.EXPECT().
-		GetReleaseSecretLabels(mock.Anything, "test-release", "test-namespace").
+		GetReleaseStorageLabels(mock.Anything, "test-release", "test-namespace").
 		Return(map[string]string{
 			"name":    "test-release",
 			"owner":   "helm",
@@ -126,7 +126,7 @@ func TestBaseInstallOwnershipCheckError(t *testing.T) {
 
 	base, client := newBaseWithDefaults(t)
 	client.EXPECT().
-		GetReleaseSecretLabels(mock.Anything, "test-release", "test-namespace").
+		GetReleaseStorageLabels(mock.Anything, "test-release", "test-namespace").
 		Return(nil, assert.AnError)
 
 	err := base.Install(context.Background())
@@ -140,7 +140,7 @@ func TestBaseInstallRepoError(t *testing.T) {
 
 	base, client := newBaseWithDefaults(t)
 	client.EXPECT().
-		GetReleaseSecretLabels(mock.Anything, "test-release", "test-namespace").
+		GetReleaseStorageLabels(mock.Anything, "test-release", "test-namespace").
 		Return(nil, nil)
 	client.EXPECT().
 		AddRepository(mock.Anything, mock.Anything, mock.Anything).
@@ -157,7 +157,7 @@ func TestBaseInstallChartError(t *testing.T) {
 
 	base, client := newBaseWithDefaults(t)
 	client.EXPECT().
-		GetReleaseSecretLabels(mock.Anything, "test-release", "test-namespace").
+		GetReleaseStorageLabels(mock.Anything, "test-release", "test-namespace").
 		Return(nil, nil)
 	client.EXPECT().
 		AddRepository(mock.Anything, mock.Anything, mock.Anything).

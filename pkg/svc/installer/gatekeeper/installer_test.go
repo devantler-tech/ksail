@@ -84,7 +84,7 @@ func TestInstallRepoError(t *testing.T) {
 
 	installer, client := newInstallerWithDefaults(t)
 	client.EXPECT().
-		GetReleaseSecretLabels(mock.Anything, mock.Anything, mock.Anything).
+		GetReleaseStorageLabels(mock.Anything, mock.Anything, mock.Anything).
 		Return(nil, nil)
 	client.EXPECT().
 		AddRepository(mock.Anything, mock.Anything, mock.Anything).
@@ -149,7 +149,7 @@ func expectGatekeeperInstall(t *testing.T, client *helm.MockInterface, installEr
 	t.Helper()
 
 	client.EXPECT().
-		GetReleaseSecretLabels(mock.Anything, mock.Anything, mock.Anything).
+		GetReleaseStorageLabels(mock.Anything, mock.Anything, mock.Anything).
 		Return(nil, nil)
 	client.EXPECT().
 		AddRepository(
