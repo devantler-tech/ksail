@@ -34,8 +34,10 @@ Flags:
       --oidc-client-id string              OIDC client ID for kubectl authentication
       --oidc-extra-scope strings           Additional OIDC scopes beyond openid (repeatable)
       --oidc-groups-claim string           JWT claim for Kubernetes groups (default "groups")
+      --oidc-groups-prefix string          Prefix for OIDC groups in Kubernetes (default "oidc:")
       --oidc-issuer-url string             OIDC provider issuer URL (e.g. https://dex.example.com)
       --oidc-username-claim string         JWT claim for Kubernetes username (default "email")
+      --oidc-username-prefix string        Prefix for OIDC usernames in Kubernetes (default "oidc:")
       --policy-engine PolicyEngine         Policy engine (None: skip, Kyverno: install Kyverno, Gatekeeper: install Gatekeeper)
       --provider Provider                  Infrastructure provider backend (e.g., Docker)
       --ttl string                         Auto-destroy cluster after duration (e.g. 1h, 30m, 2h30m). If not set, cluster persists indefinitely.
