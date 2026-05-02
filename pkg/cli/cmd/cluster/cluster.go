@@ -5259,10 +5259,12 @@ func applyOIDCExtraScopeFlag(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster) {
 	}
 
 	scopes, err := cmd.Flags().GetStringSlice("oidc-extra-scope")
-	if err != nil || len(scopes) == 0 {
+	if err != nil {
 		return
 	}
 
+	// When the flag is explicitly set, always assign — even if empty — so the
+	// user can clear extraScopes from a config file via CLI.
 	clusterCfg.Spec.Cluster.OIDC.ExtraScopes = scopes
 }
 

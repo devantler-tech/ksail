@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
+	"runtime"
 
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	"k8s.io/client-go/tools/clientcmd"
@@ -92,7 +94,7 @@ func removeEntriesFromKubeconfig(
 		return fmt.Errorf("failed to serialize kubeconfig: %w", err)
 	}
 
-	err = os.WriteFile(kubeconfigPath, result, kubeconfigFileMode)
+	err = atomicWriteKubeconfig(kubeconfigPath, result, kubeconfigFileMode)
 	if err != nil {
 		return fmt.Errorf("failed to write kubeconfig: %w", err)
 	}
@@ -327,10 +329,57 @@ func AddOIDCKubeconfigEntries(cfg *OIDCExecConfig, logWriter io.Writer) error {
 		return fmt.Errorf("failed to serialize kubeconfig: %w", err)
 	}
 
-	//nolint:gosec // G703: path canonicalized via EvalCanonicalPath above
-	err = os.WriteFile(canonicalPath, result, kubeconfigFileMode)
+	err = atomicWriteKubeconfig(canonicalPath, result, kubeconfigFileMode)
 	if err != nil {
 		return fmt.Errorf("failed to write kubeconfig: %w", err)
+	}
+
+	return nil
+}
+
+// atomicWriteKubeconfig writes data to a temp file in the same directory and
+// renames it to the target path, ensuring an all-or-nothing write.
+func atomicWriteKubeconfig(path string, data []byte, perm os.FileMode) error {
+	dir := filepath.Dir(path)
+
+	tmp, err := os.CreateTemp(dir, ".kubeconfig-oidc-*.tmp")
+	if err != nil {
+		return fmt.Errorf("create temp file: %w", err)
+	}
+
+	tmpPath := tmp.Name()
+
+	defer func() {
+		_ = os.Remove(tmpPath)
+	}()
+
+	if chmodErr := os.Chmod(tmpPath, perm); chmodErr != nil {
+		_ = tmp.Close()
+
+		return fmt.Errorf("set permissions: %w", chmodErr)
+	}
+
+	if _, writeErr := tmp.Write(data); writeErr != nil {
+		_ = tmp.Close()
+
+		return fmt.Errorf("write data: %w", writeErr)
+	}
+
+	if closeErr := tmp.Close(); closeErr != nil {
+		return fmt.Errorf("close temp file: %w", closeErr)
+	}
+
+	renameErr := os.Rename(tmpPath, path)
+	if renameErr != nil && runtime.GOOS == "windows" {
+		if _, statErr := os.Stat(path); statErr == nil {
+			_ = os.Remove(path)
+
+			renameErr = os.Rename(tmpPath, path)
+		}
+	}
+
+	if renameErr != nil {
+		return fmt.Errorf("rename temp file: %w", renameErr)
 	}
 
 	return nil
