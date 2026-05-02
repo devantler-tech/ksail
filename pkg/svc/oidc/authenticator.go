@@ -219,31 +219,19 @@ func (a *Authenticator) startCallbackServer(
 func (a *Authenticator) listenOnRandomPort(ctx context.Context) (net.Listener, int, error) {
 	listenCfg := net.ListenConfig{}
 
-	// Try the stable default port first so the redirect URI is deterministic
-	// (most OIDC providers require an exact redirect URI match including port).
+	// Use a stable port so the redirect URI is deterministic — OIDC providers
+	// require an exact redirect URI match including port.
 	listener, err := listenCfg.Listen(ctx, "tcp", fmt.Sprintf("localhost:%d", defaultCallbackPort))
-	if err == nil {
-		return listener, defaultCallbackPort, nil
-	}
-
-	// Fall back to a random port if the default is unavailable.
-	listener, err = listenCfg.Listen(ctx, "tcp", "localhost:0")
 	if err != nil {
 		return nil, 0, fmt.Errorf(
-			"%w: failed to start callback server: %w",
+			"%w: callback port %d is unavailable — free it or configure your OIDC provider to allow a different port: %w",
 			ErrAuthenticationFailed,
+			defaultCallbackPort,
 			err,
 		)
 	}
 
-	tcpAddr, ok := listener.Addr().(*net.TCPAddr)
-	if !ok {
-		_ = listener.Close()
-
-		return nil, 0, fmt.Errorf("%w: unexpected listener address type", ErrAuthenticationFailed)
-	}
-
-	return listener, tcpAddr.Port, nil
+	return listener, defaultCallbackPort, nil
 }
 
 func (a *Authenticator) promptBrowserVisit(
@@ -317,36 +305,10 @@ func (a *Authenticator) handleCallback(
 	}
 
 	return func(writer http.ResponseWriter, request *http.Request) {
-		if errMsg := request.URL.Query().Get("error"); errMsg != "" {
-			desc := request.URL.Query().Get("error_description")
-
-			http.Error(writer, "Authentication failed: "+errMsg, http.StatusBadRequest)
-			sendResult(
-				callbackResult{
-					err: fmt.Errorf("%w: %s: %s", ErrAuthenticationFailed, errMsg, desc),
-				},
-			)
-
-			return
-		}
-
-		if request.URL.Query().Get("state") != expectedState {
-			http.Error(writer, "Invalid state parameter", http.StatusBadRequest)
-			sendResult(
-				callbackResult{err: fmt.Errorf("%w: state mismatch", ErrAuthenticationFailed)},
-			)
-
-			return
-		}
-
-		code := request.URL.Query().Get("code")
-		if code == "" {
-			http.Error(writer, "Missing authorization code", http.StatusBadRequest)
-			sendResult(
-				callbackResult{
-					err: fmt.Errorf("%w: missing authorization code", ErrAuthenticationFailed),
-				},
-			)
+		code, err := validateCallbackRequest(request, expectedState)
+		if err != nil {
+			http.Error(writer, err.Error(), http.StatusBadRequest)
+			sendResult(callbackResult{err: err})
 
 			return
 		}
@@ -367,6 +329,27 @@ func (a *Authenticator) handleCallback(
 
 		sendResult(callbackResult{token: result})
 	}
+}
+
+// validateCallbackRequest checks the OIDC callback request for errors, state
+// mismatch, and the presence of an authorization code.
+func validateCallbackRequest(request *http.Request, expectedState string) (string, error) {
+	if errMsg := request.URL.Query().Get("error"); errMsg != "" {
+		desc := request.URL.Query().Get("error_description")
+
+		return "", fmt.Errorf("%w: %s: %s", ErrAuthenticationFailed, errMsg, desc)
+	}
+
+	if request.URL.Query().Get("state") != expectedState {
+		return "", fmt.Errorf("%w: state mismatch", ErrAuthenticationFailed)
+	}
+
+	code := request.URL.Query().Get("code")
+	if code == "" {
+		return "", fmt.Errorf("%w: missing authorization code", ErrAuthenticationFailed)
+	}
+
+	return code, nil
 }
 
 func (a *Authenticator) exchangeAndVerifyToken(
@@ -474,11 +457,11 @@ func generateState() (string, error) {
 func openBrowser(ctx context.Context, targetURL string) error {
 	switch runtime.GOOS {
 	case "darwin":
-		cmd := exec.CommandContext(
+		cmd := exec.CommandContext( //nolint:gosec // G204: user-visible URL only
 			ctx,
 			"open",
 			targetURL,
-		) //nolint:gosec // G204: user-visible URL only
+		)
 		err := cmd.Start()
 		if err != nil {
 			return fmt.Errorf("failed to open browser: %w", err)
@@ -486,11 +469,11 @@ func openBrowser(ctx context.Context, targetURL string) error {
 
 		return nil
 	case "linux":
-		cmd := exec.CommandContext(
+		cmd := exec.CommandContext( //nolint:gosec // G204: user-visible URL only
 			ctx,
 			"xdg-open",
 			targetURL,
-		) //nolint:gosec // G204: user-visible URL only
+		)
 		err := cmd.Start()
 		if err != nil {
 			return fmt.Errorf("failed to open browser: %w", err)

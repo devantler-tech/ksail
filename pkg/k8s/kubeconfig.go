@@ -308,7 +308,12 @@ func AddOIDCKubeconfigEntries(cfg *OIDCExecConfig, logWriter io.Writer) error {
 	}
 
 	if cfg.CAFile != "" {
-		execArgs = append(execArgs, "--ca-file="+cfg.CAFile)
+		canonicalCAFile, caErr := fsutil.EvalCanonicalPath(cfg.CAFile)
+		if caErr != nil {
+			return fmt.Errorf("failed to resolve OIDC CA file path: %w", caErr)
+		}
+
+		execArgs = append(execArgs, "--ca-file="+canonicalCAFile)
 	}
 
 	// Add OIDC user with exec credential plugin
@@ -334,7 +339,7 @@ func AddOIDCKubeconfigEntries(cfg *OIDCExecConfig, logWriter io.Writer) error {
 		return fmt.Errorf("failed to serialize kubeconfig: %w", err)
 	}
 
-	err = os.WriteFile(canonicalPath, result, kubeconfigFileMode)
+	err = os.WriteFile(canonicalPath, result, kubeconfigFileMode) //nolint:gosec // G703: path canonicalized via EvalCanonicalPath above
 	if err != nil {
 		return fmt.Errorf("failed to write kubeconfig: %w", err)
 	}

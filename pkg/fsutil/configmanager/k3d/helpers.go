@@ -1,6 +1,7 @@
 package k3d
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -182,10 +183,10 @@ func ApplyImageVerificationVolumes(
 // OIDCCAContainerPath so the API server can reference it via --oidc-ca-file.
 //
 // This function is idempotent — it skips appending if the volume mount is already present.
-func ApplyOIDCCAVolume(k3dConfig *v1alpha5.SimpleConfig, hostCAPath string) {
+func ApplyOIDCCAVolume(k3dConfig *v1alpha5.SimpleConfig, hostCAPath string) error {
 	canonicalCAPath, err := fsutil.EvalCanonicalPath(hostCAPath)
 	if err != nil {
-		return
+		return fmt.Errorf("failed to resolve OIDC CA file path: %w", err)
 	}
 
 	volumeSpec := canonicalCAPath + ":" + v1alpha1.OIDCCAContainerPath
@@ -194,7 +195,7 @@ func ApplyOIDCCAVolume(k3dConfig *v1alpha5.SimpleConfig, hostCAPath string) {
 		if strings.Contains(vol.Volume, v1alpha1.OIDCCAContainerPath) {
 			k3dConfig.Volumes[i].Volume = volumeSpec
 
-			return
+			return nil
 		}
 	}
 
@@ -202,6 +203,8 @@ func ApplyOIDCCAVolume(k3dConfig *v1alpha5.SimpleConfig, hostCAPath string) {
 		Volume:      volumeSpec,
 		NodeFilters: []string{"server:*"},
 	})
+
+	return nil
 }
 
 // ResolveNetworkName returns the Docker network name for a K3d cluster.

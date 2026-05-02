@@ -1008,31 +1008,10 @@ func (g *Generator) generateOIDCPatch(
 
 	var builder strings.Builder
 
-	// If a CA file is configured, embed its content via machine.files so the
-	// API server can reference it by a well-known node-local path.
 	if model.OIDCCAFile != "" {
-		canonicalCAPath, err := fsutil.EvalCanonicalPath(model.OIDCCAFile)
-		if err != nil {
-			return fmt.Errorf("failed to resolve OIDC CA file path %q: %w", model.OIDCCAFile, err)
+		if err := writeOIDCCAMachineFiles(&builder, model.OIDCCAFile); err != nil {
+			return err
 		}
-
-		caContent, err := os.ReadFile(canonicalCAPath) //nolint:gosec // path canonicalized above
-		if err != nil {
-			return fmt.Errorf("failed to read OIDC CA file %q: %w", canonicalCAPath, err)
-		}
-
-		_, _ = fmt.Fprintf(&builder, "machine:\n")
-		_, _ = fmt.Fprintf(&builder, "  files:\n")
-		_, _ = fmt.Fprintf(&builder, "    - content: |\n")
-
-		for _, line := range strings.Split(strings.TrimRight(string(caContent), "\n"), "\n") {
-			_, _ = fmt.Fprintf(&builder, "        %s\n", line)
-		}
-
-		_, _ = fmt.Fprintf(&builder, "      permissions: 0o644\n")
-		_, _ = fmt.Fprintf(&builder, "      path: %s\n", v1alpha1.OIDCCAContainerPath)
-		_, _ = fmt.Fprintf(&builder, "      op: create\n")
-		_, _ = fmt.Fprintf(&builder, "---\n")
 	}
 
 	_, _ = fmt.Fprintf(&builder, "cluster:\n")
@@ -1065,6 +1044,35 @@ func (g *Generator) generateOIDCPatch(
 	if err != nil {
 		return fmt.Errorf("failed to create OIDC patch: %w", err)
 	}
+
+	return nil
+}
+
+// writeOIDCCAMachineFiles embeds the OIDC CA certificate content into a Talos
+// machine.files block, making it available at OIDCCAContainerPath on the node.
+func writeOIDCCAMachineFiles(builder *strings.Builder, caFilePath string) error {
+	canonicalCAPath, err := fsutil.EvalCanonicalPath(caFilePath)
+	if err != nil {
+		return fmt.Errorf("failed to resolve OIDC CA file path %q: %w", caFilePath, err)
+	}
+
+	caContent, err := os.ReadFile(canonicalCAPath) //nolint:gosec // path canonicalized above
+	if err != nil {
+		return fmt.Errorf("failed to read OIDC CA file %q: %w", canonicalCAPath, err)
+	}
+
+	_, _ = fmt.Fprintf(builder, "machine:\n")
+	_, _ = fmt.Fprintf(builder, "  files:\n")
+	_, _ = fmt.Fprintf(builder, "    - content: |\n")
+
+	for _, line := range strings.Split(strings.TrimRight(string(caContent), "\n"), "\n") {
+		_, _ = fmt.Fprintf(builder, "        %s\n", line)
+	}
+
+	_, _ = fmt.Fprintf(builder, "      permissions: 0o644\n")
+	_, _ = fmt.Fprintf(builder, "      path: %s\n", v1alpha1.OIDCCAContainerPath)
+	_, _ = fmt.Fprintf(builder, "      op: create\n")
+	_, _ = fmt.Fprintf(builder, "---\n")
 
 	return nil
 }

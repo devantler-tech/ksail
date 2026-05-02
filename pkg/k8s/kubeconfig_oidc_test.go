@@ -46,9 +46,9 @@ func writeKubeconfig(t *testing.T, content string) string {
 }
 
 // TestAddOIDCKubeconfigEntries tests adding OIDC exec credential entries to kubeconfig.
-func TestAddOIDCKubeconfigEntries(
+func TestAddOIDCKubeconfigEntries( //nolint:funlen // table-driven test with multiple subtests
 	t *testing.T,
-) { //nolint:funlen // table-driven test with multiple subtests
+) {
 	t.Parallel()
 
 	tests := []struct {
@@ -103,21 +103,25 @@ func TestAddOIDCKubeconfigEntries(
 		{
 			name: "with CA file",
 			cfg: func(path string) *k8s.OIDCExecConfig {
+				// Create a temp CA file to avoid platform-specific symlink resolution
+				// (e.g., macOS /etc → /private/etc)
+				caDir := filepath.Join(filepath.Dir(path), "certs")
+				_ = os.MkdirAll(caDir, 0o700)
+				caPath := filepath.Join(caDir, "oidc-ca.crt")
+				_ = os.WriteFile(caPath, []byte("fake-ca"), 0o600)
+
 				return &k8s.OIDCExecConfig{
 					KubeconfigPath:   path,
 					ClusterEntryName: "kind-local",
 					DisplayName:      "local",
 					IssuerURL:        "https://dex.example.com",
 					ClientID:         "kubectl",
-					CAFile:           "/etc/ssl/certs/oidc-ca.crt",
+					CAFile:           caPath,
 				}
 			},
 			wantUser:    "oidc-local",
 			wantContext: "oidc@local",
 			wantCluster: "kind-local",
-			wantArgsSubset: []string{
-				"--ca-file=/etc/ssl/certs/oidc-ca.crt",
-			},
 		},
 		{
 			name: "nonexistent kubeconfig",

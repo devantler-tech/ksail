@@ -1227,7 +1227,8 @@ func TestCreateK3dConfig_MetricsServerDisabled(t *testing.T) {
 	}
 
 	scaffolderInstance := scaffolder.NewScaffolder(cluster, &bytes.Buffer{}, nil)
-	config := scaffolderInstance.CreateK3dConfig(".")
+	config, err := scaffolderInstance.CreateK3dConfig(".")
+	require.NoError(t, err)
 
 	// Check that --disable=metrics-server flag is present
 	found := false
@@ -1258,7 +1259,8 @@ func TestCreateK3dConfig_MetricsServerEnabled(t *testing.T) {
 	}
 
 	scaffolderInstance := scaffolder.NewScaffolder(cluster, &bytes.Buffer{}, nil)
-	config := scaffolderInstance.CreateK3dConfig(".")
+	config, err := scaffolderInstance.CreateK3dConfig(".")
+	require.NoError(t, err)
 
 	// Check that --disable=metrics-server flag is NOT present
 	for _, arg := range config.Options.K3sOptions.ExtraArgs {
@@ -1285,7 +1287,8 @@ func TestCreateK3dConfig_MetricsServerDisabledWithCilium(t *testing.T) {
 	}
 
 	scaffolderInstance := scaffolder.NewScaffolder(cluster, &bytes.Buffer{}, nil)
-	config := scaffolderInstance.CreateK3dConfig(".")
+	config, err := scaffolderInstance.CreateK3dConfig(".")
+	require.NoError(t, err)
 
 	// Check that both CNI and metrics-server flags are present
 	hasCNIFlag := false
@@ -1318,7 +1321,8 @@ func TestCreateK3dConfig_CSIDisabled(t *testing.T) {
 	}
 
 	scaffolderInstance := scaffolder.NewScaffolder(cluster, &bytes.Buffer{}, nil)
-	config := scaffolderInstance.CreateK3dConfig(".")
+	config, err := scaffolderInstance.CreateK3dConfig(".")
+	require.NoError(t, err)
 
 	// Check that --disable=local-storage flag is present
 	found := false
@@ -1349,7 +1353,8 @@ func TestCreateK3dConfig_CSIEnabled(t *testing.T) {
 	}
 
 	scaffolderInstance := scaffolder.NewScaffolder(cluster, &bytes.Buffer{}, nil)
-	config := scaffolderInstance.CreateK3dConfig(".")
+	config, err := scaffolderInstance.CreateK3dConfig(".")
+	require.NoError(t, err)
 
 	// Check that --disable=local-storage flag is NOT present
 	for _, arg := range config.Options.K3sOptions.ExtraArgs {
@@ -1376,7 +1381,8 @@ func TestCreateK3dConfig_CSIDisabledWithCilium(t *testing.T) {
 	}
 
 	scaffolderInstance := scaffolder.NewScaffolder(cluster, &bytes.Buffer{}, nil)
-	config := scaffolderInstance.CreateK3dConfig(".")
+	config, err := scaffolderInstance.CreateK3dConfig(".")
+	require.NoError(t, err)
 
 	// Check that both CNI and CSI flags are present
 	hasCNIFlag := false
@@ -1400,7 +1406,8 @@ func TestCreateK3dConfig_SetsDefaultImage(t *testing.T) {
 	t.Parallel()
 
 	scaffolderInstance := newK3dScaffolder(t, nil)
-	config := scaffolderInstance.CreateK3dConfig(".")
+	config, err := scaffolderInstance.CreateK3dConfig(".")
+	require.NoError(t, err)
 
 	// Verify that image is empty, allowing k3d to use its built-in default
 	assert.Empty(t, config.Image)
@@ -1421,7 +1428,8 @@ func TestCreateK3dConfig_ImageVerificationEnabled(t *testing.T) {
 	}
 
 	scaffolderInstance := scaffolder.NewScaffolder(cluster, &bytes.Buffer{}, nil)
-	config := scaffolderInstance.CreateK3dConfig(".")
+	config, err := scaffolderInstance.CreateK3dConfig(".")
+	require.NoError(t, err)
 
 	// Verify volume mount is added for the containerd config template
 	found := false
@@ -1454,7 +1462,8 @@ func TestCreateK3dConfig_ImageVerificationDisabled(t *testing.T) {
 	}
 
 	scaffolderInstance := scaffolder.NewScaffolder(cluster, &bytes.Buffer{}, nil)
-	config := scaffolderInstance.CreateK3dConfig(".")
+	config, err := scaffolderInstance.CreateK3dConfig(".")
+	require.NoError(t, err)
 
 	// Verify no volume mount for containerd config template
 	for _, vol := range config.Volumes {

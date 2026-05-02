@@ -259,7 +259,8 @@ func TestScaffoldK3d_LoadBalancerDisabled(t *testing.T) {
 	}
 
 	scaffolderInstance := scaffolder.NewScaffolder(cluster, &bytes.Buffer{}, nil)
-	config := scaffolderInstance.CreateK3dConfig(".")
+	config, err := scaffolderInstance.CreateK3dConfig(".")
+	require.NoError(t, err)
 
 	found := false
 
@@ -318,7 +319,8 @@ func TestScaffoldK3d_NodeCounts(t *testing.T) {
 			}
 
 			scaffolderInstance := scaffolder.NewScaffolder(cluster, &bytes.Buffer{}, nil)
-			config := scaffolderInstance.CreateK3dConfig(".")
+			config, err := scaffolderInstance.CreateK3dConfig(".")
+	require.NoError(t, err)
 
 			assert.Equal(t, testCase.expectedServers, config.Servers)
 			assert.Equal(t, testCase.expectedAgents, config.Agents)
@@ -341,7 +343,8 @@ func TestScaffoldK3d_WithClusterName(t *testing.T) {
 	scaffolderInstance := scaffolder.NewScaffolder(cluster, &bytes.Buffer{}, nil)
 	scaffolderInstance.WithClusterName("my-custom-cluster")
 
-	config := scaffolderInstance.CreateK3dConfig(".")
+	config, err := scaffolderInstance.CreateK3dConfig(".")
+	require.NoError(t, err)
 	assert.Equal(t, "my-custom-cluster", config.Name)
 }
 
@@ -361,7 +364,8 @@ func TestScaffoldK3d_LocalRegistryEnabled(t *testing.T) {
 	}
 
 	scaffolderInstance := scaffolder.NewScaffolder(cluster, &bytes.Buffer{}, nil)
-	config := scaffolderInstance.CreateK3dConfig(".")
+	config, err := scaffolderInstance.CreateK3dConfig(".")
+	require.NoError(t, err)
 
 	// When local registry is enabled, Registries.Create should be set
 	require.NotNil(t, config.Registries.Create, "Registries.Create should be set")
@@ -413,7 +417,8 @@ func TestScaffoldK3d_CalicoCNI(t *testing.T) {
 	}
 
 	scaffolderInstance := scaffolder.NewScaffolder(cluster, &bytes.Buffer{}, nil)
-	config := scaffolderInstance.CreateK3dConfig(".")
+	config, err := scaffolderInstance.CreateK3dConfig(".")
+	require.NoError(t, err)
 
 	hasFlannel := false
 	hasDisableNetworkPolicy := false
