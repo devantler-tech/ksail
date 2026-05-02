@@ -7581,20 +7581,26 @@ func configureOIDCKubeconfig(
 		return fmt.Errorf("failed to resolve kubeconfig path: %w", err)
 	}
 
-	clusterName := lifecycle.ExtractClusterNameFromContext(
+	displayName := lifecycle.ExtractClusterNameFromContext(
 		clusterCfg.Spec.Cluster.Connection.Context,
 		clusterCfg.Spec.Cluster.Distribution,
 	)
 
+	// The kubeconfig cluster entry name is the full context name (e.g. "kind-local"),
+	// not the display name (e.g. "local"). This is what kubeconfig.Contexts[].Cluster
+	// must reference to find the correct cluster endpoint and CA data.
+	clusterEntryName := clusterCfg.Spec.Cluster.Connection.Context
+
 	oidc := &clusterCfg.Spec.Cluster.OIDC
 
 	err = k8s.AddOIDCKubeconfigEntries(&k8s.OIDCExecConfig{
-		KubeconfigPath: kubeconfigPath,
-		ClusterName:    clusterName,
-		IssuerURL:      oidc.IssuerURL,
-		ClientID:       oidc.ClientID,
-		ExtraScopes:    oidc.ExtraScopes,
-		CAFile:         oidc.CAFile,
+		KubeconfigPath:   kubeconfigPath,
+		ClusterEntryName: clusterEntryName,
+		DisplayName:      displayName,
+		IssuerURL:        oidc.IssuerURL,
+		ClientID:         oidc.ClientID,
+		ExtraScopes:      oidc.ExtraScopes,
+		CAFile:           oidc.CAFile,
 	}, cmd.OutOrStdout())
 	if err != nil {
 		return fmt.Errorf("failed to add OIDC kubeconfig entries: %w", err)
@@ -7603,7 +7609,7 @@ func configureOIDCKubeconfig(
 	notify.WriteMessage(notify.Message{
 		Type:    notify.InfoType,
 		Content: "OIDC context 'oidc@%s' added to kubeconfig (use 'kubectl config use-context oidc@%s' to switch)",
-		Args:    []any{clusterName, clusterName},
+		Args:    []any{displayName, displayName},
 		Writer:  cmd.OutOrStdout(),
 	})
 

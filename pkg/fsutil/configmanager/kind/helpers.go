@@ -176,42 +176,36 @@ func ApplyOIDCPatches(kindConfig *kindv1alpha4.Cluster, oidc *v1alpha1.OIDCSpec)
 }
 
 // buildOIDCKubeadmPatch generates a kubeadm ClusterConfiguration patch with API server OIDC flags.
+// kubeadm v1beta4 apiServer.extraArgs is map[string]string, so values are plain strings.
 func buildOIDCKubeadmPatch(oidc *v1alpha1.OIDCSpec) string {
-	var b strings.Builder
+	var builder strings.Builder
 
-	fmt.Fprintf(&b, "apiVersion: kubeadm.k8s.io/v1beta4\n")
-	fmt.Fprintf(&b, "kind: ClusterConfiguration\n")
-	fmt.Fprintf(&b, "apiServer:\n")
-	fmt.Fprintf(&b, "  extraArgs:\n")
-	fmt.Fprintf(&b, "    oidc-issuer-url:\n")
-	fmt.Fprintf(&b, "      - %q\n", oidc.IssuerURL)
-	fmt.Fprintf(&b, "    oidc-client-id:\n")
-	fmt.Fprintf(&b, "      - %q\n", oidc.ClientID)
+	_, _ = fmt.Fprintf(&builder, "apiVersion: kubeadm.k8s.io/v1beta4\n")
+	_, _ = fmt.Fprintf(&builder, "kind: ClusterConfiguration\n")
+	_, _ = fmt.Fprintf(&builder, "apiServer:\n")
+	_, _ = fmt.Fprintf(&builder, "  extraArgs:\n")
+	_, _ = fmt.Fprintf(&builder, "    oidc-issuer-url: %q\n", oidc.IssuerURL)
+	_, _ = fmt.Fprintf(&builder, "    oidc-client-id: %q\n", oidc.ClientID)
 
 	if oidc.UsernameClaim != "" {
-		fmt.Fprintf(&b, "    oidc-username-claim:\n")
-		fmt.Fprintf(&b, "      - %q\n", oidc.UsernameClaim)
+		_, _ = fmt.Fprintf(&builder, "    oidc-username-claim: %q\n", oidc.UsernameClaim)
 	}
 
 	if oidc.UsernamePrefix != "" {
-		fmt.Fprintf(&b, "    oidc-username-prefix:\n")
-		fmt.Fprintf(&b, "      - %q\n", oidc.UsernamePrefix)
+		_, _ = fmt.Fprintf(&builder, "    oidc-username-prefix: %q\n", oidc.UsernamePrefix)
 	}
 
 	if oidc.GroupsClaim != "" {
-		fmt.Fprintf(&b, "    oidc-groups-claim:\n")
-		fmt.Fprintf(&b, "      - %q\n", oidc.GroupsClaim)
+		_, _ = fmt.Fprintf(&builder, "    oidc-groups-claim: %q\n", oidc.GroupsClaim)
 	}
 
 	if oidc.GroupsPrefix != "" {
-		fmt.Fprintf(&b, "    oidc-groups-prefix:\n")
-		fmt.Fprintf(&b, "      - %q\n", oidc.GroupsPrefix)
+		_, _ = fmt.Fprintf(&builder, "    oidc-groups-prefix: %q\n", oidc.GroupsPrefix)
 	}
 
 	if oidc.CAFile != "" {
-		fmt.Fprintf(&b, "    oidc-ca-file:\n")
-		fmt.Fprintf(&b, "      - %q\n", oidc.CAFile)
+		_, _ = fmt.Fprintf(&builder, "    oidc-ca-file: %q\n", oidc.CAFile)
 	}
 
-	return b.String()
+	return builder.String()
 }

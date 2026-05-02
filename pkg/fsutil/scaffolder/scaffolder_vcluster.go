@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	vclusterconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/vcluster"
 )
 
@@ -41,27 +42,7 @@ func (s *Scaffolder) generateVClusterConfig(output string, force bool) error {
 
 	// Append API server OIDC flags when OIDC is configured
 	if s.KSailConfig.Spec.Cluster.OIDC.Enabled() {
-		oidc := &s.KSailConfig.Spec.Cluster.OIDC
-		header += "      apiServer:\n"
-		header += "        extraArgs:\n"
-		header += "          - --oidc-issuer-url=" + oidc.IssuerURL + "\n"
-		header += "          - --oidc-client-id=" + oidc.ClientID + "\n"
-
-		if oidc.UsernameClaim != "" {
-			header += "          - --oidc-username-claim=" + oidc.UsernameClaim + "\n"
-		}
-		if oidc.UsernamePrefix != "" {
-			header += "          - --oidc-username-prefix=" + oidc.UsernamePrefix + "\n"
-		}
-		if oidc.GroupsClaim != "" {
-			header += "          - --oidc-groups-claim=" + oidc.GroupsClaim + "\n"
-		}
-		if oidc.GroupsPrefix != "" {
-			header += "          - --oidc-groups-prefix=" + oidc.GroupsPrefix + "\n"
-		}
-		if oidc.CAFile != "" {
-			header += "          - --oidc-ca-file=" + oidc.CAFile + "\n"
-		}
+		header += buildVClusterOIDCArgs(&s.KSailConfig.Spec.Cluster.OIDC)
 	}
 
 	content := []byte(header)
@@ -81,4 +62,35 @@ func (s *Scaffolder) generateVClusterConfig(output string, force bool) error {
 	s.notifyFileAction(VClusterConfigFile, existed)
 
 	return nil
+}
+
+// buildVClusterOIDCArgs generates the YAML fragment for VCluster API server OIDC extra args.
+// Values are quoted to handle YAML-special characters (e.g., "oidc:" prefix).
+func buildVClusterOIDCArgs(oidc *v1alpha1.OIDCSpec) string {
+	result := "      apiServer:\n" +
+		"        extraArgs:\n" +
+		fmt.Sprintf("          - \"--oidc-issuer-url=%s\"\n", oidc.IssuerURL) +
+		fmt.Sprintf("          - \"--oidc-client-id=%s\"\n", oidc.ClientID)
+
+	if oidc.UsernameClaim != "" {
+		result += fmt.Sprintf("          - \"--oidc-username-claim=%s\"\n", oidc.UsernameClaim)
+	}
+
+	if oidc.UsernamePrefix != "" {
+		result += fmt.Sprintf("          - \"--oidc-username-prefix=%s\"\n", oidc.UsernamePrefix)
+	}
+
+	if oidc.GroupsClaim != "" {
+		result += fmt.Sprintf("          - \"--oidc-groups-claim=%s\"\n", oidc.GroupsClaim)
+	}
+
+	if oidc.GroupsPrefix != "" {
+		result += fmt.Sprintf("          - \"--oidc-groups-prefix=%s\"\n", oidc.GroupsPrefix)
+	}
+
+	if oidc.CAFile != "" {
+		result += fmt.Sprintf("          - \"--oidc-ca-file=%s\"\n", oidc.CAFile)
+	}
+
+	return result
 }

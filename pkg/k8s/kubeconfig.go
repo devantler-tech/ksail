@@ -257,8 +257,12 @@ func hasKubeconfigEntriesToCleanup(
 type OIDCExecConfig struct {
 	// KubeconfigPath is the absolute path to the kubeconfig file.
 	KubeconfigPath string
-	// ClusterName is the name of the cluster entry in kubeconfig.
-	ClusterName string
+	// ClusterEntryName is the kubeconfig cluster entry name (e.g. "kind-local", "k3d-local").
+	// This is used as the context.cluster reference.
+	ClusterEntryName string
+	// DisplayName is the user-friendly cluster name (e.g. "local") used for
+	// naming the OIDC user ("oidc-local") and context ("oidc@local").
+	DisplayName string
 	// IssuerURL is the OIDC provider issuer URL.
 	IssuerURL string
 	// ClientID is the OIDC client ID.
@@ -285,8 +289,8 @@ func AddOIDCKubeconfigEntries(cfg *OIDCExecConfig, logWriter io.Writer) error {
 		return fmt.Errorf("failed to parse kubeconfig: %w", err)
 	}
 
-	userName := "oidc-" + cfg.ClusterName
-	contextName := "oidc@" + cfg.ClusterName
+	userName := "oidc-" + cfg.DisplayName
+	contextName := "oidc@" + cfg.DisplayName
 
 	// Build exec args
 	execArgs := []string{
@@ -315,7 +319,7 @@ func AddOIDCKubeconfigEntries(cfg *OIDCExecConfig, logWriter io.Writer) error {
 
 	// Add OIDC context pointing to the same cluster
 	kubeConfig.Contexts[contextName] = &api.Context{
-		Cluster:  cfg.ClusterName,
+		Cluster:  cfg.ClusterEntryName,
 		AuthInfo: userName,
 	}
 
@@ -335,9 +339,10 @@ func AddOIDCKubeconfigEntries(cfg *OIDCExecConfig, logWriter io.Writer) error {
 }
 
 // CleanupOIDCKubeconfigEntries removes the OIDC user and context entries for a cluster.
-func CleanupOIDCKubeconfigEntries(kubeconfigPath, clusterName string, logWriter io.Writer) error {
-	userName := "oidc-" + clusterName
-	contextName := "oidc@" + clusterName
+// The displayName is the user-friendly cluster name (e.g. "local") used in OIDC naming.
+func CleanupOIDCKubeconfigEntries(kubeconfigPath, displayName string, logWriter io.Writer) error {
+	userName := "oidc-" + displayName
+	contextName := "oidc@" + displayName
 
 	return CleanupKubeconfig(kubeconfigPath, "", contextName, userName, logWriter)
 }

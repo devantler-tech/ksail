@@ -183,39 +183,50 @@ func (s *Scaffolder) buildK3dExtraArgs() []k3dv1alpha5.K3sArgWithNodeFilters {
 
 	// Configure API server OIDC flags when OIDC is enabled
 	if s.KSailConfig.Spec.Cluster.OIDC.Enabled() {
-		oidc := &s.KSailConfig.Spec.Cluster.OIDC
-		oidcArgs := []string{
-			"--kube-apiserver-arg=--oidc-issuer-url=" + oidc.IssuerURL,
-			"--kube-apiserver-arg=--oidc-client-id=" + oidc.ClientID,
-		}
-
-		if oidc.UsernameClaim != "" {
-			oidcArgs = append(oidcArgs, "--kube-apiserver-arg=--oidc-username-claim="+oidc.UsernameClaim)
-		}
-		if oidc.UsernamePrefix != "" {
-			oidcArgs = append(oidcArgs, "--kube-apiserver-arg=--oidc-username-prefix="+oidc.UsernamePrefix)
-		}
-		if oidc.GroupsClaim != "" {
-			oidcArgs = append(oidcArgs, "--kube-apiserver-arg=--oidc-groups-claim="+oidc.GroupsClaim)
-		}
-		if oidc.GroupsPrefix != "" {
-			oidcArgs = append(oidcArgs, "--kube-apiserver-arg=--oidc-groups-prefix="+oidc.GroupsPrefix)
-		}
-		if oidc.CAFile != "" {
-			oidcArgs = append(oidcArgs, "--kube-apiserver-arg=--oidc-ca-file="+oidc.CAFile)
-		}
-
-		for _, arg := range oidcArgs {
-			extraArgs = append(extraArgs,
-				k3dv1alpha5.K3sArgWithNodeFilters{
-					Arg:         arg,
-					NodeFilters: []string{"server:*"},
-				},
-			)
-		}
+		extraArgs = append(extraArgs, buildK3dOIDCArgs(&s.KSailConfig.Spec.Cluster.OIDC)...)
 	}
 
 	return extraArgs
+}
+
+// buildK3dOIDCArgs constructs OIDC-related K3s API server arguments.
+func buildK3dOIDCArgs(oidc *v1alpha1.OIDCSpec) []k3dv1alpha5.K3sArgWithNodeFilters {
+	oidcArgs := []string{
+		"--kube-apiserver-arg=--oidc-issuer-url=" + oidc.IssuerURL,
+		"--kube-apiserver-arg=--oidc-client-id=" + oidc.ClientID,
+	}
+
+	if oidc.UsernameClaim != "" {
+		oidcArgs = append(oidcArgs, "--kube-apiserver-arg=--oidc-username-claim="+oidc.UsernameClaim)
+	}
+
+	if oidc.UsernamePrefix != "" {
+		oidcArgs = append(oidcArgs, "--kube-apiserver-arg=--oidc-username-prefix="+oidc.UsernamePrefix)
+	}
+
+	if oidc.GroupsClaim != "" {
+		oidcArgs = append(oidcArgs, "--kube-apiserver-arg=--oidc-groups-claim="+oidc.GroupsClaim)
+	}
+
+	if oidc.GroupsPrefix != "" {
+		oidcArgs = append(oidcArgs, "--kube-apiserver-arg=--oidc-groups-prefix="+oidc.GroupsPrefix)
+	}
+
+	if oidc.CAFile != "" {
+		oidcArgs = append(oidcArgs, "--kube-apiserver-arg=--oidc-ca-file="+oidc.CAFile)
+	}
+
+	var result []k3dv1alpha5.K3sArgWithNodeFilters
+	for _, arg := range oidcArgs {
+		result = append(result,
+			k3dv1alpha5.K3sArgWithNodeFilters{
+				Arg:         arg,
+				NodeFilters: []string{"server:*"},
+			},
+		)
+	}
+
+	return result
 }
 
 // addK3dLocalRegistryConfig adds K3d-native local registry configuration.

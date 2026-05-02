@@ -257,7 +257,7 @@ func NodeAutoscalerEnabledFieldSelector() FieldSelector[v1alpha1.Cluster] {
 		},
 		Description: "Node autoscaling " +
 			"(Talos: true defers worker and control-plane scaling to an external autoscaler, " +
-			"false lets KSail manages node counts; other distributions currently ignore this setting)",
+			"false lets KSail manage node counts; other distributions currently ignore this setting)",
 		DefaultValue: false,
 	}
 }

@@ -12,6 +12,25 @@ import (
 
 // generateTalosConfig generates the Talos patches directory structure.
 func (s *Scaffolder) generateTalosConfig(output string, force bool) error {
+	config, clusterHasPatches := s.buildTalosGeneratorConfig()
+
+	opts := yamlgenerator.Options{
+		Output: output,
+		Force:  force,
+	}
+
+	_, err := s.TalosGenerator.Generate(config, opts)
+	if err != nil {
+		return fmt.Errorf("%w: %w", ErrTalosConfigGeneration, err)
+	}
+
+	s.notifyTalosGenerated(config, clusterHasPatches)
+
+	return nil
+}
+
+// buildTalosGeneratorConfig derives the Talos generator configuration from KSailConfig.
+func (s *Scaffolder) buildTalosGeneratorConfig() (*talosgenerator.Config, bool) {
 	workers := int(s.KSailConfig.Spec.Cluster.Workers)
 
 	// Disable default CNI (Flannel) if using any non-default CNI (e.g., Cilium, Calico, None)
@@ -20,21 +39,18 @@ func (s *Scaffolder) generateTalosConfig(output string, force bool) error {
 		s.KSailConfig.Spec.Cluster.CNI != ""
 
 	// Enable kubelet certificate rotation when metrics-server is explicitly enabled.
-	// This is required for secure TLS communication between metrics-server and kubelets.
 	enableKubeletCertRotation := s.KSailConfig.Spec.Cluster.MetricsServer == v1alpha1.MetricsServerEnabled
 
 	// Enable image verification scaffolding when explicitly enabled for Talos.
 	enableImageVerification := s.KSailConfig.Spec.Cluster.Talos.ImageVerification == v1alpha1.ImageVerificationEnabled
 
-	// Disable CDI when explicitly disabled. Talos 1.13+ enables CDI by default,
-	// so we only need a patch when CDI should be turned off.
+	// Disable CDI when explicitly disabled. Talos 1.13+ enables CDI by default.
 	disableCDI := s.KSailConfig.Spec.Cluster.CDI == v1alpha1.CDIDisabled
 
-	// Enable external cloud provider when using a cloud provider (e.g., Hetzner) that
-	// requires the CCM to initialize nodes with a providerID and write node labels.
+	// Enable external cloud provider when using a cloud provider (e.g., Hetzner).
 	enableExternalCloudProvider := s.KSailConfig.Spec.Cluster.Provider == v1alpha1.ProviderHetzner
 
-	// Compute Hetzner ingress firewall settings (enabled flag + network CIDR + CNI port).
+	// Compute Hetzner ingress firewall settings.
 	enableIngressFirewall, networkCIDR, cniPort := s.hetznerIngressFirewallConfig()
 
 	// Enable OIDC API server configuration when OIDC is configured.
@@ -71,36 +87,12 @@ func (s *Scaffolder) generateTalosConfig(output string, force bool) error {
 		OIDCCAFile:                  s.KSailConfig.Spec.Cluster.OIDC.CAFile,
 	}
 
-	opts := yamlgenerator.Options{
-		Output: output,
-		Force:  force,
-	}
-
-	_, err := s.TalosGenerator.Generate(config, opts)
-	if err != nil {
-		return fmt.Errorf("%w: %w", ErrTalosConfigGeneration, err)
-	}
-
-	s.notifyTalosGenerated(
-		workers,
-		disableDefaultCNI,
-		enableKubeletCertRotation,
-		enableImageVerification,
-		disableCDI,
-		enableExternalCloudProvider,
-		enableIngressFirewall,
-		enableOIDC,
-		clusterHasPatches,
-	)
-
-	return nil
+	return config, clusterHasPatches
 }
 
 // notifyTalosGenerated sends notifications about generated Talos files.
 func (s *Scaffolder) notifyTalosGenerated(
-	workers int,
-	disableDefaultCNI, enableKubeletCertRotation, enableImageVerification, disableCDI,
-	enableExternalCloudProvider, enableIngressFirewall, enableOIDC bool,
+	config *talosgenerator.Config,
 	clusterHasPatches bool,
 ) {
 	// Notify about .gitkeep files only for directories without patches
@@ -120,19 +112,19 @@ func (s *Scaffolder) notifyTalosGenerated(
 		subdir    string
 		filename  string
 	}{
-		{workers == 0, "cluster", "allow-scheduling-on-control-planes.yaml"},
+		{config.WorkerNodes == 0, "cluster", "allow-scheduling-on-control-planes.yaml"},
 		{len(s.MirrorRegistries) > 0, "cluster", "mirror-registries.yaml"},
-		{disableDefaultCNI, "cluster", "disable-default-cni.yaml"},
-		{enableKubeletCertRotation, "cluster", "kubelet-cert-rotation.yaml"},
-		{enableKubeletCertRotation, "cluster", "kubelet-csr-approver.yaml"},
-		{s.ClusterName != "", "cluster", "cluster-name.yaml"},
-		{enableImageVerification, "cluster", "image-verification.yaml"},
-		{disableCDI, "cluster", "disable-cdi.yaml"},
-		{enableExternalCloudProvider, "cluster", "external-cloud-provider.yaml"},
-		{enableIngressFirewall, "cluster", "ingress-firewall-default-action.yaml"},
-		{enableIngressFirewall, "control-planes", "ingress-firewall-rules.yaml"},
-		{enableIngressFirewall, "workers", "ingress-firewall-rules.yaml"},
-		{enableOIDC, "cluster", "oidc.yaml"},
+		{config.DisableDefaultCNI, "cluster", "disable-default-cni.yaml"},
+		{config.EnableKubeletCertRotation, "cluster", "kubelet-cert-rotation.yaml"},
+		{config.EnableKubeletCertRotation, "cluster", "kubelet-csr-approver.yaml"},
+		{config.ClusterName != "", "cluster", "cluster-name.yaml"},
+		{config.EnableImageVerification, "cluster", "image-verification.yaml"},
+		{config.DisableCDI, "cluster", "disable-cdi.yaml"},
+		{config.EnableExternalCloudProvider, "cluster", "external-cloud-provider.yaml"},
+		{config.EnableIngressFirewall, "cluster", "ingress-firewall-default-action.yaml"},
+		{config.EnableIngressFirewall, "control-planes", "ingress-firewall-rules.yaml"},
+		{config.EnableIngressFirewall, "workers", "ingress-firewall-rules.yaml"},
+		{config.EnableOIDC, "cluster", "oidc.yaml"},
 	}
 
 	for _, patch := range patches {

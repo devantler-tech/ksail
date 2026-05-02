@@ -289,22 +289,22 @@
               "properties": {
                 "issuerURL": {
                   "type": "string",
-                  "description": "OIDC provider issuer URL (e.g. https://dex.example.com)"
+                  "description": "OIDC provider issuer URL"
                 },
                 "clientID": {
                   "type": "string",
-                  "description": "OIDC client ID for kubectl authentication"
+                  "description": "OIDC client ID for kubectl"
                 },
                 "extraScopes": {
                   "items": {
                     "type": "string"
                   },
                   "type": "array",
-                  "description": "Additional OIDC scopes beyond openid (e.g. email profile groups)"
+                  "description": "Additional OIDC scopes beyond openid"
                 },
                 "usernameClaim": {
                   "type": "string",
-                  "description": "JWT claim for Kubernetes username"
+                  "description": "JWT claim for username"
                 },
                 "usernamePrefix": {
                   "type": "string",
@@ -312,7 +312,7 @@
                 },
                 "groupsClaim": {
                   "type": "string",
-                  "description": "JWT claim for Kubernetes groups"
+                  "description": "JWT claim for groups"
                 },
                 "groupsPrefix": {
                   "type": "string",
@@ -320,7 +320,7 @@
                 },
                 "caFile": {
                   "type": "string",
-                  "description": "Path to CA certificate for self-signed OIDC providers"
+                  "description": "CA cert path for self-signed OIDC"
                 }
               },
               "additionalProperties": false,

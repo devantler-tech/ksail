@@ -210,6 +210,8 @@ func (g *Generator) Generate(
 }
 
 // getDirectoriesWithPatches returns a set of subdirectory names that will have patches generated.
+//
+//nolint:cyclop // One condition per patch type; each is simple and independent.
 func (g *Generator) getDirectoriesWithPatches(
 	model *Config,
 ) map[string]bool {
@@ -275,7 +277,7 @@ func (g *Generator) getDirectoriesWithPatches(
 
 // generateConditionalPatches generates optional patches based on the configuration.
 //
-//nolint:cyclop,funlen // Sequential conditional patch generation - each condition is independent and simple.
+//nolint:cyclop,funlen,gocognit // Sequential conditional patch generation - each condition is independent and simple.
 func (g *Generator) generateConditionalPatches(
 	rootPath string,
 	model *Config,
@@ -1000,31 +1002,31 @@ func (g *Generator) generateOIDCPatch(
 		return nil
 	}
 
-	var b strings.Builder
+	var builder strings.Builder
 
-	fmt.Fprintf(&b, "cluster:\n")
-	fmt.Fprintf(&b, "  apiServer:\n")
-	fmt.Fprintf(&b, "    extraArgs:\n")
-	fmt.Fprintf(&b, "      oidc-issuer-url: %q\n", model.OIDCIssuerURL)
-	fmt.Fprintf(&b, "      oidc-client-id: %q\n", model.OIDCClientID)
+	_, _ = fmt.Fprintf(&builder, "cluster:\n")
+	_, _ = fmt.Fprintf(&builder, "  apiServer:\n")
+	_, _ = fmt.Fprintf(&builder, "    extraArgs:\n")
+	_, _ = fmt.Fprintf(&builder, "      oidc-issuer-url: %q\n", model.OIDCIssuerURL)
+	_, _ = fmt.Fprintf(&builder, "      oidc-client-id: %q\n", model.OIDCClientID)
 
 	if model.OIDCUsernameClaim != "" {
-		fmt.Fprintf(&b, "      oidc-username-claim: %q\n", model.OIDCUsernameClaim)
+		_, _ = fmt.Fprintf(&builder, "      oidc-username-claim: %q\n", model.OIDCUsernameClaim)
 	}
 	if model.OIDCUsernamePrefix != "" {
-		fmt.Fprintf(&b, "      oidc-username-prefix: %q\n", model.OIDCUsernamePrefix)
+		_, _ = fmt.Fprintf(&builder, "      oidc-username-prefix: %q\n", model.OIDCUsernamePrefix)
 	}
 	if model.OIDCGroupsClaim != "" {
-		fmt.Fprintf(&b, "      oidc-groups-claim: %q\n", model.OIDCGroupsClaim)
+		_, _ = fmt.Fprintf(&builder, "      oidc-groups-claim: %q\n", model.OIDCGroupsClaim)
 	}
 	if model.OIDCGroupsPrefix != "" {
-		fmt.Fprintf(&b, "      oidc-groups-prefix: %q\n", model.OIDCGroupsPrefix)
+		_, _ = fmt.Fprintf(&builder, "      oidc-groups-prefix: %q\n", model.OIDCGroupsPrefix)
 	}
 	if model.OIDCCAFile != "" {
-		fmt.Fprintf(&b, "      oidc-ca-file: %q\n", model.OIDCCAFile)
+		_, _ = fmt.Fprintf(&builder, "      oidc-ca-file: %q\n", model.OIDCCAFile)
 	}
 
-	err := os.WriteFile(patchPath, []byte(b.String()), filePerm)
+	err := os.WriteFile(patchPath, []byte(builder.String()), filePerm)
 	if err != nil {
 		return fmt.Errorf("failed to create OIDC patch: %w", err)
 	}
