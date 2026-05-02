@@ -68,7 +68,7 @@ dockers_v2:
       "org.opencontainers.image.revision": "{{.FullCommit}}"
       "org.opencontainers.image.version": "{{.Version}}"
       "org.opencontainers.image.source": "{{.GitURL}}"
-      "org.opencontainers.image.licenses": "Apache-2.0"
+      "org.opencontainers.image.licenses": "GPL-3.0-only"
 
 changelog:
   sort: asc
