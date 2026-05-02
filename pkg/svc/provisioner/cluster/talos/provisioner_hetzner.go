@@ -240,7 +240,8 @@ func (p *Provisioner) bootstrapAndFinalize(
 	}
 
 	// Create the cluster-autoscaler-config Secret when applicable.
-	if err := p.ensureAutoscalerSecret(ctx, configBundle, snapshotImageID); err != nil {
+	err = p.ensureAutoscalerSecret(ctx, configBundle, snapshotImageID)
+	if err != nil {
 		return err
 	}
 
