@@ -3,6 +3,7 @@ package chat
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -557,11 +558,11 @@ func (m *Model) handleCopyOutput() (tea.Model, tea.Cmd) {
 	}
 
 	// Find the last assistant message
-	for i := len(m.messages) - 1; i >= 0; i-- {
-		if m.messages[i].role == roleAssistant && m.messages[i].content != "" {
+	for _, v := range slices.Backward(m.messages) {
+		if v.role == roleAssistant && v.content != "" {
 			// Copy the raw content (markdown) to clipboard.
 			// Silently ignore errors since clipboard may be unavailable in CI/headless environments.
-			_ = clipboard.WriteAll(m.messages[i].content)
+			_ = clipboard.WriteAll(v.content)
 
 			// Show feedback and schedule its clearing after 1.5 seconds
 			m.showCopyFeedback = true

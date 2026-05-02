@@ -324,7 +324,11 @@ func TestPermissionHandler_NilChatModeRef(t *testing.T) {
 	select {
 	case result := <-resultChan:
 		if result.Kind != copilot.PermissionRequestResultKindRejected {
-			t.Errorf("expected %q, got %q", copilot.PermissionRequestResultKindRejected, result.Kind)
+			t.Errorf(
+				"expected %q, got %q",
+				copilot.PermissionRequestResultKindRejected,
+				result.Kind,
+			)
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("timed out waiting for permission handler result")
