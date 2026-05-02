@@ -1974,7 +1974,7 @@ func runDeleteAction(
 	}
 
 	// Perform post-deletion cleanup
-	performPostDeletionCleanup(cmd, tmr, resolved, flags, preDiscovered, isKindCluster)
+	performPostDeletionCleanup(cmd, tmr, resolved, flags, preDiscovered, isKindCluster, detectedInfo)
 
 	return nil
 }
@@ -2038,6 +2038,7 @@ func performPostDeletionCleanup(
 	flags *deleteFlags,
 	preDiscovered *mirrorregistry.DiscoveredRegistries,
 	isKindCluster bool,
+	detectedInfo *clusterdetector.Info,
 ) {
 	// Cleanup registries after cluster deletion (only for Docker provider)
 	if resolved.Provider == v1alpha1.ProviderDocker {
@@ -2045,10 +2046,22 @@ func performPostDeletionCleanup(
 	}
 
 	// Cleanup OIDC kubeconfig entries (user + context) if they exist.
+	// Derive the display name using the same ExtractClusterNameFromContext logic
+	// as the create path (configureOIDCKubeconfig) to ensure consistent naming.
+	oidcDisplayName := resolved.ClusterName
+	if detectedInfo != nil && detectedInfo.Context != "" {
+		if name := lifecycle.ExtractClusterNameFromContext(
+			detectedInfo.Context,
+			detectedInfo.Distribution,
+		); name != "" {
+			oidcDisplayName = name
+		}
+	}
+
 	// This is a best-effort cleanup — errors are logged as warnings.
 	cleanupErr := k8s.CleanupOIDCKubeconfigEntries(
 		resolved.KubeconfigPath,
-		resolved.ClusterName,
+		oidcDisplayName,
 		cmd.OutOrStdout(),
 	)
 	if cleanupErr != nil {

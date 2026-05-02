@@ -189,7 +189,7 @@ func ApplyOIDCCAVolume(k3dConfig *v1alpha5.SimpleConfig, hostCAPath string) erro
 		return fmt.Errorf("failed to resolve OIDC CA file path: %w", err)
 	}
 
-	volumeSpec := canonicalCAPath + ":" + v1alpha1.OIDCCAContainerPath
+	volumeSpec := canonicalCAPath + ":" + v1alpha1.OIDCCAContainerPath + ":ro"
 
 	for i, vol := range k3dConfig.Volumes {
 		if strings.Contains(vol.Volume, v1alpha1.OIDCCAContainerPath) {
