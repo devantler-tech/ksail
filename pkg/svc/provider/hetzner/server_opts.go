@@ -33,12 +33,14 @@ func (p *Provider) buildServerCreateOpts(opts CreateServerOpts) hcloud.ServerCre
 
 	// Use either Image or ISO - ISOs are used for Talos public ISOs
 	if opts.ISOID > 0 {
-		// When using ISO, we need a placeholder image for the server disk
-		// The ISO will be mounted and booted from
+		// When using ISO, we need a placeholder image for the server disk.
+		// The server must NOT start automatically so the ISO can be attached
+		// before the first boot — otherwise the server boots from the Debian
+		// disk image and never enters Talos maintenance mode.
 		createOpts.Image = &hcloud.Image{
 			Name: "debian-13",
 		}
-		// Note: ISO attachment happens after server creation via AttachISO action
+		createOpts.StartAfterCreate = new(false)
 	} else if opts.ImageID > 0 {
 		createOpts.Image = &hcloud.Image{
 			ID: opts.ImageID,
