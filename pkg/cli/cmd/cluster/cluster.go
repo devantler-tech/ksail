@@ -3320,7 +3320,9 @@ func InitFieldSelectors() []ksailconfigmanager.FieldSelector[v1alpha1.Cluster] {
 	selectors = append(selectors, ksailconfigmanager.OIDCIssuerURLFieldSelector())
 	selectors = append(selectors, ksailconfigmanager.OIDCClientIDFieldSelector())
 	selectors = append(selectors, ksailconfigmanager.OIDCUsernameClaimFieldSelector())
+	selectors = append(selectors, ksailconfigmanager.OIDCUsernamePrefixFieldSelector())
 	selectors = append(selectors, ksailconfigmanager.OIDCGroupsClaimFieldSelector())
+	selectors = append(selectors, ksailconfigmanager.OIDCGroupsPrefixFieldSelector())
 	selectors = append(selectors, ksailconfigmanager.OIDCCAFileFieldSelector())
 
 	return selectors
@@ -5169,7 +5171,9 @@ func defaultClusterMutationFieldSelectors() []ksailconfigmanager.FieldSelector[v
 		ksailconfigmanager.OIDCIssuerURLFieldSelector(),
 		ksailconfigmanager.OIDCClientIDFieldSelector(),
 		ksailconfigmanager.OIDCUsernameClaimFieldSelector(),
+		ksailconfigmanager.OIDCUsernamePrefixFieldSelector(),
 		ksailconfigmanager.OIDCGroupsClaimFieldSelector(),
+		ksailconfigmanager.OIDCGroupsPrefixFieldSelector(),
 		ksailconfigmanager.OIDCCAFileFieldSelector(),
 	)
 }

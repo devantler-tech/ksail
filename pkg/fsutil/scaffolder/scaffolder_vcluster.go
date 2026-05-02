@@ -65,31 +65,31 @@ func (s *Scaffolder) generateVClusterConfig(output string, force bool) error {
 }
 
 // buildVClusterOIDCArgs generates the YAML fragment for VCluster API server OIDC extra args.
-// Values are quoted to handle YAML-special characters (e.g., "oidc:" prefix).
+// Values are escaped with %q to handle YAML-special characters safely.
 func buildVClusterOIDCArgs(oidc *v1alpha1.OIDCSpec) string {
 	result := "      apiServer:\n" +
 		"        extraArgs:\n" +
-		fmt.Sprintf("          - \"--oidc-issuer-url=%s\"\n", oidc.IssuerURL) +
-		fmt.Sprintf("          - \"--oidc-client-id=%s\"\n", oidc.ClientID)
+		fmt.Sprintf("          - %q\n", "--oidc-issuer-url="+oidc.IssuerURL) +
+		fmt.Sprintf("          - %q\n", "--oidc-client-id="+oidc.ClientID)
 
 	if oidc.UsernameClaim != "" {
-		result += fmt.Sprintf("          - \"--oidc-username-claim=%s\"\n", oidc.UsernameClaim)
+		result += fmt.Sprintf("          - %q\n", "--oidc-username-claim="+oidc.UsernameClaim)
 	}
 
 	if oidc.UsernamePrefix != "" {
-		result += fmt.Sprintf("          - \"--oidc-username-prefix=%s\"\n", oidc.UsernamePrefix)
+		result += fmt.Sprintf("          - %q\n", "--oidc-username-prefix="+oidc.UsernamePrefix)
 	}
 
 	if oidc.GroupsClaim != "" {
-		result += fmt.Sprintf("          - \"--oidc-groups-claim=%s\"\n", oidc.GroupsClaim)
+		result += fmt.Sprintf("          - %q\n", "--oidc-groups-claim="+oidc.GroupsClaim)
 	}
 
 	if oidc.GroupsPrefix != "" {
-		result += fmt.Sprintf("          - \"--oidc-groups-prefix=%s\"\n", oidc.GroupsPrefix)
+		result += fmt.Sprintf("          - %q\n", "--oidc-groups-prefix="+oidc.GroupsPrefix)
 	}
 
 	if oidc.CAFile != "" {
-		result += fmt.Sprintf("          - \"--oidc-ca-file=%s\"\n", oidc.CAFile)
+		result += fmt.Sprintf("          - %q\n", "--oidc-ca-file="+oidc.CAFile)
 	}
 
 	return result

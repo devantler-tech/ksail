@@ -447,5 +447,12 @@ func ValidateOIDCConfig(oidc *OIDCSpec) error {
 		return fmt.Errorf("%w: issuerURL must use HTTPS scheme", ErrInvalidOIDCConfig)
 	}
 
+	for idx, scope := range oidc.ExtraScopes {
+		trimmed := strings.TrimSpace(scope)
+		if trimmed == "" {
+			return fmt.Errorf("%w: extraScopes[%d] must not be empty", ErrInvalidOIDCConfig, idx)
+		}
+	}
+
 	return nil
 }

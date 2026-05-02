@@ -306,3 +306,21 @@ func OIDCCAFileFieldSelector() FieldSelector[v1alpha1.Cluster] {
 		DefaultValue: "",
 	}
 }
+
+// OIDCUsernamePrefixFieldSelector creates a field selector for the OIDC username prefix.
+func OIDCUsernamePrefixFieldSelector() FieldSelector[v1alpha1.Cluster] {
+	return FieldSelector[v1alpha1.Cluster]{
+		Selector:     func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.OIDC.UsernamePrefix },
+		Description:  "Prefix for OIDC usernames in Kubernetes",
+		DefaultValue: "oidc:",
+	}
+}
+
+// OIDCGroupsPrefixFieldSelector creates a field selector for the OIDC groups prefix.
+func OIDCGroupsPrefixFieldSelector() FieldSelector[v1alpha1.Cluster] {
+	return FieldSelector[v1alpha1.Cluster]{
+		Selector:     func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.OIDC.GroupsPrefix },
+		Description:  "Prefix for OIDC groups in Kubernetes",
+		DefaultValue: "oidc:",
+	}
+}

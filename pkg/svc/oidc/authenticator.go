@@ -15,6 +15,7 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"sync"
 	"time"
 
 	gooidc "github.com/coreos/go-oidc/v3/oidc"
@@ -73,7 +74,10 @@ func (a *Authenticator) Authenticate(ctx context.Context) (*TokenResult, error) 
 
 	go func() {
 		if serveErr := server.Serve(listener); serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
-			resultCh <- callbackResult{err: fmt.Errorf("%w: callback server error: %w", ErrAuthenticationFailed, serveErr)}
+			select {
+			case resultCh <- callbackResult{err: fmt.Errorf("%w: callback server error: %w", ErrAuthenticationFailed, serveErr)}:
+			default:
+			}
 		}
 	}()
 
@@ -183,9 +187,10 @@ func (a *Authenticator) startCallbackServer(ctx context.Context) (net.Listener, 
 	}
 
 	resultCh := make(chan callbackResult, 1)
+	sendOnce := &sync.Once{}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc(callbackPath, a.handleCallback(prov.oidcCtx, prov.oauth2Config, prov.provider, state, codeVerifier, resultCh))
+	mux.HandleFunc(callbackPath, a.handleCallback(prov.oidcCtx, prov.oauth2Config, prov.provider, state, codeVerifier, resultCh, sendOnce))
 
 	server := &http.Server{
 		Handler:           mux,
@@ -242,19 +247,24 @@ func (a *Authenticator) handleCallback(
 	provider *gooidc.Provider,
 	expectedState, codeVerifier string,
 	resultCh chan<- callbackResult,
+	sendOnce *sync.Once,
 ) http.HandlerFunc {
+	sendResult := func(result callbackResult) {
+		sendOnce.Do(func() { resultCh <- result })
+	}
+
 	return func(writer http.ResponseWriter, request *http.Request) {
 		if errMsg := request.URL.Query().Get("error"); errMsg != "" {
 			desc := request.URL.Query().Get("error_description")
 			http.Error(writer, "Authentication failed: "+errMsg, http.StatusBadRequest)
-			resultCh <- callbackResult{err: fmt.Errorf("%w: %s: %s", ErrAuthenticationFailed, errMsg, desc)}
+			sendResult(callbackResult{err: fmt.Errorf("%w: %s: %s", ErrAuthenticationFailed, errMsg, desc)})
 
 			return
 		}
 
 		if request.URL.Query().Get("state") != expectedState {
 			http.Error(writer, "Invalid state parameter", http.StatusBadRequest)
-			resultCh <- callbackResult{err: fmt.Errorf("%w: state mismatch", ErrAuthenticationFailed)}
+			sendResult(callbackResult{err: fmt.Errorf("%w: state mismatch", ErrAuthenticationFailed)})
 
 			return
 		}
@@ -262,7 +272,7 @@ func (a *Authenticator) handleCallback(
 		code := request.URL.Query().Get("code")
 		if code == "" {
 			http.Error(writer, "Missing authorization code", http.StatusBadRequest)
-			resultCh <- callbackResult{err: fmt.Errorf("%w: missing authorization code", ErrAuthenticationFailed)}
+			sendResult(callbackResult{err: fmt.Errorf("%w: missing authorization code", ErrAuthenticationFailed)})
 
 			return
 		}
@@ -270,14 +280,14 @@ func (a *Authenticator) handleCallback(
 		result, err := a.exchangeAndVerifyToken(ctx, oauth2Config, provider, code, codeVerifier)
 		if err != nil {
 			http.Error(writer, "Token exchange or verification failed", http.StatusInternalServerError)
-			resultCh <- callbackResult{err: err}
+			sendResult(callbackResult{err: err})
 
 			return
 		}
 
 		_, _ = fmt.Fprintf(writer, "Authentication successful! You can close this window.")
 
-		resultCh <- callbackResult{token: result}
+		sendResult(callbackResult{token: result})
 	}
 }
 
@@ -333,13 +343,19 @@ func (a *Authenticator) buildHTTPClient() (*http.Client, error) {
 		return nil, fmt.Errorf("%w: failed to parse CA certificate", ErrAuthenticationFailed)
 	}
 
+	defaultTransport, ok := http.DefaultTransport.(*http.Transport)
+	if !ok {
+		return nil, fmt.Errorf("%w: unexpected default transport type", ErrAuthenticationFailed)
+	}
+
+	transport := defaultTransport.Clone()
+	transport.TLSClientConfig = &tls.Config{
+		RootCAs:    caCertPool,
+		MinVersion: tls.VersionTLS12,
+	}
+
 	return &http.Client{
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{
-				RootCAs:    caCertPool,
-				MinVersion: tls.VersionTLS12,
-			},
-		},
+		Transport: transport,
 	}, nil
 }
 
