@@ -996,3 +996,153 @@ func TestHandleToolEnd_FinalizesWhenSessionComplete(t *testing.T) {
 	assert.False(t, chat.ExportGetStreaming(m))
 	assert.True(t, chat.ExportGetJustCompleted(m))
 }
+
+// --- handleAutoModeSwitchRequested tests ---
+
+func TestHandleAutoModeSwitchRequested_AppendsNotice(t *testing.T) {
+	t.Parallel()
+
+	model := chat.NewModel(newTestParams())
+	chat.ExportSetStreaming(model, true)
+
+	chat.ExportSetMessages(model, []chat.MessageForTest{
+		chat.ExportNewStreamingAssistantMessage(""),
+	})
+
+	var updated tea.Model = model
+
+	updated, _ = updated.Update(chat.ExportNewAutoModeSwitchRequestedMsg("req-1", ""))
+	m := requireModel(t, updated)
+
+	content := chat.ExportGetMessageContent(m, 0)
+	assert.Contains(t, content, "🔄 Auto model switch requested")
+}
+
+func TestHandleAutoModeSwitchRequested_IncludesErrorCode(t *testing.T) {
+	t.Parallel()
+
+	model := chat.NewModel(newTestParams())
+	chat.ExportSetStreaming(model, true)
+
+	chat.ExportSetMessages(model, []chat.MessageForTest{
+		chat.ExportNewStreamingAssistantMessage(""),
+	})
+
+	var updated tea.Model = model
+
+	updated, _ = updated.Update(chat.ExportNewAutoModeSwitchRequestedMsg("req-2", "rate_limit_exceeded"))
+	m := requireModel(t, updated)
+
+	content := chat.ExportGetMessageContent(m, 0)
+	assert.Contains(t, content, "🔄 Auto model switch requested")
+	assert.Contains(t, content, "rate_limit_exceeded")
+}
+
+func TestHandleAutoModeSwitchRequested_NoMessageNoPanic(t *testing.T) {
+	t.Parallel()
+
+	model := chat.NewModel(newTestParams())
+	chat.ExportSetStreaming(model, true)
+
+	// No messages set — should not panic
+	updated, _ := model.Update(chat.ExportNewAutoModeSwitchRequestedMsg("req-3", ""))
+	assert.NotNil(t, updated)
+}
+
+func TestHandleAutoModeSwitchRequested_NonStreamingIgnored(t *testing.T) {
+	t.Parallel()
+
+	model := chat.NewModel(newTestParams())
+	chat.ExportSetStreaming(model, true)
+
+	// Non-streaming message should not get the notice appended
+	chat.ExportSetMessages(model, []chat.MessageForTest{
+		chat.ExportNewAssistantMessage("done"),
+	})
+
+	var updated tea.Model = model
+
+	updated, _ = updated.Update(chat.ExportNewAutoModeSwitchRequestedMsg("req-4", ""))
+	m := requireModel(t, updated)
+
+	content := chat.ExportGetMessageContent(m, 0)
+	assert.NotContains(t, content, "🔄")
+}
+
+// --- handleAutoModeSwitchCompleted tests ---
+
+func TestHandleAutoModeSwitchCompleted_Accepted(t *testing.T) {
+	t.Parallel()
+
+	model := chat.NewModel(newTestParams())
+	chat.ExportSetStreaming(model, true)
+
+	chat.ExportSetMessages(model, []chat.MessageForTest{
+		chat.ExportNewStreamingAssistantMessage(""),
+	})
+
+	var updated tea.Model = model
+
+	updated, _ = updated.Update(chat.ExportNewAutoModeSwitchCompletedMsg("req-1", "yes"))
+	m := requireModel(t, updated)
+
+	content := chat.ExportGetMessageContent(m, 0)
+	assert.Contains(t, content, "✅ Auto model switch accepted")
+}
+
+func TestHandleAutoModeSwitchCompleted_AcceptedAlways(t *testing.T) {
+	t.Parallel()
+
+	model := chat.NewModel(newTestParams())
+	chat.ExportSetStreaming(model, true)
+
+	chat.ExportSetMessages(model, []chat.MessageForTest{
+		chat.ExportNewStreamingAssistantMessage(""),
+	})
+
+	var updated tea.Model = model
+
+	updated, _ = updated.Update(chat.ExportNewAutoModeSwitchCompletedMsg("req-1", "yes_always"))
+	m := requireModel(t, updated)
+
+	content := chat.ExportGetMessageContent(m, 0)
+	assert.Contains(t, content, "✅ Auto model switch accepted")
+}
+
+func TestHandleAutoModeSwitchCompleted_Declined(t *testing.T) {
+	t.Parallel()
+
+	model := chat.NewModel(newTestParams())
+	chat.ExportSetStreaming(model, true)
+
+	chat.ExportSetMessages(model, []chat.MessageForTest{
+		chat.ExportNewStreamingAssistantMessage(""),
+	})
+
+	var updated tea.Model = model
+
+	updated, _ = updated.Update(chat.ExportNewAutoModeSwitchCompletedMsg("req-1", "no"))
+	m := requireModel(t, updated)
+
+	content := chat.ExportGetMessageContent(m, 0)
+	assert.Contains(t, content, "❌ Auto model switch declined")
+}
+
+func TestHandleAutoModeSwitchCompleted_UnknownResponse(t *testing.T) {
+	t.Parallel()
+
+	model := chat.NewModel(newTestParams())
+	chat.ExportSetStreaming(model, true)
+
+	chat.ExportSetMessages(model, []chat.MessageForTest{
+		chat.ExportNewStreamingAssistantMessage(""),
+	})
+
+	var updated tea.Model = model
+
+	updated, _ = updated.Update(chat.ExportNewAutoModeSwitchCompletedMsg("req-1", "maybe"))
+	m := requireModel(t, updated)
+
+	content := chat.ExportGetMessageContent(m, 0)
+	assert.Contains(t, content, "ℹ️ Auto model switch resolved: maybe")
+}
