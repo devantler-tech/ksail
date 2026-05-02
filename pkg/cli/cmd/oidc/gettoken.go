@@ -52,34 +52,36 @@ func handleGetToken(cmd *cobra.Command, _ []string) error {
 	extraScopes, _ := cmd.Flags().GetStringSlice("extra-scope")
 	caFile, _ := cmd.Flags().GetString("ca-file")
 
-	cacheDir := oidcsvc.CacheDir()
+	cacheDir, cacheDirErr := oidcsvc.CacheDir()
 	cacheKey := oidcsvc.CacheKey(issuerURL, clientID, extraScopes)
 
-	// 1. Check cache for valid token
-	if cached := oidcsvc.LoadCachedToken(cacheDir, cacheKey); cached != nil {
-		if time.Now().Before(cached.Expiry) {
-			return outputExecCredential(cached.IDToken, cached.Expiry)
-		}
-
-		// 2. Attempt refresh
-		if cached.RefreshToken != "" {
-			auth := &oidcsvc.Authenticator{
-				IssuerURL:   issuerURL,
-				ClientID:    clientID,
-				ExtraScopes: extraScopes,
-				CAFile:      caFile,
+	// 1. Check cache for valid token (skip if cache dir unavailable)
+	if cacheDirErr == nil {
+		if cached := oidcsvc.LoadCachedToken(cacheDir, cacheKey); cached != nil {
+			if time.Now().Before(cached.Expiry) {
+				return outputExecCredential(cached.IDToken, cached.Expiry)
 			}
 
-			ctx, cancel := context.WithTimeout(cmd.Context(), authTimeout)
-			defer cancel()
+			// 2. Attempt refresh
+			if cached.RefreshToken != "" {
+				auth := &oidcsvc.Authenticator{
+					IssuerURL:   issuerURL,
+					ClientID:    clientID,
+					ExtraScopes: extraScopes,
+					CAFile:      caFile,
+				}
 
-			refreshed, err := auth.RefreshToken(ctx, cached.RefreshToken)
-			if err == nil {
-				_ = oidcsvc.SaveCachedToken(cacheDir, cacheKey, refreshed)
+				ctx, cancel := context.WithTimeout(cmd.Context(), authTimeout)
+				defer cancel()
 
-				return outputExecCredential(refreshed.IDToken, refreshed.Expiry)
+				refreshed, err := auth.RefreshToken(ctx, cached.RefreshToken)
+				if err == nil {
+					_ = oidcsvc.SaveCachedToken(cacheDir, cacheKey, refreshed)
+
+					return outputExecCredential(refreshed.IDToken, refreshed.Expiry)
+				}
+				// Refresh failed, fall through to interactive flow
 			}
-			// Refresh failed, fall through to interactive flow
 		}
 	}
 
@@ -96,10 +98,12 @@ func handleGetToken(cmd *cobra.Command, _ []string) error {
 
 	result, err := auth.Authenticate(ctx)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to authenticate: %w", err)
 	}
 
-	_ = oidcsvc.SaveCachedToken(cacheDir, cacheKey, result)
+	if cacheDirErr == nil {
+		_ = oidcsvc.SaveCachedToken(cacheDir, cacheKey, result)
+	}
 
 	return outputExecCredential(result.IDToken, result.Expiry)
 }
@@ -107,10 +111,13 @@ func handleGetToken(cmd *cobra.Command, _ []string) error {
 func outputExecCredential(idToken string, expiry time.Time) error {
 	data, err := oidcsvc.ExecCredentialJSON(idToken, expiry)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to generate exec credential: %w", err)
 	}
 
 	_, err = fmt.Fprintln(os.Stdout, string(data))
+	if err != nil {
+		return fmt.Errorf("failed to write exec credential to stdout: %w", err)
+	}
 
-	return err
+	return nil
 }

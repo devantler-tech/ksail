@@ -18,6 +18,7 @@ import (
 	"time"
 
 	gooidc "github.com/coreos/go-oidc/v3/oidc"
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	"golang.org/x/oauth2"
 )
 
@@ -35,6 +36,9 @@ const (
 // ErrAuthenticationFailed is returned when the OIDC authentication flow fails.
 var ErrAuthenticationFailed = errors.New("OIDC authentication failed")
 
+// ErrUnsupportedPlatform is returned when the runtime OS is not supported for browser opening.
+var ErrUnsupportedPlatform = errors.New("unsupported platform")
+
 // TokenResult holds the tokens returned by the OIDC provider.
 type TokenResult struct {
 	IDToken      string    `json:"idToken"`
@@ -50,10 +54,15 @@ type Authenticator struct {
 	CAFile      string
 }
 
-// Authenticate performs the OIDC authorization code flow with PKCE.
-// It starts a local HTTP server, opens the browser to the OIDC provider,
-// and waits for the callback with the authorization code.
-func (a *Authenticator) Authenticate(ctx context.Context) (*TokenResult, error) {
+// providerResult holds the provider setup shared between Authenticate and RefreshToken.
+type providerResult struct {
+	oidcCtx      context.Context
+	provider     *gooidc.Provider
+	oauth2Config *oauth2.Config
+}
+
+// newOIDCProvider creates the HTTP client, OIDC provider, and oauth2 config.
+func (a *Authenticator) newOIDCProvider(ctx context.Context, redirectURL string) (*providerResult, error) {
 	httpClient, err := a.buildHTTPClient()
 	if err != nil {
 		return nil, err
@@ -66,45 +75,31 @@ func (a *Authenticator) Authenticate(ctx context.Context) (*TokenResult, error) 
 		return nil, fmt.Errorf("%w: failed to discover OIDC provider: %w", ErrAuthenticationFailed, err)
 	}
 
-	// Start local callback server on a random port
-	listener, err := net.Listen("tcp", "localhost:0")
-	if err != nil {
-		return nil, fmt.Errorf("%w: failed to start callback server: %w", ErrAuthenticationFailed, err)
-	}
-	defer listener.Close()
-
-	redirectURL := fmt.Sprintf("http://localhost:%d%s", listener.Addr().(*net.TCPAddr).Port, callbackPath)
-
 	scopes := append([]string{gooidc.ScopeOpenID}, a.ExtraScopes...)
 
-	oauth2Config := &oauth2.Config{
+	cfg := &oauth2.Config{
 		ClientID:    a.ClientID,
 		Endpoint:    provider.Endpoint(),
 		RedirectURL: redirectURL,
 		Scopes:      scopes,
 	}
 
-	// Generate PKCE code verifier and challenge
-	codeVerifier, codeChallenge, err := generatePKCE()
+	return &providerResult{
+		oidcCtx:      oidcCtx,
+		provider:     provider,
+		oauth2Config: cfg,
+	}, nil
+}
+
+// Authenticate performs the OIDC authorization code flow with PKCE.
+// It starts a local HTTP server, opens the browser to the OIDC provider,
+// and waits for the callback with the authorization code.
+func (a *Authenticator) Authenticate(ctx context.Context) (*TokenResult, error) {
+	listener, server, resultCh, err := a.startCallbackServer(ctx)
 	if err != nil {
 		return nil, err
 	}
-
-	state, err := generateState()
-	if err != nil {
-		return nil, err
-	}
-
-	// Channel to receive the result from the callback handler
-	resultCh := make(chan callbackResult, 1)
-
-	mux := http.NewServeMux()
-	mux.HandleFunc(callbackPath, a.handleCallback(oidcCtx, oauth2Config, provider, state, codeVerifier, resultCh))
-
-	server := &http.Server{
-		Handler:           mux,
-		ReadHeaderTimeout: shutdownTimeout,
-	}
+	defer func() { _ = listener.Close() }()
 
 	go func() {
 		if serveErr := server.Serve(listener); serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
@@ -112,20 +107,78 @@ func (a *Authenticator) Authenticate(ctx context.Context) (*TokenResult, error) 
 		}
 	}()
 
-	// Build and open the authorization URL
-	authURL := oauth2Config.AuthCodeURL(
+	return a.awaitAuthResult(ctx, server, resultCh)
+}
+
+// startCallbackServer sets up the OIDC callback listener, PKCE parameters,
+// and HTTP server, then opens the browser to the authorization URL.
+func (a *Authenticator) startCallbackServer(ctx context.Context) (net.Listener, *http.Server, chan callbackResult, error) {
+	listenCfg := net.ListenConfig{}
+	listener, err := listenCfg.Listen(ctx, "tcp", "localhost:0")
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("%w: failed to start callback server: %w", ErrAuthenticationFailed, err)
+	}
+
+	tcpAddr, ok := listener.Addr().(*net.TCPAddr)
+	if !ok {
+		_ = listener.Close()
+
+		return nil, nil, nil, fmt.Errorf("%w: unexpected listener address type", ErrAuthenticationFailed)
+	}
+
+	redirectURL := fmt.Sprintf("http://localhost:%d%s", tcpAddr.Port, callbackPath)
+
+	prov, err := a.newOIDCProvider(ctx, redirectURL)
+	if err != nil {
+		_ = listener.Close()
+
+		return nil, nil, nil, err
+	}
+
+	codeVerifier, codeChallenge, err := generatePKCE()
+	if err != nil {
+		_ = listener.Close()
+
+		return nil, nil, nil, err
+	}
+
+	state, err := generateState()
+	if err != nil {
+		_ = listener.Close()
+
+		return nil, nil, nil, err
+	}
+
+	resultCh := make(chan callbackResult, 1)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc(callbackPath, a.handleCallback(prov.oidcCtx, prov.oauth2Config, prov.provider, state, codeVerifier, resultCh))
+
+	server := &http.Server{
+		Handler:           mux,
+		ReadHeaderTimeout: shutdownTimeout,
+	}
+
+	authURL := prov.oauth2Config.AuthCodeURL(
 		state,
 		oauth2.SetAuthURLParam("code_challenge", codeChallenge),
 		oauth2.SetAuthURLParam("code_challenge_method", "S256"),
 	)
 
-	if err := openBrowser(authURL); err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to open browser automatically.\nPlease visit: %s\n", authURL)
+	err = openBrowser(authURL)
+	if err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "Failed to open browser automatically.\nPlease visit: %s\n", authURL)
 	}
 
-	// Wait for callback or context cancellation
+	return listener, server, resultCh, nil
+}
+
+// awaitAuthResult waits for the OIDC callback or context cancellation,
+// then shuts down the server and returns the result.
+func (a *Authenticator) awaitAuthResult(ctx context.Context, server *http.Server, resultCh <-chan callbackResult) (*TokenResult, error) {
 	select {
 	case result := <-resultCh:
+		//nolint:contextcheck // graceful shutdown must proceed after parent cancellation
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 		defer cancel()
 
@@ -137,6 +190,7 @@ func (a *Authenticator) Authenticate(ctx context.Context) (*TokenResult, error) 
 
 		return result.token, nil
 	case <-ctx.Done():
+		//nolint:contextcheck // graceful shutdown must proceed after parent cancellation
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 		defer cancel()
 
@@ -148,27 +202,12 @@ func (a *Authenticator) Authenticate(ctx context.Context) (*TokenResult, error) 
 
 // RefreshToken attempts to refresh an expired token using the refresh token.
 func (a *Authenticator) RefreshToken(ctx context.Context, refreshToken string) (*TokenResult, error) {
-	httpClient, err := a.buildHTTPClient()
+	prov, err := a.newOIDCProvider(ctx, "")
 	if err != nil {
 		return nil, err
 	}
 
-	oidcCtx := gooidc.ClientContext(ctx, httpClient)
-
-	provider, err := gooidc.NewProvider(oidcCtx, a.IssuerURL)
-	if err != nil {
-		return nil, fmt.Errorf("%w: failed to discover OIDC provider: %w", ErrAuthenticationFailed, err)
-	}
-
-	scopes := append([]string{gooidc.ScopeOpenID}, a.ExtraScopes...)
-
-	oauth2Config := &oauth2.Config{
-		ClientID: a.ClientID,
-		Endpoint: provider.Endpoint(),
-		Scopes:   scopes,
-	}
-
-	tokenSource := oauth2Config.TokenSource(oidcCtx, &oauth2.Token{
+	tokenSource := prov.oauth2Config.TokenSource(prov.oidcCtx, &oauth2.Token{
 		RefreshToken: refreshToken,
 	})
 
@@ -203,7 +242,7 @@ func (a *Authenticator) handleCallback(
 	expectedState, codeVerifier string,
 	resultCh chan<- callbackResult,
 ) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) { //nolint:varnamelen // w is standard http.HandlerFunc signature
 		if errMsg := r.URL.Query().Get("error"); errMsg != "" {
 			desc := r.URL.Query().Get("error_description")
 			http.Error(w, "Authentication failed: "+errMsg, http.StatusBadRequest)
@@ -227,45 +266,52 @@ func (a *Authenticator) handleCallback(
 			return
 		}
 
-		token, err := oauth2Config.Exchange(ctx, code,
-			oauth2.SetAuthURLParam("code_verifier", codeVerifier),
-		)
+		result, err := a.exchangeAndVerifyToken(ctx, oauth2Config, provider, code, codeVerifier)
 		if err != nil {
-			http.Error(w, "Token exchange failed", http.StatusInternalServerError)
-			resultCh <- callbackResult{err: fmt.Errorf("%w: token exchange failed: %w", ErrAuthenticationFailed, err)}
+			http.Error(w, "Token exchange or verification failed", http.StatusInternalServerError)
+			resultCh <- callbackResult{err: err}
 
 			return
 		}
 
-		idToken, ok := token.Extra("id_token").(string)
-		if !ok {
-			http.Error(w, "No ID token in response", http.StatusInternalServerError)
-			resultCh <- callbackResult{err: fmt.Errorf("%w: no id_token in token response", ErrAuthenticationFailed)}
+		_, _ = fmt.Fprintf(w, "Authentication successful! You can close this window.")
 
-			return
-		}
-
-		// Verify the ID token
-		verifier := provider.Verifier(&gooidc.Config{ClientID: a.ClientID})
-
-		verified, err := verifier.Verify(ctx, idToken)
-		if err != nil {
-			http.Error(w, "Token verification failed", http.StatusInternalServerError)
-			resultCh <- callbackResult{err: fmt.Errorf("%w: token verification failed: %w", ErrAuthenticationFailed, err)}
-
-			return
-		}
-
-		fmt.Fprintf(w, "Authentication successful! You can close this window.")
-
-		resultCh <- callbackResult{
-			token: &TokenResult{
-				IDToken:      idToken,
-				RefreshToken: token.RefreshToken,
-				Expiry:       verified.Expiry,
-			},
-		}
+		resultCh <- callbackResult{token: result}
 	}
+}
+
+// exchangeAndVerifyToken exchanges the authorization code for tokens
+// and verifies the returned ID token.
+func (a *Authenticator) exchangeAndVerifyToken(
+	ctx context.Context,
+	oauth2Config *oauth2.Config,
+	provider *gooidc.Provider,
+	code, codeVerifier string,
+) (*TokenResult, error) {
+	token, err := oauth2Config.Exchange(ctx, code,
+		oauth2.SetAuthURLParam("code_verifier", codeVerifier),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("%w: token exchange failed: %w", ErrAuthenticationFailed, err)
+	}
+
+	idToken, ok := token.Extra("id_token").(string)
+	if !ok {
+		return nil, fmt.Errorf("%w: no id_token in token response", ErrAuthenticationFailed)
+	}
+
+	verifier := provider.Verifier(&gooidc.Config{ClientID: a.ClientID})
+
+	verified, err := verifier.Verify(ctx, idToken)
+	if err != nil {
+		return nil, fmt.Errorf("%w: token verification failed: %w", ErrAuthenticationFailed, err)
+	}
+
+	return &TokenResult{
+		IDToken:      idToken,
+		RefreshToken: token.RefreshToken,
+		Expiry:       verified.Expiry,
+	}, nil
 }
 
 func (a *Authenticator) buildHTTPClient() (*http.Client, error) {
@@ -273,7 +319,12 @@ func (a *Authenticator) buildHTTPClient() (*http.Client, error) {
 		return http.DefaultClient, nil
 	}
 
-	caCert, err := os.ReadFile(a.CAFile)
+	canonicalPath, err := fsutil.EvalCanonicalPath(a.CAFile)
+	if err != nil {
+		return nil, fmt.Errorf("%w: failed to resolve CA file path: %w", ErrAuthenticationFailed, err)
+	}
+
+	caCert, err := os.ReadFile(canonicalPath) //nolint:gosec // G304: path canonicalized above
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to read CA file: %w", ErrAuthenticationFailed, err)
 	}
@@ -293,41 +344,51 @@ func (a *Authenticator) buildHTTPClient() (*http.Client, error) {
 	}, nil
 }
 
-func generatePKCE() (verifier, challenge string, err error) {
-	b := make([]byte, codeVerifierLength)
-	if _, err := rand.Read(b); err != nil {
+func generatePKCE() (string, string, error) {
+	randomBytes := make([]byte, codeVerifierLength)
+
+	_, err := rand.Read(randomBytes)
+	if err != nil {
 		return "", "", fmt.Errorf("%w: failed to generate PKCE verifier: %w", ErrAuthenticationFailed, err)
 	}
 
-	verifier = base64.RawURLEncoding.EncodeToString(b)
-	h := sha256.Sum256([]byte(verifier))
-	challenge = base64.RawURLEncoding.EncodeToString(h[:])
+	verifier := base64.RawURLEncoding.EncodeToString(randomBytes)
+	digest := sha256.Sum256([]byte(verifier))
+	challenge := base64.RawURLEncoding.EncodeToString(digest[:])
 
 	return verifier, challenge, nil
 }
 
 func generateState() (string, error) {
-	b := make([]byte, stateLength)
-	if _, err := rand.Read(b); err != nil {
+	randomBytes := make([]byte, stateLength)
+
+	_, err := rand.Read(randomBytes)
+	if err != nil {
 		return "", fmt.Errorf("%w: failed to generate state: %w", ErrAuthenticationFailed, err)
 	}
 
-	return base64.RawURLEncoding.EncodeToString(b), nil
+	return base64.RawURLEncoding.EncodeToString(randomBytes), nil
 }
 
-func openBrowser(url string) error {
-	var cmd *exec.Cmd
-
+func openBrowser(targetURL string) error {
 	switch runtime.GOOS {
 	case "darwin":
-		cmd = exec.Command("open", url)
-	case "linux":
-		cmd = exec.Command("xdg-open", url)
-	default:
-		return fmt.Errorf("unsupported platform: %s", runtime.GOOS)
-	}
+		cmd := exec.Command("open", targetURL) //nolint:gosec // G204: user-visible URL only
+		if err := cmd.Start(); err != nil {
+			return fmt.Errorf("failed to open browser: %w", err)
+		}
 
-	return cmd.Start()
+		return nil
+	case "linux":
+		cmd := exec.Command("xdg-open", targetURL) //nolint:gosec // G204: user-visible URL only
+		if err := cmd.Start(); err != nil {
+			return fmt.Errorf("failed to open browser: %w", err)
+		}
+
+		return nil
+	default:
+		return fmt.Errorf("%w: %s", ErrUnsupportedPlatform, runtime.GOOS)
+	}
 }
 
 // ExecCredentialJSON generates the ExecCredential JSON output for kubectl.
