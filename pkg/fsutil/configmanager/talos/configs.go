@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/netip"
 	"slices"
+	"strings"
 	"time"
 
 	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
@@ -49,6 +50,12 @@ type Configs struct {
 	patches []Patch
 	// versionContract is stored for regeneration to preserve version contract across WithName/WithEndpoint calls.
 	versionContract *talosconfig.VersionContract
+	// extensions is the list of Talos Image Factory official extension names.
+	// When non-empty, machine.install.image is patched to use a factory installer
+	// image and a schematic ID is computed.
+	extensions []string
+	// schematicID is the computed schematic ID from extensions.
+	schematicID string
 }
 
 // NewDefaultConfigs creates a new Talos Configs with default settings.
@@ -175,13 +182,15 @@ func (c *Configs) WithName(name string) (*Configs, error) {
 	}
 
 	// Regenerate the bundle with the new cluster name
-	return newConfigsWithEndpoint(
+	return newConfigsWithEndpointAndSecrets(
 		name,
 		kubernetesVersion,
 		networkCIDR,
 		c.endpoint,
 		c.patches,
+		nil,
 		c.versionContract,
+		c.extensions,
 	)
 }
 
@@ -230,6 +239,7 @@ func (c *Configs) WithEndpoint(endpointIP string) (*Configs, error) {
 		c.patches,
 		existingSecrets,
 		c.versionContract,
+		c.extensions,
 	)
 }
 
@@ -252,6 +262,24 @@ func (c *Configs) Patches() []Patch {
 
 	result := make([]Patch, len(c.patches))
 	copy(result, c.patches)
+
+	return result
+}
+
+// SchematicID returns the computed Talos Image Factory schematic ID.
+// Returns an empty string if no extensions are configured.
+func (c *Configs) SchematicID() string {
+	return c.schematicID
+}
+
+// Extensions returns a copy of the configured extensions list.
+func (c *Configs) Extensions() []string {
+	if c.extensions == nil {
+		return nil
+	}
+
+	result := make([]string, len(c.extensions))
+	copy(result, c.extensions)
 
 	return result
 }
@@ -352,6 +380,25 @@ func newConfigs(
 	patches []Patch,
 	versionContract *talosconfig.VersionContract,
 ) (*Configs, error) {
+	return newConfigsWithExtensions(
+		clusterName,
+		kubernetesVersion,
+		networkCIDR,
+		patches,
+		versionContract,
+		nil,
+	)
+}
+
+// newConfigsWithExtensions creates Configs from patches and optional extensions.
+func newConfigsWithExtensions(
+	clusterName string,
+	kubernetesVersion string,
+	networkCIDR string,
+	patches []Patch,
+	versionContract *talosconfig.VersionContract,
+	extensions []string,
+) (*Configs, error) {
 	return newConfigsWithEndpointAndSecrets(
 		clusterName,
 		kubernetesVersion,
@@ -360,6 +407,7 @@ func newConfigs(
 		patches,
 		nil,
 		versionContract,
+		extensions,
 	)
 }
 
@@ -383,6 +431,7 @@ func newConfigsWithEndpoint(
 		patches,
 		nil,
 		versionContract,
+		nil,
 	)
 }
 
@@ -480,6 +529,7 @@ func newConfigsWithEndpointAndSecrets(
 	patches []Patch,
 	existingSecrets *secrets.Bundle,
 	versionContract *talosconfig.VersionContract,
+	extensions []string,
 ) (*Configs, error) {
 	// Normalise nil to the effective default so that the stored contract
 	// and the one used for generation are always identical. This prevents
@@ -528,6 +578,28 @@ func newConfigsWithEndpointAndSecrets(
 		return nil, fmt.Errorf("failed to create config bundle: %w", err)
 	}
 
+	// Compute schematic ID and patch machine.install.image if extensions are configured
+	var schematicID string
+
+	if len(extensions) > 0 {
+		schematic := NewSchematic(extensions)
+
+		schematicID, err = schematic.ID()
+		if err != nil {
+			return nil, fmt.Errorf("failed to compute schematic ID: %w", err)
+		}
+
+		// Determine the Talos version for the installer image reference
+		talosVersion := resolveInstallerVersion(kubernetesVersion, configBundle)
+
+		installerImage := SchematicInstallerImage(schematicID, talosVersion)
+
+		err = applyInstallerImage(configBundle, installerImage)
+		if err != nil {
+			return nil, fmt.Errorf("failed to apply installer image: %w", err)
+		}
+	}
+
 	return &Configs{
 		Name:              clusterName,
 		bundle:            configBundle,
@@ -536,6 +608,8 @@ func newConfigsWithEndpointAndSecrets(
 		endpoint:          endpointIP,
 		patches:           patches,
 		versionContract:   versionContract,
+		extensions:        extensions,
+		schematicID:       schematicID,
 	}, nil
 }
 
@@ -660,4 +734,64 @@ func addRegistryAuth(cfg *v1alpha1.Config, mirror MirrorRegistry) {
 		RegistryUsername: mirror.Username,
 		RegistryPassword: mirror.Password,
 	}
+}
+
+// resolveInstallerVersion determines the Talos version tag for the installer image.
+// It extracts the version from the existing machine.install.image if present,
+// otherwise falls back to the DefaultTalosImage tag.
+func resolveInstallerVersion(_ string, configBundle *bundle.Bundle) string {
+	if configBundle != nil {
+		cp := configBundle.ControlPlane()
+		if cp != nil && cp.Machine() != nil && cp.Machine().Install() != nil {
+			if image := cp.Machine().Install().Image(); image != "" {
+				if idx := strings.LastIndex(image, ":"); idx >= 0 {
+					return image[idx+1:]
+				}
+			}
+		}
+	}
+
+	// Fall back to extracting version from default Talos image
+	if idx := strings.LastIndex(DefaultTalosImage, ":"); idx >= 0 {
+		return DefaultTalosImage[idx+1:]
+	}
+
+	return "latest"
+}
+
+// applyInstallerImage patches machine.install.image on both control-plane and worker configs.
+func applyInstallerImage(configBundle *bundle.Bundle, installerImage string) error {
+	patcher := func(cfg *v1alpha1.Config) error {
+		if cfg.MachineConfig == nil {
+			return nil
+		}
+
+		if cfg.MachineConfig.MachineInstall == nil {
+			cfg.MachineConfig.MachineInstall = &v1alpha1.InstallConfig{}
+		}
+
+		cfg.MachineConfig.MachineInstall.InstallImage = installerImage
+
+		return nil
+	}
+
+	if configBundle.ControlPlaneCfg != nil {
+		patched, err := configBundle.ControlPlaneCfg.PatchV1Alpha1(patcher)
+		if err != nil {
+			return fmt.Errorf("failed to patch control plane install image: %w", err)
+		}
+
+		configBundle.ControlPlaneCfg = patched
+	}
+
+	if configBundle.WorkerCfg != nil {
+		patched, err := configBundle.WorkerCfg.PatchV1Alpha1(patcher)
+		if err != nil {
+			return fmt.Errorf("failed to patch worker install image: %w", err)
+		}
+
+		configBundle.WorkerCfg = patched
+	}
+
+	return nil
 }

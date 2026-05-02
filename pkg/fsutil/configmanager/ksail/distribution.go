@@ -127,6 +127,12 @@ func (m *ConfigManager) loadTalosConfig() (*talosconfigmanager.Configs, error) {
 	// (e.g., permissions), we inject the patches as a fail-safe.
 	m.addKubeletCertRotationPatches(talosManager, patchesDir)
 
+	// Wire extensions from ksail.yaml so that machine.install.image is patched
+	// to use a Talos Image Factory installer containing the requested extensions.
+	if len(m.Config.Spec.Cluster.Talos.Extensions) > 0 {
+		talosManager.WithExtensions(m.Config.Spec.Cluster.Talos.Extensions)
+	}
+
 	config, err := talosManager.Load(configmanagerinterface.LoadOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to load Talos config: %w", err)
