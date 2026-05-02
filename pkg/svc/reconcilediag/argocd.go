@@ -13,8 +13,11 @@ import (
 
 const argoCDNamespace = "argocd"
 
-var gvrApplications = schema.GroupVersionResource{
-	Group: "argoproj.io", Version: "v1alpha1", Resource: "applications",
+// argoCDGVRApplications returns the GVR for ArgoCD Applications.
+func argoCDGVRApplications() schema.GroupVersionResource {
+	return schema.GroupVersionResource{
+		Group: "argoproj.io", Version: "v1alpha1", Resource: "applications",
+	}
 }
 
 // ArgoCDCollector gathers diagnostics for ArgoCD reconciliation failures.
@@ -50,7 +53,7 @@ func (c *ArgoCDCollector) collectFailingApplications(ctx context.Context) (secti
 		}
 	}()
 
-	client := c.Dynamic.Resource(gvrApplications).Namespace(argoCDNamespace)
+	client := c.Dynamic.Resource(argoCDGVRApplications()).Namespace(argoCDNamespace)
 
 	list, err := client.List(ctx, metav1.ListOptions{})
 	if err != nil {

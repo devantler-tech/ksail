@@ -98,7 +98,7 @@ const maxDiagnosticEvents = 20
 
 // Write writes the diagnostic report to the given writer using the
 // notify package for consistent styling.
-func (r *Report) Write(w io.Writer) {
+func (r *Report) Write(writer io.Writer) {
 	if r.IsEmpty() {
 		return
 	}
@@ -107,59 +107,80 @@ func (r *Report) Write(w io.Writer) {
 		Type:    notify.TitleType,
 		Emoji:   "🩺",
 		Content: "Reconciliation Diagnostics",
-		Writer:  w,
+		Writer:  writer,
 	})
 
+	r.writeSections(writer)
+	r.writeFailingPods(writer)
+	r.writeEvents(writer)
+}
+
+// writeSections writes the failing resource sections.
+func (r *Report) writeSections(writer io.Writer) {
 	for _, section := range r.Sections {
 		if len(section.Resources) == 0 {
 			continue
 		}
 
-		notify.Errorf(w, "%s:", section.Heading)
+		notify.Errorf(writer, "%s:", section.Heading)
 
 		for _, res := range section.Resources {
-			fmt.Fprintf(w, "    %s\n", res.String())
-		}
-	}
-
-	if r.FailingPods != "" {
-		notify.Warningf(w, "failing pods (%s):", r.EventNamespace)
-
-		for _, line := range strings.Split(strings.TrimSpace(r.FailingPods), "\n") {
-			line = strings.TrimSpace(line)
-			if line != "" {
-				fmt.Fprintf(w, "    %s\n", line)
-			}
-		}
-	}
-
-	if len(r.Events) > 0 {
-		label := fmt.Sprintf("warning events (%s, last 5 min)", r.EventNamespace)
-		notify.Warningf(w, "%s:", label)
-
-		limit := len(r.Events)
-		if limit > maxDiagnosticEvents {
-			limit = maxDiagnosticEvents
-		}
-
-		for _, evt := range r.Events[:limit] {
-			fmt.Fprintf(w, "    %s\n", evt.String())
-		}
-
-		if len(r.Events) > maxDiagnosticEvents {
-			fmt.Fprintf(w, "    ... and %d more events\n", len(r.Events)-maxDiagnosticEvents)
+			_, _ = fmt.Fprintf(writer, "    %s\n", res.String())
 		}
 	}
 }
+
+// writeFailingPods writes the failing pods section.
+func (r *Report) writeFailingPods(writer io.Writer) {
+	if r.FailingPods == "" {
+		return
+	}
+
+	notify.Warningf(writer, "failing pods (%s):", r.EventNamespace)
+
+	for _, line := range strings.Split(strings.TrimSpace(r.FailingPods), "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			_, _ = fmt.Fprintf(writer, "    %s\n", line)
+		}
+	}
+}
+
+// writeEvents writes the warning events section.
+func (r *Report) writeEvents(writer io.Writer) {
+	if len(r.Events) == 0 {
+		return
+	}
+
+	label := fmt.Sprintf("warning events (%s, last 5 min)", r.EventNamespace)
+	notify.Warningf(writer, "%s:", label)
+
+	limit := len(r.Events)
+	if limit > maxDiagnosticEvents {
+		limit = maxDiagnosticEvents
+	}
+
+	for _, evt := range r.Events[:limit] {
+		_, _ = fmt.Fprintf(writer, "    %s\n", evt.String())
+	}
+
+	if len(r.Events) > maxDiagnosticEvents {
+		_, _ = fmt.Fprintf(writer, "    ... and %d more events\n", len(r.Events)-maxDiagnosticEvents)
+	}
+}
+
+// minutesPerHour is used for duration formatting calculations.
+const minutesPerHour = 60
 
 // formatDuration returns a human-friendly short duration string.
-func formatDuration(d time.Duration) string {
+func formatDuration(duration time.Duration) string {
 	switch {
-	case d < time.Minute:
-		return fmt.Sprintf("%ds", int(d.Seconds()))
-	case d < time.Hour:
-		return fmt.Sprintf("%dm", int(d.Minutes()))
+	case duration < time.Minute:
+		return fmt.Sprintf("%ds", int(duration.Seconds()))
+	case duration < time.Hour:
+		return fmt.Sprintf("%dm", int(duration.Minutes()))
 	default:
-		return fmt.Sprintf("%dh%dm", int(d.Hours()), int(d.Minutes())%60)
+		return fmt.Sprintf("%dh%dm", int(duration.Hours()), int(duration.Minutes())%minutesPerHour)
 	}
 }
+

@@ -21,18 +21,26 @@ const (
 	eventLookback = 5 * time.Minute
 )
 
-// Flux GVRs.
-var (
-	gvrKustomizations = schema.GroupVersionResource{
+// fluxGVRKustomizations returns the GVR for Flux Kustomizations.
+func fluxGVRKustomizations() schema.GroupVersionResource {
+	return schema.GroupVersionResource{
 		Group: "kustomize.toolkit.fluxcd.io", Version: "v1", Resource: "kustomizations",
 	}
-	gvrHelmReleases = schema.GroupVersionResource{
+}
+
+// fluxGVRHelmReleases returns the GVR for Flux HelmReleases.
+func fluxGVRHelmReleases() schema.GroupVersionResource {
+	return schema.GroupVersionResource{
 		Group: "helm.toolkit.fluxcd.io", Version: "v2", Resource: "helmreleases",
 	}
-	gvrOCIRepositories = schema.GroupVersionResource{
+}
+
+// fluxGVROCIRepositories returns the GVR for Flux OCIRepositories.
+func fluxGVROCIRepositories() schema.GroupVersionResource {
+	return schema.GroupVersionResource{
 		Group: "source.toolkit.fluxcd.io", Version: "v1", Resource: "ocirepositories",
 	}
-)
+}
 
 // FluxCollector gathers diagnostics for Flux reconciliation failures.
 type FluxCollector struct {
@@ -49,9 +57,9 @@ func (c *FluxCollector) Collect(ctx context.Context) *Report {
 	}
 
 	report.Sections = append(report.Sections,
-		c.collectFailingCRs(ctx, "Failing Kustomizations", gvrKustomizations, fluxNamespace),
-		c.collectFailingCRs(ctx, "Failing HelmReleases", gvrHelmReleases, ""),
-		c.collectFailingCRs(ctx, "Failing OCIRepositories", gvrOCIRepositories, fluxNamespace),
+		c.collectFailingCRs(ctx, "Failing Kustomizations", fluxGVRKustomizations(), fluxNamespace),
+		c.collectFailingCRs(ctx, "Failing HelmReleases", fluxGVRHelmReleases(), ""),
+		c.collectFailingCRs(ctx, "Failing OCIRepositories", fluxGVROCIRepositories(), fluxNamespace),
 	)
 
 	report.FailingPods = c.collectFailingPods(ctx)
@@ -69,30 +77,16 @@ func (c *FluxCollector) collectFailingCRs(
 	heading string,
 	gvr schema.GroupVersionResource,
 	namespace string,
-) (section ResourceSection) {
-	section = ResourceSection{Heading: heading}
+) ResourceSection {
+	section := ResourceSection{Heading: heading}
 
-	defer func() {
-		if r := recover(); r != nil {
-			// CRDs not installed or client misconfigured — silently skip.
-			section.Resources = nil
-		}
-	}()
-
-	var client dynamic.ResourceInterface
-	if namespace != "" {
-		client = c.Dynamic.Resource(gvr).Namespace(namespace)
-	} else {
-		client = c.Dynamic.Resource(gvr)
-	}
-
-	list, err := client.List(ctx, metav1.ListOptions{})
-	if err != nil {
+	recovered := safeCollectCRs(c.Dynamic, ctx, gvr, namespace)
+	if recovered == nil {
 		return section
 	}
 
-	for i := range list.Items {
-		item := &list.Items[i]
+	for i := range recovered {
+		item := &recovered[i]
 
 		ready, reason, message := extractReadyCondition(item)
 		if ready {
@@ -104,21 +98,49 @@ func (c *FluxCollector) collectFailingCRs(
 			continue
 		}
 
-		ns := item.GetNamespace()
+		itemNamespace := item.GetNamespace()
 		// Omit namespace if it matches the default for this resource type.
-		if ns == namespace {
-			ns = ""
+		if itemNamespace == namespace {
+			itemNamespace = ""
 		}
 
 		section.Resources = append(section.Resources, FailingResource{
 			Name:      item.GetName(),
-			Namespace: ns,
+			Namespace: itemNamespace,
 			Reason:    reason,
 			Message:   message,
 		})
 	}
 
 	return section
+}
+
+// safeCollectCRs lists CRs, recovering from panics (e.g., unregistered CRDs in fake clients).
+func safeCollectCRs(
+	dynClient dynamic.Interface,
+	ctx context.Context,
+	gvr schema.GroupVersionResource,
+	namespace string,
+) (items []unstructured.Unstructured) {
+	defer func() {
+		if r := recover(); r != nil {
+			items = nil
+		}
+	}()
+
+	var client dynamic.ResourceInterface
+	if namespace != "" {
+		client = dynClient.Resource(gvr).Namespace(namespace)
+	} else {
+		client = dynClient.Resource(gvr)
+	}
+
+	list, err := client.List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil
+	}
+
+	return list.Items
 }
 
 // extractReadyCondition finds the Ready condition and returns (ready, reason, message).
@@ -167,7 +189,7 @@ func collectNamespaceWarningEvents(
 	namespace string,
 ) []WarningEvent {
 	events, err := clientset.CoreV1().Events(namespace).List(ctx, metav1.ListOptions{
-		FieldSelector: "type=" + string(corev1.EventTypeWarning),
+		FieldSelector: "type=" + corev1.EventTypeWarning,
 	})
 	if err != nil {
 		return nil
@@ -214,3 +236,4 @@ func eventTimestamp(evt *corev1.Event) time.Time {
 
 	return evt.EventTime.Time
 }
+

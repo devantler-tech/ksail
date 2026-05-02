@@ -2,7 +2,6 @@ package reconcilediag
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"time"
 
@@ -20,7 +19,7 @@ const diagnosticTimeout = 15 * time.Second
 // GitOps reconciliation. It is best-effort: if client creation or collection
 // fails, the error is silently swallowed to avoid masking the original
 // reconciliation error.
-func Diagnose(ctx context.Context, w io.Writer, kubeconfigPath string, engine v1alpha1.GitOpsEngine) {
+func Diagnose(ctx context.Context, writer io.Writer, kubeconfigPath string, engine v1alpha1.GitOpsEngine) {
 	diagCtx, cancel := context.WithTimeout(ctx, diagnosticTimeout)
 	defer cancel()
 
@@ -48,6 +47,8 @@ func Diagnose(ctx context.Context, w io.Writer, kubeconfigPath string, engine v1
 	case v1alpha1.GitOpsEngineArgoCD:
 		collector := &ArgoCDCollector{Dynamic: dynClient, Clientset: clientset}
 		report = collector.Collect(diagCtx)
+	case v1alpha1.GitOpsEngineNone:
+		return
 	default:
 		return
 	}
@@ -56,6 +57,5 @@ func Diagnose(ctx context.Context, w io.Writer, kubeconfigPath string, engine v1
 		return
 	}
 
-	fmt.Fprintln(w)
-	report.Write(w)
+	report.Write(writer)
 }
