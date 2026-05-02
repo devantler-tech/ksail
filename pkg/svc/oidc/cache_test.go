@@ -20,13 +20,24 @@ func TestCacheKeyFormat(t *testing.T) {
 		clientID  string
 		scopes    []string
 	}{
-		{name: "basic", issuerURL: "https://dex.example.com", clientID: "kubectl", scopes: []string{"email"}},
-		{name: "empty scopes", issuerURL: "https://dex.example.com", clientID: "kubectl", scopes: nil},
+		{
+			name:      "basic",
+			issuerURL: "https://dex.example.com",
+			clientID:  "kubectl",
+			scopes:    []string{"email"},
+		},
+		{
+			name:      "empty scopes",
+			issuerURL: "https://dex.example.com",
+			clientID:  "kubectl",
+			scopes:    nil,
+		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
+
 			key := oidc.CacheKey(tc.issuerURL, tc.clientID, tc.scopes)
 			assert.NotEmpty(t, key)
 			assert.Len(t, key, 64) // SHA-256 hex
@@ -41,18 +52,21 @@ func TestCacheKeyDeterminism(t *testing.T) {
 
 	t.Run("scope order invariance", func(t *testing.T) {
 		t.Parallel()
+
 		reversed := oidc.CacheKey("https://dex.example.com", "kubectl", []string{"groups", "email"})
 		assert.Equal(t, baseKey, reversed)
 	})
 
 	t.Run("different issuer differs", func(t *testing.T) {
 		t.Parallel()
+
 		other := oidc.CacheKey("https://other.example.com", "kubectl", []string{"email", "groups"})
 		assert.NotEqual(t, baseKey, other)
 	})
 
 	t.Run("different clientID differs", func(t *testing.T) {
 		t.Parallel()
+
 		other := oidc.CacheKey("https://dex.example.com", "other", []string{"email", "groups"})
 		assert.NotEqual(t, baseKey, other)
 	})

@@ -25,7 +25,8 @@ func AtomicWriteFile(path string, data []byte, perm os.FileMode) error {
 		_ = os.Remove(tmpPath)
 	}()
 
-	if chmodErr := os.Chmod(tmpPath, perm); chmodErr != nil {
+	chmodErr := os.Chmod(tmpPath, perm)
+	if chmodErr != nil {
 		_ = tmp.Close()
 
 		return fmt.Errorf("set permissions: %w", chmodErr)
