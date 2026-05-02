@@ -1955,7 +1955,15 @@ func runDeleteAction(
 	}
 
 	// Perform post-deletion cleanup
-	performPostDeletionCleanup(cmd, tmr, resolved, flags, preDiscovered, isKindCluster, detectedInfo)
+	performPostDeletionCleanup(
+		cmd,
+		tmr,
+		resolved,
+		flags,
+		preDiscovered,
+		isKindCluster,
+		detectedInfo,
+	)
 
 	return nil
 }
@@ -2058,6 +2066,7 @@ func performPostDeletionCleanup(
 	// Derive the display name using the same ExtractClusterNameFromContext logic
 	// as the create path (configureOIDCKubeconfig) to ensure consistent naming.
 	oidcDisplayName := resolved.ClusterName
+
 	if detectedInfo != nil && detectedInfo.Context != "" {
 		if name := lifecycle.ExtractClusterNameFromContext(
 			detectedInfo.Context,
