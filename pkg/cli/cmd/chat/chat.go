@@ -2,6 +2,7 @@ package chat
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -53,6 +54,8 @@ const (
 	sessionIdleTimeoutSeconds = 1800 // 30 minutes
 	// authRetryMaxWait is the maximum wait duration for auth retry backoff.
 	authRetryMaxWait = 4 * time.Second
+	// diagnoseTimeout is the timeout for the post-failure diagnostic subprocess.
+	diagnoseTimeout = 5 * time.Second
 )
 
 // Sentinel errors for the chat command.
@@ -249,14 +252,22 @@ func startCopilotClient(ctx context.Context) (*copilot.Client, error) {
 
 	err := client.Start(ctx)
 	if err != nil {
-		return nil, fmt.Errorf(
-			"failed to start Copilot client: %w\n\n"+
-				"To fix:\n"+
-				"  - Set KSAIL_COPILOT_TOKEN or COPILOT_TOKEN for token-based authentication\n"+
-				"  - Install the Copilot CLI: npm install -g @github/copilot\n"+
-				"  - Verify the CLI works: copilot --version",
-			err,
-		)
+		msg := "failed to start Copilot client: %w\n\n"
+
+		if cliPath != "" {
+			diagnostic := diagnoseCLIStartupFailure(ctx, cliPath, opts.Env)
+			if diagnostic != "" {
+				msg += "CLI diagnostic output:\n  " +
+					strings.ReplaceAll(diagnostic, "\n", "\n  ") + "\n\n"
+			}
+		}
+
+		msg += "To fix:\n" +
+			"  - Set KSAIL_COPILOT_TOKEN or COPILOT_TOKEN for token-based authentication\n" +
+			"  - Install the Copilot CLI: npm install -g @github/copilot\n" +
+			"  - Verify the CLI works: copilot --version"
+
+		return nil, fmt.Errorf(msg, err)
 	}
 
 	return client, nil
@@ -287,6 +298,27 @@ func verifyCopilotCLI(ctx context.Context, cliPath string, env []string) error {
 	}
 
 	return nil
+}
+
+// diagnoseCLIStartupFailure re-runs the copilot CLI in headless mode with
+// stderr captured, returning any diagnostic output. The Copilot SDK discards
+// the subprocess's stderr, so this post-failure re-run is the only way to
+// surface why the CLI crashed during startup.
+func diagnoseCLIStartupFailure(ctx context.Context, cliPath string, env []string) string {
+	diagCtx, cancel := context.WithTimeout(ctx, diagnoseTimeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(diagCtx, cliPath,
+		"--headless", "--no-auto-update", "--log-level", "debug", "--stdio",
+	)
+	cmd.Env = env
+
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	_ = cmd.Run()
+
+	return strings.TrimSpace(stderr.String())
 }
 
 // filterEnvVars returns a copy of env with the specified variable names removed.

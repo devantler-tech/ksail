@@ -32,6 +32,14 @@ func GetFilterEnvVars() func([]string, []string) []string {
 	return filterEnvVars
 }
 
+// DiagnoseTimeout exports the diagnoseTimeout constant for testing.
+const DiagnoseTimeout = diagnoseTimeout
+
+// GetDiagnoseCLIStartupFailure returns the diagnoseCLIStartupFailure function for testing.
+func GetDiagnoseCLIStartupFailure() func(context.Context, string, []string) string {
+	return diagnoseCLIStartupFailure
+}
+
 // AuthMaxAttempts exports the authMaxAttempts constant for testing.
 const AuthMaxAttempts = authMaxAttempts
 
