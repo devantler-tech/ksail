@@ -18,7 +18,16 @@ type CreateServerOpts struct {
 }
 
 // buildServerCreateOpts builds the hcloud.ServerCreateOpts from CreateServerOpts.
-func (p *Provider) buildServerCreateOpts(opts CreateServerOpts) hcloud.ServerCreateOpts {
+// Exactly one of ImageID or ISOID must be set; both or neither is an error.
+func (p *Provider) buildServerCreateOpts(opts CreateServerOpts) (hcloud.ServerCreateOpts, error) {
+	if opts.ImageID > 0 && opts.ISOID > 0 {
+		return hcloud.ServerCreateOpts{}, ErrImageAndISOBothSet
+	}
+
+	if opts.ImageID == 0 && opts.ISOID == 0 {
+		return hcloud.ServerCreateOpts{}, ErrImageOrISORequired
+	}
+
 	createOpts := hcloud.ServerCreateOpts{
 		Name:   opts.Name,
 		Labels: opts.Labels,
@@ -41,12 +50,19 @@ func (p *Provider) buildServerCreateOpts(opts CreateServerOpts) hcloud.ServerCre
 			Name: "debian-13",
 		}
 		createOpts.StartAfterCreate = new(false)
-	} else if opts.ImageID > 0 {
+	} else {
 		createOpts.Image = &hcloud.Image{
 			ID: opts.ImageID,
 		}
 	}
 
+	applyOptionalServerFields(opts, &createOpts)
+
+	return createOpts, nil
+}
+
+// applyOptionalServerFields copies optional CreateServerOpts fields onto createOpts.
+func applyOptionalServerFields(opts CreateServerOpts, createOpts *hcloud.ServerCreateOpts) {
 	if opts.UserData != "" {
 		createOpts.UserData = opts.UserData
 	}
@@ -80,6 +96,4 @@ func (p *Provider) buildServerCreateOpts(opts CreateServerOpts) hcloud.ServerCre
 
 		createOpts.Firewalls = firewalls
 	}
-
-	return createOpts
 }

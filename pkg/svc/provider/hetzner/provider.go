@@ -402,7 +402,10 @@ func (p *Provider) CreateServer(
 		return nil, provider.ErrProviderUnavailable
 	}
 
-	createOpts := p.buildServerCreateOpts(opts)
+	createOpts, err := p.buildServerCreateOpts(opts)
+	if err != nil {
+		return nil, fmt.Errorf("invalid server options for %s: %w", opts.Name, err)
+	}
 
 	result, _, err := p.client.Server.Create(ctx, createOpts)
 	if err != nil {

@@ -42,25 +42,15 @@ func TestBuildServerCreateOpts(t *testing.T) {
 			wantImageName:        "",
 			wantImageID:          67890,
 		},
-		{
-			name: "NoImageNoISO_ServerStartedAutomatically",
-			opts: hetzner.CreateServerOpts{
-				Name:       "test-node",
-				ServerType: "cx22",
-				Location:   "fsn1",
-			},
-			wantStartAfterCreate: true,
-			wantImageName:        "",
-			wantImageID:          0,
-		},
 	}
 
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			result := hetzner.BuildServerCreateOptsForTest(testCase.opts)
+			result, err := hetzner.BuildServerCreateOptsForTest(testCase.opts)
 
+			require.NoError(t, err)
 			require.NotNil(t, result.StartAfterCreate, "StartAfterCreate must be set")
 			assert.Equal(t, testCase.wantStartAfterCreate, *result.StartAfterCreate)
 
@@ -73,27 +63,57 @@ func TestBuildServerCreateOpts(t *testing.T) {
 				require.NotNil(t, result.Image, "Image must be set")
 				assert.Equal(t, testCase.wantImageID, result.Image.ID)
 			}
-
-			if testCase.wantImageName == "" && testCase.wantImageID == 0 {
-				assert.Nil(t, result.Image, "Image should be nil when neither ISO nor snapshot is used")
-			}
 		})
 	}
 }
 
-func TestBuildServerCreateOpts_OptionalFields(t *testing.T) {
+func TestBuildServerCreateOpts_InvalidArgs(t *testing.T) {
+	t.Parallel()
+
+	t.Run("BothImageAndISO_ReturnsError", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := hetzner.BuildServerCreateOptsForTest(hetzner.CreateServerOpts{
+			Name:       "test-node",
+			ServerType: "cx22",
+			Location:   "fsn1",
+			ImageID:    67890,
+			ISOID:      12345,
+		})
+
+		require.Error(t, err)
+		assert.ErrorIs(t, err, hetzner.ErrImageAndISOBothSet)
+	})
+
+	t.Run("NoImageNoISO_ReturnsError", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := hetzner.BuildServerCreateOptsForTest(hetzner.CreateServerOpts{
+			Name:       "test-node",
+			ServerType: "cx22",
+			Location:   "fsn1",
+		})
+
+		require.Error(t, err)
+		assert.ErrorIs(t, err, hetzner.ErrImageOrISORequired)
+	})
+}
+
+func TestBuildServerCreateOpts_NetworkFields(t *testing.T) {
 	t.Parallel()
 
 	t.Run("WithNetwork", func(t *testing.T) {
 		t.Parallel()
 
-		result := hetzner.BuildServerCreateOptsForTest(hetzner.CreateServerOpts{
+		result, err := hetzner.BuildServerCreateOptsForTest(hetzner.CreateServerOpts{
 			Name:       "test-node",
 			ServerType: "cx22",
 			Location:   "fsn1",
+			ImageID:    1,
 			NetworkID:  42,
 		})
 
+		require.NoError(t, err)
 		require.Len(t, result.Networks, 1)
 		assert.Equal(t, int64(42), result.Networks[0].ID)
 	})
@@ -101,13 +121,15 @@ func TestBuildServerCreateOpts_OptionalFields(t *testing.T) {
 	t.Run("WithPlacementGroup", func(t *testing.T) {
 		t.Parallel()
 
-		result := hetzner.BuildServerCreateOptsForTest(hetzner.CreateServerOpts{
+		result, err := hetzner.BuildServerCreateOptsForTest(hetzner.CreateServerOpts{
 			Name:             "test-node",
 			ServerType:       "cx22",
 			Location:         "fsn1",
+			ImageID:          1,
 			PlacementGroupID: 99,
 		})
 
+		require.NoError(t, err)
 		require.NotNil(t, result.PlacementGroup)
 		assert.Equal(t, int64(99), result.PlacementGroup.ID)
 	})
@@ -115,27 +137,35 @@ func TestBuildServerCreateOpts_OptionalFields(t *testing.T) {
 	t.Run("WithSSHKey", func(t *testing.T) {
 		t.Parallel()
 
-		result := hetzner.BuildServerCreateOptsForTest(hetzner.CreateServerOpts{
+		result, err := hetzner.BuildServerCreateOptsForTest(hetzner.CreateServerOpts{
 			Name:       "test-node",
 			ServerType: "cx22",
 			Location:   "fsn1",
+			ImageID:    1,
 			SSHKeyID:   7,
 		})
 
+		require.NoError(t, err)
 		require.Len(t, result.SSHKeys, 1)
 		assert.Equal(t, int64(7), result.SSHKeys[0].ID)
 	})
+}
+
+func TestBuildServerCreateOpts_ServerConfig(t *testing.T) {
+	t.Parallel()
 
 	t.Run("WithFirewalls", func(t *testing.T) {
 		t.Parallel()
 
-		result := hetzner.BuildServerCreateOptsForTest(hetzner.CreateServerOpts{
+		result, err := hetzner.BuildServerCreateOptsForTest(hetzner.CreateServerOpts{
 			Name:        "test-node",
 			ServerType:  "cx22",
 			Location:    "fsn1",
+			ImageID:     1,
 			FirewallIDs: []int64{10, 20},
 		})
 
+		require.NoError(t, err)
 		require.Len(t, result.Firewalls, 2)
 		assert.Equal(t, int64(10), result.Firewalls[0].Firewall.ID)
 		assert.Equal(t, int64(20), result.Firewalls[1].Firewall.ID)
@@ -144,13 +174,15 @@ func TestBuildServerCreateOpts_OptionalFields(t *testing.T) {
 	t.Run("WithUserData", func(t *testing.T) {
 		t.Parallel()
 
-		result := hetzner.BuildServerCreateOptsForTest(hetzner.CreateServerOpts{
+		result, err := hetzner.BuildServerCreateOptsForTest(hetzner.CreateServerOpts{
 			Name:       "test-node",
 			ServerType: "cx22",
 			Location:   "fsn1",
+			ImageID:    1,
 			UserData:   "#cloud-config",
 		})
 
+		require.NoError(t, err)
 		assert.Equal(t, "#cloud-config", result.UserData)
 	})
 }

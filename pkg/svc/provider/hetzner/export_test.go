@@ -18,7 +18,7 @@ var SourceIPsEqualForTest = sourceIPsEqual
 var BuildFirewallRulesForTest = buildFirewallRules
 
 // BuildServerCreateOptsForTest exports buildServerCreateOpts for testing.
-func BuildServerCreateOptsForTest(opts CreateServerOpts) hcloud.ServerCreateOpts {
+func BuildServerCreateOptsForTest(opts CreateServerOpts) (hcloud.ServerCreateOpts, error) {
 	p := &Provider{}
 
 	return p.buildServerCreateOpts(opts)
