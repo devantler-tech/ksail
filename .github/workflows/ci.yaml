@@ -697,7 +697,7 @@ jobs:
     needs: [changes, build-artifact, wait-for-validate-go]
     if: >-
       !cancelled()
-      && needs.wait-for-validate-go.result != 'failure'
+      && (needs.wait-for-validate-go.result == 'success' || needs.wait-for-validate-go.result == 'skipped')
       && (
         (github.event_name == 'pull_request'
         && needs.changes.outputs.system-test == 'true'
@@ -739,7 +739,7 @@ jobs:
     needs: [changes, build-artifact, wait-for-validate-go]
     if: >-
       !cancelled()
-      && needs.wait-for-validate-go.result != 'failure'
+      && (needs.wait-for-validate-go.result == 'success' || needs.wait-for-validate-go.result == 'skipped')
       && (
         (github.event_name == 'pull_request'
         && needs.changes.outputs.system-test == 'true'
@@ -790,7 +790,7 @@ jobs:
       ]
     if: >-
       !cancelled()
-      && needs.wait-for-validate-go.result != 'failure'
+      && (needs.wait-for-validate-go.result == 'success' || needs.wait-for-validate-go.result == 'skipped')
       && (
         (github.event_name == 'pull_request'
         && needs.changes.outputs.system-test == 'true'
