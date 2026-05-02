@@ -301,27 +301,11 @@ func AddOIDCKubeconfigEntries(cfg *OIDCExecConfig, logWriter io.Writer) error {
 	userName := "oidc-" + cfg.DisplayName
 	contextName := "oidc@" + cfg.DisplayName
 
-	// Build exec args
-	execArgs := []string{
-		"oidc", "get-token",
-		"--issuer-url=" + cfg.IssuerURL,
-		"--client-id=" + cfg.ClientID,
+	execArgs, err := buildOIDCExecArgs(cfg)
+	if err != nil {
+		return err
 	}
 
-	for _, scope := range cfg.ExtraScopes {
-		execArgs = append(execArgs, "--extra-scope="+scope)
-	}
-
-	if cfg.CAFile != "" {
-		canonicalCAFile, caErr := fsutil.EvalCanonicalPath(cfg.CAFile)
-		if caErr != nil {
-			return fmt.Errorf("failed to resolve OIDC CA file path: %w", caErr)
-		}
-
-		execArgs = append(execArgs, "--ca-file="+canonicalCAFile)
-	}
-
-	// Add OIDC user with exec credential plugin
 	kubeConfig.AuthInfos[userName] = &api.AuthInfo{
 		Exec: &api.ExecConfig{
 			APIVersion:      "client.authentication.k8s.io/v1",
@@ -331,7 +315,6 @@ func AddOIDCKubeconfigEntries(cfg *OIDCExecConfig, logWriter io.Writer) error {
 		},
 	}
 
-	// Add OIDC context pointing to the same cluster
 	kubeConfig.Contexts[contextName] = &api.Context{
 		Cluster:  cfg.ClusterEntryName,
 		AuthInfo: userName,
@@ -344,12 +327,36 @@ func AddOIDCKubeconfigEntries(cfg *OIDCExecConfig, logWriter io.Writer) error {
 		return fmt.Errorf("failed to serialize kubeconfig: %w", err)
 	}
 
-	err = os.WriteFile(canonicalPath, result, kubeconfigFileMode) //nolint:gosec // G703: path canonicalized via EvalCanonicalPath above
+	//nolint:gosec // G703: path canonicalized via EvalCanonicalPath above
+	err = os.WriteFile(canonicalPath, result, kubeconfigFileMode)
 	if err != nil {
 		return fmt.Errorf("failed to write kubeconfig: %w", err)
 	}
 
 	return nil
+}
+
+func buildOIDCExecArgs(cfg *OIDCExecConfig) ([]string, error) {
+	args := []string{
+		"oidc", "get-token",
+		"--issuer-url=" + cfg.IssuerURL,
+		"--client-id=" + cfg.ClientID,
+	}
+
+	for _, scope := range cfg.ExtraScopes {
+		args = append(args, "--extra-scope="+scope)
+	}
+
+	if cfg.CAFile != "" {
+		canonicalCAFile, err := fsutil.EvalCanonicalPath(cfg.CAFile)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve OIDC CA file path: %w", err)
+		}
+
+		args = append(args, "--ca-file="+canonicalCAFile)
+	}
+
+	return args, nil
 }
 
 // CleanupOIDCKubeconfigEntries removes the OIDC user and context entries for a cluster.

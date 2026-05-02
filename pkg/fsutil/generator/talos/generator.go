@@ -1014,31 +1014,7 @@ func (g *Generator) generateOIDCPatch(
 		}
 	}
 
-	_, _ = fmt.Fprintf(&builder, "cluster:\n")
-	_, _ = fmt.Fprintf(&builder, "  apiServer:\n")
-	_, _ = fmt.Fprintf(&builder, "    extraArgs:\n")
-	_, _ = fmt.Fprintf(&builder, "      oidc-issuer-url: %q\n", model.OIDCIssuerURL)
-	_, _ = fmt.Fprintf(&builder, "      oidc-client-id: %q\n", model.OIDCClientID)
-
-	if model.OIDCUsernameClaim != "" {
-		_, _ = fmt.Fprintf(&builder, "      oidc-username-claim: %q\n", model.OIDCUsernameClaim)
-	}
-
-	if model.OIDCUsernamePrefix != "" {
-		_, _ = fmt.Fprintf(&builder, "      oidc-username-prefix: %q\n", model.OIDCUsernamePrefix)
-	}
-
-	if model.OIDCGroupsClaim != "" {
-		_, _ = fmt.Fprintf(&builder, "      oidc-groups-claim: %q\n", model.OIDCGroupsClaim)
-	}
-
-	if model.OIDCGroupsPrefix != "" {
-		_, _ = fmt.Fprintf(&builder, "      oidc-groups-prefix: %q\n", model.OIDCGroupsPrefix)
-	}
-
-	if model.OIDCCAFile != "" {
-		_, _ = fmt.Fprintf(&builder, "      oidc-ca-file: %q\n", v1alpha1.OIDCCAContainerPath)
-	}
+	writeOIDCAPIServerArgs(&builder, model)
 
 	err := os.WriteFile(patchPath, []byte(builder.String()), filePerm)
 	if err != nil {
@@ -1046,6 +1022,34 @@ func (g *Generator) generateOIDCPatch(
 	}
 
 	return nil
+}
+
+func writeOIDCAPIServerArgs(builder *strings.Builder, model *Config) {
+	_, _ = fmt.Fprintf(builder, "cluster:\n")
+	_, _ = fmt.Fprintf(builder, "  apiServer:\n")
+	_, _ = fmt.Fprintf(builder, "    extraArgs:\n")
+	_, _ = fmt.Fprintf(builder, "      oidc-issuer-url: %q\n", model.OIDCIssuerURL)
+	_, _ = fmt.Fprintf(builder, "      oidc-client-id: %q\n", model.OIDCClientID)
+
+	if model.OIDCUsernameClaim != "" {
+		_, _ = fmt.Fprintf(builder, "      oidc-username-claim: %q\n", model.OIDCUsernameClaim)
+	}
+
+	if model.OIDCUsernamePrefix != "" {
+		_, _ = fmt.Fprintf(builder, "      oidc-username-prefix: %q\n", model.OIDCUsernamePrefix)
+	}
+
+	if model.OIDCGroupsClaim != "" {
+		_, _ = fmt.Fprintf(builder, "      oidc-groups-claim: %q\n", model.OIDCGroupsClaim)
+	}
+
+	if model.OIDCGroupsPrefix != "" {
+		_, _ = fmt.Fprintf(builder, "      oidc-groups-prefix: %q\n", model.OIDCGroupsPrefix)
+	}
+
+	if model.OIDCCAFile != "" {
+		_, _ = fmt.Fprintf(builder, "      oidc-ca-file: %q\n", v1alpha1.OIDCCAContainerPath)
+	}
 }
 
 // writeOIDCCAMachineFiles embeds the OIDC CA certificate content into a Talos

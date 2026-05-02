@@ -103,7 +103,7 @@ func (s *Scaffolder) CreateK3dConfig(output string) (k3dv1alpha5.SimpleConfig, e
 	// available at that path inside the containers.
 	if s.KSailConfig.Spec.Cluster.OIDC.Enabled() && s.KSailConfig.Spec.Cluster.OIDC.CAFile != "" {
 		if err := k3dconfigmanager.ApplyOIDCCAVolume(&config, s.KSailConfig.Spec.Cluster.OIDC.CAFile); err != nil {
-			return k3dv1alpha5.SimpleConfig{}, err
+			return k3dv1alpha5.SimpleConfig{}, fmt.Errorf("applying OIDC CA volume: %w", err)
 		}
 	}
 
