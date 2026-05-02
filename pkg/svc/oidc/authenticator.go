@@ -56,12 +56,65 @@ type Authenticator struct {
 
 // providerResult holds the provider setup shared between Authenticate and RefreshToken.
 type providerResult struct {
-	oidcCtx      context.Context
+	oidcCtx      context.Context //nolint:containedctx // passed as bundle to avoid 5-param functions
 	provider     *gooidc.Provider
 	oauth2Config *oauth2.Config
 }
 
-// newOIDCProvider creates the HTTP client, OIDC provider, and oauth2 config.
+// Authenticate performs the OIDC authorization code flow with PKCE.
+// It starts a local HTTP server, opens the browser to the OIDC provider,
+// and waits for the callback with the authorization code.
+func (a *Authenticator) Authenticate(ctx context.Context) (*TokenResult, error) {
+	listener, server, resultCh, err := a.startCallbackServer(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = listener.Close() }()
+
+	go func() {
+		if serveErr := server.Serve(listener); serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
+			resultCh <- callbackResult{err: fmt.Errorf("%w: callback server error: %w", ErrAuthenticationFailed, serveErr)}
+		}
+	}()
+
+	return a.awaitAuthResult(ctx, server, resultCh)
+}
+
+// RefreshToken attempts to refresh an expired token using the refresh token.
+func (a *Authenticator) RefreshToken(ctx context.Context, refreshToken string) (*TokenResult, error) {
+	prov, err := a.newOIDCProvider(ctx, "")
+	if err != nil {
+		return nil, err
+	}
+
+	tokenSource := prov.oauth2Config.TokenSource(prov.oidcCtx, &oauth2.Token{
+		RefreshToken: refreshToken,
+	})
+
+	newToken, err := tokenSource.Token()
+	if err != nil {
+		return nil, fmt.Errorf("%w: token refresh failed: %w", ErrAuthenticationFailed, err)
+	}
+
+	idToken, ok := newToken.Extra("id_token").(string)
+	if !ok {
+		return nil, fmt.Errorf("%w: no id_token in refresh response", ErrAuthenticationFailed)
+	}
+
+	return &TokenResult{
+		IDToken:      idToken,
+		RefreshToken: newToken.RefreshToken,
+		Expiry:       newToken.Expiry,
+	}, nil
+}
+
+// --- internals ---
+
+type callbackResult struct {
+	token *TokenResult
+	err   error
+}
+
 func (a *Authenticator) newOIDCProvider(ctx context.Context, redirectURL string) (*providerResult, error) {
 	httpClient, err := a.buildHTTPClient()
 	if err != nil {
@@ -91,29 +144,9 @@ func (a *Authenticator) newOIDCProvider(ctx context.Context, redirectURL string)
 	}, nil
 }
 
-// Authenticate performs the OIDC authorization code flow with PKCE.
-// It starts a local HTTP server, opens the browser to the OIDC provider,
-// and waits for the callback with the authorization code.
-func (a *Authenticator) Authenticate(ctx context.Context) (*TokenResult, error) {
-	listener, server, resultCh, err := a.startCallbackServer(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = listener.Close() }()
-
-	go func() {
-		if serveErr := server.Serve(listener); serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
-			resultCh <- callbackResult{err: fmt.Errorf("%w: callback server error: %w", ErrAuthenticationFailed, serveErr)}
-		}
-	}()
-
-	return a.awaitAuthResult(ctx, server, resultCh)
-}
-
-// startCallbackServer sets up the OIDC callback listener, PKCE parameters,
-// and HTTP server, then opens the browser to the authorization URL.
 func (a *Authenticator) startCallbackServer(ctx context.Context) (net.Listener, *http.Server, chan callbackResult, error) {
 	listenCfg := net.ListenConfig{}
+
 	listener, err := listenCfg.Listen(ctx, "tcp", "localhost:0")
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("%w: failed to start callback server: %w", ErrAuthenticationFailed, err)
@@ -165,7 +198,7 @@ func (a *Authenticator) startCallbackServer(ctx context.Context) (net.Listener, 
 		oauth2.SetAuthURLParam("code_challenge_method", "S256"),
 	)
 
-	err = openBrowser(authURL)
+	err = openBrowser(ctx, authURL)
 	if err != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "Failed to open browser automatically.\nPlease visit: %s\n", authURL)
 	}
@@ -173,66 +206,34 @@ func (a *Authenticator) startCallbackServer(ctx context.Context) (net.Listener, 
 	return listener, server, resultCh, nil
 }
 
-// awaitAuthResult waits for the OIDC callback or context cancellation,
-// then shuts down the server and returns the result.
-func (a *Authenticator) awaitAuthResult(ctx context.Context, server *http.Server, resultCh <-chan callbackResult) (*TokenResult, error) {
+func (a *Authenticator) awaitAuthResult(
+	ctx context.Context,
+	server *http.Server,
+	resultCh <-chan callbackResult,
+) (*TokenResult, error) {
 	select {
 	case result := <-resultCh:
-		//nolint:contextcheck // graceful shutdown must proceed after parent cancellation
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
-		defer cancel()
-
-		_ = server.Shutdown(shutdownCtx)
-
+		shutdownErr := a.shutdownServer(server)
 		if result.err != nil {
 			return nil, result.err
 		}
 
+		_ = shutdownErr
+
 		return result.token, nil
 	case <-ctx.Done():
-		//nolint:contextcheck // graceful shutdown must proceed after parent cancellation
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
-		defer cancel()
-
-		_ = server.Shutdown(shutdownCtx)
+		_ = a.shutdownServer(server)
 
 		return nil, fmt.Errorf("%w: %w", ErrAuthenticationFailed, ctx.Err())
 	}
 }
 
-// RefreshToken attempts to refresh an expired token using the refresh token.
-func (a *Authenticator) RefreshToken(ctx context.Context, refreshToken string) (*TokenResult, error) {
-	prov, err := a.newOIDCProvider(ctx, "")
-	if err != nil {
-		return nil, err
-	}
+func (a *Authenticator) shutdownServer(server *http.Server) error {
+	//nolint:contextcheck // graceful shutdown must proceed independently of parent context
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+	defer cancel()
 
-	tokenSource := prov.oauth2Config.TokenSource(prov.oidcCtx, &oauth2.Token{
-		RefreshToken: refreshToken,
-	})
-
-	newToken, err := tokenSource.Token()
-	if err != nil {
-		return nil, fmt.Errorf("%w: token refresh failed: %w", ErrAuthenticationFailed, err)
-	}
-
-	idToken, ok := newToken.Extra("id_token").(string)
-	if !ok {
-		return nil, fmt.Errorf("%w: no id_token in refresh response", ErrAuthenticationFailed)
-	}
-
-	return &TokenResult{
-		IDToken:      idToken,
-		RefreshToken: newToken.RefreshToken,
-		Expiry:       newToken.Expiry,
-	}, nil
-}
-
-// --- internals ---
-
-type callbackResult struct {
-	token *TokenResult
-	err   error
+	return server.Shutdown(shutdownCtx)
 }
 
 func (a *Authenticator) handleCallback(
@@ -242,25 +243,25 @@ func (a *Authenticator) handleCallback(
 	expectedState, codeVerifier string,
 	resultCh chan<- callbackResult,
 ) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) { //nolint:varnamelen // w is standard http.HandlerFunc signature
-		if errMsg := r.URL.Query().Get("error"); errMsg != "" {
-			desc := r.URL.Query().Get("error_description")
-			http.Error(w, "Authentication failed: "+errMsg, http.StatusBadRequest)
+	return func(writer http.ResponseWriter, request *http.Request) {
+		if errMsg := request.URL.Query().Get("error"); errMsg != "" {
+			desc := request.URL.Query().Get("error_description")
+			http.Error(writer, "Authentication failed: "+errMsg, http.StatusBadRequest)
 			resultCh <- callbackResult{err: fmt.Errorf("%w: %s: %s", ErrAuthenticationFailed, errMsg, desc)}
 
 			return
 		}
 
-		if r.URL.Query().Get("state") != expectedState {
-			http.Error(w, "Invalid state parameter", http.StatusBadRequest)
+		if request.URL.Query().Get("state") != expectedState {
+			http.Error(writer, "Invalid state parameter", http.StatusBadRequest)
 			resultCh <- callbackResult{err: fmt.Errorf("%w: state mismatch", ErrAuthenticationFailed)}
 
 			return
 		}
 
-		code := r.URL.Query().Get("code")
+		code := request.URL.Query().Get("code")
 		if code == "" {
-			http.Error(w, "Missing authorization code", http.StatusBadRequest)
+			http.Error(writer, "Missing authorization code", http.StatusBadRequest)
 			resultCh <- callbackResult{err: fmt.Errorf("%w: missing authorization code", ErrAuthenticationFailed)}
 
 			return
@@ -268,20 +269,18 @@ func (a *Authenticator) handleCallback(
 
 		result, err := a.exchangeAndVerifyToken(ctx, oauth2Config, provider, code, codeVerifier)
 		if err != nil {
-			http.Error(w, "Token exchange or verification failed", http.StatusInternalServerError)
+			http.Error(writer, "Token exchange or verification failed", http.StatusInternalServerError)
 			resultCh <- callbackResult{err: err}
 
 			return
 		}
 
-		_, _ = fmt.Fprintf(w, "Authentication successful! You can close this window.")
+		_, _ = fmt.Fprintf(writer, "Authentication successful! You can close this window.")
 
 		resultCh <- callbackResult{token: result}
 	}
 }
 
-// exchangeAndVerifyToken exchanges the authorization code for tokens
-// and verifies the returned ID token.
 func (a *Authenticator) exchangeAndVerifyToken(
 	ctx context.Context,
 	oauth2Config *oauth2.Config,
@@ -370,17 +369,17 @@ func generateState() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(randomBytes), nil
 }
 
-func openBrowser(targetURL string) error {
+func openBrowser(ctx context.Context, targetURL string) error {
 	switch runtime.GOOS {
 	case "darwin":
-		cmd := exec.Command("open", targetURL) //nolint:gosec // G204: user-visible URL only
+		cmd := exec.CommandContext(ctx, "open", targetURL) //nolint:gosec // G204: user-visible URL only
 		if err := cmd.Start(); err != nil {
 			return fmt.Errorf("failed to open browser: %w", err)
 		}
 
 		return nil
 	case "linux":
-		cmd := exec.Command("xdg-open", targetURL) //nolint:gosec // G204: user-visible URL only
+		cmd := exec.CommandContext(ctx, "xdg-open", targetURL) //nolint:gosec // G204: user-visible URL only
 		if err := cmd.Start(); err != nil {
 			return fmt.Errorf("failed to open browser: %w", err)
 		}

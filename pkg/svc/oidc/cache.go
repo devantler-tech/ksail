@@ -53,7 +53,7 @@ func CacheKey(issuerURL, clientID string, scopes []string) string {
 // CachedToken represents a cached OIDC token on disk.
 type CachedToken struct {
 	IDToken      string    `json:"idToken"`
-	RefreshToken string    `json:"refreshToken,omitempty"` //nolint:gosec // G117: token caching is the purpose of this file
+	RefreshToken string    `json:"refreshToken,omitempty"` //nolint:gosec,lll // G117: token caching
 	Expiry       time.Time `json:"expiry"`
 }
 
@@ -68,7 +68,9 @@ func LoadCachedToken(cacheDir, key string) *CachedToken {
 	}
 
 	var cached CachedToken
-	if err := json.Unmarshal(data, &cached); err != nil {
+
+	err = json.Unmarshal(data, &cached)
+	if err != nil {
 		return nil
 	}
 
@@ -77,7 +79,8 @@ func LoadCachedToken(cacheDir, key string) *CachedToken {
 
 // SaveCachedToken persists a token result to the cache directory.
 func SaveCachedToken(cacheDir, key string, token *TokenResult) error {
-	if err := os.MkdirAll(cacheDir, cacheDirPerm); err != nil {
+	err := os.MkdirAll(cacheDir, cacheDirPerm)
+	if err != nil {
 		return fmt.Errorf("failed to create cache directory: %w", err)
 	}
 

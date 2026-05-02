@@ -216,7 +216,7 @@ func buildK3dOIDCArgs(oidc *v1alpha1.OIDCSpec) []k3dv1alpha5.K3sArgWithNodeFilte
 		oidcArgs = append(oidcArgs, "--kube-apiserver-arg=--oidc-ca-file="+oidc.CAFile)
 	}
 
-	var result []k3dv1alpha5.K3sArgWithNodeFilters
+	result := make([]k3dv1alpha5.K3sArgWithNodeFilters, 0, len(oidcArgs))
 	for _, arg := range oidcArgs {
 		result = append(result,
 			k3dv1alpha5.K3sArgWithNodeFilters{

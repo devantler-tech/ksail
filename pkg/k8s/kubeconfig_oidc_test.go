@@ -46,7 +46,7 @@ func writeKubeconfig(t *testing.T, content string) string {
 }
 
 // TestAddOIDCKubeconfigEntries tests adding OIDC exec credential entries to kubeconfig.
-func TestAddOIDCKubeconfigEntries(t *testing.T) {
+func TestAddOIDCKubeconfigEntries(t *testing.T) { //nolint:funlen // table-driven test with multiple subtests
 	t.Parallel()
 
 	tests := []struct {
@@ -132,18 +132,18 @@ func TestAddOIDCKubeconfigEntries(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			kubeconfigPath := writeKubeconfig(t, baseKubeconfig)
-			cfg := tt.cfg(kubeconfigPath)
+			cfg := testCase.cfg(kubeconfigPath)
 
 			err := k8s.AddOIDCKubeconfigEntries(cfg, io.Discard)
 
-			if tt.wantErr != "" {
+			if testCase.wantErr != "" {
 				require.Error(t, err)
-				assert.Contains(t, err.Error(), tt.wantErr)
+				assert.Contains(t, err.Error(), testCase.wantErr)
 
 				return
 			}
@@ -154,21 +154,21 @@ func TestAddOIDCKubeconfigEntries(t *testing.T) {
 			require.NoError(t, err)
 
 			// Verify OIDC user was added with exec config
-			authInfo, hasUser := config.AuthInfos[tt.wantUser]
-			require.True(t, hasUser, "OIDC user %q should exist", tt.wantUser)
+			authInfo, hasUser := config.AuthInfos[testCase.wantUser]
+			require.True(t, hasUser, "OIDC user %q should exist", testCase.wantUser)
 			require.NotNil(t, authInfo.Exec, "OIDC user should have exec config")
 			assert.Equal(t, "client.authentication.k8s.io/v1", authInfo.Exec.APIVersion)
 			assert.Equal(t, "ksail", authInfo.Exec.Command)
 
-			for _, wantArg := range tt.wantArgsSubset {
+			for _, wantArg := range testCase.wantArgsSubset {
 				assert.Contains(t, authInfo.Exec.Args, wantArg, "exec args should contain %q", wantArg)
 			}
 
 			// Verify OIDC context was added
-			ctx, hasContext := config.Contexts[tt.wantContext]
-			require.True(t, hasContext, "OIDC context %q should exist", tt.wantContext)
-			assert.Equal(t, tt.wantCluster, ctx.Cluster, "context should reference correct cluster")
-			assert.Equal(t, tt.wantUser, ctx.AuthInfo, "context should reference OIDC user")
+			ctx, hasContext := config.Contexts[testCase.wantContext]
+			require.True(t, hasContext, "OIDC context %q should exist", testCase.wantContext)
+			assert.Equal(t, testCase.wantCluster, ctx.Cluster, "context should reference correct cluster")
+			assert.Equal(t, testCase.wantUser, ctx.AuthInfo, "context should reference OIDC user")
 
 			// Verify admin context remains current
 			assert.Equal(t, "kind-local", config.CurrentContext, "admin context should remain current")
@@ -230,8 +230,8 @@ func TestCleanupOIDCKubeconfigEntries(t *testing.T) {
 		{name: "different cluster name", displayName: "dev-cluster"},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			kubeconfigPath := writeKubeconfig(t, baseKubeconfig)
@@ -240,7 +240,7 @@ func TestCleanupOIDCKubeconfigEntries(t *testing.T) {
 			err := k8s.AddOIDCKubeconfigEntries(&k8s.OIDCExecConfig{
 				KubeconfigPath:   kubeconfigPath,
 				ClusterEntryName: "kind-local",
-				DisplayName:      tt.displayName,
+				DisplayName:      testCase.displayName,
 				IssuerURL:        "https://dex.example.com",
 				ClientID:         "kubectl",
 			}, io.Discard)
@@ -250,8 +250,8 @@ func TestCleanupOIDCKubeconfigEntries(t *testing.T) {
 			config, err := clientcmd.LoadFromFile(kubeconfigPath)
 			require.NoError(t, err)
 
-			userName := "oidc-" + tt.displayName
-			contextName := "oidc@" + tt.displayName
+			userName := "oidc-" + testCase.displayName
+			contextName := "oidc@" + testCase.displayName
 
 			_, hasUser := config.AuthInfos[userName]
 			require.True(t, hasUser, "OIDC user should exist before cleanup")
@@ -260,7 +260,7 @@ func TestCleanupOIDCKubeconfigEntries(t *testing.T) {
 			require.True(t, hasContext, "OIDC context should exist before cleanup")
 
 			// Cleanup OIDC entries
-			err = k8s.CleanupOIDCKubeconfigEntries(kubeconfigPath, tt.displayName, io.Discard)
+			err = k8s.CleanupOIDCKubeconfigEntries(kubeconfigPath, testCase.displayName, io.Discard)
 			require.NoError(t, err)
 
 			// Verify OIDC entries were removed

@@ -55,37 +55,15 @@ func handleGetToken(cmd *cobra.Command, _ []string) error {
 	cacheDir, cacheDirErr := oidcsvc.CacheDir()
 	cacheKey := oidcsvc.CacheKey(issuerURL, clientID, extraScopes)
 
-	// 1. Check cache for valid token (skip if cache dir unavailable)
+	// 1. Try cached or refreshed token (skip if cache dir unavailable)
 	if cacheDirErr == nil {
-		if cached := oidcsvc.LoadCachedToken(cacheDir, cacheKey); cached != nil {
-			if time.Now().Before(cached.Expiry) {
-				return outputExecCredential(cached.IDToken, cached.Expiry)
-			}
-
-			// 2. Attempt refresh
-			if cached.RefreshToken != "" {
-				auth := &oidcsvc.Authenticator{
-					IssuerURL:   issuerURL,
-					ClientID:    clientID,
-					ExtraScopes: extraScopes,
-					CAFile:      caFile,
-				}
-
-				ctx, cancel := context.WithTimeout(cmd.Context(), authTimeout)
-				defer cancel()
-
-				refreshed, err := auth.RefreshToken(ctx, cached.RefreshToken)
-				if err == nil {
-					_ = oidcsvc.SaveCachedToken(cacheDir, cacheKey, refreshed)
-
-					return outputExecCredential(refreshed.IDToken, refreshed.Expiry)
-				}
-				// Refresh failed, fall through to interactive flow
-			}
+		token, err := tryFromCache(cmd, cacheDir, cacheKey, issuerURL, clientID, extraScopes, caFile)
+		if err == nil && token != nil {
+			return outputExecCredential(token.IDToken, token.Expiry)
 		}
 	}
 
-	// 3. Interactive browser-based flow
+	// 2. Interactive browser-based flow
 	auth := &oidcsvc.Authenticator{
 		IssuerURL:   issuerURL,
 		ClientID:    clientID,
@@ -106,6 +84,48 @@ func handleGetToken(cmd *cobra.Command, _ []string) error {
 	}
 
 	return outputExecCredential(result.IDToken, result.Expiry)
+}
+
+func tryFromCache(
+	cmd *cobra.Command,
+	cacheDir, cacheKey, issuerURL, clientID string,
+	extraScopes []string,
+	caFile string,
+) (*oidcsvc.TokenResult, error) {
+	cached := oidcsvc.LoadCachedToken(cacheDir, cacheKey)
+	if cached == nil {
+		return nil, fmt.Errorf("no cached token")
+	}
+
+	if time.Now().Before(cached.Expiry) {
+		return &oidcsvc.TokenResult{
+			IDToken: cached.IDToken,
+			Expiry:  cached.Expiry,
+		}, nil
+	}
+
+	if cached.RefreshToken == "" {
+		return nil, fmt.Errorf("token expired and no refresh token")
+	}
+
+	auth := &oidcsvc.Authenticator{
+		IssuerURL:   issuerURL,
+		ClientID:    clientID,
+		ExtraScopes: extraScopes,
+		CAFile:      caFile,
+	}
+
+	ctx, cancel := context.WithTimeout(cmd.Context(), authTimeout)
+	defer cancel()
+
+	refreshed, err := auth.RefreshToken(ctx, cached.RefreshToken)
+	if err != nil {
+		return nil, fmt.Errorf("refresh failed: %w", err)
+	}
+
+	_ = oidcsvc.SaveCachedToken(cacheDir, cacheKey, refreshed)
+
+	return refreshed, nil
 }
 
 func outputExecCredential(idToken string, expiry time.Time) error {
