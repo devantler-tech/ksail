@@ -18,11 +18,97 @@ func TestNewInstaller(t *testing.T) {
 
 	client := helm.NewMockInterface(t)
 	installer, err := clusterautoscalerinstaller.NewInstaller(
-		client, 5*time.Minute, v1alpha1.NodeAutoscalerConfig{},
+		client, 5*time.Minute, v1alpha1.NodeAutoscalerConfig{}, false,
 	)
 	require.NoError(t, err)
 
 	assert.NotNil(t, installer)
+}
+
+func TestNewInstaller_HAEnabled(t *testing.T) {
+	t.Parallel()
+
+	client := helm.NewMockInterface(t)
+	installer, err := clusterautoscalerinstaller.NewInstaller(
+		client, 5*time.Minute, v1alpha1.NodeAutoscalerConfig{}, true,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, installer)
+}
+
+func TestClusterAutoscalerInstaller_ValuesYaml_HA(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		haEnabled bool
+		assertFn  func(t *testing.T, valuesYaml string)
+	}{
+		{
+			name:      "HAEnabled",
+			haEnabled: true,
+			assertFn: func(t *testing.T, valuesYaml string) {
+				t.Helper()
+				assert.Contains(t, valuesYaml, "replicas: 2",
+					"ValuesYaml should contain replicas: 2 when HA is enabled")
+			},
+		},
+		{
+			name:      "HADisabled",
+			haEnabled: false,
+			assertFn: func(t *testing.T, valuesYaml string) {
+				t.Helper()
+				assert.NotContains(t, valuesYaml, "replicas: 2",
+					"ValuesYaml should not contain replicas: 2 when HA is disabled")
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			assertHAValuesYaml(t, test.haEnabled, test.assertFn)
+		})
+	}
+}
+
+func assertHAValuesYaml(
+	t *testing.T,
+	haEnabled bool,
+	assertFn func(t *testing.T, valuesYaml string),
+) {
+	t.Helper()
+
+	cfg := v1alpha1.NodeAutoscalerConfig{
+		Pools: []v1alpha1.NodePool{
+			{Name: "workers", ServerType: "cx23", Location: "fsn1", Min: 1, Max: 5},
+		},
+		Expander: v1alpha1.AutoscalerExpanderLeastWaste,
+	}
+
+	client := helm.NewMockInterface(t)
+	client.EXPECT().
+		GetReleaseStorageLabels(mock.Anything, mock.Anything, mock.Anything).
+		Return(nil, nil)
+	expectAddRepository(t, client, nil)
+	client.EXPECT().
+		InstallOrUpgradeChart(
+			mock.Anything,
+			mock.MatchedBy(func(spec *helm.ChartSpec) bool {
+				assertFn(t, spec.ValuesYaml)
+
+				return true
+			}),
+		).
+		Return(nil, nil)
+
+	installer, err := clusterautoscalerinstaller.NewInstaller(
+		client, 5*time.Second, cfg, haEnabled,
+	)
+	require.NoError(t, err)
+
+	err = installer.Install(context.Background())
+	require.NoError(t, err)
 }
 
 func TestClusterAutoscalerInstaller_InstallSuccess(t *testing.T) {
@@ -128,7 +214,7 @@ func TestClusterAutoscalerInstaller_ValuesYaml_NodePools(t *testing.T) {
 		).
 		Return(nil, nil)
 
-	installer, err := clusterautoscalerinstaller.NewInstaller(client, 5*time.Second, cfg)
+	installer, err := clusterautoscalerinstaller.NewInstaller(client, 5*time.Second, cfg, false)
 	require.NoError(t, err)
 
 	err = installer.Install(context.Background())
@@ -211,7 +297,7 @@ func runExpanderTest(
 		).
 		Return(nil, nil)
 
-	installer, err := clusterautoscalerinstaller.NewInstaller(client, 5*time.Second, cfg)
+	installer, err := clusterautoscalerinstaller.NewInstaller(client, 5*time.Second, cfg, false)
 	require.NoError(t, err)
 	require.NotNil(t, installer)
 
@@ -280,7 +366,7 @@ func TestClusterAutoscalerInstaller_ValuesYaml_Contents(t *testing.T) {
 		).
 		Return(nil, nil)
 
-	installer, err := clusterautoscalerinstaller.NewInstaller(client, 5*time.Second, cfg)
+	installer, err := clusterautoscalerinstaller.NewInstaller(client, 5*time.Second, cfg, false)
 	require.NoError(t, err)
 	err = installer.Install(context.Background())
 	require.NoError(t, err)
@@ -316,7 +402,7 @@ func TestClusterAutoscalerInstaller_ValuesYaml_DefaultScaleDownTime(t *testing.T
 		).
 		Return(nil, nil)
 
-	installer, err := clusterautoscalerinstaller.NewInstaller(client, 5*time.Second, cfg)
+	installer, err := clusterautoscalerinstaller.NewInstaller(client, 5*time.Second, cfg, false)
 	require.NoError(t, err)
 	err = installer.Install(context.Background())
 	require.NoError(t, err)
@@ -352,7 +438,7 @@ func TestClusterAutoscalerInstaller_ValuesYaml_MaxNodesTotalOmittedWhenZero(t *t
 		).
 		Return(nil, nil)
 
-	installer, err := clusterautoscalerinstaller.NewInstaller(client, 5*time.Second, cfg)
+	installer, err := clusterautoscalerinstaller.NewInstaller(client, 5*time.Second, cfg, false)
 	require.NoError(t, err)
 	err = installer.Install(context.Background())
 	require.NoError(t, err)
@@ -372,7 +458,7 @@ func newInstallerWithDefaults(t *testing.T) (
 		Expander:              v1alpha1.AutoscalerExpanderLeastWaste,
 		ScaleDownUnneededTime: "10m",
 	}
-	installer, err := clusterautoscalerinstaller.NewInstaller(client, 5*time.Second, cfg)
+	installer, err := clusterautoscalerinstaller.NewInstaller(client, 5*time.Second, cfg, false)
 	require.NoError(t, err)
 
 	return installer, client

@@ -23,13 +23,26 @@ type Installer struct {
 	timeout     time.Duration
 	client      helm.Interface
 	sopsEnabled bool
+	haEnabled   bool
 }
 
 // NewInstaller creates a new Argo CD installer instance.
 // When sopsEnabled is true the chart is deployed with a CMP sidecar that
 // transparently decrypts SOPS-encrypted manifests using an Age key.
-func NewInstaller(client helm.Interface, timeout time.Duration, sopsEnabled bool) *Installer {
-	return &Installer{client: client, timeout: timeout, sopsEnabled: sopsEnabled}
+// When haEnabled is true the chart is configured with HA defaults
+// (replicas, PDB) for server and repo-server.
+func NewInstaller(
+	client helm.Interface,
+	timeout time.Duration,
+	sopsEnabled bool,
+	haEnabled bool,
+) *Installer {
+	return &Installer{
+		client:      client,
+		timeout:     timeout,
+		sopsEnabled: sopsEnabled,
+		haEnabled:   haEnabled,
+	}
 }
 
 // Install installs or upgrades Argo CD via its Helm chart.
@@ -78,6 +91,19 @@ func (a *Installer) chartSpec() *helm.ChartSpec {
 
 	if a.sopsEnabled {
 		spec.ValuesYaml = buildSOPSValuesYaml()
+	}
+
+	if a.haEnabled {
+		if spec.SetValues == nil {
+			spec.SetValues = make(map[string]string)
+		}
+
+		spec.SetValues["server.replicas"] = "2"
+		spec.SetValues["repoServer.replicas"] = "2"
+		spec.SetValues["server.pdb.enabled"] = "true"
+		spec.SetValues["server.pdb.minAvailable"] = "1"
+		spec.SetValues["repoServer.pdb.enabled"] = "true"
+		spec.SetValues["repoServer.pdb.minAvailable"] = "1"
 	}
 
 	return spec

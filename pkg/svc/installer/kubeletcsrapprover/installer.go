@@ -15,10 +15,20 @@ type Installer struct {
 }
 
 // NewInstaller creates a new kubelet-csr-approver installer instance.
+// When haEnabled is true the chart is configured with replicas=2
+// for fast failover via leader election.
 func NewInstaller(
 	client helm.Interface,
 	timeout time.Duration,
+	haEnabled bool,
 ) *Installer {
+	valuesYaml := `providerRegex: ".*"
+bypassDnsResolution: true`
+
+	if haEnabled {
+		valuesYaml += "\nreplicas: 2"
+	}
+
 	return &Installer{
 		Base: helmutil.NewBase(
 			"kubelet-csr-approver",
@@ -40,8 +50,7 @@ func NewInstaller(
 				Timeout:     timeout,
 				// Use providerRegex to allow CSRs from any provider (DNS/IP SANs)
 				// This is safe in local development clusters where kubelet identities are trusted
-				ValuesYaml: `providerRegex: ".*"
-bypassDnsResolution: true`,
+				ValuesYaml: valuesYaml,
 			},
 		),
 	}

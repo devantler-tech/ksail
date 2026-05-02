@@ -22,7 +22,7 @@ func TestNewInstaller(t *testing.T) {
 			mockClient := helm.NewMockInterface(t)
 			installer := hcloudccminstaller.NewInstaller(
 				mockClient, testCase.kubeconfig, testCase.context, testCase.timeout,
-				testCase.networkName,
+				testCase.networkName, false,
 			)
 
 			if testCase.wantNil {
@@ -63,6 +63,18 @@ func newInstallerTestCases() []installerTestCase {
 			description: "Empty network name should still create installer",
 		},
 	}
+}
+
+func TestNewInstaller_HAEnabled(t *testing.T) {
+	t.Parallel()
+
+	mockClient := helm.NewMockInterface(t)
+	installer := hcloudccminstaller.NewInstaller(
+		mockClient, "/path/to/kubeconfig", "test-context",
+		5*time.Minute, "dev-network", true,
+	)
+
+	require.NotNil(t, installer)
 }
 
 func TestErrHetznerTokenNotSet(t *testing.T) {

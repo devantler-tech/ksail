@@ -35,6 +35,7 @@ func TestInstaller_Install_TalosDistribution_Values(t *testing.T) {
 		"test-context",
 		2*time.Minute,
 		v1alpha1.DistributionTalos,
+		false,
 	)
 	// Override API server checker to avoid needing a real cluster
 	installer.SetAPIServerCheckerForTest(func(_ context.Context) error { return nil })
@@ -59,6 +60,7 @@ func TestInstaller_Install_APIDiscoveryErrorRetry(t *testing.T) {
 		"test-context",
 		2*time.Minute,
 		v1alpha1.DistributionVanilla,
+		false,
 	)
 
 	client.EXPECT().
@@ -95,6 +97,7 @@ func TestInstaller_Install_ContextCanceled_Vanilla(t *testing.T) {
 		"test-context",
 		2*time.Minute,
 		v1alpha1.DistributionVanilla,
+		false,
 	)
 
 	client.EXPECT().
@@ -126,6 +129,7 @@ func TestInstaller_Install_K3s_APIServerUnavailableRetrySucceeds(t *testing.T) {
 		"test-context",
 		2*time.Minute,
 		v1alpha1.DistributionK3s,
+		false,
 	)
 	installer.SetAPIServerCheckerForTest(func(_ context.Context) error { return nil })
 	installer.SetRetryBackoffForTest(func(_ context.Context) error { return nil })
@@ -161,6 +165,7 @@ func TestInstaller_Install_K3s_APIServerUnavailableRetryExhausted(t *testing.T) 
 		"test-context",
 		2*time.Minute,
 		v1alpha1.DistributionK3s,
+		false,
 	)
 	installer.SetAPIServerCheckerForTest(func(_ context.Context) error { return nil })
 	installer.SetRetryBackoffForTest(func(_ context.Context) error { return nil })
@@ -196,6 +201,7 @@ func TestInstaller_Install_Vanilla_NoRetryOnAPIServerUnavailable(t *testing.T) {
 		"test-context",
 		2*time.Minute,
 		v1alpha1.DistributionVanilla,
+		false,
 	)
 
 	client.EXPECT().

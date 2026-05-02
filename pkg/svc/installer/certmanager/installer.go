@@ -15,7 +15,41 @@ type Installer struct {
 }
 
 // NewInstaller creates a new cert-manager installer instance.
-func NewInstaller(client helm.Interface, timeout time.Duration) *Installer {
+// When haEnabled is true the chart is configured with HA defaults
+// (replicas, PDB, topology spread) for the controller and webhook deployments.
+func NewInstaller(client helm.Interface, timeout time.Duration, haEnabled bool) *Installer {
+	setValues := map[string]string{
+		"installCRDs":             "true",
+		"startupapicheck.timeout": startupAPICheckTimeout(timeout),
+	}
+
+	var valuesYaml string
+
+	if haEnabled {
+		setValues["replicaCount"] = "2"
+		setValues["webhook.replicaCount"] = "2"
+		setValues["podDisruptionBudget.enabled"] = "true"
+		setValues["podDisruptionBudget.minAvailable"] = "1"
+		setValues["webhook.podDisruptionBudget.enabled"] = "true"
+		setValues["webhook.podDisruptionBudget.minAvailable"] = "1"
+
+		valuesYaml = `topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: kubernetes.io/hostname
+    whenUnsatisfiable: ScheduleAnyway
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/component: controller
+webhook:
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: kubernetes.io/hostname
+      whenUnsatisfiable: ScheduleAnyway
+      labelSelector:
+        matchLabels:
+          app.kubernetes.io/component: webhook`
+	}
+
 	return &Installer{
 		Base: helmutil.NewBase(
 			"cert-manager",
@@ -36,10 +70,8 @@ func NewInstaller(client helm.Interface, timeout time.Duration) *Installer {
 				Wait:            true,
 				WaitForJobs:     true,
 				Timeout:         timeout,
-				SetValues: map[string]string{
-					"installCRDs":             "true",
-					"startupapicheck.timeout": startupAPICheckTimeout(timeout),
-				},
+				SetValues:       setValues,
+				ValuesYaml:      valuesYaml,
 			},
 		),
 	}
