@@ -65,6 +65,18 @@ func newInstallerTestCases() []installerTestCase {
 	}
 }
 
+func TestNewInstaller_HAEnabled(t *testing.T) {
+	t.Parallel()
+
+	mockClient := helm.NewMockInterface(t)
+	installer := hcloudccminstaller.NewInstaller(
+		mockClient, "/path/to/kubeconfig", "test-context",
+		5*time.Minute, "dev-network", true,
+	)
+
+	require.NotNil(t, installer)
+}
+
 func TestErrHetznerTokenNotSet(t *testing.T) {
 	t.Parallel()
 

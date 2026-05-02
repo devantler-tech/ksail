@@ -60,6 +60,48 @@ func TestBuildValuesYaml(t *testing.T) {
 	}
 }
 
+func TestBuildValuesYaml_HAEnabled(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		networkName string
+		wantContain []string
+	}{
+		{
+			name:        "HA enabled without network name",
+			networkName: "",
+			wantContain: []string{
+				"replicaCount: 2",
+			},
+		},
+		{
+			name:        "HA enabled with network name",
+			networkName: "dev-network",
+			wantContain: []string{
+				"replicaCount: 2",
+				"networking:",
+				"enabled: true",
+				"clusterCIDR: " + hcloudccminstaller.DefaultClusterCIDR,
+			},
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			result := hcloudccminstaller.BuildValuesYamlHAForTest(testCase.networkName)
+
+			require.NotEmpty(t, result)
+
+			for _, s := range testCase.wantContain {
+				assert.Contains(t, result, s)
+			}
+		})
+	}
+}
+
 func TestBuildSecretData(t *testing.T) {
 	t.Parallel()
 

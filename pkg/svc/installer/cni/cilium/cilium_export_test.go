@@ -13,6 +13,12 @@ var DefaultCiliumValuesForTest = func() map[string]string {
 	return inst.defaultCiliumValues()
 }
 
+// DefaultCiliumValuesHAForTest exposes defaultCiliumValues for testing (haEnabled=true).
+var DefaultCiliumValuesHAForTest = func() map[string]string {
+	inst := &Installer{haEnabled: true}
+	return inst.defaultCiliumValues()
+}
+
 // TalosCiliumValuesForTest exposes talosCiliumValues for testing.
 var TalosCiliumValuesForTest = talosCiliumValues
 

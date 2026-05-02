@@ -74,6 +74,60 @@ func TestInstallSuccessWithScaledTimeout(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestNewInstaller_HAEnabled(t *testing.T) {
+	t.Parallel()
+
+	client := helm.NewMockInterface(t)
+	installer := certmanagerinstaller.NewInstaller(client, 5*time.Second, true)
+
+	require.NotNil(t, installer)
+}
+
+func TestInstallSuccess_HAEnabled(t *testing.T) {
+	t.Parallel()
+
+	client := helm.NewMockInterface(t)
+	installer := certmanagerinstaller.NewInstaller(client, 2*time.Minute, true)
+
+	client.EXPECT().
+		AddRepository(
+			mock.Anything,
+			mock.MatchedBy(func(entry *helm.RepositoryEntry) bool {
+				return entry != nil && entry.Name == "jetstack" &&
+					entry.URL == "https://charts.jetstack.io"
+			}),
+			mock.Anything,
+		).
+		Return(nil)
+
+	client.EXPECT().
+		InstallOrUpgradeChart(
+			mock.Anything,
+			mock.MatchedBy(func(spec *helm.ChartSpec) bool {
+				if spec == nil {
+					return false
+				}
+
+				assert.Equal(t, "cert-manager", spec.ReleaseName)
+				assert.Equal(t, "2", spec.SetValues["replicaCount"])
+				assert.Equal(t, "2", spec.SetValues["webhook.replicaCount"])
+				assert.Equal(t, "true", spec.SetValues["podDisruptionBudget.enabled"])
+				assert.Equal(t, "1", spec.SetValues["podDisruptionBudget.minAvailable"])
+				assert.Equal(t, "true", spec.SetValues["webhook.podDisruptionBudget.enabled"])
+				assert.Equal(t, "1", spec.SetValues["webhook.podDisruptionBudget.minAvailable"])
+				assert.Contains(t, spec.ValuesYaml, "topologySpreadConstraints")
+				assert.Contains(t, spec.ValuesYaml, "kubernetes.io/hostname")
+
+				return true
+			}),
+		).
+		Return(nil, nil)
+
+	err := installer.Install(context.Background())
+
+	require.NoError(t, err)
+}
+
 func TestInstallRepoError(t *testing.T) {
 	t.Parallel()
 

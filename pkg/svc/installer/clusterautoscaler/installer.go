@@ -167,6 +167,18 @@ type chartResources struct {
 // sigs.k8s.io/yaml to prevent YAML injection from user-supplied strings.
 // When haEnabled is true an extra standby replica is configured.
 func buildValuesYaml(cfg v1alpha1.NodeAutoscalerConfig, haEnabled bool) (string, error) {
+	vals := buildChartValues(cfg, haEnabled)
+
+	out, err := yaml.Marshal(vals)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal Helm chart values: %w", err)
+	}
+
+	return string(out), nil
+}
+
+// buildChartValues constructs the typed Helm values struct from the given config.
+func buildChartValues(cfg v1alpha1.NodeAutoscalerConfig, haEnabled bool) chartValues {
 	scaleDownTime := cfg.ScaleDownUnneededTime
 	if scaleDownTime == "" {
 		scaleDownTime = defaultScaleDownUnneededTime
@@ -179,7 +191,7 @@ func buildValuesYaml(cfg v1alpha1.NodeAutoscalerConfig, haEnabled bool) (string,
 		replicas = 2
 	}
 
-	vals := chartValues{
+	return chartValues{
 		Replicas:          replicas,
 		CloudProvider:     "hetzner",
 		AutoscalingGroups: groups,
@@ -224,13 +236,6 @@ func buildValuesYaml(cfg v1alpha1.NodeAutoscalerConfig, haEnabled bool) (string,
 			Limits:   chartResourceLimits{Memory: "256Mi"},
 		},
 	}
-
-	out, err := yaml.Marshal(vals)
-	if err != nil {
-		return "", fmt.Errorf("failed to marshal Helm chart values: %w", err)
-	}
-
-	return string(out), nil
 }
 
 // buildAutoscalingGroups converts NodePool specs to autoscalingGroup chart values.

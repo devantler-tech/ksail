@@ -10,6 +10,12 @@ var DefaultCalicoValuesForTest = func() map[string]string {
 	return inst.defaultCalicoValues()
 }
 
+// DefaultCalicoValuesHAForTest exposes defaultCalicoValues for testing (haEnabled=true).
+var DefaultCalicoValuesHAForTest = func() map[string]string {
+	inst := &Installer{haEnabled: true}
+	return inst.defaultCalicoValues()
+}
+
 // CalicoCRDNamesForTest exposes calicoCRDNames for testing.
 var CalicoCRDNamesForTest = calicoCRDNames
 

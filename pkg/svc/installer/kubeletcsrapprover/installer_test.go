@@ -22,6 +22,40 @@ func TestNewInstaller(t *testing.T) {
 	assert.NotNil(t, installer)
 }
 
+func TestNewInstaller_HAEnabled(t *testing.T) {
+	t.Parallel()
+
+	client := helm.NewMockInterface(t)
+	installer := kubeletcsrapproverinstaller.NewInstaller(client, 5*time.Minute, true)
+
+	require.NotNil(t, installer)
+}
+
+func TestKubeletCSRApproverInstaller_HAEnabled_InstallSuccess(t *testing.T) {
+	t.Parallel()
+
+	client := helm.NewMockInterface(t)
+	installer := kubeletcsrapproverinstaller.NewInstaller(client, 5*time.Second, true)
+	expectKubeletCSRApproverAddRepository(t, client, nil)
+	client.EXPECT().
+		InstallOrUpgradeChart(
+			mock.Anything,
+			mock.MatchedBy(func(spec *helm.ChartSpec) bool {
+				assert.Equal(t, "kubelet-csr-approver", spec.ReleaseName)
+				assert.Contains(t, spec.ValuesYaml, "providerRegex")
+				assert.Contains(t, spec.ValuesYaml, "bypassDnsResolution")
+				assert.Contains(t, spec.ValuesYaml, "replicas: 2")
+
+				return true
+			}),
+		).
+		Return(nil, nil)
+
+	err := installer.Install(context.Background())
+
+	require.NoError(t, err)
+}
+
 func TestKubeletCSRApproverInstallerInstallSuccess(t *testing.T) {
 	t.Parallel()
 

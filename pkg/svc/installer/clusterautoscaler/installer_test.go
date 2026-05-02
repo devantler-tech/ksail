@@ -25,6 +25,79 @@ func TestNewInstaller(t *testing.T) {
 	assert.NotNil(t, installer)
 }
 
+func TestNewInstaller_HAEnabled(t *testing.T) {
+	t.Parallel()
+
+	client := helm.NewMockInterface(t)
+	installer, err := clusterautoscalerinstaller.NewInstaller(
+		client, 5*time.Minute, v1alpha1.NodeAutoscalerConfig{}, true,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, installer)
+}
+
+func TestClusterAutoscalerInstaller_ValuesYaml_HAEnabled(t *testing.T) {
+	t.Parallel()
+
+	cfg := v1alpha1.NodeAutoscalerConfig{
+		Pools: []v1alpha1.NodePool{
+			{Name: "workers", ServerType: "cx23", Location: "fsn1", Min: 1, Max: 5},
+		},
+		Expander: v1alpha1.AutoscalerExpanderLeastWaste,
+	}
+
+	client := helm.NewMockInterface(t)
+	expectAddRepository(t, client, nil)
+	client.EXPECT().
+		InstallOrUpgradeChart(
+			mock.Anything,
+			mock.MatchedBy(func(spec *helm.ChartSpec) bool {
+				assert.Contains(t, spec.ValuesYaml, "replicas: 2",
+					"ValuesYaml should contain replicas: 2 when HA is enabled")
+
+				return true
+			}),
+		).
+		Return(nil, nil)
+
+	installer, err := clusterautoscalerinstaller.NewInstaller(client, 5*time.Second, cfg, true)
+	require.NoError(t, err)
+
+	err = installer.Install(context.Background())
+	require.NoError(t, err)
+}
+
+func TestClusterAutoscalerInstaller_ValuesYaml_HADisabled(t *testing.T) {
+	t.Parallel()
+
+	cfg := v1alpha1.NodeAutoscalerConfig{
+		Pools: []v1alpha1.NodePool{
+			{Name: "workers", ServerType: "cx23", Location: "fsn1", Min: 1, Max: 5},
+		},
+		Expander: v1alpha1.AutoscalerExpanderLeastWaste,
+	}
+
+	client := helm.NewMockInterface(t)
+	expectAddRepository(t, client, nil)
+	client.EXPECT().
+		InstallOrUpgradeChart(
+			mock.Anything,
+			mock.MatchedBy(func(spec *helm.ChartSpec) bool {
+				assert.NotContains(t, spec.ValuesYaml, "replicas: 2",
+					"ValuesYaml should not contain replicas: 2 when HA is disabled")
+
+				return true
+			}),
+		).
+		Return(nil, nil)
+
+	installer, err := clusterautoscalerinstaller.NewInstaller(client, 5*time.Second, cfg, false)
+	require.NoError(t, err)
+
+	err = installer.Install(context.Background())
+	require.NoError(t, err)
+}
+
 func TestClusterAutoscalerInstaller_InstallSuccess(t *testing.T) {
 	t.Parallel()
 

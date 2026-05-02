@@ -22,6 +22,41 @@ func TestNewInstaller(t *testing.T) {
 	require.NotNil(t, installer)
 }
 
+func TestNewInstaller_HAEnabled(t *testing.T) {
+	t.Parallel()
+
+	client := helm.NewMockInterface(t)
+	installer := argocdinstaller.NewInstaller(client, 5*time.Minute, false, true)
+
+	require.NotNil(t, installer)
+}
+
+func TestChartSpec_HAEnabled(t *testing.T) {
+	t.Parallel()
+
+	client := helm.NewMockInterface(t)
+	inst := argocdinstaller.NewInstaller(client, 5*time.Minute, false, true)
+	spec := inst.ChartSpec()
+
+	require.NotNil(t, spec.SetValues)
+	assert.Equal(t, "2", spec.SetValues["server.replicas"])
+	assert.Equal(t, "2", spec.SetValues["repoServer.replicas"])
+	assert.Equal(t, "true", spec.SetValues["server.pdb.enabled"])
+	assert.Equal(t, "1", spec.SetValues["server.pdb.minAvailable"])
+	assert.Equal(t, "true", spec.SetValues["repoServer.pdb.enabled"])
+	assert.Equal(t, "1", spec.SetValues["repoServer.pdb.minAvailable"])
+}
+
+func TestChartSpec_HADisabled(t *testing.T) {
+	t.Parallel()
+
+	client := helm.NewMockInterface(t)
+	inst := argocdinstaller.NewInstaller(client, 5*time.Minute, false, false)
+	spec := inst.ChartSpec()
+
+	assert.Empty(t, spec.SetValues, "SetValues should be empty when HA is disabled")
+}
+
 func TestChartSpecValuesYaml(t *testing.T) {
 	t.Parallel()
 
