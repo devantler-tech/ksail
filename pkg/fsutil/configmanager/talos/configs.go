@@ -507,8 +507,7 @@ func newConfigsWithEndpointAndSecrets(
 	versionContract *talosconfig.VersionContract,
 	extensions []string,
 ) (*Configs, error) {
-	// Normalise nil to the effective default so that the stored contract
-	// and the one used for generation are always identical.
+	// Default nil versionContract so the stored and generated values always match.
 	if versionContract == nil {
 		versionContract = talosconfig.TalosVersion1_11
 	}
