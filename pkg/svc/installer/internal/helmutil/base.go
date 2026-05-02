@@ -2,8 +2,9 @@ package helmutil
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"log"
+	"os"
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
@@ -53,12 +54,12 @@ func NewBase(
 // managed values.
 func (b *Base) Install(ctx context.Context) error {
 	labels, err := b.client.GetReleaseSecretLabels(ctx, b.spec.ReleaseName, b.spec.Namespace)
-	if err != nil {
+	if err != nil && !errors.Is(err, helm.ErrNoReleaseSecrets) {
 		return fmt.Errorf("check release ownership for %s: %w", b.name, err)
 	}
 
 	if controller, managed := IsGitOpsManaged(labels); managed {
-		log.Printf("%s: skipping install — release %q is managed by %s", b.name, b.spec.ReleaseName, controller)
+		fmt.Fprintf(os.Stderr, "%s: skipping install — release %q is managed by %s\n", b.name, b.spec.ReleaseName, controller)
 
 		return nil
 	}

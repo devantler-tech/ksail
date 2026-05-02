@@ -15,6 +15,10 @@ var (
 	errListReleasesUnsupported = errors.New(
 		"helm: ListReleases not supported on template-only client",
 	)
+
+	// ErrNoReleaseSecrets is returned by GetReleaseSecretLabels when no
+	// Helm release Secrets exist for the given release name and namespace.
+	ErrNoReleaseSecrets = errors.New("helm: no release secrets found")
 )
 
 // ChartSpec mirrors the mittwald chart specification while keeping KSail

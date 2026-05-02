@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
+	"os"
 	"time"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -142,12 +142,12 @@ func (b *InstallerBase) CheckGitOpsOwnership(
 	}
 
 	labels, err := client.GetReleaseSecretLabels(ctx, releaseName, namespace)
-	if err != nil {
+	if err != nil && !errors.Is(err, helm.ErrNoReleaseSecrets) {
 		return false, fmt.Errorf("check release ownership for %s: %w", componentName, err)
 	}
 
 	if controller, managed := helmutil.IsGitOpsManaged(labels); managed {
-		log.Printf("%s: skipping install — release %q is managed by %s", componentName, releaseName, controller)
+		fmt.Fprintf(os.Stderr, "%s: skipping install — release %q is managed by %s\n", componentName, releaseName, controller)
 
 		return true, nil
 	}

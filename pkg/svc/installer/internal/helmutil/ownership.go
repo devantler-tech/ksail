@@ -16,7 +16,7 @@ const (
 // IsGitOpsManaged inspects Helm release Secret labels for known GitOps
 // controller ownership markers. It returns the controller name and true when
 // the release is managed externally; ("", false) otherwise.
-func IsGitOpsManaged(labels map[string]string) (controller string, managed bool) {
+func IsGitOpsManaged(labels map[string]string) (string, bool) {
 	if len(labels) == 0 {
 		return "", false
 	}
