@@ -780,7 +780,14 @@ jobs:
     name: 🧪 System Test (Docker)
     runs-on: ubuntu-latest
     timeout-minutes: 75
-    needs: [changes, build-artifact, warm-helm-cache, warm-mirror-cache, wait-for-validate-go]
+    needs:
+      [
+        changes,
+        build-artifact,
+        warm-helm-cache,
+        warm-mirror-cache,
+        wait-for-validate-go,
+      ]
     if: >-
       !cancelled()
       && needs.wait-for-validate-go.result != 'failure'
