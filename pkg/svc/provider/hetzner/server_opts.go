@@ -18,7 +18,16 @@ type CreateServerOpts struct {
 }
 
 // buildServerCreateOpts builds the hcloud.ServerCreateOpts from CreateServerOpts.
-func (p *Provider) buildServerCreateOpts(opts CreateServerOpts) hcloud.ServerCreateOpts {
+// Exactly one of ImageID or ISOID must be set; both or neither is an error.
+func (p *Provider) buildServerCreateOpts(opts CreateServerOpts) (hcloud.ServerCreateOpts, error) {
+	if opts.ImageID > 0 && opts.ISOID > 0 {
+		return hcloud.ServerCreateOpts{}, ErrImageAndISOBothSet
+	}
+
+	if opts.ImageID == 0 && opts.ISOID == 0 {
+		return hcloud.ServerCreateOpts{}, ErrImageOrISORequired
+	}
+
 	createOpts := hcloud.ServerCreateOpts{
 		Name:   opts.Name,
 		Labels: opts.Labels,
@@ -33,18 +42,27 @@ func (p *Provider) buildServerCreateOpts(opts CreateServerOpts) hcloud.ServerCre
 
 	// Use either Image or ISO - ISOs are used for Talos public ISOs
 	if opts.ISOID > 0 {
-		// When using ISO, we need a placeholder image for the server disk
-		// The ISO will be mounted and booted from
+		// When using ISO, we need a placeholder image for the server disk.
+		// The server must NOT start automatically so the ISO can be attached
+		// before the first boot — otherwise the server boots from the Debian
+		// disk image and never enters Talos maintenance mode.
 		createOpts.Image = &hcloud.Image{
 			Name: "debian-13",
 		}
-		// Note: ISO attachment happens after server creation via AttachISO action
-	} else if opts.ImageID > 0 {
+		createOpts.StartAfterCreate = new(false)
+	} else {
 		createOpts.Image = &hcloud.Image{
 			ID: opts.ImageID,
 		}
 	}
 
+	applyOptionalServerFields(opts, &createOpts)
+
+	return createOpts, nil
+}
+
+// applyOptionalServerFields copies optional CreateServerOpts fields onto createOpts.
+func applyOptionalServerFields(opts CreateServerOpts, createOpts *hcloud.ServerCreateOpts) {
 	if opts.UserData != "" {
 		createOpts.UserData = opts.UserData
 	}
@@ -78,6 +96,4 @@ func (p *Provider) buildServerCreateOpts(opts CreateServerOpts) hcloud.ServerCre
 
 		createOpts.Firewalls = firewalls
 	}
-
-	return createOpts
 }

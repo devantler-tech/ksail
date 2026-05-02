@@ -18,6 +18,10 @@ var (
 	ErrAllRetriesExhausted = errors.New("all retry attempts failed")
 	// ErrSnapshotBuildFailed indicates that the Talos snapshot build process failed.
 	ErrSnapshotBuildFailed = errors.New("talos snapshot build failed")
+	// ErrImageAndISOBothSet indicates that both ImageID and ISOID were provided, which is invalid.
+	ErrImageAndISOBothSet = errors.New("ImageID and ISOID are mutually exclusive; set only one")
+	// ErrImageOrISORequired indicates that neither ImageID nor ISOID was provided, but one is required.
+	ErrImageOrISORequired = errors.New("either ImageID or ISOID must be provided")
 )
 
 // retryableErrorCodes are Hetzner API error codes that warrant a retry.

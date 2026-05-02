@@ -402,7 +402,10 @@ func (p *Provider) CreateServer(
 		return nil, provider.ErrProviderUnavailable
 	}
 
-	createOpts := p.buildServerCreateOpts(opts)
+	createOpts, err := p.buildServerCreateOpts(opts)
+	if err != nil {
+		return nil, fmt.Errorf("invalid server options for %s: %w", opts.Name, err)
+	}
 
 	result, _, err := p.client.Server.Create(ctx, createOpts)
 	if err != nil {
@@ -415,9 +418,11 @@ func (p *Provider) CreateServer(
 		return nil, fmt.Errorf("failed waiting for server %s creation: %w", opts.Name, err)
 	}
 
-	// If using ISO, attach it and reboot the server to boot from ISO
+	// If using ISO, attach it and power on the server to boot from ISO.
+	// The server was created with StartAfterCreate=false, so this is the
+	// first boot and the ISO takes priority over the placeholder disk image.
 	if opts.ISOID > 0 {
-		err = p.attachISOAndReboot(ctx, result.Server, opts.ISOID)
+		err = p.attachISOAndPoweron(ctx, result.Server, opts.ISOID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to attach ISO to server %s: %w", opts.Name, err)
 		}
@@ -426,10 +431,12 @@ func (p *Provider) CreateServer(
 	return result.Server, nil
 }
 
-// attachISOAndReboot attaches an ISO to a server and reboots it to boot from the ISO.
+// attachISOAndPoweron attaches an ISO to a stopped server and powers it on.
+// The server must have been created with StartAfterCreate=false so this is
+// the first boot — the ISO takes priority over the placeholder disk image.
 //
 //nolint:funcorder // Grouped with CreateServer for logical code organization
-func (p *Provider) attachISOAndReboot(
+func (p *Provider) attachISOAndPoweron(
 	ctx context.Context,
 	server *hcloud.Server,
 	isoID int64,
@@ -445,8 +452,13 @@ func (p *Provider) attachISOAndReboot(
 		return fmt.Errorf("failed waiting for ISO attachment: %w", err)
 	}
 
-	// Reset (hard reboot) the server to boot from the ISO
-	return p.ResetServer(ctx, server)
+	// Power on the server for the first time — boots from the attached ISO
+	action, _, err = p.client.Server.Poweron(ctx, server)
+	if err != nil {
+		return fmt.Errorf("failed to power on server: %w", err)
+	}
+
+	return p.waitForAction(ctx, action)
 }
 
 // DetachISO detaches any attached ISO from a server.

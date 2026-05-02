@@ -17,6 +17,13 @@ var SourceIPsEqualForTest = sourceIPsEqual
 // BuildFirewallRulesForTest exports buildFirewallRules for testing.
 var BuildFirewallRulesForTest = buildFirewallRules
 
+// BuildServerCreateOptsForTest exports buildServerCreateOpts for testing.
+func BuildServerCreateOptsForTest(opts CreateServerOpts) (hcloud.ServerCreateOpts, error) {
+	p := &Provider{}
+
+	return p.buildServerCreateOpts(opts)
+}
+
 // ShouldRetryErrorForTest exports shouldRetryError for testing.
 var ShouldRetryErrorForTest = shouldRetryError
 
