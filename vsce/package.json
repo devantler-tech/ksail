@@ -5,7 +5,7 @@
   "version": "0.1.0",
   "publisher": "devantler",
   "icon": "resources/icon.png",
-  "license": "Apache-2.0",
+  "license": "GPL-3.0-only",
   "repository": {
     "type": "git",
     "url": "https://github.com/devantler-tech/ksail"

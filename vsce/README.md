@@ -38,4 +38,4 @@ For contributor documentation (build commands, architecture, and development wor
 
 ## License
 
-Apache-2.0 - See [LICENSE](LICENSE) for details.
+GPL-3.0-only - See [LICENSE](LICENSE) for details.
