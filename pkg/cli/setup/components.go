@@ -177,10 +177,12 @@ func resolveHelmClientAndTimeout(
 	return helmClient, timeout, nil
 }
 
-// helmInstallerFactory creates a factory function for helm-based installers.
-func helmInstallerFactory(
+// haHelmInstallerFactory creates a factory for Helm-based installers that
+// derive haEnabled from the cluster node count. The constructor receives
+// (helmClient, timeout, haEnabled).
+func haHelmInstallerFactory(
 	factories *InstallerFactories,
-	newInstaller func(client helm.Interface, timeout time.Duration) installer.Installer,
+	newInstaller func(client helm.Interface, timeout time.Duration, haEnabled bool) installer.Installer,
 	minTimeout time.Duration,
 ) func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error) {
 	return func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error) {
@@ -191,48 +193,11 @@ func helmInstallerFactory(
 			return nil, err
 		}
 
-		return newInstaller(helmClient, timeout), nil
-	}
-}
-
-// certManagerInstallerFactory creates a factory for the cert-manager installer
-// that derives haEnabled from the cluster node count.
-func certManagerInstallerFactory(
-	factories *InstallerFactories,
-) func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error) {
-	return func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error) {
-		helmClient, timeout, err := resolveHelmClientAndTimeout(
-			factories, clusterCfg,
-			installer.CertManagerInstallTimeout,
+		haEnabled := installer.IsHAEnabled(
+			clusterCfg.Spec.Cluster.ControlPlanes + clusterCfg.Spec.Cluster.Workers,
 		)
-		if err != nil {
-			return nil, err
-		}
 
-		return certmanagerinstaller.NewInstaller(
-			helmClient, timeout,
-			installer.IsHAEnabled(clusterCfg.Spec.Cluster.ControlPlanes+clusterCfg.Spec.Cluster.Workers),
-		), nil
-	}
-}
-
-// kubeletCSRApproverInstallerFactory creates a factory for the kubelet-csr-approver
-// installer that derives haEnabled from the cluster node count.
-func kubeletCSRApproverInstallerFactory(
-	factories *InstallerFactories,
-) func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error) {
-	return func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error) {
-		helmClient, timeout, err := resolveHelmClientAndTimeout(
-			factories, clusterCfg, 0,
-		)
-		if err != nil {
-			return nil, err
-		}
-
-		return kubeletcsrapproverinstaller.NewInstaller(
-			helmClient, timeout,
-			installer.IsHAEnabled(clusterCfg.Spec.Cluster.ControlPlanes+clusterCfg.Spec.Cluster.Workers),
-		), nil
+		return newInstaller(helmClient, timeout, haEnabled), nil
 	}
 }
 
@@ -272,9 +237,21 @@ func DefaultInstallerFactories() *InstallerFactories {
 		return fluxinstaller.NewInstaller(client, timeout)
 	}
 
-	factories.CertManager = certManagerInstallerFactory(factories)
+	factories.CertManager = haHelmInstallerFactory(
+		factories,
+		func(c helm.Interface, t time.Duration, ha bool) installer.Installer {
+			return certmanagerinstaller.NewInstaller(c, t, ha)
+		},
+		installer.CertManagerInstallTimeout,
+	)
 	factories.ArgoCD = argoCDInstallerFactory(factories)
-	factories.KubeletCSRApprover = kubeletCSRApproverInstallerFactory(factories)
+	factories.KubeletCSRApprover = haHelmInstallerFactory(
+		factories,
+		func(c helm.Interface, t time.Duration, ha bool) installer.Installer {
+			return kubeletcsrapproverinstaller.NewInstaller(c, t, ha)
+		},
+		0,
+	)
 	factories.CSI = csiFactory(factories)
 	factories.PolicyEngine = policyEngineFactory(factories)
 
