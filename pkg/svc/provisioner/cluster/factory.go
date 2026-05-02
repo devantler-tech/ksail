@@ -379,6 +379,19 @@ func (f DefaultFactory) createTalosProvisioner(
 	hetznerOpts.NodeAutoscalerEnabled = cluster.Spec.Cluster.Autoscaler.Node.Enabled ||
 		cluster.Spec.Cluster.NodeAutoscaling == v1alpha1.NodeAutoscalingEnabled
 
+	// Derive pool names from the new autoscaler pools config so that the
+	// delete path can clean up autoscaler-managed Hetzner servers.
+	if len(hetznerOpts.AutoscalerNodePoolNames) == 0 {
+		pools := cluster.Spec.Cluster.Autoscaler.Node.Pools
+		if len(pools) > 0 {
+			names := make([]string, len(pools))
+			for i, pool := range pools {
+				names[i] = pool.Name
+			}
+			hetznerOpts.AutoscalerNodePoolNames = names
+		}
+	}
+
 	provisioner, err := talosprovisioner.CreateProvisioner(
 		f.DistributionConfig.Talos,
 		cluster.Spec.Cluster.Connection.Kubeconfig,

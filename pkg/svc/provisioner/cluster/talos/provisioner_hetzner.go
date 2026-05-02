@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/hetzner"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
@@ -259,7 +260,12 @@ func (p *Provisioner) ensureAutoscalerSecret(
 
 	_, _ = fmt.Fprintf(p.logWriter, "Applying cluster-autoscaler config secret...\n")
 
-	kubeclient, err := k8s.NewClientset(p.options.KubeconfigPath, "")
+	kubeconfigPath, err := fsutil.ExpandHomePath(p.options.KubeconfigPath)
+	if err != nil {
+		return fmt.Errorf("expanding kubeconfig path for autoscaler secret: %w", err)
+	}
+
+	kubeclient, err := k8s.NewClientset(kubeconfigPath, "")
 	if err != nil {
 		return fmt.Errorf("creating kubeclient for autoscaler secret: %w", err)
 	}
