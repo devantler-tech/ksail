@@ -613,6 +613,19 @@ func (m *Model) handleTaskComplete(msg TaskCompleteMsg) (tea.Model, tea.Cmd) {
 	return m, m.waitForEvent()
 }
 
+// injectStreamingNotice appends a blockquote notice into the current streaming
+// assistant message, if one is active.
+func (m *Model) injectStreamingNotice(notice string) {
+	if len(m.messages) > 0 {
+		last := &m.messages[len(m.messages)-1]
+		if last.role == roleAssistant && last.isStreaming {
+			m.currentResponse.WriteString("\n> " + notice + "\n")
+			last.content = m.currentResponse.String()
+			m.updateViewportContent()
+		}
+	}
+}
+
 // handleAutoModeSwitchRequested notifies the user that a model switch was requested
 // (typically due to rate limiting). The Go SDK does not yet expose a response API,
 // so this is informational only.
@@ -622,14 +635,7 @@ func (m *Model) handleAutoModeSwitchRequested(msg autoModeSwitchRequestedMsg) (t
 		notice += " (reason: " + msg.errorCode + ")"
 	}
 
-	if len(m.messages) > 0 {
-		last := &m.messages[len(m.messages)-1]
-		if last.role == roleAssistant && last.isStreaming {
-			m.currentResponse.WriteString("\n> " + notice + "\n")
-			last.content = m.currentResponse.String()
-			m.updateViewportContent()
-		}
-	}
+	m.injectStreamingNotice(notice)
 
 	return m, m.waitForEvent()
 }
@@ -647,14 +653,7 @@ func (m *Model) handleAutoModeSwitchCompleted(msg autoModeSwitchCompletedMsg) (t
 		notice = "ℹ️ Auto model switch resolved: " + msg.response
 	}
 
-	if len(m.messages) > 0 {
-		last := &m.messages[len(m.messages)-1]
-		if last.role == roleAssistant && last.isStreaming {
-			m.currentResponse.WriteString("\n> " + notice + "\n")
-			last.content = m.currentResponse.String()
-			m.updateViewportContent()
-		}
-	}
+	m.injectStreamingNotice(notice)
 
 	return m, m.waitForEvent()
 }
