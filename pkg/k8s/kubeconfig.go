@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/clientcmd/api"
 )
@@ -276,10 +277,13 @@ type OIDCExecConfig struct {
 // AddOIDCKubeconfigEntries adds an exec-based OIDC user and context to the kubeconfig.
 // The user is named "oidc-<clusterName>" and the context is named "oidc@<clusterName>".
 // The admin context remains the current context.
-//
-//nolint:gosec // G304: kubeconfigPath is validated by caller
 func AddOIDCKubeconfigEntries(cfg *OIDCExecConfig, logWriter io.Writer) error {
-	kubeconfigBytes, err := os.ReadFile(cfg.KubeconfigPath)
+	canonicalPath, err := fsutil.EvalCanonicalPath(cfg.KubeconfigPath)
+	if err != nil {
+		return fmt.Errorf("failed to resolve kubeconfig path: %w", err)
+	}
+
+	kubeconfigBytes, err := os.ReadFile(canonicalPath) //nolint:gosec // canonicalized above
 	if err != nil {
 		return fmt.Errorf("failed to read kubeconfig: %w", err)
 	}
@@ -330,7 +334,7 @@ func AddOIDCKubeconfigEntries(cfg *OIDCExecConfig, logWriter io.Writer) error {
 		return fmt.Errorf("failed to serialize kubeconfig: %w", err)
 	}
 
-	err = os.WriteFile(cfg.KubeconfigPath, result, kubeconfigFileMode)
+	err = os.WriteFile(canonicalPath, result, kubeconfigFileMode)
 	if err != nil {
 		return fmt.Errorf("failed to write kubeconfig: %w", err)
 	}
@@ -341,8 +345,13 @@ func AddOIDCKubeconfigEntries(cfg *OIDCExecConfig, logWriter io.Writer) error {
 // CleanupOIDCKubeconfigEntries removes the OIDC user and context entries for a cluster.
 // The displayName is the user-friendly cluster name (e.g. "local") used in OIDC naming.
 func CleanupOIDCKubeconfigEntries(kubeconfigPath, displayName string, logWriter io.Writer) error {
+	canonicalPath, err := fsutil.EvalCanonicalPath(kubeconfigPath)
+	if err != nil {
+		return fmt.Errorf("failed to resolve kubeconfig path: %w", err)
+	}
+
 	userName := "oidc-" + displayName
 	contextName := "oidc@" + displayName
 
-	return CleanupKubeconfig(kubeconfigPath, "", contextName, userName, logWriter)
+	return CleanupKubeconfig(canonicalPath, "", contextName, userName, logWriter)
 }

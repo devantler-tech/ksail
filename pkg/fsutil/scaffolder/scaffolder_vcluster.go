@@ -43,6 +43,11 @@ func (s *Scaffolder) generateVClusterConfig(output string, force bool) error {
 	// Append API server OIDC flags when OIDC is configured
 	if s.KSailConfig.Spec.Cluster.OIDC.Enabled() {
 		header += buildVClusterOIDCArgs(&s.KSailConfig.Spec.Cluster.OIDC)
+
+		// Add volume mounts to inject the OIDC CA certificate into the VCluster pod
+		if s.KSailConfig.Spec.Cluster.OIDC.CAFile != "" {
+			header += buildVClusterOIDCVolumes()
+		}
 	}
 
 	content := []byte(header)
@@ -66,6 +71,10 @@ func (s *Scaffolder) generateVClusterConfig(output string, force bool) error {
 
 // buildVClusterOIDCArgs generates the YAML fragment for VCluster API server OIDC extra args.
 // Values are escaped with %q to handle YAML-special characters safely.
+// When a CA file is configured, the API server arg references OIDCCAContainerPath and
+// a hostPath volume mount is added to make the CA available inside the VCluster pod.
+// This works because VCluster runs on a Docker-based host cluster (Kind/K3d) where the
+// host CA file is already mounted at OIDCCAContainerPath on all nodes.
 func buildVClusterOIDCArgs(oidc *v1alpha1.OIDCSpec) string {
 	result := "      apiServer:\n" +
 		"        extraArgs:\n" +
@@ -89,8 +98,28 @@ func buildVClusterOIDCArgs(oidc *v1alpha1.OIDCSpec) string {
 	}
 
 	if oidc.CAFile != "" {
-		result += fmt.Sprintf("          - %q\n", "--oidc-ca-file="+oidc.CAFile)
+		result += fmt.Sprintf("          - %q\n", "--oidc-ca-file="+v1alpha1.OIDCCAContainerPath)
 	}
 
 	return result
+}
+
+// buildVClusterOIDCVolumes generates the YAML fragment for VCluster volume mounts
+// that inject the OIDC CA certificate into the VCluster control plane pod.
+// Uses a hostPath volume because the host Kubernetes node (Kind/K3d) already has
+// the CA file mounted at OIDCCAContainerPath.
+func buildVClusterOIDCVolumes() string {
+	return "  statefulSet:\n" +
+		"    pods:\n" +
+		"      containers:\n" +
+		"        - name: vcluster\n" +
+		"          volumeMounts:\n" +
+		"            - name: oidc-ca\n" +
+		"              mountPath: " + v1alpha1.OIDCCAContainerPath + "\n" +
+		"              readOnly: true\n" +
+		"      volumes:\n" +
+		"        - name: oidc-ca\n" +
+		"          hostPath:\n" +
+		"            path: " + v1alpha1.OIDCCAContainerPath + "\n" +
+		"            type: File\n"
 }

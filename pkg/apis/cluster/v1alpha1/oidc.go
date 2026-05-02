@@ -1,5 +1,11 @@
 package v1alpha1
 
+// OIDCCAContainerPath is the well-known path where the OIDC CA certificate
+// is mounted inside Kubernetes node containers and pods. All distributions
+// use this path for --oidc-ca-file when caFile is configured, and each
+// distribution mounts/embeds the host CA file at this location.
+const OIDCCAContainerPath = "/etc/kubernetes/pki/oidc-ca.crt"
+
 // OIDCSpec defines OIDC authentication configuration for a KSail cluster.
 // When IssuerURL is set, KSail configures the Kubernetes API server with OIDC
 // flags and sets up kubeconfig with exec-based OIDC credentials.

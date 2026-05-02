@@ -1222,6 +1222,12 @@ func handleCreateRunE(
 
 	applyOIDCExtraScopeFlag(cmd, ctx.ClusterCfg)
 
+	// Re-validate OIDC after merging CLI scope flags which can change ExtraScopes
+	err = v1alpha1.ValidateOIDCConfig(&ctx.ClusterCfg.Spec.Cluster.OIDC)
+	if err != nil {
+		return fmt.Errorf("OIDC configuration: %w", err)
+	}
+
 	err = runClusterCreationWorkflow(cmd, cfgManager, ctx, deps)
 	if err != nil {
 		return err
@@ -3412,6 +3418,12 @@ func HandleInitRunE(
 	}
 
 	applyOIDCExtraScopeFlag(cmd, clusterCfg)
+
+	// Re-validate OIDC after merging CLI scope flags which can change ExtraScopes
+	err = v1alpha1.ValidateOIDCConfig(&clusterCfg.Spec.Cluster.OIDC)
+	if err != nil {
+		return fmt.Errorf("OIDC configuration: %w", err)
+	}
 
 	scaffolderInstance, targetPath, force, err := prepareScaffolder(cmd, cfgManager, clusterCfg)
 	if err != nil {
@@ -6256,6 +6268,12 @@ func handleUpdateRunE(
 
 	applyOIDCExtraScopeFlag(cmd, ctx.ClusterCfg)
 
+	// Re-validate OIDC after merging CLI scope flags which can change ExtraScopes
+	err = v1alpha1.ValidateOIDCConfig(&ctx.ClusterCfg.Spec.Cluster.OIDC)
+	if err != nil {
+		return fmt.Errorf("OIDC configuration: %w", err)
+	}
+
 	force := resolveForce(cfgManager.Viper.GetBool("force"), cmd.Flags().Lookup("yes"))
 
 	// Create provisioner and verify cluster exists
@@ -7591,10 +7609,17 @@ func configureOIDCKubeconfig(
 		clusterCfg.Spec.Cluster.Distribution,
 	)
 
-	// The kubeconfig cluster entry name is the full context name (e.g. "kind-local"),
-	// not the display name (e.g. "local"). This is what kubeconfig.Contexts[].Cluster
-	// must reference to find the correct cluster endpoint and CA data.
-	clusterEntryName := clusterCfg.Spec.Cluster.Connection.Context
+	// Resolve the actual cluster entry name from the kubeconfig by looking up
+	// the context. This is necessary because the context name and cluster entry
+	// name differ for some distributions (e.g. Talos uses context "admin@<name>"
+	// but cluster entry "<name>").
+	contextName := clusterCfg.Spec.Cluster.Connection.Context
+
+	clusterEntryName, resolveErr := resolveClusterEntryName(kubeconfigPath, contextName)
+	if resolveErr != nil {
+		// Fall back to using the context name directly (works for Kind, K3d, VCluster)
+		clusterEntryName = contextName
+	}
 
 	oidc := &clusterCfg.Spec.Cluster.OIDC
 
@@ -7619,4 +7644,31 @@ func configureOIDCKubeconfig(
 	})
 
 	return nil
+}
+
+// resolveClusterEntryName reads the kubeconfig and returns the cluster entry
+// name that the given context references. This handles distributions where
+// the context name differs from the cluster entry name (e.g. Talos).
+func resolveClusterEntryName(kubeconfigPath, contextName string) (string, error) {
+	canonicalPath, err := fsutil.EvalCanonicalPath(kubeconfigPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve kubeconfig path: %w", err)
+	}
+
+	kubeconfigBytes, err := os.ReadFile(canonicalPath) //nolint:gosec // canonicalized above
+	if err != nil {
+		return "", fmt.Errorf("failed to read kubeconfig: %w", err)
+	}
+
+	kubeConfig, err := clientcmd.Load(kubeconfigBytes)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse kubeconfig: %w", err)
+	}
+
+	ctxEntry, ok := kubeConfig.Contexts[contextName]
+	if !ok || ctxEntry == nil {
+		return "", fmt.Errorf("context %q not found in kubeconfig", contextName)
+	}
+
+	return ctxEntry.Cluster, nil
 }

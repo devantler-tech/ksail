@@ -176,6 +176,28 @@ func ApplyImageVerificationVolumes(
 	})
 }
 
+// ApplyOIDCCAVolume adds a volume mount to the K3d config to inject the host
+// OIDC CA certificate into K3d node containers. The CA file is mounted at
+// OIDCCAContainerPath so the API server can reference it via --oidc-ca-file.
+//
+// This function is idempotent — it skips appending if the volume mount is already present.
+func ApplyOIDCCAVolume(k3dConfig *v1alpha5.SimpleConfig, hostCAPath string) {
+	volumeSpec := hostCAPath + ":" + v1alpha1.OIDCCAContainerPath
+
+	for i, vol := range k3dConfig.Volumes {
+		if strings.Contains(vol.Volume, v1alpha1.OIDCCAContainerPath) {
+			k3dConfig.Volumes[i].Volume = volumeSpec
+
+			return
+		}
+	}
+
+	k3dConfig.Volumes = append(k3dConfig.Volumes, v1alpha5.VolumeWithNodeFilters{
+		Volume:      volumeSpec,
+		NodeFilters: []string{"server:*"},
+	})
+}
+
 // ResolveNetworkName returns the Docker network name for a K3d cluster.
 // K3d uses "k3d-<clustername>" as the network naming convention.
 func ResolveNetworkName(clusterName string) string {

@@ -116,6 +116,13 @@ func (s *Scaffolder) CreateK3dConfig(output string) k3dv1alpha5.SimpleConfig {
 		k3dconfigmanager.ApplyImageVerificationVolumes(&config, relativeTemplatePath)
 	}
 
+	// Mount the host OIDC CA file into K3d node containers when configured.
+	// The API server references OIDCCAContainerPath, so the host file must be
+	// available at that path inside the containers.
+	if s.KSailConfig.Spec.Cluster.OIDC.Enabled() && s.KSailConfig.Spec.Cluster.OIDC.CAFile != "" {
+		k3dconfigmanager.ApplyOIDCCAVolume(&config, s.KSailConfig.Spec.Cluster.OIDC.CAFile)
+	}
+
 	return config
 }
 
@@ -219,7 +226,7 @@ func buildK3dOIDCArgs(oidc *v1alpha1.OIDCSpec) []k3dv1alpha5.K3sArgWithNodeFilte
 	}
 
 	if oidc.CAFile != "" {
-		oidcArgs = append(oidcArgs, "--kube-apiserver-arg=--oidc-ca-file="+oidc.CAFile)
+		oidcArgs = append(oidcArgs, "--kube-apiserver-arg=--oidc-ca-file="+v1alpha1.OIDCCAContainerPath)
 	}
 
 	result := make([]k3dv1alpha5.K3sArgWithNodeFilters, 0, len(oidcArgs))

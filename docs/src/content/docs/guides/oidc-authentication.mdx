@@ -209,9 +209,13 @@ spec:
         - groups
 ```
 
-The `caFile` path is:
-- Injected into the API server configuration (distribution-specific)
-- Passed to `ksail oidc get-token` via kubeconfig exec args
+The `caFile` field specifies a **host path** to the CA certificate. KSail automatically handles mounting it into the cluster:
+- **Kind/Vanilla**: Mounted as a read-only `extraMount` into all nodes at `/etc/kubernetes/pki/oidc-ca.crt`
+- **K3d/K3s**: Mounted as a volume into server nodes at `/etc/kubernetes/pki/oidc-ca.crt`
+- **Talos**: CA content is embedded via `machine.files` onto the node filesystem at `/etc/kubernetes/pki/oidc-ca.crt`
+- **VCluster**: Mounted via a `hostPath` volume from the host Kubernetes node into the VCluster control plane pod
+
+The CA file path is also passed to `ksail oidc get-token` via kubeconfig exec args for client-side token verification.
 
 ## RBAC Integration
 

@@ -150,6 +150,8 @@ func ApplyImageVerificationPatches(kindConfig *kindv1alpha4.Cluster) {
 
 // ApplyOIDCPatches adds kubeadm config patches to configure the API server with OIDC flags.
 // The patch is applied to all control-plane nodes via KubeadmConfigPatches.
+// When a CA file is configured, an extraMount is added to make the host CA file
+// available inside the Kind container at OIDCCAContainerPath.
 func ApplyOIDCPatches(kindConfig *kindv1alpha4.Cluster, oidc *v1alpha1.OIDCSpec) {
 	if oidc == nil || !oidc.Enabled() {
 		return
@@ -171,6 +173,19 @@ func ApplyOIDCPatches(kindConfig *kindv1alpha4.Cluster, oidc *v1alpha1.OIDCSpec)
 				kindConfig.Nodes[i].KubeadmConfigPatches,
 				patch,
 			)
+		}
+	}
+
+	// Mount the host CA file into all nodes so the API server can read it
+	if oidc.CAFile != "" {
+		mount := kindv1alpha4.Mount{
+			HostPath:      oidc.CAFile,
+			ContainerPath: v1alpha1.OIDCCAContainerPath,
+			Readonly:      true,
+		}
+
+		for i := range kindConfig.Nodes {
+			kindConfig.Nodes[i].ExtraMounts = append(kindConfig.Nodes[i].ExtraMounts, mount)
 		}
 	}
 }
@@ -204,7 +219,7 @@ func buildOIDCKubeadmPatch(oidc *v1alpha1.OIDCSpec) string {
 	}
 
 	if oidc.CAFile != "" {
-		_, _ = fmt.Fprintf(&builder, "    oidc-ca-file: %q\n", oidc.CAFile)
+		_, _ = fmt.Fprintf(&builder, "    oidc-ca-file: %q\n", v1alpha1.OIDCCAContainerPath)
 	}
 
 	return builder.String()
