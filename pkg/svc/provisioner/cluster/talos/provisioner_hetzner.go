@@ -244,7 +244,7 @@ func (p *Provisioner) detachOrWaitForReboot(
 ) error {
 	schematicID := ""
 	if p.talosOpts != nil {
-		schematicID = p.talosOpts.SchematicID
+		schematicID = strings.TrimSpace(p.talosOpts.SchematicID)
 	}
 
 	// Fall back to extensions-derived schematic

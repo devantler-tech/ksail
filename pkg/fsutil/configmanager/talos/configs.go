@@ -712,9 +712,9 @@ func applySchematic(extensions []string, configBundle *bundle.Bundle) (string, e
 	return schematicID, nil
 }
 
-// resolveInstallerVersion determines the Talos version tag for the installer image.
-// It extracts the version from the existing machine.install.image if present,
-// otherwise falls back to the DefaultTalosImage tag.
+// resolveInstallerVersion determines the Talos version tag for the factory installer image.
+// It extracts the tag from the config bundle's existing machine.install.image (set during
+// bundle generation to match the configured Talos version). Falls back to DefaultTalosImage.
 func resolveInstallerVersion(configBundle *bundle.Bundle) string {
 	if image := controlPlaneInstallImage(configBundle); image != "" {
 		if tag := extractImageTag(image); tag != "" {
