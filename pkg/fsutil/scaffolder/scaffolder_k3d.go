@@ -102,7 +102,8 @@ func (s *Scaffolder) CreateK3dConfig(output string) (k3dv1alpha5.SimpleConfig, e
 	// The API server references OIDCCAContainerPath, so the host file must be
 	// available at that path inside the containers.
 	if s.KSailConfig.Spec.Cluster.OIDC.Enabled() && s.KSailConfig.Spec.Cluster.OIDC.CAFile != "" {
-		if err := k3dconfigmanager.ApplyOIDCCAVolume(&config, s.KSailConfig.Spec.Cluster.OIDC.CAFile); err != nil {
+		err := k3dconfigmanager.ApplyOIDCCAVolume(&config, s.KSailConfig.Spec.Cluster.OIDC.CAFile)
+		if err != nil {
 			return k3dv1alpha5.SimpleConfig{}, fmt.Errorf("applying OIDC CA volume: %w", err)
 		}
 	}
@@ -112,7 +113,10 @@ func (s *Scaffolder) CreateK3dConfig(output string) (k3dv1alpha5.SimpleConfig, e
 
 // applyK3dImageVerificationVolumes mounts the containerd config template into
 // K3d node containers so K3s uses it with the image verifier plugin enabled.
-func (s *Scaffolder) applyK3dImageVerificationVolumes(config *k3dv1alpha5.SimpleConfig, output string) {
+func (s *Scaffolder) applyK3dImageVerificationVolumes(
+	config *k3dv1alpha5.SimpleConfig,
+	output string,
+) {
 	if s.KSailConfig.Spec.Cluster.Talos.ImageVerification != v1alpha1.ImageVerificationEnabled {
 		return
 	}
@@ -234,7 +238,10 @@ func buildK3dOIDCArgs(oidc *v1alpha1.OIDCSpec) []k3dv1alpha5.K3sArgWithNodeFilte
 	}
 
 	if oidc.CAFile != "" {
-		oidcArgs = append(oidcArgs, "--kube-apiserver-arg=--oidc-ca-file="+v1alpha1.OIDCCAContainerPath)
+		oidcArgs = append(
+			oidcArgs,
+			"--kube-apiserver-arg=--oidc-ca-file="+v1alpha1.OIDCCAContainerPath,
+		)
 	}
 
 	result := make([]k3dv1alpha5.K3sArgWithNodeFilters, 0, len(oidcArgs))

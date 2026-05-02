@@ -121,7 +121,11 @@ func (a *Authenticator) RefreshToken(
 	//nolint:contextcheck // oidcCtx carries the custom HTTP client for OIDC discovery
 	verified, err := verifier.Verify(prov.oidcCtx, idToken)
 	if err != nil {
-		return nil, fmt.Errorf("%w: refreshed token verification failed: %w", ErrAuthenticationFailed, err)
+		return nil, fmt.Errorf(
+			"%w: refreshed token verification failed: %w",
+			ErrAuthenticationFailed,
+			err,
+		)
 	}
 
 	return &TokenResult{
@@ -471,6 +475,7 @@ func openBrowser(ctx context.Context, targetURL string) error {
 			"open",
 			targetURL,
 		)
+
 		err := cmd.Start()
 		if err != nil {
 			return fmt.Errorf("failed to open browser: %w", err)
@@ -483,6 +488,7 @@ func openBrowser(ctx context.Context, targetURL string) error {
 			"xdg-open",
 			targetURL,
 		)
+
 		err := cmd.Start()
 		if err != nil {
 			return fmt.Errorf("failed to open browser: %w", err)

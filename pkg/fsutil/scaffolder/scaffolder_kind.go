@@ -87,7 +87,8 @@ func (s *Scaffolder) buildKindConfig(output string) (*v1alpha4.Cluster, error) {
 
 	// Apply OIDC API server configuration when OIDC is enabled.
 	if s.KSailConfig.Spec.Cluster.OIDC.Enabled() {
-		if err := kindconfigmanager.ApplyOIDCPatches(kindConfig, &s.KSailConfig.Spec.Cluster.OIDC); err != nil {
+		err := kindconfigmanager.ApplyOIDCPatches(kindConfig, &s.KSailConfig.Spec.Cluster.OIDC)
+		if err != nil {
 			return nil, fmt.Errorf("applying OIDC patches: %w", err)
 		}
 	}

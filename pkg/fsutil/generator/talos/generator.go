@@ -1009,7 +1009,8 @@ func (g *Generator) generateOIDCPatch(
 	var builder strings.Builder
 
 	if model.OIDCCAFile != "" {
-		if err := writeOIDCCAMachineFiles(&builder, model.OIDCCAFile); err != nil {
+		err := writeOIDCCAMachineFiles(&builder, model.OIDCCAFile)
+		if err != nil {
 			return err
 		}
 	}
@@ -1069,7 +1070,7 @@ func writeOIDCCAMachineFiles(builder *strings.Builder, caFilePath string) error 
 	_, _ = fmt.Fprintf(builder, "  files:\n")
 	_, _ = fmt.Fprintf(builder, "    - content: |\n")
 
-	for _, line := range strings.Split(strings.TrimRight(string(caContent), "\n"), "\n") {
+	for line := range strings.SplitSeq(strings.TrimRight(string(caContent), "\n"), "\n") {
 		_, _ = fmt.Fprintf(builder, "        %s\n", line)
 	}
 
