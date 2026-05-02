@@ -46,7 +46,9 @@ func writeKubeconfig(t *testing.T, content string) string {
 }
 
 // TestAddOIDCKubeconfigEntries tests adding OIDC exec credential entries to kubeconfig.
-func TestAddOIDCKubeconfigEntries(t *testing.T) { //nolint:funlen // table-driven test with multiple subtests
+func TestAddOIDCKubeconfigEntries(
+	t *testing.T,
+) { //nolint:funlen // table-driven test with multiple subtests
 	t.Parallel()
 
 	tests := []struct {
@@ -161,17 +163,33 @@ func TestAddOIDCKubeconfigEntries(t *testing.T) { //nolint:funlen // table-drive
 			assert.Equal(t, "ksail", authInfo.Exec.Command)
 
 			for _, wantArg := range testCase.wantArgsSubset {
-				assert.Contains(t, authInfo.Exec.Args, wantArg, "exec args should contain %q", wantArg)
+				assert.Contains(
+					t,
+					authInfo.Exec.Args,
+					wantArg,
+					"exec args should contain %q",
+					wantArg,
+				)
 			}
 
 			// Verify OIDC context was added
 			ctx, hasContext := config.Contexts[testCase.wantContext]
 			require.True(t, hasContext, "OIDC context %q should exist", testCase.wantContext)
-			assert.Equal(t, testCase.wantCluster, ctx.Cluster, "context should reference correct cluster")
+			assert.Equal(
+				t,
+				testCase.wantCluster,
+				ctx.Cluster,
+				"context should reference correct cluster",
+			)
 			assert.Equal(t, testCase.wantUser, ctx.AuthInfo, "context should reference OIDC user")
 
 			// Verify admin context remains current
-			assert.Equal(t, "kind-local", config.CurrentContext, "admin context should remain current")
+			assert.Equal(
+				t,
+				"kind-local",
+				config.CurrentContext,
+				"admin context should remain current",
+			)
 
 			// Verify admin entries are preserved
 			_, hasAdminUser := config.AuthInfos["kind-local"]

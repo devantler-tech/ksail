@@ -1472,7 +1472,8 @@ func handlePostCreationSetup(
 
 	// Configure OIDC kubeconfig entries when OIDC is enabled
 	if clusterCfg.Spec.Cluster.OIDC.Enabled() {
-		if oidcErr := configureOIDCKubeconfig(cmd, clusterCfg); oidcErr != nil {
+		oidcErr := configureOIDCKubeconfig(cmd, clusterCfg)
+		if oidcErr != nil {
 			notify.WriteMessage(notify.Message{
 				Type:    notify.WarningType,
 				Content: "failed to configure OIDC kubeconfig: %v",

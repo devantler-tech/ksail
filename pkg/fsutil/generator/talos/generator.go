@@ -1013,15 +1013,19 @@ func (g *Generator) generateOIDCPatch(
 	if model.OIDCUsernameClaim != "" {
 		_, _ = fmt.Fprintf(&builder, "      oidc-username-claim: %q\n", model.OIDCUsernameClaim)
 	}
+
 	if model.OIDCUsernamePrefix != "" {
 		_, _ = fmt.Fprintf(&builder, "      oidc-username-prefix: %q\n", model.OIDCUsernamePrefix)
 	}
+
 	if model.OIDCGroupsClaim != "" {
 		_, _ = fmt.Fprintf(&builder, "      oidc-groups-claim: %q\n", model.OIDCGroupsClaim)
 	}
+
 	if model.OIDCGroupsPrefix != "" {
 		_, _ = fmt.Fprintf(&builder, "      oidc-groups-prefix: %q\n", model.OIDCGroupsPrefix)
 	}
+
 	if model.OIDCCAFile != "" {
 		_, _ = fmt.Fprintf(&builder, "      oidc-ca-file: %q\n", model.OIDCCAFile)
 	}

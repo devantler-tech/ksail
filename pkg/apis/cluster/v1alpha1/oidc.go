@@ -12,15 +12,15 @@ type OIDCSpec struct {
 	// ExtraScopes are additional OIDC scopes to request beyond the default 'openid' scope.
 	ExtraScopes []string `json:"extraScopes,omitzero" jsonschema:"description=Additional OIDC scopes beyond openid"` //nolint:lll
 	// UsernameClaim is the JWT claim to use as the Kubernetes username.
-	UsernameClaim string `default:"email" json:"usernameClaim,omitzero" jsonschema:"description=JWT claim for username"`    //nolint:lll
+	UsernameClaim string `default:"email" json:"usernameClaim,omitzero" jsonschema:"description=JWT claim for username"` //nolint:lll
 	// UsernamePrefix is prepended to usernames from the OIDC provider.
 	UsernamePrefix string `default:"oidc:" json:"usernamePrefix,omitzero" jsonschema:"description=Prefix for OIDC usernames"` //nolint:lll
 	// GroupsClaim is the JWT claim to use for Kubernetes group membership.
-	GroupsClaim string `default:"groups" json:"groupsClaim,omitzero" jsonschema:"description=JWT claim for groups"`   //nolint:lll
+	GroupsClaim string `default:"groups" json:"groupsClaim,omitzero" jsonschema:"description=JWT claim for groups"` //nolint:lll
 	// GroupsPrefix is prepended to group names from the OIDC provider.
 	GroupsPrefix string `default:"oidc:" json:"groupsPrefix,omitzero" jsonschema:"description=Prefix for OIDC groups"` //nolint:lll
 	// CAFile is the path to the OIDC provider's CA certificate for self-signed TLS.
-	CAFile string `json:"caFile,omitzero" jsonschema:"description=CA cert path for self-signed OIDC"` //nolint:lll
+	CAFile string `json:"caFile,omitzero" jsonschema:"description=CA cert path for self-signed OIDC"`
 }
 
 // Enabled returns true when OIDC authentication is configured (IssuerURL is set).

@@ -63,7 +63,15 @@ func handleGetToken(cmd *cobra.Command, _ []string) error {
 
 	// 1. Try cached or refreshed token (skip if cache dir unavailable)
 	if cacheDirErr == nil {
-		token, err := tryFromCache(cmd, cacheDir, cacheKey, issuerURL, clientID, extraScopes, caFile)
+		token, err := tryFromCache(
+			cmd,
+			cacheDir,
+			cacheKey,
+			issuerURL,
+			clientID,
+			extraScopes,
+			caFile,
+		)
 		if err == nil && token != nil {
 			return outputExecCredential(token.IDToken, token.Expiry)
 		}

@@ -197,11 +197,17 @@ func buildK3dOIDCArgs(oidc *v1alpha1.OIDCSpec) []k3dv1alpha5.K3sArgWithNodeFilte
 	}
 
 	if oidc.UsernameClaim != "" {
-		oidcArgs = append(oidcArgs, "--kube-apiserver-arg=--oidc-username-claim="+oidc.UsernameClaim)
+		oidcArgs = append(
+			oidcArgs,
+			"--kube-apiserver-arg=--oidc-username-claim="+oidc.UsernameClaim,
+		)
 	}
 
 	if oidc.UsernamePrefix != "" {
-		oidcArgs = append(oidcArgs, "--kube-apiserver-arg=--oidc-username-prefix="+oidc.UsernamePrefix)
+		oidcArgs = append(
+			oidcArgs,
+			"--kube-apiserver-arg=--oidc-username-prefix="+oidc.UsernamePrefix,
+		)
 	}
 
 	if oidc.GroupsClaim != "" {

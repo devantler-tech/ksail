@@ -70,10 +70,12 @@ func (a *Authenticator) Authenticate(ctx context.Context) (*TokenResult, error) 
 	if err != nil {
 		return nil, err
 	}
+
 	defer func() { _ = listener.Close() }()
 
 	go func() {
-		if serveErr := server.Serve(listener); serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
+		serveErr := server.Serve(listener)
+		if serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
 			select {
 			case resultCh <- callbackResult{err: fmt.Errorf("%w: callback server error: %w", ErrAuthenticationFailed, serveErr)}:
 			default:
@@ -85,7 +87,10 @@ func (a *Authenticator) Authenticate(ctx context.Context) (*TokenResult, error) 
 }
 
 // RefreshToken attempts to refresh an expired token using the refresh token.
-func (a *Authenticator) RefreshToken(ctx context.Context, refreshToken string) (*TokenResult, error) {
+func (a *Authenticator) RefreshToken(
+	ctx context.Context,
+	refreshToken string,
+) (*TokenResult, error) {
 	prov, err := a.newOIDCProvider(ctx, "")
 	if err != nil {
 		return nil, err
@@ -120,7 +125,10 @@ type callbackResult struct {
 	err   error
 }
 
-func (a *Authenticator) newOIDCProvider(ctx context.Context, redirectURL string) (*providerResult, error) {
+func (a *Authenticator) newOIDCProvider(
+	ctx context.Context,
+	redirectURL string,
+) (*providerResult, error) {
 	httpClient, err := a.buildHTTPClient()
 	if err != nil {
 		return nil, err
@@ -130,7 +138,11 @@ func (a *Authenticator) newOIDCProvider(ctx context.Context, redirectURL string)
 
 	provider, err := gooidc.NewProvider(oidcCtx, a.IssuerURL)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to discover OIDC provider: %w", ErrAuthenticationFailed, err)
+		return nil, fmt.Errorf(
+			"%w: failed to discover OIDC provider: %w",
+			ErrAuthenticationFailed,
+			err,
+		)
 	}
 
 	scopes := append([]string{gooidc.ScopeOpenID}, a.ExtraScopes...)
@@ -205,7 +217,11 @@ func (a *Authenticator) listenOnRandomPort(ctx context.Context) (net.Listener, i
 
 	listener, err := listenCfg.Listen(ctx, "tcp", "localhost:0")
 	if err != nil {
-		return nil, 0, fmt.Errorf("%w: failed to start callback server: %w", ErrAuthenticationFailed, err)
+		return nil, 0, fmt.Errorf(
+			"%w: failed to start callback server: %w",
+			ErrAuthenticationFailed,
+			err,
+		)
 	}
 
 	tcpAddr, ok := listener.Addr().(*net.TCPAddr)
@@ -231,7 +247,11 @@ func (a *Authenticator) promptBrowserVisit(
 
 	err := openBrowser(ctx, authURL)
 	if err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "Failed to open browser automatically.\nPlease visit: %s\n", authURL)
+		_, _ = fmt.Fprintf(
+			os.Stderr,
+			"Failed to open browser automatically.\nPlease visit: %s\n",
+			authURL,
+		)
 	}
 }
 
@@ -244,6 +264,7 @@ func (a *Authenticator) awaitAuthResult(
 	case result := <-resultCh:
 		//nolint:contextcheck // shutdownServer deliberately uses background context
 		shutdownErr := a.shutdownServer(server)
+
 		if result.err != nil {
 			return nil, result.err
 		}
@@ -260,11 +281,11 @@ func (a *Authenticator) awaitAuthResult(
 }
 
 func (a *Authenticator) shutdownServer(server *http.Server) error {
-	//nolint:contextcheck // graceful shutdown must proceed independently of parent context
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
 
-	if err := server.Shutdown(shutdownCtx); err != nil {
+	err := server.Shutdown(shutdownCtx)
+	if err != nil {
 		return fmt.Errorf("failed to shutdown callback server: %w", err)
 	}
 
@@ -286,15 +307,22 @@ func (a *Authenticator) handleCallback(
 	return func(writer http.ResponseWriter, request *http.Request) {
 		if errMsg := request.URL.Query().Get("error"); errMsg != "" {
 			desc := request.URL.Query().Get("error_description")
+
 			http.Error(writer, "Authentication failed: "+errMsg, http.StatusBadRequest)
-			sendResult(callbackResult{err: fmt.Errorf("%w: %s: %s", ErrAuthenticationFailed, errMsg, desc)})
+			sendResult(
+				callbackResult{
+					err: fmt.Errorf("%w: %s: %s", ErrAuthenticationFailed, errMsg, desc),
+				},
+			)
 
 			return
 		}
 
 		if request.URL.Query().Get("state") != expectedState {
 			http.Error(writer, "Invalid state parameter", http.StatusBadRequest)
-			sendResult(callbackResult{err: fmt.Errorf("%w: state mismatch", ErrAuthenticationFailed)})
+			sendResult(
+				callbackResult{err: fmt.Errorf("%w: state mismatch", ErrAuthenticationFailed)},
+			)
 
 			return
 		}
@@ -302,14 +330,22 @@ func (a *Authenticator) handleCallback(
 		code := request.URL.Query().Get("code")
 		if code == "" {
 			http.Error(writer, "Missing authorization code", http.StatusBadRequest)
-			sendResult(callbackResult{err: fmt.Errorf("%w: missing authorization code", ErrAuthenticationFailed)})
+			sendResult(
+				callbackResult{
+					err: fmt.Errorf("%w: missing authorization code", ErrAuthenticationFailed),
+				},
+			)
 
 			return
 		}
 
 		result, err := a.exchangeAndVerifyToken(ctx, oauth2Config, provider, code, codeVerifier)
 		if err != nil {
-			http.Error(writer, "Token exchange or verification failed", http.StatusInternalServerError)
+			http.Error(
+				writer,
+				"Token exchange or verification failed",
+				http.StatusInternalServerError,
+			)
 			sendResult(callbackResult{err: err})
 
 			return
@@ -360,7 +396,11 @@ func (a *Authenticator) buildHTTPClient() (*http.Client, error) {
 
 	canonicalPath, err := fsutil.EvalCanonicalPath(a.CAFile)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to resolve CA file path: %w", ErrAuthenticationFailed, err)
+		return nil, fmt.Errorf(
+			"%w: failed to resolve CA file path: %w",
+			ErrAuthenticationFailed,
+			err,
+		)
 	}
 
 	caCert, err := os.ReadFile(canonicalPath) //nolint:gosec // G304: path canonicalized above
@@ -394,7 +434,11 @@ func generatePKCE() (string, string, error) {
 
 	_, err := rand.Read(randomBytes)
 	if err != nil {
-		return "", "", fmt.Errorf("%w: failed to generate PKCE verifier: %w", ErrAuthenticationFailed, err)
+		return "", "", fmt.Errorf(
+			"%w: failed to generate PKCE verifier: %w",
+			ErrAuthenticationFailed,
+			err,
+		)
 	}
 
 	verifier := base64.RawURLEncoding.EncodeToString(randomBytes)
@@ -418,15 +462,25 @@ func generateState() (string, error) {
 func openBrowser(ctx context.Context, targetURL string) error {
 	switch runtime.GOOS {
 	case "darwin":
-		cmd := exec.CommandContext(ctx, "open", targetURL) //nolint:gosec // G204: user-visible URL only
-		if err := cmd.Start(); err != nil {
+		cmd := exec.CommandContext(
+			ctx,
+			"open",
+			targetURL,
+		) //nolint:gosec // G204: user-visible URL only
+		err := cmd.Start()
+		if err != nil {
 			return fmt.Errorf("failed to open browser: %w", err)
 		}
 
 		return nil
 	case "linux":
-		cmd := exec.CommandContext(ctx, "xdg-open", targetURL) //nolint:gosec // G204: user-visible URL only
-		if err := cmd.Start(); err != nil {
+		cmd := exec.CommandContext(
+			ctx,
+			"xdg-open",
+			targetURL,
+		) //nolint:gosec // G204: user-visible URL only
+		err := cmd.Start()
+		if err != nil {
 			return fmt.Errorf("failed to open browser: %w", err)
 		}
 
