@@ -202,11 +202,13 @@ func (m *ConfigManager) getFieldMappings() map[any]string {
 		&m.Config.Spec.Cluster.Autoscaler.Node.Enabled: "node-autoscaler-enabled",
 
 		// OIDC authentication
-		&m.Config.Spec.Cluster.OIDC.IssuerURL:     "oidc-issuer-url",
-		&m.Config.Spec.Cluster.OIDC.ClientID:      "oidc-client-id",
-		&m.Config.Spec.Cluster.OIDC.UsernameClaim: "oidc-username-claim",
+		&m.Config.Spec.Cluster.OIDC.IssuerURL:      "oidc-issuer-url",
+		&m.Config.Spec.Cluster.OIDC.ClientID:       "oidc-client-id",
+		&m.Config.Spec.Cluster.OIDC.UsernameClaim:  "oidc-username-claim",
+		&m.Config.Spec.Cluster.OIDC.UsernamePrefix: "oidc-username-prefix",
 		&m.Config.Spec.Cluster.OIDC.GroupsClaim:    "oidc-groups-claim",
-		&m.Config.Spec.Cluster.OIDC.CAFile:        "oidc-ca-file",
+		&m.Config.Spec.Cluster.OIDC.GroupsPrefix:   "oidc-groups-prefix",
+		&m.Config.Spec.Cluster.OIDC.CAFile:         "oidc-ca-file",
 	}
 }
 

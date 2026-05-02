@@ -2,6 +2,7 @@ package oidc
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -13,6 +14,11 @@ import (
 const (
 	// authTimeout is the maximum time to wait for the OIDC authentication flow.
 	authTimeout = 2 * time.Minute
+)
+
+var (
+	errNoCachedToken = errors.New("no cached token")
+	errTokenExpired  = errors.New("token expired and no refresh token")
 )
 
 // newGetTokenCmd creates the 'oidc get-token' subcommand.
@@ -94,7 +100,7 @@ func tryFromCache(
 ) (*oidcsvc.TokenResult, error) {
 	cached := oidcsvc.LoadCachedToken(cacheDir, cacheKey)
 	if cached == nil {
-		return nil, fmt.Errorf("no cached token")
+		return nil, errNoCachedToken
 	}
 
 	if time.Now().Before(cached.Expiry) {
@@ -105,7 +111,7 @@ func tryFromCache(
 	}
 
 	if cached.RefreshToken == "" {
-		return nil, fmt.Errorf("token expired and no refresh token")
+		return nil, errTokenExpired
 	}
 
 	auth := &oidcsvc.Authenticator{

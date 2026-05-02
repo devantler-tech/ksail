@@ -91,6 +91,7 @@ func (a *Authenticator) RefreshToken(ctx context.Context, refreshToken string) (
 		return nil, err
 	}
 
+	//nolint:contextcheck // oidcCtx carries the custom HTTP client for OIDC discovery
 	tokenSource := prov.oauth2Config.TokenSource(prov.oidcCtx, &oauth2.Token{
 		RefreshToken: refreshToken,
 	})
@@ -148,7 +149,9 @@ func (a *Authenticator) newOIDCProvider(ctx context.Context, redirectURL string)
 	}, nil
 }
 
-func (a *Authenticator) startCallbackServer(ctx context.Context) (net.Listener, *http.Server, chan callbackResult, error) {
+func (a *Authenticator) startCallbackServer(
+	ctx context.Context,
+) (net.Listener, *http.Server, chan callbackResult, error) {
 	listenCfg := net.ListenConfig{}
 
 	listener, err := listenCfg.Listen(ctx, "tcp", "localhost:0")
@@ -190,7 +193,11 @@ func (a *Authenticator) startCallbackServer(ctx context.Context) (net.Listener, 
 	sendOnce := &sync.Once{}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc(callbackPath, a.handleCallback(prov.oidcCtx, prov.oauth2Config, prov.provider, state, codeVerifier, resultCh, sendOnce))
+	//nolint:contextcheck // oidcCtx carries the custom HTTP client for OIDC token exchange
+	mux.HandleFunc(callbackPath, a.handleCallback(
+		prov.oidcCtx, prov.oauth2Config, prov.provider,
+		state, codeVerifier, resultCh, sendOnce,
+	))
 
 	server := &http.Server{
 		Handler:           mux,
@@ -218,6 +225,7 @@ func (a *Authenticator) awaitAuthResult(
 ) (*TokenResult, error) {
 	select {
 	case result := <-resultCh:
+		//nolint:contextcheck // shutdownServer deliberately uses background context
 		shutdownErr := a.shutdownServer(server)
 		if result.err != nil {
 			return nil, result.err
@@ -227,6 +235,7 @@ func (a *Authenticator) awaitAuthResult(
 
 		return result.token, nil
 	case <-ctx.Done():
+		//nolint:contextcheck // shutdownServer deliberately uses background context
 		_ = a.shutdownServer(server)
 
 		return nil, fmt.Errorf("%w: %w", ErrAuthenticationFailed, ctx.Err())
@@ -238,7 +247,11 @@ func (a *Authenticator) shutdownServer(server *http.Server) error {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
 
-	return server.Shutdown(shutdownCtx)
+	if err := server.Shutdown(shutdownCtx); err != nil {
+		return fmt.Errorf("failed to shutdown callback server: %w", err)
+	}
+
+	return nil
 }
 
 func (a *Authenticator) handleCallback(

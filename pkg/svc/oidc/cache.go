@@ -53,7 +53,7 @@ func CacheKey(issuerURL, clientID string, scopes []string) string {
 // CachedToken represents a cached OIDC token on disk.
 type CachedToken struct {
 	IDToken      string    `json:"idToken"`
-	RefreshToken string    `json:"refreshToken,omitempty"` //nolint:gosec,lll // G117: token caching
+	RefreshToken string    `json:"refreshToken,omitempty"`
 	Expiry       time.Time `json:"expiry"`
 }
 
@@ -90,7 +90,7 @@ func SaveCachedToken(cacheDir, key string, token *TokenResult) error {
 		Expiry:       token.Expiry,
 	}
 
-	data, err := json.MarshalIndent(cached, "", "  ")
+	data, err := json.MarshalIndent(cached, "", "  ") //nolint:gosec // G117: token caching is the purpose of this file
 	if err != nil {
 		return fmt.Errorf("failed to marshal cached token: %w", err)
 	}
