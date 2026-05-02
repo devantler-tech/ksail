@@ -204,7 +204,7 @@ Editor command for interactive workflows (e.g., `code --wait`, `vim`). Falls bac
 | `importImages` | string | – | Path to tar archive with container images to import after cluster creation but before component installation |
 | `controlPlanes` | int32 | `1` | Number of control-plane nodes to create for the cluster (provider/distribution-agnostic) |
 | `workers` | int32 | – | Number of worker nodes to create for the cluster (provider/distribution-agnostic) |
-| `oidc` | OIDCSpec | – |  |
+| `oidc` | OIDCSpec | – | OIDC authentication configuration for the API server and kubeconfig (see [OIDC fields](#oidc) below) |
 | `vanilla` | OptionsVanilla | – |  |
 | `talos` | OptionsTalos | – |  |
 
@@ -337,6 +337,21 @@ GitOps engine for continuous deployment. See [GitOps](/concepts/#gitops). When s
 - `None` (default) – No GitOps engine
 - `Flux` – Install [Flux CD](https://fluxcd.io/) and scaffold FluxInstance CR
 - `ArgoCD` – Install [Argo CD](https://argo-cd.readthedocs.io/) and scaffold Application CR
+
+#### oidc
+
+OIDC authentication configuration for the Kubernetes API server. When `issuerURL` is set, KSail configures the API server with OIDC flags and adds an exec-based OIDC user/context to kubeconfig.
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `issuerURL` | string | – | OIDC provider issuer URL (e.g. `https://dex.example.com`) |
+| `clientID` | string | – | OIDC client ID for kubectl authentication |
+| `extraScopes` | []string | – | Additional OIDC scopes beyond `openid` |
+| `usernameClaim` | string | `email` | JWT claim for Kubernetes username |
+| `usernamePrefix` | string | `oidc:` | Prefix for OIDC usernames |
+| `groupsClaim` | string | `groups` | JWT claim for Kubernetes groups |
+| `groupsPrefix` | string | `oidc:` | Prefix for OIDC groups |
+| `caFile` | string | – | Path to CA certificate for self-signed OIDC providers |
 
 #### Distribution and Tool Options
 

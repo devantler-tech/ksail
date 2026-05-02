@@ -320,7 +320,7 @@ func TestScaffoldK3d_NodeCounts(t *testing.T) {
 
 			scaffolderInstance := scaffolder.NewScaffolder(cluster, &bytes.Buffer{}, nil)
 			config, err := scaffolderInstance.CreateK3dConfig(".")
-	require.NoError(t, err)
+			require.NoError(t, err)
 
 			assert.Equal(t, testCase.expectedServers, config.Servers)
 			assert.Equal(t, testCase.expectedAgents, config.Agents)

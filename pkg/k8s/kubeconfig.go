@@ -79,7 +79,12 @@ func removeEntriesFromKubeconfig(
 		kubeConfig.CurrentContext = ""
 	}
 
-	_, _ = fmt.Fprintf(logWriter, "Cleaned up kubeconfig entries for cluster %q\n", clusterName)
+	logIdentifier := clusterName
+	if logIdentifier == "" {
+		logIdentifier = contextName
+	}
+
+	_, _ = fmt.Fprintf(logWriter, "Cleaned up kubeconfig entries for cluster %q\n", logIdentifier)
 
 	// Serialize and write back
 	result, err := clientcmd.Write(*kubeConfig)
@@ -358,5 +363,8 @@ func CleanupOIDCKubeconfigEntries(kubeconfigPath, displayName string, logWriter 
 	userName := "oidc-" + displayName
 	contextName := "oidc@" + displayName
 
+	// Pass empty clusterName because OIDC cleanup only removes the user and
+	// context entries — the shared cluster entry is owned by the admin context.
+	// Use contextName as the log identifier since clusterName is intentionally empty.
 	return CleanupKubeconfig(canonicalPath, "", contextName, userName, logWriter)
 }

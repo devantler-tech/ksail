@@ -32,9 +32,9 @@ const (
 	codeVerifierLength = 32
 	// stateLength is the byte length of the OIDC state parameter.
 	stateLength = 16
-	// defaultCallbackPort is the preferred port for the OIDC callback server.
-	// A stable port is required because most OIDC providers enforce exact redirect URI matching.
-	// Falls back to a random port if the default is already in use.
+	// defaultCallbackPort is the port for the OIDC callback server.
+	// A stable port is required because OIDC providers enforce exact redirect URI matching.
+	// If this port is unavailable, the authenticator fails with a clear error.
 	defaultCallbackPort = 18000
 )
 
@@ -115,10 +115,19 @@ func (a *Authenticator) RefreshToken(
 		return nil, fmt.Errorf("%w: no id_token in refresh response", ErrAuthenticationFailed)
 	}
 
+	// Verify the refreshed id_token (issuer, signature, clientID) just like the initial flow.
+	verifier := prov.provider.Verifier(&gooidc.Config{ClientID: a.ClientID})
+
+	//nolint:contextcheck // oidcCtx carries the custom HTTP client for OIDC discovery
+	verified, err := verifier.Verify(prov.oidcCtx, idToken)
+	if err != nil {
+		return nil, fmt.Errorf("%w: refreshed token verification failed: %w", ErrAuthenticationFailed, err)
+	}
+
 	return &TokenResult{
 		IDToken:      idToken,
 		RefreshToken: newToken.RefreshToken,
-		Expiry:       newToken.Expiry,
+		Expiry:       verified.Expiry,
 	}, nil
 }
 
