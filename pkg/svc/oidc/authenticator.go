@@ -32,6 +32,10 @@ const (
 	codeVerifierLength = 32
 	// stateLength is the byte length of the OIDC state parameter.
 	stateLength = 16
+	// defaultCallbackPort is the preferred port for the OIDC callback server.
+	// A stable port is required because most OIDC providers enforce exact redirect URI matching.
+	// Falls back to a random port if the default is already in use.
+	defaultCallbackPort = 18000
 )
 
 // ErrAuthenticationFailed is returned when the OIDC authentication flow fails.
@@ -215,7 +219,15 @@ func (a *Authenticator) startCallbackServer(
 func (a *Authenticator) listenOnRandomPort(ctx context.Context) (net.Listener, int, error) {
 	listenCfg := net.ListenConfig{}
 
-	listener, err := listenCfg.Listen(ctx, "tcp", "localhost:0")
+	// Try the stable default port first so the redirect URI is deterministic
+	// (most OIDC providers require an exact redirect URI match including port).
+	listener, err := listenCfg.Listen(ctx, "tcp", fmt.Sprintf("localhost:%d", defaultCallbackPort))
+	if err == nil {
+		return listener, defaultCallbackPort, nil
+	}
+
+	// Fall back to a random port if the default is unavailable.
+	listener, err = listenCfg.Listen(ctx, "tcp", "localhost:0")
 	if err != nil {
 		return nil, 0, fmt.Errorf(
 			"%w: failed to start callback server: %w",

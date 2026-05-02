@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	v1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"sigs.k8s.io/yaml"
 )
@@ -182,7 +183,12 @@ func ApplyImageVerificationVolumes(
 //
 // This function is idempotent — it skips appending if the volume mount is already present.
 func ApplyOIDCCAVolume(k3dConfig *v1alpha5.SimpleConfig, hostCAPath string) {
-	volumeSpec := hostCAPath + ":" + v1alpha1.OIDCCAContainerPath
+	canonicalCAPath, err := fsutil.EvalCanonicalPath(hostCAPath)
+	if err != nil {
+		return
+	}
+
+	volumeSpec := canonicalCAPath + ":" + v1alpha1.OIDCCAContainerPath
 
 	for i, vol := range k3dConfig.Volumes {
 		if strings.Contains(vol.Volume, v1alpha1.OIDCCAContainerPath) {

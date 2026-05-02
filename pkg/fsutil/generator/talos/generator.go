@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil/generator/talos/csrapprover"
 	yamlgenerator "github.com/devantler-tech/ksail/v7/pkg/fsutil/generator/yaml"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/registry"
@@ -42,9 +44,6 @@ const (
 	ingressFirewallRulesFileName = "ingress-firewall-rules.yaml"
 	// oidcFileName is the name of the OIDC API server configuration patch file.
 	oidcFileName = "oidc.yaml"
-	// oidcCAContainerPath is the node-local path where the OIDC CA certificate is
-	// written via machine.files. The API server references this path via --oidc-ca-file.
-	oidcCAContainerPath = "/etc/kubernetes/pki/oidc-ca.crt"
 )
 
 // KubeletServingCertApproverManifestURL is the URL for the kubelet-serving-cert-approver manifest.
@@ -1012,9 +1011,14 @@ func (g *Generator) generateOIDCPatch(
 	// If a CA file is configured, embed its content via machine.files so the
 	// API server can reference it by a well-known node-local path.
 	if model.OIDCCAFile != "" {
-		caContent, err := os.ReadFile(model.OIDCCAFile)
+		canonicalCAPath, err := fsutil.EvalCanonicalPath(model.OIDCCAFile)
 		if err != nil {
-			return fmt.Errorf("failed to read OIDC CA file %q: %w", model.OIDCCAFile, err)
+			return fmt.Errorf("failed to resolve OIDC CA file path %q: %w", model.OIDCCAFile, err)
+		}
+
+		caContent, err := os.ReadFile(canonicalCAPath) //nolint:gosec // path canonicalized above
+		if err != nil {
+			return fmt.Errorf("failed to read OIDC CA file %q: %w", canonicalCAPath, err)
 		}
 
 		_, _ = fmt.Fprintf(&builder, "machine:\n")
@@ -1026,7 +1030,7 @@ func (g *Generator) generateOIDCPatch(
 		}
 
 		_, _ = fmt.Fprintf(&builder, "      permissions: 0o644\n")
-		_, _ = fmt.Fprintf(&builder, "      path: %s\n", oidcCAContainerPath)
+		_, _ = fmt.Fprintf(&builder, "      path: %s\n", v1alpha1.OIDCCAContainerPath)
 		_, _ = fmt.Fprintf(&builder, "      op: create\n")
 		_, _ = fmt.Fprintf(&builder, "---\n")
 	}
@@ -1054,7 +1058,7 @@ func (g *Generator) generateOIDCPatch(
 	}
 
 	if model.OIDCCAFile != "" {
-		_, _ = fmt.Fprintf(&builder, "      oidc-ca-file: %q\n", oidcCAContainerPath)
+		_, _ = fmt.Fprintf(&builder, "      oidc-ca-file: %q\n", v1alpha1.OIDCCAContainerPath)
 	}
 
 	err := os.WriteFile(patchPath, []byte(builder.String()), filePerm)

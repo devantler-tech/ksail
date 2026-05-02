@@ -130,7 +130,7 @@ func TestAddOIDCKubeconfigEntries(
 					ClientID:         "kubectl",
 				}
 			},
-			wantErr: "failed to read kubeconfig",
+			wantErr: "failed to resolve kubeconfig path",
 		},
 	}
 

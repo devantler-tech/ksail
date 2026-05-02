@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	kindv1alpha4 "sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
 
@@ -178,8 +179,13 @@ func ApplyOIDCPatches(kindConfig *kindv1alpha4.Cluster, oidc *v1alpha1.OIDCSpec)
 
 	// Mount the host CA file into all nodes so the API server can read it
 	if oidc.CAFile != "" {
+		canonicalCAPath, err := fsutil.EvalCanonicalPath(oidc.CAFile)
+		if err != nil {
+			return
+		}
+
 		mount := kindv1alpha4.Mount{
-			HostPath:      oidc.CAFile,
+			HostPath:      canonicalCAPath,
 			ContainerPath: v1alpha1.OIDCCAContainerPath,
 			Readonly:      true,
 		}
