@@ -110,16 +110,16 @@ func (m ChatMode) Next() ChatMode {
 }
 
 // ToSDKMode maps the KSail chat mode to the corresponding Copilot SDK RPC mode.
-func (m ChatMode) ToSDKMode() rpc.Mode {
+func (m ChatMode) ToSDKMode() rpc.SessionMode {
 	switch m {
 	case InteractiveMode:
-		return rpc.ModeInteractive
+		return rpc.SessionModeInteractive
 	case PlanMode:
-		return rpc.ModePlan
+		return rpc.SessionModePlan
 	case AutopilotMode:
-		return rpc.ModeAutopilot
+		return rpc.SessionModeAutopilot
 	default:
-		return rpc.ModeInteractive
+		return rpc.SessionModeInteractive
 	}
 }
 
@@ -1065,7 +1065,7 @@ func (m *Model) dropNextPendingPrompt() {
 // (e.g., blocking tools in plan mode).
 func (m *Model) applyMode(mode ChatMode) error {
 	if m.session != nil && m.session.RPC != nil {
-		_, err := m.session.RPC.Mode.Set(m.ctx, &rpc.SessionModeSetParams{
+		_, err := m.session.RPC.Mode.Set(m.ctx, &rpc.ModeSetRequest{
 			Mode: mode.ToSDKMode(),
 		})
 		if err != nil {

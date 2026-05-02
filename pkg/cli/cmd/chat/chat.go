@@ -1481,8 +1481,8 @@ func wireSessionLog(session *copilot.Session, logRef *toolgen.SessionLogRef) {
 	}
 
 	logRef.Set(func(ctx context.Context, message, level string) {
-		l := rpc.Level(level)
-		_, _ = session.RPC.Log(ctx, &rpc.SessionLogParams{
+		l := rpc.SessionLogLevel(level)
+		_, _ = session.RPC.Log(ctx, &rpc.LogRequest{
 			Message: message,
 			Level:   &l,
 		})

@@ -165,23 +165,23 @@ func TestChatMode_ToSDKMode(t *testing.T) {
 	tests := []struct {
 		name     string
 		mode     chat.ChatMode
-		expected rpc.Mode
+		expected rpc.SessionMode
 	}{
 		{
 			name:     "interactive maps to interactive",
 			mode:     chat.InteractiveMode,
-			expected: rpc.ModeInteractive,
+			expected: rpc.SessionModeInteractive,
 		},
-		{name: "plan maps to plan", mode: chat.PlanMode, expected: rpc.ModePlan},
+		{name: "plan maps to plan", mode: chat.PlanMode, expected: rpc.SessionModePlan},
 		{
 			name:     "autopilot maps to autopilot",
 			mode:     chat.AutopilotMode,
-			expected: rpc.ModeAutopilot,
+			expected: rpc.SessionModeAutopilot,
 		},
 		{
 			name:     "unknown defaults to interactive",
 			mode:     chat.ChatMode(99),
-			expected: rpc.ModeInteractive,
+			expected: rpc.SessionModeInteractive,
 		},
 	}
 
