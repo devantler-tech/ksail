@@ -1929,26 +1929,7 @@ func runDeleteAction(
 
 	// Detect cluster distribution and info before deletion
 	// This must happen before deletion while kubeconfig is still available
-	detectedInfo := detectClusterDistribution(resolved)
-	isKindCluster := detectedInfo != nil &&
-		detectedInfo.Distribution == v1alpha1.DistributionVanilla
-
-	// Fallback: detect Kind cluster from container naming patterns if kubeconfig detection failed
-	// This handles cases where kubeconfig context is missing but cluster containers exist
-	if !isKindCluster && resolved.Provider == v1alpha1.ProviderDocker {
-		nodes := discoverDockerNodes(cmd, resolved.ClusterName)
-		isKindCluster = isKindClusterFromNodes(nodes, resolved.ClusterName)
-	}
-
-	// Create cluster info for provisioner creation, including detected distribution
-	clusterInfo := &clusterdetector.Info{
-		ClusterName:    resolved.ClusterName,
-		Provider:       resolved.Provider,
-		KubeconfigPath: resolved.KubeconfigPath,
-	}
-	if detectedInfo != nil {
-		clusterInfo.Distribution = detectedInfo.Distribution
-	}
+	detectedInfo, isKindCluster, clusterInfo := detectDeleteClusterInfo(cmd, resolved)
 
 	// Create provisioner for the provider
 	provisioner, err := createDeleteProvisioner(clusterInfo, resolved.OmniOpts, flags.storage)
@@ -2012,6 +1993,34 @@ func detectClusterDistribution(resolved *lifecycle.ResolvedClusterInfo) *cluster
 	}
 
 	return nil
+}
+
+// detectDeleteClusterInfo detects the distribution, Kind-cluster status, and builds
+// the clusterdetector.Info needed for provisioner creation during cluster deletion.
+func detectDeleteClusterInfo(
+	cmd *cobra.Command,
+	resolved *lifecycle.ResolvedClusterInfo,
+) (*clusterdetector.Info, bool, *clusterdetector.Info) {
+	detectedInfo := detectClusterDistribution(resolved)
+	isKindCluster := detectedInfo != nil &&
+		detectedInfo.Distribution == v1alpha1.DistributionVanilla
+
+	// Fallback: detect Kind cluster from container naming patterns if kubeconfig detection failed
+	if !isKindCluster && resolved.Provider == v1alpha1.ProviderDocker {
+		nodes := discoverDockerNodes(cmd, resolved.ClusterName)
+		isKindCluster = isKindClusterFromNodes(nodes, resolved.ClusterName)
+	}
+
+	clusterInfo := &clusterdetector.Info{
+		ClusterName:    resolved.ClusterName,
+		Provider:       resolved.Provider,
+		KubeconfigPath: resolved.KubeconfigPath,
+	}
+	if detectedInfo != nil {
+		clusterInfo.Distribution = detectedInfo.Distribution
+	}
+
+	return detectedInfo, isKindCluster, clusterInfo
 }
 
 // prepareDockerDeletion prepares Docker-specific resources before deletion.
