@@ -268,6 +268,78 @@ jobs:
       CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
       APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
 
+  # Gate: wait for the org-wide Required Workflow "✅ Validate Go Project" to
+  # finish before starting expensive system tests. On workflow_dispatch the
+  # required workflow does not run, so this job is skipped.
+  wait-for-validate-go:
+    name: ⏳ Wait for Go Validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [changes]
+    if: >-
+      github.event_name == 'pull_request'
+      && needs.changes.outputs.system-test == 'true'
+      && github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      checks: read
+    steps:
+      - name: Wait for ✅ Validate Go Project
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const sha = context.payload.pull_request.head.sha;
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const prefix = '✅ Validate Go Project';
+            const maxWait = 25 * 60 * 1000; // 25 minutes
+            const poll = 30 * 1000; // 30 seconds
+            const start = Date.now();
+
+            while (Date.now() - start < maxWait) {
+              const { data: checks } = await github.rest.checks.listForRef({
+                owner, repo, ref: sha, per_page: 100,
+              });
+
+              const relevant = checks.check_runs.filter(cr =>
+                cr.name.startsWith(prefix)
+              );
+
+              if (relevant.length > 0) {
+                const pending = relevant.filter(cr => cr.status !== 'completed');
+                if (pending.length === 0) {
+                  const failed = relevant.filter(cr =>
+                    !['success', 'skipped', 'neutral'].includes(cr.conclusion)
+                  );
+                  if (failed.length > 0) {
+                    const names = failed.map(cr => `${cr.name}: ${cr.conclusion}`).join('\n');
+                    core.setFailed(`Go validation failed:\n${names}`);
+                    return;
+                  }
+                  core.info(`✅ All ${relevant.length} Go validation check(s) passed`);
+                  return;
+                }
+                core.info(`⏳ Waiting for ${pending.length}/${relevant.length} check(s)...`);
+              } else {
+                core.info('⏳ No Go validation checks found yet...');
+              }
+
+              await new Promise(r => setTimeout(r, poll));
+            }
+
+            // On timeout, succeed gracefully if no checks ever appeared
+            // (required workflow may not be configured for this repo).
+            const { data: final } = await github.rest.checks.listForRef({
+              owner, repo, ref: sha, per_page: 100,
+            });
+            const remaining = final.check_runs.filter(cr =>
+              cr.name.startsWith(prefix)
+            );
+            if (remaining.length === 0) {
+              core.warning('No Go validation checks found — required workflow may not apply to this repo');
+              return;
+            }
+            core.setFailed('Timed out waiting for Go validation checks to complete');
+
   build-artifact:
     name: 🏗️ Build KSail Binary
     runs-on: ubuntu-latest
@@ -622,12 +694,16 @@ jobs:
     name: 🔥 Warm Helm Cache
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    needs: [changes, build-artifact]
+    needs: [changes, build-artifact, wait-for-validate-go]
     if: >-
-      (github.event_name == 'pull_request'
-      && needs.changes.outputs.system-test == 'true'
-      && github.event.pull_request.head.repo.full_name == github.repository)
-      || (github.event_name == 'workflow_dispatch' && inputs.run_system_tests == true)
+      !cancelled()
+      && (needs.wait-for-validate-go.result == 'success' || needs.wait-for-validate-go.result == 'skipped')
+      && (
+        (github.event_name == 'pull_request'
+        && needs.changes.outputs.system-test == 'true'
+        && github.event.pull_request.head.repo.full_name == github.repository)
+        || (github.event_name == 'workflow_dispatch' && inputs.run_system_tests == true)
+      )
     permissions:
       contents: read
     outputs:
@@ -660,12 +736,16 @@ jobs:
     name: 🔥 Warm Mirror Cache
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    needs: [changes, build-artifact]
+    needs: [changes, build-artifact, wait-for-validate-go]
     if: >-
-      (github.event_name == 'pull_request'
-      && needs.changes.outputs.system-test == 'true'
-      && github.event.pull_request.head.repo.full_name == github.repository)
-      || (github.event_name == 'workflow_dispatch' && inputs.run_system_tests == true)
+      !cancelled()
+      && (needs.wait-for-validate-go.result == 'success' || needs.wait-for-validate-go.result == 'skipped')
+      && (
+        (github.event_name == 'pull_request'
+        && needs.changes.outputs.system-test == 'true'
+        && github.event.pull_request.head.repo.full_name == github.repository)
+        || (github.event_name == 'workflow_dispatch' && inputs.run_system_tests == true)
+      )
     permissions:
       contents: read
     outputs:
@@ -700,12 +780,23 @@ jobs:
     name: 🧪 System Test (Docker)
     runs-on: ubuntu-latest
     timeout-minutes: 75
-    needs: [changes, build-artifact, warm-helm-cache, warm-mirror-cache]
+    needs:
+      [
+        changes,
+        build-artifact,
+        warm-helm-cache,
+        warm-mirror-cache,
+        wait-for-validate-go,
+      ]
     if: >-
-      (github.event_name == 'pull_request'
-      && needs.changes.outputs.system-test == 'true'
-      && github.event.pull_request.head.repo.full_name == github.repository)
-      || (github.event_name == 'workflow_dispatch' && inputs.run_system_tests == true)
+      !cancelled()
+      && (needs.wait-for-validate-go.result == 'success' || needs.wait-for-validate-go.result == 'skipped')
+      && (
+        (github.event_name == 'pull_request'
+        && needs.changes.outputs.system-test == 'true'
+        && github.event.pull_request.head.repo.full_name == github.repository)
+        || (github.event_name == 'workflow_dispatch' && inputs.run_system_tests == true)
+      )
     permissions:
       contents: read
       packages: write
@@ -1066,6 +1157,7 @@ jobs:
         rate-limit-gate,
         changes,
         ci-go,
+        wait-for-validate-go,
         build-artifact,
         generate,
         auto-commit,
@@ -1088,6 +1180,7 @@ jobs:
             ${{ needs.rate-limit-gate.result }}
             ${{ needs.changes.result }}
             ${{ needs.ci-go.result }}
+            ${{ needs.wait-for-validate-go.result }}
             ${{ needs.build-artifact.result }}
             ${{ needs.generate.result }}
             ${{ needs.auto-commit.result }}
