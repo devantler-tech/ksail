@@ -525,7 +525,6 @@ func newConfigsWithEndpointAndSecrets(
 
 	controlPlaneEndpoint := "https://" + net.JoinHostPort(controlPlaneIP, "6443")
 	genOptions := buildBaseGenOptions(controlPlaneIP, versionContract)
-
 	if existingSecrets != nil {
 		genOptions = append(genOptions, generate.WithSecretsBundle(existingSecrets))
 	}
@@ -716,17 +715,34 @@ func applySchematic(extensions []string, configBundle *bundle.Bundle) (string, e
 // otherwise falls back to the DefaultTalosImage tag.
 func resolveInstallerVersion(configBundle *bundle.Bundle) string {
 	if image := controlPlaneInstallImage(configBundle); image != "" {
-		if idx := strings.LastIndex(image, ":"); idx >= 0 {
-			return image[idx+1:]
+		if tag := extractImageTag(image); tag != "" {
+			return tag
 		}
 	}
 
-	// Fall back to extracting version from default Talos image
-	if idx := strings.LastIndex(DefaultTalosImage, ":"); idx >= 0 {
-		return DefaultTalosImage[idx+1:]
+	if tag := extractImageTag(DefaultTalosImage); tag != "" {
+		return tag
 	}
 
 	return "latest"
+}
+
+// extractImageTag extracts the tag from an OCI image reference.
+// Strips any @digest suffix first, then extracts the tag after the last ":"
+// only if it does not contain "/" (which would indicate a port, not a tag).
+func extractImageTag(image string) string {
+	if digestIdx := strings.Index(image, "@"); digestIdx >= 0 {
+		image = image[:digestIdx]
+	}
+
+	if colonIdx := strings.LastIndex(image, ":"); colonIdx >= 0 {
+		candidate := image[colonIdx+1:]
+		if !strings.Contains(candidate, "/") {
+			return candidate
+		}
+	}
+
+	return ""
 }
 
 // controlPlaneInstallImage returns the control plane machine.install.image, or empty string.
