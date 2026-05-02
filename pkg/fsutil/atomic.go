@@ -45,7 +45,8 @@ func AtomicWriteFile(path string, data []byte, perm os.FileMode) error {
 
 	renameErr := os.Rename(tmpPath, path)
 	if renameErr != nil && runtime.GOOS == "windows" {
-		if _, statErr := os.Stat(path); statErr == nil {
+		_, statErr := os.Stat(path)
+		if statErr == nil {
 			_ = os.Remove(path)
 
 			renameErr = os.Rename(tmpPath, path)

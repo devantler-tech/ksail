@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestCacheKey(t *testing.T) {
+func TestCacheKeyFormat(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -19,64 +19,41 @@ func TestCacheKey(t *testing.T) {
 		issuerURL string
 		clientID  string
 		scopes    []string
-		wantSame  string // if non-empty, assert key equals this
 	}{
-		{
-			name:      "deterministic for same inputs",
-			issuerURL: "https://dex.example.com",
-			clientID:  "kubectl",
-			scopes:    []string{"email", "groups"},
-		},
-		{
-			name:      "scope order does not affect key",
-			issuerURL: "https://dex.example.com",
-			clientID:  "kubectl",
-			scopes:    []string{"groups", "email"},
-		},
-		{
-			name:      "different issuer produces different key",
-			issuerURL: "https://other.example.com",
-			clientID:  "kubectl",
-			scopes:    []string{"email", "groups"},
-		},
-		{
-			name:      "different clientID produces different key",
-			issuerURL: "https://dex.example.com",
-			clientID:  "other-client",
-			scopes:    []string{"email", "groups"},
-		},
-		{
-			name:      "empty scopes",
-			issuerURL: "https://dex.example.com",
-			clientID:  "kubectl",
-			scopes:    nil,
-		},
+		{name: "basic", issuerURL: "https://dex.example.com", clientID: "kubectl", scopes: []string{"email"}},
+		{name: "empty scopes", issuerURL: "https://dex.example.com", clientID: "kubectl", scopes: nil},
 	}
-
-	// Pre-compute the key for the first two cases — they should match.
-	baseKey := oidc.CacheKey("https://dex.example.com", "kubectl", []string{"email", "groups"})
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			key := oidc.CacheKey(tc.issuerURL, tc.clientID, tc.scopes)
 			assert.NotEmpty(t, key)
-			// SHA-256 hex is 64 chars.
-			assert.Len(t, key, 64)
+			assert.Len(t, key, 64) // SHA-256 hex
 		})
 	}
+}
 
-	// Scope order invariance.
+func TestCacheKeyDeterminism(t *testing.T) {
+	t.Parallel()
+
+	baseKey := oidc.CacheKey("https://dex.example.com", "kubectl", []string{"email", "groups"})
+
 	t.Run("scope order invariance", func(t *testing.T) {
 		t.Parallel()
 		reversed := oidc.CacheKey("https://dex.example.com", "kubectl", []string{"groups", "email"})
 		assert.Equal(t, baseKey, reversed)
 	})
 
-	// Different parameters produce different keys.
 	t.Run("different issuer differs", func(t *testing.T) {
 		t.Parallel()
 		other := oidc.CacheKey("https://other.example.com", "kubectl", []string{"email", "groups"})
+		assert.NotEqual(t, baseKey, other)
+	})
+
+	t.Run("different clientID differs", func(t *testing.T) {
+		t.Parallel()
+		other := oidc.CacheKey("https://dex.example.com", "other", []string{"email", "groups"})
 		assert.NotEqual(t, baseKey, other)
 	})
 }
