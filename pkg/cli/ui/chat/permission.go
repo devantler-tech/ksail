@@ -244,7 +244,7 @@ func CreateTUIPermissionHandler(
 		}
 
 		return copilot.PermissionRequestResult{
-			Kind: copilot.PermissionRequestResultKindDeniedInteractivelyByUser,
+			Kind: copilot.PermissionRequestResultKindRejected,
 		}, nil
 	}
 }

@@ -612,3 +612,49 @@ func (m *Model) handleTaskComplete(msg TaskCompleteMsg) (tea.Model, tea.Cmd) {
 
 	return m, m.waitForEvent()
 }
+
+// handleAutoModeSwitchRequested notifies the user that a model switch was requested
+// (typically due to rate limiting). The Go SDK does not yet expose a response API,
+// so this is informational only.
+func (m *Model) handleAutoModeSwitchRequested(msg autoModeSwitchRequestedMsg) (tea.Model, tea.Cmd) {
+	notice := "🔄 Auto model switch requested"
+	if msg.errorCode != "" {
+		notice += " (reason: " + msg.errorCode + ")"
+	}
+
+	if len(m.messages) > 0 {
+		last := &m.messages[len(m.messages)-1]
+		if last.role == roleAssistant && last.isStreaming {
+			m.currentResponse.WriteString("\n> " + notice + "\n")
+			last.content = m.currentResponse.String()
+			m.updateViewportContent()
+		}
+	}
+
+	return m, m.waitForEvent()
+}
+
+// handleAutoModeSwitchCompleted notifies the user of the auto mode switch outcome.
+func (m *Model) handleAutoModeSwitchCompleted(msg autoModeSwitchCompletedMsg) (tea.Model, tea.Cmd) {
+	var notice string
+
+	switch msg.response {
+	case "yes", "yes_always":
+		notice = "✅ Auto model switch accepted"
+	case "no":
+		notice = "❌ Auto model switch declined"
+	default:
+		notice = "ℹ️ Auto model switch resolved: " + msg.response
+	}
+
+	if len(m.messages) > 0 {
+		last := &m.messages[len(m.messages)-1]
+		if last.role == roleAssistant && last.isStreaming {
+			m.currentResponse.WriteString("\n> " + notice + "\n")
+			last.content = m.currentResponse.String()
+			m.updateViewportContent()
+		}
+	}
+
+	return m, m.waitForEvent()
+}

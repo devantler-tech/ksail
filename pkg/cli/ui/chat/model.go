@@ -495,7 +495,8 @@ func (m *Model) Update(
 		usageMsg, compactionStartMsg, compactionCompleteMsg,
 		intentMsg, modelChangeMsg, shutdownMsg,
 		systemNotificationMsg, sessionWarningMsg,
-		ToolProgressMsg, TaskCompleteMsg:
+		ToolProgressMsg, TaskCompleteMsg,
+		autoModeSwitchRequestedMsg, autoModeSwitchCompletedMsg:
 		return m.handleStreamEvent(msg)
 
 	case modeChangeRequestMsg:
@@ -687,6 +688,12 @@ func (m *Model) handleStreamEvent(
 
 	case TaskCompleteMsg:
 		return m.handleTaskComplete(msg)
+
+	case autoModeSwitchRequestedMsg:
+		return m.handleAutoModeSwitchRequested(msg)
+
+	case autoModeSwitchCompletedMsg:
+		return m.handleAutoModeSwitchCompleted(msg)
 
 	default:
 		return m, nil

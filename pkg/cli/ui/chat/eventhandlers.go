@@ -82,6 +82,10 @@ func (d *sessionEventDispatcher) dispatch(
 		d.handleToolProgress(event)
 	case copilot.SessionEventTypeSessionTaskComplete:
 		d.handleTaskComplete(event)
+	case copilot.SessionEventTypeAutoModeSwitchRequested:
+		d.handleAutoModeSwitchRequested(event)
+	case copilot.SessionEventTypeAutoModeSwitchCompleted:
+		d.handleAutoModeSwitchCompleted(event)
 	}
 }
 
@@ -363,4 +367,33 @@ func (d *sessionEventDispatcher) handleTaskComplete(event copilot.SessionEvent) 
 	}
 
 	d.eventChan <- TaskCompleteMsg{Message: msg}
+}
+
+func (d *sessionEventDispatcher) handleAutoModeSwitchRequested(event copilot.SessionEvent) {
+	data, ok := event.Data.(*copilot.AutoModeSwitchRequestedData)
+	if !ok {
+		return
+	}
+
+	msg := autoModeSwitchRequestedMsg{
+		requestID: data.RequestID,
+	}
+
+	if data.ErrorCode != nil {
+		msg.errorCode = *data.ErrorCode
+	}
+
+	d.eventChan <- msg
+}
+
+func (d *sessionEventDispatcher) handleAutoModeSwitchCompleted(event copilot.SessionEvent) {
+	data, ok := event.Data.(*copilot.AutoModeSwitchCompletedData)
+	if !ok {
+		return
+	}
+
+	d.eventChan <- autoModeSwitchCompletedMsg{
+		requestID: data.RequestID,
+		response:  data.Response,
+	}
 }

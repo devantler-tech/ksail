@@ -48,6 +48,9 @@ const (
 	authMaxAttempts = 3
 	// authRetryBaseWait is the base wait duration for auth retry backoff.
 	authRetryBaseWait = 500 * time.Millisecond
+	// sessionIdleTimeoutSeconds is the server-side session idle timeout.
+	// Sessions without activity for this duration are automatically cleaned up.
+	sessionIdleTimeoutSeconds = 1800 // 30 minutes
 	// authRetryMaxWait is the maximum wait duration for auth retry backoff.
 	authRetryMaxWait = 4 * time.Second
 )
@@ -202,8 +205,9 @@ func startCopilotClient(ctx context.Context) (*copilot.Client, error) {
 	filteredEnvVars := []string{"GITHUB_TOKEN", "GH_TOKEN", "COPILOT_GITHUB_TOKEN"}
 
 	opts := &copilot.ClientOptions{
-		LogLevel: "error",
-		Env:      filterEnvVars(os.Environ(), filteredEnvVars),
+		LogLevel:                  "error",
+		Env:                       filterEnvVars(os.Environ(), filteredEnvVars),
+		SessionIdleTimeoutSeconds: sessionIdleTimeoutSeconds,
 	}
 
 	// Resolve CLI path explicitly so we get a clear error if it's missing,
