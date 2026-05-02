@@ -687,9 +687,10 @@ func addRegistryAuth(cfg *v1alpha1.Config, mirror MirrorRegistry) {
 }
 
 // applySchematic computes a schematic ID from extensions and patches machine.install.image.
-// Returns an empty string if no extensions are configured.
+// Returns an empty string if no extensions are configured (after normalization).
 func applySchematic(extensions []string, configBundle *bundle.Bundle) (string, error) {
-	if len(extensions) == 0 {
+	normalized := NormalizeExtensions(extensions)
+	if len(normalized) == 0 {
 		return "", nil
 	}
 

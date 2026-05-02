@@ -130,9 +130,12 @@ func (m *ConfigManager) loadTalosConfig() (*talosconfigmanager.Configs, error) {
 	// Wire extensions from ksail.yaml so that machine.install.image is patched
 	// to use a Talos Image Factory installer containing the requested extensions.
 	// Skip when an explicit SchematicID is set — it takes precedence over extensions.
-	if m.Config.Spec.Cluster.Talos.SchematicID == "" &&
-		len(m.Config.Spec.Cluster.Talos.Extensions) > 0 {
-		talosManager.WithExtensions(m.Config.Spec.Cluster.Talos.Extensions)
+	// Normalize first so whitespace-only or empty entries don't trigger schematic computation.
+	if m.Config.Spec.Cluster.Talos.SchematicID == "" {
+		normalized := talosconfigmanager.NormalizeExtensions(m.Config.Spec.Cluster.Talos.Extensions)
+		if len(normalized) > 0 {
+			talosManager.WithExtensions(normalized)
+		}
 	}
 
 	config, err := talosManager.Load(configmanagerinterface.LoadOptions{})

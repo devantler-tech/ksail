@@ -19,7 +19,7 @@ type Schematic = schematic.Schematic
 // The extensions are normalized (trimmed, empty entries removed, deduplicated)
 // and sorted to ensure deterministic schematic IDs.
 func NewSchematic(extensions []string) *Schematic {
-	normalized := normalizeExtensions(extensions)
+	normalized := NormalizeExtensions(extensions)
 
 	return &Schematic{
 		Customization: schematic.Customization{
@@ -30,10 +30,10 @@ func NewSchematic(extensions []string) *Schematic {
 	}
 }
 
-// normalizeExtensions trims whitespace, drops empty strings, deduplicates,
+// NormalizeExtensions trims whitespace, drops empty strings, deduplicates,
 // and sorts the extension list. This ensures deterministic schematic IDs
 // and prevents subtle mismatches against Image Factory.
-func normalizeExtensions(extensions []string) []string {
+func NormalizeExtensions(extensions []string) []string {
 	seen := make(map[string]struct{}, len(extensions))
 	result := make([]string, 0, len(extensions))
 
