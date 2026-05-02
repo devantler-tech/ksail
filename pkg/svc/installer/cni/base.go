@@ -147,7 +147,13 @@ func (b *InstallerBase) CheckGitOpsOwnership(
 	}
 
 	if controller, managed := helmutil.IsGitOpsManaged(labels); managed {
-		fmt.Fprintf(os.Stderr, "%s: skipping install — release %q is managed by %s\n", componentName, releaseName, controller)
+		fmt.Fprintf(
+			os.Stderr,
+			"%s: skipping install — release %q is managed by %s\n",
+			componentName,
+			releaseName,
+			controller,
+		)
 
 		return true, nil
 	}

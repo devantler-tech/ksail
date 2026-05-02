@@ -25,7 +25,7 @@ func testIsGitOpsManagedNilLabels(t *testing.T) {
 
 	controller, managed := helmutil.IsGitOpsManaged(nil)
 
-	assert.Equal(t, "", controller)
+	assert.Empty(t, controller)
 	assert.False(t, managed)
 }
 
@@ -35,7 +35,7 @@ func testIsGitOpsManagedEmptyLabels(t *testing.T) {
 
 	controller, managed := helmutil.IsGitOpsManaged(map[string]string{})
 
-	assert.Equal(t, "", controller)
+	assert.Empty(t, controller)
 	assert.False(t, managed)
 }
 
@@ -50,7 +50,7 @@ func testIsGitOpsManagedStandardHelmLabels(t *testing.T) {
 		"status":  "deployed",
 	})
 
-	assert.Equal(t, "", controller)
+	assert.Empty(t, controller)
 	assert.False(t, managed)
 }
 
@@ -59,8 +59,8 @@ func testIsGitOpsManagedFlux(t *testing.T) {
 	t.Parallel()
 
 	controller, managed := helmutil.IsGitOpsManaged(map[string]string{
-		"name":                            "cert-manager",
-		"owner":                           "helm",
+		"name":                             "cert-manager",
+		"owner":                            "helm",
 		"helm.toolkit.fluxcd.io/name":      "cert-manager",
 		"helm.toolkit.fluxcd.io/namespace": "flux-system",
 	})

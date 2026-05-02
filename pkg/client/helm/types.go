@@ -101,5 +101,8 @@ type Interface interface {
 	// Secret for the given release name and namespace. Returns (nil, nil) when
 	// no release Secrets exist. This is used to inspect labels added by external
 	// controllers (e.g. Flux helm-controller) to determine ownership.
-	GetReleaseSecretLabels(ctx context.Context, releaseName, namespace string) (map[string]string, error)
+	GetReleaseSecretLabels(
+		ctx context.Context,
+		releaseName, namespace string,
+	) (map[string]string, error)
 }

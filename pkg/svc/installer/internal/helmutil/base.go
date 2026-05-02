@@ -59,7 +59,13 @@ func (b *Base) Install(ctx context.Context) error {
 	}
 
 	if controller, managed := IsGitOpsManaged(labels); managed {
-		fmt.Fprintf(os.Stderr, "%s: skipping install — release %q is managed by %s\n", b.name, b.spec.ReleaseName, controller)
+		fmt.Fprintf(
+			os.Stderr,
+			"%s: skipping install — release %q is managed by %s\n",
+			b.name,
+			b.spec.ReleaseName,
+			controller,
+		)
 
 		return nil
 	}

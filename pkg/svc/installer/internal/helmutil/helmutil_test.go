@@ -50,8 +50,8 @@ func TestBaseInstallSkipsWhenFluxManaged(t *testing.T) {
 	client.EXPECT().
 		GetReleaseSecretLabels(mock.Anything, "test-release", "test-namespace").
 		Return(map[string]string{
-			"name":                            "test-release",
-			"owner":                           "helm",
+			"name":                             "test-release",
+			"owner":                            "helm",
 			"helm.toolkit.fluxcd.io/name":      "my-helmrelease",
 			"helm.toolkit.fluxcd.io/namespace": "flux-system",
 		}, nil)

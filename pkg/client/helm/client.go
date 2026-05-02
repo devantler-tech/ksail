@@ -328,7 +328,12 @@ func (c *Client) GetReleaseSecretLabels(
 		LabelSelector: fmt.Sprintf("name=%s,owner=helm", releaseName),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("list helm release secrets for %q in namespace %q: %w", releaseName, namespace, err)
+		return nil, fmt.Errorf(
+			"list helm release secrets for %q in namespace %q: %w",
+			releaseName,
+			namespace,
+			err,
+		)
 	}
 
 	if len(secretList.Items) == 0 {
