@@ -555,25 +555,9 @@ func newConfigsWithEndpointAndSecrets(
 	}
 
 	// Compute schematic ID and patch machine.install.image if extensions are configured
-	var schematicID string
-
-	if len(extensions) > 0 {
-		schematic := NewSchematic(extensions)
-
-		schematicID, err = schematic.ID()
-		if err != nil {
-			return nil, fmt.Errorf("failed to compute schematic ID: %w", err)
-		}
-
-		// Determine the Talos version for the installer image reference
-		talosVersion := resolveInstallerVersion(kubernetesVersion, configBundle)
-
-		installerImage := SchematicInstallerImage(schematicID, talosVersion)
-
-		err = applyInstallerImage(configBundle, installerImage)
-		if err != nil {
-			return nil, fmt.Errorf("failed to apply installer image: %w", err)
-		}
+	schematicID, err := applySchematic(extensions, kubernetesVersion, configBundle)
+	if err != nil {
+		return nil, err
 	}
 
 	return &Configs{
@@ -712,18 +696,37 @@ func addRegistryAuth(cfg *v1alpha1.Config, mirror MirrorRegistry) {
 	}
 }
 
+// applySchematic computes a schematic ID from extensions and patches machine.install.image.
+// Returns an empty string if no extensions are configured.
+func applySchematic(extensions []string, kubernetesVersion string, configBundle *bundle.Bundle) (string, error) {
+	if len(extensions) == 0 {
+		return "", nil
+	}
+
+	schematic := NewSchematic(extensions)
+
+	schematicID, err := schematic.ID()
+	if err != nil {
+		return "", fmt.Errorf("failed to compute schematic ID: %w", err)
+	}
+
+	talosVersion := resolveInstallerVersion(configBundle)
+	installerImage := SchematicInstallerImage(schematicID, talosVersion)
+
+	if err := applyInstallerImage(configBundle, installerImage); err != nil {
+		return "", fmt.Errorf("failed to apply installer image: %w", err)
+	}
+
+	return schematicID, nil
+}
+
 // resolveInstallerVersion determines the Talos version tag for the installer image.
 // It extracts the version from the existing machine.install.image if present,
 // otherwise falls back to the DefaultTalosImage tag.
-func resolveInstallerVersion(_ string, configBundle *bundle.Bundle) string {
-	if configBundle != nil {
-		cp := configBundle.ControlPlane()
-		if cp != nil && cp.Machine() != nil && cp.Machine().Install() != nil {
-			if image := cp.Machine().Install().Image(); image != "" {
-				if idx := strings.LastIndex(image, ":"); idx >= 0 {
-					return image[idx+1:]
-				}
-			}
+func resolveInstallerVersion(configBundle *bundle.Bundle) string {
+	if image := controlPlaneInstallImage(configBundle); image != "" {
+		if idx := strings.LastIndex(image, ":"); idx >= 0 {
+			return image[idx+1:]
 		}
 	}
 
@@ -733,6 +736,20 @@ func resolveInstallerVersion(_ string, configBundle *bundle.Bundle) string {
 	}
 
 	return "latest"
+}
+
+// controlPlaneInstallImage returns the control plane machine.install.image, or empty string.
+func controlPlaneInstallImage(configBundle *bundle.Bundle) string {
+	if configBundle == nil {
+		return ""
+	}
+
+	cp := configBundle.ControlPlane()
+	if cp == nil || cp.Machine() == nil || cp.Machine().Install() == nil {
+		return ""
+	}
+
+	return cp.Machine().Install().Image()
 }
 
 // applyInstallerImage patches machine.install.image on both control-plane and worker configs.
