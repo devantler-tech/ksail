@@ -508,36 +508,28 @@ func newConfigsWithEndpointAndSecrets(
 	extensions []string,
 ) (*Configs, error) {
 	// Normalise nil to the effective default so that the stored contract
-	// and the one used for generation are always identical. This prevents
-	// silent behaviour changes if the default ever changes and ensures that
-	// WithName/WithEndpoint regeneration produces the same config.
+	// and the one used for generation are always identical.
 	if versionContract == nil {
 		versionContract = talosconfig.TalosVersion1_11
 	}
 
-	// Categorize patches by scope
 	clusterPatches, controlPlanePatches, workerPatches, err := categorizePatchesByScope(patches)
 	if err != nil {
 		return nil, err
 	}
 
-	// Resolve the control plane IP
 	controlPlaneIP, err := resolveControlPlaneIP(endpointIP, networkCIDR)
 	if err != nil {
 		return nil, err
 	}
 
 	controlPlaneEndpoint := "https://" + net.JoinHostPort(controlPlaneIP, "6443")
-
-	// Build generate options
 	genOptions := buildBaseGenOptions(controlPlaneIP, versionContract)
 
-	// If we have existing secrets, reuse them to preserve PKI across endpoint changes
 	if existingSecrets != nil {
 		genOptions = append(genOptions, generate.WithSecretsBundle(existingSecrets))
 	}
 
-	// Build bundle options with patches
 	bundleOpts := buildBundleOptions(
 		clusterName,
 		controlPlaneEndpoint,
@@ -548,14 +540,12 @@ func newConfigsWithEndpointAndSecrets(
 		workerPatches,
 	)
 
-	// Create the bundle
 	configBundle, err := bundle.NewBundle(bundleOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create config bundle: %w", err)
 	}
 
-	// Compute schematic ID and patch machine.install.image if extensions are configured
-	schematicID, err := applySchematic(extensions, kubernetesVersion, configBundle)
+	schematicID, err := applySchematic(extensions, configBundle)
 	if err != nil {
 		return nil, err
 	}
@@ -698,7 +688,7 @@ func addRegistryAuth(cfg *v1alpha1.Config, mirror MirrorRegistry) {
 
 // applySchematic computes a schematic ID from extensions and patches machine.install.image.
 // Returns an empty string if no extensions are configured.
-func applySchematic(extensions []string, kubernetesVersion string, configBundle *bundle.Bundle) (string, error) {
+func applySchematic(extensions []string, configBundle *bundle.Bundle) (string, error) {
 	if len(extensions) == 0 {
 		return "", nil
 	}
@@ -713,7 +703,8 @@ func applySchematic(extensions []string, kubernetesVersion string, configBundle 
 	talosVersion := resolveInstallerVersion(configBundle)
 	installerImage := SchematicInstallerImage(schematicID, talosVersion)
 
-	if err := applyInstallerImage(configBundle, installerImage); err != nil {
+	err = applyInstallerImage(configBundle, installerImage)
+	if err != nil {
 		return "", fmt.Errorf("failed to apply installer image: %w", err)
 	}
 

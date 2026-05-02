@@ -45,25 +45,25 @@ func TestNewSchematic(t *testing.T) {
 	})
 }
 
-func assertSameID(t *testing.T, a, b []string) {
+func assertSameID(t *testing.T, first, second []string) {
 	t.Helper()
 
-	id1, err := talos.NewSchematic(a).ID()
+	id1, err := talos.NewSchematic(first).ID()
 	require.NoError(t, err)
 
-	id2, err := talos.NewSchematic(b).ID()
+	id2, err := talos.NewSchematic(second).ID()
 	require.NoError(t, err)
 
 	assert.Equal(t, id1, id2)
 }
 
-func assertDifferentIDs(t *testing.T, a, b []string) {
+func assertDifferentIDs(t *testing.T, first, second []string) {
 	t.Helper()
 
-	id1, err := talos.NewSchematic(a).ID()
+	id1, err := talos.NewSchematic(first).ID()
 	require.NoError(t, err)
 
-	id2, err := talos.NewSchematic(b).ID()
+	id2, err := talos.NewSchematic(second).ID()
 	require.NoError(t, err)
 
 	assert.NotEqual(t, id1, id2)
