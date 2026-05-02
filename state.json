@@ -1,7 +1,8 @@
 {
-  "last_run": "2026-05-02T01:05:26Z",
-  "workflow_run_id": "25239834474",
+  "last_run": "2026-05-02T12:33:42Z",
+  "workflow_run_id": "25251942180",
   "commented_issues": {
+    "4525": "2026-05-02",
     "4504": "2026-05-01",
     "4422": "2026-05-01",
     "4425": "2026-05-01",
@@ -26,7 +27,9 @@
     "4135": "2026-04-19",
     "4119": "2026-04-18"
   },
-  "open_prs": {},
+  "open_prs": {
+    "repo-assist/fix-lint-chat-tests": "style(chat): apply golangci-lint fixes to chat test files (Fixes #4530)"
+  },
   "merged_prs": {
     "4509": "fix(workload): validate explicit --path before config load (Fixes #4504)",
     "4419": "fix(ci): remove stale registry containers between retries",
@@ -38,10 +41,10 @@
     "4359": "perf(notify): eliminate per-tick allocations",
     "4352": "refactor(setup): replace repeated if-append with table-driven loop"
   },
-  "last_code_quality_domain": "bug-fix",
-  "issue_backlog_cursor": "4520",
+  "last_code_quality_domain": "lint-fix",
+  "issue_backlog_cursor": "4531",
   "created_issues": {
-    "aw_svcmir": "[Repo Assist] [feature]: add local-remote service mirroring",
+    "4521": "[Repo Assist] [feature]: add local-remote service mirroring",
     "4511": "[Repo Assist] [feature]: add native ephemeral CI mode",
     "4510": "[Repo Assist] [chore]: add GKE and AKS cloud providers",
     "4474": "[Repo Assist] [feature]: add ksail cluster drift command",
@@ -54,10 +57,8 @@
   },
   "notes": [
     "link_sub_issue is NOT idempotent - always verify sub-issue not already linked before calling",
-    "All previous Repo Assist PRs closed/merged — no open PRs as of 2026-05-02",
-    "Task 2 coverage: all non-automation open issues are blocked or Repo Assist created",
-    "All roadmap Later gaps now tracked: graph #4375, drift #4474, GKE/AKS #4510, CI mode #4511, service mirroring #aw_svcmir",
-    "domain alternation: last was 'bug-fix' - next should be 'test coverage'",
+    "Open PRs for review: #4527 (HA defaults), #4528 (OIDC), #4529 (CI gate)",
+    "domain alternation: last was 'lint-fix' - next should be 'test coverage'",
     "Monthly activity issue: #4501"
   ]
 }
