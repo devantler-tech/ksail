@@ -138,7 +138,7 @@ func (r *Report) writeFailingPods(writer io.Writer) {
 
 	notify.Warningf(writer, "failing pods (%s):", r.EventNamespace)
 
-	for _, line := range strings.Split(strings.TrimSpace(r.FailingPods), "\n") {
+	for line := range strings.SplitSeq(strings.TrimSpace(r.FailingPods), "\n") {
 		line = strings.TrimSpace(line)
 		if line != "" {
 			_, _ = fmt.Fprintf(writer, "    %s\n", line)
@@ -155,17 +155,18 @@ func (r *Report) writeEvents(writer io.Writer) {
 	label := fmt.Sprintf("warning events (%s, last 5 min)", r.EventNamespace)
 	notify.Warningf(writer, "%s:", label)
 
-	limit := len(r.Events)
-	if limit > maxDiagnosticEvents {
-		limit = maxDiagnosticEvents
-	}
+	limit := min(len(r.Events), maxDiagnosticEvents)
 
 	for _, evt := range r.Events[:limit] {
 		_, _ = fmt.Fprintf(writer, "    %s\n", evt.String())
 	}
 
 	if len(r.Events) > maxDiagnosticEvents {
-		_, _ = fmt.Fprintf(writer, "    ... and %d more events\n", len(r.Events)-maxDiagnosticEvents)
+		_, _ = fmt.Fprintf(
+			writer,
+			"    ... and %d more events\n",
+			len(r.Events)-maxDiagnosticEvents,
+		)
 	}
 }
 
@@ -183,4 +184,3 @@ func formatDuration(duration time.Duration) string {
 		return fmt.Sprintf("%dh%dm", int(duration.Hours()), int(duration.Minutes())%minutesPerHour)
 	}
 }
-

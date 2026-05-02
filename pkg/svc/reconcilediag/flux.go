@@ -56,10 +56,16 @@ func (c *FluxCollector) Collect(ctx context.Context) *Report {
 		EventNamespace: fluxNamespace,
 	}
 
-	report.Sections = append(report.Sections,
+	report.Sections = append(
+		report.Sections,
 		c.collectFailingCRs(ctx, "Failing Kustomizations", fluxGVRKustomizations(), fluxNamespace),
 		c.collectFailingCRs(ctx, "Failing HelmReleases", fluxGVRHelmReleases(), ""),
-		c.collectFailingCRs(ctx, "Failing OCIRepositories", fluxGVROCIRepositories(), fluxNamespace),
+		c.collectFailingCRs(
+			ctx,
+			"Failing OCIRepositories",
+			fluxGVROCIRepositories(),
+			fluxNamespace,
+		),
 	)
 
 	report.FailingPods = c.collectFailingPods(ctx)
@@ -243,4 +249,3 @@ func eventTimestamp(evt *corev1.Event) time.Time {
 
 	return evt.EventTime.Time
 }
-

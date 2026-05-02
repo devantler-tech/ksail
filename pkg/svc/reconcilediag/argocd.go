@@ -129,8 +129,8 @@ func extractConditionError(app *unstructured.Unstructured) (string, string) {
 	}
 
 	errorTypes := map[string]bool{
-		"ComparisonError": true,
-		"SyncError":       true,
+		"ComparisonError":  true,
+		"SyncError":        true,
 		"InvalidSpecError": true,
 	}
 

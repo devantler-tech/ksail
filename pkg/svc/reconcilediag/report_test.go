@@ -191,7 +191,11 @@ func TestReport_Write_FullReport(t *testing.T) {
 			{
 				Heading: "Failing Kustomizations",
 				Resources: []reconcilediag.FailingResource{
-					{Name: "apps", Reason: "HealthCheckFailed", Message: "Deployment/myapp not ready"},
+					{
+						Name:    "apps",
+						Reason:  "HealthCheckFailed",
+						Message: "Deployment/myapp not ready",
+					},
 				},
 			},
 			{

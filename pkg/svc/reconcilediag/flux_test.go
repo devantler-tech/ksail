@@ -74,9 +74,16 @@ func TestFluxCollector_AllHealthy(t *testing.T) {
 	t.Parallel()
 
 	readyKust := newFluxCR(
-		schema.GroupVersionKind{Group: "kustomize.toolkit.fluxcd.io", Version: "v1", Kind: "Kustomization"},
-		"flux-system", "flux-system",
-		"True", "ReconciliationSucceeded", "Applied revision: main@sha1:abc",
+		schema.GroupVersionKind{
+			Group:   "kustomize.toolkit.fluxcd.io",
+			Version: "v1",
+			Kind:    "Kustomization",
+		},
+		"flux-system",
+		"flux-system",
+		"True",
+		"ReconciliationSucceeded",
+		"Applied revision: main@sha1:abc",
 	)
 
 	dynClient := newDynamicClient(readyKust)
@@ -95,9 +102,16 @@ func TestFluxCollector_FailingKustomization(t *testing.T) {
 	t.Parallel()
 
 	failingKust := newFluxCR(
-		schema.GroupVersionKind{Group: "kustomize.toolkit.fluxcd.io", Version: "v1", Kind: "Kustomization"},
-		"apps", "flux-system",
-		"False", "HealthCheckFailed", "Deployment/myapp not ready after 30s",
+		schema.GroupVersionKind{
+			Group:   "kustomize.toolkit.fluxcd.io",
+			Version: "v1",
+			Kind:    "Kustomization",
+		},
+		"apps",
+		"flux-system",
+		"False",
+		"HealthCheckFailed",
+		"Deployment/myapp not ready after 30s",
 	)
 
 	dynClient := newDynamicClient(failingKust)
@@ -124,9 +138,16 @@ func TestFluxCollector_FailingHelmRelease(t *testing.T) {
 	t.Parallel()
 
 	failingHR := newFluxCR(
-		schema.GroupVersionKind{Group: "helm.toolkit.fluxcd.io", Version: "v2", Kind: "HelmRelease"},
-		"cert-manager", "cert-manager",
-		"False", "InstallFailed", "timed out waiting for the condition",
+		schema.GroupVersionKind{
+			Group:   "helm.toolkit.fluxcd.io",
+			Version: "v2",
+			Kind:    "HelmRelease",
+		},
+		"cert-manager",
+		"cert-manager",
+		"False",
+		"InstallFailed",
+		"timed out waiting for the condition",
 	)
 
 	dynClient := newDynamicClient(failingHR)
@@ -151,9 +172,16 @@ func TestFluxCollector_FailingOCIRepository(t *testing.T) {
 	t.Parallel()
 
 	failingOCI := newFluxCR(
-		schema.GroupVersionKind{Group: "source.toolkit.fluxcd.io", Version: "v1", Kind: "OCIRepository"},
-		"flux-system", "flux-system",
-		"False", "OCIPullFailed", "manifest unknown",
+		schema.GroupVersionKind{
+			Group:   "source.toolkit.fluxcd.io",
+			Version: "v1",
+			Kind:    "OCIRepository",
+		},
+		"flux-system",
+		"flux-system",
+		"False",
+		"OCIPullFailed",
+		"manifest unknown",
 	)
 
 	dynClient := newDynamicClient(failingOCI)
@@ -188,11 +216,11 @@ func TestFluxCollector_WarningEvents(t *testing.T) {
 			Name:      "kustomize-controller-abc",
 			Namespace: "flux-system",
 		},
-		Type:          "Warning",
-		Reason:        "BackOff",
-		Message:       "Back-off restarting failed container",
-		LastTimestamp:  metav1.NewTime(now.Add(-2 * time.Minute)),
-		EventTime:     metav1.NewMicroTime(now.Add(-2 * time.Minute)),
+		Type:              "Warning",
+		Reason:            "BackOff",
+		Message:           "Back-off restarting failed container",
+		LastTimestamp:     metav1.NewTime(now.Add(-2 * time.Minute)),
+		EventTime:         metav1.NewMicroTime(now.Add(-2 * time.Minute)),
 		ReportingInstance: "kubelet",
 	}
 
@@ -206,11 +234,11 @@ func TestFluxCollector_WarningEvents(t *testing.T) {
 			Name:      "old-pod",
 			Namespace: "flux-system",
 		},
-		Type:          "Warning",
-		Reason:        "Failed",
-		Message:       "old failure",
-		LastTimestamp:  metav1.NewTime(now.Add(-30 * time.Minute)),
-		EventTime:     metav1.NewMicroTime(now.Add(-30 * time.Minute)),
+		Type:              "Warning",
+		Reason:            "Failed",
+		Message:           "old failure",
+		LastTimestamp:     metav1.NewTime(now.Add(-30 * time.Minute)),
+		EventTime:         metav1.NewMicroTime(now.Add(-30 * time.Minute)),
 		ReportingInstance: "kubelet",
 	}
 
@@ -235,21 +263,42 @@ func TestFluxCollector_MultipleFailures(t *testing.T) {
 	t.Parallel()
 
 	failingKust1 := newFluxCR(
-		schema.GroupVersionKind{Group: "kustomize.toolkit.fluxcd.io", Version: "v1", Kind: "Kustomization"},
-		"infra", "flux-system",
-		"False", "ReconciliationFailed", "validation error",
+		schema.GroupVersionKind{
+			Group:   "kustomize.toolkit.fluxcd.io",
+			Version: "v1",
+			Kind:    "Kustomization",
+		},
+		"infra",
+		"flux-system",
+		"False",
+		"ReconciliationFailed",
+		"validation error",
 	)
 
 	failingKust2 := newFluxCR(
-		schema.GroupVersionKind{Group: "kustomize.toolkit.fluxcd.io", Version: "v1", Kind: "Kustomization"},
-		"apps", "flux-system",
-		"False", "HealthCheckFailed", "deployment not ready",
+		schema.GroupVersionKind{
+			Group:   "kustomize.toolkit.fluxcd.io",
+			Version: "v1",
+			Kind:    "Kustomization",
+		},
+		"apps",
+		"flux-system",
+		"False",
+		"HealthCheckFailed",
+		"deployment not ready",
 	)
 
 	readyKust := newFluxCR(
-		schema.GroupVersionKind{Group: "kustomize.toolkit.fluxcd.io", Version: "v1", Kind: "Kustomization"},
-		"flux-system", "flux-system",
-		"True", "ReconciliationSucceeded", "ok",
+		schema.GroupVersionKind{
+			Group:   "kustomize.toolkit.fluxcd.io",
+			Version: "v1",
+			Kind:    "Kustomization",
+		},
+		"flux-system",
+		"flux-system",
+		"True",
+		"ReconciliationSucceeded",
+		"ok",
 	)
 
 	dynClient := newDynamicClient(failingKust1, failingKust2, readyKust)

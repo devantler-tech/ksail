@@ -19,7 +19,12 @@ const diagnosticTimeout = 15 * time.Second
 // GitOps reconciliation. It is best-effort: if client creation or collection
 // fails, the error is silently swallowed to avoid masking the original
 // reconciliation error.
-func Diagnose(ctx context.Context, writer io.Writer, kubeconfigPath string, engine v1alpha1.GitOpsEngine) {
+func Diagnose(
+	ctx context.Context,
+	writer io.Writer,
+	kubeconfigPath string,
+	engine v1alpha1.GitOpsEngine,
+) {
 	diagCtx, cancel := context.WithTimeout(ctx, diagnosticTimeout)
 	defer cancel()
 
