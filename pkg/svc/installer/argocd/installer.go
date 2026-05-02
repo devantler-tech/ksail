@@ -31,8 +31,18 @@ type Installer struct {
 // transparently decrypts SOPS-encrypted manifests using an Age key.
 // When haEnabled is true the chart is configured with HA defaults
 // (replicas, PDB) for server and repo-server.
-func NewInstaller(client helm.Interface, timeout time.Duration, sopsEnabled bool, haEnabled bool) *Installer {
-	return &Installer{client: client, timeout: timeout, sopsEnabled: sopsEnabled, haEnabled: haEnabled}
+func NewInstaller(
+	client helm.Interface,
+	timeout time.Duration,
+	sopsEnabled bool,
+	haEnabled bool,
+) *Installer {
+	return &Installer{
+		client:      client,
+		timeout:     timeout,
+		sopsEnabled: sopsEnabled,
+		haEnabled:   haEnabled,
+	}
 }
 
 // Install installs or upgrades Argo CD via its Helm chart.
@@ -87,6 +97,7 @@ func (a *Installer) chartSpec() *helm.ChartSpec {
 		if spec.SetValues == nil {
 			spec.SetValues = make(map[string]string)
 		}
+
 		spec.SetValues["server.replicas"] = "2"
 		spec.SetValues["repoServer.replicas"] = "2"
 		spec.SetValues["server.pdb.enabled"] = "true"

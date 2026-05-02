@@ -46,8 +46,8 @@ func NewInstallerWithDistribution(
 	var setValues map[string]string
 	if haEnabled {
 		setValues = map[string]string{
-			"replicas":                       "2",
-			"podDisruptionBudget.enabled":    "true",
+			"replicas":                         "2",
+			"podDisruptionBudget.enabled":      "true",
 			"podDisruptionBudget.minAvailable": "1",
 		}
 	}

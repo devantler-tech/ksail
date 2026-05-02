@@ -102,15 +102,25 @@ func policyEngineFactory(
 			timeout = max(timeout, installer.KyvernoInstallTimeout)
 
 			return kyvernoinstaller.NewInstaller(
-				helmClient, timeout, kubeconfig, clusterCfg.Spec.Cluster.Connection.Context,
-				installer.IsHAEnabled(clusterCfg.Spec.Cluster.ControlPlanes+clusterCfg.Spec.Cluster.Workers),
+				helmClient,
+				timeout,
+				kubeconfig,
+				clusterCfg.Spec.Cluster.Connection.Context,
+				installer.IsHAEnabled(
+					clusterCfg.Spec.Cluster.ControlPlanes+clusterCfg.Spec.Cluster.Workers,
+				),
 			), nil
 		case v1alpha1.PolicyEngineGatekeeper:
 			timeout = max(timeout, installer.GatekeeperInstallTimeout)
 
 			return gatekeeperinstaller.NewInstaller(
-				helmClient, kubeconfig, clusterCfg.Spec.Cluster.Connection.Context, timeout,
-				installer.IsHAEnabled(clusterCfg.Spec.Cluster.ControlPlanes+clusterCfg.Spec.Cluster.Workers),
+				helmClient,
+				kubeconfig,
+				clusterCfg.Spec.Cluster.Connection.Context,
+				timeout,
+				installer.IsHAEnabled(
+					clusterCfg.Spec.Cluster.ControlPlanes+clusterCfg.Spec.Cluster.Workers,
+				),
 			), nil
 		default:
 			return nil, fmt.Errorf("%w: unknown engine %q", ErrPolicyEngineDisabled, engine)
@@ -144,7 +154,9 @@ func csiFactory(
 				clusterCfg.Spec.Cluster.Connection.Context,
 				timeout,
 				networkName,
-				installer.IsHAEnabled(clusterCfg.Spec.Cluster.ControlPlanes+clusterCfg.Spec.Cluster.Workers),
+				installer.IsHAEnabled(
+					clusterCfg.Spec.Cluster.ControlPlanes+clusterCfg.Spec.Cluster.Workers,
+				),
 			), nil
 		}
 
@@ -220,8 +232,12 @@ func argoCDInstallerFactory(
 		)
 
 		return argocdinstaller.NewInstaller(
-			helmClient, timeout, sopsEnabled,
-			installer.IsHAEnabled(clusterCfg.Spec.Cluster.ControlPlanes+clusterCfg.Spec.Cluster.Workers),
+			helmClient,
+			timeout,
+			sopsEnabled,
+			installer.IsHAEnabled(
+				clusterCfg.Spec.Cluster.ControlPlanes+clusterCfg.Spec.Cluster.Workers,
+			),
 		), nil
 	}
 }

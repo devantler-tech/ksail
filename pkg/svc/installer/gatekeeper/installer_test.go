@@ -36,7 +36,13 @@ func TestInstallSuccess(t *testing.T) {
 func TestInstallSuccessWithWebhookWait(t *testing.T) {
 	client := helm.NewMockInterface(t)
 	// Use a non-empty kubeconfig to trigger the webhook wait path.
-	installer := gatekeeperinstaller.NewInstaller(client, "/fake/kubeconfig", "", 2*time.Minute, false)
+	installer := gatekeeperinstaller.NewInstaller(
+		client,
+		"/fake/kubeconfig",
+		"",
+		2*time.Minute,
+		false,
+	)
 
 	webhookWaitCalled := false
 
@@ -62,7 +68,13 @@ func TestInstallSuccessWithWebhookWait(t *testing.T) {
 //nolint:paralleltest // Cannot run in parallel — modifies the package-level waitForWebhookReadyFn variable.
 func TestInstallWebhookWaitError(t *testing.T) {
 	client := helm.NewMockInterface(t)
-	installer := gatekeeperinstaller.NewInstaller(client, "/fake/kubeconfig", "", 2*time.Minute, false)
+	installer := gatekeeperinstaller.NewInstaller(
+		client,
+		"/fake/kubeconfig",
+		"",
+		2*time.Minute,
+		false,
+	)
 
 	restore := gatekeeperinstaller.SetWaitForWebhookReadyFn(
 		func(_ context.Context, _, _ string, _ time.Duration) error {

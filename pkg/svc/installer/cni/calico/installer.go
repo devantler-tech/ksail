@@ -282,6 +282,7 @@ func (c *Installer) defaultCalicoValues() map[string]string {
 	if c.haEnabled {
 		vals["installation.controlPlaneReplicas"] = "2"
 	}
+
 	return vals
 }
 

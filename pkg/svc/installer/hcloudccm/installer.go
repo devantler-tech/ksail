@@ -1,6 +1,7 @@
 package hcloudccminstaller
 
 import (
+	"strings"
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
@@ -92,10 +93,5 @@ func buildValuesYaml(networkName string, haEnabled bool) string {
 		return ""
 	}
 
-	result := parts[0]
-	for _, p := range parts[1:] {
-		result += "\n" + p
-	}
-
-	return result
+	return strings.Join(parts, "\n")
 }

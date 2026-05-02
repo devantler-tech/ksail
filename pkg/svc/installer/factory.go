@@ -118,7 +118,11 @@ func (f *Factory) GetImagesForCluster(
 	return GetImagesFromInstallers(ctx, installers)
 }
 
-func (f *Factory) addGitOpsInstaller(installers map[string]Installer, spec v1alpha1.ClusterSpec, haEnabled bool) {
+func (f *Factory) addGitOpsInstaller(
+	installers map[string]Installer,
+	spec v1alpha1.ClusterSpec,
+	haEnabled bool,
+) {
 	switch spec.GitOpsEngine {
 	case v1alpha1.GitOpsEngineFlux:
 		installers["flux"] = fluxinstaller.NewInstaller(
@@ -134,7 +138,11 @@ func (f *Factory) addGitOpsInstaller(installers map[string]Installer, spec v1alp
 	}
 }
 
-func (f *Factory) addCNIInstaller(installers map[string]Installer, spec v1alpha1.ClusterSpec, haEnabled bool) {
+func (f *Factory) addCNIInstaller(
+	installers map[string]Installer,
+	spec v1alpha1.ClusterSpec,
+	haEnabled bool,
+) {
 	switch spec.CNI {
 	case v1alpha1.CNICilium:
 		installers["cilium"] = ciliuminstaller.NewInstallerWithDistribution(
@@ -159,7 +167,11 @@ func (f *Factory) addPolicyEngineInstaller(
 	switch spec.PolicyEngine {
 	case v1alpha1.PolicyEngineKyverno:
 		installers["kyverno"] = kyvernoinstaller.NewInstaller(
-			f.helmClient, max(f.timeout, KyvernoInstallTimeout), f.kubeconfig, f.kubecontext, haEnabled,
+			f.helmClient,
+			max(f.timeout, KyvernoInstallTimeout),
+			f.kubeconfig,
+			f.kubecontext,
+			haEnabled,
 		)
 	case v1alpha1.PolicyEngineGatekeeper:
 		installers["gatekeeper"] = gatekeeperinstaller.NewInstaller(
@@ -200,7 +212,11 @@ func (f *Factory) addMetricsServerInstaller(
 	}
 }
 
-func (f *Factory) addCSIInstallers(installers map[string]Installer, cfg *v1alpha1.Cluster, haEnabled bool) {
+func (f *Factory) addCSIInstallers(
+	installers map[string]Installer,
+	cfg *v1alpha1.Cluster,
+	haEnabled bool,
+) {
 	spec := cfg.Spec.Cluster
 
 	if f.needsLocalPathStorage(spec) {

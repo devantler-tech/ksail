@@ -10,12 +10,14 @@ var GatewayAPICRDsVersionForTest = gatewayAPICRDsVersion
 // DefaultCiliumValuesForTest exposes defaultCiliumValues for testing (haEnabled=false).
 var DefaultCiliumValuesForTest = func() map[string]string {
 	inst := &Installer{}
+
 	return inst.defaultCiliumValues()
 }
 
 // DefaultCiliumValuesHAForTest exposes defaultCiliumValues for testing (haEnabled=true).
 var DefaultCiliumValuesHAForTest = func() map[string]string {
 	inst := &Installer{haEnabled: true}
+
 	return inst.defaultCiliumValues()
 }
 
