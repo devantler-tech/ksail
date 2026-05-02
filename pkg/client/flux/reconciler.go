@@ -13,6 +13,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
 )
 
@@ -59,7 +60,39 @@ const (
 	// for the Flux controllers to become ready in slow CI environments.
 	apiAvailabilityTimeout      = 2 * time.Minute
 	apiAvailabilityPollInterval = 500 * time.Millisecond
+
+	// HelmRelease reset constants.
+	helmReleaseSuspendWait = 2 * time.Second
 )
+
+// Merge patches for HelmRelease suspend/resume.
+var (
+	helmReleaseSuspendPatch = []byte(`{"spec":{"suspend":true}}`)
+	helmResumePatch         = []byte(`{"spec":{"suspend":false}}`)
+)
+
+// stuckHelmReleaseReasons lists HelmRelease Ready condition reasons that indicate
+// the release is stuck and won't recover without intervention. DependencyNotReady
+// is intentionally excluded — it is transient and resolves when upstream dependencies
+// become ready.
+var stuckHelmReleaseReasons = []string{
+	"InstallFailed",
+	"UpgradeFailed",
+	"ReconciliationFailed",
+	"TestFailed",
+	"RollbackFailed",
+	"UninstallFailed",
+	"GetLastReleaseFailed",
+}
+
+// StuckHelmRelease holds the identity and failure details of a HelmRelease
+// that is stuck in a non-recoverable state.
+type StuckHelmRelease struct {
+	Name      string
+	Namespace string
+	Reason    string
+	Message   string
+}
 
 // Reconciler handles Flux reconciliation operations.
 type Reconciler struct {
@@ -313,6 +346,152 @@ func (r *Reconciler) kustomizationClient() dynamic.ResourceInterface {
 	}
 
 	return r.Dynamic.Resource(gvr).Namespace(DefaultNamespace)
+}
+
+// helmReleaseGVR returns the GroupVersionResource for Flux HelmReleases.
+func helmReleaseGVR() schema.GroupVersionResource {
+	return schema.GroupVersionResource{
+		Group:    "helm.toolkit.fluxcd.io",
+		Version:  "v2",
+		Resource: "helmreleases",
+	}
+}
+
+// ListStuckHelmReleases returns all HelmReleases across all namespaces that are
+// stuck in a non-recoverable state. A HelmRelease is considered stuck when its
+// Ready condition is False with a failure reason (e.g., InstallFailed,
+// UpgradeFailed) or when the Stalled condition is True.
+func (r *Reconciler) ListStuckHelmReleases(
+	ctx context.Context,
+) ([]StuckHelmRelease, error) {
+	client := r.Dynamic.Resource(helmReleaseGVR())
+
+	list, err := client.List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("list helmreleases: %w", err)
+	}
+
+	var stuck []StuckHelmRelease
+
+	for i := range list.Items {
+		if hr := checkHelmReleaseStuck(&list.Items[i]); hr != nil {
+			stuck = append(stuck, *hr)
+		}
+	}
+
+	return stuck, nil
+}
+
+// checkHelmReleaseStuck evaluates a HelmRelease's conditions and returns a
+// StuckHelmRelease if it is stuck, or nil if it is healthy/transient.
+func checkHelmReleaseStuck(hr *unstructured.Unstructured) *StuckHelmRelease {
+	conditions, found, _ := unstructured.NestedSlice(hr.Object, "status", "conditions")
+	if !found || len(conditions) == 0 {
+		return nil
+	}
+
+	for _, cond := range conditions {
+		condMap, ok := cond.(map[string]any)
+		if !ok {
+			continue
+		}
+
+		condType, _, _ := unstructured.NestedString(condMap, "type")
+		condStatus, _, _ := unstructured.NestedString(condMap, "status")
+		condReason, _, _ := unstructured.NestedString(condMap, "reason")
+		condMessage, _, _ := unstructured.NestedString(condMap, "message")
+
+		// Stalled=True means the controller has given up retrying.
+		if condType == conditionTypeStalled && condStatus == conditionStatusTrue {
+			return &StuckHelmRelease{
+				Name:      hr.GetName(),
+				Namespace: hr.GetNamespace(),
+				Reason:    condReason,
+				Message:   condMessage,
+			}
+		}
+
+		// Ready=False with a failure reason.
+		if condType == conditionTypeReady && condStatus == conditionStatusFalse {
+			if slices.Contains(stuckHelmReleaseReasons, condReason) {
+				return &StuckHelmRelease{
+					Name:      hr.GetName(),
+					Namespace: hr.GetNamespace(),
+					Reason:    condReason,
+					Message:   condMessage,
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+// ResetStuckHelmReleases performs a suspend/resume cycle on the given
+// HelmReleases to clear their failure status. Returns the number of
+// HelmReleases that were successfully reset. Errors on individual releases
+// are collected and returned as a joined error; the operation is best-effort.
+func (r *Reconciler) ResetStuckHelmReleases(
+	ctx context.Context,
+	releases []StuckHelmRelease,
+) (int, error) {
+	if len(releases) == 0 {
+		return 0, nil
+	}
+
+	gvr := helmReleaseGVR()
+	var errs []error
+
+	// Phase 1: Suspend all stuck HelmReleases.
+	suspended := make([]StuckHelmRelease, 0, len(releases))
+
+	for _, hr := range releases {
+		nsClient := r.Dynamic.Resource(gvr).Namespace(hr.Namespace)
+
+		_, err := nsClient.Patch(
+			ctx, hr.Name, types.MergePatchType,
+			helmReleaseSuspendPatch, metav1.PatchOptions{},
+		)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("suspend %s/%s: %w", hr.Namespace, hr.Name, err))
+
+			continue
+		}
+
+		suspended = append(suspended, hr)
+	}
+
+	if len(suspended) == 0 {
+		return 0, errors.Join(errs...)
+	}
+
+	// Wait for Flux controllers to observe the suspension.
+	select {
+	case <-ctx.Done():
+		return 0, fmt.Errorf("context cancelled during helmrelease reset: %w", ctx.Err())
+	case <-time.After(helmReleaseSuspendWait):
+	}
+
+	// Phase 2: Resume all suspended HelmReleases.
+	resetCount := 0
+
+	for _, hr := range suspended {
+		nsClient := r.Dynamic.Resource(gvr).Namespace(hr.Namespace)
+
+		_, err := nsClient.Patch(
+			ctx, hr.Name, types.MergePatchType,
+			helmResumePatch, metav1.PatchOptions{},
+		)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("resume %s/%s: %w", hr.Namespace, hr.Name, err))
+
+			continue
+		}
+
+		resetCount++
+	}
+
+	return resetCount, errors.Join(errs...)
 }
 
 // checkOCIRepositoryStatus checks if the OCIRepository has successfully fetched an artifact.

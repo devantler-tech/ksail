@@ -2289,6 +2289,40 @@ func reconcileFlux(
 		return fmt.Errorf("reconcile oci source: %w", err)
 	}
 
+	// Sub-phase 1.5: Reset stuck HelmReleases before Kustomization polling.
+	// HelmReleases can get stuck in Failed/Stalled state after cluster outages
+	// (e.g. webhook unavailable during recovery exhausted the retry budget).
+	// A suspend/resume cycle clears the failure so Kustomization health checks
+	// can succeed on the next reconciliation.
+	stuckReleases, err := fluxReconciler.ListStuckHelmReleases(deadlineCtx)
+	if err != nil {
+		// CRD not installed or API unreachable — log and continue.
+		writeActivityNotification(
+			fmt.Sprintf("warning: could not check for stuck helmreleases: %v", err),
+			outputTimer, writer,
+		)
+	} else if len(stuckReleases) > 0 {
+		writeActivityNotification(
+			fmt.Sprintf("resetting %d stuck helmrelease(s)...", len(stuckReleases)),
+			outputTimer, writer,
+		)
+
+		resetCount, resetErr := fluxReconciler.ResetStuckHelmReleases(deadlineCtx, stuckReleases)
+		if resetErr != nil {
+			writeActivityNotification(
+				fmt.Sprintf("warning: some helmreleases could not be reset: %v", resetErr),
+				outputTimer, writer,
+			)
+		}
+
+		if resetCount > 0 {
+			writeActivityNotification(
+				fmt.Sprintf("reset %d stuck helmrelease(s)", resetCount),
+				outputTimer, writer,
+			)
+		}
+	}
+
 	// Sub-phase 2: Kustomization reconciliation with per-resource tracking
 	writeActivityNotification("reconciling kustomizations...", outputTimer, writer)
 
