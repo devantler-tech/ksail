@@ -7,8 +7,11 @@ var GatewayAPICRDsURLForTest = gatewayAPICRDsURL
 // GatewayAPICRDsVersionForTest exposes gatewayAPICRDsVersion for testing.
 var GatewayAPICRDsVersionForTest = gatewayAPICRDsVersion
 
-// DefaultCiliumValuesForTest exposes defaultCiliumValues for testing.
-var DefaultCiliumValuesForTest = defaultCiliumValues
+// DefaultCiliumValuesForTest exposes defaultCiliumValues for testing (haEnabled=false).
+var DefaultCiliumValuesForTest = func() map[string]string {
+	inst := &Installer{}
+	return inst.defaultCiliumValues()
+}
 
 // TalosCiliumValuesForTest exposes talosCiliumValues for testing.
 var TalosCiliumValuesForTest = talosCiliumValues

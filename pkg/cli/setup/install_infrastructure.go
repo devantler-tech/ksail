@@ -161,6 +161,7 @@ func InstallMetricsServerSilent(
 		helmClient,
 		timeout,
 		clusterCfg.Spec.Cluster.Distribution,
+		installer.IsHAEnabled(clusterCfg.Spec.Cluster.ControlPlanes+clusterCfg.Spec.Cluster.Workers),
 	)
 
 	installErr := msInstaller.Install(ctx)
@@ -289,6 +290,7 @@ func installHcloudCCM(
 		clusterCfg.Spec.Cluster.Connection.Context,
 		timeout,
 		networkName,
+		installer.IsHAEnabled(clusterCfg.Spec.Cluster.ControlPlanes+clusterCfg.Spec.Cluster.Workers),
 	)
 
 	installErr := ccmInstaller.Install(ctx)

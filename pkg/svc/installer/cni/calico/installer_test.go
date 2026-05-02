@@ -69,6 +69,7 @@ func TestNewInstallerWithDistribution(t *testing.T) {
 				"test-context",
 				5*time.Minute,
 				testCase.distribution,
+				false,
 			)
 
 			require.NotNil(t, installer, "expected installer to be created")
@@ -199,6 +200,7 @@ func TestInstaller_Install_NilClient(t *testing.T) {
 		"test-context",
 		5*time.Minute,
 		v1alpha1.DistributionVanilla,
+		false,
 	)
 
 	err := installer.Install(context.Background())
@@ -243,6 +245,7 @@ func TestInstaller_Uninstall_NilClient(t *testing.T) {
 		"test-context",
 		5*time.Minute,
 		v1alpha1.DistributionVanilla,
+		false,
 	)
 
 	err := installer.Uninstall(context.Background())
@@ -266,6 +269,7 @@ func newInstallerWithDistribution(
 		"test-context",
 		2*time.Minute,
 		distribution,
+		false,
 	)
 
 	return installer, client

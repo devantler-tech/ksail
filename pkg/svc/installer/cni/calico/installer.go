@@ -24,6 +24,7 @@ type Installer struct {
 	*cni.InstallerBase
 
 	distribution v1alpha1.Distribution
+	haEnabled    bool
 	// apiServerChecker is called before Helm operations to ensure the API server
 	// is stable. It defaults to WaitForAPIServerStability and can be overridden
 	// in tests to avoid needing a real cluster.
@@ -51,18 +52,22 @@ func NewInstaller(
 	kubeconfig, kubeContext string,
 	timeout time.Duration,
 ) *Installer {
-	return NewInstallerWithDistribution(client, kubeconfig, kubeContext, timeout, "")
+	return NewInstallerWithDistribution(client, kubeconfig, kubeContext, timeout, "", false)
 }
 
 // NewInstallerWithDistribution creates a new Calico installer with distribution-specific configuration.
+// When haEnabled is true the chart is configured with HA defaults
+// for the Typha control plane (controlPlaneReplicas).
 func NewInstallerWithDistribution(
 	client helm.Interface,
 	kubeconfig, kubeContext string,
 	timeout time.Duration,
 	distribution v1alpha1.Distribution,
+	haEnabled bool,
 ) *Installer {
 	calicoInstaller := &Installer{
 		distribution: distribution,
+		haEnabled:    haEnabled,
 	}
 	calicoInstaller.InstallerBase = cni.NewInstallerBase(
 		client,
@@ -254,7 +259,7 @@ func (c *Installer) attemptCalicoInstall(
 
 // getCalicoValues returns the Helm values for Calico based on the distribution.
 func (c *Installer) getCalicoValues() map[string]string {
-	values := defaultCalicoValues()
+	values := c.defaultCalicoValues()
 
 	// Add distribution-specific values
 	switch c.distribution {
@@ -272,8 +277,12 @@ func (c *Installer) getCalicoValues() map[string]string {
 	return values
 }
 
-func defaultCalicoValues() map[string]string {
-	return map[string]string{}
+func (c *Installer) defaultCalicoValues() map[string]string {
+	vals := map[string]string{}
+	if c.haEnabled {
+		vals["installation.controlPlaneReplicas"] = "2"
+	}
+	return vals
 }
 
 // talosCalicoValues returns Talos-specific Calico configuration.

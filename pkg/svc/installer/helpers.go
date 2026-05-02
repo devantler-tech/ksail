@@ -7,6 +7,12 @@ import (
 )
 
 const (
+	// HANodeThreshold is the minimum number of nodes (control-planes + workers) required
+	// to enable HA defaults (replicas ≥ 2, PDB, topology spread) on bootstrap components.
+	// Below this threshold no HA values are injected, keeping single-/dual-node dev
+	// clusters safe from unschedulable pods.
+	HANodeThreshold int32 = 3
+
 	// DefaultInstallTimeout is the default timeout (5 minutes) for component installation.
 	DefaultInstallTimeout = 5 * time.Minute
 	// TalosInstallTimeout is the timeout (8 minutes) for Talos component installation.
@@ -91,4 +97,10 @@ func GetInstallTimeout(clusterCfg *v1alpha1.Cluster) time.Duration {
 	}
 
 	return DefaultInstallTimeout
+}
+
+// IsHAEnabled reports whether the cluster has enough nodes to benefit from
+// HA defaults on bootstrap components.
+func IsHAEnabled(nodeCount int32) bool {
+	return nodeCount >= HANodeThreshold
 }

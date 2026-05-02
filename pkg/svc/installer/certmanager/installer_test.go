@@ -16,7 +16,7 @@ func TestNewInstaller(t *testing.T) {
 	t.Parallel()
 
 	client := helm.NewMockInterface(t)
-	installer := certmanagerinstaller.NewInstaller(client, 5*time.Second)
+	installer := certmanagerinstaller.NewInstaller(client, 5*time.Second, false)
 
 	assert.NotNil(t, installer)
 }
@@ -36,7 +36,7 @@ func TestInstallSuccessWithScaledTimeout(t *testing.T) {
 	t.Parallel()
 
 	client := helm.NewMockInterface(t)
-	installer := certmanagerinstaller.NewInstaller(client, 10*time.Minute)
+	installer := certmanagerinstaller.NewInstaller(client, 10*time.Minute, false)
 	client.EXPECT().
 		GetReleaseStorageLabels(mock.Anything, mock.Anything, mock.Anything).
 		Return(nil, nil)
@@ -134,7 +134,7 @@ func newInstallerWithDefaults(
 	t.Helper()
 
 	client := helm.NewMockInterface(t)
-	installer := certmanagerinstaller.NewInstaller(client, 2*time.Minute)
+	installer := certmanagerinstaller.NewInstaller(client, 2*time.Minute, false)
 
 	return installer, client
 }

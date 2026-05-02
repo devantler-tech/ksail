@@ -59,16 +59,17 @@ func NewFactory(
 func (f *Factory) CreateInstallersForConfig(cfg *v1alpha1.Cluster) (map[string]Installer, error) {
 	installers := make(map[string]Installer)
 	spec := cfg.Spec.Cluster
+	haEnabled := IsHAEnabled(spec.ControlPlanes + spec.Workers)
 
-	f.addGitOpsInstaller(installers, spec)
-	f.addCNIInstaller(installers, spec)
-	f.addPolicyEngineInstaller(installers, spec)
-	f.addCertManagerInstaller(installers, spec)
-	f.addMetricsServerInstaller(installers, spec)
-	f.addCSIInstallers(installers, cfg)
-	f.addLoadBalancerInstaller(installers, cfg)
+	f.addGitOpsInstaller(installers, spec, haEnabled)
+	f.addCNIInstaller(installers, spec, haEnabled)
+	f.addPolicyEngineInstaller(installers, spec, haEnabled)
+	f.addCertManagerInstaller(installers, spec, haEnabled)
+	f.addMetricsServerInstaller(installers, spec, haEnabled)
+	f.addCSIInstallers(installers, cfg, haEnabled)
+	f.addLoadBalancerInstaller(installers, cfg, haEnabled)
 
-	err := f.addClusterAutoscalerInstaller(installers, spec)
+	err := f.addClusterAutoscalerInstaller(installers, spec, haEnabled)
 	if err != nil {
 		return nil, err
 	}
@@ -117,7 +118,7 @@ func (f *Factory) GetImagesForCluster(
 	return GetImagesFromInstallers(ctx, installers)
 }
 
-func (f *Factory) addGitOpsInstaller(installers map[string]Installer, spec v1alpha1.ClusterSpec) {
+func (f *Factory) addGitOpsInstaller(installers map[string]Installer, spec v1alpha1.ClusterSpec, haEnabled bool) {
 	switch spec.GitOpsEngine {
 	case v1alpha1.GitOpsEngineFlux:
 		installers["flux"] = fluxinstaller.NewInstaller(
@@ -126,24 +127,24 @@ func (f *Factory) addGitOpsInstaller(installers map[string]Installer, spec v1alp
 		)
 	case v1alpha1.GitOpsEngineArgoCD:
 		installers["argocd"] = argocdinstaller.NewInstaller(
-			f.helmClient, f.timeout, argocdinstaller.ShouldEnableSOPS(spec.SOPS),
+			f.helmClient, f.timeout, argocdinstaller.ShouldEnableSOPS(spec.SOPS), haEnabled,
 		)
 	case v1alpha1.GitOpsEngineNone:
 		// No GitOps engine configured
 	}
 }
 
-func (f *Factory) addCNIInstaller(installers map[string]Installer, spec v1alpha1.ClusterSpec) {
+func (f *Factory) addCNIInstaller(installers map[string]Installer, spec v1alpha1.ClusterSpec, haEnabled bool) {
 	switch spec.CNI {
 	case v1alpha1.CNICilium:
 		installers["cilium"] = ciliuminstaller.NewInstallerWithDistribution(
 			f.helmClient, f.kubeconfig, f.kubecontext, f.timeout,
-			f.distribution, spec.Provider, spec.LoadBalancer,
+			f.distribution, spec.Provider, spec.LoadBalancer, haEnabled,
 		)
 	case v1alpha1.CNICalico:
 		installers["calico"] = calicoinstaller.NewInstallerWithDistribution(
 			f.helmClient, f.kubeconfig, f.kubecontext,
-			max(f.timeout, CalicoInstallTimeout), f.distribution,
+			max(f.timeout, CalicoInstallTimeout), f.distribution, haEnabled,
 		)
 	case v1alpha1.CNIDefault:
 		// Default CNI - no explicit installer needed
@@ -153,11 +154,12 @@ func (f *Factory) addCNIInstaller(installers map[string]Installer, spec v1alpha1
 func (f *Factory) addPolicyEngineInstaller(
 	installers map[string]Installer,
 	spec v1alpha1.ClusterSpec,
+	haEnabled bool,
 ) {
 	switch spec.PolicyEngine {
 	case v1alpha1.PolicyEngineKyverno:
 		installers["kyverno"] = kyvernoinstaller.NewInstaller(
-			f.helmClient, max(f.timeout, KyvernoInstallTimeout), f.kubeconfig, f.kubecontext,
+			f.helmClient, max(f.timeout, KyvernoInstallTimeout), f.kubeconfig, f.kubecontext, haEnabled,
 		)
 	case v1alpha1.PolicyEngineGatekeeper:
 		installers["gatekeeper"] = gatekeeperinstaller.NewInstaller(
@@ -165,6 +167,7 @@ func (f *Factory) addPolicyEngineInstaller(
 			f.kubeconfig,
 			f.kubecontext,
 			max(f.timeout, GatekeeperInstallTimeout),
+			haEnabled,
 		)
 	case v1alpha1.PolicyEngineNone:
 		// No policy engine configured
@@ -174,10 +177,11 @@ func (f *Factory) addPolicyEngineInstaller(
 func (f *Factory) addCertManagerInstaller(
 	installers map[string]Installer,
 	spec v1alpha1.ClusterSpec,
+	haEnabled bool,
 ) {
 	if spec.CertManager == v1alpha1.CertManagerEnabled {
 		installers["cert-manager"] = certmanagerinstaller.NewInstaller(
-			f.helmClient, max(f.timeout, CertManagerInstallTimeout),
+			f.helmClient, max(f.timeout, CertManagerInstallTimeout), haEnabled,
 		)
 	}
 }
@@ -185,17 +189,18 @@ func (f *Factory) addCertManagerInstaller(
 func (f *Factory) addMetricsServerInstaller(
 	installers map[string]Installer,
 	spec v1alpha1.ClusterSpec,
+	haEnabled bool,
 ) {
 	if spec.MetricsServer == v1alpha1.MetricsServerEnabled ||
 		(spec.MetricsServer == v1alpha1.MetricsServerDefault &&
 			!spec.Distribution.ProvidesMetricsServerByDefault()) {
 		installers["metrics-server"] = metricsserverinstaller.NewInstallerWithDistribution(
-			f.helmClient, f.timeout, f.distribution,
+			f.helmClient, f.timeout, f.distribution, haEnabled,
 		)
 	}
 }
 
-func (f *Factory) addCSIInstallers(installers map[string]Installer, cfg *v1alpha1.Cluster) {
+func (f *Factory) addCSIInstallers(installers map[string]Installer, cfg *v1alpha1.Cluster, haEnabled bool) {
 	spec := cfg.Spec.Cluster
 
 	if f.needsLocalPathStorage(spec) {
@@ -212,11 +217,12 @@ func (f *Factory) addCSIInstallers(installers map[string]Installer, cfg *v1alpha
 
 		networkName := hcloudccminstaller.ResolveHetznerNetworkName(cfg, clusterName)
 		installers["hetzner-csi"] = hetznercsiinstaller.NewInstaller(
-			f.helmClient, f.kubeconfig, f.kubecontext, f.timeout, networkName,
+			f.helmClient, f.kubeconfig, f.kubecontext, f.timeout, networkName, haEnabled,
 		)
 		installers["kubelet-csr-approver"] = kubeletcsrapproverinstaller.NewInstaller(
 			f.helmClient,
 			f.timeout,
+			haEnabled,
 		)
 	}
 }
@@ -224,6 +230,7 @@ func (f *Factory) addCSIInstallers(installers map[string]Installer, cfg *v1alpha
 func (f *Factory) addLoadBalancerInstaller(
 	installers map[string]Installer,
 	cfg *v1alpha1.Cluster,
+	haEnabled bool,
 ) {
 	spec := cfg.Spec.Cluster
 
@@ -256,6 +263,7 @@ func (f *Factory) addLoadBalancerInstaller(
 			f.kubecontext,
 			f.timeout,
 			networkName,
+			haEnabled,
 		)
 	}
 }
@@ -335,13 +343,14 @@ func (f *Factory) needsHcloudCCM(spec v1alpha1.ClusterSpec) bool {
 func (f *Factory) addClusterAutoscalerInstaller(
 	installers map[string]Installer,
 	spec v1alpha1.ClusterSpec,
+	haEnabled bool,
 ) error {
 	if !f.needsClusterAutoscaler(spec) {
 		return nil
 	}
 
 	inst, err := clusterautoscalerinstaller.NewInstaller(
-		f.helmClient, f.timeout, spec.Autoscaler.Node,
+		f.helmClient, f.timeout, spec.Autoscaler.Node, haEnabled,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create cluster-autoscaler installer: %w", err)

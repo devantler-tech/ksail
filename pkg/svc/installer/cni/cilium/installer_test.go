@@ -71,6 +71,7 @@ func TestNewInstallerWithDistribution(t *testing.T) {
 				testCase.distribution,
 				"",
 				v1alpha1.LoadBalancerDefault,
+				false,
 			)
 
 			require.NotNil(t, installer, "expected installer to be created")
@@ -163,6 +164,7 @@ func TestInstaller_Install_DockerProvider(t *testing.T) {
 		v1alpha1.DistributionVanilla,
 		v1alpha1.ProviderDocker,
 		v1alpha1.LoadBalancerDefault,
+		false,
 	)
 
 	installer.SetGatewayAPICRDInstaller(func(_ context.Context) error {
@@ -217,6 +219,7 @@ func TestInstaller_Install_DockerProviderWithLoadBalancer(t *testing.T) {
 		v1alpha1.DistributionVanilla,
 		v1alpha1.ProviderDocker,
 		v1alpha1.LoadBalancerEnabled,
+		false,
 	)
 
 	installer.SetGatewayAPICRDInstaller(func(_ context.Context) error {
@@ -311,6 +314,7 @@ func TestInstaller_Install_NilClient(t *testing.T) {
 		v1alpha1.DistributionVanilla,
 		"",
 		v1alpha1.LoadBalancerDefault,
+		false,
 	)
 
 	err := installer.Install(context.Background())
@@ -331,6 +335,7 @@ func TestInstaller_Install_NilGatewayAPICRDInstaller(t *testing.T) {
 		v1alpha1.DistributionVanilla,
 		"",
 		v1alpha1.LoadBalancerDefault,
+		false,
 	)
 
 	installer.SetGatewayAPICRDInstaller(nil)
@@ -353,6 +358,7 @@ func TestInstaller_Install_GatewayAPICRDError(t *testing.T) {
 		v1alpha1.DistributionVanilla,
 		"",
 		v1alpha1.LoadBalancerDefault,
+		false,
 	)
 
 	installer.SetGatewayAPICRDInstaller(func(_ context.Context) error {
@@ -406,6 +412,7 @@ func TestInstaller_Uninstall_NilClient(t *testing.T) {
 		v1alpha1.DistributionVanilla,
 		"",
 		v1alpha1.LoadBalancerDefault,
+		false,
 	)
 
 	err := installer.Uninstall(context.Background())
@@ -431,6 +438,7 @@ func newInstallerWithDistribution(
 		distribution,
 		"",
 		v1alpha1.LoadBalancerDefault,
+		false,
 	)
 
 	// Use no-op Gateway API CRD installer to avoid requiring a real cluster.

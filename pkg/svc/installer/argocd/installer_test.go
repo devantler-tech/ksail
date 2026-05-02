@@ -17,7 +17,7 @@ func TestNewInstaller(t *testing.T) {
 
 	timeout := 5 * time.Minute
 	client := helm.NewMockInterface(t)
-	installer := argocdinstaller.NewInstaller(client, timeout, false)
+	installer := argocdinstaller.NewInstaller(client, timeout, false, false)
 
 	require.NotNil(t, installer)
 }
@@ -48,7 +48,7 @@ func TestChartSpecValuesYaml(t *testing.T) {
 
 			client := helm.NewMockInterface(t)
 			inst := argocdinstaller.NewInstaller(
-				client, 5*time.Minute, testCase.sopsEnabled,
+				client, 5*time.Minute, testCase.sopsEnabled, false,
 			)
 			spec := inst.ChartSpec()
 
@@ -118,6 +118,7 @@ func newArgoCDInstallerWithDefaults(
 	installer := argocdinstaller.NewInstaller(
 		client,
 		5*time.Second,
+		false,
 		false,
 	)
 

@@ -17,7 +17,7 @@ func TestNewInstaller(t *testing.T) {
 
 	timeout := 5 * time.Minute
 	client := helm.NewMockInterface(t)
-	installer := kubeletcsrapproverinstaller.NewInstaller(client, timeout)
+	installer := kubeletcsrapproverinstaller.NewInstaller(client, timeout, false)
 
 	assert.NotNil(t, installer)
 }
@@ -94,7 +94,7 @@ func newKubeletCSRApproverInstallerWithDefaults(
 
 	timeout := 5 * time.Second
 	client := helm.NewMockInterface(t)
-	installer := kubeletcsrapproverinstaller.NewInstaller(client, timeout)
+	installer := kubeletcsrapproverinstaller.NewInstaller(client, timeout, false)
 
 	return installer, client
 }

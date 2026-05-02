@@ -25,6 +25,7 @@ func TestInstaller_Install_TalosDistribution(t *testing.T) {
 		v1alpha1.DistributionTalos,
 		v1alpha1.ProviderDocker,
 		v1alpha1.LoadBalancerDefault,
+		false,
 	)
 
 	installer.SetAPIServerCheckerForTest(func(_ context.Context) error { return nil })
@@ -74,6 +75,7 @@ func TestInstaller_Install_HetznerProvider(t *testing.T) {
 		v1alpha1.DistributionVanilla,
 		v1alpha1.ProviderHetzner,
 		v1alpha1.LoadBalancerDefault,
+		false,
 	)
 
 	installer.SetGatewayAPICRDInstaller(func(_ context.Context) error { return nil })
@@ -123,6 +125,7 @@ func TestInstaller_Install_TalosDockerWithLoadBalancer(t *testing.T) {
 		v1alpha1.DistributionTalos,
 		v1alpha1.ProviderDocker,
 		v1alpha1.LoadBalancerEnabled,
+		false,
 	)
 
 	installer.SetAPIServerCheckerForTest(func(_ context.Context) error { return nil })
@@ -172,6 +175,7 @@ func TestInstaller_Images_Success(t *testing.T) {
 		v1alpha1.DistributionVanilla,
 		"",
 		v1alpha1.LoadBalancerDefault,
+		false,
 	)
 
 	manifest := `apiVersion: apps/v1
@@ -208,6 +212,7 @@ func TestInstaller_Images_NilClient(t *testing.T) {
 		v1alpha1.DistributionVanilla,
 		"",
 		v1alpha1.LoadBalancerDefault,
+		false,
 	)
 
 	images, err := installer.Images(context.Background())
@@ -229,6 +234,7 @@ func TestInstaller_Uninstall_ContextCanceled(t *testing.T) {
 		v1alpha1.DistributionVanilla,
 		"",
 		v1alpha1.LoadBalancerDefault,
+		false,
 	)
 
 	ctx, cancel := context.WithCancel(context.Background())

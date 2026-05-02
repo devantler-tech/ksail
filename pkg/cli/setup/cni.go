@@ -136,6 +136,7 @@ func installCiliumCNI(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster, tmr time
 		clusterCfg.Spec.Cluster.Distribution,
 		clusterCfg.Spec.Cluster.Provider,
 		clusterCfg.Spec.Cluster.LoadBalancer,
+		installer.IsHAEnabled(clusterCfg.Spec.Cluster.ControlPlanes+clusterCfg.Spec.Cluster.Workers),
 	)
 
 	return runCNIInstallation(
@@ -157,6 +158,7 @@ func installCalicoCNI(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster, tmr time
 		clusterCfg.Spec.Cluster.Connection.Context,
 		setup.timeout,
 		clusterCfg.Spec.Cluster.Distribution,
+		installer.IsHAEnabled(clusterCfg.Spec.Cluster.ControlPlanes+clusterCfg.Spec.Cluster.Workers),
 	)
 
 	return runCNIInstallation(

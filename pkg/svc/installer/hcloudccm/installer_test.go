@@ -22,7 +22,7 @@ func TestNewInstaller(t *testing.T) {
 			mockClient := helm.NewMockInterface(t)
 			installer := hcloudccminstaller.NewInstaller(
 				mockClient, testCase.kubeconfig, testCase.context, testCase.timeout,
-				testCase.networkName,
+				testCase.networkName, false,
 			)
 
 			if testCase.wantNil {

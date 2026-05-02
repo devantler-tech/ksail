@@ -25,6 +25,7 @@ type Installer struct {
 	distribution           v1alpha1.Distribution
 	provider               v1alpha1.Provider
 	loadBalancer           v1alpha1.LoadBalancer
+	haEnabled              bool
 	gatewayAPICRDInstaller GatewayAPICRDInstallerFunc
 	// apiServerChecker is called for distributions that may have an API server
 	// timing gap. It defaults to WaitForAPIServerStability and can be overridden
@@ -40,12 +41,13 @@ func NewInstaller(
 ) *Installer {
 	return NewInstallerWithDistribution(
 		client, kubeconfig, context, timeout,
-		"", "", v1alpha1.LoadBalancerDefault,
+		"", "", v1alpha1.LoadBalancerDefault, false,
 	)
 }
 
 // NewInstallerWithDistribution creates a new Cilium installer instance
 // with distribution and provider-specific configuration.
+// When haEnabled is true the operator replica count is set to 2.
 func NewInstallerWithDistribution(
 	client helm.Interface,
 	kubeconfig, context string,
@@ -53,11 +55,13 @@ func NewInstallerWithDistribution(
 	distribution v1alpha1.Distribution,
 	provider v1alpha1.Provider,
 	loadBalancer v1alpha1.LoadBalancer,
+	haEnabled bool,
 ) *Installer {
 	ciliumInstaller := &Installer{
 		distribution: distribution,
 		provider:     provider,
 		loadBalancer: loadBalancer,
+		haEnabled:    haEnabled,
 	}
 	ciliumInstaller.InstallerBase = cni.NewInstallerBase(
 		client,
@@ -178,7 +182,7 @@ func (c *Installer) helmInstallOrUpgradeCilium(ctx context.Context) error {
 
 // getCiliumValues returns the Helm values for Cilium based on the distribution and provider.
 func (c *Installer) getCiliumValues() map[string]string {
-	values := defaultCiliumValues()
+	values := c.defaultCiliumValues()
 
 	// Add distribution-specific values
 	switch c.distribution {
@@ -212,9 +216,14 @@ func (c *Installer) getCiliumValues() map[string]string {
 	return values
 }
 
-func defaultCiliumValues() map[string]string {
+func (c *Installer) defaultCiliumValues() map[string]string {
+	operatorReplicas := "1"
+	if c.haEnabled {
+		operatorReplicas = "2"
+	}
+
 	return map[string]string{
-		"operator.replicas":  "1", // numeric values don't need quotes
+		"operator.replicas":  operatorReplicas,
 		"gatewayAPI.enabled": "true",
 	}
 }

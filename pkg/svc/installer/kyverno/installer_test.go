@@ -20,7 +20,7 @@ func TestNewInstaller(t *testing.T) {
 	t.Parallel()
 
 	client := helm.NewMockInterface(t)
-	installer := kyvernoinstaller.NewInstaller(client, 5*time.Second, "", "")
+	installer := kyvernoinstaller.NewInstaller(client, 5*time.Second, "", "", false)
 
 	assert.NotNil(t, installer)
 }
@@ -103,7 +103,7 @@ func newInstallerWithDefaults(
 	t.Helper()
 
 	client := helm.NewMockInterface(t)
-	installer := kyvernoinstaller.NewInstaller(client, 2*time.Minute, "", "")
+	installer := kyvernoinstaller.NewInstaller(client, 2*time.Minute, "", "", false)
 
 	return installer, client
 }
