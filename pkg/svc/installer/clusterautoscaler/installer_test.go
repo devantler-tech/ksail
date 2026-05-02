@@ -36,42 +36,48 @@ func TestNewInstaller_HAEnabled(t *testing.T) {
 	require.NotNil(t, installer)
 }
 
-func TestClusterAutoscalerInstaller_ValuesYaml_HAEnabled(t *testing.T) {
+func TestClusterAutoscalerInstaller_ValuesYaml_HA(t *testing.T) {
 	t.Parallel()
 
-	cfg := v1alpha1.NodeAutoscalerConfig{
-		Pools: []v1alpha1.NodePool{
-			{Name: "workers", ServerType: "cx23", Location: "fsn1", Min: 1, Max: 5},
+	tests := []struct {
+		name      string
+		haEnabled bool
+		assertFn  func(t *testing.T, valuesYaml string)
+	}{
+		{
+			name:      "HAEnabled",
+			haEnabled: true,
+			assertFn: func(t *testing.T, valuesYaml string) {
+				t.Helper()
+				assert.Contains(t, valuesYaml, "replicas: 2",
+					"ValuesYaml should contain replicas: 2 when HA is enabled")
+			},
 		},
-		Expander: v1alpha1.AutoscalerExpanderLeastWaste,
+		{
+			name:      "HADisabled",
+			haEnabled: false,
+			assertFn: func(t *testing.T, valuesYaml string) {
+				t.Helper()
+				assert.NotContains(t, valuesYaml, "replicas: 2",
+					"ValuesYaml should not contain replicas: 2 when HA is disabled")
+			},
+		},
 	}
 
-	client := helm.NewMockInterface(t)
-	client.EXPECT().
-		GetReleaseStorageLabels(mock.Anything, mock.Anything, mock.Anything).
-		Return(nil, nil)
-	expectAddRepository(t, client, nil)
-	client.EXPECT().
-		InstallOrUpgradeChart(
-			mock.Anything,
-			mock.MatchedBy(func(spec *helm.ChartSpec) bool {
-				assert.Contains(t, spec.ValuesYaml, "replicas: 2",
-					"ValuesYaml should contain replicas: 2 when HA is enabled")
-
-				return true
-			}),
-		).
-		Return(nil, nil)
-
-	installer, err := clusterautoscalerinstaller.NewInstaller(client, 5*time.Second, cfg, true)
-	require.NoError(t, err)
-
-	err = installer.Install(context.Background())
-	require.NoError(t, err)
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			assertHAValuesYaml(t, test.haEnabled, test.assertFn)
+		})
+	}
 }
 
-func TestClusterAutoscalerInstaller_ValuesYaml_HADisabled(t *testing.T) {
-	t.Parallel()
+func assertHAValuesYaml(
+	t *testing.T,
+	haEnabled bool,
+	assertFn func(t *testing.T, valuesYaml string),
+) {
+	t.Helper()
 
 	cfg := v1alpha1.NodeAutoscalerConfig{
 		Pools: []v1alpha1.NodePool{
@@ -89,15 +95,16 @@ func TestClusterAutoscalerInstaller_ValuesYaml_HADisabled(t *testing.T) {
 		InstallOrUpgradeChart(
 			mock.Anything,
 			mock.MatchedBy(func(spec *helm.ChartSpec) bool {
-				assert.NotContains(t, spec.ValuesYaml, "replicas: 2",
-					"ValuesYaml should not contain replicas: 2 when HA is disabled")
+				assertFn(t, spec.ValuesYaml)
 
 				return true
 			}),
 		).
 		Return(nil, nil)
 
-	installer, err := clusterautoscalerinstaller.NewInstaller(client, 5*time.Second, cfg, false)
+	installer, err := clusterautoscalerinstaller.NewInstaller(
+		client, 5*time.Second, cfg, haEnabled,
+	)
 	require.NoError(t, err)
 
 	err = installer.Install(context.Background())
