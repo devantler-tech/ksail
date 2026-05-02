@@ -12,6 +12,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const (
+	repoName = "jetstack"
+	repoURL  = "https://charts.jetstack.io"
+)
+
 func TestNewInstaller(t *testing.T) {
 	t.Parallel()
 
@@ -44,8 +49,8 @@ func TestInstallSuccessWithScaledTimeout(t *testing.T) {
 		AddRepository(
 			mock.Anything,
 			mock.MatchedBy(func(entry *helm.RepositoryEntry) bool {
-				return entry != nil && entry.Name == "jetstack" &&
-					entry.URL == "https://charts.jetstack.io"
+				return entry != nil && entry.Name == repoName &&
+					entry.URL == repoURL
 			}),
 			mock.Anything,
 		).
@@ -93,8 +98,8 @@ func TestInstallSuccess_HAEnabled(t *testing.T) {
 		AddRepository(
 			mock.Anything,
 			mock.MatchedBy(func(entry *helm.RepositoryEntry) bool {
-				return entry != nil && entry.Name == "jetstack" &&
-					entry.URL == "https://charts.jetstack.io"
+				return entry != nil && entry.Name == repoName &&
+					entry.URL == repoURL
 			}),
 			mock.Anything,
 		).
@@ -203,8 +208,8 @@ func expectCertManagerInstall(t *testing.T, client *helm.MockInterface, installE
 		AddRepository(
 			mock.Anything,
 			mock.MatchedBy(func(entry *helm.RepositoryEntry) bool {
-				return entry != nil && entry.Name == "jetstack" &&
-					entry.URL == "https://charts.jetstack.io"
+				return entry != nil && entry.Name == repoName &&
+					entry.URL == repoURL
 			}),
 			mock.Anything,
 		).
@@ -221,7 +226,7 @@ func expectCertManagerInstall(t *testing.T, client *helm.MockInterface, installE
 				assert.Equal(t, "cert-manager", spec.ReleaseName)
 				assert.Equal(t, "jetstack/cert-manager", spec.ChartName)
 				assert.Equal(t, "cert-manager", spec.Namespace)
-				assert.Equal(t, "https://charts.jetstack.io", spec.RepoURL)
+				assert.Equal(t, repoURL, spec.RepoURL)
 				assert.True(t, spec.CreateNamespace)
 				assert.True(t, spec.Atomic)
 				assert.True(t, spec.Wait)
