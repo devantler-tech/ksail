@@ -447,12 +447,23 @@ func ValidateOIDCConfig(oidc *OIDCSpec) error {
 		return fmt.Errorf("%w: issuerURL must use HTTPS scheme", ErrInvalidOIDCConfig)
 	}
 
+	// Normalize: trim whitespace, reject empty, and deduplicate scopes.
+	seen := make(map[string]struct{}, len(oidc.ExtraScopes))
+	normalized := make([]string, 0, len(oidc.ExtraScopes))
+
 	for idx, scope := range oidc.ExtraScopes {
 		trimmed := strings.TrimSpace(scope)
 		if trimmed == "" {
 			return fmt.Errorf("%w: extraScopes[%d] must not be empty", ErrInvalidOIDCConfig, idx)
 		}
+
+		if _, dup := seen[trimmed]; !dup {
+			seen[trimmed] = struct{}{}
+			normalized = append(normalized, trimmed)
+		}
 	}
+
+	oidc.ExtraScopes = normalized
 
 	return nil
 }

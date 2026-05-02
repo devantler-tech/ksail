@@ -31,13 +31,15 @@ func AtomicWriteFile(path string, data []byte, perm os.FileMode) error {
 		return fmt.Errorf("set permissions: %w", chmodErr)
 	}
 
-	if _, writeErr := tmp.Write(data); writeErr != nil {
+	_, writeErr := tmp.Write(data)
+	if writeErr != nil {
 		_ = tmp.Close()
 
 		return fmt.Errorf("write data: %w", writeErr)
 	}
 
-	if closeErr := tmp.Close(); closeErr != nil {
+	closeErr := tmp.Close()
+	if closeErr != nil {
 		return fmt.Errorf("close temp file: %w", closeErr)
 	}
 
