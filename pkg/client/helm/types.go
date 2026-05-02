@@ -98,9 +98,10 @@ type Interface interface {
 	// values. Use this for bulk release detection to avoid N separate ReleaseExists roundtrips.
 	ListReleases(ctx context.Context) ([]ReleaseInfo, error)
 	// GetReleaseSecretLabels returns the labels from the latest Helm release
-	// Secret for the given release name and namespace. Returns (nil, nil) when
-	// no release Secrets exist. This is used to inspect labels added by external
-	// controllers (e.g. Flux helm-controller) to determine ownership.
+	// Secret for the given release name and namespace. Returns
+	// (nil, ErrNoReleaseSecrets) when no release Secrets exist. This is used
+	// to inspect labels added by external controllers (e.g. Flux
+	// helm-controller) to determine ownership.
 	GetReleaseSecretLabels(
 		ctx context.Context,
 		releaseName, namespace string,

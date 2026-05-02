@@ -43,6 +43,25 @@ func TestBaseInstallSuccess(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestBaseInstallProceedsWhenNoReleaseSecrets(t *testing.T) {
+	t.Parallel()
+
+	base, client := newBaseWithDefaults(t)
+	client.EXPECT().
+		GetReleaseSecretLabels(mock.Anything, "test-release", "test-namespace").
+		Return(nil, helm.ErrNoReleaseSecrets)
+	client.EXPECT().
+		AddRepository(mock.Anything, mock.Anything, mock.Anything).
+		Return(nil)
+	client.EXPECT().
+		InstallOrUpgradeChart(mock.Anything, mock.Anything).
+		Return(nil, nil)
+
+	err := base.Install(context.Background())
+
+	require.NoError(t, err)
+}
+
 func TestBaseInstallSkipsWhenFluxManaged(t *testing.T) {
 	t.Parallel()
 

@@ -5,8 +5,6 @@ const (
 	// FluxNameLabel is the label key set by the Flux helm-controller on
 	// Helm release Secrets it manages.
 	FluxNameLabel = "helm.toolkit.fluxcd.io/name"
-	// FluxNamespaceLabel is the companion namespace label set by Flux.
-	FluxNamespaceLabel = "helm.toolkit.fluxcd.io/namespace"
 	// ArgoCDManagedByLabel is the label key set by ArgoCD on resources it
 	// manages. Present on Helm release Secrets when ArgoCD manages charts
 	// through its Helm integration.
