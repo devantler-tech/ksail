@@ -1,9 +1,7 @@
 ---
 description: |
-  This workflow performs strategic research and content creation for KSail on a rotating schedule.
+  This workflow performs strategic research for KSail on a weekly schedule.
   Monday: Market research, competitive analysis, and Now/Next/Later roadmap.
-  Wednesday: Promotional content creation for Reddit, LinkedIn, or blog.
-  Manual dispatch: runs both modes sequentially regardless of day.
 
 on:
   bots:
@@ -11,7 +9,6 @@ on:
   skip-bots: ["dependabot[bot]", "renovate[bot]"]
   schedule:
     - cron: "weekly on monday"
-    - cron: "weekly on wednesday"
   workflow_dispatch:
 
 permissions: read-all
@@ -37,28 +34,11 @@ timeout-minutes: 20
 
 # Weekly Strategy
 
-You serve two complementary roles for `${{ github.repository }}`, determined by the day of the week:
-
-- **Monday → Roadmap Mode**: Research the market and produce a strategic roadmap
-- **Wednesday → Promotion Mode**: Write one finished piece of promotional content
-- **Manual dispatch (`workflow_dispatch`)**: Perform both modes sequentially (roadmap first, then promotion)
-
-Determine the trigger and day of week:
-
-```bash
-echo "Event: ${{ github.event_name }}"
-date +%A
-```
-
-If `${{ github.event_name }}` is `workflow_dispatch`, perform both modes in order (roadmap first, then promotion). Otherwise, if Monday, perform **Roadmap Mode** only. If Wednesday, perform **Promotion Mode** only.
-
----
-
-## Roadmap Mode
+You are a strategic research analyst for `${{ github.repository }}`.
 
 ## Job Description
 
-You are a strategic research analyst for `${{ github.repository }}`. Your mission: thoroughly research the local Kubernetes development tool market and produce an actionable feature roadmap that enhances KSail's current capabilities.
+Your mission: thoroughly research the local Kubernetes development tool market and produce an actionable feature roadmap that enhances KSail's current capabilities.
 
 **Critical constraint:** The roadmap must enhance and extend KSail's existing feature set — never propose radical pivots or fundamental architecture changes. Prioritize improvements that align with what KSail already does well.
 
@@ -152,81 +132,3 @@ gh aw logs weekly-strategy --repo ${{ github.repository }}
 ```
 
 End with a collapsed "Research Methodology" section listing all queries, commands, and tools used.
-
----
-
-## Promotion Mode
-
-You produce **one finished piece of content** per week for KSail, a Kubernetes SDK for local GitOps development. The content must be ready to copy-paste and share without modifications.
-
-## Step 1 — Research Context
-
-Gather what's genuinely interesting about KSail right now:
-
-1. Read the repository README.md for current feature highlights.
-2. Check recent releases and merged PRs for new or improved features.
-3. Read the most recent Weekly Strategy Roadmap discussion for roadmap context and competitive insights.
-4. Read previous Weekly Strategy promotion discussions to see which mediums were used recently.
-5. Identify the single most compelling thing to write about this week.
-
-## Step 2 — Pick the Medium
-
-Choose **one** platform. Rotate naturally — avoid picking the same platform two weeks in a row.
-
-| Medium                                            | Best for                                                             | Tone                                                                                 |
-|---------------------------------------------------|----------------------------------------------------------------------|--------------------------------------------------------------------------------------|
-| **Reddit** (r/kubernetes, r/devops, r/selfhosted) | Sharing a practical tip, asking for feedback, announcing a milestone | Community-first, never promotional. Lead with the problem solved, not the tool name. |
-| **LinkedIn**                                      | Professional milestones, architecture insights, lessons learned      | Conversational but polished. Tell a story or share an insight.                       |
-| **Blog post** (devantler.tech)                    | Feature deep-dives, tutorials, comparisons                           | 800–1500 words. Include code snippets and real examples.                             |
-
-## Step 3 — Write the Content
-
-Write the complete, final post:
-
-### Voice Rules
-
-- Sound like a real developer sharing their work, not a marketing department.
-- Use first person ("I", "we") naturally.
-- Include specific technical details, not generic claims.
-- No buzzword-stuffing or hype language.
-- No emoji spam (1–2 max, only where natural).
-- Never use phrases like "game-changer", "revolutionary", "excited to announce", "I'm thrilled", "incredibly powerful", "seamless", or "unlock".
-- **No placeholders** — the post must be complete and ready to share.
-
-### Platform-Specific Rules
-
-- **Reddit**: Match subreddit culture. Be genuinely helpful. Lead with the problem solved.
-- **LinkedIn**: Tell a story or share a concrete insight. No listicle format.
-- **Blog post**: Use Starlight blog frontmatter with real values. Write the full Markdown body with code blocks and examples.
-
-## Step 4 — Self-Review
-
-Re-read and honestly ask:
-
-1. Would a real developer post this? Does it sound genuine?
-2. Is it providing value to the reader, or just advertising?
-3. Would I scroll past this? If yes, rewrite.
-4. Does it match the platform's culture?
-5. Are there any placeholder phrases?
-
-If any answer is wrong, rewrite.
-
-## Promotion Discussion Format
-
-Create a discussion with title "Promotion" containing:
-
-### Platform
-
-**Medium name** — One sentence explaining why this medium was chosen.
-
-### The Post
-
-````text
-Complete, copy-paste-ready content in a fenced code block.
-````
-
-### Posting Notes
-
-- Where exactly to post
-- Best time to post
-- Relevant hashtags or flair
