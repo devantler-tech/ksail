@@ -34,13 +34,15 @@ ksail cluster update --dry-run --output json | jq .recreateRequired
 
 ## High Availability Component Defaults
 
-When a cluster has **3 or more nodes** (control planes + workers ≥ 3), KSail automatically applies HA defaults to all Helm-based component installers:
+When a cluster has **3 or more nodes** (control planes + workers ≥ 3), KSail automatically applies HA-ready defaults to supported Helm-based component installers. Below the 3-node threshold, no HA values are injected to avoid unschedulable pods on single-node or dual-node clusters.
+
+The possible HA settings are:
 
 - **Replicas ≥ 2** — fast failover for controller workloads
 - **PodDisruptionBudgets** — `minAvailable: 1` to prevent simultaneous evictions
 - **Topology spread constraints** — `ScheduleAnyway` by hostname to distribute pods across nodes
 
-Components that receive HA defaults automatically:
+Each component receives the subset of these settings it supports. The table below is the source of truth for which settings are applied per component:
 
 | Component | HA Setting |
 |---|---|
