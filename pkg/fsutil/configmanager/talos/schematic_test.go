@@ -1,6 +1,7 @@
 package talos_test
 
 import (
+	"encoding/hex"
 	"testing"
 
 	configmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager"
@@ -83,6 +84,8 @@ func assertValidHexID(t *testing.T, extensions []string) {
 	id, err := talos.NewSchematic(extensions).ID()
 	require.NoError(t, err)
 	assert.Len(t, id, 64, "SHA256 hex encoding should be 64 chars")
+	_, decodeErr := hex.DecodeString(id)
+	assert.NoError(t, decodeErr, "ID should contain only valid hex characters")
 }
 
 func TestSchematicInstallerImage(t *testing.T) {

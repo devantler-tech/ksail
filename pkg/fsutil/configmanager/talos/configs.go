@@ -522,8 +522,6 @@ func newConfigsWithEndpointAndSecrets(
 		return nil, err
 	}
 
-	controlPlaneEndpoint := "https://" + net.JoinHostPort(controlPlaneIP, "6443")
-
 	genOptions := buildBaseGenOptions(controlPlaneIP, versionContract)
 	if existingSecrets != nil {
 		genOptions = append(genOptions, generate.WithSecretsBundle(existingSecrets))
@@ -531,7 +529,7 @@ func newConfigsWithEndpointAndSecrets(
 
 	bundleOpts := buildBundleOptions(
 		clusterName,
-		controlPlaneEndpoint,
+		"https://"+net.JoinHostPort(controlPlaneIP, "6443"),
 		kubernetesVersion,
 		genOptions,
 		clusterPatches,

@@ -131,7 +131,7 @@ func (m *ConfigManager) loadTalosConfig() (*talosconfigmanager.Configs, error) {
 	// to use a Talos Image Factory installer containing the requested extensions.
 	// Skip when an explicit SchematicID is set — it takes precedence over extensions.
 	// Normalize first so whitespace-only or empty entries don't trigger schematic computation.
-	if m.Config.Spec.Cluster.Talos.SchematicID == "" {
+	if strings.TrimSpace(m.Config.Spec.Cluster.Talos.SchematicID) == "" {
 		normalized := talosconfigmanager.NormalizeExtensions(m.Config.Spec.Cluster.Talos.Extensions)
 		if len(normalized) > 0 {
 			talosManager.WithExtensions(normalized)
