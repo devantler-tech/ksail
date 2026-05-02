@@ -36,6 +36,9 @@ func TestKubeletCSRApproverInstaller_HAEnabled_InstallSuccess(t *testing.T) {
 
 	client := helm.NewMockInterface(t)
 	installer := kubeletcsrapproverinstaller.NewInstaller(client, 5*time.Second, true)
+	client.EXPECT().
+		GetReleaseStorageLabels(mock.Anything, mock.Anything, mock.Anything).
+		Return(nil, nil)
 	expectKubeletCSRApproverAddRepository(t, client, nil)
 	client.EXPECT().
 		InstallOrUpgradeChart(

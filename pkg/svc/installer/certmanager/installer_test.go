@@ -95,6 +95,9 @@ func TestInstallSuccess_HAEnabled(t *testing.T) {
 	installer := certmanagerinstaller.NewInstaller(client, 2*time.Minute, true)
 
 	client.EXPECT().
+		GetReleaseStorageLabels(mock.Anything, mock.Anything, mock.Anything).
+		Return(nil, nil)
+	client.EXPECT().
 		AddRepository(
 			mock.Anything,
 			mock.MatchedBy(func(entry *helm.RepositoryEntry) bool {

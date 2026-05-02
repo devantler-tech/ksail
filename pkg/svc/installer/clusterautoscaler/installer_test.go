@@ -47,6 +47,9 @@ func TestClusterAutoscalerInstaller_ValuesYaml_HAEnabled(t *testing.T) {
 	}
 
 	client := helm.NewMockInterface(t)
+	client.EXPECT().
+		GetReleaseStorageLabels(mock.Anything, mock.Anything, mock.Anything).
+		Return(nil, nil)
 	expectAddRepository(t, client, nil)
 	client.EXPECT().
 		InstallOrUpgradeChart(
@@ -78,6 +81,9 @@ func TestClusterAutoscalerInstaller_ValuesYaml_HADisabled(t *testing.T) {
 	}
 
 	client := helm.NewMockInterface(t)
+	client.EXPECT().
+		GetReleaseStorageLabels(mock.Anything, mock.Anything, mock.Anything).
+		Return(nil, nil)
 	expectAddRepository(t, client, nil)
 	client.EXPECT().
 		InstallOrUpgradeChart(
