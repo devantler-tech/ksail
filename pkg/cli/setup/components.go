@@ -12,6 +12,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/installer"
 	argocdinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/argocd"
 	certmanagerinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/certmanager"
+	clusterautoscalerinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/clusterautoscaler"
 	fluxinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/flux"
 	gatekeeperinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/gatekeeper"
 	hcloudccminstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/hcloudccm"
@@ -29,10 +30,13 @@ var (
 	ErrKubeletCSRApproverInstallerFactoryNil = errors.New(
 		"kubelet-csr-approver installer factory is nil",
 	)
-	ErrCSIInstallerFactoryNil          = errors.New("CSI installer factory is nil")
-	ErrPolicyEngineInstallerFactoryNil = errors.New("policy engine installer factory is nil")
-	ErrPolicyEngineDisabled            = errors.New("policy engine is disabled")
-	ErrClusterConfigNil                = errors.New("cluster config is nil")
+	ErrCSIInstallerFactoryNil               = errors.New("CSI installer factory is nil")
+	ErrPolicyEngineInstallerFactoryNil      = errors.New("policy engine installer factory is nil")
+	ErrPolicyEngineDisabled                 = errors.New("policy engine is disabled")
+	ErrClusterConfigNil                     = errors.New("cluster config is nil")
+	ErrClusterAutoscalerInstallerFactoryNil = errors.New(
+		"cluster-autoscaler installer factory is nil",
+	)
 )
 
 // InstallerFactories holds factory functions for creating component installers.
@@ -44,6 +48,7 @@ type InstallerFactories struct {
 	PolicyEngine       func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error)
 	ArgoCD             func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error)
 	KubeletCSRApprover func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error)
+	ClusterAutoscaler  func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error)
 	// EnsureArgoCDResources configures default Argo CD resources post-install.
 	EnsureArgoCDResources func(
 		ctx context.Context, kubeconfig string, clusterCfg *v1alpha1.Cluster, clusterName string,
@@ -170,6 +175,27 @@ func csiFactory(
 	}
 }
 
+// clusterAutoscalerFactory creates the Cluster Autoscaler factory function.
+func clusterAutoscalerFactory(
+	factories *InstallerFactories,
+) func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error) {
+	return func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error) {
+		helmClient, _, err := factories.HelmClientFactory(clusterCfg)
+		if err != nil {
+			return nil, err
+		}
+
+		timeout := installer.GetInstallTimeout(clusterCfg)
+		haEnabled := installer.IsHAEnabled(
+			clusterCfg.Spec.Cluster.ControlPlanes + clusterCfg.Spec.Cluster.Workers,
+		)
+
+		return clusterautoscalerinstaller.NewInstaller(
+			helmClient, timeout, clusterCfg.Spec.Cluster.Autoscaler.Node, haEnabled,
+		)
+	}
+}
+
 // resolveHelmClientAndTimeout creates a Helm client and computes the
 // effective install timeout for the given cluster configuration.
 func resolveHelmClientAndTimeout(
@@ -270,6 +296,7 @@ func DefaultInstallerFactories() *InstallerFactories {
 	)
 	factories.CSI = csiFactory(factories)
 	factories.PolicyEngine = policyEngineFactory(factories)
+	factories.ClusterAutoscaler = clusterAutoscalerFactory(factories)
 
 	factories.EnsureArgoCDResources = EnsureArgoCDResources
 	factories.EnsureFluxResources = fluxinstaller.EnsureDefaultResources

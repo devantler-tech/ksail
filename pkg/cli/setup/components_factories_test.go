@@ -398,3 +398,94 @@ func TestInstallPolicyEngineSilent_InstallError(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "install failed")
 }
+
+// TestClusterAutoscalerFactory exercises the cluster autoscaler factory returned by
+// DefaultInstallerFactories. It tests Talos×Hetzner with autoscaler config and
+// helm client errors.
+func TestClusterAutoscalerFactory(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		helmErr   error
+		expectErr bool
+	}{
+		{
+			name:      "creates installer with valid config",
+			expectErr: false,
+		},
+		{
+			name:      "helm client error propagates",
+			helmErr:   errTestHelmFactory,
+			expectErr: true,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			factories := setup.DefaultInstallerFactories()
+			if testCase.helmErr != nil {
+				factories.HelmClientFactory = func(_ *v1alpha1.Cluster) (*helm.Client, string, error) {
+					return nil, "", testCase.helmErr
+				}
+			} else {
+				factories.HelmClientFactory = func(_ *v1alpha1.Cluster) (*helm.Client, string, error) {
+					return nil, testKubeconfig, nil
+				}
+			}
+
+			inst, err := factories.ClusterAutoscaler(newAutoscalerClusterConfig())
+
+			if testCase.expectErr {
+				require.Error(t, err)
+				assert.Nil(t, inst)
+			} else {
+				require.NoError(t, err)
+				assert.NotNil(t, inst)
+			}
+		})
+	}
+}
+
+func newAutoscalerClusterConfig() *v1alpha1.Cluster {
+	return &v1alpha1.Cluster{
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				Distribution: v1alpha1.DistributionTalos,
+				Provider:     v1alpha1.ProviderHetzner,
+				Autoscaler: v1alpha1.AutoscalerConfig{
+					Node: v1alpha1.NodeAutoscalerConfig{
+						Enabled: true,
+						Pools: []v1alpha1.NodePool{
+							{
+								Name:       "worker",
+								ServerType: "cx22",
+								Location:   "fsn1",
+								Min:        1,
+								Max:        5,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+// TestInstallClusterAutoscalerSilent_NilFactory verifies error when factory is nil.
+func TestInstallClusterAutoscalerSilent_NilFactory(t *testing.T) {
+	t.Parallel()
+
+	factories := &setup.InstallerFactories{}
+
+	err := setup.InstallClusterAutoscalerSilent(
+		t.Context(),
+		&v1alpha1.Cluster{},
+		factories,
+	)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, setup.ErrClusterAutoscalerInstallerFactoryNil)
+}

@@ -372,13 +372,34 @@ func (f DefaultFactory) createTalosProvisioner(
 	//nolint:staticcheck // intentional: bridging deprecated field
 	talosOpts.Workers = cluster.Spec.Cluster.Workers
 
+	// Propagate autoscaler-enabled flag to Hetzner options so the provisioner
+	// can create the cluster-autoscaler-config Secret during bootstrap.
+	hetznerOpts := cluster.Spec.Provider.Hetzner
+
+	hetznerOpts.NodeAutoscalerEnabled = cluster.Spec.Cluster.Autoscaler.Node.Enabled ||
+		cluster.Spec.Cluster.NodeAutoscaling == v1alpha1.NodeAutoscalingEnabled
+
+	// Derive pool names from the new autoscaler pools config so that the
+	// delete path can clean up autoscaler-managed Hetzner servers.
+	if len(hetznerOpts.AutoscalerNodePoolNames) == 0 {
+		pools := cluster.Spec.Cluster.Autoscaler.Node.Pools
+		if len(pools) > 0 {
+			names := make([]string, len(pools))
+			for i, pool := range pools {
+				names[i] = pool.Name
+			}
+
+			hetznerOpts.AutoscalerNodePoolNames = names
+		}
+	}
+
 	provisioner, err := talosprovisioner.CreateProvisioner(
 		f.DistributionConfig.Talos,
 		cluster.Spec.Cluster.Connection.Kubeconfig,
 		cluster.Spec.Cluster.Connection.Context,
 		cluster.Spec.Cluster.Provider,
 		talosOpts,
-		cluster.Spec.Provider.Hetzner,
+		hetznerOpts,
 		cluster.Spec.Provider.Omni,
 		skipCNIChecks,
 	)

@@ -131,6 +131,22 @@ func NeedsLoadBalancerInstall(clusterCfg *v1alpha1.Cluster) bool {
 	return !dist.ProvidesLoadBalancerByDefault(provider)
 }
 
+// NeedsClusterAutoscalerInstall determines if the Cluster Autoscaler needs to be installed.
+// The Cluster Autoscaler is only supported for Talos clusters on Hetzner Cloud
+// with node autoscaling explicitly enabled.
+func NeedsClusterAutoscalerInstall(clusterCfg *v1alpha1.Cluster) bool {
+	if clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionTalos {
+		return false
+	}
+
+	if clusterCfg.Spec.Cluster.Provider != v1alpha1.ProviderHetzner {
+		return false
+	}
+
+	return clusterCfg.Spec.Cluster.Autoscaler.Node.Enabled ||
+		clusterCfg.Spec.Cluster.NodeAutoscaling == v1alpha1.NodeAutoscalingEnabled
+}
+
 // helmClientSetup creates a Helm client and retrieves the install timeout.
 func helmClientSetup(
 	clusterCfg *v1alpha1.Cluster,
@@ -352,6 +368,18 @@ func InstallPolicyEngineSilent(
 	return installFromFactory(
 		ctx, clusterCfg, factories.PolicyEngine,
 		ErrPolicyEngineInstallerFactoryNil, "policy-engine",
+	)
+}
+
+// InstallClusterAutoscalerSilent installs the Cluster Autoscaler silently for parallel execution.
+func InstallClusterAutoscalerSilent(
+	ctx context.Context,
+	clusterCfg *v1alpha1.Cluster,
+	factories *InstallerFactories,
+) error {
+	return installFromFactory(
+		ctx, clusterCfg, factories.ClusterAutoscaler,
+		ErrClusterAutoscalerInstallerFactoryNil, "cluster-autoscaler",
 	)
 }
 

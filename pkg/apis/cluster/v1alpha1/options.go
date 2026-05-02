@@ -153,6 +153,12 @@ type OptionsHetzner struct {
 	// deletion so that autoscaler-managed nodes are cleaned up alongside
 	// KSail-managed nodes.
 	AutoscalerNodePoolNames []string `json:"autoscalerNodePoolNames,omitzero"`
+	// NodeAutoscalerEnabled is set by the cluster factory when
+	// spec.cluster.autoscaler.node.enabled (or deprecated nodeAutoscaling)
+	// is true. The Talos provisioner reads this to decide whether to create
+	// the cluster-autoscaler-config Secret during bootstrap.
+	// Not user-facing in ksail.yaml — derived at runtime.
+	NodeAutoscalerEnabled bool `json:"-"`
 }
 
 // OptionsOmni defines options specific to the Sidero Omni provider.

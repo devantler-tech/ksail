@@ -26,11 +26,14 @@ func assertComponentRequirements(
 	assert.Equal(t, expected.NeedsCSI, result.NeedsCSI, "CSI")
 	assert.Equal(t, expected.NeedsCertManager, result.NeedsCertManager, "CertManager")
 	assert.Equal(t, expected.NeedsPolicyEngine, result.NeedsPolicyEngine, "PolicyEngine")
+	assert.Equal(
+		t, expected.NeedsClusterAutoscaler, result.NeedsClusterAutoscaler, "ClusterAutoscaler",
+	)
 	assert.Equal(t, expected.NeedsArgoCD, result.NeedsArgoCD, "ArgoCD")
 	assert.Equal(t, expected.NeedsFlux, result.NeedsFlux, "Flux")
 }
 
-//nolint:funlen // Table-driven test with comprehensive test cases
+//nolint:funlen,maintidx // Table-driven test with comprehensive test cases
 func TestGetComponentRequirements(t *testing.T) {
 	t.Parallel()
 
@@ -258,6 +261,103 @@ func TestGetComponentRequirements(t *testing.T) {
 			},
 		},
 		{
+			name: "Talos × Hetzner with autoscaler enabled",
+			clusterCfg: &v1alpha1.Cluster{
+				Spec: v1alpha1.Spec{
+					Cluster: v1alpha1.ClusterSpec{
+						Distribution:  v1alpha1.DistributionTalos,
+						Provider:      v1alpha1.ProviderHetzner,
+						LoadBalancer:  v1alpha1.LoadBalancerDefault,
+						MetricsServer: v1alpha1.MetricsServerDefault,
+						CSI:           v1alpha1.CSIDefault,
+						CertManager:   v1alpha1.CertManagerDisabled,
+						PolicyEngine:  v1alpha1.PolicyEngineNone,
+						GitOpsEngine:  v1alpha1.GitOpsEngineNone,
+						Autoscaler: v1alpha1.AutoscalerConfig{
+							Node: v1alpha1.NodeAutoscalerConfig{
+								Enabled: true,
+							},
+						},
+					},
+				},
+			},
+			expectedCount: 3, // LoadBalancer + CSI + ClusterAutoscaler
+			expected: setup.ComponentRequirements{
+				NeedsLoadBalancer:      true,
+				NeedsCSI:               true,
+				NeedsClusterAutoscaler: true,
+			},
+		},
+		{
+			name: "Talos × Docker with autoscaler enabled does not enable ClusterAutoscaler",
+			clusterCfg: &v1alpha1.Cluster{
+				Spec: v1alpha1.Spec{
+					Cluster: v1alpha1.ClusterSpec{
+						Distribution:  v1alpha1.DistributionTalos,
+						Provider:      v1alpha1.ProviderDocker,
+						MetricsServer: v1alpha1.MetricsServerDefault,
+						CSI:           v1alpha1.CSIDefault,
+						CertManager:   v1alpha1.CertManagerDisabled,
+						PolicyEngine:  v1alpha1.PolicyEngineNone,
+						GitOpsEngine:  v1alpha1.GitOpsEngineNone,
+						Autoscaler: v1alpha1.AutoscalerConfig{
+							Node: v1alpha1.NodeAutoscalerConfig{
+								Enabled: true,
+							},
+						},
+					},
+				},
+			},
+			expectedCount: 0,
+			expected:      setup.ComponentRequirements{},
+		},
+		{
+			name: "Vanilla with autoscaler enabled does not enable ClusterAutoscaler",
+			clusterCfg: &v1alpha1.Cluster{
+				Spec: v1alpha1.Spec{
+					Cluster: v1alpha1.ClusterSpec{
+						Distribution:  v1alpha1.DistributionVanilla,
+						MetricsServer: v1alpha1.MetricsServerDefault,
+						CSI:           v1alpha1.CSIDefault,
+						CertManager:   v1alpha1.CertManagerDisabled,
+						PolicyEngine:  v1alpha1.PolicyEngineNone,
+						GitOpsEngine:  v1alpha1.GitOpsEngineNone,
+						Autoscaler: v1alpha1.AutoscalerConfig{
+							Node: v1alpha1.NodeAutoscalerConfig{
+								Enabled: true,
+							},
+						},
+					},
+				},
+			},
+			expectedCount: 0,
+			expected:      setup.ComponentRequirements{},
+		},
+		{
+			name: "Talos × Hetzner with deprecated NodeAutoscaling enabled",
+			clusterCfg: &v1alpha1.Cluster{
+				Spec: v1alpha1.Spec{
+					Cluster: v1alpha1.ClusterSpec{
+						Distribution:    v1alpha1.DistributionTalos,
+						Provider:        v1alpha1.ProviderHetzner,
+						LoadBalancer:    v1alpha1.LoadBalancerDefault,
+						MetricsServer:   v1alpha1.MetricsServerDefault,
+						CSI:             v1alpha1.CSIDefault,
+						CertManager:     v1alpha1.CertManagerDisabled,
+						PolicyEngine:    v1alpha1.PolicyEngineNone,
+						GitOpsEngine:    v1alpha1.GitOpsEngineNone,
+						NodeAutoscaling: v1alpha1.NodeAutoscalingEnabled,
+					},
+				},
+			},
+			expectedCount: 3, // LoadBalancer + CSI + ClusterAutoscaler
+			expected: setup.ComponentRequirements{
+				NeedsLoadBalancer:      true,
+				NeedsCSI:               true,
+				NeedsClusterAutoscaler: true,
+			},
+		},
+		{
 			name: "KWOK with Flux sets NeedsFlux to false",
 			clusterCfg: &v1alpha1.Cluster{
 				Spec: v1alpha1.Spec{
@@ -341,14 +441,16 @@ func TestComponentRequirementsCount(t *testing.T) {
 			name: "all components enabled",
 			reqs: setup.ComponentRequirements{
 				NeedsMetricsServer:      true,
+				NeedsLoadBalancer:       true,
 				NeedsKubeletCSRApprover: true,
 				NeedsCSI:                true,
 				NeedsCertManager:        true,
 				NeedsPolicyEngine:       true,
+				NeedsClusterAutoscaler:  true,
 				NeedsArgoCD:             true,
 				NeedsFlux:               true,
 			},
-			expected: 7,
+			expected: 9,
 		},
 	}
 

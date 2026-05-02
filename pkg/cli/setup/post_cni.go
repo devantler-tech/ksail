@@ -275,6 +275,7 @@ type ComponentRequirements struct {
 	NeedsCSI                bool
 	NeedsCertManager        bool
 	NeedsPolicyEngine       bool
+	NeedsClusterAutoscaler  bool
 	NeedsArgoCD             bool
 	NeedsFlux               bool
 }
@@ -288,6 +289,7 @@ func (r ComponentRequirements) Count() int {
 		r.NeedsCSI,
 		r.NeedsCertManager,
 		r.NeedsPolicyEngine,
+		r.NeedsClusterAutoscaler,
 		r.NeedsArgoCD,
 		r.NeedsFlux,
 	}
@@ -349,6 +351,7 @@ func GetComponentRequirements(clusterCfg *v1alpha1.Cluster) ComponentRequirement
 		NeedsCSI:                needsCSI,
 		NeedsCertManager:        needsCertManager,
 		NeedsPolicyEngine:       needsPolicyEngine,
+		NeedsClusterAutoscaler:  NeedsClusterAutoscalerInstall(clusterCfg),
 		NeedsArgoCD:             clusterCfg.Spec.Cluster.GitOpsEngine == v1alpha1.GitOpsEngineArgoCD,
 		NeedsFlux:               needsFlux,
 	}
@@ -652,6 +655,11 @@ func buildInfrastructureTasks(
 		{needed: reqs.NeedsCSI, name: "csi", fn: InstallCSISilent},
 		{needed: reqs.NeedsCertManager, name: "cert-manager", fn: InstallCertManagerSilent},
 		{needed: reqs.NeedsPolicyEngine, name: "policy-engine", fn: InstallPolicyEngineSilent},
+		{
+			needed: reqs.NeedsClusterAutoscaler,
+			name:   "cluster-autoscaler",
+			fn:     InstallClusterAutoscalerSilent,
+		},
 	})
 }
 
