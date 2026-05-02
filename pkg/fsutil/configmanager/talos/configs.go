@@ -524,6 +524,7 @@ func newConfigsWithEndpointAndSecrets(
 	}
 
 	controlPlaneEndpoint := "https://" + net.JoinHostPort(controlPlaneIP, "6443")
+
 	genOptions := buildBaseGenOptions(controlPlaneIP, versionContract)
 	if existingSecrets != nil {
 		genOptions = append(genOptions, generate.WithSecretsBundle(existingSecrets))

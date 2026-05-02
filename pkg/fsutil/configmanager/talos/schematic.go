@@ -59,7 +59,7 @@ func normalizeExtensions(extensions []string) []string {
 
 // SchematicInstallerImage returns the Image Factory installer image reference
 // for the given schematic ID and Talos version.
-// Format: factory.talos.dev/installer/{schematicID}:{version}
+// Format: factory.talos.dev/installer/{schematicID}:{version}.
 func SchematicInstallerImage(schematicID, talosVersion string) string {
 	return fmt.Sprintf("%s/%s:%s", factoryInstallerRepository, schematicID, talosVersion)
 }

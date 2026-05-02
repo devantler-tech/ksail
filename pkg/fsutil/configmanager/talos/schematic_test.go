@@ -37,11 +37,19 @@ func TestNewSchematic(t *testing.T) {
 	})
 	t.Run("drops empty strings", func(t *testing.T) {
 		t.Parallel()
-		assertSameID(t, []string{"siderolabs/iscsi-tools"}, []string{"", "siderolabs/iscsi-tools", ""})
+		assertSameID(
+			t,
+			[]string{"siderolabs/iscsi-tools"},
+			[]string{"", "siderolabs/iscsi-tools", ""},
+		)
 	})
 	t.Run("deduplicates extensions", func(t *testing.T) {
 		t.Parallel()
-		assertSameID(t, []string{"siderolabs/iscsi-tools"}, []string{"siderolabs/iscsi-tools", "siderolabs/iscsi-tools"})
+		assertSameID(
+			t,
+			[]string{"siderolabs/iscsi-tools"},
+			[]string{"siderolabs/iscsi-tools", "siderolabs/iscsi-tools"},
+		)
 	})
 }
 
@@ -99,13 +107,20 @@ func TestConfigsWithExtensions(t *testing.T) {
 	})
 	t.Run("SchematicID is set when extensions configured", func(t *testing.T) {
 		t.Parallel()
-		configs := loadWithExtensions(t, []string{"siderolabs/iscsi-tools", "siderolabs/util-linux-tools"})
+		configs := loadWithExtensions(
+			t,
+			[]string{"siderolabs/iscsi-tools", "siderolabs/util-linux-tools"},
+		)
 		assert.Len(t, configs.SchematicID(), 64)
 	})
 	t.Run("install image is patched on control plane config", func(t *testing.T) {
 		t.Parallel()
 		configs := loadWithExtensions(t, []string{"siderolabs/iscsi-tools"})
-		assertInstallerImage(t, configs.ControlPlane().Machine().Install().Image(), configs.SchematicID())
+		assertInstallerImage(
+			t,
+			configs.ControlPlane().Machine().Install().Image(),
+			configs.SchematicID(),
+		)
 	})
 	t.Run("install image is patched on worker config", func(t *testing.T) {
 		t.Parallel()
