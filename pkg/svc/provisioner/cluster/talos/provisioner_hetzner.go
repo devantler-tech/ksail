@@ -242,7 +242,17 @@ func (p *Provisioner) detachOrWaitForReboot(
 	hzProvider *hetzner.Provider,
 	allServers []*hcloud.Server,
 ) error {
-	if p.talosOpts != nil && p.talosOpts.SchematicID != "" {
+	schematicID := ""
+	if p.talosOpts != nil {
+		schematicID = p.talosOpts.SchematicID
+	}
+
+	// Fall back to extensions-derived schematic
+	if schematicID == "" && p.talosConfigs != nil {
+		schematicID = p.talosConfigs.SchematicID()
+	}
+
+	if schematicID != "" {
 		_, _ = fmt.Fprintf(p.logWriter, "Waiting for nodes to be reachable after reboot...\n")
 
 		return p.waitForServersToBeReachable(ctx, allServers)

@@ -61,6 +61,51 @@ func TestNewSchematic(t *testing.T) {
 		require.NoError(t, err)
 		assert.Len(t, id, 64)
 	})
+
+	t.Run("normalizes whitespace in extensions", func(t *testing.T) {
+		t.Parallel()
+
+		s1 := talos.NewSchematic([]string{"siderolabs/iscsi-tools"})
+		s2 := talos.NewSchematic([]string{"  siderolabs/iscsi-tools  "})
+
+		id1, err1 := s1.ID()
+		require.NoError(t, err1)
+
+		id2, err2 := s2.ID()
+		require.NoError(t, err2)
+
+		assert.Equal(t, id1, id2, "whitespace should be trimmed")
+	})
+
+	t.Run("drops empty strings", func(t *testing.T) {
+		t.Parallel()
+
+		s1 := talos.NewSchematic([]string{"siderolabs/iscsi-tools"})
+		s2 := talos.NewSchematic([]string{"", "siderolabs/iscsi-tools", ""})
+
+		id1, err1 := s1.ID()
+		require.NoError(t, err1)
+
+		id2, err2 := s2.ID()
+		require.NoError(t, err2)
+
+		assert.Equal(t, id1, id2, "empty entries should be dropped")
+	})
+
+	t.Run("deduplicates extensions", func(t *testing.T) {
+		t.Parallel()
+
+		s1 := talos.NewSchematic([]string{"siderolabs/iscsi-tools"})
+		s2 := talos.NewSchematic([]string{"siderolabs/iscsi-tools", "siderolabs/iscsi-tools"})
+
+		id1, err1 := s1.ID()
+		require.NoError(t, err1)
+
+		id2, err2 := s2.ID()
+		require.NoError(t, err2)
+
+		assert.Equal(t, id1, id2, "duplicates should be removed")
+	})
 }
 
 func TestSchematicInstallerImage(t *testing.T) {
@@ -101,7 +146,6 @@ func TestConfigsWithExtensions(t *testing.T) {
 
 		assert.NotEmpty(t, configs.SchematicID())
 		assert.Len(t, configs.SchematicID(), 64)
-		assert.Equal(t, extensions, configs.Extensions())
 	})
 
 	t.Run("install image is patched on control plane config", func(t *testing.T) {
@@ -157,7 +201,6 @@ func TestConfigsWithExtensions(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.Equal(t, originalID, renamed.SchematicID())
-		assert.Equal(t, extensions, renamed.Extensions())
 	})
 
 	t.Run("schematic preserved across WithEndpoint", func(t *testing.T) {

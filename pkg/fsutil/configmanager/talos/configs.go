@@ -411,30 +411,6 @@ func newConfigsWithExtensions(
 	)
 }
 
-// newConfigsWithEndpoint creates Configs with an optional explicit endpoint IP.
-// If endpointIP is empty, the endpoint is calculated from the network CIDR.
-// If endpointIP is provided (e.g., for Hetzner public IPs), it is used as the endpoint.
-// If versionContract is nil, it defaults to TalosVersion1_11.
-func newConfigsWithEndpoint(
-	clusterName string,
-	kubernetesVersion string,
-	networkCIDR string,
-	endpointIP string,
-	patches []Patch,
-	versionContract *talosconfig.VersionContract,
-) (*Configs, error) {
-	return newConfigsWithEndpointAndSecrets(
-		clusterName,
-		kubernetesVersion,
-		networkCIDR,
-		endpointIP,
-		patches,
-		nil,
-		versionContract,
-		nil,
-	)
-}
-
 // resolveControlPlaneIP determines the control plane IP from explicit endpoint or network CIDR.
 func resolveControlPlaneIP(endpointIP, networkCIDR string) (string, error) {
 	if endpointIP != "" {

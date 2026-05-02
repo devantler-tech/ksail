@@ -1,99 +1,65 @@
 package talos
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"sort"
+	"strings"
 
-	"go.yaml.in/yaml/v4"
+	"github.com/siderolabs/image-factory/pkg/schematic"
 )
 
 // factoryInstallerRepository is the OCI repository for Talos Image Factory installer images.
 const factoryInstallerRepository = "factory.talos.dev/installer"
 
-// Schematic represents the requested image customization, matching the
-// Talos Image Factory schematic format exactly. The struct layout and yaml
-// tags must match github.com/siderolabs/image-factory/pkg/schematic.Schematic
-// so that marshalling produces identical bytes and therefore identical IDs.
-//
-// See https://factory.talos.dev for the schematic format documentation.
-type Schematic struct {
-	// Owner is the name of the schematic owner (Enterprise feature, unused by KSail).
-	Owner string `yaml:"owner,omitempty"`
-	// Overlay represents overlay options for image generation.
-	Overlay SchematicOverlay `yaml:"overlay,omitempty"`
-	// Customization represents the Talos image customization.
-	Customization SchematicCustomization `yaml:"customization"`
-}
-
-// SchematicOverlay represents the overlay options for image generation.
-type SchematicOverlay struct {
-	Image   string         `yaml:"image,omitempty"`
-	Name    string         `yaml:"name,omitempty"`
-	Options map[string]any `yaml:"options,omitempty"`
-}
-
-// SchematicCustomization represents the Talos image customization.
-// Field order matches the Image Factory Customization struct exactly.
-type SchematicCustomization struct {
-	ExtraKernelArgs  []string             `yaml:"extraKernelArgs,omitempty"`
-	Meta             []SchematicMetaValue `yaml:"meta,omitempty"`
-	SystemExtensions SchematicExtensions  `yaml:"systemExtensions,omitempty"`
-	// Bootloader is the bootloader kind (int). Zero value = default, omitted from YAML.
-	Bootloader int                 `yaml:"bootloader,omitempty"`
-	SecureBoot SchematicSecureBoot `yaml:"secureboot,omitempty"`
-}
-
-// SchematicMetaValue provides initial META contents for the image.
-type SchematicMetaValue struct { //nolint:govet
-	Key   uint8  `yaml:"key"`
-	Value string `yaml:"value"`
-}
-
-// SchematicExtensions represents the Talos system extensions to be installed.
-type SchematicExtensions struct {
-	OfficialExtensions []string `yaml:"officialExtensions,omitempty"`
-}
-
-// SchematicSecureBoot represents the secure boot options for the image.
-type SchematicSecureBoot struct {
-	IncludeWellKnownCertificates bool `yaml:"includeWellKnownCertificates,omitempty"`
-}
+// Schematic is the upstream Image Factory schematic type.
+// Re-exported so callers don't need to import the image-factory package directly.
+type Schematic = schematic.Schematic
 
 // NewSchematic creates a Schematic from a list of official extension names.
-// The extensions are sorted to ensure deterministic schematic IDs.
+// The extensions are normalized (trimmed, empty entries removed, deduplicated)
+// and sorted to ensure deterministic schematic IDs.
 func NewSchematic(extensions []string) *Schematic {
-	sorted := make([]string, len(extensions))
-	copy(sorted, extensions)
-	sort.Strings(sorted)
+	normalized := normalizeExtensions(extensions)
 
 	return &Schematic{
-		Customization: SchematicCustomization{
-			SystemExtensions: SchematicExtensions{
-				OfficialExtensions: sorted,
+		Customization: schematic.Customization{
+			SystemExtensions: schematic.SystemExtensions{
+				OfficialExtensions: normalized,
 			},
 		},
 	}
 }
 
-// ID returns the deterministic identifier for this schematic.
-// It matches the Talos Image Factory algorithm: hex(sha256(yaml.Marshal(schematic))).
-// Uses go.yaml.in/yaml/v4 for marshalling, the same library as the Image Factory.
-func (s *Schematic) ID() (string, error) {
-	data, err := yaml.Marshal(s)
-	if err != nil {
-		return "", fmt.Errorf("failed to marshal schematic: %w", err)
+// normalizeExtensions trims whitespace, drops empty strings, deduplicates,
+// and sorts the extension list. This ensures deterministic schematic IDs
+// and prevents subtle mismatches against Image Factory.
+func normalizeExtensions(extensions []string) []string {
+	seen := make(map[string]struct{}, len(extensions))
+	result := make([]string, 0, len(extensions))
+
+	for _, ext := range extensions {
+		ext = strings.TrimSpace(ext)
+		if ext == "" {
+			continue
+		}
+
+		if _, ok := seen[ext]; ok {
+			continue
+		}
+
+		seen[ext] = struct{}{}
+
+		result = append(result, ext)
 	}
 
-	hash := sha256.Sum256(data)
+	sort.Strings(result)
 
-	return hex.EncodeToString(hash[:]), nil
+	return result
 }
 
 // SchematicInstallerImage returns the Image Factory installer image reference
 // for the given schematic ID and Talos version.
 // Format: factory.talos.dev/installer/{schematicID}:{version}
 func SchematicInstallerImage(schematicID, talosVersion string) string {
-	return factoryInstallerRepository + "/" + schematicID + ":" + talosVersion
+	return fmt.Sprintf("%s/%s:%s", factoryInstallerRepository, schematicID, talosVersion)
 }
