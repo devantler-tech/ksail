@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
@@ -42,26 +41,15 @@ func (c *ArgoCDCollector) Collect(ctx context.Context) *Report {
 
 // collectFailingApplications lists ArgoCD Applications and returns those
 // that are not synced+healthy.
-// The method recovers from panics (e.g., when CRDs are not installed) so
+// safeCollectCRs handles panic recovery (e.g., when CRDs are not installed) so
 // diagnostic collection never crashes the CLI.
-func (c *ArgoCDCollector) collectFailingApplications(ctx context.Context) (section ResourceSection) {
-	section = ResourceSection{Heading: "Failing Applications"}
+func (c *ArgoCDCollector) collectFailingApplications(ctx context.Context) ResourceSection {
+	section := ResourceSection{Heading: "Failing Applications"}
 
-	defer func() {
-		if r := recover(); r != nil {
-			section.Resources = nil
-		}
-	}()
+	apps := safeCollectCRs(ctx, c.Dynamic, argoCDGVRApplications(), argoCDNamespace)
 
-	client := c.Dynamic.Resource(argoCDGVRApplications()).Namespace(argoCDNamespace)
-
-	list, err := client.List(ctx, metav1.ListOptions{})
-	if err != nil {
-		return section
-	}
-
-	for i := range list.Items {
-		app := &list.Items[i]
+	for i := range apps {
+		app := &apps[i]
 
 		if isArgoCDAppHealthy(app) {
 			continue

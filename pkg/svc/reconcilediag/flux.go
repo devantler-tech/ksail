@@ -80,7 +80,7 @@ func (c *FluxCollector) collectFailingCRs(
 ) ResourceSection {
 	section := ResourceSection{Heading: heading}
 
-	recovered := safeCollectCRs(c.Dynamic, ctx, gvr, namespace)
+	recovered := safeCollectCRs(ctx, c.Dynamic, gvr, namespace)
 	if recovered == nil {
 		return section
 	}
@@ -117,30 +117,37 @@ func (c *FluxCollector) collectFailingCRs(
 
 // safeCollectCRs lists CRs, recovering from panics (e.g., unregistered CRDs in fake clients).
 func safeCollectCRs(
-	dynClient dynamic.Interface,
 	ctx context.Context,
+	dynClient dynamic.Interface,
 	gvr schema.GroupVersionResource,
 	namespace string,
-) (items []unstructured.Unstructured) {
-	defer func() {
-		if r := recover(); r != nil {
-			items = nil
+) []unstructured.Unstructured {
+	var items []unstructured.Unstructured
+
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				items = nil
+			}
+		}()
+
+		var client dynamic.ResourceInterface
+
+		if namespace != "" {
+			client = dynClient.Resource(gvr).Namespace(namespace)
+		} else {
+			client = dynClient.Resource(gvr)
 		}
+
+		list, err := client.List(ctx, metav1.ListOptions{})
+		if err != nil {
+			return
+		}
+
+		items = list.Items
 	}()
 
-	var client dynamic.ResourceInterface
-	if namespace != "" {
-		client = dynClient.Resource(gvr).Namespace(namespace)
-	} else {
-		client = dynClient.Resource(gvr)
-	}
-
-	list, err := client.List(ctx, metav1.ListOptions{})
-	if err != nil {
-		return nil
-	}
-
-	return list.Items
+	return items
 }
 
 // extractReadyCondition finds the Ready condition and returns (ready, reason, message).
