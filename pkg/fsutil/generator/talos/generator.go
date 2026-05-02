@@ -40,6 +40,8 @@ const (
 	ingressFirewallDefaultActionFileName = "ingress-firewall-default-action.yaml"
 	// ingressFirewallRulesFileName is the name of the ingress firewall rules document file.
 	ingressFirewallRulesFileName = "ingress-firewall-rules.yaml"
+	// oidcFileName is the name of the OIDC API server configuration patch file.
+	oidcFileName = "oidc.yaml"
 )
 
 // KubeletServingCertApproverManifestURL is the URL for the kubelet-serving-cert-approver manifest.
@@ -139,6 +141,23 @@ type Config struct {
 	NetworkCIDR string
 	// CNIPort is the CNI encapsulation port (e.g., 8472 for Cilium VXLAN, 4789 for Flannel/Calico).
 	CNIPort int
+	// EnableOIDC indicates whether to generate an OIDC API server configuration patch.
+	// When true, generates an oidc.yaml patch with cluster.apiServer.extraArgs for OIDC.
+	EnableOIDC bool
+	// OIDCIssuerURL is the OIDC provider's issuer URL.
+	OIDCIssuerURL string
+	// OIDCClientID is the OIDC client ID.
+	OIDCClientID string
+	// OIDCUsernameClaim is the JWT claim for the Kubernetes username.
+	OIDCUsernameClaim string
+	// OIDCUsernamePrefix is the prefix for OIDC usernames.
+	OIDCUsernamePrefix string
+	// OIDCGroupsClaim is the JWT claim for Kubernetes groups.
+	OIDCGroupsClaim string
+	// OIDCGroupsPrefix is the prefix for OIDC groups.
+	OIDCGroupsPrefix string
+	// OIDCCAFile is the path to the CA certificate for self-signed OIDC providers.
+	OIDCCAFile string
 }
 
 // Generator generates the Talos directory structure.
@@ -246,6 +265,11 @@ func (g *Generator) getDirectoriesWithPatches(
 		dirs["workers"] = true
 	}
 
+	// OIDC API server patch goes to cluster/
+	if model.EnableOIDC {
+		dirs["cluster"] = true
+	}
+
 	return dirs
 }
 
@@ -331,6 +355,14 @@ func (g *Generator) generateConditionalPatches(
 	// Generate ingress firewall documents when enabled (Hetzner defense-in-depth)
 	if model.EnableIngressFirewall {
 		err := g.generateIngressFirewallPatches(rootPath, model, force)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Generate OIDC API server configuration patch when enabled
+	if model.EnableOIDC {
+		err := g.generateOIDCPatch(rootPath, model, force)
 		if err != nil {
 			return err
 		}
@@ -950,6 +982,51 @@ func (g *Generator) generateIngressFirewallPatches(
 	err = writeFirewallFile(workerRulesPath, workerContent, force)
 	if err != nil {
 		return fmt.Errorf("failed to create ingress firewall worker rules: %w", err)
+	}
+
+	return nil
+}
+
+// generateOIDCPatch creates a Talos patch file to configure the API server with OIDC flags.
+func (g *Generator) generateOIDCPatch(
+	rootPath string,
+	model *Config,
+	force bool,
+) error {
+	patchPath := filepath.Join(rootPath, "cluster", oidcFileName)
+
+	_, statErr := os.Stat(patchPath)
+	if statErr == nil && !force {
+		return nil
+	}
+
+	var b strings.Builder
+
+	fmt.Fprintf(&b, "cluster:\n")
+	fmt.Fprintf(&b, "  apiServer:\n")
+	fmt.Fprintf(&b, "    extraArgs:\n")
+	fmt.Fprintf(&b, "      oidc-issuer-url: %q\n", model.OIDCIssuerURL)
+	fmt.Fprintf(&b, "      oidc-client-id: %q\n", model.OIDCClientID)
+
+	if model.OIDCUsernameClaim != "" {
+		fmt.Fprintf(&b, "      oidc-username-claim: %q\n", model.OIDCUsernameClaim)
+	}
+	if model.OIDCUsernamePrefix != "" {
+		fmt.Fprintf(&b, "      oidc-username-prefix: %q\n", model.OIDCUsernamePrefix)
+	}
+	if model.OIDCGroupsClaim != "" {
+		fmt.Fprintf(&b, "      oidc-groups-claim: %q\n", model.OIDCGroupsClaim)
+	}
+	if model.OIDCGroupsPrefix != "" {
+		fmt.Fprintf(&b, "      oidc-groups-prefix: %q\n", model.OIDCGroupsPrefix)
+	}
+	if model.OIDCCAFile != "" {
+		fmt.Fprintf(&b, "      oidc-ca-file: %q\n", model.OIDCCAFile)
+	}
+
+	err := os.WriteFile(patchPath, []byte(b.String()), filePerm)
+	if err != nil {
+		return fmt.Errorf("failed to create OIDC patch: %w", err)
 	}
 
 	return nil

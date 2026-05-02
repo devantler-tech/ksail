@@ -252,3 +252,92 @@ func hasKubeconfigEntriesToCleanup(
 
 	return hasContext || hasCluster || hasUser || isCurrentContext
 }
+
+// OIDCExecConfig holds the parameters for configuring an OIDC exec credential plugin in kubeconfig.
+type OIDCExecConfig struct {
+	// KubeconfigPath is the absolute path to the kubeconfig file.
+	KubeconfigPath string
+	// ClusterName is the name of the cluster entry in kubeconfig.
+	ClusterName string
+	// IssuerURL is the OIDC provider issuer URL.
+	IssuerURL string
+	// ClientID is the OIDC client ID.
+	ClientID string
+	// ExtraScopes are additional OIDC scopes to request.
+	ExtraScopes []string
+	// CAFile is an optional path to the OIDC provider's CA certificate.
+	CAFile string
+}
+
+// AddOIDCKubeconfigEntries adds an exec-based OIDC user and context to the kubeconfig.
+// The user is named "oidc-<clusterName>" and the context is named "oidc@<clusterName>".
+// The admin context remains the current context.
+//
+//nolint:gosec // G304: kubeconfigPath is validated by caller
+func AddOIDCKubeconfigEntries(cfg *OIDCExecConfig, logWriter io.Writer) error {
+	kubeconfigBytes, err := os.ReadFile(cfg.KubeconfigPath)
+	if err != nil {
+		return fmt.Errorf("failed to read kubeconfig: %w", err)
+	}
+
+	kubeConfig, err := clientcmd.Load(kubeconfigBytes)
+	if err != nil {
+		return fmt.Errorf("failed to parse kubeconfig: %w", err)
+	}
+
+	userName := "oidc-" + cfg.ClusterName
+	contextName := "oidc@" + cfg.ClusterName
+
+	// Build exec args
+	execArgs := []string{
+		"oidc", "get-token",
+		"--issuer-url=" + cfg.IssuerURL,
+		"--client-id=" + cfg.ClientID,
+	}
+
+	for _, scope := range cfg.ExtraScopes {
+		execArgs = append(execArgs, "--extra-scope="+scope)
+	}
+
+	if cfg.CAFile != "" {
+		execArgs = append(execArgs, "--ca-file="+cfg.CAFile)
+	}
+
+	// Add OIDC user with exec credential plugin
+	kubeConfig.AuthInfos[userName] = &api.AuthInfo{
+		Exec: &api.ExecConfig{
+			APIVersion:      "client.authentication.k8s.io/v1",
+			Command:         "ksail",
+			Args:            execArgs,
+			InteractiveMode: api.IfAvailableExecInteractiveMode,
+		},
+	}
+
+	// Add OIDC context pointing to the same cluster
+	kubeConfig.Contexts[contextName] = &api.Context{
+		Cluster:  cfg.ClusterName,
+		AuthInfo: userName,
+	}
+
+	_, _ = fmt.Fprintf(logWriter, "Added OIDC context %q to kubeconfig\n", contextName)
+
+	result, err := clientcmd.Write(*kubeConfig)
+	if err != nil {
+		return fmt.Errorf("failed to serialize kubeconfig: %w", err)
+	}
+
+	err = os.WriteFile(cfg.KubeconfigPath, result, kubeconfigFileMode)
+	if err != nil {
+		return fmt.Errorf("failed to write kubeconfig: %w", err)
+	}
+
+	return nil
+}
+
+// CleanupOIDCKubeconfigEntries removes the OIDC user and context entries for a cluster.
+func CleanupOIDCKubeconfigEntries(kubeconfigPath, clusterName string, logWriter io.Writer) error {
+	userName := "oidc-" + clusterName
+	contextName := "oidc@" + clusterName
+
+	return CleanupKubeconfig(kubeconfigPath, "", contextName, userName, logWriter)
+}

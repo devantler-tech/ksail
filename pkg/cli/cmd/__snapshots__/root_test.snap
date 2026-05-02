@@ -20,6 +20,7 @@ Available Commands:
   completion  Generate the autocompletion script for the specified shell
   help        Help about any command
   mcp         Start an MCP server
+  oidc        OIDC authentication utilities
   tenant      Manage tenant lifecycle
   workload    Manage workload operations
 
@@ -47,6 +48,7 @@ Available Commands:
   completion  Generate the autocompletion script for the specified shell
   help        Help about any command
   mcp         Start an MCP server
+  oidc        OIDC authentication utilities
   tenant      Manage tenant lifecycle
   workload    Manage workload operations
 

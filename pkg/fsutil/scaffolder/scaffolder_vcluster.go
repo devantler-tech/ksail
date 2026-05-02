@@ -39,6 +39,31 @@ func (s *Scaffolder) generateVClusterConfig(output string, force bool) error {
 		"      image:\n" +
 		fmt.Sprintf("        tag: %s\n", vclusterconfigmanager.DefaultKubernetesVersion)
 
+	// Append API server OIDC flags when OIDC is configured
+	if s.KSailConfig.Spec.Cluster.OIDC.Enabled() {
+		oidc := &s.KSailConfig.Spec.Cluster.OIDC
+		header += "      apiServer:\n"
+		header += "        extraArgs:\n"
+		header += "          - --oidc-issuer-url=" + oidc.IssuerURL + "\n"
+		header += "          - --oidc-client-id=" + oidc.ClientID + "\n"
+
+		if oidc.UsernameClaim != "" {
+			header += "          - --oidc-username-claim=" + oidc.UsernameClaim + "\n"
+		}
+		if oidc.UsernamePrefix != "" {
+			header += "          - --oidc-username-prefix=" + oidc.UsernamePrefix + "\n"
+		}
+		if oidc.GroupsClaim != "" {
+			header += "          - --oidc-groups-claim=" + oidc.GroupsClaim + "\n"
+		}
+		if oidc.GroupsPrefix != "" {
+			header += "          - --oidc-groups-prefix=" + oidc.GroupsPrefix + "\n"
+		}
+		if oidc.CAFile != "" {
+			header += "          - --oidc-ca-file=" + oidc.CAFile + "\n"
+		}
+	}
+
 	content := []byte(header)
 
 	err := os.WriteFile(configPath, content, filePerm)

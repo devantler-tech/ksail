@@ -1,6 +1,7 @@
 package kind
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -145,4 +146,72 @@ func ApplyImageVerificationPatches(kindConfig *kindv1alpha4.Cluster) {
 		kindConfig.ContainerdConfigPatches,
 		ImageVerificationPatch,
 	)
+}
+
+// ApplyOIDCPatches adds kubeadm config patches to configure the API server with OIDC flags.
+// The patch is applied to all control-plane nodes via KubeadmConfigPatches.
+func ApplyOIDCPatches(kindConfig *kindv1alpha4.Cluster, oidc *v1alpha1.OIDCSpec) {
+	if oidc == nil || !oidc.Enabled() {
+		return
+	}
+
+	// Ensure at least one node exists
+	if len(kindConfig.Nodes) == 0 {
+		kindConfig.Nodes = []kindv1alpha4.Node{{
+			Role:  kindv1alpha4.ControlPlaneRole,
+			Image: DefaultKindNodeImage,
+		}}
+	}
+
+	patch := buildOIDCKubeadmPatch(oidc)
+
+	for i := range kindConfig.Nodes {
+		if kindConfig.Nodes[i].Role == kindv1alpha4.ControlPlaneRole {
+			kindConfig.Nodes[i].KubeadmConfigPatches = append(
+				kindConfig.Nodes[i].KubeadmConfigPatches,
+				patch,
+			)
+		}
+	}
+}
+
+// buildOIDCKubeadmPatch generates a kubeadm ClusterConfiguration patch with API server OIDC flags.
+func buildOIDCKubeadmPatch(oidc *v1alpha1.OIDCSpec) string {
+	var b strings.Builder
+
+	fmt.Fprintf(&b, "apiVersion: kubeadm.k8s.io/v1beta4\n")
+	fmt.Fprintf(&b, "kind: ClusterConfiguration\n")
+	fmt.Fprintf(&b, "apiServer:\n")
+	fmt.Fprintf(&b, "  extraArgs:\n")
+	fmt.Fprintf(&b, "    oidc-issuer-url:\n")
+	fmt.Fprintf(&b, "      - %q\n", oidc.IssuerURL)
+	fmt.Fprintf(&b, "    oidc-client-id:\n")
+	fmt.Fprintf(&b, "      - %q\n", oidc.ClientID)
+
+	if oidc.UsernameClaim != "" {
+		fmt.Fprintf(&b, "    oidc-username-claim:\n")
+		fmt.Fprintf(&b, "      - %q\n", oidc.UsernameClaim)
+	}
+
+	if oidc.UsernamePrefix != "" {
+		fmt.Fprintf(&b, "    oidc-username-prefix:\n")
+		fmt.Fprintf(&b, "      - %q\n", oidc.UsernamePrefix)
+	}
+
+	if oidc.GroupsClaim != "" {
+		fmt.Fprintf(&b, "    oidc-groups-claim:\n")
+		fmt.Fprintf(&b, "      - %q\n", oidc.GroupsClaim)
+	}
+
+	if oidc.GroupsPrefix != "" {
+		fmt.Fprintf(&b, "    oidc-groups-prefix:\n")
+		fmt.Fprintf(&b, "      - %q\n", oidc.GroupsPrefix)
+	}
+
+	if oidc.CAFile != "" {
+		fmt.Fprintf(&b, "    oidc-ca-file:\n")
+		fmt.Fprintf(&b, "      - %q\n", oidc.CAFile)
+	}
+
+	return b.String()
 }

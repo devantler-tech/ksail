@@ -82,6 +82,11 @@ func (s *Scaffolder) buildKindConfig(output string) *v1alpha4.Cluster {
 		kindconfigmanager.ApplyImageVerificationPatches(kindConfig)
 	}
 
+	// Apply OIDC API server configuration when OIDC is enabled.
+	if s.KSailConfig.Spec.Cluster.OIDC.Enabled() {
+		kindconfigmanager.ApplyOIDCPatches(kindConfig, &s.KSailConfig.Spec.Cluster.OIDC)
+	}
+
 	// Apply node counts from CLI flags (stored in Talos options)
 	s.applyKindNodeCounts(kindConfig)
 

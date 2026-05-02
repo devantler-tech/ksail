@@ -37,12 +37,15 @@ func (s *Scaffolder) generateTalosConfig(output string, force bool) error {
 	// Compute Hetzner ingress firewall settings (enabled flag + network CIDR + CNI port).
 	enableIngressFirewall, networkCIDR, cniPort := s.hetznerIngressFirewallConfig()
 
+	// Enable OIDC API server configuration when OIDC is configured.
+	enableOIDC := s.KSailConfig.Spec.Cluster.OIDC.Enabled()
+
 	// Mirror the conditions in generator.getDirectoriesWithPatches() exactly so
 	// .gitkeep notifications match the files the generator actually writes.
 	clusterHasPatches := talosClusterHasPatches(
 		workers, s.MirrorRegistries, disableDefaultCNI, enableKubeletCertRotation,
 		s.ClusterName, enableImageVerification, disableCDI, enableExternalCloudProvider,
-		enableIngressFirewall,
+		enableIngressFirewall, enableOIDC,
 	)
 
 	config := &talosgenerator.Config{
@@ -58,6 +61,14 @@ func (s *Scaffolder) generateTalosConfig(output string, force bool) error {
 		EnableIngressFirewall:       enableIngressFirewall,
 		NetworkCIDR:                 networkCIDR,
 		CNIPort:                     cniPort,
+		EnableOIDC:                  enableOIDC,
+		OIDCIssuerURL:               s.KSailConfig.Spec.Cluster.OIDC.IssuerURL,
+		OIDCClientID:                s.KSailConfig.Spec.Cluster.OIDC.ClientID,
+		OIDCUsernameClaim:           s.KSailConfig.Spec.Cluster.OIDC.UsernameClaim,
+		OIDCUsernamePrefix:          s.KSailConfig.Spec.Cluster.OIDC.UsernamePrefix,
+		OIDCGroupsClaim:             s.KSailConfig.Spec.Cluster.OIDC.GroupsClaim,
+		OIDCGroupsPrefix:            s.KSailConfig.Spec.Cluster.OIDC.GroupsPrefix,
+		OIDCCAFile:                  s.KSailConfig.Spec.Cluster.OIDC.CAFile,
 	}
 
 	opts := yamlgenerator.Options{
@@ -78,6 +89,7 @@ func (s *Scaffolder) generateTalosConfig(output string, force bool) error {
 		disableCDI,
 		enableExternalCloudProvider,
 		enableIngressFirewall,
+		enableOIDC,
 		clusterHasPatches,
 	)
 
@@ -88,7 +100,7 @@ func (s *Scaffolder) generateTalosConfig(output string, force bool) error {
 func (s *Scaffolder) notifyTalosGenerated(
 	workers int,
 	disableDefaultCNI, enableKubeletCertRotation, enableImageVerification, disableCDI,
-	enableExternalCloudProvider, enableIngressFirewall bool,
+	enableExternalCloudProvider, enableIngressFirewall, enableOIDC bool,
 	clusterHasPatches bool,
 ) {
 	// Notify about .gitkeep files only for directories without patches
@@ -120,6 +132,7 @@ func (s *Scaffolder) notifyTalosGenerated(
 		{enableIngressFirewall, "cluster", "ingress-firewall-default-action.yaml"},
 		{enableIngressFirewall, "control-planes", "ingress-firewall-rules.yaml"},
 		{enableIngressFirewall, "workers", "ingress-firewall-rules.yaml"},
+		{enableOIDC, "cluster", "oidc.yaml"},
 	}
 
 	for _, patch := range patches {
@@ -158,7 +171,8 @@ func talosClusterHasPatches(
 	mirrorRegistries []string,
 	disableDefaultCNI, enableKubeletCertRotation bool,
 	clusterName string,
-	enableImageVerification, disableCDI, enableExternalCloudProvider, enableIngressFirewall bool,
+	enableImageVerification, disableCDI, enableExternalCloudProvider, enableIngressFirewall,
+	enableOIDC bool,
 ) bool {
 	return workers == 0 ||
 		len(mirrorRegistries) > 0 ||
@@ -168,5 +182,6 @@ func talosClusterHasPatches(
 		enableImageVerification ||
 		disableCDI ||
 		enableExternalCloudProvider ||
-		enableIngressFirewall
+		enableIngressFirewall ||
+		enableOIDC
 }

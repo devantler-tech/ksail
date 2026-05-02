@@ -96,6 +96,7 @@ linters:
             - github.com/wk8/go-ordered-map
             - github.com/samber/do/v2
             - github.com/containerd
+            - github.com/coreos/go-oidc
             - github.com/cosi-project
             - github.com/docker
             - github.com/fatih/color
@@ -118,6 +119,7 @@ linters:
             - github.com/yannh
             - filippo.io/age
             - golang.design/x
+            - golang.org/x/oauth2
             - golang.org/x/sync
             - golang.org/x/term
             - golang.org/x/text

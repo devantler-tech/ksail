@@ -421,3 +421,22 @@ func resolveServerLimit(limit int32) (int32, error) {
 
 	return limit, nil
 }
+
+// ValidateOIDCConfig validates the OIDC authentication configuration.
+// When OIDC is enabled (IssuerURL is set), ClientID must also be set.
+// IssuerURL must use HTTPS.
+func ValidateOIDCConfig(oidc *OIDCSpec) error {
+	if oidc == nil || !oidc.Enabled() {
+		return nil
+	}
+
+	if oidc.ClientID == "" {
+		return fmt.Errorf("%w: clientID is required when issuerURL is set", ErrInvalidOIDCConfig)
+	}
+
+	if !strings.HasPrefix(oidc.IssuerURL, "https://") {
+		return fmt.Errorf("%w: issuerURL must use HTTPS scheme", ErrInvalidOIDCConfig)
+	}
+
+	return nil
+}

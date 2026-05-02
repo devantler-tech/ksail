@@ -1220,6 +1220,8 @@ func handleCreateRunE(
 		return err
 	}
 
+	applyOIDCExtraScopeFlag(cmd, ctx.ClusterCfg)
+
 	err = runClusterCreationWorkflow(cmd, cfgManager, ctx, deps)
 	if err != nil {
 		return err
@@ -1466,6 +1468,18 @@ func handlePostCreationSetup(
 	)
 	if err != nil {
 		return fmt.Errorf("failed to install post-CNI components: %w", err)
+	}
+
+	// Configure OIDC kubeconfig entries when OIDC is enabled
+	if clusterCfg.Spec.Cluster.OIDC.Enabled() {
+		if oidcErr := configureOIDCKubeconfig(cmd, clusterCfg); oidcErr != nil {
+			notify.WriteMessage(notify.Message{
+				Type:    notify.WarningType,
+				Content: "failed to configure OIDC kubeconfig: %v",
+				Args:    []any{oidcErr},
+				Writer:  cmd.OutOrStderr(),
+			})
+		}
 	}
 
 	return nil
@@ -2021,6 +2035,22 @@ func performPostDeletionCleanup(
 	// Cleanup registries after cluster deletion (only for Docker provider)
 	if resolved.Provider == v1alpha1.ProviderDocker {
 		cleanupRegistriesAfterDelete(cmd, tmr, resolved, flags.storage, preDiscovered)
+	}
+
+	// Cleanup OIDC kubeconfig entries (user + context) if they exist.
+	// This is a best-effort cleanup — errors are logged as warnings.
+	cleanupErr := k8s.CleanupOIDCKubeconfigEntries(
+		resolved.KubeconfigPath,
+		resolved.ClusterName,
+		cmd.OutOrStdout(),
+	)
+	if cleanupErr != nil {
+		notify.WriteMessage(notify.Message{
+			Type:    notify.WarningType,
+			Content: "failed to clean up OIDC kubeconfig entries: %v",
+			Args:    []any{cleanupErr},
+			Writer:  cmd.OutOrStderr(),
+		})
 	}
 
 	// Cleanup cloud-provider-kind if this was the last kind cluster
@@ -3286,6 +3316,13 @@ func InitFieldSelectors() []ksailconfigmanager.FieldSelector[v1alpha1.Cluster] {
 	// Talos-specific selectors
 	selectors = append(selectors, ksailconfigmanager.ImageVerificationFieldSelector())
 
+	// OIDC authentication selectors
+	selectors = append(selectors, ksailconfigmanager.OIDCIssuerURLFieldSelector())
+	selectors = append(selectors, ksailconfigmanager.OIDCClientIDFieldSelector())
+	selectors = append(selectors, ksailconfigmanager.OIDCUsernameClaimFieldSelector())
+	selectors = append(selectors, ksailconfigmanager.OIDCGroupsClaimFieldSelector())
+	selectors = append(selectors, ksailconfigmanager.OIDCCAFileFieldSelector())
+
 	return selectors
 }
 
@@ -3312,6 +3349,8 @@ func bindInitLocalFlags(cmd *cobra.Command, cfgManager *ksailconfigmanager.Confi
 		"Cluster name used for container names, registry names, and kubeconfig context",
 	)
 	_ = cfgManager.Viper.BindPFlag("name", cmd.Flags().Lookup("name"))
+
+	registerOIDCExtraScopeFlag(cmd)
 }
 
 // InitDeps captures dependencies required for the init command.
@@ -3338,6 +3377,12 @@ func validateInitConfig(clusterCfg *v1alpha1.Cluster) error {
 		return fmt.Errorf("local registry validation: %w", err)
 	}
 
+	// Validate OIDC configuration
+	err = v1alpha1.ValidateOIDCConfig(&clusterCfg.Spec.Cluster.OIDC)
+	if err != nil {
+		return fmt.Errorf("OIDC configuration: %w", err)
+	}
+
 	return nil
 }
 
@@ -3362,6 +3407,8 @@ func HandleInitRunE(
 	if err != nil {
 		return err
 	}
+
+	applyOIDCExtraScopeFlag(cmd, clusterCfg)
 
 	scaffolderInstance, targetPath, force, err := prepareScaffolder(cmd, cfgManager, clusterCfg)
 	if err != nil {
@@ -5119,6 +5166,11 @@ func defaultClusterMutationFieldSelectors() []ksailconfigmanager.FieldSelector[v
 		ksailconfigmanager.WorkersFieldSelector(),
 		ksailconfigmanager.NodeAutoscalingFieldSelector(), //nolint:staticcheck // backward compat
 		ksailconfigmanager.NodeAutoscalerEnabledFieldSelector(),
+		ksailconfigmanager.OIDCIssuerURLFieldSelector(),
+		ksailconfigmanager.OIDCClientIDFieldSelector(),
+		ksailconfigmanager.OIDCUsernameClaimFieldSelector(),
+		ksailconfigmanager.OIDCGroupsClaimFieldSelector(),
+		ksailconfigmanager.OIDCCAFileFieldSelector(),
 	)
 }
 
@@ -5139,6 +5191,30 @@ func registerNameFlag(cmd *cobra.Command, cfgManager *ksailconfigmanager.ConfigM
 	_ = cfgManager.Viper.BindPFlag("name", cmd.Flags().Lookup("name"))
 }
 
+// registerOIDCExtraScopeFlag adds the --oidc-extra-scope flag to a command.
+// Like --mirror-registry, this is a string slice flag that is NOT bound to Viper
+// and instead merged manually after config loading.
+func registerOIDCExtraScopeFlag(cmd *cobra.Command) {
+	cmd.Flags().StringSlice("oidc-extra-scope", []string{},
+		"Additional OIDC scopes beyond openid (repeatable)")
+}
+
+// applyOIDCExtraScopeFlag merges --oidc-extra-scope flag values into the cluster config.
+// CLI flag values take precedence over config file values when explicitly set.
+func applyOIDCExtraScopeFlag(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster) {
+	scopeFlag := cmd.Flags().Lookup("oidc-extra-scope")
+	if scopeFlag == nil || !scopeFlag.Changed {
+		return
+	}
+
+	scopes, err := cmd.Flags().GetStringSlice("oidc-extra-scope")
+	if err != nil || len(scopes) == 0 {
+		return
+	}
+
+	clusterCfg.Spec.Cluster.OIDC.ExtraScopes = scopes
+}
+
 // setupMutationCmdFlags creates the shared config manager and registers the
 // common flags (--mirror-registry and --name) used by cluster mutation commands.
 // Returns the config manager for further flag bindings.
@@ -5150,6 +5226,7 @@ func setupMutationCmdFlags(cmd *cobra.Command) *ksailconfigmanager.ConfigManager
 
 	registerMirrorRegistryFlag(cmd)
 	registerNameFlag(cmd, cfgManager)
+	registerOIDCExtraScopeFlag(cmd)
 
 	return cfgManager
 }
@@ -5201,6 +5278,12 @@ func loadAndValidateClusterConfig(
 	)
 	if err != nil {
 		return nil, "", fmt.Errorf("invalid autoscaler configuration: %w", err)
+	}
+
+	// Validate OIDC configuration
+	err = v1alpha1.ValidateOIDCConfig(&ctx.ClusterCfg.Spec.Cluster.OIDC)
+	if err != nil {
+		return nil, "", fmt.Errorf("OIDC configuration: %w", err)
 	}
 
 	clusterName := resolveClusterNameFromContext(ctx)
@@ -6165,6 +6248,8 @@ func handleUpdateRunE(
 	if err != nil {
 		return err
 	}
+
+	applyOIDCExtraScopeFlag(cmd, ctx.ClusterCfg)
 
 	force := resolveForce(cfgManager.Viper.GetBool("force"), cmd.Flags().Lookup("yes"))
 
@@ -7483,4 +7568,44 @@ func executeRecreateFlow(
 // This consolidates the --force/--yes alias logic into one place.
 func resolveForce(viperForce bool, yesFlag *pflag.Flag) bool {
 	return viperForce || (yesFlag != nil && yesFlag.Changed && yesFlag.Value.String() == "true")
+}
+
+// configureOIDCKubeconfig adds OIDC exec credential plugin entries to the kubeconfig
+// after cluster creation when OIDC authentication is configured.
+func configureOIDCKubeconfig(
+	cmd *cobra.Command,
+	clusterCfg *v1alpha1.Cluster,
+) error {
+	kubeconfigPath, err := kubeconfig.GetKubeconfigPathFromConfig(clusterCfg)
+	if err != nil {
+		return fmt.Errorf("failed to resolve kubeconfig path: %w", err)
+	}
+
+	clusterName := lifecycle.ExtractClusterNameFromContext(
+		clusterCfg.Spec.Cluster.Connection.Context,
+		clusterCfg.Spec.Cluster.Distribution,
+	)
+
+	oidc := &clusterCfg.Spec.Cluster.OIDC
+
+	err = k8s.AddOIDCKubeconfigEntries(&k8s.OIDCExecConfig{
+		KubeconfigPath: kubeconfigPath,
+		ClusterName:    clusterName,
+		IssuerURL:      oidc.IssuerURL,
+		ClientID:       oidc.ClientID,
+		ExtraScopes:    oidc.ExtraScopes,
+		CAFile:         oidc.CAFile,
+	}, cmd.OutOrStdout())
+	if err != nil {
+		return fmt.Errorf("failed to add OIDC kubeconfig entries: %w", err)
+	}
+
+	notify.WriteMessage(notify.Message{
+		Type:    notify.InfoType,
+		Content: "OIDC context 'oidc@%s' added to kubeconfig (use 'kubectl config use-context oidc@%s' to switch)",
+		Args:    []any{clusterName, clusterName},
+		Writer:  cmd.OutOrStdout(),
+	})
+
+	return nil
 }
