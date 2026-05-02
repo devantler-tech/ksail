@@ -31,7 +31,7 @@ Flags:
       --metrics-server MetricsServer           Metrics Server (Default: use distribution, Enabled: install, Disabled: uninstall)
       --mirror-registry strings                Configure mirror registries with optional authentication. Format: [user:pass@]host[=upstream]. Credentials support environment variables using ${VAR} syntax (quote placeholders so KSail can expand them). Examples: docker.io=https://registry-1.docker.io, '${USER}:${TOKEN}@ghcr.io=https://ghcr.io'
   -n, --name string                            Cluster name used for container names, registry names, and kubeconfig context
-      --node-autoscaler-enabled                Node autoscaling (Talos: true defers worker and control-plane scaling to an external autoscaler, false lets KSail manages node counts; other distributions currently ignore this setting)
+      --node-autoscaler-enabled                Node autoscaling (Talos: true defers worker and control-plane scaling to an external autoscaler, false lets KSail manage node counts; other distributions currently ignore this setting)
       --node-autoscaling NodeAutoscaling       [Deprecated: use autoscaler.node.enabled instead] Node autoscaling (Talos: Enabled defers worker and control-plane scaling to an external autoscaler, Disabled lets KSail manage node counts; other distributions currently ignore this setting)
       --oidc-ca-file string                    Path to CA certificate for self-signed OIDC providers
       --oidc-client-id string                  OIDC client ID for kubectl authentication
