@@ -323,8 +323,8 @@ func TestPermissionHandler_NilChatModeRef(t *testing.T) {
 	// Verify the handler goroutine returns "denied-interactively-by-user"
 	select {
 	case result := <-resultChan:
-		if result.Kind != copilot.PermissionRequestResultKindDeniedInteractivelyByUser {
-			t.Errorf("expected 'denied-interactively-by-user', got %q", result.Kind)
+		if result.Kind != copilot.PermissionRequestResultKindRejected {
+			t.Errorf("expected 'reject', got %q", result.Kind)
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("timed out waiting for permission handler result")
