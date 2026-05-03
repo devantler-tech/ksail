@@ -1157,7 +1157,11 @@ func TestWriteDecryptedOutputToInvalidPath(t *testing.T) {
 	cmd := &cobra.Command{}
 
 	// Use a path in a non-existent directory — os.WriteFile should fail.
-	err := cipher.WriteDecryptedOutput(cmd, data, filepath.Join(t.TempDir(), "nonexistent-dir", "out.yaml"))
+	err := cipher.WriteDecryptedOutput(
+		cmd,
+		data,
+		filepath.Join(t.TempDir(), "nonexistent-dir", "out.yaml"),
+	)
 	if err == nil {
 		t.Fatal("expected error writing to invalid path, got nil")
 	}
