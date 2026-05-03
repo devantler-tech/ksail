@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/clientcmd/api"
 )
@@ -78,7 +79,12 @@ func removeEntriesFromKubeconfig(
 		kubeConfig.CurrentContext = ""
 	}
 
-	_, _ = fmt.Fprintf(logWriter, "Cleaned up kubeconfig entries for cluster %q\n", clusterName)
+	logIdentifier := clusterName
+	if logIdentifier == "" {
+		logIdentifier = contextName
+	}
+
+	_, _ = fmt.Fprintf(logWriter, "Cleaned up kubeconfig entries for cluster %q\n", logIdentifier)
 
 	// Serialize and write back
 	result, err := clientcmd.Write(*kubeConfig)
@@ -86,7 +92,7 @@ func removeEntriesFromKubeconfig(
 		return fmt.Errorf("failed to serialize kubeconfig: %w", err)
 	}
 
-	err = os.WriteFile(kubeconfigPath, result, kubeconfigFileMode)
+	err = fsutil.AtomicWriteFile(kubeconfigPath, result, kubeconfigFileMode)
 	if err != nil {
 		return fmt.Errorf("failed to write kubeconfig: %w", err)
 	}
@@ -251,4 +257,120 @@ func hasKubeconfigEntriesToCleanup(
 	isCurrentContext := kubeConfig.CurrentContext == contextName
 
 	return hasContext || hasCluster || hasUser || isCurrentContext
+}
+
+// OIDCExecConfig holds the parameters for configuring an OIDC exec credential plugin in kubeconfig.
+type OIDCExecConfig struct {
+	// KubeconfigPath is the absolute path to the kubeconfig file.
+	KubeconfigPath string
+	// ClusterEntryName is the kubeconfig cluster entry name (e.g. "kind-local", "k3d-local").
+	// This is used as the context.cluster reference.
+	ClusterEntryName string
+	// DisplayName is the user-friendly cluster name (e.g. "local") used for
+	// naming the OIDC user ("oidc-local") and context ("oidc@local").
+	DisplayName string
+	// IssuerURL is the OIDC provider issuer URL.
+	IssuerURL string
+	// ClientID is the OIDC client ID.
+	ClientID string
+	// ExtraScopes are additional OIDC scopes to request.
+	ExtraScopes []string
+	// CAFile is an optional path to the OIDC provider's CA certificate.
+	CAFile string
+}
+
+// AddOIDCKubeconfigEntries adds an exec-based OIDC user and context to the kubeconfig.
+// The user is named "oidc-<clusterName>" and the context is named "oidc@<clusterName>".
+// The admin context remains the current context.
+func AddOIDCKubeconfigEntries(cfg *OIDCExecConfig, logWriter io.Writer) error {
+	canonicalPath, err := fsutil.EvalCanonicalPath(cfg.KubeconfigPath)
+	if err != nil {
+		return fmt.Errorf("failed to resolve kubeconfig path: %w", err)
+	}
+
+	kubeconfigBytes, err := os.ReadFile(canonicalPath) //nolint:gosec // canonicalized above
+	if err != nil {
+		return fmt.Errorf("failed to read kubeconfig: %w", err)
+	}
+
+	kubeConfig, err := clientcmd.Load(kubeconfigBytes)
+	if err != nil {
+		return fmt.Errorf("failed to parse kubeconfig: %w", err)
+	}
+
+	userName := "oidc-" + cfg.DisplayName
+	contextName := "oidc@" + cfg.DisplayName
+
+	execArgs, err := buildOIDCExecArgs(cfg)
+	if err != nil {
+		return err
+	}
+
+	kubeConfig.AuthInfos[userName] = &api.AuthInfo{
+		Exec: &api.ExecConfig{
+			APIVersion:      "client.authentication.k8s.io/v1",
+			Command:         "ksail",
+			Args:            execArgs,
+			InteractiveMode: api.IfAvailableExecInteractiveMode,
+		},
+	}
+
+	kubeConfig.Contexts[contextName] = &api.Context{
+		Cluster:  cfg.ClusterEntryName,
+		AuthInfo: userName,
+	}
+
+	_, _ = fmt.Fprintf(logWriter, "Added OIDC context %q to kubeconfig\n", contextName)
+
+	result, err := clientcmd.Write(*kubeConfig)
+	if err != nil {
+		return fmt.Errorf("failed to serialize kubeconfig: %w", err)
+	}
+
+	err = fsutil.AtomicWriteFile(canonicalPath, result, kubeconfigFileMode)
+	if err != nil {
+		return fmt.Errorf("failed to write kubeconfig: %w", err)
+	}
+
+	return nil
+}
+
+func buildOIDCExecArgs(cfg *OIDCExecConfig) ([]string, error) {
+	args := []string{
+		"oidc", "get-token",
+		"--issuer-url=" + cfg.IssuerURL,
+		"--client-id=" + cfg.ClientID,
+	}
+
+	for _, scope := range cfg.ExtraScopes {
+		args = append(args, "--extra-scope="+scope)
+	}
+
+	if cfg.CAFile != "" {
+		canonicalCAFile, err := fsutil.EvalCanonicalPath(cfg.CAFile)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve OIDC CA file path: %w", err)
+		}
+
+		args = append(args, "--ca-file="+canonicalCAFile)
+	}
+
+	return args, nil
+}
+
+// CleanupOIDCKubeconfigEntries removes the OIDC user and context entries for a cluster.
+// The displayName is the user-friendly cluster name (e.g. "local") used in OIDC naming.
+func CleanupOIDCKubeconfigEntries(kubeconfigPath, displayName string, logWriter io.Writer) error {
+	canonicalPath, err := fsutil.EvalCanonicalPath(kubeconfigPath)
+	if err != nil {
+		return fmt.Errorf("failed to resolve kubeconfig path: %w", err)
+	}
+
+	userName := "oidc-" + displayName
+	contextName := "oidc@" + displayName
+
+	// Pass empty clusterName because OIDC cleanup only removes the user and
+	// context entries — the shared cluster entry is owned by the admin context.
+	// Use contextName as the log identifier since clusterName is intentionally empty.
+	return CleanupKubeconfig(canonicalPath, "", contextName, userName, logWriter)
 }

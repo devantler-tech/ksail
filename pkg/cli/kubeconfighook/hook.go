@@ -9,7 +9,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"time"
 
@@ -324,77 +323,9 @@ func refreshKubeconfig(
 		}
 	}
 
-	writeErr := atomicWriteFile(kubeconfigPath, data, kubeconfigFileMode)
+	writeErr := fsutil.AtomicWriteFile(kubeconfigPath, data, kubeconfigFileMode)
 	if writeErr != nil {
 		return fmt.Errorf("write kubeconfig: %w", writeErr)
-	}
-
-	return nil
-}
-
-// atomicWriteFile writes data to a temp file in the same directory and
-// renames it to the target path, ensuring an all-or-nothing write.
-func atomicWriteFile(path string, data []byte, perm os.FileMode) error {
-	dir := filepath.Dir(path)
-
-	tmp, err := os.CreateTemp(dir, ".kubeconfig-*.tmp")
-	if err != nil {
-		return fmt.Errorf("create temp file: %w", err)
-	}
-
-	tmpPath := tmp.Name()
-
-	defer func() {
-		// Clean up temp file on any failure path.
-		_ = os.Remove(tmpPath)
-	}()
-
-	chmodErr := os.Chmod(tmpPath, perm)
-	if chmodErr != nil {
-		_ = tmp.Close()
-
-		return fmt.Errorf("set permissions: %w", chmodErr)
-	}
-
-	bytesWritten, writeErr := tmp.Write(data)
-	if writeErr != nil {
-		_ = tmp.Close()
-
-		return fmt.Errorf("write data: %w", writeErr)
-	}
-
-	if bytesWritten != len(data) {
-		_ = tmp.Close()
-
-		return fmt.Errorf(
-			"write data: %w: wrote %d of %d bytes",
-			errShortWrite,
-			bytesWritten,
-			len(data),
-		)
-	}
-
-	closeErr := tmp.Close()
-	if closeErr != nil {
-		return fmt.Errorf("close temp file: %w", closeErr)
-	}
-
-	renameErr := os.Rename(tmpPath, path)
-	if renameErr != nil && runtime.GOOS == "windows" {
-		// On Windows, os.Rename may fail when the destination already
-		// exists. Remove the target and retry only on Windows to avoid
-		// accidentally deleting a valid kubeconfig on Unix where rename
-		// is atomic and failures indicate a different problem.
-		_, statErr := os.Stat(path)
-		if statErr == nil {
-			_ = os.Remove(path)
-
-			renameErr = os.Rename(tmpPath, path)
-		}
-	}
-
-	if renameErr != nil {
-		return fmt.Errorf("rename temp file: %w", renameErr)
 	}
 
 	return nil

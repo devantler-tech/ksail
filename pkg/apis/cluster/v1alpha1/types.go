@@ -79,6 +79,11 @@ type ClusterSpec struct {
 	// Supersedes spec.cluster.talos.workers (deprecated; aliased on load).
 	Workers int32 `json:"workers,omitzero" jsonschema:"description=Number of worker nodes to create for the cluster (provider/distribution-agnostic),minimum=0"` //nolint:lll
 
+	// OIDC defines OIDC authentication configuration.
+	// When issuerURL is set, KSail configures the API server with OIDC flags
+	// and sets up kubeconfig with exec-based OIDC credentials.
+	OIDC OIDCSpec `json:"oidc,omitzero" jsonschema:"description=OIDC authentication configuration for the API server and kubeconfig"` //nolint:lll
+
 	// Distribution-specific options
 	Vanilla OptionsVanilla `json:"vanilla,omitzero"`
 	Talos   OptionsTalos   `json:"talos,omitzero"`

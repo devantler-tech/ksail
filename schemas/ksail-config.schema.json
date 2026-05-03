@@ -285,6 +285,48 @@
               "minimum": 0,
               "description": "Number of worker nodes to create for the cluster (provider/distribution-agnostic)"
             },
+            "oidc": {
+              "properties": {
+                "issuerURL": {
+                  "type": "string",
+                  "description": "OIDC provider issuer URL"
+                },
+                "clientID": {
+                  "type": "string",
+                  "description": "OIDC client ID for kubectl"
+                },
+                "extraScopes": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array",
+                  "description": "Additional OIDC scopes beyond openid"
+                },
+                "usernameClaim": {
+                  "type": "string",
+                  "description": "JWT claim for username"
+                },
+                "usernamePrefix": {
+                  "type": "string",
+                  "description": "Prefix for OIDC usernames"
+                },
+                "groupsClaim": {
+                  "type": "string",
+                  "description": "JWT claim for groups"
+                },
+                "groupsPrefix": {
+                  "type": "string",
+                  "description": "Prefix for OIDC groups"
+                },
+                "caFile": {
+                  "type": "string",
+                  "description": "CA cert path for self-signed OIDC"
+                }
+              },
+              "additionalProperties": false,
+              "type": "object",
+              "description": "OIDC authentication configuration for the API server and kubeconfig"
+            },
             "vanilla": {
               "properties": {
                 "mirrorsDir": {

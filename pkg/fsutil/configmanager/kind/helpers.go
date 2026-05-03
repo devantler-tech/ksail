@@ -1,9 +1,11 @@
 package kind
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	kindv1alpha4 "sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
 
@@ -145,4 +147,88 @@ func ApplyImageVerificationPatches(kindConfig *kindv1alpha4.Cluster) {
 		kindConfig.ContainerdConfigPatches,
 		ImageVerificationPatch,
 	)
+}
+
+// ApplyOIDCPatches adds kubeadm config patches to configure the API server with OIDC flags.
+// The patch is applied to all control-plane nodes via KubeadmConfigPatches.
+// When a CA file is configured, an extraMount is added to make the host CA file
+// available inside the Kind container at OIDCCAContainerPath.
+func ApplyOIDCPatches(kindConfig *kindv1alpha4.Cluster, oidc *v1alpha1.OIDCSpec) error {
+	if oidc == nil || !oidc.Enabled() {
+		return nil
+	}
+
+	// Ensure at least one node exists
+	if len(kindConfig.Nodes) == 0 {
+		kindConfig.Nodes = []kindv1alpha4.Node{{
+			Role:  kindv1alpha4.ControlPlaneRole,
+			Image: DefaultKindNodeImage,
+		}}
+	}
+
+	patch := buildOIDCKubeadmPatch(oidc)
+
+	for i := range kindConfig.Nodes {
+		if kindConfig.Nodes[i].Role == kindv1alpha4.ControlPlaneRole {
+			kindConfig.Nodes[i].KubeadmConfigPatches = append(
+				kindConfig.Nodes[i].KubeadmConfigPatches,
+				patch,
+			)
+		}
+	}
+
+	// Mount the host CA file into all nodes so the API server can read it
+	if oidc.CAFile != "" {
+		canonicalCAPath, err := fsutil.EvalCanonicalPath(oidc.CAFile)
+		if err != nil {
+			return fmt.Errorf("failed to resolve OIDC CA file path: %w", err)
+		}
+
+		mount := kindv1alpha4.Mount{
+			HostPath:      canonicalCAPath,
+			ContainerPath: v1alpha1.OIDCCAContainerPath,
+			Readonly:      true,
+		}
+
+		for i := range kindConfig.Nodes {
+			kindConfig.Nodes[i].ExtraMounts = append(kindConfig.Nodes[i].ExtraMounts, mount)
+		}
+	}
+
+	return nil
+}
+
+// buildOIDCKubeadmPatch generates a kubeadm ClusterConfiguration patch with API server OIDC flags.
+// kubeadm v1beta4 apiServer.extraArgs is map[string]string, so values are plain strings.
+func buildOIDCKubeadmPatch(oidc *v1alpha1.OIDCSpec) string {
+	var builder strings.Builder
+
+	_, _ = fmt.Fprintf(&builder, "apiVersion: kubeadm.k8s.io/v1beta4\n")
+	_, _ = fmt.Fprintf(&builder, "kind: ClusterConfiguration\n")
+	_, _ = fmt.Fprintf(&builder, "apiServer:\n")
+	_, _ = fmt.Fprintf(&builder, "  extraArgs:\n")
+	_, _ = fmt.Fprintf(&builder, "    oidc-issuer-url: %q\n", oidc.IssuerURL)
+	_, _ = fmt.Fprintf(&builder, "    oidc-client-id: %q\n", oidc.ClientID)
+
+	if oidc.UsernameClaim != "" {
+		_, _ = fmt.Fprintf(&builder, "    oidc-username-claim: %q\n", oidc.UsernameClaim)
+	}
+
+	if oidc.UsernamePrefix != "" {
+		_, _ = fmt.Fprintf(&builder, "    oidc-username-prefix: %q\n", oidc.UsernamePrefix)
+	}
+
+	if oidc.GroupsClaim != "" {
+		_, _ = fmt.Fprintf(&builder, "    oidc-groups-claim: %q\n", oidc.GroupsClaim)
+	}
+
+	if oidc.GroupsPrefix != "" {
+		_, _ = fmt.Fprintf(&builder, "    oidc-groups-prefix: %q\n", oidc.GroupsPrefix)
+	}
+
+	if oidc.CAFile != "" {
+		_, _ = fmt.Fprintf(&builder, "    oidc-ca-file: %q\n", v1alpha1.OIDCCAContainerPath)
+	}
+
+	return builder.String()
 }

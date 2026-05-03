@@ -421,3 +421,49 @@ func resolveServerLimit(limit int32) (int32, error) {
 
 	return limit, nil
 }
+
+// ValidateOIDCConfig validates the OIDC authentication configuration.
+// When OIDC is enabled (IssuerURL is set), ClientID must also be set.
+// IssuerURL must use HTTPS. ClientID alone without IssuerURL is invalid.
+func ValidateOIDCConfig(oidc *OIDCSpec) error {
+	if oidc == nil {
+		return nil
+	}
+
+	// ClientID without IssuerURL is a partial/invalid configuration
+	if oidc.ClientID != "" && oidc.IssuerURL == "" {
+		return fmt.Errorf("%w: issuerURL is required when clientID is set", ErrInvalidOIDCConfig)
+	}
+
+	if !oidc.Enabled() {
+		return nil
+	}
+
+	if oidc.ClientID == "" {
+		return fmt.Errorf("%w: clientID is required when issuerURL is set", ErrInvalidOIDCConfig)
+	}
+
+	if !strings.HasPrefix(oidc.IssuerURL, "https://") {
+		return fmt.Errorf("%w: issuerURL must use HTTPS scheme", ErrInvalidOIDCConfig)
+	}
+
+	// Normalize: trim whitespace, reject empty, and deduplicate scopes.
+	seen := make(map[string]struct{}, len(oidc.ExtraScopes))
+	normalized := make([]string, 0, len(oidc.ExtraScopes))
+
+	for idx, scope := range oidc.ExtraScopes {
+		trimmed := strings.TrimSpace(scope)
+		if trimmed == "" {
+			return fmt.Errorf("%w: extraScopes[%d] must not be empty", ErrInvalidOIDCConfig, idx)
+		}
+
+		if _, dup := seen[trimmed]; !dup {
+			seen[trimmed] = struct{}{}
+			normalized = append(normalized, trimmed)
+		}
+	}
+
+	oidc.ExtraScopes = normalized
+
+	return nil
+}

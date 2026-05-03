@@ -1,0 +1,248 @@
+---
+title: OIDC Authentication
+description: Configure Kubernetes API server OIDC authentication with KSail — native exec credential plugin replaces kubelogin, works across all distributions.
+---
+
+import { Steps } from "@astrojs/starlight/components";
+
+KSail provides native OIDC (OpenID Connect) authentication support. When configured, KSail:
+
+1. **Injects OIDC flags** into the Kubernetes API server at cluster creation time (per-distribution).
+2. **Acts as an exec credential plugin** (`ksail oidc get-token`) — replacing the need for [kubelogin](https://github.com/int128/kubelogin).
+3. **Auto-configures kubeconfig** with an OIDC user and context after cluster creation.
+
+> [!NOTE]
+> KSail configures the *connection* to an OIDC provider but does not deploy one. Deploying an OIDC provider (e.g., [Dex](https://dexidp.io/)) is a workload concern managed via GitOps.
+
+## Prerequisites
+
+- [KSail CLI](/installation/) installed
+- Docker running
+- An OIDC provider (e.g., Dex) — either already deployed or planned for deployment via GitOps
+
+## Quick Start
+
+<Steps>
+1. **Initialize a cluster with OIDC**
+
+   ```bash
+   ksail cluster init \
+     --oidc-issuer-url https://dex.example.com \
+     --oidc-client-id kubectl \
+     --oidc-extra-scope email \
+     --oidc-extra-scope groups
+   ```
+
+   Or add OIDC configuration to an existing `ksail.yaml`:
+
+   ```yaml
+   spec:
+     cluster:
+       oidc:
+         issuerURL: https://dex.example.com
+         clientID: kubectl
+         extraScopes:
+           - email
+           - profile
+           - groups
+   ```
+
+2. **Create the cluster**
+
+   ```bash
+   ksail cluster create
+   ```
+
+   KSail automatically:
+   - Configures the API server with `--oidc-*` flags
+   - Adds an `oidc-<cluster-name>` user to your kubeconfig (exec-based, pointing to `ksail oidc get-token`)
+   - Adds an `oidc@<cluster-name>` context
+
+3. **Deploy your OIDC provider**
+
+   Deploy your OIDC provider (e.g., Dex) as a workload. Once it's running, the OIDC context becomes usable:
+
+   ```bash
+   kubectl --context oidc@<cluster-name> get pods
+   ```
+
+   On first use, `ksail oidc get-token` opens your browser for authentication.
+
+</Steps>
+
+## Configuration Reference
+
+All OIDC settings live under `spec.cluster.oidc` in `ksail.yaml`. See the [Declarative Configuration](/configuration/declarative-configuration/) reference for the full schema.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `issuerURL` | `string` | — | OIDC provider issuer URL. Setting this enables OIDC. |
+| `clientID` | `string` | — | OIDC client ID for kubectl authentication. |
+| `extraScopes` | `[]string` | — | Additional OIDC scopes beyond `openid`. |
+| `usernameClaim` | `string` | `email` | JWT claim for Kubernetes username. |
+| `usernamePrefix` | `string` | `oidc:` | Prefix prepended to OIDC usernames. |
+| `groupsClaim` | `string` | `groups` | JWT claim for Kubernetes group membership. |
+| `groupsPrefix` | `string` | `oidc:` | Prefix prepended to OIDC group names. |
+| `caFile` | `string` | — | Path to CA certificate for self-signed OIDC providers. |
+
+### CLI Flags
+
+OIDC can also be configured via CLI flags on `ksail cluster init`, `ksail cluster create`, and `ksail cluster update`:
+
+```
+--oidc-issuer-url         OIDC provider issuer URL
+--oidc-client-id          OIDC client ID
+--oidc-extra-scope        Additional OIDC scopes (repeatable)
+--oidc-username-claim     JWT claim for Kubernetes username
+--oidc-username-prefix    Prefix for OIDC usernames
+--oidc-groups-claim       JWT claim for Kubernetes groups
+--oidc-groups-prefix      Prefix for OIDC groups
+--oidc-ca-file            Path to CA certificate
+```
+
+## How It Works
+
+### API Server Configuration
+
+KSail injects the following flags into the Kubernetes API server based on `spec.cluster.oidc`:
+
+```
+--oidc-issuer-url=<issuerURL>
+--oidc-client-id=<clientID>
+--oidc-username-claim=<usernameClaim>
+--oidc-username-prefix=<usernamePrefix>
+--oidc-groups-claim=<groupsClaim>
+--oidc-groups-prefix=<groupsPrefix>
+--oidc-ca-file=<caFile>           # only when caFile is set
+```
+
+Each distribution handles this differently:
+
+| Distribution | Mechanism |
+|-------------|-----------|
+| **Vanilla** (Kind) | kubeadm `ClusterConfiguration` patch with `apiServer.extraArgs` |
+| **K3s** (K3d) | `--kube-apiserver-arg=--oidc-*` flags |
+| **Talos** | `cluster.apiServer.extraArgs` machine config patch |
+| **VCluster** | `controlPlane.distro.k8s.apiServer.extraArgs` Helm values |
+
+### Exec Credential Plugin
+
+`ksail oidc get-token` implements the [Kubernetes exec credential plugin protocol](https://kubernetes.io/docs/reference/access-authn-authz/authentication/#client-go-credential-plugins). The authentication flow:
+
+1. Check token cache (`~/.ksail/oidc/cache/`) — return if still valid
+2. If expired, attempt token refresh using the stored refresh token
+3. If no valid token, start authorization code flow with PKCE:
+   - Start a local HTTP callback server
+   - Open browser to the OIDC authorize endpoint
+   - User authenticates (e.g., via GitHub, Google, LDAP — depends on provider configuration)
+   - Receive callback with authorization code
+   - Exchange code for tokens
+4. Cache tokens and output `ExecCredential` JSON to stdout
+
+### Kubeconfig Layout
+
+After `ksail cluster create`, your kubeconfig contains both admin and OIDC entries:
+
+```yaml
+# Admin user (certificate-based, always works)
+users:
+- name: <cluster-name>
+  user:
+    client-certificate-data: ...
+
+# OIDC user (exec-based, requires OIDC provider to be running)
+- name: oidc-<cluster-name>
+  user:
+    exec:
+      apiVersion: client.authentication.k8s.io/v1
+      command: ksail
+      args:
+        - oidc
+        - get-token
+        - --issuer-url=https://dex.example.com
+        - --client-id=kubectl
+        - --extra-scope=email
+        - --extra-scope=groups
+      interactiveMode: IfAvailable
+
+contexts:
+# Admin context (default)
+- name: kind-<cluster-name>
+  context:
+    cluster: kind-<cluster-name>
+    user: <cluster-name>
+
+# OIDC context
+- name: oidc@<cluster-name>
+  context:
+    cluster: kind-<cluster-name>
+    user: oidc-<cluster-name>
+```
+
+The admin context remains the default. Switch to the OIDC context explicitly:
+
+```bash
+kubectl --context oidc@<cluster-name> get pods
+# or
+kubectl config use-context oidc@<cluster-name>
+```
+
+## Chicken-and-Egg: OIDC Provider Deployment
+
+The API server OIDC flags reference an OIDC provider that is deployed *after* cluster creation. This is expected:
+
+- The admin context (certificate-based) always works, regardless of OIDC provider state.
+- The OIDC context becomes usable once the OIDC provider is running.
+- Deploy your OIDC provider via GitOps (`ksail workload apply`, Flux, or ArgoCD).
+
+## Self-Signed OIDC Providers (Local Development)
+
+For local development with self-signed certificates (e.g., [mkcert](https://github.com/FiloSottile/mkcert)):
+
+```yaml
+spec:
+  cluster:
+    oidc:
+      issuerURL: https://dex.platform.lan
+      clientID: kubectl
+      caFile: /path/to/rootCA.pem
+      extraScopes:
+        - email
+        - groups
+```
+
+The `caFile` field specifies a **host path** to the CA certificate. KSail automatically handles mounting it into the cluster:
+- **Kind/Vanilla**: Mounted as a read-only `extraMount` into all nodes at `/etc/kubernetes/pki/oidc-ca.crt`
+- **K3d/K3s**: Mounted as a volume into server nodes at `/etc/kubernetes/pki/oidc-ca.crt`
+- **Talos**: CA content is embedded via `machine.files` onto the node filesystem at `/etc/kubernetes/pki/oidc-ca.crt`
+- **VCluster**: Mounted via a `hostPath` volume from the host Kubernetes node into the VCluster control plane pod
+
+The CA file path is also passed to `ksail oidc get-token` via kubeconfig exec args for client-side token verification.
+
+## RBAC Integration
+
+OIDC usernames and groups are available in Kubernetes RBAC. With the default prefixes:
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: oidc-admin
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+  # Bind to a specific OIDC user
+  - kind: User
+    name: "oidc:user@example.com"
+  # Or bind to an OIDC group
+  - kind: Group
+    name: "oidc:platform-admins"
+```
+
+## Related
+
+- [Declarative Configuration](/configuration/declarative-configuration/) — full `ksail.yaml` schema reference
+- [Secret Management](/features/secret-management/) — encrypting secrets with SOPS
+- [Kubernetes OIDC documentation](https://kubernetes.io/docs/reference/access-authn-authz/authentication/#openid-connect-tokens) — upstream reference

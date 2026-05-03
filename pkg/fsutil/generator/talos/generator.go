@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil/generator/talos/csrapprover"
 	yamlgenerator "github.com/devantler-tech/ksail/v7/pkg/fsutil/generator/yaml"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/registry"
@@ -40,6 +42,8 @@ const (
 	ingressFirewallDefaultActionFileName = "ingress-firewall-default-action.yaml"
 	// ingressFirewallRulesFileName is the name of the ingress firewall rules document file.
 	ingressFirewallRulesFileName = "ingress-firewall-rules.yaml"
+	// oidcFileName is the name of the OIDC API server configuration patch file.
+	oidcFileName = "oidc.yaml"
 )
 
 // KubeletServingCertApproverManifestURL is the URL for the kubelet-serving-cert-approver manifest.
@@ -139,6 +143,23 @@ type Config struct {
 	NetworkCIDR string
 	// CNIPort is the CNI encapsulation port (e.g., 8472 for Cilium VXLAN, 4789 for Flannel/Calico).
 	CNIPort int
+	// EnableOIDC indicates whether to generate an OIDC API server configuration patch.
+	// When true, generates an oidc.yaml patch with cluster.apiServer.extraArgs for OIDC.
+	EnableOIDC bool
+	// OIDCIssuerURL is the OIDC provider's issuer URL.
+	OIDCIssuerURL string
+	// OIDCClientID is the OIDC client ID.
+	OIDCClientID string
+	// OIDCUsernameClaim is the JWT claim for the Kubernetes username.
+	OIDCUsernameClaim string
+	// OIDCUsernamePrefix is the prefix for OIDC usernames.
+	OIDCUsernamePrefix string
+	// OIDCGroupsClaim is the JWT claim for Kubernetes groups.
+	OIDCGroupsClaim string
+	// OIDCGroupsPrefix is the prefix for OIDC groups.
+	OIDCGroupsPrefix string
+	// OIDCCAFile is the path to the CA certificate for self-signed OIDC providers.
+	OIDCCAFile string
 }
 
 // Generator generates the Talos directory structure.
@@ -191,6 +212,8 @@ func (g *Generator) Generate(
 }
 
 // getDirectoriesWithPatches returns a set of subdirectory names that will have patches generated.
+//
+//nolint:cyclop // One condition per patch type; each is simple and independent.
 func (g *Generator) getDirectoriesWithPatches(
 	model *Config,
 ) map[string]bool {
@@ -246,12 +269,17 @@ func (g *Generator) getDirectoriesWithPatches(
 		dirs["workers"] = true
 	}
 
+	// OIDC API server patch goes to cluster/
+	if model.EnableOIDC {
+		dirs["cluster"] = true
+	}
+
 	return dirs
 }
 
 // generateConditionalPatches generates optional patches based on the configuration.
 //
-//nolint:cyclop,funlen // Sequential conditional patch generation - each condition is independent and simple.
+//nolint:cyclop,funlen,gocognit // Sequential conditional patch generation - each condition is independent and simple.
 func (g *Generator) generateConditionalPatches(
 	rootPath string,
 	model *Config,
@@ -331,6 +359,14 @@ func (g *Generator) generateConditionalPatches(
 	// Generate ingress firewall documents when enabled (Hetzner defense-in-depth)
 	if model.EnableIngressFirewall {
 		err := g.generateIngressFirewallPatches(rootPath, model, force)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Generate OIDC API server configuration patch when enabled
+	if model.EnableOIDC {
+		err := g.generateOIDCPatch(rootPath, model, force)
 		if err != nil {
 			return err
 		}
@@ -951,6 +987,97 @@ func (g *Generator) generateIngressFirewallPatches(
 	if err != nil {
 		return fmt.Errorf("failed to create ingress firewall worker rules: %w", err)
 	}
+
+	return nil
+}
+
+// generateOIDCPatch creates a Talos patch file to configure the API server with OIDC flags.
+// When a CA file is configured, its content is embedded via machine.files so it is available
+// on the node at OIDCCAContainerPath, and the API server arg references that node-local path.
+func (g *Generator) generateOIDCPatch(
+	rootPath string,
+	model *Config,
+	force bool,
+) error {
+	patchPath := filepath.Join(rootPath, "cluster", oidcFileName)
+
+	_, statErr := os.Stat(patchPath)
+	if statErr == nil && !force {
+		return nil
+	}
+
+	var builder strings.Builder
+
+	if model.OIDCCAFile != "" {
+		err := writeOIDCCAMachineFiles(&builder, model.OIDCCAFile)
+		if err != nil {
+			return err
+		}
+	}
+
+	writeOIDCAPIServerArgs(&builder, model)
+
+	err := os.WriteFile(patchPath, []byte(builder.String()), filePerm)
+	if err != nil {
+		return fmt.Errorf("failed to create OIDC patch: %w", err)
+	}
+
+	return nil
+}
+
+func writeOIDCAPIServerArgs(builder *strings.Builder, model *Config) {
+	_, _ = fmt.Fprintf(builder, "cluster:\n")
+	_, _ = fmt.Fprintf(builder, "  apiServer:\n")
+	_, _ = fmt.Fprintf(builder, "    extraArgs:\n")
+	_, _ = fmt.Fprintf(builder, "      oidc-issuer-url: %q\n", model.OIDCIssuerURL)
+	_, _ = fmt.Fprintf(builder, "      oidc-client-id: %q\n", model.OIDCClientID)
+
+	if model.OIDCUsernameClaim != "" {
+		_, _ = fmt.Fprintf(builder, "      oidc-username-claim: %q\n", model.OIDCUsernameClaim)
+	}
+
+	if model.OIDCUsernamePrefix != "" {
+		_, _ = fmt.Fprintf(builder, "      oidc-username-prefix: %q\n", model.OIDCUsernamePrefix)
+	}
+
+	if model.OIDCGroupsClaim != "" {
+		_, _ = fmt.Fprintf(builder, "      oidc-groups-claim: %q\n", model.OIDCGroupsClaim)
+	}
+
+	if model.OIDCGroupsPrefix != "" {
+		_, _ = fmt.Fprintf(builder, "      oidc-groups-prefix: %q\n", model.OIDCGroupsPrefix)
+	}
+
+	if model.OIDCCAFile != "" {
+		_, _ = fmt.Fprintf(builder, "      oidc-ca-file: %q\n", v1alpha1.OIDCCAContainerPath)
+	}
+}
+
+// writeOIDCCAMachineFiles embeds the OIDC CA certificate content into a Talos
+// machine.files block, making it available at OIDCCAContainerPath on the node.
+func writeOIDCCAMachineFiles(builder *strings.Builder, caFilePath string) error {
+	canonicalCAPath, err := fsutil.EvalCanonicalPath(caFilePath)
+	if err != nil {
+		return fmt.Errorf("failed to resolve OIDC CA file path %q: %w", caFilePath, err)
+	}
+
+	caContent, err := os.ReadFile(canonicalCAPath) //nolint:gosec // path canonicalized above
+	if err != nil {
+		return fmt.Errorf("failed to read OIDC CA file %q: %w", canonicalCAPath, err)
+	}
+
+	_, _ = fmt.Fprintf(builder, "machine:\n")
+	_, _ = fmt.Fprintf(builder, "  files:\n")
+	_, _ = fmt.Fprintf(builder, "    - content: |\n")
+
+	for line := range strings.SplitSeq(strings.TrimRight(string(caContent), "\n"), "\n") {
+		_, _ = fmt.Fprintf(builder, "        %s\n", line)
+	}
+
+	_, _ = fmt.Fprintf(builder, "      permissions: 0o644\n")
+	_, _ = fmt.Fprintf(builder, "      path: %s\n", v1alpha1.OIDCCAContainerPath)
+	_, _ = fmt.Fprintf(builder, "      op: create\n")
+	_, _ = fmt.Fprintf(builder, "---\n")
 
 	return nil
 }

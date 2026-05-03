@@ -261,3 +261,66 @@ func NodeAutoscalerEnabledFieldSelector() FieldSelector[v1alpha1.Cluster] {
 		DefaultValue: false,
 	}
 }
+
+// OIDCIssuerURLFieldSelector creates a field selector for the OIDC issuer URL.
+func OIDCIssuerURLFieldSelector() FieldSelector[v1alpha1.Cluster] {
+	return FieldSelector[v1alpha1.Cluster]{
+		Selector:     func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.OIDC.IssuerURL },
+		Description:  "OIDC provider issuer URL (e.g. https://dex.example.com)",
+		DefaultValue: "",
+	}
+}
+
+// OIDCClientIDFieldSelector creates a field selector for the OIDC client ID.
+func OIDCClientIDFieldSelector() FieldSelector[v1alpha1.Cluster] {
+	return FieldSelector[v1alpha1.Cluster]{
+		Selector:     func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.OIDC.ClientID },
+		Description:  "OIDC client ID for kubectl authentication",
+		DefaultValue: "",
+	}
+}
+
+// OIDCUsernameClaimFieldSelector creates a field selector for the OIDC username claim.
+func OIDCUsernameClaimFieldSelector() FieldSelector[v1alpha1.Cluster] {
+	return FieldSelector[v1alpha1.Cluster]{
+		Selector:     func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.OIDC.UsernameClaim },
+		Description:  "JWT claim for Kubernetes username",
+		DefaultValue: "email",
+	}
+}
+
+// OIDCGroupsClaimFieldSelector creates a field selector for the OIDC groups claim.
+func OIDCGroupsClaimFieldSelector() FieldSelector[v1alpha1.Cluster] {
+	return FieldSelector[v1alpha1.Cluster]{
+		Selector:     func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.OIDC.GroupsClaim },
+		Description:  "JWT claim for Kubernetes groups",
+		DefaultValue: "groups",
+	}
+}
+
+// OIDCCAFileFieldSelector creates a field selector for the OIDC CA file.
+func OIDCCAFileFieldSelector() FieldSelector[v1alpha1.Cluster] {
+	return FieldSelector[v1alpha1.Cluster]{
+		Selector:     func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.OIDC.CAFile },
+		Description:  "Path to CA certificate for self-signed OIDC providers",
+		DefaultValue: "",
+	}
+}
+
+// OIDCUsernamePrefixFieldSelector creates a field selector for the OIDC username prefix.
+func OIDCUsernamePrefixFieldSelector() FieldSelector[v1alpha1.Cluster] {
+	return FieldSelector[v1alpha1.Cluster]{
+		Selector:     func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.OIDC.UsernamePrefix },
+		Description:  "Prefix for OIDC usernames in Kubernetes",
+		DefaultValue: "oidc:",
+	}
+}
+
+// OIDCGroupsPrefixFieldSelector creates a field selector for the OIDC groups prefix.
+func OIDCGroupsPrefixFieldSelector() FieldSelector[v1alpha1.Cluster] {
+	return FieldSelector[v1alpha1.Cluster]{
+		Selector:     func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.OIDC.GroupsPrefix },
+		Description:  "Prefix for OIDC groups in Kubernetes",
+		DefaultValue: "oidc:",
+	}
+}

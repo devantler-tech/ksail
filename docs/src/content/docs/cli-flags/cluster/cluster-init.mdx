@@ -33,6 +33,14 @@ Flags:
   -n, --name string                            Cluster name used for container names, registry names, and kubeconfig context
       --node-autoscaler-enabled                Node autoscaling (Talos: true defers worker and control-plane scaling to an external autoscaler, false lets KSail manage node counts; other distributions currently ignore this setting)
       --node-autoscaling NodeAutoscaling       [Deprecated: use autoscaler.node.enabled instead] Node autoscaling (Talos: Enabled defers worker and control-plane scaling to an external autoscaler, Disabled lets KSail manage node counts; other distributions currently ignore this setting)
+      --oidc-ca-file string                    Path to CA certificate for self-signed OIDC providers
+      --oidc-client-id string                  OIDC client ID for kubectl authentication
+      --oidc-extra-scope strings               Additional OIDC scopes beyond openid (repeatable)
+      --oidc-groups-claim string               JWT claim for Kubernetes groups (default "groups")
+      --oidc-groups-prefix string              Prefix for OIDC groups in Kubernetes (default "oidc:")
+      --oidc-issuer-url string                 OIDC provider issuer URL (e.g. https://dex.example.com)
+      --oidc-username-claim string             JWT claim for Kubernetes username (default "email")
+      --oidc-username-prefix string            Prefix for OIDC usernames in Kubernetes (default "oidc:")
   -o, --output string                          Output directory for the project
       --policy-engine PolicyEngine             Policy engine (None: skip, Kyverno: install Kyverno, Gatekeeper: install Gatekeeper)
       --provider Provider                      Infrastructure provider backend (e.g., Docker)

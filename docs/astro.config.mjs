@@ -68,6 +68,7 @@ export default defineConfig({
           label: "Guides",
           items: [
             { label: "Multi-Environment Workflows", link: "/guides/multi-environment/" },
+            { label: "OIDC Authentication", link: "/guides/oidc-authentication/" },
             { label: "PR Preview Clusters", link: "/guides/pr-preview-clusters/" },
             { label: "ArgoCD ApplicationSet", link: "/guides/argocd-applicationset/" },
           ],

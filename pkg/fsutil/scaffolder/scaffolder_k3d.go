@@ -47,7 +47,7 @@ func (s *Scaffolder) GenerateK3dRegistryConfig() k3dv1alpha5.SimpleConfigRegistr
 
 // CreateK3dConfig creates a K3d configuration with distribution-specific settings.
 // Node counts can be set via --control-planes and --workers CLI flags.
-func (s *Scaffolder) CreateK3dConfig(output string) k3dv1alpha5.SimpleConfig {
+func (s *Scaffolder) CreateK3dConfig(output string) (k3dv1alpha5.SimpleConfig, error) {
 	// Resolve cluster name - use explicit ClusterName if set, otherwise resolve from config
 	var clusterName string
 	if s.ClusterName != "" {
@@ -96,27 +96,46 @@ func (s *Scaffolder) CreateK3dConfig(output string) k3dv1alpha5.SimpleConfig {
 	}
 
 	// Add volume mount for the containerd config template when image verification is enabled.
-	// This mounts the generated config.toml.tmpl into K3d node containers so K3s uses it
-	// to generate the final containerd config with the image verifier plugin enabled.
-	if s.KSailConfig.Spec.Cluster.Talos.ImageVerification == v1alpha1.ImageVerificationEnabled {
-		templatePath := filepath.Join(
-			output,
+	s.applyK3dImageVerificationVolumes(&config, output)
+
+	// Mount the host OIDC CA file into K3d node containers when configured.
+	// The API server references OIDCCAContainerPath, so the host file must be
+	// available at that path inside the containers.
+	if s.KSailConfig.Spec.Cluster.OIDC.Enabled() && s.KSailConfig.Spec.Cluster.OIDC.CAFile != "" {
+		err := k3dconfigmanager.ApplyOIDCCAVolume(&config, s.KSailConfig.Spec.Cluster.OIDC.CAFile)
+		if err != nil {
+			return k3dv1alpha5.SimpleConfig{}, fmt.Errorf("applying OIDC CA volume: %w", err)
+		}
+	}
+
+	return config, nil
+}
+
+// applyK3dImageVerificationVolumes mounts the containerd config template into
+// K3d node containers so K3s uses it with the image verifier plugin enabled.
+func (s *Scaffolder) applyK3dImageVerificationVolumes(
+	config *k3dv1alpha5.SimpleConfig,
+	output string,
+) {
+	if s.KSailConfig.Spec.Cluster.Talos.ImageVerification != v1alpha1.ImageVerificationEnabled {
+		return
+	}
+
+	templatePath := filepath.Join(
+		output,
+		k3dconfigmanager.DefaultImageVerifierDir,
+		"config.toml.tmpl",
+	)
+
+	relativeTemplatePath, err := filepath.Rel(output, templatePath)
+	if err != nil {
+		relativeTemplatePath = filepath.Join(
 			k3dconfigmanager.DefaultImageVerifierDir,
 			"config.toml.tmpl",
 		)
-
-		relativeTemplatePath, err := filepath.Rel(output, templatePath)
-		if err != nil {
-			relativeTemplatePath = filepath.Join(
-				k3dconfigmanager.DefaultImageVerifierDir,
-				"config.toml.tmpl",
-			)
-		}
-
-		k3dconfigmanager.ApplyImageVerificationVolumes(&config, relativeTemplatePath)
 	}
 
-	return config
+	k3dconfigmanager.ApplyImageVerificationVolumes(config, relativeTemplatePath)
 }
 
 // buildK3dExtraArgs constructs K3s server arguments that disable built-in
@@ -181,7 +200,61 @@ func (s *Scaffolder) buildK3dExtraArgs() []k3dv1alpha5.K3sArgWithNodeFilters {
 		)
 	}
 
+	// Configure API server OIDC flags when OIDC is enabled
+	if s.KSailConfig.Spec.Cluster.OIDC.Enabled() {
+		extraArgs = append(extraArgs, buildK3dOIDCArgs(&s.KSailConfig.Spec.Cluster.OIDC)...)
+	}
+
 	return extraArgs
+}
+
+// buildK3dOIDCArgs constructs OIDC-related K3s API server arguments.
+func buildK3dOIDCArgs(oidc *v1alpha1.OIDCSpec) []k3dv1alpha5.K3sArgWithNodeFilters {
+	oidcArgs := []string{
+		"--kube-apiserver-arg=--oidc-issuer-url=" + oidc.IssuerURL,
+		"--kube-apiserver-arg=--oidc-client-id=" + oidc.ClientID,
+	}
+
+	if oidc.UsernameClaim != "" {
+		oidcArgs = append(
+			oidcArgs,
+			"--kube-apiserver-arg=--oidc-username-claim="+oidc.UsernameClaim,
+		)
+	}
+
+	if oidc.UsernamePrefix != "" {
+		oidcArgs = append(
+			oidcArgs,
+			"--kube-apiserver-arg=--oidc-username-prefix="+oidc.UsernamePrefix,
+		)
+	}
+
+	if oidc.GroupsClaim != "" {
+		oidcArgs = append(oidcArgs, "--kube-apiserver-arg=--oidc-groups-claim="+oidc.GroupsClaim)
+	}
+
+	if oidc.GroupsPrefix != "" {
+		oidcArgs = append(oidcArgs, "--kube-apiserver-arg=--oidc-groups-prefix="+oidc.GroupsPrefix)
+	}
+
+	if oidc.CAFile != "" {
+		oidcArgs = append(
+			oidcArgs,
+			"--kube-apiserver-arg=--oidc-ca-file="+v1alpha1.OIDCCAContainerPath,
+		)
+	}
+
+	result := make([]k3dv1alpha5.K3sArgWithNodeFilters, 0, len(oidcArgs))
+	for _, arg := range oidcArgs {
+		result = append(result,
+			k3dv1alpha5.K3sArgWithNodeFilters{
+				Arg:         arg,
+				NodeFilters: []string{"server:*"},
+			},
+		)
+	}
+
+	return result
 }
 
 // addK3dLocalRegistryConfig adds K3d-native local registry configuration.
@@ -229,7 +302,10 @@ func (s *Scaffolder) addK3dLocalRegistryConfig(
 
 // generateK3dConfig generates the k3d.yaml configuration file.
 func (s *Scaffolder) generateK3dConfig(output string, force bool) error {
-	k3dConfig := s.CreateK3dConfig(output)
+	k3dConfig, err := s.CreateK3dConfig(output)
+	if err != nil {
+		return fmt.Errorf("%w: %w", ErrK3dConfigGeneration, err)
+	}
 
 	opts := yamlgenerator.Options{
 		Output: filepath.Join(output, "k3d.yaml"),

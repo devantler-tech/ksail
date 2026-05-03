@@ -20,7 +20,10 @@ func (s *Scaffolder) GetKindMirrorsDir() string {
 
 // generateKindConfig generates the kind.yaml configuration file.
 func (s *Scaffolder) generateKindConfig(output string, force bool) error {
-	kindConfig := s.buildKindConfig(output)
+	kindConfig, err := s.buildKindConfig(output)
+	if err != nil {
+		return fmt.Errorf("%w: %w", ErrKindConfigGeneration, err)
+	}
 
 	opts := yamlgenerator.Options{
 		Output: filepath.Join(output, KindConfigFile),
@@ -44,7 +47,7 @@ func (s *Scaffolder) generateKindConfig(output string, force bool) error {
 
 // buildKindConfig creates the Kind cluster configuration object.
 // Node counts can be set via --control-planes and --workers CLI flags.
-func (s *Scaffolder) buildKindConfig(output string) *v1alpha4.Cluster {
+func (s *Scaffolder) buildKindConfig(output string) (*v1alpha4.Cluster, error) {
 	// Determine cluster name - use explicit ClusterName if set, otherwise default
 	clusterName := kindconfigmanager.DefaultClusterName
 	if s.ClusterName != "" {
@@ -82,12 +85,20 @@ func (s *Scaffolder) buildKindConfig(output string) *v1alpha4.Cluster {
 		kindconfigmanager.ApplyImageVerificationPatches(kindConfig)
 	}
 
+	// Apply OIDC API server configuration when OIDC is enabled.
+	if s.KSailConfig.Spec.Cluster.OIDC.Enabled() {
+		err := kindconfigmanager.ApplyOIDCPatches(kindConfig, &s.KSailConfig.Spec.Cluster.OIDC)
+		if err != nil {
+			return nil, fmt.Errorf("applying OIDC patches: %w", err)
+		}
+	}
+
 	// Apply node counts from CLI flags (stored in Talos options)
 	s.applyKindNodeCounts(kindConfig)
 
 	s.addMirrorMountsToKindConfig(kindConfig, output)
 
-	return kindConfig
+	return kindConfig, nil
 }
 
 // applyKindNodeCounts sets up Kind nodes based on --control-planes and --workers CLI flags.

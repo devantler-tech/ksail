@@ -1220,6 +1220,14 @@ func handleCreateRunE(
 		return err
 	}
 
+	applyOIDCExtraScopeFlag(cmd, ctx.ClusterCfg)
+
+	// Re-validate OIDC after merging CLI scope flags which can change ExtraScopes
+	err = v1alpha1.ValidateOIDCConfig(&ctx.ClusterCfg.Spec.Cluster.OIDC)
+	if err != nil {
+		return fmt.Errorf("OIDC configuration: %w", err)
+	}
+
 	err = runClusterCreationWorkflow(cmd, cfgManager, ctx, deps)
 	if err != nil {
 		return err
@@ -1466,6 +1474,19 @@ func handlePostCreationSetup(
 	)
 	if err != nil {
 		return fmt.Errorf("failed to install post-CNI components: %w", err)
+	}
+
+	// Configure OIDC kubeconfig entries when OIDC is enabled
+	if clusterCfg.Spec.Cluster.OIDC.Enabled() {
+		oidcErr := configureOIDCKubeconfig(cmd, clusterCfg)
+		if oidcErr != nil {
+			notify.WriteMessage(notify.Message{
+				Type:    notify.WarningType,
+				Content: "failed to configure OIDC kubeconfig: %v",
+				Args:    []any{oidcErr},
+				Writer:  cmd.OutOrStderr(),
+			})
+		}
 	}
 
 	return nil
@@ -1908,26 +1929,7 @@ func runDeleteAction(
 
 	// Detect cluster distribution and info before deletion
 	// This must happen before deletion while kubeconfig is still available
-	detectedInfo := detectClusterDistribution(resolved)
-	isKindCluster := detectedInfo != nil &&
-		detectedInfo.Distribution == v1alpha1.DistributionVanilla
-
-	// Fallback: detect Kind cluster from container naming patterns if kubeconfig detection failed
-	// This handles cases where kubeconfig context is missing but cluster containers exist
-	if !isKindCluster && resolved.Provider == v1alpha1.ProviderDocker {
-		nodes := discoverDockerNodes(cmd, resolved.ClusterName)
-		isKindCluster = isKindClusterFromNodes(nodes, resolved.ClusterName)
-	}
-
-	// Create cluster info for provisioner creation, including detected distribution
-	clusterInfo := &clusterdetector.Info{
-		ClusterName:    resolved.ClusterName,
-		Provider:       resolved.Provider,
-		KubeconfigPath: resolved.KubeconfigPath,
-	}
-	if detectedInfo != nil {
-		clusterInfo.Distribution = detectedInfo.Distribution
-	}
+	detectedInfo, isKindCluster, clusterInfo := detectDeleteClusterInfo(cmd, resolved)
 
 	// Create provisioner for the provider
 	provisioner, err := createDeleteProvisioner(clusterInfo, resolved.OmniOpts, flags.storage)
@@ -1953,7 +1955,15 @@ func runDeleteAction(
 	}
 
 	// Perform post-deletion cleanup
-	performPostDeletionCleanup(cmd, tmr, resolved, flags, preDiscovered, isKindCluster)
+	performPostDeletionCleanup(
+		cmd,
+		tmr,
+		resolved,
+		flags,
+		preDiscovered,
+		isKindCluster,
+		detectedInfo,
+	)
 
 	return nil
 }
@@ -1993,6 +2003,34 @@ func detectClusterDistribution(resolved *lifecycle.ResolvedClusterInfo) *cluster
 	return nil
 }
 
+// detectDeleteClusterInfo detects the distribution, Kind-cluster status, and builds
+// the clusterdetector.Info needed for provisioner creation during cluster deletion.
+func detectDeleteClusterInfo(
+	cmd *cobra.Command,
+	resolved *lifecycle.ResolvedClusterInfo,
+) (*clusterdetector.Info, bool, *clusterdetector.Info) {
+	detectedInfo := detectClusterDistribution(resolved)
+	isKindCluster := detectedInfo != nil &&
+		detectedInfo.Distribution == v1alpha1.DistributionVanilla
+
+	// Fallback: detect Kind cluster from container naming patterns if kubeconfig detection failed
+	if !isKindCluster && resolved.Provider == v1alpha1.ProviderDocker {
+		nodes := discoverDockerNodes(cmd, resolved.ClusterName)
+		isKindCluster = isKindClusterFromNodes(nodes, resolved.ClusterName)
+	}
+
+	clusterInfo := &clusterdetector.Info{
+		ClusterName:    resolved.ClusterName,
+		Provider:       resolved.Provider,
+		KubeconfigPath: resolved.KubeconfigPath,
+	}
+	if detectedInfo != nil {
+		clusterInfo.Distribution = detectedInfo.Distribution
+	}
+
+	return detectedInfo, isKindCluster, clusterInfo
+}
+
 // prepareDockerDeletion prepares Docker-specific resources before deletion.
 func prepareDockerDeletion(
 	cmd *cobra.Command,
@@ -2017,10 +2055,40 @@ func performPostDeletionCleanup(
 	flags *deleteFlags,
 	preDiscovered *mirrorregistry.DiscoveredRegistries,
 	isKindCluster bool,
+	detectedInfo *clusterdetector.Info,
 ) {
 	// Cleanup registries after cluster deletion (only for Docker provider)
 	if resolved.Provider == v1alpha1.ProviderDocker {
 		cleanupRegistriesAfterDelete(cmd, tmr, resolved, flags.storage, preDiscovered)
+	}
+
+	// Cleanup OIDC kubeconfig entries (user + context) if they exist.
+	// Derive the display name using the same ExtractClusterNameFromContext logic
+	// as the create path (configureOIDCKubeconfig) to ensure consistent naming.
+	oidcDisplayName := resolved.ClusterName
+
+	if detectedInfo != nil && detectedInfo.Context != "" {
+		if name := lifecycle.ExtractClusterNameFromContext(
+			detectedInfo.Context,
+			detectedInfo.Distribution,
+		); name != "" {
+			oidcDisplayName = name
+		}
+	}
+
+	// This is a best-effort cleanup — errors are logged as warnings.
+	cleanupErr := k8s.CleanupOIDCKubeconfigEntries(
+		resolved.KubeconfigPath,
+		oidcDisplayName,
+		cmd.OutOrStdout(),
+	)
+	if cleanupErr != nil {
+		notify.WriteMessage(notify.Message{
+			Type:    notify.WarningType,
+			Content: "failed to clean up OIDC kubeconfig entries: %v",
+			Args:    []any{cleanupErr},
+			Writer:  cmd.OutOrStderr(),
+		})
 	}
 
 	// Cleanup cloud-provider-kind if this was the last kind cluster
@@ -2697,6 +2765,9 @@ var errUnsupportedProvider = errors.New("unsupported provider")
 // errProviderNotConfigured is returned when provider credentials are missing.
 var errProviderNotConfigured = errors.New("provider not configured")
 
+// errContextNotFound is returned when a kubeconfig context cannot be found.
+var errContextNotFound = errors.New("context not found in kubeconfig")
+
 // NewInfoCmd creates the cluster info command.
 // The command queries the infrastructure provider API first, then attempts
 // kubectl cluster-info, and only fails if no information is available at all.
@@ -3286,6 +3357,15 @@ func InitFieldSelectors() []ksailconfigmanager.FieldSelector[v1alpha1.Cluster] {
 	// Talos-specific selectors
 	selectors = append(selectors, ksailconfigmanager.ImageVerificationFieldSelector())
 
+	// OIDC authentication selectors
+	selectors = append(selectors, ksailconfigmanager.OIDCIssuerURLFieldSelector())
+	selectors = append(selectors, ksailconfigmanager.OIDCClientIDFieldSelector())
+	selectors = append(selectors, ksailconfigmanager.OIDCUsernameClaimFieldSelector())
+	selectors = append(selectors, ksailconfigmanager.OIDCUsernamePrefixFieldSelector())
+	selectors = append(selectors, ksailconfigmanager.OIDCGroupsClaimFieldSelector())
+	selectors = append(selectors, ksailconfigmanager.OIDCGroupsPrefixFieldSelector())
+	selectors = append(selectors, ksailconfigmanager.OIDCCAFileFieldSelector())
+
 	return selectors
 }
 
@@ -3312,6 +3392,8 @@ func bindInitLocalFlags(cmd *cobra.Command, cfgManager *ksailconfigmanager.Confi
 		"Cluster name used for container names, registry names, and kubeconfig context",
 	)
 	_ = cfgManager.Viper.BindPFlag("name", cmd.Flags().Lookup("name"))
+
+	registerOIDCExtraScopeFlag(cmd)
 }
 
 // InitDeps captures dependencies required for the init command.
@@ -3338,6 +3420,12 @@ func validateInitConfig(clusterCfg *v1alpha1.Cluster) error {
 		return fmt.Errorf("local registry validation: %w", err)
 	}
 
+	// Validate OIDC configuration
+	err = v1alpha1.ValidateOIDCConfig(&clusterCfg.Spec.Cluster.OIDC)
+	if err != nil {
+		return fmt.Errorf("OIDC configuration: %w", err)
+	}
+
 	return nil
 }
 
@@ -3361,6 +3449,14 @@ func HandleInitRunE(
 	err = validateInitConfig(clusterCfg)
 	if err != nil {
 		return err
+	}
+
+	applyOIDCExtraScopeFlag(cmd, clusterCfg)
+
+	// Re-validate OIDC after merging CLI scope flags which can change ExtraScopes
+	err = v1alpha1.ValidateOIDCConfig(&clusterCfg.Spec.Cluster.OIDC)
+	if err != nil {
+		return fmt.Errorf("OIDC configuration: %w", err)
 	}
 
 	scaffolderInstance, targetPath, force, err := prepareScaffolder(cmd, cfgManager, clusterCfg)
@@ -5119,6 +5215,13 @@ func defaultClusterMutationFieldSelectors() []ksailconfigmanager.FieldSelector[v
 		ksailconfigmanager.WorkersFieldSelector(),
 		ksailconfigmanager.NodeAutoscalingFieldSelector(), //nolint:staticcheck // backward compat
 		ksailconfigmanager.NodeAutoscalerEnabledFieldSelector(),
+		ksailconfigmanager.OIDCIssuerURLFieldSelector(),
+		ksailconfigmanager.OIDCClientIDFieldSelector(),
+		ksailconfigmanager.OIDCUsernameClaimFieldSelector(),
+		ksailconfigmanager.OIDCUsernamePrefixFieldSelector(),
+		ksailconfigmanager.OIDCGroupsClaimFieldSelector(),
+		ksailconfigmanager.OIDCGroupsPrefixFieldSelector(),
+		ksailconfigmanager.OIDCCAFileFieldSelector(),
 	)
 }
 
@@ -5139,6 +5242,32 @@ func registerNameFlag(cmd *cobra.Command, cfgManager *ksailconfigmanager.ConfigM
 	_ = cfgManager.Viper.BindPFlag("name", cmd.Flags().Lookup("name"))
 }
 
+// registerOIDCExtraScopeFlag adds the --oidc-extra-scope flag to a command.
+// Like --mirror-registry, this is a string slice flag that is NOT bound to Viper
+// and instead merged manually after config loading.
+func registerOIDCExtraScopeFlag(cmd *cobra.Command) {
+	cmd.Flags().StringSlice("oidc-extra-scope", []string{},
+		"Additional OIDC scopes beyond openid (repeatable)")
+}
+
+// applyOIDCExtraScopeFlag merges --oidc-extra-scope flag values into the cluster config.
+// CLI flag values take precedence over config file values when explicitly set.
+func applyOIDCExtraScopeFlag(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster) {
+	scopeFlag := cmd.Flags().Lookup("oidc-extra-scope")
+	if scopeFlag == nil || !scopeFlag.Changed {
+		return
+	}
+
+	scopes, err := cmd.Flags().GetStringSlice("oidc-extra-scope")
+	if err != nil {
+		return
+	}
+
+	// When the flag is explicitly set, always assign — even if empty — so the
+	// user can clear extraScopes from a config file via CLI.
+	clusterCfg.Spec.Cluster.OIDC.ExtraScopes = scopes
+}
+
 // setupMutationCmdFlags creates the shared config manager and registers the
 // common flags (--mirror-registry and --name) used by cluster mutation commands.
 // Returns the config manager for further flag bindings.
@@ -5150,6 +5279,7 @@ func setupMutationCmdFlags(cmd *cobra.Command) *ksailconfigmanager.ConfigManager
 
 	registerMirrorRegistryFlag(cmd)
 	registerNameFlag(cmd, cfgManager)
+	registerOIDCExtraScopeFlag(cmd)
 
 	return cfgManager
 }
@@ -5201,6 +5331,12 @@ func loadAndValidateClusterConfig(
 	)
 	if err != nil {
 		return nil, "", fmt.Errorf("invalid autoscaler configuration: %w", err)
+	}
+
+	// Validate OIDC configuration
+	err = v1alpha1.ValidateOIDCConfig(&ctx.ClusterCfg.Spec.Cluster.OIDC)
+	if err != nil {
+		return nil, "", fmt.Errorf("OIDC configuration: %w", err)
 	}
 
 	clusterName := resolveClusterNameFromContext(ctx)
@@ -6164,6 +6300,14 @@ func handleUpdateRunE(
 	ctx, clusterName, err := loadAndValidateClusterConfig(cfgManager, deps)
 	if err != nil {
 		return err
+	}
+
+	applyOIDCExtraScopeFlag(cmd, ctx.ClusterCfg)
+
+	// Re-validate OIDC after merging CLI scope flags which can change ExtraScopes
+	err = v1alpha1.ValidateOIDCConfig(&ctx.ClusterCfg.Spec.Cluster.OIDC)
+	if err != nil {
+		return fmt.Errorf("OIDC configuration: %w", err)
 	}
 
 	force := resolveForce(cfgManager.Viper.GetBool("force"), cmd.Flags().Lookup("yes"))
@@ -7483,4 +7627,84 @@ func executeRecreateFlow(
 // This consolidates the --force/--yes alias logic into one place.
 func resolveForce(viperForce bool, yesFlag *pflag.Flag) bool {
 	return viperForce || (yesFlag != nil && yesFlag.Changed && yesFlag.Value.String() == "true")
+}
+
+// configureOIDCKubeconfig adds OIDC exec credential plugin entries to the kubeconfig
+// after cluster creation when OIDC authentication is configured.
+func configureOIDCKubeconfig(
+	cmd *cobra.Command,
+	clusterCfg *v1alpha1.Cluster,
+) error {
+	kubeconfigPath, err := kubeconfig.GetKubeconfigPathFromConfig(clusterCfg)
+	if err != nil {
+		return fmt.Errorf("failed to resolve kubeconfig path: %w", err)
+	}
+
+	displayName := lifecycle.ExtractClusterNameFromContext(
+		clusterCfg.Spec.Cluster.Connection.Context,
+		clusterCfg.Spec.Cluster.Distribution,
+	)
+
+	// Resolve the actual cluster entry name from the kubeconfig by looking up
+	// the context. This is necessary because the context name and cluster entry
+	// name differ for some distributions (e.g. Talos uses context "admin@<name>"
+	// but cluster entry "<name>").
+	contextName := clusterCfg.Spec.Cluster.Connection.Context
+
+	clusterEntryName, resolveErr := resolveClusterEntryName(kubeconfigPath, contextName)
+	if resolveErr != nil {
+		// Fall back to using the context name directly (works for Kind, K3d, VCluster)
+		clusterEntryName = contextName
+	}
+
+	oidc := &clusterCfg.Spec.Cluster.OIDC
+
+	err = k8s.AddOIDCKubeconfigEntries(&k8s.OIDCExecConfig{
+		KubeconfigPath:   kubeconfigPath,
+		ClusterEntryName: clusterEntryName,
+		DisplayName:      displayName,
+		IssuerURL:        oidc.IssuerURL,
+		ClientID:         oidc.ClientID,
+		ExtraScopes:      oidc.ExtraScopes,
+		CAFile:           oidc.CAFile,
+	}, cmd.OutOrStdout())
+	if err != nil {
+		return fmt.Errorf("failed to add OIDC kubeconfig entries: %w", err)
+	}
+
+	notify.WriteMessage(notify.Message{
+		Type:    notify.InfoType,
+		Content: "OIDC context 'oidc@%s' added to kubeconfig (use 'kubectl config use-context oidc@%s' to switch)",
+		Args:    []any{displayName, displayName},
+		Writer:  cmd.OutOrStdout(),
+	})
+
+	return nil
+}
+
+// resolveClusterEntryName reads the kubeconfig and returns the cluster entry
+// name that the given context references. This handles distributions where
+// the context name differs from the cluster entry name (e.g. Talos).
+func resolveClusterEntryName(kubeconfigPath, contextName string) (string, error) {
+	canonicalPath, err := fsutil.EvalCanonicalPath(kubeconfigPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve kubeconfig path: %w", err)
+	}
+
+	kubeconfigBytes, err := os.ReadFile(canonicalPath) //nolint:gosec // canonicalized above
+	if err != nil {
+		return "", fmt.Errorf("failed to read kubeconfig: %w", err)
+	}
+
+	kubeConfig, err := clientcmd.Load(kubeconfigBytes)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse kubeconfig: %w", err)
+	}
+
+	ctxEntry, ok := kubeConfig.Contexts[contextName]
+	if !ok || ctxEntry == nil {
+		return "", fmt.Errorf("%w: %s", errContextNotFound, contextName)
+	}
+
+	return ctxEntry.Cluster, nil
 }

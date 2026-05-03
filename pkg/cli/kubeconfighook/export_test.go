@@ -1,6 +1,7 @@
 package kubeconfighook
 
 import (
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 )
 
@@ -19,10 +20,10 @@ var ClusterNameFromDistConfigForTest = clusterNameFromDistConfig
 //nolint:gochecknoglobals // export_test.go pattern requires global variables to expose internal functions.
 var ClusterNameFromKubeconfigForTest = clusterNameFromKubeconfig
 
-// AtomicWriteFileForTest exports atomicWriteFile for testing.
+// AtomicWriteFileForTest exports fsutil.AtomicWriteFile for testing.
 //
 //nolint:gochecknoglobals // export_test.go pattern requires global variables to expose internal functions.
-var AtomicWriteFileForTest = atomicWriteFile
+var AtomicWriteFileForTest = fsutil.AtomicWriteFile
 
 // IsKubeconfigFlagExplicitForTest exports isKubeconfigFlagExplicit for testing.
 //
