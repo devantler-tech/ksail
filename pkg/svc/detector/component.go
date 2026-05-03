@@ -631,14 +631,14 @@ func parseAutoscalingGroups(groups []any) []v1alpha1.NodePool {
 	pools := make([]v1alpha1.NodePool, 0, len(groups))
 
 	for _, g := range groups {
-		group, ok := g.(map[string]any)
-		if !ok {
+		group, isMap := g.(map[string]any)
+		if !isMap {
 			continue
 		}
 
 		pool := v1alpha1.NodePool{}
-		name, ok := group["name"].(string)
-		if !ok || name == "" {
+		name, hasName := group["name"].(string)
+		if !hasName || name == "" {
 			continue
 		}
 
