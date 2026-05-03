@@ -385,7 +385,6 @@ func BenchmarkRoundtrip_Minimal(b *testing.B) {
 	}
 }
 
-
 // --- Exported seams for internal helper tests ---
 
 // WriteDecryptedOutput exposes the private writeDecryptedOutput for testing.
