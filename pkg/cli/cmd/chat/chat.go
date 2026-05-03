@@ -261,7 +261,7 @@ func startCopilotClient(ctx context.Context) (*copilot.Client, error) {
 
 	err := client.Start(ctx)
 	if err != nil {
-		return nil, fmt.Errorf(startupErrFmt, err, buildDiagnosticBlock(ctx, cliPath, opts.Env))
+		return nil, fmt.Errorf(startupErrFmt, err, buildDiagnosticBlock(ctx, cliPath, opts.GitHubToken, opts.Env))
 	}
 
 	return client, nil
@@ -296,13 +296,15 @@ func verifyCopilotCLI(ctx context.Context, cliPath string, env []string) error {
 
 // buildDiagnosticBlock runs the CLI diagnostic and returns a formatted block
 // suitable for inclusion in an error message, or an empty string if there is
-// nothing to report.
-func buildDiagnosticBlock(ctx context.Context, cliPath string, env []string) string {
+// nothing to report. When githubToken is non-empty, it is injected into the
+// subprocess environment via COPILOT_SDK_AUTH_TOKEN (mirroring the SDK) so the
+// diagnostic runs under the same auth context as the real startup attempt.
+func buildDiagnosticBlock(ctx context.Context, cliPath, githubToken string, env []string) string {
 	if cliPath == "" {
 		return ""
 	}
 
-	d := diagnoseCLIStartupFailure(ctx, cliPath, env)
+	d := diagnoseCLIStartupFailure(ctx, cliPath, githubToken, env)
 	if d == "" {
 		return ""
 	}
@@ -314,14 +316,24 @@ func buildDiagnosticBlock(ctx context.Context, cliPath string, env []string) str
 // stderr captured, returning any diagnostic output. The Copilot SDK discards
 // the subprocess's stderr, so this post-failure re-run is the only way to
 // surface why the CLI crashed during startup.
-func diagnoseCLIStartupFailure(ctx context.Context, cliPath string, env []string) string {
+//
+// When githubToken is non-empty, it is passed via the same COPILOT_SDK_AUTH_TOKEN
+// env var and --auth-token-env flag that the SDK uses, so the diagnostic
+// reproduces the same auth path as the real startup.
+func diagnoseCLIStartupFailure(ctx context.Context, cliPath, githubToken string, env []string) string {
 	diagCtx, cancel := context.WithTimeout(ctx, diagnoseTimeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(diagCtx, cliPath,
-		"--headless", "--no-auto-update", "--log-level", "error", "--stdio",
-	)
-	cmd.Env = env
+	args := []string{"--headless", "--no-auto-update", "--log-level", "error", "--stdio"}
+	diagEnv := env
+
+	if githubToken != "" {
+		args = append(args, "--auth-token-env", "COPILOT_SDK_AUTH_TOKEN")
+		diagEnv = append(append([]string{}, diagEnv...), "COPILOT_SDK_AUTH_TOKEN="+githubToken)
+	}
+
+	cmd := exec.CommandContext(diagCtx, cliPath, args...)
+	cmd.Env = diagEnv
 
 	var stderr bytes.Buffer
 

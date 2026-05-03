@@ -48,7 +48,7 @@ func TestDiagnoseCLIStartupFailure(t *testing.T) {
 		dir := t.TempDir()
 		script := writeScript(t, dir, "#!/bin/sh\necho 'Error: missing config' >&2\nexit 1\n")
 
-		result := diagnose(context.Background(), script, os.Environ())
+		result := diagnose(context.Background(), script, "", os.Environ())
 		assert.Equal(t, "Error: missing config", result)
 	})
 
@@ -58,7 +58,7 @@ func TestDiagnoseCLIStartupFailure(t *testing.T) {
 		dir := t.TempDir()
 		script := writeScript(t, dir, "#!/bin/sh\nexit 1\n")
 
-		result := diagnose(context.Background(), script, os.Environ())
+		result := diagnose(context.Background(), script, "", os.Environ())
 		assert.Empty(t, result)
 	})
 
@@ -71,7 +71,7 @@ func TestDiagnoseCLIStartupFailure(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 
-		result := diagnose(ctx, script, os.Environ())
+		result := diagnose(ctx, script, "", os.Environ())
 		assert.Empty(t, result)
 	})
 
@@ -82,7 +82,7 @@ func TestDiagnoseCLIStartupFailure(t *testing.T) {
 		script := writeScript(t, dir,
 			"#!/bin/sh\necho 'line 1' >&2\necho 'line 2' >&2\nexit 1\n")
 
-		result := diagnose(context.Background(), script, os.Environ())
+		result := diagnose(context.Background(), script, "", os.Environ())
 		assert.Equal(t, "line 1\nline 2", result)
 	})
 }
@@ -99,7 +99,7 @@ func TestBuildDiagnosticBlock(t *testing.T) {
 	t.Run("returns empty string for empty cliPath", func(t *testing.T) {
 		t.Parallel()
 
-		result := build(context.Background(), "", os.Environ())
+		result := build(context.Background(), "", "", os.Environ())
 		assert.Empty(t, result)
 	})
 
@@ -109,7 +109,7 @@ func TestBuildDiagnosticBlock(t *testing.T) {
 		dir := t.TempDir()
 		script := writeScript(t, dir, "#!/bin/sh\nexit 1\n")
 
-		result := build(context.Background(), script, os.Environ())
+		result := build(context.Background(), script, "", os.Environ())
 		assert.Empty(t, result)
 	})
 
@@ -119,7 +119,7 @@ func TestBuildDiagnosticBlock(t *testing.T) {
 		dir := t.TempDir()
 		script := writeScript(t, dir, "#!/bin/sh\necho 'not logged in' >&2\nexit 1\n")
 
-		result := build(context.Background(), script, os.Environ())
+		result := build(context.Background(), script, "", os.Environ())
 		assert.Equal(t, "CLI diagnostic output:\n  not logged in\n\n", result)
 	})
 
@@ -129,7 +129,7 @@ func TestBuildDiagnosticBlock(t *testing.T) {
 		dir := t.TempDir()
 		script := writeScript(t, dir, "#!/bin/sh\necho 'line 1' >&2\necho 'line 2' >&2\nexit 1\n")
 
-		result := build(context.Background(), script, os.Environ())
+		result := build(context.Background(), script, "", os.Environ())
 		assert.Equal(t, "CLI diagnostic output:\n  line 1\n  line 2\n\n", result)
 	})
 }
@@ -148,7 +148,7 @@ func TestStartupErrFmt(t *testing.T) {
 		script := writeScript(t, dir, "#!/bin/sh\necho 'not logged in' >&2\nexit 1\n")
 
 		build := chat.GetBuildDiagnosticBlock()
-		block := build(context.Background(), script, os.Environ())
+		block := build(context.Background(), script, "", os.Environ())
 
 		err := fmt.Errorf(chat.StartupErrFmt, errFakeCLIExit, block)
 
@@ -165,7 +165,7 @@ func TestStartupErrFmt(t *testing.T) {
 		script := writeScript(t, dir, "#!/bin/sh\nexit 1\n")
 
 		build := chat.GetBuildDiagnosticBlock()
-		block := build(context.Background(), script, os.Environ())
+		block := build(context.Background(), script, "", os.Environ())
 
 		err := fmt.Errorf(chat.StartupErrFmt, errFakeCLIExit, block)
 
@@ -181,7 +181,7 @@ func TestStartupErrFmt(t *testing.T) {
 		script := writeScript(t, dir, "#!/bin/sh\nprintf '100%% complete but failed' >&2\nexit 1\n")
 
 		build := chat.GetBuildDiagnosticBlock()
-		block := build(context.Background(), script, os.Environ())
+		block := build(context.Background(), script, "", os.Environ())
 
 		err := fmt.Errorf(chat.StartupErrFmt, errFakeCLIExit, block)
 

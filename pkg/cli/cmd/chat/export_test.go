@@ -39,12 +39,12 @@ const DiagnoseTimeout = diagnoseTimeout
 const StartupErrFmt = startupErrFmt
 
 // GetDiagnoseCLIStartupFailure returns the diagnoseCLIStartupFailure function for testing.
-func GetDiagnoseCLIStartupFailure() func(context.Context, string, []string) string {
+func GetDiagnoseCLIStartupFailure() func(context.Context, string, string, []string) string {
 	return diagnoseCLIStartupFailure
 }
 
 // GetBuildDiagnosticBlock returns the buildDiagnosticBlock function for testing.
-func GetBuildDiagnosticBlock() func(context.Context, string, []string) string {
+func GetBuildDiagnosticBlock() func(context.Context, string, string, []string) string {
 	return buildDiagnosticBlock
 }
 
