@@ -93,7 +93,11 @@ func TestWarningEvent_String_WithNamespace(t *testing.T) {
 		Message:   "Back-off restarting (BackOff)",
 	}
 
-	assert.Equal(t, "3m ago: Pod/flux-system/controller-abc — Back-off restarting (BackOff)", evt.String())
+	assert.Equal(
+		t,
+		"3m ago: Pod/flux-system/controller-abc — Back-off restarting (BackOff)",
+		evt.String(),
+	)
 }
 
 func TestWarningEvent_String_Seconds(t *testing.T) {

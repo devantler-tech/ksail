@@ -2130,12 +2130,24 @@ func runReconcile(cmd *cobra.Command) error {
 		cmd.Context(), cmd,
 		reconcileMaxRetryAttempts, reconcileRetryBaseWait, reconcileRetryMaxWait,
 		func() error {
-			return executeReconciliation(cmd, clusterCfg, kubeconfigPath, gitOpsEngine, timeout, outputTimer)
+			return executeReconciliation(
+				cmd,
+				clusterCfg,
+				kubeconfigPath,
+				gitOpsEngine,
+				timeout,
+				outputTimer,
+			)
 		},
 	)
 	if err != nil {
 		// Collect and display targeted diagnostics before returning the error.
-		reconcilediag.Diagnose(context.WithoutCancel(cmd.Context()), cmd.OutOrStdout(), kubeconfigPath, gitOpsEngine)
+		reconcilediag.Diagnose(
+			context.WithoutCancel(cmd.Context()),
+			cmd.OutOrStdout(),
+			kubeconfigPath,
+			gitOpsEngine,
+		)
 
 		return err
 	}

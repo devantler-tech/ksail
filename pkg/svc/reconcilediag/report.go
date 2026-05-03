@@ -152,7 +152,7 @@ func (r *Report) writeFailingPods(writer io.Writer) {
 
 	notify.Warningf(writer, "failing pods (%s):", r.EventNamespace)
 
-	for _, line := range strings.Split(strings.TrimSpace(r.FailingPods), "\n") {
+	for line := range strings.SplitSeq(strings.TrimSpace(r.FailingPods), "\n") {
 		line = strings.TrimSpace(line)
 		if line != "" {
 			_, _ = fmt.Fprintf(writer, "    %s\n", line)
