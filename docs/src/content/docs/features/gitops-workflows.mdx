@@ -46,6 +46,18 @@ Before polling Kustomizations, `ksail workload reconcile` automatically detects 
 
 HelmReleases with `DependencyNotReady` are skipped — these are transient and resolve on their own. Individual reset failures are logged but do not abort reconciliation.
 
+### Automatic Failure Diagnostics
+
+When `ksail workload reconcile` fails, KSail automatically collects and displays a targeted diagnostic report — no manual `kubectl` investigation required.
+
+The report includes:
+
+- **Failing GitOps resources** — Flux Kustomizations, HelmReleases, and OCIRepositories (or ArgoCD Applications) with their condition reason and message (only non-ready resources are shown)
+- **Failing pods** — non-ready pods in the GitOps namespace
+- **Recent warning events** — all Kubernetes warning events from the GitOps namespace in the last 5 minutes
+
+Diagnostics are best-effort with a 15-second timeout. If the cluster is unreachable, the section is silently skipped so the original reconciliation error remains prominent.
+
 ### Automatic Retry
 
 Both `workload push` and `workload reconcile` automatically retry on transient failures:
