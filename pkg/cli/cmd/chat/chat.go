@@ -261,7 +261,11 @@ func startCopilotClient(ctx context.Context) (*copilot.Client, error) {
 
 	err := client.Start(ctx)
 	if err != nil {
-		return nil, fmt.Errorf(startupErrFmt, err, buildDiagnosticBlock(ctx, cliPath, opts.GitHubToken, opts.Env))
+		return nil, fmt.Errorf(
+			startupErrFmt,
+			err,
+			buildDiagnosticBlock(ctx, cliPath, opts.GitHubToken, opts.Env),
+		)
 	}
 
 	return client, nil
@@ -320,7 +324,11 @@ func buildDiagnosticBlock(ctx context.Context, cliPath, githubToken string, env 
 // When githubToken is non-empty, it is passed via the same COPILOT_SDK_AUTH_TOKEN
 // env var and --auth-token-env flag that the SDK uses, so the diagnostic
 // reproduces the same auth path as the real startup.
-func diagnoseCLIStartupFailure(ctx context.Context, cliPath, githubToken string, env []string) string {
+func diagnoseCLIStartupFailure(
+	ctx context.Context,
+	cliPath, githubToken string,
+	env []string,
+) string {
 	diagCtx, cancel := context.WithTimeout(ctx, diagnoseTimeout)
 	defer cancel()
 
