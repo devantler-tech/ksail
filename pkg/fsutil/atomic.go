@@ -1,11 +1,14 @@
 package fsutil
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
 )
+
+var errShortWrite = errors.New("short write")
 
 // AtomicWriteFile writes data to a temp file in the same directory and
 // renames it to the target path, ensuring an all-or-nothing write.
@@ -32,11 +35,17 @@ func AtomicWriteFile(path string, data []byte, perm os.FileMode) error {
 		return fmt.Errorf("set permissions: %w", chmodErr)
 	}
 
-	_, writeErr := tmp.Write(data)
+	bytesWritten, writeErr := tmp.Write(data)
 	if writeErr != nil {
 		_ = tmp.Close()
 
 		return fmt.Errorf("write data: %w", writeErr)
+	}
+
+	if bytesWritten != len(data) {
+		_ = tmp.Close()
+
+		return fmt.Errorf("write data: %w: wrote %d of %d bytes", errShortWrite, bytesWritten, len(data))
 	}
 
 	closeErr := tmp.Close()
