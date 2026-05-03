@@ -664,7 +664,12 @@ func TestCheckHelmReleaseStuck(t *testing.T) {
 		{
 			name: "stuck with InstallFailed",
 			hr: newFakeHelmRelease("kyverno", "kyverno", []map[string]any{
-				{"type": "Ready", "status": "False", "reason": "InstallFailed", "message": "install retries exhausted"},
+				{
+					"type":    "Ready",
+					"status":  "False",
+					"reason":  "InstallFailed",
+					"message": "install retries exhausted",
+				},
 			}),
 			wantStuck:  true,
 			wantReason: "InstallFailed",
