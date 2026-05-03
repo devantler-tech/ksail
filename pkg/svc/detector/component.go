@@ -2,7 +2,9 @@ package detector
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -579,13 +581,11 @@ func (d *ComponentDetector) detectNodeAutoscaler(
 
 // parseAutoscalerValues extracts autoscaler config from Helm release values.
 func parseAutoscalerValues(cfg *v1alpha1.NodeAutoscalerConfig, values map[string]interface{}) {
-	extraArgs, ok := values["extraArgs"].(map[string]interface{})
-	if ok {
+	if extraArgs, exists := values["extraArgs"].(map[string]interface{}); exists {
 		parseAutoscalerExtraArgs(cfg, extraArgs)
 	}
 
-	groups, ok := values["autoscalingGroups"].([]interface{})
-	if ok {
+	if groups, exists := values["autoscalingGroups"].([]interface{}); exists {
 		cfg.Pools = parseAutoscalingGroups(groups)
 	}
 }
@@ -627,29 +627,29 @@ func parseAutoscalingGroups(groups []interface{}) []v1alpha1.NodePool {
 	pools := make([]v1alpha1.NodePool, 0, len(groups))
 
 	for _, g := range groups {
-		gm, ok := g.(map[string]interface{})
+		group, ok := g.(map[string]interface{})
 		if !ok {
 			continue
 		}
 
 		pool := v1alpha1.NodePool{}
-		if name, ok := gm["name"].(string); ok {
+		if name, ok := group["name"].(string); ok {
 			pool.Name = name
 		}
 
-		if st, ok := gm["instanceType"].(string); ok {
+		if st, ok := group["instanceType"].(string); ok {
 			pool.ServerType = st
 		}
 
-		if loc, ok := gm["region"].(string); ok {
+		if loc, ok := group["region"].(string); ok {
 			pool.Location = loc
 		}
 
-		if minSize, ok := toInt32(gm["minSize"]); ok {
+		if minSize, ok := toInt32(group["minSize"]); ok {
 			pool.Min = minSize
 		}
 
-		if maxSize, ok := toInt32(gm["maxSize"]); ok {
+		if maxSize, ok := toInt32(group["maxSize"]); ok {
 			pool.Max = maxSize
 		}
 
@@ -659,18 +659,43 @@ func parseAutoscalingGroups(groups []interface{}) []v1alpha1.NodePool {
 	return pools
 }
 
-// toInt32 converts a Helm values entry (which may be float64 or json.Number)
-// to int32. Returns (0, false) when the value is not a numeric type.
+// toInt32 converts a Helm values entry (which may be float64, json.Number, int, int32,
+// or int64) to int32. Returns (0, false) when the value is not a numeric type, is
+// non-integral, or falls outside the int32 range.
 func toInt32(v interface{}) (int32, bool) {
-	switch n := v.(type) {
+	const (
+		minInt32 = -1 << 31
+		maxInt32 = 1<<31 - 1
+	)
+
+	switch num := v.(type) {
 	case float64:
-		return int32(n), true
+		if num != math.Trunc(num) || num < minInt32 || num > maxInt32 {
+			return 0, false
+		}
+
+		return int32(num), true //nolint:gosec // bounds checked above
+	case json.Number:
+		f, err := num.Float64()
+		if err != nil || f != math.Trunc(f) || f < minInt32 || f > maxInt32 {
+			return 0, false
+		}
+
+		return int32(f), true //nolint:gosec // bounds checked above
 	case int:
-		return int32(n), true
+		if num < minInt32 || num > maxInt32 {
+			return 0, false
+		}
+
+		return int32(num), true //nolint:gosec // bounds checked above
 	case int32:
-		return n, true
+		return num, true
 	case int64:
-		return int32(n), true
+		if num < minInt32 || num > maxInt32 {
+			return 0, false
+		}
+
+		return int32(num), true //nolint:gosec // bounds checked above
 	default:
 		return 0, false
 	}

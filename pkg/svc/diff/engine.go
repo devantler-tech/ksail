@@ -400,7 +400,7 @@ var talosISORule = fieldRule{
 	field:      "cluster.talos.iso",
 	category:   clusterupdate.ChangeCategoryInPlace,
 	reason:     "ISO change only affects newly provisioned nodes",
-	defaultVal: "122630",
+	defaultVal: strconv.FormatInt(v1alpha1.DefaultTalosISO, 10),
 	getVal: func(s *v1alpha1.ClusterSpec) string {
 		if s.Talos.ISO == 0 {
 			return ""

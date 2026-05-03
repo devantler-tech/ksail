@@ -616,7 +616,19 @@ func (p *Provisioner) introspectTalosVersion(ctx context.Context) string {
 		return ""
 	}
 
-	version, err := p.getRunningTalosVersion(ctx, nodes[0].IP)
+	// Prefer a control-plane node for the version query; fall back to the
+	// first available node if no control-plane node is found.
+	target := nodes[0]
+
+	for _, node := range nodes {
+		if node.Role == RoleControlPlane {
+			target = node
+
+			break
+		}
+	}
+
+	version, err := p.getRunningTalosVersion(ctx, target.IP)
 	if err != nil {
 		return ""
 	}

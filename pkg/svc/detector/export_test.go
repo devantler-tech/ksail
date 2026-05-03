@@ -120,11 +120,6 @@ func (d *ComponentDetector) ExportDetectNodeAutoscaler(
 	return d.detectNodeAutoscaler(ctx)
 }
 
-// ExportParseAutoscalerValues exposes parseAutoscalerValues for testing.
-func ExportParseAutoscalerValues(cfg *v1alpha1.NodeAutoscalerConfig, values map[string]interface{}) {
-	parseAutoscalerValues(cfg, values)
-}
-
 // ExportHelmExpanderToEnum exposes helmExpanderToEnum for testing.
 func ExportHelmExpanderToEnum(value string) v1alpha1.AutoscalerExpander {
 	return helmExpanderToEnum(value)

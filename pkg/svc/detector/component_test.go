@@ -21,6 +21,7 @@ import (
 var (
 	errHelm   = errors.New("helm error")
 	errDocker = errors.New("docker error")
+	errValues = errors.New("values error")
 )
 
 func TestNewComponentDetector(t *testing.T) {
@@ -1111,7 +1112,7 @@ func TestDetectNodeAutoscaler_ValuesUnreadable(t *testing.T) {
 
 	helmClient.On("GetReleaseValues", ctx,
 		detector.ReleaseClusterAutoscaler, detector.NamespaceClusterAutoscaler,
-	).Return(nil, errors.New("values error"))
+	).Return(nil, errValues)
 
 	d := detector.NewComponentDetector(helmClient, k8sClientset, nil)
 	cfg, err := d.ExportDetectNodeAutoscaler(ctx)
