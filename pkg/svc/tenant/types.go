@@ -155,17 +155,8 @@ func (o *Options) ResolveDefaults() {
 
 // Validate checks that required fields are set and values are safe.
 func (o *Options) Validate() error {
-	if o.Name == "" {
-		return ErrTenantNameRequired
-	}
-
-	if errs := validation.IsDNS1123Label(o.Name); len(errs) > 0 {
-		return fmt.Errorf("%w: %s (%s)", ErrInvalidTenantName, o.Name, strings.Join(errs, "; "))
-	}
-
-	if strings.Contains(o.Name, "..") || strings.ContainsAny(o.Name, `/\`) {
-		return fmt.Errorf("%w: %s (must not contain path separators or '..')",
-			ErrInvalidTenantName, o.Name)
+	if err := validateTenantName(o.Name); err != nil {
+		return err
 	}
 
 	if o.TenantType == "" {
@@ -187,10 +178,36 @@ func (o *Options) Validate() error {
 		return fmt.Errorf("%w", ErrDuplicateNamespace)
 	}
 
-	if o.SourceDirectory != "" &&
-		(strings.Contains(o.SourceDirectory, "..") || strings.ContainsAny(o.SourceDirectory, `/\`)) {
+	if o.SourceDirectory != "" {
+		if err := validateSourceDirectory(o.SourceDirectory); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func validateTenantName(name string) error {
+	if name == "" {
+		return ErrTenantNameRequired
+	}
+
+	if errs := validation.IsDNS1123Label(name); len(errs) > 0 {
+		return fmt.Errorf("%w: %s (%s)", ErrInvalidTenantName, name, strings.Join(errs, "; "))
+	}
+
+	if strings.Contains(name, "..") || strings.ContainsAny(name, `/\`) {
 		return fmt.Errorf("%w: %s (must not contain path separators or '..')",
-			ErrInvalidSourceDirectory, o.SourceDirectory)
+			ErrInvalidTenantName, name)
+	}
+
+	return nil
+}
+
+func validateSourceDirectory(dir string) error {
+	if strings.Contains(dir, "..") || strings.ContainsAny(dir, `/\`) {
+		return fmt.Errorf("%w: %s (must not contain path separators or '..')",
+			ErrInvalidSourceDirectory, dir)
 	}
 
 	return nil
