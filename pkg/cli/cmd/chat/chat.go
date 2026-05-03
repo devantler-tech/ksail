@@ -324,6 +324,7 @@ func diagnoseCLIStartupFailure(ctx context.Context, cliPath string, env []string
 	cmd.Env = env
 
 	var stderr bytes.Buffer
+
 	cmd.Stderr = &stderr
 
 	_ = cmd.Run()
