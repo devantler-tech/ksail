@@ -2,6 +2,7 @@ package reconcilediag
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"time"
 
@@ -63,17 +64,17 @@ func Diagnose(
 func buildDiagClients(kubeconfigPath string) (dynamic.Interface, kubernetes.Interface, error) {
 	restCfg, err := k8sutil.BuildRESTConfig(kubeconfigPath, "")
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("build REST config: %w", err)
 	}
 
 	dynClient, err := dynamic.NewForConfig(restCfg)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("create dynamic client: %w", err)
 	}
 
 	clientset, err := kubernetes.NewForConfig(restCfg)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("create clientset: %w", err)
 	}
 
 	return dynClient, clientset, nil
