@@ -30,6 +30,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/client/flux"
 	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
 	"github.com/devantler-tech/ksail/v7/pkg/client/kubeconform"
+	kubescapeclient "github.com/devantler-tech/ksail/v7/pkg/client/kubescape"
 	"github.com/devantler-tech/ksail/v7/pkg/client/kubectl"
 	"github.com/devantler-tech/ksail/v7/pkg/client/kustomize"
 	"github.com/devantler-tech/ksail/v7/pkg/client/netretry"
@@ -2800,6 +2801,130 @@ func NewScaleCmd() *cobra.Command {
 	return cmd
 }
 
+// NewScanCmd creates the workload scan command.
+func NewScanCmd() *cobra.Command {
+	var (
+		frameworks          []string
+		format              string
+		output              string
+		complianceThreshold float32
+		verbose             bool
+	)
+
+	cmd := &cobra.Command{
+		Use:   "scan [PATH]",
+		Short: "Run security scans on Kubernetes manifests",
+		Long: `Run security scans on Kubernetes manifests using Kubescape.
+
+This command scans manifests in the specified path against security frameworks
+such as NSA-CISA, MITRE ATT&CK, and CIS Benchmarks.
+
+If no path is provided, the path is resolved in order:
+  1. spec.workload.sourceDirectory from ksail.yaml (if a config file is found and the field is set)
+  2. The default source directory when spec.workload.sourceDirectory is unset ("k8s" directory)
+  3. The current directory (fallback when no ksail.yaml config file is found)
+
+Available frameworks: nsa, mitre, cis, pss
+Available output formats: pretty-printer, json, sarif, junit
+
+For more information, see https://github.com/kubescape/kubescape`,
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runScanCmd(
+				cmd.Context(),
+				cmd,
+				args,
+				frameworks,
+				format,
+				output,
+				complianceThreshold,
+				verbose,
+			)
+		},
+		SilenceUsage: true,
+	}
+
+	cmd.Flags().StringSliceVar(&frameworks, "framework", []string{"nsa"},
+		"Security frameworks to scan against (e.g. nsa, mitre, cis, pss)")
+	cmd.Flags().StringVar(&format, "format", "pretty-printer",
+		"Output format (pretty-printer, json, sarif, junit)")
+	cmd.Flags().StringVarP(&output, "output", "o", "",
+		"Output file path (stdout if empty)")
+	cmd.Flags().Float32Var(&complianceThreshold, "compliance-threshold", 0,
+		"Fail if compliance score is below this threshold (0-100)")
+	cmd.Flags().BoolVar(&verbose, "verbose", false,
+		"Show all resources in output, not just failed ones")
+
+	return cmd
+}
+
+func runScanCmd(
+	ctx context.Context,
+	cmd *cobra.Command,
+	args []string,
+	frameworks []string,
+	format string,
+	output string,
+	complianceThreshold float32,
+	verbose bool,
+) error {
+	path, err := resolveScanPath(cmd, args)
+	if err != nil {
+		return err
+	}
+
+	canonPath, err := fsutil.EvalCanonicalPath(path)
+	if err != nil {
+		return fmt.Errorf("resolve path %q: %w", path, err)
+	}
+
+	path = canonPath
+
+	kubescapeClient := kubescapeclient.NewClient()
+
+	scanOpts := &kubescapeclient.ScanOptions{
+		Frameworks:          frameworks,
+		Format:              format,
+		Output:              output,
+		ComplianceThreshold: complianceThreshold,
+		Verbose:             verbose,
+	}
+
+	return kubescapeClient.ScanDirectory(ctx, path, scanOpts)
+}
+
+// resolveScanPath determines which path to scan.
+// If an explicit argument is given, it is returned directly.
+// Otherwise, it loads ksail.yaml (honoring --config) and returns the
+// configured sourceDirectory. Falls back to "." when no config file is found.
+func resolveScanPath(cmd *cobra.Command, args []string) (string, error) {
+	if len(args) > 0 {
+		return args[0], nil
+	}
+
+	var configFile string
+
+	cfgPath, err := flags.GetConfigPath(cmd)
+	if err == nil {
+		configFile = cfgPath
+	}
+
+	cfgManager := configmanager.NewConfigManager(io.Discard, configFile)
+
+	cfg, loadErr := cfgManager.Load(
+		configmanagerinterface.LoadOptions{Silent: true, SkipValidation: true},
+	)
+
+	switch {
+	case loadErr != nil && cfgManager.IsConfigFileFound():
+		return "", fmt.Errorf("load config: %w", loadErr)
+	case loadErr == nil && cfgManager.IsConfigFileFound():
+		return resolveSourceDir(cfg, ""), nil
+	default:
+		return ".", nil
+	}
+}
+
 const (
 	kustomizationFileName = "kustomization.yaml"
 	validationConcurrency = 5
@@ -4909,6 +5034,7 @@ func NewWorkloadCmd(runtimeContainer *di.Runtime) *cobra.Command {
 			"  explain   - Show API documentation for a resource kind\n" +
 			"  forward   - Forward one or more local ports to a pod\n" +
 			"  images    - List container images required by cluster components\n" +
+			"  scan      - Run security scans on Kubernetes manifests using Kubescape\n" +
 			"  wait      - Wait for a specific condition on resources\n\n" +
 			"Write operations:\n" +
 			"  apply, create, debug, delete, edit, exec, export, expose, import, install, push, " +
@@ -4950,6 +5076,7 @@ func NewWorkloadCmd(runtimeContainer *di.Runtime) *cobra.Command {
 	cmd.AddCommand(NewLogsCmd())
 	cmd.AddCommand(NewRolloutCmd())
 	cmd.AddCommand(NewScaleCmd())
+	cmd.AddCommand(NewScanCmd())
 	cmd.AddCommand(NewValidateCmd())
 	cmd.AddCommand(NewWaitCmd())
 	cmd.AddCommand(NewWatchCmd())

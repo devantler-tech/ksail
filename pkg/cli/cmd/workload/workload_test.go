@@ -2593,6 +2593,117 @@ func TestDetectChangedFileUpdatesSnapshotInPlace(t *testing.T) {
 	require.Empty(t, changed)
 }
 
+func TestNewScanCmdHasCorrectDefaults(t *testing.T) {
+	t.Parallel()
+
+	cmd := workload.NewScanCmd()
+
+	if cmd.Use != "scan [PATH]" {
+		t.Fatalf("expected Use to be %q, got %q", "scan [PATH]", cmd.Use)
+	}
+
+	if cmd.Short != "Run security scans on Kubernetes manifests" {
+		t.Fatalf("expected Short description %q, got %q",
+			"Run security scans on Kubernetes manifests", cmd.Short)
+	}
+
+	if !cmd.SilenceUsage {
+		t.Fatal("expected SilenceUsage to be true")
+	}
+
+	// Check --framework flag default
+	frameworkFlag := cmd.Flags().Lookup("framework")
+	if frameworkFlag == nil {
+		t.Fatal("expected --framework flag to exist")
+	}
+
+	if frameworkFlag.DefValue != "[nsa]" {
+		t.Fatalf("expected --framework default to be %q, got %q", "[nsa]", frameworkFlag.DefValue)
+	}
+
+	// Check --format flag default
+	formatFlag := cmd.Flags().Lookup("format")
+	if formatFlag == nil {
+		t.Fatal("expected --format flag to exist")
+	}
+
+	if formatFlag.DefValue != "pretty-printer" {
+		t.Fatalf("expected --format default to be %q, got %q", "pretty-printer", formatFlag.DefValue)
+	}
+
+	// Check --output flag default
+	outputFlag := cmd.Flags().Lookup("output")
+	if outputFlag == nil {
+		t.Fatal("expected --output flag to exist")
+	}
+
+	if outputFlag.DefValue != "" {
+		t.Fatalf("expected --output default to be empty, got %q", outputFlag.DefValue)
+	}
+
+	if outputFlag.Shorthand != "o" {
+		t.Fatalf("expected --output shorthand to be %q, got %q", "o", outputFlag.Shorthand)
+	}
+
+	// Check --compliance-threshold flag default
+	thresholdFlag := cmd.Flags().Lookup("compliance-threshold")
+	if thresholdFlag == nil {
+		t.Fatal("expected --compliance-threshold flag to exist")
+	}
+
+	if thresholdFlag.DefValue != "0" {
+		t.Fatalf("expected --compliance-threshold default to be %q, got %q", "0", thresholdFlag.DefValue)
+	}
+
+	// Check --verbose flag default
+	verboseFlag := cmd.Flags().Lookup("verbose")
+	if verboseFlag == nil {
+		t.Fatal("expected --verbose flag to exist")
+	}
+
+	if verboseFlag.DefValue != "false" {
+		t.Fatalf("expected --verbose default to be %q, got %q", "false", verboseFlag.DefValue)
+	}
+}
+
+func TestScanCmdShowsHelp(t *testing.T) {
+	t.Parallel()
+
+	cmd := workload.NewScanCmd()
+
+	var output bytes.Buffer
+	cmd.SetOut(&output)
+	cmd.SetErr(&output)
+	cmd.SetArgs([]string{"--help"})
+
+	err := cmd.Execute()
+	if err != nil {
+		t.Fatalf("expected no error executing scan --help, got %v", err)
+	}
+
+	snaps.MatchSnapshot(t, normalizeHomePaths(output.String()))
+}
+
+func TestScanCmdRejectsMultiplePaths(t *testing.T) {
+	t.Parallel()
+
+	cmd := workload.NewScanCmd()
+
+	cmd.SetArgs([]string{
+		"/some/path1",
+		"/some/path2",
+	})
+
+	var output bytes.Buffer
+	cmd.SetOut(&output)
+	cmd.SetErr(&output)
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected error when multiple paths are provided")
+	}
+}
+
 func TestPollInterval(t *testing.T) {
 	t.Parallel()
 
