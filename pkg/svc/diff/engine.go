@@ -96,6 +96,10 @@ type fieldRule struct {
 	// rules whose change impact varies by distribution/provider (e.g. CDI is
 	// recreate-required on Kind but reboot-required on Talos).
 	categoryFn func() clusterupdate.ChangeCategory
+	// skipWhenNewEmpty, when true, skips the diff when the desired (new) value is
+	// empty. Use this for fields that are optional in the user config — when the user
+	// hasn't set the field, any detected current value should not produce a diff.
+	skipWhenNewEmpty bool
 }
 
 // scalarFieldRules returns the table of simple scalar field diff rules.
@@ -263,13 +267,18 @@ func (e *Engine) applyFieldRules(
 	rules []fieldRule,
 ) {
 	for _, rule := range rules {
+		newVal := rule.getVal(newSpec)
+		if rule.skipWhenNewEmpty && newVal == "" {
+			continue
+		}
+
 		cat := rule.category
 		if rule.categoryFn != nil {
 			cat = rule.categoryFn()
 		}
 
 		appendChange(result, rule.field,
-			rule.getVal(oldSpec), rule.getVal(newSpec),
+			rule.getVal(oldSpec), newVal,
 			rule.defaultVal, rule.reason, cat)
 	}
 }
@@ -373,6 +382,10 @@ var talosFieldRules = []fieldRule{
 		category: clusterupdate.ChangeCategoryInPlace,
 		reason:   "version pin change only affects future operations (image selection, upgrade cap)",
 		getVal:   func(s *v1alpha1.ClusterSpec) string { return s.Talos.Version },
+		// skipWhenNewEmpty suppresses false-positive diffs when the user has not
+		// pinned a version in ksail.yaml. The detected running version is
+		// informational; absence of a desired version means "no constraint".
+		skipWhenNewEmpty: true,
 	},
 	{
 		field:    "cluster.controlPlanes",
@@ -390,13 +403,24 @@ var talosFieldRules = []fieldRule{
 }
 
 // talosISORule is the ISO field rule used by the Talos field rules.
+// ISO is a boot-time setting (Hetzner Cloud ISO ID) that cannot be detected from
+// the running cluster. When the old spec has 0 (unknown/unset), getVal returns ""
+// so that the defaultVal substitution normalises both sides to the config default,
+// suppressing false-positive diffs.
 //
 //nolint:gochecknoglobals // Immutable field-rule; avoids per-call heap allocation.
 var talosISORule = fieldRule{
-	field:    "cluster.talos.iso",
-	category: clusterupdate.ChangeCategoryInPlace,
-	reason:   "ISO change only affects newly provisioned nodes",
-	getVal:   func(s *v1alpha1.ClusterSpec) string { return strconv.FormatInt(s.Talos.ISO, 10) },
+	field:      "cluster.talos.iso",
+	category:   clusterupdate.ChangeCategoryInPlace,
+	reason:     "ISO change only affects newly provisioned nodes",
+	defaultVal: strconv.FormatInt(v1alpha1.DefaultTalosISO, 10),
+	getVal: func(s *v1alpha1.ClusterSpec) string {
+		if s.Talos.ISO == 0 {
+			return ""
+		}
+
+		return strconv.FormatInt(s.Talos.ISO, 10)
+	},
 }
 
 // checkHetznerOptionsChange checks Hetzner-specific option changes.

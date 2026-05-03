@@ -69,4 +69,9 @@ const (
 	DeploymentLocalPathProvisionerK3s = "local-path-provisioner"
 	// LabelServiceLBK3s is the label applied to DaemonSets created by K3s ServiceLB.
 	LabelServiceLBK3s = "svccontroller.k3s.cattle.io/svcname"
+
+	// ReleaseClusterAutoscaler is the Helm release name for the Cluster Autoscaler.
+	ReleaseClusterAutoscaler = "cluster-autoscaler"
+	// NamespaceClusterAutoscaler is the namespace where the Cluster Autoscaler is installed.
+	NamespaceClusterAutoscaler = "kube-system"
 )

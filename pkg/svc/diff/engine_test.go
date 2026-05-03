@@ -1,6 +1,7 @@
 package diff_test
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 
@@ -15,6 +16,7 @@ const (
 	testRegistryAlt        = "localhost:6060"
 	testFieldControlPlanes = "cluster.controlPlanes"
 	testFieldWorkers       = "cluster.workers"
+	testTalosVersionOld    = "v1.11.2"
 )
 
 func newBaseSpec() *v1alpha1.ClusterSpec {
@@ -34,7 +36,7 @@ func newBaseSpec() *v1alpha1.ClusterSpec {
 		ControlPlanes: 1,
 		Workers:       0,
 		Talos: v1alpha1.OptionsTalos{
-			ISO: 122630,
+			ISO: v1alpha1.DefaultTalosISO,
 		},
 	}
 }
@@ -477,10 +479,10 @@ func TestEngine_TalosOptionsChange(t *testing.T) {
 		},
 		{
 			name:     "ISO change",
-			mutate:   func(s *v1alpha1.ClusterSpec) { s.Talos.ISO = 122629 },
+			mutate:   func(s *v1alpha1.ClusterSpec) { s.Talos.ISO = v1alpha1.DefaultTalosISO - 1 },
 			field:    "cluster.talos.iso",
-			oldValue: "122630",
-			newValue: "122629",
+			oldValue: strconv.FormatInt(v1alpha1.DefaultTalosISO, 10),
+			newValue: strconv.FormatInt(v1alpha1.DefaultTalosISO-1, 10),
 		},
 	}
 
@@ -1015,7 +1017,7 @@ func TestEngine_TalosISOStillDetected_WhenAutoscalingEnabled(t *testing.T) {
 
 	old := newBaseSpec()
 	newer := clone(old)
-	newer.Talos.ISO = 999999
+	newer.Talos.ISO = v1alpha1.DefaultTalosISO + 1
 	newer.NodeAutoscaling = v1alpha1.NodeAutoscalingEnabled
 
 	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderDocker)
@@ -1026,7 +1028,9 @@ func TestEngine_TalosISOStillDetected_WhenAutoscalingEnabled(t *testing.T) {
 	}
 
 	assertSingleChange(t, result.InPlaceChanges, "cluster.talos.iso",
-		"122630", "999999", clusterupdate.ChangeCategoryInPlace)
+		strconv.FormatInt(v1alpha1.DefaultTalosISO, 10),
+		strconv.FormatInt(v1alpha1.DefaultTalosISO+1, 10),
+		clusterupdate.ChangeCategoryInPlace)
 }
 
 func TestEngine_AutoscalerNodeEnabledChange(t *testing.T) {
@@ -1360,4 +1364,133 @@ func TestEngine_AutoscalerToggle_NodeCountAlwaysDetected(t *testing.T) {
 	// Node-count diffs are always emitted for Talos regardless of autoscaler state.
 	assertSingleChange(t, result.InPlaceChanges, testFieldWorkers,
 		"1", "5", clusterupdate.ChangeCategoryInPlace)
+}
+
+func TestEngine_TalosISO_SuppressedWhenOldUnknown(t *testing.T) {
+	t.Parallel()
+
+	// Simulate GetCurrentConfig returning 0 (unset) for ISO — the live cluster
+	// can't report what ISO it booted from.
+	old := newBaseSpec()
+	old.Distribution = v1alpha1.DistributionTalos
+	old.Talos.ISO = 0
+
+	newer := clone(old)
+	newer.Talos.ISO = v1alpha1.DefaultTalosISO
+
+	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
+	result := engine.ComputeDiff(old, newer, nil, nil)
+
+	// ISO should NOT appear as a change because both sides normalise to the
+	// default ISO via the defaultVal mechanism.
+	for _, c := range result.AllChanges() {
+		if c.Field == "cluster.talos.iso" {
+			t.Fatalf("expected no ISO diff when old value is 0 (unknown), got %+v", c)
+		}
+	}
+}
+
+func TestEngine_TalosISO_DetectedWhenBothNonZero(t *testing.T) {
+	t.Parallel()
+
+	old := newBaseSpec()
+	old.Distribution = v1alpha1.DistributionTalos
+	old.Talos.ISO = v1alpha1.DefaultTalosISO
+
+	newer := clone(old)
+	newer.Talos.ISO = v1alpha1.DefaultTalosISO + 1
+
+	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
+	result := engine.ComputeDiff(old, newer, nil, nil)
+
+	assertSingleChange(t, result.InPlaceChanges, "cluster.talos.iso",
+		strconv.FormatInt(v1alpha1.DefaultTalosISO, 10),
+		strconv.FormatInt(v1alpha1.DefaultTalosISO+1, 10),
+		clusterupdate.ChangeCategoryInPlace)
+}
+
+func TestEngine_TalosVersion_NoChangeWhenBothSet(t *testing.T) {
+	t.Parallel()
+
+	old := newBaseSpec()
+	old.Distribution = v1alpha1.DistributionTalos
+	old.Talos.Version = testTalosVersionOld
+
+	newer := clone(old)
+	newer.Talos.Version = testTalosVersionOld
+
+	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
+	result := engine.ComputeDiff(old, newer, nil, nil)
+
+	for _, c := range result.AllChanges() {
+		if c.Field == "cluster.talos.version" {
+			t.Fatalf("expected no talos.version diff when values match, got %+v", c)
+		}
+	}
+}
+
+func TestEngine_TalosVersion_NoChangeWhenNewEmpty(t *testing.T) {
+	t.Parallel()
+
+	// Old spec has detected version (live cluster); new spec has no version pinned.
+	// This is the regression case: introspectTalosVersion detects a version but
+	// the user hasn't pinned one in ksail.yaml — no diff should be emitted.
+	old := newBaseSpec()
+	old.Distribution = v1alpha1.DistributionTalos
+	old.Talos.Version = "v1.13.0"
+
+	newer := clone(old)
+	newer.Talos.Version = ""
+
+	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
+	result := engine.ComputeDiff(old, newer, nil, nil)
+
+	for _, c := range result.AllChanges() {
+		if c.Field == "cluster.talos.version" {
+			t.Fatalf("expected no talos.version diff when new version is empty, got %+v", c)
+		}
+	}
+}
+
+func TestEngine_TalosVersion_ChangeWhenNewDiffers(t *testing.T) {
+	t.Parallel()
+
+	// Both specs pin a version but they differ — a diff should be emitted.
+	old := newBaseSpec()
+	old.Distribution = v1alpha1.DistributionTalos
+	old.Talos.Version = testTalosVersionOld
+
+	newer := clone(old)
+	newer.Talos.Version = "v1.13.0"
+
+	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
+	result := engine.ComputeDiff(old, newer, nil, nil)
+
+	assertSingleChange(
+		t, result.InPlaceChanges,
+		"cluster.talos.version", testTalosVersionOld, "v1.13.0",
+		clusterupdate.ChangeCategoryInPlace,
+	)
+}
+
+func TestEngine_TalosVersion_ChangeWhenOldEmptyNewSet(t *testing.T) {
+	t.Parallel()
+
+	// Old spec has no detected version; new spec pins one.
+	// Detection failed (e.g., no API access) but user wants a specific version.
+	old := newBaseSpec()
+	old.Distribution = v1alpha1.DistributionTalos
+	old.Talos.Version = ""
+
+	newer := clone(old)
+	newer.Talos.Version = testTalosVersionOld
+
+	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
+	result := engine.ComputeDiff(old, newer, nil, nil)
+
+	assertSingleChange(
+		t, result.InPlaceChanges,
+		"cluster.talos.version", "", testTalosVersionOld,
+		clusterupdate.ChangeCategoryInPlace,
+	)
 }

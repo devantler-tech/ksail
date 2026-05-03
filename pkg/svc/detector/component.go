@@ -2,7 +2,9 @@ package detector
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -178,6 +180,11 @@ func (d *ComponentDetector) detectAllComponents(
 	spec.GitOpsEngine, err = d.detectGitOpsEngine(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("detect GitOpsEngine: %w", err)
+	}
+
+	spec.Autoscaler.Node, err = d.detectNodeAutoscaler(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("detect NodeAutoscaler: %w", err)
 	}
 
 	return spec, nil
@@ -537,4 +544,165 @@ func (d *ComponentDetector) containerExists(
 	}
 
 	return len(containers) > 0, nil
+}
+
+// detectNodeAutoscaler detects the Cluster Autoscaler configuration from the
+// live cluster by checking for the Helm release and reading its values.
+func (d *ComponentDetector) detectNodeAutoscaler(
+	ctx context.Context,
+) (v1alpha1.NodeAutoscalerConfig, error) {
+	var cfg v1alpha1.NodeAutoscalerConfig
+
+	exists, err := d.helmClient.ReleaseExists(
+		ctx, ReleaseClusterAutoscaler, NamespaceClusterAutoscaler,
+	)
+	if err != nil {
+		return cfg, fmt.Errorf("check cluster-autoscaler release: %w", err)
+	}
+
+	if !exists {
+		return cfg, nil
+	}
+
+	cfg.Enabled = true
+
+	values, err := d.helmClient.GetReleaseValues(
+		ctx, ReleaseClusterAutoscaler, NamespaceClusterAutoscaler,
+	)
+	if err != nil {
+		// Propagate context cancellation/timeout — the caller has given up.
+		if ctx.Err() != nil {
+			return cfg, fmt.Errorf("detect node autoscaler: %w", ctx.Err())
+		}
+		// Release exists but values unreadable — return enabled with defaults.
+		return cfg, nil
+	}
+
+	parseAutoscalerValues(&cfg, values)
+
+	return cfg, nil
+}
+
+// parseAutoscalerValues extracts autoscaler config from Helm release values.
+func parseAutoscalerValues(cfg *v1alpha1.NodeAutoscalerConfig, values map[string]any) {
+	if extraArgs, exists := values["extraArgs"].(map[string]any); exists {
+		parseAutoscalerExtraArgs(cfg, extraArgs)
+	}
+
+	if groups, exists := values["autoscalingGroups"].([]any); exists {
+		cfg.Pools = parseAutoscalingGroups(groups)
+	}
+}
+
+// parseAutoscalerExtraArgs extracts scalar config from the chart's extraArgs.
+func parseAutoscalerExtraArgs(cfg *v1alpha1.NodeAutoscalerConfig, args map[string]any) {
+	if expander, ok := args["expander"].(string); ok {
+		cfg.Expander = helmExpanderToEnum(expander)
+	}
+
+	if maxNodes, ok := toInt32(args["max-nodes-total"]); ok {
+		cfg.MaxNodesTotal = maxNodes
+	}
+
+	if scaleDown, ok := args["scale-down-unneeded-time"].(string); ok {
+		cfg.ScaleDownUnneededTime = scaleDown
+	}
+}
+
+// helmExpanderToEnum reverses the Helm chart's lowercase expander value to the
+// KSail enum. Must stay in sync with expanderToHelmValue in the installer.
+func helmExpanderToEnum(value string) v1alpha1.AutoscalerExpander {
+	switch value {
+	case "price":
+		return v1alpha1.AutoscalerExpanderPrice
+	case "least-nodes":
+		return v1alpha1.AutoscalerExpanderLeastNodes
+	case "random":
+		return v1alpha1.AutoscalerExpanderRandom
+	case "least-waste":
+		return v1alpha1.AutoscalerExpanderLeastWaste
+	default:
+		return v1alpha1.AutoscalerExpanderLeastWaste
+	}
+}
+
+// parseAutoscalingGroups converts the chart's autoscalingGroups list to NodePool slices.
+func parseAutoscalingGroups(groups []any) []v1alpha1.NodePool {
+	pools := make([]v1alpha1.NodePool, 0, len(groups))
+
+	for _, g := range groups {
+		group, isMap := g.(map[string]any)
+		if !isMap {
+			continue
+		}
+
+		pool := v1alpha1.NodePool{}
+
+		name, hasName := group["name"].(string)
+		if !hasName || name == "" {
+			continue
+		}
+
+		pool.Name = name
+
+		if st, ok := group["instanceType"].(string); ok {
+			pool.ServerType = st
+		}
+
+		if loc, ok := group["region"].(string); ok {
+			pool.Location = loc
+		}
+
+		if minSize, ok := toInt32(group["minSize"]); ok {
+			pool.Min = minSize
+		}
+
+		if maxSize, ok := toInt32(group["maxSize"]); ok {
+			pool.Max = maxSize
+		}
+
+		pools = append(pools, pool)
+	}
+
+	return pools
+}
+
+const (
+	minInt32Float float64 = -1 << 31
+	maxInt32Float float64 = 1<<31 - 1
+)
+
+// float64ToInt32 converts a float64 to int32, validating that it is a whole
+// number within the int32 range. Returns (0, false) when invalid.
+func float64ToInt32(f float64) (int32, bool) {
+	if f != math.Trunc(f) || f < minInt32Float || f > maxInt32Float {
+		return 0, false
+	}
+
+	return int32(f), true
+}
+
+// toInt32 converts a Helm values entry (which may be float64, json.Number, int, int32,
+// or int64) to int32. Returns (0, false) when the value is not a numeric type, is
+// non-integral, or falls outside the int32 range.
+func toInt32(v any) (int32, bool) {
+	switch num := v.(type) {
+	case float64:
+		return float64ToInt32(num)
+	case json.Number:
+		f, err := num.Float64()
+		if err != nil {
+			return 0, false
+		}
+
+		return float64ToInt32(f)
+	case int:
+		return float64ToInt32(float64(num))
+	case int32:
+		return num, true
+	case int64:
+		return float64ToInt32(float64(num))
+	default:
+		return 0, false
+	}
 }
