@@ -659,43 +659,41 @@ func parseAutoscalingGroups(groups []interface{}) []v1alpha1.NodePool {
 	return pools
 }
 
+const (
+	minInt32Float float64 = -1 << 31
+	maxInt32Float float64 = 1<<31 - 1
+)
+
+// float64ToInt32 converts a float64 to int32, validating that it is a whole
+// number within the int32 range. Returns (0, false) when invalid.
+func float64ToInt32(f float64) (int32, bool) {
+	if f != math.Trunc(f) || f < minInt32Float || f > maxInt32Float {
+		return 0, false
+	}
+
+	return int32(f), true //nolint:gosec // bounds checked above
+}
+
 // toInt32 converts a Helm values entry (which may be float64, json.Number, int, int32,
 // or int64) to int32. Returns (0, false) when the value is not a numeric type, is
 // non-integral, or falls outside the int32 range.
 func toInt32(v interface{}) (int32, bool) {
-	const (
-		minInt32 = -1 << 31
-		maxInt32 = 1<<31 - 1
-	)
-
 	switch num := v.(type) {
 	case float64:
-		if num != math.Trunc(num) || num < minInt32 || num > maxInt32 {
-			return 0, false
-		}
-
-		return int32(num), true //nolint:gosec // bounds checked above
+		return float64ToInt32(num)
 	case json.Number:
 		f, err := num.Float64()
-		if err != nil || f != math.Trunc(f) || f < minInt32 || f > maxInt32 {
+		if err != nil {
 			return 0, false
 		}
 
-		return int32(f), true //nolint:gosec // bounds checked above
+		return float64ToInt32(f)
 	case int:
-		if num < minInt32 || num > maxInt32 {
-			return 0, false
-		}
-
-		return int32(num), true //nolint:gosec // bounds checked above
+		return float64ToInt32(float64(num))
 	case int32:
 		return num, true
 	case int64:
-		if num < minInt32 || num > maxInt32 {
-			return 0, false
-		}
-
-		return int32(num), true //nolint:gosec // bounds checked above
+		return float64ToInt32(float64(num))
 	default:
 		return 0, false
 	}
