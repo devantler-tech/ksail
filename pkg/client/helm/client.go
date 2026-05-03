@@ -348,6 +348,10 @@ func (c *Client) GetReleaseValues(
 		return nil, errReleaseNameRequired
 	}
 
+	if c.actionConfig == nil || c.actionConfig.Releases == nil {
+		return nil, errGetReleaseValuesUnsupported
+	}
+
 	err := ctx.Err()
 	if err != nil {
 		return nil, fmt.Errorf("get release values context cancelled: %w", err)

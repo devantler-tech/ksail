@@ -15,6 +15,9 @@ var (
 	errListReleasesUnsupported = errors.New(
 		"helm: ListReleases not supported on template-only client",
 	)
+	errGetReleaseValuesUnsupported = errors.New(
+		"helm: GetReleaseValues not supported on template-only client",
+	)
 
 	// ErrNoReleaseStorage is returned by GetReleaseStorageLabels when no
 	// Helm release storage objects (Secrets or ConfigMaps) exist for the

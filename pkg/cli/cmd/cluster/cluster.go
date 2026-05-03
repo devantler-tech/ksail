@@ -7203,9 +7203,13 @@ func applyInPlaceChanges(
 	}
 
 	// Persist the updated ClusterSpec for future update baselines.
-	saveErr := state.SaveClusterSpec(clusterName, &ctx.ClusterCfg.Spec.Cluster)
-	if saveErr != nil {
-		notify.Warningf(cmd.OutOrStderr(), "failed to save cluster state: %v", saveErr)
+	// Only save when all changes applied successfully: failed changes mean
+	// the cluster state is partially applied and does not match the desired spec.
+	if len(result.FailedChanges) == 0 && componentErr == nil {
+		saveErr := state.SaveClusterSpec(clusterName, &ctx.ClusterCfg.Spec.Cluster)
+		if saveErr != nil {
+			notify.Warningf(cmd.OutOrStderr(), "failed to save cluster state: %v", saveErr)
+		}
 	}
 
 	return nil

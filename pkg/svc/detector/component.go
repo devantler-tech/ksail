@@ -570,6 +570,10 @@ func (d *ComponentDetector) detectNodeAutoscaler(
 		ctx, ReleaseClusterAutoscaler, NamespaceClusterAutoscaler,
 	)
 	if err != nil {
+		// Propagate context cancellation/timeout — the caller has given up.
+		if ctx.Err() != nil {
+			return cfg, ctx.Err()
+		}
 		// Release exists but values unreadable — return enabled with defaults.
 		return cfg, nil //nolint:nilerr // graceful fallback; enabled is the critical signal
 	}
