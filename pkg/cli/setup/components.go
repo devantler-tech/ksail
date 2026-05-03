@@ -111,9 +111,7 @@ func policyEngineFactory(
 				timeout,
 				kubeconfig,
 				clusterCfg.Spec.Cluster.Connection.Context,
-				installer.IsHAEnabled(
-					clusterCfg.Spec.Cluster.ControlPlanes+clusterCfg.Spec.Cluster.Workers,
-				),
+				installer.IsHAEnabled(clusterCfg.Spec.Cluster.TotalNodeCount()),
 			), nil
 		case v1alpha1.PolicyEngineGatekeeper:
 			timeout = max(timeout, installer.GatekeeperInstallTimeout)
@@ -123,9 +121,7 @@ func policyEngineFactory(
 				kubeconfig,
 				clusterCfg.Spec.Cluster.Connection.Context,
 				timeout,
-				installer.IsHAEnabled(
-					clusterCfg.Spec.Cluster.ControlPlanes+clusterCfg.Spec.Cluster.Workers,
-				),
+				installer.IsHAEnabled(clusterCfg.Spec.Cluster.TotalNodeCount()),
 			), nil
 		default:
 			return nil, fmt.Errorf("%w: unknown engine %q", ErrPolicyEngineDisabled, engine)
@@ -159,9 +155,7 @@ func csiFactory(
 				clusterCfg.Spec.Cluster.Connection.Context,
 				timeout,
 				networkName,
-				installer.IsHAEnabled(
-					clusterCfg.Spec.Cluster.ControlPlanes+clusterCfg.Spec.Cluster.Workers,
-				),
+				installer.IsHAEnabled(clusterCfg.Spec.Cluster.TotalNodeCount()),
 			), nil
 		}
 
@@ -186,9 +180,7 @@ func clusterAutoscalerFactory(
 		}
 
 		timeout := installer.GetInstallTimeout(clusterCfg)
-		haEnabled := installer.IsHAEnabled(
-			clusterCfg.Spec.Cluster.ControlPlanes + clusterCfg.Spec.Cluster.Workers,
-		)
+		haEnabled := installer.IsHAEnabled(clusterCfg.Spec.Cluster.TotalNodeCount())
 
 		return clusterautoscalerinstaller.NewInstaller(
 			helmClient, timeout, clusterCfg.Spec.Cluster.Autoscaler.Node, haEnabled,
@@ -231,9 +223,7 @@ func haHelmInstallerFactory(
 			return nil, err
 		}
 
-		haEnabled := installer.IsHAEnabled(
-			clusterCfg.Spec.Cluster.ControlPlanes + clusterCfg.Spec.Cluster.Workers,
-		)
+		haEnabled := installer.IsHAEnabled(clusterCfg.Spec.Cluster.TotalNodeCount())
 
 		return newInstaller(helmClient, timeout, haEnabled), nil
 	}
@@ -261,9 +251,7 @@ func argoCDInstallerFactory(
 			helmClient,
 			timeout,
 			sopsEnabled,
-			installer.IsHAEnabled(
-				clusterCfg.Spec.Cluster.ControlPlanes+clusterCfg.Spec.Cluster.Workers,
-			),
+			installer.IsHAEnabled(clusterCfg.Spec.Cluster.TotalNodeCount()),
 		), nil
 	}
 }

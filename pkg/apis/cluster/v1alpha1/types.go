@@ -89,6 +89,11 @@ type ClusterSpec struct {
 	Talos   OptionsTalos   `json:"talos,omitzero"`
 }
 
+// TotalNodeCount returns the total number of nodes (control-plane + workers).
+func (c ClusterSpec) TotalNodeCount() int32 {
+	return c.ControlPlanes + c.Workers
+}
+
 // WorkloadSpec defines workload-related configuration.
 type WorkloadSpec struct {
 	SourceDirectory   string `default:"k8s"   json:"sourceDirectory,omitzero"   jsonschema_description:"Path to the directory containing Kubernetes manifests. Used as the default path by validate, watch, and push when no explicit path argument is given."`                                                                                                      //nolint:lll
