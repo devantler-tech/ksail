@@ -330,7 +330,7 @@ ls README.md vsce/README.md CONTRIBUTING.md .github/copilot-instructions.md .git
 
 **Root-file specific checks** (apply when a root file is selected):
 
-- `README.md` — `wc -l README.md` must report ≤ 250 lines, must not duplicate `docs/src/content/docs/index.mdx` (no Mermaid diagrams, full init flag reference, Native Configuration Files walkthrough, Presentations list, Blog Posts list), and must keep its Distribution × Provider matrix in sync with `docs/index.mdx`.
+- `README.md` — `wc -l README.md` must report ≤ 250 lines, must not duplicate `docs/src/content/docs/index.mdx` (no Mermaid diagrams, full init flag reference, Native Configuration Files walkthrough, Presentations list, Blog Posts list), and must keep its Distribution × Provider matrix in sync with `docs/src/content/docs/index.mdx`.
 - `vsce/README.md` — concise marketplace description only; full usage belongs on `/vscode-extension/`.
 - `CONTRIBUTING.md` / `.github/copilot-instructions.md` — contributor content only; no end-user tutorials or marketing.
 - `.github/instructions/*.instructions.md` — scoped coding conventions only; must not duplicate `.github/copilot-instructions.md` or `CONTRIBUTING.md`.
