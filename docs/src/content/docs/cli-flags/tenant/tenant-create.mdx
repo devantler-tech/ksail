@@ -19,6 +19,7 @@ Flags:
       --git-token string            GitHub API token for repo scaffolding (--git-provider=github)
       --kustomization-path string   Path to kustomization.yaml (fallback: auto-discover)
   -n, --namespace strings           Namespaces to create (repeatable, default: tenant-name)
+      --oci-path string             Path suffix appended to OCI registry URL to avoid tag collisions (e.g., 'manifests' produces oci://registry/owner/repo/manifests)
   -o, --output string               Output directory for platform manifests (default ".")
       --platform-repo string        Platform repo as owner/repo-name for PR delivery (default: auto-detect from git remote)
       --register                    Register tenant in kustomization.yaml

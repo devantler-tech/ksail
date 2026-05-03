@@ -45,7 +45,7 @@ func NewCreateCmd(_ *di.Runtime) *cobra.Command {
 	cmd.Flags().String("registry", "", "OCI registry URL for Flux OCI source (e.g., oci://ghcr.io)")
 	cmd.Flags().String("oci-path", "",
 		"Path suffix appended to OCI registry URL to avoid tag collisions "+
-			"(e.g., 'deploy' produces oci://registry/owner/repo/deploy)")
+			"(e.g., 'manifests' produces oci://registry/owner/repo/manifests)")
 	cmd.Flags().String(
 		"git-provider", "",
 		"Git provider for manifest URLs: github, gitlab, gitea "+
