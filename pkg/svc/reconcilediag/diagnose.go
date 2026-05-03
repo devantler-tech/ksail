@@ -7,7 +7,6 @@ import (
 	"time"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	k8sutil "github.com/devantler-tech/ksail/v7/pkg/k8s"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
@@ -27,21 +26,17 @@ func Diagnose(
 	kubeconfigPath string,
 	engine v1alpha1.GitOpsEngine,
 ) {
-	// Guard against GitOpsEngineNone before doing any filesystem or client
+	// Guard against unsupported engines before doing any filesystem or client
 	// work — diagnostics are only meaningful for Flux and ArgoCD clusters.
-	if engine == v1alpha1.GitOpsEngineNone {
+	// This makes unsupported values a cheap no-op.
+	if engine != v1alpha1.GitOpsEngineFlux && engine != v1alpha1.GitOpsEngineArgoCD {
 		return
 	}
 
 	diagCtx, cancel := context.WithTimeout(ctx, diagnosticTimeout)
 	defer cancel()
 
-	canonPath, err := fsutil.EvalCanonicalPath(kubeconfigPath)
-	if err != nil {
-		return
-	}
-
-	dynClient, clientset, err := buildDiagClients(canonPath)
+	dynClient, clientset, err := buildDiagClients(kubeconfigPath)
 	if err != nil {
 		return
 	}
@@ -56,9 +51,7 @@ func Diagnose(
 		collector := &ArgoCDCollector{Dynamic: dynClient, Clientset: clientset}
 		report = collector.Collect(diagCtx)
 	case v1alpha1.GitOpsEngineNone:
-		// Already guarded above; case required for exhaustive switch coverage.
-	default:
-		return
+		// Guarded above; case required for exhaustive switch coverage.
 	}
 
 	if report != nil {

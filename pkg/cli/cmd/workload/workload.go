@@ -2122,7 +2122,13 @@ func runReconcile(cmd *cobra.Command) error {
 		return kubeconfigErr
 	}
 
-	if err = runReconcileWithDiagnostics(cmd, clusterCfg, kubeconfigPath, gitOpsEngine, timeout, outputTimer); err != nil {
+	canonKubeconfigPath, canonErr := fsutil.EvalCanonicalPath(kubeconfigPath)
+	if canonErr != nil {
+		return fmt.Errorf("canonicalize kubeconfig path: %w", canonErr)
+	}
+
+	err = runReconcileWithDiagnostics(cmd, clusterCfg, canonKubeconfigPath, gitOpsEngine, timeout, outputTimer)
+	if err != nil {
 		return err
 	}
 
