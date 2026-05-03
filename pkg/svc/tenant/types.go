@@ -93,6 +93,10 @@ type Options struct {
 	SyncSource SyncSource
 	// Registry is the OCI registry URL for Flux OCI source.
 	Registry string
+	// OCIPath is an optional path suffix appended to the OCIRepository URL
+	// to avoid tag collisions when a tenant repo publishes both Docker images
+	// and K8s manifests as OCI artifacts (e.g., "deploy" produces oci://registry/owner/repo/deploy).
+	OCIPath string
 	// GitProvider is the Git provider name (github, gitlab, gitea).
 	GitProvider string
 	// TenantRepo is the tenant repo as owner/repo-name.

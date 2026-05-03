@@ -144,6 +144,11 @@ func buildFluxOCISource(opts Options, primaryNS string) (fluxSource, error) {
 
 	registry := strings.TrimSuffix(opts.Registry, "/")
 
+	url := fmt.Sprintf("%s/%s/%s", registry, owner, repo)
+	if ociPath := strings.Trim(opts.OCIPath, "/"); ociPath != "" {
+		url += "/" + ociPath
+	}
+
 	return fluxSource{
 		APIVersion: "source.toolkit.fluxcd.io/v1",
 		Kind:       "OCIRepository",
@@ -154,7 +159,7 @@ func buildFluxOCISource(opts Options, primaryNS string) (fluxSource, error) {
 		},
 		Spec: fluxSourceSpec{
 			Interval: "1m",
-			URL:      fmt.Sprintf("%s/%s/%s", registry, owner, repo),
+			URL:      url,
 			Ref:      fluxSourceRef{Tag: "latest"},
 		},
 	}, nil
