@@ -56,6 +56,13 @@ const (
 	authRetryMaxWait = 4 * time.Second
 	// diagnoseTimeout is the timeout for the post-failure diagnostic subprocess.
 	diagnoseTimeout = 5 * time.Second
+	// startupErrFmt is the static format string for Copilot client startup errors.
+	// %w is the underlying error; %s is an optional diagnostic block (empty or
+	// "CLI diagnostic output:\n  ...\n\n").
+	startupErrFmt = "failed to start Copilot client: %w\n\n%sTo fix:\n" +
+		"  - Set KSAIL_COPILOT_TOKEN or COPILOT_TOKEN for token-based authentication\n" +
+		"  - Install the Copilot CLI: npm install -g @github/copilot\n" +
+		"  - Verify the CLI works: copilot --version"
 )
 
 // Sentinel errors for the chat command.
@@ -252,22 +259,7 @@ func startCopilotClient(ctx context.Context) (*copilot.Client, error) {
 
 	err := client.Start(ctx)
 	if err != nil {
-		msg := "failed to start Copilot client: %w\n\n"
-
-		if cliPath != "" {
-			diagnostic := diagnoseCLIStartupFailure(ctx, cliPath, opts.Env)
-			if diagnostic != "" {
-				msg += "CLI diagnostic output:\n  " +
-					strings.ReplaceAll(diagnostic, "\n", "\n  ") + "\n\n"
-			}
-		}
-
-		msg += "To fix:\n" +
-			"  - Set KSAIL_COPILOT_TOKEN or COPILOT_TOKEN for token-based authentication\n" +
-			"  - Install the Copilot CLI: npm install -g @github/copilot\n" +
-			"  - Verify the CLI works: copilot --version"
-
-		return nil, fmt.Errorf(msg, err)
+		return nil, fmt.Errorf(startupErrFmt, err, buildDiagnosticBlock(ctx, cliPath, opts.Env))
 	}
 
 	return client, nil
@@ -298,6 +290,22 @@ func verifyCopilotCLI(ctx context.Context, cliPath string, env []string) error {
 	}
 
 	return nil
+}
+
+// buildDiagnosticBlock runs the CLI diagnostic and returns a formatted block
+// suitable for inclusion in an error message, or an empty string if there is
+// nothing to report.
+func buildDiagnosticBlock(ctx context.Context, cliPath string, env []string) string {
+	if cliPath == "" {
+		return ""
+	}
+
+	d := diagnoseCLIStartupFailure(ctx, cliPath, env)
+	if d == "" {
+		return ""
+	}
+
+	return "CLI diagnostic output:\n  " + strings.ReplaceAll(d, "\n", "\n  ") + "\n\n"
 }
 
 // diagnoseCLIStartupFailure re-runs the copilot CLI in headless mode with

@@ -12,11 +12,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func writeScript(t *testing.T, dir, name, content string) string {
+func writeScript(t *testing.T, dir, content string) string {
 	t.Helper()
 
-	path := filepath.Join(dir, name)
-	require.NoError(t, os.WriteFile(path, []byte(content), 0o755))
+	path := filepath.Join(dir, "copilot")
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
+	require.NoError(t, os.Chmod(path, 0o700))
 
 	return path
 }
@@ -34,7 +35,7 @@ func TestDiagnoseCLIStartupFailure(t *testing.T) {
 		t.Parallel()
 
 		dir := t.TempDir()
-		script := writeScript(t, dir, "copilot", "#!/bin/sh\necho 'Error: missing config' >&2\nexit 1\n")
+		script := writeScript(t, dir, "#!/bin/sh\necho 'Error: missing config' >&2\nexit 1\n")
 
 		result := diagnose(context.Background(), script, os.Environ())
 		assert.Equal(t, "Error: missing config", result)
@@ -44,7 +45,7 @@ func TestDiagnoseCLIStartupFailure(t *testing.T) {
 		t.Parallel()
 
 		dir := t.TempDir()
-		script := writeScript(t, dir, "copilot", "#!/bin/sh\nexit 1\n")
+		script := writeScript(t, dir, "#!/bin/sh\nexit 1\n")
 
 		result := diagnose(context.Background(), script, os.Environ())
 		assert.Empty(t, result)
@@ -54,7 +55,7 @@ func TestDiagnoseCLIStartupFailure(t *testing.T) {
 		t.Parallel()
 
 		dir := t.TempDir()
-		script := writeScript(t, dir, "copilot", "#!/bin/sh\nsleep 60\n")
+		script := writeScript(t, dir, "#!/bin/sh\nsleep 60\n")
 
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
@@ -67,7 +68,7 @@ func TestDiagnoseCLIStartupFailure(t *testing.T) {
 		t.Parallel()
 
 		dir := t.TempDir()
-		script := writeScript(t, dir, "copilot",
+		script := writeScript(t, dir,
 			"#!/bin/sh\necho 'line 1' >&2\necho 'line 2' >&2\nexit 1\n")
 
 		result := diagnose(context.Background(), script, os.Environ())
