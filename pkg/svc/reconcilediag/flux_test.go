@@ -17,10 +17,20 @@ import (
 	k8sfake "k8s.io/client-go/kubernetes/fake"
 )
 
+// Test constants shared across the reconcilediag_test package.
+const (
+	fluxSystemNS      = "flux-system"
+	podKind           = "Pod"
+	statusField       = "status"
+	messageField      = "message"
+	kustomizeAPIGroup = "kustomize.toolkit.fluxcd.io"
+	kustomizationKind = "Kustomization"
+)
+
 // Flux GVRs used in tests.
 var (
 	kustomizationGVR = schema.GroupVersionResource{ //nolint:gochecknoglobals // test constant
-		Group: "kustomize.toolkit.fluxcd.io", Version: "v1", Resource: "kustomizations",
+		Group: kustomizeAPIGroup, Version: "v1", Resource: "kustomizations",
 	}
 	helmReleaseGVR = schema.GroupVersionResource{ //nolint:gochecknoglobals // test constant
 		Group: "helm.toolkit.fluxcd.io", Version: "v2", Resource: "helmreleases",
@@ -55,13 +65,13 @@ func newFluxCR(
 	obj.SetNamespace(namespace)
 
 	if readyStatus != "" {
-		obj.Object["status"] = map[string]any{
+		obj.Object[statusField] = map[string]any{
 			"conditions": []any{
 				map[string]any{
-					"type":    "Ready",
-					"status":  readyStatus,
-					"reason":  readyReason,
-					"message": readyMessage,
+					"type":       "Ready",
+					statusField:  readyStatus,
+					"reason":     readyReason,
+					messageField: readyMessage,
 				},
 			},
 		}
@@ -75,12 +85,12 @@ func TestFluxCollector_AllHealthy(t *testing.T) {
 
 	readyKust := newFluxCR(
 		schema.GroupVersionKind{
-			Group:   "kustomize.toolkit.fluxcd.io",
+			Group:   kustomizeAPIGroup,
 			Version: "v1",
-			Kind:    "Kustomization",
+			Kind:    kustomizationKind,
 		},
-		"flux-system",
-		"flux-system",
+		fluxSystemNS,
+		fluxSystemNS,
 		"True",
 		"ReconciliationSucceeded",
 		"Applied revision: main@sha1:abc",
@@ -103,12 +113,12 @@ func TestFluxCollector_FailingKustomization(t *testing.T) {
 
 	failingKust := newFluxCR(
 		schema.GroupVersionKind{
-			Group:   "kustomize.toolkit.fluxcd.io",
+			Group:   kustomizeAPIGroup,
 			Version: "v1",
-			Kind:    "Kustomization",
+			Kind:    kustomizationKind,
 		},
 		"apps",
-		"flux-system",
+		fluxSystemNS,
 		"False",
 		"HealthCheckFailed",
 		"Deployment/myapp not ready after 30s",
@@ -177,8 +187,8 @@ func TestFluxCollector_FailingOCIRepository(t *testing.T) {
 			Version: "v1",
 			Kind:    "OCIRepository",
 		},
-		"flux-system",
-		"flux-system",
+		fluxSystemNS,
+		fluxSystemNS,
 		"False",
 		"OCIPullFailed",
 		"manifest unknown",
@@ -209,12 +219,12 @@ func TestFluxCollector_WarningEvents(t *testing.T) {
 	recentEvent := &corev1.Event{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "pod-event-1",
-			Namespace: "flux-system",
+			Namespace: fluxSystemNS,
 		},
 		InvolvedObject: corev1.ObjectReference{
-			Kind:      "Pod",
+			Kind:      podKind,
 			Name:      "kustomize-controller-abc",
-			Namespace: "flux-system",
+			Namespace: fluxSystemNS,
 		},
 		Type:              "Warning",
 		Reason:            "BackOff",
@@ -227,12 +237,12 @@ func TestFluxCollector_WarningEvents(t *testing.T) {
 	oldEvent := &corev1.Event{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "pod-event-old",
-			Namespace: "flux-system",
+			Namespace: fluxSystemNS,
 		},
 		InvolvedObject: corev1.ObjectReference{
-			Kind:      "Pod",
+			Kind:      podKind,
 			Name:      "old-pod",
-			Namespace: "flux-system",
+			Namespace: fluxSystemNS,
 		},
 		Type:              "Warning",
 		Reason:            "Failed",
@@ -254,7 +264,7 @@ func TestFluxCollector_WarningEvents(t *testing.T) {
 
 	// Only the recent event should be included.
 	require.Len(t, report.Events, 1)
-	assert.Equal(t, "Pod", report.Events[0].Kind)
+	assert.Equal(t, podKind, report.Events[0].Kind)
 	assert.Equal(t, "kustomize-controller-abc", report.Events[0].Name)
 	assert.Contains(t, report.Events[0].Message, "Back-off")
 }
@@ -264,12 +274,12 @@ func TestFluxCollector_MultipleFailures(t *testing.T) {
 
 	failingKust1 := newFluxCR(
 		schema.GroupVersionKind{
-			Group:   "kustomize.toolkit.fluxcd.io",
+			Group:   kustomizeAPIGroup,
 			Version: "v1",
-			Kind:    "Kustomization",
+			Kind:    kustomizationKind,
 		},
 		"infra",
-		"flux-system",
+		fluxSystemNS,
 		"False",
 		"ReconciliationFailed",
 		"validation error",
@@ -277,12 +287,12 @@ func TestFluxCollector_MultipleFailures(t *testing.T) {
 
 	failingKust2 := newFluxCR(
 		schema.GroupVersionKind{
-			Group:   "kustomize.toolkit.fluxcd.io",
+			Group:   kustomizeAPIGroup,
 			Version: "v1",
-			Kind:    "Kustomization",
+			Kind:    kustomizationKind,
 		},
 		"apps",
-		"flux-system",
+		fluxSystemNS,
 		"False",
 		"HealthCheckFailed",
 		"deployment not ready",
@@ -290,12 +300,12 @@ func TestFluxCollector_MultipleFailures(t *testing.T) {
 
 	readyKust := newFluxCR(
 		schema.GroupVersionKind{
-			Group:   "kustomize.toolkit.fluxcd.io",
+			Group:   kustomizeAPIGroup,
 			Version: "v1",
-			Kind:    "Kustomization",
+			Kind:    kustomizationKind,
 		},
-		"flux-system",
-		"flux-system",
+		fluxSystemNS,
+		fluxSystemNS,
 		"True",
 		"ReconciliationSucceeded",
 		"ok",

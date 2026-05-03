@@ -20,7 +20,7 @@ func TestFailingResource_String(t *testing.T) {
 		{
 			name: "reason and message",
 			resource: reconcilediag.FailingResource{
-				Name:    "flux-system",
+				Name:    fluxSystemNS,
 				Reason:  "ReconciliationFailed",
 				Message: "validation error",
 			},
@@ -74,7 +74,7 @@ func TestWarningEvent_String(t *testing.T) {
 
 	evt := reconcilediag.WarningEvent{
 		Age:     3 * time.Minute,
-		Kind:    "Pod",
+		Kind:    podKind,
 		Name:    "controller-abc",
 		Message: "Back-off restarting (BackOff)",
 	}
@@ -87,8 +87,8 @@ func TestWarningEvent_String_WithNamespace(t *testing.T) {
 
 	evt := reconcilediag.WarningEvent{
 		Age:       3 * time.Minute,
-		Kind:      "Pod",
-		Namespace: "flux-system",
+		Kind:      podKind,
+		Namespace: fluxSystemNS,
 		Name:      "controller-abc",
 		Message:   "Back-off restarting (BackOff)",
 	}
@@ -118,7 +118,7 @@ func TestWarningEvent_String_Hours(t *testing.T) {
 
 	evt := reconcilediag.WarningEvent{
 		Age:     90 * time.Minute,
-		Kind:    "Pod",
+		Kind:    podKind,
 		Name:    "source-controller-xyz",
 		Message: "OOMKilled (OOMKilled)",
 	}
@@ -191,7 +191,7 @@ func TestReport_IsEmpty_WhenFalse(t *testing.T) {
 			name: "with events",
 			report: reconcilediag.Report{
 				Events: []reconcilediag.WarningEvent{
-					{Age: time.Minute, Kind: "Pod", Name: "x", Message: "err"},
+					{Age: time.Minute, Kind: podKind, Name: "x", Message: "err"},
 				},
 			},
 		},
@@ -239,10 +239,10 @@ func TestReport_Write_FullReport(t *testing.T) {
 			},
 		},
 		FailingPods:    "  controller-abc: CrashLoopBackOff for img:v1 (3 restarts)",
-		EventNamespace: "flux-system",
+		EventNamespace: fluxSystemNS,
 		EventLookback:  5 * time.Minute,
 		Events: []reconcilediag.WarningEvent{
-			{Age: 2 * time.Minute, Kind: "Pod", Name: "ctrl", Message: "Back-off (BackOff)"},
+			{Age: 2 * time.Minute, Kind: podKind, Name: "ctrl", Message: "Back-off (BackOff)"},
 		},
 	}
 

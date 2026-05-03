@@ -2055,6 +2055,21 @@ func getKubeconfigPath(clusterCfg *v1alpha1.Cluster) (string, error) {
 	return expanded, nil
 }
 
+// getCanonicalKubeconfigPath resolves and canonicalizes the kubeconfig path from cluster config.
+func getCanonicalKubeconfigPath(clusterCfg *v1alpha1.Cluster) (string, error) {
+	kubeconfigPath, err := getKubeconfigPath(clusterCfg)
+	if err != nil {
+		return "", err
+	}
+
+	canonPath, err := fsutil.EvalCanonicalPath(kubeconfigPath)
+	if err != nil {
+		return "", fmt.Errorf("canonicalize kubeconfig path: %w", err)
+	}
+
+	return canonPath, nil
+}
+
 // NewReconcileCmd creates the workload reconcile command.
 func NewReconcileCmd(_ *di.Runtime) *cobra.Command {
 	cmd := &cobra.Command{
@@ -2117,20 +2132,15 @@ func runReconcile(cmd *cobra.Command) error {
 
 	tmr.NewStage()
 
-	kubeconfigPath, kubeconfigErr := getKubeconfigPath(clusterCfg)
-	if kubeconfigErr != nil {
-		return kubeconfigErr
-	}
-
-	canonKubeconfigPath, canonErr := fsutil.EvalCanonicalPath(kubeconfigPath)
-	if canonErr != nil {
-		return fmt.Errorf("canonicalize kubeconfig path: %w", canonErr)
+	kubeconfigPath, err := getCanonicalKubeconfigPath(clusterCfg)
+	if err != nil {
+		return err
 	}
 
 	err = runReconcileWithDiagnostics(
 		cmd,
 		clusterCfg,
-		canonKubeconfigPath,
+		kubeconfigPath,
 		gitOpsEngine,
 		timeout,
 		outputTimer,

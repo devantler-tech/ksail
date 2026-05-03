@@ -14,8 +14,13 @@ import (
 	k8sfake "k8s.io/client-go/kubernetes/fake"
 )
 
+const (
+	argoprojAPIGroup   = "argoproj.io"
+	argoprojAPIVersion = "v1alpha1"
+)
+
 var applicationGVR = schema.GroupVersionResource{ //nolint:gochecknoglobals // test constant
-	Group: "argoproj.io", Version: "v1alpha1", Resource: "applications",
+	Group: argoprojAPIGroup, Version: argoprojAPIVersion, Resource: "applications",
 }
 
 func newArgoCDDynamicClient(objects ...runtime.Object) *dynamicfake.FakeDynamicClient {
@@ -37,31 +42,31 @@ func newArgoCDApp(
 ) *unstructured.Unstructured {
 	app := &unstructured.Unstructured{}
 	app.SetGroupVersionKind(schema.GroupVersionKind{
-		Group: "argoproj.io", Version: "v1alpha1", Kind: "Application",
+		Group: argoprojAPIGroup, Version: argoprojAPIVersion, Kind: "Application",
 	})
 	app.SetName(name)
 	app.SetNamespace("argocd")
 
 	status := map[string]any{
-		"sync":   map[string]any{"status": syncStatus},
-		"health": map[string]any{"status": healthStatus},
+		"sync":   map[string]any{statusField: syncStatus},
+		"health": map[string]any{statusField: healthStatus},
 	}
 
 	if healthMessage != "" {
 		status["health"] = map[string]any{
-			"status":  healthStatus,
-			"message": healthMessage,
+			statusField:  healthStatus,
+			messageField: healthMessage,
 		}
 	}
 
 	if opPhase != "" {
 		status["operationState"] = map[string]any{
-			"phase":   opPhase,
-			"message": opMessage,
+			"phase":      opPhase,
+			messageField: opMessage,
 		}
 	}
 
-	app.Object["status"] = status
+	app.Object[statusField] = status
 
 	return app
 }
@@ -198,18 +203,18 @@ func TestArgoCDCollector_ApplicationWithConditionError(t *testing.T) {
 
 	app := &unstructured.Unstructured{}
 	app.SetGroupVersionKind(schema.GroupVersionKind{
-		Group: "argoproj.io", Version: "v1alpha1", Kind: "Application",
+		Group: argoprojAPIGroup, Version: argoprojAPIVersion, Kind: "Application",
 	})
 	app.SetName("broken")
 	app.SetNamespace("argocd")
 
-	app.Object["status"] = map[string]any{
-		"sync":   map[string]any{"status": "Unknown"},
-		"health": map[string]any{"status": "Unknown"},
+	app.Object[statusField] = map[string]any{
+		"sync":   map[string]any{statusField: "Unknown"},
+		"health": map[string]any{statusField: "Unknown"},
 		"conditions": []any{
 			map[string]any{
-				"type":    "ComparisonError",
-				"message": "rpc error: code = NotFound",
+				"type":       "ComparisonError",
+				messageField: "rpc error: code = NotFound",
 			},
 		},
 	}
