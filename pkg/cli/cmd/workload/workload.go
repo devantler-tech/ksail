@@ -46,6 +46,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/installer"
 	dockerprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/docker"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/registry"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/reconcilediag"
 	registryhelpers "github.com/devantler-tech/ksail/v7/pkg/svc/registryresolver"
 	"github.com/devantler-tech/ksail/v7/pkg/timer"
 	dockertypes "github.com/docker/docker/api/types"
@@ -2054,6 +2055,21 @@ func getKubeconfigPath(clusterCfg *v1alpha1.Cluster) (string, error) {
 	return expanded, nil
 }
 
+// getCanonicalKubeconfigPath resolves and canonicalizes the kubeconfig path from cluster config.
+func getCanonicalKubeconfigPath(clusterCfg *v1alpha1.Cluster) (string, error) {
+	kubeconfigPath, err := getKubeconfigPath(clusterCfg)
+	if err != nil {
+		return "", err
+	}
+
+	canonPath, err := fsutil.EvalCanonicalPath(kubeconfigPath)
+	if err != nil {
+		return "", fmt.Errorf("canonicalize kubeconfig path: %w", err)
+	}
+
+	return canonPath, nil
+}
+
 // NewReconcileCmd creates the workload reconcile command.
 func NewReconcileCmd(_ *di.Runtime) *cobra.Command {
 	cmd := &cobra.Command{
@@ -2116,16 +2132,18 @@ func runReconcile(cmd *cobra.Command) error {
 
 	tmr.NewStage()
 
-	// --timeout is a per-attempt bound: each retry attempt creates a fresh
-	// context.WithTimeout(timeout) inside executeReconciliation, so total
-	// runtime can be up to reconcileMaxRetryAttempts*timeout + cumulative
-	// backoff. This is intentional: each attempt deserves the full window.
-	err = retryOnTransientError(
-		cmd.Context(), cmd,
-		reconcileMaxRetryAttempts, reconcileRetryBaseWait, reconcileRetryMaxWait,
-		func() error {
-			return executeReconciliation(cmd, clusterCfg, gitOpsEngine, timeout, outputTimer)
-		},
+	kubeconfigPath, err := getCanonicalKubeconfigPath(clusterCfg)
+	if err != nil {
+		return err
+	}
+
+	err = runReconcileWithDiagnostics(
+		cmd,
+		clusterCfg,
+		kubeconfigPath,
+		gitOpsEngine,
+		timeout,
+		outputTimer,
 	)
 	if err != nil {
 		return err
@@ -2137,6 +2155,52 @@ func runReconcile(cmd *cobra.Command) error {
 		Timer:   outputTimer,
 		Writer:  cmd.OutOrStdout(),
 	})
+
+	return nil
+}
+
+// runReconcileWithDiagnostics retries reconciliation and on failure runs
+// best-effort diagnostics (unless the context was cancelled by the user).
+func runReconcileWithDiagnostics(
+	cmd *cobra.Command,
+	clusterCfg *v1alpha1.Cluster,
+	kubeconfigPath string,
+	gitOpsEngine v1alpha1.GitOpsEngine,
+	timeout time.Duration,
+	outputTimer timer.Timer,
+) error {
+	// --timeout is a per-attempt bound: each retry attempt creates a fresh
+	// context.WithTimeout(timeout) inside executeReconciliation, so total
+	// runtime can be up to reconcileMaxRetryAttempts*timeout + cumulative
+	// backoff. This is intentional: each attempt deserves the full window.
+	err := retryOnTransientError(
+		cmd.Context(), cmd,
+		reconcileMaxRetryAttempts, reconcileRetryBaseWait, reconcileRetryMaxWait,
+		func() error {
+			return executeReconciliation(
+				cmd,
+				clusterCfg,
+				kubeconfigPath,
+				gitOpsEngine,
+				timeout,
+				outputTimer,
+			)
+		},
+	)
+	if err != nil {
+		// Skip diagnostics when the user explicitly cancelled (Ctrl+C) to avoid
+		// blocking for the diagnostic timeout after a deliberate abort.
+		if !errors.Is(cmd.Context().Err(), context.Canceled) {
+			reconcilediag.Diagnose(
+				context.WithoutCancel(cmd.Context()),
+				cmd.ErrOrStderr(),
+				kubeconfigPath,
+				gitOpsEngine,
+			)
+		}
+
+		return err
+	}
 
 	return nil
 }
@@ -2202,15 +2266,11 @@ func getReconcileTimeout(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster) (time
 func executeReconciliation(
 	cmd *cobra.Command,
 	clusterCfg *v1alpha1.Cluster,
+	kubeconfigPath string,
 	gitOpsEngine v1alpha1.GitOpsEngine,
 	timeout time.Duration,
 	outputTimer timer.Timer,
 ) error {
-	kubeconfigPath, err := getKubeconfigPath(clusterCfg)
-	if err != nil {
-		return err
-	}
-
 	// Check both config and detected distribution for KWOK.
 	// When no ksail.yaml exists (e.g. init=false), clusterCfg.Spec.Cluster.Distribution
 	// defaults to empty; fall back to detecting from the active kubeconfig context.
