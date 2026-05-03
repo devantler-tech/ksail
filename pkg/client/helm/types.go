@@ -15,6 +15,9 @@ var (
 	errListReleasesUnsupported = errors.New(
 		"helm: ListReleases not supported on template-only client",
 	)
+	errGetReleaseValuesUnsupported = errors.New(
+		"helm: GetReleaseValues not supported on template-only client",
+	)
 
 	// ErrNoReleaseStorage is returned by GetReleaseStorageLabels when no
 	// Helm release storage objects (Secrets or ConfigMaps) exist for the
@@ -108,4 +111,12 @@ type Interface interface {
 		ctx context.Context,
 		releaseName, namespace string,
 	) (map[string]string, error)
+	// GetReleaseValues returns the user-supplied values for the latest revision
+	// of the named release. Returns (nil, error) when the release does not exist
+	// or cannot be queried. Use this to introspect installed chart configuration
+	// (e.g., detecting autoscaler settings from the live cluster).
+	GetReleaseValues(
+		ctx context.Context,
+		releaseName, namespace string,
+	) (map[string]any, error)
 }

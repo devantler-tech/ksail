@@ -337,6 +337,43 @@ func (c *Client) GetReleaseStorageLabels(
 	return c.fetchStorageLabels(ctx, clientset, driver, namespace, selector)
 }
 
+// GetReleaseValues returns the user-supplied values for the latest revision of
+// the named release. It reinitialises the action configuration to the target
+// namespace (same pattern as ListReleases) and restores it afterwards.
+func (c *Client) GetReleaseValues(
+	ctx context.Context,
+	releaseName, namespace string,
+) (map[string]any, error) {
+	if releaseName == "" {
+		return nil, errReleaseNameRequired
+	}
+
+	if c.actionConfig == nil || c.actionConfig.Releases == nil {
+		return nil, errGetReleaseValuesUnsupported
+	}
+
+	err := ctx.Err()
+	if err != nil {
+		return nil, fmt.Errorf("get release values context cancelled: %w", err)
+	}
+
+	cleanup, err := c.switchNamespace(namespace)
+	if err != nil {
+		return nil, err
+	}
+
+	defer cleanup()
+
+	getValues := helmv4action.NewGetValues(c.actionConfig)
+
+	values, err := getValues.Run(releaseName)
+	if err != nil {
+		return nil, fmt.Errorf("get release values for %s/%s: %w", namespace, releaseName, err)
+	}
+
+	return values, nil
+}
+
 // fetchStorageLabels queries either ConfigMaps or Secrets (based on driver) and
 // returns labels from the storage object with the highest version.
 func (c *Client) fetchStorageLabels(

@@ -1233,6 +1233,13 @@ func handleCreateRunE(
 		return err
 	}
 
+	// Persist the ClusterSpec so that future updates have an accurate baseline
+	// for fields that cannot be detected from the live cluster (e.g., Talos ISO).
+	saveErr := state.SaveClusterSpec(clusterName, &ctx.ClusterCfg.Spec.Cluster)
+	if saveErr != nil {
+		notify.Warningf(cmd.OutOrStderr(), "failed to save cluster state: %v", saveErr)
+	}
+
 	return maybeWaitForTTL(cmd, clusterName, ctx.ClusterCfg)
 }
 
@@ -7028,6 +7035,7 @@ func computeSpecOnlyDiff(
 			currentSpec.CertManager = detected.CertManager
 			currentSpec.PolicyEngine = detected.PolicyEngine
 			currentSpec.GitOpsEngine = detected.GitOpsEngine
+			currentSpec.Autoscaler.Node = detected.Autoscaler.Node
 		}
 	}
 
@@ -7336,6 +7344,16 @@ func applyInPlaceChanges(
 
 	if componentErr != nil {
 		return fmt.Errorf("some component changes failed to apply: %w", componentErr)
+	}
+
+	// Persist the updated ClusterSpec for future update baselines.
+	// Only save when all changes applied successfully: failed changes mean
+	// the cluster state is partially applied and does not match the desired spec.
+	if len(result.FailedChanges) == 0 {
+		saveErr := state.SaveClusterSpec(clusterName, &ctx.ClusterCfg.Spec.Cluster)
+		if saveErr != nil {
+			notify.Warningf(cmd.OutOrStderr(), "failed to save cluster state: %v", saveErr)
+		}
 	}
 
 	return nil

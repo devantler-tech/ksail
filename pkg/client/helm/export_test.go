@@ -29,14 +29,15 @@ var (
 
 // Expose unexported error sentinels and repository helpers for test assertions.
 var (
-	ErrUnexpectedReleaseType   = errUnexpectedReleaseType
-	ErrReleaseNameRequired     = errReleaseNameRequired
-	ErrChartSpecRequired       = errChartSpecRequired
-	ErrRepositoryEntryRequired = errRepositoryEntryRequired
-	ErrRepositoryNameRequired  = errRepositoryNameRequired
-	ErrRepositoryCacheUnset    = errRepositoryCacheUnset
-	ErrRepositoryConfigUnset   = errRepositoryConfigUnset
-	ErrListReleasesUnsupported = errListReleasesUnsupported
+	ErrUnexpectedReleaseType       = errUnexpectedReleaseType
+	ErrReleaseNameRequired         = errReleaseNameRequired
+	ErrChartSpecRequired           = errChartSpecRequired
+	ErrRepositoryEntryRequired     = errRepositoryEntryRequired
+	ErrRepositoryNameRequired      = errRepositoryNameRequired
+	ErrRepositoryCacheUnset        = errRepositoryCacheUnset
+	ErrRepositoryConfigUnset       = errRepositoryConfigUnset
+	ErrListReleasesUnsupported     = errListReleasesUnsupported
+	ErrGetReleaseValuesUnsupported = errGetReleaseValuesUnsupported
 	//nolint:gochecknoglobals // export_test.go exposes package internals as globals for tests.
 	ConvertRepositoryEntry = convertRepositoryEntry
 	//nolint:gochecknoglobals // export_test.go exposes package internals as globals for tests.
