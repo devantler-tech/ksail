@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"filippo.io/age"
 	snapshottest "github.com/devantler-tech/ksail/v7/internal/testutil/snapshottest"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/cipher"
 	"github.com/devantler-tech/ksail/v7/pkg/di"
@@ -1096,5 +1097,200 @@ func TestRotateCommandDryRunWithEncryptedFile(t *testing.T) {
 
 	if string(data) != encryptedContent {
 		t.Errorf("expected file contents unchanged after dry-run, got: %s", string(data))
+	}
+}
+
+// --- Tests for internal helper functions exposed via export_test.go ---
+
+func TestWriteDecryptedOutputToStdout(t *testing.T) {
+	t.Parallel()
+
+	data := []byte("decrypted: value\n")
+
+	cmd := &cobra.Command{}
+
+	var buf bytes.Buffer
+
+	cmd.SetOut(&buf)
+
+	err := cipher.WriteDecryptedOutput(cmd, data, "")
+	if err != nil {
+		t.Fatalf("expected no error writing to stdout, got: %v", err)
+	}
+
+	if buf.String() != string(data) {
+		t.Errorf("expected stdout to contain %q, got %q", string(data), buf.String())
+	}
+}
+
+func TestWriteDecryptedOutputToFile(t *testing.T) {
+	t.Parallel()
+
+	data := []byte("decrypted: value\n")
+	outputFile := filepath.Join(t.TempDir(), "decrypted.yaml")
+
+	cmd := &cobra.Command{}
+
+	var buf bytes.Buffer
+
+	cmd.SetOut(&buf)
+
+	err := cipher.WriteDecryptedOutput(cmd, data, outputFile)
+	if err != nil {
+		t.Fatalf("expected no error writing to file, got: %v", err)
+	}
+
+	got, err := os.ReadFile(outputFile) //nolint:gosec // test file under t.TempDir, safe to read
+	if err != nil {
+		t.Fatalf("failed to read output file: %v", err)
+	}
+
+	if string(got) != string(data) {
+		t.Errorf("expected file to contain %q, got %q", string(data), string(got))
+	}
+
+	// writeDecryptedOutput emits a success notification to cmd.OutOrStdout() after writing the file.
+	if !strings.Contains(buf.String(), "decrypted to") {
+		t.Errorf(
+			"expected stdout to contain success notification %q, got %q",
+			"decrypted to",
+			buf.String(),
+		)
+	}
+}
+
+func TestWriteDecryptedOutputToInvalidPath(t *testing.T) {
+	t.Parallel()
+
+	data := []byte("decrypted: value\n")
+
+	cmd := &cobra.Command{}
+
+	// Use a path in a non-existent directory — os.WriteFile should fail.
+	err := cipher.WriteDecryptedOutput(
+		cmd,
+		data,
+		filepath.Join(t.TempDir(), "nonexistent-dir", "out.yaml"),
+	)
+	if err == nil {
+		t.Fatal("expected error writing to invalid path, got nil")
+	}
+}
+
+func TestShowRotatePreviewDirectory(t *testing.T) {
+	t.Parallel()
+
+	files := []string{"/some/dir/secret.yaml", "/some/dir/other.yaml"}
+
+	var buf bytes.Buffer
+
+	cipher.ShowRotatePreview(&buf, files, "/some/dir", true)
+
+	output := buf.String()
+
+	if !strings.Contains(output, "/some/dir") {
+		t.Errorf("expected output to contain scan path, got: %q", output)
+	}
+
+	for _, f := range files {
+		if !strings.Contains(output, f) {
+			t.Errorf("expected output to list file %q, got: %q", f, output)
+		}
+	}
+
+	if !strings.Contains(output, `Type "yes" to confirm rotation:`) {
+		t.Errorf("expected confirmation prompt in output, got: %q", output)
+	}
+}
+
+func TestShowRotatePreviewSingleFile(t *testing.T) {
+	t.Parallel()
+
+	files := []string{"/some/dir/secret.yaml"}
+
+	var buf bytes.Buffer
+
+	cipher.ShowRotatePreview(&buf, files, "/some/dir/secret.yaml", false)
+
+	output := buf.String()
+
+	if !strings.Contains(output, files[0]) {
+		t.Errorf("expected output to list file %q, got: %q", files[0], output)
+	}
+
+	if !strings.Contains(output, `Type "yes" to confirm rotation:`) {
+		t.Errorf("expected confirmation prompt in output, got: %q", output)
+	}
+}
+
+func TestBuildRotateOptsEmpty(t *testing.T) {
+	t.Parallel()
+
+	opts, err := cipher.BuildRotateOpts("", "")
+	if err != nil {
+		t.Fatalf("expected no error for empty keys, got: %v", err)
+	}
+
+	if len(opts.AddKeys) != 0 {
+		t.Errorf("expected no AddKeys for empty add-key, got: %v", opts.AddKeys)
+	}
+
+	if len(opts.RemoveKeys) != 0 {
+		t.Errorf("expected no RemoveKeys for empty remove-key, got: %v", opts.RemoveKeys)
+	}
+
+	// buildRotateOpts always initializes KeyServices with a local client and an empty DecryptionOrder.
+	if len(opts.KeyServices) == 0 {
+		t.Errorf("expected KeyServices to be initialized (non-empty), got empty slice")
+	}
+
+	if opts.DecryptionOrder == nil {
+		t.Errorf("expected DecryptionOrder to be initialized (non-nil), got nil")
+	}
+}
+
+func TestBuildRotateOptsWithRemoveKey(t *testing.T) {
+	t.Parallel()
+
+	opts, err := cipher.BuildRotateOpts("", "age1somepublickey123")
+	if err != nil {
+		t.Fatalf("expected no error for remove-key only, got: %v", err)
+	}
+
+	if len(opts.RemoveKeys) != 1 || opts.RemoveKeys[0] != "age1somepublickey123" {
+		t.Errorf("expected RemoveKeys=[%q], got: %v", "age1somepublickey123", opts.RemoveKeys)
+	}
+}
+
+func TestBuildRotateOptsWithInvalidAddKey(t *testing.T) {
+	t.Parallel()
+
+	_, err := cipher.BuildRotateOpts("not-a-valid-key-format", "")
+	if err == nil {
+		t.Fatal("expected error for invalid add-key, got nil")
+	}
+}
+
+func TestBuildRotateOptsWithValidAddKey(t *testing.T) {
+	t.Parallel()
+
+	identity, err := age.GenerateX25519Identity()
+	if err != nil {
+		t.Fatalf("generate age identity: %v", err)
+	}
+
+	opts, err := cipher.BuildRotateOpts(identity.Recipient().String(), "")
+	if err != nil {
+		t.Fatalf("expected no error for valid add-key, got: %v", err)
+	}
+
+	if len(opts.AddKeys) != 1 {
+		t.Fatalf("expected AddKeys to have 1 entry, got %d", len(opts.AddKeys))
+	}
+
+	if opts.AddKeys[0].ToString() != identity.Recipient().String() {
+		want := identity.Recipient().String()
+		got := opts.AddKeys[0].ToString()
+		t.Errorf("expected AddKeys[0] to match recipient %q, got %q", want, got)
 	}
 }
