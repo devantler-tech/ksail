@@ -96,6 +96,10 @@ type fieldRule struct {
 	// rules whose change impact varies by distribution/provider (e.g. CDI is
 	// recreate-required on Kind but reboot-required on Talos).
 	categoryFn func() clusterupdate.ChangeCategory
+	// skipWhenNewEmpty, when true, skips the diff when the desired (new) value is
+	// empty. Use this for fields that are optional in the user config — when the user
+	// hasn't set the field, any detected current value should not produce a diff.
+	skipWhenNewEmpty bool
 }
 
 // scalarFieldRules returns the table of simple scalar field diff rules.
@@ -263,13 +267,18 @@ func (e *Engine) applyFieldRules(
 	rules []fieldRule,
 ) {
 	for _, rule := range rules {
+		newVal := rule.getVal(newSpec)
+		if rule.skipWhenNewEmpty && newVal == "" {
+			continue
+		}
+
 		cat := rule.category
 		if rule.categoryFn != nil {
 			cat = rule.categoryFn()
 		}
 
 		appendChange(result, rule.field,
-			rule.getVal(oldSpec), rule.getVal(newSpec),
+			rule.getVal(oldSpec), newVal,
 			rule.defaultVal, rule.reason, cat)
 	}
 }
@@ -373,6 +382,10 @@ var talosFieldRules = []fieldRule{
 		category: clusterupdate.ChangeCategoryInPlace,
 		reason:   "version pin change only affects future operations (image selection, upgrade cap)",
 		getVal:   func(s *v1alpha1.ClusterSpec) string { return s.Talos.Version },
+		// skipWhenNewEmpty suppresses false-positive diffs when the user has not
+		// pinned a version in ksail.yaml. The detected running version is
+		// informational; absence of a desired version means "no constraint".
+		skipWhenNewEmpty: true,
 	},
 	{
 		field:    "cluster.controlPlanes",

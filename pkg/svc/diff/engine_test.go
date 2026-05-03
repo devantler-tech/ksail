@@ -1427,3 +1427,61 @@ func TestEngine_TalosVersion_NoChangeWhenBothSet(t *testing.T) {
 		}
 	}
 }
+
+func TestEngine_TalosVersion_NoChangeWhenNewEmpty(t *testing.T) {
+	t.Parallel()
+
+	// Old spec has detected version (live cluster); new spec has no version pinned.
+	// This is the regression case: introspectTalosVersion detects a version but
+	// the user hasn't pinned one in ksail.yaml — no diff should be emitted.
+	old := newBaseSpec()
+	old.Distribution = v1alpha1.DistributionTalos
+	old.Talos.Version = "v1.13.0"
+
+	newer := clone(old)
+	newer.Talos.Version = ""
+
+	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
+	result := engine.ComputeDiff(old, newer, nil, nil)
+
+	for _, c := range result.AllChanges() {
+		if c.Field == "cluster.talos.version" {
+			t.Fatalf("expected no talos.version diff when new version is empty, got %+v", c)
+		}
+	}
+}
+
+func TestEngine_TalosVersion_ChangeWhenNewDiffers(t *testing.T) {
+	t.Parallel()
+
+	// Both specs pin a version but they differ — a diff should be emitted.
+	old := newBaseSpec()
+	old.Distribution = v1alpha1.DistributionTalos
+	old.Talos.Version = "v1.11.2"
+
+	newer := clone(old)
+	newer.Talos.Version = "v1.13.0"
+
+	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
+	result := engine.ComputeDiff(old, newer, nil, nil)
+
+	assertSingleChange(t, result.InPlaceChanges, "cluster.talos.version", "v1.11.2", "v1.13.0", clusterupdate.ChangeCategoryInPlace)
+}
+
+func TestEngine_TalosVersion_ChangeWhenOldEmptyNewSet(t *testing.T) {
+	t.Parallel()
+
+	// Old spec has no detected version; new spec pins one.
+	// Detection failed (e.g., no API access) but user wants a specific version.
+	old := newBaseSpec()
+	old.Distribution = v1alpha1.DistributionTalos
+	old.Talos.Version = ""
+
+	newer := clone(old)
+	newer.Talos.Version = "v1.11.2"
+
+	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
+	result := engine.ComputeDiff(old, newer, nil, nil)
+
+	assertSingleChange(t, result.InPlaceChanges, "cluster.talos.version", "", "v1.11.2", clusterupdate.ChangeCategoryInPlace)
+}
