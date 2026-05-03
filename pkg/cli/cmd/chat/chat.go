@@ -2,6 +2,7 @@ package chat
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -53,6 +54,17 @@ const (
 	sessionIdleTimeoutSeconds = 1800 // 30 minutes
 	// authRetryMaxWait is the maximum wait duration for auth retry backoff.
 	authRetryMaxWait = 4 * time.Second
+	// diagnoseTimeout is the timeout for the post-failure diagnostic subprocess.
+	// Kept intentionally short: ksail chat is interactive, so a brief wait on
+	// failure to surface the real root cause is an acceptable trade-off.
+	diagnoseTimeout = 3 * time.Second
+	// startupErrFmt is the static format string for Copilot client startup errors.
+	// %w is the underlying error; %s is an optional diagnostic block (empty or
+	// "CLI diagnostic output:\n  ...\n\n").
+	startupErrFmt = "failed to start Copilot client: %w\n\n%sTo fix:\n" +
+		"  - Set KSAIL_COPILOT_TOKEN or COPILOT_TOKEN for token-based authentication\n" +
+		"  - Install the Copilot CLI: npm install -g @github/copilot\n" +
+		"  - Verify the CLI works: copilot --version"
 )
 
 // Sentinel errors for the chat command.
@@ -250,12 +262,9 @@ func startCopilotClient(ctx context.Context) (*copilot.Client, error) {
 	err := client.Start(ctx)
 	if err != nil {
 		return nil, fmt.Errorf(
-			"failed to start Copilot client: %w\n\n"+
-				"To fix:\n"+
-				"  - Set KSAIL_COPILOT_TOKEN or COPILOT_TOKEN for token-based authentication\n"+
-				"  - Install the Copilot CLI: npm install -g @github/copilot\n"+
-				"  - Verify the CLI works: copilot --version",
+			startupErrFmt,
 			err,
+			buildDiagnosticBlock(ctx, cliPath, opts.GitHubToken, opts.Env),
 		)
 	}
 
@@ -287,6 +296,60 @@ func verifyCopilotCLI(ctx context.Context, cliPath string, env []string) error {
 	}
 
 	return nil
+}
+
+// buildDiagnosticBlock runs the CLI diagnostic and returns a formatted block
+// suitable for inclusion in an error message, or an empty string if there is
+// nothing to report. When githubToken is non-empty, it is injected into the
+// subprocess environment via COPILOT_SDK_AUTH_TOKEN (mirroring the SDK) so the
+// diagnostic runs under the same auth context as the real startup attempt.
+func buildDiagnosticBlock(ctx context.Context, cliPath, githubToken string, env []string) string {
+	if cliPath == "" {
+		return ""
+	}
+
+	d := diagnoseCLIStartupFailure(ctx, cliPath, githubToken, env)
+	if d == "" {
+		return ""
+	}
+
+	return "CLI diagnostic output:\n  " + strings.ReplaceAll(d, "\n", "\n  ") + "\n\n"
+}
+
+// diagnoseCLIStartupFailure re-runs the copilot CLI in headless mode with
+// stderr captured, returning any diagnostic output. The Copilot SDK discards
+// the subprocess's stderr, so this post-failure re-run is the only way to
+// surface why the CLI crashed during startup.
+//
+// When githubToken is non-empty, it is passed via the same COPILOT_SDK_AUTH_TOKEN
+// env var and --auth-token-env flag that the SDK uses, so the diagnostic
+// reproduces the same auth path as the real startup.
+func diagnoseCLIStartupFailure(
+	ctx context.Context,
+	cliPath, githubToken string,
+	env []string,
+) string {
+	diagCtx, cancel := context.WithTimeout(ctx, diagnoseTimeout)
+	defer cancel()
+
+	args := []string{"--headless", "--no-auto-update", "--log-level", "error", "--stdio"}
+	diagEnv := env
+
+	if githubToken != "" {
+		args = append(args, "--auth-token-env", "COPILOT_SDK_AUTH_TOKEN")
+		diagEnv = append(append([]string{}, diagEnv...), "COPILOT_SDK_AUTH_TOKEN="+githubToken)
+	}
+
+	cmd := exec.CommandContext(diagCtx, cliPath, args...)
+	cmd.Env = diagEnv
+
+	var stderr bytes.Buffer
+
+	cmd.Stderr = &stderr
+
+	_ = cmd.Run()
+
+	return strings.TrimSpace(stderr.String())
 }
 
 // filterEnvVars returns a copy of env with the specified variable names removed.
