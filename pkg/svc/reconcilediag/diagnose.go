@@ -7,6 +7,7 @@ import (
 	"time"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	k8sutil "github.com/devantler-tech/ksail/v7/pkg/k8s"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
@@ -62,7 +63,12 @@ func Diagnose(
 // buildDiagClients creates the Kubernetes clients needed for diagnostics.
 // Errors are returned to the caller, which treats them as best-effort skips.
 func buildDiagClients(kubeconfigPath string) (dynamic.Interface, kubernetes.Interface, error) {
-	restCfg, err := k8sutil.BuildRESTConfig(kubeconfigPath, "")
+	canonPath, err := fsutil.EvalCanonicalPath(kubeconfigPath)
+	if err != nil {
+		return nil, nil, fmt.Errorf("canonicalize kubeconfig path: %w", err)
+	}
+
+	restCfg, err := k8sutil.BuildRESTConfig(canonPath, "")
 	if err != nil {
 		return nil, nil, fmt.Errorf("build REST config: %w", err)
 	}
