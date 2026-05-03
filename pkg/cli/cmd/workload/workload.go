@@ -2127,7 +2127,14 @@ func runReconcile(cmd *cobra.Command) error {
 		return fmt.Errorf("canonicalize kubeconfig path: %w", canonErr)
 	}
 
-	err = runReconcileWithDiagnostics(cmd, clusterCfg, canonKubeconfigPath, gitOpsEngine, timeout, outputTimer)
+	err = runReconcileWithDiagnostics(
+		cmd,
+		clusterCfg,
+		canonKubeconfigPath,
+		gitOpsEngine,
+		timeout,
+		outputTimer,
+	)
 	if err != nil {
 		return err
 	}
@@ -2160,14 +2167,26 @@ func runReconcileWithDiagnostics(
 		cmd.Context(), cmd,
 		reconcileMaxRetryAttempts, reconcileRetryBaseWait, reconcileRetryMaxWait,
 		func() error {
-			return executeReconciliation(cmd, clusterCfg, kubeconfigPath, gitOpsEngine, timeout, outputTimer)
+			return executeReconciliation(
+				cmd,
+				clusterCfg,
+				kubeconfigPath,
+				gitOpsEngine,
+				timeout,
+				outputTimer,
+			)
 		},
 	)
 	if err != nil {
 		// Skip diagnostics when the user explicitly cancelled (Ctrl+C) to avoid
 		// blocking for the diagnostic timeout after a deliberate abort.
 		if !errors.Is(cmd.Context().Err(), context.Canceled) {
-			reconcilediag.Diagnose(context.WithoutCancel(cmd.Context()), cmd.ErrOrStderr(), kubeconfigPath, gitOpsEngine)
+			reconcilediag.Diagnose(
+				context.WithoutCancel(cmd.Context()),
+				cmd.ErrOrStderr(),
+				kubeconfigPath,
+				gitOpsEngine,
+			)
 		}
 
 		return err

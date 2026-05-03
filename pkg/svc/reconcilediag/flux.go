@@ -118,6 +118,7 @@ func (c *FluxCollector) collectFailingCRs(
 	sort.Slice(section.Resources, func(i, j int) bool {
 		ki := section.Resources[i].Namespace + "/" + section.Resources[i].Name
 		kj := section.Resources[j].Namespace + "/" + section.Resources[j].Name
+
 		return ki < kj
 	})
 
