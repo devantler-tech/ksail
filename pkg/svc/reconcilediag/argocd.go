@@ -30,7 +30,7 @@ type ArgoCDCollector struct {
 func (c *ArgoCDCollector) Collect(ctx context.Context) *Report {
 	report := &Report{
 		EventNamespace: argoCDNamespace,
-		EventLookback:  eventLookback,
+		EventLookback:  defaultEventLookback,
 	}
 
 	report.Sections = append(report.Sections, c.collectFailingApplications(ctx))

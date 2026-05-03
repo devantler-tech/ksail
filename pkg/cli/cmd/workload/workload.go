@@ -2130,7 +2130,7 @@ func runReconcile(cmd *cobra.Command) error {
 		cmd.Context(), cmd,
 		reconcileMaxRetryAttempts, reconcileRetryBaseWait, reconcileRetryMaxWait,
 		func() error {
-			return executeReconciliation(cmd, clusterCfg, gitOpsEngine, timeout, outputTimer)
+			return executeReconciliation(cmd, clusterCfg, kubeconfigPath, gitOpsEngine, timeout, outputTimer)
 		},
 	)
 	if err != nil {
@@ -2211,15 +2211,11 @@ func getReconcileTimeout(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster) (time
 func executeReconciliation(
 	cmd *cobra.Command,
 	clusterCfg *v1alpha1.Cluster,
+	kubeconfigPath string,
 	gitOpsEngine v1alpha1.GitOpsEngine,
 	timeout time.Duration,
 	outputTimer timer.Timer,
 ) error {
-	kubeconfigPath, err := getKubeconfigPath(clusterCfg)
-	if err != nil {
-		return err
-	}
-
 	// Check both config and detected distribution for KWOK.
 	// When no ksail.yaml exists (e.g. init=false), clusterCfg.Spec.Cluster.Distribution
 	// defaults to empty; fall back to detecting from the active kubeconfig context.

@@ -15,11 +15,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-const (
-	fluxNamespace = "flux-system"
-	// eventLookback limits events to the last 5 minutes.
-	eventLookback = 5 * time.Minute
-)
+const fluxNamespace = "flux-system"
 
 // fluxGVRKustomizations returns the GVR for Flux Kustomizations.
 func fluxGVRKustomizations() schema.GroupVersionResource {
@@ -54,7 +50,7 @@ type FluxCollector struct {
 func (c *FluxCollector) Collect(ctx context.Context) *Report {
 	report := &Report{
 		EventNamespace: fluxNamespace,
-		EventLookback:  eventLookback,
+		EventLookback:  defaultEventLookback,
 	}
 
 	report.Sections = append(
@@ -210,7 +206,7 @@ func collectNamespaceWarningEvents(
 	}
 
 	now := time.Now()
-	cutoff := now.Add(-eventLookback)
+	cutoff := now.Add(-defaultEventLookback)
 
 	var result []WarningEvent
 

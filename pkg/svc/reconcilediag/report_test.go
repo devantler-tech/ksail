@@ -122,18 +122,16 @@ func TestWarningEvent_String_Hours(t *testing.T) {
 	assert.Equal(t, "1h30m ago: Pod/source-controller-xyz — OOMKilled (OOMKilled)", evt.String())
 }
 
-func TestReport_IsEmpty(t *testing.T) {
+func TestReport_IsEmpty_WhenTrue(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
 		name   string
 		report reconcilediag.Report
-		want   bool
 	}{
 		{
 			name:   "empty report",
 			report: reconcilediag.Report{},
-			want:   true,
 		},
 		{
 			name: "empty sections no pods no events",
@@ -142,8 +140,30 @@ func TestReport_IsEmpty(t *testing.T) {
 					{Heading: "test", Resources: nil},
 				},
 			},
-			want: true,
 		},
+		{
+			name: "whitespace-only pods treated as empty",
+			report: reconcilediag.Report{
+				FailingPods: "   \n   ",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.True(t, tt.report.IsEmpty())
+		})
+	}
+}
+
+func TestReport_IsEmpty_WhenFalse(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		report reconcilediag.Report
+	}{
 		{
 			name: "with failing resources",
 			report: reconcilediag.Report{
@@ -156,21 +176,12 @@ func TestReport_IsEmpty(t *testing.T) {
 					},
 				},
 			},
-			want: false,
 		},
 		{
 			name: "with failing pods",
 			report: reconcilediag.Report{
 				FailingPods: "some pod failure",
 			},
-			want: false,
-		},
-		{
-			name: "whitespace-only pods treated as empty",
-			report: reconcilediag.Report{
-				FailingPods: "   \n   ",
-			},
-			want: true,
 		},
 		{
 			name: "with events",
@@ -179,14 +190,13 @@ func TestReport_IsEmpty(t *testing.T) {
 					{Age: time.Minute, Kind: "Pod", Name: "x", Message: "err"},
 				},
 			},
-			want: false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			assert.Equal(t, tt.want, tt.report.IsEmpty())
+			assert.False(t, tt.report.IsEmpty())
 		})
 	}
 }

@@ -102,8 +102,13 @@ func (r *Report) IsEmpty() bool {
 	return strings.TrimSpace(r.FailingPods) == "" && len(r.Events) == 0
 }
 
-// maxDiagnosticEvents limits the number of warning events shown.
-const maxDiagnosticEvents = 20
+const (
+	// defaultEventLookback is the default lookback window for warning events.
+	// Both FluxCollector and ArgoCDCollector use this value.
+	defaultEventLookback = 5 * time.Minute
+	// maxDiagnosticEvents limits the number of warning events shown.
+	maxDiagnosticEvents = 20
+)
 
 // Write writes the diagnostic report to the given writer using the
 // notify package for consistent styling.
