@@ -109,6 +109,8 @@ type Options struct {
 	PlatformRepo string
 	// TargetBranch is the PR target branch (empty = repo's default branch).
 	TargetBranch string
+	// SourceDirectory is the directory name for tenant manifests (default: "k8s").
+	SourceDirectory string
 }
 
 const (
@@ -116,6 +118,8 @@ const (
 	DefaultClusterRole = "edit"
 	// DefaultOutputDir is the default output directory.
 	DefaultOutputDir = "."
+	// DefaultSourceDirectory is the default manifest directory name for tenants.
+	DefaultSourceDirectory = "k8s"
 	// DefaultSyncSource is the default sync source for Flux tenants.
 	DefaultSyncSource = SyncSourceOCI
 	// DefaultRepoVisibility is the default repository visibility.
@@ -143,21 +147,17 @@ func (o *Options) ResolveDefaults() {
 	if o.RepoVisibility == "" {
 		o.RepoVisibility = DefaultRepoVisibility
 	}
+
+	if o.SourceDirectory == "" {
+		o.SourceDirectory = DefaultSourceDirectory
+	}
 }
 
 // Validate checks that required fields are set and values are safe.
 func (o *Options) Validate() error {
-	if o.Name == "" {
-		return ErrTenantNameRequired
-	}
-
-	if errs := validation.IsDNS1123Label(o.Name); len(errs) > 0 {
-		return fmt.Errorf("%w: %s (%s)", ErrInvalidTenantName, o.Name, strings.Join(errs, "; "))
-	}
-
-	if strings.Contains(o.Name, "..") || strings.ContainsAny(o.Name, `/\`) {
-		return fmt.Errorf("%w: %s (must not contain path separators or '..')",
-			ErrInvalidTenantName, o.Name)
+	err := validateTenantName(o.Name)
+	if err != nil {
+		return err
 	}
 
 	if o.TenantType == "" {
@@ -177,6 +177,39 @@ func (o *Options) Validate() error {
 
 	if hasDuplicateNamespaces(o.Namespaces) {
 		return fmt.Errorf("%w", ErrDuplicateNamespace)
+	}
+
+	if o.SourceDirectory != "" {
+		err := validateSourceDirectory(o.SourceDirectory)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func validateTenantName(name string) error {
+	if name == "" {
+		return ErrTenantNameRequired
+	}
+
+	if errs := validation.IsDNS1123Label(name); len(errs) > 0 {
+		return fmt.Errorf("%w: %s (%s)", ErrInvalidTenantName, name, strings.Join(errs, "; "))
+	}
+
+	if strings.Contains(name, "..") || strings.ContainsAny(name, `/\`) {
+		return fmt.Errorf("%w: %s (must not contain path separators or '..')",
+			ErrInvalidTenantName, name)
+	}
+
+	return nil
+}
+
+func validateSourceDirectory(dir string) error {
+	if strings.Contains(dir, "..") || strings.ContainsAny(dir, `/\`) {
+		return fmt.Errorf("%w: %s (must not contain path separators or '..')",
+			ErrInvalidSourceDirectory, dir)
 	}
 
 	return nil

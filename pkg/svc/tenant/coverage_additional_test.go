@@ -492,6 +492,33 @@ func TestOptions_Validate(t *testing.T) {
 			},
 			wantErr: nil,
 		},
+		{
+			name: "invalid source directory - path separator",
+			opts: tenant.Options{
+				Name:            "my-tenant",
+				TenantType:      tenant.TypeFlux,
+				SourceDirectory: "my/dir",
+			},
+			wantErr: tenant.ErrInvalidSourceDirectory,
+		},
+		{
+			name: "invalid source directory - double dots",
+			opts: tenant.Options{
+				Name:            "my-tenant",
+				TenantType:      tenant.TypeFlux,
+				SourceDirectory: "..",
+			},
+			wantErr: tenant.ErrInvalidSourceDirectory,
+		},
+		{
+			name: "valid custom source directory",
+			opts: tenant.Options{
+				Name:            "my-tenant",
+				TenantType:      tenant.TypeFlux,
+				SourceDirectory: "deploy",
+			},
+			wantErr: nil,
+		},
 	}
 
 	for _, tt := range tests { //nolint:varnamelen

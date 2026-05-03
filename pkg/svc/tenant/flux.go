@@ -69,6 +69,11 @@ func GenerateFluxSyncManifests(opts Options) (map[string]string, error) {
 
 	primaryNS := opts.Namespaces[0]
 
+	srcDir := opts.SourceDirectory
+	if srcDir == "" {
+		srcDir = DefaultSourceDirectory
+	}
+
 	source, err := buildFluxSource(opts, primaryNS)
 	if err != nil {
 		return nil, err
@@ -88,7 +93,7 @@ func GenerateFluxSyncManifests(opts Options) (map[string]string, error) {
 				Kind: source.Kind,
 				Name: opts.Name,
 			},
-			Path:               "./k8s",
+			Path:               "./" + srcDir,
 			Prune:              true,
 			TargetNamespace:    primaryNS,
 			ServiceAccountName: opts.Name,

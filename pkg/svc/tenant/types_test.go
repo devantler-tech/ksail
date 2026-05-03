@@ -70,6 +70,7 @@ func TestOptionsResolveDefaults(t *testing.T) {
 	require.Equal(t, tenant.DefaultOutputDir, opts.OutputDir)
 	require.Equal(t, tenant.DefaultSyncSource, opts.SyncSource)
 	require.Equal(t, tenant.DefaultRepoVisibility, opts.RepoVisibility)
+	require.Equal(t, tenant.DefaultSourceDirectory, opts.SourceDirectory)
 }
 
 func TestOptionsResolveDefaultsPreservesExisting(t *testing.T) {

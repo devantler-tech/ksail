@@ -12,21 +12,26 @@ resources: []
 func ScaffoldFiles(opts Options) map[string][]byte {
 	var readmeContent string
 
+	srcDir := opts.SourceDirectory
+	if srcDir == "" {
+		srcDir = DefaultSourceDirectory
+	}
+
 	switch opts.TenantType {
 	case TypeFlux:
 		readmeContent = fmt.Sprintf(
 			"# %s\n\nFlux-managed tenant. "+
-				"Resources in `k8s/` are automatically reconciled.\n",
-			opts.Name)
+				"Resources in `%s/` are automatically reconciled.\n",
+			opts.Name, srcDir)
 	case TypeArgoCD:
 		readmeContent = fmt.Sprintf(
 			"# %s\n\nArgoCD-managed tenant. "+
-				"Resources in `k8s/` are automatically synced.\n",
-			opts.Name)
+				"Resources in `%s/` are automatically synced.\n",
+			opts.Name, srcDir)
 	case TypeKubectl:
 		readmeContent = fmt.Sprintf(
-			"# %s\n\n## Apply\n\n```\nkubectl apply -k k8s/\n```\n",
-			opts.Name)
+			"# %s\n\n## Apply\n\n```\nkubectl apply -k %s/\n```\n",
+			opts.Name, srcDir)
 	default:
 		readmeContent = fmt.Sprintf(
 			"# %s\n\nKSail-managed tenant.\n",
@@ -34,7 +39,7 @@ func ScaffoldFiles(opts Options) map[string][]byte {
 	}
 
 	return map[string][]byte{
-		"README.md":              []byte(readmeContent),
-		"k8s/kustomization.yaml": []byte(kustomizationContent),
+		"README.md":                    []byte(readmeContent),
+		srcDir + "/kustomization.yaml": []byte(kustomizationContent),
 	}
 }

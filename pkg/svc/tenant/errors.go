@@ -62,4 +62,6 @@ var (
 	ErrOutsideRepoRoot = errors.New("file is outside the repository root")
 	// ErrRBACConfigMapNotFound is returned when no argocd-rbac-cm ConfigMap file is found.
 	ErrRBACConfigMapNotFound = errors.New("no argocd-rbac-cm ConfigMap found")
+	// ErrInvalidSourceDirectory is returned when the source directory name is invalid.
+	ErrInvalidSourceDirectory = errors.New("invalid source directory")
 )

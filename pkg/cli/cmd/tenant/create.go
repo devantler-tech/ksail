@@ -55,6 +55,9 @@ func NewCreateCmd(_ *di.Runtime) *cobra.Command {
 	)
 	cmd.Flags().
 		String("repo-visibility", "Private", "Repo visibility: Private, Internal, or Public")
+	cmd.Flags().
+		String("source-directory", "k8s",
+			"Directory name for tenant manifests in the tenant repo")
 
 	// Phase 2 flags
 	cmd.Flags().Bool("register", false, "Register tenant in kustomization.yaml")
@@ -161,6 +164,7 @@ func resolveCreateOptions(
 	opts.TenantRepo, _ = cmd.Flags().GetString("tenant-repo")
 	opts.GitToken, _ = cmd.Flags().GetString("git-token")
 	opts.RepoVisibility, _ = cmd.Flags().GetString("repo-visibility")
+	opts.SourceDirectory, _ = cmd.Flags().GetString("source-directory")
 
 	register, _ := cmd.Flags().GetBool("register")
 	opts.Register = register

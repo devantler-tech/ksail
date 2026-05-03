@@ -80,6 +80,11 @@ func TestCreateCmd_FlagDefaults(t *testing.T) {
 	rv, err := cmd.Flags().GetString("repo-visibility")
 	require.NoError(t, err)
 	require.Equal(t, "Private", rv)
+
+	// --source-directory default "k8s"
+	sd, err := cmd.Flags().GetString("source-directory")
+	require.NoError(t, err)
+	require.Equal(t, "k8s", sd)
 }
 
 func TestCreateCmd_KubectlType(t *testing.T) {
@@ -354,4 +359,35 @@ func TestCreateCmd_NoTypeNoConfig(t *testing.T) {
 	// No ksail.yaml and no --type → should error asking for --type.
 	require.Error(t, err)
 	require.ErrorContains(t, err, "no --type specified")
+}
+
+func TestCreateCmd_CustomSourceDirectory(t *testing.T) {
+	t.Parallel()
+
+	outDir := t.TempDir()
+
+	cmd := tenantpkg.NewCreateCmd(nil)
+
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
+	cmd.SetArgs([]string{
+		"custom-dir-tenant", "--type", "flux",
+		"--registry", "oci://ghcr.io/test",
+		"--tenant-repo", "owner/repo",
+		"--source-directory", "deploy",
+		"--output", outDir,
+	})
+
+	err := cmd.Execute()
+	require.NoError(t, err)
+	require.Contains(t, buf.String(), `Tenant "custom-dir-tenant" created successfully`)
+
+	// Verify sync.yaml references the custom directory.
+	tenantDir := filepath.Join(outDir, "custom-dir-tenant")
+	syncPath := filepath.Join(tenantDir, "sync.yaml")
+	syncContent, err := os.ReadFile(syncPath) //nolint:gosec // test path
+	require.NoError(t, err)
+	require.Contains(t, string(syncContent), "path: ./deploy")
+	require.NotContains(t, string(syncContent), "path: ./k8s")
 }
