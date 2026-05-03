@@ -38,7 +38,13 @@ See [Declarative Configuration](/configuration/declarative-configuration/) for t
 | Command                    | Description                            |
 | -------------------------- | -------------------------------------- |
 | `ksail workload push`      | Package and push manifests to registry |
-| `ksail workload reconcile` | Trigger GitOps sync and wait for completion — tracks each Flux Kustomization (with dependency ordering) and each ArgoCD Application individually; for Flux, fails immediately on permanent errors (build failures, health check failures, or upstream dependency failures) rather than waiting for the full timeout |
+| `ksail workload reconcile` | Trigger GitOps sync and wait for completion — tracks each Flux Kustomization (with dependency ordering) and each ArgoCD Application individually; for Flux, automatically resets stuck HelmReleases (Failed/Stalled) before polling begins, and fails immediately on permanent errors (build failures, health check failures, or upstream dependency failures) rather than waiting for the full timeout |
+
+### Automatic HelmRelease Recovery
+
+Before polling Kustomizations, `ksail workload reconcile` automatically detects and resets HelmReleases stuck in a non-recoverable state (Ready=False with a failure reason such as `InstallFailed`/`UpgradeFailed`, or Stalled=True). Each stuck release is suspended then resumed so the helm-controller can retry, eliminating the need for manual `kubectl patch` suspend/resume workarounds.
+
+HelmReleases with `DependencyNotReady` are skipped — these are transient and resolve on their own. Individual reset failures are logged but do not abort reconciliation.
 
 ### Automatic Retry
 

@@ -88,7 +88,7 @@ If the error mentions `connectivity check pod image pull failed` with `ImagePull
 
 ### Flux Reconciliation Fails Immediately
 
-`ksail workload reconcile` fails fast (without waiting for the timeout) when a Flux Kustomization encounters a permanent error:
+`ksail workload reconcile` automatically resets HelmReleases stuck in Failed or Stalled states before polling begins. If a HelmRelease reset does not resolve the issue, or if a Flux Kustomization encounters a permanent error, reconciliation fails fast (without waiting for the timeout):
 
 - **Build failure** — Kustomize cannot render your manifests (invalid YAML, missing patches, schema errors). Fix the manifests and re-push.
 - **Health check failure** — A deployed workload failed its readiness/liveness probe. Check pod logs for the affected workload.
