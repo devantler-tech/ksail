@@ -55,7 +55,9 @@ const (
 	// authRetryMaxWait is the maximum wait duration for auth retry backoff.
 	authRetryMaxWait = 4 * time.Second
 	// diagnoseTimeout is the timeout for the post-failure diagnostic subprocess.
-	diagnoseTimeout = 5 * time.Second
+	// Kept intentionally short: ksail chat is interactive, so a brief wait on
+	// failure to surface the real root cause is an acceptable trade-off.
+	diagnoseTimeout = 3 * time.Second
 	// startupErrFmt is the static format string for Copilot client startup errors.
 	// %w is the underlying error; %s is an optional diagnostic block (empty or
 	// "CLI diagnostic output:\n  ...\n\n").
@@ -317,7 +319,7 @@ func diagnoseCLIStartupFailure(ctx context.Context, cliPath string, env []string
 	defer cancel()
 
 	cmd := exec.CommandContext(diagCtx, cliPath,
-		"--headless", "--no-auto-update", "--log-level", "debug", "--stdio",
+		"--headless", "--no-auto-update", "--log-level", "error", "--stdio",
 	)
 	cmd.Env = env
 
