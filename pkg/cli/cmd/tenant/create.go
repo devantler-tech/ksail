@@ -43,6 +43,9 @@ func NewCreateCmd(_ *di.Runtime) *cobra.Command {
 			"(default: auto-detect from ksail.yaml gitOpsEngine)")
 	cmd.Flags().String("sync-source", "oci", "Flux source type: oci or git")
 	cmd.Flags().String("registry", "", "OCI registry URL for Flux OCI source (e.g., oci://ghcr.io)")
+	cmd.Flags().String("oci-path", "",
+		"Path suffix appended to OCI registry URL to avoid tag collisions "+
+			"(e.g., 'deploy' produces oci://registry/owner/repo/deploy)")
 	cmd.Flags().String(
 		"git-provider", "",
 		"Git provider for manifest URLs: github, gitlab, gitea "+
@@ -160,6 +163,7 @@ func resolveCreateOptions(
 	typeStr, _ := cmd.Flags().GetString("type")
 	syncSourceStr, _ := cmd.Flags().GetString("sync-source")
 	opts.Registry, _ = cmd.Flags().GetString("registry")
+	opts.OCIPath, _ = cmd.Flags().GetString("oci-path")
 	opts.GitProvider, _ = cmd.Flags().GetString("git-provider")
 	opts.TenantRepo, _ = cmd.Flags().GetString("tenant-repo")
 	opts.GitToken, _ = cmd.Flags().GetString("git-token")

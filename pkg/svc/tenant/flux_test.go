@@ -49,6 +49,18 @@ func TestGenerateFluxSyncManifests(t *testing.T) {
 				TenantType:  tenant.TypeFlux,
 			},
 		},
+		{
+			name: "oci source with oci-path suffix",
+			opts: tenant.Options{
+				Name:       "team-delta",
+				Namespaces: []string{"team-delta-ns"},
+				SyncSource: tenant.SyncSourceOCI,
+				Registry:   "oci://ghcr.io",
+				TenantRepo: "acme-org/team-delta-app",
+				OCIPath:    "deploy",
+				TenantType: tenant.TypeFlux,
+			},
+		},
 	}
 
 	for _, testCase := range tests {
@@ -175,4 +187,57 @@ func TestGenerateFluxSyncManifests_CustomSourceDirectory(t *testing.T) {
 	syncYAML := result["sync.yaml"]
 	require.Contains(t, syncYAML, "path: ./deploy")
 	require.NotContains(t, syncYAML, "path: ./k8s")
+}
+
+func TestGenerateFluxSyncManifests_OCIPath(t *testing.T) {
+	t.Parallel()
+
+	t.Run("appends path suffix to OCI URL", func(t *testing.T) {
+		t.Parallel()
+
+		result, err := tenant.GenerateFluxSyncManifests(tenant.Options{
+			Name:       "path-tenant",
+			Namespaces: []string{"path-ns"},
+			SyncSource: tenant.SyncSourceOCI,
+			Registry:   "oci://ghcr.io",
+			TenantRepo: "org/app",
+			OCIPath:    "deploy",
+			TenantType: tenant.TypeFlux,
+		})
+		require.NoError(t, err)
+		require.Contains(t, result["sync.yaml"], "url: oci://ghcr.io/org/app/deploy")
+	})
+
+	t.Run("trims leading and trailing slashes from oci-path", func(t *testing.T) {
+		t.Parallel()
+
+		result, err := tenant.GenerateFluxSyncManifests(tenant.Options{
+			Name:       "trim-tenant",
+			Namespaces: []string{"trim-ns"},
+			SyncSource: tenant.SyncSourceOCI,
+			Registry:   "oci://ghcr.io",
+			TenantRepo: "org/app",
+			OCIPath:    "/manifests/",
+			TenantType: tenant.TypeFlux,
+		})
+		require.NoError(t, err)
+		require.Contains(t, result["sync.yaml"], "url: oci://ghcr.io/org/app/manifests")
+	})
+
+	t.Run("empty oci-path preserves original URL", func(t *testing.T) {
+		t.Parallel()
+
+		result, err := tenant.GenerateFluxSyncManifests(tenant.Options{
+			Name:       "nopath-tenant",
+			Namespaces: []string{"nopath-ns"},
+			SyncSource: tenant.SyncSourceOCI,
+			Registry:   "oci://ghcr.io",
+			TenantRepo: "org/app",
+			OCIPath:    "",
+			TenantType: tenant.TypeFlux,
+		})
+		require.NoError(t, err)
+		require.Contains(t, result["sync.yaml"], "url: oci://ghcr.io/org/app")
+		require.NotContains(t, result["sync.yaml"], "url: oci://ghcr.io/org/app/")
+	})
 }

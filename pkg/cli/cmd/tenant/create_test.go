@@ -66,6 +66,11 @@ func TestCreateCmd_FlagDefaults(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "oci", ss)
 
+	// --oci-path default ""
+	op, err := cmd.Flags().GetString("oci-path")
+	require.NoError(t, err)
+	require.Empty(t, op)
+
 	// --register default false
 	reg, err := cmd.Flags().GetBool("register")
 	require.NoError(t, err)
@@ -145,6 +150,35 @@ func TestCreateCmd_FluxType(t *testing.T) {
 	// Verify kustomization.yaml exists.
 	_, err = os.Stat(filepath.Join(tenantDir, "kustomization.yaml"))
 	require.NoError(t, err)
+}
+
+func TestCreateCmd_FluxTypeWithOCIPath(t *testing.T) {
+	t.Parallel()
+
+	outDir := t.TempDir()
+
+	cmd := tenantpkg.NewCreateCmd(nil)
+
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
+	cmd.SetArgs([]string{
+		"oci-path-tenant", "--type", "flux",
+		"--registry", "oci://ghcr.io",
+		"--tenant-repo", "owner/repo",
+		"--oci-path", "deploy",
+		"--output", outDir,
+	})
+
+	err := cmd.Execute()
+	require.NoError(t, err)
+	require.Contains(t, buf.String(), `Tenant "oci-path-tenant" created successfully`)
+
+	// Verify sync.yaml contains the OCI path suffix.
+	tenantDir := filepath.Join(outDir, "oci-path-tenant")
+	syncContent, err := os.ReadFile(filepath.Join(tenantDir, "sync.yaml")) //nolint:gosec // test path
+	require.NoError(t, err)
+	require.Contains(t, string(syncContent), "url: oci://ghcr.io/owner/repo/deploy")
 }
 
 func TestCreateCmd_ArgoCDType(t *testing.T) {
