@@ -67,6 +67,8 @@ require (
 	github.com/google/go-github/v72 v72.0.0
 	github.com/hetznercloud/hcloud-go/v2 v2.38.0
 	github.com/invopop/jsonschema v0.14.0
+	github.com/kubescape/kubescape/v3 v3.0.48
+	github.com/kubescape/opa-utils v0.0.293
 	github.com/loft-sh/log v0.0.0-20240219160058-26d83ffb46ac
 	github.com/loft-sh/vcluster v0.33.2
 	github.com/modelcontextprotocol/go-sdk v1.5.0
@@ -347,7 +349,6 @@ require (
 	github.com/docker/cli v29.4.0+incompatible // indirect
 	github.com/docker/distribution v2.8.3+incompatible // indirect
 	github.com/docker/docker-credential-helpers v0.9.5 // indirect
-	github.com/docker/go v1.5.1-1.0.20160303222718-d30aec9fd63c // indirect
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/dsnet/compress v0.0.2-0.20230904184137-39efe44ab707 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
@@ -400,7 +401,6 @@ require (
 	github.com/go-git/go-git/v5 v5.18.0 // indirect
 	github.com/go-gorp/gorp/v3 v3.1.0 // indirect
 	github.com/go-gota/gota v0.12.0 // indirect
-	github.com/go-ini/ini v1.67.0 // indirect
 	github.com/go-jose/go-jose/v4 v4.1.4 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
@@ -424,12 +424,9 @@ require (
 	github.com/go-openapi/swag/stringutils v0.25.5 // indirect
 	github.com/go-openapi/swag/typeutils v0.25.5 // indirect
 	github.com/go-openapi/swag/yamlutils v0.25.5 // indirect
-	github.com/go-openapi/testify/enable/yaml/v2 v2.4.1 // indirect
-	github.com/go-openapi/testify/v2 v2.4.1 // indirect
 	github.com/go-openapi/validate v0.25.2 // indirect
 	github.com/go-piv/piv-go/v2 v2.5.0 // indirect
 	github.com/go-restruct/restruct v1.2.0-alpha // indirect
-	github.com/go-sql-driver/mysql v1.9.3 // indirect
 	github.com/go-test/deep v1.1.1 // indirect
 	github.com/go-toolsmith/astcast v1.1.0 // indirect
 	github.com/go-toolsmith/astcopy v1.1.0 // indirect
@@ -571,8 +568,6 @@ require (
 	github.com/kubescape/go-git-url v0.0.31 // indirect
 	github.com/kubescape/go-logger v0.0.25 // indirect
 	github.com/kubescape/k8s-interface v0.0.195 // indirect
-	github.com/kubescape/kubescape/v3 v3.0.48 // indirect
-	github.com/kubescape/opa-utils v0.0.293 // indirect
 	github.com/kubescape/rbac-utils v0.0.21-0.20230806101615-07e36f555520 // indirect
 	github.com/kubescape/regolibrary/v2 v2.0.1 // indirect
 	github.com/kulti/thelper v0.7.1 // indirect
@@ -594,7 +589,6 @@ require (
 	github.com/lestrrat-go/httpcc v1.0.1 // indirect
 	github.com/lestrrat-go/httprc/v3 v3.0.2 // indirect
 	github.com/lestrrat-go/jwx/v3 v3.0.13 // indirect
-	github.com/lestrrat-go/option v1.0.1 // indirect
 	github.com/lestrrat-go/option/v2 v2.0.0 // indirect
 	github.com/letsencrypt/boulder v0.20260223.0 // indirect
 	github.com/lib/pq v1.11.2 // indirect
@@ -735,8 +729,6 @@ require (
 	github.com/rakyll/hey v0.1.4 // indirect
 	github.com/rancher/wharfie v0.7.0 // indirect
 	github.com/rcrowley/go-metrics v0.0.0-20250401214520-65e299d6c5c9 // indirect
-	github.com/redis/go-redis/extra/redisotel/v9 v9.5.3 // indirect
-	github.com/redis/go-redis/v9 v9.18.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/rhysd/go-github-selfupdate v1.2.3 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
