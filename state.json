@@ -1,6 +1,6 @@
 {
-  "last_run": "2026-05-02T12:33:42Z",
-  "workflow_run_id": "25251942180",
+  "last_run": "2026-05-03T01:12:14Z",
+  "workflow_run_id": "25266351824",
   "commented_issues": {
     "4525": "2026-05-02",
     "4504": "2026-05-01",
@@ -28,7 +28,8 @@
     "4119": "2026-04-18"
   },
   "open_prs": {
-    "repo-assist/fix-lint-chat-tests": "style(chat): apply golangci-lint fixes to chat test files (Fixes #4530)"
+    "repo-assist/fix-lint-chat-tests": "style(chat): apply golangci-lint fixes to chat test files (Fixes #4530)",
+    "repo-assist/test-cipher-helper-coverage": "test(cipher): add unit tests for writeDecryptedOutput, showRotatePreview, and buildRotateOpts"
   },
   "merged_prs": {
     "4509": "fix(workload): validate explicit --path before config load (Fixes #4504)",
@@ -41,8 +42,8 @@
     "4359": "perf(notify): eliminate per-tick allocations",
     "4352": "refactor(setup): replace repeated if-append with table-driven loop"
   },
-  "last_code_quality_domain": "lint-fix",
-  "issue_backlog_cursor": "4531",
+  "last_code_quality_domain": "test-coverage",
+  "issue_backlog_cursor": "4549",
   "created_issues": {
     "4521": "[Repo Assist] [feature]: add local-remote service mirroring",
     "4511": "[Repo Assist] [feature]: add native ephemeral CI mode",
@@ -57,8 +58,8 @@
   },
   "notes": [
     "link_sub_issue is NOT idempotent - always verify sub-issue not already linked before calling",
-    "Open PRs for review: #4527 (HA defaults), #4528 (OIDC), #4529 (CI gate)",
-    "domain alternation: last was 'lint-fix' - next should be 'test coverage'",
-    "Monthly activity issue: #4501"
+    "New human PRs open: #4546 (chat stderr), #4542 (HelmRelease stuck), #4541 (reconcile diag), #4528 (OIDC)",
+    "Monthly activity issue: #4501",
+    "domain alternation: last was test-coverage - next should be refactor"
   ]
 }
