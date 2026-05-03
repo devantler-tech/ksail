@@ -9,6 +9,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/client/reconciler"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -575,4 +576,508 @@ func TestListKustomizations_DependsOnEdgeCases(t *testing.T) {
 			assert.Equal(t, testCase.wantDeps, infos[0].DependsOn)
 		})
 	}
+}
+
+// ---------------------------------------------------------------------------
+// HelmRelease GVR and helpers
+// ---------------------------------------------------------------------------
+
+// helmReleaseGVR is the GroupVersionResource for Flux HelmRelease CRs.
+var helmReleaseGVR = schema.GroupVersionResource{ //nolint:gochecknoglobals // test-scoped constant
+	Group:    "helm.toolkit.fluxcd.io",
+	Version:  "v2",
+	Resource: "helmreleases",
+}
+
+// newTestFluxReconcilerWithHelmReleases creates a Flux Reconciler backed by a
+// fake dynamic client that supports both Kustomization and HelmRelease resources.
+func newTestFluxReconcilerWithHelmReleases(objects ...runtime.Object) *flux.Reconciler {
+	scheme := runtime.NewScheme()
+	fakeClient := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(
+		scheme,
+		map[schema.GroupVersionResource]string{
+			kustomizationGVR: "KustomizationList",
+			helmReleaseGVR:   "HelmReleaseList",
+		},
+		objects...,
+	)
+
+	return &flux.Reconciler{Base: reconciler.NewBaseWithClient(fakeClient)}
+}
+
+// newFakeHelmRelease builds an unstructured Flux HelmRelease CR for testing.
+func newFakeHelmRelease(
+	name, namespace string,
+	conditions []map[string]any,
+) *unstructured.Unstructured {
+	helmRelease := &unstructured.Unstructured{}
+	helmRelease.SetGroupVersionKind(schema.GroupVersionKind{
+		Group:   "helm.toolkit.fluxcd.io",
+		Version: "v2",
+		Kind:    "HelmRelease",
+	})
+	helmRelease.SetName(name)
+	helmRelease.SetNamespace(namespace)
+
+	helmRelease.Object["spec"] = map[string]any{
+		"chart": map[string]any{
+			"spec": map[string]any{
+				"chart": name,
+			},
+		},
+	}
+
+	if len(conditions) > 0 {
+		condList := make([]any, len(conditions))
+		for i, c := range conditions {
+			condList[i] = c
+		}
+
+		helmRelease.Object["status"] = map[string]any{
+			"conditions": condList,
+		}
+	}
+
+	return helmRelease
+}
+
+// ---------------------------------------------------------------------------
+// checkHelmReleaseStuck (via export_test.go)
+// ---------------------------------------------------------------------------
+
+//nolint:funlen // Table-driven test with comprehensive cases
+func TestCheckHelmReleaseStuck(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		hr         *unstructured.Unstructured
+		wantStuck  bool
+		wantReason string
+	}{
+		{
+			name: "healthy HelmRelease (Ready=True)",
+			hr: newFakeHelmRelease("kyverno", "kyverno", []map[string]any{
+				{"type": "Ready", "status": "True", "reason": "Succeeded", "message": "ok"},
+			}),
+			wantStuck: false,
+		},
+		{
+			name: "stuck with InstallFailed",
+			hr: newFakeHelmRelease("kyverno", "kyverno", []map[string]any{
+				{
+					"type":    "Ready",
+					"status":  "False",
+					"reason":  "InstallFailed",
+					"message": "install retries exhausted",
+				},
+			}),
+			wantStuck:  true,
+			wantReason: "InstallFailed",
+		},
+		{
+			name: "stuck with UpgradeFailed",
+			hr: newFakeHelmRelease("nginx", "default", []map[string]any{
+				{
+					"type":    "Ready",
+					"status":  "False",
+					"reason":  "UpgradeFailed",
+					"message": "upgrade retries exhausted",
+				},
+			}),
+			wantStuck:  true,
+			wantReason: "UpgradeFailed",
+		},
+		{
+			name: "stuck with ReconciliationFailed",
+			hr: newFakeHelmRelease("metrics", "monitoring", []map[string]any{
+				{
+					"type":    "Ready",
+					"status":  "False",
+					"reason":  "ReconciliationFailed",
+					"message": "reconciliation failed",
+				},
+			}),
+			wantStuck:  true,
+			wantReason: "ReconciliationFailed",
+		},
+		{
+			name: "stuck with TestFailed",
+			hr: newFakeHelmRelease("app", "default", []map[string]any{
+				{
+					"type":    "Ready",
+					"status":  "False",
+					"reason":  "TestFailed",
+					"message": "helm test failed",
+				},
+			}),
+			wantStuck:  true,
+			wantReason: "TestFailed",
+		},
+		{
+			name: "stuck with RollbackFailed",
+			hr: newFakeHelmRelease("app", "default", []map[string]any{
+				{
+					"type":    "Ready",
+					"status":  "False",
+					"reason":  "RollbackFailed",
+					"message": "rollback failed",
+				},
+			}),
+			wantStuck:  true,
+			wantReason: "RollbackFailed",
+		},
+		{
+			name: "stuck with UninstallFailed",
+			hr: newFakeHelmRelease("app", "default", []map[string]any{
+				{
+					"type":    "Ready",
+					"status":  "False",
+					"reason":  "UninstallFailed",
+					"message": "uninstall failed",
+				},
+			}),
+			wantStuck:  true,
+			wantReason: "UninstallFailed",
+		},
+		{
+			name: "stuck with GetLastReleaseFailed",
+			hr: newFakeHelmRelease("app", "default", []map[string]any{
+				{
+					"type":    "Ready",
+					"status":  "False",
+					"reason":  "GetLastReleaseFailed",
+					"message": "get last release failed",
+				},
+			}),
+			wantStuck:  true,
+			wantReason: "GetLastReleaseFailed",
+		},
+		{
+			name: "Stalled=True is stuck",
+			hr: newFakeHelmRelease("kyverno", "kyverno", []map[string]any{
+				{
+					"type":    "Stalled",
+					"status":  "True",
+					"reason":  "RetryExhausted",
+					"message": "retries exhausted",
+				},
+			}),
+			wantStuck:  true,
+			wantReason: "RetryExhausted",
+		},
+		{
+			name: "DependencyNotReady is NOT stuck (transient)",
+			hr: newFakeHelmRelease("app", "default", []map[string]any{
+				{
+					"type":    "Ready",
+					"status":  "False",
+					"reason":  "DependencyNotReady",
+					"message": "waiting for dependency",
+				},
+			}),
+			wantStuck: false,
+		},
+		{
+			name: "Progressing is NOT stuck (transient)",
+			hr: newFakeHelmRelease("app", "default", []map[string]any{
+				{
+					"type":    "Ready",
+					"status":  "False",
+					"reason":  "Progressing",
+					"message": "reconciliation in progress",
+				},
+			}),
+			wantStuck: false,
+		},
+		{
+			name:      "no conditions is NOT stuck",
+			hr:        newFakeHelmRelease("app", "default", nil),
+			wantStuck: false,
+		},
+		{
+			name: "Ready=True overrides earlier failure reason",
+			hr: newFakeHelmRelease("app", "default", []map[string]any{
+				{
+					"type":    "Stalled",
+					"status":  "False",
+					"reason":  "RecoveredFromFailure",
+					"message": "stall cleared",
+				},
+				{"type": "Ready", "status": "True", "reason": "Succeeded", "message": "ok"},
+			}),
+			wantStuck: false,
+		},
+		{
+			name: "intentionally suspended HelmRelease is NOT stuck",
+			hr: func() *unstructured.Unstructured {
+				release := newFakeHelmRelease("app", "default", []map[string]any{
+					{
+						"type":    "Ready",
+						"status":  "False",
+						"reason":  "InstallFailed",
+						"message": "retries exhausted",
+					},
+				})
+
+				err := unstructured.SetNestedField(release.Object, true, "spec", "suspend")
+				require.NoError(t, err)
+
+				return release
+			}(),
+			wantStuck: false,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			result := flux.CheckHelmReleaseStuck(testCase.hr)
+
+			if !testCase.wantStuck {
+				assert.Nil(t, result, "expected HelmRelease to NOT be stuck")
+
+				return
+			}
+
+			require.NotNil(t, result, "expected HelmRelease to be stuck")
+			assert.Equal(t, testCase.wantReason, result.Reason)
+			assert.Equal(t, testCase.hr.GetName(), result.Name)
+			assert.Equal(t, testCase.hr.GetNamespace(), result.Namespace)
+		})
+	}
+}
+
+// ---------------------------------------------------------------------------
+// ListStuckHelmReleases
+// ---------------------------------------------------------------------------
+
+//nolint:funlen // table-driven test with comprehensive scenarios
+func TestListStuckHelmReleases(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		objects   []runtime.Object
+		wantCount int
+		wantNames []string
+	}{
+		{
+			name:      "no HelmReleases returns empty",
+			objects:   nil,
+			wantCount: 0,
+		},
+		{
+			name: "healthy HelmReleases are not listed",
+			objects: []runtime.Object{
+				newFakeHelmRelease("kyverno", "kyverno", []map[string]any{
+					{"type": "Ready", "status": "True", "reason": "Succeeded", "message": "ok"},
+				}),
+			},
+			wantCount: 0,
+		},
+		{
+			name: "stuck HelmRelease is listed",
+			objects: []runtime.Object{
+				newFakeHelmRelease("kyverno", "kyverno", []map[string]any{
+					{
+						"type":    "Ready",
+						"status":  "False",
+						"reason":  "InstallFailed",
+						"message": "retries exhausted",
+					},
+				}),
+			},
+			wantCount: 1,
+			wantNames: []string{"kyverno"},
+		},
+		{
+			name: "mixed healthy and stuck across namespaces",
+			objects: []runtime.Object{
+				newFakeHelmRelease("healthy", "default", []map[string]any{
+					{"type": "Ready", "status": "True", "reason": "Succeeded", "message": "ok"},
+				}),
+				newFakeHelmRelease("stuck-a", "kyverno", []map[string]any{
+					{
+						"type":    "Ready",
+						"status":  "False",
+						"reason":  "UpgradeFailed",
+						"message": "upgrade failed",
+					},
+				}),
+				newFakeHelmRelease("stuck-b", "monitoring", []map[string]any{
+					{
+						"type":    "Stalled",
+						"status":  "True",
+						"reason":  "RetryExhausted",
+						"message": "retries exhausted",
+					},
+				}),
+				newFakeHelmRelease("progressing", "default", []map[string]any{
+					{
+						"type":    "Ready",
+						"status":  "False",
+						"reason":  "Progressing",
+						"message": "in progress",
+					},
+				}),
+			},
+			wantCount: 2,
+			wantNames: []string{"stuck-a", "stuck-b"},
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			r := newTestFluxReconcilerWithHelmReleases(testCase.objects...)
+
+			stuck, err := r.ListStuckHelmReleases(context.Background())
+			require.NoError(t, err)
+			assert.Len(t, stuck, testCase.wantCount)
+
+			if len(testCase.wantNames) > 0 {
+				gotNames := make([]string, len(stuck))
+				for i, s := range stuck {
+					gotNames[i] = s.Name
+				}
+
+				assert.ElementsMatch(t, testCase.wantNames, gotNames)
+			}
+		})
+	}
+}
+
+func TestListStuckHelmReleases_APIError(t *testing.T) {
+	t.Parallel()
+
+	scheme := runtime.NewScheme()
+	fakeClient := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(
+		scheme,
+		map[schema.GroupVersionResource]string{
+			helmReleaseGVR: "HelmReleaseList",
+		},
+	)
+
+	fakeClient.PrependReactor("list", "helmreleases", func(
+		_ k8stesting.Action,
+	) (bool, runtime.Object, error) {
+		return true, nil, errSimulatedAPIFailure
+	})
+
+	r := &flux.Reconciler{Base: reconciler.NewBaseWithClient(fakeClient)}
+
+	_, err := r.ListStuckHelmReleases(context.Background())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "list helmreleases")
+}
+
+// ---------------------------------------------------------------------------
+// ResetStuckHelmReleases
+// ---------------------------------------------------------------------------
+
+func TestResetStuckHelmReleases_EmptyList(t *testing.T) {
+	t.Parallel()
+
+	reconciler := newTestFluxReconcilerWithHelmReleases()
+
+	count, err := reconciler.ResetStuckHelmReleases(context.Background(), nil)
+	require.NoError(t, err)
+	assert.Equal(t, 0, count)
+}
+
+func TestResetStuckHelmReleases_SuccessfulReset(t *testing.T) {
+	t.Parallel()
+
+	helmRelease := newFakeHelmRelease("kyverno", "kyverno", []map[string]any{
+		{
+			"type":    "Ready",
+			"status":  "False",
+			"reason":  "InstallFailed",
+			"message": "retries exhausted",
+		},
+	})
+
+	reconciler := newTestFluxReconcilerWithHelmReleases(helmRelease)
+
+	releases := []flux.StuckHelmRelease{
+		{Name: "kyverno", Namespace: "kyverno", Reason: "InstallFailed"},
+	}
+
+	count, err := reconciler.ResetStuckHelmReleases(context.Background(), releases)
+	require.NoError(t, err)
+	assert.Equal(t, 1, count)
+
+	// Verify the HelmRelease has spec.suspend=false after the reset cycle.
+	gvr := flux.HelmReleaseGVR()
+
+	got, err := reconciler.Dynamic.Resource(gvr).Namespace("kyverno").Get(
+		context.Background(), "kyverno", metav1.GetOptions{},
+	)
+	require.NoError(t, err)
+
+	suspended, _, _ := unstructured.NestedBool(got.Object, "spec", "suspend")
+	assert.False(t, suspended, "spec.suspend should be false after reset")
+}
+
+func TestResetStuckHelmReleases_PartialFailure(t *testing.T) {
+	t.Parallel()
+
+	helmRelease := newFakeHelmRelease("kyverno", "kyverno", []map[string]any{
+		{
+			"type":    "Ready",
+			"status":  "False",
+			"reason":  "InstallFailed",
+			"message": "retries exhausted",
+		},
+	})
+
+	reconciler := newTestFluxReconcilerWithHelmReleases(helmRelease)
+
+	releases := []flux.StuckHelmRelease{
+		{Name: "nonexistent", Namespace: "default", Reason: "InstallFailed"},
+		{Name: "kyverno", Namespace: "kyverno", Reason: "InstallFailed"},
+	}
+
+	count, err := reconciler.ResetStuckHelmReleases(context.Background(), releases)
+	// nonexistent is not in the fake client so its suspend patch returns NotFound.
+	// kyverno exists and succeeds, so exactly one release is reset.
+	assert.Equal(t, 1, count)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "nonexistent")
+}
+
+func TestResetStuckHelmReleases_CancelledContext(t *testing.T) {
+	t.Parallel()
+
+	helmRelease := newFakeHelmRelease("kyverno", "kyverno", []map[string]any{
+		{
+			"type":    "Ready",
+			"status":  "False",
+			"reason":  "InstallFailed",
+			"message": "retries exhausted",
+		},
+	})
+
+	reconciler := newTestFluxReconcilerWithHelmReleases(helmRelease)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // Cancel immediately
+
+	releases := []flux.StuckHelmRelease{
+		{Name: "kyverno", Namespace: "kyverno", Reason: "InstallFailed"},
+	}
+
+	// dynamicfake does not fail requests on a cancelled context, so this test
+	// cannot directly verify that the resume uses a detached context. It
+	// serves instead as a documentation test: with a real API server,
+	// context.WithoutCancel in ResetStuckHelmReleases ensures the resume
+	// phase always runs even after the parent context has been cancelled.
+	// Here we at least confirm the function returns the correct count and no
+	// error when called with an already-cancelled context.
+	count, err := reconciler.ResetStuckHelmReleases(ctx, releases)
+	require.NoError(t, err)
+	assert.Equal(t, 1, count)
 }

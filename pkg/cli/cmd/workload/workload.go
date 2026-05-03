@@ -2289,6 +2289,9 @@ func reconcileFlux(
 		return fmt.Errorf("reconcile oci source: %w", err)
 	}
 
+	// Sub-phase 1.5: Reset stuck HelmReleases before Kustomization polling.
+	resetStuckHelmReleases(deadlineCtx, fluxReconciler, outputTimer, writer)
+
 	// Sub-phase 2: Kustomization reconciliation with per-resource tracking
 	writeActivityNotification("reconciling kustomizations...", outputTimer, writer)
 
@@ -2305,9 +2308,53 @@ func reconcileFlux(
 	return nil
 }
 
-// failedKustomizations tracks kustomizations that have permanently failed
-// during reconciliation. This enables fail-fast for dependent kustomizations:
-// when an upstream kustomization fails, all dependents fail immediately
+// resetStuckHelmReleases detects and resets HelmReleases that are stuck in a
+// non-recoverable Failed/Stalled state before Kustomization polling begins.
+// Errors are treated as best-effort — if the CRD is not installed or the API
+// is unreachable, reconciliation continues normally.
+func resetStuckHelmReleases(
+	ctx context.Context,
+	fluxReconciler *flux.Reconciler,
+	outputTimer timer.Timer,
+	writer io.Writer,
+) {
+	stuckReleases, err := fluxReconciler.ListStuckHelmReleases(ctx)
+	if err != nil {
+		writeActivityNotification(
+			fmt.Sprintf("warning: could not check for stuck helmreleases: %v", err),
+			outputTimer, writer,
+		)
+
+		return
+	}
+
+	if len(stuckReleases) == 0 {
+		return
+	}
+
+	writeActivityNotification(
+		fmt.Sprintf("resetting %d stuck helmrelease(s)...", len(stuckReleases)),
+		outputTimer, writer,
+	)
+
+	resetCount, resetErr := fluxReconciler.ResetStuckHelmReleases(ctx, stuckReleases)
+	if resetErr != nil {
+		writeActivityNotification(
+			fmt.Sprintf("warning: some helmreleases could not be reset: %v", resetErr),
+			outputTimer, writer,
+		)
+	}
+
+	if resetCount > 0 {
+		writeActivityNotification(
+			fmt.Sprintf("reset %d stuck helmrelease(s)", resetCount),
+			outputTimer, writer,
+		)
+	}
+}
+
+// failedKustomizations tracks kustomizations that have permanently failed.
+// When an upstream kustomization fails, all dependents fail immediately
 // instead of waiting for the full timeout.
 type failedKustomizations struct {
 	m sync.Map
