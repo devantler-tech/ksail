@@ -1285,6 +1285,8 @@ func TestBuildRotateOptsWithValidAddKey(t *testing.T) {
 	}
 
 	if opts.AddKeys[0].ToString() != identity.Recipient().String() {
-		t.Errorf("expected AddKeys[0] to match recipient %q, got %q", identity.Recipient().String(), opts.AddKeys[0].ToString())
+		want := identity.Recipient().String()
+		got := opts.AddKeys[0].ToString()
+		t.Errorf("expected AddKeys[0] to match recipient %q, got %q", want, got)
 	}
 }
