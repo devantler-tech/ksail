@@ -34,17 +34,7 @@ func Diagnose(
 		return
 	}
 
-	restCfg, err := k8sutil.BuildRESTConfig(canonPath, "")
-	if err != nil {
-		return
-	}
-
-	dynClient, err := dynamic.NewForConfig(restCfg)
-	if err != nil {
-		return
-	}
-
-	clientset, err := kubernetes.NewForConfig(restCfg)
+	dynClient, clientset, err := buildDiagClients(canonPath)
 	if err != nil {
 		return
 	}
@@ -64,9 +54,27 @@ func Diagnose(
 		return
 	}
 
-	if report == nil || report.IsEmpty() {
-		return
+	// Write no-ops when the report is empty, so no guard needed here.
+	report.Write(writer)
+}
+
+// buildDiagClients creates the Kubernetes clients needed for diagnostics.
+// Errors are returned to the caller, which treats them as best-effort skips.
+func buildDiagClients(kubeconfigPath string) (dynamic.Interface, kubernetes.Interface, error) {
+	restCfg, err := k8sutil.BuildRESTConfig(kubeconfigPath, "")
+	if err != nil {
+		return nil, nil, err
 	}
 
-	report.Write(writer)
+	dynClient, err := dynamic.NewForConfig(restCfg)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	clientset, err := kubernetes.NewForConfig(restCfg)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return dynClient, clientset, nil
 }
