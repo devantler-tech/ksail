@@ -384,3 +384,15 @@ func BenchmarkRoundtrip_Minimal(b *testing.B) {
 		}
 	}
 }
+
+
+// --- Exported seams for internal helper tests ---
+
+// WriteDecryptedOutput exposes the private writeDecryptedOutput for testing.
+var WriteDecryptedOutput = writeDecryptedOutput
+
+// ShowRotatePreview exposes the private showRotatePreview for testing.
+var ShowRotatePreview = showRotatePreview
+
+// BuildRotateOpts exposes the private buildRotateOpts for testing.
+var BuildRotateOpts = buildRotateOpts
