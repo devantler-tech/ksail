@@ -115,5 +115,5 @@ type Interface interface {
 	GetReleaseValues(
 		ctx context.Context,
 		releaseName, namespace string,
-	) (map[string]interface{}, error)
+	) (map[string]any, error)
 }

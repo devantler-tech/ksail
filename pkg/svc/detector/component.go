@@ -580,18 +580,18 @@ func (d *ComponentDetector) detectNodeAutoscaler(
 }
 
 // parseAutoscalerValues extracts autoscaler config from Helm release values.
-func parseAutoscalerValues(cfg *v1alpha1.NodeAutoscalerConfig, values map[string]interface{}) {
-	if extraArgs, exists := values["extraArgs"].(map[string]interface{}); exists {
+func parseAutoscalerValues(cfg *v1alpha1.NodeAutoscalerConfig, values map[string]any) {
+	if extraArgs, exists := values["extraArgs"].(map[string]any); exists {
 		parseAutoscalerExtraArgs(cfg, extraArgs)
 	}
 
-	if groups, exists := values["autoscalingGroups"].([]interface{}); exists {
+	if groups, exists := values["autoscalingGroups"].([]any); exists {
 		cfg.Pools = parseAutoscalingGroups(groups)
 	}
 }
 
 // parseAutoscalerExtraArgs extracts scalar config from the chart's extraArgs.
-func parseAutoscalerExtraArgs(cfg *v1alpha1.NodeAutoscalerConfig, args map[string]interface{}) {
+func parseAutoscalerExtraArgs(cfg *v1alpha1.NodeAutoscalerConfig, args map[string]any) {
 	if expander, ok := args["expander"].(string); ok {
 		cfg.Expander = helmExpanderToEnum(expander)
 	}
@@ -623,11 +623,11 @@ func helmExpanderToEnum(value string) v1alpha1.AutoscalerExpander {
 }
 
 // parseAutoscalingGroups converts the chart's autoscalingGroups list to NodePool slices.
-func parseAutoscalingGroups(groups []interface{}) []v1alpha1.NodePool {
+func parseAutoscalingGroups(groups []any) []v1alpha1.NodePool {
 	pools := make([]v1alpha1.NodePool, 0, len(groups))
 
 	for _, g := range groups {
-		group, ok := g.(map[string]interface{})
+		group, ok := g.(map[string]any)
 		if !ok {
 			continue
 		}
@@ -671,13 +671,13 @@ func float64ToInt32(f float64) (int32, bool) {
 		return 0, false
 	}
 
-	return int32(f), true //nolint:gosec // bounds checked above
+	return int32(f), true
 }
 
 // toInt32 converts a Helm values entry (which may be float64, json.Number, int, int32,
 // or int64) to int32. Returns (0, false) when the value is not a numeric type, is
 // non-integral, or falls outside the int32 range.
-func toInt32(v interface{}) (int32, bool) {
+func toInt32(v any) (int32, bool) {
 	switch num := v.(type) {
 	case float64:
 		return float64ToInt32(num)

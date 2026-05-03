@@ -1047,14 +1047,14 @@ func TestDetectNodeAutoscaler_Enabled(t *testing.T) {
 
 	helmClient.On("GetReleaseValues", ctx,
 		detector.ReleaseClusterAutoscaler, detector.NamespaceClusterAutoscaler,
-	).Return(map[string]interface{}{
-		"extraArgs": map[string]interface{}{
+	).Return(map[string]any{
+		"extraArgs": map[string]any{
 			"expander":                 "price",
 			"max-nodes-total":          float64(10),
 			"scale-down-unneeded-time": "10m",
 		},
-		"autoscalingGroups": []interface{}{
-			map[string]interface{}{
+		"autoscalingGroups": []any{
+			map[string]any{
 				"name":         "autoscale-small",
 				"instanceType": "cx23",
 				"region":       "fsn1",

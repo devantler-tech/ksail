@@ -343,7 +343,7 @@ func (c *Client) GetReleaseStorageLabels(
 func (c *Client) GetReleaseValues(
 	ctx context.Context,
 	releaseName, namespace string,
-) (map[string]interface{}, error) {
+) (map[string]any, error) {
 	if releaseName == "" {
 		return nil, errReleaseNameRequired
 	}
