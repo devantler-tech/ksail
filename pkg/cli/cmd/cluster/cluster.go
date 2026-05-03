@@ -1227,7 +1227,8 @@ func handleCreateRunE(
 
 	// Persist the ClusterSpec so that future updates have an accurate baseline
 	// for fields that cannot be detected from the live cluster (e.g., Talos ISO).
-	if saveErr := state.SaveClusterSpec(clusterName, &ctx.ClusterCfg.Spec.Cluster); saveErr != nil {
+	saveErr := state.SaveClusterSpec(clusterName, &ctx.ClusterCfg.Spec.Cluster)
+	if saveErr != nil {
 		notify.Warningf(cmd.OutOrStderr(), "failed to save cluster state: %v", saveErr)
 	}
 
@@ -7202,7 +7203,8 @@ func applyInPlaceChanges(
 	}
 
 	// Persist the updated ClusterSpec for future update baselines.
-	if saveErr := state.SaveClusterSpec(clusterName, &ctx.ClusterCfg.Spec.Cluster); saveErr != nil {
+	saveErr := state.SaveClusterSpec(clusterName, &ctx.ClusterCfg.Spec.Cluster)
+	if saveErr != nil {
 		notify.Warningf(cmd.OutOrStderr(), "failed to save cluster state: %v", saveErr)
 	}
 
