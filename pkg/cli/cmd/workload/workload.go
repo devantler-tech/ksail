@@ -2142,12 +2142,16 @@ func runReconcile(cmd *cobra.Command) error {
 	)
 	if err != nil {
 		// Collect and display targeted diagnostics before returning the error.
-		reconcilediag.Diagnose(
-			context.WithoutCancel(cmd.Context()),
-			cmd.ErrOrStderr(),
-			kubeconfigPath,
-			gitOpsEngine,
-		)
+		// Skip diagnostics when the user explicitly cancelled (Ctrl+C) to avoid
+		// blocking for the diagnostic timeout after a deliberate abort.
+		if !errors.Is(cmd.Context().Err(), context.Canceled) {
+			reconcilediag.Diagnose(
+				context.WithoutCancel(cmd.Context()),
+				cmd.ErrOrStderr(),
+				kubeconfigPath,
+				gitOpsEngine,
+			)
+		}
 
 		return err
 	}

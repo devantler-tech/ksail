@@ -115,6 +115,12 @@ func (c *FluxCollector) collectFailingCRs(
 		})
 	}
 
+	sort.Slice(section.Resources, func(i, j int) bool {
+		ki := section.Resources[i].Namespace + "/" + section.Resources[i].Name
+		kj := section.Resources[j].Namespace + "/" + section.Resources[j].Name
+		return ki < kj
+	})
+
 	return section
 }
 
@@ -192,7 +198,7 @@ func (c *FluxCollector) collectWarningEvents(ctx context.Context) []WarningEvent
 }
 
 // collectNamespaceWarningEvents is a shared helper that queries warning events
-// from a single namespace, filtering to the configured lookback window.
+// from a single namespace, filtering to the default lookback window (defaultEventLookback).
 func collectNamespaceWarningEvents(
 	ctx context.Context,
 	clientset kubernetes.Interface,
