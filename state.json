@@ -1,6 +1,6 @@
 {
-  "last_run": "2026-05-03T01:12:14Z",
-  "workflow_run_id": "25266351824",
+  "last_run": "2026-05-04T00:00:00Z",
+  "workflow_run_id": "25279230981",
   "commented_issues": {
     "4525": "2026-05-02",
     "4504": "2026-05-01",
@@ -29,7 +29,8 @@
   },
   "open_prs": {
     "repo-assist/fix-lint-chat-tests": "style(chat): apply golangci-lint fixes to chat test files (Fixes #4530)",
-    "repo-assist/test-cipher-helper-coverage": "test(cipher): add unit tests for writeDecryptedOutput, showRotatePreview, and buildRotateOpts"
+    "repo-assist/test-cipher-helper-coverage": "test(cipher): add unit tests for writeDecryptedOutput, showRotatePreview, and buildRotateOpts",
+    "repo-assist/improve-total-node-count-helper": "refactor: add TotalNodeCount() to ClusterSpec to reduce duplication"
   },
   "merged_prs": {
     "4509": "fix(workload): validate explicit --path before config load (Fixes #4504)",
@@ -42,8 +43,8 @@
     "4359": "perf(notify): eliminate per-tick allocations",
     "4352": "refactor(setup): replace repeated if-append with table-driven loop"
   },
-  "last_code_quality_domain": "test-coverage",
-  "issue_backlog_cursor": "4549",
+  "last_code_quality_domain": "refactor",
+  "issue_backlog_cursor": "4559",
   "created_issues": {
     "4521": "[Repo Assist] [feature]: add local-remote service mirroring",
     "4511": "[Repo Assist] [feature]: add native ephemeral CI mode",
@@ -58,8 +59,7 @@
   },
   "notes": [
     "link_sub_issue is NOT idempotent - always verify sub-issue not already linked before calling",
-    "New human PRs open: #4546 (chat stderr), #4542 (HelmRelease stuck), #4541 (reconcile diag), #4528 (OIDC)",
     "Monthly activity issue: #4501",
-    "domain alternation: last was test-coverage - next should be refactor"
+    "domain alternation: last was refactor - next should be performance"
   ]
 }
