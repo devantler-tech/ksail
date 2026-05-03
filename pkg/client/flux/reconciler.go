@@ -439,13 +439,17 @@ func evaluateHelmReleaseConditions(
 	return nil
 }
 
-// evaluateHelmReleaseCondition checks a single condition map and returns a
-// StuckHelmRelease if the condition indicates a stuck state, or nil otherwise.
-func evaluateHelmReleaseCondition(
-	helmRelease *unstructured.Unstructured,
-	cond any,
-	stuckReasons []string,
-) *StuckHelmRelease {
+// conditionDetails holds the parsed fields from a Flux status condition map.
+type conditionDetails struct {
+	condType    string
+	condStatus  string
+	condReason  string
+	condMessage string
+}
+
+// parseCondition extracts the standard condition fields from a raw condition
+// map entry. Returns nil when the entry is not a map.
+func parseCondition(cond any) *conditionDetails {
 	condMap, ok := cond.(map[string]any)
 	if !ok {
 		return nil
@@ -456,24 +460,44 @@ func evaluateHelmReleaseCondition(
 	condReason, _, _ := unstructured.NestedString(condMap, "reason")
 	condMessage, _, _ := unstructured.NestedString(condMap, "message")
 
+	return &conditionDetails{
+		condType:    condType,
+		condStatus:  condStatus,
+		condReason:  condReason,
+		condMessage: condMessage,
+	}
+}
+
+// evaluateHelmReleaseCondition checks a single condition map and returns a
+// StuckHelmRelease if the condition indicates a stuck state, or nil otherwise.
+func evaluateHelmReleaseCondition(
+	helmRelease *unstructured.Unstructured,
+	cond any,
+	stuckReasons []string,
+) *StuckHelmRelease {
+	c := parseCondition(cond)
+	if c == nil {
+		return nil
+	}
+
 	// Stalled=True means the controller has given up retrying.
-	if condType == conditionTypeStalled && condStatus == conditionStatusTrue {
+	if c.condType == conditionTypeStalled && c.condStatus == conditionStatusTrue {
 		return &StuckHelmRelease{
 			Name:      helmRelease.GetName(),
 			Namespace: helmRelease.GetNamespace(),
-			Reason:    condReason,
-			Message:   condMessage,
+			Reason:    c.condReason,
+			Message:   c.condMessage,
 		}
 	}
 
 	// Ready=False with a failure reason.
-	if condType == conditionTypeReady && condStatus == conditionStatusFalse &&
-		slices.Contains(stuckReasons, condReason) {
+	if c.condType == conditionTypeReady && c.condStatus == conditionStatusFalse &&
+		slices.Contains(stuckReasons, c.condReason) {
 		return &StuckHelmRelease{
 			Name:      helmRelease.GetName(),
 			Namespace: helmRelease.GetNamespace(),
-			Reason:    condReason,
-			Message:   condMessage,
+			Reason:    c.condReason,
+			Message:   c.condMessage,
 		}
 	}
 
@@ -814,29 +838,24 @@ func evaluateKustomizationConditions(conditions []any) (bool, string, error) {
 	var readyStatus, readyReason, readyMessage string
 
 	for _, condition := range conditions {
-		condMap, ok := condition.(map[string]any)
-		if !ok {
+		c := parseCondition(condition)
+		if c == nil {
 			continue
 		}
 
-		condType, _, _ := unstructured.NestedString(condMap, "type")
-		condStatus, _, _ := unstructured.NestedString(condMap, "status")
-		condReason, _, _ := unstructured.NestedString(condMap, "reason")
-		condMessage, _, _ := unstructured.NestedString(condMap, "message")
+		if c.condType == conditionTypeReady {
+			readyStatus = c.condStatus
+			readyReason = c.condReason
+			readyMessage = c.condMessage
 
-		if condType == conditionTypeReady {
-			readyStatus = condStatus
-			readyReason = condReason
-			readyMessage = condMessage
-
-			if condStatus == conditionStatusTrue {
+			if c.condStatus == conditionStatusTrue {
 				return true, conditionTypeReady, nil
 			}
 		}
 
 		// Check for Stalled condition which indicates a permanent failure.
-		if condType == conditionTypeStalled && condStatus == conditionStatusTrue {
-			return false, "", fmt.Errorf("%w: stalled - %s", ErrKustomizationFailed, condMessage)
+		if c.condType == conditionTypeStalled && c.condStatus == conditionStatusTrue {
+			return false, "", fmt.Errorf("%w: stalled - %s", ErrKustomizationFailed, c.condMessage)
 		}
 	}
 
