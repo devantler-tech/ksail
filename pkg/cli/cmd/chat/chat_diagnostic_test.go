@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/chat"
@@ -15,12 +14,21 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const osWindows = "windows"
+
+// errFakeCLIExit is a static sentinel used in TestStartupErrFmt to simulate
+// the error produced by the Copilot SDK when its CLI subprocess exits early.
+var errFakeCLIExit = errors.New("CLI process exited: exit status 1")
+
 func writeScript(t *testing.T, dir, content string) string {
 	t.Helper()
 
 	path := filepath.Join(dir, "copilot")
 	require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
-	require.NoError(t, os.Chmod(path, 0o500))
+	require.NoError(
+		t,
+		os.Chmod(path, 0o500), //nolint:gosec // scripts need execute bit; file lives in a temp dir
+	)
 
 	return path
 }
@@ -28,7 +36,7 @@ func writeScript(t *testing.T, dir, content string) string {
 func TestDiagnoseCLIStartupFailure(t *testing.T) {
 	t.Parallel()
 
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == osWindows {
 		t.Skip("test relies on shell scripts")
 	}
 
@@ -82,7 +90,7 @@ func TestDiagnoseCLIStartupFailure(t *testing.T) {
 func TestBuildDiagnosticBlock(t *testing.T) {
 	t.Parallel()
 
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == osWindows {
 		t.Skip("test relies on shell scripts")
 	}
 
@@ -129,7 +137,7 @@ func TestBuildDiagnosticBlock(t *testing.T) {
 func TestStartupErrFmt(t *testing.T) {
 	t.Parallel()
 
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == osWindows {
 		t.Skip("test relies on shell scripts")
 	}
 
@@ -142,13 +150,12 @@ func TestStartupErrFmt(t *testing.T) {
 		build := chat.GetBuildDiagnosticBlock()
 		block := build(context.Background(), script, os.Environ())
 
-		cause := errors.New("CLI process exited: exit status 1")
-		err := fmt.Errorf(chat.StartupErrFmt, cause, block)
+		err := fmt.Errorf(chat.StartupErrFmt, errFakeCLIExit, block)
 
-		assert.ErrorIs(t, err, cause)
-		assert.True(t, strings.Contains(err.Error(), "CLI diagnostic output:"))
-		assert.True(t, strings.Contains(err.Error(), "not logged in"))
-		assert.True(t, strings.Contains(err.Error(), "To fix:"))
+		require.ErrorIs(t, err, errFakeCLIExit)
+		assert.Contains(t, err.Error(), "CLI diagnostic output:")
+		assert.Contains(t, err.Error(), "not logged in")
+		assert.Contains(t, err.Error(), "To fix:")
 	})
 
 	t.Run("omits diagnostic section when CLI writes no stderr", func(t *testing.T) {
@@ -160,12 +167,11 @@ func TestStartupErrFmt(t *testing.T) {
 		build := chat.GetBuildDiagnosticBlock()
 		block := build(context.Background(), script, os.Environ())
 
-		cause := errors.New("CLI process exited: exit status 1")
-		err := fmt.Errorf(chat.StartupErrFmt, cause, block)
+		err := fmt.Errorf(chat.StartupErrFmt, errFakeCLIExit, block)
 
-		assert.ErrorIs(t, err, cause)
-		assert.False(t, strings.Contains(err.Error(), "CLI diagnostic output:"))
-		assert.True(t, strings.Contains(err.Error(), "To fix:"))
+		require.ErrorIs(t, err, errFakeCLIExit)
+		assert.NotContains(t, err.Error(), "CLI diagnostic output:")
+		assert.Contains(t, err.Error(), "To fix:")
 	})
 
 	t.Run("percent signs in CLI stderr are not treated as format verbs", func(t *testing.T) {
@@ -177,9 +183,8 @@ func TestStartupErrFmt(t *testing.T) {
 		build := chat.GetBuildDiagnosticBlock()
 		block := build(context.Background(), script, os.Environ())
 
-		cause := errors.New("CLI process exited: exit status 1")
-		err := fmt.Errorf(chat.StartupErrFmt, cause, block)
+		err := fmt.Errorf(chat.StartupErrFmt, errFakeCLIExit, block)
 
-		assert.True(t, strings.Contains(err.Error(), "100% complete but failed"))
+		assert.Contains(t, err.Error(), "100% complete but failed")
 	})
 }
