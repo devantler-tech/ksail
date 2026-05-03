@@ -485,7 +485,8 @@ func evaluateHelmReleaseCondition(
 	}
 
 	// Stalled=True means the controller has given up retrying.
-	if condDetails.condType == conditionTypeStalled && condDetails.condStatus == conditionStatusTrue {
+	if condDetails.condType == conditionTypeStalled &&
+		condDetails.condStatus == conditionStatusTrue {
 		return &StuckHelmRelease{
 			Name:      helmRelease.GetName(),
 			Namespace: helmRelease.GetNamespace(),
@@ -495,7 +496,8 @@ func evaluateHelmReleaseCondition(
 	}
 
 	// Ready=False with a failure reason.
-	if condDetails.condType == conditionTypeReady && condDetails.condStatus == conditionStatusFalse &&
+	if condDetails.condType == conditionTypeReady &&
+		condDetails.condStatus == conditionStatusFalse &&
 		slices.Contains(stuckReasons, condDetails.condReason) {
 		return &StuckHelmRelease{
 			Name:      helmRelease.GetName(),
@@ -858,8 +860,13 @@ func evaluateKustomizationConditions(conditions []any) (bool, string, error) {
 		}
 
 		// Check for Stalled condition which indicates a permanent failure.
-		if condDetails.condType == conditionTypeStalled && condDetails.condStatus == conditionStatusTrue {
-			return false, "", fmt.Errorf("%w: stalled - %s", ErrKustomizationFailed, condDetails.condMessage)
+		if condDetails.condType == conditionTypeStalled &&
+			condDetails.condStatus == conditionStatusTrue {
+			return false, "", fmt.Errorf(
+				"%w: stalled - %s",
+				ErrKustomizationFailed,
+				condDetails.condMessage,
+			)
 		}
 	}
 
