@@ -17,7 +17,7 @@ func writeScript(t *testing.T, dir, content string) string {
 
 	path := filepath.Join(dir, "copilot")
 	require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
-	require.NoError(t, os.Chmod(path, 0o700))
+	require.NoError(t, os.Chmod(path, 0o500))
 
 	return path
 }
