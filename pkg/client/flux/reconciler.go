@@ -289,8 +289,7 @@ func helmReleaseGVR() schema.GroupVersionResource {
 // stuck in a non-recoverable state. A HelmRelease is considered stuck when its
 // Ready condition is False with a failure reason (e.g., InstallFailed,
 // UpgradeFailed) or when the Stalled condition is True.
-// HelmReleases with spec.suspend=true are excluded to avoid disturbing
-// intentionally paused releases.
+// Returns an empty list without error when the HelmRelease CRD is not installed.
 func (r *Reconciler) ListStuckHelmReleases(
 	ctx context.Context,
 ) ([]StuckHelmRelease, error) {
@@ -298,6 +297,11 @@ func (r *Reconciler) ListStuckHelmReleases(
 
 	list, err := client.List(ctx, metav1.ListOptions{})
 	if err != nil {
+		// CRD not installed — no HelmReleases exist, nothing to reset.
+		if isAPIDiscoveryError(err.Error()) {
+			return nil, nil
+		}
+
 		return nil, fmt.Errorf("list helmreleases: %w", err)
 	}
 
@@ -475,29 +479,29 @@ func evaluateHelmReleaseCondition(
 	cond any,
 	stuckReasons []string,
 ) *StuckHelmRelease {
-	c := parseCondition(cond)
-	if c == nil {
+	condDetails := parseCondition(cond)
+	if condDetails == nil {
 		return nil
 	}
 
 	// Stalled=True means the controller has given up retrying.
-	if c.condType == conditionTypeStalled && c.condStatus == conditionStatusTrue {
+	if condDetails.condType == conditionTypeStalled && condDetails.condStatus == conditionStatusTrue {
 		return &StuckHelmRelease{
 			Name:      helmRelease.GetName(),
 			Namespace: helmRelease.GetNamespace(),
-			Reason:    c.condReason,
-			Message:   c.condMessage,
+			Reason:    condDetails.condReason,
+			Message:   condDetails.condMessage,
 		}
 	}
 
 	// Ready=False with a failure reason.
-	if c.condType == conditionTypeReady && c.condStatus == conditionStatusFalse &&
-		slices.Contains(stuckReasons, c.condReason) {
+	if condDetails.condType == conditionTypeReady && condDetails.condStatus == conditionStatusFalse &&
+		slices.Contains(stuckReasons, condDetails.condReason) {
 		return &StuckHelmRelease{
 			Name:      helmRelease.GetName(),
 			Namespace: helmRelease.GetNamespace(),
-			Reason:    c.condReason,
-			Message:   c.condMessage,
+			Reason:    condDetails.condReason,
+			Message:   condDetails.condMessage,
 		}
 	}
 
@@ -838,24 +842,24 @@ func evaluateKustomizationConditions(conditions []any) (bool, string, error) {
 	var readyStatus, readyReason, readyMessage string
 
 	for _, condition := range conditions {
-		c := parseCondition(condition)
-		if c == nil {
+		condDetails := parseCondition(condition)
+		if condDetails == nil {
 			continue
 		}
 
-		if c.condType == conditionTypeReady {
-			readyStatus = c.condStatus
-			readyReason = c.condReason
-			readyMessage = c.condMessage
+		if condDetails.condType == conditionTypeReady {
+			readyStatus = condDetails.condStatus
+			readyReason = condDetails.condReason
+			readyMessage = condDetails.condMessage
 
-			if c.condStatus == conditionStatusTrue {
+			if condDetails.condStatus == conditionStatusTrue {
 				return true, conditionTypeReady, nil
 			}
 		}
 
 		// Check for Stalled condition which indicates a permanent failure.
-		if c.condType == conditionTypeStalled && c.condStatus == conditionStatusTrue {
-			return false, "", fmt.Errorf("%w: stalled - %s", ErrKustomizationFailed, c.condMessage)
+		if condDetails.condType == conditionTypeStalled && condDetails.condStatus == conditionStatusTrue {
+			return false, "", fmt.Errorf("%w: stalled - %s", ErrKustomizationFailed, condDetails.condMessage)
 		}
 	}
 

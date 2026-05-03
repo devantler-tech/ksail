@@ -9,6 +9,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/client/reconciler"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -1008,6 +1009,17 @@ func TestResetStuckHelmReleases_SuccessfulReset(t *testing.T) {
 	count, err := reconciler.ResetStuckHelmReleases(context.Background(), releases)
 	require.NoError(t, err)
 	assert.Equal(t, 1, count)
+
+	// Verify the HelmRelease has spec.suspend=false after the reset cycle.
+	gvr := flux.HelmReleaseGVR()
+
+	got, err := reconciler.Dynamic.Resource(gvr).Namespace("kyverno").Get(
+		context.Background(), "kyverno", metav1.GetOptions{},
+	)
+	require.NoError(t, err)
+
+	suspended, _, _ := unstructured.NestedBool(got.Object, "spec", "suspend")
+	assert.False(t, suspended, "spec.suspend should be false after reset")
 }
 
 func TestResetStuckHelmReleases_PartialFailure(t *testing.T) {
