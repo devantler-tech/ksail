@@ -637,6 +637,7 @@ func parseAutoscalingGroups(groups []any) []v1alpha1.NodePool {
 		}
 
 		pool := v1alpha1.NodePool{}
+
 		name, hasName := group["name"].(string)
 		if !hasName || name == "" {
 			continue
