@@ -58,8 +58,14 @@ type WarningEvent struct {
 }
 
 // String returns a single-line description of the event.
+// When Namespace is set, the object is formatted as Kind/Namespace/Name.
 func (e WarningEvent) String() string {
-	return fmt.Sprintf("%s ago: %s/%s — %s", formatDuration(e.Age), e.Kind, e.Name, e.Message)
+	obj := e.Kind + "/" + e.Name
+	if e.Namespace != "" {
+		obj = e.Kind + "/" + e.Namespace + "/" + e.Name
+	}
+
+	return fmt.Sprintf("%s ago: %s — %s", formatDuration(e.Age), obj, e.Message)
 }
 
 // ResourceSection groups failing resources under a heading.
@@ -80,6 +86,9 @@ type Report struct {
 	Events []WarningEvent
 	// EventNamespace is the namespace events were collected from.
 	EventNamespace string
+	// EventLookback is the lookback window used when collecting events.
+	// Used to derive the human-readable label in the diagnostics output.
+	EventLookback time.Duration
 }
 
 // IsEmpty returns true when the report contains no diagnostic data.
@@ -90,7 +99,7 @@ func (r *Report) IsEmpty() bool {
 		}
 	}
 
-	return r.FailingPods == "" && len(r.Events) == 0
+	return strings.TrimSpace(r.FailingPods) == "" && len(r.Events) == 0
 }
 
 // maxDiagnosticEvents limits the number of warning events shown.
@@ -132,7 +141,7 @@ func (r *Report) writeSections(writer io.Writer) {
 
 // writeFailingPods writes the failing pods section.
 func (r *Report) writeFailingPods(writer io.Writer) {
-	if r.FailingPods == "" {
+	if strings.TrimSpace(r.FailingPods) == "" {
 		return
 	}
 
@@ -152,7 +161,12 @@ func (r *Report) writeEvents(writer io.Writer) {
 		return
 	}
 
-	label := fmt.Sprintf("warning events (%s, last 5 min)", r.EventNamespace)
+	lookback := r.EventLookback
+	if lookback <= 0 {
+		lookback = 5 * time.Minute //nolint:mnd // default fallback for callers that don't set EventLookback
+	}
+
+	label := fmt.Sprintf("warning events (%s, last %s)", r.EventNamespace, formatDuration(lookback))
 	notify.Warningf(writer, "%s:", label)
 
 	limit := min(len(r.Events), maxDiagnosticEvents)

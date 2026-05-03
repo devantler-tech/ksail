@@ -82,6 +82,20 @@ func TestWarningEvent_String(t *testing.T) {
 	assert.Equal(t, "3m ago: Pod/controller-abc — Back-off restarting (BackOff)", evt.String())
 }
 
+func TestWarningEvent_String_WithNamespace(t *testing.T) {
+	t.Parallel()
+
+	evt := reconcilediag.WarningEvent{
+		Age:       3 * time.Minute,
+		Kind:      "Pod",
+		Namespace: "flux-system",
+		Name:      "controller-abc",
+		Message:   "Back-off restarting (BackOff)",
+	}
+
+	assert.Equal(t, "3m ago: Pod/flux-system/controller-abc — Back-off restarting (BackOff)", evt.String())
+}
+
 func TestWarningEvent_String_Seconds(t *testing.T) {
 	t.Parallel()
 
@@ -152,6 +166,13 @@ func TestReport_IsEmpty(t *testing.T) {
 			want: false,
 		},
 		{
+			name: "whitespace-only pods treated as empty",
+			report: reconcilediag.Report{
+				FailingPods: "   \n   ",
+			},
+			want: true,
+		},
+		{
 			name: "with events",
 			report: reconcilediag.Report{
 				Events: []reconcilediag.WarningEvent{
@@ -205,6 +226,7 @@ func TestReport_Write_FullReport(t *testing.T) {
 		},
 		FailingPods:    "  controller-abc: CrashLoopBackOff for img:v1 (3 restarts)",
 		EventNamespace: "flux-system",
+		EventLookback:  5 * time.Minute,
 		Events: []reconcilediag.WarningEvent{
 			{Age: 2 * time.Minute, Kind: "Pod", Name: "ctrl", Message: "Back-off (BackOff)"},
 		},

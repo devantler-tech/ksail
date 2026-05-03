@@ -54,6 +54,7 @@ type FluxCollector struct {
 func (c *FluxCollector) Collect(ctx context.Context) *Report {
 	report := &Report{
 		EventNamespace: fluxNamespace,
+		EventLookback:  eventLookback,
 	}
 
 	report.Sections = append(

@@ -173,6 +173,26 @@ func TestArgoCDCollector_NoCRDs(t *testing.T) {
 	assert.True(t, report.IsEmpty())
 }
 
+func TestArgoCDCollector_SkipsAppWithNoStatus(t *testing.T) {
+	t.Parallel()
+
+	// App with no status reported yet — both sync and health are empty.
+	app := newArgoCDApp("pending-app", "", "", "", "", "")
+
+	dynClient := newArgoCDDynamicClient(app)
+	clientset := k8sfake.NewClientset()
+
+	collector := &reconcilediag.ArgoCDCollector{
+		Dynamic:   dynClient,
+		Clientset: clientset,
+	}
+
+	report := collector.Collect(context.Background())
+	// The app has not reported status and is not yet Synced+Healthy, but
+	// it should be skipped rather than shown as a vague "/"-reason failure.
+	assert.True(t, report.IsEmpty())
+}
+
 func TestArgoCDCollector_ApplicationWithConditionError(t *testing.T) {
 	t.Parallel()
 

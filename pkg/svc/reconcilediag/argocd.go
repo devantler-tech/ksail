@@ -30,6 +30,7 @@ type ArgoCDCollector struct {
 func (c *ArgoCDCollector) Collect(ctx context.Context) *Report {
 	report := &Report{
 		EventNamespace: argoCDNamespace,
+		EventLookback:  eventLookback,
 	}
 
 	report.Sections = append(report.Sections, c.collectFailingApplications(ctx))
@@ -96,6 +97,19 @@ func describeArgoCDAppFailure(app *unstructured.Unstructured) (string, string) {
 	healthStatus, _, _ := unstructured.NestedString(app.Object, "status", "health", "status")
 	healthMessage, _, _ := unstructured.NestedString(app.Object, "status", "health", "message")
 
+	// Skip apps that haven't reported status yet.
+	if syncStatus == "" && healthStatus == "" {
+		return "", ""
+	}
+
+	if syncStatus == "" {
+		syncStatus = "Unknown"
+	}
+
+	if healthStatus == "" {
+		healthStatus = "Unknown"
+	}
+
 	reason := syncStatus + "/" + healthStatus
 	if healthMessage != "" {
 		return reason, healthMessage
@@ -128,12 +142,6 @@ func extractConditionError(app *unstructured.Unstructured) (string, string) {
 		return "", ""
 	}
 
-	errorTypes := map[string]bool{
-		"ComparisonError":  true,
-		"SyncError":        true,
-		"InvalidSpecError": true,
-	}
-
 	for _, cond := range conditions {
 		condMap, ok := cond.(map[string]any)
 		if !ok {
@@ -141,13 +149,15 @@ func extractConditionError(app *unstructured.Unstructured) (string, string) {
 		}
 
 		condType, _, _ := unstructured.NestedString(condMap, "type")
-		if !errorTypes[condType] {
+
+		switch condType {
+		case "ComparisonError", "SyncError", "InvalidSpecError":
+			message, _, _ := unstructured.NestedString(condMap, "message")
+
+			return condType, message
+		default:
 			continue
 		}
-
-		message, _, _ := unstructured.NestedString(condMap, "message")
-
-		return condType, message
 	}
 
 	return "", ""
