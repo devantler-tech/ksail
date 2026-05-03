@@ -320,7 +320,9 @@ func (r *Reconciler) ResetStuckHelmReleases(
 	gvr := helmReleaseGVR()
 
 	// Phase 1: Suspend all stuck HelmReleases.
-	suspended, suspendErrs := r.suspendHelmReleases(ctx, gvr, releases)
+	suspendPatch := []byte(`{"spec":{"suspend":true}}`)
+
+	suspended, suspendErrs := r.patchHelmReleases(ctx, gvr, releases, suspendPatch, "suspend")
 
 	if len(suspended) == 0 {
 		return 0, errors.Join(suspendErrs...)
@@ -336,77 +338,45 @@ func (r *Reconciler) ResetStuckHelmReleases(
 	)
 	defer resumeCancel()
 
-	resetCount, resumeErrs := r.resumeHelmReleases(resumeCtx, gvr, suspended)
-
-	return resetCount, errors.Join(append(suspendErrs, resumeErrs...)...)
-}
-
-// suspendHelmReleases patches all given HelmReleases to spec.suspend=true and
-// returns the subset that were suspended successfully along with any errors.
-func (r *Reconciler) suspendHelmReleases(
-	ctx context.Context,
-	gvr schema.GroupVersionResource,
-	releases []StuckHelmRelease,
-) ([]StuckHelmRelease, []error) {
-	suspendPatch := []byte(`{"spec":{"suspend":true}}`)
-
-	var errs []error
-
-	suspended := make([]StuckHelmRelease, 0, len(releases))
-
-	for _, helmRelease := range releases {
-		nsClient := r.Dynamic.Resource(gvr).Namespace(helmRelease.Namespace)
-
-		_, err := nsClient.Patch(
-			ctx, helmRelease.Name, types.MergePatchType,
-			suspendPatch, metav1.PatchOptions{},
-		)
-		if err != nil {
-			errs = append(errs, fmt.Errorf(
-				"suspend %s/%s: %w", helmRelease.Namespace, helmRelease.Name, err,
-			))
-
-			continue
-		}
-
-		suspended = append(suspended, helmRelease)
-	}
-
-	return suspended, errs
-}
-
-// resumeHelmReleases patches all given HelmReleases to spec.suspend=false and
-// returns the count of successful resumes along with any errors.
-func (r *Reconciler) resumeHelmReleases(
-	ctx context.Context,
-	gvr schema.GroupVersionResource,
-	releases []StuckHelmRelease,
-) (int, []error) {
 	resumePatch := []byte(`{"spec":{"suspend":false}}`)
 
+	resumed, resumeErrs := r.patchHelmReleases(resumeCtx, gvr, suspended, resumePatch, "resume")
+
+	return len(resumed), errors.Join(append(suspendErrs, resumeErrs...)...)
+}
+
+// patchHelmReleases applies patch to each HelmRelease and returns the list of
+// HelmReleases patched successfully along with any errors.
+func (r *Reconciler) patchHelmReleases(
+	ctx context.Context,
+	gvr schema.GroupVersionResource,
+	releases []StuckHelmRelease,
+	patch []byte,
+	action string,
+) ([]StuckHelmRelease, []error) {
 	var errs []error
 
-	resetCount := 0
+	patched := make([]StuckHelmRelease, 0, len(releases))
 
 	for _, helmRelease := range releases {
 		nsClient := r.Dynamic.Resource(gvr).Namespace(helmRelease.Namespace)
 
 		_, err := nsClient.Patch(
 			ctx, helmRelease.Name, types.MergePatchType,
-			resumePatch, metav1.PatchOptions{},
+			patch, metav1.PatchOptions{},
 		)
 		if err != nil {
 			errs = append(errs, fmt.Errorf(
-				"resume %s/%s: %w", helmRelease.Namespace, helmRelease.Name, err,
+				"%s %s/%s: %w", action, helmRelease.Namespace, helmRelease.Name, err,
 			))
 
 			continue
 		}
 
-		resetCount++
+		patched = append(patched, helmRelease)
 	}
 
-	return resetCount, errs
+	return patched, errs
 }
 
 // checkHelmReleaseStuck evaluates a HelmRelease's conditions and returns a
