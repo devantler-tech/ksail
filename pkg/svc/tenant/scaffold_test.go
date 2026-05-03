@@ -95,3 +95,18 @@ func TestScaffoldFilesSnapshots(t *testing.T) {
 		})
 	}
 }
+
+func TestScaffoldFilesCustomSourceDirectory(t *testing.T) {
+	t.Parallel()
+
+	files := tenant.ScaffoldFiles(tenant.Options{
+		Name:            "my-tenant",
+		TenantType:      tenant.TypeFlux,
+		SourceDirectory: "deploy",
+	})
+
+	require.Contains(t, files, "deploy/kustomization.yaml")
+	require.NotContains(t, files, "k8s/kustomization.yaml")
+	require.Contains(t, string(files["README.md"]), "`deploy/`")
+	require.NotContains(t, string(files["README.md"]), "`k8s/`")
+}

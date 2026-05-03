@@ -178,6 +178,11 @@ func generateArgoCDApp(opts Options) (string, error) {
 	repoURL := fmt.Sprintf("https://%s/%s", host, opts.TenantRepo)
 	primaryNS := opts.Namespaces[0]
 
+	srcDir := opts.SourceDirectory
+	if srcDir == "" {
+		srcDir = DefaultSourceDirectory
+	}
+
 	app := argoCDApp{
 		APIVersion: gitops.ArgoCDApplicationAPIVersion,
 		Kind:       gitops.ArgoCDApplicationKind,
@@ -191,7 +196,7 @@ func generateArgoCDApp(opts Options) (string, error) {
 			Source: argoCDAppSource{
 				RepoURL:        repoURL,
 				TargetRevision: "HEAD",
-				Path:           "k8s",
+				Path:           srcDir,
 			},
 			Destination: argoCDAppDest{
 				Server:    k8sDefaultServer,

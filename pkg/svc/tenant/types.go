@@ -109,6 +109,8 @@ type Options struct {
 	PlatformRepo string
 	// TargetBranch is the PR target branch (empty = repo's default branch).
 	TargetBranch string
+	// SourceDirectory is the directory name for tenant manifests (default: "k8s").
+	SourceDirectory string
 }
 
 const (
@@ -116,6 +118,8 @@ const (
 	DefaultClusterRole = "edit"
 	// DefaultOutputDir is the default output directory.
 	DefaultOutputDir = "."
+	// DefaultSourceDirectory is the default manifest directory name for tenants.
+	DefaultSourceDirectory = "k8s"
 	// DefaultSyncSource is the default sync source for Flux tenants.
 	DefaultSyncSource = SyncSourceOCI
 	// DefaultRepoVisibility is the default repository visibility.
@@ -142,6 +146,10 @@ func (o *Options) ResolveDefaults() {
 
 	if o.RepoVisibility == "" {
 		o.RepoVisibility = DefaultRepoVisibility
+	}
+
+	if o.SourceDirectory == "" {
+		o.SourceDirectory = DefaultSourceDirectory
 	}
 }
 
@@ -177,6 +185,12 @@ func (o *Options) Validate() error {
 
 	if hasDuplicateNamespaces(o.Namespaces) {
 		return fmt.Errorf("%w", ErrDuplicateNamespace)
+	}
+
+	if o.SourceDirectory != "" &&
+		(strings.Contains(o.SourceDirectory, "..") || strings.ContainsAny(o.SourceDirectory, `/\`)) {
+		return fmt.Errorf("%w: %s (must not contain path separators or '..')",
+			ErrInvalidSourceDirectory, o.SourceDirectory)
 	}
 
 	return nil

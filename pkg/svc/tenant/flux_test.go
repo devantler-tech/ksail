@@ -157,3 +157,22 @@ func TestGenerateFluxSyncManifests_PrimaryNamespace(t *testing.T) {
 	require.NotContains(t, syncYAML, "namespace: secondary-ns")
 	require.NotContains(t, syncYAML, "namespace: tertiary-ns")
 }
+
+func TestGenerateFluxSyncManifests_CustomSourceDirectory(t *testing.T) {
+	t.Parallel()
+
+	result, err := tenant.GenerateFluxSyncManifests(tenant.Options{
+		Name:            "custom-dir-tenant",
+		Namespaces:      []string{"custom-ns"},
+		SyncSource:      tenant.SyncSourceOCI,
+		Registry:        "oci://ghcr.io",
+		TenantRepo:      "org/repo",
+		TenantType:      tenant.TypeFlux,
+		SourceDirectory: "deploy",
+	})
+	require.NoError(t, err)
+
+	syncYAML := result["sync.yaml"]
+	require.Contains(t, syncYAML, "path: ./deploy")
+	require.NotContains(t, syncYAML, "path: ./k8s")
+}

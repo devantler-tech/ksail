@@ -90,6 +90,25 @@ func TestGenerateArgoCDManifests_NoRBACConfigMap(t *testing.T) {
 	require.False(t, exists, "argocd-rbac-cm.yaml should not be generated per-tenant")
 }
 
+func TestGenerateArgoCDManifests_CustomSourceDirectory(t *testing.T) {
+	t.Parallel()
+
+	opts := tenant.Options{
+		Name:            "team-custom",
+		Namespaces:      []string{"team-custom"},
+		TenantType:      tenant.TypeArgoCD,
+		GitProvider:     "github",
+		TenantRepo:      "org/team-custom-app",
+		SourceDirectory: "deploy",
+	}
+	result, err := tenant.GenerateArgoCDManifests(opts)
+	require.NoError(t, err)
+
+	appYAML := result["app.yaml"]
+	require.Contains(t, appYAML, "path: deploy")
+	require.NotContains(t, appYAML, "path: k8s")
+}
+
 func TestMergeArgoCDRBACPolicy_EmptyExisting(t *testing.T) {
 	t.Parallel()
 
