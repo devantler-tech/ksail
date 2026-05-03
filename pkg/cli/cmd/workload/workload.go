@@ -2135,7 +2135,7 @@ func runReconcile(cmd *cobra.Command) error {
 	)
 	if err != nil {
 		// Collect and display targeted diagnostics before returning the error.
-		reconcilediag.Diagnose(cmd.Context(), cmd.OutOrStdout(), kubeconfigPath, gitOpsEngine)
+		reconcilediag.Diagnose(context.WithoutCancel(cmd.Context()), cmd.OutOrStdout(), kubeconfigPath, gitOpsEngine)
 
 		return err
 	}

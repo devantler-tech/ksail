@@ -152,7 +152,7 @@ func (r *Report) writeFailingPods(writer io.Writer) {
 
 	notify.Warningf(writer, "failing pods (%s):", r.EventNamespace)
 
-	for line := range strings.SplitSeq(strings.TrimSpace(r.FailingPods), "\n") {
+	for _, line := range strings.Split(strings.TrimSpace(r.FailingPods), "\n") {
 		line = strings.TrimSpace(line)
 		if line != "" {
 			_, _ = fmt.Fprintf(writer, "    %s\n", line)
@@ -168,7 +168,7 @@ func (r *Report) writeEvents(writer io.Writer) {
 
 	lookback := r.EventLookback
 	if lookback <= 0 {
-		lookback = 5 * time.Minute //nolint:mnd // default fallback for callers that don't set EventLookback
+		lookback = defaultEventLookback
 	}
 
 	label := fmt.Sprintf("warning events (%s, last %s)", r.EventNamespace, formatDuration(lookback))
