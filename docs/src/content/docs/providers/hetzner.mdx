@@ -244,6 +244,7 @@ When using the Hetzner provider, KSail automatically installs:
 - **Hetzner Cloud Controller Manager** — Provisions Hetzner Cloud Load Balancers for `type: LoadBalancer` services
 - **Hetzner CSI Driver** — Provisions Hetzner Block Storage volumes for `PersistentVolumeClaim` resources
 - **Placement groups** — Distributes servers across physical hosts for high availability (configurable)
+- **Cluster Autoscaler** — Installed automatically when `autoscaler.node.enabled: true` (or the deprecated `nodeAutoscaling: Enabled`). Scales node pools defined under `autoscaler.node.pools` based on pending pod demand.
 
 ### Firewall Layers
 
