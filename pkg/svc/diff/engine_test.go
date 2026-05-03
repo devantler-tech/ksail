@@ -1027,7 +1027,9 @@ func TestEngine_TalosISOStillDetected_WhenAutoscalingEnabled(t *testing.T) {
 	}
 
 	assertSingleChange(t, result.InPlaceChanges, "cluster.talos.iso",
-		strconv.FormatInt(v1alpha1.DefaultTalosISO, 10), strconv.FormatInt(v1alpha1.DefaultTalosISO+1, 10), clusterupdate.ChangeCategoryInPlace)
+		strconv.FormatInt(v1alpha1.DefaultTalosISO, 10),
+		strconv.FormatInt(v1alpha1.DefaultTalosISO+1, 10),
+		clusterupdate.ChangeCategoryInPlace)
 }
 
 func TestEngine_AutoscalerNodeEnabledChange(t *testing.T) {
@@ -1401,7 +1403,9 @@ func TestEngine_TalosISO_DetectedWhenBothNonZero(t *testing.T) {
 	result := engine.ComputeDiff(old, newer, nil, nil)
 
 	assertSingleChange(t, result.InPlaceChanges, "cluster.talos.iso",
-		strconv.FormatInt(v1alpha1.DefaultTalosISO, 10), strconv.FormatInt(v1alpha1.DefaultTalosISO+1, 10), clusterupdate.ChangeCategoryInPlace)
+		strconv.FormatInt(v1alpha1.DefaultTalosISO, 10),
+		strconv.FormatInt(v1alpha1.DefaultTalosISO+1, 10),
+		clusterupdate.ChangeCategoryInPlace)
 }
 
 func TestEngine_TalosVersion_NoChangeWhenBothSet(t *testing.T) {
