@@ -2122,37 +2122,7 @@ func runReconcile(cmd *cobra.Command) error {
 		return kubeconfigErr
 	}
 
-	// --timeout is a per-attempt bound: each retry attempt creates a fresh
-	// context.WithTimeout(timeout) inside executeReconciliation, so total
-	// runtime can be up to reconcileMaxRetryAttempts*timeout + cumulative
-	// backoff. This is intentional: each attempt deserves the full window.
-	err = retryOnTransientError(
-		cmd.Context(), cmd,
-		reconcileMaxRetryAttempts, reconcileRetryBaseWait, reconcileRetryMaxWait,
-		func() error {
-			return executeReconciliation(
-				cmd,
-				clusterCfg,
-				kubeconfigPath,
-				gitOpsEngine,
-				timeout,
-				outputTimer,
-			)
-		},
-	)
-	if err != nil {
-		// Collect and display targeted diagnostics before returning the error.
-		// Skip diagnostics when the user explicitly cancelled (Ctrl+C) to avoid
-		// blocking for the diagnostic timeout after a deliberate abort.
-		if !errors.Is(cmd.Context().Err(), context.Canceled) {
-			reconcilediag.Diagnose(
-				context.WithoutCancel(cmd.Context()),
-				cmd.ErrOrStderr(),
-				kubeconfigPath,
-				gitOpsEngine,
-			)
-		}
-
+	if err = runReconcileWithDiagnostics(cmd, clusterCfg, kubeconfigPath, gitOpsEngine, timeout, outputTimer); err != nil {
 		return err
 	}
 
@@ -2162,6 +2132,40 @@ func runReconcile(cmd *cobra.Command) error {
 		Timer:   outputTimer,
 		Writer:  cmd.OutOrStdout(),
 	})
+
+	return nil
+}
+
+// runReconcileWithDiagnostics retries reconciliation and on failure runs
+// best-effort diagnostics (unless the context was cancelled by the user).
+func runReconcileWithDiagnostics(
+	cmd *cobra.Command,
+	clusterCfg *v1alpha1.Cluster,
+	kubeconfigPath string,
+	gitOpsEngine v1alpha1.GitOpsEngine,
+	timeout time.Duration,
+	outputTimer timer.Timer,
+) error {
+	// --timeout is a per-attempt bound: each retry attempt creates a fresh
+	// context.WithTimeout(timeout) inside executeReconciliation, so total
+	// runtime can be up to reconcileMaxRetryAttempts*timeout + cumulative
+	// backoff. This is intentional: each attempt deserves the full window.
+	err := retryOnTransientError(
+		cmd.Context(), cmd,
+		reconcileMaxRetryAttempts, reconcileRetryBaseWait, reconcileRetryMaxWait,
+		func() error {
+			return executeReconciliation(cmd, clusterCfg, kubeconfigPath, gitOpsEngine, timeout, outputTimer)
+		},
+	)
+	if err != nil {
+		// Skip diagnostics when the user explicitly cancelled (Ctrl+C) to avoid
+		// blocking for the diagnostic timeout after a deliberate abort.
+		if !errors.Is(cmd.Context().Err(), context.Canceled) {
+			reconcilediag.Diagnose(context.WithoutCancel(cmd.Context()), cmd.ErrOrStderr(), kubeconfigPath, gitOpsEngine)
+		}
+
+		return err
+	}
 
 	return nil
 }
