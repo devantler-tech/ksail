@@ -572,7 +572,7 @@ func (d *ComponentDetector) detectNodeAutoscaler(
 	if err != nil {
 		// Propagate context cancellation/timeout — the caller has given up.
 		if ctx.Err() != nil {
-			return cfg, ctx.Err()
+			return cfg, fmt.Errorf("detect node autoscaler: %w", ctx.Err())
 		}
 		// Release exists but values unreadable — return enabled with defaults.
 		return cfg, nil //nolint:nilerr // graceful fallback; enabled is the critical signal

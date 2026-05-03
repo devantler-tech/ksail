@@ -16,6 +16,7 @@ const (
 	testRegistryAlt        = "localhost:6060"
 	testFieldControlPlanes = "cluster.controlPlanes"
 	testFieldWorkers       = "cluster.workers"
+	testTalosVersionOld    = "v1.11.2"
 )
 
 func newBaseSpec() *v1alpha1.ClusterSpec {
@@ -1413,10 +1414,10 @@ func TestEngine_TalosVersion_NoChangeWhenBothSet(t *testing.T) {
 
 	old := newBaseSpec()
 	old.Distribution = v1alpha1.DistributionTalos
-	old.Talos.Version = "v1.11.2"
+	old.Talos.Version = testTalosVersionOld
 
 	newer := clone(old)
-	newer.Talos.Version = "v1.11.2"
+	newer.Talos.Version = testTalosVersionOld
 
 	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
 	result := engine.ComputeDiff(old, newer, nil, nil)
@@ -1457,7 +1458,7 @@ func TestEngine_TalosVersion_ChangeWhenNewDiffers(t *testing.T) {
 	// Both specs pin a version but they differ — a diff should be emitted.
 	old := newBaseSpec()
 	old.Distribution = v1alpha1.DistributionTalos
-	old.Talos.Version = "v1.11.2"
+	old.Talos.Version = testTalosVersionOld
 
 	newer := clone(old)
 	newer.Talos.Version = "v1.13.0"
@@ -1465,7 +1466,11 @@ func TestEngine_TalosVersion_ChangeWhenNewDiffers(t *testing.T) {
 	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
 	result := engine.ComputeDiff(old, newer, nil, nil)
 
-	assertSingleChange(t, result.InPlaceChanges, "cluster.talos.version", "v1.11.2", "v1.13.0", clusterupdate.ChangeCategoryInPlace)
+	assertSingleChange(
+		t, result.InPlaceChanges,
+		"cluster.talos.version", testTalosVersionOld, "v1.13.0",
+		clusterupdate.ChangeCategoryInPlace,
+	)
 }
 
 func TestEngine_TalosVersion_ChangeWhenOldEmptyNewSet(t *testing.T) {
@@ -1478,10 +1483,14 @@ func TestEngine_TalosVersion_ChangeWhenOldEmptyNewSet(t *testing.T) {
 	old.Talos.Version = ""
 
 	newer := clone(old)
-	newer.Talos.Version = "v1.11.2"
+	newer.Talos.Version = testTalosVersionOld
 
 	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
 	result := engine.ComputeDiff(old, newer, nil, nil)
 
-	assertSingleChange(t, result.InPlaceChanges, "cluster.talos.version", "", "v1.11.2", clusterupdate.ChangeCategoryInPlace)
+	assertSingleChange(
+		t, result.InPlaceChanges,
+		"cluster.talos.version", "", testTalosVersionOld,
+		clusterupdate.ChangeCategoryInPlace,
+	)
 }
