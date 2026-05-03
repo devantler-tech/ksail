@@ -155,7 +155,8 @@ func (o *Options) ResolveDefaults() {
 
 // Validate checks that required fields are set and values are safe.
 func (o *Options) Validate() error {
-	if err := validateTenantName(o.Name); err != nil {
+	err := validateTenantName(o.Name)
+	if err != nil {
 		return err
 	}
 
@@ -179,7 +180,8 @@ func (o *Options) Validate() error {
 	}
 
 	if o.SourceDirectory != "" {
-		if err := validateSourceDirectory(o.SourceDirectory); err != nil {
+		err := validateSourceDirectory(o.SourceDirectory)
+		if err != nil {
 			return err
 		}
 	}

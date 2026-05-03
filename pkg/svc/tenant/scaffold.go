@@ -39,7 +39,7 @@ func ScaffoldFiles(opts Options) map[string][]byte {
 	}
 
 	return map[string][]byte{
-		"README.md":                            []byte(readmeContent),
+		"README.md":                    []byte(readmeContent),
 		srcDir + "/kustomization.yaml": []byte(kustomizationContent),
 	}
 }
