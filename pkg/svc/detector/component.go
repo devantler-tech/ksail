@@ -575,7 +575,7 @@ func (d *ComponentDetector) detectNodeAutoscaler(
 			return cfg, fmt.Errorf("detect node autoscaler: %w", ctx.Err())
 		}
 		// Release exists but values unreadable — return enabled with defaults.
-		return cfg, nil //nolint:nilerr // graceful fallback; enabled is the critical signal
+		return cfg, nil
 	}
 
 	parseAutoscalerValues(&cfg, values)
