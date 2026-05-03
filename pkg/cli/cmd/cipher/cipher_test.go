@@ -1151,7 +1151,11 @@ func TestWriteDecryptedOutputToFile(t *testing.T) {
 
 	// writeDecryptedOutput emits a success notification to cmd.OutOrStdout() after writing the file.
 	if !strings.Contains(buf.String(), "decrypted to") {
-		t.Errorf("expected stdout to contain success notification %q, got %q", "decrypted to", buf.String())
+		t.Errorf(
+			"expected stdout to contain success notification %q, got %q",
+			"decrypted to",
+			buf.String(),
+		)
 	}
 }
 
