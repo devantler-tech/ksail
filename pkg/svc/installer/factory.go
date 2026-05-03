@@ -59,7 +59,7 @@ func NewFactory(
 func (f *Factory) CreateInstallersForConfig(cfg *v1alpha1.Cluster) (map[string]Installer, error) {
 	installers := make(map[string]Installer)
 	spec := cfg.Spec.Cluster
-	haEnabled := IsHAEnabled(spec.ControlPlanes + spec.Workers)
+	haEnabled := IsHAEnabled(spec.TotalNodeCount())
 
 	f.addGitOpsInstaller(installers, spec, haEnabled)
 	f.addCNIInstaller(installers, spec, haEnabled)
