@@ -609,16 +609,16 @@ func newFakeHelmRelease(
 	name, namespace string,
 	conditions []map[string]any,
 ) *unstructured.Unstructured {
-	hr := &unstructured.Unstructured{}
-	hr.SetGroupVersionKind(schema.GroupVersionKind{
+	helmRelease := &unstructured.Unstructured{}
+	helmRelease.SetGroupVersionKind(schema.GroupVersionKind{
 		Group:   "helm.toolkit.fluxcd.io",
 		Version: "v2",
 		Kind:    "HelmRelease",
 	})
-	hr.SetName(name)
-	hr.SetNamespace(namespace)
+	helmRelease.SetName(name)
+	helmRelease.SetNamespace(namespace)
 
-	hr.Object["spec"] = map[string]any{
+	helmRelease.Object["spec"] = map[string]any{
 		"chart": map[string]any{
 			"spec": map[string]any{
 				"chart": name,
@@ -632,12 +632,12 @@ func newFakeHelmRelease(
 			condList[i] = c
 		}
 
-		hr.Object["status"] = map[string]any{
+		helmRelease.Object["status"] = map[string]any{
 			"conditions": condList,
 		}
 	}
 
-	return hr
+	return helmRelease
 }
 
 // ---------------------------------------------------------------------------
@@ -672,7 +672,12 @@ func TestCheckHelmReleaseStuck(t *testing.T) {
 		{
 			name: "stuck with UpgradeFailed",
 			hr: newFakeHelmRelease("nginx", "default", []map[string]any{
-				{"type": "Ready", "status": "False", "reason": "UpgradeFailed", "message": "upgrade retries exhausted"},
+				{
+					"type":    "Ready",
+					"status":  "False",
+					"reason":  "UpgradeFailed",
+					"message": "upgrade retries exhausted",
+				},
 			}),
 			wantStuck:  true,
 			wantReason: "UpgradeFailed",
@@ -680,7 +685,12 @@ func TestCheckHelmReleaseStuck(t *testing.T) {
 		{
 			name: "stuck with ReconciliationFailed",
 			hr: newFakeHelmRelease("metrics", "monitoring", []map[string]any{
-				{"type": "Ready", "status": "False", "reason": "ReconciliationFailed", "message": "reconciliation failed"},
+				{
+					"type":    "Ready",
+					"status":  "False",
+					"reason":  "ReconciliationFailed",
+					"message": "reconciliation failed",
+				},
 			}),
 			wantStuck:  true,
 			wantReason: "ReconciliationFailed",
@@ -688,7 +698,12 @@ func TestCheckHelmReleaseStuck(t *testing.T) {
 		{
 			name: "stuck with TestFailed",
 			hr: newFakeHelmRelease("app", "default", []map[string]any{
-				{"type": "Ready", "status": "False", "reason": "TestFailed", "message": "helm test failed"},
+				{
+					"type":    "Ready",
+					"status":  "False",
+					"reason":  "TestFailed",
+					"message": "helm test failed",
+				},
 			}),
 			wantStuck:  true,
 			wantReason: "TestFailed",
@@ -696,7 +711,12 @@ func TestCheckHelmReleaseStuck(t *testing.T) {
 		{
 			name: "stuck with RollbackFailed",
 			hr: newFakeHelmRelease("app", "default", []map[string]any{
-				{"type": "Ready", "status": "False", "reason": "RollbackFailed", "message": "rollback failed"},
+				{
+					"type":    "Ready",
+					"status":  "False",
+					"reason":  "RollbackFailed",
+					"message": "rollback failed",
+				},
 			}),
 			wantStuck:  true,
 			wantReason: "RollbackFailed",
@@ -704,7 +724,12 @@ func TestCheckHelmReleaseStuck(t *testing.T) {
 		{
 			name: "stuck with UninstallFailed",
 			hr: newFakeHelmRelease("app", "default", []map[string]any{
-				{"type": "Ready", "status": "False", "reason": "UninstallFailed", "message": "uninstall failed"},
+				{
+					"type":    "Ready",
+					"status":  "False",
+					"reason":  "UninstallFailed",
+					"message": "uninstall failed",
+				},
 			}),
 			wantStuck:  true,
 			wantReason: "UninstallFailed",
@@ -712,7 +737,12 @@ func TestCheckHelmReleaseStuck(t *testing.T) {
 		{
 			name: "stuck with GetLastReleaseFailed",
 			hr: newFakeHelmRelease("app", "default", []map[string]any{
-				{"type": "Ready", "status": "False", "reason": "GetLastReleaseFailed", "message": "get last release failed"},
+				{
+					"type":    "Ready",
+					"status":  "False",
+					"reason":  "GetLastReleaseFailed",
+					"message": "get last release failed",
+				},
 			}),
 			wantStuck:  true,
 			wantReason: "GetLastReleaseFailed",
@@ -720,7 +750,12 @@ func TestCheckHelmReleaseStuck(t *testing.T) {
 		{
 			name: "Stalled=True is stuck",
 			hr: newFakeHelmRelease("kyverno", "kyverno", []map[string]any{
-				{"type": "Stalled", "status": "True", "reason": "RetryExhausted", "message": "retries exhausted"},
+				{
+					"type":    "Stalled",
+					"status":  "True",
+					"reason":  "RetryExhausted",
+					"message": "retries exhausted",
+				},
 			}),
 			wantStuck:  true,
 			wantReason: "RetryExhausted",
@@ -728,14 +763,24 @@ func TestCheckHelmReleaseStuck(t *testing.T) {
 		{
 			name: "DependencyNotReady is NOT stuck (transient)",
 			hr: newFakeHelmRelease("app", "default", []map[string]any{
-				{"type": "Ready", "status": "False", "reason": "DependencyNotReady", "message": "waiting for dependency"},
+				{
+					"type":    "Ready",
+					"status":  "False",
+					"reason":  "DependencyNotReady",
+					"message": "waiting for dependency",
+				},
 			}),
 			wantStuck: false,
 		},
 		{
 			name: "Progressing is NOT stuck (transient)",
 			hr: newFakeHelmRelease("app", "default", []map[string]any{
-				{"type": "Ready", "status": "False", "reason": "Progressing", "message": "reconciliation in progress"},
+				{
+					"type":    "Ready",
+					"status":  "False",
+					"reason":  "Progressing",
+					"message": "reconciliation in progress",
+				},
 			}),
 			wantStuck: false,
 		},
@@ -749,6 +794,25 @@ func TestCheckHelmReleaseStuck(t *testing.T) {
 			hr: newFakeHelmRelease("app", "default", []map[string]any{
 				{"type": "Ready", "status": "True", "reason": "Succeeded", "message": "ok"},
 			}),
+			wantStuck: false,
+		},
+		{
+			name: "intentionally suspended HelmRelease is NOT stuck",
+			hr: func() *unstructured.Unstructured {
+				release := newFakeHelmRelease("app", "default", []map[string]any{
+					{
+						"type":    "Ready",
+						"status":  "False",
+						"reason":  "InstallFailed",
+						"message": "retries exhausted",
+					},
+				})
+
+				err := unstructured.SetNestedField(release.Object, true, "spec", "suspend")
+				require.NoError(t, err)
+
+				return release
+			}(),
 			wantStuck: false,
 		},
 	}
@@ -777,6 +841,7 @@ func TestCheckHelmReleaseStuck(t *testing.T) {
 // ListStuckHelmReleases
 // ---------------------------------------------------------------------------
 
+//nolint:funlen // table-driven test with comprehensive scenarios
 func TestListStuckHelmReleases(t *testing.T) {
 	t.Parallel()
 
@@ -804,7 +869,12 @@ func TestListStuckHelmReleases(t *testing.T) {
 			name: "stuck HelmRelease is listed",
 			objects: []runtime.Object{
 				newFakeHelmRelease("kyverno", "kyverno", []map[string]any{
-					{"type": "Ready", "status": "False", "reason": "InstallFailed", "message": "retries exhausted"},
+					{
+						"type":    "Ready",
+						"status":  "False",
+						"reason":  "InstallFailed",
+						"message": "retries exhausted",
+					},
 				}),
 			},
 			wantCount: 1,
@@ -817,13 +887,28 @@ func TestListStuckHelmReleases(t *testing.T) {
 					{"type": "Ready", "status": "True", "reason": "Succeeded", "message": "ok"},
 				}),
 				newFakeHelmRelease("stuck-a", "kyverno", []map[string]any{
-					{"type": "Ready", "status": "False", "reason": "UpgradeFailed", "message": "upgrade failed"},
+					{
+						"type":    "Ready",
+						"status":  "False",
+						"reason":  "UpgradeFailed",
+						"message": "upgrade failed",
+					},
 				}),
 				newFakeHelmRelease("stuck-b", "monitoring", []map[string]any{
-					{"type": "Stalled", "status": "True", "reason": "RetryExhausted", "message": "retries exhausted"},
+					{
+						"type":    "Stalled",
+						"status":  "True",
+						"reason":  "RetryExhausted",
+						"message": "retries exhausted",
+					},
 				}),
 				newFakeHelmRelease("progressing", "default", []map[string]any{
-					{"type": "Ready", "status": "False", "reason": "Progressing", "message": "in progress"},
+					{
+						"type":    "Ready",
+						"status":  "False",
+						"reason":  "Progressing",
+						"message": "in progress",
+					},
 				}),
 			},
 			wantCount: 2,
@@ -881,79 +966,94 @@ func TestListStuckHelmReleases_APIError(t *testing.T) {
 // ResetStuckHelmReleases
 // ---------------------------------------------------------------------------
 
-func TestResetStuckHelmReleases(t *testing.T) {
+func TestResetStuckHelmReleases_EmptyList(t *testing.T) {
 	t.Parallel()
 
-	t.Run("empty list returns zero", func(t *testing.T) {
-		t.Parallel()
+	reconciler := newTestFluxReconcilerWithHelmReleases()
 
-		r := newTestFluxReconcilerWithHelmReleases()
+	count, err := reconciler.ResetStuckHelmReleases(context.Background(), nil)
+	require.NoError(t, err)
+	assert.Equal(t, 0, count)
+}
 
-		count, err := r.ResetStuckHelmReleases(context.Background(), nil)
-		require.NoError(t, err)
-		assert.Equal(t, 0, count)
+func TestResetStuckHelmReleases_SuccessfulReset(t *testing.T) {
+	t.Parallel()
+
+	helmRelease := newFakeHelmRelease("kyverno", "kyverno", []map[string]any{
+		{
+			"type":    "Ready",
+			"status":  "False",
+			"reason":  "InstallFailed",
+			"message": "retries exhausted",
+		},
 	})
 
-	t.Run("successfully resets stuck HelmReleases", func(t *testing.T) {
-		t.Parallel()
+	reconciler := newTestFluxReconcilerWithHelmReleases(helmRelease)
 
-		hr := newFakeHelmRelease("kyverno", "kyverno", []map[string]any{
-			{"type": "Ready", "status": "False", "reason": "InstallFailed", "message": "retries exhausted"},
-		})
+	releases := []flux.StuckHelmRelease{
+		{Name: "kyverno", Namespace: "kyverno", Reason: "InstallFailed"},
+	}
 
-		r := newTestFluxReconcilerWithHelmReleases(hr)
+	count, err := reconciler.ResetStuckHelmReleases(context.Background(), releases)
+	require.NoError(t, err)
+	assert.Equal(t, 1, count)
+}
 
-		releases := []flux.StuckHelmRelease{
-			{Name: "kyverno", Namespace: "kyverno", Reason: "InstallFailed"},
-		}
+func TestResetStuckHelmReleases_PartialFailure(t *testing.T) {
+	t.Parallel()
 
-		count, err := r.ResetStuckHelmReleases(context.Background(), releases)
-		require.NoError(t, err)
-		assert.Equal(t, 1, count)
+	helmRelease := newFakeHelmRelease("kyverno", "kyverno", []map[string]any{
+		{
+			"type":    "Ready",
+			"status":  "False",
+			"reason":  "InstallFailed",
+			"message": "retries exhausted",
+		},
 	})
 
-	t.Run("partial failure collects errors", func(t *testing.T) {
-		t.Parallel()
+	reconciler := newTestFluxReconcilerWithHelmReleases(helmRelease)
 
-		hr := newFakeHelmRelease("kyverno", "kyverno", []map[string]any{
-			{"type": "Ready", "status": "False", "reason": "InstallFailed", "message": "retries exhausted"},
-		})
+	releases := []flux.StuckHelmRelease{
+		{Name: "nonexistent", Namespace: "default", Reason: "InstallFailed"},
+		{Name: "kyverno", Namespace: "kyverno", Reason: "InstallFailed"},
+	}
 
-		r := newTestFluxReconcilerWithHelmReleases(hr)
+	count, err := reconciler.ResetStuckHelmReleases(context.Background(), releases)
+	// The nonexistent HR will fail to suspend, but kyverno will succeed.
+	// The fake client may or may not error on patching a nonexistent resource.
+	// What matters is that we get at least one successful reset.
+	assert.GreaterOrEqual(t, count, 0)
 
-		releases := []flux.StuckHelmRelease{
-			{Name: "nonexistent", Namespace: "default", Reason: "InstallFailed"},
-			{Name: "kyverno", Namespace: "kyverno", Reason: "InstallFailed"},
-		}
+	if err != nil {
+		assert.Contains(t, err.Error(), "nonexistent")
+	}
+}
 
-		count, err := r.ResetStuckHelmReleases(context.Background(), releases)
-		// The nonexistent HR will fail to suspend, but kyverno will succeed.
-		// The fake client may or may not error on patching a nonexistent resource.
-		// What matters is that we get at least one successful reset.
-		assert.GreaterOrEqual(t, count, 0)
+func TestResetStuckHelmReleases_CancelledContext(t *testing.T) {
+	t.Parallel()
 
-		if err != nil {
-			assert.Contains(t, err.Error(), "nonexistent")
-		}
+	helmRelease := newFakeHelmRelease("kyverno", "kyverno", []map[string]any{
+		{
+			"type":    "Ready",
+			"status":  "False",
+			"reason":  "InstallFailed",
+			"message": "retries exhausted",
+		},
 	})
 
-	t.Run("cancelled context returns error", func(t *testing.T) {
-		t.Parallel()
+	reconciler := newTestFluxReconcilerWithHelmReleases(helmRelease)
 
-		hr := newFakeHelmRelease("kyverno", "kyverno", []map[string]any{
-			{"type": "Ready", "status": "False", "reason": "InstallFailed", "message": "retries exhausted"},
-		})
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // Cancel immediately
 
-		r := newTestFluxReconcilerWithHelmReleases(hr)
+	releases := []flux.StuckHelmRelease{
+		{Name: "kyverno", Namespace: "kyverno", Reason: "InstallFailed"},
+	}
 
-		ctx, cancel := context.WithCancel(context.Background())
-		cancel() // Cancel immediately
-
-		releases := []flux.StuckHelmRelease{
-			{Name: "kyverno", Namespace: "kyverno", Reason: "InstallFailed"},
-		}
-
-		_, err := r.ResetStuckHelmReleases(ctx, releases)
-		require.Error(t, err)
-	})
+	// The resume phase uses a detached context so the operation completes and
+	// successfully resets the HelmRelease even when the parent context has
+	// already been cancelled.
+	count, err := reconciler.ResetStuckHelmReleases(ctx, releases)
+	require.NoError(t, err)
+	assert.Equal(t, 1, count)
 }

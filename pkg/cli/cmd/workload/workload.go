@@ -2290,38 +2290,7 @@ func reconcileFlux(
 	}
 
 	// Sub-phase 1.5: Reset stuck HelmReleases before Kustomization polling.
-	// HelmReleases can get stuck in Failed/Stalled state after cluster outages
-	// (e.g. webhook unavailable during recovery exhausted the retry budget).
-	// A suspend/resume cycle clears the failure so Kustomization health checks
-	// can succeed on the next reconciliation.
-	stuckReleases, err := fluxReconciler.ListStuckHelmReleases(deadlineCtx)
-	if err != nil {
-		// CRD not installed or API unreachable — log and continue.
-		writeActivityNotification(
-			fmt.Sprintf("warning: could not check for stuck helmreleases: %v", err),
-			outputTimer, writer,
-		)
-	} else if len(stuckReleases) > 0 {
-		writeActivityNotification(
-			fmt.Sprintf("resetting %d stuck helmrelease(s)...", len(stuckReleases)),
-			outputTimer, writer,
-		)
-
-		resetCount, resetErr := fluxReconciler.ResetStuckHelmReleases(deadlineCtx, stuckReleases)
-		if resetErr != nil {
-			writeActivityNotification(
-				fmt.Sprintf("warning: some helmreleases could not be reset: %v", resetErr),
-				outputTimer, writer,
-			)
-		}
-
-		if resetCount > 0 {
-			writeActivityNotification(
-				fmt.Sprintf("reset %d stuck helmrelease(s)", resetCount),
-				outputTimer, writer,
-			)
-		}
-	}
+	resetStuckHelmReleases(deadlineCtx, fluxReconciler, outputTimer, writer)
 
 	// Sub-phase 2: Kustomization reconciliation with per-resource tracking
 	writeActivityNotification("reconciling kustomizations...", outputTimer, writer)
@@ -2339,8 +2308,52 @@ func reconcileFlux(
 	return nil
 }
 
+// resetStuckHelmReleases detects and resets HelmReleases that are stuck in a
+// non-recoverable Failed/Stalled state before Kustomization polling begins.
+// Errors are treated as best-effort — if the CRD is not installed or the API
+// is unreachable, reconciliation continues normally.
+func resetStuckHelmReleases(
+	ctx context.Context,
+	fluxReconciler *flux.Reconciler,
+	outputTimer timer.Timer,
+	writer io.Writer,
+) {
+	stuckReleases, err := fluxReconciler.ListStuckHelmReleases(ctx)
+	if err != nil {
+		writeActivityNotification(
+			fmt.Sprintf("warning: could not check for stuck helmreleases: %v", err),
+			outputTimer, writer,
+		)
+
+		return
+	}
+
+	if len(stuckReleases) == 0 {
+		return
+	}
+
+	writeActivityNotification(
+		fmt.Sprintf("resetting %d stuck helmrelease(s)...", len(stuckReleases)),
+		outputTimer, writer,
+	)
+
+	resetCount, resetErr := fluxReconciler.ResetStuckHelmReleases(ctx, stuckReleases)
+	if resetErr != nil {
+		writeActivityNotification(
+			fmt.Sprintf("warning: some helmreleases could not be reset: %v", resetErr),
+			outputTimer, writer,
+		)
+	}
+
+	if resetCount > 0 {
+		writeActivityNotification(
+			fmt.Sprintf("reset %d stuck helmrelease(s)", resetCount),
+			outputTimer, writer,
+		)
+	}
+}
+
 // failedKustomizations tracks kustomizations that have permanently failed
-// during reconciliation. This enables fail-fast for dependent kustomizations:
 // when an upstream kustomization fails, all dependents fail immediately
 // instead of waiting for the full timeout.
 type failedKustomizations struct {
