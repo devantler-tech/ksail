@@ -27,6 +27,12 @@ func Diagnose(
 	kubeconfigPath string,
 	engine v1alpha1.GitOpsEngine,
 ) {
+	// Guard against GitOpsEngineNone before doing any filesystem or client
+	// work — diagnostics are only meaningful for Flux and ArgoCD clusters.
+	if engine == v1alpha1.GitOpsEngineNone {
+		return
+	}
+
 	diagCtx, cancel := context.WithTimeout(ctx, diagnosticTimeout)
 	defer cancel()
 
@@ -50,13 +56,14 @@ func Diagnose(
 		collector := &ArgoCDCollector{Dynamic: dynClient, Clientset: clientset}
 		report = collector.Collect(diagCtx)
 	case v1alpha1.GitOpsEngineNone:
-		return
+		// Already guarded above; case required for exhaustive switch coverage.
 	default:
 		return
 	}
 
-	// Write no-ops when the report is empty, so no guard needed here.
-	report.Write(writer)
+	if report != nil {
+		report.Write(writer)
+	}
 }
 
 // buildDiagClients creates the Kubernetes clients needed for diagnostics.

@@ -150,7 +150,11 @@ func (r *Report) writeFailingPods(writer io.Writer) {
 		return
 	}
 
-	notify.Warningf(writer, "failing pods (%s):", r.EventNamespace)
+	if r.EventNamespace != "" {
+		notify.Warningf(writer, "failing pods (%s):", r.EventNamespace)
+	} else {
+		notify.Warningf(writer, "failing pods:")
+	}
 
 	for line := range strings.SplitSeq(strings.TrimSpace(r.FailingPods), "\n") {
 		line = strings.TrimSpace(line)
@@ -171,10 +175,18 @@ func (r *Report) writeEvents(writer io.Writer) {
 		lookback = defaultEventLookback
 	}
 
-	label := fmt.Sprintf("warning events (%s, last %s)", r.EventNamespace, formatDuration(lookback))
+	var label string
+	if r.EventNamespace != "" {
+		label = fmt.Sprintf("warning events (%s, last %s)", r.EventNamespace, formatDuration(lookback))
+	} else {
+		label = fmt.Sprintf("warning events (last %s)", formatDuration(lookback))
+	}
 	notify.Warningf(writer, "%s:", label)
 
-	limit := min(len(r.Events), maxDiagnosticEvents)
+	limit := len(r.Events)
+	if limit > maxDiagnosticEvents {
+		limit = maxDiagnosticEvents
+	}
 
 	for _, evt := range r.Events[:limit] {
 		_, _ = fmt.Fprintf(writer, "    %s\n", evt.String())
