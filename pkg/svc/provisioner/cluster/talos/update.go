@@ -546,6 +546,7 @@ func (p *Provisioner) GetCurrentConfig(
 			spec.CertManager = detected.CertManager
 			spec.PolicyEngine = detected.PolicyEngine
 			spec.GitOpsEngine = detected.GitOpsEngine
+			spec.Autoscaler.Node = detected.Autoscaler.Node
 		}
 	}
 
@@ -554,6 +555,10 @@ func (p *Provisioner) GetCurrentConfig(
 	controlPlanes, workers := p.introspectNodeCounts(ctx)
 	spec.ControlPlanes = controlPlanes
 	spec.Workers = workers
+
+	// Detect the running Talos version from the cluster to avoid
+	// false-positive diffs when the user pins a version in config.
+	spec.Talos.Version = p.introspectTalosVersion(ctx)
 
 	// Build provider spec if we have Hetzner options configured.
 	// Hetzner fields (server types, location, network, SSH key) cannot be
@@ -597,6 +602,26 @@ func (p *Provisioner) introspectNodeCounts(ctx context.Context) (int32, int32) {
 	}
 
 	return 1, 0
+}
+
+// introspectTalosVersion queries a control-plane node for the running Talos
+// version. Returns an empty string when the version cannot be determined
+// (e.g., no Talos API access), which causes the diff engine to fall back to
+// its default-value handling.
+func (p *Provisioner) introspectTalosVersion(ctx context.Context) string {
+	clusterName := p.resolveClusterName("")
+
+	nodes, err := p.getNodesByRole(ctx, clusterName)
+	if err != nil || len(nodes) == 0 {
+		return ""
+	}
+
+	version, err := p.getRunningTalosVersion(ctx, nodes[0].IP)
+	if err != nil {
+		return ""
+	}
+
+	return version
 }
 
 // countNodeRoles counts control-plane and worker nodes from a list of nodeWithRole.

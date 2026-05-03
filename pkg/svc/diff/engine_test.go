@@ -1361,3 +1361,64 @@ func TestEngine_AutoscalerToggle_NodeCountAlwaysDetected(t *testing.T) {
 	assertSingleChange(t, result.InPlaceChanges, testFieldWorkers,
 		"1", "5", clusterupdate.ChangeCategoryInPlace)
 }
+
+func TestEngine_TalosISO_SuppressedWhenOldUnknown(t *testing.T) {
+	t.Parallel()
+
+	// Simulate GetCurrentConfig returning 0 (unset) for ISO — the live cluster
+	// can't report what ISO it booted from.
+	old := newBaseSpec()
+	old.Distribution = v1alpha1.DistributionTalos
+	old.Talos.ISO = 0
+
+	newer := clone(old)
+	newer.Talos.ISO = 122630
+
+	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
+	result := engine.ComputeDiff(old, newer, nil, nil)
+
+	// ISO should NOT appear as a change because both sides normalise to the
+	// default "122630" via the defaultVal mechanism.
+	for _, c := range result.AllChanges() {
+		if c.Field == "cluster.talos.iso" {
+			t.Fatalf("expected no ISO diff when old value is 0 (unknown), got %+v", c)
+		}
+	}
+}
+
+func TestEngine_TalosISO_DetectedWhenBothNonZero(t *testing.T) {
+	t.Parallel()
+
+	old := newBaseSpec()
+	old.Distribution = v1alpha1.DistributionTalos
+	old.Talos.ISO = 122630
+
+	newer := clone(old)
+	newer.Talos.ISO = 999999
+
+	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
+	result := engine.ComputeDiff(old, newer, nil, nil)
+
+	assertSingleChange(t, result.InPlaceChanges, "cluster.talos.iso",
+		"122630", "999999", clusterupdate.ChangeCategoryInPlace)
+}
+
+func TestEngine_TalosVersion_NoChangeWhenBothSet(t *testing.T) {
+	t.Parallel()
+
+	old := newBaseSpec()
+	old.Distribution = v1alpha1.DistributionTalos
+	old.Talos.Version = "v1.11.2"
+
+	newer := clone(old)
+	newer.Talos.Version = "v1.11.2"
+
+	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
+	result := engine.ComputeDiff(old, newer, nil, nil)
+
+	for _, c := range result.AllChanges() {
+		if c.Field == "cluster.talos.version" {
+			t.Fatalf("expected no talos.version diff when values match, got %+v", c)
+		}
+	}
+}

@@ -1030,3 +1030,115 @@ func TestDetectFirstRelease_Error(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "helm error")
 }
+
+// --- Node Autoscaler Detection ---
+
+func TestDetectNodeAutoscaler_Enabled(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	helmClient := helm.NewMockInterface(t)
+	k8sClientset := fake.NewClientset()
+
+	helmClient.On("ReleaseExists", ctx,
+		detector.ReleaseClusterAutoscaler, detector.NamespaceClusterAutoscaler,
+	).Return(true, nil)
+
+	helmClient.On("GetReleaseValues", ctx,
+		detector.ReleaseClusterAutoscaler, detector.NamespaceClusterAutoscaler,
+	).Return(map[string]interface{}{
+		"extraArgs": map[string]interface{}{
+			"expander":                 "price",
+			"max-nodes-total":          float64(10),
+			"scale-down-unneeded-time": "10m",
+		},
+		"autoscalingGroups": []interface{}{
+			map[string]interface{}{
+				"name":         "autoscale-small",
+				"instanceType": "cx23",
+				"region":       "fsn1",
+				"minSize":      float64(0),
+				"maxSize":      float64(1),
+			},
+		},
+	}, nil)
+
+	d := detector.NewComponentDetector(helmClient, k8sClientset, nil)
+	cfg, err := d.ExportDetectNodeAutoscaler(ctx)
+
+	require.NoError(t, err)
+	assert.True(t, cfg.Enabled)
+	assert.Equal(t, v1alpha1.AutoscalerExpanderPrice, cfg.Expander)
+	assert.Equal(t, int32(10), cfg.MaxNodesTotal)
+	assert.Equal(t, "10m", cfg.ScaleDownUnneededTime)
+	require.Len(t, cfg.Pools, 1)
+	assert.Equal(t, "autoscale-small", cfg.Pools[0].Name)
+	assert.Equal(t, "cx23", cfg.Pools[0].ServerType)
+	assert.Equal(t, "fsn1", cfg.Pools[0].Location)
+	assert.Equal(t, int32(0), cfg.Pools[0].Min)
+	assert.Equal(t, int32(1), cfg.Pools[0].Max)
+}
+
+func TestDetectNodeAutoscaler_NotInstalled(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	helmClient := helm.NewMockInterface(t)
+	k8sClientset := fake.NewClientset()
+
+	helmClient.On("ReleaseExists", ctx,
+		detector.ReleaseClusterAutoscaler, detector.NamespaceClusterAutoscaler,
+	).Return(false, nil)
+
+	d := detector.NewComponentDetector(helmClient, k8sClientset, nil)
+	cfg, err := d.ExportDetectNodeAutoscaler(ctx)
+
+	require.NoError(t, err)
+	assert.False(t, cfg.Enabled)
+	assert.Empty(t, cfg.Pools)
+}
+
+func TestDetectNodeAutoscaler_ValuesUnreadable(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	helmClient := helm.NewMockInterface(t)
+	k8sClientset := fake.NewClientset()
+
+	helmClient.On("ReleaseExists", ctx,
+		detector.ReleaseClusterAutoscaler, detector.NamespaceClusterAutoscaler,
+	).Return(true, nil)
+
+	helmClient.On("GetReleaseValues", ctx,
+		detector.ReleaseClusterAutoscaler, detector.NamespaceClusterAutoscaler,
+	).Return(nil, errors.New("values error"))
+
+	d := detector.NewComponentDetector(helmClient, k8sClientset, nil)
+	cfg, err := d.ExportDetectNodeAutoscaler(ctx)
+
+	require.NoError(t, err)
+	assert.True(t, cfg.Enabled)
+	assert.Empty(t, cfg.Pools)
+}
+
+func TestHelmExpanderToEnum(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		input    string
+		expected v1alpha1.AutoscalerExpander
+	}{
+		{"price", v1alpha1.AutoscalerExpanderPrice},
+		{"least-waste", v1alpha1.AutoscalerExpanderLeastWaste},
+		{"least-nodes", v1alpha1.AutoscalerExpanderLeastNodes},
+		{"random", v1alpha1.AutoscalerExpanderRandom},
+		{"unknown", v1alpha1.AutoscalerExpanderLeastWaste},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.input, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tc.expected, detector.ExportHelmExpanderToEnum(tc.input))
+		})
+	}
+}

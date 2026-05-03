@@ -112,3 +112,20 @@ func ExportDetectFirstRelease[T ~string](
 ) (T, error) {
 	return detectFirstRelease(ctx, helmClient, mappings, defaultVal)
 }
+
+// ExportDetectNodeAutoscaler exposes detectNodeAutoscaler for testing.
+func (d *ComponentDetector) ExportDetectNodeAutoscaler(
+	ctx context.Context,
+) (v1alpha1.NodeAutoscalerConfig, error) {
+	return d.detectNodeAutoscaler(ctx)
+}
+
+// ExportParseAutoscalerValues exposes parseAutoscalerValues for testing.
+func ExportParseAutoscalerValues(cfg *v1alpha1.NodeAutoscalerConfig, values map[string]interface{}) {
+	parseAutoscalerValues(cfg, values)
+}
+
+// ExportHelmExpanderToEnum exposes helmExpanderToEnum for testing.
+func ExportHelmExpanderToEnum(value string) v1alpha1.AutoscalerExpander {
+	return helmExpanderToEnum(value)
+}

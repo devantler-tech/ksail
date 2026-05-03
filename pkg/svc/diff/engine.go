@@ -390,13 +390,24 @@ var talosFieldRules = []fieldRule{
 }
 
 // talosISORule is the ISO field rule used by the Talos field rules.
+// ISO is a boot-time setting (Hetzner Cloud ISO ID) that cannot be detected from
+// the running cluster. When the old spec has 0 (unknown/unset), getVal returns ""
+// so that the defaultVal substitution normalises both sides to the config default,
+// suppressing false-positive diffs.
 //
 //nolint:gochecknoglobals // Immutable field-rule; avoids per-call heap allocation.
 var talosISORule = fieldRule{
-	field:    "cluster.talos.iso",
-	category: clusterupdate.ChangeCategoryInPlace,
-	reason:   "ISO change only affects newly provisioned nodes",
-	getVal:   func(s *v1alpha1.ClusterSpec) string { return strconv.FormatInt(s.Talos.ISO, 10) },
+	field:      "cluster.talos.iso",
+	category:   clusterupdate.ChangeCategoryInPlace,
+	reason:     "ISO change only affects newly provisioned nodes",
+	defaultVal: "122630",
+	getVal: func(s *v1alpha1.ClusterSpec) string {
+		if s.Talos.ISO == 0 {
+			return ""
+		}
+
+		return strconv.FormatInt(s.Talos.ISO, 10)
+	},
 }
 
 // checkHetznerOptionsChange checks Hetzner-specific option changes.

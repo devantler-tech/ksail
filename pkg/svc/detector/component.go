@@ -180,6 +180,11 @@ func (d *ComponentDetector) detectAllComponents(
 		return nil, fmt.Errorf("detect GitOpsEngine: %w", err)
 	}
 
+	spec.Autoscaler.Node, err = d.detectNodeAutoscaler(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("detect NodeAutoscaler: %w", err)
+	}
+
 	return spec, nil
 }
 
@@ -537,4 +542,136 @@ func (d *ComponentDetector) containerExists(
 	}
 
 	return len(containers) > 0, nil
+}
+
+// detectNodeAutoscaler detects the Cluster Autoscaler configuration from the
+// live cluster by checking for the Helm release and reading its values.
+func (d *ComponentDetector) detectNodeAutoscaler(
+	ctx context.Context,
+) (v1alpha1.NodeAutoscalerConfig, error) {
+	var cfg v1alpha1.NodeAutoscalerConfig
+
+	exists, err := d.helmClient.ReleaseExists(
+		ctx, ReleaseClusterAutoscaler, NamespaceClusterAutoscaler,
+	)
+	if err != nil {
+		return cfg, fmt.Errorf("check cluster-autoscaler release: %w", err)
+	}
+
+	if !exists {
+		return cfg, nil
+	}
+
+	cfg.Enabled = true
+
+	values, err := d.helmClient.GetReleaseValues(
+		ctx, ReleaseClusterAutoscaler, NamespaceClusterAutoscaler,
+	)
+	if err != nil {
+		// Release exists but values unreadable — return enabled with defaults.
+		return cfg, nil //nolint:nilerr // graceful fallback; enabled is the critical signal
+	}
+
+	parseAutoscalerValues(&cfg, values)
+
+	return cfg, nil
+}
+
+// parseAutoscalerValues extracts autoscaler config from Helm release values.
+func parseAutoscalerValues(cfg *v1alpha1.NodeAutoscalerConfig, values map[string]interface{}) {
+	extraArgs, ok := values["extraArgs"].(map[string]interface{})
+	if ok {
+		parseAutoscalerExtraArgs(cfg, extraArgs)
+	}
+
+	groups, ok := values["autoscalingGroups"].([]interface{})
+	if ok {
+		cfg.Pools = parseAutoscalingGroups(groups)
+	}
+}
+
+// parseAutoscalerExtraArgs extracts scalar config from the chart's extraArgs.
+func parseAutoscalerExtraArgs(cfg *v1alpha1.NodeAutoscalerConfig, args map[string]interface{}) {
+	if expander, ok := args["expander"].(string); ok {
+		cfg.Expander = helmExpanderToEnum(expander)
+	}
+
+	if maxNodes, ok := toInt32(args["max-nodes-total"]); ok {
+		cfg.MaxNodesTotal = maxNodes
+	}
+
+	if scaleDown, ok := args["scale-down-unneeded-time"].(string); ok {
+		cfg.ScaleDownUnneededTime = scaleDown
+	}
+}
+
+// helmExpanderToEnum reverses the Helm chart's lowercase expander value to the
+// KSail enum. Must stay in sync with expanderToHelmValue in the installer.
+func helmExpanderToEnum(value string) v1alpha1.AutoscalerExpander {
+	switch value {
+	case "price":
+		return v1alpha1.AutoscalerExpanderPrice
+	case "least-nodes":
+		return v1alpha1.AutoscalerExpanderLeastNodes
+	case "random":
+		return v1alpha1.AutoscalerExpanderRandom
+	case "least-waste":
+		return v1alpha1.AutoscalerExpanderLeastWaste
+	default:
+		return v1alpha1.AutoscalerExpanderLeastWaste
+	}
+}
+
+// parseAutoscalingGroups converts the chart's autoscalingGroups list to NodePool slices.
+func parseAutoscalingGroups(groups []interface{}) []v1alpha1.NodePool {
+	pools := make([]v1alpha1.NodePool, 0, len(groups))
+
+	for _, g := range groups {
+		gm, ok := g.(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		pool := v1alpha1.NodePool{}
+		if name, ok := gm["name"].(string); ok {
+			pool.Name = name
+		}
+
+		if st, ok := gm["instanceType"].(string); ok {
+			pool.ServerType = st
+		}
+
+		if loc, ok := gm["region"].(string); ok {
+			pool.Location = loc
+		}
+
+		if minSize, ok := toInt32(gm["minSize"]); ok {
+			pool.Min = minSize
+		}
+
+		if maxSize, ok := toInt32(gm["maxSize"]); ok {
+			pool.Max = maxSize
+		}
+
+		pools = append(pools, pool)
+	}
+
+	return pools
+}
+
+// toInt32 converts a Helm values entry (which may be float64 or json.Number)
+// to int32. Returns (0, false) when the value is not a numeric type.
+func toInt32(v interface{}) (int32, bool) {
+	switch n := v.(type) {
+	case float64:
+		return int32(n), true
+	case int:
+		return int32(n), true
+	case int32:
+		return n, true
+	case int64:
+		return int32(n), true
+	default:
+		return 0, false
+	}
 }
