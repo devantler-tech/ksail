@@ -637,9 +637,12 @@ func parseAutoscalingGroups(groups []any) []v1alpha1.NodePool {
 		}
 
 		pool := v1alpha1.NodePool{}
-		if name, ok := group["name"].(string); ok {
-			pool.Name = name
+		name, ok := group["name"].(string)
+		if !ok || name == "" {
+			continue
 		}
+
+		pool.Name = name
 
 		if st, ok := group["instanceType"].(string); ok {
 			pool.ServerType = st

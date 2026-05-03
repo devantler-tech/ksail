@@ -1122,6 +1122,52 @@ func TestDetectNodeAutoscaler_ValuesUnreadable(t *testing.T) {
 	assert.Empty(t, cfg.Pools)
 }
 
+func TestDetectNodeAutoscaler_SkipsPoolWithEmptyName(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	helmClient := helm.NewMockInterface(t)
+	k8sClientset := fake.NewClientset()
+
+	helmClient.On("ReleaseExists", ctx,
+		detector.ReleaseClusterAutoscaler, detector.NamespaceClusterAutoscaler,
+	).Return(true, nil)
+
+	helmClient.On("GetReleaseValues", ctx,
+		detector.ReleaseClusterAutoscaler, detector.NamespaceClusterAutoscaler,
+	).Return(map[string]any{
+		"autoscalingGroups": []any{
+			map[string]any{
+				"name":         "",
+				"instanceType": "cx23",
+				"region":       "fsn1",
+				"minSize":      float64(0),
+				"maxSize":      float64(1),
+			},
+			map[string]any{
+				"instanceType": "cx33",
+				"region":       "fsn1",
+				"minSize":      float64(0),
+				"maxSize":      float64(3),
+			},
+			map[string]any{
+				"name":         "valid-pool",
+				"instanceType": "cx43",
+				"region":       "fsn1",
+				"minSize":      float64(0),
+				"maxSize":      float64(5),
+			},
+		},
+	}, nil)
+
+	d := detector.NewComponentDetector(helmClient, k8sClientset, nil)
+	cfg, err := d.ExportDetectNodeAutoscaler(ctx)
+
+	require.NoError(t, err)
+	require.Len(t, cfg.Pools, 1)
+	assert.Equal(t, "valid-pool", cfg.Pools[0].Name)
+}
+
 func TestHelmExpanderToEnum(t *testing.T) {
 	t.Parallel()
 
