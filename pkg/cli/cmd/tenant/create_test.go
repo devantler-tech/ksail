@@ -176,7 +176,9 @@ func TestCreateCmd_FluxTypeWithOCIPath(t *testing.T) {
 
 	// Verify sync.yaml contains the OCI path suffix.
 	tenantDir := filepath.Join(outDir, "oci-path-tenant")
-	syncContent, err := os.ReadFile(filepath.Join(tenantDir, "sync.yaml")) //nolint:gosec // test path
+	syncContent, err := os.ReadFile( //nolint:gosec // test path
+		filepath.Join(tenantDir, "sync.yaml"),
+	)
 	require.NoError(t, err)
 	require.Contains(t, string(syncContent), "url: oci://ghcr.io/owner/repo/deploy")
 }

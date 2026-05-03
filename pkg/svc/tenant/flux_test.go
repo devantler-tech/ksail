@@ -49,18 +49,6 @@ func TestGenerateFluxSyncManifests(t *testing.T) {
 				TenantType:  tenant.TypeFlux,
 			},
 		},
-		{
-			name: "oci source with oci-path suffix",
-			opts: tenant.Options{
-				Name:       "team-delta",
-				Namespaces: []string{"team-delta-ns"},
-				SyncSource: tenant.SyncSourceOCI,
-				Registry:   "oci://ghcr.io",
-				TenantRepo: "acme-org/team-delta-app",
-				OCIPath:    "deploy",
-				TenantType: tenant.TypeFlux,
-			},
-		},
 	}
 
 	for _, testCase := range tests {
