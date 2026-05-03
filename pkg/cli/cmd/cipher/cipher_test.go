@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"filippo.io/age"
 	snapshottest "github.com/devantler-tech/ksail/v7/internal/testutil/snapshottest"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/cipher"
 	"github.com/devantler-tech/ksail/v7/pkg/di"
@@ -1147,6 +1148,11 @@ func TestWriteDecryptedOutputToFile(t *testing.T) {
 	if string(got) != string(data) {
 		t.Errorf("expected file to contain %q, got %q", string(data), string(got))
 	}
+
+	// writeDecryptedOutput emits a success notification to cmd.OutOrStdout() after writing the file.
+	if !strings.Contains(buf.String(), "decrypted to") {
+		t.Errorf("expected stdout to contain success notification %q, got %q", "decrypted to", buf.String())
+	}
 }
 
 func TestWriteDecryptedOutputToInvalidPath(t *testing.T) {
@@ -1228,6 +1234,15 @@ func TestBuildRotateOptsEmpty(t *testing.T) {
 	if len(opts.RemoveKeys) != 0 {
 		t.Errorf("expected no RemoveKeys for empty remove-key, got: %v", opts.RemoveKeys)
 	}
+
+	// buildRotateOpts always initializes KeyServices with a local client and an empty DecryptionOrder.
+	if len(opts.KeyServices) == 0 {
+		t.Errorf("expected KeyServices to be initialized (non-empty), got empty slice")
+	}
+
+	if opts.DecryptionOrder == nil {
+		t.Errorf("expected DecryptionOrder to be initialized (non-nil), got nil")
+	}
 }
 
 func TestBuildRotateOptsWithRemoveKey(t *testing.T) {
@@ -1249,5 +1264,27 @@ func TestBuildRotateOptsWithInvalidAddKey(t *testing.T) {
 	_, err := cipher.BuildRotateOpts("not-a-valid-key-format", "")
 	if err == nil {
 		t.Fatal("expected error for invalid add-key, got nil")
+	}
+}
+
+func TestBuildRotateOptsWithValidAddKey(t *testing.T) {
+	t.Parallel()
+
+	identity, err := age.GenerateX25519Identity()
+	if err != nil {
+		t.Fatalf("generate age identity: %v", err)
+	}
+
+	opts, err := cipher.BuildRotateOpts(identity.Recipient().String(), "")
+	if err != nil {
+		t.Fatalf("expected no error for valid add-key, got: %v", err)
+	}
+
+	if len(opts.AddKeys) != 1 {
+		t.Fatalf("expected AddKeys to have 1 entry, got %d", len(opts.AddKeys))
+	}
+
+	if opts.AddKeys[0].ToString() != identity.Recipient().String() {
+		t.Errorf("expected AddKeys[0] to match recipient %q, got %q", identity.Recipient().String(), opts.AddKeys[0].ToString())
 	}
 }
