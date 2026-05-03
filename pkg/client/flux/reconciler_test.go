@@ -797,6 +797,12 @@ func TestCheckHelmReleaseStuck(t *testing.T) {
 		{
 			name: "Ready=True overrides earlier failure reason",
 			hr: newFakeHelmRelease("app", "default", []map[string]any{
+				{
+					"type":    "Stalled",
+					"status":  "False",
+					"reason":  "RecoveredFromFailure",
+					"message": "stall cleared",
+				},
 				{"type": "Ready", "status": "True", "reason": "Succeeded", "message": "ok"},
 			}),
 			wantStuck: false,
@@ -1024,14 +1030,11 @@ func TestResetStuckHelmReleases_PartialFailure(t *testing.T) {
 	}
 
 	count, err := reconciler.ResetStuckHelmReleases(context.Background(), releases)
-	// The nonexistent HR will fail to suspend, but kyverno will succeed.
-	// The fake client may or may not error on patching a nonexistent resource.
-	// What matters is that we get at least one successful reset.
-	assert.GreaterOrEqual(t, count, 0)
-
-	if err != nil {
-		assert.Contains(t, err.Error(), "nonexistent")
-	}
+	// nonexistent is not in the fake client so its suspend patch returns NotFound.
+	// kyverno exists and succeeds, so exactly one release is reset.
+	assert.Equal(t, 1, count)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "nonexistent")
 }
 
 func TestResetStuckHelmReleases_CancelledContext(t *testing.T) {
@@ -1055,9 +1058,13 @@ func TestResetStuckHelmReleases_CancelledContext(t *testing.T) {
 		{Name: "kyverno", Namespace: "kyverno", Reason: "InstallFailed"},
 	}
 
-	// The resume phase uses a detached context so the operation completes and
-	// successfully resets the HelmRelease even when the parent context has
-	// already been cancelled.
+	// dynamicfake does not fail requests on a cancelled context, so this test
+	// cannot directly verify that the resume uses a detached context. It
+	// serves instead as a documentation test: with a real API server,
+	// context.WithoutCancel in ResetStuckHelmReleases ensures the resume
+	// phase always runs even after the parent context has been cancelled.
+	// Here we at least confirm the function returns the correct count and no
+	// error when called with an already-cancelled context.
 	count, err := reconciler.ResetStuckHelmReleases(ctx, releases)
 	require.NoError(t, err)
 	assert.Equal(t, 1, count)

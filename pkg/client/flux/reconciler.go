@@ -62,7 +62,17 @@ const (
 	apiAvailabilityPollInterval = 500 * time.Millisecond
 
 	// HelmRelease reset constants.
-	helmReleaseSuspendWait = 2 * time.Second
+	// helmReleaseSuspendDelay is the time the code waits after suspending
+	// HelmReleases before resuming them. A fixed delay is used rather than
+	// condition-polling because stuck HelmReleases (Failed/Stalled) already
+	// have Reconciling=False, so polling for "not reconciling" would return
+	// immediately before the helm-controller has had a chance to process the
+	// suspend patch.
+	helmReleaseSuspendDelay = 2 * time.Second
+	// helmReleaseResumeTimeout is the deadline for the resume phase. It is
+	// deliberately generous so that even a large batch of HelmReleases can be
+	// resumed before the context expires.
+	helmReleaseResumeTimeout = 30 * time.Second
 )
 
 // StuckHelmRelease holds the identity and failure details of a HelmRelease
@@ -328,13 +338,16 @@ func (r *Reconciler) ResetStuckHelmReleases(
 		return 0, errors.Join(suspendErrs...)
 	}
 
-	// Wait for the helm-controller to observe the suspension.
-	r.waitForHelmReleaseSuspended(ctx, gvr, suspended)
+	// Wait for the helm-controller to observe the suspension. A fixed delay
+	// is used because stuck HelmReleases (Failed/Stalled) already have
+	// Reconciling=False, so polling for condition absence would return
+	// immediately—before the controller has processed the suspend patch.
+	time.Sleep(helmReleaseSuspendDelay)
 
 	// Phase 2: Resume using a detached context so the resume always runs
 	// even when the parent deadline has expired.
 	resumeCtx, resumeCancel := context.WithTimeout(
-		context.WithoutCancel(ctx), helmReleaseSuspendWait,
+		context.WithoutCancel(ctx), helmReleaseResumeTimeout,
 	)
 	defer resumeCancel()
 
@@ -465,85 +478,6 @@ func evaluateHelmReleaseCondition(
 	}
 
 	return nil
-}
-
-// waitForHelmReleaseSuspended polls each released HelmRelease until its
-// Reconciling condition is absent or False, indicating that the helm-controller
-// has observed the suspension. The overall deadline is helmReleaseSuspendWait.
-func (r *Reconciler) waitForHelmReleaseSuspended(
-	ctx context.Context,
-	gvr schema.GroupVersionResource,
-	releases []StuckHelmRelease,
-) {
-	deadline := time.Now().Add(helmReleaseSuspendWait)
-
-	ticker := time.NewTicker(pollInterval)
-	defer ticker.Stop()
-
-	for {
-		if time.Now().After(deadline) {
-			return
-		}
-
-		if r.areAllHelmReleasesSettled(ctx, gvr, releases) {
-			return
-		}
-
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-		}
-	}
-}
-
-// areAllHelmReleasesSettled returns true when every released HelmRelease no
-// longer has Reconciling=True in its status conditions.
-func (r *Reconciler) areAllHelmReleasesSettled(
-	ctx context.Context,
-	gvr schema.GroupVersionResource,
-	releases []StuckHelmRelease,
-) bool {
-	for _, helmRelease := range releases {
-		if r.isHelmReleaseReconciling(ctx, gvr, helmRelease) {
-			return false
-		}
-	}
-
-	return true
-}
-
-// isHelmReleaseReconciling fetches the named HelmRelease and returns true when
-// its Reconciling condition is present and set to True.
-func (r *Reconciler) isHelmReleaseReconciling(
-	ctx context.Context,
-	gvr schema.GroupVersionResource,
-	helmRelease StuckHelmRelease,
-) bool {
-	nsClient := r.Dynamic.Resource(gvr).Namespace(helmRelease.Namespace)
-
-	obj, err := nsClient.Get(ctx, helmRelease.Name, metav1.GetOptions{})
-	if err != nil {
-		return false
-	}
-
-	conditions, _, _ := unstructured.NestedSlice(obj.Object, "status", "conditions")
-
-	for _, cond := range conditions {
-		condMap, ok := cond.(map[string]any)
-		if !ok {
-			continue
-		}
-
-		condType, _, _ := unstructured.NestedString(condMap, "type")
-		condStatus, _, _ := unstructured.NestedString(condMap, "status")
-
-		if condType == "Reconciling" && condStatus == conditionStatusTrue {
-			return true
-		}
-	}
-
-	return false
 }
 
 // pollOCIRepositoryStatus checks OCI repository status with timeout guard.

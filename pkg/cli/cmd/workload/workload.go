@@ -2353,8 +2353,8 @@ func resetStuckHelmReleases(
 	}
 }
 
-// failedKustomizations tracks kustomizations that have permanently failed
-// when an upstream kustomization fails, all dependents fail immediately
+// failedKustomizations tracks kustomizations that have permanently failed.
+// When an upstream kustomization fails, all dependents fail immediately
 // instead of waiting for the full timeout.
 type failedKustomizations struct {
 	m sync.Map
