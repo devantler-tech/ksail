@@ -606,8 +606,8 @@ func (p *Provisioner) introspectNodeCounts(ctx context.Context) (int32, int32) {
 
 // introspectTalosVersion queries a control-plane node for the running Talos
 // version. Returns an empty string when the version cannot be determined
-// (e.g., no Talos API access), which causes the diff engine to fall back to
-// its default-value handling.
+// (e.g., no Talos API access); in that case the diff engine will report a
+// version change if the desired spec specifies a version.
 func (p *Provisioner) introspectTalosVersion(ctx context.Context) string {
 	clusterName := p.resolveClusterName("")
 

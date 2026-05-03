@@ -1,6 +1,7 @@
 package diff_test
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 
@@ -34,7 +35,7 @@ func newBaseSpec() *v1alpha1.ClusterSpec {
 		ControlPlanes: 1,
 		Workers:       0,
 		Talos: v1alpha1.OptionsTalos{
-			ISO: 122630,
+			ISO: v1alpha1.DefaultTalosISO,
 		},
 	}
 }
@@ -477,10 +478,10 @@ func TestEngine_TalosOptionsChange(t *testing.T) {
 		},
 		{
 			name:     "ISO change",
-			mutate:   func(s *v1alpha1.ClusterSpec) { s.Talos.ISO = 122629 },
+			mutate:   func(s *v1alpha1.ClusterSpec) { s.Talos.ISO = v1alpha1.DefaultTalosISO - 1 },
 			field:    "cluster.talos.iso",
-			oldValue: "122630",
-			newValue: "122629",
+			oldValue: strconv.FormatInt(v1alpha1.DefaultTalosISO, 10),
+			newValue: strconv.FormatInt(v1alpha1.DefaultTalosISO-1, 10),
 		},
 	}
 
@@ -1015,7 +1016,7 @@ func TestEngine_TalosISOStillDetected_WhenAutoscalingEnabled(t *testing.T) {
 
 	old := newBaseSpec()
 	newer := clone(old)
-	newer.Talos.ISO = 999999
+	newer.Talos.ISO = v1alpha1.DefaultTalosISO + 1
 	newer.NodeAutoscaling = v1alpha1.NodeAutoscalingEnabled
 
 	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderDocker)
@@ -1026,7 +1027,7 @@ func TestEngine_TalosISOStillDetected_WhenAutoscalingEnabled(t *testing.T) {
 	}
 
 	assertSingleChange(t, result.InPlaceChanges, "cluster.talos.iso",
-		"122630", "999999", clusterupdate.ChangeCategoryInPlace)
+		strconv.FormatInt(v1alpha1.DefaultTalosISO, 10), strconv.FormatInt(v1alpha1.DefaultTalosISO+1, 10), clusterupdate.ChangeCategoryInPlace)
 }
 
 func TestEngine_AutoscalerNodeEnabledChange(t *testing.T) {
@@ -1372,13 +1373,13 @@ func TestEngine_TalosISO_SuppressedWhenOldUnknown(t *testing.T) {
 	old.Talos.ISO = 0
 
 	newer := clone(old)
-	newer.Talos.ISO = 122630
+	newer.Talos.ISO = v1alpha1.DefaultTalosISO
 
 	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
 	result := engine.ComputeDiff(old, newer, nil, nil)
 
 	// ISO should NOT appear as a change because both sides normalise to the
-	// default "122630" via the defaultVal mechanism.
+	// default ISO via the defaultVal mechanism.
 	for _, c := range result.AllChanges() {
 		if c.Field == "cluster.talos.iso" {
 			t.Fatalf("expected no ISO diff when old value is 0 (unknown), got %+v", c)
@@ -1391,16 +1392,16 @@ func TestEngine_TalosISO_DetectedWhenBothNonZero(t *testing.T) {
 
 	old := newBaseSpec()
 	old.Distribution = v1alpha1.DistributionTalos
-	old.Talos.ISO = 122630
+	old.Talos.ISO = v1alpha1.DefaultTalosISO
 
 	newer := clone(old)
-	newer.Talos.ISO = 999999
+	newer.Talos.ISO = v1alpha1.DefaultTalosISO + 1
 
 	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
 	result := engine.ComputeDiff(old, newer, nil, nil)
 
 	assertSingleChange(t, result.InPlaceChanges, "cluster.talos.iso",
-		"122630", "999999", clusterupdate.ChangeCategoryInPlace)
+		strconv.FormatInt(v1alpha1.DefaultTalosISO, 10), strconv.FormatInt(v1alpha1.DefaultTalosISO+1, 10), clusterupdate.ChangeCategoryInPlace)
 }
 
 func TestEngine_TalosVersion_NoChangeWhenBothSet(t *testing.T) {
