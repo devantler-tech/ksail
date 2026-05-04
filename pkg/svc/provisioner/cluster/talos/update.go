@@ -63,12 +63,9 @@ func (p *Provisioner) Update(
 	// ConfigManager.Load() generates fresh CA/tokens on every call, but scale-up
 	// and in-place config changes must use the same secrets as the running cluster
 	// to avoid "certificate signed by unknown authority" errors on new nodes.
-	// Only sync when machine configs will actually be pushed to nodes.
-	if p.needsSecretSync(oldSpec, newSpec, result) {
-		secretErr := p.syncSecretsFromCluster(ctx, clusterName)
-		if secretErr != nil {
-			return result, fmt.Errorf("failed to sync cluster secrets: %w", secretErr)
-		}
+	secretErr := p.syncSecretsFromCluster(ctx, clusterName, oldSpec, newSpec, result)
+	if secretErr != nil {
+		return result, fmt.Errorf("failed to sync cluster secrets: %w", secretErr)
 	}
 
 	// Handle node scaling changes
@@ -447,12 +444,19 @@ func (p *Provisioner) needsSecretSync(
 // cluster. Without this, ConfigManager.Load() generates fresh PKI on every call,
 // causing certificate mismatch errors when new nodes try to join.
 //
-// Callers must gate this behind needsSecretSync — this method assumes that
-// machine configs will be pushed and fails closed when secrets cannot be obtained.
+// This is a no-op when no machine configs will be pushed (no scale-up, no in-place
+// changes, no reboot-required changes). When secrets ARE needed but no control-plane
+// node is available, it fails closed to prevent PKI mismatch.
 func (p *Provisioner) syncSecretsFromCluster(
 	ctx context.Context,
 	clusterName string,
+	oldSpec, newSpec *v1alpha1.ClusterSpec,
+	diff *clusterupdate.UpdateResult,
 ) error {
+	if !p.needsSecretSync(oldSpec, newSpec, diff) {
+		return nil
+	}
+
 	nodes, err := p.getNodesByRole(ctx, clusterName)
 	if err != nil {
 		return fmt.Errorf("failed to discover nodes for secret sync: %w", err)
@@ -470,11 +474,7 @@ func (p *Provisioner) syncSecretsFromCluster(
 	}
 
 	if cpIP == "" {
-		return fmt.Errorf(
-			"no running control-plane node found for cluster %q: "+
-				"cannot sync PKI secrets — new or updated nodes would receive "+
-				"mismatched certificates", clusterName,
-		)
+		return fmt.Errorf("%w: cluster %q", ErrNoControlPlaneForSecretSync, clusterName)
 	}
 
 	talosClient, err := p.createTalosClient(ctx, cpIP)
@@ -485,7 +485,7 @@ func (p *Provisioner) syncSecretsFromCluster(
 	defer talosClient.Close() //nolint:errcheck
 
 	// Fetch the active MachineConfig resource from the running control-plane node.
-	mc, err := safe.StateGet[*talosresconfig.MachineConfig](
+	machineConfig, err := safe.StateGet[*talosresconfig.MachineConfig](
 		ctx,
 		talosClient.COSI,
 		talosresconfig.NewMachineConfig(nil).Metadata(),
@@ -494,7 +494,7 @@ func (p *Provisioner) syncSecretsFromCluster(
 		return fmt.Errorf("failed to fetch machine config from %s: %w", cpIP, err)
 	}
 
-	runningConfig := mc.Config()
+	runningConfig := machineConfig.Config()
 
 	existingSecrets := secrets.NewBundleFromConfig(
 		secrets.NewFixedClock(time.Now()),

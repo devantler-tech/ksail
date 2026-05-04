@@ -136,8 +136,10 @@ func (p *Provisioner) ApplyNodeScalingChangesForTest(
 func (p *Provisioner) SyncSecretsFromClusterForTest(
 	ctx context.Context,
 	clusterName string,
+	oldSpec, newSpec *v1alpha1.ClusterSpec,
+	diff *clusterupdate.UpdateResult,
 ) error {
-	return p.syncSecretsFromCluster(ctx, clusterName)
+	return p.syncSecretsFromCluster(ctx, clusterName, oldSpec, newSpec, diff)
 }
 
 // NeedsSecretSyncForTest exposes needsSecretSync for unit testing.
