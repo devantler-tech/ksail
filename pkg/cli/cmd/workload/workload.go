@@ -2885,7 +2885,8 @@ func runScanCmd(
 	path = canonPath
 
 	if output != "" {
-		if mkdirErr := os.MkdirAll(filepath.Dir(output), dirPerm); mkdirErr != nil {
+		mkdirErr := os.MkdirAll(filepath.Dir(output), dirPerm)
+		if mkdirErr != nil {
 			return fmt.Errorf("create output directory: %w", mkdirErr)
 		}
 

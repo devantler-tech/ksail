@@ -88,7 +88,8 @@ func (c *Client) ScanDirectory(ctx context.Context, path string, opts *ScanOptio
 		return fmt.Errorf("handle scan results: %w", err)
 	}
 
-	if opts.ComplianceThreshold > 0 && results.GetComplianceScore() < float32(opts.ComplianceThreshold) {
+	if opts.ComplianceThreshold > 0 &&
+		results.GetComplianceScore() < float32(opts.ComplianceThreshold) {
 		return fmt.Errorf(
 			"%w: compliance score %.2f%% is below threshold %.2f%%",
 			ErrScanFailed, results.GetComplianceScore(), opts.ComplianceThreshold,
