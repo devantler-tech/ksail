@@ -6729,6 +6729,10 @@ func TestNewDiagnoseCmd(t *testing.T) {
 	providerFlag := diagnoseCmd.Flags().Lookup("provider")
 	require.NotNil(t, providerFlag)
 	assert.Equal(t, "p", providerFlag.Shorthand)
+
+	formatFlag := diagnoseCmd.Flags().Lookup("format")
+	require.NotNil(t, formatFlag)
+	assert.Equal(t, "text", formatFlag.DefValue)
 }
 
 // TestClusterCmd_RegistersDiagnoseSubcommand verifies that NewClusterCmd wires
