@@ -4135,7 +4135,10 @@ type componentReconciler struct {
 	// reconciled during this update pass. Multiple diff fields share the
 	// "cluster.autoscaler.node." prefix and map to a single Helm operation;
 	// this flag deduplicates the install/upgrade/uninstall call.
+	// autoscalerErr preserves the error from the first attempt so that
+	// subsequent calls surface the same failure instead of silently succeeding.
 	autoscalerReconciled bool
+	autoscalerErr        error
 }
 
 // newComponentReconciler creates a reconciler for applying component changes.
@@ -4302,17 +4305,25 @@ func (r *componentReconciler) reconcileLoadBalancer(
 // reconcileClusterAutoscaler installs or uninstalls the Cluster Autoscaler.
 // Multiple autoscaler diff fields (enabled, maxNodesTotal, pools, …) map to this
 // single handler. The autoscalerReconciled guard ensures the Helm operation runs
-// at most once per update pass.
+// at most once per update pass; if it fails, subsequent calls replay the same error
+// so the failure is not masked by silent success.
 func (r *componentReconciler) reconcileClusterAutoscaler(
 	ctx context.Context,
 	_ clusterupdate.Change,
 ) error {
 	if r.autoscalerReconciled {
-		return nil
+		return r.autoscalerErr
 	}
 
 	r.autoscalerReconciled = true
 
+	r.autoscalerErr = r.doReconcileClusterAutoscaler(ctx)
+
+	return r.autoscalerErr
+}
+
+// doReconcileClusterAutoscaler performs the actual install/uninstall logic.
+func (r *componentReconciler) doReconcileClusterAutoscaler(ctx context.Context) error {
 	if setup.NeedsClusterAutoscalerInstall(r.clusterCfg) {
 		err := setup.InstallClusterAutoscalerSilent(ctx, r.clusterCfg, r.factories)
 		if err != nil {
@@ -4330,7 +4341,7 @@ func (r *componentReconciler) reconcileClusterAutoscaler(
 	}
 
 	if r.factories.ClusterAutoscaler == nil {
-		return nil
+		return setup.ErrClusterAutoscalerInstallerFactoryNil
 	}
 
 	return r.uninstallWithFactory(ctx, r.factories.ClusterAutoscaler)
