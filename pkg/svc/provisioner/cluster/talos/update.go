@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/cosi-project/runtime/pkg/safe"
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
@@ -16,6 +18,8 @@ import (
 	talosclient "github.com/siderolabs/talos/pkg/machinery/client"
 	clientconfig "github.com/siderolabs/talos/pkg/machinery/client/config"
 	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
+	"github.com/siderolabs/talos/pkg/machinery/config/generate/secrets"
+	talosresconfig "github.com/siderolabs/talos/pkg/machinery/resources/config"
 )
 
 // Update applies configuration changes to all nodes in a running Talos cluster.
@@ -53,6 +57,15 @@ func (p *Provisioner) Update(
 	configErr := p.refreshOmniConfigsIfNeeded(ctx, clusterName)
 	if configErr != nil {
 		return result, fmt.Errorf("failed to refresh Omni configs before update: %w", configErr)
+	}
+
+	// Sync in-memory machine configs with the running cluster's PKI secrets.
+	// ConfigManager.Load() generates fresh CA/tokens on every call, but scale-up
+	// and in-place config changes must use the same secrets as the running cluster
+	// to avoid "certificate signed by unknown authority" errors on new nodes.
+	secretErr := p.syncSecretsFromCluster(ctx, clusterName)
+	if secretErr != nil {
+		return result, fmt.Errorf("failed to sync cluster secrets: %w", secretErr)
 	}
 
 	// Handle node scaling changes
@@ -400,6 +413,82 @@ func (p *Provisioner) createTalosClient(
 	}
 
 	return nil, clustererr.ErrTalosConfigRequired
+}
+
+// syncSecretsFromCluster connects to a running control-plane node, fetches its
+// machine configuration, extracts the PKI secrets, and rebuilds the in-memory
+// talosConfigs with those secrets. This ensures that configs applied to new nodes
+// during scale-up use the same CA, tokens, and bootstrap secrets as the running
+// cluster. Without this, ConfigManager.Load() generates fresh PKI on every call,
+// causing certificate mismatch errors when new nodes try to join.
+//
+// This method is a no-op when talosConfigs is nil (used in tests and Omni clusters),
+// or when running on an Omni-managed cluster (Omni handles its own config).
+func (p *Provisioner) syncSecretsFromCluster(
+	ctx context.Context,
+	clusterName string,
+) error {
+	if p.talosConfigs == nil || p.omniOpts != nil {
+		return nil
+	}
+
+	nodes, err := p.getNodesByRole(ctx, clusterName)
+	if err != nil {
+		return fmt.Errorf("failed to discover nodes for secret sync: %w", err)
+	}
+
+	// Find a control-plane node to extract secrets from
+	var cpIP string
+
+	for _, node := range nodes {
+		if node.Role == RoleControlPlane {
+			cpIP = node.IP
+
+			break
+		}
+	}
+
+	if cpIP == "" {
+		// No running control-plane node found — this can happen when the
+		// cluster is freshly created or all CPs are down. Fall through to
+		// use the in-memory secrets (best effort).
+		return nil
+	}
+
+	talosClient, err := p.createTalosClient(ctx, cpIP)
+	if err != nil {
+		return fmt.Errorf("failed to create Talos client for secret sync: %w", err)
+	}
+
+	defer talosClient.Close() //nolint:errcheck
+
+	// Fetch the active MachineConfig resource from the running control-plane node.
+	mc, err := safe.StateGet[*talosresconfig.MachineConfig](
+		ctx,
+		talosClient.COSI,
+		talosresconfig.NewMachineConfig(nil).Metadata(),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to fetch machine config from %s: %w", cpIP, err)
+	}
+
+	runningConfig := mc.Config()
+
+	existingSecrets := secrets.NewBundleFromConfig(
+		secrets.NewFixedClock(time.Now()),
+		runningConfig,
+	)
+
+	rebuilt, err := p.talosConfigs.WithSecrets(existingSecrets)
+	if err != nil {
+		return fmt.Errorf("failed to rebuild configs with cluster secrets: %w", err)
+	}
+
+	p.talosConfigs = rebuilt
+
+	_, _ = fmt.Fprintf(p.logWriter, "  ✓ Synced cluster secrets from %s\n", cpIP)
+
+	return nil
 }
 
 // nodeWithRole holds an IP address and its role for role-aware config application.

@@ -379,3 +379,30 @@ func TestDiffConfig_StillValidatesMinimumControlPlanesWhenAutoscalingEnabled(t *
 	require.Error(t, err)
 	assert.ErrorIs(t, err, talosprovisioner.ErrMinimumControlPlanes)
 }
+
+// TestSyncSecretsFromCluster_NilTalosConfigs verifies that syncSecretsFromCluster
+// is a no-op when talosConfigs is nil (e.g., tests that don't load configs).
+func TestSyncSecretsFromCluster_NilTalosConfigs(t *testing.T) {
+	t.Parallel()
+
+	provisioner := talosprovisioner.NewProvisioner(nil, nil).WithLogWriter(io.Discard)
+
+	err := provisioner.SyncSecretsFromClusterForTest(context.Background(), "test")
+	require.NoError(t, err)
+}
+
+// TestSyncSecretsFromCluster_OmniSkipped verifies that syncSecretsFromCluster
+// is a no-op for Omni-managed clusters (Omni handles config independently).
+func TestSyncSecretsFromCluster_OmniSkipped(t *testing.T) {
+	t.Parallel()
+
+	configs, err := talosconfigmanager.NewDefaultConfigs()
+	require.NoError(t, err)
+
+	provisioner := talosprovisioner.NewProvisioner(configs, nil).
+		WithOmniOptions(v1alpha1.OptionsOmni{}).
+		WithLogWriter(io.Discard)
+
+	err = provisioner.SyncSecretsFromClusterForTest(context.Background(), "test")
+	require.NoError(t, err)
+}

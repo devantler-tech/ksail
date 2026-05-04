@@ -132,6 +132,14 @@ func (p *Provisioner) ApplyNodeScalingChangesForTest(
 	return p.applyNodeScalingChanges(ctx, clusterName, oldSpec, newSpec, result)
 }
 
+// SyncSecretsFromClusterForTest exposes syncSecretsFromCluster for unit testing.
+func (p *Provisioner) SyncSecretsFromClusterForTest(
+	ctx context.Context,
+	clusterName string,
+) error {
+	return p.syncSecretsFromCluster(ctx, clusterName)
+}
+
 // DockerNodeNameForTest exposes dockerNodeName for unit testing.
 func DockerNodeNameForTest(clusterName, role string, index int) string {
 	return dockerNodeName(clusterName, role, index)
