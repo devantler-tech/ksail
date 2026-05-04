@@ -2922,7 +2922,11 @@ func runDiagnoseCmd(
 		enc := json.NewEncoder(writer)
 		enc.SetIndent("", "  ")
 
-		return enc.Encode(report)
+		if err := enc.Encode(report); err != nil {
+			return fmt.Errorf("encode diagnose report: %w", err)
+		}
+
+		return nil
 	}
 
 	report, err := k8s.DiagnoseCluster(cmd.Context(), clientset)

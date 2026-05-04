@@ -20,6 +20,15 @@ const (
 	DiagnoseSeverityWarning DiagnoseSeverity = "warning"
 )
 
+const (
+	// diagnoseMaxHealthScore is the starting score for a fully healthy cluster.
+	diagnoseMaxHealthScore = 100
+	// diagnoseCriticalPenalty is the score deduction for each critical finding.
+	diagnoseCriticalPenalty = 25
+	// diagnoseWarningPenalty is the score deduction for each warning finding.
+	diagnoseWarningPenalty = 10
+)
+
 // DiagnoseFinding describes a single unhealthy resource detected during diagnosis.
 type DiagnoseFinding struct {
 	// Severity is the impact level: critical or warning.
@@ -52,7 +61,7 @@ type DiagnoseReport struct {
 func DiagnoseClusterReport(ctx context.Context, clientset kubernetes.Interface, clusterName string) (DiagnoseReport, error) {
 	report := DiagnoseReport{
 		ClusterName: clusterName,
-		HealthScore: 100,
+		HealthScore: diagnoseMaxHealthScore,
 		Findings:    []DiagnoseFinding{},
 	}
 
@@ -78,38 +87,53 @@ func DiagnoseClusterReport(ctx context.Context, clientset kubernetes.Interface, 
 	}
 
 	for _, namespace := range namespaces {
-		pods, err := clientset.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{})
-		if err != nil {
-			report.Findings = append(report.Findings, DiagnoseFinding{
-				Severity: DiagnoseSeverityWarning,
-				Resource: "namespace/" + namespace,
-				Reason:   fmt.Sprintf("failed to list pods: %v", err),
-			})
+		appendNamespacePodFindings(ctx, clientset, namespace, &report.Findings)
+	}
 
+	report.HealthScore = diagnoseComputeScore(report.Findings)
+
+	return report, nil
+}
+
+// appendNamespacePodFindings lists all pods in namespace and appends a finding
+// for each unhealthy pod (or a warning finding when the pod list itself fails).
+func appendNamespacePodFindings(ctx context.Context, clientset kubernetes.Interface, namespace string, findings *[]DiagnoseFinding) {
+	pods, err := clientset.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		*findings = append(*findings, DiagnoseFinding{
+			Severity: DiagnoseSeverityWarning,
+			Resource: "namespace/" + namespace,
+			Reason:   fmt.Sprintf("failed to list pods: %v", err),
+		})
+
+		return
+	}
+
+	for j := range pods.Items {
+		pod := &pods.Items[j]
+		if isPodHealthy(pod) {
 			continue
 		}
 
-		for j := range pods.Items {
-			pod := &pods.Items[j]
-			if isPodHealthy(pod) {
-				continue
-			}
-
-			report.Findings = append(report.Findings, DiagnoseFinding{
-				Severity: DiagnoseSeverityCritical,
-				Resource: fmt.Sprintf("pod/%s (%s)", pod.Name, namespace),
-				Reason:   describePodFailure(pod),
-			})
-		}
+		*findings = append(*findings, DiagnoseFinding{
+			Severity: DiagnoseSeverityCritical,
+			Resource: fmt.Sprintf("pod/%s (%s)", pod.Name, namespace),
+			Reason:   describePodFailure(pod),
+		})
 	}
+}
 
-	score := 100
-	for _, f := range report.Findings {
+// diagnoseComputeScore returns a health score in [0, diagnoseMaxHealthScore]
+// by deducting penalty points for each finding.
+func diagnoseComputeScore(findings []DiagnoseFinding) int {
+	score := diagnoseMaxHealthScore
+
+	for _, f := range findings {
 		switch f.Severity {
 		case DiagnoseSeverityCritical:
-			score -= 25
+			score -= diagnoseCriticalPenalty
 		case DiagnoseSeverityWarning:
-			score -= 10
+			score -= diagnoseWarningPenalty
 		}
 	}
 
@@ -117,9 +141,7 @@ func DiagnoseClusterReport(ctx context.Context, clientset kubernetes.Interface, 
 		score = 0
 	}
 
-	report.HealthScore = score
-
-	return report, nil
+	return score
 }
 
 // DiagnoseCluster produces a combined human-readable diagnostic report for
