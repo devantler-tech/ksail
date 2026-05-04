@@ -83,7 +83,7 @@ go build ./...
 go build -ldflags="-s -w" -o ksail-optimized
 ```
 
-> **Note:** Release builds use `-ldflags="-s -w -X github.com/devantler-tech/ksail/v7/internal/buildmeta.Version=... -X .../buildmeta.Commit=... -X .../buildmeta.Date=..."`, where `-s -w` strips debug symbols and the `-X` flags inject version metadata. The `-s -w` options can significantly reduce binary size (in some cases by ~25–35%; see [#2095](https://github.com/devantler-tech/ksail/pull/2095) for an example benchmark where Darwin/AMD64 binaries went from 302MB → 217MB, ~28%), while the metadata flags themselves may slightly increase size compared to a build that only uses `-s -w`. Actual size varies by OS/arch, Go version, and dependencies. Development builds include debug symbols for a better debugging experience.
+> **Note:** Release builds use `-ldflags="-s -w -X .../buildmeta.Version=... -X .../buildmeta.Commit=... -X .../buildmeta.Date=..."`. The `-s -w` flags strip debug symbols (reducing binary size significantly) and the `-X` flags inject version metadata via GoReleaser. Development builds retain debug symbols for a better debugging experience.
 
 ### Test
 
@@ -122,7 +122,7 @@ benchstat before.txt after.txt
 
 PRs that modify Go code are automatically benchmarked against `main` and the comparison is posted as a PR comment. See [docs/BENCHMARK-REGRESSION.md](docs/BENCHMARK-REGRESSION.md) for details on interpreting results.
 
-See package-specific BENCHMARKS.md files (e.g., `pkg/apis/cluster/v1alpha1/BENCHMARKS.md`, `pkg/cli/cmd/cipher/BENCHMARKS.md`, `pkg/cli/cmd/cluster/BENCHMARKS.md`, `pkg/client/argocd/BENCHMARKS.md`, `pkg/client/docker/BENCHMARKS.md`, `pkg/client/flux/BENCHMARKS.md`, `pkg/client/helm/BENCHMARKS.md`, `pkg/client/kubectl/BENCHMARKS.md`, `pkg/client/kustomize/BENCHMARKS.md`, `pkg/fsutil/configmanager/ksail/BENCHMARKS.md`, `pkg/fsutil/marshaller/BENCHMARKS.md`, `pkg/k8s/readiness/BENCHMARKS.md`, `pkg/svc/diff/BENCHMARKS.md`, `pkg/svc/image/BENCHMARKS.md`) for detailed benchmark documentation, baseline results, and performance optimization opportunities.
+See package-specific `BENCHMARKS.md` files (located throughout `pkg/` — search with `find pkg -name BENCHMARKS.md`) for detailed benchmark documentation, baseline results, and performance optimization opportunities.
 
 ### Documentation
 
