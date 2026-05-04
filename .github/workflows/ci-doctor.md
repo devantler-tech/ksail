@@ -14,7 +14,6 @@ on:
   skip-bots: ["dependabot[bot]", "renovate[bot]"]
   workflow_run:
     workflows:
-      - "CI - KSail"
       - "CD"
       - "Release"
       - "Maintenance"
