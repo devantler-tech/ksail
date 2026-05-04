@@ -6735,6 +6735,43 @@ func TestNewDiagnoseCmd(t *testing.T) {
 	assert.Equal(t, "text", formatFlag.DefValue)
 }
 
+// TestDiagnoseCmd_InvalidFormatRejectsEarly verifies that an unknown --format
+// value is rejected before any cluster interaction takes place.
+// This guards against typos like "--format jsn" silently falling back to the
+// text path instead of returning an actionable error.
+func TestDiagnoseCmd_InvalidFormatRejectsEarly(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		format string
+	}{
+		{name: "typo jsn", format: "jsn"},
+		{name: "empty format", format: ""},
+		{name: "xml", format: "xml"},
+		{name: "pretty", format: "pretty"},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			diagnoseCmd := cluster.NewDiagnoseCmd(nil)
+			diagnoseCmd.SetOut(io.Discard)
+			diagnoseCmd.SetErr(io.Discard)
+			diagnoseCmd.SetArgs([]string{"--format", testCase.format})
+
+			err := diagnoseCmd.Execute()
+
+			require.Error(t, err)
+			assert.ErrorIs(t, err, cluster.ErrUnsupportedOutputFormat,
+				"expected ErrUnsupportedOutputFormat for format %q, got: %v",
+				testCase.format, err,
+			)
+		})
+	}
+}
+
 // TestClusterCmd_RegistersDiagnoseSubcommand verifies that NewClusterCmd wires
 // the diagnose subcommand into the cluster command tree so that toolgen can
 // expose it as part of the cluster_read tool.

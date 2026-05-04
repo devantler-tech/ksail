@@ -2890,6 +2890,17 @@ func runDiagnoseCmd(
 	providerFlag v1alpha1.Provider,
 	formatFlag string,
 ) error {
+	format := strings.ToLower(formatFlag)
+	if format != outputFormatText && format != outputFormatJSON {
+		return fmt.Errorf(
+			"%w: %q (expected %q or %q)",
+			ErrUnsupportedOutputFormat,
+			format,
+			outputFormatText,
+			outputFormatJSON,
+		)
+	}
+
 	resolved, err := lifecycle.ResolveClusterInfo(cmd, nameFlag, providerFlag, "")
 	if err != nil {
 		return fmt.Errorf("resolve cluster info: %w", err)
@@ -2902,7 +2913,7 @@ func runDiagnoseCmd(
 
 	writer := cmd.OutOrStdout()
 
-	if formatFlag == "json" {
+	if format == outputFormatJSON {
 		report, diagErr := k8s.DiagnoseClusterReport(cmd.Context(), clientset, resolved.ClusterName)
 		if diagErr != nil {
 			return fmt.Errorf("diagnose cluster %q: %w", resolved.ClusterName, diagErr)

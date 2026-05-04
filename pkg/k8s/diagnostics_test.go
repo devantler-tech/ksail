@@ -620,3 +620,27 @@ func TestDiagnoseClusterReport_NodeListErrorIsSurfaced(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "list nodes")
 }
+
+func TestDiagnoseClusterReport_PodListErrorCreatesWarningFinding(t *testing.T) {
+t.Parallel()
+
+clientset := k8sfake.NewClientset(
+&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "broken-ns"}},
+)
+clientset.PrependReactor(
+"list",
+"pods",
+func(_ k8stesting.Action) (bool, runtime.Object, error) {
+return true, nil, errConnectionRefused
+},
+)
+
+report, err := k8s.DiagnoseClusterReport(context.Background(), clientset, "test")
+
+require.NoError(t, err)
+require.Len(t, report.Findings, 1)
+assert.Equal(t, k8s.DiagnoseSeverityWarning, report.Findings[0].Severity)
+assert.Equal(t, "namespace/broken-ns", report.Findings[0].Resource)
+assert.Contains(t, report.Findings[0].Reason, "failed to list pods")
+assert.Equal(t, 90, report.HealthScore)
+}
