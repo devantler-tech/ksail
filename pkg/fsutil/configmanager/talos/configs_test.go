@@ -460,7 +460,12 @@ func TestConfigs_WithSecrets(t *testing.T) {
 		// The rebuilt config should have the same cluster CA as config1
 		originalClusterCA := configs1.ControlPlane().Cluster().IssuingCA().Crt
 		rebuiltClusterCA := rebuilt.ControlPlane().Cluster().IssuingCA().Crt
-		assert.Equal(t, originalClusterCA, rebuiltClusterCA, "cluster CA should match after WithSecrets")
+		assert.Equal(
+			t,
+			originalClusterCA,
+			rebuiltClusterCA,
+			"cluster CA should match after WithSecrets",
+		)
 
 		// The rebuilt config should have the same machine token as config1
 		originalToken := configs1.ControlPlane().Machine().Security().Token()
