@@ -19,21 +19,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/client"
-	"github.com/hetznercloud/hcloud-go/v2/hcloud"
-	"github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
-	omniclient "github.com/siderolabs/omni/client/pkg/client"
-	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
-	"golang.org/x/sync/errgroup"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/cli-runtime/pkg/genericiooptions"
-	"k8s.io/client-go/tools/clientcmd"
-	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
-	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
-	sigsyaml "sigs.k8s.io/yaml"
-
 	"github.com/devantler-tech/ksail/v7/internal/buildmeta"
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
@@ -79,6 +64,20 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/state"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/versionresolver"
 	"github.com/devantler-tech/ksail/v7/pkg/timer"
+	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/client"
+	"github.com/hetznercloud/hcloud-go/v2/hcloud"
+	"github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
+	omniclient "github.com/siderolabs/omni/client/pkg/client"
+	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
+	"golang.org/x/sync/errgroup"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/cli-runtime/pkg/genericiooptions"
+	"k8s.io/client-go/tools/clientcmd"
+	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
+	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
+	sigsyaml "sigs.k8s.io/yaml"
 )
 
 const (
@@ -2951,7 +2950,8 @@ func runDiagnoseJSONReport(report k8s.DiagnoseReport, w io.Writer) error {
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
 
-	if err := enc.Encode(report); err != nil {
+	err := enc.Encode(report)
+	if err != nil {
 		return fmt.Errorf("encode diagnose report: %w", err)
 	}
 
