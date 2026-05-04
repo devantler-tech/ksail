@@ -264,6 +264,17 @@ func ExportReconcileComponents(
 	return r.reconcileComponents(context.Background(), diff, result)
 }
 
+// ExportReconcileClusterAutoscaler exposes reconcileClusterAutoscaler for unit testing.
+func ExportReconcileClusterAutoscaler(
+	cmd *cobra.Command,
+	clusterCfg *v1alpha1.Cluster,
+	change clusterupdate.Change,
+) error {
+	r := newComponentReconciler(cmd, clusterCfg, "test-cluster")
+
+	return r.reconcileClusterAutoscaler(context.Background(), change)
+}
+
 // ExportMatchesKindPattern exposes matchesKindPattern for unit testing.
 func ExportMatchesKindPattern(containerName, clusterName string) bool {
 	return matchesKindPattern(containerName, clusterName)

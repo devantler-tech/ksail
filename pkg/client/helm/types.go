@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"time"
+
+	helmv4driver "helm.sh/helm/v4/pkg/storage/driver"
 )
 
 var (
@@ -23,6 +25,11 @@ var (
 	// Helm release storage objects (Secrets or ConfigMaps) exist for the
 	// given release name and namespace.
 	ErrNoReleaseStorage = errors.New("helm: no release storage objects found")
+
+	// ErrReleaseNotFound re-exports the Helm SDK sentinel so callers can
+	// check whether an uninstall failed because the release never existed
+	// without importing the Helm driver package directly.
+	ErrReleaseNotFound = helmv4driver.ErrReleaseNotFound
 )
 
 // ChartSpec mirrors the mittwald chart specification while keeping KSail
