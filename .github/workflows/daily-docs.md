@@ -119,7 +119,7 @@ Ensure every code-level change is mirrored by clear, accurate, and stylistically
    - CLI flags per-command detail pages under `docs/src/content/docs/cli-flags/*/` are excluded from this listing; consult them separately only if you need to understand overall CLI flag documentation patterns
    - For each page you do read, determine: what topics it covers, what it should not cover, and where content boundaries lie
    - Build a page ownership map as a table with columns: `Page`, `Audience`, `Owns`, `Does NOT cover`
-   - **Audience values**: `end-user` (docs pages, README.md), `contributor` (CONTRIBUTING.md, .github/copilot-instructions.md, .github/instructions/), `ai-user` (copilot-plugin/skills/), or `both`
+   - **Audience values**: `end-user` (docs pages, README.md), `contributor` (CONTRIBUTING.md, .github/copilot-instructions.md, .github/instructions/), `ai-user` (copilot-plugin/skills/), or compound values using `+` (e.g., `end-user+contributor` for pages that serve both end-users and contributors)
    - Use the audience column when deciding where content belongs: end-user content goes in `docs/`, contributor content goes in `CONTRIBUTING.md`, `.github/copilot-instructions.md`, or `.github/instructions/`, AI-user skill content goes in `copilot-plugin/`
    - Save the map to cache memory for future runs:
 
@@ -163,7 +163,7 @@ Ensure every code-level change is mirrored by clear, accurate, and stylistically
    - **`vsce/README.md`**: must remain a concise marketplace description that links to `/vscode-extension/` — never a full docs page copy.
    - **`CONTRIBUTING.md` and `.github/copilot-instructions.md`**: must not contain end-user tutorials or feature marketing; those belong in `docs/`.
    - **`.github/instructions/*.instructions.md`**: must stay scoped to their declared `applyTo` file pattern; must not duplicate content from `.github/copilot-instructions.md` or `CONTRIBUTING.md`; conventions must match the current codebase.
-   - **`copilot-plugin/skills/ksail/SKILL.md`**: must accurately reflect available CLI commands (`ksail --help`), supported distributions, and providers; must link to the docs site for details rather than paraphrasing; must not contain contributor-only or internal API content.
+   - **`copilot-plugin/skills/ksail/SKILL.md`**: must accurately reflect available CLI commands (`go run . --help`), supported distributions, and providers; must link to the docs site for details rather than paraphrasing; must not contain contributor-only or internal API content.
 
    If every root-file check passes and the diff surfaces no doc impact, call `noop` with a summary of what was checked. Do not claim `noop` without running these checks.
 
