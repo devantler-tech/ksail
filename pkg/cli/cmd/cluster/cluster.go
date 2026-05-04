@@ -4131,6 +4131,11 @@ type componentReconciler struct {
 	clusterCfg  *v1alpha1.Cluster
 	clusterName string
 	factories   *setup.InstallerFactories
+	// autoscalerReconciled tracks whether the cluster autoscaler has already been
+	// reconciled during this update pass. Multiple diff fields share the
+	// "cluster.autoscaler.node." prefix and map to a single Helm operation;
+	// this flag deduplicates the install/upgrade/uninstall call.
+	autoscalerReconciled bool
 }
 
 // newComponentReconciler creates a reconciler for applying component changes.
@@ -4206,9 +4211,18 @@ func (r *componentReconciler) handlerForField(
 		"cluster.workload.tag":  r.reconcileWorkloadTag,
 	}
 
-	handler, ok := handlers[field]
+	if handler, ok := handlers[field]; ok {
+		return handler, true
+	}
 
-	return handler, ok
+	// Prefix-based matching for fields with dynamic suffixes.
+	// All cluster.autoscaler.node.* fields (enabled, maxNodesTotal, expander,
+	// scaleDownUnneededTime, pools[...]) map to a single Helm install/upgrade.
+	if strings.HasPrefix(field, "cluster.autoscaler.node.") {
+		return r.reconcileClusterAutoscaler, true
+	}
+
+	return nil, false
 }
 
 // reconcileCNI switches the CNI by installing the new CNI.
@@ -4283,6 +4297,43 @@ func (r *componentReconciler) reconcileLoadBalancer(
 	}
 
 	return nil
+}
+
+// reconcileClusterAutoscaler installs or uninstalls the Cluster Autoscaler.
+// Multiple autoscaler diff fields (enabled, maxNodesTotal, pools, …) map to this
+// single handler. The autoscalerReconciled guard ensures the Helm operation runs
+// at most once per update pass.
+func (r *componentReconciler) reconcileClusterAutoscaler(
+	ctx context.Context,
+	_ clusterupdate.Change,
+) error {
+	if r.autoscalerReconciled {
+		return nil
+	}
+
+	r.autoscalerReconciled = true
+
+	if setup.NeedsClusterAutoscalerInstall(r.clusterCfg) {
+		err := setup.InstallClusterAutoscalerSilent(ctx, r.clusterCfg, r.factories)
+		if err != nil {
+			return fmt.Errorf("failed to install cluster-autoscaler: %w", err)
+		}
+
+		return nil
+	}
+
+	// Autoscaler no longer needed — uninstall only on Talos × Hetzner clusters
+	// where it could have been previously installed.
+	if r.clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionTalos ||
+		r.clusterCfg.Spec.Cluster.Provider != v1alpha1.ProviderHetzner {
+		return nil
+	}
+
+	if r.factories.ClusterAutoscaler == nil {
+		return nil
+	}
+
+	return r.uninstallWithFactory(ctx, r.factories.ClusterAutoscaler)
 }
 
 // reconcileCertManager installs or uninstalls cert-manager.
@@ -5936,6 +5987,15 @@ func SetPolicyEngineInstallerFactoryForTests(
 ) func() {
 	return overrideInstallerFactory(func(f *setup.InstallerFactories) {
 		f.PolicyEngine = factory
+	})
+}
+
+// SetClusterAutoscalerInstallerFactoryForTests overrides the cluster-autoscaler installer factory.
+func SetClusterAutoscalerInstallerFactoryForTests(
+	factory func(*v1alpha1.Cluster) (installer.Installer, error),
+) func() {
+	return overrideInstallerFactory(func(f *setup.InstallerFactories) {
+		f.ClusterAutoscaler = factory
 	})
 }
 
