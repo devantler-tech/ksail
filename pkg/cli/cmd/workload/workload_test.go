@@ -2593,6 +2593,104 @@ func TestDetectChangedFileUpdatesSnapshotInPlace(t *testing.T) {
 	require.Empty(t, changed)
 }
 
+func TestNewScanCmdHasCorrectDefaults(t *testing.T) {
+	t.Parallel()
+
+	cmd := workload.NewScanCmd()
+
+	require.Equal(t, "scan [PATH]", cmd.Use)
+	require.Equal(t, "Run security scans on Kubernetes manifests", cmd.Short)
+	require.True(t, cmd.SilenceUsage)
+
+	frameworkFlag := cmd.Flags().Lookup("framework")
+	require.NotNil(t, frameworkFlag, "expected --framework flag to exist")
+	require.Equal(t, "[nsa]", frameworkFlag.DefValue)
+
+	formatFlag := cmd.Flags().Lookup("format")
+	require.NotNil(t, formatFlag, "expected --format flag to exist")
+	require.Equal(t, "pretty-printer", formatFlag.DefValue)
+
+	outputFlag := cmd.Flags().Lookup("output")
+	require.NotNil(t, outputFlag, "expected --output flag to exist")
+	require.Empty(t, outputFlag.DefValue)
+	require.Equal(t, "o", outputFlag.Shorthand)
+
+	thresholdFlag := cmd.Flags().Lookup("compliance-threshold")
+	require.NotNil(t, thresholdFlag, "expected --compliance-threshold flag to exist")
+	require.Equal(t, "0", thresholdFlag.DefValue)
+
+	verboseFlag := cmd.Flags().Lookup("verbose")
+	require.NotNil(t, verboseFlag, "expected --verbose flag to exist")
+	require.Equal(t, "false", verboseFlag.DefValue)
+}
+
+func TestScanCmdShowsHelp(t *testing.T) {
+	t.Parallel()
+
+	cmd := workload.NewScanCmd()
+
+	var output bytes.Buffer
+	cmd.SetOut(&output)
+	cmd.SetErr(&output)
+	cmd.SetArgs([]string{"--help"})
+
+	err := cmd.Execute()
+	if err != nil {
+		t.Fatalf("expected no error executing scan --help, got %v", err)
+	}
+
+	snaps.MatchSnapshot(t, normalizeHomePaths(output.String()))
+}
+
+func TestScanCmdRejectsMultiplePaths(t *testing.T) {
+	t.Parallel()
+
+	cmd := workload.NewScanCmd()
+
+	cmd.SetArgs([]string{
+		"/some/path1",
+		"/some/path2",
+	})
+
+	var output bytes.Buffer
+	cmd.SetOut(&output)
+	cmd.SetErr(&output)
+
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected error when multiple paths are provided")
+	}
+}
+
+func TestScanCmdRejectsInvalidThreshold(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		threshold string
+	}{
+		{name: "negative", threshold: "-1"},
+		{name: "above 100", threshold: "101"},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			cmd := workload.NewScanCmd()
+
+			var output bytes.Buffer
+			cmd.SetOut(&output)
+			cmd.SetErr(&output)
+			cmd.SetArgs([]string{"--compliance-threshold", testCase.threshold, "/nonexistent"})
+
+			err := cmd.Execute()
+			require.Error(t, err, "expected error for threshold %s", testCase.threshold)
+			require.Contains(t, err.Error(), "--compliance-threshold must be between 0 and 100")
+		})
+	}
+}
+
 func TestPollInterval(t *testing.T) {
 	t.Parallel()
 
