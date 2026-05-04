@@ -243,6 +243,54 @@ func (c *Configs) WithEndpoint(endpointIP string) (*Configs, error) {
 	)
 }
 
+// WithSecrets creates a new Configs with the provided secrets bundle, preserving the cluster's
+// existing PKI (CA, certificates, tokens, bootstrap secrets) across config regeneration.
+// This is used during cluster update to ensure that newly generated machine configs for
+// scale-up operations use the same CA and tokens as the running cluster.
+//
+// Returns a new Configs instance; the original is not modified.
+// Returns an error if bundle regeneration fails.
+// Returns the original Configs unchanged if existingSecrets is nil.
+func (c *Configs) WithSecrets(existingSecrets *secrets.Bundle) (*Configs, error) {
+	if existingSecrets == nil {
+		return c, nil
+	}
+
+	kubernetesVersion := c.kubernetesVersion
+	if kubernetesVersion == "" {
+		kubernetesVersion = DefaultKubernetesVersion
+	}
+
+	networkCIDR := c.networkCIDR
+	if networkCIDR == "" {
+		networkCIDR = DefaultNetworkCIDR
+	}
+
+	return newConfigsWithEndpointAndSecrets(
+		c.Name,
+		kubernetesVersion,
+		networkCIDR,
+		c.endpoint,
+		c.patches,
+		existingSecrets,
+		c.versionContract,
+		c.extensions,
+	)
+}
+
+// ExtractSecrets extracts the secrets bundle from the current config for reuse.
+// Returns nil if the bundle or control plane config is not set.
+func (c *Configs) ExtractSecrets() *secrets.Bundle {
+	if c.bundle == nil || c.bundle.ControlPlaneCfg == nil {
+		return nil
+	}
+
+	return secrets.NewBundleFromConfig(
+		secrets.NewFixedClock(time.Now()),
+		c.bundle.ControlPlaneCfg,
+	)
+}
+
 // KubernetesVersion returns the Kubernetes version used for this config.
 // Falls back to DefaultKubernetesVersion if not set.
 func (c *Configs) KubernetesVersion() string {
