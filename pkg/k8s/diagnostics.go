@@ -58,7 +58,11 @@ type DiagnoseReport struct {
 // via the cluster_read MCP tool. The plain-text representation produced by
 // DiagnoseCluster remains the default; this function is used when the caller
 // requests --format json.
-func DiagnoseClusterReport(ctx context.Context, clientset kubernetes.Interface, clusterName string) (DiagnoseReport, error) {
+func DiagnoseClusterReport(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	clusterName string,
+) (DiagnoseReport, error) {
 	report := DiagnoseReport{
 		ClusterName: clusterName,
 		HealthScore: diagnoseMaxHealthScore,
@@ -97,7 +101,12 @@ func DiagnoseClusterReport(ctx context.Context, clientset kubernetes.Interface, 
 
 // appendNamespacePodFindings lists all pods in namespace and appends a finding
 // for each unhealthy pod (or a warning finding when the pod list itself fails).
-func appendNamespacePodFindings(ctx context.Context, clientset kubernetes.Interface, namespace string, findings *[]DiagnoseFinding) {
+func appendNamespacePodFindings(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	namespace string,
+	findings *[]DiagnoseFinding,
+) {
 	pods, err := clientset.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		*findings = append(*findings, DiagnoseFinding{

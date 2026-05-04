@@ -2919,14 +2919,7 @@ func runDiagnoseCmd(
 			return fmt.Errorf("diagnose cluster %q: %w", resolved.ClusterName, diagErr)
 		}
 
-		enc := json.NewEncoder(writer)
-		enc.SetIndent("", "  ")
-
-		if err := enc.Encode(report); err != nil {
-			return fmt.Errorf("encode diagnose report: %w", err)
-		}
-
-		return nil
+		return runDiagnoseJSONReport(report, writer)
 	}
 
 	report, err := k8s.DiagnoseCluster(cmd.Context(), clientset)
@@ -2946,6 +2939,20 @@ func runDiagnoseCmd(
 
 	_, _ = fmt.Fprintf(writer, "Diagnostics for cluster %q:\n", resolved.ClusterName)
 	_, _ = fmt.Fprintln(writer, report)
+
+	return nil
+}
+
+// runDiagnoseJSONReport serialises the structured DiagnoseReport for clusterName
+// as indented JSON to w. It is extracted from runDiagnoseCmd to keep that
+// function within the allowed line-count limit.
+func runDiagnoseJSONReport(report k8s.DiagnoseReport, w io.Writer) error {
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+
+	if err := enc.Encode(report); err != nil {
+		return fmt.Errorf("encode diagnose report: %w", err)
+	}
 
 	return nil
 }
