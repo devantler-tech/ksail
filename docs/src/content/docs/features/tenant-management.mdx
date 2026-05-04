@@ -88,13 +88,15 @@ Use `--oci-path` to append a path suffix to the OCI URL (e.g., `oci://ghcr.io/my
 # OCI source (default)
 ksail tenant create my-team --type flux \
   --sync-source oci \
-  --registry oci://ghcr.io/my-org
+  --registry oci://ghcr.io \
+  --tenant-repo my-org/my-team
 
 # OCI source with a path suffix (avoids tag collisions when Docker images and
-# K8s manifests are published to the same registry path)
+# Kubernetes manifests are published to the same registry path)
 ksail tenant create my-team --type flux \
   --sync-source oci \
-  --registry oci://ghcr.io/my-org \
+  --registry oci://ghcr.io \
+  --tenant-repo my-org/my-team \
   --oci-path manifests
 
 # Git source
