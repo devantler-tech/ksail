@@ -4195,6 +4195,33 @@ func TestReconcileClusterAutoscaler_NotNeeded_Noop(t *testing.T) {
 	require.NoError(t, err, "non-Hetzner clusters should not attempt autoscaler install")
 }
 
+// TestReconcileClusterAutoscaler_Uninstall_NilFactory verifies that reconcileClusterAutoscaler
+// returns the factory-nil error when the autoscaler is no longer needed on a Talos×Hetzner
+// cluster and the factory is nil.
+//
+//nolint:paralleltest // mutates global installerFactoriesOverride; cannot run in parallel
+func TestReconcileClusterAutoscaler_Uninstall_NilFactory(t *testing.T) {
+	restore := cluster.SetClusterAutoscalerInstallerFactoryForTests(nil)
+	t.Cleanup(restore)
+
+	cmd := newReconcileTestCmd()
+	clusterCfg := &v1alpha1.Cluster{}
+	clusterCfg.Spec.Cluster.Distribution = v1alpha1.DistributionTalos
+	clusterCfg.Spec.Cluster.Provider = v1alpha1.ProviderHetzner
+	clusterCfg.Spec.Cluster.Autoscaler.Node.Enabled = false
+
+	change := clusterupdate.Change{
+		Field:    "cluster.autoscaler.node.enabled",
+		OldValue: "true",
+		NewValue: "false",
+	}
+
+	err := cluster.ExportReconcileClusterAutoscaler(cmd, clusterCfg, change)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, setup.ErrClusterAutoscalerInstallerFactoryNil)
+}
+
 // TestReconcileComponents_EmptyDiff verifies that an empty diff results in no changes and no error.
 func TestReconcileComponents_EmptyDiff(t *testing.T) {
 	t.Parallel()

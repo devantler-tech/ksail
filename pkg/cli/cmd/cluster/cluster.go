@@ -4334,7 +4334,9 @@ func (r *componentReconciler) doReconcileClusterAutoscaler(ctx context.Context) 
 	}
 
 	// Autoscaler no longer needed — uninstall only on Talos × Hetzner clusters
-	// where it could have been previously installed.
+	// where it could have been previously installed. Treat "release not found"
+	// as a successful no-op so the update is idempotent when the autoscaler was
+	// never installed (e.g. cluster created before autoscaler support).
 	if r.clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionTalos ||
 		r.clusterCfg.Spec.Cluster.Provider != v1alpha1.ProviderHetzner {
 		return nil
@@ -4344,7 +4346,12 @@ func (r *componentReconciler) doReconcileClusterAutoscaler(ctx context.Context) 
 		return setup.ErrClusterAutoscalerInstallerFactoryNil
 	}
 
-	return r.uninstallWithFactory(ctx, r.factories.ClusterAutoscaler)
+	err := r.uninstallWithFactory(ctx, r.factories.ClusterAutoscaler)
+	if err != nil && errors.Is(err, helm.ErrReleaseNotFound) {
+		return nil
+	}
+
+	return err
 }
 
 // reconcileCertManager installs or uninstalls cert-manager.
