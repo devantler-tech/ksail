@@ -2598,72 +2598,30 @@ func TestNewScanCmdHasCorrectDefaults(t *testing.T) {
 
 	cmd := workload.NewScanCmd()
 
-	if cmd.Use != "scan [PATH]" {
-		t.Fatalf("expected Use to be %q, got %q", "scan [PATH]", cmd.Use)
-	}
+	require.Equal(t, "scan [PATH]", cmd.Use)
+	require.Equal(t, "Run security scans on Kubernetes manifests", cmd.Short)
+	require.True(t, cmd.SilenceUsage)
 
-	if cmd.Short != "Run security scans on Kubernetes manifests" {
-		t.Fatalf("expected Short description %q, got %q",
-			"Run security scans on Kubernetes manifests", cmd.Short)
-	}
-
-	if !cmd.SilenceUsage {
-		t.Fatal("expected SilenceUsage to be true")
-	}
-
-	// Check --framework flag default
 	frameworkFlag := cmd.Flags().Lookup("framework")
-	if frameworkFlag == nil {
-		t.Fatal("expected --framework flag to exist")
-	}
+	require.NotNil(t, frameworkFlag, "expected --framework flag to exist")
+	require.Equal(t, "[nsa]", frameworkFlag.DefValue)
 
-	if frameworkFlag.DefValue != "[nsa]" {
-		t.Fatalf("expected --framework default to be %q, got %q", "[nsa]", frameworkFlag.DefValue)
-	}
-
-	// Check --format flag default
 	formatFlag := cmd.Flags().Lookup("format")
-	if formatFlag == nil {
-		t.Fatal("expected --format flag to exist")
-	}
+	require.NotNil(t, formatFlag, "expected --format flag to exist")
+	require.Equal(t, "pretty-printer", formatFlag.DefValue)
 
-	if formatFlag.DefValue != "pretty-printer" {
-		t.Fatalf("expected --format default to be %q, got %q", "pretty-printer", formatFlag.DefValue)
-	}
-
-	// Check --output flag default
 	outputFlag := cmd.Flags().Lookup("output")
-	if outputFlag == nil {
-		t.Fatal("expected --output flag to exist")
-	}
+	require.NotNil(t, outputFlag, "expected --output flag to exist")
+	require.Empty(t, outputFlag.DefValue)
+	require.Equal(t, "o", outputFlag.Shorthand)
 
-	if outputFlag.DefValue != "" {
-		t.Fatalf("expected --output default to be empty, got %q", outputFlag.DefValue)
-	}
-
-	if outputFlag.Shorthand != "o" {
-		t.Fatalf("expected --output shorthand to be %q, got %q", "o", outputFlag.Shorthand)
-	}
-
-	// Check --compliance-threshold flag default
 	thresholdFlag := cmd.Flags().Lookup("compliance-threshold")
-	if thresholdFlag == nil {
-		t.Fatal("expected --compliance-threshold flag to exist")
-	}
+	require.NotNil(t, thresholdFlag, "expected --compliance-threshold flag to exist")
+	require.Equal(t, "0", thresholdFlag.DefValue)
 
-	if thresholdFlag.DefValue != "0" {
-		t.Fatalf("expected --compliance-threshold default to be %q, got %q", "0", thresholdFlag.DefValue)
-	}
-
-	// Check --verbose flag default
 	verboseFlag := cmd.Flags().Lookup("verbose")
-	if verboseFlag == nil {
-		t.Fatal("expected --verbose flag to exist")
-	}
-
-	if verboseFlag.DefValue != "false" {
-		t.Fatalf("expected --verbose default to be %q, got %q", "false", verboseFlag.DefValue)
-	}
+	require.NotNil(t, verboseFlag, "expected --verbose flag to exist")
+	require.Equal(t, "false", verboseFlag.DefValue)
 }
 
 func TestScanCmdShowsHelp(t *testing.T) {
@@ -2701,6 +2659,35 @@ func TestScanCmdRejectsMultiplePaths(t *testing.T) {
 	err := cmd.Execute()
 	if err == nil {
 		t.Fatal("expected error when multiple paths are provided")
+	}
+}
+
+func TestScanCmdRejectsInvalidThreshold(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		threshold string
+	}{
+		{name: "negative", threshold: "-1"},
+		{name: "above 100", threshold: "101"},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			cmd := workload.NewScanCmd()
+
+			var output bytes.Buffer
+			cmd.SetOut(&output)
+			cmd.SetErr(&output)
+			cmd.SetArgs([]string{"--compliance-threshold", testCase.threshold, "/nonexistent"})
+
+			err := cmd.Execute()
+			require.Error(t, err, "expected error for threshold %s", testCase.threshold)
+			require.Contains(t, err.Error(), "--compliance-threshold must be between 0 and 100")
+		})
 	}
 }
 

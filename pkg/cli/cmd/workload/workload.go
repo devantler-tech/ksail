@@ -30,8 +30,8 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/client/flux"
 	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
 	"github.com/devantler-tech/ksail/v7/pkg/client/kubeconform"
-	kubescapeclient "github.com/devantler-tech/ksail/v7/pkg/client/kubescape"
 	"github.com/devantler-tech/ksail/v7/pkg/client/kubectl"
+	kubescapeclient "github.com/devantler-tech/ksail/v7/pkg/client/kubescape"
 	"github.com/devantler-tech/ksail/v7/pkg/client/kustomize"
 	"github.com/devantler-tech/ksail/v7/pkg/client/netretry"
 	"github.com/devantler-tech/ksail/v7/pkg/client/oci"
@@ -2868,7 +2868,11 @@ func runScanCmd(
 	complianceThreshold float32,
 	verbose bool,
 ) error {
-	path, err := resolveScanPath(cmd, args)
+	if complianceThreshold < 0 || complianceThreshold > 100 {
+		return fmt.Errorf("%w, got %.2f", ErrInvalidComplianceThreshold, complianceThreshold)
+	}
+
+	path, err := resolveValidatePath(cmd, args)
 	if err != nil {
 		return err
 	}
@@ -2880,6 +2884,19 @@ func runScanCmd(
 
 	path = canonPath
 
+	if output != "" {
+		if mkdirErr := os.MkdirAll(filepath.Dir(output), 0o750); mkdirErr != nil {
+			return fmt.Errorf("create output directory: %w", mkdirErr)
+		}
+
+		canonOutput, canonErr := fsutil.EvalCanonicalPath(output)
+		if canonErr != nil {
+			return fmt.Errorf("resolve output path %q: %w", output, canonErr)
+		}
+
+		output = canonOutput
+	}
+
 	kubescapeClient := kubescapeclient.NewClient()
 
 	scanOpts := &kubescapeclient.ScanOptions{
@@ -2890,39 +2907,12 @@ func runScanCmd(
 		Verbose:             verbose,
 	}
 
-	return kubescapeClient.ScanDirectory(ctx, path, scanOpts)
-}
-
-// resolveScanPath determines which path to scan.
-// If an explicit argument is given, it is returned directly.
-// Otherwise, it loads ksail.yaml (honoring --config) and returns the
-// configured sourceDirectory. Falls back to "." when no config file is found.
-func resolveScanPath(cmd *cobra.Command, args []string) (string, error) {
-	if len(args) > 0 {
-		return args[0], nil
+	err = kubescapeClient.ScanDirectory(ctx, path, scanOpts)
+	if err != nil {
+		return fmt.Errorf("scan directory: %w", err)
 	}
 
-	var configFile string
-
-	cfgPath, err := flags.GetConfigPath(cmd)
-	if err == nil {
-		configFile = cfgPath
-	}
-
-	cfgManager := configmanager.NewConfigManager(io.Discard, configFile)
-
-	cfg, loadErr := cfgManager.Load(
-		configmanagerinterface.LoadOptions{Silent: true, SkipValidation: true},
-	)
-
-	switch {
-	case loadErr != nil && cfgManager.IsConfigFileFound():
-		return "", fmt.Errorf("load config: %w", loadErr)
-	case loadErr == nil && cfgManager.IsConfigFileFound():
-		return resolveSourceDir(cfg, ""), nil
-	default:
-		return ".", nil
-	}
+	return nil
 }
 
 const (
@@ -2939,6 +2929,9 @@ var kustomizationFileNames = []string{kustomizationFileName, "kustomization.yml"
 
 // ErrBuildFailed is returned when a kustomize build or manifest validation fails.
 var ErrBuildFailed = errors.New("build failed")
+
+// ErrInvalidComplianceThreshold is returned when --compliance-threshold is outside the valid 0-100 range.
+var ErrInvalidComplianceThreshold = errors.New("--compliance-threshold must be between 0 and 100")
 
 // NewValidateCmd creates the workload validate command.
 func NewValidateCmd() *cobra.Command {

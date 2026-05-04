@@ -2,6 +2,7 @@ package kubescape
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/kubescape/kubescape/v3/core/cautils"
@@ -10,7 +11,7 @@ import (
 )
 
 // ErrScanFailed indicates that the security scan encountered an error.
-var ErrScanFailed = fmt.Errorf("security scan failed")
+var ErrScanFailed = errors.New("security scan failed")
 
 // ScanOptions configures security scan behavior.
 type ScanOptions struct {
@@ -34,19 +35,8 @@ func NewClient() *Client {
 	return &Client{}
 }
 
-// ScanDirectory scans Kubernetes manifests in the given directory path
-// against the configured security frameworks.
-func (c *Client) ScanDirectory(ctx context.Context, path string, opts *ScanOptions) error {
-	if opts == nil {
-		opts = &ScanOptions{}
-	}
-
-	if ctx.Err() != nil {
-		return fmt.Errorf("%w", ctx.Err())
-	}
-
-	ks := core.NewKubescape(ctx)
-
+// buildScanInfo constructs a ScanInfo from the given path and options.
+func buildScanInfo(path string, opts *ScanOptions) *cautils.ScanInfo {
 	scanInfo := &cautils.ScanInfo{
 		InputPatterns: []string{path},
 		Local:         true,
@@ -71,23 +61,38 @@ func (c *Client) ScanDirectory(ctx context.Context, path string, opts *ScanOptio
 		scanInfo.FrameworkScan = true
 	}
 
-	results, err := ks.Scan(scanInfo)
+	return scanInfo
+}
+
+// ScanDirectory scans Kubernetes manifests in the given directory path
+// against the configured security frameworks.
+func (c *Client) ScanDirectory(ctx context.Context, path string, opts *ScanOptions) error {
+	if opts == nil {
+		opts = &ScanOptions{}
+	}
+
+	if ctx.Err() != nil {
+		return fmt.Errorf("%w", ctx.Err())
+	}
+
+	kubescapeRunner := core.NewKubescape(ctx)
+	scanInfo := buildScanInfo(path, opts)
+
+	results, err := kubescapeRunner.Scan(scanInfo)
 	if err != nil {
 		return fmt.Errorf("%w: %w", ErrScanFailed, err)
 	}
 
-	if err := results.HandleResults(ctx, scanInfo); err != nil {
+	err = results.HandleResults(ctx, scanInfo)
+	if err != nil {
 		return fmt.Errorf("handle scan results: %w", err)
 	}
 
-	if opts.ComplianceThreshold > 0 {
-		score := results.GetComplianceScore()
-		if score < float32(opts.ComplianceThreshold) {
-			return fmt.Errorf(
-				"%w: compliance score %.2f%% is below threshold %.2f%%",
-				ErrScanFailed, score, opts.ComplianceThreshold,
-			)
-		}
+	if opts.ComplianceThreshold > 0 && results.GetComplianceScore() < float32(opts.ComplianceThreshold) {
+		return fmt.Errorf(
+			"%w: compliance score %.2f%% is below threshold %.2f%%",
+			ErrScanFailed, results.GetComplianceScore(), opts.ComplianceThreshold,
+		)
 	}
 
 	return nil
