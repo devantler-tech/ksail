@@ -2843,6 +2843,7 @@ func NewDiagnoseCmd(_ *di.Runtime) *cobra.Command {
 	var (
 		nameFlag     string
 		providerFlag v1alpha1.Provider
+		formatFlag   string
 	)
 
 	cmd := &cobra.Command{
@@ -2851,7 +2852,7 @@ func NewDiagnoseCmd(_ *di.Runtime) *cobra.Command {
 		Long:         diagnoseLongDesc,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runDiagnoseCmd(cmd, nameFlag, providerFlag)
+			return runDiagnoseCmd(cmd, nameFlag, providerFlag, formatFlag)
 		},
 	}
 
@@ -2870,17 +2871,36 @@ func NewDiagnoseCmd(_ *di.Runtime) *cobra.Command {
 		fmt.Sprintf("Provider to use (%s)", providerFlag.ValidValues()),
 	)
 
+	cmd.Flags().StringVar(
+		&formatFlag,
+		"format",
+		"text",
+		"Output format: text or json. Use json for machine-readable structured output.",
+	)
+
 	return cmd
 }
 
 // runDiagnoseCmd inspects the live cluster via the Kubernetes API and writes
-// a human-readable diagnostic report to the command's stdout. When every
+// a human-readable or JSON diagnostic report to the command's stdout. When every
 // resource looks healthy the command writes a short "all healthy" banner.
 func runDiagnoseCmd(
 	cmd *cobra.Command,
 	nameFlag string,
 	providerFlag v1alpha1.Provider,
+	formatFlag string,
 ) error {
+	format := strings.ToLower(formatFlag)
+	if format != outputFormatText && format != outputFormatJSON {
+		return fmt.Errorf(
+			"%w: %q (expected %q or %q)",
+			ErrUnsupportedOutputFormat,
+			format,
+			outputFormatText,
+			outputFormatJSON,
+		)
+	}
+
 	resolved, err := lifecycle.ResolveClusterInfo(cmd, nameFlag, providerFlag, "")
 	if err != nil {
 		return fmt.Errorf("resolve cluster info: %w", err)
@@ -2891,12 +2911,21 @@ func runDiagnoseCmd(
 		return fmt.Errorf("build kubernetes client: %w", err)
 	}
 
+	writer := cmd.OutOrStdout()
+
+	if format == outputFormatJSON {
+		report, diagErr := k8s.DiagnoseClusterReport(cmd.Context(), clientset, resolved.ClusterName)
+		if diagErr != nil {
+			return fmt.Errorf("diagnose cluster %q: %w", resolved.ClusterName, diagErr)
+		}
+
+		return runDiagnoseJSONReport(report, writer)
+	}
+
 	report, err := k8s.DiagnoseCluster(cmd.Context(), clientset)
 	if err != nil {
 		return fmt.Errorf("diagnose cluster %q: %w", resolved.ClusterName, err)
 	}
-
-	writer := cmd.OutOrStdout()
 
 	if report == "" {
 		_, _ = fmt.Fprintf(
@@ -2910,6 +2939,21 @@ func runDiagnoseCmd(
 
 	_, _ = fmt.Fprintf(writer, "Diagnostics for cluster %q:\n", resolved.ClusterName)
 	_, _ = fmt.Fprintln(writer, report)
+
+	return nil
+}
+
+// runDiagnoseJSONReport serialises the structured DiagnoseReport for clusterName
+// as indented JSON to w. It is extracted from runDiagnoseCmd to keep that
+// function within the allowed line-count limit.
+func runDiagnoseJSONReport(report k8s.DiagnoseReport, w io.Writer) error {
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+
+	err := enc.Encode(report)
+	if err != nil {
+		return fmt.Errorf("encode diagnose report: %w", err)
+	}
 
 	return nil
 }

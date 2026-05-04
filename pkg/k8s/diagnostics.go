@@ -10,6 +10,149 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
+// DiagnoseSeverity represents the severity level of a diagnostic finding.
+type DiagnoseSeverity string
+
+const (
+	// DiagnoseSeverityCritical indicates a resource is failing and requires immediate attention.
+	DiagnoseSeverityCritical DiagnoseSeverity = "critical"
+	// DiagnoseSeverityWarning indicates a resource is degraded but not yet failing.
+	DiagnoseSeverityWarning DiagnoseSeverity = "warning"
+)
+
+const (
+	// diagnoseMaxHealthScore is the starting score for a fully healthy cluster.
+	diagnoseMaxHealthScore = 100
+	// diagnoseCriticalPenalty is the score deduction for each critical finding.
+	diagnoseCriticalPenalty = 25
+	// diagnoseWarningPenalty is the score deduction for each warning finding.
+	diagnoseWarningPenalty = 10
+)
+
+// DiagnoseFinding describes a single unhealthy resource detected during diagnosis.
+type DiagnoseFinding struct {
+	// Severity is the impact level: critical or warning.
+	Severity DiagnoseSeverity `json:"severity"`
+	// Resource is a short identifier, e.g. "node/node-1" or "pod/boom (default)".
+	Resource string `json:"resource"`
+	// Reason is a one-line description of the failure.
+	Reason string `json:"reason"`
+}
+
+// DiagnoseReport is the structured result of DiagnoseClusterReport. It is
+// the JSON-serialisable form of the cluster health snapshot produced by
+// DiagnoseCluster. The HealthScore field (0–100) gives AI assistants and
+// automation a single numeric signal; Findings carry the details.
+type DiagnoseReport struct {
+	// ClusterName is the name of the inspected cluster.
+	ClusterName string `json:"clusterName"`
+	// HealthScore is an integer from 0 (completely broken) to 100 (fully healthy).
+	// Each critical finding deducts 25 points; each warning deducts 10 points.
+	HealthScore int `json:"healthScore"`
+	// Findings lists every unhealthy resource discovered.
+	Findings []DiagnoseFinding `json:"findings"`
+}
+
+// DiagnoseClusterReport is the structured equivalent of DiagnoseCluster. It
+// returns a DiagnoseReport suitable for JSON serialisation and AI consumption
+// via the cluster_read MCP tool. The plain-text representation produced by
+// DiagnoseCluster remains the default; this function is used when the caller
+// requests --format json.
+func DiagnoseClusterReport(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	clusterName string,
+) (DiagnoseReport, error) {
+	report := DiagnoseReport{
+		ClusterName: clusterName,
+		HealthScore: diagnoseMaxHealthScore,
+		Findings:    []DiagnoseFinding{},
+	}
+
+	nodes, err := clientset.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return report, fmt.Errorf("list nodes: %w", err)
+	}
+
+	for i := range nodes.Items {
+		node := &nodes.Items[i]
+		if reason := describeNotReadyNode(node); reason != "" {
+			report.Findings = append(report.Findings, DiagnoseFinding{
+				Severity: DiagnoseSeverityCritical,
+				Resource: "node/" + node.Name,
+				Reason:   reason,
+			})
+		}
+	}
+
+	namespaces, err := listNamespaceNames(ctx, clientset)
+	if err != nil {
+		return report, err
+	}
+
+	for _, namespace := range namespaces {
+		appendNamespacePodFindings(ctx, clientset, namespace, &report.Findings)
+	}
+
+	report.HealthScore = diagnoseComputeScore(report.Findings)
+
+	return report, nil
+}
+
+// appendNamespacePodFindings lists all pods in namespace and appends a finding
+// for each unhealthy pod (or a warning finding when the pod list itself fails).
+func appendNamespacePodFindings(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	namespace string,
+	findings *[]DiagnoseFinding,
+) {
+	pods, err := clientset.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		*findings = append(*findings, DiagnoseFinding{
+			Severity: DiagnoseSeverityWarning,
+			Resource: "namespace/" + namespace,
+			Reason:   fmt.Sprintf("failed to list pods: %v", err),
+		})
+
+		return
+	}
+
+	for j := range pods.Items {
+		pod := &pods.Items[j]
+		if isPodHealthy(pod) {
+			continue
+		}
+
+		*findings = append(*findings, DiagnoseFinding{
+			Severity: DiagnoseSeverityCritical,
+			Resource: fmt.Sprintf("pod/%s (%s)", pod.Name, namespace),
+			Reason:   describePodFailure(pod),
+		})
+	}
+}
+
+// diagnoseComputeScore returns a health score in [0, diagnoseMaxHealthScore]
+// by deducting penalty points for each finding.
+func diagnoseComputeScore(findings []DiagnoseFinding) int {
+	score := diagnoseMaxHealthScore
+
+	for _, f := range findings {
+		switch f.Severity {
+		case DiagnoseSeverityCritical:
+			score -= diagnoseCriticalPenalty
+		case DiagnoseSeverityWarning:
+			score -= diagnoseWarningPenalty
+		}
+	}
+
+	if score < 0 {
+		score = 0
+	}
+
+	return score
+}
+
 // DiagnoseCluster produces a combined human-readable diagnostic report for
 // a running Kubernetes cluster. It enumerates every namespace, surfaces any
 // failing pods via DiagnosePodFailures, and reports any nodes that are not
