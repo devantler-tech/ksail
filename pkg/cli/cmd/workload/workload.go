@@ -2824,8 +2824,8 @@ If no path is provided, the path is resolved in order:
   2. The default source directory when spec.workload.sourceDirectory is unset ("k8s" directory)
   3. The current directory (fallback when no ksail.yaml config file is found)
 
-Available frameworks: nsa, mitre, cis, pss
-Available output formats: pretty-printer, json, sarif, junit
+Available frameworks: nsa, mitre, cis, pss (and any other framework supported by Kubescape)
+Available output formats: pretty-printer, json, sarif, junit (and any other format supported by Kubescape)
 
 For more information, see https://github.com/kubescape/kubescape`,
 		Args: cobra.MaximumNArgs(1),
@@ -2885,7 +2885,7 @@ func runScanCmd(
 	path = canonPath
 
 	if output != "" {
-		if mkdirErr := os.MkdirAll(filepath.Dir(output), 0o750); mkdirErr != nil {
+		if mkdirErr := os.MkdirAll(filepath.Dir(output), dirPerm); mkdirErr != nil {
 			return fmt.Errorf("create output directory: %w", mkdirErr)
 		}
 
@@ -2918,6 +2918,7 @@ func runScanCmd(
 const (
 	kustomizationFileName = "kustomization.yaml"
 	validationConcurrency = 5
+	dirPerm               = 0o750
 )
 
 // kustomizationFileNames lists all kustomization filenames recognized by kubectl.
