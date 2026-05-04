@@ -55,4 +55,10 @@ var (
 	// ErrNilWorkerConfig is returned when a nil worker config is passed to
 	// GenerateAutoscalerWorkerConfig.
 	ErrNilWorkerConfig = errors.New("worker config must not be nil")
+	// ErrNoControlPlaneForSecretSync is returned when no running control-plane node can be
+	// found to extract PKI secrets from during cluster update.
+	ErrNoControlPlaneForSecretSync = errors.New(
+		"no running control-plane node found for secret sync: " +
+			"cannot reuse cluster PKI — new or updated nodes would receive mismatched certificates",
+	)
 )

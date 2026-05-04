@@ -428,3 +428,90 @@ func TestConfigs_Patches(t *testing.T) {
 		assert.Equal(t, "test.yaml", configs.Patches()[0].Path, "internal state was mutated")
 	})
 }
+
+func TestConfigs_WithSecrets(t *testing.T) {
+	t.Parallel()
+
+	t.Run("preserves PKI secrets across regeneration", func(t *testing.T) {
+		t.Parallel()
+
+		// Create two independent config bundles — they'll have different secrets
+		manager1 := talos.NewConfigManager("", "cluster-a", "1.32.0", "10.5.0.0/24")
+		configs1, err := manager1.Load(configmanager.LoadOptions{})
+		require.NoError(t, err)
+
+		manager2 := talos.NewConfigManager("", "cluster-b", "1.32.0", "10.5.0.0/24")
+		configs2, err := manager2.Load(configmanager.LoadOptions{})
+		require.NoError(t, err)
+
+		// Extract secrets from config1
+		secrets1 := configs1.ExtractSecrets()
+		require.NotNil(t, secrets1)
+
+		// Rebuild config2 with config1's secrets
+		rebuilt, err := configs2.WithSecrets(secrets1)
+		require.NoError(t, err)
+
+		// The rebuilt config should have the same OS CA as config1
+		originalOSCA := configs1.ControlPlane().Machine().Security().IssuingCA().Crt
+		rebuiltOSCA := rebuilt.ControlPlane().Machine().Security().IssuingCA().Crt
+		assert.Equal(t, originalOSCA, rebuiltOSCA, "OS CA should match after WithSecrets")
+
+		// The rebuilt config should have the same cluster CA as config1
+		originalClusterCA := configs1.ControlPlane().Cluster().IssuingCA().Crt
+		rebuiltClusterCA := rebuilt.ControlPlane().Cluster().IssuingCA().Crt
+		assert.Equal(
+			t,
+			originalClusterCA,
+			rebuiltClusterCA,
+			"cluster CA should match after WithSecrets",
+		)
+
+		// The rebuilt config should have the same machine token as config1
+		originalToken := configs1.ControlPlane().Machine().Security().Token()
+		rebuiltToken := rebuilt.ControlPlane().Machine().Security().Token()
+		assert.Equal(t, originalToken, rebuiltToken, "machine token should match after WithSecrets")
+
+		// The rebuilt config should still have config2's cluster name
+		assert.Equal(t, "cluster-b", rebuilt.GetClusterName())
+	})
+
+	t.Run("returns same config when secrets is nil", func(t *testing.T) {
+		t.Parallel()
+
+		manager := talos.NewConfigManager("", "my-cluster", "1.32.0", "10.5.0.0/24")
+		configs, err := manager.Load(configmanager.LoadOptions{})
+		require.NoError(t, err)
+
+		same, err := configs.WithSecrets(nil)
+		require.NoError(t, err)
+		assert.Same(t, configs, same, "should return same config when secrets is nil")
+	})
+}
+
+func TestConfigs_ExtractSecrets(t *testing.T) {
+	t.Parallel()
+
+	t.Run("extracts secrets from loaded config", func(t *testing.T) {
+		t.Parallel()
+
+		manager := talos.NewConfigManager("", "extract-test", "1.32.0", "10.5.0.0/24")
+		configs, err := manager.Load(configmanager.LoadOptions{})
+		require.NoError(t, err)
+
+		secretsBundle := configs.ExtractSecrets()
+		require.NotNil(t, secretsBundle)
+		assert.NotNil(t, secretsBundle.Certs)
+		assert.NotNil(t, secretsBundle.Certs.K8s)
+		assert.NotNil(t, secretsBundle.Certs.Etcd)
+		assert.NotNil(t, secretsBundle.Certs.OS)
+		assert.NotEmpty(t, secretsBundle.TrustdInfo.Token)
+	})
+
+	t.Run("returns nil when bundle is nil", func(t *testing.T) {
+		t.Parallel()
+
+		configs := &talos.Configs{}
+		assert.Nil(t, configs.ExtractSecrets())
+	})
+}

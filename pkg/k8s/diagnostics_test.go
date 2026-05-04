@@ -3,6 +3,7 @@ package k8s_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
@@ -501,4 +502,145 @@ func TestDiagnoseCluster_NodeListErrorIsSurfaced(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "list nodes")
+}
+
+func TestDiagnoseClusterReport_HealthyClusterReturns100(t *testing.T) {
+	t.Parallel()
+
+	clientset := k8sfake.NewClientset(
+		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
+		&corev1.Node{
+			ObjectMeta: metav1.ObjectMeta{Name: "node-1"},
+			Status: corev1.NodeStatus{Conditions: []corev1.NodeCondition{
+				{Type: corev1.NodeReady, Status: corev1.ConditionTrue},
+			}},
+		},
+		&corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{Name: "healthy", Namespace: "default"},
+			Status: corev1.PodStatus{
+				Phase:             corev1.PodRunning,
+				ContainerStatuses: []corev1.ContainerStatus{{Ready: true}},
+			},
+		},
+	)
+
+	report, err := k8s.DiagnoseClusterReport(context.Background(), clientset, "my-cluster")
+
+	require.NoError(t, err)
+	assert.Equal(t, "my-cluster", report.ClusterName)
+	assert.Equal(t, 100, report.HealthScore)
+	assert.Empty(t, report.Findings)
+}
+
+func TestDiagnoseClusterReport_FailingPodReducesScore(t *testing.T) {
+	t.Parallel()
+
+	clientset := k8sfake.NewClientset(
+		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
+		&corev1.Node{
+			ObjectMeta: metav1.ObjectMeta{Name: "node-ok"},
+			Status: corev1.NodeStatus{Conditions: []corev1.NodeCondition{
+				{Type: corev1.NodeReady, Status: corev1.ConditionTrue},
+			}},
+		},
+		&corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{Name: "crasher", Namespace: "default"},
+			Status:     corev1.PodStatus{Phase: corev1.PodFailed},
+		},
+	)
+
+	report, err := k8s.DiagnoseClusterReport(context.Background(), clientset, "test")
+
+	require.NoError(t, err)
+	assert.Equal(t, 75, report.HealthScore)
+	require.Len(t, report.Findings, 1)
+	assert.Equal(t, k8s.DiagnoseSeverityCritical, report.Findings[0].Severity)
+	assert.Contains(t, report.Findings[0].Resource, "crasher")
+}
+
+func TestDiagnoseClusterReport_NotReadyNodeReducesScore(t *testing.T) {
+	t.Parallel()
+
+	clientset := k8sfake.NewClientset(
+		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
+		&corev1.Node{
+			ObjectMeta: metav1.ObjectMeta{Name: "broken-node"},
+			Status: corev1.NodeStatus{Conditions: []corev1.NodeCondition{
+				{Type: corev1.NodeReady, Status: corev1.ConditionFalse, Message: "disk pressure"},
+			}},
+		},
+	)
+
+	report, err := k8s.DiagnoseClusterReport(context.Background(), clientset, "test")
+
+	require.NoError(t, err)
+	assert.Equal(t, 75, report.HealthScore)
+	require.Len(t, report.Findings, 1)
+	assert.Equal(t, k8s.DiagnoseSeverityCritical, report.Findings[0].Severity)
+	assert.Equal(t, "node/broken-node", report.Findings[0].Resource)
+}
+
+func TestDiagnoseClusterReport_ScoreFloorsAtZero(t *testing.T) {
+	t.Parallel()
+
+	pods := make([]runtime.Object, 0, 5)
+	pods = append(pods,
+		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
+	)
+
+	for i := range 5 {
+		pods = append(pods, &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("fail-%d", i), Namespace: "default"},
+			Status:     corev1.PodStatus{Phase: corev1.PodFailed},
+		})
+	}
+
+	clientset := k8sfake.NewClientset(pods...)
+
+	report, err := k8s.DiagnoseClusterReport(context.Background(), clientset, "overloaded")
+
+	require.NoError(t, err)
+	assert.Equal(t, 0, report.HealthScore)
+}
+
+func TestDiagnoseClusterReport_NodeListErrorIsSurfaced(t *testing.T) {
+	t.Parallel()
+
+	clientset := k8sfake.NewClientset()
+	clientset.PrependReactor(
+		"list",
+		"nodes",
+		func(_ k8stesting.Action) (bool, runtime.Object, error) {
+			return true, nil, errConnectionRefused
+		},
+	)
+
+	_, err := k8s.DiagnoseClusterReport(context.Background(), clientset, "test")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "list nodes")
+}
+
+func TestDiagnoseClusterReport_PodListErrorCreatesWarningFinding(t *testing.T) {
+	t.Parallel()
+
+	clientset := k8sfake.NewClientset(
+		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "broken-ns"}},
+	)
+	clientset.PrependReactor(
+		"list",
+		"pods",
+		func(_ k8stesting.Action) (bool, runtime.Object, error) {
+			return true, nil, errConnectionRefused
+		},
+	)
+
+	report, err := k8s.DiagnoseClusterReport(context.Background(), clientset, "test")
+
+	require.NoError(t, err)
+	require.Len(t, report.Findings, 1)
+	assert.Equal(t, k8s.DiagnoseSeverityWarning, report.Findings[0].Severity)
+	assert.Equal(t, "namespace/broken-ns", report.Findings[0].Resource)
+	assert.Contains(t, report.Findings[0].Reason, "failed to list pods")
+	assert.Equal(t, 90, report.HealthScore)
 }

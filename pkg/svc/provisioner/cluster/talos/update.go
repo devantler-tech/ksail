@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/cosi-project/runtime/pkg/safe"
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
@@ -16,6 +18,8 @@ import (
 	talosclient "github.com/siderolabs/talos/pkg/machinery/client"
 	clientconfig "github.com/siderolabs/talos/pkg/machinery/client/config"
 	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
+	"github.com/siderolabs/talos/pkg/machinery/config/generate/secrets"
+	talosresconfig "github.com/siderolabs/talos/pkg/machinery/resources/config"
 )
 
 // Update applies configuration changes to all nodes in a running Talos cluster.
@@ -55,6 +59,15 @@ func (p *Provisioner) Update(
 		return result, fmt.Errorf("failed to refresh Omni configs before update: %w", configErr)
 	}
 
+	// Sync in-memory machine configs with the running cluster's PKI secrets.
+	// ConfigManager.Load() generates fresh CA/tokens on every call, but scale-up
+	// and in-place config changes must use the same secrets as the running cluster
+	// to avoid "certificate signed by unknown authority" errors on new nodes.
+	secretErr := p.syncSecretsFromCluster(ctx, clusterName, oldSpec, newSpec, result)
+	if secretErr != nil {
+		return result, fmt.Errorf("failed to sync cluster secrets: %w", secretErr)
+	}
+
 	// Handle node scaling changes
 	scaleErr := p.applyNodeScalingChanges(ctx, clusterName, oldSpec, newSpec, result)
 	if scaleErr != nil {
@@ -75,11 +88,9 @@ func (p *Provisioner) Update(
 	}
 
 	// Handle reboot-required changes (STAGED mode with rolling reboot)
-	if diff.HasRebootRequired() && opts.RollingReboot {
-		err := p.applyRebootRequiredChanges(ctx, clusterName, result, opts)
-		if err != nil {
-			return result, fmt.Errorf("failed to apply reboot-required changes: %w", err)
-		}
+	rebootErr := p.applyRebootChangesIfNeeded(ctx, clusterName, result, diff, opts)
+	if rebootErr != nil {
+		return result, fmt.Errorf("failed to apply reboot-required changes: %w", rebootErr)
 	}
 
 	// Talos OS version upgrades are NOT performed here. They are only triggered
@@ -400,6 +411,121 @@ func (p *Provisioner) createTalosClient(
 	}
 
 	return nil, clustererr.ErrTalosConfigRequired
+}
+
+// applyRebootChangesIfNeeded applies reboot-required config changes with a
+// rolling reboot when both conditions are met. Returns nil when no reboot
+// changes are needed or rolling reboot is disabled.
+func (p *Provisioner) applyRebootChangesIfNeeded(
+	ctx context.Context,
+	clusterName string,
+	result *clusterupdate.UpdateResult,
+	diff *clusterupdate.UpdateResult,
+	opts clusterupdate.UpdateOptions,
+) error {
+	if !diff.HasRebootRequired() || !opts.RollingReboot {
+		return nil
+	}
+
+	return p.applyRebootRequiredChanges(ctx, clusterName, result, opts)
+}
+
+// needsSecretSync returns true when the update will push machine configs to
+// nodes and therefore needs the in-memory configs to match the running
+// cluster's PKI. This avoids unnecessary Talos API calls for no-op updates
+// or operations that don't touch machine configs (e.g., pure scale-down).
+func (p *Provisioner) needsSecretSync(
+	oldSpec, newSpec *v1alpha1.ClusterSpec,
+	diff *clusterupdate.UpdateResult,
+) bool {
+	if p.talosConfigs == nil || p.omniOpts != nil {
+		return false
+	}
+
+	// Scale-up: new nodes need the existing cluster's PKI.
+	if oldSpec != nil && newSpec != nil &&
+		(newSpec.ControlPlanes > oldSpec.ControlPlanes || newSpec.Workers > oldSpec.Workers) {
+		return true
+	}
+
+	// In-place or reboot-required config changes push configs to existing nodes.
+	return p.shouldApplyInPlaceChanges(diff) || diff.HasRebootRequired()
+}
+
+// syncSecretsFromCluster connects to a running control-plane node, fetches its
+// machine configuration, extracts the PKI secrets, and rebuilds the in-memory
+// talosConfigs with those secrets. This ensures that configs applied to new nodes
+// during scale-up use the same CA, tokens, and bootstrap secrets as the running
+// cluster. Without this, ConfigManager.Load() generates fresh PKI on every call,
+// causing certificate mismatch errors when new nodes try to join.
+//
+// This is a no-op when no machine configs will be pushed (no scale-up, no in-place
+// changes, no reboot-required changes). When secrets ARE needed but no control-plane
+// node is available, it fails closed to prevent PKI mismatch.
+func (p *Provisioner) syncSecretsFromCluster(
+	ctx context.Context,
+	clusterName string,
+	oldSpec, newSpec *v1alpha1.ClusterSpec,
+	diff *clusterupdate.UpdateResult,
+) error {
+	if !p.needsSecretSync(oldSpec, newSpec, diff) {
+		return nil
+	}
+
+	nodes, err := p.getNodesByRole(ctx, clusterName)
+	if err != nil {
+		return fmt.Errorf("failed to discover nodes for secret sync: %w", err)
+	}
+
+	// Find a control-plane node to extract secrets from
+	var cpIP string
+
+	for _, node := range nodes {
+		if node.Role == RoleControlPlane {
+			cpIP = node.IP
+
+			break
+		}
+	}
+
+	if cpIP == "" {
+		return fmt.Errorf("%w: cluster %q", ErrNoControlPlaneForSecretSync, clusterName)
+	}
+
+	talosClient, err := p.createTalosClient(ctx, cpIP)
+	if err != nil {
+		return fmt.Errorf("failed to create Talos client for secret sync: %w", err)
+	}
+
+	defer talosClient.Close() //nolint:errcheck
+
+	// Fetch the active MachineConfig resource from the running control-plane node.
+	machineConfig, err := safe.StateGet[*talosresconfig.MachineConfig](
+		ctx,
+		talosClient.COSI,
+		talosresconfig.NewMachineConfig(nil).Metadata(),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to fetch machine config from %s: %w", cpIP, err)
+	}
+
+	runningConfig := machineConfig.Config()
+
+	existingSecrets := secrets.NewBundleFromConfig(
+		secrets.NewFixedClock(time.Now()),
+		runningConfig,
+	)
+
+	rebuilt, err := p.talosConfigs.WithSecrets(existingSecrets)
+	if err != nil {
+		return fmt.Errorf("failed to rebuild configs with cluster secrets: %w", err)
+	}
+
+	p.talosConfigs = rebuilt
+
+	_, _ = fmt.Fprintf(p.logWriter, "  ✓ Synced cluster secrets from %s\n", cpIP)
+
+	return nil
 }
 
 // nodeWithRole holds an IP address and its role for role-aware config application.

@@ -14,7 +14,6 @@ on:
   skip-bots: ["dependabot[bot]", "renovate[bot]"]
   workflow_run:
     workflows:
-      - "CI - KSail"
       - "CD"
       - "Release"
       - "Maintenance"
@@ -61,7 +60,7 @@ tools:
 
 timeout-minutes: 60
 
-source: githubnext/agentics/workflows/ci-doctor.md@ecb5fea6b3621f8ecd8bdc022176cee491745b69
+source: githubnext/agentics/workflows/ci-doctor.md@e8a4d8a2217966474ef08cedff70c92d65a7a1a5
 ---
 
 # CI Doctor
