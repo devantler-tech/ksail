@@ -1,6 +1,6 @@
 {
-  "last_run": "2026-05-04T00:00:00Z",
-  "workflow_run_id": "25279230981",
+  "last_run": "2026-05-04T01:10:00Z",
+  "workflow_run_id": "25296166369",
   "commented_issues": {
     "4525": "2026-05-02",
     "4504": "2026-05-01",
@@ -28,11 +28,12 @@
     "4119": "2026-04-18"
   },
   "open_prs": {
-    "repo-assist/fix-lint-chat-tests": "style(chat): apply golangci-lint fixes to chat test files (Fixes #4530)",
-    "repo-assist/test-cipher-helper-coverage": "test(cipher): add unit tests for writeDecryptedOutput, showRotatePreview, and buildRotateOpts",
-    "repo-assist/improve-total-node-count-helper": "refactor: add TotalNodeCount() to ClusterSpec to reduce duplication"
+    "repo-assist/feat-diagnose-json-format": "feat(diagnose): add --format json flag with structured DiagnoseReport output"
   },
   "merged_prs": {
+    "4556": "fix(update): detect autoscaler and Talos config from live cluster to eliminate false-positive diffs",
+    "4563": "refactor: add TotalNodeCount() to ClusterSpec to reduce duplication",
+    "4551": "test(cipher): add unit tests for writeDecryptedOutput, showRotatePreview, and buildRotateOpts",
     "4509": "fix(workload): validate explicit --path before config load (Fixes #4504)",
     "4419": "fix(ci): remove stale registry containers between retries",
     "4396": "fix(ci): Talos+Docker retry logic",
@@ -43,8 +44,8 @@
     "4359": "perf(notify): eliminate per-tick allocations",
     "4352": "refactor(setup): replace repeated if-append with table-driven loop"
   },
-  "last_code_quality_domain": "refactor",
-  "issue_backlog_cursor": "4559",
+  "last_code_quality_domain": "perf",
+  "issue_backlog_cursor": "4570",
   "created_issues": {
     "4521": "[Repo Assist] [feature]: add local-remote service mirroring",
     "4511": "[Repo Assist] [feature]: add native ephemeral CI mode",
@@ -60,6 +61,7 @@
   "notes": [
     "link_sub_issue is NOT idempotent - always verify sub-issue not already linked before calling",
     "Monthly activity issue: #4501",
-    "domain alternation: last was refactor - next should be performance"
+    "domain alternation: last was perf (diagnose JSON / Task 10) - next should be test coverage",
+    "All roadmap Now/Next/Later items tracked - no new issues needed (backlog cursor: 4570)"
   ]
 }

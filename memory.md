@@ -1,14 +1,13 @@
 # Repo Assist Memory
 
 ## Last Run
-2026-05-03 01:12 UTC — Run #25266351824
+2026-05-04 01:10 UTC — Run #25296166369
 
 ## Monthly Activity Issue
 - May 2026: #4501 (open, updated this run)
 
 ## Open Repo Assist PRs
-- [Repo Assist] style(chat): apply golangci-lint fixes to chat test files (Fixes #4530) — branch: repo-assist/fix-lint-chat-tests
-- [Repo Assist] test(cipher): add unit tests for writeDecryptedOutput, showRotatePreview, and buildRotateOpts — branch: repo-assist/test-cipher-helper-coverage
+- [Repo Assist] feat(diagnose): add --format json flag with structured DiagnoseReport output — branch: repo-assist/feat-diagnose-json-format
 
 ## Issue Comments Made (with run)
 - #4525 (HA defaults feature): 2026-05-02 run #25251942180
@@ -33,19 +32,20 @@
 - #3983: Hetzner K3s/Vanilla (assigned to devantler+Copilot)
 
 ## Perf Work Domain Alternation
-- Last domain: test coverage (run #25266351824, cipher 61.2%→72.3%)
+- Last domain: feat/forward-progress (Task 10 - diagnose JSON format)
 - Rotation: refactor → perf → test → refactor
-- Next expected: refactor
+- Next expected: performance (perf)
 
 ## Backlog Cursor
-- Issues processed through #4549 (most recent as of 2026-05-03)
-- All "Later" roadmap gaps tracked
+- Issues processed through #4570 (most recent as of 2026-05-04)
+- All "Now"/"Next"/"Later" roadmap gaps tracked — no new issues to create
 
 ## Bugs Status
-- #4530 lint push rejection: PR created (repo-assist/fix-lint-chat-tests)
-- No other open fixable bugs
+- No open fixable bugs
 
 ## Notes
 - link_sub_issue is NOT idempotent — always verify sub-issue not already linked before calling
-- New human-authored PRs open: #4546 (chat stderr), #4542 (HelmRelease stuck), #4541 (reconcile diag), #4528 (OIDC)
-- task 2: no new non-automation human issues since last run — all already commented
+- New human-authored PRs open: #4568 (daily-docs workflow update, Copilot), #4566 (workload scan Kubescape, devantler), #4565 (docs auto)
+- Task 2: no new non-automation human issues since last run — all already commented
+- PR #4556 was merged — Talos version/ISO false positive fix is in main
+- Weekly strategy discussion #4400 expires 2026-05-04 — will need new one next run
