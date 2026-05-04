@@ -140,6 +140,14 @@ func (p *Provisioner) SyncSecretsFromClusterForTest(
 	return p.syncSecretsFromCluster(ctx, clusterName)
 }
 
+// NeedsSecretSyncForTest exposes needsSecretSync for unit testing.
+func (p *Provisioner) NeedsSecretSyncForTest(
+	oldSpec, newSpec *v1alpha1.ClusterSpec,
+	diff *clusterupdate.UpdateResult,
+) bool {
+	return p.needsSecretSync(oldSpec, newSpec, diff)
+}
+
 // DockerNodeNameForTest exposes dockerNodeName for unit testing.
 func DockerNodeNameForTest(clusterName, role string, index int) string {
 	return dockerNodeName(clusterName, role, index)

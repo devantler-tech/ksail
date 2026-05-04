@@ -380,19 +380,25 @@ func TestDiffConfig_StillValidatesMinimumControlPlanesWhenAutoscalingEnabled(t *
 	assert.ErrorIs(t, err, talosprovisioner.ErrMinimumControlPlanes)
 }
 
-// TestSyncSecretsFromCluster_NilTalosConfigs verifies that syncSecretsFromCluster
-// is a no-op when talosConfigs is nil (e.g., tests that don't load configs).
+// TestSyncSecretsFromCluster_NilTalosConfigs verifies that needsSecretSync
+// returns false when talosConfigs is nil (e.g., tests that don't load configs),
+// preventing syncSecretsFromCluster from being called.
 func TestSyncSecretsFromCluster_NilTalosConfigs(t *testing.T) {
 	t.Parallel()
 
 	provisioner := talosprovisioner.NewProvisioner(nil, nil).WithLogWriter(io.Discard)
+	diff := clusterupdate.NewEmptyUpdateResult()
+	diff.InPlaceChanges = append(diff.InPlaceChanges, clusterupdate.Change{
+		Field: "workers", Category: clusterupdate.ChangeCategoryInPlace,
+	})
 
-	err := provisioner.SyncSecretsFromClusterForTest(context.Background(), "test")
-	require.NoError(t, err)
+	assert.False(t, provisioner.NeedsSecretSyncForTest(
+		&v1alpha1.ClusterSpec{Workers: 0}, &v1alpha1.ClusterSpec{Workers: 1}, diff,
+	))
 }
 
-// TestSyncSecretsFromCluster_OmniSkipped verifies that syncSecretsFromCluster
-// is a no-op for Omni-managed clusters (Omni handles config independently).
+// TestSyncSecretsFromCluster_OmniSkipped verifies that needsSecretSync
+// returns false for Omni-managed clusters (Omni handles config independently).
 func TestSyncSecretsFromCluster_OmniSkipped(t *testing.T) {
 	t.Parallel()
 
@@ -403,6 +409,75 @@ func TestSyncSecretsFromCluster_OmniSkipped(t *testing.T) {
 		WithOmniOptions(v1alpha1.OptionsOmni{}).
 		WithLogWriter(io.Discard)
 
-	err = provisioner.SyncSecretsFromClusterForTest(context.Background(), "test")
+	diff := clusterupdate.NewEmptyUpdateResult()
+	diff.InPlaceChanges = append(diff.InPlaceChanges, clusterupdate.Change{
+		Field: "workers", Category: clusterupdate.ChangeCategoryInPlace,
+	})
+
+	assert.False(t, provisioner.NeedsSecretSyncForTest(
+		&v1alpha1.ClusterSpec{Workers: 0}, &v1alpha1.ClusterSpec{Workers: 1}, diff,
+	))
+}
+
+// TestNeedsSecretSync_ScaleUp verifies that needsSecretSync returns true
+// when the update involves scaling up nodes.
+func TestNeedsSecretSync_ScaleUp(t *testing.T) {
+	t.Parallel()
+
+	configs, err := talosconfigmanager.NewDefaultConfigs()
 	require.NoError(t, err)
+
+	provisioner := talosprovisioner.NewProvisioner(configs, nil).WithLogWriter(io.Discard)
+	diff := clusterupdate.NewEmptyUpdateResult()
+
+	// Workers scale-up
+	assert.True(t, provisioner.NeedsSecretSyncForTest(
+		&v1alpha1.ClusterSpec{ControlPlanes: 1, Workers: 0},
+		&v1alpha1.ClusterSpec{ControlPlanes: 1, Workers: 1},
+		diff,
+	))
+
+	// Control-plane scale-up
+	assert.True(t, provisioner.NeedsSecretSyncForTest(
+		&v1alpha1.ClusterSpec{ControlPlanes: 1, Workers: 0},
+		&v1alpha1.ClusterSpec{ControlPlanes: 3, Workers: 0},
+		diff,
+	))
+}
+
+// TestNeedsSecretSync_NoChanges verifies that needsSecretSync returns false
+// when there are no scaling or config changes.
+func TestNeedsSecretSync_NoChanges(t *testing.T) {
+	t.Parallel()
+
+	configs, err := talosconfigmanager.NewDefaultConfigs()
+	require.NoError(t, err)
+
+	provisioner := talosprovisioner.NewProvisioner(configs, nil).WithLogWriter(io.Discard)
+	diff := clusterupdate.NewEmptyUpdateResult()
+
+	assert.False(t, provisioner.NeedsSecretSyncForTest(
+		&v1alpha1.ClusterSpec{ControlPlanes: 1, Workers: 0},
+		&v1alpha1.ClusterSpec{ControlPlanes: 1, Workers: 0},
+		diff,
+	))
+}
+
+// TestNeedsSecretSync_ScaleDown verifies that needsSecretSync returns false
+// for a pure scale-down with no other config changes (removing nodes doesn't
+// need PKI sync).
+func TestNeedsSecretSync_ScaleDown(t *testing.T) {
+	t.Parallel()
+
+	configs, err := talosconfigmanager.NewDefaultConfigs()
+	require.NoError(t, err)
+
+	provisioner := talosprovisioner.NewProvisioner(configs, nil).WithLogWriter(io.Discard)
+	diff := clusterupdate.NewEmptyUpdateResult()
+
+	assert.False(t, provisioner.NeedsSecretSyncForTest(
+		&v1alpha1.ClusterSpec{ControlPlanes: 1, Workers: 2},
+		&v1alpha1.ClusterSpec{ControlPlanes: 1, Workers: 1},
+		diff,
+	))
 }

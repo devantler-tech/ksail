@@ -63,9 +63,12 @@ func (p *Provisioner) Update(
 	// ConfigManager.Load() generates fresh CA/tokens on every call, but scale-up
 	// and in-place config changes must use the same secrets as the running cluster
 	// to avoid "certificate signed by unknown authority" errors on new nodes.
-	secretErr := p.syncSecretsFromCluster(ctx, clusterName)
-	if secretErr != nil {
-		return result, fmt.Errorf("failed to sync cluster secrets: %w", secretErr)
+	// Only sync when machine configs will actually be pushed to nodes.
+	if p.needsSecretSync(oldSpec, newSpec, result) {
+		secretErr := p.syncSecretsFromCluster(ctx, clusterName)
+		if secretErr != nil {
+			return result, fmt.Errorf("failed to sync cluster secrets: %w", secretErr)
+		}
 	}
 
 	// Handle node scaling changes
@@ -415,6 +418,28 @@ func (p *Provisioner) createTalosClient(
 	return nil, clustererr.ErrTalosConfigRequired
 }
 
+// needsSecretSync returns true when the update will push machine configs to
+// nodes and therefore needs the in-memory configs to match the running
+// cluster's PKI. This avoids unnecessary Talos API calls for no-op updates
+// or operations that don't touch machine configs (e.g., pure scale-down).
+func (p *Provisioner) needsSecretSync(
+	oldSpec, newSpec *v1alpha1.ClusterSpec,
+	diff *clusterupdate.UpdateResult,
+) bool {
+	if p.talosConfigs == nil || p.omniOpts != nil {
+		return false
+	}
+
+	// Scale-up: new nodes need the existing cluster's PKI.
+	if oldSpec != nil && newSpec != nil &&
+		(newSpec.ControlPlanes > oldSpec.ControlPlanes || newSpec.Workers > oldSpec.Workers) {
+		return true
+	}
+
+	// In-place or reboot-required config changes push configs to existing nodes.
+	return p.shouldApplyInPlaceChanges(diff) || diff.HasRebootRequired()
+}
+
 // syncSecretsFromCluster connects to a running control-plane node, fetches its
 // machine configuration, extracts the PKI secrets, and rebuilds the in-memory
 // talosConfigs with those secrets. This ensures that configs applied to new nodes
@@ -422,16 +447,12 @@ func (p *Provisioner) createTalosClient(
 // cluster. Without this, ConfigManager.Load() generates fresh PKI on every call,
 // causing certificate mismatch errors when new nodes try to join.
 //
-// This method is a no-op when talosConfigs is nil (used in tests and Omni clusters),
-// or when running on an Omni-managed cluster (Omni handles its own config).
+// Callers must gate this behind needsSecretSync — this method assumes that
+// machine configs will be pushed and fails closed when secrets cannot be obtained.
 func (p *Provisioner) syncSecretsFromCluster(
 	ctx context.Context,
 	clusterName string,
 ) error {
-	if p.talosConfigs == nil || p.omniOpts != nil {
-		return nil
-	}
-
 	nodes, err := p.getNodesByRole(ctx, clusterName)
 	if err != nil {
 		return fmt.Errorf("failed to discover nodes for secret sync: %w", err)
@@ -449,10 +470,11 @@ func (p *Provisioner) syncSecretsFromCluster(
 	}
 
 	if cpIP == "" {
-		// No running control-plane node found — this can happen when the
-		// cluster is freshly created or all CPs are down. Fall through to
-		// use the in-memory secrets (best effort).
-		return nil
+		return fmt.Errorf(
+			"no running control-plane node found for cluster %q: "+
+				"cannot sync PKI secrets — new or updated nodes would receive "+
+				"mismatched certificates", clusterName,
+		)
 	}
 
 	talosClient, err := p.createTalosClient(ctx, cpIP)
