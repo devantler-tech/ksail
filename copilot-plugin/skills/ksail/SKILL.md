@@ -31,7 +31,7 @@ Invoke when the user asks to:
 ## Command groups (source of truth: `ksail --help`)
 
 - `ksail cluster …` — lifecycle: `init`, `create`, `update`, `delete`, `start`, `stop`, `info`, `list`, `connect`, `switch`, `backup`, `restore`
-- `ksail workload …` — `apply`, `create`, `edit`, `get`, `describe`, `explain`, `delete`, `logs`, `exec`, `expose`, `gen`, `validate`, `install`, `scale`, `rollout`, `wait`, `images`, `export`, `import`, `watch`, `push`, `reconcile`
+- `ksail workload …` — `apply`, `create`, `edit`, `get`, `describe`, `explain`, `delete`, `logs`, `exec`, `expose`, `gen`, `validate`, `install`, `scale`, `rollout`, `scan`, `wait`, `images`, `export`, `import`, `watch`, `push`, `reconcile`
 - `ksail cipher …` — SOPS-based secret management
 - `ksail chat` — AI chat TUI powered by GitHub Copilot
 - `ksail mcp` — MCP server (already auto-registered by this plugin)
@@ -48,7 +48,7 @@ ksail cluster create                        # creates + starts the cluster (Dock
 ksail cluster connect                       # opens K9s against the cluster
 ```
 
-Distribution is chosen via `--distribution` (`Vanilla`, `K3s`, `Talos`, `VCluster`). Provider is `Docker` by default; Talos also supports `Hetzner` and `Omni`.
+Distribution is chosen via `--distribution` (`Vanilla`, `K3s`, `Talos`, `VCluster`, `KWOK`, `EKS`). Provider is `Docker` by default; Talos also supports `Hetzner` and `Omni`; EKS uses AWS.
 
 ## MCP server
 
