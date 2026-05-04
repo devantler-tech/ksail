@@ -191,6 +191,14 @@ Failing pods in default namespace:
   db-0: CrashLoopBackOff for postgres:16 (5 restarts)
 ```
 
+For machine-readable output (useful for scripting or automation), use `--format json`:
+
+```bash
+ksail cluster diagnose --format json
+```
+
+The JSON output includes a `healthScore` (0–100, where 100 means fully healthy) and a `findings` array with structured details for each issue. Each critical finding (NotReady node, failing pod) deducts 25 points; warnings deduct 10 points.
+
 The command is distribution-agnostic and works with Vanilla, K3s, Talos, and VCluster. It exits 0 even when failures are reported; a non-zero exit code is reserved for unreachable clusters.
 
 ## Troubleshooting
