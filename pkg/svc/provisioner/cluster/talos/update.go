@@ -88,11 +88,9 @@ func (p *Provisioner) Update(
 	}
 
 	// Handle reboot-required changes (STAGED mode with rolling reboot)
-	if diff.HasRebootRequired() && opts.RollingReboot {
-		err := p.applyRebootRequiredChanges(ctx, clusterName, result, opts)
-		if err != nil {
-			return result, fmt.Errorf("failed to apply reboot-required changes: %w", err)
-		}
+	rebootErr := p.applyRebootChangesIfNeeded(ctx, clusterName, result, diff, opts)
+	if rebootErr != nil {
+		return result, fmt.Errorf("failed to apply reboot-required changes: %w", rebootErr)
 	}
 
 	// Talos OS version upgrades are NOT performed here. They are only triggered
@@ -413,6 +411,23 @@ func (p *Provisioner) createTalosClient(
 	}
 
 	return nil, clustererr.ErrTalosConfigRequired
+}
+
+// applyRebootChangesIfNeeded applies reboot-required config changes with a
+// rolling reboot when both conditions are met. Returns nil when no reboot
+// changes are needed or rolling reboot is disabled.
+func (p *Provisioner) applyRebootChangesIfNeeded(
+	ctx context.Context,
+	clusterName string,
+	result *clusterupdate.UpdateResult,
+	diff *clusterupdate.UpdateResult,
+	opts clusterupdate.UpdateOptions,
+) error {
+	if !diff.HasRebootRequired() || !opts.RollingReboot {
+		return nil
+	}
+
+	return p.applyRebootRequiredChanges(ctx, clusterName, result, opts)
 }
 
 // needsSecretSync returns true when the update will push machine configs to
