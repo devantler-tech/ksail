@@ -558,9 +558,13 @@ jobs:
             --ignore github.com/devantler-tech/ksail/v7 \
             --ignore github.com/spdx/tools-golang \
             --ignore github.com/in-toto/in-toto-golang \
+            --ignore github.com/in-toto/attestation \
             --ignore github.com/inconshreveable/go-update \
             --ignore github.com/loft-sh/admin-apis \
-            --ignore github.com/segmentio/asm
+            --ignore github.com/segmentio/asm \
+            --ignore github.com/alibabacloud-go/cr-20160607 \
+            --ignore github.com/cyberphone/json-canonicalization \
+            --ignore github.com/deitch/magic
 
   audit-docs:
     name: 🔍 Audit Docs Dependencies
