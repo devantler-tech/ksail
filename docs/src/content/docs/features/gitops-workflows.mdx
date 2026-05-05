@@ -58,6 +58,27 @@ The report includes:
 
 Diagnostics are best-effort with a 15-second timeout. If the cluster is unreachable, the section is silently skipped so the original reconciliation error remains prominent.
 
+### Excluding Kustomizations from Reconciliation
+
+Some Kustomizations may be intentionally long-running or should not block reconciliation. You can exclude specific Kustomizations from progress monitoring using either an annotation or a CLI flag.
+
+**Annotation** — add to the Kustomization manifest:
+
+```yaml
+metadata:
+  annotations:
+    ksail.devantler.tech/reconcile-exclude: "true"
+```
+
+**CLI flag** — pass one or more names at the command line (repeatable, comma-separated):
+
+```bash
+ksail workload reconcile --exclude my-kustomization
+ksail workload reconcile --exclude "kust-a, kust-b"
+```
+
+Excluded Kustomizations are skipped during the progress tracking phase. They are still applied to the cluster; they simply do not block `ksail workload reconcile` from completing.
+
 ### Automatic Retry
 
 Both `workload push` and `workload reconcile` automatically retry on transient failures:
