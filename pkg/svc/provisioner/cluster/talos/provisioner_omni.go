@@ -439,27 +439,20 @@ func (p *Provisioner) saveOmniKubeconfig(
 		return fmt.Errorf("failed to rename kubeconfig context: %w", err)
 	}
 
-	expandedPath, expandErr := fsutil.ExpandHomePath(p.options.KubeconfigPath)
+	// Expand tilde in kubeconfig path
+	kubeconfigPath, expandErr := fsutil.ExpandHomePath(p.options.KubeconfigPath)
 	if expandErr != nil {
 		return fmt.Errorf("failed to expand kubeconfig path: %w", expandErr)
 	}
 
-	mkdirErr := os.MkdirAll(filepath.Dir(expandedPath), stateDirectoryPermissions)
-	if mkdirErr != nil {
-		return fmt.Errorf("failed to create kubeconfig directory: %w", mkdirErr)
-	}
-
-	canonicalPath, canonErr := fsutil.EvalCanonicalPath(expandedPath)
-	if canonErr != nil {
-		return fmt.Errorf("failed to canonicalize kubeconfig path: %w", canonErr)
-	}
-
-	mergeErr := k8s.MergeKubeconfig(canonicalPath, kubeconfigData)
+	// Merge into existing kubeconfig to preserve other cluster entries.
+	// MergeKubeconfig handles directory creation and path canonicalization.
+	mergeErr := k8s.MergeKubeconfig(kubeconfigPath, kubeconfigData)
 	if mergeErr != nil {
 		return fmt.Errorf("failed to merge kubeconfig: %w", mergeErr)
 	}
 
-	_, _ = fmt.Fprintf(p.logWriter, "  ✓ Kubeconfig saved to %s\n", canonicalPath)
+	_, _ = fmt.Fprintf(p.logWriter, "  ✓ Kubeconfig saved to %s\n", kubeconfigPath)
 
 	return nil
 }
@@ -476,27 +469,20 @@ func (p *Provisioner) saveOmniTalosconfig(
 		return fmt.Errorf("failed to get talosconfig from Omni: %w", err)
 	}
 
-	expandedPath, expandErr := fsutil.ExpandHomePath(p.options.TalosconfigPath)
+	// Expand tilde in talosconfig path
+	talosconfigPath, expandErr := fsutil.ExpandHomePath(p.options.TalosconfigPath)
 	if expandErr != nil {
 		return fmt.Errorf("failed to expand talosconfig path: %w", expandErr)
 	}
 
-	mkdirErr := os.MkdirAll(filepath.Dir(expandedPath), stateDirectoryPermissions)
-	if mkdirErr != nil {
-		return fmt.Errorf("failed to create talosconfig directory: %w", mkdirErr)
-	}
-
-	canonicalPath, canonErr := fsutil.EvalCanonicalPath(expandedPath)
-	if canonErr != nil {
-		return fmt.Errorf("failed to canonicalize talosconfig path: %w", canonErr)
-	}
-
-	mergeErr := mergeTalosconfigBytes(canonicalPath, talosconfigData)
+	// Merge into existing talosconfig to preserve other cluster contexts.
+	// mergeTalosconfigBytes handles directory creation and path canonicalization.
+	mergeErr := mergeTalosconfigBytes(talosconfigPath, talosconfigData)
 	if mergeErr != nil {
 		return fmt.Errorf("failed to merge talosconfig: %w", mergeErr)
 	}
 
-	_, _ = fmt.Fprintf(p.logWriter, "  ✓ Talosconfig saved to %s\n", canonicalPath)
+	_, _ = fmt.Fprintf(p.logWriter, "  ✓ Talosconfig saved to %s\n", talosconfigPath)
 
 	return nil
 }

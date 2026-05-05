@@ -315,3 +315,8 @@ func (p *Provisioner) WithTalosConfigsForTest(
 
 	return p
 }
+
+// MergeTalosconfigBytesForTest exposes mergeTalosconfigBytes for unit testing.
+func MergeTalosconfigBytesForTest(talosconfigPath string, newData []byte) error {
+	return mergeTalosconfigBytes(talosconfigPath, newData)
+}

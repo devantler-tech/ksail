@@ -56,6 +56,7 @@ func TestMergeKubeconfig(t *testing.T) {
 		name              string
 		existingContent   string
 		newContent        string
+		useNestedDir      bool
 		wantClusters      []string
 		wantContexts      []string
 		wantUsers         []string
@@ -66,6 +67,16 @@ func TestMergeKubeconfig(t *testing.T) {
 			name:            "no existing file creates new",
 			existingContent: "",
 			newContent:      newKubeconfigCluster,
+			wantClusters:    []string{"new-cluster"},
+			wantContexts:    []string{"new-context"},
+			wantUsers:       []string{"new-user"},
+			wantCurrentCtx:  "new-context",
+		},
+		{
+			name:            "creates parent directory if missing",
+			existingContent: "",
+			newContent:      newKubeconfigCluster,
+			useNestedDir:    true,
 			wantClusters:    []string{"new-cluster"},
 			wantContexts:    []string{"new-context"},
 			wantUsers:       []string{"new-user"},
@@ -139,7 +150,13 @@ users:
 			t.Parallel()
 
 			tmpDir := t.TempDir()
-			kubeconfigPath := filepath.Join(tmpDir, "kubeconfig")
+
+			var kubeconfigPath string
+			if tt.useNestedDir {
+				kubeconfigPath = filepath.Join(tmpDir, "nested", "deep", "kubeconfig")
+			} else {
+				kubeconfigPath = filepath.Join(tmpDir, "kubeconfig")
+			}
 
 			if tt.existingContent != "" {
 				require.NoError(t, os.WriteFile(kubeconfigPath, []byte(tt.existingContent), 0o600))

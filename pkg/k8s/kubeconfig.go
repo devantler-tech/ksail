@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	"k8s.io/client-go/tools/clientcmd"
@@ -22,6 +23,10 @@ const kubeconfigDirMode = 0o700
 // by the new data. The current context is set to the new config's current context if
 // it is non-empty.
 //
+// MergeKubeconfig creates the parent directory if it does not exist and canonicalizes
+// the path (resolving symlinks) before reading or writing to prevent symlink-escape
+// attacks.
+//
 // This prevents data loss when multiple clusters share the same kubeconfig file.
 //
 //nolint:cyclop // merging is inherently multi-step
@@ -29,6 +34,21 @@ func MergeKubeconfig(kubeconfigPath string, newKubeconfigData []byte) error {
 	newConfig, err := clientcmd.Load(newKubeconfigData)
 	if err != nil {
 		return fmt.Errorf("failed to parse new kubeconfig: %w", err)
+	}
+
+	// Ensure parent directory exists before canonicalization (EvalCanonicalPath
+	// requires the parent to exist).
+	kubeconfigDir := filepath.Dir(kubeconfigPath)
+	if kubeconfigDir != "" && kubeconfigDir != "." {
+		if mkdirErr := os.MkdirAll(kubeconfigDir, kubeconfigDirMode); mkdirErr != nil {
+			return fmt.Errorf("failed to create kubeconfig directory: %w", mkdirErr)
+		}
+	}
+
+	// Canonicalize the path to prevent writes through symlinks.
+	kubeconfigPath, err = fsutil.EvalCanonicalPath(kubeconfigPath)
+	if err != nil {
+		return fmt.Errorf("failed to canonicalize kubeconfig path: %w", err)
 	}
 
 	existing, err := loadOrCreateKubeconfig(kubeconfigPath)
