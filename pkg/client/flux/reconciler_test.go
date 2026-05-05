@@ -254,6 +254,98 @@ func TestListKustomizations_APIError(t *testing.T) {
 	assert.Contains(t, err.Error(), "simulated API failure")
 }
 
+func TestListKustomizations_ExcludeAnnotation(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		objects      []runtime.Object
+		wantExcluded []bool
+	}{
+		{
+			name: "kustomization with exclude annotation set to true",
+			objects: []runtime.Object{
+				func() *unstructured.Unstructured {
+					kust := newFakeKustomization("excluded", "./excluded", nil, "True", "Succeeded", "ok")
+					kust.SetAnnotations(map[string]string{
+						flux.ReconcileExcludeAnnotation: "true",
+					})
+
+					return kust
+				}(),
+			},
+			wantExcluded: []bool{true},
+		},
+		{
+			name: "kustomization with exclude annotation set to True (case-insensitive)",
+			objects: []runtime.Object{
+				func() *unstructured.Unstructured {
+					kust := newFakeKustomization("excluded", "./excluded", nil, "True", "Succeeded", "ok")
+					kust.SetAnnotations(map[string]string{
+						flux.ReconcileExcludeAnnotation: "True",
+					})
+
+					return kust
+				}(),
+			},
+			wantExcluded: []bool{true},
+		},
+		{
+			name: "kustomization with exclude annotation set to false",
+			objects: []runtime.Object{
+				func() *unstructured.Unstructured {
+					kust := newFakeKustomization("not-excluded", "./path", nil, "True", "Succeeded", "ok")
+					kust.SetAnnotations(map[string]string{
+						flux.ReconcileExcludeAnnotation: "false",
+					})
+
+					return kust
+				}(),
+			},
+			wantExcluded: []bool{false},
+		},
+		{
+			name: "kustomization without exclude annotation",
+			objects: []runtime.Object{
+				newFakeKustomization("normal", "./normal", nil, "True", "Succeeded", "ok"),
+			},
+			wantExcluded: []bool{false},
+		},
+		{
+			name: "mixed kustomizations with and without annotation",
+			objects: []runtime.Object{
+				func() *unstructured.Unstructured {
+					kust := newFakeKustomization("excluded-app", "./apps", nil, "True", "Succeeded", "ok")
+					kust.SetAnnotations(map[string]string{
+						flux.ReconcileExcludeAnnotation: "true",
+					})
+
+					return kust
+				}(),
+				newFakeKustomization("included-infra", "./infra", nil, "True", "Succeeded", "ok"),
+			},
+			wantExcluded: []bool{true, false},
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			r := newTestFluxReconciler(testCase.objects...)
+
+			infos, err := r.ListKustomizations(context.Background())
+			require.NoError(t, err)
+			require.Len(t, infos, len(testCase.wantExcluded))
+
+			for i, info := range infos {
+				assert.Equal(t, testCase.wantExcluded[i], info.Excluded,
+					"kustomization %q: expected Excluded=%v", info.Name, testCase.wantExcluded[i])
+			}
+		})
+	}
+}
+
 // ---------------------------------------------------------------------------
 // CheckNamedKustomizationReady
 // ---------------------------------------------------------------------------
