@@ -411,6 +411,7 @@ func (p *Provisioner) saveOmniConfig(
 // If a desired context name is configured (via Options.KubeconfigContext) or can be
 // derived from the cluster name, the Omni-generated context is renamed to match.
 // This ensures the kubeconfig context name matches spec.cluster.connection.context.
+// The kubeconfig is merged into the existing file to preserve other cluster entries.
 func (p *Provisioner) saveOmniKubeconfig(
 	ctx context.Context,
 	omniProv *omniprovider.Provider,
@@ -438,10 +439,33 @@ func (p *Provisioner) saveOmniKubeconfig(
 		return fmt.Errorf("failed to rename kubeconfig context: %w", err)
 	}
 
-	return p.saveOmniConfig(kubeconfigData, p.options.KubeconfigPath, "Kubeconfig")
+	expandedPath, expandErr := fsutil.ExpandHomePath(p.options.KubeconfigPath)
+	if expandErr != nil {
+		return fmt.Errorf("failed to expand kubeconfig path: %w", expandErr)
+	}
+
+	mkdirErr := os.MkdirAll(filepath.Dir(expandedPath), stateDirectoryPermissions)
+	if mkdirErr != nil {
+		return fmt.Errorf("failed to create kubeconfig directory: %w", mkdirErr)
+	}
+
+	canonicalPath, canonErr := fsutil.EvalCanonicalPath(expandedPath)
+	if canonErr != nil {
+		return fmt.Errorf("failed to canonicalize kubeconfig path: %w", canonErr)
+	}
+
+	mergeErr := k8s.MergeKubeconfig(canonicalPath, kubeconfigData)
+	if mergeErr != nil {
+		return fmt.Errorf("failed to merge kubeconfig: %w", mergeErr)
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "  ✓ Kubeconfig saved to %s\n", canonicalPath)
+
+	return nil
 }
 
 // saveOmniTalosconfig retrieves and saves the talosconfig from Omni.
+// The talosconfig is merged into the existing file to preserve other cluster contexts.
 func (p *Provisioner) saveOmniTalosconfig(
 	ctx context.Context,
 	omniProv *omniprovider.Provider,
@@ -452,7 +476,29 @@ func (p *Provisioner) saveOmniTalosconfig(
 		return fmt.Errorf("failed to get talosconfig from Omni: %w", err)
 	}
 
-	return p.saveOmniConfig(talosconfigData, p.options.TalosconfigPath, "Talosconfig")
+	expandedPath, expandErr := fsutil.ExpandHomePath(p.options.TalosconfigPath)
+	if expandErr != nil {
+		return fmt.Errorf("failed to expand talosconfig path: %w", expandErr)
+	}
+
+	mkdirErr := os.MkdirAll(filepath.Dir(expandedPath), stateDirectoryPermissions)
+	if mkdirErr != nil {
+		return fmt.Errorf("failed to create talosconfig directory: %w", mkdirErr)
+	}
+
+	canonicalPath, canonErr := fsutil.EvalCanonicalPath(expandedPath)
+	if canonErr != nil {
+		return fmt.Errorf("failed to canonicalize talosconfig path: %w", canonErr)
+	}
+
+	mergeErr := mergeTalosconfigBytes(canonicalPath, talosconfigData)
+	if mergeErr != nil {
+		return fmt.Errorf("failed to merge talosconfig: %w", mergeErr)
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "  ✓ Talosconfig saved to %s\n", canonicalPath)
+
+	return nil
 }
 
 // waitForOmniAPIServerReady verifies that the Kubernetes API server is reachable

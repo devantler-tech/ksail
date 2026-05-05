@@ -13,6 +13,96 @@ import (
 // kubeconfigFileMode is the file mode for kubeconfig files.
 const kubeconfigFileMode = 0o600
 
+// kubeconfigDirMode is the directory mode for kubeconfig parent directories.
+const kubeconfigDirMode = 0o700
+
+// MergeKubeconfig merges the cluster, context, and user entries from newKubeconfigData
+// into the existing kubeconfig file at kubeconfigPath. If the file does not exist, it
+// creates it with the new entries. Existing entries with the same keys are overwritten
+// by the new data. The current context is set to the new config's current context if
+// it is non-empty.
+//
+// This prevents data loss when multiple clusters share the same kubeconfig file.
+//
+//nolint:cyclop // merging is inherently multi-step
+func MergeKubeconfig(kubeconfigPath string, newKubeconfigData []byte) error {
+	newConfig, err := clientcmd.Load(newKubeconfigData)
+	if err != nil {
+		return fmt.Errorf("failed to parse new kubeconfig: %w", err)
+	}
+
+	existing, err := loadOrCreateKubeconfig(kubeconfigPath)
+	if err != nil {
+		return fmt.Errorf("failed to load existing kubeconfig: %w", err)
+	}
+
+	// Merge clusters
+	if existing.Clusters == nil {
+		existing.Clusters = make(map[string]*api.Cluster)
+	}
+
+	for name, cluster := range newConfig.Clusters {
+		existing.Clusters[name] = cluster
+	}
+
+	// Merge contexts
+	if existing.Contexts == nil {
+		existing.Contexts = make(map[string]*api.Context)
+	}
+
+	for name, ctx := range newConfig.Contexts {
+		existing.Contexts[name] = ctx
+	}
+
+	// Merge auth infos (users)
+	if existing.AuthInfos == nil {
+		existing.AuthInfos = make(map[string]*api.AuthInfo)
+	}
+
+	for name, authInfo := range newConfig.AuthInfos {
+		existing.AuthInfos[name] = authInfo
+	}
+
+	// Update current context if the new config specifies one
+	if newConfig.CurrentContext != "" {
+		existing.CurrentContext = newConfig.CurrentContext
+	}
+
+	result, err := clientcmd.Write(*existing)
+	if err != nil {
+		return fmt.Errorf("failed to serialize merged kubeconfig: %w", err)
+	}
+
+	err = fsutil.AtomicWriteFile(kubeconfigPath, result, kubeconfigFileMode)
+	if err != nil {
+		return fmt.Errorf("failed to write merged kubeconfig: %w", err)
+	}
+
+	return nil
+}
+
+// loadOrCreateKubeconfig loads the kubeconfig from disk, or returns an empty
+// config if the file does not exist.
+//
+//nolint:gosec // G304: kubeconfigPath is validated by caller
+func loadOrCreateKubeconfig(kubeconfigPath string) (*api.Config, error) {
+	data, err := os.ReadFile(kubeconfigPath)
+	if os.IsNotExist(err) {
+		return api.NewConfig(), nil
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to read kubeconfig: %w", err)
+	}
+
+	config, err := clientcmd.Load(data)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse kubeconfig: %w", err)
+	}
+
+	return config, nil
+}
+
 // CleanupKubeconfig removes the cluster, context, and user entries for a cluster
 // from the kubeconfig file. This only removes entries matching the provided names,
 // leaving other cluster configurations intact.

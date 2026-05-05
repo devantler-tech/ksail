@@ -31,9 +31,6 @@ const (
 	// happens a short while before the token actually expires.
 	expiryBuffer = 5 * time.Minute
 
-	// kubeconfigFileMode is the file mode for kubeconfig files.
-	kubeconfigFileMode = 0o600
-
 	// kubeconfigDirMode is the directory mode used when creating the parent
 	// directory for the kubeconfig on initial fetch (e.g. fresh CI runners).
 	kubeconfigDirMode = 0o700
@@ -290,8 +287,8 @@ func clusterNameFromKubeconfig(kubeconfigPath string) string {
 
 // refreshKubeconfig creates an Omni client and fetches a fresh kubeconfig.
 // The Omni-generated context is renamed to desiredContext so the kubeconfig
-// matches spec.cluster.connection.context. The write is atomic (temp file +
-// rename) to prevent corruption if the process is interrupted.
+// matches spec.cluster.connection.context. The new entries are merged into
+// the existing kubeconfig to preserve other cluster configurations.
 func refreshKubeconfig(
 	ctx context.Context,
 	omniOpts v1alpha1.OptionsOmni,
@@ -323,9 +320,9 @@ func refreshKubeconfig(
 		}
 	}
 
-	writeErr := fsutil.AtomicWriteFile(kubeconfigPath, data, kubeconfigFileMode)
-	if writeErr != nil {
-		return fmt.Errorf("write kubeconfig: %w", writeErr)
+	mergeErr := k8s.MergeKubeconfig(kubeconfigPath, data)
+	if mergeErr != nil {
+		return fmt.Errorf("merge kubeconfig: %w", mergeErr)
 	}
 
 	return nil

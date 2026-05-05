@@ -18,8 +18,9 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
-// writeKubeconfig writes the raw kubeconfig bytes to the configured kubeconfig path.
-// It expands tilde in the path, ensures the directory exists, and writes the file.
+// writeKubeconfig merges the raw kubeconfig bytes into the existing kubeconfig file
+// at the configured path. It expands tilde in the path, ensures the directory exists,
+// and merges new entries into the existing file to preserve other cluster configurations.
 func (p *Provisioner) writeKubeconfig(kubeconfig []byte) error {
 	// Expand tilde in kubeconfig path (e.g., ~/.kube/config -> /home/user/.kube/config)
 	kubeconfigPath, err := fsutil.ExpandHomePath(p.options.KubeconfigPath)
@@ -42,10 +43,10 @@ func (p *Provisioner) writeKubeconfig(kubeconfig []byte) error {
 		return fmt.Errorf("failed to canonicalize kubeconfig path: %w", err)
 	}
 
-	// Write kubeconfig to file
-	err = os.WriteFile(kubeconfigPath, kubeconfig, kubeconfigFileMode)
+	// Merge into existing kubeconfig to preserve other cluster entries
+	err = k8s.MergeKubeconfig(kubeconfigPath, kubeconfig)
 	if err != nil {
-		return fmt.Errorf("failed to write kubeconfig: %w", err)
+		return fmt.Errorf("failed to merge kubeconfig: %w", err)
 	}
 
 	_, _ = fmt.Fprintf(p.logWriter, "Kubeconfig saved to %s\n", kubeconfigPath)
@@ -53,7 +54,8 @@ func (p *Provisioner) writeKubeconfig(kubeconfig []byte) error {
 	return nil
 }
 
-// saveTalosconfig saves the talosconfig for any cluster type.
+// saveTalosconfig merges the new talosconfig context into the existing talosconfig file.
+// If the file does not exist, it creates it with the new context.
 func (p *Provisioner) saveTalosconfig(configBundle *bundle.Bundle) error {
 	// Expand tilde in talosconfig path
 	talosconfigPath, err := fsutil.ExpandHomePath(p.options.TalosconfigPath)
@@ -70,15 +72,63 @@ func (p *Provisioner) saveTalosconfig(configBundle *bundle.Bundle) error {
 		}
 	}
 
-	// Save the talosconfig
-	saveErr := configBundle.TalosConfig().Save(talosconfigPath)
+	newConfig := configBundle.TalosConfig()
+
+	// Try to load existing talosconfig; if it doesn't exist, save directly
+	existing, openErr := clientconfig.Open(talosconfigPath)
+	if openErr != nil {
+		if os.IsNotExist(openErr) {
+			saveErr := newConfig.Save(talosconfigPath)
+			if saveErr != nil {
+				return fmt.Errorf("failed to save talosconfig: %w", saveErr)
+			}
+
+			_, _ = fmt.Fprintf(p.logWriter, "Talosconfig saved to %s\n", talosconfigPath)
+
+			return nil
+		}
+
+		return fmt.Errorf("failed to open existing talosconfig: %w", openErr)
+	}
+
+	// Merge new contexts into existing config (overwrites same-named contexts)
+	existing.Merge(newConfig)
+
+	saveErr := existing.Save(talosconfigPath)
 	if saveErr != nil {
-		return fmt.Errorf("failed to save talosconfig: %w", saveErr)
+		return fmt.Errorf("failed to save merged talosconfig: %w", saveErr)
 	}
 
 	_, _ = fmt.Fprintf(p.logWriter, "Talosconfig saved to %s\n", talosconfigPath)
 
 	return nil
+}
+
+// mergeTalosconfigBytes merges raw talosconfig bytes into an existing talosconfig file.
+// If the file does not exist, it creates it with the new content.
+// This is used by Omni paths that receive talosconfig as raw bytes.
+func mergeTalosconfigBytes(talosconfigPath string, newData []byte) error {
+	// Parse the new talosconfig data
+	newConfig, err := clientconfig.FromBytes(newData)
+	if err != nil {
+		return fmt.Errorf("failed to parse new talosconfig: %w", err)
+	}
+
+	// Try to load existing talosconfig
+	existing, openErr := clientconfig.Open(talosconfigPath)
+	if openErr != nil {
+		if os.IsNotExist(openErr) {
+			// No existing file; save the new config directly
+			return newConfig.Save(talosconfigPath)
+		}
+
+		return fmt.Errorf("failed to open existing talosconfig: %w", openErr)
+	}
+
+	// Merge new contexts into existing config
+	existing.Merge(newConfig)
+
+	return existing.Save(talosconfigPath)
 }
 
 // rewriteKubeconfigEndpoint rewrites all cluster server endpoints in the kubeconfig
