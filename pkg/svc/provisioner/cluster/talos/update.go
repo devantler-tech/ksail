@@ -867,9 +867,8 @@ func (p *Provisioner) syncHetznerFirewallRules(
 // ensureAutoscalerSecretIfNeeded creates or updates the cluster-autoscaler-config
 // Secret when the node autoscaler is enabled on Hetzner. It is a no-op when
 // autoscaling is disabled, the provider is not Hetzner, or the config bundle
-// is unavailable. Snapshot image lookup errors are propagated because they
-// indicate a misconfigured cluster. This mirrors the create-time call in
-// bootstrapAndFinalize.
+// is unavailable. Returns ErrAutoscalerRequiresSchematic early when no
+// schematic is configured, before performing any side effects.
 func (p *Provisioner) ensureAutoscalerSecretIfNeeded(
 	ctx context.Context,
 	clusterName string,
@@ -883,6 +882,13 @@ func (p *Provisioner) ensureAutoscalerSecretIfNeeded(
 		return nil
 	}
 
+	// Fail fast: check that a schematic is available before performing
+	// side effects (creating secrets, uploading snapshots). The autoscaler
+	// requires a snapshot image to provision new nodes.
+	if !p.hasSchematicConfigured() {
+		return ErrAutoscalerRequiresSchematic
+	}
+
 	// Ensure the hcloud secret (token + network) exists. The autoscaler Helm
 	// chart references this secret for HCLOUD_TOKEN and HCLOUD_NETWORK.
 	if err := p.ensureHcloudSecret(ctx, clusterName); err != nil {
@@ -894,9 +900,24 @@ func (p *Provisioner) ensureAutoscalerSecretIfNeeded(
 		return fmt.Errorf("looking up snapshot image for autoscaler secret: %w", err)
 	}
 
-	if snapshotImageID <= 0 {
-		return ErrAutoscalerRequiresSchematic
+	return p.ensureAutoscalerSecret(ctx, configBundle, snapshotImageID)
+}
+
+// hasSchematicConfigured reports whether a Talos schematic ID is available
+// (either explicit or auto-computed from extensions).
+func (p *Provisioner) hasSchematicConfigured() bool {
+	if p.talosOpts == nil {
+		return false
 	}
 
-	return p.ensureAutoscalerSecret(ctx, configBundle, snapshotImageID)
+	schematicID := strings.TrimSpace(p.talosOpts.SchematicID)
+	if schematicID != "" {
+		return true
+	}
+
+	if p.talosConfigs != nil {
+		schematicID = p.talosConfigs.SchematicID()
+	}
+
+	return schematicID != ""
 }

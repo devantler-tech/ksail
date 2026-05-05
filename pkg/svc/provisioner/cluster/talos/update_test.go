@@ -605,7 +605,8 @@ func TestNeedsSecretSync_AutoscalerDisabledNoSync(t *testing.T) {
 
 // TestEnsureAutoscalerSecretIfNeeded_ErrorWhenHcloudTokenNotSet verifies that
 // ensureAutoscalerSecretIfNeeded returns ErrHcloudTokenNotSet when the autoscaler
-// is enabled, a valid config bundle exists, but the HCLOUD_TOKEN env var is unset.
+// is enabled, a valid config bundle exists, a schematic is configured, but the
+// HCLOUD_TOKEN env var is unset.
 // This test mutates environment variables and cannot run in parallel.
 func TestEnsureAutoscalerSecretIfNeeded_ErrorWhenHcloudTokenNotSet(t *testing.T) {
 	// Unset the token env var to trigger the error path.
@@ -618,6 +619,9 @@ func TestEnsureAutoscalerSecretIfNeeded_ErrorWhenHcloudTokenNotSet(t *testing.T)
 		WithHetznerOptions(v1alpha1.OptionsHetzner{
 			NodeAutoscalerEnabled: true,
 		}).
+		WithTalosOptsForTest(&v1alpha1.OptionsTalos{
+			SchematicID: "test-schematic-id",
+		}).
 		WithTalosConfigsForTest(configs).
 		WithLogWriter(io.Discard)
 
@@ -627,4 +631,29 @@ func TestEnsureAutoscalerSecretIfNeeded_ErrorWhenHcloudTokenNotSet(t *testing.T)
 	)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, talosprovisioner.ErrHcloudTokenNotSet)
+}
+
+// TestEnsureAutoscalerSecretIfNeeded_ErrorWhenNoSchematic verifies that
+// ensureAutoscalerSecretIfNeeded returns ErrAutoscalerRequiresSchematic when
+// the autoscaler is enabled but no schematic ID or extensions are configured.
+func TestEnsureAutoscalerSecretIfNeeded_ErrorWhenNoSchematic(t *testing.T) {
+	t.Parallel()
+
+	configs, err := talosconfigmanager.NewDefaultConfigs()
+	require.NoError(t, err)
+
+	provisioner := talosprovisioner.NewProvisioner(nil, nil).
+		WithHetznerOptions(v1alpha1.OptionsHetzner{
+			NodeAutoscalerEnabled: true,
+		}).
+		WithTalosOptsForTest(&v1alpha1.OptionsTalos{}).
+		WithTalosConfigsForTest(configs).
+		WithLogWriter(io.Discard)
+
+	err = provisioner.EnsureAutoscalerSecretIfNeededForTest(
+		context.Background(),
+		"test-cluster",
+	)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, talosprovisioner.ErrAutoscalerRequiresSchematic)
 }

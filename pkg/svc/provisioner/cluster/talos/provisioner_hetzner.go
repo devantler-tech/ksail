@@ -369,9 +369,13 @@ func (p *Provisioner) ensureAutoscalerSecret(
 
 	_, _ = fmt.Fprintf(p.logWriter, "Applying cluster-autoscaler config secret...\n")
 
-	kubeconfigPath, err := fsutil.ExpandHomePath(p.options.KubeconfigPath)
+	if p.options.KubeconfigPath == "" {
+		return fmt.Errorf("creating kubeclient for autoscaler secret: %w", k8s.ErrKubeconfigPathEmpty)
+	}
+
+	kubeconfigPath, err := fsutil.EvalCanonicalPath(p.options.KubeconfigPath)
 	if err != nil {
-		return fmt.Errorf("expanding kubeconfig path for autoscaler secret: %w", err)
+		return fmt.Errorf("canonicalizing kubeconfig path for autoscaler secret: %w", err)
 	}
 
 	kubeclient, err := k8s.NewClientset(kubeconfigPath, "")
