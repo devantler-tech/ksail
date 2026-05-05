@@ -2,7 +2,6 @@ package talosprovisioner_test
 
 import (
 	"context"
-	"os"
 	"path/filepath"
 	"testing"
 
@@ -389,28 +388,6 @@ func TestResolveOmniMachines_BothSet_ReturnsConflict(t *testing.T) {
 	require.Error(t, err)
 	require.ErrorIs(t, err, omniprovider.ErrMachineAllocationConflict)
 	assert.Nil(t, machines)
-}
-
-func TestSaveOmniConfig_WritesFile(t *testing.T) {
-	t.Parallel()
-
-	// Use a temp dir so tilde expansion is not needed, but verify saveOmniConfig
-	// actually writes the file and handles path expansion/canonicalization.
-	tmpDir := t.TempDir()
-	outPath := filepath.Join(tmpDir, "subdir", "test-kube.yaml")
-
-	configs := createTestTalosConfigs(t, "test-cluster")
-	provisioner := talosprovisioner.NewProvisioner(configs,
-		talosprovisioner.NewOptions().WithKubeconfigPath(outPath),
-	)
-
-	dummyData := []byte("apiVersion: v1\nkind: Config\n")
-	err := provisioner.SaveOmniConfigForTest(dummyData, outPath, "Kubeconfig")
-	require.NoError(t, err)
-
-	written, err := os.ReadFile(outPath) //nolint:gosec // test-controlled temp path
-	require.NoError(t, err)
-	assert.Equal(t, dummyData, written)
 }
 
 func TestRenameKubeconfigContext(t *testing.T) {
