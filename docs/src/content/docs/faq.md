@@ -190,6 +190,28 @@ KSail includes **SOPS** for secret encryption via `ksail cipher <file>` (age, PG
 
 KSail expands `${VAR}` syntax at runtime; credentials are never stored in config files. Example: `ksail cluster init --local-registry 'user:${REGISTRY_TOKEN}@registry.example.com'` (set `REGISTRY_TOKEN` before running).
 
+## Licensing
+
+### Why is KSail licensed under PolyForm Shield 1.0.0?
+
+KSail was relicensed from Apache-2.0 (via GPL-3.0-only in [#4543](https://github.com/devantler-tech/ksail/pull/4543)) to [PolyForm Shield 1.0.0](https://polyformproject.org/licenses/shield/1.0.0) in [#4603](https://github.com/devantler-tech/ksail/pull/4603) (May 2026). The PolyForm Shield license allows anyone to use, modify, and distribute KSail for any purpose — except providing a competing product. This protects the project from commercial exploitation while keeping the code freely available for all other use cases.
+
+### Is KSail open source?
+
+KSail is **source-available**, not open source by the [OSI definition](https://opensource.org/osd). The non-compete clause disqualifies it from OSI approval. In practice, the difference only matters if you intend to build a competing product — for all other use cases (CLI tool, library, internal tooling, learning, forking), KSail works exactly like an open-source project.
+
+### Can I use KSail in my proprietary project?
+
+**Yes.** PolyForm Shield does not impose copyleft requirements — your project can use any license. You can use KSail as a CLI tool, embed it as a Go library, or incorporate its code into your own projects. If you redistribute KSail or derivatives, you must include the [license terms](https://polyformproject.org/licenses/shield/1.0.0) and required copyright notice, and the non-compete restriction still applies.
+
+### What counts as "competing"?
+
+The [PolyForm Shield license](https://polyformproject.org/licenses/shield/1.0.0) defines competition broadly: goods and services compete even across different interfaces, platforms, or programming languages, and even when provided free of charge. If you market a product as a practical substitute for KSail, it competes.
+
+### How does the license affect contributors?
+
+By submitting a pull request, you agree that your contribution is licensed under PolyForm Shield 1.0.0. Any third-party code included in contributions must be compatible with this license. See [CONTRIBUTING.md](https://github.com/devantler-tech/ksail/blob/main/CONTRIBUTING.md) for details.
+
 ## Troubleshooting
 
 For common solutions, see the [Troubleshooting Guide](/troubleshooting/). To clean up all cluster and Docker resources, run `ksail cluster delete && docker system prune`. For help, visit [GitHub Discussions](https://github.com/devantler-tech/ksail/discussions) or [GitHub Issues](https://github.com/devantler-tech/ksail/issues).

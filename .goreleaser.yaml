@@ -68,7 +68,7 @@ dockers_v2:
       "org.opencontainers.image.revision": "{{.FullCommit}}"
       "org.opencontainers.image.version": "{{.Version}}"
       "org.opencontainers.image.source": "{{.GitURL}}"
-      "org.opencontainers.image.licenses": "GPL-3.0-only"
+      "org.opencontainers.image.licenses": "PolyForm-Shield-1.0.0"
 
 changelog:
   sort: asc

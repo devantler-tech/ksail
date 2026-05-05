@@ -2,6 +2,14 @@
 
 This project accepts contributions in the form of [**bug reports**](https://github.com/devantler-tech/ksail/issues/new/choose), [**feature requests**](https://github.com/devantler-tech/ksail/issues/new/choose), and **pull requests** (see below). If you are looking to contribute code, please follow the guidelines outlined in this document.
 
+## License
+
+KSail is licensed under the **[PolyForm Shield License 1.0.0](LICENSE)**. By submitting a pull request, you agree that your contributions will be licensed under the same terms. This means:
+
+- Your contributed code is licensed under PolyForm Shield 1.0.0 — anyone may use it except to compete with KSail
+- You must have the right to submit the code under this license
+- If your contribution includes third-party code, it must be compatible with PolyForm Shield 1.0.0
+
 ## Your First Contribution
 
 New to KSail? Welcome! Here's how to get started:
@@ -260,7 +268,7 @@ KSail separates infrastructure management from distribution configuration:
 | `Talos`      | TalosProvisioner       | Talos | Docker, Hetzner, Omni | Immutable Talos Linux                          |
 | `VCluster`   | VClusterProvisioner    | Vind  | Docker                | Virtual clusters via vCluster (Vind) in Docker |
 
-This project strives to be fully open-source friendly. All core functionality is implemented in the `pkg/` directory so external projects can import and use any package under `pkg/`. The `internal/` directory is intentionally minimal — it holds only `internal/buildmeta`, which carries build-time version metadata injected via ldflags (not useful to external consumers).
+KSail's code is publicly available and reusable. All core functionality is implemented in the `pkg/` directory so external projects can import and use any package under `pkg/`. The `internal/` directory is intentionally minimal — it holds only `internal/buildmeta`, which carries build-time version metadata injected via ldflags (not useful to external consumers).
 
 For detailed package and API documentation, refer to [pkg.go.dev/github.com/devantler-tech/ksail/v7](https://pkg.go.dev/github.com/devantler-tech/ksail/v7).
 
