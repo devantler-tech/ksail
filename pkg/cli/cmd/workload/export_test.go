@@ -253,6 +253,14 @@ func ExportPollUntilKustomizationReady(
 	return pollUntilKustomizationReady(ctx, fluxReconciler, name, dependsOn, failed)
 }
 
+// ExportIsKustomizationExcluded exposes isKustomizationExcluded for testing.
+func ExportIsKustomizationExcluded(
+	kustomization flux.KustomizationInfo,
+	excludeSet map[string]bool,
+) bool {
+	return isKustomizationExcluded(kustomization, excludeSet)
+}
+
 // ExportRetryOnTransientError exposes retryOnTransientError for unit testing.
 func ExportRetryOnTransientError(
 	ctx context.Context,

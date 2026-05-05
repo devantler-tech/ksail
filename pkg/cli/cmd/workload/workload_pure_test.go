@@ -13,6 +13,7 @@ import (
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/workload"
+	"github.com/devantler-tech/ksail/v7/pkg/client/flux"
 	dockerprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/docker"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
@@ -1059,6 +1060,70 @@ func TestRunWatchEarlyPathValidation(t *testing.T) {
 
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), testCase.wantErrStr)
+		})
+	}
+}
+
+// ===========================================================================
+// isKustomizationExcluded — annotation and flag exclusion logic
+// ===========================================================================
+
+func TestIsKustomizationExcluded(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		kustomization flux.KustomizationInfo
+		excludeSet    map[string]bool
+		want          bool
+	}{
+		{
+			name:          "not excluded when annotation false and not in set",
+			kustomization: flux.KustomizationInfo{Name: "app", Excluded: false},
+			excludeSet:    map[string]bool{},
+			want:          false,
+		},
+		{
+			name:          "excluded via annotation",
+			kustomization: flux.KustomizationInfo{Name: "app", Excluded: true},
+			excludeSet:    map[string]bool{},
+			want:          true,
+		},
+		{
+			name:          "excluded via CLI flag",
+			kustomization: flux.KustomizationInfo{Name: "app", Excluded: false},
+			excludeSet:    map[string]bool{"app": true},
+			want:          true,
+		},
+		{
+			name:          "excluded via both annotation and flag",
+			kustomization: flux.KustomizationInfo{Name: "app", Excluded: true},
+			excludeSet:    map[string]bool{"app": true},
+			want:          true,
+		},
+		{
+			name:          "not excluded when flag targets different name",
+			kustomization: flux.KustomizationInfo{Name: "app", Excluded: false},
+			excludeSet:    map[string]bool{"other": true},
+			want:          false,
+		},
+		{
+			name:          "nil exclude set does not panic",
+			kustomization: flux.KustomizationInfo{Name: "app", Excluded: false},
+			excludeSet:    nil,
+			want:          false,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := workload.ExportIsKustomizationExcluded(
+				testCase.kustomization,
+				testCase.excludeSet,
+			)
+			assert.Equal(t, testCase.want, got)
 		})
 	}
 }

@@ -42,6 +42,13 @@ const (
 	apiDiscoveryNoMatchesKindSubstr = "no matches for kind"
 )
 
+// ReconcileExcludeAnnotation is the KSail annotation key that, when set to
+// "true" on a Flux Kustomization CR, excludes that kustomization from
+// KSail's progress monitoring and readiness polling during
+// `ksail workload reconcile`. Flux still reconciles the resource; only
+// KSail's waiting phase is skipped.
+const ReconcileExcludeAnnotation = "ksail.devantler.tech/reconcile-exclude"
+
 // Reconciler constants.
 const (
 	rootKustomizationName     = "flux-system"
@@ -190,6 +197,9 @@ type KustomizationInfo struct {
 	Name      string
 	Path      string
 	DependsOn []string
+	// Excluded is true when the kustomization carries the
+	// ReconcileExcludeAnnotation set to "true".
+	Excluded bool
 }
 
 // ListKustomizations lists all Flux Kustomization CRs in the default
@@ -210,8 +220,17 @@ func (r *Reconciler) ListKustomizations(
 		name := list.Items[i].GetName()
 		path, _, _ := unstructured.NestedString(list.Items[i].Object, "spec", "path")
 		dependsOn := parseDependsOn(&list.Items[i])
+		excluded := strings.EqualFold(
+			strings.TrimSpace(list.Items[i].GetAnnotations()[ReconcileExcludeAnnotation]),
+			"true",
+		)
 
-		infos = append(infos, KustomizationInfo{Name: name, Path: path, DependsOn: dependsOn})
+		infos = append(infos, KustomizationInfo{
+			Name:      name,
+			Path:      path,
+			DependsOn: dependsOn,
+			Excluded:  excluded,
+		})
 	}
 
 	return infos, nil

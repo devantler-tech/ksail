@@ -254,6 +254,113 @@ func TestListKustomizations_APIError(t *testing.T) {
 	assert.Contains(t, err.Error(), "simulated API failure")
 }
 
+// newAnnotatedKust is a test helper that creates a fake Kustomization with
+// the ReconcileExcludeAnnotation set to the given value.
+func newAnnotatedKust(name, path, annotationValue string) *unstructured.Unstructured {
+	kust := newFakeKustomization(name, path, nil, "True", "Succeeded", "ok")
+	kust.SetAnnotations(map[string]string{
+		flux.ReconcileExcludeAnnotation: annotationValue,
+	})
+
+	return kust
+}
+
+func assertKustomizationExcludedFlags(
+	t *testing.T,
+	r *flux.Reconciler,
+	wantByName map[string]bool,
+) {
+	t.Helper()
+
+	infos, err := r.ListKustomizations(context.Background())
+	require.NoError(t, err)
+	require.Len(t, infos, len(wantByName))
+
+	for _, info := range infos {
+		expected, ok := wantByName[info.Name]
+		require.True(t, ok, "unexpected kustomization %q", info.Name)
+		assert.Equal(t, expected, info.Excluded,
+			"kustomization %q: expected Excluded=%v", info.Name, expected)
+	}
+}
+
+func TestListKustomizations_ExcludeAnnotation_True(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		objects      []runtime.Object
+		wantExcluded map[string]bool
+	}{
+		{
+			name:         "kustomization with exclude annotation set to true",
+			objects:      []runtime.Object{newAnnotatedKust("excluded", "./excluded", "true")},
+			wantExcluded: map[string]bool{"excluded": true},
+		},
+		{
+			name:         "kustomization with exclude annotation set to True (case-insensitive)",
+			objects:      []runtime.Object{newAnnotatedKust("excluded", "./excluded", "True")},
+			wantExcluded: map[string]bool{"excluded": true},
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			assertKustomizationExcludedFlags(
+				t,
+				newTestFluxReconciler(testCase.objects...),
+				testCase.wantExcluded,
+			)
+		})
+	}
+}
+
+func TestListKustomizations_ExcludeAnnotation_FalseOrAbsent(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		objects      []runtime.Object
+		wantExcluded map[string]bool
+	}{
+		{
+			name:         "kustomization with exclude annotation set to false",
+			objects:      []runtime.Object{newAnnotatedKust("not-excluded", "./path", "false")},
+			wantExcluded: map[string]bool{"not-excluded": false},
+		},
+		{
+			name: "kustomization without exclude annotation",
+			objects: []runtime.Object{
+				newFakeKustomization("normal", "./normal", nil, "True", "Succeeded", "ok"),
+			},
+			wantExcluded: map[string]bool{"normal": false},
+		},
+		{
+			name: "mixed kustomizations with and without annotation",
+			objects: []runtime.Object{
+				newAnnotatedKust("excluded-app", "./apps", "true"),
+				newFakeKustomization("included-infra", "./infra", nil, "True", "Succeeded", "ok"),
+			},
+			wantExcluded: map[string]bool{
+				"excluded-app":   true,
+				"included-infra": false,
+			},
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			assertKustomizationExcludedFlags(
+				t,
+				newTestFluxReconciler(testCase.objects...),
+				testCase.wantExcluded,
+			)
+		})
+	}
+}
+
 // ---------------------------------------------------------------------------
 // CheckNamedKustomizationReady
 // ---------------------------------------------------------------------------

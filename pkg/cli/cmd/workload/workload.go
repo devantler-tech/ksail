@@ -2089,6 +2089,12 @@ func NewReconcileCmd(_ *di.Runtime) *cobra.Command {
 		"timeout for waiting for reconciliation to complete (overrides config timeout)",
 	)
 
+	cmd.Flags().StringSlice(
+		"exclude",
+		nil,
+		"kustomization names to skip during progress monitoring (repeatable, comma-separated)",
+	)
+
 	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
 		return runReconcile(cmd)
 	}
@@ -2469,21 +2475,18 @@ func reconcileFluxKustomizationsWithProgress(
 		return nil
 	}
 
+	excludeSet, err := buildExcludeSet(cmd)
+	if err != nil {
+		return err
+	}
+
 	sorted := topologicalSortKustomizations(kustomizations)
 
 	var failed failedKustomizations
 
-	tasks := make([]notify.ProgressTask, 0, len(sorted))
-	for _, kustomization := range sorted {
-		name := kustomization.Name
-		deps := kustomization.DependsOn
-
-		tasks = append(tasks, notify.ProgressTask{
-			Name: name,
-			Fn: func(ctx context.Context) error {
-				return pollUntilKustomizationReady(ctx, fluxReconciler, name, deps, &failed)
-			},
-		})
+	tasks := buildKustomizationTasks(sorted, excludeSet, fluxReconciler, &failed)
+	if len(tasks) == 0 {
+		return nil
 	}
 
 	ksGroup := notify.NewProgressGroup(
@@ -2504,6 +2507,64 @@ func reconcileFluxKustomizationsWithProgress(
 	}
 
 	return nil
+}
+
+// buildExcludeSet reads the --exclude flag and returns a set of trimmed,
+// non-empty kustomization names that should be skipped during reconciliation.
+func buildExcludeSet(cmd *cobra.Command) (map[string]bool, error) {
+	excludeNames, err := cmd.Flags().GetStringSlice("exclude")
+	if err != nil {
+		return nil, fmt.Errorf("get exclude flag: %w", err)
+	}
+
+	excludeSet := make(map[string]bool, len(excludeNames))
+	for _, name := range excludeNames {
+		if trimmed := strings.TrimSpace(name); trimmed != "" {
+			excludeSet[trimmed] = true
+		}
+	}
+
+	return excludeSet, nil
+}
+
+// buildKustomizationTasks creates a progress task for each kustomization that
+// is not excluded, capturing the name and dependency slice per iteration to
+// avoid the classic loop-variable closure bug.
+func buildKustomizationTasks(
+	sorted []flux.KustomizationInfo,
+	excludeSet map[string]bool,
+	fluxReconciler *flux.Reconciler,
+	failed *failedKustomizations,
+) []notify.ProgressTask {
+	tasks := make([]notify.ProgressTask, 0, len(sorted))
+	for _, kustomization := range sorted {
+		if isKustomizationExcluded(kustomization, excludeSet) {
+			continue
+		}
+
+		name := kustomization.Name
+		deps := kustomization.DependsOn
+
+		tasks = append(tasks, notify.ProgressTask{
+			Name: name,
+			Fn: func(ctx context.Context) error {
+				return pollUntilKustomizationReady(ctx, fluxReconciler, name, deps, failed)
+			},
+		})
+	}
+
+	return tasks
+}
+
+// isKustomizationExcluded returns true if the kustomization should be excluded
+// from KSail's progress monitoring and readiness polling, either via the
+// ReconcileExcludeAnnotation on the CR or via the --exclude CLI flag.
+// Flux still reconciles the resource; only KSail's waiting phase is skipped.
+func isKustomizationExcluded(
+	kustomization flux.KustomizationInfo,
+	excludeSet map[string]bool,
+) bool {
+	return kustomization.Excluded || excludeSet[kustomization.Name]
 }
 
 // pollUntilKustomizationReady polls a named Flux Kustomization until it is
