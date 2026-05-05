@@ -513,7 +513,12 @@ func (p *Provisioner) syncSecretsFromCluster(
 
 	p.talosConfigs = rebuilt
 
-	_, _ = fmt.Fprintf(p.logWriter, "  ✓ Synced cluster secrets and endpoint (%s) from %s\n", endpointIP, cpIP)
+	_, _ = fmt.Fprintf(
+		p.logWriter,
+		"  ✓ Synced cluster secrets and endpoint (%s) from %s\n",
+		endpointIP,
+		cpIP,
+	)
 
 	return nil
 }
