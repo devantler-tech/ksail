@@ -610,7 +610,7 @@ func TestNeedsSecretSync_AutoscalerDisabledNoSync(t *testing.T) {
 // This test mutates environment variables and cannot run in parallel.
 func TestEnsureAutoscalerSecretIfNeeded_ErrorWhenHcloudTokenNotSet(t *testing.T) {
 	// Unset the token env var to trigger the error path.
-	t.Setenv("HCLOUD_TOKEN", "")
+	t.Setenv(v1alpha1.DefaultHetznerTokenEnvVar, "")
 
 	configs, err := talosconfigmanager.NewDefaultConfigs()
 	require.NoError(t, err)

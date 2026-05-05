@@ -441,10 +441,12 @@ func (p *Provisioner) applyRebootChangesIfNeeded(
 	return p.applyRebootRequiredChanges(ctx, clusterName, result, opts)
 }
 
-// needsSecretSync returns true when the update will push machine configs to
-// nodes and therefore needs the in-memory configs to match the running
-// cluster's PKI. This avoids unnecessary Talos API calls for no-op updates
-// or operations that don't touch machine configs (e.g., pure scale-down).
+// needsSecretSync returns true when the update requires the in-memory configs
+// to match the running cluster's PKI. This is needed when pushing machine
+// configs to nodes (scale-up, in-place, reboot) or when generating the
+// autoscaler config secret (which embeds a worker config derived from the
+// bundle). This avoids unnecessary Talos API calls for no-op updates or
+// operations that don't touch machine configs (e.g., pure scale-down).
 func (p *Provisioner) needsSecretSync(
 	oldSpec, newSpec *v1alpha1.ClusterSpec,
 	diff *clusterupdate.UpdateResult,

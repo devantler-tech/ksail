@@ -553,6 +553,9 @@ jobs:
 
       - name: 🔍 Check dependency licenses
         run: |
+          # --ignore flags below exclude transitive dependencies whose licenses
+          # exist at the repository root but are not discoverable by go-licenses
+          # at the sub-package level (false-positive "license not found" errors).
           go-licenses check ./... \
             --disallowed_types=forbidden \
             --ignore github.com/devantler-tech/ksail/v7 \
