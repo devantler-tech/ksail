@@ -83,7 +83,7 @@ func (p *Provisioner) saveTalosconfig(configBundle *bundle.Bundle) error {
 		return fmt.Errorf("failed to open existing talosconfig: %w", openErr)
 	}
 
-	// Merge new contexts into existing config (overwrites same-named contexts)
+	// Merge new contexts into existing config (renames colliding contexts with -N suffix)
 	existing.Merge(newConfig)
 
 	saveErr := existing.Save(talosconfigPath)
