@@ -44,6 +44,27 @@ inputs:
   validate:
     description: "Whether to validate manifests before cluster creation"
     default: "false"
+  scan:
+    description: "Whether to run ksail workload scan after validation"
+    default: "false"
+  scan-framework:
+    description: "Comma-separated security frameworks to scan against (e.g. 'nsa,mitre'). Supports any framework known to Kubescape."
+    default: "nsa"
+  scan-compliance-threshold:
+    description: "Fail if the compliance score is below this threshold (0–100)"
+    default: "0"
+  scan-format:
+    description: "Scan output format (pretty-printer, json, sarif, junit). Use sarif with scan-output to enable GitHub Code Scanning upload."
+    default: "pretty-printer"
+  scan-output:
+    description: "File path to write scan results to. Defaults to stdout when empty."
+    default: ""
+  scan-path:
+    description: "Path to scan. When empty, ksail resolves the path from spec.workload.sourceDirectory in ksail.yaml (or 'k8s/' by default)."
+    default: ""
+  scan-verbose:
+    description: "Show all scanned resources in output, not just failed ones"
+    default: "false"
   delete:
     description: "Whether to delete the cluster at the end (runs even on failure)"
     default: "false"
@@ -288,6 +309,30 @@ runs:
       env:
         CONFIG: ${{ inputs.config }}
       run: ksail ${CONFIG:+--config "$CONFIG"} workload validate
+
+    - name: 🔍 Scan manifests
+      if: inputs.scan == 'true'
+      shell: bash
+      env:
+        CONFIG: ${{ inputs.config }}
+        SCAN_FRAMEWORK: ${{ inputs.scan-framework }}
+        SCAN_THRESHOLD: ${{ inputs.scan-compliance-threshold }}
+        SCAN_FORMAT: ${{ inputs.scan-format }}
+        SCAN_OUTPUT: ${{ inputs.scan-output }}
+        SCAN_PATH: ${{ inputs.scan-path }}
+        SCAN_VERBOSE: ${{ inputs.scan-verbose }}
+      run: |
+        set -euo pipefail
+        cmd_args=()
+        [[ -n "$CONFIG" ]] && cmd_args+=(--config "$CONFIG")
+        cmd_args+=(workload scan)
+        [[ -n "$SCAN_PATH" ]] && cmd_args+=("$SCAN_PATH")
+        cmd_args+=(--framework "$SCAN_FRAMEWORK")
+        cmd_args+=(--compliance-threshold "$SCAN_THRESHOLD")
+        cmd_args+=(--format "$SCAN_FORMAT")
+        [[ -n "$SCAN_OUTPUT" ]] && cmd_args+=(--output "$SCAN_OUTPUT")
+        [[ "$SCAN_VERBOSE" == "true" ]] && cmd_args+=(--verbose)
+        ksail "${cmd_args[@]}"
 
     - name: 🚀 Create Cluster
       id: create
