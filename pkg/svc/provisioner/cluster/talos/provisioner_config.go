@@ -127,7 +127,11 @@ func mergeTalosconfigBytes(talosconfigPath string, newData []byte) error {
 	if openErr != nil {
 		if os.IsNotExist(openErr) {
 			// No existing file; save the new config directly
-			return newConfig.Save(talosconfigPath)
+			if saveErr := newConfig.Save(talosconfigPath); saveErr != nil {
+				return fmt.Errorf("failed to save new talosconfig: %w", saveErr)
+			}
+
+			return nil
 		}
 
 		return fmt.Errorf("failed to open existing talosconfig: %w", openErr)
@@ -136,7 +140,11 @@ func mergeTalosconfigBytes(talosconfigPath string, newData []byte) error {
 	// Merge new contexts into existing config
 	existing.Merge(newConfig)
 
-	return existing.Save(talosconfigPath)
+	if saveErr := existing.Save(talosconfigPath); saveErr != nil {
+		return fmt.Errorf("failed to save merged talosconfig: %w", saveErr)
+	}
+
+	return nil
 }
 
 // rewriteKubeconfigEndpoint rewrites all cluster server endpoints in the kubeconfig

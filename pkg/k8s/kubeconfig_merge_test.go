@@ -145,59 +145,59 @@ users:
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
 			tmpDir := t.TempDir()
 
 			var kubeconfigPath string
-			if tt.useNestedDir {
+			if tc.useNestedDir {
 				kubeconfigPath = filepath.Join(tmpDir, "nested", "deep", "kubeconfig")
 			} else {
 				kubeconfigPath = filepath.Join(tmpDir, "kubeconfig")
 			}
 
-			if tt.existingContent != "" {
-				require.NoError(t, os.WriteFile(kubeconfigPath, []byte(tt.existingContent), 0o600))
+			if tc.existingContent != "" {
+				require.NoError(t, os.WriteFile(kubeconfigPath, []byte(tc.existingContent), 0o600))
 			}
 
-			err := k8s.MergeKubeconfig(kubeconfigPath, []byte(tt.newContent))
+			err := k8s.MergeKubeconfig(kubeconfigPath, []byte(tc.newContent))
 			require.NoError(t, err)
 
 			// Read back and verify
-			result, err := os.ReadFile(kubeconfigPath)
+			result, err := os.ReadFile(kubeconfigPath) //nolint:gosec // test-controlled temp path
 			require.NoError(t, err)
 
 			config, err := clientcmd.Load(result)
 			require.NoError(t, err)
 
 			// Check clusters
-			var clusterNames []string
+			clusterNames := make([]string, 0, len(config.Clusters))
 			for name := range config.Clusters {
 				clusterNames = append(clusterNames, name)
 			}
-			assert.ElementsMatch(t, tt.wantClusters, clusterNames, "clusters")
+			assert.ElementsMatch(t, tc.wantClusters, clusterNames, "clusters")
 
 			// Check contexts
-			var contextNames []string
+			contextNames := make([]string, 0, len(config.Contexts))
 			for name := range config.Contexts {
 				contextNames = append(contextNames, name)
 			}
-			assert.ElementsMatch(t, tt.wantContexts, contextNames, "contexts")
+			assert.ElementsMatch(t, tc.wantContexts, contextNames, "contexts")
 
 			// Check users
-			var userNames []string
+			userNames := make([]string, 0, len(config.AuthInfos))
 			for name := range config.AuthInfos {
 				userNames = append(userNames, name)
 			}
-			assert.ElementsMatch(t, tt.wantUsers, userNames, "users")
+			assert.ElementsMatch(t, tc.wantUsers, userNames, "users")
 
 			// Check current context
-			assert.Equal(t, tt.wantCurrentCtx, config.CurrentContext, "current-context")
+			assert.Equal(t, tc.wantCurrentCtx, config.CurrentContext, "current-context")
 
 			// Check specific server values when requested
-			for name, wantServer := range tt.wantClusterServer {
+			for name, wantServer := range tc.wantClusterServer {
 				cluster, ok := config.Clusters[name]
 				require.True(t, ok, "cluster %q should exist", name)
 				assert.Equal(t, wantServer, cluster.Server, "cluster %q server", name)

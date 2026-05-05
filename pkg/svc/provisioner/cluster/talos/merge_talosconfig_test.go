@@ -103,49 +103,59 @@ func TestMergeTalosconfigBytes(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-
-			tmpDir := t.TempDir()
-
-			var talosconfigPath string
-			if tt.useNestedDir {
-				talosconfigPath = filepath.Join(tmpDir, "nested", "deep", "talosconfig")
-			} else {
-				talosconfigPath = filepath.Join(tmpDir, "talosconfig")
-			}
-
-			if tt.existingContent != nil {
-				if tt.useNestedDir {
-					require.NoError(t, os.MkdirAll(filepath.Dir(talosconfigPath), 0o700))
-				}
-				require.NoError(t, os.WriteFile(talosconfigPath, tt.existingContent, 0o600))
-			}
-
-			err := talosprovisioner.MergeTalosconfigBytesForTest(talosconfigPath, tt.newContent)
-			require.NoError(t, err)
-
-			parsed := loadTalosconfigForTest(t, talosconfigPath)
-
-			// Check contexts present
-			var contextNames []string
-			for name := range parsed.Contexts {
-				contextNames = append(contextNames, name)
-			}
-			assert.ElementsMatch(t, tt.wantContexts, contextNames, "contexts")
-
-			// Check current context
-			assert.Equal(t, tt.wantCurrentCtx, parsed.Context, "current context")
-
-			// Check specific endpoint values
-			for ctxName, wantEP := range tt.wantEndpoint {
-				ctx, ok := parsed.Contexts[ctxName]
-				require.True(t, ok, "context %q should exist", ctxName)
-				require.NotEmpty(t, ctx.Endpoints, "context %q endpoints", ctxName)
-				assert.Equal(t, wantEP, ctx.Endpoints[0], "context %q first endpoint", ctxName)
-			}
+			runMergeTalosconfigTest(t, tc.existingContent, tc.newContent, tc.useNestedDir,
+				tc.wantContexts, tc.wantCurrentCtx, tc.wantEndpoint)
 		})
+	}
+}
+
+func runMergeTalosconfigTest(
+	t *testing.T,
+	existingContent, newContent []byte,
+	useNestedDir bool,
+	wantContexts []string,
+	wantCurrentCtx string,
+	wantEndpoint map[string]string,
+) {
+	t.Helper()
+
+	tmpDir := t.TempDir()
+
+	var talosconfigPath string
+	if useNestedDir {
+		talosconfigPath = filepath.Join(tmpDir, "nested", "deep", "talosconfig")
+	} else {
+		talosconfigPath = filepath.Join(tmpDir, "talosconfig")
+	}
+
+	if existingContent != nil {
+		if useNestedDir {
+			require.NoError(t, os.MkdirAll(filepath.Dir(talosconfigPath), 0o700))
+		}
+		require.NoError(t, os.WriteFile(talosconfigPath, existingContent, 0o600))
+	}
+
+	err := talosprovisioner.MergeTalosconfigBytesForTest(talosconfigPath, newContent)
+	require.NoError(t, err)
+
+	parsed := loadTalosconfigForTest(t, talosconfigPath)
+
+	contextNames := make([]string, 0, len(parsed.Contexts))
+	for name := range parsed.Contexts {
+		contextNames = append(contextNames, name)
+	}
+	assert.ElementsMatch(t, wantContexts, contextNames, "contexts")
+
+	assert.Equal(t, wantCurrentCtx, parsed.Context, "current context")
+
+	for ctxName, wantEP := range wantEndpoint {
+		ctx, ok := parsed.Contexts[ctxName]
+		require.True(t, ok, "context %q should exist", ctxName)
+		require.NotEmpty(t, ctx.Endpoints, "context %q endpoints", ctxName)
+		assert.Equal(t, wantEP, ctx.Endpoints[0], "context %q first endpoint", ctxName)
 	}
 }
 
