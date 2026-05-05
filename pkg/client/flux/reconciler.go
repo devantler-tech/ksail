@@ -219,7 +219,7 @@ func (r *Reconciler) ListKustomizations(
 		path, _, _ := unstructured.NestedString(list.Items[i].Object, "spec", "path")
 		dependsOn := parseDependsOn(&list.Items[i])
 		excluded := strings.EqualFold(
-			list.Items[i].GetAnnotations()[ReconcileExcludeAnnotation],
+			strings.TrimSpace(list.Items[i].GetAnnotations()[ReconcileExcludeAnnotation]),
 			"true",
 		)
 
