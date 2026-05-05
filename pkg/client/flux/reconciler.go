@@ -43,8 +43,10 @@ const (
 )
 
 // ReconcileExcludeAnnotation is the KSail annotation key that, when set to
-// "true" on a Flux Kustomization CR, excludes that kustomization from being
-// reconciled and monitored by `ksail workload reconcile`.
+// "true" on a Flux Kustomization CR, excludes that kustomization from
+// KSail's progress monitoring and readiness polling during
+// `ksail workload reconcile`. Flux still reconciles the resource; only
+// KSail's waiting phase is skipped.
 const ReconcileExcludeAnnotation = "ksail.devantler.tech/reconcile-exclude"
 
 // Reconciler constants.

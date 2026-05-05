@@ -1277,7 +1277,7 @@ Usage:
   ksail workload reconcile [flags]
 
 Flags:
-      --exclude strings    kustomization names to exclude from reconciliation (repeatable, comma-separated)
+      --exclude strings    kustomization names to skip during progress monitoring (repeatable, comma-separated)
   -h, --help               help for reconcile
       --timeout duration   timeout for waiting for reconciliation to complete (overrides config timeout)
 

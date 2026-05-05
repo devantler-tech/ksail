@@ -2092,7 +2092,7 @@ func NewReconcileCmd(_ *di.Runtime) *cobra.Command {
 	cmd.Flags().StringSlice(
 		"exclude",
 		nil,
-		"kustomization names to exclude from reconciliation (repeatable, comma-separated)",
+		"kustomization names to skip during progress monitoring (repeatable, comma-separated)",
 	)
 
 	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
@@ -2557,8 +2557,9 @@ func buildKustomizationTasks(
 }
 
 // isKustomizationExcluded returns true if the kustomization should be excluded
-// from reconciliation, either via the ReconcileExcludeAnnotation on the CR or
-// via the --exclude CLI flag.
+// from KSail's progress monitoring and readiness polling, either via the
+// ReconcileExcludeAnnotation on the CR or via the --exclude CLI flag.
+// Flux still reconciles the resource; only KSail's waiting phase is skipped.
 func isKustomizationExcluded(
 	kustomization flux.KustomizationInfo,
 	excludeSet map[string]bool,
