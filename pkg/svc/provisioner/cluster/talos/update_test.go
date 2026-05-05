@@ -554,3 +554,77 @@ func TestEnsureAutoscalerSecretIfNeeded_NoopWhenNilBundle(t *testing.T) {
 	)
 	require.NoError(t, err)
 }
+
+// TestNeedsSecretSync_AutoscalerEnabled verifies that needsSecretSync returns
+// true when the node autoscaler is enabled on Hetzner, even without node count
+// changes. The autoscaler config secret embeds a worker config that must use
+// the running cluster's PKI.
+func TestNeedsSecretSync_AutoscalerEnabled(t *testing.T) {
+	t.Parallel()
+
+	configs, err := talosconfigmanager.NewDefaultConfigs()
+	require.NoError(t, err)
+
+	provisioner := talosprovisioner.NewProvisioner(configs, nil).
+		WithHetznerOptions(v1alpha1.OptionsHetzner{
+			NodeAutoscalerEnabled: true,
+		}).
+		WithLogWriter(io.Discard)
+	diff := clusterupdate.NewEmptyUpdateResult()
+
+	// No node count changes, but autoscaler is enabled → sync needed.
+	assert.True(t, provisioner.NeedsSecretSyncForTest(
+		&v1alpha1.ClusterSpec{ControlPlanes: 1, Workers: 0},
+		&v1alpha1.ClusterSpec{ControlPlanes: 1, Workers: 0},
+		diff,
+	))
+}
+
+// TestNeedsSecretSync_AutoscalerDisabledNoSync verifies that needsSecretSync
+// returns false when hetznerOpts is set but the autoscaler is disabled and
+// there are no node count changes.
+func TestNeedsSecretSync_AutoscalerDisabledNoSync(t *testing.T) {
+	t.Parallel()
+
+	configs, err := talosconfigmanager.NewDefaultConfigs()
+	require.NoError(t, err)
+
+	provisioner := talosprovisioner.NewProvisioner(configs, nil).
+		WithHetznerOptions(v1alpha1.OptionsHetzner{
+			NodeAutoscalerEnabled: false,
+		}).
+		WithLogWriter(io.Discard)
+	diff := clusterupdate.NewEmptyUpdateResult()
+
+	assert.False(t, provisioner.NeedsSecretSyncForTest(
+		&v1alpha1.ClusterSpec{ControlPlanes: 1, Workers: 0},
+		&v1alpha1.ClusterSpec{ControlPlanes: 1, Workers: 0},
+		diff,
+	))
+}
+
+// TestEnsureAutoscalerSecretIfNeeded_ErrorWhenHcloudTokenNotSet verifies that
+// ensureAutoscalerSecretIfNeeded returns ErrHcloudTokenNotSet when the autoscaler
+// is enabled, a valid config bundle exists, but the HCLOUD_TOKEN env var is unset.
+// This test mutates environment variables and cannot run in parallel.
+func TestEnsureAutoscalerSecretIfNeeded_ErrorWhenHcloudTokenNotSet(t *testing.T) {
+	// Unset the token env var to trigger the error path.
+	t.Setenv("HCLOUD_TOKEN", "")
+
+	configs, err := talosconfigmanager.NewDefaultConfigs()
+	require.NoError(t, err)
+
+	provisioner := talosprovisioner.NewProvisioner(nil, nil).
+		WithHetznerOptions(v1alpha1.OptionsHetzner{
+			NodeAutoscalerEnabled: true,
+		}).
+		WithTalosConfigsForTest(configs).
+		WithLogWriter(io.Discard)
+
+	err = provisioner.EnsureAutoscalerSecretIfNeededForTest(
+		context.Background(),
+		"test-cluster",
+	)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, talosprovisioner.ErrHcloudTokenNotSet)
+}

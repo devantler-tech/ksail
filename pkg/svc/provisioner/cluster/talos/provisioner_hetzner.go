@@ -3,6 +3,7 @@ package talosprovisioner
 import (
 	"context"
 	"fmt"
+	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -13,6 +14,10 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"github.com/siderolabs/talos/pkg/machinery/config/bundle"
+	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/util/retry"
 )
 
 // ensureHetznerInfra creates the network, firewall, placement group, and retrieves
@@ -243,6 +248,104 @@ func (p *Provisioner) bootstrapAndFinalize(
 	err = p.ensureAutoscalerSecret(ctx, configBundle, snapshotImageID)
 	if err != nil {
 		return err
+	}
+
+	return nil
+}
+
+const (
+	hcloudSecretName      = "hcloud"
+	hcloudSecretNamespace = "kube-system"
+)
+
+// ensureHcloudSecret creates or updates the "hcloud" Secret in kube-system with
+// the API token and network name. The cluster autoscaler Helm chart reads both
+// keys from this secret. Normally created by hcloud-ccm during cluster create,
+// but must be ensured during update when enabling the autoscaler for the first
+// time (the secret may be missing or lack the "network" key).
+func (p *Provisioner) ensureHcloudSecret(ctx context.Context, clusterName string) error {
+	tokenEnvVar := p.hetznerOpts.TokenEnvVar
+	if tokenEnvVar == "" {
+		tokenEnvVar = "HCLOUD_TOKEN"
+	}
+
+	token := os.Getenv(tokenEnvVar)
+	if token == "" {
+		return fmt.Errorf("%w: %s", ErrHcloudTokenNotSet, tokenEnvVar)
+	}
+
+	networkName := p.hetznerOpts.NetworkName
+	if networkName == "" {
+		networkName = clusterName + "-network"
+	}
+
+	kubeconfigPath, err := fsutil.ExpandHomePath(p.options.KubeconfigPath)
+	if err != nil {
+		return fmt.Errorf("expanding kubeconfig path for hcloud secret: %w", err)
+	}
+
+	kubeclient, err := k8s.NewClientset(kubeconfigPath, "")
+	if err != nil {
+		return fmt.Errorf("creating kubeclient for hcloud secret: %w", err)
+	}
+
+	desiredData := map[string][]byte{
+		"token":   []byte(token),
+		"network": []byte(networkName),
+	}
+
+	secretsClient := kubeclient.CoreV1().Secrets(hcloudSecretNamespace)
+
+	existing, err := secretsClient.Get(ctx, hcloudSecretName, metav1.GetOptions{})
+	if err != nil {
+		if !apierrors.IsNotFound(err) {
+			return fmt.Errorf("get hcloud secret: %w", err)
+		}
+
+		secret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      hcloudSecretName,
+				Namespace: hcloudSecretNamespace,
+			},
+			Data: desiredData,
+		}
+
+		_, createErr := secretsClient.Create(ctx, secret, metav1.CreateOptions{})
+		if createErr != nil {
+			if !apierrors.IsAlreadyExists(createErr) {
+				return fmt.Errorf("create hcloud secret: %w", createErr)
+			}
+
+			// Race: another caller created it between Get and Create — fall through to update.
+			existing, err = secretsClient.Get(ctx, hcloudSecretName, metav1.GetOptions{})
+			if err != nil {
+				return fmt.Errorf("get hcloud secret after conflict: %w", err)
+			}
+		} else {
+			return nil
+		}
+	}
+
+	if !k8s.MergeSecretData(existing, desiredData) {
+		return nil
+	}
+
+	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		latest, getErr := secretsClient.Get(ctx, hcloudSecretName, metav1.GetOptions{})
+		if getErr != nil {
+			return fmt.Errorf("get hcloud secret for update: %w", getErr)
+		}
+
+		if !k8s.MergeSecretData(latest, desiredData) {
+			return nil
+		}
+
+		_, updateErr := secretsClient.Update(ctx, latest, metav1.UpdateOptions{})
+
+		return updateErr
+	})
+	if retryErr != nil {
+		return fmt.Errorf("update hcloud secret: %w", retryErr)
 	}
 
 	return nil

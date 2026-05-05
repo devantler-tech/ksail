@@ -459,6 +459,14 @@ func (p *Provisioner) needsSecretSync(
 		return true
 	}
 
+	// Node autoscaler: the autoscaler config secret embeds a worker config
+	// derived from the bundle. Without syncing, it would contain freshly-generated
+	// PKI that doesn't match the running cluster — autoscaler-provisioned nodes
+	// would fail to join with "certificate signed by unknown authority".
+	if p.hetznerOpts != nil && p.hetznerOpts.NodeAutoscalerEnabled {
+		return true
+	}
+
 	// In-place or reboot-required config changes push configs to existing nodes.
 	return p.shouldApplyInPlaceChanges(diff) || diff.HasRebootRequired()
 }
@@ -875,9 +883,19 @@ func (p *Provisioner) ensureAutoscalerSecretIfNeeded(
 		return nil
 	}
 
+	// Ensure the hcloud secret (token + network) exists. The autoscaler Helm
+	// chart references this secret for HCLOUD_TOKEN and HCLOUD_NETWORK.
+	if err := p.ensureHcloudSecret(ctx, clusterName); err != nil {
+		return fmt.Errorf("ensuring hcloud secret for autoscaler: %w", err)
+	}
+
 	snapshotImageID, err := p.ensureSnapshotImage(ctx, clusterName)
 	if err != nil {
 		return fmt.Errorf("looking up snapshot image for autoscaler secret: %w", err)
+	}
+
+	if snapshotImageID <= 0 {
+		return ErrAutoscalerRequiresSchematic
 	}
 
 	return p.ensureAutoscalerSecret(ctx, configBundle, snapshotImageID)
