@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/hetzner"
@@ -266,7 +267,7 @@ const (
 func (p *Provisioner) ensureHcloudSecret(ctx context.Context, clusterName string) error {
 	tokenEnvVar := p.hetznerOpts.TokenEnvVar
 	if tokenEnvVar == "" {
-		tokenEnvVar = "HCLOUD_TOKEN"
+		tokenEnvVar = v1alpha1.DefaultHetznerTokenEnvVar
 	}
 
 	token := os.Getenv(tokenEnvVar)
@@ -276,12 +277,16 @@ func (p *Provisioner) ensureHcloudSecret(ctx context.Context, clusterName string
 
 	networkName := p.hetznerOpts.NetworkName
 	if networkName == "" {
-		networkName = clusterName + "-network"
+		networkName = clusterName + hetzner.NetworkSuffix
 	}
 
-	kubeconfigPath, err := fsutil.ExpandHomePath(p.options.KubeconfigPath)
+	if p.options.KubeconfigPath == "" {
+		return fmt.Errorf("creating kubeclient for hcloud secret: %w", k8s.ErrKubeconfigPathEmpty)
+	}
+
+	kubeconfigPath, err := fsutil.EvalCanonicalPath(p.options.KubeconfigPath)
 	if err != nil {
-		return fmt.Errorf("expanding kubeconfig path for hcloud secret: %w", err)
+		return fmt.Errorf("canonicalizing kubeconfig path for hcloud secret: %w", err)
 	}
 
 	kubeclient, err := k8s.NewClientset(kubeconfigPath, "")
