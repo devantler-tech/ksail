@@ -819,8 +819,10 @@ func (p *Provisioner) syncHetznerFirewallRules(
 
 // ensureAutoscalerSecretIfNeeded creates or updates the cluster-autoscaler-config
 // Secret when the node autoscaler is enabled on Hetzner. It is a no-op when
-// autoscaling is disabled, the provider is not Hetzner, or the snapshot image
-// cannot be resolved. This mirrors the create-time call in bootstrapAndFinalize.
+// autoscaling is disabled, the provider is not Hetzner, or the config bundle
+// is unavailable. Snapshot image lookup errors are propagated because they
+// indicate a misconfigured cluster. This mirrors the create-time call in
+// bootstrapAndFinalize.
 func (p *Provisioner) ensureAutoscalerSecretIfNeeded(
 	ctx context.Context,
 	clusterName string,
@@ -829,12 +831,15 @@ func (p *Provisioner) ensureAutoscalerSecretIfNeeded(
 		return nil
 	}
 
+	configBundle := p.talosConfigs.Bundle()
+	if configBundle == nil {
+		return nil
+	}
+
 	snapshotImageID, err := p.ensureSnapshotImage(ctx, clusterName)
 	if err != nil {
 		return fmt.Errorf("looking up snapshot image for autoscaler secret: %w", err)
 	}
-
-	configBundle := p.talosConfigs.Bundle()
 
 	return p.ensureAutoscalerSecret(ctx, configBundle, snapshotImageID)
 }

@@ -6,6 +6,7 @@ import (
 	"net/netip"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	omniprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/omni"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
@@ -304,4 +305,12 @@ func (p *Provisioner) EnsureAutoscalerSecretIfNeededForTest(
 	clusterName string,
 ) error {
 	return p.ensureAutoscalerSecretIfNeeded(ctx, clusterName)
+}
+
+// WithTalosConfigsForTest sets talosConfigs on the provisioner for unit testing.
+func (p *Provisioner) WithTalosConfigsForTest(
+	configs *talosconfigmanager.Configs,
+) *Provisioner {
+	p.talosConfigs = configs
+	return p
 }

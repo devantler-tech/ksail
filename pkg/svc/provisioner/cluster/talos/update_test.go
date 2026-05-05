@@ -533,3 +533,24 @@ func TestEnsureAutoscalerSecretIfNeeded_NoopWhenNilTalosConfigs(t *testing.T) {
 	)
 	require.NoError(t, err)
 }
+
+// TestEnsureAutoscalerSecretIfNeeded_NoopWhenNilBundle verifies that
+// ensureAutoscalerSecretIfNeeded is a no-op when talosConfigs is non-nil but
+// Bundle() returns nil, preventing a nil-dereference panic.
+func TestEnsureAutoscalerSecretIfNeeded_NoopWhenNilBundle(t *testing.T) {
+	t.Parallel()
+
+	configs := &talosconfigmanager.Configs{}
+	provisioner := talosprovisioner.NewProvisioner(nil, nil).
+		WithHetznerOptions(v1alpha1.OptionsHetzner{
+			NodeAutoscalerEnabled: true,
+		}).
+		WithTalosConfigsForTest(configs).
+		WithLogWriter(io.Discard)
+
+	err := provisioner.EnsureAutoscalerSecretIfNeededForTest(
+		context.Background(),
+		"test-cluster",
+	)
+	require.NoError(t, err)
+}
