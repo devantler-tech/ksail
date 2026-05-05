@@ -312,5 +312,6 @@ func (p *Provisioner) WithTalosConfigsForTest(
 	configs *talosconfigmanager.Configs,
 ) *Provisioner {
 	p.talosConfigs = configs
+
 	return p
 }
