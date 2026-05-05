@@ -45,7 +45,7 @@ inputs:
     description: "Whether to validate manifests before cluster creation"
     default: "false"
   scan:
-    description: "Whether to run ksail workload scan after validation"
+    description: "Whether to run ksail workload scan (can be enabled independently of validate)"
     default: "false"
   scan-framework:
     description: "Comma-separated security frameworks to scan against (e.g. 'nsa,mitre'). Supports any framework known to Kubescape."
@@ -327,9 +327,9 @@ runs:
         [[ -n "$CONFIG" ]] && cmd_args+=(--config "$CONFIG")
         cmd_args+=(workload scan)
         [[ -n "$SCAN_PATH" ]] && cmd_args+=("$SCAN_PATH")
-        cmd_args+=(--framework "$SCAN_FRAMEWORK")
-        cmd_args+=(--compliance-threshold "$SCAN_THRESHOLD")
-        cmd_args+=(--format "$SCAN_FORMAT")
+        [[ -n "$SCAN_FRAMEWORK" ]] && cmd_args+=(--framework "$SCAN_FRAMEWORK")
+        [[ -n "$SCAN_THRESHOLD" ]] && cmd_args+=(--compliance-threshold "$SCAN_THRESHOLD")
+        [[ -n "$SCAN_FORMAT" ]] && cmd_args+=(--format "$SCAN_FORMAT")
         [[ -n "$SCAN_OUTPUT" ]] && cmd_args+=(--output "$SCAN_OUTPUT")
         [[ "$SCAN_VERBOSE" == "true" ]] && cmd_args+=(--verbose)
         ksail "${cmd_args[@]}"
