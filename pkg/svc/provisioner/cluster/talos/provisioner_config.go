@@ -35,7 +35,13 @@ func (p *Provisioner) writeKubeconfig(kubeconfig []byte) error {
 		return fmt.Errorf("failed to merge kubeconfig: %w", err)
 	}
 
-	_, _ = fmt.Fprintf(p.logWriter, "Kubeconfig saved to %s\n", kubeconfigPath)
+	// Log the canonical path for accuracy (MergeKubeconfig resolves symlinks internally).
+	canonicalPath, _ := fsutil.EvalCanonicalPath(kubeconfigPath)
+	if canonicalPath == "" {
+		canonicalPath = kubeconfigPath
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "Kubeconfig saved to %s\n", canonicalPath)
 
 	return nil
 }
@@ -49,19 +55,9 @@ func (p *Provisioner) saveTalosconfig(configBundle *bundle.Bundle) error {
 		return fmt.Errorf("failed to expand talosconfig path: %w", err)
 	}
 
-	// Ensure talosconfig directory exists
-	talosconfigDir := filepath.Dir(talosconfigPath)
-	if talosconfigDir != "" && talosconfigDir != "." {
-		mkdirErr := os.MkdirAll(talosconfigDir, stateDirectoryPermissions)
-		if mkdirErr != nil {
-			return fmt.Errorf("failed to create talosconfig directory: %w", mkdirErr)
-		}
-	}
-
-	// Canonicalize the path to prevent writes through symlinks
-	talosconfigPath, err = fsutil.EvalCanonicalPath(talosconfigPath)
+	talosconfigPath, err = prepareTalosconfigPath(talosconfigPath)
 	if err != nil {
-		return fmt.Errorf("failed to canonicalize talosconfig path: %w", err)
+		return err
 	}
 
 	newConfig := configBundle.TalosConfig()
@@ -108,19 +104,9 @@ func mergeTalosconfigBytes(talosconfigPath string, newData []byte) error {
 		return fmt.Errorf("failed to parse new talosconfig: %w", err)
 	}
 
-	// Ensure parent directory exists
-	talosconfigDir := filepath.Dir(talosconfigPath)
-	if talosconfigDir != "" && talosconfigDir != "." {
-		mkdirErr := os.MkdirAll(talosconfigDir, stateDirectoryPermissions)
-		if mkdirErr != nil {
-			return fmt.Errorf("failed to create talosconfig directory: %w", mkdirErr)
-		}
-	}
-
-	// Canonicalize the path to prevent writes through symlinks
-	talosconfigPath, err = fsutil.EvalCanonicalPath(talosconfigPath)
+	talosconfigPath, err = prepareTalosconfigPath(talosconfigPath)
 	if err != nil {
-		return fmt.Errorf("failed to canonicalize talosconfig path: %w", err)
+		return err
 	}
 
 	// Try to load existing talosconfig
@@ -148,6 +134,25 @@ func mergeTalosconfigBytes(talosconfigPath string, newData []byte) error {
 	}
 
 	return nil
+}
+
+// prepareTalosconfigPath ensures the parent directory exists and canonicalizes the path.
+// Shared by saveTalosconfig and mergeTalosconfigBytes to avoid duplication.
+func prepareTalosconfigPath(talosconfigPath string) (string, error) {
+	talosconfigDir := filepath.Dir(talosconfigPath)
+	if talosconfigDir != "" && talosconfigDir != "." {
+		mkdirErr := os.MkdirAll(talosconfigDir, stateDirectoryPermissions)
+		if mkdirErr != nil {
+			return "", fmt.Errorf("failed to create talosconfig directory: %w", mkdirErr)
+		}
+	}
+
+	canonicalPath, err := fsutil.EvalCanonicalPath(talosconfigPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to canonicalize talosconfig path: %w", err)
+	}
+
+	return canonicalPath, nil
 }
 
 // rewriteKubeconfigEndpoint rewrites all cluster server endpoints in the kubeconfig
