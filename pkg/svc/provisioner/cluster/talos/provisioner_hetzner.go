@@ -306,6 +306,7 @@ func (p *Provisioner) ensureHcloudSecret(ctx context.Context, clusterName string
 	if err != nil {
 		return err
 	}
+
 	if !needsUpdate {
 		return nil
 	}
@@ -400,7 +401,10 @@ func (p *Provisioner) ensureAutoscalerSecret(
 	_, _ = fmt.Fprintf(p.logWriter, "Applying cluster-autoscaler config secret...\n")
 
 	if p.options.KubeconfigPath == "" {
-		return fmt.Errorf("creating kubeclient for autoscaler secret: %w", k8s.ErrKubeconfigPathEmpty)
+		return fmt.Errorf(
+			"creating kubeclient for autoscaler secret: %w",
+			k8s.ErrKubeconfigPathEmpty,
+		)
 	}
 
 	kubeconfigPath, err := fsutil.EvalCanonicalPath(p.options.KubeconfigPath)
