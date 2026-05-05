@@ -133,8 +133,9 @@ func TestConfigs_WithEndpoint(t *testing.T) {
 
 // TestConfigs_WithSecretsAndEndpoint_PreservesBoth verifies that calling
 // WithSecrets followed by WithEndpoint produces configs that have both the
-// correct secrets and the correct endpoint. This is the pattern used by
-// syncSecretsFromCluster to fix Hetzner cluster updates (issue #4605).
+// correct secrets and the correct endpoint. This mirrors the production
+// pattern in syncSecretsFromCluster / fetchClusterSecretsAndEndpoint where
+// the endpoint is read from the running config (issue #4605).
 func TestConfigs_WithSecretsAndEndpoint_PreservesBoth(t *testing.T) {
 	t.Parallel()
 
@@ -142,9 +143,16 @@ func TestConfigs_WithSecretsAndEndpoint_PreservesBoth(t *testing.T) {
 	runningConfigs, err := talosconfig.NewDefaultConfigs()
 	require.NoError(t, err)
 
-	// Extract secrets from the running config (as syncSecretsFromCluster does)
+	// Extract secrets from the running config (as fetchClusterSecretsAndEndpoint does)
 	existingSecrets := runningConfigs.ExtractSecrets()
 	require.NotNil(t, existingSecrets)
+
+	// Extract endpoint from running config (as fetchClusterSecretsAndEndpoint does).
+	// In production this reads runningConfig.Cluster().Endpoint().Hostname(),
+	// which returns the endpoint the cluster is actually using (deterministic
+	// even in HA clusters with multiple CP nodes).
+	runningEndpoint := runningConfigs.ControlPlane().Cluster().Endpoint().Hostname()
+	require.NotEmpty(t, runningEndpoint, "running config should have a cluster endpoint")
 
 	// Simulate freshly loaded configs (different CA, empty endpoint)
 	freshConfigs, err := talosconfig.NewDefaultConfigs()
@@ -163,10 +171,8 @@ func TestConfigs_WithSecretsAndEndpoint_PreservesBoth(t *testing.T) {
 	syncedCA := afterSecrets.ControlPlane().Machine().Security().IssuingCA().Crt
 	assert.Equal(t, clusterCA, syncedCA, "CA should match running cluster after WithSecrets")
 
-	// Step 2: Sync endpoint (as the fix now does)
-	endpointIP := "78.47.10.20"
-
-	afterEndpoint, err := afterSecrets.WithEndpoint(endpointIP)
+	// Step 2: Sync endpoint extracted from running config
+	afterEndpoint, err := afterSecrets.WithEndpoint(runningEndpoint)
 	require.NoError(t, err)
 
 	// Verify CA is STILL correct after WithEndpoint
@@ -176,7 +182,7 @@ func TestConfigs_WithSecretsAndEndpoint_PreservesBoth(t *testing.T) {
 
 	// Verify endpoint is in the cluster endpoint URL
 	clusterEndpoint := afterEndpoint.ControlPlane().Cluster().Endpoint().String()
-	assert.Contains(t, clusterEndpoint, endpointIP,
+	assert.Contains(t, clusterEndpoint, runningEndpoint,
 		"cluster endpoint should contain the synced IP")
 
 	// Verify worker config also has the correct CA cert
