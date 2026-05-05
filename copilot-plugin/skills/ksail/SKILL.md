@@ -48,7 +48,7 @@ ksail cluster create                        # creates + starts the cluster (Dock
 ksail cluster connect                       # opens K9s against the cluster
 ```
 
-Distribution is chosen via `--distribution` (`Vanilla`, `K3s`, `Talos`, `VCluster`, `KWOK`, `EKS`). Provider is `Docker` by default; Talos also supports `Hetzner` and `Omni`; EKS uses AWS.
+Distribution is chosen via `--distribution` (`Vanilla`, `K3s`, `Talos`, `VCluster`, `KWOK`, `EKS`). Provider defaults to `Docker` for local distributions; Talos also supports `Hetzner` and `Omni`; EKS requires `--provider AWS` and `ksail cluster create` is not yet functional for EKS (`cluster init` only — see <https://ksail.devantler.tech/distributions/eks/>).
 
 ## MCP server
 
