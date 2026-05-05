@@ -77,6 +77,7 @@ require (
 	github.com/siderolabs/go-retry v0.3.3
 	github.com/siderolabs/image-factory v1.2.0
 	github.com/siderolabs/omni/client v1.7.1
+	go.yaml.in/yaml/v4 v4.0.0-rc.4
 	golang.org/x/oauth2 v0.36.0
 	golang.org/x/text v0.36.0
 	google.golang.org/grpc v1.80.0
@@ -914,7 +915,6 @@ require (
 	go.uber.org/zap v1.27.1 // indirect
 	go.yaml.in/yaml/v2 v2.4.4 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
-	go.yaml.in/yaml/v4 v4.0.0-rc.4 // indirect
 	go4.org v0.0.0-20230225012048-214862532bf5 // indirect
 	go4.org/netipx v0.0.0-20231129151722-fdeea329fbba // indirect
 	golang.org/x/crypto v0.50.0 // indirect
