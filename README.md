@@ -2,7 +2,7 @@
 [![GitHub Stars](https://img.shields.io/github/stars/devantler-tech/ksail?style=flat)](https://github.com/devantler-tech/ksail/stargazers)
 [![Latest Release](https://img.shields.io/github/v/release/devantler-tech/ksail)](https://github.com/devantler-tech/ksail/releases/latest)
 [![Go Report Card](https://goreportcard.com/badge/github.com/devantler-tech/ksail/v7)](https://goreportcard.com/report/github.com/devantler-tech/ksail/v7)
-[![License](https://img.shields.io/badge/License-GPL--3.0--only-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+[![License](https://img.shields.io/badge/License-PolyForm--Shield--1.0.0-blue.svg)](https://polyformproject.org/licenses/shield/1.0.0)
 [![Go Reference](https://pkg.go.dev/badge/github.com/devantler-tech/ksail/v7.svg)](https://pkg.go.dev/github.com/devantler-tech/ksail/v7)
 [![codecov](https://codecov.io/gh/devantler-tech/ksail/graph/badge.svg?token=HSUfhaiXwq)](https://app.codecov.io/gh/devantler-tech/ksail)
 [![CI - KSail](https://github.com/devantler-tech/ksail/actions/workflows/ci.yaml/badge.svg)](https://github.com/devantler-tech/ksail/actions/workflows/ci.yaml)
@@ -107,6 +107,20 @@ Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for the develo
 | [devantler-tech/platform](https://github.com/devantler-tech/platform) | My personal homelab | Platform |
 
 Using KSail in your project? Open a PR to add it here.
+
+## License
+
+KSail is licensed under the **[PolyForm Shield License 1.0.0](LICENSE)**. You may use, modify, and distribute KSail for any purpose — except providing a product that competes with KSail. When redistributing, you must include the [license terms](LICENSE) and the required copyright notice.
+
+**What this means in practice:**
+
+- ✅ Use KSail as a CLI tool in any project (open-source or proprietary)
+- ✅ Embed or link KSail as a library in your own software
+- ✅ Fork and modify KSail for internal or non-competing use
+- ✅ Use any license for your own project — no copyleft requirement
+- ❌ Build and distribute a product that competes with KSail
+
+For the full license text including notice and non-compete details, see [LICENSE](LICENSE). For common questions, see the [Licensing FAQ](https://ksail.devantler.tech/faq/#licensing).
 
 ## Star History
 

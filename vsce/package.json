@@ -5,7 +5,7 @@
   "version": "0.1.0",
   "publisher": "devantler",
   "icon": "resources/icon.png",
-  "license": "GPL-3.0-only",
+  "license": "PolyForm-Shield-1.0.0",
   "repository": {
     "type": "git",
     "url": "https://github.com/devantler-tech/ksail"

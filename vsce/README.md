@@ -38,4 +38,4 @@ For contributor documentation (build commands, architecture, and development wor
 
 ## License
 
-GPL-3.0-only - See [LICENSE](LICENSE) for details.
+PolyForm Shield 1.0.0 - See [LICENSE](LICENSE) for details.
