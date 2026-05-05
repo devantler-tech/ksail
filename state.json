@@ -1,7 +1,9 @@
 {
-  "last_run": "2026-05-05T01:03:00Z",
-  "workflow_run_id": "25352205894",
+  "last_run": "2026-05-05T12:42:00Z",
+  "workflow_run_id": "25376906090",
   "commented_issues": {
+    "4606": "2026-05-05",
+    "4605": "2026-05-05",
     "4525": "2026-05-02",
     "4504": "2026-05-01",
     "4422": "2026-05-01",
@@ -46,7 +48,7 @@
     "4352": "refactor(setup): replace repeated if-append with table-driven loop"
   },
   "last_code_quality_domain": "perf",
-  "issue_backlog_cursor": "4579",
+  "issue_backlog_cursor": "4606",
   "created_issues": {
     "4521": "[Repo Assist] [feature]: add local-remote service mirroring",
     "4511": "[Repo Assist] [feature]: add native ephemeral CI mode",
@@ -58,15 +60,18 @@
     "4422": "[Repo Assist] [feature]: enhance ksail cluster diagnose with structured health scoring",
     "4375": "[Repo Assist] [feature]: add ksail cluster graph for multi-cluster topology",
     "3983": "[Repo Assist] [feature]: extend Hetzner provider to K3s and Vanilla",
-    "new_lic001": "[Repo Assist] [chore]: communicate GPL-3.0-only license change",
-    "new_oidc01": "[Repo Assist] [feature]: OIDC federation and multi-cluster auth support"
+    "4601": "[Repo Assist] [chore]: communicate GPL-3.0-only license change",
+    "4602": "[Repo Assist] [feature]: OIDC federation and multi-cluster auth support",
+    "new_ci_k3s_cilium": "[Repo Assist] [ci]: fix K3s+Cilium full-stack system test timing race"
   },
   "notes": [
     "link_sub_issue is NOT idempotent - always verify sub-issue not already linked before calling",
     "Monthly activity issue: #4501",
     "domain alternation: last was perf - next should be test coverage",
-    "Roadmap backlog updated with new weekly strategy #4573 (May 4): new gaps = license comms + OIDC federation",
-    "Labels applied this run: agentic-workflows to #4432/#4427/#4371; next to #4423/#4473/#4474/#3983",
-    "Commented on #3912 (Dependabot multi-arch upstream bug status)"
+    "Roadmap backlog: K3s+Cilium CI flake issue created this run (was in Now roadmap but no issue existed)",
+    "Bug #4605: CA regression - CA sync in update path may not propagate into talos config bundle before worker config gen",
+    "Bug #4606: autoscaler-config secret only created in cluster create (bootstrapAndFinalize), not in cluster update path",
+    "Labels applied this run: none",
+    "PR #4571 still open"
   ]
 }
