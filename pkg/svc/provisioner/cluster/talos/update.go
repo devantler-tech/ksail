@@ -904,20 +904,20 @@ func (p *Provisioner) ensureAutoscalerSecretIfNeeded(
 }
 
 // hasSchematicConfigured reports whether a Talos schematic ID is available
-// (either explicit or auto-computed from extensions).
+// (either explicit via talosOpts.SchematicID or auto-computed from extensions
+// via talosConfigs.SchematicID()).
 func (p *Provisioner) hasSchematicConfigured() bool {
-	if p.talosOpts == nil {
-		return false
-	}
-
-	schematicID := strings.TrimSpace(p.talosOpts.SchematicID)
-	if schematicID != "" {
-		return true
+	if p.talosOpts != nil {
+		if strings.TrimSpace(p.talosOpts.SchematicID) != "" {
+			return true
+		}
 	}
 
 	if p.talosConfigs != nil {
-		schematicID = p.talosConfigs.SchematicID()
+		if strings.TrimSpace(p.talosConfigs.SchematicID()) != "" {
+			return true
+		}
 	}
 
-	return schematicID != ""
+	return false
 }
