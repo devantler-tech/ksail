@@ -549,13 +549,13 @@ jobs:
           go-version-file: go.mod
 
       - name: 📦 Install go-licenses
-        run: go install github.com/google/go-licenses/v2@latest
+        run: go install github.com/google/go-licenses/v2@v2.0.1
 
       - name: 🔍 Check dependency licenses
         run: |
           go-licenses check ./... \
             --disallowed_types=forbidden \
-            --ignore github.com/devantler-tech/ksail \
+            --ignore github.com/devantler-tech/ksail/v7 \
             --ignore github.com/spdx/tools-golang
 
   audit-docs:
