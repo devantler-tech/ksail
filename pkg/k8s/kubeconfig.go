@@ -29,7 +29,6 @@ const kubeconfigDirMode = 0o700
 //
 // This prevents data loss when multiple clusters share the same kubeconfig file.
 //
-//nolint:cyclop // merging is inherently multi-step
 func MergeKubeconfig(kubeconfigPath string, newKubeconfigData []byte) error {
 	newConfig, err := clientcmd.Load(newKubeconfigData)
 	if err != nil {
@@ -56,37 +55,7 @@ func MergeKubeconfig(kubeconfigPath string, newKubeconfigData []byte) error {
 		return fmt.Errorf("failed to load existing kubeconfig: %w", err)
 	}
 
-	// Merge clusters
-	if existing.Clusters == nil {
-		existing.Clusters = make(map[string]*api.Cluster)
-	}
-
-	for name, cluster := range newConfig.Clusters {
-		existing.Clusters[name] = cluster
-	}
-
-	// Merge contexts
-	if existing.Contexts == nil {
-		existing.Contexts = make(map[string]*api.Context)
-	}
-
-	for name, ctx := range newConfig.Contexts {
-		existing.Contexts[name] = ctx
-	}
-
-	// Merge auth infos (users)
-	if existing.AuthInfos == nil {
-		existing.AuthInfos = make(map[string]*api.AuthInfo)
-	}
-
-	for name, authInfo := range newConfig.AuthInfos {
-		existing.AuthInfos[name] = authInfo
-	}
-
-	// Update current context if the new config specifies one
-	if newConfig.CurrentContext != "" {
-		existing.CurrentContext = newConfig.CurrentContext
-	}
+	mergeKubeconfigEntries(existing, newConfig)
 
 	result, err := clientcmd.Write(*existing)
 	if err != nil {
@@ -99,6 +68,38 @@ func MergeKubeconfig(kubeconfigPath string, newKubeconfigData []byte) error {
 	}
 
 	return nil
+}
+
+// mergeKubeconfigEntries copies clusters, contexts, and users from src into dst,
+// overwriting entries with the same keys. It also updates the current context.
+func mergeKubeconfigEntries(dst, src *api.Config) {
+	if dst.Clusters == nil {
+		dst.Clusters = make(map[string]*api.Cluster)
+	}
+
+	for name, cluster := range src.Clusters {
+		dst.Clusters[name] = cluster
+	}
+
+	if dst.Contexts == nil {
+		dst.Contexts = make(map[string]*api.Context)
+	}
+
+	for name, ctx := range src.Contexts {
+		dst.Contexts[name] = ctx
+	}
+
+	if dst.AuthInfos == nil {
+		dst.AuthInfos = make(map[string]*api.AuthInfo)
+	}
+
+	for name, authInfo := range src.AuthInfos {
+		dst.AuthInfos[name] = authInfo
+	}
+
+	if src.CurrentContext != "" {
+		dst.CurrentContext = src.CurrentContext
+	}
 }
 
 // loadOrCreateKubeconfig loads the kubeconfig from disk, or returns an empty
