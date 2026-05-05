@@ -893,7 +893,8 @@ func (p *Provisioner) ensureAutoscalerSecretIfNeeded(
 
 	// Ensure the hcloud secret (token + network) exists. The autoscaler Helm
 	// chart references this secret for HCLOUD_TOKEN and HCLOUD_NETWORK.
-	if err := p.ensureHcloudSecret(ctx, clusterName); err != nil {
+	err := p.ensureHcloudSecret(ctx, clusterName)
+	if err != nil {
 		return fmt.Errorf("ensuring hcloud secret for autoscaler: %w", err)
 	}
 

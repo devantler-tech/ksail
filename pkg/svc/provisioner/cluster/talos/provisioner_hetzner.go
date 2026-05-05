@@ -18,6 +18,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	corev1client "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/util/retry"
 )
 
@@ -301,40 +302,73 @@ func (p *Provisioner) ensureHcloudSecret(ctx context.Context, clusterName string
 
 	secretsClient := kubeclient.CoreV1().Secrets(hcloudSecretNamespace)
 
-	existing, err := secretsClient.Get(ctx, hcloudSecretName, metav1.GetOptions{})
+	existing, err := p.getOrCreateHcloudSecret(ctx, secretsClient, desiredData)
 	if err != nil {
-		if !apierrors.IsNotFound(err) {
-			return fmt.Errorf("get hcloud secret: %w", err)
-		}
-
-		secret := &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      hcloudSecretName,
-				Namespace: hcloudSecretNamespace,
-			},
-			Data: desiredData,
-		}
-
-		_, createErr := secretsClient.Create(ctx, secret, metav1.CreateOptions{})
-		if createErr != nil {
-			if !apierrors.IsAlreadyExists(createErr) {
-				return fmt.Errorf("create hcloud secret: %w", createErr)
-			}
-
-			// Race: another caller created it between Get and Create — fall through to update.
-			existing, err = secretsClient.Get(ctx, hcloudSecretName, metav1.GetOptions{})
-			if err != nil {
-				return fmt.Errorf("get hcloud secret after conflict: %w", err)
-			}
-		} else {
-			return nil
-		}
+		return err
 	}
-
-	if !k8s.MergeSecretData(existing, desiredData) {
+	if existing == nil {
 		return nil
 	}
 
+	return p.updateHcloudSecret(ctx, secretsClient, desiredData)
+}
+
+// getOrCreateHcloudSecret attempts to get the hcloud secret, creating it if it
+// doesn't exist. Returns the existing secret if an update is needed, or nil if
+// the secret was created successfully (no update needed).
+func (p *Provisioner) getOrCreateHcloudSecret(
+	ctx context.Context,
+	secretsClient corev1client.SecretInterface,
+	desiredData map[string][]byte,
+) (*corev1.Secret, error) {
+	existing, err := secretsClient.Get(ctx, hcloudSecretName, metav1.GetOptions{})
+	if err == nil {
+		if !k8s.MergeSecretData(existing, desiredData) {
+			return nil, nil
+		}
+		return existing, nil
+	}
+
+	if !apierrors.IsNotFound(err) {
+		return nil, fmt.Errorf("get hcloud secret: %w", err)
+	}
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      hcloudSecretName,
+			Namespace: hcloudSecretNamespace,
+		},
+		Data: desiredData,
+	}
+
+	_, createErr := secretsClient.Create(ctx, secret, metav1.CreateOptions{})
+	if createErr == nil {
+		return nil, nil
+	}
+
+	if !apierrors.IsAlreadyExists(createErr) {
+		return nil, fmt.Errorf("create hcloud secret: %w", createErr)
+	}
+
+	// Race: another caller created it between Get and Create — fetch for update.
+	existing, err = secretsClient.Get(ctx, hcloudSecretName, metav1.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("get hcloud secret after conflict: %w", err)
+	}
+
+	if !k8s.MergeSecretData(existing, desiredData) {
+		return nil, nil
+	}
+
+	return existing, nil
+}
+
+// updateHcloudSecret performs a conflict-retrying update of the hcloud secret.
+func (p *Provisioner) updateHcloudSecret(
+	ctx context.Context,
+	secretsClient corev1client.SecretInterface,
+	desiredData map[string][]byte,
+) error {
 	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		latest, getErr := secretsClient.Get(ctx, hcloudSecretName, metav1.GetOptions{})
 		if getErr != nil {
@@ -346,8 +380,11 @@ func (p *Provisioner) ensureHcloudSecret(ctx context.Context, clusterName string
 		}
 
 		_, updateErr := secretsClient.Update(ctx, latest, metav1.UpdateOptions{})
+		if updateErr != nil {
+			return fmt.Errorf("updating hcloud secret: %w", updateErr)
+		}
 
-		return updateErr
+		return nil
 	})
 	if retryErr != nil {
 		return fmt.Errorf("update hcloud secret: %w", retryErr)
