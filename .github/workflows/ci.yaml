@@ -723,7 +723,7 @@ jobs:
     name: 🔥 Warm Helm Cache
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    needs: [changes, build-artifact, wait-for-validate-go]
+    needs: [changes, license-check, build-artifact, wait-for-validate-go]
     if: >-
       !cancelled()
       && (needs.wait-for-validate-go.result == 'success' || needs.wait-for-validate-go.result == 'skipped')
@@ -765,7 +765,7 @@ jobs:
     name: 🔥 Warm Mirror Cache
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    needs: [changes, build-artifact, wait-for-validate-go]
+    needs: [changes, license-check, build-artifact, wait-for-validate-go]
     if: >-
       !cancelled()
       && (needs.wait-for-validate-go.result == 'success' || needs.wait-for-validate-go.result == 'skipped')
