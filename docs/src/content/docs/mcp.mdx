@@ -50,7 +50,7 @@ Each tool accepts a **subcommand parameter** that selects the specific operation
 
 | Tool | Subcommands |
 |------|-------------|
-| `cluster_read` | `info`, `list`, `connect`, `switch` (pass cluster name via `args`; mutates local kubeconfig current-context), `diagnose` (pass `--format json` via `args` for structured output) |
+| `cluster_read` | `info`, `list`, `connect`, `switch` (pass cluster name via `args`; mutates local kubeconfig current-context), `diagnose` (pass `["--format", "json"]` via `args` for structured JSON output; the tool returns the JSON as a string that the client must parse) |
 | `cluster_write` | `init`, `create`, `update` (returns diff output), `delete`, `start`, `stop`, `backup`, `restore` |
 
 ### Workload Operations

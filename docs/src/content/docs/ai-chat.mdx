@@ -199,6 +199,27 @@ ksail cluster diagnose --format json
 
 The JSON output includes a `healthScore` (0–100, where 100 means fully healthy) and a `findings` array with structured details for each issue. Each critical finding (NotReady node, failing pod) deducts 25 points; warnings deduct 10 points.
 
+```json
+{
+  "clusterName": "my-app",
+  "healthScore": 50,
+  "findings": [
+    {
+      "severity": "critical",
+      "resource": "node/node-1",
+      "reason": "node-1: Ready=False (container runtime not ready)"
+    },
+    {
+      "severity": "critical",
+      "resource": "pod/db-0 (default)",
+      "reason": "db-0: CrashLoopBackOff for postgres:16 (5 restarts)"
+    }
+  ]
+}
+```
+
+Each finding has three fields: `severity` (`"critical"` or `"warning"`), `resource` (e.g., `"node/<name>"` or `"pod/<name> (<namespace>)"`), and `reason` (a one-line description of the failure).
+
 The command is distribution-agnostic and works with Vanilla, K3s, Talos, and VCluster. It exits 0 even when failures are reported; a non-zero exit code is reserved for unreachable clusters.
 
 ## Troubleshooting
