@@ -297,3 +297,11 @@ func (p *Provisioner) IsDockerProviderForTest() bool {
 func (p *Provisioner) ClusterReadinessChecksCountForTest() int {
 	return len(p.clusterReadinessChecks())
 }
+
+// EnsureAutoscalerSecretIfNeededForTest exposes ensureAutoscalerSecretIfNeeded for unit testing.
+func (p *Provisioner) EnsureAutoscalerSecretIfNeededForTest(
+	ctx context.Context,
+	clusterName string,
+) error {
+	return p.ensureAutoscalerSecretIfNeeded(ctx, clusterName)
+}
