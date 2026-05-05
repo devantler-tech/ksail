@@ -454,10 +454,15 @@ func (p *Provisioner) needsSecretSync(
 
 // syncSecretsFromCluster connects to a running control-plane node, fetches its
 // machine configuration, extracts the PKI secrets, and rebuilds the in-memory
-// talosConfigs with those secrets. This ensures that configs applied to new nodes
-// during scale-up use the same CA, tokens, and bootstrap secrets as the running
-// cluster. Without this, ConfigManager.Load() generates fresh PKI on every call,
+// talosConfigs with those secrets and the correct endpoint IP. This ensures that
+// configs applied to new nodes during scale-up use the same CA, tokens, bootstrap
+// secrets, and cluster endpoint as the running cluster.
+//
+// Without secrets sync, ConfigManager.Load() generates fresh PKI on every call,
 // causing certificate mismatch errors when new nodes try to join.
+// Without endpoint sync, the configs default to a CIDR-derived private IP which
+// is unreachable on cloud providers like Hetzner (where the endpoint must be the
+// control-plane's public IP).
 //
 // This is a no-op when no machine configs will be pushed (no scale-up, no in-place
 // changes, no reboot-required changes). When secrets ARE needed but no control-plane
@@ -519,6 +524,16 @@ func (p *Provisioner) syncSecretsFromCluster(
 	rebuilt, err := p.talosConfigs.WithSecrets(existingSecrets)
 	if err != nil {
 		return fmt.Errorf("failed to rebuild configs with cluster secrets: %w", err)
+	}
+
+	// Also sync the endpoint IP from the running cluster. ConfigManager.Load()
+	// generates configs with an empty endpoint (defaulting to a CIDR-derived
+	// private IP). For Hetzner clusters, the endpoint must be the CP's public IP
+	// so that new workers can reach the control plane. WithEndpoint preserves
+	// the secrets already embedded by WithSecrets. (Fixes #4605)
+	rebuilt, err = rebuilt.WithEndpoint(cpIP)
+	if err != nil {
+		return fmt.Errorf("failed to update configs with cluster endpoint: %w", err)
 	}
 
 	p.talosConfigs = rebuilt
