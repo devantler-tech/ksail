@@ -171,7 +171,7 @@ Press **Ctrl+N** to start a fresh conversation. Previous sessions are automatica
 
 ## Diagnosing a Misbehaving Cluster
 
-Ask the assistant natural-language questions like "why is my cluster broken?" and it will call the `cluster_read` tool with the `diagnose` subcommand, which surfaces any failing pods and NotReady nodes via the Kubernetes API. Copilot then explains the root cause and suggests remediation.
+Ask the assistant natural-language questions like "why is my cluster broken?" and it will call the `cluster_read` tool with the `diagnose` subcommand, which surfaces failing pods and NotReady nodes via the Kubernetes API. Copilot then explains the root cause and suggests remediation.
 
 You can also run the underlying command directly:
 
@@ -179,48 +179,7 @@ You can also run the underlying command directly:
 ksail cluster diagnose
 ```
 
-Example output:
-
-```text
-Diagnostics for cluster "my-app":
-Not-Ready nodes:
-  node-1: Ready=False (container runtime not ready)
-
-Failing pods in default namespace:
-  web-0: ImagePullBackOff for ghcr.io/acme/web:latest
-  db-0: CrashLoopBackOff for postgres:16 (5 restarts)
-```
-
-For machine-readable output (useful for scripting or automation), use `--format json`:
-
-```bash
-ksail cluster diagnose --format json
-```
-
-The JSON output includes a `healthScore` (0–100, where 100 means fully healthy) and a `findings` array with structured details for each issue. Each critical finding (NotReady node, failing pod) deducts 25 points; warnings deduct 10 points.
-
-```json
-{
-  "clusterName": "my-app",
-  "healthScore": 50,
-  "findings": [
-    {
-      "severity": "critical",
-      "resource": "node/node-1",
-      "reason": "node-1: Ready=False (container runtime not ready)"
-    },
-    {
-      "severity": "critical",
-      "resource": "pod/db-0 (default)",
-      "reason": "db-0: CrashLoopBackOff for postgres:16 (5 restarts)"
-    }
-  ]
-}
-```
-
-Each finding has three fields: `severity` (`"critical"` or `"warning"`), `resource` (e.g., `"node/<name>"` or `"pod/<name> (<namespace>)"`), and `reason` (a one-line description of the failure).
-
-The command is distribution-agnostic and works with Vanilla, K3s, Talos, and VCluster. It exits 0 even when failures are reported; a non-zero exit code is reserved for unreachable clusters.
+The command is distribution-agnostic and works with Vanilla, K3s, Talos, and VCluster. Use `--format json` for machine-readable output in scripts or MCP tool calls. It exits 0 even when failures are reported; a non-zero exit code is reserved for unreachable clusters.
 
 ## Troubleshooting
 
