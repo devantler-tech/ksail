@@ -464,11 +464,16 @@ func (p *Provisioner) needsSecretSync(
 }
 
 // syncSecretsFromCluster connects to a running control-plane node, fetches its
-// machine configuration, extracts the PKI secrets, and rebuilds the in-memory
-// talosConfigs with those secrets. This ensures that configs applied to new nodes
-// during scale-up use the same CA, tokens, and bootstrap secrets as the running
-// cluster. Without this, ConfigManager.Load() generates fresh PKI on every call,
+// machine configuration, extracts the PKI secrets and cluster endpoint, and
+// rebuilds the in-memory talosConfigs. This ensures that configs applied to new
+// nodes during scale-up use the same CA, tokens, bootstrap secrets, and cluster
+// endpoint as the running cluster.
+//
+// Without secrets sync, ConfigManager.Load() generates fresh PKI on every call,
 // causing certificate mismatch errors when new nodes try to join.
+// Without endpoint sync, the configs default to a CIDR-derived private IP which
+// is unreachable on cloud providers like Hetzner (where the endpoint must be the
+// control-plane's public IP).
 //
 // This is a no-op when no machine configs will be pushed (no scale-up, no in-place
 // changes, no reboot-required changes). When secrets ARE needed but no control-plane
@@ -488,7 +493,6 @@ func (p *Provisioner) syncSecretsFromCluster(
 		return fmt.Errorf("failed to discover nodes for secret sync: %w", err)
 	}
 
-	// Find a control-plane node to extract secrets from
 	var cpIP string
 
 	for _, node := range nodes {
@@ -503,21 +507,56 @@ func (p *Provisioner) syncSecretsFromCluster(
 		return fmt.Errorf("%w: cluster %q", ErrNoControlPlaneForSecretSync, clusterName)
 	}
 
+	existingSecrets, endpointIP, err := p.fetchClusterSecretsAndEndpoint(ctx, cpIP)
+	if err != nil {
+		return err
+	}
+
+	rebuilt, err := p.talosConfigs.WithSecrets(existingSecrets)
+	if err != nil {
+		return fmt.Errorf("failed to rebuild configs with cluster secrets: %w", err)
+	}
+
+	rebuilt, err = rebuilt.WithEndpoint(endpointIP)
+	if err != nil {
+		return fmt.Errorf("failed to update configs with cluster endpoint: %w", err)
+	}
+
+	p.talosConfigs = rebuilt
+
+	_, _ = fmt.Fprintf(
+		p.logWriter,
+		"  ✓ Synced cluster secrets and endpoint (%s) from %s\n",
+		endpointIP,
+		cpIP,
+	)
+
+	return nil
+}
+
+// fetchClusterSecretsAndEndpoint connects to a control-plane node via the Talos
+// API, fetches its running MachineConfig, and extracts the PKI secrets bundle
+// and cluster endpoint. The endpoint is read from the running config (not
+// derived from node IPs) so that HA clusters with multiple control-plane nodes
+// always produce a deterministic endpoint.
+func (p *Provisioner) fetchClusterSecretsAndEndpoint(
+	ctx context.Context,
+	cpIP string,
+) (*secrets.Bundle, string, error) {
 	talosClient, err := p.createTalosClient(ctx, cpIP)
 	if err != nil {
-		return fmt.Errorf("failed to create Talos client for secret sync: %w", err)
+		return nil, "", fmt.Errorf("failed to create Talos client for secret sync: %w", err)
 	}
 
 	defer talosClient.Close() //nolint:errcheck
 
-	// Fetch the active MachineConfig resource from the running control-plane node.
 	machineConfig, err := safe.StateGet[*talosresconfig.MachineConfig](
 		ctx,
 		talosClient.COSI,
 		talosresconfig.NewMachineConfig(nil).Metadata(),
 	)
 	if err != nil {
-		return fmt.Errorf("failed to fetch machine config from %s: %w", cpIP, err)
+		return nil, "", fmt.Errorf("failed to fetch machine config from %s: %w", cpIP, err)
 	}
 
 	runningConfig := machineConfig.Config()
@@ -527,16 +566,16 @@ func (p *Provisioner) syncSecretsFromCluster(
 		runningConfig,
 	)
 
-	rebuilt, err := p.talosConfigs.WithSecrets(existingSecrets)
-	if err != nil {
-		return fmt.Errorf("failed to rebuild configs with cluster secrets: %w", err)
+	// Read the endpoint from the running cluster's config rather than deriving
+	// it from node IPs. This avoids non-deterministic ordering in HA clusters
+	// where getNodesByRole may return a different first CP node between updates.
+	// Falls back to cpIP if the running config has no endpoint set.
+	endpointIP := runningConfig.Cluster().Endpoint().Hostname()
+	if endpointIP == "" {
+		endpointIP = cpIP
 	}
 
-	p.talosConfigs = rebuilt
-
-	_, _ = fmt.Fprintf(p.logWriter, "  ✓ Synced cluster secrets from %s\n", cpIP)
-
-	return nil
+	return existingSecrets, endpointIP, nil
 }
 
 // nodeWithRole holds an IP address and its role for role-aware config application.
