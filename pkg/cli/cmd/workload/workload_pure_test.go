@@ -1072,10 +1072,10 @@ func TestIsKustomizationExcluded(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name         string
+		name          string
 		kustomization flux.KustomizationInfo
-		excludeSet   map[string]bool
-		want         bool
+		excludeSet    map[string]bool
+		want          bool
 	}{
 		{
 			name:          "not excluded when annotation false and not in set",
@@ -1119,7 +1119,10 @@ func TestIsKustomizationExcluded(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := workload.ExportIsKustomizationExcluded(testCase.kustomization, testCase.excludeSet)
+			got := workload.ExportIsKustomizationExcluded(
+				testCase.kustomization,
+				testCase.excludeSet,
+			)
 			assert.Equal(t, testCase.want, got)
 		})
 	}

@@ -301,7 +301,11 @@ func TestListKustomizations_ExcludeAnnotation_True(t *testing.T) {
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
-			assertKustomizationExcludedFlags(t, newTestFluxReconciler(testCase.objects...), testCase.wantExcluded)
+			assertKustomizationExcludedFlags(
+				t,
+				newTestFluxReconciler(testCase.objects...),
+				testCase.wantExcluded,
+			)
 		})
 	}
 }
@@ -320,8 +324,10 @@ func TestListKustomizations_ExcludeAnnotation_FalseOrAbsent(t *testing.T) {
 			wantExcluded: []bool{false},
 		},
 		{
-			name:         "kustomization without exclude annotation",
-			objects:      []runtime.Object{newFakeKustomization("normal", "./normal", nil, "True", "Succeeded", "ok")},
+			name: "kustomization without exclude annotation",
+			objects: []runtime.Object{
+				newFakeKustomization("normal", "./normal", nil, "True", "Succeeded", "ok"),
+			},
 			wantExcluded: []bool{false},
 		},
 		{
@@ -337,7 +343,11 @@ func TestListKustomizations_ExcludeAnnotation_FalseOrAbsent(t *testing.T) {
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
-			assertKustomizationExcludedFlags(t, newTestFluxReconciler(testCase.objects...), testCase.wantExcluded)
+			assertKustomizationExcludedFlags(
+				t,
+				newTestFluxReconciler(testCase.objects...),
+				testCase.wantExcluded,
+			)
 		})
 	}
 }

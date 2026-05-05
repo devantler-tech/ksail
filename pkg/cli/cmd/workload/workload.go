@@ -2501,7 +2501,8 @@ func reconcileFluxKustomizationsWithProgress(
 		notify.WithConcurrency(reconcileConcurrency),
 	)
 
-	if err = ksGroup.Run(deadlineCtx, tasks...); err != nil {
+	err = ksGroup.Run(deadlineCtx, tasks...)
+	if err != nil {
 		return fmt.Errorf("reconcile kustomizations: %w", err)
 	}
 
