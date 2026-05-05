@@ -2482,7 +2482,9 @@ func reconcileFluxKustomizationsWithProgress(
 
 	excludeSet := make(map[string]bool, len(excludeNames))
 	for _, name := range excludeNames {
-		excludeSet[name] = true
+		if trimmed := strings.TrimSpace(name); trimmed != "" {
+			excludeSet[trimmed] = true
+		}
 	}
 
 	sorted := topologicalSortKustomizations(kustomizations)
