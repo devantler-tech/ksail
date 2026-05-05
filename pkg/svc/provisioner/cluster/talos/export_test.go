@@ -6,6 +6,7 @@ import (
 	"net/netip"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	omniprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/omni"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
@@ -296,4 +297,21 @@ func (p *Provisioner) IsDockerProviderForTest() bool {
 // ClusterReadinessChecksCountForTest returns the number of checks from clusterReadinessChecks for unit testing.
 func (p *Provisioner) ClusterReadinessChecksCountForTest() int {
 	return len(p.clusterReadinessChecks())
+}
+
+// EnsureAutoscalerSecretIfNeededForTest exposes ensureAutoscalerSecretIfNeeded for unit testing.
+func (p *Provisioner) EnsureAutoscalerSecretIfNeededForTest(
+	ctx context.Context,
+	clusterName string,
+) error {
+	return p.ensureAutoscalerSecretIfNeeded(ctx, clusterName)
+}
+
+// WithTalosConfigsForTest sets talosConfigs on the provisioner for unit testing.
+func (p *Provisioner) WithTalosConfigsForTest(
+	configs *talosconfigmanager.Configs,
+) *Provisioner {
+	p.talosConfigs = configs
+
+	return p
 }

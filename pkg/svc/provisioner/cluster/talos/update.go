@@ -101,6 +101,17 @@ func (p *Provisioner) Update(
 	// actually running (e.g., booted from a Hetzner ISO at a different version).
 	// See: https://github.com/devantler-tech/ksail/issues/4260
 
+	// Ensure the cluster-autoscaler-config Secret exists when the node autoscaler
+	// is enabled. During cluster create, this secret is created by
+	// bootstrapAndFinalize. During update the component reconciler installs the
+	// Helm chart but did not previously create the prerequisite secret, causing
+	// the autoscaler pod to enter CreateContainerConfigError.
+	// See: https://github.com/devantler-tech/ksail/issues/4606
+	secretErr = p.ensureAutoscalerSecretIfNeeded(ctx, clusterName)
+	if secretErr != nil {
+		return result, fmt.Errorf("failed to ensure autoscaler config secret: %w", secretErr)
+	}
+
 	return result, nil
 }
 
@@ -804,4 +815,31 @@ func (p *Provisioner) syncHetznerFirewallRules(
 	}
 
 	return nil
+}
+
+// ensureAutoscalerSecretIfNeeded creates or updates the cluster-autoscaler-config
+// Secret when the node autoscaler is enabled on Hetzner. It is a no-op when
+// autoscaling is disabled, the provider is not Hetzner, or the config bundle
+// is unavailable. Snapshot image lookup errors are propagated because they
+// indicate a misconfigured cluster. This mirrors the create-time call in
+// bootstrapAndFinalize.
+func (p *Provisioner) ensureAutoscalerSecretIfNeeded(
+	ctx context.Context,
+	clusterName string,
+) error {
+	if p.hetznerOpts == nil || !p.hetznerOpts.NodeAutoscalerEnabled || p.talosConfigs == nil {
+		return nil
+	}
+
+	configBundle := p.talosConfigs.Bundle()
+	if configBundle == nil {
+		return nil
+	}
+
+	snapshotImageID, err := p.ensureSnapshotImage(ctx, clusterName)
+	if err != nil {
+		return fmt.Errorf("looking up snapshot image for autoscaler secret: %w", err)
+	}
+
+	return p.ensureAutoscalerSecret(ctx, configBundle, snapshotImageID)
 }

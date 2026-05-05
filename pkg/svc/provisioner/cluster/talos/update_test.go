@@ -481,3 +481,76 @@ func TestNeedsSecretSync_ScaleDown(t *testing.T) {
 		diff,
 	))
 }
+
+// TestEnsureAutoscalerSecretIfNeeded_NoopWhenNotHetzner verifies that
+// ensureAutoscalerSecretIfNeeded is a no-op when hetznerOpts is nil
+// (non-Hetzner provider).
+func TestEnsureAutoscalerSecretIfNeeded_NoopWhenNotHetzner(t *testing.T) {
+	t.Parallel()
+
+	provisioner := talosprovisioner.NewProvisioner(nil, nil).WithLogWriter(io.Discard)
+
+	err := provisioner.EnsureAutoscalerSecretIfNeededForTest(
+		context.Background(),
+		"test-cluster",
+	)
+	require.NoError(t, err)
+}
+
+// TestEnsureAutoscalerSecretIfNeeded_NoopWhenAutoscalerDisabled verifies that
+// ensureAutoscalerSecretIfNeeded is a no-op when NodeAutoscalerEnabled is false.
+func TestEnsureAutoscalerSecretIfNeeded_NoopWhenAutoscalerDisabled(t *testing.T) {
+	t.Parallel()
+
+	provisioner := talosprovisioner.NewProvisioner(nil, nil).
+		WithHetznerOptions(v1alpha1.OptionsHetzner{
+			NodeAutoscalerEnabled: false,
+		}).
+		WithLogWriter(io.Discard)
+
+	err := provisioner.EnsureAutoscalerSecretIfNeededForTest(
+		context.Background(),
+		"test-cluster",
+	)
+	require.NoError(t, err)
+}
+
+// TestEnsureAutoscalerSecretIfNeeded_NoopWhenNilTalosConfigs verifies that
+// ensureAutoscalerSecretIfNeeded is a no-op when talosConfigs is nil, even
+// when autoscaler is enabled on Hetzner.
+func TestEnsureAutoscalerSecretIfNeeded_NoopWhenNilTalosConfigs(t *testing.T) {
+	t.Parallel()
+
+	provisioner := talosprovisioner.NewProvisioner(nil, nil).
+		WithHetznerOptions(v1alpha1.OptionsHetzner{
+			NodeAutoscalerEnabled: true,
+		}).
+		WithLogWriter(io.Discard)
+
+	err := provisioner.EnsureAutoscalerSecretIfNeededForTest(
+		context.Background(),
+		"test-cluster",
+	)
+	require.NoError(t, err)
+}
+
+// TestEnsureAutoscalerSecretIfNeeded_NoopWhenNilBundle verifies that
+// ensureAutoscalerSecretIfNeeded is a no-op when talosConfigs is non-nil but
+// Bundle() returns nil, preventing a nil-dereference panic.
+func TestEnsureAutoscalerSecretIfNeeded_NoopWhenNilBundle(t *testing.T) {
+	t.Parallel()
+
+	configs := &talosconfigmanager.Configs{}
+	provisioner := talosprovisioner.NewProvisioner(nil, nil).
+		WithHetznerOptions(v1alpha1.OptionsHetzner{
+			NodeAutoscalerEnabled: true,
+		}).
+		WithTalosConfigsForTest(configs).
+		WithLogWriter(io.Discard)
+
+	err := provisioner.EnsureAutoscalerSecretIfNeededForTest(
+		context.Background(),
+		"test-cluster",
+	)
+	require.NoError(t, err)
+}
