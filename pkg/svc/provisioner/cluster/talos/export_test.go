@@ -80,15 +80,6 @@ func (p *Provisioner) SyncAndWaitOmniClusterForTest(
 	return p.syncAndWaitOmniCluster(ctx, omniProv, params)
 }
 
-// SaveOmniConfigForTest exposes saveOmniConfig for unit testing.
-func (p *Provisioner) SaveOmniConfigForTest(
-	configData []byte,
-	rawPath string,
-	configLabel string,
-) error {
-	return p.saveOmniConfig(configData, rawPath, configLabel)
-}
-
 // SaveOmniKubeconfigForTest exposes saveOmniKubeconfig for unit testing.
 func (p *Provisioner) SaveOmniKubeconfigForTest(
 	ctx context.Context,
@@ -314,4 +305,9 @@ func (p *Provisioner) WithTalosConfigsForTest(
 	p.talosConfigs = configs
 
 	return p
+}
+
+// MergeTalosconfigBytesForTest exposes mergeTalosconfigBytes for unit testing.
+func MergeTalosconfigBytesForTest(talosconfigPath string, newData []byte) error {
+	return mergeTalosconfigBytes(talosconfigPath, newData)
 }

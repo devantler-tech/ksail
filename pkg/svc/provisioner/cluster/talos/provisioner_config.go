@@ -18,8 +18,9 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
-// writeKubeconfig writes the raw kubeconfig bytes to the configured kubeconfig path.
-// It expands tilde in the path, ensures the directory exists, and writes the file.
+// writeKubeconfig merges the raw kubeconfig bytes into the existing kubeconfig file
+// at the configured path. It expands tilde in the path and delegates to MergeKubeconfig
+// which handles directory creation, path canonicalization, and merging.
 func (p *Provisioner) writeKubeconfig(kubeconfig []byte) error {
 	// Expand tilde in kubeconfig path (e.g., ~/.kube/config -> /home/user/.kube/config)
 	kubeconfigPath, err := fsutil.ExpandHomePath(p.options.KubeconfigPath)
@@ -27,33 +28,26 @@ func (p *Provisioner) writeKubeconfig(kubeconfig []byte) error {
 		return fmt.Errorf("failed to expand kubeconfig path: %w", err)
 	}
 
-	// Ensure kubeconfig directory exists
-	kubeconfigDir := filepath.Dir(kubeconfigPath)
-	if kubeconfigDir != "" && kubeconfigDir != "." {
-		mkdirErr := os.MkdirAll(kubeconfigDir, stateDirectoryPermissions)
-		if mkdirErr != nil {
-			return fmt.Errorf("failed to create kubeconfig directory: %w", mkdirErr)
-		}
-	}
-
-	// Canonicalize the path (resolve symlinks) before writing
-	kubeconfigPath, err = fsutil.EvalCanonicalPath(kubeconfigPath)
+	// Merge into existing kubeconfig to preserve other cluster entries.
+	// MergeKubeconfig handles directory creation and path canonicalization.
+	err = k8s.MergeKubeconfig(kubeconfigPath, kubeconfig)
 	if err != nil {
-		return fmt.Errorf("failed to canonicalize kubeconfig path: %w", err)
+		return fmt.Errorf("failed to merge kubeconfig: %w", err)
 	}
 
-	// Write kubeconfig to file
-	err = os.WriteFile(kubeconfigPath, kubeconfig, kubeconfigFileMode)
-	if err != nil {
-		return fmt.Errorf("failed to write kubeconfig: %w", err)
+	// Log the canonical path for accuracy (MergeKubeconfig resolves symlinks internally).
+	canonicalPath, _ := fsutil.EvalCanonicalPath(kubeconfigPath)
+	if canonicalPath == "" {
+		canonicalPath = kubeconfigPath
 	}
 
-	_, _ = fmt.Fprintf(p.logWriter, "Kubeconfig saved to %s\n", kubeconfigPath)
+	_, _ = fmt.Fprintf(p.logWriter, "Kubeconfig saved to %s\n", canonicalPath)
 
 	return nil
 }
 
-// saveTalosconfig saves the talosconfig for any cluster type.
+// saveTalosconfig merges the new talosconfig context into the existing talosconfig file.
+// If the file does not exist, it creates it with the new context.
 func (p *Provisioner) saveTalosconfig(configBundle *bundle.Bundle) error {
 	// Expand tilde in talosconfig path
 	talosconfigPath, err := fsutil.ExpandHomePath(p.options.TalosconfigPath)
@@ -61,24 +55,104 @@ func (p *Provisioner) saveTalosconfig(configBundle *bundle.Bundle) error {
 		return fmt.Errorf("failed to expand talosconfig path: %w", err)
 	}
 
-	// Ensure talosconfig directory exists
-	talosconfigDir := filepath.Dir(talosconfigPath)
-	if talosconfigDir != "" && talosconfigDir != "." {
-		mkdirErr := os.MkdirAll(talosconfigDir, stateDirectoryPermissions)
-		if mkdirErr != nil {
-			return fmt.Errorf("failed to create talosconfig directory: %w", mkdirErr)
-		}
+	talosconfigPath, err = prepareTalosconfigPath(talosconfigPath)
+	if err != nil {
+		return err
 	}
 
-	// Save the talosconfig
-	saveErr := configBundle.TalosConfig().Save(talosconfigPath)
+	newConfig := configBundle.TalosConfig()
+
+	// Try to load existing talosconfig; if it doesn't exist, save directly
+	existing, openErr := clientconfig.Open(talosconfigPath)
+	if openErr != nil {
+		if os.IsNotExist(openErr) {
+			saveErr := newConfig.Save(talosconfigPath)
+			if saveErr != nil {
+				return fmt.Errorf("failed to save talosconfig: %w", saveErr)
+			}
+
+			_, _ = fmt.Fprintf(p.logWriter, "Talosconfig saved to %s\n", talosconfigPath)
+
+			return nil
+		}
+
+		return fmt.Errorf("failed to open existing talosconfig: %w", openErr)
+	}
+
+	// Merge new contexts into existing config (renames colliding contexts with -N suffix)
+	existing.Merge(newConfig)
+
+	saveErr := existing.Save(talosconfigPath)
 	if saveErr != nil {
-		return fmt.Errorf("failed to save talosconfig: %w", saveErr)
+		return fmt.Errorf("failed to save merged talosconfig: %w", saveErr)
 	}
 
 	_, _ = fmt.Fprintf(p.logWriter, "Talosconfig saved to %s\n", talosconfigPath)
 
 	return nil
+}
+
+// mergeTalosconfigBytes merges raw talosconfig bytes into an existing talosconfig file.
+// If the file does not exist, it creates it with the new content.
+// It creates the parent directory and canonicalizes the path before reading or writing
+// to prevent symlink-escape attacks.
+// This is used by Omni paths that receive talosconfig as raw bytes.
+func mergeTalosconfigBytes(talosconfigPath string, newData []byte) error {
+	// Parse the new talosconfig data
+	newConfig, err := clientconfig.FromBytes(newData)
+	if err != nil {
+		return fmt.Errorf("failed to parse new talosconfig: %w", err)
+	}
+
+	talosconfigPath, err = prepareTalosconfigPath(talosconfigPath)
+	if err != nil {
+		return err
+	}
+
+	// Try to load existing talosconfig
+	existing, openErr := clientconfig.Open(talosconfigPath)
+	if openErr != nil {
+		if os.IsNotExist(openErr) {
+			// No existing file; save the new config directly
+			saveErr := newConfig.Save(talosconfigPath)
+			if saveErr != nil {
+				return fmt.Errorf("failed to save new talosconfig: %w", saveErr)
+			}
+
+			return nil
+		}
+
+		return fmt.Errorf("failed to open existing talosconfig: %w", openErr)
+	}
+
+	// Merge new contexts into existing config
+	existing.Merge(newConfig)
+
+	saveErr := existing.Save(talosconfigPath)
+	if saveErr != nil {
+		return fmt.Errorf("failed to save merged talosconfig: %w", saveErr)
+	}
+
+	return nil
+}
+
+// prepareTalosconfigPath ensures the parent directory exists and canonicalizes the path.
+// Shared by saveTalosconfig and mergeTalosconfigBytes to avoid duplication.
+func prepareTalosconfigPath(talosconfigPath string) (string, error) {
+	talosconfigDir := filepath.Dir(talosconfigPath)
+	if talosconfigDir != "" && talosconfigDir != "." {
+		mkdirErr := os.MkdirAll(talosconfigDir, stateDirectoryPermissions)
+		if mkdirErr != nil {
+			return "", fmt.Errorf("failed to create talosconfig directory: %w", mkdirErr)
+		}
+	}
+
+	canonicalPath, err := fsutil.EvalCanonicalPath(talosconfigPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to canonicalize talosconfig path: %w", err)
+	}
+
+	return canonicalPath, nil
 }
 
 // rewriteKubeconfigEndpoint rewrites all cluster server endpoints in the kubeconfig

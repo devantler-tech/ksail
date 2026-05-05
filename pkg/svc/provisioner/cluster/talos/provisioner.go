@@ -49,8 +49,6 @@ const (
 	ipv4Offset = 2
 	// stateDirectoryPermissions is the permissions for the state directory.
 	stateDirectoryPermissions = 0o750
-	// kubeconfigFileMode is the file mode for kubeconfig files.
-	kubeconfigFileMode = 0o600
 	// clusterReadinessTimeout is the timeout for waiting for the cluster to become ready.
 	// This is shared across all Talos providers (Docker, Hetzner, Omni) and matches
 	// the upstream talosctl default of 20 minutes to accommodate slower cloud bring-up.
