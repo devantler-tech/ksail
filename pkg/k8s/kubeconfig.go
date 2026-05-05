@@ -3,6 +3,7 @@ package k8s
 import (
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
 
@@ -28,7 +29,6 @@ const kubeconfigDirMode = 0o700
 // attacks.
 //
 // This prevents data loss when multiple clusters share the same kubeconfig file.
-//
 func MergeKubeconfig(kubeconfigPath string, newKubeconfigData []byte) error {
 	newConfig, err := clientcmd.Load(newKubeconfigData)
 	if err != nil {
@@ -39,7 +39,8 @@ func MergeKubeconfig(kubeconfigPath string, newKubeconfigData []byte) error {
 	// requires the parent to exist).
 	kubeconfigDir := filepath.Dir(kubeconfigPath)
 	if kubeconfigDir != "" && kubeconfigDir != "." {
-		if mkdirErr := os.MkdirAll(kubeconfigDir, kubeconfigDirMode); mkdirErr != nil {
+		mkdirErr := os.MkdirAll(kubeconfigDir, kubeconfigDirMode)
+		if mkdirErr != nil {
 			return fmt.Errorf("failed to create kubeconfig directory: %w", mkdirErr)
 		}
 	}
@@ -77,25 +78,19 @@ func mergeKubeconfigEntries(dst, src *api.Config) {
 		dst.Clusters = make(map[string]*api.Cluster)
 	}
 
-	for name, cluster := range src.Clusters {
-		dst.Clusters[name] = cluster
-	}
+	maps.Copy(dst.Clusters, src.Clusters)
 
 	if dst.Contexts == nil {
 		dst.Contexts = make(map[string]*api.Context)
 	}
 
-	for name, ctx := range src.Contexts {
-		dst.Contexts[name] = ctx
-	}
+	maps.Copy(dst.Contexts, src.Contexts)
 
 	if dst.AuthInfos == nil {
 		dst.AuthInfos = make(map[string]*api.AuthInfo)
 	}
 
-	for name, authInfo := range src.AuthInfos {
-		dst.AuthInfos[name] = authInfo
-	}
+	maps.Copy(dst.AuthInfos, src.AuthInfos)
 
 	if src.CurrentContext != "" {
 		dst.CurrentContext = src.CurrentContext

@@ -111,7 +111,8 @@ func mergeTalosconfigBytes(talosconfigPath string, newData []byte) error {
 	// Ensure parent directory exists
 	talosconfigDir := filepath.Dir(talosconfigPath)
 	if talosconfigDir != "" && talosconfigDir != "." {
-		if mkdirErr := os.MkdirAll(talosconfigDir, stateDirectoryPermissions); mkdirErr != nil {
+		mkdirErr := os.MkdirAll(talosconfigDir, stateDirectoryPermissions)
+		if mkdirErr != nil {
 			return fmt.Errorf("failed to create talosconfig directory: %w", mkdirErr)
 		}
 	}
@@ -127,7 +128,8 @@ func mergeTalosconfigBytes(talosconfigPath string, newData []byte) error {
 	if openErr != nil {
 		if os.IsNotExist(openErr) {
 			// No existing file; save the new config directly
-			if saveErr := newConfig.Save(talosconfigPath); saveErr != nil {
+			saveErr := newConfig.Save(talosconfigPath)
+			if saveErr != nil {
 				return fmt.Errorf("failed to save new talosconfig: %w", saveErr)
 			}
 
@@ -140,7 +142,8 @@ func mergeTalosconfigBytes(talosconfigPath string, newData []byte) error {
 	// Merge new contexts into existing config
 	existing.Merge(newConfig)
 
-	if saveErr := existing.Save(talosconfigPath); saveErr != nil {
+	saveErr := existing.Save(talosconfigPath)
+	if saveErr != nil {
 		return fmt.Errorf("failed to save merged talosconfig: %w", saveErr)
 	}
 

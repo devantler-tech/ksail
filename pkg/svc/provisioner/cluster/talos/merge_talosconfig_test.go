@@ -53,13 +53,13 @@ func TestMergeTalosconfigBytes(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name             string
-		existingContent  []byte
-		newContent       []byte
-		wantContexts     []string
-		wantCurrentCtx   string
-		wantEndpoint     map[string]string
-		useNestedDir     bool
+		name            string
+		existingContent []byte
+		newContent      []byte
+		wantContexts    []string
+		wantCurrentCtx  string
+		wantEndpoint    map[string]string
+		useNestedDir    bool
 	}{
 		{
 			name:            "no existing file creates new talosconfig",
@@ -135,6 +135,7 @@ func runMergeTalosconfigTest(
 		if useNestedDir {
 			require.NoError(t, os.MkdirAll(filepath.Dir(talosconfigPath), 0o700))
 		}
+
 		require.NoError(t, os.WriteFile(talosconfigPath, existingContent, 0o600))
 	}
 
@@ -147,6 +148,7 @@ func runMergeTalosconfigTest(
 	for name := range parsed.Contexts {
 		contextNames = append(contextNames, name)
 	}
+
 	assert.ElementsMatch(t, wantContexts, contextNames, "contexts")
 
 	assert.Equal(t, wantCurrentCtx, parsed.Context, "current context")

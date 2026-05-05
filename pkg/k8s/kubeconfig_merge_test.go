@@ -101,12 +101,12 @@ type mergeKubeconfigTestCase struct {
 func mergeKubeconfigTests() []mergeKubeconfigTestCase {
 	return []mergeKubeconfigTestCase{
 		{
-			name:            "no existing file creates new",
-			newContent:      newKubeconfigCluster,
-			wantClusters:    []string{"new-cluster"},
-			wantContexts:    []string{"new-context"},
-			wantUsers:       []string{"new-user"},
-			wantCurrentCtx:  "new-context",
+			name:           "no existing file creates new",
+			newContent:     newKubeconfigCluster,
+			wantClusters:   []string{"new-cluster"},
+			wantContexts:   []string{"new-context"},
+			wantUsers:      []string{"new-user"},
+			wantCurrentCtx: "new-context",
 		},
 		{
 			name:           "creates parent directory if missing",
@@ -192,6 +192,7 @@ func runMergeKubeconfigTest(t *testing.T, testCase mergeKubeconfigTestCase) {
 	for name := range config.Clusters {
 		clusterNames = append(clusterNames, name)
 	}
+
 	assert.ElementsMatch(t, testCase.wantClusters, clusterNames, "clusters")
 
 	// Check contexts
@@ -199,6 +200,7 @@ func runMergeKubeconfigTest(t *testing.T, testCase mergeKubeconfigTestCase) {
 	for name := range config.Contexts {
 		contextNames = append(contextNames, name)
 	}
+
 	assert.ElementsMatch(t, testCase.wantContexts, contextNames, "contexts")
 
 	// Check users
@@ -206,6 +208,7 @@ func runMergeKubeconfigTest(t *testing.T, testCase mergeKubeconfigTestCase) {
 	for name := range config.AuthInfos {
 		userNames = append(userNames, name)
 	}
+
 	assert.ElementsMatch(t, testCase.wantUsers, userNames, "users")
 
 	// Check current context
