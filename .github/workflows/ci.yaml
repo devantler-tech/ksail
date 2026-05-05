@@ -556,7 +556,11 @@ jobs:
           go-licenses check ./... \
             --disallowed_types=forbidden \
             --ignore github.com/devantler-tech/ksail/v7 \
-            --ignore github.com/spdx/tools-golang
+            --ignore github.com/spdx/tools-golang \
+            --ignore github.com/in-toto/in-toto-golang \
+            --ignore github.com/inconshreveable/go-update \
+            --ignore github.com/loft-sh/admin-apis \
+            --ignore github.com/segmentio/asm
 
   audit-docs:
     name: 🔍 Audit Docs Dependencies
