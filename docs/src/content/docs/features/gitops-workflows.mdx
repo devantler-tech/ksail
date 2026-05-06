@@ -58,9 +58,11 @@ The report includes:
 
 Diagnostics are best-effort with a 15-second timeout. If the cluster is unreachable, the section is silently skipped so the original reconciliation error remains prominent.
 
-### Excluding Kustomizations from Reconciliation
+### Excluding Flux Kustomizations from Progress Monitoring
 
-Some Kustomizations may be intentionally long-running or should not block reconciliation. You can exclude specific Kustomizations from progress monitoring using either an annotation or a CLI flag.
+This feature is **Flux-specific** and does not affect ArgoCD Application reconciliation.
+
+Some Flux Kustomizations may be intentionally long-running or should not block command completion. You can exclude specific Kustomizations from progress monitoring using either an annotation or a CLI flag.
 
 **Annotation** — add to the Kustomization manifest:
 
