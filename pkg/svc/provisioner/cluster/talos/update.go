@@ -10,6 +10,7 @@ import (
 	"github.com/cosi-project/runtime/pkg/safe"
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	"github.com/docker/docker/api/types/container"
@@ -747,13 +748,33 @@ func (p *Provisioner) GetCurrentConfig(
 	spec.Talos.Version = p.introspectTalosVersion(ctx)
 
 	// Build provider spec if we have Hetzner options configured.
-	// Hetzner fields (server types, location, network, SSH key) cannot be
-	// introspected from the running cluster, so we echo the desired config
-	// as the baseline — identical to the approach used for NetworkCIDR.
+	// Server types are introspected from the running Hetzner servers so
+	// that changes (e.g., cx22 -> cx33) appear in the diff. Other Hetzner
+	// fields (location, network, SSH key) cannot be introspected, so we
+	// echo the desired config as the baseline for those.
 	var providerSpec *v1alpha1.ProviderSpec
 	if p.hetznerOpts != nil {
+		hetznerSpec := *p.hetznerOpts
+
+		// Introspect actual server types from running servers.
+		if p.infraProvider != nil {
+			clusterName := p.resolveClusterName("")
+
+			nodes, listErr := p.infraProvider.ListNodes(ctx, clusterName)
+			if listErr == nil {
+				cpType, workerType := detectHetznerServerTypes(nodes)
+				if cpType != "" {
+					hetznerSpec.ControlPlaneServerType = cpType
+				}
+
+				if workerType != "" {
+					hetznerSpec.WorkerServerType = workerType
+				}
+			}
+		}
+
 		providerSpec = &v1alpha1.ProviderSpec{
-			Hetzner: *p.hetznerOpts,
+			Hetzner: hetznerSpec,
 		}
 	}
 
@@ -840,6 +861,30 @@ func countNodeRoles(nodes []nodeWithRole) (int32, int32) {
 	}
 
 	return controlPlanes, workers
+}
+
+// detectHetznerServerTypes determines the actual control-plane and worker
+// server types from a node listing. Returns empty strings when no nodes of
+// a given role are found.
+func detectHetznerServerTypes(nodes []provider.NodeInfo) (cpServerType, workerServerType string) {
+	for _, n := range nodes {
+		switch n.Role {
+		case RoleControlPlane:
+			if cpServerType == "" && n.ServerType != "" {
+				cpServerType = n.ServerType
+			}
+		case RoleWorker:
+			if workerServerType == "" && n.ServerType != "" {
+				workerServerType = n.ServerType
+			}
+		}
+
+		if cpServerType != "" && workerServerType != "" {
+			break
+		}
+	}
+
+	return cpServerType, workerServerType
 }
 
 // syncHetznerFirewallRules synchronizes the Hetzner Cloud Firewall rules to the

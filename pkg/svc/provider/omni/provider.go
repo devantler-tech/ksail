@@ -99,7 +99,7 @@ func (p *Provider) ListNodes(ctx context.Context, clusterName string) ([]provide
 	for machine := range machines.All() {
 		role := "worker"
 		if _, ok := machine.Metadata().Labels().Get(omnires.LabelControlPlaneRole); ok {
-			role = "controlplane"
+			role = "control-plane"
 		}
 
 		stage := "unknown"
