@@ -70,7 +70,7 @@ require (
 	github.com/kubescape/kubescape/v3 v3.0.48
 	github.com/kubescape/opa-utils v0.0.293
 	github.com/loft-sh/log v0.0.0-20240219160058-26d83ffb46ac
-	github.com/loft-sh/vcluster v0.33.2
+	github.com/loft-sh/vcluster v0.34.0
 	github.com/modelcontextprotocol/go-sdk v1.5.0
 	github.com/siderolabs/gen v0.8.6
 	github.com/siderolabs/go-kubernetes v0.2.36
@@ -897,7 +897,7 @@ require (
 	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc v1.40.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp v1.43.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.43.0 // indirect
-	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.40.0 // indirect
+	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.43.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.43.0 // indirect
 	go.opentelemetry.io/otel/exporters/stdout/stdouttrace v1.40.0 // indirect
 	go.opentelemetry.io/otel/log v0.19.0 // indirect
