@@ -18,6 +18,10 @@ type NodeInfo struct {
 
 	// State is the current state of the node (running, stopped, etc.)
 	State string
+
+	// ServerType is the infrastructure server type (e.g., "cx22", "cx33").
+	// Only populated by cloud providers (Hetzner); empty for Docker/Omni.
+	ServerType string
 }
 
 // ClusterStatus contains the status of a cluster as reported by its infrastructure provider.

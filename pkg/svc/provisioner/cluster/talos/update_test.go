@@ -7,6 +7,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
 	omniprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/omni"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	talosprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/talos"
@@ -656,4 +657,80 @@ func TestEnsureAutoscalerSecretIfNeeded_ErrorWhenNoSchematic(t *testing.T) {
 	)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, talosprovisioner.ErrAutoscalerRequiresSchematic)
+}
+
+//nolint:funlen // Table-driven test with multiple node topology scenarios is clearer as single function
+func TestDetectHetznerServerTypes(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name           string
+		nodes          []provider.NodeInfo
+		wantCPType     string
+		wantWorkerType string
+	}{
+		{
+			name:           "empty node list returns empty strings",
+			nodes:          nil,
+			wantCPType:     "",
+			wantWorkerType: "",
+		},
+		{
+			name: "single control-plane node",
+			nodes: []provider.NodeInfo{
+				{Name: "cp-0", Role: talosprovisioner.RoleControlPlane, ServerType: "cx22"},
+			},
+			wantCPType:     "cx22",
+			wantWorkerType: "",
+		},
+		{
+			name: "single worker node",
+			nodes: []provider.NodeInfo{
+				{Name: "worker-0", Role: talosprovisioner.RoleWorker, ServerType: "cx33"},
+			},
+			wantCPType:     "",
+			wantWorkerType: "cx33",
+		},
+		{
+			name: "mixed nodes returns first of each role",
+			nodes: []provider.NodeInfo{
+				{Name: "cp-0", Role: talosprovisioner.RoleControlPlane, ServerType: "cx22"},
+				{Name: "cp-1", Role: talosprovisioner.RoleControlPlane, ServerType: "cx44"},
+				{Name: "worker-0", Role: talosprovisioner.RoleWorker, ServerType: "cx33"},
+				{Name: "worker-1", Role: talosprovisioner.RoleWorker, ServerType: "cx55"},
+			},
+			wantCPType:     "cx22",
+			wantWorkerType: "cx33",
+		},
+		{
+			name: "skips nodes with empty ServerType",
+			nodes: []provider.NodeInfo{
+				{Name: "cp-0", Role: talosprovisioner.RoleControlPlane, ServerType: ""},
+				{Name: "cp-1", Role: talosprovisioner.RoleControlPlane, ServerType: "cx22"},
+				{Name: "worker-0", Role: talosprovisioner.RoleWorker, ServerType: ""},
+			},
+			wantCPType:     "cx22",
+			wantWorkerType: "",
+		},
+		{
+			name: "unknown roles are ignored",
+			nodes: []provider.NodeInfo{
+				{Name: "unknown-0", Role: "unknown", ServerType: "cx11"},
+				{Name: "cp-0", Role: talosprovisioner.RoleControlPlane, ServerType: "cx22"},
+			},
+			wantCPType:     "cx22",
+			wantWorkerType: "",
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			cpType, workerType := talosprovisioner.DetectHetznerServerTypesForTest(testCase.nodes)
+
+			assert.Equal(t, testCase.wantCPType, cpType)
+			assert.Equal(t, testCase.wantWorkerType, workerType)
+		})
+	}
 }

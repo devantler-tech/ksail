@@ -195,15 +195,31 @@ func (p *Provider) ListNodes(ctx context.Context, clusterName string) ([]provide
 	for _, server := range servers {
 		nodeType := server.Labels[LabelNodeType]
 
+		var serverType string
+		if server.ServerType != nil {
+			serverType = server.ServerType.Name
+		}
+
 		nodes = append(nodes, provider.NodeInfo{
 			Name:        server.Name,
 			ClusterName: clusterName,
-			Role:        nodeType,
+			Role:        normalizeNodeRole(nodeType),
 			State:       string(server.Status),
+			ServerType:  serverType,
 		})
 	}
 
 	return nodes, nil
+}
+
+// normalizeNodeRole maps Hetzner-specific node type label values to the
+// canonical role strings defined by provider.NodeInfo (control-plane, worker).
+func normalizeNodeRole(hetznerNodeType string) string {
+	if hetznerNodeType == NodeTypeControlPlane {
+		return "control-plane"
+	}
+
+	return hetznerNodeType
 }
 
 // ListAllClusters returns the names of all clusters managed by this provider.

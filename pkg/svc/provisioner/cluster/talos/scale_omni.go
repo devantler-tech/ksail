@@ -184,7 +184,7 @@ func (p *Provisioner) discoverMachinesForScaling(
 	var cpIDs, workerIDs []string
 
 	for _, n := range existingNodes {
-		if n.Role == omniRoleControlPlane {
+		if n.Role == RoleControlPlane {
 			cpIDs = append(cpIDs, n.Name)
 		} else {
 			workerIDs = append(workerIDs, n.Name)

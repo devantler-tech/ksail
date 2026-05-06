@@ -422,3 +422,44 @@ func TestDeleteAutoscalerNodes_NilPoolNames(t *testing.T) {
 
 	require.NoError(t, err)
 }
+
+func TestNormalizeNodeRole(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "controlplane maps to control-plane",
+			input:    hetzner.NodeTypeControlPlane,
+			expected: "control-plane",
+		},
+		{
+			name:     "worker passes through unchanged",
+			input:    hetzner.NodeTypeWorker,
+			expected: "worker",
+		},
+		{
+			name:     "empty string passes through",
+			input:    "",
+			expected: "",
+		},
+		{
+			name:     "unknown value passes through",
+			input:    "custom-role",
+			expected: "custom-role",
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			result := hetzner.NormalizeNodeRoleForTest(testCase.input)
+
+			assert.Equal(t, testCase.expected, result)
+		})
+	}
+}

@@ -320,3 +320,8 @@ func (p *Provisioner) WithTalosConfigsForTest(
 func MergeTalosconfigBytesForTest(talosconfigPath string, newData []byte) error {
 	return mergeTalosconfigBytes(talosconfigPath, newData)
 }
+
+// DetectHetznerServerTypesForTest exports detectHetznerServerTypes for unit testing.
+//
+//nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
+var DetectHetznerServerTypesForTest = detectHetznerServerTypes

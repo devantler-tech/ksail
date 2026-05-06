@@ -20,11 +20,6 @@ const (
 	// The Omni proxy may report the cluster phase as RUNNING before it is
 	// operational for kubectl connections, so this absorbs the propagation delay.
 	omniAPIServerReadinessTimeout = 2 * time.Minute
-
-	// omniRoleControlPlane is the role string returned by Omni's ClusterMachineStatus
-	// for control-plane nodes. This differs from RoleControlPlane ("control-plane")
-	// which is the KSail-internal role identifier.
-	omniRoleControlPlane = "controlplane"
 )
 
 // omniProvider extracts the Omni provider from the infra provider.
@@ -551,12 +546,7 @@ func (p *Provisioner) getOmniNodesByRole(
 	nodes := make([]nodeWithRole, 0, len(listed))
 
 	for _, node := range listed {
-		role := RoleWorker
-		if node.Role == omniRoleControlPlane {
-			role = RoleControlPlane
-		}
-
-		nodes = append(nodes, nodeWithRole{IP: node.Name, Role: role})
+		nodes = append(nodes, nodeWithRole{IP: node.Name, Role: node.Role})
 	}
 
 	return nodes, nil
