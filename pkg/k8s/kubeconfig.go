@@ -3,7 +3,9 @@ package k8s
 import (
 	"fmt"
 	"io"
+	"maps"
 	"os"
+	"path/filepath"
 
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	"k8s.io/client-go/tools/clientcmd"
@@ -12,6 +14,110 @@ import (
 
 // kubeconfigFileMode is the file mode for kubeconfig files.
 const kubeconfigFileMode = 0o600
+
+// kubeconfigDirMode is the directory mode for kubeconfig parent directories.
+const kubeconfigDirMode = 0o700
+
+// MergeKubeconfig merges the cluster, context, and user entries from newKubeconfigData
+// into the existing kubeconfig file at kubeconfigPath. If the file does not exist, it
+// creates it with the new entries. Existing entries with the same keys are overwritten
+// by the new data. The current context is set to the new config's current context if
+// it is non-empty.
+//
+// MergeKubeconfig creates the parent directory if it does not exist and canonicalizes
+// the path (resolving symlinks) before reading or writing to prevent symlink-escape
+// attacks.
+//
+// This prevents data loss when multiple clusters share the same kubeconfig file.
+func MergeKubeconfig(kubeconfigPath string, newKubeconfigData []byte) error {
+	newConfig, err := clientcmd.Load(newKubeconfigData)
+	if err != nil {
+		return fmt.Errorf("failed to parse new kubeconfig: %w", err)
+	}
+
+	// Ensure parent directory exists before canonicalization (EvalCanonicalPath
+	// requires the parent to exist).
+	kubeconfigDir := filepath.Dir(kubeconfigPath)
+	if kubeconfigDir != "" && kubeconfigDir != "." {
+		mkdirErr := os.MkdirAll(kubeconfigDir, kubeconfigDirMode)
+		if mkdirErr != nil {
+			return fmt.Errorf("failed to create kubeconfig directory: %w", mkdirErr)
+		}
+	}
+
+	// Canonicalize the path to prevent writes through symlinks.
+	kubeconfigPath, err = fsutil.EvalCanonicalPath(kubeconfigPath)
+	if err != nil {
+		return fmt.Errorf("failed to canonicalize kubeconfig path: %w", err)
+	}
+
+	existing, err := loadOrCreateKubeconfig(kubeconfigPath)
+	if err != nil {
+		return fmt.Errorf("failed to load existing kubeconfig: %w", err)
+	}
+
+	mergeKubeconfigEntries(existing, newConfig)
+
+	result, err := clientcmd.Write(*existing)
+	if err != nil {
+		return fmt.Errorf("failed to serialize merged kubeconfig: %w", err)
+	}
+
+	err = fsutil.AtomicWriteFile(kubeconfigPath, result, kubeconfigFileMode)
+	if err != nil {
+		return fmt.Errorf("failed to write merged kubeconfig: %w", err)
+	}
+
+	return nil
+}
+
+// mergeKubeconfigEntries copies clusters, contexts, and users from src into dst,
+// overwriting entries with the same keys. It also updates the current context.
+func mergeKubeconfigEntries(dst, src *api.Config) {
+	if dst.Clusters == nil {
+		dst.Clusters = make(map[string]*api.Cluster)
+	}
+
+	maps.Copy(dst.Clusters, src.Clusters)
+
+	if dst.Contexts == nil {
+		dst.Contexts = make(map[string]*api.Context)
+	}
+
+	maps.Copy(dst.Contexts, src.Contexts)
+
+	if dst.AuthInfos == nil {
+		dst.AuthInfos = make(map[string]*api.AuthInfo)
+	}
+
+	maps.Copy(dst.AuthInfos, src.AuthInfos)
+
+	if src.CurrentContext != "" {
+		dst.CurrentContext = src.CurrentContext
+	}
+}
+
+// loadOrCreateKubeconfig loads the kubeconfig from disk, or returns an empty
+// config if the file does not exist.
+//
+//nolint:gosec // G304: kubeconfigPath is validated by caller
+func loadOrCreateKubeconfig(kubeconfigPath string) (*api.Config, error) {
+	data, err := os.ReadFile(kubeconfigPath)
+	if os.IsNotExist(err) {
+		return api.NewConfig(), nil
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to read kubeconfig: %w", err)
+	}
+
+	config, err := clientcmd.Load(data)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse kubeconfig: %w", err)
+	}
+
+	return config, nil
+}
 
 // CleanupKubeconfig removes the cluster, context, and user entries for a cluster
 // from the kubeconfig file. This only removes entries matching the provided names,

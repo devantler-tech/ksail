@@ -207,8 +207,14 @@ jobs:
           git add copilot-plugin/plugin.json copilot-plugin/.claude-plugin/plugin.json \
             .github/plugin/marketplace.json .claude-plugin/marketplace.json
           git commit -m "chore(copilot-plugin): release v${VERSION}"
-          # --force-with-lease makes re-runs safe: if a previous attempt of this
-          # job already pushed the branch, this will overwrite it cleanly.
+          # Fetch the remote branch only when it exists (i.e. a prior job
+          # attempt already pushed it) so --force-with-lease has up-to-date
+          # tracking info on re-runs.  git ls-remote exits 2 when no matching
+          # ref is found, so auth/network failures still surface immediately
+          # via stderr instead of being silently swallowed.
+          if git ls-remote --exit-code --heads origin "${BRANCH}" >/dev/null; then
+            git fetch origin "${BRANCH}"
+          fi
           git push --force-with-lease origin "${BRANCH}"
 
           # Create PR if one doesn't already exist for this branch.

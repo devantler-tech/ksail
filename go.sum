@@ -1412,8 +1412,8 @@ github.com/hashicorp/vault/api v1.22.0 h1:+HYFquE35/B74fHoIeXlZIP2YADVboaPjaSicH
 github.com/hashicorp/vault/api v1.22.0/go.mod h1:IUZA2cDvr4Ok3+NtK2Oq/r+lJeXkeCrHRmqdyWfpmGM=
 github.com/henvic/httpretty v0.1.4 h1:Jo7uwIRWVFxkqOnErcoYfH90o3ddQyVrSANeS4cxYmU=
 github.com/henvic/httpretty v0.1.4/go.mod h1:Dn60sQTZfbt2dYsdUSNsCljyF4AfdqnuJFDLJA1I4AM=
-github.com/hetznercloud/hcloud-go/v2 v2.38.0 h1:bJL4O5Zd8iF+vDRzeAbmsMcxKhn/sf/HUtu2jl/bFl0=
-github.com/hetznercloud/hcloud-go/v2 v2.38.0/go.mod h1:BHmbGdh59t0CazoUEFvbdp6PyV+gwnF0fl9D4Bdgqq0=
+github.com/hetznercloud/hcloud-go/v2 v2.39.0 h1:01t0YWSHMAWK6kLXSpFjmNSmHP9GYNdtcnvWpK4MReA=
+github.com/hetznercloud/hcloud-go/v2 v2.39.0/go.mod h1:BHmbGdh59t0CazoUEFvbdp6PyV+gwnF0fl9D4Bdgqq0=
 github.com/hexops/gotextdiff v1.0.3 h1:gitA9+qJrrTCsiCl7+kh75nPqQt1cx4ZkudSTLoUqJM=
 github.com/hexops/gotextdiff v1.0.3/go.mod h1:pSWU5MAI3yDq+fZBTazCSJysOMbxWL1BSow5/V2vxeg=
 github.com/hhrutter/lzw v1.0.0 h1:laL89Llp86W3rRs83LvKbwYRx6INE8gDn0XNb1oXtm0=

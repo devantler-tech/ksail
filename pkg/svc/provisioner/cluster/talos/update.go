@@ -441,10 +441,12 @@ func (p *Provisioner) applyRebootChangesIfNeeded(
 	return p.applyRebootRequiredChanges(ctx, clusterName, result, opts)
 }
 
-// needsSecretSync returns true when the update will push machine configs to
-// nodes and therefore needs the in-memory configs to match the running
-// cluster's PKI. This avoids unnecessary Talos API calls for no-op updates
-// or operations that don't touch machine configs (e.g., pure scale-down).
+// needsSecretSync returns true when the update requires the in-memory configs
+// to match the running cluster's PKI. This is needed when pushing machine
+// configs to nodes (scale-up, in-place, reboot) or when generating the
+// autoscaler config secret (which embeds a worker config derived from the
+// bundle). This avoids unnecessary Talos API calls for no-op updates or
+// operations that don't touch machine configs (e.g., pure scale-down).
 func (p *Provisioner) needsSecretSync(
 	oldSpec, newSpec *v1alpha1.ClusterSpec,
 	diff *clusterupdate.UpdateResult,
@@ -456,6 +458,14 @@ func (p *Provisioner) needsSecretSync(
 	// Scale-up: new nodes need the existing cluster's PKI.
 	if oldSpec != nil && newSpec != nil &&
 		(newSpec.ControlPlanes > oldSpec.ControlPlanes || newSpec.Workers > oldSpec.Workers) {
+		return true
+	}
+
+	// Node autoscaler: the autoscaler config secret embeds a worker config
+	// derived from the bundle. Without syncing, it would contain freshly-generated
+	// PKI that doesn't match the running cluster — autoscaler-provisioned nodes
+	// would fail to join with "certificate signed by unknown authority".
+	if p.hetznerOpts != nil && p.hetznerOpts.NodeAutoscalerEnabled {
 		return true
 	}
 
@@ -859,9 +869,8 @@ func (p *Provisioner) syncHetznerFirewallRules(
 // ensureAutoscalerSecretIfNeeded creates or updates the cluster-autoscaler-config
 // Secret when the node autoscaler is enabled on Hetzner. It is a no-op when
 // autoscaling is disabled, the provider is not Hetzner, or the config bundle
-// is unavailable. Snapshot image lookup errors are propagated because they
-// indicate a misconfigured cluster. This mirrors the create-time call in
-// bootstrapAndFinalize.
+// is unavailable. Returns ErrAutoscalerRequiresSchematic early when no
+// schematic is configured, before performing any side effects.
 func (p *Provisioner) ensureAutoscalerSecretIfNeeded(
 	ctx context.Context,
 	clusterName string,
@@ -875,10 +884,43 @@ func (p *Provisioner) ensureAutoscalerSecretIfNeeded(
 		return nil
 	}
 
+	// Fail fast: check that a schematic is available before performing
+	// side effects (creating secrets, uploading snapshots). The autoscaler
+	// requires a snapshot image to provision new nodes.
+	if !p.hasSchematicConfigured() {
+		return ErrAutoscalerRequiresSchematic
+	}
+
+	// Ensure the hcloud secret (token + network) exists. The autoscaler Helm
+	// chart references this secret for HCLOUD_TOKEN and HCLOUD_NETWORK.
+	err := p.ensureHcloudSecret(ctx, clusterName)
+	if err != nil {
+		return fmt.Errorf("ensuring hcloud secret for autoscaler: %w", err)
+	}
+
 	snapshotImageID, err := p.ensureSnapshotImage(ctx, clusterName)
 	if err != nil {
 		return fmt.Errorf("looking up snapshot image for autoscaler secret: %w", err)
 	}
 
 	return p.ensureAutoscalerSecret(ctx, configBundle, snapshotImageID)
+}
+
+// hasSchematicConfigured reports whether a Talos schematic ID is available
+// (either explicit via talosOpts.SchematicID or auto-computed from extensions
+// via talosConfigs.SchematicID()).
+func (p *Provisioner) hasSchematicConfigured() bool {
+	if p.talosOpts != nil {
+		if strings.TrimSpace(p.talosOpts.SchematicID) != "" {
+			return true
+		}
+	}
+
+	if p.talosConfigs != nil {
+		if strings.TrimSpace(p.talosConfigs.SchematicID()) != "" {
+			return true
+		}
+	}
+
+	return false
 }

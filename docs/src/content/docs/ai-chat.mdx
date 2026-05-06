@@ -95,10 +95,6 @@ When an MCP tool needs additional input during execution, an inline **📋 Input
 
 In non-TUI mode (plain terminal), the same **📋 Input Requested** elicitation request is presented as stdin prompts instead of a modal.
 
-### Prompt Queue
-
-Queue multiple prompts to run sequentially without waiting for each response. While a response is actively streaming, press **Ctrl+Q** to add the current input to the queue — queued prompts are processed in FIFO order after the current turn finishes, with any steering prompts for that turn applied first. Press **Ctrl+X** to remove the most recently added pending prompt.
-
 ### Infinite Sessions
 
 Chat sessions support unlimited conversation length through automatic background compaction when the context window nears capacity.
@@ -171,15 +167,16 @@ Press **Ctrl+N** to start a fresh conversation. Previous sessions are automatica
 
 ## Diagnosing a Misbehaving Cluster
 
-Ask the assistant natural-language questions like "why is my cluster broken?" and it will call the `cluster_read` tool with the `diagnose` subcommand, which surfaces failing pods and NotReady nodes via the Kubernetes API. Copilot then explains the root cause and suggests remediation.
+Ask natural-language questions like "why is my cluster broken?" and the assistant calls `cluster_read` → `diagnose`, surfaces failing pods and NotReady nodes, then explains the root cause and suggests remediation.
 
-You can also run the underlying command directly:
+You can also run the command directly:
 
 ```bash
-ksail cluster diagnose
+ksail cluster diagnose          # human-readable
+ksail cluster diagnose --format json   # machine-readable (healthScore and findings[])
 ```
 
-The command is distribution-agnostic and works with Vanilla, K3s, Talos, and VCluster. Use `--format json` for machine-readable output in scripts or MCP tool calls. It exits 0 even when failures are reported; a non-zero exit code is reserved for unreachable clusters.
+The command works with Vanilla, K3s, Talos, and VCluster, and exits 0 even when failures are reported (non-zero is reserved for unreachable clusters).
 
 ## Troubleshooting
 
