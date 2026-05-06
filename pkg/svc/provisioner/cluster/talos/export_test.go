@@ -320,3 +320,6 @@ func (p *Provisioner) WithTalosConfigsForTest(
 func MergeTalosconfigBytesForTest(talosconfigPath string, newData []byte) error {
 	return mergeTalosconfigBytes(talosconfigPath, newData)
 }
+
+// DetectHetznerServerTypesForTest exports detectHetznerServerTypes for unit testing.
+var DetectHetznerServerTypesForTest = detectHetznerServerTypes

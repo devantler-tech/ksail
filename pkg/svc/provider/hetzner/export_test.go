@@ -38,6 +38,9 @@ func CalculateRetryDelayForTest(attempt int) time.Duration {
 	return p.calculateRetryDelay(attempt)
 }
 
+// NormalizeNodeRoleForTest exports normalizeNodeRole for testing.
+var NormalizeNodeRoleForTest = normalizeNodeRole
+
 // NewSnapshotManagerWithUploaderForTest creates a SnapshotManager with a custom uploader,
 // allowing tests to inject a mock without hitting real Hetzner upload infrastructure.
 // A nil logWriter is replaced with io.Discard, matching NewSnapshotManager behavior.
