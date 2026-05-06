@@ -755,23 +755,7 @@ func (p *Provisioner) GetCurrentConfig(
 	var providerSpec *v1alpha1.ProviderSpec
 	if p.hetznerOpts != nil {
 		hetznerSpec := *p.hetznerOpts
-
-		// Introspect actual server types from running servers.
-		if p.infraProvider != nil {
-			clusterName := p.resolveClusterName("")
-
-			nodes, listErr := p.infraProvider.ListNodes(ctx, clusterName)
-			if listErr == nil {
-				cpType, workerType := detectHetznerServerTypes(nodes)
-				if cpType != "" {
-					hetznerSpec.ControlPlaneServerType = cpType
-				}
-
-				if workerType != "" {
-					hetznerSpec.WorkerServerType = workerType
-				}
-			}
-		}
+		p.introspectHetznerServerTypes(ctx, &hetznerSpec)
 
 		providerSpec = &v1alpha1.ProviderSpec{
 			Hetzner: hetznerSpec,
@@ -863,19 +847,45 @@ func countNodeRoles(nodes []nodeWithRole) (int32, int32) {
 	return controlPlanes, workers
 }
 
+// introspectHetznerServerTypes populates the ControlPlaneServerType and
+// WorkerServerType fields on hetznerSpec from the running Hetzner servers.
+func (p *Provisioner) introspectHetznerServerTypes(ctx context.Context, hetznerSpec *v1alpha1.OptionsHetzner) {
+	if p.infraProvider == nil {
+		return
+	}
+
+	clusterName := p.resolveClusterName("")
+
+	nodes, listErr := p.infraProvider.ListNodes(ctx, clusterName)
+	if listErr != nil {
+		return
+	}
+
+	cpType, workerType := detectHetznerServerTypes(nodes)
+	if cpType != "" {
+		hetznerSpec.ControlPlaneServerType = cpType
+	}
+
+	if workerType != "" {
+		hetznerSpec.WorkerServerType = workerType
+	}
+}
+
 // detectHetznerServerTypes determines the actual control-plane and worker
 // server types from a node listing. Returns empty strings when no nodes of
 // a given role are found.
-func detectHetznerServerTypes(nodes []svcprovider.NodeInfo) (cpServerType, workerServerType string) {
-	for _, n := range nodes {
-		switch n.Role {
+func detectHetznerServerTypes(nodes []svcprovider.NodeInfo) (string, string) {
+	var cpServerType, workerServerType string
+
+	for _, node := range nodes {
+		switch node.Role {
 		case RoleControlPlane:
-			if cpServerType == "" && n.ServerType != "" {
-				cpServerType = n.ServerType
+			if cpServerType == "" && node.ServerType != "" {
+				cpServerType = node.ServerType
 			}
 		case RoleWorker:
-			if workerServerType == "" && n.ServerType != "" {
-				workerServerType = n.ServerType
+			if workerServerType == "" && node.ServerType != "" {
+				workerServerType = node.ServerType
 			}
 		}
 
