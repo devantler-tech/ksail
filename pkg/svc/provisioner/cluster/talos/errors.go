@@ -61,4 +61,14 @@ var (
 		"no running control-plane node found for secret sync: " +
 			"cannot reuse cluster PKI — new or updated nodes would receive mismatched certificates",
 	)
+	// ErrAutoscalerRequiresSchematic is returned when the node autoscaler is enabled
+	// but no schematic (extensions or explicit schematicId) is configured. The autoscaler
+	// needs a Hetzner snapshot image to boot new nodes.
+	ErrAutoscalerRequiresSchematic = errors.New(
+		"node autoscaler requires spec.cluster.talos.schematicId or " +
+			"spec.cluster.talos.extensions to create a boot snapshot for new nodes",
+	)
+	// ErrHcloudTokenNotSet is returned when the Hetzner Cloud API token environment
+	// variable is not set but is required for autoscaler secret creation.
+	ErrHcloudTokenNotSet = errors.New("hcloud API token environment variable is not set")
 )

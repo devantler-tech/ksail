@@ -298,6 +298,15 @@ func (p *Provisioner) EnsureAutoscalerSecretIfNeededForTest(
 	return p.ensureAutoscalerSecretIfNeeded(ctx, clusterName)
 }
 
+// WithTalosOptsForTest sets talosOpts on the provisioner for unit testing.
+func (p *Provisioner) WithTalosOptsForTest(
+	opts *v1alpha1.OptionsTalos,
+) *Provisioner {
+	p.talosOpts = opts
+
+	return p
+}
+
 // WithTalosConfigsForTest sets talosConfigs on the provisioner for unit testing.
 func (p *Provisioner) WithTalosConfigsForTest(
 	configs *talosconfigmanager.Configs,
