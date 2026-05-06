@@ -10,7 +10,7 @@ import (
 	"github.com/cosi-project/runtime/pkg/safe"
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
-	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
+	svcprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	"github.com/docker/docker/api/types/container"
@@ -866,7 +866,7 @@ func countNodeRoles(nodes []nodeWithRole) (int32, int32) {
 // detectHetznerServerTypes determines the actual control-plane and worker
 // server types from a node listing. Returns empty strings when no nodes of
 // a given role are found.
-func detectHetznerServerTypes(nodes []provider.NodeInfo) (cpServerType, workerServerType string) {
+func detectHetznerServerTypes(nodes []svcprovider.NodeInfo) (cpServerType, workerServerType string) {
 	for _, n := range nodes {
 		switch n.Role {
 		case RoleControlPlane:
