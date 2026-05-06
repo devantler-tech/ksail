@@ -238,7 +238,7 @@ func TestEnsureFirewallNilClient(t *testing.T) {
 	require.NotNil(t, prov)
 
 	// Should return error when client is nil
-	firewall, err := prov.EnsureFirewall(context.TODO(), "test-cluster")
+	firewall, err := prov.EnsureFirewall(context.TODO(), "test-cluster", nil)
 
 	require.Error(t, err)
 	assert.Nil(t, firewall)
@@ -290,7 +290,7 @@ func TestSyncFirewallRulesNilClient(t *testing.T) {
 	require.NotNil(t, prov)
 
 	// Should return error when client is nil
-	err := prov.SyncFirewallRules(context.TODO(), "test-cluster")
+	err := prov.SyncFirewallRules(context.TODO(), "test-cluster", nil)
 
 	require.Error(t, err)
 	require.ErrorIs(t, err, provider.ErrProviderUnavailable)
@@ -452,7 +452,7 @@ func TestSourceIPsEqual(t *testing.T) {
 func TestBuildFirewallRulesSecureSet(t *testing.T) {
 	t.Parallel()
 
-	rules := hetzner.BuildFirewallRulesForTest()
+	rules := hetzner.BuildFirewallRulesForTest(nil)
 
 	// Only Talos API, Kubernetes API, and ICMP should be exposed publicly.
 	// Cluster-internal ports (etcd 2379-2380, kubelet 10250, trustd 50001)

@@ -903,7 +903,7 @@ func TestGenerator_Generate_IngressFirewallFlannelPort(t *testing.T) {
 func TestIngressFirewallCPRulesYAML(t *testing.T) {
 	t.Parallel()
 
-	result := talosgenerator.IngressFirewallCPRulesYAML("10.0.0.0/16", 8472)
+	result := talosgenerator.IngressFirewallCPRulesYAML("10.0.0.0/16", 8472, nil)
 
 	// Verify all expected rule names are present
 	assert.Contains(t, result, "name: kubelet")

@@ -858,7 +858,7 @@ func (p *Provisioner) syncHetznerFirewallRules(
 		return err
 	}
 
-	syncErr := hzProvider.SyncFirewallRules(ctx, clusterName)
+	syncErr := hzProvider.SyncFirewallRules(ctx, clusterName, p.hetznerOpts.AllowedCIDRs)
 	if syncErr != nil {
 		return fmt.Errorf("failed to sync Hetzner firewall rules for %s: %w", clusterName, syncErr)
 	}

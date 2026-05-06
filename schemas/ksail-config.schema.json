@@ -460,6 +460,13 @@
                   "minimum": 0,
                   "description": "Maximum total Hetzner servers allowed for this cluster (control-planes + workers + autoscaler pool capacity). Set to 0 to use the default limit of 10"
                 },
+                "allowedCidrs": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array",
+                  "description": "CIDR blocks allowed to access the Kubernetes API and Talos API on control-plane nodes. When empty defaults to 0.0.0.0/0 (open to all)."
+                },
                 "autoscalerNodePoolNames": {
                   "items": {
                     "type": "string"

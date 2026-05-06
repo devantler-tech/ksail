@@ -38,7 +38,7 @@ func (p *Provisioner) ensureHetznerInfra(
 
 	_, _ = fmt.Fprintf(p.logWriter, "  ✓ Network %s created\n", network.Name)
 
-	firewall, err := hzProvider.EnsureFirewall(ctx, clusterName)
+	firewall, err := hzProvider.EnsureFirewall(ctx, clusterName, p.hetznerOpts.AllowedCIDRs)
 	if err != nil {
 		return HetznerInfra{}, fmt.Errorf("failed to create firewall: %w", err)
 	}

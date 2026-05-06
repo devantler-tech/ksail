@@ -76,9 +76,12 @@ func (p *Provider) EnsureNetwork(
 }
 
 // EnsureFirewall ensures a firewall exists for the cluster, creating it if needed.
+// When allowedCIDRs is non-empty, the Kubernetes API and Talos API firewall rules
+// restrict source IPs to the specified CIDR blocks instead of 0.0.0.0/0.
 func (p *Provider) EnsureFirewall(
 	ctx context.Context,
 	clusterName string,
+	allowedCIDRs []string,
 ) (*hcloud.Firewall, error) {
 	if p.client == nil {
 		return nil, provider.ErrProviderUnavailable
@@ -100,7 +103,7 @@ func (p *Provider) EnsureFirewall(
 	result, _, err := p.client.Firewall.Create(ctx, hcloud.FirewallCreateOpts{
 		Name:   firewallName,
 		Labels: ResourceLabels(clusterName),
-		Rules:  buildFirewallRules(),
+		Rules:  buildFirewallRules(allowedCIDRs),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create firewall %s: %w", firewallName, err)
@@ -112,9 +115,12 @@ func (p *Provider) EnsureFirewall(
 // SyncFirewallRules updates an existing firewall's rules to match the current secure
 // rule set. This migrates already-created clusters to the hardened configuration
 // on the next `ksail cluster update`.
+// When allowedCIDRs is non-empty, the Kubernetes API and Talos API rules
+// restrict source IPs to the specified CIDR blocks instead of 0.0.0.0/0.
 func (p *Provider) SyncFirewallRules(
 	ctx context.Context,
 	clusterName string,
+	allowedCIDRs []string,
 ) error {
 	if p.client == nil {
 		return provider.ErrProviderUnavailable
@@ -131,7 +137,7 @@ func (p *Provider) SyncFirewallRules(
 		return nil // No firewall to sync
 	}
 
-	desiredRules := buildFirewallRules()
+	desiredRules := buildFirewallRules(allowedCIDRs)
 
 	// Skip update if rules already match
 	if firewallRulesMatch(firewall.Rules, desiredRules) {
@@ -317,10 +323,20 @@ func (p *Provider) EnsurePlacementGroup(
 // Only ports that need public access are included (Talos API, Kubernetes API, ICMP).
 // Cluster-internal ports (etcd, kubelet, trustd) are omitted because Hetzner Cloud
 // Firewalls only filter public traffic — private network traffic is unfiltered.
-func buildFirewallRules() []hcloud.FirewallRule {
+//
+// When allowedCIDRs is non-empty, the Kubernetes API (6443) and Talos API (50000) rules
+// restrict source IPs to those CIDR blocks. ICMP remains open to all.
+// When allowedCIDRs is empty, all rules use 0.0.0.0/0 and ::/0 (open to all).
+func buildFirewallRules(allowedCIDRs []string) []hcloud.FirewallRule {
 	anyIP := []net.IPNet{
 		{IP: net.ParseIP("0.0.0.0"), Mask: net.CIDRMask(0, IPv4CIDRBits)},
 		{IP: net.ParseIP("::"), Mask: net.CIDRMask(0, IPv6CIDRBits)},
+	}
+
+	// Determine source IPs for API ports: restricted CIDRs or open to all.
+	apiSourceIPs := anyIP
+	if len(allowedCIDRs) > 0 {
+		apiSourceIPs = parseCIDRsToIPNets(allowedCIDRs)
 	}
 
 	// Only expose ports that legitimately need public internet access.
@@ -335,7 +351,7 @@ func buildFirewallRules() []hcloud.FirewallRule {
 			Direction:   hcloud.FirewallRuleDirectionIn,
 			Protocol:    hcloud.FirewallRuleProtocolTCP,
 			Port:        new("50000"),
-			SourceIPs:   anyIP,
+			SourceIPs:   apiSourceIPs,
 			Description: new("Talos API (apid)"),
 		},
 		// Kubernetes API
@@ -343,7 +359,7 @@ func buildFirewallRules() []hcloud.FirewallRule {
 			Direction:   hcloud.FirewallRuleDirectionIn,
 			Protocol:    hcloud.FirewallRuleProtocolTCP,
 			Port:        new("6443"),
-			SourceIPs:   anyIP,
+			SourceIPs:   apiSourceIPs,
 			Description: new("Kubernetes API"),
 		},
 		// ICMP (ping)
@@ -354,6 +370,23 @@ func buildFirewallRules() []hcloud.FirewallRule {
 			Description: new("ICMP (ping)"),
 		},
 	}
+}
+
+// parseCIDRsToIPNets converts a slice of CIDR strings to net.IPNet values.
+// Invalid CIDRs are silently skipped (they should be validated before reaching here).
+func parseCIDRsToIPNets(cidrs []string) []net.IPNet {
+	result := make([]net.IPNet, 0, len(cidrs))
+
+	for _, cidr := range cidrs {
+		_, ipNet, err := net.ParseCIDR(cidr)
+		if err != nil {
+			continue
+		}
+
+		result = append(result, *ipNet)
+	}
+
+	return result
 }
 
 // deleteInfrastructure cleans up infrastructure resources for a cluster.

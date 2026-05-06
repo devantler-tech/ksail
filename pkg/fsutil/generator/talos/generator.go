@@ -143,6 +143,11 @@ type Config struct {
 	NetworkCIDR string
 	// CNIPort is the CNI encapsulation port (e.g., 8472 for Cilium VXLAN, 4789 for Flannel/Calico).
 	CNIPort int
+	// AllowedCIDRs restricts the Kubernetes API and Talos API ingress firewall rules on
+	// control-plane nodes to the specified CIDR blocks. When empty, those rules allow
+	// 0.0.0.0/0 and ::/0 (open to all). Only affects the CP rules; worker rules are
+	// always restricted to the private network CIDR.
+	AllowedCIDRs []string
 	// EnableOIDC indicates whether to generate an OIDC API server configuration patch.
 	// When true, generates an oidc.yaml patch with cluster.apiServer.extraArgs for OIDC.
 	EnableOIDC bool
@@ -781,7 +786,8 @@ ingress: block
 `
 
 // ingressFirewallCPRulesTemplate is the Talos NetworkRuleConfig YAML template for
-// control-plane nodes. %[1]s is substituted with the network CIDR, %[2]d with the CNI VXLAN port.
+// control-plane nodes. %[1]s is substituted with the network CIDR, %[2]d with the CNI VXLAN port,
+// and %[3]s with the API ingress subnet lines (either allowed CIDRs or 0.0.0.0/0 + ::/0).
 const ingressFirewallCPRulesTemplate = `apiVersion: v1alpha1
 kind: NetworkRuleConfig
 name: kubelet
@@ -800,9 +806,7 @@ portSelector:
     - 50000
   protocol: tcp
 ingress:
-  - subnet: 0.0.0.0/0
-  - subnet: ::/0
----
+%[3]s---
 apiVersion: v1alpha1
 kind: NetworkRuleConfig
 name: kubernetes-api
@@ -811,9 +815,7 @@ portSelector:
     - 6443
   protocol: tcp
 ingress:
-  - subnet: 0.0.0.0/0
-  - subnet: ::/0
----
+%[3]s---
 apiVersion: v1alpha1
 kind: NetworkRuleConfig
 name: trustd
@@ -847,11 +849,15 @@ ingress:
 
 // IngressFirewallCPRulesYAML returns the Talos NetworkRuleConfig documents for control-plane
 // nodes. The networkCIDR and cniPort parameters are injected at generation time.
+// When allowedCIDRs is non-empty, the apid and kubernetes-api rules use those CIDRs
+// instead of 0.0.0.0/0 and ::/0.
 //
 // This is the single source of truth for the CP rules content, shared between the
 // generator (file-based scaffolding) and the runtime config manager (in-memory injection).
-func IngressFirewallCPRulesYAML(networkCIDR string, cniPort int) string {
-	return fmt.Sprintf(ingressFirewallCPRulesTemplate, networkCIDR, cniPort)
+func IngressFirewallCPRulesYAML(networkCIDR string, cniPort int, allowedCIDRs []string) string {
+	apiIngress := formatIngressSubnets(allowedCIDRs)
+
+	return fmt.Sprintf(ingressFirewallCPRulesTemplate, networkCIDR, cniPort, apiIngress)
 }
 
 // IngressFirewallWorkerRulesYAML returns the Talos NetworkRuleConfig documents for worker
@@ -887,6 +893,23 @@ portSelector:
 ingress:
   - subnet: %[1]s
 `, networkCIDR, cniPort)
+}
+
+// formatIngressSubnets formats allowed CIDRs (or default 0.0.0.0/0 + ::/0) as
+// YAML ingress subnet lines suitable for inclusion in NetworkRuleConfig templates.
+// Each line is indented with two spaces (matching the ingress list level).
+func formatIngressSubnets(allowedCIDRs []string) string {
+	if len(allowedCIDRs) == 0 {
+		return "  - subnet: 0.0.0.0/0\n  - subnet: ::/0\n"
+	}
+
+	var builder strings.Builder
+
+	for _, cidr := range allowedCIDRs {
+		_, _ = fmt.Fprintf(&builder, "  - subnet: %s\n", strings.TrimSpace(cidr))
+	}
+
+	return builder.String()
 }
 
 var (
@@ -973,7 +996,7 @@ func (g *Generator) generateIngressFirewallPatches(
 
 	err = writeFirewallFile(
 		cpRulesPath,
-		[]byte(IngressFirewallCPRulesYAML(model.NetworkCIDR, model.CNIPort)),
+		[]byte(IngressFirewallCPRulesYAML(model.NetworkCIDR, model.CNIPort, model.AllowedCIDRs)),
 		force,
 	)
 	if err != nil {

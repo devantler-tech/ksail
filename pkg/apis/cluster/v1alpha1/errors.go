@@ -129,5 +129,8 @@ var ErrAutoscalerEnabledNoPools = errors.New(
 	"node autoscaler is enabled but no pools are configured",
 )
 
+// ErrInvalidAllowedCIDR is returned when an allowed CIDR entry is not a valid CIDR block.
+var ErrInvalidAllowedCIDR = errors.New("invalid allowed CIDR")
+
 // ErrInvalidOIDCConfig is returned when the OIDC configuration is incomplete or invalid.
 var ErrInvalidOIDCConfig = errors.New("invalid OIDC configuration")
