@@ -78,7 +78,7 @@ func (p *Provider) EnsureNetwork(
 
 // EnsureFirewall ensures a firewall exists for the cluster, creating it if needed.
 // When allowedCIDRs is non-empty, the Kubernetes API and Talos API firewall rules
-// restrict source IPs to the specified CIDR blocks instead of 0.0.0.0/0.
+// restrict source IPs to the specified CIDR blocks instead of 0.0.0.0/0 and ::/0.
 func (p *Provider) EnsureFirewall(
 	ctx context.Context,
 	clusterName string,
@@ -117,7 +117,7 @@ func (p *Provider) EnsureFirewall(
 // rule set. This migrates already-created clusters to the hardened configuration
 // on the next `ksail cluster update`.
 // When allowedCIDRs is non-empty, the Kubernetes API and Talos API rules
-// restrict source IPs to the specified CIDR blocks instead of 0.0.0.0/0.
+// restrict source IPs to the specified CIDR blocks instead of 0.0.0.0/0 and ::/0.
 func (p *Provider) SyncFirewallRules(
 	ctx context.Context,
 	clusterName string,

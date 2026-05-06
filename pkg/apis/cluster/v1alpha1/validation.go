@@ -424,7 +424,7 @@ func resolveServerLimit(limit int32) (int32, error) {
 }
 
 // ValidateAllowedCIDRs validates that each entry in allowedCIDRs is a valid CIDR block.
-// Returns nil when the slice is empty (meaning default 0.0.0.0/0 behavior).
+// Returns nil when the slice is empty (meaning default 0.0.0.0/0 and ::/0 behavior).
 func ValidateAllowedCIDRs(cidrs []string) error {
 	for idx, cidr := range cidrs {
 		trimmed := strings.TrimSpace(cidr)
