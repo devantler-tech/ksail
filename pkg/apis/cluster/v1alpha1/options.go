@@ -152,7 +152,7 @@ type OptionsHetzner struct {
 	// to the entire internet (0.0.0.0/0 and ::/0). Applied to both the Hetzner Cloud Firewall
 	// and the Talos OS-level ingress firewall for defense-in-depth.
 	// Examples: ["203.0.113.0/24", "198.51.100.0/24"]
-	AllowedCIDRs []string `json:"allowedCidrs,omitzero" jsonschema:"description=CIDR blocks allowed to access the Kubernetes API and Talos API on control-plane nodes. When empty defaults to 0.0.0.0/0 (open to all)."` //nolint:lll
+	AllowedCIDRs []string `json:"allowedCidrs,omitzero" jsonschema:"description=CIDR blocks allowed to access the Kubernetes API and Talos API on control-plane nodes. When empty defaults to 0.0.0.0/0 and ::/0 (open to all IPv4 and IPv6)."` //nolint:lll
 	// AutoscalerNodePoolNames lists the node-group names configured in the
 	// Kubernetes Cluster Autoscaler for this cluster. When non-empty, KSail
 	// deletes servers labelled with hcloud/node-group=<name> during cluster

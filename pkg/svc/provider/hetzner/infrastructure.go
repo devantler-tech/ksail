@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -378,7 +379,7 @@ func parseCIDRsToIPNets(cidrs []string) []net.IPNet {
 	result := make([]net.IPNet, 0, len(cidrs))
 
 	for _, cidr := range cidrs {
-		_, ipNet, err := net.ParseCIDR(cidr)
+		_, ipNet, err := net.ParseCIDR(strings.TrimSpace(cidr))
 		if err != nil {
 			continue
 		}

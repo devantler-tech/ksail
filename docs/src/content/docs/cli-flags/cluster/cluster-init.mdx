@@ -12,6 +12,7 @@ Usage:
   ksail cluster init [flags]
 
 Flags:
+      --allowed-cidrs strings                  CIDR blocks allowed to access the Kubernetes API and Talos API on control-plane nodes. When empty, both APIs are open to 0.0.0.0/0. Example: --allowed-cidrs 203.0.113.0/24 --allowed-cidrs 198.51.100.0/24
       --cdi CDI                                Container Device Interface (Default: use distribution, Enabled: enable CDI, Disabled: disable CDI)
       --cert-manager CertManager               Cert-Manager configuration (Enabled: install, Disabled: skip)
       --cni CNI                                Container Network Interface (CNI) to use

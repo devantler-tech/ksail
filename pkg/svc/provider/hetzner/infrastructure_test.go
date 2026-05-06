@@ -490,3 +490,34 @@ func TestBuildFirewallRulesSecureSet(t *testing.T) {
 	assert.False(t, ports["10250"], "kubelet port 10250 must NOT be exposed publicly")
 	assert.False(t, ports["50001"], "trustd port 50001 must NOT be exposed publicly")
 }
+
+func TestBuildFirewallRulesWithAllowedCIDRs(t *testing.T) {
+	t.Parallel()
+
+	allowedCIDRs := []string{"203.0.113.0/24", "198.51.100.0/24"}
+	rules := hetzner.BuildFirewallRulesForTest(allowedCIDRs)
+
+	require.Len(t, rules, 3, "secure rule set must have exactly 3 rules")
+
+	for _, rule := range rules {
+		assert.Equal(t, hcloud.FirewallRuleDirectionIn, rule.Direction, "all rules must be inbound")
+
+		if rule.Protocol == hcloud.FirewallRuleProtocolICMP {
+			// ICMP must remain open to all regardless of allowed CIDRs
+			require.Len(t, rule.SourceIPs, 2, "ICMP must stay open to 0.0.0.0/0 and ::/0")
+		} else {
+			// TCP rules (ports 50000, 6443) must use the provided CIDRs
+			require.Len(t, rule.SourceIPs, 2, "API rules must use the provided CIDRs")
+
+			sourceStrs := make([]string, 0, len(rule.SourceIPs))
+			for _, src := range rule.SourceIPs {
+				sourceStrs = append(sourceStrs, src.String())
+			}
+
+			assert.Contains(t, sourceStrs, "203.0.113.0/24", "must contain first allowed CIDR")
+			assert.Contains(t, sourceStrs, "198.51.100.0/24", "must contain second allowed CIDR")
+			assert.NotContains(t, sourceStrs, "0.0.0.0/0", "must NOT contain open IPv4 CIDR")
+			assert.NotContains(t, sourceStrs, "::/0", "must NOT contain open IPv6 CIDR")
+		}
+	}
+}
