@@ -3454,6 +3454,7 @@ func bindInitLocalFlags(cmd *cobra.Command, cfgManager *ksailconfigmanager.Confi
 	registerOIDCExtraScopeFlag(cmd)
 	registerAllowedCIDRsFlag(cmd)
 }
+// InitDeps holds dependencies injected into HandleInitRunE.
 type InitDeps struct {
 	Timer timer.Timer
 }
@@ -3486,6 +3487,19 @@ func validateInitConfig(clusterCfg *v1alpha1.Cluster) error {
 	return nil
 }
 
+// validatePostFlagInitConfig validates config fields that may have been modified by CLI flags.
+func validatePostFlagInitConfig(clusterCfg *v1alpha1.Cluster) error {
+	if err := v1alpha1.ValidateOIDCConfig(&clusterCfg.Spec.Cluster.OIDC); err != nil {
+		return fmt.Errorf("OIDC configuration: %w", err)
+	}
+
+	if err := v1alpha1.ValidateAllowedCIDRs(clusterCfg.Spec.Provider.Hetzner.AllowedCIDRs); err != nil {
+		return fmt.Errorf("allowed CIDRs configuration: %w", err)
+	}
+
+	return nil
+}
+
 // HandleInitRunE handles the init command.
 func HandleInitRunE(
 	cmd *cobra.Command,
@@ -3511,16 +3525,8 @@ func HandleInitRunE(
 	applyOIDCExtraScopeFlag(cmd, clusterCfg)
 	applyAllowedCIDRsFlag(cmd, clusterCfg)
 
-	// Re-validate OIDC after merging CLI scope flags which can change ExtraScopes
-	err = v1alpha1.ValidateOIDCConfig(&clusterCfg.Spec.Cluster.OIDC)
-	if err != nil {
-		return fmt.Errorf("OIDC configuration: %w", err)
-	}
-
-	// Validate allowed CIDRs after merging CLI flags
-	err = v1alpha1.ValidateAllowedCIDRs(clusterCfg.Spec.Provider.Hetzner.AllowedCIDRs)
-	if err != nil {
-		return fmt.Errorf("allowed CIDRs configuration: %w", err)
+	if err = validatePostFlagInitConfig(clusterCfg); err != nil {
+		return err
 	}
 
 	scaffolderInstance, targetPath, force, err := prepareScaffolder(cmd, cfgManager, clusterCfg)
