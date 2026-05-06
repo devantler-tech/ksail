@@ -3489,11 +3489,13 @@ func validateInitConfig(clusterCfg *v1alpha1.Cluster) error {
 
 // validatePostFlagInitConfig validates config fields that may have been modified by CLI flags.
 func validatePostFlagInitConfig(clusterCfg *v1alpha1.Cluster) error {
-	if err := v1alpha1.ValidateOIDCConfig(&clusterCfg.Spec.Cluster.OIDC); err != nil {
+	err := v1alpha1.ValidateOIDCConfig(&clusterCfg.Spec.Cluster.OIDC)
+	if err != nil {
 		return fmt.Errorf("OIDC configuration: %w", err)
 	}
 
-	if err := v1alpha1.ValidateAllowedCIDRs(clusterCfg.Spec.Provider.Hetzner.AllowedCIDRs); err != nil {
+	err = v1alpha1.ValidateAllowedCIDRs(clusterCfg.Spec.Provider.Hetzner.AllowedCIDRs)
+	if err != nil {
 		return fmt.Errorf("allowed CIDRs configuration: %w", err)
 	}
 
@@ -3525,7 +3527,8 @@ func HandleInitRunE(
 	applyOIDCExtraScopeFlag(cmd, clusterCfg)
 	applyAllowedCIDRsFlag(cmd, clusterCfg)
 
-	if err = validatePostFlagInitConfig(clusterCfg); err != nil {
+	err = validatePostFlagInitConfig(clusterCfg)
+	if err != nil {
 		return err
 	}
 
