@@ -1,7 +1,8 @@
 {
-  "last_run": "2026-05-05T12:42:00Z",
-  "workflow_run_id": "25376906090",
+  "last_run": "2026-05-06T01:04:00Z",
+  "workflow_run_id": "25410858154",
   "commented_issues": {
+    "4621": "2026-05-06",
     "4606": "2026-05-05",
     "4605": "2026-05-05",
     "4525": "2026-05-02",
@@ -48,7 +49,7 @@
     "4352": "refactor(setup): replace repeated if-append with table-driven loop"
   },
   "last_code_quality_domain": "perf",
-  "issue_backlog_cursor": "4606",
+  "issue_backlog_cursor": "4621",
   "created_issues": {
     "4521": "[Repo Assist] [feature]: add local-remote service mirroring",
     "4511": "[Repo Assist] [feature]: add native ephemeral CI mode",
@@ -60,18 +61,19 @@
     "4422": "[Repo Assist] [feature]: enhance ksail cluster diagnose with structured health scoring",
     "4375": "[Repo Assist] [feature]: add ksail cluster graph for multi-cluster topology",
     "3983": "[Repo Assist] [feature]: extend Hetzner provider to K3s and Vanilla",
-    "4601": "[Repo Assist] [chore]: communicate GPL-3.0-only license change",
+    "4601": "[Repo Assist] [chore]: communicate GPL-3.0-only license change (CLOSED)",
     "4602": "[Repo Assist] [feature]: OIDC federation and multi-cluster auth support",
-    "new_ci_k3s_cilium": "[Repo Assist] [ci]: fix K3s+Cilium full-stack system test timing race"
+    "4610": "[Repo Assist] [ci]: fix K3s+Cilium full-stack system test timing race"
   },
   "notes": [
     "link_sub_issue is NOT idempotent - always verify sub-issue not already linked before calling",
     "Monthly activity issue: #4501",
     "domain alternation: last was perf - next should be test coverage",
-    "Roadmap backlog: K3s+Cilium CI flake issue created this run (was in Now roadmap but no issue existed)",
-    "Bug #4605: CA regression - CA sync in update path may not propagate into talos config bundle before worker config gen",
-    "Bug #4606: autoscaler-config secret only created in cluster create (bootstrapAndFinalize), not in cluster update path",
-    "Labels applied this run: none",
+    "Roadmap backlog: all Now/Next/Later items tracked as of 2026-05-06",
+    "Bug #4621: workerServerType detection bug - GetCurrentConfig echoes desired config. Node count bug - couldn't find code bug, possibly transient Hetzner API issue",
+    "Bug #4605: CA regression in update path",
+    "Bug #4606: autoscaler-config secret not created in update path",
+    "Labels applied this run: #4521, #4511, #4510, #4354, #4328 all got automation+repo-assist",
     "PR #4571 still open"
   ]
 }
