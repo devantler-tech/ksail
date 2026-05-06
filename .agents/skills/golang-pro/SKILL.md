@@ -5,9 +5,9 @@ metadata:
     author: https://github.com/Jeffallan
     domain: language
     github-path: skills/golang-pro
-    github-ref: refs/tags/v0.4.11
+    github-ref: refs/tags/v0.4.14
     github-repo: https://github.com/Jeffallan/claude-skills
-    github-tree-sha: 21c16cca0eaf425259a5aebc2de99ee64807b500
+    github-tree-sha: e347d9842958ce46d5f0644ef6009304d648a964
     output-format: code
     related-skills: devops-engineer, microservices-architect, test-master
     role: specialist
@@ -123,3 +123,5 @@ When implementing Go features, provide:
 ## Knowledge Reference
 
 Go 1.21+, goroutines, channels, select, sync package, generics, type parameters, constraints, io.Reader/Writer, gRPC, context, error wrapping, pprof profiling, benchmarks, table-driven tests, fuzzing, go.mod, internal packages, functional options
+
+[Documentation](https://jeffallan.github.io/claude-skills/skills/language/golang-pro/)
