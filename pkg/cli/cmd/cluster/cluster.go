@@ -3454,6 +3454,7 @@ func bindInitLocalFlags(cmd *cobra.Command, cfgManager *ksailconfigmanager.Confi
 	registerOIDCExtraScopeFlag(cmd)
 	registerAllowedCIDRsFlag(cmd)
 }
+
 // InitDeps holds dependencies injected into HandleInitRunE.
 type InitDeps struct {
 	Timer timer.Timer

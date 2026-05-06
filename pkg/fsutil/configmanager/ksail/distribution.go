@@ -620,9 +620,11 @@ func ingressFirewallPatches(
 			Content: []byte(talosgenerator.IngressFirewallDefaultActionYAML),
 		},
 		{
-			Path:    "ingress-firewall-cp-rules",
-			Scope:   talosconfigmanager.PatchScopeControlPlane,
-			Content: []byte(talosgenerator.IngressFirewallCPRulesYAML(normalizedCIDR, cniPort, allowedCIDRs)),
+			Path:  "ingress-firewall-cp-rules",
+			Scope: talosconfigmanager.PatchScopeControlPlane,
+			Content: []byte(
+				talosgenerator.IngressFirewallCPRulesYAML(normalizedCIDR, cniPort, allowedCIDRs),
+			),
 		},
 		{
 			Path:    "ingress-firewall-worker-rules",
