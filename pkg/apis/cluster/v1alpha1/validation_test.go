@@ -487,6 +487,7 @@ func TestValidateMirrorRegistriesForProvider(t *testing.T) {
 	}
 }
 
+//nolint:funlen // Table-driven test with comprehensive test cases.
 func TestValidateAllowedCIDRs(t *testing.T) {
 	t.Parallel()
 
@@ -565,7 +566,7 @@ func TestValidateAllowedCIDRs(t *testing.T) {
 			err := v1alpha1.ValidateAllowedCIDRs(testCase.cidrs)
 			if testCase.wantError {
 				require.Error(t, err)
-				assert.ErrorIs(t, err, v1alpha1.ErrInvalidAllowedCIDR)
+				require.ErrorIs(t, err, v1alpha1.ErrInvalidAllowedCIDR)
 				assert.Contains(t, err.Error(), testCase.errorContains)
 			} else {
 				require.NoError(t, err)
