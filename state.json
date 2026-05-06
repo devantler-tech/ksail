@@ -1,6 +1,6 @@
 {
-  "last_run": "2026-05-06T01:04:00Z",
-  "workflow_run_id": "25410858154",
+  "last_run": "2026-05-06T12:54:00Z",
+  "workflow_run_id": "25436418986",
   "commented_issues": {
     "4621": "2026-05-06",
     "4606": "2026-05-05",
@@ -29,7 +29,9 @@
     "4171": "2026-04-19",
     "4135": "2026-04-19",
     "4119": "2026-04-18",
-    "3912": "2026-05-05"
+    "3912": "2026-05-05",
+    "3772": "2026-04-11",
+    "2261": "2026-04-11"
   },
   "open_prs": {
     "repo-assist/feat-diagnose-json-format": "feat(diagnose): add --format json flag with structured DiagnoseReport output"
@@ -49,7 +51,7 @@
     "4352": "refactor(setup): replace repeated if-append with table-driven loop"
   },
   "last_code_quality_domain": "perf",
-  "issue_backlog_cursor": "4621",
+  "issue_backlog_cursor": "4626",
   "created_issues": {
     "4521": "[Repo Assist] [feature]: add local-remote service mirroring",
     "4511": "[Repo Assist] [feature]: add native ephemeral CI mode",
@@ -63,17 +65,19 @@
     "3983": "[Repo Assist] [feature]: extend Hetzner provider to K3s and Vanilla",
     "4601": "[Repo Assist] [chore]: communicate GPL-3.0-only license change (CLOSED)",
     "4602": "[Repo Assist] [feature]: OIDC federation and multi-cluster auth support",
-    "4610": "[Repo Assist] [ci]: fix K3s+Cilium full-stack system test timing race"
+    "4610": "[Repo Assist] [ci]: fix K3s+Cilium full-stack system test timing race",
+    "4627+": "[Repo Assist] [Parent] Cloud Provider Expansion (groups #3983, #4328, #4510)"
+  },
+  "sub_issue_links": {
+    "cloud_provider_parent": ["3983", "4328", "4510"]
   },
   "notes": [
     "link_sub_issue is NOT idempotent - always verify sub-issue not already linked before calling",
     "Monthly activity issue: #4501",
     "domain alternation: last was perf - next should be test coverage",
     "Roadmap backlog: all Now/Next/Later items tracked as of 2026-05-06",
-    "Bug #4621: workerServerType detection bug - GetCurrentConfig echoes desired config. Node count bug - couldn't find code bug, possibly transient Hetzner API issue",
-    "Bug #4605: CA regression in update path",
-    "Bug #4606: autoscaler-config secret not created in update path",
-    "Labels applied this run: #4521, #4511, #4510, #4354, #4328 all got automation+repo-assist",
-    "PR #4571 still open"
+    "Bug #4621: devantler submitted PR #4625 normalizing Hetzner/Omni node roles + introspecting server types - fix looks correct",
+    "PR #4571 still open, all CI passing",
+    "Cloud provider parent issue created this run (aw_cloudpar) - #3983, #4328, #4510 linked as sub-issues"
   ]
 }
