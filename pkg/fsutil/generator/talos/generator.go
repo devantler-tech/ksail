@@ -906,7 +906,15 @@ func formatIngressSubnets(allowedCIDRs []string) string {
 	var builder strings.Builder
 
 	for _, cidr := range allowedCIDRs {
-		_, _ = fmt.Fprintf(&builder, "  - subnet: %s\n", strings.TrimSpace(cidr))
+		_, ipNet, err := net.ParseCIDR(strings.TrimSpace(cidr))
+		if err != nil {
+			// Already validated upstream; emit raw value as fallback.
+			_, _ = fmt.Fprintf(&builder, "  - subnet: %s\n", strings.TrimSpace(cidr))
+
+			continue
+		}
+
+		_, _ = fmt.Fprintf(&builder, "  - subnet: %s\n", ipNet.String())
 	}
 
 	return builder.String()

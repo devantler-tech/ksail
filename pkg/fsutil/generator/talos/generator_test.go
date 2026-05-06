@@ -963,6 +963,21 @@ func TestIngressFirewallCPRulesYAMLWithAllowedCIDRs(t *testing.T) {
 	assert.Contains(t, result, "name: cni-vxlan")
 }
 
+// TestIngressFirewallCPRulesYAMLNormalizesCIDRs verifies that CIDRs with host bits set
+// are normalized to network addresses (consistent with Hetzner firewall path).
+func TestIngressFirewallCPRulesYAMLNormalizesCIDRs(t *testing.T) {
+	t.Parallel()
+
+	// "203.0.113.5/24" has host bits; should be normalized to "203.0.113.0/24"
+	allowedCIDRs := []string{"203.0.113.5/24", "2001:db8::1/32"}
+	result := talosgenerator.IngressFirewallCPRulesYAML("10.0.0.0/16", 8472, allowedCIDRs)
+
+	assert.Contains(t, result, "subnet: 203.0.113.0/24")
+	assert.NotContains(t, result, "subnet: 203.0.113.5/24")
+	assert.Contains(t, result, "subnet: 2001:db8::/32")
+	assert.NotContains(t, result, "subnet: 2001:db8::1/32")
+}
+
 // TestIngressFirewallWorkerRulesYAML tests the exported worker rules YAML function directly.
 func TestIngressFirewallWorkerRulesYAML(t *testing.T) {
 	t.Parallel()
