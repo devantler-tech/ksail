@@ -753,6 +753,7 @@ func (p *Provisioner) GetCurrentConfig(
 	// fields (location, network, SSH key) cannot be introspected, so we
 	// echo the desired config as the baseline for those.
 	var providerSpec *v1alpha1.ProviderSpec
+
 	if p.hetznerOpts != nil {
 		hetznerSpec := *p.hetznerOpts
 		p.introspectHetznerServerTypes(ctx, &hetznerSpec)
@@ -849,7 +850,10 @@ func countNodeRoles(nodes []nodeWithRole) (int32, int32) {
 
 // introspectHetznerServerTypes populates the ControlPlaneServerType and
 // WorkerServerType fields on hetznerSpec from the running Hetzner servers.
-func (p *Provisioner) introspectHetznerServerTypes(ctx context.Context, hetznerSpec *v1alpha1.OptionsHetzner) {
+func (p *Provisioner) introspectHetznerServerTypes(
+	ctx context.Context,
+	hetznerSpec *v1alpha1.OptionsHetzner,
+) {
 	if p.infraProvider == nil {
 		return
 	}
