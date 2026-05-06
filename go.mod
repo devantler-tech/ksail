@@ -65,7 +65,7 @@ require (
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/github/copilot-sdk/go v0.3.0
 	github.com/google/go-github/v72 v72.0.0
-	github.com/hetznercloud/hcloud-go/v2 v2.38.0
+	github.com/hetznercloud/hcloud-go/v2 v2.39.0
 	github.com/invopop/jsonschema v0.14.0
 	github.com/kubescape/kubescape/v3 v3.0.48
 	github.com/kubescape/opa-utils v0.0.293
