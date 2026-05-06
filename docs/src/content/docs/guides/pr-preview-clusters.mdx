@@ -171,6 +171,13 @@ You can also set it globally for all subsequent steps:
 | `provider` | `Docker` | Infrastructure provider (Docker, Hetzner) |
 | `config` | `""` | Path to alternate `ksail.yaml` (e.g. `ksail.staging.yaml`) |
 | `validate` | `false` | Run `ksail workload validate` before cluster creation (after `init`, when enabled) |
+| `scan` | `false` | Run `ksail workload scan` (can be enabled independently of `validate`) |
+| `scan-framework` | `nsa` | Comma-separated security frameworks to scan against (e.g. `nsa,mitre`) |
+| `scan-compliance-threshold` | `0` | Fail if compliance score is below this threshold (0–100) |
+| `scan-format` | `pretty-printer` | Scan output format (`pretty-printer`, `json`, `sarif`, `junit`) |
+| `scan-output` | `""` | File path to write scan results to (defaults to stdout) |
+| `scan-path` | `""` | Path to scan (defaults to active config's `sourceDirectory` or `k8s/`) |
+| `scan-verbose` | `false` | Show all scanned resources in output, not just failed ones |
 | `push` | `false` | Run `ksail workload push` after creation |
 | `reconcile` | `false` | Run `ksail workload reconcile` after push |
 | `delete` | `false` | Delete cluster at the end (`if: always()`) |

@@ -60,7 +60,7 @@ inputs:
     description: "File path to write scan results to. Defaults to stdout when empty."
     default: ""
   scan-path:
-    description: "Path to scan. When empty, ksail resolves the path from spec.workload.sourceDirectory in ksail.yaml (or 'k8s/' by default)."
+    description: "Path to scan. When empty, ksail resolves the path from the active config file (or 'k8s/' by default)."
     default: ""
   scan-verbose:
     description: "Show all scanned resources in output, not just failed ones"
