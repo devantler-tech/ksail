@@ -395,6 +395,10 @@ func (p *Provisioner) createTalosClient(
 	if expandErr == nil {
 		savedCfg, openErr := clientconfig.Open(talosconfigPath)
 		if openErr == nil {
+			if caErr := validateCurrentContextCA(savedCfg, talosconfigPath); caErr != nil {
+				return nil, caErr
+			}
+
 			client, err := talosclient.New(ctx,
 				talosclient.WithEndpoints(nodeIP),
 				talosclient.WithConfig(savedCfg),

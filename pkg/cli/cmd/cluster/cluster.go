@@ -1025,6 +1025,7 @@ func NewClusterCmd(runtimeContainer *di.Runtime) *cobra.Command {
 	cmd.AddCommand(NewBackupCmd(runtimeContainer))
 	cmd.AddCommand(NewRestoreCmd(runtimeContainer))
 	cmd.AddCommand(NewSwitchCmd(runtimeContainer))
+	cmd.AddCommand(NewRepairCmd(runtimeContainer))
 
 	return cmd
 }
