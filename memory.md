@@ -1,26 +1,26 @@
 # Repo Assist Memory
 
 ## Last Run
-2026-05-05 01:03 UTC — Run #25352205894
+2026-05-07 01:08 UTC — Run #25470070628
 
 ## Monthly Activity Issue
 - May 2026: #4501 (open, updated this run)
 
 ## Open Repo Assist PRs
-- [Repo Assist] feat(diagnose): add --format json flag with structured DiagnoseReport output — branch: repo-assist/feat-diagnose-json-format (#4571)
+- (None — #4571 appears to have been merged since last run)
 
 ## Issue Comments Made (with run)
+- #4354 (KWOK v0.7.0 CEL stages): 2026-05-07 run #25470070628
+- #4621 (Hetzner node role bug): 2026-05-06
 - #3912 (Dependabot multi-arch bug): 2026-05-05 run #25352205894
 - #4525 (HA defaults feature): 2026-05-02
 - #4504 (workload watch regression): 2026-05-01
 - #4422 (diagnose health scoring): 2026-05-01
-- #4384 (autoscaler): 2026-04-30
 
-## Issues Created This Run
-- [chore]: communicate GPL-3.0-only license change (roadmap Now gap)
-- [feature]: OIDC federation and multi-cluster auth support (roadmap Later gap)
-
-## Issues Previously Created (last 4 weeks)
+## Issues Created (last 4 weeks)
+- #4627: [Parent] Cloud Provider Expansion (groups #3983, #4328, #4510)
+- #4610: [ci] fix K3s+Cilium full-stack system test timing race
+- #4602: [feature] OIDC federation and multi-cluster auth support
 - #4521: [feature] local-remote service mirroring
 - #4511: [feature] native ephemeral CI mode
 - #4510: [chore] add GKE and AKS cloud providers
@@ -37,15 +37,18 @@
 - Next expected: test coverage (Task 9)
 
 ## Backlog Cursor
-- Issues processed through #4579 (as of 2026-05-05)
-- New weekly strategy #4573 read; 2 new gaps created as issues
-- Remaining gaps: K3s+Cilium CI flake issue, Hetzner quota, Cloud E2E queue starvation (all have issues #4378, #4353, #4341)
+- Issues processed through #4635 (as of 2026-05-07)
+- All roadmap Now/Next/Later items from discussion #4573 (May 4, 2026) are tracked
+- No new gaps identified this run
 
-## Labels Applied This Run
-- #4432, #4427, #4371 → `agentic-workflows`
-- #4423, #4473, #4474, #3983 → `next`
+## Labels Applied (recent)
+- #4432, #4427, #4371 → `agentic-workflows` (May 5)
+- #4423, #4473, #4474, #3983 → `next` (May 5)
+- #4521, #4511, #4510, #4354, #4328 → `automation`, `repo-assist` (May 6)
 
 ## Notes
 - link_sub_issue is NOT idempotent — always verify sub-issue not already linked before calling
 - Weekly strategy #4573 (May 4, 2026) is the current roadmap reference
-- New roadmap items tracked: GPL-3.0 license communication, OIDC federation
+- All roadmap items are tracked; no new issues needed until next Weekly Strategy
+- ArgoCD currently on v3.3.8 (chart 9.5.9); #4316 tracking v3.4 upgrade (Dependabot will handle)
+- KWOK module at v0.7.1 dev build (post-v0.7.0), CEL stage support already available in Go API
