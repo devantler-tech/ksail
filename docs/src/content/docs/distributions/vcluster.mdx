@@ -47,36 +47,19 @@ KSail creates Docker containers for the control plane, bootstraps the GitOps eng
 ### 3. Verify the Cluster
 
 ````bash
-# Check cluster info
 ksail cluster info
-
-# List running containers
-docker ps | grep dev-cluster
-
-# Test kubectl access
 kubectl get nodes
 kubectl get pods --all-namespaces
 ````
 
-### 4. Deploy an Application
+### 4. Deploy Workloads
 
-````bash
-# Create a simple deployment
-kubectl create deployment nginx --image=nginx:1.25
-kubectl expose deployment nginx --port=80 --type=NodePort
-
-# Check the service
-kubectl get svc nginx
-````
+See [Workload Management](/features/workload-management/) for applying manifests, Helm charts, and managing resources.
 
 ### 5. Clean Up
 
 ````bash
-# Delete the cluster when done
 ksail cluster delete
-
-# Verify containers are removed
-docker ps | grep dev-cluster
 ````
 
 ## Configuration
