@@ -165,6 +165,7 @@ func (m *ConfigManager) addHetznerPatches(
 		patches, err := ingressFirewallPatches(
 			v1alpha1.HetznerNetworkCIDR(m.Config.Spec),
 			v1alpha1.HetznerCNIPort(m.Config.Spec),
+			m.Config.Spec.Provider.Hetzner.AllowedCIDRs,
 		)
 		if err != nil {
 			return err
@@ -588,8 +589,14 @@ var (
 // ingressFirewallPatches returns Talos patches that configure the OS-level ingress firewall.
 // This generates three patches: a default action (ingress: block) for all nodes, plus
 // per-role NetworkRuleConfig documents for control-plane and worker nodes.
+// When allowedCIDRs is non-empty, the CP rules restrict apid and kubernetes-api access
+// to the specified CIDR blocks instead of 0.0.0.0/0.
 // See: https://www.talos.dev/latest/talos-guides/network/ingress-firewall/
-func ingressFirewallPatches(networkCIDR string, cniPort int) ([]talosconfigmanager.Patch, error) {
+func ingressFirewallPatches(
+	networkCIDR string,
+	cniPort int,
+	allowedCIDRs []string,
+) ([]talosconfigmanager.Patch, error) {
 	cidr := strings.TrimSpace(networkCIDR)
 	if cidr == "" {
 		return nil, errIngressFirewallMissingCIDR
@@ -613,9 +620,11 @@ func ingressFirewallPatches(networkCIDR string, cniPort int) ([]talosconfigmanag
 			Content: []byte(talosgenerator.IngressFirewallDefaultActionYAML),
 		},
 		{
-			Path:    "ingress-firewall-cp-rules",
-			Scope:   talosconfigmanager.PatchScopeControlPlane,
-			Content: []byte(talosgenerator.IngressFirewallCPRulesYAML(normalizedCIDR, cniPort)),
+			Path:  "ingress-firewall-cp-rules",
+			Scope: talosconfigmanager.PatchScopeControlPlane,
+			Content: []byte(
+				talosgenerator.IngressFirewallCPRulesYAML(normalizedCIDR, cniPort, allowedCIDRs),
+			),
 		},
 		{
 			Path:    "ingress-firewall-worker-rules",

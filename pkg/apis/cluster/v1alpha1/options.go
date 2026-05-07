@@ -147,6 +147,12 @@ type OptionsHetzner struct {
 	// When set to 0, KSail uses DefaultHetznerServerLimit instead of treating 0 as an explicit
 	// limit. Defaults to DefaultHetznerServerLimit (10).
 	ServerLimit int32 `default:"10" json:"serverLimit,omitzero" jsonschema:"description=Maximum total Hetzner servers allowed for this cluster (control-planes + workers + autoscaler pool capacity). Set to 0 to use the default limit of 10,minimum=0"` //nolint:lll
+	// AllowedCIDRs restricts public access to the Kubernetes API (6443) and Talos API (50000)
+	// on control-plane nodes to the specified CIDR blocks. When empty, both APIs are open
+	// to the entire internet (0.0.0.0/0 and ::/0). Applied to both the Hetzner Cloud Firewall
+	// and the Talos OS-level ingress firewall for defense-in-depth.
+	// Examples: ["203.0.113.0/24", "198.51.100.0/24"]
+	AllowedCIDRs []string `json:"allowedCidrs,omitzero" jsonschema:"description=CIDR blocks allowed to access the Kubernetes API and Talos API on control-plane nodes. When empty defaults to 0.0.0.0/0 and ::/0 (open to all IPv4 and IPv6)."` //nolint:lll
 	// AutoscalerNodePoolNames lists the node-group names configured in the
 	// Kubernetes Cluster Autoscaler for this cluster. When non-empty, KSail
 	// deletes servers labelled with hcloud/node-group=<name> during cluster

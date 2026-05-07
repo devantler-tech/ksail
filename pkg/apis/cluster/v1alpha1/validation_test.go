@@ -486,3 +486,91 @@ func TestValidateMirrorRegistriesForProvider(t *testing.T) {
 		})
 	}
 }
+
+//nolint:funlen // Table-driven test with comprehensive test cases.
+func TestValidateAllowedCIDRs(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		cidrs         []string
+		wantError     bool
+		errorContains string
+	}{
+		{
+			name:      "empty slice is valid",
+			cidrs:     []string{},
+			wantError: false,
+		},
+		{
+			name:      "nil slice is valid",
+			cidrs:     nil,
+			wantError: false,
+		},
+		{
+			name:      "valid IPv4 CIDR",
+			cidrs:     []string{"192.168.1.0/24"},
+			wantError: false,
+		},
+		{
+			name:      "valid IPv6 CIDR",
+			cidrs:     []string{"2001:db8::/32"},
+			wantError: false,
+		},
+		{
+			name:      "multiple valid CIDRs",
+			cidrs:     []string{"10.0.0.0/8", "172.16.0.0/12", "2001:db8::/32"},
+			wantError: false,
+		},
+		{
+			name:      "whitespace around valid CIDR is accepted",
+			cidrs:     []string{"  192.168.0.0/16  "},
+			wantError: false,
+		},
+		{
+			name:          "empty string entry rejected",
+			cidrs:         []string{""},
+			wantError:     true,
+			errorContains: "entry[0] must not be empty",
+		},
+		{
+			name:          "whitespace-only entry rejected",
+			cidrs:         []string{"   "},
+			wantError:     true,
+			errorContains: "entry[0] must not be empty",
+		},
+		{
+			name:          "invalid CIDR rejected",
+			cidrs:         []string{"not-a-cidr"},
+			wantError:     true,
+			errorContains: "entry[0]",
+		},
+		{
+			name:          "IP without mask rejected",
+			cidrs:         []string{"192.168.1.1"},
+			wantError:     true,
+			errorContains: "entry[0]",
+		},
+		{
+			name:          "second entry invalid",
+			cidrs:         []string{"10.0.0.0/8", "bad"},
+			wantError:     true,
+			errorContains: "entry[1]",
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := v1alpha1.ValidateAllowedCIDRs(testCase.cidrs)
+			if testCase.wantError {
+				require.Error(t, err)
+				require.ErrorIs(t, err, v1alpha1.ErrInvalidAllowedCIDR)
+				assert.Contains(t, err.Error(), testCase.errorContains)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}

@@ -77,6 +77,7 @@ func (s *Scaffolder) buildTalosGeneratorConfig() (*talosgenerator.Config, bool) 
 		EnableIngressFirewall:       enableIngressFirewall,
 		NetworkCIDR:                 networkCIDR,
 		CNIPort:                     cniPort,
+		AllowedCIDRs:                s.KSailConfig.Spec.Provider.Hetzner.AllowedCIDRs,
 		EnableOIDC:                  enableOIDC,
 		OIDCIssuerURL:               s.KSailConfig.Spec.Cluster.OIDC.IssuerURL,
 		OIDCClientID:                s.KSailConfig.Spec.Cluster.OIDC.ClientID,

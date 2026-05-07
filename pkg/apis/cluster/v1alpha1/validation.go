@@ -2,6 +2,7 @@ package v1alpha1
 
 import (
 	"fmt"
+	"net"
 	"regexp"
 	"slices"
 	"strings"
@@ -420,6 +421,24 @@ func resolveServerLimit(limit int32) (int32, error) {
 	}
 
 	return limit, nil
+}
+
+// ValidateAllowedCIDRs validates that each entry in allowedCIDRs is a valid CIDR block.
+// Returns nil when the slice is empty (meaning default 0.0.0.0/0 and ::/0 behavior).
+func ValidateAllowedCIDRs(cidrs []string) error {
+	for idx, cidr := range cidrs {
+		trimmed := strings.TrimSpace(cidr)
+		if trimmed == "" {
+			return fmt.Errorf("%w: entry[%d] must not be empty", ErrInvalidAllowedCIDR, idx)
+		}
+
+		_, _, err := net.ParseCIDR(trimmed)
+		if err != nil {
+			return fmt.Errorf("%w: entry[%d] %q: %w", ErrInvalidAllowedCIDR, idx, cidr, err)
+		}
+	}
+
+	return nil
 }
 
 // ValidateOIDCConfig validates the OIDC authentication configuration.

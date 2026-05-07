@@ -1221,11 +1221,18 @@ func handleCreateRunE(
 	}
 
 	applyOIDCExtraScopeFlag(cmd, ctx.ClusterCfg)
+	applyAllowedCIDRsFlag(cmd, ctx.ClusterCfg)
 
 	// Re-validate OIDC after merging CLI scope flags which can change ExtraScopes
 	err = v1alpha1.ValidateOIDCConfig(&ctx.ClusterCfg.Spec.Cluster.OIDC)
 	if err != nil {
 		return fmt.Errorf("OIDC configuration: %w", err)
+	}
+
+	// Validate allowed CIDRs after merging CLI flags
+	err = v1alpha1.ValidateAllowedCIDRs(ctx.ClusterCfg.Spec.Provider.Hetzner.AllowedCIDRs)
+	if err != nil {
+		return fmt.Errorf("allowed CIDRs configuration: %w", err)
 	}
 
 	err = runClusterCreationWorkflow(cmd, cfgManager, ctx, deps)
@@ -3445,9 +3452,10 @@ func bindInitLocalFlags(cmd *cobra.Command, cfgManager *ksailconfigmanager.Confi
 	_ = cfgManager.Viper.BindPFlag("name", cmd.Flags().Lookup("name"))
 
 	registerOIDCExtraScopeFlag(cmd)
+	registerAllowedCIDRsFlag(cmd)
 }
 
-// InitDeps captures dependencies required for the init command.
+// InitDeps holds dependencies injected into HandleInitRunE.
 type InitDeps struct {
 	Timer timer.Timer
 }
@@ -3480,6 +3488,21 @@ func validateInitConfig(clusterCfg *v1alpha1.Cluster) error {
 	return nil
 }
 
+// validatePostFlagInitConfig validates config fields that may have been modified by CLI flags.
+func validatePostFlagInitConfig(clusterCfg *v1alpha1.Cluster) error {
+	err := v1alpha1.ValidateOIDCConfig(&clusterCfg.Spec.Cluster.OIDC)
+	if err != nil {
+		return fmt.Errorf("OIDC configuration: %w", err)
+	}
+
+	err = v1alpha1.ValidateAllowedCIDRs(clusterCfg.Spec.Provider.Hetzner.AllowedCIDRs)
+	if err != nil {
+		return fmt.Errorf("allowed CIDRs configuration: %w", err)
+	}
+
+	return nil
+}
+
 // HandleInitRunE handles the init command.
 func HandleInitRunE(
 	cmd *cobra.Command,
@@ -3503,11 +3526,11 @@ func HandleInitRunE(
 	}
 
 	applyOIDCExtraScopeFlag(cmd, clusterCfg)
+	applyAllowedCIDRsFlag(cmd, clusterCfg)
 
-	// Re-validate OIDC after merging CLI scope flags which can change ExtraScopes
-	err = v1alpha1.ValidateOIDCConfig(&clusterCfg.Spec.Cluster.OIDC)
+	err = validatePostFlagInitConfig(clusterCfg)
 	if err != nil {
-		return fmt.Errorf("OIDC configuration: %w", err)
+		return err
 	}
 
 	scaffolderInstance, targetPath, force, err := prepareScaffolder(cmd, cfgManager, clusterCfg)
@@ -5388,6 +5411,32 @@ func applyOIDCExtraScopeFlag(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster) {
 	clusterCfg.Spec.Cluster.OIDC.ExtraScopes = scopes
 }
 
+// registerAllowedCIDRsFlag adds the --allowed-cidrs flag to a command.
+// Like --mirror-registry, this is a string slice flag NOT bound to Viper
+// and merged manually via applyAllowedCIDRsFlag.
+func registerAllowedCIDRsFlag(cmd *cobra.Command) {
+	cmd.Flags().StringSlice("allowed-cidrs", []string{},
+		"CIDR blocks allowed to access the Kubernetes API and Talos API on control-plane nodes. "+
+			"When empty, both APIs are open to 0.0.0.0/0 and ::/0 (all IPv4 and IPv6). "+
+			"Example: --allowed-cidrs 203.0.113.0/24 --allowed-cidrs 198.51.100.0/24")
+}
+
+// applyAllowedCIDRsFlag merges --allowed-cidrs flag values into the cluster config.
+// CLI flag values take precedence over config file values when explicitly set.
+func applyAllowedCIDRsFlag(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster) {
+	cidrFlag := cmd.Flags().Lookup("allowed-cidrs")
+	if cidrFlag == nil || !cidrFlag.Changed {
+		return
+	}
+
+	cidrs, err := cmd.Flags().GetStringSlice("allowed-cidrs")
+	if err != nil {
+		return
+	}
+
+	clusterCfg.Spec.Provider.Hetzner.AllowedCIDRs = cidrs
+}
+
 // setupMutationCmdFlags creates the shared config manager and registers the
 // common flags (--mirror-registry and --name) used by cluster mutation commands.
 // Returns the config manager for further flag bindings.
@@ -5400,6 +5449,7 @@ func setupMutationCmdFlags(cmd *cobra.Command) *ksailconfigmanager.ConfigManager
 	registerMirrorRegistryFlag(cmd)
 	registerNameFlag(cmd, cfgManager)
 	registerOIDCExtraScopeFlag(cmd)
+	registerAllowedCIDRsFlag(cmd)
 
 	return cfgManager
 }
@@ -6432,11 +6482,18 @@ func handleUpdateRunE(
 	}
 
 	applyOIDCExtraScopeFlag(cmd, ctx.ClusterCfg)
+	applyAllowedCIDRsFlag(cmd, ctx.ClusterCfg)
 
 	// Re-validate OIDC after merging CLI scope flags which can change ExtraScopes
 	err = v1alpha1.ValidateOIDCConfig(&ctx.ClusterCfg.Spec.Cluster.OIDC)
 	if err != nil {
 		return fmt.Errorf("OIDC configuration: %w", err)
+	}
+
+	// Validate allowed CIDRs after merging CLI flags
+	err = v1alpha1.ValidateAllowedCIDRs(ctx.ClusterCfg.Spec.Provider.Hetzner.AllowedCIDRs)
+	if err != nil {
+		return fmt.Errorf("allowed CIDRs configuration: %w", err)
 	}
 
 	force := resolveForce(cfgManager.Viper.GetBool("force"), cmd.Flags().Lookup("yes"))

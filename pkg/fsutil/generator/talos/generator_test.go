@@ -903,7 +903,7 @@ func TestGenerator_Generate_IngressFirewallFlannelPort(t *testing.T) {
 func TestIngressFirewallCPRulesYAML(t *testing.T) {
 	t.Parallel()
 
-	result := talosgenerator.IngressFirewallCPRulesYAML("10.0.0.0/16", 8472)
+	result := talosgenerator.IngressFirewallCPRulesYAML("10.0.0.0/16", 8472, nil)
 
 	// Verify all expected rule names are present
 	assert.Contains(t, result, "name: kubelet")
@@ -933,6 +933,49 @@ func TestIngressFirewallCPRulesYAML(t *testing.T) {
 	assert.Contains(t, result, "6443")      // kubernetes-api
 	assert.Contains(t, result, "50001")     // trustd
 	assert.Contains(t, result, "2379-2380") // etcd
+}
+
+// TestIngressFirewallCPRulesYAMLWithAllowedCIDRs tests that allowedCIDRs restricts
+// apid and kubernetes-api ingress subnets.
+func TestIngressFirewallCPRulesYAMLWithAllowedCIDRs(t *testing.T) {
+	t.Parallel()
+
+	allowedCIDRs := []string{"203.0.113.0/24", "198.51.100.0/24"}
+	result := talosgenerator.IngressFirewallCPRulesYAML("10.0.0.0/16", 8472, allowedCIDRs)
+
+	// Verify apid and kubernetes-api use the provided CIDRs
+	assert.Contains(t, result, "subnet: 203.0.113.0/24")
+	assert.Contains(t, result, "subnet: 198.51.100.0/24")
+
+	// Verify open-to-all CIDRs are NOT present for API rules
+	assert.NotContains(t, result, "subnet: 0.0.0.0/0")
+	assert.NotContains(t, result, "subnet: ::/0")
+
+	// Verify private-network-restricted rules still use the network CIDR
+	assert.Contains(t, result, "subnet: 10.0.0.0/16")
+
+	// Verify all expected rule names are still present
+	assert.Contains(t, result, "name: kubelet")
+	assert.Contains(t, result, "name: apid")
+	assert.Contains(t, result, "name: kubernetes-api")
+	assert.Contains(t, result, "name: trustd")
+	assert.Contains(t, result, "name: etcd")
+	assert.Contains(t, result, "name: cni-vxlan")
+}
+
+// TestIngressFirewallCPRulesYAMLNormalizesCIDRs verifies that CIDRs with host bits set
+// are normalized to network addresses (consistent with Hetzner firewall path).
+func TestIngressFirewallCPRulesYAMLNormalizesCIDRs(t *testing.T) {
+	t.Parallel()
+
+	// "203.0.113.5/24" has host bits; should be normalized to "203.0.113.0/24"
+	allowedCIDRs := []string{"203.0.113.5/24", "2001:db8::1/32"}
+	result := talosgenerator.IngressFirewallCPRulesYAML("10.0.0.0/16", 8472, allowedCIDRs)
+
+	assert.Contains(t, result, "subnet: 203.0.113.0/24")
+	assert.NotContains(t, result, "subnet: 203.0.113.5/24")
+	assert.Contains(t, result, "subnet: 2001:db8::/32")
+	assert.NotContains(t, result, "subnet: 2001:db8::1/32")
 }
 
 // TestIngressFirewallWorkerRulesYAML tests the exported worker rules YAML function directly.
