@@ -1,6 +1,6 @@
 {
-  "last_run": "2026-05-06T12:54:00Z",
-  "workflow_run_id": "25436418986",
+  "last_run": "2026-05-07T12:55:00Z",
+  "workflow_run_id": "25496959179",
   "commented_issues": {
     "4621": "2026-05-06",
     "4606": "2026-05-05",
@@ -31,27 +31,15 @@
     "4119": "2026-04-18",
     "3912": "2026-05-05",
     "3772": "2026-04-11",
-    "2261": "2026-04-11"
+    "2261": "2026-04-11",
+    "4354": "2026-05-07"
   },
-  "open_prs": {
-    "repo-assist/feat-diagnose-json-format": "feat(diagnose): add --format json flag with structured DiagnoseReport output"
-  },
-  "merged_prs": {
-    "4556": "fix(update): detect autoscaler and Talos config from live cluster",
-    "4563": "refactor: add TotalNodeCount() to ClusterSpec",
-    "4551": "test(cipher): add unit tests for writeDecryptedOutput etc.",
-    "4509": "fix(workload): validate explicit --path before config load",
-    "4419": "fix(ci): remove stale registry containers between retries",
-    "4396": "fix(ci): Talos+Docker retry logic",
-    "4393": "docs(hetzner): document ingressFirewall option",
-    "4383": "feat: add metadata.name support to ksail config",
-    "4365": "feat(cluster): add nodeAutoscaling guard",
-    "4358": "fix(kyverno): wait for MutatingWebhookConfiguration caBundle",
-    "4359": "perf(notify): eliminate per-tick allocations",
-    "4352": "refactor(setup): replace repeated if-append with table-driven loop"
-  },
+  "open_prs": {},
   "last_code_quality_domain": "perf",
-  "issue_backlog_cursor": "4626",
+  "issue_backlog_cursor": "4637",
+  "sub_issue_links": {
+    "cloud_provider_parent_4627": ["3983", "4328", "4510"]
+  },
   "created_issues": {
     "4521": "[Repo Assist] [feature]: add local-remote service mirroring",
     "4511": "[Repo Assist] [feature]: add native ephemeral CI mode",
@@ -63,21 +51,15 @@
     "4422": "[Repo Assist] [feature]: enhance ksail cluster diagnose with structured health scoring",
     "4375": "[Repo Assist] [feature]: add ksail cluster graph for multi-cluster topology",
     "3983": "[Repo Assist] [feature]: extend Hetzner provider to K3s and Vanilla",
-    "4601": "[Repo Assist] [chore]: communicate GPL-3.0-only license change (CLOSED)",
     "4602": "[Repo Assist] [feature]: OIDC federation and multi-cluster auth support",
     "4610": "[Repo Assist] [ci]: fix K3s+Cilium full-stack system test timing race",
-    "4627+": "[Repo Assist] [Parent] Cloud Provider Expansion (groups #3983, #4328, #4510)"
-  },
-  "sub_issue_links": {
-    "cloud_provider_parent": ["3983", "4328", "4510"]
+    "4627": "[Repo Assist] [Parent] Cloud Provider Expansion"
   },
   "notes": [
     "link_sub_issue is NOT idempotent - always verify sub-issue not already linked before calling",
     "Monthly activity issue: #4501",
     "domain alternation: last was perf - next should be test coverage",
-    "Roadmap backlog: all Now/Next/Later items tracked as of 2026-05-06",
-    "Bug #4621: devantler submitted PR #4625 normalizing Hetzner/Omni node roles + introspecting server types - fix looks correct",
-    "PR #4571 still open, all CI passing",
-    "Cloud provider parent issue created this run (aw_cloudpar) - #3983, #4328, #4510 linked as sub-issues"
+    "Roadmap backlog: all Now/Next/Later items tracked as of 2026-05-07",
+    "#3983 was missing from #4627 sub-issues; re-linked this run (verified count: 3)"
   ]
 }
