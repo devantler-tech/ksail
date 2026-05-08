@@ -1,7 +1,7 @@
 # Repo Assist Memory
 
 ## Last Run
-2026-05-08 01:08 UTC — Run #25530778322
+2026-05-08 12:47 UTC — Run #25556266722
 
 ## Monthly Activity Issue
 - May 2026: #4501 (open, updated this run)
@@ -38,13 +38,11 @@
 
 ## Code Quality Domain Alternation
 - Last domain: perf (Task 8)
-- Next for Task 5 (refactor): look for refactoring opportunities unrelated to #4646/4647
-- Note: PR #4647 (Copilot) addresses ~ expansion in EvalCanonicalPath callers — don't overlap
+- Next for Task 5 (refactor): look for refactoring opportunities
 
 ## Backlog Cursor
-- Issues processed through #4647 (as of 2026-05-08)
+- Issues processed through #4648 (as of 2026-05-08 noon)
 - All roadmap Now/Next/Later items from discussion #4573 (May 4, 2026) are tracked
-- License communication #4601 was created and is now closed/completed
 
 ## Labels Applied (recent)
 - #4432, #4427, #4371 → `agentic-workflows` (May 5)
@@ -55,7 +53,6 @@
 - link_sub_issue is NOT idempotent — always verify sub-issue not already linked before calling
 - Weekly strategy #4573 (May 4, 2026) is the current roadmap reference
 - All roadmap items are tracked; no new issues needed until next Weekly Strategy
-- ArgoCD currently on v3.3.8 (chart 9.5.9); #4316 tracking v3.4 upgrade (Dependabot will handle)
-- KWOK module at v0.7.1 dev build (post-v0.7.0), CEL stage support already available in Go API
-- #3983 was missing from #4627 sub-issues; re-linked 2026-05-07 (verified count: 3)
-- Open PRs as of 2026-05-08: #4647 (Copilot fix, draft), #4645, #4643, #4642, #4641, #4638
+- #4341 was closed 2026-05-04 by devantler (CI workflow removed from monitoring)
+- Open PRs as of 2026-05-08 noon: #4648 (docs), #4647 (Hetzner fix), #4645 (Talos CA), #4642 (fsnotify dep)
+- #4501 updated this run with new run history and refreshed suggested actions

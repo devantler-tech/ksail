@@ -1,6 +1,6 @@
 {
-  "last_run": "2026-05-08T01:08:00Z",
-  "workflow_run_id": "25530778322",
+  "last_run": "2026-05-08T12:47:00Z",
+  "workflow_run_id": "25556266722",
   "commented_issues": {
     "4646": "2026-05-08",
     "4621": "2026-05-06",
@@ -37,7 +37,7 @@
   },
   "open_prs": {},
   "last_code_quality_domain": "perf",
-  "issue_backlog_cursor": "4647",
+  "issue_backlog_cursor": "4648",
   "sub_issue_links": {
     "cloud_provider_parent_4627": ["3983", "4328", "4510"]
   },
@@ -61,7 +61,7 @@
     "Monthly activity issue: #4501",
     "domain alternation: last was perf - next should be refactor (Task 5)",
     "Roadmap backlog: all Now/Next/Later items tracked as of 2026-05-08",
-    "#3983 was missing from #4627 sub-issues; re-linked this run (verified count: 3)",
-    "PR #4647 (Copilot): fixes Hetzner label 63-char + ~ expansion in kubeconfig path - don't overlap"
+    "#4341 was closed 2026-05-04 by devantler (CI workflow removed from monitoring)",
+    "Open PRs as of 2026-05-08 noon: #4648 (docs), #4647 (Hetzner fix), #4645 (Talos CA), #4642 (fsnotify dep)"
   ]
 }
