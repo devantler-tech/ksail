@@ -590,7 +590,7 @@ Flags:
       --request-timeout string         The length of time to wait before giving up on a single server request. Non-zero values should contain a corresponding time unit (e.g. 1s, 2m, 3h). A value of zero means don't timeout requests. (default "0")
   -l, --selector string                Selector (label query) to filter on, supports '=', '==', '!=', 'in', 'notin'.(e.g. -l key1=value1,key2=value2,key3 in (value3)). Matching objects must satisfy all of the specified label constraints.
   -s, --server string                  The address and port of the Kubernetes API server
-      --show-events                    If true, display events related to the described object. (default true)
+      --show-events                    If true, display events related to the described object. Defaults to true for a single object, false for multiple objects and prefix matching. (default true)
       --tls-server-name string         Server name to use for server certificate validation. If it is not provided, the hostname used to contact the server is used
       --token string                   Bearer token for authentication to the API server
       --user string                    The name of the kubeconfig user to use
@@ -731,7 +731,7 @@ Flags:
       --kubeconfig string              Path to the kubeconfig file to use for CLI requests. (default "$HOME/.kube/config")
   -n, --namespace string               If present, the namespace scope for this CLI request
   -o, --output string                  Format in which to render the schema (plaintext, plaintext-openapiv2) (default "plaintext")
-      --recursive                      Print the fields of fields (Currently only 1 level deep)
+  -R, --recursive                      Print the fields of fields (Currently only 1 level deep)
       --request-timeout string         The length of time to wait before giving up on a single server request. Non-zero values should contain a corresponding time unit (e.g. 1s, 2m, 3h). A value of zero means don't timeout requests. (default "0")
   -s, --server string                  The address and port of the Kubernetes API server
       --tls-server-name string         Server name to use for server certificate validation. If it is not provided, the hostname used to contact the server is used
@@ -1438,6 +1438,14 @@ Examples:
   # Wait for the pod "busybox1" to be deleted, with a timeout of 60s, after having issued the "delete" command
   ksail workload delete pod/busybox1
   ksail workload wait --for=delete pod/busybox1 --timeout=60s
+  
+  # Wait for pod "busybox1" to be created AND reach the "Ready" status condition
+  ksail workload wait --for=condition=Ready --for=create pod/busybox1
+  
+  # Wait for pod "busybox1" to reach the "Ready" status OR for its containers to report a "False" readiness state
+  until ksail workload wait pod/busybox1 --for=condition=Ready --timeout=1s 2>/dev/null || \
+  ksail workload wait pod/busybox1 --for=condition=ContainersReady=False --timeout=1s 2>/dev/null; \
+  do echo "Checking conditions..."; sleep 1; done
 
 Flags:
       --all                           Select all resources in the namespace of the specified resource types
@@ -1445,7 +1453,7 @@ Flags:
       --allow-missing-template-keys   If true, ignore any errors in templates when a field or map key is missing in the template. Only applies to golang and jsonpath output formats. (default true)
       --field-selector string         Selector (field query) to filter on, supports '=', '==', and '!='.(e.g. --field-selector key1=value1,key2=value2). The server only supports a limited number of field queries per type.
   -f, --filename strings              identifying the resource.
-      --for string                    The condition to wait on: [create|delete|condition=condition-name[=condition-value]|jsonpath='{JSONPath expression}'=[JSONPath value]]. The default condition-value is true. Condition values are compared after Unicode simple case folding, which is a more general form of case-insensitivity.
+      --for stringArray               The condition to wait on: [create|delete|condition=condition-name[=condition-value]|jsonpath='{JSONPath expression}'=[JSONPath value]]. The default condition-value is true. Condition values are compared after Unicode simple case folding, which is a more general form of case-insensitivity. Multiple conditions are supported and AND'ed to each other in a sequential order. If --for=create is passed, it is always waited first.
   -h, --help                          help for wait
       --local                         If true, annotation will NOT contact api-server but run locally.
   -o, --output string                 Output format. One of: (json, yaml, kyaml, name, go-template, go-template-file, template, templatefile, jsonpath, jsonpath-as-json, jsonpath-file).
