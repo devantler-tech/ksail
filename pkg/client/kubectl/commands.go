@@ -202,7 +202,7 @@ func (c *Client) CreateRolloutCommand(kubeConfigPath string) *cobra.Command {
 	defer fatalMu.RUnlock()
 
 	factory, configFlags := c.createFactory(kubeConfigPath)
-	rolloutCmd := rollout.NewCmdRollout("kubectl", factory, c.ioStreams)
+	rolloutCmd := rollout.NewCmdRollout("ksail workload", factory, c.ioStreams)
 
 	c.customizeCommand(
 		rolloutCmd,
