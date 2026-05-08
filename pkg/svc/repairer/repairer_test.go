@@ -10,6 +10,10 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/repairer"
 )
 
+// errBoom is a sentinel used by fakeRepair to test failure
+// propagation; declared at package scope to satisfy err113.
+var errBoom = errors.New("boom")
+
 type fakeRepair struct {
 	name   string
 	result repairer.Result
@@ -49,27 +53,17 @@ func TestRegistry_RegisterAndAll(t *testing.T) {
 	}
 }
 
-func TestRegistry_Reset(t *testing.T) {
-	t.Parallel()
-
-	reg := repairer.NewRegistry()
-	reg.Register(&fakeRepair{name: "x"})
-	reg.Reset()
-
-	if len(reg.All()) != 0 {
-		t.Fatal("Reset did not clear registry")
-	}
-}
-
 func TestRunResultPropagates(t *testing.T) {
 	t.Parallel()
 
-	wantErr := errors.New("boom")
-	r := &fakeRepair{name: "r", result: repairer.Result{Status: repairer.StatusUnrepairable, Err: wantErr}}
+	r := &fakeRepair{
+		name:   "r",
+		result: repairer.Result{Status: repairer.StatusUnrepairable, Err: errBoom},
+	}
 
 	got := r.Run(context.Background(), io.Discard)
-	if !errors.Is(got.Err, wantErr) {
-		t.Fatalf("expected wantErr, got %v", got.Err)
+	if !errors.Is(got.Err, errBoom) {
+		t.Fatalf("expected errBoom, got %v", got.Err)
 	}
 }
 
@@ -87,22 +81,5 @@ func TestStatusString(t *testing.T) {
 		if got := s.String(); got != want {
 			t.Errorf("Status(%d).String() = %q, want %q", s, got, want)
 		}
-	}
-}
-
-// TestDefaultRegistry verifies that the package-level Register / All /
-// Reset shims forward to [repairer.Default]. It does not rely on
-// init()-registered repairs from sibling packages — it Resets first.
-func TestDefaultRegistry(t *testing.T) {
-	// Cannot run in parallel — mutates [repairer.Default].
-	t.Cleanup(func() { repairer.Default().Reset() })
-
-	repairer.Default().Reset()
-
-	repairer.Register(&fakeRepair{name: "default-test"})
-
-	got := repairer.All()
-	if len(got) != 1 || got[0].Name() != "default-test" {
-		t.Fatalf("default registry shim mismatch: %#v", got)
 	}
 }

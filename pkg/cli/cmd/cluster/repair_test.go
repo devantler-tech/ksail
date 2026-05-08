@@ -40,7 +40,8 @@ func TestRepairCmd_RunsRegisteredRepairs(t *testing.T) {
 	cmd.SetErr(&out)
 	cmd.SetArgs([]string{})
 
-	if err := cmd.Execute(); err != nil {
+	err := cmd.Execute()
+	if err != nil {
 		t.Fatalf("execute: %v\nout: %s", err, out.String())
 	}
 
@@ -48,6 +49,9 @@ func TestRepairCmd_RunsRegisteredRepairs(t *testing.T) {
 		t.Fatalf("expected fake-ok in output: %s", out.String())
 	}
 }
+
+// errStubFailure is a sentinel used by stub repairs in failure-path tests.
+var errStubFailure = errors.New("stub repair failed")
 
 func TestRepairCmd_FailsOnUnrepairable(t *testing.T) {
 	t.Parallel()
@@ -57,7 +61,7 @@ func TestRepairCmd_FailsOnUnrepairable(t *testing.T) {
 		Name:   "broken",
 		Status: repairer.StatusUnrepairable,
 		Detail: "cannot fix",
-		Err:    errors.New("oops"),
+		Err:    errStubFailure,
 	}})
 
 	cmd := clustercmd.NewRepairCmd(nil, reg)
@@ -82,10 +86,12 @@ func TestRepairCmd_NoRepairsRegistered(t *testing.T) {
 	cmd.SetContext(context.Background())
 
 	var out bytes.Buffer
+
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
 
-	if err := cmd.Execute(); err != nil {
+	err := cmd.Execute()
+	if err != nil {
 		t.Fatalf("expected nil err, got %v", err)
 	}
 

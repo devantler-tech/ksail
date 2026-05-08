@@ -2,7 +2,7 @@ package cluster
 
 import (
 	"context"
-	"fmt"
+	"errors"
 
 	"github.com/devantler-tech/ksail/v7/pkg/di"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
@@ -100,7 +100,7 @@ func runRepair(
 // errRepairsFailed signals that at least one repair returned an error
 // or [repairer.StatusUnrepairable]. Cobra picks this up via RunE and
 // surfaces it as a non-zero exit.
-var errRepairsFailed = fmt.Errorf("one or more repairs reported failures")
+var errRepairsFailed = errors.New("one or more repairs reported failures")
 
 // configurePerRepairOptions threads CLI flags into individual repair
 // implementations that need them. Today only the talosconfig repair

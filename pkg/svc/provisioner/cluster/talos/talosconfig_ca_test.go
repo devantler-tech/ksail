@@ -13,10 +13,11 @@ import (
 	"testing"
 	"time"
 
-	clientconfig "github.com/siderolabs/talos/pkg/machinery/client/config"
-
 	talosprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/talos"
+	clientconfig "github.com/siderolabs/talos/pkg/machinery/client/config"
 )
+
+const prodContextName = "prod"
 
 func mustValidCA(t *testing.T) string {
 	t.Helper()
@@ -46,45 +47,61 @@ func mustValidCA(t *testing.T) string {
 }
 
 func TestValidateCurrentContextCA_Valid(t *testing.T) {
+	t.Parallel()
+
 	cfg := &clientconfig.Config{
-		Context: "prod",
+		Context: prodContextName,
 		Contexts: map[string]*clientconfig.Context{
-			"prod": {CA: mustValidCA(t)},
+			prodContextName: {CA: mustValidCA(t)},
 		},
 	}
 
-	if err := talosprovisioner.ValidateCurrentContextCAForTest(cfg, "/tmp/talosconfig"); err != nil {
+	err := talosprovisioner.ValidateCurrentContextCAForTest(cfg, "/tmp/talosconfig")
+	if err != nil {
 		t.Fatalf("expected nil, got %v", err)
 	}
 }
 
 func TestValidateCurrentContextCA_NilCfg(t *testing.T) {
-	if err := talosprovisioner.ValidateCurrentContextCAForTest(nil, ""); err != nil {
+	t.Parallel()
+
+	err := talosprovisioner.ValidateCurrentContextCAForTest(nil, "")
+	if err != nil {
 		t.Fatalf("expected nil, got %v", err)
 	}
 }
 
 func TestValidateCurrentContextCA_NoContext(t *testing.T) {
+	t.Parallel()
+
 	cfg := &clientconfig.Config{Context: "missing", Contexts: map[string]*clientconfig.Context{}}
-	if err := talosprovisioner.ValidateCurrentContextCAForTest(cfg, ""); err != nil {
+
+	err := talosprovisioner.ValidateCurrentContextCAForTest(cfg, "")
+	if err != nil {
 		t.Fatalf("expected nil for missing context, got %v", err)
 	}
 }
 
 func TestValidateCurrentContextCA_EmptyCA(t *testing.T) {
+	t.Parallel()
+
 	cfg := &clientconfig.Config{
-		Context:  "prod",
-		Contexts: map[string]*clientconfig.Context{"prod": {}},
+		Context:  prodContextName,
+		Contexts: map[string]*clientconfig.Context{prodContextName: {}},
 	}
-	if err := talosprovisioner.ValidateCurrentContextCAForTest(cfg, ""); err != nil {
+
+	err := talosprovisioner.ValidateCurrentContextCAForTest(cfg, "")
+	if err != nil {
 		t.Fatalf("expected nil for empty CA, got %v", err)
 	}
 }
 
 func TestValidateCurrentContextCA_BadBase64(t *testing.T) {
+	t.Parallel()
+
 	cfg := &clientconfig.Config{
-		Context:  "prod",
-		Contexts: map[string]*clientconfig.Context{"prod": {CA: "@@notbase64@@"}},
+		Context:  prodContextName,
+		Contexts: map[string]*clientconfig.Context{prodContextName: {CA: "@@notbase64@@"}},
 	}
 
 	err := talosprovisioner.ValidateCurrentContextCAForTest(cfg, "/tmp/x")
@@ -98,9 +115,12 @@ func TestValidateCurrentContextCA_BadBase64(t *testing.T) {
 }
 
 func TestValidateCurrentContextCA_NotPEM(t *testing.T) {
+	t.Parallel()
+
+	encodedCA := base64.StdEncoding.EncodeToString([]byte("hello world"))
 	cfg := &clientconfig.Config{
-		Context:  "prod",
-		Contexts: map[string]*clientconfig.Context{"prod": {CA: base64.StdEncoding.EncodeToString([]byte("hello world"))}},
+		Context:  prodContextName,
+		Contexts: map[string]*clientconfig.Context{prodContextName: {CA: encodedCA}},
 	}
 
 	err := talosprovisioner.ValidateCurrentContextCAForTest(cfg, "/tmp/x")
@@ -110,11 +130,13 @@ func TestValidateCurrentContextCA_NotPEM(t *testing.T) {
 }
 
 func TestValidateCurrentContextCA_BadDER(t *testing.T) {
+	t.Parallel()
+
 	pemBytes := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: []byte("garbage")})
 	cfg := &clientconfig.Config{
-		Context: "prod",
+		Context: prodContextName,
 		Contexts: map[string]*clientconfig.Context{
-			"prod": {CA: base64.StdEncoding.EncodeToString(pemBytes)},
+			prodContextName: {CA: base64.StdEncoding.EncodeToString(pemBytes)},
 		},
 	}
 
@@ -128,7 +150,7 @@ func TestValidateCurrentContextCA_BadDER(t *testing.T) {
 		t.Fatalf("expected typed error, got %T", err)
 	}
 
-	if typed.Path != "/tmp/x" || typed.Context != "prod" {
+	if typed.Path != "/tmp/x" || typed.Context != prodContextName {
 		t.Fatalf("unexpected error fields: %+v", typed)
 	}
 

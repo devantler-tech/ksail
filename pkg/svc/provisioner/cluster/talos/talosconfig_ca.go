@@ -15,6 +15,10 @@ import (
 // is wrapped so callers can use errors.Is/As.
 var ErrMalformedTalosConfigCA = errors.New("malformed CA in talosconfig")
 
+// ErrCANotPEMCertificate is the wrapped cause for a talosconfig CA that
+// decodes from base64 but is not a PEM CERTIFICATE block.
+var ErrCANotPEMCertificate = errors.New("CA is not a PEM CERTIFICATE block")
+
 // MalformedTalosConfigCAError carries the talosconfig path, current
 // context name, and the underlying x509 parse error, plus a single
 // human-readable message that points at `ksail cluster repair`.
@@ -88,11 +92,12 @@ func validateCurrentContextCA(cfg *clientconfig.Config, path string) error {
 		return &MalformedTalosConfigCAError{
 			Path:    path,
 			Context: ctxName,
-			Cause:   errors.New("CA is not a PEM CERTIFICATE block"),
+			Cause:   ErrCANotPEMCertificate,
 		}
 	}
 
-	if _, err := x509.ParseCertificate(block.Bytes); err != nil {
+	_, err = x509.ParseCertificate(block.Bytes)
+	if err != nil {
 		return &MalformedTalosConfigCAError{
 			Path:    path,
 			Context: ctxName,

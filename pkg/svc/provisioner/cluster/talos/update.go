@@ -2,6 +2,7 @@ package talosprovisioner
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -381,6 +382,12 @@ func (p *Provisioner) applyConfigWithMode(
 	return nil
 }
 
+// errSavedTalosconfigUnavailable signals that the on-disk talosconfig
+// was absent or unreadable. Callers can use [errors.Is] to distinguish
+// this expected case from a real client-creation failure and fall
+// through to the in-memory PKI bundle.
+var errSavedTalosconfigUnavailable = errors.New("saved talosconfig unavailable")
+
 // createTalosClient creates a Talos client for the given node.
 // It prefers the saved talosconfig on disk (written during cluster creation)
 // because it contains the CA and client certificates the running cluster trusts.
@@ -393,21 +400,13 @@ func (p *Provisioner) createTalosClient(
 	// Prefer the saved talosconfig (written during cluster creation).
 	talosconfigPath, expandErr := fsutil.ExpandHomePath(p.options.TalosconfigPath)
 	if expandErr == nil {
-		savedCfg, openErr := clientconfig.Open(talosconfigPath)
-		if openErr == nil {
-			if caErr := validateCurrentContextCA(savedCfg, talosconfigPath); caErr != nil {
-				return nil, caErr
-			}
-
-			client, err := talosclient.New(ctx,
-				talosclient.WithEndpoints(nodeIP),
-				talosclient.WithConfig(savedCfg),
-			)
-			if err != nil {
-				return nil, fmt.Errorf("failed to create Talos client from saved config: %w", err)
-			}
-
+		client, err := p.tryClientFromSavedConfig(ctx, talosconfigPath, nodeIP)
+		if err == nil {
 			return client, nil
+		}
+
+		if !errors.Is(err, errSavedTalosconfigUnavailable) {
+			return nil, err
 		}
 	}
 
@@ -427,6 +426,35 @@ func (p *Provisioner) createTalosClient(
 	}
 
 	return nil, clustererr.ErrTalosConfigRequired
+}
+
+// tryClientFromSavedConfig attempts to construct a Talos client from a
+// saved talosconfig at talosconfigPath. It returns
+// [errSavedTalosconfigUnavailable] when the file cannot be opened so
+// the caller can fall through to the in-memory bundle.
+func (p *Provisioner) tryClientFromSavedConfig(
+	ctx context.Context,
+	talosconfigPath, nodeIP string,
+) (*talosclient.Client, error) {
+	savedCfg, openErr := clientconfig.Open(talosconfigPath)
+	if openErr != nil {
+		return nil, fmt.Errorf("%w: %w", errSavedTalosconfigUnavailable, openErr)
+	}
+
+	caErr := validateCurrentContextCA(savedCfg, talosconfigPath)
+	if caErr != nil {
+		return nil, caErr
+	}
+
+	client, err := talosclient.New(ctx,
+		talosclient.WithEndpoints(nodeIP),
+		talosclient.WithConfig(savedCfg),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Talos client from saved config: %w", err)
+	}
+
+	return client, nil
 }
 
 // applyRebootChangesIfNeeded applies reboot-required config changes with a

@@ -17,10 +17,9 @@ import (
 	"testing"
 	"time"
 
-	clientconfig "github.com/siderolabs/talos/pkg/machinery/client/config"
-
 	"github.com/devantler-tech/ksail/v7/pkg/svc/repairer"
 	talosconfigrepair "github.com/devantler-tech/ksail/v7/pkg/svc/repairer/talosconfig"
+	clientconfig "github.com/siderolabs/talos/pkg/machinery/client/config"
 )
 
 // generateValidCertDER produces a fresh Ed25519 self-signed CA cert.
@@ -56,7 +55,24 @@ func generateValidCertDER(t *testing.T) []byte {
 func corruptBasicConstraintsLength(t *testing.T, der []byte) []byte {
 	t.Helper()
 
-	prefix := []byte{0x30, 0x0f, 0x06, 0x03, 0x55, 0x1d, 0x13, 0x01, 0x01, 0xff, 0x04, 0x05, 0x30, 0x03, 0x01, 0x01}
+	prefix := []byte{
+		0x30,
+		0x0f,
+		0x06,
+		0x03,
+		0x55,
+		0x1d,
+		0x13,
+		0x01,
+		0x01,
+		0xff,
+		0x04,
+		0x05,
+		0x30,
+		0x03,
+		0x01,
+		0x01,
+	}
 
 	idx := bytes.Index(der, prefix)
 	if idx < 0 {
@@ -80,7 +96,7 @@ func caFieldFromDER(der []byte) string {
 
 // writeTalosConfig builds a minimal talosconfig YAML with one context
 // whose CA equals the given base64(PEM) string.
-func writeTalosConfig(t *testing.T, dir, ca string) string {
+func writeTalosConfig(t *testing.T, dir, caEncoded string) string {
 	t.Helper()
 
 	body := `context: prod
@@ -88,13 +104,15 @@ contexts:
   prod:
     endpoints:
       - https://1.2.3.4:50000
-    ca: "` + ca + `"
+    ca: "` + caEncoded + `"
     crt: ""
     key: ""
 `
 
 	path := filepath.Join(dir, "config")
-	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+
+	err := os.WriteFile(path, []byte(body), 0o600)
+	if err != nil {
 		t.Fatalf("write talosconfig: %v", err)
 	}
 
@@ -102,17 +120,20 @@ contexts:
 }
 
 func TestRepair_HappyPath(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 	der := generateValidCertDER(t)
 	corruptedDER := corruptBasicConstraintsLength(t, der)
 	path := writeTalosConfig(t, dir, caFieldFromDER(corruptedDER))
 
-	r := &talosconfigrepair.Repair{Path: path, Now: func() time.Time {
+	repair := &talosconfigrepair.Repair{Path: path, Now: func() time.Time {
 		return time.Date(2026, 5, 7, 23, 53, 32, 0, time.UTC)
 	}}
 
 	var log bytes.Buffer
-	result := r.Run(context.Background(), &log)
+
+	result := repair.Run(context.Background(), &log)
 
 	if result.Status != repairer.StatusRepaired {
 		t.Fatalf("status = %s; log: %s", result.Status, log.String())
@@ -122,7 +143,8 @@ func TestRepair_HappyPath(t *testing.T) {
 		t.Fatalf("expected timestamped backup, got %q", result.BackupPath)
 	}
 
-	if _, err := os.Stat(result.BackupPath); err != nil {
+	_, err := os.Stat(result.BackupPath)
+	if err != nil {
 		t.Fatalf("backup not written: %v", err)
 	}
 
@@ -142,12 +164,15 @@ func TestRepair_HappyPath(t *testing.T) {
 		t.Fatal("repaired CA is not a PEM block")
 	}
 
-	if _, err := x509.ParseCertificate(block.Bytes); err != nil {
+	_, err = x509.ParseCertificate(block.Bytes)
+	if err != nil {
 		t.Fatalf("repaired cert does not parse: %v", err)
 	}
 }
 
 func TestRepair_AlreadyValid(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 	der := generateValidCertDER(t)
 	path := writeTalosConfig(t, dir, caFieldFromDER(der))
@@ -165,6 +190,8 @@ func TestRepair_AlreadyValid(t *testing.T) {
 }
 
 func TestRepair_MissingFile(t *testing.T) {
+	t.Parallel()
+
 	r := &talosconfigrepair.Repair{Path: filepath.Join(t.TempDir(), "does-not-exist")}
 
 	result := r.Run(context.Background(), io.Discard)
@@ -174,10 +201,13 @@ func TestRepair_MissingFile(t *testing.T) {
 }
 
 func TestRepair_InvalidYAML(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config")
 
-	if err := os.WriteFile(path, []byte(":\n  - not: valid\n   - yaml"), 0o600); err != nil {
+	err := os.WriteFile(path, []byte(":\n  - not: valid\n   - yaml"), 0o600)
+	if err != nil {
 		t.Fatalf("write file: %v", err)
 	}
 
@@ -194,6 +224,8 @@ func TestRepair_InvalidYAML(t *testing.T) {
 }
 
 func TestRepair_CorruptionPatternMissing(t *testing.T) {
+	t.Parallel()
+
 	// CA bytes that are valid PEM but not parseable as X.509, AND don't
 	// contain the recognised corruption pattern.
 	dir := t.TempDir()
@@ -203,6 +235,7 @@ func TestRepair_CorruptionPatternMissing(t *testing.T) {
 	r := &talosconfigrepair.Repair{Path: path}
 
 	var log bytes.Buffer
+
 	result := r.Run(context.Background(), &log)
 
 	if result.Status != repairer.StatusUnrepairable {
@@ -215,12 +248,15 @@ func TestRepair_CorruptionPatternMissing(t *testing.T) {
 }
 
 func TestRepair_BadBase64(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 	path := writeTalosConfig(t, dir, "@not-base64!!")
 
 	r := &talosconfigrepair.Repair{Path: path}
 
 	var log bytes.Buffer
+
 	result := r.Run(context.Background(), &log)
 
 	if result.Status != repairer.StatusUnrepairable {
@@ -233,6 +269,8 @@ func TestRepair_BadBase64(t *testing.T) {
 }
 
 func TestRepair_NoCAField(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config")
 	body := `context: prod
@@ -241,7 +279,9 @@ contexts:
     endpoints:
       - https://1.2.3.4:50000
 `
-	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+
+	err := os.WriteFile(path, []byte(body), 0o600)
+	if err != nil {
 		t.Fatalf("write: %v", err)
 	}
 
@@ -253,32 +293,20 @@ contexts:
 	}
 }
 
-func TestRepair_RegistersByDefault(t *testing.T) {
-	// Importing the talosconfig package self-registers a default Repair
-	// on [repairer.Default()]. This test inspects (but does not mutate)
-	// the default registry.
-	for _, r := range repairer.Default().All() {
+func TestRegisterDefault(t *testing.T) {
+	t.Parallel()
+
+	// RegisterDefault wires the talosconfig CA repair into the supplied
+	// registry. We use an isolated registry (not [repairer.Default]) so
+	// the test does not depend on global state.
+	reg := repairer.NewRegistry()
+	talosconfigrepair.RegisterDefault(reg)
+
+	for _, r := range reg.All() {
 		if r.Name() == "talosconfig-ca" {
 			return
 		}
 	}
 
-	t.Fatal("talosconfig-ca repair was not registered via init()")
-}
-
-func TestRepair_MissingFileIsSkipped(t *testing.T) {
-	t.Parallel()
-
-	// A path under t.TempDir() is guaranteed not to exist; the repair
-	// should report StatusSkipped without surfacing an error.
-	r := &talosconfigrepair.Repair{Path: filepath.Join(t.TempDir(), "missing")}
-
-	result := r.Run(context.Background(), io.Discard)
-	if result.Status != repairer.StatusSkipped {
-		t.Fatalf("expected StatusSkipped for missing file, got %s", result.Status)
-	}
-
-	if result.Err != nil {
-		t.Fatalf("expected no err for missing file, got %v", result.Err)
-	}
+	t.Fatal("RegisterDefault did not register talosconfig-ca")
 }

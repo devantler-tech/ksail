@@ -43,6 +43,20 @@ const DefaultPath = "~/.talos/config"
 // repairName is the stable identifier returned by [Repair.Name].
 const repairName = "talosconfig-ca"
 
+// filePermUserRW is the standard permission for user-private files
+// (read/write owner only). Used for the talosconfig and its backup.
+const filePermUserRW os.FileMode = 0o600
+
+// yamlIndentWidth matches the upstream Talos talosconfig 2-space style.
+const yamlIndentWidth = 2
+
+// backupPathRetries bounds [uniqueBackupPath] retries before giving up.
+const backupPathRetries = 8
+
+// backupRandSuffixBytes controls the entropy of the backup-path random
+// suffix; 4 bytes (32 bits) is overwhelmingly sufficient given retries.
+const backupRandSuffixBytes = 4
+
 // corruptedBasicConstraintsPrefix matches the DER bytes of a
 // BasicConstraints extension whose SEQUENCE length is 0x0e but should
 // be 0x0f. The trailing `0xff` (BOOLEAN TRUE for `CA:TRUE`) ends up
@@ -56,6 +70,11 @@ var corruptedBasicConstraintsPrefix = []byte{
 // to parse but does not match the known corruption signature.
 var ErrPatternNotMatched = errors.New("malformed CA does not match a known repair pattern")
 
+// errBackupPathAllocFailed is returned by [Repair.uniqueBackupPath]
+// when it cannot allocate a non-colliding backup path within a bounded
+// number of attempts.
+var errBackupPathAllocFailed = errors.New("could not allocate unique backup path after retries")
+
 // Repair implements [repairer.Repair].
 type Repair struct {
 	// Path is the talosconfig path. Empty means [DefaultPath].
@@ -65,6 +84,13 @@ type Repair struct {
 	Now func() time.Time
 }
 
+// RegisterDefault appends the standard talosconfig CA repair (using
+// [DefaultPath]) to the supplied registry. Call once during command
+// wiring; safe to call with [repairer.Default()].
+func RegisterDefault(reg *repairer.Registry) {
+	reg.Register(&Repair{})
+}
+
 // Name returns the stable identifier "talosconfig-ca".
 func (r *Repair) Name() string { return repairName }
 
@@ -72,6 +98,29 @@ func (r *Repair) Name() string { return repairName }
 // CA does not parse, writes a timestamped backup before overwriting,
 // and returns a single [repairer.Result] summarising the outcome.
 func (r *Repair) Run(_ context.Context, logWriter io.Writer) repairer.Result {
+	path, data, result, loaded := r.loadConfig()
+	if !loaded {
+		return result
+	}
+
+	doc, parseResult, parsed := parseYAML(path, data)
+	if !parsed {
+		return parseResult
+	}
+
+	repaired, unrepairable, alreadyValid := r.walkAndRepair(doc, logWriter)
+
+	if repaired == 0 {
+		return r.summarizeNoRepair(path, unrepairable, alreadyValid)
+	}
+
+	return r.persistRepairedConfig(path, doc, data, repaired)
+}
+
+// loadConfig resolves [Repair.Path], canonicalizes it, and reads the
+// raw bytes. The third return is the result to surface when loaded is
+// false; loaded is true only when the file was successfully read.
+func (r *Repair) loadConfig() (string, []byte, repairer.Result, bool) {
 	rawPath := r.Path
 	if rawPath == "" {
 		rawPath = DefaultPath
@@ -79,12 +128,12 @@ func (r *Repair) Run(_ context.Context, logWriter io.Writer) repairer.Result {
 
 	expanded, err := fsutil.ExpandHomePath(rawPath)
 	if err != nil {
-		return repairer.Result{
+		return "", nil, repairer.Result{
 			Name:   repairName,
 			Status: repairer.StatusSkipped,
 			Detail: fmt.Sprintf("could not expand path %q: %v", rawPath, err),
 			Err:    err,
-		}
+		}, false
 	}
 
 	// Canonicalize the user-supplied path so we never read or write
@@ -94,68 +143,91 @@ func (r *Repair) Run(_ context.Context, logWriter io.Writer) repairer.Result {
 	// below rather than failing canonicalization.
 	path, err := fsutil.EvalCanonicalPath(expanded)
 	if err != nil {
-		return repairer.Result{
+		return "", nil, repairer.Result{
 			Name:   repairName,
 			Status: repairer.StatusSkipped,
 			Detail: fmt.Sprintf("could not canonicalize %q: %v", expanded, err),
 			Err:    err,
-		}
+		}, false
 	}
 
 	data, err := os.ReadFile(path) //nolint:gosec // path canonicalized via EvalCanonicalPath
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return repairer.Result{
+			return "", nil, repairer.Result{
 				Name:   repairName,
 				Status: repairer.StatusSkipped,
-				Detail: fmt.Sprintf("%s does not exist", path),
-			}
+				Detail: path + " does not exist",
+			}, false
 		}
 
-		return repairer.Result{
+		return "", nil, repairer.Result{
 			Name:   repairName,
 			Status: repairer.StatusSkipped,
 			Detail: fmt.Sprintf("could not read %s: %v", path, err),
 			Err:    err,
-		}
+		}, false
 	}
 
+	return path, data, repairer.Result{}, true
+}
+
+// parseYAML decodes data into a YAML document tree. The third return
+// is the result to surface when parsed is false.
+func parseYAML(path string, data []byte) (*yaml.Node, repairer.Result, bool) {
 	var doc yaml.Node
-	if err := yaml.Unmarshal(data, &doc); err != nil {
-		return repairer.Result{
+
+	err := yaml.Unmarshal(data, &doc)
+	if err != nil {
+		return nil, repairer.Result{
 			Name:   repairName,
 			Status: repairer.StatusUnrepairable,
 			Detail: fmt.Sprintf("%s: invalid YAML: %v", path, err),
 			Err:    err,
-		}
+		}, false
 	}
 
-	repaired, unrepairable, alreadyValid := r.walkAndRepair(&doc, logWriter)
+	return &doc, repairer.Result{}, true
+}
 
-	if repaired == 0 {
-		switch {
-		case unrepairable > 0:
-			return repairer.Result{
-				Name:   repairName,
-				Status: repairer.StatusUnrepairable,
-				Detail: fmt.Sprintf("%s: %d context(s) malformed but no known repair pattern matches", path, unrepairable),
-			}
-		case alreadyValid > 0:
-			return repairer.Result{
-				Name:   repairName,
-				Status: repairer.StatusOK,
-				Detail: fmt.Sprintf("%s: %d context(s) already valid", path, alreadyValid),
-			}
-		default:
-			return repairer.Result{
-				Name:   repairName,
-				Status: repairer.StatusOK,
-				Detail: fmt.Sprintf("%s: no contexts with a CA found", path),
-			}
+// summarizeNoRepair produces a result for the "nothing repaired" case,
+// distinguishing between unrepairable contexts, already-valid contexts,
+// and a config with no CA fields at all.
+func (r *Repair) summarizeNoRepair(path string, unrepairable, alreadyValid int) repairer.Result {
+	switch {
+	case unrepairable > 0:
+		return repairer.Result{
+			Name:   repairName,
+			Status: repairer.StatusUnrepairable,
+			Detail: fmt.Sprintf(
+				"%s: %d context(s) malformed but no known repair pattern matches",
+				path, unrepairable,
+			),
+		}
+	case alreadyValid > 0:
+		return repairer.Result{
+			Name:   repairName,
+			Status: repairer.StatusOK,
+			Detail: fmt.Sprintf("%s: %d context(s) already valid", path, alreadyValid),
+		}
+	default:
+		return repairer.Result{
+			Name:   repairName,
+			Status: repairer.StatusOK,
+			Detail: path + ": no contexts with a CA found",
 		}
 	}
+}
 
-	out, err := marshalPreserving(&doc)
+// persistRepairedConfig marshals the repaired YAML, writes a backup of
+// the original bytes, and atomically replaces the original file.
+func (r *Repair) persistRepairedConfig(
+	path string,
+	doc *yaml.Node,
+	originalData []byte,
+	repaired int,
+) repairer.Result {
+	out, err := marshalPreserving(doc)
 	if err != nil {
 		return repairer.Result{
 			Name:   repairName,
@@ -175,7 +247,8 @@ func (r *Repair) Run(_ context.Context, logWriter io.Writer) repairer.Result {
 		}
 	}
 
-	if err := fsutil.AtomicWriteFile(backup, data, 0o600); err != nil {
+	err = fsutil.AtomicWriteFile(backup, originalData, filePermUserRW)
+	if err != nil {
 		return repairer.Result{
 			Name:   repairName,
 			Status: repairer.StatusUnrepairable,
@@ -184,7 +257,8 @@ func (r *Repair) Run(_ context.Context, logWriter io.Writer) repairer.Result {
 		}
 	}
 
-	if err := fsutil.AtomicWriteFile(path, out, 0o600); err != nil {
+	err = fsutil.AtomicWriteFile(path, out, filePermUserRW)
+	if err != nil {
 		return repairer.Result{
 			Name:   repairName,
 			Status: repairer.StatusUnrepairable,
@@ -213,9 +287,13 @@ func (r *Repair) now() time.Time {
 // collide with an existing file, even when multiple repairs run within
 // the same second. The format is `<path>.bak.<UTC timestamp ns>-<rand>`.
 func (r *Repair) uniqueBackupPath(path string) (string, error) {
-	for attempt := 0; attempt < 8; attempt++ {
-		var randBytes [4]byte
-		if _, err := rand.Read(randBytes[:]); err != nil {
+	for attempt := range backupPathRetries {
+		_ = attempt
+
+		var randBytes [backupRandSuffixBytes]byte
+
+		_, err := rand.Read(randBytes[:])
+		if err != nil {
 			return "", fmt.Errorf("read random bytes: %w", err)
 		}
 
@@ -226,14 +304,15 @@ func (r *Repair) uniqueBackupPath(path string) (string, error) {
 			hex.EncodeToString(randBytes[:]),
 		)
 
-		if _, err := os.Stat(candidate); errors.Is(err, os.ErrNotExist) {
+		_, statErr := os.Stat(candidate)
+		if errors.Is(statErr, os.ErrNotExist) {
 			return candidate, nil
-		} else if err != nil {
-			return "", fmt.Errorf("stat backup candidate: %w", err)
+		} else if statErr != nil {
+			return "", fmt.Errorf("stat backup candidate: %w", statErr)
 		}
 	}
 
-	return "", errors.New("could not allocate unique backup path after 8 attempts")
+	return "", errBackupPathAllocFailed
 }
 
 // walkAndRepair traverses the YAML document looking for `contexts.<name>.ca`
@@ -245,72 +324,95 @@ func (r *Repair) walkAndRepair(
 	var repaired, unrepairable, alreadyValid int
 
 	walkContextCANodes(doc, func(ctxName string, caNode *yaml.Node) {
-		if caNode == nil || caNode.Value == "" {
-			return
-		}
-
-		caBytes, err := base64.StdEncoding.DecodeString(caNode.Value)
-		if err != nil {
-			fmt.Fprintf(logWriter, "  [%s] base64 decode failed: %v (skipped)\n", ctxName, err)
-
-			unrepairable++
-
-			return
-		}
-
-		block, _ := pem.Decode(caBytes)
-		if block == nil || block.Type != "CERTIFICATE" {
-			fmt.Fprintf(logWriter, "  [%s] not a PEM CERTIFICATE block (skipped)\n", ctxName)
-
-			unrepairable++
-
-			return
-		}
-
-		if _, err := x509.ParseCertificate(block.Bytes); err == nil {
-			fmt.Fprintf(logWriter, "  [%s] CA already valid\n", ctxName)
-
+		switch tryRepairContextCA(ctxName, caNode, logWriter) {
+		case caStatusRepaired:
+			repaired++
+		case caStatusAlreadyValid:
 			alreadyValid++
-
-			return
-		}
-
-		fixed, ok := tryRepair(block.Bytes)
-		if !ok {
-			fmt.Fprintf(logWriter, "  [%s] %v\n", ctxName, ErrPatternNotMatched)
-
+		case caStatusUnrepairable:
 			unrepairable++
-
-			return
+		case caStatusEmpty:
+			// nothing to count
 		}
-
-		if _, err := x509.ParseCertificate(fixed); err != nil {
-			fmt.Fprintf(logWriter, "  [%s] repair did not produce a valid cert: %v\n", ctxName, err)
-
-			unrepairable++
-
-			return
-		}
-
-		newPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: fixed})
-		caNode.Value = base64.StdEncoding.EncodeToString(newPEM)
-		caNode.Style = yaml.DoubleQuotedStyle
-		caNode.Tag = "!!str"
-
-		fmt.Fprintf(logWriter, "  [%s] repaired ✓\n", ctxName)
-
-		repaired++
 	})
 
 	return repaired, unrepairable, alreadyValid
 }
 
+// caRepairStatus enumerates the per-context outcomes considered by
+// [walkAndRepair].
+type caRepairStatus int
+
+const (
+	caStatusEmpty caRepairStatus = iota
+	caStatusRepaired
+	caStatusAlreadyValid
+	caStatusUnrepairable
+)
+
+// tryRepairContextCA inspects a single context's `ca` scalar node,
+// repairs it in place when the corruption signature matches, and
+// returns the outcome category.
+func tryRepairContextCA(ctxName string, caNode *yaml.Node, logWriter io.Writer) caRepairStatus {
+	if caNode == nil || caNode.Value == "" {
+		return caStatusEmpty
+	}
+
+	caBytes, err := base64.StdEncoding.DecodeString(caNode.Value)
+	if err != nil {
+		_, _ = fmt.Fprintf(logWriter, "  [%s] base64 decode failed: %v (skipped)\n", ctxName, err)
+
+		return caStatusUnrepairable
+	}
+
+	block, _ := pem.Decode(caBytes)
+	if block == nil || block.Type != "CERTIFICATE" {
+		_, _ = fmt.Fprintf(logWriter, "  [%s] not a PEM CERTIFICATE block (skipped)\n", ctxName)
+
+		return caStatusUnrepairable
+	}
+
+	_, parseErr := x509.ParseCertificate(block.Bytes)
+	if parseErr == nil {
+		_, _ = fmt.Fprintf(logWriter, "  [%s] CA already valid\n", ctxName)
+
+		return caStatusAlreadyValid
+	}
+
+	fixed, ok := tryRepair(block.Bytes)
+	if !ok {
+		_, _ = fmt.Fprintf(logWriter, "  [%s] %v\n", ctxName, ErrPatternNotMatched)
+
+		return caStatusUnrepairable
+	}
+
+	_, postErr := x509.ParseCertificate(fixed)
+	if postErr != nil {
+		_, _ = fmt.Fprintf(
+			logWriter,
+			"  [%s] repair did not produce a valid cert: %v\n",
+			ctxName, postErr,
+		)
+
+		return caStatusUnrepairable
+	}
+
+	newPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: fixed})
+	caNode.Value = base64.StdEncoding.EncodeToString(newPEM)
+	caNode.Style = yaml.DoubleQuotedStyle
+	caNode.Tag = "!!str"
+
+	_, _ = fmt.Fprintf(logWriter, "  [%s] repaired ✓\n", ctxName)
+
+	return caStatusRepaired
+}
+
 // walkContextCANodes finds every `contexts.<name>.ca` scalar node in the
-// YAML document and invokes fn with the context name and the value
+// YAML document and invokes visit with the context name and the value
 // node.
-func walkContextCANodes(doc *yaml.Node, fn func(name string, caNode *yaml.Node)) {
+func walkContextCANodes(doc *yaml.Node, visit func(name string, caNode *yaml.Node)) {
 	if doc.Kind == yaml.DocumentNode && len(doc.Content) > 0 {
-		walkContextCANodes(doc.Content[0], fn)
+		walkContextCANodes(doc.Content[0], visit)
 
 		return
 	}
@@ -319,28 +421,45 @@ func walkContextCANodes(doc *yaml.Node, fn func(name string, caNode *yaml.Node))
 		return
 	}
 
+	contextsNode := findContextsMapping(doc)
+	if contextsNode == nil {
+		return
+	}
+
+	visitContextCANodes(contextsNode, visit)
+}
+
+// findContextsMapping returns the value node for the top-level
+// `contexts` key when it is itself a mapping; otherwise nil.
+func findContextsMapping(doc *yaml.Node) *yaml.Node {
 	for i := 0; i+1 < len(doc.Content); i += 2 {
 		if doc.Content[i].Value != "contexts" {
 			continue
 		}
 
 		ctxs := doc.Content[i+1]
-		if ctxs.Kind != yaml.MappingNode {
+		if ctxs.Kind == yaml.MappingNode {
+			return ctxs
+		}
+	}
+
+	return nil
+}
+
+// visitContextCANodes iterates the children of the `contexts` mapping,
+// invoking visit with each context's name and the inner `ca` scalar node.
+func visitContextCANodes(ctxs *yaml.Node, visit func(name string, caNode *yaml.Node)) {
+	for j := 0; j+1 < len(ctxs.Content); j += 2 {
+		ctxName := ctxs.Content[j].Value
+
+		ctxBody := ctxs.Content[j+1]
+		if ctxBody.Kind != yaml.MappingNode {
 			continue
 		}
 
-		for j := 0; j+1 < len(ctxs.Content); j += 2 {
-			ctxName := ctxs.Content[j].Value
-
-			ctxBody := ctxs.Content[j+1]
-			if ctxBody.Kind != yaml.MappingNode {
-				continue
-			}
-
-			for k := 0; k+1 < len(ctxBody.Content); k += 2 {
-				if ctxBody.Content[k].Value == "ca" {
-					fn(ctxName, ctxBody.Content[k+1])
-				}
+		for k := 0; k+1 < len(ctxBody.Content); k += 2 {
+			if ctxBody.Content[k].Value == "ca" {
+				visit(ctxName, ctxBody.Content[k+1])
 			}
 		}
 	}
@@ -370,22 +489,17 @@ func marshalPreserving(doc *yaml.Node) ([]byte, error) {
 	var buf bytes.Buffer
 
 	enc := yaml.NewEncoder(&buf)
-	enc.SetIndent(2)
+	enc.SetIndent(yamlIndentWidth)
 
-	if err := enc.Encode(doc); err != nil {
+	err := enc.Encode(doc)
+	if err != nil {
 		return nil, fmt.Errorf("encode yaml: %w", err)
 	}
 
-	if err := enc.Close(); err != nil {
+	err = enc.Close()
+	if err != nil {
 		return nil, fmt.Errorf("close yaml encoder: %w", err)
 	}
 
 	return buf.Bytes(), nil
-}
-
-// init registers a default [Repair] (using [DefaultPath]) so that any
-// binary importing this package picks up the talosconfig CA repair
-// automatically.
-func init() {
-	repairer.Register(&Repair{})
 }

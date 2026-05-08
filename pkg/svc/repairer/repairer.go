@@ -1,4 +1,3 @@
-// Package repairer is documented in doc.go.
 package repairer
 
 import (
@@ -100,14 +99,6 @@ func (reg *Registry) All() []Repair {
 	return out
 }
 
-// Reset removes every repair from this registry. Intended for tests.
-func (reg *Registry) Reset() {
-	reg.mu.Lock()
-	defer reg.mu.Unlock()
-
-	reg.repairs = nil
-}
-
 // defaultRegistry is the process-wide registry that init() functions in
 // concrete repair packages populate. Production code uses [Default];
 // tests SHOULD prefer [NewRegistry] for isolation.
@@ -124,8 +115,3 @@ func Register(r Repair) { defaultRegistry.Register(r) }
 
 // All returns a snapshot of every repair registered with [Default].
 func All() []Repair { return defaultRegistry.All() }
-
-// Reset clears [Default]. Intended only for tests that genuinely need
-// to inspect or replace process-wide state; prefer [NewRegistry] when
-// possible.
-func Reset() { defaultRegistry.Reset() }
