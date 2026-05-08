@@ -105,13 +105,5 @@ func (reg *Registry) All() []Repair {
 var defaultRegistry = &Registry{}
 
 // Default returns the process-wide [Registry] populated by repair
-// packages' init() functions.
+// packages via [Registry.Register].
 func Default() *Registry { return defaultRegistry }
-
-// Register adds r to the [Default] registry. Provided for repair
-// packages whose init() registers a repair without holding a Registry
-// reference.
-func Register(r Repair) { defaultRegistry.Register(r) }
-
-// All returns a snapshot of every repair registered with [Default].
-func All() []Repair { return defaultRegistry.All() }
