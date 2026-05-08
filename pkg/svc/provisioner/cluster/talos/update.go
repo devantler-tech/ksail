@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -398,15 +399,14 @@ func (p *Provisioner) createTalosClient(
 	nodeIP string,
 ) (*talosclient.Client, error) {
 	// Prefer the saved talosconfig (written during cluster creation).
-	talosconfigPath, expandErr := fsutil.ExpandHomePath(p.options.TalosconfigPath)
-	if expandErr == nil {
-		// Canonicalize so symlinks resolve before opening the file (matches
-		// the path-safety convention used elsewhere in the provisioner).
-		canonicalPath, canonErr := fsutil.EvalCanonicalPath(talosconfigPath)
-		if canonErr == nil {
-			talosconfigPath = canonicalPath
+	talosconfigPath, pathErr := canonicalSavedTalosconfigPath(p.options.TalosconfigPath)
+	if pathErr != nil {
+		if !errors.Is(pathErr, errSavedTalosconfigUnavailable) {
+			return nil, pathErr
 		}
+	}
 
+	if pathErr == nil && talosconfigPath != "" {
 		client, err := p.tryClientFromSavedConfig(ctx, talosconfigPath, nodeIP)
 		if err == nil {
 			return client, nil
@@ -433,6 +433,31 @@ func (p *Provisioner) createTalosClient(
 	}
 
 	return nil, clustererr.ErrTalosConfigRequired
+}
+
+// canonicalSavedTalosconfigPath returns the canonical on-disk talosconfig path
+// when available. A missing path is treated as unavailable so callers can
+// fall back to in-memory configuration.
+func canonicalSavedTalosconfigPath(rawPath string) (string, error) {
+	expandedPath, expandErr := fsutil.ExpandHomePath(rawPath)
+	if expandErr != nil {
+		return "", fmt.Errorf("%w: %w", errSavedTalosconfigUnavailable, expandErr)
+	}
+
+	canonicalPath, canonErr := fsutil.EvalCanonicalPath(expandedPath)
+	if canonErr != nil {
+		if errors.Is(canonErr, os.ErrNotExist) {
+			return "", fmt.Errorf("%w: %w", errSavedTalosconfigUnavailable, canonErr)
+		}
+
+		return "", fmt.Errorf(
+			"failed to canonicalize talosconfig path %q: %w",
+			expandedPath,
+			canonErr,
+		)
+	}
+
+	return canonicalPath, nil
 }
 
 // tryClientFromSavedConfig attempts to construct a Talos client from a

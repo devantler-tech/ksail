@@ -114,7 +114,20 @@ func (r *Repair) Run(_ context.Context, logWriter io.Writer) repairer.Result {
 		return r.summarizeNoRepair(path, unrepairable, alreadyValid)
 	}
 
-	return r.persistRepairedConfig(path, doc, data, repaired)
+	result = r.persistRepairedConfig(path, doc, data, repaired)
+	if result.Status != repairer.StatusRepaired {
+		return result
+	}
+
+	if unrepairable > 0 {
+		result.Status = repairer.StatusUnrepairable
+		result.Detail = fmt.Sprintf(
+			"%s: repaired %d CA(s), but %d context(s) remain unrepairable",
+			path, repaired, unrepairable,
+		)
+	}
+
+	return result
 }
 
 // loadConfig resolves [Repair.Path], canonicalizes it, and reads the
@@ -143,6 +156,14 @@ func (r *Repair) loadConfig() (string, []byte, repairer.Result, bool) {
 	// below rather than failing canonicalization.
 	path, err := fsutil.EvalCanonicalPath(expanded)
 	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return "", nil, repairer.Result{
+				Name:   repairName,
+				Status: repairer.StatusSkipped,
+				Detail: expanded + " does not exist",
+			}, false
+		}
+
 		return "", nil, repairer.Result{
 			Name:   repairName,
 			Status: repairer.StatusSkipped,

@@ -200,6 +200,28 @@ func TestRepair_MissingFile(t *testing.T) {
 	}
 }
 
+func TestRepair_MissingParentDirectoryIsSkipped(t *testing.T) {
+	t.Parallel()
+
+	rootDir := t.TempDir()
+	r := &talosconfigrepair.Repair{
+		Path: filepath.Join(rootDir, "missing-parent", "config"),
+	}
+
+	result := r.Run(context.Background(), io.Discard)
+	if result.Status != repairer.StatusSkipped {
+		t.Fatalf("expected StatusSkipped, got %s", result.Status)
+	}
+
+	if result.Err != nil {
+		t.Fatalf("expected no error for missing file path, got %v", result.Err)
+	}
+
+	if !strings.Contains(result.Detail, "does not exist") {
+		t.Fatalf("expected missing-file detail, got %q", result.Detail)
+	}
+}
+
 func TestRepair_InvalidYAML(t *testing.T) {
 	t.Parallel()
 
@@ -265,6 +287,54 @@ func TestRepair_BadBase64(t *testing.T) {
 
 	if !strings.Contains(log.String(), "base64 decode failed") {
 		t.Fatalf("expected base64 decode log line, got: %s", log.String())
+	}
+}
+
+func TestRepair_PartialRepairReturnsUnrepairable(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	validDER := generateValidCertDER(t)
+	corruptedDER := corruptBasicConstraintsLength(t, validDER)
+	corruptedCA := caFieldFromDER(corruptedDER)
+	gibberishCA := caFieldFromDER(bytes.Repeat([]byte{0x42}, 64))
+
+	body := `context: prod
+contexts:
+  prod:
+    endpoints:
+      - https://1.2.3.4:50000
+    ca: "` + corruptedCA + `"
+    crt: ""
+    key: ""
+  broken:
+    endpoints:
+      - https://5.6.7.8:50000
+    ca: "` + gibberishCA + `"
+    crt: ""
+    key: ""
+`
+
+	path := filepath.Join(dir, "config")
+
+	err := os.WriteFile(path, []byte(body), 0o600)
+	if err != nil {
+		t.Fatalf("write talosconfig: %v", err)
+	}
+
+	repair := &talosconfigrepair.Repair{Path: path}
+	result := repair.Run(context.Background(), io.Discard)
+
+	if result.Status != repairer.StatusUnrepairable {
+		t.Fatalf("expected StatusUnrepairable, got %s (%s)", result.Status, result.Detail)
+	}
+
+	if result.BackupPath == "" {
+		t.Fatal("expected backup path when at least one CA is repaired")
+	}
+
+	if !strings.Contains(result.Detail, "remain unrepairable") {
+		t.Fatalf("expected partial-repair detail, got %q", result.Detail)
 	}
 }
 
