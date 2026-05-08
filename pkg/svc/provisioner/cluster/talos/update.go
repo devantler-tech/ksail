@@ -398,25 +398,52 @@ func (p *Provisioner) createTalosClient(
 	ctx context.Context,
 	nodeIP string,
 ) (*talosclient.Client, error) {
+	client, fromSavedConfig, err := p.createTalosClientFromSavedConfig(ctx, nodeIP)
+	if err != nil {
+		return nil, err
+	}
+
+	if fromSavedConfig {
+		return client, nil
+	}
+
+	return p.createTalosClientFromBundle(ctx, nodeIP)
+}
+
+func (p *Provisioner) createTalosClientFromSavedConfig(
+	ctx context.Context,
+	nodeIP string,
+) (*talosclient.Client, bool, error) {
 	// Prefer the saved talosconfig (written during cluster creation).
 	talosconfigPath, pathErr := canonicalSavedTalosconfigPath(p.options.TalosconfigPath)
 	if pathErr != nil {
 		if !errors.Is(pathErr, errSavedTalosconfigUnavailable) {
-			return nil, pathErr
+			return nil, false, pathErr
 		}
+
+		return nil, false, nil
 	}
 
-	if pathErr == nil && talosconfigPath != "" {
-		client, err := p.tryClientFromSavedConfig(ctx, talosconfigPath, nodeIP)
-		if err == nil {
-			return client, nil
-		}
-
-		if !errors.Is(err, errSavedTalosconfigUnavailable) {
-			return nil, err
-		}
+	if talosconfigPath == "" {
+		return nil, false, nil
 	}
 
+	client, err := p.tryClientFromSavedConfig(ctx, talosconfigPath, nodeIP)
+	if err == nil {
+		return client, true, nil
+	}
+
+	if errors.Is(err, errSavedTalosconfigUnavailable) {
+		return nil, false, nil
+	}
+
+	return nil, false, err
+}
+
+func (p *Provisioner) createTalosClientFromBundle(
+	ctx context.Context,
+	nodeIP string,
+) (*talosclient.Client, error) {
 	// Fallback: use the in-memory bundle's TalosConfig (works for first-time creation).
 	if p.talosConfigs != nil && p.talosConfigs.Bundle() != nil {
 		if talosConf := p.talosConfigs.Bundle().TalosConfig(); talosConf != nil {
