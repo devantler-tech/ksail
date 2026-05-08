@@ -114,17 +114,11 @@ Installed after a cluster stability check confirms the API server is fully ready
 - **Flux** — GitOps continuous delivery
 - **ArgoCD** — GitOps continuous delivery
 
-Before Phase 2, KSail always performs a **Cluster Stability Check** with three sequential steps:
-
-1. **API server stability** — requires consecutive successful health checks within a 2-minute timeout. The threshold is distribution-aware: 3 checks for Vanilla, K3s, and KWOK (which stabilize faster after webhook registration), and 5 for Talos and VCluster.
-2. **DaemonSet readiness** — verifies all kube-system DaemonSets are ready within a 3-minute timeout. Runs after API server stability, as it does not retry transient transport errors.
-3. **In-cluster API connectivity** *(Cilium only)* — creates a short-lived busybox pod that tests TCP connectivity to the API server ClusterIP (port 443) from within the cluster, with a 2-minute timeout. Only performed for Cilium CNI, where eBPF dataplane programming may lag behind DaemonSet readiness. Skipped for the default (distribution-provided) CNI and Calico.
-
-This check always runs before GitOps engines, even when no Phase 1 components are installed. It prevents race conditions where K3s/K3d clusters report creation success before the API server is fully ready to serve requests. On setups with Phase 1 infrastructure components, it also ensures API connectivity has recovered after those components register webhooks and CRDs.
+Before Phase 2, KSail always performs a **Cluster Stability Check** — verifying API server health, DaemonSet readiness, and (for Cilium) in-cluster connectivity. This prevents race conditions where clusters report creation success before the API server is fully ready. The check always runs even when no Phase 1 components are installed.
 
 ### Detection and Updates
 
-The detector service identifies installed components by querying Helm release history and the Kubernetes API, with additional checks against the Docker daemon where needed. It determines the active distribution, provider, and cluster name from the current kubeconfig context, and distinguishes KSail-managed GitOps resources from unrelated ones so it does not interfere with external GitOps setups.
+KSail detects installed components by querying Helm release history and the Kubernetes API (and, for Docker-based providers, inspecting the Docker daemon where needed), and determines the active distribution, provider, and cluster name from the kubeconfig context. It distinguishes KSail-managed GitOps resources from unrelated ones to avoid interfering with external GitOps setups.
 
 The diff service classifies update impact as **in-place** (no disruption), **reboot-required** (node reboot), or **recreate-required** (full cluster recreation).
 
