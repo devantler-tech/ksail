@@ -400,6 +400,13 @@ func (p *Provisioner) createTalosClient(
 	// Prefer the saved talosconfig (written during cluster creation).
 	talosconfigPath, expandErr := fsutil.ExpandHomePath(p.options.TalosconfigPath)
 	if expandErr == nil {
+		// Canonicalize so symlinks resolve before opening the file (matches
+		// the path-safety convention used elsewhere in the provisioner).
+		canonicalPath, canonErr := fsutil.EvalCanonicalPath(talosconfigPath)
+		if canonErr == nil {
+			talosconfigPath = canonicalPath
+		}
+
 		client, err := p.tryClientFromSavedConfig(ctx, talosconfigPath, nodeIP)
 		if err == nil {
 			return client, nil

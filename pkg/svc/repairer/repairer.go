@@ -79,12 +79,21 @@ type Registry struct {
 // NewRegistry returns an empty, isolated [Registry] suitable for tests.
 func NewRegistry() *Registry { return &Registry{} }
 
-// Register adds r to this registry.
-func (reg *Registry) Register(r Repair) {
+// Register adds r to this registry. If a repair with the same
+// [Repair.Name] is already present, Register is a no-op so callers may
+// invoke it idempotently (e.g., on every command-tree construction).
+func (reg *Registry) Register(repair Repair) {
 	reg.mu.Lock()
 	defer reg.mu.Unlock()
 
-	reg.repairs = append(reg.repairs, r)
+	name := repair.Name()
+	for _, existing := range reg.repairs {
+		if existing.Name() == name {
+			return
+		}
+	}
+
+	reg.repairs = append(reg.repairs, repair)
 }
 
 // All returns a snapshot of every registered [Repair] in registration
