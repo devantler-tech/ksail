@@ -85,7 +85,7 @@ func (sm *SnapshotManager) EnsureTalosSnapshot(
 		Architecture:     hcloud.ArchitectureX86,
 		Labels: map[string]string{
 			LabelTalosVersion:   talosVersion,
-			LabelTalosSchematic: schematicID,
+			LabelTalosSchematic: SchematicLabelValue(schematicID),
 			LabelTalosCluster:   clusterName,
 		},
 	})
@@ -146,7 +146,7 @@ func (sm *SnapshotManager) findExistingSnapshot(
 		ListOpts: hcloud.ListOpts{
 			LabelSelector: fmt.Sprintf("%s=%s,%s=%s,%s=%s",
 				LabelTalosVersion, talosVersion,
-				LabelTalosSchematic, schematicID,
+				LabelTalosSchematic, SchematicLabelValue(schematicID),
 				LabelTalosCluster, clusterName,
 			),
 		},

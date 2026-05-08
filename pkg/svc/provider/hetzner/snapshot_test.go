@@ -380,3 +380,59 @@ func TestSnapshotManager_EnsureTalosSnapshot_SkipsNonAvailableSnapshot(t *testin
 		"Upload should have been called when existing snapshot is not available",
 	)
 }
+
+func TestSnapshotManager_EnsureTalosSnapshot_SHA256SchematicID(t *testing.T) {
+	t.Parallel()
+
+	const (
+		clusterName = "sha256-cluster"
+		version     = "v1.12.4"
+		// A real 64-char SHA256 schematic ID that exceeds Hetzner's 63-char label limit.
+		schematic = "e187c9b90f773cd8c84e5a3265c5554ee787b2fe67b508d9f955e90e7ae8c96c"
+		imageID   = int64(55)
+	)
+
+	truncatedSchematic := hetzner.SchematicLabelValue(schematic)
+
+	mux := http.NewServeMux()
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	mux.HandleFunc("/images", func(responseWriter http.ResponseWriter, r *http.Request) {
+		responseWriter.Header().Set("Content-Type", "application/json")
+
+		// Verify the label selector uses the truncated value.
+		labelSelector := r.URL.Query().Get("label_selector")
+		assert.Contains(t, labelSelector, truncatedSchematic)
+		assert.NotContains(t, labelSelector, schematic)
+
+		resp := hcloudImageListResponse{
+			Images: []hcloudImageSchema{
+				{
+					ID: imageID,
+					Labels: map[string]string{
+						"ksail.io/talos-version":   version,
+						"ksail.io/talos-schematic": truncatedSchematic,
+						"ksail.io/cluster":         clusterName,
+					},
+					Type:   "snapshot",
+					Status: "available",
+				},
+			},
+		}
+		_, _ = responseWriter.Write(marshalJSON(t, resp))
+	})
+
+	client := newTestHcloudClient(srv.URL)
+	uploader := &mockUploader{}
+
+	var logBuf bytes.Buffer
+
+	sm := hetzner.NewSnapshotManagerWithUploaderForTest(client, uploader, &logBuf)
+
+	gotID, err := sm.EnsureTalosSnapshot(context.Background(), clusterName, version, schematic)
+
+	require.NoError(t, err)
+	assert.Equal(t, imageID, gotID)
+	assert.False(t, uploader.called)
+}

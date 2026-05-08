@@ -34,11 +34,27 @@ const (
 	LabelTalosVersion = "ksail.io/talos-version"
 
 	// LabelTalosSchematic identifies the Talos factory schematic ID of the snapshot image.
+	// The stored value is truncated to maxLabelValueLen characters via SchematicLabelValue.
 	LabelTalosSchematic = "ksail.io/talos-schematic"
 
 	// LabelTalosCluster identifies which cluster created the snapshot image.
 	LabelTalosCluster = "ksail.io/cluster"
+
+	// maxLabelValueLen is the maximum length of a Hetzner Cloud label value.
+	// See https://github.com/hetznercloud/hcloud-go/blob/main/hcloud/label.go.
+	maxLabelValueLen = 63
 )
+
+// SchematicLabelValue returns the schematic ID truncated to fit within
+// Hetzner Cloud's 63-character label value limit. Talos factory schematic
+// IDs are SHA256 hex digests (64 chars), which exceed the limit by one.
+func SchematicLabelValue(schematicID string) string {
+	if len(schematicID) > maxLabelValueLen {
+		return schematicID[:maxLabelValueLen]
+	}
+
+	return schematicID
+}
 
 // Node type values for LabelNodeType.
 const (

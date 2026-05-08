@@ -285,7 +285,12 @@ func (p *Provisioner) ensureHcloudSecret(ctx context.Context, clusterName string
 		return fmt.Errorf("creating kubeclient for hcloud secret: %w", k8s.ErrKubeconfigPathEmpty)
 	}
 
-	kubeconfigPath, err := fsutil.EvalCanonicalPath(p.options.KubeconfigPath)
+	expandedPath, err := fsutil.ExpandHomePath(p.options.KubeconfigPath)
+	if err != nil {
+		return fmt.Errorf("expanding kubeconfig path for hcloud secret: %w", err)
+	}
+
+	kubeconfigPath, err := fsutil.EvalCanonicalPath(expandedPath)
 	if err != nil {
 		return fmt.Errorf("canonicalizing kubeconfig path for hcloud secret: %w", err)
 	}
@@ -407,7 +412,12 @@ func (p *Provisioner) ensureAutoscalerSecret(
 		)
 	}
 
-	kubeconfigPath, err := fsutil.EvalCanonicalPath(p.options.KubeconfigPath)
+	expandedPath, err := fsutil.ExpandHomePath(p.options.KubeconfigPath)
+	if err != nil {
+		return fmt.Errorf("expanding kubeconfig path for autoscaler secret: %w", err)
+	}
+
+	kubeconfigPath, err := fsutil.EvalCanonicalPath(expandedPath)
 	if err != nil {
 		return fmt.Errorf("canonicalizing kubeconfig path for autoscaler secret: %w", err)
 	}
