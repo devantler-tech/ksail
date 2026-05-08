@@ -11,21 +11,25 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Blank import keeps the talosconfig repair registered even when the
-// command file is the only consumer of the package.
-var _ = talosconfigrepair.DefaultPath
-
-// NewRepairCmd creates the `ksail cluster repair` command.
+// NewRepairCmd creates the `ksail cluster repair` command, backed by
+// the supplied [repairer.Registry]. Pass [repairer.Default] for normal
+// operation; tests can pass an isolated registry from
+// [repairer.NewRegistry] to avoid cross-package contention.
 //
-// The command runs every [repairer.Repair] registered in the process,
-// printing one status line per repair. It is idempotent and safe to
-// run repeatedly. The first registered repair fixes a known
-// single-byte corruption in Talos talosconfig CA bytes that produces:
+// The command runs every [repairer.Repair] registered with the
+// supplied registry, printing one status line per repair. It is
+// idempotent and safe to run repeatedly. The first registered repair
+// fixes a known single-byte corruption in Talos talosconfig CA bytes
+// that produces:
 //
 //	failed to append CA certificate to RootCAs pool
 //
 // during `ksail cluster update`.
-func NewRepairCmd(_ *di.Runtime) *cobra.Command {
+func NewRepairCmd(_ *di.Runtime, registry *repairer.Registry) *cobra.Command {
+	if registry == nil {
+		registry = repairer.Default()
+	}
+
 	var talosconfigPath string
 
 	cmd := &cobra.Command{
@@ -42,7 +46,7 @@ Each repair is idempotent and writes a timestamped backup of any file
 it modifies.`,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runRepair(cmd.Context(), cmd, talosconfigPath)
+			return runRepair(cmd.Context(), cmd, registry, talosconfigPath)
 		},
 	}
 
@@ -56,12 +60,17 @@ it modifies.`,
 	return cmd
 }
 
-func runRepair(ctx context.Context, cmd *cobra.Command, talosconfigPath string) error {
+func runRepair(
+	ctx context.Context,
+	cmd *cobra.Command,
+	registry *repairer.Registry,
+	talosconfigPath string,
+) error {
 	out := cmd.OutOrStdout()
 
-	configurePerRepairOptions(talosconfigPath)
+	repairs := registry.All()
+	configurePerRepairOptions(repairs, talosconfigPath)
 
-	repairs := repairer.All()
 	if len(repairs) == 0 {
 		notify.Activityf(out, "no repairs registered")
 
@@ -96,12 +105,12 @@ var errRepairsFailed = fmt.Errorf("one or more repairs reported failures")
 // configurePerRepairOptions threads CLI flags into individual repair
 // implementations that need them. Today only the talosconfig repair
 // reads --talosconfig.
-func configurePerRepairOptions(talosconfigPath string) {
+func configurePerRepairOptions(repairs []repairer.Repair, talosconfigPath string) {
 	if talosconfigPath == "" {
 		return
 	}
 
-	for _, r := range repairer.All() {
+	for _, r := range repairs {
 		if tc, ok := r.(*talosconfigrepair.Repair); ok {
 			tc.Path = talosconfigPath
 		}

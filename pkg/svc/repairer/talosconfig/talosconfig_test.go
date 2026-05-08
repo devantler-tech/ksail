@@ -9,7 +9,6 @@ import (
 	"crypto/x509/pkix"
 	"encoding/base64"
 	"encoding/pem"
-	"errors"
 	"io"
 	"math/big"
 	"os"
@@ -255,8 +254,10 @@ contexts:
 }
 
 func TestRepair_RegistersByDefault(t *testing.T) {
-	// Importing the talosconfig package self-registers a default Repair.
-	for _, r := range repairer.All() {
+	// Importing the talosconfig package self-registers a default Repair
+	// on [repairer.Default()]. This test inspects (but does not mutate)
+	// the default registry.
+	for _, r := range repairer.Default().All() {
 		if r.Name() == "talosconfig-ca" {
 			return
 		}
@@ -265,19 +266,19 @@ func TestRepair_RegistersByDefault(t *testing.T) {
 	t.Fatal("talosconfig-ca repair was not registered via init()")
 }
 
-func TestRepair_PathExpansionError(t *testing.T) {
-	// ExpandHomePath only fails for paths that begin with "~unknown_user".
-	// We can't easily induce that here without OS-specific behaviour, so
-	// just ensure the explicit path branch works.
+func TestRepair_MissingFileIsSkipped(t *testing.T) {
+	t.Parallel()
+
+	// A path under t.TempDir() is guaranteed not to exist; the repair
+	// should report StatusSkipped without surfacing an error.
 	r := &talosconfigrepair.Repair{Path: filepath.Join(t.TempDir(), "missing")}
 
 	result := r.Run(context.Background(), io.Discard)
+	if result.Status != repairer.StatusSkipped {
+		t.Fatalf("expected StatusSkipped for missing file, got %s", result.Status)
+	}
 
-	var noop = result.Err == nil
-	if !noop {
-		t.Fatalf("expected no err for missing file (skipped), got %v", result.Err)
+	if result.Err != nil {
+		t.Fatalf("expected no err for missing file, got %v", result.Err)
 	}
 }
-
-// Sanity check that the package's exported error sentinel exists.
-var _ = errors.Is

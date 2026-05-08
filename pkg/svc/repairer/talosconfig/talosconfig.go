@@ -20,8 +20,10 @@ package talosconfig
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"crypto/x509"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/pem"
 	"errors"
 	"fmt"
@@ -75,7 +77,7 @@ func (r *Repair) Run(_ context.Context, logWriter io.Writer) repairer.Result {
 		rawPath = DefaultPath
 	}
 
-	path, err := fsutil.ExpandHomePath(rawPath)
+	expanded, err := fsutil.ExpandHomePath(rawPath)
 	if err != nil {
 		return repairer.Result{
 			Name:   repairName,
@@ -85,7 +87,22 @@ func (r *Repair) Run(_ context.Context, logWriter io.Writer) repairer.Result {
 		}
 	}
 
-	data, err := os.ReadFile(path) //nolint:gosec // user-supplied talosconfig path
+	// Canonicalize the user-supplied path so we never read or write
+	// through symlinks. EvalCanonicalPath falls back to the parent
+	// directory when the file itself does not yet exist, so a missing
+	// talosconfig is still reported through the os.ReadFile branch
+	// below rather than failing canonicalization.
+	path, err := fsutil.EvalCanonicalPath(expanded)
+	if err != nil {
+		return repairer.Result{
+			Name:   repairName,
+			Status: repairer.StatusSkipped,
+			Detail: fmt.Sprintf("could not canonicalize %q: %v", expanded, err),
+			Err:    err,
+		}
+	}
+
+	data, err := os.ReadFile(path) //nolint:gosec // path canonicalized via EvalCanonicalPath
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return repairer.Result{
@@ -148,8 +165,17 @@ func (r *Repair) Run(_ context.Context, logWriter io.Writer) repairer.Result {
 		}
 	}
 
-	backup := fmt.Sprintf("%s.bak.%s", path, r.now().Format("20060102-150405"))
-	if err := os.WriteFile(backup, data, 0o600); err != nil {
+	backup, err := r.uniqueBackupPath(path)
+	if err != nil {
+		return repairer.Result{
+			Name:   repairName,
+			Status: repairer.StatusUnrepairable,
+			Detail: fmt.Sprintf("%s: failed to allocate backup path: %v", path, err),
+			Err:    err,
+		}
+	}
+
+	if err := fsutil.AtomicWriteFile(backup, data, 0o600); err != nil {
 		return repairer.Result{
 			Name:   repairName,
 			Status: repairer.StatusUnrepairable,
@@ -158,7 +184,7 @@ func (r *Repair) Run(_ context.Context, logWriter io.Writer) repairer.Result {
 		}
 	}
 
-	if err := os.WriteFile(path, out, 0o600); err != nil {
+	if err := fsutil.AtomicWriteFile(path, out, 0o600); err != nil {
 		return repairer.Result{
 			Name:   repairName,
 			Status: repairer.StatusUnrepairable,
@@ -181,6 +207,33 @@ func (r *Repair) now() time.Time {
 	}
 
 	return time.Now()
+}
+
+// uniqueBackupPath returns a backup path that is guaranteed not to
+// collide with an existing file, even when multiple repairs run within
+// the same second. The format is `<path>.bak.<UTC timestamp ns>-<rand>`.
+func (r *Repair) uniqueBackupPath(path string) (string, error) {
+	for attempt := 0; attempt < 8; attempt++ {
+		var randBytes [4]byte
+		if _, err := rand.Read(randBytes[:]); err != nil {
+			return "", fmt.Errorf("read random bytes: %w", err)
+		}
+
+		candidate := fmt.Sprintf(
+			"%s.bak.%s-%s",
+			path,
+			r.now().UTC().Format("20060102-150405.000000000"),
+			hex.EncodeToString(randBytes[:]),
+		)
+
+		if _, err := os.Stat(candidate); errors.Is(err, os.ErrNotExist) {
+			return candidate, nil
+		} else if err != nil {
+			return "", fmt.Errorf("stat backup candidate: %w", err)
+		}
+	}
+
+	return "", errors.New("could not allocate unique backup path after 8 attempts")
 }
 
 // walkAndRepair traverses the YAML document looking for `contexts.<name>.ca`

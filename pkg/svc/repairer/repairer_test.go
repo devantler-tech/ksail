@@ -28,17 +28,18 @@ func (f *fakeRepair) Run(_ context.Context, _ io.Writer) repairer.Result {
 	return f.result
 }
 
-func TestRegisterAndAll(t *testing.T) {
-	t.Cleanup(repairer.Reset)
-	repairer.Reset()
+func TestRegistry_RegisterAndAll(t *testing.T) {
+	t.Parallel()
+
+	reg := repairer.NewRegistry()
 
 	a := &fakeRepair{name: "a"}
 	b := &fakeRepair{name: "b"}
 
-	repairer.Register(a)
-	repairer.Register(b)
+	reg.Register(a)
+	reg.Register(b)
 
-	got := repairer.All()
+	got := reg.All()
 	if len(got) != 2 {
 		t.Fatalf("expected 2 repairs, got %d", len(got))
 	}
@@ -48,17 +49,21 @@ func TestRegisterAndAll(t *testing.T) {
 	}
 }
 
-func TestReset(t *testing.T) {
-	repairer.Reset()
-	repairer.Register(&fakeRepair{name: "x"})
-	repairer.Reset()
+func TestRegistry_Reset(t *testing.T) {
+	t.Parallel()
 
-	if len(repairer.All()) != 0 {
+	reg := repairer.NewRegistry()
+	reg.Register(&fakeRepair{name: "x"})
+	reg.Reset()
+
+	if len(reg.All()) != 0 {
 		t.Fatal("Reset did not clear registry")
 	}
 }
 
 func TestRunResultPropagates(t *testing.T) {
+	t.Parallel()
+
 	wantErr := errors.New("boom")
 	r := &fakeRepair{name: "r", result: repairer.Result{Status: repairer.StatusUnrepairable, Err: wantErr}}
 
@@ -69,6 +74,8 @@ func TestRunResultPropagates(t *testing.T) {
 }
 
 func TestStatusString(t *testing.T) {
+	t.Parallel()
+
 	cases := map[repairer.Status]string{
 		repairer.StatusOK:           "ok",
 		repairer.StatusRepaired:     "repaired",
@@ -80,5 +87,22 @@ func TestStatusString(t *testing.T) {
 		if got := s.String(); got != want {
 			t.Errorf("Status(%d).String() = %q, want %q", s, got, want)
 		}
+	}
+}
+
+// TestDefaultRegistry verifies that the package-level Register / All /
+// Reset shims forward to [repairer.Default]. It does not rely on
+// init()-registered repairs from sibling packages — it Resets first.
+func TestDefaultRegistry(t *testing.T) {
+	// Cannot run in parallel — mutates [repairer.Default].
+	t.Cleanup(func() { repairer.Default().Reset() })
+
+	repairer.Default().Reset()
+
+	repairer.Register(&fakeRepair{name: "default-test"})
+
+	got := repairer.All()
+	if len(got) != 1 || got[0].Name() != "default-test" {
+		t.Fatalf("default registry shim mismatch: %#v", got)
 	}
 }

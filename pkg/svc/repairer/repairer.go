@@ -68,36 +68,64 @@ type Repair interface {
 	Run(ctx context.Context, logWriter io.Writer) Result
 }
 
-var (
-	registryMu sync.RWMutex
-	registry   []Repair
-)
+// Registry holds a collection of [Repair] implementations. It is safe
+// for concurrent use. Tests SHOULD construct an isolated [Registry]
+// via [NewRegistry] rather than mutating [Default] to avoid races
+// between packages that run in parallel under `go test`.
+type Registry struct {
+	mu      sync.RWMutex
+	repairs []Repair
+}
 
-// Register adds a [Repair] to the package-level registry. It is safe to
-// call from multiple goroutines.
-func Register(r Repair) {
-	registryMu.Lock()
-	defer registryMu.Unlock()
+// NewRegistry returns an empty, isolated [Registry] suitable for tests.
+func NewRegistry() *Registry { return &Registry{} }
 
-	registry = append(registry, r)
+// Register adds r to this registry.
+func (reg *Registry) Register(r Repair) {
+	reg.mu.Lock()
+	defer reg.mu.Unlock()
+
+	reg.repairs = append(reg.repairs, r)
 }
 
 // All returns a snapshot of every registered [Repair] in registration
 // order.
-func All() []Repair {
-	registryMu.RLock()
-	defer registryMu.RUnlock()
+func (reg *Registry) All() []Repair {
+	reg.mu.RLock()
+	defer reg.mu.RUnlock()
 
-	out := make([]Repair, len(registry))
-	copy(out, registry)
+	out := make([]Repair, len(reg.repairs))
+	copy(out, reg.repairs)
 
 	return out
 }
 
-// Reset removes every registered repair. Intended for tests.
-func Reset() {
-	registryMu.Lock()
-	defer registryMu.Unlock()
+// Reset removes every repair from this registry. Intended for tests.
+func (reg *Registry) Reset() {
+	reg.mu.Lock()
+	defer reg.mu.Unlock()
 
-	registry = nil
+	reg.repairs = nil
 }
+
+// defaultRegistry is the process-wide registry that init() functions in
+// concrete repair packages populate. Production code uses [Default];
+// tests SHOULD prefer [NewRegistry] for isolation.
+var defaultRegistry = &Registry{}
+
+// Default returns the process-wide [Registry] populated by repair
+// packages' init() functions.
+func Default() *Registry { return defaultRegistry }
+
+// Register adds r to the [Default] registry. Provided for repair
+// packages whose init() registers a repair without holding a Registry
+// reference.
+func Register(r Repair) { defaultRegistry.Register(r) }
+
+// All returns a snapshot of every repair registered with [Default].
+func All() []Repair { return defaultRegistry.All() }
+
+// Reset clears [Default]. Intended only for tests that genuinely need
+// to inspect or replace process-wide state; prefer [NewRegistry] when
+// possible.
+func Reset() { defaultRegistry.Reset() }

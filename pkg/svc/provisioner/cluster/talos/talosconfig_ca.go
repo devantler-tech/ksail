@@ -51,10 +51,13 @@ func (e *MalformedTalosConfigCAError) Is(target error) bool {
 // context of cfg parses as a valid X.509 certificate. It returns a
 // [*MalformedTalosConfigCAError] when the CA is structurally broken in
 // a way that would make [crypto/tls] reject it (the symptom users see
-// is "failed to append CA certificate to RootCAs pool"). All other
-// failure modes (no current context, missing CA, corrupted PEM) are
-// reported the same way so the user is consistently pointed at
-// `ksail cluster repair`.
+// is "failed to append CA certificate to RootCAs pool").
+//
+// Benign cases — a nil config, a missing/blank current context, or an
+// empty CA — return nil. Those situations are handled by the caller's
+// regular client-construction path (or surfaced as the existing
+// "no current context" error from the Talos library) and are not
+// indicative of CA corruption.
 func validateCurrentContextCA(cfg *clientconfig.Config, path string) error {
 	if cfg == nil {
 		return nil

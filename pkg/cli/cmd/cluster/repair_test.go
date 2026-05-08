@@ -24,11 +24,17 @@ func (s *stubRepair) Run(_ context.Context, _ io.Writer) repairer.Result {
 }
 
 func TestRepairCmd_RunsRegisteredRepairs(t *testing.T) {
-	t.Cleanup(repairer.Reset)
-	repairer.Reset()
-	repairer.Register(&stubRepair{name: "fake-ok", result: repairer.Result{Name: "fake-ok", Status: repairer.StatusOK, Detail: "all good"}})
+	t.Parallel()
 
-	cmd := clustercmd.NewRepairCmd(nil)
+	reg := repairer.NewRegistry()
+	reg.Register(&stubRepair{
+		name:   "fake-ok",
+		result: repairer.Result{Name: "fake-ok", Status: repairer.StatusOK, Detail: "all good"},
+	})
+
+	cmd := clustercmd.NewRepairCmd(nil, reg)
+	cmd.SetContext(context.Background())
+
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
@@ -44,16 +50,19 @@ func TestRepairCmd_RunsRegisteredRepairs(t *testing.T) {
 }
 
 func TestRepairCmd_FailsOnUnrepairable(t *testing.T) {
-	t.Cleanup(repairer.Reset)
-	repairer.Reset()
-	repairer.Register(&stubRepair{name: "broken", result: repairer.Result{
+	t.Parallel()
+
+	reg := repairer.NewRegistry()
+	reg.Register(&stubRepair{name: "broken", result: repairer.Result{
 		Name:   "broken",
 		Status: repairer.StatusUnrepairable,
 		Detail: "cannot fix",
 		Err:    errors.New("oops"),
 	}})
 
-	cmd := clustercmd.NewRepairCmd(nil)
+	cmd := clustercmd.NewRepairCmd(nil, reg)
+	cmd.SetContext(context.Background())
+
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
@@ -65,10 +74,13 @@ func TestRepairCmd_FailsOnUnrepairable(t *testing.T) {
 }
 
 func TestRepairCmd_NoRepairsRegistered(t *testing.T) {
-	t.Cleanup(repairer.Reset)
-	repairer.Reset()
+	t.Parallel()
 
-	cmd := clustercmd.NewRepairCmd(nil)
+	reg := repairer.NewRegistry()
+
+	cmd := clustercmd.NewRepairCmd(nil, reg)
+	cmd.SetContext(context.Background())
+
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
