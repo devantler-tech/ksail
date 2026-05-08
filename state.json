@@ -1,7 +1,8 @@
 {
-  "last_run": "2026-05-07T12:55:00Z",
-  "workflow_run_id": "25496959179",
+  "last_run": "2026-05-08T01:08:00Z",
+  "workflow_run_id": "25530778322",
   "commented_issues": {
+    "4646": "2026-05-08",
     "4621": "2026-05-06",
     "4606": "2026-05-05",
     "4605": "2026-05-05",
@@ -36,7 +37,7 @@
   },
   "open_prs": {},
   "last_code_quality_domain": "perf",
-  "issue_backlog_cursor": "4637",
+  "issue_backlog_cursor": "4647",
   "sub_issue_links": {
     "cloud_provider_parent_4627": ["3983", "4328", "4510"]
   },
@@ -58,8 +59,9 @@
   "notes": [
     "link_sub_issue is NOT idempotent - always verify sub-issue not already linked before calling",
     "Monthly activity issue: #4501",
-    "domain alternation: last was perf - next should be test coverage",
-    "Roadmap backlog: all Now/Next/Later items tracked as of 2026-05-07",
-    "#3983 was missing from #4627 sub-issues; re-linked this run (verified count: 3)"
+    "domain alternation: last was perf - next should be refactor (Task 5)",
+    "Roadmap backlog: all Now/Next/Later items tracked as of 2026-05-08",
+    "#3983 was missing from #4627 sub-issues; re-linked this run (verified count: 3)",
+    "PR #4647 (Copilot): fixes Hetzner label 63-char + ~ expansion in kubeconfig path - don't overlap"
   ]
 }
