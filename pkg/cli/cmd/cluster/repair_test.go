@@ -70,6 +70,7 @@ func TestRepairCmd_FailsOnUnrepairable(t *testing.T) {
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
+	cmd.SetArgs([]string{})
 
 	err := cmd.Execute()
 	if err == nil {
@@ -89,6 +90,7 @@ func TestRepairCmd_NoRepairsRegistered(t *testing.T) {
 
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
+	cmd.SetArgs([]string{})
 
 	err := cmd.Execute()
 	if err != nil {

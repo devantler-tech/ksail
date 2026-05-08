@@ -3,7 +3,7 @@
 // ...).
 //
 // Each repair satisfies the Repair interface and is registered in a
-// [Registry] (typically via [(*Registry).Register] on [Default]()). The
+// [Registry] (typically via [(*Registry).Register] on [Default]). The
 // `ksail cluster repair`
 // command iterates
 // every registered repair and runs it.
