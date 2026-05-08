@@ -118,7 +118,7 @@ Before Phase 2, KSail always performs a **Cluster Stability Check** — verifyin
 
 ### Detection and Updates
 
-KSail detects installed components by querying Helm release history and the Kubernetes API, and determines the active distribution, provider, and cluster name from the kubeconfig context. It distinguishes KSail-managed GitOps resources from unrelated ones to avoid interfering with external GitOps setups.
+KSail detects installed components by querying Helm release history and the Kubernetes API (and, for Docker-based providers, inspecting the Docker daemon where needed), and determines the active distribution, provider, and cluster name from the kubeconfig context. It distinguishes KSail-managed GitOps resources from unrelated ones to avoid interfering with external GitOps setups.
 
 The diff service classifies update impact as **in-place** (no disruption), **reboot-required** (node reboot), or **recreate-required** (full cluster recreation).
 
