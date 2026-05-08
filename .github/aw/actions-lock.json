@@ -80,10 +80,10 @@
       "version": "v0.71.5",
       "sha": "19ac811a4a85389c33b15128e1d7b7d4507f814a"
     },
-    "githubnext/gh-aw/actions/setup@v0.72.0": {
+    "githubnext/gh-aw/actions/setup@v0.72.1": {
       "repo": "githubnext/gh-aw/actions/setup",
-      "version": "v0.72.0",
-      "sha": "94efd27a5232ade194f2c3a94fd19fada414058c"
+      "version": "v0.72.1",
+      "sha": "489dbab88cc78e35506b5ccbf08a4037166824ac"
     }
   },
   "containers": {
