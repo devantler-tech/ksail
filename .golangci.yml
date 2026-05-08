@@ -44,6 +44,12 @@ linters:
       - linters:
           - gochecknoglobals
         path: pkg/cli/ui/chat/
+      # repairer package uses a process-wide registry singleton and an
+      # immutable byte-pattern constant that cannot be expressed as a Go
+      # const because of its []byte type.
+      - linters:
+          - gochecknoglobals
+        path: pkg/svc/repairer/
       # Package names that conflict with stdlib or are too generic cannot be renamed without breaking changes
       - linters:
           - revive
@@ -124,6 +130,7 @@ linters:
             - golang.org/x/sync
             - golang.org/x/term
             - golang.org/x/text
+            - gopkg.in/yaml.v3
             - helm.sh/helm
             - k8s.io
             - sigs.k8s.io

@@ -61,6 +61,8 @@ import (
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/repairer"
+	talosconfigrepair "github.com/devantler-tech/ksail/v7/pkg/svc/repairer/talosconfig"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/state"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/versionresolver"
 	"github.com/devantler-tech/ksail/v7/pkg/timer"
@@ -1025,6 +1027,8 @@ func NewClusterCmd(runtimeContainer *di.Runtime) *cobra.Command {
 	cmd.AddCommand(NewBackupCmd(runtimeContainer))
 	cmd.AddCommand(NewRestoreCmd(runtimeContainer))
 	cmd.AddCommand(NewSwitchCmd(runtimeContainer))
+	talosconfigrepair.RegisterDefault(repairer.Default())
+	cmd.AddCommand(NewRepairCmd(runtimeContainer, repairer.Default()))
 
 	return cmd
 }

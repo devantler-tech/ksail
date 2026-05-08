@@ -193,6 +193,36 @@ KSail automatically retries transient Talos node image pull failures (up to 3 at
 
 If all retries fail, check your internet connection and `ghcr.io` availability with `curl -I https://ghcr.io/v2/`, then retry with `ksail cluster delete && ksail cluster create`.
 
+### "failed to append CA certificate to RootCAs pool" on `cluster update`
+
+`ksail cluster update` against a Talos cluster fails with:
+
+```text
+failed to apply updates: failed to sync cluster secrets:
+  failed to create Talos client for secret sync:
+  failed to create Talos client from saved config:
+  failed to create client connection:
+  failed to append CA certificate to RootCAs pool
+```
+
+This means the CA certificate stored under the current context in `~/.talos/config` is structurally malformed. KSail validates the saved CA before opening a Talos client and surfaces the path, context name, and underlying X.509 parse error.
+
+**Recover automatically:**
+
+```bash
+ksail cluster repair
+```
+
+The `talosconfig-ca` repair detects a known single-byte BasicConstraints corruption pattern, fixes it in place, and writes a timestamped backup (`~/.talos/config.bak.<timestamp>`) before overwriting. The repair is idempotent and only modifies CA bytes whose corruption it recognises.
+
+**Verify manually** (optional):
+
+```bash
+yq '.contexts.<context>.ca' ~/.talos/config | base64 -d | openssl x509 -noout -text
+```
+
+If neither the repair nor a backup restore work, regenerate the talosconfig by re-running `ksail cluster create` (note: this requires destroying and recreating the cluster).
+
 ## VCluster Issues
 
 ### Transient Startup Failures
