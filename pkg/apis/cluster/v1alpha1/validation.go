@@ -375,8 +375,9 @@ func ValidateAutoscalerConfig(
 		return enumErr
 	}
 
-	if err := validateExpanderForProvider(cluster.Provider, autoscaler); err != nil {
-		return err
+	expanderErr := validateExpanderForProvider(cluster.Provider, autoscaler)
+	if expanderErr != nil {
+		return expanderErr
 	}
 
 	if autoscaler.Enabled && len(autoscaler.Pools) == 0 {
