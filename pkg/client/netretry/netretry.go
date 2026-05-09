@@ -8,6 +8,21 @@ import (
 	"time"
 )
 
+// transientTextPatterns contains fixed substrings for HTTP and TCP-level
+// transient errors. Declared at package level to avoid slice allocation on
+// every IsRetryable call.
+//
+//nolint:gochecknoglobals // avoids per-call slice allocation in hot retry path
+var transientTextPatterns = []string{
+	"Too Many Requests",
+	"Internal Server Error", "Bad Gateway",
+	"Service Unavailable", "Gateway Timeout",
+	"connection reset by peer", "connection refused",
+	"i/o timeout", "TLS handshake timeout",
+	"unexpected EOF", "no such host",
+	"context deadline exceeded",
+}
+
 // httpStatusCodePattern matches HTTP 429 and 5xx status codes at word boundaries
 // to avoid false positives on port numbers like ":5000".
 var httpStatusCodePattern = regexp.MustCompile(`\b(429|5\d{2})\b`)
@@ -29,17 +44,7 @@ func IsRetryable(err error) bool {
 	errMsg := err.Error()
 
 	// HTTP status text patterns and TCP-level transient network errors.
-	textPatterns := []string{
-		"Too Many Requests",
-		"Internal Server Error", "Bad Gateway",
-		"Service Unavailable", "Gateway Timeout",
-		"connection reset by peer", "connection refused",
-		"i/o timeout", "TLS handshake timeout",
-		"unexpected EOF", "no such host",
-		"context deadline exceeded",
-	}
-
-	for _, pattern := range textPatterns {
+	for _, pattern := range transientTextPatterns {
 		if strings.Contains(errMsg, pattern) {
 			return true
 		}
