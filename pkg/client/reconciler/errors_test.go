@@ -13,6 +13,9 @@ import (
 var (
 	errReconcilerSomethingWentWrong = errors.New("something went wrong")
 	errReconcilerNotContext         = errors.New("not a context error")
+	errRateLimiterContextDeadline   = errors.New(
+		"client rate limiter Wait returned an error: rate: Wait(n=1) would exceed context deadline",
+	)
 )
 
 func TestIsContextError(t *testing.T) {
@@ -23,16 +26,8 @@ func TestIsContextError(t *testing.T) {
 		err      error
 		expected bool
 	}{
-		{
-			name:     "deadline exceeded",
-			err:      context.DeadlineExceeded,
-			expected: true,
-		},
-		{
-			name:     "context canceled",
-			err:      context.Canceled,
-			expected: true,
-		},
+		{name: "deadline exceeded", err: context.DeadlineExceeded, expected: true},
+		{name: "context canceled", err: context.Canceled, expected: true},
 		{
 			name:     "wrapped deadline exceeded",
 			err:      fmt.Errorf("operation failed: %w", context.DeadlineExceeded),
@@ -48,23 +43,24 @@ func TestIsContextError(t *testing.T) {
 			err:      fmt.Errorf("outer: %w", fmt.Errorf("inner: %w", context.DeadlineExceeded)),
 			expected: true,
 		},
-		{
-			name:     "nil error",
-			err:      nil,
-			expected: false,
-		},
-		{
-			name:     "generic error",
-			err:      errReconcilerSomethingWentWrong,
-			expected: false,
-		},
+		{name: "nil error", err: nil, expected: false},
+		{name: "generic error", err: errReconcilerSomethingWentWrong, expected: false},
 		{
 			name:     "wrapped generic error",
 			err:      fmt.Errorf("wrap: %w", errReconcilerNotContext),
 			expected: false,
 		},
+		{
+			name:     "k8s rate limiter context deadline error",
+			err:      errRateLimiterContextDeadline,
+			expected: true,
+		},
+		{
+			name:     "wrapped k8s rate limiter context deadline error",
+			err:      fmt.Errorf("get flux kustomization: %w", errRateLimiterContextDeadline),
+			expected: true,
+		},
 	}
-
 	for index := range tests {
 		t.Run(tests[index].name, func(t *testing.T) {
 			t.Parallel()

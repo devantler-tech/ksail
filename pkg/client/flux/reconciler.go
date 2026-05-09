@@ -118,8 +118,8 @@ type ReconcileOptions struct {
 }
 
 // TriggerOCIRepositoryReconciliation triggers OCIRepository reconciliation without waiting.
-// It uses retry logic to handle optimistic concurrency conflicts that can occur when the
-// Flux controller updates the resource between our Get and Update calls.
+// It uses a JSON merge patch with retry logic for transient API errors (e.g. resource not
+// yet created, API server temporarily unavailable).
 func (r *Reconciler) TriggerOCIRepositoryReconciliation(ctx context.Context) error {
 	return triggerReconciliationWithRetry(
 		ctx,
@@ -165,8 +165,8 @@ func (r *Reconciler) WaitForOCIRepositoryReady(ctx context.Context, timeout time
 }
 
 // TriggerKustomizationReconciliation triggers Kustomization reconciliation without waiting.
-// It uses retry logic to handle optimistic concurrency conflicts that can occur when the
-// Flux controller updates the resource between our Get and Update calls.
+// It uses a JSON merge patch with retry logic for transient API errors (e.g. resource not
+// yet created, API server temporarily unavailable).
 func (r *Reconciler) TriggerKustomizationReconciliation(ctx context.Context) error {
 	return triggerReconciliationWithRetry(
 		ctx,
@@ -728,9 +728,10 @@ func handleTransientError(
 	select {
 	case <-waitCtx.Done():
 		return fmt.Errorf(
-			"timed out waiting for %s to be available: %w",
+			"timed out waiting for %s to be available (last error: %w): %w",
 			resourceDescription,
 			err,
+			waitCtx.Err(),
 		)
 	case <-ticker.C:
 		return nil // Continue retry loop
@@ -738,74 +739,77 @@ func handleTransientError(
 }
 
 // triggerReconciliationWithRetry triggers reconciliation on a Flux resource with retry logic
-// for handling optimistic concurrency conflicts and transient API errors.
-// This is necessary because Flux controllers may not be fully ready immediately after
-// cluster creation, especially in slow CI environments.
+// for handling transient API errors (e.g. resource not yet created in slow CI environments).
+//
+// A JSON merge patch is used instead of the traditional Get+Update approach.  Patches
+// are applied atomically server-side, so they never produce 409 Conflict errors even
+// when Flux controllers are concurrently updating the same resource status.  This
+// prevents the retry loop from running for the full apiAvailabilityTimeout when the
+// cluster has many HelmReleases or kustomizations.
 func triggerReconciliationWithRetry(
 	ctx context.Context,
 	client dynamic.ResourceInterface,
 	resourceName string,
 	resourceDescription string,
 ) error {
-	// Create a timeout context for the entire retry operation
+	// Create a timeout context for the entire retry operation.
 	waitCtx, cancel := context.WithTimeout(ctx, apiAvailabilityTimeout)
 	defer cancel()
 
 	ticker := time.NewTicker(apiAvailabilityPollInterval)
 	defer ticker.Stop()
 
+	// Build the merge patch once; the timestamp is set at trigger time.
+	patch := fmt.Appendf(nil,
+		`{"metadata":{"annotations":{%q:%q}}}`,
+		reconcileAnnotationKey,
+		time.Now().Format(time.RFC3339Nano),
+	)
+
 	var lastErr error
 
 	for {
-		resource, err := client.Get(waitCtx, resourceName, metav1.GetOptions{})
+		// Guard against an expired context before making an API call.
+		// Without this check, an expired context causes the k8s rate limiter to
+		// return "rate: Wait(n=1) would exceed context deadline" — a plain
+		// fmt.Errorf that does not wrap context.DeadlineExceeded and produces
+		// confusing user-facing error messages if it bubbles up unhandled.
+		err := waitCtx.Err()
 		if err != nil {
-			// Check if this is a transient API error that should be retried
-			if isTransientAPIError(err) {
-				lastErr = err
-
-				retryErr := handleTransientError(waitCtx, ticker, resourceDescription, lastErr)
-				if retryErr != nil {
-					return retryErr
-				}
-
-				continue
+			if lastErr != nil {
+				return fmt.Errorf(
+					"timed out waiting for %s to be available (last error: %w): %w",
+					resourceDescription,
+					lastErr,
+					err,
+				)
 			}
 
-			// Non-transient error, fail immediately
-			return fmt.Errorf("get %s: %w", resourceDescription, err)
+			return fmt.Errorf("trigger %s reconciliation: %w", resourceDescription, err)
 		}
 
-		// Resource found, try to update it
-		annotations := resource.GetAnnotations()
-		if annotations == nil {
-			annotations = make(map[string]string)
-		}
-
-		annotations[reconcileAnnotationKey] = time.Now().Format(time.RFC3339Nano)
-		resource.SetAnnotations(annotations)
-
-		_, err = client.Update(waitCtx, resource, metav1.UpdateOptions{})
+		_, err = client.Patch(
+			waitCtx,
+			resourceName,
+			types.MergePatchType,
+			patch,
+			metav1.PatchOptions{},
+		)
 		if err == nil {
-			return nil // Success
+			return nil
 		}
 
-		// Check if this is a transient error (conflict or API not ready)
 		if isTransientAPIError(err) {
 			lastErr = err
 
-			select {
-			case <-waitCtx.Done():
-				return fmt.Errorf(
-					"timed out updating %s: %w",
-					resourceDescription,
-					lastErr,
-				)
-			case <-ticker.C:
-				continue
+			retryErr := handleTransientError(waitCtx, ticker, resourceDescription, lastErr)
+			if retryErr != nil {
+				return retryErr
 			}
+
+			continue
 		}
 
-		// Non-transient error on update, fail immediately
 		return fmt.Errorf("trigger %s reconciliation: %w", resourceDescription, err)
 	}
 }
