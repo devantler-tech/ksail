@@ -728,7 +728,7 @@ func handleTransientError(
 	select {
 	case <-waitCtx.Done():
 		return fmt.Errorf(
-			"timed out waiting for %s to be available (last error: %v): %w",
+			"timed out waiting for %s to be available (last error: %w): %w",
 			resourceDescription,
 			err,
 			waitCtx.Err(),
@@ -760,11 +760,11 @@ func triggerReconciliationWithRetry(
 	defer ticker.Stop()
 
 	// Build the merge patch once; the timestamp is set at trigger time.
-	patch := []byte(fmt.Sprintf(
+	patch := fmt.Appendf(nil,
 		`{"metadata":{"annotations":{%q:%q}}}`,
 		reconcileAnnotationKey,
 		time.Now().Format(time.RFC3339Nano),
-	))
+	)
 
 	var lastErr error
 
@@ -778,7 +778,7 @@ func triggerReconciliationWithRetry(
 		if err != nil {
 			if lastErr != nil {
 				return fmt.Errorf(
-					"timed out waiting for %s to be available (last error: %v): %w",
+					"timed out waiting for %s to be available (last error: %w): %w",
 					resourceDescription,
 					lastErr,
 					err,
@@ -788,7 +788,13 @@ func triggerReconciliationWithRetry(
 			return fmt.Errorf("trigger %s reconciliation: %w", resourceDescription, err)
 		}
 
-		_, err = client.Patch(waitCtx, resourceName, types.MergePatchType, patch, metav1.PatchOptions{})
+		_, err = client.Patch(
+			waitCtx,
+			resourceName,
+			types.MergePatchType,
+			patch,
+			metav1.PatchOptions{},
+		)
 		if err == nil {
 			return nil
 		}

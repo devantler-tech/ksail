@@ -20,6 +20,7 @@ var (
 
 func TestIsContextError(t *testing.T) {
 	t.Parallel()
+
 	tests := []struct {
 		name     string
 		err      error
@@ -49,7 +50,11 @@ func TestIsContextError(t *testing.T) {
 			err:      fmt.Errorf("wrap: %w", errReconcilerNotContext),
 			expected: false,
 		},
-		{name: "k8s rate limiter context deadline error", err: errRateLimiterContextDeadline, expected: true},
+		{
+			name:     "k8s rate limiter context deadline error",
+			err:      errRateLimiterContextDeadline,
+			expected: true,
+		},
 		{
 			name:     "wrapped k8s rate limiter context deadline error",
 			err:      fmt.Errorf("get flux kustomization: %w", errRateLimiterContextDeadline),
