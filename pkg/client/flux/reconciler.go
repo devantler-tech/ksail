@@ -118,8 +118,8 @@ type ReconcileOptions struct {
 }
 
 // TriggerOCIRepositoryReconciliation triggers OCIRepository reconciliation without waiting.
-// It uses retry logic to handle optimistic concurrency conflicts that can occur when the
-// Flux controller updates the resource between our Get and Update calls.
+// It uses a JSON merge patch with retry logic for transient API errors (e.g. resource not
+// yet created, API server temporarily unavailable).
 func (r *Reconciler) TriggerOCIRepositoryReconciliation(ctx context.Context) error {
 	return triggerReconciliationWithRetry(
 		ctx,
@@ -165,8 +165,8 @@ func (r *Reconciler) WaitForOCIRepositoryReady(ctx context.Context, timeout time
 }
 
 // TriggerKustomizationReconciliation triggers Kustomization reconciliation without waiting.
-// It uses retry logic to handle optimistic concurrency conflicts that can occur when the
-// Flux controller updates the resource between our Get and Update calls.
+// It uses a JSON merge patch with retry logic for transient API errors (e.g. resource not
+// yet created, API server temporarily unavailable).
 func (r *Reconciler) TriggerKustomizationReconciliation(ctx context.Context) error {
 	return triggerReconciliationWithRetry(
 		ctx,
