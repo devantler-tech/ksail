@@ -11,9 +11,11 @@ import (
 )
 
 var (
-	errReconcilerSomethingWentWrong    = errors.New("something went wrong")
-	errReconcilerNotContext            = errors.New("not a context error")
-	errRateLimiterContextDeadline      = errors.New("client rate limiter Wait returned an error: rate: Wait(n=1) would exceed context deadline")
+	errReconcilerSomethingWentWrong = errors.New("something went wrong")
+	errReconcilerNotContext         = errors.New("not a context error")
+	errRateLimiterContextDeadline   = errors.New(
+		"client rate limiter Wait returned an error: rate: Wait(n=1) would exceed context deadline",
+	)
 )
 
 func TestIsContextError(t *testing.T) {
