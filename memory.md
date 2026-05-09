@@ -1,13 +1,13 @@
 # Repo Assist Memory
 
 ## Last Run
-2026-05-08 12:47 UTC — Run #25556266722
+2026-05-09 01:07 UTC — Run #25587204641
 
 ## Monthly Activity Issue
 - May 2026: #4501 (open, updated this run)
 
 ## Open Repo Assist PRs
-- (None currently open)
+- `repo-assist/refactor-duplicate-loops`: refactor: extract poolsByName and appendChangesAsRows helpers (created 2026-05-09)
 
 ## Issue Comments Made (with run)
 - #4646 (Hetzner label + ~ expansion bugs): 2026-05-08 run #25530778322
@@ -37,8 +37,8 @@
 - #4627 parent: #3983, #4328, #4510 (all linked, verified 2026-05-07)
 
 ## Code Quality Domain Alternation
-- Last domain: perf (Task 8)
-- Next for Task 5 (refactor): look for refactoring opportunities
+- Last domain: refactor (Task 5, 2026-05-09)
+- Next for Task 5: perf
 
 ## Backlog Cursor
 - Issues processed through #4648 (as of 2026-05-08 noon)
@@ -54,5 +54,4 @@
 - Weekly strategy #4573 (May 4, 2026) is the current roadmap reference
 - All roadmap items are tracked; no new issues needed until next Weekly Strategy
 - #4341 was closed 2026-05-04 by devantler (CI workflow removed from monitoring)
-- Open PRs as of 2026-05-08 noon: #4648 (docs), #4647 (Hetzner fix), #4645 (Talos CA), #4642 (fsnotify dep)
-- #4501 updated this run with new run history and refreshed suggested actions
+- Open PRs as of 2026-05-09: #4642 (fsnotify dep), repo-assist/refactor-duplicate-loops (refactor)

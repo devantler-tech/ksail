@@ -1,6 +1,6 @@
 {
-  "last_run": "2026-05-08T12:47:00Z",
-  "workflow_run_id": "25556266722",
+  "last_run": "2026-05-09T01:07:00Z",
+  "workflow_run_id": "25587204641",
   "commented_issues": {
     "4646": "2026-05-08",
     "4621": "2026-05-06",
@@ -35,8 +35,14 @@
     "2261": "2026-04-11",
     "4354": "2026-05-07"
   },
-  "open_prs": {},
-  "last_code_quality_domain": "perf",
+  "open_prs": {
+    "repo-assist/refactor-duplicate-loops": {
+      "title": "[Repo Assist] refactor: extract poolsByName and appendChangesAsRows helpers",
+      "status": "open",
+      "created": "2026-05-09"
+    }
+  },
+  "last_code_quality_domain": "refactor",
   "issue_backlog_cursor": "4648",
   "sub_issue_links": {
     "cloud_provider_parent_4627": ["3983", "4328", "4510"]
@@ -59,9 +65,9 @@
   "notes": [
     "link_sub_issue is NOT idempotent - always verify sub-issue not already linked before calling",
     "Monthly activity issue: #4501",
-    "domain alternation: last was perf - next should be refactor (Task 5)",
+    "domain alternation: last was refactor (Task 5) - next should be perf (Task 8)",
     "Roadmap backlog: all Now/Next/Later items tracked as of 2026-05-08",
     "#4341 was closed 2026-05-04 by devantler (CI workflow removed from monitoring)",
-    "Open PRs as of 2026-05-08 noon: #4648 (docs), #4647 (Hetzner fix), #4645 (Talos CA), #4642 (fsnotify dep)"
+    "Open PRs as of 2026-05-09: #4642 (fsnotify dep), repo-assist/refactor-duplicate-loops (refactor PR)"
   ]
 }
