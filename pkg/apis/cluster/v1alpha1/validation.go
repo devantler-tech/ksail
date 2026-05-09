@@ -270,6 +270,33 @@ func validateAutoscalerEnumFields(
 	return nil
 }
 
+// validateExpanderForProvider checks that the chosen autoscaler expander
+// strategy is supported by the cluster's infrastructure provider. The Hetzner
+// cloud provider in the upstream cluster-autoscaler does not implement the
+// pricing API, so the Price expander causes a fatal crash on startup.
+func validateExpanderForProvider(
+	provider Provider,
+	autoscaler *NodeAutoscalerConfig,
+) error {
+	if !autoscaler.Enabled || autoscaler.Expander == "" {
+		return nil
+	}
+
+	if provider == ProviderHetzner && autoscaler.Expander == AutoscalerExpanderPrice {
+		return fmt.Errorf(
+			"%w: %q is not supported on %s (Hetzner does not implement the pricing API); "+
+				"use %s or %s instead",
+			ErrExpanderNotSupportedForProvider,
+			autoscaler.Expander,
+			ProviderHetzner,
+			AutoscalerExpanderLeastWaste,
+			AutoscalerExpanderRandom,
+		)
+	}
+
+	return nil
+}
+
 // validateNodePools checks each NodePool for name validity, min ≤ max, and uniqueness.
 func validateNodePools(pools []NodePool) error {
 	seen := make(map[string]struct{}, len(pools))
@@ -346,6 +373,10 @@ func ValidateAutoscalerConfig(
 	enumErr := validateAutoscalerEnumFields(autoscaler, &cluster.Autoscaler.Pod)
 	if enumErr != nil {
 		return enumErr
+	}
+
+	if err := validateExpanderForProvider(cluster.Provider, autoscaler); err != nil {
+		return err
 	}
 
 	if autoscaler.Enabled && len(autoscaler.Pools) == 0 {
