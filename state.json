@@ -1,6 +1,6 @@
 {
-  "last_run": "2026-05-09T01:07:00Z",
-  "workflow_run_id": "25587204641",
+  "last_run": "2026-05-09T12:34:00Z",
+  "workflow_run_id": "25601213607",
   "commented_issues": {
     "4646": "2026-05-08",
     "4621": "2026-05-06",
@@ -36,18 +36,22 @@
     "4354": "2026-05-07"
   },
   "open_prs": {
-    "repo-assist/refactor-duplicate-loops": {
-      "title": "[Repo Assist] refactor: extract poolsByName and appendChangesAsRows helpers",
+    "repo-assist/perf-netretry-text-patterns": {
+      "title": "[Repo Assist] perf(netretry): hoist transientTextPatterns to package level",
       "status": "open",
       "created": "2026-05-09"
     }
   },
-  "last_code_quality_domain": "refactor",
-  "issue_backlog_cursor": "4648",
+  "last_code_quality_domain": "perf",
+  "issue_backlog_cursor": "4666",
   "sub_issue_links": {
     "cloud_provider_parent_4627": ["3983", "4328", "4510"]
   },
   "created_issues": {
+    "4602": "[Repo Assist] [feature]: add OIDC federation and multi-cluster auth support",
+    "4610": "[Repo Assist] [ci]: fix K3s+Cilium full-stack system test timing race",
+    "4627": "[Repo Assist] [Parent] Cloud Provider Expansion",
+    "4601": "[Repo Assist] [chore]: communicate GPL-3.0-only license change (CLOSED)",
     "4521": "[Repo Assist] [feature]: add local-remote service mirroring",
     "4511": "[Repo Assist] [feature]: add native ephemeral CI mode",
     "4510": "[Repo Assist] [chore]: add GKE and AKS cloud providers",
@@ -57,17 +61,14 @@
     "4423": "[Repo Assist] [feature]: add build pipeline hooks to ksail workload watch",
     "4422": "[Repo Assist] [feature]: enhance ksail cluster diagnose with structured health scoring",
     "4375": "[Repo Assist] [feature]: add ksail cluster graph for multi-cluster topology",
-    "3983": "[Repo Assist] [feature]: extend Hetzner provider to K3s and Vanilla",
-    "4602": "[Repo Assist] [feature]: OIDC federation and multi-cluster auth support",
-    "4610": "[Repo Assist] [ci]: fix K3s+Cilium full-stack system test timing race",
-    "4627": "[Repo Assist] [Parent] Cloud Provider Expansion"
+    "3983": "[Repo Assist] [feature]: extend Hetzner provider to K3s and Vanilla"
   },
   "notes": [
     "link_sub_issue is NOT idempotent - always verify sub-issue not already linked before calling",
     "Monthly activity issue: #4501",
-    "domain alternation: last was refactor (Task 5) - next should be perf (Task 8)",
-    "Roadmap backlog: all Now/Next/Later items tracked as of 2026-05-08",
-    "#4341 was closed 2026-05-04 by devantler (CI workflow removed from monitoring)",
-    "Open PRs as of 2026-05-09: #4642 (fsnotify dep), repo-assist/refactor-duplicate-loops (refactor PR)"
+    "domain alternation: last was perf (Task 5) - next should be test (Task 9)",
+    "Roadmap backlog: all Now/Next/Later items tracked as of 2026-05-09",
+    "#4601 license communication issue closed/completed",
+    "Open PRs as of 2026-05-09: #4662 (in-toto dep), #4663/#4664/#4666 (Daily Docs)"
   ]
 }
