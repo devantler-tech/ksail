@@ -615,6 +615,68 @@ func TestValidateAutoscalerConfig(t *testing.T) {
 			},
 			wantErr: v1alpha1.ErrInvalidServerLimit,
 		},
+		{
+			name: "price expander rejected for hetzner provider",
+			cluster: &v1alpha1.ClusterSpec{
+				Provider:      v1alpha1.ProviderHetzner,
+				ControlPlanes: 1,
+				Workers:       1,
+				Autoscaler: v1alpha1.AutoscalerConfig{
+					Node: v1alpha1.NodeAutoscalerConfig{
+						Enabled:  true,
+						Expander: v1alpha1.AutoscalerExpanderPrice,
+						Pools: []v1alpha1.NodePool{
+							{Name: "workers", ServerType: "cx23", Location: "fsn1", Min: 1, Max: 5},
+						},
+					},
+				},
+			},
+			provider: &v1alpha1.ProviderSpec{
+				Hetzner: v1alpha1.OptionsHetzner{ServerLimit: 10},
+			},
+			wantErr:     v1alpha1.ErrExpanderNotSupportedForProvider,
+			errContains: "pricing API",
+		},
+		{
+			name: "price expander accepted for docker provider",
+			cluster: &v1alpha1.ClusterSpec{
+				Provider:      v1alpha1.ProviderDocker,
+				ControlPlanes: 1,
+				Workers:       1,
+				Autoscaler: v1alpha1.AutoscalerConfig{
+					Node: v1alpha1.NodeAutoscalerConfig{
+						Enabled:  true,
+						Expander: v1alpha1.AutoscalerExpanderPrice,
+						Pools: []v1alpha1.NodePool{
+							{Name: "workers", ServerType: "cx23", Location: "fsn1", Min: 1, Max: 5},
+						},
+					},
+				},
+			},
+			provider: &v1alpha1.ProviderSpec{},
+			wantErr:  nil,
+		},
+		{
+			name: "least-waste expander accepted for hetzner provider",
+			cluster: &v1alpha1.ClusterSpec{
+				Provider:      v1alpha1.ProviderHetzner,
+				ControlPlanes: 1,
+				Workers:       1,
+				Autoscaler: v1alpha1.AutoscalerConfig{
+					Node: v1alpha1.NodeAutoscalerConfig{
+						Enabled:  true,
+						Expander: v1alpha1.AutoscalerExpanderLeastWaste,
+						Pools: []v1alpha1.NodePool{
+							{Name: "workers", ServerType: "cx23", Location: "fsn1", Min: 1, Max: 5},
+						},
+					},
+				},
+			},
+			provider: &v1alpha1.ProviderSpec{
+				Hetzner: v1alpha1.OptionsHetzner{ServerLimit: 10},
+			},
+			wantErr: nil,
+		},
 	}
 
 	for _, testCase := range tests {

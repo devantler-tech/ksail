@@ -124,6 +124,14 @@ var ErrAutoscalerExceedsServerLimit = errors.New(
 	"autoscaler configuration exceeds Hetzner server limit",
 )
 
+// ErrExpanderNotSupportedForProvider is returned when the selected autoscaler
+// expander strategy is not supported by the infrastructure provider's cloud
+// provider implementation (e.g., Hetzner does not implement the pricing API
+// required by the Price expander).
+var ErrExpanderNotSupportedForProvider = errors.New(
+	"autoscaler expander not supported for provider",
+)
+
 // ErrAutoscalerEnabledNoPools is returned when node autoscaler is enabled but no pools are configured.
 var ErrAutoscalerEnabledNoPools = errors.New(
 	"node autoscaler is enabled but no pools are configured",
