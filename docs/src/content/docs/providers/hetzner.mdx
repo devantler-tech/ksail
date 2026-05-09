@@ -150,7 +150,7 @@ spec:
 | Field | Type | Default | Description |
 | --- | --- | --- | --- |
 | `autoscaler.node.enabled` | bool | `false` | `true` — defer node scaling to an external autoscaler; `false` — KSail manages node counts directly |
-| `autoscaler.node.expander` | string | `LeastWaste` | Expander strategy: `LeastWaste`, `LeastNodes`, `Random`. (`Price` is not supported for the Hetzner provider — it causes a fatal crash because the Hetzner cloud provider does not implement the pricing API.) |
+| `autoscaler.node.expander` | string | `LeastWaste` | Expander strategy: `LeastWaste`, `LeastNodes`, `Random`. (`Price` is rejected by KSail with a validation error for the Hetzner provider, because the Hetzner cloud provider does not implement the pricing API.) |
 | `autoscaler.node.maxNodesTotal` | int | `0` | Maximum total nodes across all pools. `0` disables the global cap. |
 | `autoscaler.node.scaleDownUnneededTime` | string | `10m` | How long a node must be unneeded before it is eligible for scale-down (e.g. `10m`) |
 | `autoscaler.node.pools[].name` | string | — | Unique pool name (DNS-1123 label, max 63 chars) |
