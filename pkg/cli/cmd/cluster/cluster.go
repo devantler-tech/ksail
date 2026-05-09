@@ -7630,6 +7630,18 @@ func formatDiffTable(
 	return strings.TrimRight(block.String(), "\n")
 }
 
+// appendChangesAsRows converts a slice of Changes into diffRows and appends
+// them to rows, returning the extended slice.
+func appendChangesAsRows(rows []diffRow, changes []clusterupdate.Change) []diffRow {
+	for _, c := range changes {
+		rows = append(rows, diffRow{
+			categoryIcon(c.Category), c.Field, c.OldValue, c.NewValue, c.Category.String(),
+		})
+	}
+
+	return rows
+}
+
 // collectDiffRows builds an ordered list of diff rows.
 // Order: 🔴 recreate-required → 🟡 reboot-required → 🟢 in-place.
 func collectDiffRows(
@@ -7637,24 +7649,9 @@ func collectDiffRows(
 	totalChanges int,
 ) []diffRow {
 	rows := make([]diffRow, 0, totalChanges)
-
-	for _, c := range diff.RecreateRequired {
-		rows = append(rows, diffRow{
-			categoryIcon(c.Category), c.Field, c.OldValue, c.NewValue, c.Category.String(),
-		})
-	}
-
-	for _, c := range diff.RebootRequired {
-		rows = append(rows, diffRow{
-			categoryIcon(c.Category), c.Field, c.OldValue, c.NewValue, c.Category.String(),
-		})
-	}
-
-	for _, c := range diff.InPlaceChanges {
-		rows = append(rows, diffRow{
-			categoryIcon(c.Category), c.Field, c.OldValue, c.NewValue, c.Category.String(),
-		})
-	}
+	rows = appendChangesAsRows(rows, diff.RecreateRequired)
+	rows = appendChangesAsRows(rows, diff.RebootRequired)
+	rows = appendChangesAsRows(rows, diff.InPlaceChanges)
 
 	return rows
 }
