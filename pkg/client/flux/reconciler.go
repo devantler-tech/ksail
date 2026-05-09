@@ -774,7 +774,8 @@ func triggerReconciliationWithRetry(
 		// return "rate: Wait(n=1) would exceed context deadline" — a plain
 		// fmt.Errorf that does not wrap context.DeadlineExceeded and produces
 		// confusing user-facing error messages if it bubbles up unhandled.
-		if err := waitCtx.Err(); err != nil {
+		err := waitCtx.Err()
+		if err != nil {
 			if lastErr != nil {
 				return fmt.Errorf(
 					"timed out waiting for %s to be available (last error: %v): %w",
@@ -787,7 +788,7 @@ func triggerReconciliationWithRetry(
 			return fmt.Errorf("trigger %s reconciliation: %w", resourceDescription, err)
 		}
 
-		_, err := client.Patch(waitCtx, resourceName, types.MergePatchType, patch, metav1.PatchOptions{})
+		_, err = client.Patch(waitCtx, resourceName, types.MergePatchType, patch, metav1.PatchOptions{})
 		if err == nil {
 			return nil
 		}
