@@ -576,27 +576,28 @@ func (e *Engine) checkAutoscalerPodScalarsChange(
 		clusterupdate.ChangeCategoryInPlace)
 }
 
+// poolsByName indexes a slice of NodePool by name, keeping only the first
+// occurrence of each name (duplicates are silently discarded).
+func poolsByName(pools []v1alpha1.NodePool) map[string]v1alpha1.NodePool {
+	byName := make(map[string]v1alpha1.NodePool, len(pools))
+
+	for _, p := range pools {
+		if _, exists := byName[p.Name]; !exists {
+			byName[p.Name] = p
+		}
+	}
+
+	return byName
+}
+
 // checkAutoscalerPoolChanges compares old and new node pool slices by name and emits
 // in-place diff entries for each addition, removal, or field-level modification.
 func (e *Engine) checkAutoscalerPoolChanges(
 	oldPools, newPools []v1alpha1.NodePool,
 	result *clusterupdate.UpdateResult,
 ) {
-	oldByName := make(map[string]v1alpha1.NodePool, len(oldPools))
-
-	for _, p := range oldPools {
-		if _, exists := oldByName[p.Name]; !exists {
-			oldByName[p.Name] = p
-		}
-	}
-
-	newByName := make(map[string]v1alpha1.NodePool, len(newPools))
-
-	for _, p := range newPools {
-		if _, exists := newByName[p.Name]; !exists {
-			newByName[p.Name] = p
-		}
-	}
+	oldByName := poolsByName(oldPools)
+	newByName := poolsByName(newPools)
 
 	e.checkAutoscalerPoolsAdded(oldByName, newByName, result)
 	e.checkAutoscalerPoolsRemoved(oldByName, newByName, result)
