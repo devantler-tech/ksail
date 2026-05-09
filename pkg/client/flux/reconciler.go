@@ -728,9 +728,10 @@ func handleTransientError(
 	select {
 	case <-waitCtx.Done():
 		return fmt.Errorf(
-			"timed out waiting for %s to be available: %w",
+			"timed out waiting for %s to be available (last error: %v): %w",
 			resourceDescription,
 			err,
+			waitCtx.Err(),
 		)
 	case <-ticker.C:
 		return nil // Continue retry loop
@@ -770,15 +771,16 @@ func triggerReconciliationWithRetry(
 	for {
 		// Guard against an expired context before making an API call.
 		// Without this check, an expired context causes the k8s rate limiter to
-		// return "rate: Wait(n=1) would exceed context deadline", which is not
-		// recognised as a context error and propagates as a confusing permanent
-		// failure.
+		// return "rate: Wait(n=1) would exceed context deadline" — a plain
+		// fmt.Errorf that does not wrap context.DeadlineExceeded and produces
+		// confusing user-facing error messages if it bubbles up unhandled.
 		if err := waitCtx.Err(); err != nil {
 			if lastErr != nil {
 				return fmt.Errorf(
-					"timed out waiting for %s to be available: %w",
+					"timed out waiting for %s to be available (last error: %v): %w",
 					resourceDescription,
 					lastErr,
+					err,
 				)
 			}
 
