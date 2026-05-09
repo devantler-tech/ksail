@@ -63,6 +63,20 @@ func TestIsContextError(t *testing.T) {
 			err:      fmt.Errorf("wrap: %w", errReconcilerNotContext),
 			expected: false,
 		},
+		{
+			// The k8s client-go rate limiter returns a plain fmt.Errorf containing
+			// "would exceed context deadline" when the context deadline is imminent.
+			// This is NOT a wrapped context.DeadlineExceeded, so errors.Is cannot
+			// detect it.  IsContextError must treat it as a context error.
+			name:     "k8s rate limiter context deadline error",
+			err:      fmt.Errorf("client rate limiter Wait returned an error: rate: Wait(n=1) would exceed context deadline"),
+			expected: true,
+		},
+		{
+			name:     "wrapped k8s rate limiter context deadline error",
+			err:      fmt.Errorf("get flux kustomization: %w", fmt.Errorf("client rate limiter Wait returned an error: rate: Wait(n=1) would exceed context deadline")),
+			expected: true,
+		},
 	}
 
 	for index := range tests {
