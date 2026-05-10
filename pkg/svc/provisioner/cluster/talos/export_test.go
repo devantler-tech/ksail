@@ -384,6 +384,6 @@ func (p *Provisioner) ApplyWipeRequiredChangesForTest(
 }
 
 // PartitionWipeDecisionForTest exposes partitionWipeDecision for unit testing.
-func PartitionWipeDecisionForTest(changes []clusterupdate.Change) (ephemeral, state bool) {
+func PartitionWipeDecisionForTest(changes []clusterupdate.Change) (bool, bool) {
 	return partitionWipeDecision(changes)
 }

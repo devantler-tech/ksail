@@ -169,7 +169,7 @@ func encryptionProviderName(
 func classifyMachineConfigChanges(
 	runningConfig, desiredConfig machineClusterConfig,
 ) []clusterupdate.Change {
-	var changes []clusterupdate.Change
+	changes := make([]clusterupdate.Change, 0, 4)
 
 	changes = append(changes, detectVolumeEncryptionChanges(
 		runningConfig.Machine().SystemDiskEncryption(),

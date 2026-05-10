@@ -14,6 +14,7 @@ import (
 	talosclient "github.com/siderolabs/talos/pkg/machinery/client"
 	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
 	"github.com/siderolabs/talos/pkg/machinery/constants"
+	"k8s.io/client-go/kubernetes"
 )
 
 // maintenanceWaitTimeout is the maximum duration to wait for a node to enter
@@ -67,7 +68,7 @@ func (p *Provisioner) applyConfigInsecure(
 	config talosconfig.Provider,
 ) error {
 	if config == nil {
-		return fmt.Errorf("config must not be nil for insecure apply")
+		return fmt.Errorf("insecure apply on %s: %w", nodeIP, ErrConfigNilForInsecureApply)
 	}
 
 	cfgBytes, err := config.Bytes()
@@ -82,7 +83,7 @@ func (p *Provisioner) applyConfigInsecure(
 		// without TLS. InsecureSkipVerify is required to connect and apply the initial
 		// config that will establish PKI. This is equivalent to `talosctl apply-config --insecure`.
 		talosclient.WithTLSConfig(&tls.Config{
-			InsecureSkipVerify: true,
+			InsecureSkipVerify: true, // #nosec G402
 		}),
 	)
 	if err != nil {
@@ -110,13 +111,13 @@ func (p *Provisioner) waitForMaintenanceMode(
 ) error {
 	_, _ = fmt.Fprintf(p.logWriter, "    Waiting for %s to enter maintenance mode...\n", nodeIP)
 
-	return readiness.PollForReadiness(ctx, timeout, func(ctx context.Context) (bool, error) {
+	pollErr := readiness.PollForReadiness(ctx, timeout, func(ctx context.Context) (bool, error) {
 		client, err := talosclient.New(ctx,
 			talosclient.WithEndpoints(nodeIP),
 			//nolint:gosec // Intentional: maintenance mode nodes have no TLS certificates.
 			// See applyConfigInsecure for full rationale.
 			talosclient.WithTLSConfig(&tls.Config{
-				InsecureSkipVerify: true,
+				InsecureSkipVerify: true, // #nosec G402
 			}),
 		)
 		if err != nil {
@@ -129,43 +130,24 @@ func (p *Provisioner) waitForMaintenanceMode(
 
 		return versionErr == nil, nil
 	})
+	if pollErr != nil {
+		return fmt.Errorf("wait for maintenance mode on %s: %w", nodeIP, pollErr)
+	}
+
+	return nil
 }
 
 // rollingWipeEphemeral performs a rolling EPHEMERAL partition wipe across all nodes.
 // For each node: cordon → drain → staged apply → reset EPHEMERAL → wait Ready → uncordon.
-//
-//nolint:cyclop // sequential rolling-wipe workflow with cordon/drain/reset/wait/uncordon
 func (p *Provisioner) rollingWipeEphemeral(
 	ctx context.Context,
 	clusterName string,
 	result *clusterupdate.UpdateResult,
 ) error {
-	kubeconfigPath, err := fsutil.ExpandHomePath(p.options.KubeconfigPath)
+	clientset, ordered, err := p.prepareRollingWipe(ctx, clusterName, "EPHEMERAL")
 	if err != nil {
-		return fmt.Errorf("expand kubeconfig path: %w", err)
+		return err
 	}
-
-	canonicalPath, err := fsutil.EvalCanonicalPath(kubeconfigPath)
-	if err != nil {
-		return fmt.Errorf("canonicalize kubeconfig path: %w", err)
-	}
-
-	kubeconfigContext := p.options.KubeconfigContext
-	if kubeconfigContext == "" {
-		kubeconfigContext = "admin@" + clusterName
-	}
-
-	clientset, err := k8s.NewClientset(canonicalPath, kubeconfigContext)
-	if err != nil {
-		return fmt.Errorf("create kubernetes client: %w", err)
-	}
-
-	nodes, err := p.getNodesByRole(ctx, clusterName)
-	if err != nil {
-		return fmt.Errorf("list nodes for EPHEMERAL wipe: %w", err)
-	}
-
-	ordered := sortNodesWorkersFirst(nodes)
 
 	for i, node := range ordered {
 		_, _ = fmt.Fprintf(p.logWriter,
@@ -173,74 +155,9 @@ func (p *Provisioner) rollingWipeEphemeral(
 			i+1, len(ordered), node.IP, node.Role,
 		)
 
-		nodeName, resolveErr := p.resolveNodeName(ctx, clientset, node.IP)
-		if resolveErr != nil {
-			recordFailedChange(result, node.Role, node.IP, resolveErr)
-
-			return fmt.Errorf("resolve node name for %s: %w", node.IP, resolveErr)
-		}
-
-		_, _ = fmt.Fprintf(p.logWriter, "    Cordoning %s (%s)...\n", nodeName, node.IP)
-
-		if cordonErr := p.cordonNode(ctx, clientset, nodeName); cordonErr != nil {
-			recordFailedChange(result, node.Role, node.IP, cordonErr)
-
-			return fmt.Errorf("cordon %s: %w", nodeName, cordonErr)
-		}
-
-		_, _ = fmt.Fprintf(p.logWriter, "    Draining %s...\n", nodeName)
-
-		if drainErr := p.drainNode(ctx, clientset, nodeName); drainErr != nil {
-			recordFailedChange(result, node.Role, node.IP, drainErr)
-
-			return fmt.Errorf("drain %s: %w", nodeName, drainErr)
-		}
-
-		// Apply config with STAGED mode before reset so new config takes effect on reboot.
-		if p.talosConfigs != nil {
-			config := p.talosConfigs.ControlPlane()
-			if node.Role == RoleWorker {
-				config = p.talosConfigs.Worker()
-			}
-
-			if config != nil {
-				_, _ = fmt.Fprintf(p.logWriter, "    Staging config on %s...\n", node.IP)
-
-				if stageErr := p.applyConfigWithMode(
-					ctx, node.IP, config,
-					machineapi.ApplyConfigurationRequest_STAGED,
-				); stageErr != nil {
-					recordFailedChange(result, node.Role, node.IP, stageErr)
-
-					return fmt.Errorf("stage config on %s: %w", node.IP, stageErr)
-				}
-			}
-		}
-
-		_, _ = fmt.Fprintf(p.logWriter, "    Resetting EPHEMERAL partition on %s...\n", node.IP)
-
-		if resetErr := p.resetNode(ctx, node.IP,
-			[]string{constants.EphemeralPartitionLabel}, true,
-		); resetErr != nil {
-			recordFailedChange(result, node.Role, node.IP, resetErr)
-
-			return fmt.Errorf("reset EPHEMERAL on %s: %w", node.IP, resetErr)
-		}
-
-		_, _ = fmt.Fprintf(p.logWriter, "    Waiting for %s to become ready...\n", nodeName)
-
-		if waitErr := p.waitForK8sNodeReady(ctx, clientset, nodeName, nodeReadinessTimeout); waitErr != nil {
-			recordFailedChange(result, node.Role, node.IP, waitErr)
-
-			return fmt.Errorf("wait for ready after EPHEMERAL wipe on %s: %w", nodeName, waitErr)
-		}
-
-		_, _ = fmt.Fprintf(p.logWriter, "    Uncordoning %s...\n", nodeName)
-
-		if uncordonErr := p.uncordonNode(ctx, clientset, nodeName); uncordonErr != nil {
-			recordFailedChange(result, node.Role, node.IP, uncordonErr)
-
-			return fmt.Errorf("uncordon %s: %w", nodeName, uncordonErr)
+		wipeErr := p.wipeEphemeralSingleNode(ctx, clientset, node, result)
+		if wipeErr != nil {
+			return wipeErr
 		}
 
 		recordAppliedChange(result, node.Role, node.IP, "EPHEMERAL partition wiped")
@@ -254,42 +171,86 @@ func (p *Provisioner) rollingWipeEphemeral(
 	return nil
 }
 
+// wipeEphemeralSingleNode performs the cordon → drain → stage → reset EPHEMERAL →
+// wait → uncordon sequence for a single node.
+//
+//nolint:cyclop // sequential cordon/drain/stage/reset/wait/uncordon steps
+func (p *Provisioner) wipeEphemeralSingleNode(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	node nodeWithRole,
+	result *clusterupdate.UpdateResult,
+) error {
+	nodeName, resolveErr := p.resolveNodeName(ctx, clientset, node.IP)
+	if resolveErr != nil {
+		recordFailedChange(result, node.Role, node.IP, resolveErr)
+
+		return fmt.Errorf("resolve node name for %s: %w", node.IP, resolveErr)
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "    Cordoning %s (%s)...\n", nodeName, node.IP)
+
+	if cordonErr := p.cordonNode(ctx, clientset, nodeName); cordonErr != nil {
+		recordFailedChange(result, node.Role, node.IP, cordonErr)
+
+		return fmt.Errorf("cordon %s: %w", nodeName, cordonErr)
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "    Draining %s...\n", nodeName)
+
+	if drainErr := p.drainNode(ctx, clientset, nodeName); drainErr != nil {
+		recordFailedChange(result, node.Role, node.IP, drainErr)
+
+		return fmt.Errorf("drain %s: %w", nodeName, drainErr)
+	}
+
+	if stageErr := p.stageConfigIfNeeded(ctx, node); stageErr != nil {
+		recordFailedChange(result, node.Role, node.IP, stageErr)
+
+		return fmt.Errorf("stage config on %s: %w", node.IP, stageErr)
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "    Resetting EPHEMERAL partition on %s...\n", node.IP)
+
+	if resetErr := p.resetNode(ctx, node.IP,
+		[]string{constants.EphemeralPartitionLabel}, true,
+	); resetErr != nil {
+		recordFailedChange(result, node.Role, node.IP, resetErr)
+
+		return fmt.Errorf("reset EPHEMERAL on %s: %w", node.IP, resetErr)
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "    Waiting for %s to become ready...\n", nodeName)
+
+	if waitErr := p.waitForK8sNodeReady(ctx, clientset, nodeName, nodeReadinessTimeout); waitErr != nil {
+		recordFailedChange(result, node.Role, node.IP, waitErr)
+
+		return fmt.Errorf("wait for ready after EPHEMERAL wipe on %s: %w", nodeName, waitErr)
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "    Uncordoning %s...\n", nodeName)
+
+	if uncordonErr := p.uncordonNode(ctx, clientset, nodeName); uncordonErr != nil {
+		recordFailedChange(result, node.Role, node.IP, uncordonErr)
+
+		return fmt.Errorf("uncordon %s: %w", nodeName, uncordonErr)
+	}
+
+	return nil
+}
+
 // rollingWipeState performs a rolling STATE partition wipe across all nodes.
 // For each node: cordon → drain → reset STATE → wait maintenance → insecure apply → wait Ready → uncordon.
 // STATE partition wipe causes the node to enter maintenance mode, requiring an insecure apply.
-//
-//nolint:cyclop // sequential rolling-wipe workflow with cordon/drain/reset/wait/apply/uncordon
 func (p *Provisioner) rollingWipeState(
 	ctx context.Context,
 	clusterName string,
 	result *clusterupdate.UpdateResult,
 ) error {
-	kubeconfigPath, err := fsutil.ExpandHomePath(p.options.KubeconfigPath)
+	clientset, ordered, err := p.prepareRollingWipe(ctx, clusterName, "STATE")
 	if err != nil {
-		return fmt.Errorf("expand kubeconfig path: %w", err)
+		return err
 	}
-
-	canonicalPath, err := fsutil.EvalCanonicalPath(kubeconfigPath)
-	if err != nil {
-		return fmt.Errorf("canonicalize kubeconfig path: %w", err)
-	}
-
-	kubeconfigContext := p.options.KubeconfigContext
-	if kubeconfigContext == "" {
-		kubeconfigContext = "admin@" + clusterName
-	}
-
-	clientset, err := k8s.NewClientset(canonicalPath, kubeconfigContext)
-	if err != nil {
-		return fmt.Errorf("create kubernetes client: %w", err)
-	}
-
-	nodes, err := p.getNodesByRole(ctx, clusterName)
-	if err != nil {
-		return fmt.Errorf("list nodes for STATE wipe: %w", err)
-	}
-
-	ordered := sortNodesWorkersFirst(nodes)
 
 	for i, node := range ordered {
 		_, _ = fmt.Fprintf(p.logWriter,
@@ -297,78 +258,9 @@ func (p *Provisioner) rollingWipeState(
 			i+1, len(ordered), node.IP, node.Role,
 		)
 
-		nodeName, resolveErr := p.resolveNodeName(ctx, clientset, node.IP)
-		if resolveErr != nil {
-			recordFailedChange(result, node.Role, node.IP, resolveErr)
-
-			return fmt.Errorf("resolve node name for %s: %w", node.IP, resolveErr)
-		}
-
-		_, _ = fmt.Fprintf(p.logWriter, "    Cordoning %s (%s)...\n", nodeName, node.IP)
-
-		if cordonErr := p.cordonNode(ctx, clientset, nodeName); cordonErr != nil {
-			recordFailedChange(result, node.Role, node.IP, cordonErr)
-
-			return fmt.Errorf("cordon %s: %w", nodeName, cordonErr)
-		}
-
-		_, _ = fmt.Fprintf(p.logWriter, "    Draining %s...\n", nodeName)
-
-		if drainErr := p.drainNode(ctx, clientset, nodeName); drainErr != nil {
-			recordFailedChange(result, node.Role, node.IP, drainErr)
-
-			return fmt.Errorf("drain %s: %w", nodeName, drainErr)
-		}
-
-		_, _ = fmt.Fprintf(p.logWriter, "    Resetting STATE partition on %s...\n", node.IP)
-
-		if resetErr := p.resetNode(ctx, node.IP,
-			[]string{constants.StatePartitionLabel}, true,
-		); resetErr != nil {
-			recordFailedChange(result, node.Role, node.IP, resetErr)
-
-			return fmt.Errorf("reset STATE on %s: %w", node.IP, resetErr)
-		}
-
-		// STATE wipe causes the node to enter maintenance mode.
-		if waitErr := p.waitForMaintenanceMode(ctx, node.IP, maintenanceWaitTimeout); waitErr != nil {
-			recordFailedChange(result, node.Role, node.IP, waitErr)
-
-			return fmt.Errorf("wait for maintenance mode on %s: %w", node.IP, waitErr)
-		}
-
-		// Apply config via insecure connection (node is in maintenance mode).
-		if p.talosConfigs != nil {
-			config := p.talosConfigs.ControlPlane()
-			if node.Role == RoleWorker {
-				config = p.talosConfigs.Worker()
-			}
-
-			if config != nil {
-				_, _ = fmt.Fprintf(p.logWriter, "    Applying config (insecure) on %s...\n", node.IP)
-
-				if applyErr := p.applyConfigInsecure(ctx, node.IP, config); applyErr != nil {
-					recordFailedChange(result, node.Role, node.IP, applyErr)
-
-					return fmt.Errorf("insecure apply on %s: %w", node.IP, applyErr)
-				}
-			}
-		}
-
-		_, _ = fmt.Fprintf(p.logWriter, "    Waiting for %s to become ready...\n", nodeName)
-
-		if waitErr := p.waitForK8sNodeReady(ctx, clientset, nodeName, nodeReadinessTimeout); waitErr != nil {
-			recordFailedChange(result, node.Role, node.IP, waitErr)
-
-			return fmt.Errorf("wait for ready after STATE wipe on %s: %w", nodeName, waitErr)
-		}
-
-		_, _ = fmt.Fprintf(p.logWriter, "    Uncordoning %s...\n", nodeName)
-
-		if uncordonErr := p.uncordonNode(ctx, clientset, nodeName); uncordonErr != nil {
-			recordFailedChange(result, node.Role, node.IP, uncordonErr)
-
-			return fmt.Errorf("uncordon %s: %w", nodeName, uncordonErr)
+		wipeErr := p.wipeStateSingleNode(ctx, clientset, node, result)
+		if wipeErr != nil {
+			return wipeErr
 		}
 
 		recordAppliedChange(result, node.Role, node.IP, "STATE partition wiped")
@@ -382,9 +274,171 @@ func (p *Provisioner) rollingWipeState(
 	return nil
 }
 
+// wipeStateSingleNode performs the cordon → drain → reset STATE → wait maintenance →
+// insecure apply → wait Ready → uncordon sequence for a single node.
+//
+//nolint:cyclop // sequential cordon/drain/reset/wait-maintenance/apply/wait-ready/uncordon steps
+func (p *Provisioner) wipeStateSingleNode(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	node nodeWithRole,
+	result *clusterupdate.UpdateResult,
+) error {
+	nodeName, resolveErr := p.resolveNodeName(ctx, clientset, node.IP)
+	if resolveErr != nil {
+		recordFailedChange(result, node.Role, node.IP, resolveErr)
+
+		return fmt.Errorf("resolve node name for %s: %w", node.IP, resolveErr)
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "    Cordoning %s (%s)...\n", nodeName, node.IP)
+
+	if cordonErr := p.cordonNode(ctx, clientset, nodeName); cordonErr != nil {
+		recordFailedChange(result, node.Role, node.IP, cordonErr)
+
+		return fmt.Errorf("cordon %s: %w", nodeName, cordonErr)
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "    Draining %s...\n", nodeName)
+
+	if drainErr := p.drainNode(ctx, clientset, nodeName); drainErr != nil {
+		recordFailedChange(result, node.Role, node.IP, drainErr)
+
+		return fmt.Errorf("drain %s: %w", nodeName, drainErr)
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "    Resetting STATE partition on %s...\n", node.IP)
+
+	if resetErr := p.resetNode(ctx, node.IP,
+		[]string{constants.StatePartitionLabel}, true,
+	); resetErr != nil {
+		recordFailedChange(result, node.Role, node.IP, resetErr)
+
+		return fmt.Errorf("reset STATE on %s: %w", node.IP, resetErr)
+	}
+
+	// STATE wipe causes the node to enter maintenance mode.
+	if waitErr := p.waitForMaintenanceMode(ctx, node.IP, maintenanceWaitTimeout); waitErr != nil {
+		recordFailedChange(result, node.Role, node.IP, waitErr)
+
+		return fmt.Errorf("wait for maintenance mode on %s: %w", node.IP, waitErr)
+	}
+
+	if applyErr := p.applyInsecureConfigIfNeeded(ctx, node); applyErr != nil {
+		recordFailedChange(result, node.Role, node.IP, applyErr)
+
+		return fmt.Errorf("insecure apply on %s: %w", node.IP, applyErr)
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "    Waiting for %s to become ready...\n", nodeName)
+
+	if waitErr := p.waitForK8sNodeReady(ctx, clientset, nodeName, nodeReadinessTimeout); waitErr != nil {
+		recordFailedChange(result, node.Role, node.IP, waitErr)
+
+		return fmt.Errorf("wait for ready after STATE wipe on %s: %w", nodeName, waitErr)
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "    Uncordoning %s...\n", nodeName)
+
+	if uncordonErr := p.uncordonNode(ctx, clientset, nodeName); uncordonErr != nil {
+		recordFailedChange(result, node.Role, node.IP, uncordonErr)
+
+		return fmt.Errorf("uncordon %s: %w", nodeName, uncordonErr)
+	}
+
+	return nil
+}
+
+// prepareRollingWipe creates the Kubernetes clientset and returns sorted nodes
+// for a rolling wipe operation. Shared between rollingWipeEphemeral and rollingWipeState.
+func (p *Provisioner) prepareRollingWipe(
+	ctx context.Context,
+	clusterName, partitionType string,
+) (kubernetes.Interface, []nodeWithRole, error) {
+	kubeconfigPath, err := fsutil.ExpandHomePath(p.options.KubeconfigPath)
+	if err != nil {
+		return nil, nil, fmt.Errorf("expand kubeconfig path: %w", err)
+	}
+
+	canonicalPath, err := fsutil.EvalCanonicalPath(kubeconfigPath)
+	if err != nil {
+		return nil, nil, fmt.Errorf("canonicalize kubeconfig path: %w", err)
+	}
+
+	kubeconfigContext := p.options.KubeconfigContext
+	if kubeconfigContext == "" {
+		kubeconfigContext = "admin@" + clusterName
+	}
+
+	clientset, err := k8s.NewClientset(canonicalPath, kubeconfigContext)
+	if err != nil {
+		return nil, nil, fmt.Errorf("create kubernetes client: %w", err)
+	}
+
+	nodes, err := p.getNodesByRole(ctx, clusterName)
+	if err != nil {
+		return nil, nil, fmt.Errorf("list nodes for %s wipe: %w", partitionType, err)
+	}
+
+	return clientset, sortNodesWorkersFirst(nodes), nil
+}
+
+// stageConfigIfNeeded applies config with STAGED mode before a partition reset
+// so new config takes effect on reboot.
+func (p *Provisioner) stageConfigIfNeeded(
+	ctx context.Context,
+	node nodeWithRole,
+) error {
+	if p.talosConfigs == nil {
+		return nil
+	}
+
+	config := p.talosConfigs.ControlPlane()
+	if node.Role == RoleWorker {
+		config = p.talosConfigs.Worker()
+	}
+
+	if config == nil {
+		return nil
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "    Staging config on %s...\n", node.IP)
+
+	return p.applyConfigWithMode(
+		ctx, node.IP, config,
+		machineapi.ApplyConfigurationRequest_STAGED,
+	)
+}
+
+// applyInsecureConfigIfNeeded applies config via insecure connection when the
+// node is in maintenance mode (after STATE partition wipe).
+func (p *Provisioner) applyInsecureConfigIfNeeded(
+	ctx context.Context,
+	node nodeWithRole,
+) error {
+	if p.talosConfigs == nil {
+		return nil
+	}
+
+	config := p.talosConfigs.ControlPlane()
+	if node.Role == RoleWorker {
+		config = p.talosConfigs.Worker()
+	}
+
+	if config == nil {
+		return nil
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "    Applying config (insecure) on %s...\n", node.IP)
+
+	return p.applyConfigInsecure(ctx, node.IP, config)
+}
+
 // partitionWipeDecision determines which partitions need wiping based on the
 // wipe-required changes in the update result.
-func partitionWipeDecision(changes []clusterupdate.Change) (ephemeral, state bool) {
+func partitionWipeDecision(changes []clusterupdate.Change) (bool, bool) {
+	var ephemeral, state bool
+
 	for _, change := range changes {
 		switch change.Field {
 		case FieldEphemeralEncryption:
@@ -394,7 +448,7 @@ func partitionWipeDecision(changes []clusterupdate.Change) (ephemeral, state boo
 		}
 	}
 
-	return
+	return ephemeral, state
 }
 
 // applyWipeRequiredChanges orchestrates partition wipe operations for

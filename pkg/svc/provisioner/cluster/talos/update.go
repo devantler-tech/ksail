@@ -38,27 +38,7 @@ func (p *Provisioner) Update(
 
 	// Detect disruptive config changes (encryption, CNI, disk quota) and merge
 	// into diff before PrepareUpdate, so --dry-run includes wipe-required changes.
-	// This runs before secrets sync because it uses the saved talosconfig on disk
-	// (not the in-memory configs that need secrets sync).
-	if diffErr == nil && diff != nil {
-		clusterName := p.resolveClusterName(name)
-
-		wipeChanges, detectErr := p.detectDisruptiveConfigChanges(ctx, clusterName)
-		if detectErr != nil {
-			_, _ = fmt.Fprintf(p.logWriter, "  ⚠ Failed to detect disruptive config changes: %v\n", detectErr)
-		} else {
-			for _, change := range wipeChanges {
-				switch change.Category {
-				case clusterupdate.ChangeCategoryWipeRequired:
-					diff.WipeRequired = append(diff.WipeRequired, change)
-				case clusterupdate.ChangeCategoryRebootRequired:
-					diff.RebootRequired = append(diff.RebootRequired, change)
-				default:
-					diff.InPlaceChanges = append(diff.InPlaceChanges, change)
-				}
-			}
-		}
-	}
+	p.mergeDisruptiveChanges(ctx, name, diff, diffErr)
 
 	result, proceed, prepErr := clusterupdate.PrepareUpdate(
 		diff, diffErr, opts, clustererr.ErrRecreationRequired,
@@ -69,70 +49,85 @@ func (p *Provisioner) Update(
 
 	clusterName := p.resolveClusterName(name)
 
+	return p.applyUpdateChanges(ctx, clusterName, oldSpec, newSpec, diff, result, opts)
+}
+
+// mergeDisruptiveChanges detects disruptive config changes (encryption, CNI, disk quota)
+// and merges them into the diff before PrepareUpdate.
+func (p *Provisioner) mergeDisruptiveChanges(
+	ctx context.Context,
+	name string,
+	diff *clusterupdate.UpdateResult,
+	diffErr error,
+) {
+	if diffErr != nil || diff == nil {
+		return
+	}
+
+	clusterName := p.resolveClusterName(name)
+
+	wipeChanges, detectErr := p.detectDisruptiveConfigChanges(ctx, clusterName)
+	if detectErr != nil {
+		_, _ = fmt.Fprintf(p.logWriter, "  ⚠ Failed to detect disruptive config changes: %v\n", detectErr)
+
+		return
+	}
+
+	for _, change := range wipeChanges {
+		switch change.Category {
+		case clusterupdate.ChangeCategoryWipeRequired:
+			diff.WipeRequired = append(diff.WipeRequired, change)
+		case clusterupdate.ChangeCategoryRebootRequired:
+			diff.RebootRequired = append(diff.RebootRequired, change)
+		case clusterupdate.ChangeCategoryRecreateRequired:
+			diff.RecreateRequired = append(diff.RecreateRequired, change)
+		default:
+			diff.InPlaceChanges = append(diff.InPlaceChanges, change)
+		}
+	}
+}
+
+// applyUpdateChanges applies all update changes after PrepareUpdate succeeds.
+//
+//nolint:cyclop // sequential update workflow with multiple change categories
+func (p *Provisioner) applyUpdateChanges(
+	ctx context.Context,
+	clusterName string,
+	oldSpec, newSpec *v1alpha1.ClusterSpec,
+	diff *clusterupdate.UpdateResult,
+	result *clusterupdate.UpdateResult,
+	opts clusterupdate.UpdateOptions,
+) (*clusterupdate.UpdateResult, error) {
 	// Sync Hetzner Cloud Firewall rules to the hardened set.
-	// This migrates existing clusters that were created with insecure rules
-	// (etcd, kubelet, trustd exposed to 0.0.0.0/0) to the secure configuration.
 	syncErr := p.syncHetznerFirewallRules(ctx, clusterName)
 	if syncErr != nil {
 		return result, syncErr
 	}
 
-	// For Omni-managed clusters, refresh kubeconfig and talosconfig before any
-	// Helm/K8s operations. cluster create always calls saveOmniConfigs, but
-	// cluster update did not, leaving the on-disk kubeconfig stale after token
-	// rotation or Omni-side reissuance (Fixes #3922).
 	configErr := p.refreshOmniConfigsIfNeeded(ctx, clusterName)
 	if configErr != nil {
 		return result, fmt.Errorf("failed to refresh Omni configs before update: %w", configErr)
 	}
 
-	// Sync in-memory machine configs with the running cluster's PKI secrets.
-	// ConfigManager.Load() generates fresh CA/tokens on every call, but scale-up
-	// and in-place config changes must use the same secrets as the running cluster
-	// to avoid "certificate signed by unknown authority" errors on new nodes.
 	secretErr := p.syncSecretsFromCluster(ctx, clusterName, oldSpec, newSpec, result)
 	if secretErr != nil {
 		return result, fmt.Errorf("failed to sync cluster secrets: %w", secretErr)
 	}
 
-	// Wipe-required changes were already detected and merged into the result
-	// before PrepareUpdate. Gate on --force before executing the wipe migration.
-	if result.HasWipeRequired() && !opts.Force {
-		wipeChanges := result.WipeRequired
-		_, _ = fmt.Fprintf(p.logWriter, "\n  ⚠ Detected %d change(s) requiring partition wipe:\n", len(wipeChanges))
-
-		for _, change := range wipeChanges {
-			_, _ = fmt.Fprintf(p.logWriter, "    • %s: %s → %s (%s)\n",
-				change.Field, change.OldValue, change.NewValue, change.Reason)
-		}
-
-		_, _ = fmt.Fprintf(p.logWriter, "\n  Use --force to proceed with partition wipe migration.\n")
-		_, _ = fmt.Fprintf(p.logWriter, "  Manual procedure: https://docs.siderolabs.com/talos/v1.13/configure-your-talos-cluster/storage-and-disk-management/disk-encryption#going-from-unencrypted-to-encrypted-and-vice-versa\n")
-
-		return result, fmt.Errorf("%w: %d changes require partition wipe (use --force to proceed)",
-			clusterupdate.ErrWipeRequired, len(wipeChanges))
-	}
-
+	// Execute wipe migration if --force was set (PrepareUpdate already blocks without --force)
 	if result.HasWipeRequired() {
-		// Force is set — execute wipe migration
 		wipeErr := p.applyWipeRequiredChanges(ctx, clusterName, result)
 		if wipeErr != nil {
 			return result, fmt.Errorf("failed to apply wipe-required changes: %w", wipeErr)
 		}
 	}
 
-	// Handle node scaling changes
 	scaleErr := p.applyNodeScalingChanges(ctx, clusterName, oldSpec, newSpec, result)
 	if scaleErr != nil {
 		return result, fmt.Errorf("failed to apply node scaling changes: %w", scaleErr)
 	}
 
 	// Handle in-place config changes (NO_REBOOT mode).
-	// Only re-apply machine configs when the provisioner detected actual changes;
-	// component-level changes (e.g. loadBalancer) are handled by the reconciler.
-	// Omni manages node configuration through its own API; the diff for Omni clusters
-	// only ever contains node-count fields (controlPlanes/workers) which are already
-	// handled (and skipped) above, so direct Talos machine config pushes are not needed.
 	if p.shouldApplyInPlaceChanges(diff) {
 		cfgErr := p.applyInPlaceConfigChanges(ctx, clusterName, result)
 		if cfgErr != nil {
@@ -140,26 +135,11 @@ func (p *Provisioner) Update(
 		}
 	}
 
-	// Handle reboot-required changes (STAGED mode with rolling reboot)
 	rebootErr := p.applyRebootChangesIfNeeded(ctx, clusterName, result, diff, opts)
 	if rebootErr != nil {
 		return result, fmt.Errorf("failed to apply reboot-required changes: %w", rebootErr)
 	}
 
-	// Talos OS version upgrades are NOT performed here. They are only triggered
-	// explicitly via `ksail cluster update --update-distribution`, which goes
-	// through the UpgradeDistribution() path. Running applyTalosVersionUpgrade()
-	// unconditionally would silently attempt to change the Talos version to
-	// KSail's baked-in default, which may differ from what the cluster is
-	// actually running (e.g., booted from a Hetzner ISO at a different version).
-	// See: https://github.com/devantler-tech/ksail/issues/4260
-
-	// Ensure the cluster-autoscaler-config Secret exists when the node autoscaler
-	// is enabled. During cluster create, this secret is created by
-	// bootstrapAndFinalize. During update the component reconciler installs the
-	// Helm chart but did not previously create the prerequisite secret, causing
-	// the autoscaler pod to enter CreateContainerConfigError.
-	// See: https://github.com/devantler-tech/ksail/issues/4606
 	secretErr = p.ensureAutoscalerSecretIfNeeded(ctx, clusterName)
 	if secretErr != nil {
 		return result, fmt.Errorf("failed to ensure autoscaler config secret: %w", secretErr)

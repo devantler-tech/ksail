@@ -66,11 +66,12 @@ func (p *Provisioner) drainNode(ctx context.Context, clientset kubernetes.Interf
 
 	pods, errs := drainer.GetPodsForDeletion(nodeName)
 	if len(errs) > 0 {
-		return fmt.Errorf("get pods for drain on %s: %v", nodeName, errs)
+		return fmt.Errorf("%w on %s: %v", ErrDrainPodRetrieval, nodeName, errs)
 	}
 
-	if err := drainer.DeleteOrEvictPods(pods.Pods()); err != nil {
-		return fmt.Errorf("drain node %s: %w", nodeName, err)
+	deleteErr := drainer.DeleteOrEvictPods(pods.Pods())
+	if deleteErr != nil {
+		return fmt.Errorf("drain node %s: %w", nodeName, deleteErr)
 	}
 
 	return nil
@@ -123,7 +124,7 @@ func (p *Provisioner) waitForK8sNodeReady(
 	nodeName string,
 	timeout time.Duration,
 ) error {
-	return readiness.PollForReadiness(ctx, timeout, func(ctx context.Context) (bool, error) {
+	pollErr := readiness.PollForReadiness(ctx, timeout, func(ctx context.Context) (bool, error) {
 		node, err := clientset.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
 		if err != nil {
 			return false, nil //nolint:nilerr // returning nil to continue polling
@@ -137,10 +138,15 @@ func (p *Provisioner) waitForK8sNodeReady(
 
 		return false, nil
 	})
+	if pollErr != nil {
+		return fmt.Errorf("wait for node %s readiness: %w", nodeName, pollErr)
+	}
+
+	return nil
 }
 
 // resolveNodeName maps a Talos node IP address to its Kubernetes node name.
-// It searches all nodes for one with a matching InternalIP address.
+// It searches all nodes for one with a matching InternalIP or ExternalIP address.
 func (p *Provisioner) resolveNodeName(
 	ctx context.Context,
 	clientset kubernetes.Interface,
@@ -153,13 +159,13 @@ func (p *Provisioner) resolveNodeName(
 
 	for i := range nodes.Items {
 		for _, addr := range nodes.Items[i].Status.Addresses {
-			if addr.Type == corev1.NodeInternalIP && addr.Address == nodeIP {
+			if (addr.Type == corev1.NodeInternalIP || addr.Type == corev1.NodeExternalIP) && addr.Address == nodeIP {
 				return nodes.Items[i].Name, nil
 			}
 		}
 	}
 
-	return "", fmt.Errorf("no Kubernetes node found with IP %s", nodeIP)
+	return "", fmt.Errorf("%w: %s", ErrNodeNotFoundByIP, nodeIP)
 }
 
 // sortNodesWorkersFirst returns nodes sorted with workers first, then control-planes.
@@ -266,14 +272,16 @@ func (p *Provisioner) rollingRebootSingleNode(
 
 	_, _ = fmt.Fprintf(p.logWriter, "    Cordoning %s (%s)...\n", nodeName, node.IP)
 
-	if err := p.cordonNode(ctx, clientset, nodeName); err != nil {
-		return fmt.Errorf("cordon: %w", err)
+	cordonErr := p.cordonNode(ctx, clientset, nodeName)
+	if cordonErr != nil {
+		return fmt.Errorf("cordon: %w", cordonErr)
 	}
 
 	_, _ = fmt.Fprintf(p.logWriter, "    Draining %s...\n", nodeName)
 
-	if err := p.drainNode(ctx, clientset, nodeName); err != nil {
-		return fmt.Errorf("drain: %w", err)
+	drainErr := p.drainNode(ctx, clientset, nodeName)
+	if drainErr != nil {
+		return fmt.Errorf("drain: %w", drainErr)
 	}
 
 	// Apply config with STAGED mode — config takes effect on next reboot.
@@ -286,19 +294,21 @@ func (p *Provisioner) rollingRebootSingleNode(
 		if config != nil {
 			_, _ = fmt.Fprintf(p.logWriter, "    Staging config on %s...\n", node.IP)
 
-			if err := p.applyConfigWithMode(
-				ctx, node.IP, config,
-				machineapi.ApplyConfigurationRequest_STAGED,
-			); err != nil {
-				return fmt.Errorf("stage config: %w", err)
-			}
+				stageErr := p.applyConfigWithMode(
+					ctx, node.IP, config,
+					machineapi.ApplyConfigurationRequest_STAGED,
+				)
+				if stageErr != nil {
+					return fmt.Errorf("stage config: %w", stageErr)
+				}
 		}
 	}
 
 	_, _ = fmt.Fprintf(p.logWriter, "    Rebooting %s...\n", node.IP)
 
-	if err := p.rebootNode(ctx, node.IP); err != nil {
-		return fmt.Errorf("reboot: %w", err)
+	rebootErr := p.rebootNode(ctx, node.IP)
+	if rebootErr != nil {
+		return fmt.Errorf("reboot: %w", rebootErr)
 	}
 
 	_, _ = fmt.Fprintf(p.logWriter, "    Waiting for %s to become ready...\n", nodeName)

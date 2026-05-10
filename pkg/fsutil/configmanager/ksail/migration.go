@@ -185,7 +185,7 @@ func warnIngressFirewallDeprecation(cfg *v1alpha1.Cluster, out io.Writer) {
 	_, _ = fmt.Fprintf(out,
 		"warning: spec.provider.hetzner.ingressFirewall is deprecated for Talos clusters. "+
 			"To disable the ingress firewall, remove the firewall patch files from "+
-			"talos/cluster/ and talos/control-planes/ instead.\n")
+			"talos/cluster/, talos/control-planes/, and talos/workers/ instead.\n")
 }
 
 func warnImageVerificationDeprecation(cfg *v1alpha1.Cluster, out io.Writer) {

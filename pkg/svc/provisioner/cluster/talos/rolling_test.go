@@ -8,7 +8,7 @@ import (
 	talosprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/talos"
 )
 
-func TestRolling_SortNodesWorkersFirst(t *testing.T) {
+func TestRolling_SortNodesWorkersFirst(t *testing.T) { //nolint:funlen // table-driven tests
 	t.Parallel()
 
 	tests := []struct {

@@ -14,7 +14,7 @@ import (
 
 func boolPtr(b bool) *bool { return &b }
 
-func TestDetectVolumeEncryptionChanges(t *testing.T) {
+func TestDetectVolumeEncryptionChanges(t *testing.T) { //nolint:funlen // table-driven tests
 	t.Parallel()
 
 	tests := []struct {
@@ -114,15 +114,15 @@ func TestDetectVolumeEncryptionChanges(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			changes := talosprovisioner.DetectVolumeEncryptionChangesForTest(tt.running, tt.desired)
+			changes := talosprovisioner.DetectVolumeEncryptionChangesForTest(testCase.running, testCase.desired)
 
-			require.Len(t, changes, tt.expectedCount)
+			require.Len(t, changes, testCase.expectedCount)
 
-			for i, field := range tt.expectedFields {
+			for i, field := range testCase.expectedFields {
 				assert.Equal(t, field, changes[i].Field)
 				assert.Equal(t, clusterupdate.ChangeCategoryWipeRequired, changes[i].Category)
 			}
@@ -130,7 +130,7 @@ func TestDetectVolumeEncryptionChanges(t *testing.T) {
 	}
 }
 
-func TestEncryptionProviderName(t *testing.T) {
+func TestEncryptionProviderName(t *testing.T) { //nolint:funlen // table-driven tests
 	t.Parallel()
 
 	tests := []struct {
@@ -185,17 +185,17 @@ func TestEncryptionProviderName(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			result := talosprovisioner.EncryptionProviderNameForTest(tt.encryption, tt.partitionLabel)
-			assert.Equal(t, tt.expected, result)
+			result := talosprovisioner.EncryptionProviderNameForTest(testCase.encryption, testCase.partitionLabel)
+			assert.Equal(t, testCase.expected, result)
 		})
 	}
 }
 
-func TestDetectCNIChanges(t *testing.T) {
+func TestDetectCNIChanges(t *testing.T) { //nolint:funlen // table-driven tests
 	t.Parallel()
 
 	tests := []struct {
@@ -285,15 +285,15 @@ func TestDetectCNIChanges(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			changes := talosprovisioner.DetectCNIChangesForTest(tt.running, tt.desired)
+			changes := talosprovisioner.DetectCNIChangesForTest(testCase.running, testCase.desired)
 
-			require.Len(t, changes, tt.expectedCount)
+			require.Len(t, changes, testCase.expectedCount)
 
-			for i, field := range tt.expectedFields {
+			for i, field := range testCase.expectedFields {
 				assert.Equal(t, field, changes[i].Field)
 				assert.Equal(t, clusterupdate.ChangeCategoryRebootRequired, changes[i].Category)
 			}
@@ -301,7 +301,7 @@ func TestDetectCNIChanges(t *testing.T) {
 	}
 }
 
-func TestDetectDiskQuotaChanges(t *testing.T) {
+func TestDetectDiskQuotaChanges(t *testing.T) { //nolint:funlen // table-driven tests
 	t.Parallel()
 
 	tests := []struct {
@@ -404,15 +404,15 @@ func TestDetectDiskQuotaChanges(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			changes := talosprovisioner.DetectDiskQuotaChangesForTest(tt.running, tt.desired)
+			changes := talosprovisioner.DetectDiskQuotaChangesForTest(testCase.running, testCase.desired)
 
-			require.Len(t, changes, tt.expectedCount)
+			require.Len(t, changes, testCase.expectedCount)
 
-			for i, field := range tt.expectedFields {
+			for i, field := range testCase.expectedFields {
 				assert.Equal(t, field, changes[i].Field)
 				assert.Equal(t, clusterupdate.ChangeCategoryRebootRequired, changes[i].Category)
 			}
@@ -420,7 +420,7 @@ func TestDetectDiskQuotaChanges(t *testing.T) {
 	}
 }
 
-func TestClassifyMachineConfigChanges(t *testing.T) {
+func TestClassifyMachineConfigChanges(t *testing.T) { //nolint:funlen // table-driven tests
 	t.Parallel()
 
 	tests := []struct {
@@ -543,13 +543,13 @@ func TestClassifyMachineConfigChanges(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			changes := talosprovisioner.ClassifyMachineConfigChangesForTest(tt.running, tt.desired)
+			changes := talosprovisioner.ClassifyMachineConfigChangesForTest(testCase.running, testCase.desired)
 
-			require.Len(t, changes, tt.expectedTotal)
+			require.Len(t, changes, testCase.expectedTotal)
 
 			var wipeCount, rebootCount int
 			for _, c := range changes {
@@ -558,16 +558,19 @@ func TestClassifyMachineConfigChanges(t *testing.T) {
 					wipeCount++
 				case clusterupdate.ChangeCategoryRebootRequired:
 					rebootCount++
+				case clusterupdate.ChangeCategoryInPlace,
+					clusterupdate.ChangeCategoryRecreateRequired:
+					// not counted in this test
 				}
 			}
 
-			assert.Equal(t, tt.expectedWipe, wipeCount, "wipe-required count")
-			assert.Equal(t, tt.expectedReboot, rebootCount, "reboot-required count")
+			assert.Equal(t, testCase.expectedWipe, wipeCount, "wipe-required count")
+			assert.Equal(t, testCase.expectedReboot, rebootCount, "reboot-required count")
 		})
 	}
 }
 
-func TestCNIName(t *testing.T) {
+func TestCNIName(t *testing.T) { //nolint:funlen // table-driven tests
 	t.Parallel()
 
 	tests := []struct {
@@ -624,17 +627,17 @@ func TestCNIName(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			result := talosprovisioner.CNINameForTest(tt.config)
-			assert.Equal(t, tt.expected, result)
+			result := talosprovisioner.CNINameForTest(testCase.config)
+			assert.Equal(t, testCase.expected, result)
 		})
 	}
 }
 
-func TestDiskQuotaEnabled(t *testing.T) {
+func TestDiskQuotaEnabled(t *testing.T) { //nolint:funlen // table-driven tests
 	t.Parallel()
 
 	tests := []struct {
@@ -691,12 +694,12 @@ func TestDiskQuotaEnabled(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			result := talosprovisioner.DiskQuotaEnabledForTest(tt.config)
-			assert.Equal(t, tt.expected, result)
+			result := talosprovisioner.DiskQuotaEnabledForTest(testCase.config)
+			assert.Equal(t, testCase.expected, result)
 		})
 	}
 }
