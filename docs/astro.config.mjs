@@ -71,6 +71,7 @@ export default defineConfig({
             { label: "OIDC Authentication", link: "/guides/oidc-authentication/" },
             { label: "PR Preview Clusters", link: "/guides/pr-preview-clusters/" },
             { label: "ArgoCD ApplicationSet", link: "/guides/argocd-applicationset/" },
+            { label: "Talos Disk Encryption Migration", link: "/guides/talos-disk-encryption/" },
           ],
         },
         {
