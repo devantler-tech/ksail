@@ -879,6 +879,6 @@ func TestMergePersistedState_ReturnsErrorForCorruptState(t *testing.T) {
 		WithLogWriter(io.Discard)
 
 	err = provisioner.MergePersistedStateForTest(spec, clusterName)
-	assert.Error(t, err, "corrupt state should return an error")
+	require.Error(t, err, "corrupt state should return an error")
 	assert.Contains(t, err.Error(), "load persisted cluster state")
 }
