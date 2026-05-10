@@ -60,8 +60,9 @@ func (p *Provisioner) resetNode(
 }
 
 // applyConfigInsecure applies configuration to a node in maintenance mode.
-// During maintenance mode, the node's API is available but without TLS,
-// so we need an insecure client connection.
+// During maintenance mode, the node's Talos API requires an insecure TLS
+// connection (no certificate validation) because the node has no PKI yet.
+// This is equivalent to `talosctl apply-config --insecure`.
 func (p *Provisioner) applyConfigInsecure(
 	ctx context.Context,
 	nodeIP string,
@@ -387,15 +388,7 @@ func (p *Provisioner) stageConfigIfNeeded(
 	ctx context.Context,
 	node nodeWithRole,
 ) error {
-	if p.talosConfigs == nil {
-		return nil
-	}
-
-	config := p.talosConfigs.ControlPlane()
-	if node.Role == RoleWorker {
-		config = p.talosConfigs.Worker()
-	}
-
+	config := p.configForRole(node.Role)
 	if config == nil {
 		return nil
 	}
@@ -414,15 +407,7 @@ func (p *Provisioner) applyInsecureConfigIfNeeded(
 	ctx context.Context,
 	node nodeWithRole,
 ) error {
-	if p.talosConfigs == nil {
-		return nil
-	}
-
-	config := p.talosConfigs.ControlPlane()
-	if node.Role == RoleWorker {
-		config = p.talosConfigs.Worker()
-	}
-
+	config := p.configForRole(node.Role)
 	if config == nil {
 		return nil
 	}

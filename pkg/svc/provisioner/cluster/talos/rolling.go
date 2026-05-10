@@ -24,11 +24,12 @@ const drainTimeout = 120 * time.Second
 // after reboot.
 const nodeReadinessTimeout = 10 * time.Minute
 
-// cordonNode marks a Kubernetes node as unschedulable.
-func (p *Provisioner) cordonNode(
+// setNodeSchedulable marks a Kubernetes node as schedulable or unschedulable.
+func (p *Provisioner) setNodeSchedulable(
 	ctx context.Context,
 	clientset kubernetes.Interface,
 	nodeName string,
+	schedulable bool,
 ) error {
 	node, err := clientset.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
 	if err != nil {
@@ -36,20 +37,38 @@ func (p *Provisioner) cordonNode(
 	}
 
 	helper := kubedrain.NewCordonHelper(node)
-	if !helper.UpdateIfRequired(true) {
-		return nil // already cordoned
+	if !helper.UpdateIfRequired(!schedulable) {
+		return nil // already in desired state
 	}
 
 	patchErr, updateErr := helper.PatchOrReplaceWithContext(ctx, clientset, false)
 	if patchErr != nil {
-		return fmt.Errorf("cordon node %s (patch): %w", nodeName, patchErr)
+		return fmt.Errorf("set schedulable=%v on node %s (patch): %w", schedulable, nodeName, patchErr)
 	}
 
 	if updateErr != nil {
-		return fmt.Errorf("cordon node %s (update): %w", nodeName, updateErr)
+		return fmt.Errorf("set schedulable=%v on node %s (update): %w", schedulable, nodeName, updateErr)
 	}
 
 	return nil
+}
+
+// cordonNode marks a Kubernetes node as unschedulable.
+func (p *Provisioner) cordonNode(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	nodeName string,
+) error {
+	return p.setNodeSchedulable(ctx, clientset, nodeName, false)
+}
+
+// uncordonNode marks a Kubernetes node as schedulable.
+func (p *Provisioner) uncordonNode(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	nodeName string,
+) error {
+	return p.setNodeSchedulable(ctx, clientset, nodeName, true)
 }
 
 // drainNode evicts all pods from a Kubernetes node.
@@ -78,34 +97,6 @@ func (p *Provisioner) drainNode(
 	deleteErr := drainer.DeleteOrEvictPods(pods.Pods())
 	if deleteErr != nil {
 		return fmt.Errorf("drain node %s: %w", nodeName, deleteErr)
-	}
-
-	return nil
-}
-
-// uncordonNode marks a Kubernetes node as schedulable.
-func (p *Provisioner) uncordonNode(
-	ctx context.Context,
-	clientset kubernetes.Interface,
-	nodeName string,
-) error {
-	node, err := clientset.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
-	if err != nil {
-		return fmt.Errorf("get node %s: %w", nodeName, err)
-	}
-
-	helper := kubedrain.NewCordonHelper(node)
-	if !helper.UpdateIfRequired(false) {
-		return nil // already uncordoned
-	}
-
-	patchErr, updateErr := helper.PatchOrReplaceWithContext(ctx, clientset, false)
-	if patchErr != nil {
-		return fmt.Errorf("uncordon node %s (patch): %w", nodeName, patchErr)
-	}
-
-	if updateErr != nil {
-		return fmt.Errorf("uncordon node %s (update): %w", nodeName, updateErr)
 	}
 
 	return nil
