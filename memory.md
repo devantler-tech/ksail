@@ -1,15 +1,16 @@
 # Repo Assist Memory
 
 ## Last Run
-2026-05-09 12:34 UTC — Run #25601213607
+2026-05-10 12:35 UTC — Run #25628828750
 
 ## Monthly Activity Issue
 - May 2026: #4501 (open, updated this run)
 
 ## Open Repo Assist PRs
-- `repo-assist/perf-netretry-text-patterns`: perf(netretry): hoist transientTextPatterns to package level (created 2026-05-09)
+- PR #4672: perf(fsutil): cache home directory lookup in ExpandHomePath (created 2026-05-10)
 
 ## Issue Comments Made (with run)
+- #4675 (Talos disk encryption feature): 2026-05-10 run #25628828750
 - #4646 (Hetzner label + ~ expansion bugs): 2026-05-08 run #25530778322
 - #4354 (KWOK v0.7.0 CEL stages): 2026-05-07 run #25470070628
 - #4621 (Hetzner node role bug): 2026-05-06
@@ -39,13 +40,12 @@
 - #4627 parent: #3983, #4328, #4510 (all linked, verified 2026-05-07)
 
 ## Code Quality Domain Alternation
-- Last domain: perf (Task 5, 2026-05-09)
-- Next for Task 5: test
+- Last domain: test (Task 5, 2026-05-10)
+- Next for Task 5: refactor
 
 ## Backlog Cursor
-- Issues processed through #4666 (as of 2026-05-09)
+- Issues processed through #4675 (as of 2026-05-10)
 - All roadmap Now/Next/Later items from discussion #4573 (May 4, 2026) are tracked
-- #4601 (license comm) confirmed closed/completed
 
 ## Labels Applied (recent)
 - #4432, #4427, #4371 → `agentic-workflows` (May 5)
@@ -55,5 +55,9 @@
 ## Notes
 - link_sub_issue is NOT idempotent — always verify sub-issue not already linked before calling
 - Weekly strategy #4573 (May 4, 2026) is the current roadmap reference
-- All roadmap items are tracked; no new issues needed until next Weekly Strategy
-- Open PRs as of 2026-05-09: #4662 (in-toto dep), #4663/#4664/#4666 (Daily Docs), repo-assist/perf-netretry-text-patterns
+- All roadmap items are tracked; check for new Weekly Strategy discussion
+- PRs #4645, #4647, #4648 all merged as of 2026-05-10
+- devantler filed #4675 (Talos disk encryption) + PR #4676 implementing it (still open)
+- Daily Docs PR #4677 (skill.md fixes) still open
+- CI Doctor issues #4673/#4674 are infrastructure flakes, not code bugs
+- PR #4672 (Repo Assist perf/fsutil) still open awaiting review

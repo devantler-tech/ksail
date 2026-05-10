@@ -1,7 +1,8 @@
 {
-  "last_run": "2026-05-10T01:14:00Z",
-  "workflow_run_id": "25616301177",
+  "last_run": "2026-05-10T12:35:07Z",
+  "workflow_run_id": "25628828750",
   "commented_issues": {
+    "4675": "2026-05-10",
     "4646": "2026-05-08",
     "4621": "2026-05-06",
     "4606": "2026-05-05",
@@ -36,14 +37,15 @@
     "4354": "2026-05-07"
   },
   "open_prs": {
-    "repo-assist/perf-expand-home-path-cache": {
+    "repo-assist/perf-expand-home-path-cache-a46ff99bdeec6e03": {
       "title": "[Repo Assist] perf(fsutil): cache home directory lookup in ExpandHomePath",
+      "pr_number": 4672,
       "status": "open",
       "created": "2026-05-10"
     }
   },
   "last_code_quality_domain": "test",
-  "issue_backlog_cursor": "4666",
+  "issue_backlog_cursor": "4675",
   "sub_issue_links": {
     "cloud_provider_parent_4627": ["3983", "4328", "4510"]
   },
@@ -66,10 +68,14 @@
   "notes": [
     "link_sub_issue is NOT idempotent - always verify sub-issue not already linked before calling",
     "Monthly activity issue: #4501",
-    "domain alternation: last was test (Task 5+8 combined) - next should be refactor (Task 5)",
+    "domain alternation: last was test - next should be refactor (Task 5)",
     "Roadmap backlog: all Now/Next/Later items tracked as of 2026-05-10",
     "#4601 license communication issue closed/completed",
-    "perf(netretry) PR merged (52acada3)",
-    "perf(fsutil): ExpandHomePath cache PR created 2026-05-10"
+    "PRs #4645, #4647, #4648 all merged as of 2026-05-10",
+    "perf(netretry) PR merged (52acada3 = #4667)",
+    "perf(fsutil): ExpandHomePath cache PR #4672 still open",
+    "devantler filed #4675 (Talos disk encryption) and PR #4676 implementing it",
+    "Daily Docs PR #4677 open: skill.md fixes for tenant/oidc commands",
+    "CI Doctor issues #4673 (Omni empty pool) and #4674 (Hetzner CCM flake) are infrastructure flakes"
   ]
 }
