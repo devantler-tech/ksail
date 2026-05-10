@@ -3,9 +3,8 @@ package talosprovisioner_test
 import (
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-
 	talosprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/talos"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestRolling_SortNodesWorkersFirst(t *testing.T) { //nolint:funlen // table-driven tests

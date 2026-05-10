@@ -159,6 +159,7 @@ func warnCDIDeprecation(cfg *v1alpha1.Cluster, out io.Writer) {
 	if cfg.Spec.Cluster.CDI == "" || cfg.Spec.Cluster.CDI == v1alpha1.CDIDefault {
 		return
 	}
+
 	_, _ = fmt.Fprintf(out,
 		"warning: spec.cluster.cdi is deprecated for Talos clusters. "+
 			"Manage CDI via native Talos patches in talos/cluster/ instead "+
@@ -169,6 +170,7 @@ func warnOIDCDeprecation(cfg *v1alpha1.Cluster, out io.Writer) {
 	if !cfg.Spec.Cluster.OIDC.Enabled() {
 		return
 	}
+
 	_, _ = fmt.Fprintf(out,
 		"warning: spec.cluster.oidc is deprecated for Talos clusters. "+
 			"Configure OIDC via native Talos patches in talos/cluster/oidc.yaml instead "+
@@ -179,9 +181,11 @@ func warnIngressFirewallDeprecation(cfg *v1alpha1.Cluster, out io.Writer) {
 	if cfg.Spec.Cluster.Provider != v1alpha1.ProviderHetzner {
 		return
 	}
+
 	if cfg.Spec.Provider.Hetzner.IngressFirewall != v1alpha1.IngressFirewallDisabled {
 		return
 	}
+
 	_, _ = fmt.Fprintf(out,
 		"warning: spec.provider.hetzner.ingressFirewall is deprecated for Talos clusters. "+
 			"To disable the ingress firewall, remove the firewall patch files from "+
@@ -192,6 +196,7 @@ func warnImageVerificationDeprecation(cfg *v1alpha1.Cluster, out io.Writer) {
 	if cfg.Spec.Cluster.Talos.ImageVerification != v1alpha1.ImageVerificationEnabled {
 		return
 	}
+
 	_, _ = fmt.Fprintf(out,
 		"warning: spec.cluster.talos.imageVerification is deprecated. "+
 			"Add an ImageVerificationConfig document to talos/cluster/image-verification.yaml directly.\n")

@@ -3,10 +3,9 @@ package talosprovisioner_test
 import (
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	talosprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/talos"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestPartitionWipeDecision_EphemeralOnly(t *testing.T) {

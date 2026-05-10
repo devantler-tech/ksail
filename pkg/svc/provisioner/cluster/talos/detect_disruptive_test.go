@@ -3,8 +3,8 @@ package talosprovisioner_test
 import (
 	"testing"
 
-	talosprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/talos"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
+	talosprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/talos"
 	talosconfigtypes "github.com/siderolabs/talos/pkg/machinery/config/config"
 	"github.com/siderolabs/talos/pkg/machinery/config/types/v1alpha1"
 	"github.com/siderolabs/talos/pkg/machinery/constants"
@@ -12,7 +12,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func boolPtr(b bool) *bool { return &b }
+//go:fix inline
+func boolPtr(b bool) *bool { return new(b) }
 
 func TestDetectVolumeEncryptionChanges(t *testing.T) { //nolint:funlen // table-driven tests
 	t.Parallel()
@@ -118,7 +119,10 @@ func TestDetectVolumeEncryptionChanges(t *testing.T) { //nolint:funlen // table-
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			changes := talosprovisioner.DetectVolumeEncryptionChangesForTest(testCase.running, testCase.desired)
+			changes := talosprovisioner.DetectVolumeEncryptionChangesForTest(
+				testCase.running,
+				testCase.desired,
+			)
 
 			require.Len(t, changes, testCase.expectedCount)
 
@@ -189,7 +193,10 @@ func TestEncryptionProviderName(t *testing.T) { //nolint:funlen // table-driven 
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			result := talosprovisioner.EncryptionProviderNameForTest(testCase.encryption, testCase.partitionLabel)
+			result := talosprovisioner.EncryptionProviderNameForTest(
+				testCase.encryption,
+				testCase.partitionLabel,
+			)
 			assert.Equal(t, testCase.expected, result)
 		})
 	}
@@ -339,7 +346,7 @@ func TestDetectDiskQuotaChanges(t *testing.T) { //nolint:funlen // table-driven 
 				ClusterConfig: &v1alpha1.ClusterConfig{},
 				MachineConfig: &v1alpha1.MachineConfig{
 					MachineFeatures: &v1alpha1.FeaturesConfig{
-						DiskQuotaSupport: boolPtr(true),
+						DiskQuotaSupport: new(true),
 					},
 				},
 			},
@@ -352,7 +359,7 @@ func TestDetectDiskQuotaChanges(t *testing.T) { //nolint:funlen // table-driven 
 				ClusterConfig: &v1alpha1.ClusterConfig{},
 				MachineConfig: &v1alpha1.MachineConfig{
 					MachineFeatures: &v1alpha1.FeaturesConfig{
-						DiskQuotaSupport: boolPtr(true),
+						DiskQuotaSupport: new(true),
 					},
 				},
 			},
@@ -371,7 +378,7 @@ func TestDetectDiskQuotaChanges(t *testing.T) { //nolint:funlen // table-driven 
 				ClusterConfig: &v1alpha1.ClusterConfig{},
 				MachineConfig: &v1alpha1.MachineConfig{
 					MachineFeatures: &v1alpha1.FeaturesConfig{
-						DiskQuotaSupport: boolPtr(true),
+						DiskQuotaSupport: new(true),
 					},
 				},
 			},
@@ -379,7 +386,7 @@ func TestDetectDiskQuotaChanges(t *testing.T) { //nolint:funlen // table-driven 
 				ClusterConfig: &v1alpha1.ClusterConfig{},
 				MachineConfig: &v1alpha1.MachineConfig{
 					MachineFeatures: &v1alpha1.FeaturesConfig{
-						DiskQuotaSupport: boolPtr(true),
+						DiskQuotaSupport: new(true),
 					},
 				},
 			},
@@ -395,7 +402,7 @@ func TestDetectDiskQuotaChanges(t *testing.T) { //nolint:funlen // table-driven 
 				ClusterConfig: &v1alpha1.ClusterConfig{},
 				MachineConfig: &v1alpha1.MachineConfig{
 					MachineFeatures: &v1alpha1.FeaturesConfig{
-						DiskQuotaSupport: boolPtr(true),
+						DiskQuotaSupport: new(true),
 					},
 				},
 			},
@@ -408,7 +415,10 @@ func TestDetectDiskQuotaChanges(t *testing.T) { //nolint:funlen // table-driven 
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			changes := talosprovisioner.DetectDiskQuotaChangesForTest(testCase.running, testCase.desired)
+			changes := talosprovisioner.DetectDiskQuotaChangesForTest(
+				testCase.running,
+				testCase.desired,
+			)
 
 			require.Len(t, changes, testCase.expectedCount)
 
@@ -424,12 +434,12 @@ func TestClassifyMachineConfigChanges(t *testing.T) { //nolint:funlen // table-d
 	t.Parallel()
 
 	tests := []struct {
-		name              string
-		running           talosprovisioner.MachineClusterConfigForTest
-		desired           talosprovisioner.MachineClusterConfigForTest
-		expectedWipe      int
-		expectedReboot    int
-		expectedTotal     int
+		name           string
+		running        talosprovisioner.MachineClusterConfigForTest
+		desired        talosprovisioner.MachineClusterConfigForTest
+		expectedWipe   int
+		expectedReboot int
+		expectedTotal  int
 	}{
 		{
 			name: "no changes when configs match",
@@ -505,7 +515,7 @@ func TestClassifyMachineConfigChanges(t *testing.T) { //nolint:funlen // table-d
 				MachineConfig: &v1alpha1.MachineConfig{
 					MachineSystemDiskEncryption: &v1alpha1.SystemDiskEncryptionConfig{},
 					MachineFeatures: &v1alpha1.FeaturesConfig{
-						DiskQuotaSupport: boolPtr(true),
+						DiskQuotaSupport: new(true),
 					},
 				},
 			},
@@ -533,7 +543,7 @@ func TestClassifyMachineConfigChanges(t *testing.T) { //nolint:funlen // table-d
 				},
 				MachineConfig: &v1alpha1.MachineConfig{
 					MachineFeatures: &v1alpha1.FeaturesConfig{
-						DiskQuotaSupport: boolPtr(true),
+						DiskQuotaSupport: new(true),
 					},
 				},
 			},
@@ -547,11 +557,15 @@ func TestClassifyMachineConfigChanges(t *testing.T) { //nolint:funlen // table-d
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			changes := talosprovisioner.ClassifyMachineConfigChangesForTest(testCase.running, testCase.desired)
+			changes := talosprovisioner.ClassifyMachineConfigChangesForTest(
+				testCase.running,
+				testCase.desired,
+			)
 
 			require.Len(t, changes, testCase.expectedTotal)
 
 			var wipeCount, rebootCount int
+
 			for _, c := range changes {
 				switch c.Category {
 				case clusterupdate.ChangeCategoryWipeRequired:
@@ -674,7 +688,7 @@ func TestDiskQuotaEnabled(t *testing.T) { //nolint:funlen // table-driven tests
 				ClusterConfig: &v1alpha1.ClusterConfig{},
 				MachineConfig: &v1alpha1.MachineConfig{
 					MachineFeatures: &v1alpha1.FeaturesConfig{
-						DiskQuotaSupport: boolPtr(true),
+						DiskQuotaSupport: new(true),
 					},
 				},
 			},
@@ -686,7 +700,7 @@ func TestDiskQuotaEnabled(t *testing.T) { //nolint:funlen // table-driven tests
 				ClusterConfig: &v1alpha1.ClusterConfig{},
 				MachineConfig: &v1alpha1.MachineConfig{
 					MachineFeatures: &v1alpha1.FeaturesConfig{
-						DiskQuotaSupport: boolPtr(false),
+						DiskQuotaSupport: new(false),
 					},
 				},
 			},

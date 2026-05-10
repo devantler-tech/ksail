@@ -6,17 +6,15 @@ import (
 	"sort"
 	"time"
 
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
+	"github.com/devantler-tech/ksail/v7/pkg/k8s"
+	"github.com/devantler-tech/ksail/v7/pkg/k8s/readiness"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
+	machineapi "github.com/siderolabs/talos/pkg/machinery/api/machine"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	kubedrain "k8s.io/kubectl/pkg/drain"
-
-	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
-	"github.com/devantler-tech/ksail/v7/pkg/k8s"
-	"github.com/devantler-tech/ksail/v7/pkg/k8s/readiness"
-	machineapi "github.com/siderolabs/talos/pkg/machinery/api/machine"
-
-	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 )
 
 // drainTimeout is the maximum duration to wait for pod eviction during node drain.
@@ -27,7 +25,11 @@ const drainTimeout = 120 * time.Second
 const nodeReadinessTimeout = 10 * time.Minute
 
 // cordonNode marks a Kubernetes node as unschedulable.
-func (p *Provisioner) cordonNode(ctx context.Context, clientset kubernetes.Interface, nodeName string) error {
+func (p *Provisioner) cordonNode(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	nodeName string,
+) error {
 	node, err := clientset.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
 	if err != nil {
 		return fmt.Errorf("get node %s: %w", nodeName, err)
@@ -51,7 +53,11 @@ func (p *Provisioner) cordonNode(ctx context.Context, clientset kubernetes.Inter
 }
 
 // drainNode evicts all pods from a Kubernetes node.
-func (p *Provisioner) drainNode(ctx context.Context, clientset kubernetes.Interface, nodeName string) error {
+func (p *Provisioner) drainNode(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	nodeName string,
+) error {
 	drainer := &kubedrain.Helper{
 		Ctx:                 ctx,
 		Client:              clientset,
@@ -78,7 +84,11 @@ func (p *Provisioner) drainNode(ctx context.Context, clientset kubernetes.Interf
 }
 
 // uncordonNode marks a Kubernetes node as schedulable.
-func (p *Provisioner) uncordonNode(ctx context.Context, clientset kubernetes.Interface, nodeName string) error {
+func (p *Provisioner) uncordonNode(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	nodeName string,
+) error {
 	node, err := clientset.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
 	if err != nil {
 		return fmt.Errorf("get node %s: %w", nodeName, err)
@@ -110,7 +120,8 @@ func (p *Provisioner) rebootNode(ctx context.Context, nodeIP string) error {
 
 	defer talosClient.Close() //nolint:errcheck
 
-	if rebootErr := talosClient.Reboot(ctx); rebootErr != nil {
+	rebootErr := talosClient.Reboot(ctx)
+	if rebootErr != nil {
 		return fmt.Errorf("reboot node %s: %w", nodeIP, rebootErr)
 	}
 
@@ -159,7 +170,8 @@ func (p *Provisioner) resolveNodeName(
 
 	for i := range nodes.Items {
 		for _, addr := range nodes.Items[i].Status.Addresses {
-			if (addr.Type == corev1.NodeInternalIP || addr.Type == corev1.NodeExternalIP) && addr.Address == nodeIP {
+			if (addr.Type == corev1.NodeInternalIP || addr.Type == corev1.NodeExternalIP) &&
+				addr.Address == nodeIP {
 				return nodes.Items[i].Name, nil
 			}
 		}
@@ -183,7 +195,10 @@ func sortNodesWorkersFirst(nodes []nodeWithRole) []nodeWithRole {
 	}
 
 	sort.Slice(workers, func(i, j int) bool { return workers[i].IP < workers[j].IP })
-	sort.Slice(controlPlanes, func(i, j int) bool { return controlPlanes[i].IP < controlPlanes[j].IP })
+	sort.Slice(
+		controlPlanes,
+		func(i, j int) bool { return controlPlanes[i].IP < controlPlanes[j].IP },
+	)
 
 	ordered := make([]nodeWithRole, 0, len(workers)+len(controlPlanes))
 	ordered = append(ordered, workers...)
@@ -197,7 +212,7 @@ func sortNodesWorkersFirst(nodes []nodeWithRole) []nodeWithRole {
 // control-plane disruption. For each node: cordon → drain → apply config (STAGED) →
 // reboot → wait for Ready → uncordon.
 //
-//nolint:cyclop // sequential rolling-reboot workflow with cordon/drain/reboot/wait/uncordon
+
 func (p *Provisioner) rollingApplyRebootChanges(
 	ctx context.Context,
 	clusterName string,
@@ -294,13 +309,13 @@ func (p *Provisioner) rollingRebootSingleNode(
 		if config != nil {
 			_, _ = fmt.Fprintf(p.logWriter, "    Staging config on %s...\n", node.IP)
 
-				stageErr := p.applyConfigWithMode(
-					ctx, node.IP, config,
-					machineapi.ApplyConfigurationRequest_STAGED,
-				)
-				if stageErr != nil {
-					return fmt.Errorf("stage config: %w", stageErr)
-				}
+			stageErr := p.applyConfigWithMode(
+				ctx, node.IP, config,
+				machineapi.ApplyConfigurationRequest_STAGED,
+			)
+			if stageErr != nil {
+				return fmt.Errorf("stage config: %w", stageErr)
+			}
 		}
 	}
 

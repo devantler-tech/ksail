@@ -49,8 +49,8 @@ func (p *Provisioner) resetNode(
 
 	err = talosClient.ResetGeneric(ctx, &machineapi.ResetRequest{
 		SystemPartitionsToWipe: partitions,
-		Reboot:                reboot,
-		Graceful:              true,
+		Reboot:                 reboot,
+		Graceful:               true,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to reset node %s: %w", nodeIP, err)
@@ -78,7 +78,7 @@ func (p *Provisioner) applyConfigInsecure(
 
 	client, err := talosclient.New(ctx,
 		talosclient.WithEndpoints(nodeIP),
-		//nolint:gosec // Intentional: maintenance mode nodes have no TLS certificates.
+
 		// Talos nodes in maintenance mode (after STATE partition wipe) serve the API
 		// without TLS. InsecureSkipVerify is required to connect and apply the initial
 		// config that will establish PKI. This is equivalent to `talosctl apply-config --insecure`.
@@ -114,14 +114,14 @@ func (p *Provisioner) waitForMaintenanceMode(
 	pollErr := readiness.PollForReadiness(ctx, timeout, func(ctx context.Context) (bool, error) {
 		client, err := talosclient.New(ctx,
 			talosclient.WithEndpoints(nodeIP),
-			//nolint:gosec // Intentional: maintenance mode nodes have no TLS certificates.
+
 			// See applyConfigInsecure for full rationale.
 			talosclient.WithTLSConfig(&tls.Config{
 				InsecureSkipVerify: true, // #nosec G402
 			}),
 		)
 		if err != nil {
-			return false, nil //nolint:nilerr // returning nil to continue polling
+			return false, nil
 		}
 
 		defer client.Close() //nolint:errcheck
@@ -188,7 +188,8 @@ func (p *Provisioner) cordonAndDrainNode(
 
 	_, _ = fmt.Fprintf(p.logWriter, "    Cordoning %s (%s)...\n", nodeName, node.IP)
 
-	if cordonErr := p.cordonNode(ctx, clientset, nodeName); cordonErr != nil {
+	cordonErr := p.cordonNode(ctx, clientset, nodeName)
+	if cordonErr != nil {
 		recordFailedChange(result, node.Role, node.IP, cordonErr)
 
 		return "", fmt.Errorf("cordon %s: %w", nodeName, cordonErr)
@@ -196,7 +197,8 @@ func (p *Provisioner) cordonAndDrainNode(
 
 	_, _ = fmt.Fprintf(p.logWriter, "    Draining %s...\n", nodeName)
 
-	if drainErr := p.drainNode(ctx, clientset, nodeName); drainErr != nil {
+	drainErr := p.drainNode(ctx, clientset, nodeName)
+	if drainErr != nil {
 		recordFailedChange(result, node.Role, node.IP, drainErr)
 
 		return "", fmt.Errorf("drain %s: %w", nodeName, drainErr)
@@ -215,7 +217,8 @@ func (p *Provisioner) waitReadyAndUncordon(
 ) error {
 	_, _ = fmt.Fprintf(p.logWriter, "    Waiting for %s to become ready...\n", nodeName)
 
-	if waitErr := p.waitForK8sNodeReady(ctx, clientset, nodeName, nodeReadinessTimeout); waitErr != nil {
+	waitErr := p.waitForK8sNodeReady(ctx, clientset, nodeName, nodeReadinessTimeout)
+	if waitErr != nil {
 		recordFailedChange(result, node.Role, node.IP, waitErr)
 
 		return fmt.Errorf("wait for ready on %s: %w", nodeName, waitErr)
@@ -223,7 +226,8 @@ func (p *Provisioner) waitReadyAndUncordon(
 
 	_, _ = fmt.Fprintf(p.logWriter, "    Uncordoning %s...\n", nodeName)
 
-	if uncordonErr := p.uncordonNode(ctx, clientset, nodeName); uncordonErr != nil {
+	uncordonErr := p.uncordonNode(ctx, clientset, nodeName)
+	if uncordonErr != nil {
 		recordFailedChange(result, node.Role, node.IP, uncordonErr)
 
 		return fmt.Errorf("uncordon %s: %w", nodeName, uncordonErr)
@@ -245,7 +249,8 @@ func (p *Provisioner) wipeEphemeralSingleNode(
 		return err
 	}
 
-	if stageErr := p.stageConfigIfNeeded(ctx, node); stageErr != nil {
+	stageErr := p.stageConfigIfNeeded(ctx, node)
+	if stageErr != nil {
 		recordFailedChange(result, node.Role, node.IP, stageErr)
 
 		return fmt.Errorf("stage config on %s: %w", node.IP, stageErr)
@@ -253,9 +258,10 @@ func (p *Provisioner) wipeEphemeralSingleNode(
 
 	_, _ = fmt.Fprintf(p.logWriter, "    Resetting EPHEMERAL partition on %s...\n", node.IP)
 
-	if resetErr := p.resetNode(ctx, node.IP,
+	resetErr := p.resetNode(ctx, node.IP,
 		[]string{constants.EphemeralPartitionLabel}, true,
-	); resetErr != nil {
+	)
+	if resetErr != nil {
 		recordFailedChange(result, node.Role, node.IP, resetErr)
 
 		return fmt.Errorf("reset EPHEMERAL on %s: %w", node.IP, resetErr)
@@ -314,22 +320,25 @@ func (p *Provisioner) wipeStateSingleNode(
 
 	_, _ = fmt.Fprintf(p.logWriter, "    Resetting STATE partition on %s...\n", node.IP)
 
-	if resetErr := p.resetNode(ctx, node.IP,
+	resetErr := p.resetNode(ctx, node.IP,
 		[]string{constants.StatePartitionLabel}, true,
-	); resetErr != nil {
+	)
+	if resetErr != nil {
 		recordFailedChange(result, node.Role, node.IP, resetErr)
 
 		return fmt.Errorf("reset STATE on %s: %w", node.IP, resetErr)
 	}
 
 	// STATE wipe causes the node to enter maintenance mode.
-	if waitErr := p.waitForMaintenanceMode(ctx, node.IP, maintenanceWaitTimeout); waitErr != nil {
+	waitErr := p.waitForMaintenanceMode(ctx, node.IP, maintenanceWaitTimeout)
+	if waitErr != nil {
 		recordFailedChange(result, node.Role, node.IP, waitErr)
 
 		return fmt.Errorf("wait for maintenance mode on %s: %w", node.IP, waitErr)
 	}
 
-	if applyErr := p.applyInsecureConfigIfNeeded(ctx, node); applyErr != nil {
+	applyErr := p.applyInsecureConfigIfNeeded(ctx, node)
+	if applyErr != nil {
 		recordFailedChange(result, node.Role, node.IP, applyErr)
 
 		return fmt.Errorf("insecure apply on %s: %w", node.IP, applyErr)
@@ -455,7 +464,8 @@ func (p *Provisioner) applyWipeRequiredChanges(
 	if needsEphemeral {
 		_, _ = fmt.Fprintf(p.logWriter, "\n  🔄 Starting EPHEMERAL partition wipe migration...\n")
 
-		if err := p.rollingWipeEphemeral(ctx, clusterName, result); err != nil {
+		err := p.rollingWipeEphemeral(ctx, clusterName, result)
+		if err != nil {
 			return fmt.Errorf("EPHEMERAL partition wipe failed: %w", err)
 		}
 
@@ -465,7 +475,8 @@ func (p *Provisioner) applyWipeRequiredChanges(
 	if needsState {
 		_, _ = fmt.Fprintf(p.logWriter, "\n  🔄 Starting STATE partition wipe migration...\n")
 
-		if err := p.rollingWipeState(ctx, clusterName, result); err != nil {
+		err := p.rollingWipeState(ctx, clusterName, result)
+		if err != nil {
 			return fmt.Errorf("STATE partition wipe failed: %w", err)
 		}
 

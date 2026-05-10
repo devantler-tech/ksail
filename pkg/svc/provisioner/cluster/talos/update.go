@@ -68,7 +68,11 @@ func (p *Provisioner) mergeDisruptiveChanges(
 
 	wipeChanges, detectErr := p.detectDisruptiveConfigChanges(ctx, clusterName)
 	if detectErr != nil {
-		_, _ = fmt.Fprintf(p.logWriter, "  ⚠ Failed to detect disruptive config changes: %v\n", detectErr)
+		_, _ = fmt.Fprintf(
+			p.logWriter,
+			"  ⚠ Failed to detect disruptive config changes: %v\n",
+			detectErr,
+		)
 
 		return
 	}
