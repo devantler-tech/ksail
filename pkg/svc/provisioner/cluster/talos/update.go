@@ -832,7 +832,9 @@ func (p *Provisioner) GetCurrentConfig(
 	// Merge non-introspectable fields from persisted state.
 	// Fields like Talos.ISO and LocalRegistry cannot be detected from the running
 	// cluster but are saved after successful create/update operations.
-	p.mergePersistedState(spec, clusterName)
+	if err := p.mergePersistedState(spec, clusterName); err != nil {
+		return nil, nil, fmt.Errorf("merge persisted state: %w", err)
+	}
 
 	// Detect installed components from the live cluster when the detector is available.
 	if p.componentDetector != nil {
@@ -887,14 +889,19 @@ func (p *Provisioner) GetCurrentConfig(
 // diffs for boot-time settings (e.g., Talos ISO ID) and configuration that is
 // not exposed via any cluster API.
 //
-// If no persisted state exists (first update after manual creation, or state was
-// deleted), the function is a silent no-op — the caller proceeds with defaults.
-func (p *Provisioner) mergePersistedState(spec *v1alpha1.ClusterSpec, clusterName string) {
+// Returns nil when state is missing (ErrStateNotFound) — the caller proceeds
+// with defaults. Returns a wrapped error for any other failure (I/O, corrupt
+// JSON, permission issues) so the caller can surface it.
+func (p *Provisioner) mergePersistedState(spec *v1alpha1.ClusterSpec, clusterName string) error {
 	name := p.resolveClusterName(clusterName)
 
 	saved, err := state.LoadClusterSpec(name)
 	if err != nil {
-		return
+		if errors.Is(err, state.ErrStateNotFound) {
+			return nil
+		}
+
+		return fmt.Errorf("load persisted cluster state for %q: %w", name, err)
 	}
 
 	// Talos.ISO is a boot-time setting (Hetzner Cloud ISO ID) that cannot be
@@ -907,6 +914,8 @@ func (p *Provisioner) mergePersistedState(spec *v1alpha1.ClusterSpec, clusterNam
 	if saved.LocalRegistry.Registry != "" {
 		spec.LocalRegistry = saved.LocalRegistry
 	}
+
+	return nil
 }
 
 // introspectNodeCounts determines the actual control-plane and worker node

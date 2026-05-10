@@ -739,7 +739,7 @@ func TestDetectHetznerServerTypes(t *testing.T) {
 }
 
 func TestMergePersistedState_MergesISOFromSavedState(t *testing.T) {
-	t.Parallel()
+	t.Setenv("HOME", t.TempDir())
 
 	clusterName := "merge-iso-test-" + t.Name()
 	t.Cleanup(func() { _ = state.DeleteClusterState(clusterName) })
@@ -758,14 +758,14 @@ func TestMergePersistedState_MergesISOFromSavedState(t *testing.T) {
 
 	provisioner := talosprovisioner.NewProvisioner(nil, nil).
 		WithLogWriter(io.Discard)
-	provisioner.MergePersistedStateForTest(spec, clusterName)
+	require.NoError(t, provisioner.MergePersistedStateForTest(spec, clusterName))
 
 	assert.Equal(t, int64(125127), spec.Talos.ISO,
 		"mergePersistedState should fill ISO from saved state")
 }
 
 func TestMergePersistedState_MergesLocalRegistryFromSavedState(t *testing.T) {
-	t.Parallel()
+	t.Setenv("HOME", t.TempDir())
 
 	clusterName := "merge-registry-test-" + t.Name()
 	t.Cleanup(func() { _ = state.DeleteClusterState(clusterName) })
@@ -782,28 +782,28 @@ func TestMergePersistedState_MergesLocalRegistryFromSavedState(t *testing.T) {
 
 	provisioner := talosprovisioner.NewProvisioner(nil, nil).
 		WithLogWriter(io.Discard)
-	provisioner.MergePersistedStateForTest(spec, clusterName)
+	require.NoError(t, provisioner.MergePersistedStateForTest(spec, clusterName))
 
 	assert.Equal(t, "ghcr.io/myorg", spec.LocalRegistry.Registry,
 		"mergePersistedState should fill LocalRegistry from saved state")
 }
 
 func TestMergePersistedState_NoStateIsNoOp(t *testing.T) {
-	t.Parallel()
+	t.Setenv("HOME", t.TempDir())
 
 	spec := clusterupdate.DefaultCurrentSpec(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
 	originalISO := spec.Talos.ISO
 
 	provisioner := talosprovisioner.NewProvisioner(nil, nil).
 		WithLogWriter(io.Discard)
-	provisioner.MergePersistedStateForTest(spec, "nonexistent-cluster-"+t.Name())
+	require.NoError(t, provisioner.MergePersistedStateForTest(spec, "nonexistent-cluster-"+t.Name()))
 
 	assert.Equal(t, originalISO, spec.Talos.ISO,
 		"mergePersistedState should be no-op when no state exists")
 }
 
 func TestMergePersistedState_ZeroISOInStateIsNotMerged(t *testing.T) {
-	t.Parallel()
+	t.Setenv("HOME", t.TempDir())
 
 	clusterName := "zero-iso-test-" + t.Name()
 	t.Cleanup(func() { _ = state.DeleteClusterState(clusterName) })
@@ -820,14 +820,14 @@ func TestMergePersistedState_ZeroISOInStateIsNotMerged(t *testing.T) {
 
 	provisioner := talosprovisioner.NewProvisioner(nil, nil).
 		WithLogWriter(io.Discard)
-	provisioner.MergePersistedStateForTest(spec, clusterName)
+	require.NoError(t, provisioner.MergePersistedStateForTest(spec, clusterName))
 
 	assert.Equal(t, int64(0), spec.Talos.ISO,
 		"zero ISO in saved state should not override spec")
 }
 
 func TestMergePersistedState_ResolvesClusterNameFromConfigs(t *testing.T) {
-	t.Parallel()
+	t.Setenv("HOME", t.TempDir())
 
 	// Use a name that resolveClusterName will return from talosConfigs
 	configName := "talos-resolved-name-" + t.Name()
@@ -853,8 +853,32 @@ func TestMergePersistedState_ResolvesClusterNameFromConfigs(t *testing.T) {
 	provisioner := talosprovisioner.NewProvisioner(configs, nil).
 		WithLogWriter(io.Discard)
 	// Pass empty clusterName — should resolve from talosConfigs
-	provisioner.MergePersistedStateForTest(spec, "")
+	require.NoError(t, provisioner.MergePersistedStateForTest(spec, ""))
 
 	assert.Equal(t, int64(999999), spec.Talos.ISO,
 		"should resolve cluster name from talosConfigs and merge ISO")
+}
+
+func TestMergePersistedState_ReturnsErrorForCorruptState(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	clusterName := "corrupt-state-test-" + t.Name()
+
+	// Write corrupt JSON to the state file
+	homeDir, err := os.UserHomeDir()
+	require.NoError(t, err)
+
+	stateDir := filepath.Join(homeDir, ".ksail", "clusters", clusterName)
+	require.NoError(t, os.MkdirAll(stateDir, 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(stateDir, "spec.json"), []byte("not-json"), 0o600))
+	t.Cleanup(func() { _ = os.RemoveAll(stateDir) })
+
+	spec := clusterupdate.DefaultCurrentSpec(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
+
+	provisioner := talosprovisioner.NewProvisioner(nil, nil).
+		WithLogWriter(io.Discard)
+
+	err = provisioner.MergePersistedStateForTest(spec, clusterName)
+	assert.Error(t, err, "corrupt state should return an error")
+	assert.Contains(t, err.Error(), "load persisted cluster state")
 }

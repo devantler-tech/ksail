@@ -392,6 +392,6 @@ func PartitionWipeDecisionForTest(changes []clusterupdate.Change) (bool, bool) {
 func (p *Provisioner) MergePersistedStateForTest(
 	spec *v1alpha1.ClusterSpec,
 	clusterName string,
-) {
-	p.mergePersistedState(spec, clusterName)
+) error {
+	return p.mergePersistedState(spec, clusterName)
 }
