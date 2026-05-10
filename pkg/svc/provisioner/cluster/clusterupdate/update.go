@@ -66,7 +66,7 @@ const (
 	ChangeCategoryInPlace ChangeCategory = iota
 
 	// ChangeCategoryRebootRequired indicates the change requires node reboots.
-	// Examples: Talos kernel parameters, disk encryption settings.
+	// Examples: Talos kernel parameters, CNI provider changes, machine feature toggles.
 	ChangeCategoryRebootRequired
 
 	// ChangeCategoryRecreateRequired indicates the cluster must be recreated.

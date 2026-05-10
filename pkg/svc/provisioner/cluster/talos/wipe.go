@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
-	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s/readiness"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	machineapi "github.com/siderolabs/talos/pkg/machinery/api/machine"
@@ -355,24 +353,9 @@ func (p *Provisioner) prepareRollingWipe(
 	ctx context.Context,
 	clusterName, partitionType string,
 ) (kubernetes.Interface, []nodeWithRole, error) {
-	kubeconfigPath, err := fsutil.ExpandHomePath(p.options.KubeconfigPath)
+	clientset, err := p.createK8sClient(clusterName)
 	if err != nil {
-		return nil, nil, fmt.Errorf("expand kubeconfig path: %w", err)
-	}
-
-	canonicalPath, err := fsutil.EvalCanonicalPath(kubeconfigPath)
-	if err != nil {
-		return nil, nil, fmt.Errorf("canonicalize kubeconfig path: %w", err)
-	}
-
-	kubeconfigContext := p.options.KubeconfigContext
-	if kubeconfigContext == "" {
-		kubeconfigContext = "admin@" + clusterName
-	}
-
-	clientset, err := k8s.NewClientset(canonicalPath, kubeconfigContext)
-	if err != nil {
-		return nil, nil, fmt.Errorf("create kubernetes client: %w", err)
+		return nil, nil, err
 	}
 
 	nodes, err := p.getNodesByRole(ctx, clusterName)

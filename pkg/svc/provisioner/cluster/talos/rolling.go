@@ -208,23 +208,18 @@ func sortNodesWorkersFirst(nodes []nodeWithRole) []nodeWithRole {
 	return ordered
 }
 
-// rollingApplyRebootChanges applies config changes with STAGED mode and performs
-// a rolling reboot across all cluster nodes. Workers are rebooted first to minimize
-// control-plane disruption. For each node: cordon → drain → apply config (STAGED) →
-// reboot → wait for Ready → uncordon.
-func (p *Provisioner) rollingApplyRebootChanges(
-	ctx context.Context,
-	clusterName string,
-	result *clusterupdate.UpdateResult,
-) error {
+// createK8sClient creates a Kubernetes clientset using the provisioner's kubeconfig
+// path and the appropriate context for the given cluster name. The kubeconfig path
+// is expanded and canonicalized for path safety.
+func (p *Provisioner) createK8sClient(clusterName string) (kubernetes.Interface, error) {
 	kubeconfigPath, err := fsutil.ExpandHomePath(p.options.KubeconfigPath)
 	if err != nil {
-		return fmt.Errorf("expand kubeconfig path: %w", err)
+		return nil, fmt.Errorf("expand kubeconfig path: %w", err)
 	}
 
 	canonicalPath, err := fsutil.EvalCanonicalPath(kubeconfigPath)
 	if err != nil {
-		return fmt.Errorf("canonicalize kubeconfig path: %w", err)
+		return nil, fmt.Errorf("canonicalize kubeconfig path: %w", err)
 	}
 
 	kubeconfigContext := p.options.KubeconfigContext
@@ -234,7 +229,24 @@ func (p *Provisioner) rollingApplyRebootChanges(
 
 	clientset, err := k8s.NewClientset(canonicalPath, kubeconfigContext)
 	if err != nil {
-		return fmt.Errorf("create kubernetes client: %w", err)
+		return nil, fmt.Errorf("create kubernetes client: %w", err)
+	}
+
+	return clientset, nil
+}
+
+// rollingApplyRebootChanges applies config changes with STAGED mode and performs
+// a rolling reboot across all cluster nodes. Workers are rebooted first to minimize
+// control-plane disruption. For each node: cordon → drain → apply config (STAGED) →
+// reboot → wait for Ready → uncordon.
+func (p *Provisioner) rollingApplyRebootChanges(
+	ctx context.Context,
+	clusterName string,
+	result *clusterupdate.UpdateResult,
+) error {
+	clientset, err := p.createK8sClient(clusterName)
+	if err != nil {
+		return err
 	}
 
 	nodes, err := p.getNodesByRole(ctx, clusterName)
