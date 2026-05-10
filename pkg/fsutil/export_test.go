@@ -9,5 +9,5 @@ import "sync"
 var ResetHomeDirCache = func() {
 	homeDirOnce = sync.Once{}
 	homeDirValue = ""
-	homeDirErr = nil
+	errHomeDir = nil
 }

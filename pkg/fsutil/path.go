@@ -13,10 +13,12 @@ import (
 // homeDir caches the current user's home directory after the first lookup.
 // user.Current() is a syscall; caching it avoids repeated OS round-trips in
 // hot paths such as cluster provisioning and kubeconfig resolution.
+//
+//nolint:gochecknoglobals // sync.Once cache must be package-scoped.
 var (
 	homeDirOnce  sync.Once
 	homeDirValue string
-	homeDirErr   error
+	errHomeDir   error
 )
 
 // currentHomeDir returns the cached home directory, calling user.Current() at
@@ -25,7 +27,7 @@ func currentHomeDir() (string, error) {
 	homeDirOnce.Do(func() {
 		usr, err := user.Current()
 		if err != nil {
-			homeDirErr = err
+			errHomeDir = err
 
 			return
 		}
@@ -33,7 +35,7 @@ func currentHomeDir() (string, error) {
 		homeDirValue = usr.HomeDir
 	})
 
-	return homeDirValue, homeDirErr
+	return homeDirValue, errHomeDir
 }
 
 // ExpandHomePath expands a path beginning with ~/ to the user's home directory
