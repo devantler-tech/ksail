@@ -71,6 +71,30 @@ func (p *Provisioner) Update(
 		return result, fmt.Errorf("failed to sync cluster secrets: %w", secretErr)
 	}
 
+	// Detect disruptive config changes (e.g., disk encryption migration)
+	// that require partition wiping. This must run after secrets sync so
+	// that p.talosConfigs has the correct PKI for creating Talos clients.
+	wipeChanges, detectErr := p.detectDisruptiveConfigChanges(ctx, clusterName)
+	if detectErr != nil {
+		_, _ = fmt.Fprintf(p.logWriter, "  ⚠ Failed to detect disruptive config changes: %v\n", detectErr)
+		// Non-fatal: continue with update even if detection fails
+	} else if len(wipeChanges) > 0 {
+		result.WipeRequired = append(result.WipeRequired, wipeChanges...)
+
+		if !opts.Force {
+			_, _ = fmt.Fprintf(p.logWriter, "\n  ⚠ Detected %d change(s) requiring partition wipe:\n", len(wipeChanges))
+			for _, change := range wipeChanges {
+				_, _ = fmt.Fprintf(p.logWriter, "    • %s: %s → %s (%s)\n",
+					change.Field, change.OldValue, change.NewValue, change.Reason)
+			}
+			_, _ = fmt.Fprintf(p.logWriter, "\n  Use --force to proceed with partition wipe migration.\n")
+			_, _ = fmt.Fprintf(p.logWriter, "  Manual procedure: https://docs.siderolabs.com/talos/v1.13/configure-your-talos-cluster/storage-and-disk-management/disk-encryption#going-from-unencrypted-to-encrypted-and-vice-versa\n")
+
+			return result, fmt.Errorf("%w: %d changes require partition wipe (use --force to proceed)",
+				clusterupdate.ErrWipeRequired, len(wipeChanges))
+		}
+	}
+
 	// Handle node scaling changes
 	scaleErr := p.applyNodeScalingChanges(ctx, clusterName, oldSpec, newSpec, result)
 	if scaleErr != nil {

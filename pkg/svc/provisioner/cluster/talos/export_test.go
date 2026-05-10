@@ -326,6 +326,16 @@ func MergeTalosconfigBytesForTest(talosconfigPath string, newData []byte) error 
 //nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
 var DetectHetznerServerTypesForTest = detectHetznerServerTypes
 
+// DetectVolumeEncryptionChangesForTest exposes detectVolumeEncryptionChanges for unit testing.
+//
+//nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
+var DetectVolumeEncryptionChangesForTest = detectVolumeEncryptionChanges
+
+// EncryptionProviderNameForTest exposes encryptionProviderName for unit testing.
+//
+//nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
+var EncryptionProviderNameForTest = encryptionProviderName
+
 // ValidateCurrentContextCAForTest exposes validateCurrentContextCA for unit testing.
 //
 //nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
