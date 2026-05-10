@@ -43,11 +43,21 @@ func (p *Provisioner) setNodeSchedulable(
 
 	patchErr, updateErr := helper.PatchOrReplaceWithContext(ctx, clientset, false)
 	if patchErr != nil {
-		return fmt.Errorf("set schedulable=%v on node %s (patch): %w", schedulable, nodeName, patchErr)
+		return fmt.Errorf(
+			"set schedulable=%v on node %s (patch): %w",
+			schedulable,
+			nodeName,
+			patchErr,
+		)
 	}
 
 	if updateErr != nil {
-		return fmt.Errorf("set schedulable=%v on node %s (update): %w", schedulable, nodeName, updateErr)
+		return fmt.Errorf(
+			"set schedulable=%v on node %s (update): %w",
+			schedulable,
+			nodeName,
+			updateErr,
+		)
 	}
 
 	return nil
