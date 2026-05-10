@@ -8,10 +8,9 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 )
 
-// BenchmarkExpandHomePath_HomePrefix benchmarks the ~/ expansion path, which
-// exercises the home-directory lookup. After the first call the result is
-// served from the sync.Once cache, so subsequent iterations measure the
-// cached fast path.
+// BenchmarkExpandHomePath_HomePrefix benchmarks the ~/ expansion path.
+// The cache is warmed before timing begins so every iteration measures the
+// cached fast path exclusively.
 func BenchmarkExpandHomePath_HomePrefix(b *testing.B) {
 	usr, err := user.Current()
 	if err != nil {
@@ -19,6 +18,11 @@ func BenchmarkExpandHomePath_HomePrefix(b *testing.B) {
 	}
 
 	expected := filepath.Join(usr.HomeDir, "some", "nested", "dir")
+
+	// Warm the sync.Once cache so the timed loop only measures the fast path.
+	if _, err := fsutil.ExpandHomePath("~/warmup"); err != nil {
+		b.Fatalf("cache warmup failed: %v", err)
+	}
 
 	b.ResetTimer()
 
@@ -33,7 +37,7 @@ func BenchmarkExpandHomePath_HomePrefix(b *testing.B) {
 // BenchmarkExpandHomePath_Absolute benchmarks the already-absolute fast path
 // (no home-directory lookup required).
 func BenchmarkExpandHomePath_Absolute(b *testing.B) {
-	path := "/tmp/some/config.yaml"
+	path := filepath.Join(string(filepath.Separator), "tmp", "some", "config.yaml")
 
 	b.ResetTimer()
 
