@@ -5,12 +5,12 @@ description: How to migrate an existing Talos cluster to use LUKS2 disk encrypti
 
 Talos Linux supports LUKS2 disk encryption for the EPHEMERAL and STATE partitions. However, encryption only takes effect on empty or unformatted partitions — existing partitions must be wiped before encryption can be applied. This makes encryption migration a disruptive operation that requires careful orchestration.
 
-For upstream details, see the [Talos disk encryption docs](https://www.talos.dev/v1.9/talos-guides/configuration/disk-encryption/#going-from-unencrypted-to-encrypted-and-vice-versa).
+For upstream details, see the [Talos disk encryption docs](https://docs.siderolabs.com/talos/v1.13/configure-your-talos-cluster/storage-and-disk-management/disk-encryption/#going-from-unencrypted-to-encrypted-and-vice-versa).
 
 ## Prerequisites
 
 - A running Talos cluster managed by KSail
-- Encryption config patches prepared (machine config with LUKS2 `VolumeConfig` resources)
+- Encryption config patches prepared (machine config with `systemDiskEncryption` settings)
 - Redundant workloads — migration is rolling but temporarily reduces cluster capacity
 
 ## Detecting Encryption Changes
@@ -21,7 +21,7 @@ Use `--dry-run` to preview whether an update requires partition wipes:
 ksail cluster update --dry-run
 ```
 
-KSail compares the running node configs against the desired configs and reports any `VolumeConfig`/encryption changes that require a wipe-and-reboot cycle.
+KSail compares the running node configs against the desired configs and reports any encryption changes that require a wipe-and-reboot cycle.
 
 ## Automated Migration
 
@@ -100,5 +100,5 @@ Removing encryption follows the same process: the partition must be wiped so it 
 
 ## Related Links
 
-- [Talos Disk Encryption](https://www.talos.dev/v1.9/talos-guides/configuration/disk-encryption/) — upstream Talos documentation
-- [Talos VolumeConfig](https://www.talos.dev/v1.9/reference/configuration/cni/volumeconfig/) — resource reference
+- [Talos Disk Encryption](https://docs.siderolabs.com/talos/v1.13/configure-your-talos-cluster/storage-and-disk-management/disk-encryption/) — upstream Talos documentation
+- [Talos System Disk Encryption Config](https://docs.siderolabs.com/talos/v1.13/reference/configuration/v1alpha1/config/#SystemDiskEncryptionConfig) — configuration reference

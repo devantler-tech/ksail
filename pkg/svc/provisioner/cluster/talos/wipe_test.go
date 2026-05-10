@@ -6,99 +6,87 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
+	talosprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/talos"
 )
 
-func TestApplyWipeRequiredChanges_PartitionDetection(t *testing.T) {
+func TestPartitionWipeDecision_EphemeralOnly(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name             string
-		wipeChanges      []clusterupdate.Change
-		expectsEphemeral bool
-		expectsState     bool
-	}{
+	changes := []clusterupdate.Change{
 		{
-			name:             "no wipe changes",
-			wipeChanges:      nil,
-			expectsEphemeral: false,
-			expectsState:     false,
-		},
-		{
-			name: "ephemeral only",
-			wipeChanges: []clusterupdate.Change{
-				{
-					Field:    "machine.systemDiskEncryption.ephemeral",
-					OldValue: "none",
-					NewValue: "luks2",
-					Category: clusterupdate.ChangeCategoryWipeRequired,
-					Reason:   "EPHEMERAL partition encryption change requires partition wipe",
-				},
-			},
-			expectsEphemeral: true,
-			expectsState:     false,
-		},
-		{
-			name: "state only",
-			wipeChanges: []clusterupdate.Change{
-				{
-					Field:    "machine.systemDiskEncryption.state",
-					OldValue: "none",
-					NewValue: "luks2",
-					Category: clusterupdate.ChangeCategoryWipeRequired,
-					Reason:   "STATE partition encryption change requires partition wipe and maintenance mode",
-				},
-			},
-			expectsEphemeral: false,
-			expectsState:     true,
-		},
-		{
-			name: "both ephemeral and state",
-			wipeChanges: []clusterupdate.Change{
-				{
-					Field:    "machine.systemDiskEncryption.ephemeral",
-					OldValue: "luks2",
-					NewValue: "none",
-					Category: clusterupdate.ChangeCategoryWipeRequired,
-					Reason:   "EPHEMERAL partition encryption change requires partition wipe",
-				},
-				{
-					Field:    "machine.systemDiskEncryption.state",
-					OldValue: "luks2",
-					NewValue: "none",
-					Category: clusterupdate.ChangeCategoryWipeRequired,
-					Reason:   "STATE partition encryption change requires partition wipe and maintenance mode",
-				},
-			},
-			expectsEphemeral: true,
-			expectsState:     true,
+			Field:    talosprovisioner.FieldEphemeralEncryption,
+			OldValue: "none",
+			NewValue: "luks2",
+			Category: clusterupdate.ChangeCategoryWipeRequired,
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
+	ephemeral, state := talosprovisioner.PartitionWipeDecisionForTest(changes)
+	assert.True(t, ephemeral, "should detect ephemeral wipe")
+	assert.False(t, state, "should not detect state wipe")
+}
 
-			result := clusterupdate.NewEmptyUpdateResult()
-			result.WipeRequired = tt.wipeChanges
+func TestPartitionWipeDecision_StateOnly(t *testing.T) {
+	t.Parallel()
 
-			// Verify the WipeRequired field correctly reflects the expected partitions
-			hasEphemeral := false
-			hasState := false
-
-			for _, change := range result.WipeRequired {
-				if change.Field == "machine.systemDiskEncryption.ephemeral" {
-					hasEphemeral = true
-				}
-
-				if change.Field == "machine.systemDiskEncryption.state" {
-					hasState = true
-				}
-			}
-
-			assert.Equal(t, tt.expectsEphemeral, hasEphemeral, "ephemeral partition detection")
-			assert.Equal(t, tt.expectsState, hasState, "state partition detection")
-		})
+	changes := []clusterupdate.Change{
+		{
+			Field:    talosprovisioner.FieldStateEncryption,
+			OldValue: "none",
+			NewValue: "luks2",
+			Category: clusterupdate.ChangeCategoryWipeRequired,
+		},
 	}
+
+	ephemeral, state := talosprovisioner.PartitionWipeDecisionForTest(changes)
+	assert.False(t, ephemeral, "should not detect ephemeral wipe")
+	assert.True(t, state, "should detect state wipe")
+}
+
+func TestPartitionWipeDecision_Both(t *testing.T) {
+	t.Parallel()
+
+	changes := []clusterupdate.Change{
+		{
+			Field:    talosprovisioner.FieldEphemeralEncryption,
+			OldValue: "luks2",
+			NewValue: "none",
+			Category: clusterupdate.ChangeCategoryWipeRequired,
+		},
+		{
+			Field:    talosprovisioner.FieldStateEncryption,
+			OldValue: "luks2",
+			NewValue: "none",
+			Category: clusterupdate.ChangeCategoryWipeRequired,
+		},
+	}
+
+	ephemeral, state := talosprovisioner.PartitionWipeDecisionForTest(changes)
+	assert.True(t, ephemeral, "should detect ephemeral wipe")
+	assert.True(t, state, "should detect state wipe")
+}
+
+func TestPartitionWipeDecision_Empty(t *testing.T) {
+	t.Parallel()
+
+	ephemeral, state := talosprovisioner.PartitionWipeDecisionForTest(nil)
+	assert.False(t, ephemeral, "should not detect ephemeral wipe from nil")
+	assert.False(t, state, "should not detect state wipe from nil")
+}
+
+func TestPartitionWipeDecision_UnknownField(t *testing.T) {
+	t.Parallel()
+
+	changes := []clusterupdate.Change{
+		{
+			Field:    "machine.features.diskQuotaSupport",
+			Category: clusterupdate.ChangeCategoryWipeRequired,
+		},
+	}
+
+	ephemeral, state := talosprovisioner.PartitionWipeDecisionForTest(changes)
+	assert.False(t, ephemeral, "unknown field should not trigger ephemeral wipe")
+	assert.False(t, state, "unknown field should not trigger state wipe")
 }
 
 func TestUpdateResult_HasWipeRequired(t *testing.T) {
@@ -120,7 +108,7 @@ func TestUpdateResult_HasWipeRequired(t *testing.T) {
 				r := clusterupdate.NewEmptyUpdateResult()
 				r.WipeRequired = []clusterupdate.Change{
 					{
-						Field:    "machine.systemDiskEncryption.ephemeral",
+						Field:    talosprovisioner.FieldEphemeralEncryption,
 						Category: clusterupdate.ChangeCategoryWipeRequired,
 					},
 				}

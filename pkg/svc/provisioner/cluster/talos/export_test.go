@@ -382,3 +382,8 @@ func (p *Provisioner) ApplyWipeRequiredChangesForTest(
 ) error {
 	return p.applyWipeRequiredChanges(ctx, clusterName, result)
 }
+
+// PartitionWipeDecisionForTest exposes partitionWipeDecision for unit testing.
+func PartitionWipeDecisionForTest(changes []clusterupdate.Change) (ephemeral, state bool) {
+	return partitionWipeDecision(changes)
+}

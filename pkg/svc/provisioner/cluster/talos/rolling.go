@@ -202,7 +202,17 @@ func (p *Provisioner) rollingApplyRebootChanges(
 		return fmt.Errorf("expand kubeconfig path: %w", err)
 	}
 
-	clientset, err := k8s.NewClientset(kubeconfigPath, "")
+	canonicalPath, err := fsutil.EvalCanonicalPath(kubeconfigPath)
+	if err != nil {
+		return fmt.Errorf("canonicalize kubeconfig path: %w", err)
+	}
+
+	kubeconfigContext := p.options.KubeconfigContext
+	if kubeconfigContext == "" {
+		kubeconfigContext = "admin@" + clusterName
+	}
+
+	clientset, err := k8s.NewClientset(canonicalPath, kubeconfigContext)
 	if err != nil {
 		return fmt.Errorf("create kubernetes client: %w", err)
 	}

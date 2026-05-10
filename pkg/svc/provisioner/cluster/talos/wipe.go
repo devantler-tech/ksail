@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
@@ -78,8 +77,12 @@ func (p *Provisioner) applyConfigInsecure(
 
 	client, err := talosclient.New(ctx,
 		talosclient.WithEndpoints(nodeIP),
+		//nolint:gosec // Intentional: maintenance mode nodes have no TLS certificates.
+		// Talos nodes in maintenance mode (after STATE partition wipe) serve the API
+		// without TLS. InsecureSkipVerify is required to connect and apply the initial
+		// config that will establish PKI. This is equivalent to `talosctl apply-config --insecure`.
 		talosclient.WithTLSConfig(&tls.Config{
-			InsecureSkipVerify: true, //nolint:gosec // maintenance mode requires insecure connection
+			InsecureSkipVerify: true,
 		}),
 	)
 	if err != nil {
@@ -110,8 +113,10 @@ func (p *Provisioner) waitForMaintenanceMode(
 	return readiness.PollForReadiness(ctx, timeout, func(ctx context.Context) (bool, error) {
 		client, err := talosclient.New(ctx,
 			talosclient.WithEndpoints(nodeIP),
+			//nolint:gosec // Intentional: maintenance mode nodes have no TLS certificates.
+			// See applyConfigInsecure for full rationale.
 			talosclient.WithTLSConfig(&tls.Config{
-				InsecureSkipVerify: true, //nolint:gosec // maintenance mode requires insecure connection
+				InsecureSkipVerify: true,
 			}),
 		)
 		if err != nil {
@@ -140,7 +145,17 @@ func (p *Provisioner) rollingWipeEphemeral(
 		return fmt.Errorf("expand kubeconfig path: %w", err)
 	}
 
-	clientset, err := k8s.NewClientset(kubeconfigPath, "")
+	canonicalPath, err := fsutil.EvalCanonicalPath(kubeconfigPath)
+	if err != nil {
+		return fmt.Errorf("canonicalize kubeconfig path: %w", err)
+	}
+
+	kubeconfigContext := p.options.KubeconfigContext
+	if kubeconfigContext == "" {
+		kubeconfigContext = "admin@" + clusterName
+	}
+
+	clientset, err := k8s.NewClientset(canonicalPath, kubeconfigContext)
 	if err != nil {
 		return fmt.Errorf("create kubernetes client: %w", err)
 	}
@@ -254,7 +269,17 @@ func (p *Provisioner) rollingWipeState(
 		return fmt.Errorf("expand kubeconfig path: %w", err)
 	}
 
-	clientset, err := k8s.NewClientset(kubeconfigPath, "")
+	canonicalPath, err := fsutil.EvalCanonicalPath(kubeconfigPath)
+	if err != nil {
+		return fmt.Errorf("canonicalize kubeconfig path: %w", err)
+	}
+
+	kubeconfigContext := p.options.KubeconfigContext
+	if kubeconfigContext == "" {
+		kubeconfigContext = "admin@" + clusterName
+	}
+
+	clientset, err := k8s.NewClientset(canonicalPath, kubeconfigContext)
 	if err != nil {
 		return fmt.Errorf("create kubernetes client: %w", err)
 	}
@@ -357,6 +382,21 @@ func (p *Provisioner) rollingWipeState(
 	return nil
 }
 
+// partitionWipeDecision determines which partitions need wiping based on the
+// wipe-required changes in the update result.
+func partitionWipeDecision(changes []clusterupdate.Change) (ephemeral, state bool) {
+	for _, change := range changes {
+		switch change.Field {
+		case FieldEphemeralEncryption:
+			ephemeral = true
+		case FieldStateEncryption:
+			state = true
+		}
+	}
+
+	return
+}
+
 // applyWipeRequiredChanges orchestrates partition wipe operations for
 // encryption migration. It determines which partitions need wiping based
 // on the detected changes and executes the appropriate rolling wipe flow.
@@ -366,18 +406,7 @@ func (p *Provisioner) applyWipeRequiredChanges(
 	clusterName string,
 	result *clusterupdate.UpdateResult,
 ) error {
-	needsEphemeral := false
-	needsState := false
-
-	for _, change := range result.WipeRequired {
-		if strings.Contains(change.Field, "ephemeral") {
-			needsEphemeral = true
-		}
-
-		if strings.Contains(change.Field, "state") {
-			needsState = true
-		}
-	}
+	needsEphemeral, needsState := partitionWipeDecision(result.WipeRequired)
 
 	// EPHEMERAL wipe is less disruptive and must complete before STATE wipe.
 	if needsEphemeral {

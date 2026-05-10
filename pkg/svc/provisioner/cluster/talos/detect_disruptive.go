@@ -12,6 +12,13 @@ import (
 	talosresconfig "github.com/siderolabs/talos/pkg/machinery/resources/config"
 )
 
+const (
+	// FieldEphemeralEncryption is the change field for EPHEMERAL partition encryption.
+	FieldEphemeralEncryption = "machine.systemDiskEncryption.ephemeral"
+	// FieldStateEncryption is the change field for STATE partition encryption.
+	FieldStateEncryption = "machine.systemDiskEncryption.state"
+)
+
 // machineClusterConfig is a minimal interface covering the Machine() and Cluster()
 // accessors shared by config/config.Config and config.Provider. Using this instead
 // of the full Config interface allows unit tests to construct lightweight v1alpha1
@@ -41,7 +48,11 @@ func (p *Provisioner) detectDisruptiveConfigChanges(
 		return nil, fmt.Errorf("failed to discover nodes for config change detection: %w", err)
 	}
 
-	// Find the first control-plane node to fetch the running config.
+	// Compare against a single control-plane node. Encryption config patches
+	// are cluster-wide (applied to all nodes from the same patch files), so
+	// checking one CP node is sufficient for detecting pending migrations.
+	// Per-node comparison would be needed for partial migration recovery
+	// (future enhancement).
 	var cpIP string
 
 	for _, node := range nodes {
@@ -100,7 +111,7 @@ func detectVolumeEncryptionChanges(
 
 	if runningEphemeral != desiredEphemeral {
 		changes = append(changes, clusterupdate.Change{
-			Field:    "machine.systemDiskEncryption.ephemeral",
+			Field:    FieldEphemeralEncryption,
 			OldValue: runningEphemeral,
 			NewValue: desiredEphemeral,
 			Category: clusterupdate.ChangeCategoryWipeRequired,
@@ -114,7 +125,7 @@ func detectVolumeEncryptionChanges(
 
 	if runningState != desiredState {
 		changes = append(changes, clusterupdate.Change{
-			Field:    "machine.systemDiskEncryption.state",
+			Field:    FieldStateEncryption,
 			OldValue: runningState,
 			NewValue: desiredState,
 			Category: clusterupdate.ChangeCategoryWipeRequired,
