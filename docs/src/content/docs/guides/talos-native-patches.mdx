@@ -52,7 +52,7 @@ To enable CDI (Talos 1.13+ default), simply delete this patch file.
 Remove `spec.cluster.oidc.*` from `ksail.yaml`. Manage OIDC configuration directly in
 `talos/cluster/oidc.yaml` (created by `ksail cluster init --oidc-issuer-url=...`).
 
-See [Talos OIDC docs](https://www.talos.dev/latest/kubernetes-guides/configuration/oidc/) for the full
+See [Talos OIDC docs](https://docs.siderolabs.com/talos/v1.13/kubernetes-guides/configuration/oidc/) for the full
 patch format.
 
 ### Ingress Firewall
@@ -73,7 +73,7 @@ See [Talos Ingress Firewall docs](https://docs.siderolabs.com/talos/v1.13/networ
 Remove `spec.cluster.talos.imageVerification` from `ksail.yaml`. Add an `ImageVerificationConfig`
 document directly to `talos/cluster/image-verification.yaml`.
 
-See [Talos Image Verification docs](https://www.talos.dev/latest/talos-guides/configuration/image-verification/).
+See [Talos Image Verification docs](https://docs.siderolabs.com/talos/v1.13/talos-guides/configuration/image-verification/).
 
 ## Patch Directory Structure
 
@@ -117,4 +117,4 @@ There is no urgency to migrate — fields will be supported until a future major
 ## Related Links
 
 - [Talos Disk Encryption Migration](/guides/talos-disk-encryption/) — rolling encryption migration guide
-- [Talos Machine Configuration](https://www.talos.dev/latest/reference/configuration/) — upstream Talos config reference
+- [Talos Machine Configuration](https://docs.siderolabs.com/talos/v1.13/reference/configuration/) — upstream Talos config reference

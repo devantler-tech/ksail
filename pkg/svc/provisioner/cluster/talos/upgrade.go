@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"sort"
 	"time"
 
 	"github.com/siderolabs/talos/pkg/machinery/api/common"
@@ -223,29 +222,8 @@ func (p *Provisioner) rollingUpgradeNodes(
 		return fmt.Errorf("listing nodes for upgrade: %w", err)
 	}
 
-	// Partition into workers and control-planes.
-	var workers, controlPlanes []nodeWithRole
-
-	for _, n := range nodes {
-		switch n.Role {
-		case RoleWorker:
-			workers = append(workers, n)
-		case RoleControlPlane:
-			controlPlanes = append(controlPlanes, n)
-		}
-	}
-
-	// Sort for deterministic ordering.
-	sort.Slice(workers, func(i, j int) bool { return workers[i].IP < workers[j].IP })
-	sort.Slice(
-		controlPlanes,
-		func(i, j int) bool { return controlPlanes[i].IP < controlPlanes[j].IP },
-	)
-
-	// Upgrade workers first, then control-planes.
-	ordered := make([]nodeWithRole, 0, len(workers)+len(controlPlanes))
-	ordered = append(ordered, workers...)
-	ordered = append(ordered, controlPlanes...)
+	// Sort workers first, then control-planes for minimal disruption.
+	ordered := sortNodesWorkersFirst(nodes)
 
 	for i, node := range ordered {
 		_, _ = fmt.Fprintf(p.logWriter,

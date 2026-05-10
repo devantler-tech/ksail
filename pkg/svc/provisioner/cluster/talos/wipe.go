@@ -80,9 +80,10 @@ func (p *Provisioner) applyConfigInsecure(
 	client, err := talosclient.New(ctx,
 		talosclient.WithEndpoints(nodeIP),
 
-		// Talos nodes in maintenance mode (after STATE partition wipe) serve the API
-		// without TLS. InsecureSkipVerify is required to connect and apply the initial
-		// config that will establish PKI. This is equivalent to `talosctl apply-config --insecure`.
+		// Talos nodes in maintenance mode (after STATE partition wipe) require an
+		// insecure TLS connection because no valid PKI certificates exist yet.
+		// InsecureSkipVerify skips certificate validation, equivalent to
+		// `talosctl apply-config --insecure`.
 		talosclient.WithTLSConfig(&tls.Config{
 			InsecureSkipVerify: true, // #nosec G402
 		}),
