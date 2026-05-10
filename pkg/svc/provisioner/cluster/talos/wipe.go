@@ -171,21 +171,19 @@ func (p *Provisioner) rollingWipeEphemeral(
 	return nil
 }
 
-// wipeEphemeralSingleNode performs the cordon → drain → stage → reset EPHEMERAL →
-// wait → uncordon sequence for a single node.
-//
-//nolint:cyclop // sequential cordon/drain/stage/reset/wait/uncordon steps
-func (p *Provisioner) wipeEphemeralSingleNode(
+// cordonAndDrainNode resolves a node's Kubernetes name from its IP, then cordons
+// and drains it. Returns the resolved node name for use in subsequent operations.
+func (p *Provisioner) cordonAndDrainNode(
 	ctx context.Context,
 	clientset kubernetes.Interface,
 	node nodeWithRole,
 	result *clusterupdate.UpdateResult,
-) error {
+) (string, error) {
 	nodeName, resolveErr := p.resolveNodeName(ctx, clientset, node.IP)
 	if resolveErr != nil {
 		recordFailedChange(result, node.Role, node.IP, resolveErr)
 
-		return fmt.Errorf("resolve node name for %s: %w", node.IP, resolveErr)
+		return "", fmt.Errorf("resolve node name for %s: %w", node.IP, resolveErr)
 	}
 
 	_, _ = fmt.Fprintf(p.logWriter, "    Cordoning %s (%s)...\n", nodeName, node.IP)
@@ -193,7 +191,7 @@ func (p *Provisioner) wipeEphemeralSingleNode(
 	if cordonErr := p.cordonNode(ctx, clientset, nodeName); cordonErr != nil {
 		recordFailedChange(result, node.Role, node.IP, cordonErr)
 
-		return fmt.Errorf("cordon %s: %w", nodeName, cordonErr)
+		return "", fmt.Errorf("cordon %s: %w", nodeName, cordonErr)
 	}
 
 	_, _ = fmt.Fprintf(p.logWriter, "    Draining %s...\n", nodeName)
@@ -201,7 +199,50 @@ func (p *Provisioner) wipeEphemeralSingleNode(
 	if drainErr := p.drainNode(ctx, clientset, nodeName); drainErr != nil {
 		recordFailedChange(result, node.Role, node.IP, drainErr)
 
-		return fmt.Errorf("drain %s: %w", nodeName, drainErr)
+		return "", fmt.Errorf("drain %s: %w", nodeName, drainErr)
+	}
+
+	return nodeName, nil
+}
+
+// waitReadyAndUncordon waits for a node to become Ready, then uncordons it.
+func (p *Provisioner) waitReadyAndUncordon(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	node nodeWithRole,
+	nodeName string,
+	result *clusterupdate.UpdateResult,
+) error {
+	_, _ = fmt.Fprintf(p.logWriter, "    Waiting for %s to become ready...\n", nodeName)
+
+	if waitErr := p.waitForK8sNodeReady(ctx, clientset, nodeName, nodeReadinessTimeout); waitErr != nil {
+		recordFailedChange(result, node.Role, node.IP, waitErr)
+
+		return fmt.Errorf("wait for ready on %s: %w", nodeName, waitErr)
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "    Uncordoning %s...\n", nodeName)
+
+	if uncordonErr := p.uncordonNode(ctx, clientset, nodeName); uncordonErr != nil {
+		recordFailedChange(result, node.Role, node.IP, uncordonErr)
+
+		return fmt.Errorf("uncordon %s: %w", nodeName, uncordonErr)
+	}
+
+	return nil
+}
+
+// wipeEphemeralSingleNode performs the cordon → drain → stage → reset EPHEMERAL →
+// wait → uncordon sequence for a single node.
+func (p *Provisioner) wipeEphemeralSingleNode(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	node nodeWithRole,
+	result *clusterupdate.UpdateResult,
+) error {
+	nodeName, err := p.cordonAndDrainNode(ctx, clientset, node, result)
+	if err != nil {
+		return err
 	}
 
 	if stageErr := p.stageConfigIfNeeded(ctx, node); stageErr != nil {
@@ -220,23 +261,7 @@ func (p *Provisioner) wipeEphemeralSingleNode(
 		return fmt.Errorf("reset EPHEMERAL on %s: %w", node.IP, resetErr)
 	}
 
-	_, _ = fmt.Fprintf(p.logWriter, "    Waiting for %s to become ready...\n", nodeName)
-
-	if waitErr := p.waitForK8sNodeReady(ctx, clientset, nodeName, nodeReadinessTimeout); waitErr != nil {
-		recordFailedChange(result, node.Role, node.IP, waitErr)
-
-		return fmt.Errorf("wait for ready after EPHEMERAL wipe on %s: %w", nodeName, waitErr)
-	}
-
-	_, _ = fmt.Fprintf(p.logWriter, "    Uncordoning %s...\n", nodeName)
-
-	if uncordonErr := p.uncordonNode(ctx, clientset, nodeName); uncordonErr != nil {
-		recordFailedChange(result, node.Role, node.IP, uncordonErr)
-
-		return fmt.Errorf("uncordon %s: %w", nodeName, uncordonErr)
-	}
-
-	return nil
+	return p.waitReadyAndUncordon(ctx, clientset, node, nodeName, result)
 }
 
 // rollingWipeState performs a rolling STATE partition wipe across all nodes.
@@ -276,35 +301,15 @@ func (p *Provisioner) rollingWipeState(
 
 // wipeStateSingleNode performs the cordon → drain → reset STATE → wait maintenance →
 // insecure apply → wait Ready → uncordon sequence for a single node.
-//
-//nolint:cyclop // sequential cordon/drain/reset/wait-maintenance/apply/wait-ready/uncordon steps
 func (p *Provisioner) wipeStateSingleNode(
 	ctx context.Context,
 	clientset kubernetes.Interface,
 	node nodeWithRole,
 	result *clusterupdate.UpdateResult,
 ) error {
-	nodeName, resolveErr := p.resolveNodeName(ctx, clientset, node.IP)
-	if resolveErr != nil {
-		recordFailedChange(result, node.Role, node.IP, resolveErr)
-
-		return fmt.Errorf("resolve node name for %s: %w", node.IP, resolveErr)
-	}
-
-	_, _ = fmt.Fprintf(p.logWriter, "    Cordoning %s (%s)...\n", nodeName, node.IP)
-
-	if cordonErr := p.cordonNode(ctx, clientset, nodeName); cordonErr != nil {
-		recordFailedChange(result, node.Role, node.IP, cordonErr)
-
-		return fmt.Errorf("cordon %s: %w", nodeName, cordonErr)
-	}
-
-	_, _ = fmt.Fprintf(p.logWriter, "    Draining %s...\n", nodeName)
-
-	if drainErr := p.drainNode(ctx, clientset, nodeName); drainErr != nil {
-		recordFailedChange(result, node.Role, node.IP, drainErr)
-
-		return fmt.Errorf("drain %s: %w", nodeName, drainErr)
+	nodeName, err := p.cordonAndDrainNode(ctx, clientset, node, result)
+	if err != nil {
+		return err
 	}
 
 	_, _ = fmt.Fprintf(p.logWriter, "    Resetting STATE partition on %s...\n", node.IP)
@@ -330,23 +335,7 @@ func (p *Provisioner) wipeStateSingleNode(
 		return fmt.Errorf("insecure apply on %s: %w", node.IP, applyErr)
 	}
 
-	_, _ = fmt.Fprintf(p.logWriter, "    Waiting for %s to become ready...\n", nodeName)
-
-	if waitErr := p.waitForK8sNodeReady(ctx, clientset, nodeName, nodeReadinessTimeout); waitErr != nil {
-		recordFailedChange(result, node.Role, node.IP, waitErr)
-
-		return fmt.Errorf("wait for ready after STATE wipe on %s: %w", nodeName, waitErr)
-	}
-
-	_, _ = fmt.Fprintf(p.logWriter, "    Uncordoning %s...\n", nodeName)
-
-	if uncordonErr := p.uncordonNode(ctx, clientset, nodeName); uncordonErr != nil {
-		recordFailedChange(result, node.Role, node.IP, uncordonErr)
-
-		return fmt.Errorf("uncordon %s: %w", nodeName, uncordonErr)
-	}
-
-	return nil
+	return p.waitReadyAndUncordon(ctx, clientset, node, nodeName, result)
 }
 
 // prepareRollingWipe creates the Kubernetes clientset and returns sorted nodes

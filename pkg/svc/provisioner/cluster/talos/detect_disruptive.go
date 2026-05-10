@@ -17,6 +17,11 @@ const (
 	FieldEphemeralEncryption = "machine.systemDiskEncryption.ephemeral"
 	// FieldStateEncryption is the change field for STATE partition encryption.
 	FieldStateEncryption = "machine.systemDiskEncryption.state"
+
+	// initialChangeCapacity is the initial capacity for the changes slice in
+	// classifyMachineConfigChanges. Sized for the common case of a few
+	// detected changes (encryption + CNI + features).
+	initialChangeCapacity = 4
 )
 
 // machineClusterConfig is a minimal interface covering the Machine() and Cluster()
@@ -169,7 +174,7 @@ func encryptionProviderName(
 func classifyMachineConfigChanges(
 	runningConfig, desiredConfig machineClusterConfig,
 ) []clusterupdate.Change {
-	changes := make([]clusterupdate.Change, 0, 4)
+	changes := make([]clusterupdate.Change, 0, initialChangeCapacity)
 
 	changes = append(changes, detectVolumeEncryptionChanges(
 		runningConfig.Machine().SystemDiskEncryption(),

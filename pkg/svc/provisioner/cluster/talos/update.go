@@ -74,7 +74,7 @@ func (p *Provisioner) mergeDisruptiveChanges(
 	}
 
 	for _, change := range wipeChanges {
-		switch change.Category {
+		switch change.Category { //nolint:exhaustive // only actionable categories need routing
 		case clusterupdate.ChangeCategoryWipeRequired:
 			diff.WipeRequired = append(diff.WipeRequired, change)
 		case clusterupdate.ChangeCategoryRebootRequired:

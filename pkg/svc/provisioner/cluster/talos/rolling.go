@@ -259,7 +259,7 @@ func (p *Provisioner) rollingApplyRebootChanges(
 // rollingRebootSingleNode performs the cordon → drain → stage config → reboot →
 // wait → uncordon sequence for a single node.
 //
-//nolint:cyclop // sequential cordon/drain/stage/reboot/wait/uncordon steps
+//nolint:cyclop,funlen // sequential cordon/drain/stage/reboot/wait/uncordon steps
 func (p *Provisioner) rollingRebootSingleNode(
 	ctx context.Context,
 	clientset kubernetes.Interface,
@@ -313,14 +313,16 @@ func (p *Provisioner) rollingRebootSingleNode(
 
 	_, _ = fmt.Fprintf(p.logWriter, "    Waiting for %s to become ready...\n", nodeName)
 
-	if err := p.waitForK8sNodeReady(ctx, clientset, nodeName, nodeReadinessTimeout); err != nil {
-		return fmt.Errorf("wait for ready: %w", err)
+	waitErr := p.waitForK8sNodeReady(ctx, clientset, nodeName, nodeReadinessTimeout)
+	if waitErr != nil {
+		return fmt.Errorf("wait for ready: %w", waitErr)
 	}
 
 	_, _ = fmt.Fprintf(p.logWriter, "    Uncordoning %s...\n", nodeName)
 
-	if err := p.uncordonNode(ctx, clientset, nodeName); err != nil {
-		return fmt.Errorf("uncordon: %w", err)
+	uncordonErr := p.uncordonNode(ctx, clientset, nodeName)
+	if uncordonErr != nil {
+		return fmt.Errorf("uncordon: %w", uncordonErr)
 	}
 
 	return nil
