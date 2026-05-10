@@ -326,6 +326,9 @@ func MergeTalosconfigBytesForTest(talosconfigPath string, newData []byte) error 
 //nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
 var DetectHetznerServerTypesForTest = detectHetznerServerTypes
 
+// MachineClusterConfigForTest is the exported alias of machineClusterConfig for testing.
+type MachineClusterConfigForTest = machineClusterConfig
+
 // DetectVolumeEncryptionChangesForTest exposes detectVolumeEncryptionChanges for unit testing.
 //
 //nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
@@ -335,6 +338,31 @@ var DetectVolumeEncryptionChangesForTest = detectVolumeEncryptionChanges
 //
 //nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
 var EncryptionProviderNameForTest = encryptionProviderName
+
+// ClassifyMachineConfigChangesForTest exposes classifyMachineConfigChanges for unit testing.
+//
+//nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
+var ClassifyMachineConfigChangesForTest = classifyMachineConfigChanges
+
+// DetectCNIChangesForTest exposes detectCNIChanges for unit testing.
+//
+//nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
+var DetectCNIChangesForTest = detectCNIChanges
+
+// DetectDiskQuotaChangesForTest exposes detectDiskQuotaChanges for unit testing.
+//
+//nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
+var DetectDiskQuotaChangesForTest = detectDiskQuotaChanges
+
+// CNINameForTest exposes cniName for unit testing.
+//
+//nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
+var CNINameForTest = cniName
+
+// DiskQuotaEnabledForTest exposes diskQuotaEnabled for unit testing.
+//
+//nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
+var DiskQuotaEnabledForTest = diskQuotaEnabled
 
 // ValidateCurrentContextCAForTest exposes validateCurrentContextCA for unit testing.
 //

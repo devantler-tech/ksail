@@ -71,22 +71,35 @@ func (p *Provisioner) Update(
 		return result, fmt.Errorf("failed to sync cluster secrets: %w", secretErr)
 	}
 
-	// Detect disruptive config changes (e.g., disk encryption migration)
-	// that require partition wiping. This must run after secrets sync so
-	// that p.talosConfigs has the correct PKI for creating Talos clients.
-	wipeChanges, detectErr := p.detectDisruptiveConfigChanges(ctx, clusterName)
+	// Detect config changes (encryption, CNI, disk quota) from Talos machine config.
+	// This must run after secrets sync so that p.talosConfigs has the correct PKI
+	// for creating Talos clients.
+	classifiedChanges, detectErr := p.detectDisruptiveConfigChanges(ctx, clusterName)
 	if detectErr != nil {
-		_, _ = fmt.Fprintf(p.logWriter, "  ⚠ Failed to detect disruptive config changes: %v\n", detectErr)
+		_, _ = fmt.Fprintf(p.logWriter, "  ⚠ Failed to detect config changes: %v\n", detectErr)
 		// Non-fatal: continue with update even if detection fails
-	} else if len(wipeChanges) > 0 {
-		result.WipeRequired = append(result.WipeRequired, wipeChanges...)
+	} else {
+		for _, change := range classifiedChanges {
+			switch change.Category {
+			case clusterupdate.ChangeCategoryWipeRequired:
+				result.WipeRequired = append(result.WipeRequired, change)
+			case clusterupdate.ChangeCategoryRebootRequired:
+				result.RebootRequired = append(result.RebootRequired, change)
+			default:
+				result.InPlaceChanges = append(result.InPlaceChanges, change)
+			}
+		}
 
-		if !opts.Force {
+		// Only block for wipe-required changes (reboot changes are handled by rolling reboot)
+		if result.HasWipeRequired() && !opts.Force {
+			wipeChanges := result.WipeRequired
 			_, _ = fmt.Fprintf(p.logWriter, "\n  ⚠ Detected %d change(s) requiring partition wipe:\n", len(wipeChanges))
+
 			for _, change := range wipeChanges {
 				_, _ = fmt.Fprintf(p.logWriter, "    • %s: %s → %s (%s)\n",
 					change.Field, change.OldValue, change.NewValue, change.Reason)
 			}
+
 			_, _ = fmt.Fprintf(p.logWriter, "\n  Use --force to proceed with partition wipe migration.\n")
 			_, _ = fmt.Fprintf(p.logWriter, "  Manual procedure: https://docs.siderolabs.com/talos/v1.13/configure-your-talos-cluster/storage-and-disk-management/disk-encryption#going-from-unencrypted-to-encrypted-and-vice-versa\n")
 
@@ -94,10 +107,12 @@ func (p *Provisioner) Update(
 				clusterupdate.ErrWipeRequired, len(wipeChanges))
 		}
 
-		// Force is set — execute wipe migration
-		wipeErr := p.applyWipeRequiredChanges(ctx, clusterName, result)
-		if wipeErr != nil {
-			return result, fmt.Errorf("failed to apply wipe-required changes: %w", wipeErr)
+		if result.HasWipeRequired() {
+			// Force is set — execute wipe migration
+			wipeErr := p.applyWipeRequiredChanges(ctx, clusterName, result)
+			if wipeErr != nil {
+				return result, fmt.Errorf("failed to apply wipe-required changes: %w", wipeErr)
+			}
 		}
 	}
 
