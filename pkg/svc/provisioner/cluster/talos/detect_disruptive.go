@@ -209,29 +209,38 @@ func detectCNIChanges(
 	}
 }
 
+// defaultTalosCNI is the Talos default CNI name when no CNI config is specified.
+const defaultTalosCNI = "flannel"
+
 // cniName extracts the CNI name from a Talos config.
-// Returns empty string if the CNI config is not set.
+// Returns "flannel" (Talos default) when the config has no CNI section,
+// preventing false-positive diffs when one side omits the CNI stanza.
 func cniName(cfg machineClusterConfig) string {
 	if cfg == nil {
-		return ""
+		return defaultTalosCNI
 	}
 
 	cluster := cfg.Cluster()
 	if cluster == nil {
-		return ""
+		return defaultTalosCNI
 	}
 
 	network := cluster.Network()
 	if network == nil {
-		return ""
+		return defaultTalosCNI
 	}
 
 	cni := network.CNI()
 	if cni == nil {
-		return ""
+		return defaultTalosCNI
 	}
 
-	return cni.Name()
+	name := cni.Name()
+	if name == "" {
+		return defaultTalosCNI
+	}
+
+	return name
 }
 
 // detectDiskQuotaChanges compares disk quota support configuration.

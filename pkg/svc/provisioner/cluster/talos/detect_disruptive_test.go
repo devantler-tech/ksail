@@ -12,8 +12,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-//go:fix inline
-func boolPtr(b bool) *bool { return new(b) }
+//nolint:gocheckcompilerdirectives // Go 1.26 auto-adds //go:fix inline directive
+func boolPtr(b bool) *bool { return &b }
 
 func TestDetectVolumeEncryptionChanges(t *testing.T) { //nolint:funlen // table-driven tests
 	t.Parallel()
@@ -593,9 +593,9 @@ func TestCNIName(t *testing.T) { //nolint:funlen // table-driven tests
 		expected string
 	}{
 		{
-			name:     "nil config returns empty string",
+			name:     "nil config returns flannel default",
 			config:   nil,
-			expected: "",
+			expected: "flannel",
 		},
 		{
 			name: "nil network returns flannel default",
