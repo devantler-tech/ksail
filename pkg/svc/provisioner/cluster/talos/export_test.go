@@ -345,3 +345,12 @@ var ValidateCurrentContextCAForTest = validateCurrentContextCA
 func SortNodesWorkersFirstForTest(nodes []NodeWithRoleForTest) []NodeWithRoleForTest {
 	return sortNodesWorkersFirst(nodes)
 }
+
+// ApplyWipeRequiredChangesForTest exposes applyWipeRequiredChanges for unit testing.
+func (p *Provisioner) ApplyWipeRequiredChangesForTest(
+	ctx context.Context,
+	clusterName string,
+	result *clusterupdate.UpdateResult,
+) error {
+	return p.applyWipeRequiredChanges(ctx, clusterName, result)
+}

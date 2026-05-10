@@ -93,6 +93,12 @@ func (p *Provisioner) Update(
 			return result, fmt.Errorf("%w: %d changes require partition wipe (use --force to proceed)",
 				clusterupdate.ErrWipeRequired, len(wipeChanges))
 		}
+
+		// Force is set — execute wipe migration
+		wipeErr := p.applyWipeRequiredChanges(ctx, clusterName, result)
+		if wipeErr != nil {
+			return result, fmt.Errorf("failed to apply wipe-required changes: %w", wipeErr)
+		}
 	}
 
 	// Handle node scaling changes
