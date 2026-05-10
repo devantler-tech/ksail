@@ -326,7 +326,64 @@ func MergeTalosconfigBytesForTest(talosconfigPath string, newData []byte) error 
 //nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
 var DetectHetznerServerTypesForTest = detectHetznerServerTypes
 
+// MachineClusterConfigForTest is the exported alias of machineClusterConfig for testing.
+type MachineClusterConfigForTest = machineClusterConfig
+
+// DetectVolumeEncryptionChangesForTest exposes detectVolumeEncryptionChanges for unit testing.
+//
+//nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
+var DetectVolumeEncryptionChangesForTest = detectVolumeEncryptionChanges
+
+// EncryptionProviderNameForTest exposes encryptionProviderName for unit testing.
+//
+//nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
+var EncryptionProviderNameForTest = encryptionProviderName
+
+// ClassifyMachineConfigChangesForTest exposes classifyMachineConfigChanges for unit testing.
+//
+//nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
+var ClassifyMachineConfigChangesForTest = classifyMachineConfigChanges
+
+// DetectCNIChangesForTest exposes detectCNIChanges for unit testing.
+//
+//nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
+var DetectCNIChangesForTest = detectCNIChanges
+
+// DetectDiskQuotaChangesForTest exposes detectDiskQuotaChanges for unit testing.
+//
+//nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
+var DetectDiskQuotaChangesForTest = detectDiskQuotaChanges
+
+// CNINameForTest exposes cniName for unit testing.
+//
+//nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
+var CNINameForTest = cniName
+
+// DiskQuotaEnabledForTest exposes diskQuotaEnabled for unit testing.
+//
+//nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
+var DiskQuotaEnabledForTest = diskQuotaEnabled
+
 // ValidateCurrentContextCAForTest exposes validateCurrentContextCA for unit testing.
 //
 //nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
 var ValidateCurrentContextCAForTest = validateCurrentContextCA
+
+// SortNodesWorkersFirstForTest exposes sortNodesWorkersFirst for unit testing.
+func SortNodesWorkersFirstForTest(nodes []NodeWithRoleForTest) []NodeWithRoleForTest {
+	return sortNodesWorkersFirst(nodes)
+}
+
+// ApplyWipeRequiredChangesForTest exposes applyWipeRequiredChanges for unit testing.
+func (p *Provisioner) ApplyWipeRequiredChangesForTest(
+	ctx context.Context,
+	clusterName string,
+	result *clusterupdate.UpdateResult,
+) error {
+	return p.applyWipeRequiredChanges(ctx, clusterName, result)
+}
+
+// PartitionWipeDecisionForTest exposes partitionWipeDecision for unit testing.
+func PartitionWipeDecisionForTest(changes []clusterupdate.Change) (bool, bool) {
+	return partitionWipeDecision(changes)
+}

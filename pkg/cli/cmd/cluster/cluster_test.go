@@ -6435,6 +6435,27 @@ func TestDiffToJSON_RequiresConfirmation_OnlyInPlace(t *testing.T) {
 	}
 }
 
+func TestDiffToJSON_IncludesWipeRequired(t *testing.T) {
+	t.Parallel()
+
+	diff := clusterupdate.NewEmptyUpdateResult()
+	diff.WipeRequired = append(diff.WipeRequired, clusterupdate.Change{
+		Field:    "machine.systemDiskEncryption.ephemeral",
+		OldValue: "none",
+		NewValue: "luks2",
+		Category: clusterupdate.ChangeCategoryWipeRequired,
+		Reason:   "EPHEMERAL partition encryption change requires partition wipe",
+	})
+
+	out := cluster.ExportDiffToJSON(diff)
+
+	assert.Equal(t, 1, out.TotalChanges)
+	assert.Len(t, out.WipeRequired, 1)
+	assert.Equal(t, "machine.systemDiskEncryption.ephemeral", out.WipeRequired[0].Field)
+	assert.Equal(t, "wipe-required", out.WipeRequired[0].Category)
+	assert.True(t, out.RequiresConfirmation)
+}
+
 // TestEnsureLocalRegistriesReady_CloudProviders verifies that Docker infrastructure
 // (local registry container, mirror registry containers, Docker network) is skipped
 // for cloud providers (Omni, Hetzner). Cloud providers run nodes on remote servers

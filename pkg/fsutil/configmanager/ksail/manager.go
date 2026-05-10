@@ -343,6 +343,9 @@ func (m *ConfigManager) unmarshalAndApplyDefaults(ignoreConfigFile bool) error {
 		return err
 	}
 
+	// Warn about deprecated Talos patch-wrapper fields
+	warnDeprecatedTalosPatchFields(m.Config, m.Writer)
+
 	// Track whether local-registry was explicitly set in config
 	m.localRegistryExplicit = m.Viper.IsSet("spec.cluster.localRegistry.registry") ||
 		m.Viper.IsSet("local-registry")

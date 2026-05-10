@@ -257,6 +257,8 @@ func appendChange(
 		result.InPlaceChanges = append(result.InPlaceChanges, change)
 	case clusterupdate.ChangeCategoryRebootRequired:
 		result.RebootRequired = append(result.RebootRequired, change)
+	case clusterupdate.ChangeCategoryWipeRequired:
+		result.WipeRequired = append(result.WipeRequired, change)
 	}
 }
 

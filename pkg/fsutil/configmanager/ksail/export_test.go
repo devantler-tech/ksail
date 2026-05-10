@@ -31,6 +31,9 @@ func (m *ConfigManager) GetDefaultTalosPatchesForTest() []Patch {
 // Patch re-exports the Talos Patch type for testing.
 type Patch = talosconfigmanager.Patch
 
+// WarnDeprecatedTalosPatchFieldsForTest exposes warnDeprecatedTalosPatchFields for testing.
+var WarnDeprecatedTalosPatchFieldsForTest = warnDeprecatedTalosPatchFields
+
 // MigrateDeprecatedNodeCountsForTest exposes migrateDeprecatedNodeCounts for testing.
 var MigrateDeprecatedNodeCountsForTest = migrateDeprecatedNodeCounts
 
