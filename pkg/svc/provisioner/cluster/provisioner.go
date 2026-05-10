@@ -56,8 +56,13 @@ type Updater interface {
 
 	// GetCurrentConfig retrieves the current cluster configuration from the running cluster.
 	// Used to compare against the desired configuration for computing diffs.
+	// The clusterName parameter is used to load persisted state for fields that cannot
+	// be introspected from the live cluster (e.g., Talos ISO, local registry settings).
 	// Returns the cluster spec and an optional provider spec (non-nil for provider-aware provisioners).
-	GetCurrentConfig(ctx context.Context) (*v1alpha1.ClusterSpec, *v1alpha1.ProviderSpec, error)
+	GetCurrentConfig(
+		ctx context.Context,
+		clusterName string,
+	) (*v1alpha1.ClusterSpec, *v1alpha1.ProviderSpec, error)
 }
 
 // ProviderAware is an optional interface for provisioners that can use a provider

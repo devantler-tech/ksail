@@ -15,6 +15,7 @@ import (
 	svcprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/state"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	machineapi "github.com/siderolabs/talos/pkg/machinery/api/machine"
@@ -813,6 +814,7 @@ func (p *Provisioner) getDockerNodesByRole(
 // running cluster through the Kubernetes API and Docker/Hetzner/Omni providers.
 func (p *Provisioner) GetCurrentConfig(
 	ctx context.Context,
+	clusterName string,
 ) (*v1alpha1.ClusterSpec, *v1alpha1.ProviderSpec, error) {
 	var provider v1alpha1.Provider
 
@@ -826,6 +828,14 @@ func (p *Provisioner) GetCurrentConfig(
 	}
 
 	spec := clusterupdate.DefaultCurrentSpec(v1alpha1.DistributionTalos, provider)
+
+	// Merge non-introspectable fields from persisted state.
+	// Fields like Talos.ISO and LocalRegistry cannot be detected from the running
+	// cluster but are saved after successful create/update operations.
+	err := p.mergePersistedState(spec, clusterName)
+	if err != nil {
+		return nil, nil, fmt.Errorf("merge persisted state: %w", err)
+	}
 
 	// Detect installed components from the live cluster when the detector is available.
 	if p.componentDetector != nil {
@@ -873,6 +883,40 @@ func (p *Provisioner) GetCurrentConfig(
 	}
 
 	return spec, providerSpec, nil
+}
+
+// mergePersistedState loads the previously saved ClusterSpec and merges fields
+// that cannot be introspected from the live cluster. This prevents false-positive
+// diffs for boot-time settings (e.g., Talos ISO ID) and configuration that is
+// not exposed via any cluster API.
+//
+// Returns nil when state is missing (ErrStateNotFound) — the caller proceeds
+// with defaults. Returns a wrapped error for any other failure (I/O, corrupt
+// JSON, permission issues) so the caller can surface it.
+func (p *Provisioner) mergePersistedState(spec *v1alpha1.ClusterSpec, clusterName string) error {
+	name := p.resolveClusterName(clusterName)
+
+	saved, err := state.LoadClusterSpec(name)
+	if err != nil {
+		if errors.Is(err, state.ErrStateNotFound) {
+			return nil
+		}
+
+		return fmt.Errorf("load persisted cluster state for %q: %w", name, err)
+	}
+
+	// Talos.ISO is a boot-time setting (Hetzner Cloud ISO ID) that cannot be
+	// detected from the running cluster.
+	if saved.Talos.ISO != 0 {
+		spec.Talos.ISO = saved.Talos.ISO
+	}
+
+	// LocalRegistry configuration is not exposed by any cluster API.
+	if saved.LocalRegistry.Registry != "" {
+		spec.LocalRegistry = saved.LocalRegistry
+	}
+
+	return nil
 }
 
 // introspectNodeCounts determines the actual control-plane and worker node

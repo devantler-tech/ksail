@@ -71,8 +71,11 @@ func (k *Provisioner) DiffConfig(
 // GetCurrentConfig retrieves the current cluster configuration by probing the
 // running cluster via Helm releases, Kubernetes Deployments, and Docker
 // containers. Falls back to static defaults when no detector is available.
+//
+// jscpd:ignore-start
 func (k *Provisioner) GetCurrentConfig(
 	ctx context.Context,
+	_ string,
 ) (*v1alpha1.ClusterSpec, *v1alpha1.ProviderSpec, error) {
 	if k.componentDetector != nil {
 		spec, err := k.componentDetector.DetectComponents(
@@ -86,6 +89,8 @@ func (k *Provisioner) GetCurrentConfig(
 
 		return spec, nil, nil
 	}
+
+	// jscpd:ignore-end
 
 	return clusterupdate.DefaultCurrentSpec(
 		v1alpha1.DistributionVanilla,

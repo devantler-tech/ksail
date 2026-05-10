@@ -387,3 +387,11 @@ func (p *Provisioner) ApplyWipeRequiredChangesForTest(
 func PartitionWipeDecisionForTest(changes []clusterupdate.Change) (bool, bool) {
 	return partitionWipeDecision(changes)
 }
+
+// MergePersistedStateForTest exposes mergePersistedState for unit testing.
+func (p *Provisioner) MergePersistedStateForTest(
+	spec *v1alpha1.ClusterSpec,
+	clusterName string,
+) error {
+	return p.mergePersistedState(spec, clusterName)
+}
