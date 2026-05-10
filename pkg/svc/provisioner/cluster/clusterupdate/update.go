@@ -2,11 +2,16 @@ package clusterupdate
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 )
+
+// ErrWipeRequired is returned when configuration changes require partition wiping
+// (e.g., disk encryption migration) and --force was not provided.
+var ErrWipeRequired = errors.New("partition wipe required")
 
 // DefaultLocalRegistryAddress is the default local registry address applied by
 // the config system when a GitOps engine is configured but no explicit
@@ -67,6 +72,11 @@ const (
 	// ChangeCategoryRecreateRequired indicates the cluster must be recreated.
 	// Examples: distribution change, provider change, Kind node changes, network CIDR changes.
 	ChangeCategoryRecreateRequired
+
+	// ChangeCategoryWipeRequired indicates the change requires partition wiping.
+	// Examples: disk encryption migration (LUKS2), changes requiring formatted partitions.
+	// These changes are more disruptive than reboots but don't require full cluster recreation.
+	ChangeCategoryWipeRequired
 )
 
 // String returns a human-readable name for the change category.
@@ -78,6 +88,8 @@ func (c ChangeCategory) String() string {
 		return "reboot-required"
 	case ChangeCategoryRecreateRequired:
 		return "recreate-required"
+	case ChangeCategoryWipeRequired:
+		return "wipe-required"
 	default:
 		return "unknown"
 	}
@@ -105,6 +117,8 @@ type UpdateResult struct {
 	RebootRequired []Change
 	// RecreateRequired lists changes that require cluster recreation.
 	RecreateRequired []Change
+	// WipeRequired lists changes that require partition wiping.
+	WipeRequired []Change
 	// AppliedChanges lists changes that were successfully applied.
 	AppliedChanges []Change
 	// FailedChanges lists changes that failed to apply.
@@ -123,6 +137,7 @@ func NewEmptyUpdateResult() *UpdateResult {
 		InPlaceChanges:   make([]Change, 0),
 		RebootRequired:   make([]Change, 0),
 		RecreateRequired: make([]Change, 0),
+		WipeRequired:     make([]Change, 0),
 		AppliedChanges:   make([]Change, 0),
 		FailedChanges:    make([]Change, 0),
 	}
@@ -144,6 +159,7 @@ func NewUpdateResultFromDiff(diff *UpdateResult) *UpdateResult {
 		InPlaceChanges:   diff.InPlaceChanges,
 		RebootRequired:   diff.RebootRequired,
 		RecreateRequired: diff.RecreateRequired,
+		WipeRequired:     diff.WipeRequired,
 		AppliedChanges:   make([]Change, 0),
 		FailedChanges:    make([]Change, 0),
 	}
@@ -164,15 +180,20 @@ func (r *UpdateResult) HasRecreateRequired() bool {
 	return len(r.RecreateRequired) > 0
 }
 
+// HasWipeRequired returns true if there are changes requiring partition wipes.
+func (r *UpdateResult) HasWipeRequired() bool {
+	return len(r.WipeRequired) > 0
+}
+
 // NeedsUserConfirmation returns true if any changes require user confirmation.
-// In-place changes can be applied silently; reboot or recreate require confirmation.
+// In-place changes can be applied silently; reboot, recreate, or wipe require confirmation.
 func (r *UpdateResult) NeedsUserConfirmation() bool {
-	return r.HasRebootRequired() || r.HasRecreateRequired()
+	return r.HasRebootRequired() || r.HasRecreateRequired() || r.HasWipeRequired()
 }
 
 // TotalChanges returns the total number of detected changes.
 func (r *UpdateResult) TotalChanges() int {
-	return len(r.InPlaceChanges) + len(r.RebootRequired) + len(r.RecreateRequired)
+	return len(r.InPlaceChanges) + len(r.RebootRequired) + len(r.RecreateRequired) + len(r.WipeRequired)
 }
 
 // AllChanges returns all detected changes in a single slice.
@@ -181,6 +202,7 @@ func (r *UpdateResult) AllChanges() []Change {
 	all = append(all, r.InPlaceChanges...)
 	all = append(all, r.RebootRequired...)
 	all = append(all, r.RecreateRequired...)
+	all = append(all, r.WipeRequired...)
 
 	return all
 }
@@ -222,6 +244,12 @@ func PrepareUpdate(
 	if diff.HasRecreateRequired() {
 		return result, false, fmt.Errorf("%w: %d changes require recreation",
 			recreateErr, len(diff.RecreateRequired))
+	}
+
+	// Wipe-required changes need explicit --force confirmation
+	if diff.HasWipeRequired() && !opts.Force {
+		return result, false, fmt.Errorf("%w: %d changes require partition wipe (use --force to proceed)",
+			ErrWipeRequired, len(diff.WipeRequired))
 	}
 
 	return result, true, nil

@@ -202,6 +202,7 @@ func TestChangeCategory_String(t *testing.T) {
 		{"in-place", clusterupdate.ChangeCategoryInPlace, "in-place"},
 		{"reboot-required", clusterupdate.ChangeCategoryRebootRequired, "reboot-required"},
 		{"recreate-required", clusterupdate.ChangeCategoryRecreateRequired, "recreate-required"},
+		{"wipe-required", clusterupdate.ChangeCategoryWipeRequired, "wipe-required"},
 		{"unknown", clusterupdate.ChangeCategory(999), "unknown"},
 	}
 
@@ -400,6 +401,93 @@ func TestPrepareUpdate_NoChanges(t *testing.T) {
 
 	diff := clusterupdate.NewEmptyUpdateResult()
 	opts := clusterupdate.UpdateOptions{}
+
+	result, shouldContinue, err := clusterupdate.PrepareUpdate(diff, nil, opts, errRecreateRequired)
+
+	require.NotNil(t, result)
+	assert.True(t, shouldContinue)
+	require.NoError(t, err)
+}
+
+// TestUpdateResult_WipeRequiredChangesAreDetected tests that wipe-required changes are properly detected.
+func TestUpdateResult_WipeRequiredChangesAreDetected(t *testing.T) {
+	t.Parallel()
+
+	result := clusterupdate.NewEmptyUpdateResult()
+	result.WipeRequired = append(result.WipeRequired, clusterupdate.Change{
+		Field:    "talos.volumeConfig.encryption",
+		OldValue: "",
+		NewValue: "LUKS2",
+		Category: clusterupdate.ChangeCategoryWipeRequired,
+		Reason:   "disk encryption requires partition wipe",
+	})
+
+	assert.Equal(t, 1, result.TotalChanges())
+	assert.True(t, result.HasWipeRequired())
+	assert.True(t, result.NeedsUserConfirmation())
+	assert.False(t, result.HasInPlaceChanges())
+	assert.False(t, result.HasRebootRequired())
+	assert.False(t, result.HasRecreateRequired())
+}
+
+// TestUpdateResult_AllChanges_IncludesWipeRequired tests that AllChanges includes wipe-required changes.
+func TestUpdateResult_AllChanges_IncludesWipeRequired(t *testing.T) {
+	t.Parallel()
+
+	result := clusterupdate.NewEmptyUpdateResult()
+	result.WipeRequired = append(result.WipeRequired, clusterupdate.Change{
+		Field:    "talos.volumeConfig.encryption",
+		Category: clusterupdate.ChangeCategoryWipeRequired,
+	})
+
+	all := result.AllChanges()
+	assert.Len(t, all, 1)
+	assert.Contains(t, all, result.WipeRequired[0])
+}
+
+// TestNewUpdateResultFromDiff_CopiesWipeRequired tests that NewUpdateResultFromDiff copies WipeRequired.
+func TestNewUpdateResultFromDiff_CopiesWipeRequired(t *testing.T) {
+	t.Parallel()
+
+	diff := clusterupdate.NewEmptyUpdateResult()
+	diff.WipeRequired = append(diff.WipeRequired, clusterupdate.Change{
+		Field:    "talos.volumeConfig.encryption",
+		Category: clusterupdate.ChangeCategoryWipeRequired,
+	})
+
+	result := clusterupdate.NewUpdateResultFromDiff(diff)
+
+	require.NotNil(t, result)
+	assert.Equal(t, diff.WipeRequired, result.WipeRequired)
+}
+
+// TestPrepareUpdate_WipeRequiredBlocksWithoutForce tests that wipe-required changes block without --force.
+func TestPrepareUpdate_WipeRequiredBlocksWithoutForce(t *testing.T) {
+	t.Parallel()
+
+	diff := clusterupdate.NewEmptyUpdateResult()
+	diff.WipeRequired = append(diff.WipeRequired, clusterupdate.Change{
+		Field: "talos.volumeConfig.encryption",
+	})
+	opts := clusterupdate.UpdateOptions{}
+
+	result, shouldContinue, err := clusterupdate.PrepareUpdate(diff, nil, opts, errRecreateRequired)
+
+	require.NotNil(t, result)
+	assert.False(t, shouldContinue)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, clusterupdate.ErrWipeRequired)
+}
+
+// TestPrepareUpdate_WipeRequiredAllowedWithForce tests that wipe-required changes proceed with --force.
+func TestPrepareUpdate_WipeRequiredAllowedWithForce(t *testing.T) {
+	t.Parallel()
+
+	diff := clusterupdate.NewEmptyUpdateResult()
+	diff.WipeRequired = append(diff.WipeRequired, clusterupdate.Change{
+		Field: "talos.volumeConfig.encryption",
+	})
+	opts := clusterupdate.UpdateOptions{Force: true}
 
 	result, shouldContinue, err := clusterupdate.PrepareUpdate(diff, nil, opts, errRecreateRequired)
 
