@@ -1,6 +1,6 @@
 ---
 name: ksail
-description: Use the ksail CLI to spin up and manage local Kubernetes clusters (Kind/K3d/Talos/vCluster/KWOK/EKS) and GitOps workloads declaratively. Triggers on requests involving local Kubernetes clusters, Flux/ArgoCD GitOps bootstrapping, Kind/K3d/Talos/vCluster/KWOK/EKS, multi-tenancy onboarding, OIDC authentication, or the ksail CLI/MCP server.
+description: Use the ksail CLI to spin up and manage Kubernetes clusters (Kind/K3d/Talos/vCluster/KWOK — local via Docker; EKS — cloud via AWS) and GitOps workloads declaratively. Triggers on requests involving Kubernetes clusters, Flux/ArgoCD GitOps bootstrapping, Kind/K3d/Talos/vCluster/KWOK/EKS, multi-tenancy onboarding, OIDC authentication, or the ksail CLI/MCP server.
 ---
 
 # ksail
