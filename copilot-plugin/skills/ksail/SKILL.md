@@ -1,6 +1,6 @@
 ---
 name: ksail
-description: Use the ksail CLI to spin up and manage local Kubernetes clusters (Kind/K3d/Talos/vCluster) and GitOps workloads declaratively. Triggers on requests involving local Kubernetes clusters, Flux/ArgoCD GitOps bootstrapping, Kind/K3d/Talos/vCluster, or the ksail CLI/MCP server.
+description: Use the ksail CLI to spin up and manage local Kubernetes clusters (Kind/K3d/Talos/vCluster/KWOK/EKS) and GitOps workloads declaratively. Triggers on requests involving local Kubernetes clusters, Flux/ArgoCD GitOps bootstrapping, Kind/K3d/Talos/vCluster/KWOK/EKS, multi-tenancy onboarding, OIDC authentication, or the ksail CLI/MCP server.
 ---
 
 # ksail
@@ -33,6 +33,8 @@ Invoke when the user asks to:
 - `ksail cluster …` — lifecycle: `init`, `create`, `update`, `delete`, `start`, `stop`, `info`, `list`, `connect`, `switch`, `backup`, `restore`
 - `ksail workload …` — `apply`, `create`, `edit`, `get`, `describe`, `explain`, `delete`, `logs`, `exec`, `expose`, `gen`, `validate`, `install`, `scale`, `rollout`, `scan`, `wait`, `images`, `export`, `import`, `watch`, `push`, `reconcile`
 - `ksail cipher …` — SOPS-based secret management
+- `ksail tenant …` — multi-tenancy: `create`, `delete`
+- `ksail oidc …` — OIDC authentication: `get-token`
 - `ksail chat` — AI chat TUI powered by GitHub Copilot
 - `ksail mcp` — MCP server (already auto-registered by this plugin)
 
