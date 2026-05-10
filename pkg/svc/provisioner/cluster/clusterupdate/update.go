@@ -193,15 +193,7 @@ func (r *UpdateResult) NeedsUserConfirmation() bool {
 
 // TotalChanges returns the total number of detected changes.
 func (r *UpdateResult) TotalChanges() int {
-	return len(
-		r.InPlaceChanges,
-	) + len(
-		r.RebootRequired,
-	) + len(
-		r.RecreateRequired,
-	) + len(
-		r.WipeRequired,
-	)
+	return len(r.InPlaceChanges) + len(r.RebootRequired) + len(r.RecreateRequired) + len(r.WipeRequired)
 }
 
 // AllChanges returns all detected changes in a single slice.
@@ -257,7 +249,8 @@ func PrepareUpdate(
 	// Wipe-required changes need explicit --force confirmation
 	if diff.HasWipeRequired() && !opts.Force {
 		return result, false, fmt.Errorf(
-			"%w: %d changes require partition wipe (use --force to proceed)",
+			"%w: %d changes require partition wipe (use --force to proceed, "+
+				"or see https://ksail.devantler.tech/guides/talos-disk-encryption/ for manual steps)",
 			ErrWipeRequired,
 			len(diff.WipeRequired),
 		)

@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-//nolint:gocheckcompilerdirectives // Go 1.26 auto-adds //go:fix inline directive
+//nolint:gocheckcompilerdirectives,unused // Go 1.26 auto-inlines; definition needed for source readability
 func boolPtr(b bool) *bool { return &b }
 
 func TestDetectVolumeEncryptionChanges(t *testing.T) { //nolint:funlen // table-driven tests

@@ -211,8 +211,6 @@ func sortNodesWorkersFirst(nodes []nodeWithRole) []nodeWithRole {
 // a rolling reboot across all cluster nodes. Workers are rebooted first to minimize
 // control-plane disruption. For each node: cordon → drain → apply config (STAGED) →
 // reboot → wait for Ready → uncordon.
-//
-
 func (p *Provisioner) rollingApplyRebootChanges(
 	ctx context.Context,
 	clusterName string,
