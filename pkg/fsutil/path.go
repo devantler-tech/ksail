@@ -5,9 +5,36 @@ import (
 	"os/user"
 	"path/filepath"
 	"strings"
+	"sync"
 )
 
 // Path expansion operations.
+
+// homeDir caches the current user's home directory after the first lookup.
+// user.Current() is a syscall; caching it avoids repeated OS round-trips in
+// hot paths such as cluster provisioning and kubeconfig resolution.
+var (
+	homeDirOnce  sync.Once
+	homeDirValue string
+	homeDirErr   error
+)
+
+// currentHomeDir returns the cached home directory, calling user.Current() at
+// most once per process lifetime.
+func currentHomeDir() (string, error) {
+	homeDirOnce.Do(func() {
+		usr, err := user.Current()
+		if err != nil {
+			homeDirErr = err
+
+			return
+		}
+
+		homeDirValue = usr.HomeDir
+	})
+
+	return homeDirValue, homeDirErr
+}
 
 // ExpandHomePath expands a path beginning with ~/ to the user's home directory
 // and converts relative paths to absolute paths.
@@ -20,12 +47,12 @@ import (
 //   - error: Error if unable to get current user information or convert to absolute path
 func ExpandHomePath(path string) (string, error) {
 	if strings.HasPrefix(path, "~/") {
-		usr, err := user.Current()
+		homeDir, err := currentHomeDir()
 		if err != nil {
 			return "", fmt.Errorf("failed to get current user: %w", err)
 		}
 
-		path = filepath.Join(usr.HomeDir, path[2:])
+		path = filepath.Join(homeDir, path[2:])
 	}
 
 	// Convert relative paths to absolute paths
