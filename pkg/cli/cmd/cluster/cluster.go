@@ -6323,6 +6323,7 @@ type DiffJSONOutput struct {
 	InPlaceChanges       []ChangeJSON `json:"inPlaceChanges"`
 	RebootRequired       []ChangeJSON `json:"rebootRequired"`
 	RecreateRequired     []ChangeJSON `json:"recreateRequired"`
+	WipeRequired         []ChangeJSON `json:"wipeRequired"`
 	RequiresConfirmation bool         `json:"requiresConfirmation"`
 }
 
@@ -6382,6 +6383,7 @@ func diffToJSON(diff *clusterupdate.UpdateResult) DiffJSONOutput {
 		InPlaceChanges:       convertChanges(diff.InPlaceChanges),
 		RebootRequired:       convertChanges(diff.RebootRequired),
 		RecreateRequired:     convertChanges(diff.RecreateRequired),
+		WipeRequired:         convertChanges(diff.WipeRequired),
 		RequiresConfirmation: diff.NeedsUserConfirmation(),
 	}
 }
@@ -7544,7 +7546,7 @@ func applyInPlaceChanges(
 
 // displayChangesSummary outputs a human-readable summary of configuration changes
 // as a before/after table with one row per changed field and impact icons.
-// Rows are ordered by severity: recreate-required → reboot-required → in-place.
+// Rows are ordered by severity: recreate-required → wipe-required → reboot-required → in-place.
 // Fields with no change are omitted.
 // When --output json is set, emits machine-readable JSON instead of the table.
 func displayChangesSummary(cmd *cobra.Command, diff *clusterupdate.UpdateResult) {
@@ -7582,6 +7584,8 @@ func categoryIcon(cat clusterupdate.ChangeCategory) string {
 	switch cat {
 	case clusterupdate.ChangeCategoryRecreateRequired:
 		return "🔴"
+	case clusterupdate.ChangeCategoryWipeRequired:
+		return "⚠️"
 	case clusterupdate.ChangeCategoryRebootRequired:
 		return "🟡"
 	case clusterupdate.ChangeCategoryInPlace:
@@ -7593,7 +7597,7 @@ func categoryIcon(cat clusterupdate.ChangeCategory) string {
 
 // formatDiffTable builds the formatted diff table string.
 // The table has four columns: Component, Before, After, Impact.
-// Rows are ordered by severity: 🔴 recreate → 🟡 reboot → 🟢 in-place.
+// Rows are ordered by severity: 🔴 recreate → ⚠️ wipe → 🟡 reboot → 🟢 in-place.
 func formatDiffTable(
 	diff *clusterupdate.UpdateResult,
 	totalChanges int,
@@ -7643,13 +7647,14 @@ func appendChangesAsRows(rows []diffRow, changes []clusterupdate.Change) []diffR
 }
 
 // collectDiffRows builds an ordered list of diff rows.
-// Order: 🔴 recreate-required → 🟡 reboot-required → 🟢 in-place.
+// Order: 🔴 recreate-required → ⚠️ wipe-required → 🟡 reboot-required → 🟢 in-place.
 func collectDiffRows(
 	diff *clusterupdate.UpdateResult,
 	totalChanges int,
 ) []diffRow {
 	rows := make([]diffRow, 0, totalChanges)
 	rows = appendChangesAsRows(rows, diff.RecreateRequired)
+	rows = appendChangesAsRows(rows, diff.WipeRequired)
 	rows = appendChangesAsRows(rows, diff.RebootRequired)
 	rows = appendChangesAsRows(rows, diff.InPlaceChanges)
 
