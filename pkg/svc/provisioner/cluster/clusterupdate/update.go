@@ -193,7 +193,15 @@ func (r *UpdateResult) NeedsUserConfirmation() bool {
 
 // TotalChanges returns the total number of detected changes.
 func (r *UpdateResult) TotalChanges() int {
-	return len(r.InPlaceChanges) + len(r.RebootRequired) + len(r.RecreateRequired) + len(r.WipeRequired)
+	return len(
+		r.InPlaceChanges,
+	) + len(
+		r.RebootRequired,
+	) + len(
+		r.RecreateRequired,
+	) + len(
+		r.WipeRequired,
+	)
 }
 
 // AllChanges returns all detected changes in a single slice.
