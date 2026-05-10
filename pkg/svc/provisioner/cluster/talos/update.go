@@ -317,16 +317,12 @@ func (p *Provisioner) applyNodeConfig(
 }
 
 // applyRebootRequiredChanges applies changes that require node reboots.
-// Uses rolling reboot strategy: for each node, apply config with STAGED mode,
-// cordon the node (drain workloads), reboot, wait for Ready, then uncordon.
-//
-// This is not yet implemented because it requires:
-//   - Kubernetes client for cordon/drain/uncordon operations
-//   - Node readiness polling after reboot
-//   - Proper ordering (workers first, then control-planes)
+// Uses rolling reboot strategy: for each node, cordon → drain → apply config
+// with STAGED mode → reboot → wait for Ready → uncordon. Workers are processed
+// first to minimize control-plane disruption.
 func (p *Provisioner) applyRebootRequiredChanges(
-	_ context.Context,
-	_ string,
+	ctx context.Context,
+	clusterName string,
 	result *clusterupdate.UpdateResult,
 	opts clusterupdate.UpdateOptions,
 ) error {
@@ -334,19 +330,7 @@ func (p *Provisioner) applyRebootRequiredChanges(
 		"  %d changes require reboot (rolling=%v)\n",
 		len(result.RebootRequired), opts.RollingReboot)
 
-	// Record as failed changes
-	for i := range result.RebootRequired {
-		result.FailedChanges = append(result.FailedChanges, clusterupdate.Change{
-			Field:    result.RebootRequired[i].Field,
-			OldValue: result.RebootRequired[i].OldValue,
-			NewValue: result.RebootRequired[i].NewValue,
-			Category: clusterupdate.ChangeCategoryRebootRequired,
-			Reason:   "Talos rolling reboot is not yet implemented",
-		})
-	}
-
-	return fmt.Errorf("%w: Talos rolling reboot for %d change(s)",
-		ErrNotImplemented, len(result.RebootRequired))
+	return p.rollingApplyRebootChanges(ctx, clusterName, result)
 }
 
 // applyConfigWithMode applies configuration to a single node with the specified mode.

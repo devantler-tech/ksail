@@ -330,3 +330,8 @@ var DetectHetznerServerTypesForTest = detectHetznerServerTypes
 //
 //nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
 var ValidateCurrentContextCAForTest = validateCurrentContextCA
+
+// SortNodesWorkersFirstForTest exposes sortNodesWorkersFirst for unit testing.
+func SortNodesWorkersFirstForTest(nodes []NodeWithRoleForTest) []NodeWithRoleForTest {
+	return sortNodesWorkersFirst(nodes)
+}
