@@ -841,10 +841,6 @@ func TestMergePersistedState_ResolvesClusterNameFromConfigs(t *testing.T) {
 	require.NoError(t, state.SaveClusterSpec(configName, savedSpec))
 
 	// Create provisioner with talosConfigs that has the cluster name
-	tmpDir := t.TempDir()
-	configsDir := filepath.Join(tmpDir, "configs")
-	require.NoError(t, os.MkdirAll(configsDir, 0o700))
-
 	configs := &talosconfigmanager.Configs{}
 	configs.Name = configName
 
