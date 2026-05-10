@@ -1,0 +1,104 @@
+---
+title: Talos Disk Encryption Migration
+description: How to migrate an existing Talos cluster to use LUKS2 disk encryption with KSail's automated rolling migration or manual procedures.
+---
+
+Talos Linux supports LUKS2 disk encryption for the EPHEMERAL and STATE partitions. However, encryption only takes effect on empty or unformatted partitions — existing partitions must be wiped before encryption can be applied. This makes encryption migration a disruptive operation that requires careful orchestration.
+
+For upstream details, see the [Talos disk encryption docs](https://docs.siderolabs.com/talos/v1.13/configure-your-talos-cluster/storage-and-disk-management/disk-encryption/#going-from-unencrypted-to-encrypted-and-vice-versa).
+
+## Prerequisites
+
+- A running Talos cluster managed by KSail
+- Encryption config patches prepared (machine config with `systemDiskEncryption` settings)
+- Redundant workloads — migration is rolling but temporarily reduces cluster capacity
+
+## Detecting Encryption Changes
+
+Use `--dry-run` to preview whether an update requires partition wipes:
+
+```bash
+ksail cluster update --dry-run
+```
+
+KSail compares the running node configs against the desired configs and reports any encryption changes that require a wipe-and-reboot cycle.
+
+## Automated Migration
+
+KSail can orchestrate a rolling encryption migration automatically:
+
+```bash
+ksail cluster update --force
+```
+
+Workers are processed before control-plane nodes. The procedure differs by partition:
+
+### EPHEMERAL Partition
+
+For each node:
+
+1. **Cordon** — prevent new workloads from being scheduled
+2. **Drain** — evict existing workloads
+3. **Staged apply** — write the new config without rebooting
+4. **Wipe EPHEMERAL** — destroy the unencrypted partition
+5. **Reboot** — node reformats EPHEMERAL with LUKS2
+6. **Wait Ready** — confirm the node rejoins the cluster
+7. **Uncordon** — allow workloads again
+
+### STATE Partition
+
+For each node:
+
+1. **Cordon** — prevent new workloads from being scheduled
+2. **Drain** — evict existing workloads
+3. **Wipe STATE** — destroy the partition (node enters maintenance mode)
+4. **Insecure apply** — push the new config to the node in maintenance mode
+5. **Wait Ready** — confirm the node rejoins the cluster
+6. **Uncordon** — allow workloads again
+
+> [!NOTE]
+> STATE partition wipe is more disruptive than EPHEMERAL because the node loses its machine config and enters maintenance mode.
+
+## Manual Migration
+
+If automated migration is not suitable (for example, clusters not managed by KSail or when you need finer control), you can perform the steps manually with `talosctl`.
+
+### EPHEMERAL Partition
+
+```bash
+# For each node (one at a time):
+kubectl cordon <node>
+kubectl drain <node> --ignore-daemonsets --delete-emptydir-data
+talosctl apply-config -f config.yaml -n <node-ip> --mode=staged
+talosctl reset --system-labels-to-wipe EPHEMERAL -n <node-ip> --reboot=true
+# Wait for the node to rejoin and become Ready
+kubectl uncordon <node>
+```
+
+### STATE Partition
+
+```bash
+# For each node (one at a time):
+kubectl cordon <node>
+kubectl drain <node> --ignore-daemonsets --delete-emptydir-data
+talosctl reset --system-labels-to-wipe STATE -n <node-ip> --reboot=true
+# Node enters maintenance mode — apply config insecurely
+talosctl apply-config --insecure -n <node-ip> -f config.yaml
+# Wait for the node to rejoin and become Ready
+kubectl uncordon <node>
+```
+
+### Important Notes
+
+- **One node at a time** — always wait for the previous node to become Ready before proceeding
+- **Drain before wiping** — prevents workload disruption
+- **Verify cluster health** between nodes (`kubectl get nodes`, `talosctl health`)
+
+## Removing Encryption
+
+Removing encryption follows the same process: the partition must be wiped so it can be reformatted without LUKS2. Use the same `ksail cluster update --force` workflow or the manual steps above with a config that removes the encryption settings.
+
+## Related Links
+
+- [Talos Disk Encryption](https://docs.siderolabs.com/talos/v1.13/configure-your-talos-cluster/storage-and-disk-management/disk-encryption/) — upstream Talos documentation
+- [Talos System Disk Encryption Config](https://docs.siderolabs.com/talos/v1.13/reference/configuration/v1alpha1/config/#SystemDiskEncryptionConfig) — configuration reference

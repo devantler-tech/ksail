@@ -137,6 +137,71 @@ func migrateDeprecatedNodeAutoscaling(
 	return nil
 }
 
+// warnDeprecatedTalosPatchFields emits deprecation warnings for ksail.yaml fields
+// that wrap native Talos machine config patches. These fields are deprecated for Talos
+// clusters; users should manage patches directly in the talos/ patch directories.
+func warnDeprecatedTalosPatchFields(cfg *v1alpha1.Cluster, out io.Writer) {
+	if cfg == nil || out == nil {
+		return
+	}
+
+	if cfg.Spec.Cluster.Distribution != v1alpha1.DistributionTalos {
+		return
+	}
+
+	warnCDIDeprecation(cfg, out)
+	warnOIDCDeprecation(cfg, out)
+	warnIngressFirewallDeprecation(cfg, out)
+	warnImageVerificationDeprecation(cfg, out)
+}
+
+func warnCDIDeprecation(cfg *v1alpha1.Cluster, out io.Writer) {
+	if cfg.Spec.Cluster.CDI == "" || cfg.Spec.Cluster.CDI == v1alpha1.CDIDefault {
+		return
+	}
+
+	_, _ = fmt.Fprintf(out,
+		"warning: spec.cluster.cdi is deprecated for Talos clusters. "+
+			"Manage CDI via native Talos patches in talos/cluster/ instead "+
+			"(e.g., machine.features.enableCDI in disable-cdi.yaml).\n")
+}
+
+func warnOIDCDeprecation(cfg *v1alpha1.Cluster, out io.Writer) {
+	if !cfg.Spec.Cluster.OIDC.Enabled() {
+		return
+	}
+
+	_, _ = fmt.Fprintf(out,
+		"warning: spec.cluster.oidc is deprecated for Talos clusters. "+
+			"Configure OIDC via native Talos patches in talos/cluster/oidc.yaml instead "+
+			"(cluster.apiServer.extraArgs + machine.files).\n")
+}
+
+func warnIngressFirewallDeprecation(cfg *v1alpha1.Cluster, out io.Writer) {
+	if cfg.Spec.Cluster.Provider != v1alpha1.ProviderHetzner {
+		return
+	}
+
+	if cfg.Spec.Provider.Hetzner.IngressFirewall != v1alpha1.IngressFirewallDisabled {
+		return
+	}
+
+	_, _ = fmt.Fprintf(out,
+		"warning: spec.provider.hetzner.ingressFirewall is deprecated for Talos clusters. "+
+			"To disable the ingress firewall, remove the firewall patch files from "+
+			"talos/cluster/, talos/control-planes/, and talos/workers/ instead.\n")
+}
+
+func warnImageVerificationDeprecation(cfg *v1alpha1.Cluster, out io.Writer) {
+	if cfg.Spec.Cluster.Talos.ImageVerification != v1alpha1.ImageVerificationEnabled {
+		return
+	}
+
+	_, _ = fmt.Fprintf(out,
+		"warning: spec.cluster.talos.imageVerification is deprecated. "+
+			"Add an ImageVerificationConfig document to talos/cluster/image-verification.yaml directly.\n")
+}
+
 func migrateDeprecatedInt32(
 	newField, oldField *int32,
 	oldPath, newPath string,

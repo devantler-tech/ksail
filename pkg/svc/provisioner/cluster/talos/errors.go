@@ -71,4 +71,10 @@ var (
 	// ErrHcloudTokenNotSet is returned when the Hetzner Cloud API token environment
 	// variable is not set but is required for autoscaler secret creation.
 	ErrHcloudTokenNotSet = errors.New("hcloud API token environment variable is not set")
+	// ErrDrainPodRetrieval is returned when listing pods for drain encounters errors.
+	ErrDrainPodRetrieval = errors.New("failed to retrieve pods for drain")
+	// ErrNodeNotFoundByIP is returned when no Kubernetes node matches the given IP.
+	ErrNodeNotFoundByIP = errors.New("no Kubernetes node found with IP")
+	// ErrConfigNilForInsecureApply is returned when a nil config is passed to applyConfigInsecure.
+	ErrConfigNilForInsecureApply = errors.New("config must not be nil for insecure apply")
 )
