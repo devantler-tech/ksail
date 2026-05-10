@@ -7161,7 +7161,7 @@ func computeUpdateDiff(
 	updater clusterprovisioner.Updater,
 	clusterName string,
 ) (*v1alpha1.ClusterSpec, *clusterupdate.UpdateResult, error) {
-	currentSpec, currentProvider, err := updater.GetCurrentConfig(cmd.Context())
+	currentSpec, currentProvider, err := updater.GetCurrentConfig(cmd.Context(), clusterName)
 	if err != nil {
 		return nil, nil, fmt.Errorf(
 			"could not retrieve current cluster configuration: %w", err,

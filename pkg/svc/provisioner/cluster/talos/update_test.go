@@ -3,6 +3,8 @@ package talosprovisioner_test
 import (
 	"context"
 	"io"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -10,6 +12,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
 	omniprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/omni"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/state"
 	talosprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/talos"
 	"github.com/siderolabs/omni/client/api/omni/specs"
 	omnires "github.com/siderolabs/omni/client/pkg/omni/resources/omni"
@@ -733,4 +736,125 @@ func TestDetectHetznerServerTypes(t *testing.T) {
 			assert.Equal(t, testCase.wantWorkerType, workerType)
 		})
 	}
+}
+
+func TestMergePersistedState_MergesISOFromSavedState(t *testing.T) {
+	t.Parallel()
+
+	clusterName := "merge-iso-test-" + t.Name()
+	t.Cleanup(func() { _ = state.DeleteClusterState(clusterName) })
+
+	// Save state with a specific ISO value
+	savedSpec := &v1alpha1.ClusterSpec{
+		Talos: v1alpha1.OptionsTalos{
+			ISO: 125127,
+		},
+	}
+	require.NoError(t, state.SaveClusterSpec(clusterName, savedSpec))
+
+	// Create a spec from DefaultCurrentSpec (ISO will be 0)
+	spec := clusterupdate.DefaultCurrentSpec(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
+	assert.Equal(t, int64(0), spec.Talos.ISO, "default spec should have zero ISO")
+
+	provisioner := talosprovisioner.NewProvisioner(nil, nil).
+		WithLogWriter(io.Discard)
+	provisioner.MergePersistedStateForTest(spec, clusterName)
+
+	assert.Equal(t, int64(125127), spec.Talos.ISO,
+		"mergePersistedState should fill ISO from saved state")
+}
+
+func TestMergePersistedState_MergesLocalRegistryFromSavedState(t *testing.T) {
+	t.Parallel()
+
+	clusterName := "merge-registry-test-" + t.Name()
+	t.Cleanup(func() { _ = state.DeleteClusterState(clusterName) })
+
+	savedSpec := &v1alpha1.ClusterSpec{
+		LocalRegistry: v1alpha1.LocalRegistry{
+			Registry: "ghcr.io/myorg",
+		},
+	}
+	require.NoError(t, state.SaveClusterSpec(clusterName, savedSpec))
+
+	spec := clusterupdate.DefaultCurrentSpec(v1alpha1.DistributionTalos, v1alpha1.ProviderDocker)
+	assert.Empty(t, spec.LocalRegistry.Registry, "default spec should have empty registry")
+
+	provisioner := talosprovisioner.NewProvisioner(nil, nil).
+		WithLogWriter(io.Discard)
+	provisioner.MergePersistedStateForTest(spec, clusterName)
+
+	assert.Equal(t, "ghcr.io/myorg", spec.LocalRegistry.Registry,
+		"mergePersistedState should fill LocalRegistry from saved state")
+}
+
+func TestMergePersistedState_NoStateIsNoOp(t *testing.T) {
+	t.Parallel()
+
+	spec := clusterupdate.DefaultCurrentSpec(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
+	originalISO := spec.Talos.ISO
+
+	provisioner := talosprovisioner.NewProvisioner(nil, nil).
+		WithLogWriter(io.Discard)
+	provisioner.MergePersistedStateForTest(spec, "nonexistent-cluster-"+t.Name())
+
+	assert.Equal(t, originalISO, spec.Talos.ISO,
+		"mergePersistedState should be no-op when no state exists")
+}
+
+func TestMergePersistedState_ZeroISOInStateIsNotMerged(t *testing.T) {
+	t.Parallel()
+
+	clusterName := "zero-iso-test-" + t.Name()
+	t.Cleanup(func() { _ = state.DeleteClusterState(clusterName) })
+
+	// Save state with zero ISO (unknown/unset)
+	savedSpec := &v1alpha1.ClusterSpec{
+		Talos: v1alpha1.OptionsTalos{
+			ISO: 0,
+		},
+	}
+	require.NoError(t, state.SaveClusterSpec(clusterName, savedSpec))
+
+	spec := clusterupdate.DefaultCurrentSpec(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
+
+	provisioner := talosprovisioner.NewProvisioner(nil, nil).
+		WithLogWriter(io.Discard)
+	provisioner.MergePersistedStateForTest(spec, clusterName)
+
+	assert.Equal(t, int64(0), spec.Talos.ISO,
+		"zero ISO in saved state should not override spec")
+}
+
+func TestMergePersistedState_ResolvesClusterNameFromConfigs(t *testing.T) {
+	t.Parallel()
+
+	// Use a name that resolveClusterName will return from talosConfigs
+	configName := "talos-resolved-name-" + t.Name()
+	t.Cleanup(func() { _ = state.DeleteClusterState(configName) })
+
+	savedSpec := &v1alpha1.ClusterSpec{
+		Talos: v1alpha1.OptionsTalos{
+			ISO: 999999,
+		},
+	}
+	require.NoError(t, state.SaveClusterSpec(configName, savedSpec))
+
+	// Create provisioner with talosConfigs that has the cluster name
+	tmpDir := t.TempDir()
+	configsDir := filepath.Join(tmpDir, "configs")
+	require.NoError(t, os.MkdirAll(configsDir, 0o700))
+
+	configs := &talosconfigmanager.Configs{}
+	configs.Name = configName
+
+	spec := clusterupdate.DefaultCurrentSpec(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
+
+	provisioner := talosprovisioner.NewProvisioner(configs, nil).
+		WithLogWriter(io.Discard)
+	// Pass empty clusterName — should resolve from talosConfigs
+	provisioner.MergePersistedStateForTest(spec, "")
+
+	assert.Equal(t, int64(999999), spec.Talos.ISO,
+		"should resolve cluster name from talosConfigs and merge ISO")
 }

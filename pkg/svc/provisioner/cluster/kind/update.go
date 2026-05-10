@@ -73,6 +73,7 @@ func (k *Provisioner) DiffConfig(
 // containers. Falls back to static defaults when no detector is available.
 func (k *Provisioner) GetCurrentConfig(
 	ctx context.Context,
+	_ string,
 ) (*v1alpha1.ClusterSpec, *v1alpha1.ProviderSpec, error) {
 	if k.componentDetector != nil {
 		spec, err := k.componentDetector.DetectComponents(
