@@ -832,7 +832,8 @@ func (p *Provisioner) GetCurrentConfig(
 	// Merge non-introspectable fields from persisted state.
 	// Fields like Talos.ISO and LocalRegistry cannot be detected from the running
 	// cluster but are saved after successful create/update operations.
-	if err := p.mergePersistedState(spec, clusterName); err != nil {
+	err := p.mergePersistedState(spec, clusterName)
+	if err != nil {
 		return nil, nil, fmt.Errorf("merge persisted state: %w", err)
 	}
 

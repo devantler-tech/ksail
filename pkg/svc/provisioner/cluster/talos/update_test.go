@@ -796,7 +796,10 @@ func TestMergePersistedState_NoStateIsNoOp(t *testing.T) {
 
 	provisioner := talosprovisioner.NewProvisioner(nil, nil).
 		WithLogWriter(io.Discard)
-	require.NoError(t, provisioner.MergePersistedStateForTest(spec, "nonexistent-cluster-"+t.Name()))
+	require.NoError(
+		t,
+		provisioner.MergePersistedStateForTest(spec, "nonexistent-cluster-"+t.Name()),
+	)
 
 	assert.Equal(t, originalISO, spec.Talos.ISO,
 		"mergePersistedState should be no-op when no state exists")
@@ -866,7 +869,10 @@ func TestMergePersistedState_ReturnsErrorForCorruptState(t *testing.T) {
 
 	stateDir := filepath.Join(homeDir, ".ksail", "clusters", clusterName)
 	require.NoError(t, os.MkdirAll(stateDir, 0o700))
-	require.NoError(t, os.WriteFile(filepath.Join(stateDir, "spec.json"), []byte("not-json"), 0o600))
+	require.NoError(
+		t,
+		os.WriteFile(filepath.Join(stateDir, "spec.json"), []byte("not-json"), 0o600),
+	)
 	t.Cleanup(func() { _ = os.RemoveAll(stateDir) })
 
 	spec := clusterupdate.DefaultCurrentSpec(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
