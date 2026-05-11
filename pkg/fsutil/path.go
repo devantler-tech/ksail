@@ -37,7 +37,7 @@ func currentHomeDir() (string, error) {
 
 	usr, err := user.Current()
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("looking up current user: %w", err)
 	}
 
 	homeDirValue = usr.HomeDir
