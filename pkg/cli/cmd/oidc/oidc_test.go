@@ -49,24 +49,24 @@ func TestGetTokenCmd_RequiredFlags(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name        string
-		args        []string
-		expectError bool
+		name           string
+		args           []string
+		errMustContain []string
 	}{
 		{
-			name:        "missing both required flags",
-			args:        []string{getTokenSubcmd},
-			expectError: true,
+			name:           "missing both required flags",
+			args:           []string{getTokenSubcmd},
+			errMustContain: []string{`required flag(s)`, "issuer-url"},
 		},
 		{
-			name:        "missing client-id",
-			args:        []string{getTokenSubcmd, "--issuer-url=https://dex.example.com"},
-			expectError: true,
+			name:           "missing client-id",
+			args:           []string{getTokenSubcmd, "--issuer-url=https://dex.example.com"},
+			errMustContain: []string{`required flag(s)`, "client-id"},
 		},
 		{
-			name:        "missing issuer-url",
-			args:        []string{getTokenSubcmd, "--client-id=kubectl"},
-			expectError: true,
+			name:           "missing issuer-url",
+			args:           []string{getTokenSubcmd, "--client-id=kubectl"},
+			errMustContain: []string{`required flag(s)`, "issuer-url"},
 		},
 	}
 
@@ -83,10 +83,9 @@ func TestGetTokenCmd_RequiredFlags(t *testing.T) {
 			cmd.SetArgs(testCase.args)
 
 			err := cmd.Execute()
-			if testCase.expectError {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
+			require.Error(t, err)
+			for _, fragment := range testCase.errMustContain {
+				assert.ErrorContains(t, err, fragment)
 			}
 		})
 	}
