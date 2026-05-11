@@ -1,6 +1,7 @@
 package fsutil_test
 
 import (
+	"os"
 	"os/user"
 	"path/filepath"
 	"testing"
@@ -38,7 +39,7 @@ func BenchmarkExpandHomePath_HomePrefix(b *testing.B) {
 // BenchmarkExpandHomePath_Absolute benchmarks the already-absolute fast path
 // (no home-directory lookup required).
 func BenchmarkExpandHomePath_Absolute(b *testing.B) {
-	path := filepath.Join(string(filepath.Separator), "tmp", "some", "config.yaml")
+	path := filepath.Join(os.TempDir(), "some", "config.yaml")
 
 	b.ResetTimer()
 

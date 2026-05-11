@@ -10,32 +10,40 @@ import (
 
 // Path expansion operations.
 
-// homeDir caches the current user's home directory after the first lookup.
-// user.Current() is a syscall; caching it avoids repeated OS round-trips in
-// hot paths such as cluster provisioning and kubeconfig resolution.
+// homeDir caches the current user's home directory after the first successful
+// lookup. user.Current() is a syscall; caching it avoids repeated OS
+// round-trips in hot paths such as cluster provisioning and kubeconfig
+// resolution.
 //
-//nolint:gochecknoglobals // sync.Once cache must be package-scoped.
+// Only the successful result is cached. A transient error (e.g. temporary NSS
+// failure) does not poison the cache — the next call retries the syscall.
+//
+//nolint:gochecknoglobals // sync cache must be package-scoped.
 var (
-	homeDirOnce  sync.Once
+	homeDirMu    sync.Mutex
 	homeDirValue string
-	errHomeDir   error
+	homeDirSet   bool
 )
 
-// currentHomeDir returns the cached home directory, calling user.Current() at
-// most once per process lifetime.
+// currentHomeDir returns the cached home directory, calling user.Current()
+// only when no successful result has been cached yet.
 func currentHomeDir() (string, error) {
-	homeDirOnce.Do(func() {
-		usr, err := user.Current()
-		if err != nil {
-			errHomeDir = err
+	homeDirMu.Lock()
+	defer homeDirMu.Unlock()
 
-			return
-		}
+	if homeDirSet {
+		return homeDirValue, nil
+	}
 
-		homeDirValue = usr.HomeDir
-	})
+	usr, err := user.Current()
+	if err != nil {
+		return "", err
+	}
 
-	return homeDirValue, errHomeDir
+	homeDirValue = usr.HomeDir
+	homeDirSet = true
+
+	return homeDirValue, nil
 }
 
 // ExpandHomePath expands a path beginning with ~/ to the user's home directory

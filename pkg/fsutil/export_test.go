@@ -11,7 +11,7 @@ import "sync"
 //
 //nolint:gochecknoglobals // Standard export_test.go seam.
 var ResetHomeDirCache = func() {
-	homeDirOnce = sync.Once{}
+	homeDirMu = sync.Mutex{}
 	homeDirValue = ""
-	errHomeDir = nil
+	homeDirSet = false
 }
