@@ -1,16 +1,16 @@
 # Repo Assist Memory
 
 ## Last Run
-2026-05-11 01:14 UTC — Run #25645163084
+2026-05-11 13:19 UTC — Run #25672575161
 
 ## Monthly Activity Issue
 - May 2026: #4501 (open, updated this run)
 
 ## Open Repo Assist PRs
-- PR #4672: perf(fsutil): cache home directory lookup in ExpandHomePath (created 2026-05-10)
-- PR [new this run]: ci: extend workload-timeout to 900s for full-stack Cilium+Kyverno matrix (Fixes #4610)
+- PR [new this run]: test(oidc): add unit tests for oidc cmd package
 
 ## Issue Comments Made (with run)
+- #4423 (workload watch hooks): 2026-05-11 run #25672575161
 - #4675 (Talos disk encryption feature): 2026-05-10 run #25628828750
 - #4646 (Hetzner label + ~ expansion bugs): 2026-05-08 run #25530778322
 - #4354 (KWOK v0.7.0 CEL stages): 2026-05-07 run #25470070628
@@ -20,10 +20,11 @@
 - #4504 (workload watch regression): 2026-05-01
 - #4422 (diagnose health scoring): 2026-05-01
 - #2261 (VCluster D-Bus): 2026-04-11
+- #3772 (loft-sh/log blocked): 2026-04-11
 
 ## Issues Created (last 4 weeks)
 - #4627: [Parent] Cloud Provider Expansion (groups #3983, #4328, #4510) — all 3 now linked
-- #4610: [ci] fix K3s+Cilium full-stack system test timing race — CI PR created this run
+- #4610: [ci] fix K3s+Cilium full-stack system test timing race — CI PR created (blocked by workflows perm, issue #4681)
 - #4602: [feature] OIDC federation and multi-cluster auth support
 - #4601: [chore] communicate GPL-3.0-only license change — CLOSED/COMPLETED
 - #4521: [feature] local-remote service mirroring
@@ -41,12 +42,12 @@
 - #4627 parent: #3983, #4328, #4510 (all linked, verified 2026-05-07)
 
 ## Code Quality Domain Alternation
-- Last domain: test (Task 5, 2026-05-10)
+- Last domain: test (Task 9, 2026-05-11)
 - Next for Task 5: refactor
 
 ## Backlog Cursor
-- Issues processed through #4675 (as of 2026-05-10)
-- All roadmap Now/Next/Later items from discussion #4573 (May 4, 2026) are tracked
+- Issues processed through #4683 (as of 2026-05-11)
+- All roadmap Now/Next/Later items from discussion #4682 (May 11, 2026) are tracked
 
 ## Labels Applied (recent)
 - #4432, #4427, #4371 → `agentic-workflows` (May 5)
@@ -55,12 +56,12 @@
 
 ## Notes
 - link_sub_issue is NOT idempotent — always verify sub-issue not already linked before calling
-- Weekly strategy #4573 (May 4, 2026) is the current roadmap reference
-- All roadmap items are tracked; check for new Weekly Strategy discussion
-- PRs #4645, #4647, #4648 all merged as of 2026-05-10
-- devantler filed #4675 (Talos disk encryption) + PR #4676 implementing it (still open)
-- Daily Docs PR #4677 (skill.md fixes) still open
-- CI Doctor issues #4673/#4674 are infrastructure flakes, not code bugs
-- PR #4672 (Repo Assist perf/fsutil) still open awaiting review
+- Weekly strategy #4682 (May 11, 2026) is the current roadmap reference
+- All roadmap items are tracked; no new items in #4682 vs #4573
+- PRs #4676, #4677, #4672 all merged as of 2026-05-11
+- Issue #4675 CLOSED (completed) — Talos disk encryption implemented in #4676
+- Issue #4316 CLOSED (completed) — ArgoCD v3.4 done
+- Issue #4681: CI workload-timeout (blocked by workflows permission, needs manual PR creation)
+- devantler filed #4675 (Talos disk encryption) + PR #4676 implementing it (MERGED)
+- CI Doctor issues #4673/#4674/#4626/#4683 are infrastructure flakes, not code bugs
 - ArgoCD v3.4 issue #4316 CLOSED (completed April 30)
-- CI workload-timeout PR created this run for K3s+Cilium race (#4610)
