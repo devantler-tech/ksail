@@ -20,7 +20,7 @@ func BenchmarkExpandHomePath_HomePrefix(b *testing.B) {
 
 	expected := filepath.Join(usr.HomeDir, "some", "nested", "dir")
 
-	// Warm the sync.Once cache so the timed loop only measures the fast path.
+	// Warm the home-directory cache so the timed loop only measures the fast path.
 	_, err = fsutil.ExpandHomePath("~/warmup")
 	if err != nil {
 		b.Fatalf("cache warmup failed: %v", err)
