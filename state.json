@@ -1,6 +1,6 @@
 {
-  "last_run": "2026-05-10T12:35:07Z",
-  "workflow_run_id": "25628828750",
+  "last_run": "2026-05-11T01:14:17Z",
+  "workflow_run_id": "25645163084",
   "commented_issues": {
     "4675": "2026-05-10",
     "4646": "2026-05-08",
@@ -42,6 +42,12 @@
       "pr_number": 4672,
       "status": "open",
       "created": "2026-05-10"
+    },
+    "repo-assist/ci-k3s-cilium-workload-timeout": {
+      "title": "[Repo Assist] ci: extend workload-timeout to 900s for full-stack Cilium+Kyverno matrix",
+      "status": "open",
+      "created": "2026-05-11",
+      "fixes": "#4610"
     }
   },
   "last_code_quality_domain": "test",
@@ -69,13 +75,9 @@
     "link_sub_issue is NOT idempotent - always verify sub-issue not already linked before calling",
     "Monthly activity issue: #4501",
     "domain alternation: last was test - next should be refactor (Task 5)",
-    "Roadmap backlog: all Now/Next/Later items tracked as of 2026-05-10",
-    "#4601 license communication issue closed/completed",
-    "PRs #4645, #4647, #4648 all merged as of 2026-05-10",
-    "perf(netretry) PR merged (52acada3 = #4667)",
-    "perf(fsutil): ExpandHomePath cache PR #4672 still open",
-    "devantler filed #4675 (Talos disk encryption) and PR #4676 implementing it",
-    "Daily Docs PR #4677 open: skill.md fixes for tenant/oidc commands",
-    "CI Doctor issues #4673 (Omni empty pool) and #4674 (Hetzner CCM flake) are infrastructure flakes"
+    "Roadmap backlog: all Now/Next/Later items tracked as of 2026-05-11",
+    "ArgoCD v3.4 issue #4316 CLOSED (completed April 30)",
+    "PR #4672 (perf/fsutil ExpandHomePath cache) still open",
+    "CI workload-timeout PR created this run (fixes #4610 K3s+Cilium race)"
   ]
 }

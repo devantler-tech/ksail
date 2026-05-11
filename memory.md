@@ -1,13 +1,14 @@
 # Repo Assist Memory
 
 ## Last Run
-2026-05-10 12:35 UTC — Run #25628828750
+2026-05-11 01:14 UTC — Run #25645163084
 
 ## Monthly Activity Issue
 - May 2026: #4501 (open, updated this run)
 
 ## Open Repo Assist PRs
 - PR #4672: perf(fsutil): cache home directory lookup in ExpandHomePath (created 2026-05-10)
+- PR [new this run]: ci: extend workload-timeout to 900s for full-stack Cilium+Kyverno matrix (Fixes #4610)
 
 ## Issue Comments Made (with run)
 - #4675 (Talos disk encryption feature): 2026-05-10 run #25628828750
@@ -22,7 +23,7 @@
 
 ## Issues Created (last 4 weeks)
 - #4627: [Parent] Cloud Provider Expansion (groups #3983, #4328, #4510) — all 3 now linked
-- #4610: [ci] fix K3s+Cilium full-stack system test timing race
+- #4610: [ci] fix K3s+Cilium full-stack system test timing race — CI PR created this run
 - #4602: [feature] OIDC federation and multi-cluster auth support
 - #4601: [chore] communicate GPL-3.0-only license change — CLOSED/COMPLETED
 - #4521: [feature] local-remote service mirroring
@@ -61,3 +62,5 @@
 - Daily Docs PR #4677 (skill.md fixes) still open
 - CI Doctor issues #4673/#4674 are infrastructure flakes, not code bugs
 - PR #4672 (Repo Assist perf/fsutil) still open awaiting review
+- ArgoCD v3.4 issue #4316 CLOSED (completed April 30)
+- CI workload-timeout PR created this run for K3s+Cilium race (#4610)
