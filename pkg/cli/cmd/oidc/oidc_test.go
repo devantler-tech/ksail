@@ -32,11 +32,13 @@ func TestNewOIDCCmd_ExcludeAnnotation(t *testing.T) {
 	assert.Equal(t, "true", val)
 }
 
+const getTokenSubcmd = "get-token"
+
 func TestNewOIDCCmd_HasGetTokenSubcommand(t *testing.T) {
 	t.Parallel()
 
 	cmd := oidc.NewOIDCCmd()
-	sub := findSubcommand(cmd, "get-token")
+	sub := findSubcommand(cmd, getTokenSubcmd)
 
 	require.NotNil(t, sub, "expected get-token subcommand to exist")
 	assert.NotEmpty(t, sub.Short)
@@ -53,33 +55,35 @@ func TestGetTokenCmd_RequiredFlags(t *testing.T) {
 	}{
 		{
 			name:        "missing both required flags",
-			args:        []string{"get-token"},
+			args:        []string{getTokenSubcmd},
 			expectError: true,
 		},
 		{
 			name:        "missing client-id",
-			args:        []string{"get-token", "--issuer-url=https://dex.example.com"},
+			args:        []string{getTokenSubcmd, "--issuer-url=https://dex.example.com"},
 			expectError: true,
 		},
 		{
 			name:        "missing issuer-url",
-			args:        []string{"get-token", "--client-id=kubectl"},
+			args:        []string{getTokenSubcmd, "--client-id=kubectl"},
 			expectError: true,
 		},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			cmd := oidc.NewOIDCCmd()
+
 			var out bytes.Buffer
+
 			cmd.SetOut(&out)
 			cmd.SetErr(&out)
-			cmd.SetArgs(tc.args)
+			cmd.SetArgs(testCase.args)
 
 			err := cmd.Execute()
-			if tc.expectError {
+			if testCase.expectError {
 				assert.Error(t, err)
 			} else {
 				assert.NoError(t, err)
@@ -92,7 +96,7 @@ func TestGetTokenCmd_OptionalFlags(t *testing.T) {
 	t.Parallel()
 
 	cmd := oidc.NewOIDCCmd()
-	sub := findSubcommand(cmd, "get-token")
+	sub := findSubcommand(cmd, getTokenSubcmd)
 	require.NotNil(t, sub)
 
 	assert.NotNil(t, sub.Flags().Lookup("extra-scope"), "expected extra-scope flag")
@@ -103,7 +107,9 @@ func TestOIDCCmd_Help(t *testing.T) {
 	t.Parallel()
 
 	cmd := oidc.NewOIDCCmd()
+
 	var out bytes.Buffer
+
 	cmd.SetOut(&out)
 	cmd.SetArgs([]string{"--help"})
 
