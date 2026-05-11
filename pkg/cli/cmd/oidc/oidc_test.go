@@ -84,6 +84,7 @@ func TestGetTokenCmd_RequiredFlags(t *testing.T) {
 
 			err := cmd.Execute()
 			require.Error(t, err)
+
 			for _, fragment := range testCase.errMustContain {
 				assert.ErrorContains(t, err, fragment)
 			}
