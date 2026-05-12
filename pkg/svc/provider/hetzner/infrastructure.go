@@ -405,6 +405,13 @@ func (p *Provider) deleteInfrastructure(ctx context.Context, clusterName string)
 		return err
 	}
 
+	// Delete load balancers before the network — LBs attached to the network
+	// must be removed first, otherwise network deletion will fail.
+	err = p.deleteLoadBalancers(ctx, clusterName)
+	if err != nil {
+		return err
+	}
+
 	return p.deleteNetwork(ctx, clusterName)
 }
 
@@ -526,4 +533,75 @@ func (p *Provider) deleteNetwork(ctx context.Context, clusterName string) error 
 	}
 
 	return nil
+}
+
+// deleteLoadBalancers deletes all Hetzner Cloud Load Balancers attached to the
+// cluster's private network. These are typically provisioned by hcloud-ccm for
+// Kubernetes Service objects of type LoadBalancer.
+//
+// Load balancers must be deleted before the network, otherwise network deletion
+// will fail because the network still has attached resources.
+func (p *Provider) deleteLoadBalancers(ctx context.Context, clusterName string) error {
+	networkName := clusterName + NetworkSuffix
+
+	// Look up the network to confirm it exists. If not, there are no LBs to clean up.
+	network, _, err := p.client.Network.GetByName(ctx, networkName)
+	if err != nil || network == nil {
+		return nil //nolint:nilerr // No network means no LBs to clean up
+	}
+
+	loadBalancers, err := p.client.LoadBalancer.AllWithOpts(ctx, hcloud.LoadBalancerListOpts{})
+	if err != nil {
+		return fmt.Errorf("failed to list load balancers: %w", err)
+	}
+
+	for _, lb := range loadBalancers {
+		if !lbInNetwork(lb, networkName) {
+			continue
+		}
+
+		deleteErr := p.deleteLoadBalancerWithRetry(ctx, lb)
+		if deleteErr != nil {
+			return deleteErr
+		}
+	}
+
+	return nil
+}
+
+// deleteLoadBalancerWithRetry deletes a single load balancer with retry logic.
+// Retries handle the case where the LB is still processing actions from the
+// recently deleted cluster.
+//
+//nolint:funcorder // Grouped with deleteLoadBalancers for logical code organization
+func (p *Provider) deleteLoadBalancerWithRetry(ctx context.Context, lb *hcloud.LoadBalancer) error {
+	for attempt := range MaxDeleteRetries {
+		_, err := p.client.LoadBalancer.Delete(ctx, lb)
+		if err == nil {
+			return nil
+		}
+
+		if attempt == MaxDeleteRetries-1 {
+			return fmt.Errorf(
+				"failed to delete load balancer %s (ID %d) after %d attempts: %w",
+				lb.Name, lb.ID, MaxDeleteRetries, err,
+			)
+		}
+
+		time.Sleep(DefaultDeleteRetryDelay)
+	}
+
+	return nil
+}
+
+// lbInNetwork reports whether the given load balancer is attached to the named
+// private network.
+func lbInNetwork(lb *hcloud.LoadBalancer, networkName string) bool {
+	for _, privateNet := range lb.PrivateNet {
+		if privateNet.Network != nil && privateNet.Network.Name == networkName {
+			return true
+		}
+	}
+
+	return false
 }
