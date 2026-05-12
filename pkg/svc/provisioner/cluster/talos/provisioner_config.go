@@ -313,6 +313,29 @@ func etcdChecks() []check.ClusterCheck {
 	}
 }
 
+// kubeletAndBootChecks returns the kubelet health and boot sequence completion
+// checks shared across all provider-specific pre-boot sequences.
+func kubeletAndBootChecks() []check.ClusterCheck {
+	allNodeTypes := check.WithNodeTypes(
+		machine.TypeInit,
+		machine.TypeControlPlane,
+		machine.TypeWorker,
+	)
+
+	return []check.ClusterCheck{
+		func(cluster check.ClusterInfo) conditions.Condition {
+			return conditions.PollingCondition("kubelet to be healthy", func(ctx context.Context) error {
+				return check.ServiceHealthAssertion(ctx, cluster, "kubelet", allNodeTypes)
+			}, preBootPollInterval)
+		},
+		func(cluster check.ClusterInfo) conditions.Condition {
+			return conditions.PollingCondition("all nodes to finish boot sequence", func(ctx context.Context) error {
+				return check.AllNodesBootedAssertion(ctx, cluster)
+			}, preBootPollInterval)
+		},
+	}
+}
+
 // dockerPreBootSequenceChecks returns a trimmed subset of the upstream
 // check.PreBootSequenceChecks() (github.com/siderolabs/talos v1.13.0-beta.1,
 // pkg/cluster/check/check.go) optimized for Docker environments. It omits
@@ -322,40 +345,19 @@ func etcdChecks() []check.ClusterCheck {
 // When upgrading the Talos dependency, verify this list against the upstream
 // check.PreBootSequenceChecks() to pick up any new essential readiness gates.
 func dockerPreBootSequenceChecks() []check.ClusterCheck {
-	allNodeTypes := check.WithNodeTypes(
-		machine.TypeInit,
-		machine.TypeControlPlane,
-		machine.TypeWorker,
-	)
-
-	return append(
+	// AllNodesMemorySizes — skipped: diagnostic-only, Docker containers have consistent resources
+	// AllNodesDiskSizes — skipped: diagnostic-only, Docker containers have consistent resources
+	// NoDiagnostics — skipped: informational-only, not a readiness gate
+	return slices.Concat(
 		etcdChecks(),
-		func(cluster check.ClusterInfo) conditions.Condition {
-			return conditions.PollingCondition("apid to be ready", func(ctx context.Context) error {
-				return check.ApidReadyAssertion(ctx, cluster)
-			}, preBootPollInterval)
+		[]check.ClusterCheck{
+			func(cluster check.ClusterInfo) conditions.Condition {
+				return conditions.PollingCondition("apid to be ready", func(ctx context.Context) error {
+					return check.ApidReadyAssertion(ctx, cluster)
+				}, preBootPollInterval)
+			},
 		},
-		// AllNodesMemorySizes — skipped: diagnostic-only, Docker containers have consistent resources
-		// AllNodesDiskSizes — skipped: diagnostic-only, Docker containers have consistent resources
-		// NoDiagnostics — skipped: informational-only, not a readiness gate
-		func(cluster check.ClusterInfo) conditions.Condition {
-			return conditions.PollingCondition(
-				"kubelet to be healthy",
-				func(ctx context.Context) error {
-					return check.ServiceHealthAssertion(ctx, cluster, "kubelet", allNodeTypes)
-				},
-				preBootPollInterval,
-			)
-		},
-		func(cluster check.ClusterInfo) conditions.Condition {
-			return conditions.PollingCondition(
-				"all nodes to finish boot sequence",
-				func(ctx context.Context) error {
-					return check.AllNodesBootedAssertion(ctx, cluster)
-				},
-				preBootPollInterval,
-			)
-		},
+		kubeletAndBootChecks(),
 	)
 }
 
@@ -378,41 +380,28 @@ func dockerPreBootSequenceChecks() []check.ClusterCheck {
 // When upgrading the Talos dependency, verify this list against the upstream
 // check.PreBootSequenceChecks() to pick up any new essential readiness gates.
 func preBootSequenceChecksSkipDiagnostics() []check.ClusterCheck {
-	allNodeTypes := check.WithNodeTypes(
-		machine.TypeInit,
-		machine.TypeControlPlane,
-		machine.TypeWorker,
-	)
-
-	return append(
+	// NoDiagnostics — skipped: creates deadlock when kubelet cert rotation is enabled
+	// without CNI (cert-approver can't schedule, "CSR is not approved" diagnostic never clears)
+	return slices.Concat(
 		etcdChecks(),
-		func(cluster check.ClusterInfo) conditions.Condition {
-			return conditions.PollingCondition("apid to be ready", func(ctx context.Context) error {
-				return check.ApidReadyAssertion(ctx, cluster)
-			}, preBootPollInterval)
+		[]check.ClusterCheck{
+			func(cluster check.ClusterInfo) conditions.Condition {
+				return conditions.PollingCondition("apid to be ready", func(ctx context.Context) error {
+					return check.ApidReadyAssertion(ctx, cluster)
+				}, preBootPollInterval)
+			},
+			func(cluster check.ClusterInfo) conditions.Condition {
+				return conditions.PollingCondition("all nodes memory sizes", func(ctx context.Context) error {
+					return check.AllNodesMemorySizes(ctx, cluster)
+				}, preBootPollInterval)
+			},
+			func(cluster check.ClusterInfo) conditions.Condition {
+				return conditions.PollingCondition("all nodes disk sizes", func(ctx context.Context) error {
+					return check.AllNodesDiskSizes(ctx, cluster)
+				}, preBootPollInterval)
+			},
 		},
-		func(cluster check.ClusterInfo) conditions.Condition {
-			return conditions.PollingCondition("all nodes memory sizes", func(ctx context.Context) error {
-				return check.AllNodesMemorySizes(ctx, cluster)
-			}, preBootPollInterval)
-		},
-		func(cluster check.ClusterInfo) conditions.Condition {
-			return conditions.PollingCondition("all nodes disk sizes", func(ctx context.Context) error {
-				return check.AllNodesDiskSizes(ctx, cluster)
-			}, preBootPollInterval)
-		},
-		// NoDiagnostics — skipped: creates deadlock when kubelet cert rotation is enabled
-		// without CNI (cert-approver can't schedule, "CSR is not approved" diagnostic never clears)
-		func(cluster check.ClusterInfo) conditions.Condition {
-			return conditions.PollingCondition("kubelet to be healthy", func(ctx context.Context) error {
-				return check.ServiceHealthAssertion(ctx, cluster, "kubelet", allNodeTypes)
-			}, preBootPollInterval)
-		},
-		func(cluster check.ClusterInfo) conditions.Condition {
-			return conditions.PollingCondition("all nodes to finish boot sequence", func(ctx context.Context) error {
-				return check.AllNodesBootedAssertion(ctx, cluster)
-			}, preBootPollInterval)
-		},
+		kubeletAndBootChecks(),
 	)
 }
 
