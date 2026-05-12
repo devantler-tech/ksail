@@ -502,11 +502,12 @@ func (p *Provider) deleteFirewallWithRetry(ctx context.Context, clusterName stri
 	return nil
 }
 
-// deleteNetwork deletes the network for a cluster if it exists.
-func (p *Provider) deleteNetwork(ctx context.Context, clusterName string) error {
+// getNetworkByClusterName looks up the cluster's private network with
+// transient-retry. Returns (nil, nil) when the network does not exist.
+func (p *Provider) getNetworkByClusterName(ctx context.Context, clusterName string) (*hcloud.Network, error) {
 	networkName := clusterName + NetworkSuffix
 
-	network, err := retryTransientHetznerOperation(
+	return retryTransientHetznerOperation(
 		ctx,
 		DefaultTransientRetryCount,
 		p.calculateRetryDelay,
@@ -519,6 +520,13 @@ func (p *Provider) deleteNetwork(ctx context.Context, clusterName string) error 
 			return network, nil
 		},
 	)
+}
+
+// deleteNetwork deletes the network for a cluster if it exists.
+func (p *Provider) deleteNetwork(ctx context.Context, clusterName string) error {
+	networkName := clusterName + NetworkSuffix
+
+	network, err := p.getNetworkByClusterName(ctx, clusterName)
 	if err != nil {
 		return nil //nolint:nilerr // Ignoring lookup error - resource may not exist
 	}
@@ -546,19 +554,7 @@ func (p *Provider) deleteLoadBalancers(ctx context.Context, clusterName string) 
 
 	// Look up the network with transient-retry to avoid silently skipping LB
 	// cleanup on a transient API error (which could leave billed resources).
-	network, err := retryTransientHetznerOperation(
-		ctx,
-		DefaultTransientRetryCount,
-		p.calculateRetryDelay,
-		func() (*hcloud.Network, error) {
-			network, _, err := p.client.Network.GetByName(ctx, networkName)
-			if err != nil {
-				return nil, fmt.Errorf("failed to get network %s: %w", networkName, err)
-			}
-
-			return network, nil
-		},
-	)
+	network, err := p.getNetworkByClusterName(ctx, clusterName)
 	if err != nil {
 		return fmt.Errorf("failed to look up network for LB cleanup: %w", err)
 	}
