@@ -421,7 +421,7 @@ func TestInstallComponentsInPhases_HetznerCCMRunsBeforeCertManager(t *testing.T)
 		func(context.Context, *v1alpha1.Cluster) error { return nil },
 	))
 
-	t.Cleanup(SetLoadBalancerInstallForTests(
+	t.Cleanup(SetCloudProviderInitInstallForTests(
 		func(_ context.Context, _ *v1alpha1.Cluster, _ *InstallerFactories) error {
 			record("load-balancer")
 
@@ -565,7 +565,7 @@ func TestRunCloudProviderInitPhase_WaitsForNodeSchedulability(t *testing.T) {
 		},
 	))
 
-	t.Cleanup(SetLoadBalancerInstallForTests(
+	t.Cleanup(SetCloudProviderInitInstallForTests(
 		func(context.Context, *v1alpha1.Cluster, *InstallerFactories) error {
 			order = append(order, "load-balancer-install")
 
@@ -613,7 +613,7 @@ func TestRunCloudProviderInitPhase_ReturnsErrorWhenNodeSchedulabilityFails(t *te
 		func(context.Context, *v1alpha1.Cluster, bool) error { return nil },
 	))
 
-	t.Cleanup(SetLoadBalancerInstallForTests(
+	t.Cleanup(SetCloudProviderInitInstallForTests(
 		func(context.Context, *v1alpha1.Cluster, *InstallerFactories) error { return nil },
 	))
 
@@ -659,7 +659,7 @@ func TestInstallComponentsInPhases_HetznerCCMPrePhaseExcludesFromParallelPhase(t
 		func(context.Context, *v1alpha1.Cluster) error { return nil },
 	))
 
-	t.Cleanup(SetLoadBalancerInstallForTests(
+	t.Cleanup(SetCloudProviderInitInstallForTests(
 		func(context.Context, *v1alpha1.Cluster, *InstallerFactories) error {
 			lbCallCount++
 

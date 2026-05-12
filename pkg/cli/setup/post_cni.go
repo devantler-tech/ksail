@@ -301,42 +301,45 @@ func SetCSRApproverWaitForTests(
 
 var (
 	//nolint:gochecknoglobals // dependency injection for tests
-	loadBalancerInstallMu sync.RWMutex
+	cloudProviderInitInstallMu sync.RWMutex
 	//nolint:gochecknoglobals // dependency injection for tests
-	loadBalancerInstallOverride silentInstallFunc
+	cloudProviderInitInstallOverride silentInstallFunc
 )
 
-// getLoadBalancerInstallFn returns the load-balancer install function,
-// using the test override if one is set. This allows tests to mock the
-// hcloud-ccm installation in the cloud-provider init pre-phase without
-// needing a real Helm client.
+// getLoadBalancerInstallFn returns the load-balancer install function used by
+// the cloud-provider init pre-phase, using the test override if one is set.
+// This allows tests to mock the hcloud-ccm installation without needing a real
+// Helm client. Note: the override only affects the pre-phase; the normal
+// parallel infra path uses InstallLoadBalancerSilent directly.
 func getLoadBalancerInstallFn() silentInstallFunc {
-	loadBalancerInstallMu.RLock()
-	defer loadBalancerInstallMu.RUnlock()
+	cloudProviderInitInstallMu.RLock()
+	defer cloudProviderInitInstallMu.RUnlock()
 
-	if loadBalancerInstallOverride != nil {
-		return loadBalancerInstallOverride
+	if cloudProviderInitInstallOverride != nil {
+		return cloudProviderInitInstallOverride
 	}
 
 	return InstallLoadBalancerSilent
 }
 
-// SetLoadBalancerInstallForTests overrides the load-balancer install function for testing.
-// Returns a cleanup function that restores the previous function.
-func SetLoadBalancerInstallForTests(fn silentInstallFunc) func() {
-	loadBalancerInstallMu.Lock()
+// SetCloudProviderInitInstallForTests overrides the load-balancer install
+// function used by the cloud-provider init pre-phase for testing. The override
+// only affects runCloudProviderInitPhase; the normal parallel infra path is not
+// affected. Returns a cleanup function that restores the previous function.
+func SetCloudProviderInitInstallForTests(fn silentInstallFunc) func() {
+	cloudProviderInitInstallMu.Lock()
 
-	previous := loadBalancerInstallOverride
-	loadBalancerInstallOverride = fn
+	previous := cloudProviderInitInstallOverride
+	cloudProviderInitInstallOverride = fn
 
-	loadBalancerInstallMu.Unlock()
+	cloudProviderInitInstallMu.Unlock()
 
 	return func() {
-		loadBalancerInstallMu.Lock()
+		cloudProviderInitInstallMu.Lock()
 
-		loadBalancerInstallOverride = previous
+		cloudProviderInitInstallOverride = previous
 
-		loadBalancerInstallMu.Unlock()
+		cloudProviderInitInstallMu.Unlock()
 	}
 }
 
@@ -653,7 +656,7 @@ func InstallPostCNIComponents(
 	)
 }
 
-//nolint:cyclop // Phase orchestration is inherently branchy; each phase gate is a distinct concern.
+//nolint:cyclop,funlen // Phase orchestration is inherently branchy; each phase gate is a distinct concern.
 func installComponentsInPhases(
 	ctx context.Context,
 	cmd *cobra.Command,
