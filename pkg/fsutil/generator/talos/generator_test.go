@@ -53,7 +53,11 @@ func TestGenerator_Generate_CreatesDirectoryStructure(t *testing.T) {
 	// workers/ should NOT have .gitkeep since it has the worker-role-label patch
 	gitkeepPath := filepath.Join(tempDir, "talos", "workers", ".gitkeep")
 	_, err = os.Stat(gitkeepPath)
-	assert.True(t, os.IsNotExist(err), "expected .gitkeep to not exist in workers/ when patches are generated")
+	assert.True(
+		t,
+		os.IsNotExist(err),
+		"expected .gitkeep to not exist in workers/ when patches are generated",
+	)
 }
 
 func TestGenerator_Generate_NilConfig(t *testing.T) {
@@ -248,7 +252,11 @@ func TestGenerator_Generate_DisableDefaultCNI(t *testing.T) {
 
 	// Verify .gitkeep was NOT created in workers/ since worker-role-label patch is generated there
 	_, err = os.Stat(filepath.Join(tempDir, "talos", "workers", ".gitkeep"))
-	assert.True(t, os.IsNotExist(err), "expected .gitkeep to not exist when worker patches are generated")
+	assert.True(
+		t,
+		os.IsNotExist(err),
+		"expected .gitkeep to not exist when worker patches are generated",
+	)
 }
 
 func TestGenerator_Generate_NoDisableCNIPatchWhenFalse(t *testing.T) {
@@ -365,7 +373,11 @@ func TestGenerator_Generate_WorkerRoleLabel_NotGeneratedWithoutWorkers(t *testin
 	// Verify worker-role-label.yaml was NOT created
 	patchPath := filepath.Join(tempDir, "talos", "workers", "worker-role-label.yaml")
 	_, err = os.Stat(patchPath)
-	assert.True(t, os.IsNotExist(err), "expected worker-role-label.yaml to not exist when WorkerNodes == 0")
+	assert.True(
+		t,
+		os.IsNotExist(err),
+		"expected worker-role-label.yaml to not exist when WorkerNodes == 0",
+	)
 }
 
 func TestGenerator_Generate_MirrorRegistries(t *testing.T) {
