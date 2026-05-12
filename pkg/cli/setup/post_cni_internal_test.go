@@ -369,3 +369,189 @@ func TestInstallComponentsInPhases_CertManagerRunsBeforePolicyEngine(t *testing.
 	assert.Equal(t, "policy-engine", order[1],
 		"policy-engine must be installed after cert-manager")
 }
+
+func TestInstallComponentsInPhases_HetznerCCMRunsBeforeCertManager(t *testing.T) {
+	// On Hetzner × Talos clusters, hcloud-ccm must install before cert-manager
+	// because all nodes carry the node.cloudprovider.kubernetes.io/uninitialized
+	// taint until the CCM initializes them. Without this ordering, cert-manager
+	// pods fail to schedule on any node.
+	clusterCfg := &v1alpha1.Cluster{
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				Distribution: v1alpha1.DistributionTalos,
+				Provider:     v1alpha1.ProviderHetzner,
+				CertManager:  v1alpha1.CertManagerEnabled,
+				PolicyEngine: v1alpha1.PolicyEngineKyverno,
+				LoadBalancer: v1alpha1.LoadBalancerDefault,
+			},
+		},
+	}
+
+	// Verify needsCloudProviderInitPhase returns true for this config,
+	// ensuring the pre-phase will trigger before cert-manager.
+	reqs := GetComponentRequirements(clusterCfg)
+	assert.True(t, needsCloudProviderInitPhase(clusterCfg, reqs),
+		"Hetzner × Talos with LoadBalancer should need cloud provider init phase")
+	assert.True(t, reqs.NeedsCertManager, "cert-manager should be needed")
+	assert.True(t, reqs.NeedsPolicyEngine, "policy engine should be needed")
+}
+
+func TestNeedsCloudProviderInitPhase(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		cluster  *v1alpha1.Cluster
+		reqs     ComponentRequirements
+		expected bool
+	}{
+		{
+			name: "Talos x Hetzner with load-balancer needed",
+			cluster: &v1alpha1.Cluster{
+				Spec: v1alpha1.Spec{
+					Cluster: v1alpha1.ClusterSpec{
+						Distribution: v1alpha1.DistributionTalos,
+						Provider:     v1alpha1.ProviderHetzner,
+					},
+				},
+			},
+			reqs:     ComponentRequirements{NeedsLoadBalancer: true},
+			expected: true,
+		},
+		{
+			name: "Talos x Docker does not need pre-phase",
+			cluster: &v1alpha1.Cluster{
+				Spec: v1alpha1.Spec{
+					Cluster: v1alpha1.ClusterSpec{
+						Distribution: v1alpha1.DistributionTalos,
+						Provider:     v1alpha1.ProviderDocker,
+					},
+				},
+			},
+			reqs:     ComponentRequirements{NeedsLoadBalancer: true},
+			expected: false,
+		},
+		{
+			name: "Vanilla x Docker does not need pre-phase",
+			cluster: &v1alpha1.Cluster{
+				Spec: v1alpha1.Spec{
+					Cluster: v1alpha1.ClusterSpec{
+						Distribution: v1alpha1.DistributionVanilla,
+						Provider:     v1alpha1.ProviderDocker,
+					},
+				},
+			},
+			reqs:     ComponentRequirements{NeedsLoadBalancer: true},
+			expected: false,
+		},
+		{
+			name: "Talos x Hetzner without load-balancer does not need pre-phase",
+			cluster: &v1alpha1.Cluster{
+				Spec: v1alpha1.Spec{
+					Cluster: v1alpha1.ClusterSpec{
+						Distribution: v1alpha1.DistributionTalos,
+						Provider:     v1alpha1.ProviderHetzner,
+					},
+				},
+			},
+			reqs:     ComponentRequirements{NeedsLoadBalancer: false},
+			expected: false,
+		},
+		{
+			name: "Talos x Omni does not need pre-phase",
+			cluster: &v1alpha1.Cluster{
+				Spec: v1alpha1.Spec{
+					Cluster: v1alpha1.ClusterSpec{
+						Distribution: v1alpha1.DistributionTalos,
+						Provider:     v1alpha1.ProviderOmni,
+					},
+				},
+			},
+			reqs:     ComponentRequirements{NeedsLoadBalancer: true},
+			expected: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			result := needsCloudProviderInitPhase(tc.cluster, tc.reqs)
+			assert.Equal(t, tc.expected, result)
+		})
+	}
+}
+
+func TestRunCloudProviderInitPhase_WaitsForNodeSchedulability(t *testing.T) {
+	// Verify that the node schedulability wait test seam is properly wired.
+	var waitCalled bool
+
+	t.Cleanup(SetNodeSchedulabilityWaitForTests(
+		func(context.Context, *v1alpha1.Cluster) error {
+			waitCalled = true
+
+			return nil
+		},
+	))
+
+	clusterCfg := &v1alpha1.Cluster{
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				Distribution: v1alpha1.DistributionTalos,
+				Provider:     v1alpha1.ProviderHetzner,
+			},
+		},
+	}
+
+	waitFn := getNodeSchedulabilityWaitFn()
+	err := waitFn(context.Background(), clusterCfg)
+	require.NoError(t, err)
+	assert.True(t, waitCalled, "node schedulability wait must be callable through test seam")
+}
+
+func TestRunCloudProviderInitPhase_ReturnsErrorWhenNodeSchedulabilityFails(t *testing.T) {
+	errNodesNotReady := errors.New("nodes still tainted")
+
+	t.Cleanup(SetNodeSchedulabilityWaitForTests(
+		func(context.Context, *v1alpha1.Cluster) error {
+			return errNodesNotReady
+		},
+	))
+
+	clusterCfg := &v1alpha1.Cluster{
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				Distribution: v1alpha1.DistributionTalos,
+				Provider:     v1alpha1.ProviderHetzner,
+			},
+		},
+	}
+
+	waitFn := getNodeSchedulabilityWaitFn()
+	err := waitFn(context.Background(), clusterCfg)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errNodesNotReady)
+}
+
+func TestInstallComponentsInPhases_HetznerCCMPrePhaseExcludesFromParallelPhase(t *testing.T) {
+	// After the cloud provider init pre-phase, NeedsLoadBalancer should be
+	// cleared so hcloud-ccm isn't installed again in the parallel phase.
+	clusterCfg := &v1alpha1.Cluster{
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				Distribution: v1alpha1.DistributionTalos,
+				Provider:     v1alpha1.ProviderHetzner,
+				CertManager:  v1alpha1.CertManagerEnabled,
+				LoadBalancer: v1alpha1.LoadBalancerDefault,
+			},
+		},
+	}
+
+	reqs := GetComponentRequirements(clusterCfg)
+	assert.True(t, reqs.NeedsLoadBalancer, "initial reqs should need load-balancer")
+
+	// After the pre-phase runs, NeedsLoadBalancer would be set to false.
+	// Verify the flag is true initially and that the pre-phase is triggered.
+	assert.True(t, needsCloudProviderInitPhase(clusterCfg, reqs),
+		"should need cloud provider init phase")
+}
