@@ -684,6 +684,10 @@ func TestInstallComponentsInPhases_HetznerCCMPrePhaseExcludesFromParallelPhase(t
 	)
 	require.NoError(t, err)
 
-	assert.Equal(t, 1, lbCallCount,
-		"load-balancer installer must run exactly once (pre-phase only, not again in parallel phase)")
+	assert.Equal(
+		t,
+		1,
+		lbCallCount,
+		"load-balancer installer must run exactly once (pre-phase only, not again in parallel phase)",
+	)
 }
