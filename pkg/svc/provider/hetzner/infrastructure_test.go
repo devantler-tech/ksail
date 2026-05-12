@@ -551,8 +551,10 @@ func lbInNetworkTestCases() []lbInNetworkTestCase {
 		{"DifferentNetwork", mkLB(mkPrivNets(mkNet("other"))), cluster, false},
 		{"NoPrivateNetworks", mkLB(nil), cluster, false},
 		{"EmptyPrivateNetworks", mkLB(mkPrivNets()), cluster, false},
-		{"MultipleNetworks_OneMatching",
-			mkLB(mkPrivNets(mkNet("other"), mkNet(cluster))), cluster, true},
+		{
+			"MultipleNetworks_OneMatching",
+			mkLB(mkPrivNets(mkNet("other"), mkNet(cluster))), cluster, true,
+		},
 		{"NilNetworkField", mkLB(mkPrivNets(nil)), cluster, false},
 	}
 }
