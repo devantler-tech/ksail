@@ -2,7 +2,6 @@ package hetzner_test
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -154,7 +153,7 @@ func TestCheckServerAvailability(t *testing.T) {
 
 			if testCase.wantErr != nil {
 				require.Error(t, err)
-				assert.True(t, errors.Is(err, testCase.wantErr),
+				assert.ErrorIs(t, err, testCase.wantErr,
 					"expected %v, got %v", testCase.wantErr, err)
 
 				if testCase.wantErrContains != "" {
@@ -180,7 +179,7 @@ func TestCheckServerAvailability_NilClient(t *testing.T) {
 	)
 
 	require.Error(t, err)
-	assert.True(t, errors.Is(err, provider.ErrProviderUnavailable))
+	assert.ErrorIs(t, err, provider.ErrProviderUnavailable)
 }
 
 func TestAvailableLocations(t *testing.T) {
