@@ -1,5 +1,7 @@
 package hcloudccminstaller
 
+import "github.com/devantler-tech/ksail/v7/pkg/svc/installer/internal/hetzner"
+
 // BuildValuesYamlForTest exports buildValuesYaml for testing (haEnabled=false).
 //
 //nolint:gochecknoglobals // Standard Go export_test.go pattern.
@@ -14,5 +16,5 @@ var BuildValuesYamlHAForTest = func(networkName string) string {
 	return buildValuesYaml(networkName, true)
 }
 
-// BuildSecretDataForTest exports buildSecretData for testing.
-var BuildSecretDataForTest = buildSecretData //nolint:gochecknoglobals // Standard Go export_test.go pattern.
+// BuildSecretDataForTest exports BuildNetworkSecretData for testing.
+var BuildSecretDataForTest = hetzner.BuildNetworkSecretData //nolint:gochecknoglobals // Standard Go export_test.go pattern.
