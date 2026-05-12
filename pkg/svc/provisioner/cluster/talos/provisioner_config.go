@@ -355,8 +355,8 @@ func apidCheck() check.ClusterCheck {
 }
 
 // dockerPreBootSequenceChecks returns a trimmed subset of the upstream
-// check.PreBootSequenceChecks() (github.com/siderolabs/talos v1.13.0-beta.1,
-// pkg/cluster/check/check.go) optimized for Docker environments. It omits
+// check.PreBootSequenceChecks() (github.com/siderolabs/talos v1.13.0,
+// pkg/cluster/check/default.go) optimized for Docker environments. It omits
 // purely diagnostic checks (AllNodesMemorySizes, AllNodesDiskSizes, NoDiagnostics)
 // that add polling overhead without catching real issues in Docker containers.
 //
@@ -374,7 +374,7 @@ func dockerPreBootSequenceChecks() []check.ClusterCheck {
 }
 
 // preBootSequenceChecksSkipDiagnostics returns the upstream PreBootSequenceChecks
-// (github.com/siderolabs/talos, pkg/cluster/check/default.go) with the
+// (github.com/siderolabs/talos v1.13.0, pkg/cluster/check/default.go) with the
 // NoDiagnostics check omitted. Used for non-Docker providers (Hetzner, Omni) when
 // kubelet cert rotation is enabled and CNI is not yet installed (CNI disabled in
 // config or skipped via SkipCNIChecks because it is installed post-creation).
