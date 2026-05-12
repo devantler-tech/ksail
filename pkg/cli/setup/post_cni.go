@@ -575,6 +575,31 @@ func runCloudProviderInitPhase(
 	return nil
 }
 
+// runCloudProviderInitAndClearReqs runs the cloud-provider init pre-phase and
+// returns updated requirements with NeedsLoadBalancer cleared and cniInstalled
+// set to false so subsequent phases run the full stability check.
+func runCloudProviderInitAndClearReqs(
+	ctx context.Context,
+	clusterCfg *v1alpha1.Cluster,
+	writer io.Writer,
+	labels notify.ProgressLabels,
+	tmr timer.Timer,
+	factories *InstallerFactories,
+	reqs ComponentRequirements,
+	cniInstalled bool,
+) (ComponentRequirements, bool, error) {
+	err := runCloudProviderInitPhase(
+		ctx, clusterCfg, writer, labels, tmr, factories, cniInstalled,
+	)
+	if err != nil {
+		return reqs, cniInstalled, err
+	}
+
+	reqs.NeedsLoadBalancer = false
+
+	return reqs, false, nil
+}
+
 // InstallPostCNIComponents installs all post-CNI components in parallel.
 // This includes metrics-server, CSI, cert-manager, and GitOps engines (Flux/ArgoCD).
 // For Flux, the OCI artifact push and readiness wait happens after installation.
@@ -646,17 +671,14 @@ func installComponentsInPhases(
 	// hcloud-ccm first and wait for nodes to become schedulable before any other
 	// infrastructure component, otherwise all pods fail with FailedScheduling.
 	if needsCloudProviderInitPhase(clusterCfg, reqs) {
-		err := runCloudProviderInitPhase(
-			ctx, clusterCfg, writer, labels, tmr, factories, cniInstalled,
+		var err error
+
+		reqs, cniInstalled, err = runCloudProviderInitAndClearReqs(
+			ctx, clusterCfg, writer, labels, tmr, factories, reqs, cniInstalled,
 		)
 		if err != nil {
 			return err
 		}
-
-		// hcloud-ccm is installed; exclude it from the parallel infra phase below.
-		// Clear cniInstalled so subsequent phases run the full stability check.
-		reqs.NeedsLoadBalancer = false
-		cniInstalled = false
 	}
 
 	// When cert-manager and a policy engine are both needed, install cert-manager

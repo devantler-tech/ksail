@@ -19,6 +19,7 @@ import (
 var (
 	errNotStable        = errors.New("not stable")
 	errApproverNotReady = errors.New("approver not ready")
+	errNodesNotReady    = errors.New("nodes still tainted")
 )
 
 func TestRunGitOpsPhase_AlwaysChecksClusterStabilityBeforeInstallingGitOps(t *testing.T) {
@@ -370,7 +371,7 @@ func TestInstallComponentsInPhases_CertManagerRunsBeforePolicyEngine(t *testing.
 		"policy-engine must be installed after cert-manager")
 }
 
-func TestInstallComponentsInPhases_HetznerCCMRunsBeforeCertManager(t *testing.T) {
+func TestInstallComponentsInPhases_HetznerCCMRunsBeforeCertManager(t *testing.T) { //nolint:funlen // integration test with multiple mocked phases
 	// On Hetzner × Talos clusters, hcloud-ccm must install before cert-manager
 	// because all nodes carry the node.cloudprovider.kubernetes.io/uninitialized
 	// taint until the CCM initializes them. Without this ordering, cert-manager
@@ -453,7 +454,7 @@ func TestInstallComponentsInPhases_HetznerCCMRunsBeforeCertManager(t *testing.T)
 		"policy-engine must install last")
 }
 
-func TestNeedsCloudProviderInitPhase(t *testing.T) {
+func TestNeedsCloudProviderInitPhase(t *testing.T) { //nolint:funlen // table-driven test with comprehensive cases
 	t.Parallel()
 
 	tests := []struct {
@@ -597,8 +598,6 @@ func TestRunCloudProviderInitPhase_WaitsForNodeSchedulability(t *testing.T) {
 }
 
 func TestRunCloudProviderInitPhase_ReturnsErrorWhenNodeSchedulabilityFails(t *testing.T) {
-	errNodesNotReady := errors.New("nodes still tainted")
-
 	clusterCfg := &v1alpha1.Cluster{
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{
