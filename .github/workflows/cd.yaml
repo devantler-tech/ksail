@@ -266,8 +266,8 @@ jobs:
       - name: 📥 Install mcp-publisher
         run: |
           set -euo pipefail
-          curl -sLO "https://github.com/modelcontextprotocol/registry/releases/download/v1.7.8/mcp-publisher_linux_amd64.tar.gz"
-          curl -sLO "https://github.com/modelcontextprotocol/registry/releases/download/v1.7.8/registry_1.7.8_checksums.txt"
+          curl -fsSLO "https://github.com/modelcontextprotocol/registry/releases/download/v1.7.8/mcp-publisher_linux_amd64.tar.gz"
+          curl -fsSLO "https://github.com/modelcontextprotocol/registry/releases/download/v1.7.8/registry_1.7.8_checksums.txt"
           grep "mcp-publisher_linux_amd64.tar.gz$" registry_1.7.8_checksums.txt | sha256sum --check
           tar -xzf mcp-publisher_linux_amd64.tar.gz mcp-publisher
           rm mcp-publisher_linux_amd64.tar.gz registry_1.7.8_checksums.txt
@@ -280,28 +280,27 @@ jobs:
           set -euo pipefail
           max_attempts=3
           delay=15
+          last_output=""
           for attempt in $(seq 1 "$max_attempts"); do
             echo "Publish attempt ${attempt}/${max_attempts}..."
-            if output="$(./mcp-publisher publish 2>&1)"; then
-              echo "$output"
+            if last_output="$(./mcp-publisher publish 2>&1)"; then
+              echo "$last_output"
               exit 0
             fi
-            echo "$output"
-            # Only retry on 5xx (server) errors — bail immediately on 4xx
-            if echo "$output" | grep -qP 'status [45]\d{2}'; then
-              if echo "$output" | grep -qP 'status 5\d{2}'; then
-                if [ "$attempt" -lt "$max_attempts" ]; then
-                  echo "Server error; retrying in ${delay}s..."
-                  sleep "$delay"
-                  delay=$((delay * 2))
-                  continue
-                fi
+            echo "$last_output"
+            # Only retry on 5xx (server) errors — bail immediately on anything else
+            if echo "$last_output" | grep -Eq 'status 5[0-9]{2}'; then
+              if [ "$attempt" -lt "$max_attempts" ]; then
+                echo "Server error; retrying in ${delay}s..."
+                sleep "$delay"
+                delay=$((delay * 2))
+                continue
               fi
+            else
+              break
             fi
-            echo "::error::mcp-publisher publish failed"
-            exit 1
           done
-          echo "::error::mcp-publisher publish failed after ${max_attempts} attempts"
+          echo "::error::mcp-publisher publish failed after ${attempt} attempt(s)"
           exit 1
 
   pages-build:
