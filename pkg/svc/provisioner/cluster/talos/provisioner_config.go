@@ -436,7 +436,8 @@ func (p *Provisioner) clusterReadinessChecks() []check.ClusterCheck {
 		return check.DefaultClusterChecks()
 	}
 
-	// When kubelet cert rotation is enabled with CNI disabled, the kubelet-serving-cert-approver
+	// When kubelet cert rotation is enabled and node readiness checks are skipped
+	// (CNI not yet installed or SkipCNIChecks set), the kubelet-serving-cert-approver
 	// pod cannot schedule (node has not-ready taint), so kubelet serving CSRs remain pending.
 	// Without a serving certificate, Talos cannot connect to kubelet, and StaticPodStatus
 	// resources are never populated. Skip the Talos-based static pod check and rely on

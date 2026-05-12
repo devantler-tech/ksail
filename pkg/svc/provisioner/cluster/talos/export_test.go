@@ -293,12 +293,15 @@ func (p *Provisioner) ClusterReadinessChecksCountForTest() int {
 
 // PreBootChecksCountForTest returns just the pre-boot check count for unit testing,
 // isolating the pre-boot sequence selection from the k8s component checks.
+// Only valid when skipNodeReadiness is true (CNI disabled or SkipCNIChecks set);
+// when skipNodeReadiness is false, production code uses DefaultClusterChecks()
+// which does not separate pre-boot from k8s component checks.
 func (p *Provisioner) PreBootChecksCountForTest() int {
 	skipNodeReadiness := (p.talosConfigs != nil && p.talosConfigs.IsCNIDisabled()) ||
 		p.options.SkipCNIChecks
 
 	if !skipNodeReadiness {
-		return len(check.PreBootSequenceChecks())
+		panic("PreBootChecksCountForTest is only valid when skipNodeReadiness is true")
 	}
 
 	switch {
