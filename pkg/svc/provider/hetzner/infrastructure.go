@@ -504,7 +504,10 @@ func (p *Provider) deleteFirewallWithRetry(ctx context.Context, clusterName stri
 
 // getNetworkByClusterName looks up the cluster's private network with
 // transient-retry. Returns (nil, nil) when the network does not exist.
-func (p *Provider) getNetworkByClusterName(ctx context.Context, clusterName string) (*hcloud.Network, error) {
+func (p *Provider) getNetworkByClusterName(
+	ctx context.Context,
+	clusterName string,
+) (*hcloud.Network, error) {
 	networkName := clusterName + NetworkSuffix
 
 	return retryTransientHetznerOperation(
@@ -586,8 +589,11 @@ func (p *Provider) deleteLoadBalancers(ctx context.Context, clusterName string) 
 // Retries handle the case where the LB is still processing actions from the
 // recently deleted cluster.
 //
-//nolint:funcorder // Grouped with deleteLoadBalancers for logical code organization
-func (p *Provider) deleteLoadBalancerWithRetry(ctx context.Context, loadBalancer *hcloud.LoadBalancer) error {
+
+func (p *Provider) deleteLoadBalancerWithRetry(
+	ctx context.Context,
+	loadBalancer *hcloud.LoadBalancer,
+) error {
 	for attempt := range MaxDeleteRetries {
 		_, err := p.client.LoadBalancer.Delete(ctx, loadBalancer)
 		if err == nil {
@@ -609,7 +615,10 @@ func (p *Provider) deleteLoadBalancerWithRetry(ctx context.Context, loadBalancer
 
 		select {
 		case <-ctx.Done():
-			return fmt.Errorf("context cancelled while retrying load balancer deletion: %w", ctx.Err())
+			return fmt.Errorf(
+				"context cancelled while retrying load balancer deletion: %w",
+				ctx.Err(),
+			)
 		case <-time.After(DefaultDeleteRetryDelay):
 		}
 	}

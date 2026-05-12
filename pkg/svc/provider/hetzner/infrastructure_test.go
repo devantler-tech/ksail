@@ -522,7 +522,9 @@ func TestBuildFirewallRulesWithAllowedCIDRs(t *testing.T) {
 	}
 }
 
-func TestLBInNetwork(t *testing.T) { //nolint:funlen // Table-driven test with comprehensive coverage
+func TestLBInNetwork(
+	t *testing.T,
+) { //nolint:funlen // Table-driven test with comprehensive coverage
 	t.Parallel()
 
 	tests := []struct {
