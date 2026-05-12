@@ -371,7 +371,8 @@ func TestInstallComponentsInPhases_CertManagerRunsBeforePolicyEngine(t *testing.
 		"policy-engine must be installed after cert-manager")
 }
 
-func TestInstallComponentsInPhases_HetznerCCMRunsBeforeCertManager(t *testing.T) { //nolint:funlen // integration test with multiple mocked phases
+//nolint:funlen // integration test with multiple mocked phases
+func TestInstallComponentsInPhases_HetznerCCMRunsBeforeCertManager(t *testing.T) {
 	// On Hetzner × Talos clusters, hcloud-ccm must install before cert-manager
 	// because all nodes carry the node.cloudprovider.kubernetes.io/uninitialized
 	// taint until the CCM initializes them. Without this ordering, cert-manager
@@ -454,7 +455,8 @@ func TestInstallComponentsInPhases_HetznerCCMRunsBeforeCertManager(t *testing.T)
 		"policy-engine must install last")
 }
 
-func TestNeedsCloudProviderInitPhase(t *testing.T) { //nolint:funlen // table-driven test with comprehensive cases
+//nolint:funlen // table-driven test with comprehensive cases
+func TestNeedsCloudProviderInitPhase(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {

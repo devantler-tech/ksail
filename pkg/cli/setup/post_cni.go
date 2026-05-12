@@ -653,6 +653,7 @@ func InstallPostCNIComponents(
 	)
 }
 
+//nolint:cyclop // Phase orchestration is inherently branchy; each phase gate is a distinct concern.
 func installComponentsInPhases(
 	ctx context.Context,
 	cmd *cobra.Command,
