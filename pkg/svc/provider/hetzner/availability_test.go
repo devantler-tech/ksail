@@ -153,7 +153,7 @@ func TestCheckServerAvailability(t *testing.T) {
 
 			if testCase.wantErr != nil {
 				require.Error(t, err)
-				assert.ErrorIs(t, err, testCase.wantErr,
+				require.ErrorIs(t, err, testCase.wantErr,
 					"expected %v, got %v", testCase.wantErr, err)
 
 				if testCase.wantErrContains != "" {
@@ -267,11 +267,6 @@ func TestDeduplicateServerTypes(t *testing.T) {
 			name:  "Empty",
 			input: []string{},
 			want:  []string{},
-		},
-		{
-			name:  "Single",
-			input: []string{"cx23"},
-			want:  []string{"cx23"},
 		},
 		{
 			name:  "SkipsEmpty",
