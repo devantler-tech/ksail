@@ -34,6 +34,18 @@ func TestSentinelErrors(t *testing.T) {
 		require.Error(t, hetzner.ErrAllLocationsFailed)
 		assert.Contains(t, hetzner.ErrAllLocationsFailed.Error(), "location")
 	})
+
+	t.Run("ErrServerTypeNotFound", func(t *testing.T) {
+		t.Parallel()
+		require.Error(t, hetzner.ErrServerTypeNotFound)
+		assert.Contains(t, hetzner.ErrServerTypeNotFound.Error(), "not found")
+	})
+
+	t.Run("ErrServerTypeUnavailable", func(t *testing.T) {
+		t.Parallel()
+		require.Error(t, hetzner.ErrServerTypeUnavailable)
+		assert.Contains(t, hetzner.ErrServerTypeUnavailable.Error(), "unavailable")
+	})
 }
 
 //nolint:funlen // Table-driven test with many cases

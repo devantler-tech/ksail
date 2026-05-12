@@ -44,6 +44,12 @@ func (p *Provisioner) addHetznerNodes(
 
 	nextIndex := nextHetznerNodeIndex(existing, clusterName, role)
 
+	// Verify server type availability before creating infrastructure
+	err = p.checkHetznerAvailabilityForRole(ctx, hzProvider, role)
+	if err != nil {
+		return err
+	}
+
 	infra, err := p.ensureHetznerInfra(ctx, hzProvider, clusterName)
 	if err != nil {
 		return fmt.Errorf("failed to ensure Hetzner infrastructure: %w", err)
@@ -333,4 +339,38 @@ func (p *Provisioner) hetznerRetryOpts() hetzner.ServerRetryOpts {
 	}
 
 	return opts
+}
+
+// checkHetznerAvailabilityForRole verifies that the server type for the given
+// role is available in the configured locations. Used during scale-up to fail
+// fast before creating infrastructure resources.
+func (p *Provisioner) checkHetznerAvailabilityForRole(
+	ctx context.Context,
+	hzProvider *hetzner.Provider,
+	role string,
+) error {
+	if p.hetznerOpts == nil {
+		return nil
+	}
+
+	serverType := p.hetznerServerType(role)
+	if serverType == "" {
+		return nil
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "Checking server type availability for %s...\n", role)
+
+	err := hzProvider.CheckServerAvailability(
+		ctx,
+		[]string{serverType},
+		p.hetznerOpts.Location,
+		p.hetznerOpts.FallbackLocations,
+	)
+	if err != nil {
+		return fmt.Errorf("server availability check failed for %s: %w", role, err)
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "  ✓ Server type %q available\n", serverType)
+
+	return nil
 }

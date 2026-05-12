@@ -22,6 +22,10 @@ var (
 	ErrImageAndISOBothSet = errors.New("ImageID and ISOID are mutually exclusive; set only one")
 	// ErrImageOrISORequired indicates that neither ImageID nor ISOID was provided, but one is required.
 	ErrImageOrISORequired = errors.New("either ImageID or ISOID must be provided")
+	// ErrServerTypeNotFound indicates that the requested server type does not exist.
+	ErrServerTypeNotFound = errors.New("server type not found")
+	// ErrServerTypeUnavailable indicates that the server type is not available in any configured location.
+	ErrServerTypeUnavailable = errors.New("server type unavailable in all configured locations")
 )
 
 // retryableErrorCodes are Hetzner API error codes that warrant a retry.
