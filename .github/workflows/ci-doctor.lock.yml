@@ -66,22 +66,22 @@ name: "CI Doctor"
   workflow_run:
     # zizmor: ignore[dangerous-triggers] - workflow_run trigger is secured with role and fork validation
     branches:
-    # - main # Skip-bots processed as bot check in pre-activation job
-    # - "**" # Skip-bots processed as bot check in pre-activation job
+      - main # Skip-bots processed as bot check in pre-activation job
+      - "**" # Skip-bots processed as bot check in pre-activation job
     types:
-    # - completed # Skip-bots processed as bot check in pre-activation job
+      - completed # Skip-bots processed as bot check in pre-activation job
     workflows:
-    # - CD # Skip-bots processed as bot check in pre-activation job
-    # - Release # Skip-bots processed as bot check in pre-activation job
-    # - Maintenance # Skip-bots processed as bot check in pre-activation job
-    # - Sync labels # Skip-bots processed as bot check in pre-activation job
-    # - TODOs # Skip-bots processed as bot check in pre-activation job
-    # - Repo Assist # Skip-bots processed as bot check in pre-activation job
-    # - Daily Docs # Skip-bots processed as bot check in pre-activation job
-    # - Daily Workflow Maintenance # Skip-bots processed as bot check in pre-activation job
-    # - Weekly Strategy # Skip-bots processed as bot check in pre-activation job
-    # - "System Test - Hetzner" # Skip-bots processed as bot check in pre-activation job
-    # - "System Test - Omni" # Skip-bots processed as bot check in pre-activation job
+      - CD # Skip-bots processed as bot check in pre-activation job
+      - Release # Skip-bots processed as bot check in pre-activation job
+      - Maintenance # Skip-bots processed as bot check in pre-activation job
+      - Sync labels # Skip-bots processed as bot check in pre-activation job
+      - TODOs # Skip-bots processed as bot check in pre-activation job
+      - Repo Assist # Skip-bots processed as bot check in pre-activation job
+      - Daily Docs # Skip-bots processed as bot check in pre-activation job
+      - Daily Workflow Maintenance # Skip-bots processed as bot check in pre-activation job
+      - Weekly Strategy # Skip-bots processed as bot check in pre-activation job
+      - "System Test - Hetzner" # Skip-bots processed as bot check in pre-activation job
+      - "System Test - Omni" # Skip-bots processed as bot check in pre-activation job
 
 permissions: {}
 
