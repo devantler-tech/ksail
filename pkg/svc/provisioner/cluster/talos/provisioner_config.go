@@ -324,14 +324,22 @@ func kubeletAndBootChecks() []check.ClusterCheck {
 
 	return []check.ClusterCheck{
 		func(cluster check.ClusterInfo) conditions.Condition {
-			return conditions.PollingCondition("kubelet to be healthy", func(ctx context.Context) error {
-				return check.ServiceHealthAssertion(ctx, cluster, "kubelet", allNodeTypes)
-			}, preBootPollInterval)
+			return conditions.PollingCondition(
+				"kubelet to be healthy",
+				func(ctx context.Context) error {
+					return check.ServiceHealthAssertion(ctx, cluster, "kubelet", allNodeTypes)
+				},
+				preBootPollInterval,
+			)
 		},
 		func(cluster check.ClusterInfo) conditions.Condition {
-			return conditions.PollingCondition("all nodes to finish boot sequence", func(ctx context.Context) error {
-				return check.AllNodesBootedAssertion(ctx, cluster)
-			}, preBootPollInterval)
+			return conditions.PollingCondition(
+				"all nodes to finish boot sequence",
+				func(ctx context.Context) error {
+					return check.AllNodesBootedAssertion(ctx, cluster)
+				},
+				preBootPollInterval,
+			)
 		},
 	}
 }
@@ -352,9 +360,13 @@ func dockerPreBootSequenceChecks() []check.ClusterCheck {
 		etcdChecks(),
 		[]check.ClusterCheck{
 			func(cluster check.ClusterInfo) conditions.Condition {
-				return conditions.PollingCondition("apid to be ready", func(ctx context.Context) error {
-					return check.ApidReadyAssertion(ctx, cluster)
-				}, preBootPollInterval)
+				return conditions.PollingCondition(
+					"apid to be ready",
+					func(ctx context.Context) error {
+						return check.ApidReadyAssertion(ctx, cluster)
+					},
+					preBootPollInterval,
+				)
 			},
 		},
 		kubeletAndBootChecks(),
@@ -386,19 +398,31 @@ func preBootSequenceChecksSkipDiagnostics() []check.ClusterCheck {
 		etcdChecks(),
 		[]check.ClusterCheck{
 			func(cluster check.ClusterInfo) conditions.Condition {
-				return conditions.PollingCondition("apid to be ready", func(ctx context.Context) error {
-					return check.ApidReadyAssertion(ctx, cluster)
-				}, preBootPollInterval)
+				return conditions.PollingCondition(
+					"apid to be ready",
+					func(ctx context.Context) error {
+						return check.ApidReadyAssertion(ctx, cluster)
+					},
+					preBootPollInterval,
+				)
 			},
 			func(cluster check.ClusterInfo) conditions.Condition {
-				return conditions.PollingCondition("all nodes memory sizes", func(ctx context.Context) error {
-					return check.AllNodesMemorySizes(ctx, cluster)
-				}, preBootPollInterval)
+				return conditions.PollingCondition(
+					"all nodes memory sizes",
+					func(ctx context.Context) error {
+						return check.AllNodesMemorySizes(ctx, cluster)
+					},
+					preBootPollInterval,
+				)
 			},
 			func(cluster check.ClusterInfo) conditions.Condition {
-				return conditions.PollingCondition("all nodes disk sizes", func(ctx context.Context) error {
-					return check.AllNodesDiskSizes(ctx, cluster)
-				}, preBootPollInterval)
+				return conditions.PollingCondition(
+					"all nodes disk sizes",
+					func(ctx context.Context) error {
+						return check.AllNodesDiskSizes(ctx, cluster)
+					},
+					preBootPollInterval,
+				)
 			},
 		},
 		kubeletAndBootChecks(),

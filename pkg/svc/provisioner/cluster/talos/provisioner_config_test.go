@@ -95,8 +95,12 @@ func TestClusterReadinessChecks_HetznerCertRotationSkipsDiagnostics(t *testing.T
 	withRotation := hetznerWithCertRotation.PreBootChecksCountForTest()
 	withoutRotation := hetznerWithoutCertRotation.PreBootChecksCountForTest()
 
-	assert.Less(t, withRotation, withoutRotation,
-		"Hetzner with cert rotation should skip NoDiagnostics pre-boot check (fewer pre-boot checks)")
+	assert.Less(
+		t,
+		withRotation,
+		withoutRotation,
+		"Hetzner with cert rotation should skip NoDiagnostics pre-boot check (fewer pre-boot checks)",
+	)
 }
 
 func loadCertRotationConfigs(t *testing.T, clusterName, rotateValue string) *talos.Configs {
