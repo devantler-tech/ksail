@@ -299,6 +299,47 @@ func SetCSRApproverWaitForTests(
 	}
 }
 
+var (
+	//nolint:gochecknoglobals // dependency injection for tests
+	loadBalancerInstallMu sync.RWMutex
+	//nolint:gochecknoglobals // dependency injection for tests
+	loadBalancerInstallOverride silentInstallFunc
+)
+
+// getLoadBalancerInstallFn returns the load-balancer install function,
+// using the test override if one is set. This allows tests to mock the
+// hcloud-ccm installation in the cloud-provider init pre-phase without
+// needing a real Helm client.
+func getLoadBalancerInstallFn() silentInstallFunc {
+	loadBalancerInstallMu.RLock()
+	defer loadBalancerInstallMu.RUnlock()
+
+	if loadBalancerInstallOverride != nil {
+		return loadBalancerInstallOverride
+	}
+
+	return InstallLoadBalancerSilent
+}
+
+// SetLoadBalancerInstallForTests overrides the load-balancer install function for testing.
+// Returns a cleanup function that restores the previous function.
+func SetLoadBalancerInstallForTests(fn silentInstallFunc) func() {
+	loadBalancerInstallMu.Lock()
+
+	previous := loadBalancerInstallOverride
+	loadBalancerInstallOverride = fn
+
+	loadBalancerInstallMu.Unlock()
+
+	return func() {
+		loadBalancerInstallMu.Lock()
+
+		loadBalancerInstallOverride = previous
+
+		loadBalancerInstallMu.Unlock()
+	}
+}
+
 // ShouldPushOCIArtifact determines if OCI artifact push should happen for GitOps engines.
 // Returns true if Flux or ArgoCD is enabled and a local registry is configured.
 func ShouldPushOCIArtifact(clusterCfg *v1alpha1.Cluster) bool {
@@ -501,7 +542,7 @@ func needsCloudProviderInitPhase(
 // and waits for nodes to become schedulable. The CCM chart includes a built-in
 // toleration for the uninitialized taint, so it can schedule on tainted nodes.
 // Once running, the CCM initializes nodes by assigning provider IDs and removing
-// the taint. We wait for at least one worker to become schedulable before
+// the taint. We wait for at least one node to become schedulable before
 // returning, so subsequent components (cert-manager, metrics-server, etc.) can
 // schedule without hitting FailedScheduling.
 func runCloudProviderInitPhase(
@@ -513,7 +554,7 @@ func runCloudProviderInitPhase(
 	factories *InstallerFactories,
 	cniInstalled bool,
 ) error {
-	ccmTask := newTask("load-balancer", clusterCfg, factories, InstallLoadBalancerSilent)
+	ccmTask := newTask("load-balancer", clusterCfg, factories, getLoadBalancerInstallFn())
 
 	err := runInfraPhase(
 		ctx, clusterCfg, writer, labels, tmr,
