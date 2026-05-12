@@ -127,6 +127,13 @@ func (m *ConfigManager) loadTalosConfig() (*talosconfigmanager.Configs, error) {
 	// (e.g., permissions), we inject the patches as a fail-safe.
 	m.addKubeletCertRotationPatches(talosManager, patchesDir)
 
+	// Inject worker role label patch at runtime when the patch file doesn't
+	// already exist on disk. Projects initialized with this version+ have
+	// the patch file; older projects or manually-managed talos/ directories
+	// may not. The runtime injection ensures worker nodes always get the
+	// node-role.kubernetes.io/worker label.
+	m.addWorkerRoleLabelPatch(talosManager, patchesDir)
+
 	// Wire extensions from ksail.yaml so that machine.install.image is patched
 	// to use a Talos Image Factory installer containing the requested extensions.
 	// Skip when an explicit SchematicID is set — it takes precedence over extensions.
@@ -186,6 +193,19 @@ func (m *ConfigManager) addKubeletCertRotationPatches(
 	if m.Config.Spec.Cluster.MetricsServer == v1alpha1.MetricsServerEnabled &&
 		!kubeletPatchFilesExist(patchesDir) {
 		talosManager.WithAdditionalPatches(kubeletCertRotationAndApproverPatches())
+	}
+}
+
+// addWorkerRoleLabelPatch injects the worker role label patch at runtime
+// when the patch file does not exist on disk. This ensures existing
+// scaffolded projects (created before this patch was introduced) still
+// get the node-role.kubernetes.io/worker label on worker nodes.
+func (m *ConfigManager) addWorkerRoleLabelPatch(
+	talosManager *talosconfigmanager.ConfigManager,
+	patchesDir string,
+) {
+	if !workerRoleLabelPatchFileExists(patchesDir) {
+		talosManager.WithAdditionalPatches([]talosconfigmanager.Patch{workerRoleLabelPatch()})
 	}
 }
 
@@ -311,6 +331,10 @@ func (m *ConfigManager) getDefaultTalosPatches() []talosconfigmanager.Patch {
 		patches = append(patches, externalCloudProviderPatches()...)
 	}
 
+	// Always label worker nodes with node-role.kubernetes.io/worker.
+	// This is worker-scoped so it only affects worker configs.
+	patches = append(patches, workerRoleLabelPatch())
+
 	return patches
 }
 
@@ -361,6 +385,16 @@ func kubeletPatchFilesExist(patchesDir string) bool {
 	_, err2 := os.Stat(csrApprover)
 
 	return err1 == nil && err2 == nil
+}
+
+// workerRoleLabelPatchFileExists returns true when the worker role label
+// patch file exists on disk. If the file is missing or stat fails for any
+// reason, returns false so that the runtime patch is injected as a fail-safe.
+func workerRoleLabelPatchFileExists(patchesDir string) bool {
+	patchFile := filepath.Join(patchesDir, "workers", "worker-role-label.yaml")
+	_, err := os.Stat(patchFile)
+
+	return err == nil
 }
 
 // ingressFirewallPatchPaths returns the expected ingress firewall patch file paths
@@ -575,6 +609,17 @@ func externalCloudProviderPatches() []talosconfigmanager.Patch {
 			Scope:   talosconfigmanager.PatchScopeCluster,
 			Content: []byte(talosgenerator.ExternalCloudProviderPatchYAML),
 		},
+	}
+}
+
+// workerRoleLabelPatch returns a Talos machine config patch that labels worker nodes
+// with node-role.kubernetes.io/worker. Used for runtime injection when no scaffolded
+// project exists (init=false). Worker-scoped so it only affects worker configs.
+func workerRoleLabelPatch() talosconfigmanager.Patch {
+	return talosconfigmanager.Patch{
+		Path:    "worker-role-label",
+		Scope:   talosconfigmanager.PatchScopeWorker,
+		Content: []byte(talosgenerator.WorkerRoleLabelPatchYAML),
 	}
 }
 
