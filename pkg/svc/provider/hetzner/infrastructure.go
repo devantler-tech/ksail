@@ -587,9 +587,9 @@ func (p *Provider) deleteLoadBalancers(ctx context.Context, clusterName string) 
 // recently deleted cluster.
 //
 //nolint:funcorder // Grouped with deleteLoadBalancers for logical code organization
-func (p *Provider) deleteLoadBalancerWithRetry(ctx context.Context, lb *hcloud.LoadBalancer) error {
+func (p *Provider) deleteLoadBalancerWithRetry(ctx context.Context, loadBalancer *hcloud.LoadBalancer) error {
 	for attempt := range MaxDeleteRetries {
-		_, err := p.client.LoadBalancer.Delete(ctx, lb)
+		_, err := p.client.LoadBalancer.Delete(ctx, loadBalancer)
 		if err == nil {
 			return nil
 		}
@@ -603,13 +603,13 @@ func (p *Provider) deleteLoadBalancerWithRetry(ctx context.Context, lb *hcloud.L
 		if attempt == MaxDeleteRetries-1 {
 			return fmt.Errorf(
 				"failed to delete load balancer %s (ID %d) after %d attempts: %w",
-				lb.Name, lb.ID, MaxDeleteRetries, err,
+				loadBalancer.Name, loadBalancer.ID, MaxDeleteRetries, err,
 			)
 		}
 
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return fmt.Errorf("context cancelled while retrying load balancer deletion: %w", ctx.Err())
 		case <-time.After(DefaultDeleteRetryDelay):
 		}
 	}
