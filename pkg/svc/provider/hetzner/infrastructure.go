@@ -553,8 +553,6 @@ func (p *Provider) deleteNetwork(ctx context.Context, clusterName string) error 
 // Load balancers must be deleted before the network, otherwise network deletion
 // will fail because the network still has attached resources.
 func (p *Provider) deleteLoadBalancers(ctx context.Context, clusterName string) error {
-	networkName := clusterName + NetworkSuffix
-
 	// Look up the network with transient-retry to avoid silently skipping LB
 	// cleanup on a transient API error (which could leave billed resources).
 	network, err := p.getNetworkByClusterName(ctx, clusterName)
@@ -566,13 +564,20 @@ func (p *Provider) deleteLoadBalancers(ctx context.Context, clusterName string) 
 		return nil
 	}
 
-	loadBalancers, err := p.client.LoadBalancer.AllWithOpts(ctx, hcloud.LoadBalancerListOpts{})
+	loadBalancers, err := retryTransientHetznerOperation(
+		ctx,
+		DefaultTransientRetryCount,
+		p.calculateRetryDelay,
+		func() ([]*hcloud.LoadBalancer, error) {
+			return p.client.LoadBalancer.AllWithOpts(ctx, hcloud.LoadBalancerListOpts{})
+		},
+	)
 	if err != nil {
 		return fmt.Errorf("failed to list load balancers: %w", err)
 	}
 
 	for _, lb := range loadBalancers {
-		if !lbInNetwork(lb, networkName) {
+		if !lbInNetwork(lb, network.Name) {
 			continue
 		}
 
