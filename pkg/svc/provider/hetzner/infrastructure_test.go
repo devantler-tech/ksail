@@ -522,75 +522,82 @@ func TestBuildFirewallRulesWithAllowedCIDRs(t *testing.T) {
 	}
 }
 
-var lbInNetworkTests = []struct {
+func lbInNetworkTestCases() []struct {
 	name        string
 	lb          *hcloud.LoadBalancer
 	networkName string
 	expected    bool
-}{
-	{
-		name: "MatchingNetwork",
-		lb: &hcloud.LoadBalancer{
-			PrivateNet: []hcloud.LoadBalancerPrivateNet{
-				{Network: &hcloud.Network{Name: "my-cluster-network"}},
+} {
+	return []struct {
+		name        string
+		lb          *hcloud.LoadBalancer
+		networkName string
+		expected    bool
+	}{
+		{
+			name: "MatchingNetwork",
+			lb: &hcloud.LoadBalancer{
+				PrivateNet: []hcloud.LoadBalancerPrivateNet{
+					{Network: &hcloud.Network{Name: "my-cluster-network"}},
+				},
 			},
+			networkName: "my-cluster-network",
+			expected:    true,
 		},
-		networkName: "my-cluster-network",
-		expected:    true,
-	},
-	{
-		name: "DifferentNetwork",
-		lb: &hcloud.LoadBalancer{
-			PrivateNet: []hcloud.LoadBalancerPrivateNet{
-				{Network: &hcloud.Network{Name: "other-cluster-network"}},
+		{
+			name: "DifferentNetwork",
+			lb: &hcloud.LoadBalancer{
+				PrivateNet: []hcloud.LoadBalancerPrivateNet{
+					{Network: &hcloud.Network{Name: "other-cluster-network"}},
+				},
 			},
+			networkName: "my-cluster-network",
+			expected:    false,
 		},
-		networkName: "my-cluster-network",
-		expected:    false,
-	},
-	{
-		name: "NoPrivateNetworks",
-		lb: &hcloud.LoadBalancer{
-			PrivateNet: nil,
-		},
-		networkName: "my-cluster-network",
-		expected:    false,
-	},
-	{
-		name: "EmptyPrivateNetworks",
-		lb: &hcloud.LoadBalancer{
-			PrivateNet: []hcloud.LoadBalancerPrivateNet{},
-		},
-		networkName: "my-cluster-network",
-		expected:    false,
-	},
-	{
-		name: "MultipleNetworks_OneMatching",
-		lb: &hcloud.LoadBalancer{
-			PrivateNet: []hcloud.LoadBalancerPrivateNet{
-				{Network: &hcloud.Network{Name: "other-network"}},
-				{Network: &hcloud.Network{Name: "my-cluster-network"}},
+		{
+			name: "NoPrivateNetworks",
+			lb: &hcloud.LoadBalancer{
+				PrivateNet: nil,
 			},
+			networkName: "my-cluster-network",
+			expected:    false,
 		},
-		networkName: "my-cluster-network",
-		expected:    true,
-	},
-	{
-		name: "NilNetworkField",
-		lb: &hcloud.LoadBalancer{
-			PrivateNet: []hcloud.LoadBalancerPrivateNet{
-				{Network: nil},
+		{
+			name: "EmptyPrivateNetworks",
+			lb: &hcloud.LoadBalancer{
+				PrivateNet: []hcloud.LoadBalancerPrivateNet{},
 			},
+			networkName: "my-cluster-network",
+			expected:    false,
 		},
-		networkName: "my-cluster-network",
-		expected:    false,
-	},
+		{
+			name: "MultipleNetworks_OneMatching",
+			lb: &hcloud.LoadBalancer{
+				PrivateNet: []hcloud.LoadBalancerPrivateNet{
+					{Network: &hcloud.Network{Name: "other-network"}},
+					{Network: &hcloud.Network{Name: "my-cluster-network"}},
+				},
+			},
+			networkName: "my-cluster-network",
+			expected:    true,
+		},
+		{
+			name: "NilNetworkField",
+			lb: &hcloud.LoadBalancer{
+				PrivateNet: []hcloud.LoadBalancerPrivateNet{
+					{Network: nil},
+				},
+			},
+			networkName: "my-cluster-network",
+			expected:    false,
+		},
+	}
 }
 
 func TestLBInNetwork(t *testing.T) {
 	t.Parallel()
 
-	for _, testCase := range lbInNetworkTests {
+	for _, testCase := range lbInNetworkTestCases() {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
