@@ -90,11 +90,13 @@ func TestClusterReadinessChecks_HetznerCertRotationSkipsDiagnostics(t *testing.T
 	hetznerWithoutCertRotation := talosprovisioner.NewProvisioner(nil, opts).
 		WithInfraProvider(&hetzner.Provider{})
 
-	withRotation := hetznerWithCertRotation.ClusterReadinessChecksCountForTest()
-	withoutRotation := hetznerWithoutCertRotation.ClusterReadinessChecksCountForTest()
+	// Use the pre-boot check count seam to isolate the NoDiagnostics skip from
+	// the separate k8s component check difference (static pod status vs full CP).
+	withRotation := hetznerWithCertRotation.PreBootChecksCountForTest()
+	withoutRotation := hetznerWithoutCertRotation.PreBootChecksCountForTest()
 
 	assert.Less(t, withRotation, withoutRotation,
-		"Hetzner with cert rotation should skip NoDiagnostics check (fewer total checks)")
+		"Hetzner with cert rotation should skip NoDiagnostics pre-boot check (fewer pre-boot checks)")
 }
 
 func loadCertRotationConfigs(t *testing.T, clusterName, rotateValue string) *talos.Configs {
@@ -106,7 +108,7 @@ func loadCertRotationConfigs(t *testing.T, clusterName, rotateValue string) *tal
       rotate-server-certificates: "%s"
 `, rotateValue)
 
-	manager := talos.NewConfigManager("", clusterName, "1.32.0", "10.5.0.0/24")
+	manager := talos.NewConfigManager(t.TempDir(), clusterName, "1.32.0", "10.5.0.0/24")
 	manager = manager.WithAdditionalPatches([]talos.Patch{
 		{
 			Path:    "test-cert-rotation.yaml",

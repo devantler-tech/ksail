@@ -11,6 +11,7 @@ import (
 	omniprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/omni"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	"github.com/docker/docker/api/types/container"
+	check "github.com/siderolabs/talos/pkg/cluster/check"
 )
 
 // NodeWithRoleForTest is the exported alias of nodeWithRole for testing.
@@ -288,6 +289,26 @@ func (p *Provisioner) IsDockerProviderForTest() bool {
 // ClusterReadinessChecksCountForTest returns the number of checks from clusterReadinessChecks for unit testing.
 func (p *Provisioner) ClusterReadinessChecksCountForTest() int {
 	return len(p.clusterReadinessChecks())
+}
+
+// PreBootChecksCountForTest returns just the pre-boot check count for unit testing,
+// isolating the pre-boot sequence selection from the k8s component checks.
+func (p *Provisioner) PreBootChecksCountForTest() int {
+	skipNodeReadiness := (p.talosConfigs != nil && p.talosConfigs.IsCNIDisabled()) ||
+		p.options.SkipCNIChecks
+
+	if !skipNodeReadiness {
+		return len(check.PreBootSequenceChecks())
+	}
+
+	switch {
+	case p.isDockerProvider():
+		return len(dockerPreBootSequenceChecks())
+	case p.talosConfigs != nil && p.talosConfigs.IsKubeletCertRotationEnabled():
+		return len(preBootSequenceChecksSkipDiagnostics())
+	default:
+		return len(check.PreBootSequenceChecks())
+	}
 }
 
 // EnsureAutoscalerSecretIfNeededForTest exposes ensureAutoscalerSecretIfNeeded for unit testing.
