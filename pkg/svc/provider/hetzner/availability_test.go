@@ -273,6 +273,26 @@ func TestDeduplicateServerTypes(t *testing.T) {
 			input: []string{"cx23"},
 			want:  []string{"cx23"},
 		},
+		{
+			name:  "SkipsEmpty",
+			input: []string{"cx23", "", "cpx31"},
+			want:  []string{"cx23", "cpx31"},
+		},
+		{
+			name:  "SkipsWhitespace",
+			input: []string{"cx23", "  ", "\t", "cpx31"},
+			want:  []string{"cx23", "cpx31"},
+		},
+		{
+			name:  "TrimsWhitespace",
+			input: []string{" cx23 ", "cpx31"},
+			want:  []string{"cx23", "cpx31"},
+		},
+		{
+			name:  "AllEmpty",
+			input: []string{"", " ", "\t"},
+			want:  []string{},
+		},
 	}
 
 	for _, testCase := range tests {
@@ -311,6 +331,24 @@ func TestBuildLocationList(t *testing.T) {
 			primary:   "fsn1",
 			fallbacks: []string{},
 			want:      []string{"fsn1"},
+		},
+		{
+			name:      "EmptyPrimary",
+			primary:   "",
+			fallbacks: []string{"nbg1", "hel1"},
+			want:      []string{"nbg1", "hel1"},
+		},
+		{
+			name:      "DuplicateLocations",
+			primary:   "fsn1",
+			fallbacks: []string{"fsn1", "nbg1"},
+			want:      []string{"fsn1", "nbg1"},
+		},
+		{
+			name:      "WhitespaceFiltered",
+			primary:   "  ",
+			fallbacks: []string{"", "nbg1"},
+			want:      []string{"nbg1"},
 		},
 	}
 

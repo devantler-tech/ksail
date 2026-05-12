@@ -89,28 +89,48 @@ func availableLocations(
 }
 
 // deduplicateServerTypes returns a deduplicated slice preserving order.
+// Empty and whitespace-only entries are skipped.
 func deduplicateServerTypes(types []string) []string {
 	seen := make(map[string]struct{}, len(types))
 	result := make([]string, 0, len(types))
 
 	for _, serverType := range types {
-		if _, ok := seen[serverType]; ok {
+		trimmed := strings.TrimSpace(serverType)
+		if trimmed == "" {
 			continue
 		}
 
-		seen[serverType] = struct{}{}
-		result = append(result, serverType)
+		if _, ok := seen[trimmed]; ok {
+			continue
+		}
+
+		seen[trimmed] = struct{}{}
+		result = append(result, trimmed)
 	}
 
 	return result
 }
 
 // buildLocationList constructs the ordered list of locations to check:
-// primary first, then fallbacks.
+// primary first, then fallbacks. Empty strings are skipped and
+// duplicates are removed while preserving order.
 func buildLocationList(primary string, fallbacks []string) []string {
+	seen := make(map[string]struct{}, 1+len(fallbacks))
 	locations := make([]string, 0, 1+len(fallbacks))
-	locations = append(locations, primary)
-	locations = append(locations, fallbacks...)
+
+	for _, loc := range append([]string{primary}, fallbacks...) {
+		trimmed := strings.TrimSpace(loc)
+		if trimmed == "" {
+			continue
+		}
+
+		if _, ok := seen[trimmed]; ok {
+			continue
+		}
+
+		seen[trimmed] = struct{}{}
+		locations = append(locations, trimmed)
+	}
 
 	return locations
 }
