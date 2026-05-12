@@ -35,6 +35,10 @@ func (p *Provider) CreateServerWithRetry(
 	// Build list of locations to try: primary + fallbacks
 	locations := buildLocationList(opts.Location, retryOpts.FallbackLocations)
 
+	if len(locations) == 0 {
+		return nil, ErrNoLocationsConfigured
+	}
+
 	var lastErr error
 
 	originalPlacementGroupID := opts.PlacementGroupID

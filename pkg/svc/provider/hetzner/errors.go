@@ -26,6 +26,8 @@ var (
 	ErrServerTypeNotFound = errors.New("server type not found")
 	// ErrServerTypeUnavailable indicates that the server type is not available in any configured location.
 	ErrServerTypeUnavailable = errors.New("server type unavailable in all configured locations")
+	// ErrNoLocationsConfigured indicates that no valid locations were provided for server creation.
+	ErrNoLocationsConfigured = errors.New("no locations configured for server creation")
 )
 
 // retryableErrorCodes are Hetzner API error codes that warrant a retry.
