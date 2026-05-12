@@ -33,9 +33,11 @@ func (p *Provider) CreateServerWithRetry(
 	}
 
 	// Build list of locations to try: primary + fallbacks
-	locations := make([]string, 0, 1+len(retryOpts.FallbackLocations))
-	locations = append(locations, opts.Location)
-	locations = append(locations, retryOpts.FallbackLocations...)
+	locations := buildLocationList(opts.Location, retryOpts.FallbackLocations)
+
+	if len(locations) == 0 {
+		return nil, ErrNoLocationsConfigured
+	}
 
 	var lastErr error
 

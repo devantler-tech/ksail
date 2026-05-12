@@ -41,6 +41,15 @@ func CalculateRetryDelayForTest(attempt int) time.Duration {
 // NormalizeNodeRoleForTest exports normalizeNodeRole for testing.
 var NormalizeNodeRoleForTest = normalizeNodeRole
 
+// AvailableLocationsForTest exports availableLocations for testing.
+var AvailableLocationsForTest = availableLocations
+
+// DeduplicateServerTypesForTest exports deduplicateServerTypes for testing.
+var DeduplicateServerTypesForTest = deduplicateServerTypes
+
+// BuildLocationListForTest exports buildLocationList for testing.
+var BuildLocationListForTest = buildLocationList
+
 // NewSnapshotManagerWithUploaderForTest creates a SnapshotManager with a custom uploader,
 // allowing tests to inject a mock without hitting real Hetzner upload infrastructure.
 // A nil logWriter is replaced with io.Discard, matching NewSnapshotManager behavior.

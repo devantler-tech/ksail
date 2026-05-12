@@ -500,6 +500,12 @@ func (p *Provisioner) createHetznerCluster(ctx context.Context, clusterName stri
 		return err
 	}
 
+	// Verify server type availability before creating infrastructure resources
+	err = p.checkHetznerAvailability(ctx, hzProvider)
+	if err != nil {
+		return err
+	}
+
 	// Create infrastructure resources
 	infra, err := p.ensureHetznerInfra(ctx, hzProvider, clusterName)
 	if err != nil {
@@ -576,6 +582,61 @@ func (p *Provisioner) ensureSnapshotImage(ctx context.Context, clusterName strin
 	}
 
 	return snapshotImageID, nil
+}
+
+// checkHetznerAvailability verifies that the configured server types are available
+// in the primary location or any fallback locations. This check runs before
+// infrastructure resource creation to avoid creating networks, firewalls, and
+// placement groups that would need cleanup if servers cannot be provisioned.
+func (p *Provisioner) checkHetznerAvailability(
+	ctx context.Context,
+	hzProvider *hetzner.Provider,
+) error {
+	if p.hetznerOpts == nil {
+		return nil
+	}
+
+	serverTypes := uniqueServerTypes(
+		p.hetznerOpts.ControlPlaneServerType,
+		p.hetznerOpts.WorkerServerType,
+	)
+
+	_, _ = fmt.Fprintf(p.logWriter, "Checking server type availability...\n")
+
+	err := hzProvider.CheckServerAvailability(
+		ctx,
+		serverTypes,
+		p.hetznerOpts.Location,
+		p.hetznerOpts.FallbackLocations,
+	)
+	if err != nil {
+		return fmt.Errorf("server availability check failed: %w", err)
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "  ✓ Server types available\n")
+
+	return nil
+}
+
+// uniqueServerTypes returns a deduplicated list of non-empty server type names.
+func uniqueServerTypes(types ...string) []string {
+	seen := make(map[string]struct{}, len(types))
+	result := make([]string, 0, len(types))
+
+	for _, serverType := range types {
+		if serverType == "" {
+			continue
+		}
+
+		if _, ok := seen[serverType]; ok {
+			continue
+		}
+
+		seen[serverType] = struct{}{}
+		result = append(result, serverType)
+	}
+
+	return result
 }
 
 // applyConfigsAndBootstrap updates machine configs with the correct endpoint,
