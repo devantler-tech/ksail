@@ -522,75 +522,31 @@ func TestBuildFirewallRulesWithAllowedCIDRs(t *testing.T) {
 	}
 }
 
-func lbInNetworkTestCases() []struct {
+type lbInNetworkTestCase struct {
 	name        string
 	lb          *hcloud.LoadBalancer
 	networkName string
 	expected    bool
-} {
-	return []struct {
-		name        string
-		lb          *hcloud.LoadBalancer
-		networkName string
-		expected    bool
-	}{
-		{
-			name: "MatchingNetwork",
-			lb: &hcloud.LoadBalancer{
-				PrivateNet: []hcloud.LoadBalancerPrivateNet{
-					{Network: &hcloud.Network{Name: "my-cluster-network"}},
-				},
-			},
-			networkName: "my-cluster-network",
-			expected:    true,
-		},
-		{
-			name: "DifferentNetwork",
-			lb: &hcloud.LoadBalancer{
-				PrivateNet: []hcloud.LoadBalancerPrivateNet{
-					{Network: &hcloud.Network{Name: "other-cluster-network"}},
-				},
-			},
-			networkName: "my-cluster-network",
-			expected:    false,
-		},
-		{
-			name: "NoPrivateNetworks",
-			lb: &hcloud.LoadBalancer{
-				PrivateNet: nil,
-			},
-			networkName: "my-cluster-network",
-			expected:    false,
-		},
-		{
-			name: "EmptyPrivateNetworks",
-			lb: &hcloud.LoadBalancer{
-				PrivateNet: []hcloud.LoadBalancerPrivateNet{},
-			},
-			networkName: "my-cluster-network",
-			expected:    false,
-		},
-		{
-			name: "MultipleNetworks_OneMatching",
-			lb: &hcloud.LoadBalancer{
-				PrivateNet: []hcloud.LoadBalancerPrivateNet{
-					{Network: &hcloud.Network{Name: "other-network"}},
-					{Network: &hcloud.Network{Name: "my-cluster-network"}},
-				},
-			},
-			networkName: "my-cluster-network",
-			expected:    true,
-		},
-		{
-			name: "NilNetworkField",
-			lb: &hcloud.LoadBalancer{
-				PrivateNet: []hcloud.LoadBalancerPrivateNet{
-					{Network: nil},
-				},
-			},
-			networkName: "my-cluster-network",
-			expected:    false,
-		},
+}
+
+func lbInNetworkTestCases() []lbInNetworkTestCase {
+	net := func(name string) *hcloud.Network { return &hcloud.Network{Name: name} }
+	pn := func(nets ...*hcloud.Network) []hcloud.LoadBalancerPrivateNet {
+		out := make([]hcloud.LoadBalancerPrivateNet, len(nets))
+		for i, n := range nets {
+			out[i] = hcloud.LoadBalancerPrivateNet{Network: n}
+		}
+
+		return out
+	}
+
+	return []lbInNetworkTestCase{
+		{"MatchingNetwork", &hcloud.LoadBalancer{PrivateNet: pn(net("my-cluster-network"))}, "my-cluster-network", true},
+		{"DifferentNetwork", &hcloud.LoadBalancer{PrivateNet: pn(net("other-cluster-network"))}, "my-cluster-network", false},
+		{"NoPrivateNetworks", &hcloud.LoadBalancer{PrivateNet: nil}, "my-cluster-network", false},
+		{"EmptyPrivateNetworks", &hcloud.LoadBalancer{PrivateNet: pn()}, "my-cluster-network", false},
+		{"MultipleNetworks_OneMatching", &hcloud.LoadBalancer{PrivateNet: pn(net("other-network"), net("my-cluster-network"))}, "my-cluster-network", true},
+		{"NilNetworkField", &hcloud.LoadBalancer{PrivateNet: pn(nil)}, "my-cluster-network", false},
 	}
 }
 
