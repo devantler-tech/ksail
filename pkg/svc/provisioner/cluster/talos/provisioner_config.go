@@ -344,6 +344,16 @@ func kubeletAndBootChecks() []check.ClusterCheck {
 	}
 }
 
+// apidCheck returns the apid readiness check shared across all provider-specific
+// pre-boot sequences.
+func apidCheck() check.ClusterCheck {
+	return func(cluster check.ClusterInfo) conditions.Condition {
+		return conditions.PollingCondition("apid to be ready", func(ctx context.Context) error {
+			return check.ApidReadyAssertion(ctx, cluster)
+		}, preBootPollInterval)
+	}
+}
+
 // dockerPreBootSequenceChecks returns a trimmed subset of the upstream
 // check.PreBootSequenceChecks() (github.com/siderolabs/talos v1.13.0-beta.1,
 // pkg/cluster/check/check.go) optimized for Docker environments. It omits
@@ -358,17 +368,7 @@ func dockerPreBootSequenceChecks() []check.ClusterCheck {
 	// NoDiagnostics — skipped: informational-only, not a readiness gate
 	return slices.Concat(
 		etcdChecks(),
-		[]check.ClusterCheck{
-			func(cluster check.ClusterInfo) conditions.Condition {
-				return conditions.PollingCondition(
-					"apid to be ready",
-					func(ctx context.Context) error {
-						return check.ApidReadyAssertion(ctx, cluster)
-					},
-					preBootPollInterval,
-				)
-			},
-		},
+		[]check.ClusterCheck{apidCheck()},
 		kubeletAndBootChecks(),
 	)
 }
@@ -397,15 +397,7 @@ func preBootSequenceChecksSkipDiagnostics() []check.ClusterCheck {
 	return slices.Concat(
 		etcdChecks(),
 		[]check.ClusterCheck{
-			func(cluster check.ClusterInfo) conditions.Condition {
-				return conditions.PollingCondition(
-					"apid to be ready",
-					func(ctx context.Context) error {
-						return check.ApidReadyAssertion(ctx, cluster)
-					},
-					preBootPollInterval,
-				)
-			},
+			apidCheck(),
 			func(cluster check.ClusterInfo) conditions.Condition {
 				return conditions.PollingCondition(
 					"all nodes memory sizes",
