@@ -30,7 +30,7 @@ type serverTypeSchema struct {
 
 // serverTypeListResp mirrors the Hetzner API list response.
 type serverTypeListResp struct {
-	ServerTypes []serverTypeSchema `json:"server_types"`
+	ServerTypes []serverTypeSchema `json:"server_types"` //nolint:tagliatelle // Hetzner API uses snake_case
 }
 
 // newAvailabilityTestServer creates a test HTTP server that responds to
@@ -39,15 +39,15 @@ func newAvailabilityTestServer(t *testing.T, types map[string]serverTypeSchema) 
 	t.Helper()
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /server_types", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /server_types", func(writer http.ResponseWriter, r *http.Request) {
 		name := r.URL.Query().Get("name")
 
 		resp := serverTypeListResp{}
-		if st, ok := types[name]; ok {
-			resp.ServerTypes = []serverTypeSchema{st}
+		if serverType, ok := types[name]; ok {
+			resp.ServerTypes = []serverTypeSchema{serverType}
 		}
 
-		writeJSONResponse(t, w, resp)
+		writeJSONResponse(t, writer, resp)
 	})
 
 	srv := httptest.NewServer(mux)
