@@ -588,8 +588,6 @@ func (p *Provider) deleteLoadBalancers(ctx context.Context, clusterName string) 
 // deleteLoadBalancerWithRetry deletes a single load balancer with retry logic.
 // Retries handle the case where the LB is still processing actions from the
 // recently deleted cluster.
-//
-
 func (p *Provider) deleteLoadBalancerWithRetry(
 	ctx context.Context,
 	loadBalancer *hcloud.LoadBalancer,
