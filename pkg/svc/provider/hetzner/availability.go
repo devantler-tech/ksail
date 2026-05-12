@@ -93,13 +93,13 @@ func deduplicateServerTypes(types []string) []string {
 	seen := make(map[string]struct{}, len(types))
 	result := make([]string, 0, len(types))
 
-	for _, t := range types {
-		if _, ok := seen[t]; ok {
+	for _, serverType := range types {
+		if _, ok := seen[serverType]; ok {
 			continue
 		}
 
-		seen[t] = struct{}{}
-		result = append(result, t)
+		seen[serverType] = struct{}{}
+		result = append(result, serverType)
 	}
 
 	return result
