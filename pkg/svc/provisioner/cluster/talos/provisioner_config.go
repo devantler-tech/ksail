@@ -277,8 +277,9 @@ func (p *Provisioner) isDockerProvider() bool {
 	return ok
 }
 
-// dockerEtcdChecks returns the etcd-related pre-boot checks for Docker environments.
-func dockerEtcdChecks() []check.ClusterCheck {
+// etcdChecks returns the etcd-related pre-boot readiness checks shared across
+// all provider-specific pre-boot sequences.
+func etcdChecks() []check.ClusterCheck {
 	cpTypes := check.WithNodeTypes(machine.TypeInit, machine.TypeControlPlane)
 
 	return []check.ClusterCheck{
@@ -328,7 +329,7 @@ func dockerPreBootSequenceChecks() []check.ClusterCheck {
 	)
 
 	return append(
-		dockerEtcdChecks(),
+		etcdChecks(),
 		func(cluster check.ClusterInfo) conditions.Condition {
 			return conditions.PollingCondition("apid to be ready", func(ctx context.Context) error {
 				return check.ApidReadyAssertion(ctx, cluster)
@@ -361,7 +362,8 @@ func dockerPreBootSequenceChecks() []check.ClusterCheck {
 // preBootSequenceChecksSkipDiagnostics returns the upstream PreBootSequenceChecks
 // (github.com/siderolabs/talos, pkg/cluster/check/default.go) with the
 // NoDiagnostics check omitted. Used for non-Docker providers (Hetzner, Omni) when
-// kubelet cert rotation is enabled and CNI is disabled.
+// kubelet cert rotation is enabled and CNI is not yet installed (CNI disabled in
+// config or skipped via SkipCNIChecks because it is installed post-creation).
 //
 // Without CNI, the kubelet-serving-cert-approver pod cannot schedule (nodes have
 // not-ready:NoSchedule taint), so kubelet serving CSRs remain pending. Talos
@@ -381,84 +383,37 @@ func preBootSequenceChecksSkipDiagnostics() []check.ClusterCheck {
 		machine.TypeControlPlane,
 		machine.TypeWorker,
 	)
-	cpTypes := check.WithNodeTypes(machine.TypeInit, machine.TypeControlPlane)
 
-	return []check.ClusterCheck{
+	return append(
+		etcdChecks(),
 		func(cluster check.ClusterInfo) conditions.Condition {
-			return conditions.PollingCondition(
-				"etcd to be healthy",
-				func(ctx context.Context) error {
-					return check.ServiceHealthAssertion(ctx, cluster, "etcd", cpTypes)
-				},
-				preBootPollInterval,
-			)
+			return conditions.PollingCondition("apid to be ready", func(ctx context.Context) error {
+				return check.ApidReadyAssertion(ctx, cluster)
+			}, preBootPollInterval)
 		},
 		func(cluster check.ClusterInfo) conditions.Condition {
-			return conditions.PollingCondition(
-				"etcd members to be consistent across nodes",
-				func(ctx context.Context) error {
-					return check.EtcdConsistentAssertion(ctx, cluster)
-				},
-				preBootPollInterval,
-			)
+			return conditions.PollingCondition("all nodes memory sizes", func(ctx context.Context) error {
+				return check.AllNodesMemorySizes(ctx, cluster)
+			}, preBootPollInterval)
 		},
 		func(cluster check.ClusterInfo) conditions.Condition {
-			return conditions.PollingCondition(
-				"etcd members to be control plane nodes",
-				func(ctx context.Context) error {
-					return check.EtcdControlPlaneNodesAssertion(ctx, cluster)
-				},
-				preBootPollInterval,
-			)
-		},
-		func(cluster check.ClusterInfo) conditions.Condition {
-			return conditions.PollingCondition(
-				"apid to be ready",
-				func(ctx context.Context) error {
-					return check.ApidReadyAssertion(ctx, cluster)
-				},
-				preBootPollInterval,
-			)
-		},
-		func(cluster check.ClusterInfo) conditions.Condition {
-			return conditions.PollingCondition(
-				"all nodes memory sizes",
-				func(ctx context.Context) error {
-					return check.AllNodesMemorySizes(ctx, cluster)
-				},
-				preBootPollInterval,
-			)
-		},
-		func(cluster check.ClusterInfo) conditions.Condition {
-			return conditions.PollingCondition(
-				"all nodes disk sizes",
-				func(ctx context.Context) error {
-					return check.AllNodesDiskSizes(ctx, cluster)
-				},
-				preBootPollInterval,
-			)
+			return conditions.PollingCondition("all nodes disk sizes", func(ctx context.Context) error {
+				return check.AllNodesDiskSizes(ctx, cluster)
+			}, preBootPollInterval)
 		},
 		// NoDiagnostics — skipped: creates deadlock when kubelet cert rotation is enabled
 		// without CNI (cert-approver can't schedule, "CSR is not approved" diagnostic never clears)
 		func(cluster check.ClusterInfo) conditions.Condition {
-			return conditions.PollingCondition(
-				"kubelet to be healthy",
-				func(ctx context.Context) error {
-					return check.ServiceHealthAssertion(ctx, cluster, "kubelet", allNodeTypes)
-				},
-				preBootPollInterval,
-			)
+			return conditions.PollingCondition("kubelet to be healthy", func(ctx context.Context) error {
+				return check.ServiceHealthAssertion(ctx, cluster, "kubelet", allNodeTypes)
+			}, preBootPollInterval)
 		},
 		func(cluster check.ClusterInfo) conditions.Condition {
-			return conditions.PollingCondition(
-				"all nodes to finish boot sequence",
-				func(ctx context.Context) error {
-					return check.AllNodesBootedAssertion(ctx, cluster)
-				},
-				preBootPollInterval,
-			)
+			return conditions.PollingCondition("all nodes to finish boot sequence", func(ctx context.Context) error {
+				return check.AllNodesBootedAssertion(ctx, cluster)
+			}, preBootPollInterval)
 		},
-	}
+	)
 }
 
 // the K8sControlPlaneStaticPods check is skipped because it depends on Talos
