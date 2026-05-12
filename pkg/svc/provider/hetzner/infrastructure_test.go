@@ -521,3 +521,53 @@ func TestBuildFirewallRulesWithAllowedCIDRs(t *testing.T) {
 		}
 	}
 }
+
+type lbInNetworkTestCase struct {
+	name        string
+	lb          *hcloud.LoadBalancer
+	networkName string
+	expected    bool
+}
+
+func lbInNetworkTestCases() []lbInNetworkTestCase {
+	mkNet := func(name string) *hcloud.Network {
+		return &hcloud.Network{Name: name}
+	}
+	mkPrivNets := func(nets ...*hcloud.Network) []hcloud.LoadBalancerPrivateNet {
+		out := make([]hcloud.LoadBalancerPrivateNet, len(nets))
+		for i, n := range nets {
+			out[i] = hcloud.LoadBalancerPrivateNet{Network: n}
+		}
+
+		return out
+	}
+	mkLB := func(nets []hcloud.LoadBalancerPrivateNet) *hcloud.LoadBalancer {
+		return &hcloud.LoadBalancer{PrivateNet: nets}
+	}
+	cluster := "my-cluster-network"
+
+	return []lbInNetworkTestCase{
+		{"MatchingNetwork", mkLB(mkPrivNets(mkNet(cluster))), cluster, true},
+		{"DifferentNetwork", mkLB(mkPrivNets(mkNet("other"))), cluster, false},
+		{"NoPrivateNetworks", mkLB(nil), cluster, false},
+		{"EmptyPrivateNetworks", mkLB(mkPrivNets()), cluster, false},
+		{
+			"MultipleNetworks_OneMatching",
+			mkLB(mkPrivNets(mkNet("other"), mkNet(cluster))), cluster, true,
+		},
+		{"NilNetworkField", mkLB(mkPrivNets(nil)), cluster, false},
+	}
+}
+
+func TestLBInNetwork(t *testing.T) {
+	t.Parallel()
+
+	for _, testCase := range lbInNetworkTestCases() {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			result := hetzner.LBInNetworkForTest(testCase.lb, testCase.networkName)
+			assert.Equal(t, testCase.expected, result)
+		})
+	}
+}
