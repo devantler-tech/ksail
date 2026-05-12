@@ -544,10 +544,27 @@ func (p *Provider) deleteNetwork(ctx context.Context, clusterName string) error 
 func (p *Provider) deleteLoadBalancers(ctx context.Context, clusterName string) error {
 	networkName := clusterName + NetworkSuffix
 
-	// Look up the network to confirm it exists. If not, there are no LBs to clean up.
-	network, _, err := p.client.Network.GetByName(ctx, networkName)
-	if err != nil || network == nil {
-		return nil //nolint:nilerr // No network means no LBs to clean up
+	// Look up the network with transient-retry to avoid silently skipping LB
+	// cleanup on a transient API error (which could leave billed resources).
+	network, err := retryTransientHetznerOperation(
+		ctx,
+		DefaultTransientRetryCount,
+		p.calculateRetryDelay,
+		func() (*hcloud.Network, error) {
+			network, _, err := p.client.Network.GetByName(ctx, networkName)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get network %s: %w", networkName, err)
+			}
+
+			return network, nil
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("failed to look up network for LB cleanup: %w", err)
+	}
+
+	if network == nil {
+		return nil
 	}
 
 	loadBalancers, err := p.client.LoadBalancer.AllWithOpts(ctx, hcloud.LoadBalancerListOpts{})
@@ -581,6 +598,12 @@ func (p *Provider) deleteLoadBalancerWithRetry(ctx context.Context, lb *hcloud.L
 			return nil
 		}
 
+		// The LB may have been deleted between list and delete (or is already
+		// being removed). Treat not-found as success for idempotency.
+		if hcloud.IsError(err, hcloud.ErrorCodeNotFound) {
+			return nil
+		}
+
 		if attempt == MaxDeleteRetries-1 {
 			return fmt.Errorf(
 				"failed to delete load balancer %s (ID %d) after %d attempts: %w",
@@ -588,7 +611,11 @@ func (p *Provider) deleteLoadBalancerWithRetry(ctx context.Context, lb *hcloud.L
 			)
 		}
 
-		time.Sleep(DefaultDeleteRetryDelay)
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(DefaultDeleteRetryDelay):
+		}
 	}
 
 	return nil
