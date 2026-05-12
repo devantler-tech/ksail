@@ -310,7 +310,9 @@ The `type: LoadBalancer` service provisions a real Hetzner Cloud Load Balancer w
 
 **`hcloud token is not set`** — The `HCLOUD_TOKEN` environment variable is missing or empty. Run `echo $HCLOUD_TOKEN` to check. Re-export if needed. If you use a custom variable name, verify it matches `spec.provider.hetzner.tokenEnvVar` in `ksail.yaml`.
 
-**Server creation fails with resource unavailability** — The selected location may be out of capacity for the requested server type. Configure `spec.provider.hetzner.fallbackLocations` to try alternative datacenter locations automatically:
+**`server type not found`** — The server type name in `controlPlaneServerType`, `workerServerType`, or an autoscaler pool does not exist in the Hetzner Cloud API. Check available types in the [Hetzner Cloud Console](https://console.hetzner.cloud/) or with `hcloud server-type list`.
+
+**`server type unavailable in all configured locations`** — The requested server type exists but is not available in your primary location or any configured fallback locations. KSail runs this precheck before creating any infrastructure, so no partial resources are left behind. Add more fallback locations or choose a different server type:
 
 ```yaml
 spec:
@@ -319,6 +321,8 @@ spec:
       location: "fsn1"
       fallbackLocations: ["nbg1", "hel1"]
 ```
+
+**Server creation fails with resource unavailability** — If the precheck passes but server creation still fails (transient capacity issue), configure `spec.provider.hetzner.fallbackLocations` to try alternative datacenter locations automatically (see example above).
 
 **Placement group errors** — Hetzner limits spread placement groups to 10 servers per datacenter. Reduce your node count or set `placementGroupStrategy: "None"`. For best-effort HA, set `placementGroupFallbackToNone: true` to fall back automatically when spread placement fails.
 
