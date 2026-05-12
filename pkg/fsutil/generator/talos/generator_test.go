@@ -24,10 +24,11 @@ func TestGenerator_Generate_CreatesDirectoryStructure(t *testing.T) {
 	tempDir := t.TempDir()
 	gen := talosgenerator.NewGenerator()
 
-	// With workers > 0 and no other patches, all dirs should have .gitkeep
+	// With workers > 0, cluster/ and control-planes/ should have .gitkeep,
+	// but workers/ should have the worker-role-label patch instead
 	config := &talosgenerator.Config{
 		PatchesDir:  "talos",
-		WorkerNodes: 1, // Prevents allow-scheduling patch from being generated
+		WorkerNodes: 1,
 	}
 	opts := yamlgenerator.Options{
 		Output: tempDir,
@@ -37,18 +38,22 @@ func TestGenerator_Generate_CreatesDirectoryStructure(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, filepath.Join(tempDir, "talos"), result)
 
-	// Verify directory structure - all should have .gitkeep since no patches generated
-	expectedPaths := []string{
+	// Verify directory structure - cluster/ and control-planes/ should have .gitkeep
+	gitkeepPaths := []string{
 		filepath.Join(tempDir, "talos", "cluster", ".gitkeep"),
 		filepath.Join(tempDir, "talos", "control-planes", ".gitkeep"),
-		filepath.Join(tempDir, "talos", "workers", ".gitkeep"),
 	}
 
-	for _, path := range expectedPaths {
+	for _, path := range gitkeepPaths {
 		info, err := os.Stat(path)
 		require.NoError(t, err, "expected path to exist: %s", path)
 		assert.False(t, info.IsDir(), "expected file, got directory: %s", path)
 	}
+
+	// workers/ should NOT have .gitkeep since it has the worker-role-label patch
+	gitkeepPath := filepath.Join(tempDir, "talos", "workers", ".gitkeep")
+	_, err = os.Stat(gitkeepPath)
+	assert.True(t, os.IsNotExist(err), "expected .gitkeep to not exist in workers/ when patches are generated")
 }
 
 func TestGenerator_Generate_NilConfig(t *testing.T) {
@@ -237,11 +242,13 @@ func TestGenerator_Generate_DisableDefaultCNI(t *testing.T) {
 	_, err = os.Stat(gitkeepPath)
 	assert.True(t, os.IsNotExist(err), "expected .gitkeep to not exist when patches are generated")
 
-	// Verify .gitkeep WAS created in other directories
+	// Verify .gitkeep WAS created in control-planes/ (no patches there)
 	_, err = os.Stat(filepath.Join(tempDir, "talos", "control-planes", ".gitkeep"))
 	require.NoError(t, err, "expected .gitkeep in control-planes/")
+
+	// Verify .gitkeep was NOT created in workers/ since worker-role-label patch is generated there
 	_, err = os.Stat(filepath.Join(tempDir, "talos", "workers", ".gitkeep"))
-	require.NoError(t, err, "expected .gitkeep in workers/")
+	assert.True(t, os.IsNotExist(err), "expected .gitkeep to not exist when worker patches are generated")
 }
 
 func TestGenerator_Generate_NoDisableCNIPatchWhenFalse(t *testing.T) {
@@ -303,6 +310,62 @@ func TestGenerator_Generate_AllowSchedulingOnControlPlanes(t *testing.T) {
 	gitkeepPath := filepath.Join(clusterDir, ".gitkeep")
 	_, err = os.Stat(gitkeepPath)
 	assert.True(t, os.IsNotExist(err), "expected .gitkeep to not exist when patches are generated")
+}
+
+func TestGenerator_Generate_WorkerRoleLabel(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	gen := talosgenerator.NewGenerator()
+
+	config := &talosgenerator.Config{
+		PatchesDir:  "talos",
+		WorkerNodes: 3,
+	}
+	opts := yamlgenerator.Options{
+		Output: tempDir,
+	}
+
+	result, err := gen.Generate(config, opts)
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(tempDir, "talos"), result)
+
+	// Verify worker-role-label.yaml was created in workers/
+	workersDir := filepath.Join(tempDir, "talos", "workers")
+	patchPath := filepath.Join(workersDir, "worker-role-label.yaml")
+	content, err := os.ReadFile(patchPath) //nolint:gosec // Test file path is safe
+	require.NoError(t, err)
+	assert.Contains(t, string(content), "machine:")
+	assert.Contains(t, string(content), "nodeLabels:")
+	assert.Contains(t, string(content), `node-role.kubernetes.io/worker: ""`)
+
+	// Verify .gitkeep was NOT created in workers/ since we have a patch there
+	gitkeepPath := filepath.Join(workersDir, ".gitkeep")
+	_, err = os.Stat(gitkeepPath)
+	assert.True(t, os.IsNotExist(err), "expected .gitkeep to not exist when patches are generated")
+}
+
+func TestGenerator_Generate_WorkerRoleLabel_NotGeneratedWithoutWorkers(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	gen := talosgenerator.NewGenerator()
+
+	config := &talosgenerator.Config{
+		PatchesDir:  "talos",
+		WorkerNodes: 0,
+	}
+	opts := yamlgenerator.Options{
+		Output: tempDir,
+	}
+
+	_, err := gen.Generate(config, opts)
+	require.NoError(t, err)
+
+	// Verify worker-role-label.yaml was NOT created
+	patchPath := filepath.Join(tempDir, "talos", "workers", "worker-role-label.yaml")
+	_, err = os.Stat(patchPath)
+	assert.True(t, os.IsNotExist(err), "expected worker-role-label.yaml to not exist when WorkerNodes == 0")
 }
 
 func TestGenerator_Generate_MirrorRegistries(t *testing.T) {

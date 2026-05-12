@@ -311,6 +311,10 @@ func (m *ConfigManager) getDefaultTalosPatches() []talosconfigmanager.Patch {
 		patches = append(patches, externalCloudProviderPatches()...)
 	}
 
+	// Always label worker nodes with node-role.kubernetes.io/worker.
+	// This is worker-scoped so it only affects worker configs.
+	patches = append(patches, workerRoleLabelPatch())
+
 	return patches
 }
 
@@ -575,6 +579,17 @@ func externalCloudProviderPatches() []talosconfigmanager.Patch {
 			Scope:   talosconfigmanager.PatchScopeCluster,
 			Content: []byte(talosgenerator.ExternalCloudProviderPatchYAML),
 		},
+	}
+}
+
+// workerRoleLabelPatch returns a Talos machine config patch that labels worker nodes
+// with node-role.kubernetes.io/worker. Used for runtime injection when no scaffolded
+// project exists (init=false). Worker-scoped so it only affects worker configs.
+func workerRoleLabelPatch() talosconfigmanager.Patch {
+	return talosconfigmanager.Patch{
+		Path:    "worker-role-label",
+		Scope:   talosconfigmanager.PatchScopeWorker,
+		Content: []byte(talosgenerator.WorkerRoleLabelPatchYAML),
 	}
 }
 
