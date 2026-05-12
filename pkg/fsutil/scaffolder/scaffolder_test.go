@@ -1543,7 +1543,7 @@ func TestScaffoldTalos_CreatesDirectoryStructure(t *testing.T) {
 	expectedPaths := []string{
 		filepath.Join(tempDir, scaffolder.TalosConfigDir, "cluster", ".gitkeep"),
 		filepath.Join(tempDir, scaffolder.TalosConfigDir, "control-planes", ".gitkeep"),
-		filepath.Join(tempDir, scaffolder.TalosConfigDir, "workers", ".gitkeep"),
+		filepath.Join(tempDir, scaffolder.TalosConfigDir, "workers", "worker-role-label.yaml"),
 		filepath.Join(tempDir, "ksail.yaml"),
 		filepath.Join(tempDir, "k8s", "kustomization.yaml"),
 	}

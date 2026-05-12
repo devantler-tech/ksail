@@ -3,10 +3,14 @@ package hetznercsiinstaller
 import (
 	"context"
 	"time"
+
+	"github.com/devantler-tech/ksail/v7/pkg/svc/installer/internal/hetzner"
 )
 
-// BuildSecretDataForTest exports buildSecretData for testing.
-var BuildSecretDataForTest = buildSecretData //nolint:gochecknoglobals // Standard Go export_test.go pattern.
+// BuildSecretDataForTest exports BuildNetworkSecretData for testing.
+//
+//nolint:gochecknoglobals // Standard Go export_test.go pattern.
+var BuildSecretDataForTest = hetzner.BuildNetworkSecretData
 
 // SetWaitForCCMNodeLabelsFnForTest replaces the internal CCM label-wait
 // function and returns a restore func. It is exposed only to tests.
