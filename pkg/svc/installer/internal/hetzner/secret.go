@@ -169,6 +169,20 @@ func updateSecretIfNeeded(
 	return nil
 }
 
+// BuildNetworkSecretData returns the extra key-value pairs for the shared "hcloud"
+// Kubernetes secret that make the Hetzner private network name available to CCM and CSI
+// charts via their default valueFrom.secretKeyRef (environment variable HCLOUD_NETWORK).
+// Returns nil when networkName is empty so callers can skip the key without branching.
+func BuildNetworkSecretData(networkName string) map[string][]byte {
+	if networkName == "" {
+		return nil
+	}
+
+	return map[string][]byte{
+		"network": []byte(networkName),
+	}
+}
+
 // InstallWithSecret ensures the Hetzner Cloud API token secret exists and then
 // installs or upgrades a Helm chart via the given helmutil.Base.
 // extraData contains additional key-value pairs to store in the secret

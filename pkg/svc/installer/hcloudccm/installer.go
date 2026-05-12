@@ -55,21 +55,8 @@ func NewInstaller(
 		ChartName:   "hcloud/hcloud-cloud-controller-manager",
 		Version:     chartVersion(),
 		ValuesYaml:  buildValuesYaml(networkName, haEnabled),
-		SecretData:  buildSecretData(networkName),
+		SecretData:  hetzner.BuildNetworkSecretData(networkName),
 	})
-}
-
-// buildSecretData returns extra key-value pairs for the shared "hcloud" secret.
-// When networkName is set, it includes the "network" key so the chart's default
-// valueFrom.secretKeyRef reads it as HCLOUD_NETWORK.
-func buildSecretData(networkName string) map[string][]byte {
-	if networkName == "" {
-		return nil
-	}
-
-	return map[string][]byte{
-		"network": []byte(networkName),
-	}
 }
 
 // buildValuesYaml generates the Helm values YAML for the hcloud-ccm chart.

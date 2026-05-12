@@ -70,7 +70,7 @@ func NewInstaller(
 		ChartName:   "hcloud/hcloud-csi",
 		Version:     chartVersion(),
 		ValuesYaml:  valuesYaml,
-		SecretData:  buildSecretData(networkName),
+		SecretData:  hetzner.BuildNetworkSecretData(networkName),
 	})
 
 	return &Installer{
@@ -101,18 +101,4 @@ func (h *Installer) Install(ctx context.Context) error {
 	}
 
 	return nil
-}
-
-// buildSecretData returns extra key-value pairs for the shared "hcloud" secret.
-// When networkName is set, it includes the "network" key so that consumers of
-// the secret (the hcloud-ccm chart's default valueFrom.secretKeyRef, and any
-// GitOps-managed CCM/CSI HelmReleases) can read HCLOUD_NETWORK from it.
-func buildSecretData(networkName string) map[string][]byte {
-	if networkName == "" {
-		return nil
-	}
-
-	return map[string][]byte{
-		"network": []byte(networkName),
-	}
 }
