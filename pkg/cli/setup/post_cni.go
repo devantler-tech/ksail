@@ -580,7 +580,9 @@ func runCloudProviderInitPhase(
 
 // runCloudProviderInitAndClearReqs runs the cloud-provider init pre-phase and
 // returns updated requirements with NeedsLoadBalancer cleared and cniInstalled
-// set to false so subsequent phases run the full stability check.
+// set to false so subsequent phases include the node readiness check in their
+// stability pre-flight (the in-cluster connectivity check is separate and only
+// runs for Cilium CNI).
 func runCloudProviderInitAndClearReqs(
 	ctx context.Context,
 	clusterCfg *v1alpha1.Cluster,
