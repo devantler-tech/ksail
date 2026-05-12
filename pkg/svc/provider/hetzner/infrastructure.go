@@ -528,7 +528,7 @@ func (p *Provider) deleteNetwork(ctx context.Context, clusterName string) error 
 
 	network, err := p.getNetworkByClusterName(ctx, clusterName)
 	if err != nil {
-		return nil //nolint:nilerr // Ignoring lookup error - resource may not exist
+		return fmt.Errorf("failed to look up network for deletion: %w", err)
 	}
 
 	if network == nil {
