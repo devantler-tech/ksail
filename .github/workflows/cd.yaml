@@ -266,17 +266,43 @@ jobs:
       - name: 📥 Install mcp-publisher
         run: |
           set -euo pipefail
-          curl -sLO "https://github.com/modelcontextprotocol/registry/releases/download/v1.7.6/mcp-publisher_linux_amd64.tar.gz"
-          curl -sLO "https://github.com/modelcontextprotocol/registry/releases/download/v1.7.6/registry_1.7.6_checksums.txt"
-          grep "mcp-publisher_linux_amd64.tar.gz$" registry_1.7.6_checksums.txt | sha256sum --check
+          curl -sLO "https://github.com/modelcontextprotocol/registry/releases/download/v1.7.8/mcp-publisher_linux_amd64.tar.gz"
+          curl -sLO "https://github.com/modelcontextprotocol/registry/releases/download/v1.7.8/registry_1.7.8_checksums.txt"
+          grep "mcp-publisher_linux_amd64.tar.gz$" registry_1.7.8_checksums.txt | sha256sum --check
           tar -xzf mcp-publisher_linux_amd64.tar.gz mcp-publisher
-          rm mcp-publisher_linux_amd64.tar.gz registry_1.7.6_checksums.txt
+          rm mcp-publisher_linux_amd64.tar.gz registry_1.7.8_checksums.txt
 
       - name: 🔐 Authenticate with MCP Registry
         run: ./mcp-publisher login github-oidc
 
       - name: 📤 Publish to MCP Registry
-        run: ./mcp-publisher publish
+        run: |
+          set -euo pipefail
+          max_attempts=3
+          delay=15
+          for attempt in $(seq 1 "$max_attempts"); do
+            echo "Publish attempt ${attempt}/${max_attempts}..."
+            if output="$(./mcp-publisher publish 2>&1)"; then
+              echo "$output"
+              exit 0
+            fi
+            echo "$output"
+            # Only retry on 5xx (server) errors — bail immediately on 4xx
+            if echo "$output" | grep -qP 'status [45]\d{2}'; then
+              if echo "$output" | grep -qP 'status 5\d{2}'; then
+                if [ "$attempt" -lt "$max_attempts" ]; then
+                  echo "Server error; retrying in ${delay}s..."
+                  sleep "$delay"
+                  delay=$((delay * 2))
+                  continue
+                fi
+              fi
+            fi
+            echo "::error::mcp-publisher publish failed"
+            exit 1
+          done
+          echo "::error::mcp-publisher publish failed after ${max_attempts} attempts"
+          exit 1
 
   pages-build:
     name: 📄 Build Pages
