@@ -1,15 +1,17 @@
 # Repo Assist Memory
 
 ## Last Run
-2026-05-11 13:19 UTC — Run #25672575161
+2026-05-12 01:07 UTC — Run #25706827036
 
 ## Monthly Activity Issue
 - May 2026: #4501 (open, updated this run)
 
 ## Open Repo Assist PRs
-- PR [new this run]: test(oidc): add unit tests for oidc cmd package
+- PR [new this run]: refactor(hetzner): consolidate buildSecretData into shared BuildNetworkSecretData
+- PR [2026-05-11]: test(oidc): add unit tests for oidc cmd package
 
 ## Issue Comments Made (with run)
+- #4674 (Hetzner CCM taint race): 2026-05-12 run #25706827036
 - #4423 (workload watch hooks): 2026-05-11 run #25672575161
 - #4675 (Talos disk encryption feature): 2026-05-10 run #25628828750
 - #4646 (Hetzner label + ~ expansion bugs): 2026-05-08 run #25530778322
@@ -42,11 +44,11 @@
 - #4627 parent: #3983, #4328, #4510 (all linked, verified 2026-05-07)
 
 ## Code Quality Domain Alternation
-- Last domain: test (Task 9, 2026-05-11)
-- Next for Task 5: refactor
+- Last domain: refactor (Task 5, 2026-05-12)
+- Next for Task 5: performance
 
 ## Backlog Cursor
-- Issues processed through #4683 (as of 2026-05-11)
+- Issues processed through #4695 (as of 2026-05-12)
 - All roadmap Now/Next/Later items from discussion #4682 (May 11, 2026) are tracked
 
 ## Labels Applied (recent)
@@ -65,3 +67,5 @@
 - devantler filed #4675 (Talos disk encryption) + PR #4676 implementing it (MERGED)
 - CI Doctor issues #4673/#4674/#4626/#4683 are infrastructure flakes, not code bugs
 - ArgoCD v3.4 issue #4316 CLOSED (completed April 30)
+- #4683: CD secondary rate limit hit — infrastructure/GitHub issue, not code
+- 2 new Dependabot PRs open: #4694 (fsnotify 1.10.1), #4695 (grpc 1.81.0)
