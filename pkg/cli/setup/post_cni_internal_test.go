@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
 	installer "github.com/devantler-tech/ksail/v7/pkg/svc/installer"
 	"github.com/devantler-tech/ksail/v7/pkg/timer"
@@ -673,6 +674,13 @@ func TestInstallComponentsInPhases_HetznerCCMPrePhaseExcludesFromParallelPhase(t
 	factories := &InstallerFactories{
 		CertManager: func(_ *v1alpha1.Cluster) (installer.Installer, error) {
 			return &mockInstaller{}, nil
+		},
+		// HelmClientFactory fails explicitly if the parallel infra path tries
+		// to install the load-balancer again via InstallLoadBalancerSilent.
+		HelmClientFactory: func(_ *v1alpha1.Cluster) (*helm.Client, string, error) {
+			t.Fatal("HelmClientFactory called — load-balancer leaked into parallel phase")
+
+			return nil, "", nil
 		},
 	}
 
