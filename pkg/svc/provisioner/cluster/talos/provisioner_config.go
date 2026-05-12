@@ -277,8 +277,9 @@ func (p *Provisioner) isDockerProvider() bool {
 	return ok
 }
 
-// dockerEtcdChecks returns the etcd-related pre-boot checks for Docker environments.
-func dockerEtcdChecks() []check.ClusterCheck {
+// etcdChecks returns the etcd-related pre-boot readiness checks shared across
+// all provider-specific pre-boot sequences.
+func etcdChecks() []check.ClusterCheck {
 	cpTypes := check.WithNodeTypes(machine.TypeInit, machine.TypeControlPlane)
 
 	return []check.ClusterCheck{
@@ -312,31 +313,16 @@ func dockerEtcdChecks() []check.ClusterCheck {
 	}
 }
 
-// dockerPreBootSequenceChecks returns a trimmed subset of the upstream
-// check.PreBootSequenceChecks() (github.com/siderolabs/talos v1.13.0-beta.1,
-// pkg/cluster/check/check.go) optimized for Docker environments. It omits
-// purely diagnostic checks (AllNodesMemorySizes, AllNodesDiskSizes, NoDiagnostics)
-// that add polling overhead without catching real issues in Docker containers.
-//
-// When upgrading the Talos dependency, verify this list against the upstream
-// check.PreBootSequenceChecks() to pick up any new essential readiness gates.
-func dockerPreBootSequenceChecks() []check.ClusterCheck {
+// kubeletAndBootChecks returns the kubelet health and boot sequence completion
+// checks shared across all provider-specific pre-boot sequences.
+func kubeletAndBootChecks() []check.ClusterCheck {
 	allNodeTypes := check.WithNodeTypes(
 		machine.TypeInit,
 		machine.TypeControlPlane,
 		machine.TypeWorker,
 	)
 
-	return append(
-		dockerEtcdChecks(),
-		func(cluster check.ClusterInfo) conditions.Condition {
-			return conditions.PollingCondition("apid to be ready", func(ctx context.Context) error {
-				return check.ApidReadyAssertion(ctx, cluster)
-			}, preBootPollInterval)
-		},
-		// AllNodesMemorySizes — skipped: diagnostic-only, Docker containers have consistent resources
-		// AllNodesDiskSizes — skipped: diagnostic-only, Docker containers have consistent resources
-		// NoDiagnostics — skipped: informational-only, not a readiness gate
+	return []check.ClusterCheck{
 		func(cluster check.ClusterInfo) conditions.Condition {
 			return conditions.PollingCondition(
 				"kubelet to be healthy",
@@ -355,21 +341,86 @@ func dockerPreBootSequenceChecks() []check.ClusterCheck {
 				preBootPollInterval,
 			)
 		},
+	}
+}
+
+// apidCheck returns the apid readiness check shared across all provider-specific
+// pre-boot sequences.
+func apidCheck() check.ClusterCheck {
+	return func(cluster check.ClusterInfo) conditions.Condition {
+		return conditions.PollingCondition("apid to be ready", func(ctx context.Context) error {
+			return check.ApidReadyAssertion(ctx, cluster)
+		}, preBootPollInterval)
+	}
+}
+
+// dockerPreBootSequenceChecks returns a trimmed subset of the upstream
+// check.PreBootSequenceChecks() (github.com/siderolabs/talos v1.13.0,
+// pkg/cluster/check/default.go) optimized for Docker environments. It omits
+// purely diagnostic checks (AllNodesMemorySizes, AllNodesDiskSizes, NoDiagnostics)
+// that add polling overhead without catching real issues in Docker containers.
+//
+// When upgrading the Talos dependency, verify this list against the upstream
+// check.PreBootSequenceChecks() to pick up any new essential readiness gates.
+func dockerPreBootSequenceChecks() []check.ClusterCheck {
+	// AllNodesMemorySizes — skipped: diagnostic-only, Docker containers have consistent resources
+	// AllNodesDiskSizes — skipped: diagnostic-only, Docker containers have consistent resources
+	// NoDiagnostics — skipped: informational-only, not a readiness gate
+	return slices.Concat(
+		etcdChecks(),
+		[]check.ClusterCheck{apidCheck()},
+		kubeletAndBootChecks(),
 	)
 }
 
-// clusterReadinessChecks returns the appropriate set of cluster readiness checks
-// based on CNI and kubelet certificate configuration.
+// preBootSequenceChecksSkipDiagnostics returns the upstream PreBootSequenceChecks
+// (github.com/siderolabs/talos v1.13.0, pkg/cluster/check/default.go) with the
+// NoDiagnostics check omitted. Used for non-Docker providers (Hetzner, Omni) when
+// kubelet cert rotation is enabled and CNI is not yet installed (CNI disabled in
+// config or skipped via SkipCNIChecks because it is installed post-creation).
 //
-// When CNI is disabled (either by Talos config or SkipCNIChecks option), returns
-// lighter checks that skip node Ready status, since nodes will remain NotReady
-// until the CNI is installed post-creation.
+// Without CNI, the kubelet-serving-cert-approver pod cannot schedule (nodes have
+// not-ready:NoSchedule taint), so kubelet serving CSRs remain pending. Talos
+// reports this as a diagnostic ("CSR is not approved"), causing NoDiagnostics to
+// never pass — which would deadlock check.Wait since CNI installation only
+// happens after the provisioner returns.
 //
-// For Docker providers, uses a trimmed pre-boot check set that skips purely
-// diagnostic checks (memory/disk sizes, diagnostics) to reduce sequential
-// polling overhead.
+// Unlike dockerPreBootSequenceChecks, this retains AllNodesMemorySizes and
+// AllNodesDiskSizes checks because cloud servers have meaningful resource
+// constraints worth validating.
 //
-// Additionally, when kubelet serving certificate rotation is enabled with CNI disabled,
+// When upgrading the Talos dependency, verify this list against the upstream
+// check.PreBootSequenceChecks() to pick up any new essential readiness gates.
+func preBootSequenceChecksSkipDiagnostics() []check.ClusterCheck {
+	// NoDiagnostics — skipped: creates deadlock when kubelet cert rotation is enabled
+	// without CNI (cert-approver can't schedule, "CSR is not approved" diagnostic never clears)
+	return slices.Concat(
+		etcdChecks(),
+		[]check.ClusterCheck{
+			apidCheck(),
+			func(cluster check.ClusterInfo) conditions.Condition {
+				return conditions.PollingCondition(
+					"all nodes memory sizes",
+					func(ctx context.Context) error {
+						return check.AllNodesMemorySizes(ctx, cluster)
+					},
+					preBootPollInterval,
+				)
+			},
+			func(cluster check.ClusterInfo) conditions.Condition {
+				return conditions.PollingCondition(
+					"all nodes disk sizes",
+					func(ctx context.Context) error {
+						return check.AllNodesDiskSizes(ctx, cluster)
+					},
+					preBootPollInterval,
+				)
+			},
+		},
+		kubeletAndBootChecks(),
+	)
+}
+
 // the K8sControlPlaneStaticPods check is skipped because it depends on Talos
 // StaticPodStatus resources which require a kubelet serving certificate. Without CNI,
 // the kubelet-serving-cert-approver pod cannot schedule, leaving CSRs unapproved and
@@ -385,18 +436,28 @@ func (p *Provisioner) clusterReadinessChecks() []check.ClusterCheck {
 		return check.DefaultClusterChecks()
 	}
 
-	preBootChecks := check.PreBootSequenceChecks()
-	if p.isDockerProvider() {
-		preBootChecks = dockerPreBootSequenceChecks()
-	}
-
-	// When kubelet cert rotation is enabled with CNI disabled, the kubelet-serving-cert-approver
+	// When kubelet cert rotation is enabled and node readiness checks are skipped
+	// (CNI not yet installed or SkipCNIChecks set), the kubelet-serving-cert-approver
 	// pod cannot schedule (node has not-ready taint), so kubelet serving CSRs remain pending.
 	// Without a serving certificate, Talos cannot connect to kubelet, and StaticPodStatus
 	// resources are never populated. Skip the Talos-based static pod check and rely on
 	// K8sFullControlPlaneAssertion which validates the same thing via the K8s API.
 	skipStaticPodStatusCheck := p.talosConfigs != nil &&
 		p.talosConfigs.IsKubeletCertRotationEnabled()
+
+	var preBootChecks []check.ClusterCheck
+
+	switch {
+	case p.isDockerProvider():
+		preBootChecks = dockerPreBootSequenceChecks()
+	case skipStaticPodStatusCheck:
+		// Non-Docker providers with kubelet cert rotation: skip NoDiagnostics to
+		// avoid deadlock (cert-approver can't schedule without CNI, so the "CSR
+		// is not approved" diagnostic never clears).
+		preBootChecks = preBootSequenceChecksSkipDiagnostics()
+	default:
+		preBootChecks = check.PreBootSequenceChecks()
+	}
 
 	if skipStaticPodStatusCheck {
 		return slices.Concat(
