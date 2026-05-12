@@ -196,6 +196,75 @@ var (
 	csrApproverWaitOverride func(context.Context, *v1alpha1.Cluster) error
 )
 
+var (
+	//nolint:gochecknoglobals // dependency injection for tests
+	nodeSchedulabilityWaitMu sync.RWMutex
+	//nolint:gochecknoglobals // dependency injection for tests
+	nodeSchedulabilityWaitOverride func(context.Context, *v1alpha1.Cluster) error
+)
+
+// getNodeSchedulabilityWaitFn returns the node schedulability wait function,
+// using the test override if one is set.
+func getNodeSchedulabilityWaitFn() func(context.Context, *v1alpha1.Cluster) error {
+	nodeSchedulabilityWaitMu.RLock()
+	defer nodeSchedulabilityWaitMu.RUnlock()
+
+	if nodeSchedulabilityWaitOverride != nil {
+		return nodeSchedulabilityWaitOverride
+	}
+
+	return waitForNodeSchedulability
+}
+
+// SetNodeSchedulabilityWaitForTests overrides the node schedulability wait function for testing.
+// Returns a cleanup function that restores the previous function.
+func SetNodeSchedulabilityWaitForTests(
+	fn func(context.Context, *v1alpha1.Cluster) error,
+) func() {
+	nodeSchedulabilityWaitMu.Lock()
+
+	previous := nodeSchedulabilityWaitOverride
+	nodeSchedulabilityWaitOverride = fn
+
+	nodeSchedulabilityWaitMu.Unlock()
+
+	return func() {
+		nodeSchedulabilityWaitMu.Lock()
+
+		nodeSchedulabilityWaitOverride = previous
+
+		nodeSchedulabilityWaitMu.Unlock()
+	}
+}
+
+// waitForNodeSchedulability waits for all nodes to reach Ready state and for at
+// least one node to be schedulable (no blocking taints). Used after hcloud-ccm
+// installation to ensure the uninitialized taint has been removed before
+// subsequent components attempt to schedule pods.
+func waitForNodeSchedulability(
+	ctx context.Context,
+	clusterCfg *v1alpha1.Cluster,
+) error {
+	kubeconfigPath, err := kubeconfig.GetKubeconfigPathFromConfig(clusterCfg)
+	if err != nil {
+		return fmt.Errorf("get kubeconfig path for node schedulability check: %w", err)
+	}
+
+	clientset, err := k8s.NewClientset(
+		kubeconfigPath, clusterCfg.Spec.Cluster.Connection.Context,
+	)
+	if err != nil {
+		return fmt.Errorf("create clientset for node schedulability check: %w", err)
+	}
+
+	err = readiness.WaitForAllNodesReadyAndSchedulable(ctx, clientset, nodeReadinessTimeout)
+	if err != nil {
+		return fmt.Errorf("wait for nodes to become schedulable after cloud provider init: %w", err)
+	}
+
+	return nil
+}
+
 // getWaitForCSRApproverFn returns the CSR approver wait function,
 // using the test override if one is set.
 func getWaitForCSRApproverFn() func(context.Context, *v1alpha1.Cluster) error {
@@ -227,6 +296,50 @@ func SetCSRApproverWaitForTests(
 		csrApproverWaitOverride = previous
 
 		csrApproverWaitMu.Unlock()
+	}
+}
+
+var (
+	//nolint:gochecknoglobals // dependency injection for tests
+	cloudProviderInitInstallMu sync.RWMutex
+	//nolint:gochecknoglobals // dependency injection for tests
+	cloudProviderInitInstallOverride silentInstallFunc
+)
+
+// getLoadBalancerInstallFn returns the load-balancer install function used by
+// the cloud-provider init pre-phase, using the test override if one is set.
+// This allows tests to mock the hcloud-ccm installation without needing a real
+// Helm client. Note: the override only affects the pre-phase; the normal
+// parallel infra path uses InstallLoadBalancerSilent directly.
+func getLoadBalancerInstallFn() silentInstallFunc {
+	cloudProviderInitInstallMu.RLock()
+	defer cloudProviderInitInstallMu.RUnlock()
+
+	if cloudProviderInitInstallOverride != nil {
+		return cloudProviderInitInstallOverride
+	}
+
+	return InstallLoadBalancerSilent
+}
+
+// SetCloudProviderInitInstallForTests overrides the load-balancer install
+// function used by the cloud-provider init pre-phase for testing. The override
+// only affects runCloudProviderInitPhase; the normal parallel infra path is not
+// affected. Returns a cleanup function that restores the previous function.
+func SetCloudProviderInitInstallForTests(fn silentInstallFunc) func() {
+	cloudProviderInitInstallMu.Lock()
+
+	previous := cloudProviderInitInstallOverride
+	cloudProviderInitInstallOverride = fn
+
+	cloudProviderInitInstallMu.Unlock()
+
+	return func() {
+		cloudProviderInitInstallMu.Lock()
+
+		cloudProviderInitInstallOverride = previous
+
+		cloudProviderInitInstallMu.Unlock()
 	}
 }
 
@@ -414,6 +527,84 @@ func emitKWOKUnsupportedComponentWarnings(cmd *cobra.Command, clusterCfg *v1alph
 	}
 }
 
+// needsCloudProviderInitPhase returns true when the cluster uses an external
+// cloud controller manager that must initialize nodes (remove the
+// node.cloudprovider.kubernetes.io/uninitialized:NoSchedule taint) before any
+// other infrastructure component can schedule pods. Currently this applies to
+// Talos × Hetzner clusters where hcloud-ccm is the external CCM.
+func needsCloudProviderInitPhase(
+	clusterCfg *v1alpha1.Cluster,
+	reqs ComponentRequirements,
+) bool {
+	return clusterCfg.Spec.Cluster.Distribution == v1alpha1.DistributionTalos &&
+		clusterCfg.Spec.Cluster.Provider == v1alpha1.ProviderHetzner &&
+		reqs.NeedsLoadBalancer
+}
+
+// runCloudProviderInitPhase installs the cloud controller manager (hcloud-ccm)
+// and waits for nodes to become schedulable. The CCM chart includes a built-in
+// toleration for the uninitialized taint, so it can schedule on tainted nodes.
+// Once running, the CCM initializes nodes by assigning provider IDs and removing
+// the taint. We wait for at least one node to become schedulable before
+// returning, so subsequent components (cert-manager, metrics-server, etc.) can
+// schedule without hitting FailedScheduling.
+func runCloudProviderInitPhase(
+	ctx context.Context,
+	clusterCfg *v1alpha1.Cluster,
+	writer io.Writer,
+	labels notify.ProgressLabels,
+	tmr timer.Timer,
+	factories *InstallerFactories,
+	cniInstalled bool,
+) error {
+	ccmTask := newTask("load-balancer", clusterCfg, factories, getLoadBalancerInstallFn())
+
+	err := runInfraPhase(
+		ctx, clusterCfg, writer, labels, tmr,
+		[]notify.ProgressTask{ccmTask},
+		cniInstalled, false,
+	)
+	if err != nil {
+		return err
+	}
+
+	err = getNodeSchedulabilityWaitFn()(ctx, clusterCfg)
+	if err != nil {
+		return fmt.Errorf(
+			"nodes not schedulable after cloud provider initialization: %w", err,
+		)
+	}
+
+	return nil
+}
+
+// runCloudProviderInitAndClearReqs runs the cloud-provider init pre-phase and
+// returns updated requirements with NeedsLoadBalancer cleared and cniInstalled
+// set to false so subsequent phases include the node readiness check in their
+// stability pre-flight (the in-cluster connectivity check is separate and only
+// runs for Cilium CNI).
+func runCloudProviderInitAndClearReqs(
+	ctx context.Context,
+	clusterCfg *v1alpha1.Cluster,
+	writer io.Writer,
+	labels notify.ProgressLabels,
+	tmr timer.Timer,
+	factories *InstallerFactories,
+	reqs ComponentRequirements,
+	cniInstalled bool,
+) (ComponentRequirements, bool, error) {
+	err := runCloudProviderInitPhase(
+		ctx, clusterCfg, writer, labels, tmr, factories, cniInstalled,
+	)
+	if err != nil {
+		return reqs, cniInstalled, err
+	}
+
+	reqs.NeedsLoadBalancer = false
+
+	return reqs, false, nil
+}
+
 // InstallPostCNIComponents installs all post-CNI components in parallel.
 // This includes metrics-server, CSI, cert-manager, and GitOps engines (Flux/ArgoCD).
 // For Flux, the OCI artifact push and readiness wait happens after installation.
@@ -467,6 +658,7 @@ func InstallPostCNIComponents(
 	)
 }
 
+//nolint:cyclop,funlen // Phase orchestration is inherently branchy; each phase gate is a distinct concern.
 func installComponentsInPhases(
 	ctx context.Context,
 	cmd *cobra.Command,
@@ -478,6 +670,22 @@ func installComponentsInPhases(
 ) error {
 	writer := cmd.OutOrStdout()
 	labels := notify.InstallingLabels()
+
+	// On Hetzner clusters, all nodes carry the
+	// node.cloudprovider.kubernetes.io/uninitialized:NoSchedule taint until the
+	// external cloud controller manager (hcloud-ccm) initializes them. Install
+	// hcloud-ccm first and wait for nodes to become schedulable before any other
+	// infrastructure component, otherwise all pods fail with FailedScheduling.
+	if needsCloudProviderInitPhase(clusterCfg, reqs) {
+		var err error
+
+		reqs, cniInstalled, err = runCloudProviderInitAndClearReqs(
+			ctx, clusterCfg, writer, labels, tmr, factories, reqs, cniInstalled,
+		)
+		if err != nil {
+			return err
+		}
+	}
 
 	// When cert-manager and a policy engine are both needed, install cert-manager
 	// first in its own sequential phase before the parallel infrastructure phase.
