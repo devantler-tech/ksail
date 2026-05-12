@@ -1,6 +1,6 @@
 {
-  "last_run": "2026-05-11T01:14:17Z",
-  "workflow_run_id": "25645163084",
+  "last_run": "2026-05-12T12:59:09Z",
+  "workflow_run_id": "25735866201",
   "commented_issues": {
     "4675": "2026-05-10",
     "4646": "2026-05-08",
@@ -34,7 +34,9 @@
     "3912": "2026-05-05",
     "3772": "2026-04-11",
     "2261": "2026-04-11",
-    "4354": "2026-05-07"
+    "4354": "2026-05-07",
+    "4674": "2026-05-12",
+    "4423": "2026-05-11"
   },
   "open_prs": {
     "repo-assist/perf-expand-home-path-cache-a46ff99bdeec6e03": {
@@ -42,16 +44,10 @@
       "pr_number": 4672,
       "status": "open",
       "created": "2026-05-10"
-    },
-    "repo-assist/ci-k3s-cilium-workload-timeout": {
-      "title": "[Repo Assist] ci: extend workload-timeout to 900s for full-stack Cilium+Kyverno matrix",
-      "status": "open",
-      "created": "2026-05-11",
-      "fixes": "#4610"
     }
   },
-  "last_code_quality_domain": "test",
-  "issue_backlog_cursor": "4675",
+  "last_code_quality_domain": "refactor",
+  "issue_backlog_cursor": "4683",
   "sub_issue_links": {
     "cloud_provider_parent_4627": ["3983", "4328", "4510"]
   },
@@ -59,7 +55,6 @@
     "4602": "[Repo Assist] [feature]: add OIDC federation and multi-cluster auth support",
     "4610": "[Repo Assist] [ci]: fix K3s+Cilium full-stack system test timing race",
     "4627": "[Repo Assist] [Parent] Cloud Provider Expansion",
-    "4601": "[Repo Assist] [chore]: communicate GPL-3.0-only license change (CLOSED)",
     "4521": "[Repo Assist] [feature]: add local-remote service mirroring",
     "4511": "[Repo Assist] [feature]: add native ephemeral CI mode",
     "4510": "[Repo Assist] [chore]: add GKE and AKS cloud providers",
@@ -73,11 +68,11 @@
   },
   "notes": [
     "link_sub_issue is NOT idempotent - always verify sub-issue not already linked before calling",
-    "Monthly activity issue: #4501",
-    "domain alternation: last was test - next should be refactor (Task 5)",
-    "Roadmap backlog: all Now/Next/Later items tracked as of 2026-05-11",
-    "ArgoCD v3.4 issue #4316 CLOSED (completed April 30)",
+    "Monthly activity issue: #4501 (now labelled automation + repo-assist)",
+    "domain alternation: last was refactor - next should be performance (Task 8) or test (Task 9)",
+    "Roadmap backlog: all Now/Next/Later items tracked as of 2026-05-12",
     "PR #4672 (perf/fsutil ExpandHomePath cache) still open",
-    "CI workload-timeout PR created this run (fixes #4610 K3s+Cilium race)"
+    "Human PR #4700 open: hetzner availability precheck",
+    "All recent new issues (4683, 4681, 4674, 4673) are CI Doctor/automation - no human issues to engage"
   ]
 }
