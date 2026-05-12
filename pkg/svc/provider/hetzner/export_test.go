@@ -41,8 +41,8 @@ func CalculateRetryDelayForTest(attempt int) time.Duration {
 // NormalizeNodeRoleForTest exports normalizeNodeRole for testing.
 var NormalizeNodeRoleForTest = normalizeNodeRole
 
-// LbInNetworkForTest exports lbInNetwork for testing.
-var LbInNetworkForTest = lbInNetwork
+// LBInNetworkForTest exports lbInNetwork for testing.
+var LBInNetworkForTest = lbInNetwork
 
 // AvailableLocationsForTest exports availableLocations for testing.
 var AvailableLocationsForTest = availableLocations

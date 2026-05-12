@@ -522,7 +522,7 @@ func TestBuildFirewallRulesWithAllowedCIDRs(t *testing.T) {
 	}
 }
 
-func TestLbInNetwork(t *testing.T) { //nolint:funlen // Table-driven test with comprehensive coverage
+func TestLBInNetwork(t *testing.T) { //nolint:funlen // Table-driven test with comprehensive coverage
 	t.Parallel()
 
 	tests := []struct {
@@ -594,7 +594,7 @@ func TestLbInNetwork(t *testing.T) { //nolint:funlen // Table-driven test with c
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			result := hetzner.LbInNetworkForTest(testCase.lb, testCase.networkName)
+			result := hetzner.LBInNetworkForTest(testCase.lb, testCase.networkName)
 			assert.Equal(t, testCase.expected, result)
 		})
 	}
