@@ -102,4 +102,3 @@ func (h *Installer) Install(ctx context.Context) error {
 
 	return nil
 }
-

@@ -17,4 +17,6 @@ var BuildValuesYamlHAForTest = func(networkName string) string {
 }
 
 // BuildSecretDataForTest exports BuildNetworkSecretData for testing.
-var BuildSecretDataForTest = hetzner.BuildNetworkSecretData //nolint:gochecknoglobals // Standard Go export_test.go pattern.
+//
+//nolint:gochecknoglobals // Standard Go export_test.go pattern.
+var BuildSecretDataForTest = hetzner.BuildNetworkSecretData

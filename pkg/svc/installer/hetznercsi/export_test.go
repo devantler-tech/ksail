@@ -8,7 +8,9 @@ import (
 )
 
 // BuildSecretDataForTest exports BuildNetworkSecretData for testing.
-var BuildSecretDataForTest = hetzner.BuildNetworkSecretData //nolint:gochecknoglobals // Standard Go export_test.go pattern.
+//
+//nolint:gochecknoglobals // Standard Go export_test.go pattern.
+var BuildSecretDataForTest = hetzner.BuildNetworkSecretData
 
 // SetWaitForCCMNodeLabelsFnForTest replaces the internal CCM label-wait
 // function and returns a restore func. It is exposed only to tests.
