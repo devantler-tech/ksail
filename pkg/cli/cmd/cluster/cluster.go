@@ -5740,13 +5740,13 @@ func loadSwitchHistory() []string {
 		return nil
 	}
 
-	var h switchHistory
-	err = json.Unmarshal(data, &h)
+	var history switchHistory
+	err = json.Unmarshal(data, &history)
 	if err != nil {
 		return nil
 	}
 
-	return h.Recent
+	return history.Recent
 }
 
 // saveToSwitchHistory prepends name to the recent list, deduplicates, caps at
