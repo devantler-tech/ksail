@@ -5741,6 +5741,7 @@ func loadSwitchHistory() []string {
 	}
 
 	var history switchHistory
+
 	err = json.Unmarshal(data, &history)
 	if err != nil {
 		return nil
@@ -5781,7 +5782,8 @@ func saveToSwitchHistory(name string) {
 		return
 	}
 
-	if mkErr := os.MkdirAll(filepath.Dir(path), switchHistoryDirPerms); mkErr != nil {
+	mkErr := os.MkdirAll(filepath.Dir(path), switchHistoryDirPerms)
+	if mkErr != nil {
 		return
 	}
 

@@ -5628,6 +5628,7 @@ func TestSwitchHistory_PickerOrdersRecentFirst(t *testing.T) {
 	cmd, _ := newSwitchTestCmd()
 
 	var pickerItems []string
+
 	deps := cluster.SwitchDeps{
 		KubeconfigPath:    kubeconfigPath,
 		LoadSwitchHistory: func() []string { return []string{"staging"} },
@@ -5636,6 +5637,7 @@ func TestSwitchHistory_PickerOrdersRecentFirst(t *testing.T) {
 			if len(items) == 0 {
 				return "", errPickerEmptyItems
 			}
+
 			return items[0], nil
 		},
 	}
@@ -5659,6 +5661,7 @@ func TestSwitchHistory_RecentNotInKubeconfig(t *testing.T) {
 
 	// History references a cluster that no longer exists in the kubeconfig.
 	var pickerItems []string
+
 	deps := cluster.SwitchDeps{
 		KubeconfigPath:    kubeconfigPath,
 		LoadSwitchHistory: func() []string { return []string{"deleted-cluster"} },
@@ -5667,6 +5670,7 @@ func TestSwitchHistory_RecentNotInKubeconfig(t *testing.T) {
 			if len(items) == 0 {
 				return "", errPickerEmptyItems
 			}
+
 			return items[0], nil
 		},
 	}
