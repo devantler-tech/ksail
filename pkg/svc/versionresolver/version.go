@@ -137,19 +137,39 @@ func (v Version) Equal(other Version) bool {
 		v.PreRelease == other.PreRelease
 }
 
+const (
+	intBufSize  = 20 // stack buffer capacity for strconv.AppendInt
+	decimalBase = 10
+)
+
 // String returns the version as "vMAJOR.MINOR.PATCH" with pre-release and
 // suffix if present (e.g., "v1.13.0-beta.1", "v1.35.3-k3s1").
 func (v Version) String() string {
-	base := fmt.Sprintf("v%d.%d.%d", v.Major, v.Minor, v.Patch)
+	var buf [intBufSize]byte
+
+	// "v" + up to 3 digit groups + 2 dots + optional hyphen+prerelease + optional hyphen+suffix
+	capacity := intBufSize + len(v.PreRelease) + len(v.Suffix) + len("--")
+
+	var builder strings.Builder
+	builder.Grow(capacity)
+	builder.WriteByte('v')
+	builder.Write(strconv.AppendInt(buf[:0], int64(v.Major), decimalBase))
+	builder.WriteByte('.')
+	builder.Write(strconv.AppendInt(buf[:0], int64(v.Minor), decimalBase))
+	builder.WriteByte('.')
+	builder.Write(strconv.AppendInt(buf[:0], int64(v.Patch), decimalBase))
+
 	if v.PreRelease != "" {
-		base += "-" + v.PreRelease
+		builder.WriteByte('-')
+		builder.WriteString(v.PreRelease)
 	}
 
 	if v.Suffix != "" {
-		base += "-" + v.Suffix
+		builder.WriteByte('-')
+		builder.WriteString(v.Suffix)
 	}
 
-	return base
+	return builder.String()
 }
 
 // FilterStable returns only stable versions from the input.
