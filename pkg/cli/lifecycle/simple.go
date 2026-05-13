@@ -4,17 +4,24 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"os"
+	"strings"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/flags"
 	configmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/ksail"
 	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
+	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
 	clusterdetector "github.com/devantler-tech/ksail/v7/pkg/svc/detector/cluster"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	talosprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/talos"
 	"github.com/spf13/cobra"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 )
 
 // Lifecycle errors.
@@ -93,6 +100,7 @@ type ResolvedClusterInfo struct {
 	Provider       v1alpha1.Provider
 	KubeconfigPath string
 	OmniOpts       v1alpha1.OptionsOmni
+	KubernetesOpts v1alpha1.OptionsKubernetes
 }
 
 // ResolveClusterInfo resolves the cluster name, provider, and kubeconfig from flags, config, or kubeconfig.
@@ -111,11 +119,12 @@ func ResolveClusterInfo(
 	provider := providerFlag
 	kubeconfigPath := kubeconfigFlag
 
-	// Always load config to fill missing fields and extract Omni options.
+	// Always load config to fill missing fields and extract Omni/Kubernetes options.
 	// Even when --name is provided, we still need Omni endpoint from config.
 	var omniOpts v1alpha1.OptionsOmni
+	var kubernetesOpts v1alpha1.OptionsKubernetes
 
-	resolveFromConfig(cmd, &clusterName, &provider, &kubeconfigPath, &omniOpts)
+	resolveFromConfig(cmd, &clusterName, &provider, &kubeconfigPath, &omniOpts, &kubernetesOpts)
 
 	// Fall back to kubeconfig context detection
 	if clusterName == "" {
@@ -140,6 +149,7 @@ func ResolveClusterInfo(
 		Provider:       provider,
 		KubeconfigPath: resolvedPath,
 		OmniOpts:       omniOpts,
+		KubernetesOpts: kubernetesOpts,
 	}, nil
 }
 
@@ -174,6 +184,7 @@ func resolveFromConfig(
 	provider *v1alpha1.Provider,
 	kubeconfigPath *string,
 	omniOpts *v1alpha1.OptionsOmni,
+	kubernetesOpts *v1alpha1.OptionsKubernetes,
 ) {
 	cfg, distCfg := loadConfig(cmd)
 	if cfg == nil {
@@ -199,6 +210,7 @@ func resolveFromConfig(
 	}
 
 	*omniOpts = cfg.Spec.Provider.Omni
+	*kubernetesOpts = cfg.Spec.Provider.Kubernetes
 }
 
 // clusterNameFromDistConfig extracts the cluster name from distribution-specific config.
@@ -290,7 +302,7 @@ func runSimpleLifecycleAction(
 		KubeconfigPath: resolved.KubeconfigPath,
 	}
 
-	provisioner, err := CreateMinimalProvisionerForProvider(clusterInfo, resolved.OmniOpts, false)
+	provisioner, err := CreateMinimalProvisionerForProvider(clusterInfo, resolved.OmniOpts, resolved.KubernetesOpts, false)
 	if err != nil {
 		return fmt.Errorf("failed to create provisioner: %w", err)
 	}
@@ -335,13 +347,19 @@ func CreateMinimalProvisioner(
 func CreateMinimalProvisionerForProvider(
 	info *clusterdetector.Info,
 	omniOpts v1alpha1.OptionsOmni,
+	kubernetesOpts v1alpha1.OptionsKubernetes,
 	deleteStorage bool,
 ) (clusterprovisioner.Provisioner, error) {
 	switch info.Provider {
-	case v1alpha1.ProviderDocker, v1alpha1.ProviderKubernetes, "":
-		// Docker and Kubernetes providers support all Docker-based distributions -
+	case v1alpha1.ProviderDocker, "":
+		// Docker provider supports all Docker-based distributions -
 		// create a multi-provisioner that tries each distribution in order
 		return clusterprovisioner.NewMultiProvisioner(info.ClusterName), nil
+
+	case v1alpha1.ProviderKubernetes:
+		// Kubernetes provider runs clusters as pods in a host cluster.
+		// Delete by removing the ksail-<name> namespace (cascading delete).
+		return newKubernetesCleanupProvisioner(info.ClusterName, kubernetesOpts)
 
 	case v1alpha1.ProviderHetzner, v1alpha1.ProviderOmni:
 		// Hetzner and Omni only support Talos
@@ -387,4 +405,116 @@ func CreateMinimalProvisionerForProvider(
 			info.Provider,
 		)
 	}
+}
+
+// kubernetesCleanupProvisioner deletes nested clusters on a Kubernetes provider
+// by removing the ksail-<name> namespace (cascading delete removes all resources).
+type kubernetesCleanupProvisioner struct {
+	clusterName    string
+	clientset      kubernetes.Interface
+	kubeconfigPath string
+}
+
+func newKubernetesCleanupProvisioner(
+	clusterName string,
+	opts v1alpha1.OptionsKubernetes,
+) (*kubernetesCleanupProvisioner, error) {
+	kubeconfig := resolveKubernetesOption(opts.Kubeconfig, opts.KubeconfigEnvVar)
+	if kubeconfig == "" {
+		kubeconfig = k8s.DefaultKubeconfigPath()
+	} else if len(kubeconfig) > 1 && kubeconfig[:2] == "~/" {
+		homeDir, _ := os.UserHomeDir()
+		if homeDir != "" {
+			kubeconfig = homeDir + kubeconfig[1:]
+		}
+	}
+
+	contextName := resolveKubernetesOption(opts.Context, opts.ContextEnvVar)
+
+	restConfig, err := k8s.BuildRESTConfig(kubeconfig, contextName)
+	if err != nil {
+		return nil, fmt.Errorf("build host REST config: %w", err)
+	}
+
+	clientset, err := kubernetes.NewForConfig(restConfig)
+	if err != nil {
+		return nil, fmt.Errorf("create host clientset: %w", err)
+	}
+
+	return &kubernetesCleanupProvisioner{
+		clusterName:    clusterName,
+		clientset:      clientset,
+		kubeconfigPath: kubeconfig,
+	}, nil
+}
+
+func (p *kubernetesCleanupProvisioner) Create(_ context.Context, _ string) error {
+	return fmt.Errorf("create not supported on cleanup provisioner")
+}
+
+func (p *kubernetesCleanupProvisioner) Delete(ctx context.Context, _ string) error {
+	ns := "ksail-" + p.clusterName
+
+	err := p.clientset.CoreV1().Namespaces().Delete(ctx, ns, metav1.DeleteOptions{})
+	if err != nil && !apierrors.IsNotFound(err) {
+		return fmt.Errorf("delete namespace %s: %w", ns, err)
+	}
+
+	// Clean up nested cluster kubeconfig entries (kind-<name> convention)
+	kindContext := "kind-" + p.clusterName
+	_ = k8s.CleanupKubeconfig(p.kubeconfigPath, kindContext, kindContext, kindContext, io.Discard)
+
+	return nil
+}
+
+func (p *kubernetesCleanupProvisioner) Start(_ context.Context, _ string) error {
+	return fmt.Errorf("start not supported on cleanup provisioner")
+}
+
+func (p *kubernetesCleanupProvisioner) Stop(_ context.Context, _ string) error {
+	return fmt.Errorf("stop not supported on cleanup provisioner")
+}
+
+func (p *kubernetesCleanupProvisioner) Exists(ctx context.Context, _ string) (bool, error) {
+	ns := "ksail-" + p.clusterName
+
+	_, err := p.clientset.CoreV1().Namespaces().Get(ctx, ns, metav1.GetOptions{})
+	if apierrors.IsNotFound(err) {
+		return false, nil
+	}
+
+	if err != nil {
+		return false, fmt.Errorf("check namespace %s: %w", ns, err)
+	}
+
+	return true, nil
+}
+
+func (p *kubernetesCleanupProvisioner) List(ctx context.Context) ([]string, error) {
+	nsList, err := p.clientset.CoreV1().Namespaces().List(ctx, metav1.ListOptions{
+		LabelSelector: "ksail.io/managed-by=ksail",
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list ksail namespaces: %w", err)
+	}
+
+	var names []string
+	for _, ns := range nsList.Items {
+		names = append(names, strings.TrimPrefix(ns.Name, "ksail-"))
+	}
+
+	return names, nil
+}
+
+// resolveKubernetesOption resolves a value from a direct config value or environment variable.
+func resolveKubernetesOption(value, envVar string) string {
+	if value != "" {
+		return value
+	}
+
+	if envVar != "" {
+		return os.Getenv(envVar)
+	}
+
+	return ""
 }

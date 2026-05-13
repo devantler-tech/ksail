@@ -96,6 +96,14 @@ func (p *Provider) IsCloud() bool {
 	return *p == ProviderHetzner || *p == ProviderOmni || *p == ProviderAWS
 }
 
+// NeedsLocalDocker returns true if the provider requires a local Docker daemon
+// on the host machine for running cluster nodes, registries, and networks.
+// Returns false for cloud providers and the Kubernetes provider (which runs
+// nodes as pods in an existing cluster rather than as local Docker containers).
+func (p *Provider) NeedsLocalDocker() bool {
+	return !p.IsCloud() && *p != ProviderKubernetes
+}
+
 // ValidateForDistribution validates that the provider is valid for the given distribution.
 // Returns nil if the combination is valid, or an error describing the invalid combination.
 func (p *Provider) ValidateForDistribution(distribution Distribution) error {

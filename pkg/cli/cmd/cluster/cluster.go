@@ -1416,7 +1416,7 @@ func ensureLocalRegistriesReady(
 		return err
 	}
 
-	if !provider.IsCloud() {
+	if provider.NeedsLocalDocker() {
 		// Stage 1: Provision local registry (skipped for external registries)
 		err := localregistry.ExecuteStage(
 			cmd,
@@ -1438,7 +1438,7 @@ func ensureLocalRegistriesReady(
 		return fmt.Errorf("failed to verify registry access: %w", err)
 	}
 
-	if !provider.IsCloud() {
+	if provider.NeedsLocalDocker() {
 		params := buildRegistryStageParams(cmd, ctx, deps, cfgManager, localDeps)
 
 		// Stage 3: Create and configure registry containers (local + mirrors)
@@ -1980,7 +1980,7 @@ func runDeleteAction(
 	detectedInfo, isKindCluster, clusterInfo := detectDeleteClusterInfo(cmd, resolved)
 
 	// Create provisioner for the provider
-	provisioner, err := createDeleteProvisioner(clusterInfo, resolved.OmniOpts, flags.storage)
+	provisioner, err := createDeleteProvisioner(clusterInfo, resolved.OmniOpts, resolved.KubernetesOpts, flags.storage)
 	if err != nil {
 		return fmt.Errorf("failed to create provisioner: %w", err)
 	}
@@ -2190,6 +2190,7 @@ func promptForDeletion(
 func createDeleteProvisioner(
 	clusterInfo *clusterdetector.Info,
 	omniOpts v1alpha1.OptionsOmni,
+	kubernetesOpts v1alpha1.OptionsKubernetes,
 	deleteStorage bool,
 ) (clusterprovisioner.Provisioner, error) {
 	// Check for test factory override
@@ -2209,7 +2210,7 @@ func createDeleteProvisioner(
 	}
 
 	provisioner, err := lifecycle.CreateMinimalProvisionerForProvider(
-		clusterInfo, omniOpts, deleteStorage,
+		clusterInfo, omniOpts, kubernetesOpts, deleteStorage,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create provisioner for provider: %w", err)
@@ -5601,9 +5602,9 @@ func runClusterCreationWorkflow(
 	}
 
 	// Post-creation Docker steps are only needed for local Docker clusters.
-	// Cloud providers (Omni, Hetzner) run nodes remotely and cannot access
-	// local Docker infrastructure.
-	if !ctx.ClusterCfg.Spec.Cluster.Provider.IsCloud() {
+	// Cloud providers (Omni, Hetzner) run nodes remotely and the Kubernetes
+	// provider runs nodes as pods — neither can access local Docker infrastructure.
+	if ctx.ClusterCfg.Spec.Cluster.Provider.NeedsLocalDocker() {
 		configureRegistryMirrorsInClusterWithWarning(
 			cmd,
 			ctx,
@@ -6461,7 +6462,7 @@ func autoDeleteCluster(
 		Provider:     clusterCfg.Spec.Cluster.Provider,
 	}
 
-	provisioner, err := createDeleteProvisioner(info, clusterCfg.Spec.Provider.Omni, false)
+	provisioner, err := createDeleteProvisioner(info, clusterCfg.Spec.Provider.Omni, clusterCfg.Spec.Provider.Kubernetes, false)
 	if err != nil {
 		return fmt.Errorf("TTL auto-delete: failed to create provisioner: %w", err)
 	}

@@ -12,8 +12,10 @@ import (
 	k3dconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/k3d"
 	kindconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/kind"
 	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
+	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/detector"
 	awsprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/aws"
+	kubernetesprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/kubernetes"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
 	eksprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/eks"
 	k3dprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/k3d"
@@ -22,6 +24,9 @@ import (
 	talosprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/talos"
 	vclusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/vcluster"
 	k3dv1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 	"sigs.k8s.io/yaml"
 )
@@ -206,6 +211,11 @@ func (f DefaultFactory) createKindProvisioner(
 		kindconfigmanager.ApplyCDIPatches(kindConfig)
 	}
 
+	// Kubernetes provider: run Kind inside a DinD pod on the host cluster
+	if cluster.Spec.Cluster.Provider == v1alpha1.ProviderKubernetes {
+		return f.createKindKubernetesProvisioner(cluster, kindConfig)
+	}
+
 	provisioner, err := kindprovisioner.CreateProvisioner(
 		kindConfig,
 		cluster.Spec.Cluster.Connection.Kubeconfig,
@@ -219,6 +229,137 @@ func (f DefaultFactory) createKindProvisioner(
 	}
 
 	return provisioner, kindConfig, nil
+}
+
+// createKindKubernetesProvisioner creates a Kind provisioner that runs inside
+// a DinD pod on a host Kubernetes cluster.
+func (f DefaultFactory) createKindKubernetesProvisioner(
+	cluster *v1alpha1.Cluster,
+	kindConfig *v1alpha4.Cluster,
+) (Provisioner, any, error) {
+	opts := cluster.Spec.Provider.Kubernetes
+	clusterName := cluster.Metadata.Name
+
+	// Build host cluster clients
+	hostClient, restConfig, dynClient, err := buildHostClusterClients(opts)
+	if err != nil {
+		return nil, nil, fmt.Errorf("build host cluster clients: %w", err)
+	}
+
+	// Create the Kubernetes provider
+	k8sProvider, err := kubernetesprovider.NewProvider(hostClient, opts)
+	if err != nil {
+		return nil, nil, fmt.Errorf("create Kubernetes provider: %w", err)
+	}
+
+	// Configure Kind for DinD: API server must bind to all interfaces
+	// and use a fixed port so it's accessible from outside the DinD container.
+	applyKindDinDNetworking(kindConfig)
+
+	provisioner, err := kindprovisioner.NewKubernetesProvisioner(
+		kindprovisioner.KubernetesProvisionerConfig{
+			KindConfig:       kindConfig,
+			KubeconfigPath:   cluster.Spec.Cluster.Connection.Kubeconfig,
+			K8sProvider:      k8sProvider,
+			DynamicClient:    dynClient,
+			RestConfig:       restConfig,
+			ClusterName:      clusterName,
+			Distribution:     string(cluster.Spec.Cluster.Distribution),
+			GatewayClassName: opts.GatewayClassName,
+			APIServerPort:    kubernetesprovider.DinDAPIServerPort,
+		},
+	)
+	if err != nil {
+		return nil, nil, fmt.Errorf("create Kind Kubernetes provisioner: %w", err)
+	}
+
+	if f.ComponentDetector != nil {
+		provisioner.WithComponentDetector(f.ComponentDetector)
+	}
+
+	return provisioner, kindConfig, nil
+}
+
+// applyKindDinDNetworking configures Kind networking for DinD execution.
+// The API server must bind to 0.0.0.0 (all interfaces) so it's accessible
+// from outside the DinD container. A fixed port (6443) is used instead of
+// a random port to enable deterministic port mapping. The certSANs patch
+// ensures the API server TLS certificate includes 127.0.0.1 and localhost,
+// which are needed when accessing the API via port-forward.
+func applyKindDinDNetworking(kindConfig *v1alpha4.Cluster) {
+	kindConfig.Networking.APIServerAddress = "0.0.0.0"
+	kindConfig.Networking.APIServerPort = kubernetesprovider.DinDAPIServerPort
+
+	// Add certSANs to all control-plane nodes so the API server cert
+	// is valid for 127.0.0.1 (port-forward) and localhost.
+	certSANsPatch := `kind: ClusterConfiguration
+apiServer:
+  certSANs:
+  - "127.0.0.1"
+  - "localhost"
+  - "0.0.0.0"`
+
+	for i, node := range kindConfig.Nodes {
+		if node.Role == v1alpha4.ControlPlaneRole {
+			kindConfig.Nodes[i].KubeadmConfigPatches = append(
+				kindConfig.Nodes[i].KubeadmConfigPatches,
+				certSANsPatch,
+			)
+		}
+	}
+	// If no nodes are defined, add one with the patch
+	if len(kindConfig.Nodes) == 0 {
+		kindConfig.Nodes = []v1alpha4.Node{
+			{
+				Role:                 v1alpha4.ControlPlaneRole,
+				KubeadmConfigPatches: []string{certSANsPatch},
+			},
+		}
+	}
+}
+
+// buildHostClusterClients builds Kubernetes clients for the host cluster
+// from the Kubernetes provider options.
+func buildHostClusterClients(
+	opts v1alpha1.OptionsKubernetes,
+) (kubernetes.Interface, *rest.Config, dynamic.Interface, error) {
+	kubeconfig := resolveKubernetesOption(opts.Kubeconfig, opts.KubeconfigEnvVar)
+
+	// Fall back to default kubeconfig path if not set
+	if kubeconfig == "" {
+		kubeconfig = k8s.DefaultKubeconfigPath()
+	}
+
+	context := resolveKubernetesOption(opts.Context, opts.ContextEnvVar)
+
+	restConfig, err := k8s.BuildRESTConfig(kubeconfig, context)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("build host REST config: %w", err)
+	}
+
+	clientset, err := kubernetes.NewForConfig(restConfig)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("create host clientset: %w", err)
+	}
+
+	dynClient, err := dynamic.NewForConfig(restConfig)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("create host dynamic client: %w", err)
+	}
+
+	return clientset, restConfig, dynClient, nil
+}
+
+// resolveKubernetesOption returns the value from the environment variable
+// if set, otherwise returns the direct value.
+func resolveKubernetesOption(directValue, envVar string) string {
+	if envVar != "" {
+		if envValue := os.Getenv(envVar); envValue != "" {
+			return envValue
+		}
+	}
+
+	return directValue
 }
 
 // applyKindNodeCounts applies node count overrides from CLI flags / cluster-level
