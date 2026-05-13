@@ -5614,6 +5614,10 @@ func TestSwitchHistory_HandleSwitchRunE_UpdatesHistory(t *testing.T) {
 	assert.Equal(t, "dev", saved[1])
 }
 
+// errPickerEmptyItems is a sentinel returned by test picker stubs when the
+// items list is empty, so regressions produce a clean failure rather than a panic.
+var errPickerEmptyItems = errors.New("picker received empty items list")
+
 func TestSwitchHistory_PickerOrdersRecentFirst(t *testing.T) {
 	t.Parallel()
 
@@ -5630,7 +5634,7 @@ func TestSwitchHistory_PickerOrdersRecentFirst(t *testing.T) {
 		PickCluster: func(_ string, items []string) (string, error) {
 			pickerItems = items
 			if len(items) == 0 {
-				return "", errors.New("picker received empty items list")
+				return "", errPickerEmptyItems
 			}
 			return items[0], nil
 		},
@@ -5661,7 +5665,7 @@ func TestSwitchHistory_RecentNotInKubeconfig(t *testing.T) {
 		PickCluster: func(_ string, items []string) (string, error) {
 			pickerItems = items
 			if len(items) == 0 {
-				return "", errors.New("picker received empty items list")
+				return "", errPickerEmptyItems
 			}
 			return items[0], nil
 		},

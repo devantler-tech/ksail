@@ -5741,7 +5741,8 @@ func loadSwitchHistory() []string {
 	}
 
 	var h switchHistory
-	if err := json.Unmarshal(data, &h); err != nil {
+	err = json.Unmarshal(data, &h)
+	if err != nil {
 		return nil
 	}
 
@@ -5921,6 +5922,33 @@ func HandleSwitchRunE(
 	return nil
 }
 
+// buildOrderedClusterNames merges recent switch history with all known cluster
+// names so that recently-switched clusters appear first in the list.
+// Names in recent that are no longer present in allNames are silently skipped.
+func buildOrderedClusterNames(recent, allNames []string) []string {
+	recentSet := make(map[string]struct{}, len(recent))
+	names := make([]string, 0, len(allNames))
+
+	for _, name := range recent {
+		if len(names) >= switchHistoryMaxItems {
+			break
+		}
+
+		if _, already := recentSet[name]; !already && slices.Contains(allNames, name) {
+			names = append(names, name)
+			recentSet[name] = struct{}{}
+		}
+	}
+
+	for _, name := range allNames {
+		if _, ok := recentSet[name]; !ok {
+			names = append(names, name)
+		}
+	}
+
+	return names
+}
+
 // pickCluster resolves the kubeconfig, lists available cluster names ordered
 // by recency (recently switched clusters appear first), and presents an
 // interactive picker for the user to select one.
@@ -5935,36 +5963,12 @@ func pickCluster(cmd *cobra.Command, deps SwitchDeps) (string, error) {
 		return "", fmt.Errorf("%w", ErrNoClusters)
 	}
 
-	// Load recent history and filter to names still present in the kubeconfig.
 	loadHistory := deps.LoadSwitchHistory
 	if loadHistory == nil {
 		loadHistory = loadSwitchHistory
 	}
 
-	recent := loadHistory()
-	recentSet := make(map[string]struct{}, len(recent))
-	var recentFiltered []string
-
-	for _, n := range recent {
-		if len(recentFiltered) >= switchHistoryMaxItems {
-			break
-		}
-
-		if _, already := recentSet[n]; !already && slices.Contains(allNames, n) {
-			recentFiltered = append(recentFiltered, n)
-			recentSet[n] = struct{}{}
-		}
-	}
-
-	// Remaining names = all names not already listed as recent.
-	var remaining []string
-	for _, n := range allNames {
-		if _, ok := recentSet[n]; !ok {
-			remaining = append(remaining, n)
-		}
-	}
-
-	names := append(recentFiltered, remaining...)
+	names := buildOrderedClusterNames(loadHistory(), allNames)
 
 	pick := deps.PickCluster
 	if pick == nil {
