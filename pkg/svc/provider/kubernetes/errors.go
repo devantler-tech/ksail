@@ -1,0 +1,19 @@
+package kubernetes
+
+import "errors"
+
+// Provider-specific errors.
+var (
+	// ErrHostClientRequired is returned when a nil Kubernetes client is provided.
+	ErrHostClientRequired = errors.New("host cluster Kubernetes client is required")
+
+	// ErrNamespaceNotFound is returned when the cluster namespace does not exist.
+	ErrNamespaceNotFound = errors.New("cluster namespace not found")
+
+	// ErrGatewayNotReady is returned when the Gateway has not been assigned an address.
+	ErrGatewayNotReady = errors.New("gateway has not been assigned an external address")
+
+	// ErrGatewayClassNotFound is returned when the specified GatewayClass does not exist
+	// on the host cluster.
+	ErrGatewayClassNotFound = errors.New("specified GatewayClass not found on host cluster")
+)
