@@ -52,3 +52,14 @@ func DistributionConfigIsOppositeDefaultForTest(
 ) bool {
 	return distributionConfigIsOppositeDefault(current, distribution)
 }
+
+// AddWorkerRoleLabelPatchForTest exposes addWorkerRoleLabelPatch for testing.
+func (m *ConfigManager) AddWorkerRoleLabelPatchForTest(
+	talosManager *talosconfigmanager.ConfigManager,
+	patchesDir string,
+) {
+	m.addWorkerRoleLabelPatch(talosManager, patchesDir)
+}
+
+// LegacyWorkerRoleLabelPatchYAMLForTest exports the legacy constant for testing.
+const LegacyWorkerRoleLabelPatchYAMLForTest = legacyWorkerRoleLabelPatchYAML
