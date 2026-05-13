@@ -196,6 +196,10 @@ func (m *ConfigManager) addKubeletCertRotationPatches(
 	}
 }
 
+// legacyWorkerRoleLabelPatchYAML is the exact content of the old scaffold that
+// used machine.nodeLabels. Only files matching this content exactly are migrated.
+const legacyWorkerRoleLabelPatchYAML = "machine:\n  nodeLabels:\n    node-role.kubernetes.io/worker: \"\"\n"
+
 // addWorkerRoleLabelPatch injects the worker role label patch at runtime
 // when the patch file does not exist on disk. This ensures existing
 // scaffolded projects (created before this patch was introduced) still
@@ -224,13 +228,19 @@ func (m *ConfigManager) addWorkerRoleLabelPatch(
 		return
 	}
 
-	if strings.Contains(string(content), "nodeLabels:") {
+	// Only migrate files that exactly match the legacy scaffold. User-customized
+	// files (with additional labels or settings) are left untouched.
+	if strings.TrimSpace(string(content)) == strings.TrimSpace(legacyWorkerRoleLabelPatchYAML) {
 		canonPath, pathErr := fsutil.EvalCanonicalPath(patchFile)
 		if pathErr != nil {
 			return
 		}
 
-		_ = os.WriteFile(canonPath, []byte(talosgenerator.WorkerRoleLabelPatchYAML), 0o600) //nolint:mnd // standard restrictive file permission
+		if writeErr := os.WriteFile(canonPath, []byte(talosgenerator.WorkerRoleLabelPatchYAML), 0o600); writeErr != nil { //nolint:mnd // standard restrictive file permission
+			// Write failed — inject the correct runtime patch as fallback so the
+			// worker role label is still set via kubelet.extraArgs at registration time.
+			talosManager.WithAdditionalPatches([]talosconfigmanager.Patch{workerRoleLabelPatch()})
+		}
 	}
 }
 
