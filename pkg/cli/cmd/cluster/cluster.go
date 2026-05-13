@@ -5946,7 +5946,7 @@ func pickCluster(cmd *cobra.Command, deps SwitchDeps) (string, error) {
 	var recentFiltered []string
 
 	for _, n := range recent {
-		if slices.Contains(allNames, n) {
+		if _, already := recentSet[n]; !already && slices.Contains(allNames, n) {
 			recentFiltered = append(recentFiltered, n)
 			recentSet[n] = struct{}{}
 		}

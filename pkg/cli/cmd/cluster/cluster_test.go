@@ -5571,11 +5571,10 @@ func TestSwitchCmd_FallbackKubeconfigInvalid(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to read kubeconfig")
 }
 
-func TestSwitchHistory_SaveAndLoad(t *testing.T) {
+func TestSwitchHistory_HandleSwitchRunE_UpdatesHistory(t *testing.T) {
 	t.Parallel()
 
 	tmpDir := t.TempDir()
-	historyPath := filepath.Join(tmpDir, "switch-history.json")
 
 	var saved []string
 
@@ -5592,9 +5591,6 @@ func TestSwitchHistory_SaveAndLoad(t *testing.T) {
 		}
 
 		saved = updated
-
-		data, _ := json.Marshal(map[string]any{"recent": updated})
-		_ = os.WriteFile(historyPath, data, 0o600)
 	}
 
 	kubeconfigPath := filepath.Join(tmpDir, "kubeconfig")
