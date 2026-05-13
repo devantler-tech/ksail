@@ -5698,6 +5698,95 @@ var ErrAmbiguousCluster = errors.New("ambiguous cluster name")
 // ErrNoClusters is returned when no KSail-managed clusters are found in the kubeconfig.
 var ErrNoClusters = errors.New("no KSail-managed clusters found in kubeconfig")
 
+// switchHistoryMaxItems is the maximum number of recently-switched clusters to remember.
+const switchHistoryMaxItems = 5
+
+// switchHistoryFileName is the file name used to persist switch history under ~/.ksail/.
+const switchHistoryFileName = "switch-history.json"
+
+// switchHistoryDirPerms is the permission mode for the ~/.ksail/ directory.
+const switchHistoryDirPerms = 0o700
+
+// switchHistoryFilePerms is the permission mode for the switch-history.json file.
+const switchHistoryFilePerms = 0o600
+
+// switchHistory is the JSON representation persisted to ~/.ksail/switch-history.json.
+type switchHistory struct {
+	Recent []string `json:"recent"`
+}
+
+// switchHistoryPath returns the path to the switch history file (~/.ksail/switch-history.json).
+func switchHistoryPath() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("get user home directory: %w", err)
+	}
+
+	return filepath.Join(home, ".ksail", switchHistoryFileName), nil
+}
+
+// loadSwitchHistory reads the recent-cluster list from disk.
+// Returns nil if the file does not exist or cannot be parsed.
+//
+//nolint:gosec // G304: path is derived from os.UserHomeDir() with a fixed suffix
+func loadSwitchHistory() []string {
+	path, err := switchHistoryPath()
+	if err != nil {
+		return nil
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+
+	var h switchHistory
+	if err := json.Unmarshal(data, &h); err != nil {
+		return nil
+	}
+
+	return h.Recent
+}
+
+// saveToSwitchHistory prepends name to the recent list, deduplicates, caps at
+// switchHistoryMaxItems, and writes to disk. Errors are silently discarded so that
+// a failed history write never blocks the user's context switch.
+func saveToSwitchHistory(name string) {
+	path, err := switchHistoryPath()
+	if err != nil {
+		return
+	}
+
+	existing := loadSwitchHistory()
+
+	seen := map[string]struct{}{name: {}}
+	updated := []string{name}
+
+	for _, n := range existing {
+		if _, dup := seen[n]; !dup {
+			seen[n] = struct{}{}
+			updated = append(updated, n)
+
+			if len(updated) >= switchHistoryMaxItems {
+				break
+			}
+		}
+	}
+
+	h := switchHistory{Recent: updated}
+
+	data, err := json.Marshal(h)
+	if err != nil {
+		return
+	}
+
+	if mkErr := os.MkdirAll(filepath.Dir(path), switchHistoryDirPerms); mkErr != nil {
+		return
+	}
+
+	_ = os.WriteFile(path, data, switchHistoryFilePerms)
+}
+
 // switchKubeconfigFileMode is the file mode for kubeconfig files.
 const switchKubeconfigFileMode = 0o600
 
@@ -5771,6 +5860,14 @@ type SwitchDeps struct {
 	// PickCluster overrides the interactive picker for testing.
 	// If nil, the default bubbletea picker is used.
 	PickCluster func(title string, items []string) (string, error)
+
+	// LoadSwitchHistory overrides history loading for testing.
+	// If nil, the default loadSwitchHistory is used.
+	LoadSwitchHistory func() []string
+
+	// SaveToSwitchHistory overrides history saving for testing.
+	// If nil, the default saveToSwitchHistory is used.
+	SaveToSwitchHistory func(name string)
 }
 
 // resolveSwitchKubeconfig returns the kubeconfig path for switch operations.
@@ -5813,21 +5910,57 @@ func HandleSwitchRunE(
 		contextName,
 	)
 
+	// Persist the cluster name to switch history (errors silently ignored).
+	save := deps.SaveToSwitchHistory
+	if save == nil {
+		save = saveToSwitchHistory
+	}
+
+	save(clusterName)
+
 	return nil
 }
 
-// pickCluster resolves the kubeconfig, lists available cluster names, and
-// presents an interactive picker for the user to select one.
+// pickCluster resolves the kubeconfig, lists available cluster names ordered
+// by recency (recently switched clusters appear first), and presents an
+// interactive picker for the user to select one.
 func pickCluster(cmd *cobra.Command, deps SwitchDeps) (string, error) {
 	kubeconfigPath, err := resolveSwitchKubeconfig(cmd, deps)
 	if err != nil {
 		return "", err
 	}
 
-	names := clusterNamesFromPath(kubeconfigPath)
-	if len(names) == 0 {
+	allNames := clusterNamesFromPath(kubeconfigPath)
+	if len(allNames) == 0 {
 		return "", fmt.Errorf("%w", ErrNoClusters)
 	}
+
+	// Load recent history and filter to names still present in the kubeconfig.
+	loadHistory := deps.LoadSwitchHistory
+	if loadHistory == nil {
+		loadHistory = loadSwitchHistory
+	}
+
+	recent := loadHistory()
+	recentSet := make(map[string]struct{}, len(recent))
+	var recentFiltered []string
+
+	for _, n := range recent {
+		if slices.Contains(allNames, n) {
+			recentFiltered = append(recentFiltered, n)
+			recentSet[n] = struct{}{}
+		}
+	}
+
+	// Remaining names = all names not already listed as recent.
+	var remaining []string
+	for _, n := range allNames {
+		if _, ok := recentSet[n]; !ok {
+			remaining = append(remaining, n)
+		}
+	}
+
+	names := append(recentFiltered, remaining...)
 
 	pick := deps.PickCluster
 	if pick == nil {

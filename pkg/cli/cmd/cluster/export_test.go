@@ -305,6 +305,21 @@ func ExportPickCluster(cmd *cobra.Command, deps SwitchDeps) (string, error) {
 	return pickCluster(cmd, deps)
 }
 
+// ExportLoadSwitchHistory exposes loadSwitchHistory for unit testing.
+func ExportLoadSwitchHistory() []string {
+	return loadSwitchHistory()
+}
+
+// ExportSaveToSwitchHistory exposes saveToSwitchHistory for unit testing.
+func ExportSaveToSwitchHistory(name string) {
+	saveToSwitchHistory(name)
+}
+
+// ExportSwitchHistoryPath exposes switchHistoryPath for unit testing.
+func ExportSwitchHistoryPath() (string, error) {
+	return switchHistoryPath()
+}
+
 // ExportPrintRestoreHeader exposes printRestoreHeader for testing.
 // Parameters mirror restoreFlags fields so the unexported struct is not needed.
 func ExportPrintRestoreHeader(writer io.Writer, inputPath, policy string, dryRun bool) {

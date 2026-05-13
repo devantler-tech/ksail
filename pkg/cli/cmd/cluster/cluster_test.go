@@ -5571,6 +5571,108 @@ func TestSwitchCmd_FallbackKubeconfigInvalid(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to read kubeconfig")
 }
 
+func TestSwitchHistory_SaveAndLoad(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	historyPath := filepath.Join(tmpDir, "switch-history.json")
+
+	var saved []string
+
+	loadFn := func() []string { return saved }
+	saveFn := func(name string) {
+		seen := map[string]struct{}{name: {}}
+		updated := []string{name}
+
+		for _, n := range saved {
+			if _, dup := seen[n]; !dup {
+				seen[n] = struct{}{}
+				updated = append(updated, n)
+			}
+		}
+
+		saved = updated
+
+		data, _ := json.Marshal(map[string]any{"recent": updated})
+		_ = os.WriteFile(historyPath, data, 0o600)
+	}
+
+	kubeconfigPath := filepath.Join(tmpDir, "kubeconfig")
+	require.NoError(t, os.WriteFile(kubeconfigPath, []byte(testKubeconfigTwoContexts), 0o600))
+
+	cmd, _ := newSwitchTestCmd()
+
+	// Switch to "dev" then "staging"
+	deps := cluster.SwitchDeps{
+		KubeconfigPath:      kubeconfigPath,
+		LoadSwitchHistory:   loadFn,
+		SaveToSwitchHistory: saveFn,
+	}
+
+	require.NoError(t, cluster.HandleSwitchRunE(cmd, "dev", deps))
+	require.NoError(t, cluster.HandleSwitchRunE(cmd, "staging", deps))
+
+	// "staging" was switched to last, so it should be first.
+	assert.Equal(t, "staging", saved[0])
+	assert.Equal(t, "dev", saved[1])
+}
+
+func TestSwitchHistory_PickerOrdersRecentFirst(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	kubeconfigPath := filepath.Join(tmpDir, "kubeconfig")
+	require.NoError(t, os.WriteFile(kubeconfigPath, []byte(testKubeconfigTwoContexts), 0o600))
+
+	cmd, _ := newSwitchTestCmd()
+
+	var pickerItems []string
+	deps := cluster.SwitchDeps{
+		KubeconfigPath:    kubeconfigPath,
+		LoadSwitchHistory: func() []string { return []string{"staging"} },
+		PickCluster: func(_ string, items []string) (string, error) {
+			pickerItems = items
+			return items[0], nil
+		},
+	}
+
+	_, err := cluster.ExportPickCluster(cmd, deps)
+	require.NoError(t, err)
+
+	// "staging" was recently used, so it must appear first.
+	require.NotEmpty(t, pickerItems)
+	assert.Equal(t, "staging", pickerItems[0])
+}
+
+func TestSwitchHistory_RecentNotInKubeconfig(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	kubeconfigPath := filepath.Join(tmpDir, "kubeconfig")
+	require.NoError(t, os.WriteFile(kubeconfigPath, []byte(testKubeconfigTwoContexts), 0o600))
+
+	cmd, _ := newSwitchTestCmd()
+
+	// History references a cluster that no longer exists in the kubeconfig.
+	var pickerItems []string
+	deps := cluster.SwitchDeps{
+		KubeconfigPath:    kubeconfigPath,
+		LoadSwitchHistory: func() []string { return []string{"deleted-cluster"} },
+		PickCluster: func(_ string, items []string) (string, error) {
+			pickerItems = items
+			return items[0], nil
+		},
+	}
+
+	_, err := cluster.ExportPickCluster(cmd, deps)
+	require.NoError(t, err)
+
+	// "deleted-cluster" must not appear in the picker.
+	for _, item := range pickerItems {
+		assert.NotEqual(t, "deleted-cluster", item)
+	}
+}
+
 func TestDisplayListResults_WithTTL(t *testing.T) {
 	t.Parallel()
 
