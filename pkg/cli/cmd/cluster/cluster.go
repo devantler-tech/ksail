@@ -5784,7 +5784,7 @@ func saveToSwitchHistory(name string) {
 		return
 	}
 
-	_ = os.WriteFile(path, data, switchHistoryFilePerms)
+	_ = fsutil.AtomicWriteFile(path, data, switchHistoryFilePerms)
 }
 
 // switchKubeconfigFileMode is the file mode for kubeconfig files.
@@ -5916,7 +5916,7 @@ func HandleSwitchRunE(
 		save = saveToSwitchHistory
 	}
 
-	save(clusterName)
+	save(stripParenthetical(clusterName))
 
 	return nil
 }

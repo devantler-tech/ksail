@@ -5609,6 +5609,7 @@ func TestSwitchHistory_HandleSwitchRunE_UpdatesHistory(t *testing.T) {
 	require.NoError(t, cluster.HandleSwitchRunE(cmd, "staging", deps))
 
 	// "staging" was switched to last, so it should be first.
+	require.Len(t, saved, 2)
 	assert.Equal(t, "staging", saved[0])
 	assert.Equal(t, "dev", saved[1])
 }
@@ -5628,6 +5629,9 @@ func TestSwitchHistory_PickerOrdersRecentFirst(t *testing.T) {
 		LoadSwitchHistory: func() []string { return []string{"staging"} },
 		PickCluster: func(_ string, items []string) (string, error) {
 			pickerItems = items
+			if len(items) == 0 {
+				return "", errors.New("picker received empty items list")
+			}
 			return items[0], nil
 		},
 	}
@@ -5656,6 +5660,9 @@ func TestSwitchHistory_RecentNotInKubeconfig(t *testing.T) {
 		LoadSwitchHistory: func() []string { return []string{"deleted-cluster"} },
 		PickCluster: func(_ string, items []string) (string, error) {
 			pickerItems = items
+			if len(items) == 0 {
+				return "", errors.New("picker received empty items list")
+			}
 			return items[0], nil
 		},
 	}
