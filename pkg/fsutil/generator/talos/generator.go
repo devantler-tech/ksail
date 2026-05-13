@@ -104,13 +104,13 @@ machine:
 // target workers by role label cannot find them.
 //
 // This uses kubelet.extraArgs["node-labels"] instead of machine.nodeLabels because:
-// - machine.nodeLabels is applied post-registration by Talos's NodeApplyController using
-//   the kubelet kubeconfig (limited RBAC)
-// - The Kubernetes NodeRestriction admission controller blocks kubelet from modifying
-//   node-role.kubernetes.io/* labels after initial registration
-// - kubelet --node-labels sets labels AT registration time, when NodeRestriction allows them
-// - If node-role.kubernetes.io/worker is in machine.nodeLabels, the NodeApplyController
-//   fails on the entire update, blocking ALL user-defined labels (e.g. Longhorn labels)
+//   - machine.nodeLabels is applied post-registration by Talos's NodeApplyController using
+//     the kubelet kubeconfig (limited RBAC)
+//   - The Kubernetes NodeRestriction admission controller blocks kubelet from modifying
+//     node-role.kubernetes.io/* labels after initial registration
+//   - kubelet --node-labels sets labels AT registration time, when NodeRestriction allows them
+//   - If node-role.kubernetes.io/worker is in machine.nodeLabels, the NodeApplyController
+//     fails on the entire update, blocking ALL user-defined labels (e.g. Longhorn labels)
 //
 // See: https://kubernetes.io/docs/reference/access-authn-authz/admission-controllers/#noderestriction
 const WorkerRoleLabelPatchYAML = `machine:
