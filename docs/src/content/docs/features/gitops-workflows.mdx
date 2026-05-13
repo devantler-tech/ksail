@@ -38,7 +38,7 @@ See [Declarative Configuration](/configuration/declarative-configuration/) for t
 | Command                    | Description                            |
 | -------------------------- | -------------------------------------- |
 | `ksail workload push`      | Package and push manifests to registry |
-| `ksail workload reconcile` | Trigger GitOps sync and wait for completion — tracks each Flux Kustomization (with dependency ordering) and each ArgoCD Application individually; for Flux, automatically resets stuck HelmReleases (Failed/Stalled) before polling begins, and fails immediately on permanent errors (build failures, health check failures, or upstream dependency failures) rather than waiting for the full timeout |
+| `ksail workload reconcile` | Trigger GitOps sync and wait for completion |
 
 ### Automatic HelmRelease Recovery
 
@@ -88,8 +88,6 @@ Both `workload push` and `workload reconcile` automatically retry on transient f
 - **Up to 3 attempts** with exponential backoff starting at 5s (capped at 30s); with the current 3-attempt limit, retries wait 5s after the first failure and 10s after the second
 - **Retryable conditions** are determined by the shared `netretry.IsRetryable` predicate, including examples such as HTTP 429 (rate-limit), 5xx server errors, connection refused, i/o timeout, unexpected EOF, no such host, redirect limit, TCP resets, and context deadline exceeded
 - A warning is printed on each retry attempt so you can follow progress
-
-`workload push` previously only retried low-level OCI writes; command-level retries now wrap the full build-and-push cycle. `workload reconcile` previously had no retry at all.
 
 For `ksail workload reconcile`, the `--timeout` flag (if set) is a **per-attempt** bound — total runtime can reach up to `maxAttempts × timeout` plus backoff.
 
