@@ -618,8 +618,12 @@ func (f DefaultFactory) createTalosProvisioner(
 }
 
 func (f DefaultFactory) createVClusterProvisioner(
-	_ *v1alpha1.Cluster,
+	cluster *v1alpha1.Cluster,
 ) (Provisioner, any, error) {
+	if cluster.Spec.Cluster.Provider == v1alpha1.ProviderKubernetes {
+		return f.createVClusterKubernetesProvisioner(cluster)
+	}
+
 	if f.DistributionConfig.VCluster == nil {
 		return nil, nil, fmt.Errorf(
 			"vcluster config is required for VCluster distribution: %w",
@@ -637,6 +641,50 @@ func (f DefaultFactory) createVClusterProvisioner(
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create VCluster provisioner: %w", err)
 	}
+
+	return provisioner, vclusterConfig, nil
+}
+
+// createVClusterKubernetesProvisioner creates a vCluster provisioner that
+// deploys vCluster as a Helm release on a host Kubernetes cluster.
+func (f DefaultFactory) createVClusterKubernetesProvisioner(
+	cluster *v1alpha1.Cluster,
+) (Provisioner, any, error) {
+	opts := cluster.Spec.Provider.Kubernetes
+	clusterName := cluster.Metadata.Name
+
+	// Build host cluster clients
+	hostClient, restConfig, _, err := buildHostClusterClients(opts)
+	if err != nil {
+		return nil, nil, fmt.Errorf("build host cluster clients: %w", err)
+	}
+
+	// Build a minimal Kubernetes provider for port-forward support
+	k8sProvider, err := kubernetesprovider.NewProvider(hostClient, opts)
+	if err != nil {
+		return nil, nil, fmt.Errorf("create kubernetes provider: %w", err)
+	}
+
+	vclusterConfig := f.DistributionConfig.VCluster
+	var valuesPath string
+	var disableFlannel bool
+	if vclusterConfig != nil {
+		valuesPath = vclusterConfig.ValuesPath
+		disableFlannel = vclusterConfig.DisableFlannel
+	}
+
+	provisioner := vclusterprovisioner.NewKubernetesProvisioner(
+		vclusterprovisioner.KubernetesProvisionerConfig{
+			ClusterName:    clusterName,
+			HostContext:    resolveKubernetesOption(opts.Context, opts.ContextEnvVar),
+			KubeconfigPath: cluster.Spec.Cluster.Connection.Kubeconfig,
+			HostClientset:  hostClient,
+			RestConfig:     restConfig,
+			K8sProvider:    k8sProvider,
+			ValuesPath:     valuesPath,
+			DisableFlannel: disableFlannel,
+		},
+	)
 
 	return provisioner, vclusterConfig, nil
 }

@@ -456,7 +456,8 @@ func (p *kubernetesCleanupProvisioner) Delete(ctx context.Context, _ string) err
 	// Try all known namespace prefixes used by nested cluster provisioners:
 	// - "ksail-" for DinD-based Kind-on-Kubernetes
 	// - "k3k-" for k3k-based K3s-on-Kubernetes
-	for _, prefix := range []string{"ksail-", "k3k-"} {
+	// - "vcluster-" for vCluster-on-Kubernetes (Helm driver)
+	for _, prefix := range []string{"ksail-", "k3k-", "vcluster-"} {
 		ns := prefix + p.clusterName
 
 		err := p.clientset.CoreV1().Namespaces().Delete(ctx, ns, metav1.DeleteOptions{})
@@ -466,7 +467,7 @@ func (p *kubernetesCleanupProvisioner) Delete(ctx context.Context, _ string) err
 	}
 
 	// Clean up nested cluster kubeconfig entries for all naming conventions
-	for _, prefix := range []string{"kind-", "k3k-"} {
+	for _, prefix := range []string{"kind-", "k3k-", "vcluster-"} {
 		contextName := prefix + p.clusterName
 		_ = k8s.CleanupKubeconfig(p.kubeconfigPath, contextName, contextName, contextName, io.Discard)
 	}
@@ -484,7 +485,7 @@ func (p *kubernetesCleanupProvisioner) Stop(_ context.Context, _ string) error {
 
 func (p *kubernetesCleanupProvisioner) Exists(ctx context.Context, _ string) (bool, error) {
 	// Check all known namespace prefixes used by nested cluster provisioners
-	for _, prefix := range []string{"ksail-", "k3k-"} {
+	for _, prefix := range []string{"ksail-", "k3k-", "vcluster-"} {
 		ns := prefix + p.clusterName
 
 		_, err := p.clientset.CoreV1().Namespaces().Get(ctx, ns, metav1.GetOptions{})
@@ -514,7 +515,7 @@ func (p *kubernetesCleanupProvisioner) List(ctx context.Context) ([]string, erro
 	for _, ns := range nsList.Items {
 		name := ns.Name
 		// Strip known namespace prefixes to get the cluster name
-		for _, prefix := range []string{"ksail-", "k3k-"} {
+		for _, prefix := range []string{"ksail-", "k3k-", "vcluster-"} {
 			if strings.HasPrefix(name, prefix) {
 				name = strings.TrimPrefix(name, prefix)
 
