@@ -229,12 +229,7 @@ jobs:
               --body "Automated version bump for copilot plugin manifests to v${VERSION}."
           fi
 
-          # Ensure auto-merge is enabled at the repository level (idempotent).
-          if ! gh api "repos/{owner}/{repo}" --method PATCH -f allow_auto_merge=true --silent; then
-            echo "::warning::Could not enable auto-merge at the repository level (token may lack administration permissions)."
-          fi
-
-          if ! gh pr merge "${BRANCH}" --auto --squash --delete-branch; then
+          if ! gh pr merge "${BRANCH}" --auto --squash; then
             echo "::warning::Auto-merge could not be enabled; the PR must be merged manually or auto-merge must be enabled in repository settings."
           fi
 
