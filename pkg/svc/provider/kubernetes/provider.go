@@ -8,6 +8,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 )
@@ -171,7 +172,7 @@ func (p *Provider) EnsureNamespace(ctx context.Context, clusterName string) erro
 	}
 
 	_, err := p.client.CoreV1().Namespaces().Create(ctx, namespace, metav1.CreateOptions{})
-	if err != nil {
+	if err != nil && !apierrors.IsAlreadyExists(err) {
 		return fmt.Errorf("ensure namespace %s: %w", ns, err)
 	}
 

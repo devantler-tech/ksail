@@ -623,10 +623,17 @@ func (f DefaultFactory) createTalosProvisioner(
 }
 
 // createTalosKubernetesProvisioner creates a Talos provisioner that runs inside
-// a DinD pod on a host Kubernetes cluster using talosctl.
+// a DinD pod on a host Kubernetes cluster via the Talos SDK.
 func (f DefaultFactory) createTalosKubernetesProvisioner(
 	cluster *v1alpha1.Cluster,
 ) (Provisioner, any, error) {
+	if f.DistributionConfig.Talos == nil {
+		return nil, nil, fmt.Errorf(
+			"talos config is required for Talos distribution: %w",
+			ErrMissingDistributionConfig,
+		)
+	}
+
 	opts := cluster.Spec.Provider.Kubernetes
 	clusterName := cluster.Metadata.Name
 
@@ -640,8 +647,31 @@ func (f DefaultFactory) createTalosKubernetesProvisioner(
 		return nil, nil, fmt.Errorf("create Kubernetes provider: %w", err)
 	}
 
+	// Create a full inner Talos Provisioner (Docker provider type).
+	// The Docker client will be injected at Create() time after DinD is ready.
+	talosOpts := cluster.Spec.Cluster.Talos
+	//nolint:staticcheck // intentional: bridging deprecated field
+	talosOpts.ControlPlanes = cluster.Spec.Cluster.ControlPlanes
+	//nolint:staticcheck // intentional: bridging deprecated field
+	talosOpts.Workers = cluster.Spec.Cluster.Workers
+
+	innerProvisioner, err := talosprovisioner.CreateProvisioner(
+		f.DistributionConfig.Talos,
+		cluster.Spec.Cluster.Connection.Kubeconfig,
+		"",
+		v1alpha1.ProviderDocker,
+		talosOpts,
+		v1alpha1.OptionsHetzner{},
+		v1alpha1.OptionsOmni{},
+		true, // skipCNIChecks — same as normal Docker path
+	)
+	if err != nil {
+		return nil, nil, fmt.Errorf("create inner Talos provisioner: %w", err)
+	}
+
 	provisioner := talosprovisioner.NewKubernetesProvisioner(
 		talosprovisioner.KubernetesProvisionerConfig{
+			InnerProvisioner: innerProvisioner,
 			KubeconfigPath:   cluster.Spec.Cluster.Connection.Kubeconfig,
 			K8sProvider:      k8sProvider,
 			DynamicClient:    dynClient,

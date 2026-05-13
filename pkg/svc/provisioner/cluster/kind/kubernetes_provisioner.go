@@ -6,23 +6,18 @@ import (
 	"os"
 	"strings"
 
-	"github.com/devantler-tech/ksail/v7/pkg/fsutil/marshaller"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	kubernetessprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/kubernetes"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
 
-// kindVersion is the Kind binary version installed inside DinD pods.
-// Must match go.mod: sigs.k8s.io/kind.
-const kindVersion = "v0.31.0"
-
 // KubernetesProvisioner wraps a Kind provisioner with DinD lifecycle management.
-// Instead of running the Kind SDK from the host (which requires a port-forward to
-// the DinD Docker daemon), it installs the Kind binary inside the DinD pod and
-// runs `kind create cluster` via kubectl exec. This avoids SPDY tunnel reliability
-// issues that cause Docker API calls (especially docker exec) to fail.
+// It port-forwards the DinD pod's Docker API to localhost, sets DOCKER_HOST so
+// the Kind SDK transparently creates containers inside DinD, then port-forwards
+// the nested API server for host access.
 type KubernetesProvisioner struct {
 	*Provisioner
 
@@ -47,7 +42,7 @@ type KubernetesProvisionerConfig struct {
 	K8sProvider *kubernetessprovider.Provider
 	// DynamicClient is the dynamic client for Gateway API resources.
 	DynamicClient dynamic.Interface
-	// RestConfig is the REST config for exec into the DinD pod.
+	// RestConfig is the REST config for port-forwarding to the DinD pod.
 	RestConfig *rest.Config
 	// ClusterName is the nested cluster name.
 	ClusterName string
@@ -95,59 +90,47 @@ func NewKubernetesProvisioner(cfg KubernetesProvisionerConfig) (*KubernetesProvi
 }
 
 // Create creates a Kind cluster inside a DinD pod on the host Kubernetes cluster.
-// The Kind binary is installed and executed inside the DinD pod via kubectl exec,
-// avoiding SPDY port-forward reliability issues with Docker API streaming.
+// It port-forwards the DinD Docker API, sets DOCKER_HOST, then delegates to the
+// inner Kind provisioner which uses the Kind SDK (Cobra commands that shell out
+// to the docker CLI, inheriting DOCKER_HOST).
 func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 	target := setName(name, p.Provisioner.kindConfig.Name)
 
-	// Step 1: Ensure namespace exists
-	err := p.k8sProvider.EnsureNamespace(ctx, p.clusterName)
-	if err != nil {
-		return fmt.Errorf("ensure namespace: %w", err)
+	// Step 1: Ensure namespace + DinD pod
+	if err := p.setupDinD(ctx); err != nil {
+		return err
 	}
 
-	// Step 2: Create DinD pod and service
-	err = p.k8sProvider.CreateDinDPod(ctx, p.clusterName, p.distribution)
-	if err != nil {
-		return fmt.Errorf("create DinD pod: %w", err)
-	}
-
-	// Step 3: Wait for DinD to be ready (Docker daemon accepting connections)
-	err = p.k8sProvider.WaitForDinD(ctx, p.clusterName)
-	if err != nil {
-		return fmt.Errorf("wait for DinD: %w", err)
-	}
-
-	// Step 4: Install Kind binary inside the DinD pod
-	fmt.Fprintln(os.Stdout, "► installing Kind binary in DinD pod")
-
-	err = p.k8sProvider.InstallKindInDinD(ctx, p.restConfig, p.clusterName, kindVersion)
-	if err != nil {
-		return fmt.Errorf("install Kind in DinD: %w", err)
-	}
-
-	// Step 5: Marshal Kind config and create cluster inside DinD
-	m := marshaller.NewYAMLMarshaller[*v1alpha4.Cluster]()
-
-	configYAML, err := m.Marshal(p.Provisioner.kindConfig)
-	if err != nil {
-		return fmt.Errorf("marshal kind config: %w", err)
-	}
-
-	fmt.Fprintln(os.Stdout, "► creating Kind cluster inside DinD pod")
-
-	kubeconfigContent, err := p.k8sProvider.RunKindCreateInDinD(
-		ctx, p.restConfig, p.clusterName, target, configYAML,
+	// Step 2: Start exec tunnel for Docker API (2375) to localhost.
+	// The exec tunnel uses CRI exec + nc instead of SPDY port-forward,
+	// which correctly handles Docker's HTTP connection hijacking (101 Upgrade)
+	// for docker exec operations.
+	dockerPF, err := p.k8sProvider.StartExecTunnel(
+		ctx, p.restConfig, p.clusterName,
+		kubernetessprovider.DinDPodName, kubernetessprovider.DinDContainerName,
+		kubernetessprovider.DinDDockerPort,
 	)
 	if err != nil {
-		return fmt.Errorf("kind create in DinD: %w", err)
+		return fmt.Errorf("port-forward Docker API: %w", err)
+	}
+	defer dockerPF.Close()
+
+	// Step 3: Set DOCKER_HOST so the Kind SDK talks to DinD
+	fmt.Fprintln(os.Stdout, "► creating Kind cluster via SDK (DOCKER_HOST → exec tunnel → DinD)")
+
+	err = kubernetessprovider.WithRemoteDockerHost(dockerPF, func() error {
+		return p.Provisioner.Create(ctx, target)
+	})
+	if err != nil {
+		return fmt.Errorf("kind create via SDK: %w", err)
 	}
 
-	// Step 6: Start port-forward to the nested API server so kubeconfig works from the host
+	// Step 4: Port-forward the nested API server (6443) from DinD to localhost
 	fmt.Fprintln(os.Stdout, "► port-forwarding nested API server to localhost")
 
 	pf, err := p.k8sProvider.StartPortForward(
-		ctx, p.restConfig, p.clusterName, kubernetessprovider.DinDPodName, int(p.apiServerPort),
+		ctx, p.restConfig, p.clusterName,
+		kubernetessprovider.DinDPodName, int(p.apiServerPort),
 	)
 	if err != nil {
 		return fmt.Errorf("port-forward API server: %w", err)
@@ -155,34 +138,16 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 
 	p.portForward = pf
 
-	// Step 7: Rewrite kubeconfig server address from 0.0.0.0:6443 to 127.0.0.1:<local-port>
-	kubeconfigContent = strings.ReplaceAll(
-		kubeconfigContent,
-		fmt.Sprintf("https://0.0.0.0:%d", p.apiServerPort),
-		fmt.Sprintf("https://127.0.0.1:%d", pf.LocalPort),
-	)
-
-	// Step 8: Merge kubeconfig into the host kubeconfig file
-	if kubeconfigContent != "" && p.kubeconfigPath != "" {
-		err = k8s.MergeKubeconfig(p.kubeconfigPath, []byte(kubeconfigContent))
-		if err != nil {
-			return fmt.Errorf("merge kubeconfig: %w", err)
-		}
+	// Step 5: Rewrite kubeconfig server URL to use the host port-forward address
+	if err := p.rewriteKindKubeconfig(target, pf.LocalPort); err != nil {
+		return fmt.Errorf("rewrite kubeconfig: %w", err)
 	}
 
-	// Step 9: Expose the nested API server via Gateway API (if configured)
-	err = p.k8sProvider.EnsureAPIExposure(
-		ctx,
-		p.dynamicClient,
-		p.clusterName,
-		p.apiServerPort,
-		p.gatewayClassName,
+	// Step 6: Expose the nested API server via Gateway API (if configured)
+	return p.k8sProvider.EnsureAPIExposure(
+		ctx, p.dynamicClient, p.clusterName,
+		p.apiServerPort, p.gatewayClassName,
 	)
-	if err != nil {
-		return fmt.Errorf("expose API server: %w", err)
-	}
-
-	return nil
 }
 
 // Delete deletes the Kind cluster inside DinD and cleans up host cluster resources.
@@ -194,8 +159,19 @@ func (p *KubernetesProvisioner) Delete(ctx context.Context, name string) error {
 		p.portForward.Close()
 	}
 
-	// Try to delete the Kind cluster inside DinD first (best-effort)
-	_ = p.k8sProvider.RunKindDeleteInDinD(ctx, p.restConfig, p.clusterName, target)
+	// Best-effort: delete Kind cluster inside DinD via SDK
+	dockerPF, pfErr := p.k8sProvider.StartExecTunnel(
+		ctx, p.restConfig, p.clusterName,
+		kubernetessprovider.DinDPodName, kubernetessprovider.DinDContainerName,
+		kubernetessprovider.DinDDockerPort,
+	)
+	if pfErr == nil {
+		defer dockerPF.Close()
+
+		_ = kubernetessprovider.WithRemoteDockerHost(dockerPF, func() error {
+			return p.Provisioner.Delete(ctx, target)
+		})
+	}
 
 	// Clean up API exposure resources
 	if err := p.k8sProvider.DeleteAPIExposure(ctx, p.dynamicClient, p.clusterName); err != nil {
@@ -213,4 +189,48 @@ func (p *KubernetesProvisioner) Delete(ctx context.Context, name string) error {
 	}
 
 	return nil
+}
+
+// Exists checks if the Kind-on-Kubernetes cluster exists by checking for the DinD pod.
+func (p *KubernetesProvisioner) Exists(ctx context.Context, _ string) (bool, error) {
+	return p.k8sProvider.NodesExist(ctx, p.clusterName)
+}
+
+// List returns cluster names found by namespace.
+func (p *KubernetesProvisioner) List(ctx context.Context) ([]string, error) {
+	return p.k8sProvider.ListAllClusters(ctx)
+}
+
+// setupDinD creates the namespace and DinD pod, then waits for readiness.
+func (p *KubernetesProvisioner) setupDinD(ctx context.Context) error {
+	if err := p.k8sProvider.EnsureNamespace(ctx, p.clusterName); err != nil {
+		return fmt.Errorf("ensure namespace: %w", err)
+	}
+
+	if err := p.k8sProvider.CreateDinDPod(ctx, p.clusterName, p.distribution); err != nil {
+		return fmt.Errorf("create DinD pod: %w", err)
+	}
+
+	if err := p.k8sProvider.WaitForDinD(ctx, p.clusterName); err != nil {
+		return fmt.Errorf("wait for DinD: %w", err)
+	}
+
+	return nil
+}
+
+// rewriteKindKubeconfig rewrites the Kind kubeconfig server URL to use the
+// local port-forward address. Kind writes kubeconfig with context "kind-<name>"
+// and cluster entry "kind-<name>".
+func (p *KubernetesProvisioner) rewriteKindKubeconfig(clusterName string, localPort int) error {
+	config, err := clientcmd.LoadFromFile(p.kubeconfigPath)
+	if err != nil {
+		return fmt.Errorf("load kubeconfig: %w", err)
+	}
+
+	clusterKey := "kind-" + clusterName
+	if cluster, ok := config.Clusters[clusterKey]; ok {
+		cluster.Server = fmt.Sprintf("https://127.0.0.1:%d", localPort)
+	}
+
+	return clientcmd.WriteToFile(*config, p.kubeconfigPath)
 }
