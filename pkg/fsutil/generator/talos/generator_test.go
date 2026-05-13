@@ -344,8 +344,8 @@ func TestGenerator_Generate_WorkerRoleLabel(t *testing.T) {
 	content, err := os.ReadFile(patchPath) //nolint:gosec // Test file path is safe
 	require.NoError(t, err)
 	assert.Contains(t, string(content), "machine:")
-	assert.Contains(t, string(content), "nodeLabels:")
-	assert.Contains(t, string(content), `node-role.kubernetes.io/worker: ""`)
+	assert.Contains(t, string(content), "node-labels:")
+	assert.Contains(t, string(content), `node-role.kubernetes.io/worker=`)
 
 	// Verify .gitkeep was NOT created in workers/ since we have a patch there
 	gitkeepPath := filepath.Join(workersDir, ".gitkeep")
