@@ -140,16 +140,22 @@ func (v Version) Equal(other Version) bool {
 // String returns the version as "vMAJOR.MINOR.PATCH" with pre-release and
 // suffix if present (e.g., "v1.13.0-beta.1", "v1.35.3-k3s1").
 func (v Version) String() string {
-	base := fmt.Sprintf("v%d.%d.%d", v.Major, v.Minor, v.Patch)
+	var b strings.Builder
+	b.WriteByte('v')
+	b.WriteString(strconv.Itoa(v.Major))
+	b.WriteByte('.')
+	b.WriteString(strconv.Itoa(v.Minor))
+	b.WriteByte('.')
+	b.WriteString(strconv.Itoa(v.Patch))
 	if v.PreRelease != "" {
-		base += "-" + v.PreRelease
+		b.WriteByte('-')
+		b.WriteString(v.PreRelease)
 	}
-
 	if v.Suffix != "" {
-		base += "-" + v.Suffix
+		b.WriteByte('-')
+		b.WriteString(v.Suffix)
 	}
-
-	return base
+	return b.String()
 }
 
 // FilterStable returns only stable versions from the input.
