@@ -21,7 +21,10 @@ The kubeconfig is resolved in the following priority order:
   3. Defaults to ~/.kube/config
 
 When called without arguments, an interactive picker is shown
-to select from available clusters.
+to select from available clusters. Recently-switched clusters
+appear at the top of the list (up to the last 5), followed by
+the remaining clusters in alphabetical order. The history is
+persisted to ~/.ksail/switch-history.json.
 
 Examples:
   # Switch to a Vanilla (Kind) cluster named "dev"
@@ -30,7 +33,7 @@ Examples:
   # Switch to a cluster named "staging"
   ksail cluster switch staging
 
-  # Select a cluster interactively
+  # Select a cluster interactively (recent clusters shown first)
   ksail cluster switch
 
 Usage:

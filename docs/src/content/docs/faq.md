@@ -76,9 +76,11 @@ For usage patterns and tips, see [Ephemeral Clusters](/features/ephemeral-cluste
 Use `ksail cluster switch` for the native experience. Run it without arguments for an interactive picker, or pass a cluster name directly:
 
 ```bash
-ksail cluster switch          # interactive picker (requires a TTY)
+ksail cluster switch          # interactive picker — recent clusters shown first (requires a TTY)
 ksail cluster switch dev      # switch directly to "dev"
 ```
+
+The interactive picker orders recently-switched clusters (up to the last 5) at the top, making it fast to cycle between a small set of active clusters. History is saved to `~/.ksail/switch-history.json`.
 
 You can also use `kubectl config use-context <context-name>` directly, or list all contexts with `kubectl config get-contexts`.
 
