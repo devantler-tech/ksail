@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	eksctlclient "github.com/devantler-tech/ksail/v7/pkg/client/eksctl"
@@ -318,6 +319,55 @@ apiServer:
 	}
 }
 
+// createK3dKubernetesProvisioner creates a K3s provisioner that runs inside
+// a host Kubernetes cluster using the k3k operator.
+func (f DefaultFactory) createK3dKubernetesProvisioner(
+	cluster *v1alpha1.Cluster,
+) (Provisioner, any, error) {
+	opts := cluster.Spec.Provider.Kubernetes
+	clusterName := cluster.Metadata.Name
+
+	// Build host cluster clients
+	hostClient, restConfig, _, err := buildHostClusterClients(opts)
+	if err != nil {
+		return nil, nil, fmt.Errorf("build host cluster clients: %w", err)
+	}
+
+	// Create the Kubernetes provider (needed for port-forward)
+	k8sProvider, err := kubernetesprovider.NewProvider(hostClient, opts)
+	if err != nil {
+		return nil, nil, fmt.Errorf("create Kubernetes provider: %w", err)
+	}
+
+	controlPlanes := cluster.Spec.Cluster.ControlPlanes
+	if controlPlanes <= 0 {
+		controlPlanes = 1
+	}
+
+	workers := cluster.Spec.Cluster.Workers
+
+	provisioner := k3dprovisioner.NewK3kProvisioner(
+		k3dprovisioner.K3kProvisionerConfig{
+			HostClientset:  hostClient,
+			RestConfig:     restConfig,
+			K8sProvider:    k8sProvider,
+			ClusterName:    clusterName,
+			KubeconfigPath: cluster.Spec.Cluster.Connection.Kubeconfig,
+			HostContext:    resolveKubernetesOption(opts.Context, opts.ContextEnvVar),
+			ControlPlanes:  controlPlanes,
+			Workers:        workers,
+			PodCIDR:        opts.PodCIDR,
+			ServiceCIDR:    opts.ServiceCIDR,
+		},
+	)
+
+	if f.ComponentDetector != nil {
+		provisioner.WithComponentDetector(f.ComponentDetector)
+	}
+
+	return provisioner, nil, nil
+}
+
 // buildHostClusterClients builds Kubernetes clients for the host cluster
 // from the Kubernetes provider options.
 func buildHostClusterClients(
@@ -328,6 +378,13 @@ func buildHostClusterClients(
 	// Fall back to default kubeconfig path if not set
 	if kubeconfig == "" {
 		kubeconfig = k8s.DefaultKubeconfigPath()
+	}
+
+	// Expand ~ to the user's home directory
+	if strings.HasPrefix(kubeconfig, "~/") {
+		if homeDir, err := os.UserHomeDir(); err == nil {
+			kubeconfig = filepath.Join(homeDir, kubeconfig[2:])
+		}
 	}
 
 	context := resolveKubernetesOption(opts.Context, opts.ContextEnvVar)
@@ -399,6 +456,11 @@ func applyKindNodeCounts(kindConfig *v1alpha4.Cluster, controlPlanes, workers in
 func (f DefaultFactory) createK3dProvisioner(
 	cluster *v1alpha1.Cluster,
 ) (Provisioner, any, error) {
+	// Kubernetes provider: use k3k operator instead of Docker-based K3d
+	if cluster.Spec.Cluster.Provider == v1alpha1.ProviderKubernetes {
+		return f.createK3dKubernetesProvisioner(cluster)
+	}
+
 	if f.DistributionConfig.K3d == nil {
 		return nil, nil, fmt.Errorf(
 			"k3d config is required for K3d distribution: %w",

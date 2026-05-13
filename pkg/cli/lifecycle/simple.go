@@ -453,16 +453,23 @@ func (p *kubernetesCleanupProvisioner) Create(_ context.Context, _ string) error
 }
 
 func (p *kubernetesCleanupProvisioner) Delete(ctx context.Context, _ string) error {
-	ns := "ksail-" + p.clusterName
+	// Try all known namespace prefixes used by nested cluster provisioners:
+	// - "ksail-" for DinD-based Kind-on-Kubernetes
+	// - "k3k-" for k3k-based K3s-on-Kubernetes
+	for _, prefix := range []string{"ksail-", "k3k-"} {
+		ns := prefix + p.clusterName
 
-	err := p.clientset.CoreV1().Namespaces().Delete(ctx, ns, metav1.DeleteOptions{})
-	if err != nil && !apierrors.IsNotFound(err) {
-		return fmt.Errorf("delete namespace %s: %w", ns, err)
+		err := p.clientset.CoreV1().Namespaces().Delete(ctx, ns, metav1.DeleteOptions{})
+		if err != nil && !apierrors.IsNotFound(err) {
+			return fmt.Errorf("delete namespace %s: %w", ns, err)
+		}
 	}
 
-	// Clean up nested cluster kubeconfig entries (kind-<name> convention)
-	kindContext := "kind-" + p.clusterName
-	_ = k8s.CleanupKubeconfig(p.kubeconfigPath, kindContext, kindContext, kindContext, io.Discard)
+	// Clean up nested cluster kubeconfig entries for all naming conventions
+	for _, prefix := range []string{"kind-", "k3k-"} {
+		contextName := prefix + p.clusterName
+		_ = k8s.CleanupKubeconfig(p.kubeconfigPath, contextName, contextName, contextName, io.Discard)
+	}
 
 	return nil
 }
@@ -476,18 +483,23 @@ func (p *kubernetesCleanupProvisioner) Stop(_ context.Context, _ string) error {
 }
 
 func (p *kubernetesCleanupProvisioner) Exists(ctx context.Context, _ string) (bool, error) {
-	ns := "ksail-" + p.clusterName
+	// Check all known namespace prefixes used by nested cluster provisioners
+	for _, prefix := range []string{"ksail-", "k3k-"} {
+		ns := prefix + p.clusterName
 
-	_, err := p.clientset.CoreV1().Namespaces().Get(ctx, ns, metav1.GetOptions{})
-	if apierrors.IsNotFound(err) {
-		return false, nil
+		_, err := p.clientset.CoreV1().Namespaces().Get(ctx, ns, metav1.GetOptions{})
+		if apierrors.IsNotFound(err) {
+			continue
+		}
+
+		if err != nil {
+			return false, fmt.Errorf("check namespace %s: %w", ns, err)
+		}
+
+		return true, nil
 	}
 
-	if err != nil {
-		return false, fmt.Errorf("check namespace %s: %w", ns, err)
-	}
-
-	return true, nil
+	return false, nil
 }
 
 func (p *kubernetesCleanupProvisioner) List(ctx context.Context) ([]string, error) {
@@ -500,7 +512,17 @@ func (p *kubernetesCleanupProvisioner) List(ctx context.Context) ([]string, erro
 
 	var names []string
 	for _, ns := range nsList.Items {
-		names = append(names, strings.TrimPrefix(ns.Name, "ksail-"))
+		name := ns.Name
+		// Strip known namespace prefixes to get the cluster name
+		for _, prefix := range []string{"ksail-", "k3k-"} {
+			if strings.HasPrefix(name, prefix) {
+				name = strings.TrimPrefix(name, prefix)
+
+				break
+			}
+		}
+
+		names = append(names, name)
 	}
 
 	return names, nil

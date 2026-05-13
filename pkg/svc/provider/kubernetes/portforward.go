@@ -124,6 +124,89 @@ func (p *Provider) StartPortForward(
 	}, nil
 }
 
+// StartPortForwardInNamespace opens a port-forward from a random local port to the specified
+// pod port in an arbitrary namespace. Use this for k3k or other operators that use custom namespaces.
+func (p *Provider) StartPortForwardInNamespace(
+	ctx context.Context,
+	restConfig *rest.Config,
+	namespace string,
+	podName string,
+	podPort int,
+) (*PortForwardSession, error) {
+	// Build the URL for the pod's portforward subresource
+	apiURL, err := url.Parse(restConfig.Host)
+	if err != nil {
+		return nil, fmt.Errorf("parse API server URL: %w", err)
+	}
+
+	apiURL.Path = fmt.Sprintf(
+		"/api/v1/namespaces/%s/pods/%s/portforward",
+		namespace, podName,
+	)
+
+	transport, upgrader, err := spdy.RoundTripperFor(restConfig)
+	if err != nil {
+		return nil, fmt.Errorf("create SPDY transport: %w", err)
+	}
+
+	dialer := spdy.NewDialer(
+		upgrader,
+		&http.Client{Transport: transport},
+		http.MethodPost,
+		apiURL,
+	)
+
+	// Allocate a random local port
+	localPort, err := getAvailablePort()
+	if err != nil {
+		return nil, fmt.Errorf("allocate local port: %w", err)
+	}
+
+	stopCh := make(chan struct{})
+	readyCh := make(chan struct{})
+
+	portSpec := fmt.Sprintf("%d:%d", localPort, podPort)
+
+	fw, err := portforward.New(
+		dialer,
+		[]string{portSpec},
+		stopCh,
+		readyCh,
+		io.Discard,
+		io.Discard,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create port-forwarder: %w", err)
+	}
+
+	errCh := make(chan error, 1)
+
+	go func() {
+		errCh <- fw.ForwardPorts()
+	}()
+
+	select {
+	case <-readyCh:
+	case err := <-errCh:
+		return nil, fmt.Errorf("port-forward failed: %w", err)
+	case <-ctx.Done():
+		close(stopCh)
+
+		return nil, fmt.Errorf("port-forward timed out: %w", ctx.Err())
+	}
+
+	ports, err := fw.GetPorts()
+	if err == nil && len(ports) > 0 {
+		localPort = int(ports[0].Local)
+	}
+
+	return &PortForwardSession{
+		LocalPort: localPort,
+		stopCh:    stopCh,
+		readyCh:   readyCh,
+	}, nil
+}
+
 // getAvailablePort finds an available TCP port on localhost.
 func getAvailablePort() (int, error) {
 	listener, err := net.Listen("tcp", "127.0.0.1:0")

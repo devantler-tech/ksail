@@ -1,0 +1,519 @@
+package k3dprovisioner
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"strings"
+	"time"
+
+	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
+	"github.com/devantler-tech/ksail/v7/pkg/k8s"
+	kubernetessprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/kubernetes"
+	k3kv1beta1 "github.com/rancher/k3k/pkg/apis/k3k.io/v1beta1"
+	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/serializer"
+	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
+)
+
+const (
+	// k3kChartRepo is the Helm chart repository URL for k3k.
+	k3kChartRepo = "https://rancher.github.io/k3k"
+	// k3kChartName is the Helm chart name for k3k.
+	k3kChartName = "k3k/k3k"
+	// k3kReleaseName is the Helm release name for the k3k operator.
+	k3kReleaseName = "k3k"
+	// k3kSystemNamespace is the namespace where the k3k operator is installed.
+	k3kSystemNamespace = "k3k-system"
+	// k3kNamespacePrefix is the namespace prefix for k3k clusters.
+	k3kNamespacePrefix = "k3k-"
+	// k3kKubeconfigSecretSuffix is appended to the cluster name for the kubeconfig Secret.
+	k3kKubeconfigSecretSuffix = "kubeconfig"
+	// k3kKubeconfigKey is the key in the kubeconfig Secret.
+	k3kKubeconfigKey = "kubeconfig.yaml"
+	// k3kWaitTimeout is the maximum time to wait for the k3k cluster to become ready.
+	k3kWaitTimeout = 10 * time.Minute
+	// k3kWaitInterval is the polling interval when waiting for the cluster.
+	k3kWaitInterval = 5 * time.Second
+	// k3kHelmTimeout is the timeout for Helm operations.
+	k3kHelmTimeout = 5 * time.Minute
+	// k3kAPIServerPort is the API server port used by k3k clusters.
+	k3kAPIServerPort = 6443
+)
+
+// K3kProvisioner creates and manages K3s clusters on a host Kubernetes cluster
+// using the rancher/k3k operator. Unlike the DinD approach used for Kind, k3k
+// provisions K3s server/agent pods natively as Kubernetes workloads.
+type K3kProvisioner struct {
+	// Embed the standard K3d provisioner for component detection and interface compliance.
+	*Provisioner
+
+	hostClientset  kubernetes.Interface
+	restConfig     *rest.Config
+	k8sProvider    *kubernetessprovider.Provider
+	clusterName    string
+	kubeconfigPath string
+	hostContext    string
+	portForward    *kubernetessprovider.PortForwardSession
+
+	// k3k-specific configuration
+	controlPlanes int32
+	workers       int32
+	podCIDR       string
+	serviceCIDR   string
+}
+
+// K3kProvisionerConfig holds configuration for creating a K3kProvisioner.
+type K3kProvisionerConfig struct {
+	// K3dProvisioner is the inner K3d provisioner (used for component detection).
+	K3dProvisioner *Provisioner
+	// HostClientset is the Kubernetes clientset for the host cluster.
+	HostClientset kubernetes.Interface
+	// RestConfig is the REST config for the host cluster.
+	RestConfig *rest.Config
+	// K8sProvider is the Kubernetes infrastructure provider.
+	K8sProvider *kubernetessprovider.Provider
+	// ClusterName is the nested cluster name.
+	ClusterName string
+	// KubeconfigPath is the path to store the nested cluster kubeconfig.
+	KubeconfigPath string
+	// ControlPlanes is the number of K3s server pods.
+	ControlPlanes int32
+	// Workers is the number of K3s agent pods (virtual mode only).
+	Workers int32
+	// PodCIDR is the pod CIDR for the nested cluster.
+	PodCIDR string
+	// ServiceCIDR is the service CIDR for the nested cluster.
+	ServiceCIDR string
+	// HostContext is the kubeconfig context to use for the host cluster.
+	HostContext string
+}
+
+// NewK3kProvisioner creates a K3kProvisioner for managing K3s clusters via k3k.
+func NewK3kProvisioner(cfg K3kProvisionerConfig) *K3kProvisioner {
+	kubeconfigPath := cfg.KubeconfigPath
+	if kubeconfigPath == "" {
+		kubeconfigPath = k8s.DefaultKubeconfigPath()
+	} else if strings.HasPrefix(kubeconfigPath, "~/") {
+		homeDir, _ := os.UserHomeDir()
+		if homeDir != "" {
+			kubeconfigPath = homeDir + kubeconfigPath[1:]
+		}
+	}
+
+	controlPlanes := cfg.ControlPlanes
+	if controlPlanes <= 0 {
+		controlPlanes = 1
+	}
+
+	workers := cfg.Workers
+	if workers < 0 {
+		workers = 0
+	}
+
+	return &K3kProvisioner{
+		Provisioner:    cfg.K3dProvisioner,
+		hostClientset:  cfg.HostClientset,
+		restConfig:     cfg.RestConfig,
+		k8sProvider:    cfg.K8sProvider,
+		clusterName:    cfg.ClusterName,
+		kubeconfigPath: kubeconfigPath,
+		hostContext:    cfg.HostContext,
+		controlPlanes:  controlPlanes,
+		workers:        workers,
+		podCIDR:        cfg.PodCIDR,
+		serviceCIDR:    cfg.ServiceCIDR,
+	}
+}
+
+// Create provisions a K3s cluster using the k3k operator on the host Kubernetes cluster.
+func (p *K3kProvisioner) Create(ctx context.Context, name string) error {
+	clusterName := p.clusterName
+	if clusterName == "" {
+		clusterName = name
+	}
+
+	namespace := k3kNamespacePrefix + clusterName
+
+	// Step 1: Ensure the k3k operator is installed
+	fmt.Fprintln(os.Stdout, "► ensuring k3k operator is installed")
+
+	if err := p.ensureK3kOperator(ctx); err != nil {
+		return fmt.Errorf("ensure k3k operator: %w", err)
+	}
+
+	// Step 2: Create the namespace for this cluster
+	fmt.Fprintf(os.Stdout, "► creating namespace %s\n", namespace)
+
+	if err := p.ensureNamespace(ctx, namespace); err != nil {
+		return fmt.Errorf("ensure namespace: %w", err)
+	}
+
+	// Step 3: Create the k3k Cluster CR
+	fmt.Fprintf(os.Stdout, "► creating k3k Cluster CR for %s\n", clusterName)
+
+	if err := p.createClusterCR(ctx, clusterName, namespace); err != nil {
+		return fmt.Errorf("create k3k cluster CR: %w", err)
+	}
+
+	// Step 4: Wait for the cluster to become ready
+	fmt.Fprintln(os.Stdout, "► waiting for k3k cluster to become ready")
+
+	if err := p.waitForClusterReady(ctx, clusterName, namespace); err != nil {
+		return fmt.Errorf("wait for k3k cluster ready: %w", err)
+	}
+
+	// Step 5: Wait for the kubeconfig Secret to appear
+	fmt.Fprintln(os.Stdout, "► waiting for kubeconfig secret")
+
+	kubeconfigData, err := p.waitForKubeconfigSecret(ctx, clusterName, namespace)
+	if err != nil {
+		return fmt.Errorf("get kubeconfig secret: %w", err)
+	}
+
+	// Step 6: Port-forward the API server to localhost
+	fmt.Fprintln(os.Stdout, "► port-forwarding nested K3s API server to localhost")
+
+	serverPodName := fmt.Sprintf("k3k-%s-server-0", clusterName)
+
+	pf, err := p.k8sProvider.StartPortForwardInNamespace(
+		ctx, p.restConfig, namespace, serverPodName, k3kAPIServerPort,
+	)
+	if err != nil {
+		return fmt.Errorf("port-forward K3s API server: %w", err)
+	}
+
+	p.portForward = pf
+
+	// Step 7: Rewrite kubeconfig to use localhost port-forward address
+	kubeconfigStr := string(kubeconfigData)
+	// k3k kubeconfig uses the ClusterIP service address — replace with localhost
+	kubeconfigStr = rewriteK3kKubeconfig(kubeconfigStr, pf.LocalPort, clusterName)
+
+	// Step 8: Merge kubeconfig into the host kubeconfig file
+	if p.kubeconfigPath != "" {
+		if err := k8s.MergeKubeconfig(p.kubeconfigPath, []byte(kubeconfigStr)); err != nil {
+			return fmt.Errorf("merge kubeconfig: %w", err)
+		}
+	}
+
+	fmt.Fprintf(os.Stdout, "✓ k3k cluster %q ready (context: k3k-%s)\n", clusterName, clusterName)
+
+	return nil
+}
+
+// Delete removes the k3k cluster by deleting the Cluster CR and namespace.
+func (p *K3kProvisioner) Delete(ctx context.Context, name string) error {
+	clusterName := p.clusterName
+	if clusterName == "" {
+		clusterName = name
+	}
+
+	namespace := k3kNamespacePrefix + clusterName
+
+	// Close port-forward if active
+	if p.portForward != nil {
+		p.portForward.Close()
+		p.portForward = nil
+	}
+
+	// Delete the namespace (cascading delete removes Cluster CR, pods, services, etc.)
+	fmt.Fprintf(os.Stdout, "► deleting namespace %s\n", namespace)
+
+	err := p.hostClientset.CoreV1().Namespaces().Delete(ctx, namespace, metav1.DeleteOptions{})
+	if err != nil && !apierrors.IsNotFound(err) {
+		return fmt.Errorf("delete namespace %s: %w", namespace, err)
+	}
+
+	// Clean up kubeconfig entries
+	contextName := "k3k-" + clusterName
+	_ = k8s.CleanupKubeconfig(p.kubeconfigPath, contextName, contextName, contextName, os.Stdout)
+
+	fmt.Fprintf(os.Stdout, "✓ k3k cluster %q deleted\n", clusterName)
+
+	return nil
+}
+
+// Exists checks whether the k3k cluster namespace exists.
+func (p *K3kProvisioner) Exists(ctx context.Context, name string) (bool, error) {
+	clusterName := p.clusterName
+	if clusterName == "" {
+		clusterName = name
+	}
+
+	namespace := k3kNamespacePrefix + clusterName
+
+	_, err := p.hostClientset.CoreV1().Namespaces().Get(ctx, namespace, metav1.GetOptions{})
+	if apierrors.IsNotFound(err) {
+		return false, nil
+	}
+
+	if err != nil {
+		return false, fmt.Errorf("check namespace %s: %w", namespace, err)
+	}
+
+	return true, nil
+}
+
+// ensureK3kOperator installs the k3k Helm chart if it isn't already present.
+func (p *K3kProvisioner) ensureK3kOperator(ctx context.Context) error {
+	helmClient, err := helm.NewClient(p.kubeconfigPath, p.hostContext)
+	if err != nil {
+		return fmt.Errorf("create helm client: %w", err)
+	}
+
+	// Check if k3k is already installed
+	exists, err := helmClient.ReleaseExists(ctx, k3kReleaseName, k3kSystemNamespace)
+	if err != nil {
+		return fmt.Errorf("check k3k release: %w", err)
+	}
+
+	if exists {
+		fmt.Fprintln(os.Stdout, "  k3k operator already installed")
+		return nil
+	}
+
+	// Install k3k via Helm
+	fmt.Fprintln(os.Stdout, "  installing k3k operator via Helm")
+
+	repoConfig := helm.RepoConfig{
+		Name:     "k3k",
+		RepoName: "k3k",
+		URL:      k3kChartRepo,
+	}
+
+	chartConfig := helm.ChartConfig{
+		ReleaseName:     k3kReleaseName,
+		ChartName:       k3kChartName,
+		Namespace:       k3kSystemNamespace,
+		CreateNamespace: true,
+		RepoURL:         k3kChartRepo,
+	}
+
+	if err := helm.InstallOrUpgradeChart(ctx, helmClient, repoConfig, chartConfig, k3kHelmTimeout); err != nil {
+		return fmt.Errorf("install k3k chart: %w", err)
+	}
+
+	fmt.Fprintln(os.Stdout, "  k3k operator installed successfully")
+
+	return nil
+}
+
+// ensureNamespace creates the namespace if it doesn't exist, with ksail labels.
+func (p *K3kProvisioner) ensureNamespace(ctx context.Context, namespace string) error {
+	ns := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: namespace,
+			Labels: map[string]string{
+				"ksail.io/managed-by": "ksail",
+				"ksail.io/cluster":    p.clusterName,
+			},
+		},
+	}
+
+	_, err := p.hostClientset.CoreV1().Namespaces().Create(ctx, ns, metav1.CreateOptions{})
+	if apierrors.IsAlreadyExists(err) {
+		return nil
+	}
+
+	return err
+}
+
+// createClusterCR creates the k3k Cluster custom resource.
+func (p *K3kProvisioner) createClusterCR(ctx context.Context, clusterName, namespace string) error {
+	cluster := &k3kv1beta1.Cluster{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "k3k.io/v1beta1",
+			Kind:       "Cluster",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      clusterName,
+			Namespace: namespace,
+			Labels: map[string]string{
+				"ksail.io/managed-by": "ksail",
+				"ksail.io/cluster":    clusterName,
+			},
+		},
+		Spec: k3kv1beta1.ClusterSpec{
+			Servers: &p.controlPlanes,
+			Agents:  &p.workers,
+			Mode:    k3kv1beta1.VirtualClusterMode,
+			Persistence: k3kv1beta1.PersistenceConfig{
+				Type: k3kv1beta1.EphemeralPersistenceMode,
+			},
+			TLSSANs: []string{
+				"127.0.0.1",
+				"localhost",
+			},
+			Expose: &k3kv1beta1.ExposeConfig{
+				NodePort: &k3kv1beta1.NodePortConfig{},
+			},
+		},
+	}
+
+	if p.podCIDR != "" {
+		cluster.Spec.ClusterCIDR = p.podCIDR
+	}
+
+	if p.serviceCIDR != "" {
+		cluster.Spec.ServiceCIDR = p.serviceCIDR
+	}
+
+	restClient, paramCodec, err := p.buildK3kRESTClient()
+	if err != nil {
+		return err
+	}
+
+	result := &k3kv1beta1.Cluster{}
+	err = restClient.Post().
+		AbsPath("/apis/k3k.io/v1beta1").
+		Namespace(namespace).
+		Resource("clusters").
+		VersionedParams(&metav1.CreateOptions{}, paramCodec).
+		Body(cluster).
+		Do(ctx).
+		Into(result)
+
+	if apierrors.IsAlreadyExists(err) {
+		fmt.Fprintln(os.Stdout, "  k3k Cluster CR already exists")
+		return nil
+	}
+
+	if err != nil {
+		return fmt.Errorf("create cluster CR: %w", err)
+	}
+
+	return nil
+}
+
+// waitForClusterReady polls the k3k Cluster status until it reports Ready.
+func (p *K3kProvisioner) waitForClusterReady(ctx context.Context, clusterName, namespace string) error {
+	restClient, _, err := p.buildK3kRESTClient()
+	if err != nil {
+		return err
+	}
+
+	return wait.PollUntilContextTimeout(ctx, k3kWaitInterval, k3kWaitTimeout, true, func(ctx context.Context) (bool, error) {
+		cluster := &k3kv1beta1.Cluster{}
+		err := restClient.Get().
+			AbsPath("/apis/k3k.io/v1beta1").
+			Namespace(namespace).
+			Resource("clusters").
+			Name(clusterName).
+			Do(ctx).
+			Into(cluster)
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				return false, nil
+			}
+			return false, fmt.Errorf("get cluster status: %w", err)
+		}
+
+		phase := cluster.Status.Phase
+		switch phase {
+		case k3kv1beta1.ClusterReady:
+			return true, nil
+		case k3kv1beta1.ClusterFailed:
+			return false, fmt.Errorf("k3k cluster entered Failed phase")
+		default:
+			fmt.Fprintf(os.Stdout, "  cluster phase: %s\n", phase)
+			return false, nil
+		}
+	})
+}
+
+// buildK3kRESTClient creates a REST client configured for k3k CRD operations.
+func (p *K3kProvisioner) buildK3kRESTClient() (*rest.RESTClient, runtime.ParameterCodec, error) {
+	scheme := runtime.NewScheme()
+	if err := k3kv1beta1.AddToScheme(scheme); err != nil {
+		return nil, nil, fmt.Errorf("add k3k scheme: %w", err)
+	}
+
+	codecs := serializer.NewCodecFactory(scheme)
+	paramCodec := runtime.NewParameterCodec(scheme)
+
+	cfg := rest.CopyConfig(p.restConfig)
+	cfg.ContentConfig = rest.ContentConfig{
+		GroupVersion:         &k3kv1beta1.SchemeGroupVersion,
+		NegotiatedSerializer: codecs,
+	}
+	cfg.APIPath = "/apis"
+
+	restClient, err := rest.UnversionedRESTClientFor(cfg)
+	if err != nil {
+		return nil, nil, fmt.Errorf("create k3k REST client: %w", err)
+	}
+
+	return restClient, paramCodec, nil
+}
+
+// waitForKubeconfigSecret polls for the kubeconfig Secret created by the k3k operator.
+func (p *K3kProvisioner) waitForKubeconfigSecret(ctx context.Context, clusterName, namespace string) ([]byte, error) {
+	// k3k names the kubeconfig secret as k3k-<clusterName>-kubeconfig
+	secretName := fmt.Sprintf("k3k-%s-%s", clusterName, k3kKubeconfigSecretSuffix)
+
+	var kubeconfigData []byte
+
+	err := wait.PollUntilContextTimeout(ctx, k3kWaitInterval, k3kWaitTimeout, true, func(ctx context.Context) (bool, error) {
+		secret, err := p.hostClientset.CoreV1().Secrets(namespace).Get(ctx, secretName, metav1.GetOptions{})
+		if apierrors.IsNotFound(err) {
+			return false, nil
+		}
+
+		if err != nil {
+			return false, fmt.Errorf("get kubeconfig secret: %w", err)
+		}
+
+		data, ok := secret.Data[k3kKubeconfigKey]
+		if !ok || len(data) == 0 {
+			return false, nil
+		}
+
+		kubeconfigData = data
+
+		return true, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return kubeconfigData, nil
+}
+
+// rewriteK3kKubeconfig rewrites the k3k-generated kubeconfig to use a localhost
+// port-forward address and renames context/cluster/user entries for uniqueness.
+func rewriteK3kKubeconfig(kubeconfig string, localPort int, clusterName string) string {
+	// Replace the server address with the port-forward address.
+	// k3k kubeconfig uses the ClusterIP or NodePort address of the service.
+	// We need to rewrite it to use 127.0.0.1 with the port-forwarded port.
+	lines := strings.Split(kubeconfig, "\n")
+
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "server:") {
+			indent := line[:len(line)-len(strings.TrimLeft(line, " \t"))]
+			lines[i] = fmt.Sprintf("%sserver: https://127.0.0.1:%d", indent, localPort)
+		}
+	}
+
+	result := strings.Join(lines, "\n")
+
+	// Rename context, cluster, and user from "default" to "k3k-<name>" for uniqueness
+	contextName := "k3k-" + clusterName
+	result = strings.ReplaceAll(result, "name: default", "name: "+contextName)
+	result = strings.ReplaceAll(result, "cluster: default", "cluster: "+contextName)
+	result = strings.ReplaceAll(result, "user: default", "user: "+contextName)
+	result = strings.ReplaceAll(result, "current-context: default", "current-context: "+contextName)
+
+	return result
+}
+
+// K3kNamespaceForCluster returns the k3k namespace for a given cluster name.
+func K3kNamespaceForCluster(clusterName string) string {
+	return k3kNamespacePrefix + clusterName
+}
