@@ -200,12 +200,32 @@ func (m *ConfigManager) addKubeletCertRotationPatches(
 // when the patch file does not exist on disk. This ensures existing
 // scaffolded projects (created before this patch was introduced) still
 // get the node-role.kubernetes.io/worker label on worker nodes.
+//
+// It also migrates existing patch files that use the legacy machine.nodeLabels
+// format to the kubelet.extraArgs["node-labels"] format. The old format causes
+// the Kubernetes NodeRestriction admission controller to block ALL label updates
+// from Talos's NodeApplyController on worker nodes.
 func (m *ConfigManager) addWorkerRoleLabelPatch(
 	talosManager *talosconfigmanager.ConfigManager,
 	patchesDir string,
 ) {
+	patchFile := filepath.Join(patchesDir, "workers", "worker-role-label.yaml")
+
 	if !workerRoleLabelPatchFileExists(patchesDir) {
 		talosManager.WithAdditionalPatches([]talosconfigmanager.Patch{workerRoleLabelPatch()})
+
+		return
+	}
+
+	// Migrate stale patch files that use machine.nodeLabels (broken on Hetzner
+	// due to NodeRestriction blocking kubelet from setting node-role.kubernetes.io/*).
+	content, err := os.ReadFile(patchFile)
+	if err != nil {
+		return
+	}
+
+	if strings.Contains(string(content), "nodeLabels:") {
+		_ = os.WriteFile(patchFile, []byte(talosgenerator.WorkerRoleLabelPatchYAML), 0o644)
 	}
 }
 
