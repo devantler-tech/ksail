@@ -1,14 +1,13 @@
 # Repo Assist Memory
 
 ## Last Run
-2026-05-12 01:07 UTC — Run #25706827036
+2026-05-13 13:03 UTC — Run #25800679562
 
 ## Monthly Activity Issue
 - May 2026: #4501 (open, updated this run)
 
 ## Open Repo Assist PRs
-- PR [new this run]: refactor(hetzner): consolidate buildSecretData into shared BuildNetworkSecretData
-- PR [2026-05-11]: test(oidc): add unit tests for oidc cmd package
+- PR [new this run]: feat(switch): persist recently-switched clusters and order picker by recency
 
 ## Issue Comments Made (with run)
 - #4674 (Hetzner CCM taint race): 2026-05-12 run #25706827036
@@ -28,13 +27,12 @@
 - #4627: [Parent] Cloud Provider Expansion (groups #3983, #4328, #4510) — all 3 now linked
 - #4610: [ci] fix K3s+Cilium full-stack system test timing race — CI PR created (blocked by workflows perm, issue #4681)
 - #4602: [feature] OIDC federation and multi-cluster auth support
-- #4601: [chore] communicate GPL-3.0-only license change — CLOSED/COMPLETED
 - #4521: [feature] local-remote service mirroring
 - #4511: [feature] native ephemeral CI mode
 - #4510: [chore] add GKE and AKS cloud providers
 - #4474: ksail cluster drift command (labelled next)
 - #4473: vCluster v0.34 compatibility (labelled next)
-- #4465: cluster switch fuzzy search (labelled next)
+- #4465: cluster switch fuzzy search (labelled next) — recent-clusters criterion partially implemented
 - #4423: workload watch build hooks (labelled next)
 - #4422: cluster diagnose health scoring (labelled next)
 - #4375: cluster graph topology
@@ -44,8 +42,8 @@
 - #4627 parent: #3983, #4328, #4510 (all linked, verified 2026-05-07)
 
 ## Code Quality Domain Alternation
-- Last domain: refactor (Task 5, 2026-05-12)
-- Next for Task 5: performance
+- Last domain: performance (Task 8/5, 2026-05-13)
+- Next for Task 5: test coverage
 
 ## Backlog Cursor
 - Issues processed through #4695 (as of 2026-05-12)
@@ -60,12 +58,10 @@
 - link_sub_issue is NOT idempotent — always verify sub-issue not already linked before calling
 - Weekly strategy #4682 (May 11, 2026) is the current roadmap reference
 - All roadmap items are tracked; no new items in #4682 vs #4573
-- PRs #4676, #4677, #4672 all merged as of 2026-05-11
 - Issue #4675 CLOSED (completed) — Talos disk encryption implemented in #4676
 - Issue #4316 CLOSED (completed) — ArgoCD v3.4 done
 - Issue #4681: CI workload-timeout (blocked by workflows permission, needs manual PR creation)
-- devantler filed #4675 (Talos disk encryption) + PR #4676 implementing it (MERGED)
-- CI Doctor issues #4673/#4674/#4626/#4683 are infrastructure flakes, not code bugs
-- ArgoCD v3.4 issue #4316 CLOSED (completed April 30)
-- #4683: CD secondary rate limit hit — infrastructure/GitHub issue, not code
-- 2 new Dependabot PRs open: #4694 (fsnotify 1.10.1), #4695 (grpc 1.81.0)
+- No Dependabot PRs open (all merged as of this run)
+- No human-filed issues without prior engagement; all open issues are CI Doctor/automation/Repo Assist/blocked
+- [aw] Detection Runs issues #4432 and #4371 say "No action to take - Do not assign to an agent" — skip
+- #4465 (cluster switch): recent-clusters criterion implemented in this run's PR
