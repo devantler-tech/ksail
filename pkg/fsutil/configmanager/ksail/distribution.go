@@ -230,7 +230,7 @@ func (m *ConfigManager) addWorkerRoleLabelPatch(
 			return
 		}
 
-		_ = os.WriteFile(canonPath, []byte(talosgenerator.WorkerRoleLabelPatchYAML), 0o600)
+		_ = os.WriteFile(canonPath, []byte(talosgenerator.WorkerRoleLabelPatchYAML), 0o600) //nolint:mnd // standard restrictive file permission
 	}
 }
 
