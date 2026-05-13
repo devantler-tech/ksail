@@ -112,6 +112,11 @@ func (m *ConfigManager) WithAdditionalPatches(patches []Patch) *ConfigManager {
 	return m
 }
 
+// AdditionalPatchCount returns the number of runtime patches currently registered.
+func (m *ConfigManager) AdditionalPatchCount() int {
+	return len(m.additionalPatches)
+}
+
 // WithExtensions sets the Talos Image Factory official extension names.
 // When non-empty, machine.install.image is patched to use a factory installer
 // image containing the specified extensions.

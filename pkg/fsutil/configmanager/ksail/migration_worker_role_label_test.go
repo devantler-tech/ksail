@@ -36,14 +36,14 @@ func TestAddWorkerRoleLabelPatch_MigratesLegacyScaffold(t *testing.T) {
 	assert.Equal(t, talosgenerator.WorkerRoleLabelPatchYAML, string(got))
 }
 
-func TestAddWorkerRoleLabelPatch_PreservesCustomizedFile(t *testing.T) {
+func TestAddWorkerRoleLabelPatch_CustomizedFileInjectsRuntime(t *testing.T) {
 	t.Parallel()
 
 	patchesDir := t.TempDir()
 	workersDir := filepath.Join(patchesDir, "workers")
 	require.NoError(t, os.MkdirAll(workersDir, 0o750))
 
-	// File contains additional user content beyond the legacy scaffold.
+	// File contains the legacy worker role label plus additional user labels.
 	customContent := "machine:\n  nodeLabels:\n" +
 		"    node-role.kubernetes.io/worker: \"\"\n" +
 		"    custom.label/app: \"myapp\"\n"
@@ -55,9 +55,14 @@ func TestAddWorkerRoleLabelPatch_PreservesCustomizedFile(t *testing.T) {
 
 	cm.AddWorkerRoleLabelPatchForTest(talosManager, patchesDir)
 
+	// File should be preserved (not overwritten).
 	got, err := os.ReadFile(patchFile) //nolint:gosec // test reads from t.TempDir
 	require.NoError(t, err)
 	assert.Equal(t, customContent, string(got), "customized file should be left untouched")
+
+	// Runtime patch should be injected as fallback.
+	assert.Equal(t, 1, talosManager.AdditionalPatchCount(),
+		"runtime patch should be injected for customized files with legacy label")
 }
 
 func TestAddWorkerRoleLabelPatch_InjectsRuntimeWhenFileAbsent(t *testing.T) {
@@ -74,4 +79,6 @@ func TestAddWorkerRoleLabelPatch_InjectsRuntimeWhenFileAbsent(t *testing.T) {
 	// The runtime patch should have been injected (file still absent).
 	_, err := os.Stat(filepath.Join(patchesDir, "workers", "worker-role-label.yaml"))
 	assert.True(t, os.IsNotExist(err), "file should not be created by runtime injection")
+	assert.Equal(t, 1, talosManager.AdditionalPatchCount(),
+		"runtime patch should be injected when file is absent")
 }

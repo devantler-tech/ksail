@@ -197,7 +197,7 @@ func (m *ConfigManager) addKubeletCertRotationPatches(
 }
 
 // legacyWorkerRoleLabelPatchYAML is the exact content of the old scaffold that
-// used machine.nodeLabels. Only files matching this content exactly are migrated.
+// used machine.nodeLabels. Only files matching this content exactly are fully migrated.
 const legacyWorkerRoleLabelPatchYAML = "machine:\n  nodeLabels:\n    node-role.kubernetes.io/worker: \"\"\n"
 
 // addWorkerRoleLabelPatch injects the worker role label patch at runtime
@@ -225,14 +225,21 @@ func (m *ConfigManager) addWorkerRoleLabelPatch(
 
 	content, err := fsutil.ReadFileSafe(patchesDir, patchFile)
 	if err != nil {
+		// Cannot read safely (e.g. symlink escape) — inject runtime fallback so
+		// the worker role label is still set via kubelet.extraArgs at registration.
+		talosManager.WithAdditionalPatches([]talosconfigmanager.Patch{workerRoleLabelPatch()})
+
 		return
 	}
 
-	// Only migrate files that exactly match the legacy scaffold. User-customized
-	// files (with additional labels or settings) are left untouched.
-	if strings.TrimSpace(string(content)) == strings.TrimSpace(legacyWorkerRoleLabelPatchYAML) {
+	contentStr := strings.TrimSpace(string(content))
+
+	if contentStr == strings.TrimSpace(legacyWorkerRoleLabelPatchYAML) {
+		// Exact legacy scaffold — overwrite with the new format.
 		canonPath, pathErr := fsutil.EvalCanonicalPath(patchFile)
 		if pathErr != nil {
+			talosManager.WithAdditionalPatches([]talosconfigmanager.Patch{workerRoleLabelPatch()})
+
 			return
 		}
 
@@ -243,6 +250,12 @@ func (m *ConfigManager) addWorkerRoleLabelPatch(
 			// worker role label is still set via kubelet.extraArgs at registration time.
 			talosManager.WithAdditionalPatches([]talosconfigmanager.Patch{workerRoleLabelPatch()})
 		}
+	} else if strings.Contains(contentStr, "node-role.kubernetes.io/worker") &&
+		strings.Contains(contentStr, "nodeLabels") {
+		// Customized file still contains the legacy worker role label in nodeLabels.
+		// We cannot safely rewrite user-customized content, but we inject the runtime
+		// kubelet.extraArgs patch so the worker role is at least set at registration time.
+		talosManager.WithAdditionalPatches([]talosconfigmanager.Patch{workerRoleLabelPatch()})
 	}
 }
 
