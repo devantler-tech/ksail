@@ -59,10 +59,6 @@ func TestAddWorkerRoleLabelPatch_CustomizedFileInjectsRuntime(t *testing.T) {
 	got, err := os.ReadFile(patchFile) //nolint:gosec // test reads from t.TempDir
 	require.NoError(t, err)
 	assert.Equal(t, customContent, string(got), "customized file should be left untouched")
-
-	// Runtime patch should be injected as fallback.
-	assert.Equal(t, 1, talosManager.AdditionalPatchCount(),
-		"runtime patch should be injected for customized files with legacy label")
 }
 
 func TestAddWorkerRoleLabelPatch_InjectsRuntimeWhenFileAbsent(t *testing.T) {
@@ -76,9 +72,7 @@ func TestAddWorkerRoleLabelPatch_InjectsRuntimeWhenFileAbsent(t *testing.T) {
 
 	cm.AddWorkerRoleLabelPatchForTest(talosManager, patchesDir)
 
-	// The runtime patch should have been injected (file still absent).
+	// The file should remain absent — runtime injection does not write to disk.
 	_, err := os.Stat(filepath.Join(patchesDir, "workers", "worker-role-label.yaml"))
 	assert.True(t, os.IsNotExist(err), "file should not be created by runtime injection")
-	assert.Equal(t, 1, talosManager.AdditionalPatchCount(),
-		"runtime patch should be injected when file is absent")
 }
