@@ -236,7 +236,8 @@ func (m *ConfigManager) addWorkerRoleLabelPatch(
 			return
 		}
 
-		if writeErr := os.WriteFile(canonPath, []byte(talosgenerator.WorkerRoleLabelPatchYAML), 0o600); writeErr != nil { //nolint:mnd // standard restrictive file permission
+		//nolint:mnd // standard restrictive file permission
+		if writeErr := os.WriteFile(canonPath, []byte(talosgenerator.WorkerRoleLabelPatchYAML), 0o600); writeErr != nil {
 			// Write failed — inject the correct runtime patch as fallback so the
 			// worker role label is still set via kubelet.extraArgs at registration time.
 			talosManager.WithAdditionalPatches([]talosconfigmanager.Patch{workerRoleLabelPatch()})
