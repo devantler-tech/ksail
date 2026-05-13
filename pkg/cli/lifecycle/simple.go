@@ -467,7 +467,7 @@ func (p *kubernetesCleanupProvisioner) Delete(ctx context.Context, _ string) err
 	}
 
 	// Clean up nested cluster kubeconfig entries for all naming conventions
-	for _, prefix := range []string{"kind-", "k3k-", "vcluster-"} {
+	for _, prefix := range []string{"kind-", "k3k-", "vcluster-", "admin@"} {
 		contextName := prefix + p.clusterName
 		_ = k8s.CleanupKubeconfig(p.kubeconfigPath, contextName, contextName, contextName, io.Discard)
 	}

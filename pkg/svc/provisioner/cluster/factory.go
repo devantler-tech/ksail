@@ -547,6 +547,11 @@ func applyK3dNodeCounts(k3dConfig *k3dv1alpha5.SimpleConfig, controlPlanes, work
 func (f DefaultFactory) createTalosProvisioner(
 	cluster *v1alpha1.Cluster,
 ) (Provisioner, any, error) {
+	// Kubernetes provider: run Talos inside a DinD pod on the host cluster
+	if cluster.Spec.Cluster.Provider == v1alpha1.ProviderKubernetes {
+		return f.createTalosKubernetesProvisioner(cluster)
+	}
+
 	if f.DistributionConfig.Talos == nil {
 		return nil, nil, fmt.Errorf(
 			"talos config is required for Talos distribution: %w",
@@ -615,6 +620,41 @@ func (f DefaultFactory) createTalosProvisioner(
 	}
 
 	return provisioner, f.DistributionConfig.Talos, nil
+}
+
+// createTalosKubernetesProvisioner creates a Talos provisioner that runs inside
+// a DinD pod on a host Kubernetes cluster using talosctl.
+func (f DefaultFactory) createTalosKubernetesProvisioner(
+	cluster *v1alpha1.Cluster,
+) (Provisioner, any, error) {
+	opts := cluster.Spec.Provider.Kubernetes
+	clusterName := cluster.Metadata.Name
+
+	hostClient, restConfig, dynClient, err := buildHostClusterClients(opts)
+	if err != nil {
+		return nil, nil, fmt.Errorf("build host cluster clients: %w", err)
+	}
+
+	k8sProvider, err := kubernetesprovider.NewProvider(hostClient, opts)
+	if err != nil {
+		return nil, nil, fmt.Errorf("create Kubernetes provider: %w", err)
+	}
+
+	provisioner := talosprovisioner.NewKubernetesProvisioner(
+		talosprovisioner.KubernetesProvisionerConfig{
+			KubeconfigPath:   cluster.Spec.Cluster.Connection.Kubeconfig,
+			K8sProvider:      k8sProvider,
+			DynamicClient:    dynClient,
+			RestConfig:       restConfig,
+			ClusterName:      clusterName,
+			Distribution:     string(cluster.Spec.Cluster.Distribution),
+			GatewayClassName: opts.GatewayClassName,
+			ControlPlanes:    int(cluster.Spec.Cluster.ControlPlanes),
+			Workers:          int(cluster.Spec.Cluster.Workers),
+		},
+	)
+
+	return provisioner, nil, nil
 }
 
 func (f DefaultFactory) createVClusterProvisioner(
