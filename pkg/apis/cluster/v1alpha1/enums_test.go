@@ -308,6 +308,18 @@ func TestProvider_Set(t *testing.T) {
 			wantError: false,
 		},
 		{
+			name:      "kubernetes_lowercase",
+			input:     "kubernetes",
+			expected:  v1alpha1.ProviderKubernetes,
+			wantError: false,
+		},
+		{
+			name:      "kubernetes_mixed_case",
+			input:     "Kubernetes",
+			expected:  v1alpha1.ProviderKubernetes,
+			wantError: false,
+		},
+		{
 			name:      "invalid_provider",
 			input:     "invalid",
 			wantError: true,
@@ -357,7 +369,8 @@ func TestProvider_ValidValues(t *testing.T) {
 	assert.Contains(t, values, "Hetzner")
 	assert.Contains(t, values, "Omni")
 	assert.Contains(t, values, "AWS")
-	assert.Len(t, values, 4)
+	assert.Contains(t, values, "Kubernetes")
+	assert.Len(t, values, 5)
 }
 
 func TestProvider_IsCloud(t *testing.T) {
@@ -372,6 +385,7 @@ func TestProvider_IsCloud(t *testing.T) {
 		{"hetzner", v1alpha1.ProviderHetzner, true},
 		{"omni", v1alpha1.ProviderOmni, true},
 		{"aws", v1alpha1.ProviderAWS, true},
+		{"kubernetes", v1alpha1.ProviderKubernetes, false},
 		{"empty", v1alpha1.Provider(""), false},
 	}
 
@@ -397,6 +411,10 @@ func TestProvider_ValidateForDistribution_ValidCombinations(t *testing.T) {
 		{"docker_for_talos", v1alpha1.ProviderDocker, v1alpha1.DistributionTalos},
 		{"hetzner_for_talos", v1alpha1.ProviderHetzner, v1alpha1.DistributionTalos},
 		{"omni_for_talos", v1alpha1.ProviderOmni, v1alpha1.DistributionTalos},
+		{"kubernetes_for_vanilla", v1alpha1.ProviderKubernetes, v1alpha1.DistributionVanilla},
+		{"kubernetes_for_k3s", v1alpha1.ProviderKubernetes, v1alpha1.DistributionK3s},
+		{"kubernetes_for_talos", v1alpha1.ProviderKubernetes, v1alpha1.DistributionTalos},
+		{"kubernetes_for_vcluster", v1alpha1.ProviderKubernetes, v1alpha1.DistributionVCluster},
 		{"empty_provider_defaults_to_docker", v1alpha1.Provider(""), v1alpha1.DistributionVanilla},
 	}
 
@@ -422,6 +440,8 @@ func TestProvider_ValidateForDistribution_InvalidCombinations(t *testing.T) {
 		{"hetzner_for_k3s_invalid", v1alpha1.ProviderHetzner, v1alpha1.DistributionK3s},
 		{"omni_for_vanilla_invalid", v1alpha1.ProviderOmni, v1alpha1.DistributionVanilla},
 		{"omni_for_k3s_invalid", v1alpha1.ProviderOmni, v1alpha1.DistributionK3s},
+		{"kubernetes_for_kwok_invalid", v1alpha1.ProviderKubernetes, v1alpha1.DistributionKWOK},
+		{"kubernetes_for_eks_invalid", v1alpha1.ProviderKubernetes, v1alpha1.DistributionEKS},
 		{"unknown_distribution", v1alpha1.ProviderDocker, v1alpha1.Distribution("Unknown")},
 	}
 
