@@ -338,9 +338,9 @@ func CreateMinimalProvisionerForProvider(
 	deleteStorage bool,
 ) (clusterprovisioner.Provisioner, error) {
 	switch info.Provider {
-	case v1alpha1.ProviderDocker, "":
-		// Docker provider supports all distributions - create a multi-provisioner
-		// that tries each distribution in order
+	case v1alpha1.ProviderDocker, v1alpha1.ProviderKubernetes, "":
+		// Docker and Kubernetes providers support all Docker-based distributions -
+		// create a multi-provisioner that tries each distribution in order
 		return clusterprovisioner.NewMultiProvisioner(info.ClusterName), nil
 
 	case v1alpha1.ProviderHetzner, v1alpha1.ProviderOmni:

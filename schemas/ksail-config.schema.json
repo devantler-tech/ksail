@@ -67,7 +67,8 @@
                 "Docker",
                 "Hetzner",
                 "Omni",
-                "AWS"
+                "AWS",
+                "Kubernetes"
               ]
             },
             "cni": {
@@ -523,6 +524,48 @@
                 },
                 "sessionTokenEnvVar": {
                   "type": "string"
+                }
+              },
+              "additionalProperties": false,
+              "type": "object"
+            },
+            "kubernetes": {
+              "properties": {
+                "kubeconfig": {
+                  "type": "string"
+                },
+                "kubeconfigEnvVar": {
+                  "type": "string"
+                },
+                "context": {
+                  "type": "string"
+                },
+                "contextEnvVar": {
+                  "type": "string"
+                },
+                "gatewayClassName": {
+                  "type": "string"
+                },
+                "podCidr": {
+                  "type": "string"
+                },
+                "serviceCidr": {
+                  "type": "string"
+                },
+                "persistence": {
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "storageClassName": {
+                      "type": "string"
+                    },
+                    "size": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": false,
+                  "type": "object"
                 }
               },
               "additionalProperties": false,
