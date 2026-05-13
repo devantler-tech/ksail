@@ -209,8 +209,6 @@ func (m *ConfigManager) addWorkerRoleLabelPatch(
 	talosManager *talosconfigmanager.ConfigManager,
 	patchesDir string,
 ) {
-	patchFile := filepath.Join(patchesDir, "workers", "worker-role-label.yaml")
-
 	if !workerRoleLabelPatchFileExists(patchesDir) {
 		talosManager.WithAdditionalPatches([]talosconfigmanager.Patch{workerRoleLabelPatch()})
 
@@ -219,13 +217,20 @@ func (m *ConfigManager) addWorkerRoleLabelPatch(
 
 	// Migrate stale patch files that use machine.nodeLabels (broken on Hetzner
 	// due to NodeRestriction blocking kubelet from setting node-role.kubernetes.io/*).
-	content, err := os.ReadFile(patchFile)
+	patchFile := filepath.Join(patchesDir, "workers", "worker-role-label.yaml")
+
+	content, err := fsutil.ReadFileSafe(patchesDir, patchFile)
 	if err != nil {
 		return
 	}
 
 	if strings.Contains(string(content), "nodeLabels:") {
-		_ = os.WriteFile(patchFile, []byte(talosgenerator.WorkerRoleLabelPatchYAML), 0o644)
+		canonPath, pathErr := fsutil.EvalCanonicalPath(patchFile)
+		if pathErr != nil {
+			return
+		}
+
+		_ = os.WriteFile(canonPath, []byte(talosgenerator.WorkerRoleLabelPatchYAML), 0o600)
 	}
 }
 
