@@ -138,17 +138,20 @@ func (v Version) Equal(other Version) bool {
 }
 
 const (
-	versionBufSize = 20 // stack buffer capacity for strconv.AppendInt
-	decimalBase    = 10
+	intBufSize  = 20 // stack buffer capacity for strconv.AppendInt
+	decimalBase = 10
 )
 
 // String returns the version as "vMAJOR.MINOR.PATCH" with pre-release and
 // suffix if present (e.g., "v1.13.0-beta.1", "v1.35.3-k3s1").
 func (v Version) String() string {
-	var buf [versionBufSize]byte
+	var buf [intBufSize]byte
+
+	// "v" + up to 3 digit groups + 2 dots + optional hyphen+prerelease + optional hyphen+suffix
+	capacity := intBufSize + len(v.PreRelease) + len(v.Suffix) + len("--")
 
 	var builder strings.Builder
-	builder.Grow(versionBufSize)
+	builder.Grow(capacity)
 	builder.WriteByte('v')
 	builder.Write(strconv.AppendInt(buf[:0], int64(v.Major), decimalBase))
 	builder.WriteByte('.')
