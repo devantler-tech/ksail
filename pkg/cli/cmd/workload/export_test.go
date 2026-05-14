@@ -275,5 +275,13 @@ func ExportRetryOnTransientError(
 // ExportRunWatch exposes runWatch for unit testing the early-exit path
 // validation that runs before config load.
 func ExportRunWatch(cmd *cobra.Command, pathFlag string, initialApply bool, debug bool) error {
-	return runWatch(cmd, pathFlag, initialApply, debug)
+	return runWatch(cmd, pathFlag, initialApply, debug, nil)
 }
+
+// ExportRunHooks exposes runHooks for unit testing hook execution.
+func ExportRunHooks(ctx context.Context, cmd *cobra.Command, hooks []string) error {
+	return runHooks(ctx, cmd, hooks)
+}
+
+// ExportErrHookFailed exposes the errHookFailed sentinel for test assertions.
+var ExportErrHookFailed = errHookFailed //nolint:gochecknoglobals // test export

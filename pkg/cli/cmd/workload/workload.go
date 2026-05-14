@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"regexp"
@@ -4149,6 +4150,31 @@ func NewWaitCmd() *cobra.Command {
 
 var errNotDirectory = errors.New("watch path is not a directory")
 
+// errHookFailed is returned when a pre-apply hook command fails.
+var errHookFailed = errors.New("pre-apply hook failed")
+
+// runHooks executes hook commands sequentially via "sh -c". If any hook
+// fails, execution stops and an error is returned (fail-fast). Stdout and
+// stderr are forwarded to the terminal via cmd.
+func runHooks(ctx context.Context, cmd *cobra.Command, hooks []string) error {
+	for _, hook := range hooks {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+
+		//nolint:gosec // Hooks are user-provided build commands (like Tilt/Skaffold); sh -c is intentional.
+		shellCmd := exec.CommandContext(ctx, "sh", "-c", hook)
+		shellCmd.Stdout = cmd.OutOrStdout()
+		shellCmd.Stderr = cmd.ErrOrStderr()
+
+		if err := shellCmd.Run(); err != nil {
+			return fmt.Errorf("%w: %q: %w", errHookFailed, hook, err)
+		}
+	}
+
+	return nil
+}
+
 // watchCmdLong is the long description for the watch subcommand.
 const watchCmdLong = `Watch a directory for file changes and automatically apply workloads.
 
@@ -4169,6 +4195,11 @@ Use --initial-apply to synchronize the cluster with the current state of
 the watch directory before entering the watch loop. This is useful after
 editing manifests offline or when starting a fresh session.
 
+Use --hook to run shell commands before each apply (e.g. docker build).
+Hooks execute sequentially; if any hook fails the apply is skipped for
+that cycle. Hooks can also be configured in ksail.yaml under
+spec.workload.watch.hooks. CLI --hook flags are appended after config hooks.
+
 Examples:
   # Watch the default k8s/ directory
   ksail workload watch
@@ -4177,7 +4208,13 @@ Examples:
   ksail workload watch --initial-apply
 
   # Watch a custom directory
-  ksail workload watch --path=./manifests`
+  ksail workload watch --path=./manifests
+
+  # Run a build before each apply
+  ksail workload watch --hook "docker build -t myapp:latest ."
+
+  # Chain multiple hooks
+  ksail workload watch --hook "make generate" --hook "docker build -t myapp ."` 
 
 // NewWatchCmd creates the workload watch command.
 func NewWatchCmd() *cobra.Command {
@@ -4185,6 +4222,7 @@ func NewWatchCmd() *cobra.Command {
 		pathFlag     string
 		initialApply bool
 		debugFlag    bool
+		hookFlags    []string
 	)
 
 	cmd := &cobra.Command{
@@ -4213,15 +4251,20 @@ func NewWatchCmd() *cobra.Command {
 		"Show diagnostic output for file events and polling (useful for troubleshooting watch behavior)",
 	)
 
+	cmd.Flags().StringArrayVar(
+		&hookFlags, "hook", nil,
+		"Shell command to run before each apply (repeatable; appended after spec.workload.watch.hooks)",
+	)
+
 	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
-		return runWatch(cmd, pathFlag, initialApply, debugFlag)
+		return runWatch(cmd, pathFlag, initialApply, debugFlag, hookFlags)
 	}
 
 	return cmd
 }
 
 // runWatch starts the file watcher loop.
-func runWatch(cmd *cobra.Command, pathFlag string, initialApply bool, debug bool) error {
+func runWatch(cmd *cobra.Command, pathFlag string, initialApply bool, debug bool, hookFlags []string) error {
 	// The root-level error executor captures stderr into a buffer for error
 	// aggregation.  For long-running commands like watch the buffer is never
 	// flushed, making all feedback invisible.  Override with real stderr so
@@ -4269,6 +4312,9 @@ func runWatch(cmd *cobra.Command, pathFlag string, initialApply bool, debug bool
 		return fmt.Errorf("resolve watch directory %q: %w", watchDir, err)
 	}
 
+	// Merge hooks: config hooks first, then CLI --hook flags appended.
+	hooks := append(cmdCtx.ClusterCfg.Spec.Workload.Watch.Hooks, hookFlags...)
+
 	// Try to create a Flux reconciler for selective Kustomization reconciliation.
 	// If Flux is not available (CRDs not installed, kubeconfig error, etc.),
 	// the reconciler is nil and selective reconciliation is silently skipped.
@@ -4283,9 +4329,14 @@ func runWatch(cmd *cobra.Command, pathFlag string, initialApply bool, debug bool
 	})
 
 	cmd.PrintErrf("  watching: %s\n", absDir)
+
+	if len(hooks) > 0 {
+		cmd.PrintErrf("  hooks:    %d configured\n", len(hooks))
+	}
+
 	cmd.PrintErrf("  press Ctrl+C to stop\n\n")
 
-	return watchLoop(cmd.Context(), cmd, absDir, initialApply, fluxReconciler, debug)
+	return watchLoop(cmd.Context(), cmd, absDir, initialApply, fluxReconciler, debug, hooks)
 }
 
 // watchLoop sets up the fsnotify watcher and runs the debounced apply loop.
@@ -4300,6 +4351,7 @@ func watchLoop(
 	initialApply bool,
 	fluxReconciler *flux.Reconciler,
 	debug bool,
+	hooks []string,
 ) error {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
@@ -4323,11 +4375,11 @@ func watchLoop(
 	errCh := make(chan error, 1)
 
 	go func() {
-		errCh <- eventLoop(sigCtx, cmd, watcher, dir, fluxReconciler, debug)
+		errCh <- eventLoop(sigCtx, cmd, watcher, dir, fluxReconciler, debug, hooks)
 	}()
 
 	if initialApply {
-		executeAndReportApply(sigCtx, cmd, dir, "initial apply")
+		executeAndReportApply(sigCtx, cmd, dir, "initial apply", hooks)
 	}
 
 	// Wait for the event loop to complete and propagate its error.
@@ -4347,6 +4399,7 @@ func eventLoop(
 	dir string,
 	fluxReconciler *flux.Reconciler,
 	debug bool,
+	hooks []string,
 ) error {
 	state := &debounceState{}
 
@@ -4355,7 +4408,7 @@ func eventLoop(
 	applyCh := make(chan string, 1)
 
 	// Single worker: runs applies one at a time, stops when ctx is cancelled.
-	go applyWorker(ctx, cmd, dir, applyCh, fluxReconciler)
+	go applyWorker(ctx, cmd, dir, applyCh, fluxReconciler, hooks)
 
 	// Polling fallback: periodically scan for modification time changes to
 	// catch events missed by fsnotify (CI runners, atomic-save editors).
@@ -4377,6 +4430,7 @@ func applyWorker(
 	dir string,
 	applyCh <-chan string,
 	fluxReconciler *flux.Reconciler,
+	hooks []string,
 ) {
 	var cachedKustomizations []flux.KustomizationInfo
 
@@ -4389,7 +4443,7 @@ func applyWorker(
 				return
 			}
 
-			applyAndReport(ctx, cmd, dir, file, fluxReconciler, &cachedKustomizations)
+			applyAndReport(ctx, cmd, dir, file, fluxReconciler, &cachedKustomizations, hooks)
 		}
 	}
 }
@@ -4454,12 +4508,13 @@ func handleFileEvent(
 	scheduleApply(state, event.Name, applyCh)
 }
 
-// executeAndReportApply runs kubectl apply against the given directory and
-// prints a timestamped result line with elapsed time. The label parameter
-// (e.g. "initial apply", "reconciling") is printed before the apply starts.
+// executeAndReportApply runs pre-apply hooks and kubectl apply against the
+// given directory, printing a timestamped result line with elapsed time.
+// The label parameter (e.g. "initial apply", "reconciling") is printed
+// before the apply starts. If any hook fails, the apply is skipped.
 // Used directly for the initial full-root sync and called by applyAndReport
 // for scoped reconciles, keeping timing and formatting in one place.
-func executeAndReportApply(ctx context.Context, cmd *cobra.Command, dir, label string) {
+func executeAndReportApply(ctx context.Context, cmd *cobra.Command, dir, label string, hooks []string) {
 	if ctx.Err() != nil {
 		return
 	}
@@ -4468,6 +4523,25 @@ func executeAndReportApply(ctx context.Context, cmd *cobra.Command, dir, label s
 	cmd.PrintErrf("[%s] %s\n", timestamp, label)
 
 	start := time.Now()
+
+	// Run pre-apply hooks; skip the apply if any hook fails.
+	if len(hooks) > 0 {
+		cmd.PrintErrf("[%s] running %d hook(s)\n", timestamp, len(hooks))
+
+		if hookErr := runHooks(ctx, cmd, hooks); hookErr != nil {
+			elapsed := time.Since(start)
+			timestamp = time.Now().Format("15:04:05")
+			cmd.PrintErrf(
+				"[%s] ✗ hook failed, apply skipped (%s): %v\n\n",
+				timestamp,
+				formatElapsed(elapsed),
+				hookErr,
+			)
+
+			return
+		}
+	}
+
 	applyErr := runKubectlApply(ctx, cmd, dir)
 	elapsed := time.Since(start)
 
@@ -4501,6 +4575,7 @@ func applyAndReport(
 	dir, changedFile string,
 	fluxReconciler *flux.Reconciler,
 	cachedKustomizations *[]flux.KustomizationInfo,
+	hooks []string,
 ) {
 	if ctx.Err() != nil {
 		return
@@ -4528,7 +4603,7 @@ func applyAndReport(
 		label = "→ reconciling subtree: " + relDir
 	}
 
-	executeAndReportApply(ctx, cmd, applyDir, label)
+	executeAndReportApply(ctx, cmd, applyDir, label, hooks)
 
 	reconcileFluxSelectively(ctx, cmd, fluxReconciler, applyDir, dir, cachedKustomizations)
 }

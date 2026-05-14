@@ -100,6 +100,14 @@ type WorkloadSpec struct {
 	ValidateOnPush    bool   `default:"false" json:"validateOnPush,omitzero"    jsonschema_description:"Validate manifests against schemas before pushing (validation disabled by default)"`                                                                                                                                                                         //nolint:lll
 	Tag               string `default:"dev"   json:"tag,omitzero"               jsonschema_description:"OCI artifact tag used for workload push and GitOps reconciliation (Flux OCIRepository and ArgoCD Application). Push priority: CLI oci:// ref > this field > registry-embedded tag > dev. Reconciliation priority: this field > registry-embedded tag > dev"` //nolint:lll
 	KustomizationFile string `default:""      json:"kustomizationFile,omitzero" jsonschema_description:"Path to the kustomization directory relative to sourceDirectory. When set, Flux Sync.Path is configured to this path so Flux uses the specified kustomization as the entry point instead of requiring a root kustomization.yaml."`                           //nolint:lll
+	Watch             WatchConfig `json:"watch,omitzero"`
+}
+
+// WatchConfig defines configuration for the workload watch command.
+type WatchConfig struct {
+	// Hooks are shell commands to run before each apply cycle.
+	// Hooks execute sequentially via "sh -c"; if any hook fails, the apply is skipped for that cycle.
+	Hooks []string `json:"hooks,omitzero" jsonschema_description:"Shell commands to run before each apply (e.g. docker build, make generate). Executed sequentially; if any hook fails the apply is skipped."` //nolint:lll
 }
 
 // ChatSpec defines AI chat assistant configuration.
