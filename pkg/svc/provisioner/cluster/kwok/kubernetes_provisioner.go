@@ -306,21 +306,12 @@ func (p *KubernetesProvisioner) rewriteKubeconfig(name string, localPort int) er
 	clusterKey := "kwok-" + target
 	newServer := fmt.Sprintf("https://127.0.0.1:%d", localPort)
 
-	// Rewrite ~/.kube/config
-	config, err := clientcmd.LoadFromFile(p.kubeconfigPath)
-	if err != nil {
-		return fmt.Errorf("load kubeconfig: %w", err)
+	// Rewrite ~/.kube/config (atomic, merge-safe)
+	if err := k8s.ModifyKubeconfigCluster(p.kubeconfigPath, clusterKey, newServer); err != nil {
+		return fmt.Errorf("rewrite kubeconfig: %w", err)
 	}
 
-	if cluster, ok := config.Clusters[clusterKey]; ok {
-		cluster.Server = newServer
-	}
-
-	if err := clientcmd.WriteToFile(*config, p.kubeconfigPath); err != nil {
-		return fmt.Errorf("write kubeconfig: %w", err)
-	}
-
-	// Rewrite kwokctl's internal kubeconfig
+	// Rewrite kwokctl's internal kubeconfig (dedicated file, not shared)
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return fmt.Errorf("get home dir: %w", err)

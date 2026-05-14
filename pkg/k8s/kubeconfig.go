@@ -119,6 +119,37 @@ func loadOrCreateKubeconfig(kubeconfigPath string) (*api.Config, error) {
 	return config, nil
 }
 
+// ModifyKubeconfigCluster atomically updates a single cluster entry's server URL
+// in the kubeconfig file at kubeconfigPath. It loads the existing config, applies
+// the change, and writes it back atomically — preserving all other entries.
+//
+// This is the safe alternative to clientcmd.WriteToFile for in-place edits.
+func ModifyKubeconfigCluster(kubeconfigPath, clusterKey, newServerURL string) error {
+	kubeconfigPath, err := fsutil.EvalCanonicalPath(kubeconfigPath)
+	if err != nil {
+		return fmt.Errorf("canonicalize kubeconfig path: %w", err)
+	}
+
+	existing, err := loadOrCreateKubeconfig(kubeconfigPath)
+	if err != nil {
+		return fmt.Errorf("load kubeconfig: %w", err)
+	}
+
+	cluster, ok := existing.Clusters[clusterKey]
+	if !ok {
+		return fmt.Errorf("cluster entry %q not found in kubeconfig", clusterKey)
+	}
+
+	cluster.Server = newServerURL
+
+	result, err := clientcmd.Write(*existing)
+	if err != nil {
+		return fmt.Errorf("serialize kubeconfig: %w", err)
+	}
+
+	return fsutil.AtomicWriteFile(kubeconfigPath, result, kubeconfigFileMode)
+}
+
 // CleanupKubeconfig removes the cluster, context, and user entries for a cluster
 // from the kubeconfig file. This only removes entries matching the provided names,
 // leaving other cluster configurations intact.

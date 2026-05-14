@@ -10,7 +10,6 @@ import (
 	kubernetessprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/kubernetes"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
 
@@ -222,15 +221,8 @@ func (p *KubernetesProvisioner) setupDinD(ctx context.Context) error {
 // local port-forward address. Kind writes kubeconfig with context "kind-<name>"
 // and cluster entry "kind-<name>".
 func (p *KubernetesProvisioner) rewriteKindKubeconfig(clusterName string, localPort int) error {
-	config, err := clientcmd.LoadFromFile(p.kubeconfigPath)
-	if err != nil {
-		return fmt.Errorf("load kubeconfig: %w", err)
-	}
-
 	clusterKey := "kind-" + clusterName
-	if cluster, ok := config.Clusters[clusterKey]; ok {
-		cluster.Server = fmt.Sprintf("https://127.0.0.1:%d", localPort)
-	}
+	newServer := fmt.Sprintf("https://127.0.0.1:%d", localPort)
 
-	return clientcmd.WriteToFile(*config, p.kubeconfigPath)
+	return k8s.ModifyKubeconfigCluster(p.kubeconfigPath, clusterKey, newServer)
 }
