@@ -1970,7 +1970,12 @@ func TestCreate_NoConfigFile_FlagsOnly(t *testing.T) {
 	})
 
 	err := cmd.Execute()
-	require.NoError(t, err, "create command should succeed without ksail.yaml; output:\n%s", out.String())
+	require.NoError(
+		t,
+		err,
+		"create command should succeed without ksail.yaml; output:\n%s",
+		out.String(),
+	)
 
 	output := out.String()
 	// The cluster lifecycle stages should have executed.
@@ -2020,7 +2025,12 @@ func TestCreate_NoConfigFile_WithComponentFlags(t *testing.T) {
 	})
 
 	err := cmd.Execute()
-	require.NoError(t, err, "create command should succeed without ksail.yaml; output:\n%s", out.String())
+	require.NoError(
+		t,
+		err,
+		"create command should succeed without ksail.yaml; output:\n%s",
+		out.String(),
+	)
 
 	output := out.String()
 	// Metrics-server was disabled, so it should not appear in the output.
@@ -5116,7 +5126,7 @@ func TestExtractBackupArchive_SecurityGuards(t *testing.T) {
 
 		_, _, err := cluster.ExportExtractBackupArchive(archivePath)
 		require.Error(t, err)
-		assert.True(t, errors.Is(err, cluster.ErrInvalidTarPath),
+		assert.ErrorIs(t, err, cluster.ErrInvalidTarPath,
 			"expected ErrInvalidTarPath, got: %v", err)
 	})
 
@@ -5132,7 +5142,7 @@ func TestExtractBackupArchive_SecurityGuards(t *testing.T) {
 
 		_, _, err := cluster.ExportExtractBackupArchive(archivePath)
 		require.Error(t, err)
-		assert.True(t, errors.Is(err, cluster.ErrSymlinkInArchive),
+		assert.ErrorIs(t, err, cluster.ErrSymlinkInArchive,
 			"expected ErrSymlinkInArchive, got: %v", err)
 	})
 
@@ -5148,7 +5158,7 @@ func TestExtractBackupArchive_SecurityGuards(t *testing.T) {
 
 		_, _, err := cluster.ExportExtractBackupArchive(archivePath)
 		require.Error(t, err)
-		assert.True(t, errors.Is(err, cluster.ErrSymlinkInArchive),
+		assert.ErrorIs(t, err, cluster.ErrSymlinkInArchive,
 			"expected ErrSymlinkInArchive, got: %v", err)
 	})
 }
@@ -5156,7 +5166,12 @@ func TestExtractBackupArchive_SecurityGuards(t *testing.T) {
 // createMaliciousArchive builds a tar.gz with valid metadata followed by a
 // caller-supplied malicious tar entry. If content is nil the entry is written
 // as a header-only entry (appropriate for symlinks/hard links).
-func createMaliciousArchive(t *testing.T, metaJSON string, malicious tar.Header, content []byte) string {
+func createMaliciousArchive(
+	t *testing.T,
+	metaJSON string,
+	malicious tar.Header,
+	content []byte,
+) string {
 	t.Helper()
 
 	tmpDir := t.TempDir()
