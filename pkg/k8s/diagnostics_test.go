@@ -644,3 +644,266 @@ func TestDiagnoseClusterReport_PodListErrorCreatesWarningFinding(t *testing.T) {
 	assert.Contains(t, report.Findings[0].Reason, "failed to list pods")
 	assert.Equal(t, 90, report.HealthScore)
 }
+
+func TestDiagnoseClusterReport_CrashLoopBackOffIncludesRemediation(t *testing.T) {
+	t.Parallel()
+
+	clientset := k8sfake.NewClientset(
+		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
+		&corev1.Node{
+			ObjectMeta: metav1.ObjectMeta{Name: "node-ok"},
+			Status: corev1.NodeStatus{Conditions: []corev1.NodeCondition{
+				{Type: corev1.NodeReady, Status: corev1.ConditionTrue},
+			}},
+		},
+		&corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{Name: "crash-pod", Namespace: "default"},
+			Status: corev1.PodStatus{
+				Phase: corev1.PodRunning,
+				ContainerStatuses: []corev1.ContainerStatus{
+					{
+						Ready: false,
+						State: corev1.ContainerState{
+							Waiting: &corev1.ContainerStateWaiting{Reason: "CrashLoopBackOff"},
+						},
+						Image: "myapp:v1",
+					},
+				},
+			},
+		},
+	)
+
+	report, err := k8s.DiagnoseClusterReport(context.Background(), clientset, "test")
+
+	require.NoError(t, err)
+	require.Len(t, report.Findings, 1)
+	assert.Contains(t, report.Findings[0].Remediation, "logs")
+	assert.Contains(t, report.Findings[0].Remediation, "crash")
+}
+
+func TestDiagnoseClusterReport_ImagePullBackOffIncludesRemediation(t *testing.T) {
+	t.Parallel()
+
+	clientset := k8sfake.NewClientset(
+		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
+		&corev1.Node{
+			ObjectMeta: metav1.ObjectMeta{Name: "node-ok"},
+			Status: corev1.NodeStatus{Conditions: []corev1.NodeCondition{
+				{Type: corev1.NodeReady, Status: corev1.ConditionTrue},
+			}},
+		},
+		&corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{Name: "pull-fail", Namespace: "default"},
+			Status: corev1.PodStatus{
+				Phase: corev1.PodPending,
+				ContainerStatuses: []corev1.ContainerStatus{
+					{
+						State: corev1.ContainerState{
+							Waiting: &corev1.ContainerStateWaiting{Reason: "ImagePullBackOff"},
+						},
+						Image: "ghcr.io/missing:latest",
+					},
+				},
+			},
+		},
+	)
+
+	report, err := k8s.DiagnoseClusterReport(context.Background(), clientset, "test")
+
+	require.NoError(t, err)
+	require.Len(t, report.Findings, 1)
+	assert.Contains(t, report.Findings[0].Remediation, "registry")
+}
+
+func TestDiagnoseClusterReport_OOMKilledIncludesRemediation(t *testing.T) {
+	t.Parallel()
+
+	clientset := k8sfake.NewClientset(
+		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
+		&corev1.Node{
+			ObjectMeta: metav1.ObjectMeta{Name: "node-ok"},
+			Status: corev1.NodeStatus{Conditions: []corev1.NodeCondition{
+				{Type: corev1.NodeReady, Status: corev1.ConditionTrue},
+			}},
+		},
+		&corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{Name: "oom-pod", Namespace: "default"},
+			Status: corev1.PodStatus{
+				Phase: corev1.PodFailed,
+				ContainerStatuses: []corev1.ContainerStatus{
+					{
+						Ready: false,
+						State: corev1.ContainerState{
+							Terminated: &corev1.ContainerStateTerminated{
+								ExitCode: 137,
+								Reason:   "OOMKilled",
+							},
+						},
+					},
+				},
+			},
+		},
+	)
+
+	report, err := k8s.DiagnoseClusterReport(context.Background(), clientset, "test")
+
+	require.NoError(t, err)
+	require.Len(t, report.Findings, 1)
+	assert.Contains(t, report.Findings[0].Remediation, "memory")
+}
+
+func TestDiagnoseClusterReport_NotReadyNodeIncludesRemediation(t *testing.T) {
+	t.Parallel()
+
+	clientset := k8sfake.NewClientset(
+		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
+		&corev1.Node{
+			ObjectMeta: metav1.ObjectMeta{Name: "bad-node"},
+			Status: corev1.NodeStatus{Conditions: []corev1.NodeCondition{
+				{Type: corev1.NodeReady, Status: corev1.ConditionFalse, Message: "disk pressure"},
+			}},
+		},
+	)
+
+	report, err := k8s.DiagnoseClusterReport(context.Background(), clientset, "test")
+
+	require.NoError(t, err)
+	require.Len(t, report.Findings, 1)
+	assert.Contains(t, report.Findings[0].Remediation, "kubelet")
+}
+
+func TestDiagnoseClusterReport_UnknownReasonHasEmptyRemediation(t *testing.T) {
+	t.Parallel()
+
+	clientset := k8sfake.NewClientset(
+		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
+		&corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{Name: "mystery", Namespace: "default"},
+			Status:     corev1.PodStatus{Phase: corev1.PodFailed},
+		},
+	)
+
+	report, err := k8s.DiagnoseClusterReport(context.Background(), clientset, "test")
+
+	require.NoError(t, err)
+	require.Len(t, report.Findings, 1)
+	assert.Empty(t, report.Findings[0].Remediation)
+}
+
+func TestDiagnoseClusterReport_PendingPVCCreatesWarningFinding(t *testing.T) {
+	t.Parallel()
+
+	clientset := k8sfake.NewClientset(
+		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
+		&corev1.PersistentVolumeClaim{
+			ObjectMeta: metav1.ObjectMeta{Name: "stuck-pvc", Namespace: "default"},
+			Status:     corev1.PersistentVolumeClaimStatus{Phase: corev1.ClaimPending},
+		},
+	)
+
+	report, err := k8s.DiagnoseClusterReport(context.Background(), clientset, "test")
+
+	require.NoError(t, err)
+	require.Len(t, report.Findings, 1)
+	assert.Equal(t, k8s.DiagnoseSeverityWarning, report.Findings[0].Severity)
+	assert.Equal(t, "pvc/stuck-pvc (default)", report.Findings[0].Resource)
+	assert.Contains(t, report.Findings[0].Reason, "Pending")
+	assert.Contains(t, report.Findings[0].Remediation, "StorageClass")
+	assert.Equal(t, 90, report.HealthScore)
+}
+
+func TestDiagnoseClusterReport_BoundPVCIsIgnored(t *testing.T) {
+	t.Parallel()
+
+	clientset := k8sfake.NewClientset(
+		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
+		&corev1.PersistentVolumeClaim{
+			ObjectMeta: metav1.ObjectMeta{Name: "bound-pvc", Namespace: "default"},
+			Status:     corev1.PersistentVolumeClaimStatus{Phase: corev1.ClaimBound},
+		},
+	)
+
+	report, err := k8s.DiagnoseClusterReport(context.Background(), clientset, "test")
+
+	require.NoError(t, err)
+	assert.Empty(t, report.Findings)
+	assert.Equal(t, 100, report.HealthScore)
+}
+
+func TestDiagnoseClusterReport_MixedFindingsComputeCorrectScore(t *testing.T) {
+	t.Parallel()
+
+	clientset := k8sfake.NewClientset(
+		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
+		&corev1.Node{
+			ObjectMeta: metav1.ObjectMeta{Name: "bad-node"},
+			Status: corev1.NodeStatus{Conditions: []corev1.NodeCondition{
+				{Type: corev1.NodeReady, Status: corev1.ConditionFalse, Message: "not ready"},
+			}},
+		},
+		&corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{Name: "fail-pod", Namespace: "default"},
+			Status:     corev1.PodStatus{Phase: corev1.PodFailed},
+		},
+		&corev1.PersistentVolumeClaim{
+			ObjectMeta: metav1.ObjectMeta{Name: "pending-pvc", Namespace: "default"},
+			Status:     corev1.PersistentVolumeClaimStatus{Phase: corev1.ClaimPending},
+		},
+	)
+
+	report, err := k8s.DiagnoseClusterReport(context.Background(), clientset, "mixed")
+
+	require.NoError(t, err)
+	// 100 - 25 (node critical) - 25 (pod critical) - 10 (pvc warning) = 40
+	assert.Equal(t, 40, report.HealthScore)
+	assert.Len(t, report.Findings, 3)
+}
+
+func TestDiagnosePVCPending_NoPendingPVCsReturnsEmpty(t *testing.T) {
+	t.Parallel()
+
+	clientset := k8sfake.NewClientset(
+		&corev1.PersistentVolumeClaim{
+			ObjectMeta: metav1.ObjectMeta{Name: "bound-pvc", Namespace: "default"},
+			Status:     corev1.PersistentVolumeClaimStatus{Phase: corev1.ClaimBound},
+		},
+	)
+
+	result := k8s.DiagnosePVCPending(context.Background(), clientset, []string{"default"})
+
+	assert.Empty(t, result)
+}
+
+func TestDiagnosePVCPending_PendingPVCIsReported(t *testing.T) {
+	t.Parallel()
+
+	clientset := k8sfake.NewClientset(
+		&corev1.PersistentVolumeClaim{
+			ObjectMeta: metav1.ObjectMeta{Name: "my-data", Namespace: "default"},
+			Status:     corev1.PersistentVolumeClaimStatus{Phase: corev1.ClaimPending},
+		},
+	)
+
+	result := k8s.DiagnosePVCPending(context.Background(), clientset, []string{"default"})
+
+	assert.Contains(t, result, "my-data")
+	assert.Contains(t, result, "Pending PVCs in default")
+}
+
+func TestDiagnosePVCPending_ListErrorIsReported(t *testing.T) {
+	t.Parallel()
+
+	clientset := k8sfake.NewClientset()
+	clientset.PrependReactor(
+		"list",
+		"persistentvolumeclaims",
+		func(_ k8stesting.Action) (bool, runtime.Object, error) {
+			return true, nil, errConnectionRefused
+		},
+	)
+
+	result := k8s.DiagnosePVCPending(context.Background(), clientset, []string{"default"})
+
+	assert.Contains(t, result, "failed to list PVCs")
+	assert.Contains(t, result, "connection refused")
+}

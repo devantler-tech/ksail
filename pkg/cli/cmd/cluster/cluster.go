@@ -2829,9 +2829,13 @@ const diagnoseLongDesc = `Surface failing Kubernetes resources for the ` +
 	`current cluster.
 
 This command inspects the live cluster via the Kubernetes API and reports
-any pods that are not running successfully and any nodes that are not Ready.
-It is distribution-agnostic and works with Vanilla, K3s, Talos, and
-VCluster.
+any pods that are not running successfully, any nodes that are not Ready,
+and any PersistentVolumeClaims stuck in Pending phase. Each finding
+includes a severity classification and, where a known failure pattern is
+detected, a proactive remediation suggestion.
+
+A health score (0–100) summarises overall cluster health: each critical
+finding deducts 25 points and each warning deducts 10 points.
 
 The output is intentionally compact so it can be consumed directly by users
 or by the KSail AI chat assistant (ksail chat) and MCP server, which expose
@@ -2922,34 +2926,45 @@ func runDiagnoseCmd(
 		return fmt.Errorf("build kubernetes client: %w", err)
 	}
 
-	writer := cmd.OutOrStdout()
-
-	if format == outputFormatJSON {
-		report, diagErr := k8s.DiagnoseClusterReport(cmd.Context(), clientset, resolved.ClusterName)
-		if diagErr != nil {
-			return fmt.Errorf("diagnose cluster %q: %w", resolved.ClusterName, diagErr)
-		}
-
-		return runDiagnoseJSONReport(report, writer)
-	}
-
-	report, err := k8s.DiagnoseCluster(cmd.Context(), clientset)
+	report, err := k8s.DiagnoseClusterReport(cmd.Context(), clientset, resolved.ClusterName)
 	if err != nil {
 		return fmt.Errorf("diagnose cluster %q: %w", resolved.ClusterName, err)
 	}
 
-	if report == "" {
+	writer := cmd.OutOrStdout()
+
+	if format == outputFormatJSON {
+		return runDiagnoseJSONReport(report, writer)
+	}
+
+	return runDiagnoseTextReport(report, writer)
+}
+
+// runDiagnoseTextReport writes a human-readable diagnostic report including
+// the health score and per-finding remediation hints.
+func runDiagnoseTextReport(report k8s.DiagnoseReport, writer io.Writer) error {
+	if len(report.Findings) == 0 {
 		_, _ = fmt.Fprintf(
 			writer,
-			"Cluster %q looks healthy — no failing pods or NotReady nodes detected.\n",
-			resolved.ClusterName,
+			"Cluster %q looks healthy — no failing pods, NotReady nodes, or pending PVCs detected.\n",
+			report.ClusterName,
 		)
+		_, _ = fmt.Fprintf(writer, "Health score: %d/100\n", report.HealthScore)
 
 		return nil
 	}
 
-	_, _ = fmt.Fprintf(writer, "Diagnostics for cluster %q:\n", resolved.ClusterName)
-	_, _ = fmt.Fprintln(writer, report)
+	_, _ = fmt.Fprintf(writer, "Diagnostics for cluster %q:\n", report.ClusterName)
+	_, _ = fmt.Fprintf(writer, "Health score: %d/100\n", report.HealthScore)
+
+	for _, f := range report.Findings {
+		_, _ = fmt.Fprintf(writer, "\n  [%s] %s\n", f.Severity, f.Resource)
+		_, _ = fmt.Fprintf(writer, "    Reason: %s\n", f.Reason)
+
+		if f.Remediation != "" {
+			_, _ = fmt.Fprintf(writer, "    Suggested fix: %s\n", f.Remediation)
+		}
+	}
 
 	return nil
 }
