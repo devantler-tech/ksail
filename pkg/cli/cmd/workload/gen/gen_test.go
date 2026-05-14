@@ -2,11 +2,13 @@ package gen_test
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/workload/gen"
+	"github.com/devantler-tech/ksail/v7/pkg/client/kubeconform"
 	"github.com/devantler-tech/ksail/v7/pkg/di"
 	"github.com/gkampitakis/go-snaps/snaps"
 	"github.com/spf13/cobra"
@@ -86,6 +88,55 @@ func execGen(
 	err := cmd.Execute()
 
 	return outBuf.String(), errBuf.String(), err
+}
+
+func TestGenAndValidate(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		cmdFactory func(*di.Runtime) *cobra.Command
+		args       []string
+	}{
+		{"deployment", gen.NewDeploymentCmd, []string{"test-deploy", "--image", "nginx:1.27"}},
+		{"service-clusterip", gen.NewServiceCmd, []string{"clusterip", "test-svc", "--tcp=80:80"}},
+		{"configmap", gen.NewConfigMapCmd, []string{"test-cm", "--from-literal=key=value"}},
+		{"secret-generic", gen.NewSecretCmd, []string{"generic", "test-secret", "--from-literal=password=test123"}},
+		{"namespace", gen.NewNamespaceCmd, []string{"test-ns"}},
+		{"job", gen.NewJobCmd, []string{"test-job", "--image=busybox:1.37"}},
+		{"cronjob", gen.NewCronJobCmd, []string{"test-cron", "--image=busybox:1.37", "--schedule=*/5 * * * *"}},
+		{"serviceaccount", gen.NewServiceAccountCmd, []string{"test-sa"}},
+		{"clusterrolebinding", gen.NewClusterRoleBindingCmd, []string{"test-crb", "--clusterrole=test-cr", "--serviceaccount=default:test-sa"}},
+		{"rolebinding", gen.NewRoleBindingCmd, []string{"test-rb", "--role=test-role", "--serviceaccount=default:test-sa"}},
+		{"ingress", gen.NewIngressCmd, []string{"test-ing", "--rule=host/path=svc:80"}},
+		{"quota", gen.NewQuotaCmd, []string{"test-quota", "--hard=cpu=1,memory=1Gi"}},
+		{"priorityclass", gen.NewPriorityClassCmd, []string{"test-pc", "--value=1000"}},
+		{"poddisruptionbudget", gen.NewPodDisruptionBudgetCmd, []string{"test-pdb", "--min-available=1", "--selector=app=test"}},
+		{"helmrelease", gen.NewHelmReleaseCmd, []string{"test-hr", "--source=HelmRepository/test", "--chart=test", "--export"}},
+	}
+
+	client := kubeconform.NewClient()
+	ctx := context.Background()
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			output, _, err := execGen(t, tt.cmdFactory, tt.args)
+			require.NoError(t, err)
+			require.NotEmpty(t, output)
+
+			tmpDir := t.TempDir()
+			manifestPath := filepath.Join(tmpDir, tt.name+".yaml")
+			require.NoError(t, os.WriteFile(manifestPath, []byte(output), 0o600))
+
+			opts := &kubeconform.ValidationOptions{
+				IgnoreMissingSchemas: true,
+				SkipKinds:            []string{},
+			}
+			require.NoError(t, client.ValidateFile(ctx, manifestPath, opts))
+		})
+	}
 }
 
 func TestNewGenCmd(t *testing.T) {

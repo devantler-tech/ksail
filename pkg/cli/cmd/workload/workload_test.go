@@ -1673,6 +1673,32 @@ func TestWatchCmdRejectsArguments(t *testing.T) {
 	require.Contains(t, err.Error(), "unknown command")
 }
 
+func TestWatchRejectsNonExistentDirectory(t *testing.T) {
+	t.Parallel()
+
+	nonexistentPath := filepath.Join(t.TempDir(), "does-not-exist")
+	cmd := &cobra.Command{}
+
+	err := workload.ExportRunWatch(cmd, nonexistentPath, false, false)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "access watch directory")
+}
+
+func TestWatchRejectsFilePath(t *testing.T) {
+	t.Parallel()
+
+	filePath := filepath.Join(t.TempDir(), "regular-file.txt")
+	require.NoError(t, os.WriteFile(filePath, []byte("not a dir"), 0o600))
+
+	cmd := &cobra.Command{}
+
+	err := workload.ExportRunWatch(cmd, filePath, false, false)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "watch path is not a directory")
+}
+
 func TestIsRelevantEvent(t *testing.T) {
 	t.Parallel()
 

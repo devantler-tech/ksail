@@ -1926,6 +1926,107 @@ func TestCreate_Minimal_PrintsOnlyClusterLifecycle(t *testing.T) {
 	snaps.MatchSnapshot(t, trimTrailingNewline(out.String()))
 }
 
+// TestCreate_NoConfigFile_FlagsOnly verifies that cluster creation succeeds
+// when no ksail.yaml is present, relying entirely on CLI flags for configuration.
+// This covers the init=false code path exercised by E2E system tests.
+//
+//nolint:paralleltest // uses t.Chdir and mutates shared test hooks
+func TestCreate_NoConfigFile_FlagsOnly(t *testing.T) {
+	workingDir := t.TempDir()
+	t.Chdir(workingDir)
+
+	// Write only the distribution config and kubeconfig — no ksail.yaml.
+	writeFile(
+		t,
+		workingDir,
+		"kind.yaml",
+		"kind: Cluster\napiVersion: kind.x-k8s.io/v1alpha4\nname: test-no-config\nnodes: []\n",
+	)
+	writeFile(
+		t,
+		workingDir,
+		"kubeconfig",
+		"apiVersion: v1\nkind: Config\ncurrent-context: kind-test-no-config\nclusters:\n"+
+			"- cluster:\n    server: https://127.0.0.1:6443\n  name: kind-test-no-config\n"+
+			"contexts:\n- context:\n    cluster: kind-test-no-config\n    user: kind-test-no-config\n  name: kind-test-no-config\n"+
+			"users:\n- name: kind-test-no-config\n  user:\n    token: fake\n",
+	)
+
+	setupMockRegistryBackend(t)
+
+	restoreFactory := cluster.SetProvisionerFactoryForTests(fakeFactory{})
+	defer restoreFactory()
+
+	cmd := cluster.NewCreateCmd(newTestRuntimeContainer(t))
+
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetContext(context.Background())
+	cmd.SetArgs([]string{
+		"--distribution", "Vanilla",
+		"--name", "test-no-config",
+	})
+
+	err := cmd.Execute()
+	require.NoError(t, err, "create command should succeed without ksail.yaml; output:\n%s", out.String())
+
+	output := out.String()
+	// The cluster lifecycle stages should have executed.
+	require.Contains(t, output, "Create cluster", "output should contain cluster lifecycle text")
+}
+
+// TestCreate_NoConfigFile_WithComponentFlags verifies that component flags
+// (e.g. --metrics-server Disabled) are respected when no ksail.yaml exists.
+//
+//nolint:paralleltest // uses t.Chdir and mutates shared test hooks
+func TestCreate_NoConfigFile_WithComponentFlags(t *testing.T) {
+	workingDir := t.TempDir()
+	t.Chdir(workingDir)
+
+	// Write only the distribution config and kubeconfig — no ksail.yaml.
+	writeFile(
+		t,
+		workingDir,
+		"kind.yaml",
+		"kind: Cluster\napiVersion: kind.x-k8s.io/v1alpha4\nname: test-flags\nnodes: []\n",
+	)
+	writeFile(
+		t,
+		workingDir,
+		"kubeconfig",
+		"apiVersion: v1\nkind: Config\ncurrent-context: kind-test-flags\nclusters:\n"+
+			"- cluster:\n    server: https://127.0.0.1:6443\n  name: kind-test-flags\n"+
+			"contexts:\n- context:\n    cluster: kind-test-flags\n    user: kind-test-flags\n  name: kind-test-flags\n"+
+			"users:\n- name: kind-test-flags\n  user:\n    token: fake\n",
+	)
+
+	setupMockRegistryBackend(t)
+
+	restoreFactory := cluster.SetProvisionerFactoryForTests(fakeFactory{})
+	defer restoreFactory()
+
+	cmd := cluster.NewCreateCmd(newTestRuntimeContainer(t))
+
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetContext(context.Background())
+	cmd.SetArgs([]string{
+		"--distribution", "Vanilla",
+		"--name", "test-flags",
+		"--metrics-server", "Disabled",
+	})
+
+	err := cmd.Execute()
+	require.NoError(t, err, "create command should succeed without ksail.yaml; output:\n%s", out.String())
+
+	output := out.String()
+	// Metrics-server was disabled, so it should not appear in the output.
+	require.NotContains(t, output, "metrics-server",
+		"output should not mention metrics-server install when it is disabled")
+}
+
 // TestCreate_LocalRegistryDisabled_SkipsRegistryStages tests cluster creation with local registry disabled.
 //
 //nolint:paralleltest // uses t.Chdir and mutates shared test hooks
@@ -4992,6 +5093,106 @@ func TestExtractBackupArchive_ErrorPaths(t *testing.T) {
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "backup metadata")
 	})
+}
+
+// TestExtractBackupArchive_SecurityGuards validates that malicious tar entries
+// (path traversal, symlinks, hard links) are rejected when processed through
+// the full ExportExtractBackupArchive pipeline.
+func TestExtractBackupArchive_SecurityGuards(t *testing.T) {
+	t.Parallel()
+
+	validMeta := `{"version":"v1","clusterName":"test-cluster","resourceCount":1}`
+
+	t.Run("path traversal entry rejected", func(t *testing.T) {
+		t.Parallel()
+
+		archivePath := createMaliciousArchive(t, validMeta, tar.Header{
+			Name:     "../../../etc/passwd",
+			Typeflag: tar.TypeReg,
+			Size:     int64(len("root:x:0:0")),
+			Mode:     0o600,
+		}, []byte("root:x:0:0"))
+
+		_, _, err := cluster.ExportExtractBackupArchive(archivePath)
+		require.Error(t, err)
+		assert.True(t, errors.Is(err, cluster.ErrInvalidTarPath),
+			"expected ErrInvalidTarPath, got: %v", err)
+	})
+
+	t.Run("symlink entry rejected", func(t *testing.T) {
+		t.Parallel()
+
+		archivePath := createMaliciousArchive(t, validMeta, tar.Header{
+			Name:     "resources/namespaces/evil.yaml",
+			Typeflag: tar.TypeSymlink,
+			Linkname: "/etc/passwd",
+			Mode:     0o777,
+		}, nil)
+
+		_, _, err := cluster.ExportExtractBackupArchive(archivePath)
+		require.Error(t, err)
+		assert.True(t, errors.Is(err, cluster.ErrSymlinkInArchive),
+			"expected ErrSymlinkInArchive, got: %v", err)
+	})
+
+	t.Run("hard link entry rejected", func(t *testing.T) {
+		t.Parallel()
+
+		archivePath := createMaliciousArchive(t, validMeta, tar.Header{
+			Name:     "resources/namespaces/hardlink.yaml",
+			Typeflag: tar.TypeLink,
+			Linkname: "resources/pods.yaml",
+			Mode:     0o600,
+		}, nil)
+
+		_, _, err := cluster.ExportExtractBackupArchive(archivePath)
+		require.Error(t, err)
+		assert.True(t, errors.Is(err, cluster.ErrSymlinkInArchive),
+			"expected ErrSymlinkInArchive, got: %v", err)
+	})
+}
+
+// createMaliciousArchive builds a tar.gz with valid metadata followed by a
+// caller-supplied malicious tar entry. If content is nil the entry is written
+// as a header-only entry (appropriate for symlinks/hard links).
+func createMaliciousArchive(t *testing.T, metaJSON string, malicious tar.Header, content []byte) string {
+	t.Helper()
+
+	tmpDir := t.TempDir()
+	archivePath := filepath.Join(tmpDir, "malicious.tar.gz")
+
+	f, err := os.Create(archivePath) //nolint:gosec // test-controlled temp path
+	require.NoError(t, err)
+
+	defer func() { _ = f.Close() }()
+
+	gzipWriter := gzip.NewWriter(f)
+	tarWriter := tar.NewWriter(gzipWriter)
+
+	// 1. Valid backup-metadata.json so the archive passes initial parsing.
+	addTarEntry(t, tarWriter, "backup-metadata.json", []byte(metaJSON))
+
+	// 2. resources/ directory entry.
+	err = tarWriter.WriteHeader(&tar.Header{
+		Name:     "resources/",
+		Typeflag: tar.TypeDir,
+		Mode:     0o755,
+	})
+	require.NoError(t, err)
+
+	// 3. The malicious entry.
+	err = tarWriter.WriteHeader(&malicious)
+	require.NoError(t, err)
+
+	if content != nil {
+		_, err = tarWriter.Write(content)
+		require.NoError(t, err)
+	}
+
+	require.NoError(t, tarWriter.Close())
+	require.NoError(t, gzipWriter.Close())
+
+	return archivePath
 }
 
 // createArchiveWithoutMetadata creates a valid .tar.gz file that contains

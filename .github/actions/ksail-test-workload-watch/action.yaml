@@ -18,22 +18,8 @@ inputs:
 runs:
   using: composite
   steps:
-    # ── Test 1 — Non-existent directory returns error ────────────────
-    - name: 🧪 watch rejects non-existent directory
-      id: watch-nonexistent
-      shell: bash
-      run: |
-        # Use a unique non-existent path to avoid false positives if /tmp has matching dirs.
-        # Wrap in timeout so the step cannot hang if the path somehow exists.
-        NONEXISTENT_DIR="$(mktemp -u -d -p "${GITHUB_WORKSPACE:-.}" .watch-nonexistent-XXXXXX)"
-        OUTPUT=$(timeout 30 ksail workload watch --path "$NONEXISTENT_DIR" 2>&1 || true)
-        if echo "$OUTPUT" | grep -q "access watch directory"; then
-          echo "✅ Watch correctly rejected non-existent directory"
-        else
-          echo "❌ Expected error about non-existent directory, got:"
-          echo "$OUTPUT"
-          exit 1
-        fi
+    # Test 1 (non-existent directory rejection) is covered by the unit
+    # test TestWatchRejectsNonExistentDirectory and removed from E2E.
 
     # ── Test 2 — --initial-apply syncs cluster on startup ────────────
     - name: 🧪 watch --initial-apply syncs on startup

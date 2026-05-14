@@ -213,84 +213,9 @@ runs:
         fi
         rm -f /tmp/restore-none-stderr.txt
 
-    - name: 🧪 Invalid archive rejected
-      id: invalid-archive
-      shell: bash
-      run: |
-        echo "not-a-valid-archive" > /tmp/invalid-backup.tar.gz
-        if ksail cluster restore --input /tmp/invalid-backup.tar.gz 2>/tmp/invalid-archive-stderr.txt; then
-          echo "❌ Expected restore to fail on invalid archive"
-          rm -f /tmp/invalid-backup.tar.gz /tmp/invalid-archive-stderr.txt
-          exit 1
-        fi
-        echo "✅ Invalid archive correctly rejected"
-        rm -f /tmp/invalid-backup.tar.gz /tmp/invalid-archive-stderr.txt
-
-    - name: 🧪 Path traversal rejected
-      id: path-traversal
-      shell: bash
-      run: |
-        python3 << 'PYEOF'
-        import tarfile, io, json
-        buf = io.BytesIO()
-        with tarfile.open(fileobj=buf, mode='w:gz') as tar:
-            meta = json.dumps({'version':'1','timestamp':'2024-01-01T00:00:00Z','namespaces':['default']}).encode()
-            info = tarfile.TarInfo(name='backup-metadata.json')
-            info.size = len(meta)
-            tar.addfile(info, io.BytesIO(meta))
-            content = b'apiVersion: v1'
-            info = tarfile.TarInfo(name='../../../etc/passwd')
-            info.size = len(content)
-            tar.addfile(info, io.BytesIO(content))
-        with open('/tmp/traversal-backup.tar.gz', 'wb') as f:
-            f.write(buf.getvalue())
-        PYEOF
-        if ksail cluster restore --input /tmp/traversal-backup.tar.gz 2>/tmp/traversal-stderr.txt; then
-          echo "❌ Expected restore to reject path traversal archive"
-          rm -f /tmp/traversal-backup.tar.gz /tmp/traversal-stderr.txt
-          exit 1
-        fi
-        if ! grep -q "invalid tar entry path" /tmp/traversal-stderr.txt; then
-          echo "❌ Expected 'invalid tar entry path' error, got:"
-          cat /tmp/traversal-stderr.txt
-          rm -f /tmp/traversal-backup.tar.gz /tmp/traversal-stderr.txt
-          exit 1
-        fi
-        echo "✅ Path traversal archive correctly rejected"
-        rm -f /tmp/traversal-backup.tar.gz /tmp/traversal-stderr.txt
-
-    - name: 🧪 Symlink in archive rejected
-      id: symlink-rejection
-      shell: bash
-      run: |
-        python3 << 'PYEOF'
-        import tarfile, io, json
-        buf = io.BytesIO()
-        with tarfile.open(fileobj=buf, mode='w:gz') as tar:
-            meta = json.dumps({'version':'1','timestamp':'2024-01-01T00:00:00Z','namespaces':['default']}).encode()
-            info = tarfile.TarInfo(name='backup-metadata.json')
-            info.size = len(meta)
-            tar.addfile(info, io.BytesIO(meta))
-            info = tarfile.TarInfo(name='resources/namespaces/evil.yaml')
-            info.type = tarfile.SYMTYPE
-            info.linkname = '/etc/passwd'
-            tar.addfile(info)
-        with open('/tmp/symlink-backup.tar.gz', 'wb') as f:
-            f.write(buf.getvalue())
-        PYEOF
-        if ksail cluster restore --input /tmp/symlink-backup.tar.gz 2>/tmp/symlink-stderr.txt; then
-          echo "❌ Expected restore to reject archive containing symlink"
-          rm -f /tmp/symlink-backup.tar.gz /tmp/symlink-stderr.txt
-          exit 1
-        fi
-        if ! grep -q "symbolic and hard links are not supported" /tmp/symlink-stderr.txt; then
-          echo "❌ Expected symlink rejection error, got:"
-          cat /tmp/symlink-stderr.txt
-          rm -f /tmp/symlink-backup.tar.gz /tmp/symlink-stderr.txt
-          exit 1
-        fi
-        echo "✅ Symlink archive correctly rejected"
-        rm -f /tmp/symlink-backup.tar.gz /tmp/symlink-stderr.txt
+    # Security guard tests (invalid archive, path traversal, symlink rejection)
+    # are covered by unit tests (TestExtractBackupArchive_SecurityGuards) and
+    # removed from E2E to avoid running 35× redundantly.
 
     - name: 🧪 Cleanup backup test workload
       if: always()
@@ -299,7 +224,7 @@ runs:
         ksail workload delete deployment/backup-test --ignore-not-found 2>/dev/null || true
 
     - name: 🐞 Debug failure
-      if: failure() && (steps.deploy.outcome == 'failure' || steps.backup.outcome == 'failure' || steps.validate-archive.outcome == 'failure' || steps.validate-metadata.outcome == 'failure' || steps.backup-ns.outcome == 'failure' || steps.backup-compression.outcome == 'failure' || steps.backup-exclude-types.outcome == 'failure' || steps.dry-run-restore.outcome == 'failure' || steps.restore.outcome == 'failure' || steps.verify.outcome == 'failure' || steps.restore-policy-none.outcome == 'failure' || steps.invalid-archive.outcome == 'failure' || steps.path-traversal.outcome == 'failure' || steps.symlink-rejection.outcome == 'failure')
+      if: failure() && (steps.deploy.outcome == 'failure' || steps.backup.outcome == 'failure' || steps.validate-archive.outcome == 'failure' || steps.validate-metadata.outcome == 'failure' || steps.backup-ns.outcome == 'failure' || steps.backup-compression.outcome == 'failure' || steps.backup-exclude-types.outcome == 'failure' || steps.dry-run-restore.outcome == 'failure' || steps.restore.outcome == 'failure' || steps.verify.outcome == 'failure' || steps.restore-policy-none.outcome == 'failure')
       uses: ./.github/actions/debug-kubernetes-failure
       with:
         kubectl-command: "ksail workload"
@@ -308,9 +233,7 @@ runs:
       if: always()
       shell: bash
       run: |
-        rm -f /tmp/cluster-backup.tar.gz /tmp/invalid-backup.tar.gz \
-              /tmp/traversal-backup.tar.gz /tmp/symlink-backup.tar.gz \
+        rm -f /tmp/cluster-backup.tar.gz \
               /tmp/backup-ns.tar.gz /tmp/backup-fast.tar.gz \
               /tmp/backup-exclude.tar.gz \
-              /tmp/invalid-archive-stderr.txt /tmp/traversal-stderr.txt \
-              /tmp/symlink-stderr.txt /tmp/restore-none-stderr.txt
+              /tmp/restore-none-stderr.txt
