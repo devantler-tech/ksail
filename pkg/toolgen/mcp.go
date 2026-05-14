@@ -80,8 +80,10 @@ func addMCPTool(server *mcp.Server, tool ToolDefinition, opts ToolOptions) {
 
 // boolPtr returns a pointer to a bool value.
 // MCP SDK uses *bool to distinguish "explicitly false" from "unset" (nil).
+//
+//go:fix inline
 func boolPtr(b bool) *bool {
-	return &b
+	return new(b)
 }
 
 // buildMCPAnnotations creates MCP ToolAnnotations from the tool's behavioral hints.
@@ -89,9 +91,9 @@ func buildMCPAnnotations(tool ToolDefinition) *mcp.ToolAnnotations {
 	return &mcp.ToolAnnotations{
 		Title:           tool.Title,
 		ReadOnlyHint:    tool.Annotations.ReadOnlyHint,
-		DestructiveHint: boolPtr(tool.Annotations.DestructiveHint),
+		DestructiveHint: new(tool.Annotations.DestructiveHint),
 		IdempotentHint:  tool.Annotations.IdempotentHint,
-		OpenWorldHint:   boolPtr(tool.Annotations.OpenWorldHint),
+		OpenWorldHint:   new(tool.Annotations.OpenWorldHint),
 	}
 }
 

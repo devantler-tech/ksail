@@ -173,7 +173,14 @@ func collectSubcommandsRecursively(
 	parentRequiresWrite bool,
 	excludeFlags []string,
 ) {
-	collectSubcommandsWithPrefix(parent, readSubcommands, writeSubcommands, "", parentRequiresWrite, excludeFlags)
+	collectSubcommandsWithPrefix(
+		parent,
+		readSubcommands,
+		writeSubcommands,
+		"",
+		parentRequiresWrite,
+		excludeFlags,
+	)
 }
 
 // collectSubcommandsWithPrefix recursively collects subcommands with permission splitting and path prefix.
@@ -231,7 +238,11 @@ func determineWritePermission(cmd *cobra.Command, parentRequiresWrite bool) bool
 }
 
 // buildSubcommandDef creates a SubcommandDef from a command.
-func buildSubcommandDef(cmd *cobra.Command, relativeKey string, excludeFlags []string) *SubcommandDef {
+func buildSubcommandDef(
+	cmd *cobra.Command,
+	relativeKey string,
+	excludeFlags []string,
+) *SubcommandDef {
 	return &SubcommandDef{
 		Name:         relativeKey,
 		Description:  cmd.Short,

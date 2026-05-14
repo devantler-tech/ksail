@@ -100,7 +100,10 @@ func buildStandardProperty(flag *pflag.Flag) map[string]any {
 	case "duration":
 		prop["type"] = jsonSchemaTypeString
 
-		desc := truncateDescription(flag.Usage, maxDescriptionLength-len(" (format: 1h30m, 5m, 30s)"))
+		desc := truncateDescription(
+			flag.Usage,
+			maxDescriptionLength-len(" (format: 1h30m, 5m, 30s)"),
+		)
 		prop["description"] = desc + " (format: 1h30m, 5m, 30s)"
 	default:
 		prop["type"] = jsonSchemaTypeString
@@ -296,7 +299,10 @@ func buildSubcommandEnumProperty(subcommands map[string]*SubcommandDef) map[stri
 
 	for name, def := range subcommands {
 		names = append(names, name)
-		descriptions = append(descriptions, name+": "+truncateDescription(def.Description, maxSubcommandDescLength))
+		descriptions = append(
+			descriptions,
+			name+": "+truncateDescription(def.Description, maxSubcommandDescLength),
+		)
 	}
 
 	return map[string]any{
