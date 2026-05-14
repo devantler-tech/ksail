@@ -154,7 +154,7 @@ ksail cluster delete   # Delete namespace and all resources
 ksail cluster list --provider Kubernetes
 ```
 
-> **Note:** Kubernetes provider cluster listing returns an empty result in the current version. Use `kubectl get namespaces -l ksail.io/managed-by=ksail` on the host cluster to find active nested clusters.
+This lists all nested clusters discovered on the host cluster. The host kubeconfig is resolved from the `KSAIL_HOST_KUBECONFIG` environment variable, or `~/.kube/config` by default. The context is resolved from `KSAIL_HOST_CONTEXT`.
 
 ## Troubleshooting
 
