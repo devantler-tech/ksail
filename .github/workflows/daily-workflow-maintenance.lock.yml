@@ -55,8 +55,6 @@
 
 name: "Daily Workflow Maintenance"
 "on":
-  # bots: # Bots processed as bot check in pre-activation job
-  # - github-merge-queue[bot] # Bots processed as bot check in pre-activation job
   repository_dispatch:
     types:
       - maintainer
@@ -1456,7 +1454,7 @@ jobs:
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           GH_AW_REQUIRED_ROLES: "admin,maintainer,write"
-          GH_AW_ALLOWED_BOTS: "github-merge-queue[bot]"
+          GH_AW_ALLOWED_BOTS: ""
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
