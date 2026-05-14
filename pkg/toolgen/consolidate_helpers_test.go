@@ -29,7 +29,7 @@ func TestCollectAllSubcommands_LeafChildren(t *testing.T) {
 	parent.AddCommand(createCmd, deleteCmd)
 
 	subcommands := make(map[string]*toolgen.SubcommandDef)
-	toolgen.CollectAllSubcommands(parent, &subcommands)
+	toolgen.CollectAllSubcommands(parent, &subcommands, nil)
 
 	require.Len(t, subcommands, 2)
 	assert.Contains(t, subcommands, "create")
@@ -58,7 +58,7 @@ func TestCollectAllSubcommands_SkipsHiddenCommands(t *testing.T) {
 	parent.AddCommand(visibleCmd, hiddenCmd)
 
 	subcommands := make(map[string]*toolgen.SubcommandDef)
-	toolgen.CollectAllSubcommands(parent, &subcommands)
+	toolgen.CollectAllSubcommands(parent, &subcommands, nil)
 
 	require.Len(t, subcommands, 1)
 	assert.Contains(t, subcommands, "list")
@@ -84,7 +84,7 @@ func TestCollectAllSubcommands_NestedSubcommands(t *testing.T) {
 	root.AddCommand(groupCmd)
 
 	subcommands := make(map[string]*toolgen.SubcommandDef)
-	toolgen.CollectAllSubcommands(root, &subcommands)
+	toolgen.CollectAllSubcommands(root, &subcommands, nil)
 
 	// The group is not runnable so only leaf is collected, with prefix
 	require.Len(t, subcommands, 1)
@@ -116,7 +116,7 @@ func TestCollectAllSubcommands_RunnableParentWithChildren(t *testing.T) {
 	root.AddCommand(groupCmd)
 
 	subcommands := make(map[string]*toolgen.SubcommandDef)
-	toolgen.CollectAllSubcommands(root, &subcommands)
+	toolgen.CollectAllSubcommands(root, &subcommands, nil)
 
 	// Both the parent (runnable with non-help flags) and leaf should be collected
 	require.Len(t, subcommands, 2)
@@ -133,7 +133,7 @@ func TestCollectAllSubcommands_Empty(t *testing.T) {
 	}
 
 	subcommands := make(map[string]*toolgen.SubcommandDef)
-	toolgen.CollectAllSubcommands(parent, &subcommands)
+	toolgen.CollectAllSubcommands(parent, &subcommands, nil)
 
 	assert.Empty(t, subcommands)
 }
@@ -153,7 +153,7 @@ func TestCollectAllSubcommandsWithPrefix(t *testing.T) {
 	parent.AddCommand(child)
 
 	subcommands := make(map[string]*toolgen.SubcommandDef)
-	toolgen.CollectAllSubcommandsWithPrefix(parent, &subcommands, "myprefix")
+	toolgen.CollectAllSubcommandsWithPrefix(parent, &subcommands, "myprefix", nil)
 
 	require.Len(t, subcommands, 1)
 	assert.Contains(t, subcommands, "myprefix_child")
@@ -174,7 +174,7 @@ func TestCollectAllSubcommandsWithPrefix_EmptyPrefix(t *testing.T) {
 	parent.AddCommand(child)
 
 	subcommands := make(map[string]*toolgen.SubcommandDef)
-	toolgen.CollectAllSubcommandsWithPrefix(parent, &subcommands, "")
+	toolgen.CollectAllSubcommandsWithPrefix(parent, &subcommands, "", nil)
 
 	require.Len(t, subcommands, 1)
 	assert.Contains(t, subcommands, "child")
@@ -203,7 +203,7 @@ func TestCollectAllSubcommands_AcceptsPositionalArgs(t *testing.T) {
 	parent.AddCommand(acceptsCmd, noArgsCmd)
 
 	subcommands := make(map[string]*toolgen.SubcommandDef)
-	toolgen.CollectAllSubcommands(parent, &subcommands)
+	toolgen.CollectAllSubcommands(parent, &subcommands, nil)
 
 	require.Len(t, subcommands, 2)
 	assert.True(t, subcommands["accepts"].AcceptsArgs, "nil Args should accept positional args")
@@ -227,7 +227,7 @@ func TestCollectAllSubcommands_PreservesFlags(t *testing.T) {
 	parent.AddCommand(child)
 
 	subcommands := make(map[string]*toolgen.SubcommandDef)
-	toolgen.CollectAllSubcommands(parent, &subcommands)
+	toolgen.CollectAllSubcommands(parent, &subcommands, nil)
 
 	require.Contains(t, subcommands, "child")
 	assert.NotEmpty(t, subcommands["child"].Flags, "flags should be collected")
@@ -249,7 +249,7 @@ func TestCollectAllSubcommands_DeepNesting(t *testing.T) {
 	root.AddCommand(level1)
 
 	subcommands := make(map[string]*toolgen.SubcommandDef)
-	toolgen.CollectAllSubcommands(root, &subcommands)
+	toolgen.CollectAllSubcommands(root, &subcommands, nil)
 
 	require.Len(t, subcommands, 1)
 	assert.Contains(t, subcommands, "level1_level2_leaf")

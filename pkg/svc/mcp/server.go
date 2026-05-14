@@ -50,10 +50,15 @@ func NewServer(cfg ServerConfig) (*mcpsdk.Server, error) {
 		Name:    cfg.Name,
 		Version: cfg.Version,
 	}, &mcpsdk.ServerOptions{
-		Instructions: "KSail MCP server - provides access to KSail Kubernetes cluster management commands",
-		Logger:       cfg.Logger,
-		KeepAlive:    serverKeepAlive,
-		PageSize:     serverPageSize,
+		Instructions: "KSail — SDK for managing local Kubernetes clusters. Only Docker is required.\n\n" +
+			"Workflow: init → create → [update|info|diagnose] → delete.\n" +
+			"Tools: cluster_read (inspect), cluster_write (lifecycle), " +
+			"workload_read (get/describe/logs), workload_write (apply/create/scale/rollout), " +
+			"cipher_write (SOPS encryption), tenant_write (multi-tenancy).\n" +
+			"All operations target the current kubeconfig context. Use the 'context' parameter to target a different cluster.",
+		Logger:    cfg.Logger,
+		KeepAlive: serverKeepAlive,
+		PageSize:  serverPageSize,
 	})
 
 	// Generate tool definitions

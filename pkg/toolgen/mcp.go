@@ -18,12 +18,17 @@ func ToMCPTools(server *mcp.Server, tools []ToolDefinition, opts ToolOptions) {
 
 // addMCPTool adds a single tool definition to an MCP server.
 func addMCPTool(server *mcp.Server, tool ToolDefinition, opts ToolOptions) {
+	// Build MCP annotations from tool hints
+	annotations := buildMCPAnnotations(tool)
+
 	// Create MCP tool definition
 	mcpTool := &mcp.Tool{
 		Name:        tool.Name,
+		Title:       tool.Title,
 		Description: tool.Description,
 		// Expose the existing JSON schema to MCP clients for validation and UI generation.
 		InputSchema: tool.Parameters,
+		Annotations: annotations,
 	}
 
 	// Create handler
@@ -71,6 +76,23 @@ func addMCPTool(server *mcp.Server, tool ToolDefinition, opts ToolOptions) {
 	// This is acceptable for server initialization where failures should be fatal.
 	// The panic will propagate up and terminate the MCP server startup process.
 	mcp.AddTool(server, mcpTool, handler)
+}
+
+// boolPtr returns a pointer to a bool value.
+// MCP SDK uses *bool to distinguish "explicitly false" from "unset" (nil).
+func boolPtr(b bool) *bool {
+	return &b
+}
+
+// buildMCPAnnotations creates MCP ToolAnnotations from the tool's behavioral hints.
+func buildMCPAnnotations(tool ToolDefinition) *mcp.ToolAnnotations {
+	return &mcp.ToolAnnotations{
+		Title:           tool.Title,
+		ReadOnlyHint:    tool.Annotations.ReadOnlyHint,
+		DestructiveHint: boolPtr(tool.Annotations.DestructiveHint),
+		IdempotentHint:  tool.Annotations.IdempotentHint,
+		OpenWorldHint:   boolPtr(tool.Annotations.OpenWorldHint),
+	}
 }
 
 // mcpResponse is the structured JSON envelope returned by MCP tool handlers.

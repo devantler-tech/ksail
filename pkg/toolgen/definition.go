@@ -6,6 +6,10 @@ type ToolDefinition struct {
 	// Name is the tool identifier (e.g., "ksail_cluster_create").
 	Name string
 
+	// Title is a human-readable display name for the tool (e.g., "Cluster Management").
+	// Used by MCP clients for UI display. Precedence: Title > Name.
+	Title string
+
 	// Description provides context for the AI about what the tool does.
 	Description string
 
@@ -22,6 +26,10 @@ type ToolDefinition struct {
 	// RequiresPermission indicates if this tool performs edit operations.
 	RequiresPermission bool
 
+	// Annotations holds MCP behavioral hints for the tool.
+	// These help clients decide on auto-approval, warnings, and retry behavior.
+	Annotations ToolAnnotationHints
+
 	// IsConsolidated indicates if this tool represents multiple subcommands.
 	IsConsolidated bool
 
@@ -32,6 +40,26 @@ type ToolDefinition struct {
 	// Subcommands maps subcommand names to their metadata.
 	// Only populated when IsConsolidated is true.
 	Subcommands map[string]*SubcommandDef
+}
+
+// ToolAnnotationHints contains SDK-agnostic behavioral hints for a tool.
+// These map to MCP ToolAnnotations and inform client behavior.
+// All fields follow the MCP spec defaults: unset means worst-case assumptions.
+type ToolAnnotationHints struct {
+	// ReadOnlyHint indicates the tool does not modify its environment.
+	ReadOnlyHint bool
+
+	// DestructiveHint indicates the tool may perform destructive updates.
+	// Only meaningful when ReadOnlyHint is false.
+	DestructiveHint bool
+
+	// IdempotentHint indicates repeated calls with the same args have no additional effect.
+	// Only meaningful when ReadOnlyHint is false.
+	IdempotentHint bool
+
+	// OpenWorldHint indicates the tool interacts with external entities.
+	// False means the tool's domain of interaction is closed (e.g., local Docker/k8s).
+	OpenWorldHint bool
 }
 
 // Parameter represents a single tool parameter extracted from a Cobra flag.

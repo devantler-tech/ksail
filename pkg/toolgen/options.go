@@ -27,6 +27,10 @@ const (
 type ToolOptions struct {
 	// ExcludeCommands is a list of command paths to exclude (e.g., "ksail chat").
 	ExcludeCommands []string
+	// ExcludeFlags is a list of flag names to exclude from tool schemas.
+	// These flags still work at runtime — they're just hidden from the AI schema
+	// to reduce token usage.
+	ExcludeFlags []string
 	// IncludeHidden includes hidden commands in tool generation.
 	IncludeHidden bool
 	// CommandTimeout is the timeout for command execution.
@@ -99,6 +103,25 @@ func DefaultOptions() ToolOptions {
 			"ksail completion", // Shell completion generator
 			"ksail help",       // Help command, not a tool
 			"ksail",            // Root command, not a tool
+		},
+		ExcludeFlags: []string{
+			// kubectl global config flags rarely used by LLMs.
+			// These are still accepted at runtime — just hidden from the AI schema.
+			"cache-dir",
+			"certificate-authority",
+			"client-certificate",
+			"client-key",
+			"disable-compression",
+			"insecure-skip-tls-verify",
+			"insecure-skip-tls-verify-backend",
+			"tls-server-name",
+			"as",
+			"as-group",
+			"as-uid",
+			"as-user-extra",
+			"token",
+			"server",
+			"user",
 		},
 		IncludeHidden:  false,
 		CommandTimeout: defaultCommandTimeout,

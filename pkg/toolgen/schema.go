@@ -11,7 +11,7 @@ import (
 )
 
 // buildParameterSchema creates a JSON schema from Cobra command flags.
-func buildParameterSchema(cmd *cobra.Command) map[string]any {
+func buildParameterSchema(cmd *cobra.Command, excludeFlags []string) map[string]any {
 	properties := make(map[string]any)
 	required := []string{}
 
@@ -19,6 +19,11 @@ func buildParameterSchema(cmd *cobra.Command) map[string]any {
 	cmd.Flags().VisitAll(func(flag *pflag.Flag) {
 		// Skip help flag
 		if flag.Name == helpFlagName {
+			return
+		}
+
+		// Skip excluded flags
+		if slices.Contains(excludeFlags, flag.Name) {
 			return
 		}
 
@@ -75,7 +80,7 @@ func flagToSchemaProperty(flag *pflag.Flag) map[string]any {
 // buildStandardProperty creates a property map with type information based on flag type.
 func buildStandardProperty(flag *pflag.Flag) map[string]any {
 	prop := map[string]any{
-		"description": flag.Usage,
+		"description": truncateDescription(flag.Usage, maxDescriptionLength),
 	}
 
 	switch flag.Value.Type() {
@@ -94,7 +99,9 @@ func buildStandardProperty(flag *pflag.Flag) map[string]any {
 		prop["items"] = map[string]any{"type": jsonSchemaTypeInteger}
 	case "duration":
 		prop["type"] = jsonSchemaTypeString
-		prop["description"] = flag.Usage + " (format: 1h30m, 5m, 30s)"
+
+		desc := truncateDescription(flag.Usage, maxDescriptionLength-len(" (format: 1h30m, 5m, 30s)"))
+		prop["description"] = desc + " (format: 1h30m, 5m, 30s)"
 	default:
 		prop["type"] = jsonSchemaTypeString
 	}
@@ -205,11 +212,11 @@ func buildEnumProperty(ev enumValuer, flag *pflag.Flag) map[string]any {
 	prop := map[string]any{
 		"type": jsonSchemaTypeString,
 		"enum": validValues,
-		"description": fmt.Sprintf(
+		"description": truncateDescription(fmt.Sprintf(
 			"%s (valid options: %s)",
 			flag.Usage,
 			strings.Join(validValues, ", "),
-		),
+		), maxDescriptionLength),
 	}
 
 	// Add default value if available
@@ -225,11 +232,16 @@ func buildEnumProperty(ev enumValuer, flag *pflag.Flag) map[string]any {
 }
 
 // extractFlags extracts flag metadata from a command.
-func extractFlags(cmd *cobra.Command) map[string]*FlagDef {
+func extractFlags(cmd *cobra.Command, excludeFlags []string) map[string]*FlagDef {
 	flags := make(map[string]*FlagDef)
 
 	cmd.Flags().VisitAll(func(flag *pflag.Flag) {
 		if flag.Name == helpFlagName {
+			return
+		}
+
+		// Skip excluded flags
+		if slices.Contains(excludeFlags, flag.Name) {
 			return
 		}
 
@@ -284,7 +296,7 @@ func buildSubcommandEnumProperty(subcommands map[string]*SubcommandDef) map[stri
 
 	for name, def := range subcommands {
 		names = append(names, name)
-		descriptions = append(descriptions, name+": "+def.Description)
+		descriptions = append(descriptions, name+": "+truncateDescription(def.Description, maxSubcommandDescLength))
 	}
 
 	return map[string]any{
@@ -339,9 +351,12 @@ func addFlagProperties(
 			prop["items"] = map[string]any{"type": flagDef.ItemsType}
 		}
 
-		// Build description with conditional applicability
-		description := flagDef.Description
-		if len(flagDef.AppliesToSubcommands) < totalSubcommands {
+		// Build description with conditional applicability.
+		// Truncate the base description first, then append "(applies to: ...)" if needed.
+		description := truncateDescription(flagDef.Description, maxDescriptionLength)
+
+		applicability := float64(len(flagDef.AppliesToSubcommands)) / float64(totalSubcommands)
+		if applicability < appliesToThreshold {
 			description = fmt.Sprintf(
 				"%s (applies to: %s)",
 				description,
@@ -428,4 +443,31 @@ func mapFlagTypeToItemsType(flagType string) string {
 	default:
 		return ""
 	}
+}
+
+// truncateDescription truncates a description string to maxLen characters.
+// It tries to break at a sentence boundary ('. ') or clause boundary (', ', '; ')
+// within the limit. Falls back to a hard cut with '…' suffix.
+func truncateDescription(desc string, maxLen int) string {
+	if len(desc) <= maxLen {
+		return desc
+	}
+
+	// Reserve space for the ellipsis
+	cutoff := maxLen - 1
+
+	// Try to break at natural boundaries in descending preference
+	for _, sep := range []string{". ", "; ", ", "} {
+		if idx := strings.LastIndex(desc[:cutoff], sep); idx > 0 {
+			return desc[:idx+len(sep)-1] + "…"
+		}
+	}
+
+	// Try to break at a space
+	if idx := strings.LastIndex(desc[:cutoff], " "); idx > 0 {
+		return desc[:idx] + "…"
+	}
+
+	// Hard cut
+	return desc[:cutoff] + "…"
 }
