@@ -1,5 +1,5 @@
 // Copyright (c) KSail contributors. All rights reserved.
-// Licensed under the MIT License.
+// Licensed under the PolyForm Shield License 1.0.0. See LICENSE in the project root.
 
 //go:build ignore
 
