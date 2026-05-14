@@ -148,7 +148,7 @@ spec:
 
 // KWOKNodeNotReadyStage defines a Stage that transitions nodes to NotReady when labeled.
 // Uses KWOK v0.7.0 CEL expressions for selector matching.
-// Apply the label to trigger: kubectl label node <name> node-not-ready.stage.kwok.x-k8s.io=true
+// Apply the label to trigger: kubectl label node <name> node-not-ready.stage.kwok.x-k8s.io=true.
 const KWOKNodeNotReadyStage = `# Node NotReady chaos stage (KWOK v0.7.0+ CEL support).
 # Transitions labeled nodes to NotReady status after a configurable delay.
 # Usage: kubectl label node <name> node-not-ready.stage.kwok.x-k8s.io=true
@@ -207,7 +207,7 @@ spec:
 
 // KWOKPodFailureStage defines a Stage that fails running pod containers when labeled.
 // Uses KWOK v0.7.0 CEL expressions for selector matching.
-// Apply the label to trigger: kubectl label pod <name> pod-failure.stage.kwok.x-k8s.io=true
+// Apply the label to trigger: kubectl label pod <name> pod-failure.stage.kwok.x-k8s.io=true.
 const KWOKPodFailureStage = `# Pod container failure chaos stage (KWOK v0.7.0+ CEL support).
 # Transitions labeled pods to Failed status after a configurable delay.
 # Usage: kubectl label pod <name> pod-failure.stage.kwok.x-k8s.io=true

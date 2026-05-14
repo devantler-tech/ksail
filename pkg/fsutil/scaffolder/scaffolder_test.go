@@ -1644,7 +1644,11 @@ func TestScaffoldKWOK_CreatesConfigDir(t *testing.T) {
 	}
 
 	// Verify simulation.yaml contains expected CRD kinds
-	simulationPath := filepath.Join(tempDir, scaffolder.KWOKConfigDir, scaffolder.KWOKSimulationFile)
+	simulationPath := filepath.Join(
+		tempDir,
+		scaffolder.KWOKConfigDir,
+		scaffolder.KWOKSimulationFile,
+	)
 	simContent, err := os.ReadFile(simulationPath) //nolint:gosec // Test path
 	require.NoError(t, err)
 	assert.Contains(t, string(simContent), "kind: ClusterLogs")
@@ -1660,13 +1664,21 @@ func TestScaffoldKWOK_CreatesConfigDir(t *testing.T) {
 	assert.Contains(t, string(kustomizationContent), "kind: Kustomization")
 
 	// Verify chaos stage files contain CEL expressions
-	nodeNotReadyPath := filepath.Join(tempDir, scaffolder.KWOKConfigDir, scaffolder.KWOKNodeNotReadyFile)
+	nodeNotReadyPath := filepath.Join(
+		tempDir,
+		scaffolder.KWOKConfigDir,
+		scaffolder.KWOKNodeNotReadyFile,
+	)
 	nodeNotReadyContent, err := os.ReadFile(nodeNotReadyPath) //nolint:gosec // Test path
 	require.NoError(t, err)
 	assert.Contains(t, string(nodeNotReadyContent), "kind: Stage")
 	assert.Contains(t, string(nodeNotReadyContent), "cel:")
 
-	podFailurePath := filepath.Join(tempDir, scaffolder.KWOKConfigDir, scaffolder.KWOKPodFailureFile)
+	podFailurePath := filepath.Join(
+		tempDir,
+		scaffolder.KWOKConfigDir,
+		scaffolder.KWOKPodFailureFile,
+	)
 	podFailureContent, err := os.ReadFile(podFailurePath) //nolint:gosec // Test path
 	require.NoError(t, err)
 	assert.Contains(t, string(podFailureContent), "kind: Stage")
