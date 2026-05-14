@@ -7335,7 +7335,7 @@ func TestDriftExitError(t *testing.T) {
 	err := &cluster.DriftExitError{Changes: 3}
 
 	assert.Equal(t, 2, err.ExitCode(), "exit code must be 2 (diff(1) convention)")
-	assert.ErrorIs(t, err, cluster.ErrDriftDetected,
+	require.ErrorIs(t, err, cluster.ErrDriftDetected,
 		"DriftExitError must unwrap to ErrDriftDetected")
 	assert.Contains(t, err.Error(), "3")
 }
