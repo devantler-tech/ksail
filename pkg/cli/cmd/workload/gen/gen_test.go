@@ -90,14 +90,14 @@ func execGen(
 	return outBuf.String(), errBuf.String(), err
 }
 
-func TestGenAndValidate(t *testing.T) {
-	t.Parallel()
+type genValidateCase struct {
+	name       string
+	cmdFactory func(*di.Runtime) *cobra.Command
+	args       []string
+}
 
-	tests := []struct {
-		name       string
-		cmdFactory func(*di.Runtime) *cobra.Command
-		args       []string
-	}{
+func genValidateCases() []genValidateCase {
+	return []genValidateCase{
 		{"deployment", gen.NewDeploymentCmd, []string{"test-deploy", "--image", "nginx:1.27"}},
 		{"service-clusterip", gen.NewServiceCmd, []string{"clusterip", "test-svc", "--tcp=80:80"}},
 		{"configmap", gen.NewConfigMapCmd, []string{"test-cm", "--from-literal=key=value"}},
@@ -135,11 +135,15 @@ func TestGenAndValidate(t *testing.T) {
 			[]string{"test-hr", "--source=HelmRepository/test", "--chart=test", "--export"},
 		},
 	}
+}
+
+func TestGenAndValidate(t *testing.T) {
+	t.Parallel()
 
 	client := kubeconform.NewClient()
 	ctx := context.Background()
 
-	for _, testCase := range tests {
+	for _, testCase := range genValidateCases() {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
