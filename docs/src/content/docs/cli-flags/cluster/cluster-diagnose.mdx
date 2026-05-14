@@ -9,9 +9,13 @@ description: "Diagnose failing cluster resources"
 Surface failing Kubernetes resources for the current cluster.
 
 This command inspects the live cluster via the Kubernetes API and reports
-any pods that are not running successfully and any nodes that are not Ready.
-It is distribution-agnostic and works with Vanilla, K3s, Talos, and
-VCluster.
+any pods that are not running successfully, any nodes that are not Ready,
+and any PersistentVolumeClaims stuck in Pending phase. Each finding
+includes a severity classification and, where a known failure pattern is
+detected, a proactive remediation suggestion.
+
+A health score (0–100) summarises overall cluster health: each critical
+finding deducts 25 points and each warning deducts 10 points.
 
 The output is intentionally compact so it can be consumed directly by users
 or by the KSail AI chat assistant (ksail chat) and MCP server, which expose
