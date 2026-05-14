@@ -14,7 +14,7 @@ inputs:
       Comma-separated list of distributions to test on the Kubernetes provider.
       Each will be created, verified, and deleted sequentially.
     required: false
-    default: "Vanilla,K3s,VCluster,Talos,KWOK"
+    default: "Vanilla,K3s,VCluster,Talos"
   timeout:
     description: Timeout per nested cluster create (seconds)
     required: false

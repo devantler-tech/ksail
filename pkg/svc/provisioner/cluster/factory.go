@@ -386,6 +386,11 @@ func buildHostClusterClients(
 		return nil, nil, nil, fmt.Errorf("expand kubeconfig path: %w", err)
 	}
 
+	kubeconfig, err = fsutil.EvalCanonicalPath(kubeconfig)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("canonicalize kubeconfig path: %w", err)
+	}
+
 	context := resolveKubernetesOption(opts.Context, opts.ContextEnvVar)
 
 	restConfig, err := k8s.BuildRESTConfig(kubeconfig, context)

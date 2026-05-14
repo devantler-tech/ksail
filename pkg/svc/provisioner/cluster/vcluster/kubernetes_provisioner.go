@@ -253,12 +253,12 @@ func (p *KubernetesProvisioner) Exists(ctx context.Context, name string) (bool, 
 
 // Start is not supported for Helm-based vClusters (they run as pods).
 func (p *KubernetesProvisioner) Start(_ context.Context, _ string) error {
-	return fmt.Errorf("start not supported for vCluster on Kubernetes (pods are always running): %w", clustererr.ErrProviderNotSet)
+	return fmt.Errorf("start not supported for vCluster on Kubernetes (pods are always running): %w", clustererr.ErrOperationNotSupported)
 }
 
 // Stop is not supported for Helm-based vClusters (they run as pods).
 func (p *KubernetesProvisioner) Stop(_ context.Context, _ string) error {
-	return fmt.Errorf("stop not supported for vCluster on Kubernetes (pods are always running): %w", clustererr.ErrProviderNotSet)
+	return fmt.Errorf("stop not supported for vCluster on Kubernetes (pods are always running): %w", clustererr.ErrOperationNotSupported)
 }
 
 // List returns all vCluster instances discovered by the SDK.

@@ -133,10 +133,9 @@ The Gateway controller's LoadBalancer provides the external IP that users connec
 
 ### Start / Stop
 
-```bash
-ksail cluster stop     # Delete node pods (namespace preserved)
-ksail cluster start    # Recreate node pods
-```
+Start and stop are **not supported** for the Kubernetes provider. Nested cluster pods are managed by
+their respective operators/controllers and cannot be independently stopped/started. Use `delete` and
+`create` to manage cluster lifecycle.
 
 ### Delete
 

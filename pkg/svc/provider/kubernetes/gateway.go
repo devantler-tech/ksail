@@ -163,7 +163,7 @@ func (p *Provider) GetAPIEndpoint(
 	}
 
 	return "https://" + net.JoinHostPort(
-		svc.Spec.ClusterIP, strconv.FormatInt(int64(DinDAPIServerPort), 10),
+		svc.Spec.ClusterIP, strconv.FormatInt(int64(svc.Spec.Ports[0].Port), 10),
 	), nil
 }
 

@@ -75,7 +75,7 @@ inputs:
       Comma-separated list of distributions to test on the Kubernetes provider.
       Only used when test-kubernetes-provider is 'true'.
     required: false
-    default: "Vanilla,K3s,VCluster,Talos,KWOK"
+    default: "Vanilla,K3s,VCluster,Talos"
 
 runs:
   using: composite

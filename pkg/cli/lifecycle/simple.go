@@ -431,6 +431,11 @@ func newKubernetesCleanupProvisioner(
 		return nil, fmt.Errorf("expand kubeconfig path: %w", err)
 	}
 
+	kubeconfig, err = fsutil.EvalCanonicalPath(kubeconfig)
+	if err != nil {
+		return nil, fmt.Errorf("canonicalize kubeconfig path: %w", err)
+	}
+
 	contextName := resolveKubernetesOption(opts.Context, opts.ContextEnvVar)
 
 	restConfig, err := k8s.BuildRESTConfig(kubeconfig, contextName)
@@ -531,15 +536,13 @@ func (p *kubernetesCleanupProvisioner) List(ctx context.Context) ([]string, erro
 	return names, nil
 }
 
-// resolveKubernetesOption resolves a value from a direct config value or environment variable.
+// resolveKubernetesOption resolves a value from an environment variable (preferred) or direct config value.
 func resolveKubernetesOption(value, envVar string) string {
-	if value != "" {
-		return value
-	}
-
 	if envVar != "" {
-		return os.Getenv(envVar)
+		if envValue := os.Getenv(envVar); envValue != "" {
+			return envValue
+		}
 	}
 
-	return ""
+	return value
 }

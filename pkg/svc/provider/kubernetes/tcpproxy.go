@@ -157,9 +157,6 @@ func (tp *tcpProxy) handleConnection(localConn net.Conn) {
 		}
 	}
 
-	// Close error stream's write direction (we only read from it)
-	errorStream.Close()
-
 	defer conn.RemoveStreams(errorStream, dataStream)
 
 	// Read error stream in the background

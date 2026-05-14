@@ -284,7 +284,7 @@ type OptionsKubernetes struct {
 	ContextEnvVar string `default:"KSAIL_HOST_CONTEXT" json:"contextEnvVar,omitzero"`
 	// GatewayClassName is the GatewayClass to use for exposing the nested API server.
 	// Must reference a GatewayClass that exists on the host cluster.
-	// Required when using the Kubernetes provider.
+	// When empty, the API is exposed via ClusterIP Service only (no external Gateway).
 	GatewayClassName string `json:"gatewayClassName,omitzero"`
 	// PodCIDR is the pod CIDR for the nested cluster.
 	// Must not overlap with the host cluster's pod or service CIDRs.

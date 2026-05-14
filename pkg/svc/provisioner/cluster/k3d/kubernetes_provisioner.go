@@ -10,6 +10,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	kubernetesprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/kubernetes"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
 	k3kv1beta1 "github.com/rancher/k3k/pkg/apis/k3k.io/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -258,6 +259,35 @@ func (p *K3kProvisioner) Exists(ctx context.Context, name string) (bool, error) 
 }
 
 // jscpd:ignore-end
+
+// Start is not supported for k3k clusters (pods are always running).
+func (p *K3kProvisioner) Start(_ context.Context, _ string) error {
+	return fmt.Errorf("start not supported for k3k clusters (pods are managed by the k3k operator): %w", clustererr.ErrOperationNotSupported)
+}
+
+// Stop is not supported for k3k clusters (pods are managed by the operator).
+func (p *K3kProvisioner) Stop(_ context.Context, _ string) error {
+	return fmt.Errorf("stop not supported for k3k clusters (pods are managed by the k3k operator): %w", clustererr.ErrOperationNotSupported)
+}
+
+// List returns all k3k cluster namespaces found on the host cluster.
+func (p *K3kProvisioner) List(ctx context.Context) ([]string, error) {
+	namespaces, err := p.hostClientset.CoreV1().Namespaces().List(ctx, metav1.ListOptions{
+		LabelSelector: "app.kubernetes.io/managed-by=ksail",
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list k3k namespaces: %w", err)
+	}
+
+	var names []string
+	for _, ns := range namespaces.Items {
+		if strings.HasPrefix(ns.Name, k3kNamespacePrefix) {
+			names = append(names, strings.TrimPrefix(ns.Name, k3kNamespacePrefix))
+		}
+	}
+
+	return names, nil
+}
 
 // ensureK3kOperator installs the k3k Helm chart if it isn't already present.
 func (p *K3kProvisioner) ensureK3kOperator(ctx context.Context) error {

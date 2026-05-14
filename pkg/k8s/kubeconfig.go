@@ -125,7 +125,12 @@ func loadOrCreateKubeconfig(kubeconfigPath string) (*api.Config, error) {
 //
 // This is the safe alternative to clientcmd.WriteToFile for in-place edits.
 func ModifyKubeconfigCluster(kubeconfigPath, clusterKey, newServerURL string) error {
-	kubeconfigPath, err := fsutil.EvalCanonicalPath(kubeconfigPath)
+	kubeconfigPath, err := fsutil.ExpandHomePath(kubeconfigPath)
+	if err != nil {
+		return fmt.Errorf("expand kubeconfig path: %w", err)
+	}
+
+	kubeconfigPath, err = fsutil.EvalCanonicalPath(kubeconfigPath)
 	if err != nil {
 		return fmt.Errorf("canonicalize kubeconfig path: %w", err)
 	}

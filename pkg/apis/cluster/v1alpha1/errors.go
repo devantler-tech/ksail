@@ -143,7 +143,7 @@ var ErrInvalidAllowedCIDR = errors.New("invalid allowed CIDR")
 // ErrInvalidOIDCConfig is returned when the OIDC configuration is incomplete or invalid.
 var ErrInvalidOIDCConfig = errors.New("invalid OIDC configuration")
 
-// ErrGatewayAPINotAvailable is returned when the Kubernetes provider requires Gateway API
+// ErrGatewayAPINotAvailable is returned when Gateway API exposure is requested
 // but the host cluster does not have the experimental CRDs installed.
 var ErrGatewayAPINotAvailable = errors.New(
 	"gateway API experimental CRDs not found on host cluster; " +
@@ -152,9 +152,3 @@ var ErrGatewayAPINotAvailable = errors.New(
 
 // ErrCIDROverlap is returned when nested cluster CIDRs overlap with host cluster CIDRs.
 var ErrCIDROverlap = errors.New("nested cluster CIDR overlaps with host cluster CIDR")
-
-// ErrGatewayClassNameRequired is returned when the Kubernetes provider is selected
-// but no GatewayClassName is configured.
-var ErrGatewayClassNameRequired = errors.New(
-	"gatewayClassName is required when using the Kubernetes provider",
-)

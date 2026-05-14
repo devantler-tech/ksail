@@ -342,6 +342,7 @@ func (p *KubernetesProvisioner) setupDinD(ctx context.Context) error {
 // jscpd:ignore-end
 
 // parsePort extracts the port number from a "host:port" endpoint string.
+// Returns a value in the valid TCP port range [1, 65535].
 func parsePort(endpoint string) (int, error) {
 	_, portStr, err := net.SplitHostPort(endpoint)
 	if err != nil {
@@ -351,6 +352,10 @@ func parsePort(endpoint string) (int, error) {
 	port, err := strconv.Atoi(portStr)
 	if err != nil {
 		return 0, fmt.Errorf("parse port %q: %w", portStr, err)
+	}
+
+	if port < 1 || port > 65535 {
+		return 0, fmt.Errorf("port %d out of valid range [1, 65535]", port)
 	}
 
 	return port, nil
