@@ -10,9 +10,10 @@ import (
 // KWOK's config loader auto-detects directories and runs kustomize to assemble configs.
 const KWOKConfigDir = "kwok"
 
-// KWOKConfigFile is an alias for KWOKConfigDir for backward compatibility.
+// KWOKConfigFile is the legacy single-file configuration name.
+//
 // Deprecated: Use KWOKConfigDir instead.
-const KWOKConfigFile = KWOKConfigDir
+const KWOKConfigFile = "kwok.yaml"
 
 // KWOKSimulationFile is the filename for the simulation CRDs within the kwok directory.
 const KWOKSimulationFile = "simulation.yaml"

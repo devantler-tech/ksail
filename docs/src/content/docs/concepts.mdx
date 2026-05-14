@@ -5,7 +5,7 @@ description: KSail builds upon established Kubernetes technologies and patterns.
 
 ## Native Configuration Philosophy
 
-**KSail is a superset, not a replacement.** KSail works with native distribution configurations rather than creating proprietary formats. When you run `ksail cluster init`, KSail generates standard configuration files: `kind.yaml` ([Kind](https://kind.sigs.k8s.io/docs/user/configuration/)) for Vanilla, `k3d.yaml` ([K3d](https://k3d.io/stable/usage/configfile/)) for K3s, `talos/` patches ([Talos](https://www.talos.dev/latest/reference/configuration/)), `vcluster.yaml` ([vCluster](https://www.vcluster.com/docs/vcluster/configure/vcluster-yaml/)) for VCluster, and `kwok.yaml` ([KWOK](https://kwok.sigs.k8s.io/docs/user/)) for KWOK.
+**KSail is a superset, not a replacement.** KSail works with native distribution configurations rather than creating proprietary formats. When you run `ksail cluster init`, KSail generates standard configuration files: `kind.yaml` ([Kind](https://kind.sigs.k8s.io/docs/user/configuration/)) for Vanilla, `k3d.yaml` ([K3d](https://k3d.io/stable/usage/configfile/)) for K3s, `talos/` patches ([Talos](https://www.talos.dev/latest/reference/configuration/)), `vcluster.yaml` ([vCluster](https://www.vcluster.com/docs/vcluster/configure/vcluster-yaml/)) for VCluster, and `kwok/` ([KWOK](https://kwok.sigs.k8s.io/docs/user/)) for KWOK.
 
 **No vendor lock-in:** These files work directly with underlying tools without KSail, providing freedom to migrate, use native CLI tools alongside KSail, and maintain team flexibility. Your configurations match official documentation and remain valid even if you stop using KSail.
 

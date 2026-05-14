@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -478,20 +479,26 @@ func (p *Provisioner) resolveConfigPath() (string, func(), error) {
 		return "", nil, fmt.Errorf("failed to create temp config dir: %w", err)
 	}
 
-	kustomizationContent := "apiVersion: kustomize.config.k8s.io/v1beta1\nkind: Kustomization\nresources:\n  - simulation.yaml\n"
+	kustomizationContent := "" +
+		"apiVersion: kustomize.config.k8s.io/v1beta1\n" +
+		"kind: Kustomization\n" +
+		"resources:\n" +
+		"  - simulation.yaml\n"
 
-	kustomizationPath := tmpDir + "/kustomization.yaml"
+	const fileMode = 0o600
 
-	err = os.WriteFile(kustomizationPath, []byte(kustomizationContent), 0o600)
+	kustomizationPath := filepath.Join(tmpDir, "kustomization.yaml")
+
+	err = os.WriteFile(kustomizationPath, []byte(kustomizationContent), fileMode)
 	if err != nil {
 		_ = os.RemoveAll(tmpDir)
 
 		return "", nil, fmt.Errorf("failed to write temp kustomization.yaml: %w", err)
 	}
 
-	simulationPath := tmpDir + "/simulation.yaml"
+	simulationPath := filepath.Join(tmpDir, "simulation.yaml")
 
-	err = os.WriteFile(simulationPath, []byte(scaffolder.KWOKDefaultSimulationConfig), 0o600)
+	err = os.WriteFile(simulationPath, []byte(scaffolder.KWOKDefaultSimulationConfig), fileMode)
 	if err != nil {
 		_ = os.RemoveAll(tmpDir)
 

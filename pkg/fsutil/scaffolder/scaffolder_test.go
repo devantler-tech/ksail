@@ -76,7 +76,7 @@ func TestScaffoldAppliesDistributionDefaults(t *testing.T) {
 		{
 			name:         "KWOK",
 			distribution: v1alpha1.DistributionKWOK,
-			expected:     scaffolder.KWOKConfigFile,
+			expected:     scaffolder.KWOKConfigDir,
 		},
 		{name: "Unknown", distribution: "unknown", expected: scaffolder.KindConfigFile},
 	}
@@ -1617,7 +1617,7 @@ func TestScaffoldVCluster_SetsCorrectDistribution(t *testing.T) {
 	assert.Contains(t, string(ksailContent), "distribution: VCluster")
 }
 
-func TestScaffoldKWOK_CreatesConfigFile(t *testing.T) {
+func TestScaffoldKWOK_CreatesConfigDir(t *testing.T) {
 	t.Parallel()
 
 	tempDir := t.TempDir()
