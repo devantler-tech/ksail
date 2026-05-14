@@ -8274,7 +8274,7 @@ func mergeProvisionerDiff(
 	provisioner, _, err := factory.Create(cmd.Context(), ctx.ClusterCfg)
 	if err != nil {
 		notify.Warningf(
-			cmd.OutOrStderr(),
+			cmd.ErrOrStderr(),
 			"Cannot create provisioner for provisioner-level diff (drift detection may be incomplete): %v",
 			err,
 		)
@@ -8291,7 +8291,7 @@ func mergeProvisionerDiff(
 
 	currentSpec, _, err := updater.GetCurrentConfig(cmd.Context(), clusterName)
 	if err != nil {
-		notify.Warningf(cmd.OutOrStderr(),
+		notify.Warningf(cmd.ErrOrStderr(),
 			"Cannot retrieve current config for provisioner-level diff: %v", err)
 
 		return
@@ -8301,7 +8301,7 @@ func mergeProvisionerDiff(
 		cmd.Context(), clusterName, currentSpec, &ctx.ClusterCfg.Spec.Cluster,
 	)
 	if err != nil {
-		notify.Warningf(cmd.OutOrStderr(),
+		notify.Warningf(cmd.ErrOrStderr(),
 			"Cannot compute provisioner-level diff: %v", err)
 
 		return

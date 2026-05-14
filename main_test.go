@@ -153,19 +153,30 @@ func TestRunSafelyPropagatesRunnerExitCode(t *testing.T) {
 func TestRunWithArgsHandlesCustomExitCode(t *testing.T) {
 	t.Parallel()
 
-	funcStub := func(code int) func([]string) int {
-		return func([]string) int {
-			var errWithCode interface {
-				error
-				ExitCode() int
-			} = &customExitError{code: code}
-			panic(errWithCode) // Simulate command returning custom exit error (caught in Execute)
-		}
+	// Test that runWithArgs detects errors implementing ExitCode() int
+	// and returns their exit code instead of defaulting to 1.
+	tests := []struct {
+		name       string
+		customCode int
+	}{
+		{name: "drift_exit_code_2", customCode: 2},
+		{name: "custom_exit_code_42", customCode: 42},
 	}
 
-	// Test: custom exit code 2 from diff command
-	// This verifies that runWithArgs can detect and return custom exit codes
-	// Note: A full integration test would mock the cmd.Execute flow; this
-	// documents the behavior conceptually.
-	_ = funcStub(2)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var errOutput bytes.Buffer
+
+			// Create a runner that panics with an error implementing ExitCode() int
+			runner := func([]string) int {
+				panic(&customExitError{code: tc.customCode})
+			}
+
+			// runSafely should catch the panic, extract the exit code, and return it
+			exitCode := runSafely(nil, runner, &errOutput)
+
+			// Verify the custom exit code is returned (not the default 1)
+			assert.Equal(t, tc.customCode, exitCode)
+		})
+	}
 }
