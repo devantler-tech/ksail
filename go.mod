@@ -72,6 +72,7 @@ require (
 	github.com/loft-sh/log v0.0.0-20240219160058-26d83ffb46ac
 	github.com/loft-sh/vcluster v0.34.0
 	github.com/modelcontextprotocol/go-sdk v1.6.0
+	github.com/rancher/k3k v1.0.2
 	github.com/siderolabs/gen v0.8.6
 	github.com/siderolabs/go-kubernetes v0.2.37
 	github.com/siderolabs/go-retry v0.3.3
@@ -405,7 +406,6 @@ require (
 	github.com/go-jose/go-jose/v4 v4.1.4 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
-	github.com/go-logr/zapr v1.3.0 // indirect
 	github.com/go-openapi/analysis v0.24.3 // indirect
 	github.com/go-openapi/errors v0.22.7 // indirect
 	github.com/go-openapi/jsonpointer v0.22.5 // indirect
@@ -730,8 +730,6 @@ require (
 	github.com/quay/zlog v1.1.8 // indirect
 	github.com/raeperd/recvcheck v0.2.0 // indirect
 	github.com/rakyll/hey v0.1.4 // indirect
-	github.com/rancher/dynamiclistener v1.27.5 // indirect
-	github.com/rancher/k3k v1.0.2 // indirect
 	github.com/rancher/wharfie v0.7.0 // indirect
 	github.com/rcrowley/go-metrics v0.0.0-20250401214520-65e299d6c5c9 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
