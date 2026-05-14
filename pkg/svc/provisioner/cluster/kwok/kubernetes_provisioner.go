@@ -96,7 +96,7 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 	target := p.Provisioner.resolveName(name)
 
 	// Step 1: Ensure namespace + DinD pod
-	if err := p.setupDinD(ctx); err != nil {
+	if err := p.setupDinD(ctx, target); err != nil {
 		return err
 	}
 
@@ -161,7 +161,7 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 	_, _ = fmt.Fprintln(os.Stdout, "► port-forwarding nested API server to localhost")
 
 	pf, err := p.k8sProvider.StartPortForward(
-		ctx, p.restConfig, p.clusterName,
+		ctx, p.restConfig, target,
 		kubernetesprovider.DinDPodName, apiServerPort,
 	)
 	if err != nil {
@@ -191,13 +191,15 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 
 	// Step 12: Expose via Gateway API (if configured)
 	return p.k8sProvider.EnsureAPIExposure(
-		ctx, p.dynamicClient, p.clusterName,
+		ctx, p.dynamicClient, target,
 		int32(apiServerPort), p.gatewayClassName,
 	)
 }
 
 // Delete deletes the KWOK cluster inside DinD and cleans up host cluster resources.
 func (p *KubernetesProvisioner) Delete(ctx context.Context, name string) error {
+	target := p.Provisioner.resolveName(name)
+
 	// Close port-forward if active
 	if p.portForward != nil {
 		p.portForward.Close()
@@ -206,7 +208,7 @@ func (p *KubernetesProvisioner) Delete(ctx context.Context, name string) error {
 	// jscpd:ignore-start
 	// Best-effort: delete KWOK cluster inside DinD via SDK
 	dockerPF, pfErr := p.k8sProvider.StartExecTunnel(
-		ctx, p.restConfig, p.clusterName,
+		ctx, p.restConfig, target,
 		kubernetesprovider.DinDPodName, kubernetesprovider.DinDContainerName,
 		kubernetesprovider.DinDDockerPort,
 	)
@@ -219,12 +221,11 @@ func (p *KubernetesProvisioner) Delete(ctx context.Context, name string) error {
 	}
 
 	// Clean up API exposure, DinD, and namespace
-	if err := p.k8sProvider.TeardownDinD(ctx, p.dynamicClient, p.clusterName); err != nil {
+	if err := p.k8sProvider.TeardownDinD(ctx, p.dynamicClient, target); err != nil {
 		return fmt.Errorf("teardown DinD: %w", err)
 	}
 
 	// Clean up kubeconfig entries
-	target := p.Provisioner.resolveName(name)
 	contextName := "kwok-" + target
 	if err := k8s.CleanupKubeconfig(p.kubeconfigPath, contextName, contextName, contextName, os.Stdout); err != nil {
 		return fmt.Errorf("cleanup kubeconfig: %w", err)
@@ -244,8 +245,8 @@ func (p *KubernetesProvisioner) List(ctx context.Context) ([]string, error) {
 }
 
 // setupDinD creates the namespace and DinD pod, then waits for readiness.
-func (p *KubernetesProvisioner) setupDinD(ctx context.Context) error {
-	return p.k8sProvider.SetupDinD(ctx, p.clusterName, p.distribution)
+func (p *KubernetesProvisioner) setupDinD(ctx context.Context, clusterName string) error {
+	return p.k8sProvider.SetupDinD(ctx, clusterName, p.distribution)
 }
 
 // jscpd:ignore-end
@@ -355,14 +356,14 @@ func (p *KubernetesProvisioner) createPlaceholderFiles(ctx context.Context, clus
 	}
 
 	mkdirCmd := fmt.Sprintf("mkdir -p '%s'", strings.ReplaceAll(pkiDir, "'", "'\\''"))
-	if _, err := p.k8sProvider.ExecInDinD(ctx, p.restConfig, p.clusterName, mkdirCmd); err != nil {
+	if _, err := p.k8sProvider.ExecInDinD(ctx, p.restConfig, clusterName, mkdirCmd); err != nil {
 		return fmt.Errorf("mkdir pki: %w", err)
 	}
 
 	for _, path := range placeholders {
 		escapedPath := strings.ReplaceAll(path, "'", "'\\''")
 		touchCmd := fmt.Sprintf("touch '%s'", escapedPath)
-		if _, err := p.k8sProvider.ExecInDinD(ctx, p.restConfig, p.clusterName, touchCmd); err != nil {
+		if _, err := p.k8sProvider.ExecInDinD(ctx, p.restConfig, clusterName, touchCmd); err != nil {
 			return fmt.Errorf("touch %s: %w", path, err)
 		}
 	}
@@ -397,7 +398,7 @@ func (p *KubernetesProvisioner) copyStateToDinD(ctx context.Context, clusterName
 		}
 
 		remotePath := filepath.Join(stateDir, rel)
-		if err := p.k8sProvider.WriteFileInDinD(ctx, p.restConfig, p.clusterName, remotePath, string(content)); err != nil {
+		if err := p.k8sProvider.WriteFileInDinD(ctx, p.restConfig, clusterName, remotePath, string(content)); err != nil {
 			return fmt.Errorf("write %s to DinD: %w", rel, err)
 		}
 	}
@@ -411,7 +412,7 @@ func (p *KubernetesProvisioner) restartContainersInDinD(ctx context.Context, clu
 	containers := kwokContainerNames(clusterName)
 	restartCmd := "docker restart " + strings.Join(containers, " ")
 
-	if _, err := p.k8sProvider.ExecInDinD(ctx, p.restConfig, p.clusterName, restartCmd); err != nil {
+	if _, err := p.k8sProvider.ExecInDinD(ctx, p.restConfig, clusterName, restartCmd); err != nil {
 		return fmt.Errorf("docker restart: %w", err)
 	}
 

@@ -20,13 +20,18 @@ The Kubernetes provider is ideal when you:
 ## Prerequisites
 
 1. **Host Kubernetes cluster** — any distribution (cloud-managed, on-prem, or local)
-2. **Gateway API experimental CRDs** — install from [gateway-api.sigs.k8s.io](https://gateway-api.sigs.k8s.io/guides/getting-started/#install-experimental-channel):
+2. **Privileged pod policy** — nested cluster pods require `privileged: true` security context
+
+**Optional — Gateway API exposure** (only needed when `spec.provider.kubernetes.gatewayClassName` is set):
+
+3. **Gateway API experimental CRDs** — install from [gateway-api.sigs.k8s.io](https://gateway-api.sigs.k8s.io/guides/getting-started/#install-experimental-channel):
    ```bash
    kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.5.1/experimental-install.yaml
    ```
-3. **Gateway controller** — one of: [Envoy Gateway](https://gateway.envoyproxy.io/), [Traefik](https://traefik.io/), [NGINX Gateway Fabric](https://docs.nginx.com/nginx-gateway-fabric/), [Contour](https://projectcontour.io/), or [HAProxy Ingress](https://haproxy-ingress.github.io/)
-4. **GatewayClass** — must exist on the host cluster (created by the Gateway controller)
-5. **Privileged pod policy** — nested cluster pods require `privileged: true` security context
+4. **Gateway controller** — one of: [Envoy Gateway](https://gateway.envoyproxy.io/), [Traefik](https://traefik.io/), [NGINX Gateway Fabric](https://docs.nginx.com/nginx-gateway-fabric/), [Contour](https://projectcontour.io/), or [HAProxy Ingress](https://haproxy-ingress.github.io/)
+5. **GatewayClass** — must exist on the host cluster (created by the Gateway controller)
+
+When `gatewayClassName` is empty (the default), KSail uses local port-forwarding for API access instead of Gateway API exposure.
 
 ## Configuration
 
@@ -149,11 +154,13 @@ ksail cluster delete   # Delete namespace and all resources
 ksail cluster list --provider Kubernetes
 ```
 
+> **Note:** Kubernetes provider cluster listing returns an empty result in the current version. Use `kubectl get namespaces -l ksail.io/managed-by=ksail` on the host cluster to find active nested clusters.
+
 ## Troubleshooting
 
-**`Gateway API experimental CRDs not found`** — Install the experimental CRDs: `kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.5.1/experimental-install.yaml`
+**`Gateway API experimental CRDs not found`** — This error only occurs when `spec.provider.kubernetes.gatewayClassName` is set. Install the experimental CRDs: `kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.5.1/experimental-install.yaml`, or leave `gatewayClassName` empty to use port-forward-only access.
 
-**`gatewayClassName is required`** — Set `spec.provider.kubernetes.gatewayClassName` to a GatewayClass that exists on your host cluster. List available classes: `kubectl get gatewayclasses`
+**`GatewayClass not found`** — Set `spec.provider.kubernetes.gatewayClassName` to a GatewayClass that exists on your host cluster. List available classes: `kubectl get gatewayclasses`
 
 **`nested cluster CIDR overlaps`** — Change `spec.provider.kubernetes.podCidr` and/or `spec.provider.kubernetes.serviceCidr` to ranges that don't overlap with your host cluster. Check host CIDRs: `kubectl cluster-info dump | grep -m 1 service-cluster-ip-range`
 

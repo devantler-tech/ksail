@@ -96,7 +96,7 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 	}
 
 	// Step 1: Ensure namespace + DinD pod
-	if err := p.setupDinD(ctx); err != nil {
+	if err := p.setupDinD(ctx, target); err != nil {
 		return err
 	}
 
@@ -105,7 +105,7 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 	// which correctly handles Docker's HTTP connection hijacking (101 Upgrade)
 	// for docker exec operations.
 	dockerPF, err := p.k8sProvider.StartExecTunnel(
-		ctx, p.restConfig, p.clusterName,
+		ctx, p.restConfig, target,
 		kubernetesprovider.DinDPodName, kubernetesprovider.DinDContainerName,
 		kubernetesprovider.DinDDockerPort,
 	)
@@ -128,7 +128,7 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 	fmt.Fprintln(os.Stdout, "► port-forwarding nested API server to localhost")
 
 	apiPortForward, err := p.k8sProvider.StartPortForward(
-		ctx, p.restConfig, p.clusterName,
+		ctx, p.restConfig, target,
 		kubernetesprovider.DinDPodName, int(p.apiServerPort),
 	)
 	if err != nil {
@@ -149,7 +149,7 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 
 	// Step 7: Expose the nested API server via Gateway API (if configured)
 	return p.k8sProvider.EnsureAPIExposure(
-		ctx, p.dynamicClient, p.clusterName,
+		ctx, p.dynamicClient, target,
 		p.apiServerPort, p.gatewayClassName,
 	)
 }
@@ -166,7 +166,7 @@ func (p *KubernetesProvisioner) Delete(ctx context.Context, name string) error {
 	// jscpd:ignore-start
 	// Best-effort: delete Kind cluster inside DinD via SDK
 	dockerPF, pfErr := p.k8sProvider.StartExecTunnel(
-		ctx, p.restConfig, p.clusterName,
+		ctx, p.restConfig, target,
 		kubernetesprovider.DinDPodName, kubernetesprovider.DinDContainerName,
 		kubernetesprovider.DinDDockerPort,
 	)
@@ -179,7 +179,7 @@ func (p *KubernetesProvisioner) Delete(ctx context.Context, name string) error {
 	}
 
 	// Clean up API exposure, DinD, and namespace
-	if err := p.k8sProvider.TeardownDinD(ctx, p.dynamicClient, p.clusterName); err != nil {
+	if err := p.k8sProvider.TeardownDinD(ctx, p.dynamicClient, target); err != nil {
 		return fmt.Errorf("teardown DinD: %w", err)
 	}
 
@@ -203,8 +203,8 @@ func (p *KubernetesProvisioner) List(ctx context.Context) ([]string, error) {
 }
 
 // setupDinD creates the namespace and DinD pod, then waits for readiness.
-func (p *KubernetesProvisioner) setupDinD(ctx context.Context) error {
-	return p.k8sProvider.SetupDinD(ctx, p.clusterName, p.distribution)
+func (p *KubernetesProvisioner) setupDinD(ctx context.Context, clusterName string) error {
+	return p.k8sProvider.SetupDinD(ctx, clusterName, p.distribution)
 }
 
 // jscpd:ignore-end

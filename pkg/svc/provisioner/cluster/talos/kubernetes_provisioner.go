@@ -93,7 +93,7 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 	}
 
 	// Step 1: Ensure namespace + DinD pod
-	if err := p.setupDinD(ctx); err != nil {
+	if err := p.setupDinD(ctx, clusterName); err != nil {
 		return err
 	}
 
@@ -196,7 +196,7 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 
 	// Port-forward Talos API from DinD to host
 	talosPF, err := p.k8sProvider.StartPortForward(
-		ctx, p.restConfig, p.clusterName,
+		ctx, p.restConfig, clusterName,
 		kubernetesprovider.DinDPodName, talosPort,
 	)
 	if err != nil {
@@ -207,7 +207,7 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 
 	// Port-forward K8s API from DinD to host
 	k8sPF, err := p.k8sProvider.StartPortForward(
-		ctx, p.restConfig, p.clusterName,
+		ctx, p.restConfig, clusterName,
 		kubernetesprovider.DinDPodName, k8sPort,
 	)
 	if err != nil {
@@ -258,7 +258,7 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 
 	// Expose the nested API server via Gateway API (if configured)
 	return p.k8sProvider.EnsureAPIExposure(
-		ctx, p.dynamicClient, p.clusterName,
+		ctx, p.dynamicClient, clusterName,
 		int32(k8sPort), p.gatewayClassName,
 	)
 }
@@ -280,7 +280,7 @@ func (p *KubernetesProvisioner) Delete(ctx context.Context, name string) error {
 	// jscpd:ignore-start
 	// Best-effort: delete Talos cluster inside DinD via SDK
 	dockerPF, pfErr := p.k8sProvider.StartExecTunnel(
-		ctx, p.restConfig, p.clusterName,
+		ctx, p.restConfig, clusterName,
 		kubernetesprovider.DinDPodName, kubernetesprovider.DinDContainerName,
 		kubernetesprovider.DinDDockerPort,
 	)
@@ -305,7 +305,7 @@ func (p *KubernetesProvisioner) Delete(ctx context.Context, name string) error {
 	}
 
 	// Clean up API exposure, DinD, and namespace
-	if err := p.k8sProvider.TeardownDinD(ctx, p.dynamicClient, p.clusterName); err != nil {
+	if err := p.k8sProvider.TeardownDinD(ctx, p.dynamicClient, clusterName); err != nil {
 		return fmt.Errorf("teardown DinD: %w", err)
 	}
 
@@ -333,8 +333,8 @@ func (p *KubernetesProvisioner) Stop(_ context.Context, _ string) error {
 }
 
 // setupDinD creates the namespace and DinD pod, then waits for readiness.
-func (p *KubernetesProvisioner) setupDinD(ctx context.Context) error {
-	return p.k8sProvider.SetupDinD(ctx, p.clusterName, p.distribution)
+func (p *KubernetesProvisioner) setupDinD(ctx context.Context, clusterName string) error {
+	return p.k8sProvider.SetupDinD(ctx, clusterName, p.distribution)
 }
 
 // jscpd:ignore-end

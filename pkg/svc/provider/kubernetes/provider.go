@@ -65,8 +65,9 @@ func (p *Provider) StopNodes(ctx context.Context, clusterName string) error {
 		return fmt.Errorf("%w: %s", provider.ErrNoNodes, clusterName)
 	}
 
-	// Delete pods to "stop" the cluster. StatefulSet controller will not recreate
-	// them if the StatefulSet itself has been scaled to 0 replicas.
+	// Delete pods to "stop" the cluster. KSail's Kubernetes provider uses standalone
+	// (unmanaged) pods, so deleting them stops the DinD processes without a controller
+	// recreating them.
 	for i := range pods {
 		err := p.client.CoreV1().Pods(ns).Delete(ctx, pods[i].Name, metav1.DeleteOptions{})
 		if err != nil {

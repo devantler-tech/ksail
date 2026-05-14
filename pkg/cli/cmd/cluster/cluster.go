@@ -3128,7 +3128,8 @@ func getProviderStatus(
 		// that rely on this helper do not fail for EKS.
 		return &provider.ClusterStatus{Phase: "unknown"}, nil
 	case v1alpha1.ProviderKubernetes:
-		// Kubernetes provider status is derived from the host cluster namespace.
+		// Kubernetes provider status is a stub: full pod/namespace status inspection
+		// is not yet implemented. Return unknown so callers do not fail.
 		return &provider.ClusterStatus{Phase: "unknown"}, nil
 	default:
 		return nil, fmt.Errorf("%w: %s", errUnsupportedProvider, prov)
