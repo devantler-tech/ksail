@@ -31,7 +31,11 @@ import (
 
 var errGenerateFailure = errors.New("generate failure")
 
-const flannelBackendNoneArg = "--flannel-backend=none"
+const (
+	flannelBackendNoneArg = "--flannel-backend=none"
+	distributionVanilla   = "Vanilla"
+	distributionK3d       = "K3d"
+)
 
 func TestMain(m *testing.M) {
 	os.Exit(snapshottest.Run(m, snaps.CleanOpts{Sort: true}))
@@ -58,11 +62,11 @@ func TestScaffoldAppliesDistributionDefaults(t *testing.T) {
 		expected     string
 	}{
 		{
-			name:         "Vanilla",
+			name: distributionVanilla,
 			distribution: v1alpha1.DistributionVanilla,
 			expected:     scaffolder.KindConfigFile,
 		},
-		{name: "K3d", distribution: v1alpha1.DistributionK3s, expected: scaffolder.K3dConfigFile},
+		{name: distributionK3d, distribution: v1alpha1.DistributionK3s, expected: scaffolder.K3dConfigFile},
 		{
 			name:         "Talos",
 			distribution: v1alpha1.DistributionTalos,
@@ -309,7 +313,7 @@ func TestScaffoldWrapsDistributionGenerationErrors(t *testing.T) {
 
 	tests := []distributionErrorTestCase{
 		{
-			name: "Vanilla",
+			name: distributionVanilla,
 			configure: func(mocks *generatorMocks) {
 				mocks.kind.ExpectedCalls = nil // Clear default expectations
 				mocks.kind.On(
@@ -601,8 +605,8 @@ func TestGenerateK3dConfigHandlesCNI(t *testing.T) {
 			expectArgs:  3,
 			expectValue: flannelBackendNoneArg,
 			expectContainsArgs: []k3dArgExpectation{
-				{arg: "--disable-network-policy", nodeFilters: []string{"server:*"}},
-				{arg: "--disable=traefik", nodeFilters: []string{"server:*"}},
+				{arg: "--disable-network-policy", nodeFilters: []string{serverPlaceholder}},
+				{arg: "--disable=traefik", nodeFilters: []string{serverPlaceholder}},
 			},
 		},
 	}
@@ -1039,7 +1043,7 @@ func createTestCluster(_ string) v1alpha1.Cluster {
 				DistributionConfig: "kind.yaml",
 			},
 			Workload: v1alpha1.WorkloadSpec{
-				SourceDirectory: "k8s",
+				SourceDirectory: sourceDirectory,
 			},
 		},
 	}
@@ -1203,7 +1207,7 @@ func TestGenerateK3dRegistryConfig_InvalidSpec(t *testing.T) {
 func TestGenerateK3dRegistryConfig_WithValidMirror(t *testing.T) {
 	t.Parallel()
 
-	scaffolderInstance := newK3dScaffolder(t, []string{"docker.io=https://registry-1.docker.io"})
+	scaffolderInstance := newK3dScaffolder(t, []string{dockerMirrorURL})
 
 	config := scaffolderInstance.GenerateK3dRegistryConfig()
 
@@ -1237,7 +1241,7 @@ func TestCreateK3dConfig_MetricsServerDisabled(t *testing.T) {
 		if arg.Arg == "--disable=metrics-server" {
 			found = true
 
-			assert.Equal(t, []string{"server:*"}, arg.NodeFilters)
+			assert.Equal(t, []string{serverPlaceholder}, arg.NodeFilters)
 
 			break
 		}
@@ -1331,7 +1335,7 @@ func TestCreateK3dConfig_CSIDisabled(t *testing.T) {
 		if arg.Arg == "--disable=local-storage" {
 			found = true
 
-			assert.Equal(t, []string{"server:*"}, arg.NodeFilters)
+			assert.Equal(t, []string{serverPlaceholder}, arg.NodeFilters)
 
 			break
 		}

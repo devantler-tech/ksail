@@ -176,7 +176,8 @@ func (p *Provisioner) SetProvider(prov provider.Provider) {
 // It retries on transient errors (e.g. registry rate limits) with a fixed delay between attempts.
 // globalMu is held only for the duration of each kwokctl command; the retry sleep runs unlocked.
 func (p *Provisioner) Create(ctx context.Context, name string) error {
-	if err := p.CreateCluster(ctx, name); err != nil {
+	err := p.CreateCluster(ctx, name)
+	if err != nil {
 		return err
 	}
 

@@ -63,7 +63,41 @@ func (p *Provider) EnsureAPIExposure(
 ) error {
 	namespace := NamespaceName(clusterName)
 
-	// Create or update the ClusterIP Service targeting the DinD pod's API server port
+	// Ensure API Service
+	err := p.ensureAPIService(ctx, namespace, clusterName, apiPort)
+	if err != nil {
+		return err
+	}
+
+	if gatewayClassName == "" {
+		// No gateway controller — user must port-forward manually
+		return nil
+	}
+
+	if dynamicClient == nil {
+		return fmt.Errorf("ensure API exposure: %w", ErrDynamicClientRequired)
+	}
+
+	// Ensure Gateway
+	err = p.ensureGateway(ctx, dynamicClient, namespace, clusterName, gatewayClassName, apiPort)
+	if err != nil {
+		return err
+	}
+
+	// Ensure TCPRoute
+	err = p.ensureTCPRoute(ctx, dynamicClient, namespace, clusterName, apiPort)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (p *Provider) ensureAPIService(
+	ctx context.Context,
+	namespace, clusterName string,
+	apiPort int32,
+) error {
 	svc := buildAPIService(clusterName, apiPort)
 
 	_, err := p.client.CoreV1().Services(namespace).Create(ctx, svc, metav1.CreateOptions{})
@@ -81,19 +115,19 @@ func (p *Provider) EnsureAPIExposure(
 		return fmt.Errorf("ensure API server service: %w", err)
 	}
 
-	if gatewayClassName == "" {
-		// No gateway controller — user must port-forward manually
-		return nil
-	}
+	return nil
+}
 
-	if dynamicClient == nil {
-		return fmt.Errorf("ensure API exposure: %w", ErrDynamicClientRequired)
-	}
-
-	// Create or update Gateway
+func (p *Provider) ensureGateway(
+	ctx context.Context,
+	dynamicClient dynamic.Interface,
+	namespace, clusterName string,
+	gatewayClassName string,
+	apiPort int32,
+) error {
 	gateway := buildGateway(clusterName, gatewayClassName, apiPort)
 
-	_, err = dynamicClient.Resource(gatewayGVR()).Namespace(namespace).Create(
+	_, err := dynamicClient.Resource(gatewayGVR()).Namespace(namespace).Create(
 		ctx, gateway, metav1.CreateOptions{},
 	)
 	if errors.IsAlreadyExists(err) {
@@ -113,10 +147,18 @@ func (p *Provider) EnsureAPIExposure(
 		return fmt.Errorf("ensure Gateway: %w", err)
 	}
 
-	// Create or update TCPRoute
+	return nil
+}
+
+func (p *Provider) ensureTCPRoute(
+	ctx context.Context,
+	dynamicClient dynamic.Interface,
+	namespace, clusterName string,
+	apiPort int32,
+) error {
 	route := buildTCPRoute(clusterName, apiPort)
 
-	_, err = dynamicClient.Resource(tcpRouteGVR()).Namespace(namespace).Create(
+	_, err := dynamicClient.Resource(tcpRouteGVR()).Namespace(namespace).Create(
 		ctx, route, metav1.CreateOptions{},
 	)
 	if errors.IsAlreadyExists(err) {

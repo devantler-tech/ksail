@@ -14,7 +14,8 @@ func WithRemoteDockerHost(pf *PortForwardSession, fn func() error) error {
 
 	origHost := os.Getenv("DOCKER_HOST")
 
-	if err := os.Setenv("DOCKER_HOST", dockerHost); err != nil {
+	err := os.Setenv("DOCKER_HOST", dockerHost)
+	if err != nil {
 		return fmt.Errorf("set DOCKER_HOST: %w", err)
 	}
 

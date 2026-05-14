@@ -7,6 +7,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const (
+	ociTag                = "6.6.2"
+	flagExportOCI         = "export"
+	testExportWithNS      = "export with namespace"
+	testCustomNamespace   = "custom-ns"
+)
+
 func TestNewCreateSourceOCICmd(t *testing.T) {
 	t.Parallel()
 
@@ -53,8 +60,8 @@ func ociRepositoryExportTestsBasic() map[string]testCase {
 			args: []string{"podinfo"},
 			flags: map[string]string{
 				"url":    "oci://ghcr.io/stefanprodan/manifests/podinfo",
-				"tag":    "6.6.2",
-				"export": "true",
+				"tag":    ociTag,
+				flagExportOCI: "true",
 			},
 		},
 		"export with semver": {
@@ -62,7 +69,7 @@ func ociRepositoryExportTestsBasic() map[string]testCase {
 			flags: map[string]string{
 				"url":        "oci://ghcr.io/stefanprodan/manifests/podinfo",
 				"tag-semver": ">=6.0.0 <7.0.0",
-				"export":     "true",
+				flagExportOCI:     "true",
 			},
 		},
 		"export with digest": {
@@ -70,16 +77,16 @@ func ociRepositoryExportTestsBasic() map[string]testCase {
 			flags: map[string]string{
 				"url":    "oci://ghcr.io/stefanprodan/manifests/podinfo",
 				"digest": "sha256:abcdef123456",
-				"export": "true",
+				flagExportOCI: "true",
 			},
 		},
 		"export with secret ref": {
 			args: []string{"podinfo"},
 			flags: map[string]string{
 				"url":        "oci://ghcr.io/stefanprodan/manifests/podinfo",
-				"tag":        "6.6.2",
+				"tag":        ociTag,
 				"secret-ref": "oci-credentials",
-				"export":     "true",
+				flagExportOCI: "true",
 			},
 		},
 		"export with custom provider": {
@@ -88,7 +95,7 @@ func ociRepositoryExportTestsBasic() map[string]testCase {
 				"url":      "oci://gcr.io/project/manifests",
 				"tag":      "v1.0.0",
 				"provider": "gcp",
-				"export":   "true",
+				flagExportOCI:   "true",
 			},
 		},
 	}
@@ -102,32 +109,32 @@ func ociRepositoryExportTestsAdvanced() map[string]testCase {
 				"url":      "oci://localhost:5000/manifests",
 				"tag":      "latest",
 				"insecure": "true",
-				"export":   "true",
+				flagExportOCI:   "true",
 			},
 		},
 		"export with custom interval": {
 			args: []string{"podinfo"},
 			flags: map[string]string{
 				"url":      "oci://ghcr.io/stefanprodan/manifests/podinfo",
-				"tag":      "6.6.2",
+				"tag":      ociTag,
 				"interval": "15m",
-				"export":   "true",
+				flagExportOCI:   "true",
 			},
 		},
-		"export with namespace": {
+		testExportWithNS: {
 			args: []string{"podinfo"},
 			flags: map[string]string{
 				"url":       "oci://ghcr.io/stefanprodan/manifests/podinfo",
-				"tag":       "6.6.2",
-				"namespace": "custom-ns",
-				"export":    "true",
+				"tag":       ociTag,
+				"namespace": testCustomNamespace,
+				flagExportOCI:    "true",
 			},
 		},
 		"missing reference fails": {
 			args: []string{"podinfo"},
 			flags: map[string]string{
 				"url":    "oci://ghcr.io/stefanprodan/manifests/podinfo",
-				"export": "true",
+				flagExportOCI: "true",
 			},
 			wantErr: true,
 			errMsg:  "one of --tag, --tag-semver or --digest is required",
@@ -160,6 +167,6 @@ func TestCreateOCIRepository_MissingRequiredURL(t *testing.T) {
 	testMissingRequiredFlag(
 		t,
 		[]string{"source", "oci"},
-		[]string{"podinfo", "--tag", "v1.0.0", "--export"},
+		[]string{"podinfo", "--tag", "v1.0.0", "--" + flagExportOCI},
 	)
 }

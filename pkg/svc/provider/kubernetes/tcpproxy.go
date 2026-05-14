@@ -126,7 +126,7 @@ func (tp *tcpProxy) nextRequestID() int {
 // handleConnection forwards a single TCP connection to the pod via SPDY streams.
 // If the SPDY connection is dead, it transparently re-dials before creating streams.
 func (tp *tcpProxy) handleConnection(localConn net.Conn) {
-	defer localConn.Close()
+	defer func() { _ = localConn.Close() }()
 
 	conn, err := tp.getConnection()
 	if err != nil {

@@ -18,6 +18,17 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+const (
+	testScenarioMinimal              = "Minimal"
+	testScenarioProduction           = "Production"
+	testLabelApp                     = "app"
+	testKindGitRepository            = "GitRepository"
+	testKindHelmRepository           = "HelmRepository"
+	testKindKustomization            = "Kustomization"
+	testKindOCIRepository            = "OCIRepository"
+	testKindHelmRelease              = "HelmRelease"
+)
+
 // setupTestKubeconfig creates a temporary kubeconfig file for testing.
 // Returns the path to the temp file and a cleanup function.
 func setupTestKubeconfig(b *testing.B) (string, func()) {
@@ -86,7 +97,7 @@ func BenchmarkGitRepository_Creation(b *testing.B) {
 		repo *sourcev1.GitRepository
 	}{
 		{
-			name: "Minimal",
+			name: testScenarioMinimal,
 			repo: &sourcev1.GitRepository{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-repo",
@@ -117,13 +128,13 @@ func BenchmarkGitRepository_Creation(b *testing.B) {
 			},
 		},
 		{
-			name: "Production",
+			name: testScenarioProduction,
 			repo: &sourcev1.GitRepository{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "production-repo",
 					Namespace: "flux-system",
 					Labels: map[string]string{
-						"app":         "production",
+						testLabelApp:  "production",
 						"environment": "prod",
 						"team":        "platform",
 					},
@@ -165,7 +176,7 @@ func BenchmarkHelmRepository_Creation(b *testing.B) {
 		repo *sourcev1.HelmRepository
 	}{
 		{
-			name: "Minimal",
+			name: testScenarioMinimal,
 			repo: &sourcev1.HelmRepository{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-helm-repo",
@@ -178,14 +189,14 @@ func BenchmarkHelmRepository_Creation(b *testing.B) {
 			},
 		},
 		{
-			name: "Production",
+			name: testScenarioProduction,
 			repo: &sourcev1.HelmRepository{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "production-helm-repo",
 					Namespace: "flux-system",
 					Labels: map[string]string{
-						"app":  "production",
-						"type": "helm",
+						testLabelApp: "production",
+						"type":       "helm",
 					},
 				},
 				Spec: sourcev1.HelmRepositorySpec{
@@ -221,7 +232,7 @@ func BenchmarkOCIRepository_Creation(b *testing.B) {
 		repo *sourcev1.OCIRepository
 	}{
 		{
-			name: "Minimal",
+			name: testScenarioMinimal,
 			repo: &sourcev1.OCIRepository{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-oci-repo",
@@ -251,13 +262,13 @@ func BenchmarkOCIRepository_Creation(b *testing.B) {
 			},
 		},
 		{
-			name: "Production",
+			name: testScenarioProduction,
 			repo: &sourcev1.OCIRepository{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "production-oci-repo",
 					Namespace: "flux-system",
 					Labels: map[string]string{
-						"app":         "production",
+						testLabelApp:  "production",
 						"environment": "prod",
 					},
 				},
@@ -298,7 +309,7 @@ func BenchmarkKustomization_Creation(b *testing.B) {
 		kustomization *kustomizev1.Kustomization
 	}{
 		{
-			name: "Minimal",
+			name: testScenarioMinimal,
 			kustomization: &kustomizev1.Kustomization{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-kustomization",
@@ -306,7 +317,7 @@ func BenchmarkKustomization_Creation(b *testing.B) {
 				},
 				Spec: kustomizev1.KustomizationSpec{
 					SourceRef: kustomizev1.CrossNamespaceSourceReference{
-						Kind: "GitRepository",
+						Kind: testKindGitRepository,
 						Name: "test-repo",
 					},
 					Path:     "./",
@@ -316,19 +327,19 @@ func BenchmarkKustomization_Creation(b *testing.B) {
 			},
 		},
 		{
-			name: "Production",
+			name: testScenarioProduction,
 			kustomization: &kustomizev1.Kustomization{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "production-kustomization",
 					Namespace: "flux-system",
 					Labels: map[string]string{
-						"app":         "production",
+						testLabelApp:  "production",
 						"environment": "prod",
 					},
 				},
 				Spec: kustomizev1.KustomizationSpec{
 					SourceRef: kustomizev1.CrossNamespaceSourceReference{
-						Kind:      "GitRepository",
+						Kind:      testKindGitRepository,
 						Name:      "production-repo",
 						Namespace: "flux-system",
 					},
@@ -442,7 +453,7 @@ func BenchmarkCopySpec(b *testing.B) {
 		newDst func() client.Object
 	}{
 		{
-			name: "GitRepository",
+			name: testKindGitRepository,
 			newSrc: func() client.Object {
 				return &sourcev1.GitRepository{
 					Spec: sourcev1.GitRepositorySpec{
@@ -454,7 +465,7 @@ func BenchmarkCopySpec(b *testing.B) {
 			newDst: func() client.Object { return &sourcev1.GitRepository{} },
 		},
 		{
-			name: "HelmRepository",
+			name: testKindHelmRepository,
 			newSrc: func() client.Object {
 				return &sourcev1.HelmRepository{
 					Spec: sourcev1.HelmRepositorySpec{
@@ -466,7 +477,7 @@ func BenchmarkCopySpec(b *testing.B) {
 			newDst: func() client.Object { return &sourcev1.HelmRepository{} },
 		},
 		{
-			name: "OCIRepository",
+			name: testKindOCIRepository,
 			newSrc: func() client.Object {
 				return &sourcev1.OCIRepository{
 					Spec: sourcev1.OCIRepositorySpec{
@@ -478,12 +489,12 @@ func BenchmarkCopySpec(b *testing.B) {
 			newDst: func() client.Object { return &sourcev1.OCIRepository{} },
 		},
 		{
-			name: "Kustomization",
+			name: testKindKustomization,
 			newSrc: func() client.Object {
 				return &kustomizev1.Kustomization{
 					Spec: kustomizev1.KustomizationSpec{
 						SourceRef: kustomizev1.CrossNamespaceSourceReference{
-							Kind: "GitRepository",
+							Kind: testKindGitRepository,
 							Name: "test-repo",
 						},
 						Path:     "./",
@@ -495,7 +506,7 @@ func BenchmarkCopySpec(b *testing.B) {
 			newDst: func() client.Object { return &kustomizev1.Kustomization{} },
 		},
 		{
-			name: "HelmRelease",
+			name: testKindHelmRelease,
 			newSrc: func() client.Object {
 				return &helmv2.HelmRelease{
 					Spec: helmv2.HelmReleaseSpec{
@@ -503,7 +514,7 @@ func BenchmarkCopySpec(b *testing.B) {
 							Spec: helmv2.HelmChartTemplateSpec{
 								Chart: "nginx",
 								SourceRef: helmv2.CrossNamespaceObjectReference{
-									Kind: "HelmRepository",
+									Kind: testKindHelmRepository,
 									Name: "test-helm-repo",
 								},
 							},

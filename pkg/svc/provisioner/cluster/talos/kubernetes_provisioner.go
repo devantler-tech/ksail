@@ -93,7 +93,8 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 	}
 
 	// Step 1: Ensure namespace + DinD pod
-	if err := p.setupDinD(ctx, clusterName); err != nil {
+	err := p.setupDinD(ctx, clusterName)
+	if err != nil {
 		return err
 	}
 
@@ -119,7 +120,8 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 	_, _ = fmt.Fprintf(os.Stdout, "► creating Talos cluster via SDK (DOCKER_HOST=%s)\n", dockerHost)
 
 	origHost := os.Getenv("DOCKER_HOST")
-	if err := os.Setenv("DOCKER_HOST", dockerHost); err != nil {
+	err = os.Setenv("DOCKER_HOST", dockerHost)
+	if err != nil {
 		return fmt.Errorf("set DOCKER_HOST: %w", err)
 	}
 
@@ -231,7 +233,8 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 	}
 
 	if p.inner.options.TalosconfigPath != "" {
-		if saveErr := p.inner.saveTalosconfig(configBundle); saveErr != nil {
+		saveErr := p.inner.saveTalosconfig(configBundle)
+		if saveErr != nil {
 			return fmt.Errorf("save talosconfig: %w", saveErr)
 		}
 	}
@@ -305,7 +308,8 @@ func (p *KubernetesProvisioner) Delete(ctx context.Context, name string) error {
 	}
 
 	// Clean up API exposure, DinD, and namespace
-	if err := p.k8sProvider.TeardownDinD(ctx, p.dynamicClient, clusterName); err != nil {
+	err := p.k8sProvider.TeardownDinD(ctx, p.dynamicClient, clusterName)
+	if err != nil {
 		return fmt.Errorf("teardown DinD: %w", err)
 	}
 

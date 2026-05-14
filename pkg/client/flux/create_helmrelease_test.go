@@ -7,6 +7,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const (
+	sourceHelmRepository  = "HelmRepository/podinfo"
+	chartVersionDefault   = "6.6.2"
+	intervalDefaultValue  = "10m"
+	appName               = "app"
+	sourceKindGit         = "GitRepository"
+	flagChartName         = "chart"
+	flagSourceName        = "source"
+	flagExportName        = "export"
+)
+
 func TestNewCreateHelmReleaseCmd(t *testing.T) {
 	t.Parallel()
 
@@ -52,46 +63,46 @@ func helmReleaseExportTestsBasic() map[string]testCase {
 		"export basic helmrelease": {
 			args: []string{"podinfo"},
 			flags: map[string]string{
-				"source": "HelmRepository/podinfo",
-				"chart":  "podinfo",
-				"export": "true",
+				flagSourceName: sourceHelmRepository,
+				flagChartName:  "podinfo",
+				flagExportName: "true",
 			},
 		},
 		"export with chart version": {
 			args: []string{"podinfo"},
 			flags: map[string]string{
-				"source":        "HelmRepository/podinfo",
-				"chart":         "podinfo",
-				"chart-version": "6.6.2",
-				"export":        "true",
+				flagSourceName:          sourceHelmRepository,
+				flagChartName:           "podinfo",
+				"chart-version":     chartVersionDefault,
+				flagExportName:          "true",
 			},
 		},
 		"export with target namespace": {
 			args: []string{"podinfo"},
 			flags: map[string]string{
-				"source":           "HelmRepository/podinfo",
-				"chart":            "podinfo",
+				flagSourceName:        sourceHelmRepository,
+				flagChartName:         "podinfo",
 				"target-namespace": "production",
-				"export":           "true",
+				flagExportName:         "true",
 			},
 		},
 		"export with create namespace": {
 			args: []string{"podinfo"},
 			flags: map[string]string{
-				"source":                  "HelmRepository/podinfo",
-				"chart":                   "podinfo",
+				flagSourceName:                sourceHelmRepository,
+				flagChartName:                 "podinfo",
 				"target-namespace":        "new-ns",
 				"create-target-namespace": "true",
-				"export":                  "true",
+				flagExportName:                "true",
 			},
 		},
 		"export with custom interval": {
 			args: []string{"podinfo"},
 			flags: map[string]string{
-				"source":   "HelmRepository/podinfo",
-				"chart":    "podinfo",
-				"interval": "10m",
-				"export":   "true",
+				flagSourceName:  sourceHelmRepository,
+				flagChartName:   "podinfo",
+				"interval":  intervalDefaultValue,
+				flagExportName:  "true",
 			},
 		},
 	}
@@ -102,44 +113,44 @@ func helmReleaseExportTestsAdvanced() map[string]testCase {
 		"export with namespace flag": {
 			args: []string{"podinfo"},
 			flags: map[string]string{
-				"source":    "HelmRepository/podinfo",
-				"chart":     "podinfo",
+				flagSourceName:  sourceHelmRepository,
+				flagChartName:   "podinfo",
 				"namespace": "custom-ns",
-				"export":    "true",
+				flagExportName:  "true",
 			},
 		},
 		"export with dependencies": {
-			args: []string{"app"},
+			args: []string{appName},
 			flags: map[string]string{
-				"source":     "HelmRepository/app",
-				"chart":      "app",
+				flagSourceName:   "HelmRepository/" + appName,
+				flagChartName:    appName,
 				"depends-on": "database,cache",
-				"export":     "true",
+				flagExportName:   "true",
 			},
 		},
 		"export with GitRepository source": {
-			args: []string{"app"},
+			args: []string{appName},
 			flags: map[string]string{
-				"source-kind": "GitRepository",
-				"source":      "app",
-				"chart":       "./charts/app",
-				"export":      "true",
+				"source-kind": sourceKindGit,
+				flagSourceName:    appName,
+				flagChartName:     "./charts/" + appName,
+				flagExportName:    "true",
 			},
 		},
 		"export with source Kind/name format": {
 			args: []string{"podinfo"},
 			flags: map[string]string{
-				"source": "HelmRepository/podinfo",
-				"chart":  "podinfo",
-				"export": "true",
+				flagSourceName: sourceHelmRepository,
+				flagChartName:  "podinfo",
+				flagExportName: "true",
 			},
 		},
 		"export with cross-namespace source": {
-			args: []string{"app"},
+			args: []string{appName},
 			flags: map[string]string{
-				"source": "HelmRepository/charts.flux-system",
-				"chart":  "app",
-				"export": "true",
+				flagSourceName: "HelmRepository/charts.flux-system",
+				flagChartName:  appName,
+				flagExportName: "true",
 			},
 		},
 	}
@@ -172,11 +183,11 @@ func TestCreateHelmRelease_MissingRequiredFlags(t *testing.T) {
 		errMsg string
 	}{
 		"missing source": {
-			args:   []string{"podinfo", "--chart", "podinfo", "--export"},
+			args:   []string{"podinfo", "--" + flagChartName, "podinfo", "--" + flagExportName},
 			errMsg: "required flag(s)",
 		},
 		"missing chart": {
-			args:   []string{"podinfo", "--source", "HelmRepository/podinfo", "--export"},
+			args:   []string{"podinfo", "--" + flagSourceName, sourceHelmRepository, "--" + flagExportName},
 			errMsg: "required flag(s)",
 		},
 	}
@@ -195,10 +206,10 @@ func TestCreateHelmRelease_AliasWorks(t *testing.T) {
 	testCommandSuccess(t, []string{
 		"hr",
 		"podinfo",
-		"--source",
-		"HelmRepository/podinfo",
-		"--chart",
+		"--" + flagSourceName,
+		sourceHelmRepository,
+		"--" + flagChartName,
 		"podinfo",
-		"--export",
+		"--" + flagExportName,
 	})
 }

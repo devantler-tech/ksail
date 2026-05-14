@@ -96,7 +96,8 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 	target := p.Provisioner.resolveName(name)
 
 	// Step 1: Ensure namespace + DinD pod
-	if err := p.setupDinD(ctx, target); err != nil {
+	err := p.setupDinD(ctx, target)
+	if err != nil {
 		return err
 	}
 
@@ -106,7 +107,8 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 	// with "read /etc/kubernetes/pki/admin.key: is a directory".
 	_, _ = fmt.Fprintln(os.Stdout, "► preparing DinD bind mount paths")
 
-	if err := p.createPlaceholderFiles(ctx, target); err != nil {
+	err = p.createPlaceholderFiles(ctx, target)
+	if err != nil {
 		return fmt.Errorf("create placeholder files: %w", err)
 	}
 
@@ -139,7 +141,8 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 	// (where kwokctl wrote them) into DinD, overwriting the placeholders.
 	_, _ = fmt.Fprintln(os.Stdout, "► syncing PKI and config into DinD")
 
-	if err := p.copyStateToDinD(ctx, target); err != nil {
+	err = p.copyStateToDinD(ctx, target)
+	if err != nil {
 		return fmt.Errorf("copy state to DinD: %w", err)
 	}
 
@@ -147,7 +150,8 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 	// Bind mounts reference the DinD filesystem; a restart rereads the content.
 	_, _ = fmt.Fprintln(os.Stdout, "► restarting KWOK containers in DinD")
 
-	if err := p.restartContainersInDinD(ctx, target); err != nil {
+	err = p.restartContainersInDinD(ctx, target)
+	if err != nil {
 		return fmt.Errorf("restart containers: %w", err)
 	}
 
@@ -171,21 +175,24 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 	p.portForward = pf
 
 	// Step 9: Rewrite kubeconfig server URL to use the local port-forward address
-	if err := p.rewriteKubeconfig(name, pf.LocalPort); err != nil {
+	err = p.rewriteKubeconfig(name, pf.LocalPort)
+	if err != nil {
 		return fmt.Errorf("rewrite kubeconfig: %w", err)
 	}
 
 	// Step 10: Wait for the nested API server to be reachable through port-forward.
 	_, _ = fmt.Fprintln(os.Stdout, "► waiting for nested API server to be ready")
 
-	if err := k8s.WaitForAPIServer(ctx, p.kubeconfigPath, "kwok-"+target); err != nil {
+	err = k8s.WaitForAPIServer(ctx, p.kubeconfigPath, "kwok-"+target)
+	if err != nil {
 		return fmt.Errorf("wait for API server: %w", err)
 	}
 
 	// Step 11: Scale simulated nodes — now the API server is accessible via port-forward
 	_, _ = fmt.Fprintln(os.Stdout, "► creating simulated KWOK node")
 
-	if err := p.Provisioner.ScaleNodes(ctx, name); err != nil {
+	err = p.Provisioner.ScaleNodes(ctx, name)
+	if err != nil {
 		return fmt.Errorf("kwok scale via SDK: %w", err)
 	}
 
@@ -221,7 +228,8 @@ func (p *KubernetesProvisioner) Delete(ctx context.Context, name string) error {
 	}
 
 	// Clean up API exposure, DinD, and namespace
-	if err := p.k8sProvider.TeardownDinD(ctx, p.dynamicClient, target); err != nil {
+	err := p.k8sProvider.TeardownDinD(ctx, p.dynamicClient, target)
+	if err != nil {
 		return fmt.Errorf("teardown DinD: %w", err)
 	}
 
@@ -292,7 +300,8 @@ func (p *KubernetesProvisioner) rewriteKubeconfig(name string, localPort int) er
 	newServer := fmt.Sprintf("https://127.0.0.1:%d", localPort)
 
 	// Rewrite ~/.kube/config (atomic, merge-safe)
-	if err := k8s.ModifyKubeconfigCluster(p.kubeconfigPath, clusterKey, newServer); err != nil {
+	err := k8s.ModifyKubeconfigCluster(p.kubeconfigPath, clusterKey, newServer)
+	if err != nil {
 		return fmt.Errorf("rewrite kubeconfig: %w", err)
 	}
 
@@ -357,7 +366,8 @@ func (p *KubernetesProvisioner) createPlaceholderFiles(ctx context.Context, clus
 	}
 
 	mkdirCmd := fmt.Sprintf("mkdir -p '%s'", strings.ReplaceAll(pkiDir, "'", "'\\''"))
-	if _, err := p.k8sProvider.ExecInDinD(ctx, p.restConfig, clusterName, mkdirCmd); err != nil {
+	_, err = p.k8sProvider.ExecInDinD(ctx, p.restConfig, clusterName, mkdirCmd)
+	if err != nil {
 		return fmt.Errorf("mkdir pki: %w", err)
 	}
 
@@ -413,7 +423,8 @@ func (p *KubernetesProvisioner) restartContainersInDinD(ctx context.Context, clu
 	containers := kwokContainerNames(clusterName)
 	restartCmd := "docker restart " + strings.Join(containers, " ")
 
-	if _, err := p.k8sProvider.ExecInDinD(ctx, p.restConfig, clusterName, restartCmd); err != nil {
+	_, err := p.k8sProvider.ExecInDinD(ctx, p.restConfig, clusterName, restartCmd)
+	if err != nil {
 		return fmt.Errorf("docker restart: %w", err)
 	}
 

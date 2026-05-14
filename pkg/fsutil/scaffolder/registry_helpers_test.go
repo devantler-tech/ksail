@@ -12,6 +12,16 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+const (
+	dockerMirrorURL     = "docker.io=https://registry-1.docker.io"
+	dockerHost          = "docker.io"
+	ghcrMirrorURL       = "ghcr.io=https://ghcr.io"
+	ghcrHost            = "ghcr.io"
+	dockerFallbackURL   = "http://docker.io:5000"
+	sourceDirectory     = "k8s"
+	serverPlaceholder   = "server:*"
+)
+
 func createTestScaffolderForK3d() *scaffolder.Scaffolder {
 	cluster := &v1alpha1.Cluster{
 		TypeMeta: metav1.TypeMeta{
@@ -53,9 +63,9 @@ func containerdPatchCases() []containerdPatchCase {
 func containerdSingleMirrorCase() containerdPatchCase {
 	return containerdPatchCase{
 		name:    "single mirror registry",
-		mirrors: []string{"docker.io=https://registry-1.docker.io"},
+		mirrors: []string{dockerMirrorURL},
 		expected: []containerdPatchExpectation{
-			{host: "docker.io", fallback: "http://docker.io:5000"},
+			{host: dockerHost, fallback: dockerFallbackURL},
 		},
 	}
 }
@@ -64,13 +74,13 @@ func containerdMultipleMirrorCase() containerdPatchCase {
 	return containerdPatchCase{
 		name: "multiple mirror registries",
 		mirrors: []string{
-			"docker.io=https://registry-1.docker.io",
-			"ghcr.io=https://ghcr.io",
+			dockerMirrorURL,
+			ghcrMirrorURL,
 			"quay.io=https://quay.io",
 		},
 		expected: []containerdPatchExpectation{
-			{host: "docker.io", fallback: "http://docker.io:5000"},
-			{host: "ghcr.io", fallback: "http://ghcr.io:5000"},
+			{host: dockerHost, fallback: dockerFallbackURL},
+			{host: ghcrHost, fallback: "http://ghcr.io:5000"},
 			{host: "quay.io", fallback: "http://quay.io:5000"},
 		},
 	}
@@ -88,13 +98,13 @@ func containerdInvalidMirrorCase() containerdPatchCase {
 	return containerdPatchCase{
 		name: "invalid mirror spec skipped",
 		mirrors: []string{
-			"docker.io=https://registry-1.docker.io",
+			dockerMirrorURL,
 			"invalid-spec-no-equals",
-			"ghcr.io=https://ghcr.io",
+			ghcrMirrorURL,
 		},
 		expected: []containerdPatchExpectation{
-			{host: "docker.io", fallback: "http://docker.io:5000"},
-			{host: "ghcr.io", fallback: "http://ghcr.io:5000"},
+			{host: dockerHost, fallback: dockerFallbackURL},
+			{host: ghcrHost, fallback: "http://ghcr.io:5000"},
 		},
 	}
 }
@@ -126,7 +136,7 @@ func k3dRegistryConfigCases() []k3dRegistryConfigCase {
 	return []k3dRegistryConfigCase{
 		{
 			name:    "single mirror registry",
-			mirrors: []string{"docker.io=https://registry-1.docker.io"},
+			mirrors: []string{dockerMirrorURL},
 			expected: k3dRegistryExpectation{
 				contains: []string{
 					"\"docker.io\":",

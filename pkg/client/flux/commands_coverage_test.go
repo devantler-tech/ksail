@@ -8,6 +8,21 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const (
+	flagChart              = "--chart"
+	flagSource             = "--source"
+	flagExport             = "--export"
+	flagDependsOn          = "--depends-on"
+	chartVersion           = "6.6.2"
+	intervalDefault        = "10m"
+	sourceGitRepoMyRepo    = "GitRepository/my-repo"
+	sourceHelmRepoPodinfo  = "HelmRepository/podinfo"
+	sourceGitRepoPodinfo   = "GitRepository/podinfo"
+	kindHelmRepository     = "HelmRepository"
+	kindGitRepository      = "GitRepository"
+	chartKeyName           = "chart"
+)
+
 // TestCreateSourceCommand_SubCommands verifies that the source command has all
 // expected sub-commands: git, helm, and oci.
 func TestCreateSourceCommand_SubCommands(t *testing.T) {
@@ -75,7 +90,7 @@ func TestNewCreateHelmReleaseCmd_RequiredFlags(t *testing.T) {
 		testMissingRequiredFlag(
 			t,
 			[]string{"helmrelease"},
-			[]string{"my-release", "--chart", "my-chart"},
+			[]string{"my-release", flagChart, "my-chart"},
 		)
 	})
 
@@ -84,7 +99,7 @@ func TestNewCreateHelmReleaseCmd_RequiredFlags(t *testing.T) {
 		testMissingRequiredFlag(
 			t,
 			[]string{"helmrelease"},
-			[]string{"my-release", "--source", "HelmRepository/podinfo"},
+			[]string{"my-release", flagSource, sourceHelmRepoPodinfo},
 		)
 	})
 }
@@ -106,9 +121,9 @@ func TestNewCreateHelmReleaseCmd_Export(t *testing.T) {
 
 	testCommandSuccess(t, []string{
 		"helmrelease", "podinfo",
-		"--source", "HelmRepository/podinfo",
-		"--chart", "podinfo",
-		"--export",
+		flagSource, sourceHelmRepoPodinfo,
+		flagChart, "podinfo",
+		flagExport,
 	})
 }
 
@@ -123,14 +138,14 @@ func TestNewCreateHelmReleaseCmd_ExportWithAllOptions(t *testing.T) {
 
 	createCmd.SetArgs([]string{
 		"helmrelease", "podinfo",
-		"--source", "HelmRepository/podinfo",
-		"--chart", "podinfo",
-		"--chart-version", "6.6.2",
+		flagSource, sourceHelmRepoPodinfo,
+		flagChart, "podinfo",
+		"--chart-version", chartVersion,
 		"--target-namespace", "production",
 		"--create-target-namespace",
 		"--interval", "5m",
-		"--depends-on", "ns/other-release",
-		"--export",
+		flagDependsOn, "ns/other-release",
+		flagExport,
 	})
 
 	err := createCmd.Execute()
@@ -189,8 +204,8 @@ func TestNewCreateKustomizationCmd_Export(t *testing.T) {
 
 	testCommandSuccess(t, []string{
 		"kustomization", "my-ks",
-		"--source", "GitRepository/my-repo",
-		"--export",
+		flagSource, sourceGitRepoMyRepo,
+		flagExport,
 	})
 }
 
@@ -205,14 +220,14 @@ func TestNewCreateKustomizationCmd_ExportWithAllOptions(t *testing.T) {
 
 	createCmd.SetArgs([]string{
 		"kustomization", "my-ks",
-		"--source", "OCIRepository/my-oci",
+		flagSource, "OCIRepository/my-oci",
 		"--path", "./deploy/production",
 		"--prune",
 		"--wait",
 		"--target-namespace", "prod",
-		"--interval", "10m",
-		"--depends-on", "infra",
-		"--export",
+		flagDependsOn, "infra",
+		"--interval", intervalDefault,
+		flagExport,
 	})
 
 	err := createCmd.Execute()
@@ -298,18 +313,18 @@ func TestHelmReleaseExport_SourceRefParsing(t *testing.T) {
 	}{
 		{
 			name:     "Kind/name format",
-			source:   "HelmRepository/podinfo",
-			wantKind: "HelmRepository",
+			source:   sourceHelmRepoPodinfo,
+			wantKind: kindHelmRepository,
 		},
 		{
 			name:     "Kind/name.namespace format",
 			source:   "GitRepository/flux-system.flux-system",
-			wantKind: "GitRepository",
+			wantKind: kindGitRepository,
 		},
 		{
 			name:     "plain name defaults to HelmRepository",
 			source:   "podinfo",
-			wantKind: "HelmRepository",
+			wantKind: kindHelmRepository,
 		},
 	}
 
@@ -323,9 +338,9 @@ func TestHelmReleaseExport_SourceRefParsing(t *testing.T) {
 
 			createCmd.SetArgs([]string{
 				"helmrelease", "test-hr",
-				"--source", tt.source,
-				"--chart", "test-chart",
-				"--export",
+				flagSource, tt.source,
+				flagChart, "test-chart",
+				flagExport,
 			})
 
 			err := createCmd.Execute()

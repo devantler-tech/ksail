@@ -99,7 +99,7 @@ func NewKubernetesProvisioner(cfg KubernetesProvisionerConfig) *KubernetesProvis
 // After chart installation, it manually extracts the kubeconfig from the vc-<name>
 // Secret and sets up a port-forward to the vCluster pod (bypassing ConnectHelm which
 // blocks indefinitely on port-forwarding).
-func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error { //nolint:funlen // sequential setup steps
+func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error { //nolint:funlen,cyclop // sequential setup steps
 	clusterName := p.clusterName
 	if clusterName == "" {
 		clusterName = name
@@ -145,7 +145,8 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 		clusterName, namespace, p.hostContext,
 	)
 
-	if err := cli.CreateHelm(ctx, opts, globalFlags, clusterName, logger); err != nil {
+	err = cli.CreateHelm(ctx, opts, globalFlags, clusterName, logger)
+	if err != nil {
 		return fmt.Errorf("create vCluster via Helm: %w", err)
 	}
 
@@ -182,12 +183,13 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 
 	// Step 6: Merge kubeconfig into the host kubeconfig file
 	if p.kubeconfigPath != "" {
-		if err := k8s.MergeKubeconfig(p.kubeconfigPath, rewrittenKubeconfig); err != nil {
+		err := k8s.MergeKubeconfig(p.kubeconfigPath, rewrittenKubeconfig)
+		if err != nil {
 			return fmt.Errorf("merge kubeconfig: %w", err)
 		}
 	}
 
-	fmt.Fprintf(os.Stdout, "✓ vCluster %q ready (context: %s)\n", clusterName, contextName)
+	_, _ = fmt.Fprintf(os.Stdout, "✓ vCluster %q ready (context: %s)\n", clusterName, contextName)
 
 	return nil
 }
@@ -216,7 +218,7 @@ func (p *KubernetesProvisioner) Delete(ctx context.Context, name string) error {
 	globalFlags := p.newHostGlobalFlags(namespace)
 	logger := p.newLogger()
 
-	fmt.Fprintf(os.Stdout, "► deleting vCluster %q from namespace %s\n", clusterName, namespace)
+	_, _ = fmt.Fprintf(os.Stdout, "► deleting vCluster %q from namespace %s\n", clusterName, namespace)
 
 	// platformClient is nil — no platform integration for local clusters.
 	err := cli.DeleteHelm(ctx, nil, deleteOpts, globalFlags, clusterName, logger)
@@ -228,7 +230,7 @@ func (p *KubernetesProvisioner) Delete(ctx context.Context, name string) error {
 	contextName := "vcluster-" + clusterName
 	_ = k8s.CleanupKubeconfig(p.kubeconfigPath, contextName, contextName, contextName, os.Stdout)
 
-	fmt.Fprintf(os.Stdout, "✓ vCluster %q deleted\n", clusterName)
+	_, _ = fmt.Fprintf(os.Stdout, "✓ vCluster %q deleted\n", clusterName)
 
 	return nil
 }

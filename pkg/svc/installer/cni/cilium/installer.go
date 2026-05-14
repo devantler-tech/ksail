@@ -208,8 +208,8 @@ func (c *Installer) getCiliumValues() map[string]string {
 		if effective != v1alpha1.LoadBalancerEnabled {
 			maps.Copy(values, dockerCiliumValues())
 		}
-	case v1alpha1.ProviderHetzner, v1alpha1.ProviderOmni, v1alpha1.ProviderAWS:
-		// Hetzner, Omni, and AWS use default values (Cilium is not installed
+	case v1alpha1.ProviderHetzner, v1alpha1.ProviderOmni, v1alpha1.ProviderAWS, v1alpha1.ProviderKubernetes:
+		// Hetzner, Omni, AWS, and Kubernetes use default values (Cilium is not installed
 		// on EKS by KSail, but if selected it behaves like other cloud providers).
 	}
 

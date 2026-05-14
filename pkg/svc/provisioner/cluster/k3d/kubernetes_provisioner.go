@@ -194,7 +194,8 @@ func (p *K3kProvisioner) Create(ctx context.Context, name string) error { //noli
 
 	// Step 8: Merge kubeconfig into the host kubeconfig file
 	if p.kubeconfigPath != "" {
-		if err := k8s.MergeKubeconfig(p.kubeconfigPath, []byte(kubeconfigStr)); err != nil {
+		err := k8s.MergeKubeconfig(p.kubeconfigPath, []byte(kubeconfigStr))
+		if err != nil {
 			return fmt.Errorf("merge kubeconfig: %w", err)
 		}
 	}
@@ -466,7 +467,8 @@ func (p *K3kProvisioner) waitForClusterReady(ctx context.Context, clusterName, n
 // buildK3kRESTClient creates a REST client configured for k3k CRD operations.
 func (p *K3kProvisioner) buildK3kRESTClient() (*rest.RESTClient, runtime.ParameterCodec, error) {
 	scheme := runtime.NewScheme()
-	if err := k3kv1beta1.AddToScheme(scheme); err != nil {
+	err := k3kv1beta1.AddToScheme(scheme)
+	if err != nil {
 		return nil, nil, fmt.Errorf("add k3k scheme: %w", err)
 	}
 

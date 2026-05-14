@@ -26,16 +26,16 @@ func TestScaffoldKind_MirrorRegistries(t *testing.T) {
 	}{
 		{
 			name:               "single mirror creates hosts.toml",
-			mirrors:            []string{"docker.io=https://registry-1.docker.io"},
-			expectedMirrorDirs: []string{"docker.io"},
+			mirrors:            []string{dockerMirrorURL},
+			expectedMirrorDirs: []string{dockerHost},
 		},
 		{
 			name: "multiple mirrors create multiple hosts.toml",
 			mirrors: []string{
-				"docker.io=https://registry-1.docker.io",
-				"ghcr.io=https://ghcr.io",
+				dockerMirrorURL,
+				ghcrMirrorURL,
 			},
-			expectedMirrorDirs: []string{"docker.io", "ghcr.io"},
+			expectedMirrorDirs: []string{dockerHost, ghcrHost},
 		},
 		{
 			name:               "no mirrors creates no hosts.toml",
@@ -56,7 +56,7 @@ func TestScaffoldKind_MirrorRegistries(t *testing.T) {
 						DistributionConfig: scaffolder.KindConfigFile,
 					},
 					Workload: v1alpha1.WorkloadSpec{
-						SourceDirectory: "k8s",
+						SourceDirectory: sourceDirectory,
 					},
 				},
 			}
@@ -95,12 +95,12 @@ func TestScaffoldKind_MirrorRegistries_SkipExistingNoForce(t *testing.T) {
 				DistributionConfig: scaffolder.KindConfigFile,
 			},
 			Workload: v1alpha1.WorkloadSpec{
-				SourceDirectory: "k8s",
+				SourceDirectory: sourceDirectory,
 			},
 		},
 	}
 
-	mirrors := []string{"docker.io=https://registry-1.docker.io"}
+	mirrors := []string{dockerMirrorURL}
 	scaffolderInstance := scaffolder.NewScaffolder(cluster, io.Discard, mirrors)
 
 	// First scaffold to create files
@@ -158,7 +158,7 @@ func TestScaffoldKind_NodeCounts(t *testing.T) {
 						Workers:            testCase.workers,
 					},
 					Workload: v1alpha1.WorkloadSpec{
-						SourceDirectory: "k8s",
+						SourceDirectory: sourceDirectory,
 					},
 				},
 			}
@@ -196,7 +196,7 @@ func TestScaffoldKind_MetricsServerEnabled(t *testing.T) {
 				MetricsServer:      v1alpha1.MetricsServerEnabled,
 			},
 			Workload: v1alpha1.WorkloadSpec{
-				SourceDirectory: "k8s",
+				SourceDirectory: sourceDirectory,
 			},
 		},
 	}
@@ -227,7 +227,7 @@ func TestScaffoldKind_CDIEnabled(t *testing.T) {
 				CDI:                v1alpha1.CDIEnabled,
 			},
 			Workload: v1alpha1.WorkloadSpec{
-				SourceDirectory: "k8s",
+				SourceDirectory: sourceDirectory,
 			},
 		},
 	}
@@ -268,7 +268,7 @@ func TestScaffoldK3d_LoadBalancerDisabled(t *testing.T) {
 		if arg.Arg == "--disable=servicelb" {
 			found = true
 
-			assert.Equal(t, []string{"server:*"}, arg.NodeFilters)
+			assert.Equal(t, []string{serverPlaceholder}, arg.NodeFilters)
 
 			break
 		}
@@ -386,7 +386,7 @@ func TestScaffoldKind_CalicoCNI(t *testing.T) {
 				CNI:                v1alpha1.CNICalico,
 			},
 			Workload: v1alpha1.WorkloadSpec{
-				SourceDirectory: "k8s",
+				SourceDirectory: sourceDirectory,
 			},
 		},
 	}
@@ -511,7 +511,7 @@ func TestScaffoldTalos_HetznerExternalCloudProvider(t *testing.T) {
 				Provider:           v1alpha1.ProviderHetzner,
 			},
 			Workload: v1alpha1.WorkloadSpec{
-				SourceDirectory: "k8s",
+				SourceDirectory: sourceDirectory,
 			},
 		},
 	}
@@ -549,7 +549,7 @@ func TestScaffoldTalos_DockerNoExternalCloudProvider(t *testing.T) {
 				Provider:           v1alpha1.ProviderDocker,
 			},
 			Workload: v1alpha1.WorkloadSpec{
-				SourceDirectory: "k8s",
+				SourceDirectory: sourceDirectory,
 			},
 		},
 	}

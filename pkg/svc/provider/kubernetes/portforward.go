@@ -149,7 +149,8 @@ func startProxy(
 	}
 
 	// Verify the SPDY connection is functional before returning
-	if _, connErr := proxy.getConnection(); connErr != nil {
+	_, connErr := proxy.getConnection()
+	if connErr != nil {
 		proxy.close()
 
 		return nil, fmt.Errorf("initial SPDY dial: %w", connErr)

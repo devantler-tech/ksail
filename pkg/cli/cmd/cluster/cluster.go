@@ -4018,6 +4018,21 @@ func getKubernetesClusters(ctx context.Context, deps ListDeps) ([]clusterWithDis
 		return toKubernetesClusters(infos), nil
 	}
 
+	prov, err := getKubernetesProviderFromConfig()
+	if err != nil {
+		return nil, err
+	}
+
+	infos, err := prov.ListAllClustersWithDistribution(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list Kubernetes clusters: %w", err)
+	}
+
+	return toKubernetesClusters(infos), nil
+}
+
+// getKubernetesProviderFromConfig creates a Kubernetes provider from the host config.
+func getKubernetesProviderFromConfig() (*kubernetesprovider.Provider, error) {
 	// Resolve kubeconfig: prefer KSAIL_HOST_KUBECONFIG env var, fall back to default.
 	kubeconfigPath := os.Getenv("KSAIL_HOST_KUBECONFIG")
 	if kubeconfigPath == "" {
@@ -4034,7 +4049,7 @@ func getKubernetesClusters(ctx context.Context, deps ListDeps) ([]clusterWithDis
 		return nil, nil
 	}
 
-	canonicalPath, err := fsutil.EvalCanonicalPath(expandedPath)
+	canonicalPath, err := fsutil.EvalCanonicalPath(expandedPath) //nolint:gosec // path already validated by os.Stat
 	if err != nil {
 		return nil, fmt.Errorf("canonicalize kubeconfig path: %w", err)
 	}
@@ -4057,12 +4072,7 @@ func getKubernetesClusters(ctx context.Context, deps ListDeps) ([]clusterWithDis
 		return nil, fmt.Errorf("create Kubernetes provider: %w", err)
 	}
 
-	infos, err := prov.ListAllClustersWithDistribution(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list Kubernetes clusters: %w", err)
-	}
-
-	return toKubernetesClusters(infos), nil
+	return prov, nil
 }
 
 // toKubernetesClusters converts ClusterInfo to clusterWithDistribution,
@@ -4072,7 +4082,8 @@ func toKubernetesClusters(infos []kubernetesprovider.ClusterInfo) []clusterWithD
 
 	for _, info := range infos {
 		var dist v1alpha1.Distribution
-		if err := dist.Set(info.Distribution); err != nil {
+		err := dist.Set(info.Distribution)
+		if err != nil {
 			dist = v1alpha1.DistributionVanilla
 		}
 

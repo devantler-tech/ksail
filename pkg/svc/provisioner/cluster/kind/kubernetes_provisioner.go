@@ -96,7 +96,8 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 	}
 
 	// Step 1: Ensure namespace + DinD pod
-	if err := p.setupDinD(ctx, target); err != nil {
+	err = p.setupDinD(ctx, target)
+	if err != nil {
 		return err
 	}
 
@@ -115,7 +116,7 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 	defer dockerPF.Close()
 
 	// Step 3: Set DOCKER_HOST so the Kind SDK talks to DinD
-	fmt.Fprintln(os.Stdout, "► creating Kind cluster via SDK (DOCKER_HOST → exec tunnel → DinD)")
+	_, _ = fmt.Fprintln(os.Stdout, "► creating Kind cluster via SDK (DOCKER_HOST → exec tunnel → DinD)")
 
 	err = kubernetesprovider.WithRemoteDockerHost(dockerPF, func() error {
 		return p.Provisioner.Create(ctx, target)
@@ -125,7 +126,7 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 	}
 
 	// Step 4: Port-forward the nested API server (6443) from DinD to localhost
-	fmt.Fprintln(os.Stdout, "► port-forwarding nested API server to localhost")
+	_, _ = fmt.Fprintln(os.Stdout, "► port-forwarding nested API server to localhost")
 
 	apiPortForward, err := p.k8sProvider.StartPortForward(
 		ctx, p.restConfig, target,
@@ -138,12 +139,14 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 	p.portForward = apiPortForward
 
 	// Step 5: Rewrite kubeconfig server URL to use the host port-forward address
-	if err := p.rewriteKindKubeconfig(target, apiPortForward.LocalPort); err != nil {
+	err = p.rewriteKindKubeconfig(target, apiPortForward.LocalPort)
+	if err != nil {
 		return fmt.Errorf("rewrite kubeconfig: %w", err)
 	}
 
 	// Step 6: Restore the host kubeconfig current-context that the Kind SDK changed.
-	if err := k8s.SetKubeconfigCurrentContext(p.kubeconfigPath, originalContext); err != nil {
+	err = k8s.SetKubeconfigCurrentContext(p.kubeconfigPath, originalContext)
+	if err != nil {
 		return fmt.Errorf("restore kubeconfig current-context: %w", err)
 	}
 
@@ -179,7 +182,8 @@ func (p *KubernetesProvisioner) Delete(ctx context.Context, name string) error {
 	}
 
 	// Clean up API exposure, DinD, and namespace
-	if err := p.k8sProvider.TeardownDinD(ctx, p.dynamicClient, target); err != nil {
+	err := p.k8sProvider.TeardownDinD(ctx, p.dynamicClient, target)
+	if err != nil {
 		return fmt.Errorf("teardown DinD: %w", err)
 	}
 
