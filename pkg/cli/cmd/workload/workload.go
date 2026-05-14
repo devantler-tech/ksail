@@ -8,13 +8,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"slices"
-	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -529,14 +530,12 @@ func runInteractiveDockerExec(
 
 func stdinFD() (int, error) {
 	stdinFDValue := os.Stdin.Fd()
-	stdinFDString := strconv.FormatUint(uint64(stdinFDValue), 10)
-
-	stdinFDInt, err := strconv.Atoi(stdinFDString)
-	if err != nil {
-		return 0, fmt.Errorf("parse stdin file descriptor: %w", err)
+	if stdinFDValue > uintptr(math.MaxInt) {
+		return 0, fmt.Errorf("%w: %d", errStdinFDOverflow, stdinFDValue)
 	}
 
-	return stdinFDInt, nil
+	// #nosec G115 -- value is bounds-checked against math.MaxInt above.
+	return int(stdinFDValue), nil
 }
 
 // setupRawTerminal sets the terminal to raw mode and returns a restore function.
@@ -4173,18 +4172,24 @@ var errNotDirectory = errors.New("watch path is not a directory")
 
 // errHookFailed is returned when a pre-apply hook command fails.
 var errHookFailed = errors.New("pre-apply hook failed")
+var errStdinFDOverflow = errors.New("stdin file descriptor overflows int")
 
-// runHooks executes hook commands sequentially via "sh -c". If any hook
-// fails, execution stops and an error is returned (fail-fast). Stdout and
-// stderr are forwarded to the terminal via cmd.
+// runHooks executes hook commands sequentially via the platform shell.
+// If any hook fails, execution stops and an error is returned (fail-fast).
+// Stdout and stderr are forwarded to the terminal via cmd.
 func runHooks(ctx context.Context, cmd *cobra.Command, hooks []string) error {
+	shellName, shellArg := "sh", "-c"
+	if runtime.GOOS == "windows" {
+		shellName, shellArg = "cmd", "/C"
+	}
+
 	for _, hook := range hooks {
 		if ctx.Err() != nil {
 			return fmt.Errorf("context cancelled before hook execution: %w", ctx.Err())
 		}
 
-		//nolint:gosec // Hooks are user-provided build commands (like Tilt/Skaffold); sh -c is intentional.
-		shellCmd := exec.CommandContext(ctx, "sh", "-c", hook)
+		//nolint:gosec // Hooks are user-provided build commands (like Tilt/Skaffold); shell execution is intentional.
+		shellCmd := exec.CommandContext(ctx, shellName, shellArg, hook)
 		shellCmd.Stdout = cmd.OutOrStdout()
 		shellCmd.Stderr = cmd.ErrOrStderr()
 
