@@ -187,6 +187,12 @@ func (p *KubernetesProvisioner) Delete(ctx context.Context, name string) error {
 		return fmt.Errorf("delete namespace: %w", err)
 	}
 
+	// Clean up kubeconfig entries
+	contextName := "kind-" + target
+	if err := k8s.CleanupKubeconfig(p.kubeconfigPath, contextName, contextName, contextName, os.Stdout); err != nil {
+		return fmt.Errorf("cleanup kubeconfig: %w", err)
+	}
+
 	return nil
 }
 

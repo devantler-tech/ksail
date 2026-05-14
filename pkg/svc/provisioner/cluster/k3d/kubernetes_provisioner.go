@@ -418,9 +418,9 @@ func (p *K3kProvisioner) waitForClusterReady(ctx context.Context, clusterName, n
 		switch phase {
 		case k3kv1beta1.ClusterReady:
 			return true, nil
-		case k3kv1beta1.ClusterFailed:
-			return false, fmt.Errorf("k3k cluster entered Failed phase")
 		default:
+			// k3k clusters can transiently enter Failed phase (e.g., bootstrap
+			// secret timeout) before recovering. Keep polling until timeout.
 			fmt.Fprintf(os.Stdout, "  cluster phase: %s\n", phase)
 			return false, nil
 		}

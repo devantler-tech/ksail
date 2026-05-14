@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	kubernetessprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/kubernetes"
 	"k8s.io/client-go/dynamic"
@@ -237,6 +238,13 @@ func (p *KubernetesProvisioner) Delete(ctx context.Context, name string) error {
 		return fmt.Errorf("delete namespace: %w", err)
 	}
 
+	// Clean up kubeconfig entries
+	target := p.Provisioner.resolveName(name)
+	contextName := "kwok-" + target
+	if err := k8s.CleanupKubeconfig(p.kubeconfigPath, contextName, contextName, contextName, os.Stdout); err != nil {
+		return fmt.Errorf("cleanup kubeconfig: %w", err)
+	}
+
 	return nil
 }
 
@@ -329,7 +337,12 @@ func (p *KubernetesProvisioner) rewriteKubeconfig(name string, localPort int) er
 		cluster.Server = newServer
 	}
 
-	if err := clientcmd.WriteToFile(*kwokConfig, kwokKubeconfig); err != nil {
+	result, err := clientcmd.Write(*kwokConfig)
+	if err != nil {
+		return fmt.Errorf("serialize kwokctl kubeconfig: %w", err)
+	}
+
+	if err := fsutil.AtomicWriteFile(kwokKubeconfig, result, 0o600); err != nil {
 		return fmt.Errorf("write kwokctl kubeconfig: %w", err)
 	}
 
