@@ -37,6 +37,44 @@ type DiagnoseFinding struct {
 	Resource string `json:"resource"`
 	// Reason is a one-line description of the failure.
 	Reason string `json:"reason"`
+	// Remediation is an actionable hint for resolving the failure, or empty
+	// when no known remediation exists for the detected reason.
+	Remediation string `json:"remediation,omitempty"`
+}
+
+// remediationHints maps known Kubernetes failure reasons to actionable
+// remediation suggestions. Keys are matched as substrings of the finding
+// reason so that both exact reasons (e.g. "CrashLoopBackOff") and
+// composite descriptions are covered.
+var remediationHints = map[string]string{
+	"CrashLoopBackOff":           "Check container logs with 'ksail workload logs <pod>' for the crash reason. Common causes: misconfigured entrypoint, missing config/secrets, or application error.",
+	"ImagePullBackOff":           "Verify the image name and tag exist in the registry. Check registry credentials and network connectivity.",
+	"ErrImagePull":               "Verify the image name and tag exist in the registry. Check registry credentials and network connectivity.",
+	"CreateContainerConfigError": "Check that referenced ConfigMaps and Secrets exist and are correctly mounted.",
+	"OOMKilled":                  "Container exceeded its memory limit. Increase resources.limits.memory or reduce application memory usage.",
+	"Evicted":                    "Pod was evicted due to node resource pressure. Check node disk and memory usage.",
+	"Ready condition missing":    "Node is not reporting a Ready condition. Check kubelet status and node logs.",
+}
+
+// remediationNotReadyNode is the remediation hint for nodes whose Ready
+// condition is not True.
+const remediationNotReadyNode = "Check kubelet status and node conditions for disk, memory, or PID pressure."
+
+// remediationPVCPending is the remediation hint for PersistentVolumeClaims
+// stuck in Pending phase.
+const remediationPVCPending = "Verify a matching StorageClass exists and the provisioner is running. Check PVC events with 'ksail workload describe pvc/<name>'."
+
+// lookupRemediation returns a remediation hint for the given reason string
+// by checking for known substring matches. Returns an empty string when no
+// hint is available.
+func lookupRemediation(reason string) string {
+	for pattern, hint := range remediationHints {
+		if strings.Contains(reason, pattern) {
+			return hint
+		}
+	}
+
+	return ""
 }
 
 // DiagnoseReport is the structured result of DiagnoseClusterReport. It is
@@ -78,9 +116,10 @@ func DiagnoseClusterReport(
 		node := &nodes.Items[i]
 		if reason := describeNotReadyNode(node); reason != "" {
 			report.Findings = append(report.Findings, DiagnoseFinding{
-				Severity: DiagnoseSeverityCritical,
-				Resource: "node/" + node.Name,
-				Reason:   reason,
+				Severity:    DiagnoseSeverityCritical,
+				Resource:    "node/" + node.Name,
+				Reason:      reason,
+				Remediation: remediationNotReadyNode,
 			})
 		}
 	}
@@ -92,6 +131,7 @@ func DiagnoseClusterReport(
 
 	for _, namespace := range namespaces {
 		appendNamespacePodFindings(ctx, clientset, namespace, &report.Findings)
+		appendNamespacePVCFindings(ctx, clientset, namespace, &report.Findings)
 	}
 
 	report.HealthScore = diagnoseComputeScore(report.Findings)
@@ -110,9 +150,10 @@ func appendNamespacePodFindings(
 	pods, err := clientset.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		*findings = append(*findings, DiagnoseFinding{
-			Severity: DiagnoseSeverityWarning,
-			Resource: "namespace/" + namespace,
-			Reason:   fmt.Sprintf("failed to list pods: %v", err),
+			Severity:    DiagnoseSeverityWarning,
+			Resource:    "namespace/" + namespace,
+			Reason:      fmt.Sprintf("failed to list pods: %v", err),
+			Remediation: "Check cluster connectivity and RBAC permissions.",
 		})
 
 		return
@@ -124,10 +165,47 @@ func appendNamespacePodFindings(
 			continue
 		}
 
+		reason := describePodFailure(pod)
 		*findings = append(*findings, DiagnoseFinding{
-			Severity: DiagnoseSeverityCritical,
-			Resource: fmt.Sprintf("pod/%s (%s)", pod.Name, namespace),
-			Reason:   describePodFailure(pod),
+			Severity:    DiagnoseSeverityCritical,
+			Resource:    fmt.Sprintf("pod/%s (%s)", pod.Name, namespace),
+			Reason:      reason,
+			Remediation: lookupRemediation(reason),
+		})
+	}
+}
+
+// appendNamespacePVCFindings lists all PersistentVolumeClaims in namespace
+// and appends a warning finding for each PVC stuck in Pending phase.
+func appendNamespacePVCFindings(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	namespace string,
+	findings *[]DiagnoseFinding,
+) {
+	pvcs, err := clientset.CoreV1().PersistentVolumeClaims(namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		*findings = append(*findings, DiagnoseFinding{
+			Severity:    DiagnoseSeverityWarning,
+			Resource:    "namespace/" + namespace,
+			Reason:      fmt.Sprintf("failed to list PVCs: %v", err),
+			Remediation: "Check cluster connectivity and RBAC permissions.",
+		})
+
+		return
+	}
+
+	for i := range pvcs.Items {
+		pvc := &pvcs.Items[i]
+		if pvc.Status.Phase != corev1.ClaimPending {
+			continue
+		}
+
+		*findings = append(*findings, DiagnoseFinding{
+			Severity:    DiagnoseSeverityWarning,
+			Resource:    fmt.Sprintf("pvc/%s (%s)", pvc.Name, namespace),
+			Reason:      "PVC is stuck in Pending phase",
+			Remediation: remediationPVCPending,
 		})
 	}
 }
@@ -187,6 +265,15 @@ func DiagnoseCluster(ctx context.Context, clientset kubernetes.Interface) (strin
 		}
 
 		builder.WriteString(podReport)
+	}
+
+	pvcReport := DiagnosePVCPending(ctx, clientset, namespaces)
+	if pvcReport != "" {
+		if builder.Len() > 0 {
+			builder.WriteString("\n")
+		}
+
+		builder.WriteString(pvcReport)
 	}
 
 	return strings.Trim(builder.String(), "\n"), nil
@@ -286,6 +373,47 @@ func DiagnosePodFailures(
 		for _, f := range failures {
 			builder.WriteString("\n  ")
 			builder.WriteString(f)
+		}
+	}
+
+	return builder.String()
+}
+
+// DiagnosePVCPending checks PersistentVolumeClaims in the given namespaces
+// and returns a human-readable summary of any PVCs stuck in Pending phase.
+// If no PVCs are pending, it returns an empty string.
+func DiagnosePVCPending(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	namespaces []string,
+) string {
+	var builder strings.Builder
+
+	for _, namespace := range namespaces {
+		pvcs, err := clientset.CoreV1().PersistentVolumeClaims(namespace).List(ctx, metav1.ListOptions{})
+		if err != nil {
+			fmt.Fprintf(&builder, "\n  (failed to list PVCs in %s: %v)", namespace, err)
+
+			continue
+		}
+
+		var pending []string
+
+		for i := range pvcs.Items {
+			if pvcs.Items[i].Status.Phase == corev1.ClaimPending {
+				pending = append(pending, pvcs.Items[i].Name)
+			}
+		}
+
+		if len(pending) == 0 {
+			continue
+		}
+
+		fmt.Fprintf(&builder, "\nPending PVCs in %s namespace:", namespace)
+
+		for _, name := range pending {
+			builder.WriteString("\n  ")
+			builder.WriteString(name)
 		}
 	}
 
