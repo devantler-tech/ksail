@@ -69,4 +69,4 @@ var ErrUpgraderNotSupported = errors.New("provisioner does not support version u
 var ErrVersionUndetermined = errors.New("cannot determine running version")
 
 // ErrOperationNotSupported is returned when an operation is not supported on a provisioner.
-var ErrOperationNotSupported = errors.New("operation not supported on cleanup provisioner")
+var ErrOperationNotSupported = errors.New("operation not supported")

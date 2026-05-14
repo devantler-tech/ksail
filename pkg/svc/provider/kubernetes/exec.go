@@ -110,7 +110,7 @@ func (p *Provider) WriteFileInDinD(
 	path string,
 	content string,
 ) error {
-	cmd := fmt.Sprintf("cat > %s", path)
+	cmd := fmt.Sprintf("cat > '%s'", strings.ReplaceAll(path, "'", "'\\''"))
 	stdin := strings.NewReader(content)
 
 	_, err := p.ExecInDinDWithStdin(ctx, restConfig, clusterName, cmd, stdin)
@@ -128,7 +128,7 @@ func (p *Provider) ReadFileFromDinD(
 	clusterName string,
 	path string,
 ) (string, error) {
-	cmd := fmt.Sprintf("cat %s", path)
+	cmd := fmt.Sprintf("cat '%s'", strings.ReplaceAll(path, "'", "'\\''"))
 
 	result, err := p.ExecInDinD(ctx, restConfig, clusterName, cmd)
 	if err != nil {

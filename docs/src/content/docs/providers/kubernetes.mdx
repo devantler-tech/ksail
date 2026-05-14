@@ -93,14 +93,14 @@ provider:
 
 ## Architecture
 
-Each nested cluster runs in a dedicated namespace (`ksail-<cluster-name>`) on the host cluster. The execution model depends on the distribution:
+Each nested cluster runs in a dedicated namespace on the host cluster. The namespace prefix depends on the distribution:
 
-| Distribution | Execution Mode | Description |
-| --- | --- | --- |
-| K3s | Direct pod | K3s binary runs directly in a privileged pod (k3k-style) |
-| Vanilla (Kind) | Docker-in-Docker | Docker daemon sidecar, Kind SDK operates against it |
-| Talos | Docker-in-Docker | Docker daemon sidecar, Talos SDK operates against it |
-| VCluster | Docker-in-Docker | Docker daemon sidecar, VCluster Vind driver operates against it |
+| Distribution | Namespace | Execution Mode | Description |
+| --- | --- | --- | --- |
+| K3s | `ksail-<name>` | Direct pod | K3s binary runs directly in a privileged pod (k3k-style) |
+| Vanilla (Kind) | `ksail-<name>` | Docker-in-Docker | Docker daemon sidecar, Kind SDK operates against it |
+| Talos | `ksail-<name>` | Docker-in-Docker | Docker daemon sidecar, Talos SDK operates against it |
+| VCluster | `vcluster-<name>` | Helm release | VCluster deployed via Helm driver on host cluster |
 
 ````mermaid
 graph TB

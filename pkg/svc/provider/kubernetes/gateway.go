@@ -3,7 +3,6 @@ package kubernetes
 import (
 	"context"
 	"fmt"
-	"math"
 	"net"
 	"strconv"
 	"time"
@@ -339,8 +338,17 @@ func extractGatewayPort(gateway *unstructured.Unstructured) int32 {
 		return DinDAPIServerPort
 	}
 
-	port, isInt := listenerMap["port"].(int64)
-	if !isInt || port < 0 || port > math.MaxInt32 {
+	var port int64
+	switch v := listenerMap["port"].(type) {
+	case int64:
+		port = v
+	case float64:
+		port = int64(v)
+	default:
+		return DinDAPIServerPort
+	}
+
+	if port < 1 || port > 65535 {
 		return DinDAPIServerPort
 	}
 
