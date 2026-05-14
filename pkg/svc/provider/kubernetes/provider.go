@@ -135,13 +135,21 @@ func (p *Provider) ListAllClustersWithDistribution(ctx context.Context) ([]Clust
 	clusters := make([]ClusterInfo, 0, len(namespaces.Items))
 
 	for i := range namespaces.Items {
-		name := namespaces.Items[i].Name
-		clusterName, ok := strings.CutPrefix(name, NamespacePrefix)
-		if !ok {
-			continue
+		ns := namespaces.Items[i]
+
+		// Prefer the ksail.io/cluster label for the cluster name; this works
+		// regardless of namespace prefix (ksail-<name>, vcluster-<name>, etc.).
+		clusterName := ns.Labels[LabelClusterName]
+		if clusterName == "" {
+			// Fall back to stripping the ksail- prefix for older namespaces.
+			var ok bool
+			clusterName, ok = strings.CutPrefix(ns.Name, NamespacePrefix)
+			if !ok {
+				continue
+			}
 		}
 
-		distribution := p.detectDistribution(ctx, name, clusterName)
+		distribution := p.detectDistribution(ctx, ns.Name, clusterName)
 		clusters = append(clusters, ClusterInfo{Name: clusterName, Distribution: distribution})
 	}
 

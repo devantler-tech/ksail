@@ -102,7 +102,7 @@ Each nested cluster runs in a dedicated namespace on the host cluster. The names
 
 | Distribution | Namespace | Execution Mode | Description |
 | --- | --- | --- | --- |
-| K3s | `ksail-<name>` | Direct pod | K3s binary runs directly in a privileged pod (k3k-style) |
+| K3s | `ksail-<name>` | Docker-in-Docker | kwokctl runs in a DinD pod; all cluster containers live inside it |
 | Vanilla (Kind) | `ksail-<name>` | Docker-in-Docker | Docker daemon sidecar, Kind SDK operates against it |
 | Talos | `ksail-<name>` | Docker-in-Docker | Docker daemon sidecar, Talos SDK operates against it |
 | VCluster | `vcluster-<name>` | Helm release | VCluster deployed via Helm driver on host cluster |

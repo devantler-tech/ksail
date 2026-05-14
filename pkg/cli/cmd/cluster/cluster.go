@@ -4029,6 +4029,11 @@ func getKubernetesClusters(ctx context.Context, deps ListDeps) ([]clusterWithDis
 		return nil, fmt.Errorf("expand kubeconfig path: %w", err)
 	}
 
+	// Skip silently when the kubeconfig file does not exist.
+	if _, statErr := os.Stat(expandedPath); os.IsNotExist(statErr) {
+		return nil, nil
+	}
+
 	canonicalPath, err := fsutil.EvalCanonicalPath(expandedPath)
 	if err != nil {
 		return nil, fmt.Errorf("canonicalize kubeconfig path: %w", err)
@@ -4038,7 +4043,7 @@ func getKubernetesClusters(ctx context.Context, deps ListDeps) ([]clusterWithDis
 
 	restConfig, err := k8s.BuildRESTConfig(canonicalPath, hostContext)
 	if err != nil {
-		// If no kubeconfig is available, skip silently.
+		// If the kubeconfig is present but invalid or unreachable, skip silently.
 		return nil, nil //nolint:nilerr
 	}
 

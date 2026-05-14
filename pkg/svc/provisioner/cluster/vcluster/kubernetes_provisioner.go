@@ -16,6 +16,7 @@ import (
 	"github.com/loft-sh/vcluster/pkg/cli/find"
 	"github.com/loft-sh/vcluster/pkg/cli/flags"
 	"github.com/sirupsen/logrus"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -106,13 +107,26 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 
 	namespace := vclusterNamespacePrefix + clusterName
 
-	// Step 1: Deploy the vCluster Helm chart
+	// Step 1: Pre-create the namespace with KSail labels so it is discoverable
+	// via `ksail cluster list --provider Kubernetes`. Setting CreateNamespace: false
+	// below prevents the Helm driver from creating it without our labels.
+	nsObj := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: namespace,
+			Labels: kubernetesprovider.CommonLabels(clusterName),
+		},
+	}
+	if _, nsErr := p.hostClientset.CoreV1().Namespaces().Create(ctx, nsObj, metav1.CreateOptions{}); nsErr != nil && !apierrors.IsAlreadyExists(nsErr) {
+		return fmt.Errorf("pre-create vCluster namespace %s: %w", namespace, nsErr)
+	}
+
+	// Step 2: Deploy the vCluster Helm chart
 	opts := &cli.CreateOptions{
 		ChartVersion:    vclusterconfigmanager.ChartVersion(),
 		ChartName:       "vcluster",
 		ChartRepo:       "https://charts.loft.sh",
 		Connect:         false,
-		CreateNamespace: true,
+		CreateNamespace: false,
 	}
 
 	valuesFiles, cleanup, err := buildValuesFiles(p.valuesPath, p.disableFlannel)
@@ -135,7 +149,7 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 		return fmt.Errorf("create vCluster via Helm: %w", err)
 	}
 
-	// Step 2: Wait for the kubeconfig Secret to appear
+	// Step 3: Wait for the kubeconfig Secret to appear
 	_, _ = fmt.Fprintln(os.Stdout, "► waiting for vCluster kubeconfig secret")
 
 	kubeconfigData, err := p.waitForKubeconfigSecret(ctx, clusterName, namespace)
@@ -143,7 +157,7 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 		return fmt.Errorf("get kubeconfig secret: %w", err)
 	}
 
-	// Step 3: Port-forward the vCluster API server to localhost
+	// Step 4: Port-forward the vCluster API server to localhost
 	_, _ = fmt.Fprintln(os.Stdout, "► port-forwarding vCluster API server to localhost")
 
 	podName := clusterName + "-0"
@@ -157,7 +171,7 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 
 	p.portForward = apiPortForward
 
-	// Step 4: Rewrite kubeconfig with localhost port-forward address
+	// Step 5: Rewrite kubeconfig with localhost port-forward address
 	contextName := "vcluster-" + clusterName
 	rewrittenKubeconfig, err := rewriteVClusterKubeconfig(
 		kubeconfigData, apiPortForward.LocalPort, clusterName,
@@ -166,7 +180,7 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 		return fmt.Errorf("rewrite vCluster kubeconfig: %w", err)
 	}
 
-	// Step 5: Merge kubeconfig into the host kubeconfig file
+	// Step 6: Merge kubeconfig into the host kubeconfig file
 	if p.kubeconfigPath != "" {
 		if err := k8s.MergeKubeconfig(p.kubeconfigPath, rewrittenKubeconfig); err != nil {
 			return fmt.Errorf("merge kubeconfig: %w", err)
