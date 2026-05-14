@@ -169,6 +169,7 @@ spec:
             has(self.metadata.labels) &&
             'node-not-ready.stage.kwok.x-k8s.io' in self.metadata.labels &&
             self.metadata.labels['node-not-ready.stage.kwok.x-k8s.io'] == 'true'
+      # KWOK's node-initialize stage sets status.phase to "Running" on simulated nodes.
       - cel:
           expression: self.status.phase == 'Running'
   delay:
