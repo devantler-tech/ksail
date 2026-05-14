@@ -7,9 +7,6 @@ description: |
   non-agentic and agentic workflows. Subsumes the former Maintainer workflow.
 
 on:
-  bots:
-    - "github-merge-queue[bot]"
-
   skip-bots: ["dependabot[bot]", "renovate[bot]"]
   schedule: daily
   workflow_dispatch:
