@@ -4101,7 +4101,6 @@ func toKubernetesClusters(infos []kubernetesprovider.ClusterInfo) []clusterWithD
 	return result
 }
 
-
 // Hetzner and Omni providers only support Talos.
 func toTalosClusters(names []string) []clusterWithDistribution {
 	result := make([]clusterWithDistribution, 0, len(names))

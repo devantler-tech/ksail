@@ -558,4 +558,3 @@ func rewriteK3kKubeconfig(kubeconfig string, localPort int, clusterName string) 
 
 	return result
 }
-
