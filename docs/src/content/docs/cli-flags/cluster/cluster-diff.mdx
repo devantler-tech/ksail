@@ -18,11 +18,11 @@ recreate-required, wipe-required) — the same categories used by
 No changes are applied to the cluster; this is a read-only operation.
 
 The cluster is resolved in the following priority order:
-  1. From ksail.yaml config file (if present)
-  2. From --name flag override
-  3. From current kubeconfig context
+  1. From the --name flag override
+  2. From metadata.name in the ksail.yaml config file
+  3. From the current kubeconfig context
 
-Use --format json for machine-readable output suitable for CI pipelines.
+Use --output json for machine-readable output suitable for CI pipelines.
 Use --exit-code to return exit code 2 when drift is detected (useful for
 CI gates and monitoring scripts).
 
@@ -31,8 +31,8 @@ Usage:
 
 Flags:
       --exit-code       Return exit code 2 when drift is detected (for CI gates)
-      --format string   Output format: text or json. Use json for machine-readable structured output. (default "text")
   -n, --name string     Cluster name used for container names, registry names, and kubeconfig context
+      --output string   Output format: text or json. Use json for machine-readable structured output. (default "text")
 
 Global Flags:
       --benchmark       Show per-activity benchmark output

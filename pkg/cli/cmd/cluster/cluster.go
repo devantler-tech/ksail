@@ -115,6 +115,28 @@ var ErrEmptyPinnedVersion = errors.New(
 // convention: 0 = no diff, 1 = error, 2 = differences found).
 var ErrDriftDetected = errors.New("configuration drift detected")
 
+// DriftExitError is an error type that carries a custom exit code for the diff
+// command. It wraps ErrDriftDetected so callers can use errors.Is, and exposes
+// ExitCode() so main.go can propagate exit code 2 instead of the generic 1.
+type DriftExitError struct {
+	Changes int
+}
+
+// Error implements the error interface.
+func (e *DriftExitError) Error() string {
+	return fmt.Sprintf("%v: %d change(s) detected", ErrDriftDetected, e.Changes)
+}
+
+// Unwrap returns ErrDriftDetected so errors.Is(err, ErrDriftDetected) works.
+func (e *DriftExitError) Unwrap() error {
+	return ErrDriftDetected
+}
+
+// ExitCode returns the exit code that main.go should use for this error.
+func (e *DriftExitError) ExitCode() int {
+	return diffExitCode
+}
+
 // BackupMetadata contains metadata about a backup.
 type BackupMetadata struct {
 	Version       string    `json:"version"`
@@ -8097,11 +8119,11 @@ recreate-required, wipe-required) — the same categories used by
 No changes are applied to the cluster; this is a read-only operation.
 
 The cluster is resolved in the following priority order:
-  1. From ksail.yaml config file (if present)
-  2. From --name flag override
-  3. From current kubeconfig context
+  1. From the --name flag override
+  2. From metadata.name in the ksail.yaml config file
+  3. From the current kubeconfig context
 
-Use --format json for machine-readable output suitable for CI pipelines.
+Use --output json for machine-readable output suitable for CI pipelines.
 Use --exit-code to return exit code 2 when drift is detected (useful for
 CI gates and monitoring scripts).`
 
@@ -8114,7 +8136,7 @@ func NewDiffCmd(runtimeContainer *di.Runtime) *cobra.Command {
 		Short: "Show configuration drift between ksail.yaml and live cluster",
 		Long:  diffLongDesc,
 		Annotations: map[string]string{
-			annotations.AnnotationDescription: "Compare desired cluster configuration against live cluster state and report drift",
+			annotations.AnnotationDescription: "Compare desired cluster configuration against live state and report drift",
 		},
 		SilenceUsage: true,
 	}
@@ -8124,7 +8146,7 @@ func NewDiffCmd(runtimeContainer *di.Runtime) *cobra.Command {
 		nil, // no field selectors needed for read-only diff
 	)
 
-	cmd.Flags().String("format", "text",
+	cmd.Flags().String("output", "text",
 		"Output format: text or json. Use json for machine-readable structured output.")
 
 	cmd.Flags().BoolVar(&exitCodeFlag, "exit-code", false,
@@ -8133,19 +8155,13 @@ func NewDiffCmd(runtimeContainer *di.Runtime) *cobra.Command {
 	registerNameFlag(cmd, cfgManager)
 
 	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
-		// Validate format before entering WrapHandler to avoid unnecessary DI
-		// when the format is obviously invalid. This mirrors the diagnose command's
-		// early format validation pattern.
-		format := strings.ToLower(getFlagValue(cmd, "format"))
-		if format != outputFormatText && format != outputFormatJSON {
-			return fmt.Errorf(
-				"%w: %q (expected %q or %q)",
-				ErrUnsupportedOutputFormat,
-				format,
-				outputFormatText,
-				outputFormatJSON,
-			)
+		// Validate output format before entering WrapHandler to avoid unnecessary
+		// DI when the format is obviously invalid. Mirrors the diagnose pattern.
+		if err := validateOutputFormat(cmd); err != nil {
+			return err
 		}
+
+		format := getOutputFormat(cmd)
 
 		handler := lifecycle.WrapHandler(runtimeContainer, cfgManager,
 			func(cmd *cobra.Command, cfgManager *ksailconfigmanager.ConfigManager, deps lifecycle.Deps) error {
@@ -8191,8 +8207,7 @@ func handleDiffRunE(
 	displayDiffResult(cmd, diff, format)
 
 	if exitCodeFlag {
-		return fmt.Errorf("%w: %d changes detected (exit code %d)",
-			ErrDriftDetected, diff.TotalChanges(), diffExitCode)
+		return &DriftExitError{Changes: diff.TotalChanges()}
 	}
 
 	return nil
@@ -8233,6 +8248,7 @@ func mergeProvisionerDiff(
 			Talos:    ctx.TalosConfig,
 			VCluster: ctx.VClusterConfig,
 			KWOK:     ctx.KWOKConfig,
+			EKS:      ctx.EKSConfig,
 		},
 	}
 
@@ -8267,14 +8283,4 @@ func mergeProvisionerDiff(
 	}
 
 	specdiff.MergeProvisionerDiff(mainDiff, provisionerDiff)
-}
-
-// getFlagValue returns the string value of a flag, or empty string if not set.
-func getFlagValue(cmd *cobra.Command, name string) string {
-	flag := cmd.Flags().Lookup(name)
-	if flag == nil {
-		return ""
-	}
-
-	return flag.Value.String()
 }

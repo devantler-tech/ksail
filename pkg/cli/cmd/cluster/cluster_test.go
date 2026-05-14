@@ -7247,9 +7247,9 @@ func TestNewDiffCmd(t *testing.T) {
 	require.NotNil(t, nameFlag)
 	assert.Equal(t, "n", nameFlag.Shorthand)
 
-	formatFlag := cmd.Flags().Lookup("format")
-	require.NotNil(t, formatFlag)
-	assert.Equal(t, "text", formatFlag.DefValue)
+	outputFlag := cmd.Flags().Lookup("output")
+	require.NotNil(t, outputFlag)
+	assert.Equal(t, "text", outputFlag.DefValue)
 
 	exitCodeFlag := cmd.Flags().Lookup("exit-code")
 	require.NotNil(t, exitCodeFlag)
@@ -7278,7 +7278,7 @@ func TestDiffCmd_InvalidFormatRejectsEarly(t *testing.T) {
 			diffCmd := cluster.NewDiffCmd(&di.Runtime{})
 			diffCmd.SetOut(io.Discard)
 			diffCmd.SetErr(io.Discard)
-			diffCmd.SetArgs([]string{"--format", testCase.format})
+			diffCmd.SetArgs([]string{"--output", testCase.format})
 
 			err := diffCmd.Execute()
 
@@ -7325,4 +7325,17 @@ func TestDiffCmd_HasNoWriteAnnotation(t *testing.T) {
 	// This ensures toolgen places it under cluster_read, not cluster_write.
 	assert.Empty(t, cmd.Annotations["ai.toolgen.permission"],
 		"diff command must not have a 'write' permission annotation")
+}
+
+// TestDriftExitError verifies that DriftExitError carries exit code 2 and
+// that errors.Is(err, ErrDriftDetected) works through the error chain.
+func TestDriftExitError(t *testing.T) {
+	t.Parallel()
+
+	err := &cluster.DriftExitError{Changes: 3}
+
+	assert.Equal(t, 2, err.ExitCode(), "exit code must be 2 (diff(1) convention)")
+	assert.ErrorIs(t, err, cluster.ErrDriftDetected,
+		"DriftExitError must unwrap to ErrDriftDetected")
+	assert.Contains(t, err.Error(), "3")
 }
