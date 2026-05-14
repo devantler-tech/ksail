@@ -102,9 +102,9 @@ Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for the develo
 
 ## Related Projects
 
-| Project                                                               | Description         | Type     |
-|-----------------------------------------------------------------------|---------------------|----------|
-| [devantler-tech/platform](https://github.com/devantler-tech/platform) | My personal homelab | Platform |
+| Project                                                               | Description                                   | Type     |
+|-----------------------------------------------------------------------|-----------------------------------------------|----------|
+| [devantler-tech/platform](https://github.com/devantler-tech/platform) | The maintainer's personal kubernetes platform | Platform |
 
 Using KSail in your project? Open a PR to add it here.
 
