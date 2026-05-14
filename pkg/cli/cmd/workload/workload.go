@@ -486,7 +486,12 @@ func runInteractiveDockerExec(
 	containerName string,
 	cmdArgs []string,
 ) error {
-	isTTY := term.IsTerminal(int(os.Stdin.Fd()))
+	stdinFd, err := stdinFD()
+	if err != nil {
+		return err
+	}
+
+	isTTY := term.IsTerminal(stdinFd)
 
 	execID, err := dockerClient.ContainerExecCreate(ctx, containerName, dockercontainer.ExecOptions{
 		Cmd:          cmdArgs,
@@ -521,9 +526,22 @@ func runInteractiveDockerExec(
 	return checkExecExitCode(ctx, dockerClient, execID.ID)
 }
 
+func stdinFD() (int, error) {
+	fd := os.Stdin.Fd()
+	maxInt := ^uint(0) >> 1
+	if fd > uintptr(maxInt) {
+		return 0, fmt.Errorf("stdin fd overflows int: %d", fd)
+	}
+
+	return int(fd), nil
+}
+
 // setupRawTerminal sets the terminal to raw mode and returns a restore function.
 func setupRawTerminal() (func(), error) {
-	stdinFd := int(os.Stdin.Fd())
+	stdinFd, err := stdinFD()
+	if err != nil {
+		return nil, err
+	}
 
 	if !term.IsTerminal(stdinFd) {
 		return func() {}, nil

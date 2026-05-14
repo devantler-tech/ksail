@@ -110,10 +110,14 @@ func streamDebugContainer(
 ) error {
 	defer cancel()
 
-	stdinFd := int(os.Stdin.Fd())
+	stdinFd, err := stdinFD()
+	if err != nil {
+		return err
+	}
+
 	isTTY := term.IsTerminal(stdinFd)
 
-	err := sendContainerSpec(stream, imageName, args, isTTY)
+	err = sendContainerSpec(stream, imageName, args, isTTY)
 	if err != nil {
 		return err
 	}
