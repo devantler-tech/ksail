@@ -6,7 +6,7 @@ description: |
     3. Kustomize boundary scoping (only affected overlay re-applied)
     4. Graceful shutdown on SIGTERM
   Non-existent directory rejection is covered by unit tests
-  (TestWatchRejectsNonExistentDirectory).
+  (TestRunWatchEarlyPathValidation in workload_pure_test.go).
 
 inputs:
   workload-timeout:
@@ -20,7 +20,7 @@ runs:
   using: composite
   steps:
     # Test 1 (non-existent directory rejection) is covered by the unit
-    # test TestWatchRejectsNonExistentDirectory and removed from E2E.
+    # test TestRunWatchEarlyPathValidation and removed from E2E.
 
     # ── Test 1 — --initial-apply syncs cluster on startup ────────────
     - name: 🧪 watch --initial-apply syncs on startup
