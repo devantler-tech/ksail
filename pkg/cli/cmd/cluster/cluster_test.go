@@ -7256,7 +7256,7 @@ func TestNewDiffCmd(t *testing.T) {
 	assert.Equal(t, "false", exitCodeFlag.DefValue)
 }
 
-// TestDiffCmd_InvalidFormatRejectsEarly verifies that an unknown --format
+// TestDiffCmd_InvalidFormatRejectsEarly verifies that an unknown --output
 // value is rejected before any cluster interaction takes place.
 func TestDiffCmd_InvalidFormatRejectsEarly(t *testing.T) {
 	t.Parallel()

@@ -112,7 +112,7 @@ var ErrEmptyPinnedVersion = errors.New(
 
 // ErrDriftDetected is returned by the diff command when --exit-code is set
 // and configuration drift is detected. The exit code is 2 (matching diff(1)
-// convention: 0 = no diff, 1 = error, 2 = differences found).
+// convention: 0 = no drift, 1 = error, 2 = drift detected).
 var ErrDriftDetected = errors.New("configuration drift detected")
 
 // DriftExitError is an error type that carries a custom exit code for the diff
@@ -8103,7 +8103,7 @@ func resolveClusterEntryName(kubeconfigPath, contextName string) (string, error)
 
 // diffExitCode is the exit code returned by the diff command when --exit-code is
 // set and configuration drift is detected. Matches diff(1) convention:
-// 0 = identical, 1 = error, 2 = differences found.
+// 0 = no drift, 1 = error, 2 = drift detected.
 const diffExitCode = 2
 
 // diffLongDesc describes the `ksail cluster diff` command.

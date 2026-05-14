@@ -48,15 +48,16 @@ func runWithArgs(args []string) int {
 
 	err := cmd.Execute(rootCmd)
 	if err != nil {
-		notify.Errorf(rootCmd.ErrOrStderr(), "%v", err)
-
 		// Check if this is a DriftExitError (from 'ksail cluster diff --exit-code').
-		// If so, return the custom exit code (2) instead of the generic 1.
+		// If so, return the custom exit code (2) instead of the generic 1. For drift,
+		// this is not an error condition but a "differences found" result, so don't print it.
 		var driftErr *cluster.DriftExitError
 		if errors.As(err, &driftErr) {
 			return driftErr.ExitCode()
 		}
 
+		// For actual errors, print and return exit code 1
+		notify.Errorf(rootCmd.ErrOrStderr(), "%v", err)
 		return 1
 	}
 
