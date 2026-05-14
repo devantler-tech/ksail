@@ -1161,7 +1161,9 @@ func TestRunHooks_SuccessfulHooksAllExecute(t *testing.T) {
 	err := workload.ExportRunHooks(context.Background(), cmd, hooks)
 	require.NoError(t, err)
 
-	content, readErr := os.ReadFile(markerFile) //nolint:gosec // test-only; path is from t.TempDir()
+	content, readErr := os.ReadFile( //nolint:gosec // test-only; path from t.TempDir()
+		markerFile,
+	)
 	require.NoError(t, readErr)
 	assert.Contains(t, string(content), "first")
 	assert.Contains(t, string(content), "second")

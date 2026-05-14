@@ -486,7 +486,7 @@ func runInteractiveDockerExec(
 	containerName string,
 	cmdArgs []string,
 ) error {
-	isTTY := term.IsTerminal(int(os.Stdin.Fd())) //nolint:gosec
+	isTTY := term.IsTerminal(int(os.Stdin.Fd()))
 
 	execID, err := dockerClient.ContainerExecCreate(ctx, containerName, dockercontainer.ExecOptions{
 		Cmd:          cmdArgs,
@@ -523,7 +523,7 @@ func runInteractiveDockerExec(
 
 // setupRawTerminal sets the terminal to raw mode and returns a restore function.
 func setupRawTerminal() (func(), error) {
-	stdinFd := int(os.Stdin.Fd()) //nolint:gosec
+	stdinFd := int(os.Stdin.Fd())
 
 	if !term.IsTerminal(stdinFd) {
 		return func() {}, nil
@@ -4167,7 +4167,8 @@ func runHooks(ctx context.Context, cmd *cobra.Command, hooks []string) error {
 		shellCmd.Stdout = cmd.OutOrStdout()
 		shellCmd.Stderr = cmd.ErrOrStderr()
 
-		if err := shellCmd.Run(); err != nil {
+		err := shellCmd.Run()
+		if err != nil {
 			return fmt.Errorf("%w: %q: %w", errHookFailed, hook, err)
 		}
 	}
@@ -4214,7 +4215,7 @@ Examples:
   ksail workload watch --hook "docker build -t myapp:latest ."
 
   # Chain multiple hooks
-  ksail workload watch --hook "make generate" --hook "docker build -t myapp ."` 
+  ksail workload watch --hook "make generate" --hook "docker build -t myapp ."`
 
 // NewWatchCmd creates the workload watch command.
 func NewWatchCmd() *cobra.Command {
@@ -4263,8 +4264,28 @@ func NewWatchCmd() *cobra.Command {
 	return cmd
 }
 
+// validateWatchDir checks that dir exists and is a directory.
+func validateWatchDir(dir string) error {
+	info, err := os.Stat(dir)
+	if err != nil {
+		return fmt.Errorf("access watch directory %q: %w", dir, err)
+	}
+
+	if !info.IsDir() {
+		return fmt.Errorf("%q: %w", dir, errNotDirectory)
+	}
+
+	return nil
+}
+
 // runWatch starts the file watcher loop.
-func runWatch(cmd *cobra.Command, pathFlag string, initialApply bool, debug bool, hookFlags []string) error {
+func runWatch(
+	cmd *cobra.Command,
+	pathFlag string,
+	initialApply bool,
+	debug bool,
+	hookFlags []string,
+) error {
 	// The root-level error executor captures stderr into a buffer for error
 	// aggregation.  For long-running commands like watch the buffer is never
 	// flushed, making all feedback invisible.  Override with real stderr so
@@ -4277,13 +4298,9 @@ func runWatch(cmd *cobra.Command, pathFlag string, initialApply bool, debug bool
 	// config loading or cluster connection).  The CI contract test
 	// (ksail-test-workload-watch) relies on this early-exit behaviour.
 	if dir := strings.TrimSpace(pathFlag); dir != "" {
-		info, err := os.Stat(dir)
+		err := validateWatchDir(dir)
 		if err != nil {
-			return fmt.Errorf("access watch directory %q: %w", dir, err)
-		}
-
-		if !info.IsDir() {
-			return fmt.Errorf("%q: %w", dir, errNotDirectory)
+			return err
 		}
 	}
 
@@ -4294,14 +4311,9 @@ func runWatch(cmd *cobra.Command, pathFlag string, initialApply bool, debug bool
 
 	watchDir := resolveSourceDir(cmdCtx.ClusterCfg, pathFlag)
 
-	// Verify the directory exists.
-	info, err := os.Stat(watchDir)
+	err = validateWatchDir(watchDir)
 	if err != nil {
-		return fmt.Errorf("access watch directory %q: %w", watchDir, err)
-	}
-
-	if !info.IsDir() {
-		return fmt.Errorf("%q: %w", watchDir, errNotDirectory)
+		return err
 	}
 
 	// Canonicalize the watch directory (resolve symlinks + absolute) so that
@@ -4518,7 +4530,12 @@ func handleFileEvent(
 // before the apply starts. If any hook fails, the apply is skipped.
 // Used directly for the initial full-root sync and called by applyAndReport
 // for scoped reconciles, keeping timing and formatting in one place.
-func executeAndReportApply(ctx context.Context, cmd *cobra.Command, dir, label string, hooks []string) {
+func executeAndReportApply(
+	ctx context.Context,
+	cmd *cobra.Command,
+	dir, label string,
+	hooks []string,
+) {
 	if ctx.Err() != nil {
 		return
 	}
@@ -4532,7 +4549,8 @@ func executeAndReportApply(ctx context.Context, cmd *cobra.Command, dir, label s
 	if len(hooks) > 0 {
 		cmd.PrintErrf("[%s] running %d hook(s)\n", timestamp, len(hooks))
 
-		if hookErr := runHooks(ctx, cmd, hooks); hookErr != nil {
+		hookErr := runHooks(ctx, cmd, hooks)
+		if hookErr != nil {
 			elapsed := time.Since(start)
 			timestamp = time.Now().Format("15:04:05")
 			cmd.PrintErrf(

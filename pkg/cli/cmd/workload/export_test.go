@@ -284,4 +284,4 @@ func ExportRunHooks(ctx context.Context, cmd *cobra.Command, hooks []string) err
 }
 
 // ErrHookFailed exposes the errHookFailed sentinel for test assertions.
-var ErrHookFailed = errHookFailed //nolint:gochecknoglobals // test export
+var ErrHookFailed = errHookFailed
