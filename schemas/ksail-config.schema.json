@@ -561,7 +561,8 @@
                 }
               },
               "additionalProperties": false,
-              "type": "object"
+              "type": "object",
+              "description": "Configuration for the workload watch command (pre-apply hooks, etc.)"
             }
           },
           "additionalProperties": false,

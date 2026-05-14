@@ -4313,7 +4313,11 @@ func runWatch(cmd *cobra.Command, pathFlag string, initialApply bool, debug bool
 	}
 
 	// Merge hooks: config hooks first, then CLI --hook flags appended.
-	hooks := append(cmdCtx.ClusterCfg.Spec.Workload.Watch.Hooks, hookFlags...)
+	// Allocate a new slice to avoid mutating the config's backing array.
+	configHooks := cmdCtx.ClusterCfg.Spec.Workload.Watch.Hooks
+	hooks := make([]string, 0, len(configHooks)+len(hookFlags))
+	hooks = append(hooks, configHooks...)
+	hooks = append(hooks, hookFlags...)
 
 	// Try to create a Flux reconciler for selective Kustomization reconciliation.
 	// If Flux is not available (CRDs not installed, kubeconfig error, etc.),

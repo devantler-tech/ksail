@@ -25,6 +25,11 @@ Use --initial-apply to synchronize the cluster with the current state of
 the watch directory before entering the watch loop. This is useful after
 editing manifests offline or when starting a fresh session.
 
+Use --hook to run shell commands before each apply (e.g. docker build).
+Hooks execute sequentially; if any hook fails the apply is skipped for
+that cycle. Hooks can also be configured in ksail.yaml under
+spec.workload.watch.hooks. CLI --hook flags are appended after config hooks.
+
 Examples:
   # Watch the default k8s/ directory
   ksail workload watch
@@ -35,13 +40,20 @@ Examples:
   # Watch a custom directory
   ksail workload watch --path=./manifests
 
+  # Run a build before each apply
+  ksail workload watch --hook "docker build -t myapp:latest ."
+
+  # Chain multiple hooks
+  ksail workload watch --hook "make generate" --hook "docker build -t myapp ."
+
 Usage:
   ksail workload watch [flags]
 
 Flags:
-      --debug           Show diagnostic output for file events and polling (useful for troubleshooting watch behavior)
-      --initial-apply   Apply all workloads once immediately on startup before entering the watch loop
-      --path string     Directory to watch for changes (default: k8s/ or spec.workload.sourceDirectory from ksail.yaml)
+      --debug              Show diagnostic output for file events and polling (useful for troubleshooting watch behavior)
+      --hook stringArray   Shell command to run before each apply (repeatable; appended after spec.workload.watch.hooks)
+      --initial-apply      Apply all workloads once immediately on startup before entering the watch loop
+      --path string        Directory to watch for changes (default: k8s/ or spec.workload.sourceDirectory from ksail.yaml)
 
 Global Flags:
       --benchmark       Show per-activity benchmark output
