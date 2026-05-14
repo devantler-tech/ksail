@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -463,38 +464,48 @@ func setDefaultCluster(name string) func() {
 	return func() { config.DefaultCluster = prev }
 }
 
-// resolveConfigPath returns the config file path to pass to kwokctl.
+// resolveConfigPath returns the config path to pass to kwokctl.
 // If an explicit configPath was provided, it is returned as-is.
-// Otherwise a temporary file containing the default simulation CRDs
-// is created and a cleanup function is returned that removes it.
+// Otherwise a temporary directory containing a kustomization.yaml and
+// simulation.yaml with the default simulation CRDs is created.
+// KWOK's config loader auto-detects directories and runs kustomize.
 func (p *Provisioner) resolveConfigPath() (string, func(), error) {
 	if p.configPath != "" {
 		return p.configPath, nil, nil
 	}
 
-	tmpFile, err := os.CreateTemp("", "kwok-default-*.yaml")
+	tmpDir, err := os.MkdirTemp("", "kwok-default-*")
 	if err != nil {
-		return "", nil, fmt.Errorf("failed to create temp config: %w", err)
+		return "", nil, fmt.Errorf("failed to create temp config dir: %w", err)
 	}
 
-	tmpName := tmpFile.Name()
+	kustomizationContent := "" +
+		"apiVersion: kustomize.config.k8s.io/v1beta1\n" +
+		"kind: Kustomization\n" +
+		"resources:\n" +
+		"  - simulation.yaml\n"
 
-	_, writeErr := tmpFile.WriteString(scaffolder.KWOKDefaultSimulationConfig)
-	if writeErr != nil {
-		_ = tmpFile.Close()
-		_ = os.Remove(tmpName)
+	const fileMode = 0o600
 
-		return "", nil, fmt.Errorf("failed to write temp config: %w", writeErr)
+	kustomizationPath := filepath.Join(tmpDir, "kustomization.yaml")
+
+	err = os.WriteFile(kustomizationPath, []byte(kustomizationContent), fileMode)
+	if err != nil {
+		_ = os.RemoveAll(tmpDir)
+
+		return "", nil, fmt.Errorf("failed to write temp kustomization.yaml: %w", err)
 	}
 
-	closeErr := tmpFile.Close()
-	if closeErr != nil {
-		_ = os.Remove(tmpName)
+	simulationPath := filepath.Join(tmpDir, "simulation.yaml")
 
-		return "", nil, fmt.Errorf("failed to close temp config: %w", closeErr)
+	err = os.WriteFile(simulationPath, []byte(scaffolder.KWOKDefaultSimulationConfig), fileMode)
+	if err != nil {
+		_ = os.RemoveAll(tmpDir)
+
+		return "", nil, fmt.Errorf("failed to write temp simulation.yaml: %w", err)
 	}
 
-	cleanup := func() { _ = os.Remove(tmpName) }
+	cleanup := func() { _ = os.RemoveAll(tmpDir) }
 
-	return tmpName, cleanup, nil
+	return tmpDir, cleanup, nil
 }

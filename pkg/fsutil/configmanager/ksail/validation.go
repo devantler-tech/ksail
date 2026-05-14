@@ -183,7 +183,7 @@ func expectedDistributionConfigName(distribution v1alpha1.Distribution) string {
 	case v1alpha1.DistributionVCluster:
 		return "vcluster.yaml"
 	case v1alpha1.DistributionKWOK:
-		return "kwok.yaml"
+		return "kwok"
 	case v1alpha1.DistributionEKS:
 		return "eks.yaml"
 	default:
