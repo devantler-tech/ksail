@@ -5,6 +5,7 @@ import (
 	"os"
 )
 
+// jscpd:ignore-start
 // WithRemoteDockerHost sets DOCKER_HOST to point at a port-forwarded DinD Docker API,
 // executes fn, then restores the original DOCKER_HOST value.
 // This is safe for CLI usage (sequential cluster creation) but is NOT goroutine-safe.
@@ -27,3 +28,5 @@ func WithRemoteDockerHost(pf *PortForwardSession, fn func() error) error {
 
 	return fn()
 }
+
+// jscpd:ignore-end

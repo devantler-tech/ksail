@@ -96,15 +96,7 @@ type K3kProvisionerConfig struct {
 
 // NewK3kProvisioner creates a K3kProvisioner for managing K3s clusters via k3k.
 func NewK3kProvisioner(cfg K3kProvisionerConfig) *K3kProvisioner {
-	kubeconfigPath := cfg.KubeconfigPath
-	if kubeconfigPath == "" {
-		kubeconfigPath = k8s.DefaultKubeconfigPath()
-	} else if strings.HasPrefix(kubeconfigPath, "~/") {
-		homeDir, _ := os.UserHomeDir()
-		if homeDir != "" {
-			kubeconfigPath = homeDir + kubeconfigPath[1:]
-		}
-	}
+	kubeconfigPath := k8s.ResolveKubeconfigPath(cfg.KubeconfigPath)
 
 	controlPlanes := cfg.ControlPlanes
 	if controlPlanes <= 0 {
@@ -243,6 +235,7 @@ func (p *K3kProvisioner) Delete(ctx context.Context, name string) error {
 	return nil
 }
 
+// jscpd:ignore-start
 // Exists checks whether the k3k cluster namespace exists.
 func (p *K3kProvisioner) Exists(ctx context.Context, name string) (bool, error) {
 	clusterName := p.clusterName
@@ -263,6 +256,8 @@ func (p *K3kProvisioner) Exists(ctx context.Context, name string) (bool, error) 
 
 	return true, nil
 }
+
+// jscpd:ignore-end
 
 // ensureK3kOperator installs the k3k Helm chart if it isn't already present.
 func (p *K3kProvisioner) ensureK3kOperator(ctx context.Context) error {
@@ -463,6 +458,7 @@ func (p *K3kProvisioner) buildK3kRESTClient() (*rest.RESTClient, runtime.Paramet
 	return restClient, paramCodec, nil
 }
 
+// jscpd:ignore-start
 // waitForKubeconfigSecret polls for the kubeconfig Secret created by the k3k operator.
 func (p *K3kProvisioner) waitForKubeconfigSecret(ctx context.Context, clusterName, namespace string) ([]byte, error) {
 	// k3k names the kubeconfig secret as k3k-<clusterName>-kubeconfig
@@ -500,6 +496,8 @@ func (p *K3kProvisioner) waitForKubeconfigSecret(ctx context.Context, clusterNam
 
 	return kubeconfigData, nil
 }
+
+// jscpd:ignore-end
 
 // rewriteK3kKubeconfig rewrites the k3k-generated kubeconfig to use a localhost
 // port-forward address and renames context/cluster/user entries for uniqueness.

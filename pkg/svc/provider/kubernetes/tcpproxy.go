@@ -6,15 +6,11 @@ import (
 	"net"
 	"net/http"
 	"strconv"
-	"strings"
 	"sync"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/httpstream"
 )
-
-// minAddressParts is the minimum number of colon-separated parts in a host:port address.
-const minAddressParts = 2
 
 // tcpProxy is a local TCP proxy that forwards connections to a Kubernetes pod
 // through the SPDY port-forward protocol. Unlike the standard portforward library,
@@ -39,30 +35,14 @@ type tcpProxy struct {
 // newTCPProxy creates a TCP proxy listening on a random local port that forwards
 // to the given remote pod port via the SPDY dialer.
 func newTCPProxy(dialer httpstream.Dialer, remotePort int) (*tcpProxy, error) {
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	ll, err := newLocalListener()
 	if err != nil {
-		return nil, fmt.Errorf("create TCP proxy listener: %w", err)
-	}
-
-	addr := listener.Addr().String()
-
-	parts := strings.Split(addr, ":")
-	if len(parts) < minAddressParts {
-		listener.Close()
-
-		return nil, fmt.Errorf("parse listener address %q: %w", addr, ErrUnexpectedAddressFormat)
-	}
-
-	port, err := strconv.Atoi(parts[len(parts)-1])
-	if err != nil {
-		listener.Close()
-
-		return nil, fmt.Errorf("parse listener port: %w", err)
+		return nil, fmt.Errorf("tcp proxy: %w", err)
 	}
 
 	return &tcpProxy{
-		listener:   listener,
-		localPort:  port,
+		listener:   ll.Listener,
+		localPort:  ll.Port,
 		remotePort: remotePort,
 		dialer:     dialer,
 		stopCh:     make(chan struct{}),

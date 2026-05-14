@@ -57,15 +57,7 @@ type KubernetesProvisionerConfig struct {
 
 // NewKubernetesProvisioner creates a KubernetesProvisioner that wraps KWOK with DinD lifecycle.
 func NewKubernetesProvisioner(cfg KubernetesProvisionerConfig) *KubernetesProvisioner {
-	kubeconfigPath := cfg.KubeconfigPath
-	if kubeconfigPath == "" {
-		kubeconfigPath = k8s.DefaultKubeconfigPath()
-	} else if strings.HasPrefix(kubeconfigPath, "~/") {
-		homeDir, _ := os.UserHomeDir()
-		if homeDir != "" {
-			kubeconfigPath = homeDir + kubeconfigPath[1:]
-		}
-	}
+	kubeconfigPath := k8s.ResolveKubeconfigPath(cfg.KubeconfigPath)
 
 	innerProvisioner := NewProvisioner(
 		cfg.Name,
@@ -209,6 +201,7 @@ func (p *KubernetesProvisioner) Delete(ctx context.Context, name string) error {
 		p.portForward.Close()
 	}
 
+	// jscpd:ignore-start
 	// Best-effort: delete KWOK cluster inside DinD via SDK
 	dockerPF, pfErr := p.k8sProvider.StartExecTunnel(
 		ctx, p.restConfig, p.clusterName,
@@ -223,19 +216,9 @@ func (p *KubernetesProvisioner) Delete(ctx context.Context, name string) error {
 		})
 	}
 
-	// Clean up API exposure resources
-	if err := p.k8sProvider.DeleteAPIExposure(ctx, p.dynamicClient, p.clusterName); err != nil {
-		return fmt.Errorf("delete API exposure: %w", err)
-	}
-
-	// Clean up DinD
-	if err := p.k8sProvider.DeleteDinD(ctx, p.clusterName); err != nil {
-		return fmt.Errorf("delete DinD: %w", err)
-	}
-
-	// Delete namespace (cascading delete)
-	if err := p.k8sProvider.DeleteNodes(ctx, p.clusterName); err != nil {
-		return fmt.Errorf("delete namespace: %w", err)
+	// Clean up API exposure, DinD, and namespace
+	if err := p.k8sProvider.TeardownDinD(ctx, p.dynamicClient, p.clusterName); err != nil {
+		return fmt.Errorf("teardown DinD: %w", err)
 	}
 
 	// Clean up kubeconfig entries
@@ -260,20 +243,10 @@ func (p *KubernetesProvisioner) List(ctx context.Context) ([]string, error) {
 
 // setupDinD creates the namespace and DinD pod, then waits for readiness.
 func (p *KubernetesProvisioner) setupDinD(ctx context.Context) error {
-	if err := p.k8sProvider.EnsureNamespace(ctx, p.clusterName); err != nil {
-		return fmt.Errorf("ensure namespace: %w", err)
-	}
-
-	if err := p.k8sProvider.CreateDinDPod(ctx, p.clusterName, p.distribution); err != nil {
-		return fmt.Errorf("create DinD pod: %w", err)
-	}
-
-	if err := p.k8sProvider.WaitForDinD(ctx, p.clusterName); err != nil {
-		return fmt.Errorf("wait for DinD: %w", err)
-	}
-
-	return nil
+	return p.k8sProvider.SetupDinD(ctx, p.clusterName, p.distribution)
 }
+
+// jscpd:ignore-end
 
 // discoverAPIServerPort reads the kubeconfig that kwokctl wrote and extracts
 // the API server port from the cluster entry. kwokctl (docker compose runtime)

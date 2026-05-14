@@ -245,16 +245,9 @@ func (f DefaultFactory) createKindKubernetesProvisioner(
 	// while cluster.Metadata.Name may be empty with --name flag.
 	clusterName := kindConfig.Name
 
-	// Build host cluster clients
-	hostClient, restConfig, dynClient, err := buildHostClusterClients(opts)
+	_, restConfig, dynClient, k8sProvider, err := buildKubernetesInfra(opts)
 	if err != nil {
-		return nil, nil, fmt.Errorf("build host cluster clients: %w", err)
-	}
-
-	// Create the Kubernetes provider
-	k8sProvider, err := kubernetesprovider.NewProvider(hostClient, opts)
-	if err != nil {
-		return nil, nil, fmt.Errorf("create Kubernetes provider: %w", err)
+		return nil, nil, err
 	}
 
 	// Configure Kind for DinD: API server must bind to all interfaces
@@ -341,16 +334,9 @@ func (f DefaultFactory) createK3dKubernetesProvisioner(
 		clusterName = cluster.Metadata.Name
 	}
 
-	// Build host cluster clients
-	hostClient, restConfig, _, err := buildHostClusterClients(opts)
+	hostClient, restConfig, _, k8sProvider, err := buildKubernetesInfra(opts)
 	if err != nil {
-		return nil, nil, fmt.Errorf("build host cluster clients: %w", err)
-	}
-
-	// Create the Kubernetes provider (needed for port-forward)
-	k8sProvider, err := kubernetesprovider.NewProvider(hostClient, opts)
-	if err != nil {
-		return nil, nil, fmt.Errorf("create Kubernetes provider: %w", err)
+		return nil, nil, err
 	}
 
 	controlPlanes := cluster.Spec.Cluster.ControlPlanes
@@ -430,6 +416,24 @@ func resolveKubernetesOption(directValue, envVar string) string {
 	}
 
 	return directValue
+}
+
+// buildKubernetesInfra creates the host-cluster clients and Kubernetes provider in one call.
+// This consolidates the repeated buildHostClusterClients + NewProvider sequence.
+func buildKubernetesInfra(
+	opts v1alpha1.OptionsKubernetes,
+) (kubernetes.Interface, *rest.Config, dynamic.Interface, *kubernetesprovider.Provider, error) {
+	hostClient, restConfig, dynClient, err := buildHostClusterClients(opts)
+	if err != nil {
+		return nil, nil, nil, nil, fmt.Errorf("build host cluster clients: %w", err)
+	}
+
+	k8sProvider, err := kubernetesprovider.NewProvider(hostClient, opts)
+	if err != nil {
+		return nil, nil, nil, nil, fmt.Errorf("create Kubernetes provider: %w", err)
+	}
+
+	return hostClient, restConfig, dynClient, k8sProvider, nil
 }
 
 // applyKindNodeCounts applies node count overrides from CLI flags / cluster-level
@@ -655,14 +659,9 @@ func (f DefaultFactory) createTalosKubernetesProvisioner(
 		clusterName = cluster.Metadata.Name
 	}
 
-	hostClient, restConfig, dynClient, err := buildHostClusterClients(opts)
+	_, restConfig, dynClient, k8sProvider, err := buildKubernetesInfra(opts)
 	if err != nil {
-		return nil, nil, fmt.Errorf("build host cluster clients: %w", err)
-	}
-
-	k8sProvider, err := kubernetesprovider.NewProvider(hostClient, opts)
-	if err != nil {
-		return nil, nil, fmt.Errorf("create Kubernetes provider: %w", err)
+		return nil, nil, err
 	}
 
 	// Create a full inner Talos Provisioner (Docker provider type).
@@ -751,16 +750,9 @@ func (f DefaultFactory) createVClusterKubernetesProvisioner(
 		clusterName = cluster.Metadata.Name
 	}
 
-	// Build host cluster clients
-	hostClient, restConfig, _, err := buildHostClusterClients(opts)
+	hostClient, restConfig, _, k8sProvider, err := buildKubernetesInfra(opts)
 	if err != nil {
-		return nil, nil, fmt.Errorf("build host cluster clients: %w", err)
-	}
-
-	// Build a minimal Kubernetes provider for port-forward support
-	k8sProvider, err := kubernetesprovider.NewProvider(hostClient, opts)
-	if err != nil {
-		return nil, nil, fmt.Errorf("create kubernetes provider: %w", err)
+		return nil, nil, err
 	}
 
 	var valuesPath string
@@ -820,16 +812,9 @@ func (f DefaultFactory) createKWOKKubernetesProvisioner(
 ) (Provisioner, any, error) {
 	opts := cluster.Spec.Provider.Kubernetes
 
-	// Build host cluster clients
-	hostClient, restConfig, dynClient, err := buildHostClusterClients(opts)
+	_, restConfig, dynClient, k8sProvider, err := buildKubernetesInfra(opts)
 	if err != nil {
-		return nil, nil, fmt.Errorf("build host cluster clients: %w", err)
-	}
-
-	// Create the Kubernetes provider
-	k8sProvider, err := kubernetesprovider.NewProvider(hostClient, opts)
-	if err != nil {
-		return nil, nil, fmt.Errorf("create Kubernetes provider: %w", err)
+		return nil, nil, err
 	}
 
 	// Use kwokConfig.Name as the cluster name — it's always set correctly

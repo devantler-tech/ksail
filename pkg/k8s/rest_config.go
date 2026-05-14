@@ -33,6 +33,25 @@ func DefaultKubeconfigPath() string {
 	return filepath.Join(homeDir, ".kube", "config")
 }
 
+// ResolveKubeconfigPath returns a usable kubeconfig path from the given input.
+// If path is empty, the default kubeconfig path is returned.
+// If path starts with "~/", the tilde is expanded to the user's home directory.
+// Otherwise path is returned unchanged.
+func ResolveKubeconfigPath(path string) string {
+	if path == "" {
+		return DefaultKubeconfigPath()
+	}
+
+	if len(path) >= 2 && path[:2] == "~/" {
+		homeDir, _ := os.UserHomeDir()
+		if homeDir != "" {
+			return homeDir + path[1:]
+		}
+	}
+
+	return path
+}
+
 // GetRESTConfig loads the kubeconfig using default loading rules and returns a REST config.
 // This is a convenience function that uses the standard client-go loading rules
 // (KUBECONFIG env var, default kubeconfig path) without requiring explicit paths.

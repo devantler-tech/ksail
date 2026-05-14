@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"strings"
 	"time"
 
 	vclusterconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/vcluster"
@@ -81,15 +80,7 @@ type KubernetesProvisionerConfig struct {
 
 // NewKubernetesProvisioner creates a KubernetesProvisioner for vCluster-on-Kubernetes.
 func NewKubernetesProvisioner(cfg KubernetesProvisionerConfig) *KubernetesProvisioner {
-	kubeconfigPath := cfg.KubeconfigPath
-	if kubeconfigPath == "" {
-		kubeconfigPath = k8s.DefaultKubeconfigPath()
-	} else if strings.HasPrefix(kubeconfigPath, "~/") {
-		homeDir, _ := os.UserHomeDir()
-		if homeDir != "" {
-			kubeconfigPath = homeDir + kubeconfigPath[1:]
-		}
-	}
+	kubeconfigPath := k8s.ResolveKubeconfigPath(cfg.KubeconfigPath)
 
 	return &KubernetesProvisioner{
 		clusterName:    cfg.ClusterName,
