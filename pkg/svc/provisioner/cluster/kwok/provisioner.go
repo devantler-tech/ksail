@@ -181,7 +181,14 @@ func (p *Provisioner) Create(ctx context.Context, name string) error {
 		return err
 	}
 
-	return p.ScaleNodes(ctx, name)
+	err = p.ScaleNodes(ctx, name)
+	if err != nil {
+		// Best-effort cleanup on scale failure to avoid leaving partial cluster.
+		_ = p.Delete(ctx, name)
+		return err
+	}
+
+	return nil
 }
 
 // CreateCluster creates the KWOK cluster but does NOT create simulated nodes.
