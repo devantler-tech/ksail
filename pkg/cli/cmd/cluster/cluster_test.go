@@ -7227,3 +7227,102 @@ func TestClusterCmd_RegistersDiagnoseSubcommand(t *testing.T) {
 
 	require.NotNil(t, diagnoseCmd, "expected 'diagnose' subcommand to be registered")
 }
+
+// --- Diff command tests ---
+
+func TestNewDiffCmd(t *testing.T) {
+	t.Parallel()
+
+	runtimeContainer := &di.Runtime{}
+
+	cmd := cluster.NewDiffCmd(runtimeContainer)
+	require.NotNil(t, cmd)
+
+	assert.Equal(t, "diff", cmd.Name())
+	assert.Equal(t, "Show configuration drift between ksail.yaml and live cluster",
+		cmd.Short)
+	assert.True(t, cmd.SilenceUsage)
+
+	nameFlag := cmd.Flags().Lookup("name")
+	require.NotNil(t, nameFlag)
+	assert.Equal(t, "n", nameFlag.Shorthand)
+
+	formatFlag := cmd.Flags().Lookup("format")
+	require.NotNil(t, formatFlag)
+	assert.Equal(t, "text", formatFlag.DefValue)
+
+	exitCodeFlag := cmd.Flags().Lookup("exit-code")
+	require.NotNil(t, exitCodeFlag)
+	assert.Equal(t, "false", exitCodeFlag.DefValue)
+}
+
+// TestDiffCmd_InvalidFormatRejectsEarly verifies that an unknown --format
+// value is rejected before any cluster interaction takes place.
+func TestDiffCmd_InvalidFormatRejectsEarly(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		format string
+	}{
+		{name: "typo jsn", format: "jsn"},
+		{name: "empty format", format: ""},
+		{name: "xml", format: "xml"},
+		{name: "pretty", format: "pretty"},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			diffCmd := cluster.NewDiffCmd(&di.Runtime{})
+			diffCmd.SetOut(io.Discard)
+			diffCmd.SetErr(io.Discard)
+			diffCmd.SetArgs([]string{"--format", testCase.format})
+
+			err := diffCmd.Execute()
+
+			require.Error(t, err)
+			assert.ErrorIs(t, err, cluster.ErrUnsupportedOutputFormat,
+				"expected ErrUnsupportedOutputFormat for format %q, got: %v",
+				testCase.format, err,
+			)
+		})
+	}
+}
+
+// TestClusterCmd_RegistersDiffSubcommand verifies that NewClusterCmd wires
+// the diff subcommand into the cluster command tree so that toolgen can
+// expose it as part of the cluster_read tool.
+func TestClusterCmd_RegistersDiffSubcommand(t *testing.T) {
+	t.Parallel()
+
+	clusterCmd := cluster.NewClusterCmd(nil)
+	require.NotNil(t, clusterCmd)
+
+	var diffCmd *cobra.Command
+
+	for _, sub := range clusterCmd.Commands() {
+		if sub.Name() == "diff" {
+			diffCmd = sub
+
+			break
+		}
+	}
+
+	require.NotNil(t, diffCmd, "expected 'diff' subcommand to be registered")
+}
+
+// TestDiffCmd_HasNoWriteAnnotation verifies that the diff command is not
+// annotated as a write command, ensuring it appears in cluster_read tools.
+func TestDiffCmd_HasNoWriteAnnotation(t *testing.T) {
+	t.Parallel()
+
+	cmd := cluster.NewDiffCmd(&di.Runtime{})
+	require.NotNil(t, cmd)
+
+	// The diff command is read-only and must NOT have a "write" permission annotation.
+	// This ensures toolgen places it under cluster_read, not cluster_write.
+	assert.Empty(t, cmd.Annotations["ai.toolgen.permission"],
+		"diff command must not have a 'write' permission annotation")
+}
