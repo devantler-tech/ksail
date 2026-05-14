@@ -111,8 +111,8 @@ var ErrEmptyPinnedVersion = errors.New(
 )
 
 // ErrDriftDetected is returned by the diff command when --exit-code is set
-// and configuration drift is detected. The exit code is 2 (matching diff(1)
-// convention: 0 = no drift, 1 = error, 2 = drift detected).
+// and configuration drift is detected. The exit code is 2 (KSail-specific:
+// 0 = no drift, 1 = error, 2 = drift detected — not the diff(1) convention).
 var ErrDriftDetected = errors.New("configuration drift detected")
 
 // DriftExitError is an error type that carries a custom exit code for the diff
@@ -8102,8 +8102,10 @@ func resolveClusterEntryName(kubeconfigPath, contextName string) (string, error)
 }
 
 // diffExitCode is the exit code returned by the diff command when --exit-code is
-// set and configuration drift is detected. Matches diff(1) convention:
+// set and configuration drift is detected. This is a KSail-specific convention:
 // 0 = no drift, 1 = error, 2 = drift detected.
+// (Note: diff(1) uses 1 for differences; KSail reserves 1 for command errors and
+// uses 2 for drift so CI scripts can distinguish drift from failures.)
 const diffExitCode = 2
 
 // diffLongDesc describes the `ksail cluster diff` command.
@@ -8143,8 +8145,16 @@ func NewDiffCmd(runtimeContainer *di.Runtime) *cobra.Command {
 
 	cfgManager := ksailconfigmanager.NewCommandConfigManager(
 		cmd,
-		nil, // no field selectors needed for read-only diff
+		ksailconfigmanager.DefaultClusterFieldSelectors(),
 	)
+
+	// Hide flags that diff doesn't expose in its help but that are needed for
+	// config defaults and validation to work correctly.
+	for _, flagName := range []string{"distribution", "distribution-config", "gitops-engine", "local-registry"} {
+		if f := cmd.Flags().Lookup(flagName); f != nil {
+			f.Hidden = true
+		}
+	}
 
 	cmd.Flags().String("output", "text",
 		"Output format: text or json. Use json for machine-readable structured output.")
@@ -8257,6 +8267,8 @@ func mergeProvisionerDiff(
 
 	provisioner, _, err := factory.Create(cmd.Context(), ctx.ClusterCfg)
 	if err != nil {
+		notify.Warningf(cmd.OutOrStderr(),
+			"Cannot create provisioner for provisioner-level diff (drift detection may be incomplete): %v", err)
 		return
 	}
 
