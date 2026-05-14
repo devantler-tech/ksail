@@ -500,6 +500,57 @@ func buildOIDCExecArgs(cfg *OIDCExecConfig) ([]string, error) {
 	return args, nil
 }
 
+// GetKubeconfigCurrentContext returns the current-context field from the kubeconfig at
+// kubeconfigPath. Returns an empty string (not an error) if the file does not exist or
+// has no current context set.
+func GetKubeconfigCurrentContext(kubeconfigPath string) (string, error) {
+	kubeconfigPath, err := fsutil.ExpandHomePath(kubeconfigPath)
+	if err != nil {
+		return "", fmt.Errorf("expand kubeconfig path: %w", err)
+	}
+
+	cfg, err := loadOrCreateKubeconfig(kubeconfigPath)
+	if err != nil {
+		return "", fmt.Errorf("load kubeconfig: %w", err)
+	}
+
+	return cfg.CurrentContext, nil
+}
+
+// SetKubeconfigCurrentContext updates the current-context field in the kubeconfig at
+// kubeconfigPath to contextName. It is a no-op when contextName is empty. The context
+// entry does not need to exist in the file (e.g. setting to a context that will be added
+// later is allowed).
+func SetKubeconfigCurrentContext(kubeconfigPath, contextName string) error {
+	if contextName == "" {
+		return nil
+	}
+
+	kubeconfigPath, err := fsutil.ExpandHomePath(kubeconfigPath)
+	if err != nil {
+		return fmt.Errorf("expand kubeconfig path: %w", err)
+	}
+
+	kubeconfigPath, err = fsutil.EvalCanonicalPath(kubeconfigPath)
+	if err != nil {
+		return fmt.Errorf("canonicalize kubeconfig path: %w", err)
+	}
+
+	cfg, err := loadOrCreateKubeconfig(kubeconfigPath)
+	if err != nil {
+		return fmt.Errorf("load kubeconfig: %w", err)
+	}
+
+	cfg.CurrentContext = contextName
+
+	result, err := clientcmd.Write(*cfg)
+	if err != nil {
+		return fmt.Errorf("serialize kubeconfig: %w", err)
+	}
+
+	return fsutil.AtomicWriteFile(kubeconfigPath, result, kubeconfigFileMode)
+}
+
 // CleanupOIDCKubeconfigEntries removes the OIDC user and context entries for a cluster.
 // The displayName is the user-friendly cluster name (e.g. "local") used in OIDC naming.
 func CleanupOIDCKubeconfigEntries(kubeconfigPath, displayName string, logWriter io.Writer) error {

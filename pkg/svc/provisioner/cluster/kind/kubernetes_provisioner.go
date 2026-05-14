@@ -86,6 +86,15 @@ func NewKubernetesProvisioner(cfg KubernetesProvisionerConfig) (*KubernetesProvi
 func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 	target := setName(name, p.Provisioner.kindConfig.Name)
 
+	// Preserve the host kubeconfig's current-context. The Kind SDK switches
+	// current-context to "kind-<name>" when it creates the cluster, which would
+	// cause subsequent Kubernetes provider operations to connect to the nested
+	// cluster instead of the host cluster.
+	originalContext, err := k8s.GetKubeconfigCurrentContext(p.kubeconfigPath)
+	if err != nil {
+		return fmt.Errorf("read current kubeconfig context: %w", err)
+	}
+
 	// Step 1: Ensure namespace + DinD pod
 	if err := p.setupDinD(ctx); err != nil {
 		return err
@@ -133,7 +142,12 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 		return fmt.Errorf("rewrite kubeconfig: %w", err)
 	}
 
-	// Step 6: Expose the nested API server via Gateway API (if configured)
+	// Step 6: Restore the host kubeconfig current-context that the Kind SDK changed.
+	if err := k8s.SetKubeconfigCurrentContext(p.kubeconfigPath, originalContext); err != nil {
+		return fmt.Errorf("restore kubeconfig current-context: %w", err)
+	}
+
+	// Step 7: Expose the nested API server via Gateway API (if configured)
 	return p.k8sProvider.EnsureAPIExposure(
 		ctx, p.dynamicClient, p.clusterName,
 		p.apiServerPort, p.gatewayClassName,

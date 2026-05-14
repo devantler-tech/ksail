@@ -34,7 +34,8 @@ runs:
         mkdir -p "$LOG_DIR"
 
         echo "=== Kubernetes Provider E2E Tests ==="
-        echo "Host cluster context: $(kubectl config current-context)"
+        HOST_CONTEXT="$(kubectl config current-context)"
+        echo "Host cluster context: $HOST_CONTEXT"
         echo "Distributions to test: $DISTRIBUTIONS"
         echo ""
 
@@ -91,6 +92,9 @@ runs:
           else
             echo "  ⚠️ $DIST delete failed (best-effort cleanup)"
           fi
+
+          # Restore host context in case nested cluster creation changed it.
+          kubectl config use-context "$HOST_CONTEXT" 2>/dev/null || true
 
           echo ""
         done
