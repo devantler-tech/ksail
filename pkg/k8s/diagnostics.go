@@ -49,13 +49,11 @@ const remediationNotReadyNode = "Check kubelet status and node conditions for di
 // remediationPVCPending is the remediation hint for PersistentVolumeClaims
 // stuck in Pending phase.
 const remediationPVCPending = "Verify a matching StorageClass exists and the provisioner is running. " +
-	"Check PVC events with 'ksail workload describe pvc/<name>'."
+	"Check PVC events with 'ksail workload describe pvc/<name> -n <namespace>'."
 
 // lookupRemediation returns a remediation hint for the given reason string
 // by checking for known substring matches against common Kubernetes failure
 // patterns. Returns an empty string when no hint is available.
-//
-
 func lookupRemediation(reason string) string {
 	type hint struct {
 		pattern string
@@ -264,8 +262,10 @@ func diagnoseComputeScore(findings []DiagnoseFinding) int {
 
 // DiagnoseCluster produces a combined human-readable diagnostic report for
 // a running Kubernetes cluster. It enumerates every namespace, surfaces any
-// failing pods via DiagnosePodFailures, and reports any nodes that are not
-// Ready. When everything appears healthy, the returned string is empty.
+// failing pods via DiagnosePodFailures, reports any nodes that are not
+// Ready, and lists PersistentVolumeClaims stuck in Pending phase via
+// DiagnosePVCPending. When everything appears healthy, the returned string
+// is empty.
 //
 // The diagnostic is intentionally distribution-agnostic — it only relies on
 // the Kubernetes API and therefore works for Vanilla, K3s, Talos, and
