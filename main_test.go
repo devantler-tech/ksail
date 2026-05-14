@@ -158,9 +158,7 @@ func TestRunWithArgsHandlesCustomExitCode(t *testing.T) {
 			var errWithCode interface {
 				error
 				ExitCode() int
-			}
-
-			errWithCode = &customExitError{code: code}
+			} = &customExitError{code: code}
 			panic(errWithCode) // Simulate command returning custom exit error (caught in Execute)
 		}
 	}
