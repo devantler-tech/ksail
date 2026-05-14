@@ -10,7 +10,6 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/internal/buildmeta"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd"
-	cluster "github.com/devantler-tech/ksail/v7/pkg/cli/cmd/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
 )
 
@@ -48,12 +47,18 @@ func runWithArgs(args []string) int {
 
 	err := cmd.Execute(rootCmd)
 	if err != nil {
-		// Check if this is a DriftExitError (from 'ksail cluster diff --exit-code').
-		// If so, return the custom exit code (2) instead of the generic 1. For drift,
-		// this is not an error condition but a "differences found" result, so don't print it.
-		var driftErr *cluster.DriftExitError
-		if errors.As(err, &driftErr) {
-			return driftErr.ExitCode()
+		// Check if this is an error with a custom exit code (e.g., DriftExitError).
+		// This allows commands to return non-standard exit codes without coupling the
+		// entrypoint to specific command types.
+		type ExitCoder interface {
+			ExitCode() int
+		}
+
+		var exitCoder ExitCoder
+		if errors.As(err, &exitCoder) {
+			// Custom exit codes (e.g., 2 for drift detected) are valid results,
+			// not errors to print to stderr
+			return exitCoder.ExitCode()
 		}
 
 		// For actual errors, print and return exit code 1

@@ -7401,7 +7401,10 @@ func computeSpecOnlyDiff(
 			ctx.ClusterCfg.Spec.Cluster.Distribution,
 			ctx.ClusterCfg.Spec.Cluster.Provider,
 		)
-		if err == nil {
+		if err != nil {
+			notify.Warningf(cmd.ErrOrStderr(),
+				"Cannot detect live cluster components (drift detection may be incomplete): %v", err)
+		} else {
 			currentSpec.CNI = detected.CNI
 			currentSpec.CSI = detected.CSI
 			currentSpec.MetricsServer = detected.MetricsServer
