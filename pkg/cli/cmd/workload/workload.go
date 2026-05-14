@@ -86,8 +86,8 @@ func NewApplyCmd() *cobra.Command {
 // The runtime parameter is kept for consistency with other workload command constructors,
 // though it's currently unused as this command wraps kubectl and flux directly.
 func NewCreateCmd(_ *di.Runtime) *cobra.Command {
-	// Use a placeholder during command construction.
-	// Kubeconfig will be re-resolved in PersistentPreRunE after flags are parsed.
+	// Resolve kubeconfig path from ksail.yaml (cheap — skips distribution config loading).
+	// This is re-resolved in PersistentPreRunE after flags are parsed.
 	kubeconfigPath := kubeconfig.GetKubeconfigPathSilently(nil)
 
 	// Create IO streams for kubectl and flux

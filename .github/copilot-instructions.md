@@ -253,6 +253,8 @@ ksail cluster init --help
 # --distribution K3s       # Lightweight K3s via K3d
 # --distribution Talos     # Immutable Talos Linux
 # --distribution VCluster  # Virtual clusters via Vind
+# --distribution KWOK      # Simulated Kubernetes cluster via kwokctl
+# --distribution EKS       # Managed Kubernetes on AWS via eksctl
 
 ```
 
@@ -315,20 +317,25 @@ For a deeper dive into KSail's design and internals, refer to:
   - `docker.Provider`: Runs Kubernetes nodes as Docker containers
   - `hetzner.Provider`: Runs Kubernetes nodes as Hetzner Cloud servers
   - `omni.Provider`: Manages Talos cluster nodes through the Sidero Omni SaaS API
+  - `aws.Provider`: Manages EKS clusters on Amazon Web Services
 - **Provisioners** (`pkg/svc/provisioner/`) configure and manage Kubernetes distributions
   - `KindClusterProvisioner` (`pkg/svc/provisioner/cluster/kind/`): Uses Kind SDK for standard upstream Kubernetes
   - `K3dClusterProvisioner` (`pkg/svc/provisioner/cluster/k3d/`): Uses K3d via Cobra/SDK for lightweight K3s clusters
   - `TalosProvisioner` (`pkg/svc/provisioner/cluster/talos/`): Uses Talos SDK for immutable Talos Linux clusters
   - `VClusterProvisioner` (`pkg/svc/provisioner/cluster/vcluster/`): Uses vCluster Go SDK (Vind Docker driver) for virtual Kubernetes clusters
+  - `KWOKProvisioner` (`pkg/svc/provisioner/cluster/kwok/`): Uses kwokctl for simulated Kubernetes clusters (lightweight, no real workloads)
+  - `EKSProvisioner` (`pkg/svc/provisioner/cluster/eks/`): Uses embedded eksctl Go libraries for managed EKS clusters on AWS
 
 **Distribution Names (user-facing):**
 
-| Distribution | Tool  | Provider              | Description                                    |
-|--------------|-------|-----------------------|------------------------------------------------|
-| `Vanilla`    | Kind  | Docker                | Standard upstream Kubernetes                   |
-| `K3s`        | K3d   | Docker                | Lightweight K3s in Docker                      |
-| `Talos`      | Talos | Docker, Hetzner, Omni | Immutable Talos Linux                          |
-| `VCluster`   | Vind  | Docker                | Virtual clusters via vCluster (Vind) in Docker |
+| Distribution | Tool    | Provider              | Description                                      |
+|--------------|---------|-----------------------|--------------------------------------------------|
+| `Vanilla`    | Kind    | Docker                | Standard upstream Kubernetes                     |
+| `K3s`        | K3d     | Docker                | Lightweight K3s in Docker                        |
+| `Talos`      | Talos   | Docker, Hetzner, Omni | Immutable Talos Linux                            |
+| `VCluster`   | Vind    | Docker                | Virtual clusters via vCluster (Vind) in Docker   |
+| `KWOK`       | kwokctl | Docker                | Simulated Kubernetes cluster (no real workloads) |
+| `EKS`        | eksctl  | AWS                   | Managed Kubernetes on Amazon Web Services        |
 
 **Key Packages:**
 
