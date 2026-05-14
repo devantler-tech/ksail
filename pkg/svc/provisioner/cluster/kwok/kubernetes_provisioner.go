@@ -235,8 +235,9 @@ func (p *KubernetesProvisioner) Delete(ctx context.Context, name string) error {
 }
 
 // Exists checks if the KWOK-on-Kubernetes cluster exists by checking for the DinD pod.
-func (p *KubernetesProvisioner) Exists(ctx context.Context, _ string) (bool, error) {
-	return p.k8sProvider.NodesExist(ctx, p.clusterName)
+func (p *KubernetesProvisioner) Exists(ctx context.Context, name string) (bool, error) {
+	target := p.Provisioner.resolveName(name)
+	return p.k8sProvider.NodesExist(ctx, target)
 }
 
 // List returns cluster names found by namespace.

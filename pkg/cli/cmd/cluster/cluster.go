@@ -57,6 +57,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
 	dockerprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/docker"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/hetzner"
+	kubernetesprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/kubernetes"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/omni"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
@@ -76,6 +77,7 @@ import (
 	"golang.org/x/sync/errgroup"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/cli-runtime/pkg/genericiooptions"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
@@ -3801,6 +3803,11 @@ type ListDeps struct {
 	// OmniProvider is an optional Omni provider for listing Omni clusters.
 	// If nil, a real provider will be created if OMNI_SERVICE_ACCOUNT_KEY is set.
 	OmniProvider *omni.Provider
+
+	// KubernetesProvider is an optional Kubernetes provider for listing Kubernetes-hosted clusters.
+	// If nil, a real provider will be created using KSAIL_HOST_KUBECONFIG/KSAIL_HOST_CONTEXT env vars
+	// or the default kubeconfig (~/.kube/config) if those are not set.
+	KubernetesProvider *kubernetesprovider.Provider
 }
 
 // HandleListRunE handles the list command.
@@ -3889,8 +3896,7 @@ func getProviderClusters(
 		// does not error when AWS is configured in a profile.
 		return nil, nil
 	case v1alpha1.ProviderKubernetes:
-		// Kubernetes provider cluster listing not yet implemented.
-		return nil, nil
+		return getKubernetesClusters(ctx, deps)
 	default:
 		return nil, fmt.Errorf("%w: %s", ErrUnsupportedProvider, provider)
 	}
@@ -4000,7 +4006,81 @@ func getOmniClusters(ctx context.Context, deps ListDeps) ([]clusterWithDistribut
 	return toTalosClusters(clusters), nil
 }
 
-// toTalosClusters wraps cluster names as Talos distribution clusters.
+// getKubernetesClusters returns all clusters hosted on the Kubernetes provider.
+func getKubernetesClusters(ctx context.Context, deps ListDeps) ([]clusterWithDistribution, error) {
+	// Use injected provider if available (for testing)
+	if deps.KubernetesProvider != nil {
+		infos, err := deps.KubernetesProvider.ListAllClustersWithDistribution(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to list Kubernetes clusters: %w", err)
+		}
+
+		return toKubernetesClusters(infos), nil
+	}
+
+	// Resolve kubeconfig: prefer KSAIL_HOST_KUBECONFIG env var, fall back to default.
+	kubeconfigPath := os.Getenv("KSAIL_HOST_KUBECONFIG")
+	if kubeconfigPath == "" {
+		kubeconfigPath = k8s.DefaultKubeconfigPath()
+	}
+
+	expandedPath, err := fsutil.ExpandHomePath(kubeconfigPath)
+	if err != nil {
+		return nil, fmt.Errorf("expand kubeconfig path: %w", err)
+	}
+
+	canonicalPath, err := fsutil.EvalCanonicalPath(expandedPath)
+	if err != nil {
+		return nil, fmt.Errorf("canonicalize kubeconfig path: %w", err)
+	}
+
+	hostContext := os.Getenv("KSAIL_HOST_CONTEXT")
+
+	restConfig, err := k8s.BuildRESTConfig(canonicalPath, hostContext)
+	if err != nil {
+		// If no kubeconfig is available, skip silently.
+		return nil, nil //nolint:nilerr
+	}
+
+	clientset, err := kubernetes.NewForConfig(restConfig)
+	if err != nil {
+		return nil, fmt.Errorf("create Kubernetes client: %w", err)
+	}
+
+	prov, err := kubernetesprovider.NewProvider(clientset, v1alpha1.OptionsKubernetes{})
+	if err != nil {
+		return nil, fmt.Errorf("create Kubernetes provider: %w", err)
+	}
+
+	infos, err := prov.ListAllClustersWithDistribution(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list Kubernetes clusters: %w", err)
+	}
+
+	return toKubernetesClusters(infos), nil
+}
+
+// toKubernetesClusters converts ClusterInfo to clusterWithDistribution,
+// mapping the distribution label string to a v1alpha1.Distribution enum value.
+func toKubernetesClusters(infos []kubernetesprovider.ClusterInfo) []clusterWithDistribution {
+	result := make([]clusterWithDistribution, 0, len(infos))
+
+	for _, info := range infos {
+		var dist v1alpha1.Distribution
+		if err := dist.Set(info.Distribution); err != nil {
+			dist = v1alpha1.DistributionVanilla
+		}
+
+		result = append(result, clusterWithDistribution{
+			Name:         info.Name,
+			Distribution: dist,
+		})
+	}
+
+	return result
+}
+
+
 // Hetzner and Omni providers only support Talos.
 func toTalosClusters(names []string) []clusterWithDistribution {
 	result := make([]clusterWithDistribution, 0, len(names))

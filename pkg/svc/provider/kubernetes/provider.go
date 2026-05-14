@@ -96,9 +96,33 @@ func (p *Provider) ListNodes(ctx context.Context, clusterName string) ([]provide
 	return nodes, nil
 }
 
+// ClusterInfo holds the name and distribution of a discovered nested cluster.
+type ClusterInfo struct {
+	Name         string
+	Distribution string
+}
+
 // ListAllClusters returns the names of all nested clusters managed by this provider.
 // It identifies clusters by listing namespaces with the KSail managed-by label.
 func (p *Provider) ListAllClusters(ctx context.Context) ([]string, error) {
+	infos, err := p.ListAllClustersWithDistribution(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	names := make([]string, 0, len(infos))
+	for _, info := range infos {
+		names = append(names, info.Name)
+	}
+
+	return names, nil
+}
+
+// ListAllClustersWithDistribution returns the names and distributions of all
+// nested clusters managed by this provider. It identifies clusters by listing
+// namespaces with the KSail managed-by label, then queries pod labels for
+// the distribution.
+func (p *Provider) ListAllClustersWithDistribution(ctx context.Context) ([]ClusterInfo, error) {
 	labelSelector := LabelManagedBy + "=" + LabelManagedByValue
 
 	namespaces, err := p.client.CoreV1().Namespaces().List(ctx, metav1.ListOptions{
@@ -108,16 +132,34 @@ func (p *Provider) ListAllClusters(ctx context.Context) ([]string, error) {
 		return nil, fmt.Errorf("list all clusters: %w", err)
 	}
 
-	clusters := make([]string, 0, len(namespaces.Items))
+	clusters := make([]ClusterInfo, 0, len(namespaces.Items))
 
 	for i := range namespaces.Items {
 		name := namespaces.Items[i].Name
-		if clusterName, ok := strings.CutPrefix(name, NamespacePrefix); ok {
-			clusters = append(clusters, clusterName)
+		clusterName, ok := strings.CutPrefix(name, NamespacePrefix)
+		if !ok {
+			continue
 		}
+
+		distribution := p.detectDistribution(ctx, name, clusterName)
+		clusters = append(clusters, ClusterInfo{Name: clusterName, Distribution: distribution})
 	}
 
 	return clusters, nil
+}
+
+// detectDistribution queries the first pod in the cluster namespace for the
+// distribution label. Returns an empty string if the distribution is unknown.
+func (p *Provider) detectDistribution(ctx context.Context, namespace, clusterName string) string {
+	pods, err := p.client.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{
+		LabelSelector: LabelClusterName + "=" + clusterName,
+		Limit:         1,
+	})
+	if err != nil || len(pods.Items) == 0 {
+		return ""
+	}
+
+	return pods.Items[0].Labels[LabelDistribution]
 }
 
 // NodesExist returns true if node pods exist for the given nested cluster.

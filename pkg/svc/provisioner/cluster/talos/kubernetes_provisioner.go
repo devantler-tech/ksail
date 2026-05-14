@@ -313,8 +313,12 @@ func (p *KubernetesProvisioner) Delete(ctx context.Context, name string) error {
 }
 
 // Exists checks if the Talos cluster exists by checking for the DinD pod.
-func (p *KubernetesProvisioner) Exists(ctx context.Context, _ string) (bool, error) {
-	return p.k8sProvider.NodesExist(ctx, p.clusterName)
+func (p *KubernetesProvisioner) Exists(ctx context.Context, name string) (bool, error) {
+	clusterName := name
+	if clusterName == "" {
+		clusterName = p.clusterName
+	}
+	return p.k8sProvider.NodesExist(ctx, clusterName)
 }
 
 // List returns cluster names found by namespace.

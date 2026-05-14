@@ -51,7 +51,7 @@ func tcpRouteGVR() schema.GroupVersionResource {
 	}
 }
 
-// EnsureAPIExposure creates the Kubernetes Service, Gateway, and TCPRoute to expose
+// EnsureAPIExposure creates or updates the Kubernetes Service, Gateway, and TCPRoute to expose
 // the nested cluster's API server. If gatewayClassName is empty, only the Service
 // is created and instructions for manual port-forward are logged.
 func (p *Provider) EnsureAPIExposure(
@@ -63,12 +63,22 @@ func (p *Provider) EnsureAPIExposure(
 ) error {
 	namespace := NamespaceName(clusterName)
 
-	// Create a ClusterIP Service targeting the DinD pod's API server port
+	// Create or update the ClusterIP Service targeting the DinD pod's API server port
 	svc := buildAPIService(clusterName, apiPort)
 
 	_, err := p.client.CoreV1().Services(namespace).Create(ctx, svc, metav1.CreateOptions{})
-	if err != nil && !errors.IsAlreadyExists(err) {
-		return fmt.Errorf("create API server service: %w", err)
+	if errors.IsAlreadyExists(err) {
+		existing, getErr := p.client.CoreV1().Services(namespace).Get(ctx, APIServiceName, metav1.GetOptions{})
+		if getErr != nil {
+			return fmt.Errorf("get existing API server service: %w", getErr)
+		}
+		svc.ResourceVersion = existing.ResourceVersion
+		svc.Spec.ClusterIP = existing.Spec.ClusterIP // ClusterIP is immutable; preserve it
+		_, err = p.client.CoreV1().Services(namespace).Update(ctx, svc, metav1.UpdateOptions{})
+	}
+
+	if err != nil {
+		return fmt.Errorf("ensure API server service: %w", err)
 	}
 
 	if gatewayClassName == "" {
@@ -80,24 +90,50 @@ func (p *Provider) EnsureAPIExposure(
 		return fmt.Errorf("ensure API exposure: %w", ErrDynamicClientRequired)
 	}
 
-	// Create Gateway
+	// Create or update Gateway
 	gateway := buildGateway(clusterName, gatewayClassName, apiPort)
 
 	_, err = dynamicClient.Resource(gatewayGVR()).Namespace(namespace).Create(
 		ctx, gateway, metav1.CreateOptions{},
 	)
-	if err != nil && !errors.IsAlreadyExists(err) {
-		return fmt.Errorf("create Gateway: %w", err)
+	if errors.IsAlreadyExists(err) {
+		existing, getErr := dynamicClient.Resource(gatewayGVR()).Namespace(namespace).Get(
+			ctx, GatewayName, metav1.GetOptions{},
+		)
+		if getErr != nil {
+			return fmt.Errorf("get existing Gateway: %w", getErr)
+		}
+		gateway.SetResourceVersion(existing.GetResourceVersion())
+		_, err = dynamicClient.Resource(gatewayGVR()).Namespace(namespace).Update(
+			ctx, gateway, metav1.UpdateOptions{},
+		)
 	}
 
-	// Create TCPRoute
+	if err != nil {
+		return fmt.Errorf("ensure Gateway: %w", err)
+	}
+
+	// Create or update TCPRoute
 	route := buildTCPRoute(clusterName, apiPort)
 
 	_, err = dynamicClient.Resource(tcpRouteGVR()).Namespace(namespace).Create(
 		ctx, route, metav1.CreateOptions{},
 	)
-	if err != nil && !errors.IsAlreadyExists(err) {
-		return fmt.Errorf("create TCPRoute: %w", err)
+	if errors.IsAlreadyExists(err) {
+		existing, getErr := dynamicClient.Resource(tcpRouteGVR()).Namespace(namespace).Get(
+			ctx, TCPRouteName, metav1.GetOptions{},
+		)
+		if getErr != nil {
+			return fmt.Errorf("get existing TCPRoute: %w", getErr)
+		}
+		route.SetResourceVersion(existing.GetResourceVersion())
+		_, err = dynamicClient.Resource(tcpRouteGVR()).Namespace(namespace).Update(
+			ctx, route, metav1.UpdateOptions{},
+		)
+	}
+
+	if err != nil {
+		return fmt.Errorf("ensure TCPRoute: %w", err)
 	}
 
 	return nil
