@@ -63,7 +63,7 @@ func lookupRemediation(reason string) string {
 	hints := [...]hint{
 		{
 			"CrashLoopBackOff",
-			"Check container logs with 'ksail workload logs <pod>' for the crash reason. " +
+			"Check container logs with 'ksail workload logs <pod> -n <namespace>' for the crash reason. " +
 				"Common causes: misconfigured entrypoint, missing config/secrets, or application error.",
 		},
 		{
@@ -269,9 +269,9 @@ func diagnoseComputeScore(findings []DiagnoseFinding) int {
 //
 // The diagnostic is intentionally distribution-agnostic — it only relies on
 // the Kubernetes API and therefore works for Vanilla, K3s, Talos, and
-// VCluster alike. It is consumed by the `ksail cluster diagnose` command
-// and surfaced to the Copilot chat/MCP tooling via the auto-generated
-// `cluster_read` tool so AI assistants can reason over the output.
+// VCluster alike. It is preserved for callers that want a combined
+// human-readable string, while the `ksail cluster diagnose` command and
+// Copilot chat/MCP tooling use DiagnoseClusterReport.
 func DiagnoseCluster(ctx context.Context, clientset kubernetes.Interface) (string, error) {
 	var builder strings.Builder
 
