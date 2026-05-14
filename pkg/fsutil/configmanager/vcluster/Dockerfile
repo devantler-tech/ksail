@@ -7,5 +7,5 @@
 # - ghcr.io/loft-sh/vcluster-pro → ChartVersion() in images.go
 # - ghcr.io/loft-sh/kubernetes → KubernetesVersion() in images.go
 
-FROM ghcr.io/loft-sh/vcluster-pro:0.33.1@sha256:29379ee7d3c41a3fb0cc5513d9b20ef856c1fe80f7311104210f20f1ab4e0a38
+FROM ghcr.io/loft-sh/vcluster-pro:0.34.0@sha256:665a7a4ed97db5ce8a6cbab99f7c92ccd6a4415affb106a29a2970270664c298
 FROM ghcr.io/loft-sh/kubernetes:v1.35.3@sha256:946d566e0f823b79a6116ab7361f87c8d3536754bb97f3da0682de2903af1944
