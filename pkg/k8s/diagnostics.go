@@ -48,7 +48,8 @@ const remediationNotReadyNode = "Check kubelet status and node conditions for di
 
 // remediationPVCPending is the remediation hint for PersistentVolumeClaims
 // stuck in Pending phase.
-const remediationPVCPending = "Verify a matching StorageClass exists and the provisioner is running. Check PVC events with 'ksail workload describe pvc/<name>'."
+const remediationPVCPending = "Verify a matching StorageClass exists and the provisioner is running. " +
+	"Check PVC events with 'ksail workload describe pvc/<name>'."
 
 // lookupRemediation returns a remediation hint for the given reason string
 // by checking for known substring matches against common Kubernetes failure
@@ -62,13 +63,38 @@ func lookupRemediation(reason string) string {
 	}
 
 	hints := [...]hint{
-		{"CrashLoopBackOff", "Check container logs with 'ksail workload logs <pod>' for the crash reason. Common causes: misconfigured entrypoint, missing config/secrets, or application error."},
-		{"ImagePullBackOff", "Verify the image name and tag exist in the registry. Check registry credentials and network connectivity."},
-		{"ErrImagePull", "Verify the image name and tag exist in the registry. Check registry credentials and network connectivity."},
-		{"CreateContainerConfigError", "Check that referenced ConfigMaps and Secrets exist and are correctly mounted."},
-		{"OOMKilled", "Container exceeded its memory limit. Increase resources.limits.memory or reduce application memory usage."},
-		{"Evicted", "Pod was evicted due to node resource pressure. Check node disk and memory usage."},
-		{"Ready condition missing", "Node is not reporting a Ready condition. Check kubelet status and node logs."},
+		{
+			"CrashLoopBackOff",
+			"Check container logs with 'ksail workload logs <pod>' for the crash reason. " +
+				"Common causes: misconfigured entrypoint, missing config/secrets, or application error.",
+		},
+		{
+			"ImagePullBackOff",
+			"Verify the image name and tag exist in the registry. " +
+				"Check registry credentials and network connectivity.",
+		},
+		{
+			"ErrImagePull",
+			"Verify the image name and tag exist in the registry. " +
+				"Check registry credentials and network connectivity.",
+		},
+		{
+			"CreateContainerConfigError",
+			"Check that referenced ConfigMaps and Secrets exist and are correctly mounted.",
+		},
+		{
+			"OOMKilled",
+			"Container exceeded its memory limit. " +
+				"Increase resources.limits.memory or reduce application memory usage.",
+		},
+		{
+			"Evicted",
+			"Pod was evicted due to node resource pressure. Check node disk and memory usage.",
+		},
+		{
+			"Ready condition missing",
+			"Node is not reporting a Ready condition. Check kubelet status and node logs.",
+		},
 	}
 
 	for _, h := range hints {

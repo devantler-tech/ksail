@@ -2942,10 +2942,10 @@ func runDiagnoseCmd(
 
 // runDiagnoseTextReport writes a human-readable diagnostic report including
 // the health score and per-finding remediation hints.
-func runDiagnoseTextReport(report k8s.DiagnoseReport, w io.Writer) error {
+func runDiagnoseTextReport(report k8s.DiagnoseReport, writer io.Writer) error {
 	if len(report.Findings) == 0 {
 		_, _ = fmt.Fprintf(
-			w,
+			writer,
 			"Cluster %q looks healthy — no failing pods, NotReady nodes, or pending PVCs detected.\n",
 			report.ClusterName,
 		)
@@ -2953,15 +2953,15 @@ func runDiagnoseTextReport(report k8s.DiagnoseReport, w io.Writer) error {
 		return nil
 	}
 
-	_, _ = fmt.Fprintf(w, "Diagnostics for cluster %q:\n", report.ClusterName)
-	_, _ = fmt.Fprintf(w, "Health score: %d/100\n", report.HealthScore)
+	_, _ = fmt.Fprintf(writer, "Diagnostics for cluster %q:\n", report.ClusterName)
+	_, _ = fmt.Fprintf(writer, "Health score: %d/100\n", report.HealthScore)
 
 	for _, f := range report.Findings {
-		_, _ = fmt.Fprintf(w, "\n  [%s] %s\n", f.Severity, f.Resource)
-		_, _ = fmt.Fprintf(w, "    Reason: %s\n", f.Reason)
+		_, _ = fmt.Fprintf(writer, "\n  [%s] %s\n", f.Severity, f.Resource)
+		_, _ = fmt.Fprintf(writer, "    Reason: %s\n", f.Reason)
 
 		if f.Remediation != "" {
-			_, _ = fmt.Fprintf(w, "    Suggested fix: %s\n", f.Remediation)
+			_, _ = fmt.Fprintf(writer, "    Suggested fix: %s\n", f.Remediation)
 		}
 	}
 
