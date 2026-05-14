@@ -1,13 +1,13 @@
 # Repo Assist Memory
 
 ## Last Run
-2026-05-13 13:03 UTC — Run #25800679562
+2026-05-14 01:13 UTC — Run #25835703906
 
 ## Monthly Activity Issue
 - May 2026: #4501 (open, updated this run)
 
 ## Open Repo Assist PRs
-- PR [new this run]: feat(switch): persist recently-switched clusters and order picker by recency
+- PR [new this run]: test(envvar): cover ExpandWithLookup nil-lookup fallback path
 
 ## Issue Comments Made (with run)
 - #4674 (Hetzner CCM taint race): 2026-05-12 run #25706827036
@@ -22,6 +22,7 @@
 - #4422 (diagnose health scoring): 2026-05-01
 - #2261 (VCluster D-Bus): 2026-04-11
 - #3772 (loft-sh/log blocked): 2026-04-11
+- #4474 (cluster diff): 2026-05-13
 
 ## Issues Created (last 4 weeks)
 - #4627: [Parent] Cloud Provider Expansion (groups #3983, #4328, #4510) — all 3 now linked
@@ -42,17 +43,18 @@
 - #4627 parent: #3983, #4328, #4510 (all linked, verified 2026-05-07)
 
 ## Code Quality Domain Alternation
-- Last domain: performance (Task 8/5, 2026-05-13)
-- Next for Task 5: test coverage
+- Last domain: test coverage (Task 5, 2026-05-14)
+- Next for Task 5: refactor
 
 ## Backlog Cursor
-- Issues processed through #4695 (as of 2026-05-12)
+- Issues processed through #4717 (as of 2026-05-14)
 - All roadmap Now/Next/Later items from discussion #4682 (May 11, 2026) are tracked
 
 ## Labels Applied (recent)
+- #4432, #4371 → `agentic-workflows` (May 14)
+- #4501 → `automation`, `repo-assist` (May 12)
 - #4432, #4427, #4371 → `agentic-workflows` (May 5)
 - #4423, #4473, #4474, #3983 → `next` (May 5)
-- #4521, #4511, #4510, #4354, #4328 → `automation`, `repo-assist` (May 6)
 
 ## Notes
 - link_sub_issue is NOT idempotent — always verify sub-issue not already linked before calling
@@ -63,5 +65,5 @@
 - Issue #4681: CI workload-timeout (blocked by workflows permission, needs manual PR creation)
 - No Dependabot PRs open (all merged as of this run)
 - No human-filed issues without prior engagement; all open issues are CI Doctor/automation/Repo Assist/blocked
-- [aw] Detection Runs issues #4432 and #4371 say "No action to take - Do not assign to an agent" — skip
-- #4465 (cluster switch): recent-clusters criterion implemented in this run's PR
+- [aw] Detection Runs issues #4432 and #4371 say "No action to take - Do not assign to an agent" — skip (labelled agentic-workflows)
+- PR #4718 (Kubernetes provider): human PR by devantler, open for review
