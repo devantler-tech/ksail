@@ -146,7 +146,7 @@ var ErrInvalidOIDCConfig = errors.New("invalid OIDC configuration")
 // ErrGatewayAPINotAvailable is returned when the Kubernetes provider requires Gateway API
 // but the host cluster does not have the experimental CRDs installed.
 var ErrGatewayAPINotAvailable = errors.New(
-	"Gateway API experimental CRDs not found on host cluster; " +
+	"gateway API experimental CRDs not found on host cluster; " +
 		"install from https://gateway-api.sigs.k8s.io/guides/getting-started/#install-experimental-channel",
 )
 

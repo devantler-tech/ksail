@@ -466,7 +466,7 @@ func applyKindNodeCounts(kindConfig *v1alpha4.Cluster, controlPlanes, workers in
 	kindConfig.Nodes = newNodes
 }
 
-func (f DefaultFactory) createK3dProvisioner(
+func (f DefaultFactory) createK3dProvisioner( //nolint:funlen // sequential setup steps
 	cluster *v1alpha1.Cluster,
 ) (Provisioner, any, error) {
 	// Kubernetes provider: use k3k operator instead of Docker-based K3d

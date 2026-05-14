@@ -107,7 +107,7 @@ func NewKubernetesProvisioner(cfg KubernetesProvisionerConfig) *KubernetesProvis
 // After chart installation, it manually extracts the kubeconfig from the vc-<name>
 // Secret and sets up a port-forward to the vCluster pod (bypassing ConnectHelm which
 // blocks indefinitely on port-forwarding).
-func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
+func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error { //nolint:funlen // sequential setup steps
 	clusterName := p.clusterName
 	if clusterName == "" {
 		clusterName = name
@@ -135,15 +135,17 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 	globalFlags := p.newHostGlobalFlags(namespace)
 	logger := p.newLogger()
 
-	fmt.Fprintf(os.Stdout, "► creating vCluster %q in namespace %s on host context %s\n",
-		clusterName, namespace, p.hostContext)
+	_, _ = fmt.Fprintf(os.Stdout,
+		"► creating vCluster %q in namespace %s on host context %s\n",
+		clusterName, namespace, p.hostContext,
+	)
 
 	if err := cli.CreateHelm(ctx, opts, globalFlags, clusterName, logger); err != nil {
 		return fmt.Errorf("create vCluster via Helm: %w", err)
 	}
 
 	// Step 2: Wait for the kubeconfig Secret to appear
-	fmt.Fprintln(os.Stdout, "► waiting for vCluster kubeconfig secret")
+	_, _ = fmt.Fprintln(os.Stdout, "► waiting for vCluster kubeconfig secret")
 
 	kubeconfigData, err := p.waitForKubeconfigSecret(ctx, clusterName, namespace)
 	if err != nil {
@@ -151,22 +153,24 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 	}
 
 	// Step 3: Port-forward the vCluster API server to localhost
-	fmt.Fprintln(os.Stdout, "► port-forwarding vCluster API server to localhost")
+	_, _ = fmt.Fprintln(os.Stdout, "► port-forwarding vCluster API server to localhost")
 
 	podName := clusterName + "-0"
 
-	pf, err := p.k8sProvider.StartPortForwardInNamespace(
+	apiPortForward, err := p.k8sProvider.StartPortForwardInNamespace(
 		ctx, p.restConfig, namespace, podName, vclusterAPIServerPort,
 	)
 	if err != nil {
 		return fmt.Errorf("port-forward vCluster API server: %w", err)
 	}
 
-	p.portForward = pf
+	p.portForward = apiPortForward
 
 	// Step 4: Rewrite kubeconfig with localhost port-forward address
 	contextName := "vcluster-" + clusterName
-	rewrittenKubeconfig, err := rewriteVClusterKubeconfig(kubeconfigData, pf.LocalPort, clusterName)
+	rewrittenKubeconfig, err := rewriteVClusterKubeconfig(
+		kubeconfigData, apiPortForward.LocalPort, clusterName,
+	)
 	if err != nil {
 		return fmt.Errorf("rewrite vCluster kubeconfig: %w", err)
 	}
@@ -248,7 +252,9 @@ func (p *KubernetesProvisioner) Exists(ctx context.Context, name string) (bool, 
 
 	_, findErr := find.GetVCluster(ctx, globalFlags.Context, clusterName, namespace, logger)
 	if findErr != nil {
-		return false, nil
+		// GetVCluster returns an error when the vCluster is not found — this is
+		// expected and means the cluster does not exist.
+		return false, nil //nolint:nilerr // error means "not found"
 	}
 
 	return true, nil
@@ -288,27 +294,32 @@ func (p *KubernetesProvisioner) waitForKubeconfigSecret(ctx context.Context, clu
 
 	var kubeconfigData []byte
 
-	err := wait.PollUntilContextTimeout(ctx, vclusterWaitInterval, vclusterWaitTimeout, true, func(ctx context.Context) (bool, error) {
-		secret, err := p.hostClientset.CoreV1().Secrets(namespace).Get(ctx, secretName, metav1.GetOptions{})
-		if apierrors.IsNotFound(err) {
-			return false, nil
-		}
+	err := wait.PollUntilContextTimeout(
+		ctx, vclusterWaitInterval, vclusterWaitTimeout, true,
+		func(ctx context.Context) (bool, error) {
+			secret, err := p.hostClientset.CoreV1().Secrets(namespace).Get(
+				ctx, secretName, metav1.GetOptions{},
+			)
+			if apierrors.IsNotFound(err) {
+				return false, nil
+			}
 
-		if err != nil {
-			return false, fmt.Errorf("get kubeconfig secret: %w", err)
-		}
+			if err != nil {
+				return false, fmt.Errorf("get kubeconfig secret: %w", err)
+			}
 
-		data, ok := secret.Data[vclusterKubeconfigKey]
-		if !ok || len(data) == 0 {
-			return false, nil
-		}
+			data, ok := secret.Data[vclusterKubeconfigKey]
+			if !ok || len(data) == 0 {
+				return false, nil
+			}
 
-		kubeconfigData = data
+			kubeconfigData = data
 
-		return true, nil
-	})
+			return true, nil
+		},
+	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("wait for kubeconfig secret: %w", err)
 	}
 
 	return kubeconfigData, nil
@@ -353,11 +364,6 @@ func rewriteVClusterKubeconfig(kubeconfigBytes []byte, localPort int, clusterNam
 	}
 
 	return out, nil
-}
-
-// VClusterNamespaceForCluster returns the vCluster namespace for a given cluster name.
-func VClusterNamespaceForCluster(clusterName string) string {
-	return vclusterNamespacePrefix + clusterName
 }
 
 // newHostGlobalFlags creates global flags configured for the host cluster.

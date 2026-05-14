@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
-	kubernetessprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/kubernetes"
+	kubernetesprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/kubernetes"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
@@ -20,7 +20,7 @@ import (
 type KubernetesProvisioner struct {
 	*Provisioner
 
-	k8sProvider      *kubernetessprovider.Provider
+	k8sProvider      *kubernetesprovider.Provider
 	dynamicClient    dynamic.Interface
 	restConfig       *rest.Config
 	clusterName      string
@@ -28,7 +28,7 @@ type KubernetesProvisioner struct {
 	gatewayClassName string
 	apiServerPort    int32
 	kubeconfigPath   string
-	portForward      *kubernetessprovider.PortForwardSession
+	portForward      *kubernetesprovider.PortForwardSession
 }
 
 // KubernetesProvisionerConfig holds configuration for creating a KubernetesProvisioner.
@@ -38,7 +38,7 @@ type KubernetesProvisionerConfig struct {
 	// KubeconfigPath is the path to the nested cluster's kubeconfig.
 	KubeconfigPath string
 	// K8sProvider is the Kubernetes infrastructure provider.
-	K8sProvider *kubernetessprovider.Provider
+	K8sProvider *kubernetesprovider.Provider
 	// DynamicClient is the dynamic client for Gateway API resources.
 	DynamicClient dynamic.Interface
 	// RestConfig is the REST config for port-forwarding to the DinD pod.
@@ -106,8 +106,8 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 	// for docker exec operations.
 	dockerPF, err := p.k8sProvider.StartExecTunnel(
 		ctx, p.restConfig, p.clusterName,
-		kubernetessprovider.DinDPodName, kubernetessprovider.DinDContainerName,
-		kubernetessprovider.DinDDockerPort,
+		kubernetesprovider.DinDPodName, kubernetesprovider.DinDContainerName,
+		kubernetesprovider.DinDDockerPort,
 	)
 	if err != nil {
 		return fmt.Errorf("port-forward Docker API: %w", err)
@@ -117,7 +117,7 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 	// Step 3: Set DOCKER_HOST so the Kind SDK talks to DinD
 	fmt.Fprintln(os.Stdout, "► creating Kind cluster via SDK (DOCKER_HOST → exec tunnel → DinD)")
 
-	err = kubernetessprovider.WithRemoteDockerHost(dockerPF, func() error {
+	err = kubernetesprovider.WithRemoteDockerHost(dockerPF, func() error {
 		return p.Provisioner.Create(ctx, target)
 	})
 	if err != nil {
@@ -127,18 +127,18 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 	// Step 4: Port-forward the nested API server (6443) from DinD to localhost
 	fmt.Fprintln(os.Stdout, "► port-forwarding nested API server to localhost")
 
-	pf, err := p.k8sProvider.StartPortForward(
+	apiPortForward, err := p.k8sProvider.StartPortForward(
 		ctx, p.restConfig, p.clusterName,
-		kubernetessprovider.DinDPodName, int(p.apiServerPort),
+		kubernetesprovider.DinDPodName, int(p.apiServerPort),
 	)
 	if err != nil {
 		return fmt.Errorf("port-forward API server: %w", err)
 	}
 
-	p.portForward = pf
+	p.portForward = apiPortForward
 
 	// Step 5: Rewrite kubeconfig server URL to use the host port-forward address
-	if err := p.rewriteKindKubeconfig(target, pf.LocalPort); err != nil {
+	if err := p.rewriteKindKubeconfig(target, apiPortForward.LocalPort); err != nil {
 		return fmt.Errorf("rewrite kubeconfig: %w", err)
 	}
 
@@ -161,13 +161,13 @@ func (p *KubernetesProvisioner) Delete(ctx context.Context, name string) error {
 	// Best-effort: delete Kind cluster inside DinD via SDK
 	dockerPF, pfErr := p.k8sProvider.StartExecTunnel(
 		ctx, p.restConfig, p.clusterName,
-		kubernetessprovider.DinDPodName, kubernetessprovider.DinDContainerName,
-		kubernetessprovider.DinDDockerPort,
+		kubernetesprovider.DinDPodName, kubernetesprovider.DinDContainerName,
+		kubernetesprovider.DinDDockerPort,
 	)
 	if pfErr == nil {
 		defer dockerPF.Close()
 
-		_ = kubernetessprovider.WithRemoteDockerHost(dockerPF, func() error {
+		_ = kubernetesprovider.WithRemoteDockerHost(dockerPF, func() error {
 			return p.Provisioner.Delete(ctx, target)
 		})
 	}

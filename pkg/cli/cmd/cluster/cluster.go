@@ -2316,6 +2316,11 @@ func buildDeletionPreview(
 		// CloudFormation stacks owning the control plane and managed nodegroups.
 		eksPlaceholder := "(EKS cluster and managed nodegroups for: " + resolved.ClusterName + ")"
 		preview.Servers = []string{eksPlaceholder}
+	case v1alpha1.ProviderKubernetes:
+		// For Kubernetes provider, nested cluster resources (DinD pod, Gateway,
+		// namespace) will be removed from the host cluster.
+		k8sPlaceholder := "(nested cluster namespace and resources for: " + resolved.ClusterName + ")"
+		preview.Servers = []string{k8sPlaceholder}
 	}
 
 	return preview
@@ -3121,6 +3126,9 @@ func getProviderStatus(
 		// AWS/EKS status is derived from the EKS API through the provisioner,
 		// not from local container inspection. Return a minimal stub so callers
 		// that rely on this helper do not fail for EKS.
+		return &provider.ClusterStatus{Phase: "unknown"}, nil
+	case v1alpha1.ProviderKubernetes:
+		// Kubernetes provider status is derived from the host cluster namespace.
 		return &provider.ClusterStatus{Phase: "unknown"}, nil
 	default:
 		return nil, fmt.Errorf("%w: %s", errUnsupportedProvider, prov)
@@ -6462,7 +6470,9 @@ func autoDeleteCluster(
 		Provider:     clusterCfg.Spec.Cluster.Provider,
 	}
 
-	provisioner, err := createDeleteProvisioner(info, clusterCfg.Spec.Provider.Omni, clusterCfg.Spec.Provider.Kubernetes, false)
+	provisioner, err := createDeleteProvisioner(
+		info, clusterCfg.Spec.Provider.Omni, clusterCfg.Spec.Provider.Kubernetes, false,
+	)
 	if err != nil {
 		return fmt.Errorf("TTL auto-delete: failed to create provisioner: %w", err)
 	}

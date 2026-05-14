@@ -16,4 +16,16 @@ var (
 	// ErrGatewayClassNotFound is returned when the specified GatewayClass does not exist
 	// on the host cluster.
 	ErrGatewayClassNotFound = errors.New("specified GatewayClass not found on host cluster")
+
+	// ErrDynamicClientRequired is returned when a dynamic client is needed but nil.
+	ErrDynamicClientRequired = errors.New("dynamic client is required for Gateway API resources")
+
+	// ErrDinDNotReady is returned when the DinD pod did not become ready in time.
+	ErrDinDNotReady = errors.New("DinD pod did not become ready within timeout")
+
+	// ErrDinDNoIP is returned when the DinD pod has no IP assigned.
+	ErrDinDNoIP = errors.New("DinD pod has no IP assigned")
+
+	// ErrUnexpectedAddressFormat is returned when a listener address has an unexpected format.
+	ErrUnexpectedAddressFormat = errors.New("unexpected listener address format")
 )

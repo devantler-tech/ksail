@@ -576,7 +576,7 @@ func TestValidateAllowedCIDRs(t *testing.T) {
 	}
 }
 
-func TestValidateNestedCIDRs(t *testing.T) {
+func TestValidateNestedCIDRs(t *testing.T) { //nolint:funlen // table-driven test data
 	t.Parallel()
 
 	tests := []struct {

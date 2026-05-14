@@ -17,6 +17,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
 	clusterdetector "github.com/devantler-tech/ksail/v7/pkg/svc/detector/cluster"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
 	talosprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/talos"
 	"github.com/spf13/cobra"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -449,7 +450,7 @@ func newKubernetesCleanupProvisioner(
 }
 
 func (p *kubernetesCleanupProvisioner) Create(_ context.Context, _ string) error {
-	return fmt.Errorf("create not supported on cleanup provisioner")
+	return fmt.Errorf("create: %w", clustererr.ErrOperationNotSupported)
 }
 
 func (p *kubernetesCleanupProvisioner) Delete(ctx context.Context, _ string) error {
@@ -476,11 +477,11 @@ func (p *kubernetesCleanupProvisioner) Delete(ctx context.Context, _ string) err
 }
 
 func (p *kubernetesCleanupProvisioner) Start(_ context.Context, _ string) error {
-	return fmt.Errorf("start not supported on cleanup provisioner")
+	return fmt.Errorf("start: %w", clustererr.ErrOperationNotSupported)
 }
 
 func (p *kubernetesCleanupProvisioner) Stop(_ context.Context, _ string) error {
-	return fmt.Errorf("stop not supported on cleanup provisioner")
+	return fmt.Errorf("stop: %w", clustererr.ErrOperationNotSupported)
 }
 
 func (p *kubernetesCleanupProvisioner) Exists(ctx context.Context, _ string) (bool, error) {

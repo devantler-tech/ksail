@@ -3,6 +3,8 @@ package kubernetes
 import (
 	"context"
 	"fmt"
+	"net"
+	"strconv"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -39,23 +41,30 @@ const (
 
 	// LabelApp is the label key for pod selection by services.
 	LabelApp = "app"
+
+	// probeInitialDelaySeconds is the readiness probe initial delay.
+	probeInitialDelaySeconds = 5
+	// probePeriodSeconds is the readiness probe period.
+	probePeriodSeconds = 2
+	// probeFailureThreshold is the readiness probe failure threshold.
+	probeFailureThreshold = 30
 )
 
 // CreateDinDPod creates a Docker-in-Docker pod and service in the cluster's namespace.
 // The DinD pod runs a privileged Docker daemon that distributions like Kind
 // use as their container runtime.
 func (p *Provider) CreateDinDPod(ctx context.Context, clusterName, distribution string) error {
-	ns := NamespaceName(clusterName)
+	namespace := NamespaceName(clusterName)
 
 	pod := buildDinDPod(clusterName, distribution)
 	svc := buildDinDService(clusterName)
 
-	_, err := p.client.CoreV1().Pods(ns).Create(ctx, pod, metav1.CreateOptions{})
+	_, err := p.client.CoreV1().Pods(namespace).Create(ctx, pod, metav1.CreateOptions{})
 	if err != nil && !errors.IsAlreadyExists(err) {
 		return fmt.Errorf("create DinD pod: %w", err)
 	}
 
-	_, err = p.client.CoreV1().Services(ns).Create(ctx, svc, metav1.CreateOptions{})
+	_, err = p.client.CoreV1().Services(namespace).Create(ctx, svc, metav1.CreateOptions{})
 	if err != nil && !errors.IsAlreadyExists(err) {
 		return fmt.Errorf("create DinD service: %w", err)
 	}
@@ -65,13 +74,13 @@ func (p *Provider) CreateDinDPod(ctx context.Context, clusterName, distribution 
 
 // WaitForDinD waits until the Docker daemon inside the DinD pod is ready to accept connections.
 func (p *Provider) WaitForDinD(ctx context.Context, clusterName string) error {
-	ns := NamespaceName(clusterName)
+	namespace := NamespaceName(clusterName)
 
 	// Wait for pod to be Running first
 	deadline := time.Now().Add(dindReadyTimeout)
 
 	for time.Now().Before(deadline) {
-		pod, err := p.client.CoreV1().Pods(ns).Get(ctx, DinDPodName, metav1.GetOptions{})
+		pod, err := p.client.CoreV1().Pods(namespace).Get(ctx, DinDPodName, metav1.GetOptions{})
 		if err != nil {
 			return fmt.Errorf("get DinD pod: %w", err)
 		}
@@ -93,7 +102,7 @@ func (p *Provider) WaitForDinD(ctx context.Context, clusterName string) error {
 		}
 	}
 
-	return fmt.Errorf("DinD pod did not become ready within %v", dindReadyTimeout)
+	return fmt.Errorf("%w: %v", ErrDinDNotReady, dindReadyTimeout)
 }
 
 // GetDockerDaemonEndpoint returns the in-cluster Docker daemon endpoint for the DinD pod.
@@ -107,31 +116,33 @@ func (p *Provider) GetDockerDaemonEndpoint(clusterName string) string {
 // GetDockerDaemonPodEndpoint returns the Docker daemon endpoint using the pod IP.
 // This is used when connecting from outside the cluster (via port-forward or NodePort).
 func (p *Provider) GetDockerDaemonPodEndpoint(ctx context.Context, clusterName string) (string, error) {
-	ns := NamespaceName(clusterName)
+	namespace := NamespaceName(clusterName)
 
-	pod, err := p.client.CoreV1().Pods(ns).Get(ctx, DinDPodName, metav1.GetOptions{})
+	pod, err := p.client.CoreV1().Pods(namespace).Get(ctx, DinDPodName, metav1.GetOptions{})
 	if err != nil {
 		return "", fmt.Errorf("get DinD pod: %w", err)
 	}
 
 	if pod.Status.PodIP == "" {
-		return "", fmt.Errorf("DinD pod has no IP assigned")
+		return "", fmt.Errorf("get DinD endpoint: %w", ErrDinDNoIP)
 	}
 
-	return fmt.Sprintf("tcp://%s:%d", pod.Status.PodIP, DinDDockerPort), nil
+	return "tcp://" + net.JoinHostPort(
+		pod.Status.PodIP, strconv.Itoa(DinDDockerPort),
+	), nil
 }
 
 // DeleteDinD removes the DinD pod and service.
 // These are also removed when the namespace is deleted, but this allows targeted cleanup.
 func (p *Provider) DeleteDinD(ctx context.Context, clusterName string) error {
-	ns := NamespaceName(clusterName)
+	namespace := NamespaceName(clusterName)
 
-	err := p.client.CoreV1().Pods(ns).Delete(ctx, DinDPodName, metav1.DeleteOptions{})
+	err := p.client.CoreV1().Pods(namespace).Delete(ctx, DinDPodName, metav1.DeleteOptions{})
 	if err != nil && !errors.IsNotFound(err) {
 		return fmt.Errorf("delete DinD pod: %w", err)
 	}
 
-	err = p.client.CoreV1().Services(ns).Delete(ctx, DinDServiceName, metav1.DeleteOptions{})
+	err = p.client.CoreV1().Services(namespace).Delete(ctx, DinDServiceName, metav1.DeleteOptions{})
 	if err != nil && !errors.IsNotFound(err) {
 		return fmt.Errorf("delete DinD service: %w", err)
 	}
@@ -140,7 +151,6 @@ func (p *Provider) DeleteDinD(ctx context.Context, clusterName string) error {
 }
 
 func buildDinDPod(clusterName, distribution string) *corev1.Pod {
-	privileged := true
 	labels := NodeLabels(clusterName, RoleControlPlane, distribution)
 	labels[LabelApp] = DinDPodName
 
@@ -150,76 +160,84 @@ func buildDinDPod(clusterName, distribution string) *corev1.Pod {
 			Labels: labels,
 		},
 		Spec: corev1.PodSpec{
-			Containers: []corev1.Container{
-				{
-					Name:  DinDContainerName,
-					Image: DinDImage,
-					SecurityContext: &corev1.SecurityContext{
-						Privileged: &privileged,
-					},
-					Env: []corev1.EnvVar{
-						{
-							Name:  "DOCKER_TLS_CERTDIR",
-							Value: "",
-						},
-					},
-					ReadinessProbe: &corev1.Probe{
-						ProbeHandler: corev1.ProbeHandler{
-							TCPSocket: &corev1.TCPSocketAction{
-								Port: intstr.FromInt32(DinDDockerPort),
-							},
-						},
-						InitialDelaySeconds: 5,
-						PeriodSeconds:       2,
-						FailureThreshold:    30,
-					},
-					Ports: []corev1.ContainerPort{
-						{
-							Name:          "docker",
-							ContainerPort: DinDDockerPort,
-						},
-						{
-							Name:          "apiserver",
-							ContainerPort: DinDAPIServerPort,
-						},
-					},
-					Resources: corev1.ResourceRequirements{
-						Requests: corev1.ResourceList{
-							corev1.ResourceCPU:    resource.MustParse("1"),
-							corev1.ResourceMemory: resource.MustParse("2Gi"),
-						},
-						Limits: corev1.ResourceList{
-							corev1.ResourceCPU:    resource.MustParse("4"),
-							corev1.ResourceMemory: resource.MustParse("8Gi"),
-						},
-					},
-					VolumeMounts: []corev1.VolumeMount{
-						{
-							Name:      "docker-data",
-							MountPath: "/var/lib/docker",
-						},
-						{
-							Name:      "modules",
-							MountPath: "/lib/modules",
-							ReadOnly:  true,
-						},
-					},
+			Containers: []corev1.Container{buildDinDContainer()},
+			Volumes:    buildDinDVolumes(),
+		},
+	}
+}
+
+func buildDinDContainer() corev1.Container {
+	privileged := true
+
+	return corev1.Container{
+		Name:  DinDContainerName,
+		Image: DinDImage,
+		SecurityContext: &corev1.SecurityContext{
+			Privileged: &privileged,
+		},
+		Env: []corev1.EnvVar{
+			{
+				Name:  "DOCKER_TLS_CERTDIR",
+				Value: "",
+			},
+		},
+		ReadinessProbe: &corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				TCPSocket: &corev1.TCPSocketAction{
+					Port: intstr.FromInt32(DinDDockerPort),
 				},
 			},
-			Volumes: []corev1.Volume{
-				{
-					Name: "docker-data",
-					VolumeSource: corev1.VolumeSource{
-						EmptyDir: &corev1.EmptyDirVolumeSource{},
-					},
-				},
-				{
-					Name: "modules",
-					VolumeSource: corev1.VolumeSource{
-						HostPath: &corev1.HostPathVolumeSource{
-							Path: "/lib/modules",
-						},
-					},
+			InitialDelaySeconds: probeInitialDelaySeconds,
+			PeriodSeconds:       probePeriodSeconds,
+			FailureThreshold:    probeFailureThreshold,
+		},
+		Ports: []corev1.ContainerPort{
+			{
+				Name:          "docker",
+				ContainerPort: DinDDockerPort,
+			},
+			{
+				Name:          "apiserver",
+				ContainerPort: DinDAPIServerPort,
+			},
+		},
+		Resources: corev1.ResourceRequirements{
+			Requests: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("1"),
+				corev1.ResourceMemory: resource.MustParse("2Gi"),
+			},
+			Limits: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("4"),
+				corev1.ResourceMemory: resource.MustParse("8Gi"),
+			},
+		},
+		VolumeMounts: []corev1.VolumeMount{
+			{
+				Name:      "docker-data",
+				MountPath: "/var/lib/docker",
+			},
+			{
+				Name:      "modules",
+				MountPath: "/lib/modules",
+				ReadOnly:  true,
+			},
+		},
+	}
+}
+
+func buildDinDVolumes() []corev1.Volume {
+	return []corev1.Volume{
+		{
+			Name: "docker-data",
+			VolumeSource: corev1.VolumeSource{
+				EmptyDir: &corev1.EmptyDirVolumeSource{},
+			},
+		},
+		{
+			Name: "modules",
+			VolumeSource: corev1.VolumeSource{
+				HostPath: &corev1.HostPathVolumeSource{
+					Path: "/lib/modules",
 				},
 			},
 		},

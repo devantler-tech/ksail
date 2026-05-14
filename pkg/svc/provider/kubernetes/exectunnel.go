@@ -58,10 +58,10 @@ func newExecTunnel(
 	addr := listener.Addr().String()
 
 	parts := strings.Split(addr, ":")
-	if len(parts) < 2 {
+	if len(parts) < minAddressParts {
 		listener.Close()
 
-		return nil, fmt.Errorf("unexpected listener address format: %s", addr)
+		return nil, fmt.Errorf("parse listener address %q: %w", addr, ErrUnexpectedAddressFormat)
 	}
 
 	port, err := strconv.Atoi(parts[len(parts)-1])

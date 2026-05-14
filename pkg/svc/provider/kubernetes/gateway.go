@@ -3,6 +3,9 @@ package kubernetes
 import (
 	"context"
 	"fmt"
+	"math"
+	"net"
+	"strconv"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -31,19 +34,23 @@ const (
 	gatewayReadyTimeout = 120 * time.Second
 )
 
-// Gateway API GroupVersionResources.
-var (
-	gatewayGVR = schema.GroupVersionResource{
+// gatewayGVR returns the GroupVersionResource for Gateway API Gateway objects.
+func gatewayGVR() schema.GroupVersionResource {
+	return schema.GroupVersionResource{
 		Group:    "gateway.networking.k8s.io",
 		Version:  "v1",
 		Resource: "gateways",
 	}
-	tcpRouteGVR = schema.GroupVersionResource{
+}
+
+// tcpRouteGVR returns the GroupVersionResource for Gateway API TCPRoute objects.
+func tcpRouteGVR() schema.GroupVersionResource {
+	return schema.GroupVersionResource{
 		Group:    "gateway.networking.k8s.io",
 		Version:  "v1alpha2",
 		Resource: "tcproutes",
 	}
-)
+}
 
 // EnsureAPIExposure creates the Kubernetes Service, Gateway, and TCPRoute to expose
 // the nested cluster's API server. If gatewayClassName is empty, only the Service
@@ -55,12 +62,12 @@ func (p *Provider) EnsureAPIExposure(
 	apiPort int32,
 	gatewayClassName string,
 ) error {
-	ns := NamespaceName(clusterName)
+	namespace := NamespaceName(clusterName)
 
 	// Create a ClusterIP Service targeting the DinD pod's API server port
 	svc := buildAPIService(clusterName, apiPort)
 
-	_, err := p.client.CoreV1().Services(ns).Create(ctx, svc, metav1.CreateOptions{})
+	_, err := p.client.CoreV1().Services(namespace).Create(ctx, svc, metav1.CreateOptions{})
 	if err != nil && !errors.IsAlreadyExists(err) {
 		return fmt.Errorf("create API server service: %w", err)
 	}
@@ -71,14 +78,14 @@ func (p *Provider) EnsureAPIExposure(
 	}
 
 	if dynamicClient == nil {
-		return fmt.Errorf("dynamic client is required for Gateway API resources")
+		return fmt.Errorf("ensure API exposure: %w", ErrDynamicClientRequired)
 	}
 
 	// Create Gateway
-	gw := buildGateway(clusterName, gatewayClassName, apiPort)
+	gateway := buildGateway(clusterName, gatewayClassName, apiPort)
 
-	_, err = dynamicClient.Resource(gatewayGVR).Namespace(ns).Create(
-		ctx, gw, metav1.CreateOptions{},
+	_, err = dynamicClient.Resource(gatewayGVR()).Namespace(namespace).Create(
+		ctx, gateway, metav1.CreateOptions{},
 	)
 	if err != nil && !errors.IsAlreadyExists(err) {
 		return fmt.Errorf("create Gateway: %w", err)
@@ -87,7 +94,7 @@ func (p *Provider) EnsureAPIExposure(
 	// Create TCPRoute
 	route := buildTCPRoute(clusterName, apiPort)
 
-	_, err = dynamicClient.Resource(tcpRouteGVR).Namespace(ns).Create(
+	_, err = dynamicClient.Resource(tcpRouteGVR()).Namespace(namespace).Create(
 		ctx, route, metav1.CreateOptions{},
 	)
 	if err != nil && !errors.IsAlreadyExists(err) {
@@ -104,18 +111,18 @@ func (p *Provider) WaitForGateway(
 	dynamicClient dynamic.Interface,
 	clusterName string,
 ) (string, int32, error) {
-	ns := NamespaceName(clusterName)
+	namespace := NamespaceName(clusterName)
 	deadline := time.Now().Add(gatewayReadyTimeout)
 
 	for time.Now().Before(deadline) {
-		gw, err := dynamicClient.Resource(gatewayGVR).Namespace(ns).Get(
+		gateway, err := dynamicClient.Resource(gatewayGVR()).Namespace(namespace).Get(
 			ctx, GatewayName, metav1.GetOptions{},
 		)
 		if err != nil {
 			return "", 0, fmt.Errorf("get Gateway: %w", err)
 		}
 
-		addr, port, found := extractGatewayAddress(gw)
+		addr, port, found := extractGatewayAddress(gateway)
 		if found {
 			return addr, port, nil
 		}
@@ -139,23 +146,25 @@ func (p *Provider) GetAPIEndpoint(
 	clusterName string,
 	gatewayClassName string,
 ) (string, error) {
-	ns := NamespaceName(clusterName)
+	namespace := NamespaceName(clusterName)
 
 	if gatewayClassName != "" && dynamicClient != nil {
 		addr, port, err := p.WaitForGateway(ctx, dynamicClient, clusterName)
 		if err == nil {
-			return fmt.Sprintf("https://%s:%d", addr, port), nil
+			return "https://" + net.JoinHostPort(addr, strconv.FormatInt(int64(port), 10)), nil
 		}
 		// Fall through to Service endpoint on Gateway failure
 	}
 
 	// Return the ClusterIP Service address for port-forward
-	svc, err := p.client.CoreV1().Services(ns).Get(ctx, APIServiceName, metav1.GetOptions{})
+	svc, err := p.client.CoreV1().Services(namespace).Get(ctx, APIServiceName, metav1.GetOptions{})
 	if err != nil {
 		return "", fmt.Errorf("get API service: %w", err)
 	}
 
-	return fmt.Sprintf("https://%s:%d", svc.Spec.ClusterIP, DinDAPIServerPort), nil
+	return "https://" + net.JoinHostPort(
+		svc.Spec.ClusterIP, strconv.FormatInt(int64(DinDAPIServerPort), 10),
+	), nil
 }
 
 // DeleteAPIExposure removes all API exposure resources (Service, Gateway, TCPRoute).
@@ -164,11 +173,11 @@ func (p *Provider) DeleteAPIExposure(
 	dynamicClient dynamic.Interface,
 	clusterName string,
 ) error {
-	ns := NamespaceName(clusterName)
+	namespace := NamespaceName(clusterName)
 
 	// Delete TCPRoute
 	if dynamicClient != nil {
-		err := dynamicClient.Resource(tcpRouteGVR).Namespace(ns).Delete(
+		err := dynamicClient.Resource(tcpRouteGVR()).Namespace(namespace).Delete(
 			ctx, TCPRouteName, metav1.DeleteOptions{},
 		)
 		if err != nil && !errors.IsNotFound(err) {
@@ -176,7 +185,7 @@ func (p *Provider) DeleteAPIExposure(
 		}
 
 		// Delete Gateway
-		err = dynamicClient.Resource(gatewayGVR).Namespace(ns).Delete(
+		err = dynamicClient.Resource(gatewayGVR()).Namespace(namespace).Delete(
 			ctx, GatewayName, metav1.DeleteOptions{},
 		)
 		if err != nil && !errors.IsNotFound(err) {
@@ -185,7 +194,7 @@ func (p *Provider) DeleteAPIExposure(
 	}
 
 	// Delete API Service
-	err := p.client.CoreV1().Services(ns).Delete(ctx, APIServiceName, metav1.DeleteOptions{})
+	err := p.client.CoreV1().Services(namespace).Delete(ctx, APIServiceName, metav1.DeleteOptions{})
 	if err != nil && !errors.IsNotFound(err) {
 		return fmt.Errorf("delete API service: %w", err)
 	}
@@ -277,44 +286,65 @@ func buildTCPRoute(clusterName string, apiPort int32) *unstructured.Unstructured
 }
 
 // extractGatewayAddress extracts the first address and port from a Gateway's status.
-func extractGatewayAddress(gw *unstructured.Unstructured) (string, int32, bool) {
-	status, found, _ := unstructured.NestedMap(gw.Object, "status")
+func extractGatewayAddress(gateway *unstructured.Unstructured) (string, int32, bool) {
+	addr, found := extractGatewayAddressValue(gateway)
 	if !found {
 		return "", 0, false
 	}
 
+	port := extractGatewayPort(gateway)
+
+	return addr, port, true
+}
+
+// extractGatewayAddressValue extracts the address value from the Gateway status.
+func extractGatewayAddressValue(gateway *unstructured.Unstructured) (string, bool) {
+	status, found, _ := unstructured.NestedMap(gateway.Object, "status")
+	if !found {
+		return "", false
+	}
+
 	addresses, found, _ := unstructured.NestedSlice(status, "addresses")
 	if !found || len(addresses) == 0 {
-		return "", 0, false
+		return "", false
 	}
 
-	addrMap, ok := addresses[0].(map[string]any)
-	if !ok {
-		return "", 0, false
+	addrMap, isMap := addresses[0].(map[string]any)
+	if !isMap {
+		return "", false
 	}
 
-	value, ok := addrMap["value"].(string)
-	if !ok || value == "" {
-		return "", 0, false
+	value, isString := addrMap["value"].(string)
+	if !isString || value == "" {
+		return "", false
 	}
 
-	// Get port from listeners
+	return value, true
+}
+
+// extractGatewayPort extracts the port from the Gateway status listeners.
+func extractGatewayPort(gateway *unstructured.Unstructured) int32 {
+	status, found, _ := unstructured.NestedMap(gateway.Object, "status")
+	if !found {
+		return DinDAPIServerPort
+	}
+
 	listeners, found, _ := unstructured.NestedSlice(status, "listeners")
 	if !found || len(listeners) == 0 {
-		return value, DinDAPIServerPort, true
+		return DinDAPIServerPort
 	}
 
-	listenerMap, ok := listeners[0].(map[string]any)
-	if !ok {
-		return value, DinDAPIServerPort, true
+	listenerMap, isMap := listeners[0].(map[string]any)
+	if !isMap {
+		return DinDAPIServerPort
 	}
 
-	port, ok := listenerMap["port"].(int64)
-	if !ok {
-		return value, DinDAPIServerPort, true
+	port, isInt := listenerMap["port"].(int64)
+	if !isInt || port < 0 || port > math.MaxInt32 {
+		return DinDAPIServerPort
 	}
 
-	return value, int32(port), true
+	return int32(port)
 }
 
 // toAnyMap converts a string map to an any map for unstructured objects.

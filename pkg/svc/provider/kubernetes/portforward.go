@@ -46,9 +46,9 @@ func (p *Provider) StartPortForward(
 	podName string,
 	podPort int,
 ) (*PortForwardSession, error) {
-	ns := NamespaceName(clusterName)
+	namespace := NamespaceName(clusterName)
 
-	return startProxy(ctx, restConfig, ns, podName, podPort)
+	return startProxy(ctx, restConfig, namespace, podName, podPort)
 }
 
 // StartPortForwardInNamespace opens a resilient port-forward from a random local port to the
@@ -79,9 +79,9 @@ func (p *Provider) StartExecTunnel(
 	containerName string,
 	podPort int,
 ) (*PortForwardSession, error) {
-	ns := NamespaceName(clusterName)
+	namespace := NamespaceName(clusterName)
 
-	return startExecTunnel(ctx, p.client, restConfig, ns, podName, containerName, podPort)
+	return startExecTunnel(ctx, p.client, restConfig, namespace, podName, containerName, podPort)
 }
 
 // startExecTunnel creates an exec-based tunnel and verifies it's functional.
