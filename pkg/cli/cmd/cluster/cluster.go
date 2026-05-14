@@ -8267,8 +8267,12 @@ func mergeProvisionerDiff(
 
 	provisioner, _, err := factory.Create(cmd.Context(), ctx.ClusterCfg)
 	if err != nil {
-		notify.Warningf(cmd.OutOrStderr(),
-			"Cannot create provisioner for provisioner-level diff (drift detection may be incomplete): %v", err)
+		notify.Warningf(
+			cmd.OutOrStderr(),
+			"Cannot create provisioner for provisioner-level diff (drift detection may be incomplete): %v",
+			err,
+		)
+
 		return
 	}
 
