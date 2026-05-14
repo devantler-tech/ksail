@@ -1967,6 +1967,7 @@ func TestCreate_NoConfigFile_FlagsOnly(t *testing.T) {
 	cmd.SetArgs([]string{
 		"--distribution", "Vanilla",
 		"--name", "test-no-config",
+		"--kubeconfig", "./kubeconfig",
 	})
 
 	err := cmd.Execute()
@@ -2022,6 +2023,7 @@ func TestCreate_NoConfigFile_WithComponentFlags(t *testing.T) {
 		"--distribution", "Vanilla",
 		"--name", "test-flags",
 		"--metrics-server", "Disabled",
+		"--kubeconfig", "./kubeconfig",
 	})
 
 	err := cmd.Execute()

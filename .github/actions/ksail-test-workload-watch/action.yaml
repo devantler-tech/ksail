@@ -22,7 +22,7 @@ runs:
     # Test 1 (non-existent directory rejection) is covered by the unit
     # test TestWatchRejectsNonExistentDirectory and removed from E2E.
 
-    # ── Test 2 — --initial-apply syncs cluster on startup ────────────
+    # ── Test 1 — --initial-apply syncs cluster on startup ────────────
     - name: 🧪 watch --initial-apply syncs on startup
       id: watch-initial-apply
       shell: bash
@@ -84,7 +84,7 @@ runs:
           exit 1
         fi
 
-    # ── Test 3 — File modification triggers debounced re-apply ───────
+    # ── Test 2 — File modification triggers debounced re-apply ───────
     - name: 🧪 watch detects file modification
       id: watch-file-modify
       shell: bash
@@ -183,7 +183,7 @@ runs:
           exit 1
         fi
 
-    # ── Test 4 — Kustomize boundary scoping ──────────────────────────
+    # ── Test 3 — Kustomize boundary scoping ──────────────────────────
     - name: 🧪 watch scopes apply to kustomize boundary
       id: watch-boundary
       shell: bash
@@ -304,7 +304,7 @@ runs:
           echo "✅ Test passed (change was applied correctly)"
         fi
 
-    # ── Test 5 — Graceful shutdown on SIGTERM ────────────────────────
+    # ── Test 4 — Graceful shutdown on SIGTERM ────────────────────────
     - name: 🧪 watch graceful shutdown on SIGTERM
       id: watch-sigterm
       shell: bash
