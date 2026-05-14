@@ -25,6 +25,10 @@ func (e *customExitError) ExitCode() int {
 	return e.code
 }
 
+// errPlain is a sentinel error used in tests to verify that plain errors
+// do not produce a custom exit code.
+var errPlain = errors.New("plain error")
+
 func TestMain(m *testing.M) {
 	os.Exit(snapshottest.Run(m, snaps.CleanOpts{Sort: true}))
 }
@@ -165,15 +169,15 @@ func TestRunWithArgsHandlesCustomExitCode(t *testing.T) {
 	}
 
 	for i := range tests {
-		tc := tests[i]
+		testCase := tests[i]
 
-		t.Run(tc.name, func(t *testing.T) {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			code, ok := exitCodeFromError(&customExitError{code: tc.customCode})
+			code, ok := exitCodeFromError(&customExitError{code: testCase.customCode})
 
 			assert.True(t, ok)
-			assert.Equal(t, tc.customCode, code)
+			assert.Equal(t, testCase.customCode, code)
 		})
 	}
 }
@@ -181,7 +185,7 @@ func TestRunWithArgsHandlesCustomExitCode(t *testing.T) {
 func TestExitCodeFromErrorReturnsFalseForPlainErrors(t *testing.T) {
 	t.Parallel()
 
-	code, ok := exitCodeFromError(errors.New("plain error"))
+	code, ok := exitCodeFromError(errPlain)
 
 	assert.False(t, ok)
 	assert.Equal(t, 0, code)
