@@ -8157,13 +8157,16 @@ func NewDiffCmd(runtimeContainer *di.Runtime) *cobra.Command {
 	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
 		// Validate output format before entering WrapHandler to avoid unnecessary
 		// DI when the format is obviously invalid. Mirrors the diagnose pattern.
-		if err := validateOutputFormat(cmd); err != nil {
+		err := validateOutputFormat(cmd)
+		if err != nil {
 			return err
 		}
 
 		format := getOutputFormat(cmd)
 
-		handler := lifecycle.WrapHandler(runtimeContainer, cfgManager,
+		handler := lifecycle.WrapHandler(
+			runtimeContainer,
+			cfgManager,
 			func(cmd *cobra.Command, cfgManager *ksailconfigmanager.ConfigManager, deps lifecycle.Deps) error {
 				return handleDiffRunE(cmd, cfgManager, deps, exitCodeFlag, format)
 			},

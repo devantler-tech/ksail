@@ -58,6 +58,7 @@ func runWithArgs(args []string) int {
 
 		// For actual errors, print and return exit code 1
 		notify.Errorf(rootCmd.ErrOrStderr(), "%v", err)
+
 		return 1
 	}
 
