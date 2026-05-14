@@ -966,7 +966,7 @@ func generateDistributionContent(
 	case v1alpha1.DistributionVCluster:
 		// VCluster doesn't have a separate distribution config file to snapshot
 	case v1alpha1.DistributionKWOK:
-		// KWOK config is snapshotted via the scaffolder's kwok.yaml generation
+		// KWOK config is snapshotted via the scaffolder's kwok/ directory generation
 	case v1alpha1.DistributionEKS:
 		// EKS config is snapshotted via the scaffolder's eks.yaml generation
 	}
@@ -1016,7 +1016,7 @@ func minimalDistributionConfigFile(distribution v1alpha1.Distribution) string {
 	case v1alpha1.DistributionVCluster:
 		return "vcluster.yaml"
 	case v1alpha1.DistributionKWOK:
-		return "kwok.yaml"
+		return "kwok"
 	case v1alpha1.DistributionEKS:
 		return "eks.yaml"
 	case v1alpha1.DistributionVanilla:
@@ -1073,7 +1073,7 @@ func createVClusterCluster(name string) v1alpha1.Cluster {
 func createKWOKCluster(name string) v1alpha1.Cluster {
 	c := createTestCluster(name)
 	c.Spec.Cluster.Distribution = v1alpha1.DistributionKWOK
-	c.Spec.Cluster.DistributionConfig = scaffolder.KWOKConfigFile
+	c.Spec.Cluster.DistributionConfig = scaffolder.KWOKConfigDir
 
 	return c
 }
@@ -1627,9 +1627,13 @@ func TestScaffoldKWOK_CreatesConfigFile(t *testing.T) {
 	err := scaffolderInstance.Scaffold(tempDir, false)
 	require.NoError(t, err)
 
-	// Verify the kwok.yaml config file was created
+	// Verify the kwok/ directory and its contents were created
 	expectedPaths := []string{
-		filepath.Join(tempDir, scaffolder.KWOKConfigFile),
+		filepath.Join(tempDir, scaffolder.KWOKConfigDir),
+		filepath.Join(tempDir, scaffolder.KWOKConfigDir, "kustomization.yaml"),
+		filepath.Join(tempDir, scaffolder.KWOKConfigDir, scaffolder.KWOKSimulationFile),
+		filepath.Join(tempDir, scaffolder.KWOKConfigDir, scaffolder.KWOKNodeNotReadyFile),
+		filepath.Join(tempDir, scaffolder.KWOKConfigDir, scaffolder.KWOKPodFailureFile),
 		filepath.Join(tempDir, "ksail.yaml"),
 		filepath.Join(tempDir, "k8s", "kustomization.yaml"),
 	}
@@ -1639,14 +1643,34 @@ func TestScaffoldKWOK_CreatesConfigFile(t *testing.T) {
 		require.NoError(t, err, "expected path to exist: %s", path)
 	}
 
-	// Verify kwok.yaml contains expected CRD kinds
-	kwokConfigPath := filepath.Join(tempDir, scaffolder.KWOKConfigFile)
-	kwokContent, err := os.ReadFile(kwokConfigPath) //nolint:gosec // Test path
+	// Verify simulation.yaml contains expected CRD kinds
+	simulationPath := filepath.Join(tempDir, scaffolder.KWOKConfigDir, scaffolder.KWOKSimulationFile)
+	simContent, err := os.ReadFile(simulationPath) //nolint:gosec // Test path
 	require.NoError(t, err)
-	assert.Contains(t, string(kwokContent), "kind: ClusterLogs")
-	assert.Contains(t, string(kwokContent), "kind: ClusterExec")
-	assert.Contains(t, string(kwokContent), "kind: ClusterAttach")
-	assert.Contains(t, string(kwokContent), "kind: ClusterPortForward")
+	assert.Contains(t, string(simContent), "kind: ClusterLogs")
+	assert.Contains(t, string(simContent), "kind: ClusterExec")
+	assert.Contains(t, string(simContent), "kind: ClusterAttach")
+	assert.Contains(t, string(simContent), "kind: ClusterPortForward")
+
+	// Verify kustomization.yaml references simulation.yaml
+	kustomizationPath := filepath.Join(tempDir, scaffolder.KWOKConfigDir, "kustomization.yaml")
+	kustomizationContent, err := os.ReadFile(kustomizationPath) //nolint:gosec // Test path
+	require.NoError(t, err)
+	assert.Contains(t, string(kustomizationContent), "simulation.yaml")
+	assert.Contains(t, string(kustomizationContent), "kind: Kustomization")
+
+	// Verify chaos stage files contain CEL expressions
+	nodeNotReadyPath := filepath.Join(tempDir, scaffolder.KWOKConfigDir, scaffolder.KWOKNodeNotReadyFile)
+	nodeNotReadyContent, err := os.ReadFile(nodeNotReadyPath) //nolint:gosec // Test path
+	require.NoError(t, err)
+	assert.Contains(t, string(nodeNotReadyContent), "kind: Stage")
+	assert.Contains(t, string(nodeNotReadyContent), "cel:")
+
+	podFailurePath := filepath.Join(tempDir, scaffolder.KWOKConfigDir, scaffolder.KWOKPodFailureFile)
+	podFailureContent, err := os.ReadFile(podFailurePath) //nolint:gosec // Test path
+	require.NoError(t, err)
+	assert.Contains(t, string(podFailureContent), "kind: Stage")
+	assert.Contains(t, string(podFailureContent), "cel:")
 }
 
 func TestScaffoldKWOK_SetsCorrectDistribution(t *testing.T) {

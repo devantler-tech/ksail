@@ -33,7 +33,11 @@ ksail cluster init \
 
 This generates:
 - `ksail.yaml` — KSail cluster configuration
-- `kwok.yaml` — KWOK simulation CRDs (ClusterLogs, ClusterExec, ClusterAttach, ClusterPortForward)
+- `kwok/` — KWOK kustomize configuration directory:
+  - `kustomization.yaml` — Kustomize entrypoint referencing simulation CRDs
+  - `simulation.yaml` — ClusterLogs, ClusterExec, ClusterAttach, ClusterPortForward CRDs
+  - `node-not-ready.yaml` — CEL-based node NotReady chaos stage (opt-in)
+  - `pod-failure.yaml` — CEL-based pod failure chaos stage (opt-in)
 - `k8s/kustomization.yaml` — Directory for Kubernetes manifests
 
 ### 2. Create the Cluster
@@ -77,11 +81,35 @@ ksail cluster delete
 
 ## Configuration
 
-For general KSail YAML options, see the [Configuration Reference](/configuration/). The `kwok.yaml` file contains KWOK-specific CRDs that enable simulation of kubectl operations:
+For general KSail YAML options, see the [Configuration Reference](/configuration/). KSail scaffolds a `kwok/` kustomize directory that KWOK's config loader assembles automatically.
+
+### Kustomize Directory Layout
+
+````
+kwok/
+├── kustomization.yaml       # Kustomize entrypoint
+├── simulation.yaml          # Cluster-level simulation CRDs
+├── node-not-ready.yaml      # Node NotReady chaos stage (opt-in)
+└── pod-failure.yaml         # Pod failure chaos stage (opt-in)
+````
+
+The `kustomization.yaml` references `simulation.yaml` by default. Chaos stages are included as commented-out resources — uncomment them to enable:
 
 ````yaml
-# KWOK cluster simulation configuration.
-# These CRDs enable kubectl logs, exec, attach, and port-forward for simulated pods.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - simulation.yaml
+  # Uncomment to enable chaos simulation stages (KWOK v0.7.0+ CEL support):
+  # - node-not-ready.yaml
+  # - pod-failure.yaml
+````
+
+### Simulation CRDs
+
+The `simulation.yaml` file contains four Cluster-level CRDs that KWOK does **not** provide by default:
+
+````yaml
 ---
 apiVersion: kwok.x-k8s.io/v1alpha1
 kind: ClusterLogs
@@ -118,13 +146,33 @@ spec:
 
 See the [KWOK documentation](https://kwok.sigs.k8s.io/docs/user/) for all available CRDs and configuration options.
 
+### CEL Chaos Stages (KWOK v0.7.0+)
+
+KSail includes two example chaos stages that use [KWOK v0.7.0 CEL expression support](https://github.com/kubernetes-sigs/kwok/releases/tag/v0.7.0) for conditional node and pod simulation. These stages use label-based selectors with CEL expressions instead of the older JQ-based syntax.
+
+**Node NotReady** (`node-not-ready.yaml`) — Transitions nodes to `NotReady` status when labeled:
+
+````bash
+# Enable the stage by uncommenting it in kwok/kustomization.yaml, then:
+kubectl label node <name> node-not-ready.stage.kwok.x-k8s.io=true
+````
+
+**Pod Failure** (`pod-failure.yaml`) — Fails running pods when labeled:
+
+````bash
+# Enable the stage by uncommenting it in kwok/kustomization.yaml, then:
+kubectl label pod <name> pod-failure.stage.kwok.x-k8s.io=true
+````
+
+You can create additional custom stages by adding YAML files to the `kwok/` directory and referencing them in `kustomization.yaml`. See the [KWOK Stages Configuration documentation](https://kwok.sigs.k8s.io/docs/user/stages-configuration/) for the full Stage API.
+
 ## How KWOK Simulation Works
 
 KWOK provides default Stage configurations that automatically transition pods and nodes:
 - **Nodes**: Transition to `Ready` status immediately
 - **Pods**: Transition through `Pending` → `Running` → `Succeeded` lifecycle
 
-The `kwok.yaml` scaffolded by KSail adds four Cluster-level CRDs not provided by default:
+The `kwok/simulation.yaml` scaffolded by KSail adds four Cluster-level CRDs not provided by default:
 - **ClusterLogs**: Enables `kubectl logs` to return configurable output
 - **ClusterExec**: Enables `kubectl exec` to run commands
 - **ClusterAttach**: Enables `kubectl attach`
@@ -166,7 +214,7 @@ kubectl config use-context kwok-dev-cluster  # Switch if needed
 
 **Symptom:** Pods stay in `Pending` state.
 
-This typically means KWOK's Stage configurations are missing. Ensure `kwok.yaml` is present or recreate the cluster:
+This typically means KWOK's Stage configurations are missing. Ensure the `kwok/` directory is present or recreate the cluster:
 
 ````bash
 ksail cluster delete
