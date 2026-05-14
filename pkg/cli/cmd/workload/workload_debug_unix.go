@@ -110,10 +110,14 @@ func streamDebugContainer(
 ) error {
 	defer cancel()
 
-	stdinFd := int(os.Stdin.Fd()) //nolint:gosec
+	stdinFd, err := stdinFD()
+	if err != nil {
+		return err
+	}
+
 	isTTY := term.IsTerminal(stdinFd)
 
-	err := sendContainerSpec(stream, imageName, args, isTTY)
+	err = sendContainerSpec(stream, imageName, args, isTTY)
 	if err != nil {
 		return err
 	}
@@ -330,7 +334,10 @@ func setupSignalForwarding(ctx context.Context, msgC chan<- *machine.DebugContai
 
 // sendTermResize sends a terminal resize message if stdin is a terminal.
 func sendTermResize(ctx context.Context, msgC chan<- *machine.DebugContainerRunRequest) {
-	stdinFd := int(os.Stdin.Fd()) //nolint:gosec
+	stdinFd, err := stdinFD()
+	if err != nil {
+		return
+	}
 
 	if !term.IsTerminal(stdinFd) {
 		return

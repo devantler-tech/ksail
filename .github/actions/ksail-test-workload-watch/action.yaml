@@ -5,6 +5,8 @@ description: |
     2. File modification triggers debounced re-apply
     3. Kustomize boundary scoping (only affected overlay re-applied)
     4. Graceful shutdown on SIGTERM
+    5. --hook runs shell commands before each apply
+    6. Failing --hook skips the apply
   Non-existent directory rejection is covered by unit tests
   (TestRunWatchEarlyPathValidation in workload_pure_test.go).
 
@@ -385,8 +387,155 @@ runs:
           exit 1
         fi
 
+    # ── Test 6 — Hooks execute before apply ──────────────────────────
+    - name: 🧪 watch --hook runs before apply
+      id: watch-hook
+      shell: bash
+      run: |
+        WATCH_ROOT="${GITHUB_WORKSPACE:-.}"
+        WATCH_DIR="$(mktemp -d -p "$WATCH_ROOT" .watch-hook-XXXXXX)"
+        WATCH_LOG="${WATCH_DIR}.log"
+        HOOK_LOG="${WATCH_DIR}.hook"
+        trap 'kill $WATCH_PID 2>/dev/null || true; ksail workload delete configmap/ksail-watch-hook-test --ignore-not-found 2>/dev/null || true; rm -rf "$WATCH_DIR" "$WATCH_LOG" "$HOOK_LOG"' EXIT
+
+        cat > "$WATCH_DIR/configmap.yaml" <<'EOF'
+        apiVersion: v1
+        kind: ConfigMap
+        metadata:
+          name: ksail-watch-hook-test
+        data:
+          status: applied-with-hook
+        EOF
+        cat > "$WATCH_DIR/kustomization.yaml" <<'EOF'
+        apiVersion: kustomize.config.k8s.io/v1beta1
+        kind: Kustomization
+        resources:
+          - configmap.yaml
+        EOF
+
+        # Start watcher with --initial-apply and a hook that writes a marker
+        ksail workload watch \
+          --path "$WATCH_DIR" \
+          --initial-apply \
+          --hook "echo hook-executed >> $HOOK_LOG" \
+          --debug > "$WATCH_LOG" 2>&1 &
+        WATCH_PID=$!
+
+        # Poll until the ConfigMap appears (proves apply ran after hook)
+        APPLY_SUCCESS=false
+        for i in $(seq 1 60); do
+          if ksail workload get configmap/ksail-watch-hook-test -o jsonpath='{.data.status}' 2>/dev/null | grep -q "applied-with-hook"; then
+            APPLY_SUCCESS=true
+            break
+          fi
+          sleep 2
+        done
+
+        kill $WATCH_PID 2>/dev/null || true
+        for _ in $(seq 1 10); do
+          kill -0 "$WATCH_PID" 2>/dev/null || break
+          sleep 1
+        done
+        if kill -0 "$WATCH_PID" 2>/dev/null; then
+          kill -KILL "$WATCH_PID" 2>/dev/null || true
+        fi
+        wait "$WATCH_PID" 2>/dev/null || true
+
+        # Verify the hook marker file exists
+        HOOK_OK=false
+        if [ -f "$HOOK_LOG" ] && grep -q "hook-executed" "$HOOK_LOG" 2>/dev/null; then
+          HOOK_OK=true
+        fi
+
+        ksail workload delete configmap/ksail-watch-hook-test --ignore-not-found
+        rm -rf "$WATCH_DIR" "$WATCH_LOG" "$HOOK_LOG"
+        trap - EXIT
+
+        if [ "$APPLY_SUCCESS" != "true" ]; then
+          echo "❌ --hook: apply did not create the ConfigMap within timeout"
+          exit 1
+        fi
+        if [ "$HOOK_OK" = "true" ]; then
+          echo "✅ --hook correctly executed before apply"
+        else
+          echo "❌ --hook marker file not found — hook did not run"
+          exit 1
+        fi
+
+    # ── Test 7 — Failing hook skips apply ────────────────────────────
+    - name: 🧪 watch --hook failure skips apply
+      id: watch-hook-fail
+      shell: bash
+      run: |
+        WATCH_ROOT="${GITHUB_WORKSPACE:-.}"
+        WATCH_DIR="$(mktemp -d -p "$WATCH_ROOT" .watch-hookfail-XXXXXX)"
+        WATCH_LOG="${WATCH_DIR}.log"
+        trap 'kill $WATCH_PID 2>/dev/null || true; ksail workload delete configmap/ksail-watch-hookfail-test --ignore-not-found 2>/dev/null || true; rm -rf "$WATCH_DIR" "$WATCH_LOG"' EXIT
+
+        cat > "$WATCH_DIR/configmap.yaml" <<'EOF'
+        apiVersion: v1
+        kind: ConfigMap
+        metadata:
+          name: ksail-watch-hookfail-test
+        data:
+          status: should-not-appear
+        EOF
+        cat > "$WATCH_DIR/kustomization.yaml" <<'EOF'
+        apiVersion: kustomize.config.k8s.io/v1beta1
+        kind: Kustomization
+        resources:
+          - configmap.yaml
+        EOF
+
+        # Start watcher with --initial-apply and a hook that always fails
+        ksail workload watch \
+          --path "$WATCH_DIR" \
+          --initial-apply \
+          --hook "exit 1" \
+          --debug > "$WATCH_LOG" 2>&1 &
+        WATCH_PID=$!
+
+        # Give time for the initial apply cycle to attempt (and be skipped)
+        sleep 15
+
+        # The ConfigMap should NOT exist because the failing hook skips apply
+        SKIP_OK=true
+        if ksail workload get configmap/ksail-watch-hookfail-test 2>/dev/null; then
+          SKIP_OK=false
+        fi
+
+        # Verify watcher log contains the hook failure message
+        HOOK_FAIL_LOGGED=false
+        if grep -q "hook failed, apply skipped" "$WATCH_LOG" 2>/dev/null; then
+          HOOK_FAIL_LOGGED=true
+        fi
+
+        kill $WATCH_PID 2>/dev/null || true
+        for _ in $(seq 1 10); do
+          kill -0 "$WATCH_PID" 2>/dev/null || break
+          sleep 1
+        done
+        if kill -0 "$WATCH_PID" 2>/dev/null; then
+          kill -KILL "$WATCH_PID" 2>/dev/null || true
+        fi
+        wait "$WATCH_PID" 2>/dev/null || true
+        ksail workload delete configmap/ksail-watch-hookfail-test --ignore-not-found 2>/dev/null || true
+        rm -rf "$WATCH_DIR" "$WATCH_LOG"
+        trap - EXIT
+
+        if [ "$SKIP_OK" != "true" ]; then
+          echo "❌ Failing hook did not prevent apply (ConfigMap was created)"
+          exit 1
+        fi
+        if [ "$HOOK_FAIL_LOGGED" = "true" ]; then
+          echo "✅ Failing hook correctly skipped apply"
+        else
+          echo "⚠️  Apply was skipped but hook failure message not found in log"
+          echo "✅ Test passed (ConfigMap was not created)"
+        fi
+
     - name: 🐞 Debug Kubernetes failure
-      if: failure() && (steps.watch-initial-apply.outcome == 'failure' || steps.watch-file-modify.outcome == 'failure' || steps.watch-boundary.outcome == 'failure' || steps.watch-sigterm.outcome == 'failure')
+      if: failure() && (steps.watch-initial-apply.outcome == 'failure' || steps.watch-file-modify.outcome == 'failure' || steps.watch-boundary.outcome == 'failure' || steps.watch-sigterm.outcome == 'failure' || steps.watch-hook.outcome == 'failure' || steps.watch-hook-fail.outcome == 'failure')
       uses: ./.github/actions/debug-kubernetes-failure
       with:
         kubectl-command: "ksail workload"
