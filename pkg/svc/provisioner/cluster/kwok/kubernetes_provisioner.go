@@ -81,6 +81,7 @@ func NewKubernetesProvisioner(cfg KubernetesProvisionerConfig) *KubernetesProvis
 // Etcd is excluded because it has no host-path bind mounts.
 func kwokContainerNames(clusterName string) []string {
 	prefix := "kwok-" + clusterName
+
 	return []string{
 		prefix + "-kube-apiserver",
 		prefix + "-kube-controller-manager",
@@ -197,10 +198,15 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 	}
 
 	// Step 12: Expose via Gateway API (if configured)
-	return p.k8sProvider.EnsureAPIExposure(
+	err = p.k8sProvider.EnsureAPIExposure(
 		ctx, p.dynamicClient, target,
 		int32(apiServerPort), p.gatewayClassName,
 	)
+	if err != nil {
+		return fmt.Errorf("ensure API exposure: %w", err)
+	}
+
+	return nil
 }
 
 // Delete deletes the KWOK cluster inside DinD and cleans up host cluster resources.
@@ -245,17 +251,28 @@ func (p *KubernetesProvisioner) Delete(ctx context.Context, name string) error {
 // Exists checks if the KWOK-on-Kubernetes cluster exists by checking for the DinD pod.
 func (p *KubernetesProvisioner) Exists(ctx context.Context, name string) (bool, error) {
 	target := p.Provisioner.resolveName(name)
+
 	return p.k8sProvider.NodesExist(ctx, target)
 }
 
 // List returns cluster names found by namespace.
 func (p *KubernetesProvisioner) List(ctx context.Context) ([]string, error) {
-	return p.k8sProvider.ListAllClusters(ctx)
+	clusters, err := p.k8sProvider.ListAllClusters(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list all clusters: %w", err)
+	}
+
+	return clusters, nil
 }
 
 // setupDinD creates the namespace and DinD pod, then waits for readiness.
 func (p *KubernetesProvisioner) setupDinD(ctx context.Context, clusterName string) error {
-	return p.k8sProvider.SetupDinD(ctx, clusterName, p.distribution)
+	err := p.k8sProvider.SetupDinD(ctx, clusterName, p.distribution)
+	if err != nil {
+		return fmt.Errorf("setup dinD: %w", err)
+	}
+
+	return nil
 }
 
 // jscpd:ignore-end

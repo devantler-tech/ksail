@@ -185,6 +185,7 @@ func (p *Provisioner) Create(ctx context.Context, name string) error {
 	if err != nil {
 		// Best-effort cleanup on scale failure to avoid leaving partial cluster.
 		_ = p.Delete(ctx, name)
+
 		return err
 	}
 
