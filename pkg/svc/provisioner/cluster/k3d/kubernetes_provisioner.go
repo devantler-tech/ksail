@@ -122,6 +122,7 @@ func NewK3kProvisioner(cfg K3kProvisionerConfig) *K3kProvisioner {
 }
 
 // Create provisions a K3s cluster using the k3k operator on the host Kubernetes cluster.
+//
 //nolint:funlen // sequential setup steps
 func (p *K3kProvisioner) Create(ctx context.Context, name string) error {
 	clusterName := p.clusterName
