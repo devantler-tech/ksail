@@ -4159,7 +4159,7 @@ var errHookFailed = errors.New("pre-apply hook failed")
 func runHooks(ctx context.Context, cmd *cobra.Command, hooks []string) error {
 	for _, hook := range hooks {
 		if ctx.Err() != nil {
-			return ctx.Err()
+			return fmt.Errorf("context cancelled before hook execution: %w", ctx.Err())
 		}
 
 		//nolint:gosec // Hooks are user-provided build commands (like Tilt/Skaffold); sh -c is intentional.

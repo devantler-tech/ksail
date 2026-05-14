@@ -1132,101 +1132,97 @@ func TestIsKustomizationExcluded(t *testing.T) {
 // runHooks — pre-apply hook execution
 // ===========================================================================
 
-func TestRunHooks(t *testing.T) {
+func TestRunHooks_EmptyIsNoop(t *testing.T) {
 	t.Parallel()
 
-	t.Run("empty hooks is a no-op", func(t *testing.T) {
-		t.Parallel()
+	cmd := &cobra.Command{}
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
 
-		cmd := &cobra.Command{}
-		cmd.SetOut(io.Discard)
-		cmd.SetErr(io.Discard)
+	err := workload.ExportRunHooks(context.Background(), cmd, nil)
+	require.NoError(t, err)
+}
 
-		err := workload.ExportRunHooks(context.Background(), cmd, nil)
-		require.NoError(t, err)
-	})
+func TestRunHooks_SuccessfulHooksAllExecute(t *testing.T) {
+	t.Parallel()
 
-	t.Run("successful hooks all execute", func(t *testing.T) {
-		t.Parallel()
+	tmpDir := t.TempDir()
+	markerFile := filepath.Join(tmpDir, "hook-ran.txt")
 
-		tmpDir := t.TempDir()
-		markerFile := filepath.Join(tmpDir, "hook-ran.txt")
+	cmd := &cobra.Command{}
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
 
-		cmd := &cobra.Command{}
-		cmd.SetOut(io.Discard)
-		cmd.SetErr(io.Discard)
+	hooks := []string{
+		"echo first >> " + markerFile,
+		"echo second >> " + markerFile,
+	}
 
-		hooks := []string{
-			"echo first >> " + markerFile,
-			"echo second >> " + markerFile,
-		}
+	err := workload.ExportRunHooks(context.Background(), cmd, hooks)
+	require.NoError(t, err)
 
-		err := workload.ExportRunHooks(context.Background(), cmd, hooks)
-		require.NoError(t, err)
+	content, readErr := os.ReadFile(markerFile) //nolint:gosec // test-only; path is from t.TempDir()
+	require.NoError(t, readErr)
+	assert.Contains(t, string(content), "first")
+	assert.Contains(t, string(content), "second")
+}
 
-		content, readErr := os.ReadFile(markerFile)
-		require.NoError(t, readErr)
-		assert.Contains(t, string(content), "first")
-		assert.Contains(t, string(content), "second")
-	})
+func TestRunHooks_FailingHookAbortsEarly(t *testing.T) {
+	t.Parallel()
 
-	t.Run("failing hook aborts early", func(t *testing.T) {
-		t.Parallel()
+	tmpDir := t.TempDir()
+	markerFile := filepath.Join(tmpDir, "hook-ran.txt")
 
-		tmpDir := t.TempDir()
-		markerFile := filepath.Join(tmpDir, "hook-ran.txt")
+	cmd := &cobra.Command{}
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
 
-		cmd := &cobra.Command{}
-		cmd.SetOut(io.Discard)
-		cmd.SetErr(io.Discard)
+	hooks := []string{
+		"exit 1",
+		"echo should-not-run >> " + markerFile,
+	}
 
-		hooks := []string{
-			"exit 1",
-			"echo should-not-run >> " + markerFile,
-		}
+	err := workload.ExportRunHooks(context.Background(), cmd, hooks)
+	require.Error(t, err)
+	require.ErrorIs(t, err, workload.ErrHookFailed)
 
-		err := workload.ExportRunHooks(context.Background(), cmd, hooks)
-		require.Error(t, err)
-		assert.ErrorIs(t, err, workload.ExportErrHookFailed)
+	_, statErr := os.Stat(markerFile)
+	assert.True(t, os.IsNotExist(statErr), "second hook should not have executed")
+}
 
-		_, statErr := os.Stat(markerFile)
-		assert.True(t, os.IsNotExist(statErr), "second hook should not have executed")
-	})
+func TestRunHooks_CancelledContextStopsHooks(t *testing.T) {
+	t.Parallel()
 
-	t.Run("cancelled context stops hooks", func(t *testing.T) {
-		t.Parallel()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
 
-		ctx, cancel := context.WithCancel(context.Background())
-		cancel()
+	cmd := &cobra.Command{}
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
 
-		cmd := &cobra.Command{}
-		cmd.SetOut(io.Discard)
-		cmd.SetErr(io.Discard)
+	hooks := []string{"echo should-not-run"}
 
-		hooks := []string{"echo should-not-run"}
+	err := workload.ExportRunHooks(ctx, cmd, hooks)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, context.Canceled)
+}
 
-		err := workload.ExportRunHooks(ctx, cmd, hooks)
-		require.Error(t, err)
-		assert.ErrorIs(t, err, context.Canceled)
-	})
+func TestRunHooks_StdoutAndStderrForwarded(t *testing.T) {
+	t.Parallel()
 
-	t.Run("hook stdout and stderr forwarded", func(t *testing.T) {
-		t.Parallel()
+	var outBuf, errBuf strings.Builder
 
-		var outBuf, errBuf strings.Builder
+	cmd := &cobra.Command{}
+	cmd.SetOut(&outBuf)
+	cmd.SetErr(&errBuf)
 
-		cmd := &cobra.Command{}
-		cmd.SetOut(&outBuf)
-		cmd.SetErr(&errBuf)
+	hooks := []string{
+		"echo hello-stdout",
+		"echo hello-stderr >&2",
+	}
 
-		hooks := []string{
-			"echo hello-stdout",
-			"echo hello-stderr >&2",
-		}
-
-		err := workload.ExportRunHooks(context.Background(), cmd, hooks)
-		require.NoError(t, err)
-		assert.Contains(t, outBuf.String(), "hello-stdout")
-		assert.Contains(t, errBuf.String(), "hello-stderr")
-	})
+	err := workload.ExportRunHooks(context.Background(), cmd, hooks)
+	require.NoError(t, err)
+	assert.Contains(t, outBuf.String(), "hello-stdout")
+	assert.Contains(t, errBuf.String(), "hello-stderr")
 }
