@@ -4,7 +4,7 @@ description: |
   focused sub-actions.  The test flow is:
 
     Phase 1 — Setup (provider validation, artifact tag, GHCR resolution)
-    Phase 2 — Offline tests (gen/smoke, tenant — no cluster needed)
+    Phase 2 — (removed: gen/smoke and tenant tests moved to unit tests)
     Phase 3 — Cluster provisioning (init + create, info, list)
     Phase 4 — Online tests (workload CRUD, image export/import, online gen, backup/restore, update)
     Phase 5 — Debug (on failure)
@@ -144,12 +144,9 @@ runs:
         echo "Tag: $TAG" >> /tmp/ksail-system-test-logs/test-timeline.log
 
     # ── Phase 2 — Offline tests ──────────────────────────────────────
-
-    - name: 🧪 Gen & Smoke Tests
-      uses: ./.github/actions/ksail-test-gen-smoke
-
-    - name: 🧪 Tenant Tests
-      uses: ./.github/actions/ksail-tenant-test
+    # Gen/smoke and tenant tests are covered by unit tests
+    # (TestGenAndValidate, pkg/svc/tenant/, pkg/cli/cmd/tenant/) and
+    # removed from the system test to avoid running 35× redundantly.
 
     # ── Phase 3 — Cluster provisioning ───────────────────────────────
 
