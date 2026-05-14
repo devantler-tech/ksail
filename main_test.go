@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// customExitError is used in tests to verify exit code handling
+// customExitError is used in tests to verify exit code handling.
 type customExitError struct {
 	code int
 }
@@ -155,7 +155,11 @@ func TestRunWithArgsHandlesCustomExitCode(t *testing.T) {
 
 	funcStub := func(code int) func([]string) int {
 		return func([]string) int {
-			var errWithCode interface{ error; ExitCode() int }
+			var errWithCode interface {
+				error
+				ExitCode() int
+			}
+
 			errWithCode = &customExitError{code: code}
 			panic(errWithCode) // Simulate command returning custom exit error (caught in Execute)
 		}
