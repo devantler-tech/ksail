@@ -104,10 +104,7 @@ func NewK3kProvisioner(cfg K3kProvisionerConfig) *K3kProvisioner {
 		controlPlanes = 1
 	}
 
-	workers := cfg.Workers
-	if workers < 0 {
-		workers = 0
-	}
+	workers := max(0, cfg.Workers)
 
 	return &K3kProvisioner{
 		Provisioner:    cfg.K3dProvisioner,
@@ -125,7 +122,8 @@ func NewK3kProvisioner(cfg K3kProvisionerConfig) *K3kProvisioner {
 }
 
 // Create provisions a K3s cluster using the k3k operator on the host Kubernetes cluster.
-func (p *K3kProvisioner) Create(ctx context.Context, name string) error { //nolint:funlen // sequential setup steps
+//nolint:funlen // sequential setup steps
+func (p *K3kProvisioner) Create(ctx context.Context, name string) error {
 	clusterName := p.clusterName
 	if clusterName == "" {
 		clusterName = name
@@ -237,8 +235,9 @@ func (p *K3kProvisioner) Delete(ctx context.Context, name string) error {
 	return nil
 }
 
-// jscpd:ignore-start
 // Exists checks whether the k3k cluster namespace exists.
+//
+// jscpd:ignore-start
 func (p *K3kProvisioner) Exists(ctx context.Context, name string) (bool, error) {
 	clusterName := p.clusterName
 	if clusterName == "" {
@@ -282,8 +281,8 @@ func (p *K3kProvisioner) List(ctx context.Context) ([]string, error) {
 
 	var names []string
 	for _, ns := range namespaces.Items {
-		if strings.HasPrefix(ns.Name, k3kNamespacePrefix) {
-			names = append(names, strings.TrimPrefix(ns.Name, k3kNamespacePrefix))
+		if clusterName, ok := strings.CutPrefix(ns.Name, k3kNamespacePrefix); ok {
+			names = append(names, clusterName)
 		}
 	}
 
@@ -305,6 +304,7 @@ func (p *K3kProvisioner) ensureK3kOperator(ctx context.Context) error {
 
 	if exists {
 		_, _ = fmt.Fprintln(os.Stdout, "  k3k operator already installed")
+
 		return nil
 	}
 
@@ -336,7 +336,7 @@ func (p *K3kProvisioner) ensureK3kOperator(ctx context.Context) error {
 
 // ensureNamespace creates the namespace if it doesn't exist, with ksail labels.
 func (p *K3kProvisioner) ensureNamespace(ctx context.Context, namespace string) error {
-	ns := &corev1.Namespace{
+	nsObj := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: namespace,
 			Labels: map[string]string{
@@ -346,7 +346,7 @@ func (p *K3kProvisioner) ensureNamespace(ctx context.Context, namespace string) 
 		},
 	}
 
-	_, err := p.hostClientset.CoreV1().Namespaces().Create(ctx, ns, metav1.CreateOptions{})
+	_, err := p.hostClientset.CoreV1().Namespaces().Create(ctx, nsObj, metav1.CreateOptions{})
 	if apierrors.IsAlreadyExists(err) {
 		return nil
 	}
@@ -422,6 +422,7 @@ func (p *K3kProvisioner) createClusterCR(ctx context.Context, clusterName, names
 
 	if apierrors.IsAlreadyExists(err) {
 		_, _ = fmt.Fprintln(os.Stdout, "  k3k Cluster CR already exists")
+
 		return nil
 	}
 
@@ -439,7 +440,7 @@ func (p *K3kProvisioner) waitForClusterReady(ctx context.Context, clusterName, n
 		return err
 	}
 
-	return wait.PollUntilContextTimeout(
+	return fmt.Errorf("poll cluster ready: %w", wait.PollUntilContextTimeout(
 		ctx, k3kWaitInterval, k3kWaitTimeout, true,
 		func(ctx context.Context) (bool, error) {
 			cluster := &k3kv1beta1.Cluster{}
@@ -454,6 +455,7 @@ func (p *K3kProvisioner) waitForClusterReady(ctx context.Context, clusterName, n
 				if apierrors.IsNotFound(err) {
 					return false, nil
 				}
+
 				return false, fmt.Errorf("get cluster status: %w", err)
 			}
 
@@ -465,10 +467,11 @@ func (p *K3kProvisioner) waitForClusterReady(ctx context.Context, clusterName, n
 				// k3k clusters can transiently enter Failed phase (e.g., bootstrap
 				// secret timeout) before recovering. Keep polling until timeout.
 				_, _ = fmt.Fprintf(os.Stdout, "  cluster phase: %s\n", phase)
+
 				return false, nil
 			}
 		},
-	)
+	))
 }
 
 // buildK3kRESTClient creates a REST client configured for k3k CRD operations.

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -293,8 +294,8 @@ func upstreamFromEndpoints(host string, endpoints []string, clusterName string) 
 	expectedLocal := registry.BuildRegistryName("", host)
 	expectedLocalPrefixed := registry.BuildRegistryName(clusterName, host)
 
-	for idx := len(endpoints) - 1; idx >= 0; idx-- {
-		candidate := strings.TrimSpace(endpoints[idx])
+	for _, candidate := range slices.Backward(endpoints) {
+		candidate = strings.TrimSpace(candidate)
 		if candidate == "" {
 			continue
 		}

@@ -105,7 +105,9 @@ func startExecTunnel(
 	default:
 	}
 
-	go tunnel.run() //nolint:contextcheck // tunnel is a long-lived goroutine that manages its own context via execTunnel.Stop()
+	//nolint:contextcheck // tunnel is a long-lived goroutine that manages its own
+	// context via execTunnel.Stop()
+	go tunnel.run()
 
 	return &PortForwardSession{
 		LocalPort: tunnel.localPort,

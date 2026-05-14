@@ -164,7 +164,7 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 	// Step 8: Port-forward the nested API server from DinD to localhost.
 	_, _ = fmt.Fprintln(os.Stdout, "► port-forwarding nested API server to localhost")
 
-	pf, err := p.k8sProvider.StartPortForward(
+	portForward, err := p.k8sProvider.StartPortForward(
 		ctx, p.restConfig, target,
 		kubernetesprovider.DinDPodName, apiServerPort,
 	)
@@ -172,10 +172,10 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 		return fmt.Errorf("port-forward API server: %w", err)
 	}
 
-	p.portForward = pf
+	p.portForward = portForward
 
 	// Step 9: Rewrite kubeconfig server URL to use the local port-forward address
-	err = p.rewriteKubeconfig(name, pf.LocalPort)
+	err = p.rewriteKubeconfig(name, portForward.LocalPort)
 	if err != nil {
 		return fmt.Errorf("rewrite kubeconfig: %w", err)
 	}
