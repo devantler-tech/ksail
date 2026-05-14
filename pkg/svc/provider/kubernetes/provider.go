@@ -32,8 +32,9 @@ func NewProvider(client kubernetes.Interface, opts v1alpha1.OptionsKubernetes) (
 	}, nil
 }
 
-// StartNodes scales the nested cluster's node pods back to the desired replica count.
-// For StatefulSets this resumes the pods that were scaled to 0 by StopNodes.
+// StartNodes verifies that the nested cluster's node pods are running.
+// Actual pod creation is handled by the provisioner; this method checks
+// that nodes exist and returns an error if none are found.
 func (p *Provider) StartNodes(ctx context.Context, clusterName string) error {
 	ns := NamespaceName(clusterName)
 
@@ -49,7 +50,9 @@ func (p *Provider) StartNodes(ctx context.Context, clusterName string) error {
 	return nil
 }
 
-// StopNodes scales the nested cluster's node pods to 0.
+// StopNodes deletes the nested cluster's node pods.
+// The pods are not managed by a controller (they are standalone),
+// so deletion effectively stops the cluster.
 func (p *Provider) StopNodes(ctx context.Context, clusterName string) error {
 	ns := NamespaceName(clusterName)
 
@@ -128,12 +131,13 @@ func (p *Provider) NodesExist(ctx context.Context, clusterName string) (bool, er
 
 // DeleteNodes removes all resources for the given nested cluster:
 // pods, services, gateway resources, and the cluster namespace.
+// It is idempotent: deleting an already-removed cluster is not an error.
 func (p *Provider) DeleteNodes(ctx context.Context, clusterName string) error {
 	ns := NamespaceName(clusterName)
 
 	// Delete the namespace (cascading delete removes all resources within it)
 	err := p.client.CoreV1().Namespaces().Delete(ctx, ns, metav1.DeleteOptions{})
-	if err != nil {
+	if err != nil && !apierrors.IsNotFound(err) {
 		return fmt.Errorf("delete nodes: remove namespace %s: %w", ns, err)
 	}
 
@@ -180,6 +184,7 @@ func (p *Provider) EnsureNamespace(ctx context.Context, clusterName string) erro
 }
 
 // listClusterPods returns all pods in the cluster namespace with the cluster label.
+// Returns an empty slice (not an error) when the namespace does not exist yet.
 func (p *Provider) listClusterPods(
 	ctx context.Context,
 	namespace, clusterName string,
@@ -190,6 +195,10 @@ func (p *Provider) listClusterPods(
 		LabelSelector: labelSelector,
 	})
 	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil, nil
+		}
+
 		return nil, fmt.Errorf("list cluster pods: %w", err)
 	}
 

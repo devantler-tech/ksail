@@ -10,6 +10,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	eksctlclient "github.com/devantler-tech/ksail/v7/pkg/client/eksctl"
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	k3dconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/k3d"
 	kindconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/kind"
 	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
@@ -393,11 +394,10 @@ func buildHostClusterClients(
 		kubeconfig = k8s.DefaultKubeconfigPath()
 	}
 
-	// Expand ~ to the user's home directory
-	if strings.HasPrefix(kubeconfig, "~/") {
-		if homeDir, err := os.UserHomeDir(); err == nil {
-			kubeconfig = filepath.Join(homeDir, kubeconfig[2:])
-		}
+	// Canonicalize the path (expand ~, resolve symlinks)
+	kubeconfig, err := fsutil.ExpandHomePath(kubeconfig)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("expand kubeconfig path: %w", err)
 	}
 
 	context := resolveKubernetesOption(opts.Context, opts.ContextEnvVar)

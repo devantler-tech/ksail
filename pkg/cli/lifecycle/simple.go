@@ -10,6 +10,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/flags"
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	configmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/ksail"
 	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
@@ -423,11 +424,11 @@ func newKubernetesCleanupProvisioner(
 	kubeconfig := resolveKubernetesOption(opts.Kubeconfig, opts.KubeconfigEnvVar)
 	if kubeconfig == "" {
 		kubeconfig = k8s.DefaultKubeconfigPath()
-	} else if len(kubeconfig) > 1 && kubeconfig[:2] == "~/" {
-		homeDir, _ := os.UserHomeDir()
-		if homeDir != "" {
-			kubeconfig = homeDir + kubeconfig[1:]
-		}
+	}
+
+	kubeconfig, err := fsutil.ExpandHomePath(kubeconfig)
+	if err != nil {
+		return nil, fmt.Errorf("expand kubeconfig path: %w", err)
 	}
 
 	contextName := resolveKubernetesOption(opts.Context, opts.ContextEnvVar)
