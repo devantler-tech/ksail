@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -527,13 +528,15 @@ func runInteractiveDockerExec(
 }
 
 func stdinFD() (int, error) {
-	fd := os.Stdin.Fd()
-	maxInt := ^uint(0) >> 1
-	if fd > uintptr(maxInt) {
-		return 0, fmt.Errorf("stdin fd overflows int: %d", fd)
+	stdinFDValue := os.Stdin.Fd()
+	stdinFDString := strconv.FormatUint(uint64(stdinFDValue), 10)
+
+	stdinFDInt, err := strconv.Atoi(stdinFDString)
+	if err != nil {
+		return 0, fmt.Errorf("parse stdin file descriptor: %w", err)
 	}
 
-	return int(fd), nil
+	return stdinFDInt, nil
 }
 
 // setupRawTerminal sets the terminal to raw mode and returns a restore function.

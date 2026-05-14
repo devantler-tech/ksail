@@ -334,7 +334,10 @@ func setupSignalForwarding(ctx context.Context, msgC chan<- *machine.DebugContai
 
 // sendTermResize sends a terminal resize message if stdin is a terminal.
 func sendTermResize(ctx context.Context, msgC chan<- *machine.DebugContainerRunRequest) {
-	stdinFd := int(os.Stdin.Fd())
+	stdinFd, err := stdinFD()
+	if err != nil {
+		return
+	}
 
 	if !term.IsTerminal(stdinFd) {
 		return
