@@ -3,6 +3,7 @@ package k8s
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"k8s.io/client-go/kubernetes"
@@ -28,7 +29,7 @@ func WaitForAPIServer(ctx context.Context, kubeconfigPath, contextName string) e
 
 	for {
 		body, err := clientset.Discovery().RESTClient().Get().AbsPath("/readyz").DoRaw(waitCtx)
-		if err == nil && string(body) == "ok" {
+		if err == nil && strings.TrimSpace(string(body)) == "ok" {
 			return nil
 		}
 
