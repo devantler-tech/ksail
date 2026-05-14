@@ -31,7 +31,7 @@ func TestChartVersion_MatchesDockerfileFormat(t *testing.T) {
 	version := vcluster.ChartVersion()
 
 	// The chart version is extracted from the Dockerfile line:
-	// FROM ghcr.io/loft-sh/vcluster-pro:0.33.1
+	// FROM ghcr.io/loft-sh/vcluster-pro:0.34.0
 	// Expected format: semver with optional pre-release suffix
 	assert.Regexp(t,
 		`^\d+\.\d+\.\d+(-[a-zA-Z0-9.-]+)?$`,
@@ -124,10 +124,10 @@ func TestChartVersion_ExpectedValue(t *testing.T) {
 	// This test documents the current Dockerfile content.
 	// Dependabot is configured to update this image but may not track it (dependabot-core#13383);
 	// update manually if needed.
-	// FROM ghcr.io/loft-sh/vcluster-pro:0.33.1
+	// FROM ghcr.io/loft-sh/vcluster-pro:0.34.0
 	assert.Equal(
 		t,
-		"0.33.1",
+		"0.34.0",
 		version,
 		"ChartVersion should match current Dockerfile (update this test when manually bumping the version)",
 	)
