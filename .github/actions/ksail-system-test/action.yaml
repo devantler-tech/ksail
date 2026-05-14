@@ -62,6 +62,20 @@ inputs:
     description: GitHub Container Registry token (for external registry auth)
     required: false
     default: ""
+  test-kubernetes-provider:
+    description: |
+      When 'true', runs an additional phase that tests the Kubernetes provider
+      by creating nested clusters (all supported distributions) on top of the
+      currently active host cluster. Set to 'true' only for one matrix entry
+      per host type to avoid redundant testing.
+    required: false
+    default: "false"
+  kubernetes-provider-distributions:
+    description: |
+      Comma-separated list of distributions to test on the Kubernetes provider.
+      Only used when test-kubernetes-provider is 'true'.
+    required: false
+    default: "Vanilla,K3s,VCluster,Talos,KWOK"
 
 runs:
   using: composite
@@ -352,10 +366,21 @@ runs:
         fi
         echo "✅ No unexpected changes detected"
 
+    # ── Phase 4b — Kubernetes Provider tests ─────────────────────────
+    # Tests nested clusters on the Kubernetes provider using the active
+    # host cluster. Only runs when test-kubernetes-provider is 'true'.
+
+    - name: 🧪 Kubernetes Provider Tests (nested clusters)
+      id: kubernetes-provider-tests
+      if: inputs.test-kubernetes-provider == 'true'
+      uses: ./.github/actions/ksail-test-kubernetes-provider
+      with:
+        distributions: ${{ inputs.kubernetes-provider-distributions }}
+
     # ── Phase 5 — Debug ──────────────────────────────────────────────
 
     - name: 🐞 Debug Kubernetes failure
-      if: failure() && (steps.cluster-create.outcome == 'failure' || steps.image-export-import-tests.outcome == 'failure' || steps.workload-watch-tests.outcome == 'failure' || steps.online-gen.outcome == 'failure' || steps.cluster-update-dry-run.outcome == 'failure' || steps.cluster-update.outcome == 'failure')
+      if: failure() && (steps.cluster-create.outcome == 'failure' || steps.image-export-import-tests.outcome == 'failure' || steps.workload-watch-tests.outcome == 'failure' || steps.online-gen.outcome == 'failure' || steps.cluster-update-dry-run.outcome == 'failure' || steps.cluster-update.outcome == 'failure' || steps.kubernetes-provider-tests.outcome == 'failure')
       uses: ./.github/actions/debug-kubernetes-failure
       with:
         kubectl-command: "ksail workload"

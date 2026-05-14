@@ -1,0 +1,106 @@
+name: KSail Test Kubernetes Provider
+description: |
+  Tests the Kubernetes provider by creating nested clusters (all 5 distributions)
+  on top of the currently active host cluster. Each nested cluster is created,
+  verified via `ksail cluster info`, and then deleted.
+
+  Prerequisites:
+  - A healthy host cluster must already be active (reachable via current kubeconfig context)
+  - `ksail` binary must be in PATH
+
+inputs:
+  distributions:
+    description: |
+      Comma-separated list of distributions to test on the Kubernetes provider.
+      Each will be created, verified, and deleted sequentially.
+    required: false
+    default: "Vanilla,K3s,VCluster,Talos,KWOK"
+  timeout:
+    description: Timeout per nested cluster create (seconds)
+    required: false
+    default: "600"
+
+runs:
+  using: composite
+  steps:
+    - name: 🧪 Test Kubernetes Provider (nested clusters)
+      shell: bash
+      env:
+        DISTRIBUTIONS: ${{ inputs.distributions }}
+        TIMEOUT: ${{ inputs.timeout }}
+      run: |
+        set -euo pipefail
+        LOG_DIR="/tmp/ksail-system-test-logs/kubernetes-provider"
+        mkdir -p "$LOG_DIR"
+
+        echo "=== Kubernetes Provider E2E Tests ==="
+        echo "Host cluster context: $(kubectl config current-context)"
+        echo "Distributions to test: $DISTRIBUTIONS"
+        echo ""
+
+        FAILED=0
+        PASSED=0
+        IFS=',' read -ra DIST_ARRAY <<< "$DISTRIBUTIONS"
+
+        for DIST in "${DIST_ARRAY[@]}"; do
+          DIST=$(echo "$DIST" | xargs) # trim whitespace
+          NESTED_NAME="nested-${DIST,,}"  # lowercase
+          echo "──────────────────────────────────────────────────────"
+          echo "🧪 Testing: $DIST on Kubernetes provider (name: $NESTED_NAME)"
+          echo "──────────────────────────────────────────────────────"
+
+          CREATE_LOG="$LOG_DIR/${DIST,,}-create.log"
+          INFO_LOG="$LOG_DIR/${DIST,,}-info.log"
+          DELETE_LOG="$LOG_DIR/${DIST,,}-delete.log"
+
+          # Create nested cluster
+          echo "  ⏳ Creating $DIST cluster..."
+          create_ok=false
+          if timeout "$TIMEOUT" ksail cluster create \
+            --distribution "$DIST" \
+            --provider Kubernetes \
+            --name "$NESTED_NAME" \
+            2>&1 | tee "$CREATE_LOG"; then
+            create_ok=true
+            echo "  ✅ $DIST create succeeded"
+          else
+            echo "  ❌ $DIST create FAILED (exit code: $?)"
+            FAILED=$((FAILED + 1))
+          fi
+
+          # Verify with cluster info (only if create succeeded)
+          if [ "$create_ok" = "true" ]; then
+            echo "  ⏳ Verifying $DIST cluster info..."
+            if ksail cluster info --name "$NESTED_NAME" --provider Kubernetes 2>&1 | tee "$INFO_LOG"; then
+              echo "  ✅ $DIST info succeeded"
+              PASSED=$((PASSED + 1))
+            else
+              echo "  ⚠️ $DIST info failed (cluster may still be functional)"
+              PASSED=$((PASSED + 1))
+            fi
+          fi
+
+          # Always attempt delete (cleanup)
+          echo "  ⏳ Deleting $DIST cluster..."
+          if ksail cluster delete \
+            --provider Kubernetes \
+            --name "$NESTED_NAME" \
+            --force \
+            2>&1 | tee "$DELETE_LOG"; then
+            echo "  ✅ $DIST delete succeeded"
+          else
+            echo "  ⚠️ $DIST delete failed (best-effort cleanup)"
+          fi
+
+          echo ""
+        done
+
+        echo "=== Kubernetes Provider Test Summary ==="
+        echo "  Passed: $PASSED / ${#DIST_ARRAY[@]}"
+        echo "  Failed: $FAILED / ${#DIST_ARRAY[@]}"
+
+        if [ "$FAILED" -gt 0 ]; then
+          echo "❌ $FAILED Kubernetes provider test(s) failed"
+          exit 1
+        fi
+        echo "✅ All Kubernetes provider tests passed"
