@@ -2949,6 +2949,7 @@ func runDiagnoseTextReport(report k8s.DiagnoseReport, writer io.Writer) error {
 			"Cluster %q looks healthy — no failing pods, NotReady nodes, or pending PVCs detected.\n",
 			report.ClusterName,
 		)
+		_, _ = fmt.Fprintf(writer, "Health score: %d/100\n", report.HealthScore)
 
 		return nil
 	}

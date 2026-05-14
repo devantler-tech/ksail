@@ -120,9 +120,9 @@ type DiagnoseReport struct {
 
 // DiagnoseClusterReport is the structured equivalent of DiagnoseCluster. It
 // returns a DiagnoseReport suitable for JSON serialisation and AI consumption
-// via the cluster_read MCP tool. The plain-text representation produced by
-// DiagnoseCluster remains the default; this function is used when the caller
-// requests --format json.
+// via the cluster_read MCP tool. The CLI uses this structured result for both
+// text and JSON output, while DiagnoseCluster preserves the legacy plain-text
+// API for callers that need a combined string report.
 func DiagnoseClusterReport(
 	ctx context.Context,
 	clientset kubernetes.Interface,
