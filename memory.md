@@ -1,69 +1,65 @@
 # Repo Assist Memory
 
 ## Last Run
-2026-05-14 01:13 UTC — Run #25835703906
+2026-05-14 12:53 UTC — Run #25861003229
 
 ## Monthly Activity Issue
 - May 2026: #4501 (open, updated this run)
 
 ## Open Repo Assist PRs
-- PR [new this run]: test(envvar): cover ExpandWithLookup nil-lookup fallback path
+- None (last PR #4729 merged: test(envvar))
 
 ## Issue Comments Made (with run)
-- #4674 (Hetzner CCM taint race): 2026-05-12 run #25706827036
-- #4423 (workload watch hooks): 2026-05-11 run #25672575161
-- #4675 (Talos disk encryption feature): 2026-05-10 run #25628828750
-- #4646 (Hetzner label + ~ expansion bugs): 2026-05-08 run #25530778322
-- #4354 (KWOK v0.7.0 CEL stages): 2026-05-07 run #25470070628
+- #4674 (Hetzner CCM taint race): 2026-05-12
+- #4423 (workload watch hooks): 2026-05-11
+- #4675 (Talos disk encryption): 2026-05-10
+- #4646 (Hetzner label + ~ bugs): 2026-05-08
+- #4354 (KWOK v0.7.0): 2026-05-07
 - #4621 (Hetzner node role bug): 2026-05-06
-- #3912 (Dependabot multi-arch bug): 2026-05-05 run #25352205894
-- #4525 (HA defaults feature): 2026-05-02
-- #4504 (workload watch regression): 2026-05-01
-- #4422 (diagnose health scoring): 2026-05-01
-- #2261 (VCluster D-Bus): 2026-04-11
-- #3772 (loft-sh/log blocked): 2026-04-11
+- #3912 (Dependabot multi-arch): 2026-05-05
 - #4474 (cluster diff): 2026-05-13
 
 ## Issues Created (last 4 weeks)
-- #4627: [Parent] Cloud Provider Expansion (groups #3983, #4328, #4510) — all 3 now linked
-- #4610: [ci] fix K3s+Cilium full-stack system test timing race — CI PR created (blocked by workflows perm, issue #4681)
-- #4602: [feature] OIDC federation and multi-cluster auth support
-- #4521: [feature] local-remote service mirroring
+- #4627: [Parent] Cloud Provider Expansion (groups #3983, #4328, #4510) — all 3 linked
+- #4610: [ci] fix K3s+Cilium timing race — blocked (issue #4681)
+- #4602: [feature] OIDC federation
+- #4521: [feature] local-remote mirroring
 - #4511: [feature] native ephemeral CI mode
-- #4510: [chore] add GKE and AKS cloud providers
-- #4474: ksail cluster drift command (labelled next)
-- #4473: vCluster v0.34 compatibility (labelled next)
-- #4465: cluster switch fuzzy search (labelled next) — recent-clusters criterion partially implemented
-- #4423: workload watch build hooks (labelled next)
-- #4422: cluster diagnose health scoring (labelled next)
+- #4510: [chore] GKE/AKS providers (sub-issue of #4627)
+- #4474: cluster diff command (PR #4737 open)
+- #4473: vCluster v0.34 compat (merged #4734)
+- #4465: cluster switch fuzzy search
+- #4423: workload watch hooks (PR #4733 open)
+- #4422: cluster diagnose health scoring (PR #4735 open)
 - #4375: cluster graph topology
-- #3983: Hetzner K3s/Vanilla (labelled next)
+- #3983: Hetzner K3s/Vanilla (sub-issue of #4627)
 
 ## Sub-Issue Links (verified)
-- #4627 parent: #3983, #4328, #4510 (all linked, verified 2026-05-07)
+- #4627 parent: #3983, #4328, #4510 (all linked, all open as of 2026-05-14)
 
 ## Code Quality Domain Alternation
-- Last domain: test coverage (Task 5, 2026-05-14)
+- Last domain: test coverage (Task 5, 2026-05-14 01:13)
 - Next for Task 5: refactor
 
 ## Backlog Cursor
-- Issues processed through #4717 (as of 2026-05-14)
+- Issues processed through #4741 (as of 2026-05-14)
 - All roadmap Now/Next/Later items from discussion #4682 (May 11, 2026) are tracked
 
 ## Labels Applied (recent)
 - #4432, #4371 → `agentic-workflows` (May 14)
 - #4501 → `automation`, `repo-assist` (May 12)
-- #4432, #4427, #4371 → `agentic-workflows` (May 5)
-- #4423, #4473, #4474, #3983 → `next` (May 5)
 
 ## Notes
 - link_sub_issue is NOT idempotent — always verify sub-issue not already linked before calling
 - Weekly strategy #4682 (May 11, 2026) is the current roadmap reference
-- All roadmap items are tracked; no new items in #4682 vs #4573
+- All roadmap items are tracked
 - Issue #4675 CLOSED (completed) — Talos disk encryption implemented in #4676
 - Issue #4316 CLOSED (completed) — ArgoCD v3.4 done
+- Issue #4473 CLOSED — vCluster v0.34 done (merged #4734)
 - Issue #4681: CI workload-timeout (blocked by workflows permission, needs manual PR creation)
-- No Dependabot PRs open (all merged as of this run)
-- No human-filed issues without prior engagement; all open issues are CI Doctor/automation/Repo Assist/blocked
-- [aw] Detection Runs issues #4432 and #4371 say "No action to take - Do not assign to an agent" — skip (labelled agentic-workflows)
 - PR #4718 (Kubernetes provider): human PR by devantler, open for review
+- PRs #4741, #4737, #4736, #4735, #4733: human PRs by devantler, all open for review
+- Issues #4474, #4422, #4423, #4354 now have PRs implementing them
+- No Dependabot PRs open (all merged)
+- Duplicate patterns in v1alpha1 enum types are intentional (nolint:dupl) — do NOT refactor Set() methods
+- Run 2026-05-14 12:53: Tasks 12/3/5 all had no actionable work; only Task 13 done
