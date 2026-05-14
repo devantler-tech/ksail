@@ -327,6 +327,13 @@ func TestExpandWithLookup(t *testing.T) {
 	assert.Equal(t, "https://example.com/fallback", result)
 }
 
+func TestExpandWithLookup_NilLookupFallsBackToOsLookupEnv(t *testing.T) {
+	t.Setenv("TEST_EXPAND_NIL_LOOKUP", "os-resolved")
+
+	result := envvar.ExpandWithLookup("${TEST_EXPAND_NIL_LOOKUP}", nil)
+	assert.Equal(t, "os-resolved", result)
+}
+
 func TestExpandBytes_YAMLContent(t *testing.T) {
 	t.Setenv("TEST_REGISTRY", "myregistry.io:5000")
 
