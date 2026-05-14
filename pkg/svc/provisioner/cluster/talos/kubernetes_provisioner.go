@@ -85,7 +85,7 @@ func NewKubernetesProvisioner(cfg KubernetesProvisionerConfig) *KubernetesProvis
 //  1. Port-forward Docker API → set DOCKER_HOST → provision containers inside DinD
 //  2. Discover DinD-internal mapped ports → port-forward Talos API + K8s API → bootstrap
 //
-//nolint:cyclop // Sequential multi-phase provisioning flow — extracting phases would obscure the overall sequence.
+//nolint:cyclop,funlen // Sequential multi-phase provisioning flow — extracting phases would obscure the overall sequence.
 func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 	clusterName := name
 	if clusterName == "" {

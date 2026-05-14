@@ -358,8 +358,8 @@ func (p *K3kProvisioner) ensureNamespace(ctx context.Context, namespace string) 
 	return nil
 }
 
-// createClusterCR creates the k3k Cluster custom resource.
-func (p *K3kProvisioner) createClusterCR(ctx context.Context, clusterName, namespace string) error {
+// buildClusterCR constructs the k3k Cluster custom resource with the provisioner's configuration.
+func (p *K3kProvisioner) buildClusterCR(clusterName, namespace string) *k3kv1beta1.Cluster {
 	cluster := &k3kv1beta1.Cluster{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "k3k.io/v1beta1",
@@ -397,6 +397,13 @@ func (p *K3kProvisioner) createClusterCR(ctx context.Context, clusterName, names
 	if p.serviceCIDR != "" {
 		cluster.Spec.ServiceCIDR = p.serviceCIDR
 	}
+
+	return cluster
+}
+
+// createClusterCR creates the k3k Cluster custom resource.
+func (p *K3kProvisioner) createClusterCR(ctx context.Context, clusterName, namespace string) error {
+	cluster := p.buildClusterCR(clusterName, namespace)
 
 	restClient, paramCodec, err := p.buildK3kRESTClient()
 	if err != nil {

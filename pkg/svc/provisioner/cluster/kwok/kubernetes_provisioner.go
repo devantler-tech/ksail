@@ -91,7 +91,7 @@ func kwokContainerNames(clusterName string) []string {
 
 // Create creates a KWOK cluster inside a DinD pod on the host Kubernetes cluster.
 //
-//nolint:cyclop // Sequential multi-step provisioning flow — extracting steps would obscure the overall sequence.
+//nolint:cyclop,funlen // Sequential multi-step provisioning flow — extracting steps would obscure the overall sequence.
 func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 	target := p.Provisioner.resolveName(name)
 

@@ -98,6 +98,7 @@ func TestExtractGatewayPort(t *testing.T) { //nolint:funlen // comprehensive tab
 	}
 }
 
+// nolint:funlen // Table-driven test with multiple test cases.
 func TestExtractGatewayAddressValue(t *testing.T) {
 	t.Parallel()
 
