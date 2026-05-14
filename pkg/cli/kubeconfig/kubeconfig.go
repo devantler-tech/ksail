@@ -90,7 +90,11 @@ func getKubeconfigPath(cfgManager *ksailconfigmanager.ConfigManager) (string, er
 	tmr := timer.New()
 	tmr.Start()
 
-	clusterCfg, err := cfgManager.Load(configmanager.LoadOptions{Timer: tmr})
+	clusterCfg, err := cfgManager.Load(configmanager.LoadOptions{
+		Timer:                  tmr,
+		Silent:                 true,
+		SkipDistributionConfig: true,
+	})
 	if err != nil {
 		return "", fmt.Errorf("failed to load cluster configuration: %w", err)
 	}

@@ -108,6 +108,7 @@ func (m *ConfigManager) Load(opts configmanagerinterface.LoadOptions) (*v1alpha1
 		opts.Silent,
 		opts.IgnoreConfigFile,
 		opts.SkipValidation,
+		opts.SkipDistributionConfig,
 	)
 }
 
@@ -147,6 +148,7 @@ func (m *ConfigManager) loadConfigWithOptions(
 	silent bool,
 	ignoreConfigFile bool,
 	skipValidation bool,
+	skipDistributionConfig bool,
 ) (*v1alpha1.Cluster, error) {
 	// Check if config was already loaded before outputting any messages
 	if m.configLoaded {
@@ -174,10 +176,15 @@ func (m *ConfigManager) loadConfigWithOptions(
 		return nil, err
 	}
 
-	// Run validation unless skipped
-	err = m.validateOrLoadDistributionConfig(silent, skipValidation)
-	if err != nil {
-		return nil, err
+	// Skip distribution config loading entirely when the caller only needs
+	// base config fields (e.g., kubeconfig path). This avoids expensive
+	// operations like Talos PKI certificate generation.
+	if !skipDistributionConfig {
+		// Run validation unless skipped
+		err = m.validateOrLoadDistributionConfig(silent, skipValidation)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	if !silent {
