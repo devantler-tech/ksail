@@ -41,6 +41,21 @@ func runSafely(args []string, runner func([]string) int, errWriter io.Writer) (e
 	return exitCode
 }
 
+// exitCodeFromError extracts a custom exit code from err if it implements
+// ExitCode() int, returning (code, true). Otherwise it returns (0, false).
+func exitCodeFromError(err error) (int, bool) {
+	type ExitCoder interface {
+		ExitCode() int
+	}
+
+	var exitCoder ExitCoder
+	if errors.As(err, &exitCoder) {
+		return exitCoder.ExitCode(), true
+	}
+
+	return 0, false
+}
+
 func runWithArgs(args []string) int {
 	rootCmd := cmd.NewRootCmd(buildmeta.Version, buildmeta.Commit, buildmeta.Date)
 	rootCmd.SetArgs(args)
@@ -50,15 +65,10 @@ func runWithArgs(args []string) int {
 		// Check if this is an error with a custom exit code (e.g., DriftExitError).
 		// This allows commands to return non-standard exit codes without coupling the
 		// entrypoint to specific command types.
-		type ExitCoder interface {
-			ExitCode() int
-		}
-
-		var exitCoder ExitCoder
-		if errors.As(err, &exitCoder) {
+		if code, ok := exitCodeFromError(err); ok {
 			// Custom exit codes (e.g., 2 for drift detected) are valid results,
 			// not errors to print to stderr
-			return exitCoder.ExitCode()
+			return code
 		}
 
 		// For actual errors, print and return exit code 1

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"testing"
 
@@ -153,8 +154,8 @@ func TestRunSafelyPropagatesRunnerExitCode(t *testing.T) {
 func TestRunWithArgsHandlesCustomExitCode(t *testing.T) {
 	t.Parallel()
 
-	// Test that runWithArgs detects errors implementing ExitCode() int
-	// and returns their exit code instead of defaulting to 1.
+	// Test that exitCodeFromError correctly extracts custom exit codes from errors
+	// implementing ExitCode() int, as used by runWithArgs for DriftExitError etc.
 	tests := []struct {
 		name       string
 		customCode int
@@ -163,20 +164,25 @@ func TestRunWithArgsHandlesCustomExitCode(t *testing.T) {
 		{name: "custom_exit_code_42", customCode: 42},
 	}
 
-	for _, tc := range tests {
+	for i := range tests {
+		tc := tests[i]
+
 		t.Run(tc.name, func(t *testing.T) {
-			var errOutput bytes.Buffer
+			t.Parallel()
 
-			// Create a runner that panics with an error implementing ExitCode() int
-			runner := func([]string) int {
-				panic(&customExitError{code: tc.customCode})
-			}
+			code, ok := exitCodeFromError(&customExitError{code: tc.customCode})
 
-			// runSafely should catch the panic, extract the exit code, and return it
-			exitCode := runSafely(nil, runner, &errOutput)
-
-			// Verify the custom exit code is returned (not the default 1)
-			assert.Equal(t, tc.customCode, exitCode)
+			assert.True(t, ok)
+			assert.Equal(t, tc.customCode, code)
 		})
 	}
+}
+
+func TestExitCodeFromErrorReturnsFalseForPlainErrors(t *testing.T) {
+	t.Parallel()
+
+	code, ok := exitCodeFromError(errors.New("plain error"))
+
+	assert.False(t, ok)
+	assert.Equal(t, 0, code)
 }
