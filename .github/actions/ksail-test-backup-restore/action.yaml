@@ -6,8 +6,9 @@ description: |
   and resourceCount cross-validation), tests namespace-filtered,
   compression-level, and exclude-types backups, tests dry-run restore,
   deletes the workload, restores from backup, verifies the workload is
-  restored, tests skip-existing policy, and validates security guards
-  (invalid archive, path traversal, symlink rejection).
+  restored, and tests skip-existing policy. Security guards (invalid
+  archive, path traversal, symlink rejection) are covered by unit tests
+  (TestExtractBackupArchive_SecurityGuards).
 
   Does NOT create or delete the cluster — the orchestrator handles that.
 

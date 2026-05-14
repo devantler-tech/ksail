@@ -1948,7 +1948,8 @@ func TestCreate_NoConfigFile_FlagsOnly(t *testing.T) {
 		"kubeconfig",
 		"apiVersion: v1\nkind: Config\ncurrent-context: kind-test-no-config\nclusters:\n"+
 			"- cluster:\n    server: https://127.0.0.1:6443\n  name: kind-test-no-config\n"+
-			"contexts:\n- context:\n    cluster: kind-test-no-config\n    user: kind-test-no-config\n  name: kind-test-no-config\n"+
+			"contexts:\n- context:\n    cluster: kind-test-no-config\n"+
+			"    user: kind-test-no-config\n  name: kind-test-no-config\n"+
 			"users:\n- name: kind-test-no-config\n  user:\n    token: fake\n",
 	)
 

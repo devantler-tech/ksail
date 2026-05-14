@@ -1,11 +1,12 @@
 name: KSail Workload Watch Test
 description: |
   Tests the workload watch command E2E on a running cluster:
-    1. Non-existent directory returns error
-    2. --initial-apply syncs cluster on startup
-    3. File modification triggers debounced re-apply
-    4. Kustomize boundary scoping (only affected overlay re-applied)
-    5. Graceful shutdown on SIGTERM
+    1. --initial-apply syncs cluster on startup
+    2. File modification triggers debounced re-apply
+    3. Kustomize boundary scoping (only affected overlay re-applied)
+    4. Graceful shutdown on SIGTERM
+  Non-existent directory rejection is covered by unit tests
+  (TestWatchRejectsNonExistentDirectory).
 
 inputs:
   workload-timeout:
