@@ -420,6 +420,9 @@ func resolveTalosNodeEndpoint(
 		// EKS host-level debug is not supported: nodes are AWS EC2 instances
 		// reachable only via SSM/SSH, not via Talos or Docker host debug paths.
 		return "", fmt.Errorf("%w: %s", ErrUnsupportedHostDebug, info.Provider)
+	case v1alpha1.ProviderKubernetes:
+		// Kubernetes provider host-level debug is not yet supported.
+		return "", fmt.Errorf("%w: %s", ErrUnsupportedHostDebug, info.Provider)
 	default:
 		return "", fmt.Errorf("%w: %s", ErrUnsupportedHostDebug, info.Provider)
 	}

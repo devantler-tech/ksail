@@ -3887,6 +3887,9 @@ func getProviderClusters(
 		// in the local list path. Return an empty slice so `cluster list`
 		// does not error when AWS is configured in a profile.
 		return nil, nil
+	case v1alpha1.ProviderKubernetes:
+		// Kubernetes provider cluster listing not yet implemented.
+		return nil, nil
 	default:
 		return nil, fmt.Errorf("%w: %s", ErrUnsupportedProvider, provider)
 	}

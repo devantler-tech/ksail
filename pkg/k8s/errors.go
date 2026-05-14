@@ -16,3 +16,9 @@ var ErrKubeconfigContextNotFound = errors.New("kubeconfig context not found")
 // ErrKubeconfigContextCollision is returned when the desired context name
 // already exists as a different context entry in the kubeconfig.
 var ErrKubeconfigContextCollision = errors.New("kubeconfig context name collision")
+
+// ErrClusterEntryNotFound is returned when a cluster entry is not found in the kubeconfig.
+var ErrClusterEntryNotFound = errors.New("cluster entry not found in kubeconfig")
+
+// ErrAPIServerTimeout is returned when the API server does not become ready within the timeout.
+var ErrAPIServerTimeout = errors.New("API server not ready within timeout")

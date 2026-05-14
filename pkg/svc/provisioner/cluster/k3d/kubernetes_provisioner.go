@@ -450,7 +450,7 @@ func (p *K3kProvisioner) waitForClusterReady(ctx context.Context, clusterName, n
 			}
 
 			phase := cluster.Status.Phase
-			switch phase {
+			switch phase { //nolint:exhaustive // default handles all non-Ready phases (e.g., Failed, Provisioning, Deleting)
 			case k3kv1beta1.ClusterReady:
 				return true, nil
 			default:

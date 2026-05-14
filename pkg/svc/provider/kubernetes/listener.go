@@ -28,14 +28,14 @@ func newLocalListener() (*localListener, error) {
 
 	parts := strings.Split(addr, ":")
 	if len(parts) < minAddressParts {
-		ln.Close()
+		_ = ln.Close()
 
 		return nil, fmt.Errorf("parse listener address %q: %w", addr, ErrUnexpectedAddressFormat)
 	}
 
 	port, err := strconv.Atoi(parts[len(parts)-1])
 	if err != nil {
-		ln.Close()
+		_ = ln.Close()
 
 		return nil, fmt.Errorf("parse listener port: %w", err)
 	}

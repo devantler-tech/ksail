@@ -76,13 +76,13 @@ func (tp *tcpProxy) close() {
 		close(tp.stopCh)
 	}
 
-	tp.listener.Close()
+	_ = tp.listener.Close()
 
 	tp.mu.Lock()
 	defer tp.mu.Unlock()
 
 	if tp.spdyConn != nil {
-		tp.spdyConn.Close()
+		_ = tp.spdyConn.Close()
 		tp.spdyConn = nil
 	}
 }
@@ -96,7 +96,7 @@ func (tp *tcpProxy) getConnection() (httpstream.Connection, error) {
 		select {
 		case <-tp.spdyConn.CloseChan():
 			// Connection died, close it and redial
-			tp.spdyConn.Close()
+			_ = tp.spdyConn.Close()
 			tp.spdyConn = nil
 		default:
 			return tp.spdyConn, nil
@@ -141,7 +141,7 @@ func (tp *tcpProxy) handleConnection(localConn net.Conn) {
 		// Invalidate and retry once.
 		tp.mu.Lock()
 		if tp.spdyConn == conn {
-			tp.spdyConn.Close()
+			_ = tp.spdyConn.Close()
 			tp.spdyConn = nil
 		}
 		tp.mu.Unlock()
@@ -169,7 +169,7 @@ func (tp *tcpProxy) handleConnection(localConn net.Conn) {
 		case readErr != nil:
 			errorCh <- fmt.Errorf("error stream read: %w", readErr)
 		case len(message) > 0:
-			errorCh <- fmt.Errorf("port-forward error: %s", string(message))
+			errorCh <- fmt.Errorf("%w: %s", ErrPortForwardError, string(message))
 		}
 
 		close(errorCh)
@@ -227,7 +227,7 @@ func (tp *tcpProxy) createStreams(
 
 	dataStream, err = conn.CreateStream(headers)
 	if err != nil {
-		errorStream.Close()
+		_ = errorStream.Close()
 
 		return nil, nil, fmt.Errorf("create data stream: %w", err)
 	}

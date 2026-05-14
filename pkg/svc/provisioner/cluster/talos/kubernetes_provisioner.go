@@ -84,6 +84,8 @@ func NewKubernetesProvisioner(cfg KubernetesProvisionerConfig) *KubernetesProvis
 // Two-phase flow:
 //  1. Port-forward Docker API → set DOCKER_HOST → provision containers inside DinD
 //  2. Discover DinD-internal mapped ports → port-forward Talos API + K8s API → bootstrap
+//
+//nolint:cyclop // Sequential multi-phase provisioning flow — extracting phases would obscure the overall sequence.
 func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 	clusterName := name
 	if clusterName == "" {
@@ -114,7 +116,7 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 	dockerHost := fmt.Sprintf("tcp://127.0.0.1:%d", dockerPF.LocalPort)
 
 	// jscpd:ignore-start
-	fmt.Fprintf(os.Stdout, "► creating Talos cluster via SDK (DOCKER_HOST=%s)\n", dockerHost)
+	_, _ = fmt.Fprintf(os.Stdout, "► creating Talos cluster via SDK (DOCKER_HOST=%s)\n", dockerHost)
 
 	origHost := os.Getenv("DOCKER_HOST")
 	if err := os.Setenv("DOCKER_HOST", dockerHost); err != nil {
@@ -139,11 +141,7 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 		return fmt.Errorf("create DinD Docker client: %w", err)
 	}
 
-	defer dindClient.Close()
-
-	p.inner.WithDockerClient(dindClient)
-
-	// === Phase 1: Provision containers inside DinD ===
+	defer func() { _ = dindClient.Close() }()
 
 	err = kernelmod.EnsureBrNetfilter(ctx, p.inner.logWriter)
 	if err != nil {
@@ -169,7 +167,7 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 		return fmt.Errorf("provision cluster: %w", err)
 	}
 
-	fmt.Fprintf(os.Stdout, "► containers provisioned inside DinD [%s]\n",
+	_, _ = fmt.Fprintf(os.Stdout, "► containers provisioned inside DinD [%s]\n",
 		time.Since(provisionStart).Truncate(time.Second))
 
 	// === Phase 2: Port-forward Talos API + K8s API from DinD, then bootstrap ===
@@ -221,8 +219,8 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 	hostTalosEndpoint := net.JoinHostPort("127.0.0.1", strconv.Itoa(talosPF.LocalPort))
 	hostK8sEndpoint := fmt.Sprintf("https://127.0.0.1:%d", k8sPF.LocalPort)
 
-	fmt.Fprintf(os.Stdout, "► Talos API: %s → localhost:%d\n", talosEndpoint, talosPF.LocalPort)
-	fmt.Fprintf(os.Stdout, "► K8s API: %s → localhost:%d\n", k8sEndpoint, k8sPF.LocalPort)
+	_, _ = fmt.Fprintf(os.Stdout, "► Talos API: %s → localhost:%d\n", talosEndpoint, talosPF.LocalPort)
+	_, _ = fmt.Fprintf(os.Stdout, "► K8s API: %s → localhost:%d\n", k8sEndpoint, k8sPF.LocalPort)
 
 	// Save talosconfig with host-accessible endpoint
 	talosConfig := configBundle.TalosConfig()
@@ -298,7 +296,7 @@ func (p *KubernetesProvisioner) Delete(ctx context.Context, name string) error {
 				return clientErr
 			}
 
-			defer dindClient.Close()
+			defer func() { _ = dindClient.Close() }()
 
 			p.inner.WithDockerClient(dindClient)
 
@@ -326,12 +324,12 @@ func (p *KubernetesProvisioner) List(ctx context.Context) ([]string, error) {
 
 // Start is not supported for Talos-on-Kubernetes.
 func (p *KubernetesProvisioner) Start(_ context.Context, _ string) error {
-	return fmt.Errorf("start not supported for Talos-on-Kubernetes: recreate the cluster instead")
+	return ErrStartNotSupported
 }
 
 // Stop is not supported for Talos-on-Kubernetes.
 func (p *KubernetesProvisioner) Stop(_ context.Context, _ string) error {
-	return fmt.Errorf("stop not supported for Talos-on-Kubernetes: delete the cluster instead")
+	return ErrStopNotSupported
 }
 
 // setupDinD creates the namespace and DinD pod, then waits for readiness.
@@ -355,7 +353,7 @@ func parsePort(endpoint string) (int, error) {
 	}
 
 	if port < 1 || port > 65535 {
-		return 0, fmt.Errorf("port %d out of valid range [1, 65535]", port)
+		return 0, fmt.Errorf("%w: %d", ErrInvalidPort, port)
 	}
 
 	return port, nil

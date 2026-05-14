@@ -212,6 +212,9 @@ func InstallLoadBalancerSilent(
 		case v1alpha1.ProviderAWS:
 			// AWS is not a supported provider for Talos.
 			return nil
+		case v1alpha1.ProviderKubernetes:
+			// Kubernetes provider: no additional load balancer needed.
+			return nil
 		}
 	case v1alpha1.DistributionK3s:
 		// K3s already has ServiceLB (Klipper) by default, no installation needed

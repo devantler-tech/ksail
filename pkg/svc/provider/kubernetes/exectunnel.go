@@ -100,14 +100,14 @@ func (t *execTunnel) close() {
 		close(t.stopCh)
 	}
 
-	t.listener.Close()
+	_ = t.listener.Close()
 	t.wg.Wait()
 }
 
 // handleConnection tunnels a single TCP connection to the pod by exec-ing
 // `nc localhost <targetPort>` and piping stdin/stdout.
 func (t *execTunnel) handleConnection(conn net.Conn) {
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

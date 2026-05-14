@@ -28,4 +28,7 @@ var (
 
 	// ErrUnexpectedAddressFormat is returned when a listener address has an unexpected format.
 	ErrUnexpectedAddressFormat = errors.New("unexpected listener address format")
+
+	// ErrPortForwardError is returned when the port-forward error stream receives a non-empty message.
+	ErrPortForwardError = errors.New("port-forward error")
 )

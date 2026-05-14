@@ -8,7 +8,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
-func TestExtractGatewayPort(t *testing.T) {
+func TestExtractGatewayPort(t *testing.T) { //nolint:funlen // comprehensive table test covering multiple Gateway status variants
 	t.Parallel()
 
 	tests := []struct {

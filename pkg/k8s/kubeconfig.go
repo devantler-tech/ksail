@@ -142,7 +142,7 @@ func ModifyKubeconfigCluster(kubeconfigPath, clusterKey, newServerURL string) er
 
 	cluster, ok := existing.Clusters[clusterKey]
 	if !ok {
-		return fmt.Errorf("cluster entry %q not found in kubeconfig", clusterKey)
+		return fmt.Errorf("%w: %s", ErrClusterEntryNotFound, clusterKey)
 	}
 
 	cluster.Server = newServerURL

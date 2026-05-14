@@ -90,6 +90,8 @@ func kwokContainerNames(clusterName string) []string {
 }
 
 // Create creates a KWOK cluster inside a DinD pod on the host Kubernetes cluster.
+//
+//nolint:cyclop // Sequential multi-step provisioning flow — extracting steps would obscure the overall sequence.
 func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 	target := p.Provisioner.resolveName(name)
 
@@ -102,7 +104,7 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 	// will reference in Docker bind mounts. Without this, Docker auto-creates
 	// missing bind mount sources as directories, causing kube-apiserver to fail
 	// with "read /etc/kubernetes/pki/admin.key: is a directory".
-	fmt.Fprintln(os.Stdout, "► preparing DinD bind mount paths")
+	_, _ = fmt.Fprintln(os.Stdout, "► preparing DinD bind mount paths")
 
 	if err := p.createPlaceholderFiles(ctx, target); err != nil {
 		return fmt.Errorf("create placeholder files: %w", err)
@@ -124,7 +126,7 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 	// kwokctl generates PKI locally, writes Docker Compose containers inside DinD.
 	// Containers are created with file-level bind mounts (thanks to placeholders)
 	// but crash-loop because the placeholder files are empty.
-	fmt.Fprintln(os.Stdout, "► creating KWOK cluster via SDK (DOCKER_HOST → exec tunnel → DinD)")
+	_, _ = fmt.Fprintln(os.Stdout, "► creating KWOK cluster via SDK (DOCKER_HOST → exec tunnel → DinD)")
 
 	err = kubernetesprovider.WithRemoteDockerHost(dockerPF, func() error {
 		return p.Provisioner.CreateCluster(ctx, name)
@@ -135,7 +137,7 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 
 	// Step 5: Copy real PKI, kubeconfig, and kwok.yaml from the local host
 	// (where kwokctl wrote them) into DinD, overwriting the placeholders.
-	fmt.Fprintln(os.Stdout, "► syncing PKI and config into DinD")
+	_, _ = fmt.Fprintln(os.Stdout, "► syncing PKI and config into DinD")
 
 	if err := p.copyStateToDinD(ctx, target); err != nil {
 		return fmt.Errorf("copy state to DinD: %w", err)
@@ -143,7 +145,7 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 
 	// Step 6: Restart crash-looping containers so they pick up the real files.
 	// Bind mounts reference the DinD filesystem; a restart rereads the content.
-	fmt.Fprintln(os.Stdout, "► restarting KWOK containers in DinD")
+	_, _ = fmt.Fprintln(os.Stdout, "► restarting KWOK containers in DinD")
 
 	if err := p.restartContainersInDinD(ctx, target); err != nil {
 		return fmt.Errorf("restart containers: %w", err)
@@ -156,7 +158,7 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 	}
 
 	// Step 8: Port-forward the nested API server from DinD to localhost.
-	fmt.Fprintln(os.Stdout, "► port-forwarding nested API server to localhost")
+	_, _ = fmt.Fprintln(os.Stdout, "► port-forwarding nested API server to localhost")
 
 	pf, err := p.k8sProvider.StartPortForward(
 		ctx, p.restConfig, p.clusterName,
@@ -174,14 +176,14 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 	}
 
 	// Step 10: Wait for the nested API server to be reachable through port-forward.
-	fmt.Fprintln(os.Stdout, "► waiting for nested API server to be ready")
+	_, _ = fmt.Fprintln(os.Stdout, "► waiting for nested API server to be ready")
 
-	if err := k8s.WaitForAPIServer(p.kubeconfigPath, "kwok-"+target); err != nil {
+	if err := k8s.WaitForAPIServer(ctx, p.kubeconfigPath, "kwok-"+target); err != nil {
 		return fmt.Errorf("wait for API server: %w", err)
 	}
 
 	// Step 11: Scale simulated nodes — now the API server is accessible via port-forward
-	fmt.Fprintln(os.Stdout, "► creating simulated KWOK node")
+	_, _ = fmt.Fprintln(os.Stdout, "► creating simulated KWOK node")
 
 	if err := p.Provisioner.ScaleNodes(ctx, name); err != nil {
 		return fmt.Errorf("kwok scale via SDK: %w", err)
@@ -263,7 +265,7 @@ func (p *KubernetesProvisioner) discoverAPIServerPort(name string) (int, error) 
 
 	cluster, ok := config.Clusters[clusterKey]
 	if !ok {
-		return 0, fmt.Errorf("cluster entry %q not found in kubeconfig", clusterKey)
+		return 0, fmt.Errorf("%w: %s", k8s.ErrClusterEntryNotFound, clusterKey)
 	}
 
 	// Server URL is typically https://127.0.0.1:<port>
