@@ -15,6 +15,11 @@ type LoadOptions struct {
 	// SkipValidation skips config validation when true.
 	// Useful for commands that only need partial config (e.g., context/kubeconfig).
 	SkipValidation bool
+	// SkipDistributionConfig skips loading distribution-specific configuration
+	// (Kind, K3d, Talos, VCluster, etc.) when true. This avoids expensive
+	// operations like Talos PKI certificate generation when only the base
+	// cluster config fields (e.g., kubeconfig path) are needed.
+	SkipDistributionConfig bool
 }
 
 // ConfigManager provides configuration management functionality.
