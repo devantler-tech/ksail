@@ -176,6 +176,18 @@ func (p *Provisioner) SetProvider(prov provider.Provider) {
 // It retries on transient errors (e.g. registry rate limits) with a fixed delay between attempts.
 // globalMu is held only for the duration of each kwokctl command; the retry sleep runs unlocked.
 func (p *Provisioner) Create(ctx context.Context, name string) error {
+	if err := p.CreateCluster(ctx, name); err != nil {
+		return err
+	}
+
+	return p.ScaleNodes(ctx, name)
+}
+
+// CreateCluster creates the KWOK cluster but does NOT create simulated nodes.
+// Use ScaleNodes separately to add nodes. This split is needed for the
+// Kubernetes provider where the API server must be port-forwarded before
+// scale commands can connect.
+func (p *Provisioner) CreateCluster(ctx context.Context, name string) error {
 	target := p.resolveName(name)
 
 	configPath, cleanup, err := p.resolveConfigPath()
@@ -209,9 +221,22 @@ func (p *Provisioner) Create(ctx context.Context, name string) error {
 		}
 	}
 
-	err = createWithRetry(ctx, createRetryDelay, createAttempt, cleanupAttempt)
+	return createWithRetry(ctx, createRetryDelay, createAttempt, cleanupAttempt)
+}
+
+// ScaleNodes creates one simulated node so the kube-scheduler can place pods.
+// This is separated from CreateCluster so that the Kubernetes provider can
+// port-forward the API server before calling scale.
+func (p *Provisioner) ScaleNodes(ctx context.Context, name string) error {
+	target := p.resolveName(name)
+
+	configPath, cleanup, err := p.resolveConfigPath()
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to scale KWOK cluster: %w", err)
+	}
+
+	if cleanup != nil {
+		defer cleanup()
 	}
 
 	return p.withCluster(ctx, target, configPath, p.runScaleCommand)

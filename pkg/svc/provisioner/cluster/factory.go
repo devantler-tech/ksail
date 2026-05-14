@@ -239,7 +239,10 @@ func (f DefaultFactory) createKindKubernetesProvisioner(
 	kindConfig *v1alpha4.Cluster,
 ) (Provisioner, any, error) {
 	opts := cluster.Spec.Provider.Kubernetes
-	clusterName := cluster.Metadata.Name
+
+	// Use kindConfig.Name — it's set by applyClusterNameOverride,
+	// while cluster.Metadata.Name may be empty with --name flag.
+	clusterName := kindConfig.Name
 
 	// Build host cluster clients
 	hostClient, restConfig, dynClient, err := buildHostClusterClients(opts)
@@ -325,7 +328,17 @@ func (f DefaultFactory) createK3dKubernetesProvisioner(
 	cluster *v1alpha1.Cluster,
 ) (Provisioner, any, error) {
 	opts := cluster.Spec.Provider.Kubernetes
-	clusterName := cluster.Metadata.Name
+
+	// resolveClusterNameFromContext normally extracts from k3dConfig.Name,
+	// but k3d config is skipped for the Kubernetes provider path.
+	// Derive from connection context (set by applyClusterNameOverride),
+	// stripping the "k3d-" prefix that ContextName() adds.
+	clusterName := strings.TrimPrefix(
+		cluster.Spec.Cluster.Connection.Context, "k3d-",
+	)
+	if clusterName == "" {
+		clusterName = cluster.Metadata.Name
+	}
 
 	// Build host cluster clients
 	hostClient, restConfig, _, err := buildHostClusterClients(opts)
@@ -635,7 +648,12 @@ func (f DefaultFactory) createTalosKubernetesProvisioner(
 	}
 
 	opts := cluster.Spec.Provider.Kubernetes
-	clusterName := cluster.Metadata.Name
+
+	// Derive cluster name from Talos config (set by applyClusterNameOverride).
+	clusterName := f.DistributionConfig.Talos.GetClusterName()
+	if clusterName == "" {
+		clusterName = cluster.Metadata.Name
+	}
 
 	hostClient, restConfig, dynClient, err := buildHostClusterClients(opts)
 	if err != nil {
@@ -721,7 +739,17 @@ func (f DefaultFactory) createVClusterKubernetesProvisioner(
 	cluster *v1alpha1.Cluster,
 ) (Provisioner, any, error) {
 	opts := cluster.Spec.Provider.Kubernetes
-	clusterName := cluster.Metadata.Name
+
+	// Use VCluster config name (set by applyClusterNameOverride).
+	vclusterConfig := f.DistributionConfig.VCluster
+	clusterName := ""
+	if vclusterConfig != nil {
+		clusterName = vclusterConfig.Name
+	}
+
+	if clusterName == "" {
+		clusterName = cluster.Metadata.Name
+	}
 
 	// Build host cluster clients
 	hostClient, restConfig, _, err := buildHostClusterClients(opts)
@@ -735,7 +763,6 @@ func (f DefaultFactory) createVClusterKubernetesProvisioner(
 		return nil, nil, fmt.Errorf("create kubernetes provider: %w", err)
 	}
 
-	vclusterConfig := f.DistributionConfig.VCluster
 	var valuesPath string
 	var disableFlannel bool
 	if vclusterConfig != nil {
@@ -760,7 +787,7 @@ func (f DefaultFactory) createVClusterKubernetesProvisioner(
 }
 
 func (f DefaultFactory) createKWOKProvisioner(
-	_ *v1alpha1.Cluster,
+	cluster *v1alpha1.Cluster,
 ) (Provisioner, any, error) {
 	if f.DistributionConfig.KWOK == nil {
 		return nil, nil, fmt.Errorf(
@@ -771,10 +798,57 @@ func (f DefaultFactory) createKWOKProvisioner(
 
 	kwokConfig := f.DistributionConfig.KWOK
 
+	// Kubernetes provider: run KWOK inside a DinD pod on the host cluster
+	if cluster.Spec.Cluster.Provider == v1alpha1.ProviderKubernetes {
+		return f.createKWOKKubernetesProvisioner(cluster, kwokConfig)
+	}
+
 	provisioner := kwokprovisioner.NewProvisioner(
 		kwokConfig.Name,
 		kwokConfig.ConfigPath,
 		nil,
+	)
+
+	return provisioner, kwokConfig, nil
+}
+
+// createKWOKKubernetesProvisioner creates a KWOK provisioner that runs inside
+// a DinD pod on a host Kubernetes cluster.
+func (f DefaultFactory) createKWOKKubernetesProvisioner(
+	cluster *v1alpha1.Cluster,
+	kwokConfig *KWOKConfig,
+) (Provisioner, any, error) {
+	opts := cluster.Spec.Provider.Kubernetes
+
+	// Build host cluster clients
+	hostClient, restConfig, dynClient, err := buildHostClusterClients(opts)
+	if err != nil {
+		return nil, nil, fmt.Errorf("build host cluster clients: %w", err)
+	}
+
+	// Create the Kubernetes provider
+	k8sProvider, err := kubernetesprovider.NewProvider(hostClient, opts)
+	if err != nil {
+		return nil, nil, fmt.Errorf("create Kubernetes provider: %w", err)
+	}
+
+	// Use kwokConfig.Name as the cluster name — it's always set correctly
+	// by applyClusterNameOverride, while cluster.Metadata.Name may be empty
+	// when using --name flag without a ksail.yaml file.
+	clusterName := kwokConfig.Name
+
+	provisioner := kwokprovisioner.NewKubernetesProvisioner(
+		kwokprovisioner.KubernetesProvisionerConfig{
+			Name:             kwokConfig.Name,
+			ConfigPath:       kwokConfig.ConfigPath,
+			KubeconfigPath:   cluster.Spec.Cluster.Connection.Kubeconfig,
+			K8sProvider:      k8sProvider,
+			DynamicClient:    dynClient,
+			RestConfig:       restConfig,
+			ClusterName:      clusterName,
+			Distribution:     string(cluster.Spec.Cluster.Distribution),
+			GatewayClassName: opts.GatewayClassName,
+		},
 	)
 
 	return provisioner, kwokConfig, nil

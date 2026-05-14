@@ -80,7 +80,7 @@ func supportedProviders(distribution Distribution) []Provider {
 	case DistributionVanilla, DistributionK3s, DistributionVCluster:
 		return []Provider{ProviderDocker, ProviderKubernetes}
 	case DistributionKWOK:
-		return []Provider{ProviderDocker}
+		return []Provider{ProviderDocker, ProviderKubernetes}
 	case DistributionTalos:
 		return []Provider{ProviderDocker, ProviderHetzner, ProviderOmni, ProviderKubernetes}
 	case DistributionEKS:
