@@ -4171,8 +4171,10 @@ func NewWaitCmd() *cobra.Command {
 var errNotDirectory = errors.New("watch path is not a directory")
 
 // errHookFailed is returned when a pre-apply hook command fails.
-var errHookFailed = errors.New("pre-apply hook failed")
-var errStdinFDOverflow = errors.New("stdin file descriptor overflows int")
+var (
+	errHookFailed      = errors.New("pre-apply hook failed")
+	errStdinFDOverflow = errors.New("stdin file descriptor overflows int")
+)
 
 // runHooks executes hook commands sequentially via the platform shell.
 // If any hook fails, execution stops and an error is returned (fail-fast).
