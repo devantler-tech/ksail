@@ -55,7 +55,7 @@ const remediationPVCPending = "Verify a matching StorageClass exists and the pro
 // by checking for known substring matches against common Kubernetes failure
 // patterns. Returns an empty string when no hint is available.
 //
-//nolint:cyclop // Switch covers all known failure patterns; splitting would scatter the lookup.
+
 func lookupRemediation(reason string) string {
 	type hint struct {
 		pattern string
@@ -212,7 +212,9 @@ func appendNamespacePVCFindings(
 	namespace string,
 	findings *[]DiagnoseFinding,
 ) {
-	pvcs, err := clientset.CoreV1().PersistentVolumeClaims(namespace).List(ctx, metav1.ListOptions{})
+	pvcs, err := clientset.CoreV1().
+		PersistentVolumeClaims(namespace).
+		List(ctx, metav1.ListOptions{})
 	if err != nil {
 		*findings = append(*findings, DiagnoseFinding{
 			Severity:    DiagnoseSeverityWarning,
@@ -419,7 +421,9 @@ func DiagnosePVCPending(
 	var builder strings.Builder
 
 	for _, namespace := range namespaces {
-		pvcs, err := clientset.CoreV1().PersistentVolumeClaims(namespace).List(ctx, metav1.ListOptions{})
+		pvcs, err := clientset.CoreV1().
+			PersistentVolumeClaims(namespace).
+			List(ctx, metav1.ListOptions{})
 		if err != nil {
 			fmt.Fprintf(&builder, "\n  (failed to list PVCs in %s: %v)", namespace, err)
 
