@@ -4023,6 +4023,10 @@ func getKubernetesClusters(ctx context.Context, deps ListDeps) ([]clusterWithDis
 		return nil, err
 	}
 
+	if prov == nil {
+		return []clusterWithDistribution{}, nil
+	}
+
 	infos, err := prov.ListAllClustersWithDistribution(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list Kubernetes clusters: %w", err)
@@ -4046,7 +4050,7 @@ func getKubernetesProviderFromConfig() (*kubernetesprovider.Provider, error) {
 
 	// Skip silently when the kubeconfig file does not exist.
 	if _, statErr := os.Stat(expandedPath); os.IsNotExist(statErr) {
-		return nil, nil
+		return nil, nil //nolint:nilnil
 	}
 
 	canonicalPath, err := fsutil.EvalCanonicalPath(expandedPath) //nolint:gosec // path already validated by os.Stat
@@ -4059,7 +4063,7 @@ func getKubernetesProviderFromConfig() (*kubernetesprovider.Provider, error) {
 	restConfig, err := k8s.BuildRESTConfig(canonicalPath, hostContext)
 	if err != nil {
 		// If the kubeconfig is present but invalid or unreachable, skip silently.
-		return nil, nil //nolint:nilerr
+		return nil, nil //nolint:nilnil
 	}
 
 	clientset, err := kubernetes.NewForConfig(restConfig)
@@ -4082,6 +4086,7 @@ func toKubernetesClusters(infos []kubernetesprovider.ClusterInfo) []clusterWithD
 
 	for _, info := range infos {
 		var dist v1alpha1.Distribution
+
 		err := dist.Set(info.Distribution)
 		if err != nil {
 			dist = v1alpha1.DistributionVanilla
