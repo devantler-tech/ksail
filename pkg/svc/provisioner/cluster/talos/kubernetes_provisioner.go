@@ -11,7 +11,7 @@ import (
 	dockerclient "github.com/docker/docker/client"
 
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
-	kubernetessprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/kubernetes"
+	kubernetesprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/kubernetes"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/kernelmod"
 	"github.com/siderolabs/talos/pkg/provision"
 	"github.com/siderolabs/talos/pkg/provision/access"
@@ -29,14 +29,14 @@ import (
 // two-phase create flow needed for DinD.
 type KubernetesProvisioner struct {
 	inner            *Provisioner
-	k8sProvider      *kubernetessprovider.Provider
+	k8sProvider      *kubernetesprovider.Provider
 	dynamicClient    dynamic.Interface
 	restConfig       *rest.Config
 	clusterName      string
 	distribution     string
 	gatewayClassName string
 	kubeconfigPath   string
-	portForwards     []*kubernetessprovider.PortForwardSession
+	portForwards     []*kubernetesprovider.PortForwardSession
 }
 
 // KubernetesProvisionerConfig holds configuration for creating a KubernetesProvisioner.
@@ -46,7 +46,7 @@ type KubernetesProvisionerConfig struct {
 	// KubeconfigPath is the path to the nested cluster's kubeconfig.
 	KubeconfigPath string
 	// K8sProvider is the Kubernetes infrastructure provider.
-	K8sProvider *kubernetessprovider.Provider
+	K8sProvider *kubernetesprovider.Provider
 	// DynamicClient is the dynamic client for Gateway API resources.
 	DynamicClient dynamic.Interface
 	// RestConfig is the REST config for port-forwarding to the DinD pod.
@@ -100,9 +100,9 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 	// which correctly handles Docker's HTTP connection hijacking (101 Upgrade)
 	// for docker exec operations.
 	dockerPF, err := p.k8sProvider.StartExecTunnel(
-		ctx, p.restConfig, p.clusterName,
-		kubernetessprovider.DinDPodName, kubernetessprovider.DinDContainerName,
-		kubernetessprovider.DinDDockerPort,
+		ctx, p.restConfig, clusterName,
+		kubernetesprovider.DinDPodName, kubernetesprovider.DinDContainerName,
+		kubernetesprovider.DinDDockerPort,
 	)
 	if err != nil {
 		return fmt.Errorf("port-forward Docker API: %w", err)
@@ -199,7 +199,7 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 	// Port-forward Talos API from DinD to host
 	talosPF, err := p.k8sProvider.StartPortForward(
 		ctx, p.restConfig, p.clusterName,
-		kubernetessprovider.DinDPodName, talosPort,
+		kubernetesprovider.DinDPodName, talosPort,
 	)
 	if err != nil {
 		return fmt.Errorf("port-forward Talos API: %w", err)
@@ -210,7 +210,7 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 	// Port-forward K8s API from DinD to host
 	k8sPF, err := p.k8sProvider.StartPortForward(
 		ctx, p.restConfig, p.clusterName,
-		kubernetessprovider.DinDPodName, k8sPort,
+		kubernetesprovider.DinDPodName, k8sPort,
 	)
 	if err != nil {
 		return fmt.Errorf("port-forward K8s API: %w", err)
@@ -283,13 +283,13 @@ func (p *KubernetesProvisioner) Delete(ctx context.Context, name string) error {
 	// Best-effort: delete Talos cluster inside DinD via SDK
 	dockerPF, pfErr := p.k8sProvider.StartExecTunnel(
 		ctx, p.restConfig, p.clusterName,
-		kubernetessprovider.DinDPodName, kubernetessprovider.DinDContainerName,
-		kubernetessprovider.DinDDockerPort,
+		kubernetesprovider.DinDPodName, kubernetesprovider.DinDContainerName,
+		kubernetesprovider.DinDDockerPort,
 	)
 	if pfErr == nil {
 		defer dockerPF.Close()
 
-		_ = kubernetessprovider.WithRemoteDockerHost(dockerPF, func() error {
+		_ = kubernetesprovider.WithRemoteDockerHost(dockerPF, func() error {
 			dindClient, clientErr := dockerclient.NewClientWithOpts(
 				dockerclient.FromEnv,
 				dockerclient.WithAPIVersionNegotiation(),

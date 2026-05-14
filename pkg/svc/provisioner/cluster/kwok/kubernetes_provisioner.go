@@ -10,7 +10,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
-	kubernetessprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/kubernetes"
+	kubernetesprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/kubernetes"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -23,14 +23,14 @@ import (
 type KubernetesProvisioner struct {
 	*Provisioner
 
-	k8sProvider      *kubernetessprovider.Provider
+	k8sProvider      *kubernetesprovider.Provider
 	dynamicClient    dynamic.Interface
 	restConfig       *rest.Config
 	clusterName      string
 	distribution     string
 	gatewayClassName string
 	kubeconfigPath   string
-	portForward      *kubernetessprovider.PortForwardSession
+	portForward      *kubernetesprovider.PortForwardSession
 }
 
 // KubernetesProvisionerConfig holds configuration for creating a KubernetesProvisioner.
@@ -42,7 +42,7 @@ type KubernetesProvisionerConfig struct {
 	// KubeconfigPath is the path to the nested cluster's kubeconfig.
 	KubeconfigPath string
 	// K8sProvider is the Kubernetes infrastructure provider.
-	K8sProvider *kubernetessprovider.Provider
+	K8sProvider *kubernetesprovider.Provider
 	// DynamicClient is the dynamic client for Gateway API resources.
 	DynamicClient dynamic.Interface
 	// RestConfig is the REST config for port-forwarding to the DinD pod.
@@ -110,9 +110,9 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 
 	// Step 3: Start exec tunnel for Docker API (2375)
 	dockerPF, err := p.k8sProvider.StartExecTunnel(
-		ctx, p.restConfig, p.clusterName,
-		kubernetessprovider.DinDPodName, kubernetessprovider.DinDContainerName,
-		kubernetessprovider.DinDDockerPort,
+		ctx, p.restConfig, target,
+		kubernetesprovider.DinDPodName, kubernetesprovider.DinDContainerName,
+		kubernetesprovider.DinDDockerPort,
 	)
 	if err != nil {
 		return fmt.Errorf("exec tunnel Docker API: %w", err)
@@ -126,7 +126,7 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 	// but crash-loop because the placeholder files are empty.
 	fmt.Fprintln(os.Stdout, "► creating KWOK cluster via SDK (DOCKER_HOST → exec tunnel → DinD)")
 
-	err = kubernetessprovider.WithRemoteDockerHost(dockerPF, func() error {
+	err = kubernetesprovider.WithRemoteDockerHost(dockerPF, func() error {
 		return p.Provisioner.CreateCluster(ctx, name)
 	})
 	if err != nil {
@@ -160,7 +160,7 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 
 	pf, err := p.k8sProvider.StartPortForward(
 		ctx, p.restConfig, p.clusterName,
-		kubernetessprovider.DinDPodName, apiServerPort,
+		kubernetesprovider.DinDPodName, apiServerPort,
 	)
 	if err != nil {
 		return fmt.Errorf("port-forward API server: %w", err)
@@ -205,13 +205,13 @@ func (p *KubernetesProvisioner) Delete(ctx context.Context, name string) error {
 	// Best-effort: delete KWOK cluster inside DinD via SDK
 	dockerPF, pfErr := p.k8sProvider.StartExecTunnel(
 		ctx, p.restConfig, p.clusterName,
-		kubernetessprovider.DinDPodName, kubernetessprovider.DinDContainerName,
-		kubernetessprovider.DinDDockerPort,
+		kubernetesprovider.DinDPodName, kubernetesprovider.DinDContainerName,
+		kubernetesprovider.DinDDockerPort,
 	)
 	if pfErr == nil {
 		defer dockerPF.Close()
 
-		_ = kubernetessprovider.WithRemoteDockerHost(dockerPF, func() error {
+		_ = kubernetesprovider.WithRemoteDockerHost(dockerPF, func() error {
 			return p.Provisioner.Delete(ctx, name)
 		})
 	}
@@ -352,13 +352,14 @@ func (p *KubernetesProvisioner) createPlaceholderFiles(ctx context.Context, clus
 		filepath.Join(stateDir, "kwok.yaml"),
 	}
 
-	mkdirCmd := fmt.Sprintf("mkdir -p %s", pkiDir)
+	mkdirCmd := fmt.Sprintf("mkdir -p '%s'", strings.ReplaceAll(pkiDir, "'", "'\\''"))
 	if _, err := p.k8sProvider.ExecInDinD(ctx, p.restConfig, p.clusterName, mkdirCmd); err != nil {
 		return fmt.Errorf("mkdir pki: %w", err)
 	}
 
 	for _, path := range placeholders {
-		touchCmd := fmt.Sprintf("touch %s", path)
+		escapedPath := strings.ReplaceAll(path, "'", "'\\''")
+		touchCmd := fmt.Sprintf("touch '%s'", escapedPath)
 		if _, err := p.k8sProvider.ExecInDinD(ctx, p.restConfig, p.clusterName, touchCmd); err != nil {
 			return fmt.Errorf("touch %s: %w", path, err)
 		}

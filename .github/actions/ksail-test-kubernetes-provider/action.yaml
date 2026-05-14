@@ -1,8 +1,8 @@
 name: KSail Test Kubernetes Provider
 description: |
-  Tests the Kubernetes provider by creating nested clusters (all 5 distributions)
-  on top of the currently active host cluster. Each nested cluster is created,
-  verified via `ksail cluster info`, and then deleted.
+  Tests the Kubernetes provider by creating nested clusters (4 distributions:
+  Vanilla, K3s, VCluster, Talos) on top of the currently active host cluster.
+  Each nested cluster is created, verified via `ksail cluster info`, and then deleted.
 
   Prerequisites:
   - A healthy host cluster must already be active (reachable via current kubeconfig context)
@@ -75,8 +75,8 @@ runs:
               echo "  ✅ $DIST info succeeded"
               PASSED=$((PASSED + 1))
             else
-              echo "  ⚠️ $DIST info failed (cluster may still be functional)"
-              PASSED=$((PASSED + 1))
+              echo "  ❌ $DIST info FAILED"
+              FAILED=$((FAILED + 1))
             fi
           fi
 
