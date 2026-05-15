@@ -78,7 +78,7 @@ require (
 	github.com/siderolabs/image-factory v1.2.0
 	github.com/siderolabs/omni/client v1.7.2
 	golang.org/x/oauth2 v0.36.0
-	golang.org/x/text v0.36.0
+	golang.org/x/text v0.37.0
 	google.golang.org/grpc v1.81.0
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/klog/v2 v2.140.0
