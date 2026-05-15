@@ -135,10 +135,25 @@ func (p *K3kProvisioner) Create(ctx context.Context, name string) error {
 
 	namespace := k3kNamespacePrefix + clusterName
 
+	// Preserve the host kubeconfig's current-context. MergeKubeconfig overwrites
+	// current-context with the nested cluster's context, which would cause subsequent
+	// Kubernetes provider operations (info, delete) to connect to the nested cluster
+	// instead of the host cluster.
+	originalContext, err := k8s.GetKubeconfigCurrentContext(p.kubeconfigPath)
+	if err != nil {
+		return fmt.Errorf("read current kubeconfig context: %w", err)
+	}
+
+	defer func() {
+		if restoreErr := k8s.SetKubeconfigCurrentContext(p.kubeconfigPath, originalContext); restoreErr != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "warning: failed to restore kubeconfig context: %v\n", restoreErr)
+		}
+	}()
+
 	// Step 1: Ensure the k3k operator is installed
 	_, _ = fmt.Fprintln(os.Stdout, "► ensuring k3k operator is installed")
 
-	err := p.ensureK3kOperator(ctx)
+	err = p.ensureK3kOperator(ctx)
 	if err != nil {
 		return fmt.Errorf("ensure k3k operator: %w", err)
 	}

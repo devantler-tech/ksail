@@ -101,8 +101,23 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 		clusterName = p.clusterName
 	}
 
+	// Preserve the host kubeconfig's current-context. MergeKubeconfig overwrites
+	// current-context with the nested cluster's context, which would cause subsequent
+	// Kubernetes provider operations (info, delete) to connect to the nested cluster
+	// instead of the host cluster.
+	originalContext, err := k8s.GetKubeconfigCurrentContext(p.kubeconfigPath)
+	if err != nil {
+		return fmt.Errorf("read current kubeconfig context: %w", err)
+	}
+
+	defer func() {
+		if restoreErr := k8s.SetKubeconfigCurrentContext(p.kubeconfigPath, originalContext); restoreErr != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "warning: failed to restore kubeconfig context: %v\n", restoreErr)
+		}
+	}()
+
 	// Step 1: Ensure namespace + DinD pod
-	err := p.setupDinD(ctx, clusterName)
+	err = p.setupDinD(ctx, clusterName)
 	if err != nil {
 		return err
 	}
