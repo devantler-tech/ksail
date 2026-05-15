@@ -1,14 +1,13 @@
 package kubernetes
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"strconv"
 	"sync"
-
-	"context"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/httpstream" //nolint:staticcheck // deprecated but no available replacement at this client-go version
@@ -127,6 +126,7 @@ func (tp *tcpProxy) nextRequestID() int {
 
 // handleConnection forwards a single TCP connection to the pod via SPDY streams.
 // If the SPDY connection is dead, it transparently re-dials before creating streams.
+//
 //nolint:funlen // TCP connection handling with bidirectional relay — extracting would obscure the flow.
 func (tp *tcpProxy) handleConnection(localConn net.Conn) {
 	defer func() { _ = localConn.Close() }()
@@ -190,12 +190,14 @@ func (tp *tcpProxy) handleConnection(localConn net.Conn) {
 
 	go func() {
 		_, _ = io.Copy(localConn, dataStream)
+
 		close(remoteDone)
 	}()
 
 	go func() {
 		_, _ = io.Copy(dataStream, localConn)
 		_ = dataStream.Close()
+
 		close(localDone)
 	}()
 

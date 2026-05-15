@@ -143,6 +143,7 @@ func (p *Provider) ListAllClustersWithDistribution(ctx context.Context) ([]Clust
 		if clusterName == "" {
 			// Fall back to stripping the ksail- prefix for older namespaces.
 			var ok bool
+
 			clusterName, ok = strings.CutPrefix(nsItem.Name, NamespacePrefix)
 			if !ok {
 				continue

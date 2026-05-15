@@ -35,7 +35,11 @@ func (p *Provider) SetupDinD(
 
 // TeardownDinD is a composite operation that removes API exposure, DinD pod,
 // and the namespace. It combines DeleteAPIExposure + DeleteDinD + DeleteNodes.
-func (p *Provider) TeardownDinD(ctx context.Context, dynClient dynamic.Interface, clusterName string) error {
+func (p *Provider) TeardownDinD(
+	ctx context.Context,
+	dynClient dynamic.Interface,
+	clusterName string,
+) error {
 	err := p.DeleteAPIExposure(ctx, dynClient, clusterName)
 	if err != nil {
 		return fmt.Errorf("delete API exposure: %w", err)

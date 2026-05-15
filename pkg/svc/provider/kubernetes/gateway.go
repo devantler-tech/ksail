@@ -26,6 +26,9 @@ const (
 	// TCPRouteName is the name of the TCPRoute resource.
 	TCPRouteName = "ksail-apiserver"
 
+	// gatewayNameKey is the JSON key for Gateway name in status.
+	gatewayNameKey = "name"
+
 	// gatewayReadyPollInterval is the interval between Gateway status checks.
 	gatewayReadyPollInterval = 3 * time.Second
 
@@ -102,10 +105,13 @@ func (p *Provider) ensureAPIService(
 
 	_, err := p.client.CoreV1().Services(namespace).Create(ctx, svc, metav1.CreateOptions{})
 	if errors.IsAlreadyExists(err) {
-		existing, getErr := p.client.CoreV1().Services(namespace).Get(ctx, APIServiceName, metav1.GetOptions{})
+		existing, getErr := p.client.CoreV1().
+			Services(namespace).
+			Get(ctx, APIServiceName, metav1.GetOptions{})
 		if getErr != nil {
 			return fmt.Errorf("get existing API server service: %w", getErr)
 		}
+
 		svc.ResourceVersion = existing.ResourceVersion
 		svc.Spec.ClusterIP = existing.Spec.ClusterIP // ClusterIP is immutable; preserve it
 		_, err = p.client.CoreV1().Services(namespace).Update(ctx, svc, metav1.UpdateOptions{})
@@ -137,6 +143,7 @@ func (p *Provider) ensureGateway(
 		if getErr != nil {
 			return fmt.Errorf("get existing Gateway: %w", getErr)
 		}
+
 		gateway.SetResourceVersion(existing.GetResourceVersion())
 		_, err = dynamicClient.Resource(gatewayGVR()).Namespace(namespace).Update(
 			ctx, gateway, metav1.UpdateOptions{},
@@ -168,6 +175,7 @@ func (p *Provider) ensureTCPRoute(
 		if getErr != nil {
 			return fmt.Errorf("get existing TCPRoute: %w", getErr)
 		}
+
 		route.SetResourceVersion(existing.GetResourceVersion())
 		_, err = dynamicClient.Resource(tcpRouteGVR()).Namespace(namespace).Update(
 			ctx, route, metav1.UpdateOptions{},
@@ -311,16 +319,16 @@ func buildGateway(clusterName, gatewayClassName string, apiPort int32) *unstruct
 			"apiVersion": "gateway.networking.k8s.io/v1",
 			"kind":       "Gateway",
 			"metadata": map[string]any{
-				"name":   GatewayName,
-				"labels": toAnyMap(labels),
+				gatewayNameKey: GatewayName,
+				"labels":       toAnyMap(labels),
 			},
 			"spec": map[string]any{
 				"gatewayClassName": gatewayClassName,
 				"listeners": []any{
 					map[string]any{
-						"name":     "apiserver",
-						"protocol": "TCP",
-						"port":     int64(apiPort),
+						gatewayNameKey: APIServiceName,
+						"protocol":     "TCP",
+						"port":         int64(apiPort),
 					},
 				},
 			},
@@ -337,14 +345,14 @@ func buildTCPRoute(clusterName string, apiPort int32) *unstructured.Unstructured
 			"apiVersion": "gateway.networking.k8s.io/v1alpha2",
 			"kind":       "TCPRoute",
 			"metadata": map[string]any{
-				"name":   TCPRouteName,
-				"labels": toAnyMap(labels),
+				gatewayNameKey: TCPRouteName,
+				"labels":       toAnyMap(labels),
 			},
 			"spec": map[string]any{
 				"parentRefs": []any{
 					map[string]any{
-						"name":      GatewayName,
-						"namespace": namespaceName,
+						gatewayNameKey: GatewayName,
+						"namespace":    namespaceName,
 					},
 				},
 				"rules": []any{
@@ -417,6 +425,7 @@ func extractGatewayPort(gateway *unstructured.Unstructured) int32 {
 	}
 
 	var port int64
+
 	switch v := listenerMap["port"].(type) {
 	case int64:
 		port = v

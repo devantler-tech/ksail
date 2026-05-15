@@ -8,7 +8,16 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
-func TestExtractGatewayPort(t *testing.T) { //nolint:funlen // table test with many Gateway status variants
+const (
+	// Test constants for Gateway status structure.
+	testListenersKey = "listeners"
+	testPortKey      = "port"
+	testAddressesKey = "addresses"
+	testValueKey     = "value"
+)
+
+//nolint:funlen // table test with many Gateway status variants
+func TestExtractGatewayPort(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -29,15 +38,15 @@ func TestExtractGatewayPort(t *testing.T) { //nolint:funlen // table test with m
 		{
 			name: "empty_listeners",
 			status: map[string]any{
-				"listeners": []any{},
+				testListenersKey: []any{},
 			},
 			expected: kubeprovider.DinDAPIServerPort,
 		},
 		{
 			name: "port_as_int64",
 			status: map[string]any{
-				"listeners": []any{
-					map[string]any{"port": int64(7001)},
+				testListenersKey: []any{
+					map[string]any{testPortKey: int64(7001)},
 				},
 			},
 			expected: 7001,
@@ -45,8 +54,8 @@ func TestExtractGatewayPort(t *testing.T) { //nolint:funlen // table test with m
 		{
 			name: "port_as_float64",
 			status: map[string]any{
-				"listeners": []any{
-					map[string]any{"port": float64(8443)},
+				testListenersKey: []any{
+					map[string]any{testPortKey: float64(8443)},
 				},
 			},
 			expected: 8443,
@@ -54,8 +63,8 @@ func TestExtractGatewayPort(t *testing.T) { //nolint:funlen // table test with m
 		{
 			name: "port_as_string_fallback",
 			status: map[string]any{
-				"listeners": []any{
-					map[string]any{"port": "invalid"},
+				testListenersKey: []any{
+					map[string]any{testPortKey: "invalid"},
 				},
 			},
 			expected: kubeprovider.DinDAPIServerPort,
@@ -63,8 +72,8 @@ func TestExtractGatewayPort(t *testing.T) { //nolint:funlen // table test with m
 		{
 			name: "port_out_of_range",
 			status: map[string]any{
-				"listeners": []any{
-					map[string]any{"port": int64(99999)},
+				testListenersKey: []any{
+					map[string]any{testPortKey: int64(99999)},
 				},
 			},
 			expected: kubeprovider.DinDAPIServerPort,
@@ -72,8 +81,8 @@ func TestExtractGatewayPort(t *testing.T) { //nolint:funlen // table test with m
 		{
 			name: "port_zero",
 			status: map[string]any{
-				"listeners": []any{
-					map[string]any{"port": int64(0)},
+				testListenersKey: []any{
+					map[string]any{testPortKey: int64(0)},
 				},
 			},
 			expected: kubeprovider.DinDAPIServerPort,
@@ -103,10 +112,10 @@ func TestExtractGatewayAddressValue(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name      string
-		status    map[string]any
-		expected  string
-		expectOK  bool
+		name     string
+		status   map[string]any
+		expected string
+		expectOK bool
 	}{
 		{
 			name:     "no_status",
@@ -117,7 +126,7 @@ func TestExtractGatewayAddressValue(t *testing.T) {
 		{
 			name: "no_addresses",
 			status: map[string]any{
-				"addresses": []any{},
+				testAddressesKey: []any{},
 			},
 			expected: "",
 			expectOK: false,
@@ -125,8 +134,8 @@ func TestExtractGatewayAddressValue(t *testing.T) {
 		{
 			name: "valid_ip_address",
 			status: map[string]any{
-				"addresses": []any{
-					map[string]any{"value": "10.0.0.1"},
+				testAddressesKey: []any{
+					map[string]any{testValueKey: "10.0.0.1"},
 				},
 			},
 			expected: "10.0.0.1",
@@ -135,8 +144,8 @@ func TestExtractGatewayAddressValue(t *testing.T) {
 		{
 			name: "hostname_address",
 			status: map[string]any{
-				"addresses": []any{
-					map[string]any{"value": "gw.example.com"},
+				testAddressesKey: []any{
+					map[string]any{testValueKey: "gw.example.com"},
 				},
 			},
 			expected: "gw.example.com",
@@ -145,8 +154,8 @@ func TestExtractGatewayAddressValue(t *testing.T) {
 		{
 			name: "empty_value",
 			status: map[string]any{
-				"addresses": []any{
-					map[string]any{"value": ""},
+				testAddressesKey: []any{
+					map[string]any{testValueKey: ""},
 				},
 			},
 			expected: "",

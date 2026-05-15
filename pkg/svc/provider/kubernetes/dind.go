@@ -141,7 +141,10 @@ func (p *Provider) DeleteDinD(ctx context.Context, clusterName string) error {
 	return nil
 }
 
-func buildDinDPod(clusterName, distribution string, persistence v1alpha1.KubernetesPersistence) *corev1.Pod {
+func buildDinDPod(
+	clusterName, distribution string,
+	persistence v1alpha1.KubernetesPersistence,
+) *corev1.Pod {
 	labels := NodeLabels(clusterName, RoleControlPlane, distribution)
 	labels[LabelApp] = DinDPodName
 
@@ -188,7 +191,7 @@ func buildDinDContainer() corev1.Container {
 				ContainerPort: DinDDockerPort,
 			},
 			{
-				Name:          "apiserver",
+				Name:          APIServiceName,
 				ContainerPort: DinDAPIServerPort,
 			},
 		},
@@ -284,7 +287,9 @@ func (p *Provider) ensurePVC(
 		pvc.Spec.StorageClassName = &storageClassName
 	}
 
-	_, err = p.client.CoreV1().PersistentVolumeClaims(namespace).Create(ctx, pvc, metav1.CreateOptions{})
+	_, err = p.client.CoreV1().
+		PersistentVolumeClaims(namespace).
+		Create(ctx, pvc, metav1.CreateOptions{})
 	if err != nil && !errors.IsAlreadyExists(err) {
 		return fmt.Errorf("create PVC: %w", err)
 	}
@@ -306,7 +311,7 @@ func buildDinDService(clusterName string) *corev1.Service {
 			},
 			Ports: []corev1.ServicePort{
 				{
-					Name:       "apiserver",
+					Name:       APIServiceName,
 					Port:       DinDAPIServerPort,
 					TargetPort: intstr.FromInt32(DinDAPIServerPort),
 				},

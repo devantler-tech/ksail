@@ -92,7 +92,15 @@ func startExecTunnel(
 	namespace, podName, containerName string,
 	podPort int,
 ) (*PortForwardSession, error) {
-	tunnel, err := newExecTunnel(ctx, clientset, restConfig, namespace, podName, containerName, podPort)
+	tunnel, err := newExecTunnel(
+		ctx,
+		clientset,
+		restConfig,
+		namespace,
+		podName,
+		containerName,
+		podPort,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("create exec tunnel: %w", err)
 	}

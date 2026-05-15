@@ -14,6 +14,10 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 )
 
+const (
+	testClusterCPPodName = "test-cluster-cp-0"
+)
+
 func TestNewProvider(t *testing.T) {
 	t.Parallel()
 
@@ -57,27 +61,31 @@ func TestProvider_ListNodes_Empty(t *testing.T) {
 func TestProvider_ListNodes_WithPods(t *testing.T) {
 	t.Parallel()
 
-	ns := kubeprovider.NamespaceName("test-cluster")
+	namespace := kubeprovider.NamespaceName("test-cluster")
 
 	client := fake.NewClientset(
 		&corev1.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:   ns,
+				Name:   namespace,
 				Labels: kubeprovider.CommonLabels("test-cluster"),
 			},
 		},
 		&corev1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-cluster-cp-0",
-				Namespace: ns,
-				Labels:    kubeprovider.NodeLabels("test-cluster", kubeprovider.RoleControlPlane, "K3s"),
+				Name:      testClusterCPPodName,
+				Namespace: namespace,
+				Labels: kubeprovider.NodeLabels(
+					"test-cluster",
+					kubeprovider.RoleControlPlane,
+					"K3s",
+				),
 			},
 			Status: corev1.PodStatus{Phase: corev1.PodRunning},
 		},
 		&corev1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-cluster-worker-0",
-				Namespace: ns,
+				Namespace: namespace,
 				Labels:    kubeprovider.NodeLabels("test-cluster", kubeprovider.RoleWorker, "K3s"),
 			},
 			Status: corev1.PodStatus{Phase: corev1.PodRunning},
@@ -140,7 +148,11 @@ func TestProvider_NodesExist(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-cluster-cp-0",
 				Namespace: namespaceName,
-				Labels:    kubeprovider.NodeLabels("test-cluster", kubeprovider.RoleControlPlane, "K3s"),
+				Labels: kubeprovider.NodeLabels(
+					"test-cluster",
+					kubeprovider.RoleControlPlane,
+					"K3s",
+				),
 			},
 		},
 	)
@@ -190,27 +202,31 @@ func TestProvider_EnsureNamespace(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify namespace was created with correct labels
-	ns, err := client.CoreV1().Namespaces().Get(
+	namespace, err := client.CoreV1().Namespaces().Get(
 		context.Background(),
 		"ksail-my-cluster",
 		metav1.GetOptions{},
 	)
 	require.NoError(t, err)
-	assert.Equal(t, "ksail", ns.Labels[kubeprovider.LabelManagedBy])
-	assert.Equal(t, "my-cluster", ns.Labels[kubeprovider.LabelClusterName])
+	assert.Equal(t, "ksail", namespace.Labels[kubeprovider.LabelManagedBy])
+	assert.Equal(t, "my-cluster", namespace.Labels[kubeprovider.LabelClusterName])
 }
 
 func TestProvider_GetClusterStatus(t *testing.T) {
 	t.Parallel()
 
-	ns := kubeprovider.NamespaceName("test-cluster")
+	namespace := kubeprovider.NamespaceName("test-cluster")
 
 	client := fake.NewClientset(
 		&corev1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-cluster-cp-0",
-				Namespace: ns,
-				Labels:    kubeprovider.NodeLabels("test-cluster", kubeprovider.RoleControlPlane, "K3s"),
+				Name:      testClusterCPPodName,
+				Namespace: namespace,
+				Labels: kubeprovider.NodeLabels(
+					"test-cluster",
+					kubeprovider.RoleControlPlane,
+					"K3s",
+				),
 			},
 			Status: corev1.PodStatus{Phase: corev1.PodRunning},
 		},

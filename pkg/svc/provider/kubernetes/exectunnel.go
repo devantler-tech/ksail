@@ -82,13 +82,9 @@ func (t *execTunnel) run() {
 			}
 		}
 
-		t.wg.Add(1)
-
-		go func() {
-			defer t.wg.Done()
-
+		t.wg.Go(func() {
 			t.handleConnection(conn)
-		}()
+		})
 	}
 }
 
