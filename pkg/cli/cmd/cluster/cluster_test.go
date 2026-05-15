@@ -7337,7 +7337,7 @@ func TestDriftExitError(t *testing.T) {
 	assert.Equal(
 		t,
 		2,
-		err.ExitCode(),
+		err.KSailExitCode(),
 		"exit code must be 2 (KSail convention: 0=no drift, 1=error, 2=drift detected)",
 	)
 	require.ErrorIs(t, err, cluster.ErrDriftDetected,

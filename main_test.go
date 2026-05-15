@@ -159,7 +159,7 @@ func TestRunWithArgsHandlesCustomExitCode(t *testing.T) {
 	t.Parallel()
 
 	// Test that exitCodeFromError correctly extracts custom exit codes from errors
-	// implementing ExitCode() int, as used by runWithArgs for DriftExitError etc.
+	// implementing KSailExitCode() int, as used by runWithArgs for DriftExitError etc.
 	tests := []struct {
 		name       string
 		customCode int
