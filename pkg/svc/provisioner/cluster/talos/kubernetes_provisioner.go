@@ -262,6 +262,7 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 		provision.WithTalosConfig(talosConfig),
 		provision.WithKubernetesEndpoint(hostK8sEndpoint),
 	)
+
 	defer func() { _ = clusterAccess.Close() }()
 
 	// Bootstrap and wait for readiness

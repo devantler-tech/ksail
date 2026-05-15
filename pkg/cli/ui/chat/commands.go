@@ -18,12 +18,12 @@ var (
 
 // Command names for slash commands.
 const (
-	cmdMode   = "mode"
-	cmdModel  = "model"
-	cmdNew    = "new"
+	cmdMode     = "mode"
+	cmdModel    = "model"
+	cmdNew      = "new"
 	cmdSessions = "sessions"
-	cmdHelp   = "help"
-	cmdClear  = "clear"
+	cmdHelp     = "help"
+	cmdClear    = "clear"
 )
 
 // Slash command message types sent from command handlers to the TUI event channel.
