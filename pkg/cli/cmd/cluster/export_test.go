@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/lifecycle"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/setup"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/setup/localregistry"
@@ -491,4 +492,14 @@ func ExportSetIsKubeconfigStaleFunc(fn func(string, string) bool) func() {
 	isKubeconfigStaleFunc = fn
 
 	return func() { isKubeconfigStaleFunc = orig }
+}
+
+// ExportRunDiagnoseTextReport exposes runDiagnoseTextReport for testing.
+func ExportRunDiagnoseTextReport(report k8s.DiagnoseReport, w io.Writer) error {
+	return runDiagnoseTextReport(report, w)
+}
+
+// ExportRunDiagnoseJSONReport exposes runDiagnoseJSONReport for testing.
+func ExportRunDiagnoseJSONReport(report k8s.DiagnoseReport, w io.Writer) error {
+	return runDiagnoseJSONReport(report, w)
 }
