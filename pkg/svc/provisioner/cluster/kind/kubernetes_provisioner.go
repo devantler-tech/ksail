@@ -89,8 +89,13 @@ func NewKubernetesProvisioner(cfg KubernetesProvisionerConfig) (*KubernetesProvi
 // It port-forwards the DinD Docker API, sets DOCKER_HOST, then delegates to the
 // inner Kind provisioner which uses the Kind SDK (Cobra commands that shell out
 // to the docker CLI, inheriting DOCKER_HOST).
-func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error { //nolint:funlen // sequential setup steps with many error-checks
-	target := setName(name, p.Provisioner.kindConfig.Name)
+//
+//nolint:funlen // sequential setup steps with many error-checks
+func (p *KubernetesProvisioner) Create(
+	ctx context.Context,
+	name string,
+) error {
+	target := setName(name, p.kindConfig.Name)
 
 	// Preserve the host kubeconfig's current-context. The Kind SDK switches
 	// current-context to "kind-<name>" when it creates the cluster, which would
@@ -125,7 +130,8 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 	defer dockerPF.Close()
 
 	// Step 3: Set DOCKER_HOST so the Kind SDK talks to DinD
-	_, _ = fmt.Fprintln(os.Stdout, "► creating Kind cluster via SDK (DOCKER_HOST → exec tunnel → DinD)")
+	msg := "► creating Kind cluster via SDK (DOCKER_HOST → exec tunnel → DinD)"
+	_, _ = fmt.Fprintln(os.Stdout, msg)
 
 	err = kubernetesprovider.WithRemoteDockerHost(dockerPF, func() error {
 		return p.Provisioner.Create(ctx, target)
@@ -175,7 +181,7 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 
 // Delete deletes the Kind cluster inside DinD and cleans up host cluster resources.
 func (p *KubernetesProvisioner) Delete(ctx context.Context, name string) error {
-	target := setName(name, p.Provisioner.kindConfig.Name)
+	target := setName(name, p.kindConfig.Name)
 
 	// Close port-forward if active
 	if p.portForward != nil {
@@ -216,7 +222,7 @@ func (p *KubernetesProvisioner) Delete(ctx context.Context, name string) error {
 
 // Exists checks if the Kind-on-Kubernetes cluster exists by checking for the DinD pod.
 func (p *KubernetesProvisioner) Exists(ctx context.Context, name string) (bool, error) {
-	target := setName(name, p.Provisioner.kindConfig.Name)
+	target := setName(name, p.kindConfig.Name)
 
 	exists, err := p.k8sProvider.NodesExist(ctx, target)
 	if err != nil {
@@ -255,7 +261,7 @@ func (p *KubernetesProvisioner) rewriteKindKubeconfig(clusterName string, localP
 	clusterKey := "kind-" + clusterName
 	newServer := fmt.Sprintf("https://127.0.0.1:%d", localPort)
 
-	if err := k8s.ModifyKubeconfigCluster(p.kubeconfigPath, clusterKey, newServer); err != nil {
+	if err := k8s.ModifyKubeconfigCluster(p.kubeconfigPath, clusterKey, newServer); err != nil { //nolint:noinlineerr
 		return fmt.Errorf("modify kubeconfig cluster: %w", err)
 	}
 

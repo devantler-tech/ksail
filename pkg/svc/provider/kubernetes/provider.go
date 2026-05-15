@@ -20,7 +20,7 @@ type Provider struct {
 }
 
 // NewProvider creates a new Kubernetes provider with the given host cluster client and options.
-func NewProvider(client kubernetes.Interface, opts v1alpha1.OptionsKubernetes) (*Provider, error) {
+func NewProvider(client kubernetes.Interface, _ v1alpha1.OptionsKubernetes) (*Provider, error) {
 	if client == nil {
 		return nil, ErrHostClientRequired
 	}
