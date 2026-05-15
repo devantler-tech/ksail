@@ -68,7 +68,8 @@ func (p *Provider) CreateDinDPod(
 	namespace := NamespaceName(clusterName)
 
 	if persistence.Enabled {
-		if err := p.ensurePVC(ctx, namespace, clusterName, persistence); err != nil {
+		err := p.ensurePVC(ctx, namespace, clusterName, persistence)
+		if err != nil {
 			return fmt.Errorf("ensure PVC: %w", err)
 		}
 	}

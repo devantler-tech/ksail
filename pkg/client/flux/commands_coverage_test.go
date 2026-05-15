@@ -9,18 +9,18 @@ import (
 )
 
 const (
-	flagChart              = "--chart"
-	flagSource             = "--source"
-	flagExport             = "--export"
-	flagDependsOn          = "--depends-on"
-	chartVersion           = "6.6.2"
-	intervalDefault        = "10m"
-	sourceGitRepoMyRepo    = "GitRepository/my-repo"
-	sourceHelmRepoPodinfo  = "HelmRepository/podinfo"
-	sourceGitRepoPodinfo   = "GitRepository/podinfo"
-	kindHelmRepository     = "HelmRepository"
-	kindGitRepository      = "GitRepository"
-	chartKeyName           = "chart"
+	flagChart             = "--chart"
+	flagSource            = "--source"
+	flagExport            = "--export"
+	flagDependsOn         = "--depends-on"
+	chartVersion          = "6.6.2"
+	intervalDefault       = "10m"
+	sourceGitRepoMyRepo   = "GitRepository/my-repo"
+	sourceHelmRepoPodinfo = "HelmRepository/podinfo"
+	sourceGitRepoPodinfo  = "GitRepository/podinfo"
+	kindHelmRepository    = "HelmRepository"
+	kindGitRepository     = "GitRepository"
+	chartKeyName          = "chart"
 )
 
 // TestCreateSourceCommand_SubCommands verifies that the source command has all

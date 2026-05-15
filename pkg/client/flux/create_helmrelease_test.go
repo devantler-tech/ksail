@@ -8,14 +8,14 @@ import (
 )
 
 const (
-	sourceHelmRepository  = "HelmRepository/podinfo"
-	chartVersionDefault   = "6.6.2"
-	intervalDefaultValue  = "10m"
-	appName               = "app"
-	sourceKindGit         = "GitRepository"
-	flagChartName         = "chart"
-	flagSourceName        = "source"
-	flagExportName        = "export"
+	sourceHelmRepository = "HelmRepository/podinfo"
+	chartVersionDefault  = "6.6.2"
+	intervalDefaultValue = "10m"
+	appName              = "app"
+	sourceKindGit        = "GitRepository"
+	flagChartName        = "chart"
+	flagSourceName       = "source"
+	flagExportName       = "export"
 )
 
 func TestNewCreateHelmReleaseCmd(t *testing.T) {
@@ -71,38 +71,38 @@ func helmReleaseExportTestsBasic() map[string]testCase {
 		"export with chart version": {
 			args: []string{"podinfo"},
 			flags: map[string]string{
-				flagSourceName:          sourceHelmRepository,
-				flagChartName:           "podinfo",
-				"chart-version":     chartVersionDefault,
-				flagExportName:          "true",
+				flagSourceName:  sourceHelmRepository,
+				flagChartName:   "podinfo",
+				"chart-version": chartVersionDefault,
+				flagExportName:  "true",
 			},
 		},
 		"export with target namespace": {
 			args: []string{"podinfo"},
 			flags: map[string]string{
-				flagSourceName:        sourceHelmRepository,
-				flagChartName:         "podinfo",
+				flagSourceName:     sourceHelmRepository,
+				flagChartName:      "podinfo",
 				"target-namespace": "production",
-				flagExportName:         "true",
+				flagExportName:     "true",
 			},
 		},
 		"export with create namespace": {
 			args: []string{"podinfo"},
 			flags: map[string]string{
-				flagSourceName:                sourceHelmRepository,
-				flagChartName:                 "podinfo",
+				flagSourceName:            sourceHelmRepository,
+				flagChartName:             "podinfo",
 				"target-namespace":        "new-ns",
 				"create-target-namespace": "true",
-				flagExportName:                "true",
+				flagExportName:            "true",
 			},
 		},
 		"export with custom interval": {
 			args: []string{"podinfo"},
 			flags: map[string]string{
-				flagSourceName:  sourceHelmRepository,
-				flagChartName:   "podinfo",
-				"interval":  intervalDefaultValue,
-				flagExportName:  "true",
+				flagSourceName: sourceHelmRepository,
+				flagChartName:  "podinfo",
+				"interval":     intervalDefaultValue,
+				flagExportName: "true",
 			},
 		},
 	}
@@ -113,28 +113,28 @@ func helmReleaseExportTestsAdvanced() map[string]testCase {
 		"export with namespace flag": {
 			args: []string{"podinfo"},
 			flags: map[string]string{
-				flagSourceName:  sourceHelmRepository,
-				flagChartName:   "podinfo",
-				"namespace": "custom-ns",
-				flagExportName:  "true",
+				flagSourceName: sourceHelmRepository,
+				flagChartName:  "podinfo",
+				"namespace":    "custom-ns",
+				flagExportName: "true",
 			},
 		},
 		"export with dependencies": {
 			args: []string{appName},
 			flags: map[string]string{
-				flagSourceName:   "HelmRepository/" + appName,
-				flagChartName:    appName,
-				"depends-on": "database,cache",
-				flagExportName:   "true",
+				flagSourceName: "HelmRepository/" + appName,
+				flagChartName:  appName,
+				"depends-on":   "database,cache",
+				flagExportName: "true",
 			},
 		},
 		"export with GitRepository source": {
 			args: []string{appName},
 			flags: map[string]string{
-				"source-kind": sourceKindGit,
-				flagSourceName:    appName,
-				flagChartName:     "./charts/" + appName,
-				flagExportName:    "true",
+				"source-kind":  sourceKindGit,
+				flagSourceName: appName,
+				flagChartName:  "./charts/" + appName,
+				flagExportName: "true",
 			},
 		},
 		"export with source Kind/name format": {

@@ -19,14 +19,14 @@ import (
 )
 
 const (
-	testScenarioMinimal              = "Minimal"
-	testScenarioProduction           = "Production"
-	testLabelApp                     = "app"
-	testKindGitRepository            = "GitRepository"
-	testKindHelmRepository           = "HelmRepository"
-	testKindKustomization            = "Kustomization"
-	testKindOCIRepository            = "OCIRepository"
-	testKindHelmRelease              = "HelmRelease"
+	testScenarioMinimal    = "Minimal"
+	testScenarioProduction = "Production"
+	testLabelApp           = "app"
+	testKindGitRepository  = "GitRepository"
+	testKindHelmRepository = "HelmRepository"
+	testKindKustomization  = "Kustomization"
+	testKindOCIRepository  = "OCIRepository"
+	testKindHelmRelease    = "HelmRelease"
 )
 
 // setupTestKubeconfig creates a temporary kubeconfig file for testing.

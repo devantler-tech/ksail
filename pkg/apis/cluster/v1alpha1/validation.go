@@ -550,7 +550,7 @@ func ValidateNestedCIDRs(podCIDR, serviceCIDR string) error {
 		}
 
 		for _, hostRange := range hostRanges {
-			_, hostNet, _ := net.ParseCIDR(hostRange) //nolint:errcheck // static values
+			_, hostNet, _ := net.ParseCIDR(hostRange) //nolint:errcheck // static CIDR values, parsing cannot fail
 
 			if nestedNet.Contains(hostNet.IP) || hostNet.Contains(nestedNet.IP) {
 				return fmt.Errorf(

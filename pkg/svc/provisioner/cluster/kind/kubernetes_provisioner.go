@@ -240,7 +240,8 @@ func (p *KubernetesProvisioner) List(ctx context.Context) ([]string, error) {
 
 // setupDinD creates the namespace and DinD pod, then waits for readiness.
 func (p *KubernetesProvisioner) setupDinD(ctx context.Context, clusterName string) error {
-	if err := p.k8sProvider.SetupDinD(ctx, clusterName, p.distribution, p.persistence); err != nil {
+	err := p.k8sProvider.SetupDinD(ctx, clusterName, p.distribution, p.persistence)
+	if err != nil {
 		return fmt.Errorf("setup DinD: %w", err)
 	}
 
