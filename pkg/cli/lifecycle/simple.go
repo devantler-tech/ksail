@@ -482,9 +482,26 @@ func (p *kubernetesCleanupProvisioner) Delete(ctx context.Context, _ string) err
 	for _, prefix := range []string{"ksail-", "k3k-", "vcluster-"} {
 		namespaceName := prefix + p.clusterName
 
-		err := p.clientset.CoreV1().Namespaces().Delete(ctx, namespaceName, metav1.DeleteOptions{})
-		if err != nil && !apierrors.IsNotFound(err) {
-			return fmt.Errorf("delete namespace %s: %w", namespaceName, err)
+		// Verify KSail ownership before deletion to prevent accidental deletion of unrelated namespaces
+		namespace, err := p.clientset.CoreV1().Namespaces().Get(ctx, namespaceName, metav1.GetOptions{})
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				// Namespace doesn't exist, continue to next prefix
+				continue
+			}
+			// On other errors, continue trying other prefixes
+			continue
+		}
+
+		// Verify that this namespace is KSail-managed before deleting
+		if namespace.Labels != nil &&
+			namespace.Labels["ksail.io/managed-by"] == "ksail" &&
+			namespace.Labels["ksail.io/cluster"] == p.clusterName {
+			// This is a KSail-managed namespace, safe to delete
+			err := p.clientset.CoreV1().Namespaces().Delete(ctx, namespaceName, metav1.DeleteOptions{})
+			if err != nil && !apierrors.IsNotFound(err) {
+				return fmt.Errorf("delete namespace %s: %w", namespaceName, err)
+			}
 		}
 	}
 

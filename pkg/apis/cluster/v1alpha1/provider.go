@@ -75,6 +75,8 @@ func (p *Provider) ValidValues() []string {
 }
 
 // supportedProviders returns the valid providers for a given distribution.
+// The Kubernetes provider is supported by Vanilla, K3s, Talos, VCluster, and KWOK distributions,
+// allowing them to run as nested clusters in pod form within an existing host Kubernetes cluster.
 func supportedProviders(distribution Distribution) []Provider {
 	switch distribution {
 	case DistributionVanilla, DistributionK3s, DistributionVCluster:

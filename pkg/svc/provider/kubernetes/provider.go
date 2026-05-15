@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -171,8 +172,24 @@ func (p *Provider) NodesExist(ctx context.Context, clusterName string) (bool, er
 func (p *Provider) DeleteNodes(ctx context.Context, clusterName string) error {
 	ns := NamespaceName(clusterName)
 
+	// Verify the namespace exists and has KSail ownership labels before deletion
+	namespace, err := p.client.CoreV1().Namespaces().Get(ctx, ns, metav1.GetOptions{})
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			// Namespace already gone — idempotent success
+			return nil
+		}
+		return fmt.Errorf("get namespace %s: %w", ns, err)
+	}
+
+	// Verify KSail ownership
+	if namespace.Labels[LabelManagedBy] != LabelManagedByValue ||
+		namespace.Labels[LabelClusterName] != clusterName {
+		return fmt.Errorf("namespace %s does not have KSail ownership labels; refusing deletion", ns)
+	}
+
 	// Delete the namespace (cascading delete removes all resources within it)
-	err := p.client.CoreV1().Namespaces().Delete(ctx, ns, metav1.DeleteOptions{})
+	err = p.client.CoreV1().Namespaces().Delete(ctx, ns, metav1.DeleteOptions{})
 	if err != nil && !apierrors.IsNotFound(err) {
 		return fmt.Errorf("delete nodes: remove namespace %s: %w", ns, err)
 	}
@@ -204,16 +221,35 @@ func (p *Provider) IsAvailable() bool {
 func (p *Provider) EnsureNamespace(ctx context.Context, clusterName string) error {
 	namespaceName := NamespaceName(clusterName)
 
-	namespace := &corev1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:   namespaceName,
-			Labels: CommonLabels(clusterName),
-		},
+	// Create or update namespace with PodSecurity privileged labels
+	if err := k8s.EnsurePrivilegedNamespace(ctx, p.client, namespaceName); err != nil {
+		return fmt.Errorf("ensure namespace %s: %w", namespaceName, err)
 	}
 
-	_, err := p.client.CoreV1().Namespaces().Create(ctx, namespace, metav1.CreateOptions{})
-	if err != nil && !apierrors.IsAlreadyExists(err) {
-		return fmt.Errorf("ensure namespace %s: %w", namespaceName, err)
+	// Merge in KSail ownership labels
+	namespace, err := p.client.CoreV1().Namespaces().Get(ctx, namespaceName, metav1.GetOptions{})
+	if err != nil {
+		return fmt.Errorf("get namespace %s: %w", namespaceName, err)
+	}
+
+	if namespace.Labels == nil {
+		namespace.Labels = make(map[string]string)
+	}
+
+	// Check if any KSail labels need to be added
+	needsUpdate := false
+	for k, v := range CommonLabels(clusterName) {
+		if namespace.Labels[k] != v {
+			namespace.Labels[k] = v
+			needsUpdate = true
+		}
+	}
+
+	if needsUpdate {
+		_, err := p.client.CoreV1().Namespaces().Update(ctx, namespace, metav1.UpdateOptions{})
+		if err != nil {
+			return fmt.Errorf("update namespace labels %s: %w", namespaceName, err)
+		}
 	}
 
 	return nil

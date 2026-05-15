@@ -82,6 +82,7 @@ func (t *execTunnel) run() {
 			}
 		}
 
+	// sync.WaitGroup.Go() is available in Go 1.22+ (KSail requires Go 1.26+).
 		t.wg.Go(func() {
 			t.handleConnection(conn)
 		})
