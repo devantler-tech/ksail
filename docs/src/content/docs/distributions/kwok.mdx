@@ -81,17 +81,7 @@ ksail cluster delete
 
 ## Configuration
 
-For general KSail YAML options, see the [Configuration Reference](/configuration/). KSail scaffolds a `kwok/` kustomize directory that KWOK's config loader assembles automatically.
-
-### Kustomize Directory Layout
-
-````
-kwok/
-├── kustomization.yaml       # Kustomize entrypoint
-├── simulation.yaml          # Cluster-level simulation CRDs
-├── node-not-ready.yaml      # Node NotReady chaos stage (opt-in)
-└── pod-failure.yaml         # Pod failure chaos stage (opt-in)
-````
+For general KSail YAML options, see the [Configuration Reference](/configuration/). KSail scaffolds a `kwok/` kustomize directory (shown in [Quick Start](#1-initialize-a-kwok-project)) that KWOK's config loader assembles automatically.
 
 The `kustomization.yaml` references `simulation.yaml` by default. Chaos stages are included as commented-out resources — uncomment them to enable:
 
@@ -109,40 +99,12 @@ resources:
 
 The `simulation.yaml` file contains four Cluster-level CRDs that KWOK does **not** provide by default:
 
-````yaml
----
-apiVersion: kwok.x-k8s.io/v1alpha1
-kind: ClusterLogs
-metadata:
-  name: default-logs
-spec:
-  logs:
-    - logsFile: /dev/null
----
-apiVersion: kwok.x-k8s.io/v1alpha1
-kind: ClusterExec
-metadata:
-  name: default-exec
-spec:
-  execs:
-    - local: {}
----
-apiVersion: kwok.x-k8s.io/v1alpha1
-kind: ClusterAttach
-metadata:
-  name: default-attach
-spec:
-  attaches:
-    - {}
----
-apiVersion: kwok.x-k8s.io/v1alpha1
-kind: ClusterPortForward
-metadata:
-  name: default-port-forward
-spec:
-  forwards:
-    - {}
-````
+| CRD | Enables |
+|-----|---------|
+| `ClusterLogs` | `kubectl logs` to return configurable output |
+| `ClusterExec` | `kubectl exec` to run commands |
+| `ClusterAttach` | `kubectl attach` |
+| `ClusterPortForward` | `kubectl port-forward` |
 
 See the [KWOK documentation](https://kwok.sigs.k8s.io/docs/user/) for all available CRDs and configuration options.
 
@@ -166,29 +128,22 @@ kubectl label pod <name> pod-failure.stage.kwok.x-k8s.io=true
 
 You can create additional custom stages by adding YAML files to the `kwok/` directory and referencing them in `kustomization.yaml`. See the [KWOK Stages Configuration documentation](https://kwok.sigs.k8s.io/docs/user/stages-configuration/) for the full Stage API.
 
-## How KWOK Simulation Works
+## Unsupported Components
 
-KWOK provides default Stage configurations that automatically transition pods and nodes:
-- **Nodes**: Transition to `Ready` status immediately
-- **Pods**: Transition through `Pending` → `Running` → `Succeeded` lifecycle
+The following components are **not installed** on KWOK clusters because they require real container execution:
 
-The `kwok/simulation.yaml` scaffolded by KSail adds four Cluster-level CRDs not provided by default:
-- **ClusterLogs**: Enables `kubectl logs` to return configurable output
-- **ClusterExec**: Enables `kubectl exec` to run commands
-- **ClusterAttach**: Enables `kubectl attach`
-- **ClusterPortForward**: Enables `kubectl port-forward`
+| Component | Reason |
+|-----------|--------|
+| **CNI (Cilium, Calico)** | KWOK has no real network dataplane. `spec.cluster.cni` has no effect. |
+| **CSI (Local Path Provisioner)** | Requires real container execution; would never become truly ready. |
+| **cert-manager** | Webhook pods must serve real TLS endpoints. |
+| **Flux** | Simulated flux-operator pod never registers Flux CRDs; use ArgoCD instead. |
+| **Policy engines (Kyverno, Gatekeeper)** | Register global `MutatingWebhookConfigurations` whose endpoints are never served, breaking subsequent Helm installs. |
 
-All Kubernetes API operations (create, get, describe, delete, scale, apply) work against the real API server. Helm charts install and their pods appear Running. GitOps controllers are deployed and simulated as Running, but `ksail workload reconcile` is skipped for KWOK — controllers cannot actually sync resources because their container processes are not running.
+KSail emits a warning and skips each of these when `spec.cluster.distribution: KWOK` is set. For a full compatibility overview, see the [Support Matrix](/support-matrix/).
 
-The following components are **not installed** on KWOK clusters:
-
-- **CNI (Cilium, Calico)** — KWOK has no real network dataplane, so CNI plugins are skipped entirely. If a non-default CNI is configured in `ksail.yaml`, KSail emits a warning and skips installation. The `spec.cluster.cni` setting has no effect on KWOK clusters.
-- **CSI (Local Path Provisioner)** — KSail skips local-path-provisioner on KWOK because its pods and helper containers require real container execution and would never become truly ready.
-- **cert-manager** — KSail skips cert-manager on KWOK because its webhook pods must serve real TLS endpoints and would never become ready.
-- **Flux** — KSail skips Flux on KWOK because the simulated flux-operator pod never registers the Flux CRDs; use ArgoCD instead.
-- **Policy engines (Kyverno, Gatekeeper)** — both register global `MutatingWebhookConfigurations` whose endpoints are never served on KWOK, breaking all subsequent Helm installs.
-
-KSail emits a warning and skips installation for each of these components when `spec.cluster.distribution: KWOK` is set. For a full compatibility overview, see the [Support Matrix](/support-matrix/).
+> [!NOTE]
+> `ksail workload reconcile` is skipped for KWOK — GitOps controllers are simulated as Running but cannot actually sync resources.
 
 ## Troubleshooting
 
