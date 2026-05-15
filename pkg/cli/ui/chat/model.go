@@ -802,15 +802,15 @@ func (m *Model) handleUserSubmit(msg userSubmitMsg) (tea.Model, tea.Cmd) {
 
 // commitToolsToLastAssistantMessage saves current tools to the last assistant message.
 func (m *Model) commitToolsToLastAssistantMessage() {
-	for _, v := range slices.Backward(m.messages) {
-		if v.role == roleAssistant {
-			v.tools = make([]*toolExecution, 0, len(m.toolOrder))
-			v.toolOrder = make([]string, len(m.toolOrder))
-			copy(v.toolOrder, m.toolOrder)
+	for _, msg := range slices.Backward(m.messages) {
+		if msg.role == roleAssistant {
+			msg.tools = make([]*toolExecution, 0, len(m.toolOrder))
+			msg.toolOrder = make([]string, len(m.toolOrder))
+			copy(msg.toolOrder, m.toolOrder)
 
 			for _, id := range m.toolOrder {
 				if tool := m.tools[id]; tool != nil {
-					v.tools = append(v.tools, tool)
+					msg.tools = append(msg.tools, tool)
 				}
 			}
 

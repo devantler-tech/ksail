@@ -4054,6 +4054,7 @@ func getKubernetesProviderFromConfig() (*kubernetesprovider.Provider, error) {
 	}
 
 	// Skip silently when the kubeconfig file does not exist.
+	//nolint:gosec // path is user-controlled kubeconfig, safe and canonicalized below
 	if _, statErr := os.Stat(expandedPath); os.IsNotExist(statErr) {
 		return nil, nil //nolint:nilnil
 	}
