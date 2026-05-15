@@ -69,7 +69,7 @@ Continue with the [Getting Started guide](https://ksail.devantler.tech/) for Git
 | Manifest Validation      | Kubeconform                                                 |
 | Cluster Operations       | K9s, backup & restore, multi-tenancy (`ksail tenant`)       |
 | AI Integration           | Chat assistant (Copilot SDK), MCP server, VS Code extension |
-| Infrastructure Providers | Docker (local), Hetzner Cloud, Sidero Omni, AWS             |
+| Infrastructure Providers | Docker (local), Kubernetes (nested), Hetzner Cloud, Sidero Omni, AWS |
 
 See the [feature overview](https://ksail.devantler.tech/features/) and [architecture guide](https://ksail.devantler.tech/architecture/) for details.
 
@@ -81,12 +81,13 @@ See the [feature overview](https://ksail.devantler.tech/features/) and [architec
 | 🍎 macOS                                      | arm64        |
 | ⊞ Windows (native untested; WSL2 recommended) | amd64, arm64 |
 
-| Provider | Vanilla  | K3s     | Talos | VCluster | KWOK        | EKS |
-|----------|----------|---------|-------|----------|-------------|-----|
-| Docker   | ✅ (Kind) | ✅ (K3d) | ✅     | ✅ (Vind) | ✅ (kwokctl) | ❌   |
-| Hetzner  | —        | —       | ✅     | —        | —           | —   |
-| Omni     | —        | —       | ✅     | —        | —           | —   |
-| AWS      | —        | —       | —     | —        | —           | 🚧  |
+| Provider   | Vanilla   | K3s      | Talos | VCluster  | KWOK         | EKS |
+|------------|-----------|----------|-------|-----------|--------------|-----|
+| Docker     | ✅ (Kind) | ✅ (K3d) | ✅    | ✅ (Vind) | ✅ (kwokctl) | ❌  |
+| Kubernetes | ✅        | ✅       | ✅    | ✅        | ✅           | —   |
+| Hetzner    | —         | —        | ✅    | —         | —            | —   |
+| Omni       | —         | —        | ✅    | —         | —            | —   |
+| AWS        | —         | —        | —     | —         | —            | 🚧  |
 
 ## Community & Support
 
