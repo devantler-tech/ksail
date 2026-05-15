@@ -1,0 +1,169 @@
+---
+title: Kubernetes Provider
+description: Run nested Kubernetes clusters as pods inside an existing host Kubernetes cluster with KSail.
+---
+
+The Kubernetes provider runs nested cluster nodes as pods inside an existing host Kubernetes cluster. It exposes the nested cluster's API server via [Gateway API](https://gateway-api.sigs.k8s.io/) TCPRoute for external `kubectl` access.
+
+## When to Use the Kubernetes Provider
+
+The Kubernetes provider is ideal when you:
+
+- Already have a Kubernetes cluster and want to run nested clusters inside it
+- Need isolated development clusters without Docker Desktop
+- Want to share a host cluster across a team, each running their own nested cluster
+- Run CI/CD pipelines in a Kubernetes environment (e.g., Tekton, Argo Workflows)
+
+> [!NOTE]
+> The Kubernetes provider supports Vanilla, K3s, Talos, VCluster, and KWOK. See the [Support Matrix](/support-matrix/) for component compatibility.
+
+## Prerequisites
+
+1. **Host Kubernetes cluster** — any distribution (cloud-managed, on-prem, or local)
+2. **Privileged pod policy** — nested cluster pods require `privileged: true` security context
+
+**Optional — Gateway API exposure** (only needed when `spec.provider.kubernetes.gatewayClassName` is set):
+
+3. **Gateway API experimental CRDs** — install from [gateway-api.sigs.k8s.io](https://gateway-api.sigs.k8s.io/guides/getting-started/#install-experimental-channel):
+   ```bash
+   kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.5.1/experimental-install.yaml
+   ```
+4. **Gateway controller** — one of: [Envoy Gateway](https://gateway.envoyproxy.io/), [Traefik](https://traefik.io/), [NGINX Gateway Fabric](https://docs.nginx.com/nginx-gateway-fabric/), [Contour](https://projectcontour.io/), or [HAProxy Ingress](https://haproxy-ingress.github.io/)
+5. **GatewayClass** — must exist on the host cluster (created by the Gateway controller)
+
+When `gatewayClassName` is empty (the default), KSail uses local port-forwarding for API access instead of Gateway API exposure.
+
+## Configuration
+
+Set `provider: Kubernetes` in `ksail.yaml` and configure the host cluster connection under `spec.provider.kubernetes`:
+
+```yaml
+apiVersion: ksail.io/v1alpha1
+kind: Cluster
+metadata:
+  name: my-nested-cluster
+spec:
+  cluster:
+    distribution: K3s          # or Vanilla, Talos, VCluster
+    provider: Kubernetes
+  provider:
+    kubernetes:
+      kubeconfig: ~/.kube/config        # host cluster kubeconfig
+      context: my-host-context          # host cluster context (optional)
+      gatewayClassName: eg              # GatewayClass on the host cluster
+      podCidr: "10.64.0.0/16"          # nested pod CIDR (must not overlap host)
+      serviceCidr: "10.128.0.0/16"     # nested service CIDR (must not overlap host)
+      persistence:
+        enabled: false                  # true for PVC-backed persistent clusters
+        storageClassName: ""            # empty = cluster default StorageClass
+        size: "20Gi"                    # PVC size when persistence is enabled
+```
+
+### Host Cluster Authentication
+
+| Field | Env Var | Default | Description |
+| --- | --- | --- | --- |
+| `kubeconfig` | `KSAIL_HOST_KUBECONFIG` | `~/.kube/config` | Path to host cluster kubeconfig |
+| `context` | `KSAIL_HOST_CONTEXT` | current context | Host cluster kubeconfig context |
+
+> [!IMPORTANT]
+> `spec.provider.kubernetes.kubeconfig` and `spec.provider.kubernetes.context` configure the **host** cluster connection. `spec.cluster.connection.kubeconfig` and `spec.cluster.connection.context` configure the **nested** cluster connection.
+
+### CIDR Configuration
+
+Nested cluster CIDRs **must not overlap** with the host cluster's pod or service CIDRs. The defaults below are chosen to avoid conflicts with common host cluster ranges.
+
+| Default | Range | Purpose |
+| --- | --- | --- |
+| `10.64.0.0/16` | Pod CIDR | IP addresses for nested cluster pods |
+| `10.128.0.0/16` | Service CIDR | ClusterIP addresses for nested cluster services |
+
+Common host cluster CIDR ranges to avoid:
+- `10.244.0.0/16` — default pod CIDR (Flannel, Calico)
+- `10.96.0.0/12` — default service CIDR (kubeadm)
+
+### Persistence
+
+By default, nested clusters are **ephemeral** — all state is lost on pod restart. This matches KSail's GitOps-first philosophy where cluster state is reconstructible from Git.
+
+Enable persistence for long-lived environments:
+
+```yaml
+provider:
+  kubernetes:
+    persistence:
+      enabled: true
+      size: "20Gi"    # includes etcd + containerd image cache
+```
+
+## Architecture
+
+Each nested cluster runs in a dedicated namespace on the host cluster. The namespace prefix depends on the distribution:
+
+| Distribution | Namespace | Execution Mode | Description |
+| --- | --- | --- | --- |
+| K3s | `k3k-<name>` | Direct Pod | k3k operator creates K3s server in privileged pod; K3s binary runs directly |
+| Vanilla (Kind) | `ksail-<name>` | Docker-in-Docker | Docker daemon sidecar, Kind SDK operates against it |
+| Talos | `ksail-<name>` | Docker-in-Docker | Docker daemon sidecar, Talos SDK operates against it |
+| VCluster | `vcluster-<name>` | Helm release | VCluster deployed via Helm driver on host cluster |
+
+````mermaid
+graph TB
+    subgraph "Host Kubernetes Cluster"
+        subgraph "ksail-my-cluster namespace"
+            CP["Control Plane Pod<br/>(privileged)"]
+            W1["Worker Pod 1<br/>(privileged)"]
+            SVC["ClusterIP Service<br/>→ port 6443"]
+        end
+        GW["Gateway<br/>TCP listener :6443"]
+        ROUTE["TCPRoute<br/>→ ClusterIP Service"]
+        GWCTRL["Gateway Controller"]
+    end
+
+    USER["kubectl → LB:6443"] --> GW
+    GW --> ROUTE --> SVC --> CP
+    GWCTRL -.-> GW
+````
+
+### Gateway API Exposure
+
+The nested cluster's API server is exposed via:
+1. **ClusterIP Service** — targets the control-plane pod(s) on the nested API server port (default: 6443)
+2. **Gateway** — TCP listener on the nested API server port
+3. **TCPRoute** — routes the TCP listener to the ClusterIP Service
+
+The Gateway controller's LoadBalancer provides the external IP that users connect to via `kubectl`.
+
+## Operations
+
+### Start / Stop
+
+Start and stop are **not supported** for the Kubernetes provider. Nested cluster pods are managed by
+their respective operators/controllers and cannot be independently stopped/started. Use `delete` and
+`create` to manage cluster lifecycle.
+
+### Delete
+
+```bash
+ksail cluster delete   # Delete namespace and all resources
+```
+
+### List Clusters
+
+```bash
+ksail cluster list --provider Kubernetes
+```
+
+This lists all nested clusters discovered on the host cluster. The host kubeconfig is resolved from the `KSAIL_HOST_KUBECONFIG` environment variable, or `~/.kube/config` by default. The context is resolved from `KSAIL_HOST_CONTEXT`.
+
+## Troubleshooting
+
+**`Gateway API experimental CRDs not found`** — This error only occurs when `spec.provider.kubernetes.gatewayClassName` is set. Install the experimental CRDs: `kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.5.1/experimental-install.yaml`, or leave `gatewayClassName` empty to use port-forward-only access.
+
+**`GatewayClass not found`** — Set `spec.provider.kubernetes.gatewayClassName` to a GatewayClass that exists on your host cluster. List available classes: `kubectl get gatewayclasses`
+
+**`nested cluster CIDR overlaps`** — Change `spec.provider.kubernetes.podCidr` and/or `spec.provider.kubernetes.serviceCidr` to ranges that don't overlap with your host cluster. Check host CIDRs: `kubectl cluster-info dump | grep -m 1 service-cluster-ip-range`
+
+**Pods stuck in `Pending`** — The host cluster may not allow privileged pods. Check PodSecurityStandard: `kubectl get ns <namespace> -o jsonpath='{.metadata.labels.pod-security\.kubernetes\.io/enforce}'`
+
+**Pod `CrashLoopBackOff`** — Check pod logs: `kubectl logs -n ksail-<cluster-name> <pod-name>`. Common causes: cgroup misconfiguration (ensure cgroup v2), insufficient resources, or AppArmor blocking nested container operations.

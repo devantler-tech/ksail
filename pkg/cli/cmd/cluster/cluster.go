@@ -57,6 +57,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
 	dockerprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/docker"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/hetzner"
+	kubernetesprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/kubernetes"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/omni"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
@@ -76,6 +77,7 @@ import (
 	"golang.org/x/sync/errgroup"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/cli-runtime/pkg/genericiooptions"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
@@ -1416,7 +1418,7 @@ func ensureLocalRegistriesReady(
 		return err
 	}
 
-	if !provider.IsCloud() {
+	if provider.NeedsLocalDocker() {
 		// Stage 1: Provision local registry (skipped for external registries)
 		err := localregistry.ExecuteStage(
 			cmd,
@@ -1438,7 +1440,7 @@ func ensureLocalRegistriesReady(
 		return fmt.Errorf("failed to verify registry access: %w", err)
 	}
 
-	if !provider.IsCloud() {
+	if provider.NeedsLocalDocker() {
 		params := buildRegistryStageParams(cmd, ctx, deps, cfgManager, localDeps)
 
 		// Stage 3: Create and configure registry containers (local + mirrors)
@@ -1980,7 +1982,12 @@ func runDeleteAction(
 	detectedInfo, isKindCluster, clusterInfo := detectDeleteClusterInfo(cmd, resolved)
 
 	// Create provisioner for the provider
-	provisioner, err := createDeleteProvisioner(clusterInfo, resolved.OmniOpts, flags.storage)
+	provisioner, err := createDeleteProvisioner(
+		clusterInfo,
+		resolved.OmniOpts,
+		resolved.KubernetesOpts,
+		flags.storage,
+	)
 	if err != nil {
 		return fmt.Errorf("failed to create provisioner: %w", err)
 	}
@@ -2190,6 +2197,7 @@ func promptForDeletion(
 func createDeleteProvisioner(
 	clusterInfo *clusterdetector.Info,
 	omniOpts v1alpha1.OptionsOmni,
+	kubernetesOpts v1alpha1.OptionsKubernetes,
 	deleteStorage bool,
 ) (clusterprovisioner.Provisioner, error) {
 	// Check for test factory override
@@ -2209,7 +2217,7 @@ func createDeleteProvisioner(
 	}
 
 	provisioner, err := lifecycle.CreateMinimalProvisionerForProvider(
-		clusterInfo, omniOpts, deleteStorage,
+		clusterInfo, omniOpts, kubernetesOpts, deleteStorage,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create provisioner for provider: %w", err)
@@ -2315,6 +2323,11 @@ func buildDeletionPreview(
 		// CloudFormation stacks owning the control plane and managed nodegroups.
 		eksPlaceholder := "(EKS cluster and managed nodegroups for: " + resolved.ClusterName + ")"
 		preview.Servers = []string{eksPlaceholder}
+	case v1alpha1.ProviderKubernetes:
+		// For Kubernetes provider, nested cluster resources (DinD pod, Gateway,
+		// namespace) will be removed from the host cluster.
+		k8sPlaceholder := "(nested cluster namespace and resources for: " + resolved.ClusterName + ")"
+		preview.Servers = []string{k8sPlaceholder}
 	}
 
 	return preview
@@ -3121,6 +3134,10 @@ func getProviderStatus(
 		// not from local container inspection. Return a minimal stub so callers
 		// that rely on this helper do not fail for EKS.
 		return &provider.ClusterStatus{Phase: "unknown"}, nil
+	case v1alpha1.ProviderKubernetes:
+		// Kubernetes provider status is a stub: full pod/namespace status inspection
+		// is not yet implemented. Return unknown so callers do not fail.
+		return &provider.ClusterStatus{Phase: "unknown"}, nil
 	default:
 		return nil, fmt.Errorf("%w: %s", errUnsupportedProvider, prov)
 	}
@@ -3791,6 +3808,11 @@ type ListDeps struct {
 	// OmniProvider is an optional Omni provider for listing Omni clusters.
 	// If nil, a real provider will be created if OMNI_SERVICE_ACCOUNT_KEY is set.
 	OmniProvider *omni.Provider
+
+	// KubernetesProvider is an optional Kubernetes provider for listing Kubernetes-hosted clusters.
+	// If nil, a real provider will be created using KSAIL_HOST_KUBECONFIG/KSAIL_HOST_CONTEXT env vars
+	// or the default kubeconfig (~/.kube/config) if those are not set.
+	KubernetesProvider *kubernetesprovider.Provider
 }
 
 // HandleListRunE handles the list command.
@@ -3878,6 +3900,8 @@ func getProviderClusters(
 		// in the local list path. Return an empty slice so `cluster list`
 		// does not error when AWS is configured in a profile.
 		return nil, nil
+	case v1alpha1.ProviderKubernetes:
+		return getKubernetesClusters(ctx, deps)
 	default:
 		return nil, fmt.Errorf("%w: %s", ErrUnsupportedProvider, provider)
 	}
@@ -3987,7 +4011,103 @@ func getOmniClusters(ctx context.Context, deps ListDeps) ([]clusterWithDistribut
 	return toTalosClusters(clusters), nil
 }
 
-// toTalosClusters wraps cluster names as Talos distribution clusters.
+// getKubernetesClusters returns all clusters hosted on the Kubernetes provider.
+func getKubernetesClusters(ctx context.Context, deps ListDeps) ([]clusterWithDistribution, error) {
+	// Use injected provider if available (for testing)
+	if deps.KubernetesProvider != nil {
+		infos, err := deps.KubernetesProvider.ListAllClustersWithDistribution(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to list Kubernetes clusters: %w", err)
+		}
+
+		return toKubernetesClusters(infos), nil
+	}
+
+	prov, err := getKubernetesProviderFromConfig()
+	if err != nil {
+		return nil, err
+	}
+
+	if prov == nil {
+		return []clusterWithDistribution{}, nil
+	}
+
+	infos, err := prov.ListAllClustersWithDistribution(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list Kubernetes clusters: %w", err)
+	}
+
+	return toKubernetesClusters(infos), nil
+}
+
+// getKubernetesProviderFromConfig creates a Kubernetes provider from the host config.
+func getKubernetesProviderFromConfig() (*kubernetesprovider.Provider, error) {
+	// Resolve kubeconfig: prefer KSAIL_HOST_KUBECONFIG env var, fall back to default.
+	kubeconfigPath := os.Getenv("KSAIL_HOST_KUBECONFIG")
+	if kubeconfigPath == "" {
+		kubeconfigPath = k8s.DefaultKubeconfigPath()
+	}
+
+	expandedPath, err := fsutil.ExpandHomePath(kubeconfigPath)
+	if err != nil {
+		return nil, fmt.Errorf("expand kubeconfig path: %w", err)
+	}
+
+	// Skip silently when the kubeconfig file does not exist.
+	//nolint:gosec // path is user-controlled kubeconfig, safe and canonicalized below
+	_, statErr := os.Stat(expandedPath)
+	if os.IsNotExist(statErr) {
+		return nil, nil //nolint:nilnil
+	}
+
+	canonicalPath, err := fsutil.EvalCanonicalPath(expandedPath)
+	if err != nil {
+		return nil, fmt.Errorf("canonicalize kubeconfig path: %w", err)
+	}
+
+	hostContext := os.Getenv("KSAIL_HOST_CONTEXT")
+
+	restConfig, err := k8s.BuildRESTConfig(canonicalPath, hostContext)
+	if err != nil {
+		// If the kubeconfig is present but invalid or unreachable, skip silently.
+		return nil, nil //nolint:nilnil,nilerr // intentionally swallow: host cluster unavailable
+	}
+
+	clientset, err := kubernetes.NewForConfig(restConfig)
+	if err != nil {
+		return nil, fmt.Errorf("create Kubernetes client: %w", err)
+	}
+
+	prov, err := kubernetesprovider.NewProvider(clientset, v1alpha1.OptionsKubernetes{})
+	if err != nil {
+		return nil, fmt.Errorf("create Kubernetes provider: %w", err)
+	}
+
+	return prov, nil
+}
+
+// toKubernetesClusters converts ClusterInfo to clusterWithDistribution,
+// mapping the distribution label string to a v1alpha1.Distribution enum value.
+func toKubernetesClusters(infos []kubernetesprovider.ClusterInfo) []clusterWithDistribution {
+	result := make([]clusterWithDistribution, 0, len(infos))
+
+	for _, info := range infos {
+		var dist v1alpha1.Distribution
+
+		err := dist.Set(info.Distribution)
+		if err != nil {
+			dist = v1alpha1.DistributionVanilla
+		}
+
+		result = append(result, clusterWithDistribution{
+			Name:         info.Name,
+			Distribution: dist,
+		})
+	}
+
+	return result
+}
+
 // Hetzner and Omni providers only support Talos.
 func toTalosClusters(names []string) []clusterWithDistribution {
 	result := make([]clusterWithDistribution, 0, len(names))
@@ -5601,9 +5721,9 @@ func runClusterCreationWorkflow(
 	}
 
 	// Post-creation Docker steps are only needed for local Docker clusters.
-	// Cloud providers (Omni, Hetzner) run nodes remotely and cannot access
-	// local Docker infrastructure.
-	if !ctx.ClusterCfg.Spec.Cluster.Provider.IsCloud() {
+	// Cloud providers (Omni, Hetzner) run nodes remotely and the Kubernetes
+	// provider runs nodes as pods — neither can access local Docker infrastructure.
+	if ctx.ClusterCfg.Spec.Cluster.Provider.NeedsLocalDocker() {
 		configureRegistryMirrorsInClusterWithWarning(
 			cmd,
 			ctx,
@@ -6461,7 +6581,9 @@ func autoDeleteCluster(
 		Provider:     clusterCfg.Spec.Cluster.Provider,
 	}
 
-	provisioner, err := createDeleteProvisioner(info, clusterCfg.Spec.Provider.Omni, false)
+	provisioner, err := createDeleteProvisioner(
+		info, clusterCfg.Spec.Provider.Omni, clusterCfg.Spec.Provider.Kubernetes, false,
+	)
 	if err != nil {
 		return fmt.Errorf("TTL auto-delete: failed to create provisioner: %w", err)
 	}

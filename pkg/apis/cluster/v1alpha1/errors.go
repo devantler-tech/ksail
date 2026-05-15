@@ -142,3 +142,13 @@ var ErrInvalidAllowedCIDR = errors.New("invalid allowed CIDR")
 
 // ErrInvalidOIDCConfig is returned when the OIDC configuration is incomplete or invalid.
 var ErrInvalidOIDCConfig = errors.New("invalid OIDC configuration")
+
+// ErrGatewayAPINotAvailable is returned when Gateway API exposure is requested
+// but the host cluster does not have the experimental CRDs installed.
+var ErrGatewayAPINotAvailable = errors.New(
+	"gateway API experimental CRDs not found on host cluster; " +
+		"install from https://gateway-api.sigs.k8s.io/guides/getting-started/#install-experimental-channel",
+)
+
+// ErrCIDROverlap is returned when nested cluster CIDRs overlap with host cluster CIDRs.
+var ErrCIDROverlap = errors.New("nested cluster CIDR overlaps with host cluster CIDR")

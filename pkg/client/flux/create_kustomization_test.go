@@ -7,6 +7,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const (
+	sourceGitRepository = "GitRepository/podinfo"
+	pathKustomize       = "./kustomize"
+	flagExportKust      = "export"
+	appNameKust         = "app"
+)
+
 func TestNewCreateKustomizationCmd(t *testing.T) {
 	t.Parallel()
 
@@ -51,45 +58,45 @@ func kustomizationExportTestsBasic() map[string]testCase {
 		"export basic kustomization": {
 			args: []string{"podinfo"},
 			flags: map[string]string{
-				"source": "GitRepository/podinfo",
-				"path":   "./kustomize",
-				"export": "true",
+				"source":       sourceGitRepository,
+				"path":         pathKustomize,
+				flagExportKust: "true",
 			},
 		},
 		"export with prune": {
 			args: []string{"podinfo"},
 			flags: map[string]string{
-				"source": "GitRepository/podinfo",
-				"path":   "./kustomize",
-				"prune":  "true",
-				"export": "true",
+				"source":       sourceGitRepository,
+				"path":         pathKustomize,
+				"prune":        "true",
+				flagExportKust: "true",
 			},
 		},
 		"export with wait": {
 			args: []string{"podinfo"},
 			flags: map[string]string{
-				"source": "GitRepository/podinfo",
-				"path":   "./deploy",
-				"wait":   "true",
-				"export": "true",
+				"source":       sourceGitRepository,
+				"path":         "./deploy",
+				"wait":         "true",
+				flagExportKust: "true",
 			},
 		},
 		"export with target namespace": {
 			args: []string{"podinfo"},
 			flags: map[string]string{
-				"source":           "GitRepository/podinfo",
-				"path":             "./kustomize",
+				"source":           sourceGitRepository,
+				"path":             pathKustomize,
 				"target-namespace": "production",
-				"export":           "true",
+				flagExportKust:     "true",
 			},
 		},
 		"export with custom interval": {
 			args: []string{"podinfo"},
 			flags: map[string]string{
-				"source":   "GitRepository/podinfo",
-				"path":     "./kustomize",
-				"interval": "5m",
-				"export":   "true",
+				"source":       sourceGitRepository,
+				"path":         pathKustomize,
+				"interval":     "5m",
+				flagExportKust: "true",
 			},
 		},
 	}
@@ -100,36 +107,36 @@ func kustomizationExportTestsAdvanced() map[string]testCase {
 		"export with namespace": {
 			args: []string{"podinfo"},
 			flags: map[string]string{
-				"source":    "GitRepository/podinfo",
-				"path":      "./kustomize",
-				"namespace": "custom-ns",
-				"export":    "true",
+				"source":       sourceGitRepository,
+				"path":         pathKustomize,
+				"namespace":    "custom-ns",
+				flagExportKust: "true",
 			},
 		},
 		"export with dependencies": {
-			args: []string{"app"},
+			args: []string{appNameKust},
 			flags: map[string]string{
-				"source":     "GitRepository/app",
-				"path":       "./kustomize",
-				"depends-on": "infra,database",
-				"export":     "true",
+				"source":       "GitRepository/" + appNameKust,
+				"path":         pathKustomize,
+				"depends-on":   "infra,database",
+				flagExportKust: "true",
 			},
 		},
 		"export with source Kind/name format": {
 			args: []string{"podinfo"},
 			flags: map[string]string{
-				"source": "GitRepository/podinfo",
-				"path":   "./",
-				"export": "true",
+				"source":       sourceGitRepository,
+				"path":         "./",
+				flagExportKust: "true",
 			},
 		},
 		"export with OCIRepository source": {
 			args: []string{"podinfo"},
 			flags: map[string]string{
-				"source-kind": "OCIRepository",
-				"source":      "podinfo",
-				"path":        "./kustomize",
-				"export":      "true",
+				"source-kind":  "OCIRepository",
+				"source":       "podinfo",
+				"path":         pathKustomize,
+				flagExportKust: "true",
 			},
 		},
 	}
@@ -160,6 +167,6 @@ func TestCreateKustomization_MissingRequiredSource(t *testing.T) {
 	testMissingRequiredFlag(
 		t,
 		[]string{"kustomization"},
-		[]string{"podinfo", "--path", "./kustomize", "--export"},
+		[]string{"podinfo", "--path", pathKustomize, "--" + flagExportKust},
 	)
 }

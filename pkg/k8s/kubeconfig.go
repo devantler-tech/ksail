@@ -119,6 +119,47 @@ func loadOrCreateKubeconfig(kubeconfigPath string) (*api.Config, error) {
 	return config, nil
 }
 
+// ModifyKubeconfigCluster atomically updates a single cluster entry's server URL
+// in the kubeconfig file at kubeconfigPath. It loads the existing config, applies
+// the change, and writes it back atomically — preserving all other entries.
+//
+// This is the safe alternative to clientcmd.WriteToFile for in-place edits.
+func ModifyKubeconfigCluster(kubeconfigPath, clusterKey, newServerURL string) error {
+	kubeconfigPath, err := fsutil.ExpandHomePath(kubeconfigPath)
+	if err != nil {
+		return fmt.Errorf("expand kubeconfig path: %w", err)
+	}
+
+	kubeconfigPath, err = fsutil.EvalCanonicalPath(kubeconfigPath)
+	if err != nil {
+		return fmt.Errorf("canonicalize kubeconfig path: %w", err)
+	}
+
+	existing, err := loadOrCreateKubeconfig(kubeconfigPath)
+	if err != nil {
+		return fmt.Errorf("load kubeconfig: %w", err)
+	}
+
+	cluster, ok := existing.Clusters[clusterKey]
+	if !ok {
+		return fmt.Errorf("%w: %s", ErrClusterEntryNotFound, clusterKey)
+	}
+
+	cluster.Server = newServerURL
+
+	result, err := clientcmd.Write(*existing)
+	if err != nil {
+		return fmt.Errorf("serialize kubeconfig: %w", err)
+	}
+
+	err = fsutil.AtomicWriteFile(kubeconfigPath, result, kubeconfigFileMode)
+	if err != nil {
+		return fmt.Errorf("write modified kubeconfig: %w", err)
+	}
+
+	return nil
+}
+
 // CleanupKubeconfig removes the cluster, context, and user entries for a cluster
 // from the kubeconfig file. This only removes entries matching the provided names,
 // leaving other cluster configurations intact.
@@ -462,6 +503,69 @@ func buildOIDCExecArgs(cfg *OIDCExecConfig) ([]string, error) {
 	}
 
 	return args, nil
+}
+
+// GetKubeconfigCurrentContext returns the current-context field from the kubeconfig at
+// kubeconfigPath. Returns an empty string (not an error) if the file does not exist or
+// has no current context set.
+func GetKubeconfigCurrentContext(kubeconfigPath string) (string, error) {
+	kubeconfigPath, err := fsutil.ExpandHomePath(kubeconfigPath)
+	if err != nil {
+		return "", fmt.Errorf("expand kubeconfig path: %w", err)
+	}
+
+	kubeconfigPath, err = fsutil.EvalCanonicalPath(kubeconfigPath)
+	if err != nil {
+		return "", fmt.Errorf("canonicalize kubeconfig path: %w", err)
+	}
+
+	cfg, err := loadOrCreateKubeconfig(kubeconfigPath)
+	if err != nil {
+		return "", fmt.Errorf("load kubeconfig: %w", err)
+	}
+
+	return cfg.CurrentContext, nil
+}
+
+// SetKubeconfigCurrentContext updates the current-context field in the kubeconfig at
+// kubeconfigPath to contextName. It is a no-op when contextName is empty. The context
+// entry does not need to exist in the file (e.g. setting to a context that will be added
+// later is allowed).
+func SetKubeconfigCurrentContext(kubeconfigPath, contextName string) error {
+	if contextName == "" {
+		return nil
+	}
+
+	// jscpd:ignore-start
+	kubeconfigPath, err := fsutil.ExpandHomePath(kubeconfigPath)
+	if err != nil {
+		return fmt.Errorf("expand kubeconfig path: %w", err)
+	}
+
+	kubeconfigPath, err = fsutil.EvalCanonicalPath(kubeconfigPath)
+	if err != nil {
+		return fmt.Errorf("canonicalize kubeconfig path: %w", err)
+	}
+
+	cfg, err := loadOrCreateKubeconfig(kubeconfigPath)
+	// jscpd:ignore-end
+	if err != nil {
+		return fmt.Errorf("load kubeconfig: %w", err)
+	}
+
+	cfg.CurrentContext = contextName
+
+	result, err := clientcmd.Write(*cfg)
+	if err != nil {
+		return fmt.Errorf("serialize kubeconfig: %w", err)
+	}
+
+	err = fsutil.AtomicWriteFile(kubeconfigPath, result, kubeconfigFileMode)
+	if err != nil {
+		return fmt.Errorf("write kubeconfig: %w", err)
+	}
+
+	return nil
 }
 
 // CleanupOIDCKubeconfigEntries removes the OIDC user and context entries for a cluster.

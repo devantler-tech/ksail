@@ -252,7 +252,7 @@ func setFieldValue(fieldPtr any, value any) {
 	}
 
 	fieldVal := reflect.ValueOf(fieldPtr)
-	if fieldVal.Kind() != reflect.Ptr || fieldVal.IsNil() {
+	if fieldVal.Kind() != reflect.Pointer || fieldVal.IsNil() {
 		return
 	}
 

@@ -17,6 +17,8 @@ import (
 	k3dv1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 )
 
+const serverNodeFilter = "server:*"
+
 // GenerateK3dRegistryConfig generates K3d registry configuration for mirror registry.
 // Input format: "name=upstream" (e.g., "docker.io=https://registry-1.docker.io")
 // K3d requires one registry per proxy, so we generate multiple create configs.
@@ -149,11 +151,11 @@ func (s *Scaffolder) buildK3dExtraArgs() []k3dv1alpha5.K3sArgWithNodeFilters {
 		extraArgs = append(extraArgs,
 			k3dv1alpha5.K3sArgWithNodeFilters{
 				Arg:         "--flannel-backend=none",
-				NodeFilters: []string{"server:*"},
+				NodeFilters: []string{serverNodeFilter},
 			},
 			k3dv1alpha5.K3sArgWithNodeFilters{
 				Arg:         "--disable-network-policy",
-				NodeFilters: []string{"server:*"},
+				NodeFilters: []string{serverNodeFilter},
 			},
 		)
 	}
@@ -165,7 +167,7 @@ func (s *Scaffolder) buildK3dExtraArgs() []k3dv1alpha5.K3sArgWithNodeFilters {
 		extraArgs = append(extraArgs,
 			k3dv1alpha5.K3sArgWithNodeFilters{
 				Arg:         "--disable=traefik",
-				NodeFilters: []string{"server:*"},
+				NodeFilters: []string{serverNodeFilter},
 			},
 		)
 	}
@@ -175,7 +177,7 @@ func (s *Scaffolder) buildK3dExtraArgs() []k3dv1alpha5.K3sArgWithNodeFilters {
 		extraArgs = append(extraArgs,
 			k3dv1alpha5.K3sArgWithNodeFilters{
 				Arg:         "--disable=metrics-server",
-				NodeFilters: []string{"server:*"},
+				NodeFilters: []string{serverNodeFilter},
 			},
 		)
 	}
@@ -185,7 +187,7 @@ func (s *Scaffolder) buildK3dExtraArgs() []k3dv1alpha5.K3sArgWithNodeFilters {
 		extraArgs = append(extraArgs,
 			k3dv1alpha5.K3sArgWithNodeFilters{
 				Arg:         "--disable=local-storage",
-				NodeFilters: []string{"server:*"},
+				NodeFilters: []string{serverNodeFilter},
 			},
 		)
 	}
@@ -195,7 +197,7 @@ func (s *Scaffolder) buildK3dExtraArgs() []k3dv1alpha5.K3sArgWithNodeFilters {
 		extraArgs = append(extraArgs,
 			k3dv1alpha5.K3sArgWithNodeFilters{
 				Arg:         "--disable=servicelb",
-				NodeFilters: []string{"server:*"},
+				NodeFilters: []string{serverNodeFilter},
 			},
 		)
 	}

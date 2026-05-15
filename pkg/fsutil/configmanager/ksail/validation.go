@@ -217,7 +217,7 @@ func isFieldEmpty(fieldPtr any) bool {
 	}
 
 	fieldVal := reflect.ValueOf(fieldPtr)
-	if fieldVal.Kind() != reflect.Ptr || fieldVal.IsNil() {
+	if fieldVal.Kind() != reflect.Pointer || fieldVal.IsNil() {
 		return true
 	}
 

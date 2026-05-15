@@ -72,6 +72,7 @@ require (
 	github.com/loft-sh/log v0.0.0-20240219160058-26d83ffb46ac
 	github.com/loft-sh/vcluster v0.34.0
 	github.com/modelcontextprotocol/go-sdk v1.6.0
+	github.com/rancher/k3k v1.0.2
 	github.com/siderolabs/gen v0.8.6
 	github.com/siderolabs/go-kubernetes v0.2.37
 	github.com/siderolabs/go-retry v0.3.3
@@ -648,7 +649,7 @@ require (
 	github.com/moby/locker v1.0.1 // indirect
 	github.com/moby/moby/api v1.54.1 // indirect
 	github.com/moby/moby/client v0.4.0 // indirect
-	github.com/moby/patternmatcher v0.6.0 // indirect
+	github.com/moby/patternmatcher v0.6.1 // indirect
 	github.com/moby/spdystream v0.5.1 // indirect
 	github.com/moby/sys/atomicwriter v0.1.0 // indirect
 	github.com/moby/sys/capability v0.4.0 // indirect
@@ -879,9 +880,9 @@ require (
 	go.augendre.info/arangolint v0.3.1 // indirect
 	go.augendre.info/fatcontext v0.9.0 // indirect
 	go.etcd.io/bbolt v1.4.3 // indirect
-	go.etcd.io/etcd/api/v3 v3.6.9 // indirect
-	go.etcd.io/etcd/client/pkg/v3 v3.6.9 // indirect
-	go.etcd.io/etcd/client/v3 v3.6.9 // indirect
+	go.etcd.io/etcd/api/v3 v3.6.10 // indirect
+	go.etcd.io/etcd/client/pkg/v3 v3.6.10 // indirect
+	go.etcd.io/etcd/client/v3 v3.6.10 // indirect
 	go.etcd.io/etcd/pkg/v3 v3.6.9 // indirect
 	go.etcd.io/etcd/server/v3 v3.6.9 // indirect
 	go.etcd.io/raft/v3 v3.6.0 // indirect
@@ -951,14 +952,14 @@ require (
 	k8s.io/cluster-bootstrap v0.35.0 // indirect
 	k8s.io/component-base v0.36.0 // indirect
 	k8s.io/component-helpers v0.36.0 // indirect
-	k8s.io/cri-api v0.35.3 // indirect
+	k8s.io/cri-api v0.35.4 // indirect
 	k8s.io/cri-client v0.35.0 // indirect
 	k8s.io/kube-aggregator v0.35.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20260330154417-16be699c7b31 // indirect
 	k8s.io/kube-proxy v0.33.0 // indirect
 	k8s.io/kube-scheduler v0.35.3 // indirect
-	k8s.io/kubelet v0.35.3 // indirect
-	k8s.io/kubernetes v1.35.0 // indirect
+	k8s.io/kubelet v0.35.4 // indirect
+	k8s.io/kubernetes v1.35.4 // indirect
 	k8s.io/metrics v0.36.0 // indirect
 	k8s.io/streaming v0.36.0 // indirect
 	k8s.io/utils v0.0.0-20260319190234-28399d86e0b5 // indirect
@@ -973,7 +974,7 @@ require (
 	sigs.k8s.io/apiserver-network-proxy/konnectivity-client v0.34.0 // indirect
 	sigs.k8s.io/cli-utils v0.37.2 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
-	sigs.k8s.io/knftables v0.0.18 // indirect
+	sigs.k8s.io/knftables v0.0.21 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
 	sigs.k8s.io/release-utils v0.12.4 // indirect
 	sigs.k8s.io/structured-merge-diff/v6 v6.3.2 // indirect

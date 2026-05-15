@@ -265,3 +265,50 @@ type OptionsAWS struct {
 	// Defaults to "AWS_SESSION_TOKEN".
 	SessionTokenEnvVar string `default:"AWS_SESSION_TOKEN" json:"sessionTokenEnvVar,omitzero"`
 }
+
+// OptionsKubernetes defines options specific to the Kubernetes provider.
+// The Kubernetes provider runs nested cluster nodes as pods inside an existing host cluster.
+// It uses Gateway API (TCPRoute) to expose the nested cluster's API server.
+type OptionsKubernetes struct {
+	// Kubeconfig is the path to the kubeconfig for the host cluster.
+	// Defaults to "~/.kube/config".
+	Kubeconfig string `default:"~/.kube/config" json:"kubeconfig,omitzero"`
+	// KubeconfigEnvVar is the environment variable containing the host kubeconfig path.
+	// Defaults to "KSAIL_HOST_KUBECONFIG".
+	KubeconfigEnvVar string `default:"KSAIL_HOST_KUBECONFIG" json:"kubeconfigEnvVar,omitzero"`
+	// Context is the kubeconfig context for the host cluster.
+	// When empty, uses the current context.
+	Context string `json:"context,omitzero"`
+	// ContextEnvVar is the environment variable containing the host kubeconfig context.
+	// Defaults to "KSAIL_HOST_CONTEXT".
+	ContextEnvVar string `default:"KSAIL_HOST_CONTEXT" json:"contextEnvVar,omitzero"`
+	// GatewayClassName is the GatewayClass to use for exposing the nested API server.
+	// Must reference a GatewayClass that exists on the host cluster.
+	// When empty, the API is exposed via ClusterIP Service only (no external Gateway).
+	GatewayClassName string `json:"gatewayClassName,omitzero"`
+	// PodCIDR is the pod CIDR for the nested cluster.
+	// Must not overlap with the host cluster's pod or service CIDRs.
+	// Defaults to "10.64.0.0/16".
+	PodCIDR string `default:"10.64.0.0/16" json:"podCidr,omitzero"`
+	// ServiceCIDR is the service CIDR for the nested cluster.
+	// Must not overlap with the host cluster's pod or service CIDRs.
+	// Defaults to "10.128.0.0/16".
+	ServiceCIDR string `default:"10.128.0.0/16" json:"serviceCidr,omitzero"`
+	// Persistence defines storage persistence for the nested cluster's data directory.
+	Persistence KubernetesPersistence `json:"persistence,omitzero"`
+}
+
+// KubernetesPersistence defines storage persistence configuration for the Kubernetes provider.
+// When enabled, a PVC is created for the nested cluster's data directory to survive pod restarts.
+// When disabled (default), emptyDir is used and clusters are fully ephemeral.
+type KubernetesPersistence struct {
+	// Enabled controls whether a PVC is used for the nested cluster's data directory.
+	// When false (default), emptyDir is used and the cluster is ephemeral.
+	Enabled bool `json:"enabled,omitzero"`
+	// StorageClassName is the StorageClass to use for the PVC.
+	// When empty, the cluster's default StorageClass is used.
+	StorageClassName string `json:"storageClassName,omitzero"`
+	// Size is the storage request size for the PVC.
+	// Defaults to "20Gi".
+	Size string `default:"20Gi" json:"size,omitzero"`
+}

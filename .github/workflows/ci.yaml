@@ -861,6 +861,30 @@ jobs:
             provider: Docker
             init: true
             args: "--name system-test-cluster-with-image-verification --image-verification Enabled"
+          # Enable Kubernetes provider tests on the default (init=true, args="")
+          # entry for each distribution. This tests all 5 nested distributions
+          # on each host type, once per matrix.
+          - distribution: Vanilla
+            provider: Docker
+            init: true
+            args: ""
+            test-kubernetes-provider: "true"
+          - distribution: K3s
+            provider: Docker
+            init: true
+            args: ""
+            test-kubernetes-provider: "true"
+          - distribution: Talos
+            provider: Docker
+            init: true
+            args: ""
+            test-kubernetes-provider: "true"
+          - distribution: VCluster
+            provider: Docker
+            init: true
+            args: ""
+            test-kubernetes-provider: "true"
+          # NOTE: KWOK excluded — simulated nodes cannot run real workloads (DinD pods)
     steps:
       - name: 📄 Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -936,6 +960,7 @@ jobs:
           init: ${{ matrix.init }}
           args: ${{ matrix.args }}
           apply-overlay-path: ".github/fixtures/podinfo-overlay"
+          test-kubernetes-provider: ${{ matrix.test-kubernetes-provider || 'false' }}
 
           ghcr-user: ${{ github.actor }}
           ghcr-token: ${{ secrets.GITHUB_TOKEN }}

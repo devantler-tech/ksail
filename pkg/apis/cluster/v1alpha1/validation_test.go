@@ -235,7 +235,8 @@ func TestValidProviders(t *testing.T) {
 	assert.Contains(t, providers, v1alpha1.ProviderHetzner)
 	assert.Contains(t, providers, v1alpha1.ProviderOmni)
 	assert.Contains(t, providers, v1alpha1.ProviderAWS)
-	assert.Len(t, providers, 4)
+	assert.Contains(t, providers, v1alpha1.ProviderKubernetes)
+	assert.Len(t, providers, 5)
 }
 
 func TestValidPlacementGroupStrategies(t *testing.T) {
@@ -568,6 +569,73 @@ func TestValidateAllowedCIDRs(t *testing.T) {
 				require.Error(t, err)
 				require.ErrorIs(t, err, v1alpha1.ErrInvalidAllowedCIDR)
 				assert.Contains(t, err.Error(), testCase.errorContains)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestValidateNestedCIDRs(t *testing.T) { //nolint:funlen // table-driven test data
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		podCIDR     string
+		serviceCIDR string
+		wantError   bool
+	}{
+		{
+			name:        "default_non_overlapping_cidrs",
+			podCIDR:     "10.64.0.0/16",
+			serviceCIDR: "10.128.0.0/16",
+			wantError:   false,
+		},
+		{
+			name:        "empty_cidrs_valid",
+			podCIDR:     "",
+			serviceCIDR: "",
+			wantError:   false,
+		},
+		{
+			name:        "pod_cidr_overlaps_host_pod_cidr",
+			podCIDR:     "10.244.0.0/16",
+			serviceCIDR: "10.128.0.0/16",
+			wantError:   true,
+		},
+		{
+			name:        "service_cidr_overlaps_host_service_cidr",
+			podCIDR:     "10.64.0.0/16",
+			serviceCIDR: "10.96.0.0/16",
+			wantError:   true,
+		},
+		{
+			name:        "both_overlap",
+			podCIDR:     "10.244.0.0/16",
+			serviceCIDR: "10.96.0.0/12",
+			wantError:   true,
+		},
+		{
+			name:        "invalid_pod_cidr",
+			podCIDR:     "not-a-cidr",
+			serviceCIDR: "10.128.0.0/16",
+			wantError:   true,
+		},
+		{
+			name:        "custom_non_overlapping",
+			podCIDR:     "172.20.0.0/16",
+			serviceCIDR: "172.21.0.0/16",
+			wantError:   false,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := v1alpha1.ValidateNestedCIDRs(testCase.podCIDR, testCase.serviceCIDR)
+			if testCase.wantError {
+				require.Error(t, err)
 			} else {
 				require.NoError(t, err)
 			}

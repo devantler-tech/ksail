@@ -19,6 +19,11 @@ const (
 	ProviderOmni Provider = "Omni"
 	// ProviderAWS runs EKS managed Kubernetes clusters on AWS.
 	ProviderAWS Provider = "AWS"
+	// ProviderKubernetes runs cluster nodes as pods inside an existing Kubernetes cluster.
+	// Supports all Docker-based distributions (Vanilla, K3s, Talos, VCluster) via either
+	// direct pod execution (K3s) or Docker-in-Docker (Kind, Talos, VCluster).
+	// Requires Gateway API experimental CRDs and a Gateway controller on the host cluster.
+	ProviderKubernetes Provider = "Kubernetes"
 )
 
 // Set for Provider (pflag.Value interface).
@@ -32,13 +37,14 @@ func (p *Provider) Set(value string) error {
 	}
 
 	return fmt.Errorf(
-		"%w: %s (valid options: %s, %s, %s, %s)",
+		"%w: %s (valid options: %s, %s, %s, %s, %s)",
 		ErrInvalidProvider,
 		value,
 		ProviderDocker,
 		ProviderHetzner,
 		ProviderOmni,
 		ProviderAWS,
+		ProviderKubernetes,
 	)
 }
 
@@ -64,16 +70,21 @@ func (p *Provider) ValidValues() []string {
 		string(ProviderHetzner),
 		string(ProviderOmni),
 		string(ProviderAWS),
+		string(ProviderKubernetes),
 	}
 }
 
 // supportedProviders returns the valid providers for a given distribution.
+// The Kubernetes provider is supported by Vanilla, K3s, Talos, VCluster, and KWOK distributions,
+// allowing them to run as nested clusters in pod form within an existing host Kubernetes cluster.
 func supportedProviders(distribution Distribution) []Provider {
 	switch distribution {
-	case DistributionVanilla, DistributionK3s, DistributionVCluster, DistributionKWOK:
-		return []Provider{ProviderDocker}
+	case DistributionVanilla, DistributionK3s, DistributionVCluster:
+		return []Provider{ProviderDocker, ProviderKubernetes}
+	case DistributionKWOK:
+		return []Provider{ProviderDocker, ProviderKubernetes}
 	case DistributionTalos:
-		return []Provider{ProviderDocker, ProviderHetzner, ProviderOmni}
+		return []Provider{ProviderDocker, ProviderHetzner, ProviderOmni, ProviderKubernetes}
 	case DistributionEKS:
 		return []Provider{ProviderAWS}
 	default:
@@ -85,6 +96,14 @@ func supportedProviders(distribution Distribution) []Provider {
 // Cloud providers run nodes on remote servers and cannot access local Docker infrastructure.
 func (p *Provider) IsCloud() bool {
 	return *p == ProviderHetzner || *p == ProviderOmni || *p == ProviderAWS
+}
+
+// NeedsLocalDocker returns true if the provider requires a local Docker daemon
+// on the host machine for running cluster nodes, registries, and networks.
+// Returns false for cloud providers and the Kubernetes provider (which runs
+// nodes as pods in an existing cluster rather than as local Docker containers).
+func (p *Provider) NeedsLocalDocker() bool {
+	return !p.IsCloud() && *p != ProviderKubernetes
 }
 
 // ValidateForDistribution validates that the provider is valid for the given distribution.

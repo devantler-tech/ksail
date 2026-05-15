@@ -7,6 +7,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const (
+	helmInterval   = "10m"
+	flagExportHelm = "export"
+)
+
 func TestNewCreateSourceHelmCmd(t *testing.T) {
 	t.Parallel()
 
@@ -81,23 +86,23 @@ func helmRepositoryExportTestsAdvanced() map[string]testCase {
 				"url":              "https://charts.example.com",
 				"secret-ref":       "helm-creds",
 				"pass-credentials": "true",
-				"export":           "true",
+				flagExportHelm:     "true",
 			},
 		},
 		"export with custom interval": {
 			args: []string{"podinfo"},
 			flags: map[string]string{
-				"url":      "https://stefanprodan.github.io/podinfo",
-				"interval": "10m",
-				"export":   "true",
+				"url":          "https://stefanprodan.github.io/podinfo",
+				"interval":     helmInterval,
+				flagExportHelm: "true",
 			},
 		},
 		"export with namespace": {
 			args: []string{"podinfo"},
 			flags: map[string]string{
-				"url":       "https://stefanprodan.github.io/podinfo",
-				"namespace": "custom-ns",
-				"export":    "true",
+				"url":          "https://stefanprodan.github.io/podinfo",
+				"namespace":    "custom-ns",
+				flagExportHelm: "true",
 			},
 		},
 	}
@@ -128,6 +133,6 @@ func TestCreateHelmRepository_MissingRequiredURL(t *testing.T) {
 	testMissingRequiredFlag(
 		t,
 		[]string{"source", "helm"},
-		[]string{"podinfo", "--export"},
+		[]string{"podinfo", "--" + flagExportHelm},
 	)
 }

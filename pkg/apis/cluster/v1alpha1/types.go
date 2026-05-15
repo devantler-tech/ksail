@@ -43,9 +43,10 @@ type Spec struct {
 // This separates infrastructure provider concerns (Hetzner servers, Omni SaaS) from
 // cluster/distribution concerns in ClusterSpec.
 type ProviderSpec struct {
-	Hetzner OptionsHetzner `json:"hetzner,omitzero"`
-	Omni    OptionsOmni    `json:"omni,omitzero"`
-	AWS     OptionsAWS     `json:"aws,omitzero"`
+	Hetzner    OptionsHetzner    `json:"hetzner,omitzero"`
+	Omni       OptionsOmni       `json:"omni,omitzero"`
+	AWS        OptionsAWS        `json:"aws,omitzero"`
+	Kubernetes OptionsKubernetes `json:"kubernetes,omitzero"`
 }
 
 // ClusterSpec defines cluster-related configuration.
