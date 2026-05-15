@@ -107,7 +107,11 @@ func (p *KubernetesProvisioner) Create(
 	}
 
 	// Restore the context on any return path (success or failure).
-	defer func() { _ = k8s.SetKubeconfigCurrentContext(p.kubeconfigPath, originalContext) }()
+	defer func() {
+		if restoreErr := k8s.SetKubeconfigCurrentContext(p.kubeconfigPath, originalContext); restoreErr != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "warning: failed to restore kubeconfig context: %v\n", restoreErr)
+		}
+	}()
 
 	// Step 1: Ensure namespace + DinD pod
 	err = p.setupDinD(ctx, target)

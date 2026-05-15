@@ -514,6 +514,11 @@ func GetKubeconfigCurrentContext(kubeconfigPath string) (string, error) {
 		return "", fmt.Errorf("expand kubeconfig path: %w", err)
 	}
 
+	kubeconfigPath, err = fsutil.EvalCanonicalPath(kubeconfigPath)
+	if err != nil {
+		return "", fmt.Errorf("canonicalize kubeconfig path: %w", err)
+	}
+
 	cfg, err := loadOrCreateKubeconfig(kubeconfigPath)
 	if err != nil {
 		return "", fmt.Errorf("load kubeconfig: %w", err)

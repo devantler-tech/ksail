@@ -24,7 +24,8 @@ const (
 	RoleWorker = "worker"
 )
 
-// NamespacePrefix is the prefix for nested cluster namespaces.
+// NamespacePrefix is the prefix for KSail-managed nested cluster namespaces (e.g., "ksail-mycluster").
+// Other provisioners (k3k, vCluster) may use their own namespace prefixes alongside this one.
 const NamespacePrefix = "ksail-"
 
 // NamespaceName returns the namespace name for a nested cluster.
