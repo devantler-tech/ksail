@@ -108,8 +108,13 @@ func (p *KubernetesProvisioner) Create(
 
 	// Restore the context on any return path (success or failure).
 	defer func() {
-		if restoreErr := k8s.SetKubeconfigCurrentContext(p.kubeconfigPath, originalContext); restoreErr != nil {
-			_, _ = fmt.Fprintf(os.Stderr, "warning: failed to restore kubeconfig context: %v\n", restoreErr)
+		restoreErr := k8s.SetKubeconfigCurrentContext(p.kubeconfigPath, originalContext)
+		if restoreErr != nil {
+			_, _ = fmt.Fprintf(
+				os.Stderr,
+				"warning: failed to restore kubeconfig context: %v\n",
+				restoreErr,
+			)
 		}
 	}()
 
