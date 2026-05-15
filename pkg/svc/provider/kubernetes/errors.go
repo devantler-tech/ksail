@@ -33,5 +33,7 @@ var (
 	ErrPortForwardError = errors.New("port-forward error")
 
 	// ErrNamespaceNotOwnedByKSail is returned when a namespace lacks KSail ownership labels.
-	ErrNamespaceNotOwnedByKSail = errors.New("namespace does not have KSail ownership labels; refusing deletion")
+	ErrNamespaceNotOwnedByKSail = errors.New(
+		"namespace does not have KSail ownership labels; refusing deletion",
+	)
 )

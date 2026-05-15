@@ -170,28 +170,29 @@ func (p *Provider) NodesExist(ctx context.Context, clusterName string) (bool, er
 // pods, services, gateway resources, and the cluster namespace.
 // It is idempotent: deleting an already-removed cluster is not an error.
 func (p *Provider) DeleteNodes(ctx context.Context, clusterName string) error {
-	ns := NamespaceName(clusterName)
+	namespaceName := NamespaceName(clusterName)
 
 	// Verify the namespace exists and has KSail ownership labels before deletion
-	namespace, err := p.client.CoreV1().Namespaces().Get(ctx, ns, metav1.GetOptions{})
+	namespace, err := p.client.CoreV1().Namespaces().Get(ctx, namespaceName, metav1.GetOptions{})
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			// Namespace already gone — idempotent success
 			return nil
 		}
-		return fmt.Errorf("get namespace %s: %w", ns, err)
+
+		return fmt.Errorf("get namespace %s: %w", namespaceName, err)
 	}
 
 	// Verify KSail ownership
 	if namespace.Labels[LabelManagedBy] != LabelManagedByValue ||
 		namespace.Labels[LabelClusterName] != clusterName {
-		return fmt.Errorf("namespace %s: %w", ns, ErrNamespaceNotOwnedByKSail)
+		return fmt.Errorf("namespace %s: %w", namespaceName, ErrNamespaceNotOwnedByKSail)
 	}
 
 	// Delete the namespace (cascading delete removes all resources within it)
-	err = p.client.CoreV1().Namespaces().Delete(ctx, ns, metav1.DeleteOptions{})
+	err = p.client.CoreV1().Namespaces().Delete(ctx, namespaceName, metav1.DeleteOptions{})
 	if err != nil && !apierrors.IsNotFound(err) {
-		return fmt.Errorf("delete nodes: remove namespace %s: %w", ns, err)
+		return fmt.Errorf("delete nodes: remove namespace %s: %w", namespaceName, err)
 	}
 
 	return nil
@@ -222,7 +223,8 @@ func (p *Provider) EnsureNamespace(ctx context.Context, clusterName string) erro
 	namespaceName := NamespaceName(clusterName)
 
 	// Create or update namespace with PodSecurity privileged labels
-	if err := k8s.EnsurePrivilegedNamespace(ctx, p.client, namespaceName); err != nil {
+	err := k8s.EnsurePrivilegedNamespace(ctx, p.client, namespaceName)
+	if err != nil {
 		return fmt.Errorf("ensure namespace %s: %w", namespaceName, err)
 	}
 
@@ -238,6 +240,7 @@ func (p *Provider) EnsureNamespace(ctx context.Context, clusterName string) erro
 
 	// Check if any KSail labels need to be added
 	needsUpdate := false
+
 	for k, v := range CommonLabels(clusterName) {
 		if namespace.Labels[k] != v {
 			namespace.Labels[k] = v
