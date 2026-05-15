@@ -185,7 +185,7 @@ func (p *Provider) DeleteNodes(ctx context.Context, clusterName string) error {
 	// Verify KSail ownership
 	if namespace.Labels[LabelManagedBy] != LabelManagedByValue ||
 		namespace.Labels[LabelClusterName] != clusterName {
-		return fmt.Errorf("namespace %s does not have KSail ownership labels; refusing deletion", ns)
+		return fmt.Errorf("namespace %s: %w", ns, ErrNamespaceNotOwnedByKSail)
 	}
 
 	// Delete the namespace (cascading delete removes all resources within it)
