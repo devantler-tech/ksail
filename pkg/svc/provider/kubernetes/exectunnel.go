@@ -44,19 +44,20 @@ type execTunnel struct {
 // newExecTunnel creates a TCP tunnel listening on a random local port.
 // Each connection is relayed to the pod via CRI exec + nc.
 func newExecTunnel(
+	ctx context.Context,
 	clientset kubernetes.Interface,
 	restConfig *rest.Config,
 	namespace, podName, container string,
 	targetPort int,
 ) (*execTunnel, error) {
-	ll, err := newLocalListener()
+	listener, err := newLocalListener(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("exec tunnel: %w", err)
 	}
 
 	return &execTunnel{
-		listener:   ll.Listener,
-		localPort:  ll.Port,
+		listener:   listener.Listener,
+		localPort:  listener.Port,
 		clientset:  clientset,
 		restConfig: restConfig,
 		namespace:  namespace,

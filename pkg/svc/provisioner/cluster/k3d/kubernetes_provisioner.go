@@ -96,8 +96,11 @@ type K3kProvisionerConfig struct {
 }
 
 // NewK3kProvisioner creates a K3kProvisioner for managing K3s clusters via k3k.
-func NewK3kProvisioner(cfg K3kProvisionerConfig) *K3kProvisioner {
-	kubeconfigPath := k8s.ResolveKubeconfigPath(cfg.KubeconfigPath)
+func NewK3kProvisioner(cfg K3kProvisionerConfig) (*K3kProvisioner, error) {
+	kubeconfigPath, err := k8s.ResolveKubeconfigPath(cfg.KubeconfigPath)
+	if err != nil {
+		return nil, fmt.Errorf("resolve kubeconfig path: %w", err)
+	}
 
 	controlPlanes := cfg.ControlPlanes
 	if controlPlanes <= 0 {
@@ -118,7 +121,7 @@ func NewK3kProvisioner(cfg K3kProvisionerConfig) *K3kProvisioner {
 		workers:        workers,
 		podCIDR:        cfg.PodCIDR,
 		serviceCIDR:    cfg.ServiceCIDR,
-	}
+	}, nil
 }
 
 // Create provisions a K3s cluster using the k3k operator on the host Kubernetes cluster.
@@ -263,12 +266,14 @@ func (p *K3kProvisioner) Exists(ctx context.Context, name string) (bool, error) 
 
 // Start is not supported for k3k clusters (pods are always running).
 func (p *K3kProvisioner) Start(_ context.Context, _ string) error {
-	return fmt.Errorf("start not supported for k3k clusters (pods are managed by the k3k operator): %w", clustererr.ErrOperationNotSupported)
+	return fmt.Errorf("start not supported for k3k clusters (pods are managed by the k3k operator): %w",
+		clustererr.ErrOperationNotSupported)
 }
 
 // Stop is not supported for k3k clusters (pods are managed by the operator).
 func (p *K3kProvisioner) Stop(_ context.Context, _ string) error {
-	return fmt.Errorf("stop not supported for k3k clusters (pods are managed by the k3k operator): %w", clustererr.ErrOperationNotSupported)
+	return fmt.Errorf("stop not supported for k3k clusters (pods are managed by the k3k operator): %w",
+		clustererr.ErrOperationNotSupported)
 }
 
 // List returns all k3k cluster namespaces found on the host cluster.
@@ -326,7 +331,8 @@ func (p *K3kProvisioner) ensureK3kOperator(ctx context.Context) error {
 		RepoURL:         k3kChartRepo,
 	}
 
-	if err := helm.InstallOrUpgradeChart(ctx, helmClient, repoConfig, chartConfig, k3kHelmTimeout); err != nil {
+	err = helm.InstallOrUpgradeChart(ctx, helmClient, repoConfig, chartConfig, k3kHelmTimeout)
+	if err != nil {
 		return fmt.Errorf("install k3k chart: %w", err)
 	}
 

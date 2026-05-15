@@ -5,11 +5,11 @@ import (
 	"os"
 )
 
-// jscpd:ignore-start
 // WithRemoteDockerHost sets DOCKER_HOST to point at a port-forwarded DinD Docker API,
-// executes fn, then restores the original DOCKER_HOST value.
+// executes callback, then restores the original DOCKER_HOST value.
 // This is safe for CLI usage (sequential cluster creation) but is NOT goroutine-safe.
-func WithRemoteDockerHost(pf *PortForwardSession, fn func() error) error {
+// jscpd:ignore-start
+func WithRemoteDockerHost(pf *PortForwardSession, callback func() error) error {
 	dockerHost := fmt.Sprintf("tcp://127.0.0.1:%d", pf.LocalPort)
 
 	origHost := os.Getenv("DOCKER_HOST")
@@ -27,7 +27,7 @@ func WithRemoteDockerHost(pf *PortForwardSession, fn func() error) error {
 		}
 	}()
 
-	return fn()
+	return callback()
 }
 
 // jscpd:ignore-end

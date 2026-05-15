@@ -54,9 +54,9 @@ func (p *Provider) StartNodes(ctx context.Context, clusterName string) error {
 // The pods are not managed by a controller (they are standalone),
 // so deletion effectively stops the cluster.
 func (p *Provider) StopNodes(ctx context.Context, clusterName string) error {
-	ns := NamespaceName(clusterName)
+	namespace := NamespaceName(clusterName)
 
-	pods, err := p.listClusterPods(ctx, ns, clusterName)
+	pods, err := p.listClusterPods(ctx, namespace, clusterName)
 	if err != nil {
 		return fmt.Errorf("stop nodes: %w", err)
 	}
@@ -69,8 +69,8 @@ func (p *Provider) StopNodes(ctx context.Context, clusterName string) error {
 	// (unmanaged) pods, so deleting them stops the DinD processes without a controller
 	// recreating them.
 	for i := range pods {
-		err := p.client.CoreV1().Pods(ns).Delete(ctx, pods[i].Name, metav1.DeleteOptions{})
-		if err != nil {
+		err := p.client.CoreV1().Pods(namespace).Delete(ctx, pods[i].Name, metav1.DeleteOptions{})
+		if err != nil && !apierrors.IsNotFound(err) {
 			return fmt.Errorf("stop nodes: delete pod %s: %w", pods[i].Name, err)
 		}
 	}
@@ -80,9 +80,9 @@ func (p *Provider) StopNodes(ctx context.Context, clusterName string) error {
 
 // ListNodes returns all node pods for the given nested cluster.
 func (p *Provider) ListNodes(ctx context.Context, clusterName string) ([]provider.NodeInfo, error) {
-	ns := NamespaceName(clusterName)
+	namespace := NamespaceName(clusterName)
 
-	pods, err := p.listClusterPods(ctx, ns, clusterName)
+	pods, err := p.listClusterPods(ctx, namespace, clusterName)
 	if err != nil {
 		return nil, fmt.Errorf("list nodes: %w", err)
 	}

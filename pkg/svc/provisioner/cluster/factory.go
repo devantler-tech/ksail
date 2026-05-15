@@ -265,6 +265,7 @@ func (f DefaultFactory) createKindKubernetesProvisioner(
 			Distribution:     string(cluster.Spec.Cluster.Distribution),
 			GatewayClassName: opts.GatewayClassName,
 			APIServerPort:    kubernetesprovider.DinDAPIServerPort,
+			Persistence:      opts.Persistence,
 		},
 	)
 	if err != nil {
@@ -346,7 +347,7 @@ func (f DefaultFactory) createK3dKubernetesProvisioner(
 
 	workers := cluster.Spec.Cluster.Workers
 
-	provisioner := k3dprovisioner.NewK3kProvisioner(
+	provisioner, err := k3dprovisioner.NewK3kProvisioner(
 		k3dprovisioner.K3kProvisionerConfig{
 			HostClientset:  hostClient,
 			RestConfig:     restConfig,
@@ -360,6 +361,9 @@ func (f DefaultFactory) createK3dKubernetesProvisioner(
 			ServiceCIDR:    opts.ServiceCIDR,
 		},
 	)
+	if err != nil {
+		return nil, nil, fmt.Errorf("create K3k provisioner: %w", err)
+	}
 
 	if f.ComponentDetector != nil {
 		provisioner.WithComponentDetector(f.ComponentDetector)
@@ -691,7 +695,7 @@ func (f DefaultFactory) createTalosKubernetesProvisioner(
 		return nil, nil, fmt.Errorf("create inner Talos provisioner: %w", err)
 	}
 
-	provisioner := talosprovisioner.NewKubernetesProvisioner(
+	provisioner, err := talosprovisioner.NewKubernetesProvisioner(
 		talosprovisioner.KubernetesProvisionerConfig{
 			InnerProvisioner: innerProvisioner,
 			KubeconfigPath:   cluster.Spec.Cluster.Connection.Kubeconfig,
@@ -703,8 +707,12 @@ func (f DefaultFactory) createTalosKubernetesProvisioner(
 			GatewayClassName: opts.GatewayClassName,
 			ControlPlanes:    int(cluster.Spec.Cluster.ControlPlanes),
 			Workers:          int(cluster.Spec.Cluster.Workers),
+			Persistence:      opts.Persistence,
 		},
 	)
+	if err != nil {
+		return nil, nil, fmt.Errorf("create Talos Kubernetes provisioner: %w", err)
+	}
 
 	return provisioner, nil, nil
 }
@@ -767,7 +775,7 @@ func (f DefaultFactory) createVClusterKubernetesProvisioner(
 		disableFlannel = vclusterConfig.DisableFlannel
 	}
 
-	provisioner := vclusterprovisioner.NewKubernetesProvisioner(
+	provisioner, err := vclusterprovisioner.NewKubernetesProvisioner(
 		vclusterprovisioner.KubernetesProvisionerConfig{
 			ClusterName:    clusterName,
 			HostContext:    resolveKubernetesOption(opts.Context, opts.ContextEnvVar),
@@ -779,6 +787,9 @@ func (f DefaultFactory) createVClusterKubernetesProvisioner(
 			DisableFlannel: disableFlannel,
 		},
 	)
+	if err != nil {
+		return nil, nil, fmt.Errorf("create vCluster Kubernetes provisioner: %w", err)
+	}
 
 	return provisioner, vclusterConfig, nil
 }
@@ -827,7 +838,7 @@ func (f DefaultFactory) createKWOKKubernetesProvisioner(
 	// when using --name flag without a ksail.yaml file.
 	clusterName := kwokConfig.Name
 
-	provisioner := kwokprovisioner.NewKubernetesProvisioner(
+	provisioner, err := kwokprovisioner.NewKubernetesProvisioner(
 		kwokprovisioner.KubernetesProvisionerConfig{
 			Name:             kwokConfig.Name,
 			ConfigPath:       kwokConfig.ConfigPath,
@@ -838,8 +849,12 @@ func (f DefaultFactory) createKWOKKubernetesProvisioner(
 			ClusterName:      clusterName,
 			Distribution:     string(cluster.Spec.Cluster.Distribution),
 			GatewayClassName: opts.GatewayClassName,
+			Persistence:      opts.Persistence,
 		},
 	)
+	if err != nil {
+		return nil, nil, fmt.Errorf("create KWOK Kubernetes provisioner: %w", err)
+	}
 
 	return provisioner, kwokConfig, nil
 }

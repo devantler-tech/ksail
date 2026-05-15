@@ -80,8 +80,11 @@ type KubernetesProvisionerConfig struct {
 }
 
 // NewKubernetesProvisioner creates a KubernetesProvisioner for vCluster-on-Kubernetes.
-func NewKubernetesProvisioner(cfg KubernetesProvisionerConfig) *KubernetesProvisioner {
-	kubeconfigPath := k8s.ResolveKubeconfigPath(cfg.KubeconfigPath)
+func NewKubernetesProvisioner(cfg KubernetesProvisionerConfig) (*KubernetesProvisioner, error) {
+	kubeconfigPath, err := k8s.ResolveKubeconfigPath(cfg.KubeconfigPath)
+	if err != nil {
+		return nil, fmt.Errorf("resolve kubeconfig path: %w", err)
+	}
 
 	return &KubernetesProvisioner{
 		clusterName:    cfg.ClusterName,
@@ -92,14 +95,15 @@ func NewKubernetesProvisioner(cfg KubernetesProvisionerConfig) *KubernetesProvis
 		k8sProvider:    cfg.K8sProvider,
 		valuesPath:     cfg.ValuesPath,
 		disableFlannel: cfg.DisableFlannel,
-	}
+	}, nil
 }
 
 // Create provisions a vCluster on the host Kubernetes cluster using the Helm driver.
 // After chart installation, it manually extracts the kubeconfig from the vc-<name>
 // Secret and sets up a port-forward to the vCluster pod (bypassing ConnectHelm which
 // blocks indefinitely on port-forwarding).
-func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error { //nolint:funlen,cyclop // sequential setup steps
+func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error { //nolint:funlen,cyclop
+	// sequential setup steps
 	clusterName := p.clusterName
 	if clusterName == "" {
 		clusterName = name
@@ -116,7 +120,9 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 			Labels: kubernetesprovider.CommonLabels(clusterName),
 		},
 	}
-	if _, nsErr := p.hostClientset.CoreV1().Namespaces().Create(ctx, nsObj, metav1.CreateOptions{}); nsErr != nil && !apierrors.IsAlreadyExists(nsErr) {
+	if _, nsErr := p.hostClientset.CoreV1().Namespaces().Create(
+		ctx, nsObj, metav1.CreateOptions{},
+	); nsErr != nil && !apierrors.IsAlreadyExists(nsErr) {
 		return fmt.Errorf("pre-create vCluster namespace %s: %w", namespace, nsErr)
 	}
 
@@ -269,12 +275,14 @@ func (p *KubernetesProvisioner) Exists(ctx context.Context, name string) (bool, 
 
 // Start is not supported for Helm-based vClusters (they run as pods).
 func (p *KubernetesProvisioner) Start(_ context.Context, _ string) error {
-	return fmt.Errorf("start not supported for vCluster on Kubernetes (pods are always running): %w", clustererr.ErrOperationNotSupported)
+	return fmt.Errorf("start not supported for vCluster on Kubernetes (pods are always running): %w",
+		clustererr.ErrOperationNotSupported)
 }
 
 // Stop is not supported for Helm-based vClusters (they run as pods).
 func (p *KubernetesProvisioner) Stop(_ context.Context, _ string) error {
-	return fmt.Errorf("stop not supported for vCluster on Kubernetes (pods are always running): %w", clustererr.ErrOperationNotSupported)
+	return fmt.Errorf("stop not supported for vCluster on Kubernetes (pods are always running): %w",
+		clustererr.ErrOperationNotSupported)
 }
 
 // List returns all vCluster instances discovered by the SDK.
@@ -296,7 +304,9 @@ func (p *KubernetesProvisioner) List(ctx context.Context) ([]string, error) {
 
 // waitForKubeconfigSecret polls for the vc-<name> Secret until it contains
 // the kubeconfig data, matching the approach used by the vCluster SDK itself.
-func (p *KubernetesProvisioner) waitForKubeconfigSecret(ctx context.Context, clusterName, namespace string) ([]byte, error) {
+func (p *KubernetesProvisioner) waitForKubeconfigSecret(
+	ctx context.Context, clusterName, namespace string,
+) ([]byte, error) {
 	secretName := vclusterSecretPrefix + clusterName
 
 	var kubeconfigData []byte

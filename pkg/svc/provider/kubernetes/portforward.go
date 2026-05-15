@@ -92,7 +92,7 @@ func startExecTunnel(
 	namespace, podName, containerName string,
 	podPort int,
 ) (*PortForwardSession, error) {
-	tunnel, err := newExecTunnel(clientset, restConfig, namespace, podName, containerName, podPort)
+	tunnel, err := newExecTunnel(ctx, clientset, restConfig, namespace, podName, containerName, podPort)
 	if err != nil {
 		return nil, fmt.Errorf("create exec tunnel: %w", err)
 	}
@@ -145,7 +145,7 @@ func startProxy(
 		apiURL,
 	)
 
-	proxy, err := newTCPProxy(dialer, podPort)
+	proxy, err := newTCPProxy(ctx, dialer, podPort)
 	if err != nil {
 		return nil, fmt.Errorf("create TCP proxy: %w", err)
 	}

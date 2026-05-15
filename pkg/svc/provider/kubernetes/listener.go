@@ -1,6 +1,7 @@
 package kubernetes
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"strconv"
@@ -18,8 +19,8 @@ type localListener struct {
 
 // newLocalListener creates a TCP listener on a random localhost port and
 // extracts the assigned port number. On any error the listener is closed.
-func newLocalListener() (*localListener, error) {
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+func newLocalListener(ctx context.Context) (*localListener, error) {
+	ln, err := (&net.ListenConfig{}).Listen(ctx, "tcp", "127.0.0.1:0")
 	if err != nil {
 		return nil, fmt.Errorf("create listener: %w", err)
 	}

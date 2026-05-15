@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -35,21 +36,18 @@ func DefaultKubeconfigPath() string {
 
 // ResolveKubeconfigPath returns a usable kubeconfig path from the given input.
 // If path is empty, the default kubeconfig path is returned.
-// If path starts with "~/", the tilde is expanded to the user's home directory.
-// Otherwise path is returned unchanged.
-func ResolveKubeconfigPath(path string) string {
+// Otherwise path is expanded (tilde → home directory, relative → absolute) via fsutil.ExpandHomePath.
+func ResolveKubeconfigPath(path string) (string, error) {
 	if path == "" {
-		return DefaultKubeconfigPath()
+		return DefaultKubeconfigPath(), nil
 	}
 
-	if len(path) >= 2 && path[:2] == "~/" {
-		homeDir, _ := os.UserHomeDir()
-		if homeDir != "" {
-			return homeDir + path[1:]
-		}
+	expanded, err := fsutil.ExpandHomePath(path)
+	if err != nil {
+		return "", fmt.Errorf("expand kubeconfig path: %w", err)
 	}
 
-	return path
+	return expanded, nil
 }
 
 // GetRESTConfig loads the kubeconfig using default loading rules and returns a REST config.

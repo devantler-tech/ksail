@@ -4,18 +4,23 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"k8s.io/client-go/dynamic"
 )
 
 // SetupDinD is a composite operation that creates the namespace, DinD pod,
 // and waits for readiness. It combines EnsureNamespace + CreateDinDPod + WaitForDinD.
-func (p *Provider) SetupDinD(ctx context.Context, clusterName, distribution string) error {
+func (p *Provider) SetupDinD(
+	ctx context.Context,
+	clusterName, distribution string,
+	persistence v1alpha1.KubernetesPersistence,
+) error {
 	err := p.EnsureNamespace(ctx, clusterName)
 	if err != nil {
 		return fmt.Errorf("ensure namespace: %w", err)
 	}
 
-	err = p.CreateDinDPod(ctx, clusterName, distribution)
+	err = p.CreateDinDPod(ctx, clusterName, distribution, persistence)
 	if err != nil {
 		return fmt.Errorf("create DinD pod: %w", err)
 	}

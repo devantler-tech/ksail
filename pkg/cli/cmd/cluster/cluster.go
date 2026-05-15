@@ -4063,7 +4063,7 @@ func getKubernetesProviderFromConfig() (*kubernetesprovider.Provider, error) {
 	restConfig, err := k8s.BuildRESTConfig(canonicalPath, hostContext)
 	if err != nil {
 		// If the kubeconfig is present but invalid or unreachable, skip silently.
-		return nil, nil //nolint:nilnil
+		return nil, nil //nolint:nilnil,nilerr // intentionally swallow: host cluster unavailable
 	}
 
 	clientset, err := kubernetes.NewForConfig(restConfig)

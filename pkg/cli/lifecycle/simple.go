@@ -361,7 +361,8 @@ func CreateMinimalProvisionerForProvider(
 	case v1alpha1.ProviderKubernetes:
 		// Kubernetes provider runs clusters as pods in a host cluster.
 		// Delete by removing the ksail-<name> namespace (cascading delete).
-		return newKubernetesCleanupProvisioner(info.ClusterName, kubernetesOpts)
+		// Pass info.KubeconfigPath as the nested cluster's kubeconfig for context cleanup.
+		return newKubernetesCleanupProvisioner(info.ClusterName, kubernetesOpts, info.KubeconfigPath)
 
 	case v1alpha1.ProviderHetzner, v1alpha1.ProviderOmni:
 		// Hetzner and Omni only support Talos
@@ -412,14 +413,16 @@ func CreateMinimalProvisionerForProvider(
 // kubernetesCleanupProvisioner deletes nested clusters on a Kubernetes provider
 // by removing the ksail-<name> namespace (cascading delete removes all resources).
 type kubernetesCleanupProvisioner struct {
-	clusterName    string
-	clientset      kubernetes.Interface
-	kubeconfigPath string
+	clusterName          string
+	clientset            kubernetes.Interface
+	kubeconfigPath       string
+	nestedKubeconfigPath string
 }
 
 func newKubernetesCleanupProvisioner(
 	clusterName string,
 	opts v1alpha1.OptionsKubernetes,
+	nestedKubeconfigPath string,
 ) (*kubernetesCleanupProvisioner, error) {
 	kubeconfig := resolveKubernetesOption(opts.Kubeconfig, opts.KubeconfigEnvVar)
 	if kubeconfig == "" {
@@ -449,9 +452,10 @@ func newKubernetesCleanupProvisioner(
 	}
 
 	return &kubernetesCleanupProvisioner{
-		clusterName:    clusterName,
-		clientset:      clientset,
-		kubeconfigPath: kubeconfig,
+		clusterName:          clusterName,
+		clientset:            clientset,
+		kubeconfigPath:       kubeconfig,
+		nestedKubeconfigPath: nestedKubeconfigPath,
 	}, nil
 }
 
@@ -465,18 +469,24 @@ func (p *kubernetesCleanupProvisioner) Delete(ctx context.Context, _ string) err
 	// - "k3k-" for k3k-based K3s-on-Kubernetes
 	// - "vcluster-" for vCluster-on-Kubernetes (Helm driver)
 	for _, prefix := range []string{"ksail-", "k3k-", "vcluster-"} {
-		ns := prefix + p.clusterName
+		namespaceName := prefix + p.clusterName
 
-		err := p.clientset.CoreV1().Namespaces().Delete(ctx, ns, metav1.DeleteOptions{})
+		err := p.clientset.CoreV1().Namespaces().Delete(ctx, namespaceName, metav1.DeleteOptions{})
 		if err != nil && !apierrors.IsNotFound(err) {
-			return fmt.Errorf("delete namespace %s: %w", ns, err)
+			return fmt.Errorf("delete namespace %s: %w", namespaceName, err)
 		}
 	}
 
-	// Clean up nested cluster kubeconfig entries for all naming conventions
+	// Clean up nested cluster kubeconfig entries using the nested cluster's kubeconfig
+	// (spec.cluster.connection.kubeconfig), not the host kubeconfig.
+	cleanupPath := p.nestedKubeconfigPath
+	if cleanupPath == "" {
+		cleanupPath = p.kubeconfigPath
+	}
+
 	for _, prefix := range []string{"kind-", "k3k-", "vcluster-", "admin@"} {
 		contextName := prefix + p.clusterName
-		_ = k8s.CleanupKubeconfig(p.kubeconfigPath, contextName, contextName, contextName, io.Discard)
+		_ = k8s.CleanupKubeconfig(cleanupPath, contextName, contextName, contextName, io.Discard)
 	}
 
 	return nil
@@ -493,15 +503,15 @@ func (p *kubernetesCleanupProvisioner) Stop(_ context.Context, _ string) error {
 func (p *kubernetesCleanupProvisioner) Exists(ctx context.Context, _ string) (bool, error) {
 	// Check all known namespace prefixes used by nested cluster provisioners
 	for _, prefix := range []string{"ksail-", "k3k-", "vcluster-"} {
-		ns := prefix + p.clusterName
+		namespaceName := prefix + p.clusterName
 
-		_, err := p.clientset.CoreV1().Namespaces().Get(ctx, ns, metav1.GetOptions{})
+		_, err := p.clientset.CoreV1().Namespaces().Get(ctx, namespaceName, metav1.GetOptions{})
 		if apierrors.IsNotFound(err) {
 			continue
 		}
 
 		if err != nil {
-			return false, fmt.Errorf("check namespace %s: %w", ns, err)
+			return false, fmt.Errorf("check namespace %s: %w", namespaceName, err)
 		}
 
 		return true, nil

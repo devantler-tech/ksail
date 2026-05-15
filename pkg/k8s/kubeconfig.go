@@ -152,7 +152,11 @@ func ModifyKubeconfigCluster(kubeconfigPath, clusterKey, newServerURL string) er
 		return fmt.Errorf("serialize kubeconfig: %w", err)
 	}
 
-	return fsutil.AtomicWriteFile(kubeconfigPath, result, kubeconfigFileMode)
+	if err := fsutil.AtomicWriteFile(kubeconfigPath, result, kubeconfigFileMode); err != nil {
+		return fmt.Errorf("write modified kubeconfig: %w", err)
+	}
+
+	return nil
 }
 
 // CleanupKubeconfig removes the cluster, context, and user entries for a cluster
@@ -550,7 +554,11 @@ func SetKubeconfigCurrentContext(kubeconfigPath, contextName string) error {
 		return fmt.Errorf("serialize kubeconfig: %w", err)
 	}
 
-	return fsutil.AtomicWriteFile(kubeconfigPath, result, kubeconfigFileMode)
+	if err := fsutil.AtomicWriteFile(kubeconfigPath, result, kubeconfigFileMode); err != nil {
+		return fmt.Errorf("write kubeconfig: %w", err)
+	}
+
+	return nil
 }
 
 // CleanupOIDCKubeconfigEntries removes the OIDC user and context entries for a cluster.

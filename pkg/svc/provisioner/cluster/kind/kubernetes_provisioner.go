@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	kubernetesprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/kubernetes"
 	"k8s.io/client-go/dynamic"
@@ -27,6 +28,7 @@ type KubernetesProvisioner struct {
 	gatewayClassName string
 	apiServerPort    int32
 	kubeconfigPath   string
+	persistence      v1alpha1.KubernetesPersistence
 	portForward      *kubernetesprovider.PortForwardSession
 }
 
@@ -50,11 +52,16 @@ type KubernetesProvisionerConfig struct {
 	GatewayClassName string
 	// APIServerPort is the port the nested API server listens on.
 	APIServerPort int32
+	// Persistence holds PVC configuration for the DinD Docker data directory.
+	Persistence v1alpha1.KubernetesPersistence
 }
 
 // NewKubernetesProvisioner creates a KubernetesProvisioner that wraps Kind with DinD lifecycle.
 func NewKubernetesProvisioner(cfg KubernetesProvisionerConfig) (*KubernetesProvisioner, error) {
-	kubeconfigPath := k8s.ResolveKubeconfigPath(cfg.KubeconfigPath)
+	kubeconfigPath, err := k8s.ResolveKubeconfigPath(cfg.KubeconfigPath)
+	if err != nil {
+		return nil, fmt.Errorf("resolve kubeconfig path: %w", err)
+	}
 
 	// For Kubernetes provider, inject the K8s provider as the infra provider
 	innerProvisioner, err := CreateProvisionerWithProvider(
@@ -76,6 +83,7 @@ func NewKubernetesProvisioner(cfg KubernetesProvisionerConfig) (*KubernetesProvi
 		gatewayClassName: cfg.GatewayClassName,
 		apiServerPort:    cfg.APIServerPort,
 		kubeconfigPath:   kubeconfigPath,
+		persistence:      cfg.Persistence,
 	}, nil
 }
 
@@ -94,6 +102,9 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 	if err != nil {
 		return fmt.Errorf("read current kubeconfig context: %w", err)
 	}
+
+	// Restore the context on any return path (success or failure).
+	defer func() { _ = k8s.SetKubeconfigCurrentContext(p.kubeconfigPath, originalContext) }()
 
 	// Step 1: Ensure namespace + DinD pod
 	err = p.setupDinD(ctx, target)
@@ -136,7 +147,12 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 		return fmt.Errorf("port-forward API server: %w", err)
 	}
 
-	p.portForward = apiPortForward
+	// Close the port-forward if any subsequent step fails (success stores it in p.portForward).
+	defer func() {
+		if p.portForward != apiPortForward {
+			apiPortForward.Close()
+		}
+	}()
 
 	// Step 5: Rewrite kubeconfig server URL to use the host port-forward address
 	err = p.rewriteKindKubeconfig(target, apiPortForward.LocalPort)
@@ -144,17 +160,18 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 		return fmt.Errorf("rewrite kubeconfig: %w", err)
 	}
 
-	// Step 6: Restore the host kubeconfig current-context that the Kind SDK changed.
-	err = k8s.SetKubeconfigCurrentContext(p.kubeconfigPath, originalContext)
-	if err != nil {
-		return fmt.Errorf("restore kubeconfig current-context: %w", err)
-	}
-
-	// Step 7: Expose the nested API server via Gateway API (if configured)
-	return p.k8sProvider.EnsureAPIExposure(
+	// Step 6: Expose the nested API server via Gateway API (if configured)
+	if err := p.k8sProvider.EnsureAPIExposure(
 		ctx, p.dynamicClient, target,
 		p.apiServerPort, p.gatewayClassName,
-	)
+	); err != nil {
+		return fmt.Errorf("expose API server: %w", err)
+	}
+
+	// All steps succeeded — retain port-forward for the lifetime of the provisioner.
+	p.portForward = apiPortForward
+
+	return nil
 }
 
 // Delete deletes the Kind cluster inside DinD and cleans up host cluster resources.
@@ -189,7 +206,9 @@ func (p *KubernetesProvisioner) Delete(ctx context.Context, name string) error {
 
 	// Clean up kubeconfig entries
 	contextName := "kind-" + target
-	if err := k8s.CleanupKubeconfig(p.kubeconfigPath, contextName, contextName, contextName, os.Stdout); err != nil {
+
+	err = k8s.CleanupKubeconfig(p.kubeconfigPath, contextName, contextName, contextName, os.Stdout)
+	if err != nil {
 		return fmt.Errorf("cleanup kubeconfig: %w", err)
 	}
 
@@ -199,17 +218,32 @@ func (p *KubernetesProvisioner) Delete(ctx context.Context, name string) error {
 // Exists checks if the Kind-on-Kubernetes cluster exists by checking for the DinD pod.
 func (p *KubernetesProvisioner) Exists(ctx context.Context, name string) (bool, error) {
 	target := setName(name, p.Provisioner.kindConfig.Name)
-	return p.k8sProvider.NodesExist(ctx, target)
+
+	exists, err := p.k8sProvider.NodesExist(ctx, target)
+	if err != nil {
+		return false, fmt.Errorf("check nodes: %w", err)
+	}
+
+	return exists, nil
 }
 
 // List returns cluster names found by namespace.
 func (p *KubernetesProvisioner) List(ctx context.Context) ([]string, error) {
-	return p.k8sProvider.ListAllClusters(ctx)
+	clusters, err := p.k8sProvider.ListAllClusters(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list clusters: %w", err)
+	}
+
+	return clusters, nil
 }
 
 // setupDinD creates the namespace and DinD pod, then waits for readiness.
 func (p *KubernetesProvisioner) setupDinD(ctx context.Context, clusterName string) error {
-	return p.k8sProvider.SetupDinD(ctx, clusterName, p.distribution)
+	if err := p.k8sProvider.SetupDinD(ctx, clusterName, p.distribution, p.persistence); err != nil {
+		return fmt.Errorf("setup DinD: %w", err)
+	}
+
+	return nil
 }
 
 // jscpd:ignore-end
@@ -221,5 +255,9 @@ func (p *KubernetesProvisioner) rewriteKindKubeconfig(clusterName string, localP
 	clusterKey := "kind-" + clusterName
 	newServer := fmt.Sprintf("https://127.0.0.1:%d", localPort)
 
-	return k8s.ModifyKubeconfigCluster(p.kubeconfigPath, clusterKey, newServer)
+	if err := k8s.ModifyKubeconfigCluster(p.kubeconfigPath, clusterKey, newServer); err != nil {
+		return fmt.Errorf("modify kubeconfig cluster: %w", err)
+	}
+
+	return nil
 }

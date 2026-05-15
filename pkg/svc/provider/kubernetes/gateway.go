@@ -330,7 +330,7 @@ func buildGateway(clusterName, gatewayClassName string, apiPort int32) *unstruct
 
 func buildTCPRoute(clusterName string, apiPort int32) *unstructured.Unstructured {
 	labels := CommonLabels(clusterName)
-	ns := NamespaceName(clusterName)
+	namespaceName := NamespaceName(clusterName)
 
 	return &unstructured.Unstructured{
 		Object: map[string]any{
@@ -344,7 +344,7 @@ func buildTCPRoute(clusterName string, apiPort int32) *unstructured.Unstructured
 				"parentRefs": []any{
 					map[string]any{
 						"name":      GatewayName,
-						"namespace": ns,
+						"namespace": namespaceName,
 					},
 				},
 				"rules": []any{

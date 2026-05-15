@@ -9,6 +9,14 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
+const (
+	// waitForAPIServerTimeout is the maximum time to wait for the API server to become ready.
+	waitForAPIServerTimeout = 60 * time.Second
+
+	// waitBackoffMultiplier is the exponential backoff multiplier for the wait interval.
+	waitBackoffMultiplier = 2
+)
+
 // WaitForAPIServer waits until the Kubernetes API server is reachable and responsive.
 // It polls the /readyz endpoint with exponential backoff up to the timeout.
 func WaitForAPIServer(ctx context.Context, kubeconfigPath, contextName string) error {
@@ -22,7 +30,7 @@ func WaitForAPIServer(ctx context.Context, kubeconfigPath, contextName string) e
 		return fmt.Errorf("create clientset: %w", err)
 	}
 
-	waitCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	waitCtx, cancel := context.WithTimeout(ctx, waitForAPIServerTimeout)
 	defer cancel()
 
 	interval := 1 * time.Second
@@ -42,7 +50,7 @@ func WaitForAPIServer(ctx context.Context, kubeconfigPath, contextName string) e
 			return fmt.Errorf("%w (last body: %s)", ErrAPIServerTimeout, string(body))
 		case <-time.After(interval):
 			// Exponential backoff capped at 5s
-			interval = min(interval*2, 5*time.Second)
+			interval = min(interval*waitBackoffMultiplier, 5*time.Second)
 		}
 	}
 }

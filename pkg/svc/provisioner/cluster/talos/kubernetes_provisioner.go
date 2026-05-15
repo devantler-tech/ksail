@@ -10,6 +10,7 @@ import (
 
 	dockerclient "github.com/docker/docker/client"
 
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	kubernetesprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/kubernetes"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/kernelmod"
@@ -36,6 +37,7 @@ type KubernetesProvisioner struct {
 	distribution     string
 	gatewayClassName string
 	kubeconfigPath   string
+	persistence      v1alpha1.KubernetesPersistence
 	portForwards     []*kubernetesprovider.PortForwardSession
 }
 
@@ -61,11 +63,16 @@ type KubernetesProvisionerConfig struct {
 	ControlPlanes int
 	// Workers is the number of worker nodes.
 	Workers int
+	// Persistence holds PVC configuration for the DinD Docker data directory.
+	Persistence v1alpha1.KubernetesPersistence
 }
 
 // NewKubernetesProvisioner creates a KubernetesProvisioner that wraps Talos with DinD lifecycle.
-func NewKubernetesProvisioner(cfg KubernetesProvisionerConfig) *KubernetesProvisioner {
-	kubeconfigPath := k8s.ResolveKubeconfigPath(cfg.KubeconfigPath)
+func NewKubernetesProvisioner(cfg KubernetesProvisionerConfig) (*KubernetesProvisioner, error) {
+	kubeconfigPath, err := k8s.ResolveKubeconfigPath(cfg.KubeconfigPath)
+	if err != nil {
+		return nil, fmt.Errorf("resolve kubeconfig path: %w", err)
+	}
 
 	return &KubernetesProvisioner{
 		inner:            cfg.InnerProvisioner,
@@ -76,7 +83,8 @@ func NewKubernetesProvisioner(cfg KubernetesProvisionerConfig) *KubernetesProvis
 		distribution:     cfg.Distribution,
 		gatewayClassName: cfg.GatewayClassName,
 		kubeconfigPath:   kubeconfigPath,
-	}
+		persistence:      cfg.Persistence,
+	}, nil
 }
 
 // Create creates a Talos cluster inside a DinD pod on the host Kubernetes cluster.
@@ -261,10 +269,15 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 	}
 
 	// Expose the nested API server via Gateway API (if configured)
-	return p.k8sProvider.EnsureAPIExposure(
+	err = p.k8sProvider.EnsureAPIExposure(
 		ctx, p.dynamicClient, clusterName,
-		int32(k8sPort), p.gatewayClassName,
+		int32(k8sPort), p.gatewayClassName, //nolint:gosec // port value is bounded within TCP port range (1-65535)
 	)
+	if err != nil {
+		return fmt.Errorf("expose API: %w", err)
+	}
+
+	return nil
 }
 
 // Delete deletes the Talos cluster inside DinD and cleans up host cluster resources.
@@ -323,12 +336,23 @@ func (p *KubernetesProvisioner) Exists(ctx context.Context, name string) (bool, 
 	if clusterName == "" {
 		clusterName = p.clusterName
 	}
-	return p.k8sProvider.NodesExist(ctx, clusterName)
+
+	exists, err := p.k8sProvider.NodesExist(ctx, clusterName)
+	if err != nil {
+		return false, fmt.Errorf("check nodes: %w", err)
+	}
+
+	return exists, nil
 }
 
 // List returns cluster names found by namespace.
 func (p *KubernetesProvisioner) List(ctx context.Context) ([]string, error) {
-	return p.k8sProvider.ListAllClusters(ctx)
+	clusters, err := p.k8sProvider.ListAllClusters(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list clusters: %w", err)
+	}
+
+	return clusters, nil
 }
 
 // Start is not supported for Talos-on-Kubernetes.
@@ -343,7 +367,11 @@ func (p *KubernetesProvisioner) Stop(_ context.Context, _ string) error {
 
 // setupDinD creates the namespace and DinD pod, then waits for readiness.
 func (p *KubernetesProvisioner) setupDinD(ctx context.Context, clusterName string) error {
-	return p.k8sProvider.SetupDinD(ctx, clusterName, p.distribution)
+	if err := p.k8sProvider.SetupDinD(ctx, clusterName, p.distribution, p.persistence); err != nil {
+		return fmt.Errorf("setup DinD: %w", err)
+	}
+
+	return nil
 }
 
 // jscpd:ignore-end

@@ -8,7 +8,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
-func TestExtractGatewayPort(t *testing.T) { //nolint:funlen // comprehensive table test covering multiple Gateway status variants
+func TestExtractGatewayPort(t *testing.T) { //nolint:funlen // table test with many Gateway status variants
 	t.Parallel()
 
 	tests := []struct {
@@ -80,20 +80,20 @@ func TestExtractGatewayPort(t *testing.T) { //nolint:funlen // comprehensive tab
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			gw := &unstructured.Unstructured{Object: map[string]any{
+			gateway := &unstructured.Unstructured{Object: map[string]any{
 				"apiVersion": "gateway.networking.k8s.io/v1",
 				"kind":       "Gateway",
 			}}
-			if tt.status != nil {
-				gw.Object["status"] = tt.status
+			if tc.status != nil {
+				gateway.Object["status"] = tc.status
 			}
 
-			got := kubeprovider.ExtractGatewayPortForTest(gw)
-			assert.Equal(t, tt.expected, got)
+			got := kubeprovider.ExtractGatewayPortForTest(gateway)
+			assert.Equal(t, tc.expected, got)
 		})
 	}
 }
@@ -154,21 +154,21 @@ func TestExtractGatewayAddressValue(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			gw := &unstructured.Unstructured{Object: map[string]any{
+			gateway := &unstructured.Unstructured{Object: map[string]any{
 				"apiVersion": "gateway.networking.k8s.io/v1",
 				"kind":       "Gateway",
 			}}
-			if tt.status != nil {
-				gw.Object["status"] = tt.status
+			if tc.status != nil {
+				gateway.Object["status"] = tc.status
 			}
 
-			val, ok := kubeprovider.ExtractGatewayAddressValueForTest(gw)
-			assert.Equal(t, tt.expected, val)
-			assert.Equal(t, tt.expectOK, ok)
+			val, ok := kubeprovider.ExtractGatewayAddressValueForTest(gateway)
+			assert.Equal(t, tc.expected, val)
+			assert.Equal(t, tc.expectOK, ok)
 		})
 	}
 }

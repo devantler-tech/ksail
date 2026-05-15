@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	kubernetesprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/kubernetes"
@@ -15,6 +16,10 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 )
+
+// kwokContainerRestartDelay is the time to wait after restarting KWOK containers
+// so that they can initialize before API server readiness is checked.
+const kwokContainerRestartDelay = 3 * time.Second
 
 // KubernetesProvisioner wraps a KWOK provisioner with DinD lifecycle management.
 // It uses an exec tunnel for the DinD pod's Docker API, sets DOCKER_HOST so
@@ -30,6 +35,7 @@ type KubernetesProvisioner struct {
 	distribution     string
 	gatewayClassName string
 	kubeconfigPath   string
+	persistence      v1alpha1.KubernetesPersistence
 	portForward      *kubernetesprovider.PortForwardSession
 }
 
@@ -53,11 +59,16 @@ type KubernetesProvisionerConfig struct {
 	Distribution string
 	// GatewayClassName is the Gateway class for API exposure (empty = no gateway).
 	GatewayClassName string
+	// Persistence holds PVC configuration for the DinD Docker data directory.
+	Persistence v1alpha1.KubernetesPersistence
 }
 
 // NewKubernetesProvisioner creates a KubernetesProvisioner that wraps KWOK with DinD lifecycle.
-func NewKubernetesProvisioner(cfg KubernetesProvisionerConfig) *KubernetesProvisioner {
-	kubeconfigPath := k8s.ResolveKubeconfigPath(cfg.KubeconfigPath)
+func NewKubernetesProvisioner(cfg KubernetesProvisionerConfig) (*KubernetesProvisioner, error) {
+	kubeconfigPath, err := k8s.ResolveKubeconfigPath(cfg.KubeconfigPath)
+	if err != nil {
+		return nil, fmt.Errorf("resolve kubeconfig path: %w", err)
+	}
 
 	innerProvisioner := NewProvisioner(
 		cfg.Name,
@@ -74,7 +85,8 @@ func NewKubernetesProvisioner(cfg KubernetesProvisionerConfig) *KubernetesProvis
 		distribution:     cfg.Distribution,
 		gatewayClassName: cfg.GatewayClassName,
 		kubeconfigPath:   kubeconfigPath,
-	}
+		persistence:      cfg.Persistence,
+	}, nil
 }
 
 // kwokContainerNames returns the Docker container names kwokctl creates inside DinD.
@@ -200,7 +212,7 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 	// Step 12: Expose via Gateway API (if configured)
 	err = p.k8sProvider.EnsureAPIExposure(
 		ctx, p.dynamicClient, target,
-		int32(apiServerPort), p.gatewayClassName,
+		int32(apiServerPort), p.gatewayClassName, //nolint:gosec // port value is bounded within TCP port range (1-65535)
 	)
 	if err != nil {
 		return fmt.Errorf("ensure API exposure: %w", err)
@@ -241,7 +253,9 @@ func (p *KubernetesProvisioner) Delete(ctx context.Context, name string) error {
 
 	// Clean up kubeconfig entries
 	contextName := "kwok-" + target
-	if err := k8s.CleanupKubeconfig(p.kubeconfigPath, contextName, contextName, contextName, os.Stdout); err != nil {
+
+	err = k8s.CleanupKubeconfig(p.kubeconfigPath, contextName, contextName, contextName, os.Stdout)
+	if err != nil {
 		return fmt.Errorf("cleanup kubeconfig: %w", err)
 	}
 
@@ -252,7 +266,12 @@ func (p *KubernetesProvisioner) Delete(ctx context.Context, name string) error {
 func (p *KubernetesProvisioner) Exists(ctx context.Context, name string) (bool, error) {
 	target := p.Provisioner.resolveName(name)
 
-	return p.k8sProvider.NodesExist(ctx, target)
+	exists, err := p.k8sProvider.NodesExist(ctx, target)
+	if err != nil {
+		return false, fmt.Errorf("check nodes: %w", err)
+	}
+
+	return exists, nil
 }
 
 // List returns cluster names found by namespace.
@@ -267,7 +286,7 @@ func (p *KubernetesProvisioner) List(ctx context.Context) ([]string, error) {
 
 // setupDinD creates the namespace and DinD pod, then waits for readiness.
 func (p *KubernetesProvisioner) setupDinD(ctx context.Context, clusterName string) error {
-	err := p.k8sProvider.SetupDinD(ctx, clusterName, p.distribution)
+	err := p.k8sProvider.SetupDinD(ctx, clusterName, p.distribution, p.persistence)
 	if err != nil {
 		return fmt.Errorf("setup dinD: %w", err)
 	}
@@ -345,7 +364,7 @@ func (p *KubernetesProvisioner) rewriteKubeconfig(name string, localPort int) er
 		return fmt.Errorf("serialize kwokctl kubeconfig: %w", err)
 	}
 
-	if err := fsutil.AtomicWriteFile(kwokKubeconfig, result, 0o600); err != nil {
+	if err := fsutil.AtomicWriteFile(kwokKubeconfig, result, 0o600); err != nil { //nolint:mnd // standard kubeconfig file permission
 		return fmt.Errorf("write kwokctl kubeconfig: %w", err)
 	}
 
@@ -420,7 +439,7 @@ func (p *KubernetesProvisioner) copyStateToDinD(ctx context.Context, clusterName
 	for _, rel := range files {
 		localPath := filepath.Join(stateDir, rel)
 
-		content, err := os.ReadFile(localPath)
+		content, err := os.ReadFile(localPath) //nolint:gosec // path constructed from trusted state directory
 		if err != nil {
 			return fmt.Errorf("read local %s: %w", rel, err)
 		}
@@ -446,7 +465,7 @@ func (p *KubernetesProvisioner) restartContainersInDinD(ctx context.Context, clu
 	}
 
 	// Give the containers a moment to start up
-	time.Sleep(3 * time.Second)
+	time.Sleep(kwokContainerRestartDelay)
 
 	return nil
 }

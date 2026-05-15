@@ -8,8 +8,10 @@ import (
 	"strconv"
 	"sync"
 
+	"context"
+
 	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/util/httpstream"
+	"k8s.io/apimachinery/pkg/util/httpstream" //nolint:staticcheck // deprecated but no available replacement at this client-go version
 )
 
 // tcpProxy is a local TCP proxy that forwards connections to a Kubernetes pod
@@ -34,15 +36,15 @@ type tcpProxy struct {
 
 // newTCPProxy creates a TCP proxy listening on a random local port that forwards
 // to the given remote pod port via the SPDY dialer.
-func newTCPProxy(dialer httpstream.Dialer, remotePort int) (*tcpProxy, error) {
-	ll, err := newLocalListener()
+func newTCPProxy(ctx context.Context, dialer httpstream.Dialer, remotePort int) (*tcpProxy, error) {
+	listener, err := newLocalListener(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("tcp proxy: %w", err)
 	}
 
 	return &tcpProxy{
-		listener:   ll.Listener,
-		localPort:  ll.Port,
+		listener:   listener.Listener,
+		localPort:  listener.Port,
 		remotePort: remotePort,
 		dialer:     dialer,
 		stopCh:     make(chan struct{}),
@@ -213,25 +215,25 @@ func (tp *tcpProxy) handleConnection(localConn net.Conn) {
 func (tp *tcpProxy) createStreams(
 	conn httpstream.Connection,
 	requestID int,
-) (errorStream, dataStream httpstream.Stream, err error) {
+) (httpstream.Stream, httpstream.Stream, error) {
 	headers := http.Header{}
 	headers.Set(v1.StreamType, v1.StreamTypeError)
 	headers.Set(v1.PortHeader, strconv.Itoa(tp.remotePort))
 	headers.Set(v1.PortForwardRequestIDHeader, strconv.Itoa(requestID))
 
-	errorStream, err = conn.CreateStream(headers)
+	errStream, err := conn.CreateStream(headers)
 	if err != nil {
 		return nil, nil, fmt.Errorf("create error stream: %w", err)
 	}
 
 	headers.Set(v1.StreamType, v1.StreamTypeData)
 
-	dataStream, err = conn.CreateStream(headers)
+	dataStream, err := conn.CreateStream(headers)
 	if err != nil {
-		_ = errorStream.Close()
+		_ = errStream.Close()
 
 		return nil, nil, fmt.Errorf("create data stream: %w", err)
 	}
 
-	return errorStream, dataStream, nil
+	return errStream, dataStream, nil
 }

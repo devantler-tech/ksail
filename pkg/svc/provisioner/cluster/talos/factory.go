@@ -177,7 +177,8 @@ func configureInfraProvider(
 			ErrUnsupportedProvider, providerType)
 
 	case v1alpha1.ProviderKubernetes:
-		return fmt.Errorf("%w: %s (this factory does not accept Kubernetes provider; use the Kubernetes-specific Talos provisioner instead)",
+		return fmt.Errorf("%w: %s (this factory does not accept Kubernetes provider; "+
+			"use the Kubernetes-specific Talos provisioner instead)",
 			ErrUnsupportedProvider, providerType)
 
 	default:

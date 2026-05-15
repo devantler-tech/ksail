@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -33,6 +34,12 @@ const (
 	// DinDAPIServerPort is the port the nested API server is exposed on (via Docker port mapping).
 	DinDAPIServerPort = 6443
 
+	// DinDPVCName is the name of the PVC for the Docker data directory.
+	DinDPVCName = "docker-data"
+
+	// defaultPVCSize is the default PVC size when persistence is enabled but no size is configured.
+	defaultPVCSize = "20Gi"
+
 	// dindReadyPollInterval is the interval between Docker daemon readiness checks.
 	dindReadyPollInterval = 2 * time.Second
 
@@ -52,11 +59,22 @@ const (
 
 // CreateDinDPod creates a Docker-in-Docker pod and service in the cluster's namespace.
 // The DinD pod runs a privileged Docker daemon that distributions like Kind
-// use as their container runtime.
-func (p *Provider) CreateDinDPod(ctx context.Context, clusterName, distribution string) error {
+// use as their container runtime. If persistence.Enabled is true, a PVC is
+// created for the Docker data directory so the daemon state survives pod restarts.
+func (p *Provider) CreateDinDPod(
+	ctx context.Context,
+	clusterName, distribution string,
+	persistence v1alpha1.KubernetesPersistence,
+) error {
 	namespace := NamespaceName(clusterName)
 
-	pod := buildDinDPod(clusterName, distribution)
+	if persistence.Enabled {
+		if err := p.ensurePVC(ctx, namespace, clusterName, persistence); err != nil {
+			return fmt.Errorf("ensure PVC: %w", err)
+		}
+	}
+
+	pod := buildDinDPod(clusterName, distribution, persistence)
 	svc := buildDinDService(clusterName)
 
 	_, err := p.client.CoreV1().Pods(namespace).Create(ctx, pod, metav1.CreateOptions{})
@@ -150,7 +168,7 @@ func (p *Provider) DeleteDinD(ctx context.Context, clusterName string) error {
 	return nil
 }
 
-func buildDinDPod(clusterName, distribution string) *corev1.Pod {
+func buildDinDPod(clusterName, distribution string, persistence v1alpha1.KubernetesPersistence) *corev1.Pod {
 	labels := NodeLabels(clusterName, RoleControlPlane, distribution)
 	labels[LabelApp] = DinDPodName
 
@@ -161,7 +179,7 @@ func buildDinDPod(clusterName, distribution string) *corev1.Pod {
 		},
 		Spec: corev1.PodSpec{
 			Containers: []corev1.Container{buildDinDContainer()},
-			Volumes:    buildDinDVolumes(),
+			Volumes:    buildDinDVolumes(persistence),
 		},
 	}
 }
@@ -225,13 +243,24 @@ func buildDinDContainer() corev1.Container {
 	}
 }
 
-func buildDinDVolumes() []corev1.Volume {
+func buildDinDVolumes(persistence v1alpha1.KubernetesPersistence) []corev1.Volume {
+	var dockerDataSource corev1.VolumeSource
+	if persistence.Enabled {
+		dockerDataSource = corev1.VolumeSource{
+			PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+				ClaimName: DinDPVCName,
+			},
+		}
+	} else {
+		dockerDataSource = corev1.VolumeSource{
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
+		}
+	}
+
 	return []corev1.Volume{
 		{
-			Name: "docker-data",
-			VolumeSource: corev1.VolumeSource{
-				EmptyDir: &corev1.EmptyDirVolumeSource{},
-			},
+			Name:         "docker-data",
+			VolumeSource: dockerDataSource,
 		},
 		{
 			Name: "modules",
@@ -242,6 +271,52 @@ func buildDinDVolumes() []corev1.Volume {
 			},
 		},
 	}
+}
+
+// ensurePVC creates a PVC for the DinD Docker data directory if it does not already exist.
+func (p *Provider) ensurePVC(
+	ctx context.Context,
+	namespace, clusterName string,
+	persistence v1alpha1.KubernetesPersistence,
+) error {
+	size := persistence.Size
+	if size == "" {
+		size = defaultPVCSize
+	}
+
+	storageRequest, err := resource.ParseQuantity(size)
+	if err != nil {
+		return fmt.Errorf("parse PVC size %q: %w", size, err)
+	}
+
+	labels := CommonLabels(clusterName)
+	storageClassName := persistence.StorageClassName
+
+	pvc := &corev1.PersistentVolumeClaim{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   DinDPVCName,
+			Labels: labels,
+		},
+		Spec: corev1.PersistentVolumeClaimSpec{
+			AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+			Resources: corev1.VolumeResourceRequirements{
+				Requests: corev1.ResourceList{
+					corev1.ResourceStorage: storageRequest,
+				},
+			},
+		},
+	}
+
+	if storageClassName != "" {
+		pvc.Spec.StorageClassName = &storageClassName
+	}
+
+	_, err = p.client.CoreV1().PersistentVolumeClaims(namespace).Create(ctx, pvc, metav1.CreateOptions{})
+	if err != nil && !errors.IsAlreadyExists(err) {
+		return fmt.Errorf("create PVC: %w", err)
+	}
+
+	return nil
 }
 
 func buildDinDService(clusterName string) *corev1.Service {
