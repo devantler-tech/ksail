@@ -41,16 +41,19 @@ func runSafely(args []string, runner func([]string) int, errWriter io.Writer) (e
 	return exitCode
 }
 
-// exitCodeFromError extracts a custom exit code from err if it implements
-// ExitCode() int, returning (code, true). Otherwise it returns (0, false).
+// exitCodeFromError extracts a KSail-specific exit code from err if it
+// implements KSailExitCode() int, returning (code, true). This intentionally
+// uses a KSail-specific method name to avoid matching stdlib *exec.ExitError,
+// which also implements ExitCode() int but represents real subprocess failures.
+// Otherwise it returns (0, false).
 func exitCodeFromError(err error) (int, bool) {
-	type ExitCoder interface {
-		ExitCode() int
+	type KSailExitCoder interface {
+		KSailExitCode() int
 	}
 
-	var exitCoder ExitCoder
+	var exitCoder KSailExitCoder
 	if errors.As(err, &exitCoder) {
-		return exitCoder.ExitCode(), true
+		return exitCoder.KSailExitCode(), true
 	}
 
 	return 0, false
@@ -67,11 +70,11 @@ func runWithArgs(args []string) int {
 		// entrypoint to specific command types.
 		if code, ok := exitCodeFromError(err); ok {
 			// Custom exit codes (e.g., 2 for drift detected) are valid results,
-			// not errors to print to stderr
+			// not errors to print to stderr.
 			return code
 		}
 
-		// For actual errors, print and return exit code 1
+		// For actual errors, print and return exit code 1.
 		notify.Errorf(rootCmd.ErrOrStderr(), "%v", err)
 
 		return 1

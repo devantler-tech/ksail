@@ -117,7 +117,7 @@ var ErrDriftDetected = errors.New("configuration drift detected")
 
 // DriftExitError is an error type that carries a custom exit code for the diff
 // command. It wraps ErrDriftDetected so callers can use errors.Is, and exposes
-// ExitCode() so main.go can propagate exit code 2 instead of the generic 1.
+// KSailExitCode() so main.go can propagate exit code 2 instead of the generic 1.
 type DriftExitError struct {
 	Changes int
 }
@@ -132,8 +132,10 @@ func (e *DriftExitError) Unwrap() error {
 	return ErrDriftDetected
 }
 
-// ExitCode returns the exit code that main.go should use for this error.
-func (e *DriftExitError) ExitCode() int {
+// KSailExitCode returns the exit code that main.go should use for this error.
+// Using a KSail-specific name avoids matching stdlib *exec.ExitError, which also
+// implements ExitCode() int but represents a real subprocess failure.
+func (e *DriftExitError) KSailExitCode() int {
 	return diffExitCode
 }
 

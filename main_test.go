@@ -21,7 +21,7 @@ func (e *customExitError) Error() string {
 	return "custom exit error"
 }
 
-func (e *customExitError) ExitCode() int {
+func (e *customExitError) KSailExitCode() int {
 	return e.code
 }
 
