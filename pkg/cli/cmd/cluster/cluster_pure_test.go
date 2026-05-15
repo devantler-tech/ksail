@@ -886,77 +886,83 @@ func TestRefreshAndVerifyKubeconfig_StatPermissionError(t *testing.T) {
 // ===========================================================================
 
 func TestRunDiagnoseTextReport_HealthyCluster(t *testing.T) {
-t.Parallel()
+	t.Parallel()
 
-report := k8s.DiagnoseReport{
-ClusterName: "my-cluster",
-HealthScore: 100,
-Findings:    []k8s.DiagnoseFinding{},
-}
+	report := k8s.DiagnoseReport{
+		ClusterName: "my-cluster",
+		HealthScore: 100,
+		Findings:    []k8s.DiagnoseFinding{},
+	}
 
-var buf strings.Builder
-err := cluster.ExportRunDiagnoseTextReport(report, &buf)
+	var buf strings.Builder
 
-require.NoError(t, err)
-out := buf.String()
-assert.Contains(t, out, `"my-cluster"`)
-assert.Contains(t, out, "looks healthy")
-assert.Contains(t, out, "Health score: 100/100")
+	err := cluster.ExportRunDiagnoseTextReport(report, &buf)
+
+	require.NoError(t, err)
+
+	out := buf.String()
+	assert.Contains(t, out, `"my-cluster"`)
+	assert.Contains(t, out, "looks healthy")
+	assert.Contains(t, out, "Health score: 100/100")
 }
 
 func TestRunDiagnoseTextReport_WithFindings(t *testing.T) {
-t.Parallel()
+	t.Parallel()
 
-report := k8s.DiagnoseReport{
-ClusterName: "broken-cluster",
-HealthScore: 75,
-Findings: []k8s.DiagnoseFinding{
-{
-Severity:    k8s.DiagnoseSeverityCritical,
-Resource:    "pod/crash-pod (default)",
-Reason:      "CrashLoopBackOff",
-Remediation: "Check pod logs for errors.",
-},
-},
-}
+	report := k8s.DiagnoseReport{
+		ClusterName: "broken-cluster",
+		HealthScore: 75,
+		Findings: []k8s.DiagnoseFinding{
+			{
+				Severity:    k8s.DiagnoseSeverityCritical,
+				Resource:    "pod/crash-pod (default)",
+				Reason:      "CrashLoopBackOff",
+				Remediation: "Check pod logs for errors.",
+			},
+		},
+	}
 
-var buf strings.Builder
-err := cluster.ExportRunDiagnoseTextReport(report, &buf)
+	var buf strings.Builder
 
-require.NoError(t, err)
-out := buf.String()
-assert.Contains(t, out, `"broken-cluster"`)
-assert.Contains(t, out, "Health score: 75/100")
-assert.Contains(t, out, "critical")
-assert.Contains(t, out, "pod/crash-pod (default)")
-assert.Contains(t, out, "CrashLoopBackOff")
-assert.Contains(t, out, "Suggested fix: Check pod logs for errors.")
+	err := cluster.ExportRunDiagnoseTextReport(report, &buf)
+
+	require.NoError(t, err)
+
+	out := buf.String()
+	assert.Contains(t, out, `"broken-cluster"`)
+	assert.Contains(t, out, "Health score: 75/100")
+	assert.Contains(t, out, "critical")
+	assert.Contains(t, out, "pod/crash-pod (default)")
+	assert.Contains(t, out, "CrashLoopBackOff")
+	assert.Contains(t, out, "Suggested fix: Check pod logs for errors.")
 }
 
 func TestRunDiagnoseTextReport_FindingWithoutRemediation(t *testing.T) {
-t.Parallel()
+	t.Parallel()
 
-report := k8s.DiagnoseReport{
-ClusterName: "cluster",
-HealthScore: 90,
-Findings: []k8s.DiagnoseFinding{
-{
-Severity:    k8s.DiagnoseSeverityWarning,
-Resource:    "pvc/data-pvc (default)",
-Reason:      "Pending",
-Remediation: "",
-},
-},
-}
+	report := k8s.DiagnoseReport{
+		ClusterName: "cluster",
+		HealthScore: 90,
+		Findings: []k8s.DiagnoseFinding{
+			{
+				Severity:    k8s.DiagnoseSeverityWarning,
+				Resource:    "pvc/data-pvc (default)",
+				Reason:      "Pending",
+				Remediation: "",
+			},
+		},
+	}
 
-var buf strings.Builder
-err := cluster.ExportRunDiagnoseTextReport(report, &buf)
+	var buf strings.Builder
 
-require.NoError(t, err)
-out := buf.String()
-assert.Contains(t, out, "warning")
-assert.Contains(t, out, "pvc/data-pvc (default)")
-assert.NotContains(t, out, "Suggested fix")
+	err := cluster.ExportRunDiagnoseTextReport(report, &buf)
+
+	require.NoError(t, err)
+
+	out := buf.String()
+	assert.Contains(t, out, "warning")
+	assert.Contains(t, out, "pvc/data-pvc (default)")
+	assert.NotContains(t, out, "Suggested fix")
 }
 
 // ===========================================================================
@@ -964,49 +970,53 @@ assert.NotContains(t, out, "Suggested fix")
 // ===========================================================================
 
 func TestRunDiagnoseJSONReport_HealthyCluster(t *testing.T) {
-t.Parallel()
+	t.Parallel()
 
-report := k8s.DiagnoseReport{
-ClusterName: "my-cluster",
-HealthScore: 100,
-Findings:    []k8s.DiagnoseFinding{},
-}
+	report := k8s.DiagnoseReport{
+		ClusterName: "my-cluster",
+		HealthScore: 100,
+		Findings:    []k8s.DiagnoseFinding{},
+	}
 
-var buf strings.Builder
-err := cluster.ExportRunDiagnoseJSONReport(report, &buf)
+	var buf strings.Builder
 
-require.NoError(t, err)
-out := buf.String()
-assert.Contains(t, out, `"clusterName": "my-cluster"`)
-assert.Contains(t, out, `"healthScore": 100`)
-assert.Contains(t, out, `"findings": []`)
+	err := cluster.ExportRunDiagnoseJSONReport(report, &buf)
+
+	require.NoError(t, err)
+
+	out := buf.String()
+	assert.Contains(t, out, `"clusterName": "my-cluster"`)
+	assert.Contains(t, out, `"healthScore": 100`)
+	assert.Contains(t, out, `"findings": []`)
 }
 
 func TestRunDiagnoseJSONReport_WithFindings(t *testing.T) {
-t.Parallel()
+	t.Parallel()
 
-report := k8s.DiagnoseReport{
-ClusterName: "broken-cluster",
-HealthScore: 75,
-Findings: []k8s.DiagnoseFinding{
-{
-Severity:    k8s.DiagnoseSeverityCritical,
-Resource:    "pod/crash-pod (default)",
-Reason:      "CrashLoopBackOff",
-Remediation: "Check pod logs for errors.",
-},
-},
-}
+	report := k8s.DiagnoseReport{
+		ClusterName: "broken-cluster",
+		HealthScore: 75,
+		Findings: []k8s.DiagnoseFinding{
+			{
+				Severity:    k8s.DiagnoseSeverityCritical,
+				Resource:    "pod/crash-pod (default)",
+				Reason:      "CrashLoopBackOff",
+				Remediation: "Check pod logs for errors.",
+			},
+		},
+	}
 
-var buf strings.Builder
-err := cluster.ExportRunDiagnoseJSONReport(report, &buf)
+	var buf strings.Builder
 
-require.NoError(t, err)
-out := buf.String()
-assert.Contains(t, out, `"clusterName": "broken-cluster"`)
-assert.Contains(t, out, `"healthScore": 75`)
-assert.Contains(t, out, `"severity": "critical"`)
-assert.Contains(t, out, `"resource": "pod/crash-pod (default)"`)
-assert.Contains(t, out, `"reason": "CrashLoopBackOff"`)
-assert.Contains(t, out, `"remediation": "Check pod logs for errors."`)
+	err := cluster.ExportRunDiagnoseJSONReport(report, &buf)
+
+	require.NoError(t, err)
+
+	out := buf.String()
+	assert.Contains(t, out, `"clusterName": "broken-cluster"`)
+	assert.Contains(t, out, `"healthScore": 75`)
+	assert.Contains(t, out, `"severity": "critical"`)
+	assert.Contains(t, out, `"resource": "pod/crash-pod (default)"`)
+	assert.Contains(t, out, `"reason": "CrashLoopBackOff"`)
+	assert.Contains(t, out, `"remediation": "Check pod logs for errors."`)
 }

@@ -9,11 +9,11 @@ import (
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/lifecycle"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/setup"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/setup/localregistry"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/ksail"
+	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	clusterdetector "github.com/devantler-tech/ksail/v7/pkg/svc/detector/cluster"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
