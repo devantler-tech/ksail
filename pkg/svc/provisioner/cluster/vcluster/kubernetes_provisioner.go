@@ -102,7 +102,10 @@ func NewKubernetesProvisioner(cfg KubernetesProvisionerConfig) (*KubernetesProvi
 // After chart installation, it manually extracts the kubeconfig from the vc-<name>
 // Secret and sets up a port-forward to the vCluster pod (bypassing ConnectHelm which
 // blocks indefinitely on port-forwarding).
-func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error { //nolint:funlen,cyclop
+func (p *KubernetesProvisioner) Create(
+	ctx context.Context,
+	name string,
+) error { //nolint:funlen,cyclop
 	// sequential setup steps
 	clusterName := p.clusterName
 	if clusterName == "" {
@@ -116,13 +119,14 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 	// below prevents the Helm driver from creating it without our labels.
 	nsObj := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: namespace,
+			Name:   namespace,
 			Labels: kubernetesprovider.CommonLabels(clusterName),
 		},
 	}
-	if _, nsErr := p.hostClientset.CoreV1().Namespaces().Create(
+	_, nsErr := p.hostClientset.CoreV1().Namespaces().Create(
 		ctx, nsObj, metav1.CreateOptions{},
-	); nsErr != nil && !apierrors.IsAlreadyExists(nsErr) {
+	)
+	if nsErr != nil && !apierrors.IsAlreadyExists(nsErr) {
 		return fmt.Errorf("pre-create vCluster namespace %s: %w", namespace, nsErr)
 	}
 
@@ -180,6 +184,7 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 
 	// Step 5: Rewrite kubeconfig with localhost port-forward address
 	contextName := "vcluster-" + clusterName
+
 	rewrittenKubeconfig, err := rewriteVClusterKubeconfig(
 		kubeconfigData, apiPortForward.LocalPort, clusterName,
 	)
@@ -224,7 +229,12 @@ func (p *KubernetesProvisioner) Delete(ctx context.Context, name string) error {
 	globalFlags := p.newHostGlobalFlags(namespace)
 	logger := p.newLogger()
 
-	_, _ = fmt.Fprintf(os.Stdout, "► deleting vCluster %q from namespace %s\n", clusterName, namespace)
+	_, _ = fmt.Fprintf(
+		os.Stdout,
+		"► deleting vCluster %q from namespace %s\n",
+		clusterName,
+		namespace,
+	)
 
 	// platformClient is nil — no platform integration for local clusters.
 	err := cli.DeleteHelm(ctx, nil, deleteOpts, globalFlags, clusterName, logger)
@@ -275,8 +285,10 @@ func (p *KubernetesProvisioner) Exists(ctx context.Context, name string) (bool, 
 
 // Start is not supported for Helm-based vClusters (they run as pods).
 func (p *KubernetesProvisioner) Start(_ context.Context, _ string) error {
-	return fmt.Errorf("start not supported for vCluster on Kubernetes (pods are always running): %w",
-		clustererr.ErrOperationNotSupported)
+	return fmt.Errorf(
+		"start not supported for vCluster on Kubernetes (pods are always running): %w",
+		clustererr.ErrOperationNotSupported,
+	)
 }
 
 // Stop is not supported for Helm-based vClusters (they run as pods).
@@ -344,7 +356,11 @@ func (p *KubernetesProvisioner) waitForKubeconfigSecret(
 
 // rewriteVClusterKubeconfig parses the vCluster-generated kubeconfig, rewrites the
 // server URL to use the localhost port-forward, and renames all entries for uniqueness.
-func rewriteVClusterKubeconfig(kubeconfigBytes []byte, localPort int, clusterName string) ([]byte, error) {
+func rewriteVClusterKubeconfig(
+	kubeconfigBytes []byte,
+	localPort int,
+	clusterName string,
+) ([]byte, error) {
 	config, err := clientcmd.Load(kubeconfigBytes)
 	if err != nil {
 		return nil, fmt.Errorf("parse vCluster kubeconfig: %w", err)

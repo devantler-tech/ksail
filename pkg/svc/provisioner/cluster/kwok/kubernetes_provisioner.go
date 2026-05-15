@@ -108,7 +108,7 @@ func kwokContainerNames(clusterName string) []string {
 //
 //nolint:cyclop,funlen // Sequential multi-step provisioning flow — extracting steps would obscure the overall sequence.
 func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
-	target := p.Provisioner.resolveName(name)
+	target := p.resolveName(name)
 
 	// Step 1: Ensure namespace + DinD pod
 	err := p.setupDinD(ctx, target)
@@ -143,10 +143,13 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 	// kwokctl generates PKI locally, writes Docker Compose containers inside DinD.
 	// Containers are created with file-level bind mounts (thanks to placeholders)
 	// but crash-loop because the placeholder files are empty.
-	_, _ = fmt.Fprintln(os.Stdout, "► creating KWOK cluster via SDK (DOCKER_HOST → exec tunnel → DinD)")
+	_, _ = fmt.Fprintln(
+		os.Stdout,
+		"► creating KWOK cluster via SDK (DOCKER_HOST → exec tunnel → DinD)",
+	)
 
 	err = kubernetesprovider.WithRemoteDockerHost(dockerPF, func() error {
-		return p.Provisioner.CreateCluster(ctx, name)
+		return p.CreateCluster(ctx, name)
 	})
 	if err != nil {
 		return fmt.Errorf("kwok create via SDK: %w", err)
@@ -206,15 +209,20 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 	// Step 11: Scale simulated nodes — now the API server is accessible via port-forward
 	_, _ = fmt.Fprintln(os.Stdout, "► creating simulated KWOK node")
 
-	err = p.Provisioner.ScaleNodes(ctx, name)
+	err = p.ScaleNodes(ctx, name)
 	if err != nil {
 		return fmt.Errorf("kwok scale via SDK: %w", err)
 	}
 
 	// Step 12: Expose via Gateway API (if configured)
 	err = p.k8sProvider.EnsureAPIExposure(
-		ctx, p.dynamicClient, target,
-		int32(apiServerPort), p.gatewayClassName, //nolint:gosec // port value is bounded within TCP port range (1-65535)
+		ctx,
+		p.dynamicClient,
+		target,
+		int32(
+			apiServerPort,
+		),
+		p.gatewayClassName, //nolint:gosec // port value is bounded within TCP port range (1-65535)
 	)
 	if err != nil {
 		return fmt.Errorf("ensure API exposure: %w", err)
@@ -225,7 +233,7 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 
 // Delete deletes the KWOK cluster inside DinD and cleans up host cluster resources.
 func (p *KubernetesProvisioner) Delete(ctx context.Context, name string) error {
-	target := p.Provisioner.resolveName(name)
+	target := p.resolveName(name)
 
 	// Close port-forward if active
 	if p.portForward != nil {
@@ -266,7 +274,7 @@ func (p *KubernetesProvisioner) Delete(ctx context.Context, name string) error {
 
 // Exists checks if the KWOK-on-Kubernetes cluster exists by checking for the DinD pod.
 func (p *KubernetesProvisioner) Exists(ctx context.Context, name string) (bool, error) {
-	target := p.Provisioner.resolveName(name)
+	target := p.resolveName(name)
 
 	exists, err := p.k8sProvider.NodesExist(ctx, target)
 	if err != nil {
@@ -308,7 +316,7 @@ func (p *KubernetesProvisioner) discoverAPIServerPort(name string) (int, error) 
 		return 0, fmt.Errorf("load kubeconfig: %w", err)
 	}
 
-	target := p.Provisioner.resolveName(name)
+	target := p.resolveName(name)
 	clusterKey := "kwok-" + target
 
 	cluster, ok := config.Clusters[clusterKey]
@@ -333,7 +341,7 @@ func (p *KubernetesProvisioner) discoverAPIServerPort(name string) (int, error) 
 //   - ~/.kwok/clusters/<name>/kubeconfig.yaml — kwokctl's internal kubeconfig
 //     used by kwokctl scale and other runtime commands
 func (p *KubernetesProvisioner) rewriteKubeconfig(name string, localPort int) error {
-	target := p.Provisioner.resolveName(name)
+	target := p.resolveName(name)
 	clusterKey := "kwok-" + target
 	newServer := fmt.Sprintf("https://127.0.0.1:%d", localPort)
 
@@ -367,7 +375,12 @@ func (p *KubernetesProvisioner) rewriteKubeconfig(name string, localPort int) er
 	}
 
 	kwokKubeconfigPath := kwokKubeconfig
-	err = fsutil.AtomicWriteFile(kwokKubeconfigPath, result, 0o600) //nolint:mnd // standard kubeconfig file permission
+
+	err = fsutil.AtomicWriteFile(
+		kwokKubeconfigPath,
+		result,
+		0o600,
+	) //nolint:mnd // standard kubeconfig file permission
 	if err != nil {
 		return fmt.Errorf("write kwokctl kubeconfig: %w", err)
 	}
@@ -388,7 +401,10 @@ func kwokStateDir(clusterName string) (string, error) {
 // createPlaceholderFiles creates empty placeholder files in the DinD container
 // at the exact paths kwokctl will reference in Docker bind mounts.
 // This ensures Docker creates file-level bind mounts instead of directory mounts.
-func (p *KubernetesProvisioner) createPlaceholderFiles(ctx context.Context, clusterName string) error {
+func (p *KubernetesProvisioner) createPlaceholderFiles(
+	ctx context.Context,
+	clusterName string,
+) error {
 	stateDir, err := kwokStateDir(clusterName)
 	if err != nil {
 		return err
@@ -406,6 +422,7 @@ func (p *KubernetesProvisioner) createPlaceholderFiles(ctx context.Context, clus
 	}
 
 	mkdirCmd := fmt.Sprintf("mkdir -p '%s'", strings.ReplaceAll(pkiDir, "'", "'\\''"))
+
 	_, err = p.k8sProvider.ExecInDinD(ctx, p.restConfig, clusterName, mkdirCmd)
 	if err != nil {
 		return fmt.Errorf("mkdir pki: %w", err)
@@ -413,8 +430,15 @@ func (p *KubernetesProvisioner) createPlaceholderFiles(ctx context.Context, clus
 
 	for _, path := range placeholders {
 		escapedPath := strings.ReplaceAll(path, "'", "'\\''")
+
 		touchCmd := fmt.Sprintf("touch '%s'", escapedPath)
-		if _, err := p.k8sProvider.ExecInDinD(ctx, p.restConfig, clusterName, touchCmd); err != nil {
+		_, err := p.k8sProvider.ExecInDinD(
+			ctx,
+			p.restConfig,
+			clusterName,
+			touchCmd,
+		)
+		if err != nil {
 			return fmt.Errorf("touch %s: %w", path, err)
 		}
 	}
@@ -443,13 +467,22 @@ func (p *KubernetesProvisioner) copyStateToDinD(ctx context.Context, clusterName
 	for _, rel := range files {
 		localPath := filepath.Join(stateDir, rel)
 
-		content, err := os.ReadFile(localPath) //nolint:gosec // path constructed from trusted state directory
+		content, err := os.ReadFile(
+			localPath,
+		) //nolint:gosec // path constructed from trusted state directory
 		if err != nil {
 			return fmt.Errorf("read local %s: %w", rel, err)
 		}
 
 		remotePath := filepath.Join(stateDir, rel)
-		if err := p.k8sProvider.WriteFileInDinD(ctx, p.restConfig, clusterName, remotePath, string(content)); err != nil {
+		err = p.k8sProvider.WriteFileInDinD(
+			ctx,
+			p.restConfig,
+			clusterName,
+			remotePath,
+			string(content),
+		)
+		if err != nil {
 			return fmt.Errorf("write %s to DinD: %w", rel, err)
 		}
 	}
@@ -459,7 +492,10 @@ func (p *KubernetesProvisioner) copyStateToDinD(ctx context.Context, clusterName
 
 // restartContainersInDinD restarts the crash-looping KWOK Docker containers
 // inside DinD so they pick up the real PKI files written by copyStateToDinD.
-func (p *KubernetesProvisioner) restartContainersInDinD(ctx context.Context, clusterName string) error {
+func (p *KubernetesProvisioner) restartContainersInDinD(
+	ctx context.Context,
+	clusterName string,
+) error {
 	containers := kwokContainerNames(clusterName)
 	restartCmd := "docker restart " + strings.Join(containers, " ")
 
