@@ -261,7 +261,12 @@ func (p *KubernetesProvisioner) rewriteKindKubeconfig(clusterName string, localP
 	clusterKey := "kind-" + clusterName
 	newServer := fmt.Sprintf("https://127.0.0.1:%d", localPort)
 
-	if err := k8s.ModifyKubeconfigCluster(p.kubeconfigPath, clusterKey, newServer); err != nil { //nolint:noinlineerr
+	err := k8s.ModifyKubeconfigCluster(
+		p.kubeconfigPath,
+		clusterKey,
+		newServer,
+	)
+	if err != nil {
 		return fmt.Errorf("modify kubeconfig cluster: %w", err)
 	}
 
