@@ -91,7 +91,7 @@ func NewKubernetesProvisioner(cfg KubernetesProvisionerConfig) (*KubernetesProvi
 // It port-forwards the DinD Docker API, sets DOCKER_HOST, then delegates to the
 // inner Kind provisioner which uses the Kind SDK (Cobra commands that shell out
 // to the docker CLI, inheriting DOCKER_HOST).
-func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
+func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error { //nolint:funlen // sequential setup steps with many error-checks
 	target := setName(name, p.Provisioner.kindConfig.Name)
 
 	// Preserve the host kubeconfig's current-context. The Kind SDK switches
@@ -161,10 +161,11 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 	}
 
 	// Step 6: Expose the nested API server via Gateway API (if configured)
-	if err := p.k8sProvider.EnsureAPIExposure(
+	err = p.k8sProvider.EnsureAPIExposure(
 		ctx, p.dynamicClient, target,
 		p.apiServerPort, p.gatewayClassName,
-	); err != nil {
+	)
+	if err != nil {
 		return fmt.Errorf("expose API server: %w", err)
 	}
 

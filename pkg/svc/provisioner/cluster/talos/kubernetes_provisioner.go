@@ -310,7 +310,7 @@ func (p *KubernetesProvisioner) Delete(ctx context.Context, name string) error {
 				dockerclient.WithAPIVersionNegotiation(),
 			)
 			if clientErr != nil {
-				return clientErr
+				return fmt.Errorf("create Docker client: %w", clientErr)
 			}
 
 			defer func() { _ = dindClient.Close() }()

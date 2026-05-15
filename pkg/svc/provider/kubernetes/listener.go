@@ -20,26 +20,26 @@ type localListener struct {
 // newLocalListener creates a TCP listener on a random localhost port and
 // extracts the assigned port number. On any error the listener is closed.
 func newLocalListener(ctx context.Context) (*localListener, error) {
-	ln, err := (&net.ListenConfig{}).Listen(ctx, "tcp", "127.0.0.1:0")
+	listener, err := (&net.ListenConfig{}).Listen(ctx, "tcp", "127.0.0.1:0")
 	if err != nil {
 		return nil, fmt.Errorf("create listener: %w", err)
 	}
 
-	addr := ln.Addr().String()
+	addr := listener.Addr().String()
 
 	parts := strings.Split(addr, ":")
 	if len(parts) < minAddressParts {
-		_ = ln.Close()
+		_ = listener.Close()
 
 		return nil, fmt.Errorf("parse listener address %q: %w", addr, ErrUnexpectedAddressFormat)
 	}
 
 	port, err := strconv.Atoi(parts[len(parts)-1])
 	if err != nil {
-		_ = ln.Close()
+		_ = listener.Close()
 
 		return nil, fmt.Errorf("parse listener port: %w", err)
 	}
 
-	return &localListener{Listener: ln, Port: port}, nil
+	return &localListener{Listener: listener, Port: port}, nil
 }

@@ -133,13 +133,13 @@ func TestProvider_ListAllClusters(t *testing.T) {
 func TestProvider_NodesExist(t *testing.T) {
 	t.Parallel()
 
-	ns := kubeprovider.NamespaceName("test-cluster")
+	namespaceName := kubeprovider.NamespaceName("test-cluster")
 
 	client := fake.NewClientset(
 		&corev1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-cluster-cp-0",
-				Namespace: ns,
+				Namespace: namespaceName,
 				Labels:    kubeprovider.NodeLabels("test-cluster", kubeprovider.RoleControlPlane, "K3s"),
 			},
 		},

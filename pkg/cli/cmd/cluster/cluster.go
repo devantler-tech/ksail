@@ -4058,7 +4058,7 @@ func getKubernetesProviderFromConfig() (*kubernetesprovider.Provider, error) {
 		return nil, fmt.Errorf("canonicalize kubeconfig path: %w", err)
 	}
 
-	hostContext := os.Getenv("KSAIL_HOST_CONTEXT")
+	hostContext := os.Getenv("KSAIL_HOST_CONTEXT") //nolint:gosec // kubeconfig context name, not a path
 
 	restConfig, err := k8s.BuildRESTConfig(canonicalPath, hostContext)
 	if err != nil {

@@ -152,7 +152,8 @@ func ModifyKubeconfigCluster(kubeconfigPath, clusterKey, newServerURL string) er
 		return fmt.Errorf("serialize kubeconfig: %w", err)
 	}
 
-	if err := fsutil.AtomicWriteFile(kubeconfigPath, result, kubeconfigFileMode); err != nil {
+	err = fsutil.AtomicWriteFile(kubeconfigPath, result, kubeconfigFileMode)
+	if err != nil {
 		return fmt.Errorf("write modified kubeconfig: %w", err)
 	}
 
@@ -554,7 +555,8 @@ func SetKubeconfigCurrentContext(kubeconfigPath, contextName string) error {
 		return fmt.Errorf("serialize kubeconfig: %w", err)
 	}
 
-	if err := fsutil.AtomicWriteFile(kubeconfigPath, result, kubeconfigFileMode); err != nil {
+	err = fsutil.AtomicWriteFile(kubeconfigPath, result, kubeconfigFileMode)
+	if err != nil {
 		return fmt.Errorf("write kubeconfig: %w", err)
 	}
 

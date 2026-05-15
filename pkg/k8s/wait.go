@@ -15,6 +15,9 @@ const (
 
 	// waitBackoffMultiplier is the exponential backoff multiplier for the wait interval.
 	waitBackoffMultiplier = 2
+
+	// maxWaitInterval is the maximum backoff interval between API server readiness polls.
+	maxWaitInterval = 5 * time.Second
 )
 
 // WaitForAPIServer waits until the Kubernetes API server is reachable and responsive.
@@ -49,8 +52,8 @@ func WaitForAPIServer(ctx context.Context, kubeconfigPath, contextName string) e
 
 			return fmt.Errorf("%w (last body: %s)", ErrAPIServerTimeout, string(body))
 		case <-time.After(interval):
-			// Exponential backoff capped at 5s
-			interval = min(interval*waitBackoffMultiplier, 5*time.Second)
+			// Exponential backoff capped at maxWaitInterval
+			interval = min(interval*waitBackoffMultiplier, maxWaitInterval)
 		}
 	}
 }

@@ -135,21 +135,21 @@ func (p *Provider) ListAllClustersWithDistribution(ctx context.Context) ([]Clust
 	clusters := make([]ClusterInfo, 0, len(namespaces.Items))
 
 	for i := range namespaces.Items {
-		ns := namespaces.Items[i]
+		nsItem := namespaces.Items[i]
 
 		// Prefer the ksail.io/cluster label for the cluster name; this works
 		// regardless of namespace prefix (ksail-<name>, vcluster-<name>, etc.).
-		clusterName := ns.Labels[LabelClusterName]
+		clusterName := nsItem.Labels[LabelClusterName]
 		if clusterName == "" {
 			// Fall back to stripping the ksail- prefix for older namespaces.
 			var ok bool
-			clusterName, ok = strings.CutPrefix(ns.Name, NamespacePrefix)
+			clusterName, ok = strings.CutPrefix(nsItem.Name, NamespacePrefix)
 			if !ok {
 				continue
 			}
 		}
 
-		distribution := p.detectDistribution(ctx, ns.Name, clusterName)
+		distribution := p.detectDistribution(ctx, nsItem.Name, clusterName)
 		clusters = append(clusters, ClusterInfo{Name: clusterName, Distribution: distribution})
 	}
 
@@ -203,18 +203,18 @@ func (p *Provider) IsAvailable() bool {
 
 // EnsureNamespace creates the cluster namespace if it does not exist.
 func (p *Provider) EnsureNamespace(ctx context.Context, clusterName string) error {
-	ns := NamespaceName(clusterName)
+	namespaceName := NamespaceName(clusterName)
 
 	namespace := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:   ns,
+			Name:   namespaceName,
 			Labels: CommonLabels(clusterName),
 		},
 	}
 
 	_, err := p.client.CoreV1().Namespaces().Create(ctx, namespace, metav1.CreateOptions{})
 	if err != nil && !apierrors.IsAlreadyExists(err) {
-		return fmt.Errorf("ensure namespace %s: %w", ns, err)
+		return fmt.Errorf("ensure namespace %s: %w", namespaceName, err)
 	}
 
 	return nil

@@ -3,8 +3,6 @@ package kubernetes
 import (
 	"context"
 	"fmt"
-	"net"
-	"strconv"
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -28,7 +26,8 @@ const (
 	// DinDServiceName is the name of the DinD ClusterIP service.
 	DinDServiceName = "dind"
 
-	// DinDDockerPort is the port the Docker daemon listens on (no TLS).
+	// DinDDockerPort is the port the Docker daemon listens on inside the DinD pod.
+	// Used for port-forwarding to the pod; not exposed via the ClusterIP Service.
 	DinDDockerPort = 2375
 
 	// DinDAPIServerPort is the port the nested API server is exposed on (via Docker port mapping).
@@ -121,33 +120,6 @@ func (p *Provider) WaitForDinD(ctx context.Context, clusterName string) error {
 	}
 
 	return fmt.Errorf("%w: %v", ErrDinDNotReady, dindReadyTimeout)
-}
-
-// GetDockerDaemonEndpoint returns the in-cluster Docker daemon endpoint for the DinD pod.
-// The returned value is suitable for use as DOCKER_HOST.
-func (p *Provider) GetDockerDaemonEndpoint(clusterName string) string {
-	ns := NamespaceName(clusterName)
-
-	return fmt.Sprintf("tcp://%s.%s.svc.cluster.local:%d", DinDServiceName, ns, DinDDockerPort)
-}
-
-// GetDockerDaemonPodEndpoint returns the Docker daemon endpoint using the pod IP.
-// This is used when connecting from outside the cluster (via port-forward or NodePort).
-func (p *Provider) GetDockerDaemonPodEndpoint(ctx context.Context, clusterName string) (string, error) {
-	namespace := NamespaceName(clusterName)
-
-	pod, err := p.client.CoreV1().Pods(namespace).Get(ctx, DinDPodName, metav1.GetOptions{})
-	if err != nil {
-		return "", fmt.Errorf("get DinD pod: %w", err)
-	}
-
-	if pod.Status.PodIP == "" {
-		return "", fmt.Errorf("get DinD endpoint: %w", ErrDinDNoIP)
-	}
-
-	return "tcp://" + net.JoinHostPort(
-		pod.Status.PodIP, strconv.Itoa(DinDDockerPort),
-	), nil
 }
 
 // DeleteDinD removes the DinD pod and service.
@@ -332,11 +304,6 @@ func buildDinDService(clusterName string) *corev1.Service {
 				LabelApp: DinDPodName,
 			},
 			Ports: []corev1.ServicePort{
-				{
-					Name:       "docker",
-					Port:       DinDDockerPort,
-					TargetPort: intstr.FromInt32(DinDDockerPort),
-				},
 				{
 					Name:       "apiserver",
 					Port:       DinDAPIServerPort,

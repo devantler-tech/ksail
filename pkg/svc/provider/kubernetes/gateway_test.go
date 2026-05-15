@@ -80,20 +80,20 @@ func TestExtractGatewayPort(t *testing.T) { //nolint:funlen // table test with m
 		},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			gateway := &unstructured.Unstructured{Object: map[string]any{
 				"apiVersion": "gateway.networking.k8s.io/v1",
 				"kind":       "Gateway",
 			}}
-			if tc.status != nil {
-				gateway.Object["status"] = tc.status
+			if testCase.status != nil {
+				gateway.Object["status"] = testCase.status
 			}
 
 			got := kubeprovider.ExtractGatewayPortForTest(gateway)
-			assert.Equal(t, tc.expected, got)
+			assert.Equal(t, testCase.expected, got)
 		})
 	}
 }
@@ -154,21 +154,21 @@ func TestExtractGatewayAddressValue(t *testing.T) {
 		},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			gateway := &unstructured.Unstructured{Object: map[string]any{
 				"apiVersion": "gateway.networking.k8s.io/v1",
 				"kind":       "Gateway",
 			}}
-			if tc.status != nil {
-				gateway.Object["status"] = tc.status
+			if testCase.status != nil {
+				gateway.Object["status"] = testCase.status
 			}
 
 			val, ok := kubeprovider.ExtractGatewayAddressValueForTest(gateway)
-			assert.Equal(t, tc.expected, val)
-			assert.Equal(t, tc.expectOK, ok)
+			assert.Equal(t, testCase.expected, val)
+			assert.Equal(t, testCase.expectOK, ok)
 		})
 	}
 }

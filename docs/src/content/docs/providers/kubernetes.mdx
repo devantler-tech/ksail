@@ -115,12 +115,12 @@ graph TB
             W1["Worker Pod 1<br/>(privileged)"]
             SVC["ClusterIP Service<br/>→ port 6443"]
         end
-        GW["Gateway<br/>TCP listener :7001"]
+        GW["Gateway<br/>TCP listener :6443"]
         ROUTE["TCPRoute<br/>→ ClusterIP Service"]
         GWCTRL["Gateway Controller"]
     end
 
-    USER["kubectl → LB:7001"] --> GW
+    USER["kubectl → LB:6443"] --> GW
     GW --> ROUTE --> SVC --> CP
     GWCTRL -.-> GW
 ````
@@ -128,8 +128,8 @@ graph TB
 ### Gateway API Exposure
 
 The nested cluster's API server is exposed via:
-1. **ClusterIP Service** — targets the control-plane pod(s) on port 6443
-2. **Gateway** — TCP listener on a unique port per cluster
+1. **ClusterIP Service** — targets the control-plane pod(s) on the nested API server port (default: 6443)
+2. **Gateway** — TCP listener on the nested API server port
 3. **TCPRoute** — routes the TCP listener to the ClusterIP Service
 
 The Gateway controller's LoadBalancer provides the external IP that users connect to via `kubectl`.
