@@ -23,7 +23,6 @@ type KubernetesProvisioner struct {
 	k8sProvider      *kubernetesprovider.Provider
 	dynamicClient    dynamic.Interface
 	restConfig       *rest.Config
-	clusterName      string
 	distribution     string
 	gatewayClassName string
 	apiServerPort    int32
@@ -78,7 +77,6 @@ func NewKubernetesProvisioner(cfg KubernetesProvisionerConfig) (*KubernetesProvi
 		k8sProvider:      cfg.K8sProvider,
 		dynamicClient:    cfg.DynamicClient,
 		restConfig:       cfg.RestConfig,
-		clusterName:      cfg.ClusterName,
 		distribution:     cfg.Distribution,
 		gatewayClassName: cfg.GatewayClassName,
 		apiServerPort:    cfg.APIServerPort,

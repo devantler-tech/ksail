@@ -17,7 +17,6 @@ import (
 // Nested cluster nodes run as pods inside a dedicated namespace on the host cluster.
 type Provider struct {
 	client kubernetes.Interface
-	opts   v1alpha1.OptionsKubernetes
 }
 
 // NewProvider creates a new Kubernetes provider with the given host cluster client and options.
@@ -28,7 +27,6 @@ func NewProvider(client kubernetes.Interface, opts v1alpha1.OptionsKubernetes) (
 
 	return &Provider{
 		client: client,
-		opts:   opts,
 	}, nil
 }
 
