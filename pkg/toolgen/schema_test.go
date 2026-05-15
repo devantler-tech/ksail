@@ -580,3 +580,74 @@ func TestMapFlagTypes(t *testing.T) {
 		})
 	}
 }
+
+func TestTruncateDescription(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		input    string
+		maxLen   int
+		expected string
+	}{
+		{
+			name:     "no truncation needed",
+			input:    "Short description",
+			maxLen:   100,
+			expected: "Short description",
+		},
+		{
+			name:     "exact length",
+			input:    "Exact",
+			maxLen:   5,
+			expected: "Exact",
+		},
+		{
+			name:     "truncate at sentence boundary",
+			input:    "First sentence. Second sentence that is longer and pushes past the limit.",
+			maxLen:   30,
+			expected: "First sentence....",
+		},
+		{
+			name:     "truncate at clause boundary",
+			input:    "Main clause, secondary clause that extends beyond the boundary",
+			maxLen:   30,
+			expected: "Main clause,...",
+		},
+		{
+			name:     "truncate at space",
+			input:    "word1 word2 word3 word4 word5 word6 word7",
+			maxLen:   20,
+			expected: "word1 word2...",
+		},
+		{
+			name:     "hard cut no spaces",
+			input:    "abcdefghijklmnopqrstuvwxyz",
+			maxLen:   10,
+			expected: "abcdefg...",
+		},
+		{
+			name:     "very small maxLen",
+			input:    "something long",
+			maxLen:   3,
+			expected: "...",
+		},
+		{
+			name:     "result never exceeds maxLen",
+			input:    "This is a somewhat long description that should be truncated properly.",
+			maxLen:   25,
+			expected: "This is a somewhat...",
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			result := toolgen.TruncateDescription(testCase.input, testCase.maxLen)
+			assert.Equal(t, testCase.expected, result)
+			assert.LessOrEqual(t, len(result), testCase.maxLen,
+				"result length %d exceeds maxLen %d", len(result), testCase.maxLen)
+		})
+	}
+}

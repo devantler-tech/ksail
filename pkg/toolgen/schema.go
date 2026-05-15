@@ -368,6 +368,8 @@ func addFlagProperties(
 				description,
 				strings.Join(flagDef.AppliesToSubcommands, ", "),
 			)
+			// Enforce total cap so very long applies-to lists don't blow up the schema.
+			description = truncateDescription(description, maxTotalFlagDescriptionLength)
 		}
 
 		prop["description"] = description
@@ -451,29 +453,37 @@ func mapFlagTypeToItemsType(flagType string) string {
 	}
 }
 
-// truncateDescription truncates a description string to maxLen characters.
+// ellipsis is the suffix appended to truncated descriptions.
+const ellipsis = "..."
+
+// truncateDescription truncates a description string to maxLen bytes.
 // It tries to break at a sentence boundary ('. ') or clause boundary (', ', '; ')
-// within the limit. Falls back to a hard cut with '…' suffix.
+// within the limit. Falls back to a hard cut with "..." suffix.
 func truncateDescription(desc string, maxLen int) string {
 	if len(desc) <= maxLen {
 		return desc
 	}
 
+	// Guard against very small maxLen values
+	if maxLen <= len(ellipsis) {
+		return ellipsis
+	}
+
 	// Reserve space for the ellipsis
-	cutoff := maxLen - 1
+	cutoff := maxLen - len(ellipsis)
 
 	// Try to break at natural boundaries in descending preference
 	for _, sep := range []string{". ", "; ", ", "} {
 		if idx := strings.LastIndex(desc[:cutoff], sep); idx > 0 {
-			return desc[:idx+len(sep)-1] + "…"
+			return desc[:idx+len(sep)-1] + ellipsis
 		}
 	}
 
 	// Try to break at a space
 	if idx := strings.LastIndex(desc[:cutoff], " "); idx > 0 {
-		return desc[:idx] + "…"
+		return desc[:idx] + ellipsis
 	}
 
 	// Hard cut
-	return desc[:cutoff] + "…"
+	return desc[:cutoff] + ellipsis
 }

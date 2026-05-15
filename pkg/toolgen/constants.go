@@ -56,6 +56,11 @@ const (
 	// the "(applies to: ...)" annotation is omitted. When a flag applies to
 	// >= 50% of subcommands, the annotation adds more noise than signal.
 	appliesToThreshold = 0.50
+
+	// maxTotalFlagDescriptionLength is the upper bound for a flag description
+	// including the "(applies to: ...)" suffix. Prevents the total from
+	// exceeding a reasonable size when many subcommands are listed.
+	maxTotalFlagDescriptionLength = 400
 )
 
 // Parameter key for positional arguments.

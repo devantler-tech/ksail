@@ -44,17 +44,17 @@ type ToolDefinition struct {
 
 // ToolAnnotationHints contains SDK-agnostic behavioral hints for a tool.
 // These map to MCP ToolAnnotations and inform client behavior.
-// All fields follow the MCP spec defaults: unset means worst-case assumptions.
+// KSail always sets all fields explicitly so there is no ambiguity.
 type ToolAnnotationHints struct {
 	// ReadOnlyHint indicates the tool does not modify its environment.
 	ReadOnlyHint bool
 
 	// DestructiveHint indicates the tool may perform destructive updates.
-	// Only meaningful when ReadOnlyHint is false.
 	DestructiveHint bool
 
 	// IdempotentHint indicates repeated calls with the same args have no additional effect.
-	// Only meaningful when ReadOnlyHint is false.
+	// Set true for both read-only tools (reads are inherently idempotent) and
+	// write tools whose operations are idempotent (e.g., declarative apply).
 	IdempotentHint bool
 
 	// OpenWorldHint indicates the tool interacts with external entities.

@@ -115,6 +115,7 @@ func DefaultOptions() ToolOptions {
 			"insecure-skip-tls-verify",
 			"insecure-skip-tls-verify-backend",
 			"tls-server-name",
+			"request-timeout",
 			"as",
 			"as-group",
 			"as-uid",
