@@ -110,6 +110,35 @@ var ErrEmptyPinnedVersion = errors.New(
 	"pinned distribution version is empty",
 )
 
+// ErrDriftDetected is returned by the diff command when --exit-code is set
+// and configuration drift is detected. The exit code is 2 (KSail-specific:
+// 0 = no drift, 1 = error, 2 = drift detected — not the diff(1) convention).
+var ErrDriftDetected = errors.New("configuration drift detected")
+
+// DriftExitError is an error type that carries a custom exit code for the diff
+// command. It wraps ErrDriftDetected so callers can use errors.Is, and exposes
+// KSailExitCode() so main.go can propagate exit code 2 instead of the generic 1.
+type DriftExitError struct {
+	Changes int
+}
+
+// Error implements the error interface.
+func (e *DriftExitError) Error() string {
+	return fmt.Sprintf("%v: %d change(s) detected", ErrDriftDetected, e.Changes)
+}
+
+// Unwrap returns ErrDriftDetected so errors.Is(err, ErrDriftDetected) works.
+func (e *DriftExitError) Unwrap() error {
+	return ErrDriftDetected
+}
+
+// KSailExitCode returns the exit code that main.go should use for this error.
+// Using a KSail-specific name avoids matching stdlib *exec.ExitError, which also
+// implements ExitCode() int but represents a real subprocess failure.
+func (e *DriftExitError) KSailExitCode() int {
+	return diffExitCode
+}
+
 // BackupMetadata contains metadata about a backup.
 type BackupMetadata struct {
 	Version       string    `json:"version"`
@@ -1023,6 +1052,7 @@ func NewClusterCmd(runtimeContainer *di.Runtime) *cobra.Command {
 	cmd.AddCommand(NewListCmd(runtimeContainer))
 	cmd.AddCommand(NewInfoCmd(runtimeContainer))
 	cmd.AddCommand(NewDiagnoseCmd(runtimeContainer))
+	cmd.AddCommand(NewDiffCmd(runtimeContainer))
 	cmd.AddCommand(NewConnectCmd(runtimeContainer))
 	cmd.AddCommand(NewBackupCmd(runtimeContainer))
 	cmd.AddCommand(NewRestoreCmd(runtimeContainer))
@@ -7373,7 +7403,13 @@ func computeSpecOnlyDiff(
 			ctx.ClusterCfg.Spec.Cluster.Distribution,
 			ctx.ClusterCfg.Spec.Cluster.Provider,
 		)
-		if err == nil {
+		if err != nil {
+			notify.Warningf(
+				cmd.ErrOrStderr(),
+				"Cannot detect live cluster components (drift detection may be incomplete): %v",
+				err,
+			)
+		} else {
 			currentSpec.CNI = detected.CNI
 			currentSpec.CSI = detected.CSI
 			currentSpec.MetricsServer = detected.MetricsServer
@@ -8071,4 +8107,207 @@ func resolveClusterEntryName(kubeconfigPath, contextName string) (string, error)
 	}
 
 	return ctxEntry.Cluster, nil
+}
+
+// diffExitCode is the exit code returned by the diff command when --exit-code is
+// set and configuration drift is detected. This is a KSail-specific convention:
+// 0 = no drift, 1 = error, 2 = drift detected.
+// (Note: diff(1) uses 1 for differences; KSail reserves 1 for command errors and
+// uses 2 for drift so CI scripts can distinguish drift from failures.)
+const diffExitCode = 2
+
+// diffLongDesc describes the `ksail cluster diff` command.
+const diffLongDesc = `Compare the desired cluster configuration (ksail.yaml) against the live
+cluster state and report any drift.
+
+This command detects installed components via the Kubernetes API and Helm
+release history, then compares them against the configuration defined in
+ksail.yaml. Changes are classified by impact (in-place, reboot-required,
+recreate-required, wipe-required) — the same categories used by
+'ksail cluster update'.
+
+No changes are applied to the cluster; this is a read-only operation.
+
+The cluster is resolved in the following priority order:
+  1. From the --name flag override
+  2. From metadata.name in the ksail.yaml config file
+  3. From the current kubeconfig context
+
+Use --output json for machine-readable output suitable for CI pipelines.
+Use --exit-code to return exit code 2 when drift is detected (useful for
+CI gates and monitoring scripts).`
+
+// NewDiffCmd creates the cluster diff command.
+func NewDiffCmd(runtimeContainer *di.Runtime) *cobra.Command {
+	var exitCodeFlag bool
+
+	cmd := &cobra.Command{
+		Use:   "diff",
+		Short: "Show configuration drift between ksail.yaml and live cluster",
+		Long:  diffLongDesc,
+		Annotations: map[string]string{
+			annotations.AnnotationDescription: "Compare desired cluster configuration against live state and report drift",
+		},
+		SilenceUsage: true,
+	}
+
+	cfgManager := ksailconfigmanager.NewCommandConfigManager(
+		cmd,
+		ksailconfigmanager.DefaultClusterFieldSelectors(),
+	)
+
+	// Hide flags that diff doesn't expose in its help but that are needed for
+	// config defaults and validation to work correctly.
+	for _, flagName := range []string{"distribution", "distribution-config", "gitops-engine", "local-registry"} {
+		if f := cmd.Flags().Lookup(flagName); f != nil {
+			f.Hidden = true
+		}
+	}
+
+	cmd.Flags().String("output", "text",
+		"Output format: text or json. Use json for machine-readable structured output.")
+
+	cmd.Flags().BoolVar(&exitCodeFlag, "exit-code", false,
+		"Return exit code 2 when drift is detected (for CI gates)")
+
+	registerNameFlag(cmd, cfgManager)
+
+	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
+		// Validate output format before entering WrapHandler to avoid unnecessary
+		// DI when the format is obviously invalid. Mirrors the diagnose pattern.
+		err := validateOutputFormat(cmd)
+		if err != nil {
+			return err
+		}
+
+		format := getOutputFormat(cmd)
+
+		handler := lifecycle.WrapHandler(
+			runtimeContainer,
+			cfgManager,
+			func(cmd *cobra.Command, cfgManager *ksailconfigmanager.ConfigManager, deps lifecycle.Deps) error {
+				return handleDiffRunE(cmd, cfgManager, deps, exitCodeFlag, format)
+			},
+		)
+
+		return handler(cmd, nil)
+	}
+
+	return cmd
+}
+
+// handleDiffRunE computes the diff between desired and live cluster state.
+func handleDiffRunE(
+	cmd *cobra.Command,
+	cfgManager *ksailconfigmanager.ConfigManager,
+	deps lifecycle.Deps,
+	exitCodeFlag bool,
+	format string,
+) error {
+	ctx, _, err := loadAndValidateClusterConfig(cfgManager, deps)
+	if err != nil {
+		return err
+	}
+
+	diff := computeSpecOnlyDiff(cmd, ctx)
+
+	// Also try provisioner-level diff for Updater-capable provisioners.
+	// This adds distribution-specific changes (e.g., node counts, Talos config).
+	mergeProvisionerDiff(cmd, ctx, diff)
+
+	if diff.TotalChanges() == 0 {
+		if format == outputFormatJSON {
+			emitDiffJSON(cmd, diff)
+		} else {
+			notify.Infof(cmd.OutOrStdout(), "No configuration drift detected")
+		}
+
+		return nil
+	}
+
+	displayDiffResult(cmd, diff, format)
+
+	if exitCodeFlag {
+		return &DriftExitError{Changes: diff.TotalChanges()}
+	}
+
+	return nil
+}
+
+// displayDiffResult renders the diff output in the requested format.
+func displayDiffResult(
+	cmd *cobra.Command,
+	diff *clusterupdate.UpdateResult,
+	format string,
+) {
+	if format == outputFormatJSON {
+		emitDiffJSON(cmd, diff)
+
+		return
+	}
+
+	notify.Titlef(cmd.OutOrStdout(), "🔍", "Configuration drift")
+
+	notify.Infof(
+		cmd.OutOrStdout(),
+		formatDiffTable(diff, diff.TotalChanges()),
+	)
+}
+
+// mergeProvisionerDiff attempts to compute and merge provisioner-specific diffs
+// for distributions that support the Updater interface. Errors are logged as
+// warnings and do not block the main spec-level diff.
+func mergeProvisionerDiff(
+	cmd *cobra.Command,
+	ctx *localregistry.Context,
+	mainDiff *clusterupdate.UpdateResult,
+) {
+	factory := clusterprovisioner.DefaultFactory{
+		DistributionConfig: &clusterprovisioner.DistributionConfig{
+			Kind:     ctx.KindConfig,
+			K3d:      ctx.K3dConfig,
+			Talos:    ctx.TalosConfig,
+			VCluster: ctx.VClusterConfig,
+			KWOK:     ctx.KWOKConfig,
+			EKS:      ctx.EKSConfig,
+		},
+	}
+
+	provisioner, _, err := factory.Create(cmd.Context(), ctx.ClusterCfg)
+	if err != nil {
+		notify.Warningf(
+			cmd.ErrOrStderr(),
+			"Cannot create provisioner for provisioner-level diff (drift detection may be incomplete): %v",
+			err,
+		)
+
+		return
+	}
+
+	updater, ok := provisioner.(clusterprovisioner.Updater)
+	if !ok {
+		return
+	}
+
+	clusterName := resolveClusterNameFromContext(ctx)
+
+	currentSpec, _, err := updater.GetCurrentConfig(cmd.Context(), clusterName)
+	if err != nil {
+		notify.Warningf(cmd.ErrOrStderr(),
+			"Cannot retrieve current config for provisioner-level diff: %v", err)
+
+		return
+	}
+
+	provisionerDiff, err := updater.DiffConfig(
+		cmd.Context(), clusterName, currentSpec, &ctx.ClusterCfg.Spec.Cluster,
+	)
+	if err != nil {
+		notify.Warningf(cmd.ErrOrStderr(),
+			"Cannot compute provisioner-level diff: %v", err)
+
+		return
+	}
+
+	specdiff.MergeProvisionerDiff(mainDiff, provisionerDiff)
 }
