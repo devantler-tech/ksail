@@ -892,8 +892,8 @@ github.com/fluxcd/pkg/apis/acl v0.9.0 h1:wBpgsKT+jcyZEcM//OmZr9RiF8klL3ebrDp2u2T
 github.com/fluxcd/pkg/apis/acl v0.9.0/go.mod h1:TttNS+gocsGLwnvmgVi3/Yscwqrjc17+vhgYfqkfrV4=
 github.com/fluxcd/pkg/apis/kustomize v1.15.1 h1:t9QZh+3ZS8EKmlxrnnbcKZcGTrg8FDvMF1T8BHMCuqI=
 github.com/fluxcd/pkg/apis/kustomize v1.15.1/go.mod h1:IZOy4CCtR/hxMGb7erK1RfbGnczVv4/dRBoVD37AywI=
-github.com/fluxcd/pkg/apis/meta v1.26.0 h1:dxP1FfBpTCYso6odzRcltVnnRuBb2VyhhgV0VX9YbUE=
-github.com/fluxcd/pkg/apis/meta v1.26.0/go.mod h1:c7o6mJGLCMvNrfdinGZehkrdZuFT9vZdZNrn66DtVD0=
+github.com/fluxcd/pkg/apis/meta v1.27.0 h1:EspByEk5j8w3rs1cGbEh9AjSmpDwQIz7DFG/zzqf6uI=
+github.com/fluxcd/pkg/apis/meta v1.27.0/go.mod h1:2t6JyrRfvIBhx6EBnXfFh/6sCCJ1db9WGaqko0JmNOE=
 github.com/fluxcd/pkg/ssa v0.73.0 h1:JdFp3M+Ib2vg26Vara/5eirHZ/qMNzEQ1nQ+/LaWPsc=
 github.com/fluxcd/pkg/ssa v0.73.0/go.mod h1:6igtlt7/zF+nNFQpa5ZAkkvtpL6o36NRU39/PqqC+Bg=
 github.com/fluxcd/source-controller/api v1.8.3 h1:WNEETjmp/YTZx5IMg9ewz2Wn8YzOVETeJJ0LIPivm40=
