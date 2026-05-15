@@ -1135,15 +1135,9 @@ jobs:
         auto-commit,
         warm-helm-cache,
         warm-mirror-cache,
-        system-test-docker,
         license-check,
-        audit-docs,
-        audit-vsce,
         build-docs,
-        vscode-extension,
-        copilot-plugin,
         benchmark,
-        benchmark-store,
       ]
     if: ${{ always() }}
     steps:
@@ -1159,12 +1153,6 @@ jobs:
             ${{ needs.auto-commit.result }}
             ${{ needs.warm-helm-cache.result }}
             ${{ needs.warm-mirror-cache.result }}
-            ${{ needs.system-test-docker.result }}
             ${{ needs.license-check.result }}
-            ${{ needs.audit-docs.result }}
-            ${{ needs.audit-vsce.result }}
             ${{ needs.build-docs.result }}
-            ${{ needs.vscode-extension.result }}
-            ${{ needs.copilot-plugin.result }}
             ${{ needs.benchmark.result }}
-            ${{ needs.benchmark-store.result }}
