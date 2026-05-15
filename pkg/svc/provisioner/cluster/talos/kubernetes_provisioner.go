@@ -279,10 +279,11 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 		ctx,
 		p.dynamicClient,
 		clusterName,
+		//nolint:gosec // port value is bounded within TCP port range (1-65535)
 		int32(
 			k8sPort,
 		),
-		p.gatewayClassName, //nolint:gosec // port value is bounded within TCP port range (1-65535)
+		p.gatewayClassName,
 	)
 	if err != nil {
 		return fmt.Errorf("expose API: %w", err)

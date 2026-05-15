@@ -219,10 +219,11 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 		ctx,
 		p.dynamicClient,
 		target,
+		//nolint:gosec // port value is bounded within TCP port range (1-65535)
 		int32(
 			apiServerPort,
 		),
-		p.gatewayClassName, //nolint:gosec // port value is bounded within TCP port range (1-65535)
+		p.gatewayClassName,
 	)
 	if err != nil {
 		return fmt.Errorf("ensure API exposure: %w", err)
@@ -379,8 +380,8 @@ func (p *KubernetesProvisioner) rewriteKubeconfig(name string, localPort int) er
 	err = fsutil.AtomicWriteFile(
 		kwokKubeconfigPath,
 		result,
-		0o600,
-	) //nolint:mnd // standard kubeconfig file permission
+		0o600, //nolint:mnd // standard kubeconfig file permission
+	)
 	if err != nil {
 		return fmt.Errorf("write kwokctl kubeconfig: %w", err)
 	}
@@ -468,9 +469,10 @@ func (p *KubernetesProvisioner) copyStateToDinD(ctx context.Context, clusterName
 	for _, rel := range files {
 		localPath := filepath.Join(stateDir, rel)
 
+		//nolint:gosec // path constructed from trusted state directory
 		content, err := os.ReadFile(
 			localPath,
-		) //nolint:gosec // path constructed from trusted state directory
+		)
 		if err != nil {
 			return fmt.Errorf("read local %s: %w", rel, err)
 		}
