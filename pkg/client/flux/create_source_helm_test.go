@@ -8,8 +8,8 @@ import (
 )
 
 const (
-	helmInterval    = "10m"
-	flagExportHelm  = "export"
+	helmInterval   = "10m"
+	flagExportHelm = "export"
 )
 
 func TestNewCreateSourceHelmCmd(t *testing.T) {
@@ -86,23 +86,23 @@ func helmRepositoryExportTestsAdvanced() map[string]testCase {
 				"url":              "https://charts.example.com",
 				"secret-ref":       "helm-creds",
 				"pass-credentials": "true",
-				flagExportHelm:           "true",
+				flagExportHelm:     "true",
 			},
 		},
 		"export with custom interval": {
 			args: []string{"podinfo"},
 			flags: map[string]string{
-				"url":      "https://stefanprodan.github.io/podinfo",
-				"interval": helmInterval,
-				flagExportHelm:   "true",
+				"url":          "https://stefanprodan.github.io/podinfo",
+				"interval":     helmInterval,
+				flagExportHelm: "true",
 			},
 		},
 		"export with namespace": {
 			args: []string{"podinfo"},
 			flags: map[string]string{
-				"url":       "https://stefanprodan.github.io/podinfo",
-				"namespace": "custom-ns",
-				flagExportHelm:    "true",
+				"url":          "https://stefanprodan.github.io/podinfo",
+				"namespace":    "custom-ns",
+				flagExportHelm: "true",
 			},
 		},
 	}

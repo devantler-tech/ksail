@@ -8,10 +8,10 @@ import (
 )
 
 const (
-	ociTag                = "6.6.2"
-	flagExportOCI         = "export"
-	testExportWithNS      = "export with namespace"
-	testCustomNamespace   = "custom-ns"
+	ociTag              = "6.6.2"
+	flagExportOCI       = "export"
+	testExportWithNS    = "export with namespace"
+	testCustomNamespace = "custom-ns"
 )
 
 func TestNewCreateSourceOCICmd(t *testing.T) {
@@ -59,43 +59,43 @@ func ociRepositoryExportTestsBasic() map[string]testCase {
 		"export with tag": {
 			args: []string{"podinfo"},
 			flags: map[string]string{
-				"url":    "oci://ghcr.io/stefanprodan/manifests/podinfo",
-				"tag":    ociTag,
+				"url":         "oci://ghcr.io/stefanprodan/manifests/podinfo",
+				"tag":         ociTag,
 				flagExportOCI: "true",
 			},
 		},
 		"export with semver": {
 			args: []string{"podinfo"},
 			flags: map[string]string{
-				"url":        "oci://ghcr.io/stefanprodan/manifests/podinfo",
-				"tag-semver": ">=6.0.0 <7.0.0",
-				flagExportOCI:     "true",
+				"url":         "oci://ghcr.io/stefanprodan/manifests/podinfo",
+				"tag-semver":  ">=6.0.0 <7.0.0",
+				flagExportOCI: "true",
 			},
 		},
 		"export with digest": {
 			args: []string{"podinfo"},
 			flags: map[string]string{
-				"url":    "oci://ghcr.io/stefanprodan/manifests/podinfo",
-				"digest": "sha256:abcdef123456",
+				"url":         "oci://ghcr.io/stefanprodan/manifests/podinfo",
+				"digest":      "sha256:abcdef123456",
 				flagExportOCI: "true",
 			},
 		},
 		"export with secret ref": {
 			args: []string{"podinfo"},
 			flags: map[string]string{
-				"url":        "oci://ghcr.io/stefanprodan/manifests/podinfo",
-				"tag":        ociTag,
-				"secret-ref": "oci-credentials",
+				"url":         "oci://ghcr.io/stefanprodan/manifests/podinfo",
+				"tag":         ociTag,
+				"secret-ref":  "oci-credentials",
 				flagExportOCI: "true",
 			},
 		},
 		"export with custom provider": {
 			args: []string{"podinfo"},
 			flags: map[string]string{
-				"url":      "oci://gcr.io/project/manifests",
-				"tag":      "v1.0.0",
-				"provider": "gcp",
-				flagExportOCI:   "true",
+				"url":         "oci://gcr.io/project/manifests",
+				"tag":         "v1.0.0",
+				"provider":    "gcp",
+				flagExportOCI: "true",
 			},
 		},
 	}
@@ -106,34 +106,34 @@ func ociRepositoryExportTestsAdvanced() map[string]testCase {
 		"export with insecure": {
 			args: []string{"podinfo"},
 			flags: map[string]string{
-				"url":      "oci://localhost:5000/manifests",
-				"tag":      "latest",
-				"insecure": "true",
-				flagExportOCI:   "true",
+				"url":         "oci://localhost:5000/manifests",
+				"tag":         "latest",
+				"insecure":    "true",
+				flagExportOCI: "true",
 			},
 		},
 		"export with custom interval": {
 			args: []string{"podinfo"},
 			flags: map[string]string{
-				"url":      "oci://ghcr.io/stefanprodan/manifests/podinfo",
-				"tag":      ociTag,
-				"interval": "15m",
-				flagExportOCI:   "true",
+				"url":         "oci://ghcr.io/stefanprodan/manifests/podinfo",
+				"tag":         ociTag,
+				"interval":    "15m",
+				flagExportOCI: "true",
 			},
 		},
 		testExportWithNS: {
 			args: []string{"podinfo"},
 			flags: map[string]string{
-				"url":       "oci://ghcr.io/stefanprodan/manifests/podinfo",
-				"tag":       ociTag,
-				"namespace": testCustomNamespace,
-				flagExportOCI:    "true",
+				"url":         "oci://ghcr.io/stefanprodan/manifests/podinfo",
+				"tag":         ociTag,
+				"namespace":   testCustomNamespace,
+				flagExportOCI: "true",
 			},
 		},
 		"missing reference fails": {
 			args: []string{"podinfo"},
 			flags: map[string]string{
-				"url":    "oci://ghcr.io/stefanprodan/manifests/podinfo",
+				"url":         "oci://ghcr.io/stefanprodan/manifests/podinfo",
 				flagExportOCI: "true",
 			},
 			wantErr: true,

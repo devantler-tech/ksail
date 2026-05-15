@@ -13,13 +13,13 @@ import (
 )
 
 const (
-	dockerMirrorURL     = "docker.io=https://registry-1.docker.io"
-	dockerHost          = "docker.io"
-	ghcrMirrorURL       = "ghcr.io=https://ghcr.io"
-	ghcrHost            = "ghcr.io"
-	dockerFallbackURL   = "http://docker.io:5000"
-	sourceDirectory     = "k8s"
-	serverPlaceholder   = "server:*"
+	dockerMirrorURL   = "docker.io=https://registry-1.docker.io"
+	dockerHost        = "docker.io"
+	ghcrMirrorURL     = "ghcr.io=https://ghcr.io"
+	ghcrHost          = "ghcr.io"
+	dockerFallbackURL = "http://docker.io:5000"
+	sourceDirectory   = "k8s"
+	serverPlaceholder = "server:*"
 )
 
 func createTestScaffolderForK3d() *scaffolder.Scaffolder {

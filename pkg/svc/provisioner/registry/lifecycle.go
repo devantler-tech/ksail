@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 
 	dockerclient "github.com/devantler-tech/ksail/v7/pkg/client/docker"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
@@ -296,8 +297,8 @@ func cleanupCreatedRegistries(
 	networkName string,
 	writer io.Writer,
 ) {
-	for i := len(created) - 1; i >= 0; i-- {
-		reg := created[i]
+	for _, v := range slices.Backward(created) {
+		reg := v
 
 		err := registryMgr.DeleteRegistry(
 			ctx,

@@ -754,6 +754,7 @@ func (f DefaultFactory) createVClusterKubernetesProvisioner(
 
 	// Use VCluster config name (set by applyClusterNameOverride).
 	vclusterConfig := f.DistributionConfig.VCluster
+
 	clusterName := ""
 	if vclusterConfig != nil {
 		clusterName = vclusterConfig.Name
@@ -768,8 +769,11 @@ func (f DefaultFactory) createVClusterKubernetesProvisioner(
 		return nil, nil, err
 	}
 
-	var valuesPath string
-	var disableFlannel bool
+	var (
+		valuesPath     string
+		disableFlannel bool
+	)
+
 	if vclusterConfig != nil {
 		valuesPath = vclusterConfig.ValuesPath
 		disableFlannel = vclusterConfig.DisableFlannel

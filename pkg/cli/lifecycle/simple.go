@@ -123,8 +123,10 @@ func ResolveClusterInfo(
 
 	// Always load config to fill missing fields and extract Omni/Kubernetes options.
 	// Even when --name is provided, we still need Omni endpoint from config.
-	var omniOpts v1alpha1.OptionsOmni
-	var kubernetesOpts v1alpha1.OptionsKubernetes
+	var (
+		omniOpts       v1alpha1.OptionsOmni
+		kubernetesOpts v1alpha1.OptionsKubernetes
+	)
 
 	resolveFromConfig(cmd, &clusterName, &provider, &kubeconfigPath, &omniOpts, &kubernetesOpts)
 
@@ -304,7 +306,12 @@ func runSimpleLifecycleAction(
 		KubeconfigPath: resolved.KubeconfigPath,
 	}
 
-	provisioner, err := CreateMinimalProvisionerForProvider(clusterInfo, resolved.OmniOpts, resolved.KubernetesOpts, false)
+	provisioner, err := CreateMinimalProvisionerForProvider(
+		clusterInfo,
+		resolved.OmniOpts,
+		resolved.KubernetesOpts,
+		false,
+	)
 	if err != nil {
 		return fmt.Errorf("failed to create provisioner: %w", err)
 	}
@@ -362,7 +369,11 @@ func CreateMinimalProvisionerForProvider(
 		// Kubernetes provider runs clusters as pods in a host cluster.
 		// Delete by removing the ksail-<name> namespace (cascading delete).
 		// Pass info.KubeconfigPath as the nested cluster's kubeconfig for context cleanup.
-		return newKubernetesCleanupProvisioner(info.ClusterName, kubernetesOpts, info.KubeconfigPath)
+		return newKubernetesCleanupProvisioner(
+			info.ClusterName,
+			kubernetesOpts,
+			info.KubeconfigPath,
+		)
 
 	case v1alpha1.ProviderHetzner, v1alpha1.ProviderOmni:
 		// Hetzner and Omni only support Talos
@@ -529,12 +540,13 @@ func (p *kubernetesCleanupProvisioner) List(ctx context.Context) ([]string, erro
 	}
 
 	var names []string
+
 	for _, ns := range nsList.Items {
 		name := ns.Name
 		// Strip known namespace prefixes to get the cluster name
 		for _, prefix := range []string{"ksail-", "k3k-", "vcluster-"} {
-			if strings.HasPrefix(name, prefix) {
-				name = strings.TrimPrefix(name, prefix)
+			if after, ok := strings.CutPrefix(name, prefix); ok {
+				name = after
 
 				break
 			}

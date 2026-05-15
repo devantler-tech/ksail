@@ -102,10 +102,12 @@ func NewKubernetesProvisioner(cfg KubernetesProvisionerConfig) (*KubernetesProvi
 // After chart installation, it manually extracts the kubeconfig from the vc-<name>
 // Secret and sets up a port-forward to the vCluster pod (bypassing ConnectHelm which
 // blocks indefinitely on port-forwarding).
+//
+//nolint:funlen,cyclop // sequential setup with many error-checks and branches
 func (p *KubernetesProvisioner) Create(
 	ctx context.Context,
 	name string,
-) error { //nolint:funlen,cyclop
+) error {
 	// sequential setup steps
 	clusterName := p.clusterName
 	if clusterName == "" {
@@ -123,6 +125,7 @@ func (p *KubernetesProvisioner) Create(
 			Labels: kubernetesprovider.CommonLabels(clusterName),
 		},
 	}
+
 	_, nsErr := p.hostClientset.CoreV1().Namespaces().Create(
 		ctx, nsObj, metav1.CreateOptions{},
 	)

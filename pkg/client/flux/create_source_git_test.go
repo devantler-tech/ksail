@@ -8,9 +8,9 @@ import (
 )
 
 const (
-	gitBranch      = "branch"
-	gitTag         = "6.6.2"
-	flagExportGit  = "export"
+	gitBranch     = "branch"
+	gitTag        = "6.6.2"
+	flagExportGit = "export"
 )
 
 func TestNewCreateSourceGitCmd(t *testing.T) {
@@ -53,32 +53,32 @@ func gitRepositoryExportTestsBasic() map[string]testCase {
 		"export with branch": {
 			args: []string{"podinfo"},
 			flags: map[string]string{
-				"url":    "https://github.com/stefanprodan/podinfo",
-				gitBranch: "master",
+				"url":         "https://github.com/stefanprodan/podinfo",
+				gitBranch:     "master",
 				flagExportGit: "true",
 			},
 		},
 		"export with tag": {
 			args: []string{"podinfo"},
 			flags: map[string]string{
-				"url":    "https://github.com/stefanprodan/podinfo",
-				"tag":    gitTag,
+				"url":         "https://github.com/stefanprodan/podinfo",
+				"tag":         gitTag,
 				flagExportGit: "true",
 			},
 		},
 		"export with semver": {
 			args: []string{"podinfo"},
 			flags: map[string]string{
-				"url":        "https://github.com/stefanprodan/podinfo",
-				"tag-semver": ">=6.0.0",
-				flagExportGit:     "true",
+				"url":         "https://github.com/stefanprodan/podinfo",
+				"tag-semver":  ">=6.0.0",
+				flagExportGit: "true",
 			},
 		},
 		"export with commit": {
 			args: []string{"podinfo"},
 			flags: map[string]string{
-				"url":    "https://github.com/stefanprodan/podinfo",
-				"commit": "abc123",
+				"url":         "https://github.com/stefanprodan/podinfo",
+				"commit":      "abc123",
 				flagExportGit: "true",
 			},
 		},
@@ -90,28 +90,28 @@ func gitRepositoryExportTestsAdvanced() map[string]testCase {
 		"export with secret ref": {
 			args: []string{"podinfo"},
 			flags: map[string]string{
-				"url":        "ssh://git@github.com/stefanprodan/podinfo",
+				"url":         "ssh://git@github.com/stefanprodan/podinfo",
 				gitBranch:     "main",
-				"secret-ref": "git-credentials",
-				flagExportGit:     "true",
+				"secret-ref":  "git-credentials",
+				flagExportGit: "true",
 			},
 		},
 		"export with namespace flag": {
 			args: []string{"podinfo"},
 			flags: map[string]string{
-				"url":       "https://github.com/stefanprodan/podinfo",
-				gitBranch:    "master",
-				"namespace": "custom-ns",
-				flagExportGit:    "true",
+				"url":         "https://github.com/stefanprodan/podinfo",
+				gitBranch:     "master",
+				"namespace":   "custom-ns",
+				flagExportGit: "true",
 			},
 		},
 		"export with custom interval": {
 			args: []string{"podinfo"},
 			flags: map[string]string{
-				"url":      "https://github.com/stefanprodan/podinfo",
-				gitBranch:   "master",
-				"interval": "5m",
-				flagExportGit:   "true",
+				"url":         "https://github.com/stefanprodan/podinfo",
+				gitBranch:     "master",
+				"interval":    "5m",
+				flagExportGit: "true",
 			},
 		},
 	}

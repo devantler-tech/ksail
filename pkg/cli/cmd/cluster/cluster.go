@@ -1982,7 +1982,12 @@ func runDeleteAction(
 	detectedInfo, isKindCluster, clusterInfo := detectDeleteClusterInfo(cmd, resolved)
 
 	// Create provisioner for the provider
-	provisioner, err := createDeleteProvisioner(clusterInfo, resolved.OmniOpts, resolved.KubernetesOpts, flags.storage)
+	provisioner, err := createDeleteProvisioner(
+		clusterInfo,
+		resolved.OmniOpts,
+		resolved.KubernetesOpts,
+		flags.storage,
+	)
 	if err != nil {
 		return fmt.Errorf("failed to create provisioner: %w", err)
 	}
@@ -4053,12 +4058,12 @@ func getKubernetesProviderFromConfig() (*kubernetesprovider.Provider, error) {
 		return nil, nil //nolint:nilnil
 	}
 
-	canonicalPath, err := fsutil.EvalCanonicalPath(expandedPath) //nolint:gosec // path already validated by os.Stat
+	canonicalPath, err := fsutil.EvalCanonicalPath(expandedPath)
 	if err != nil {
 		return nil, fmt.Errorf("canonicalize kubeconfig path: %w", err)
 	}
 
-	hostContext := os.Getenv("KSAIL_HOST_CONTEXT") //nolint:gosec // kubeconfig context name, not a path
+	hostContext := os.Getenv("KSAIL_HOST_CONTEXT")
 
 	restConfig, err := k8s.BuildRESTConfig(canonicalPath, hostContext)
 	if err != nil {

@@ -18,22 +18,22 @@ import (
 )
 
 const (
-	kustomizationListKind  = "KustomizationList"
-	kustomizationKind      = "Kustomization"
-	conditionTypeReady     = "Ready"
-	conditionTypeStalled   = "Stalled"
-	statusApps             = "apps"
-	reasonSucceeded        = "Succeeded"
-	reasonReconcilFailed   = "ReconciliationFailed"
-	reasonInstallFailed    = "InstallFailed"
-	reasonUpgradeFailed    = "UpgradeFailed"
-	reasonRetryExhausted   = "RetryExhausted"
-	statusTrue             = "True"
-	statusFalse            = "False"
-	chartLiteral           = "chart"
-	statusConditions       = "conditions"
-	statusInfra            = "infra"
-	namespaceFluxSystem    = "flux-system"
+	kustomizationListKind = "KustomizationList"
+	kustomizationKind     = "Kustomization"
+	conditionTypeReady    = "Ready"
+	conditionTypeStalled  = "Stalled"
+	statusApps            = "apps"
+	reasonSucceeded       = "Succeeded"
+	reasonReconcilFailed  = "ReconciliationFailed"
+	reasonInstallFailed   = "InstallFailed"
+	reasonUpgradeFailed   = "UpgradeFailed"
+	reasonRetryExhausted  = "RetryExhausted"
+	statusTrue            = "True"
+	statusFalse           = "False"
+	chartLiteral          = "chart"
+	statusConditions      = "conditions"
+	statusInfra           = "infra"
+	namespaceFluxSystem   = "flux-system"
 )
 
 var errSimulatedAPIFailure = errors.New("simulated API failure")
@@ -189,7 +189,11 @@ func TestListKustomizations(t *testing.T) {
 			wantInfos: []flux.KustomizationInfo{
 				{Name: statusApps, Path: "./apps", DependsOn: []string{statusInfra}},
 				{Name: namespaceFluxSystem, Path: "./clusters/my-cluster", DependsOn: nil},
-				{Name: statusInfra, Path: "./infrastructure", DependsOn: []string{namespaceFluxSystem}},
+				{
+					Name:      statusInfra,
+					Path:      "./infrastructure",
+					DependsOn: []string{namespaceFluxSystem},
+				},
 			},
 			unordered: true,
 		},
@@ -359,7 +363,14 @@ func TestListKustomizations_ExcludeAnnotation_FalseOrAbsent(t *testing.T) {
 			name: "mixed kustomizations with and without annotation",
 			objects: []runtime.Object{
 				newAnnotatedKust("excluded-app", "./apps", "true"),
-				newFakeKustomization("included-infra", "./infra", nil, statusTrue, reasonSucceeded, "ok"),
+				newFakeKustomization(
+					"included-infra",
+					"./infra",
+					nil,
+					statusTrue,
+					reasonSucceeded,
+					"ok",
+				),
 			},
 			wantExcluded: map[string]bool{
 				"excluded-app":   true,
@@ -784,7 +795,12 @@ func TestCheckHelmReleaseStuck(t *testing.T) {
 		{
 			name: "healthy HelmRelease (Ready=True)",
 			hr: newFakeHelmRelease("kyverno", "kyverno", []map[string]any{
-				{"type": conditionTypeReady, "status": statusTrue, "reason": reasonSucceeded, "message": "ok"},
+				{
+					"type":    conditionTypeReady,
+					"status":  statusTrue,
+					"reason":  reasonSucceeded,
+					"message": "ok",
+				},
 			}),
 			wantStuck: false,
 		},
@@ -930,7 +946,12 @@ func TestCheckHelmReleaseStuck(t *testing.T) {
 					"reason":  "RecoveredFromFailure",
 					"message": "stall cleared",
 				},
-				{"type": conditionTypeReady, "status": statusTrue, "reason": reasonSucceeded, "message": "ok"},
+				{
+					"type":    conditionTypeReady,
+					"status":  statusTrue,
+					"reason":  reasonSucceeded,
+					"message": "ok",
+				},
 			}),
 			wantStuck: false,
 		},
@@ -998,7 +1019,12 @@ func TestListStuckHelmReleases(t *testing.T) {
 			name: "healthy HelmReleases are not listed",
 			objects: []runtime.Object{
 				newFakeHelmRelease("kyverno", "kyverno", []map[string]any{
-					{"type": conditionTypeReady, "status": statusTrue, "reason": reasonSucceeded, "message": "ok"},
+					{
+						"type":    conditionTypeReady,
+						"status":  statusTrue,
+						"reason":  reasonSucceeded,
+						"message": "ok",
+					},
 				}),
 			},
 			wantCount: 0,
@@ -1022,7 +1048,12 @@ func TestListStuckHelmReleases(t *testing.T) {
 			name: "mixed healthy and stuck across namespaces",
 			objects: []runtime.Object{
 				newFakeHelmRelease("healthy", "default", []map[string]any{
-					{"type": conditionTypeReady, "status": statusTrue, "reason": reasonSucceeded, "message": "ok"},
+					{
+						"type":    conditionTypeReady,
+						"status":  statusTrue,
+						"reason":  reasonSucceeded,
+						"message": "ok",
+					},
 				}),
 				newFakeHelmRelease("stuck-a", "kyverno", []map[string]any{
 					{

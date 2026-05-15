@@ -126,7 +126,13 @@ func ValidPolicyEngines() []PolicyEngine {
 
 // ValidProviders returns supported provider values.
 func ValidProviders() []Provider {
-	return []Provider{ProviderDocker, ProviderHetzner, ProviderOmni, ProviderAWS, ProviderKubernetes}
+	return []Provider{
+		ProviderDocker,
+		ProviderHetzner,
+		ProviderOmni,
+		ProviderAWS,
+		ProviderKubernetes,
+	}
 }
 
 // ValidPlacementGroupStrategies returns supported placement group strategy values.
@@ -550,7 +556,7 @@ func ValidateNestedCIDRs(podCIDR, serviceCIDR string) error {
 		}
 
 		for _, hostRange := range hostRanges {
-			_, hostNet, _ := net.ParseCIDR(hostRange) //nolint:errcheck // static CIDR values, parsing cannot fail
+			_, hostNet, _ := net.ParseCIDR(hostRange)
 
 			if nestedNet.Contains(hostNet.IP) || hostNet.Contains(nestedNet.IP) {
 				return fmt.Errorf(

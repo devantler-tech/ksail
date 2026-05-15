@@ -62,11 +62,15 @@ func TestScaffoldAppliesDistributionDefaults(t *testing.T) {
 		expected     string
 	}{
 		{
-			name: distributionVanilla,
+			name:         distributionVanilla,
 			distribution: v1alpha1.DistributionVanilla,
 			expected:     scaffolder.KindConfigFile,
 		},
-		{name: distributionK3d, distribution: v1alpha1.DistributionK3s, expected: scaffolder.K3dConfigFile},
+		{
+			name:         distributionK3d,
+			distribution: v1alpha1.DistributionK3s,
+			expected:     scaffolder.K3dConfigFile,
+		},
 		{
 			name:         "Talos",
 			distribution: v1alpha1.DistributionTalos,

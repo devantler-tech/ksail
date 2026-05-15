@@ -202,7 +202,12 @@ func (p *K3kProvisioner) Create(ctx context.Context, name string) error {
 		}
 	}
 
-	_, _ = fmt.Fprintf(os.Stdout, "✓ k3k cluster %q ready (context: k3k-%s)\n", clusterName, clusterName)
+	_, _ = fmt.Fprintf(
+		os.Stdout,
+		"✓ k3k cluster %q ready (context: k3k-%s)\n",
+		clusterName,
+		clusterName,
+	)
 
 	return nil
 }
@@ -266,14 +271,18 @@ func (p *K3kProvisioner) Exists(ctx context.Context, name string) (bool, error) 
 
 // Start is not supported for k3k clusters (pods are always running).
 func (p *K3kProvisioner) Start(_ context.Context, _ string) error {
-	return fmt.Errorf("start not supported for k3k clusters (pods are managed by the k3k operator): %w",
-		clustererr.ErrOperationNotSupported)
+	return fmt.Errorf(
+		"start not supported for k3k clusters (pods are managed by the k3k operator): %w",
+		clustererr.ErrOperationNotSupported,
+	)
 }
 
 // Stop is not supported for k3k clusters (pods are managed by the operator).
 func (p *K3kProvisioner) Stop(_ context.Context, _ string) error {
-	return fmt.Errorf("stop not supported for k3k clusters (pods are managed by the k3k operator): %w",
-		clustererr.ErrOperationNotSupported)
+	return fmt.Errorf(
+		"stop not supported for k3k clusters (pods are managed by the k3k operator): %w",
+		clustererr.ErrOperationNotSupported,
+	)
 }
 
 // List returns all k3k cluster namespaces found on the host cluster.
@@ -286,6 +295,7 @@ func (p *K3kProvisioner) List(ctx context.Context) ([]string, error) {
 	}
 
 	var names []string
+
 	for _, ns := range namespaces.Items {
 		if clusterName, ok := strings.CutPrefix(ns.Name, k3kNamespacePrefix); ok {
 			names = append(names, clusterName)
@@ -441,7 +451,10 @@ func (p *K3kProvisioner) createClusterCR(ctx context.Context, clusterName, names
 }
 
 // waitForClusterReady polls the k3k Cluster status until it reports Ready.
-func (p *K3kProvisioner) waitForClusterReady(ctx context.Context, clusterName, namespace string) error {
+func (p *K3kProvisioner) waitForClusterReady(
+	ctx context.Context,
+	clusterName, namespace string,
+) error {
 	restClient, _, err := p.buildK3kRESTClient()
 	if err != nil {
 		return err
@@ -451,6 +464,7 @@ func (p *K3kProvisioner) waitForClusterReady(ctx context.Context, clusterName, n
 		ctx, k3kWaitInterval, k3kWaitTimeout, true,
 		func(ctx context.Context) (bool, error) {
 			cluster := &k3kv1beta1.Cluster{}
+
 			err := restClient.Get().
 				AbsPath("/apis/k3k.io/v1beta1").
 				Namespace(namespace).
@@ -484,6 +498,7 @@ func (p *K3kProvisioner) waitForClusterReady(ctx context.Context, clusterName, n
 // buildK3kRESTClient creates a REST client configured for k3k CRD operations.
 func (p *K3kProvisioner) buildK3kRESTClient() (*rest.RESTClient, runtime.ParameterCodec, error) {
 	scheme := runtime.NewScheme()
+
 	err := k3kv1beta1.AddToScheme(scheme)
 	if err != nil {
 		return nil, nil, fmt.Errorf("add k3k scheme: %w", err)
@@ -509,7 +524,10 @@ func (p *K3kProvisioner) buildK3kRESTClient() (*rest.RESTClient, runtime.Paramet
 
 // jscpd:ignore-start
 // waitForKubeconfigSecret polls for the kubeconfig Secret created by the k3k operator.
-func (p *K3kProvisioner) waitForKubeconfigSecret(ctx context.Context, clusterName, namespace string) ([]byte, error) {
+func (p *K3kProvisioner) waitForKubeconfigSecret(
+	ctx context.Context,
+	clusterName, namespace string,
+) ([]byte, error) {
 	// k3k names the kubeconfig secret as k3k-<clusterName>-kubeconfig
 	secretName := fmt.Sprintf("k3k-%s-%s", clusterName, k3kKubeconfigSecretSuffix)
 

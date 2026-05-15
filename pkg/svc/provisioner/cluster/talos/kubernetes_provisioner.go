@@ -8,12 +8,11 @@ import (
 	"strconv"
 	"time"
 
-	dockerclient "github.com/docker/docker/client"
-
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	kubernetesprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/kubernetes"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/kernelmod"
+	dockerclient "github.com/docker/docker/client"
 	"github.com/siderolabs/talos/pkg/provision"
 	"github.com/siderolabs/talos/pkg/provision/access"
 	"k8s.io/client-go/dynamic"
@@ -93,8 +92,9 @@ func NewKubernetesProvisioner(cfg KubernetesProvisionerConfig) (*KubernetesProvi
 //  1. Port-forward Docker API → set DOCKER_HOST → provision containers inside DinD
 //  2. Discover DinD-internal mapped ports → port-forward Talos API + K8s API → bootstrap
 //
-//nolint:cyclop,funlen // Sequential multi-phase provisioning flow — extracting phases
 // would obscure the overall sequence.
+//
+//nolint:cyclop,funlen // Sequential multi-phase provisioning flow — extracting phases
 func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 	clusterName := name
 	if clusterName == "" {
@@ -129,6 +129,7 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 	_, _ = fmt.Fprintf(os.Stdout, "► creating Talos cluster via SDK (DOCKER_HOST=%s)\n", dockerHost)
 
 	origHost := os.Getenv("DOCKER_HOST")
+
 	err = os.Setenv("DOCKER_HOST", dockerHost)
 	if err != nil {
 		return fmt.Errorf("set DOCKER_HOST: %w", err)
@@ -230,7 +231,12 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 	hostTalosEndpoint := net.JoinHostPort("127.0.0.1", strconv.Itoa(talosPF.LocalPort))
 	hostK8sEndpoint := fmt.Sprintf("https://127.0.0.1:%d", k8sPF.LocalPort)
 
-	_, _ = fmt.Fprintf(os.Stdout, "► Talos API: %s → localhost:%d\n", talosEndpoint, talosPF.LocalPort)
+	_, _ = fmt.Fprintf(
+		os.Stdout,
+		"► Talos API: %s → localhost:%d\n",
+		talosEndpoint,
+		talosPF.LocalPort,
+	)
 	_, _ = fmt.Fprintf(os.Stdout, "► K8s API: %s → localhost:%d\n", k8sEndpoint, k8sPF.LocalPort)
 
 	// Save talosconfig with host-accessible endpoint
@@ -270,8 +276,13 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 
 	// Expose the nested API server via Gateway API (if configured)
 	err = p.k8sProvider.EnsureAPIExposure(
-		ctx, p.dynamicClient, clusterName,
-		int32(k8sPort), p.gatewayClassName, //nolint:gosec // port value is bounded within TCP port range (1-65535)
+		ctx,
+		p.dynamicClient,
+		clusterName,
+		int32(
+			k8sPort,
+		),
+		p.gatewayClassName, //nolint:gosec // port value is bounded within TCP port range (1-65535)
 	)
 	if err != nil {
 		return fmt.Errorf("expose API: %w", err)
@@ -367,7 +378,8 @@ func (p *KubernetesProvisioner) Stop(_ context.Context, _ string) error {
 
 // setupDinD creates the namespace and DinD pod, then waits for readiness.
 func (p *KubernetesProvisioner) setupDinD(ctx context.Context, clusterName string) error {
-	if err := p.k8sProvider.SetupDinD(ctx, clusterName, p.distribution, p.persistence); err != nil {
+	err := p.k8sProvider.SetupDinD(ctx, clusterName, p.distribution, p.persistence)
+	if err != nil {
 		return fmt.Errorf("setup DinD: %w", err)
 	}
 

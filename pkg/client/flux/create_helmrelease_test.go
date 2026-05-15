@@ -187,7 +187,12 @@ func TestCreateHelmRelease_MissingRequiredFlags(t *testing.T) {
 			errMsg: "required flag(s)",
 		},
 		"missing chart": {
-			args:   []string{"podinfo", "--" + flagSourceName, sourceHelmRepository, "--" + flagExportName},
+			args: []string{
+				"podinfo",
+				"--" + flagSourceName,
+				sourceHelmRepository,
+				"--" + flagExportName,
+			},
 			errMsg: "required flag(s)",
 		},
 	}

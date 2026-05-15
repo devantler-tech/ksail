@@ -432,6 +432,7 @@ func (p *KubernetesProvisioner) createPlaceholderFiles(
 		escapedPath := strings.ReplaceAll(path, "'", "'\\''")
 
 		touchCmd := fmt.Sprintf("touch '%s'", escapedPath)
+
 		_, err := p.k8sProvider.ExecInDinD(
 			ctx,
 			p.restConfig,
@@ -475,6 +476,7 @@ func (p *KubernetesProvisioner) copyStateToDinD(ctx context.Context, clusterName
 		}
 
 		remotePath := filepath.Join(stateDir, rel)
+
 		err = p.k8sProvider.WriteFileInDinD(
 			ctx,
 			p.restConfig,

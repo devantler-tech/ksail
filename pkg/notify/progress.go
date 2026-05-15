@@ -283,7 +283,7 @@ func NewProgressGroup(
 	termWidth := 0
 
 	if file, ok := writer.(*os.File); ok {
-		fd := int(file.Fd()) //nolint:gosec // G115: safe fd conversion
+		fd := int(file.Fd())
 		isTTY = term.IsTerminal(fd)
 
 		if isTTY {
