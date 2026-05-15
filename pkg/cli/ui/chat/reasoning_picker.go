@@ -9,9 +9,11 @@ import (
 )
 
 // reasoningEffortLevels lists the selectable reasoning effort options.
-// The first entry ("off") clears the effort setting; the rest map directly
+// The first entry (effortOff) clears the effort setting; the rest map directly
 // to the SDK's ReasoningEffort field.
-var reasoningEffortLevels = []string{"off", "low", "medium", "high"}
+const effortOff = "off"
+
+var reasoningEffortLevels = []string{effortOff, "low", "medium", "high"}
 
 // handleReasoningPickerKey handles keyboard input when the reasoning effort picker is active.
 func (m *Model) handleReasoningPickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -48,12 +50,12 @@ func (m *Model) handleReasoningPickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 // selectReasoningEffort applies the chosen reasoning effort level.
-// "off" clears the setting; other values update the session config and recreate the session.
+// effortOff clears the setting; other values update the session config and recreate the session.
 func (m *Model) selectReasoningEffort() (tea.Model, tea.Cmd) {
 	selected := reasoningEffortLevels[m.reasoningPickerIndex]
 
 	newEffort := selected
-	if selected == "off" {
+	if selected == effortOff {
 		newEffort = ""
 	}
 
@@ -151,7 +153,7 @@ func (m *Model) formatReasoningItem(index int) (string, bool) {
 // isCurrentReasoningEffort checks whether a level matches the active reasoning effort.
 func (m *Model) isCurrentReasoningEffort(level string) bool {
 	current := m.sessionConfig.ReasoningEffort
-	if level == "off" {
+	if level == effortOff {
 		return current == ""
 	}
 

@@ -16,6 +16,16 @@ var (
 	errUnknownMode = errors.New("invalid mode")
 )
 
+// Command names for slash commands.
+const (
+	cmdMode   = "mode"
+	cmdModel  = "model"
+	cmdNew    = "new"
+	cmdSessions = "sessions"
+	cmdHelp   = "help"
+	cmdClear  = "clear"
+)
+
 // Slash command message types sent from command handlers to the TUI event channel.
 
 // modeChangeRequestMsg requests a specific chat mode change via slash command.
@@ -73,21 +83,21 @@ func ParseChatMode(name string) (ChatMode, bool) {
 func BuildTUISlashCommands(eventChan chan<- tea.Msg) []copilot.CommandDefinition {
 	return []copilot.CommandDefinition{
 		{
-			Name:        "mode",
+			Name:        cmdMode,
 			Description: "Switch chat mode (interactive, plan, autopilot)",
 			Handler: func(ctx copilot.CommandContext) error {
 				return handleModeCommand(ctx.Args, eventChan)
 			},
 		},
 		{
-			Name:        "model",
+			Name:        cmdModel,
 			Description: "Switch LLM model (opens picker if no name given)",
 			Handler: func(ctx copilot.CommandContext) error {
 				return handleModelCommand(ctx.Args, eventChan)
 			},
 		},
 		{
-			Name:        "new",
+			Name:        cmdNew,
 			Description: "Start a new chat session",
 			Handler: func(_ copilot.CommandContext) error {
 				eventChan <- newChatRequestMsg{}
@@ -96,7 +106,7 @@ func BuildTUISlashCommands(eventChan chan<- tea.Msg) []copilot.CommandDefinition
 			},
 		},
 		{
-			Name:        "sessions",
+			Name:        cmdSessions,
 			Description: "Open session history picker",
 			Handler: func(_ copilot.CommandContext) error {
 				eventChan <- openSessionPickerMsg{}
@@ -105,7 +115,7 @@ func BuildTUISlashCommands(eventChan chan<- tea.Msg) []copilot.CommandDefinition
 			},
 		},
 		{
-			Name:        "help",
+			Name:        cmdHelp,
 			Description: "Show keyboard shortcuts and commands",
 			Handler: func(_ copilot.CommandContext) error {
 				eventChan <- showHelpMsg{}
@@ -114,7 +124,7 @@ func BuildTUISlashCommands(eventChan chan<- tea.Msg) []copilot.CommandDefinition
 			},
 		},
 		{
-			Name:        "clear",
+			Name:        cmdClear,
 			Description: "Clear the chat viewport",
 			Handler: func(_ copilot.CommandContext) error {
 				eventChan <- clearViewportMsg{}
@@ -130,7 +140,7 @@ func BuildTUISlashCommands(eventChan chan<- tea.Msg) []copilot.CommandDefinition
 func BuildNonTUISlashCommands(writer io.Writer) []copilot.CommandDefinition {
 	return []copilot.CommandDefinition{
 		{
-			Name:        "help",
+			Name:        cmdHelp,
 			Description: "Show available commands",
 			Handler: func(_ copilot.CommandContext) error {
 				_, _ = fmt.Fprintln(writer, "\nAvailable commands:")
@@ -146,7 +156,7 @@ func BuildNonTUISlashCommands(writer io.Writer) []copilot.CommandDefinition {
 			},
 		},
 		{
-			Name:        "mode",
+			Name:        cmdMode,
 			Description: "Switch chat mode (interactive, plan, autopilot)",
 			Handler: func(ctx copilot.CommandContext) error {
 				args := strings.TrimSpace(ctx.Args)
@@ -210,14 +220,14 @@ func handleModelCommand(args string, eventChan chan<- tea.Msg) error {
 // for commands that support argument autocompletion.
 func BuildTUICommandOptions() map[string]CommandOptionProvider {
 	return map[string]CommandOptionProvider{
-		"mode": func(_ *Model) []CommandOption {
+		cmdMode: func(_ *Model) []CommandOption {
 			return []CommandOption{
 				{Name: "interactive", Description: "Confirm each action"},
 				{Name: "plan", Description: "Create plans before acting"},
 				{Name: "autopilot", Description: "Act autonomously"},
 			}
 		},
-		"model": func(model *Model) []CommandOption {
+		cmdModel: func(model *Model) []CommandOption {
 			if len(model.availableModels) == 0 {
 				allModels, err := model.client.ListModels(model.ctx)
 				if err == nil {
