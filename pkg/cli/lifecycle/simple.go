@@ -1,4 +1,3 @@
-// Package lifecycle provides cluster lifecycle management including create, update, delete, and cleanup operations.
 package lifecycle
 
 import (

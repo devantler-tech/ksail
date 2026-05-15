@@ -460,7 +460,7 @@ func (p *K3kProvisioner) waitForClusterReady(
 		return err
 	}
 
-	return fmt.Errorf("poll cluster ready: %w", wait.PollUntilContextTimeout(
+	err = wait.PollUntilContextTimeout(
 		ctx, k3kWaitInterval, k3kWaitTimeout, true,
 		func(ctx context.Context) (bool, error) {
 			cluster := &k3kv1beta1.Cluster{}
@@ -492,7 +492,12 @@ func (p *K3kProvisioner) waitForClusterReady(
 				return false, nil
 			}
 		},
-	))
+	)
+	if err != nil {
+		return fmt.Errorf("poll cluster ready: %w", err)
+	}
+
+	return nil
 }
 
 // buildK3kRESTClient creates a REST client configured for k3k CRD operations.

@@ -155,6 +155,8 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 
 	defer func() { _ = dindClient.Close() }()
 
+	p.inner.WithDockerClient(dindClient)
+
 	err = kernelmod.EnsureBrNetfilter(ctx, p.inner.logWriter)
 	if err != nil {
 		return fmt.Errorf("kernel module check: %w", err)
