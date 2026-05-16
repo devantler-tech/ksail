@@ -1,13 +1,14 @@
 # Repo Assist Memory
 
 ## Last Run
-2026-05-14 12:53 UTC — Run #25861003229
+2026-05-16 01:30 UTC — Run #25948710815
 
 ## Monthly Activity Issue
-- May 2026: #4501 (open, updated this run)
+- May 2026: #4501 (open)
 
 ## Open Repo Assist PRs
-- None (last PR #4729 merged: test(envvar))
+- #4757: test(cluster): diagnose report formatters (infra CI failure, no code fix needed)
+- new PR: refactor(notify) timing label constant + test(flux) Windows drive letter paths
 
 ## Issue Comments Made (with run)
 - #4674 (Hetzner CCM taint race): 2026-05-12
@@ -26,11 +27,11 @@
 - #4521: [feature] local-remote mirroring
 - #4511: [feature] native ephemeral CI mode
 - #4510: [chore] GKE/AKS providers (sub-issue of #4627)
-- #4474: cluster diff command (PR #4737 open)
+- #4474: cluster diff command
 - #4473: vCluster v0.34 compat (merged #4734)
 - #4465: cluster switch fuzzy search
-- #4423: workload watch hooks (PR #4733 open)
-- #4422: cluster diagnose health scoring (PR #4735 open)
+- #4423: workload watch hooks
+- #4422: cluster diagnose health scoring
 - #4375: cluster graph topology
 - #3983: Hetzner K3s/Vanilla (sub-issue of #4627)
 
@@ -38,8 +39,8 @@
 - #4627 parent: #3983, #4328, #4510 (all linked, all open as of 2026-05-14)
 
 ## Code Quality Domain Alternation
-- Last domain: test coverage (Task 5, 2026-05-14 01:13)
-- Next for Task 5: refactor
+- Last domain: refactor (Task 5, 2026-05-16)
+- Next for Task 5: performance
 
 ## Backlog Cursor
 - Issues processed through #4741 (as of 2026-05-14)
@@ -58,8 +59,5 @@
 - Issue #4473 CLOSED — vCluster v0.34 done (merged #4734)
 - Issue #4681: CI workload-timeout (blocked by workflows permission, needs manual PR creation)
 - PR #4718 (Kubernetes provider): human PR by devantler, open for review
-- PRs #4741, #4737, #4736, #4735, #4733: human PRs by devantler, all open for review
-- Issues #4474, #4422, #4423, #4354 now have PRs implementing them
-- No Dependabot PRs open (all merged)
 - Duplicate patterns in v1alpha1 enum types are intentional (nolint:dupl) — do NOT refactor Set() methods
-- Run 2026-05-14 12:53: Tasks 12/3/5 all had no actionable work; only Task 13 done
+- Run 2026-05-16: Tasks 2 (no actionable issues), 9 (added Windows drive letter path tests), 5 (replaced timingLabelWidth() with compile-time constant), 13 (updated #4501)
