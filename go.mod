@@ -985,6 +985,16 @@ require (
 // incompatible with docker/docker types. Pinning docker/cli to v28 keeps
 // everything on the monolith type system.
 replace (
+
+	// image-factory v1.3.0 transitively pulls in grype v0.112.0 (via go-vex),
+	// which added a *DistroAlertData parameter to models.NewDocument. kubescape
+	// v3.0.48 (latest stable Go module) still calls the 10-argument form and
+	// will not compile against v0.106+. The enterprise/scanner code from
+	// image-factory and go-vex that calls the new API is not in KSail's import
+	// graph and is never compiled, so pinning grype back to v0.104.2 is safe.
+	// This replace can be removed once kubescape ships a release compatible with
+	// grype v0.106+.
+	github.com/anchore/grype => github.com/anchore/grype v0.104.2
 	github.com/docker/cli => github.com/docker/cli v28.3.1+incompatible
 	github.com/docker/docker => github.com/docker/docker v28.5.2+incompatible
 
