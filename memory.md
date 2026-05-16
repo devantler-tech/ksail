@@ -1,14 +1,14 @@
 # Repo Assist Memory
 
 ## Last Run
-2026-05-16 01:30 UTC — Run #25948710815
+2026-05-16 12:36 UTC — Run #25962055629
 
 ## Monthly Activity Issue
 - May 2026: #4501 (open)
 
 ## Open Repo Assist PRs
-- #4757: test(cluster): diagnose report formatters (infra CI failure, no code fix needed)
-- new PR: refactor(notify) timing label constant + test(flux) Windows drive letter paths
+- #4770: refactor(notify): timing label constant (infra CI may fail, no code change needed)
+- new (perf-slices): perf: migrate sort.Strings/sort.Slice to slices package (12 files)
 
 ## Issue Comments Made (with run)
 - #4674 (Hetzner CCM taint race): 2026-05-12
@@ -36,11 +36,11 @@
 - #3983: Hetzner K3s/Vanilla (sub-issue of #4627)
 
 ## Sub-Issue Links (verified)
-- #4627 parent: #3983, #4328, #4510 (all linked, all open as of 2026-05-14)
+- #4627 parent: #3983, #4328, #4510 (all linked, all open as of 2026-05-16)
 
 ## Code Quality Domain Alternation
-- Last domain: refactor (Task 5, 2026-05-16)
-- Next for Task 5: performance
+- Last domain: performance (Task 5, 2026-05-16)
+- Next for Task 5: refactor
 
 ## Backlog Cursor
 - Issues processed through #4741 (as of 2026-05-14)
@@ -60,4 +60,5 @@
 - Issue #4681: CI workload-timeout (blocked by workflows permission, needs manual PR creation)
 - PR #4718 (Kubernetes provider): human PR by devantler, open for review
 - Duplicate patterns in v1alpha1 enum types are intentional (nolint:dupl) — do NOT refactor Set() methods
-- Run 2026-05-16: Tasks 2 (no actionable issues), 9 (added Windows drive letter path tests), 5 (replaced timingLabelWidth() with compile-time constant), 13 (updated #4501)
+- PR #4757 CLOSED/merged — diagnose report formatter tests
+- Run 2026-05-16 (12:36): Tasks 3 (no bugs open), 5 (perf slices migration, 12 files), 12 (no new links), 13 (updated #4501)
