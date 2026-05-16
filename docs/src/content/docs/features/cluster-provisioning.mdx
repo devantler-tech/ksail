@@ -28,7 +28,7 @@ ksail cluster create --ttl 1h
 
 ## Updating Clusters
 
-`ksail cluster update` applies changes from `ksail.yaml` to a running cluster. Changes are classified as in-place (no disruption), reboot-required, or recreate-required. Use `--dry-run` to preview changes without applying them. Use `--output json` for a machine-readable diff in CI pipelines or [MCP tools](/mcp/):
+`ksail cluster update` applies changes from `ksail.yaml` to a running cluster. Changes are classified as in-place (no disruption), reboot-required, recreate-required, or wipe-required. Use `--dry-run` to preview changes without applying them. Use `--output json` for a machine-readable diff in CI pipelines or [MCP tools](/mcp/):
 
 ```bash
 # Preview changes without applying
@@ -37,6 +37,23 @@ ksail cluster update --dry-run
 # Machine-readable diff for CI gating or MCP consumption
 ksail cluster update --dry-run --output json | jq .recreateRequired
 ```
+
+## Drift Detection
+
+`ksail cluster diff` compares the desired configuration in `ksail.yaml` against the live cluster state and reports any drift — without applying changes. Use it in CI pipelines or monitoring workflows to catch unintended drift early.
+
+```bash
+# Report drift in human-readable form
+ksail cluster diff
+
+# Machine-readable output for CI gating
+ksail cluster diff --output json | jq .recreateRequired
+
+# Return exit code 2 when drift is detected (useful for CI gate steps)
+ksail cluster diff --exit-code
+```
+
+Changes are classified the same way as `cluster update`: in-place, reboot-required, recreate-required, or wipe-required. Unlike `cluster update --dry-run`, `cluster diff` is a pure read operation — it never applies or stages any changes.
 
 ## High Availability Component Defaults
 
