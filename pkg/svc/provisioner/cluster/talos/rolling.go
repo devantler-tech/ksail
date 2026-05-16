@@ -3,7 +3,8 @@ package talosprovisioner
 import (
 	"context"
 	"fmt"
-	"sort"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
@@ -195,10 +196,10 @@ func sortNodesWorkersFirst(nodes []nodeWithRole) []nodeWithRole {
 		}
 	}
 
-	sort.Slice(workers, func(i, j int) bool { return workers[i].IP < workers[j].IP })
-	sort.Slice(
+	slices.SortFunc(workers, func(a, b nodeWithRole) int { return strings.Compare(a.IP, b.IP) })
+	slices.SortFunc(
 		controlPlanes,
-		func(i, j int) bool { return controlPlanes[i].IP < controlPlanes[j].IP },
+		func(a, b nodeWithRole) int { return strings.Compare(a.IP, b.IP) },
 	)
 
 	ordered := make([]nodeWithRole, 0, len(workers)+len(controlPlanes))

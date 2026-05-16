@@ -2,7 +2,7 @@ package talos
 
 import (
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/siderolabs/image-factory/pkg/schematic"
@@ -52,7 +52,7 @@ func NormalizeExtensions(extensions []string) []string {
 		result = append(result, ext)
 	}
 
-	sort.Strings(result)
+	slices.Sort(result)
 
 	return result
 }

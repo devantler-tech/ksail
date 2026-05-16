@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -73,7 +73,7 @@ func validateKubeconfigContext(kubeconfigPath, contextName string) error {
 		available = append(available, name)
 	}
 
-	sort.Strings(available)
+	slices.Sort(available)
 
 	return fmt.Errorf(
 		"%w: %q not found in %s (available: %s)",
