@@ -213,6 +213,54 @@ func TestNormalizeFluxPath_Coverage(t *testing.T) {
 	}
 }
 
+// TestNormalizeFluxPath_WindowsDriveLetter verifies that Windows-style drive letter
+// paths are rejected and coerced to the artifact root. This guards the isWindowsDriveLetter
+// and isInvalidFluxPath helpers which are exercised via the exported NormalizeFluxPath seam.
+func TestNormalizeFluxPath_WindowsDriveLetter(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "uppercase drive letter with path",
+			input: "C:/path/to/dir",
+			want:  "./",
+		},
+		{
+			name:  "lowercase drive letter with path",
+			input: "c:/path",
+			want:  "./",
+		},
+		{
+			name:  "drive letter only",
+			input: "C:",
+			want:  "./",
+		},
+		{
+			name:  "drive letter with trailing slash",
+			input: "Z:/",
+			want:  "./",
+		},
+		{
+			name:  "backslash drive letter path (normalized to forward slash first)",
+			input: `D:\some\path`,
+			want:  "./",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			result := fluxinstaller.NormalizeFluxPath(tt.input)
+			assert.Equal(t, tt.want, result)
+		})
+	}
+}
+
 //nolint:varnamelen // Short names keep this table-driven test readable.
 func TestBuildDockerConfigJSON_Formats(t *testing.T) {
 	t.Parallel()
