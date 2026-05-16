@@ -182,6 +182,25 @@ func (p *K3kProvisioner) Create(ctx context.Context, name string) error {
 		return fmt.Errorf("wait for k3k cluster ready: %w", err)
 	}
 
+	// Steps 5-8: fetch kubeconfig, port-forward API server, and merge into host kubeconfig
+	if err = p.connectAndMergeKubeconfig(ctx, clusterName, namespace); err != nil {
+		return err
+	}
+
+	_, _ = fmt.Fprintf(
+		os.Stdout,
+		"✓ k3k cluster %q ready (context: k3k-%s)\n",
+		clusterName,
+		clusterName,
+	)
+
+	return nil
+}
+
+// connectAndMergeKubeconfig waits for the k3k kubeconfig Secret, starts a port-forward to
+// the nested API server, rewrites the kubeconfig to point at localhost, and merges it into
+// the host kubeconfig file.
+func (p *K3kProvisioner) connectAndMergeKubeconfig(ctx context.Context, clusterName, namespace string) error {
 	// Step 5: Wait for the kubeconfig Secret to appear
 	_, _ = fmt.Fprintln(os.Stdout, "► waiting for kubeconfig secret")
 
@@ -211,18 +230,10 @@ func (p *K3kProvisioner) Create(ctx context.Context, name string) error {
 
 	// Step 8: Merge kubeconfig into the host kubeconfig file
 	if p.kubeconfigPath != "" {
-		err := k8s.MergeKubeconfig(p.kubeconfigPath, []byte(kubeconfigStr))
-		if err != nil {
-			return fmt.Errorf("merge kubeconfig: %w", err)
+		if mergeErr := k8s.MergeKubeconfig(p.kubeconfigPath, []byte(kubeconfigStr)); mergeErr != nil {
+			return fmt.Errorf("merge kubeconfig: %w", mergeErr)
 		}
 	}
-
-	_, _ = fmt.Fprintf(
-		os.Stdout,
-		"✓ k3k cluster %q ready (context: k3k-%s)\n",
-		clusterName,
-		clusterName,
-	)
 
 	return nil
 }

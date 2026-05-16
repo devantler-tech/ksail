@@ -258,11 +258,7 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 
 	// Save talosconfig with host-accessible endpoint
 	talosConfig := configBundle.TalosConfig()
-	if talosConfig != nil && talosConfig.Context != "" {
-		if talosCtx, ok := talosConfig.Contexts[talosConfig.Context]; ok {
-			talosCtx.Endpoints = []string{hostTalosEndpoint}
-		}
-	}
+	patchTalosConfigEndpoint(talosConfig, hostTalosEndpoint)
 
 	if p.inner.options.TalosconfigPath != "" {
 		saveErr := p.inner.saveTalosconfig(configBundle)
