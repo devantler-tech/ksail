@@ -4,6 +4,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/devantler-tech/ksail/v7/pkg/strutil"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -185,17 +186,7 @@ func commandToToolDefinition(cmd *cobra.Command, excludeFlags []string) ToolDefi
 // buildToolTitle generates a human-readable title from a tool path.
 // Example: "cluster create" -> "Cluster Create", "workload_read" -> "Workload Read".
 func buildToolTitle(strippedPath string) string {
-	// Replace underscores with spaces for consolidated tool names
-	normalized := strings.ReplaceAll(strippedPath, "_", " ")
-	words := strings.Fields(normalized)
-
-	for i, word := range words {
-		if len(word) > 0 {
-			words[i] = strings.ToUpper(word[:1]) + word[1:]
-		}
-	}
-
-	return strings.Join(words, " ")
+	return strutil.SnakeCaseToTitle(strippedPath)
 }
 
 // buildAnnotationHints creates behavioral hints based on permission level.

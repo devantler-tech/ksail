@@ -254,3 +254,53 @@ func TestCollectAllSubcommands_DeepNesting(t *testing.T) {
 	require.Len(t, subcommands, 1)
 	assert.Contains(t, subcommands, "level1_level2_leaf")
 }
+
+// TestGenerateTools_ConsolidateWithParentPermission exercises the parentHasPermission
+// branch of commandToPermissionSplitTools.
+// When a command carries both AnnotationConsolidate and AnnotationPermission,
+// all subcommands collapse into a SINGLE tool instead of a read/write pair.
+// Adding an excluded flag to a subcommand also exercises the ExcludeFlags path
+// inside extractFlags during consolidation.
+func TestGenerateTools_ConsolidateWithParentPermission(t *testing.T) {
+	t.Parallel()
+
+	root := &cobra.Command{Use: "ksail", Short: "KSail CLI"}
+	cipherCmd := &cobra.Command{
+		Use:   "cipher",
+		Short: "Manage encrypted files with SOPS",
+		Annotations: map[string]string{
+			toolgen.AnnotationConsolidate: "cipher_operation",
+			toolgen.AnnotationPermission:  "write",
+		},
+	}
+	encryptCmd := &cobra.Command{
+		Use:  "encrypt",
+		RunE: func(_ *cobra.Command, _ []string) error { return nil },
+	}
+	// Add a flag that is in DefaultOptions().ExcludeFlags to exercise
+	// the slices.Contains(excludeFlags, flag.Name) branch inside extractFlags.
+	encryptCmd.Flags().String("server", "", "API server URL")
+	encryptCmd.Flags().String("output", "yaml", "Output format")
+
+	decryptCmd := &cobra.Command{
+		Use:  "decrypt",
+		RunE: func(_ *cobra.Command, _ []string) error { return nil },
+	}
+	cipherCmd.AddCommand(encryptCmd, decryptCmd)
+	root.AddCommand(cipherCmd)
+
+	tools := toolgen.GenerateTools(root, toolgen.DefaultOptions())
+
+	// parentHasPermission path: single tool, not a read/write split
+	require.Len(t, tools, 1)
+	assert.Equal(t, "cipher", tools[0].Name)
+	assert.True(t, tools[0].RequiresPermission, "parent permission should propagate to the tool")
+
+	// The "server" flag should be excluded from the encrypt subcommand's schema.
+	encryptSubcmd, hasEncrypt := tools[0].Subcommands["encrypt"]
+	require.True(t, hasEncrypt, "encrypt subcommand should be present")
+	_, hasServer := encryptSubcmd.Flags["server"]
+	assert.False(t, hasServer, "server flag should be excluded by ExcludeFlags")
+	_, hasOutput := encryptSubcmd.Flags["output"]
+	assert.True(t, hasOutput, "output flag should be present")
+}

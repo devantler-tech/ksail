@@ -464,6 +464,25 @@ func TestBuildParameterSchema_ExcludesHelpFlag(t *testing.T) {
 	assert.True(t, hasName, "expected name property to be present")
 }
 
+// Test that flags listed in DefaultOptions.ExcludeFlags are excluded from the schema.
+func TestBuildParameterSchema_ExcludesConfiguredFlags(t *testing.T) {
+	t.Parallel()
+
+	cmd := newTestCmd()
+	// "server" is in DefaultOptions().ExcludeFlags — it should be absent from the schema.
+	cmd.Flags().String("server", "", "API server URL")
+	// "name" is not excluded — it should appear in the schema.
+	cmd.Flags().String("name", "", "Name value")
+
+	properties := generateToolProperties(t, cmd)
+
+	_, hasServer := properties["server"]
+	assert.False(t, hasServer, "server flag should be excluded by ExcludeFlags")
+
+	_, hasName := properties["name"]
+	assert.True(t, hasName, "name flag should be present in schema")
+}
+
 // Test buildEnumProperty via enum-valued flags.
 func TestBuildParameterSchema_EnumValues(t *testing.T) {
 	t.Parallel()
