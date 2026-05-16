@@ -22,7 +22,7 @@ ksail cluster create --ttl 1h
 
 ## Updating Clusters
 
-`ksail cluster update` applies changes from `ksail.yaml` to a running cluster. Changes are classified as in-place (no disruption), reboot-required, or recreate-required. Use `--dry-run` to preview changes without applying them. Use `--output json` for a machine-readable diff in CI pipelines or [MCP tools](/mcp/):
+`ksail cluster update` applies changes from `ksail.yaml` to a running cluster. Changes are classified as in-place (no disruption), reboot-required, recreate-required, or wipe-required. Use `--dry-run` to preview changes without applying them. Use `--output json` for a machine-readable diff in CI pipelines or [MCP tools](/mcp/):
 
 ```bash
 # Preview changes without applying
@@ -47,7 +47,7 @@ ksail cluster diff --output json | jq .recreateRequired
 ksail cluster diff --exit-code
 ```
 
-Changes are classified the same way as `cluster update`: in-place, reboot-required, or recreate-required. Unlike `cluster update --dry-run`, `cluster diff` is a pure read operation — it never applies or stages any changes.
+Changes are classified the same way as `cluster update`: in-place, reboot-required, recreate-required, or wipe-required. Unlike `cluster update --dry-run`, `cluster diff` is a pure read operation — it never applies or stages any changes.
 
 ## High Availability Component Defaults
 
