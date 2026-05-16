@@ -514,6 +514,17 @@ func GetKubeconfigCurrentContext(kubeconfigPath string) (string, error) {
 		return "", fmt.Errorf("expand kubeconfig path: %w", err)
 	}
 
+	// Ensure the parent directory exists before canonicalizing. EvalCanonicalPath
+	// requires the parent to exist (it resolves parent symlinks as a fallback when the
+	// file itself is absent). Without this, callers in fresh environments where ~/.kube/
+	// has not been created yet would receive an error rather than the documented empty
+	// string for "no current context".
+	if kubeconfigDir := filepath.Dir(kubeconfigPath); kubeconfigDir != "" && kubeconfigDir != "." {
+		if mkdirErr := os.MkdirAll(kubeconfigDir, kubeconfigDirMode); mkdirErr != nil {
+			return "", fmt.Errorf("create kubeconfig directory: %w", mkdirErr)
+		}
+	}
+
 	kubeconfigPath, err = fsutil.EvalCanonicalPath(kubeconfigPath)
 	if err != nil {
 		return "", fmt.Errorf("canonicalize kubeconfig path: %w", err)
