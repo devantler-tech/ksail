@@ -4,7 +4,7 @@ metadata:
     github-path: skills/github-issues
     github-ref: refs/heads/main
     github-repo: https://github.com/github/awesome-copilot
-    github-tree-sha: 44219c182a1435252a1751313b99fb0a79882bb5
+    github-tree-sha: 95fb5bd16c2cecb7c14c58d7e902a91daae2ec5e
 name: github-issues
 ---
 # GitHub Issues
