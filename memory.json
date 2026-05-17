@@ -1,6 +1,6 @@
 {
-  "last_run": "2026-05-15T01:11:40Z",
-  "last_run_id": "25894671601",
+  "last_run": "2026-05-17T12:35:41Z",
+  "last_run_id": "25990977717",
   "monthly_activity_issue": 4501,
   "monthly_activity_month": "2026-05",
   "labels_applied": [
@@ -12,11 +12,12 @@
     "4504": "2026-05-01",
     "4525": "2026-05-02",
     "4422": "2026-05-01",
-    "4474": "2026-05-13"
+    "4474": "2026-05-13",
+    "4768": "2026-05-17"
   },
   "issue_labelling_cursor": 4422,
-  "last_tasks": [9, 10, 4],
-  "last_code_quality_domain": "test",
+  "last_tasks": [2, 9, 5],
+  "last_code_quality_domain": "refactor",
   "created_issues": [4521, 4511, 4510, 4474, 4473, 4465],
   "roadmap_items_tracked": ["cluster-drift", "cluster-switch-fuzzy", "cluster-diagnose-json", "cluster-graph", "local-remote-mirroring", "ephemeral-ci-mode", "gke-aks-providers", "vcluster-v034-compat"]
 }
