@@ -540,14 +540,10 @@ func GetKubeconfigCurrentContext(kubeconfigPath string) (string, error) {
 }
 
 // SetKubeconfigCurrentContext updates the current-context field in the kubeconfig at
-// kubeconfigPath to contextName. It is a no-op when contextName is empty. The context
-// entry does not need to exist in the file (e.g. setting to a context that will be added
-// later is allowed).
+// kubeconfigPath to contextName. When contextName is empty, current-context is cleared
+// (set to ""), restoring the file to having no active context. The context entry does not
+// need to exist in the file (e.g. setting to a context that will be added later is allowed).
 func SetKubeconfigCurrentContext(kubeconfigPath, contextName string) error {
-	if contextName == "" {
-		return nil
-	}
-
 	// jscpd:ignore-start
 	kubeconfigPath, err := fsutil.ExpandHomePath(kubeconfigPath)
 	if err != nil {
