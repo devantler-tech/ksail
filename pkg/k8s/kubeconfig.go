@@ -520,7 +520,8 @@ func GetKubeconfigCurrentContext(kubeconfigPath string) (string, error) {
 	// has not been created yet would receive an error rather than the documented empty
 	// string for "no current context".
 	if kubeconfigDir := filepath.Dir(kubeconfigPath); kubeconfigDir != "" && kubeconfigDir != "." {
-		if mkdirErr := os.MkdirAll(kubeconfigDir, kubeconfigDirMode); mkdirErr != nil {
+		mkdirErr := os.MkdirAll(kubeconfigDir, kubeconfigDirMode)
+		if mkdirErr != nil {
 			return "", fmt.Errorf("create kubeconfig directory: %w", mkdirErr)
 		}
 	}

@@ -126,7 +126,7 @@ func NewK3kProvisioner(cfg K3kProvisionerConfig) (*K3kProvisioner, error) {
 
 // Create provisions a K3s cluster using the k3k operator on the host Kubernetes cluster.
 //
-//nolint:funlen // sequential setup steps
+
 func (p *K3kProvisioner) Create(ctx context.Context, name string) error {
 	clusterName := p.clusterName
 	if clusterName == "" {
@@ -145,8 +145,13 @@ func (p *K3kProvisioner) Create(ctx context.Context, name string) error {
 	}
 
 	defer func() {
-		if restoreErr := k8s.SetKubeconfigCurrentContext(p.kubeconfigPath, originalContext); restoreErr != nil {
-			_, _ = fmt.Fprintf(os.Stderr, "warning: failed to restore kubeconfig context: %v\n", restoreErr)
+		restoreErr := k8s.SetKubeconfigCurrentContext(p.kubeconfigPath, originalContext)
+		if restoreErr != nil {
+			_, _ = fmt.Fprintf(
+				os.Stderr,
+				"warning: failed to restore kubeconfig context: %v\n",
+				restoreErr,
+			)
 		}
 	}()
 
@@ -294,7 +299,10 @@ func (p *K3kProvisioner) List(ctx context.Context) ([]string, error) {
 // connectAndMergeKubeconfig waits for the k3k kubeconfig Secret, starts a port-forward to
 // the nested API server, rewrites the kubeconfig to point at localhost, and merges it into
 // the host kubeconfig file.
-func (p *K3kProvisioner) connectAndMergeKubeconfig(ctx context.Context, clusterName, namespace string) error {
+func (p *K3kProvisioner) connectAndMergeKubeconfig(
+	ctx context.Context,
+	clusterName, namespace string,
+) error {
 	// Step 5: Wait for the kubeconfig Secret to appear
 	_, _ = fmt.Fprintln(os.Stdout, "► waiting for kubeconfig secret")
 
@@ -324,7 +332,8 @@ func (p *K3kProvisioner) connectAndMergeKubeconfig(ctx context.Context, clusterN
 
 	// Step 8: Merge kubeconfig into the host kubeconfig file
 	if p.kubeconfigPath != "" {
-		if mergeErr := k8s.MergeKubeconfig(p.kubeconfigPath, []byte(kubeconfigStr)); mergeErr != nil {
+		mergeErr := k8s.MergeKubeconfig(p.kubeconfigPath, []byte(kubeconfigStr))
+		if mergeErr != nil {
 			return fmt.Errorf("merge kubeconfig: %w", mergeErr)
 		}
 	}
