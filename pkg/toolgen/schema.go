@@ -295,13 +295,16 @@ func buildConsolidatedParameterSchema(
 // buildSubcommandEnumProperty creates the enum property for subcommand selection.
 func buildSubcommandEnumProperty(subcommands map[string]*SubcommandDef) map[string]any {
 	names := make([]string, 0, len(subcommands))
-	descriptions := make([]string, 0, len(subcommands))
-
-	for name, def := range subcommands {
+	for name := range subcommands {
 		names = append(names, name)
+	}
+	slices.Sort(names)
+
+	descriptions := make([]string, 0, len(subcommands))
+	for _, name := range names {
 		descriptions = append(
 			descriptions,
-			name+": "+truncateDescription(def.Description, maxSubcommandDescLength),
+			name+": "+truncateDescription(subcommands[name].Description, maxSubcommandDescLength),
 		)
 	}
 
@@ -336,6 +339,11 @@ func mergeSubcommandFlags(subcommands map[string]*SubcommandDef) map[string]*Fla
 				}
 			}
 		}
+	}
+
+	// Sort AppliesToSubcommands for each flag to ensure deterministic schema output.
+	for _, flagDef := range allFlags {
+		slices.Sort(flagDef.AppliesToSubcommands)
 	}
 
 	return allFlags

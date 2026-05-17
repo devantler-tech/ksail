@@ -55,7 +55,8 @@ func NewServer(cfg ServerConfig) (*mcpsdk.Server, error) {
 			"Tools: cluster_read (inspect), cluster_write (lifecycle), " +
 			"workload_read (get/describe/logs), workload_write (apply/create/scale/rollout), " +
 			"cipher_write (SOPS encryption), tenant_write (multi-tenancy).\n" +
-			"All operations target the current kubeconfig context. Use the 'context' parameter to target a different cluster.",
+			"Cluster lifecycle tools use --name and optionally --kubeconfig to target a cluster. " +
+			"Workload tools accept --context to target a kubeconfig context and --namespace for namespace scoping.",
 		Logger:    cfg.Logger,
 		KeepAlive: serverKeepAlive,
 		PageSize:  serverPageSize,
