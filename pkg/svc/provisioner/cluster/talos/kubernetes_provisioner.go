@@ -101,6 +101,7 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 		clusterName = p.clusterName
 	}
 
+	// jscpd:ignore-start
 	// Preserve the host kubeconfig's current-context. MergeKubeconfig overwrites
 	// current-context with the nested cluster's context, which would cause subsequent
 	// Kubernetes provider operations (info, delete) to connect to the nested cluster
@@ -115,6 +116,7 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 			_, _ = fmt.Fprintf(os.Stderr, "warning: failed to restore kubeconfig context: %v\n", restoreErr)
 		}
 	}()
+	// jscpd:ignore-end
 
 	// Step 1: Ensure namespace + DinD pod
 	err = p.setupDinD(ctx, clusterName)

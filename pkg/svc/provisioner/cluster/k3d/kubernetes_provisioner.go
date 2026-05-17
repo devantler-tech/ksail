@@ -183,7 +183,8 @@ func (p *K3kProvisioner) Create(ctx context.Context, name string) error {
 	}
 
 	// Steps 5-8: fetch kubeconfig, port-forward API server, and merge into host kubeconfig
-	if err = p.connectAndMergeKubeconfig(ctx, clusterName, namespace); err != nil {
+	err = p.connectAndMergeKubeconfig(ctx, clusterName, namespace)
+	if err != nil {
 		return err
 	}
 
@@ -193,47 +194,6 @@ func (p *K3kProvisioner) Create(ctx context.Context, name string) error {
 		clusterName,
 		clusterName,
 	)
-
-	return nil
-}
-
-// connectAndMergeKubeconfig waits for the k3k kubeconfig Secret, starts a port-forward to
-// the nested API server, rewrites the kubeconfig to point at localhost, and merges it into
-// the host kubeconfig file.
-func (p *K3kProvisioner) connectAndMergeKubeconfig(ctx context.Context, clusterName, namespace string) error {
-	// Step 5: Wait for the kubeconfig Secret to appear
-	_, _ = fmt.Fprintln(os.Stdout, "► waiting for kubeconfig secret")
-
-	kubeconfigData, err := p.waitForKubeconfigSecret(ctx, clusterName, namespace)
-	if err != nil {
-		return fmt.Errorf("get kubeconfig secret: %w", err)
-	}
-
-	// Step 6: Port-forward the API server to localhost
-	_, _ = fmt.Fprintln(os.Stdout, "► port-forwarding nested K3s API server to localhost")
-
-	serverPodName := fmt.Sprintf("k3k-%s-server-0", clusterName)
-
-	apiPortForward, err := p.k8sProvider.StartPortForwardInNamespace(
-		ctx, p.restConfig, namespace, serverPodName, k3kAPIServerPort,
-	)
-	if err != nil {
-		return fmt.Errorf("port-forward K3s API server: %w", err)
-	}
-
-	p.portForward = apiPortForward
-
-	// Step 7: Rewrite kubeconfig to use localhost port-forward address
-	kubeconfigStr := string(kubeconfigData)
-	// k3k kubeconfig uses the ClusterIP service address — replace with localhost
-	kubeconfigStr = rewriteK3kKubeconfig(kubeconfigStr, apiPortForward.LocalPort, clusterName)
-
-	// Step 8: Merge kubeconfig into the host kubeconfig file
-	if p.kubeconfigPath != "" {
-		if mergeErr := k8s.MergeKubeconfig(p.kubeconfigPath, []byte(kubeconfigStr)); mergeErr != nil {
-			return fmt.Errorf("merge kubeconfig: %w", mergeErr)
-		}
-	}
 
 	return nil
 }
@@ -329,6 +289,47 @@ func (p *K3kProvisioner) List(ctx context.Context) ([]string, error) {
 	}
 
 	return names, nil
+}
+
+// connectAndMergeKubeconfig waits for the k3k kubeconfig Secret, starts a port-forward to
+// the nested API server, rewrites the kubeconfig to point at localhost, and merges it into
+// the host kubeconfig file.
+func (p *K3kProvisioner) connectAndMergeKubeconfig(ctx context.Context, clusterName, namespace string) error {
+	// Step 5: Wait for the kubeconfig Secret to appear
+	_, _ = fmt.Fprintln(os.Stdout, "► waiting for kubeconfig secret")
+
+	kubeconfigData, err := p.waitForKubeconfigSecret(ctx, clusterName, namespace)
+	if err != nil {
+		return fmt.Errorf("get kubeconfig secret: %w", err)
+	}
+
+	// Step 6: Port-forward the API server to localhost
+	_, _ = fmt.Fprintln(os.Stdout, "► port-forwarding nested K3s API server to localhost")
+
+	serverPodName := fmt.Sprintf("k3k-%s-server-0", clusterName)
+
+	apiPortForward, err := p.k8sProvider.StartPortForwardInNamespace(
+		ctx, p.restConfig, namespace, serverPodName, k3kAPIServerPort,
+	)
+	if err != nil {
+		return fmt.Errorf("port-forward K3s API server: %w", err)
+	}
+
+	p.portForward = apiPortForward
+
+	// Step 7: Rewrite kubeconfig to use localhost port-forward address
+	kubeconfigStr := string(kubeconfigData)
+	// k3k kubeconfig uses the ClusterIP service address — replace with localhost
+	kubeconfigStr = rewriteK3kKubeconfig(kubeconfigStr, apiPortForward.LocalPort, clusterName)
+
+	// Step 8: Merge kubeconfig into the host kubeconfig file
+	if p.kubeconfigPath != "" {
+		if mergeErr := k8s.MergeKubeconfig(p.kubeconfigPath, []byte(kubeconfigStr)); mergeErr != nil {
+			return fmt.Errorf("merge kubeconfig: %w", mergeErr)
+		}
+	}
+
+	return nil
 }
 
 // ensureK3kOperator installs the k3k Helm chart if it isn't already present.
