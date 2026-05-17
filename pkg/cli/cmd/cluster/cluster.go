@@ -13,7 +13,6 @@ import (
 	"os/signal"
 	"path/filepath"
 	"slices"
-	"sort"
 	"strings"
 	"sync"
 	"syscall"
@@ -6194,7 +6193,7 @@ func resolveContextName(
 			available = append(available, name)
 		}
 
-		sort.Strings(available)
+		slices.Sort(available)
 
 		return "", fmt.Errorf(
 			"%w: %s (available contexts: %s)",
@@ -6205,7 +6204,7 @@ func resolveContextName(
 	case 1:
 		return matches[0], nil
 	default:
-		sort.Strings(matches)
+		slices.Sort(matches)
 
 		return "", fmt.Errorf(
 			"%w: '%s' matches multiple contexts: %s",
@@ -6305,7 +6304,7 @@ func clusterNamesFromPath(kubeconfigPath string) []string {
 		names = append(names, name)
 	}
 
-	sort.Strings(names)
+	slices.Sort(names)
 
 	return names
 }

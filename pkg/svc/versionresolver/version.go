@@ -3,7 +3,7 @@ package versionresolver
 import (
 	"fmt"
 	"regexp"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -200,8 +200,16 @@ func NewerThan(versions []Version, current Version) []Version {
 
 // SortVersions sorts versions in ascending order.
 func SortVersions(versions []Version) {
-	sort.Slice(versions, func(i, j int) bool {
-		return versions[i].Less(versions[j])
+	slices.SortFunc(versions, func(a, b Version) int {
+		if a.Less(b) {
+			return -1
+		}
+
+		if b.Less(a) {
+			return 1
+		}
+
+		return 0
 	})
 }
 

@@ -1,9 +1,11 @@
 package reconcilediag
 
 import (
+	"cmp"
 	"context"
 	"fmt"
-	"sort"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
@@ -115,11 +117,8 @@ func (c *FluxCollector) collectFailingCRs(
 		})
 	}
 
-	sort.Slice(section.Resources, func(i, j int) bool {
-		ki := section.Resources[i].Namespace + "/" + section.Resources[i].Name
-		kj := section.Resources[j].Namespace + "/" + section.Resources[j].Name
-
-		return ki < kj
+	slices.SortFunc(section.Resources, func(a, b FailingResource) int {
+		return strings.Compare(a.Namespace+"/"+a.Name, b.Namespace+"/"+b.Name)
 	})
 
 	return section
@@ -234,8 +233,8 @@ func collectNamespaceWarningEvents(
 		})
 	}
 
-	sort.Slice(result, func(i, j int) bool {
-		return result[i].Age < result[j].Age
+	slices.SortFunc(result, func(a, b WarningEvent) int {
+		return cmp.Compare(a.Age, b.Age)
 	})
 
 	return result

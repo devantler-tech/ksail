@@ -2,7 +2,7 @@ package diff
 
 import (
 	"fmt"
-	"sort"
+	"slices"
 	"strconv"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -619,7 +619,7 @@ func (e *Engine) checkAutoscalerPoolsAdded(
 		}
 	}
 
-	sort.Strings(addedNames)
+	slices.Sort(addedNames)
 
 	for _, name := range addedNames {
 		appendChange(result, "cluster.autoscaler.node.pools["+name+"]",
@@ -642,7 +642,7 @@ func (e *Engine) checkAutoscalerPoolsRemoved(
 		}
 	}
 
-	sort.Strings(removedNames)
+	slices.Sort(removedNames)
 
 	for _, name := range removedNames {
 		appendChange(result, "cluster.autoscaler.node.pools["+name+"]",
@@ -665,7 +665,7 @@ func (e *Engine) checkAutoscalerPoolsModified(
 		}
 	}
 
-	sort.Strings(modifiedNames)
+	slices.Sort(modifiedNames)
 
 	for _, name := range modifiedNames {
 		newPool := newByName[name]
