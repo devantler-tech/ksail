@@ -1,6 +1,6 @@
 {
-  "last_run": "2026-05-16T12:36:33Z",
-  "workflow_run_id": "25962055629",
+  "last_run": "2026-05-17T01:17:00Z",
+  "workflow_run_id": "25977733168",
   "commented_issues": {
     "4675": "2026-05-10",
     "4646": "2026-05-08",
@@ -40,11 +40,11 @@
     "4474": "2026-05-13"
   },
   "open_prs": {
-    "4770": "[Repo Assist] refactor(notify): replace timingLabelWidth() with compile-time constant",
-    "perf_slices": "[Repo Assist] perf: migrate remaining sort.Strings/sort.Slice to slices package"
+    "4771": "[Repo Assist] perf: migrate remaining sort.Strings/sort.Slice to slices package",
+    "4770": "[Repo Assist] refactor(notify): replace timingLabelWidth() with compile-time constant"
   },
   "last_code_quality_domain": "performance",
-  "issue_backlog_cursor": "4741",
+  "issue_backlog_cursor": "4771",
   "sub_issue_links": {
     "cloud_provider_parent_4627": ["3983", "4328", "4510"]
   },
@@ -67,12 +67,12 @@
     "link_sub_issue is NOT idempotent - always verify sub-issue not already linked before calling",
     "Monthly activity issue: #4501 (automation + repo-assist labelled)",
     "domain alternation: last was performance - next should be refactor",
-    "Roadmap backlog: all Now/Next/Later items tracked as of 2026-05-15",
-    "Human PR #4718 open: Kubernetes provider by devantler",
-    "All recent new issues (4744, 4743, 4683, 4768) are CI Doctor/automation - no human issues to engage",
-    "PR #4770 open: Repo Assist refactor/notify timing label constant",
-    "PR 'perf-slices' created: perf: migrate sort.Strings/sort.Slice to slices package (12 files)",
-    "PR #4757 CLOSED (merged) - diagnose report formatters tests",
-    "Run 2026-05-16: Tasks 3 (no bugs), 5 (perf: slices migration), 12 (no new links needed), 13 (updated #4501)"
+    "Roadmap backlog: all Now/Next/Later items tracked as of 2026-05-17",
+    "Human PR #4769 open: fix restore host kubeconfig context after kubernetes provider create",
+    "Human PR #4741 open: feat(toolgen) align MCP tool generation with best practices",
+    "All recent open issues are CI Doctor/automation or upstream-blocked",
+    "PR #4771 open: Repo Assist perf slices migration (CI passing except infra Talos flake)",
+    "PR #4770 open: Repo Assist refactor/notify timing label constant (CI passing)",
+    "Run 2026-05-17: Tasks 3 (no bugs), 5 (deferred - 2 PRs already open), 11 (all items tracked), 13 (updated #4501)"
   ]
 }
