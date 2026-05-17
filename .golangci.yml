@@ -70,6 +70,7 @@ linters:
         - github.com/docker/cli
         - github.com/opencontainers/runtime-spec
         - github.com/loft-sh/log
+        - github.com/anchore/grype
     wsl_v5:
       allow-first-in-block: true
       allow-whole-block: false
