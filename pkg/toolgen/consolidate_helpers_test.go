@@ -299,8 +299,10 @@ func TestGenerateTools_ConsolidateWithParentPermission(t *testing.T) {
 	// The "server" flag should be excluded from the encrypt subcommand's schema.
 	encryptSubcmd, hasEncrypt := tools[0].Subcommands["encrypt"]
 	require.True(t, hasEncrypt, "encrypt subcommand should be present")
+
 	_, hasServer := encryptSubcmd.Flags["server"]
 	assert.False(t, hasServer, "server flag should be excluded by ExcludeFlags")
+
 	_, hasOutput := encryptSubcmd.Flags["output"]
 	assert.True(t, hasOutput, "output flag should be present")
 }
