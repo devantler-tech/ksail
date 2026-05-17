@@ -983,7 +983,6 @@ require (
 // Dependency version pins: modules replaced here have upstream incompatibilities
 // that require pinning until the respective projects ship compatible releases.
 replace (
-
 	// image-factory v1.3.0 transitively pulls in grype v0.112.0 (via go-vex),
 	// which added a *DistroAlertData parameter to models.NewDocument. kubescape
 	// v3.0.48 still calls the 10-argument form and will not compile against
