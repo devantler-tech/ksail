@@ -298,6 +298,7 @@ func buildSubcommandEnumProperty(subcommands map[string]*SubcommandDef) map[stri
 	for name := range subcommands {
 		names = append(names, name)
 	}
+
 	slices.Sort(names)
 
 	descriptions := make([]string, 0, len(subcommands))
