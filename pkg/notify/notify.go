@@ -5,7 +5,6 @@ import (
 	"io"
 	"os"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/devantler-tech/ksail/v7/pkg/timer"
 	fcolor "github.com/fatih/color"
@@ -17,15 +16,10 @@ const timingCurrentLabel = "⏲ current:"
 // timingTotalLabel is the label for the total timing line.
 const timingTotalLabel = "total:"
 
-// timingLabelWidth returns the column width needed to align both timing labels.
-func timingLabelWidth() int {
-	w := utf8.RuneCountInString(timingCurrentLabel)
-	if tw := utf8.RuneCountInString(timingTotalLabel); tw > w {
-		return tw
-	}
-
-	return w
-}
+// timingLabelColumnWidth is the pre-computed column width for aligning timing output.
+// "⏲ current:" is 10 runes wide, which exceeds "total:" (6 runes), so 10 is the
+// minimum width needed to left-align both labels in fixed-width columns.
+const timingLabelColumnWidth = 10
 
 // Message type constants.
 // Each type determines the message styling (color and symbol).
@@ -207,7 +201,7 @@ func WriteMessage(msg Message) {
 	if msg.Type == SuccessType && msg.Timer != nil {
 		total, stage := msg.Timer.GetTiming()
 
-		labelWidth := timingLabelWidth()
+		labelWidth := timingLabelColumnWidth
 
 		_, err = config.color.Fprintf(
 			msg.Writer,

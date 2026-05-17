@@ -722,7 +722,7 @@ func (pg *ProgressGroup) printFinalSummary() {
 // printTiming prints the timing information.
 func (pg *ProgressGroup) printTiming() {
 	total, stage := pg.timer.GetTiming()
-	labelWidth := timingLabelWidth()
+	labelWidth := timingLabelColumnWidth
 	_, _ = pg.colorGreen.Fprintf(
 		pg.writer,
 		"%-*s %s\n",
