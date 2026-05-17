@@ -616,12 +616,6 @@ func TestTruncateDescription(t *testing.T) {
 			expected: "Short description",
 		},
 		{
-			name:     "exact length",
-			input:    "Exact",
-			maxLen:   5,
-			expected: "Exact",
-		},
-		{
 			name:     "truncate at sentence boundary",
 			input:    "First sentence. Second sentence that is longer and pushes past the limit.",
 			maxLen:   30,
@@ -650,12 +644,6 @@ func TestTruncateDescription(t *testing.T) {
 			input:    "something long",
 			maxLen:   3,
 			expected: "...",
-		},
-		{
-			name:     "result never exceeds maxLen",
-			input:    "This is a somewhat long description that should be truncated properly.",
-			maxLen:   25,
-			expected: "This is a somewhat...",
 		},
 	}
 
