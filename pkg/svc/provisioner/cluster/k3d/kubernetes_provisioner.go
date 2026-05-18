@@ -302,6 +302,7 @@ func (p *K3kProvisioner) connectAndMergeKubeconfig(
 		mergeErr := k8s.MergeKubeconfig(p.kubeconfigPath, []byte(kubeconfigStr))
 		if mergeErr != nil {
 			apiPortForward.Close()
+
 			return fmt.Errorf("merge kubeconfig: %w", mergeErr)
 		}
 	}
