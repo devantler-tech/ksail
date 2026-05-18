@@ -292,8 +292,6 @@ func (p *K3kProvisioner) connectAndMergeKubeconfig(
 		return fmt.Errorf("port-forward K3s API server: %w", err)
 	}
 
-	p.portForward = apiPortForward
-
 	// Step 7: Rewrite kubeconfig to use localhost port-forward address
 	kubeconfigStr := string(kubeconfigData)
 	// k3k kubeconfig uses the ClusterIP service address — replace with localhost
@@ -303,9 +301,14 @@ func (p *K3kProvisioner) connectAndMergeKubeconfig(
 	if p.kubeconfigPath != "" {
 		mergeErr := k8s.MergeKubeconfig(p.kubeconfigPath, []byte(kubeconfigStr))
 		if mergeErr != nil {
+			apiPortForward.Close()
 			return fmt.Errorf("merge kubeconfig: %w", mergeErr)
 		}
 	}
+
+	// Only store the port-forward session once all steps succeed so that a
+	// failure in any step above does not leave an unclosed session.
+	p.portForward = apiPortForward
 
 	return nil
 }
