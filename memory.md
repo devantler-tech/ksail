@@ -1,14 +1,13 @@
 # Repo Assist Memory
 
 ## Last Run
-2026-05-17 01:17 UTC — Run #25977733168
+2026-05-18 13:35 UTC — Run #26036747411
 
 ## Monthly Activity Issue
 - May 2026: #4501 (open)
 
 ## Open Repo Assist PRs
-- #4770: refactor(notify): timing label constant (CI passing)
-- #4771: perf: migrate remaining sort.Strings/sort.Slice to slices package (CI passing except infra Talos flake)
+- (check current state — #4770 and #4771 may have merged)
 
 ## Issue Comments Made (with run)
 - #4674 (Hetzner CCM taint race): 2026-05-12
@@ -19,6 +18,8 @@
 - #4621 (Hetzner node role bug): 2026-05-06
 - #3912 (Dependabot multi-arch): 2026-05-05
 - #4474 (cluster diff): 2026-05-13
+- #3983 (Hetzner K3s/Vanilla): 2026-05-18
+- #4768 (k8s provider docs): 2026-05-17
 
 ## Issues Created (last 4 weeks)
 - #4627: [Parent] Cloud Provider Expansion (groups #3983, #4328, #4510) — all 3 linked
@@ -34,6 +35,8 @@
 - #4422: cluster diagnose health scoring
 - #4375: cluster graph topology
 - #3983: Hetzner K3s/Vanilla (sub-issue of #4627)
+- TBD: [feature] DevContainer scaffolding (created run #26036747411)
+- TBD: [feature] eBPF traffic observability via Hubble (created run #26036747411)
 
 ## Sub-Issue Links (verified)
 - #4627 parent: #3983, #4328, #4510 (all linked, all open as of 2026-05-17)
@@ -43,8 +46,8 @@
 - Next for Task 5: refactor (deferred - 2 PRs open)
 
 ## Backlog Cursor
-- Issues processed through #4771 (as of 2026-05-17)
-- All roadmap Now/Next/Later items from discussion #4682 (May 11, 2026) are tracked
+- Issues processed through #4773 (as of 2026-05-18)
+- Roadmap from discussion #4776 (May 18, 2026): DevContainer scaffolding + eBPF observability created; all other items tracked
 
 ## Labels Applied (recent)
 - #4432, #4371 → `agentic-workflows` (May 14)
@@ -52,8 +55,9 @@
 
 ## Notes
 - link_sub_issue is NOT idempotent — always verify sub-issue not already linked before calling
-- Weekly strategy #4682 (May 11, 2026) is the current roadmap reference
-- All roadmap items are tracked
+- Weekly strategy #4776 (May 18, 2026) is the current roadmap reference
+- DevContainer scaffolding issue: created this run, check for issue number next run
+- eBPF traffic observability issue: created this run, check for issue number next run
 - Issue #4675 CLOSED (completed) — Talos disk encryption implemented in #4676
 - Issue #4316 CLOSED (completed) — ArgoCD v3.4 done
 - Issue #4473 CLOSED — vCluster v0.34 done (merged #4734)
@@ -61,5 +65,4 @@
 - PR #4769 (fix kubeconfig context): human PR by devantler, open for review
 - PR #4741 (toolgen): human PR by devantler, open for review
 - Duplicate patterns in v1alpha1 enum types are intentional (nolint:dupl) — do NOT refactor Set() methods
-- PR #4757 CLOSED/merged — diagnose report formatter tests
-- Run 2026-05-17: Tasks 3 (no bugs), 5 (deferred - 2 PRs open), 11 (all items tracked), 13 (updated #4501)
+- Run 2026-05-18: Tasks 11 (2 new issues from #4776), 3 (no bugs), 2 (no unengaged issues), 13 (updated #4501)

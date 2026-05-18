@@ -1,6 +1,6 @@
 {
-  "last_run": "2026-05-17T01:17:00Z",
-  "workflow_run_id": "25977733168",
+  "last_run": "2026-05-18T13:35:00Z",
+  "workflow_run_id": "26036747411",
   "commented_issues": {
     "4675": "2026-05-10",
     "4646": "2026-05-08",
@@ -37,14 +37,13 @@
     "4354": "2026-05-07",
     "4674": "2026-05-12",
     "4423": "2026-05-11",
-    "4474": "2026-05-13"
+    "4474": "2026-05-13",
+    "3983": "2026-05-18",
+    "4768": "2026-05-17"
   },
-  "open_prs": {
-    "4771": "[Repo Assist] perf: migrate remaining sort.Strings/sort.Slice to slices package",
-    "4770": "[Repo Assist] refactor(notify): replace timingLabelWidth() with compile-time constant"
-  },
+  "open_prs": {},
   "last_code_quality_domain": "performance",
-  "issue_backlog_cursor": "4771",
+  "issue_backlog_cursor": "4773",
   "sub_issue_links": {
     "cloud_provider_parent_4627": ["3983", "4328", "4510"]
   },
@@ -61,18 +60,30 @@
     "4423": "[Repo Assist] [feature]: add build pipeline hooks to ksail workload watch",
     "4422": "[Repo Assist] [feature]: enhance ksail cluster diagnose with structured health scoring",
     "4375": "[Repo Assist] [feature]: add ksail cluster graph for multi-cluster topology",
-    "3983": "[Repo Assist] [feature]: extend Hetzner provider to K3s and Vanilla"
+    "3983": "[Repo Assist] [feature]: extend Hetzner provider to support K3s and Vanilla (Kind) distributions",
+    "TBD_devc": "[Repo Assist] [feature]: add DevContainer scaffolding to ksail cluster init",
+    "TBD_ebpf": "[Repo Assist] [feature]: add eBPF traffic observability via Hubble (ksail workload network)"
   },
+  "roadmap_items_tracked": [
+    "cluster-drift",
+    "cluster-switch-fuzzy",
+    "cluster-diagnose-json",
+    "cluster-graph",
+    "local-remote-mirroring",
+    "ephemeral-ci-mode",
+    "gke-aks-providers",
+    "vcluster-v034-compat",
+    "devcontainer-scaffolding",
+    "ebpf-traffic-observability"
+  ],
   "notes": [
     "link_sub_issue is NOT idempotent - always verify sub-issue not already linked before calling",
     "Monthly activity issue: #4501 (automation + repo-assist labelled)",
     "domain alternation: last was performance - next should be refactor",
-    "Roadmap backlog: all Now/Next/Later items tracked as of 2026-05-17",
+    "Roadmap backlog: #4776 (May 18) - DevContainer scaffolding + eBPF observability created",
     "Human PR #4769 open: fix restore host kubeconfig context after kubernetes provider create",
     "Human PR #4741 open: feat(toolgen) align MCP tool generation with best practices",
-    "All recent open issues are CI Doctor/automation or upstream-blocked",
-    "PR #4771 open: Repo Assist perf slices migration (CI passing except infra Talos flake)",
-    "PR #4770 open: Repo Assist refactor/notify timing label constant (CI passing)",
-    "Run 2026-05-17: Tasks 3 (no bugs), 5 (deferred - 2 PRs already open), 11 (all items tracked), 13 (updated #4501)"
+    "PR #4770 and #4771 - check if merged next run",
+    "Run 2026-05-18 13:35: Tasks 11 (2 new issues), 3 (no bugs), 2 (no unengaged issues), 13 (updated #4501)"
   ]
 }
