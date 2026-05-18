@@ -543,6 +543,7 @@ users:
 			err = k8s.SetKubeconfigCurrentContext(kubeconfigPath, testCase.contextName)
 			require.NoError(t, err)
 
+			//nolint:gosec // G304: Safe in test context with controlled paths
 			data, err := os.ReadFile(kubeconfigPath)
 			require.NoError(t, err)
 
