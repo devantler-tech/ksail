@@ -44,8 +44,10 @@ const (
 
 // Token optimization limits.
 const (
-	// maxDescriptionLength is the maximum length for parameter descriptions.
-	// Verbose kubectl help text is truncated to this limit.
+	// maxDescriptionLength is the base maximum length for parameter descriptions
+	// before any suffix is appended. Verbose kubectl help text is truncated to
+	// this limit; the final description may be longer (up to maxTotalFlagDescriptionLength)
+	// when an "(applies to: ...)" suffix is added for consolidated tools.
 	maxDescriptionLength = 200
 
 	// maxSubcommandDescLength is the maximum length for subcommand descriptions

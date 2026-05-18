@@ -198,7 +198,7 @@ func buildAnnotationHints(requiresPermission bool) ToolAnnotationHints {
 			ReadOnlyHint:    true,
 			DestructiveHint: false,
 			IdempotentHint:  true,
-			OpenWorldHint:   false,
+			OpenWorldHint:   true,
 		}
 	}
 
@@ -206,6 +206,6 @@ func buildAnnotationHints(requiresPermission bool) ToolAnnotationHints {
 		ReadOnlyHint:    false,
 		DestructiveHint: true,
 		IdempotentHint:  false,
-		OpenWorldHint:   false,
+		OpenWorldHint:   true,
 	}
 }

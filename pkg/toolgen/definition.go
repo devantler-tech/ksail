@@ -57,8 +57,9 @@ type ToolAnnotationHints struct {
 	// write tools whose operations are idempotent (e.g., declarative apply).
 	IdempotentHint bool
 
-	// OpenWorldHint indicates the tool interacts with external entities.
-	// False means the tool's domain of interaction is closed (e.g., local Docker/k8s).
+	// OpenWorldHint indicates the tool may interact with external entities.
+	// Always true for KSail tools because they can target remote clusters,
+	// external cloud providers (Hetzner, AWS EKS, Omni), and OCI registries.
 	OpenWorldHint bool
 }
 
