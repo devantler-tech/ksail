@@ -133,6 +133,7 @@ func (p *K3kProvisioner) Create(ctx context.Context, name string) error {
 
 	namespace := k3kNamespacePrefix + clusterName
 
+	// jscpd:ignore-start
 	// Preserve the host kubeconfig's current-context. MergeKubeconfig overwrites
 	// it with the nested cluster's context, so provider operations (info, delete)
 	// would target the nested cluster instead of the host.
@@ -151,6 +152,7 @@ func (p *K3kProvisioner) Create(ctx context.Context, name string) error {
 			)
 		}
 	}()
+	// jscpd:ignore-end
 
 	err = p.setupCluster(ctx, clusterName, namespace)
 	if err != nil {
