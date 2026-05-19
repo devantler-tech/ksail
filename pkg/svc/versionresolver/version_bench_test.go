@@ -1,6 +1,7 @@
 package versionresolver_test
 
 import (
+	"strconv"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/svc/versionresolver"
@@ -54,16 +55,16 @@ func BenchmarkFilterStable_LargeInput(b *testing.B) {
 
 	for minor := range 15 {
 		for patch := range 10 {
-			tags = append(tags, "v1."+string(rune('0'+minor))+"."+string(rune('0'+patch)))
+			tags = append(tags, "v1."+strconv.Itoa(minor)+"."+strconv.Itoa(patch))
 		}
 	}
 
 	for i := range 30 {
-		tags = append(tags, "v1.35."+string(rune('0'+i%10))+"-rc.1")
+		tags = append(tags, "v1.35."+strconv.Itoa(i%10)+"-rc.1")
 	}
 
 	for i := range 20 {
-		tags = append(tags, "v1.35."+string(rune('0'+i%10))+"-alpha.1")
+		tags = append(tags, "v1.35."+strconv.Itoa(i%10)+"-alpha.1")
 	}
 
 	versions := versionresolver.ParseTags(tags)
