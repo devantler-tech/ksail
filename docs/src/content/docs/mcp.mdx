@@ -77,9 +77,9 @@ All tools carry [MCP behavioral annotations](https://spec.modelcontextprotocol.i
 | `readOnlyHint` | `true` — safe to auto-approve | `false` |
 | `destructiveHint` | `false` | `true` — clients should warn before running |
 | `idempotentHint` | `true` | `false` |
-| `openWorldHint` | `false` | `true` — may affect external systems |
+| `openWorldHint` | `true` — may interact with external systems such as clusters or registries | `true` — may affect external systems |
 
-Clients that support MCP annotations (such as Claude Desktop) use these hints to auto-approve read-only operations and prompt for confirmation before destructive actions.
+Clients that support MCP annotations (such as Claude Desktop) use these hints to distinguish read-only operations from destructive or non-idempotent actions, while recognizing that both read and write tools may interact with external systems.
 
 ## Tool Responses
 
