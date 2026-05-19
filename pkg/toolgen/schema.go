@@ -11,7 +11,7 @@ import (
 )
 
 // buildParameterSchema creates a JSON schema from Cobra command flags.
-func buildParameterSchema(cmd *cobra.Command) map[string]any {
+func buildParameterSchema(cmd *cobra.Command, excludeFlags []string) map[string]any {
 	properties := make(map[string]any)
 	required := []string{}
 
@@ -19,6 +19,11 @@ func buildParameterSchema(cmd *cobra.Command) map[string]any {
 	cmd.Flags().VisitAll(func(flag *pflag.Flag) {
 		// Skip help flag
 		if flag.Name == helpFlagName {
+			return
+		}
+
+		// Skip excluded flags
+		if slices.Contains(excludeFlags, flag.Name) {
 			return
 		}
 
@@ -75,7 +80,7 @@ func flagToSchemaProperty(flag *pflag.Flag) map[string]any {
 // buildStandardProperty creates a property map with type information based on flag type.
 func buildStandardProperty(flag *pflag.Flag) map[string]any {
 	prop := map[string]any{
-		"description": flag.Usage,
+		"description": truncateDescription(flag.Usage, maxDescriptionLength),
 	}
 
 	switch flag.Value.Type() {
@@ -94,7 +99,12 @@ func buildStandardProperty(flag *pflag.Flag) map[string]any {
 		prop["items"] = map[string]any{"type": jsonSchemaTypeInteger}
 	case "duration":
 		prop["type"] = jsonSchemaTypeString
-		prop["description"] = flag.Usage + " (format: 1h30m, 5m, 30s)"
+
+		desc := truncateDescription(
+			flag.Usage,
+			maxDescriptionLength-len(" (format: 1h30m, 5m, 30s)"),
+		)
+		prop["description"] = desc + " (format: 1h30m, 5m, 30s)"
 	default:
 		prop["type"] = jsonSchemaTypeString
 	}
@@ -205,11 +215,11 @@ func buildEnumProperty(ev enumValuer, flag *pflag.Flag) map[string]any {
 	prop := map[string]any{
 		"type": jsonSchemaTypeString,
 		"enum": validValues,
-		"description": fmt.Sprintf(
+		"description": truncateDescription(fmt.Sprintf(
 			"%s (valid options: %s)",
 			flag.Usage,
 			strings.Join(validValues, ", "),
-		),
+		), maxDescriptionLength),
 	}
 
 	// Add default value if available
@@ -225,6 +235,10 @@ func buildEnumProperty(ev enumValuer, flag *pflag.Flag) map[string]any {
 }
 
 // extractFlags extracts flag metadata from a command.
+// All flags (including those in ExcludeFlags) are returned so that
+// handleConsolidatedTool can forward them at runtime even when they are
+// hidden from the generated JSON schema. Schema-level filtering happens
+// in mergeSubcommandFlags.
 func extractFlags(cmd *cobra.Command) map[string]*FlagDef {
 	flags := make(map[string]*FlagDef)
 
@@ -253,9 +267,11 @@ func extractFlags(cmd *cobra.Command) map[string]*FlagDef {
 }
 
 // buildConsolidatedParameterSchema builds a dynamic JSON schema for consolidated tools.
+// excludeFlags lists flags to omit from the schema (they still work at runtime).
 func buildConsolidatedParameterSchema(
 	subcommandParam string,
 	subcommands map[string]*SubcommandDef,
+	excludeFlags []string,
 ) map[string]any {
 	properties := make(map[string]any)
 	required := []string{subcommandParam}
@@ -264,7 +280,7 @@ func buildConsolidatedParameterSchema(
 	properties[subcommandParam] = buildSubcommandEnumProperty(subcommands)
 
 	// Merge and add all flags from subcommands
-	allFlags := mergeSubcommandFlags(subcommands)
+	allFlags := mergeSubcommandFlags(subcommands, excludeFlags)
 	addFlagProperties(properties, allFlags, len(subcommands))
 
 	// Add positional args parameter if any subcommand accepts them
@@ -280,11 +296,18 @@ func buildConsolidatedParameterSchema(
 // buildSubcommandEnumProperty creates the enum property for subcommand selection.
 func buildSubcommandEnumProperty(subcommands map[string]*SubcommandDef) map[string]any {
 	names := make([]string, 0, len(subcommands))
-	descriptions := make([]string, 0, len(subcommands))
-
-	for name, def := range subcommands {
+	for name := range subcommands {
 		names = append(names, name)
-		descriptions = append(descriptions, name+": "+def.Description)
+	}
+
+	slices.Sort(names)
+
+	descriptions := make([]string, 0, len(subcommands))
+	for _, name := range names {
+		descriptions = append(
+			descriptions,
+			name+": "+truncateDescription(subcommands[name].Description, maxSubcommandDescLength),
+		)
 	}
 
 	return map[string]any{
@@ -295,15 +318,36 @@ func buildSubcommandEnumProperty(subcommands map[string]*SubcommandDef) map[stri
 }
 
 // mergeSubcommandFlags collects all flags from subcommands, tracking which subcommands each applies to.
+// excludeFlags lists flags to omit from the merged result (schema-level exclusion); these flags
+// remain in each SubcommandDef.Flags so handleConsolidatedTool can forward them at runtime.
 // When multiple subcommands have the same flag name, the flag definition (type, description, etc.)
-// is taken from whichever subcommand is processed last, while AppliesToSubcommands tracks all
-// subcommands that use this flag. For consistent behavior, flags with the same name should have
-// the same type and description across subcommands.
-func mergeSubcommandFlags(subcommands map[string]*SubcommandDef) map[string]*FlagDef {
+// is taken from the first subcommand encountered (alphabetically by key), while AppliesToSubcommands
+// tracks all subcommands that use this flag. For consistent behavior, flags with the same name should
+// have the same type and description across subcommands.
+func mergeSubcommandFlags(
+	subcommands map[string]*SubcommandDef,
+	excludeFlags []string,
+) map[string]*FlagDef {
 	allFlags := make(map[string]*FlagDef)
 
-	for subCmdName, subCmd := range subcommands {
+	// Sort keys for deterministic output — first alphabetical key wins when the same flag
+	// name appears in multiple subcommands.
+	sortedKeys := make([]string, 0, len(subcommands))
+	for key := range subcommands {
+		sortedKeys = append(sortedKeys, key)
+	}
+
+	slices.Sort(sortedKeys)
+
+	for _, subCmdName := range sortedKeys {
+		subCmd := subcommands[subCmdName]
 		for flagName, flagDef := range subCmd.Flags {
+			// Skip excluded flags — they are hidden from the AI schema but still
+			// forwarded at runtime via SubcommandDef.Flags in handleConsolidatedTool.
+			if slices.Contains(excludeFlags, flagName) {
+				continue
+			}
+
 			if existing, exists := allFlags[flagName]; exists {
 				existing.AppliesToSubcommands = append(existing.AppliesToSubcommands, subCmdName)
 			} else {
@@ -318,6 +362,11 @@ func mergeSubcommandFlags(subcommands map[string]*SubcommandDef) map[string]*Fla
 				}
 			}
 		}
+	}
+
+	// Sort AppliesToSubcommands for each flag to ensure deterministic schema output.
+	for _, flagDef := range allFlags {
+		slices.Sort(flagDef.AppliesToSubcommands)
 	}
 
 	return allFlags
@@ -339,14 +388,19 @@ func addFlagProperties(
 			prop["items"] = map[string]any{"type": flagDef.ItemsType}
 		}
 
-		// Build description with conditional applicability
-		description := flagDef.Description
-		if len(flagDef.AppliesToSubcommands) < totalSubcommands {
+		// Build description with conditional applicability.
+		// Truncate the base description first, then append "(applies to: ...)" if needed.
+		description := truncateDescription(flagDef.Description, maxDescriptionLength)
+
+		applicability := float64(len(flagDef.AppliesToSubcommands)) / float64(totalSubcommands)
+		if applicability < appliesToThreshold {
 			description = fmt.Sprintf(
 				"%s (applies to: %s)",
 				description,
 				strings.Join(flagDef.AppliesToSubcommands, ", "),
 			)
+			// Enforce total cap so very long applies-to lists don't blow up the schema.
+			description = truncateDescription(description, maxTotalFlagDescriptionLength)
 		}
 
 		prop["description"] = description
@@ -428,4 +482,39 @@ func mapFlagTypeToItemsType(flagType string) string {
 	default:
 		return ""
 	}
+}
+
+// ellipsis is the suffix appended to truncated descriptions.
+const ellipsis = "..."
+
+// truncateDescription truncates a description string to maxLen bytes.
+// It tries to break at a sentence boundary ('. ') or clause boundary (', ', '; ')
+// within the limit. Falls back to a hard cut with "..." suffix.
+func truncateDescription(desc string, maxLen int) string {
+	if len(desc) <= maxLen {
+		return desc
+	}
+
+	// Guard against very small maxLen values — slice to maxLen to honour the contract.
+	if maxLen <= len(ellipsis) {
+		return ellipsis[:maxLen]
+	}
+
+	// Reserve space for the ellipsis
+	cutoff := maxLen - len(ellipsis)
+
+	// Try to break at natural boundaries in descending preference
+	for _, sep := range []string{". ", "; ", ", "} {
+		if idx := strings.LastIndex(desc[:cutoff], sep); idx > 0 {
+			return desc[:idx] + ellipsis
+		}
+	}
+
+	// Try to break at a space
+	if idx := strings.LastIndex(desc[:cutoff], " "); idx > 0 {
+		return desc[:idx] + ellipsis
+	}
+
+	// Hard cut
+	return desc[:cutoff] + ellipsis
 }

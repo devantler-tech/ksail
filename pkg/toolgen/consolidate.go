@@ -36,7 +36,7 @@ func shouldConsolidate(cmd *cobra.Command) bool {
 // commandToPermissionSplitTools splits a parent command into read and write tools based on permission.
 // It flattens all nested subcommands recursively and groups them by permission.
 // If the parent has an explicit permission, all subcommands inherit it and create a single tool.
-func commandToPermissionSplitTools(cmd *cobra.Command) []ToolDefinition {
+func commandToPermissionSplitTools(cmd *cobra.Command, excludeFlags []string) []ToolDefinition {
 	// Get the subcommand parameter name from annotation
 	subcommandParam := cmd.Annotations[AnnotationConsolidate]
 
@@ -62,6 +62,7 @@ func commandToPermissionSplitTools(cmd *cobra.Command) []ToolDefinition {
 			subcommandParam,
 			allSubcommands,
 			parentRequiresWrite,
+			excludeFlags,
 		)
 
 		return []ToolDefinition{tool}
@@ -84,6 +85,7 @@ func commandToPermissionSplitTools(cmd *cobra.Command) []ToolDefinition {
 			subcommandParam,
 			readSubcommands,
 			false, // read-only, no permission required
+			excludeFlags,
 		)
 		tools = append(tools, readTool)
 	}
@@ -96,6 +98,7 @@ func commandToPermissionSplitTools(cmd *cobra.Command) []ToolDefinition {
 			subcommandParam,
 			writeSubcommands,
 			true, // write requires permission
+			excludeFlags,
 		)
 		tools = append(tools, writeTool)
 	}
@@ -105,7 +108,10 @@ func commandToPermissionSplitTools(cmd *cobra.Command) []ToolDefinition {
 
 // collectAllSubcommands collects all subcommands recursively without regard to permission.
 // Uses relative path from parent as map key to avoid naming collisions.
-func collectAllSubcommands(parent *cobra.Command, subcommands *map[string]*SubcommandDef) {
+func collectAllSubcommands(
+	parent *cobra.Command,
+	subcommands *map[string]*SubcommandDef,
+) {
 	collectAllSubcommandsWithPrefix(parent, subcommands, "")
 }
 
@@ -167,7 +173,13 @@ func collectSubcommandsRecursively(
 	writeSubcommands *map[string]*SubcommandDef,
 	parentRequiresWrite bool,
 ) {
-	collectSubcommandsWithPrefix(parent, readSubcommands, writeSubcommands, "", parentRequiresWrite)
+	collectSubcommandsWithPrefix(
+		parent,
+		readSubcommands,
+		writeSubcommands,
+		"",
+		parentRequiresWrite,
+	)
 }
 
 // collectSubcommandsWithPrefix recursively collects subcommands with permission splitting and path prefix.
@@ -223,7 +235,12 @@ func determineWritePermission(cmd *cobra.Command, parentRequiresWrite bool) bool
 }
 
 // buildSubcommandDef creates a SubcommandDef from a command.
-func buildSubcommandDef(cmd *cobra.Command, relativeKey string) *SubcommandDef {
+// All flags (including those in ExcludeFlags) are stored so that
+// handleConsolidatedTool can forward them at runtime.
+func buildSubcommandDef(
+	cmd *cobra.Command,
+	relativeKey string,
+) *SubcommandDef {
 	return &SubcommandDef{
 		Name:         relativeKey,
 		Description:  cmd.Short,
@@ -283,12 +300,14 @@ func addToSubcommandMap(
 }
 
 // buildConsolidatedTool creates a consolidated tool definition with the given parameters.
+// excludeFlags lists flags to omit from the generated JSON schema; they still work at runtime.
 func buildConsolidatedTool(
 	toolName string,
 	cmd *cobra.Command,
 	subcommandParam string,
 	subcommands map[string]*SubcommandDef,
 	requiresPermission bool,
+	excludeFlags []string,
 ) ToolDefinition {
 	// Build description
 	description := cmd.Short
@@ -297,18 +316,20 @@ func buildConsolidatedTool(
 	}
 
 	// Build dynamic parameter schema
-	parameters := buildConsolidatedParameterSchema(subcommandParam, subcommands)
+	parameters := buildConsolidatedParameterSchema(subcommandParam, subcommands, excludeFlags)
 
 	cmdPath := cmd.CommandPath()
 	cmdParts := strings.Fields(cmdPath)
 
 	return ToolDefinition{
 		Name:               toolName,
+		Title:              buildToolTitle(toolName),
 		Description:        description,
 		Parameters:         parameters,
 		CommandPath:        cmdPath,
 		CommandParts:       cmdParts,
 		RequiresPermission: requiresPermission,
+		Annotations:        buildAnnotationHints(requiresPermission),
 		IsConsolidated:     true,
 		SubcommandParam:    subcommandParam,
 		Subcommands:        subcommands,

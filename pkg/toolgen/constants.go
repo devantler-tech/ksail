@@ -42,6 +42,29 @@ const (
 	defaultValueEmptyArray = "[]"
 )
 
+// Token optimization limits.
+const (
+	// maxDescriptionLength is the base maximum length for parameter descriptions
+	// before any suffix is appended. Verbose kubectl help text is truncated to
+	// this limit; the final description may be longer (up to maxTotalFlagDescriptionLength)
+	// when an "(applies to: ...)" suffix is added for consolidated tools.
+	maxDescriptionLength = 200
+
+	// maxSubcommandDescLength is the maximum length for subcommand descriptions
+	// in the consolidated enum property.
+	maxSubcommandDescLength = 60
+
+	// appliesToThreshold is the fraction of total subcommands above which
+	// the "(applies to: ...)" annotation is omitted. When a flag applies to
+	// >= 50% of subcommands, the annotation adds more noise than signal.
+	appliesToThreshold = 0.50
+
+	// maxTotalFlagDescriptionLength is the upper bound for a flag description
+	// including the "(applies to: ...)" suffix. Prevents the total from
+	// exceeding a reasonable size when many subcommands are listed.
+	maxTotalFlagDescriptionLength = 400
+)
+
 // Parameter key for positional arguments.
 const argsKey = "args"
 
