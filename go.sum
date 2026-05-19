@@ -700,8 +700,8 @@ github.com/coreos/go-systemd/v22 v22.7.0 h1:LAEzFkke61DFROc7zNLX/WA2i5J8gYqe0rSj
 github.com/coreos/go-systemd/v22 v22.7.0/go.mod h1:xNUYtjHu2EDXbsxz1i41wouACIwT7Ybq9o0BQhMwD0w=
 github.com/corpix/uarand v0.0.0-20170723150923-031be390f409 h1:9A+mfQmwzZ6KwUXPc8nHxFtKgn9VIvO3gXAOspIcE3s=
 github.com/corpix/uarand v0.0.0-20170723150923-031be390f409/go.mod h1:JSm890tOkDN+M1jqN8pUGDKnzJrsVbJwSMHBY4zwz7M=
-github.com/cosi-project/runtime v1.15.0 h1:53U5ZSQLlIKqDHZGV+CaZI+Z5Du6lSO9oDT8C2Lj0mA=
-github.com/cosi-project/runtime v1.15.0/go.mod h1:SfzpfNx7YwK8byi1X6ytikDXVMmbC7UpiCWdzntRf8M=
+github.com/cosi-project/runtime v1.15.1 h1:EksoHi7tMTeitEN9PiRPw2OENfAj9OejfR1TJ8AlCKw=
+github.com/cosi-project/runtime v1.15.1/go.mod h1:SfzpfNx7YwK8byi1X6ytikDXVMmbC7UpiCWdzntRf8M=
 github.com/cpuguy83/dockercfg v0.3.2 h1:DlJTyZGBDlXqUZ2Dk2Q3xHs/FtnooJJVaad2S9GKorA=
 github.com/cpuguy83/dockercfg v0.3.2/go.mod h1:sugsbF4//dDlL/i+S+rtpIWp+5h0BHJHfjj5/jFyUJc=
 github.com/cpuguy83/go-docker v0.3.0 h1:O88rocdycYvY+pUYYp0i1rRDANXHurNir3VE0F/PH3g=
