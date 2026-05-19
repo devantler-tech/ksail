@@ -1,6 +1,7 @@
 package toolgen_test
 
 import (
+	"strconv"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/toolgen"
@@ -639,30 +640,6 @@ func TestTruncateDescription(t *testing.T) {
 			maxLen:   10,
 			expected: "abcdefg...",
 		},
-		{
-			name:     "very small maxLen zero",
-			input:    "something long",
-			maxLen:   0,
-			expected: "",
-		},
-		{
-			name:     "very small maxLen one",
-			input:    "something long",
-			maxLen:   1,
-			expected: ".",
-		},
-		{
-			name:     "very small maxLen two",
-			input:    "something long",
-			maxLen:   2,
-			expected: "..",
-		},
-		{
-			name:     "very small maxLen equal to ellipsis",
-			input:    "something long",
-			maxLen:   3,
-			expected: "...",
-		},
 	}
 
 	for _, testCase := range tests {
@@ -673,6 +650,32 @@ func TestTruncateDescription(t *testing.T) {
 			assert.Equal(t, testCase.expected, result)
 			assert.LessOrEqual(t, len(result), testCase.maxLen,
 				"result length %d exceeds maxLen %d", len(result), testCase.maxLen)
+		})
+	}
+}
+
+func TestTruncateDescriptionSmallMaxLen(t *testing.T) {
+	t.Parallel()
+
+	// maxLen=0,1,2 are below len("..."); result must be truncated to maxLen bytes.
+	tests := []struct {
+		maxLen   int
+		expected string
+	}{
+		{0, ""},
+		{1, "."},
+		{2, ".."},
+		{3, "..."},
+	}
+
+	for _, tc := range tests {
+		t.Run("maxLen="+strconv.Itoa(tc.maxLen), func(t *testing.T) {
+			t.Parallel()
+
+			result := toolgen.TruncateDescription("something long", tc.maxLen)
+			assert.Equal(t, tc.expected, result)
+			assert.LessOrEqual(t, len(result), tc.maxLen,
+				"result length %d exceeds maxLen %d", len(result), tc.maxLen)
 		})
 	}
 }
