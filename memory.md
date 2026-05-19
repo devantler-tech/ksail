@@ -1,13 +1,14 @@
 # Repo Assist Memory
 
 ## Last Run
-2026-05-18 13:35 UTC — Run #26036747411
+2026-05-19 13:27 UTC — Run #26100174348
 
 ## Monthly Activity Issue
 - May 2026: #4501 (open)
 
 ## Open Repo Assist PRs
-- (check current state — #4770 and #4771 may have merged)
+- #4781: test(image): add direct unit tests for isHelperContainer helper (open, CI mostly passing - one flaky Talos test)
+- repo-assist/improve-picker-filter-and-parsetags-perf: feat(picker): add / filter mode + ParseTags fast-path (created this run)
 
 ## Issue Comments Made (with run)
 - #4674 (Hetzner CCM taint race): 2026-05-12
@@ -30,24 +31,24 @@
 - #4510: [chore] GKE/AKS providers (sub-issue of #4627)
 - #4474: cluster diff command
 - #4473: vCluster v0.34 compat (merged #4734)
-- #4465: cluster switch fuzzy search
+- #4465: cluster switch fuzzy search (partially addressed by this run's PR)
 - #4423: workload watch hooks
 - #4422: cluster diagnose health scoring
 - #4375: cluster graph topology
 - #3983: Hetzner K3s/Vanilla (sub-issue of #4627)
-- TBD: [feature] DevContainer scaffolding (created run #26036747411)
-- TBD: [feature] eBPF traffic observability via Hubble (created run #26036747411)
+- #4777: [feature] DevContainer scaffolding
+- #4778: [feature] eBPF traffic observability via Hubble
 
 ## Sub-Issue Links (verified)
-- #4627 parent: #3983, #4328, #4510 (all linked, all open as of 2026-05-17)
+- #4627 parent: #3983, #4328, #4510 (all linked, all open as of 2026-05-19)
 
 ## Code Quality Domain Alternation
-- Last domain: performance (Task 5, 2026-05-16)
-- Next for Task 5: refactor (deferred - 2 PRs open)
+- Last domain: testing (Task 9, 2026-05-19 AM)
+- Next for Task 5: refactor
 
 ## Backlog Cursor
-- Issues processed through #4773 (as of 2026-05-18)
-- Roadmap from discussion #4776 (May 18, 2026): DevContainer scaffolding + eBPF observability created; all other items tracked
+- Issues processed through #4780 (as of 2026-05-19)
+- Roadmap from discussion #4776 (May 18, 2026): all items tracked
 
 ## Labels Applied (recent)
 - #4432, #4371 → `agentic-workflows` (May 14)
@@ -56,13 +57,11 @@
 ## Notes
 - link_sub_issue is NOT idempotent — always verify sub-issue not already linked before calling
 - Weekly strategy #4776 (May 18, 2026) is the current roadmap reference
-- DevContainer scaffolding issue: created this run, check for issue number next run
-- eBPF traffic observability issue: created this run, check for issue number next run
 - Issue #4675 CLOSED (completed) — Talos disk encryption implemented in #4676
 - Issue #4316 CLOSED (completed) — ArgoCD v3.4 done
 - Issue #4473 CLOSED — vCluster v0.34 done (merged #4734)
 - Issue #4681: CI workload-timeout (blocked by workflows permission, needs manual PR creation)
 - PR #4769 (fix kubeconfig context): human PR by devantler, open for review
-- PR #4741 (toolgen): human PR by devantler, open for review
+- PR #4741 (toolgen): human PR by devantler, merged (PR #4794 docs follow-up open)
 - Duplicate patterns in v1alpha1 enum types are intentional (nolint:dupl) — do NOT refactor Set() methods
-- Run 2026-05-18: Tasks 11 (2 new issues from #4776), 3 (no bugs), 2 (no unengaged issues), 13 (updated #4501)
+- Run 2026-05-19 13:27: Tasks 12 (no orphans; all #4627 sub-issues open), 8 (ParseTags fast-path + benchmarks), 10 (picker filter mode - partial Fixes #4465), 13 (updated #4501)

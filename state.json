@@ -1,6 +1,6 @@
 {
-  "last_run": "2026-05-19T01:16:58Z",
-  "workflow_run_id": "26070112268",
+  "last_run": "2026-05-19T13:27:36Z",
+  "workflow_run_id": "26100174348",
   "commented_issues": {
     "4675": "2026-05-10",
     "4646": "2026-05-08",
@@ -42,9 +42,10 @@
     "4768": "2026-05-17"
   },
   "open_prs": {
-    "repo-assist/test-image-helper-container": "test(image): add direct unit tests for isHelperContainer helper (pending creation)"
+    "repo-assist/test-image-helper-container-1272f7dad5fc2cb2": "test(image): add direct unit tests for isHelperContainer helper",
+    "repo-assist/improve-picker-filter-and-parsetags-perf": "feat(picker): add / filter mode + ParseTags fast-path optimisation"
   },
-  "last_code_quality_domain": "testing",
+  "last_code_quality_domain": "performance",
   "issue_backlog_cursor": "4780",
   "sub_issue_links": {
     "cloud_provider_parent_4627": ["3983", "4328", "4510"]
@@ -81,10 +82,9 @@
   "notes": [
     "link_sub_issue is NOT idempotent - always verify sub-issue not already linked before calling",
     "Monthly activity issue: #4501 (automation + repo-assist labelled)",
-    "domain alternation: last was testing - next should be refactor",
+    "domain alternation: last was performance - next should be refactor",
     "Human PR #4769 open: fix restore host kubeconfig context after kubernetes provider create",
-    "Human PR #4741 open: feat(toolgen) align MCP tool generation with best practices",
-    "Run 2026-05-19 01:16: Tasks 9 (PR created: test image isHelperContainer), 1 (labelled #4743/#4432/#4371), 4 (no opportunities), 13 (updated #4501)",
-    "PR repo-assist/test-image-helper-container created: test(image): add direct unit tests for isHelperContainer helper"
+    "Human PR #4794 open: docs(mcp): document MCP tool annotations for read/write hints",
+    "Run 2026-05-19 13:27: Tasks 12 (no orphan clusters), 8 (ParseTags fast-path + new benchmarks), 10 (picker / filter mode, partial Fixes #4465), 13 (updated #4501)"
   ]
 }
