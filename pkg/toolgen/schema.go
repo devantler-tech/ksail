@@ -506,7 +506,7 @@ func truncateDescription(desc string, maxLen int) string {
 	// Try to break at natural boundaries in descending preference
 	for _, sep := range []string{". ", "; ", ", "} {
 		if idx := strings.LastIndex(desc[:cutoff], sep); idx > 0 {
-			return desc[:idx+len(sep)-1] + ellipsis
+			return desc[:idx] + ellipsis
 		}
 	}
 

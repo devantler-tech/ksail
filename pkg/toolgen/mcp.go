@@ -82,7 +82,7 @@ func addMCPTool(server *mcp.Server, tool ToolDefinition, opts ToolOptions) {
 // DestructiveHint and OpenWorldHint use *bool in the MCP SDK because nil and false
 // have different meanings per the MCP spec (nil means "unset/unknown"; false is explicit).
 // KSail always provides explicit values for all hints, so nil is never used here.
-// ReadOnlyHint and IdempotentHint are plain bool (nil defaults to false = zero value).
+// ReadOnlyHint and IdempotentHint are plain bool whose zero value is false.
 func buildMCPAnnotations(tool ToolDefinition) *mcp.ToolAnnotations {
 	return &mcp.ToolAnnotations{
 		Title:           tool.Title,

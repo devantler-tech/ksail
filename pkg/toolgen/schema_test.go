@@ -620,13 +620,13 @@ func TestTruncateDescription(t *testing.T) {
 			name:     "truncate at sentence boundary",
 			input:    "First sentence. Second sentence that is longer and pushes past the limit.",
 			maxLen:   30,
-			expected: "First sentence....",
+			expected: "First sentence...",
 		},
 		{
 			name:     "truncate at clause boundary",
 			input:    "Main clause, secondary clause that extends beyond the boundary",
 			maxLen:   30,
-			expected: "Main clause,...",
+			expected: "Main clause...",
 		},
 		{
 			name:     "truncate at space",
