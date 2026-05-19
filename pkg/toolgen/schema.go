@@ -324,7 +324,10 @@ func buildSubcommandEnumProperty(subcommands map[string]*SubcommandDef) map[stri
 // is taken from whichever subcommand is processed last, while AppliesToSubcommands tracks all
 // subcommands that use this flag. For consistent behavior, flags with the same name should have
 // the same type and description across subcommands.
-func mergeSubcommandFlags(subcommands map[string]*SubcommandDef, excludeFlags []string) map[string]*FlagDef {
+func mergeSubcommandFlags(
+	subcommands map[string]*SubcommandDef,
+	excludeFlags []string,
+) map[string]*FlagDef {
 	allFlags := make(map[string]*FlagDef)
 
 	for subCmdName, subCmd := range subcommands {
@@ -334,6 +337,7 @@ func mergeSubcommandFlags(subcommands map[string]*SubcommandDef, excludeFlags []
 			if slices.Contains(excludeFlags, flagName) {
 				continue
 			}
+
 			if existing, exists := allFlags[flagName]; exists {
 				existing.AppliesToSubcommands = append(existing.AppliesToSubcommands, subCmdName)
 			} else {

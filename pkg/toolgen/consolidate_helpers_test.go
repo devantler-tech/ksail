@@ -302,7 +302,11 @@ func TestGenerateTools_ConsolidateWithParentPermission(t *testing.T) {
 	require.True(t, hasEncrypt, "encrypt subcommand should be present")
 
 	_, hasServerInFlags := encryptSubcmd.Flags["server"]
-	assert.True(t, hasServerInFlags, "server flag should be present in SubcommandDef.Flags for runtime forwarding")
+	assert.True(
+		t,
+		hasServerInFlags,
+		"server flag should be present in SubcommandDef.Flags for runtime forwarding",
+	)
 
 	schemaProps, _ := tools[0].Parameters["properties"].(map[string]any)
 	_, hasServerInSchema := schemaProps["server"]
