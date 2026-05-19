@@ -54,7 +54,7 @@ func commandToPermissionSplitTools(cmd *cobra.Command, excludeFlags []string) []
 	// If parent has explicit permission, create single tool without splitting
 	if parentHasPermission {
 		allSubcommands := make(map[string]*SubcommandDef)
-		collectAllSubcommands(cmd, &allSubcommands, excludeFlags)
+		collectAllSubcommands(cmd, &allSubcommands)
 
 		tool := buildConsolidatedTool(
 			baseName,
@@ -62,6 +62,7 @@ func commandToPermissionSplitTools(cmd *cobra.Command, excludeFlags []string) []
 			subcommandParam,
 			allSubcommands,
 			parentRequiresWrite,
+			excludeFlags,
 		)
 
 		return []ToolDefinition{tool}
@@ -71,7 +72,7 @@ func commandToPermissionSplitTools(cmd *cobra.Command, excludeFlags []string) []
 	readSubcommands := make(map[string]*SubcommandDef)
 	writeSubcommands := make(map[string]*SubcommandDef)
 
-	collectSubcommandsRecursively(cmd, &readSubcommands, &writeSubcommands, false, excludeFlags)
+	collectSubcommandsRecursively(cmd, &readSubcommands, &writeSubcommands, false)
 
 	// Build tool definitions
 	var tools []ToolDefinition
@@ -84,6 +85,7 @@ func commandToPermissionSplitTools(cmd *cobra.Command, excludeFlags []string) []
 			subcommandParam,
 			readSubcommands,
 			false, // read-only, no permission required
+			excludeFlags,
 		)
 		tools = append(tools, readTool)
 	}
@@ -96,6 +98,7 @@ func commandToPermissionSplitTools(cmd *cobra.Command, excludeFlags []string) []
 			subcommandParam,
 			writeSubcommands,
 			true, // write requires permission
+			excludeFlags,
 		)
 		tools = append(tools, writeTool)
 	}
@@ -108,9 +111,8 @@ func commandToPermissionSplitTools(cmd *cobra.Command, excludeFlags []string) []
 func collectAllSubcommands(
 	parent *cobra.Command,
 	subcommands *map[string]*SubcommandDef,
-	excludeFlags []string,
 ) {
-	collectAllSubcommandsWithPrefix(parent, subcommands, "", excludeFlags)
+	collectAllSubcommandsWithPrefix(parent, subcommands, "")
 }
 
 // collectAllSubcommandsWithPrefix recursively collects subcommands with a path prefix.
@@ -118,7 +120,6 @@ func collectAllSubcommandsWithPrefix(
 	cmd *cobra.Command,
 	subcommands *map[string]*SubcommandDef,
 	prefix string,
-	excludeFlags []string,
 ) {
 	for _, subCmd := range cmd.Commands() {
 		// Skip hidden subcommands
@@ -134,7 +135,7 @@ func collectAllSubcommandsWithPrefix(
 
 		subCmdPath := subCmd.CommandPath()
 		subCmdParts := strings.Fields(subCmdPath)
-		flags := extractFlags(subCmd, excludeFlags)
+		flags := extractFlags(subCmd)
 
 		// If this subcommand has its own children, check if it's also runnable
 		if len(subCmd.Commands()) > 0 {
@@ -149,7 +150,7 @@ func collectAllSubcommandsWithPrefix(
 				}
 			}
 			// Recursively collect nested subcommands with updated prefix
-			collectAllSubcommandsWithPrefix(subCmd, subcommands, relativeKey, excludeFlags)
+			collectAllSubcommandsWithPrefix(subCmd, subcommands, relativeKey)
 		} else {
 			// Leaf command - add it to the map
 			(*subcommands)[relativeKey] = &SubcommandDef{
@@ -171,7 +172,6 @@ func collectSubcommandsRecursively(
 	readSubcommands *map[string]*SubcommandDef,
 	writeSubcommands *map[string]*SubcommandDef,
 	parentRequiresWrite bool,
-	excludeFlags []string,
 ) {
 	collectSubcommandsWithPrefix(
 		parent,
@@ -179,7 +179,6 @@ func collectSubcommandsRecursively(
 		writeSubcommands,
 		"",
 		parentRequiresWrite,
-		excludeFlags,
 	)
 }
 
@@ -190,7 +189,6 @@ func collectSubcommandsWithPrefix(
 	writeSubcommands *map[string]*SubcommandDef,
 	prefix string,
 	parentRequiresWrite bool,
-	excludeFlags []string,
 ) {
 	for _, subCmd := range cmd.Commands() {
 		// Skip hidden subcommands
@@ -204,7 +202,7 @@ func collectSubcommandsWithPrefix(
 		// Determine if this command requires write permission
 		requiresWrite := determineWritePermission(subCmd, parentRequiresWrite)
 
-		subcommandDef := buildSubcommandDef(subCmd, relativeKey, excludeFlags)
+		subcommandDef := buildSubcommandDef(subCmd, relativeKey)
 
 		// Process subcommand based on whether it has children
 		processSubcommand(
@@ -214,7 +212,6 @@ func collectSubcommandsWithPrefix(
 			requiresWrite,
 			readSubcommands,
 			writeSubcommands,
-			excludeFlags,
 		)
 	}
 }
@@ -238,16 +235,17 @@ func determineWritePermission(cmd *cobra.Command, parentRequiresWrite bool) bool
 }
 
 // buildSubcommandDef creates a SubcommandDef from a command.
+// All flags (including those in ExcludeFlags) are stored so that
+// handleConsolidatedTool can forward them at runtime.
 func buildSubcommandDef(
 	cmd *cobra.Command,
 	relativeKey string,
-	excludeFlags []string,
 ) *SubcommandDef {
 	return &SubcommandDef{
 		Name:         relativeKey,
 		Description:  cmd.Short,
 		CommandParts: strings.Fields(cmd.CommandPath()),
-		Flags:        extractFlags(cmd, excludeFlags),
+		Flags:        extractFlags(cmd),
 		AcceptsArgs:  acceptsPositionalArgs(cmd),
 	}
 }
@@ -260,7 +258,6 @@ func processSubcommand(
 	requiresWrite bool,
 	readSubcommands *map[string]*SubcommandDef,
 	writeSubcommands *map[string]*SubcommandDef,
-	excludeFlags []string,
 ) {
 	hasChildren := len(subCmd.Commands()) > 0
 
@@ -283,7 +280,6 @@ func processSubcommand(
 			writeSubcommands,
 			relativeKey,
 			requiresWrite,
-			excludeFlags,
 		)
 	}
 }
@@ -304,12 +300,14 @@ func addToSubcommandMap(
 }
 
 // buildConsolidatedTool creates a consolidated tool definition with the given parameters.
+// excludeFlags lists flags to omit from the generated JSON schema; they still work at runtime.
 func buildConsolidatedTool(
 	toolName string,
 	cmd *cobra.Command,
 	subcommandParam string,
 	subcommands map[string]*SubcommandDef,
 	requiresPermission bool,
+	excludeFlags []string,
 ) ToolDefinition {
 	// Build description
 	description := cmd.Short
@@ -318,7 +316,7 @@ func buildConsolidatedTool(
 	}
 
 	// Build dynamic parameter schema
-	parameters := buildConsolidatedParameterSchema(subcommandParam, subcommands)
+	parameters := buildConsolidatedParameterSchema(subcommandParam, subcommands, excludeFlags)
 
 	cmdPath := cmd.CommandPath()
 	cmdParts := strings.Fields(cmdPath)

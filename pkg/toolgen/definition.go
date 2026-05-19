@@ -6,7 +6,7 @@ type ToolDefinition struct {
 	// Name is the tool identifier (e.g., "ksail_cluster_create").
 	Name string
 
-	// Title is a human-readable display name for the tool (e.g., "Cluster Management").
+	// Title is a human-readable display name for the tool (e.g., "Cluster Create", "Workload Read").
 	// Used by MCP clients for UI display. Precedence: Title > Name.
 	Title string
 

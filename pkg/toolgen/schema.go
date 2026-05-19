@@ -235,16 +235,15 @@ func buildEnumProperty(ev enumValuer, flag *pflag.Flag) map[string]any {
 }
 
 // extractFlags extracts flag metadata from a command.
-func extractFlags(cmd *cobra.Command, excludeFlags []string) map[string]*FlagDef {
+// All flags (including those in ExcludeFlags) are returned so that
+// handleConsolidatedTool can forward them at runtime even when they are
+// hidden from the generated JSON schema. Schema-level filtering happens
+// in mergeSubcommandFlags.
+func extractFlags(cmd *cobra.Command) map[string]*FlagDef {
 	flags := make(map[string]*FlagDef)
 
 	cmd.Flags().VisitAll(func(flag *pflag.Flag) {
 		if flag.Name == helpFlagName {
-			return
-		}
-
-		// Skip excluded flags
-		if slices.Contains(excludeFlags, flag.Name) {
 			return
 		}
 
@@ -268,9 +267,11 @@ func extractFlags(cmd *cobra.Command, excludeFlags []string) map[string]*FlagDef
 }
 
 // buildConsolidatedParameterSchema builds a dynamic JSON schema for consolidated tools.
+// excludeFlags lists flags to omit from the schema (they still work at runtime).
 func buildConsolidatedParameterSchema(
 	subcommandParam string,
 	subcommands map[string]*SubcommandDef,
+	excludeFlags []string,
 ) map[string]any {
 	properties := make(map[string]any)
 	required := []string{subcommandParam}
@@ -279,7 +280,7 @@ func buildConsolidatedParameterSchema(
 	properties[subcommandParam] = buildSubcommandEnumProperty(subcommands)
 
 	// Merge and add all flags from subcommands
-	allFlags := mergeSubcommandFlags(subcommands)
+	allFlags := mergeSubcommandFlags(subcommands, excludeFlags)
 	addFlagProperties(properties, allFlags, len(subcommands))
 
 	// Add positional args parameter if any subcommand accepts them
@@ -317,15 +318,22 @@ func buildSubcommandEnumProperty(subcommands map[string]*SubcommandDef) map[stri
 }
 
 // mergeSubcommandFlags collects all flags from subcommands, tracking which subcommands each applies to.
+// excludeFlags lists flags to omit from the merged result (schema-level exclusion); these flags
+// remain in each SubcommandDef.Flags so handleConsolidatedTool can forward them at runtime.
 // When multiple subcommands have the same flag name, the flag definition (type, description, etc.)
 // is taken from whichever subcommand is processed last, while AppliesToSubcommands tracks all
 // subcommands that use this flag. For consistent behavior, flags with the same name should have
 // the same type and description across subcommands.
-func mergeSubcommandFlags(subcommands map[string]*SubcommandDef) map[string]*FlagDef {
+func mergeSubcommandFlags(subcommands map[string]*SubcommandDef, excludeFlags []string) map[string]*FlagDef {
 	allFlags := make(map[string]*FlagDef)
 
 	for subCmdName, subCmd := range subcommands {
 		for flagName, flagDef := range subCmd.Flags {
+			// Skip excluded flags — they are hidden from the AI schema but still
+			// forwarded at runtime via SubcommandDef.Flags in handleConsolidatedTool.
+			if slices.Contains(excludeFlags, flagName) {
+				continue
+			}
 			if existing, exists := allFlags[flagName]; exists {
 				existing.AppliesToSubcommands = append(existing.AppliesToSubcommands, subCmdName)
 			} else {

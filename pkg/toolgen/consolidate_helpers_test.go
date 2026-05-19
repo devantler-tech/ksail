@@ -29,7 +29,7 @@ func TestCollectAllSubcommands_LeafChildren(t *testing.T) {
 	parent.AddCommand(createCmd, deleteCmd)
 
 	subcommands := make(map[string]*toolgen.SubcommandDef)
-	toolgen.CollectAllSubcommands(parent, &subcommands, nil)
+	toolgen.CollectAllSubcommands(parent, &subcommands)
 
 	require.Len(t, subcommands, 2)
 	assert.Contains(t, subcommands, "create")
@@ -58,7 +58,7 @@ func TestCollectAllSubcommands_SkipsHiddenCommands(t *testing.T) {
 	parent.AddCommand(visibleCmd, hiddenCmd)
 
 	subcommands := make(map[string]*toolgen.SubcommandDef)
-	toolgen.CollectAllSubcommands(parent, &subcommands, nil)
+	toolgen.CollectAllSubcommands(parent, &subcommands)
 
 	require.Len(t, subcommands, 1)
 	assert.Contains(t, subcommands, "list")
@@ -84,7 +84,7 @@ func TestCollectAllSubcommands_NestedSubcommands(t *testing.T) {
 	root.AddCommand(groupCmd)
 
 	subcommands := make(map[string]*toolgen.SubcommandDef)
-	toolgen.CollectAllSubcommands(root, &subcommands, nil)
+	toolgen.CollectAllSubcommands(root, &subcommands)
 
 	// The group is not runnable so only leaf is collected, with prefix
 	require.Len(t, subcommands, 1)
@@ -116,7 +116,7 @@ func TestCollectAllSubcommands_RunnableParentWithChildren(t *testing.T) {
 	root.AddCommand(groupCmd)
 
 	subcommands := make(map[string]*toolgen.SubcommandDef)
-	toolgen.CollectAllSubcommands(root, &subcommands, nil)
+	toolgen.CollectAllSubcommands(root, &subcommands)
 
 	// Both the parent (runnable with non-help flags) and leaf should be collected
 	require.Len(t, subcommands, 2)
@@ -133,7 +133,7 @@ func TestCollectAllSubcommands_Empty(t *testing.T) {
 	}
 
 	subcommands := make(map[string]*toolgen.SubcommandDef)
-	toolgen.CollectAllSubcommands(parent, &subcommands, nil)
+	toolgen.CollectAllSubcommands(parent, &subcommands)
 
 	assert.Empty(t, subcommands)
 }
@@ -153,7 +153,7 @@ func TestCollectAllSubcommandsWithPrefix(t *testing.T) {
 	parent.AddCommand(child)
 
 	subcommands := make(map[string]*toolgen.SubcommandDef)
-	toolgen.CollectAllSubcommandsWithPrefix(parent, &subcommands, "myprefix", nil)
+	toolgen.CollectAllSubcommandsWithPrefix(parent, &subcommands, "myprefix")
 
 	require.Len(t, subcommands, 1)
 	assert.Contains(t, subcommands, "myprefix_child")
@@ -174,7 +174,7 @@ func TestCollectAllSubcommandsWithPrefix_EmptyPrefix(t *testing.T) {
 	parent.AddCommand(child)
 
 	subcommands := make(map[string]*toolgen.SubcommandDef)
-	toolgen.CollectAllSubcommandsWithPrefix(parent, &subcommands, "", nil)
+	toolgen.CollectAllSubcommandsWithPrefix(parent, &subcommands, "")
 
 	require.Len(t, subcommands, 1)
 	assert.Contains(t, subcommands, "child")
@@ -203,7 +203,7 @@ func TestCollectAllSubcommands_AcceptsPositionalArgs(t *testing.T) {
 	parent.AddCommand(acceptsCmd, noArgsCmd)
 
 	subcommands := make(map[string]*toolgen.SubcommandDef)
-	toolgen.CollectAllSubcommands(parent, &subcommands, nil)
+	toolgen.CollectAllSubcommands(parent, &subcommands)
 
 	require.Len(t, subcommands, 2)
 	assert.True(t, subcommands["accepts"].AcceptsArgs, "nil Args should accept positional args")
@@ -227,7 +227,7 @@ func TestCollectAllSubcommands_PreservesFlags(t *testing.T) {
 	parent.AddCommand(child)
 
 	subcommands := make(map[string]*toolgen.SubcommandDef)
-	toolgen.CollectAllSubcommands(parent, &subcommands, nil)
+	toolgen.CollectAllSubcommands(parent, &subcommands)
 
 	require.Contains(t, subcommands, "child")
 	assert.NotEmpty(t, subcommands["child"].Flags, "flags should be collected")
@@ -249,7 +249,7 @@ func TestCollectAllSubcommands_DeepNesting(t *testing.T) {
 	root.AddCommand(level1)
 
 	subcommands := make(map[string]*toolgen.SubcommandDef)
-	toolgen.CollectAllSubcommands(root, &subcommands, nil)
+	toolgen.CollectAllSubcommands(root, &subcommands)
 
 	require.Len(t, subcommands, 1)
 	assert.Contains(t, subcommands, "level1_level2_leaf")
@@ -278,7 +278,7 @@ func TestGenerateTools_ConsolidateWithParentPermission(t *testing.T) {
 		RunE: func(_ *cobra.Command, _ []string) error { return nil },
 	}
 	// Add a flag that is in DefaultOptions().ExcludeFlags to exercise
-	// the slices.Contains(excludeFlags, flag.Name) branch inside extractFlags.
+	// the schema-level exclusion path in mergeSubcommandFlags.
 	encryptCmd.Flags().String("server", "", "API server URL")
 	encryptCmd.Flags().String("output", "yaml", "Output format")
 
@@ -296,12 +296,17 @@ func TestGenerateTools_ConsolidateWithParentPermission(t *testing.T) {
 	assert.Equal(t, "cipher", tools[0].Name)
 	assert.True(t, tools[0].RequiresPermission, "parent permission should propagate to the tool")
 
-	// The "server" flag should be excluded from the encrypt subcommand's schema.
+	// The "server" flag must be present in SubcommandDef.Flags for runtime forwarding,
+	// but absent from the generated schema properties (schema-level exclusion).
 	encryptSubcmd, hasEncrypt := tools[0].Subcommands["encrypt"]
 	require.True(t, hasEncrypt, "encrypt subcommand should be present")
 
-	_, hasServer := encryptSubcmd.Flags["server"]
-	assert.False(t, hasServer, "server flag should be excluded by ExcludeFlags")
+	_, hasServerInFlags := encryptSubcmd.Flags["server"]
+	assert.True(t, hasServerInFlags, "server flag should be present in SubcommandDef.Flags for runtime forwarding")
+
+	schemaProps, _ := tools[0].Parameters["properties"].(map[string]any)
+	_, hasServerInSchema := schemaProps["server"]
+	assert.False(t, hasServerInSchema, "server flag should be excluded from the generated schema")
 
 	_, hasOutput := encryptSubcmd.Flags["output"]
 	assert.True(t, hasOutput, "output flag should be present")
