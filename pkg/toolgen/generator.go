@@ -191,7 +191,7 @@ func buildToolTitle(strippedPath string) string {
 
 // buildAnnotationHints creates behavioral hints based on permission level.
 // Read-only tools are marked safe; write tools are marked destructive and non-idempotent.
-// All KSail tools operate on local Docker/k8s, so openWorldHint is always false.
+// All KSail tools can interact with external entities (remote clusters, cloud providers, OCI registries), so openWorldHint is always true.
 func buildAnnotationHints(requiresPermission bool) ToolAnnotationHints {
 	if !requiresPermission {
 		return ToolAnnotationHints{

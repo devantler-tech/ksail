@@ -473,9 +473,9 @@ func truncateDescription(desc string, maxLen int) string {
 		return desc
 	}
 
-	// Guard against very small maxLen values
+	// Guard against very small maxLen values — slice to maxLen to honour the contract.
 	if maxLen <= len(ellipsis) {
-		return ellipsis
+		return ellipsis[:maxLen]
 	}
 
 	// Reserve space for the ellipsis

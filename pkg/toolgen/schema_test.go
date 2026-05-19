@@ -640,7 +640,25 @@ func TestTruncateDescription(t *testing.T) {
 			expected: "abcdefg...",
 		},
 		{
-			name:     "very small maxLen",
+			name:     "very small maxLen zero",
+			input:    "something long",
+			maxLen:   0,
+			expected: "",
+		},
+		{
+			name:     "very small maxLen one",
+			input:    "something long",
+			maxLen:   1,
+			expected: ".",
+		},
+		{
+			name:     "very small maxLen two",
+			input:    "something long",
+			maxLen:   2,
+			expected: "..",
+		},
+		{
+			name:     "very small maxLen equal to ellipsis",
 			input:    "something long",
 			maxLen:   3,
 			expected: "...",
