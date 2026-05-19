@@ -668,14 +668,14 @@ func TestTruncateDescriptionSmallMaxLen(t *testing.T) {
 		{3, "..."},
 	}
 
-	for _, tc := range tests {
-		t.Run("maxLen="+strconv.Itoa(tc.maxLen), func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run("maxLen="+strconv.Itoa(testCase.maxLen), func(t *testing.T) {
 			t.Parallel()
 
-			result := toolgen.TruncateDescription("something long", tc.maxLen)
-			assert.Equal(t, tc.expected, result)
-			assert.LessOrEqual(t, len(result), tc.maxLen,
-				"result length %d exceeds maxLen %d", len(result), tc.maxLen)
+			result := toolgen.TruncateDescription("something long", testCase.maxLen)
+			assert.Equal(t, testCase.expected, result)
+			assert.LessOrEqual(t, len(result), testCase.maxLen,
+				"result length %d exceeds maxLen %d", len(result), testCase.maxLen)
 		})
 	}
 }
