@@ -321,16 +321,25 @@ func buildSubcommandEnumProperty(subcommands map[string]*SubcommandDef) map[stri
 // excludeFlags lists flags to omit from the merged result (schema-level exclusion); these flags
 // remain in each SubcommandDef.Flags so handleConsolidatedTool can forward them at runtime.
 // When multiple subcommands have the same flag name, the flag definition (type, description, etc.)
-// is taken from whichever subcommand is processed last, while AppliesToSubcommands tracks all
-// subcommands that use this flag. For consistent behavior, flags with the same name should have
-// the same type and description across subcommands.
+// is taken from the first subcommand encountered (alphabetically by key), while AppliesToSubcommands
+// tracks all subcommands that use this flag. For consistent behavior, flags with the same name should
+// have the same type and description across subcommands.
 func mergeSubcommandFlags(
 	subcommands map[string]*SubcommandDef,
 	excludeFlags []string,
 ) map[string]*FlagDef {
 	allFlags := make(map[string]*FlagDef)
 
-	for subCmdName, subCmd := range subcommands {
+	// Sort keys for deterministic output — first alphabetical key wins when the same flag
+	// name appears in multiple subcommands.
+	sortedKeys := make([]string, 0, len(subcommands))
+	for key := range subcommands {
+		sortedKeys = append(sortedKeys, key)
+	}
+	slices.Sort(sortedKeys)
+
+	for _, subCmdName := range sortedKeys {
+		subCmd := subcommands[subCmdName]
 		for flagName, flagDef := range subCmd.Flags {
 			// Skip excluded flags — they are hidden from the AI schema but still
 			// forwarded at runtime via SubcommandDef.Flags in handleConsolidatedTool.

@@ -3,7 +3,7 @@ package toolgen
 // ToolDefinition is an SDK-agnostic representation of a tool generated from a Cobra command.
 // It contains all the metadata needed to create SDK-specific tools (Copilot, MCP, etc.).
 type ToolDefinition struct {
-	// Name is the tool identifier (e.g., "ksail_cluster_create").
+	// Name is the tool identifier (e.g., "cluster_create", "workload_read").
 	Name string
 
 	// Title is a human-readable display name for the tool (e.g., "Cluster Create", "Workload Read").

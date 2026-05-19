@@ -259,8 +259,8 @@ func TestCollectAllSubcommands_DeepNesting(t *testing.T) {
 // branch of commandToPermissionSplitTools.
 // When a command carries both AnnotationConsolidate and AnnotationPermission,
 // all subcommands collapse into a SINGLE tool instead of a read/write pair.
-// Adding an excluded flag to a subcommand also exercises the ExcludeFlags path
-// inside extractFlags during consolidation.
+// Adding an excluded flag to a subcommand also exercises the schema-level exclusion
+// path in mergeSubcommandFlags during consolidation.
 func TestGenerateTools_ConsolidateWithParentPermission(t *testing.T) {
 	t.Parallel()
 
