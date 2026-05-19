@@ -4,6 +4,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/devantler-tech/ksail/v7/pkg/strutil"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -35,7 +36,7 @@ func generateToolsRecursive(cmd *cobra.Command, tools *[]ToolDefinition, opts To
 
 	// Check if this command should be consolidated (only if not excluded)
 	if !isExcluded && shouldConsolidate(cmd) {
-		splitTools := commandToPermissionSplitTools(cmd)
+		splitTools := commandToPermissionSplitTools(cmd, opts.ExcludeFlags)
 		*tools = append(*tools, splitTools...)
 
 		return // Don't traverse children - they're now part of the consolidated tool(s)
@@ -70,7 +71,7 @@ func processCommandAndChildren(
 
 	// Generate tool for runnable commands (if not excluded)
 	if !isExcluded && isRunnableCommand(cmd) {
-		tool := commandToToolDefinition(cmd)
+		tool := commandToToolDefinition(cmd, opts.ExcludeFlags)
 		*tools = append(*tools, tool)
 	}
 }
@@ -148,7 +149,7 @@ func stripRootCommand(commandPath string) string {
 }
 
 // commandToToolDefinition converts a Cobra command to a tool definition.
-func commandToToolDefinition(cmd *cobra.Command) ToolDefinition {
+func commandToToolDefinition(cmd *cobra.Command, excludeFlags []string) ToolDefinition {
 	// Build tool name: "ksail cluster create" -> "cluster_create"
 	cmdPath := cmd.CommandPath()
 	strippedPath := stripRootCommand(cmdPath)
@@ -161,7 +162,7 @@ func commandToToolDefinition(cmd *cobra.Command) ToolDefinition {
 	}
 
 	// Build JSON schema from flags
-	parameters := buildParameterSchema(cmd)
+	parameters := buildParameterSchema(cmd, excludeFlags)
 
 	// Check if permission is required
 	requiresPermission := cmd.Annotations != nil &&
@@ -172,10 +173,40 @@ func commandToToolDefinition(cmd *cobra.Command) ToolDefinition {
 
 	return ToolDefinition{
 		Name:               toolName,
+		Title:              buildToolTitle(strippedPath),
 		Description:        description,
 		Parameters:         parameters,
 		CommandPath:        cmdPath,
 		CommandParts:       cmdParts,
 		RequiresPermission: requiresPermission,
+		Annotations:        buildAnnotationHints(requiresPermission),
+	}
+}
+
+// buildToolTitle generates a human-readable title from a tool path.
+// Example: "cluster create" -> "Cluster Create", "workload_read" -> "Workload Read".
+func buildToolTitle(strippedPath string) string {
+	return strutil.SnakeCaseToTitle(strippedPath)
+}
+
+// buildAnnotationHints creates behavioral hints based on permission level.
+// Read-only tools are marked safe; write tools are marked destructive and non-idempotent.
+// All KSail tools set openWorldHint=true: they can target remote clusters,
+// cloud providers (Hetzner, AWS EKS), and OCI registries.
+func buildAnnotationHints(requiresPermission bool) ToolAnnotationHints {
+	if !requiresPermission {
+		return ToolAnnotationHints{
+			ReadOnlyHint:    true,
+			DestructiveHint: false,
+			IdempotentHint:  true,
+			OpenWorldHint:   true,
+		}
+	}
+
+	return ToolAnnotationHints{
+		ReadOnlyHint:    false,
+		DestructiveHint: true,
+		IdempotentHint:  false,
+		OpenWorldHint:   true,
 	}
 }

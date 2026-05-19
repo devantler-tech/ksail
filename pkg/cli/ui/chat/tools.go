@@ -1,8 +1,9 @@
 package chat
 
 import (
-	"strings"
 	"time"
+
+	"github.com/devantler-tech/ksail/v7/pkg/strutil"
 )
 
 // toolStatus represents the current state of a tool execution.
@@ -34,14 +35,7 @@ func humanizeToolName(name string, mappings map[string]string) string {
 	}
 
 	// Fallback: convert snake_case to Title Case
-	words := strings.Split(name, "_")
-	for i, word := range words {
-		if len(word) > 0 {
-			words[i] = strings.ToUpper(word[:1]) + word[1:]
-		}
-	}
-
-	return strings.Join(words, " ")
+	return strutil.SnakeCaseToTitle(name)
 }
 
 // extractCommandFromArgs extracts a command string from tool arguments for display.

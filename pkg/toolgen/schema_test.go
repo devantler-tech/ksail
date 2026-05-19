@@ -1,6 +1,7 @@
 package toolgen_test
 
 import (
+	"strconv"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/toolgen"
@@ -464,6 +465,25 @@ func TestBuildParameterSchema_ExcludesHelpFlag(t *testing.T) {
 	assert.True(t, hasName, "expected name property to be present")
 }
 
+// Test that flags listed in DefaultOptions.ExcludeFlags are excluded from the schema.
+func TestBuildParameterSchema_ExcludesConfiguredFlags(t *testing.T) {
+	t.Parallel()
+
+	cmd := newTestCmd()
+	// "server" is in DefaultOptions().ExcludeFlags — it should be absent from the schema.
+	cmd.Flags().String("server", "", "API server URL")
+	// "name" is not excluded — it should appear in the schema.
+	cmd.Flags().String("name", "", "Name value")
+
+	properties := generateToolProperties(t, cmd)
+
+	_, hasServer := properties["server"]
+	assert.False(t, hasServer, "server flag should be excluded by ExcludeFlags")
+
+	_, hasName := properties["name"]
+	assert.True(t, hasName, "name flag should be present in schema")
+}
+
 // Test buildEnumProperty via enum-valued flags.
 func TestBuildParameterSchema_EnumValues(t *testing.T) {
 	t.Parallel()
@@ -577,6 +597,85 @@ func TestMapFlagTypes(t *testing.T) {
 
 			require.True(t, propOK, "expected 'test' property")
 			assert.Equal(t, testCase.expectedType, propMap["type"])
+		})
+	}
+}
+
+func TestTruncateDescription(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		input    string
+		maxLen   int
+		expected string
+	}{
+		{
+			name:     "no truncation needed",
+			input:    "Short description",
+			maxLen:   100,
+			expected: "Short description",
+		},
+		{
+			name:     "truncate at sentence boundary",
+			input:    "First sentence. Second sentence that is longer and pushes past the limit.",
+			maxLen:   30,
+			expected: "First sentence...",
+		},
+		{
+			name:     "truncate at clause boundary",
+			input:    "Main clause, secondary clause that extends beyond the boundary",
+			maxLen:   30,
+			expected: "Main clause...",
+		},
+		{
+			name:     "truncate at space",
+			input:    "word1 word2 word3 word4 word5 word6 word7",
+			maxLen:   20,
+			expected: "word1 word2...",
+		},
+		{
+			name:     "hard cut no spaces",
+			input:    "abcdefghijklmnopqrstuvwxyz",
+			maxLen:   10,
+			expected: "abcdefg...",
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			result := toolgen.TruncateDescription(testCase.input, testCase.maxLen)
+			assert.Equal(t, testCase.expected, result)
+			assert.LessOrEqual(t, len(result), testCase.maxLen,
+				"result length %d exceeds maxLen %d", len(result), testCase.maxLen)
+		})
+	}
+}
+
+func TestTruncateDescriptionSmallMaxLen(t *testing.T) {
+	t.Parallel()
+
+	// maxLen=0,1,2 are below len("..."); result must be truncated to maxLen bytes.
+	tests := []struct {
+		maxLen   int
+		expected string
+	}{
+		{0, ""},
+		{1, "."},
+		{2, ".."},
+		{3, "..."},
+	}
+
+	for _, testCase := range tests {
+		t.Run("maxLen="+strconv.Itoa(testCase.maxLen), func(t *testing.T) {
+			t.Parallel()
+
+			result := toolgen.TruncateDescription("something long", testCase.maxLen)
+			assert.Equal(t, testCase.expected, result)
+			assert.LessOrEqual(t, len(result), testCase.maxLen,
+				"result length %d exceeds maxLen %d", len(result), testCase.maxLen)
 		})
 	}
 }

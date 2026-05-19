@@ -27,3 +27,6 @@ var CollectAllSubcommandsWithPrefix = collectAllSubcommandsWithPrefix
 
 // ExecuteTool exposes executeTool for testing.
 var ExecuteTool = executeTool
+
+// TruncateDescription exposes truncateDescription for testing.
+var TruncateDescription = truncateDescription

@@ -3,8 +3,12 @@ package toolgen
 // ToolDefinition is an SDK-agnostic representation of a tool generated from a Cobra command.
 // It contains all the metadata needed to create SDK-specific tools (Copilot, MCP, etc.).
 type ToolDefinition struct {
-	// Name is the tool identifier (e.g., "ksail_cluster_create").
+	// Name is the tool identifier (e.g., "cluster_create", "workload_read").
 	Name string
+
+	// Title is a human-readable display name for the tool (e.g., "Cluster Create", "Workload Read").
+	// Used by MCP clients for UI display. Precedence: Title > Name.
+	Title string
 
 	// Description provides context for the AI about what the tool does.
 	Description string
@@ -22,6 +26,10 @@ type ToolDefinition struct {
 	// RequiresPermission indicates if this tool performs edit operations.
 	RequiresPermission bool
 
+	// Annotations holds MCP behavioral hints for the tool.
+	// These help clients decide on auto-approval, warnings, and retry behavior.
+	Annotations ToolAnnotationHints
+
 	// IsConsolidated indicates if this tool represents multiple subcommands.
 	IsConsolidated bool
 
@@ -32,6 +40,27 @@ type ToolDefinition struct {
 	// Subcommands maps subcommand names to their metadata.
 	// Only populated when IsConsolidated is true.
 	Subcommands map[string]*SubcommandDef
+}
+
+// ToolAnnotationHints contains SDK-agnostic behavioral hints for a tool.
+// These map to MCP ToolAnnotations and inform client behavior.
+// KSail always sets all fields explicitly so there is no ambiguity.
+type ToolAnnotationHints struct {
+	// ReadOnlyHint indicates the tool does not modify its environment.
+	ReadOnlyHint bool
+
+	// DestructiveHint indicates the tool may perform destructive updates.
+	DestructiveHint bool
+
+	// IdempotentHint indicates repeated calls with the same args have no additional effect.
+	// Set true for both read-only tools (reads are inherently idempotent) and
+	// write tools whose operations are idempotent (e.g., declarative apply).
+	IdempotentHint bool
+
+	// OpenWorldHint indicates the tool may interact with external entities.
+	// Always true for KSail tools because they can target remote clusters,
+	// external cloud providers (Hetzner, AWS EKS, Omni), and OCI registries.
+	OpenWorldHint bool
 }
 
 // Parameter represents a single tool parameter extracted from a Cobra flag.
