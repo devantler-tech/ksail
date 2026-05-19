@@ -51,15 +51,18 @@ func BenchmarkParseTags_MixedTags(b *testing.B) {
 func BenchmarkFilterStable_LargeInput(b *testing.B) {
 	// Build 200 tags: 150 stable, 30 release-candidates, 20 alpha/beta.
 	tags := make([]string, 0, 200)
-	for minor := 0; minor < 15; minor++ {
-		for patch := 0; patch < 10; patch++ {
+
+	for minor := range 15 {
+		for patch := range 10 {
 			tags = append(tags, "v1."+string(rune('0'+minor))+"."+string(rune('0'+patch)))
 		}
 	}
-	for i := 0; i < 30; i++ {
+
+	for i := range 30 {
 		tags = append(tags, "v1.35."+string(rune('0'+i%10))+"-rc.1")
 	}
-	for i := 0; i < 20; i++ {
+
+	for i := range 20 {
 		tags = append(tags, "v1.35."+string(rune('0'+i%10))+"-alpha.1")
 	}
 
@@ -72,4 +75,3 @@ func BenchmarkFilterStable_LargeInput(b *testing.B) {
 		_ = versionresolver.FilterStable(versions)
 	}
 }
-
