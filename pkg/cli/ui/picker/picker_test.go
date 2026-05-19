@@ -158,137 +158,137 @@ func assertModel(t *testing.T, teaModel tea.Model) picker.Model {
 }
 
 func TestModel_FilterMode_EnterAndExit(t *testing.T) {
-t.Parallel()
+	t.Parallel()
 
-mdl := picker.NewModel("Pick:", []string{"alpha", "beta", "gamma"})
+	mdl := picker.NewModel("Pick:", []string{"alpha", "beta", "gamma"})
 
-// Press "/" to enter filter mode
-updated, _ := mdl.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
-mdl = assertModel(t, updated)
-assert.True(t, mdl.FilterActive())
-assert.Empty(t, mdl.Filter())
+	// Press "/" to enter filter mode
+	updated, _ := mdl.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	mdl = assertModel(t, updated)
+	assert.True(t, mdl.FilterActive())
+	assert.Empty(t, mdl.Filter())
 
-// Press Esc to exit filter mode
-updated, _ = mdl.Update(tea.KeyMsg{Type: tea.KeyEscape})
-mdl = assertModel(t, updated)
-assert.False(t, mdl.FilterActive())
-assert.Empty(t, mdl.Filter())
+	// Press Esc to exit filter mode
+	updated, _ = mdl.Update(tea.KeyMsg{Type: tea.KeyEscape})
+	mdl = assertModel(t, updated)
+	assert.False(t, mdl.FilterActive())
+	assert.Empty(t, mdl.Filter())
 }
 
 func TestModel_FilterMode_TypeToFilter(t *testing.T) {
-t.Parallel()
+	t.Parallel()
 
-mdl := picker.NewModel("Pick:", []string{"alpha", "beta", "gamma"})
+	mdl := picker.NewModel("Pick:", []string{"alpha", "beta", "gamma"})
 
-// Enter filter mode
-updated, _ := mdl.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
-mdl = assertModel(t, updated)
+	// Enter filter mode
+	updated, _ := mdl.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	mdl = assertModel(t, updated)
 
-// Type "al" to filter
-updated, _ = mdl.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
-mdl = assertModel(t, updated)
-updated, _ = mdl.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
-mdl = assertModel(t, updated)
-assert.Equal(t, "al", mdl.Filter())
+	// Type "al" to filter
+	updated, _ = mdl.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
+	mdl = assertModel(t, updated)
+	updated, _ = mdl.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
+	mdl = assertModel(t, updated)
+	assert.Equal(t, "al", mdl.Filter())
 
-view := mdl.View()
-assert.Contains(t, view, "Filter: al_")
-assert.Contains(t, view, "alpha")
-assert.NotContains(t, view, "  beta")
-assert.NotContains(t, view, "  gamma")
+	view := mdl.View()
+	assert.Contains(t, view, "Filter: al_")
+	assert.Contains(t, view, "alpha")
+	assert.NotContains(t, view, "  beta")
+	assert.NotContains(t, view, "  gamma")
 }
 
 func TestModel_FilterMode_BackspaceRemovesChar(t *testing.T) {
-t.Parallel()
+	t.Parallel()
 
-mdl := picker.NewModel("Pick:", []string{"alpha", "beta"})
+	mdl := picker.NewModel("Pick:", []string{"alpha", "beta"})
 
-// Enter filter mode and type "al"
-updated, _ := mdl.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
-mdl = assertModel(t, updated)
-updated, _ = mdl.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
-mdl = assertModel(t, updated)
-updated, _ = mdl.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
-mdl = assertModel(t, updated)
-assert.Equal(t, "al", mdl.Filter())
+	// Enter filter mode and type "al"
+	updated, _ := mdl.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	mdl = assertModel(t, updated)
+	updated, _ = mdl.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
+	mdl = assertModel(t, updated)
+	updated, _ = mdl.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
+	mdl = assertModel(t, updated)
+	assert.Equal(t, "al", mdl.Filter())
 
-// Backspace removes last char
-updated, _ = mdl.Update(tea.KeyMsg{Type: tea.KeyBackspace})
-mdl = assertModel(t, updated)
-assert.Equal(t, "a", mdl.Filter())
+	// Backspace removes last char
+	updated, _ = mdl.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+	mdl = assertModel(t, updated)
+	assert.Equal(t, "a", mdl.Filter())
 }
 
 func TestModel_FilterMode_SelectFilteredItem(t *testing.T) {
-t.Parallel()
+	t.Parallel()
 
-mdl := picker.NewModel("Pick:", []string{"alpha", "beta", "gamma"})
+	mdl := picker.NewModel("Pick:", []string{"alpha", "beta", "gamma"})
 
-// Enter filter mode and type "bet"
-updated, _ := mdl.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
-mdl = assertModel(t, updated)
-updated, _ = mdl.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'b'}})
-mdl = assertModel(t, updated)
-updated, _ = mdl.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'e'}})
-mdl = assertModel(t, updated)
-updated, _ = mdl.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'t'}})
-mdl = assertModel(t, updated)
+	// Enter filter mode and type "bet"
+	updated, _ := mdl.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	mdl = assertModel(t, updated)
+	updated, _ = mdl.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'b'}})
+	mdl = assertModel(t, updated)
+	updated, _ = mdl.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'e'}})
+	mdl = assertModel(t, updated)
+	updated, _ = mdl.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'t'}})
+	mdl = assertModel(t, updated)
 
-// Only "beta" should match; enter selects it
-updated, cmd := mdl.Update(tea.KeyMsg{Type: tea.KeyEnter})
-mdl = assertModel(t, updated)
-assert.Equal(t, "beta", mdl.Selected())
-assert.NotNil(t, cmd)
+	// Only "beta" should match; enter selects it
+	updated, cmd := mdl.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	mdl = assertModel(t, updated)
+	assert.Equal(t, "beta", mdl.Selected())
+	assert.NotNil(t, cmd)
 }
 
 func TestModel_FilterMode_NoMatches(t *testing.T) {
-t.Parallel()
+	t.Parallel()
 
-mdl := picker.NewModel("Pick:", []string{"alpha", "beta"})
+	mdl := picker.NewModel("Pick:", []string{"alpha", "beta"})
 
-// Enter filter mode and type "zzz" (no matches)
-updated, _ := mdl.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
-mdl = assertModel(t, updated)
-updated, _ = mdl.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'z'}})
-mdl = assertModel(t, updated)
+	// Enter filter mode and type "zzz" (no matches)
+	updated, _ := mdl.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	mdl = assertModel(t, updated)
+	updated, _ = mdl.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'z'}})
+	mdl = assertModel(t, updated)
 
-view := mdl.View()
-assert.Contains(t, view, "(no matches)")
+	view := mdl.View()
+	assert.Contains(t, view, "(no matches)")
 
-// Enter on empty filtered list does nothing
-updated, cmd := mdl.Update(tea.KeyMsg{Type: tea.KeyEnter})
-mdl = assertModel(t, updated)
-assert.Empty(t, mdl.Selected())
-assert.Nil(t, cmd)
+	// Enter on empty filtered list does nothing
+	updated, cmd := mdl.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	mdl = assertModel(t, updated)
+	assert.Empty(t, mdl.Selected())
+	assert.Nil(t, cmd)
 }
 
 func TestModel_FilterMode_CancelWithCtrlC(t *testing.T) {
-t.Parallel()
+	t.Parallel()
 
-mdl := picker.NewModel("Pick:", []string{"alpha", "beta"})
+	mdl := picker.NewModel("Pick:", []string{"alpha", "beta"})
 
-// Enter filter mode
-updated, _ := mdl.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
-mdl = assertModel(t, updated)
+	// Enter filter mode
+	updated, _ := mdl.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	mdl = assertModel(t, updated)
 
-// Ctrl+C cancels even in filter mode
-updated, cmd := mdl.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
-mdl = assertModel(t, updated)
-assert.True(t, mdl.Cancelled())
-assert.NotNil(t, cmd)
+	// Ctrl+C cancels even in filter mode
+	updated, cmd := mdl.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	mdl = assertModel(t, updated)
+	assert.True(t, mdl.Cancelled())
+	assert.NotNil(t, cmd)
 }
 
 func TestModel_FilterMode_ViewShowsHint(t *testing.T) {
-t.Parallel()
+	t.Parallel()
 
-mdl := picker.NewModel("Pick:", []string{"a", "b"})
+	mdl := picker.NewModel("Pick:", []string{"a", "b"})
 
-// Normal mode shows filter hint
-view := mdl.View()
-assert.Contains(t, view, "/ filter")
+	// Normal mode shows filter hint
+	view := mdl.View()
+	assert.Contains(t, view, "/ filter")
 
-// Filter mode shows different hint
-updated, _ := mdl.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
-mdl = assertModel(t, updated)
-filterView := mdl.View()
-assert.Contains(t, filterView, "esc clear filter")
+	// Filter mode shows different hint
+	updated, _ := mdl.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	mdl = assertModel(t, updated)
+	filterView := mdl.View()
+	assert.Contains(t, filterView, "esc clear filter")
 }
