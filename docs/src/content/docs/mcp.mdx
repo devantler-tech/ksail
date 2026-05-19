@@ -68,6 +68,19 @@ Each tool accepts a **subcommand parameter** that selects the specific operation
 
 MCP clients can discover available tools dynamically and toggle them on/off as needed. Each tool includes its name, a description, and a JSON schema with the subcommand selector enum and merged flags.
 
+### Tool Annotations
+
+All tools carry [MCP behavioral annotations](https://spec.modelcontextprotocol.io/specification/2025-03-26/server/tools/#tool-annotations) that allow clients to make smarter decisions:
+
+| Annotation | Read tools (`*_read`) | Write tools (`*_write`) |
+|------------|----------------------|-------------------------|
+| `readOnlyHint` | `true` — safe to auto-approve | `false` |
+| `destructiveHint` | `false` | `true` — clients should warn before running |
+| `idempotentHint` | `true` | `false` |
+| `openWorldHint` | `false` | `true` — may affect external systems |
+
+Clients that support MCP annotations (such as Claude Desktop) use these hints to auto-approve read-only operations and prompt for confirmation before destructive actions.
+
 ## Tool Responses
 
 All MCP tools return a structured JSON envelope, making responses easy to parse programmatically:
