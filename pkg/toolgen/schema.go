@@ -336,6 +336,7 @@ func mergeSubcommandFlags(
 	for key := range subcommands {
 		sortedKeys = append(sortedKeys, key)
 	}
+
 	slices.Sort(sortedKeys)
 
 	for _, subCmdName := range sortedKeys {
