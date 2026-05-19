@@ -39,7 +39,7 @@ func TestExpectedDistributionConfigName(t *testing.T) {
 		{
 			name:         "KWOK",
 			distribution: v1alpha1.DistributionKWOK,
-			want:         "kwok.yaml",
+			want:         "kwok",
 		},
 		{
 			name:         "EKS",
@@ -139,16 +139,16 @@ func TestDistributionConfigIsOppositeDefault(t *testing.T) {
 			want:         true,
 		},
 		{
-			// "kwok.yaml" is KWOK's default — not opposite
-			name:         "kwok.yaml_is_not_opposite_for_KWOK",
-			current:      "kwok.yaml",
+			// "kwok" is KWOK's default — not opposite
+			name:         "kwok_is_not_opposite_for_KWOK",
+			current:      "kwok",
 			distribution: v1alpha1.DistributionKWOK,
 			want:         false,
 		},
 		{
-			// "kwok.yaml" is KWOK's default — opposite of Vanilla
-			name:         "kwok.yaml_is_opposite_for_Vanilla",
-			current:      "kwok.yaml",
+			// "kwok" is KWOK's default — opposite of Vanilla
+			name:         "kwok_is_opposite_for_Vanilla",
+			current:      "kwok",
 			distribution: v1alpha1.DistributionVanilla,
 			want:         true,
 		},

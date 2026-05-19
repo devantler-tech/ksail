@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -165,7 +165,7 @@ func (g *gitHubProvider) pushFilesInternal(
 		paths = append(paths, path)
 	}
 
-	sort.Strings(paths)
+	slices.Sort(paths)
 
 	for _, path := range paths {
 		content := files[path]

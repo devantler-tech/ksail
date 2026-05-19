@@ -11,6 +11,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const (
+	editorCode       = "code"
+	editorVim        = "vim"
+	editorEnvVarName = "EDITOR"
+)
+
 func TestNewEditorResolver(t *testing.T) {
 	t.Parallel()
 
@@ -21,16 +27,16 @@ func TestNewEditorResolver(t *testing.T) {
 	}{
 		{
 			name:       "with flag and config",
-			flagEditor: "code",
+			flagEditor: editorCode,
 			cfg: &v1alpha1.Cluster{
 				Spec: v1alpha1.Spec{
-					Editor: "vim",
+					Editor: editorVim,
 				},
 			},
 		},
 		{
 			name:       "with flag only",
-			flagEditor: "code",
+			flagEditor: editorCode,
 			cfg:        nil,
 		},
 		{
@@ -38,7 +44,7 @@ func TestNewEditorResolver(t *testing.T) {
 			flagEditor: "",
 			cfg: &v1alpha1.Cluster{
 				Spec: v1alpha1.Spec{
-					Editor: "vim",
+					Editor: editorVim,
 				},
 			},
 		},
@@ -62,27 +68,27 @@ func TestNewEditorResolver(t *testing.T) {
 func TestEditorResolver_Resolve(t *testing.T) {
 	// Not parallel because subtests use t.Setenv
 	t.Run("flag takes priority over config", func(t *testing.T) {
-		t.Setenv("EDITOR", "")
+		t.Setenv(editorEnvVarName, "")
 
-		resolver := editor.NewResolver("code", &v1alpha1.Cluster{
-			Spec: v1alpha1.Spec{Editor: "vim"},
+		resolver := editor.NewResolver(editorCode, &v1alpha1.Cluster{
+			Spec: v1alpha1.Spec{Editor: editorVim},
 		})
-		assert.Equal(t, "code", resolver.Resolve())
+		assert.Equal(t, editorCode, resolver.Resolve())
 	})
 
 	t.Run("config takes priority over env", func(t *testing.T) {
-		t.Setenv("EDITOR", "nano")
+		t.Setenv(editorEnvVarName, "nano")
 
 		resolver := editor.NewResolver("", &v1alpha1.Cluster{
-			Spec: v1alpha1.Spec{Editor: "vim"},
+			Spec: v1alpha1.Spec{Editor: editorVim},
 		})
-		assert.Equal(t, "vim", resolver.Resolve())
+		assert.Equal(t, editorVim, resolver.Resolve())
 	})
 }
 
 func TestEditorResolver_Resolve_EnvPriority(t *testing.T) {
 	// Not parallel because subtests use t.Setenv
-	envsToClear := []string{"SOPS_EDITOR", "KUBE_EDITOR", "EDITOR", "VISUAL"}
+	envsToClear := []string{"SOPS_EDITOR", "KUBE_EDITOR", editorEnvVarName, "VISUAL"}
 
 	t.Run("SOPS_EDITOR takes priority over KUBE_EDITOR", func(t *testing.T) {
 		for _, env := range envsToClear {
@@ -102,7 +108,7 @@ func TestEditorResolver_Resolve_EnvPriority(t *testing.T) {
 		}
 
 		t.Setenv("KUBE_EDITOR", "kube-editor")
-		t.Setenv("EDITOR", "default-editor")
+		t.Setenv(editorEnvVarName, "default-editor")
 
 		resolver := editor.NewResolver("", nil)
 		assert.Equal(t, "kube-editor", resolver.Resolve())
@@ -113,7 +119,7 @@ func TestEditorResolver_Resolve_EnvPriority(t *testing.T) {
 			t.Setenv(env, "")
 		}
 
-		t.Setenv("EDITOR", "default-editor")
+		t.Setenv(editorEnvVarName, "default-editor")
 		t.Setenv("VISUAL", "visual-editor")
 
 		resolver := editor.NewResolver("", nil)
@@ -171,7 +177,7 @@ func TestEditorResolver_SetEnvVars(t *testing.T) {
 			// Not parallel because t.Setenv is used
 
 			// Clear all editor environment variables first
-			envsToClear := []string{"SOPS_EDITOR", "KUBE_EDITOR", "EDITOR", "VISUAL"}
+			envsToClear := []string{"SOPS_EDITOR", "KUBE_EDITOR", editorEnvVarName, "VISUAL"}
 			for _, env := range envsToClear {
 				t.Setenv(env, "")
 			}
@@ -215,7 +221,7 @@ func TestEditorResolver_SetEnvVars_RestoresOriginal(t *testing.T) {
 //nolint:paralleltest // t.Setenv is incompatible with t.Parallel
 func TestEditorResolver_Resolve_FallbackSnapshot(t *testing.T) {
 	// Clear all editor environment variables
-	envsToClear := []string{"SOPS_EDITOR", "KUBE_EDITOR", "EDITOR", "VISUAL"}
+	envsToClear := []string{"SOPS_EDITOR", "KUBE_EDITOR", editorEnvVarName, "VISUAL"}
 	for _, env := range envsToClear {
 		t.Setenv(env, "")
 	}

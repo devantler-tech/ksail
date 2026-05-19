@@ -112,7 +112,7 @@ func TestGeneratedSchema(t *testing.T) {
 		cluster := mustNestedProp(t, schema, "spec", "cluster")
 		props := mustMap(t, cluster["properties"], "cluster.properties")
 		prov := mustMap(t, props["provider"], "provider")
-		assertEnum(t, prov, []string{"Docker", "Hetzner", "Omni", "AWS"})
+		assertEnum(t, prov, []string{"Docker", "Hetzner", "Omni", "AWS", "Kubernetes"})
 	})
 
 	testNoRequiredFields(t, schema)

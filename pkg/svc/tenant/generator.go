@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	kustomizationgenerator "github.com/devantler-tech/ksail/v7/pkg/fsutil/generator/kustomization"
@@ -54,7 +54,7 @@ func Generate(opts Options) error {
 
 	resources = append(resources, typeResources...)
 
-	sort.Strings(resources)
+	slices.Sort(resources)
 
 	// Generate kustomization.yaml.
 	gen := kustomizationgenerator.NewGenerator()

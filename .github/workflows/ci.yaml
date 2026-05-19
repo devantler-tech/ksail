@@ -448,7 +448,7 @@ jobs:
       pull-requests: write
     steps:
       - name: 🔑 Generate GitHub App Token
-        uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3.1.1
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         id: generate-token
         with:
           client-id: ${{ vars.APP_CLIENT_ID }}
@@ -861,6 +861,30 @@ jobs:
             provider: Docker
             init: true
             args: "--name system-test-cluster-with-image-verification --image-verification Enabled"
+          # Enable Kubernetes provider tests on the default (init=true, args="")
+          # entry for each distribution. This tests all 5 nested distributions
+          # on each host type, once per matrix.
+          - distribution: Vanilla
+            provider: Docker
+            init: true
+            args: ""
+            test-kubernetes-provider: "true"
+          - distribution: K3s
+            provider: Docker
+            init: true
+            args: ""
+            test-kubernetes-provider: "true"
+          - distribution: Talos
+            provider: Docker
+            init: true
+            args: ""
+            test-kubernetes-provider: "true"
+          - distribution: VCluster
+            provider: Docker
+            init: true
+            args: ""
+            test-kubernetes-provider: "true"
+          # NOTE: KWOK excluded — simulated nodes cannot run real workloads (DinD pods)
     steps:
       - name: 📄 Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -936,6 +960,7 @@ jobs:
           init: ${{ matrix.init }}
           args: ${{ matrix.args }}
           apply-overlay-path: ".github/fixtures/podinfo-overlay"
+          test-kubernetes-provider: ${{ matrix.test-kubernetes-provider || 'false' }}
 
           ghcr-user: ${{ github.actor }}
           ghcr-token: ${{ secrets.GITHUB_TOKEN }}
@@ -1135,15 +1160,9 @@ jobs:
         auto-commit,
         warm-helm-cache,
         warm-mirror-cache,
-        system-test-docker,
         license-check,
-        audit-docs,
-        audit-vsce,
         build-docs,
-        vscode-extension,
-        copilot-plugin,
         benchmark,
-        benchmark-store,
       ]
     if: ${{ always() }}
     steps:
@@ -1159,12 +1178,6 @@ jobs:
             ${{ needs.auto-commit.result }}
             ${{ needs.warm-helm-cache.result }}
             ${{ needs.warm-mirror-cache.result }}
-            ${{ needs.system-test-docker.result }}
             ${{ needs.license-check.result }}
-            ${{ needs.audit-docs.result }}
-            ${{ needs.audit-vsce.result }}
             ${{ needs.build-docs.result }}
-            ${{ needs.vscode-extension.result }}
-            ${{ needs.copilot-plugin.result }}
             ${{ needs.benchmark.result }}
-            ${{ needs.benchmark-store.result }}

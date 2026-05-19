@@ -10,6 +10,8 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
 )
 
+const talosClusterDir = "cluster"
+
 // generateTalosConfig generates the Talos patches directory structure.
 func (s *Scaffolder) generateTalosConfig(output string, force bool) error {
 	config, clusterHasPatches := s.buildTalosGeneratorConfig()
@@ -97,10 +99,10 @@ func (s *Scaffolder) notifyTalosGenerated(
 	clusterHasPatches bool,
 ) {
 	// Notify about .gitkeep files only for directories without patches
-	subdirs := []string{"cluster", "control-planes", "workers"}
+	subdirs := []string{talosClusterDir, "control-planes", "workers"}
 	for _, subdir := range subdirs {
 		// Skip .gitkeep notification for cluster/ if it has patches
-		if subdir == "cluster" && clusterHasPatches {
+		if subdir == talosClusterDir && clusterHasPatches {
 			continue
 		}
 
@@ -113,19 +115,19 @@ func (s *Scaffolder) notifyTalosGenerated(
 		subdir    string
 		filename  string
 	}{
-		{config.WorkerNodes == 0, "cluster", "allow-scheduling-on-control-planes.yaml"},
-		{len(s.MirrorRegistries) > 0, "cluster", "mirror-registries.yaml"},
-		{config.DisableDefaultCNI, "cluster", "disable-default-cni.yaml"},
-		{config.EnableKubeletCertRotation, "cluster", "kubelet-cert-rotation.yaml"},
-		{config.EnableKubeletCertRotation, "cluster", "kubelet-csr-approver.yaml"},
-		{config.ClusterName != "", "cluster", "cluster-name.yaml"},
-		{config.EnableImageVerification, "cluster", "image-verification.yaml"},
-		{config.DisableCDI, "cluster", "disable-cdi.yaml"},
-		{config.EnableExternalCloudProvider, "cluster", "external-cloud-provider.yaml"},
-		{config.EnableIngressFirewall, "cluster", "ingress-firewall-default-action.yaml"},
+		{config.WorkerNodes == 0, talosClusterDir, "allow-scheduling-on-control-planes.yaml"},
+		{len(s.MirrorRegistries) > 0, talosClusterDir, "mirror-registries.yaml"},
+		{config.DisableDefaultCNI, talosClusterDir, "disable-default-cni.yaml"},
+		{config.EnableKubeletCertRotation, talosClusterDir, "kubelet-cert-rotation.yaml"},
+		{config.EnableKubeletCertRotation, talosClusterDir, "kubelet-csr-approver.yaml"},
+		{config.ClusterName != "", talosClusterDir, "cluster-name.yaml"},
+		{config.EnableImageVerification, talosClusterDir, "image-verification.yaml"},
+		{config.DisableCDI, talosClusterDir, "disable-cdi.yaml"},
+		{config.EnableExternalCloudProvider, talosClusterDir, "external-cloud-provider.yaml"},
+		{config.EnableIngressFirewall, talosClusterDir, "ingress-firewall-default-action.yaml"},
 		{config.EnableIngressFirewall, "control-planes", "ingress-firewall-rules.yaml"},
 		{config.EnableIngressFirewall, "workers", "ingress-firewall-rules.yaml"},
-		{config.EnableOIDC, "cluster", "oidc.yaml"},
+		{config.EnableOIDC, talosClusterDir, "oidc.yaml"},
 	}
 
 	for _, patch := range patches {

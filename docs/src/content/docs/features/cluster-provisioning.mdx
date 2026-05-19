@@ -3,7 +3,13 @@ title: Cluster Provisioning
 description: Create and manage local Kubernetes clusters with a single command — supporting Vanilla, K3s, Talos, VCluster, and KWOK distributions.
 ---
 
-Create and manage local Kubernetes clusters with a single command. KSail supports [Vanilla, K3s, Talos, VCluster, and KWOK](/concepts/#distributions) distributions, generates native configuration files (`kind.yaml`, `k3d.yaml`, Talos patches, `vcluster.yaml`, `kwok.yaml`) that work directly with upstream tools, and automatically configures [CNI](/concepts/#container-network-interface-cni), [CSI](/concepts/#container-storage-interface-csi), [metrics-server](/concepts/#metrics-server), [cert-manager](/concepts/#cert-manager), and [policy engines](/concepts/#policy-engines). Component installations use automatic retry with exponential backoff; the `--benchmark` flag shows per-component install durations during `cluster create` and `cluster update`.
+Create and manage local Kubernetes clusters with a single command. KSail:
+
+- Supports [Vanilla, K3s, Talos, VCluster, and KWOK](/concepts/#distributions) distributions
+- Generates native config files (`kind.yaml`, `k3d.yaml`, Talos patches, `vcluster.yaml`, `kwok/`) that work directly with upstream tools
+- Auto-configures [CNI](/concepts/#container-network-interface-cni), [CSI](/concepts/#container-storage-interface-csi), [metrics-server](/concepts/#metrics-server), [cert-manager](/concepts/#cert-manager), and [policy engines](/concepts/#policy-engines) with automatic retry and exponential backoff
+
+Use `--benchmark` during `cluster create` or `cluster update` to show per-component install durations.
 
 ```bash
 ksail cluster init --name my-cluster --distribution Vanilla --cni Cilium
@@ -22,7 +28,7 @@ ksail cluster create --ttl 1h
 
 ## Updating Clusters
 
-`ksail cluster update` applies changes from `ksail.yaml` to a running cluster. Changes are classified as in-place (no disruption), reboot-required, or recreate-required. Use `--dry-run` to preview changes without applying them. Use `--output json` for a machine-readable diff in CI pipelines or [MCP tools](/mcp/):
+`ksail cluster update` applies changes from `ksail.yaml` to a running cluster. Changes are classified as in-place (no disruption), reboot-required, recreate-required, or wipe-required. Use `--dry-run` to preview changes without applying them. Use `--output json` for a machine-readable diff in CI pipelines or [MCP tools](/mcp/):
 
 ```bash
 # Preview changes without applying
@@ -31,6 +37,23 @@ ksail cluster update --dry-run
 # Machine-readable diff for CI gating or MCP consumption
 ksail cluster update --dry-run --output json | jq .recreateRequired
 ```
+
+## Drift Detection
+
+`ksail cluster diff` compares the desired configuration in `ksail.yaml` against the live cluster state and reports any drift — without applying changes. Use it in CI pipelines or monitoring workflows to catch unintended drift early.
+
+```bash
+# Report drift in human-readable form
+ksail cluster diff
+
+# Machine-readable output for CI gating
+ksail cluster diff --output json | jq .recreateRequired
+
+# Return exit code 2 when drift is detected (useful for CI gate steps)
+ksail cluster diff --exit-code
+```
+
+Changes are classified the same way as `cluster update`: in-place, reboot-required, recreate-required, or wipe-required. Unlike `cluster update --dry-run`, `cluster diff` is a pure read operation — it never applies or stages any changes.
 
 ## High Availability Component Defaults
 

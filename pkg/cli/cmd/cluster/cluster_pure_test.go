@@ -7,11 +7,13 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/cluster"
+	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	v1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/spf13/cobra"
@@ -877,4 +879,144 @@ func TestRefreshAndVerifyKubeconfig_StatPermissionError(t *testing.T) {
 	require.Error(t, err)
 	require.ErrorContains(t, err, "failed to stat kubeconfig")
 	assert.False(t, refresher.called, "should not attempt refresh on permission error")
+}
+
+// ===========================================================================
+// runDiagnoseTextReport — output formatting for text output mode
+// ===========================================================================
+
+func TestRunDiagnoseTextReport_HealthyCluster(t *testing.T) {
+	t.Parallel()
+
+	report := k8s.DiagnoseReport{
+		ClusterName: "my-cluster",
+		HealthScore: 100,
+		Findings:    []k8s.DiagnoseFinding{},
+	}
+
+	var buf strings.Builder
+
+	err := cluster.ExportRunDiagnoseTextReport(report, &buf)
+
+	require.NoError(t, err)
+
+	out := buf.String()
+	assert.Contains(t, out, `"my-cluster"`)
+	assert.Contains(t, out, "looks healthy")
+	assert.Contains(t, out, "Health score: 100/100")
+}
+
+func TestRunDiagnoseTextReport_WithFindings(t *testing.T) {
+	t.Parallel()
+
+	report := k8s.DiagnoseReport{
+		ClusterName: "broken-cluster",
+		HealthScore: 75,
+		Findings: []k8s.DiagnoseFinding{
+			{
+				Severity:    k8s.DiagnoseSeverityCritical,
+				Resource:    "pod/crash-pod (default)",
+				Reason:      "CrashLoopBackOff",
+				Remediation: "Check pod logs for errors.",
+			},
+		},
+	}
+
+	var buf strings.Builder
+
+	err := cluster.ExportRunDiagnoseTextReport(report, &buf)
+
+	require.NoError(t, err)
+
+	out := buf.String()
+	assert.Contains(t, out, `"broken-cluster"`)
+	assert.Contains(t, out, "Health score: 75/100")
+	assert.Contains(t, out, "critical")
+	assert.Contains(t, out, "pod/crash-pod (default)")
+	assert.Contains(t, out, "CrashLoopBackOff")
+	assert.Contains(t, out, "Suggested fix: Check pod logs for errors.")
+}
+
+func TestRunDiagnoseTextReport_FindingWithoutRemediation(t *testing.T) {
+	t.Parallel()
+
+	report := k8s.DiagnoseReport{
+		ClusterName: "cluster",
+		HealthScore: 90,
+		Findings: []k8s.DiagnoseFinding{
+			{
+				Severity:    k8s.DiagnoseSeverityWarning,
+				Resource:    "pvc/data-pvc (default)",
+				Reason:      "Pending",
+				Remediation: "",
+			},
+		},
+	}
+
+	var buf strings.Builder
+
+	err := cluster.ExportRunDiagnoseTextReport(report, &buf)
+
+	require.NoError(t, err)
+
+	out := buf.String()
+	assert.Contains(t, out, "warning")
+	assert.Contains(t, out, "pvc/data-pvc (default)")
+	assert.NotContains(t, out, "Suggested fix")
+}
+
+// ===========================================================================
+// runDiagnoseJSONReport — JSON serialisation
+// ===========================================================================
+
+func TestRunDiagnoseJSONReport_HealthyCluster(t *testing.T) {
+	t.Parallel()
+
+	report := k8s.DiagnoseReport{
+		ClusterName: "my-cluster",
+		HealthScore: 100,
+		Findings:    []k8s.DiagnoseFinding{},
+	}
+
+	var buf strings.Builder
+
+	err := cluster.ExportRunDiagnoseJSONReport(report, &buf)
+
+	require.NoError(t, err)
+
+	out := buf.String()
+	assert.Contains(t, out, `"clusterName": "my-cluster"`)
+	assert.Contains(t, out, `"healthScore": 100`)
+	assert.Contains(t, out, `"findings": []`)
+}
+
+func TestRunDiagnoseJSONReport_WithFindings(t *testing.T) {
+	t.Parallel()
+
+	report := k8s.DiagnoseReport{
+		ClusterName: "broken-cluster",
+		HealthScore: 75,
+		Findings: []k8s.DiagnoseFinding{
+			{
+				Severity:    k8s.DiagnoseSeverityCritical,
+				Resource:    "pod/crash-pod (default)",
+				Reason:      "CrashLoopBackOff",
+				Remediation: "Check pod logs for errors.",
+			},
+		},
+	}
+
+	var buf strings.Builder
+
+	err := cluster.ExportRunDiagnoseJSONReport(report, &buf)
+
+	require.NoError(t, err)
+
+	out := buf.String()
+	assert.Contains(t, out, `"clusterName": "broken-cluster"`)
+	assert.Contains(t, out, `"healthScore": 75`)
+	assert.Contains(t, out, `"severity": "critical"`)
+	assert.Contains(t, out, `"resource": "pod/crash-pod (default)"`)
+	assert.Contains(t, out, `"reason": "CrashLoopBackOff"`)
+	assert.Contains(t, out, `"remediation": "Check pod logs for errors."`)
 }

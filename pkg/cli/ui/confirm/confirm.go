@@ -147,6 +147,8 @@ func ShowDeletionPreview(writer io.Writer, preview *DeletionPreview) {
 		writeOmniResources(&previewText, preview)
 	case v1alpha1.ProviderAWS:
 		writeAWSResources(&previewText, preview)
+	case v1alpha1.ProviderKubernetes:
+		writeKubernetesResources(&previewText, preview)
 	}
 
 	notify.Warningf(writer, "%s", previewText.String())
@@ -222,6 +224,17 @@ func writeOmniResources(previewText *strings.Builder, preview *DeletionPreview) 
 func writeAWSResources(previewText *strings.Builder, preview *DeletionPreview) {
 	if len(preview.Servers) > 0 {
 		previewText.WriteString("\n  EKS Resources:")
+
+		for _, resource := range preview.Servers {
+			previewText.WriteString("\n    - " + resource)
+		}
+	}
+}
+
+// writeKubernetesResources writes Kubernetes provider-specific resources to the preview.
+func writeKubernetesResources(previewText *strings.Builder, preview *DeletionPreview) {
+	if len(preview.Servers) > 0 {
+		previewText.WriteString("\n  Kubernetes Resources:")
 
 		for _, resource := range preview.Servers {
 			previewText.WriteString("\n    - " + resource)

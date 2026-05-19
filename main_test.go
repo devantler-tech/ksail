@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"testing"
 
@@ -10,6 +11,23 @@ import (
 	"github.com/gkampitakis/go-snaps/snaps"
 	"github.com/stretchr/testify/assert"
 )
+
+// customExitError is used in tests to verify exit code handling.
+type customExitError struct {
+	code int
+}
+
+func (e *customExitError) Error() string {
+	return "custom exit error"
+}
+
+func (e *customExitError) KSailExitCode() int {
+	return e.code
+}
+
+// errPlain is a sentinel error used in tests to verify that plain errors
+// do not produce a custom exit code.
+var errPlain = errors.New("plain error")
 
 func TestMain(m *testing.M) {
 	os.Exit(snapshottest.Run(m, snaps.CleanOpts{Sort: true}))
@@ -135,4 +153,40 @@ func TestRunSafelyPropagatesRunnerExitCode(t *testing.T) {
 			assert.Equal(t, testCase.want, runSafely(nil, testCase.runner, &output))
 		})
 	}
+}
+
+func TestRunWithArgsHandlesCustomExitCode(t *testing.T) {
+	t.Parallel()
+
+	// Test that exitCodeFromError correctly extracts custom exit codes from errors
+	// implementing KSailExitCode() int, as used by runWithArgs for DriftExitError etc.
+	tests := []struct {
+		name       string
+		customCode int
+	}{
+		{name: "drift_exit_code_2", customCode: 2},
+		{name: "custom_exit_code_42", customCode: 42},
+	}
+
+	for i := range tests {
+		testCase := tests[i]
+
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			code, ok := exitCodeFromError(&customExitError{code: testCase.customCode})
+
+			assert.True(t, ok)
+			assert.Equal(t, testCase.customCode, code)
+		})
+	}
+}
+
+func TestExitCodeFromErrorReturnsFalseForPlainErrors(t *testing.T) {
+	t.Parallel()
+
+	code, ok := exitCodeFromError(errPlain)
+
+	assert.False(t, ok)
+	assert.Equal(t, 0, code)
 }

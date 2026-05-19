@@ -6,14 +6,18 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	eksctlclient "github.com/devantler-tech/ksail/v7/pkg/client/eksctl"
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	k3dconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/k3d"
 	kindconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/kind"
 	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
+	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/detector"
 	awsprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/aws"
+	kubernetesprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/kubernetes"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
 	eksprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/eks"
 	k3dprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/k3d"
@@ -22,6 +26,9 @@ import (
 	talosprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/talos"
 	vclusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/vcluster"
 	k3dv1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 	"sigs.k8s.io/yaml"
 )
@@ -206,6 +213,11 @@ func (f DefaultFactory) createKindProvisioner(
 		kindconfigmanager.ApplyCDIPatches(kindConfig)
 	}
 
+	// Kubernetes provider: run Kind inside a DinD pod on the host cluster
+	if cluster.Spec.Cluster.Provider == v1alpha1.ProviderKubernetes {
+		return f.createKindKubernetesProvisioner(cluster, kindConfig)
+	}
+
 	provisioner, err := kindprovisioner.CreateProvisioner(
 		kindConfig,
 		cluster.Spec.Cluster.Connection.Kubeconfig,
@@ -219,6 +231,218 @@ func (f DefaultFactory) createKindProvisioner(
 	}
 
 	return provisioner, kindConfig, nil
+}
+
+// createKindKubernetesProvisioner creates a Kind provisioner that runs inside
+// a DinD pod on a host Kubernetes cluster.
+func (f DefaultFactory) createKindKubernetesProvisioner(
+	cluster *v1alpha1.Cluster,
+	kindConfig *v1alpha4.Cluster,
+) (Provisioner, any, error) {
+	opts := cluster.Spec.Provider.Kubernetes
+
+	// Use kindConfig.Name — it's set by applyClusterNameOverride,
+	// while cluster.Metadata.Name may be empty with --name flag.
+	clusterName := kindConfig.Name
+
+	_, restConfig, dynClient, k8sProvider, err := buildKubernetesInfra(opts)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Configure Kind for DinD: API server must bind to all interfaces
+	// and use a fixed port so it's accessible from outside the DinD container.
+	applyKindDinDNetworking(kindConfig)
+
+	provisioner, err := kindprovisioner.NewKubernetesProvisioner(
+		kindprovisioner.KubernetesProvisionerConfig{
+			KindConfig:       kindConfig,
+			KubeconfigPath:   cluster.Spec.Cluster.Connection.Kubeconfig,
+			K8sProvider:      k8sProvider,
+			DynamicClient:    dynClient,
+			RestConfig:       restConfig,
+			ClusterName:      clusterName,
+			Distribution:     string(cluster.Spec.Cluster.Distribution),
+			GatewayClassName: opts.GatewayClassName,
+			APIServerPort:    kubernetesprovider.DinDAPIServerPort,
+			Persistence:      opts.Persistence,
+		},
+	)
+	if err != nil {
+		return nil, nil, fmt.Errorf("create Kind Kubernetes provisioner: %w", err)
+	}
+
+	if f.ComponentDetector != nil {
+		provisioner.WithComponentDetector(f.ComponentDetector)
+	}
+
+	return provisioner, kindConfig, nil
+}
+
+// applyKindDinDNetworking configures Kind networking for DinD execution.
+// The API server must bind to 0.0.0.0 (all interfaces) so it's accessible
+// from outside the DinD container. A fixed port (6443) is used instead of
+// a random port to enable deterministic port mapping. The certSANs patch
+// ensures the API server TLS certificate includes 127.0.0.1 and localhost,
+// which are needed when accessing the API via port-forward.
+func applyKindDinDNetworking(kindConfig *v1alpha4.Cluster) {
+	kindConfig.Networking.APIServerAddress = "0.0.0.0"
+	kindConfig.Networking.APIServerPort = kubernetesprovider.DinDAPIServerPort
+
+	// Add certSANs to all control-plane nodes so the API server cert
+	// is valid for 127.0.0.1 (port-forward) and localhost.
+	certSANsPatch := `kind: ClusterConfiguration
+apiServer:
+  certSANs:
+  - "127.0.0.1"
+  - "localhost"
+  - "0.0.0.0"`
+
+	for i, node := range kindConfig.Nodes {
+		if node.Role == v1alpha4.ControlPlaneRole {
+			kindConfig.Nodes[i].KubeadmConfigPatches = append(
+				kindConfig.Nodes[i].KubeadmConfigPatches,
+				certSANsPatch,
+			)
+		}
+	}
+	// If no nodes are defined, add one with the patch
+	if len(kindConfig.Nodes) == 0 {
+		kindConfig.Nodes = []v1alpha4.Node{
+			{
+				Role:                 v1alpha4.ControlPlaneRole,
+				KubeadmConfigPatches: []string{certSANsPatch},
+			},
+		}
+	}
+}
+
+// createK3dKubernetesProvisioner creates a K3s provisioner that runs inside
+// a host Kubernetes cluster using the k3k operator.
+func (f DefaultFactory) createK3dKubernetesProvisioner(
+	cluster *v1alpha1.Cluster,
+) (Provisioner, any, error) {
+	opts := cluster.Spec.Provider.Kubernetes
+
+	// resolveClusterNameFromContext normally extracts from k3dConfig.Name,
+	// but k3d config is skipped for the Kubernetes provider path.
+	// Derive from connection context (set by applyClusterNameOverride),
+	// stripping the "k3d-" prefix that ContextName() adds.
+	clusterName := strings.TrimPrefix(
+		cluster.Spec.Cluster.Connection.Context, "k3d-",
+	)
+	if clusterName == "" {
+		clusterName = cluster.Metadata.Name
+	}
+
+	hostClient, restConfig, _, k8sProvider, err := buildKubernetesInfra(opts)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	controlPlanes := cluster.Spec.Cluster.ControlPlanes
+	if controlPlanes <= 0 {
+		controlPlanes = 1
+	}
+
+	workers := cluster.Spec.Cluster.Workers
+
+	provisioner, err := k3dprovisioner.NewK3kProvisioner(
+		k3dprovisioner.K3kProvisionerConfig{
+			HostClientset:  hostClient,
+			RestConfig:     restConfig,
+			K8sProvider:    k8sProvider,
+			ClusterName:    clusterName,
+			KubeconfigPath: cluster.Spec.Cluster.Connection.Kubeconfig,
+			HostContext:    resolveKubernetesOption(opts.Context, opts.ContextEnvVar),
+			ControlPlanes:  controlPlanes,
+			Workers:        workers,
+			PodCIDR:        opts.PodCIDR,
+			ServiceCIDR:    opts.ServiceCIDR,
+		},
+	)
+	if err != nil {
+		return nil, nil, fmt.Errorf("create K3k provisioner: %w", err)
+	}
+
+	if f.ComponentDetector != nil {
+		provisioner.WithComponentDetector(f.ComponentDetector)
+	}
+
+	return provisioner, nil, nil
+}
+
+// buildHostClusterClients builds Kubernetes clients for the host cluster
+// from the Kubernetes provider options.
+func buildHostClusterClients(
+	opts v1alpha1.OptionsKubernetes,
+) (kubernetes.Interface, *rest.Config, dynamic.Interface, error) {
+	kubeconfig := resolveKubernetesOption(opts.Kubeconfig, opts.KubeconfigEnvVar)
+
+	// Fall back to default kubeconfig path if not set
+	if kubeconfig == "" {
+		kubeconfig = k8s.DefaultKubeconfigPath()
+	}
+
+	// Canonicalize the path (expand ~, resolve symlinks)
+	kubeconfig, err := fsutil.ExpandHomePath(kubeconfig)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("expand kubeconfig path: %w", err)
+	}
+
+	kubeconfig, err = fsutil.EvalCanonicalPath(kubeconfig)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("canonicalize kubeconfig path: %w", err)
+	}
+
+	context := resolveKubernetesOption(opts.Context, opts.ContextEnvVar)
+
+	restConfig, err := k8s.BuildRESTConfig(kubeconfig, context)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("build host REST config: %w", err)
+	}
+
+	clientset, err := kubernetes.NewForConfig(restConfig)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("create host clientset: %w", err)
+	}
+
+	dynClient, err := dynamic.NewForConfig(restConfig)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("create host dynamic client: %w", err)
+	}
+
+	return clientset, restConfig, dynClient, nil
+}
+
+// resolveKubernetesOption returns the value from the environment variable
+// if set, otherwise returns the direct value.
+func resolveKubernetesOption(directValue, envVar string) string {
+	if envVar != "" {
+		if envValue := os.Getenv(envVar); envValue != "" {
+			return envValue
+		}
+	}
+
+	return directValue
+}
+
+// buildKubernetesInfra creates the host-cluster clients and Kubernetes provider in one call.
+// This consolidates the repeated buildHostClusterClients + NewProvider sequence.
+func buildKubernetesInfra(
+	opts v1alpha1.OptionsKubernetes,
+) (kubernetes.Interface, *rest.Config, dynamic.Interface, *kubernetesprovider.Provider, error) {
+	hostClient, restConfig, dynClient, err := buildHostClusterClients(opts)
+	if err != nil {
+		return nil, nil, nil, nil, fmt.Errorf("build host cluster clients: %w", err)
+	}
+
+	k8sProvider, err := kubernetesprovider.NewProvider(hostClient, opts)
+	if err != nil {
+		return nil, nil, nil, nil, fmt.Errorf("create Kubernetes provider: %w", err)
+	}
+
+	return hostClient, restConfig, dynClient, k8sProvider, nil
 }
 
 // applyKindNodeCounts applies node count overrides from CLI flags / cluster-level
@@ -255,9 +479,14 @@ func applyKindNodeCounts(kindConfig *v1alpha4.Cluster, controlPlanes, workers in
 	kindConfig.Nodes = newNodes
 }
 
-func (f DefaultFactory) createK3dProvisioner(
+func (f DefaultFactory) createK3dProvisioner( //nolint:funlen // sequential setup steps
 	cluster *v1alpha1.Cluster,
 ) (Provisioner, any, error) {
+	// Kubernetes provider: use k3k operator instead of Docker-based K3d
+	if cluster.Spec.Cluster.Provider == v1alpha1.ProviderKubernetes {
+		return f.createK3dKubernetesProvisioner(cluster)
+	}
+
 	if f.DistributionConfig.K3d == nil {
 		return nil, nil, fmt.Errorf(
 			"k3d config is required for K3d distribution: %w",
@@ -344,6 +573,11 @@ func applyK3dNodeCounts(k3dConfig *k3dv1alpha5.SimpleConfig, controlPlanes, work
 func (f DefaultFactory) createTalosProvisioner(
 	cluster *v1alpha1.Cluster,
 ) (Provisioner, any, error) {
+	// Kubernetes provider: run Talos inside a DinD pod on the host cluster
+	if cluster.Spec.Cluster.Provider == v1alpha1.ProviderKubernetes {
+		return f.createTalosKubernetesProvisioner(cluster)
+	}
+
 	if f.DistributionConfig.Talos == nil {
 		return nil, nil, fmt.Errorf(
 			"talos config is required for Talos distribution: %w",
@@ -414,9 +648,82 @@ func (f DefaultFactory) createTalosProvisioner(
 	return provisioner, f.DistributionConfig.Talos, nil
 }
 
-func (f DefaultFactory) createVClusterProvisioner(
-	_ *v1alpha1.Cluster,
+// createTalosKubernetesProvisioner creates a Talos provisioner that runs inside
+// a DinD pod on a host Kubernetes cluster via the Talos SDK.
+func (f DefaultFactory) createTalosKubernetesProvisioner(
+	cluster *v1alpha1.Cluster,
 ) (Provisioner, any, error) {
+	if f.DistributionConfig.Talos == nil {
+		return nil, nil, fmt.Errorf(
+			"talos config is required for Talos distribution: %w",
+			ErrMissingDistributionConfig,
+		)
+	}
+
+	opts := cluster.Spec.Provider.Kubernetes
+
+	// Derive cluster name from Talos config (set by applyClusterNameOverride).
+	clusterName := f.DistributionConfig.Talos.GetClusterName()
+	if clusterName == "" {
+		clusterName = cluster.Metadata.Name
+	}
+
+	_, restConfig, dynClient, k8sProvider, err := buildKubernetesInfra(opts)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Create a full inner Talos Provisioner (Docker provider type).
+	// The Docker client will be injected at Create() time after DinD is ready.
+	talosOpts := cluster.Spec.Cluster.Talos
+	//nolint:staticcheck // intentional: bridging deprecated field
+	talosOpts.ControlPlanes = cluster.Spec.Cluster.ControlPlanes
+	//nolint:staticcheck // intentional: bridging deprecated field
+	talosOpts.Workers = cluster.Spec.Cluster.Workers
+
+	innerProvisioner, err := talosprovisioner.CreateProvisioner(
+		f.DistributionConfig.Talos,
+		cluster.Spec.Cluster.Connection.Kubeconfig,
+		"",
+		v1alpha1.ProviderDocker,
+		talosOpts,
+		v1alpha1.OptionsHetzner{},
+		v1alpha1.OptionsOmni{},
+		true, // skipCNIChecks — same as normal Docker path
+	)
+	if err != nil {
+		return nil, nil, fmt.Errorf("create inner Talos provisioner: %w", err)
+	}
+
+	provisioner, err := talosprovisioner.NewKubernetesProvisioner(
+		talosprovisioner.KubernetesProvisionerConfig{
+			InnerProvisioner: innerProvisioner,
+			KubeconfigPath:   cluster.Spec.Cluster.Connection.Kubeconfig,
+			K8sProvider:      k8sProvider,
+			DynamicClient:    dynClient,
+			RestConfig:       restConfig,
+			ClusterName:      clusterName,
+			Distribution:     string(cluster.Spec.Cluster.Distribution),
+			GatewayClassName: opts.GatewayClassName,
+			ControlPlanes:    int(cluster.Spec.Cluster.ControlPlanes),
+			Workers:          int(cluster.Spec.Cluster.Workers),
+			Persistence:      opts.Persistence,
+		},
+	)
+	if err != nil {
+		return nil, nil, fmt.Errorf("create Talos Kubernetes provisioner: %w", err)
+	}
+
+	return provisioner, nil, nil
+}
+
+func (f DefaultFactory) createVClusterProvisioner(
+	cluster *v1alpha1.Cluster,
+) (Provisioner, any, error) {
+	if cluster.Spec.Cluster.Provider == v1alpha1.ProviderKubernetes {
+		return f.createVClusterKubernetesProvisioner(cluster)
+	}
+
 	if f.DistributionConfig.VCluster == nil {
 		return nil, nil, fmt.Errorf(
 			"vcluster config is required for VCluster distribution: %w",
@@ -438,8 +745,61 @@ func (f DefaultFactory) createVClusterProvisioner(
 	return provisioner, vclusterConfig, nil
 }
 
+// createVClusterKubernetesProvisioner creates a vCluster provisioner that
+// deploys vCluster as a Helm release on a host Kubernetes cluster.
+func (f DefaultFactory) createVClusterKubernetesProvisioner(
+	cluster *v1alpha1.Cluster,
+) (Provisioner, any, error) {
+	opts := cluster.Spec.Provider.Kubernetes
+
+	// Use VCluster config name (set by applyClusterNameOverride).
+	vclusterConfig := f.DistributionConfig.VCluster
+
+	clusterName := ""
+	if vclusterConfig != nil {
+		clusterName = vclusterConfig.Name
+	}
+
+	if clusterName == "" {
+		clusterName = cluster.Metadata.Name
+	}
+
+	hostClient, restConfig, _, k8sProvider, err := buildKubernetesInfra(opts)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var (
+		valuesPath     string
+		disableFlannel bool
+	)
+
+	if vclusterConfig != nil {
+		valuesPath = vclusterConfig.ValuesPath
+		disableFlannel = vclusterConfig.DisableFlannel
+	}
+
+	provisioner, err := vclusterprovisioner.NewKubernetesProvisioner(
+		vclusterprovisioner.KubernetesProvisionerConfig{
+			ClusterName:    clusterName,
+			HostContext:    resolveKubernetesOption(opts.Context, opts.ContextEnvVar),
+			KubeconfigPath: cluster.Spec.Cluster.Connection.Kubeconfig,
+			HostClientset:  hostClient,
+			RestConfig:     restConfig,
+			K8sProvider:    k8sProvider,
+			ValuesPath:     valuesPath,
+			DisableFlannel: disableFlannel,
+		},
+	)
+	if err != nil {
+		return nil, nil, fmt.Errorf("create vCluster Kubernetes provisioner: %w", err)
+	}
+
+	return provisioner, vclusterConfig, nil
+}
+
 func (f DefaultFactory) createKWOKProvisioner(
-	_ *v1alpha1.Cluster,
+	cluster *v1alpha1.Cluster,
 ) (Provisioner, any, error) {
 	if f.DistributionConfig.KWOK == nil {
 		return nil, nil, fmt.Errorf(
@@ -450,11 +810,55 @@ func (f DefaultFactory) createKWOKProvisioner(
 
 	kwokConfig := f.DistributionConfig.KWOK
 
+	// Kubernetes provider: run KWOK inside a DinD pod on the host cluster
+	if cluster.Spec.Cluster.Provider == v1alpha1.ProviderKubernetes {
+		return f.createKWOKKubernetesProvisioner(cluster, kwokConfig)
+	}
+
 	provisioner := kwokprovisioner.NewProvisioner(
 		kwokConfig.Name,
 		kwokConfig.ConfigPath,
 		nil,
 	)
+
+	return provisioner, kwokConfig, nil
+}
+
+// createKWOKKubernetesProvisioner creates a KWOK provisioner that runs inside
+// a DinD pod on a host Kubernetes cluster.
+func (f DefaultFactory) createKWOKKubernetesProvisioner(
+	cluster *v1alpha1.Cluster,
+	kwokConfig *KWOKConfig,
+) (Provisioner, any, error) {
+	opts := cluster.Spec.Provider.Kubernetes
+
+	_, restConfig, dynClient, k8sProvider, err := buildKubernetesInfra(opts)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Use kwokConfig.Name as the cluster name — it's always set correctly
+	// by applyClusterNameOverride, while cluster.Metadata.Name may be empty
+	// when using --name flag without a ksail.yaml file.
+	clusterName := kwokConfig.Name
+
+	provisioner, err := kwokprovisioner.NewKubernetesProvisioner(
+		kwokprovisioner.KubernetesProvisionerConfig{
+			Name:             kwokConfig.Name,
+			ConfigPath:       kwokConfig.ConfigPath,
+			KubeconfigPath:   cluster.Spec.Cluster.Connection.Kubeconfig,
+			K8sProvider:      k8sProvider,
+			DynamicClient:    dynClient,
+			RestConfig:       restConfig,
+			ClusterName:      clusterName,
+			Distribution:     string(cluster.Spec.Cluster.Distribution),
+			GatewayClassName: opts.GatewayClassName,
+			Persistence:      opts.Persistence,
+		},
+	)
+	if err != nil {
+		return nil, nil, fmt.Errorf("create KWOK Kubernetes provisioner: %w", err)
+	}
 
 	return provisioner, kwokConfig, nil
 }

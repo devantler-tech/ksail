@@ -77,4 +77,14 @@ var (
 	ErrNodeNotFoundByIP = errors.New("no Kubernetes node found with IP")
 	// ErrConfigNilForInsecureApply is returned when a nil config is passed to applyConfigInsecure.
 	ErrConfigNilForInsecureApply = errors.New("config must not be nil for insecure apply")
+	// ErrStartNotSupported is returned when Start is called on a Talos-on-Kubernetes provisioner.
+	ErrStartNotSupported = errors.New(
+		"start not supported for Talos-on-Kubernetes: recreate the cluster instead",
+	)
+	// ErrStopNotSupported is returned when Stop is called on a Talos-on-Kubernetes provisioner.
+	ErrStopNotSupported = errors.New(
+		"stop not supported for Talos-on-Kubernetes: delete the cluster instead",
+	)
+	// ErrInvalidPort is returned when a port number is outside the valid TCP range [1, 65535].
+	ErrInvalidPort = errors.New("port out of valid range [1, 65535]")
 )

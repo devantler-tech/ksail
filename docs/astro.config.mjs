@@ -86,7 +86,7 @@ export default defineConfig({
             {
               label: "CLI Flags",
               collapsed: true,
-              autogenerate: { directory: "cli-flags" },
+              items: [{ autogenerate: { directory: "cli-flags", collapsed: true } }],
             },
           ],
         },

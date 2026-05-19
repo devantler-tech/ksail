@@ -40,7 +40,7 @@ func structToMap(val reflect.Value) map[string]any {
 	result := make(map[string]any)
 
 	// Handle pointers
-	if val.Kind() == reflect.Ptr {
+	if val.Kind() == reflect.Pointer {
 		if val.IsNil() {
 			return nil
 		}
@@ -113,7 +113,7 @@ func getJSONFieldName(field reflect.StructField) string {
 // Returns nil for zero/empty values that should be omitted.
 func convertValue(val reflect.Value) any {
 	// Handle pointers first
-	if val.Kind() == reflect.Ptr {
+	if val.Kind() == reflect.Pointer {
 		if val.IsNil() {
 			return nil
 		}
@@ -309,7 +309,7 @@ func pruneDefaults(val reflect.Value) {
 // pruneDefaultsWithPath recursively prunes default values, tracking the field path.
 func pruneDefaultsWithPath(val reflect.Value, path string) {
 	// Handle pointers
-	if val.Kind() == reflect.Ptr {
+	if val.Kind() == reflect.Pointer {
 		if val.IsNil() {
 			return
 		}

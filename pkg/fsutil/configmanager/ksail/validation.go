@@ -183,7 +183,7 @@ func expectedDistributionConfigName(distribution v1alpha1.Distribution) string {
 	case v1alpha1.DistributionVCluster:
 		return "vcluster.yaml"
 	case v1alpha1.DistributionKWOK:
-		return "kwok.yaml"
+		return "kwok"
 	case v1alpha1.DistributionEKS:
 		return "eks.yaml"
 	default:
@@ -217,7 +217,7 @@ func isFieldEmpty(fieldPtr any) bool {
 	}
 
 	fieldVal := reflect.ValueOf(fieldPtr)
-	if fieldVal.Kind() != reflect.Ptr || fieldVal.IsNil() {
+	if fieldVal.Kind() != reflect.Pointer || fieldVal.IsNil() {
 		return true
 	}
 

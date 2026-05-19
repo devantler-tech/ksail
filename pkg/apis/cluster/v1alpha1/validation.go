@@ -126,7 +126,13 @@ func ValidPolicyEngines() []PolicyEngine {
 
 // ValidProviders returns supported provider values.
 func ValidProviders() []Provider {
-	return []Provider{ProviderDocker, ProviderHetzner, ProviderOmni, ProviderAWS}
+	return []Provider{
+		ProviderDocker,
+		ProviderHetzner,
+		ProviderOmni,
+		ProviderAWS,
+		ProviderKubernetes,
+	}
 }
 
 // ValidPlacementGroupStrategies returns supported placement group strategy values.
@@ -177,7 +183,7 @@ func ValidateMirrorRegistriesForProvider(provider Provider, mirrorRegistries []s
 	}
 
 	// Cloud providers cannot access local Docker containers as mirrors
-	if provider == ProviderHetzner || provider == ProviderOmni || provider == ProviderAWS {
+	if provider.IsCloud() {
 		for _, spec := range mirrorRegistries {
 			if isLocalMirrorSpec(spec) {
 				return fmt.Errorf(
@@ -232,10 +238,11 @@ func ValidateLocalRegistryForProvider(provider Provider, registry LocalRegistry)
 		return nil
 	}
 
-	// Cloud providers require external registries with proper host configuration
-	if (provider == ProviderHetzner || provider == ProviderOmni || provider == ProviderAWS) &&
-		!registry.IsExternal() {
-		return ErrLocalRegistryNotSupported
+	// Cloud and Kubernetes providers require external registries with proper host configuration
+	if provider.IsCloud() || provider == ProviderKubernetes {
+		if !registry.IsExternal() {
+			return ErrLocalRegistryNotSupported
+		}
 	}
 
 	return nil
@@ -515,6 +522,50 @@ func ValidateOIDCConfig(oidc *OIDCSpec) error {
 	}
 
 	oidc.ExtraScopes = normalized
+
+	return nil
+}
+
+// ValidateNestedCIDRs validates that the nested cluster's pod and service CIDRs
+// do not overlap with common host cluster CIDR ranges.
+// Returns nil if valid, or ErrCIDROverlap describing the conflict.
+func ValidateNestedCIDRs(podCIDR, serviceCIDR string) error {
+	// Common host cluster CIDR ranges to check against
+	hostRanges := []string{
+		"10.244.0.0/16", // common host pod CIDR (Flannel, Calico default)
+		"10.96.0.0/12",  // common host service CIDR (kubeadm default)
+	}
+
+	for _, cidr := range []struct {
+		name  string
+		value string
+	}{
+		{"podCidr", podCIDR},
+		{"serviceCidr", serviceCIDR},
+	} {
+		if cidr.value == "" {
+			continue
+		}
+
+		_, nestedNet, err := net.ParseCIDR(cidr.value)
+		if err != nil {
+			return fmt.Errorf("invalid %s %q: %w", cidr.name, cidr.value, err)
+		}
+
+		for _, hostRange := range hostRanges {
+			_, hostNet, _ := net.ParseCIDR(hostRange)
+
+			if nestedNet.Contains(hostNet.IP) || hostNet.Contains(nestedNet.IP) {
+				return fmt.Errorf(
+					"%w: %s %q overlaps with common host range %s",
+					ErrCIDROverlap,
+					cidr.name,
+					cidr.value,
+					hostRange,
+				)
+			}
+		}
+	}
 
 	return nil
 }

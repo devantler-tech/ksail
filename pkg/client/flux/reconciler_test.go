@@ -17,6 +17,25 @@ import (
 	k8stesting "k8s.io/client-go/testing"
 )
 
+const (
+	kustomizationListKind = "KustomizationList"
+	kustomizationKind     = "Kustomization"
+	conditionTypeReady    = "Ready"
+	conditionTypeStalled  = "Stalled"
+	statusApps            = "apps"
+	reasonSucceeded       = "Succeeded"
+	reasonReconcilFailed  = "ReconciliationFailed"
+	reasonInstallFailed   = "InstallFailed"
+	reasonUpgradeFailed   = "UpgradeFailed"
+	reasonRetryExhausted  = "RetryExhausted"
+	statusTrue            = "True"
+	statusFalse           = "False"
+	chartLiteral          = "chart"
+	statusConditions      = "conditions"
+	statusInfra           = "infra"
+	namespaceFluxSystem   = "flux-system"
+)
+
 var errSimulatedAPIFailure = errors.New("simulated API failure")
 
 // kustomizationGVR is the GroupVersionResource for Flux Kustomization CRs.
@@ -33,7 +52,7 @@ func newTestFluxReconciler(objects ...runtime.Object) *flux.Reconciler {
 	fakeClient := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(
 		scheme,
 		map[schema.GroupVersionResource]string{
-			kustomizationGVR: "KustomizationList",
+			kustomizationGVR: kustomizationListKind,
 		},
 		objects...,
 	)
@@ -51,10 +70,10 @@ func newFakeKustomization(
 	kust.SetGroupVersionKind(schema.GroupVersionKind{
 		Group:   "kustomize.toolkit.fluxcd.io",
 		Version: "v1",
-		Kind:    "Kustomization",
+		Kind:    kustomizationKind,
 	})
 	kust.SetName(name)
-	kust.SetNamespace("flux-system")
+	kust.SetNamespace(namespaceFluxSystem)
 
 	obj := kust.Object
 	obj["spec"] = map[string]any{
@@ -73,9 +92,9 @@ func newFakeKustomization(
 
 	if readyStatus != "" {
 		obj["status"] = map[string]any{
-			"conditions": []any{
+			statusConditions: []any{
 				map[string]any{
-					"type":    "Ready",
+					"type":    conditionTypeReady,
 					"status":  readyStatus,
 					"reason":  readyReason,
 					"message": readyMessage,
@@ -111,66 +130,70 @@ func TestListKustomizations(t *testing.T) {
 			name: "single kustomization without dependencies",
 			objects: []runtime.Object{
 				newFakeKustomization(
-					"infra",
+					statusInfra,
 					"./infrastructure",
 					nil,
-					"True",
-					"Succeeded",
+					statusTrue,
+					reasonSucceeded,
 					"Applied revision: v1",
 				),
 			},
 			wantInfos: []flux.KustomizationInfo{
-				{Name: "infra", Path: "./infrastructure", DependsOn: nil},
+				{Name: statusInfra, Path: "./infrastructure", DependsOn: nil},
 			},
 		},
 		{
 			name: "single kustomization with dependencies",
 			objects: []runtime.Object{
 				newFakeKustomization(
-					"apps",
+					statusApps,
 					"./apps",
-					[]string{"infra", "configs"},
-					"True",
-					"Succeeded",
+					[]string{statusInfra, "configs"},
+					statusTrue,
+					reasonSucceeded,
 					"ok",
 				),
 			},
 			wantInfos: []flux.KustomizationInfo{
-				{Name: "apps", Path: "./apps", DependsOn: []string{"infra", "configs"}},
+				{Name: statusApps, Path: "./apps", DependsOn: []string{statusInfra, "configs"}},
 			},
 		},
 		{
 			name: "multiple kustomizations with mixed dependencies",
 			objects: []runtime.Object{
 				newFakeKustomization(
-					"flux-system",
+					namespaceFluxSystem,
 					"./clusters/my-cluster",
 					nil,
-					"True",
-					"Succeeded",
+					statusTrue,
+					reasonSucceeded,
 					"ok",
 				),
 				newFakeKustomization(
-					"infra",
+					statusInfra,
 					"./infrastructure",
-					[]string{"flux-system"},
-					"True",
-					"Succeeded",
+					[]string{namespaceFluxSystem},
+					statusTrue,
+					reasonSucceeded,
 					"ok",
 				),
 				newFakeKustomization(
-					"apps",
+					statusApps,
 					"./apps",
-					[]string{"infra"},
-					"False",
+					[]string{statusInfra},
+					statusFalse,
 					"Progressing",
 					"reconciling",
 				),
 			},
 			wantInfos: []flux.KustomizationInfo{
-				{Name: "apps", Path: "./apps", DependsOn: []string{"infra"}},
-				{Name: "flux-system", Path: "./clusters/my-cluster", DependsOn: nil},
-				{Name: "infra", Path: "./infrastructure", DependsOn: []string{"flux-system"}},
+				{Name: statusApps, Path: "./apps", DependsOn: []string{statusInfra}},
+				{Name: namespaceFluxSystem, Path: "./clusters/my-cluster", DependsOn: nil},
+				{
+					Name:      statusInfra,
+					Path:      "./infrastructure",
+					DependsOn: []string{namespaceFluxSystem},
+				},
 			},
 			unordered: true,
 		},
@@ -182,7 +205,7 @@ func TestListKustomizations(t *testing.T) {
 					kust.SetGroupVersionKind(schema.GroupVersionKind{
 						Group:   "kustomize.toolkit.fluxcd.io",
 						Version: "v1",
-						Kind:    "Kustomization",
+						Kind:    kustomizationKind,
 					})
 					kust.SetName("no-path")
 					kust.SetNamespace("flux-system")
@@ -235,7 +258,7 @@ func TestListKustomizations_APIError(t *testing.T) {
 	fakeClient := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(
 		scheme,
 		map[schema.GroupVersionResource]string{
-			kustomizationGVR: "KustomizationList",
+			kustomizationGVR: kustomizationListKind,
 		},
 	)
 
@@ -257,7 +280,7 @@ func TestListKustomizations_APIError(t *testing.T) {
 // newAnnotatedKust is a test helper that creates a fake Kustomization with
 // the ReconcileExcludeAnnotation set to the given value.
 func newAnnotatedKust(name, path, annotationValue string) *unstructured.Unstructured {
-	kust := newFakeKustomization(name, path, nil, "True", "Succeeded", "ok")
+	kust := newFakeKustomization(name, path, nil, statusTrue, reasonSucceeded, "ok")
 	kust.SetAnnotations(map[string]string{
 		flux.ReconcileExcludeAnnotation: annotationValue,
 	})
@@ -299,7 +322,7 @@ func TestListKustomizations_ExcludeAnnotation_True(t *testing.T) {
 		},
 		{
 			name:         "kustomization with exclude annotation set to True (case-insensitive)",
-			objects:      []runtime.Object{newAnnotatedKust("excluded", "./excluded", "True")},
+			objects:      []runtime.Object{newAnnotatedKust("excluded", "./excluded", statusTrue)},
 			wantExcluded: map[string]bool{"excluded": true},
 		},
 	}
@@ -332,7 +355,7 @@ func TestListKustomizations_ExcludeAnnotation_FalseOrAbsent(t *testing.T) {
 		{
 			name: "kustomization without exclude annotation",
 			objects: []runtime.Object{
-				newFakeKustomization("normal", "./normal", nil, "True", "Succeeded", "ok"),
+				newFakeKustomization("normal", "./normal", nil, statusTrue, reasonSucceeded, "ok"),
 			},
 			wantExcluded: map[string]bool{"normal": false},
 		},
@@ -340,7 +363,14 @@ func TestListKustomizations_ExcludeAnnotation_FalseOrAbsent(t *testing.T) {
 			name: "mixed kustomizations with and without annotation",
 			objects: []runtime.Object{
 				newAnnotatedKust("excluded-app", "./apps", "true"),
-				newFakeKustomization("included-infra", "./infra", nil, "True", "Succeeded", "ok"),
+				newFakeKustomization(
+					"included-infra",
+					"./infra",
+					nil,
+					statusTrue,
+					reasonSucceeded,
+					"ok",
+				),
 			},
 			wantExcluded: map[string]bool{
 				"excluded-app":   true,
@@ -387,23 +417,23 @@ func TestCheckNamedKustomizationReady(t *testing.T) {
 					"infra",
 					"./infrastructure",
 					nil,
-					"True",
-					"Succeeded",
+					statusTrue,
+					reasonSucceeded,
 					"Applied revision: main@sha1:abc123",
 				),
 			},
 			wantReady:  true,
-			wantStatus: "Ready",
+			wantStatus: conditionTypeReady,
 		},
 		{
 			name:   "not-ready kustomization with transient reason",
-			ksName: "apps",
+			ksName: statusApps,
 			objects: []runtime.Object{
 				newFakeKustomization(
-					"apps",
+					statusApps,
 					"./apps",
 					nil,
-					"False",
+					statusFalse,
 					"Progressing",
 					"reconciliation in progress",
 				),
@@ -413,11 +443,11 @@ func TestCheckNamedKustomizationReady(t *testing.T) {
 		},
 		{
 			name:   "not-ready kustomization with DependencyNotReady",
-			ksName: "apps",
+			ksName: statusApps,
 			objects: []runtime.Object{
 				newFakeKustomization(
-					"apps", "./apps", []string{"infra"},
-					"False", "DependencyNotReady", "dependency 'infra' is not ready",
+					statusApps, "./apps", []string{"infra"},
+					statusFalse, "DependencyNotReady", "dependency 'infra' is not ready",
 				),
 			},
 			wantReady:  false,
@@ -431,15 +461,15 @@ func TestCheckNamedKustomizationReady(t *testing.T) {
 					"broken",
 					"./broken",
 					nil,
-					"False",
-					"ReconciliationFailed",
+					statusFalse,
+					reasonReconcilFailed,
 					"kustomize build failed",
 				),
 			},
 			wantReady:   false,
 			wantErr:     true,
 			wantErrType: flux.ErrKustomizationFailed,
-			wantErrMsg:  "ReconciliationFailed",
+			wantErrMsg:  reasonReconcilFailed,
 		},
 		{
 			name:   "failed kustomization with ValidationFailed",
@@ -449,7 +479,7 @@ func TestCheckNamedKustomizationReady(t *testing.T) {
 					"invalid",
 					"./invalid",
 					nil,
-					"False",
+					statusFalse,
 					"ValidationFailed",
 					"validation error",
 				),
@@ -467,7 +497,7 @@ func TestCheckNamedKustomizationReady(t *testing.T) {
 					"no-artifact",
 					"./na",
 					nil,
-					"False",
+					statusFalse,
 					"ArtifactFailed",
 					"artifact not found",
 				),
@@ -485,7 +515,7 @@ func TestCheckNamedKustomizationReady(t *testing.T) {
 					"build-fail",
 					"./build-fail",
 					nil,
-					"False",
+					statusFalse,
 					"BuildFailed",
 					"kustomize build failed: invalid overlay",
 				),
@@ -503,7 +533,7 @@ func TestCheckNamedKustomizationReady(t *testing.T) {
 					"health-fail",
 					"./health-fail",
 					nil,
-					"False",
+					statusFalse,
 					"HealthCheckFailed",
 					"health check timed out for deployment/nginx",
 				),
@@ -529,7 +559,7 @@ func TestCheckNamedKustomizationReady(t *testing.T) {
 					kust.SetGroupVersionKind(schema.GroupVersionKind{
 						Group:   "kustomize.toolkit.fluxcd.io",
 						Version: "v1",
-						Kind:    "Kustomization",
+						Kind:    kustomizationKind,
 					})
 					kust.SetName("new-ks")
 					kust.SetNamespace("flux-system")
@@ -550,7 +580,7 @@ func TestCheckNamedKustomizationReady(t *testing.T) {
 					kust.SetGroupVersionKind(schema.GroupVersionKind{
 						Group:   "kustomize.toolkit.fluxcd.io",
 						Version: "v1",
-						Kind:    "Kustomization",
+						Kind:    kustomizationKind,
 					})
 					kust.SetName("stalled-ks")
 					kust.SetNamespace("flux-system")
@@ -558,8 +588,8 @@ func TestCheckNamedKustomizationReady(t *testing.T) {
 					kust.Object["status"] = map[string]any{
 						"conditions": []any{
 							map[string]any{
-								"type":    "Stalled",
-								"status":  "True",
+								"type":    conditionTypeStalled,
+								"status":  statusTrue,
 								"reason":  "StalledReason",
 								"message": "resource is stalled",
 							},
@@ -703,7 +733,7 @@ func newTestFluxReconcilerWithHelmReleases(objects ...runtime.Object) *flux.Reco
 	fakeClient := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(
 		scheme,
 		map[schema.GroupVersionResource]string{
-			kustomizationGVR: "KustomizationList",
+			kustomizationGVR: kustomizationListKind,
 			helmReleaseGVR:   "HelmReleaseList",
 		},
 		objects...,
@@ -727,9 +757,9 @@ func newFakeHelmRelease(
 	helmRelease.SetNamespace(namespace)
 
 	helmRelease.Object["spec"] = map[string]any{
-		"chart": map[string]any{
+		chartLiteral: map[string]any{
 			"spec": map[string]any{
-				"chart": name,
+				chartLiteral: name,
 			},
 		},
 	}
@@ -741,7 +771,7 @@ func newFakeHelmRelease(
 		}
 
 		helmRelease.Object["status"] = map[string]any{
-			"conditions": condList,
+			statusConditions: condList,
 		}
 	}
 
@@ -765,7 +795,12 @@ func TestCheckHelmReleaseStuck(t *testing.T) {
 		{
 			name: "healthy HelmRelease (Ready=True)",
 			hr: newFakeHelmRelease("kyverno", "kyverno", []map[string]any{
-				{"type": "Ready", "status": "True", "reason": "Succeeded", "message": "ok"},
+				{
+					"type":    conditionTypeReady,
+					"status":  statusTrue,
+					"reason":  reasonSucceeded,
+					"message": "ok",
+				},
 			}),
 			wantStuck: false,
 		},
@@ -773,47 +808,47 @@ func TestCheckHelmReleaseStuck(t *testing.T) {
 			name: "stuck with InstallFailed",
 			hr: newFakeHelmRelease("kyverno", "kyverno", []map[string]any{
 				{
-					"type":    "Ready",
-					"status":  "False",
-					"reason":  "InstallFailed",
+					"type":    conditionTypeReady,
+					"status":  statusFalse,
+					"reason":  reasonInstallFailed,
 					"message": "install retries exhausted",
 				},
 			}),
 			wantStuck:  true,
-			wantReason: "InstallFailed",
+			wantReason: reasonInstallFailed,
 		},
 		{
 			name: "stuck with UpgradeFailed",
 			hr: newFakeHelmRelease("nginx", "default", []map[string]any{
 				{
-					"type":    "Ready",
-					"status":  "False",
-					"reason":  "UpgradeFailed",
+					"type":    conditionTypeReady,
+					"status":  statusFalse,
+					"reason":  reasonUpgradeFailed,
 					"message": "upgrade retries exhausted",
 				},
 			}),
 			wantStuck:  true,
-			wantReason: "UpgradeFailed",
+			wantReason: reasonUpgradeFailed,
 		},
 		{
 			name: "stuck with ReconciliationFailed",
 			hr: newFakeHelmRelease("metrics", "monitoring", []map[string]any{
 				{
-					"type":    "Ready",
-					"status":  "False",
-					"reason":  "ReconciliationFailed",
+					"type":    conditionTypeReady,
+					"status":  statusFalse,
+					"reason":  reasonReconcilFailed,
 					"message": "reconciliation failed",
 				},
 			}),
 			wantStuck:  true,
-			wantReason: "ReconciliationFailed",
+			wantReason: reasonReconcilFailed,
 		},
 		{
 			name: "stuck with TestFailed",
-			hr: newFakeHelmRelease("app", "default", []map[string]any{
+			hr: newFakeHelmRelease(statusApps, "default", []map[string]any{
 				{
-					"type":    "Ready",
-					"status":  "False",
+					"type":    conditionTypeReady,
+					"status":  statusFalse,
 					"reason":  "TestFailed",
 					"message": "helm test failed",
 				},
@@ -823,10 +858,10 @@ func TestCheckHelmReleaseStuck(t *testing.T) {
 		},
 		{
 			name: "stuck with RollbackFailed",
-			hr: newFakeHelmRelease("app", "default", []map[string]any{
+			hr: newFakeHelmRelease(statusApps, "default", []map[string]any{
 				{
-					"type":    "Ready",
-					"status":  "False",
+					"type":    conditionTypeReady,
+					"status":  statusFalse,
 					"reason":  "RollbackFailed",
 					"message": "rollback failed",
 				},
@@ -836,10 +871,10 @@ func TestCheckHelmReleaseStuck(t *testing.T) {
 		},
 		{
 			name: "stuck with UninstallFailed",
-			hr: newFakeHelmRelease("app", "default", []map[string]any{
+			hr: newFakeHelmRelease(statusApps, "default", []map[string]any{
 				{
-					"type":    "Ready",
-					"status":  "False",
+					"type":    conditionTypeReady,
+					"status":  statusFalse,
 					"reason":  "UninstallFailed",
 					"message": "uninstall failed",
 				},
@@ -849,10 +884,10 @@ func TestCheckHelmReleaseStuck(t *testing.T) {
 		},
 		{
 			name: "stuck with GetLastReleaseFailed",
-			hr: newFakeHelmRelease("app", "default", []map[string]any{
+			hr: newFakeHelmRelease(statusApps, "default", []map[string]any{
 				{
-					"type":    "Ready",
-					"status":  "False",
+					"type":    conditionTypeReady,
+					"status":  statusFalse,
 					"reason":  "GetLastReleaseFailed",
 					"message": "get last release failed",
 				},
@@ -864,21 +899,21 @@ func TestCheckHelmReleaseStuck(t *testing.T) {
 			name: "Stalled=True is stuck",
 			hr: newFakeHelmRelease("kyverno", "kyverno", []map[string]any{
 				{
-					"type":    "Stalled",
-					"status":  "True",
-					"reason":  "RetryExhausted",
+					"type":    conditionTypeStalled,
+					"status":  statusTrue,
+					"reason":  reasonRetryExhausted,
 					"message": "retries exhausted",
 				},
 			}),
 			wantStuck:  true,
-			wantReason: "RetryExhausted",
+			wantReason: reasonRetryExhausted,
 		},
 		{
 			name: "DependencyNotReady is NOT stuck (transient)",
-			hr: newFakeHelmRelease("app", "default", []map[string]any{
+			hr: newFakeHelmRelease(statusApps, "default", []map[string]any{
 				{
-					"type":    "Ready",
-					"status":  "False",
+					"type":    conditionTypeReady,
+					"status":  statusFalse,
 					"reason":  "DependencyNotReady",
 					"message": "waiting for dependency",
 				},
@@ -887,10 +922,10 @@ func TestCheckHelmReleaseStuck(t *testing.T) {
 		},
 		{
 			name: "Progressing is NOT stuck (transient)",
-			hr: newFakeHelmRelease("app", "default", []map[string]any{
+			hr: newFakeHelmRelease(statusApps, "default", []map[string]any{
 				{
-					"type":    "Ready",
-					"status":  "False",
+					"type":    conditionTypeReady,
+					"status":  statusFalse,
 					"reason":  "Progressing",
 					"message": "reconciliation in progress",
 				},
@@ -899,30 +934,35 @@ func TestCheckHelmReleaseStuck(t *testing.T) {
 		},
 		{
 			name:      "no conditions is NOT stuck",
-			hr:        newFakeHelmRelease("app", "default", nil),
+			hr:        newFakeHelmRelease(statusApps, "default", nil),
 			wantStuck: false,
 		},
 		{
 			name: "Ready=True overrides earlier failure reason",
-			hr: newFakeHelmRelease("app", "default", []map[string]any{
+			hr: newFakeHelmRelease(statusApps, "default", []map[string]any{
 				{
-					"type":    "Stalled",
-					"status":  "False",
+					"type":    conditionTypeStalled,
+					"status":  statusFalse,
 					"reason":  "RecoveredFromFailure",
 					"message": "stall cleared",
 				},
-				{"type": "Ready", "status": "True", "reason": "Succeeded", "message": "ok"},
+				{
+					"type":    conditionTypeReady,
+					"status":  statusTrue,
+					"reason":  reasonSucceeded,
+					"message": "ok",
+				},
 			}),
 			wantStuck: false,
 		},
 		{
 			name: "intentionally suspended HelmRelease is NOT stuck",
 			hr: func() *unstructured.Unstructured {
-				release := newFakeHelmRelease("app", "default", []map[string]any{
+				release := newFakeHelmRelease(statusApps, "default", []map[string]any{
 					{
-						"type":    "Ready",
-						"status":  "False",
-						"reason":  "InstallFailed",
+						"type":    conditionTypeReady,
+						"status":  statusFalse,
+						"reason":  reasonInstallFailed,
 						"message": "retries exhausted",
 					},
 				})
@@ -979,7 +1019,12 @@ func TestListStuckHelmReleases(t *testing.T) {
 			name: "healthy HelmReleases are not listed",
 			objects: []runtime.Object{
 				newFakeHelmRelease("kyverno", "kyverno", []map[string]any{
-					{"type": "Ready", "status": "True", "reason": "Succeeded", "message": "ok"},
+					{
+						"type":    conditionTypeReady,
+						"status":  statusTrue,
+						"reason":  reasonSucceeded,
+						"message": "ok",
+					},
 				}),
 			},
 			wantCount: 0,
@@ -989,9 +1034,9 @@ func TestListStuckHelmReleases(t *testing.T) {
 			objects: []runtime.Object{
 				newFakeHelmRelease("kyverno", "kyverno", []map[string]any{
 					{
-						"type":    "Ready",
-						"status":  "False",
-						"reason":  "InstallFailed",
+						"type":    conditionTypeReady,
+						"status":  statusFalse,
+						"reason":  reasonInstallFailed,
 						"message": "retries exhausted",
 					},
 				}),
@@ -1003,28 +1048,33 @@ func TestListStuckHelmReleases(t *testing.T) {
 			name: "mixed healthy and stuck across namespaces",
 			objects: []runtime.Object{
 				newFakeHelmRelease("healthy", "default", []map[string]any{
-					{"type": "Ready", "status": "True", "reason": "Succeeded", "message": "ok"},
+					{
+						"type":    conditionTypeReady,
+						"status":  statusTrue,
+						"reason":  reasonSucceeded,
+						"message": "ok",
+					},
 				}),
 				newFakeHelmRelease("stuck-a", "kyverno", []map[string]any{
 					{
-						"type":    "Ready",
-						"status":  "False",
-						"reason":  "UpgradeFailed",
+						"type":    conditionTypeReady,
+						"status":  statusFalse,
+						"reason":  reasonUpgradeFailed,
 						"message": "upgrade failed",
 					},
 				}),
 				newFakeHelmRelease("stuck-b", "monitoring", []map[string]any{
 					{
-						"type":    "Stalled",
-						"status":  "True",
-						"reason":  "RetryExhausted",
+						"type":    conditionTypeStalled,
+						"status":  statusTrue,
+						"reason":  reasonRetryExhausted,
 						"message": "retries exhausted",
 					},
 				}),
 				newFakeHelmRelease("progressing", "default", []map[string]any{
 					{
-						"type":    "Ready",
-						"status":  "False",
+						"type":    conditionTypeReady,
+						"status":  statusFalse,
 						"reason":  "Progressing",
 						"message": "in progress",
 					},
@@ -1100,9 +1150,9 @@ func TestResetStuckHelmReleases_SuccessfulReset(t *testing.T) {
 
 	helmRelease := newFakeHelmRelease("kyverno", "kyverno", []map[string]any{
 		{
-			"type":    "Ready",
-			"status":  "False",
-			"reason":  "InstallFailed",
+			"type":    conditionTypeReady,
+			"status":  statusFalse,
+			"reason":  reasonInstallFailed,
 			"message": "retries exhausted",
 		},
 	})
@@ -1110,7 +1160,7 @@ func TestResetStuckHelmReleases_SuccessfulReset(t *testing.T) {
 	reconciler := newTestFluxReconcilerWithHelmReleases(helmRelease)
 
 	releases := []flux.StuckHelmRelease{
-		{Name: "kyverno", Namespace: "kyverno", Reason: "InstallFailed"},
+		{Name: "kyverno", Namespace: "kyverno", Reason: reasonInstallFailed},
 	}
 
 	count, err := reconciler.ResetStuckHelmReleases(context.Background(), releases)
@@ -1134,9 +1184,9 @@ func TestResetStuckHelmReleases_PartialFailure(t *testing.T) {
 
 	helmRelease := newFakeHelmRelease("kyverno", "kyverno", []map[string]any{
 		{
-			"type":    "Ready",
-			"status":  "False",
-			"reason":  "InstallFailed",
+			"type":    conditionTypeReady,
+			"status":  statusFalse,
+			"reason":  reasonInstallFailed,
 			"message": "retries exhausted",
 		},
 	})
@@ -1144,8 +1194,8 @@ func TestResetStuckHelmReleases_PartialFailure(t *testing.T) {
 	reconciler := newTestFluxReconcilerWithHelmReleases(helmRelease)
 
 	releases := []flux.StuckHelmRelease{
-		{Name: "nonexistent", Namespace: "default", Reason: "InstallFailed"},
-		{Name: "kyverno", Namespace: "kyverno", Reason: "InstallFailed"},
+		{Name: "nonexistent", Namespace: "default", Reason: reasonInstallFailed},
+		{Name: "kyverno", Namespace: "kyverno", Reason: reasonInstallFailed},
 	}
 
 	count, err := reconciler.ResetStuckHelmReleases(context.Background(), releases)
@@ -1161,9 +1211,9 @@ func TestResetStuckHelmReleases_CancelledContext(t *testing.T) {
 
 	helmRelease := newFakeHelmRelease("kyverno", "kyverno", []map[string]any{
 		{
-			"type":    "Ready",
-			"status":  "False",
-			"reason":  "InstallFailed",
+			"type":    conditionTypeReady,
+			"status":  statusFalse,
+			"reason":  reasonInstallFailed,
 			"message": "retries exhausted",
 		},
 	})
@@ -1174,7 +1224,7 @@ func TestResetStuckHelmReleases_CancelledContext(t *testing.T) {
 	cancel() // Cancel immediately
 
 	releases := []flux.StuckHelmRelease{
-		{Name: "kyverno", Namespace: "kyverno", Reason: "InstallFailed"},
+		{Name: "kyverno", Namespace: "kyverno", Reason: reasonInstallFailed},
 	}
 
 	// dynamicfake does not fail requests on a cancelled context, so this test

@@ -3,6 +3,7 @@ package chat
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -801,15 +802,16 @@ func (m *Model) handleUserSubmit(msg userSubmitMsg) (tea.Model, tea.Cmd) {
 
 // commitToolsToLastAssistantMessage saves current tools to the last assistant message.
 func (m *Model) commitToolsToLastAssistantMessage() {
-	for idx := len(m.messages) - 1; idx >= 0; idx-- {
-		if m.messages[idx].role == roleAssistant {
-			m.messages[idx].tools = make([]*toolExecution, 0, len(m.toolOrder))
-			m.messages[idx].toolOrder = make([]string, len(m.toolOrder))
-			copy(m.messages[idx].toolOrder, m.toolOrder)
+	for i := range slices.Backward(m.messages) {
+		msg := &m.messages[i]
+		if msg.role == roleAssistant {
+			msg.tools = make([]*toolExecution, 0, len(m.toolOrder))
+			msg.toolOrder = make([]string, len(m.toolOrder))
+			copy(msg.toolOrder, m.toolOrder)
 
 			for _, id := range m.toolOrder {
 				if tool := m.tools[id]; tool != nil {
-					m.messages[idx].tools = append(m.messages[idx].tools, tool)
+					msg.tools = append(msg.tools, tool)
 				}
 			}
 

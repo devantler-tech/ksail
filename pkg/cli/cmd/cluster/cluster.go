@@ -13,7 +13,6 @@ import (
 	"os/signal"
 	"path/filepath"
 	"slices"
-	"sort"
 	"strings"
 	"sync"
 	"syscall"
@@ -57,6 +56,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
 	dockerprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/docker"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/hetzner"
+	kubernetesprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/kubernetes"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/omni"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
@@ -76,6 +76,7 @@ import (
 	"golang.org/x/sync/errgroup"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/cli-runtime/pkg/genericiooptions"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
@@ -109,6 +110,35 @@ var ErrInvalidCompressionLevel = errors.New(
 var ErrEmptyPinnedVersion = errors.New(
 	"pinned distribution version is empty",
 )
+
+// ErrDriftDetected is returned by the diff command when --exit-code is set
+// and configuration drift is detected. The exit code is 2 (KSail-specific:
+// 0 = no drift, 1 = error, 2 = drift detected — not the diff(1) convention).
+var ErrDriftDetected = errors.New("configuration drift detected")
+
+// DriftExitError is an error type that carries a custom exit code for the diff
+// command. It wraps ErrDriftDetected so callers can use errors.Is, and exposes
+// KSailExitCode() so main.go can propagate exit code 2 instead of the generic 1.
+type DriftExitError struct {
+	Changes int
+}
+
+// Error implements the error interface.
+func (e *DriftExitError) Error() string {
+	return fmt.Sprintf("%v: %d change(s) detected", ErrDriftDetected, e.Changes)
+}
+
+// Unwrap returns ErrDriftDetected so errors.Is(err, ErrDriftDetected) works.
+func (e *DriftExitError) Unwrap() error {
+	return ErrDriftDetected
+}
+
+// KSailExitCode returns the exit code that main.go should use for this error.
+// Using a KSail-specific name avoids matching stdlib *exec.ExitError, which also
+// implements ExitCode() int but represents a real subprocess failure.
+func (e *DriftExitError) KSailExitCode() int {
+	return diffExitCode
+}
 
 // BackupMetadata contains metadata about a backup.
 type BackupMetadata struct {
@@ -1023,6 +1053,7 @@ func NewClusterCmd(runtimeContainer *di.Runtime) *cobra.Command {
 	cmd.AddCommand(NewListCmd(runtimeContainer))
 	cmd.AddCommand(NewInfoCmd(runtimeContainer))
 	cmd.AddCommand(NewDiagnoseCmd(runtimeContainer))
+	cmd.AddCommand(NewDiffCmd(runtimeContainer))
 	cmd.AddCommand(NewConnectCmd(runtimeContainer))
 	cmd.AddCommand(NewBackupCmd(runtimeContainer))
 	cmd.AddCommand(NewRestoreCmd(runtimeContainer))
@@ -1386,7 +1417,7 @@ func ensureLocalRegistriesReady(
 		return err
 	}
 
-	if !provider.IsCloud() {
+	if provider.NeedsLocalDocker() {
 		// Stage 1: Provision local registry (skipped for external registries)
 		err := localregistry.ExecuteStage(
 			cmd,
@@ -1408,7 +1439,7 @@ func ensureLocalRegistriesReady(
 		return fmt.Errorf("failed to verify registry access: %w", err)
 	}
 
-	if !provider.IsCloud() {
+	if provider.NeedsLocalDocker() {
 		params := buildRegistryStageParams(cmd, ctx, deps, cfgManager, localDeps)
 
 		// Stage 3: Create and configure registry containers (local + mirrors)
@@ -1950,7 +1981,12 @@ func runDeleteAction(
 	detectedInfo, isKindCluster, clusterInfo := detectDeleteClusterInfo(cmd, resolved)
 
 	// Create provisioner for the provider
-	provisioner, err := createDeleteProvisioner(clusterInfo, resolved.OmniOpts, flags.storage)
+	provisioner, err := createDeleteProvisioner(
+		clusterInfo,
+		resolved.OmniOpts,
+		resolved.KubernetesOpts,
+		flags.storage,
+	)
 	if err != nil {
 		return fmt.Errorf("failed to create provisioner: %w", err)
 	}
@@ -2160,6 +2196,7 @@ func promptForDeletion(
 func createDeleteProvisioner(
 	clusterInfo *clusterdetector.Info,
 	omniOpts v1alpha1.OptionsOmni,
+	kubernetesOpts v1alpha1.OptionsKubernetes,
 	deleteStorage bool,
 ) (clusterprovisioner.Provisioner, error) {
 	// Check for test factory override
@@ -2179,7 +2216,7 @@ func createDeleteProvisioner(
 	}
 
 	provisioner, err := lifecycle.CreateMinimalProvisionerForProvider(
-		clusterInfo, omniOpts, deleteStorage,
+		clusterInfo, omniOpts, kubernetesOpts, deleteStorage,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create provisioner for provider: %w", err)
@@ -2285,6 +2322,11 @@ func buildDeletionPreview(
 		// CloudFormation stacks owning the control plane and managed nodegroups.
 		eksPlaceholder := "(EKS cluster and managed nodegroups for: " + resolved.ClusterName + ")"
 		preview.Servers = []string{eksPlaceholder}
+	case v1alpha1.ProviderKubernetes:
+		// For Kubernetes provider, nested cluster resources (DinD pod, Gateway,
+		// namespace) will be removed from the host cluster.
+		k8sPlaceholder := "(nested cluster namespace and resources for: " + resolved.ClusterName + ")"
+		preview.Servers = []string{k8sPlaceholder}
 	}
 
 	return preview
@@ -2829,9 +2871,13 @@ const diagnoseLongDesc = `Surface failing Kubernetes resources for the ` +
 	`current cluster.
 
 This command inspects the live cluster via the Kubernetes API and reports
-any pods that are not running successfully and any nodes that are not Ready.
-It is distribution-agnostic and works with Vanilla, K3s, Talos, and
-VCluster.
+any pods that are not running successfully, any nodes that are not Ready,
+and any PersistentVolumeClaims stuck in Pending phase. Each finding
+includes a severity classification and, where a known failure pattern is
+detected, a proactive remediation suggestion.
+
+A health score (0–100) summarises overall cluster health: each critical
+finding deducts 25 points and each warning deducts 10 points.
 
 The output is intentionally compact so it can be consumed directly by users
 or by the KSail AI chat assistant (ksail chat) and MCP server, which expose
@@ -2922,34 +2968,45 @@ func runDiagnoseCmd(
 		return fmt.Errorf("build kubernetes client: %w", err)
 	}
 
-	writer := cmd.OutOrStdout()
-
-	if format == outputFormatJSON {
-		report, diagErr := k8s.DiagnoseClusterReport(cmd.Context(), clientset, resolved.ClusterName)
-		if diagErr != nil {
-			return fmt.Errorf("diagnose cluster %q: %w", resolved.ClusterName, diagErr)
-		}
-
-		return runDiagnoseJSONReport(report, writer)
-	}
-
-	report, err := k8s.DiagnoseCluster(cmd.Context(), clientset)
+	report, err := k8s.DiagnoseClusterReport(cmd.Context(), clientset, resolved.ClusterName)
 	if err != nil {
 		return fmt.Errorf("diagnose cluster %q: %w", resolved.ClusterName, err)
 	}
 
-	if report == "" {
+	writer := cmd.OutOrStdout()
+
+	if format == outputFormatJSON {
+		return runDiagnoseJSONReport(report, writer)
+	}
+
+	return runDiagnoseTextReport(report, writer)
+}
+
+// runDiagnoseTextReport writes a human-readable diagnostic report including
+// the health score and per-finding remediation hints.
+func runDiagnoseTextReport(report k8s.DiagnoseReport, writer io.Writer) error {
+	if len(report.Findings) == 0 {
 		_, _ = fmt.Fprintf(
 			writer,
-			"Cluster %q looks healthy — no failing pods or NotReady nodes detected.\n",
-			resolved.ClusterName,
+			"Cluster %q looks healthy — no failing pods, NotReady nodes, or pending PVCs detected.\n",
+			report.ClusterName,
 		)
+		_, _ = fmt.Fprintf(writer, "Health score: %d/100\n", report.HealthScore)
 
 		return nil
 	}
 
-	_, _ = fmt.Fprintf(writer, "Diagnostics for cluster %q:\n", resolved.ClusterName)
-	_, _ = fmt.Fprintln(writer, report)
+	_, _ = fmt.Fprintf(writer, "Diagnostics for cluster %q:\n", report.ClusterName)
+	_, _ = fmt.Fprintf(writer, "Health score: %d/100\n", report.HealthScore)
+
+	for _, f := range report.Findings {
+		_, _ = fmt.Fprintf(writer, "\n  [%s] %s\n", f.Severity, f.Resource)
+		_, _ = fmt.Fprintf(writer, "    Reason: %s\n", f.Reason)
+
+		if f.Remediation != "" {
+			_, _ = fmt.Fprintf(writer, "    Suggested fix: %s\n", f.Remediation)
+		}
+	}
 
 	return nil
 }
@@ -3075,6 +3132,10 @@ func getProviderStatus(
 		// AWS/EKS status is derived from the EKS API through the provisioner,
 		// not from local container inspection. Return a minimal stub so callers
 		// that rely on this helper do not fail for EKS.
+		return &provider.ClusterStatus{Phase: "unknown"}, nil
+	case v1alpha1.ProviderKubernetes:
+		// Kubernetes provider status is a stub: full pod/namespace status inspection
+		// is not yet implemented. Return unknown so callers do not fail.
 		return &provider.ClusterStatus{Phase: "unknown"}, nil
 	default:
 		return nil, fmt.Errorf("%w: %s", errUnsupportedProvider, prov)
@@ -3746,6 +3807,11 @@ type ListDeps struct {
 	// OmniProvider is an optional Omni provider for listing Omni clusters.
 	// If nil, a real provider will be created if OMNI_SERVICE_ACCOUNT_KEY is set.
 	OmniProvider *omni.Provider
+
+	// KubernetesProvider is an optional Kubernetes provider for listing Kubernetes-hosted clusters.
+	// If nil, a real provider will be created using KSAIL_HOST_KUBECONFIG/KSAIL_HOST_CONTEXT env vars
+	// or the default kubeconfig (~/.kube/config) if those are not set.
+	KubernetesProvider *kubernetesprovider.Provider
 }
 
 // HandleListRunE handles the list command.
@@ -3833,6 +3899,8 @@ func getProviderClusters(
 		// in the local list path. Return an empty slice so `cluster list`
 		// does not error when AWS is configured in a profile.
 		return nil, nil
+	case v1alpha1.ProviderKubernetes:
+		return getKubernetesClusters(ctx, deps)
 	default:
 		return nil, fmt.Errorf("%w: %s", ErrUnsupportedProvider, provider)
 	}
@@ -3942,7 +4010,103 @@ func getOmniClusters(ctx context.Context, deps ListDeps) ([]clusterWithDistribut
 	return toTalosClusters(clusters), nil
 }
 
-// toTalosClusters wraps cluster names as Talos distribution clusters.
+// getKubernetesClusters returns all clusters hosted on the Kubernetes provider.
+func getKubernetesClusters(ctx context.Context, deps ListDeps) ([]clusterWithDistribution, error) {
+	// Use injected provider if available (for testing)
+	if deps.KubernetesProvider != nil {
+		infos, err := deps.KubernetesProvider.ListAllClustersWithDistribution(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to list Kubernetes clusters: %w", err)
+		}
+
+		return toKubernetesClusters(infos), nil
+	}
+
+	prov, err := getKubernetesProviderFromConfig()
+	if err != nil {
+		return nil, err
+	}
+
+	if prov == nil {
+		return []clusterWithDistribution{}, nil
+	}
+
+	infos, err := prov.ListAllClustersWithDistribution(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list Kubernetes clusters: %w", err)
+	}
+
+	return toKubernetesClusters(infos), nil
+}
+
+// getKubernetesProviderFromConfig creates a Kubernetes provider from the host config.
+func getKubernetesProviderFromConfig() (*kubernetesprovider.Provider, error) {
+	// Resolve kubeconfig: prefer KSAIL_HOST_KUBECONFIG env var, fall back to default.
+	kubeconfigPath := os.Getenv("KSAIL_HOST_KUBECONFIG")
+	if kubeconfigPath == "" {
+		kubeconfigPath = k8s.DefaultKubeconfigPath()
+	}
+
+	expandedPath, err := fsutil.ExpandHomePath(kubeconfigPath)
+	if err != nil {
+		return nil, fmt.Errorf("expand kubeconfig path: %w", err)
+	}
+
+	// Skip silently when the kubeconfig file does not exist.
+	//nolint:gosec // path is user-controlled kubeconfig, safe and canonicalized below
+	_, statErr := os.Stat(expandedPath)
+	if os.IsNotExist(statErr) {
+		return nil, nil //nolint:nilnil
+	}
+
+	canonicalPath, err := fsutil.EvalCanonicalPath(expandedPath)
+	if err != nil {
+		return nil, fmt.Errorf("canonicalize kubeconfig path: %w", err)
+	}
+
+	hostContext := os.Getenv("KSAIL_HOST_CONTEXT")
+
+	restConfig, err := k8s.BuildRESTConfig(canonicalPath, hostContext)
+	if err != nil {
+		// If the kubeconfig is present but invalid or unreachable, skip silently.
+		return nil, nil //nolint:nilnil,nilerr // intentionally swallow: host cluster unavailable
+	}
+
+	clientset, err := kubernetes.NewForConfig(restConfig)
+	if err != nil {
+		return nil, fmt.Errorf("create Kubernetes client: %w", err)
+	}
+
+	prov, err := kubernetesprovider.NewProvider(clientset, v1alpha1.OptionsKubernetes{})
+	if err != nil {
+		return nil, fmt.Errorf("create Kubernetes provider: %w", err)
+	}
+
+	return prov, nil
+}
+
+// toKubernetesClusters converts ClusterInfo to clusterWithDistribution,
+// mapping the distribution label string to a v1alpha1.Distribution enum value.
+func toKubernetesClusters(infos []kubernetesprovider.ClusterInfo) []clusterWithDistribution {
+	result := make([]clusterWithDistribution, 0, len(infos))
+
+	for _, info := range infos {
+		var dist v1alpha1.Distribution
+
+		err := dist.Set(info.Distribution)
+		if err != nil {
+			dist = v1alpha1.DistributionVanilla
+		}
+
+		result = append(result, clusterWithDistribution{
+			Name:         info.Name,
+			Distribution: dist,
+		})
+	}
+
+	return result
+}
+
 // Hetzner and Omni providers only support Talos.
 func toTalosClusters(names []string) []clusterWithDistribution {
 	result := make([]clusterWithDistribution, 0, len(names))
@@ -5556,9 +5720,9 @@ func runClusterCreationWorkflow(
 	}
 
 	// Post-creation Docker steps are only needed for local Docker clusters.
-	// Cloud providers (Omni, Hetzner) run nodes remotely and cannot access
-	// local Docker infrastructure.
-	if !ctx.ClusterCfg.Spec.Cluster.Provider.IsCloud() {
+	// Cloud providers (Omni, Hetzner) run nodes remotely and the Kubernetes
+	// provider runs nodes as pods — neither can access local Docker infrastructure.
+	if ctx.ClusterCfg.Spec.Cluster.Provider.NeedsLocalDocker() {
 		configureRegistryMirrorsInClusterWithWarning(
 			cmd,
 			ctx,
@@ -6029,7 +6193,7 @@ func resolveContextName(
 			available = append(available, name)
 		}
 
-		sort.Strings(available)
+		slices.Sort(available)
 
 		return "", fmt.Errorf(
 			"%w: %s (available contexts: %s)",
@@ -6040,7 +6204,7 @@ func resolveContextName(
 	case 1:
 		return matches[0], nil
 	default:
-		sort.Strings(matches)
+		slices.Sort(matches)
 
 		return "", fmt.Errorf(
 			"%w: '%s' matches multiple contexts: %s",
@@ -6140,7 +6304,7 @@ func clusterNamesFromPath(kubeconfigPath string) []string {
 		names = append(names, name)
 	}
 
-	sort.Strings(names)
+	slices.Sort(names)
 
 	return names
 }
@@ -6416,7 +6580,9 @@ func autoDeleteCluster(
 		Provider:     clusterCfg.Spec.Cluster.Provider,
 	}
 
-	provisioner, err := createDeleteProvisioner(info, clusterCfg.Spec.Provider.Omni, false)
+	provisioner, err := createDeleteProvisioner(
+		info, clusterCfg.Spec.Provider.Omni, clusterCfg.Spec.Provider.Kubernetes, false,
+	)
 	if err != nil {
 		return fmt.Errorf("TTL auto-delete: failed to create provisioner: %w", err)
 	}
@@ -7358,7 +7524,13 @@ func computeSpecOnlyDiff(
 			ctx.ClusterCfg.Spec.Cluster.Distribution,
 			ctx.ClusterCfg.Spec.Cluster.Provider,
 		)
-		if err == nil {
+		if err != nil {
+			notify.Warningf(
+				cmd.ErrOrStderr(),
+				"Cannot detect live cluster components (drift detection may be incomplete): %v",
+				err,
+			)
+		} else {
 			currentSpec.CNI = detected.CNI
 			currentSpec.CSI = detected.CSI
 			currentSpec.MetricsServer = detected.MetricsServer
@@ -8056,4 +8228,207 @@ func resolveClusterEntryName(kubeconfigPath, contextName string) (string, error)
 	}
 
 	return ctxEntry.Cluster, nil
+}
+
+// diffExitCode is the exit code returned by the diff command when --exit-code is
+// set and configuration drift is detected. This is a KSail-specific convention:
+// 0 = no drift, 1 = error, 2 = drift detected.
+// (Note: diff(1) uses 1 for differences; KSail reserves 1 for command errors and
+// uses 2 for drift so CI scripts can distinguish drift from failures.)
+const diffExitCode = 2
+
+// diffLongDesc describes the `ksail cluster diff` command.
+const diffLongDesc = `Compare the desired cluster configuration (ksail.yaml) against the live
+cluster state and report any drift.
+
+This command detects installed components via the Kubernetes API and Helm
+release history, then compares them against the configuration defined in
+ksail.yaml. Changes are classified by impact (in-place, reboot-required,
+recreate-required, wipe-required) — the same categories used by
+'ksail cluster update'.
+
+No changes are applied to the cluster; this is a read-only operation.
+
+The cluster is resolved in the following priority order:
+  1. From the --name flag override
+  2. From metadata.name in the ksail.yaml config file
+  3. From the current kubeconfig context
+
+Use --output json for machine-readable output suitable for CI pipelines.
+Use --exit-code to return exit code 2 when drift is detected (useful for
+CI gates and monitoring scripts).`
+
+// NewDiffCmd creates the cluster diff command.
+func NewDiffCmd(runtimeContainer *di.Runtime) *cobra.Command {
+	var exitCodeFlag bool
+
+	cmd := &cobra.Command{
+		Use:   "diff",
+		Short: "Show configuration drift between ksail.yaml and live cluster",
+		Long:  diffLongDesc,
+		Annotations: map[string]string{
+			annotations.AnnotationDescription: "Compare desired cluster configuration against live state and report drift",
+		},
+		SilenceUsage: true,
+	}
+
+	cfgManager := ksailconfigmanager.NewCommandConfigManager(
+		cmd,
+		ksailconfigmanager.DefaultClusterFieldSelectors(),
+	)
+
+	// Hide flags that diff doesn't expose in its help but that are needed for
+	// config defaults and validation to work correctly.
+	for _, flagName := range []string{"distribution", "distribution-config", "gitops-engine", "local-registry"} {
+		if f := cmd.Flags().Lookup(flagName); f != nil {
+			f.Hidden = true
+		}
+	}
+
+	cmd.Flags().String("output", "text",
+		"Output format: text or json. Use json for machine-readable structured output.")
+
+	cmd.Flags().BoolVar(&exitCodeFlag, "exit-code", false,
+		"Return exit code 2 when drift is detected (for CI gates)")
+
+	registerNameFlag(cmd, cfgManager)
+
+	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
+		// Validate output format before entering WrapHandler to avoid unnecessary
+		// DI when the format is obviously invalid. Mirrors the diagnose pattern.
+		err := validateOutputFormat(cmd)
+		if err != nil {
+			return err
+		}
+
+		format := getOutputFormat(cmd)
+
+		handler := lifecycle.WrapHandler(
+			runtimeContainer,
+			cfgManager,
+			func(cmd *cobra.Command, cfgManager *ksailconfigmanager.ConfigManager, deps lifecycle.Deps) error {
+				return handleDiffRunE(cmd, cfgManager, deps, exitCodeFlag, format)
+			},
+		)
+
+		return handler(cmd, nil)
+	}
+
+	return cmd
+}
+
+// handleDiffRunE computes the diff between desired and live cluster state.
+func handleDiffRunE(
+	cmd *cobra.Command,
+	cfgManager *ksailconfigmanager.ConfigManager,
+	deps lifecycle.Deps,
+	exitCodeFlag bool,
+	format string,
+) error {
+	ctx, _, err := loadAndValidateClusterConfig(cfgManager, deps)
+	if err != nil {
+		return err
+	}
+
+	diff := computeSpecOnlyDiff(cmd, ctx)
+
+	// Also try provisioner-level diff for Updater-capable provisioners.
+	// This adds distribution-specific changes (e.g., node counts, Talos config).
+	mergeProvisionerDiff(cmd, ctx, diff)
+
+	if diff.TotalChanges() == 0 {
+		if format == outputFormatJSON {
+			emitDiffJSON(cmd, diff)
+		} else {
+			notify.Infof(cmd.OutOrStdout(), "No configuration drift detected")
+		}
+
+		return nil
+	}
+
+	displayDiffResult(cmd, diff, format)
+
+	if exitCodeFlag {
+		return &DriftExitError{Changes: diff.TotalChanges()}
+	}
+
+	return nil
+}
+
+// displayDiffResult renders the diff output in the requested format.
+func displayDiffResult(
+	cmd *cobra.Command,
+	diff *clusterupdate.UpdateResult,
+	format string,
+) {
+	if format == outputFormatJSON {
+		emitDiffJSON(cmd, diff)
+
+		return
+	}
+
+	notify.Titlef(cmd.OutOrStdout(), "🔍", "Configuration drift")
+
+	notify.Infof(
+		cmd.OutOrStdout(),
+		formatDiffTable(diff, diff.TotalChanges()),
+	)
+}
+
+// mergeProvisionerDiff attempts to compute and merge provisioner-specific diffs
+// for distributions that support the Updater interface. Errors are logged as
+// warnings and do not block the main spec-level diff.
+func mergeProvisionerDiff(
+	cmd *cobra.Command,
+	ctx *localregistry.Context,
+	mainDiff *clusterupdate.UpdateResult,
+) {
+	factory := clusterprovisioner.DefaultFactory{
+		DistributionConfig: &clusterprovisioner.DistributionConfig{
+			Kind:     ctx.KindConfig,
+			K3d:      ctx.K3dConfig,
+			Talos:    ctx.TalosConfig,
+			VCluster: ctx.VClusterConfig,
+			KWOK:     ctx.KWOKConfig,
+			EKS:      ctx.EKSConfig,
+		},
+	}
+
+	provisioner, _, err := factory.Create(cmd.Context(), ctx.ClusterCfg)
+	if err != nil {
+		notify.Warningf(
+			cmd.ErrOrStderr(),
+			"Cannot create provisioner for provisioner-level diff (drift detection may be incomplete): %v",
+			err,
+		)
+
+		return
+	}
+
+	updater, ok := provisioner.(clusterprovisioner.Updater)
+	if !ok {
+		return
+	}
+
+	clusterName := resolveClusterNameFromContext(ctx)
+
+	currentSpec, _, err := updater.GetCurrentConfig(cmd.Context(), clusterName)
+	if err != nil {
+		notify.Warningf(cmd.ErrOrStderr(),
+			"Cannot retrieve current config for provisioner-level diff: %v", err)
+
+		return
+	}
+
+	provisionerDiff, err := updater.DiffConfig(
+		cmd.Context(), clusterName, currentSpec, &ctx.ClusterCfg.Spec.Cluster,
+	)
+	if err != nil {
+		notify.Warningf(cmd.ErrOrStderr(),
+			"Cannot compute provisioner-level diff: %v", err)
+
+		return
+	}
+
+	specdiff.MergeProvisionerDiff(mainDiff, provisionerDiff)
 }

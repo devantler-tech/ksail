@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -73,7 +73,7 @@ func validateKubeconfigContext(kubeconfigPath, contextName string) error {
 		available = append(available, name)
 	}
 
-	sort.Strings(available)
+	slices.Sort(available)
 
 	return fmt.Errorf(
 		"%w: %q not found in %s (available: %s)",
@@ -211,6 +211,9 @@ func InstallLoadBalancerSilent(
 			return nil
 		case v1alpha1.ProviderAWS:
 			// AWS is not a supported provider for Talos.
+			return nil
+		case v1alpha1.ProviderKubernetes:
+			// Kubernetes provider: no additional load balancer needed.
 			return nil
 		}
 	case v1alpha1.DistributionK3s:

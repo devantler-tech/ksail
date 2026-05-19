@@ -13,6 +13,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/cli/setup"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/setup/localregistry"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/ksail"
+	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	clusterdetector "github.com/devantler-tech/ksail/v7/pkg/svc/detector/cluster"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
@@ -491,4 +492,14 @@ func ExportSetIsKubeconfigStaleFunc(fn func(string, string) bool) func() {
 	isKubeconfigStaleFunc = fn
 
 	return func() { isKubeconfigStaleFunc = orig }
+}
+
+// ExportRunDiagnoseTextReport exposes runDiagnoseTextReport for testing.
+func ExportRunDiagnoseTextReport(report k8s.DiagnoseReport, w io.Writer) error {
+	return runDiagnoseTextReport(report, w)
+}
+
+// ExportRunDiagnoseJSONReport exposes runDiagnoseJSONReport for testing.
+func ExportRunDiagnoseJSONReport(report k8s.DiagnoseReport, w io.Writer) error {
+	return runDiagnoseJSONReport(report, w)
 }

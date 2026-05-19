@@ -9,8 +9,9 @@ const (
 	DefaultTalosDistributionConfig = "talos"
 	// DefaultVClusterDistributionConfig is the default VCluster distribution configuration filename.
 	DefaultVClusterDistributionConfig = "vcluster.yaml"
-	// DefaultKWOKDistributionConfig is the default KWOK distribution configuration filename.
-	DefaultKWOKDistributionConfig = "kwok.yaml"
+	// DefaultKWOKDistributionConfig is the default KWOK distribution configuration directory.
+	// KWOK's config loader auto-detects directories and runs kustomize to assemble configs.
+	DefaultKWOKDistributionConfig = "kwok"
 	// DefaultEKSDistributionConfig is the default EKS distribution configuration filename
 	// (declarative eksctl ClusterConfig consumed by the eksctl CLI).
 	DefaultEKSDistributionConfig = "eks.yaml"

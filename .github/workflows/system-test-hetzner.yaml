@@ -262,6 +262,7 @@ jobs:
           init: ${{ matrix.init }}
           args: ${{ steps.args.outputs.value }}
           apply-overlay-path: ".github/fixtures/podinfo-overlay"
+          test-kubernetes-provider: ${{ matrix.suffix == 'default-init' && 'true' || 'false' }}
 
           ghcr-user: ${{ github.actor }}
           ghcr-token: ${{ secrets.GITHUB_TOKEN }}

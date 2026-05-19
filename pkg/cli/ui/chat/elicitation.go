@@ -2,7 +2,7 @@ package chat
 
 import (
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -311,7 +311,7 @@ func extractFieldNames(schema map[string]any) []string {
 		fields = append(fields, k)
 	}
 
-	sort.Strings(fields)
+	slices.Sort(fields)
 
 	return fields
 }

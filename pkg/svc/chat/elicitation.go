@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"sort"
+	"slices"
 	"strings"
 
 	copilot "github.com/github/copilot-sdk/go"
@@ -107,7 +107,7 @@ func promptElicitationFields(
 		fieldNames = append(fieldNames, field)
 	}
 
-	sort.Strings(fieldNames)
+	slices.Sort(fieldNames)
 
 	_, _ = fmt.Fprintln(writer, "(type !cancel on any field to decline)")
 

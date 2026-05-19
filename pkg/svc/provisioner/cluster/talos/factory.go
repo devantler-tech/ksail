@@ -176,6 +176,11 @@ func configureInfraProvider(
 		return fmt.Errorf("%w: %s (AWS is only supported with the EKS distribution)",
 			ErrUnsupportedProvider, providerType)
 
+	case v1alpha1.ProviderKubernetes:
+		return fmt.Errorf("%w: %s (this factory does not accept Kubernetes provider; "+
+			"use the Kubernetes-specific Talos provisioner instead)",
+			ErrUnsupportedProvider, providerType)
+
 	default:
 		return fmt.Errorf("%w: %s (supported: %s, %s, %s)",
 			ErrUnsupportedProvider, providerType,

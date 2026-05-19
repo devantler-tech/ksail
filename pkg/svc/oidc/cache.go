@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
@@ -37,7 +37,7 @@ func CacheDir() (string, error) {
 func CacheKey(issuerURL, clientID string, scopes []string) string {
 	sorted := make([]string, len(scopes))
 	copy(sorted, scopes)
-	sort.Strings(sorted)
+	slices.Sort(sorted)
 
 	hasher := sha256.New()
 	hasher.Write([]byte(issuerURL))
