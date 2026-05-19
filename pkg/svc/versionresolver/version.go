@@ -217,8 +217,15 @@ func SortVersions(versions []Version) {
 func ParseTags(tags []string) []Version {
 	versions := make([]Version, 0, len(tags))
 	for _, tag := range tags {
-		// Skip tags that are clearly not semver
-		if tag == "latest" || tag == "" {
+		// Fast-path reject: empty, "latest", or first byte is not 'v' or '0'–'9'.
+		// Semver tags always begin with 'v' or a digit, so anything else (e.g.
+		// "main", "develop", "sha256:...", "latest-slim") can be skipped without
+		// invoking the regex, which is the dominant cost inside ParseVersion.
+		if tag == "" || tag == "latest" {
+			continue
+		}
+
+		if tag[0] != 'v' && (tag[0] < '0' || tag[0] > '9') {
 			continue
 		}
 
