@@ -46,7 +46,7 @@ Your mission: thoroughly research the local Kubernetes development tool market a
 
 Before any external research, deeply understand KSail's current state:
 
-1. Read `README.md`, `.github/copilot-instructions.md`, and key documentation in `docs/` to understand:
+1. Read `README.md`, `AGENTS.md`, and key documentation in `docs/` to understand:
    - What KSail does today (supported distributions, providers, features)
    - Its architecture (provider/provisioner model, embedded tools, GitOps support)
    - Its target audience and value proposition
