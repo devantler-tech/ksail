@@ -1,14 +1,13 @@
 # Repo Assist Memory
 
 ## Last Run
-2026-05-20 01:17 UTC — Run #26135227761
+2026-05-20 13:15 UTC — Run #26164849857
 
 ## Monthly Activity Issue
 - May 2026: #4501 (open)
 
 ## Open Repo Assist PRs
-- #4795: feat(picker): add / filter mode + ParseTags fast-path optimisation (CI mostly passing)
-- #4781: test(image): add direct unit tests for isHelperContainer helper (CI passing)
+- Bundled Dependabot PR: chore(deps): bundle Dependabot Go updates (k3k 1.1.0, talos 1.13.2, k8s 1.36.0) — closes #4793, #4801
 
 ## Issue Comments Made (with run)
 - #4328 (EKS provider status): 2026-05-20
@@ -32,7 +31,7 @@
 - #4510: [chore] GKE/AKS providers (sub-issue of #4627)
 - #4474: cluster diff command
 - #4473: vCluster v0.34 compat (merged #4734)
-- #4465: cluster switch fuzzy search (partially addressed by #4795)
+- #4465: cluster switch fuzzy search (partially addressed by #4795, merged)
 - #4423: workload watch hooks
 - #4422: cluster diagnose health scoring
 - #4375: cluster graph topology
@@ -48,7 +47,7 @@
 - Next for Task 5: refactor
 
 ## Backlog Cursor
-- Issues processed through #4795 (as of 2026-05-20)
+- Issues processed through #4803 (as of 2026-05-20)
 - Roadmap from discussion #4776 (May 18, 2026): all items tracked
 
 ## Labels Applied (recent)
@@ -63,7 +62,11 @@
 - Issue #4473 CLOSED — vCluster v0.34 done (merged #4734)
 - Issue #4681: CI workload-timeout (blocked by workflows permission, needs manual PR creation)
 - PR #4769 (fix kubeconfig context): human PR by devantler, open for review
-- PR #4794 (toolgen docs): human PR by devantler, open for review
 - Duplicate patterns in v1alpha1 enum types are intentional (nolint:dupl) — do NOT refactor Set() methods
 - EKS provider is largely implemented; missing: CI system test + docs 🚧 removal (#4328)
-- k3k Dependabot PR #4793: CI has infrastructure failures (not code-related)
+- Dependabot PRs #4793 (k3k 1.1.0) and #4801 (talos 1.13.2) bundled into one Repo Assist PR
+- moby/go-archive replace directive needed: k3k 1.1.0 transitively requires v0.2.0 which breaks docker/docker@v28.5.2
+- k8s.io/kubernetes 1.35.4→1.36.0 required alongside talos 1.13.2 due to cri-api/cri-client version alignment
+- PR #4795 (picker/ParseTags): MERGED ✅
+- PR #4781 (test/image): MERGED ✅
+- PR #4794 (docs/mcp): MERGED ✅
