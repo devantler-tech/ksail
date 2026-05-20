@@ -26,7 +26,7 @@ If you have questions, don't hesitate to ask in [GitHub Discussions](https://git
 
 To get started with contributing to KSail, you'll need to set up your development environment, and understand the codebase, the CI setup and its requirements.
 
-To understand the codebase it is recommended to read the [AGENTS.md](AGENTS.md) file, which provides an overview of the project structure and key components. You can also use GitHub Copilot to assist you in navigating the codebase and understanding its functionality.
+To understand the codebase, it is recommended to read the [AGENTS.md](AGENTS.md) file, which provides an overview of the project structure and key components. You can also use GitHub Copilot to assist you in navigating the codebase and understanding its functionality.
 
 For a deeper dive into KSail's design and internals, refer to:
 
