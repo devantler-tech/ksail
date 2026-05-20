@@ -10,7 +10,6 @@ import (
 	docker "github.com/devantler-tech/ksail/v7/pkg/client/docker"
 	"github.com/devantler-tech/ksail/v7/pkg/client/netretry"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
-	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/kernelmod"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/go-connections/nat"
@@ -26,7 +25,7 @@ func (p *Provisioner) createDockerCluster(ctx context.Context, clusterName strin
 	provisionStart := time.Now()
 
 	// Ensure required kernel modules are loaded (Linux only)
-	err := kernelmod.EnsureBrNetfilter(ctx, p.logWriter)
+	err := p.kernelModuleLoader(ctx, p.logWriter)
 	if err != nil {
 		return fmt.Errorf("%w: %w", ErrKernelModuleLoadFailed, err)
 	}

@@ -190,6 +190,7 @@ func runTryWriteFileErrorTests(t *testing.T) {
 
 func setupTryWriteFileStatError(t *testing.T) (string, string, bool) {
 	t.Helper()
+	skipPermissionSensitivePathTest(t)
 
 	content := "content for stat error test"
 	tempDir := t.TempDir()
@@ -202,15 +203,25 @@ func setupTryWriteFileStatError(t *testing.T) (string, string, bool) {
 	return content, outputPath, false
 }
 
-func setupTryWriteFileWriteError(_ *testing.T) (string, string, bool) {
-	content := "content for write error test"
-	invalidPath := "/invalid/nonexistent/deeply/nested/path/file.txt"
+func setupTryWriteFileWriteError(t *testing.T) (string, string, bool) {
+	t.Helper()
 
-	return content, invalidPath, false
+	content := "content for write error test"
+
+	// Use a path whose parent is a regular file so directory creation fails with
+	// ENOTDIR. This triggers the error path independently of the current user's
+	// privileges (root could otherwise create directories under "/"). force=true
+	// skips the pre-write stat so MkdirAll runs and fails.
+	notADir := filepath.Join(t.TempDir(), "not-a-dir")
+	require.NoError(t, os.WriteFile(notADir, []byte("file"), 0o600))
+	invalidPath := filepath.Join(notADir, "nested", "file.txt")
+
+	return content, invalidPath, true
 }
 
 func setupTryWriteFilePermissionError(t *testing.T) (string, string, bool) {
 	t.Helper()
+	skipPermissionSensitivePathTest(t)
 
 	content := "content for file write error test"
 	tempDir := t.TempDir()

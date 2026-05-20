@@ -3,6 +3,7 @@ package talosprovisioner
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/netip"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -418,4 +419,14 @@ func (p *Provisioner) MergePersistedStateForTest(
 	clusterName string,
 ) error {
 	return p.mergePersistedState(spec, clusterName)
+}
+
+// WithKernelModuleLoaderForTest overrides the kernel module loader so unit tests
+// can exercise the Docker provisioning path without invoking modprobe.
+func (p *Provisioner) WithKernelModuleLoaderForTest(
+	f func(ctx context.Context, logWriter io.Writer) error,
+) *Provisioner {
+	p.kernelModuleLoader = f
+
+	return p
 }

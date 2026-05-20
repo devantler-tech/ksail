@@ -7,12 +7,14 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	dockerclient "github.com/devantler-tech/ksail/v7/pkg/client/docker"
 	cloudproviderkindinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/cloudproviderkind"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/network"
+	dockerapi "github.com/docker/docker/client"
 	v1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -20,6 +22,38 @@ import (
 )
 
 const ciEnvValue = "true"
+
+// dockerPingTimeout bounds how long the Docker-availability probe waits.
+const dockerPingTimeout = 5 * time.Second
+
+// skipIfDockerUnavailable returns a real Docker client for integration tests,
+// skipping the test when Docker cannot be used. It skips in CI (where these
+// container-starting integration tests are intentionally not run) and whenever
+// the Docker daemon is unreachable (e.g. sandboxed unit-test environments), so
+// the suite stays hermetic instead of failing.
+func skipIfDockerUnavailable(t *testing.T) dockerapi.APIClient {
+	t.Helper()
+
+	if os.Getenv("CI") == ciEnvValue {
+		t.Skip("Skipping Docker integration test in CI")
+	}
+
+	client, err := dockerclient.GetDockerClient()
+	if err != nil {
+		t.Skipf("Docker client unavailable: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), dockerPingTimeout)
+	defer cancel()
+
+	_, err = client.Ping(ctx)
+	if err != nil {
+		_ = client.Close()
+		t.Skipf("Docker daemon not reachable: %v", err)
+	}
+
+	return client
+}
 
 var (
 	errNotFound             = errors.New("not found")
@@ -32,11 +66,8 @@ var (
 func TestNewInstaller(t *testing.T) {
 	t.Parallel()
 
-	// Skip in CI - requires Docker
-	if os.Getenv("CI") == ciEnvValue {
-		t.Skip("Skipping test that requires Docker in CI")
-	}
-
+	// Constructing the client does not require a running Docker daemon, so this
+	// test does not need to be gated on Docker availability.
 	dockerClient, err := dockerclient.GetDockerClient()
 	require.NoError(t, err)
 
@@ -50,14 +81,8 @@ func TestNewInstaller(t *testing.T) {
 func TestCloudProviderKINDInstallerInstallAndUninstall(t *testing.T) {
 	t.Parallel()
 
-	// Note: This is an integration test that actually starts the controller
-	// Skip in CI environments where Docker might not be available
-	if os.Getenv("CI") == ciEnvValue {
-		t.Skip("Skipping integration test in CI")
-	}
-
-	dockerClient, err := dockerclient.GetDockerClient()
-	require.NoError(t, err)
+	// Note: This is an integration test that actually starts the controller.
+	dockerClient := skipIfDockerUnavailable(t)
 
 	defer func() { _ = dockerClient.Close() }()
 
@@ -66,7 +91,7 @@ func TestCloudProviderKINDInstallerInstallAndUninstall(t *testing.T) {
 	ctx := context.Background()
 
 	// Install - this creates and starts the container
-	err = installer.Install(ctx)
+	err := installer.Install(ctx)
 	require.NoError(t, err)
 
 	// Clean up
@@ -77,20 +102,14 @@ func TestCloudProviderKINDInstallerInstallAndUninstall(t *testing.T) {
 func TestCloudProviderKINDInstallerUninstallNoInstall(t *testing.T) {
 	t.Parallel()
 
-	// Skip in CI - requires Docker
-	if os.Getenv("CI") == ciEnvValue {
-		t.Skip("Skipping test that requires Docker in CI")
-	}
-
-	dockerClient, err := dockerclient.GetDockerClient()
-	require.NoError(t, err)
+	dockerClient := skipIfDockerUnavailable(t)
 
 	defer func() { _ = dockerClient.Close() }()
 
 	installer := cloudproviderkindinstaller.NewInstaller(dockerClient)
 
 	ctx := context.Background()
-	err = installer.Uninstall(ctx)
+	err := installer.Uninstall(ctx)
 
 	// Uninstall when nothing is installed should succeed (no-op)
 	require.NoError(t, err)

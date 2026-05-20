@@ -31,9 +31,14 @@ var (
 
 // Provisioner executes k3d lifecycle commands via Cobra.
 type Provisioner struct {
-	simpleCfg         *v1alpha5.SimpleConfig
-	configPath        string
-	runner            runner.CommandRunner
+	simpleCfg  *v1alpha5.SimpleConfig
+	configPath string
+	runner     runner.CommandRunner
+	// listClustersRaw returns the raw cluster-list output from k3d. It is a seam
+	// so tests can supply canned output without invoking the real k3d runtime
+	// (which calls logrus.Fatal when Docker is unavailable). Defaults to
+	// defaultListClustersRaw; tests override it via export_test.go.
+	listClustersRaw   func(ctx context.Context) (string, error)
 	componentDetector *detector.ComponentDetector
 }
 
@@ -61,6 +66,7 @@ func NewProvisioner(
 		configPath: configPath,
 		runner:     runner.NewCobraCommandRunner(nil, nil),
 	}
+	prov.listClustersRaw = prov.defaultListClustersRaw
 
 	return prov
 }
@@ -137,6 +143,19 @@ func (k *Provisioner) Stop(ctx context.Context, name string) error {
 
 // List returns cluster names reported by the Cobra command.
 func (k *Provisioner) List(ctx context.Context) ([]string, error) {
+	raw, err := k.listClustersRaw(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return parseClusterNames(raw)
+}
+
+// defaultListClustersRaw runs the k3d cluster list command and returns its raw
+// JSON output. k3d's PrintClusters writes directly to os.Stdout using
+// fmt.Println (not Cobra's cmd.OutOrStdout()), so the output is captured by
+// temporarily redirecting os.Stdout.
+func (k *Provisioner) defaultListClustersRaw(ctx context.Context) (string, error) {
 	// Temporarily redirect logrus to discard output during list
 	// to prevent log messages from appearing in console
 	originalLogOutput := logrus.StandardLogger().Out
@@ -147,16 +166,13 @@ func (k *Provisioner) List(ctx context.Context) ([]string, error) {
 	// Lock to prevent concurrent modifications of os.Stdout
 	listMutex.Lock()
 
-	// Setup stdout redirection - k3d's PrintClusters writes directly to os.Stdout
-	// using fmt.Println, not through Cobra's cmd.OutOrStdout(), so we must
-	// capture from os.Stdout directly.
 	originalStdout := os.Stdout
 
 	pipeReader, pipeWriter, err := os.Pipe()
 	if err != nil {
 		listMutex.Unlock()
 
-		return nil, fmt.Errorf("cluster list: create stdout pipe: %w", err)
+		return "", fmt.Errorf("cluster list: create stdout pipe: %w", err)
 	}
 
 	os.Stdout = pipeWriter
@@ -189,14 +205,14 @@ func (k *Provisioner) List(ctx context.Context) ([]string, error) {
 	runErr := <-errChan
 
 	if copyErr != nil {
-		return nil, fmt.Errorf("cluster list: read stdout pipe: %w", copyErr)
+		return "", fmt.Errorf("cluster list: read stdout pipe: %w", copyErr)
 	}
 
 	if runErr != nil {
-		return nil, fmt.Errorf("cluster list: %w", runErr)
+		return "", fmt.Errorf("cluster list: %w", runErr)
 	}
 
-	return parseClusterNames(strings.TrimSpace(outputBuf.String()))
+	return strings.TrimSpace(outputBuf.String()), nil
 }
 
 // Exists returns whether the target cluster is present.
