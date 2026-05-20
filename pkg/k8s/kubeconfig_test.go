@@ -511,6 +511,7 @@ func TestGetKubeconfigCurrentContext(t *testing.T) {
 				path := filepath.Join(dir, "kubeconfig")
 				err := os.WriteFile(path, []byte(kubeconfigWithContext), 0o600)
 				require.NoError(t, err)
+
 				return path
 			},
 			wantContext: "my-cluster",
@@ -520,6 +521,7 @@ func TestGetKubeconfigCurrentContext(t *testing.T) {
 			setup: func(t *testing.T) string {
 				t.Helper()
 				dir := t.TempDir()
+
 				return filepath.Join(dir, "kubeconfig")
 			},
 			wantContext: "",
@@ -529,6 +531,7 @@ func TestGetKubeconfigCurrentContext(t *testing.T) {
 			setup: func(t *testing.T) string {
 				t.Helper()
 				dir := t.TempDir()
+
 				return filepath.Join(dir, "nonexistent-subdir", "kubeconfig")
 			},
 			wantContext:   "",
