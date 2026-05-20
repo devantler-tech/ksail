@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/url"
 	"strconv"
 	"time"
 
@@ -17,7 +18,7 @@ import (
 )
 
 const (
-	// APIServiceName is the name of the Service that targets the nested API server port on the DinD pod.
+	// APIServiceName is the name of the Service that targets the nested API server port.
 	APIServiceName = "apiserver"
 
 	// GatewayName is the name of the Gateway resource created for API exposure.
@@ -34,7 +35,73 @@ const (
 
 	// gatewayReadyTimeout is the maximum time to wait for Gateway address assignment.
 	gatewayReadyTimeout = 120 * time.Second
+
+	// lbReadyPollInterval is the interval between LoadBalancer Service status checks.
+	lbReadyPollInterval = 3 * time.Second
+
+	// lbReadyTimeout is the maximum time to wait for a LoadBalancer address. Kept short so the
+	// NodePort fallback kicks in quickly when the host cluster has no LoadBalancer controller.
+	lbReadyTimeout = 30 * time.Second
 )
+
+// Exposure kinds reported by ResolveExposure.
+const (
+	// ExposureGateway means the nested API server is exposed via a Gateway API Gateway + TCPRoute.
+	ExposureGateway = "gateway"
+	// ExposureLoadBalancer means it is exposed via a LoadBalancer Service.
+	ExposureLoadBalancer = "loadbalancer"
+	// ExposureNodePort means it is exposed via a NodePort Service.
+	ExposureNodePort = "nodeport"
+)
+
+// APIExposureSpec describes how to expose a nested cluster's API server on the host cluster.
+// It generalizes the exposure machinery beyond the DinD model so it also works for distributions
+// that manage their own namespace and backend pods (k3k, vCluster).
+type APIExposureSpec struct {
+	// ClusterName is the nested cluster name (used for labels).
+	ClusterName string
+	// Namespace is the host-cluster namespace the exposure resources live in.
+	// Defaults to NamespaceName(ClusterName) when empty.
+	Namespace string
+	// BackendSelector selects the pod(s) backing the API server Service.
+	// Defaults to the DinD pod selector when nil.
+	BackendSelector map[string]string
+	// APIPort is the port the nested API server listens on.
+	APIPort int32
+	// GatewayClassName, when set, makes the Gateway API the preferred exposure tier.
+	GatewayClassName string
+	// HostAddress is the host cluster's reachable address (typically derived from the host
+	// REST config). Used as a NodePort address fallback when no node ExternalIP is available.
+	HostAddress string
+}
+
+// ExposureResult is the resolved, stable endpoint for a nested cluster's API server.
+type ExposureResult struct {
+	// Address is the host/IP clients should connect to.
+	Address string
+	// Port is the port clients should connect to.
+	Port int32
+	// Kind is one of ExposureGateway, ExposureLoadBalancer, or ExposureNodePort.
+	Kind string
+}
+
+// ServerURL returns the kubeconfig server URL for the resolved exposure.
+func (r *ExposureResult) ServerURL() string {
+	return "https://" + net.JoinHostPort(r.Address, strconv.FormatInt(int64(r.Port), 10))
+}
+
+// withDefaults fills in namespace and backend selector defaults for the DinD model.
+func (s APIExposureSpec) withDefaults() APIExposureSpec {
+	if s.Namespace == "" {
+		s.Namespace = NamespaceName(s.ClusterName)
+	}
+
+	if s.BackendSelector == nil {
+		s.BackendSelector = map[string]string{LabelApp: DinDPodName}
+	}
+
+	return s
+}
 
 // gatewayGVR returns the GroupVersionResource for Gateway API Gateway objects.
 func gatewayGVR() schema.GroupVersionResource {
@@ -54,90 +121,148 @@ func tcpRouteGVR() schema.GroupVersionResource {
 	}
 }
 
-// EnsureAPIExposure creates or updates the Kubernetes Service, Gateway, and TCPRoute to expose
-// the nested cluster's API server. If gatewayClassName is empty, only the Service
-// is created and instructions for manual port-forward are logged.
-func (p *Provider) EnsureAPIExposure(
+// ResolveExposure creates a stable, server-side exposure for the nested cluster's API server and
+// returns its address. It tries, in order:
+//  1. Gateway API (when GatewayClassName is set and a TCPRoute-capable controller assigns an address),
+//  2. a LoadBalancer Service (when the host cluster assigns an external address),
+//  3. a NodePort Service (universal last resort).
+//
+// The returned address survives the CLI process exit and should be written to the kubeconfig and
+// added to the nested API server's certificate SANs.
+func (p *Provider) ResolveExposure(
 	ctx context.Context,
 	dynamicClient dynamic.Interface,
-	clusterName string,
-	apiPort int32,
-	gatewayClassName string,
-) error {
-	namespace := NamespaceName(clusterName)
+	spec APIExposureSpec,
+) (*ExposureResult, error) {
+	spec = spec.withDefaults()
 
-	// Ensure API Service
-	err := p.ensureAPIService(ctx, namespace, clusterName, apiPort)
-	if err != nil {
-		return err
+	if spec.GatewayClassName != "" && dynamicClient != nil {
+		result, err := p.exposeViaGateway(ctx, dynamicClient, spec)
+		if err == nil {
+			return result, nil
+		}
+		// Fall through to LB/NodePort when the Gateway path can't yield an address.
 	}
 
-	if gatewayClassName == "" {
-		// No gateway controller — user must port-forward manually
-		return nil
+	result, err := p.exposeViaLoadBalancer(ctx, spec)
+	if err == nil {
+		return result, nil
 	}
 
-	if dynamicClient == nil {
-		return fmt.Errorf("ensure API exposure: %w", ErrDynamicClientRequired)
-	}
-
-	// Ensure Gateway
-	err = p.ensureGateway(ctx, dynamicClient, namespace, clusterName, gatewayClassName, apiPort)
-	if err != nil {
-		return err
-	}
-
-	// Ensure TCPRoute
-	err = p.ensureTCPRoute(ctx, dynamicClient, namespace, clusterName, apiPort)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return p.exposeViaNodePort(ctx, spec)
 }
 
-func (p *Provider) ensureAPIService(
+// exposeViaGateway ensures a ClusterIP Service, Gateway, and TCPRoute, then waits for the
+// Gateway to be assigned an external address.
+func (p *Provider) exposeViaGateway(
 	ctx context.Context,
-	namespace, clusterName string,
-	apiPort int32,
-) error {
-	svc := buildAPIService(clusterName, apiPort)
+	dynamicClient dynamic.Interface,
+	spec APIExposureSpec,
+) (*ExposureResult, error) {
+	_, err := p.ensureService(ctx, spec, corev1.ServiceTypeClusterIP)
+	if err != nil {
+		return nil, err
+	}
 
-	_, err := p.client.CoreV1().Services(namespace).Create(ctx, svc, metav1.CreateOptions{})
+	err = p.ensureGateway(ctx, dynamicClient, spec)
+	if err != nil {
+		return nil, err
+	}
+
+	err = p.ensureTCPRoute(ctx, dynamicClient, spec)
+	if err != nil {
+		return nil, err
+	}
+
+	addr, port, err := p.WaitForGateway(ctx, dynamicClient, spec.Namespace)
+	if err != nil {
+		return nil, err
+	}
+
+	return &ExposureResult{Address: addr, Port: port, Kind: ExposureGateway}, nil
+}
+
+// exposeViaLoadBalancer ensures a LoadBalancer Service and waits for an external address.
+func (p *Provider) exposeViaLoadBalancer(
+	ctx context.Context,
+	spec APIExposureSpec,
+) (*ExposureResult, error) {
+	_, err := p.ensureService(ctx, spec, corev1.ServiceTypeLoadBalancer)
+	if err != nil {
+		return nil, err
+	}
+
+	addr, err := p.waitForLoadBalancer(ctx, spec.Namespace)
+	if err != nil {
+		return nil, err
+	}
+
+	return &ExposureResult{Address: addr, Port: spec.APIPort, Kind: ExposureLoadBalancer}, nil
+}
+
+// exposeViaNodePort ensures a NodePort Service and resolves a reachable node address.
+func (p *Provider) exposeViaNodePort(
+	ctx context.Context,
+	spec APIExposureSpec,
+) (*ExposureResult, error) {
+	svc, err := p.ensureService(ctx, spec, corev1.ServiceTypeNodePort)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(svc.Spec.Ports) == 0 || svc.Spec.Ports[0].NodePort == 0 {
+		return nil, ErrNodePortNotAssigned
+	}
+
+	addr, err := p.pickNodeAddress(ctx, spec.HostAddress)
+	if err != nil {
+		return nil, err
+	}
+
+	return &ExposureResult{Address: addr, Port: svc.Spec.Ports[0].NodePort, Kind: ExposureNodePort}, nil
+}
+
+// ensureService creates or updates the API server Service with the given type and selector.
+func (p *Provider) ensureService(
+	ctx context.Context,
+	spec APIExposureSpec,
+	serviceType corev1.ServiceType,
+) (*corev1.Service, error) {
+	svc := buildAPIService(spec, serviceType)
+
+	created, err := p.client.CoreV1().Services(spec.Namespace).Create(ctx, svc, metav1.CreateOptions{})
 	if errors.IsAlreadyExists(err) {
 		existing, getErr := p.client.CoreV1().
-			Services(namespace).
+			Services(spec.Namespace).
 			Get(ctx, APIServiceName, metav1.GetOptions{})
 		if getErr != nil {
-			return fmt.Errorf("get existing API server service: %w", getErr)
+			return nil, fmt.Errorf("get existing API server service: %w", getErr)
 		}
 
 		svc.ResourceVersion = existing.ResourceVersion
 		svc.Spec.ClusterIP = existing.Spec.ClusterIP // ClusterIP is immutable; preserve it
-		_, err = p.client.CoreV1().Services(namespace).Update(ctx, svc, metav1.UpdateOptions{})
+		created, err = p.client.CoreV1().Services(spec.Namespace).Update(ctx, svc, metav1.UpdateOptions{})
 	}
 
 	if err != nil {
-		return fmt.Errorf("ensure API server service: %w", err)
+		return nil, fmt.Errorf("ensure API server service: %w", err)
 	}
 
-	return nil
+	return created, nil
 }
 
 func (p *Provider) ensureGateway(
 	ctx context.Context,
 	dynamicClient dynamic.Interface,
-	namespace, clusterName string,
-	gatewayClassName string,
-	apiPort int32,
+	spec APIExposureSpec,
 ) error {
-	gateway := buildGateway(clusterName, gatewayClassName, apiPort)
+	gateway := buildGateway(spec)
 
-	_, err := dynamicClient.Resource(gatewayGVR()).Namespace(namespace).Create(
+	_, err := dynamicClient.Resource(gatewayGVR()).Namespace(spec.Namespace).Create(
 		ctx, gateway, metav1.CreateOptions{},
 	)
 	if errors.IsAlreadyExists(err) {
-		existing, getErr := dynamicClient.Resource(gatewayGVR()).Namespace(namespace).Get(
+		existing, getErr := dynamicClient.Resource(gatewayGVR()).Namespace(spec.Namespace).Get(
 			ctx, GatewayName, metav1.GetOptions{},
 		)
 		if getErr != nil {
@@ -145,7 +270,7 @@ func (p *Provider) ensureGateway(
 		}
 
 		gateway.SetResourceVersion(existing.GetResourceVersion())
-		_, err = dynamicClient.Resource(gatewayGVR()).Namespace(namespace).Update(
+		_, err = dynamicClient.Resource(gatewayGVR()).Namespace(spec.Namespace).Update(
 			ctx, gateway, metav1.UpdateOptions{},
 		)
 	}
@@ -160,16 +285,15 @@ func (p *Provider) ensureGateway(
 func (p *Provider) ensureTCPRoute(
 	ctx context.Context,
 	dynamicClient dynamic.Interface,
-	namespace, clusterName string,
-	apiPort int32,
+	spec APIExposureSpec,
 ) error {
-	route := buildTCPRoute(clusterName, apiPort)
+	route := buildTCPRoute(spec)
 
-	_, err := dynamicClient.Resource(tcpRouteGVR()).Namespace(namespace).Create(
+	_, err := dynamicClient.Resource(tcpRouteGVR()).Namespace(spec.Namespace).Create(
 		ctx, route, metav1.CreateOptions{},
 	)
 	if errors.IsAlreadyExists(err) {
-		existing, getErr := dynamicClient.Resource(tcpRouteGVR()).Namespace(namespace).Get(
+		existing, getErr := dynamicClient.Resource(tcpRouteGVR()).Namespace(spec.Namespace).Get(
 			ctx, TCPRouteName, metav1.GetOptions{},
 		)
 		if getErr != nil {
@@ -177,7 +301,7 @@ func (p *Provider) ensureTCPRoute(
 		}
 
 		route.SetResourceVersion(existing.GetResourceVersion())
-		_, err = dynamicClient.Resource(tcpRouteGVR()).Namespace(namespace).Update(
+		_, err = dynamicClient.Resource(tcpRouteGVR()).Namespace(spec.Namespace).Update(
 			ctx, route, metav1.UpdateOptions{},
 		)
 	}
@@ -189,14 +313,13 @@ func (p *Provider) ensureTCPRoute(
 	return nil
 }
 
-// WaitForGateway waits for the Gateway to be assigned an external address.
+// WaitForGateway waits for the Gateway in the given namespace to be assigned an external address.
 // Returns the address (IP or hostname) and port.
 func (p *Provider) WaitForGateway(
 	ctx context.Context,
 	dynamicClient dynamic.Interface,
-	clusterName string,
+	namespace string,
 ) (string, int32, error) {
-	namespace := NamespaceName(clusterName)
 	deadline := time.Now().Add(gatewayReadyTimeout)
 
 	for time.Now().Before(deadline) {
@@ -222,37 +345,130 @@ func (p *Provider) WaitForGateway(
 	return "", 0, ErrGatewayNotReady
 }
 
-// GetAPIEndpoint returns the API server endpoint for the nested cluster.
-// If a Gateway is configured, it returns the Gateway's external address.
-// Otherwise, it returns the ClusterIP Service endpoint for port-forward use.
-func (p *Provider) GetAPIEndpoint(
-	ctx context.Context,
-	dynamicClient dynamic.Interface,
-	clusterName string,
-	gatewayClassName string,
-) (string, error) {
-	namespace := NamespaceName(clusterName)
+// waitForLoadBalancer waits for the API server LoadBalancer Service to be assigned an ingress
+// address (IP or hostname).
+func (p *Provider) waitForLoadBalancer(ctx context.Context, namespace string) (string, error) {
+	deadline := time.Now().Add(lbReadyTimeout)
 
-	if gatewayClassName != "" && dynamicClient != nil {
-		addr, port, err := p.WaitForGateway(ctx, dynamicClient, clusterName)
-		if err == nil {
-			return "https://" + net.JoinHostPort(addr, strconv.FormatInt(int64(port), 10)), nil
+	for time.Now().Before(deadline) {
+		svc, err := p.client.CoreV1().Services(namespace).Get(ctx, APIServiceName, metav1.GetOptions{})
+		if err != nil {
+			return "", fmt.Errorf("get LoadBalancer service: %w", err)
 		}
-		// Fall through to Service endpoint on Gateway failure
+
+		for _, ingress := range svc.Status.LoadBalancer.Ingress {
+			if ingress.IP != "" {
+				return ingress.IP, nil
+			}
+
+			if ingress.Hostname != "" {
+				return ingress.Hostname, nil
+			}
+		}
+
+		select {
+		case <-ctx.Done():
+			return "", fmt.Errorf("waiting for LoadBalancer: %w", ctx.Err())
+		case <-time.After(lbReadyPollInterval):
+		}
 	}
 
-	// Return the ClusterIP Service address for port-forward
-	svc, err := p.client.CoreV1().Services(namespace).Get(ctx, APIServiceName, metav1.GetOptions{})
-	if err != nil {
-		return "", fmt.Errorf("get API service: %w", err)
-	}
-
-	return "https://" + net.JoinHostPort(
-		svc.Spec.ClusterIP, strconv.FormatInt(int64(svc.Spec.Ports[0].Port), 10),
-	), nil
+	return "", ErrLoadBalancerNotReady
 }
 
-// DeleteAPIExposure removes all API exposure resources (Service, Gateway, TCPRoute).
+// pickNodeAddress chooses a host-reachable node address for NodePort exposure.
+// Precedence: a node ExternalIP, then the host derived from the host REST config
+// (known-reachable since KSail uses it), then a node InternalIP.
+func (p *Provider) pickNodeAddress(ctx context.Context, hostAddress string) (string, error) {
+	nodes, listErr := p.client.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+
+	if listErr == nil {
+		if addr := firstNodeAddress(nodes.Items, corev1.NodeExternalIP); addr != "" {
+			return addr, nil
+		}
+	}
+
+	if host := hostnameOnly(hostAddress); host != "" {
+		return host, nil
+	}
+
+	if listErr == nil {
+		if addr := firstNodeAddress(nodes.Items, corev1.NodeInternalIP); addr != "" {
+			return addr, nil
+		}
+	}
+
+	if listErr != nil {
+		return "", fmt.Errorf("list nodes for NodePort address: %w", listErr)
+	}
+
+	return "", ErrNoNodeAddress
+}
+
+// firstNodeAddress returns the first node address of the given type, or "".
+func firstNodeAddress(nodes []corev1.Node, addrType corev1.NodeAddressType) string {
+	for i := range nodes {
+		for _, addr := range nodes[i].Status.Addresses {
+			if addr.Type == addrType && addr.Address != "" {
+				return addr.Address
+			}
+		}
+	}
+
+	return ""
+}
+
+// hostnameOnly extracts the host portion (no scheme, no port) from a host address that may be a
+// URL (https://host:port), a host:port pair, or a bare host.
+func hostnameOnly(hostAddress string) string {
+	if hostAddress == "" {
+		return ""
+	}
+
+	if parsed, err := url.Parse(hostAddress); err == nil && parsed.Hostname() != "" {
+		return parsed.Hostname()
+	}
+
+	if host, _, err := net.SplitHostPort(hostAddress); err == nil && host != "" {
+		return host
+	}
+
+	return hostAddress
+}
+
+// UpdateAPIServiceTargetPort updates the target port of the API server Service so it routes to the
+// port the nested API server is actually published on. This is used when that port is only known
+// after the cluster is created (e.g. Talos's dynamically-mapped DinD port), while the exposure
+// address/port the kubeconfig points at were resolved up-front.
+func (p *Provider) UpdateAPIServiceTargetPort(
+	ctx context.Context,
+	clusterName string,
+	targetPort int32,
+) error {
+	namespace := NamespaceName(clusterName)
+
+	svc, err := p.client.CoreV1().Services(namespace).Get(ctx, APIServiceName, metav1.GetOptions{})
+	if err != nil {
+		return fmt.Errorf("get API service: %w", err)
+	}
+
+	if len(svc.Spec.Ports) == 0 {
+		return nil
+	}
+
+	svc.Spec.Ports[0].TargetPort = intstr.FromInt32(targetPort)
+
+	_, err = p.client.CoreV1().Services(namespace).Update(ctx, svc, metav1.UpdateOptions{})
+	if err != nil {
+		return fmt.Errorf("update API service target port: %w", err)
+	}
+
+	return nil
+}
+
+// DeleteAPIExposure removes all API exposure resources (Service, Gateway, TCPRoute) for a
+// DinD-model cluster. For distributions that delete their whole namespace (k3k, vCluster) the
+// namespace deletion already cascades these resources, so this call is defensive there.
 func (p *Provider) DeleteAPIExposure(
 	ctx context.Context,
 	dynamicClient dynamic.Interface,
@@ -260,7 +476,7 @@ func (p *Provider) DeleteAPIExposure(
 ) error {
 	namespace := NamespaceName(clusterName)
 
-	// Delete TCPRoute
+	// Delete TCPRoute + Gateway (only present on the Gateway path).
 	if dynamicClient != nil {
 		err := dynamicClient.Resource(tcpRouteGVR()).Namespace(namespace).Delete(
 			ctx, TCPRouteName, metav1.DeleteOptions{},
@@ -269,7 +485,6 @@ func (p *Provider) DeleteAPIExposure(
 			return fmt.Errorf("delete TCPRoute: %w", err)
 		}
 
-		// Delete Gateway
 		err = dynamicClient.Resource(gatewayGVR()).Namespace(namespace).Delete(
 			ctx, GatewayName, metav1.DeleteOptions{},
 		)
@@ -278,7 +493,6 @@ func (p *Provider) DeleteAPIExposure(
 		}
 	}
 
-	// Delete API Service
 	err := p.client.CoreV1().Services(namespace).Delete(ctx, APIServiceName, metav1.DeleteOptions{})
 	if err != nil && !errors.IsNotFound(err) {
 		return fmt.Errorf("delete API service: %w", err)
@@ -287,8 +501,8 @@ func (p *Provider) DeleteAPIExposure(
 	return nil
 }
 
-func buildAPIService(clusterName string, apiPort int32) *corev1.Service {
-	labels := CommonLabels(clusterName)
+func buildAPIService(spec APIExposureSpec, serviceType corev1.ServiceType) *corev1.Service {
+	labels := CommonLabels(spec.ClusterName)
 
 	return &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -296,14 +510,13 @@ func buildAPIService(clusterName string, apiPort int32) *corev1.Service {
 			Labels: labels,
 		},
 		Spec: corev1.ServiceSpec{
-			Selector: map[string]string{
-				LabelApp: DinDPodName,
-			},
+			Type:     serviceType,
+			Selector: spec.BackendSelector,
 			Ports: []corev1.ServicePort{
 				{
 					Name:       "https",
-					Port:       apiPort,
-					TargetPort: intstr.FromInt32(apiPort),
+					Port:       spec.APIPort,
+					TargetPort: intstr.FromInt32(spec.APIPort),
 					Protocol:   corev1.ProtocolTCP,
 				},
 			},
@@ -311,8 +524,8 @@ func buildAPIService(clusterName string, apiPort int32) *corev1.Service {
 	}
 }
 
-func buildGateway(clusterName, gatewayClassName string, apiPort int32) *unstructured.Unstructured {
-	labels := CommonLabels(clusterName)
+func buildGateway(spec APIExposureSpec) *unstructured.Unstructured {
+	labels := CommonLabels(spec.ClusterName)
 
 	return &unstructured.Unstructured{
 		Object: map[string]any{
@@ -323,12 +536,12 @@ func buildGateway(clusterName, gatewayClassName string, apiPort int32) *unstruct
 				"labels":       toAnyMap(labels),
 			},
 			"spec": map[string]any{
-				"gatewayClassName": gatewayClassName,
+				"gatewayClassName": spec.GatewayClassName,
 				"listeners": []any{
 					map[string]any{
 						gatewayNameKey: APIServiceName,
 						"protocol":     "TCP",
-						"port":         int64(apiPort),
+						"port":         int64(spec.APIPort),
 					},
 				},
 			},
@@ -336,9 +549,8 @@ func buildGateway(clusterName, gatewayClassName string, apiPort int32) *unstruct
 	}
 }
 
-func buildTCPRoute(clusterName string, apiPort int32) *unstructured.Unstructured {
-	labels := CommonLabels(clusterName)
-	namespaceName := NamespaceName(clusterName)
+func buildTCPRoute(spec APIExposureSpec) *unstructured.Unstructured {
+	labels := CommonLabels(spec.ClusterName)
 
 	return &unstructured.Unstructured{
 		Object: map[string]any{
@@ -352,7 +564,7 @@ func buildTCPRoute(clusterName string, apiPort int32) *unstructured.Unstructured
 				"parentRefs": []any{
 					map[string]any{
 						gatewayNameKey: GatewayName,
-						"namespace":    namespaceName,
+						"namespace":    spec.Namespace,
 					},
 				},
 				"rules": []any{
@@ -360,7 +572,7 @@ func buildTCPRoute(clusterName string, apiPort int32) *unstructured.Unstructured
 						"backendRefs": []any{
 							map[string]any{
 								"name": APIServiceName,
-								"port": int64(apiPort),
+								"port": int64(spec.APIPort),
 							},
 						},
 					},

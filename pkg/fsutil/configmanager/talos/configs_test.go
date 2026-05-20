@@ -489,6 +489,44 @@ func TestConfigs_WithSecrets(t *testing.T) {
 	})
 }
 
+func TestConfigs_WithCertSANs(t *testing.T) {
+	t.Parallel()
+
+	t.Run("adds exposure address to API server cert SANs and preserves PKI", func(t *testing.T) {
+		t.Parallel()
+
+		manager := talos.NewConfigManager("", "cluster-a", "1.32.0", "10.5.0.0/24")
+		configs, err := manager.Load(configmanager.LoadOptions{})
+		require.NoError(t, err)
+
+		updated, err := configs.WithCertSANs([]string{"127.0.0.1", "localhost", "5.6.7.8"})
+		require.NoError(t, err)
+
+		sans := updated.ControlPlane().Cluster().CertSANs()
+		assert.Contains(t, sans, "5.6.7.8")
+		assert.Contains(t, sans, "127.0.0.1")
+
+		// PKI must be preserved across regeneration.
+		assert.Equal(t,
+			configs.ControlPlane().Cluster().IssuingCA().Crt,
+			updated.ControlPlane().Cluster().IssuingCA().Crt,
+		)
+		assert.Equal(t, "cluster-a", updated.GetClusterName())
+	})
+
+	t.Run("returns same config when sans is empty", func(t *testing.T) {
+		t.Parallel()
+
+		manager := talos.NewConfigManager("", "my-cluster", "1.32.0", "10.5.0.0/24")
+		configs, err := manager.Load(configmanager.LoadOptions{})
+		require.NoError(t, err)
+
+		same, err := configs.WithCertSANs(nil)
+		require.NoError(t, err)
+		assert.Same(t, configs, same)
+	})
+}
+
 func TestConfigs_ExtractSecrets(t *testing.T) {
 	t.Parallel()
 

@@ -18,6 +18,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 )
@@ -54,13 +55,14 @@ type K3kProvisioner struct {
 	// Embed the standard K3d provisioner for component detection and interface compliance.
 	*Provisioner
 
-	hostClientset  kubernetes.Interface
-	restConfig     *rest.Config
-	k8sProvider    *kubernetesprovider.Provider
-	clusterName    string
-	kubeconfigPath string
-	hostContext    string
-	portForward    *kubernetesprovider.PortForwardSession
+	hostClientset    kubernetes.Interface
+	restConfig       *rest.Config
+	k8sProvider      *kubernetesprovider.Provider
+	dynamicClient    dynamic.Interface
+	clusterName      string
+	kubeconfigPath   string
+	hostContext      string
+	gatewayClassName string
 
 	// k3k-specific configuration
 	controlPlanes int32
@@ -79,10 +81,14 @@ type K3kProvisionerConfig struct {
 	RestConfig *rest.Config
 	// K8sProvider is the Kubernetes infrastructure provider.
 	K8sProvider *kubernetesprovider.Provider
+	// DynamicClient is the dynamic client for Gateway API resources.
+	DynamicClient dynamic.Interface
 	// ClusterName is the nested cluster name.
 	ClusterName string
 	// KubeconfigPath is the path to store the nested cluster kubeconfig.
 	KubeconfigPath string
+	// GatewayClassName is the Gateway class for API exposure (empty = no gateway).
+	GatewayClassName string
 	// ControlPlanes is the number of K3s server pods.
 	ControlPlanes int32
 	// Workers is the number of K3s agent pods (virtual mode only).
@@ -110,17 +116,19 @@ func NewK3kProvisioner(cfg K3kProvisionerConfig) (*K3kProvisioner, error) {
 	workers := max(0, cfg.Workers)
 
 	return &K3kProvisioner{
-		Provisioner:    cfg.K3dProvisioner,
-		hostClientset:  cfg.HostClientset,
-		restConfig:     cfg.RestConfig,
-		k8sProvider:    cfg.K8sProvider,
-		clusterName:    cfg.ClusterName,
-		kubeconfigPath: kubeconfigPath,
-		hostContext:    cfg.HostContext,
-		controlPlanes:  controlPlanes,
-		workers:        workers,
-		podCIDR:        cfg.PodCIDR,
-		serviceCIDR:    cfg.ServiceCIDR,
+		Provisioner:      cfg.K3dProvisioner,
+		hostClientset:    cfg.HostClientset,
+		restConfig:       cfg.RestConfig,
+		k8sProvider:      cfg.K8sProvider,
+		dynamicClient:    cfg.DynamicClient,
+		clusterName:      cfg.ClusterName,
+		kubeconfigPath:   kubeconfigPath,
+		hostContext:      cfg.HostContext,
+		gatewayClassName: cfg.GatewayClassName,
+		controlPlanes:    controlPlanes,
+		workers:          workers,
+		podCIDR:          cfg.PodCIDR,
+		serviceCIDR:      cfg.ServiceCIDR,
 	}, nil
 }
 
@@ -151,10 +159,28 @@ func (p *K3kProvisioner) Create(ctx context.Context, name string) error {
 		return fmt.Errorf("ensure namespace: %w", err)
 	}
 
-	// Step 3: Create the k3k Cluster CR
+	// Step 2b: Resolve a stable, server-side exposure (Gateway → LoadBalancer → NodePort) for the
+	// K3s API server. The Service targets the k3k server pods, which the operator provisions once
+	// the Cluster CR is applied; the address is assigned independently and survives the CLI exit.
+	exposure, err := p.k8sProvider.ResolveExposure(
+		ctx, p.dynamicClient,
+		kubernetesprovider.APIExposureSpec{
+			ClusterName:      clusterName,
+			Namespace:        namespace,
+			BackendSelector:  map[string]string{"cluster": clusterName, "role": "server"},
+			APIPort:          k3kAPIServerPort,
+			GatewayClassName: p.gatewayClassName,
+			HostAddress:      p.restConfig.Host,
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("expose K3s API server: %w", err)
+	}
+
+	// Step 3: Create the k3k Cluster CR (with the exposure address in the server cert SANs)
 	_, _ = fmt.Fprintf(os.Stdout, "► creating k3k Cluster CR for %s\n", clusterName)
 
-	err = p.createClusterCR(ctx, clusterName, namespace)
+	err = p.createClusterCR(ctx, clusterName, namespace, exposure.Address)
 	if err != nil {
 		return fmt.Errorf("create k3k cluster CR: %w", err)
 	}
@@ -175,26 +201,10 @@ func (p *K3kProvisioner) Create(ctx context.Context, name string) error {
 		return fmt.Errorf("get kubeconfig secret: %w", err)
 	}
 
-	// Step 6: Port-forward the API server to localhost
-	_, _ = fmt.Fprintln(os.Stdout, "► port-forwarding nested K3s API server to localhost")
+	// Step 6: Rewrite the kubeconfig to point at the stable exposure address.
+	kubeconfigStr := rewriteK3kKubeconfig(string(kubeconfigData), exposure.ServerURL(), clusterName)
 
-	serverPodName := fmt.Sprintf("k3k-%s-server-0", clusterName)
-
-	apiPortForward, err := p.k8sProvider.StartPortForwardInNamespace(
-		ctx, p.restConfig, namespace, serverPodName, k3kAPIServerPort,
-	)
-	if err != nil {
-		return fmt.Errorf("port-forward K3s API server: %w", err)
-	}
-
-	p.portForward = apiPortForward
-
-	// Step 7: Rewrite kubeconfig to use localhost port-forward address
-	kubeconfigStr := string(kubeconfigData)
-	// k3k kubeconfig uses the ClusterIP service address — replace with localhost
-	kubeconfigStr = rewriteK3kKubeconfig(kubeconfigStr, apiPortForward.LocalPort, clusterName)
-
-	// Step 8: Merge kubeconfig into the host kubeconfig file
+	// Step 7: Merge kubeconfig into the host kubeconfig file
 	if p.kubeconfigPath != "" {
 		err := k8s.MergeKubeconfig(p.kubeconfigPath, []byte(kubeconfigStr))
 		if err != nil {
@@ -220,12 +230,6 @@ func (p *K3kProvisioner) Delete(ctx context.Context, name string) error {
 	}
 
 	namespace := k3kNamespacePrefix + clusterName
-
-	// Close port-forward if active
-	if p.portForward != nil {
-		p.portForward.Close()
-		p.portForward = nil
-	}
 
 	// Delete the namespace (cascading delete removes Cluster CR, pods, services, etc.)
 	_, _ = fmt.Fprintf(os.Stdout, "► deleting namespace %s\n", namespace)
@@ -376,7 +380,17 @@ func (p *K3kProvisioner) ensureNamespace(ctx context.Context, namespace string) 
 }
 
 // buildClusterCR constructs the k3k Cluster custom resource with the provisioner's configuration.
-func (p *K3kProvisioner) buildClusterCR(clusterName, namespace string) *k3kv1beta1.Cluster {
+// certSAN, when non-empty, is added to the server certificate SANs so the API server cert is
+// valid for the stable exposure address. The Service is left as ClusterIP — external exposure is
+// handled by the ksail-managed Service/Gateway resolved separately.
+func (p *K3kProvisioner) buildClusterCR(
+	clusterName, namespace, certSAN string,
+) *k3kv1beta1.Cluster {
+	tlsSANs := []string{"127.0.0.1", "localhost"}
+	if certSAN != "" {
+		tlsSANs = append(tlsSANs, certSAN)
+	}
+
 	cluster := &k3kv1beta1.Cluster{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "k3k.io/v1beta1",
@@ -397,13 +411,7 @@ func (p *K3kProvisioner) buildClusterCR(clusterName, namespace string) *k3kv1bet
 			Persistence: k3kv1beta1.PersistenceConfig{
 				Type: k3kv1beta1.EphemeralPersistenceMode,
 			},
-			TLSSANs: []string{
-				"127.0.0.1",
-				"localhost",
-			},
-			Expose: &k3kv1beta1.ExposeConfig{
-				NodePort: &k3kv1beta1.NodePortConfig{},
-			},
+			TLSSANs: tlsSANs,
 		},
 	}
 
@@ -419,8 +427,11 @@ func (p *K3kProvisioner) buildClusterCR(clusterName, namespace string) *k3kv1bet
 }
 
 // createClusterCR creates the k3k Cluster custom resource.
-func (p *K3kProvisioner) createClusterCR(ctx context.Context, clusterName, namespace string) error {
-	cluster := p.buildClusterCR(clusterName, namespace)
+func (p *K3kProvisioner) createClusterCR(
+	ctx context.Context,
+	clusterName, namespace, certSAN string,
+) error {
+	cluster := p.buildClusterCR(clusterName, namespace, certSAN)
 
 	restClient, paramCodec, err := p.buildK3kRESTClient()
 	if err != nil {
@@ -571,19 +582,18 @@ func (p *K3kProvisioner) waitForKubeconfigSecret(
 
 // jscpd:ignore-end
 
-// rewriteK3kKubeconfig rewrites the k3k-generated kubeconfig to use a localhost
-// port-forward address and renames context/cluster/user entries for uniqueness.
-func rewriteK3kKubeconfig(kubeconfig string, localPort int, clusterName string) string {
-	// Replace the server address with the port-forward address.
-	// k3k kubeconfig uses the ClusterIP or NodePort address of the service.
-	// We need to rewrite it to use 127.0.0.1 with the port-forwarded port.
+// rewriteK3kKubeconfig rewrites the k3k-generated kubeconfig to use the stable exposure
+// address and renames context/cluster/user entries for uniqueness.
+func rewriteK3kKubeconfig(kubeconfig, serverURL, clusterName string) string {
+	// Replace the server address. The k3k kubeconfig uses the ClusterIP/NodePort address of the
+	// service; rewrite it to the stable exposure address the cert SANs were issued for.
 	lines := strings.Split(kubeconfig, "\n")
 
 	for i, line := range lines {
 		trimmed := strings.TrimSpace(line)
 		if strings.HasPrefix(trimmed, "server:") {
 			indent := line[:len(line)-len(strings.TrimLeft(line, " \t"))]
-			lines[i] = fmt.Sprintf("%sserver: https://127.0.0.1:%d", indent, localPort)
+			lines[i] = fmt.Sprintf("%sserver: %s", indent, serverURL)
 		}
 	}
 

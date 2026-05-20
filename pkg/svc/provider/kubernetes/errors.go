@@ -20,6 +20,17 @@ var (
 	// ErrDynamicClientRequired is returned when a dynamic client is needed but nil.
 	ErrDynamicClientRequired = errors.New("dynamic client is required for Gateway API resources")
 
+	// ErrLoadBalancerNotReady is returned when a LoadBalancer Service was not assigned an address.
+	ErrLoadBalancerNotReady = errors.New(
+		"LoadBalancer service was not assigned an external address",
+	)
+
+	// ErrNodePortNotAssigned is returned when a NodePort Service has no allocated node port.
+	ErrNodePortNotAssigned = errors.New("NodePort service has no allocated node port")
+
+	// ErrNoNodeAddress is returned when no reachable host node address could be determined.
+	ErrNoNodeAddress = errors.New("no reachable host node address found for NodePort exposure")
+
 	// ErrDinDNotReady is returned when the DinD pod did not become ready in time.
 	ErrDinDNotReady = errors.New("DinD pod did not become ready within timeout")
 

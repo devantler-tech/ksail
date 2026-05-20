@@ -335,7 +335,7 @@ func (f DefaultFactory) createK3dKubernetesProvisioner(
 		clusterName = cluster.Metadata.Name
 	}
 
-	hostClient, restConfig, _, k8sProvider, err := buildKubernetesInfra(opts)
+	hostClient, restConfig, dynClient, k8sProvider, err := buildKubernetesInfra(opts)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -349,16 +349,18 @@ func (f DefaultFactory) createK3dKubernetesProvisioner(
 
 	provisioner, err := k3dprovisioner.NewK3kProvisioner(
 		k3dprovisioner.K3kProvisionerConfig{
-			HostClientset:  hostClient,
-			RestConfig:     restConfig,
-			K8sProvider:    k8sProvider,
-			ClusterName:    clusterName,
-			KubeconfigPath: cluster.Spec.Cluster.Connection.Kubeconfig,
-			HostContext:    resolveKubernetesOption(opts.Context, opts.ContextEnvVar),
-			ControlPlanes:  controlPlanes,
-			Workers:        workers,
-			PodCIDR:        opts.PodCIDR,
-			ServiceCIDR:    opts.ServiceCIDR,
+			HostClientset:    hostClient,
+			RestConfig:       restConfig,
+			K8sProvider:      k8sProvider,
+			DynamicClient:    dynClient,
+			ClusterName:      clusterName,
+			KubeconfigPath:   cluster.Spec.Cluster.Connection.Kubeconfig,
+			HostContext:      resolveKubernetesOption(opts.Context, opts.ContextEnvVar),
+			GatewayClassName: opts.GatewayClassName,
+			ControlPlanes:    controlPlanes,
+			Workers:          workers,
+			PodCIDR:          opts.PodCIDR,
+			ServiceCIDR:      opts.ServiceCIDR,
 		},
 	)
 	if err != nil {
@@ -764,7 +766,7 @@ func (f DefaultFactory) createVClusterKubernetesProvisioner(
 		clusterName = cluster.Metadata.Name
 	}
 
-	hostClient, restConfig, _, k8sProvider, err := buildKubernetesInfra(opts)
+	hostClient, restConfig, dynClient, k8sProvider, err := buildKubernetesInfra(opts)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -781,14 +783,16 @@ func (f DefaultFactory) createVClusterKubernetesProvisioner(
 
 	provisioner, err := vclusterprovisioner.NewKubernetesProvisioner(
 		vclusterprovisioner.KubernetesProvisionerConfig{
-			ClusterName:    clusterName,
-			HostContext:    resolveKubernetesOption(opts.Context, opts.ContextEnvVar),
-			KubeconfigPath: cluster.Spec.Cluster.Connection.Kubeconfig,
-			HostClientset:  hostClient,
-			RestConfig:     restConfig,
-			K8sProvider:    k8sProvider,
-			ValuesPath:     valuesPath,
-			DisableFlannel: disableFlannel,
+			ClusterName:      clusterName,
+			HostContext:      resolveKubernetesOption(opts.Context, opts.ContextEnvVar),
+			KubeconfigPath:   cluster.Spec.Cluster.Connection.Kubeconfig,
+			HostClientset:    hostClient,
+			RestConfig:       restConfig,
+			K8sProvider:      k8sProvider,
+			DynamicClient:    dynClient,
+			GatewayClassName: opts.GatewayClassName,
+			ValuesPath:       valuesPath,
+			DisableFlannel:   disableFlannel,
 		},
 	)
 	if err != nil {

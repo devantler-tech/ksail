@@ -3,7 +3,15 @@ title: Kubernetes Provider
 description: Run nested Kubernetes clusters as pods inside an existing host Kubernetes cluster with KSail.
 ---
 
-The Kubernetes provider runs nested cluster nodes as pods inside an existing host Kubernetes cluster. It exposes the nested cluster's API server via [Gateway API](https://gateway-api.sigs.k8s.io/) TCPRoute for external `kubectl` access.
+The Kubernetes provider runs nested cluster nodes as pods inside an existing host Kubernetes cluster. It exposes the nested cluster's API server through a **stable, server-side endpoint** so `kubectl` keeps working after the `ksail` process exits — no long-lived port-forward is required.
+
+KSail picks the exposure mechanism automatically, in order of preference:
+
+1. **Gateway API** ([TCPRoute](https://gateway-api.sigs.k8s.io/)) — used when `spec.provider.kubernetes.gatewayClassName` is set and the host cluster has a TCPRoute-capable Gateway controller.
+2. **LoadBalancer Service** — used when the host cluster has a LoadBalancer controller that assigns an external address.
+3. **NodePort Service** — the universal fallback; the nested API is reached at `https://<node-address>:<nodePort>`.
+
+The resolved address is written into the nested cluster's kubeconfig, and is added to the nested API server's certificate SANs so TLS verification succeeds.
 
 ## When to Use the Kubernetes Provider
 
@@ -22,16 +30,18 @@ The Kubernetes provider is ideal when you:
 1. **Host Kubernetes cluster** — any distribution (cloud-managed, on-prem, or local)
 2. **Privileged pod policy** — nested cluster pods require `privileged: true` security context
 
-**Optional — Gateway API exposure** (only needed when `spec.provider.kubernetes.gatewayClassName` is set):
+3. **A reachable exposure address** — the resolved Gateway/LoadBalancer/NodePort address must be routable from the machine running `ksail`. This is automatic for cloud host clusters and for local hosts that publish service addresses to the host (e.g. Docker Desktop, or `cloud-provider-kind`). On local Docker-based hosts on macOS/Windows, node and LoadBalancer IPs are frequently **not** routable from the host — prefer Docker Desktop's localhost LoadBalancer, `cloud-provider-kind`, or a routable Gateway address.
 
-3. **Gateway API experimental CRDs** — install from [gateway-api.sigs.k8s.io](https://gateway-api.sigs.k8s.io/guides/getting-started/#install-experimental-channel):
+**Optional — Gateway API exposure** (preferred tier; used when `spec.provider.kubernetes.gatewayClassName` is set):
+
+4. **Gateway API experimental CRDs** (TCPRoute is in the experimental channel) — install from [gateway-api.sigs.k8s.io](https://gateway-api.sigs.k8s.io/guides/getting-started/#install-experimental-channel):
    ```bash
    kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.5.1/experimental-install.yaml
    ```
-4. **Gateway controller** — one of: [Envoy Gateway](https://gateway.envoyproxy.io/), [Traefik](https://traefik.io/), [NGINX Gateway Fabric](https://docs.nginx.com/nginx-gateway-fabric/), [Contour](https://projectcontour.io/), or [HAProxy Ingress](https://haproxy-ingress.github.io/)
-5. **GatewayClass** — must exist on the host cluster (created by the Gateway controller)
+5. **Gateway controller with TCPRoute support** — e.g. [Envoy Gateway](https://gateway.envoyproxy.io/), [Cilium](https://cilium.io/), or [Istio](https://istio.io/). The controller must implement TCPRoute (v1alpha2), not only HTTPRoute.
+6. **GatewayClass** — must exist on the host cluster (created by the Gateway controller)
 
-When `gatewayClassName` is empty (the default), KSail uses local port-forwarding for API access instead of Gateway API exposure.
+When `gatewayClassName` is empty (the default), KSail falls back to a LoadBalancer Service, then a NodePort Service.
 
 ## Configuration
 
@@ -125,14 +135,15 @@ graph TB
     GWCTRL -.-> GW
 ````
 
-### Gateway API Exposure
+### API Server Exposure
 
-The nested cluster's API server is exposed via:
-1. **ClusterIP Service** — targets the control-plane pod(s) on the nested API server port (default: 6443)
-2. **Gateway** — TCP listener on the nested API server port
-3. **TCPRoute** — routes the TCP listener to the ClusterIP Service
+The nested cluster's API server is exposed through the first mechanism that yields a stable address:
 
-The Gateway controller's LoadBalancer provides the external IP that users connect to via `kubectl`.
+1. **Gateway API** (when `gatewayClassName` is set) — a ClusterIP Service targeting the control-plane pod(s), a **Gateway** (TCP listener on the nested API server port), and a **TCPRoute** routing the listener to the Service. The Gateway controller's LoadBalancer provides the external address.
+2. **LoadBalancer Service** — a Service of type `LoadBalancer` targeting the control-plane pod(s); the host LoadBalancer controller assigns the external address.
+3. **NodePort Service** — a Service of type `NodePort`; KSail resolves a reachable node address (preferring a node `ExternalIP`, then the host cluster's API address, then a node `InternalIP`).
+
+In every case the resolved address is added to the nested API server's certificate SANs and written to the nested cluster's kubeconfig, so `kubectl` verifies TLS and connects directly — the connection survives the `ksail` process exiting.
 
 ## Operations
 
@@ -158,9 +169,11 @@ This lists all nested clusters discovered on the host cluster. The host kubeconf
 
 ## Troubleshooting
 
-**`Gateway API experimental CRDs not found`** — This error only occurs when `spec.provider.kubernetes.gatewayClassName` is set. Install the experimental CRDs: `kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.5.1/experimental-install.yaml`, or leave `gatewayClassName` empty to use port-forward-only access.
+**`Gateway API experimental CRDs not found`** — This error only occurs when `spec.provider.kubernetes.gatewayClassName` is set. Install the experimental CRDs: `kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.5.1/experimental-install.yaml`, or leave `gatewayClassName` empty to fall back to a LoadBalancer/NodePort Service.
 
 **`GatewayClass not found`** — Set `spec.provider.kubernetes.gatewayClassName` to a GatewayClass that exists on your host cluster. List available classes: `kubectl get gatewayclasses`
+
+**`kubectl` times out connecting to the nested cluster** — The resolved exposure address may not be routable from your machine. This is common with NodePort/LoadBalancer addresses on local Docker-based host clusters on macOS/Windows, where service addresses live inside the Docker VM. Use Docker Desktop's localhost LoadBalancer, install `cloud-provider-kind`, or configure a TCPRoute-capable Gateway whose address is routable. Inspect the exposure: `kubectl get svc,gateway,tcproute -n <namespace>`.
 
 **`nested cluster CIDR overlaps`** — Change `spec.provider.kubernetes.podCidr` and/or `spec.provider.kubernetes.serviceCidr` to ranges that don't overlap with your host cluster. Check host CIDRs: `kubectl cluster-info dump | grep -m 1 service-cluster-ip-range`
 

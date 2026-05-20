@@ -107,6 +107,33 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 		return err
 	}
 
+	// Step 1b: Resolve a stable, server-side exposure (Gateway → LoadBalancer → NodePort) for the
+	// nested Kubernetes API server. The Service is created up-front (its target port is corrected
+	// after the DinD-mapped K8s port is discovered) so the address can be added to the cert SANs.
+	exposure, err := p.k8sProvider.ResolveExposure(
+		ctx, p.dynamicClient,
+		kubernetesprovider.APIExposureSpec{
+			ClusterName:      clusterName,
+			APIPort:          kubernetesprovider.DinDAPIServerPort,
+			GatewayClassName: p.gatewayClassName,
+			HostAddress:      p.restConfig.Host,
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("expose API server: %w", err)
+	}
+
+	// Step 1c: Regenerate the Talos config so the API server cert is valid for the exposure
+	// address (keeping loopback for the creation-time port-forward), preserving the PKI.
+	newConfigs, err := p.inner.talosConfigs.WithCertSANs(
+		[]string{"127.0.0.1", "localhost", exposure.Address},
+	)
+	if err != nil {
+		return fmt.Errorf("add exposure address to cert SANs: %w", err)
+	}
+
+	p.inner.talosConfigs = newConfigs
+
 	// Step 2: Start exec tunnel for Docker API (2375) to localhost.
 	// The exec tunnel uses CRI exec + nc instead of SPDY port-forward,
 	// which correctly handles Docker's HTTP connection hijacking (101 Upgrade)
@@ -271,25 +298,23 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 		return fmt.Errorf("bootstrap: %w", err)
 	}
 
-	// Fetch and save kubeconfig with host-accessible K8s API endpoint
+	// Fetch and save kubeconfig (server set to the loopback endpoint used for bootstrap).
 	err = p.inner.fetchAndSaveKubeconfig(ctx, clusterAccess)
 	if err != nil {
 		return fmt.Errorf("save kubeconfig: %w", err)
 	}
 
-	// Expose the nested API server via Gateway API (if configured)
-	err = p.k8sProvider.EnsureAPIExposure(
-		ctx,
-		p.dynamicClient,
-		clusterName,
-		//nolint:gosec // port value is bounded within TCP port range (1-65535)
-		int32(
-			k8sPort,
-		),
-		p.gatewayClassName,
-	)
+	// Point the exposure Service at the DinD-mapped K8s API port (only known now).
+	//nolint:gosec // port value is bounded within TCP port range (1-65535)
+	err = p.k8sProvider.UpdateAPIServiceTargetPort(ctx, clusterName, int32(k8sPort))
 	if err != nil {
-		return fmt.Errorf("expose API: %w", err)
+		return fmt.Errorf("update API exposure target port: %w", err)
+	}
+
+	// Repoint the persisted kubeconfig at the stable exposure address (survives the CLI exit).
+	err = k8s.ModifyKubeconfigCluster(p.kubeconfigPath, clusterName, exposure.ServerURL())
+	if err != nil {
+		return fmt.Errorf("repoint kubeconfig at exposure address: %w", err)
 	}
 
 	return nil

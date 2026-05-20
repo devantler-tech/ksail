@@ -224,7 +224,7 @@ func (p *Provisioner) Create(ctx context.Context, name string) error {
 		Upgrade:      false,
 	}
 
-	valuesFiles, cleanup, err := buildValuesFiles(p.valuesPath, p.disableFlannel)
+	valuesFiles, cleanup, err := buildValuesFiles(p.valuesPath, p.disableFlannel, "")
 	if err != nil {
 		return fmt.Errorf("failed to prepare values files: %w", err)
 	}
@@ -801,11 +801,21 @@ func (p *Provisioner) withProvider(
 // When disableFlannel is true, the defaults file also sets
 // deploy.cni.flannel.enabled=false to prevent flannel from conflicting with a
 // custom CNI that will be installed post-creation.
-func buildValuesFiles(userValuesPath string, disableFlannel bool) ([]string, func(), error) {
+func buildValuesFiles(
+	userValuesPath string,
+	disableFlannel bool,
+	extraSAN string,
+) ([]string, func(), error) {
 	defaultsContent := fmt.Sprintf(
 		"controlPlane:\n  distro:\n    k8s:\n      image:\n        tag: %s\n",
 		vclusterconfigmanager.DefaultKubernetesVersion,
 	)
+
+	if extraSAN != "" {
+		// Add the stable exposure address to the vCluster proxy certificate SANs so kubectl
+		// verifies TLS when connecting via the exposure address.
+		defaultsContent += fmt.Sprintf("  proxy:\n    extraSANs:\n    - %q\n", extraSAN)
+	}
 
 	if disableFlannel {
 		defaultsContent += "deploy:\n  cni:\n    flannel:\n      enabled: false\n"
