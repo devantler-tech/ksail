@@ -15,7 +15,7 @@ require (
 	github.com/docker/go-connections v0.7.0
 	github.com/fatih/color v1.19.0
 	github.com/fluxcd/helm-controller/api v1.5.4
-	github.com/fluxcd/kustomize-controller/api v1.8.4
+	github.com/fluxcd/kustomize-controller/api v1.8.5
 	github.com/fluxcd/pkg/apis/meta v1.27.0
 	github.com/fluxcd/source-controller/api v1.8.3
 	github.com/getsops/sops/v3 v3.13.0
