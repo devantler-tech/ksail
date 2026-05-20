@@ -492,6 +492,68 @@ users:
 	}
 }
 
+func TestGetKubeconfigCurrentContext(t *testing.T) {
+	t.Parallel()
+
+	const kubeconfigWithContext = "apiVersion: v1\nkind: Config\ncurrent-context: my-cluster\n"
+
+	tests := []struct {
+		name          string
+		setup         func(t *testing.T) string
+		wantContext   string
+		wantParentDir bool
+	}{
+		{
+			name: "returns current-context from existing kubeconfig",
+			setup: func(t *testing.T) string {
+				t.Helper()
+				dir := t.TempDir()
+				path := filepath.Join(dir, "kubeconfig")
+				err := os.WriteFile(path, []byte(kubeconfigWithContext), 0o600)
+				require.NoError(t, err)
+				return path
+			},
+			wantContext: "my-cluster",
+		},
+		{
+			name: "returns empty string when kubeconfig file does not exist",
+			setup: func(t *testing.T) string {
+				t.Helper()
+				dir := t.TempDir()
+				return filepath.Join(dir, "kubeconfig")
+			},
+			wantContext: "",
+		},
+		{
+			name: "creates parent directory and returns empty string when parent does not exist",
+			setup: func(t *testing.T) string {
+				t.Helper()
+				dir := t.TempDir()
+				return filepath.Join(dir, "nonexistent-subdir", "kubeconfig")
+			},
+			wantContext:   "",
+			wantParentDir: true,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			kubeconfigPath := testCase.setup(t)
+
+			got, err := k8s.GetKubeconfigCurrentContext(kubeconfigPath)
+			require.NoError(t, err)
+			assert.Equal(t, testCase.wantContext, got)
+
+			if testCase.wantParentDir {
+				_, statErr := os.Stat(filepath.Dir(kubeconfigPath))
+				assert.NoError(t, statErr, "expected parent directory to be created")
+			}
+		})
+	}
+}
+
 func TestSetKubeconfigCurrentContext(t *testing.T) {
 	t.Parallel()
 
