@@ -49,6 +49,7 @@ func skipIfDockerUnavailable(t *testing.T) dockerapi.APIClient {
 	_, err = client.Ping(ctx)
 	if err != nil {
 		_ = client.Close()
+
 		t.Skipf("Docker daemon not reachable: %v", err)
 	}
 

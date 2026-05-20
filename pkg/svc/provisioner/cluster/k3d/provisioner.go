@@ -151,6 +151,32 @@ func (k *Provisioner) List(ctx context.Context) ([]string, error) {
 	return parseClusterNames(raw)
 }
 
+// Exists returns whether the target cluster is present.
+func (k *Provisioner) Exists(ctx context.Context, name string) (bool, error) {
+	clusters, err := k.List(ctx)
+	if err != nil {
+		return false, fmt.Errorf("list: %w", err)
+	}
+
+	target := k.resolveName(name)
+	if target == "" {
+		return false, nil
+	}
+
+	return slices.Contains(clusters, target), nil
+}
+
+// WithComponentDetector sets the component detector for querying cluster state.
+func (k *Provisioner) WithComponentDetector(d *detector.ComponentDetector) {
+	k.componentDetector = d
+}
+
+// SetComponentDetector sets the component detector for querying cluster state.
+// This implements the ComponentDetectorAware interface.
+func (k *Provisioner) SetComponentDetector(d *detector.ComponentDetector) {
+	k.WithComponentDetector(d)
+}
+
 // defaultListClustersRaw runs the k3d cluster list command and returns its raw
 // JSON output. k3d's PrintClusters writes directly to os.Stdout using
 // fmt.Println (not Cobra's cmd.OutOrStdout()), so the output is captured by
@@ -213,32 +239,6 @@ func (k *Provisioner) defaultListClustersRaw(ctx context.Context) (string, error
 	}
 
 	return strings.TrimSpace(outputBuf.String()), nil
-}
-
-// Exists returns whether the target cluster is present.
-func (k *Provisioner) Exists(ctx context.Context, name string) (bool, error) {
-	clusters, err := k.List(ctx)
-	if err != nil {
-		return false, fmt.Errorf("list: %w", err)
-	}
-
-	target := k.resolveName(name)
-	if target == "" {
-		return false, nil
-	}
-
-	return slices.Contains(clusters, target), nil
-}
-
-// WithComponentDetector sets the component detector for querying cluster state.
-func (k *Provisioner) WithComponentDetector(d *detector.ComponentDetector) {
-	k.componentDetector = d
-}
-
-// SetComponentDetector sets the component detector for querying cluster state.
-// This implements the ComponentDetectorAware interface.
-func (k *Provisioner) SetComponentDetector(d *detector.ComponentDetector) {
-	k.WithComponentDetector(d)
 }
 
 // runListCommand executes the k3d cluster list command and returns the output.

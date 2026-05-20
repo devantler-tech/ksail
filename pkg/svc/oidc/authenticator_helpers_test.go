@@ -223,21 +223,22 @@ func TestNewOIDCProvider(t *testing.T) {
 
 		var issuer string
 
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Path == "/.well-known/openid-configuration" {
-				w.Header().Set("Content-Type", "application/json")
-				_ = json.NewEncoder(w).Encode(map[string]any{
-					"issuer":                 issuer,
-					"authorization_endpoint": issuer + "/auth",
-					"token_endpoint":         issuer + "/token",
-					"jwks_uri":               issuer + "/keys",
-				})
+		server := httptest.NewServer(http.HandlerFunc(
+			func(writer http.ResponseWriter, request *http.Request) {
+				if request.URL.Path == "/.well-known/openid-configuration" {
+					writer.Header().Set("Content-Type", "application/json")
+					_ = json.NewEncoder(writer).Encode(map[string]any{
+						"issuer":                 issuer,
+						"authorization_endpoint": issuer + "/auth",
+						"token_endpoint":         issuer + "/token",
+						"jwks_uri":               issuer + "/keys",
+					})
 
-				return
-			}
+					return
+				}
 
-			http.NotFound(w, r)
-		}))
+				http.NotFound(writer, request)
+			}))
 		defer server.Close()
 
 		issuer = server.URL

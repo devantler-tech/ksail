@@ -91,9 +91,11 @@ func TestSetDefaultCluster(t *testing.T) {
 	t.Cleanup(func() { config.DefaultCluster = original })
 
 	restore := kwokprovisioner.SetDefaultClusterForTest("temp-cluster")
+
 	assert.Equal(t, "temp-cluster", config.DefaultCluster)
 
 	restore()
+
 	assert.Equal(t, original, config.DefaultCluster)
 }
 
@@ -125,17 +127,20 @@ func TestResolveConfigPath_GeneratesDefault(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, info.IsDir())
 
-	kustomization, err := os.ReadFile(filepath.Join(path, "kustomization.yaml"))
+	kustomizationPath := filepath.Join(path, "kustomization.yaml")
+	kustomization, err := os.ReadFile(kustomizationPath) //nolint:gosec // Test file path is safe
 	require.NoError(t, err)
 	assert.Contains(t, string(kustomization), "kind: Kustomization")
 	assert.Contains(t, string(kustomization), "simulation.yaml")
 
-	simulation, err := os.ReadFile(filepath.Join(path, "simulation.yaml"))
+	simulationPath := filepath.Join(path, "simulation.yaml")
+	simulation, err := os.ReadFile(simulationPath) //nolint:gosec // Test file path is safe
 	require.NoError(t, err)
 	assert.NotEmpty(t, simulation)
 
 	// cleanup removes the generated directory.
 	cleanup()
+
 	_, statErr := os.Stat(path)
 	require.ErrorIs(t, statErr, os.ErrNotExist)
 }

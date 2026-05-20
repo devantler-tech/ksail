@@ -242,17 +242,17 @@ func TestProvisioner_StartStop(t *testing.T) {
 
 	tests := []struct {
 		name string
-		call func(p *k3dprovisioner.Provisioner, ctx context.Context) error
+		call func(ctx context.Context, p *k3dprovisioner.Provisioner) error
 	}{
 		{
 			name: "start",
-			call: func(p *k3dprovisioner.Provisioner, ctx context.Context) error {
+			call: func(ctx context.Context, p *k3dprovisioner.Provisioner) error {
 				return p.Start(ctx, "alpha")
 			},
 		},
 		{
 			name: "stop",
-			call: func(p *k3dprovisioner.Provisioner, ctx context.Context) error {
+			call: func(ctx context.Context, p *k3dprovisioner.Provisioner) error {
 				return p.Stop(ctx, "alpha")
 			},
 		},
@@ -270,7 +270,7 @@ func TestProvisioner_StartStop(t *testing.T) {
 			prov := k3dprovisioner.NewProvisioner(&v1alpha5.SimpleConfig{}, "").
 				WithRunnerForTest(mockRunner)
 
-			require.NoError(t, testCase.call(prov, context.Background()))
+			require.NoError(t, testCase.call(context.Background(), prov))
 		})
 
 		t.Run(testCase.name+" propagates error", func(t *testing.T) {
@@ -284,7 +284,7 @@ func TestProvisioner_StartStop(t *testing.T) {
 			prov := k3dprovisioner.NewProvisioner(&v1alpha5.SimpleConfig{}, "").
 				WithRunnerForTest(mockRunner)
 
-			require.ErrorIs(t, testCase.call(prov, context.Background()), errRunnerBoom)
+			require.ErrorIs(t, testCase.call(context.Background(), prov), errRunnerBoom)
 		})
 	}
 }
@@ -301,7 +301,11 @@ func TestParseClusterNames(t *testing.T) {
 	}{
 		{name: "empty", output: "", want: nil},
 		{name: "two clusters", output: twoClusterJSON, want: []string{"alpha", "beta"}},
-		{name: "skips empty names", output: `[{"name":"alpha"},{"name":""}]`, want: []string{"alpha"}},
+		{
+			name:   "skips empty names",
+			output: `[{"name":"alpha"},{"name":""}]`,
+			want:   []string{"alpha"},
+		},
 		{name: "invalid json", output: "{not json", wantErr: true},
 	}
 
@@ -380,7 +384,8 @@ func TestAppendFlags(t *testing.T) {
 	t.Run("image flag appended from config when no config path", func(t *testing.T) {
 		t.Parallel()
 
-		prov := k3dprovisioner.NewProvisioner(&v1alpha5.SimpleConfig{Image: "rancher/k3s:v1.30"}, "")
+		cfg := &v1alpha5.SimpleConfig{Image: "rancher/k3s:v1.30"}
+		prov := k3dprovisioner.NewProvisioner(cfg, "")
 		args := prov.AppendImageFlagForTest(nil)
 		assert.True(t, slices.Contains(args, "--image"))
 		assert.True(t, slices.Contains(args, "rancher/k3s:v1.30"))
