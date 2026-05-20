@@ -79,10 +79,13 @@ func TestNewInstaller(t *testing.T) {
 	assert.NotNil(t, installer)
 }
 
+// TestCloudProviderKINDInstallerInstallAndUninstall is an integration test that
+// starts the real controller container. It shares a fixed container name and
+// network with TestCloudProviderKINDInstallerUninstallNoInstall, so the two must
+// not run concurrently.
+//
+//nolint:paralleltest // shares a fixed Docker container name and network
 func TestCloudProviderKINDInstallerInstallAndUninstall(t *testing.T) {
-	t.Parallel()
-
-	// Note: This is an integration test that actually starts the controller.
 	dockerClient := skipIfDockerUnavailable(t)
 
 	defer func() { _ = dockerClient.Close() }()
@@ -100,9 +103,8 @@ func TestCloudProviderKINDInstallerInstallAndUninstall(t *testing.T) {
 	require.NoError(t, err)
 }
 
+//nolint:paralleltest // shares a fixed Docker container name and network
 func TestCloudProviderKINDInstallerUninstallNoInstall(t *testing.T) {
-	t.Parallel()
-
 	dockerClient := skipIfDockerUnavailable(t)
 
 	defer func() { _ = dockerClient.Close() }()
