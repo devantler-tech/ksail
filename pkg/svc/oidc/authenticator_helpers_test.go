@@ -28,7 +28,12 @@ import (
 func newCallbackRequest(t *testing.T, query url.Values) *http.Request {
 	t.Helper()
 
-	return httptest.NewRequest(http.MethodGet, "/callback?"+query.Encode(), nil)
+	return httptest.NewRequestWithContext(
+		t.Context(),
+		http.MethodGet,
+		"/callback?"+query.Encode(),
+		nil,
+	)
 }
 
 func TestValidateCallbackRequest(t *testing.T) {
