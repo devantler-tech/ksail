@@ -1003,6 +1003,14 @@ replace (
 	// required by k9s, grype, and syft. This replace can be removed once
 	// https://github.com/loft-sh/log/pull/3 is merged and tagged.
 	github.com/loft-sh/log => github.com/devantler/log v0.0.0-20260407144227-16cc61ebdb79
+
+	// rancher/k3k v1.1.0 transitively requires moby/go-archive v0.2.0 (via
+	// testcontainers-go v0.42.0). v0.2.0 removed the Compression type alias from
+	// the root package, which docker/docker v28.5.2 references in its deprecated
+	// archive wrapper. Pinning back to v0.1.0 restores that alias. This replace
+	// can be removed once docker/docker ships a release compatible with
+	// moby/go-archive v0.2.0.
+	github.com/moby/go-archive => github.com/moby/go-archive v0.1.0
 )
 
 tool (
