@@ -103,7 +103,7 @@ require (
 	cloud.google.com/go/storage v1.62.1 // indirect
 	codeberg.org/chavacava/garif v0.2.0 // indirect
 	codeberg.org/polyfloyd/go-errorlint v1.9.0 // indirect
-	cyphar.com/go-pathrs v0.2.1 // indirect
+	cyphar.com/go-pathrs v0.2.2 // indirect
 	dario.cat/mergo v1.0.2 // indirect
 	dev.gaijin.team/go/exhaustruct/v4 v4.0.0 // indirect
 	dev.gaijin.team/go/golib v0.6.0 // indirect
@@ -952,13 +952,13 @@ require (
 	k8s.io/component-base v0.36.1 // indirect
 	k8s.io/component-helpers v0.36.1 // indirect
 	k8s.io/cri-api v0.36.0 // indirect
-	k8s.io/cri-client v0.35.0 // indirect
+	k8s.io/cri-client v0.36.0 // indirect
 	k8s.io/kube-aggregator v0.35.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20260330154417-16be699c7b31 // indirect
 	k8s.io/kube-proxy v0.33.0 // indirect
 	k8s.io/kube-scheduler v0.36.0 // indirect
 	k8s.io/kubelet v0.36.0 // indirect
-	k8s.io/kubernetes v1.35.4 // indirect
+	k8s.io/kubernetes v1.36.0 // indirect
 	k8s.io/metrics v0.36.1 // indirect
 	k8s.io/streaming v0.36.1 // indirect
 	k8s.io/utils v0.0.0-20260319190234-28399d86e0b5 // indirect
