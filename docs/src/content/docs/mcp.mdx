@@ -74,10 +74,14 @@ All tools carry [MCP behavioral annotations](https://spec.modelcontextprotocol.i
 
 | Annotation | Read tools (`*_read`) | Write tools (`*_write`) |
 |------------|----------------------|-------------------------|
-| `readOnlyHint` | `true` — safe to auto-approve | `false` |
+| `readOnlyHint` | `true` — no cluster or infrastructure mutations | `false` |
 | `destructiveHint` | `false` | `true` — clients should warn before running |
 | `idempotentHint` | `true` | `false` |
 | `openWorldHint` | `true` — may interact with external systems such as clusters or registries | `true` — may affect external systems |
+
+:::note
+`readOnlyHint: true` means the tool performs no cluster or infrastructure mutations. However, some `*_read` subcommands may still produce local side effects — for example, `cluster_read switch` updates the kubeconfig `current-context`, and `workload_read export` writes a tar archive to disk. Review the subcommand behavior before relying on this hint for auto-approval.
+:::
 
 Clients that support MCP annotations (such as Claude Desktop) use these hints to distinguish read-only operations from destructive or non-idempotent actions, while recognizing that both read and write tools may interact with external systems.
 
