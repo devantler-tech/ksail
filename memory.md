@@ -1,16 +1,17 @@
 # Repo Assist Memory
 
 ## Last Run
-2026-05-19 13:27 UTC — Run #26100174348
+2026-05-20 01:17 UTC — Run #26135227761
 
 ## Monthly Activity Issue
 - May 2026: #4501 (open)
 
 ## Open Repo Assist PRs
-- #4781: test(image): add direct unit tests for isHelperContainer helper (open, CI mostly passing - one flaky Talos test)
-- repo-assist/improve-picker-filter-and-parsetags-perf: feat(picker): add / filter mode + ParseTags fast-path (created this run)
+- #4795: feat(picker): add / filter mode + ParseTags fast-path optimisation (CI mostly passing)
+- #4781: test(image): add direct unit tests for isHelperContainer helper (CI passing)
 
 ## Issue Comments Made (with run)
+- #4328 (EKS provider status): 2026-05-20
 - #4674 (Hetzner CCM taint race): 2026-05-12
 - #4423 (workload watch hooks): 2026-05-11
 - #4675 (Talos disk encryption): 2026-05-10
@@ -31,7 +32,7 @@
 - #4510: [chore] GKE/AKS providers (sub-issue of #4627)
 - #4474: cluster diff command
 - #4473: vCluster v0.34 compat (merged #4734)
-- #4465: cluster switch fuzzy search (partially addressed by this run's PR)
+- #4465: cluster switch fuzzy search (partially addressed by #4795)
 - #4423: workload watch hooks
 - #4422: cluster diagnose health scoring
 - #4375: cluster graph topology
@@ -40,18 +41,18 @@
 - #4778: [feature] eBPF traffic observability via Hubble
 
 ## Sub-Issue Links (verified)
-- #4627 parent: #3983, #4328, #4510 (all linked, all open as of 2026-05-19)
+- #4627 parent: #4328, #4510, #3983 (all linked, all open as of 2026-05-20)
 
 ## Code Quality Domain Alternation
-- Last domain: testing (Task 9, 2026-05-19 AM)
+- Last domain: performance (Task 8, 2026-05-19)
 - Next for Task 5: refactor
 
 ## Backlog Cursor
-- Issues processed through #4780 (as of 2026-05-19)
+- Issues processed through #4795 (as of 2026-05-20)
 - Roadmap from discussion #4776 (May 18, 2026): all items tracked
 
 ## Labels Applied (recent)
-- #4432, #4371 → `agentic-workflows` (May 14)
+- #4743, #4432, #4371 → `agentic-workflows`, `automation` (May 19)
 - #4501 → `automation`, `repo-assist` (May 12)
 
 ## Notes
@@ -62,6 +63,7 @@
 - Issue #4473 CLOSED — vCluster v0.34 done (merged #4734)
 - Issue #4681: CI workload-timeout (blocked by workflows permission, needs manual PR creation)
 - PR #4769 (fix kubeconfig context): human PR by devantler, open for review
-- PR #4741 (toolgen): human PR by devantler, merged (PR #4794 docs follow-up open)
+- PR #4794 (toolgen docs): human PR by devantler, open for review
 - Duplicate patterns in v1alpha1 enum types are intentional (nolint:dupl) — do NOT refactor Set() methods
-- Run 2026-05-19 13:27: Tasks 12 (no orphans; all #4627 sub-issues open), 8 (ParseTags fast-path + benchmarks), 10 (picker filter mode - partial Fixes #4465), 13 (updated #4501)
+- EKS provider is largely implemented; missing: CI system test + docs 🚧 removal (#4328)
+- k3k Dependabot PR #4793: CI has infrastructure failures (not code-related)

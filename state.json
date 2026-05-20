@@ -1,6 +1,6 @@
 {
-  "last_run": "2026-05-19T13:27:36Z",
-  "workflow_run_id": "26100174348",
+  "last_run": "2026-05-20T01:17:29Z",
+  "workflow_run_id": "26135227761",
   "commented_issues": {
     "4675": "2026-05-10",
     "4646": "2026-05-08",
@@ -39,14 +39,15 @@
     "4423": "2026-05-11",
     "4474": "2026-05-13",
     "3983": "2026-05-18",
-    "4768": "2026-05-17"
+    "4768": "2026-05-17",
+    "4328": "2026-05-20"
   },
   "open_prs": {
     "repo-assist/test-image-helper-container-1272f7dad5fc2cb2": "test(image): add direct unit tests for isHelperContainer helper",
-    "repo-assist/improve-picker-filter-and-parsetags-perf": "feat(picker): add / filter mode + ParseTags fast-path optimisation"
+    "repo-assist/improve-picker-filter-and-parsetags-perf-dc313418d47a1194": "feat(picker): add / filter mode + ParseTags fast-path optimisation"
   },
   "last_code_quality_domain": "performance",
-  "issue_backlog_cursor": "4780",
+  "issue_backlog_cursor": "4795",
   "sub_issue_links": {
     "cloud_provider_parent_4627": ["3983", "4328", "4510"]
   },
@@ -85,6 +86,9 @@
     "domain alternation: last was performance - next should be refactor",
     "Human PR #4769 open: fix restore host kubeconfig context after kubernetes provider create",
     "Human PR #4794 open: docs(mcp): document MCP tool annotations for read/write hints",
-    "Run 2026-05-19 13:27: Tasks 12 (no orphan clusters), 8 (ParseTags fast-path + new benchmarks), 10 (picker / filter mode, partial Fixes #4465), 13 (updated #4501)"
+    "Run 2026-05-20 01:17: Task 2 (comment on #4328 EKS status), Task 3 (no bugs), Task 12 (sub-issues stable), Task 13 (updated #4501)",
+    "PR #4795 (picker/ParseTags): CI passing except one flaky Talos test (infrastructure)",
+    "PR #4781 (test/image): CI passing",
+    "k3k Dependabot PR #4793: CI has failures (Vanilla test fail + cancels) - appears infrastructure-related"
   ]
 }
