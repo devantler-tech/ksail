@@ -77,7 +77,7 @@ require (
 	github.com/siderolabs/go-kubernetes v0.2.37
 	github.com/siderolabs/go-retry v0.3.3
 	github.com/siderolabs/image-factory v1.3.0
-	github.com/siderolabs/omni/client v1.7.2
+	github.com/siderolabs/omni/client v1.7.3
 	golang.org/x/oauth2 v0.36.0
 	golang.org/x/text v0.37.0
 	google.golang.org/grpc v1.81.0
@@ -622,10 +622,10 @@ require (
 	github.com/mattn/go-localereader v0.0.2-0.20220822084749-2491eb6c1c75 // indirect
 	github.com/mattn/go-runewidth v0.0.19 // indirect
 	github.com/mattn/go-sqlite3 v1.14.27 // indirect
-	github.com/mdlayher/ethtool v0.5.1 // indirect
-	github.com/mdlayher/genetlink v1.3.2 // indirect
-	github.com/mdlayher/netlink v1.9.0 // indirect
-	github.com/mdlayher/socket v0.5.1 // indirect
+	github.com/mdlayher/ethtool v0.6.0 // indirect
+	github.com/mdlayher/genetlink v1.4.0 // indirect
+	github.com/mdlayher/netlink v1.11.0 // indirect
+	github.com/mdlayher/socket v0.6.0 // indirect
 	github.com/mgechev/revive v1.13.0 // indirect
 	github.com/mgutz/ansi v0.0.0-20200706080929-d51e80ef957d // indirect
 	github.com/mholt/archives v0.1.5 // indirect
@@ -704,7 +704,7 @@ require (
 	github.com/pelletier/go-toml v1.9.5 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
 	github.com/peterbourgon/diskv v2.0.1+incompatible // indirect
-	github.com/petermattis/goid v0.0.0-20260226131333-17d1149c6ac6 // indirect
+	github.com/petermattis/goid v0.0.0-20260330135022-df67b199bc81 // indirect
 	github.com/pierrec/lz4/v4 v4.1.22 // indirect
 	github.com/pin/tftp/v3 v3.2.0 // indirect
 	github.com/pjbgf/sha1cd v0.6.0 // indirect
