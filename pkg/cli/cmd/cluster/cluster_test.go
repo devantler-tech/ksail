@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/devantler-tech/ksail/v7/internal/testutil/homeenv"
 	snapshottest "github.com/devantler-tech/ksail/v7/internal/testutil/snapshottest"
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/cluster"
@@ -3761,7 +3762,11 @@ var (
 )
 
 func TestMain(m *testing.M) {
-	os.Exit(snapshottest.Run(m, snaps.CleanOpts{Sort: true}))
+	cleanup := homeenv.Isolate()
+	code := snapshottest.Run(m, snaps.CleanOpts{Sort: true})
+
+	cleanup()
+	os.Exit(code)
 }
 
 // fakeProvisionerWithClusters returns a list of clusters for testing.

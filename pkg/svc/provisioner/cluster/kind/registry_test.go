@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/devantler-tech/ksail/v7/internal/testutil/homeenv"
 	snapshottest "github.com/devantler-tech/ksail/v7/internal/testutil/snapshottest"
 	docker "github.com/devantler-tech/ksail/v7/pkg/client/docker"
 	kindprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/kind"
@@ -34,7 +35,11 @@ var (
 )
 
 func TestMain(m *testing.M) {
-	os.Exit(snapshottest.Run(m, snaps.CleanOpts{}))
+	cleanup := homeenv.Isolate()
+	code := snapshottest.Run(m, snaps.CleanOpts{})
+
+	cleanup()
+	os.Exit(code)
 }
 
 // setupTestEnvironment creates a standard test environment with mock client, context, and buffer.
