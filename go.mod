@@ -28,7 +28,7 @@ require (
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/samber/do/v2 v2.0.0
 	github.com/siderolabs/talos v1.13.0
-	github.com/siderolabs/talos/pkg/machinery v1.13.0
+	github.com/siderolabs/talos/pkg/machinery v1.13.2
 	github.com/sirupsen/logrus v1.9.4
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
