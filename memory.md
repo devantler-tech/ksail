@@ -1,13 +1,13 @@
 # Repo Assist Memory
 
 ## Last Run
-2026-05-20 13:15 UTC — Run #26164849857
+2026-05-21 01:18 UTC — Run #26199577223
 
 ## Monthly Activity Issue
 - May 2026: #4501 (open)
 
 ## Open Repo Assist PRs
-- Bundled Dependabot PR: chore(deps): bundle Dependabot Go updates (k3k 1.1.0, talos 1.13.2, k8s 1.36.0) — closes #4793, #4801
+- refactor(talos)+perf(gen_docs): extract patch subdir constants + hoist gen_docs regexps
 
 ## Issue Comments Made (with run)
 - #4328 (EKS provider status): 2026-05-20
@@ -43,11 +43,11 @@
 - #4627 parent: #4328, #4510, #3983 (all linked, all open as of 2026-05-20)
 
 ## Code Quality Domain Alternation
-- Last domain: performance (Task 8, 2026-05-19)
-- Next for Task 5: refactor
+- Last domain: refactor (Task 5, 2026-05-21)
+- Next for Task 5: performance
 
 ## Backlog Cursor
-- Issues processed through #4803 (as of 2026-05-20)
+- Issues processed through #4804 (as of 2026-05-20)
 - Roadmap from discussion #4776 (May 18, 2026): all items tracked
 
 ## Labels Applied (recent)
@@ -64,7 +64,7 @@
 - PR #4769 (fix kubeconfig context): human PR by devantler, open for review
 - Duplicate patterns in v1alpha1 enum types are intentional (nolint:dupl) — do NOT refactor Set() methods
 - EKS provider is largely implemented; missing: CI system test + docs 🚧 removal (#4328)
-- Dependabot PRs #4793 (k3k 1.1.0) and #4801 (talos 1.13.2) bundled into one Repo Assist PR
+- Dependabot PRs #4793 (k3k 1.1.0) and #4801 (talos 1.13.2) bundled into one Repo Assist PR (#4804)
 - moby/go-archive replace directive needed: k3k 1.1.0 transitively requires v0.2.0 which breaks docker/docker@v28.5.2
 - k8s.io/kubernetes 1.35.4→1.36.0 required alongside talos 1.13.2 due to cri-api/cri-client version alignment
 - PR #4795 (picker/ParseTags): MERGED ✅
