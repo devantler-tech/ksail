@@ -414,6 +414,12 @@ func (p *Provisioner) initContext(
 
 	ctx, _ = kwoklog.InitFlags(ctx, flagset)
 
+	// Silence kwokctl's structured JSON logger. kwokctl commands read the logger
+	// from the context (there is no IOStreams parameter to redirect, unlike the
+	// Kind SDK), and its INFO-level JSON lines would otherwise pollute KSail's
+	// own ►/✔ progress output. NewLogger(nil, …) returns kwok's noop logger.
+	ctx = kwoklog.NewContext(ctx, kwoklog.NewLogger(nil, kwoklog.LevelError))
+
 	ctx, err := config.InitFlags(ctx, flagset)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize kwokctl config: %w", err)

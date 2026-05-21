@@ -7164,14 +7164,14 @@ func TestNewDiagnoseCmd(t *testing.T) {
 	require.NotNil(t, providerFlag)
 	assert.Equal(t, "p", providerFlag.Shorthand)
 
-	formatFlag := diagnoseCmd.Flags().Lookup("format")
-	require.NotNil(t, formatFlag)
-	assert.Equal(t, "text", formatFlag.DefValue)
+	outputFlag := diagnoseCmd.Flags().Lookup("output")
+	require.NotNil(t, outputFlag)
+	assert.Equal(t, "text", outputFlag.DefValue)
 }
 
-// TestDiagnoseCmd_InvalidFormatRejectsEarly verifies that an unknown --format
+// TestDiagnoseCmd_InvalidFormatRejectsEarly verifies that an unknown --output
 // value is rejected before any cluster interaction takes place.
-// This guards against typos like "--format jsn" silently falling back to the
+// This guards against typos like "--output jsn" silently falling back to the
 // text path instead of returning an actionable error.
 func TestDiagnoseCmd_InvalidFormatRejectsEarly(t *testing.T) {
 	t.Parallel()
@@ -7193,7 +7193,7 @@ func TestDiagnoseCmd_InvalidFormatRejectsEarly(t *testing.T) {
 			diagnoseCmd := cluster.NewDiagnoseCmd(nil)
 			diagnoseCmd.SetOut(io.Discard)
 			diagnoseCmd.SetErr(io.Discard)
-			diagnoseCmd.SetArgs([]string{"--format", testCase.format})
+			diagnoseCmd.SetArgs([]string{"--output", testCase.format})
 
 			err := diagnoseCmd.Execute()
 
@@ -7204,6 +7204,43 @@ func TestDiagnoseCmd_InvalidFormatRejectsEarly(t *testing.T) {
 			)
 		})
 	}
+}
+
+// TestResolveClusterContext verifies the fix for #4835: cluster info resolves
+// the requested cluster's context and returns "" when none matches, so it never
+// falls back to the kubeconfig's current context for a non-existent cluster.
+func TestResolveClusterContext(t *testing.T) {
+	t.Parallel()
+
+	kubeconfig := `apiVersion: v1
+kind: Config
+current-context: kind-real
+clusters:
+- name: kind-real
+  cluster:
+    server: https://127.0.0.1:6443
+contexts:
+- name: kind-real
+  context:
+    cluster: kind-real
+    user: kind-real
+users:
+- name: kind-real
+  user: {}
+`
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "kubeconfig")
+	require.NoError(t, os.WriteFile(path, []byte(kubeconfig), 0o600))
+
+	// A real cluster resolves to its prefixed context.
+	assert.Equal(t, "kind-real", cluster.ExportResolveClusterContext(path, "real"))
+
+	// A non-existent cluster resolves to "" — no current-context fallback.
+	assert.Empty(t, cluster.ExportResolveClusterContext(path, "ghost"))
+
+	// An unreadable kubeconfig resolves to "".
+	assert.Empty(t, cluster.ExportResolveClusterContext(filepath.Join(dir, "missing"), "real"))
 }
 
 // TestClusterCmd_RegistersDiagnoseSubcommand verifies that NewClusterCmd wires

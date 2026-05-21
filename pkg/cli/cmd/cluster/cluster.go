@@ -2900,7 +2900,7 @@ func NewDiagnoseCmd(_ *di.Runtime) *cobra.Command {
 	var (
 		nameFlag     string
 		providerFlag v1alpha1.Provider
-		formatFlag   string
+		outputFlag   string
 	)
 
 	cmd := &cobra.Command{
@@ -2909,7 +2909,7 @@ func NewDiagnoseCmd(_ *di.Runtime) *cobra.Command {
 		Long:         diagnoseLongDesc,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runDiagnoseCmd(cmd, nameFlag, providerFlag, formatFlag)
+			return runDiagnoseCmd(cmd, nameFlag, providerFlag, outputFlag)
 		},
 	}
 
@@ -2929,8 +2929,8 @@ func NewDiagnoseCmd(_ *di.Runtime) *cobra.Command {
 	)
 
 	cmd.Flags().StringVar(
-		&formatFlag,
-		"format",
+		&outputFlag,
+		"output",
 		"text",
 		"Output format: text or json. Use json for machine-readable structured output.",
 	)
@@ -2945,9 +2945,9 @@ func runDiagnoseCmd(
 	cmd *cobra.Command,
 	nameFlag string,
 	providerFlag v1alpha1.Provider,
-	formatFlag string,
+	outputFlag string,
 ) error {
-	format := strings.ToLower(formatFlag)
+	format := strings.ToLower(outputFlag)
 	if format != outputFormatText && format != outputFormatJSON {
 		return fmt.Errorf(
 			"%w: %q (expected %q or %q)",
@@ -3017,6 +3017,9 @@ func runDiagnoseTextReport(report k8s.DiagnoseReport, writer io.Writer) error {
 func runDiagnoseJSONReport(report k8s.DiagnoseReport, w io.Writer) error {
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
+	// Keep '<', '>', '&' literal (e.g. in remediation hints like "<name>")
+	// instead of <-escaping them for HTML safety we don't need on a CLI.
+	enc.SetEscapeHTML(false)
 
 	err := enc.Encode(report)
 	if err != nil {
@@ -3065,9 +3068,20 @@ func runInfoCmd(
 		displayProviderStatus(writer, resolved.Provider, resolved.ClusterName, status)
 	}
 
-	// Phase 2: Attempt kubectl cluster-info
-	kubeErr := tryKubeClusterInfo(cmd, resolved.KubeconfigPath)
-	hasKubeInfo := kubeErr == nil
+	// Resolve the requested cluster's kubeconfig context. Phases 2 and 3 are
+	// scoped to it so a non-existent cluster does not silently fall back to the
+	// kubeconfig's current context (which would misreport an unrelated cluster
+	// as the requested one). An empty result means no context matched.
+	contextName := resolveClusterContext(resolved.KubeconfigPath, resolved.ClusterName)
+
+	// Phase 2: Attempt kubectl cluster-info, scoped to the resolved context.
+	// Skip entirely when no context matched — falling back to the current
+	// context here is exactly the false-positive we are preventing.
+	hasKubeInfo := false
+
+	if contextName != "" {
+		hasKubeInfo = tryKubeClusterInfo(cmd, resolved.KubeconfigPath, contextName) == nil
+	}
 
 	if !hasKubeInfo && hasProviderInfo {
 		_, _ = fmt.Fprintln(writer)
@@ -3076,7 +3090,7 @@ func runInfoCmd(
 
 	// Phase 3: Append KSail details (TTL, components)
 	if hasProviderInfo || hasKubeInfo {
-		displayKSailDetails(cmd, resolved.KubeconfigPath)
+		displayKSailDetails(cmd, resolved.KubeconfigPath, contextName)
 
 		return nil
 	}
@@ -3111,6 +3125,31 @@ func buildNoInfoError(clusterName string, provErr error) error {
 		errNoClusterInfo,
 		clusterName,
 	)
+}
+
+// resolveClusterContext returns the kubeconfig context name for the requested
+// cluster, or "" when the kubeconfig cannot be read or no context matches the
+// cluster name. It reuses the same name→context resolution as 'cluster switch'
+// so 'cluster info' only inspects the cluster it was asked about.
+//
+//nolint:gosec // G304: kubeconfigPath is resolved from trusted config or default.
+func resolveClusterContext(kubeconfigPath, clusterName string) string {
+	configBytes, err := os.ReadFile(kubeconfigPath)
+	if err != nil {
+		return ""
+	}
+
+	config, err := clientcmd.Load(configBytes)
+	if err != nil {
+		return ""
+	}
+
+	contextName, err := resolveContextName(config, clusterName)
+	if err != nil {
+		return ""
+	}
+
+	return contextName
 }
 
 // getProviderStatus queries the infrastructure provider for cluster status.
@@ -3275,7 +3314,7 @@ const (
 // output to cmd's writer. Output is buffered during retries so that failed
 // attempts do not leak partial output. Returns nil on success, an error if
 // the Kubernetes API is unreachable after all attempts.
-func tryKubeClusterInfo(cmd *cobra.Command, kubeconfigPath string) error {
+func tryKubeClusterInfo(cmd *cobra.Command, kubeconfigPath, contextName string) error {
 	var lastErr error
 
 	for attempt := 1; attempt <= clusterInfoMaxAttempts; attempt++ {
@@ -3287,7 +3326,7 @@ func tryKubeClusterInfo(cmd *cobra.Command, kubeconfigPath string) error {
 			ErrOut: io.Discard,
 		})
 
-		kubeCmd := kubectlClient.CreateClusterInfoCommand(kubeconfigPath)
+		kubeCmd := kubectlClient.CreateClusterInfoCommand(kubeconfigPath, contextName)
 
 		// Suppress kubectl's own error output
 		kubeCmd.SetErr(io.Discard)
@@ -3320,8 +3359,8 @@ func tryKubeClusterInfo(cmd *cobra.Command, kubeconfigPath string) error {
 // displayKSailDetails appends KSail-specific cluster metadata after kubectl output.
 // This includes cluster identity (name, distribution, provider), TTL status,
 // and enabled component summary from persisted state. Each section fails gracefully.
-func displayKSailDetails(cmd *cobra.Command, kubeconfigPath string) {
-	info, err := clusterdetector.DetectInfo(kubeconfigPath, "")
+func displayKSailDetails(cmd *cobra.Command, kubeconfigPath, contextName string) {
+	info, err := clusterdetector.DetectInfo(kubeconfigPath, contextName)
 	if err != nil || info == nil {
 		// If detection fails, skip KSail details because cluster identity could not be determined.
 		return
@@ -6707,15 +6746,24 @@ func diffToJSON(diff *clusterupdate.UpdateResult) DiffJSONOutput {
 func emitDiffJSON(cmd *cobra.Command, diff *clusterupdate.UpdateResult) {
 	out := diffToJSON(diff)
 
-	data, err := json.MarshalIndent(out, "", "  ")
+	var buf bytes.Buffer
+
+	enc := json.NewEncoder(&buf)
+	enc.SetIndent("", "  ")
+	// Keep '<', '>', '&' literal instead of \u-escaping them; this is CLI
+	// output, not HTML.
+	enc.SetEscapeHTML(false)
+
+	err := enc.Encode(out)
 	if err != nil {
-		// json.MarshalIndent on a plain struct with only basic types never fails.
+		// Encoding a plain struct with only basic types never fails.
 		notify.Errorf(cmd.OutOrStderr(), "failed to marshal diff to JSON: %v", err)
 
 		return
 	}
 
-	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s\n", data)
+	// enc.Encode already appends a trailing newline.
+	_, _ = fmt.Fprint(cmd.OutOrStdout(), buf.String())
 }
 
 // NewUpdateCmd creates the cluster update command.

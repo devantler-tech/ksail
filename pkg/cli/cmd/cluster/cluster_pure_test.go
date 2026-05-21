@@ -1000,6 +1000,38 @@ func TestRunDiagnoseJSONReport_HealthyCluster(t *testing.T) {
 	assert.Contains(t, out, `"findings": []`)
 }
 
+// TestRunDiagnoseJSONReport_DoesNotEscapeHTML verifies the fix for the JSON
+// HTML-escaping issue: '<', '>', '&' (e.g. in remediation hints like "<name>")
+// appear literally instead of being </>/&-escaped.
+func TestRunDiagnoseJSONReport_DoesNotEscapeHTML(t *testing.T) {
+	t.Parallel()
+
+	report := k8s.DiagnoseReport{
+		ClusterName: "broken-cluster",
+		HealthScore: 90,
+		Findings: []k8s.DiagnoseFinding{
+			{
+				Severity:    k8s.DiagnoseSeverityWarning,
+				Resource:    "pvc/stuck (default)",
+				Reason:      "PVC is stuck in Pending phase",
+				Remediation: "Run 'ksail workload describe pvc/<name> -n <namespace>'.",
+			},
+		},
+	}
+
+	var buf strings.Builder
+
+	err := cluster.ExportRunDiagnoseJSONReport(report, &buf)
+	require.NoError(t, err)
+
+	out := buf.String()
+	// With HTML-escaping disabled the angle brackets appear literally. If
+	// escaping were on, these would be rendered as <name> and the
+	// substring assertions below would fail.
+	assert.Contains(t, out, "<name>")
+	assert.Contains(t, out, "<namespace>")
+}
+
 func TestRunDiagnoseJSONReport_WithFindings(t *testing.T) {
 	t.Parallel()
 

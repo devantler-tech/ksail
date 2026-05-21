@@ -293,7 +293,7 @@ func TestCreateClusterInfoCommand(t *testing.T) {
 
 	testCommandCreation(
 		t,
-		func(c *kubectl.Client, path string) *cobra.Command { return c.CreateClusterInfoCommand(path) },
+		func(c *kubectl.Client, path string) *cobra.Command { return c.CreateClusterInfoCommand(path, "") },
 		"info",
 		"Display cluster information",
 		"Display addresses of the control plane and services with label kubernetes.io/cluster-service=true.",
@@ -306,7 +306,7 @@ func TestCreateClusterInfoCommandHasSubcommands(t *testing.T) {
 	ioStreams := createTestIOStreams()
 
 	client := kubectl.NewClient(ioStreams)
-	cmd := client.CreateClusterInfoCommand("/path/to/kubeconfig")
+	cmd := client.CreateClusterInfoCommand("/path/to/kubeconfig", "")
 
 	// Verify that kubectl cluster-info subcommands are present
 	subcommands := cmd.Commands()

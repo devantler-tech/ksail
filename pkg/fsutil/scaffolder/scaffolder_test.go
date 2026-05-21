@@ -864,6 +864,40 @@ func TestScaffoldForceUpdatesModTime(t *testing.T) {
 	}
 }
 
+// TestScaffold_KWOK_RegeneratesMissingFile verifies the fix for #4836: the KWOK
+// scaffolder writes its files individually, so deleting one inner file and
+// re-running init without --force regenerates that single file instead of
+// treating the whole kwok/ directory as one already-present unit.
+func TestScaffold_KWOK_RegeneratesMissingFile(t *testing.T) {
+	t.Parallel()
+
+	output := t.TempDir()
+
+	sc := scaffolder.NewScaffolder(createKWOKCluster("kwok-repair"), io.Discard, nil)
+	require.NoError(t, sc.Scaffold(output, false))
+
+	kwokDir := filepath.Join(output, scaffolder.KWOKConfigDir)
+	files := []string{
+		"kustomization.yaml",
+		scaffolder.KWOKSimulationFile,
+		scaffolder.KWOKNodeNotReadyFile,
+		scaffolder.KWOKPodFailureFile,
+	}
+
+	for _, file := range files {
+		require.FileExists(t, filepath.Join(kwokDir, file))
+	}
+
+	// Remove a single inner file and re-run init WITHOUT --force.
+	require.NoError(t, os.Remove(filepath.Join(kwokDir, scaffolder.KWOKPodFailureFile)))
+	require.NoError(t, sc.Scaffold(output, false))
+
+	// The removed file is restored and the others are left intact.
+	for _, file := range files {
+		require.FileExists(t, filepath.Join(kwokDir, file))
+	}
+}
+
 // Test case definitions.
 type scaffoldTestCase struct {
 	name        string

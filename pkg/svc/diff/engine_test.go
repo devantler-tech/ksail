@@ -780,6 +780,38 @@ func TestEngine_DefaultVsDisabled_NoFalsePositive_Vanilla(t *testing.T) {
 	}
 }
 
+// TestEngine_ComponentDefaults_NoFalsePositive reproduces the scenario where a
+// freshly initialised ksail.yaml leaves cni/certManager/policyEngine/gitOpsEngine
+// unset (empty). The detected baseline carries the applied defaults
+// (CNIDefault/Disabled/None/None), so without default normalisation these unset
+// fields would produce phantom in-place drift on an otherwise-unchanged cluster.
+func TestEngine_ComponentDefaults_NoFalsePositive(t *testing.T) {
+	t.Parallel()
+
+	old := newBaseSpec()
+
+	// Simulate an unpinned config: the user never set these component fields.
+	newer := clone(old)
+	newer.CNI = ""
+	newer.CertManager = ""
+	newer.PolicyEngine = ""
+	newer.GitOpsEngine = ""
+
+	engine := diff.NewEngine(v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
+	result := engine.ComputeDiff(old, newer, nil, nil)
+
+	if result.TotalChanges() != 0 {
+		t.Errorf(
+			"unset component fields should normalise to their defaults (0 changes), got %d",
+			result.TotalChanges(),
+		)
+
+		for _, change := range result.AllChanges() {
+			t.Logf("  change: %s %q -> %q", change.Field, change.OldValue, change.NewValue)
+		}
+	}
+}
+
 func TestEngine_DefaultVsDisabled_DetectedOnK3s(t *testing.T) {
 	t.Parallel()
 
