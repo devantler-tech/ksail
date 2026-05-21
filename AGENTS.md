@@ -383,7 +383,7 @@ The Daily Docs agentic workflow (`daily-docs.lock.yml`) is designed to fill docu
 
 ## Benchmark Pipeline Consistency
 
-When changing `-count` in the `go test -bench` command in CI, always update the awk averaging/filtering step in "Prepare benchmark regression gate input" to produce exactly one result line per benchmark name. Failing to do so causes false-positive performance regression alerts for all benchmarks, even ones unrelated to the PR. The comparison tool (`github-action-benchmark`) expects the file it reads to contain exactly one result line per benchmark name, so repeated entries for the same benchmark must be consolidated before comparison. See [docs/BENCHMARK-REGRESSION.md](../docs/BENCHMARK-REGRESSION.md) for details.
+When changing `-count` in the `go test -bench` command in CI, always update the awk averaging/filtering step in "Prepare benchmark regression gate input" to produce exactly one result line per benchmark name. Failing to do so causes false-positive performance regression alerts for all benchmarks, even ones unrelated to the PR. The comparison tool (`github-action-benchmark`) expects the file it reads to contain exactly one result line per benchmark name, so repeated entries for the same benchmark must be consolidated before comparison. See [docs/BENCHMARK-REGRESSION.md](docs/BENCHMARK-REGRESSION.md) for details.
 
 ## CI Doctor Issue Linking
 
