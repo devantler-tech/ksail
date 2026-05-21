@@ -6,7 +6,7 @@ description: |
   - Comments helpfully on open issues to unblock contributors
   - Identifies fixable issues and creates draft pull requests
   - Improves code quality, performance, and test coverage via PRs
-  - Translates the weekly roadmap into actionable backlog issues
+  - Translates the monthly roadmap into actionable backlog issues
   - Organizes issue hierarchies and auto-closes completed parent issues
   - Makes engineering investments (dependency updates, CI improvements)
   - Nudges stale PRs waiting for author response
@@ -431,9 +431,9 @@ Proactively move the repository forward. Use your judgement to identify the most
 
 ### Task 11: Roadmap Backlog Creation
 
-Translate the weekly roadmap into actionable backlog issues.
+Translate the monthly roadmap into actionable backlog issues.
 
-1. **Read the roadmap**: Search for the most recent open discussion with title starting with "Weekly Strategy" using `list_discussions`. Read it carefully — this is your primary source of what features and improvements to plan for.
+1. **Read the roadmap**: Search for the most recent open discussion with title starting with "Monthly Strategy" using `list_discussions`. Read it carefully — this is your primary source of what features and improvements to plan for.
 2. **Read all open issues**: Understand what work is already tracked.
 3. **Read recently closed issues** (last 90 days) for deduplication.
 4. **Identify gaps**: Compare roadmap "Now" and "Next" items against open issues.

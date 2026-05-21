@@ -10,6 +10,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil/scaffolder"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	kubernetesprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/kubernetes"
 	"k8s.io/client-go/dynamic"
@@ -36,7 +37,6 @@ type KubernetesProvisioner struct {
 	gatewayClassName string
 	kubeconfigPath   string
 	persistence      v1alpha1.KubernetesPersistence
-	portForward      *kubernetesprovider.PortForwardSession
 }
 
 // KubernetesProvisionerConfig holds configuration for creating a KubernetesProvisioner.
@@ -116,6 +116,31 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 		return err
 	}
 
+	// Step 1b: Resolve a stable, server-side exposure (Gateway → LoadBalancer → NodePort) for the
+	// nested API server. The API server is pinned to a fixed port (below) so the address can be
+	// resolved up-front and added to the API server cert SANs.
+	exposure, err := p.k8sProvider.ResolveExposure(
+		ctx, p.dynamicClient,
+		kubernetesprovider.APIExposureSpec{
+			ClusterName:      target,
+			APIPort:          kubernetesprovider.DinDAPIServerPort,
+			GatewayClassName: p.gatewayClassName,
+			HostAddress:      p.restConfig.Host,
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("expose API server: %w", err)
+	}
+
+	// Step 1c: Pin the API server port and add the exposure address to the API server cert SANs
+	// (kwokctl reads this from a generated KwokctlConfiguration), so kubectl verifies TLS when
+	// connecting via the stable address.
+	cleanupCfg, err := p.applyKwokCertSANs(exposure.Address)
+	if err != nil {
+		return fmt.Errorf("configure kwok cert SANs: %w", err)
+	}
+	defer cleanupCfg()
+
 	// Step 2: Pre-create placeholder files in DinD at the exact paths kwokctl
 	// will reference in Docker bind mounts. Without this, Docker auto-creates
 	// missing bind mount sources as directories, causing kube-apiserver to fail
@@ -179,7 +204,9 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 		return fmt.Errorf("discover API server port: %w", err)
 	}
 
-	// Step 8: Port-forward the nested API server from DinD to localhost.
+	// Step 8: Port-forward the nested API server from DinD to localhost. This forward is
+	// transient — it is only used for the readiness check and node scaling below, and is closed
+	// before Create returns. Steady-state access goes through the stable exposure address.
 	_, _ = fmt.Fprintln(os.Stdout, "► port-forwarding nested API server to localhost")
 
 	portForward, err := p.k8sProvider.StartPortForward(
@@ -190,10 +217,11 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 		return fmt.Errorf("port-forward API server: %w", err)
 	}
 
-	p.portForward = portForward
+	defer portForward.Close()
 
-	// Step 9: Rewrite kubeconfig server URL to use the local port-forward address
-	err = p.rewriteKubeconfig(name, portForward.LocalPort)
+	// Step 9: Temporarily point the kubeconfig at the loopback port-forward so the readiness
+	// check and node scaling can reach the API during creation (the cert includes 127.0.0.1).
+	err = p.rewriteKubeconfig(name, fmt.Sprintf("https://127.0.0.1:%d", portForward.LocalPort))
 	if err != nil {
 		return fmt.Errorf("rewrite kubeconfig: %w", err)
 	}
@@ -214,19 +242,10 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 		return fmt.Errorf("kwok scale via SDK: %w", err)
 	}
 
-	// Step 12: Expose via Gateway API (if configured)
-	err = p.k8sProvider.EnsureAPIExposure(
-		ctx,
-		p.dynamicClient,
-		target,
-		//nolint:gosec // port value is bounded within TCP port range (1-65535)
-		int32(
-			apiServerPort,
-		),
-		p.gatewayClassName,
-	)
+	// Step 12: Point the kubeconfig at the stable exposure address (survives the CLI process exit).
+	err = p.rewriteKubeconfig(name, exposure.ServerURL())
 	if err != nil {
-		return fmt.Errorf("ensure API exposure: %w", err)
+		return fmt.Errorf("rewrite kubeconfig: %w", err)
 	}
 
 	return nil
@@ -235,11 +254,6 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 // Delete deletes the KWOK cluster inside DinD and cleans up host cluster resources.
 func (p *KubernetesProvisioner) Delete(ctx context.Context, name string) error {
 	target := p.resolveName(name)
-
-	// Close port-forward if active
-	if p.portForward != nil {
-		p.portForward.Close()
-	}
 
 	// jscpd:ignore-start
 	// Best-effort: delete KWOK cluster inside DinD via SDK
@@ -336,15 +350,13 @@ func (p *KubernetesProvisioner) discoverAPIServerPort(name string) (int, error) 
 	return port, nil
 }
 
-// rewriteKubeconfig rewrites the KWOK kubeconfig server URL to use the
-// local port-forward address. Updates both:
+// rewriteKubeconfig rewrites the KWOK kubeconfig server URL to the given URL. Updates both:
 //   - ~/.kube/config — the standard kubeconfig for kubectl access
 //   - ~/.kwok/clusters/<name>/kubeconfig.yaml — kwokctl's internal kubeconfig
 //     used by kwokctl scale and other runtime commands
-func (p *KubernetesProvisioner) rewriteKubeconfig(name string, localPort int) error {
+func (p *KubernetesProvisioner) rewriteKubeconfig(name, newServer string) error {
 	target := p.resolveName(name)
 	clusterKey := "kwok-" + target
-	newServer := fmt.Sprintf("https://127.0.0.1:%d", localPort)
 
 	// Rewrite ~/.kube/config (atomic, merge-safe)
 	err := k8s.ModifyKubeconfigCluster(p.kubeconfigPath, clusterKey, newServer)
@@ -387,6 +399,66 @@ func (p *KubernetesProvisioner) rewriteKubeconfig(name string, localPort int) er
 	}
 
 	return nil
+}
+
+// applyKwokCertSANs writes a temporary kwok config directory that pins the API server port and
+// adds the exposure address to the API server certificate SANs, then points the inner kwokctl
+// provisioner at it. It returns a cleanup function that removes the temporary directory.
+//
+// For the Kubernetes provider this overrides any user-supplied kwok config path; the default
+// node-simulation config is reproduced so node scaling continues to work.
+func (p *KubernetesProvisioner) applyKwokCertSANs(address string) (func(), error) {
+	noop := func() {}
+
+	dir, err := os.MkdirTemp("", "kwok-k8s-*")
+	if err != nil {
+		return noop, fmt.Errorf("create temp config dir: %w", err)
+	}
+
+	cleanup := func() { _ = os.RemoveAll(dir) }
+
+	kustomization := "apiVersion: kustomize.config.k8s.io/v1beta1\n" +
+		"kind: Kustomization\n" +
+		"resources:\n" +
+		"  - simulation.yaml\n" +
+		"  - kwokctl.yaml\n"
+
+	kwokctl := fmt.Sprintf(`apiVersion: config.kwok.x-k8s.io/v1alpha1
+kind: KwokctlConfiguration
+metadata:
+  name: kwok
+options:
+  kubeApiserverPort: %d
+  kubeApiserverCertSANs:
+  - "127.0.0.1"
+  - "localhost"
+  - %q
+`, kubernetesprovider.DinDAPIServerPort, address)
+
+	files := map[string]string{
+		"kustomization.yaml": kustomization,
+		"simulation.yaml":    scaffolder.KWOKDefaultSimulationConfig,
+		"kwokctl.yaml":       kwokctl,
+	}
+
+	const fileMode = 0o600
+
+	for name, content := range files {
+		writeErr := os.WriteFile(filepath.Join(dir, name), []byte(content), fileMode)
+		if writeErr != nil {
+			cleanup()
+
+			return noop, fmt.Errorf("write %s: %w", name, writeErr)
+		}
+	}
+
+	originalConfigPath := p.configPath
+	p.configPath = dir
+
+	return func() {
+		p.configPath = originalConfigPath
+		_ = os.RemoveAll(dir)
+	}, nil
 }
 
 // kwokStateDir returns the absolute path to kwokctl's cluster state directory.

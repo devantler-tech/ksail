@@ -1,4 +1,4 @@
-# gh-aw-metadata: {"schema_version":"v3","frontmatter_hash":"0d8b630b5846f117d196b7839ed6032abd9a1698cb8ec7b3379560ebb637c67b","compiler_version":"v0.72.1","agent_id":"copilot"}
+# gh-aw-metadata: {"schema_version":"v3","frontmatter_hash":"0be2769f61a6d6bccbb0fb8cf0c3199b248102284eeda0cfcaef25573c10320a","compiler_version":"v0.72.1","agent_id":"copilot"}
 # gh-aw-manifest: {"version":1,"secrets":["COPILOT_GITHUB_TOKEN","GH_AW_CI_TRIGGER_TOKEN","GH_AW_GITHUB_MCP_SERVER_TOKEN","GH_AW_GITHUB_TOKEN","GITHUB_TOKEN"],"actions":[{"repo":"actions/checkout","sha":"de0fac2e4500dabe0009e67214ff5f5447ce83dd","version":"v6.0.2"},{"repo":"actions/download-artifact","sha":"3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c","version":"v8.0.1"},{"repo":"actions/github-script","sha":"3a2844b7e9c422d3c10d287c895573f7108da1b3","version":"v9.0.0"},{"repo":"actions/setup-node","sha":"48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e","version":"v6.4.0"},{"repo":"actions/upload-artifact","sha":"043fb46d1a93c77aae656e7c1c64a875d1fc6a0a","version":"v7.0.1"},{"repo":"github/gh-aw-actions/setup","sha":"bc56a0cad2f450c562810785ef38649c04db812a","version":"v0.72.1"}],"containers":[{"image":"ghcr.io/github/gh-aw-firewall/agent:0.25.41"},{"image":"ghcr.io/github/gh-aw-firewall/api-proxy:0.25.41"},{"image":"ghcr.io/github/gh-aw-firewall/squid:0.25.41"},{"image":"ghcr.io/github/gh-aw-mcpg:v0.3.6","digest":"sha256:2bb8eef86006a4c5963c55616a9c51c32f27bfdecb023b8aa6f91f6718d9171c","pinned_image":"ghcr.io/github/gh-aw-mcpg:v0.3.6@sha256:2bb8eef86006a4c5963c55616a9c51c32f27bfdecb023b8aa6f91f6718d9171c"},{"image":"ghcr.io/github/github-mcp-server:v1.0.3","digest":"sha256:2ac27ef03461ef2b877031b838a7d1fd7f12b12d4ace7796d8cad91446d55959","pinned_image":"ghcr.io/github/github-mcp-server:v1.0.3@sha256:2ac27ef03461ef2b877031b838a7d1fd7f12b12d4ace7796d8cad91446d55959"},{"image":"node:lts-alpine","digest":"sha256:d1b3b4da11eefd5941e7f0b9cf17783fc99d9c6fc34884a665f40a06dbdfc94f","pinned_image":"node:lts-alpine@sha256:d1b3b4da11eefd5941e7f0b9cf17783fc99d9c6fc34884a665f40a06dbdfc94f"}]}
 #    ___                   _   _
 #   / _ \                 | | (_)
@@ -28,7 +28,7 @@
 # - Comments helpfully on open issues to unblock contributors
 # - Identifies fixable issues and creates draft pull requests
 # - Improves code quality, performance, and test coverage via PRs
-# - Translates the weekly roadmap into actionable backlog issues
+# - Translates the monthly roadmap into actionable backlog issues
 # - Organizes issue hierarchies and auto-closes completed parent issues
 # - Makes engineering investments (dependency updates, CI improvements)
 # - Nudges stale PRs waiting for author response
@@ -1634,7 +1634,7 @@ jobs:
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           WORKFLOW_NAME: "Repo Assist"
-          WORKFLOW_DESCRIPTION: "A repository assistant that runs every 12 hours to support contributors and maintainers.\nCan also be triggered on-demand via '/repo-assist <instructions>' to perform specific tasks.\n- Labels and triages open issues using devantler-tech issue templates\n- Comments helpfully on open issues to unblock contributors\n- Identifies fixable issues and creates draft pull requests\n- Improves code quality, performance, and test coverage via PRs\n- Translates the weekly roadmap into actionable backlog issues\n- Organizes issue hierarchies and auto-closes completed parent issues\n- Makes engineering investments (dependency updates, CI improvements)\n- Nudges stale PRs waiting for author response\n- Maintains its own PRs when CI fails or merge conflicts arise\n- Maintains a monthly activity summary for maintainer visibility\nAlways polite, constructive, and mindful of the project's goals."
+          WORKFLOW_DESCRIPTION: "A repository assistant that runs every 12 hours to support contributors and maintainers.\nCan also be triggered on-demand via '/repo-assist <instructions>' to perform specific tasks.\n- Labels and triages open issues using devantler-tech issue templates\n- Comments helpfully on open issues to unblock contributors\n- Identifies fixable issues and creates draft pull requests\n- Improves code quality, performance, and test coverage via PRs\n- Translates the monthly roadmap into actionable backlog issues\n- Organizes issue hierarchies and auto-closes completed parent issues\n- Makes engineering investments (dependency updates, CI improvements)\n- Nudges stale PRs waiting for author response\n- Maintains its own PRs when CI fails or merge conflicts arise\n- Maintains a monthly activity summary for maintainer visibility\nAlways polite, constructive, and mindful of the project's goals."
           HAS_PATCH: ${{ needs.agent.outputs.has_patch }}
         with:
           script: |

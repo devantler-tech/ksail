@@ -7,10 +7,12 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/devantler-tech/ksail/v7/internal/testutil/rootcheck"
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
@@ -852,6 +854,14 @@ func TestRefreshAndVerifyKubeconfig_StaleKubeconfigRefreshFailsWarns(t *testing.
 //
 //nolint:paralleltest // Mutates the global isKubeconfigStaleFunc.
 func TestRefreshAndVerifyKubeconfig_StatPermissionError(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("permission semantics differ on Windows")
+	}
+
+	if rootcheck.IsRootUser() {
+		t.Skip("running as root — permission checks are bypassed")
+	}
+
 	dir := t.TempDir()
 	// Create a directory that we can't read (os.Stat on a file inside it will
 	// fail with EACCES on most Unix systems).

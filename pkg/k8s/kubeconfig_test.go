@@ -606,3 +606,51 @@ users:
 		})
 	}
 }
+
+func TestPreserveCurrentContextUnlessExplicit(t *testing.T) {
+	t.Parallel()
+
+	const initial = "apiVersion: v1\nkind: Config\ncurrent-context: host-ctx\n"
+
+	t.Run("implicit host context restores the original after a switch", func(t *testing.T) {
+		t.Parallel()
+
+		path := filepath.Join(t.TempDir(), "kubeconfig")
+		require.NoError(t, os.WriteFile(path, []byte(initial), 0o600))
+
+		restore, err := k8s.PreserveCurrentContextUnlessExplicit(path, "")
+		require.NoError(t, err)
+
+		// Simulate create switching the active context to the nested cluster.
+		require.NoError(t, k8s.SetKubeconfigCurrentContext(path, "nested-ctx"))
+
+		restore()
+
+		got, err := k8s.GetKubeconfigCurrentContext(path)
+		require.NoError(t, err)
+		assert.Equal(t, "host-ctx", got, "implicit host context should be restored")
+	})
+
+	t.Run("explicit host context leaves the switched context in place", func(t *testing.T) {
+		t.Parallel()
+
+		path := filepath.Join(t.TempDir(), "kubeconfig")
+		require.NoError(t, os.WriteFile(path, []byte(initial), 0o600))
+
+		restore, err := k8s.PreserveCurrentContextUnlessExplicit(path, "my-host")
+		require.NoError(t, err)
+
+		require.NoError(t, k8s.SetKubeconfigCurrentContext(path, "nested-ctx"))
+
+		restore()
+
+		got, err := k8s.GetKubeconfigCurrentContext(path)
+		require.NoError(t, err)
+		assert.Equal(
+			t,
+			"nested-ctx",
+			got,
+			"explicit host context should leave the new context active",
+		)
+	})
+}

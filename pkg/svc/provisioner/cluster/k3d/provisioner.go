@@ -31,9 +31,14 @@ var (
 
 // Provisioner executes k3d lifecycle commands via Cobra.
 type Provisioner struct {
-	simpleCfg         *v1alpha5.SimpleConfig
-	configPath        string
-	runner            runner.CommandRunner
+	simpleCfg  *v1alpha5.SimpleConfig
+	configPath string
+	runner     runner.CommandRunner
+	// listClustersRaw returns the raw cluster-list output from k3d. It is a seam
+	// so tests can supply canned output without invoking the real k3d runtime
+	// (which calls logrus.Fatal when Docker is unavailable). Defaults to
+	// defaultListClustersRaw; tests override it via export_test.go.
+	listClustersRaw   func(ctx context.Context) (string, error)
 	componentDetector *detector.ComponentDetector
 }
 
@@ -61,6 +66,7 @@ func NewProvisioner(
 		configPath: configPath,
 		runner:     runner.NewCobraCommandRunner(nil, nil),
 	}
+	prov.listClustersRaw = prov.defaultListClustersRaw
 
 	return prov
 }
@@ -137,66 +143,12 @@ func (k *Provisioner) Stop(ctx context.Context, name string) error {
 
 // List returns cluster names reported by the Cobra command.
 func (k *Provisioner) List(ctx context.Context) ([]string, error) {
-	// Temporarily redirect logrus to discard output during list
-	// to prevent log messages from appearing in console
-	originalLogOutput := logrus.StandardLogger().Out
-
-	logrus.SetOutput(io.Discard)
-	defer logrus.SetOutput(originalLogOutput)
-
-	// Lock to prevent concurrent modifications of os.Stdout
-	listMutex.Lock()
-
-	// Setup stdout redirection - k3d's PrintClusters writes directly to os.Stdout
-	// using fmt.Println, not through Cobra's cmd.OutOrStdout(), so we must
-	// capture from os.Stdout directly.
-	originalStdout := os.Stdout
-
-	pipeReader, pipeWriter, err := os.Pipe()
+	raw, err := k.listClustersRaw(ctx)
 	if err != nil {
-		listMutex.Unlock()
-
-		return nil, fmt.Errorf("cluster list: create stdout pipe: %w", err)
+		return nil, err
 	}
 
-	os.Stdout = pipeWriter
-
-	// Run the command in a goroutine since we need to read from the pipe
-	// while the command is running (otherwise it may block on a full pipe buffer)
-	errChan := make(chan error, 1)
-
-	go func() {
-		_, runErr := k.runListCommand(ctx)
-		// Close write end to signal EOF to the reader
-		_ = pipeWriter.Close()
-
-		errChan <- runErr
-	}()
-
-	// Read all output from the pipe (this is the JSON from k3d)
-	var outputBuf bytes.Buffer
-
-	_, copyErr := io.Copy(&outputBuf, pipeReader)
-	_ = pipeReader.Close()
-
-	// Restore stdout while still holding the lock
-	os.Stdout = originalStdout
-
-	// Unlock mutex after restoring stdout
-	listMutex.Unlock()
-
-	// Wait for command to complete and get any error
-	runErr := <-errChan
-
-	if copyErr != nil {
-		return nil, fmt.Errorf("cluster list: read stdout pipe: %w", copyErr)
-	}
-
-	if runErr != nil {
-		return nil, fmt.Errorf("cluster list: %w", runErr)
-	}
-
-	return parseClusterNames(strings.TrimSpace(outputBuf.String()))
+	return parseClusterNames(raw)
 }
 
 // Exists returns whether the target cluster is present.
@@ -223,6 +175,75 @@ func (k *Provisioner) WithComponentDetector(d *detector.ComponentDetector) {
 // This implements the ComponentDetectorAware interface.
 func (k *Provisioner) SetComponentDetector(d *detector.ComponentDetector) {
 	k.WithComponentDetector(d)
+}
+
+// defaultListClustersRaw runs the k3d cluster list command and returns its raw
+// JSON output. k3d's PrintClusters writes directly to os.Stdout using
+// fmt.Println (not Cobra's cmd.OutOrStdout()), so the output is captured by
+// temporarily redirecting os.Stdout.
+func (k *Provisioner) defaultListClustersRaw(ctx context.Context) (string, error) {
+	// Lock first so that the logrus save/restore and the os.Stdout save/restore
+	// are both protected by the same critical section. Without this ordering a
+	// second concurrent caller could read originalLogOutput as io.Discard (the
+	// value set by the first caller) and later restore to io.Discard, leaving
+	// the global logrus logger permanently muted.
+	listMutex.Lock()
+
+	// Temporarily redirect logrus to discard output during list
+	// to prevent log messages from appearing in console.
+	originalLogOutput := logrus.StandardLogger().Out
+
+	logrus.SetOutput(io.Discard)
+
+	originalStdout := os.Stdout
+
+	pipeReader, pipeWriter, err := os.Pipe()
+	if err != nil {
+		logrus.SetOutput(originalLogOutput)
+		listMutex.Unlock()
+
+		return "", fmt.Errorf("cluster list: create stdout pipe: %w", err)
+	}
+
+	os.Stdout = pipeWriter
+
+	// Run the command in a goroutine since we need to read from the pipe
+	// while the command is running (otherwise it may block on a full pipe buffer)
+	errChan := make(chan error, 1)
+
+	go func() {
+		_, runErr := k.runListCommand(ctx)
+		// Close write end to signal EOF to the reader
+		_ = pipeWriter.Close()
+
+		errChan <- runErr
+	}()
+
+	// Read all output from the pipe (this is the JSON from k3d)
+	var outputBuf bytes.Buffer
+
+	_, copyErr := io.Copy(&outputBuf, pipeReader)
+	_ = pipeReader.Close()
+
+	// Restore stdout and logrus, then release the lock.
+	os.Stdout = originalStdout
+
+	logrus.SetOutput(originalLogOutput)
+
+	listMutex.Unlock()
+
+	// Wait for command to complete and get any error
+	runErr := <-errChan
+
+	if copyErr != nil {
+		return "", fmt.Errorf("cluster list: read stdout pipe: %w", copyErr)
+	}
+
+	if runErr != nil {
+		return "", fmt.Errorf("cluster list: %w", runErr)
+	}
+
+	return strings.TrimSpace(outputBuf.String()), nil
 }
 
 // runListCommand executes the k3d cluster list command and returns the output.

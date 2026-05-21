@@ -264,6 +264,7 @@ func (f DefaultFactory) createKindKubernetesProvisioner(
 			ClusterName:      clusterName,
 			Distribution:     string(cluster.Spec.Cluster.Distribution),
 			GatewayClassName: opts.GatewayClassName,
+			HostContext:      resolveKubernetesOption(opts.Context, opts.ContextEnvVar),
 			APIServerPort:    kubernetesprovider.DinDAPIServerPort,
 			Persistence:      opts.Persistence,
 		},
@@ -335,7 +336,7 @@ func (f DefaultFactory) createK3dKubernetesProvisioner(
 		clusterName = cluster.Metadata.Name
 	}
 
-	hostClient, restConfig, _, k8sProvider, err := buildKubernetesInfra(opts)
+	hostClient, restConfig, dynClient, k8sProvider, err := buildKubernetesInfra(opts)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -349,16 +350,18 @@ func (f DefaultFactory) createK3dKubernetesProvisioner(
 
 	provisioner, err := k3dprovisioner.NewK3kProvisioner(
 		k3dprovisioner.K3kProvisionerConfig{
-			HostClientset:  hostClient,
-			RestConfig:     restConfig,
-			K8sProvider:    k8sProvider,
-			ClusterName:    clusterName,
-			KubeconfigPath: cluster.Spec.Cluster.Connection.Kubeconfig,
-			HostContext:    resolveKubernetesOption(opts.Context, opts.ContextEnvVar),
-			ControlPlanes:  controlPlanes,
-			Workers:        workers,
-			PodCIDR:        opts.PodCIDR,
-			ServiceCIDR:    opts.ServiceCIDR,
+			HostClientset:    hostClient,
+			RestConfig:       restConfig,
+			K8sProvider:      k8sProvider,
+			DynamicClient:    dynClient,
+			ClusterName:      clusterName,
+			KubeconfigPath:   cluster.Spec.Cluster.Connection.Kubeconfig,
+			HostContext:      resolveKubernetesOption(opts.Context, opts.ContextEnvVar),
+			GatewayClassName: opts.GatewayClassName,
+			ControlPlanes:    controlPlanes,
+			Workers:          workers,
+			PodCIDR:          opts.PodCIDR,
+			ServiceCIDR:      opts.ServiceCIDR,
 		},
 	)
 	if err != nil {
@@ -695,6 +698,7 @@ func (f DefaultFactory) createTalosKubernetesProvisioner(
 		return nil, nil, fmt.Errorf("create inner Talos provisioner: %w", err)
 	}
 
+	// jscpd:ignore-start
 	provisioner, err := talosprovisioner.NewKubernetesProvisioner(
 		talosprovisioner.KubernetesProvisionerConfig{
 			InnerProvisioner: innerProvisioner,
@@ -705,11 +709,13 @@ func (f DefaultFactory) createTalosKubernetesProvisioner(
 			ClusterName:      clusterName,
 			Distribution:     string(cluster.Spec.Cluster.Distribution),
 			GatewayClassName: opts.GatewayClassName,
+			HostContext:      resolveKubernetesOption(opts.Context, opts.ContextEnvVar),
 			ControlPlanes:    int(cluster.Spec.Cluster.ControlPlanes),
 			Workers:          int(cluster.Spec.Cluster.Workers),
 			Persistence:      opts.Persistence,
 		},
 	)
+	// jscpd:ignore-end
 	if err != nil {
 		return nil, nil, fmt.Errorf("create Talos Kubernetes provisioner: %w", err)
 	}
@@ -764,7 +770,7 @@ func (f DefaultFactory) createVClusterKubernetesProvisioner(
 		clusterName = cluster.Metadata.Name
 	}
 
-	hostClient, restConfig, _, k8sProvider, err := buildKubernetesInfra(opts)
+	hostClient, restConfig, dynClient, k8sProvider, err := buildKubernetesInfra(opts)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -781,14 +787,16 @@ func (f DefaultFactory) createVClusterKubernetesProvisioner(
 
 	provisioner, err := vclusterprovisioner.NewKubernetesProvisioner(
 		vclusterprovisioner.KubernetesProvisionerConfig{
-			ClusterName:    clusterName,
-			HostContext:    resolveKubernetesOption(opts.Context, opts.ContextEnvVar),
-			KubeconfigPath: cluster.Spec.Cluster.Connection.Kubeconfig,
-			HostClientset:  hostClient,
-			RestConfig:     restConfig,
-			K8sProvider:    k8sProvider,
-			ValuesPath:     valuesPath,
-			DisableFlannel: disableFlannel,
+			ClusterName:      clusterName,
+			HostContext:      resolveKubernetesOption(opts.Context, opts.ContextEnvVar),
+			KubeconfigPath:   cluster.Spec.Cluster.Connection.Kubeconfig,
+			HostClientset:    hostClient,
+			RestConfig:       restConfig,
+			K8sProvider:      k8sProvider,
+			DynamicClient:    dynClient,
+			GatewayClassName: opts.GatewayClassName,
+			ValuesPath:       valuesPath,
+			DisableFlannel:   disableFlannel,
 		},
 	)
 	if err != nil {

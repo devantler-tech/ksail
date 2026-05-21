@@ -12,6 +12,9 @@ var CreateWithRetryForTest = createWithRetry
 // WaitForNetworkRemovalForTest exposes waitForNetworkRemoval for unit testing.
 var WaitForNetworkRemovalForTest = waitForNetworkRemoval
 
+// BuildValuesFilesForTest exposes buildValuesFiles for unit testing.
+var BuildValuesFilesForTest = buildValuesFiles
+
 // NetworkExistsFnForTest exposes the networkExistsFn type for unit testing.
 type NetworkExistsFnForTest = networkExistsFn
 
