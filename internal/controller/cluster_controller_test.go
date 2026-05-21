@@ -3,6 +3,7 @@ package controller_test
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/internal/controller"
@@ -120,7 +121,11 @@ func TestReconcile_AddsFinalizer(t *testing.T) {
 	var got v1alpha1.Cluster
 
 	require.NoError(t, fakeClient.Get(context.Background(), request().NamespacedName, &got))
-	assert.True(t, containsFinalizer(got.Finalizers), "finalizer should be added")
+	assert.True(
+		t,
+		slices.Contains(got.Finalizers, controller.FinalizerName),
+		"finalizer should be added",
+	)
 }
 
 func TestReconcile_CreatesWhenMissing(t *testing.T) {
@@ -206,14 +211,4 @@ func TestReconcile_DeletesAndRemovesFinalizer(t *testing.T) {
 
 	getErr := fakeClient.Get(context.Background(), request().NamespacedName, &got)
 	assert.True(t, apierrors.IsNotFound(getErr), "cluster should be gone after finalizer removal")
-}
-
-func containsFinalizer(finalizers []string) bool {
-	for _, f := range finalizers {
-		if f == controller.FinalizerName {
-			return true
-		}
-	}
-
-	return false
 }

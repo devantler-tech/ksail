@@ -22,6 +22,9 @@ import (
 // cluster before the custom resource is removed from the API server.
 const FinalizerName = "ksail.io/finalizer"
 
+// reasonReconciled is the condition reason reported when a cluster is reconciled and ready.
+const reasonReconciled = "Reconciled"
+
 // Default requeue intervals. Transitional states are requeued quickly so the reported phase
 // converges promptly; steady (Ready) state is polled less frequently.
 const (
@@ -248,21 +251,21 @@ func (r *ClusterReconciler) markReady(cluster *v1alpha1.Cluster) {
 		Type:               v1alpha1.ConditionReady,
 		Status:             metav1.ConditionTrue,
 		ObservedGeneration: cluster.Generation,
-		Reason:             "Reconciled",
+		Reason:             reasonReconciled,
 		Message:            message,
 	})
 	apimeta.SetStatusCondition(&cluster.Status.Conditions, metav1.Condition{
 		Type:               v1alpha1.ConditionProgressing,
 		Status:             metav1.ConditionFalse,
 		ObservedGeneration: cluster.Generation,
-		Reason:             "Reconciled",
+		Reason:             reasonReconciled,
 		Message:            message,
 	})
 	apimeta.SetStatusCondition(&cluster.Status.Conditions, metav1.Condition{
 		Type:               v1alpha1.ConditionDegraded,
 		Status:             metav1.ConditionFalse,
 		ObservedGeneration: cluster.Generation,
-		Reason:             "Reconciled",
+		Reason:             reasonReconciled,
 		Message:            message,
 	})
 }
