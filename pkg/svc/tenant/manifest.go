@@ -44,7 +44,8 @@ func generateNamespacedManifest(
 // validateQuantities ensures every provided value parses as a resource.Quantity.
 func validateQuantities(values ...string) error {
 	for _, value := range values {
-		if err := validateQuantity(value); err != nil {
+		err := validateQuantity(value)
+		if err != nil {
 			return err
 		}
 	}

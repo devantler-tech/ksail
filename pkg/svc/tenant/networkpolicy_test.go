@@ -17,7 +17,7 @@ func TestGenerateNetworkPolicyManifests_Disabled(t *testing.T) {
 		Namespaces: []string{"team"},
 	})
 	require.NoError(t, err)
-	require.Nil(t, result)
+	require.Empty(t, result)
 }
 
 func TestGenerateNetworkPolicyManifests_Native(t *testing.T) {

@@ -67,16 +67,16 @@ func TestGenerateRBACManifests_MultipleClusterRoles(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	rb := result["rolebinding.yaml"]
+	roleBinding := result["rolebinding.yaml"]
 	// One RoleBinding per role, named <tenant>-<role>.
-	require.Contains(t, rb, "name: team-alpha-edit")
-	require.Contains(t, rb, "name: team-alpha-view")
+	require.Contains(t, roleBinding, "name: team-alpha-edit")
+	require.Contains(t, roleBinding, "name: team-alpha-view")
 	// Both bind the single tenant ServiceAccount.
-	require.Equal(t, 2, strings.Count(rb, "name: team-alpha\n  namespace: team-alpha"))
+	require.Equal(t, 2, strings.Count(roleBinding, "name: team-alpha\n  namespace: team-alpha"))
 
-	docs := strings.Split(rb, "---\n")
+	docs := strings.Split(roleBinding, "---\n")
 	require.Len(t, docs, 2)
-	snaps.MatchSnapshot(t, rb)
+	snaps.MatchSnapshot(t, roleBinding)
 }
 
 func TestGenerateRBACManifests_ClusterRoleWithColonSanitized(t *testing.T) {
@@ -89,12 +89,12 @@ func TestGenerateRBACManifests_ClusterRoleWithColonSanitized(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	rb := result["rolebinding.yaml"]
+	roleBinding := result["rolebinding.yaml"]
 	// roleRef keeps the canonical ClusterRole name (':' is valid there)...
-	require.Contains(t, rb, "name: system:auth-delegator")
+	require.Contains(t, roleBinding, "name: system:auth-delegator")
 	// ...but the binding metadata.name is sanitized to a valid DNS-1123 label.
-	require.Contains(t, rb, "name: team-alpha-system-auth-delegator")
-	require.NotContains(t, rb, "name: team-alpha-system:auth-delegator")
+	require.Contains(t, roleBinding, "name: team-alpha-system-auth-delegator")
+	require.NotContains(t, roleBinding, "name: team-alpha-system:auth-delegator")
 }
 
 func TestGenerateRBACManifests_ClusterRolesTrimmedAndDeduped(t *testing.T) {
@@ -107,12 +107,12 @@ func TestGenerateRBACManifests_ClusterRolesTrimmedAndDeduped(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	rb := result["rolebinding.yaml"]
+	roleBinding := result["rolebinding.yaml"]
 	// " edit " and "edit" collapse to a single binding; no leading/trailing space.
-	require.NotContains(t, rb, "name:  edit")
-	require.Equal(t, 1, strings.Count(rb, "name: edit\n"))
+	require.NotContains(t, roleBinding, "name:  edit")
+	require.Equal(t, 1, strings.Count(roleBinding, "name: edit\n"))
 
-	docs := strings.Split(rb, "---\n")
+	docs := strings.Split(roleBinding, "---\n")
 	require.Len(t, docs, 2) // edit + view
 }
 

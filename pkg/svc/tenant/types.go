@@ -242,6 +242,42 @@ func (o *Options) ResolveDefaults() {
 	o.resolveProductionDefaults()
 }
 
+// Validate checks that required fields are set and values are safe.
+func (o *Options) Validate() error {
+	err := validateTenantName(o.Name)
+	if err != nil {
+		return err
+	}
+
+	if o.TenantType == "" {
+		return ErrTenantTypeRequired
+	}
+
+	if !isValidType(o.TenantType) {
+		return fmt.Errorf("%w: %q", ErrInvalidType, o.TenantType)
+	}
+
+	for _, ns := range o.Namespaces {
+		if errs := validation.IsDNS1123Label(ns); len(errs) > 0 {
+			return fmt.Errorf("%w: namespace %q (%s)",
+				ErrInvalidNamespace, ns, strings.Join(errs, "; "))
+		}
+	}
+
+	if hasDuplicateNamespaces(o.Namespaces) {
+		return fmt.Errorf("%w", ErrDuplicateNamespace)
+	}
+
+	if o.SourceDirectory != "" {
+		err = validateSourceDirectory(o.SourceDirectory)
+		if err != nil {
+			return err
+		}
+	}
+
+	return o.validateProduction()
+}
+
 // resolveProductionDefaults fills in defaults for the production hardening fields.
 func (o *Options) resolveProductionDefaults() {
 	if len(o.ClusterRoles) == 0 {
@@ -273,87 +309,70 @@ func (o *Options) resolveProductionDefaults() {
 	}
 }
 
-func setDefault(field *string, value string) {
-	if *field == "" {
-		*field = value
-	}
-}
-
-// Validate checks that required fields are set and values are safe.
-func (o *Options) Validate() error {
-	err := validateTenantName(o.Name)
+// validateProduction validates the production hardening fields.
+func (o *Options) validateProduction() error {
+	err := o.validatePodSecurity()
 	if err != nil {
 		return err
 	}
 
-	if o.TenantType == "" {
-		return ErrTenantTypeRequired
+	err = o.validateClusterRoles()
+	if err != nil {
+		return err
 	}
 
-	if !isValidType(o.TenantType) {
-		return fmt.Errorf("%w: %q", ErrInvalidType, o.TenantType)
+	err = o.validateResourceQuantities()
+	if err != nil {
+		return err
 	}
 
-	for _, ns := range o.Namespaces {
-		if errs := validation.IsDNS1123Label(ns); len(errs) > 0 {
-			return fmt.Errorf("%w: namespace %q (%s)",
-				ErrInvalidNamespace, ns, strings.Join(errs, "; "))
-		}
-	}
-
-	if hasDuplicateNamespaces(o.Namespaces) {
-		return fmt.Errorf("%w", ErrDuplicateNamespace)
-	}
-
-	if o.SourceDirectory != "" {
-		err := validateSourceDirectory(o.SourceDirectory)
-		if err != nil {
-			return err
-		}
-	}
-
-	return o.validateProduction()
+	return o.validateDurations()
 }
 
-// validateProduction validates the production hardening fields.
-func (o *Options) validateProduction() error {
+func (o *Options) validatePodSecurity() error {
 	if o.PodSecurity != "" && !slices.Contains(ValidPodSecurityLevels(), o.PodSecurity) {
 		return fmt.Errorf("%w: %q (valid options: %s)",
 			ErrInvalidPodSecurityLevel, o.PodSecurity,
 			strings.Join(ValidPodSecurityLevels(), ", "))
 	}
 
+	return nil
+}
+
+func (o *Options) validateClusterRoles() error {
 	for _, role := range o.ClusterRoles {
 		if strings.TrimSpace(role) == "" {
 			return ErrEmptyClusterRole
 		}
 	}
 
+	return nil
+}
+
+func (o *Options) validateResourceQuantities() error {
+	var values []string
+
 	if o.WithQuota {
-		for _, qty := range []string{o.QuotaCPU, o.QuotaMemory} {
-			if err := validateQuantity(qty); err != nil {
-				return err
-			}
-		}
+		values = append(values, o.QuotaCPU, o.QuotaMemory)
 	}
 
 	if o.WithLimitRange {
-		for _, qty := range []string{
+		values = append(values,
 			o.LimitDefaultCPU, o.LimitDefaultMemory,
-			o.LimitRequestCPU, o.LimitRequestMemory,
-		} {
-			if err := validateQuantity(qty); err != nil {
-				return err
-			}
-		}
+			o.LimitRequestCPU, o.LimitRequestMemory)
 	}
 
+	return validateQuantities(values...)
+}
+
+func (o *Options) validateDurations() error {
 	for _, dur := range []string{o.FluxTimeout, o.FluxRetryInterval} {
 		if dur == "" {
 			continue
 		}
 
-		if _, err := time.ParseDuration(dur); err != nil {
+		_, err := time.ParseDuration(dur)
+		if err != nil {
 			return fmt.Errorf("%w: %q", ErrInvalidDuration, dur)
 		}
 	}
@@ -361,12 +380,19 @@ func (o *Options) validateProduction() error {
 	return nil
 }
 
+func setDefault(field *string, value string) {
+	if *field == "" {
+		*field = value
+	}
+}
+
 func validateQuantity(value string) error {
 	if value == "" {
 		return nil
 	}
 
-	if _, err := resource.ParseQuantity(value); err != nil {
+	_, err := resource.ParseQuantity(value)
+	if err != nil {
 		return fmt.Errorf("%w: %q", ErrInvalidQuantity, value)
 	}
 

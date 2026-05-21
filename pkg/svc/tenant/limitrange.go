@@ -5,7 +5,7 @@ package tenant
 // (nil, nil) when WithLimitRange is false.
 func GenerateLimitRangeManifests(opts Options) (map[string]string, error) {
 	if !opts.WithLimitRange {
-		return nil, nil
+		return map[string]string{}, nil
 	}
 
 	defaultCPU := valueOrDefault(opts.LimitDefaultCPU, DefaultLimitDefaultCPU)
@@ -13,7 +13,8 @@ func GenerateLimitRangeManifests(opts Options) (map[string]string, error) {
 	requestCPU := valueOrDefault(opts.LimitRequestCPU, DefaultLimitRequestCPU)
 	requestMemory := valueOrDefault(opts.LimitRequestMemory, DefaultLimitRequestMemory)
 
-	if err := validateQuantities(defaultCPU, defaultMemory, requestCPU, requestMemory); err != nil {
+	err := validateQuantities(defaultCPU, defaultMemory, requestCPU, requestMemory)
+	if err != nil {
 		return nil, err
 	}
 

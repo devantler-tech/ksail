@@ -17,7 +17,7 @@ func TestGenerateResourceQuotaManifests_Disabled(t *testing.T) {
 		Namespaces: []string{"team"},
 	})
 	require.NoError(t, err)
-	require.Nil(t, result)
+	require.Empty(t, result)
 }
 
 func TestGenerateResourceQuotaManifests_Defaults(t *testing.T) {

@@ -49,27 +49,15 @@ func TestTypeSetInvalid(t *testing.T) {
 	require.ErrorIs(t, err, tenant.ErrInvalidType)
 }
 
-func TestValidateProduction(t *testing.T) {
-	t.Parallel()
+type validateProductionCase struct {
+	name    string
+	mutate  func(*tenant.Options)
+	wantErr error
+}
 
-	base := func() tenant.Options {
-		return tenant.Options{
-			Name:       "team",
-			Namespaces: []string{"team"},
-			TenantType: tenant.TypeKubectl,
-		}
-	}
-
-	tests := []struct {
-		name    string
-		mutate  func(*tenant.Options)
-		wantErr error
-	}{
-		{
-			"valid pod security",
-			func(o *tenant.Options) { o.PodSecurity = "restricted" },
-			nil,
-		},
+func validateProductionCases() []validateProductionCase {
+	return []validateProductionCase{
+		{"valid pod security", func(o *tenant.Options) { o.PodSecurity = "restricted" }, nil},
 		{
 			"invalid pod security",
 			func(o *tenant.Options) { o.PodSecurity = "nope" },
@@ -85,24 +73,31 @@ func TestValidateProduction(t *testing.T) {
 			func(o *tenant.Options) { o.WithQuota = true; o.QuotaCPU = "bad" },
 			tenant.ErrInvalidQuantity,
 		},
-		{
-			"invalid limit",
-			func(o *tenant.Options) { o.WithLimitRange = true; o.LimitDefaultCPU = "bad" },
-			tenant.ErrInvalidQuantity,
-		},
+		{"invalid limit", func(o *tenant.Options) {
+			o.WithLimitRange = true
+			o.LimitDefaultCPU = "bad"
+		}, tenant.ErrInvalidQuantity},
 		{
 			"invalid duration",
 			func(o *tenant.Options) { o.FluxTimeout = "5" },
 			tenant.ErrInvalidDuration,
 		},
-		{
-			"valid duration",
-			func(o *tenant.Options) { o.FluxTimeout = "5m" },
-			nil,
-		},
+		{"valid duration", func(o *tenant.Options) { o.FluxTimeout = "5m" }, nil},
+	}
+}
+
+func TestValidateProduction(t *testing.T) {
+	t.Parallel()
+
+	base := func() tenant.Options {
+		return tenant.Options{
+			Name:       "team",
+			Namespaces: []string{"team"},
+			TenantType: tenant.TypeKubectl,
+		}
 	}
 
-	for _, testCase := range tests {
+	for _, testCase := range validateProductionCases() {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 

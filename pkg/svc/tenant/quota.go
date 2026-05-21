@@ -5,13 +5,14 @@ package tenant
 // (nil, nil) when WithQuota is false.
 func GenerateResourceQuotaManifests(opts Options) (map[string]string, error) {
 	if !opts.WithQuota {
-		return nil, nil
+		return map[string]string{}, nil
 	}
 
 	cpu := valueOrDefault(opts.QuotaCPU, DefaultQuotaCPU)
 	memory := valueOrDefault(opts.QuotaMemory, DefaultQuotaMemory)
 
-	if err := validateQuantities(cpu, memory); err != nil {
+	err := validateQuantities(cpu, memory)
+	if err != nil {
 		return nil, err
 	}
 

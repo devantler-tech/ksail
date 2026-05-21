@@ -15,7 +15,7 @@ const dnsPort = 53
 // opts.NetworkPolicyEngine.
 func GenerateNetworkPolicyManifests(opts Options) (map[string]string, error) {
 	if !opts.WithNetworkPolicy {
-		return nil, nil
+		return map[string]string{}, nil
 	}
 
 	if len(opts.Namespaces) == 0 {

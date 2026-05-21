@@ -91,7 +91,8 @@ func addProductionFlags(cmd *cobra.Command) {
 		"Generate default-deny NetworkPolicy plus DNS and intra-namespace allow rules")
 	cmd.Flags().Bool("with-quota", false, "Generate a ResourceQuota for each namespace")
 	cmd.Flags().String("quota-cpu", "4", "CPU quota (sets requests.cpu and limits.cpu)")
-	cmd.Flags().String("quota-memory", "8Gi", "Memory quota (sets requests.memory and limits.memory)")
+	cmd.Flags().
+		String("quota-memory", "8Gi", "Memory quota (sets requests.memory and limits.memory)")
 	cmd.Flags().Bool("with-limit-range", false,
 		"Generate a LimitRange with default container requests/limits")
 	cmd.Flags().String("limit-default-cpu", "500m", "Default container CPU limit")
@@ -102,7 +103,8 @@ func addProductionFlags(cmd *cobra.Command) {
 		"Set automountServiceAccountToken: false on the tenant ServiceAccount")
 	cmd.Flags().StringSlice("image-pull-secret", nil,
 		"imagePullSecret to add to the tenant ServiceAccount (repeatable)")
-	cmd.Flags().Bool("flux-wait", false, "(Flux) Set wait: true and timeout on the Flux Kustomization")
+	cmd.Flags().
+		Bool("flux-wait", false, "(Flux) Set wait: true and timeout on the Flux Kustomization")
 	cmd.Flags().String("flux-timeout", "",
 		"(Flux) Flux Kustomization timeout; setting it implies --flux-wait (default 5m when waiting)")
 	cmd.Flags().String("flux-retry-interval", "", "(Flux) Flux Kustomization retryInterval")
@@ -225,21 +227,10 @@ func resolveCreateOptions(
 		return tenant.Options{}, "", "", deliveryErr
 	}
 
-	// Load ksail.yaml once for both tenant-type auto-detect and engine selection.
-	cfg, cfgFound, cfgErr := loadKSailConfig(cmd)
-	if typeStr == "" && cfgErr != nil {
-		return tenant.Options{}, "", "", cfgErr
-	}
-
-	// Resolve tenant type.
-	typeErr := resolveTenantType(typeStr, &opts, cfg, cfgFound)
-	if typeErr != nil {
-		return tenant.Options{}, "", "", typeErr
-	}
-
-	// Best-effort engine selection (NetworkPolicy flavor, policy engine) from config.
-	if cfgErr == nil && cfgFound && cfg != nil {
-		applyEngineDefaults(&opts, cfg)
+	// Resolve tenant type and engine selection from ksail.yaml (loaded once).
+	err := resolveTypeAndEngine(cmd, typeStr, &opts)
+	if err != nil {
+		return tenant.Options{}, "", "", err
 	}
 
 	// Expand the --production umbrella (granular flags always win when set).
@@ -254,6 +245,27 @@ func resolveCreateOptions(
 	}
 
 	return opts, outputStr, delivery, nil
+}
+
+// resolveTypeAndEngine loads ksail.yaml once to resolve the tenant type
+// (auto-detected from gitOpsEngine when --type is unset) and best-effort engine
+// selection (NetworkPolicy flavor, policy engine).
+func resolveTypeAndEngine(cmd *cobra.Command, typeStr string, opts *tenant.Options) error {
+	cfg, cfgFound, cfgErr := loadKSailConfig(cmd)
+	if typeStr == "" && cfgErr != nil {
+		return cfgErr
+	}
+
+	err := resolveTenantType(typeStr, opts, cfg, cfgFound)
+	if err != nil {
+		return err
+	}
+
+	if cfgErr == nil && cfgFound && cfg != nil {
+		applyEngineDefaults(opts, cfg)
+	}
+
+	return nil
 }
 
 // readProductionFlags reads the opt-in production hardening flags into opts.

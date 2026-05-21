@@ -2,6 +2,7 @@ package tenant
 
 import (
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -160,9 +161,7 @@ func generateProductionManifests(opts Options, tenantDir string) ([]string, erro
 			return nil, fmt.Errorf("generating production manifests: %w", err)
 		}
 
-		for name, content := range files {
-			merged[name] = content
-		}
+		maps.Copy(merged, files)
 	}
 
 	if len(merged) == 0 {

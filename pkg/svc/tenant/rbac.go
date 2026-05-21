@@ -2,6 +2,7 @@ package tenant
 
 import (
 	"fmt"
+	"maps"
 	"strings"
 
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
@@ -25,7 +26,8 @@ func GenerateRBACManifests(opts Options) (map[string]string, error) {
 	roles := effectiveClusterRoles(opts)
 	bindingNames := buildBindingNames(opts.Name, roles)
 
-	var namespaceDocs, rbDocs []string
+	namespaceDocs := make([]string, 0, len(opts.Namespaces))
+	rbDocs := make([]string, 0, len(opts.Namespaces)*len(roles))
 
 	for _, namespace := range opts.Namespaces {
 		nsYAML, err := marshalNamespace(namespace, opts.PodSecurity)
@@ -35,8 +37,10 @@ func GenerateRBACManifests(opts Options) (map[string]string, error) {
 
 		namespaceDocs = append(namespaceDocs, nsYAML)
 
-		for i, role := range roles {
-			rbYAML, err := marshalRoleBinding(bindingNames[i], opts.Name, namespace, primaryNS, role)
+		for index, role := range roles {
+			rbYAML, err := marshalRoleBinding(
+				bindingNames[index], opts.Name, namespace, primaryNS, role,
+			)
 			if err != nil {
 				return nil, err
 			}
@@ -46,7 +50,12 @@ func GenerateRBACManifests(opts Options) (map[string]string, error) {
 	}
 
 	// Single ServiceAccount in primary namespace.
-	saYAML, err := marshalServiceAccount(opts.Name, primaryNS, opts.DisableTokenAutomount, opts.ImagePullSecrets)
+	saYAML, err := marshalServiceAccount(
+		opts.Name,
+		primaryNS,
+		opts.DisableTokenAutomount,
+		opts.ImagePullSecrets,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -109,7 +118,7 @@ func buildBindingNames(tenant string, roles []string) []string {
 
 	used := make(map[string]bool, len(roles))
 
-	for i, role := range roles {
+	for index, role := range roles {
 		base := tenant + "-" + sanitizeNameSegment(role)
 		name := base
 
@@ -118,7 +127,7 @@ func buildBindingNames(tenant string, roles []string) []string {
 		}
 
 		used[name] = true
-		names[i] = name
+		names[index] = name
 	}
 
 	return names
@@ -148,9 +157,7 @@ func sanitizeNameSegment(value string) string {
 
 func marshalNamespace(name, podSecurity string) (string, error) {
 	labels := ManagedByLabels()
-	for k, v := range k8s.PSSLabels(podSecurity) {
-		labels[k] = v
-	}
+	maps.Copy(labels, k8s.PSSLabels(podSecurity))
 
 	namespace := map[string]any{
 		"apiVersion": "v1",

@@ -148,11 +148,15 @@ func TestCreateCmd_Production(t *testing.T) {
 		require.NoError(t, statErr, "expected %s to exist", filename)
 	}
 
-	nsContent, err := os.ReadFile(filepath.Join(tenantDir, "namespace.yaml")) //nolint:gosec // test path
+	nsContent, err := os.ReadFile( //nolint:gosec // test path
+		filepath.Join(tenantDir, "namespace.yaml"),
+	)
 	require.NoError(t, err)
 	require.Contains(t, string(nsContent), "pod-security.kubernetes.io/enforce: baseline")
 
-	saContent, err := os.ReadFile(filepath.Join(tenantDir, "serviceaccount.yaml")) //nolint:gosec // test path
+	saContent, err := os.ReadFile( //nolint:gosec // test path
+		filepath.Join(tenantDir, "serviceaccount.yaml"),
+	)
 	require.NoError(t, err)
 	require.Contains(t, string(saContent), "automountServiceAccountToken: false")
 }
@@ -204,7 +208,9 @@ func TestCreateCmd_CiliumNetworkPolicyFromConfig(t *testing.T) {
 	var buf bytes.Buffer
 	cmd.SetOut(&buf)
 	cmd.SetErr(&buf)
-	cmd.SetArgs([]string{"cil-tenant", "--type", "kubectl", "--with-network-policy", "--output", dir})
+	cmd.SetArgs(
+		[]string{"cil-tenant", "--type", "kubectl", "--with-network-policy", "--output", dir},
+	)
 
 	err := cmd.Execute()
 	require.NoError(t, err)
