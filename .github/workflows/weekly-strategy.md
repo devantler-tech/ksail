@@ -1,14 +1,15 @@
 ---
 description: |
-  This workflow performs strategic research for KSail on a weekly schedule.
-  Monday: Market research, competitive analysis, and Now/Next/Later roadmap.
+  This workflow performs strategic research for KSail on a monthly schedule.
+  Market research, competitive analysis, and Now/Next/Later roadmap.
 
 on:
   bots:
     - "github-merge-queue[bot]"
   skip-bots: ["dependabot[bot]", "renovate[bot]"]
   schedule:
-    - cron: "weekly on monday"
+    # Runs at 02:49 UTC on the 1st of every month
+    - cron: "49 2 1 * *"
   workflow_dispatch:
 
 permissions: read-all
@@ -65,7 +66,7 @@ Before any external research, deeply understand KSail's current state:
    - Suggestions and proposals from contributors
    - Any discussion with significant engagement (upvotes, replies)
 
-4. Read recent merged PRs (last 2 weeks) to understand:
+4. Read recent merged PRs (last month) to understand:
    - Current development momentum and direction
    - Recently completed features
 
