@@ -1,0 +1,1031 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.19.0
+  name: clusters.ksail.io
+spec:
+  group: ksail.io
+  names:
+    kind: Cluster
+    listKind: ClusterList
+    plural: clusters
+    shortNames:
+    - ksail
+    singular: cluster
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.cluster.distribution
+      name: Distribution
+      type: string
+    - jsonPath: .spec.cluster.provider
+      name: Provider
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.endpoint
+      name: Endpoint
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          Cluster represents a KSail cluster configuration including API metadata and desired state.
+          It contains TypeMeta for API versioning information, ObjectMeta for the cluster name and
+          standard Kubernetes object metadata, Spec for the desired state, and Status for the
+          observed state when reconciled by the KSail operator.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: Spec defines the desired state of a KSail cluster.
+            properties:
+              chat:
+                description: ChatSpec defines AI chat assistant configuration.
+                properties:
+                  model:
+                    type: string
+                  reasoningEffort:
+                    description: |-
+                      ReasoningEffort specifies the reasoning effort level for chat responses.
+                      Valid values: "low", "medium", "high"
+                    type: string
+                required:
+                - model
+                - reasoningEffort
+                type: object
+              cluster:
+                description: ClusterSpec defines cluster-related configuration.
+                properties:
+                  autoscaler:
+                    description: |-
+                      Autoscaler defines pod and node autoscaling configuration.
+                      Supersedes spec.cluster.nodeAutoscaling (deprecated; aliased on load).
+                    properties:
+                      node:
+                        description: |-
+                          NodeAutoscalerConfig defines configuration for node-level autoscaling.
+                          When Enabled, the Cluster Autoscaler manages worker node counts dynamically.
+                          KSail-specified node counts serve as a baseline; the autoscaler adds and removes
+                          workers based on workload demand. Node-count changes via ksail cluster update
+                          are still applied to the Talos machine config and will take effect normally.
+                        properties:
+                          enabled:
+                            type: boolean
+                          expander:
+                            description: AutoscalerExpander defines the node expander
+                              strategy for the cluster autoscaler.
+                            type: string
+                          maxNodesTotal:
+                            format: int32
+                            type: integer
+                          pools:
+                            items:
+                              description: NodePool defines a Hetzner node pool managed
+                                by the cluster autoscaler.
+                              properties:
+                                location:
+                                  description: Location is the Hetzner datacenter
+                                    location for this pool (e.g. "fsn1", "nbg1").
+                                  type: string
+                                max:
+                                  description: Max is the maximum number of nodes
+                                    in this pool.
+                                  format: int32
+                                  type: integer
+                                min:
+                                  description: Min is the minimum number of nodes
+                                    in this pool.
+                                  format: int32
+                                  type: integer
+                                name:
+                                  description: Name is the unique identifier for this
+                                    node pool (DNS-1123 label).
+                                  type: string
+                                serverType:
+                                  description: ServerType is the Hetzner server type
+                                    for nodes in this pool (e.g. "cx23", "cax11").
+                                  type: string
+                              required:
+                              - location
+                              - max
+                              - min
+                              - name
+                              - serverType
+                              type: object
+                            type: array
+                          scaleDownUnneededTime:
+                            type: string
+                        required:
+                        - enabled
+                        - expander
+                        - maxNodesTotal
+                        - pools
+                        - scaleDownUnneededTime
+                        type: object
+                      pod:
+                        description: PodAutoscalerConfig defines configuration for
+                          pod-level autoscaling.
+                        properties:
+                          horizontal:
+                            description: PodAutoscalerHorizontal defines whether Horizontal
+                              Pod Autoscaling (HPA) is enabled.
+                            type: string
+                          vertical:
+                            description: PodAutoscalerVertical defines whether Vertical
+                              Pod Autoscaling (VPA) is enabled.
+                            type: string
+                        required:
+                        - horizontal
+                        - vertical
+                        type: object
+                    required:
+                    - node
+                    - pod
+                    type: object
+                  cdi:
+                    description: CDI defines the CDI (Container Device Interface)
+                      options for a KSail cluster.
+                    type: string
+                  certManager:
+                    description: CertManager defines the cert-manager options for
+                      a KSail cluster.
+                    type: string
+                  cni:
+                    description: CNI defines the CNI options for a KSail cluster.
+                    type: string
+                  connection:
+                    description: Connection defines connection options for a KSail
+                      cluster.
+                    properties:
+                      context:
+                        type: string
+                      kubeconfig:
+                        type: string
+                      timeout:
+                        type: string
+                    required:
+                    - context
+                    - kubeconfig
+                    - timeout
+                    type: object
+                  controlPlanes:
+                    description: |-
+                      ControlPlanes is the number of control-plane nodes (default: 1).
+                      Provider/distribution-agnostic: applies to Vanilla (Kind), K3s (K3d), Talos, and VCluster.
+                      Supersedes spec.cluster.talos.controlPlanes (deprecated; aliased on load).
+                    format: int32
+                    type: integer
+                  csi:
+                    description: CSI defines the CSI options for a KSail cluster.
+                    type: string
+                  distribution:
+                    description: Distribution defines the distribution options for
+                      a KSail cluster.
+                    type: string
+                  distributionConfig:
+                    type: string
+                  gitOpsEngine:
+                    description: GitOpsEngine defines the GitOps Engine options for
+                      a KSail cluster.
+                    type: string
+                  importImages:
+                    type: string
+                  loadBalancer:
+                    description: LoadBalancer defines the LoadBalancer options for
+                      a KSail cluster.
+                    type: string
+                  localRegistry:
+                    description: |-
+                      LocalRegistry defines options for the host-local OCI registry integration.
+                      For cloud providers (e.g., Hetzner), this can be used to configure an external registry.
+                    properties:
+                      registry:
+                        description: |-
+                          Registry is the full registry specification in the format: [user:pass@]host[:port][/path]
+                          When populated, enables registry integration for GitOps workflows.
+                          Examples:
+                            - "localhost:5050" (local Docker registry)
+                            - "ghcr.io/myorg/myrepo" (GitHub Container Registry with path)
+                            - "${USER}:${PASS}@ghcr.io:443/myorg" (with credentials from env vars)
+                          Credentials support ${ENV_VAR} placeholders for environment variable expansion.
+                        type: string
+                    required:
+                    - registry
+                    type: object
+                  metricsServer:
+                    description: MetricsServer defines the Metrics Server options
+                      for a KSail cluster.
+                    type: string
+                  nodeAutoscaling:
+                    description: |-
+                      NodeAutoscaling is a deprecated alias for [NodeAutoscalerEnabled].
+                      Setting NodeAutoscalingEnabled migrates to NodeAutoscalerEnabledEnabled at load time.
+                      Regardless of this setting, KSail always manages and diffs baseline node counts
+                      (controlPlanes and workers) during cluster update operations.
+                      NOTE: Use spec.cluster.autoscaler.node.enabled ([NodeAutoscalerEnabled]) instead.
+                    type: string
+                  oidc:
+                    description: |-
+                      OIDC defines OIDC authentication configuration.
+                      When issuerURL is set, KSail configures the API server with OIDC flags
+                      and sets up kubeconfig with exec-based OIDC credentials.
+                    properties:
+                      caFile:
+                        description: CAFile is the path to the OIDC provider's CA
+                          certificate for self-signed TLS.
+                        type: string
+                      clientID:
+                        description: ClientID is the OIDC client ID for kubectl authentication.
+                        type: string
+                      extraScopes:
+                        description: ExtraScopes are additional OIDC scopes to request
+                          beyond the default 'openid' scope.
+                        items:
+                          type: string
+                        type: array
+                      groupsClaim:
+                        description: GroupsClaim is the JWT claim to use for Kubernetes
+                          group membership.
+                        type: string
+                      groupsPrefix:
+                        description: GroupsPrefix is prepended to group names from
+                          the OIDC provider.
+                        type: string
+                      issuerURL:
+                        description: |-
+                          IssuerURL is the OIDC provider's issuer URL (e.g., https://dex.example.com).
+                          Setting this field enables OIDC authentication for the cluster.
+                        type: string
+                      usernameClaim:
+                        description: UsernameClaim is the JWT claim to use as the
+                          Kubernetes username.
+                        type: string
+                      usernamePrefix:
+                        description: UsernamePrefix is prepended to usernames from
+                          the OIDC provider.
+                        type: string
+                    required:
+                    - caFile
+                    - clientID
+                    - extraScopes
+                    - groupsClaim
+                    - groupsPrefix
+                    - issuerURL
+                    - usernameClaim
+                    - usernamePrefix
+                    type: object
+                  policyEngine:
+                    description: PolicyEngine defines the policy engine options for
+                      a KSail cluster.
+                    type: string
+                  provider:
+                    description: |-
+                      Provider defines the infrastructure provider backend for running clusters.
+                      This is a unified type used across distributions that support multiple providers.
+                    type: string
+                  sops:
+                    description: |-
+                      SOPS defines configuration for automatic SOPS Age secret creation in the cluster.
+                      When enabled (default: auto-detect), KSail creates a "sops-age" generic Secret
+                      containing the Age private key(s):
+                        - For Flux: in the flux-system namespace, referenced by Kustomization CRDs via spec.decryption.secretRef.
+                        - For ArgoCD: in the argocd namespace, for use by Config Management Plugins or repo-server SOPS integration.
+                    properties:
+                      ageKeyEnvVar:
+                        description: |-
+                          Deprecated: Use Env.Var instead. AgeKeyEnvVar is the name of the environment
+                          variable containing the Age private key. Kept for backward compatibility.
+                          When Env.Var is set, it takes priority over AgeKeyEnvVar.
+                        type: string
+                      enabled:
+                        description: |-
+                          Enabled controls whether the SOPS Age secret is created.
+                          nil (default) = auto-detect (create if key is found via env var or key file).
+                          true = require key (error if not found).
+                          false = disable entirely (skip secret creation).
+                        type: boolean
+                      env:
+                        description: Env configures the environment variable source
+                          for the Age private key.
+                        properties:
+                          var:
+                            description: |-
+                              Var is the name of the environment variable containing the Age private key.
+                              When set, takes priority over SOPS.AgeKeyEnvVar.
+                              Leave empty to fall back to AgeKeyEnvVar (default: "SOPS_AGE_KEY").
+                            type: string
+                        required:
+                        - var
+                        type: object
+                      extract:
+                        description: Extract configures extraction of Age private
+                          keys from a key file.
+                        properties:
+                          file:
+                            description: |-
+                              File is the path to the Age key file (absolute or relative to the working directory).
+                              Defaults to the OS-specific SOPS age key path when empty.
+                            type: string
+                          publicKeys:
+                            description: |-
+                              PublicKeys is a list of Age public keys (age1...) used to select which
+                              private keys to include in the SOPS secret. For each private key in the
+                              key file, its public key is derived and compared against this list.
+                              Only matching private keys are included.
+                              When empty (default), all private keys from the file are included.
+                            items:
+                              type: string
+                            type: array
+                        required:
+                        - file
+                        - publicKeys
+                        type: object
+                    required:
+                    - ageKeyEnvVar
+                    - enabled
+                    - env
+                    - extract
+                    type: object
+                  talos:
+                    description: OptionsTalos defines options specific to the Talos
+                      distribution.
+                    properties:
+                      config:
+                        description: |-
+                          Config is the path to the talosconfig file.
+                          Defaults to "~/.talos/config".
+                        type: string
+                      controlPlanes:
+                        description: |-
+                          ControlPlanes is the number of control-plane nodes (default: 1).
+
+                          Deprecated: use spec.cluster.controlPlanes. This field is kept as a
+                          migration alias and emits a warning on load. Removal planned in a
+                          future minor release.
+                        format: int32
+                        type: integer
+                      extensions:
+                        description: |-
+                          Extensions lists Talos Image Factory official system extension names to include in the
+                          node image. KSail automatically computes the Image Factory schematic ID from this list
+                          and sets machine.install.image to factory.talos.dev/installer/{schematicID}:{version},
+                          where {version} is derived from the Talos config bundle's existing install image tag.
+                          For Hetzner, the schematic is also used for snapshot building.
+                          Extension names follow the Image Factory convention (e.g., "siderolabs/iscsi-tools").
+                          The Image Factory resolves extension versions automatically per Talos release.
+                          When SchematicID is also set, it takes precedence over Extensions.
+                        items:
+                          type: string
+                        type: array
+                      extraPortMappings:
+                        description: |-
+                          ExtraPortMappings defines additional port mappings from Docker containers to the host.
+                          Only used with the Docker provider. Useful on macOS where MetalLB virtual IPs
+                          are not accessible from the host because Docker runs in a Linux VM.
+                          Ports are exposed on the first control-plane node (when multiple control-planes are configured).
+                        items:
+                          description: PortMapping defines a mapping between a container
+                            port and a host port.
+                          properties:
+                            containerPort:
+                              description: ContainerPort is the port inside the container.
+                              format: int32
+                              type: integer
+                            hostPort:
+                              description: HostPort is the port on the host. If 0,
+                                Docker assigns a random port.
+                              format: int32
+                              type: integer
+                            protocol:
+                              description: Protocol is the network protocol (TCP or
+                                UDP). Defaults to TCP.
+                              type: string
+                          required:
+                          - containerPort
+                          - hostPort
+                          - protocol
+                          type: object
+                        type: array
+                      imageVerification:
+                        description: |-
+                          ImageVerification enables scaffolding of a Talos ImageVerificationConfig document
+                          during cluster init. When Enabled, generates an image-verification.yaml template
+                          in the Talos patches directory with commented-out examples for keyless (Cosign/OIDC)
+                          and public key verification rules. Requires Talos 1.13+.
+                        type: string
+                      iso:
+                        description: |-
+                          ISO is the cloud provider's ISO/image ID for booting Talos Linux.
+                          Only used when targeting cloud providers (e.g., Hetzner Cloud).
+                          For Hetzner: See https://docs.hetzner.cloud/changelog for available Talos ISOs.
+                          Defaults to 122630 (Talos Linux 1.11.2 x86). Use 122629 for ARM.
+                          When SchematicID is set, ISO is ignored in favour of a pre-built snapshot.
+                        format: int64
+                        type: integer
+                      schematicId:
+                        description: |-
+                          SchematicID is the Talos factory schematic ID used to build a Hetzner snapshot image.
+                          When set, KSail uploads a Talos OS disk snapshot using this schematic ID and Version
+                          instead of booting from the cloud ISO specified in ISO.
+                          Obtain a schematic ID from https://factory.talos.dev.
+                          Only used when targeting cloud providers (e.g., Hetzner Cloud).
+                        type: string
+                      version:
+                        description: |-
+                          Version pins the Talos OS version used for cluster creation and upgrades.
+                          When set, KSail uses this version as the Docker container image tag and
+                          caps `--update-distribution` upgrades at this version. Accepts values
+                          with or without the "v" prefix (e.g., "v1.11.2" or "1.11.2").
+                          When empty, KSail uses its built-in default version.
+                        type: string
+                      workers:
+                        description: |-
+                          Workers is the number of worker nodes (default: 0).
+                          When 0, scheduling is allowed on control-plane nodes.
+
+                          Deprecated: use spec.cluster.workers. This field is kept as a
+                          migration alias and emits a warning on load. Removal planned in a
+                          future minor release.
+                        format: int32
+                        type: integer
+                    required:
+                    - config
+                    - controlPlanes
+                    - extensions
+                    - extraPortMappings
+                    - imageVerification
+                    - iso
+                    - schematicId
+                    - version
+                    - workers
+                    type: object
+                  vanilla:
+                    description: Distribution-specific options
+                    properties:
+                      mirrorsDir:
+                        description: |-
+                          MirrorsDir is the directory for containerd host mirror configuration.
+                          Defaults to "kind/mirrors" if not specified.
+                        type: string
+                    required:
+                    - mirrorsDir
+                    type: object
+                  workers:
+                    description: |-
+                      Workers is the number of worker nodes (default: 0).
+                      Provider/distribution-agnostic: applies to Vanilla (Kind), K3s (K3d), Talos, and VCluster.
+                      When 0 on Talos, scheduling is allowed on control-plane nodes.
+                      Supersedes spec.cluster.talos.workers (deprecated; aliased on load).
+                    format: int32
+                    type: integer
+                required:
+                - autoscaler
+                - cdi
+                - certManager
+                - cni
+                - connection
+                - controlPlanes
+                - csi
+                - distribution
+                - distributionConfig
+                - gitOpsEngine
+                - importImages
+                - loadBalancer
+                - localRegistry
+                - metricsServer
+                - nodeAutoscaling
+                - oidc
+                - policyEngine
+                - provider
+                - sops
+                - talos
+                - vanilla
+                - workers
+                type: object
+              editor:
+                type: string
+              provider:
+                description: |-
+                  ProviderSpec defines provider-specific configuration for infrastructure providers.
+                  This separates infrastructure provider concerns (Hetzner servers, Omni SaaS) from
+                  cluster/distribution concerns in ClusterSpec.
+                properties:
+                  aws:
+                    description: |-
+                      OptionsAWS defines options specific to the AWS cloud provider.
+                      Credentials are resolved via the standard AWS SDK v2 credential chain;
+                      the *EnvVar fields let users point KSail at non-standard environment
+                      variable names (mirrors the Hetzner/Omni pattern).
+                    properties:
+                      accessKeyIdEnvVar:
+                        description: |-
+                          AccessKeyIDEnvVar is the environment variable containing a static AWS access key ID.
+                          Defaults to "AWS_ACCESS_KEY_ID".
+                        type: string
+                      profileEnvVar:
+                        description: |-
+                          ProfileEnvVar is the environment variable containing the AWS shared-config profile name.
+                          Defaults to "AWS_PROFILE".
+                        type: string
+                      regionEnvVar:
+                        description: |-
+                          RegionEnvVar is the environment variable containing the AWS region.
+                          When set, it overrides the region declared in eks.yaml.
+                          Defaults to "AWS_REGION".
+                        type: string
+                      secretAccessKeyEnvVar:
+                        description: |-
+                          SecretAccessKeyEnvVar is the environment variable containing a static AWS secret access key.
+                          Defaults to "AWS_SECRET_ACCESS_KEY".
+                        type: string
+                      sessionTokenEnvVar:
+                        description: |-
+                          SessionTokenEnvVar is the environment variable containing an AWS session token
+                          (used with temporary credentials from STS).
+                          Defaults to "AWS_SESSION_TOKEN".
+                        type: string
+                    required:
+                    - accessKeyIdEnvVar
+                    - profileEnvVar
+                    - regionEnvVar
+                    - secretAccessKeyEnvVar
+                    - sessionTokenEnvVar
+                    type: object
+                  hetzner:
+                    description: |-
+                      OptionsHetzner defines options specific to the Hetzner Cloud provider.
+                      These options are used when Provider is set to "Hetzner" for the Talos distribution.
+                    properties:
+                      allowedCidrs:
+                        description: |-
+                          AllowedCIDRs restricts public access to the Kubernetes API (6443) and Talos API (50000)
+                          on control-plane nodes to the specified CIDR blocks. When empty, both APIs are open
+                          to the entire internet (0.0.0.0/0 and ::/0). Applied to both the Hetzner Cloud Firewall
+                          and the Talos OS-level ingress firewall for defense-in-depth.
+                          Examples: ["203.0.113.0/24", "198.51.100.0/24"]
+                        items:
+                          type: string
+                        type: array
+                      autoscalerNodePoolNames:
+                        description: |-
+                          AutoscalerNodePoolNames lists the node-group names configured in the
+                          Kubernetes Cluster Autoscaler for this cluster. When non-empty, KSail
+                          deletes servers labelled with hcloud/node-group=<name> during cluster
+                          deletion so that autoscaler-managed nodes are cleaned up alongside
+                          KSail-managed nodes.
+                        items:
+                          type: string
+                        type: array
+                      controlPlaneServerType:
+                        description: |-
+                          ControlPlaneServerType is the Hetzner server type for control-plane nodes.
+                          Examples: "cx23" (x86), "cax11" (ARM), "cpx21" (AMD). Defaults to "cx23".
+                        type: string
+                      fallbackLocations:
+                        description: |-
+                          FallbackLocations specifies alternative datacenter locations to try when
+                          server creation fails in the primary location due to resource unavailability.
+                          Defaults to ["nbg1", "hel1"] (Nuremberg, Helsinki) as fallbacks for fsn1 (Falkenstein).
+                          All locations should be in the same network zone (eu-central) for consistency.
+                        items:
+                          type: string
+                        type: array
+                      ingressFirewall:
+                        description: |-
+                          IngressFirewall controls the Talos OS-level ingress firewall configuration.
+                          When Enabled (default), KSail generates NetworkDefaultActionConfig and NetworkRuleConfig
+                          documents as Talos machine config patches, providing defense-in-depth at the node level
+                          independent of the Hetzner Cloud Firewall.
+                          See: https://www.talos.dev/latest/talos-guides/network/ingress-firewall/
+                        type: string
+                      location:
+                        description: |-
+                          Location is the Hetzner datacenter location.
+                          Examples: "fsn1" (Falkenstein), "nbg1" (Nuremberg), "hel1" (Helsinki).
+                          Defaults to "fsn1".
+                        type: string
+                      networkCidr:
+                        description: |-
+                          NetworkCIDR is the CIDR block for the private network.
+                          Defaults to "10.0.0.0/16".
+                        type: string
+                      networkName:
+                        description: |-
+                          NetworkName is the name of the private network to create or use.
+                          If empty, a network named "<cluster-name>-network" will be created.
+                        type: string
+                      placementGroup:
+                        description: |-
+                          PlacementGroup is the name of the placement group for server distribution.
+                          If empty, a placement group named "<cluster-name>-placement" will be created.
+                          Only used when PlacementGroupStrategy is "Spread".
+                        type: string
+                      placementGroupFallbackToNone:
+                        description: |-
+                          PlacementGroupFallbackToNone allows automatic fallback to no placement group
+                          when spread placement constraints cannot be satisfied (e.g., due to datacenter capacity).
+                          When true and placement fails, retries server creation without a placement group.
+                          Defaults to false to preserve HA guarantees; set to true for best-effort provisioning.
+                        type: boolean
+                      placementGroupStrategy:
+                        description: |-
+                          PlacementGroupStrategy controls whether and how placement groups are used.
+                          "Spread" (default) distributes servers across different physical hosts for HA.
+                          "None" disables placement groups, useful when Hetzner resources are constrained.
+                          Note: Spread groups are limited to 10 servers per datacenter.
+                        type: string
+                      serverLimit:
+                        description: |-
+                          ServerLimit is the maximum number of Hetzner servers (control-plane + worker + autoscaler
+                          pool capacity) permitted in this cluster. Used by ValidateAutoscalerConfig to prevent
+                          the configured autoscaler capacity from exceeding the account/project server quota.
+                          When set to 0, KSail uses DefaultHetznerServerLimit instead of treating 0 as an explicit
+                          limit. Defaults to DefaultHetznerServerLimit (10).
+                        format: int32
+                        type: integer
+                      sshKeyName:
+                        description: |-
+                          SSHKeyName is the name of the SSH key to use for server access.
+                          The key must already exist in the Hetzner Cloud project.
+                          If empty, no SSH key is attached (only Talos API access).
+                        type: string
+                      tokenEnvVar:
+                        description: |-
+                          TokenEnvVar is the environment variable containing the Hetzner API token.
+                          Defaults to "HCLOUD_TOKEN".
+                        type: string
+                      workerServerType:
+                        description: |-
+                          WorkerServerType is the Hetzner server type for worker nodes.
+                          Examples: "cx23" (x86), "cax11" (ARM), "cpx21" (AMD). Defaults to "cx23".
+                        type: string
+                    required:
+                    - allowedCidrs
+                    - autoscalerNodePoolNames
+                    - controlPlaneServerType
+                    - fallbackLocations
+                    - ingressFirewall
+                    - location
+                    - networkCidr
+                    - networkName
+                    - placementGroup
+                    - placementGroupFallbackToNone
+                    - placementGroupStrategy
+                    - serverLimit
+                    - sshKeyName
+                    - tokenEnvVar
+                    - workerServerType
+                    type: object
+                  kubernetes:
+                    description: |-
+                      OptionsKubernetes defines options specific to the Kubernetes provider.
+                      The Kubernetes provider runs nested cluster nodes as pods inside an existing host cluster.
+                      It uses Gateway API (TCPRoute) to expose the nested cluster's API server.
+                    properties:
+                      context:
+                        description: |-
+                          Context is the kubeconfig context for the host cluster.
+                          When empty, uses the current context.
+                        type: string
+                      contextEnvVar:
+                        description: |-
+                          ContextEnvVar is the environment variable containing the host kubeconfig context.
+                          Defaults to "KSAIL_HOST_CONTEXT".
+                        type: string
+                      gatewayClassName:
+                        description: |-
+                          GatewayClassName is the GatewayClass to use for exposing the nested API server.
+                          Must reference a GatewayClass that exists on the host cluster.
+                          When empty, the API is exposed via ClusterIP Service only (no external Gateway).
+                        type: string
+                      kubeconfig:
+                        description: |-
+                          Kubeconfig is the path to the kubeconfig for the host cluster.
+                          Defaults to "~/.kube/config".
+                        type: string
+                      kubeconfigEnvVar:
+                        description: |-
+                          KubeconfigEnvVar is the environment variable containing the host kubeconfig path.
+                          Defaults to "KSAIL_HOST_KUBECONFIG".
+                        type: string
+                      persistence:
+                        description: Persistence defines storage persistence for the
+                          nested cluster's data directory.
+                        properties:
+                          enabled:
+                            description: |-
+                              Enabled controls whether a PVC is used for the nested cluster's data directory.
+                              When false (default), emptyDir is used and the cluster is ephemeral.
+                            type: boolean
+                          size:
+                            description: |-
+                              Size is the storage request size for the PVC.
+                              Defaults to "20Gi".
+                            type: string
+                          storageClassName:
+                            description: |-
+                              StorageClassName is the StorageClass to use for the PVC.
+                              When empty, the cluster's default StorageClass is used.
+                            type: string
+                        required:
+                        - enabled
+                        - size
+                        - storageClassName
+                        type: object
+                      podCidr:
+                        description: |-
+                          PodCIDR is the pod CIDR for the nested cluster.
+                          Must not overlap with the host cluster's pod or service CIDRs.
+                          Defaults to "10.64.0.0/16".
+                        type: string
+                      serviceCidr:
+                        description: |-
+                          ServiceCIDR is the service CIDR for the nested cluster.
+                          Must not overlap with the host cluster's pod or service CIDRs.
+                          Defaults to "10.128.0.0/16".
+                        type: string
+                    required:
+                    - context
+                    - contextEnvVar
+                    - gatewayClassName
+                    - kubeconfig
+                    - kubeconfigEnvVar
+                    - persistence
+                    - podCidr
+                    - serviceCidr
+                    type: object
+                  omni:
+                    description: |-
+                      OptionsOmni defines options specific to the Sidero Omni provider.
+                      These options are used when Provider is set to "Omni" for the Talos distribution.
+                    properties:
+                      endpoint:
+                        description: |-
+                          Endpoint is the Omni API endpoint URL.
+                          Example: "https://<account>.omni.siderolabs.io:443".
+                        type: string
+                      endpointEnvVar:
+                        description: |-
+                          EndpointEnvVar is the environment variable containing the Omni API endpoint URL.
+                          When set, the value of this environment variable takes precedence over Endpoint.
+                          Defaults to "OMNI_ENDPOINT".
+                        type: string
+                      kubernetesVersion:
+                        description: |-
+                          KubernetesVersion is the Kubernetes version to use for the cluster in Omni.
+                          Accepts values with or without the "v" prefix (e.g., "v1.32.0" or "1.32.0").
+                          Generated templates normalize the value to include the "v" prefix.
+                          This determines the Kubernetes version that Omni will deploy.
+                        type: string
+                      machineClass:
+                        description: |-
+                          MachineClass is the Omni machine class name to use for dynamic node allocation.
+                          Machine classes are user-defined in the Omni dashboard and match machines
+                          by labels (e.g., CPU, region, role). The specified class must exist in
+                          the Omni account before cluster creation. The number of machines allocated
+                          is derived from the controlPlanes and workers count in the cluster spec.
+                          Mutually exclusive with Machines — set one or the other.
+                          When neither MachineClass nor Machines is set, KSail automatically discovers
+                          available (unallocated) machines in Omni and uses them for node allocation.
+                        type: string
+                      machines:
+                        description: |-
+                          Machines is a list of Omni machine UUIDs to use for static node allocation.
+                          The first N machines are assigned as control planes (where N = controlPlanes count),
+                          and the remaining machines are assigned as workers.
+                          Mutually exclusive with MachineClass — set one or the other.
+                          When neither MachineClass nor Machines is set, KSail automatically discovers
+                          available (unallocated) machines in Omni and uses them for node allocation.
+                        items:
+                          type: string
+                        type: array
+                      serviceAccountKeyEnvVar:
+                        description: |-
+                          ServiceAccountKeyEnvVar is the environment variable containing the
+                          base64-encoded Omni service account key.
+                          Defaults to "OMNI_SERVICE_ACCOUNT_KEY".
+                        type: string
+                      talosVersion:
+                        description: |-
+                          TalosVersion is the Talos version to use for the cluster in Omni.
+                          Accepts values with or without the "v" prefix (e.g., "v1.11.2" or "1.11.2").
+                          Generated templates normalize the value to include the "v" prefix.
+                          This determines the Talos Linux version that Omni will deploy to machines.
+                        type: string
+                    required:
+                    - endpoint
+                    - endpointEnvVar
+                    - kubernetesVersion
+                    - machineClass
+                    - machines
+                    - serviceAccountKeyEnvVar
+                    - talosVersion
+                    type: object
+                required:
+                - aws
+                - hetzner
+                - kubernetes
+                - omni
+                type: object
+              workload:
+                description: WorkloadSpec defines workload-related configuration.
+                properties:
+                  kustomizationFile:
+                    type: string
+                  sourceDirectory:
+                    type: string
+                  tag:
+                    type: string
+                  validateOnPush:
+                    type: boolean
+                  watch:
+                    description: WatchConfig defines configuration for the workload
+                      watch command.
+                    properties:
+                      hooks:
+                        description: |-
+                          Hooks are shell commands to run before each apply cycle.
+                          Hooks execute sequentially via "sh -c"; if any hook fails, the apply is skipped for that cycle.
+                        items:
+                          type: string
+                        type: array
+                    required:
+                    - hooks
+                    type: object
+                required:
+                - kustomizationFile
+                - sourceDirectory
+                - tag
+                - validateOnPush
+                - watch
+                type: object
+            required:
+            - chat
+            - cluster
+            - editor
+            - provider
+            - workload
+            type: object
+          status:
+            description: |-
+              ClusterStatus describes the observed state of a Cluster as reconciled by the KSail operator.
+              It replaces the on-disk state previously persisted under ~/.ksail/clusters/<name>/spec.json.
+            properties:
+              conditions:
+                description: Conditions represent the latest observations of the cluster's
+                  state.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              endpoint:
+                description: Endpoint is the stable API server URL of the provisioned
+                  cluster, when known.
+                type: string
+              expiresAt:
+                description: ExpiresAt is when a TTL-bound cluster is scheduled for
+                  automatic deletion, when a TTL is set.
+                format: date-time
+                type: string
+              gitOps:
+                description: |-
+                  GitOps reports observed GitOps reconciliation state for monitoring only.
+                  It does NOT control the UI read-only lock, which is a deployment-level configuration.
+                properties:
+                  engine:
+                    description: Engine is the GitOps engine detected/configured for
+                      the cluster.
+                    type: string
+                  lastSyncTime:
+                    description: LastSyncTime is the most recent successful sync time
+                      observed, when known.
+                    format: date-time
+                    type: string
+                  message:
+                    description: Message is a human-readable summary of the current
+                      GitOps sync state.
+                    type: string
+                  synced:
+                    description: Synced is true when all tracked GitOps resources
+                      report a healthy/synced state.
+                    type: boolean
+                type: object
+              kubeconfigSecretRef:
+                description: KubeconfigSecretRef points to the Secret holding the
+                  child cluster's kubeconfig.
+                properties:
+                  name:
+                    description: Name is the Secret name.
+                    type: string
+                  namespace:
+                    description: Namespace is the Secret namespace. Empty means the
+                      Cluster's namespace.
+                    type: string
+                required:
+                - name
+                type: object
+              lastReconcileTime:
+                description: LastReconcileTime is when the operator last reconciled
+                  this cluster.
+                format: date-time
+                type: string
+              nodesReady:
+                description: NodesReady is the number of cluster nodes reporting Ready.
+                format: int32
+                type: integer
+              nodesTotal:
+                description: NodesTotal is the total number of cluster nodes.
+                format: int32
+                type: integer
+              observedGeneration:
+                description: ObservedGeneration is the metadata.generation last processed
+                  by the operator.
+                format: int64
+                type: integer
+              phase:
+                description: Phase is a high-level summary of the cluster lifecycle.
+                type: string
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

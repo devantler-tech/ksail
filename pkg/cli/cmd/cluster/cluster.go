@@ -1850,7 +1850,7 @@ func resolveFallbackName(ctx *localregistry.Context) string {
 	}
 
 	// Fall back to metadata.name from ksail.yaml
-	if name := strings.TrimSpace(ctx.ClusterCfg.Metadata.Name); name != "" {
+	if name := strings.TrimSpace(ctx.ClusterCfg.Name); name != "" {
 		return name
 	}
 
@@ -5639,7 +5639,7 @@ func loadAndValidateClusterConfig(
 	// Apply cluster name override: --name flag takes priority, then metadata.name
 	nameOverride := cfgManager.Viper.GetString("name")
 	if nameOverride == "" {
-		nameOverride = ctx.ClusterCfg.Metadata.Name
+		nameOverride = ctx.ClusterCfg.Name
 	}
 
 	if nameOverride != "" {

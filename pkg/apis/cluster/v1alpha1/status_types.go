@@ -1,0 +1,71 @@
+package v1alpha1
+
+import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+// Condition type strings reported in ClusterStatus.Conditions.
+const (
+	// ConditionReady is True when the cluster exists and matches the desired spec.
+	ConditionReady = "Ready"
+	// ConditionProgressing is True while the operator is provisioning or updating the cluster.
+	ConditionProgressing = "Progressing"
+	// ConditionDegraded is True when reconciliation encountered an error.
+	ConditionDegraded = "Degraded"
+)
+
+// ClusterStatus describes the observed state of a Cluster as reconciled by the KSail operator.
+// It replaces the on-disk state previously persisted under ~/.ksail/clusters/<name>/spec.json.
+type ClusterStatus struct {
+	// Phase is a high-level summary of the cluster lifecycle.
+	Phase ClusterPhase `json:"phase,omitempty"`
+
+	// Conditions represent the latest observations of the cluster's state.
+	// +listType=map
+	// +listMapKey=type
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
+
+	// ObservedGeneration is the metadata.generation last processed by the operator.
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+	// KubeconfigSecretRef points to the Secret holding the child cluster's kubeconfig.
+	KubeconfigSecretRef *SecretReference `json:"kubeconfigSecretRef,omitempty"`
+
+	// Endpoint is the stable API server URL of the provisioned cluster, when known.
+	Endpoint string `json:"endpoint,omitempty"`
+
+	// NodesReady is the number of cluster nodes reporting Ready.
+	NodesReady int32 `json:"nodesReady,omitempty"`
+
+	// NodesTotal is the total number of cluster nodes.
+	NodesTotal int32 `json:"nodesTotal,omitempty"`
+
+	// LastReconcileTime is when the operator last reconciled this cluster.
+	LastReconcileTime *metav1.Time `json:"lastReconcileTime,omitempty"`
+
+	// ExpiresAt is when a TTL-bound cluster is scheduled for automatic deletion, when a TTL is set.
+	ExpiresAt *metav1.Time `json:"expiresAt,omitempty"`
+
+	// GitOps reports observed GitOps reconciliation state for monitoring only.
+	// It does NOT control the UI read-only lock, which is a deployment-level configuration.
+	GitOps *GitOpsStatus `json:"gitOps,omitempty"`
+}
+
+// SecretReference identifies a Secret by name and (optionally) namespace.
+type SecretReference struct {
+	// Name is the Secret name.
+	Name string `json:"name"`
+	// Namespace is the Secret namespace. Empty means the Cluster's namespace.
+	Namespace string `json:"namespace,omitempty"`
+}
+
+// GitOpsStatus summarizes the GitOps engine reconciliation state observed in the child cluster.
+// It is derived from the reconcile diagnostics (Flux/ArgoCD) and is observability-only.
+type GitOpsStatus struct {
+	// Engine is the GitOps engine detected/configured for the cluster.
+	Engine GitOpsEngine `json:"engine,omitempty"`
+	// Synced is true when all tracked GitOps resources report a healthy/synced state.
+	Synced bool `json:"synced,omitempty"`
+	// Message is a human-readable summary of the current GitOps sync state.
+	Message string `json:"message,omitempty"`
+	// LastSyncTime is the most recent successful sync time observed, when known.
+	LastSyncTime *metav1.Time `json:"lastSyncTime,omitempty"`
+}

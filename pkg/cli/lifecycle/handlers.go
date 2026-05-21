@@ -171,9 +171,9 @@ func getClusterNameFromConfigOrContext(
 	}
 
 	// Check metadata.name (skip if invalid, fall through to other sources)
-	if clusterCfg != nil && clusterCfg.Metadata.Name != "" {
-		if v1alpha1.ValidateClusterName(clusterCfg.Metadata.Name) == nil {
-			return clusterCfg.Metadata.Name, nil
+	if clusterCfg != nil && clusterCfg.Name != "" {
+		if v1alpha1.ValidateClusterName(clusterCfg.Name) == nil {
+			return clusterCfg.Name, nil
 		}
 	}
 
@@ -245,9 +245,9 @@ func GetClusterNameFromConfig(
 	}
 
 	// Check metadata.name (skip if invalid, fall through to other sources)
-	if clusterCfg.Metadata.Name != "" {
-		if v1alpha1.ValidateClusterName(clusterCfg.Metadata.Name) == nil {
-			return clusterCfg.Metadata.Name, nil
+	if clusterCfg.Name != "" {
+		if v1alpha1.ValidateClusterName(clusterCfg.Name) == nil {
+			return clusterCfg.Name, nil
 		}
 	}
 

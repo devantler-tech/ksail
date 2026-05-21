@@ -234,6 +234,18 @@ func handleStructValue(val reflect.Value) any {
 		return dur.Duration.String()
 	}
 
+	// Special handling for metav1.Time. The embedded time.Time has no exported fields, so the
+	// generic struct walk below would drop it; emit RFC3339 (matching Kubernetes serialization)
+	// so operator-populated status timestamps round-trip correctly.
+	if val.Type() == reflect.TypeFor[metav1.Time]() {
+		t := val.Interface().(metav1.Time) //nolint:forcetypeassert // known type
+		if t.IsZero() {
+			return nil
+		}
+
+		return t.UTC().Format(time.RFC3339)
+	}
+
 	// For other structs, recursively convert
 	mapped := structToMap(val)
 	if len(mapped) == 0 {
@@ -292,6 +304,8 @@ func contextDependentPruneRules(distribution Distribution) []pruneRule {
 // Defaulter is implemented by types that have a non-zero default value.
 // When marshalling, fields matching their default will be omitted.
 // To add a new type with a default, just implement this interface on the type.
+//
+// +kubebuilder:object:generate=false
 type Defaulter interface {
 	Default() any
 }

@@ -242,7 +242,7 @@ func (f DefaultFactory) createKindKubernetesProvisioner(
 	opts := cluster.Spec.Provider.Kubernetes
 
 	// Use kindConfig.Name — it's set by applyClusterNameOverride,
-	// while cluster.Metadata.Name may be empty with --name flag.
+	// while cluster.Name may be empty with --name flag.
 	clusterName := kindConfig.Name
 
 	_, restConfig, dynClient, k8sProvider, err := buildKubernetesInfra(opts)
@@ -333,7 +333,7 @@ func (f DefaultFactory) createK3dKubernetesProvisioner(
 		cluster.Spec.Cluster.Connection.Context, "k3d-",
 	)
 	if clusterName == "" {
-		clusterName = cluster.Metadata.Name
+		clusterName = cluster.Name
 	}
 
 	hostClient, restConfig, dynClient, k8sProvider, err := buildKubernetesInfra(opts)
@@ -668,7 +668,7 @@ func (f DefaultFactory) createTalosKubernetesProvisioner(
 	// Derive cluster name from Talos config (set by applyClusterNameOverride).
 	clusterName := f.DistributionConfig.Talos.GetClusterName()
 	if clusterName == "" {
-		clusterName = cluster.Metadata.Name
+		clusterName = cluster.Name
 	}
 
 	_, restConfig, dynClient, k8sProvider, err := buildKubernetesInfra(opts)
@@ -767,7 +767,7 @@ func (f DefaultFactory) createVClusterKubernetesProvisioner(
 	}
 
 	if clusterName == "" {
-		clusterName = cluster.Metadata.Name
+		clusterName = cluster.Name
 	}
 
 	hostClient, restConfig, dynClient, k8sProvider, err := buildKubernetesInfra(opts)
@@ -846,7 +846,7 @@ func (f DefaultFactory) createKWOKKubernetesProvisioner(
 	}
 
 	// Use kwokConfig.Name as the cluster name — it's always set correctly
-	// by applyClusterNameOverride, while cluster.Metadata.Name may be empty
+	// by applyClusterNameOverride, while cluster.Name may be empty
 	// when using --name flag without a ksail.yaml file.
 	clusterName := kwokConfig.Name
 
