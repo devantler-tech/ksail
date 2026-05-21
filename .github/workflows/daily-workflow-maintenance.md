@@ -316,7 +316,7 @@ To decide which deep-mode phase to perform:
    c. Check for existing optimization PRs (especially yours with "${{ github.workflow }}" prefix). Avoid duplicate work.
    d. If plan needs updating, comment on discussion with revised plan.
    e. Select a goal from the plan. Alternate between structural CI/CD optimizations and prompt enhancement/simplification work. Prefer small, incremental changes.
-   f. Review `.github/copilot-instructions.md` for guidance on workflow conventions.
+   f. Review `AGENTS.md` for guidance on workflow conventions.
 
 2. **Work towards your selected goal**.
 

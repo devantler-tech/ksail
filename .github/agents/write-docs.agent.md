@@ -53,7 +53,7 @@ Documentation‑as‑Code, transparency, single source of truth, continuous impr
      - Internal architecture details, package structure, and design decisions belong here (not in `docs/`)
      - Keep accurate with the current codebase
 
-   - **.github/copilot-instructions.md** (audience: contributor / AI assistants)
+   - **AGENTS.md** (audience: contributor / AI assistants)
      - Architecture overview, build commands, project structure, and package layout for AI assistant guidance
      - Update when significant project changes occur
 

@@ -218,7 +218,7 @@ Always be:
 
 ## KSail-Specific Conventions
 
-**Before any code changes**, read `.github/copilot-instructions.md` and `AGENTS.md` (if present) for project conventions.
+**Before any code changes**, read `AGENTS.md` for project conventions.
 
 **Build & validation requirements for all PRs:**
 

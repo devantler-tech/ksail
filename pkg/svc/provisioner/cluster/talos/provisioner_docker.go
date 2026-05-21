@@ -356,11 +356,7 @@ func (p *Provisioner) setupClusterEndpoints(
 
 	// Create a modified talosconfig with the mapped endpoint
 	talosConfig := configBundle.TalosConfig()
-	if talosConfig != nil && talosConfig.Context != "" {
-		if context, ok := talosConfig.Contexts[talosConfig.Context]; ok {
-			context.Endpoints = []string{mappedEndpoint}
-		}
-	}
+	patchTalosConfigEndpoint(talosConfig, mappedEndpoint)
 
 	// Get the Kubernetes API endpoint from the cluster info.
 	// The Docker provisioner automatically sets this to the external endpoint
@@ -744,4 +740,16 @@ func (p *Provisioner) getMappedK8sAPIEndpoint(
 	clusterName string,
 ) (string, error) {
 	return p.getMappedPortEndpoint(ctx, clusterName, k8sAPIPort)
+}
+
+// patchTalosConfigEndpoint updates the active context's Talos API endpoint in cfg.
+// It is a no-op when cfg is nil or has no active context name.
+func patchTalosConfigEndpoint(cfg *config.Config, hostEndpoint string) {
+	if cfg == nil || cfg.Context == "" {
+		return
+	}
+
+	if talosCtx, ok := cfg.Contexts[cfg.Context]; ok {
+		talosCtx.Endpoints = []string{hostEndpoint}
+	}
 }
