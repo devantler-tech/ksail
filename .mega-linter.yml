@@ -32,7 +32,8 @@ MARKDOWN_MARKDOWN_TABLE_FORMATTER_FILTER_REGEX_EXCLUDE: .github/(agents|prompts)
 MARKDOWN_MARKDOWNLINT_FILTER_REGEX_EXCLUDE: (.github/(agents|prompts)|\.github/workflows/.*\.lock\.yml)
 SPELL_LYCHEE_FILTER_REGEX_EXCLUDE: (AGENTS\.md|.*\.mdx|docs/src/.*\.md|\.github/workflows/.*\.md)
 # Helm chart templates contain Go template directives ({{ ... }}) and are not valid standalone
-# YAML, so exclude them from the YAML linters.
-YAML_YAMLLINT_FILTER_REGEX_EXCLUDE: (charts/.*/templates/.*|\.github/workflows/.*\.lock\.yml)
-YAML_PRETTIER_FILTER_REGEX_EXCLUDE: charts/.*/templates/.*
-YAML_V8R_FILTER_REGEX_EXCLUDE: (\.github/workflows/.*\.lock\.yml|charts/.*/templates/.*)
+# YAML; generated CRDs (controller-gen output) are large and machine-managed. Exclude both from
+# the YAML linters.
+YAML_YAMLLINT_FILTER_REGEX_EXCLUDE: (charts/.*/templates/.*|config/crd/bases/.*|charts/.*/crds/.*|\.github/workflows/.*\.lock\.yml)
+YAML_PRETTIER_FILTER_REGEX_EXCLUDE: (charts/.*/templates/.*|config/crd/bases/.*|charts/.*/crds/.*)
+YAML_V8R_FILTER_REGEX_EXCLUDE: (\.github/workflows/.*\.lock\.yml|charts/.*/templates/.*|config/crd/bases/.*|charts/.*/crds/.*)

@@ -97,6 +97,9 @@ changelog:
 
 release:
   draft: true
+  extra_files:
+    # Attach the Cluster CRD so it can be applied without the Helm chart.
+    - glob: ./config/crd/bases/*.yaml
   footer: |
     ## Quick Start
 

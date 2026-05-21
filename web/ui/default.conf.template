@@ -1,0 +1,18 @@
+# Rendered by the nginx entrypoint (envsubst on ${API_BASE_URL}). Serves the SPA and proxies
+# /api requests to the operator REST API.
+server {
+    listen 80;
+    server_name _;
+    root /usr/share/nginx/html;
+
+    location /api/ {
+        proxy_pass ${API_BASE_URL};
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}
