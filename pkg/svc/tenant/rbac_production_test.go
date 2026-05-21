@@ -79,6 +79,43 @@ func TestGenerateRBACManifests_MultipleClusterRoles(t *testing.T) {
 	snaps.MatchSnapshot(t, rb)
 }
 
+func TestGenerateRBACManifests_ClusterRoleWithColonSanitized(t *testing.T) {
+	t.Parallel()
+
+	result, err := tenant.GenerateRBACManifests(tenant.Options{
+		Name:         "team-alpha",
+		Namespaces:   []string{"team-alpha"},
+		ClusterRoles: []string{"edit", "system:auth-delegator"},
+	})
+	require.NoError(t, err)
+
+	rb := result["rolebinding.yaml"]
+	// roleRef keeps the canonical ClusterRole name (':' is valid there)...
+	require.Contains(t, rb, "name: system:auth-delegator")
+	// ...but the binding metadata.name is sanitized to a valid DNS-1123 label.
+	require.Contains(t, rb, "name: team-alpha-system-auth-delegator")
+	require.NotContains(t, rb, "name: team-alpha-system:auth-delegator")
+}
+
+func TestGenerateRBACManifests_ClusterRolesTrimmedAndDeduped(t *testing.T) {
+	t.Parallel()
+
+	result, err := tenant.GenerateRBACManifests(tenant.Options{
+		Name:         "team-alpha",
+		Namespaces:   []string{"team-alpha"},
+		ClusterRoles: []string{" edit ", "edit", "view"},
+	})
+	require.NoError(t, err)
+
+	rb := result["rolebinding.yaml"]
+	// " edit " and "edit" collapse to a single binding; no leading/trailing space.
+	require.NotContains(t, rb, "name:  edit")
+	require.Equal(t, 1, strings.Count(rb, "name: edit\n"))
+
+	docs := strings.Split(rb, "---\n")
+	require.Len(t, docs, 2) // edit + view
+}
+
 func TestGenerate_ProductionTenant(t *testing.T) {
 	t.Parallel()
 

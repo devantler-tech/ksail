@@ -115,7 +115,7 @@ func TestCreateCmd_ProductionFlagDefaults(t *testing.T) {
 
 	ft, err := cmd.Flags().GetString("flux-timeout")
 	require.NoError(t, err)
-	require.Equal(t, "5m", ft)
+	require.Empty(t, ft)
 
 	for _, name := range []string{
 		"with-network-policy", "with-quota", "with-limit-range",
@@ -155,6 +155,33 @@ func TestCreateCmd_Production(t *testing.T) {
 	saContent, err := os.ReadFile(filepath.Join(tenantDir, "serviceaccount.yaml")) //nolint:gosec // test path
 	require.NoError(t, err)
 	require.Contains(t, string(saContent), "automountServiceAccountToken: false")
+}
+
+func TestCreateCmd_FluxTimeoutImpliesWait(t *testing.T) {
+	t.Parallel()
+
+	outDir := t.TempDir()
+
+	cmd := tenantpkg.NewCreateCmd(nil)
+
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+	cmd.SetErr(&buf)
+	cmd.SetArgs([]string{
+		"timeout-tenant", "--type", "flux",
+		"--registry", "oci://ghcr.io", "--tenant-repo", "owner/repo",
+		"--flux-timeout", "10m", "--output", outDir,
+	})
+
+	err := cmd.Execute()
+	require.NoError(t, err)
+
+	syncContent, err := os.ReadFile( //nolint:gosec // test path
+		filepath.Join(outDir, "timeout-tenant", "sync.yaml"),
+	)
+	require.NoError(t, err)
+	require.Contains(t, string(syncContent), "wait: true")
+	require.Contains(t, string(syncContent), "timeout: 10m")
 }
 
 //nolint:paralleltest // uses t.Chdir

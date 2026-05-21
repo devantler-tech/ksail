@@ -103,7 +103,8 @@ func addProductionFlags(cmd *cobra.Command) {
 	cmd.Flags().StringSlice("image-pull-secret", nil,
 		"imagePullSecret to add to the tenant ServiceAccount (repeatable)")
 	cmd.Flags().Bool("flux-wait", false, "(Flux) Set wait: true and timeout on the Flux Kustomization")
-	cmd.Flags().String("flux-timeout", "5m", "(Flux) Flux Kustomization timeout (implies wait)")
+	cmd.Flags().String("flux-timeout", "",
+		"(Flux) Flux Kustomization timeout; setting it implies --flux-wait (default 5m when waiting)")
 	cmd.Flags().String("flux-retry-interval", "", "(Flux) Flux Kustomization retryInterval")
 	cmd.Flags().Bool("flux-decryption", false,
 		"(Flux) Add a SOPS decryption block referencing the sops-age secret")
@@ -190,6 +191,13 @@ func resolveCreateOptions(
 	opts.ClusterRoles, _ = cmd.Flags().GetStringSlice("cluster-role")
 
 	readProductionFlags(cmd, &opts)
+
+	// Setting --flux-timeout implies --flux-wait, since the timeout only takes
+	// effect while waiting. The flag default is empty so this only triggers on
+	// explicit use.
+	if cmd.Flags().Changed("flux-timeout") {
+		opts.FluxWait = true
+	}
 
 	outputStr, _ := cmd.Flags().GetString("output")
 	opts.Force, _ = cmd.Flags().GetBool("force")

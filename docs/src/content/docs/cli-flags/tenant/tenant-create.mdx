@@ -17,7 +17,7 @@ Flags:
       --disable-token-automount       Set automountServiceAccountToken: false on the tenant ServiceAccount
       --flux-decryption               (Flux) Add a SOPS decryption block referencing the sops-age secret
       --flux-retry-interval string    (Flux) Flux Kustomization retryInterval
-      --flux-timeout string           (Flux) Flux Kustomization timeout (implies wait) (default "5m")
+      --flux-timeout string           (Flux) Flux Kustomization timeout; setting it implies --flux-wait (default 5m when waiting)
       --flux-wait                     (Flux) Set wait: true and timeout on the Flux Kustomization
       --force                         Overwrite existing tenant directory
       --git-provider string           Git provider for manifest URLs: github, gitlab, gitea (repo scaffolding requires github)

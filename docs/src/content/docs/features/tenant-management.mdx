@@ -215,7 +215,8 @@ For Flux tenants you can additionally harden the sync:
 
 | Flag | Effect |
 |------|--------|
-| `--flux-wait` (`--flux-timeout`) | Sets `wait: true` and `timeout` on the Flux Kustomization |
+| `--flux-wait` | Sets `wait: true` and `timeout` (default `5m`) on the Flux Kustomization |
+| `--flux-timeout` | Flux Kustomization timeout; setting it implies `--flux-wait` |
 | `--flux-retry-interval` | Sets the Kustomization `retryInterval` |
 | `--flux-decryption` | Adds a SOPS `decryption` block referencing the `sops-age` secret |
 

@@ -23,7 +23,7 @@ func GenerateRBACManifests(opts Options) (map[string]string, error) {
 
 	primaryNS := opts.Namespaces[0]
 	roles := effectiveClusterRoles(opts)
-	multiRole := len(roles) > 1
+	bindingNames := buildBindingNames(opts.Name, roles)
 
 	var namespaceDocs, rbDocs []string
 
@@ -35,13 +35,8 @@ func GenerateRBACManifests(opts Options) (map[string]string, error) {
 
 		namespaceDocs = append(namespaceDocs, nsYAML)
 
-		for _, role := range roles {
-			bindingName := opts.Name
-			if multiRole {
-				bindingName = opts.Name + "-" + role
-			}
-
-			rbYAML, err := marshalRoleBinding(bindingName, opts.Name, namespace, primaryNS, role)
+		for i, role := range roles {
+			rbYAML, err := marshalRoleBinding(bindingNames[i], opts.Name, namespace, primaryNS, role)
 			if err != nil {
 				return nil, err
 			}
@@ -65,16 +60,90 @@ func GenerateRBACManifests(opts Options) (map[string]string, error) {
 
 // effectiveClusterRoles returns the ClusterRoles to bind, preferring the
 // ClusterRoles slice and falling back to the legacy single ClusterRole field.
+// Entries are trimmed and de-duplicated; empty entries are dropped.
 func effectiveClusterRoles(opts Options) []string {
-	if len(opts.ClusterRoles) > 0 {
-		return opts.ClusterRoles
+	raw := opts.ClusterRoles
+	if len(raw) == 0 {
+		if opts.ClusterRole != "" {
+			raw = []string{opts.ClusterRole}
+		} else {
+			raw = []string{DefaultClusterRole}
+		}
 	}
 
-	if opts.ClusterRole != "" {
-		return []string{opts.ClusterRole}
+	seen := make(map[string]bool, len(raw))
+	result := make([]string, 0, len(raw))
+
+	for _, role := range raw {
+		role = strings.TrimSpace(role)
+		if role == "" || seen[role] {
+			continue
+		}
+
+		seen[role] = true
+
+		result = append(result, role)
 	}
 
-	return []string{DefaultClusterRole}
+	if len(result) == 0 {
+		result = append(result, DefaultClusterRole)
+	}
+
+	return result
+}
+
+// buildBindingNames returns the RoleBinding metadata.name for each role.
+// A single role keeps the tenant name (so it reads as "<tenant>"); multiple
+// roles get "<tenant>-<sanitized-role>" suffixes. ClusterRole names may contain
+// characters invalid for metadata.name (e.g. "system:auth-delegator"), so the
+// role segment is sanitized to a DNS-1123 label and disambiguated on collision.
+func buildBindingNames(tenant string, roles []string) []string {
+	names := make([]string, len(roles))
+	if len(roles) <= 1 {
+		if len(roles) == 1 {
+			names[0] = tenant
+		}
+
+		return names
+	}
+
+	used := make(map[string]bool, len(roles))
+
+	for i, role := range roles {
+		base := tenant + "-" + sanitizeNameSegment(role)
+		name := base
+
+		for dup := 2; used[name]; dup++ {
+			name = fmt.Sprintf("%s-%d", base, dup)
+		}
+
+		used[name] = true
+		names[i] = name
+	}
+
+	return names
+}
+
+// sanitizeNameSegment lowercases the input and replaces any character that is
+// not a lowercase alphanumeric or '-' with '-', trimming leading/trailing '-'.
+func sanitizeNameSegment(value string) string {
+	var builder strings.Builder
+
+	for _, r := range strings.ToLower(value) {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '-':
+			builder.WriteRune(r)
+		default:
+			builder.WriteRune('-')
+		}
+	}
+
+	out := strings.Trim(builder.String(), "-")
+	if out == "" {
+		out = "role"
+	}
+
+	return out
 }
 
 func marshalNamespace(name, podSecurity string) (string, error) {
