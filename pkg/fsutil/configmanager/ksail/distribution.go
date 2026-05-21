@@ -231,7 +231,20 @@ func (m *ConfigManager) removeWorkerRoleLabelPatch(patchesDir string) {
 
 	content, err := fsutil.ReadFileSafe(patchesDir, patchFile)
 	if err != nil {
-		// File missing (the common case) or unreadable — nothing to migrate.
+		if errors.Is(err, os.ErrNotExist) {
+			// No patch file — the common case, nothing to migrate.
+			return
+		}
+
+		// The file exists but could not be read safely (e.g. a symlink escaping
+		// patchesDir, or a permission error). Warn rather than silently leaving a
+		// patch that may break worker kubelets.
+		m.warnWorkerRoleLabel(
+			"could not read talos/workers/worker-role-label.yaml (" + err.Error() +
+				"); if it sets node-role.kubernetes.io/worker, remove it manually — " +
+				"Kubernetes 1.33+ rejects that label and worker nodes will fail to start.",
+		)
+
 		return
 	}
 
@@ -241,25 +254,39 @@ func (m *ConfigManager) removeWorkerRoleLabelPatch(patchesDir string) {
 		contentStr == strings.TrimSpace(kubeletWorkerRoleLabelPatchYAML)
 
 	if isKnownScaffold {
-		canonPath, pathErr := fsutil.EvalCanonicalPath(patchFile)
-		if pathErr != nil {
-			return
+		// Remove the entry at its declared path. os.Remove does not follow the final
+		// symlink, so a symlinked entry is unlinked instead of deleting its target.
+		removeErr := os.Remove(patchFile)
+		if removeErr != nil {
+			m.warnWorkerRoleLabel(
+				"could not delete the obsolete talos/workers/worker-role-label.yaml (" +
+					removeErr.Error() + "); remove it manually — it sets " +
+					"node-role.kubernetes.io/worker, which Kubernetes 1.33+ rejects, " +
+					"preventing worker nodes from starting.",
+			)
 		}
-
-		_ = os.Remove(canonPath)
 
 		return
 	}
 
 	if strings.Contains(contentStr, "node-role.kubernetes.io/worker") {
-		notify.WriteMessage(notify.Message{
-			Type: notify.WarningType,
-			Content: "talos/workers/worker-role-label.yaml sets node-role.kubernetes.io/worker, " +
-				"which Kubernetes 1.33+ rejects via kubelet --node-labels and will prevent worker " +
-				"nodes from starting. Remove that label from the file.",
-			Writer: m.Writer,
-		})
+		m.warnWorkerRoleLabel(
+			"talos/workers/worker-role-label.yaml sets node-role.kubernetes.io/worker; " +
+				"remove that label. Set via kubelet --node-labels it is rejected by " +
+				"Kubernetes 1.33+ (worker kubelets fail to start); set via machine.nodeLabels " +
+				"it is blocked by the NodeRestriction admission controller after registration.",
+		)
 	}
+}
+
+// warnWorkerRoleLabel emits a warning about a stale or customized worker role label patch
+// that still sets node-role.kubernetes.io/worker.
+func (m *ConfigManager) warnWorkerRoleLabel(content string) {
+	notify.WriteMessage(notify.Message{
+		Type:    notify.WarningType,
+		Content: content,
+		Writer:  m.Writer,
+	})
 }
 
 // loadAndCacheDistributionConfig loads the distribution-specific configuration based on

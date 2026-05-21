@@ -80,6 +80,42 @@ func TestRemoveWorkerRoleLabelPatch_LeavesCustomizedFileAndWarns(t *testing.T) {
 	)
 }
 
+func TestRemoveWorkerRoleLabelPatch_WarnsOnUnreadableFile(t *testing.T) {
+	t.Parallel()
+
+	patchesDir := t.TempDir()
+	workersDir := filepath.Join(patchesDir, "workers")
+	require.NoError(t, os.MkdirAll(workersDir, 0o750))
+
+	// A symlink escaping patchesDir makes ReadFileSafe return ErrPathOutsideBase
+	// (not os.ErrNotExist), which must produce a warning rather than a silent no-op.
+	outside := filepath.Join(t.TempDir(), "target.yaml")
+	require.NoError(t, os.WriteFile(outside, []byte("data"), 0o600))
+
+	patchFile := filepath.Join(workersDir, "worker-role-label.yaml")
+
+	err := os.Symlink(outside, patchFile)
+	if err != nil {
+		t.Skipf("symlinks not supported on this platform: %v", err)
+	}
+
+	var buf bytes.Buffer
+
+	cm := &configmanager.ConfigManager{Writer: &buf}
+	cm.RemoveWorkerRoleLabelPatchForTest(patchesDir)
+
+	assert.Contains(
+		t,
+		buf.String(),
+		"worker-role-label.yaml",
+		"should warn when the file cannot be read safely",
+	)
+
+	// The symlink (and its target) must be left in place, not followed and deleted.
+	_, err = os.Lstat(patchFile)
+	require.NoError(t, err, "symlink should not be removed")
+}
+
 func TestRemoveWorkerRoleLabelPatch_NoFileIsNoop(t *testing.T) {
 	t.Parallel()
 
