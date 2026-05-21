@@ -151,9 +151,10 @@ func (p *KubernetesProvisioner) Create(
 		return fmt.Errorf("pre-create vCluster namespace %s: %w", namespace, nsErr)
 	}
 
-	// Step 1b: Resolve a stable, server-side exposure (Gateway → LoadBalancer → NodePort) for the
-	// vCluster API server. The Service targets the vCluster pods, which the Helm release creates;
-	// the address is resolved up-front so it can be added to the proxy cert SANs below.
+	// Step 1b: Resolve a stable, server-side exposure (Gateway → NodePort) for the vCluster API
+	// server. The LoadBalancer tier is skipped to avoid the host LB controller (e.g. K3s
+	// klipper-lb) binding the API server port on the node. The Service targets the vCluster pods,
+	// which the Helm release creates; the address is resolved up-front for the proxy cert SANs.
 	exposure, err := p.k8sProvider.ResolveExposure(
 		ctx, p.dynamicClient,
 		kubernetesprovider.APIExposureSpec{

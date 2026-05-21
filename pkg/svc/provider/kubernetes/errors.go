@@ -13,10 +13,6 @@ var (
 	// ErrGatewayNotReady is returned when the Gateway has not been assigned an address.
 	ErrGatewayNotReady = errors.New("gateway has not been assigned an external address")
 
-	// ErrGatewayClassNotFound is returned when the specified GatewayClass does not exist
-	// on the host cluster.
-	ErrGatewayClassNotFound = errors.New("specified GatewayClass not found on host cluster")
-
 	// ErrDynamicClientRequired is returned when a dynamic client is needed but nil.
 	ErrDynamicClientRequired = errors.New("dynamic client is required for Gateway API resources")
 

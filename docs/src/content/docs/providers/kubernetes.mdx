@@ -169,9 +169,7 @@ This lists all nested clusters discovered on the host cluster. The host kubeconf
 
 ## Troubleshooting
 
-**`Gateway API experimental CRDs not found`** — This error only occurs when `spec.provider.kubernetes.gatewayClassName` is set. Install the experimental CRDs: `kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.5.1/experimental-install.yaml`, or leave `gatewayClassName` empty to fall back to a LoadBalancer/NodePort Service.
-
-**`GatewayClass not found`** — Set `spec.provider.kubernetes.gatewayClassName` to a GatewayClass that exists on your host cluster. List available classes: `kubectl get gatewayclasses`
+**Gateway exposure was requested but a NodePort/LoadBalancer was used instead** — When `spec.provider.kubernetes.gatewayClassName` is set but the Gateway tier cannot be configured (e.g. the experimental Gateway API CRDs or a TCPRoute-capable controller are missing, or the GatewayClass does not exist), KSail prints a warning (`Gateway API exposure failed (...); falling back to LoadBalancer/NodePort`) and falls back to the next tier rather than failing the create. To force Gateway exposure, install the experimental CRDs (`kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.5.1/experimental-install.yaml`), ensure a TCPRoute-capable controller is running, and set `gatewayClassName` to a class that exists (`kubectl get gatewayclasses`). To check which tier was selected, inspect the created resources: `kubectl get svc,gateway,tcproute -n <namespace>`.
 
 **`kubectl` times out connecting to the nested cluster** — The resolved exposure address may not be routable from your machine. This is common with NodePort/LoadBalancer addresses on local Docker-based host clusters on macOS/Windows, where service addresses live inside the Docker VM. Use Docker Desktop's localhost LoadBalancer, install `cloud-provider-kind`, or configure a TCPRoute-capable Gateway whose address is routable. Inspect the exposure: `kubectl get svc,gateway,tcproute -n <namespace>`.
 

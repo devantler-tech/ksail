@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"os"
 	"strconv"
 	"time"
 
@@ -131,6 +132,10 @@ func tcpRouteGVR() schema.GroupVersionResource {
 //  2. a LoadBalancer Service (when SkipLoadBalancer is false and the host cluster assigns an external address),
 //  3. a NodePort Service (universal last resort).
 //
+// When GatewayClassName is set the Gateway tier is preferred, but a Gateway failure still falls
+// back to LoadBalancer/NodePort (a warning is emitted so the failure is not hidden). A nil dynamic
+// client with GatewayClassName set is treated as a wiring error.
+//
 // The returned address survives the CLI process exit and should be written to the kubeconfig and
 // added to the nested API server's certificate SANs.
 func (p *Provider) ResolveExposure(
@@ -140,12 +145,27 @@ func (p *Provider) ResolveExposure(
 ) (*ExposureResult, error) {
 	spec = spec.withDefaults()
 
-	if spec.GatewayClassName != "" && dynamicClient != nil {
+	if spec.GatewayClassName != "" {
+		if dynamicClient == nil {
+			return nil, fmt.Errorf(
+				"gateway exposure requested for %q: %w",
+				spec.ClusterName,
+				ErrDynamicClientRequired,
+			)
+		}
+
 		result, err := p.exposeViaGateway(ctx, dynamicClient, spec)
 		if err == nil {
 			return result, nil
 		}
-		// Fall through to LB/NodePort when the Gateway path can't yield an address.
+
+		// Surface the Gateway failure (e.g. missing CRDs / GatewayClass) instead of hiding it,
+		// then fall back to the LoadBalancer/NodePort tiers.
+		_, _ = fmt.Fprintf(
+			os.Stderr,
+			"warning: Gateway API exposure failed (%v); falling back to LoadBalancer/NodePort\n",
+			err,
+		)
 	}
 
 	if !spec.SkipLoadBalancer {
@@ -252,16 +272,7 @@ func (p *Provider) ensureService(
 		}
 
 		svc.ResourceVersion = existing.ResourceVersion
-		svc.Spec.ClusterIP = existing.Spec.ClusterIP // ClusterIP is immutable; preserve it
-		// NodePort allocations are immutable on update; copy them back by port name to
-		// avoid an "invalid value" rejection from the API server.
-		for i := range svc.Spec.Ports {
-			for _, ep := range existing.Spec.Ports {
-				if svc.Spec.Ports[i].Name == ep.Name && ep.NodePort != 0 {
-					svc.Spec.Ports[i].NodePort = ep.NodePort
-				}
-			}
-		}
+		preserveImmutableServiceFields(svc, existing, serviceType)
 
 		created, err = p.client.CoreV1().
 			Services(spec.Namespace).
@@ -273,6 +284,34 @@ func (p *Provider) ensureService(
 	}
 
 	return created, nil
+}
+
+// preserveImmutableServiceFields copies cluster-assigned, immutable Service networking fields from
+// an existing Service onto the desired spec so an Update is not rejected for changing them.
+func preserveImmutableServiceFields(
+	svc, existing *corev1.Service,
+	serviceType corev1.ServiceType,
+) {
+	// ClusterIP(s) and IP-family settings are immutable / cluster-defaulted (notably on dual-stack
+	// clusters); omitting them on update can be rejected as an immutable-field change.
+	svc.Spec.ClusterIP = existing.Spec.ClusterIP
+	svc.Spec.ClusterIPs = existing.Spec.ClusterIPs
+	svc.Spec.IPFamilies = existing.Spec.IPFamilies
+	svc.Spec.IPFamilyPolicy = existing.Spec.IPFamilyPolicy
+
+	// Allocated node ports only exist for NodePort/LoadBalancer Services; copying a nodePort onto a
+	// ClusterIP Service (e.g. when switching to the Gateway tier) would be rejected by the API.
+	if serviceType != corev1.ServiceTypeNodePort && serviceType != corev1.ServiceTypeLoadBalancer {
+		return
+	}
+
+	for i := range svc.Spec.Ports {
+		for _, ep := range existing.Spec.Ports {
+			if svc.Spec.Ports[i].Name == ep.Name && ep.NodePort != 0 {
+				svc.Spec.Ports[i].NodePort = ep.NodePort
+			}
+		}
+	}
 }
 
 func (p *Provider) ensureGateway(

@@ -115,9 +115,10 @@ func (p *KubernetesProvisioner) Create(
 		return err
 	}
 
-	// Step 2: Resolve a stable, server-side exposure (Gateway → LoadBalancer → NodePort) for the
-	// nested API server. This address survives the CLI process exit and is written to the
-	// kubeconfig, so no long-lived port-forward is needed for steady-state access.
+	// Step 2: Resolve a stable, server-side exposure (Gateway → NodePort) for the nested API
+	// server. The LoadBalancer tier is skipped to avoid the host LB controller (e.g. K3s
+	// klipper-lb) binding the API server port on the node. This address survives the CLI process
+	// exit and is written to the kubeconfig, so no long-lived port-forward is needed.
 	exposure, err := p.k8sProvider.ResolveExposure(
 		ctx, p.dynamicClient,
 		kubernetesprovider.APIExposureSpec{
