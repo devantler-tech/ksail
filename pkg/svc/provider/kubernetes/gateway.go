@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -272,7 +273,7 @@ func warnNodePortReachability(result *ExposureResult) {
 		"spec.provider.kubernetes.gatewayClassName and install a TCPRoute-capable " +
 		"Gateway controller (e.g. Envoy Gateway, Cilium, Istio)."
 
-	if ip := net.ParseIP(result.Address); ip != nil && ip.IsLoopback() {
+	if isLoopbackAddress(result.Address) {
 		_, _ = fmt.Fprintf(os.Stderr,
 			"⚠ nested API server exposed via NodePort at %s, a loopback address that is "+
 				"typically NOT reachable from the host (common with Docker Desktop / Kind on "+
@@ -288,6 +289,20 @@ func warnNodePortReachability(result *ExposureResult) {
 			"reachable from your host. %s\n",
 		endpoint, guidance,
 	)
+}
+
+// isLoopbackAddress reports whether addr is a loopback endpoint. It covers both
+// literal loopback IPs (127.0.0.0/8, ::1) and the "localhost" hostname
+// (case-insensitive), which pickNodeAddress may return from the host REST
+// config and which net.ParseIP cannot classify.
+func isLoopbackAddress(addr string) bool {
+	if strings.EqualFold(addr, "localhost") {
+		return true
+	}
+
+	ip := net.ParseIP(addr)
+
+	return ip != nil && ip.IsLoopback()
 }
 
 // ensureService creates or updates the API server Service with the given type and selector.

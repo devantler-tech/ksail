@@ -3018,7 +3018,7 @@ func runDiagnoseJSONReport(report k8s.DiagnoseReport, w io.Writer) error {
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
 	// Keep '<', '>', '&' literal (e.g. in remediation hints like "<name>")
-	// instead of <-escaping them for HTML safety we don't need on a CLI.
+	// instead of HTML-escaping them; this is CLI output, not HTML.
 	enc.SetEscapeHTML(false)
 
 	err := enc.Encode(report)

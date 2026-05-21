@@ -873,8 +873,8 @@ func TestScaffold_KWOK_RegeneratesMissingFile(t *testing.T) {
 
 	output := t.TempDir()
 
-	sc := scaffolder.NewScaffolder(createKWOKCluster("kwok-repair"), io.Discard, nil)
-	require.NoError(t, sc.Scaffold(output, false))
+	subject := scaffolder.NewScaffolder(createKWOKCluster("kwok-repair"), io.Discard, nil)
+	require.NoError(t, subject.Scaffold(output, false))
 
 	kwokDir := filepath.Join(output, scaffolder.KWOKConfigDir)
 	files := []string{
@@ -890,7 +890,7 @@ func TestScaffold_KWOK_RegeneratesMissingFile(t *testing.T) {
 
 	// Remove a single inner file and re-run init WITHOUT --force.
 	require.NoError(t, os.Remove(filepath.Join(kwokDir, scaffolder.KWOKPodFailureFile)))
-	require.NoError(t, sc.Scaffold(output, false))
+	require.NoError(t, subject.Scaffold(output, false))
 
 	// The removed file is restored and the others are left intact.
 	for _, file := range files {

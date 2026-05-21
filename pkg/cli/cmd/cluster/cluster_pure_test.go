@@ -1025,9 +1025,9 @@ func TestRunDiagnoseJSONReport_DoesNotEscapeHTML(t *testing.T) {
 	require.NoError(t, err)
 
 	out := buf.String()
-	// With HTML-escaping disabled the angle brackets appear literally. If
-	// escaping were on, these would be rendered as <name> and the
-	// substring assertions below would fail.
+	// With HTML-escaping disabled, '<', '>' and '&' appear literally. If
+	// escaping were enabled they would be emitted as their unicode escape
+	// sequences instead, so the literal substring assertions below would fail.
 	assert.Contains(t, out, "<name>")
 	assert.Contains(t, out, "<namespace>")
 }
