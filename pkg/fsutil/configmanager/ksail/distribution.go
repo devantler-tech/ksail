@@ -213,6 +213,13 @@ const kubeletWorkerRoleLabelPatchYAML = `machine:
       node-labels: "node-role.kubernetes.io/worker="
 `
 
+// workerRoleLabelFailureModes explains why a node-role.kubernetes.io/worker patch breaks
+// worker nodes, covering both forms ksail historically generated. Shared across the migration
+// warnings so the remediation guidance stays accurate regardless of which form is found.
+const workerRoleLabelFailureModes = "Set via kubelet --node-labels the label is rejected by " +
+	"Kubernetes 1.33+ (worker kubelets fail to start); set via machine.nodeLabels it is " +
+	"blocked by the NodeRestriction admission controller after registration."
+
 // removeWorkerRoleLabelPatch deletes a stale worker role label patch file from disk.
 //
 // ksail used to label worker nodes with node-role.kubernetes.io/worker, first via
@@ -241,8 +248,8 @@ func (m *ConfigManager) removeWorkerRoleLabelPatch(patchesDir string) {
 		// patch that may break worker kubelets.
 		m.warnWorkerRoleLabel(
 			"could not read talos/workers/worker-role-label.yaml (" + err.Error() +
-				"); if it sets node-role.kubernetes.io/worker, remove it manually — " +
-				"Kubernetes 1.33+ rejects that label and worker nodes will fail to start.",
+				"); if it sets node-role.kubernetes.io/worker, remove it manually. " +
+				workerRoleLabelFailureModes,
 		)
 
 		return
@@ -260,9 +267,8 @@ func (m *ConfigManager) removeWorkerRoleLabelPatch(patchesDir string) {
 		if removeErr != nil {
 			m.warnWorkerRoleLabel(
 				"could not delete the obsolete talos/workers/worker-role-label.yaml (" +
-					removeErr.Error() + "); remove it manually — it sets " +
-					"node-role.kubernetes.io/worker, which Kubernetes 1.33+ rejects, " +
-					"preventing worker nodes from starting.",
+					removeErr.Error() + "); it sets node-role.kubernetes.io/worker, so " +
+					"remove it manually. " + workerRoleLabelFailureModes,
 			)
 		}
 
@@ -272,9 +278,7 @@ func (m *ConfigManager) removeWorkerRoleLabelPatch(patchesDir string) {
 	if strings.Contains(contentStr, "node-role.kubernetes.io/worker") {
 		m.warnWorkerRoleLabel(
 			"talos/workers/worker-role-label.yaml sets node-role.kubernetes.io/worker; " +
-				"remove that label. Set via kubelet --node-labels it is rejected by " +
-				"Kubernetes 1.33+ (worker kubelets fail to start); set via machine.nodeLabels " +
-				"it is blocked by the NodeRestriction admission controller after registration.",
+				"remove that label. " + workerRoleLabelFailureModes,
 		)
 	}
 }

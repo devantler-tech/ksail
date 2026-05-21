@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"testing"
 
+	"github.com/devantler-tech/ksail/v7/internal/testutil/rootcheck"
 	configmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/ksail"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -124,8 +125,8 @@ func TestRemoveWorkerRoleLabelPatch_WarnsWhenDeleteFails(t *testing.T) {
 		t.Skip("directory write permissions are not enforced the same way on Windows")
 	}
 
-	if os.Geteuid() == 0 {
-		t.Skip("root bypasses directory write permissions, so os.Remove would not fail")
+	if rootcheck.IsRootUser() {
+		t.Skip("running as root — directory write permissions are bypassed")
 	}
 
 	patchesDir, _ := writeWorkerRoleLabelPatch(
