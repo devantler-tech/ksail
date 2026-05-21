@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/devantler-tech/ksail/v7/internal/testutil/homeenv"
 	snapshottest "github.com/devantler-tech/ksail/v7/internal/testutil/snapshottest"
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
@@ -2709,7 +2710,9 @@ func normalizeHomePaths(content string) string {
 }
 
 func TestMain(m *testing.M) {
-	os.Exit(snapshottest.Run(m, snaps.CleanOpts{Sort: true}))
+	os.Exit(homeenv.RunFunc(func() int {
+		return snapshottest.Run(m, snaps.CleanOpts{Sort: true})
+	}))
 }
 
 func writeValidKsailConfig(t *testing.T, dir string) {
