@@ -26,11 +26,13 @@ const (
 // The Talos SDK uses offset 2 (network + gateway + first node).
 const ipv4Offset = 2
 
-// Patch subdirectory names under the configured patches root.
 const (
-	PatchSubdirCluster       = "cluster"
+	// PatchSubdirCluster is the subdirectory name for cluster-wide patches.
+	PatchSubdirCluster = "cluster"
+	// PatchSubdirControlPlanes is the subdirectory name for control-plane-only patches.
 	PatchSubdirControlPlanes = "control-planes"
-	PatchSubdirWorkers       = "workers"
+	// PatchSubdirWorkers is the subdirectory name for worker-only patches.
+	PatchSubdirWorkers = "workers"
 )
 
 // Patch represents a Talos machine config patch with its scope.
