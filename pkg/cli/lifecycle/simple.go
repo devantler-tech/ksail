@@ -501,7 +501,7 @@ func (p *kubernetesCleanupProvisioner) Delete(ctx context.Context, _ string) err
 		cleanupPath = p.kubeconfigPath
 	}
 
-	for _, prefix := range []string{"kind-", namespaceK3kPrefix, namespaceVClusterPrefix, "admin@"} {
+	for _, prefix := range []string{"kind-", namespaceK3kPrefix, namespaceVClusterPrefix, "admin@", "kwok-"} {
 		contextName := prefix + p.clusterName
 		_ = k8s.CleanupKubeconfig(cleanupPath, contextName, contextName, contextName, io.Discard)
 	}

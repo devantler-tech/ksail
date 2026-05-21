@@ -119,10 +119,16 @@ func (p *Provider) ValidateForDistribution(distribution Distribution) error {
 		return nil
 	}
 
+	supportedNames := make([]string, len(supported))
+	for i, prov := range supported {
+		supportedNames[i] = string(prov)
+	}
+
 	return fmt.Errorf(
-		"%w: distribution %s does not support provider %s",
+		"%w: distribution %s does not support provider %s (supported providers: %s)",
 		ErrInvalidDistributionProviderCombination,
 		distribution,
 		*p,
+		strings.Join(supportedNames, ", "),
 	)
 }

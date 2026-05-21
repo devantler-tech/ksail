@@ -20,3 +20,6 @@ var ExposeViaNodePortForTest = (*Provider).exposeViaNodePort //nolint:gochecknog
 
 // ExposeViaLoadBalancerForTest exposes exposeViaLoadBalancer for unit testing.
 var ExposeViaLoadBalancerForTest = (*Provider).exposeViaLoadBalancer //nolint:gochecknoglobals
+
+// IsLoopbackAddressForTest exposes isLoopbackAddress for unit testing.
+var IsLoopbackAddressForTest = isLoopbackAddress //nolint:gochecknoglobals
