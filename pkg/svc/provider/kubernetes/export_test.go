@@ -20,3 +20,6 @@ var ExposeViaNodePortForTest = (*Provider).exposeViaNodePort //nolint:gochecknog
 
 // ExposeViaLoadBalancerForTest exposes exposeViaLoadBalancer for unit testing.
 var ExposeViaLoadBalancerForTest = (*Provider).exposeViaLoadBalancer //nolint:gochecknoglobals
+
+// PreserveImmutableServiceFieldsForTest exposes preserveImmutableServiceFields for unit testing.
+var PreserveImmutableServiceFieldsForTest = preserveImmutableServiceFields //nolint:gochecknoglobals
