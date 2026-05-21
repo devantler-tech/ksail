@@ -25,6 +25,7 @@ type KubernetesProvisioner struct {
 	restConfig       *rest.Config
 	distribution     string
 	gatewayClassName string
+	hostContext      string
 	apiServerPort    int32
 	kubeconfigPath   string
 	persistence      v1alpha1.KubernetesPersistence
@@ -48,6 +49,9 @@ type KubernetesProvisionerConfig struct {
 	Distribution string
 	// GatewayClassName is the Gateway class for API exposure (empty = no gateway).
 	GatewayClassName string
+	// HostContext is the explicitly-configured host kubeconfig context (empty = resolved from
+	// the kubeconfig's current-context).
+	HostContext string
 	// APIServerPort is the port the nested API server listens on.
 	APIServerPort int32
 	// Persistence holds PVC configuration for the DinD Docker data directory.
@@ -78,6 +82,7 @@ func NewKubernetesProvisioner(cfg KubernetesProvisionerConfig) (*KubernetesProvi
 		restConfig:       cfg.RestConfig,
 		distribution:     cfg.Distribution,
 		gatewayClassName: cfg.GatewayClassName,
+		hostContext:      cfg.HostContext,
 		apiServerPort:    cfg.APIServerPort,
 		kubeconfigPath:   kubeconfigPath,
 		persistence:      cfg.Persistence,
@@ -88,34 +93,21 @@ func NewKubernetesProvisioner(cfg KubernetesProvisionerConfig) (*KubernetesProvi
 // It port-forwards the DinD Docker API, sets DOCKER_HOST, then delegates to the
 // inner Kind provisioner which uses the Kind SDK (Cobra commands that shell out
 // to the docker CLI, inheriting DOCKER_HOST).
-//
-//nolint:funlen // sequential setup steps with many error-checks
 func (p *KubernetesProvisioner) Create(
 	ctx context.Context,
 	name string,
 ) error {
 	target := setName(name, p.kindConfig.Name)
 
-	// Preserve the host kubeconfig's current-context. The Kind SDK switches
-	// current-context to "kind-<name>" when it creates the cluster, which would
-	// cause subsequent Kubernetes provider operations to connect to the nested
-	// cluster instead of the host cluster.
-	originalContext, err := k8s.GetKubeconfigCurrentContext(p.kubeconfigPath)
+	// Preserve the host kubeconfig's current-context (the Kind SDK switches it to "kind-<name>"
+	// on create) when the host is resolved from current-context. With an explicit host context
+	// configured, leave the user pointed at the new nested cluster.
+	restoreContext, err := k8s.PreserveCurrentContextUnlessExplicit(p.kubeconfigPath, p.hostContext)
 	if err != nil {
-		return fmt.Errorf("read current kubeconfig context: %w", err)
+		return fmt.Errorf("preserve host kubeconfig context: %w", err)
 	}
 
-	// Restore the context on any return path (success or failure).
-	defer func() {
-		restoreErr := k8s.SetKubeconfigCurrentContext(p.kubeconfigPath, originalContext)
-		if restoreErr != nil {
-			_, _ = fmt.Fprintf(
-				os.Stderr,
-				"warning: failed to restore kubeconfig context: %v\n",
-				restoreErr,
-			)
-		}
-	}()
+	defer restoreContext()
 
 	// Step 1: Ensure namespace + DinD pod
 	err = p.setupDinD(ctx, target)

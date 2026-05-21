@@ -124,27 +124,15 @@ func (p *KubernetesProvisioner) Create(
 
 	namespace := vclusterNamespacePrefix + clusterName
 
-	// jscpd:ignore-start
-	// Preserve the host kubeconfig's current-context. MergeKubeconfig overwrites
-	// current-context with the nested cluster's context, which would cause subsequent
-	// Kubernetes provider operations (info, delete) to connect to the nested cluster
-	// instead of the host cluster.
-	originalContext, err := k8s.GetKubeconfigCurrentContext(p.kubeconfigPath)
+	// Preserve the host kubeconfig's current-context (which MergeKubeconfig would otherwise
+	// overwrite with the nested cluster) when the host is resolved from current-context. With an
+	// explicit host context configured, leave the user pointed at the new nested cluster.
+	restoreContext, err := k8s.PreserveCurrentContextUnlessExplicit(p.kubeconfigPath, p.hostContext)
 	if err != nil {
-		return fmt.Errorf("read current kubeconfig context: %w", err)
+		return fmt.Errorf("preserve host kubeconfig context: %w", err)
 	}
 
-	defer func() {
-		restoreErr := k8s.SetKubeconfigCurrentContext(p.kubeconfigPath, originalContext)
-		if restoreErr != nil {
-			_, _ = fmt.Fprintf(
-				os.Stderr,
-				"warning: failed to restore kubeconfig context: %v\n",
-				restoreErr,
-			)
-		}
-	}()
-	// jscpd:ignore-end
+	defer restoreContext()
 
 	// Step 1: Pre-create the namespace with KSail labels so it is discoverable
 	// via `ksail cluster list --provider Kubernetes`. Setting CreateNamespace: false

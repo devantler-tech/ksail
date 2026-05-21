@@ -141,26 +141,15 @@ func (p *K3kProvisioner) Create(ctx context.Context, name string) error {
 
 	namespace := k3kNamespacePrefix + clusterName
 
-	// jscpd:ignore-start
-	// Preserve the host kubeconfig's current-context. MergeKubeconfig overwrites
-	// it with the nested cluster's context, so provider operations (info, delete)
-	// would target the nested cluster instead of the host.
-	originalContext, err := k8s.GetKubeconfigCurrentContext(p.kubeconfigPath)
+	// Preserve the host kubeconfig's current-context (which MergeKubeconfig would otherwise
+	// overwrite with the nested cluster) when the host is resolved from current-context. With an
+	// explicit host context configured, leave the user pointed at the new nested cluster.
+	restoreContext, err := k8s.PreserveCurrentContextUnlessExplicit(p.kubeconfigPath, p.hostContext)
 	if err != nil {
-		return fmt.Errorf("read current kubeconfig context: %w", err)
+		return fmt.Errorf("preserve host kubeconfig context: %w", err)
 	}
 
-	defer func() {
-		restoreErr := k8s.SetKubeconfigCurrentContext(p.kubeconfigPath, originalContext)
-		if restoreErr != nil {
-			_, _ = fmt.Fprintf(
-				os.Stderr,
-				"warning: failed to restore kubeconfig context: %v\n",
-				restoreErr,
-			)
-		}
-	}()
-	// jscpd:ignore-end
+	defer restoreContext()
 
 	exposure, err := p.setupCluster(ctx, clusterName, namespace)
 	if err != nil {

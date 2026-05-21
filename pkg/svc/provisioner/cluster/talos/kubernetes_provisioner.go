@@ -35,6 +35,7 @@ type KubernetesProvisioner struct {
 	clusterName      string
 	distribution     string
 	gatewayClassName string
+	hostContext      string
 	kubeconfigPath   string
 	persistence      v1alpha1.KubernetesPersistence
 	portForwards     []*kubernetesprovider.PortForwardSession
@@ -58,6 +59,9 @@ type KubernetesProvisionerConfig struct {
 	Distribution string
 	// GatewayClassName is the Gateway class for API exposure (empty = no gateway).
 	GatewayClassName string
+	// HostContext is the explicitly-configured host kubeconfig context (empty = resolved from
+	// the kubeconfig's current-context).
+	HostContext string
 	// ControlPlanes is the number of control-plane nodes.
 	ControlPlanes int
 	// Workers is the number of worker nodes.
@@ -81,6 +85,7 @@ func NewKubernetesProvisioner(cfg KubernetesProvisionerConfig) (*KubernetesProvi
 		clusterName:      cfg.ClusterName,
 		distribution:     cfg.Distribution,
 		gatewayClassName: cfg.GatewayClassName,
+		hostContext:      cfg.HostContext,
 		kubeconfigPath:   kubeconfigPath,
 		persistence:      cfg.Persistence,
 	}, nil
@@ -101,27 +106,15 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 		clusterName = p.clusterName
 	}
 
-	// jscpd:ignore-start
-	// Preserve the host kubeconfig's current-context. MergeKubeconfig overwrites
-	// current-context with the nested cluster's context, which would cause subsequent
-	// Kubernetes provider operations (info, delete) to connect to the nested cluster
-	// instead of the host cluster.
-	originalContext, err := k8s.GetKubeconfigCurrentContext(p.kubeconfigPath)
+	// Preserve the host kubeconfig's current-context (which MergeKubeconfig would otherwise
+	// overwrite with the nested cluster) when the host is resolved from current-context. With an
+	// explicit host context configured, leave the user pointed at the new nested cluster.
+	restoreContext, err := k8s.PreserveCurrentContextUnlessExplicit(p.kubeconfigPath, p.hostContext)
 	if err != nil {
-		return fmt.Errorf("read current kubeconfig context: %w", err)
+		return fmt.Errorf("preserve host kubeconfig context: %w", err)
 	}
 
-	defer func() {
-		restoreErr := k8s.SetKubeconfigCurrentContext(p.kubeconfigPath, originalContext)
-		if restoreErr != nil {
-			_, _ = fmt.Fprintf(
-				os.Stderr,
-				"warning: failed to restore kubeconfig context: %v\n",
-				restoreErr,
-			)
-		}
-	}()
-	// jscpd:ignore-end
+	defer restoreContext()
 
 	// Step 1: Ensure namespace + DinD pod
 	err = p.setupDinD(ctx, clusterName)
