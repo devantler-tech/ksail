@@ -68,3 +68,46 @@ func TestIsolateRedirectsAndRestoresHome(t *testing.T) {
 		t.Fatalf("cleanup did not remove isolated home %q (stat err: %v)", isolated, removedErr)
 	}
 }
+
+// TestRunFuncIsolatesAndRestoresHome verifies that RunFunc isolates the home
+// directory while the wrapped function runs, propagates its exit code, and
+// restores the environment afterwards.
+//
+//nolint:paralleltest // Mutates the process environment; cannot run in parallel.
+func TestRunFuncIsolatesAndRestoresHome(t *testing.T) {
+	origHome, origHad := os.LookupEnv("HOME")
+
+	var (
+		homeDuringRun string
+		homeErr       error
+	)
+
+	code := homeenv.RunFunc(func() int {
+		homeDuringRun, homeErr = os.UserHomeDir()
+
+		return 7
+	})
+
+	if code != 7 {
+		t.Fatalf(
+			"RunFunc returned %d, want 7 (must propagate the wrapped function's exit code)",
+			code,
+		)
+	}
+
+	if homeErr != nil {
+		t.Fatalf("os.UserHomeDir inside RunFunc: %v", homeErr)
+	}
+
+	if origHad && homeDuringRun == origHome {
+		t.Fatalf("RunFunc did not isolate HOME (still %q) while running", origHome)
+	}
+
+	afterHome, afterHad := os.LookupEnv("HOME")
+	if afterHad != origHad || afterHome != origHome {
+		t.Fatalf(
+			"RunFunc did not restore HOME: got set=%v val=%q, want set=%v val=%q",
+			afterHad, afterHome, origHad, origHome,
+		)
+	}
+}

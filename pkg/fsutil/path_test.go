@@ -96,3 +96,16 @@ func TestExpandHomePathRespectsHOMEEnv(t *testing.T) {
 		)
 	}
 }
+
+// TestExpandHomePathErrorsWhenHomeUnset covers the failure branch taken when
+// the home directory cannot be resolved (os.UserHomeDir returns an error).
+func TestExpandHomePathErrorsWhenHomeUnset(t *testing.T) {
+	// Not parallel: mutates the process environment via t.Setenv.
+	t.Setenv("HOME", "")
+	t.Setenv("USERPROFILE", "") // Windows equivalent consulted by os.UserHomeDir.
+
+	_, err := fsutil.ExpandHomePath("~/anything")
+	if err == nil {
+		t.Fatal("ExpandHomePath(~/...) with no home directory set should return an error")
+	}
+}
