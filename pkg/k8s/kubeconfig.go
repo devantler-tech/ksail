@@ -514,6 +514,18 @@ func GetKubeconfigCurrentContext(kubeconfigPath string) (string, error) {
 		return "", fmt.Errorf("expand kubeconfig path: %w", err)
 	}
 
+	// Ensure the parent directory exists before canonicalizing. EvalCanonicalPath
+	// requires the parent to exist (it resolves parent symlinks as a fallback when the
+	// file itself is absent). Without this, callers in fresh environments where ~/.kube/
+	// has not been created yet would receive an error rather than the documented empty
+	// string for "no current context".
+	if kubeconfigDir := filepath.Dir(kubeconfigPath); kubeconfigDir != "" && kubeconfigDir != "." {
+		mkdirErr := os.MkdirAll(kubeconfigDir, kubeconfigDirMode)
+		if mkdirErr != nil {
+			return "", fmt.Errorf("create kubeconfig directory: %w", mkdirErr)
+		}
+	}
+
 	kubeconfigPath, err = fsutil.EvalCanonicalPath(kubeconfigPath)
 	if err != nil {
 		return "", fmt.Errorf("canonicalize kubeconfig path: %w", err)
@@ -528,14 +540,10 @@ func GetKubeconfigCurrentContext(kubeconfigPath string) (string, error) {
 }
 
 // SetKubeconfigCurrentContext updates the current-context field in the kubeconfig at
-// kubeconfigPath to contextName. It is a no-op when contextName is empty. The context
-// entry does not need to exist in the file (e.g. setting to a context that will be added
-// later is allowed).
+// kubeconfigPath to contextName. When contextName is empty, current-context is cleared
+// (set to ""), restoring the file to having no active context. The context entry does not
+// need to exist in the file (e.g. setting to a context that will be added later is allowed).
 func SetKubeconfigCurrentContext(kubeconfigPath, contextName string) error {
-	if contextName == "" {
-		return nil
-	}
-
 	// jscpd:ignore-start
 	kubeconfigPath, err := fsutil.ExpandHomePath(kubeconfigPath)
 	if err != nil {

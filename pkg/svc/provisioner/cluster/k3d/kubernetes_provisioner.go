@@ -125,8 +125,6 @@ func NewK3kProvisioner(cfg K3kProvisionerConfig) (*K3kProvisioner, error) {
 }
 
 // Create provisions a K3s cluster using the k3k operator on the host Kubernetes cluster.
-//
-//nolint:funlen // sequential setup steps
 func (p *K3kProvisioner) Create(ctx context.Context, name string) error {
 	clusterName := p.clusterName
 	if clusterName == "" {
@@ -135,71 +133,35 @@ func (p *K3kProvisioner) Create(ctx context.Context, name string) error {
 
 	namespace := k3kNamespacePrefix + clusterName
 
-	// Step 1: Ensure the k3k operator is installed
-	_, _ = fmt.Fprintln(os.Stdout, "► ensuring k3k operator is installed")
-
-	err := p.ensureK3kOperator(ctx)
+	// jscpd:ignore-start
+	// Preserve the host kubeconfig's current-context. MergeKubeconfig overwrites
+	// it with the nested cluster's context, so provider operations (info, delete)
+	// would target the nested cluster instead of the host.
+	originalContext, err := k8s.GetKubeconfigCurrentContext(p.kubeconfigPath)
 	if err != nil {
-		return fmt.Errorf("ensure k3k operator: %w", err)
+		return fmt.Errorf("read current kubeconfig context: %w", err)
 	}
 
-	// Step 2: Create the namespace for this cluster
-	_, _ = fmt.Fprintf(os.Stdout, "► creating namespace %s\n", namespace)
-
-	err = p.ensureNamespace(ctx, namespace)
-	if err != nil {
-		return fmt.Errorf("ensure namespace: %w", err)
-	}
-
-	// Step 3: Create the k3k Cluster CR
-	_, _ = fmt.Fprintf(os.Stdout, "► creating k3k Cluster CR for %s\n", clusterName)
-
-	err = p.createClusterCR(ctx, clusterName, namespace)
-	if err != nil {
-		return fmt.Errorf("create k3k cluster CR: %w", err)
-	}
-
-	// Step 4: Wait for the cluster to become ready
-	_, _ = fmt.Fprintln(os.Stdout, "► waiting for k3k cluster to become ready")
-
-	err = p.waitForClusterReady(ctx, clusterName, namespace)
-	if err != nil {
-		return fmt.Errorf("wait for k3k cluster ready: %w", err)
-	}
-
-	// Step 5: Wait for the kubeconfig Secret to appear
-	_, _ = fmt.Fprintln(os.Stdout, "► waiting for kubeconfig secret")
-
-	kubeconfigData, err := p.waitForKubeconfigSecret(ctx, clusterName, namespace)
-	if err != nil {
-		return fmt.Errorf("get kubeconfig secret: %w", err)
-	}
-
-	// Step 6: Port-forward the API server to localhost
-	_, _ = fmt.Fprintln(os.Stdout, "► port-forwarding nested K3s API server to localhost")
-
-	serverPodName := fmt.Sprintf("k3k-%s-server-0", clusterName)
-
-	apiPortForward, err := p.k8sProvider.StartPortForwardInNamespace(
-		ctx, p.restConfig, namespace, serverPodName, k3kAPIServerPort,
-	)
-	if err != nil {
-		return fmt.Errorf("port-forward K3s API server: %w", err)
-	}
-
-	p.portForward = apiPortForward
-
-	// Step 7: Rewrite kubeconfig to use localhost port-forward address
-	kubeconfigStr := string(kubeconfigData)
-	// k3k kubeconfig uses the ClusterIP service address — replace with localhost
-	kubeconfigStr = rewriteK3kKubeconfig(kubeconfigStr, apiPortForward.LocalPort, clusterName)
-
-	// Step 8: Merge kubeconfig into the host kubeconfig file
-	if p.kubeconfigPath != "" {
-		err := k8s.MergeKubeconfig(p.kubeconfigPath, []byte(kubeconfigStr))
-		if err != nil {
-			return fmt.Errorf("merge kubeconfig: %w", err)
+	defer func() {
+		restoreErr := k8s.SetKubeconfigCurrentContext(p.kubeconfigPath, originalContext)
+		if restoreErr != nil {
+			_, _ = fmt.Fprintf(
+				os.Stderr,
+				"warning: failed to restore kubeconfig context: %v\n",
+				restoreErr,
+			)
 		}
+	}()
+	// jscpd:ignore-end
+
+	err = p.setupCluster(ctx, clusterName, namespace)
+	if err != nil {
+		return err
+	}
+
+	err = p.connectAndMergeKubeconfig(ctx, clusterName, namespace)
+	if err != nil {
+		return err
 	}
 
 	_, _ = fmt.Fprintf(
@@ -303,6 +265,89 @@ func (p *K3kProvisioner) List(ctx context.Context) ([]string, error) {
 	}
 
 	return names, nil
+}
+
+// connectAndMergeKubeconfig waits for the k3k kubeconfig Secret, starts a port-forward to
+// the nested API server, rewrites the kubeconfig to point at localhost, and merges it into
+// the host kubeconfig file.
+func (p *K3kProvisioner) connectAndMergeKubeconfig(
+	ctx context.Context,
+	clusterName, namespace string,
+) error {
+	// Step 5: Wait for the kubeconfig Secret to appear
+	_, _ = fmt.Fprintln(os.Stdout, "► waiting for kubeconfig secret")
+
+	kubeconfigData, err := p.waitForKubeconfigSecret(ctx, clusterName, namespace)
+	if err != nil {
+		return fmt.Errorf("get kubeconfig secret: %w", err)
+	}
+
+	// Step 6: Port-forward the API server to localhost
+	_, _ = fmt.Fprintln(os.Stdout, "► port-forwarding nested K3s API server to localhost")
+
+	serverPodName := fmt.Sprintf("k3k-%s-server-0", clusterName)
+
+	apiPortForward, err := p.k8sProvider.StartPortForwardInNamespace(
+		ctx, p.restConfig, namespace, serverPodName, k3kAPIServerPort,
+	)
+	if err != nil {
+		return fmt.Errorf("port-forward K3s API server: %w", err)
+	}
+
+	// Step 7: Rewrite kubeconfig to use localhost port-forward address
+	kubeconfigStr := string(kubeconfigData)
+	// k3k kubeconfig uses the ClusterIP service address — replace with localhost
+	kubeconfigStr = rewriteK3kKubeconfig(kubeconfigStr, apiPortForward.LocalPort, clusterName)
+
+	// Step 8: Merge kubeconfig into the host kubeconfig file
+	if p.kubeconfigPath != "" {
+		mergeErr := k8s.MergeKubeconfig(p.kubeconfigPath, []byte(kubeconfigStr))
+		if mergeErr != nil {
+			apiPortForward.Close()
+
+			return fmt.Errorf("merge kubeconfig: %w", mergeErr)
+		}
+	}
+
+	// Only store the port-forward session once all steps succeed so that a
+	// failure in any step above does not leave an unclosed session.
+	p.portForward = apiPortForward
+
+	return nil
+}
+
+// setupCluster installs the k3k operator and creates the cluster namespace,
+// Cluster CR, and waits for the cluster to become ready.
+func (p *K3kProvisioner) setupCluster(ctx context.Context, clusterName, namespace string) error {
+	_, _ = fmt.Fprintln(os.Stdout, "► ensuring k3k operator is installed")
+
+	err := p.ensureK3kOperator(ctx)
+	if err != nil {
+		return fmt.Errorf("ensure k3k operator: %w", err)
+	}
+
+	_, _ = fmt.Fprintf(os.Stdout, "► creating namespace %s\n", namespace)
+
+	err = p.ensureNamespace(ctx, namespace)
+	if err != nil {
+		return fmt.Errorf("ensure namespace: %w", err)
+	}
+
+	_, _ = fmt.Fprintf(os.Stdout, "► creating k3k Cluster CR for %s\n", clusterName)
+
+	err = p.createClusterCR(ctx, clusterName, namespace)
+	if err != nil {
+		return fmt.Errorf("create k3k cluster CR: %w", err)
+	}
+
+	_, _ = fmt.Fprintln(os.Stdout, "► waiting for k3k cluster to become ready")
+
+	err = p.waitForClusterReady(ctx, clusterName, namespace)
+	if err != nil {
+		return fmt.Errorf("wait for k3k cluster ready: %w", err)
+	}
+
+	return nil
 }
 
 // ensureK3kOperator installs the k3k Helm chart if it isn't already present.
