@@ -182,20 +182,24 @@ func (k *Provisioner) SetComponentDetector(d *detector.ComponentDetector) {
 // fmt.Println (not Cobra's cmd.OutOrStdout()), so the output is captured by
 // temporarily redirecting os.Stdout.
 func (k *Provisioner) defaultListClustersRaw(ctx context.Context) (string, error) {
+	// Lock first so that the logrus save/restore and the os.Stdout save/restore
+	// are both protected by the same critical section. Without this ordering a
+	// second concurrent caller could read originalLogOutput as io.Discard (the
+	// value set by the first caller) and later restore to io.Discard, leaving
+	// the global logrus logger permanently muted.
+	listMutex.Lock()
+
 	// Temporarily redirect logrus to discard output during list
-	// to prevent log messages from appearing in console
+	// to prevent log messages from appearing in console.
 	originalLogOutput := logrus.StandardLogger().Out
 
 	logrus.SetOutput(io.Discard)
-	defer logrus.SetOutput(originalLogOutput)
-
-	// Lock to prevent concurrent modifications of os.Stdout
-	listMutex.Lock()
 
 	originalStdout := os.Stdout
 
 	pipeReader, pipeWriter, err := os.Pipe()
 	if err != nil {
+		logrus.SetOutput(originalLogOutput)
 		listMutex.Unlock()
 
 		return "", fmt.Errorf("cluster list: create stdout pipe: %w", err)
@@ -221,10 +225,10 @@ func (k *Provisioner) defaultListClustersRaw(ctx context.Context) (string, error
 	_, copyErr := io.Copy(&outputBuf, pipeReader)
 	_ = pipeReader.Close()
 
-	// Restore stdout while still holding the lock
+	// Restore stdout and logrus, then release the lock.
 	os.Stdout = originalStdout
+	logrus.SetOutput(originalLogOutput)
 
-	// Unlock mutex after restoring stdout
 	listMutex.Unlock()
 
 	// Wait for command to complete and get any error

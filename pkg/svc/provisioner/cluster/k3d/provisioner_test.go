@@ -143,12 +143,12 @@ func TestProvisioner_NewProvisioner(t *testing.T) {
 
 // TestProvisioner_Create verifies the create command is dispatched with the
 // expected flags and that runner errors are wrapped.
+//
+//nolint:paralleltest // subtests call runLifecycleCommand which constructs k3d's NewCmdClusterCreate; that builder mutates package-level Viper state and is not safe to call concurrently
 func TestProvisioner_Create(t *testing.T) {
 	t.Parallel()
 
 	t.Run("runs create with config flag", func(t *testing.T) {
-		t.Parallel()
-
 		var capturedArgs []string
 
 		mockRunner := runner.NewMockCommandRunner(t)
@@ -176,8 +176,6 @@ func TestProvisioner_Create(t *testing.T) {
 	})
 
 	t.Run("wraps runner error", func(t *testing.T) {
-		t.Parallel()
-
 		mockRunner := runner.NewMockCommandRunner(t)
 		mockRunner.EXPECT().
 			Run(mock.Anything, mock.Anything, mock.Anything).
