@@ -1,13 +1,14 @@
 # Repo Assist Memory
 
 ## Last Run
-2026-05-21 01:18 UTC — Run #26199577223
+2026-05-21 13:27 UTC — Run #26228793180
 
 ## Monthly Activity Issue
 - May 2026: #4501 (open)
 
 ## Open Repo Assist PRs
-- refactor(talos)+perf(gen_docs): extract patch subdir constants + hoist gen_docs regexps
+- #4816: refactor(talos)+perf(gen_docs): extract patch subdir constants + hoist gen_docs regexps
+- test(kubernetes-provider): add unit tests for preserveImmutableServiceFields
 
 ## Issue Comments Made (with run)
 - #4328 (EKS provider status): 2026-05-20
@@ -23,7 +24,7 @@
 - #4768 (k8s provider docs): 2026-05-17
 
 ## Issues Created (last 4 weeks)
-- #4627: [Parent] Cloud Provider Expansion (groups #3983, #4328, #4510) — all 3 linked
+- #4627: [Parent] Cloud Provider Expansion (groups #3983, #4328, #4510)
 - #4610: [ci] fix K3s+Cilium timing race — blocked (issue #4681)
 - #4602: [feature] OIDC federation
 - #4521: [feature] local-remote mirroring
@@ -31,7 +32,7 @@
 - #4510: [chore] GKE/AKS providers (sub-issue of #4627)
 - #4474: cluster diff command
 - #4473: vCluster v0.34 compat (merged #4734)
-- #4465: cluster switch fuzzy search (partially addressed by #4795, merged)
+- #4465: cluster switch fuzzy search (partially addressed, merged)
 - #4423: workload watch hooks
 - #4422: cluster diagnose health scoring
 - #4375: cluster graph topology
@@ -47,26 +48,13 @@
 - Next for Task 5: performance
 
 ## Backlog Cursor
-- Issues processed through #4804 (as of 2026-05-20)
+- Issues processed through #4821 (as of 2026-05-21)
 - Roadmap from discussion #4776 (May 18, 2026): all items tracked
-
-## Labels Applied (recent)
-- #4743, #4432, #4371 → `agentic-workflows`, `automation` (May 19)
-- #4501 → `automation`, `repo-assist` (May 12)
 
 ## Notes
 - link_sub_issue is NOT idempotent — always verify sub-issue not already linked before calling
-- Weekly strategy #4776 (May 18, 2026) is the current roadmap reference
-- Issue #4675 CLOSED (completed) — Talos disk encryption implemented in #4676
-- Issue #4316 CLOSED (completed) — ArgoCD v3.4 done
-- Issue #4473 CLOSED — vCluster v0.34 done (merged #4734)
-- Issue #4681: CI workload-timeout (blocked by workflows permission, needs manual PR creation)
-- PR #4769 (fix kubeconfig context): human PR by devantler, open for review
+- PR #4815 (kubernetes-provider exposure): MERGED
+- PR #4816 (refactor+perf): CI passing, needs review
+- Dependabot PRs #4793, #4801 still open (bundle attempt previously was PR #4804, now 404 - likely merged)
+- EKS provider is largely implemented; missing: CI system test + docs removal (#4328)
 - Duplicate patterns in v1alpha1 enum types are intentional (nolint:dupl) — do NOT refactor Set() methods
-- EKS provider is largely implemented; missing: CI system test + docs 🚧 removal (#4328)
-- Dependabot PRs #4793 (k3k 1.1.0) and #4801 (talos 1.13.2) bundled into one Repo Assist PR (#4804)
-- moby/go-archive replace directive needed: k3k 1.1.0 transitively requires v0.2.0 which breaks docker/docker@v28.5.2
-- k8s.io/kubernetes 1.35.4→1.36.0 required alongside talos 1.13.2 due to cri-api/cri-client version alignment
-- PR #4795 (picker/ParseTags): MERGED ✅
-- PR #4781 (test/image): MERGED ✅
-- PR #4794 (docs/mcp): MERGED ✅

@@ -1,6 +1,6 @@
 {
-  "last_run": "2026-05-21T01:18:39Z",
-  "workflow_run_id": "26199577223",
+  "last_run": "2026-05-21T13:27:14Z",
+  "workflow_run_id": "26228793180",
   "commented_issues": {
     "4675": "2026-05-10",
     "4646": "2026-05-08",
@@ -43,10 +43,11 @@
     "4328": "2026-05-20"
   },
   "open_prs": {
-    "repo-assist/improve-patch-subdir-constants": "refactor(talos): extract patch subdir name constants; perf(gen_docs): hoist inline regexps to package level"
+    "repo-assist/improve-patch-subdir-constants-df29a6f070c9e8ff": "refactor(talos): extract patch subdir name constants; perf(gen_docs): hoist inline regexps to package level",
+    "repo-assist/test-preserve-immutable-service-fields": "test(kubernetes-provider): add unit tests for preserveImmutableServiceFields"
   },
   "last_code_quality_domain": "refactor",
-  "issue_backlog_cursor": "4804",
+  "issue_backlog_cursor": "4821",
   "sub_issue_links": {
     "cloud_provider_parent_4627": ["3983", "4328", "4510"]
   },
@@ -76,11 +77,10 @@
     "link_sub_issue is NOT idempotent - always verify sub-issue not already linked before calling",
     "Monthly activity issue: #4501 (automation + repo-assist labelled)",
     "domain alternation: last was refactor - next should be performance",
-    "Human PR #4769 open: fix restore host kubeconfig context after kubernetes provider create",
-    "Run 2026-05-21 01:18: Task 5 (refactor patch subdir constants + gen_docs regexps), Task 2 (no new issues), Task 8 (bundled into Task 5 PR), Task 13 (updated #4501)",
-    "PR #4795 (picker/ParseTags): MERGED",
-    "PR #4781 (test/image): MERGED",
-    "PR #4794 (docs/mcp): MERGED",
-    "Bundled Dependabot PR #4804: k3k 1.1.0, talos 1.13.2, k8s 1.36.0 - open for review"
+    "PR #4816 (refactor+perf patch subdir): open, CI passing, needs review",
+    "PR #4769 open (fix kubeconfig context): merged into #4815",
+    "PR #4815 (kubernetes-provider exposure): MERGED",
+    "Dependabot PRs #4793, #4801 still open for bundling",
+    "Run 2026-05-21 13:27: Task 9 (tests for preserveImmutableServiceFields), Task 6 (PR #4816 CI passing, no action), Task 3 (no bugs), Task 13 (updated #4501)"
   ]
 }
