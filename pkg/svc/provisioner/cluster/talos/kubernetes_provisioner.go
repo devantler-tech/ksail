@@ -34,6 +34,7 @@ type KubernetesProvisioner struct {
 	clusterName      string
 	distribution     string
 	gatewayClassName string
+	hostContext      string
 	kubeconfigPath   string
 	persistence      v1alpha1.KubernetesPersistence
 	portForwards     []*kubernetesprovider.PortForwardSession
@@ -57,6 +58,9 @@ type KubernetesProvisionerConfig struct {
 	Distribution string
 	// GatewayClassName is the Gateway class for API exposure (empty = no gateway).
 	GatewayClassName string
+	// HostContext is the explicitly-configured host kubeconfig context (empty = resolved from
+	// the kubeconfig's current-context).
+	HostContext string
 	// ControlPlanes is the number of control-plane nodes.
 	ControlPlanes int
 	// Workers is the number of worker nodes.
@@ -80,6 +84,7 @@ func NewKubernetesProvisioner(cfg KubernetesProvisionerConfig) (*KubernetesProvi
 		clusterName:      cfg.ClusterName,
 		distribution:     cfg.Distribution,
 		gatewayClassName: cfg.GatewayClassName,
+		hostContext:      cfg.HostContext,
 		kubeconfigPath:   kubeconfigPath,
 		persistence:      cfg.Persistence,
 	}, nil
@@ -100,30 +105,25 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 		clusterName = p.clusterName
 	}
 
-	// jscpd:ignore-start
-	// Preserve the host kubeconfig's current-context. MergeKubeconfig overwrites
-	// current-context with the nested cluster's context, which would cause subsequent
-	// Kubernetes provider operations (info, delete) to connect to the nested cluster
-	// instead of the host cluster.
-	originalContext, err := k8s.GetKubeconfigCurrentContext(p.kubeconfigPath)
+	// Preserve the host kubeconfig's current-context (which MergeKubeconfig would otherwise
+	// overwrite with the nested cluster) when the host is resolved from current-context. With an
+	// explicit host context configured, leave the user pointed at the new nested cluster.
+	restoreContext, err := k8s.PreserveCurrentContextUnlessExplicit(p.kubeconfigPath, p.hostContext)
 	if err != nil {
-		return fmt.Errorf("read current kubeconfig context: %w", err)
+		return fmt.Errorf("preserve host kubeconfig context: %w", err)
 	}
 
-	defer func() {
-		restoreErr := k8s.SetKubeconfigCurrentContext(p.kubeconfigPath, originalContext)
-		if restoreErr != nil {
-			_, _ = fmt.Fprintf(
-				os.Stderr,
-				"warning: failed to restore kubeconfig context: %v\n",
-				restoreErr,
-			)
-		}
-	}()
-	// jscpd:ignore-end
+	defer restoreContext()
 
 	// Step 1: Ensure namespace + DinD pod
 	err = p.setupDinD(ctx, clusterName)
+	if err != nil {
+		return err
+	}
+
+	// Step 1b: Resolve a stable, server-side exposure and bake its address into the API server
+	// cert SANs (the Service target port is corrected once the DinD-mapped K8s port is known).
+	exposure, err := p.prepareExposure(ctx, clusterName)
 	if err != nil {
 		return err
 	}
@@ -207,26 +207,10 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 
 	// === Phase 2: Port-forward Talos API + K8s API from DinD, then bootstrap ===
 
-	// Discover mapped Talos API port inside DinD (e.g., 127.0.0.1:32001)
-	talosEndpoint, err := p.inner.getMappedTalosAPIEndpoint(ctx, clusterName)
+	// Discover the host ports the Talos API and K8s API are mapped to inside DinD.
+	talosPort, k8sPort, err := p.discoverMappedPorts(ctx, clusterName)
 	if err != nil {
-		return fmt.Errorf("get Talos API endpoint: %w", err)
-	}
-
-	talosPort, err := parsePort(talosEndpoint)
-	if err != nil {
-		return fmt.Errorf("parse Talos API port: %w", err)
-	}
-
-	// Discover mapped K8s API port inside DinD
-	k8sEndpoint, err := p.inner.getMappedK8sAPIEndpoint(ctx, clusterName)
-	if err != nil {
-		return fmt.Errorf("get K8s API endpoint: %w", err)
-	}
-
-	k8sPort, err := parsePort(k8sEndpoint)
-	if err != nil {
-		return fmt.Errorf("parse K8s API port: %w", err)
+		return err
 	}
 
 	// Port-forward Talos API from DinD to host
@@ -254,13 +238,8 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 	hostTalosEndpoint := net.JoinHostPort("127.0.0.1", strconv.Itoa(talosPF.LocalPort))
 	hostK8sEndpoint := fmt.Sprintf("https://127.0.0.1:%d", k8sPF.LocalPort)
 
-	_, _ = fmt.Fprintf(
-		os.Stdout,
-		"► Talos API: %s → localhost:%d\n",
-		talosEndpoint,
-		talosPF.LocalPort,
-	)
-	_, _ = fmt.Fprintf(os.Stdout, "► K8s API: %s → localhost:%d\n", k8sEndpoint, k8sPF.LocalPort)
+	_, _ = fmt.Fprintf(os.Stdout, "► Talos API → localhost:%d\n", talosPF.LocalPort)
+	_, _ = fmt.Fprintf(os.Stdout, "► K8s API → localhost:%d\n", k8sPF.LocalPort)
 
 	// Save talosconfig with host-accessible endpoint
 	talosConfig := configBundle.TalosConfig()
@@ -288,25 +267,23 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 		return fmt.Errorf("bootstrap: %w", err)
 	}
 
-	// Fetch and save kubeconfig with host-accessible K8s API endpoint
+	// Fetch and save kubeconfig (server set to the loopback endpoint used for bootstrap).
 	err = p.inner.fetchAndSaveKubeconfig(ctx, clusterAccess)
 	if err != nil {
 		return fmt.Errorf("save kubeconfig: %w", err)
 	}
 
-	// Expose the nested API server via Gateway API (if configured)
-	err = p.k8sProvider.EnsureAPIExposure(
-		ctx,
-		p.dynamicClient,
-		clusterName,
-		//nolint:gosec // port value is bounded within TCP port range (1-65535)
-		int32(
-			k8sPort,
-		),
-		p.gatewayClassName,
-	)
+	// Point the exposure Service at the DinD-mapped K8s API port (only known now).
+	//nolint:gosec // port value is bounded within TCP port range (1-65535)
+	err = p.k8sProvider.UpdateAPIServiceTargetPort(ctx, clusterName, int32(k8sPort))
 	if err != nil {
-		return fmt.Errorf("expose API: %w", err)
+		return fmt.Errorf("update API exposure target port: %w", err)
+	}
+
+	// Repoint the persisted kubeconfig at the stable exposure address (survives the CLI exit).
+	err = k8s.ModifyKubeconfigCluster(p.kubeconfigPath, clusterName, exposure.ServerURL())
+	if err != nil {
+		return fmt.Errorf("repoint kubeconfig at exposure address: %w", err)
 	}
 
 	return nil
@@ -395,6 +372,69 @@ func (p *KubernetesProvisioner) Start(_ context.Context, _ string) error {
 // Stop is not supported for Talos-on-Kubernetes.
 func (p *KubernetesProvisioner) Stop(_ context.Context, _ string) error {
 	return ErrStopNotSupported
+}
+
+// prepareExposure resolves a stable, server-side exposure for the nested Kubernetes API server and
+// regenerates the Talos config so the API server certificate is valid for that address (preserving
+// the existing PKI). The Service target port is corrected later, once the DinD-mapped K8s port is
+// known.
+func (p *KubernetesProvisioner) prepareExposure(
+	ctx context.Context,
+	clusterName string,
+) (*kubernetesprovider.ExposureResult, error) {
+	exposure, err := p.k8sProvider.ResolveExposure(
+		ctx, p.dynamicClient,
+		kubernetesprovider.APIExposureSpec{
+			ClusterName:      clusterName,
+			APIPort:          kubernetesprovider.DinDAPIServerPort,
+			GatewayClassName: p.gatewayClassName,
+			HostAddress:      p.restConfig.Host,
+			SkipLoadBalancer: true,
+		},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("expose API server: %w", err)
+	}
+
+	newConfigs, err := p.inner.talosConfigs.WithCertSANs(
+		[]string{"127.0.0.1", "localhost", exposure.Address},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("add exposure address to cert SANs: %w", err)
+	}
+
+	p.inner.talosConfigs = newConfigs
+
+	return exposure, nil
+}
+
+// discoverMappedPorts returns the host ports the Talos API and Kubernetes API are published on
+// inside the DinD container, in that order (talosPort, k8sPort).
+func (p *KubernetesProvisioner) discoverMappedPorts(
+	ctx context.Context,
+	clusterName string,
+) (int, int, error) {
+	talosEndpoint, err := p.inner.getMappedTalosAPIEndpoint(ctx, clusterName)
+	if err != nil {
+		return 0, 0, fmt.Errorf("get Talos API endpoint: %w", err)
+	}
+
+	talosPort, err := parsePort(talosEndpoint)
+	if err != nil {
+		return 0, 0, fmt.Errorf("parse Talos API port: %w", err)
+	}
+
+	k8sEndpoint, err := p.inner.getMappedK8sAPIEndpoint(ctx, clusterName)
+	if err != nil {
+		return 0, 0, fmt.Errorf("get K8s API endpoint: %w", err)
+	}
+
+	k8sPort, err := parsePort(k8sEndpoint)
+	if err != nil {
+		return 0, 0, fmt.Errorf("parse K8s API port: %w", err)
+	}
+
+	return talosPort, k8sPort, nil
 }
 
 // setupDinD creates the namespace and DinD pod, then waits for readiness.

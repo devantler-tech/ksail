@@ -576,6 +576,40 @@ func SetKubeconfigCurrentContext(kubeconfigPath, contextName string) error {
 	return nil
 }
 
+// PreserveCurrentContextUnlessExplicit captures the kubeconfig's current-context and returns a
+// function that restores it — UNLESS an explicit host context is configured (hostContext != ""),
+// in which case it returns a no-op.
+//
+// Nested-cluster provisioners merge the nested kubeconfig during create, which overwrites
+// current-context with the nested cluster. When the host cluster is resolved from current-context
+// (no explicit context configured), restoring it keeps subsequent KSail provider operations
+// (info, delete) pointed at the host. When an explicit host context is set, KSail no longer relies
+// on current-context, so the user is left pointed at the freshly-created nested cluster (matching
+// the convention of kind/k3d).
+func PreserveCurrentContextUnlessExplicit(
+	kubeconfigPath, hostContext string,
+) (func(), error) {
+	if hostContext != "" {
+		return func() {}, nil
+	}
+
+	originalContext, err := GetKubeconfigCurrentContext(kubeconfigPath)
+	if err != nil {
+		return nil, err
+	}
+
+	return func() {
+		restoreErr := SetKubeconfigCurrentContext(kubeconfigPath, originalContext)
+		if restoreErr != nil {
+			_, _ = fmt.Fprintf(
+				os.Stderr,
+				"warning: failed to restore kubeconfig context: %v\n",
+				restoreErr,
+			)
+		}
+	}, nil
+}
+
 // CleanupOIDCKubeconfigEntries removes the OIDC user and context entries for a cluster.
 // The displayName is the user-friendly cluster name (e.g. "local") used in OIDC naming.
 func CleanupOIDCKubeconfigEntries(kubeconfigPath, displayName string, logWriter io.Writer) error {
