@@ -17,7 +17,7 @@ description: KSail builds upon established Kubernetes technologies and patterns.
 
 ## Distributions
 
-Kubernetes distributions package core components with additional tooling for specific use cases. KSail supports five distributions: Vanilla, K3s, Talos, VCluster, and KWOK. All can run on Docker; Talos can also run on Hetzner Cloud and Sidero Omni.
+Kubernetes distributions package core components with additional tooling for specific use cases. KSail supports six distributions: Vanilla, K3s, Talos, VCluster, KWOK, and EKS. All local distributions run on Docker; Talos can also run on Hetzner Cloud and Sidero Omni; EKS runs on AWS.
 
 ### Vanilla (Kind)
 
@@ -39,6 +39,10 @@ Vanilla uses [Kind](https://kind.sigs.k8s.io/) to run standard upstream Kubernet
 
 [KWOK](https://kwok.sigs.k8s.io/) (Kubernetes WithOut Kubelet) creates simulated Kubernetes clusters where nodes and pods exist at the API level without running real containers. KSail uses kwokctl's Docker runtime to run etcd, kube-apiserver, and the kwok-controller as Docker containers. Ideal for control-plane testing, CI/CD speed optimization, and scale testing. See [documentation](https://kwok.sigs.k8s.io/docs/), [user guide](https://kwok.sigs.k8s.io/docs/user/), and [GitHub](https://github.com/kubernetes-sigs/kwok).
 
+### EKS (eksctl)
+
+[Amazon EKS](https://aws.amazon.com/eks/) is AWS's managed Kubernetes service. KSail uses [eksctl](https://eksctl.io/) to scaffold a declarative `eks.yaml` (`ClusterConfig`). `ksail cluster init` is available; full cluster creation support is planned. Requires AWS credentials and an account with EKS permissions. See [EKS Distribution](/distributions/eks/) and [AWS Provider](/providers/aws/).
+
 ## Providers
 
 Providers are infrastructure backends that run cluster nodes. KSail abstracts provider-specific operations for consistent workflows.
@@ -46,6 +50,10 @@ Providers are infrastructure backends that run cluster nodes. KSail abstracts pr
 ### Docker
 
 Runs Kubernetes nodes as Docker containers locally. Default provider for all distributions, requires only Docker. **Supported distributions:** Vanilla, K3s, Talos, VCluster, KWOK. See [Docker Provider](/providers/docker/), [Docker docs](https://docs.docker.com/), and [Docker Desktop](https://www.docker.com/products/docker-desktop/).
+
+### Kubernetes
+
+Runs nested cluster nodes as pods inside an existing host Kubernetes cluster. The nested API server is exposed through a stable, server-side endpoint (Gateway API, LoadBalancer, or NodePort) so `kubectl` keeps working after `ksail` exits — no port-forward required. **Supported distributions:** Vanilla, K3s, Talos, VCluster, KWOK. **Requirements:** a host Kubernetes cluster that allows privileged pods and a routable exposure address. See [Kubernetes Provider](/providers/kubernetes/).
 
 ### Hetzner
 
