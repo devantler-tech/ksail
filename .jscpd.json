@@ -27,6 +27,7 @@
     "**/mocks.go",
     "**/*mocks*.go",
     "**/*_test.go",
+    "**/zz_generated*.go",
     "**/patches/**"
   ],
   "reporters": ["html", "markdown"],

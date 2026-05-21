@@ -33,7 +33,7 @@ type Cluster struct {
 	metav1.ObjectMeta `json:"metadata,omitempty" mapstructure:"metadata,omitempty"`
 
 	Spec   Spec          `json:"spec,omitzero"    mapstructure:"spec,omitempty"`
-	Status ClusterStatus `json:"status,omitempty" mapstructure:"-"           jsonschema:"-"`
+	Status ClusterStatus `json:"status,omitempty" mapstructure:"-"`
 }
 
 // ClusterList contains a list of Cluster resources. It is required by controller-runtime
