@@ -18,7 +18,10 @@ import (
 func newTestProvider(t *testing.T, objects ...runtime.Object) *kubeprovider.Provider {
 	t.Helper()
 
-	prov, err := kubeprovider.NewProvider(fake.NewClientset(objects...), v1alpha1.OptionsKubernetes{})
+	prov, err := kubeprovider.NewProvider(
+		fake.NewClientset(objects...),
+		v1alpha1.OptionsKubernetes{},
+	)
 	require.NoError(t, err)
 
 	return prov
@@ -27,7 +30,11 @@ func newTestProvider(t *testing.T, objects ...runtime.Object) *kubeprovider.Prov
 func TestExposureResultServerURL(t *testing.T) {
 	t.Parallel()
 
-	result := &kubeprovider.ExposureResult{Address: "1.2.3.4", Port: 6443, Kind: kubeprovider.ExposureNodePort}
+	result := &kubeprovider.ExposureResult{
+		Address: "1.2.3.4",
+		Port:    6443,
+		Kind:    kubeprovider.ExposureNodePort,
+	}
 	assert.Equal(t, "https://1.2.3.4:6443", result.ServerURL())
 }
 
@@ -55,25 +62,30 @@ func TestHostnameOnly(t *testing.T) {
 	}
 }
 
-func nodeWithAddresses(name string, addrs ...corev1.NodeAddress) *corev1.Node {
+func nodeWithAddresses(addrs ...corev1.NodeAddress) *corev1.Node {
 	return &corev1.Node{
-		ObjectMeta: metav1.ObjectMeta{Name: name},
+		ObjectMeta: metav1.ObjectMeta{Name: "n1"},
 		Status:     corev1.NodeStatus{Addresses: addrs},
 	}
 }
 
+//nolint:funlen // table of independent NodePort address-resolution scenarios
 func TestPickNodeAddress(t *testing.T) {
 	t.Parallel()
 
 	t.Run("prefers_external_ip", func(t *testing.T) {
 		t.Parallel()
 
-		prov := newTestProvider(t, nodeWithAddresses("n1",
+		prov := newTestProvider(t, nodeWithAddresses(
 			corev1.NodeAddress{Type: corev1.NodeInternalIP, Address: "10.0.0.1"},
 			corev1.NodeAddress{Type: corev1.NodeExternalIP, Address: "5.6.7.8"},
 		))
 
-		addr, err := kubeprovider.PickNodeAddressForTest(prov, context.Background(), "https://10.0.0.99:6443")
+		addr, err := kubeprovider.PickNodeAddressForTest(
+			prov,
+			context.Background(),
+			"https://10.0.0.99:6443",
+		)
 		require.NoError(t, err)
 		assert.Equal(t, "5.6.7.8", addr)
 	})
@@ -81,11 +93,15 @@ func TestPickNodeAddress(t *testing.T) {
 	t.Run("falls_back_to_host_address", func(t *testing.T) {
 		t.Parallel()
 
-		prov := newTestProvider(t, nodeWithAddresses("n1",
+		prov := newTestProvider(t, nodeWithAddresses(
 			corev1.NodeAddress{Type: corev1.NodeInternalIP, Address: "10.0.0.1"},
 		))
 
-		addr, err := kubeprovider.PickNodeAddressForTest(prov, context.Background(), "https://127.0.0.1:6443")
+		addr, err := kubeprovider.PickNodeAddressForTest(
+			prov,
+			context.Background(),
+			"https://127.0.0.1:6443",
+		)
 		require.NoError(t, err)
 		assert.Equal(t, "127.0.0.1", addr)
 	})
@@ -93,7 +109,7 @@ func TestPickNodeAddress(t *testing.T) {
 	t.Run("falls_back_to_internal_ip", func(t *testing.T) {
 		t.Parallel()
 
-		prov := newTestProvider(t, nodeWithAddresses("n1",
+		prov := newTestProvider(t, nodeWithAddresses(
 			corev1.NodeAddress{Type: corev1.NodeInternalIP, Address: "10.0.0.1"},
 		))
 
@@ -105,14 +121,18 @@ func TestPickNodeAddress(t *testing.T) {
 	t.Run("skips_wildcard_host_address_falls_back_to_internal_ip", func(t *testing.T) {
 		t.Parallel()
 
-		prov := newTestProvider(t, nodeWithAddresses("n1",
+		prov := newTestProvider(t, nodeWithAddresses(
 			corev1.NodeAddress{Type: corev1.NodeInternalIP, Address: "10.0.0.1"},
 		))
 
 		// 0.0.0.0 is a valid bind address for the host cluster's API server but is not
 		// routable from clients of the nested cluster. pickNodeAddress must skip it and
 		// fall through to the node's InternalIP.
-		addr, err := kubeprovider.PickNodeAddressForTest(prov, context.Background(), "https://0.0.0.0:43307")
+		addr, err := kubeprovider.PickNodeAddressForTest(
+			prov,
+			context.Background(),
+			"https://0.0.0.0:43307",
+		)
 		require.NoError(t, err)
 		assert.Equal(t, "10.0.0.1", addr)
 	})
@@ -130,19 +150,23 @@ func nodePortSpec() kubeprovider.APIExposureSpec {
 func TestExposeViaNodePort(t *testing.T) {
 	t.Parallel()
 
-	client := fake.NewClientset(nodeWithAddresses("n1",
+	client := fake.NewClientset(nodeWithAddresses(
 		corev1.NodeAddress{Type: corev1.NodeExternalIP, Address: "5.6.7.8"},
 	))
 	// The fake client does not run the NodePort allocator, so simulate it.
-	client.PrependReactor("create", "services", func(action k8stesting.Action) (bool, runtime.Object, error) {
-		svc, ok := action.(k8stesting.CreateAction).GetObject().(*corev1.Service)
-		if ok && len(svc.Spec.Ports) > 0 {
-			svc.Spec.Ports[0].NodePort = 31234
-		}
+	client.PrependReactor(
+		"create",
+		"services",
+		func(action k8stesting.Action) (bool, runtime.Object, error) {
+			svc, ok := action.(k8stesting.CreateAction).GetObject().(*corev1.Service)
+			if ok && len(svc.Spec.Ports) > 0 {
+				svc.Spec.Ports[0].NodePort = 31234
+			}
 
-		// Fall through so the (mutated) Service is stored by the default tracker.
-		return false, nil, nil
-	})
+			// Fall through so the (mutated) Service is stored by the default tracker.
+			return false, nil, nil
+		},
+	)
 
 	prov, err := kubeprovider.NewProvider(client, v1alpha1.OptionsKubernetes{})
 	require.NoError(t, err)
@@ -153,7 +177,9 @@ func TestExposeViaNodePort(t *testing.T) {
 	assert.Equal(t, "5.6.7.8", result.Address)
 	assert.Equal(t, int32(31234), result.Port)
 
-	svc, err := client.CoreV1().Services("ksail-demo").Get(context.Background(), kubeprovider.APIServiceName, metav1.GetOptions{})
+	svc, err := client.CoreV1().
+		Services("ksail-demo").
+		Get(context.Background(), kubeprovider.APIServiceName, metav1.GetOptions{})
 	require.NoError(t, err)
 	assert.Equal(t, corev1.ServiceTypeNodePort, svc.Spec.Type)
 	assert.Equal(t, kubeprovider.DinDPodName, svc.Spec.Selector[kubeprovider.LabelApp])
@@ -164,21 +190,32 @@ func TestExposeViaLoadBalancer(t *testing.T) {
 
 	client := fake.NewClientset()
 	// Simulate a LoadBalancer controller having assigned an ingress address.
-	client.PrependReactor("get", "services", func(_ k8stesting.Action) (bool, runtime.Object, error) {
-		return true, &corev1.Service{
-			ObjectMeta: metav1.ObjectMeta{Name: kubeprovider.APIServiceName, Namespace: "ksail-demo"},
-			Status: corev1.ServiceStatus{
-				LoadBalancer: corev1.LoadBalancerStatus{
-					Ingress: []corev1.LoadBalancerIngress{{IP: "9.9.9.9"}},
+	client.PrependReactor(
+		"get",
+		"services",
+		func(_ k8stesting.Action) (bool, runtime.Object, error) {
+			return true, &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      kubeprovider.APIServiceName,
+					Namespace: "ksail-demo",
 				},
-			},
-		}, nil
-	})
+				Status: corev1.ServiceStatus{
+					LoadBalancer: corev1.LoadBalancerStatus{
+						Ingress: []corev1.LoadBalancerIngress{{IP: "9.9.9.9"}},
+					},
+				},
+			}, nil
+		},
+	)
 
 	prov, err := kubeprovider.NewProvider(client, v1alpha1.OptionsKubernetes{})
 	require.NoError(t, err)
 
-	result, err := kubeprovider.ExposeViaLoadBalancerForTest(prov, context.Background(), nodePortSpec())
+	result, err := kubeprovider.ExposeViaLoadBalancerForTest(
+		prov,
+		context.Background(),
+		nodePortSpec(),
+	)
 	require.NoError(t, err)
 	assert.Equal(t, kubeprovider.ExposureLoadBalancer, result.Kind)
 	assert.Equal(t, "9.9.9.9", result.Address)
@@ -189,16 +226,23 @@ func TestResolveExposureFallsBackToLoadBalancer(t *testing.T) {
 	t.Parallel()
 
 	client := fake.NewClientset()
-	client.PrependReactor("get", "services", func(_ k8stesting.Action) (bool, runtime.Object, error) {
-		return true, &corev1.Service{
-			ObjectMeta: metav1.ObjectMeta{Name: kubeprovider.APIServiceName, Namespace: "ksail-demo"},
-			Status: corev1.ServiceStatus{
-				LoadBalancer: corev1.LoadBalancerStatus{
-					Ingress: []corev1.LoadBalancerIngress{{Hostname: "lb.example.com"}},
+	client.PrependReactor(
+		"get",
+		"services",
+		func(_ k8stesting.Action) (bool, runtime.Object, error) {
+			return true, &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      kubeprovider.APIServiceName,
+					Namespace: "ksail-demo",
 				},
-			},
-		}, nil
-	})
+				Status: corev1.ServiceStatus{
+					LoadBalancer: corev1.LoadBalancerStatus{
+						Ingress: []corev1.LoadBalancerIngress{{Hostname: "lb.example.com"}},
+					},
+				},
+			}, nil
+		},
+	)
 
 	prov, err := kubeprovider.NewProvider(client, v1alpha1.OptionsKubernetes{})
 	require.NoError(t, err)
@@ -230,7 +274,9 @@ func TestUpdateAPIServiceTargetPort(t *testing.T) {
 	err = prov.UpdateAPIServiceTargetPort(context.Background(), "demo", 32456)
 	require.NoError(t, err)
 
-	svc, err := client.CoreV1().Services("ksail-demo").Get(context.Background(), kubeprovider.APIServiceName, metav1.GetOptions{})
+	svc, err := client.CoreV1().
+		Services("ksail-demo").
+		Get(context.Background(), kubeprovider.APIServiceName, metav1.GetOptions{})
 	require.NoError(t, err)
 	assert.Equal(t, int32(32456), svc.Spec.Ports[0].TargetPort.IntVal)
 }

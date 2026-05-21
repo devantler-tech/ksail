@@ -225,7 +225,11 @@ func (p *Provider) exposeViaNodePort(
 		return nil, err
 	}
 
-	return &ExposureResult{Address: addr, Port: svc.Spec.Ports[0].NodePort, Kind: ExposureNodePort}, nil
+	return &ExposureResult{
+		Address: addr,
+		Port:    svc.Spec.Ports[0].NodePort,
+		Kind:    ExposureNodePort,
+	}, nil
 }
 
 // ensureService creates or updates the API server Service with the given type and selector.
@@ -236,7 +240,9 @@ func (p *Provider) ensureService(
 ) (*corev1.Service, error) {
 	svc := buildAPIService(spec, serviceType)
 
-	created, err := p.client.CoreV1().Services(spec.Namespace).Create(ctx, svc, metav1.CreateOptions{})
+	created, err := p.client.CoreV1().
+		Services(spec.Namespace).
+		Create(ctx, svc, metav1.CreateOptions{})
 	if errors.IsAlreadyExists(err) {
 		existing, getErr := p.client.CoreV1().
 			Services(spec.Namespace).
@@ -256,7 +262,10 @@ func (p *Provider) ensureService(
 				}
 			}
 		}
-		created, err = p.client.CoreV1().Services(spec.Namespace).Update(ctx, svc, metav1.UpdateOptions{})
+
+		created, err = p.client.CoreV1().
+			Services(spec.Namespace).
+			Update(ctx, svc, metav1.UpdateOptions{})
 	}
 
 	if err != nil {
@@ -366,7 +375,9 @@ func (p *Provider) waitForLoadBalancer(ctx context.Context, namespace string) (s
 	deadline := time.Now().Add(lbReadyTimeout)
 
 	for time.Now().Before(deadline) {
-		svc, err := p.client.CoreV1().Services(namespace).Get(ctx, APIServiceName, metav1.GetOptions{})
+		svc, err := p.client.CoreV1().
+			Services(namespace).
+			Get(ctx, APIServiceName, metav1.GetOptions{})
 		if err != nil {
 			return "", fmt.Errorf("get LoadBalancer service: %w", err)
 		}
@@ -396,7 +407,6 @@ func (p *Provider) waitForLoadBalancer(ctx context.Context, namespace string) (s
 // (known-reachable since KSail uses it), then a node InternalIP.
 func (p *Provider) pickNodeAddress(ctx context.Context, hostAddress string) (string, error) {
 	nodes, listErr := p.client.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
-
 	if listErr == nil {
 		if addr := firstNodeAddress(nodes.Items, corev1.NodeExternalIP); addr != "" {
 			return addr, nil
@@ -445,11 +455,13 @@ func hostnameOnly(hostAddress string) string {
 		return ""
 	}
 
-	if parsed, err := url.Parse(hostAddress); err == nil && parsed.Hostname() != "" {
+	parsed, err := url.Parse(hostAddress)
+	if err == nil && parsed.Hostname() != "" {
 		return parsed.Hostname()
 	}
 
-	if host, _, err := net.SplitHostPort(hostAddress); err == nil && host != "" {
+	host, _, err := net.SplitHostPort(hostAddress)
+	if err == nil && host != "" {
 		return host
 	}
 
