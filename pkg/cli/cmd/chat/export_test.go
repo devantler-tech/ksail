@@ -48,6 +48,12 @@ func GetBuildDiagnosticBlock() func(context.Context, string, string, []string) s
 	return buildDiagnosticBlock
 }
 
+// FormatDiagnosticOutput exposes the formatDiagnosticOutput formatting helper for
+// deterministic unit tests that verify block layout without subprocess execution.
+func FormatDiagnosticOutput(d string) string {
+	return formatDiagnosticOutput(d)
+}
+
 // AuthMaxAttempts exports the authMaxAttempts constant for testing.
 const AuthMaxAttempts = authMaxAttempts
 
