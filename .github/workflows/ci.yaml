@@ -578,12 +578,12 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: � Checkout
+      - name: 📄 Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
 
-      - name: �🔍 NPM Audit and Fix
+      - name: 🔍 NPM Audit and Fix
         uses: ./.github/actions/npm-audit-and-fix
         with:
           working-directory: docs
@@ -600,12 +600,12 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: � Checkout
+      - name: 📄 Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
 
-      - name: �🔍 NPM Audit and Fix
+      - name: 🔍 NPM Audit and Fix
         uses: ./.github/actions/npm-audit-and-fix
         with:
           working-directory: vsce
@@ -819,7 +819,7 @@ jobs:
   system-test-docker:
     name: 🧪 System Test (Docker)
     runs-on: ubuntu-latest
-    timeout-minutes: 75
+    timeout-minutes: 90
     needs:
       [
         changes,
@@ -879,6 +879,9 @@ jobs:
             init: true
             args: ""
             test-kubernetes-provider: "true"
+            # Talos host cluster provisioning is slow (~15 min); limit nested
+            # distributions to keep the combined job under the 90-min timeout.
+            kubernetes-provider-distributions: "Vanilla,K3s"
           - distribution: VCluster
             provider: Docker
             init: true
@@ -961,7 +964,7 @@ jobs:
           args: ${{ matrix.args }}
           apply-overlay-path: ".github/fixtures/podinfo-overlay"
           test-kubernetes-provider: ${{ matrix.test-kubernetes-provider || 'false' }}
-
+          kubernetes-provider-distributions: ${{ matrix.kubernetes-provider-distributions || 'Vanilla,K3s,VCluster,Talos' }}
           ghcr-user: ${{ github.actor }}
           ghcr-token: ${{ secrets.GITHUB_TOKEN }}
 
