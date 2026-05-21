@@ -1,0 +1,83 @@
+{{- if .Values.operator.enabled -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "ksail-operator.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ksail-operator.labels" . | nindent 4 }}
+    app.kubernetes.io/component: operator
+spec:
+  replicas: {{ .Values.operator.replicas }}
+  selector:
+    matchLabels:
+      {{- include "ksail-operator.operatorSelectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "ksail-operator.operatorSelectorLabels" . | nindent 8 }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "ksail-operator.serviceAccountName" . }}
+      containers:
+        - name: operator
+          image: {{ include "ksail-operator.operatorImage" . | quote }}
+          imagePullPolicy: {{ .Values.operator.image.pullPolicy }}
+          args:
+            - operator
+            - --health-probe-bind-address={{ .Values.operator.healthProbeBindAddress }}
+            - --metrics-bind-address={{ .Values.operator.metricsBindAddress }}
+            {{- if .Values.api.bindPort }}
+            - --api-bind-address=:{{ .Values.api.bindPort }}
+            {{- end }}
+            {{- if .Values.operator.leaderElection }}
+            - --leader-elect
+            {{- end }}
+            {{- if .Values.ui.readOnly }}
+            - --read-only
+            {{- end }}
+          ports:
+            {{- if .Values.api.bindPort }}
+            - name: api
+              containerPort: {{ .Values.api.bindPort }}
+            {{- end }}
+            - name: health
+              containerPort: 8081
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: health
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: health
+          resources:
+            {{- toYaml .Values.operator.resources | nindent 12 }}
+          {{- if .Values.operator.dockerSocket.enabled }}
+          volumeMounts:
+            - name: docker-socket
+              mountPath: /var/run/docker.sock
+          {{- end }}
+      {{- if .Values.operator.dockerSocket.enabled }}
+      volumes:
+        - name: docker-socket
+          hostPath:
+            path: /var/run/docker.sock
+            type: Socket
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

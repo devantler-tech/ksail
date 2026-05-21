@@ -1,0 +1,79 @@
+# Default values for the ksail-operator chart.
+
+# nameOverride / fullnameOverride let you customize the generated resource names.
+nameOverride: ""
+fullnameOverride: ""
+
+operator:
+  enabled: true
+  image:
+    repository: ghcr.io/devantler-tech/ksail
+    # tag defaults to the chart appVersion when empty.
+    tag: ""
+    pullPolicy: IfNotPresent
+  replicas: 1
+  # leaderElection ensures a single active operator when running multiple replicas.
+  leaderElection: true
+  # dockerSocket mounts the host Docker socket for Docker-based distributions (Kind/K3d).
+  # This is privileged and single-node; leave disabled and prefer VCluster/K3s in-cluster.
+  dockerSocket:
+    enabled: false
+  metricsBindAddress: "0"
+  healthProbeBindAddress: ":8081"
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      memory: 256Mi
+
+api:
+  # Port the operator REST API listens on (consumed by the UI). Set to 0 to disable the API.
+  bindPort: 8080
+
+# ui is the optional web dashboard. It talks to the operator REST API.
+#
+# readOnly is the single, user-controlled lock that governs the whole deployment. It is wired
+# to BOTH the operator API (--read-only, enforced server-side) and the UI (UI_READ_ONLY).
+# It is intentionally independent of any cluster's spec.cluster.gitOpsEngine: set it to true
+# for GitOps-enforced environments so the Git repository remains the single source of truth.
+ui:
+  enabled: false
+  readOnly: false
+  image:
+    repository: ghcr.io/devantler-tech/ksail-ui
+    tag: ""
+    pullPolicy: IfNotPresent
+  replicas: 1
+  service:
+    type: ClusterIP
+    port: 80
+  ingress:
+    enabled: false
+    className: ""
+    annotations: {}
+    hosts:
+      - host: ksail.local
+        paths:
+          - path: /
+            pathType: Prefix
+    tls: []
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      memory: 128Mi
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+rbac:
+  create: true
+
+podAnnotations: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}

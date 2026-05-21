@@ -1,0 +1,29 @@
+KSail operator installed as {{ include "ksail-operator.fullname" . }} in namespace {{ .Release.Namespace }}.
+
+Create a cluster:
+
+  kubectl apply -f - <<'EOF'
+  apiVersion: ksail.io/v1alpha1
+  kind: Cluster
+  metadata:
+    name: my-cluster
+    namespace: {{ .Release.Namespace }}
+  spec:
+    cluster:
+      distribution: VCluster
+  EOF
+
+  kubectl get clusters -n {{ .Release.Namespace }} -w
+
+{{- if .Values.ui.enabled }}
+
+Web UI is enabled ({{ if .Values.ui.readOnly }}read-only{{ else }}ClickOps{{ end }} mode).
+{{- if not .Values.ui.ingress.enabled }}
+Port-forward to reach it:
+
+  kubectl port-forward -n {{ .Release.Namespace }} svc/{{ include "ksail-operator.fullname" . }}-ui {{ .Values.ui.service.port }}:{{ .Values.ui.service.port }}
+{{- end }}
+{{- else }}
+
+Web UI is disabled. Enable it with --set ui.enabled=true (and ui.readOnly=true for GitOps-enforced environments).
+{{- end }}
