@@ -265,9 +265,14 @@ func TestGenerateWithInvalidOutputDirectory(t *testing.T) {
 	gen := generator.NewGenerator()
 	cluster := &v1alpha5.SimpleConfig{}
 
-	// Use invalid directory path
+	// Use a path whose parent is a regular file so directory creation fails with
+	// ENOTDIR. This triggers the write error path independently of the current
+	// user's privileges (root would otherwise be able to create directories).
+	notADir := filepath.Join(t.TempDir(), "not-a-dir")
+	require.NoError(t, os.WriteFile(notADir, []byte("file"), testFilePermissions))
+
 	opts := yamlgenerator.Options{
-		Output: "/nonexistent/directory/k3d.yaml",
+		Output: filepath.Join(notADir, "k3d.yaml"),
 	}
 
 	result, err := gen.Generate(cluster, opts)

@@ -11,7 +11,6 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	kubernetesprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/kubernetes"
-	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/kernelmod"
 	dockerclient "github.com/docker/docker/client"
 	"github.com/siderolabs/talos/pkg/provision"
 	"github.com/siderolabs/talos/pkg/provision/access"
@@ -179,7 +178,7 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 
 	p.inner.WithDockerClient(dindClient)
 
-	err = kernelmod.EnsureBrNetfilter(ctx, p.inner.logWriter)
+	err = p.inner.kernelModuleLoader(ctx, p.inner.logWriter)
 	if err != nil {
 		return fmt.Errorf("kernel module check: %w", err)
 	}
