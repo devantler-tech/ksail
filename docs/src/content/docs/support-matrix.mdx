@@ -7,18 +7,19 @@ KSail supports multiple Kubernetes distributions, providers, and components. Thi
 
 ## Distribution × Provider Matrix
 
-| Distribution     | Docker | Hetzner | Omni | AWS   |
-| ---------------- | ------ | ------- | ---- | ----- |
-| Vanilla (Kind)   | ✅     | ❌      | ❌   | ❌    |
-| K3s (K3d)        | ✅     | ❌      | ❌   | ❌    |
-| Talos            | ✅     | ✅      | ✅   | ❌    |
-| VCluster (Vind)  | ✅     | ❌      | ❌   | ❌    |
-| KWOK (kwokctl)   | ✅     | ❌      | ❌   | ❌    |
-| EKS              | ❌     | ❌      | ❌   | 🚧¹⁰ |
+| Distribution     | Docker | Kubernetes | Hetzner | Omni | AWS   |
+| ---------------- | ------ | ---------- | ------- | ---- | ----- |
+| Vanilla (Kind)   | ✅     | ✅         | ❌      | ❌   | ❌    |
+| K3s (K3d)        | ✅     | ✅         | ❌      | ❌   | ❌    |
+| Talos            | ✅     | ✅         | ✅      | ✅   | ❌    |
+| VCluster (Vind)  | ✅     | ✅         | ❌      | ❌   | ❌    |
+| KWOK (kwokctl)   | ✅     | ✅         | ❌      | ❌   | ❌    |
+| EKS              | ❌     | ❌         | ❌      | ❌   | 🚧¹⁰ |
 
 **Notes:**
 
 - Docker provider requires Docker Desktop or Docker Engine installed locally — see [Docker Provider](/providers/docker/) for setup details
+- Kubernetes provider runs nested cluster nodes as pods inside an existing host Kubernetes cluster; requires a reachable host cluster and privileged pod policy — see [Kubernetes Provider](/providers/kubernetes/) for setup details
 - Hetzner provider requires `HCLOUD_TOKEN` environment variable and a Talos ISO uploaded to your Hetzner account (x86: `122630`, ARM: `122629` — see [Talos options](/configuration/declarative-configuration/#distribution-and-tool-options)) — see [Hetzner Provider](/providers/hetzner/) for setup details
 - Omni provider requires a [Sidero Omni](https://www.siderolabs.com/omni/) account, an `OMNI_SERVICE_ACCOUNT_KEY` environment variable, and an Omni API endpoint configured via `spec.provider.omni.endpoint` in your KSail configuration — see [Omni Provider](/providers/omni/) for setup details
 - ¹⁰ AWS provider requires AWS credentials and an AWS account with EKS permissions — see [AWS Provider](/providers/aws/) for setup details; `ksail cluster create` is not yet functional for EKS

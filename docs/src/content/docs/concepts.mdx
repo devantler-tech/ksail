@@ -17,7 +17,7 @@ description: KSail builds upon established Kubernetes technologies and patterns.
 
 ## Distributions
 
-Kubernetes distributions package core components with additional tooling for specific use cases. KSail supports five distributions: Vanilla, K3s, Talos, VCluster, and KWOK. All can run on Docker; Talos can also run on Hetzner Cloud and Sidero Omni.
+Kubernetes distributions package core components with additional tooling for specific use cases. KSail supports six distributions: Vanilla, K3s, Talos, VCluster, KWOK, and EKS. All local distributions can run on Docker; Talos can also run on Hetzner Cloud, Sidero Omni, or an existing Kubernetes cluster; EKS runs on AWS.
 
 ### Vanilla (Kind)
 
@@ -38,6 +38,10 @@ Vanilla uses [Kind](https://kind.sigs.k8s.io/) to run standard upstream Kubernet
 ### KWOK (kwokctl)
 
 [KWOK](https://kwok.sigs.k8s.io/) (Kubernetes WithOut Kubelet) creates simulated Kubernetes clusters where nodes and pods exist at the API level without running real containers. KSail uses kwokctl's Docker runtime to run etcd, kube-apiserver, and the kwok-controller as Docker containers. Ideal for control-plane testing, CI/CD speed optimization, and scale testing. See [documentation](https://kwok.sigs.k8s.io/docs/), [user guide](https://kwok.sigs.k8s.io/docs/user/), and [GitHub](https://github.com/kubernetes-sigs/kwok).
+
+### EKS (eksctl)
+
+[Amazon EKS](https://aws.amazon.com/eks/) is a managed Kubernetes service on AWS. KSail uses [eksctl](https://eksctl.io/) and scaffolds a declarative `eks.yaml` (`ClusterConfig`) via `ksail cluster init`; full `ksail cluster create` support is coming. EKS requires the AWS provider and is the only cloud-only distribution — local mirror registries and local registry containers are not supported. See [EKS distribution](/distributions/eks/), [Amazon EKS docs](https://docs.aws.amazon.com/eks/), and [eksctl docs](https://eksctl.io/).
 
 ## Providers
 
@@ -60,6 +64,14 @@ Manages Talos clusters through the [Sidero Omni](https://www.siderolabs.com/omni
 
 > [!NOTE]
 > Omni provider is only supported with the `Talos` distribution.
+
+### AWS
+
+Creates managed [Amazon EKS](https://aws.amazon.com/eks/) clusters. **Supported distributions:** EKS. **Requirements:** `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and `AWS_REGION` environment variables and an AWS account with EKS permissions. See [AWS Provider](/providers/aws/) and [AWS docs](https://docs.aws.amazon.com/eks/).
+
+### Kubernetes
+
+Runs nested Kubernetes cluster nodes as pods inside an existing host Kubernetes cluster, using Docker-in-Docker (Kind, Talos, VCluster) or direct pod execution (K3s). The nested API server is exposed through Gateway API, LoadBalancer, or NodePort — whichever is available on the host cluster. **Supported distributions:** Vanilla, K3s, Talos, VCluster, KWOK. **Requirements:** a reachable host cluster with privileged pod policy. See [Kubernetes Provider](/providers/kubernetes/).
 
 ## Container Network Interface (CNI)
 
