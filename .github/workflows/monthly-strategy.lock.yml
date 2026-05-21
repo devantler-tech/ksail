@@ -48,7 +48,7 @@
 #   - ghcr.io/github/github-mcp-server:v1.0.3@sha256:2ac27ef03461ef2b877031b838a7d1fd7f12b12d4ace7796d8cad91446d55959
 #   - node:lts-alpine@sha256:d1b3b4da11eefd5941e7f0b9cf17783fc99d9c6fc34884a665f40a06dbdfc94f
 
-name: "Weekly Strategy"
+name: "Monthly Strategy"
 "on":
   # bots: # Bots processed as bot check in pre-activation job
   # - github-merge-queue[bot] # Bots processed as bot check in pre-activation job
@@ -70,7 +70,7 @@ permissions: {}
 concurrency:
   group: "gh-aw-${{ github.workflow }}"
 
-run-name: "Weekly Strategy"
+run-name: "Monthly Strategy"
 
 jobs:
   activation:
@@ -98,8 +98,8 @@ jobs:
           job-name: ${{ github.job }}
           trace-id: ${{ needs.pre_activation.outputs.setup-trace-id }}
         env:
-          GH_AW_SETUP_WORKFLOW_NAME: "Weekly Strategy"
-          GH_AW_CURRENT_WORKFLOW_REF: ${{ github.repository }}/.github/workflows/weekly-strategy.lock.yml@${{ github.ref }}
+          GH_AW_SETUP_WORKFLOW_NAME: "Monthly Strategy"
+          GH_AW_CURRENT_WORKFLOW_REF: ${{ github.repository }}/.github/workflows/monthly-strategy.lock.yml@${{ github.ref }}
           GH_AW_INFO_VERSION: "1.0.40"
       - name: Generate agentic run info
         id: generate_aw_info
@@ -110,7 +110,7 @@ jobs:
           GH_AW_INFO_VERSION: "1.0.40"
           GH_AW_INFO_AGENT_VERSION: "1.0.40"
           GH_AW_INFO_CLI_VERSION: "v0.72.1"
-          GH_AW_INFO_WORKFLOW_NAME: "Weekly Strategy"
+          GH_AW_INFO_WORKFLOW_NAME: "Monthly Strategy"
           GH_AW_INFO_EXPERIMENTAL: "false"
           GH_AW_INFO_SUPPORTS_TOOLS_ALLOWLIST: "true"
           GH_AW_INFO_STAGED: "false"
@@ -157,7 +157,7 @@ jobs:
         id: check-lock-file
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
-          GH_AW_WORKFLOW_FILE: "weekly-strategy.lock.yml"
+          GH_AW_WORKFLOW_FILE: "monthly-strategy.lock.yml"
           GH_AW_CONTEXT_WORKFLOW_REF: "${{ github.workflow_ref }}"
         with:
           script: |
@@ -238,7 +238,7 @@ jobs:
           cat "${RUNNER_TEMP}/gh-aw/prompts/github_mcp_tools_with_safeoutputs_prompt.md"
           cat << 'GH_AW_PROMPT_1deaeabfe8fba469_EOF'
           </system>
-          {{#runtime-import .github/workflows/weekly-strategy.md}}
+          {{#runtime-import .github/workflows/monthly-strategy.md}}
           GH_AW_PROMPT_1deaeabfe8fba469_EOF
           } > "$GH_AW_PROMPT"
       - name: Interpolate variables and render templates
@@ -332,7 +332,7 @@ jobs:
       GH_AW_ASSETS_BRANCH: ""
       GH_AW_ASSETS_MAX_SIZE_KB: 0
       GH_AW_MCP_LOG_DIR: /tmp/gh-aw/mcp-logs/safeoutputs
-      GH_AW_WORKFLOW_ID_SANITIZED: weeklystrategy
+      GH_AW_WORKFLOW_ID_SANITIZED: monthlystrategy
     outputs:
       agentic_engine_timeout: ${{ steps.detect-copilot-errors.outputs.agentic_engine_timeout || 'false' }}
       checkout_pr_success: ${{ steps.checkout-pr.outputs.checkout_pr_success || 'true' }}
@@ -354,8 +354,8 @@ jobs:
           job-name: ${{ github.job }}
           trace-id: ${{ needs.activation.outputs.setup-trace-id }}
         env:
-          GH_AW_SETUP_WORKFLOW_NAME: "Weekly Strategy"
-          GH_AW_CURRENT_WORKFLOW_REF: ${{ github.repository }}/.github/workflows/weekly-strategy.lock.yml@${{ github.ref }}
+          GH_AW_SETUP_WORKFLOW_NAME: "Monthly Strategy"
+          GH_AW_CURRENT_WORKFLOW_REF: ${{ github.repository }}/.github/workflows/monthly-strategy.lock.yml@${{ github.ref }}
           GH_AW_INFO_VERSION: "1.0.40"
       - name: Set runtime paths
         id: set-runtime-paths
@@ -903,7 +903,7 @@ jobs:
       discussions: write
       issues: write
     concurrency:
-      group: "gh-aw-conclusion-weekly-strategy"
+      group: "gh-aw-conclusion-monthly-strategy"
       cancel-in-progress: false
     outputs:
       incomplete_count: ${{ steps.report_incomplete.outputs.incomplete_count }}
@@ -918,8 +918,8 @@ jobs:
           job-name: ${{ github.job }}
           trace-id: ${{ needs.activation.outputs.setup-trace-id }}
         env:
-          GH_AW_SETUP_WORKFLOW_NAME: "Weekly Strategy"
-          GH_AW_CURRENT_WORKFLOW_REF: ${{ github.repository }}/.github/workflows/weekly-strategy.lock.yml@${{ github.ref }}
+          GH_AW_SETUP_WORKFLOW_NAME: "Monthly Strategy"
+          GH_AW_CURRENT_WORKFLOW_REF: ${{ github.repository }}/.github/workflows/monthly-strategy.lock.yml@${{ github.ref }}
           GH_AW_INFO_VERSION: "1.0.40"
       - name: Download agent output artifact
         id: download-agent-output
@@ -940,7 +940,7 @@ jobs:
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           GH_AW_AGENT_OUTPUT: ${{ steps.setup-agent-output-env.outputs.GH_AW_AGENT_OUTPUT }}
-          GH_AW_WORKFLOW_NAME: "Weekly Strategy"
+          GH_AW_WORKFLOW_NAME: "Monthly Strategy"
           GH_AW_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           GH_AW_DETECTION_CONCLUSION: ${{ needs.detection.outputs.detection_conclusion }}
           GH_AW_DETECTION_REASON: ${{ needs.detection.outputs.detection_reason }}
@@ -957,7 +957,7 @@ jobs:
         env:
           GH_AW_AGENT_OUTPUT: ${{ steps.setup-agent-output-env.outputs.GH_AW_AGENT_OUTPUT }}
           GH_AW_MISSING_TOOL_CREATE_ISSUE: "true"
-          GH_AW_WORKFLOW_NAME: "Weekly Strategy"
+          GH_AW_WORKFLOW_NAME: "Monthly Strategy"
         with:
           github-token: ${{ secrets.GH_AW_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
           script: |
@@ -971,7 +971,7 @@ jobs:
         env:
           GH_AW_AGENT_OUTPUT: ${{ steps.setup-agent-output-env.outputs.GH_AW_AGENT_OUTPUT }}
           GH_AW_REPORT_INCOMPLETE_CREATE_ISSUE: "true"
-          GH_AW_WORKFLOW_NAME: "Weekly Strategy"
+          GH_AW_WORKFLOW_NAME: "Monthly Strategy"
         with:
           github-token: ${{ secrets.GH_AW_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
           script: |
@@ -985,10 +985,10 @@ jobs:
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           GH_AW_AGENT_OUTPUT: ${{ steps.setup-agent-output-env.outputs.GH_AW_AGENT_OUTPUT }}
-          GH_AW_WORKFLOW_NAME: "Weekly Strategy"
+          GH_AW_WORKFLOW_NAME: "Monthly Strategy"
           GH_AW_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           GH_AW_AGENT_CONCLUSION: ${{ needs.agent.result }}
-          GH_AW_WORKFLOW_ID: "weekly-strategy"
+          GH_AW_WORKFLOW_ID: "monthly-strategy"
           GH_AW_ACTION_FAILURE_ISSUE_EXPIRES_HOURS: "168"
           GH_AW_ENGINE_ID: "copilot"
           GH_AW_SECRET_VERIFICATION_RESULT: ${{ needs.activation.outputs.secret_verification_result }}
@@ -1037,8 +1037,8 @@ jobs:
           job-name: ${{ github.job }}
           trace-id: ${{ needs.activation.outputs.setup-trace-id }}
         env:
-          GH_AW_SETUP_WORKFLOW_NAME: "Weekly Strategy"
-          GH_AW_CURRENT_WORKFLOW_REF: ${{ github.repository }}/.github/workflows/weekly-strategy.lock.yml@${{ github.ref }}
+          GH_AW_SETUP_WORKFLOW_NAME: "Monthly Strategy"
+          GH_AW_CURRENT_WORKFLOW_REF: ${{ github.repository }}/.github/workflows/monthly-strategy.lock.yml@${{ github.ref }}
           GH_AW_INFO_VERSION: "1.0.40"
       - name: Download agent output artifact
         id: download-agent-output
@@ -1104,7 +1104,7 @@ jobs:
         if: always() && steps.detection_guard.outputs.run_detection == 'true'
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
-          WORKFLOW_NAME: "Weekly Strategy"
+          WORKFLOW_NAME: "Monthly Strategy"
           WORKFLOW_DESCRIPTION: "This workflow performs strategic research for KSail on a monthly schedule.\nMarket research, competitive analysis, and Now/Next/Later roadmap."
           HAS_PATCH: ${{ needs.agent.outputs.has_patch }}
         with:
@@ -1219,8 +1219,8 @@ jobs:
           destination: ${{ runner.temp }}/gh-aw/actions
           job-name: ${{ github.job }}
         env:
-          GH_AW_SETUP_WORKFLOW_NAME: "Weekly Strategy"
-          GH_AW_CURRENT_WORKFLOW_REF: ${{ github.repository }}/.github/workflows/weekly-strategy.lock.yml@${{ github.ref }}
+          GH_AW_SETUP_WORKFLOW_NAME: "Monthly Strategy"
+          GH_AW_CURRENT_WORKFLOW_REF: ${{ github.repository }}/.github/workflows/monthly-strategy.lock.yml@${{ github.ref }}
           GH_AW_INFO_VERSION: "1.0.40"
       - name: Check team membership for workflow
         id: check_membership
@@ -1240,7 +1240,7 @@ jobs:
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           GH_AW_SKIP_BOTS: "dependabot[bot],renovate[bot]"
-          GH_AW_WORKFLOW_NAME: "Weekly Strategy"
+          GH_AW_WORKFLOW_NAME: "Monthly Strategy"
         with:
           script: |
             const { setupGlobals } = require('${{ runner.temp }}/gh-aw/actions/setup_globals.cjs');
@@ -1261,15 +1261,15 @@ jobs:
       issues: write
     timeout-minutes: 15
     env:
-      GH_AW_CALLER_WORKFLOW_ID: "${{ github.repository }}/weekly-strategy"
+      GH_AW_CALLER_WORKFLOW_ID: "${{ github.repository }}/monthly-strategy"
       GH_AW_DETECTION_CONCLUSION: ${{ needs.detection.outputs.detection_conclusion }}
       GH_AW_DETECTION_REASON: ${{ needs.detection.outputs.detection_reason }}
       GH_AW_EFFECTIVE_TOKENS: ${{ needs.agent.outputs.effective_tokens }}
       GH_AW_ENGINE_ID: "copilot"
       GH_AW_ENGINE_MODEL: ${{ needs.agent.outputs.model }}
       GH_AW_ENGINE_VERSION: "1.0.40"
-      GH_AW_WORKFLOW_ID: "weekly-strategy"
-      GH_AW_WORKFLOW_NAME: "Weekly Strategy"
+      GH_AW_WORKFLOW_ID: "monthly-strategy"
+      GH_AW_WORKFLOW_NAME: "Monthly Strategy"
     outputs:
       code_push_failure_count: ${{ steps.process_safe_outputs.outputs.code_push_failure_count }}
       code_push_failure_errors: ${{ steps.process_safe_outputs.outputs.code_push_failure_errors }}
@@ -1286,8 +1286,8 @@ jobs:
           job-name: ${{ github.job }}
           trace-id: ${{ needs.activation.outputs.setup-trace-id }}
         env:
-          GH_AW_SETUP_WORKFLOW_NAME: "Weekly Strategy"
-          GH_AW_CURRENT_WORKFLOW_REF: ${{ github.repository }}/.github/workflows/weekly-strategy.lock.yml@${{ github.ref }}
+          GH_AW_SETUP_WORKFLOW_NAME: "Monthly Strategy"
+          GH_AW_CURRENT_WORKFLOW_REF: ${{ github.repository }}/.github/workflows/monthly-strategy.lock.yml@${{ github.ref }}
           GH_AW_INFO_VERSION: "1.0.40"
       - name: Download agent output artifact
         id: download-agent-output

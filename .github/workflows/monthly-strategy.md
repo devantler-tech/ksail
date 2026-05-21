@@ -33,7 +33,7 @@ tools:
 timeout-minutes: 20
 ---
 
-# Weekly Strategy
+# Monthly Strategy
 
 You are a strategic research analyst for `${{ github.repository }}`.
 
@@ -126,10 +126,10 @@ Before creating the new discussion, locate and read the most recent previous "${
 **Include a "How to Control this Workflow" section:**
 
 ```bash
-gh aw disable weekly-strategy --repo ${{ github.repository }}
-gh aw enable weekly-strategy --repo ${{ github.repository }}
-gh aw run weekly-strategy --repo ${{ github.repository }}
-gh aw logs weekly-strategy --repo ${{ github.repository }}
+gh aw disable monthly-strategy --repo ${{ github.repository }}
+gh aw enable monthly-strategy --repo ${{ github.repository }}
+gh aw run monthly-strategy --repo ${{ github.repository }}
+gh aw logs monthly-strategy --repo ${{ github.repository }}
 ```
 
 End with a collapsed "Research Methodology" section listing all queries, commands, and tools used.
