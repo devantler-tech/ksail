@@ -3762,11 +3762,9 @@ var (
 )
 
 func TestMain(m *testing.M) {
-	cleanup := homeenv.Isolate()
-	code := snapshottest.Run(m, snaps.CleanOpts{Sort: true})
-
-	cleanup()
-	os.Exit(code)
+	os.Exit(homeenv.RunFunc(func() int {
+		return snapshottest.Run(m, snaps.CleanOpts{Sort: true})
+	}))
 }
 
 // fakeProvisionerWithClusters returns a list of clusters for testing.

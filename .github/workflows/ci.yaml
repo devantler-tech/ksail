@@ -601,6 +601,7 @@ jobs:
           export GOCACHE GOMODCACHE GOPATH
 
           sandbox="$(mktemp -d)"
+          trap 'rm -rf "$sandbox"' EXIT
           mkdir -p "$sandbox/.kube" "$sandbox/.ksail"
           cat > "$sandbox/.kube/config" <<'EOF'
           apiVersion: v1
@@ -608,7 +609,7 @@ jobs:
           current-context: admin@home-isolation-guard
           clusters:
             - cluster:
-                server: https://127.0.0.1:6443
+                server: https://localhost:6443
               name: home-isolation-guard
           contexts:
             - context:

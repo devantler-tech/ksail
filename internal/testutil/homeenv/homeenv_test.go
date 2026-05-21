@@ -7,13 +7,26 @@ import (
 	"github.com/devantler-tech/ksail/v7/internal/testutil/homeenv"
 )
 
-// TestIsolateRedirectsAndRestoresHome verifies that Isolate points
-// os.UserHomeDir() at a fresh directory and that the returned cleanup restores
-// the original environment.
+// TestIsolateRedirectsAndRestoresHome verifies that Isolate points the home
+// environment variables (HOME and USERPROFILE) at a fresh directory and that
+// the returned cleanup restores their original state.
 //
 //nolint:paralleltest // Mutates the process environment; cannot run in parallel.
 func TestIsolateRedirectsAndRestoresHome(t *testing.T) {
-	origValue, origHad := os.LookupEnv("HOME")
+	type envState struct {
+		value string
+		set   bool
+	}
+
+	// os.UserHomeDir consults HOME on unix/darwin and USERPROFILE on Windows;
+	// Isolate must redirect and restore both.
+	homeEnvVars := []string{"HOME", "USERPROFILE"}
+
+	orig := make(map[string]envState, len(homeEnvVars))
+	for _, key := range homeEnvVars {
+		value, set := os.LookupEnv(key)
+		orig[key] = envState{value: value, set: set}
+	}
 
 	cleanup := homeenv.Isolate()
 
@@ -22,8 +35,12 @@ func TestIsolateRedirectsAndRestoresHome(t *testing.T) {
 		t.Fatalf("os.UserHomeDir after Isolate: %v", err)
 	}
 
-	if origHad && isolated == origValue {
-		t.Fatalf("Isolate did not redirect HOME away from %q", origValue)
+	// Every home variable must point at the same fresh directory.
+	for _, key := range homeEnvVars {
+		got := os.Getenv(key)
+		if got != isolated {
+			t.Fatalf("Isolate set %s=%q, want the isolated home %q", key, got, isolated)
+		}
 	}
 
 	_, statErr := os.Stat(isolated)
@@ -33,12 +50,17 @@ func TestIsolateRedirectsAndRestoresHome(t *testing.T) {
 
 	cleanup()
 
-	afterValue, afterHad := os.LookupEnv("HOME")
-	if afterHad != origHad || afterValue != origValue {
-		t.Fatalf(
-			"cleanup did not restore HOME: got had=%v val=%q, want had=%v val=%q",
-			afterHad, afterValue, origHad, origValue,
-		)
+	// Cleanup must restore every home variable to its original state.
+	for _, key := range homeEnvVars {
+		want := orig[key]
+
+		got, gotSet := os.LookupEnv(key)
+		if gotSet != want.set || got != want.value {
+			t.Fatalf(
+				"cleanup did not restore %s: got set=%v val=%q, want set=%v val=%q",
+				key, gotSet, got, want.set, want.value,
+			)
+		}
 	}
 
 	_, removedErr := os.Stat(isolated)

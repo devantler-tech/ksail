@@ -35,11 +35,9 @@ var (
 )
 
 func TestMain(m *testing.M) {
-	cleanup := homeenv.Isolate()
-	code := snapshottest.Run(m, snaps.CleanOpts{})
-
-	cleanup()
-	os.Exit(code)
+	os.Exit(homeenv.RunFunc(func() int {
+		return snapshottest.Run(m, snaps.CleanOpts{})
+	}))
 }
 
 // setupTestEnvironment creates a standard test environment with mock client, context, and buffer.

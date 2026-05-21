@@ -60,8 +60,22 @@ func Isolate() func() {
 //
 //	func TestMain(m *testing.M) { os.Exit(homeenv.Run(m)) }
 func Run(m *testing.M) int {
+	return RunFunc(m.Run)
+}
+
+// RunFunc isolates the home directory, invokes run, and restores the previous
+// environment afterwards — even if run panics — returning run's exit code.
+// Use it from a TestMain that wraps a custom suite runner so the cleanup is
+// not skipped by the trailing os.Exit:
+//
+//	func TestMain(m *testing.M) {
+//		os.Exit(homeenv.RunFunc(func() int {
+//			return snapshottest.Run(m, snaps.CleanOpts{Sort: true})
+//		}))
+//	}
+func RunFunc(run func() int) int {
 	cleanup := Isolate()
 	defer cleanup()
 
-	return m.Run()
+	return run()
 }
