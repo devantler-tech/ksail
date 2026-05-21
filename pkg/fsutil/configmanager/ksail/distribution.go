@@ -209,12 +209,19 @@ const legacyWorkerRoleLabelPatchYAML = "machine:\n  nodeLabels:\n    node-role.k
 // format to the kubelet.extraArgs["node-labels"] format. The old format causes
 // the Kubernetes NodeRestriction admission controller to block ALL label updates
 // from Talos's NodeApplyController on worker nodes.
+//
+// When injecting the runtime patch, existing kubelet.extraArgs.node-labels values
+// from other worker patch files are preserved by merging them comma-separated into
+// the injected patch. This prevents the runtime patch from silently overwriting
+// user-defined labels (e.g., Longhorn disk labels).
 func (m *ConfigManager) addWorkerRoleLabelPatch(
 	talosManager *talosconfigmanager.ConfigManager,
 	patchesDir string,
 ) {
 	if !workerRoleLabelPatchFileExists(patchesDir) {
-		talosManager.WithAdditionalPatches([]talosconfigmanager.Patch{workerRoleLabelPatch()})
+		talosManager.WithAdditionalPatches([]talosconfigmanager.Patch{
+			mergedWorkerRoleLabelPatch(patchesDir),
+		})
 
 		return
 	}
@@ -227,7 +234,9 @@ func (m *ConfigManager) addWorkerRoleLabelPatch(
 	if err != nil {
 		// Cannot read safely (e.g. symlink escape) — inject runtime fallback so
 		// the worker role label is still set via kubelet.extraArgs at registration.
-		talosManager.WithAdditionalPatches([]talosconfigmanager.Patch{workerRoleLabelPatch()})
+		talosManager.WithAdditionalPatches([]talosconfigmanager.Patch{
+			mergedWorkerRoleLabelPatch(patchesDir),
+		})
 
 		return
 	}
@@ -235,27 +244,147 @@ func (m *ConfigManager) addWorkerRoleLabelPatch(
 	contentStr := strings.TrimSpace(string(content))
 
 	if contentStr == strings.TrimSpace(legacyWorkerRoleLabelPatchYAML) {
-		// Exact legacy scaffold — overwrite with the new format.
+		// Exact legacy scaffold — overwrite with the new format (including
+		// any node-labels from other worker patches to avoid overwriting them).
 		canonPath, pathErr := fsutil.EvalCanonicalPath(patchFile)
 		if pathErr != nil {
-			talosManager.WithAdditionalPatches([]talosconfigmanager.Patch{workerRoleLabelPatch()})
+			talosManager.WithAdditionalPatches([]talosconfigmanager.Patch{
+				mergedWorkerRoleLabelPatch(patchesDir),
+			})
 
 			return
 		}
 
+		mergedContent := mergedWorkerRoleLabelPatchYAML(patchesDir)
+
 		//nolint:mnd // standard restrictive file permission
-		writeErr := os.WriteFile(canonPath, []byte(talosgenerator.WorkerRoleLabelPatchYAML), 0o600)
+		writeErr := os.WriteFile(canonPath, []byte(mergedContent), 0o600)
 		if writeErr != nil {
 			// Write failed — inject the correct runtime patch as fallback so the
 			// worker role label is still set via kubelet.extraArgs at registration time.
-			talosManager.WithAdditionalPatches([]talosconfigmanager.Patch{workerRoleLabelPatch()})
+			talosManager.WithAdditionalPatches([]talosconfigmanager.Patch{
+				mergedWorkerRoleLabelPatch(patchesDir),
+			})
 		}
 	} else if strings.Contains(contentStr, "node-role.kubernetes.io/worker") &&
 		strings.Contains(contentStr, "nodeLabels") {
 		// Customized file still contains the legacy worker role label in nodeLabels.
 		// We cannot safely rewrite user-customized content, but we inject the runtime
 		// kubelet.extraArgs patch so the worker role is at least set at registration time.
-		talosManager.WithAdditionalPatches([]talosconfigmanager.Patch{workerRoleLabelPatch()})
+		talosManager.WithAdditionalPatches([]talosconfigmanager.Patch{
+			mergedWorkerRoleLabelPatch(patchesDir),
+		})
+	}
+}
+
+// workerRoleLabelFileName is the expected filename for the worker role label patch.
+const workerRoleLabelFileName = "worker-role-label.yaml"
+
+// nodeLabelsPartial is a minimal struct for extracting kubelet.extraArgs.node-labels
+// from Talos machine config patch YAML files.
+type nodeLabelsPartial struct {
+	Machine struct {
+		Kubelet struct {
+			ExtraArgs map[string]string `json:"extraArgs"`
+		} `json:"kubelet"`
+	} `json:"machine"`
+}
+
+// collectWorkerNodeLabelsFromPatches scans worker patch files (excluding
+// worker-role-label.yaml) for kubelet.extraArgs["node-labels"] values and
+// returns all individual labels found. Labels are comma-separated in the
+// kubelet --node-labels flag format.
+func collectWorkerNodeLabelsFromPatches(patchesDir string) []string {
+	workersDir := filepath.Join(patchesDir, "workers")
+
+	entries, err := os.ReadDir(workersDir)
+	if err != nil {
+		return nil
+	}
+
+	var labels []string
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		name := entry.Name()
+		if name == workerRoleLabelFileName {
+			continue
+		}
+
+		if !strings.HasSuffix(name, ".yaml") && !strings.HasSuffix(name, ".yml") {
+			continue
+		}
+
+		filePath := filepath.Join(workersDir, filepath.Clean(name))
+
+		//nolint:gosec // filePath is constructed from validated directory entries
+		content, readErr := os.ReadFile(filePath)
+		if readErr != nil {
+			continue
+		}
+
+		var partial nodeLabelsPartial
+		if unmarshalErr := yaml.Unmarshal(content, &partial); unmarshalErr != nil {
+			continue
+		}
+
+		if nodeLabels, ok := partial.Machine.Kubelet.ExtraArgs["node-labels"]; ok && nodeLabels != "" {
+			for _, label := range strings.Split(nodeLabels, ",") {
+				label = strings.TrimSpace(label)
+				if label != "" {
+					labels = append(labels, label)
+				}
+			}
+		}
+	}
+
+	return labels
+}
+
+// mergedWorkerRoleLabelPatchYAML returns the YAML content for a worker role label
+// patch that includes node-role.kubernetes.io/worker= combined with any existing
+// node-labels found in other worker patch files.
+func mergedWorkerRoleLabelPatchYAML(patchesDir string) string {
+	existingLabels := collectWorkerNodeLabelsFromPatches(patchesDir)
+
+	// Deduplicate and ensure worker role is present.
+	seen := make(map[string]struct{})
+	var combined []string
+
+	// Worker role label always comes first.
+	const workerRoleLabel = "node-role.kubernetes.io/worker="
+
+	seen[workerRoleLabel] = struct{}{}
+	combined = append(combined, workerRoleLabel)
+
+	for _, label := range existingLabels {
+		if _, exists := seen[label]; exists {
+			continue
+		}
+
+		seen[label] = struct{}{}
+		combined = append(combined, label)
+	}
+
+	if len(combined) == 1 {
+		// Only worker role label — use the standard constant.
+		return talosgenerator.WorkerRoleLabelPatchYAML
+	}
+
+	return fmt.Sprintf("machine:\n  kubelet:\n    extraArgs:\n      node-labels: %q\n",
+		strings.Join(combined, ","))
+}
+
+// mergedWorkerRoleLabelPatch returns a runtime patch that sets the worker role label
+// combined with any existing node-labels from other worker patch files.
+func mergedWorkerRoleLabelPatch(patchesDir string) talosconfigmanager.Patch {
+	return talosconfigmanager.Patch{
+		Path:    "worker-role-label",
+		Scope:   talosconfigmanager.PatchScopeWorker,
+		Content: []byte(mergedWorkerRoleLabelPatchYAML(patchesDir)),
 	}
 }
 

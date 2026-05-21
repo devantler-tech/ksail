@@ -63,3 +63,13 @@ func (m *ConfigManager) AddWorkerRoleLabelPatchForTest(
 
 // LegacyWorkerRoleLabelPatchYAMLForTest exports the legacy constant for testing.
 const LegacyWorkerRoleLabelPatchYAMLForTest = legacyWorkerRoleLabelPatchYAML
+
+// CollectWorkerNodeLabelsFromPatchesForTest exposes collectWorkerNodeLabelsFromPatches for testing.
+func CollectWorkerNodeLabelsFromPatchesForTest(patchesDir string) []string {
+	return collectWorkerNodeLabelsFromPatches(patchesDir)
+}
+
+// MergedWorkerRoleLabelPatchYAMLForTest exposes mergedWorkerRoleLabelPatchYAML for testing.
+func MergedWorkerRoleLabelPatchYAMLForTest(patchesDir string) string {
+	return mergedWorkerRoleLabelPatchYAML(patchesDir)
+}
