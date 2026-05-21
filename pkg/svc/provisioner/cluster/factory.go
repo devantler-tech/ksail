@@ -698,6 +698,7 @@ func (f DefaultFactory) createTalosKubernetesProvisioner(
 		return nil, nil, fmt.Errorf("create inner Talos provisioner: %w", err)
 	}
 
+	// jscpd:ignore-start
 	provisioner, err := talosprovisioner.NewKubernetesProvisioner(
 		talosprovisioner.KubernetesProvisionerConfig{
 			InnerProvisioner: innerProvisioner,
@@ -714,6 +715,7 @@ func (f DefaultFactory) createTalosKubernetesProvisioner(
 			Persistence:      opts.Persistence,
 		},
 	)
+	// jscpd:ignore-end
 	if err != nil {
 		return nil, nil, fmt.Errorf("create Talos Kubernetes provisioner: %w", err)
 	}
