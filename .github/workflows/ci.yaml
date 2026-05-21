@@ -631,9 +631,15 @@ jobs:
           # tolerated.
           HOME="$sandbox" go test ./... >/dev/null 2>&1 || true
 
-          kube_after="$(sha256sum "$sandbox/.kube/config" | cut -d' ' -f1)"
-          hist_after="$(sha256sum "$sandbox/.ksail/switch-history.json" | cut -d' ' -f1)"
-          tree_after="$(find "$sandbox/.kube" "$sandbox/.ksail" | sort)"
+          # Capture the post-run state with errexit disabled: a test that
+          # deletes the canary files/dirs is itself a violation, and the empty
+          # captures below will differ from the "before" values and trip the
+          # actionable ::error:: messages rather than aborting the step.
+          set +e
+          kube_after="$(sha256sum "$sandbox/.kube/config" 2>/dev/null | cut -d' ' -f1)"
+          hist_after="$(sha256sum "$sandbox/.ksail/switch-history.json" 2>/dev/null | cut -d' ' -f1)"
+          tree_after="$(find "$sandbox/.kube" "$sandbox/.ksail" 2>/dev/null | sort)"
+          set -e
 
           status=0
           if [ "$kube_before" != "$kube_after" ]; then
