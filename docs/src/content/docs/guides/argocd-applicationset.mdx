@@ -263,7 +263,7 @@ spec:
     sops:
       env:
         var: SOPS_AGE_KEY  # env var containing your Age private key
-      # enabled: true       # set explicitly to disable auto-detect
+      # enabled: true  # require SOPS key — error if none found
 ```
 
 > [!NOTE]
