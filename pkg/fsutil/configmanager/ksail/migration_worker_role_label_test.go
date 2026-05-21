@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	configmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/ksail"
@@ -114,6 +115,43 @@ func TestRemoveWorkerRoleLabelPatch_WarnsOnUnreadableFile(t *testing.T) {
 	// The symlink (and its target) must be left in place, not followed and deleted.
 	_, err = os.Lstat(patchFile)
 	require.NoError(t, err, "symlink should not be removed")
+}
+
+func TestRemoveWorkerRoleLabelPatch_WarnsWhenDeleteFails(t *testing.T) {
+	t.Parallel()
+
+	if runtime.GOOS == "windows" {
+		t.Skip("directory write permissions are not enforced the same way on Windows")
+	}
+
+	if os.Geteuid() == 0 {
+		t.Skip("root bypasses directory write permissions, so os.Remove would not fail")
+	}
+
+	patchesDir, _ := writeWorkerRoleLabelPatch(
+		t,
+		configmanager.KubeletWorkerRoleLabelPatchYAMLForTest,
+	)
+	workersDir := filepath.Join(patchesDir, "workers")
+
+	// Make the parent directory non-writable (but still readable/executable) so the
+	// file can be read but os.Remove fails. Restore on cleanup so t.TempDir removal works.
+	//nolint:gosec // directory needs the execute bit; permissions are restored in cleanup
+	t.Cleanup(func() { _ = os.Chmod(workersDir, 0o700) })
+	//nolint:gosec // 0o500 keeps the dir traversable but read-only to force os.Remove to fail
+	require.NoError(t, os.Chmod(workersDir, 0o500))
+
+	var buf bytes.Buffer
+
+	cm := &configmanager.ConfigManager{Writer: &buf}
+	cm.RemoveWorkerRoleLabelPatchForTest(patchesDir)
+
+	assert.Contains(
+		t,
+		buf.String(),
+		"could not delete",
+		"should warn when the stale patch cannot be removed",
+	)
 }
 
 func TestRemoveWorkerRoleLabelPatch_NoFileIsNoop(t *testing.T) {
