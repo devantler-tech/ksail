@@ -298,6 +298,12 @@ func verifyCopilotCLI(ctx context.Context, cliPath string, env []string) error {
 	return nil
 }
 
+// formatDiagnosticOutput wraps a non-empty diagnostic string in an indented
+// display block ready for inclusion in an error message.
+func formatDiagnosticOutput(d string) string {
+	return "CLI diagnostic output:\n  " + strings.ReplaceAll(d, "\n", "\n  ") + "\n\n"
+}
+
 // buildDiagnosticBlock runs the CLI diagnostic and returns a formatted block
 // suitable for inclusion in an error message, or an empty string if there is
 // nothing to report. When githubToken is non-empty, it is injected into the
@@ -313,7 +319,7 @@ func buildDiagnosticBlock(ctx context.Context, cliPath, githubToken string, env 
 		return ""
 	}
 
-	return "CLI diagnostic output:\n  " + strings.ReplaceAll(d, "\n", "\n  ") + "\n\n"
+	return formatDiagnosticOutput(d)
 }
 
 // diagnoseCLIStartupFailure re-runs the copilot CLI in headless mode with

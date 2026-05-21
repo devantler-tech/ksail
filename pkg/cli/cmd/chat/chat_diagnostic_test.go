@@ -112,24 +112,22 @@ func TestBuildDiagnosticBlock(t *testing.T) {
 		result := build(context.Background(), script, "", os.Environ())
 		assert.Empty(t, result)
 	})
+}
 
-	t.Run("formats stderr as indented block", func(t *testing.T) {
+func TestFormatDiagnosticOutput(t *testing.T) {
+	t.Parallel()
+
+	t.Run("formats single-line output as indented block", func(t *testing.T) {
 		t.Parallel()
 
-		dir := t.TempDir()
-		script := writeScript(t, dir, "#!/bin/sh\necho 'not logged in' >&2\nexit 1\n")
-
-		result := build(context.Background(), script, "", os.Environ())
+		result := chat.FormatDiagnosticOutput("not logged in")
 		assert.Equal(t, "CLI diagnostic output:\n  not logged in\n\n", result)
 	})
 
-	t.Run("indents multiline stderr correctly", func(t *testing.T) {
+	t.Run("indents each line of multiline output", func(t *testing.T) {
 		t.Parallel()
 
-		dir := t.TempDir()
-		script := writeScript(t, dir, "#!/bin/sh\necho 'line 1' >&2\necho 'line 2' >&2\nexit 1\n")
-
-		result := build(context.Background(), script, "", os.Environ())
+		result := chat.FormatDiagnosticOutput("line 1\nline 2")
 		assert.Equal(t, "CLI diagnostic output:\n  line 1\n  line 2\n\n", result)
 	})
 }
@@ -144,12 +142,7 @@ func TestStartupErrFmt(t *testing.T) {
 	t.Run("includes diagnostic block in error when CLI writes stderr", func(t *testing.T) {
 		t.Parallel()
 
-		dir := t.TempDir()
-		script := writeScript(t, dir, "#!/bin/sh\necho 'not logged in' >&2\nexit 1\n")
-
-		build := chat.GetBuildDiagnosticBlock()
-		block := build(context.Background(), script, "", os.Environ())
-
+		block := chat.FormatDiagnosticOutput("not logged in")
 		err := fmt.Errorf(chat.StartupErrFmt, errFakeCLIExit, block)
 
 		require.ErrorIs(t, err, errFakeCLIExit)
@@ -177,12 +170,7 @@ func TestStartupErrFmt(t *testing.T) {
 	t.Run("percent signs in CLI stderr are not treated as format verbs", func(t *testing.T) {
 		t.Parallel()
 
-		dir := t.TempDir()
-		script := writeScript(t, dir, "#!/bin/sh\nprintf '100%% complete but failed' >&2\nexit 1\n")
-
-		build := chat.GetBuildDiagnosticBlock()
-		block := build(context.Background(), script, "", os.Environ())
-
+		block := chat.FormatDiagnosticOutput("100% complete but failed")
 		err := fmt.Errorf(chat.StartupErrFmt, errFakeCLIExit, block)
 
 		assert.Contains(t, err.Error(), "100% complete but failed")
