@@ -382,8 +382,15 @@ func buildHostClusterClients(
 ) (kubernetes.Interface, *rest.Config, dynamic.Interface, error) {
 	kubeconfig := resolveKubernetesOption(opts.Kubeconfig, opts.KubeconfigEnvVar)
 
-	// Fall back to default kubeconfig path if not set
+	// When no kubeconfig is configured, prefer the in-cluster service account if we are
+	// running inside a pod (e.g. the KSail operator). rest.InClusterConfig returns an error
+	// when not in a pod, so CLI behavior outside a cluster is unchanged.
 	if kubeconfig == "" {
+		inClusterConfig, inClusterErr := rest.InClusterConfig()
+		if inClusterErr == nil {
+			return clientsFromRESTConfig(inClusterConfig)
+		}
+
 		kubeconfig = k8s.DefaultKubeconfigPath()
 	}
 
@@ -405,6 +412,14 @@ func buildHostClusterClients(
 		return nil, nil, nil, fmt.Errorf("build host REST config: %w", err)
 	}
 
+	return clientsFromRESTConfig(restConfig)
+}
+
+// clientsFromRESTConfig builds the typed and dynamic clients used by the Kubernetes-provider
+// provisioners from an already-resolved REST config.
+func clientsFromRESTConfig(
+	restConfig *rest.Config,
+) (kubernetes.Interface, *rest.Config, dynamic.Interface, error) {
 	clientset, err := kubernetes.NewForConfig(restConfig)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("create host clientset: %w", err)
