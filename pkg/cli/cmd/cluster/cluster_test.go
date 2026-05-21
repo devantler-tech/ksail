@@ -7219,13 +7219,31 @@ clusters:
 - name: kind-real
   cluster:
     server: https://127.0.0.1:6443
+- name: kind-dup
+  cluster:
+    server: https://127.0.0.1:6444
+- name: k3d-dup
+  cluster:
+    server: https://127.0.0.1:6445
 contexts:
 - name: kind-real
   context:
     cluster: kind-real
     user: kind-real
+- name: kind-dup
+  context:
+    cluster: kind-dup
+    user: kind-dup
+- name: k3d-dup
+  context:
+    cluster: k3d-dup
+    user: k3d-dup
 users:
 - name: kind-real
+  user: {}
+- name: kind-dup
+  user: {}
+- name: k3d-dup
   user: {}
 `
 
@@ -7234,13 +7252,26 @@ users:
 	require.NoError(t, os.WriteFile(path, []byte(kubeconfig), 0o600))
 
 	// A real cluster resolves to its prefixed context.
-	assert.Equal(t, "kind-real", cluster.ExportResolveClusterContext(path, "real"))
+	ctx, err := cluster.ExportResolveClusterContext(path, "real")
+	require.NoError(t, err)
+	assert.Equal(t, "kind-real", ctx)
 
-	// A non-existent cluster resolves to "" — no current-context fallback.
-	assert.Empty(t, cluster.ExportResolveClusterContext(path, "ghost"))
+	// A non-existent cluster reports not-found and resolves to "" — no
+	// current-context fallback.
+	ctx, err = cluster.ExportResolveClusterContext(path, "ghost")
+	require.ErrorIs(t, err, cluster.ErrContextNotFound)
+	assert.Empty(t, ctx)
 
-	// An unreadable kubeconfig resolves to "".
-	assert.Empty(t, cluster.ExportResolveClusterContext(filepath.Join(dir, "missing"), "real"))
+	// A name matching multiple contexts surfaces an ambiguity error rather than
+	// silently behaving like "not found".
+	ctx, err = cluster.ExportResolveClusterContext(path, "dup")
+	require.ErrorIs(t, err, cluster.ErrAmbiguousCluster)
+	assert.Empty(t, ctx)
+
+	// An unreadable kubeconfig is non-fatal: "" with no error.
+	ctx, err = cluster.ExportResolveClusterContext(filepath.Join(dir, "missing"), "real")
+	require.NoError(t, err)
+	assert.Empty(t, ctx)
 }
 
 // TestClusterCmd_RegistersDiagnoseSubcommand verifies that NewClusterCmd wires

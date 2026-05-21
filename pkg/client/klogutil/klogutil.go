@@ -41,7 +41,10 @@ func Silence() {
 			"stderrthreshold": "fatal",
 			"v":               "-10",
 		} {
-			// Errors here would only occur if klog's flag names change upstream.
+			// flag.Set can fail if the flag is missing (e.g. klog renamed it
+			// upstream) or the value is rejected by the flag's parser. These
+			// values are valid for current klog, so a failure just means klog
+			// silencing is best-effort — never fatal to the command.
 			_ = flag.Set(name, value)
 		}
 	})

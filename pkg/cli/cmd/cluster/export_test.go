@@ -45,7 +45,7 @@ func ExportResolveClusterNameFromContext(ctx *localregistry.Context) string {
 }
 
 // ExportResolveClusterContext exports resolveClusterContext for testing.
-func ExportResolveClusterContext(kubeconfigPath, clusterName string) string {
+func ExportResolveClusterContext(kubeconfigPath, clusterName string) (string, error) {
 	return resolveClusterContext(kubeconfigPath, clusterName)
 }
 

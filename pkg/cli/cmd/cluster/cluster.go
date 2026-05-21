@@ -3072,23 +3072,21 @@ func runInfoCmd(
 	// scoped to it so a non-existent cluster does not silently fall back to the
 	// kubeconfig's current context (which would misreport an unrelated cluster
 	// as the requested one). An empty result means no context matched.
-	contextName := resolveClusterContext(resolved.KubeconfigPath, resolved.ClusterName)
+	contextName, ctxErr := resolveClusterContext(resolved.KubeconfigPath, resolved.ClusterName)
+	if errors.Is(ctxErr, ErrAmbiguousCluster) {
+		// Surface the ambiguity (like 'cluster switch') instead of silently
+		// behaving like "not found".
+		return ctxErr
+	}
 
 	// Phase 2: Attempt kubectl cluster-info, scoped to the resolved context.
-	// Skip entirely when no context matched — falling back to the current
-	// context here is exactly the false-positive we are preventing.
-	hasKubeInfo := false
+	hasKubeInfo := tryScopedKubeInfo(
+		cmd, writer, resolved.KubeconfigPath, contextName, hasProviderInfo,
+	)
 
-	if contextName != "" {
-		hasKubeInfo = tryKubeClusterInfo(cmd, resolved.KubeconfigPath, contextName) == nil
-	}
-
-	if !hasKubeInfo && hasProviderInfo {
-		_, _ = fmt.Fprintln(writer)
-		_, _ = fmt.Fprintln(writer, "  Kubernetes API: unreachable")
-	}
-
-	// Phase 3: Append KSail details (TTL, components)
+	// Phase 3: Append KSail details (TTL, components). Only when we resolved a
+	// context — displayKSailDetails would otherwise fall back to the current
+	// context and reintroduce the cross-cluster false-positive.
 	if hasProviderInfo || hasKubeInfo {
 		displayKSailDetails(cmd, resolved.KubeconfigPath, contextName)
 
@@ -3096,6 +3094,30 @@ func runInfoCmd(
 	}
 
 	return buildNoInfoError(resolved.ClusterName, provErr)
+}
+
+// tryScopedKubeInfo runs kubectl cluster-info scoped to contextName, skipping
+// entirely when it is empty (falling back to the current context there is the
+// cross-cluster false-positive we are preventing). When the API is unreachable
+// but provider info is present, it prints an "unreachable" notice. It returns
+// whether kube info was obtained.
+func tryScopedKubeInfo(
+	cmd *cobra.Command,
+	writer io.Writer,
+	kubeconfigPath, contextName string,
+	hasProviderInfo bool,
+) bool {
+	hasKubeInfo := false
+	if contextName != "" {
+		hasKubeInfo = tryKubeClusterInfo(cmd, kubeconfigPath, contextName) == nil
+	}
+
+	if !hasKubeInfo && hasProviderInfo {
+		_, _ = fmt.Fprintln(writer)
+		_, _ = fmt.Fprintln(writer, "  Kubernetes API: unreachable")
+	}
+
+	return hasKubeInfo
 }
 
 // classifyProviderError returns nil for soft errors that mean "no provider info"
@@ -3128,28 +3150,28 @@ func buildNoInfoError(clusterName string, provErr error) error {
 }
 
 // resolveClusterContext returns the kubeconfig context name for the requested
-// cluster, or "" when the kubeconfig cannot be read or no context matches the
-// cluster name. It reuses the same name→context resolution as 'cluster switch'
-// so 'cluster info' only inspects the cluster it was asked about.
+// cluster. It reuses the same name→context resolution as 'cluster switch' so
+// 'cluster info' only inspects the cluster it was asked about.
+//
+// It returns ("", nil) when the kubeconfig cannot be read or parsed (best
+// effort — callers fall back to provider info), ("", ErrContextNotFound) when
+// no context matches, and ("", ErrAmbiguousCluster) when the name matches more
+// than one context. Callers should surface the ambiguity error rather than
+// treating it as "not found".
 //
 //nolint:gosec // G304: kubeconfigPath is resolved from trusted config or default.
-func resolveClusterContext(kubeconfigPath, clusterName string) string {
+func resolveClusterContext(kubeconfigPath, clusterName string) (string, error) {
 	configBytes, err := os.ReadFile(kubeconfigPath)
 	if err != nil {
-		return ""
+		return "", nil //nolint:nilerr // unreadable kubeconfig is non-fatal for info
 	}
 
 	config, err := clientcmd.Load(configBytes)
 	if err != nil {
-		return ""
+		return "", nil //nolint:nilerr // unparseable kubeconfig is non-fatal for info
 	}
 
-	contextName, err := resolveContextName(config, clusterName)
-	if err != nil {
-		return ""
-	}
-
-	return contextName
+	return resolveContextName(config, clusterName)
 }
 
 // getProviderStatus queries the infrastructure provider for cluster status.
@@ -3359,7 +3381,15 @@ func tryKubeClusterInfo(cmd *cobra.Command, kubeconfigPath, contextName string) 
 // displayKSailDetails appends KSail-specific cluster metadata after kubectl output.
 // This includes cluster identity (name, distribution, provider), TTL status,
 // and enabled component summary from persisted state. Each section fails gracefully.
+//
+// It requires a resolved contextName: with an empty context, DetectInfo would
+// fall back to the kubeconfig current context and could report an unrelated
+// cluster, so details are skipped entirely in that case.
 func displayKSailDetails(cmd *cobra.Command, kubeconfigPath, contextName string) {
+	if contextName == "" {
+		return
+	}
+
 	info, err := clusterdetector.DetectInfo(kubeconfigPath, contextName)
 	if err != nil || info == nil {
 		// If detection fails, skip KSail details because cluster identity could not be determined.
