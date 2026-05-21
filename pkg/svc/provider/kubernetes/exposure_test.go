@@ -15,6 +15,12 @@ import (
 	k8stesting "k8s.io/client-go/testing"
 )
 
+const (
+	testServerIP       = "1.2.3.4"
+	testNodeInternalIP = "10.0.0.1"
+	testExposureNS     = "ksail-demo"
+)
+
 func newTestProvider(t *testing.T, objects ...runtime.Object) *kubeprovider.Provider {
 	t.Helper()
 
@@ -31,7 +37,7 @@ func TestExposureResultServerURL(t *testing.T) {
 	t.Parallel()
 
 	result := &kubeprovider.ExposureResult{
-		Address: "1.2.3.4",
+		Address: testServerIP,
 		Port:    6443,
 		Kind:    kubeprovider.ExposureNodePort,
 	}
@@ -47,10 +53,10 @@ func TestHostnameOnly(t *testing.T) {
 		expected string
 	}{
 		{"empty", "", ""},
-		{"url_with_port", "https://1.2.3.4:6443", "1.2.3.4"},
+		{"url_with_port", "https://1.2.3.4:6443", testServerIP},
 		{"url_hostname", "https://api.example.com:6443", "api.example.com"},
-		{"host_port", "1.2.3.4:6443", "1.2.3.4"},
-		{"bare_ip", "1.2.3.4", "1.2.3.4"},
+		{"host_port", "1.2.3.4:6443", testServerIP},
+		{"bare_ip", testServerIP, testServerIP},
 	}
 
 	for _, testCase := range tests {
@@ -77,7 +83,7 @@ func TestPickNodeAddress(t *testing.T) {
 		t.Parallel()
 
 		prov := newTestProvider(t, nodeWithAddresses(
-			corev1.NodeAddress{Type: corev1.NodeInternalIP, Address: "10.0.0.1"},
+			corev1.NodeAddress{Type: corev1.NodeInternalIP, Address: testNodeInternalIP},
 			corev1.NodeAddress{Type: corev1.NodeExternalIP, Address: "5.6.7.8"},
 		))
 
@@ -94,7 +100,7 @@ func TestPickNodeAddress(t *testing.T) {
 		t.Parallel()
 
 		prov := newTestProvider(t, nodeWithAddresses(
-			corev1.NodeAddress{Type: corev1.NodeInternalIP, Address: "10.0.0.1"},
+			corev1.NodeAddress{Type: corev1.NodeInternalIP, Address: testNodeInternalIP},
 		))
 
 		addr, err := kubeprovider.PickNodeAddressForTest(
@@ -110,19 +116,19 @@ func TestPickNodeAddress(t *testing.T) {
 		t.Parallel()
 
 		prov := newTestProvider(t, nodeWithAddresses(
-			corev1.NodeAddress{Type: corev1.NodeInternalIP, Address: "10.0.0.1"},
+			corev1.NodeAddress{Type: corev1.NodeInternalIP, Address: testNodeInternalIP},
 		))
 
 		addr, err := kubeprovider.PickNodeAddressForTest(prov, context.Background(), "")
 		require.NoError(t, err)
-		assert.Equal(t, "10.0.0.1", addr)
+		assert.Equal(t, testNodeInternalIP, addr)
 	})
 
 	t.Run("skips_wildcard_host_address_falls_back_to_internal_ip", func(t *testing.T) {
 		t.Parallel()
 
 		prov := newTestProvider(t, nodeWithAddresses(
-			corev1.NodeAddress{Type: corev1.NodeInternalIP, Address: "10.0.0.1"},
+			corev1.NodeAddress{Type: corev1.NodeInternalIP, Address: testNodeInternalIP},
 		))
 
 		// 0.0.0.0 is a valid bind address for the host cluster's API server but is not
@@ -134,14 +140,14 @@ func TestPickNodeAddress(t *testing.T) {
 			"https://0.0.0.0:43307",
 		)
 		require.NoError(t, err)
-		assert.Equal(t, "10.0.0.1", addr)
+		assert.Equal(t, testNodeInternalIP, addr)
 	})
 }
 
 func nodePortSpec() kubeprovider.APIExposureSpec {
 	return kubeprovider.APIExposureSpec{
 		ClusterName:     "demo",
-		Namespace:       "ksail-demo",
+		Namespace:       testExposureNS,
 		BackendSelector: map[string]string{kubeprovider.LabelApp: kubeprovider.DinDPodName},
 		APIPort:         kubeprovider.DinDAPIServerPort,
 	}
@@ -178,7 +184,7 @@ func TestExposeViaNodePort(t *testing.T) {
 	assert.Equal(t, int32(31234), result.Port)
 
 	svc, err := client.CoreV1().
-		Services("ksail-demo").
+		Services(testExposureNS).
 		Get(context.Background(), kubeprovider.APIServiceName, metav1.GetOptions{})
 	require.NoError(t, err)
 	assert.Equal(t, corev1.ServiceTypeNodePort, svc.Spec.Type)
@@ -197,7 +203,7 @@ func TestExposeViaLoadBalancer(t *testing.T) {
 			return true, &corev1.Service{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      kubeprovider.APIServiceName,
-					Namespace: "ksail-demo",
+					Namespace: testExposureNS,
 				},
 				Status: corev1.ServiceStatus{
 					LoadBalancer: corev1.LoadBalancerStatus{
@@ -233,7 +239,7 @@ func TestResolveExposureFallsBackToLoadBalancer(t *testing.T) {
 			return true, &corev1.Service{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      kubeprovider.APIServiceName,
-					Namespace: "ksail-demo",
+					Namespace: testExposureNS,
 				},
 				Status: corev1.ServiceStatus{
 					LoadBalancer: corev1.LoadBalancerStatus{
@@ -261,7 +267,7 @@ func TestUpdateAPIServiceTargetPort(t *testing.T) {
 	t.Parallel()
 
 	existing := &corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{Name: kubeprovider.APIServiceName, Namespace: "ksail-demo"},
+		ObjectMeta: metav1.ObjectMeta{Name: kubeprovider.APIServiceName, Namespace: testExposureNS},
 		Spec: corev1.ServiceSpec{
 			Ports: []corev1.ServicePort{{Name: "https", Port: kubeprovider.DinDAPIServerPort}},
 		},
@@ -275,7 +281,7 @@ func TestUpdateAPIServiceTargetPort(t *testing.T) {
 	require.NoError(t, err)
 
 	svc, err := client.CoreV1().
-		Services("ksail-demo").
+		Services(testExposureNS).
 		Get(context.Background(), kubeprovider.APIServiceName, metav1.GetOptions{})
 	require.NoError(t, err)
 	assert.Equal(t, int32(32456), svc.Spec.Ports[0].TargetPort.IntVal)
