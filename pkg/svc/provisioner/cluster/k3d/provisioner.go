@@ -227,6 +227,7 @@ func (k *Provisioner) defaultListClustersRaw(ctx context.Context) (string, error
 
 	// Restore stdout and logrus, then release the lock.
 	os.Stdout = originalStdout
+
 	logrus.SetOutput(originalLogOutput)
 
 	listMutex.Unlock()
