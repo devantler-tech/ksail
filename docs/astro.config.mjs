@@ -108,6 +108,7 @@ export default defineConfig({
             { label: "Hetzner", link: "/providers/hetzner/" },
             { label: "Omni (Sidero)", link: "/providers/omni/" },
             { label: "AWS", link: "/providers/aws/" },
+            { label: "Kubernetes", link: "/providers/kubernetes/" },
           ],
         },
         { label: "Support Matrix", link: "/support-matrix/" },

@@ -59,6 +59,7 @@ Supported distributions run on different infrastructure providers:
 | Hetzner | — | — | ✅ | — | — | — |
 | Omni | — | — | ✅ | — | — | — |
 | AWS | — | — | — | — | — | 🚧 |
+| Kubernetes | ✅ | ✅ | ✅ | ✅ | ✅ | — |
 
 ## Quick Start
 
@@ -211,6 +212,9 @@ flowchart TD
   </Card>
   <Card title="AWS" icon="external">
     Run managed EKS clusters on Amazon Web Services. Requires AWS credentials and an AWS account with EKS permissions. [Learn more →](/providers/aws/)
+  </Card>
+  <Card title="Kubernetes" icon="cluster">
+    Run nested clusters as pods inside an existing host Kubernetes cluster. No Docker required — API server access survives the CLI process exit. [Learn more →](/providers/kubernetes/)
   </Card>
 </CardGrid>
 
