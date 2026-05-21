@@ -68,6 +68,7 @@ linters:
       replace-allow-list:
         - github.com/docker/docker
         - github.com/docker/cli
+        - github.com/moby/go-archive
         - github.com/opencontainers/runtime-spec
         - github.com/loft-sh/log
         - github.com/anchore/grype
