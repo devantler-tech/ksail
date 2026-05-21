@@ -1,0 +1,245 @@
+// Package api serves the KSail operator's REST/JSON API over the Cluster custom resource.
+// It is a thin layer over the controller-runtime client and is registered as a manager
+// Runnable. When read-only mode is enabled, all mutating verbs are rejected server-side so the
+// optional web UI cannot diverge from a GitOps-enforced source of truth.
+package api
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/http"
+	"time"
+
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
+)
+
+const (
+	readHeaderTimeout = 10 * time.Second
+	shutdownTimeout   = 5 * time.Second
+)
+
+// Server serves the operator REST API. It implements controller-runtime's manager.Runnable.
+type Server struct {
+	// Client is the controller-runtime client used to read and mutate Cluster resources.
+	Client client.Client
+	// ReadOnly rejects all mutating requests with HTTP 403 when true.
+	ReadOnly bool
+	// BindAddress is the address the HTTP server listens on (e.g. ":8080").
+	BindAddress string
+}
+
+// NeedLeaderElection reports that the API server runs on every replica, not only the leader,
+// so reads remain available on standby replicas.
+func (s *Server) NeedLeaderElection() bool {
+	return false
+}
+
+// Start runs the HTTP server until the context is cancelled.
+func (s *Server) Start(ctx context.Context) error {
+	server := &http.Server{
+		Addr:              s.BindAddress,
+		Handler:           s.Handler(),
+		ReadHeaderTimeout: readHeaderTimeout,
+	}
+
+	go func() {
+		<-ctx.Done()
+
+		// Derive from ctx (without cancellation, since it is already cancelled) so shutdown
+		// keeps a bounded deadline while remaining linked to the parent context values.
+		shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), shutdownTimeout)
+		defer cancel()
+
+		_ = server.Shutdown(shutdownCtx)
+	}()
+
+	logf.FromContext(ctx).
+		Info("starting operator API server", "address", s.BindAddress, "readOnly", s.ReadOnly)
+
+	err := server.ListenAndServe()
+	if err != nil && !errors.Is(err, http.ErrServerClosed) {
+		return fmt.Errorf("operator API server: %w", err)
+	}
+
+	return nil
+}
+
+// Handler builds the HTTP routes wrapped in the read-only guard.
+func (s *Server) Handler() http.Handler {
+	mux := http.NewServeMux()
+
+	mux.HandleFunc("GET /healthz", s.handleHealth)
+	mux.HandleFunc("GET /readyz", s.handleHealth)
+	mux.HandleFunc("GET /api/v1/config", s.handleConfig)
+	mux.HandleFunc("GET /api/v1/clusters", s.handleListClusters)
+	mux.HandleFunc("POST /api/v1/clusters", s.handleCreateCluster)
+	mux.HandleFunc("GET /api/v1/clusters/{namespace}/{name}", s.handleGetCluster)
+	mux.HandleFunc("PUT /api/v1/clusters/{namespace}/{name}", s.handleUpdateCluster)
+	mux.HandleFunc("DELETE /api/v1/clusters/{namespace}/{name}", s.handleDeleteCluster)
+
+	return s.readOnlyGuard(mux)
+}
+
+// readOnlyGuard rejects mutating requests with 403 when the server is in read-only mode.
+func (s *Server) readOnlyGuard(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if s.ReadOnly && isMutating(request.Method) {
+			writeJSON(writer, http.StatusForbidden, map[string]any{
+				"readOnly": true,
+				"reason":   "UI is configured read-only (GitOps-enforced)",
+			})
+
+			return
+		}
+
+		next.ServeHTTP(writer, request)
+	})
+}
+
+func (s *Server) handleHealth(writer http.ResponseWriter, _ *http.Request) {
+	writeJSON(writer, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func (s *Server) handleConfig(writer http.ResponseWriter, _ *http.Request) {
+	writeJSON(writer, http.StatusOK, map[string]bool{"readOnly": s.ReadOnly})
+}
+
+func (s *Server) handleListClusters(writer http.ResponseWriter, request *http.Request) {
+	var list v1alpha1.ClusterList
+
+	err := s.Client.List(request.Context(), &list)
+	if err != nil {
+		writeError(writer, http.StatusInternalServerError, err)
+
+		return
+	}
+
+	writeJSON(writer, http.StatusOK, &list)
+}
+
+func (s *Server) handleGetCluster(writer http.ResponseWriter, request *http.Request) {
+	var cluster v1alpha1.Cluster
+
+	key := types.NamespacedName{
+		Namespace: request.PathValue("namespace"),
+		Name:      request.PathValue("name"),
+	}
+
+	err := s.Client.Get(request.Context(), key, &cluster)
+	if err != nil {
+		writeClientError(writer, err)
+
+		return
+	}
+
+	writeJSON(writer, http.StatusOK, &cluster)
+}
+
+func (s *Server) handleCreateCluster(writer http.ResponseWriter, request *http.Request) {
+	cluster, err := decodeCluster(request)
+	if err != nil {
+		writeError(writer, http.StatusBadRequest, err)
+
+		return
+	}
+
+	createErr := s.Client.Create(request.Context(), cluster)
+	if createErr != nil {
+		writeClientError(writer, createErr)
+
+		return
+	}
+
+	writeJSON(writer, http.StatusCreated, cluster)
+}
+
+func (s *Server) handleUpdateCluster(writer http.ResponseWriter, request *http.Request) {
+	cluster, err := decodeCluster(request)
+	if err != nil {
+		writeError(writer, http.StatusBadRequest, err)
+
+		return
+	}
+
+	cluster.Namespace = request.PathValue("namespace")
+	cluster.Name = request.PathValue("name")
+
+	updateErr := s.Client.Update(request.Context(), cluster)
+	if updateErr != nil {
+		writeClientError(writer, updateErr)
+
+		return
+	}
+
+	writeJSON(writer, http.StatusOK, cluster)
+}
+
+func (s *Server) handleDeleteCluster(writer http.ResponseWriter, request *http.Request) {
+	cluster := &v1alpha1.Cluster{}
+	cluster.Namespace = request.PathValue("namespace")
+	cluster.Name = request.PathValue("name")
+
+	err := s.Client.Delete(request.Context(), cluster)
+	if err != nil {
+		writeClientError(writer, err)
+
+		return
+	}
+
+	writer.WriteHeader(http.StatusNoContent)
+}
+
+func isMutating(method string) bool {
+	switch method {
+	case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
+		return true
+	default:
+		return false
+	}
+}
+
+func decodeCluster(request *http.Request) (*v1alpha1.Cluster, error) {
+	var cluster v1alpha1.Cluster
+
+	err := json.NewDecoder(request.Body).Decode(&cluster)
+	if err != nil {
+		return nil, fmt.Errorf("decode cluster: %w", err)
+	}
+
+	return &cluster, nil
+}
+
+func writeJSON(writer http.ResponseWriter, status int, body any) {
+	data, err := json.Marshal(body)
+	if err != nil {
+		writer.WriteHeader(http.StatusInternalServerError)
+
+		return
+	}
+
+	writer.Header().Set("Content-Type", "application/json")
+	writer.WriteHeader(status)
+
+	_, _ = writer.Write(data)
+}
+
+func writeError(writer http.ResponseWriter, status int, err error) {
+	writeJSON(writer, status, map[string]string{"error": err.Error()})
+}
+
+func writeClientError(writer http.ResponseWriter, err error) {
+	switch {
+	case apierrors.IsNotFound(err):
+		writeError(writer, http.StatusNotFound, err)
+	case apierrors.IsConflict(err), apierrors.IsAlreadyExists(err):
+		writeError(writer, http.StatusConflict, err)
+	default:
+		writeError(writer, http.StatusInternalServerError, err)
+	}
+}

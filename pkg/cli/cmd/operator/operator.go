@@ -57,6 +57,18 @@ It is intended to be deployed via the KSail operator Helm chart rather than run 
 		false,
 		"Enable leader election to ensure only one active operator instance",
 	)
+	cmd.Flags().StringVar(
+		&opts.APIBindAddress,
+		"api-bind-address",
+		"",
+		"Address the REST API binds to (empty disables it, e.g. \":8080\")",
+	)
+	cmd.Flags().BoolVar(
+		&opts.ReadOnly,
+		"read-only",
+		false,
+		"Run the REST API in read-only mode, rejecting all mutating requests",
+	)
 
 	return cmd
 }

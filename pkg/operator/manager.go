@@ -8,6 +8,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/internal/controller"
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v7/pkg/operator/api"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -24,6 +25,10 @@ type Options struct {
 	MetricsBindAddress string
 	// HealthProbeBindAddress is the address the health/readiness probes bind to.
 	HealthProbeBindAddress string
+	// APIBindAddress is the address the REST API binds to (empty disables it).
+	APIBindAddress string
+	// ReadOnly puts the REST API in read-only mode, rejecting all mutating requests.
+	ReadOnly bool
 	// LeaderElection enables leader election to ensure a single active operator.
 	LeaderElection bool
 	// LeaderElectionID overrides the leader election lease name (optional).
@@ -43,31 +48,51 @@ func Run(ctx context.Context, opts Options) error {
 		return fmt.Errorf("load kubernetes config: %w", err)
 	}
 
+	mgr, err := ctrl.NewManager(restConfig, managerOptions(scheme, opts))
+	if err != nil {
+		return fmt.Errorf("create manager: %w", err)
+	}
+
+	setupErr := setupManager(mgr, opts)
+	if setupErr != nil {
+		return setupErr
+	}
+
+	startErr := mgr.Start(ctx)
+	if startErr != nil {
+		return fmt.Errorf("start manager: %w", startErr)
+	}
+
+	return nil
+}
+
+// managerOptions builds the controller-runtime manager options from the operator Options.
+func managerOptions(scheme *runtime.Scheme, opts Options) ctrl.Options {
 	leaderID := opts.LeaderElectionID
 	if leaderID == "" {
 		leaderID = DefaultLeaderElectionID
 	}
 
-	mgr, err := ctrl.NewManager(restConfig, ctrl.Options{
+	return ctrl.Options{
 		Scheme:                 scheme,
 		Metrics:                metricsserver.Options{BindAddress: opts.MetricsBindAddress},
 		HealthProbeBindAddress: opts.HealthProbeBindAddress,
 		LeaderElection:         opts.LeaderElection,
 		LeaderElectionID:       leaderID,
-	})
-	if err != nil {
-		return fmt.Errorf("create manager: %w", err)
 	}
+}
 
+// setupManager registers the reconciler, health probes, and (optionally) the REST API server.
+func setupManager(mgr ctrl.Manager, opts Options) error {
 	reconciler := &controller.ClusterReconciler{
 		Client:         mgr.GetClient(),
 		Scheme:         mgr.GetScheme(),
 		NewProvisioner: BuildProvisioner,
 	}
 
-	setupErr := reconciler.SetupWithManager(mgr)
-	if setupErr != nil {
-		return fmt.Errorf("set up cluster reconciler: %w", setupErr)
+	reconcilerErr := reconciler.SetupWithManager(mgr)
+	if reconcilerErr != nil {
+		return fmt.Errorf("set up cluster reconciler: %w", reconcilerErr)
 	}
 
 	healthErr := mgr.AddHealthzCheck("healthz", healthz.Ping)
@@ -80,9 +105,15 @@ func Run(ctx context.Context, opts Options) error {
 		return fmt.Errorf("add ready check: %w", readyErr)
 	}
 
-	startErr := mgr.Start(ctx)
-	if startErr != nil {
-		return fmt.Errorf("start manager: %w", startErr)
+	if opts.APIBindAddress != "" {
+		apiErr := mgr.Add(&api.Server{
+			Client:      mgr.GetClient(),
+			ReadOnly:    opts.ReadOnly,
+			BindAddress: opts.APIBindAddress,
+		})
+		if apiErr != nil {
+			return fmt.Errorf("add API server: %w", apiErr)
+		}
 	}
 
 	return nil
