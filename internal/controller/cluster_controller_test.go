@@ -9,6 +9,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/internal/controller"
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -56,6 +57,49 @@ func (f *fakeProvisioner) Exists(_ context.Context, _ string) (bool, error) {
 	return f.exists, f.existsErr
 }
 
+// fakeUpdaterProvisioner adds the optional Updater interface to fakeProvisioner so drift
+// detection can be exercised. changes controls how many in-place changes DiffConfig reports.
+type fakeUpdaterProvisioner struct {
+	*fakeProvisioner
+
+	changes     int
+	updateCalls int
+}
+
+func (f *fakeUpdaterProvisioner) DiffConfig(
+	_ context.Context,
+	_ string,
+	_, _ *v1alpha1.ClusterSpec,
+) (*clusterupdate.UpdateResult, error) {
+	result := clusterupdate.NewEmptyUpdateResult()
+	for range f.changes {
+		result.InPlaceChanges = append(
+			result.InPlaceChanges,
+			clusterupdate.Change{Field: "cluster.cni"},
+		)
+	}
+
+	return result, nil
+}
+
+func (f *fakeUpdaterProvisioner) Update(
+	_ context.Context,
+	_ string,
+	_, _ *v1alpha1.ClusterSpec,
+	_ clusterupdate.UpdateOptions,
+) (*clusterupdate.UpdateResult, error) {
+	f.updateCalls++
+
+	return clusterupdate.NewEmptyUpdateResult(), nil
+}
+
+func (f *fakeUpdaterProvisioner) GetCurrentConfig(
+	_ context.Context,
+	_ string,
+) (*v1alpha1.ClusterSpec, *v1alpha1.ProviderSpec, error) {
+	return nil, nil, nil
+}
+
 func newScheme(t *testing.T) *runtime.Scheme {
 	t.Helper()
 
@@ -87,10 +131,10 @@ func newFakeClient(scheme *runtime.Scheme, cluster *v1alpha1.Cluster) client.Cli
 		Build()
 }
 
-func newReconciler(
+func newReconcilerWith(
 	scheme *runtime.Scheme,
 	cl client.Client,
-	prov *fakeProvisioner,
+	prov clusterprovisioner.Provisioner,
 ) *controller.ClusterReconciler {
 	return &controller.ClusterReconciler{
 		Client: cl,
@@ -102,6 +146,14 @@ func newReconciler(
 			return prov, nil
 		},
 	}
+}
+
+func newReconciler(
+	scheme *runtime.Scheme,
+	cl client.Client,
+	prov *fakeProvisioner,
+) *controller.ClusterReconciler {
+	return newReconcilerWith(scheme, cl, prov)
 }
 
 func request() ctrl.Request {
@@ -211,4 +263,39 @@ func TestReconcile_DeletesAndRemovesFinalizer(t *testing.T) {
 
 	getErr := fakeClient.Get(context.Background(), request().NamespacedName, &got)
 	assert.True(t, apierrors.IsNotFound(getErr), "cluster should be gone after finalizer removal")
+}
+
+func TestReconcile_DetectsDriftAndUpdates(t *testing.T) {
+	t.Parallel()
+
+	scheme := newScheme(t)
+	cluster := newCluster(true)
+	cluster.Annotations = map[string]string{controller.LastAppliedSpecAnnotation: "{}"}
+	fakeClient := newFakeClient(scheme, cluster)
+	prov := &fakeUpdaterProvisioner{fakeProvisioner: &fakeProvisioner{exists: true}, changes: 1}
+	reconciler := newReconcilerWith(scheme, fakeClient, prov)
+
+	_, err := reconciler.Reconcile(context.Background(), request())
+	require.NoError(t, err)
+	assert.Equal(t, 1, prov.updateCalls, "Update should be applied when drift is detected")
+
+	var got v1alpha1.Cluster
+
+	require.NoError(t, fakeClient.Get(context.Background(), request().NamespacedName, &got))
+	assert.Equal(t, v1alpha1.ClusterPhaseReady, got.Status.Phase)
+}
+
+func TestReconcile_NoDriftSkipsUpdate(t *testing.T) {
+	t.Parallel()
+
+	scheme := newScheme(t)
+	cluster := newCluster(true)
+	cluster.Annotations = map[string]string{controller.LastAppliedSpecAnnotation: "{}"}
+	fakeClient := newFakeClient(scheme, cluster)
+	prov := &fakeUpdaterProvisioner{fakeProvisioner: &fakeProvisioner{exists: true}, changes: 0}
+	reconciler := newReconcilerWith(scheme, fakeClient, prov)
+
+	_, err := reconciler.Reconcile(context.Background(), request())
+	require.NoError(t, err)
+	assert.Equal(t, 0, prov.updateCalls, "Update should not run when there is no drift")
 }

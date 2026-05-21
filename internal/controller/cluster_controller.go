@@ -3,11 +3,13 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -21,6 +23,10 @@ import (
 // FinalizerName is added to Cluster resources so the operator can tear down the underlying
 // cluster before the custom resource is removed from the API server.
 const FinalizerName = "ksail.io/finalizer"
+
+// LastAppliedSpecAnnotation stores the JSON of the cluster spec the operator last provisioned,
+// used as the baseline for drift detection on subsequent reconciles.
+const LastAppliedSpecAnnotation = "ksail.io/last-applied-spec"
 
 // reasonReconciled is the condition reason reported when a cluster is reconciled and ready.
 const reasonReconciled = "Reconciled"
@@ -135,9 +141,14 @@ func (r *ClusterReconciler) reconcileNormal(
 			return ctrl.Result{}, statusErr
 		}
 
-		createErr := provisioner.Create(ctx, cluster.Name)
+		createErr := r.provisionAndRecord(ctx, cluster, provisioner)
 		if createErr != nil {
 			return r.fail(ctx, cluster, "CreateFailed", createErr)
+		}
+	} else {
+		driftErr := r.reconcileDrift(ctx, cluster, provisioner)
+		if driftErr != nil {
+			return r.fail(ctx, cluster, "UpdateFailed", driftErr)
 		}
 	}
 
@@ -268,6 +279,114 @@ func (r *ClusterReconciler) markReady(cluster *v1alpha1.Cluster) {
 		Reason:             reasonReconciled,
 		Message:            message,
 	})
+}
+
+// provisionAndRecord creates the underlying cluster and records the applied spec baseline.
+func (r *ClusterReconciler) provisionAndRecord(
+	ctx context.Context,
+	cluster *v1alpha1.Cluster,
+	provisioner clusterprovisioner.Provisioner,
+) error {
+	createErr := provisioner.Create(ctx, cluster.Name)
+	if createErr != nil {
+		return fmt.Errorf("create cluster: %w", createErr)
+	}
+
+	return r.recordAppliedSpec(ctx, cluster)
+}
+
+// reconcileDrift detects configuration drift against the last-applied spec and applies an
+// in-place update when the provisioner supports it. Provisioners that do not implement Updater
+// (or clusters without a recorded baseline) are reconciled to a baseline without changes.
+func (r *ClusterReconciler) reconcileDrift(
+	ctx context.Context,
+	cluster *v1alpha1.Cluster,
+	provisioner clusterprovisioner.Provisioner,
+) error {
+	updater, ok := provisioner.(clusterprovisioner.Updater)
+	if !ok {
+		return nil
+	}
+
+	oldSpec, hasBaseline := lastAppliedSpec(cluster)
+	if !hasBaseline {
+		// No baseline yet (e.g. a cluster adopted by the operator): record the current spec.
+		return r.recordAppliedSpec(ctx, cluster)
+	}
+
+	newSpec := cluster.Spec.Cluster.DeepCopy()
+
+	diff, err := updater.DiffConfig(ctx, cluster.Name, oldSpec, newSpec)
+	if err != nil {
+		return fmt.Errorf("diff cluster config: %w", err)
+	}
+
+	if diff.TotalChanges() == 0 {
+		return nil
+	}
+
+	r.markProgressing(
+		cluster,
+		v1alpha1.ClusterPhaseUpdating,
+		"Updating",
+		"Applying configuration changes",
+	)
+	_ = r.updateStatus(ctx, cluster)
+
+	_, err = updater.Update(
+		ctx,
+		cluster.Name,
+		oldSpec,
+		newSpec,
+		clusterupdate.UpdateOptions{Force: true},
+	)
+	if err != nil {
+		return fmt.Errorf("update cluster: %w", err)
+	}
+
+	return r.recordAppliedSpec(ctx, cluster)
+}
+
+// lastAppliedSpec returns the cluster spec the operator last provisioned, parsed from the
+// last-applied annotation. The second return is false when no valid baseline is recorded.
+func lastAppliedSpec(cluster *v1alpha1.Cluster) (*v1alpha1.ClusterSpec, bool) {
+	raw, ok := cluster.Annotations[LastAppliedSpecAnnotation]
+	if !ok || raw == "" {
+		return nil, false
+	}
+
+	var spec v1alpha1.ClusterSpec
+
+	err := json.Unmarshal([]byte(raw), &spec)
+	if err != nil {
+		return nil, false
+	}
+
+	return &spec, true
+}
+
+// recordAppliedSpec stores the current cluster spec as the drift-detection baseline.
+func (r *ClusterReconciler) recordAppliedSpec(
+	ctx context.Context,
+	cluster *v1alpha1.Cluster,
+) error {
+	data, err := json.Marshal(cluster.Spec.Cluster)
+	if err != nil {
+		return fmt.Errorf("marshal cluster spec: %w", err)
+	}
+
+	if cluster.Annotations == nil {
+		cluster.Annotations = map[string]string{}
+	}
+
+	cluster.Annotations[LastAppliedSpecAnnotation] = string(data)
+
+	updateErr := r.Update(ctx, cluster)
+	if updateErr != nil {
+		return fmt.Errorf("record last-applied spec: %w", updateErr)
+	}
+
+	return nil
 }
 
 // updateStatus persists the cluster status subresource.
