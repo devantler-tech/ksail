@@ -26,6 +26,13 @@ const (
 // The Talos SDK uses offset 2 (network + gateway + first node).
 const ipv4Offset = 2
 
+// Patch subdirectory names under the configured patches root.
+const (
+	PatchSubdirCluster       = "cluster"
+	PatchSubdirControlPlanes = "control-planes"
+	PatchSubdirWorkers       = "workers"
+)
+
 // Patch represents a Talos machine config patch with its scope.
 type Patch struct {
 	// Path is the source file path or identifier for the patch.
@@ -51,9 +58,9 @@ var (
 func LoadPatches(patchesDir string) ([]Patch, error) {
 	var patches []Patch
 
-	clusterDir := filepath.Join(patchesDir, "cluster")
-	controlPlanesDir := filepath.Join(patchesDir, "control-planes")
-	workersDir := filepath.Join(patchesDir, "workers")
+	clusterDir := filepath.Join(patchesDir, PatchSubdirCluster)
+	controlPlanesDir := filepath.Join(patchesDir, PatchSubdirControlPlanes)
+	workersDir := filepath.Join(patchesDir, PatchSubdirWorkers)
 
 	// Load cluster-wide patches
 	clusterPatches, err := loadPatchesFromDir(clusterDir, PatchScopeCluster)
