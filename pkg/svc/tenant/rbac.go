@@ -80,22 +80,29 @@ func effectiveClusterRoles(opts Options) []string {
 		}
 	}
 
-	seen := make(map[string]bool, len(raw))
-	result := make([]string, 0, len(raw))
+	result := sanitizeNameList(raw)
+	if len(result) == 0 {
+		result = append(result, DefaultClusterRole)
+	}
 
-	for _, role := range raw {
-		role = strings.TrimSpace(role)
-		if role == "" || seen[role] {
+	return result
+}
+
+// sanitizeNameList trims each entry, drops empties, and de-duplicates while
+// preserving order.
+func sanitizeNameList(values []string) []string {
+	seen := make(map[string]bool, len(values))
+	result := make([]string, 0, len(values))
+
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" || seen[value] {
 			continue
 		}
 
-		seen[role] = true
+		seen[value] = true
 
-		result = append(result, role)
-	}
-
-	if len(result) == 0 {
-		result = append(result, DefaultClusterRole)
+		result = append(result, value)
 	}
 
 	return result
@@ -195,9 +202,10 @@ func marshalServiceAccount(
 		serviceAccount["automountServiceAccountToken"] = false
 	}
 
-	if len(imagePullSecrets) > 0 {
-		refs := make([]map[string]string, len(imagePullSecrets))
-		for i, secret := range imagePullSecrets {
+	secrets := sanitizeNameList(imagePullSecrets)
+	if len(secrets) > 0 {
+		refs := make([]map[string]string, len(secrets))
+		for i, secret := range secrets {
 			refs[i] = map[string]string{"name": secret}
 		}
 

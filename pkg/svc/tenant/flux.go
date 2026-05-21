@@ -130,9 +130,11 @@ func GenerateFluxSyncManifests(opts Options) (map[string]string, error) {
 
 // applyFluxHardening sets the optional production hardening fields on the Flux
 // Kustomization spec based on the tenant options. All fields are no-ops when
-// their flag is unset, keeping default output unchanged.
+// their flag is unset, keeping default output unchanged. A non-empty
+// FluxTimeout implies waiting, so the timeout takes effect even when callers
+// set it via the svc API without FluxWait.
 func applyFluxHardening(spec *fluxKustomizationSpec, opts Options) {
-	if opts.FluxWait {
+	if opts.FluxWait || opts.FluxTimeout != "" {
 		spec.Wait = true
 
 		timeout := opts.FluxTimeout

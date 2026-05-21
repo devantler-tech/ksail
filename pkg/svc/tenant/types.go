@@ -307,6 +307,8 @@ func (o *Options) resolveProductionDefaults() {
 	if o.FluxWait && o.FluxTimeout == "" {
 		o.FluxTimeout = DefaultFluxTimeout
 	}
+
+	o.ImagePullSecrets = sanitizeNameList(o.ImagePullSecrets)
 }
 
 // validateProduction validates the production hardening fields.
@@ -326,7 +328,28 @@ func (o *Options) validateProduction() error {
 		return err
 	}
 
+	err = o.validateImagePullSecrets()
+	if err != nil {
+		return err
+	}
+
 	return o.validateDurations()
+}
+
+func (o *Options) validateImagePullSecrets() error {
+	for _, secret := range o.ImagePullSecrets {
+		trimmed := strings.TrimSpace(secret)
+		if trimmed == "" {
+			continue
+		}
+
+		if errs := validation.IsDNS1123Subdomain(trimmed); len(errs) > 0 {
+			return fmt.Errorf("%w: %q (%s)",
+				ErrInvalidImagePullSecret, trimmed, strings.Join(errs, "; "))
+		}
+	}
+
+	return nil
 }
 
 func (o *Options) validatePodSecurity() error {

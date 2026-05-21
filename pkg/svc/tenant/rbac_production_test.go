@@ -57,6 +57,24 @@ func TestGenerateRBACManifests_ServiceAccountHardening(t *testing.T) {
 	snaps.MatchSnapshot(t, sa)
 }
 
+func TestGenerateRBACManifests_ImagePullSecretsSanitized(t *testing.T) {
+	t.Parallel()
+
+	result, err := tenant.GenerateRBACManifests(tenant.Options{
+		Name:             "team-alpha",
+		Namespaces:       []string{"team-alpha"},
+		ClusterRole:      "edit",
+		ImagePullSecrets: []string{"ghcr-auth", " ", "ghcr-auth", "dockerhub"},
+	})
+	require.NoError(t, err)
+
+	serviceAccount := result["serviceaccount.yaml"]
+	// Empty/whitespace dropped, duplicate collapsed, no `name: ""` emitted.
+	require.NotContains(t, serviceAccount, `name: ""`)
+	require.Equal(t, 1, strings.Count(serviceAccount, "name: ghcr-auth"))
+	require.Contains(t, serviceAccount, "name: dockerhub")
+}
+
 func TestGenerateRBACManifests_MultipleClusterRoles(t *testing.T) {
 	t.Parallel()
 

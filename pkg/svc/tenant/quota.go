@@ -1,8 +1,8 @@
 package tenant
 
 // GenerateResourceQuotaManifests generates a ResourceQuota for each namespace.
-// Returns a map with a single "resourcequota.yaml" (multi-doc) entry, or
-// (nil, nil) when WithQuota is false.
+// Returns a map with a single "resourcequota.yaml" (multi-doc) entry, or an
+// empty map when WithQuota is false.
 func GenerateResourceQuotaManifests(opts Options) (map[string]string, error) {
 	if !opts.WithQuota {
 		return map[string]string{}, nil

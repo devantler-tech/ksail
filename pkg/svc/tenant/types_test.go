@@ -83,6 +83,16 @@ func validateProductionCases() []validateProductionCase {
 			tenant.ErrInvalidDuration,
 		},
 		{"valid duration", func(o *tenant.Options) { o.FluxTimeout = "5m" }, nil},
+		{
+			"invalid image pull secret",
+			func(o *tenant.Options) { o.ImagePullSecrets = []string{"Bad Name"} },
+			tenant.ErrInvalidImagePullSecret,
+		},
+		{
+			"valid image pull secret",
+			func(o *tenant.Options) { o.ImagePullSecrets = []string{"ghcr-auth"} },
+			nil,
+		},
 	}
 }
 

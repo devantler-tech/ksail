@@ -1,8 +1,8 @@
 package tenant
 
 // GenerateLimitRangeManifests generates a LimitRange for each namespace.
-// Returns a map with a single "limitrange.yaml" (multi-doc) entry, or
-// (nil, nil) when WithLimitRange is false.
+// Returns a map with a single "limitrange.yaml" (multi-doc) entry, or an
+// empty map when WithLimitRange is false.
 func GenerateLimitRangeManifests(opts Options) (map[string]string, error) {
 	if !opts.WithLimitRange {
 		return map[string]string{}, nil

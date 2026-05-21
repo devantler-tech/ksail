@@ -145,7 +145,7 @@ func generateTypeSpecificManifests(opts Options, tenantDir string) ([]string, er
 // generateProductionManifests generates the optional production hardening
 // manifests (NetworkPolicy, ResourceQuota, LimitRange), writes them to the
 // tenant directory, and returns the filenames written. Each generator returns
-// nil when its feature flag is off, so nothing is written by default.
+// an empty map when its feature flag is off, so nothing is written by default.
 func generateProductionManifests(opts Options, tenantDir string) ([]string, error) {
 	generators := []func(Options) (map[string]string, error){
 		GenerateNetworkPolicyManifests,

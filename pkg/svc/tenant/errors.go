@@ -74,4 +74,6 @@ var (
 	ErrInvalidDuration = errors.New("invalid duration")
 	// ErrUnsupportedNetworkPolicyEngine is returned for an unknown NetworkPolicy engine.
 	ErrUnsupportedNetworkPolicyEngine = errors.New("unsupported network policy engine")
+	// ErrInvalidImagePullSecret is returned when an imagePullSecret name is not a valid DNS-1123 subdomain.
+	ErrInvalidImagePullSecret = errors.New("invalid image pull secret name")
 )

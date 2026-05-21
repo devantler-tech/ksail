@@ -10,7 +10,7 @@ const dnsPort = 53
 
 // GenerateNetworkPolicyManifests generates default-deny NetworkPolicies plus
 // DNS and intra-namespace allow rules for each namespace. Returns a map with a
-// single "networkpolicy.yaml" (multi-doc) entry, or (nil, nil) when
+// single "networkpolicy.yaml" (multi-doc) entry, or an empty map when
 // WithNetworkPolicy is false. The flavor (native vs Cilium) is selected by
 // opts.NetworkPolicyEngine.
 func GenerateNetworkPolicyManifests(opts Options) (map[string]string, error) {

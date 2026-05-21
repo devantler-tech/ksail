@@ -90,15 +90,20 @@ func addProductionFlags(cmd *cobra.Command) {
 	cmd.Flags().Bool("with-network-policy", false,
 		"Generate default-deny NetworkPolicy plus DNS and intra-namespace allow rules")
 	cmd.Flags().Bool("with-quota", false, "Generate a ResourceQuota for each namespace")
-	cmd.Flags().String("quota-cpu", "4", "CPU quota (sets requests.cpu and limits.cpu)")
 	cmd.Flags().
-		String("quota-memory", "8Gi", "Memory quota (sets requests.memory and limits.memory)")
+		String("quota-cpu", tenant.DefaultQuotaCPU, "CPU quota (sets requests.cpu and limits.cpu)")
+	cmd.Flags().String("quota-memory", tenant.DefaultQuotaMemory,
+		"Memory quota (sets requests.memory and limits.memory)")
 	cmd.Flags().Bool("with-limit-range", false,
 		"Generate a LimitRange with default container requests/limits")
-	cmd.Flags().String("limit-default-cpu", "500m", "Default container CPU limit")
-	cmd.Flags().String("limit-default-memory", "512Mi", "Default container memory limit")
-	cmd.Flags().String("limit-request-cpu", "100m", "Default container CPU request")
-	cmd.Flags().String("limit-request-memory", "128Mi", "Default container memory request")
+	cmd.Flags().
+		String("limit-default-cpu", tenant.DefaultLimitDefaultCPU, "Default container CPU limit")
+	cmd.Flags().String("limit-default-memory", tenant.DefaultLimitDefaultMemory,
+		"Default container memory limit")
+	cmd.Flags().
+		String("limit-request-cpu", tenant.DefaultLimitRequestCPU, "Default container CPU request")
+	cmd.Flags().String("limit-request-memory", tenant.DefaultLimitRequestMemory,
+		"Default container memory request")
 	cmd.Flags().Bool("disable-token-automount", false,
 		"Set automountServiceAccountToken: false on the tenant ServiceAccount")
 	cmd.Flags().StringSlice("image-pull-secret", nil,
@@ -193,13 +198,6 @@ func resolveCreateOptions(
 	opts.ClusterRoles, _ = cmd.Flags().GetStringSlice("cluster-role")
 
 	readProductionFlags(cmd, &opts)
-
-	// Setting --flux-timeout implies --flux-wait, since the timeout only takes
-	// effect while waiting. The flag default is empty so this only triggers on
-	// explicit use.
-	if cmd.Flags().Changed("flux-timeout") {
-		opts.FluxWait = true
-	}
 
 	outputStr, _ := cmd.Flags().GetString("output")
 	opts.Force, _ = cmd.Flags().GetBool("force")
