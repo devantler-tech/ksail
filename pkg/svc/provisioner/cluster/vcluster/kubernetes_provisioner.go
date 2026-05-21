@@ -153,6 +153,7 @@ func (p *KubernetesProvisioner) Create(
 			APIPort:          vclusterAPIServerPort,
 			GatewayClassName: p.gatewayClassName,
 			HostAddress:      p.restConfig.Host,
+			SkipLoadBalancer: true,
 		},
 	)
 	if err != nil {
@@ -364,7 +365,7 @@ func (p *KubernetesProvisioner) waitForKubeconfigSecret(
 }
 
 // rewriteVClusterKubeconfig parses the vCluster-generated kubeconfig, rewrites the
-// server URL to use the localhost port-forward, and renames all entries for uniqueness.
+// server URL to use the stable exposure address, and renames all entries for uniqueness.
 func rewriteVClusterKubeconfig(
 	kubeconfigBytes []byte,
 	serverURL string,

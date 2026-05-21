@@ -47,4 +47,7 @@ var (
 	ErrNamespaceNotOwnedByKSail = errors.New(
 		"namespace does not have KSail ownership labels; refusing deletion",
 	)
+
+	// ErrNoServicePorts is returned when an API server Service has no ports configured.
+	ErrNoServicePorts = errors.New("API service has no ports configured")
 )

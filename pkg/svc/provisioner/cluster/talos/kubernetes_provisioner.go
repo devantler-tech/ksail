@@ -117,6 +117,7 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 			APIPort:          kubernetesprovider.DinDAPIServerPort,
 			GatewayClassName: p.gatewayClassName,
 			HostAddress:      p.restConfig.Host,
+			SkipLoadBalancer: true,
 		},
 	)
 	if err != nil {

@@ -101,6 +101,21 @@ func TestPickNodeAddress(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "10.0.0.1", addr)
 	})
+
+	t.Run("skips_wildcard_host_address_falls_back_to_internal_ip", func(t *testing.T) {
+		t.Parallel()
+
+		prov := newTestProvider(t, nodeWithAddresses("n1",
+			corev1.NodeAddress{Type: corev1.NodeInternalIP, Address: "10.0.0.1"},
+		))
+
+		// 0.0.0.0 is a valid bind address for the host cluster's API server but is not
+		// routable from clients of the nested cluster. pickNodeAddress must skip it and
+		// fall through to the node's InternalIP.
+		addr, err := kubeprovider.PickNodeAddressForTest(prov, context.Background(), "https://0.0.0.0:43307")
+		require.NoError(t, err)
+		assert.Equal(t, "10.0.0.1", addr)
+	})
 }
 
 func nodePortSpec() kubeprovider.APIExposureSpec {

@@ -171,6 +171,7 @@ func (p *K3kProvisioner) Create(ctx context.Context, name string) error {
 			APIPort:          k3kAPIServerPort,
 			GatewayClassName: p.gatewayClassName,
 			HostAddress:      p.restConfig.Host,
+			SkipLoadBalancer: true,
 		},
 	)
 	if err != nil {

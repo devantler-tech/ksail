@@ -452,9 +452,13 @@ options:
 		}
 	}
 
+	originalConfigPath := p.configPath
 	p.configPath = dir
 
-	return cleanup, nil
+	return func() {
+		p.configPath = originalConfigPath
+		_ = os.RemoveAll(dir)
+	}, nil
 }
 
 // kwokStateDir returns the absolute path to kwokctl's cluster state directory.

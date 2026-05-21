@@ -73,6 +73,10 @@ type APIExposureSpec struct {
 	// HostAddress is the host cluster's reachable address (typically derived from the host
 	// REST config). Used as a NodePort address fallback when no node ExternalIP is available.
 	HostAddress string
+	// SkipLoadBalancer, when true, skips the LoadBalancer exposure tier and falls through
+	// directly to NodePort. Use this when the host cluster's LB controller (e.g. K3s
+	// klipper-lb) would bind the API port on the node, conflicting with the host API server.
+	SkipLoadBalancer bool
 }
 
 // ExposureResult is the resolved, stable endpoint for a nested cluster's API server.
@@ -124,7 +128,7 @@ func tcpRouteGVR() schema.GroupVersionResource {
 // ResolveExposure creates a stable, server-side exposure for the nested cluster's API server and
 // returns its address. It tries, in order:
 //  1. Gateway API (when GatewayClassName is set and a TCPRoute-capable controller assigns an address),
-//  2. a LoadBalancer Service (when the host cluster assigns an external address),
+//  2. a LoadBalancer Service (when SkipLoadBalancer is false and the host cluster assigns an external address),
 //  3. a NodePort Service (universal last resort).
 //
 // The returned address survives the CLI process exit and should be written to the kubeconfig and
@@ -144,9 +148,11 @@ func (p *Provider) ResolveExposure(
 		// Fall through to LB/NodePort when the Gateway path can't yield an address.
 	}
 
-	result, err := p.exposeViaLoadBalancer(ctx, spec)
-	if err == nil {
-		return result, nil
+	if !spec.SkipLoadBalancer {
+		result, err := p.exposeViaLoadBalancer(ctx, spec)
+		if err == nil {
+			return result, nil
+		}
 	}
 
 	return p.exposeViaNodePort(ctx, spec)
@@ -241,6 +247,15 @@ func (p *Provider) ensureService(
 
 		svc.ResourceVersion = existing.ResourceVersion
 		svc.Spec.ClusterIP = existing.Spec.ClusterIP // ClusterIP is immutable; preserve it
+		// NodePort allocations are immutable on update; copy them back by port name to
+		// avoid an "invalid value" rejection from the API server.
+		for i := range svc.Spec.Ports {
+			for _, ep := range existing.Spec.Ports {
+				if svc.Spec.Ports[i].Name == ep.Name && ep.NodePort != 0 {
+					svc.Spec.Ports[i].NodePort = ep.NodePort
+				}
+			}
+		}
 		created, err = p.client.CoreV1().Services(spec.Namespace).Update(ctx, svc, metav1.UpdateOptions{})
 	}
 
@@ -389,7 +404,12 @@ func (p *Provider) pickNodeAddress(ctx context.Context, hostAddress string) (str
 	}
 
 	if host := hostnameOnly(hostAddress); host != "" {
-		return host, nil
+		// Skip unspecified (wildcard) addresses like 0.0.0.0 or :: — they are valid
+		// bind addresses for the host cluster's API server but are not routable from
+		// clients that load the nested kubeconfig.
+		if ip := net.ParseIP(host); ip == nil || !ip.IsUnspecified() {
+			return host, nil
+		}
 	}
 
 	if listErr == nil {
@@ -453,7 +473,7 @@ func (p *Provider) UpdateAPIServiceTargetPort(
 	}
 
 	if len(svc.Spec.Ports) == 0 {
-		return nil
+		return fmt.Errorf("update API exposure target port: %w", ErrNoServicePorts)
 	}
 
 	svc.Spec.Ports[0].TargetPort = intstr.FromInt32(targetPort)

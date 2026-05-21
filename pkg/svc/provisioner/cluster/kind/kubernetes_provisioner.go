@@ -133,6 +133,7 @@ func (p *KubernetesProvisioner) Create(
 			APIPort:          p.apiServerPort,
 			GatewayClassName: p.gatewayClassName,
 			HostAddress:      p.restConfig.Host,
+			SkipLoadBalancer: true,
 		},
 	)
 	if err != nil {
