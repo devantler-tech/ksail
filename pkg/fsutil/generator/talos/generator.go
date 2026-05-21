@@ -44,8 +44,6 @@ const (
 	ingressFirewallRulesFileName = "ingress-firewall-rules.yaml"
 	// oidcFileName is the name of the OIDC API server configuration patch file.
 	oidcFileName = "oidc.yaml"
-	// workerRoleLabelFileName is the name of the worker role label patch file.
-	workerRoleLabelFileName = "worker-role-label.yaml"
 )
 
 // KubeletServingCertApproverManifestURL is the URL for the kubelet-serving-cert-approver manifest.
@@ -91,32 +89,6 @@ machine:
   kubelet:
     extraArgs:
       cloud-provider: external
-`
-
-// WorkerRoleLabelPatchYAML is the Talos machine config patch YAML that labels worker nodes
-// with the standard Kubernetes worker role. This is the single source of truth for the patch
-// content, shared between the generator (file-based scaffolding) and the runtime config manager
-// (in-memory patch injection when no scaffolded project exists).
-//
-// Talos does not set node-role.kubernetes.io/worker on worker nodes by default (unlike
-// control-plane nodes which receive node-role.kubernetes.io/control-plane automatically).
-// Without this label, kubectl shows <none> for the worker role column and operators that
-// target workers by role label cannot find them.
-//
-// This uses kubelet.extraArgs["node-labels"] instead of machine.nodeLabels because:
-//   - machine.nodeLabels is applied post-registration by Talos's NodeApplyController using
-//     the kubelet kubeconfig (limited RBAC)
-//   - The Kubernetes NodeRestriction admission controller blocks kubelet from modifying
-//     node-role.kubernetes.io/* labels after initial registration
-//   - kubelet --node-labels sets labels AT registration time, when NodeRestriction allows them
-//   - If node-role.kubernetes.io/worker is in machine.nodeLabels, the NodeApplyController
-//     fails on the entire update, blocking ALL user-defined labels (e.g. Longhorn labels)
-//
-// See: https://kubernetes.io/docs/reference/access-authn-authz/admission-controllers/#noderestriction
-const WorkerRoleLabelPatchYAML = `machine:
-  kubelet:
-    extraArgs:
-      node-labels: "node-role.kubernetes.io/worker="
 `
 
 // ErrConfigRequired is returned when a nil config is provided.
@@ -262,11 +234,6 @@ func (g *Generator) getDirectoriesWithPatches(
 		dirs["cluster"] = true
 	}
 
-	// Worker role label patch goes to workers/
-	if model.WorkerNodes > 0 {
-		dirs["workers"] = true
-	}
-
 	// Disable CNI patch goes to cluster/
 	if model.DisableDefaultCNI {
 		dirs["cluster"] = true
@@ -334,14 +301,6 @@ func (g *Generator) generateConditionalPatches(
 	// Generate allow-scheduling-on-control-planes patch when no workers are configured
 	if model.WorkerNodes == 0 {
 		err := g.generateAllowSchedulingPatch(rootPath, force)
-		if err != nil {
-			return err
-		}
-	}
-
-	// Generate worker role label patch when workers are configured
-	if model.WorkerNodes > 0 {
-		err := g.generateWorkerRoleLabelPatch(rootPath, force)
 		if err != nil {
 			return err
 		}
@@ -556,29 +515,6 @@ func (g *Generator) generateAllowSchedulingPatch(
 	err := os.WriteFile(patchPath, []byte(patchContent), filePerm)
 	if err != nil {
 		return fmt.Errorf("failed to create allow-scheduling-on-control-planes patch: %w", err)
-	}
-
-	return nil
-}
-
-// generateWorkerRoleLabelPatch creates a Talos patch file that labels worker nodes
-// with node-role.kubernetes.io/worker. This goes into the workers/ directory so it
-// only applies to worker machine configs.
-func (g *Generator) generateWorkerRoleLabelPatch(
-	rootPath string,
-	force bool,
-) error {
-	patchPath := filepath.Join(rootPath, "workers", workerRoleLabelFileName)
-
-	// Check if file already exists
-	_, statErr := os.Stat(patchPath)
-	if statErr == nil && !force {
-		return nil
-	}
-
-	err := os.WriteFile(patchPath, []byte(WorkerRoleLabelPatchYAML), filePerm)
-	if err != nil {
-		return fmt.Errorf("failed to create worker-role-label patch: %w", err)
 	}
 
 	return nil
