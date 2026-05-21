@@ -129,33 +129,12 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 		return err
 	}
 
-	// Step 1b: Resolve a stable, server-side exposure (Gateway → LoadBalancer → NodePort) for the
-	// nested Kubernetes API server. The Service is created up-front (its target port is corrected
-	// after the DinD-mapped K8s port is discovered) so the address can be added to the cert SANs.
-	exposure, err := p.k8sProvider.ResolveExposure(
-		ctx, p.dynamicClient,
-		kubernetesprovider.APIExposureSpec{
-			ClusterName:      clusterName,
-			APIPort:          kubernetesprovider.DinDAPIServerPort,
-			GatewayClassName: p.gatewayClassName,
-			HostAddress:      p.restConfig.Host,
-			SkipLoadBalancer: true,
-		},
-	)
+	// Step 1b: Resolve a stable, server-side exposure and bake its address into the API server
+	// cert SANs (the Service target port is corrected once the DinD-mapped K8s port is known).
+	exposure, err := p.prepareExposure(ctx, clusterName)
 	if err != nil {
-		return fmt.Errorf("expose API server: %w", err)
+		return err
 	}
-
-	// Step 1c: Regenerate the Talos config so the API server cert is valid for the exposure
-	// address (keeping loopback for the creation-time port-forward), preserving the PKI.
-	newConfigs, err := p.inner.talosConfigs.WithCertSANs(
-		[]string{"127.0.0.1", "localhost", exposure.Address},
-	)
-	if err != nil {
-		return fmt.Errorf("add exposure address to cert SANs: %w", err)
-	}
-
-	p.inner.talosConfigs = newConfigs
 
 	// Step 2: Start exec tunnel for Docker API (2375) to localhost.
 	// The exec tunnel uses CRI exec + nc instead of SPDY port-forward,
@@ -236,26 +215,10 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 
 	// === Phase 2: Port-forward Talos API + K8s API from DinD, then bootstrap ===
 
-	// Discover mapped Talos API port inside DinD (e.g., 127.0.0.1:32001)
-	talosEndpoint, err := p.inner.getMappedTalosAPIEndpoint(ctx, clusterName)
+	// Discover the host ports the Talos API and K8s API are mapped to inside DinD.
+	talosPort, k8sPort, err := p.discoverMappedPorts(ctx, clusterName)
 	if err != nil {
-		return fmt.Errorf("get Talos API endpoint: %w", err)
-	}
-
-	talosPort, err := parsePort(talosEndpoint)
-	if err != nil {
-		return fmt.Errorf("parse Talos API port: %w", err)
-	}
-
-	// Discover mapped K8s API port inside DinD
-	k8sEndpoint, err := p.inner.getMappedK8sAPIEndpoint(ctx, clusterName)
-	if err != nil {
-		return fmt.Errorf("get K8s API endpoint: %w", err)
-	}
-
-	k8sPort, err := parsePort(k8sEndpoint)
-	if err != nil {
-		return fmt.Errorf("parse K8s API port: %w", err)
+		return err
 	}
 
 	// Port-forward Talos API from DinD to host
@@ -283,13 +246,8 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 	hostTalosEndpoint := net.JoinHostPort("127.0.0.1", strconv.Itoa(talosPF.LocalPort))
 	hostK8sEndpoint := fmt.Sprintf("https://127.0.0.1:%d", k8sPF.LocalPort)
 
-	_, _ = fmt.Fprintf(
-		os.Stdout,
-		"► Talos API: %s → localhost:%d\n",
-		talosEndpoint,
-		talosPF.LocalPort,
-	)
-	_, _ = fmt.Fprintf(os.Stdout, "► K8s API: %s → localhost:%d\n", k8sEndpoint, k8sPF.LocalPort)
+	_, _ = fmt.Fprintf(os.Stdout, "► Talos API → localhost:%d\n", talosPF.LocalPort)
+	_, _ = fmt.Fprintf(os.Stdout, "► K8s API → localhost:%d\n", k8sPF.LocalPort)
 
 	// Save talosconfig with host-accessible endpoint
 	talosConfig := configBundle.TalosConfig()
@@ -422,6 +380,69 @@ func (p *KubernetesProvisioner) Start(_ context.Context, _ string) error {
 // Stop is not supported for Talos-on-Kubernetes.
 func (p *KubernetesProvisioner) Stop(_ context.Context, _ string) error {
 	return ErrStopNotSupported
+}
+
+// prepareExposure resolves a stable, server-side exposure for the nested Kubernetes API server and
+// regenerates the Talos config so the API server certificate is valid for that address (preserving
+// the existing PKI). The Service target port is corrected later, once the DinD-mapped K8s port is
+// known.
+func (p *KubernetesProvisioner) prepareExposure(
+	ctx context.Context,
+	clusterName string,
+) (*kubernetesprovider.ExposureResult, error) {
+	exposure, err := p.k8sProvider.ResolveExposure(
+		ctx, p.dynamicClient,
+		kubernetesprovider.APIExposureSpec{
+			ClusterName:      clusterName,
+			APIPort:          kubernetesprovider.DinDAPIServerPort,
+			GatewayClassName: p.gatewayClassName,
+			HostAddress:      p.restConfig.Host,
+			SkipLoadBalancer: true,
+		},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("expose API server: %w", err)
+	}
+
+	newConfigs, err := p.inner.talosConfigs.WithCertSANs(
+		[]string{"127.0.0.1", "localhost", exposure.Address},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("add exposure address to cert SANs: %w", err)
+	}
+
+	p.inner.talosConfigs = newConfigs
+
+	return exposure, nil
+}
+
+// discoverMappedPorts returns the host ports the Talos API and Kubernetes API are published on
+// inside the DinD container, in that order (talosPort, k8sPort).
+func (p *KubernetesProvisioner) discoverMappedPorts(
+	ctx context.Context,
+	clusterName string,
+) (int, int, error) {
+	talosEndpoint, err := p.inner.getMappedTalosAPIEndpoint(ctx, clusterName)
+	if err != nil {
+		return 0, 0, fmt.Errorf("get Talos API endpoint: %w", err)
+	}
+
+	talosPort, err := parsePort(talosEndpoint)
+	if err != nil {
+		return 0, 0, fmt.Errorf("parse Talos API port: %w", err)
+	}
+
+	k8sEndpoint, err := p.inner.getMappedK8sAPIEndpoint(ctx, clusterName)
+	if err != nil {
+		return 0, 0, fmt.Errorf("get K8s API endpoint: %w", err)
+	}
+
+	k8sPort, err := parsePort(k8sEndpoint)
+	if err != nil {
+		return 0, 0, fmt.Errorf("parse K8s API port: %w", err)
+	}
+
+	return talosPort, k8sPort, nil
 }
 
 // setupDinD creates the namespace and DinD pod, then waits for readiness.
