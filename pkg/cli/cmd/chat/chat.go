@@ -264,7 +264,7 @@ func startCopilotClient(ctx context.Context) (*copilot.Client, error) {
 		return nil, fmt.Errorf(
 			startupErrFmt,
 			err,
-			buildDiagnosticBlock(ctx, cliPath, opts.GitHubToken, opts.Env),
+			buildDiagnosticBlock(diagnoseCLIStartupFailure(ctx, cliPath, opts.GitHubToken, opts.Env)),
 		)
 	}
 
@@ -298,22 +298,14 @@ func verifyCopilotCLI(ctx context.Context, cliPath string, env []string) error {
 	return nil
 }
 
-// buildDiagnosticBlock runs the CLI diagnostic and returns a formatted block
-// suitable for inclusion in an error message, or an empty string if there is
-// nothing to report. When githubToken is non-empty, it is injected into the
-// subprocess environment via COPILOT_SDK_AUTH_TOKEN (mirroring the SDK) so the
-// diagnostic runs under the same auth context as the real startup attempt.
-func buildDiagnosticBlock(ctx context.Context, cliPath, githubToken string, env []string) string {
-	if cliPath == "" {
+// buildDiagnosticBlock formats the diagnostic output for inclusion in an error
+// message, or returns an empty string if there is nothing to report.
+func buildDiagnosticBlock(diagnosticOutput string) string {
+	if diagnosticOutput == "" {
 		return ""
 	}
 
-	d := diagnoseCLIStartupFailure(ctx, cliPath, githubToken, env)
-	if d == "" {
-		return ""
-	}
-
-	return "CLI diagnostic output:\n  " + strings.ReplaceAll(d, "\n", "\n  ") + "\n\n"
+	return "CLI diagnostic output:\n  " + strings.ReplaceAll(diagnosticOutput, "\n", "\n  ") + "\n\n"
 }
 
 // diagnoseCLIStartupFailure re-runs the copilot CLI in headless mode with

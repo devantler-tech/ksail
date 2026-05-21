@@ -43,9 +43,9 @@ func GetDiagnoseCLIStartupFailure() func(context.Context, string, string, []stri
 	return diagnoseCLIStartupFailure
 }
 
-// GetBuildDiagnosticBlock returns the buildDiagnosticBlock function for testing.
-func GetBuildDiagnosticBlock() func(context.Context, string, string, []string) string {
-	return buildDiagnosticBlock
+// BuildDiagnosticBlock exposes buildDiagnosticBlock for testing.
+func BuildDiagnosticBlock(diagnosticOutput string) string {
+	return buildDiagnosticBlock(diagnosticOutput)
 }
 
 // AuthMaxAttempts exports the authMaxAttempts constant for testing.
