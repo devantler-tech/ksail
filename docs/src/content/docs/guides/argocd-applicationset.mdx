@@ -245,48 +245,37 @@ spec:
 
 ## SOPS Age Integration
 
-KSail provides native SOPS Age parity for ArgoCD, matching the Flux integration. When SOPS is enabled (or auto-detected) **and an Age key can be resolved**, KSail automatically:
+When SOPS is enabled (or auto-detected) and an Age key is available, KSail automatically:
 
 1. Creates a `sops-age` Secret in the `argocd` namespace containing your Age private key
 2. Installs a [Config Management Plugin](https://argo-cd.readthedocs.io/en/stable/operator-manual/config-management-plugins/) (CMP) sidecar on the ArgoCD repo-server that decrypts SOPS-encrypted manifests before rendering
 
-Key resolution checks `sops.env.var` first; if empty, it falls back to `sops.ageKeyEnvVar` (deprecated; default: `SOPS_AGE_KEY`). `sops.extract.file` specifies a custom key file path. Use `sops.extract.publicKeys` to filter which private keys from the file are included in the secret. If no key can be resolved, the `sops-age` Secret is not created and SOPS decryption is skipped.
-
-This means encrypted secrets in your source directory are decrypted transparently during sync — no manual plugin setup required.
+Encrypted secrets in your source directory are decrypted transparently during sync — no manual plugin setup required. For key resolution details and all `spec.cluster.sops` options, see [Secret Management](/features/secret-management/).
 
 ### Enabling SOPS
 
-SOPS is auto-detected by default. If `SOPS_AGE_KEY` is set or an Age key file exists, KSail enables SOPS automatically:
+SOPS is auto-detected. If `SOPS_AGE_KEY` is set or an Age key file exists, KSail enables SOPS automatically. To configure explicitly:
 
 ```yaml
-# ksail.yaml
-apiVersion: ksail.io/v1alpha1
-kind: Cluster
 spec:
   cluster:
     gitOpsEngine: ArgoCD
     sops:
       env:
-        var: SOPS_AGE_KEY        # overrides sops.ageKeyEnvVar when non-empty
-      extract:
-        file: ""                 # custom key file path; defaults to OS-specific SOPS path
-        publicKeys: []           # filter by age1... public keys; empty = include all
-      # enabled: true            # explicit; omit for auto-detect
+        var: SOPS_AGE_KEY  # env var containing your Age private key
+      # enabled: true       # set explicitly to disable auto-detect
 ```
 
-> **Note:** `sops.ageKeyEnvVar` is deprecated. Use `sops.env.var` instead. To disable env var lookup entirely, explicitly set `sops.ageKeyEnvVar: ""` (there is no non-deprecated way to disable it yet).
+> [!NOTE]
+> `sops.ageKeyEnvVar` is deprecated — use `sops.env.var` instead. For all `spec.cluster.sops` options, see [Declarative Configuration](/configuration/declarative-configuration/).
 
 ### Encrypting Secrets
-
-Encrypt secrets in your source directory with SOPS and Age:
 
 ```bash
 ksail cipher encrypt k8s/apps/backend/secret.yaml
 ```
 
 When the ApplicationSet syncs the `backend` Application, the CMP sidecar detects the `sops:` metadata block and decrypts the file before applying it to the cluster.
-
-See [Secret Management](/features/secret-management/) for the full SOPS configuration reference and [Declarative Configuration](/configuration/declarative-configuration/) for `spec.cluster.sops` options.
 
 ## Tips
 
