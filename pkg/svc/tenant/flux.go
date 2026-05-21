@@ -39,11 +39,20 @@ type fluxKustomizationSourceRef struct {
 
 type fluxKustomizationSpec struct {
 	Interval           string                     `json:"interval"`
+	RetryInterval      string                     `json:"retryInterval,omitempty"`
 	SourceRef          fluxKustomizationSourceRef `json:"sourceRef"`
 	Path               string                     `json:"path"`
 	Prune              bool                       `json:"prune"`
+	Wait               bool                       `json:"wait,omitempty"`
+	Timeout            string                     `json:"timeout,omitempty"`
 	TargetNamespace    string                     `json:"targetNamespace"`
 	ServiceAccountName string                     `json:"serviceAccountName"`
+	Decryption         *fluxDecryption            `json:"decryption,omitempty"`
+}
+
+type fluxDecryption struct {
+	Provider  string            `json:"provider"`
+	SecretRef map[string]string `json:"secretRef,omitempty"`
 }
 
 type fluxKustomization struct {
@@ -100,6 +109,8 @@ func GenerateFluxSyncManifests(opts Options) (map[string]string, error) {
 		},
 	}
 
+	applyFluxHardening(&kustomization.Spec, opts)
+
 	sourceYAML, err := yaml.Marshal(source)
 	if err != nil {
 		return nil, fmt.Errorf("marshaling flux source: %w", err)
@@ -115,6 +126,33 @@ func GenerateFluxSyncManifests(opts Options) (map[string]string, error) {
 	return map[string]string{
 		"sync.yaml": syncYAML,
 	}, nil
+}
+
+// applyFluxHardening sets the optional production hardening fields on the Flux
+// Kustomization spec based on the tenant options. All fields are no-ops when
+// their flag is unset, keeping default output unchanged.
+func applyFluxHardening(spec *fluxKustomizationSpec, opts Options) {
+	if opts.FluxWait {
+		spec.Wait = true
+
+		timeout := opts.FluxTimeout
+		if timeout == "" {
+			timeout = DefaultFluxTimeout
+		}
+
+		spec.Timeout = timeout
+	}
+
+	if opts.FluxRetryInterval != "" {
+		spec.RetryInterval = opts.FluxRetryInterval
+	}
+
+	if opts.FluxDecryption {
+		spec.Decryption = &fluxDecryption{
+			Provider:  "sops",
+			SecretRef: map[string]string{"name": "sops-age"},
+		}
+	}
 }
 
 func buildFluxSource(opts Options, primaryNS string) (fluxSource, error) {

@@ -35,7 +35,8 @@ func NewCreateCmd(_ *di.Runtime) *cobra.Command {
 	// Phase 1 flags
 	cmd.Flags().
 		StringSliceP("namespace", "n", nil, "Namespaces to create (repeatable, default: tenant-name)")
-	cmd.Flags().String("cluster-role", "edit", "ClusterRole to bind to the tenant ServiceAccount")
+	cmd.Flags().StringSlice("cluster-role", []string{"edit"},
+		"ClusterRole(s) to bind to the tenant ServiceAccount (repeatable)")
 	cmd.Flags().StringP("output", "o", ".", "Output directory for platform manifests")
 	cmd.Flags().Bool("force", false, "Overwrite existing tenant directory")
 	cmd.Flags().StringP("type", "t", "",
@@ -72,9 +73,40 @@ func NewCreateCmd(_ *di.Runtime) *cobra.Command {
 	cmd.Flags().String("target-branch", "",
 		"PR target branch (default: repo's default branch)")
 
+	addProductionFlags(cmd)
+
 	cmd.RunE = handleCreateRunE
 
 	return cmd
+}
+
+// addProductionFlags registers the opt-in production hardening flags.
+func addProductionFlags(cmd *cobra.Command) {
+	cmd.Flags().Bool("production", false,
+		"Enable the recommended production baseline (PSS baseline, default-deny "+
+			"NetworkPolicy, ResourceQuota, LimitRange, hardened ServiceAccount and Flux sync)")
+	cmd.Flags().String("pod-security", "",
+		"Pod Security Standards level for namespaces: restricted, baseline, or privileged")
+	cmd.Flags().Bool("with-network-policy", false,
+		"Generate default-deny NetworkPolicy plus DNS and intra-namespace allow rules")
+	cmd.Flags().Bool("with-quota", false, "Generate a ResourceQuota for each namespace")
+	cmd.Flags().String("quota-cpu", "4", "CPU quota (sets requests.cpu and limits.cpu)")
+	cmd.Flags().String("quota-memory", "8Gi", "Memory quota (sets requests.memory and limits.memory)")
+	cmd.Flags().Bool("with-limit-range", false,
+		"Generate a LimitRange with default container requests/limits")
+	cmd.Flags().String("limit-default-cpu", "500m", "Default container CPU limit")
+	cmd.Flags().String("limit-default-memory", "512Mi", "Default container memory limit")
+	cmd.Flags().String("limit-request-cpu", "100m", "Default container CPU request")
+	cmd.Flags().String("limit-request-memory", "128Mi", "Default container memory request")
+	cmd.Flags().Bool("disable-token-automount", false,
+		"Set automountServiceAccountToken: false on the tenant ServiceAccount")
+	cmd.Flags().StringSlice("image-pull-secret", nil,
+		"imagePullSecret to add to the tenant ServiceAccount (repeatable)")
+	cmd.Flags().Bool("flux-wait", false, "(Flux) Set wait: true and timeout on the Flux Kustomization")
+	cmd.Flags().String("flux-timeout", "5m", "(Flux) Flux Kustomization timeout (implies wait)")
+	cmd.Flags().String("flux-retry-interval", "", "(Flux) Flux Kustomization retryInterval")
+	cmd.Flags().Bool("flux-decryption", false,
+		"(Flux) Add a SOPS decryption block referencing the sops-age secret")
 }
 
 func handleCreateRunE(cmd *cobra.Command, args []string) error {
@@ -155,7 +187,9 @@ func resolveCreateOptions(
 	// Read flags.
 	namespaces, _ := cmd.Flags().GetStringSlice("namespace")
 	opts.Namespaces = namespaces
-	opts.ClusterRole, _ = cmd.Flags().GetString("cluster-role")
+	opts.ClusterRoles, _ = cmd.Flags().GetStringSlice("cluster-role")
+
+	readProductionFlags(cmd, &opts)
 
 	outputStr, _ := cmd.Flags().GetString("output")
 	opts.Force, _ = cmd.Flags().GetBool("force")
@@ -183,11 +217,25 @@ func resolveCreateOptions(
 		return tenant.Options{}, "", "", deliveryErr
 	}
 
+	// Load ksail.yaml once for both tenant-type auto-detect and engine selection.
+	cfg, cfgFound, cfgErr := loadKSailConfig(cmd)
+	if typeStr == "" && cfgErr != nil {
+		return tenant.Options{}, "", "", cfgErr
+	}
+
 	// Resolve tenant type.
-	typeErr := resolveTenantType(cmd, typeStr, &opts)
+	typeErr := resolveTenantType(typeStr, &opts, cfg, cfgFound)
 	if typeErr != nil {
 		return tenant.Options{}, "", "", typeErr
 	}
+
+	// Best-effort engine selection (NetworkPolicy flavor, policy engine) from config.
+	if cfgErr == nil && cfgFound && cfg != nil {
+		applyEngineDefaults(&opts, cfg)
+	}
+
+	// Expand the --production umbrella (granular flags always win when set).
+	applyProductionDefaults(cmd, &opts)
 
 	// Validate sync source only for Flux tenants.
 	if opts.TenantType == tenant.TypeFlux {
@@ -198,6 +246,71 @@ func resolveCreateOptions(
 	}
 
 	return opts, outputStr, delivery, nil
+}
+
+// readProductionFlags reads the opt-in production hardening flags into opts.
+func readProductionFlags(cmd *cobra.Command, opts *tenant.Options) {
+	opts.PodSecurity, _ = cmd.Flags().GetString("pod-security")
+	opts.WithNetworkPolicy, _ = cmd.Flags().GetBool("with-network-policy")
+	opts.WithQuota, _ = cmd.Flags().GetBool("with-quota")
+	opts.QuotaCPU, _ = cmd.Flags().GetString("quota-cpu")
+	opts.QuotaMemory, _ = cmd.Flags().GetString("quota-memory")
+	opts.WithLimitRange, _ = cmd.Flags().GetBool("with-limit-range")
+	opts.LimitDefaultCPU, _ = cmd.Flags().GetString("limit-default-cpu")
+	opts.LimitDefaultMemory, _ = cmd.Flags().GetString("limit-default-memory")
+	opts.LimitRequestCPU, _ = cmd.Flags().GetString("limit-request-cpu")
+	opts.LimitRequestMemory, _ = cmd.Flags().GetString("limit-request-memory")
+	opts.DisableTokenAutomount, _ = cmd.Flags().GetBool("disable-token-automount")
+	opts.ImagePullSecrets, _ = cmd.Flags().GetStringSlice("image-pull-secret")
+	opts.FluxWait, _ = cmd.Flags().GetBool("flux-wait")
+	opts.FluxTimeout, _ = cmd.Flags().GetString("flux-timeout")
+	opts.FluxRetryInterval, _ = cmd.Flags().GetString("flux-retry-interval")
+	opts.FluxDecryption, _ = cmd.Flags().GetBool("flux-decryption")
+}
+
+// applyProductionDefaults expands the --production umbrella flag. Granular flags
+// the user explicitly set always take precedence.
+func applyProductionDefaults(cmd *cobra.Command, opts *tenant.Options) {
+	production, _ := cmd.Flags().GetBool("production")
+	if !production {
+		return
+	}
+
+	if !cmd.Flags().Changed("pod-security") {
+		opts.PodSecurity = tenant.PodSecurityBaseline
+	}
+
+	if !cmd.Flags().Changed("with-network-policy") {
+		opts.WithNetworkPolicy = true
+	}
+
+	if !cmd.Flags().Changed("with-quota") {
+		opts.WithQuota = true
+	}
+
+	if !cmd.Flags().Changed("with-limit-range") {
+		opts.WithLimitRange = true
+	}
+
+	if !cmd.Flags().Changed("disable-token-automount") {
+		opts.DisableTokenAutomount = true
+	}
+
+	if !cmd.Flags().Changed("flux-wait") {
+		opts.FluxWait = true
+	}
+}
+
+// applyEngineDefaults selects the NetworkPolicy flavor and records the policy
+// engine based on the loaded ksail.yaml cluster spec.
+func applyEngineDefaults(opts *tenant.Options, cfg *v1alpha1.Cluster) {
+	if cfg.Spec.Cluster.CNI == v1alpha1.CNICilium {
+		opts.NetworkPolicyEngine = tenant.NetworkPolicyEngineCilium
+	} else {
+		opts.NetworkPolicyEngine = tenant.NetworkPolicyEngineNative
+	}
+
+	opts.PolicyEngine = string(cfg.Spec.Cluster.PolicyEngine)
 }
 
 func validateDelivery(delivery, gitProvider string) error {
@@ -225,16 +338,9 @@ func validateDelivery(delivery, gitProvider string) error {
 	}
 }
 
-func resolveTenantType(cmd *cobra.Command, typeStr string, opts *tenant.Options) error {
-	if typeStr != "" {
-		err := opts.TenantType.Set(typeStr)
-		if err != nil {
-			return fmt.Errorf("setting tenant type: %w", err)
-		}
-
-		return nil
-	}
-
+// loadKSailConfig loads ksail.yaml once, returning the cluster config, whether
+// a config file was found, and any load error.
+func loadKSailConfig(cmd *cobra.Command) (*v1alpha1.Cluster, bool, error) {
 	var configFile string
 
 	cfgPath, err := flags.GetConfigPath(cmd)
@@ -246,10 +352,28 @@ func resolveTenantType(cmd *cobra.Command, typeStr string, opts *tenant.Options)
 
 	cfg, err := cfgManager.Load(configmanager.LoadOptions{Silent: true})
 	if err != nil {
-		return fmt.Errorf("loading config: %w", err)
+		return nil, false, fmt.Errorf("loading config: %w", err)
 	}
 
-	if !cfgManager.IsConfigFileFound() {
+	return cfg, cfgManager.IsConfigFileFound(), nil
+}
+
+func resolveTenantType(
+	typeStr string,
+	opts *tenant.Options,
+	cfg *v1alpha1.Cluster,
+	cfgFound bool,
+) error {
+	if typeStr != "" {
+		err := opts.TenantType.Set(typeStr)
+		if err != nil {
+			return fmt.Errorf("setting tenant type: %w", err)
+		}
+
+		return nil
+	}
+
+	if !cfgFound || cfg == nil {
 		return fmt.Errorf("%w", tenant.ErrConfigNotFound)
 	}
 

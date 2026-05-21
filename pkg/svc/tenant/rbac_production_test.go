@@ -1,0 +1,107 @@
+package tenant_test
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/devantler-tech/ksail/v7/pkg/svc/tenant"
+	"github.com/gkampitakis/go-snaps/snaps"
+	"github.com/stretchr/testify/require"
+)
+
+func readTenantFile(t *testing.T, dir, tenantName, filename string) string {
+	t.Helper()
+
+	data, err := os.ReadFile(filepath.Join(dir, tenantName, filename)) //nolint:gosec // test path
+	require.NoError(t, err)
+
+	return string(data)
+}
+
+func TestGenerateRBACManifests_PodSecurityLabels(t *testing.T) {
+	t.Parallel()
+
+	result, err := tenant.GenerateRBACManifests(tenant.Options{
+		Name:        "team-alpha",
+		Namespaces:  []string{"team-alpha"},
+		ClusterRole: "edit",
+		PodSecurity: tenant.PodSecurityRestricted,
+	})
+	require.NoError(t, err)
+
+	ns := result["namespace.yaml"]
+	require.Contains(t, ns, "pod-security.kubernetes.io/enforce: restricted")
+	require.Contains(t, ns, "pod-security.kubernetes.io/audit: restricted")
+	require.Contains(t, ns, "pod-security.kubernetes.io/warn: restricted")
+	snaps.MatchSnapshot(t, ns)
+}
+
+func TestGenerateRBACManifests_ServiceAccountHardening(t *testing.T) {
+	t.Parallel()
+
+	result, err := tenant.GenerateRBACManifests(tenant.Options{
+		Name:                  "team-alpha",
+		Namespaces:            []string{"team-alpha"},
+		ClusterRole:           "edit",
+		DisableTokenAutomount: true,
+		ImagePullSecrets:      []string{"ghcr-auth", "dockerhub"},
+	})
+	require.NoError(t, err)
+
+	sa := result["serviceaccount.yaml"]
+	require.Contains(t, sa, "automountServiceAccountToken: false")
+	require.Contains(t, sa, "name: ghcr-auth")
+	require.Contains(t, sa, "name: dockerhub")
+	snaps.MatchSnapshot(t, sa)
+}
+
+func TestGenerateRBACManifests_MultipleClusterRoles(t *testing.T) {
+	t.Parallel()
+
+	result, err := tenant.GenerateRBACManifests(tenant.Options{
+		Name:         "team-alpha",
+		Namespaces:   []string{"team-alpha"},
+		ClusterRoles: []string{"edit", "view"},
+	})
+	require.NoError(t, err)
+
+	rb := result["rolebinding.yaml"]
+	// One RoleBinding per role, named <tenant>-<role>.
+	require.Contains(t, rb, "name: team-alpha-edit")
+	require.Contains(t, rb, "name: team-alpha-view")
+	// Both bind the single tenant ServiceAccount.
+	require.Equal(t, 2, strings.Count(rb, "name: team-alpha\n  namespace: team-alpha"))
+
+	docs := strings.Split(rb, "---\n")
+	require.Len(t, docs, 2)
+	snaps.MatchSnapshot(t, rb)
+}
+
+func TestGenerate_ProductionTenant(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	err := tenant.Generate(tenant.Options{
+		Name:              "team-prod",
+		Namespaces:        []string{"team-prod"},
+		TenantType:        tenant.TypeKubectl,
+		OutputDir:         dir,
+		PodSecurity:       tenant.PodSecurityBaseline,
+		WithNetworkPolicy: true,
+		WithQuota:         true,
+		WithLimitRange:    true,
+	})
+	require.NoError(t, err)
+
+	kustomization := readTenantFile(t, dir, "team-prod", "kustomization.yaml")
+	for _, name := range []string{
+		"namespace.yaml", "serviceaccount.yaml", "rolebinding.yaml",
+		"networkpolicy.yaml", "resourcequota.yaml", "limitrange.yaml",
+	} {
+		require.Contains(t, kustomization, name)
+	}
+
+	snaps.MatchSnapshot(t, kustomization)
+}

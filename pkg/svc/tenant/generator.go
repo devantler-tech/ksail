@@ -54,6 +54,14 @@ func Generate(opts Options) error {
 
 	resources = append(resources, typeResources...)
 
+	// Generate optional production hardening manifests.
+	prodResources, err := generateProductionManifests(opts, tenantDir)
+	if err != nil {
+		return err
+	}
+
+	resources = append(resources, prodResources...)
+
 	slices.Sort(resources)
 
 	// Generate kustomization.yaml.
@@ -131,6 +139,37 @@ func generateTypeSpecificManifests(opts Options, tenantDir string) ([]string, er
 	default:
 		return nil, fmt.Errorf("%w: %q", ErrInvalidType, opts.TenantType)
 	}
+}
+
+// generateProductionManifests generates the optional production hardening
+// manifests (NetworkPolicy, ResourceQuota, LimitRange), writes them to the
+// tenant directory, and returns the filenames written. Each generator returns
+// nil when its feature flag is off, so nothing is written by default.
+func generateProductionManifests(opts Options, tenantDir string) ([]string, error) {
+	generators := []func(Options) (map[string]string, error){
+		GenerateNetworkPolicyManifests,
+		GenerateResourceQuotaManifests,
+		GenerateLimitRangeManifests,
+	}
+
+	merged := make(map[string]string)
+
+	for _, generate := range generators {
+		files, err := generate(opts)
+		if err != nil {
+			return nil, fmt.Errorf("generating production manifests: %w", err)
+		}
+
+		for name, content := range files {
+			merged[name] = content
+		}
+	}
+
+	if len(merged) == 0 {
+		return nil, nil
+	}
+
+	return writeManifests(tenantDir, merged, opts.Force)
 }
 
 // writeManifests writes a map of filename->content to the given directory

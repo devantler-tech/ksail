@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
+	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/util/validation"
 )
 
@@ -115,6 +117,73 @@ type Options struct {
 	TargetBranch string
 	// SourceDirectory is the directory name for tenant manifests (default: "k8s").
 	SourceDirectory string
+
+	// --- Production hardening (all opt-in) ---
+
+	// ClusterRoles are the ClusterRoles to bind to the tenant ServiceAccount.
+	// When empty, falls back to ClusterRole (or DefaultClusterRole).
+	ClusterRoles []string
+	// PodSecurity is the Pod Security Standards level applied to namespaces
+	// ("" | restricted | baseline | privileged).
+	PodSecurity string
+	// DisableTokenAutomount sets automountServiceAccountToken: false on the SA.
+	DisableTokenAutomount bool
+	// ImagePullSecrets are imagePullSecrets added to the tenant ServiceAccount.
+	ImagePullSecrets []string
+	// WithNetworkPolicy generates default-deny NetworkPolicies (plus DNS + intra-ns allow).
+	WithNetworkPolicy bool
+	// NetworkPolicyEngine selects the NetworkPolicy flavor: native or cilium.
+	NetworkPolicyEngine NetworkPolicyEngine
+	// WithQuota generates a ResourceQuota per namespace.
+	WithQuota bool
+	// QuotaCPU is the cpu quota (sets requests.cpu and limits.cpu).
+	QuotaCPU string
+	// QuotaMemory is the memory quota (sets requests.memory and limits.memory).
+	QuotaMemory string
+	// WithLimitRange generates a LimitRange per namespace.
+	WithLimitRange bool
+	// LimitDefaultCPU is the default container CPU limit.
+	LimitDefaultCPU string
+	// LimitDefaultMemory is the default container memory limit.
+	LimitDefaultMemory string
+	// LimitRequestCPU is the default container CPU request.
+	LimitRequestCPU string
+	// LimitRequestMemory is the default container memory request.
+	LimitRequestMemory string
+	// FluxWait sets wait: true (and timeout) on the Flux Kustomization.
+	FluxWait bool
+	// FluxTimeout is the Flux Kustomization timeout (implies wait).
+	FluxTimeout string
+	// FluxRetryInterval is the Flux Kustomization retryInterval.
+	FluxRetryInterval string
+	// FluxDecryption adds a SOPS decryption block to the Flux Kustomization.
+	FluxDecryption bool
+	// PolicyEngine mirrors the cluster's policy engine (e.g. "Kyverno"), informational.
+	PolicyEngine string
+}
+
+// NetworkPolicyEngine selects which NetworkPolicy flavor to emit.
+type NetworkPolicyEngine string
+
+const (
+	// NetworkPolicyEngineNative emits upstream networking.k8s.io/v1 NetworkPolicies.
+	NetworkPolicyEngineNative NetworkPolicyEngine = "native"
+	// NetworkPolicyEngineCilium emits cilium.io/v2 CiliumNetworkPolicies.
+	NetworkPolicyEngineCilium NetworkPolicyEngine = "cilium"
+)
+
+const (
+	// PodSecurityRestricted is the most restrictive Pod Security Standards level.
+	PodSecurityRestricted = "restricted"
+	// PodSecurityBaseline is the baseline Pod Security Standards level.
+	PodSecurityBaseline = "baseline"
+	// PodSecurityPrivileged is the least restrictive Pod Security Standards level.
+	PodSecurityPrivileged = "privileged"
+)
+
+// ValidPodSecurityLevels returns the valid Pod Security Standards levels.
+func ValidPodSecurityLevels() []string {
+	return []string{PodSecurityRestricted, PodSecurityBaseline, PodSecurityPrivileged}
 }
 
 const (
@@ -128,6 +197,20 @@ const (
 	DefaultSyncSource = SyncSourceOCI
 	// DefaultRepoVisibility is the default repository visibility.
 	DefaultRepoVisibility = "Private"
+	// DefaultQuotaCPU is the default cpu quota.
+	DefaultQuotaCPU = "4"
+	// DefaultQuotaMemory is the default memory quota.
+	DefaultQuotaMemory = "8Gi"
+	// DefaultLimitDefaultCPU is the default container CPU limit.
+	DefaultLimitDefaultCPU = "500m"
+	// DefaultLimitDefaultMemory is the default container memory limit.
+	DefaultLimitDefaultMemory = "512Mi"
+	// DefaultLimitRequestCPU is the default container CPU request.
+	DefaultLimitRequestCPU = "100m"
+	// DefaultLimitRequestMemory is the default container memory request.
+	DefaultLimitRequestMemory = "128Mi"
+	// DefaultFluxTimeout is the default Flux Kustomization timeout when waiting.
+	DefaultFluxTimeout = "5m"
 )
 
 // ResolveDefaults fills in default values for unset fields.
@@ -154,6 +237,45 @@ func (o *Options) ResolveDefaults() {
 
 	if o.SourceDirectory == "" {
 		o.SourceDirectory = DefaultSourceDirectory
+	}
+
+	o.resolveProductionDefaults()
+}
+
+// resolveProductionDefaults fills in defaults for the production hardening fields.
+func (o *Options) resolveProductionDefaults() {
+	if len(o.ClusterRoles) == 0 {
+		if o.ClusterRole != "" {
+			o.ClusterRoles = []string{o.ClusterRole}
+		} else {
+			o.ClusterRoles = []string{DefaultClusterRole}
+		}
+	}
+
+	if o.NetworkPolicyEngine == "" {
+		o.NetworkPolicyEngine = NetworkPolicyEngineNative
+	}
+
+	if o.WithQuota {
+		setDefault(&o.QuotaCPU, DefaultQuotaCPU)
+		setDefault(&o.QuotaMemory, DefaultQuotaMemory)
+	}
+
+	if o.WithLimitRange {
+		setDefault(&o.LimitDefaultCPU, DefaultLimitDefaultCPU)
+		setDefault(&o.LimitDefaultMemory, DefaultLimitDefaultMemory)
+		setDefault(&o.LimitRequestCPU, DefaultLimitRequestCPU)
+		setDefault(&o.LimitRequestMemory, DefaultLimitRequestMemory)
+	}
+
+	if o.FluxWait && o.FluxTimeout == "" {
+		o.FluxTimeout = DefaultFluxTimeout
+	}
+}
+
+func setDefault(field *string, value string) {
+	if *field == "" {
+		*field = value
 	}
 }
 
@@ -188,6 +310,64 @@ func (o *Options) Validate() error {
 		if err != nil {
 			return err
 		}
+	}
+
+	return o.validateProduction()
+}
+
+// validateProduction validates the production hardening fields.
+func (o *Options) validateProduction() error {
+	if o.PodSecurity != "" && !slices.Contains(ValidPodSecurityLevels(), o.PodSecurity) {
+		return fmt.Errorf("%w: %q (valid options: %s)",
+			ErrInvalidPodSecurityLevel, o.PodSecurity,
+			strings.Join(ValidPodSecurityLevels(), ", "))
+	}
+
+	for _, role := range o.ClusterRoles {
+		if strings.TrimSpace(role) == "" {
+			return ErrEmptyClusterRole
+		}
+	}
+
+	if o.WithQuota {
+		for _, qty := range []string{o.QuotaCPU, o.QuotaMemory} {
+			if err := validateQuantity(qty); err != nil {
+				return err
+			}
+		}
+	}
+
+	if o.WithLimitRange {
+		for _, qty := range []string{
+			o.LimitDefaultCPU, o.LimitDefaultMemory,
+			o.LimitRequestCPU, o.LimitRequestMemory,
+		} {
+			if err := validateQuantity(qty); err != nil {
+				return err
+			}
+		}
+	}
+
+	for _, dur := range []string{o.FluxTimeout, o.FluxRetryInterval} {
+		if dur == "" {
+			continue
+		}
+
+		if _, err := time.ParseDuration(dur); err != nil {
+			return fmt.Errorf("%w: %q", ErrInvalidDuration, dur)
+		}
+	}
+
+	return nil
+}
+
+func validateQuantity(value string) error {
+	if value == "" {
+		return nil
+	}
+
+	if _, err := resource.ParseQuantity(value); err != nil {
+		return fmt.Errorf("%w: %q", ErrInvalidQuantity, value)
 	}
 
 	return nil

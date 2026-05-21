@@ -49,6 +49,83 @@ func TestTypeSetInvalid(t *testing.T) {
 	require.ErrorIs(t, err, tenant.ErrInvalidType)
 }
 
+func TestValidateProduction(t *testing.T) {
+	t.Parallel()
+
+	base := func() tenant.Options {
+		return tenant.Options{
+			Name:       "team",
+			Namespaces: []string{"team"},
+			TenantType: tenant.TypeKubectl,
+		}
+	}
+
+	tests := []struct {
+		name    string
+		mutate  func(*tenant.Options)
+		wantErr error
+	}{
+		{
+			"valid pod security",
+			func(o *tenant.Options) { o.PodSecurity = "restricted" },
+			nil,
+		},
+		{
+			"invalid pod security",
+			func(o *tenant.Options) { o.PodSecurity = "nope" },
+			tenant.ErrInvalidPodSecurityLevel,
+		},
+		{
+			"empty cluster role",
+			func(o *tenant.Options) { o.ClusterRoles = []string{" "} },
+			tenant.ErrEmptyClusterRole,
+		},
+		{
+			"invalid quota",
+			func(o *tenant.Options) { o.WithQuota = true; o.QuotaCPU = "bad" },
+			tenant.ErrInvalidQuantity,
+		},
+		{
+			"invalid limit",
+			func(o *tenant.Options) { o.WithLimitRange = true; o.LimitDefaultCPU = "bad" },
+			tenant.ErrInvalidQuantity,
+		},
+		{
+			"invalid duration",
+			func(o *tenant.Options) { o.FluxTimeout = "5" },
+			tenant.ErrInvalidDuration,
+		},
+		{
+			"valid duration",
+			func(o *tenant.Options) { o.FluxTimeout = "5m" },
+			nil,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			opts := base()
+			testCase.mutate(&opts)
+
+			err := opts.Validate()
+			if testCase.wantErr == nil {
+				require.NoError(t, err)
+			} else {
+				require.ErrorIs(t, err, testCase.wantErr)
+			}
+		})
+	}
+}
+
+func TestValidPodSecurityLevels(t *testing.T) {
+	t.Parallel()
+
+	levels := tenant.ValidPodSecurityLevels()
+	require.ElementsMatch(t, []string{"restricted", "baseline", "privileged"}, levels)
+}
+
 func TestValidTypes(t *testing.T) {
 	t.Parallel()
 
