@@ -293,7 +293,7 @@ func TestCreateClusterInfoCommand(t *testing.T) {
 
 	testCommandCreation(
 		t,
-		func(c *kubectl.Client, path string) *cobra.Command { return c.CreateClusterInfoCommand(path) },
+		func(c *kubectl.Client, path string) *cobra.Command { return c.CreateClusterInfoCommand(path, "") },
 		"info",
 		"Display cluster information",
 		"Display addresses of the control plane and services with label kubernetes.io/cluster-service=true.",
@@ -306,7 +306,7 @@ func TestCreateClusterInfoCommandHasSubcommands(t *testing.T) {
 	ioStreams := createTestIOStreams()
 
 	client := kubectl.NewClient(ioStreams)
-	cmd := client.CreateClusterInfoCommand("/path/to/kubeconfig")
+	cmd := client.CreateClusterInfoCommand("/path/to/kubeconfig", "")
 
 	// Verify that kubectl cluster-info subcommands are present
 	subcommands := cmd.Commands()
@@ -319,6 +319,24 @@ func TestCreateClusterInfoCommandHasSubcommands(t *testing.T) {
 	}
 
 	require.True(t, subcommandNames["dump"], "expected dump subcommand to be present")
+}
+
+func TestCreateClusterInfoCommandScopesContext(t *testing.T) {
+	t.Parallel()
+
+	client := kubectl.NewClient(createTestIOStreams())
+
+	// A non-empty context scopes the command to that kubeconfig context.
+	scoped := client.CreateClusterInfoCommand("/path/to/kubeconfig", "kind-demo")
+	ctxFlag := scoped.Flags().Lookup("context")
+	require.NotNil(t, ctxFlag)
+	require.Equal(t, "kind-demo", ctxFlag.Value.String())
+
+	// An empty context leaves the flag at its default (current context).
+	unscoped := client.CreateClusterInfoCommand("/path/to/kubeconfig", "")
+	unscopedFlag := unscoped.Flags().Lookup("context")
+	require.NotNil(t, unscopedFlag)
+	require.Empty(t, unscopedFlag.Value.String())
 }
 
 func TestCreateExposeCommand(t *testing.T) {

@@ -254,10 +254,16 @@ func (c *Client) CreateExposeCommand(kubeConfigPath string) *cobra.Command {
 }
 
 // CreateClusterInfoCommand wires kubectl's cluster-info with minimal guarding.
-func (c *Client) CreateClusterInfoCommand(kubeConfigPath string) *cobra.Command {
+// When contextName is non-empty the command is scoped to that kubeconfig
+// context; otherwise kubectl falls back to the kubeconfig's current context.
+func (c *Client) CreateClusterInfoCommand(kubeConfigPath, contextName string) *cobra.Command {
 	configFlags := genericclioptions.NewConfigFlags(true)
 	if kubeConfigPath != "" {
 		configFlags.KubeConfig = &kubeConfigPath
+	}
+
+	if contextName != "" {
+		configFlags.Context = &contextName
 	}
 
 	restClientGetter := cmdutil.NewMatchVersionFlags(configFlags)

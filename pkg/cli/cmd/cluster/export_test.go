@@ -44,6 +44,11 @@ func ExportResolveClusterNameFromContext(ctx *localregistry.Context) string {
 	return resolveClusterNameFromContext(ctx)
 }
 
+// ExportResolveClusterContext exports resolveClusterContext for testing.
+func ExportResolveClusterContext(kubeconfigPath, clusterName string) (string, error) {
+	return resolveClusterContext(kubeconfigPath, clusterName)
+}
+
 // ExportWriteMetadata exports writeMetadata for testing.
 func ExportWriteMetadata(metadata *BackupMetadata, path string) error {
 	return writeMetadata(metadata, path)
