@@ -16,5 +16,5 @@ package v1alpha1
 // Regenerate DeepCopy methods (zz_generated.deepcopy.go) and the Cluster CRD manifest
 // (config/crd/bases/ksail.io_clusters.yaml) after changing the API types. Mirrors the
 // schema generation in schemas/ (go run gen_schema.go).
-//go:generate go run sigs.k8s.io/controller-tools/cmd/controller-gen@v0.19.0 object:headerFile=../../../../hack/boilerplate.go.txt paths=.
+//go:generate go run sigs.k8s.io/controller-tools/cmd/controller-gen@v0.19.0 object:headerFile=boilerplate.go.txt paths=.
 //go:generate go run sigs.k8s.io/controller-tools/cmd/controller-gen@v0.19.0 crd paths=. output:crd:dir=../../../../config/crd/bases
