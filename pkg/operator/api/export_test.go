@@ -62,13 +62,13 @@ func VerifySignedValue(secret []byte, value string) ([]byte, error) {
 func MustMarshal(value any) []byte { return mustMarshal(value) }
 
 // NewAuthenticator discovers the OIDC provider and builds an authenticator (network I/O).
-func NewAuthenticator(ctx context.Context, cfg OIDCConfig) (*authenticator, error) {
+func NewAuthenticator(ctx context.Context, cfg OIDCConfig) (*Authenticator, error) {
 	return newAuthenticator(ctx, cfg)
 }
 
 // NewConfigAuthenticator builds an authenticator from config alone (no OIDC discovery), for tests
 // that exercise cookie/session/callback behavior without a live provider.
-func NewConfigAuthenticator(cfg OIDCConfig) *authenticator {
+func NewConfigAuthenticator(cfg OIDCConfig) *Authenticator {
 	return &authenticator{config: cfg}
 }
 
