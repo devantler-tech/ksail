@@ -13,6 +13,8 @@ The operator reconciles `Cluster` resources (`ksail.io/v1alpha1`) so you can pro
 - **Web UI** _(optional)_ — a dashboard that talks to the REST API (`ui.enabled`).
 - **OIDC auth** _(optional)_ — app-driven OIDC login that protects the REST API and UI (`auth.oidc.enabled`).
 
+> **Note:** The REST API is unauthenticated by default. Enable OIDC (`auth.oidc.enabled=true`) to require sign-in, or set `api.bindPort=0` to disable the API entirely when you don't need the UI.
+
 ## Prerequisites
 
 - Kubernetes 1.27+
@@ -72,17 +74,21 @@ helm upgrade --install ksail-operator charts/ksail-operator \
 Set `ui.readOnly=true` for GitOps-enforced environments so the Git repository stays the single source of truth; the operator enforces read-only server-side. When `ui.ingress.enabled` is `false`, port-forward to reach the UI. The UI Service is named `<release-name>-ksail-operator-ui` (unless you set `fullnameOverride`), so for the install above:
 
 ```sh
-kubectl port-forward -n ksail-system svc/ksail-operator-ksail-operator-ui 80:80
+kubectl port-forward -n ksail-system svc/ksail-operator-ksail-operator-ui 8080:80
 ```
+
+Then open <http://localhost:8080>.
 
 ### Enable OIDC authentication
 
-OIDC closes the otherwise-unauthenticated REST API: the API owns the login/callback flow (a confidential client), and the client secret stays server-side. Provide an issuer, client credentials, and a redirect URL (auto-derived from the first ingress host when `ui.ingress` is enabled):
+OIDC closes the otherwise-unauthenticated REST API: the API owns the login/callback flow (a confidential client), and the client secret stays server-side. The provider must be able to reach the API's callback at a stable URL, so this example exposes it through an Ingress at `ksail.local` (with the Ingress enabled, `redirectURL` would otherwise auto-derive from the first host):
 
 ```sh
 helm upgrade --install ksail-operator charts/ksail-operator \
   --namespace ksail-system --create-namespace \
   --set ui.enabled=true \
+  --set ui.ingress.enabled=true \
+  --set ui.ingress.hosts[0].host=ksail.local \
   --set auth.oidc.enabled=true \
   --set auth.oidc.issuerURL=https://dex.example.com \
   --set auth.oidc.clientID=ksail \
@@ -90,7 +96,7 @@ helm upgrade --install ksail-operator charts/ksail-operator \
   --set auth.oidc.redirectURL=https://ksail.local/api/v1/auth/callback
 ```
 
-Register the redirect URL with your provider. To keep secrets out of `--set`/values, pre-create a Secret with keys `client-secret` and `session-secret` and reference it via `auth.oidc.existingSecret`.
+Register the redirect URL with your provider, and point `ksail.local` at your Ingress controller (terminating TLS for the `https` callback). To keep secrets out of `--set`/values, pre-create a Secret with keys `client-secret` and `session-secret` and reference it via `auth.oidc.existingSecret`.
 
 ## Configuration
 
