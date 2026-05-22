@@ -131,6 +131,7 @@ jobs:
       docs-deps: ${{ steps.filter.outputs.docs-deps }}
       vsce-deps: ${{ steps.filter.outputs.vsce-deps }}
       copilot-plugin: ${{ steps.filter.outputs.copilot-plugin }}
+      operator-chart: ${{ steps.filter.outputs.operator-chart }}
     steps:
       - name: 📄 Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -254,6 +255,19 @@ jobs:
               - 'copilot-plugin/**'
               - '.github/plugin/**'
               - '.claude-plugin/**'
+              - '.github/workflows/ci.yaml'
+            operator-chart:
+              # Operator Helm chart E2E. Covers the chart, the web UI, the
+              # operator runtime (`ksail operator` subcommand), the reconciler,
+              # the Cluster CRD types, and the image build inputs.
+              - 'charts/ksail-operator/**'
+              - 'web/ui/**'
+              - 'pkg/operator/**'
+              - 'internal/controller/**'
+              - 'pkg/cli/cmd/operator/**'
+              - 'pkg/apis/**'
+              - 'Dockerfile'
+              - '.github/actions/operator-chart-e2e/**'
               - '.github/workflows/ci.yaml'
 
   ci-go:
@@ -818,6 +832,72 @@ jobs:
           # MCP server must point at the ksail binary
           jq -e '.mcpServers.ksail.command == "ksail"' copilot-plugin/.mcp.json >/dev/null
 
+  operator-chart-lint:
+    name: ⛵ Operator Chart Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [changes]
+    if: github.event_name != 'merge_group' && needs.changes.outputs.operator-chart == 'true'
+    permissions:
+      contents: read
+    steps:
+      - name: 📄 Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: 🔍 Helm lint
+        run: helm lint charts/ksail-operator
+
+      - name: 📐 Helm template (value permutations)
+        run: |
+          set -euo pipefail
+          echo "=== defaults (operator only) ==="
+          helm template ksail-operator charts/ksail-operator >/dev/null
+          echo "=== ui.enabled ==="
+          helm template ksail-operator charts/ksail-operator \
+            --set ui.enabled=true >/dev/null
+          echo "=== auth.oidc.enabled ==="
+          # OIDC requires a redirectURL (or ui.ingress) plus a client secret;
+          # the operator does not run here, so dummy values are sufficient to
+          # exercise the secret/deployment templates.
+          helm template ksail-operator charts/ksail-operator \
+            --set ui.enabled=true \
+            --set auth.oidc.enabled=true \
+            --set auth.oidc.issuerURL=https://dex.example \
+            --set auth.oidc.clientID=ksail \
+            --set auth.oidc.clientSecret=dummy \
+            --set auth.oidc.redirectURL=https://ksail.local/api/v1/auth/callback >/dev/null
+          echo "✅ All chart template permutations rendered"
+
+  operator-chart-e2e:
+    name: ⛵ Operator Chart E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [changes]
+    # Local images only — no secrets/GHCR — so this also runs on fork PRs.
+    if: >-
+      !cancelled()
+      && (
+        (github.event_name == 'pull_request' && needs.changes.outputs.operator-chart == 'true')
+        || github.event_name == 'workflow_dispatch'
+      )
+    permissions:
+      contents: read
+    steps:
+      - name: 📄 Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: ⚙️ Setup Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version-file: go.mod
+
+      - name: 🧪 Run Operator Chart E2E
+        uses: ./.github/actions/operator-chart-e2e
+
   warm-helm-cache:
     name: 🔥 Warm Helm Cache
     runs-on: ubuntu-latest
@@ -1251,6 +1331,8 @@ jobs:
         license-check,
         build-docs,
         benchmark,
+        operator-chart-lint,
+        operator-chart-e2e,
       ]
     if: ${{ always() }}
     steps:
@@ -1269,3 +1351,5 @@ jobs:
             ${{ needs.license-check.result }}
             ${{ needs.build-docs.result }}
             ${{ needs.benchmark.result }}
+            ${{ needs.operator-chart-lint.result }}
+            ${{ needs.operator-chart-e2e.result }}

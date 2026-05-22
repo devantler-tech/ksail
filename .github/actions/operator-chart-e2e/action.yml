@@ -1,0 +1,203 @@
+name: Operator Chart E2E
+description: |
+  Smoke + API end-to-end test of the ksail-operator Helm chart on a throwaway
+  kind cluster. Builds the operator and web UI images locally (no registry),
+  loads them into kind, installs the chart with the UI enabled in read-only
+  mode, and asserts the CRD registers, the operator and UI roll out, the REST
+  API serves /readyz and /api/v1/config, mutations are rejected (403), and the
+  UI serves its SPA and proxies /api to the operator.
+
+  Full Cluster-CR reconciliation is intentionally out of scope: the reconciler
+  provisions real Docker-based clusters, which is not feasible inside a plain
+  kind hub without privileged Docker access.
+
+  Assumes Go is already set up by the caller (actions/setup-go).
+
+inputs:
+  namespace:
+    description: Namespace to install the chart into.
+    required: false
+    default: "ksail-operator"
+  cluster-name:
+    description: Name of the throwaway kind cluster.
+    required: false
+    default: "ksail-operator-e2e"
+  operator-image:
+    description: Local tag for the operator image.
+    required: false
+    default: "ksail:e2e"
+  ui-image:
+    description: Local tag for the web UI image.
+    required: false
+    default: "ksail-web-ui:e2e"
+
+runs:
+  using: composite
+  steps:
+    - name: 🧹 Free disk space
+      shell: bash
+      run: |
+        set -euo pipefail
+        before=$(df --output=avail -BG / | tail -1 | tr -dc '0-9')
+        sudo rm -rf \
+          /usr/local/lib/android \
+          /usr/share/dotnet \
+          /opt/ghc \
+          /usr/local/share/boost \
+          /usr/share/swift \
+          /opt/hostedtoolcache/CodeQL \
+          /usr/local/share/powershell \
+          /usr/local/julia* || true
+        after=$(df --output=avail -BG / | tail -1 | tr -dc '0-9')
+        echo "Free disk space on /: ${before}G -> ${after}G (gained $((after - before))G)"
+
+    - name: 🏗️ Build operator image
+      shell: bash
+      env:
+        # Match .goreleaser.yaml: a static (CGO_ENABLED=0) binary is required by
+        # the distroless/static base in the root Dockerfile. The generate +
+        # bundler hooks mirror the release build's pre-hooks so the embed
+        # directives resolve.
+        GOPROXY: "https://proxy.golang.org|direct"
+        GOMEMLIMIT: "6GiB"
+        OPERATOR_IMAGE: ${{ inputs.operator-image }}
+      run: |
+        set -euo pipefail
+        go generate ./pkg/svc/chat/...
+        go tool bundler --platform linux/amd64 --cli-version 1.0.10
+        ctx="$(mktemp -d)"
+        mkdir -p "$ctx/linux/amd64"
+        CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+          go build -trimpath -ldflags="-s -w" -o "$ctx/linux/amd64/ksail" .
+        cp Dockerfile "$ctx/Dockerfile"
+        docker build --build-arg TARGETPLATFORM=linux/amd64 -t "$OPERATOR_IMAGE" "$ctx"
+        rm -rf "$ctx"
+
+    - name: 🏗️ Build web UI image
+      shell: bash
+      env:
+        UI_IMAGE: ${{ inputs.ui-image }}
+      run: docker build -t "$UI_IMAGE" web/ui
+
+    - name: ☸️ Create kind cluster
+      uses: helm/kind-action@ef37e7f390d99f746eb8b610417061a60e82a6cc # v1.14.0
+      with:
+        cluster_name: ${{ inputs.cluster-name }}
+
+    - name: 📦 Load images into kind
+      shell: bash
+      env:
+        CLUSTER_NAME: ${{ inputs.cluster-name }}
+        OPERATOR_IMAGE: ${{ inputs.operator-image }}
+        UI_IMAGE: ${{ inputs.ui-image }}
+      run: |
+        set -euo pipefail
+        kind load docker-image "$OPERATOR_IMAGE" "$UI_IMAGE" --name "$CLUSTER_NAME"
+
+    - name: 🚀 Install chart
+      shell: bash
+      env:
+        NS: ${{ inputs.namespace }}
+        OPERATOR_IMAGE: ${{ inputs.operator-image }}
+        UI_IMAGE: ${{ inputs.ui-image }}
+      run: |
+        set -euo pipefail
+        op_repo="${OPERATOR_IMAGE%:*}"; op_tag="${OPERATOR_IMAGE##*:}"
+        ui_repo="${UI_IMAGE%:*}";       ui_tag="${UI_IMAGE##*:}"
+        # fullnameOverride keeps resource names clean (ksail-operator,
+        # ksail-operator-ui) instead of <release>-<chart>.
+        # pullPolicy=Never forces use of the kind-loaded images and fails fast
+        # if a load broke. ui.readOnly wires --read-only onto the operator,
+        # enabling the deterministic 403 mutation assertion below.
+        helm install ksail-operator charts/ksail-operator \
+          --namespace "$NS" --create-namespace \
+          --set fullnameOverride=ksail-operator \
+          --set operator.image.repository="$op_repo" \
+          --set operator.image.tag="$op_tag" \
+          --set operator.image.pullPolicy=Never \
+          --set ui.enabled=true \
+          --set ui.readOnly=true \
+          --set ui.image.repository="$ui_repo" \
+          --set ui.image.tag="$ui_tag" \
+          --set ui.image.pullPolicy=Never \
+          --wait --timeout 5m
+
+    - name: ✅ Verify deployment and API
+      shell: bash
+      env:
+        NS: ${{ inputs.namespace }}
+      run: |
+        set -euo pipefail
+
+        wait_http() { # $1=url  $2=expected code
+          local url="$1" want="$2" code=000
+          for _ in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "$url" 2>/dev/null || true)
+            [ "$code" = "$want" ] && return 0
+            sleep 2
+          done
+          echo "❌ Timed out waiting for $url (wanted $want, last $code)"
+          return 1
+        }
+
+        echo "=== CRD registration ==="
+        kubectl wait --for=condition=Established crd/clusters.ksail.io --timeout=60s
+
+        echo "=== Rollouts ==="
+        kubectl -n "$NS" rollout status deploy/ksail-operator --timeout=180s
+        kubectl -n "$NS" rollout status deploy/ksail-operator-ui --timeout=120s
+
+        PF_OP=""; PF_UI=""
+        trap 'kill "${PF_OP:-}" "${PF_UI:-}" 2>/dev/null || true' EXIT
+
+        echo "=== Operator REST API ==="
+        kubectl -n "$NS" port-forward svc/ksail-operator 18080:8080 >/tmp/pf-operator.log 2>&1 &
+        PF_OP=$!
+        wait_http "http://127.0.0.1:18080/readyz" 200
+        echo "  ✅ /readyz"
+        wait_http "http://127.0.0.1:18080/api/v1/config" 200
+        echo "  ✅ /api/v1/config"
+
+        echo "=== Read-only enforcement ==="
+        code=$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:18080/api/v1/clusters)
+        if [ "$code" != "403" ]; then
+          echo "❌ Expected 403 from POST /api/v1/clusters in read-only mode, got $code"
+          exit 1
+        fi
+        echo "  ✅ POST /api/v1/clusters -> 403"
+
+        echo "=== Web UI ==="
+        kubectl -n "$NS" port-forward svc/ksail-operator-ui 18081:80 >/tmp/pf-ui.log 2>&1 &
+        PF_UI=$!
+        wait_http "http://127.0.0.1:18081/" 200
+        echo "  ✅ UI serves SPA"
+        wait_http "http://127.0.0.1:18081/api/v1/config" 200
+        echo "  ✅ UI proxies /api to the operator"
+
+        echo "✅ Operator chart E2E passed"
+
+    - name: 🐞 Operator/UI logs on failure
+      if: failure()
+      shell: bash
+      env:
+        NS: ${{ inputs.namespace }}
+      run: |
+        for d in ksail-operator ksail-operator-ui; do
+          echo "==== describe deploy/$d ===="
+          kubectl -n "$NS" describe deploy "$d" || true
+          echo "==== logs deploy/$d ===="
+          kubectl -n "$NS" logs "deploy/$d" --all-containers --tail=200 || true
+        done
+
+    - name: 🐞 Debug Kubernetes failure
+      if: failure()
+      uses: ./.github/actions/debug-kubernetes-failure
+      with:
+        kubectl-command: kubectl
+        namespace: ${{ inputs.namespace }}
+        show-cni: "false"
+        show-csi: "false"
+        show-gitops: "false"
+        show-policy-engine: "false"
+        show-cert-manager: "false"
+        show-metrics-server: "false"
