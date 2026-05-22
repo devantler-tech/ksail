@@ -1,0 +1,96 @@
+name: 🧩 Desktop App
+
+on:
+  pull_request:
+    paths:
+      - "desktop/**"
+      - "pkg/cli/uiserver/**"
+      - "pkg/webui/**"
+      - "web/ui/**"
+      - ".goreleaser.desktop.yaml"
+      - ".github/workflows/desktop.yaml"
+  push:
+    branches: [main]
+    paths:
+      - "desktop/**"
+      - "pkg/cli/uiserver/**"
+      - "pkg/webui/**"
+      - "web/ui/**"
+      - ".goreleaser.desktop.yaml"
+      - ".github/workflows/desktop.yaml"
+
+permissions:
+  contents: read
+
+jobs:
+  build-linux:
+    name: 🏗️ Build (Linux)
+    # ubuntu-22.04 ships libwebkit2gtk-4.0-dev, which webview_go's cgo requires (24.04 only has 4.1).
+    runs-on: ubuntu-22.04
+    timeout-minutes: 40
+    steps:
+      - name: 📄 Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: ⚙️ Setup Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: ⚙️ Setup Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0 # zizmor: ignore[cache-poisoning]
+        with:
+          node-version: "24"
+
+      - name: 🐧 Install Linux webview dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev
+
+      - name: 🏗️ Build and stage web UI
+        shell: bash
+        run: |
+          npm --prefix web/ui ci
+          npm --prefix web/ui run build
+          rm -rf pkg/webui/dist
+          mkdir -p pkg/webui/dist
+          touch pkg/webui/dist/.gitkeep
+          cp -R web/ui/dist/. pkg/webui/dist/
+
+      - name: 🏗️ Build desktop app
+        working-directory: desktop
+        run: go build -o ksail-desktop .
+
+  # Validate the full macOS desktop release pipeline (build into KSail.app, archive, cask
+  # generation) without publishing. --snapshot needs no secrets, so this runs on fork PRs too.
+  build-macos:
+    name: 🏗️ Build + cask (macOS)
+    runs-on: macos-latest
+    timeout-minutes: 40
+    steps:
+      - name: 📄 Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: ⚙️ Setup Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: ⚙️ Setup Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0 # zizmor: ignore[cache-poisoning]
+        with:
+          node-version: "24"
+
+      - name: 🏗️ Run GoReleaser (snapshot)
+        uses: goreleaser/goreleaser-action@1a80836c5c9d9e5755a25cb59ec6f45a3b5f41a8 # v7.2.1
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --snapshot --clean --config .goreleaser.desktop.yaml

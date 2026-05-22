@@ -109,7 +109,7 @@ func setupManager(mgr ctrl.Manager, opts Options) error {
 
 	if opts.APIBindAddress != "" {
 		apiErr := mgr.Add(&api.Server{
-			Client:      mgr.GetClient(),
+			Service:     api.NewCRClusterService(mgr.GetClient()),
 			ReadOnly:    opts.ReadOnly,
 			BindAddress: opts.APIBindAddress,
 			OIDC:        opts.OIDC,

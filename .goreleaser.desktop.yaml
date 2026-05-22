@@ -1,0 +1,81 @@
+# GoReleaser config for the macOS KSail desktop app.
+#
+# The desktop app is a separate Go module (desktop/) that links a system webview via CGO, so it
+# cannot be cross-compiled in the main release; this config runs on a macOS runner and builds the
+# darwin binary natively. It packages the binary into a KSail.app bundle, archives it, and publishes
+# a Homebrew cask to the same tap as the main `ksail` cask.
+version: 2
+
+project_name: ksail-desktop
+
+dist: dist-desktop
+
+# This runs as a second GoReleaser invocation (on a macOS runner) after the main release. Upload the
+# desktop archive to the release the main run already created, without touching its notes.
+release:
+  mode: keep-existing
+
+before:
+  hooks:
+    # Build and stage the web UI so it is embedded in the desktop binary (see pkg/webui/embed.go).
+    - npm --prefix web/ui ci
+    - npm --prefix web/ui run build
+    - sh -c 'rm -rf pkg/webui/dist && mkdir -p pkg/webui/dist && touch pkg/webui/dist/.gitkeep && cp -R web/ui/dist/. pkg/webui/dist/'
+
+builds:
+  - id: ksail-desktop
+    dir: desktop
+    main: .
+    # Build straight into the bundle layout so the archive contains a valid KSail.app.
+    binary: KSail.app/Contents/MacOS/ksail-desktop
+    goos: [darwin]
+    goarch: [arm64]
+    env:
+      - CGO_ENABLED=1
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+    hooks:
+      # Generate the bundle Info.plist with the release version for inclusion in the archive.
+      post:
+        - cmd: bash desktop/scripts/make-info-plist.sh "{{ .Version }}" "desktop/build/Info.plist"
+
+archives:
+  - id: ksail-desktop
+    ids: [ksail-desktop]
+    formats: [zip]
+    wrap_in_directory: false
+    name_template: "KSail_{{ .Version }}_darwin_{{ .Arch }}"
+    # The build emits KSail.app/Contents/MacOS/ksail-desktop; add the Info.plist alongside it so the
+    # archive holds a complete KSail.app bundle.
+    files:
+      - src: desktop/build/Info.plist
+        dst: KSail.app/Contents/Info.plist
+
+homebrew_casks:
+  - name: ksail-desktop
+    ids: [ksail-desktop]
+    description: "KSail desktop app — manage local Kubernetes clusters in a native window"
+    homepage: "https://ksail.devantler.tech"
+    repository:
+      owner: devantler-tech
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_GITHUB_API_TOKEN }}"
+      branch: "goreleaser/{{ .ProjectName }}-{{ .Tag }}"
+      pull_request:
+        enabled: true
+    # The cask schema has no first-class `app` field; install the bundle via a custom stanza.
+    custom_block: |
+      app "KSail.app"
+    # Symlink the CLI from inside the installed app (the canonical GUI-app-with-CLI cask pattern),
+    # so `ksail-desktop` is on PATH and `ksail desktop` finds it. Without this, GoReleaser would
+    # default the symlink to the bare basename, which does not exist at the archive root.
+    binaries:
+      - "#{appdir}/KSail.app/Contents/MacOS/ksail-desktop"
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/KSail.app"]
+          end

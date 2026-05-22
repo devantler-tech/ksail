@@ -37,6 +37,8 @@ export interface Config {
   readOnly: boolean;
   authEnabled: boolean;
   user?: User;
+  // distributions the create form should offer. Absent when the backend relies on the SPA default.
+  distributions?: string[];
 }
 
 // ApiError carries the HTTP status so callers can react to auth failures (401) specifically.
