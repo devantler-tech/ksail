@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/internal/controller"
@@ -328,4 +329,24 @@ func TestProvisionedName(t *testing.T) {
 			assert.Equal(t, testCase.want, controller.ProvisionedName(cluster))
 		})
 	}
+}
+
+func TestProvisionedNameTruncatesLongNames(t *testing.T) {
+	t.Parallel()
+
+	cluster := &v1alpha1.Cluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      strings.Repeat("b", 40),
+			Namespace: strings.Repeat("a", 40),
+		},
+	}
+
+	got := controller.ProvisionedName(cluster)
+
+	assert.LessOrEqual(t, len(got), 54)
+	assert.Equal(t, got, controller.ProvisionedName(cluster), "must be deterministic")
+	assert.False(t, strings.HasPrefix(got, "-"))
+	assert.False(t, strings.HasSuffix(got, "-"))
+	// vcluster derives a namespace "vcluster-<name>"; it must fit the 63-char DNS-1123 label limit.
+	assert.LessOrEqual(t, len("vcluster-"+got), 63)
 }

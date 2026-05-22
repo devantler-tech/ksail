@@ -169,10 +169,13 @@ func isOpenPath(path string) bool {
 	}
 }
 
-// readOnlyGuard rejects mutating requests with 403 when the server is in read-only mode.
+// readOnlyGuard rejects mutating cluster requests with 403 when the server is in read-only mode.
+// Auth endpoints (e.g. POST /api/v1/auth/logout) are exempt: read-only constrains cluster
+// mutations, not session management, so users must still be able to log out.
 func (s *Server) readOnlyGuard(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		if s.ReadOnly && isMutating(request.Method) {
+		isAuthPath := strings.HasPrefix(request.URL.Path, "/api/v1/auth/")
+		if s.ReadOnly && isMutating(request.Method) && !isAuthPath {
 			writeJSON(writer, http.StatusForbidden, map[string]any{
 				"readOnly": true,
 				"reason":   "UI is configured read-only (GitOps-enforced)",

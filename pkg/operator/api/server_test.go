@@ -319,6 +319,27 @@ func TestAuthGuardAllowsValidSession(t *testing.T) {
 	assert.Equal(t, http.StatusOK, recorder.Code)
 }
 
+func TestReadOnlyAllowsAuthLogout(t *testing.T) {
+	t.Parallel()
+
+	server := api.NewAuthTestServer(newClient(t), []byte(sessionSecret))
+	server.ReadOnly = true
+
+	request := httptest.NewRequestWithContext(
+		context.Background(),
+		http.MethodPost,
+		"/api/v1/auth/logout",
+		nil,
+	)
+	request.AddCookie(server.NewSessionCookie("alice@example.com"))
+
+	recorder := httptest.NewRecorder()
+	server.Handler().ServeHTTP(recorder, request)
+
+	// Read-only constrains cluster mutations, not session management, so logout must still work.
+	assert.Equal(t, http.StatusNoContent, recorder.Code)
+}
+
 func TestAuthGuardLeavesConfigOpen(t *testing.T) {
 	t.Parallel()
 

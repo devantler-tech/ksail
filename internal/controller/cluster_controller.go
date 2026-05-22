@@ -3,8 +3,11 @@ package controller
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -39,16 +42,32 @@ const (
 	defaultTransitionalRequeue = 10 * time.Second
 )
 
+// maxProvisionedNameLen bounds ProvisionedName so downstream provisioners that derive a Kubernetes
+// namespace from it (e.g. vcluster's "vcluster-<name>") stay within the 63-char DNS-1123 label
+// limit: 63 - len("vcluster-") = 54.
+const maxProvisionedNameLen = 54
+
 // ProvisionedName returns the name of the underlying cluster the operator provisions for a
 // Cluster resource. It is qualified with the resource namespace so two Cluster resources with the
 // same name in different namespaces never collide on the same underlying cluster (and its
 // kubeconfig). The Cluster CRD is namespaced, so name alone is not unique across the hub cluster.
+// Long namespace/name combinations are deterministically truncated with a hash suffix so the
+// result always fits the DNS-1123 label limit expected by downstream provisioners.
 func ProvisionedName(cluster *v1alpha1.Cluster) string {
-	if cluster.Namespace == "" {
-		return cluster.Name
+	name := cluster.Name
+	if cluster.Namespace != "" {
+		name = cluster.Namespace + "-" + cluster.Name
 	}
 
-	return cluster.Namespace + "-" + cluster.Name
+	if len(name) <= maxProvisionedNameLen {
+		return name
+	}
+
+	sum := sha256.Sum256([]byte(name))
+	suffix := hex.EncodeToString(sum[:])[:8]
+	prefix := strings.TrimRight(name[:maxProvisionedNameLen-len(suffix)-1], "-")
+
+	return prefix + "-" + suffix
 }
 
 // ProvisionerBuilder returns a distribution provisioner for the given Cluster. The operator
