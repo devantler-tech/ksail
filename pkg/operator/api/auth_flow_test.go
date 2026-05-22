@@ -1,4 +1,4 @@
-package api //nolint:testpackage // white-box tests for the unexported OIDC flow
+package api_test
 
 import (
 	"context"
@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/devantler-tech/ksail/v7/pkg/operator/api"
 	"github.com/go-jose/go-jose/v4"
 	"github.com/go-jose/go-jose/v4/jwt"
 	"github.com/stretchr/testify/assert"
@@ -148,18 +149,18 @@ func findCookie(cookies []*http.Cookie, name string) *http.Cookie {
 func TestEnabled(t *testing.T) {
 	t.Parallel()
 
-	assert.False(t, OIDCConfig{}.Enabled())
-	assert.True(t, OIDCConfig{IssuerURL: "https://issuer.example"}.Enabled())
+	assert.False(t, api.OIDCConfig{}.Enabled())
+	assert.True(t, api.OIDCConfig{IssuerURL: "https://issuer.example"}.Enabled())
 }
 
 func TestNewAuthenticatorRequiresConfig(t *testing.T) {
 	t.Parallel()
 
-	_, err := newAuthenticator(
+	_, err := api.NewAuthenticator(
 		context.Background(),
-		OIDCConfig{IssuerURL: "https://issuer.example"},
+		api.OIDCConfig{IssuerURL: "https://issuer.example"},
 	)
-	require.ErrorIs(t, err, ErrOIDCConfig)
+	require.ErrorIs(t, err, api.ErrOIDCConfig)
 }
 
 func TestOIDCLoginCallbackFlow(t *testing.T) {
@@ -168,7 +169,7 @@ func TestOIDCLoginCallbackFlow(t *testing.T) {
 	idp := newMockIDP(t)
 	secret := []byte(flowSecret)
 
-	auth, err := newAuthenticator(context.Background(), OIDCConfig{
+	auth, err := api.NewAuthenticator(context.Background(), api.OIDCConfig{
 		IssuerURL:     idp.server.URL,
 		ClientID:      idp.clientID,
 		ClientSecret:  "client-secret",
@@ -181,18 +182,18 @@ func TestOIDCLoginCallbackFlow(t *testing.T) {
 
 	// 1. Login redirects to the provider and sets a signed state cookie.
 	loginRec := httptest.NewRecorder()
-	auth.handleLogin(loginRec, httptest.NewRequestWithContext(
-		context.Background(), http.MethodGet, loginPath, nil,
+	auth.HandleLogin(loginRec, httptest.NewRequestWithContext(
+		context.Background(), http.MethodGet, api.LoginPath, nil,
 	))
 	require.Equal(t, http.StatusFound, loginRec.Code)
 
-	stateCookie := findCookie(loginRec.Result().Cookies(), stateCookieName)
+	stateCookie := findCookie(loginRec.Result().Cookies(), api.StateCookieName)
 	require.NotNil(t, stateCookie)
 
-	statePayload, err := verifySignedValue(secret, stateCookie.Value)
+	statePayload, err := api.VerifySignedValue(secret, stateCookie.Value)
 	require.NoError(t, err)
 
-	var state stateData
+	var state api.StateData
 
 	require.NoError(t, json.Unmarshal(statePayload, &state))
 	assert.Contains(t, loginRec.Header().Get("Location"), "state="+state.State)
@@ -210,10 +211,10 @@ func TestOIDCLoginCallbackFlow(t *testing.T) {
 	callbackReq.AddCookie(stateCookie)
 
 	callbackRec := httptest.NewRecorder()
-	auth.handleCallback(callbackRec, callbackReq)
+	auth.HandleCallback(callbackRec, callbackReq)
 	require.Equal(t, http.StatusFound, callbackRec.Code, callbackRec.Body.String())
 
-	sessionCookie := findCookie(callbackRec.Result().Cookies(), sessionCookieName)
+	sessionCookie := findCookie(callbackRec.Result().Cookies(), api.SessionCookieName)
 	require.NotNil(t, sessionCookie)
 
 	// 3. The session cookie authenticates subsequent requests.
@@ -222,7 +223,7 @@ func TestOIDCLoginCallbackFlow(t *testing.T) {
 	)
 	authedReq.AddCookie(sessionCookie)
 
-	claims, ok := auth.currentUser(authedReq)
+	claims, ok := auth.CurrentUser(authedReq)
 	require.True(t, ok)
 	assert.Equal(t, testSubject, claims.Subject)
 	assert.Equal(t, "alice@example.com", claims.Email)
@@ -232,11 +233,11 @@ func TestHandleCallbackRejectsBadRequests(t *testing.T) {
 	t.Parallel()
 
 	secret := []byte(flowSecret)
-	auth := &authenticator{config: OIDCConfig{SessionSecret: secret, SessionTTL: time.Hour}}
+	auth := api.NewConfigAuthenticator(api.OIDCConfig{SessionSecret: secret, SessionTTL: time.Hour})
 
-	goodState := auth.signedCookie(
-		stateCookieName,
-		mustMarshal(stateData{State: "good", Nonce: "n"}),
+	goodState := auth.SignedCookie(
+		api.StateCookieName,
+		api.MustMarshal(api.StateData{State: "good", Nonce: "n"}),
 		"/api/v1/auth",
 		600,
 	)
@@ -271,7 +272,7 @@ func TestHandleCallbackRejectsBadRequests(t *testing.T) {
 			}
 
 			rec := httptest.NewRecorder()
-			auth.handleCallback(rec, req)
+			auth.HandleCallback(rec, req)
 			assert.Equal(t, http.StatusBadRequest, rec.Code)
 		})
 	}
@@ -280,16 +281,16 @@ func TestHandleCallbackRejectsBadRequests(t *testing.T) {
 func TestHandleLogoutClearsSession(t *testing.T) {
 	t.Parallel()
 
-	auth := &authenticator{config: OIDCConfig{SessionSecret: []byte(flowSecret)}}
+	auth := api.NewConfigAuthenticator(api.OIDCConfig{SessionSecret: []byte(flowSecret)})
 
 	rec := httptest.NewRecorder()
-	auth.handleLogout(rec, httptest.NewRequestWithContext(
+	auth.HandleLogout(rec, httptest.NewRequestWithContext(
 		context.Background(), http.MethodPost, "/api/v1/auth/logout", nil,
 	))
 
 	require.Equal(t, http.StatusNoContent, rec.Code)
 
-	cleared := findCookie(rec.Result().Cookies(), sessionCookieName)
+	cleared := findCookie(rec.Result().Cookies(), api.SessionCookieName)
 	require.NotNil(t, cleared)
 	assert.Negative(t, cleared.MaxAge)
 }
