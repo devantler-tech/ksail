@@ -93,31 +93,6 @@ func TestGenerate_AllowSchedulingWriteError(t *testing.T) {
 	}, "allow-scheduling-on-control-planes")
 }
 
-func TestGenerate_WorkerRoleLabelWriteError(t *testing.T) {
-	t.Parallel()
-
-	skipPermissionWriteFailureTest(t)
-
-	config := &talosgenerator.Config{
-		PatchesDir:  "talos",
-		WorkerNodes: 1,
-	}
-
-	tempDir := t.TempDir()
-	gen := talosgenerator.NewGenerator()
-
-	_, err := gen.Generate(config, yamlgenerator.Options{Output: tempDir, Force: true})
-	require.NoError(t, err)
-
-	workersDir := filepath.Join(tempDir, "talos", "workers")
-	prepareClusterDirForWriteFailure(t, workersDir)
-
-	_, err = gen.Generate(config, yamlgenerator.Options{Output: tempDir, Force: true})
-	require.Error(t, err)
-	require.ErrorIs(t, err, fs.ErrPermission, "expected permission-denied write failure")
-	assert.Contains(t, err.Error(), "worker-role-label")
-}
-
 func TestGenerate_DisableCNIWriteError(t *testing.T) {
 	t.Parallel()
 

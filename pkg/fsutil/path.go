@@ -2,64 +2,34 @@ package fsutil
 
 import (
 	"fmt"
-	"os/user"
+	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 )
 
 // Path expansion operations.
 
-// homeDir caches the current user's home directory after the first successful
-// lookup. user.Current() is a syscall; caching it avoids repeated OS
-// round-trips in hot paths such as cluster provisioning and kubeconfig
-// resolution.
-//
-// Only the successful result is cached. A transient error (e.g. temporary NSS
-// failure) does not poison the cache — the next call retries the syscall.
-//
-//nolint:gochecknoglobals // sync cache must be package-scoped.
-var (
-	homeDirMu    sync.Mutex
-	homeDirValue string
-	homeDirSet   bool
-)
-
-// currentHomeDir returns the cached home directory, calling user.Current()
-// only when no successful result has been cached yet.
-func currentHomeDir() (string, error) {
-	homeDirMu.Lock()
-	defer homeDirMu.Unlock()
-
-	if homeDirSet {
-		return homeDirValue, nil
-	}
-
-	usr, err := user.Current()
-	if err != nil {
-		return "", fmt.Errorf("looking up current user: %w", err)
-	}
-
-	homeDirValue = usr.HomeDir
-	homeDirSet = true
-
-	return homeDirValue, nil
-}
-
 // ExpandHomePath expands a path beginning with ~/ to the user's home directory
 // and converts relative paths to absolute paths.
+//
+// The home directory is resolved via os.UserHomeDir(), which honors $HOME (or
+// %USERPROFILE% on Windows). Resolving through the environment — rather than
+// the OS user database (user.Current) — is what every standard tool does, and
+// it lets tests redirect home-derived paths (e.g. ~/.kube/config) to a
+// temporary directory by overriding $HOME, so the suite never reads from or
+// writes to the developer's real configuration.
 //
 // Parameters:
 //   - path: The path to expand (e.g., "~/config.yaml", "./config.yaml", or "/absolute/path")
 //
 // Returns:
 //   - string: The expanded and absolute path
-//   - error: Error if unable to get current user information or convert to absolute path
+//   - error: Error if unable to get the home directory or convert to absolute path
 func ExpandHomePath(path string) (string, error) {
 	if strings.HasPrefix(path, "~/") {
-		homeDir, err := currentHomeDir()
+		homeDir, err := os.UserHomeDir()
 		if err != nil {
-			return "", fmt.Errorf("failed to get current user: %w", err)
+			return "", fmt.Errorf("failed to get user home directory: %w", err)
 		}
 
 		path = filepath.Join(homeDir, path[2:])

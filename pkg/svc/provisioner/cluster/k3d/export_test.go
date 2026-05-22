@@ -1,0 +1,45 @@
+package k3dprovisioner
+
+import (
+	"context"
+
+	"github.com/devantler-tech/ksail/v7/pkg/runner"
+)
+
+// WithRunnerForTest injects a command runner so lifecycle operations can be
+// exercised without invoking the real k3d runtime.
+func (k *Provisioner) WithRunnerForTest(r runner.CommandRunner) *Provisioner {
+	k.runner = r
+
+	return k
+}
+
+// WithListClustersRawForTest injects a stub that returns canned cluster-list
+// output, so List/Exists can be tested without invoking the real k3d runtime.
+func (k *Provisioner) WithListClustersRawForTest(
+	f func(ctx context.Context) (string, error),
+) *Provisioner {
+	k.listClustersRaw = f
+
+	return k
+}
+
+// ParseClusterNamesForTest exposes parseClusterNames for unit testing.
+func ParseClusterNamesForTest(output string) ([]string, error) {
+	return parseClusterNames(output)
+}
+
+// ResolveNameForTest exposes resolveName for unit testing.
+func (k *Provisioner) ResolveNameForTest(name string) string {
+	return k.resolveName(name)
+}
+
+// AppendConfigFlagForTest exposes appendConfigFlag for unit testing.
+func (k *Provisioner) AppendConfigFlagForTest(args []string) []string {
+	return k.appendConfigFlag(args)
+}
+
+// AppendImageFlagForTest exposes appendImageFlag for unit testing.
+func (k *Provisioner) AppendImageFlagForTest(args []string) []string {
+	return k.appendImageFlag(args)
+}

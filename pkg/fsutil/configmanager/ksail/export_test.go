@@ -53,13 +53,13 @@ func DistributionConfigIsOppositeDefaultForTest(
 	return distributionConfigIsOppositeDefault(current, distribution)
 }
 
-// AddWorkerRoleLabelPatchForTest exposes addWorkerRoleLabelPatch for testing.
-func (m *ConfigManager) AddWorkerRoleLabelPatchForTest(
-	talosManager *talosconfigmanager.ConfigManager,
-	patchesDir string,
-) {
-	m.addWorkerRoleLabelPatch(talosManager, patchesDir)
+// RemoveWorkerRoleLabelPatchForTest exposes removeWorkerRoleLabelPatch for testing.
+func (m *ConfigManager) RemoveWorkerRoleLabelPatchForTest(patchesDir string) {
+	m.removeWorkerRoleLabelPatch(patchesDir)
 }
 
-// LegacyWorkerRoleLabelPatchYAMLForTest exports the legacy constant for testing.
+// LegacyWorkerRoleLabelPatchYAMLForTest exports the legacy machine.nodeLabels constant for testing.
 const LegacyWorkerRoleLabelPatchYAMLForTest = legacyWorkerRoleLabelPatchYAML
+
+// KubeletWorkerRoleLabelPatchYAMLForTest exports the kubelet --node-labels constant for testing.
+const KubeletWorkerRoleLabelPatchYAMLForTest = kubeletWorkerRoleLabelPatchYAML

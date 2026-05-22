@@ -22,7 +22,7 @@ on:
       - "Repo Assist"
       - "Daily Docs"
       - "Daily Workflow Maintenance"
-      - "Weekly Strategy"
+      - "Monthly Strategy"
       - "System Test - Hetzner"
       - "System Test - Omni"
     types:

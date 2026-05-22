@@ -193,7 +193,7 @@ go run main.go --help
 - **go.mod**: Go module dependencies (includes embedded kubectl, helm, kind, k3d, vcluster, flux, argocd)
 - **package.json**: Node.js dependencies for Astro documentation
 - **.github/workflows/\*.yaml**: CI/CD pipelines
-- **.github/workflows/\*.md**: Agentic workflows (repo-assist, daily-docs, daily-workflow-maintenance, weekly-strategy, ci-doctor); each runs on a schedule or dispatch, and many operate in multiple phases
+- **.github/workflows/\*.md**: Agentic workflows (repo-assist, daily-docs, daily-workflow-maintenance, monthly-strategy, ci-doctor); each runs on a schedule or dispatch, and many operate in multiple phases
 
 ### CLI Commands Reference
 
@@ -208,7 +208,7 @@ ksail cluster start                    # Start existing cluster
 ksail cluster stop                     # Stop running cluster
 ksail cluster info                     # Show cluster status
 ksail cluster diagnose                 # Report failing pods and NotReady nodes
-ksail cluster list [--all]             # List clusters
+ksail cluster list [--provider <provider>]  # List clusters (optionally filter by provider)
 ksail cluster connect                  # Connect to cluster with K9s
 ksail cluster switch [cluster-name]    # Switch active kubeconfig context (interactive picker if no arg)
 ksail cluster backup                   # Backup cluster resources to .tar.gz
@@ -350,7 +350,7 @@ For a deeper dive into KSail's design and internals, refer to:
   - `pkg/svc/diff/`: Computes configuration differences between old and new ClusterSpec values; classifies update impact (in-place, reboot-required, recreate-required)
   - `pkg/svc/image/`: Container image export/import services for Vanilla and K3s distributions; `parser/` sub-package provides `ParseAllImagesFromDockerfile` for extracting all `FROM` directives from multi-stage Dockerfiles (used by Flux installer to include distribution controller images in mirror cache warming)
   - `pkg/svc/installer/`: Component installers (CNI, CSI, metrics-server, etc.); `internal/hetzner/` holds shared utilities for the Hetzner installers—`hcloudccm.Installer` is a type alias for `hetzner.Installer`, while `hetznercsi.Installer` is a thin wrapper that embeds `*hetzner.Installer` and adds a pre-install gate waiting for `hcloud-ccm` to label all nodes with `instance.hetzner.cloud/provided-by` (preventing a CSI topology registration race); both share a single `EnsureSecret` implementation; `flux/Dockerfile.distribution` tracks Flux distribution controller images (updated by Dependabot) that are deployed by the Flux operator when creating a FluxInstance but are not part of the Helm chart — included in `Images()` output for mirror cache warming
-  - `pkg/svc/mcp/`: Model Context Protocol server for Claude and other AI assistants; tools are auto-generated from root Cobra commands via `pkg/toolgen/` (not manually registered) — all operational cluster/workload/cipher commands (both read and write) are consolidated into 5 tools via `ai.toolgen.consolidate` + `ai.toolgen.permission`: `cluster_read`, `cluster_write`, `workload_read`, `workload_write`, `cipher_write`
+  - `pkg/svc/mcp/`: Model Context Protocol server for Claude and other AI assistants; tools are auto-generated from root Cobra commands via `pkg/toolgen/` (not manually registered) — all operational cluster/workload/tenant/cipher commands (both read and write) are consolidated into 6 tools via `ai.toolgen.consolidate` + `ai.toolgen.permission`: `cluster_read`, `cluster_write`, `workload_read`, `workload_write`, `tenant_write`, `cipher_write`
   - `pkg/svc/provider/`: Infrastructure providers (docker, hetzner, omni)
   - `pkg/svc/provisioner/`: Distribution provisioners (Vanilla, K3s, Talos, VCluster)
   - `pkg/svc/registryresolver/`: OCI registry detection, resolution, credential merging from cluster secrets (Flux dockerconfigjson / ArgoCD repo secret), and artifact push utilities; `ErrExternalRegistryCredentialsIncomplete` is returned when a username is set (e.g. `GITHUB_ACTOR`) but the password/token is missing
@@ -383,7 +383,7 @@ The Daily Docs agentic workflow (`daily-docs.lock.yml`) is designed to fill docu
 
 ## Benchmark Pipeline Consistency
 
-When changing `-count` in the `go test -bench` command in CI, always update the awk averaging/filtering step in "Prepare benchmark regression gate input" to produce exactly one result line per benchmark name. Failing to do so causes false-positive performance regression alerts for all benchmarks, even ones unrelated to the PR. The comparison tool (`github-action-benchmark`) expects the file it reads to contain exactly one result line per benchmark name, so repeated entries for the same benchmark must be consolidated before comparison. See [docs/BENCHMARK-REGRESSION.md](../docs/BENCHMARK-REGRESSION.md) for details.
+When changing `-count` in the `go test -bench` command in CI, always update the awk averaging/filtering step in "Prepare benchmark regression gate input" to produce exactly one result line per benchmark name. Failing to do so causes false-positive performance regression alerts for all benchmarks, even ones unrelated to the PR. The comparison tool (`github-action-benchmark`) expects the file it reads to contain exactly one result line per benchmark name, so repeated entries for the same benchmark must be consolidated before comparison. See [docs/BENCHMARK-REGRESSION.md](docs/BENCHMARK-REGRESSION.md) for details.
 
 ## CI Doctor Issue Linking
 

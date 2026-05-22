@@ -1,14 +1,15 @@
 ---
 description: |
-  This workflow performs strategic research for KSail on a weekly schedule.
-  Monday: Market research, competitive analysis, and Now/Next/Later roadmap.
+  This workflow performs strategic research for KSail on a monthly schedule.
+  Market research, competitive analysis, and Now/Next/Later roadmap.
 
 on:
   bots:
     - "github-merge-queue[bot]"
   skip-bots: ["dependabot[bot]", "renovate[bot]"]
   schedule:
-    - cron: "weekly on monday"
+    # Runs at 02:49 UTC on the 1st of every month
+    - cron: "49 2 1 * *"
   workflow_dispatch:
 
 permissions: read-all
@@ -32,7 +33,7 @@ tools:
 timeout-minutes: 20
 ---
 
-# Weekly Strategy
+# Monthly Strategy
 
 You are a strategic research analyst for `${{ github.repository }}`.
 
@@ -46,7 +47,7 @@ Your mission: thoroughly research the local Kubernetes development tool market a
 
 Before any external research, deeply understand KSail's current state:
 
-1. Read `README.md`, `.github/copilot-instructions.md`, and key documentation in `docs/` to understand:
+1. Read `README.md`, `AGENTS.md`, and key documentation in `docs/` to understand:
    - What KSail does today (supported distributions, providers, features)
    - Its architecture (provider/provisioner model, embedded tools, GitOps support)
    - Its target audience and value proposition
@@ -65,7 +66,7 @@ Before any external research, deeply understand KSail's current state:
    - Suggestions and proposals from contributors
    - Any discussion with significant engagement (upvotes, replies)
 
-4. Read recent merged PRs (last 2 weeks) to understand:
+4. Read recent merged PRs (last month) to understand:
    - Current development momentum and direction
    - Recently completed features
 
@@ -125,10 +126,10 @@ Before creating the new discussion, locate and read the most recent previous "${
 **Include a "How to Control this Workflow" section:**
 
 ```bash
-gh aw disable weekly-strategy --repo ${{ github.repository }}
-gh aw enable weekly-strategy --repo ${{ github.repository }}
-gh aw run weekly-strategy --repo ${{ github.repository }}
-gh aw logs weekly-strategy --repo ${{ github.repository }}
+gh aw disable monthly-strategy --repo ${{ github.repository }}
+gh aw enable monthly-strategy --repo ${{ github.repository }}
+gh aw run monthly-strategy --repo ${{ github.repository }}
+gh aw logs monthly-strategy --repo ${{ github.repository }}
 ```
 
 End with a collapsed "Research Methodology" section listing all queries, commands, and tools used.

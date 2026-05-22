@@ -50,26 +50,7 @@ graph TB
 
 KSail separates **infrastructure management** (providers) from **distribution configuration** (provisioners). This separation allows the same distribution (e.g., Talos) to run on different infrastructure (Docker, Hetzner, Omni).
 
-### Providers
-
-Providers manage the underlying infrastructure where Kubernetes nodes run:
-
-| Provider | Description | Supported Distributions |
-|----------|-------------|------------------------|
-| [**Docker**](/providers/docker/) | Runs nodes as Docker containers | Vanilla, K3s, Talos, VCluster, KWOK |
-| [**Hetzner**](/providers/hetzner/) | Runs nodes on Hetzner Cloud servers | Talos |
-| [**Omni**](/providers/omni/) | Manages Talos clusters via Sidero Omni API | Talos |
-
-### Provisioners
-
-Provisioners configure and manage Kubernetes distributions on top of provider infrastructure:
-
-| Distribution | Tool | Description |
-|--------------|------|-------------|
-| **Vanilla** | Kind | Standard upstream Kubernetes |
-| **K3s** | K3d | Lightweight K3s |
-| **Talos** | Talos | Immutable Talos Linux |
-| **VCluster** | vCluster | Virtual clusters via vCluster |
+For supported providers and distributions, see [Concepts](/concepts/#providers) and the [Distribution × Provider Matrix](/support-matrix/#distribution--provider-matrix).
 
 ### Interaction Flow
 

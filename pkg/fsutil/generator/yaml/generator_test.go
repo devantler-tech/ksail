@@ -232,8 +232,12 @@ func TestGenerateWithInvalidOutputDirectory(t *testing.T) {
 		"test": "value",
 	}
 
-	// Use invalid path that should cause write error
-	invalidPath := "/invalid/path/that/does/not/exist/output.yaml"
+	// Use a path whose parent is a regular file so directory creation fails with
+	// ENOTDIR. This triggers the write error path independently of the current
+	// user's privileges (root would otherwise be able to create directories).
+	notADir := filepath.Join(t.TempDir(), "not-a-dir")
+	require.NoError(t, os.WriteFile(notADir, []byte("file"), testFilePermissions))
+	invalidPath := filepath.Join(notADir, "output.yaml")
 
 	_, err := gen.Generate(model, yamlgenerator.Options{
 		Output: invalidPath,

@@ -26,7 +26,7 @@ If you have questions, don't hesitate to ask in [GitHub Discussions](https://git
 
 To get started with contributing to KSail, you'll need to set up your development environment, and understand the codebase, the CI setup and its requirements.
 
-To understand the codebase it is recommended to read the [.github/copilot-instructions.md](.github/copilot-instructions.md) file, which provides an overview of the project structure and key components. You can also use GitHub Copilot to assist you in navigating the codebase and understanding its functionality.
+To understand the codebase, it is recommended to read the [AGENTS.md](AGENTS.md) file, which provides an overview of the project structure and key components. You can also use GitHub Copilot to assist you in navigating the codebase and understanding its functionality.
 
 For a deeper dive into KSail's design and internals, refer to:
 
@@ -374,7 +374,7 @@ KSail uses [GitHub Agentic Workflows](https://github.github.com/gh-aw/) (`.githu
 | `repo-assist`                | Every 12h / On `/repo-assist`               | Issue triage, code quality, building, planning, and repository maintenance |
 | `daily-workflow-maintenance` | Daily (18:00 UTC)                           | CI/CD workflow updates, optimization, CI coaching, and dependency upgrades |
 | `daily-docs`                 | Daily (22:00 UTC) / On push / On `/unbloat` | Documentation sync with code changes, bloat reduction, and link fixing     |
-| `weekly-strategy`            | Weekly (Mon + Wed) / On dispatch            | Market research, roadmap planning (Mon), and project promotion (Wed)       |
+| `monthly-strategy`           | Monthly (1st, 02:49 UTC) / On dispatch      | Market research, competitive analysis, and Now/Next/Later roadmap planning |
 | `ci-doctor`                  | On CI failure                               | CI failure investigation, diagnostics, and Go-specific analysis            |
 
 Each agentic workflow creates a GitHub Discussion to coordinate its work and, depending on its purpose, may open draft PRs or create issues with incremental improvements. You can control them using the [`gh aw`](https://github.com/github/gh-aw) CLI extension:

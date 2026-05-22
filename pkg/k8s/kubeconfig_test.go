@@ -491,3 +491,166 @@ users:
 		})
 	}
 }
+
+func TestGetKubeconfigCurrentContext(t *testing.T) {
+	t.Parallel()
+
+	const kubeconfigContent = "apiVersion: v1\nkind: Config\ncurrent-context: my-cluster\n"
+
+	tests := []struct {
+		name            string
+		existingContent string
+		missingParent   bool
+		wantContext     string
+	}{
+		{
+			name:            "returns current-context from existing kubeconfig",
+			existingContent: kubeconfigContent,
+			wantContext:     "my-cluster",
+		},
+		{name: "returns empty string when kubeconfig file does not exist"},
+		{
+			name:          "creates parent directory and returns empty when parent does not exist",
+			missingParent: true,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			dir := t.TempDir()
+
+			kubeconfigPath := filepath.Join(dir, "kubeconfig")
+			if testCase.missingParent {
+				kubeconfigPath = filepath.Join(dir, "nonexistent", "kubeconfig")
+			}
+
+			if testCase.existingContent != "" {
+				require.NoError(
+					t,
+					os.WriteFile(kubeconfigPath, []byte(testCase.existingContent), 0o600),
+				)
+			}
+
+			got, err := k8s.GetKubeconfigCurrentContext(kubeconfigPath)
+			require.NoError(t, err)
+			assert.Equal(t, testCase.wantContext, got)
+
+			if testCase.missingParent {
+				_, statErr := os.Stat(filepath.Dir(kubeconfigPath))
+				assert.NoError(t, statErr, "expected parent directory to be created")
+			}
+		})
+	}
+}
+
+func TestSetKubeconfigCurrentContext(t *testing.T) {
+	t.Parallel()
+
+	const startingKubeconfig = `apiVersion: v1
+kind: Config
+clusters:
+- cluster:
+    server: https://10.0.0.1:6443
+  name: my-cluster
+contexts:
+- context:
+    cluster: my-cluster
+    user: my-user
+  name: my-cluster
+current-context: my-cluster
+users:
+- name: my-user
+  user:
+    token: token
+`
+
+	tests := []struct {
+		name        string
+		contextName string
+		wantContext string
+	}{
+		{
+			name:        "sets named context",
+			contextName: "my-cluster",
+			wantContext: "my-cluster",
+		},
+		{
+			name:        "clears current-context when contextName is empty",
+			contextName: "",
+			wantContext: "",
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			dir := t.TempDir()
+			kubeconfigPath := filepath.Join(dir, "kubeconfig")
+
+			err := os.WriteFile(kubeconfigPath, []byte(startingKubeconfig), 0o600)
+			require.NoError(t, err)
+
+			err = k8s.SetKubeconfigCurrentContext(kubeconfigPath, testCase.contextName)
+			require.NoError(t, err)
+
+			//nolint:gosec // G304: Safe in test context with controlled paths
+			data, err := os.ReadFile(kubeconfigPath)
+			require.NoError(t, err)
+
+			cfg, err := clientcmd.Load(data)
+			require.NoError(t, err)
+			assert.Equal(t, testCase.wantContext, cfg.CurrentContext)
+		})
+	}
+}
+
+func TestPreserveCurrentContextUnlessExplicit(t *testing.T) {
+	t.Parallel()
+
+	const initial = "apiVersion: v1\nkind: Config\ncurrent-context: host-ctx\n"
+
+	t.Run("implicit host context restores the original after a switch", func(t *testing.T) {
+		t.Parallel()
+
+		path := filepath.Join(t.TempDir(), "kubeconfig")
+		require.NoError(t, os.WriteFile(path, []byte(initial), 0o600))
+
+		restore, err := k8s.PreserveCurrentContextUnlessExplicit(path, "")
+		require.NoError(t, err)
+
+		// Simulate create switching the active context to the nested cluster.
+		require.NoError(t, k8s.SetKubeconfigCurrentContext(path, "nested-ctx"))
+
+		restore()
+
+		got, err := k8s.GetKubeconfigCurrentContext(path)
+		require.NoError(t, err)
+		assert.Equal(t, "host-ctx", got, "implicit host context should be restored")
+	})
+
+	t.Run("explicit host context leaves the switched context in place", func(t *testing.T) {
+		t.Parallel()
+
+		path := filepath.Join(t.TempDir(), "kubeconfig")
+		require.NoError(t, os.WriteFile(path, []byte(initial), 0o600))
+
+		restore, err := k8s.PreserveCurrentContextUnlessExplicit(path, "my-host")
+		require.NoError(t, err)
+
+		require.NoError(t, k8s.SetKubeconfigCurrentContext(path, "nested-ctx"))
+
+		restore()
+
+		got, err := k8s.GetKubeconfigCurrentContext(path)
+		require.NoError(t, err)
+		assert.Equal(
+			t,
+			"nested-ctx",
+			got,
+			"explicit host context should leave the new context active",
+		)
+	})
+}

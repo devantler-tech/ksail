@@ -10,7 +10,6 @@ import (
 	docker "github.com/devantler-tech/ksail/v7/pkg/client/docker"
 	"github.com/devantler-tech/ksail/v7/pkg/client/netretry"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
-	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/kernelmod"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/go-connections/nat"
@@ -26,7 +25,7 @@ func (p *Provisioner) createDockerCluster(ctx context.Context, clusterName strin
 	provisionStart := time.Now()
 
 	// Ensure required kernel modules are loaded (Linux only)
-	err := kernelmod.EnsureBrNetfilter(ctx, p.logWriter)
+	err := p.kernelModuleLoader(ctx, p.logWriter)
 	if err != nil {
 		return fmt.Errorf("%w: %w", ErrKernelModuleLoadFailed, err)
 	}
@@ -356,11 +355,7 @@ func (p *Provisioner) setupClusterEndpoints(
 
 	// Create a modified talosconfig with the mapped endpoint
 	talosConfig := configBundle.TalosConfig()
-	if talosConfig != nil && talosConfig.Context != "" {
-		if context, ok := talosConfig.Contexts[talosConfig.Context]; ok {
-			context.Endpoints = []string{mappedEndpoint}
-		}
-	}
+	patchTalosConfigEndpoint(talosConfig, mappedEndpoint)
 
 	// Get the Kubernetes API endpoint from the cluster info.
 	// The Docker provisioner automatically sets this to the external endpoint
@@ -744,4 +739,16 @@ func (p *Provisioner) getMappedK8sAPIEndpoint(
 	clusterName string,
 ) (string, error) {
 	return p.getMappedPortEndpoint(ctx, clusterName, k8sAPIPort)
+}
+
+// patchTalosConfigEndpoint updates the active context's Talos API endpoint in cfg.
+// It is a no-op when cfg is nil or has no active context name.
+func patchTalosConfigEndpoint(cfg *config.Config, hostEndpoint string) {
+	if cfg == nil || cfg.Context == "" {
+		return
+	}
+
+	if talosCtx, ok := cfg.Contexts[cfg.Context]; ok {
+		talosCtx.Endpoints = []string{hostEndpoint}
+	}
 }

@@ -33,6 +33,12 @@ var (
 	errRepoNotFound   = errors.New("repository not found: 404 Not Found")
 )
 
+// noopKernelModuleLoader is a kernel module loader stub that succeeds without
+// invoking modprobe, so Docker provisioning tests are hermetic.
+func noopKernelModuleLoader(_ context.Context, _ io.Writer) error {
+	return nil
+}
+
 // createTestTalosConfigs creates a minimal TalosConfigs for testing.
 func createTestTalosConfigs(t *testing.T, clusterName string) *talosconfigmanager.Configs {
 	t.Helper()
@@ -115,7 +121,8 @@ func TestProvisioner_Create_NoDockerClient(t *testing.T) {
 	t.Parallel()
 
 	configs := createTestTalosConfigs(t, "test-cluster")
-	provisioner := talosprovisioner.NewProvisioner(configs, nil)
+	provisioner := talosprovisioner.NewProvisioner(configs, nil).
+		WithKernelModuleLoaderForTest(noopKernelModuleLoader)
 
 	ctx := context.Background()
 	err := provisioner.Create(ctx, "")
@@ -145,7 +152,8 @@ func TestProvisioner_Create_ClusterAlreadyExists(t *testing.T) {
 
 	configs := createTestTalosConfigs(t, "existing-cluster")
 	provisioner := talosprovisioner.NewProvisioner(configs, nil).
-		WithDockerClient(mockClient)
+		WithDockerClient(mockClient).
+		WithKernelModuleLoaderForTest(noopKernelModuleLoader)
 
 	ctx := context.Background()
 	err := provisioner.Create(ctx, "existing-cluster")
@@ -189,7 +197,8 @@ func TestProvisioner_Create_Success(t *testing.T) {
 		WithProvisionerFactory(func(_ context.Context) (provision.Provisioner, error) {
 			return mockProvisioner, nil
 		}).
-		WithLogWriter(io.Discard)
+		WithLogWriter(io.Discard).
+		WithKernelModuleLoaderForTest(noopKernelModuleLoader)
 
 	ctx := context.Background()
 	err := provisioner.Create(ctx, "test-cluster")
@@ -235,7 +244,8 @@ func TestProvisioner_Create_WithPatches(t *testing.T) {
 		WithProvisionerFactory(func(_ context.Context) (provision.Provisioner, error) {
 			return mockProvisioner, nil
 		}).
-		WithLogWriter(io.Discard)
+		WithLogWriter(io.Discard).
+		WithKernelModuleLoaderForTest(noopKernelModuleLoader)
 
 	ctx := context.Background()
 	err := provisioner.Create(ctx, "test-cluster-patches")
@@ -291,7 +301,8 @@ func TestProvisioner_Create_ImagePullRetryOnTransientError(t *testing.T) {
 			return mockTalosProvisioner, nil
 		}).
 		WithImagePullRetryConfig(3, 0, 0).
-		WithLogWriter(io.Discard)
+		WithLogWriter(io.Discard).
+		WithKernelModuleLoaderForTest(noopKernelModuleLoader)
 
 	ctx := context.Background()
 	err := provisioner.Create(ctx, "test-cluster-retry")
@@ -325,7 +336,8 @@ func TestProvisioner_Create_ImagePullNonRetryableError(t *testing.T) {
 	provisioner := talosprovisioner.NewProvisioner(configs, nil).
 		WithDockerClient(mockClient).
 		WithImagePullRetryConfig(3, 0, 0).
-		WithLogWriter(io.Discard)
+		WithLogWriter(io.Discard).
+		WithKernelModuleLoaderForTest(noopKernelModuleLoader)
 
 	ctx := context.Background()
 	err := provisioner.Create(ctx, "test-cluster-nonretry")
