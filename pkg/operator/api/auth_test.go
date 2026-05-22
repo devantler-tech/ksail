@@ -60,7 +60,9 @@ func TestCurrentUserRejectsExpiredSession(t *testing.T) {
 
 	expired := auth.signedCookie(
 		sessionCookieName,
-		mustMarshal(sessionClaims{Subject: "alice", Expiry: time.Now().Add(-time.Minute).Unix()}),
+		mustMarshal(
+			sessionClaims{Subject: testSubject, Expiry: time.Now().Add(-time.Minute).Unix()},
+		),
 		"/",
 		0,
 	)
@@ -79,12 +81,12 @@ func TestCurrentUserAcceptsValidSession(t *testing.T) {
 
 	valid := auth.signedCookie(
 		sessionCookieName,
-		mustMarshal(sessionClaims{Subject: "alice", Expiry: time.Now().Add(time.Hour).Unix()}),
+		mustMarshal(sessionClaims{Subject: testSubject, Expiry: time.Now().Add(time.Hour).Unix()}),
 		"/",
 		3600,
 	)
 
 	claims, ok := auth.currentUser(requestWithCookie(valid))
 	require.True(t, ok)
-	assert.Equal(t, "alice", claims.Subject)
+	assert.Equal(t, testSubject, claims.Subject)
 }
