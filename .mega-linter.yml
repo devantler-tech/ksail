@@ -34,6 +34,6 @@ SPELL_LYCHEE_FILTER_REGEX_EXCLUDE: (AGENTS\.md|.*\.mdx|docs/src/.*\.md|\.github/
 # Helm chart templates contain Go template directives ({{ ... }}) and are not valid standalone
 # YAML; generated CRDs (controller-gen output) are large and machine-managed. Exclude both from
 # the YAML linters.
-YAML_YAMLLINT_FILTER_REGEX_EXCLUDE: (charts/.*/templates/.*|config/crd/bases/.*|charts/.*/crds/.*|\.github/workflows/.*\.lock\.yml)
-YAML_PRETTIER_FILTER_REGEX_EXCLUDE: (charts/.*/templates/.*|config/crd/bases/.*|charts/.*/crds/.*)
-YAML_V8R_FILTER_REGEX_EXCLUDE: (\.github/workflows/.*\.lock\.yml|charts/.*/templates/.*|config/crd/bases/.*|charts/.*/crds/.*)
+YAML_YAMLLINT_FILTER_REGEX_EXCLUDE: (charts/.*/templates/.*|charts/.*/crds/.*|\.github/workflows/.*\.lock\.yml)
+YAML_PRETTIER_FILTER_REGEX_EXCLUDE: (charts/.*/templates/.*|charts/.*/crds/.*)
+YAML_V8R_FILTER_REGEX_EXCLUDE: (\.github/workflows/.*\.lock\.yml|charts/.*/templates/.*|charts/.*/crds/.*)

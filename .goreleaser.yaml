@@ -99,7 +99,7 @@ release:
   draft: true
   extra_files:
     # Attach the Cluster CRD so it can be applied without the Helm chart.
-    - glob: ./config/crd/bases/*.yaml
+    - glob: ./charts/ksail-operator/crds/*.yaml
   footer: |
     ## Quick Start
 
