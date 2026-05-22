@@ -368,7 +368,7 @@ jobs:
           output-path: /usr/local/bin/ksail
 
   generate:
-    name: 📝 Generate Schema & Docs
+    name: 📝 Generate Schema, CRD & Docs
     runs-on: ubuntu-latest
     timeout-minutes: 25
     # Depend on build-artifact so the Go build cache is warm by the time
@@ -400,6 +400,10 @@ jobs:
         if: needs.changes.outputs.schema == 'true'
         run: go generate ./schemas/...
 
+      - name: 📐 Generate CRD & DeepCopy
+        if: needs.changes.outputs.schema == 'true'
+        run: go generate ./pkg/apis/...
+
       - name: 📚 Generate reference documentation
         if: needs.changes.outputs.cli == 'true'
         run: go generate ./docs/...
@@ -427,7 +431,7 @@ jobs:
         shell: bash
         run: |
           if [ -s /tmp/generate.patch ]; then
-            echo "::error::Generated files are out of date. Please run 'go generate ./schemas/...' and 'go generate ./docs/...' locally and commit the results."
+            echo "::error::Generated files are out of date. Please run 'go generate ./schemas/...', 'go generate ./pkg/apis/...', and 'go generate ./docs/...' locally and commit the results."
             echo ""
             cat /tmp/generate.patch
             exit 1
