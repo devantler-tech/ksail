@@ -256,6 +256,13 @@ func handleStructValue(val reflect.Value) any {
 }
 
 // pruneClusterDefaults zeroes fields that match default values so they are omitted when marshalled.
+//
+// Note: this runs inside Cluster.MarshalJSON, which is shared by the CLI config writer and by
+// controller-runtime when the operator serializes objects for the API server. It must NOT strip
+// ObjectMeta (namespace, finalizers, resourceVersion, ...) or operator writes would break. The
+// reflection-based marshaller already omits zero values, so a CLI-constructed Cluster (empty
+// ObjectMeta beyond name, zero creationTimestamp, empty status) emits only metadata.name without
+// leaking API-server-populated fields.
 func pruneClusterDefaults(cluster Cluster) Cluster {
 	// Distribution defaults - needed for context derivation
 	distribution := cluster.Spec.Cluster.Distribution

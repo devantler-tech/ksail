@@ -24,6 +24,16 @@ spec:
     - host: {{ .host | quote }}
       http:
         paths:
+          {{- if $.Values.api.bindPort }}
+          # Route /api to the operator REST API Service so the same-origin SPA can reach it.
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "ksail-operator.fullname" $ }}
+                port:
+                  number: {{ $.Values.api.bindPort }}
+          {{- end }}
           {{- range .paths }}
           - path: {{ .path }}
             pathType: {{ .pathType }}

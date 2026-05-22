@@ -5,6 +5,10 @@
 // The Cluster type is both the CLI configuration model (ksail.yaml) and the
 // controller-runtime custom resource reconciled by the KSail operator.
 //
+// All ksail config fields have defaults, so CRD validation treats fields as optional by default
+// (a minimal Cluster needs only spec.cluster.distribution). Mark specific fields Required as needed.
+//
+// +kubebuilder:validation:Optional
 // +kubebuilder:object:generate=true
 // +groupName=ksail.io
 package v1alpha1

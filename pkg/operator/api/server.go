@@ -22,9 +22,21 @@ import (
 const (
 	readHeaderTimeout = 10 * time.Second
 	shutdownTimeout   = 5 * time.Second
+	// maxRequestBodyBytes caps decoded request bodies to guard against oversized payloads.
+	maxRequestBodyBytes = 1 << 20 // 1 MiB
+	// defaultNamespace is used when a create request does not specify a namespace.
+	defaultNamespace = "default"
+	// lastAppliedSpecAnnotation is the operator-managed drift baseline annotation
+	// (controller.LastAppliedSpecAnnotation); the API strips it from client input.
+	lastAppliedSpecAnnotation = "ksail.io/last-applied-spec"
 )
 
 // Server serves the operator REST API. It implements controller-runtime's manager.Runnable.
+//
+// The API has no built-in authentication/authorization: any caller that can reach the listener
+// inherits the operator's RBAC. Do not expose it directly. Deploy it behind an authenticating
+// proxy (e.g. kube-rbac-proxy, OIDC, or mTLS), or keep it cluster-internal and rely on the
+// read-only lock. Per-user authn/z is a planned follow-up.
 type Server struct {
 	// Client is the controller-runtime client used to read and mutate Cluster resources.
 	Client client.Client
@@ -142,11 +154,16 @@ func (s *Server) handleGetCluster(writer http.ResponseWriter, request *http.Requ
 }
 
 func (s *Server) handleCreateCluster(writer http.ResponseWriter, request *http.Request) {
-	cluster, err := decodeCluster(request)
+	decoded, err := decodeCluster(writer, request)
 	if err != nil {
 		writeError(writer, http.StatusBadRequest, err)
 
 		return
+	}
+
+	cluster := sanitizeForWrite(decoded)
+	if cluster.Namespace == "" {
+		cluster.Namespace = defaultNamespace
 	}
 
 	createErr := s.Client.Create(request.Context(), cluster)
@@ -160,24 +177,40 @@ func (s *Server) handleCreateCluster(writer http.ResponseWriter, request *http.R
 }
 
 func (s *Server) handleUpdateCluster(writer http.ResponseWriter, request *http.Request) {
-	cluster, err := decodeCluster(request)
+	decoded, err := decodeCluster(writer, request)
 	if err != nil {
 		writeError(writer, http.StatusBadRequest, err)
 
 		return
 	}
 
-	cluster.Namespace = request.PathValue("namespace")
-	cluster.Name = request.PathValue("name")
+	key := types.NamespacedName{
+		Namespace: request.PathValue("namespace"),
+		Name:      request.PathValue("name"),
+	}
 
-	updateErr := s.Client.Update(request.Context(), cluster)
+	// Fetch the existing object so the update carries the current resourceVersion and preserves
+	// server- and operator-managed fields (status, finalizers, operator annotations). Only the
+	// client-mutable spec is applied.
+	var existing v1alpha1.Cluster
+
+	getErr := s.Client.Get(request.Context(), key, &existing)
+	if getErr != nil {
+		writeClientError(writer, getErr)
+
+		return
+	}
+
+	existing.Spec = decoded.Spec
+
+	updateErr := s.Client.Update(request.Context(), &existing)
 	if updateErr != nil {
 		writeClientError(writer, updateErr)
 
 		return
 	}
 
-	writeJSON(writer, http.StatusOK, cluster)
+	writeJSON(writer, http.StatusOK, &existing)
 }
 
 func (s *Server) handleDeleteCluster(writer http.ResponseWriter, request *http.Request) {
@@ -204,15 +237,48 @@ func isMutating(method string) bool {
 	}
 }
 
-func decodeCluster(request *http.Request) (*v1alpha1.Cluster, error) {
+func decodeCluster(writer http.ResponseWriter, request *http.Request) (*v1alpha1.Cluster, error) {
 	var cluster v1alpha1.Cluster
 
-	err := json.NewDecoder(request.Body).Decode(&cluster)
+	// Cap the request body to guard against oversized payloads when exposed via Ingress.
+	limited := http.MaxBytesReader(writer, request.Body, maxRequestBodyBytes)
+
+	err := json.NewDecoder(limited).Decode(&cluster)
 	if err != nil {
 		return nil, fmt.Errorf("decode cluster: %w", err)
 	}
 
 	return &cluster, nil
+}
+
+// sanitizeForWrite returns a copy of a client-supplied Cluster containing only the fields a caller
+// is allowed to set (name, namespace, labels, spec). It drops status, finalizers, resourceVersion,
+// and the operator-managed last-applied-spec annotation so the API cannot be used to interfere with
+// reconciliation or drift detection.
+func sanitizeForWrite(cluster *v1alpha1.Cluster) *v1alpha1.Cluster {
+	out := &v1alpha1.Cluster{}
+	out.Name = cluster.Name
+	out.Namespace = cluster.Namespace
+	out.Labels = cluster.Labels
+	out.Spec = cluster.Spec
+
+	if len(cluster.Annotations) > 0 {
+		annotations := make(map[string]string, len(cluster.Annotations))
+
+		for key, value := range cluster.Annotations {
+			if key == lastAppliedSpecAnnotation {
+				continue
+			}
+
+			annotations[key] = value
+		}
+
+		if len(annotations) > 0 {
+			out.Annotations = annotations
+		}
+	}
+
+	return out
 }
 
 func writeJSON(writer http.ResponseWriter, status int, body any) {
@@ -234,12 +300,26 @@ func writeError(writer http.ResponseWriter, status int, err error) {
 }
 
 func writeClientError(writer http.ResponseWriter, err error) {
+	writeError(writer, clientErrorStatus(err), err)
+}
+
+// clientErrorStatus maps a Kubernetes API error to the closest HTTP status code so clients and the
+// UI can react appropriately instead of treating everything as a 500.
+func clientErrorStatus(err error) int {
 	switch {
 	case apierrors.IsNotFound(err):
-		writeError(writer, http.StatusNotFound, err)
+		return http.StatusNotFound
 	case apierrors.IsConflict(err), apierrors.IsAlreadyExists(err):
-		writeError(writer, http.StatusConflict, err)
+		return http.StatusConflict
+	case apierrors.IsInvalid(err):
+		return http.StatusUnprocessableEntity
+	case apierrors.IsBadRequest(err):
+		return http.StatusBadRequest
+	case apierrors.IsUnauthorized(err):
+		return http.StatusUnauthorized
+	case apierrors.IsForbidden(err):
+		return http.StatusForbidden
 	default:
-		writeError(writer, http.StatusInternalServerError, err)
+		return http.StatusInternalServerError
 	}
 }

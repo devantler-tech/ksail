@@ -1,5 +1,8 @@
-// Typed client for the KSail operator REST API. All requests are same-origin; in production the
-// UI is served behind an ingress/proxy that routes /api to the operator service.
+// Typed client for the KSail operator REST API.
+//
+// Requests are intentionally same-origin (/api/...): the UI container's nginx proxies /api to the
+// operator using the API_BASE_URL env var (see web/ui/default.conf.template), and the Helm chart
+// ingress routes /api to the operator Service. The SPA therefore needs no build-time base URL.
 
 export interface ClusterStatus {
   phase?: string;
@@ -31,7 +34,11 @@ export interface Config {
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, init);
   if (!response.ok) {
-    throw new Error(`${init?.method ?? "GET"} ${path}: ${response.status}`);
+    // Surface the server-provided error body (e.g. the Kubernetes status message) so the UI can
+    // show something actionable instead of a bare status code.
+    const body = (await response.text()).trim();
+    const detail = body === "" ? "" : `: ${body}`;
+    throw new Error(`${init?.method ?? "GET"} ${path}: ${response.status}${detail}`);
   }
 
   if (response.status === 204) {

@@ -13,9 +13,11 @@ const (
 )
 
 // ClusterStatus describes the observed state of a Cluster as reconciled by the KSail operator.
-// It replaces the on-disk state previously persisted under ~/.ksail/clusters/<name>/spec.json.
+// It is the operator's source of truth for observed state; the imperative CLI continues to
+// persist its own state under ~/.ksail/clusters/<name>/spec.json independently.
 type ClusterStatus struct {
 	// Phase is a high-level summary of the cluster lifecycle.
+	// +kubebuilder:validation:Enum=Pending;Provisioning;Ready;Updating;Deleting;Failed
 	Phase ClusterPhase `json:"phase,omitempty"`
 
 	// Conditions represent the latest observations of the cluster's state.

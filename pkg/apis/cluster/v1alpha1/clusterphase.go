@@ -27,8 +27,10 @@ func (p ClusterPhase) String() string {
 	return string(p)
 }
 
-// ValidValues returns all valid ClusterPhase values as strings. It implements EnumValuer so
-// the JSON schema and CRD generators can discover the allowed values automatically.
+// ValidValues returns all valid ClusterPhase values as strings. It implements EnumValuer so the
+// JSON schema generator can discover the allowed values automatically. CRD enum validation is
+// enforced separately by the +kubebuilder:validation:Enum marker on ClusterStatus.Phase, because
+// controller-gen does not consult this interface.
 func (p ClusterPhase) ValidValues() []string {
 	return []string{
 		string(ClusterPhasePending),

@@ -26,9 +26,10 @@ spec:
           image: {{ include "ksail-operator.uiImage" . | quote }}
           imagePullPolicy: {{ .Values.ui.image.pullPolicy }}
           env:
-            # The single read-only lock value, shared with the operator API.
-            - name: UI_READ_ONLY
-              value: {{ .Values.ui.readOnly | quote }}
+            # API_BASE_URL is consumed by the UI container's nginx to proxy /api to the operator
+            # Service. The read-only state is read by the SPA at runtime from GET /api/v1/config
+            # (driven by the operator's --read-only flag, wired from ui.readOnly), so the SPA needs
+            # no build-time or runtime UI_READ_ONLY env var.
             - name: API_BASE_URL
               value: "http://{{ include "ksail-operator.fullname" . }}.{{ .Release.Namespace }}.svc:{{ .Values.api.bindPort }}"
           ports:

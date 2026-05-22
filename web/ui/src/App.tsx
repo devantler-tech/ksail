@@ -7,7 +7,9 @@ import {
   type Cluster,
 } from "./api.ts";
 
-const DISTRIBUTIONS = ["VCluster", "K3s", "Vanilla", "Talos", "KWOK", "EKS"];
+// Only distributions the operator can currently provision in-cluster (see
+// pkg/operator/provisioner.go buildDistributionConfig). Creating others would fail reconciliation.
+const DISTRIBUTIONS = ["VCluster"];
 
 export function App() {
   const [readOnly, setReadOnly] = useState(true);
@@ -81,7 +83,16 @@ export function App() {
         </div>
       )}
 
-      {loading ? <p>Loading…</p> : <ClusterTable clusters={clusters} readOnly={readOnly} onChanged={refresh} />}
+      {loading ? (
+        <p>Loading…</p>
+      ) : (
+        <ClusterTable
+          clusters={clusters}
+          readOnly={readOnly}
+          onChanged={refresh}
+          onError={setError}
+        />
+      )}
 
       {!readOnly && !loading && <CreateForm onCreated={refresh} onError={setError} />}
     </div>
@@ -92,8 +103,9 @@ function ClusterTable(props: {
   clusters: Cluster[];
   readOnly: boolean;
   onChanged: () => Promise<void>;
+  onError: (message: string) => void;
 }) {
-  const { clusters, readOnly, onChanged } = props;
+  const { clusters, readOnly, onChanged, onError } = props;
 
   if (clusters.length === 0) {
     return <p className="text-slate-500">No clusters.</p>;
@@ -121,7 +133,7 @@ function ClusterTable(props: {
             <td className="font-mono text-xs">{cluster.status?.endpoint ?? "—"}</td>
             {!readOnly && (
               <td className="text-right">
-                <DeleteButton cluster={cluster} onDeleted={onChanged} />
+                <DeleteButton cluster={cluster} onDeleted={onChanged} onError={onError} />
               </td>
             )}
           </tr>
@@ -131,12 +143,20 @@ function ClusterTable(props: {
   );
 }
 
-function DeleteButton(props: { cluster: Cluster; onDeleted: () => Promise<void> }) {
-  const { cluster, onDeleted } = props;
+function DeleteButton(props: {
+  cluster: Cluster;
+  onDeleted: () => Promise<void>;
+  onError: (message: string) => void;
+}) {
+  const { cluster, onDeleted, onError } = props;
 
   async function handleDelete() {
-    await deleteCluster(cluster.metadata.namespace ?? "default", cluster.metadata.name);
-    await onDeleted();
+    try {
+      await deleteCluster(cluster.metadata.namespace ?? "default", cluster.metadata.name);
+      await onDeleted();
+    } catch (err) {
+      onError(String(err));
+    }
   }
 
   return (

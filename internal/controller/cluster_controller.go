@@ -10,6 +10,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
+	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -118,6 +119,8 @@ func (r *ClusterReconciler) reconcileNormal(
 	ctx context.Context,
 	cluster *v1alpha1.Cluster,
 ) (ctrl.Result, error) {
+	before := cluster.Status.DeepCopy()
+
 	provisioner, err := r.NewProvisioner(ctx, cluster)
 	if err != nil {
 		return r.fail(ctx, cluster, "ProvisionerError", err)
@@ -136,7 +139,7 @@ func (r *ClusterReconciler) reconcileNormal(
 			"Creating cluster",
 		)
 
-		statusErr := r.updateStatus(ctx, cluster)
+		statusErr := r.updateStatusIfChanged(ctx, cluster, before)
 		if statusErr != nil {
 			return ctrl.Result{}, statusErr
 		}
@@ -152,9 +155,11 @@ func (r *ClusterReconciler) reconcileNormal(
 		}
 	}
 
+	// Exists()/Create() only confirm the cluster is present, not that every workload is healthy.
+	// Deeper readiness (node/pod health, kubeconfig Secret) is reported by the monitoring follow-up.
 	r.markReady(cluster)
 
-	statusErr := r.updateStatus(ctx, cluster)
+	statusErr := r.updateStatusIfChanged(ctx, cluster, before)
 	if statusErr != nil {
 		return ctrl.Result{}, statusErr
 	}
@@ -182,10 +187,9 @@ func (r *ClusterReconciler) reconcileDelete(
 
 	delErr := provisioner.Delete(ctx, cluster.Name)
 	if delErr != nil {
-		return ctrl.Result{RequeueAfter: r.transitionalRequeue()}, fmt.Errorf(
-			"delete cluster: %w",
-			delErr,
-		)
+		// Return only the error: controller-runtime ignores Result when err != nil and applies
+		// its rate-limited backoff, so a RequeueAfter here would have no effect.
+		return ctrl.Result{}, fmt.Errorf("delete cluster: %w", delErr)
 	}
 
 	controllerutil.RemoveFinalizer(cluster, FinalizerName)
@@ -205,10 +209,10 @@ func (r *ClusterReconciler) fail(
 	reason string,
 	cause error,
 ) (ctrl.Result, error) {
+	before := cluster.Status.DeepCopy()
+
 	cluster.Status.Phase = v1alpha1.ClusterPhaseFailed
 	cluster.Status.ObservedGeneration = cluster.Generation
-	now := metav1.Now()
-	cluster.Status.LastReconcileTime = &now
 
 	apimeta.SetStatusCondition(&cluster.Status.Conditions, metav1.Condition{
 		Type:               v1alpha1.ConditionReady,
@@ -224,8 +228,16 @@ func (r *ClusterReconciler) fail(
 		Reason:             reason,
 		Message:            cause.Error(),
 	})
+	// Clear Progressing so a previously-Progressing cluster does not stay Progressing while Failed.
+	apimeta.SetStatusCondition(&cluster.Status.Conditions, metav1.Condition{
+		Type:               v1alpha1.ConditionProgressing,
+		Status:             metav1.ConditionFalse,
+		ObservedGeneration: cluster.Generation,
+		Reason:             reason,
+		Message:            cause.Error(),
+	})
 
-	statusErr := r.updateStatus(ctx, cluster)
+	statusErr := r.updateStatusIfChanged(ctx, cluster, before)
 	if statusErr != nil {
 		return ctrl.Result{}, statusErr
 	}
@@ -249,12 +261,11 @@ func (r *ClusterReconciler) markProgressing(
 	})
 }
 
-// markReady records a successful reconciliation.
+// markReady records a successful reconciliation. LastReconcileTime is set by
+// updateStatusIfChanged only when the status actually changes, to avoid status-write churn.
 func (r *ClusterReconciler) markReady(cluster *v1alpha1.Cluster) {
 	cluster.Status.Phase = v1alpha1.ClusterPhaseReady
 	cluster.Status.ObservedGeneration = cluster.Generation
-	now := metav1.Now()
-	cluster.Status.LastReconcileTime = &now
 
 	const message = "Cluster is reconciled and ready"
 
@@ -387,6 +398,30 @@ func (r *ClusterReconciler) recordAppliedSpec(
 	}
 
 	return nil
+}
+
+// updateStatusIfChanged persists the status only when it differs from before (ignoring
+// LastReconcileTime). This avoids a tight reconcile loop where every steady-state reconcile would
+// otherwise write status, generate a watch event, and trigger another reconcile. LastReconcileTime
+// is stamped only when a real change is being written.
+func (r *ClusterReconciler) updateStatusIfChanged(
+	ctx context.Context,
+	cluster *v1alpha1.Cluster,
+	before *v1alpha1.ClusterStatus,
+) error {
+	currentCmp := cluster.Status.DeepCopy()
+	beforeCmp := before.DeepCopy()
+	currentCmp.LastReconcileTime = nil
+	beforeCmp.LastReconcileTime = nil
+
+	if equality.Semantic.DeepEqual(beforeCmp, currentCmp) {
+		return nil
+	}
+
+	now := metav1.Now()
+	cluster.Status.LastReconcileTime = &now
+
+	return r.updateStatus(ctx, cluster)
 }
 
 // updateStatus persists the cluster status subresource.
