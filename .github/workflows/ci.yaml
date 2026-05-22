@@ -670,12 +670,12 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: � Checkout
+      - name: 📄 Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
 
-      - name: �🔍 NPM Audit and Fix
+      - name: 🔍 NPM Audit and Fix
         uses: ./.github/actions/npm-audit-and-fix
         with:
           working-directory: docs
@@ -692,12 +692,12 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: � Checkout
+      - name: 📄 Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
 
-      - name: �🔍 NPM Audit and Fix
+      - name: 🔍 NPM Audit and Fix
         uses: ./.github/actions/npm-audit-and-fix
         with:
           working-directory: vsce
@@ -911,7 +911,10 @@ jobs:
   system-test-docker:
     name: 🧪 System Test (Docker)
     runs-on: ubuntu-latest
-    timeout-minutes: 75
+    # The Talos host + full nested Kubernetes-provider coverage (Vanilla,K3s,VCluster,Talos)
+    # has a ~77-min worst case. 120 gives comfortable headroom to absorb runtime variance
+    # without trimming test coverage.
+    timeout-minutes: 120
     needs:
       [
         changes,
@@ -954,8 +957,8 @@ jobs:
             init: true
             args: "--name system-test-cluster-with-image-verification --image-verification Enabled"
           # Enable Kubernetes provider tests on the default (init=true, args="")
-          # entry for each distribution. This tests all 5 nested distributions
-          # on each host type, once per matrix.
+          # entry for each distribution. This tests all 4 nested distributions
+          # (Vanilla,K3s,VCluster,Talos) on each host type, once per matrix.
           - distribution: Vanilla
             provider: Docker
             init: true

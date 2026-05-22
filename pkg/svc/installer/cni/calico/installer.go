@@ -278,7 +278,17 @@ func (c *Installer) getCalicoValues() map[string]string {
 }
 
 func (c *Installer) defaultCalicoValues() map[string]string {
-	vals := map[string]string{}
+	vals := map[string]string{
+		// Goldmane (network flow collector) and Whisker (observability UI) are optional
+		// components added in Calico v3.32. They require CRDs that the operator creates
+		// after it starts, but Helm's schema validation rejects their CRs before any
+		// resource is deployed — including the operator Deployment itself. This deadlock
+		// prevents the operator from ever starting. Disabling them here allows the operator
+		// to deploy and register CRDs without schema-validation failures. Goldmane and
+		// Whisker are not required for CNI functionality.
+		"goldmane.enabled": "false",
+		"whisker.enabled":  "false",
+	}
 	if c.haEnabled {
 		vals["installation.controlPlaneReplicas"] = "2"
 	}
@@ -383,13 +393,14 @@ func isCRDEstablished(crd *apiextensionsv1.CustomResourceDefinition) bool {
 }
 
 func calicoCRDNames() []string {
+	// Goldmane and Whisker CRDs are excluded because those components are disabled
+	// in defaultCalicoValues (see the comment there). Waiting for CRDs of disabled
+	// components would block unnecessarily and obscure real failures.
 	return []string{
-		"goldmanes.operator.tigera.io",
 		"imagesets.operator.tigera.io",
 		"installations.operator.tigera.io",
 		"managementclusterconnections.operator.tigera.io",
 		"tigerastatuses.operator.tigera.io",
-		"whiskers.operator.tigera.io",
 	}
 }
 
