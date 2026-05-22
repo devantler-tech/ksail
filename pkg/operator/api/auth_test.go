@@ -1,4 +1,4 @@
-package api //nolint:testpackage // white-box tests for unexported cookie-signing helpers
+package api_test
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/devantler-tech/ksail/v7/pkg/operator/api"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -29,9 +30,9 @@ func TestSignedValueRoundTrip(t *testing.T) {
 	secret := []byte("0123456789abcdef0123456789abcdef")
 	payload := []byte(`{"sub":"alice"}`)
 
-	value := signValue(secret, payload)
+	value := api.SignValue(secret, payload)
 
-	got, err := verifySignedValue(secret, value)
+	got, err := api.VerifySignedValue(secret, value)
 	require.NoError(t, err)
 	assert.Equal(t, payload, got)
 }
@@ -40,28 +41,28 @@ func TestVerifySignedValueRejectsTampering(t *testing.T) {
 	t.Parallel()
 
 	secret := []byte("0123456789abcdef0123456789abcdef")
-	value := signValue(secret, []byte(`{"sub":"alice"}`))
+	value := api.SignValue(secret, []byte(`{"sub":"alice"}`))
 
-	_, err := verifySignedValue([]byte("a-different-secret-of-the-key-len"), value)
-	require.ErrorIs(t, err, errInvalidCookie)
+	_, err := api.VerifySignedValue([]byte("a-different-secret-of-the-key-len"), value)
+	require.ErrorIs(t, err, api.ErrInvalidCookie)
 
-	_, err = verifySignedValue(secret, value+"x")
-	require.ErrorIs(t, err, errInvalidCookie)
+	_, err = api.VerifySignedValue(secret, value+"x")
+	require.ErrorIs(t, err, api.ErrInvalidCookie)
 
-	_, err = verifySignedValue(secret, "no-separator")
-	require.ErrorIs(t, err, errInvalidCookie)
+	_, err = api.VerifySignedValue(secret, "no-separator")
+	require.ErrorIs(t, err, api.ErrInvalidCookie)
 }
 
 func TestCurrentUserRejectsExpiredSession(t *testing.T) {
 	t.Parallel()
 
 	secret := []byte("0123456789abcdef0123456789abcdef")
-	auth := &authenticator{config: OIDCConfig{SessionSecret: secret, SessionTTL: time.Hour}}
+	auth := api.NewConfigAuthenticator(api.OIDCConfig{SessionSecret: secret, SessionTTL: time.Hour})
 
-	expired := auth.signedCookie(
-		sessionCookieName,
-		mustMarshal(
-			sessionClaims{Subject: testSubject, Expiry: time.Now().Add(-time.Minute).Unix()},
+	expired := auth.SignedCookie(
+		api.SessionCookieName,
+		api.MustMarshal(
+			api.SessionClaims{Subject: testSubject, Expiry: time.Now().Add(-time.Minute).Unix()},
 		),
 		"/",
 		0,
@@ -69,7 +70,7 @@ func TestCurrentUserRejectsExpiredSession(t *testing.T) {
 
 	request := requestWithCookie(expired)
 
-	_, ok := auth.currentUser(request)
+	_, ok := auth.CurrentUser(request)
 	assert.False(t, ok, "expired session must be rejected")
 }
 
@@ -77,16 +78,18 @@ func TestCurrentUserAcceptsValidSession(t *testing.T) {
 	t.Parallel()
 
 	secret := []byte("0123456789abcdef0123456789abcdef")
-	auth := &authenticator{config: OIDCConfig{SessionSecret: secret, SessionTTL: time.Hour}}
+	auth := api.NewConfigAuthenticator(api.OIDCConfig{SessionSecret: secret, SessionTTL: time.Hour})
 
-	valid := auth.signedCookie(
-		sessionCookieName,
-		mustMarshal(sessionClaims{Subject: testSubject, Expiry: time.Now().Add(time.Hour).Unix()}),
+	valid := auth.SignedCookie(
+		api.SessionCookieName,
+		api.MustMarshal(
+			api.SessionClaims{Subject: testSubject, Expiry: time.Now().Add(time.Hour).Unix()},
+		),
 		"/",
 		3600,
 	)
 
-	claims, ok := auth.currentUser(requestWithCookie(valid))
+	claims, ok := auth.CurrentUser(requestWithCookie(valid))
 	require.True(t, ok)
 	assert.Equal(t, testSubject, claims.Subject)
 }
