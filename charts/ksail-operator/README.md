@@ -96,81 +96,81 @@ Register the redirect URL with your provider. To keep secrets out of `--set`/val
 
 ### Common
 
-| Key | Description | Default |
-|-----|-------------|---------|
-| `nameOverride` | Override the chart name in generated resource names. | `""` |
-| `fullnameOverride` | Override the fully qualified resource name. | `""` |
+| Key                | Description                                          | Default |
+|--------------------|------------------------------------------------------|---------|
+| `nameOverride`     | Override the chart name in generated resource names. | `""`    |
+| `fullnameOverride` | Override the fully qualified resource name.          | `""`    |
 
 ### Operator
 
-| Key | Description | Default |
-|-----|-------------|---------|
-| `operator.enabled` | Deploy the operator. | `true` |
-| `operator.image.repository` | Operator image repository. | `ghcr.io/devantler-tech/ksail` |
-| `operator.image.tag` | Operator image tag. Defaults to the chart `appVersion` when empty. | `""` |
-| `operator.image.pullPolicy` | Operator image pull policy. | `IfNotPresent` |
-| `operator.replicas` | Number of operator replicas. | `1` |
-| `operator.leaderElection` | Ensure a single active operator across replicas. | `true` |
-| `operator.dockerSocket.enabled` | Mount the host Docker socket for Docker-based distributions (Kind/K3d). Privileged and single-node — prefer VCluster/K3s in-cluster. | `false` |
-| `operator.metricsBindAddress` | Metrics bind address (`"0"` disables). | `"0"` |
-| `operator.healthProbeBindAddress` | Health probe bind address. | `":8081"` |
-| `operator.resources` | Operator resource requests/limits. | requests `100m`/`128Mi`, limits `256Mi` |
+| Key                               | Description                                                                                                                          | Default                                 |
+|-----------------------------------|--------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------|
+| `operator.enabled`                | Deploy the operator.                                                                                                                 | `true`                                  |
+| `operator.image.repository`       | Operator image repository.                                                                                                           | `ghcr.io/devantler-tech/ksail`          |
+| `operator.image.tag`              | Operator image tag. Defaults to the chart `appVersion` when empty.                                                                   | `""`                                    |
+| `operator.image.pullPolicy`       | Operator image pull policy.                                                                                                          | `IfNotPresent`                          |
+| `operator.replicas`               | Number of operator replicas.                                                                                                         | `1`                                     |
+| `operator.leaderElection`         | Ensure a single active operator across replicas.                                                                                     | `true`                                  |
+| `operator.dockerSocket.enabled`   | Mount the host Docker socket for Docker-based distributions (Kind/K3d). Privileged and single-node — prefer VCluster/K3s in-cluster. | `false`                                 |
+| `operator.metricsBindAddress`     | Metrics bind address (`"0"` disables).                                                                                               | `"0"`                                   |
+| `operator.healthProbeBindAddress` | Health probe bind address.                                                                                                           | `":8081"`                               |
+| `operator.resources`              | Operator resource requests/limits.                                                                                                   | requests `100m`/`128Mi`, limits `256Mi` |
 
 ### API
 
-| Key | Description | Default |
-|-----|-------------|---------|
-| `api.bindPort` | Port the operator REST API listens on (consumed by the UI). Set to `0` to disable the API. | `8080` |
+| Key            | Description                                                                                | Default |
+|----------------|--------------------------------------------------------------------------------------------|---------|
+| `api.bindPort` | Port the operator REST API listens on (consumed by the UI). Set to `0` to disable the API. | `8080`  |
 
 ### Web UI
 
-| Key | Description | Default |
-|-----|-------------|---------|
-| `ui.enabled` | Deploy the optional web UI. | `false` |
-| `ui.readOnly` | Lock the deployment to read-only mode (enforced server-side via the API). | `false` |
-| `ui.image.repository` | UI image repository. | `ghcr.io/devantler-tech/ksail/web-ui` |
-| `ui.image.tag` | UI image tag. Defaults to the chart `appVersion` when empty. | `""` |
-| `ui.image.pullPolicy` | UI image pull policy. | `IfNotPresent` |
-| `ui.replicas` | Number of UI replicas. | `1` |
-| `ui.service.type` | UI Service type. | `ClusterIP` |
-| `ui.service.port` | UI Service port. | `80` |
-| `ui.ingress.enabled` | Create an Ingress for the UI. | `false` |
-| `ui.ingress.className` | Ingress class name. | `""` |
-| `ui.ingress.annotations` | Ingress annotations. | `{}` |
-| `ui.ingress.hosts` | Ingress host/path rules. | `[{host: ksail.local, paths: [{path: /, pathType: Prefix}]}]` |
-| `ui.ingress.tls` | Ingress TLS configuration. | `[]` |
-| `ui.resources` | UI resource requests/limits. | requests `50m`/`64Mi`, limits `128Mi` |
+| Key                      | Description                                                               | Default                                                       |
+|--------------------------|---------------------------------------------------------------------------|---------------------------------------------------------------|
+| `ui.enabled`             | Deploy the optional web UI.                                               | `false`                                                       |
+| `ui.readOnly`            | Lock the deployment to read-only mode (enforced server-side via the API). | `false`                                                       |
+| `ui.image.repository`    | UI image repository.                                                      | `ghcr.io/devantler-tech/ksail/web-ui`                         |
+| `ui.image.tag`           | UI image tag. Defaults to the chart `appVersion` when empty.              | `""`                                                          |
+| `ui.image.pullPolicy`    | UI image pull policy.                                                     | `IfNotPresent`                                                |
+| `ui.replicas`            | Number of UI replicas.                                                    | `1`                                                           |
+| `ui.service.type`        | UI Service type.                                                          | `ClusterIP`                                                   |
+| `ui.service.port`        | UI Service port.                                                          | `80`                                                          |
+| `ui.ingress.enabled`     | Create an Ingress for the UI.                                             | `false`                                                       |
+| `ui.ingress.className`   | Ingress class name.                                                       | `""`                                                          |
+| `ui.ingress.annotations` | Ingress annotations.                                                      | `{}`                                                          |
+| `ui.ingress.hosts`       | Ingress host/path rules.                                                  | `[{host: ksail.local, paths: [{path: /, pathType: Prefix}]}]` |
+| `ui.ingress.tls`         | Ingress TLS configuration.                                                | `[]`                                                          |
+| `ui.resources`           | UI resource requests/limits.                                              | requests `50m`/`64Mi`, limits `128Mi`                         |
 
 ### OIDC authentication
 
-| Key | Description | Default |
-|-----|-------------|---------|
-| `auth.oidc.enabled` | Enable OIDC authentication for the REST API and UI. | `false` |
-| `auth.oidc.issuerURL` | OIDC issuer (discovery) URL, e.g. `https://dex.example.com`. | `""` |
-| `auth.oidc.clientID` | OAuth client ID. | `""` |
-| `auth.oidc.clientSecret` | OAuth client secret (sensitive; rendered into a Secret). | `""` |
-| `auth.oidc.sessionSecret` | Session cookie signing secret. Auto-generated and preserved across upgrades when empty. | `""` |
-| `auth.oidc.existingSecret` | Reference a pre-created Secret with keys `client-secret` and `session-secret`. | `""` |
-| `auth.oidc.scopes` | Scopes requested from the issuer (`openid` is always included). | `"openid email profile"` |
-| `auth.oidc.redirectURL` | OIDC callback URL. Defaults to `<scheme>://<first ingress host>/api/v1/auth/callback` when `ui.ingress` is enabled. | `""` |
+| Key                        | Description                                                                                                         | Default                  |
+|----------------------------|---------------------------------------------------------------------------------------------------------------------|--------------------------|
+| `auth.oidc.enabled`        | Enable OIDC authentication for the REST API and UI.                                                                 | `false`                  |
+| `auth.oidc.issuerURL`      | OIDC issuer (discovery) URL, e.g. `https://dex.example.com`.                                                        | `""`                     |
+| `auth.oidc.clientID`       | OAuth client ID.                                                                                                    | `""`                     |
+| `auth.oidc.clientSecret`   | OAuth client secret (sensitive; rendered into a Secret).                                                            | `""`                     |
+| `auth.oidc.sessionSecret`  | Session cookie signing secret. Auto-generated and preserved across upgrades when empty.                             | `""`                     |
+| `auth.oidc.existingSecret` | Reference a pre-created Secret with keys `client-secret` and `session-secret`.                                      | `""`                     |
+| `auth.oidc.scopes`         | Scopes requested from the issuer (`openid` is always included).                                                     | `"openid email profile"` |
+| `auth.oidc.redirectURL`    | OIDC callback URL. Defaults to `<scheme>://<first ingress host>/api/v1/auth/callback` when `ui.ingress` is enabled. | `""`                     |
 
 ### ServiceAccount & RBAC
 
-| Key | Description | Default |
-|-----|-------------|---------|
-| `serviceAccount.create` | Create a ServiceAccount. | `true` |
-| `serviceAccount.name` | ServiceAccount name override. | `""` |
-| `serviceAccount.annotations` | ServiceAccount annotations. | `{}` |
-| `rbac.create` | Create RBAC resources. | `true` |
+| Key                          | Description                   | Default |
+|------------------------------|-------------------------------|---------|
+| `serviceAccount.create`      | Create a ServiceAccount.      | `true`  |
+| `serviceAccount.name`        | ServiceAccount name override. | `""`    |
+| `serviceAccount.annotations` | ServiceAccount annotations.   | `{}`    |
+| `rbac.create`                | Create RBAC resources.        | `true`  |
 
 ### Scheduling
 
-| Key | Description | Default |
-|-----|-------------|---------|
-| `podAnnotations` | Annotations added to pods. | `{}` |
-| `nodeSelector` | Node selector for pods. | `{}` |
-| `tolerations` | Pod tolerations. | `[]` |
-| `affinity` | Pod affinity rules. | `{}` |
+| Key              | Description                | Default |
+|------------------|----------------------------|---------|
+| `podAnnotations` | Annotations added to pods. | `{}`    |
+| `nodeSelector`   | Node selector for pods.    | `{}`    |
+| `tolerations`    | Pod tolerations.           | `[]`    |
+| `affinity`       | Pod affinity rules.        | `{}`    |
 
 ## Learn more
 
