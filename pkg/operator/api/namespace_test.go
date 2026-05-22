@@ -30,14 +30,21 @@ func TestCreateClusterCreatesMissingNamespace(t *testing.T) {
 
 	var namespace corev1.Namespace
 
-	require.NoError(t, kubeClient.Get(context.Background(), client.ObjectKey{Name: "newns"}, &namespace))
+	require.NoError(
+		t,
+		kubeClient.Get(context.Background(), client.ObjectKey{Name: "newns"}, &namespace),
+	)
 	assert.Equal(t, "true", namespace.Labels[v1alpha1.ManagedNamespaceLabel])
 
 	var cluster v1alpha1.Cluster
 
 	require.NoError(
 		t,
-		kubeClient.Get(context.Background(), client.ObjectKey{Name: "c1", Namespace: "newns"}, &cluster),
+		kubeClient.Get(
+			context.Background(),
+			client.ObjectKey{Name: "c1", Namespace: "newns"},
+			&cluster,
+		),
 	)
 }
 

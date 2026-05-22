@@ -328,13 +328,20 @@ func (p *KubernetesProvisioner) Kubeconfig(ctx context.Context, name string) ([]
 	namespace := vclusterNamespacePrefix + clusterName
 	secretName := vclusterSecretPrefix + clusterName
 
-	secret, err := p.hostClientset.CoreV1().Secrets(namespace).Get(ctx, secretName, metav1.GetOptions{})
+	secret, err := p.hostClientset.CoreV1().
+		Secrets(namespace).
+		Get(ctx, secretName, metav1.GetOptions{})
 	if apierrors.IsNotFound(err) {
 		return nil, clustererr.ErrKubeconfigNotReady
 	}
 
 	if err != nil {
-		return nil, fmt.Errorf("get vcluster kubeconfig secret %s/%s: %w", namespace, secretName, err)
+		return nil, fmt.Errorf(
+			"get vcluster kubeconfig secret %s/%s: %w",
+			namespace,
+			secretName,
+			err,
+		)
 	}
 
 	raw := secret.Data[vclusterKubeconfigKey]

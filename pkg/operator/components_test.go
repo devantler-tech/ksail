@@ -13,6 +13,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// errBoom is a static sentinel for tests that exercise installer failure handling.
+var errBoom = errors.New("boom")
+
+// Component keys reused across the installer-ordering tests.
+const (
+	componentCilium        = "cilium"
+	componentMetricsServer = "metrics-server"
+	componentFlux          = "flux"
+)
+
 // stubProvisioner satisfies clusterprovisioner.Provisioner without implementing Connector.
 type stubProvisioner struct{}
 
@@ -85,14 +95,14 @@ func TestRunInstallers_OrdersCNIFirstAndGitOpsLast(t *testing.T) {
 	var order []string
 
 	installers := map[string]installer.Installer{
-		"flux":           &recordingInstaller{name: "flux", order: &order},
-		"metrics-server": &recordingInstaller{name: "metrics-server", order: &order},
-		"cilium":         &recordingInstaller{name: "cilium", order: &order},
+		componentFlux:          &recordingInstaller{name: componentFlux, order: &order},
+		componentMetricsServer: &recordingInstaller{name: componentMetricsServer, order: &order},
+		componentCilium:        &recordingInstaller{name: componentCilium, order: &order},
 	}
 
 	err := operator.RunInstallers(context.Background(), installers)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"cilium", "metrics-server", "flux"}, order)
+	assert.Equal(t, []string{componentCilium, componentMetricsServer, componentFlux}, order)
 }
 
 func TestRunInstallers_AggregatesErrorsAndContinues(t *testing.T) {
@@ -100,15 +110,14 @@ func TestRunInstallers_AggregatesErrorsAndContinues(t *testing.T) {
 
 	var order []string
 
-	boom := errors.New("boom")
 	installers := map[string]installer.Installer{
-		"cilium": &recordingInstaller{name: "cilium", err: boom, order: &order},
-		"flux":   &recordingInstaller{name: "flux", order: &order},
+		componentCilium: &recordingInstaller{name: componentCilium, err: errBoom, order: &order},
+		componentFlux:   &recordingInstaller{name: componentFlux, order: &order},
 	}
 
 	err := operator.RunInstallers(context.Background(), installers)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "cilium")
+	assert.Contains(t, err.Error(), componentCilium)
 	// flux still ran despite cilium failing.
-	assert.Equal(t, []string{"cilium", "flux"}, order)
+	assert.Equal(t, []string{componentCilium, componentFlux}, order)
 }

@@ -1,6 +1,7 @@
 package api_test
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -28,7 +29,12 @@ func fetchMeta(t *testing.T) metaResponse {
 	server := &api.Server{}
 
 	recorder := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodGet, "/api/v1/meta", nil)
+	request := httptest.NewRequestWithContext(
+		context.Background(),
+		http.MethodGet,
+		"/api/v1/meta",
+		nil,
+	)
 	server.Handler().ServeHTTP(recorder, request)
 
 	require.Equal(t, http.StatusOK, recorder.Code)

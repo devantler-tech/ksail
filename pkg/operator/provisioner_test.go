@@ -90,6 +90,7 @@ func TestBuildDistributionConfig_EKS(t *testing.T) {
 	// No t.Parallel(): this test uses t.Setenv, which is incompatible with parallel tests.
 	cluster := clusterWithDistribution("c1", v1alpha1.DistributionEKS)
 	cluster.Spec.Provider.AWS.RegionEnvVar = "KSAIL_TEST_REGION"
+
 	t.Setenv("KSAIL_TEST_REGION", "eu-west-1")
 
 	config, err := operator.BuildDistributionConfig(cluster)

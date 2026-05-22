@@ -81,7 +81,12 @@ func TestSecurityHeadersApplied(t *testing.T) {
 	t.Parallel()
 
 	// Security headers wrap every response, including the API when no UI is present.
-	recorder := doRequest((&api.Server{Client: newClient(t)}).Handler(), http.MethodGet, "/api/v1/config", "")
+	recorder := doRequest(
+		(&api.Server{Client: newClient(t)}).Handler(),
+		http.MethodGet,
+		"/api/v1/config",
+		"",
+	)
 
 	header := recorder.Header()
 	assert.Equal(t, "nosniff", header.Get("X-Content-Type-Options"))

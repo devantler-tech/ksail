@@ -108,7 +108,7 @@ func countNodes(
 	// The kubeconfig points at a local port-forward address; reach the API server at its in-cluster
 	// Service instead, verifying the served certificate against its actual SAN.
 	restConfig.Host = endpoint
-	restConfig.TLSClientConfig.ServerName = vclusterServerName
+	restConfig.ServerName = vclusterServerName
 
 	clientset, err := kubernetes.NewForConfig(restConfig)
 	if err != nil {

@@ -21,6 +21,8 @@ const componentInstallTimeout = 5 * time.Minute
 // installOrder lists component installers in the order they must run: CNI first (pods cannot
 // schedule without networking), then infrastructure add-ons, then GitOps last. Keys match the
 // installer factory's map keys (pkg/svc/installer).
+//
+//nolint:gochecknoglobals // immutable ordered lookup table for component install ordering
 var installOrder = []string{
 	"cilium", "calico",
 	"cert-manager",
@@ -49,9 +51,11 @@ func InstallComponents(
 
 	connector, ok := provisioner.(clusterprovisioner.Connector)
 	if !ok {
-		log.Info("skipping component install: distribution exposes no operator-reachable kubeconfig",
+		log.Info(
+			"skipping component install: distribution has no operator-reachable kubeconfig",
 			"distribution", cluster.Spec.Cluster.Distribution,
-			"provider", cluster.Spec.Cluster.Provider)
+			"provider", cluster.Spec.Cluster.Provider,
+		)
 
 		return nil
 	}
@@ -132,7 +136,8 @@ func runInstallers(ctx context.Context, installers map[string]installer.Installe
 	install := func(key string, component installer.Installer) {
 		log.Info("installing component", "component", key)
 
-		if err := component.Install(ctx); err != nil {
+		err := component.Install(ctx)
+		if err != nil {
 			errs = append(errs, fmt.Errorf("%s: %w", key, err))
 		}
 

@@ -14,6 +14,7 @@ import (
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -395,13 +396,20 @@ func (r *ClusterReconciler) cleanupNamespace(ctx context.Context, cluster *v1alp
 		return
 	}
 
-	if namespace.Labels[v1alpha1.ManagedNamespaceLabel] != "true" || !namespace.DeletionTimestamp.IsZero() {
+	if namespace.Labels[v1alpha1.ManagedNamespaceLabel] != "true" ||
+		!namespace.DeletionTimestamp.IsZero() {
 		return
 	}
 
 	empty, err := r.namespaceHasOnlyOperatorResources(ctx, name, cluster.Name)
 	if err != nil {
-		log.Info("namespace cleanup check failed (best-effort)", "namespace", name, "error", err.Error())
+		log.Info(
+			"namespace cleanup check failed (best-effort)",
+			"namespace",
+			name,
+			"error",
+			err.Error(),
+		)
 
 		return
 	}
@@ -412,7 +420,13 @@ func (r *ClusterReconciler) cleanupNamespace(ctx context.Context, cluster *v1alp
 
 	delErr := r.Delete(ctx, &namespace)
 	if delErr != nil && !apierrors.IsNotFound(delErr) {
-		log.Info("delete operator-managed namespace (best-effort)", "namespace", name, "error", delErr.Error())
+		log.Info(
+			"delete operator-managed namespace (best-effort)",
+			"namespace",
+			name,
+			"error",
+			delErr.Error(),
+		)
 
 		return
 	}
@@ -420,9 +434,14 @@ func (r *ClusterReconciler) cleanupNamespace(ctx context.Context, cluster *v1alp
 	log.Info("deleted operator-managed namespace", "namespace", name)
 }
 
+// rootCAConfigMapName is the ConfigMap Kubernetes injects into every namespace; it is ignored when
+// deciding whether a managed namespace still holds user data.
+const rootCAConfigMapName = "kube-root-ca.crt"
+
 // namespaceHasOnlyOperatorResources reports whether the namespace contains nothing other than the
-// Cluster being deleted: no other live Cluster resources and no common user workloads. It is
-// conservative — any listed resource keeps the namespace.
+// Cluster being deleted: no other live Cluster resources, no user workloads or batch jobs, and no
+// user-authored ConfigMaps/Secrets. It is conservative — any such resource keeps the namespace —
+// so the operator never deletes a namespace that still holds user data.
 func (r *ClusterReconciler) namespaceHasOnlyOperatorResources(
 	ctx context.Context,
 	namespace, excludeCluster string,
@@ -446,18 +465,20 @@ func (r *ClusterReconciler) namespaceHasOnlyOperatorResources(
 		return false, nil
 	}
 
-	// Keep the namespace if it holds any common user workload. The list is bounded; one item is
+	// Keep the namespace if it holds any workload or batch job. The list is bounded; one item is
 	// enough to know the namespace is in use.
-	workloadLists := []client.ObjectList{
+	presenceLists := []client.ObjectList{
 		&corev1.PodList{},
 		&corev1.ServiceList{},
 		&corev1.PersistentVolumeClaimList{},
 		&appsv1.DeploymentList{},
 		&appsv1.StatefulSetList{},
 		&appsv1.DaemonSetList{},
+		&batchv1.JobList{},
+		&batchv1.CronJobList{},
 	}
 
-	for _, list := range workloadLists {
+	for _, list := range presenceLists {
 		err := reader.List(ctx, list, client.InNamespace(namespace), client.Limit(1))
 		if err != nil {
 			return false, fmt.Errorf("list %T in %q: %w", list, namespace, err)
@@ -469,6 +490,45 @@ func (r *ClusterReconciler) namespaceHasOnlyOperatorResources(
 		}
 
 		if len(items) > 0 {
+			return false, nil
+		}
+	}
+
+	return r.namespaceHasNoUserConfig(ctx, namespace)
+}
+
+// namespaceHasNoUserConfig reports whether the namespace holds no user-authored ConfigMaps or
+// Secrets, ignoring the resources Kubernetes provisions in every namespace (the kube-root-ca.crt
+// ConfigMap and the default ServiceAccount's token Secret). These need filtering rather than a
+// presence check, so they are listed in full (a namespace's config set is small).
+func (r *ClusterReconciler) namespaceHasNoUserConfig(
+	ctx context.Context,
+	namespace string,
+) (bool, error) {
+	reader := r.reader()
+
+	var configMaps corev1.ConfigMapList
+
+	cmErr := reader.List(ctx, &configMaps, client.InNamespace(namespace))
+	if cmErr != nil {
+		return false, fmt.Errorf("list configmaps in %q: %w", namespace, cmErr)
+	}
+
+	for index := range configMaps.Items {
+		if configMaps.Items[index].Name != rootCAConfigMapName {
+			return false, nil
+		}
+	}
+
+	var secrets corev1.SecretList
+
+	secretErr := reader.List(ctx, &secrets, client.InNamespace(namespace))
+	if secretErr != nil {
+		return false, fmt.Errorf("list secrets in %q: %w", namespace, secretErr)
+	}
+
+	for index := range secrets.Items {
+		if secrets.Items[index].Type != corev1.SecretTypeServiceAccountToken {
 			return false, nil
 		}
 	}

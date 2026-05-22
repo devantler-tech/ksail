@@ -4,16 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>KSail</title>
-    <script>
-      // Apply the saved (or system) theme before first paint to avoid a flash of the wrong theme.
-      (function () {
-        try {
-          var stored = localStorage.getItem("ksail-theme");
-          var dark = stored ? stored === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
-          if (dark) document.documentElement.classList.add("dark");
-        } catch (e) {}
-      })();
-    </script>
+    <!-- Render-blocking, same-origin theme init (no inline script, so it passes the operator CSP). -->
+    <script src="/theme-init.js"></script>
   </head>
   <body class="h-full bg-slate-50 text-slate-900 antialiased dark:bg-slate-950 dark:text-slate-100">
     <div id="root"></div>

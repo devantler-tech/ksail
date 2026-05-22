@@ -440,7 +440,10 @@ func TestReconcile_InstallsComponentsOncePerGeneration(t *testing.T) {
 	var got v1alpha1.Cluster
 
 	require.NoError(t, fakeClient.Get(context.Background(), request().NamespacedName, &got))
-	condition := apimeta.FindStatusCondition(got.Status.Conditions, v1alpha1.ConditionComponentsReady)
+	condition := apimeta.FindStatusCondition(
+		got.Status.Conditions,
+		v1alpha1.ConditionComponentsReady,
+	)
 	require.NotNil(t, condition)
 	assert.Equal(t, metav1.ConditionTrue, condition.Status)
 
@@ -467,12 +470,20 @@ func TestReconcile_ComponentFailureIsBestEffortAndRequeues(t *testing.T) {
 	result, err := reconciler.Reconcile(context.Background(), request())
 	// A component-install failure must not fail the reconcile.
 	require.NoError(t, err)
-	assert.Equal(t, 10*time.Second, result.RequeueAfter, "should requeue at the transitional interval")
+	assert.Equal(
+		t,
+		10*time.Second,
+		result.RequeueAfter,
+		"should requeue at the transitional interval",
+	)
 
 	var got v1alpha1.Cluster
 
 	require.NoError(t, fakeClient.Get(context.Background(), request().NamespacedName, &got))
-	condition := apimeta.FindStatusCondition(got.Status.Conditions, v1alpha1.ConditionComponentsReady)
+	condition := apimeta.FindStatusCondition(
+		got.Status.Conditions,
+		v1alpha1.ConditionComponentsReady,
+	)
 	require.NotNil(t, condition)
 	assert.Equal(t, metav1.ConditionFalse, condition.Status)
 	// The cluster itself is still provisioned/Ready independent of component health.
@@ -509,7 +520,7 @@ func deleteRequest(name, namespace string) ctrl.Request {
 func reconcileDeletion(
 	t *testing.T,
 	objects ...client.Object,
-) (client.Client, *v1alpha1.Cluster) {
+) client.Client {
 	t.Helper()
 
 	scheme := newScheme(t)
@@ -530,15 +541,15 @@ func reconcileDeletion(
 	)
 	require.NoError(t, err)
 
-	return fakeClient, cluster
+	return fakeClient
 }
 
-func namespaceExists(t *testing.T, cl client.Client, name string) bool {
+func namespaceExists(t *testing.T, reader client.Client, name string) bool {
 	t.Helper()
 
 	var namespace corev1.Namespace
 
-	err := cl.Get(context.Background(), client.ObjectKey{Name: name}, &namespace)
+	err := reader.Get(context.Background(), client.ObjectKey{Name: name}, &namespace)
 	if apierrors.IsNotFound(err) {
 		return false
 	}
@@ -551,11 +562,15 @@ func namespaceExists(t *testing.T, cl client.Client, name string) bool {
 func TestReconcileDelete_DeletesEmptyManagedNamespace(t *testing.T) {
 	t.Parallel()
 
-	cl, _ := reconcileDeletion(t, managedNamespace("team-a"), clusterInNamespace("c1", "team-a"))
+	fakeClient := reconcileDeletion(
+		t,
+		managedNamespace("team-a"),
+		clusterInNamespace("c1", "team-a"),
+	)
 
 	assert.False(
 		t,
-		namespaceExists(t, cl, "team-a"),
+		namespaceExists(t, fakeClient, "team-a"),
 		"operator-managed namespace should be deleted once empty",
 	)
 }
@@ -565,11 +580,11 @@ func TestReconcileDelete_KeepsUnmanagedNamespace(t *testing.T) {
 
 	userNS := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "user-ns"}}
 
-	cl, _ := reconcileDeletion(t, userNS, clusterInNamespace("c1", "user-ns"))
+	fakeClient := reconcileDeletion(t, userNS, clusterInNamespace("c1", "user-ns"))
 
 	assert.True(
 		t,
-		namespaceExists(t, cl, "user-ns"),
+		namespaceExists(t, fakeClient, "user-ns"),
 		"a namespace the operator did not create must be preserved",
 	)
 }
@@ -577,7 +592,7 @@ func TestReconcileDelete_KeepsUnmanagedNamespace(t *testing.T) {
 func TestReconcileDelete_KeepsManagedNamespaceWithOtherCluster(t *testing.T) {
 	t.Parallel()
 
-	cl, _ := reconcileDeletion(
+	fakeClient := reconcileDeletion(
 		t,
 		managedNamespace("team-a"),
 		clusterInNamespace("c2", "team-a"),
@@ -586,7 +601,28 @@ func TestReconcileDelete_KeepsManagedNamespaceWithOtherCluster(t *testing.T) {
 
 	assert.True(
 		t,
-		namespaceExists(t, cl, "team-a"),
+		namespaceExists(t, fakeClient, "team-a"),
 		"namespace with another cluster must be preserved",
+	)
+}
+
+func TestReconcileDelete_KeepsManagedNamespaceWithUserConfig(t *testing.T) {
+	t.Parallel()
+
+	userConfigMap := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: "app-config", Namespace: "team-a"},
+	}
+
+	fakeClient := reconcileDeletion(
+		t,
+		managedNamespace("team-a"),
+		userConfigMap,
+		clusterInNamespace("c1", "team-a"),
+	)
+
+	assert.True(
+		t,
+		namespaceExists(t, fakeClient, "team-a"),
+		"a managed namespace holding user ConfigMaps must be preserved",
 	)
 }

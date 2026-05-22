@@ -84,7 +84,7 @@ drift-detection pattern (`ksail.io/last-applied-spec`).
 
 Reconcile flow becomes:
 
-```
+```text
 reconcileNormal:
   provisioner.Exists / Create / drift-Update      (unchanged)
   observeStatus                                    (unchanged; endpoint/nodes)

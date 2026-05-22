@@ -143,7 +143,7 @@ func (s *Server) Handler() http.Handler {
 
 	guardedAPI := s.authGuard(s.readOnlyGuard(mux))
 
-	var handler http.Handler = guardedAPI
+	handler := guardedAPI
 	if s.UIFS != nil {
 		handler = s.uiOrAPI(guardedAPI)
 	}
