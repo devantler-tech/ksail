@@ -10,4 +10,6 @@ var (
 	ManagerOptions = managerOptions
 	// IsNodeReady exposes isNodeReady for testing.
 	IsNodeReady = isNodeReady
+	// ResolveProvider exposes resolveProvider for testing.
+	ResolveProvider = resolveProvider
 )

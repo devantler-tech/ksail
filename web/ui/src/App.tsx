@@ -21,9 +21,6 @@ import { Button } from "./components/ui.tsx";
 import { useTheme } from "./hooks/useTheme.ts";
 import { useToast } from "./components/Toast.tsx";
 
-// Distributions the operator can currently provision in-cluster (see pkg/operator/provisioner.go).
-const DISTRIBUTIONS = ["VCluster"];
-
 const POLL_MS = 10000;
 
 function clusterKey(cluster: Cluster): string {
@@ -146,7 +143,7 @@ export function App() {
       try {
         await createCluster({
           metadata: { name: input.name, namespace: input.namespace },
-          spec: { cluster: { distribution: input.distribution } },
+          spec: { cluster: { distribution: input.distribution, provider: input.provider } },
         });
         toast.success(`Cluster "${input.name}" created`);
         await refresh(true);
@@ -245,7 +242,6 @@ export function App() {
         open={createOpen}
         onClose={() => setCreateOpen(false)}
         onCreate={handleCreate}
-        distributions={DISTRIBUTIONS}
       />
 
       <ConfirmDialog

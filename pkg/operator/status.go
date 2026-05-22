@@ -43,6 +43,12 @@ func ObserveVClusterStatus(
 	hub client.Reader,
 	cluster *v1alpha1.Cluster,
 ) (controller.ObservedStatus, error) {
+	// Endpoint/node observation here is vcluster-specific (it reads the vcluster kubeconfig Secret
+	// the in-cluster provisioner publishes). Other distributions report nothing for now.
+	if cluster.Spec.Cluster.Distribution != v1alpha1.DistributionVCluster {
+		return controller.ObservedStatus{}, nil
+	}
+
 	name := controller.ProvisionedName(cluster)
 	namespace := vclusterNamespacePrefix + name
 	secretName := vclusterSecretPrefix + name

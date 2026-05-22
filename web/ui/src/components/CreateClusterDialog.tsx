@@ -1,32 +1,42 @@
 import { useState, type FormEvent } from "react";
+import { DISTRIBUTIONS, providersFor } from "../lib/distributions.ts";
 import { Button, Modal, SelectField, TextField } from "./ui.tsx";
 
 export interface CreateClusterInput {
   name: string;
   namespace: string;
   distribution: string;
+  provider: string;
 }
 
 export function CreateClusterDialog({
   open,
   onClose,
   onCreate,
-  distributions,
 }: {
   open: boolean;
   onClose: () => void;
   onCreate: (input: CreateClusterInput) => Promise<void>;
-  distributions: string[];
 }) {
   const [name, setName] = useState("");
   const [namespace, setNamespace] = useState("default");
-  const [distribution, setDistribution] = useState(distributions[0] ?? "");
+  const [distribution, setDistribution] = useState<string>(DISTRIBUTIONS[0]);
+  const [provider, setProvider] = useState<string>(providersFor(DISTRIBUTIONS[0])[0]);
   const [submitting, setSubmitting] = useState(false);
+
+  const providers = providersFor(distribution);
 
   function reset() {
     setName("");
     setNamespace("default");
-    setDistribution(distributions[0] ?? "");
+    setDistribution(DISTRIBUTIONS[0]);
+    setProvider(providersFor(DISTRIBUTIONS[0])[0]);
+  }
+
+  // Changing the distribution narrows the valid providers; snap to the recommended default.
+  function handleDistributionChange(value: string) {
+    setDistribution(value);
+    setProvider(providersFor(value)[0]);
   }
 
   async function handleSubmit(event: FormEvent) {
@@ -37,7 +47,12 @@ export function CreateClusterDialog({
 
     setSubmitting(true);
     try {
-      await onCreate({ name: name.trim(), namespace: namespace.trim() || "default", distribution });
+      await onCreate({
+        name: name.trim(),
+        namespace: namespace.trim() || "default",
+        distribution,
+        provider,
+      });
       reset();
       onClose();
     } catch {
@@ -72,18 +87,29 @@ export function CreateClusterDialog({
           placeholder="my-cluster"
           onChange={(event) => setName(event.target.value)}
         />
+        <TextField
+          label="Namespace"
+          value={namespace}
+          onChange={(event) => setNamespace(event.target.value)}
+        />
         <div className="grid grid-cols-2 gap-3">
-          <TextField
-            label="Namespace"
-            value={namespace}
-            onChange={(event) => setNamespace(event.target.value)}
-          />
           <SelectField
             label="Distribution"
             value={distribution}
-            onChange={(event) => setDistribution(event.target.value)}
+            onChange={(event) => handleDistributionChange(event.target.value)}
           >
-            {distributions.map((value) => (
+            {DISTRIBUTIONS.map((value) => (
+              <option key={value} value={value}>
+                {value}
+              </option>
+            ))}
+          </SelectField>
+          <SelectField
+            label="Provider"
+            value={provider}
+            onChange={(event) => setProvider(event.target.value)}
+          >
+            {providers.map((value) => (
               <option key={value} value={value}>
                 {value}
               </option>

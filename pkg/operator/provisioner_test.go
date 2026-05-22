@@ -39,11 +39,91 @@ func TestBuildDistributionConfig_DefaultsToVCluster(t *testing.T) {
 	assert.Equal(t, "c1", config.VCluster.Name)
 }
 
+func TestBuildDistributionConfig_Vanilla(t *testing.T) {
+	t.Parallel()
+
+	config, err := operator.BuildDistributionConfig(
+		clusterWithDistribution("c1", v1alpha1.DistributionVanilla),
+	)
+	require.NoError(t, err)
+	require.NotNil(t, config.Kind)
+	assert.Equal(t, "c1", config.Kind.Name)
+}
+
+func TestBuildDistributionConfig_K3s(t *testing.T) {
+	t.Parallel()
+
+	config, err := operator.BuildDistributionConfig(
+		clusterWithDistribution("c1", v1alpha1.DistributionK3s),
+	)
+	require.NoError(t, err)
+	require.NotNil(t, config.K3d)
+	assert.Equal(t, "c1", config.K3d.Name)
+}
+
+func TestBuildDistributionConfig_KWOK(t *testing.T) {
+	t.Parallel()
+
+	config, err := operator.BuildDistributionConfig(
+		clusterWithDistribution("c1", v1alpha1.DistributionKWOK),
+	)
+	require.NoError(t, err)
+	require.NotNil(t, config.KWOK)
+	assert.Equal(t, "c1", config.KWOK.Name)
+}
+
+func TestBuildDistributionConfig_Talos(t *testing.T) {
+	t.Parallel()
+
+	config, err := operator.BuildDistributionConfig(
+		clusterWithDistribution("c1", v1alpha1.DistributionTalos),
+	)
+	require.NoError(t, err)
+	require.NotNil(t, config.Talos)
+	assert.Equal(t, "c1", config.Talos.GetClusterName())
+}
+
+func TestBuildDistributionConfig_EKS(t *testing.T) {
+	// No t.Parallel(): this test uses t.Setenv, which is incompatible with parallel tests.
+	cluster := clusterWithDistribution("c1", v1alpha1.DistributionEKS)
+	cluster.Spec.Provider.AWS.RegionEnvVar = "KSAIL_TEST_REGION"
+	t.Setenv("KSAIL_TEST_REGION", "eu-west-1")
+
+	config, err := operator.BuildDistributionConfig(cluster)
+	require.NoError(t, err)
+	require.NotNil(t, config.EKS)
+	assert.Equal(t, "c1", config.EKS.Name)
+	assert.Equal(t, "eu-west-1", config.EKS.Region)
+}
+
 func TestBuildDistributionConfig_Unsupported(t *testing.T) {
 	t.Parallel()
 
 	_, err := operator.BuildDistributionConfig(
-		clusterWithDistribution("c1", v1alpha1.DistributionEKS),
+		clusterWithDistribution("c1", v1alpha1.Distribution("Nonexistent")),
 	)
 	require.ErrorIs(t, err, operator.ErrUnsupportedDistribution)
+}
+
+func TestResolveProvider(t *testing.T) {
+	t.Parallel()
+
+	// Explicit provider is respected.
+	explicit := clusterWithDistribution("c1", v1alpha1.DistributionVanilla)
+	explicit.Spec.Cluster.Provider = v1alpha1.ProviderDocker
+	assert.Equal(t, v1alpha1.ProviderDocker, operator.ResolveProvider(explicit))
+
+	// Unset provider defaults to Kubernetes (in-cluster) for non-EKS distributions.
+	assert.Equal(
+		t,
+		v1alpha1.ProviderKubernetes,
+		operator.ResolveProvider(clusterWithDistribution("c1", v1alpha1.DistributionVCluster)),
+	)
+
+	// EKS defaults to AWS, its only provider.
+	assert.Equal(
+		t,
+		v1alpha1.ProviderAWS,
+		operator.ResolveProvider(clusterWithDistribution("c1", v1alpha1.DistributionEKS)),
+	)
 }

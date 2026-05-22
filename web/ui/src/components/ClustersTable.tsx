@@ -48,6 +48,7 @@ export function ClustersTable({
               <th className={th}>Name</th>
               <th className={th}>Namespace</th>
               <th className={th}>Distribution</th>
+              <th className={cx(th, "hidden sm:table-cell")}>Provider</th>
               <th className={th}>Status</th>
               <th className={th}>Nodes</th>
               <th className={cx(th, "hidden lg:table-cell")}>Endpoint</th>
@@ -74,6 +75,9 @@ export function ClustersTable({
                   </td>
                   <td className={cx(td, "text-sm text-slate-600 dark:text-slate-300")}>
                     {cluster.spec?.cluster?.distribution ?? "—"}
+                  </td>
+                  <td className={cx(td, "hidden text-sm text-slate-600 sm:table-cell dark:text-slate-300")}>
+                    {cluster.spec?.cluster?.provider ?? "—"}
                   </td>
                   <td className={td}>
                     <StatusBadge phase={cluster.status?.phase} />

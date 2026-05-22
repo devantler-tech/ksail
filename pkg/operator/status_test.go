@@ -52,7 +52,12 @@ func statusReader(t *testing.T, objects ...*corev1.Secret) *fake.ClientBuilder {
 }
 
 func clusterNamed(name, namespace string) *v1alpha1.Cluster {
-	return &v1alpha1.Cluster{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace}}
+	return &v1alpha1.Cluster{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{Distribution: v1alpha1.DistributionVCluster},
+		},
+	}
 }
 
 func TestObserveVClusterStatus_SecretNotReadyYet(t *testing.T) {
@@ -100,6 +105,22 @@ func TestObserveVClusterStatus_ReportsEndpointEvenWhenNodeCountFails(t *testing.
 	assert.Equal(t, "vc-default-myc", observed.KubeconfigSecret.Name)
 	assert.Equal(t, "vcluster-default-myc", observed.KubeconfigSecret.Namespace)
 	assert.False(t, observed.NodesObserved)
+}
+
+func TestObserveVClusterStatus_SkipsNonVCluster(t *testing.T) {
+	t.Parallel()
+
+	reader := statusReader(t).Build()
+
+	cluster := clusterNamed("myc", "default")
+	cluster.Spec.Cluster.Distribution = v1alpha1.DistributionVanilla
+
+	observed, err := operator.ObserveVClusterStatus(context.Background(), reader, cluster)
+
+	// Endpoint/node observation is vcluster-specific; other distributions report nothing.
+	require.NoError(t, err)
+	assert.Empty(t, observed.Endpoint)
+	assert.Nil(t, observed.KubeconfigSecret)
 }
 
 func TestIsNodeReady(t *testing.T) {
