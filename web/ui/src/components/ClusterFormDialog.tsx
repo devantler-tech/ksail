@@ -33,8 +33,8 @@ function componentDefaults(meta: ClusterMeta): Record<string, string> {
   return defaults;
 }
 
-function createDefaults(meta: ClusterMeta): ClusterFormValues {
-  const distribution = meta.distributions[0] ?? "";
+function createDefaults(meta: ClusterMeta, distributions: string[]): ClusterFormValues {
+  const distribution = distributions[0] ?? meta.distributions[0] ?? "";
   const defaults = componentDefaults(meta);
   return {
     name: "",
@@ -54,10 +54,14 @@ function createDefaults(meta: ClusterMeta): ClusterFormValues {
   };
 }
 
-function valuesFromCluster(cluster: Cluster, meta: ClusterMeta): ClusterFormValues {
+function valuesFromCluster(
+  cluster: Cluster,
+  meta: ClusterMeta,
+  distributions: string[],
+): ClusterFormValues {
   const spec = cluster.spec?.cluster ?? {};
   const defaults = componentDefaults(meta);
-  const distribution = spec.distribution || meta.distributions[0] || "";
+  const distribution = spec.distribution || distributions[0] || meta.distributions[0] || "";
 
   return {
     name: cluster.metadata.name,
@@ -81,17 +85,23 @@ export function ClusterFormDialog({
   open,
   mode,
   initial,
+  distributions,
   onSubmit,
   onClose,
 }: {
   open: boolean;
   mode: FormMode;
   initial: Cluster | null;
+  // distributions the create form offers (backend-advertised via config.distributions). The
+  // provider matrix and component options for the selected one still come from /api/v1/meta.
+  distributions: string[];
   onSubmit: (values: ClusterFormValues) => Promise<void>;
   onClose: () => void;
 }) {
   const meta = useMeta();
-  const [values, setValues] = useState<ClusterFormValues>(() => createDefaults(meta));
+  const [values, setValues] = useState<ClusterFormValues>(() =>
+    createDefaults(meta, distributions),
+  );
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
@@ -100,9 +110,13 @@ export function ClusterFormDialog({
     if (!open) {
       return;
     }
-    setValues(mode === "edit" && initial ? valuesFromCluster(initial, meta) : createDefaults(meta));
+    setValues(
+      mode === "edit" && initial
+        ? valuesFromCluster(initial, meta, distributions)
+        : createDefaults(meta, distributions),
+    );
     setAdvancedOpen(false);
-  }, [open, mode, initial, meta]);
+  }, [open, mode, initial, meta, distributions]);
 
   const isEdit = mode === "edit";
   const providers = meta.providers[values.distribution] ?? [];
@@ -179,7 +193,7 @@ export function ClusterFormDialog({
             disabled={isEdit}
             onChange={(event) => handleDistributionChange(event.target.value)}
           >
-            {meta.distributions.map((value) => (
+            {distributions.map((value) => (
               <option key={value} value={value}>
                 {value}
               </option>

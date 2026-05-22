@@ -3,10 +3,13 @@ version: 2
 before:
   hooks:
     - go mod tidy
-    # Build the web UI into pkg/operator/ui/dist so the `-tags ui` build below embeds it into the
-    # binary. The operator then serves the dashboard itself (no separate UI image, no reverse proxy).
+    # Build the web UI (Vite outputs to pkg/operator/ui/dist) so the `-tags ui` build below embeds it
+    # into the binary; the operator serves the dashboard itself (no separate UI image, no reverse
+    # proxy). Mirror the same assets into pkg/webui/dist so the embedded `ksail ui`/`desktop` server
+    # (pkg/webui/embed.go) serves them too. Built assets are gitignored, keeping the tree clean.
     - npm --prefix web/ui ci
     - npm --prefix web/ui run build
+    - sh -c 'rm -rf pkg/webui/dist && mkdir -p pkg/webui/dist && touch pkg/webui/dist/.gitkeep && cp -R pkg/operator/ui/dist/. pkg/webui/dist/'
 
 builds:
   - binary: ksail
@@ -105,7 +108,7 @@ release:
   draft: true
   extra_files:
     # Attach the Cluster CRD so it can be applied without the Helm chart.
-    - glob: ./config/crd/bases/*.yaml
+    - glob: ./charts/ksail-operator/crds/*.yaml
   footer: |
     ## Quick Start
 

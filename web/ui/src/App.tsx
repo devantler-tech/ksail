@@ -32,6 +32,12 @@ import { useToast } from "./components/Toast.tsx";
 
 const POLL_MS = 10000;
 
+// DEFAULT_DISTRIBUTIONS is the create-form distribution list used when the backend does not advertise
+// its supported set via config.distributions. The operator omits it (it only provisions VCluster
+// in-cluster); the local `ksail ui` backend advertises everything it can create locally. The
+// provider matrix and component options for whatever is selected still come from /api/v1/meta.
+const DEFAULT_DISTRIBUTIONS = ["VCluster"];
+
 function clusterKey(cluster: Cluster): string {
   return `${cluster.metadata.namespace ?? "default"}/${cluster.metadata.name}`;
 }
@@ -76,6 +82,7 @@ export function App() {
   const [user, setUser] = useState<User | null>(null);
   const [needsLogin, setNeedsLogin] = useState(false);
   const [meta, setMeta] = useState<ClusterMeta | null>(null);
+  const [distributions, setDistributions] = useState<string[]>(DEFAULT_DISTRIBUTIONS);
 
   const [clusters, setClusters] = useState<Cluster[]>([]);
   const [loading, setLoading] = useState(true);
@@ -149,6 +156,7 @@ export function App() {
 
       setReadOnly(config.readOnly);
       setUser(config.user ?? null);
+      setDistributions(config.distributions ?? DEFAULT_DISTRIBUTIONS);
 
       if (config.authEnabled && !config.user) {
         setNeedsLogin(true);
@@ -326,6 +334,7 @@ export function App() {
           open={formOpen}
           mode={formMode}
           initial={formInitial}
+          distributions={distributions}
           onSubmit={handleSubmit}
           onClose={() => setFormOpen(false)}
         />

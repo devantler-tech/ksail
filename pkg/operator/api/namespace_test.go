@@ -18,7 +18,7 @@ func TestCreateClusterCreatesMissingNamespace(t *testing.T) {
 	t.Parallel()
 
 	kubeClient := newClient(t)
-	server := &api.Server{Client: kubeClient}
+	server := &api.Server{Service: api.NewCRClusterService(kubeClient)}
 
 	recorder := doRequest(
 		server.Handler(),
@@ -53,7 +53,7 @@ func TestCreateClusterPreservesExistingNamespace(t *testing.T) {
 
 	existing := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "preexisting"}}
 	kubeClient := newClient(t, existing)
-	server := &api.Server{Client: kubeClient}
+	server := &api.Server{Service: api.NewCRClusterService(kubeClient)}
 
 	recorder := doRequest(
 		server.Handler(),

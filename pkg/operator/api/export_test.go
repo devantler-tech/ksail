@@ -13,9 +13,9 @@ import (
 // the session secret); the provider-backed login/callback flow is not covered here.
 func NewAuthTestServer(kubeClient client.Client, secret []byte) *Server {
 	return &Server{
-		Client: kubeClient,
-		OIDC:   OIDCConfig{IssuerURL: "https://issuer.test", SessionSecret: secret},
-		auth:   &authenticator{config: OIDCConfig{SessionSecret: secret, SessionTTL: time.Hour}},
+		Service: NewCRClusterService(kubeClient),
+		OIDC:    OIDCConfig{IssuerURL: "https://issuer.test", SessionSecret: secret},
+		auth:    &authenticator{config: OIDCConfig{SessionSecret: secret, SessionTTL: time.Hour}},
 	}
 }
 

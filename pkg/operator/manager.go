@@ -120,7 +120,7 @@ func setupManager(mgr ctrl.Manager, opts Options) error {
 
 	if opts.APIBindAddress != "" {
 		server := &api.Server{
-			Client:      mgr.GetClient(),
+			Service:     api.NewCRClusterService(mgr.GetClient()),
 			ReadOnly:    opts.ReadOnly,
 			BindAddress: opts.APIBindAddress,
 			OIDC:        opts.OIDC,
@@ -129,7 +129,7 @@ func setupManager(mgr ctrl.Manager, opts Options) error {
 		// Serve the dashboard from the operator itself when a UI was embedded at build time
 		// (-tags ui), so the SPA and API share one origin and no reverse proxy is needed.
 		if assets, ok := operatorui.Assets(); ok {
-			server.UIFS = assets
+			server.StaticFS = assets
 		}
 
 		apiErr := mgr.Add(server)
