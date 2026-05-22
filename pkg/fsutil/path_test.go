@@ -1,7 +1,7 @@
 package fsutil_test
 
 import (
-	"os/user"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -11,9 +11,9 @@ import (
 func TestExpandHomePath(t *testing.T) {
 	t.Parallel()
 
-	usr, err := user.Current()
+	home, err := os.UserHomeDir()
 	if err != nil {
-		t.Fatalf("failed to get current user: %v", err)
+		t.Fatalf("failed to get user home directory: %v", err)
 	}
 
 	tests := []struct {
@@ -25,7 +25,7 @@ func TestExpandHomePath(t *testing.T) {
 		{
 			name:     "expands home prefix",
 			input:    "~/some/nested/dir",
-			expected: filepath.Join(usr.HomeDir, "some", "nested", "dir"),
+			expected: filepath.Join(home, "some", "nested", "dir"),
 		},
 		{
 			name:        "converts relative path to absolute",
@@ -67,5 +67,45 @@ func TestExpandHomePath(t *testing.T) {
 				t.Fatalf("ExpandHomePath(%q) = %q, want %q", testCase.input, got, testCase.expected)
 			}
 		})
+	}
+}
+
+// TestExpandHomePathRespectsHOMEEnv guards the regression that destroyed the
+// developer's real ~/.kube/config: ExpandHomePath must resolve "~/" against
+// $HOME (os.UserHomeDir), not the OS user database. Tests redirect $HOME to a
+// temporary directory; if ~ expansion ignores that override, kubeconfig
+// cleanup and other home-derived writes escape the test sandbox and mutate the
+// real configuration.
+func TestExpandHomePathRespectsHOMEEnv(t *testing.T) {
+	// Not parallel: mutates the process environment via t.Setenv.
+	tempHome := t.TempDir()
+	t.Setenv("HOME", tempHome)
+	t.Setenv("USERPROFILE", tempHome) // Windows equivalent consulted by os.UserHomeDir.
+
+	got, err := fsutil.ExpandHomePath("~/.kube/config")
+	if err != nil {
+		t.Fatalf("ExpandHomePath returned error: %v", err)
+	}
+
+	want := filepath.Join(tempHome, ".kube", "config")
+	if got != want {
+		t.Fatalf(
+			"ExpandHomePath(~/.kube/config) = %q, want %q; ~ must honor $HOME so tests can redirect home-derived paths",
+			got,
+			want,
+		)
+	}
+}
+
+// TestExpandHomePathErrorsWhenHomeUnset covers the failure branch taken when
+// the home directory cannot be resolved (os.UserHomeDir returns an error).
+func TestExpandHomePathErrorsWhenHomeUnset(t *testing.T) {
+	// Not parallel: mutates the process environment via t.Setenv.
+	t.Setenv("HOME", "")
+	t.Setenv("USERPROFILE", "") // Windows equivalent consulted by os.UserHomeDir.
+
+	_, err := fsutil.ExpandHomePath("~/anything")
+	if err == nil {
+		t.Fatal("ExpandHomePath(~/...) with no home directory set should return an error")
 	}
 }

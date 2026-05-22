@@ -176,6 +176,59 @@ The scaffolded repo contains a plain kustomize setup for manual workflows:
 
 The tenant applies their manifests with `kubectl apply -k k8s/`.
 
+## Production-Ready Tenants
+
+By default KSail generates a minimal tenant (namespace, ServiceAccount, RoleBinding, and any GitOps sync resources). For shared production clusters you usually want stronger isolation. These hardening resources are **opt-in** — nothing below is generated unless you ask for it.
+
+Enable the recommended baseline with a single flag:
+
+```bash
+ksail tenant create my-team --production
+```
+
+`--production` turns on Pod Security Standards (`baseline`), a default-deny NetworkPolicy, a ResourceQuota, a LimitRange, a hardened ServiceAccount, and (for Flux tenants) a hardened sync. Any granular flag you set explicitly overrides the umbrella default. The resulting tenant directory adds:
+
+```text
+platform/tenants/my-team/
+├── kustomization.yaml
+├── namespace.yaml          # + Pod Security Standards labels
+├── serviceaccount.yaml     # + automountServiceAccountToken: false
+├── rolebinding.yaml
+├── networkpolicy.yaml      # default-deny + DNS + intra-namespace
+├── resourcequota.yaml
+└── limitrange.yaml
+```
+
+### Granular flags
+
+| Flag | Effect |
+|------|--------|
+| `--pod-security <restricted\|baseline\|privileged>` | Adds `pod-security.kubernetes.io/{enforce,audit,warn}` labels to each namespace |
+| `--with-network-policy` | Default-deny NetworkPolicy plus allow rules for DNS and intra-namespace traffic |
+| `--with-quota` (`--quota-cpu`, `--quota-memory`) | ResourceQuota capping namespace `requests`/`limits` (defaults: 4 CPU, 8Gi) |
+| `--with-limit-range` (`--limit-default-cpu`, `--limit-default-memory`, `--limit-request-cpu`, `--limit-request-memory`) | LimitRange with default container requests/limits |
+| `--disable-token-automount` | Sets `automountServiceAccountToken: false` on the ServiceAccount |
+| `--image-pull-secret <name>` | Adds an `imagePullSecrets` entry (repeatable) |
+| `--cluster-role <name>` | Bind multiple ClusterRoles (repeatable; one RoleBinding per role) |
+
+For Flux tenants you can additionally harden the sync:
+
+| Flag | Effect |
+|------|--------|
+| `--flux-wait` | Sets `wait: true` and `timeout` (default `5m`) on the Flux Kustomization |
+| `--flux-timeout` | Flux Kustomization timeout; setting it implies `--flux-wait` |
+| `--flux-retry-interval` | Sets the Kustomization `retryInterval` |
+| `--flux-decryption` | Adds a SOPS `decryption` block referencing the `sops-age` secret |
+
+### Portable by default, native CRDs when available
+
+The generated manifests are portable upstream Kubernetes resources by default, so they work on any distribution KSail supports. When `ksail.yaml` opts into a richer control plane, KSail upgrades the output automatically:
+
+- If `spec.cluster.cni` is `Cilium`, `--with-network-policy` emits a `CiliumNetworkPolicy` (`cilium.io/v2`) instead of an upstream `NetworkPolicy`.
+- Pod Security Standards labels remain the portable baseline even when `spec.cluster.policyEngine` is `Kyverno` — Kyverno enforces additional policy server-side but does not replace NetworkPolicies.
+
+The Cilium policy is an intentionally simple starting point (default-deny, plus intra-namespace and kube-dns allow rules) that platform teams can extend.
+
 ## Delete a Tenant
 
 ```bash

@@ -173,9 +173,9 @@ func (m *ConfigManager) ValidatePatchDirectory() (string, error) {
 
 	// Validate YAML files in each subdirectory
 	subdirs := []string{
-		filepath.Join(m.patchesDir, "cluster"),
-		filepath.Join(m.patchesDir, "control-planes"),
-		filepath.Join(m.patchesDir, "workers"),
+		filepath.Join(m.patchesDir, PatchSubdirCluster),
+		filepath.Join(m.patchesDir, PatchSubdirControlPlanes),
+		filepath.Join(m.patchesDir, PatchSubdirWorkers),
 	}
 
 	for _, dir := range subdirs {

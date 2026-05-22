@@ -12,24 +12,41 @@ Usage:
   ksail tenant create <tenant-name> [flags]
 
 Flags:
-      --cluster-role string         ClusterRole to bind to the tenant ServiceAccount (default "edit")
-      --delivery string             How to deliver platform changes: commit or pr (default "commit")
-      --force                       Overwrite existing tenant directory
-      --git-provider string         Git provider for manifest URLs: github, gitlab, gitea (repo scaffolding requires github)
-      --git-token string            GitHub API token for repo scaffolding (--git-provider=github)
-      --kustomization-path string   Path to kustomization.yaml (fallback: auto-discover)
-  -n, --namespace strings           Namespaces to create (repeatable, default: tenant-name)
-      --oci-path string             Path suffix appended to OCI registry URL to avoid tag collisions (e.g., 'manifests' produces oci://registry/owner/repo/manifests)
-  -o, --output string               Output directory for platform manifests (default ".")
-      --platform-repo string        Platform repo as owner/repo-name for PR delivery (default: auto-detect from git remote)
-      --register                    Register tenant in kustomization.yaml
-      --registry string             OCI registry URL for Flux OCI source (e.g., oci://ghcr.io)
-      --repo-visibility string      Repo visibility: Private, Internal, or Public (default "Private")
-      --source-directory string     Directory name for tenant manifests in the tenant repo (default "k8s")
-      --sync-source string          Flux source type: oci or git (default "oci")
-      --target-branch string        PR target branch (default: repo's default branch)
-      --tenant-repo string          Tenant repo as owner/repo-name
-  -t, --type string                 Tenant type: flux, argocd, or kubectl (default: auto-detect from ksail.yaml gitOpsEngine)
+      --cluster-role strings          ClusterRole(s) to bind to the tenant ServiceAccount (repeatable) (default [edit])
+      --delivery string               How to deliver platform changes: commit or pr (default "commit")
+      --disable-token-automount       Set automountServiceAccountToken: false on the tenant ServiceAccount
+      --flux-decryption               (Flux) Add a SOPS decryption block referencing the sops-age secret
+      --flux-retry-interval string    (Flux) Flux Kustomization retryInterval
+      --flux-timeout string           (Flux) Flux Kustomization timeout; setting it implies --flux-wait (default 5m when waiting)
+      --flux-wait                     (Flux) Set wait: true and timeout on the Flux Kustomization
+      --force                         Overwrite existing tenant directory
+      --git-provider string           Git provider for manifest URLs: github, gitlab, gitea (repo scaffolding requires github)
+      --git-token string              GitHub API token for repo scaffolding (--git-provider=github)
+      --image-pull-secret strings     imagePullSecret to add to the tenant ServiceAccount (repeatable)
+      --kustomization-path string     Path to kustomization.yaml (fallback: auto-discover)
+      --limit-default-cpu string      Default container CPU limit (default "500m")
+      --limit-default-memory string   Default container memory limit (default "512Mi")
+      --limit-request-cpu string      Default container CPU request (default "100m")
+      --limit-request-memory string   Default container memory request (default "128Mi")
+  -n, --namespace strings             Namespaces to create (repeatable, default: tenant-name)
+      --oci-path string               Path suffix appended to OCI registry URL to avoid tag collisions (e.g., 'manifests' produces oci://registry/owner/repo/manifests)
+  -o, --output string                 Output directory for platform manifests (default ".")
+      --platform-repo string          Platform repo as owner/repo-name for PR delivery (default: auto-detect from git remote)
+      --pod-security string           Pod Security Standards level for namespaces: restricted, baseline, or privileged
+      --production                    Enable the recommended production baseline (PSS baseline, default-deny NetworkPolicy, ResourceQuota, LimitRange, hardened ServiceAccount and Flux sync)
+      --quota-cpu string              CPU quota (sets requests.cpu and limits.cpu) (default "4")
+      --quota-memory string           Memory quota (sets requests.memory and limits.memory) (default "8Gi")
+      --register                      Register tenant in kustomization.yaml
+      --registry string               OCI registry URL for Flux OCI source (e.g., oci://ghcr.io)
+      --repo-visibility string        Repo visibility: Private, Internal, or Public (default "Private")
+      --source-directory string       Directory name for tenant manifests in the tenant repo (default "k8s")
+      --sync-source string            Flux source type: oci or git (default "oci")
+      --target-branch string          PR target branch (default: repo's default branch)
+      --tenant-repo string            Tenant repo as owner/repo-name
+  -t, --type string                   Tenant type: flux, argocd, or kubectl (default: auto-detect from ksail.yaml gitOpsEngine)
+      --with-limit-range              Generate a LimitRange with default container requests/limits
+      --with-network-policy           Generate default-deny NetworkPolicy plus DNS and intra-namespace allow rules
+      --with-quota                    Generate a ResourceQuota for each namespace
 
 Global Flags:
       --benchmark       Show per-activity benchmark output
