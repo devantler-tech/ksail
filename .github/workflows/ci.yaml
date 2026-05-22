@@ -907,7 +907,10 @@ jobs:
   system-test-docker:
     name: 🧪 System Test (Docker)
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    # The Talos host + full nested Kubernetes-provider coverage (Vanilla,K3s,VCluster,Talos)
+    # has a ~77-min worst case and was the flakiest job in CI when timed at 75/90 min. 120 gives
+    # comfortable headroom to absorb runtime variance without trimming test coverage.
+    timeout-minutes: 120
     needs:
       [
         changes,
