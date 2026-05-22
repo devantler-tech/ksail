@@ -1,0 +1,57 @@
+
+[TestGenerateLimitRangeManifests_MultiNamespace - 1]
+apiVersion: v1
+kind: LimitRange
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: ksail
+  name: team-beta-limits
+  namespace: ns-a
+spec:
+  limits:
+  - default:
+      cpu: "1"
+      memory: 512Mi
+    defaultRequest:
+      cpu: 100m
+      memory: 128Mi
+    type: Container
+/-/-/-/
+apiVersion: v1
+kind: LimitRange
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: ksail
+  name: team-beta-limits
+  namespace: ns-b
+spec:
+  limits:
+  - default:
+      cpu: "1"
+      memory: 512Mi
+    defaultRequest:
+      cpu: 100m
+      memory: 128Mi
+    type: Container
+
+---
+
+[TestGenerateLimitRangeManifests_Defaults - 1]
+apiVersion: v1
+kind: LimitRange
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: ksail
+  name: team-alpha-limits
+  namespace: team-alpha
+spec:
+  limits:
+  - default:
+      cpu: 500m
+      memory: 512Mi
+    defaultRequest:
+      cpu: 100m
+      memory: 128Mi
+    type: Container
+
+---

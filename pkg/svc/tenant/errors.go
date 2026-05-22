@@ -64,4 +64,16 @@ var (
 	ErrRBACConfigMapNotFound = errors.New("no argocd-rbac-cm ConfigMap found")
 	// ErrInvalidSourceDirectory is returned when the source directory name is invalid.
 	ErrInvalidSourceDirectory = errors.New("invalid source directory")
+	// ErrInvalidPodSecurityLevel is returned when an invalid Pod Security Standards level is provided.
+	ErrInvalidPodSecurityLevel = errors.New("invalid pod-security level")
+	// ErrEmptyClusterRole is returned when a ClusterRole entry is empty.
+	ErrEmptyClusterRole = errors.New("cluster role must not be empty")
+	// ErrInvalidQuantity is returned when a resource quantity cannot be parsed.
+	ErrInvalidQuantity = errors.New("invalid resource quantity")
+	// ErrInvalidDuration is returned when a duration value cannot be parsed.
+	ErrInvalidDuration = errors.New("invalid duration")
+	// ErrUnsupportedNetworkPolicyEngine is returned for an unknown NetworkPolicy engine.
+	ErrUnsupportedNetworkPolicyEngine = errors.New("unsupported network policy engine")
+	// ErrInvalidImagePullSecret is returned when an imagePullSecret name is not a valid DNS-1123 subdomain.
+	ErrInvalidImagePullSecret = errors.New("invalid image pull secret name")
 )
