@@ -13,7 +13,7 @@ import {
 
 // Fallback create-form options used when the backend does not advertise its supported distributions
 // via config.distributions. The operator omits it and only provisions VCluster in-cluster; the local
-// `ksail cluster ui` backend advertises the locally creatable set.
+// `ksail ui` backend advertises the locally creatable set.
 const DEFAULT_DISTRIBUTIONS = ["VCluster"];
 
 export function App() {

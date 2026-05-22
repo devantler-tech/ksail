@@ -37,7 +37,7 @@ const (
 // The operator always acts with its own RBAC; OIDC provides authentication, not per-user authz.
 type Server struct {
 	// Service is the backend the cluster handlers delegate to (controller-runtime-backed in the
-	// operator, CLI-lifecycle-backed for `ksail cluster ui`).
+	// operator, CLI-lifecycle-backed for `ksail ui`).
 	Service ClusterService
 	// ReadOnly rejects all mutating requests with HTTP 403 when true.
 	ReadOnly bool
@@ -52,7 +52,7 @@ type Server struct {
 
 	// StaticFS, when non-nil, serves the embedded web UI (SPA) for any route the API does not handle,
 	// falling back to index.html for client-side routing. The operator leaves it nil (nginx serves
-	// the UI separately); `ksail cluster ui` sets it to the embedded assets.
+	// the UI separately); `ksail ui` sets it to the embedded assets.
 	StaticFS fs.FS
 
 	// auth is built from OIDC at Start; nil means authentication is disabled.
@@ -115,7 +115,7 @@ func (s *Server) Start(ctx context.Context) error {
 }
 
 // Serve runs the HTTP server on the supplied listener until the context is cancelled. Binding the
-// listener separately lets callers (e.g. `ksail cluster ui`) discover the chosen port before serving
+// listener separately lets callers (e.g. `ksail ui`) discover the chosen port before serving
 // when port 0 is requested.
 func (s *Server) Serve(ctx context.Context, listener net.Listener) error {
 	if s.OIDC.Enabled() && s.auth == nil {

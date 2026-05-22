@@ -1,5 +1,5 @@
 // Package clusterapi implements the operator REST API's ClusterService over the local KSail
-// provider/provisioner lifecycle. It lets `ksail cluster ui` serve the same web UI the operator
+// provider/provisioner lifecycle. It lets `ksail ui` serve the same web UI the operator
 // serves, but backed by clusters on the local machine (Docker) instead of Cluster custom resources.
 //
 // Local create and delete are long-running, so they run asynchronously: a request returns

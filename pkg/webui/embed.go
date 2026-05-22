@@ -1,5 +1,5 @@
 // Package webui embeds the built KSail web UI (the Vite/React SPA from web/ui) so the CLI can serve
-// it from `ksail cluster ui` without an external web server.
+// it from `ksail ui` without an external web server.
 //
 // The assets are produced by `make ui` (npm run build in web/ui) and staged into the dist directory
 // before `go build`; release binaries embed the real assets via the GoReleaser before-hook. When the
