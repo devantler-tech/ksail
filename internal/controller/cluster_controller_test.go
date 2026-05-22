@@ -13,11 +13,13 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -105,6 +107,7 @@ func newScheme(t *testing.T) *runtime.Scheme {
 	t.Helper()
 
 	scheme := runtime.NewScheme()
+	require.NoError(t, clientgoscheme.AddToScheme(scheme))
 	require.NoError(t, v1alpha1.AddToScheme(scheme))
 
 	return scheme
@@ -409,4 +412,116 @@ func TestReconcile_ObserveStatusErrorIsBestEffort(t *testing.T) {
 	assert.Equal(t, v1alpha1.ClusterPhaseReady, got.Status.Phase)
 	assert.Equal(t, "https://child.svc:443", got.Status.Endpoint)
 	assert.Zero(t, got.Status.NodesTotal, "nodes stay unset when not observed")
+}
+
+func managedNamespace(name string) *corev1.Namespace {
+	return &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   name,
+			Labels: map[string]string{v1alpha1.ManagedNamespaceLabel: "true"},
+		},
+	}
+}
+
+func clusterInNamespace(name, namespace string) *v1alpha1.Cluster {
+	return &v1alpha1.Cluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       name,
+			Namespace:  namespace,
+			Generation: 1,
+			Finalizers: []string{controller.FinalizerName},
+		},
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{Distribution: v1alpha1.DistributionVCluster},
+		},
+	}
+}
+
+func deleteRequest(name, namespace string) ctrl.Request {
+	return ctrl.Request{NamespacedName: types.NamespacedName{Name: name, Namespace: namespace}}
+}
+
+func reconcileDeletion(
+	t *testing.T,
+	objects ...client.Object,
+) (client.Client, *v1alpha1.Cluster) {
+	t.Helper()
+
+	scheme := newScheme(t)
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(objects...).
+		WithStatusSubresource(&v1alpha1.Cluster{}).
+		Build()
+	reconciler := newReconciler(scheme, fakeClient, &fakeProvisioner{exists: true})
+
+	cluster, ok := objects[len(objects)-1].(*v1alpha1.Cluster)
+	require.True(t, ok, "last object must be the cluster to delete")
+	require.NoError(t, fakeClient.Delete(context.Background(), cluster))
+
+	_, err := reconciler.Reconcile(
+		context.Background(),
+		deleteRequest(cluster.Name, cluster.Namespace),
+	)
+	require.NoError(t, err)
+
+	return fakeClient, cluster
+}
+
+func namespaceExists(t *testing.T, cl client.Client, name string) bool {
+	t.Helper()
+
+	var namespace corev1.Namespace
+
+	err := cl.Get(context.Background(), client.ObjectKey{Name: name}, &namespace)
+	if apierrors.IsNotFound(err) {
+		return false
+	}
+
+	require.NoError(t, err)
+
+	return true
+}
+
+func TestReconcileDelete_DeletesEmptyManagedNamespace(t *testing.T) {
+	t.Parallel()
+
+	cl, _ := reconcileDeletion(t, managedNamespace("team-a"), clusterInNamespace("c1", "team-a"))
+
+	assert.False(
+		t,
+		namespaceExists(t, cl, "team-a"),
+		"operator-managed namespace should be deleted once empty",
+	)
+}
+
+func TestReconcileDelete_KeepsUnmanagedNamespace(t *testing.T) {
+	t.Parallel()
+
+	userNS := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "user-ns"}}
+
+	cl, _ := reconcileDeletion(t, userNS, clusterInNamespace("c1", "user-ns"))
+
+	assert.True(
+		t,
+		namespaceExists(t, cl, "user-ns"),
+		"a namespace the operator did not create must be preserved",
+	)
+}
+
+func TestReconcileDelete_KeepsManagedNamespaceWithOtherCluster(t *testing.T) {
+	t.Parallel()
+
+	cl, _ := reconcileDeletion(
+		t,
+		managedNamespace("team-a"),
+		clusterInNamespace("c2", "team-a"),
+		clusterInNamespace("c1", "team-a"),
+	)
+
+	assert.True(
+		t,
+		namespaceExists(t, cl, "team-a"),
+		"namespace with another cluster must be preserved",
+	)
 }

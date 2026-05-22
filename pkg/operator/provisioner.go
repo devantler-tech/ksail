@@ -22,10 +22,10 @@ var ErrUnsupportedDistribution = errors.New("unsupported distribution for operat
 // cluster does not override it.
 const defaultAWSRegionEnvVar = "AWS_REGION"
 
-// BuildProvisioner returns a provisioner for the cluster's distribution and provider. The provider
-// is taken from the Cluster spec; when unset it defaults to an operator-native value (Kubernetes,
-// i.e. provisioned in-cluster, for the distributions that support it; AWS for EKS). Every
-// distribution × provider combination the factory supports is available.
+// BuildProvisioner returns a provisioner for the cluster's distribution and provider. Distribution
+// and Provider follow the API's zero-value convention: an unset distribution means Vanilla and an
+// unset provider means Docker (their default values serialize to empty via `omitzero`). EKS uses
+// AWS. Every distribution × provider combination the factory supports is available.
 //
 // Provider requirements at runtime: the Docker provider needs an accessible Docker endpoint
 // (DOCKER_HOST, or a mounted /var/run/docker.sock via the chart's operator.dockerSocket.enabled);
@@ -40,7 +40,7 @@ func BuildProvisioner(
 	desired := cluster.DeepCopy()
 
 	if desired.Spec.Cluster.Distribution == "" {
-		desired.Spec.Cluster.Distribution = v1alpha1.DistributionVCluster
+		desired.Spec.Cluster.Distribution = v1alpha1.DistributionVanilla
 	}
 
 	desired.Spec.Cluster.Provider = resolveProvider(desired)
@@ -67,8 +67,9 @@ func BuildProvisioner(
 	return provisioner, nil
 }
 
-// resolveProvider returns the provider declared on the cluster, or an operator-native default when
-// unset: AWS for EKS (its only provider), Kubernetes (in-cluster) for everything else.
+// resolveProvider returns the provider declared on the cluster, or the API default when unset:
+// AWS for EKS (its only provider), Docker for everything else (Provider's zero value). The UI sends
+// an explicit provider, so an unset provider only occurs for hand-written Cluster resources.
 func resolveProvider(cluster *v1alpha1.Cluster) v1alpha1.Provider {
 	if cluster.Spec.Cluster.Provider != "" {
 		return cluster.Spec.Cluster.Provider
@@ -78,12 +79,12 @@ func resolveProvider(cluster *v1alpha1.Cluster) v1alpha1.Provider {
 		return v1alpha1.ProviderAWS
 	}
 
-	return v1alpha1.ProviderKubernetes
+	return v1alpha1.ProviderDocker
 }
 
 // buildDistributionConfig builds the in-memory distribution config the factory needs. Each config
 // is named after the operator's provisioned name so multiple Cluster resources never collide on the
-// same underlying cluster. An empty distribution defaults to VCluster.
+// same underlying cluster. An empty distribution defaults to Vanilla (the API's zero value).
 func buildDistributionConfig(
 	cluster *v1alpha1.Cluster,
 ) (*clusterprovisioner.DistributionConfig, error) {
@@ -91,7 +92,7 @@ func buildDistributionConfig(
 
 	distribution := cluster.Spec.Cluster.Distribution
 	if distribution == "" {
-		distribution = v1alpha1.DistributionVCluster
+		distribution = v1alpha1.DistributionVanilla
 	}
 
 	switch distribution {

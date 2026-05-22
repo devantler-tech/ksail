@@ -30,13 +30,16 @@ func TestBuildDistributionConfig_VCluster(t *testing.T) {
 	assert.Equal(t, "my-cluster", config.VCluster.Name)
 }
 
-func TestBuildDistributionConfig_DefaultsToVCluster(t *testing.T) {
+func TestBuildDistributionConfig_DefaultsToVanilla(t *testing.T) {
 	t.Parallel()
 
+	// An unset distribution is Vanilla per the API zero-value convention (its default serializes to
+	// empty via omitzero), so the operator must not silently substitute a different distribution.
 	config, err := operator.BuildDistributionConfig(clusterWithDistribution("c1", ""))
 	require.NoError(t, err)
-	require.NotNil(t, config.VCluster)
-	assert.Equal(t, "c1", config.VCluster.Name)
+	require.NotNil(t, config.Kind)
+	assert.Nil(t, config.VCluster)
+	assert.Equal(t, "c1", config.Kind.Name)
 }
 
 func TestBuildDistributionConfig_Vanilla(t *testing.T) {
@@ -113,10 +116,10 @@ func TestResolveProvider(t *testing.T) {
 	explicit.Spec.Cluster.Provider = v1alpha1.ProviderDocker
 	assert.Equal(t, v1alpha1.ProviderDocker, operator.ResolveProvider(explicit))
 
-	// Unset provider defaults to Kubernetes (in-cluster) for non-EKS distributions.
+	// Unset provider defaults to Docker (the Provider zero value) for non-EKS distributions.
 	assert.Equal(
 		t,
-		v1alpha1.ProviderKubernetes,
+		v1alpha1.ProviderDocker,
 		operator.ResolveProvider(clusterWithDistribution("c1", v1alpha1.DistributionVCluster)),
 	)
 

@@ -16,7 +16,9 @@ import (
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -345,6 +347,15 @@ func (s *Server) handleCreateCluster(writer http.ResponseWriter, request *http.R
 		cluster.Namespace = defaultNamespace
 	}
 
+	// A Cluster cannot be created in a namespace that does not exist, so create it on demand. The
+	// namespace is labelled as operator-managed so the reconciler can clean it up on deletion.
+	nsErr := s.ensureNamespace(request.Context(), cluster.Namespace)
+	if nsErr != nil {
+		writeClientError(writer, nsErr)
+
+		return
+	}
+
 	createErr := s.Client.Create(request.Context(), cluster)
 	if createErr != nil {
 		writeClientError(writer, createErr)
@@ -353,6 +364,37 @@ func (s *Server) handleCreateCluster(writer http.ResponseWriter, request *http.R
 	}
 
 	writeJSON(writer, http.StatusCreated, cluster)
+}
+
+// ensureNamespace creates the namespace if it does not already exist, labelling namespaces it
+// creates as operator-managed. Pre-existing namespaces are left untouched (and unlabelled), so the
+// operator never deletes a namespace it did not create.
+func (s *Server) ensureNamespace(ctx context.Context, name string) error {
+	var existing corev1.Namespace
+
+	getErr := s.Client.Get(ctx, types.NamespacedName{Name: name}, &existing)
+	if getErr == nil {
+		return nil
+	}
+
+	if !apierrors.IsNotFound(getErr) {
+		return fmt.Errorf("check namespace %q: %w", name, getErr)
+	}
+
+	namespace := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   name,
+			Labels: map[string]string{v1alpha1.ManagedNamespaceLabel: "true"},
+		},
+	}
+
+	createErr := s.Client.Create(ctx, namespace)
+	// Tolerate a concurrent creation (another request created it first).
+	if createErr != nil && !apierrors.IsAlreadyExists(createErr) {
+		return fmt.Errorf("create namespace %q: %w", name, createErr)
+	}
+
+	return nil
 }
 
 func (s *Server) handleUpdateCluster(writer http.ResponseWriter, request *http.Request) {
