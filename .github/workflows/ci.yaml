@@ -950,8 +950,8 @@ jobs:
             init: true
             args: "--name system-test-cluster-with-image-verification --image-verification Enabled"
           # Enable Kubernetes provider tests on the default (init=true, args="")
-          # entry for each distribution. This tests all 4 nested distributions
-          # (Vanilla,K3s,VCluster,Talos) on each host type, once per matrix.
+          # entry for each distribution. Vanilla/K3s/VCluster test all 4 nested
+          # distributions (Vanilla,K3s,VCluster,Talos) via the action's default.
           - distribution: Vanilla
             provider: Docker
             init: true
@@ -962,11 +962,16 @@ jobs:
             init: true
             args: ""
             test-kubernetes-provider: "true"
+          # Talos host is reduced to 2 nested distributions: provisioning a Talos
+          # host plus 4 nested clusters pushed worst-case past the job timeout
+          # (the flakiest job in CI, ~67% timeout rate). Vanilla,K3s keeps Talos
+          # nested-provider coverage while staying well under the 90-min limit.
           - distribution: Talos
             provider: Docker
             init: true
             args: ""
             test-kubernetes-provider: "true"
+            kubernetes-provider-distributions: "Vanilla,K3s"
           - distribution: VCluster
             provider: Docker
             init: true
