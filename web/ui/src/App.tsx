@@ -25,6 +25,8 @@ export function App() {
   // Guards against state updates from in-flight requests that resolve after the component unmounts
   // (refresh runs from the interval, the button, and child callbacks, not only the init effect).
   const mounted = useRef(true);
+  // Holds the polling interval so it can be stopped from refresh() on a 401 without unmounting.
+  const pollRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
 
   const refresh = useCallback(async () => {
     try {
@@ -39,6 +41,12 @@ export function App() {
         return;
       }
       if (err instanceof ApiError && err.status === 401) {
+        // Stop polling once the session is gone; otherwise the interval keeps firing
+        // unauthorized requests every 10s while the login screen is shown.
+        if (pollRef.current) {
+          clearInterval(pollRef.current);
+          pollRef.current = undefined;
+        }
         setNeedsLogin(true);
         return;
       }
@@ -48,7 +56,6 @@ export function App() {
 
   useEffect(() => {
     mounted.current = true;
-    let timer: ReturnType<typeof setInterval> | undefined;
 
     async function init() {
       let config;
@@ -79,7 +86,7 @@ export function App() {
       await refresh();
       if (mounted.current) {
         setLoading(false);
-        timer = setInterval(() => void refresh(), 10000);
+        pollRef.current = setInterval(() => void refresh(), 10000);
       }
     }
 
@@ -87,8 +94,9 @@ export function App() {
 
     return () => {
       mounted.current = false;
-      if (timer) {
-        clearInterval(timer);
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = undefined;
       }
     };
   }, [refresh]);

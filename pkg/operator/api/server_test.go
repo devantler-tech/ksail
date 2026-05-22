@@ -76,6 +76,18 @@ func TestListClusters(t *testing.T) {
 	assert.Contains(t, recorder.Body.String(), "c1")
 }
 
+func TestListClustersEmptyReturnsArray(t *testing.T) {
+	t.Parallel()
+
+	server := &api.Server{Client: newClient(t)}
+
+	recorder := doRequest(server.Handler(), http.MethodGet, "/api/v1/clusters", "")
+
+	assert.Equal(t, http.StatusOK, recorder.Code)
+	// Empty list must serialize items as [] (not null) to match Kubernetes list semantics.
+	assert.Contains(t, recorder.Body.String(), `"items":[]`)
+}
+
 func TestGetClusterNotFound(t *testing.T) {
 	t.Parallel()
 
@@ -84,6 +96,19 @@ func TestGetClusterNotFound(t *testing.T) {
 	recorder := doRequest(server.Handler(), http.MethodGet, "/api/v1/clusters/default/missing", "")
 
 	assert.Equal(t, http.StatusNotFound, recorder.Code)
+}
+
+func TestCreateClusterOversizedBodyReturns413(t *testing.T) {
+	t.Parallel()
+
+	server := &api.Server{Client: newClient(t)}
+	// Body exceeds the 1 MiB cap, so the decode must surface 413, not a generic 400.
+	body := `{"metadata":{"name":"big","namespace":"default","labels":{"big":"` +
+		strings.Repeat("a", 1<<20) + `"}}}`
+
+	recorder := doRequest(server.Handler(), http.MethodPost, "/api/v1/clusters", body)
+
+	assert.Equal(t, http.StatusRequestEntityTooLarge, recorder.Code)
 }
 
 func TestCreateClusterWhenWritable(t *testing.T) {

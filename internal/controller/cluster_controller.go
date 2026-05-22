@@ -339,7 +339,7 @@ func (r *ClusterReconciler) reconcileDrift(
 
 	newSpec := cluster.Spec.Cluster.DeepCopy()
 
-	diff, err := updater.DiffConfig(ctx, cluster.Name, oldSpec, newSpec)
+	diff, err := updater.DiffConfig(ctx, ProvisionedName(cluster), oldSpec, newSpec)
 	if err != nil {
 		return fmt.Errorf("diff cluster config: %w", err)
 	}
@@ -358,7 +358,7 @@ func (r *ClusterReconciler) reconcileDrift(
 
 	_, err = updater.Update(
 		ctx,
-		cluster.Name,
+		ProvisionedName(cluster),
 		oldSpec,
 		newSpec,
 		clusterupdate.UpdateOptions{Force: true},

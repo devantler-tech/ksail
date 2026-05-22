@@ -216,6 +216,12 @@ func (s *Server) handleListClusters(writer http.ResponseWriter, request *http.Re
 		return
 	}
 
+	// Emit an empty array rather than null for items when there are no clusters,
+	// matching Kubernetes list semantics so clients don't have to special-case null.
+	if list.Items == nil {
+		list.Items = []v1alpha1.Cluster{}
+	}
+
 	writeJSON(writer, http.StatusOK, &list)
 }
 
@@ -240,7 +246,7 @@ func (s *Server) handleGetCluster(writer http.ResponseWriter, request *http.Requ
 func (s *Server) handleCreateCluster(writer http.ResponseWriter, request *http.Request) {
 	decoded, err := decodeCluster(writer, request)
 	if err != nil {
-		writeError(writer, http.StatusBadRequest, err)
+		writeDecodeError(writer, err)
 
 		return
 	}
@@ -263,7 +269,7 @@ func (s *Server) handleCreateCluster(writer http.ResponseWriter, request *http.R
 func (s *Server) handleUpdateCluster(writer http.ResponseWriter, request *http.Request) {
 	decoded, err := decodeCluster(writer, request)
 	if err != nil {
-		writeError(writer, http.StatusBadRequest, err)
+		writeDecodeError(writer, err)
 
 		return
 	}
@@ -381,6 +387,19 @@ func writeJSON(writer http.ResponseWriter, status int, body any) {
 
 func writeError(writer http.ResponseWriter, status int, err error) {
 	writeJSON(writer, status, map[string]string{"error": err.Error()})
+}
+
+// writeDecodeError maps a request-body decode failure to the most appropriate status: 413 when the
+// body exceeded maxRequestBodyBytes, otherwise 400 for malformed JSON.
+func writeDecodeError(writer http.ResponseWriter, err error) {
+	var maxBytesErr *http.MaxBytesError
+	if errors.As(err, &maxBytesErr) {
+		writeError(writer, http.StatusRequestEntityTooLarge, err)
+
+		return
+	}
+
+	writeError(writer, http.StatusBadRequest, err)
 }
 
 func writeClientError(writer http.ResponseWriter, err error) {
