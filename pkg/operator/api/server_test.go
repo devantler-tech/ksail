@@ -17,6 +17,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
+const defaultNS = "default"
+
 func newClient(t *testing.T, objects ...client.Object) client.Client {
 	t.Helper()
 
@@ -32,7 +34,7 @@ func newClient(t *testing.T, objects ...client.Object) client.Client {
 
 func sampleCluster() *v1alpha1.Cluster {
 	return &v1alpha1.Cluster{
-		ObjectMeta: metav1.ObjectMeta{Name: "c1", Namespace: "default"},
+		ObjectMeta: metav1.ObjectMeta{Name: "c1", Namespace: defaultNS},
 		Spec: v1alpha1.Spec{
 			Cluster: v1alpha1.ClusterSpec{Distribution: v1alpha1.DistributionVCluster},
 		},
@@ -139,7 +141,7 @@ func TestDeleteClusterWhenWritable(t *testing.T) {
 
 	err := fakeClient.Get(
 		context.Background(),
-		client.ObjectKey{Namespace: "default", Name: "c1"},
+		client.ObjectKey{Namespace: defaultNS, Name: "c1"},
 		&v1alpha1.Cluster{},
 	)
 	assert.Error(t, err, "cluster should be deleted")
@@ -153,4 +155,109 @@ func TestHealthz(t *testing.T) {
 	recorder := doRequest(server.Handler(), http.MethodGet, "/healthz", "")
 
 	assert.Equal(t, http.StatusOK, recorder.Code)
+}
+
+func TestUpdateClusterAppliesSpec(t *testing.T) {
+	t.Parallel()
+
+	fakeClient := newClient(t, sampleCluster())
+	server := &api.Server{Client: fakeClient}
+	body := `{"spec":{"cluster":{"distribution":"K3s"}}}`
+
+	recorder := doRequest(server.Handler(), http.MethodPut, "/api/v1/clusters/default/c1", body)
+	assert.Equal(t, http.StatusOK, recorder.Code)
+
+	var got v1alpha1.Cluster
+
+	require.NoError(t, fakeClient.Get(
+		context.Background(),
+		client.ObjectKey{Namespace: defaultNS, Name: "c1"},
+		&got,
+	))
+	assert.Equal(t, v1alpha1.DistributionK3s, got.Spec.Cluster.Distribution)
+}
+
+func TestUpdateClusterNotFound(t *testing.T) {
+	t.Parallel()
+
+	server := &api.Server{Client: newClient(t)}
+	body := `{"spec":{"cluster":{"distribution":"VCluster"}}}`
+
+	recorder := doRequest(
+		server.Handler(),
+		http.MethodPut,
+		"/api/v1/clusters/default/missing",
+		body,
+	)
+	assert.Equal(t, http.StatusNotFound, recorder.Code)
+}
+
+func TestCreateDefaultsNamespace(t *testing.T) {
+	t.Parallel()
+
+	fakeClient := newClient(t)
+	server := &api.Server{Client: fakeClient}
+	body := `{"metadata":{"name":"nons"},"spec":{"cluster":{"distribution":"VCluster"}}}`
+
+	recorder := doRequest(server.Handler(), http.MethodPost, "/api/v1/clusters", body)
+	assert.Equal(t, http.StatusCreated, recorder.Code)
+
+	err := fakeClient.Get(
+		context.Background(),
+		client.ObjectKey{Namespace: defaultNS, Name: "nons"},
+		&v1alpha1.Cluster{},
+	)
+	assert.NoError(t, err, "cluster should be created in the default namespace")
+}
+
+func TestCreateSanitizesClientInput(t *testing.T) {
+	t.Parallel()
+
+	fakeClient := newClient(t)
+	server := &api.Server{Client: fakeClient}
+	// Client tries to set operator-managed fields; they must be stripped.
+	body := `{"metadata":{"name":"san","namespace":"default",` +
+		`"finalizers":["ksail.io/finalizer"],` +
+		`"annotations":{"ksail.io/last-applied-spec":"{}","keep":"yes"}},` +
+		`"spec":{"cluster":{"distribution":"VCluster"}}}`
+
+	recorder := doRequest(server.Handler(), http.MethodPost, "/api/v1/clusters", body)
+	require.Equal(t, http.StatusCreated, recorder.Code)
+
+	var got v1alpha1.Cluster
+
+	require.NoError(t, fakeClient.Get(
+		context.Background(),
+		client.ObjectKey{Namespace: defaultNS, Name: "san"},
+		&got,
+	))
+	assert.Empty(t, got.Finalizers, "finalizers must be stripped")
+	assert.NotContains(
+		t,
+		got.Annotations,
+		"ksail.io/last-applied-spec",
+		"operator annotation stripped",
+	)
+	assert.Equal(t, "yes", got.Annotations["keep"], "non-operator annotations preserved")
+}
+
+func TestCreateConflictReturns409(t *testing.T) {
+	t.Parallel()
+
+	server := &api.Server{Client: newClient(t, sampleCluster())}
+	body := `{"metadata":{"name":"c1","namespace":"default"},"spec":{"cluster":{"distribution":"VCluster"}}}`
+
+	recorder := doRequest(server.Handler(), http.MethodPost, "/api/v1/clusters", body)
+	assert.Equal(t, http.StatusConflict, recorder.Code)
+}
+
+func TestConfigDefaultsWritable(t *testing.T) {
+	t.Parallel()
+
+	server := &api.Server{Client: newClient(t)}
+
+	recorder := doRequest(server.Handler(), http.MethodGet, "/api/v1/config", "")
+
+	assert.Equal(t, http.StatusOK, recorder.Code)
+	assert.JSONEq(t, `{"readOnly":false}`, recorder.Body.String())
 }
