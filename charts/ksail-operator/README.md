@@ -69,10 +69,10 @@ helm upgrade --install ksail-operator charts/ksail-operator \
   --set ui.enabled=true
 ```
 
-Set `ui.readOnly=true` for GitOps-enforced environments so the Git repository stays the single source of truth; the operator enforces read-only server-side. When `ui.ingress.enabled` is `false`, port-forward to reach the UI:
+Set `ui.readOnly=true` for GitOps-enforced environments so the Git repository stays the single source of truth; the operator enforces read-only server-side. When `ui.ingress.enabled` is `false`, port-forward to reach the UI. The UI Service is named `<release-name>-ksail-operator-ui` (unless you set `fullnameOverride`), so for the install above:
 
 ```sh
-kubectl port-forward -n ksail-system svc/ksail-operator-ui 80:80
+kubectl port-forward -n ksail-system svc/ksail-operator-ksail-operator-ui 80:80
 ```
 
 ### Enable OIDC authentication
@@ -86,7 +86,7 @@ helm upgrade --install ksail-operator charts/ksail-operator \
   --set auth.oidc.enabled=true \
   --set auth.oidc.issuerURL=https://dex.example.com \
   --set auth.oidc.clientID=ksail \
-  --set auth.oidc.clientSecret=<client-secret> \
+  --set-string auth.oidc.clientSecret=CLIENT_SECRET \
   --set auth.oidc.redirectURL=https://ksail.local/api/v1/auth/callback
 ```
 
