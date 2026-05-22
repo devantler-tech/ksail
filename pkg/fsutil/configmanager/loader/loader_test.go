@@ -3,8 +3,10 @@ package loader_test
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
+	"github.com/devantler-tech/ksail/v7/internal/testutil/rootcheck"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/loader"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil/validator"
 	"github.com/stretchr/testify/assert"
@@ -389,6 +391,14 @@ func testValidateConfigMultipleErrors(t *testing.T) {
 
 func TestLoadConfigFromFilePermissionError(t *testing.T) {
 	t.Parallel()
+
+	if runtime.GOOS == "windows" {
+		t.Skip("permission semantics differ on Windows")
+	}
+
+	if rootcheck.IsRootUser() {
+		t.Skip("running as root — permission checks are bypassed")
+	}
 
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.yaml")

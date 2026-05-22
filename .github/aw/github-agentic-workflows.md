@@ -1726,7 +1726,7 @@ Monitor workflow execution and costs using the `logs` command:
 gh aw logs
 
 # Download logs for a specific workflow
-gh aw logs weekly-strategy
+gh aw logs monthly-strategy
 
 # Filter logs by AI engine type
 gh aw logs --engine copilot          # Only Copilot workflows
@@ -1877,7 +1877,7 @@ Use the `mcp list-tools` command to explore tools available from specific MCP se
 gh aw mcp list-tools github
 
 # List tools from a specific MCP server in a workflow
-gh aw mcp list-tools github weekly-strategy
+gh aw mcp list-tools github monthly-strategy
 ```
 
 This command is useful for:

@@ -243,6 +243,76 @@ func (c *Configs) WithEndpoint(endpointIP string) (*Configs, error) {
 	)
 }
 
+// WithCertSANs creates a new Configs whose Kubernetes API server and machine certificates include
+// the given Subject Alternative Names, preserving the existing PKI. This is needed when the
+// Kubernetes API is reached via a stable exposure address (NodePort/LoadBalancer/Gateway) that
+// differs from the in-cluster addresses. Pass the full SAN set (e.g. loopback + exposure address),
+// since the patch replaces the certSANs list rather than appending to it.
+//
+// Returns a new Configs instance; the original is not modified. Returns the original unchanged
+// when sans is empty.
+func (c *Configs) WithCertSANs(sans []string) (*Configs, error) {
+	if len(sans) == 0 {
+		return c, nil
+	}
+
+	kubernetesVersion := c.kubernetesVersion
+	if kubernetesVersion == "" {
+		kubernetesVersion = DefaultKubernetesVersion
+	}
+
+	networkCIDR := c.networkCIDR
+	if networkCIDR == "" {
+		networkCIDR = DefaultNetworkCIDR
+	}
+
+	var existingSecrets *secrets.Bundle
+	if c.bundle != nil && c.bundle.ControlPlaneCfg != nil {
+		existingSecrets = secrets.NewBundleFromConfig(
+			secrets.NewFixedClock(time.Now()),
+			c.bundle.ControlPlaneCfg,
+		)
+	}
+
+	patches := make([]Patch, 0, len(c.patches)+1)
+	patches = append(patches, c.patches...)
+	patches = append(patches, buildCertSANsPatch(sans))
+
+	return newConfigsWithEndpointAndSecrets(
+		c.Name,
+		kubernetesVersion,
+		networkCIDR,
+		c.endpoint,
+		patches,
+		existingSecrets,
+		c.versionContract,
+		c.extensions,
+	)
+}
+
+// buildCertSANsPatch builds a cluster-scope patch that sets the API server and machine certificate
+// SANs. Talos applies these as strategic-merge replacements, so the patch carries the full set.
+func buildCertSANsPatch(sans []string) Patch {
+	var sansList strings.Builder
+	for _, san := range sans {
+		fmt.Fprintf(&sansList, "    - %q\n", san)
+	}
+
+	var machineSANs strings.Builder
+	for _, san := range sans {
+		fmt.Fprintf(&machineSANs, "  - %q\n", san)
+	}
+
+	content := "cluster:\n  apiServer:\n    certSANs:\n" + sansList.String() +
+		"machine:\n  certSANs:\n" + machineSANs.String()
+
+	return Patch{
+		Path:    "ksail-exposure-cert-sans",
+		Scope:   PatchScopeCluster,
+		Content: []byte(content),
+	}
+}
+
 // WithSecrets creates a new Configs with the provided secrets bundle, preserving the cluster's
 // existing PKI (CA, certificates, tokens, bootstrap secrets) across config regeneration.
 // This is used during cluster update to ensure that newly generated machine configs for

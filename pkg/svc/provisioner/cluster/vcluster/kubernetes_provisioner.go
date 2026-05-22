@@ -20,6 +20,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -48,15 +49,16 @@ const (
 // Kubeconfig is extracted manually from the vc-<name> Secret and a port-forward is
 // established to the vCluster pod, bypassing ConnectHelm which blocks indefinitely.
 type KubernetesProvisioner struct {
-	clusterName    string
-	hostContext    string
-	kubeconfigPath string
-	hostClientset  kubernetes.Interface
-	restConfig     *rest.Config
-	k8sProvider    *kubernetesprovider.Provider
-	portForward    *kubernetesprovider.PortForwardSession
-	valuesPath     string
-	disableFlannel bool
+	clusterName      string
+	hostContext      string
+	kubeconfigPath   string
+	hostClientset    kubernetes.Interface
+	restConfig       *rest.Config
+	k8sProvider      *kubernetesprovider.Provider
+	dynamicClient    dynamic.Interface
+	gatewayClassName string
+	valuesPath       string
+	disableFlannel   bool
 }
 
 // KubernetesProvisionerConfig holds configuration for creating a KubernetesProvisioner.
@@ -73,6 +75,10 @@ type KubernetesProvisionerConfig struct {
 	RestConfig *rest.Config
 	// K8sProvider is the Kubernetes infrastructure provider (needed for port-forwarding).
 	K8sProvider *kubernetesprovider.Provider
+	// DynamicClient is the dynamic client for Gateway API resources.
+	DynamicClient dynamic.Interface
+	// GatewayClassName is the Gateway class for API exposure (empty = no gateway).
+	GatewayClassName string
 	// ValuesPath is the optional path to a vcluster.yaml values file.
 	ValuesPath string
 	// DisableFlannel disables the built-in flannel CNI in the vCluster.
@@ -87,14 +93,16 @@ func NewKubernetesProvisioner(cfg KubernetesProvisionerConfig) (*KubernetesProvi
 	}
 
 	return &KubernetesProvisioner{
-		clusterName:    cfg.ClusterName,
-		hostContext:    cfg.HostContext,
-		kubeconfigPath: kubeconfigPath,
-		hostClientset:  cfg.HostClientset,
-		restConfig:     cfg.RestConfig,
-		k8sProvider:    cfg.K8sProvider,
-		valuesPath:     cfg.ValuesPath,
-		disableFlannel: cfg.DisableFlannel,
+		clusterName:      cfg.ClusterName,
+		hostContext:      cfg.HostContext,
+		kubeconfigPath:   kubeconfigPath,
+		hostClientset:    cfg.HostClientset,
+		restConfig:       cfg.RestConfig,
+		k8sProvider:      cfg.K8sProvider,
+		dynamicClient:    cfg.DynamicClient,
+		gatewayClassName: cfg.GatewayClassName,
+		valuesPath:       cfg.ValuesPath,
+		disableFlannel:   cfg.DisableFlannel,
 	}, nil
 }
 
@@ -116,27 +124,15 @@ func (p *KubernetesProvisioner) Create(
 
 	namespace := vclusterNamespacePrefix + clusterName
 
-	// jscpd:ignore-start
-	// Preserve the host kubeconfig's current-context. MergeKubeconfig overwrites
-	// current-context with the nested cluster's context, which would cause subsequent
-	// Kubernetes provider operations (info, delete) to connect to the nested cluster
-	// instead of the host cluster.
-	originalContext, err := k8s.GetKubeconfigCurrentContext(p.kubeconfigPath)
+	// Preserve the host kubeconfig's current-context (which MergeKubeconfig would otherwise
+	// overwrite with the nested cluster) when the host is resolved from current-context. With an
+	// explicit host context configured, leave the user pointed at the new nested cluster.
+	restoreContext, err := k8s.PreserveCurrentContextUnlessExplicit(p.kubeconfigPath, p.hostContext)
 	if err != nil {
-		return fmt.Errorf("read current kubeconfig context: %w", err)
+		return fmt.Errorf("preserve host kubeconfig context: %w", err)
 	}
 
-	defer func() {
-		restoreErr := k8s.SetKubeconfigCurrentContext(p.kubeconfigPath, originalContext)
-		if restoreErr != nil {
-			_, _ = fmt.Fprintf(
-				os.Stderr,
-				"warning: failed to restore kubeconfig context: %v\n",
-				restoreErr,
-			)
-		}
-	}()
-	// jscpd:ignore-end
+	defer restoreContext()
 
 	// Step 1: Pre-create the namespace with KSail labels so it is discoverable
 	// via `ksail cluster list --provider Kubernetes`. Setting CreateNamespace: false
@@ -155,6 +151,26 @@ func (p *KubernetesProvisioner) Create(
 		return fmt.Errorf("pre-create vCluster namespace %s: %w", namespace, nsErr)
 	}
 
+	// Step 1b: Resolve a stable, server-side exposure (Gateway → NodePort) for the vCluster API
+	// server. The LoadBalancer tier is skipped to avoid the host LB controller (e.g. K3s
+	// klipper-lb) binding the API server port on the node. The Service targets the vCluster pods,
+	// which the Helm release creates; the address is resolved up-front for the proxy cert SANs.
+	exposure, err := p.k8sProvider.ResolveExposure(
+		ctx, p.dynamicClient,
+		kubernetesprovider.APIExposureSpec{
+			ClusterName:      clusterName,
+			Namespace:        namespace,
+			BackendSelector:  map[string]string{"app": "vcluster", "release": clusterName},
+			APIPort:          vclusterAPIServerPort,
+			GatewayClassName: p.gatewayClassName,
+			HostAddress:      p.restConfig.Host,
+			SkipLoadBalancer: true,
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("expose vCluster API server: %w", err)
+	}
+
 	// Step 2: Deploy the vCluster Helm chart
 	opts := &cli.CreateOptions{
 		ChartVersion:    vclusterconfigmanager.ChartVersion(),
@@ -164,7 +180,7 @@ func (p *KubernetesProvisioner) Create(
 		CreateNamespace: false,
 	}
 
-	valuesFiles, cleanup, err := buildValuesFiles(p.valuesPath, p.disableFlannel)
+	valuesFiles, cleanup, err := buildValuesFiles(p.valuesPath, p.disableFlannel, exposure.Address)
 	if err != nil {
 		return fmt.Errorf("prepare values files: %w", err)
 	}
@@ -193,31 +209,17 @@ func (p *KubernetesProvisioner) Create(
 		return fmt.Errorf("get kubeconfig secret: %w", err)
 	}
 
-	// Step 4: Port-forward the vCluster API server to localhost
-	_, _ = fmt.Fprintln(os.Stdout, "► port-forwarding vCluster API server to localhost")
-
-	podName := clusterName + "-0"
-
-	apiPortForward, err := p.k8sProvider.StartPortForwardInNamespace(
-		ctx, p.restConfig, namespace, podName, vclusterAPIServerPort,
-	)
-	if err != nil {
-		return fmt.Errorf("port-forward vCluster API server: %w", err)
-	}
-
-	p.portForward = apiPortForward
-
-	// Step 5: Rewrite kubeconfig with localhost port-forward address
+	// Step 4: Rewrite kubeconfig to point at the stable exposure address.
 	contextName := "vcluster-" + clusterName
 
 	rewrittenKubeconfig, err := rewriteVClusterKubeconfig(
-		kubeconfigData, apiPortForward.LocalPort, clusterName,
+		kubeconfigData, exposure.ServerURL(), clusterName,
 	)
 	if err != nil {
 		return fmt.Errorf("rewrite vCluster kubeconfig: %w", err)
 	}
 
-	// Step 6: Merge kubeconfig into the host kubeconfig file
+	// Step 5: Merge kubeconfig into the host kubeconfig file
 	if p.kubeconfigPath != "" {
 		err := k8s.MergeKubeconfig(p.kubeconfigPath, rewrittenKubeconfig)
 		if err != nil {
@@ -238,12 +240,6 @@ func (p *KubernetesProvisioner) Delete(ctx context.Context, name string) error {
 	}
 
 	namespace := vclusterNamespacePrefix + clusterName
-
-	// Close port-forward if active
-	if p.portForward != nil {
-		p.portForward.Close()
-		p.portForward = nil
-	}
 
 	deleteOpts := &cli.DeleteOptions{
 		DeleteNamespace: true,
@@ -380,10 +376,10 @@ func (p *KubernetesProvisioner) waitForKubeconfigSecret(
 }
 
 // rewriteVClusterKubeconfig parses the vCluster-generated kubeconfig, rewrites the
-// server URL to use the localhost port-forward, and renames all entries for uniqueness.
+// server URL to use the stable exposure address, and renames all entries for uniqueness.
 func rewriteVClusterKubeconfig(
 	kubeconfigBytes []byte,
-	localPort int,
+	serverURL string,
 	clusterName string,
 ) ([]byte, error) {
 	config, err := clientcmd.Load(kubeconfigBytes)
@@ -392,7 +388,6 @@ func rewriteVClusterKubeconfig(
 	}
 
 	contextName := "vcluster-" + clusterName
-	serverURL := fmt.Sprintf("https://127.0.0.1:%d", localPort)
 
 	// Build a new config with renamed entries
 	newConfig := clientcmdapi.NewConfig()

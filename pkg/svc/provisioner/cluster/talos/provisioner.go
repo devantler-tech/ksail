@@ -16,6 +16,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
 	dockerprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/docker"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/hetzner"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/kernelmod"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	dockerclient "github.com/docker/docker/client"
@@ -146,6 +147,10 @@ type Provisioner struct {
 	// omniOpts holds Omni-specific options when using the Omni provider.
 	omniOpts           *v1alpha1.OptionsOmni
 	provisionerFactory func(ctx context.Context) (provision.Provisioner, error)
+	// kernelModuleLoader ensures required kernel modules are loaded before
+	// Docker-based provisioning. Defaults to kernelmod.EnsureBrNetfilter; tests
+	// override it via export_test.go to avoid invoking modprobe.
+	kernelModuleLoader func(ctx context.Context, logWriter io.Writer) error
 	// talosClientFactory creates a Talos client for the given node IP.
 	// Tests can override this via export_test.go to inject a mock.
 	talosClientFactory func(ctx context.Context, ip string) (kubeconfigFetcher, error)
@@ -181,8 +186,9 @@ func NewProvisioner(
 		provisionerFactory: func(ctx context.Context) (provision.Provisioner, error) {
 			return providers.Factory(ctx, TalosProviderName)
 		},
-		logWriter:      os.Stdout,
-		imagePullRetry: defaultImagePullRetryConfig(),
+		kernelModuleLoader: kernelmod.EnsureBrNetfilter,
+		logWriter:          os.Stdout,
+		imagePullRetry:     defaultImagePullRetryConfig(),
 	}
 
 	prov.talosClientFactory = func(ctx context.Context, ip string) (kubeconfigFetcher, error) {

@@ -374,7 +374,7 @@ KSail uses [GitHub Agentic Workflows](https://github.github.com/gh-aw/) (`.githu
 | `repo-assist`                | Every 12h / On `/repo-assist`               | Issue triage, code quality, building, planning, and repository maintenance |
 | `daily-workflow-maintenance` | Daily (18:00 UTC)                           | CI/CD workflow updates, optimization, CI coaching, and dependency upgrades |
 | `daily-docs`                 | Daily (22:00 UTC) / On push / On `/unbloat` | Documentation sync with code changes, bloat reduction, and link fixing     |
-| `weekly-strategy`            | Weekly (Mon + Wed) / On dispatch            | Market research, roadmap planning (Mon), and project promotion (Wed)       |
+| `monthly-strategy`           | Monthly (1st, 02:49 UTC) / On dispatch      | Market research, competitive analysis, and Now/Next/Later roadmap planning |
 | `ci-doctor`                  | On CI failure                               | CI failure investigation, diagnostics, and Go-specific analysis            |
 
 Each agentic workflow creates a GitHub Discussion to coordinate its work and, depending on its purpose, may open draft PRs or create issues with incremental improvements. You can control them using the [`gh aw`](https://github.com/github/gh-aw) CLI extension:

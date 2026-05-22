@@ -25,10 +25,10 @@ type KubernetesProvisioner struct {
 	restConfig       *rest.Config
 	distribution     string
 	gatewayClassName string
+	hostContext      string
 	apiServerPort    int32
 	kubeconfigPath   string
 	persistence      v1alpha1.KubernetesPersistence
-	portForward      *kubernetesprovider.PortForwardSession
 }
 
 // KubernetesProvisionerConfig holds configuration for creating a KubernetesProvisioner.
@@ -49,6 +49,9 @@ type KubernetesProvisionerConfig struct {
 	Distribution string
 	// GatewayClassName is the Gateway class for API exposure (empty = no gateway).
 	GatewayClassName string
+	// HostContext is the explicitly-configured host kubeconfig context (empty = resolved from
+	// the kubeconfig's current-context).
+	HostContext string
 	// APIServerPort is the port the nested API server listens on.
 	APIServerPort int32
 	// Persistence holds PVC configuration for the DinD Docker data directory.
@@ -79,6 +82,7 @@ func NewKubernetesProvisioner(cfg KubernetesProvisionerConfig) (*KubernetesProvi
 		restConfig:       cfg.RestConfig,
 		distribution:     cfg.Distribution,
 		gatewayClassName: cfg.GatewayClassName,
+		hostContext:      cfg.HostContext,
 		apiServerPort:    cfg.APIServerPort,
 		kubeconfigPath:   kubeconfigPath,
 		persistence:      cfg.Persistence,
@@ -89,34 +93,21 @@ func NewKubernetesProvisioner(cfg KubernetesProvisionerConfig) (*KubernetesProvi
 // It port-forwards the DinD Docker API, sets DOCKER_HOST, then delegates to the
 // inner Kind provisioner which uses the Kind SDK (Cobra commands that shell out
 // to the docker CLI, inheriting DOCKER_HOST).
-//
-//nolint:funlen // sequential setup steps with many error-checks
 func (p *KubernetesProvisioner) Create(
 	ctx context.Context,
 	name string,
 ) error {
 	target := setName(name, p.kindConfig.Name)
 
-	// Preserve the host kubeconfig's current-context. The Kind SDK switches
-	// current-context to "kind-<name>" when it creates the cluster, which would
-	// cause subsequent Kubernetes provider operations to connect to the nested
-	// cluster instead of the host cluster.
-	originalContext, err := k8s.GetKubeconfigCurrentContext(p.kubeconfigPath)
+	// Preserve the host kubeconfig's current-context (the Kind SDK switches it to "kind-<name>"
+	// on create) when the host is resolved from current-context. With an explicit host context
+	// configured, leave the user pointed at the new nested cluster.
+	restoreContext, err := k8s.PreserveCurrentContextUnlessExplicit(p.kubeconfigPath, p.hostContext)
 	if err != nil {
-		return fmt.Errorf("read current kubeconfig context: %w", err)
+		return fmt.Errorf("preserve host kubeconfig context: %w", err)
 	}
 
-	// Restore the context on any return path (success or failure).
-	defer func() {
-		restoreErr := k8s.SetKubeconfigCurrentContext(p.kubeconfigPath, originalContext)
-		if restoreErr != nil {
-			_, _ = fmt.Fprintf(
-				os.Stderr,
-				"warning: failed to restore kubeconfig context: %v\n",
-				restoreErr,
-			)
-		}
-	}()
+	defer restoreContext()
 
 	// Step 1: Ensure namespace + DinD pod
 	err = p.setupDinD(ctx, target)
@@ -124,7 +115,29 @@ func (p *KubernetesProvisioner) Create(
 		return err
 	}
 
-	// Step 2: Start exec tunnel for Docker API (2375) to localhost.
+	// Step 2: Resolve a stable, server-side exposure (Gateway → NodePort) for the nested API
+	// server. The LoadBalancer tier is skipped to avoid the host LB controller (e.g. K3s
+	// klipper-lb) binding the API server port on the node. This address survives the CLI process
+	// exit and is written to the kubeconfig, so no long-lived port-forward is needed.
+	exposure, err := p.k8sProvider.ResolveExposure(
+		ctx, p.dynamicClient,
+		kubernetesprovider.APIExposureSpec{
+			ClusterName:      target,
+			APIPort:          p.apiServerPort,
+			GatewayClassName: p.gatewayClassName,
+			HostAddress:      p.restConfig.Host,
+			SkipLoadBalancer: true,
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("expose API server: %w", err)
+	}
+
+	// Step 3: Add the exposure address to the API server cert SANs so kubectl verifies TLS when
+	// connecting via the stable address (the kubeadm patch also keeps 127.0.0.1/localhost).
+	appendAPIServerCertSAN(p.kindConfig, exposure.Address)
+
+	// Step 4: Start exec tunnel for Docker API (2375) to localhost.
 	// The exec tunnel uses CRI exec + nc instead of SPDY port-forward,
 	// which correctly handles Docker's HTTP connection hijacking (101 Upgrade)
 	// for docker exec operations.
@@ -138,7 +151,7 @@ func (p *KubernetesProvisioner) Create(
 	}
 	defer dockerPF.Close()
 
-	// Step 3: Set DOCKER_HOST so the Kind SDK talks to DinD
+	// Step 5: Set DOCKER_HOST so the Kind SDK talks to DinD
 	msg := "► creating Kind cluster via SDK (DOCKER_HOST → exec tunnel → DinD)"
 	_, _ = fmt.Fprintln(os.Stdout, msg)
 
@@ -149,41 +162,11 @@ func (p *KubernetesProvisioner) Create(
 		return fmt.Errorf("kind create via SDK: %w", err)
 	}
 
-	// Step 4: Port-forward the nested API server (6443) from DinD to localhost
-	_, _ = fmt.Fprintln(os.Stdout, "► port-forwarding nested API server to localhost")
-
-	apiPortForward, err := p.k8sProvider.StartPortForward(
-		ctx, p.restConfig, target,
-		kubernetesprovider.DinDPodName, int(p.apiServerPort),
-	)
-	if err != nil {
-		return fmt.Errorf("port-forward API server: %w", err)
-	}
-
-	// Close the port-forward if any subsequent step fails (success stores it in p.portForward).
-	defer func() {
-		if p.portForward != apiPortForward {
-			apiPortForward.Close()
-		}
-	}()
-
-	// Step 5: Rewrite kubeconfig server URL to use the host port-forward address
-	err = p.rewriteKindKubeconfig(target, apiPortForward.LocalPort)
+	// Step 6: Point the kubeconfig at the stable exposure address.
+	err = p.rewriteKindKubeconfig(target, exposure.ServerURL())
 	if err != nil {
 		return fmt.Errorf("rewrite kubeconfig: %w", err)
 	}
-
-	// Step 6: Expose the nested API server via Gateway API (if configured)
-	err = p.k8sProvider.EnsureAPIExposure(
-		ctx, p.dynamicClient, target,
-		p.apiServerPort, p.gatewayClassName,
-	)
-	if err != nil {
-		return fmt.Errorf("expose API server: %w", err)
-	}
-
-	// All steps succeeded — retain port-forward for the lifetime of the provisioner.
-	p.portForward = apiPortForward
 
 	return nil
 }
@@ -191,11 +174,6 @@ func (p *KubernetesProvisioner) Create(
 // Delete deletes the Kind cluster inside DinD and cleans up host cluster resources.
 func (p *KubernetesProvisioner) Delete(ctx context.Context, name string) error {
 	target := setName(name, p.kindConfig.Name)
-
-	// Close port-forward if active
-	if p.portForward != nil {
-		p.portForward.Close()
-	}
 
 	// jscpd:ignore-start
 	// Best-effort: delete Kind cluster inside DinD via SDK
@@ -263,21 +241,56 @@ func (p *KubernetesProvisioner) setupDinD(ctx context.Context, clusterName strin
 
 // jscpd:ignore-end
 
-// rewriteKindKubeconfig rewrites the Kind kubeconfig server URL to use the
-// local port-forward address. Kind writes kubeconfig with context "kind-<name>"
-// and cluster entry "kind-<name>".
-func (p *KubernetesProvisioner) rewriteKindKubeconfig(clusterName string, localPort int) error {
+// rewriteKindKubeconfig rewrites the Kind kubeconfig server URL to the stable exposure address.
+// Kind writes kubeconfig with context "kind-<name>" and cluster entry "kind-<name>".
+func (p *KubernetesProvisioner) rewriteKindKubeconfig(clusterName, serverURL string) error {
 	clusterKey := "kind-" + clusterName
-	newServer := fmt.Sprintf("https://127.0.0.1:%d", localPort)
 
 	err := k8s.ModifyKubeconfigCluster(
 		p.kubeconfigPath,
 		clusterKey,
-		newServer,
+		serverURL,
 	)
 	if err != nil {
 		return fmt.Errorf("modify kubeconfig cluster: %w", err)
 	}
 
 	return nil
+}
+
+// appendAPIServerCertSAN appends a kubeadm certSANs patch (including the resolved exposure
+// address alongside the loopback SANs) to every control-plane node. Kind applies
+// kubeadmConfigPatches as strategic merge patches, so the certSANs list in this later patch
+// supersedes the base patch from applyKindDinDNetworking — hence it must carry the full list.
+func appendAPIServerCertSAN(kindConfig *v1alpha4.Cluster, san string) {
+	if san == "" {
+		return
+	}
+
+	patch := fmt.Sprintf(`kind: ClusterConfiguration
+apiServer:
+  certSANs:
+  - "127.0.0.1"
+  - "localhost"
+  - "0.0.0.0"
+  - %q`, san)
+
+	hasControlPlane := false
+
+	for i := range kindConfig.Nodes {
+		if kindConfig.Nodes[i].Role == v1alpha4.ControlPlaneRole {
+			kindConfig.Nodes[i].KubeadmConfigPatches = append(
+				kindConfig.Nodes[i].KubeadmConfigPatches,
+				patch,
+			)
+			hasControlPlane = true
+		}
+	}
+
+	if !hasControlPlane {
+		kindConfig.Nodes = append(kindConfig.Nodes, v1alpha4.Node{
+			Role:                 v1alpha4.ControlPlaneRole,
+			KubeadmConfigPatches: []string{patch},
+		})
+	}
 }

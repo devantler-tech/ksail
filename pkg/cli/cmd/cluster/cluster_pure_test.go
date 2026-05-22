@@ -7,10 +7,12 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/devantler-tech/ksail/v7/internal/testutil/rootcheck"
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
@@ -852,6 +854,14 @@ func TestRefreshAndVerifyKubeconfig_StaleKubeconfigRefreshFailsWarns(t *testing.
 //
 //nolint:paralleltest // Mutates the global isKubeconfigStaleFunc.
 func TestRefreshAndVerifyKubeconfig_StatPermissionError(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("permission semantics differ on Windows")
+	}
+
+	if rootcheck.IsRootUser() {
+		t.Skip("running as root — permission checks are bypassed")
+	}
+
 	dir := t.TempDir()
 	// Create a directory that we can't read (os.Stat on a file inside it will
 	// fail with EACCES on most Unix systems).
@@ -988,6 +998,38 @@ func TestRunDiagnoseJSONReport_HealthyCluster(t *testing.T) {
 	assert.Contains(t, out, `"clusterName": "my-cluster"`)
 	assert.Contains(t, out, `"healthScore": 100`)
 	assert.Contains(t, out, `"findings": []`)
+}
+
+// TestRunDiagnoseJSONReport_DoesNotEscapeHTML verifies the fix for the JSON
+// HTML-escaping issue: '<', '>', '&' (e.g. in remediation hints like "<name>")
+// appear literally instead of being </>/&-escaped.
+func TestRunDiagnoseJSONReport_DoesNotEscapeHTML(t *testing.T) {
+	t.Parallel()
+
+	report := k8s.DiagnoseReport{
+		ClusterName: "broken-cluster",
+		HealthScore: 90,
+		Findings: []k8s.DiagnoseFinding{
+			{
+				Severity:    k8s.DiagnoseSeverityWarning,
+				Resource:    "pvc/stuck (default)",
+				Reason:      "PVC is stuck in Pending phase",
+				Remediation: "Run 'ksail workload describe pvc/<name> -n <namespace>'.",
+			},
+		},
+	}
+
+	var buf strings.Builder
+
+	err := cluster.ExportRunDiagnoseJSONReport(report, &buf)
+	require.NoError(t, err)
+
+	out := buf.String()
+	// With HTML-escaping disabled, '<', '>' and '&' appear literally. If
+	// escaping were enabled they would be emitted as their unicode escape
+	// sequences instead, so the literal substring assertions below would fail.
+	assert.Contains(t, out, "<name>")
+	assert.Contains(t, out, "<namespace>")
 }
 
 func TestRunDiagnoseJSONReport_WithFindings(t *testing.T) {

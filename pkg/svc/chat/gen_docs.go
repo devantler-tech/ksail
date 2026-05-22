@@ -30,6 +30,14 @@ const (
 	outputFile = "docs_generated.go"
 )
 
+// Pre-compile regexps at package level to avoid re-compiling once per doc file
+// (readDocFile is called for every .mdx/.md file under sourceDocsDir).
+var (
+	frontmatterRegex = regexp.MustCompile(`(?s)^---\n.*?\n---\n*`)
+	importRegex      = regexp.MustCompile(`(?m)^import\s+.*$\n*`)
+	componentRegex   = regexp.MustCompile(`<[A-Z][^>]*>|</[A-Z][^>]*>`)
+)
+
 func main() {
 	docs := buildDocumentation()
 
@@ -164,15 +172,12 @@ func readDocFile(path string) (string, error) {
 	text := string(content)
 
 	// Strip YAML frontmatter (between --- markers).
-	frontmatterRegex := regexp.MustCompile(`(?s)^---\n.*?\n---\n*`)
 	text = frontmatterRegex.ReplaceAllString(text, "")
 
 	// Strip import statements.
-	importRegex := regexp.MustCompile(`(?m)^import\s+.*$\n*`)
 	text = importRegex.ReplaceAllString(text, "")
 
 	// Strip JSX/MDX components but keep their text content.
-	componentRegex := regexp.MustCompile(`<[A-Z][^>]*>|</[A-Z][^>]*>`)
 	text = componentRegex.ReplaceAllString(text, "")
 
 	return strings.TrimSpace(text), nil

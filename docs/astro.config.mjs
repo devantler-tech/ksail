@@ -105,6 +105,7 @@ export default defineConfig({
           label: "Providers",
           items: [
             { label: "Docker", link: "/providers/docker/" },
+            { label: "Kubernetes (Nested)", link: "/providers/kubernetes/" },
             { label: "Hetzner", link: "/providers/hetzner/" },
             { label: "Omni (Sidero)", link: "/providers/omni/" },
             { label: "AWS", link: "/providers/aws/" },
