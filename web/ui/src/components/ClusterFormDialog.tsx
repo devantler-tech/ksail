@@ -1,8 +1,7 @@
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
-import type { Cluster } from "../api.ts";
-import { DISTRIBUTIONS, providersFor } from "../lib/distributions.ts";
-import { COMPONENT_FIELDS, componentDefaults } from "../lib/options.ts";
+import type { Cluster, ClusterMeta } from "../api.ts";
+import { COMPONENT_LABELS, preferredProvider, useMeta } from "../lib/meta.ts";
 import { Button, Modal, SelectField, TextField } from "./ui.tsx";
 
 export interface ClusterFormValues {
@@ -24,28 +23,47 @@ export interface ClusterFormValues {
 
 export type FormMode = "create" | "edit";
 
-function createDefaults(): ClusterFormValues {
+// componentDefaults returns the API-default selection for every component field, keyed by the
+// component's spec key, sourced from the server's /meta payload.
+function componentDefaults(meta: ClusterMeta): Record<string, string> {
+  const defaults: Record<string, string> = {};
+  for (const component of meta.components) {
+    defaults[component.key] = component.default;
+  }
+  return defaults;
+}
+
+function createDefaults(meta: ClusterMeta): ClusterFormValues {
+  const distribution = meta.distributions[0] ?? "";
+  const defaults = componentDefaults(meta);
   return {
     name: "",
     namespace: "default",
-    distribution: DISTRIBUTIONS[0],
-    provider: providersFor(DISTRIBUTIONS[0])[0],
+    distribution,
+    provider: preferredProvider(meta.providers[distribution] ?? []),
     controlPlanes: "1",
     workers: "0",
-    ...componentDefaults(),
+    cni: defaults.cni ?? "",
+    csi: defaults.csi ?? "",
+    cdi: defaults.cdi ?? "",
+    metricsServer: defaults.metricsServer ?? "",
+    loadBalancer: defaults.loadBalancer ?? "",
+    certManager: defaults.certManager ?? "",
+    policyEngine: defaults.policyEngine ?? "",
+    gitOpsEngine: defaults.gitOpsEngine ?? "",
   };
 }
 
-function valuesFromCluster(cluster: Cluster): ClusterFormValues {
+function valuesFromCluster(cluster: Cluster, meta: ClusterMeta): ClusterFormValues {
   const spec = cluster.spec?.cluster ?? {};
-  const defaults = componentDefaults();
-  const distribution = spec.distribution || DISTRIBUTIONS[0];
+  const defaults = componentDefaults(meta);
+  const distribution = spec.distribution || meta.distributions[0] || "";
 
   return {
     name: cluster.metadata.name,
     namespace: cluster.metadata.namespace ?? "default",
     distribution,
-    provider: spec.provider || providersFor(distribution)[0],
+    provider: spec.provider || preferredProvider(meta.providers[distribution] ?? []),
     controlPlanes: spec.controlPlanes === undefined ? "1" : String(spec.controlPlanes),
     workers: spec.workers === undefined ? "0" : String(spec.workers),
     cni: spec.cni || defaults.cni,
@@ -72,7 +90,8 @@ export function ClusterFormDialog({
   onSubmit: (values: ClusterFormValues) => Promise<void>;
   onClose: () => void;
 }) {
-  const [values, setValues] = useState<ClusterFormValues>(createDefaults);
+  const meta = useMeta();
+  const [values, setValues] = useState<ClusterFormValues>(() => createDefaults(meta));
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
@@ -81,18 +100,23 @@ export function ClusterFormDialog({
     if (!open) {
       return;
     }
-    setValues(mode === "edit" && initial ? valuesFromCluster(initial) : createDefaults());
+    setValues(mode === "edit" && initial ? valuesFromCluster(initial, meta) : createDefaults(meta));
     setAdvancedOpen(false);
-  }, [open, mode, initial]);
+  }, [open, mode, initial, meta]);
 
   const isEdit = mode === "edit";
+  const providers = meta.providers[values.distribution] ?? [];
 
   function setField<K extends keyof ClusterFormValues>(key: K, value: ClusterFormValues[K]) {
     setValues((current) => ({ ...current, [key]: value }));
   }
 
   function handleDistributionChange(value: string) {
-    setValues((current) => ({ ...current, distribution: value, provider: providersFor(value)[0] }));
+    setValues((current) => ({
+      ...current,
+      distribution: value,
+      provider: preferredProvider(meta.providers[value] ?? []),
+    }));
   }
 
   async function handleSubmit(event: FormEvent) {
@@ -155,7 +179,7 @@ export function ClusterFormDialog({
             disabled={isEdit}
             onChange={(event) => handleDistributionChange(event.target.value)}
           >
-            {DISTRIBUTIONS.map((value) => (
+            {meta.distributions.map((value) => (
               <option key={value} value={value}>
                 {value}
               </option>
@@ -168,7 +192,7 @@ export function ClusterFormDialog({
           disabled={isEdit}
           onChange={(event) => setField("provider", event.target.value)}
         >
-          {providersFor(values.distribution).map((value) => (
+          {providers.map((value) => (
             <option key={value} value={value}>
               {value}
             </option>
@@ -205,14 +229,14 @@ export function ClusterFormDialog({
                 />
               </div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                {COMPONENT_FIELDS.map((field) => (
+                {meta.components.map((component) => (
                   <SelectField
-                    key={field.key}
-                    label={field.label}
-                    value={values[field.key]}
-                    onChange={(event) => setField(field.key, event.target.value)}
+                    key={component.key}
+                    label={COMPONENT_LABELS[component.key] ?? component.key}
+                    value={values[component.key]}
+                    onChange={(event) => setField(component.key, event.target.value)}
                   >
-                    {field.options.map((option) => (
+                    {component.values.map((option) => (
                       <option key={option} value={option}>
                         {option}
                       </option>

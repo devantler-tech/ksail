@@ -2,6 +2,7 @@ import { Check, CircleAlert, CircleCheck, CircleHelp, Copy, Pencil } from "lucid
 import { useState, type ReactNode } from "react";
 import type { Cluster, Condition } from "../api.ts";
 import { formatTimestamp, relativeAge } from "../lib/format.ts";
+import { COMPONENT_LABELS, useMeta } from "../lib/meta.ts";
 import { StatusBadge } from "./StatusBadge.tsx";
 import { Button, SlideOver } from "./ui.tsx";
 
@@ -107,10 +108,16 @@ export function ClusterDetail({
   onClose: () => void;
   onEdit: (cluster: Cluster) => void;
 }) {
+  const meta = useMeta();
   const status = cluster?.status;
   const spec = cluster?.spec?.cluster;
   const namespace = cluster?.metadata.namespace ?? "default";
   const secret = status?.kubeconfigSecretRef;
+
+  // Fall back to the API defaults (distribution zero-value, then the first provider the matrix lists
+  // for it — which is what the operator resolves an unset provider to) for hand-written CRs.
+  const distribution = spec?.distribution || meta.distributions[0] || "";
+  const provider = spec?.provider || meta.providers[distribution]?.[0] || "";
 
   return (
     <SlideOver
@@ -133,18 +140,15 @@ export function ClusterDetail({
 
           <SectionTitle>Spec</SectionTitle>
           <dl className="divide-y divide-slate-100 dark:divide-slate-800">
-            <Row label="Distribution">{spec?.distribution || "Vanilla"}</Row>
-            <Row label="Provider">{spec?.provider || "Docker"}</Row>
+            <Row label="Distribution">{distribution}</Row>
+            <Row label="Provider">{provider}</Row>
             <Row label="Control planes">{spec?.controlPlanes ?? 1}</Row>
             <Row label="Workers">{spec?.workers ?? 0}</Row>
-            <Row label="CNI">{spec?.cni || "Default"}</Row>
-            <Row label="CSI">{spec?.csi || "Default"}</Row>
-            <Row label="CDI">{spec?.cdi || "Default"}</Row>
-            <Row label="Metrics Server">{spec?.metricsServer || "Default"}</Row>
-            <Row label="Load Balancer">{spec?.loadBalancer || "Default"}</Row>
-            <Row label="Cert Manager">{spec?.certManager || "Enabled"}</Row>
-            <Row label="Policy Engine">{spec?.policyEngine || "None"}</Row>
-            <Row label="GitOps">{spec?.gitOpsEngine || "None"}</Row>
+            {meta.components.map((component) => (
+              <Row key={component.key} label={COMPONENT_LABELS[component.key] ?? component.key}>
+                {spec?.[component.key] || component.default}
+              </Row>
+            ))}
           </dl>
 
           <SectionTitle>Status</SectionTitle>

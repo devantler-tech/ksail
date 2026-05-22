@@ -5,13 +5,16 @@ import {
   createCluster,
   deleteCluster,
   getConfig,
+  getMeta,
   listClusters,
   logout,
   updateCluster,
   type Cluster,
+  type ClusterMeta,
   type ClusterSpec,
   type User,
 } from "./api.ts";
+import { MetaContext } from "./lib/meta.ts";
 import { AppShell } from "./components/AppShell.tsx";
 import { ClusterDetail } from "./components/ClusterDetail.tsx";
 import {
@@ -47,19 +50,21 @@ function specFromValues(values: ClusterFormValues): ClusterSpec {
   const controlPlanes = Number.parseInt(values.controlPlanes, 10);
   const workers = Number.parseInt(values.workers, 10);
 
+  // The form holds plain strings sourced from /api/v1/meta (the server's valid enum values); narrow
+  // them to the generated enum unions on the way out.
   return {
-    distribution: values.distribution,
-    provider: values.provider,
+    distribution: values.distribution as ClusterSpec["distribution"],
+    provider: values.provider as ClusterSpec["provider"],
     controlPlanes: Number.isNaN(controlPlanes) ? undefined : controlPlanes,
     workers: Number.isNaN(workers) ? undefined : workers,
-    cni: values.cni,
-    csi: values.csi,
-    cdi: values.cdi,
-    metricsServer: values.metricsServer,
-    loadBalancer: values.loadBalancer,
-    certManager: values.certManager,
-    policyEngine: values.policyEngine,
-    gitOpsEngine: values.gitOpsEngine,
+    cni: values.cni as ClusterSpec["cni"],
+    csi: values.csi as ClusterSpec["csi"],
+    cdi: values.cdi as ClusterSpec["cdi"],
+    metricsServer: values.metricsServer as ClusterSpec["metricsServer"],
+    loadBalancer: values.loadBalancer as ClusterSpec["loadBalancer"],
+    certManager: values.certManager as ClusterSpec["certManager"],
+    policyEngine: values.policyEngine as ClusterSpec["policyEngine"],
+    gitOpsEngine: values.gitOpsEngine as ClusterSpec["gitOpsEngine"],
   };
 }
 
@@ -70,6 +75,7 @@ export function App() {
   const [readOnly, setReadOnly] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [needsLogin, setNeedsLogin] = useState(false);
+  const [meta, setMeta] = useState<ClusterMeta | null>(null);
 
   const [clusters, setClusters] = useState<Cluster[]>([]);
   const [loading, setLoading] = useState(true);
@@ -147,6 +153,19 @@ export function App() {
       if (config.authEnabled && !config.user) {
         setNeedsLogin(true);
         setLoading(false);
+        return;
+      }
+
+      try {
+        const clusterMeta = await getMeta();
+        if (mounted.current) {
+          setMeta(clusterMeta);
+        }
+      } catch (err) {
+        if (mounted.current) {
+          setError(errorMessage(err));
+          setLoading(false);
+        }
         return;
       }
 
@@ -246,6 +265,7 @@ export function App() {
   );
 
   return (
+    <MetaContext.Provider value={meta}>
     <AppShell
       theme={theme}
       onToggleTheme={toggle}
@@ -291,21 +311,25 @@ export function App() {
         )}
       </div>
 
-      <ClusterDetail
-        cluster={selected}
-        open={selected !== null}
-        readOnly={readOnly}
-        onClose={() => setSelectedKey(null)}
-        onEdit={openEdit}
-      />
+      {meta ? (
+        <ClusterDetail
+          cluster={selected}
+          open={selected !== null}
+          readOnly={readOnly}
+          onClose={() => setSelectedKey(null)}
+          onEdit={openEdit}
+        />
+      ) : null}
 
-      <ClusterFormDialog
-        open={formOpen}
-        mode={formMode}
-        initial={formInitial}
-        onSubmit={handleSubmit}
-        onClose={() => setFormOpen(false)}
-      />
+      {meta ? (
+        <ClusterFormDialog
+          open={formOpen}
+          mode={formMode}
+          initial={formInitial}
+          onSubmit={handleSubmit}
+          onClose={() => setFormOpen(false)}
+        />
+      ) : null}
 
       <ConfirmDialog
         open={deleteTarget !== null}
@@ -328,5 +352,6 @@ export function App() {
         onClose={() => setDeleteTarget(null)}
       />
     </AppShell>
+    </MetaContext.Provider>
   );
 }

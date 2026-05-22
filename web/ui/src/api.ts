@@ -4,6 +4,8 @@
 // SPA and the REST API from one origin, so no reverse proxy or build-time base URL is needed. In
 // local development, the Vite dev server proxies /api to a locally-running operator.
 
+import type { KSailClusterConfiguration } from "./generated/ksail-config.ts";
+
 export interface Condition {
   type: string;
   status: "True" | "False" | "Unknown";
@@ -29,19 +31,36 @@ export interface ClusterStatus {
   observedGeneration?: number;
 }
 
-export interface ClusterSpec {
-  distribution?: string;
-  provider?: string;
-  controlPlanes?: number;
-  workers?: number;
-  cni?: string;
-  csi?: string;
-  cdi?: string;
-  metricsServer?: string;
-  loadBalancer?: string;
-  certManager?: string;
-  policyEngine?: string;
-  gitOpsEngine?: string;
+// ClusterSpec is the spec.cluster shape, derived from the Go API types via the JSON schema
+// (web/ui's `gen:types` script generates ./generated/ksail-config.ts from schemas/). There is no
+// hand-written mirror: adding a field or enum value in Go surfaces here after regeneration.
+export type ClusterSpec = NonNullable<KSailClusterConfiguration["spec"]["cluster"]>;
+
+// ComponentKey is the set of spec.cluster fields the UI surfaces as component selectors. The valid
+// values and defaults for each come from the /api/v1/meta endpoint, not from this list.
+export type ComponentKey =
+  | "cni"
+  | "csi"
+  | "cdi"
+  | "metricsServer"
+  | "loadBalancer"
+  | "certManager"
+  | "policyEngine"
+  | "gitOpsEngine";
+
+export interface ComponentMeta {
+  key: ComponentKey;
+  values: string[];
+  default: string;
+}
+
+// ClusterMeta is the static cluster-configuration metadata served by /api/v1/meta: the single
+// runtime source of truth for the distribution list, the distribution→provider matrix, and the
+// component option lists. The SPA renders its forms from this instead of hard-coding them.
+export interface ClusterMeta {
+  distributions: string[];
+  providers: Record<string, string[]>;
+  components: ComponentMeta[];
 }
 
 export interface ObjectMeta {
@@ -129,6 +148,10 @@ export const loginPath = "/api/v1/auth/login";
 
 export function getConfig(): Promise<Config> {
   return request<Config>("/api/v1/config");
+}
+
+export function getMeta(): Promise<ClusterMeta> {
+  return request<ClusterMeta>("/api/v1/meta");
 }
 
 export function listClusters(): Promise<ClusterList> {

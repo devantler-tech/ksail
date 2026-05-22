@@ -128,6 +128,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /healthz", s.handleHealth)
 	mux.HandleFunc("GET /readyz", s.handleHealth)
 	mux.HandleFunc("GET /api/v1/config", s.handleConfig)
+	mux.HandleFunc("GET /api/v1/meta", s.handleMeta)
 	mux.HandleFunc("GET /api/v1/clusters", s.handleListClusters)
 	mux.HandleFunc("POST /api/v1/clusters", s.handleCreateCluster)
 	mux.HandleFunc("GET /api/v1/clusters/{namespace}/{name}", s.handleGetCluster)
@@ -250,7 +251,7 @@ func (s *Server) authGuard(next http.Handler) http.Handler {
 // isOpenPath reports whether a path is reachable without an authenticated session.
 func isOpenPath(path string) bool {
 	switch path {
-	case "/healthz", "/readyz", "/api/v1/config":
+	case "/healthz", "/readyz", "/api/v1/config", "/api/v1/meta":
 		return true
 	default:
 		return strings.HasPrefix(path, "/api/v1/auth/")
