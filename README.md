@@ -60,15 +60,15 @@ Continue with the [Getting Started guide](https://ksail.devantler.tech/) for Git
 
 ## What KSail Bundles
 
-| Category                 | Built-in Capabilities                                       |
-|--------------------------|-------------------------------------------------------------|
-| Cluster Provisioning     | Kind, K3d, Talos, VCluster (Vind), KWOK (kwokctl), EKS      |
-| Container Orchestration  | kubectl, Helm, Kustomize                                    |
-| GitOps Engines           | Flux, ArgoCD                                                |
-| Secrets Management       | SOPS with Age encryption                                    |
-| Manifest Validation      | Kubeconform                                                 |
-| Cluster Operations       | K9s, backup & restore, multi-tenancy (`ksail tenant`)       |
-| AI Integration           | Chat assistant (Copilot SDK), MCP server, VS Code extension |
+| Category                 | Built-in Capabilities                                                |
+|--------------------------|----------------------------------------------------------------------|
+| Cluster Provisioning     | Kind, K3d, Talos, VCluster (Vind), KWOK (kwokctl), EKS               |
+| Container Orchestration  | kubectl, Helm, Kustomize                                             |
+| GitOps Engines           | Flux, ArgoCD                                                         |
+| Secrets Management       | SOPS with Age encryption                                             |
+| Manifest Validation      | Kubeconform                                                          |
+| Cluster Operations       | K9s, backup & restore, multi-tenancy (`ksail tenant`)                |
+| AI Integration           | Chat assistant (Copilot SDK), MCP server, VS Code extension          |
 | Infrastructure Providers | Docker (local), Kubernetes (nested), Hetzner Cloud, Sidero Omni, AWS |
 
 See the [feature overview](https://ksail.devantler.tech/features/) and [architecture guide](https://ksail.devantler.tech/architecture/) for details.
