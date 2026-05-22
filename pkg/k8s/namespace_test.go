@@ -15,6 +15,17 @@ import (
 	k8stesting "k8s.io/client-go/testing"
 )
 
+func TestPSSLabels(t *testing.T) {
+	t.Parallel()
+
+	require.Nil(t, k8s.PSSLabels(""))
+
+	labels := k8s.PSSLabels("restricted")
+	assert.Equal(t, "restricted", labels["pod-security.kubernetes.io/enforce"])
+	assert.Equal(t, "restricted", labels["pod-security.kubernetes.io/audit"])
+	assert.Equal(t, "restricted", labels["pod-security.kubernetes.io/warn"])
+}
+
 var (
 	errFakeGetFailed    = errors.New("get failed")
 	errFakeCreateFailed = errors.New("create failed")
