@@ -31,7 +31,10 @@ api:
   # Port the operator REST API listens on (consumed by the UI). Set to 0 to disable the API.
   bindPort: 8080
 
-# ui is the optional web dashboard. It talks to the operator REST API.
+# ui is the web dashboard. It is embedded in the operator binary and served by the operator itself
+# on the API port (api.bindPort) — same origin as the REST API, so there is no separate UI
+# container and no reverse proxy. Reach it via the ingress below or by port-forwarding the operator
+# Service.
 #
 # readOnly is the single, user-controlled lock that governs the whole deployment. It is wired to
 # the operator API as --read-only (enforced server-side); the SPA reflects the mode at runtime via
@@ -39,16 +42,7 @@ api:
 # cluster's spec.cluster.gitOpsEngine: set it to true for GitOps-enforced environments so the Git
 # repository remains the single source of truth.
 ui:
-  enabled: false
   readOnly: false
-  image:
-    repository: ghcr.io/devantler-tech/ksail/web-ui
-    tag: ""
-    pullPolicy: IfNotPresent
-  replicas: 1
-  service:
-    type: ClusterIP
-    port: 80
   ingress:
     enabled: false
     className: ""
@@ -59,12 +53,6 @@ ui:
           - path: /
             pathType: Prefix
     tls: []
-  resources:
-    requests:
-      cpu: 50m
-      memory: 64Mi
-    limits:
-      memory: 128Mi
 
 # auth enables app-driven OIDC authentication for the operator REST API (and therefore the UI),
 # in the style of Headlamp: the API itself owns the OIDC login/callback (a confidential client),

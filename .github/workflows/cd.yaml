@@ -78,41 +78,8 @@ jobs:
           HOMEBREW_GITHUB_API_TOKEN: ${{ secrets.HOMEBREW_GITHUB_API_TOKEN }}
           GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
 
-  # The web UI ships as a separate image (a Node-built SPA served by nginx),
-  # not part of the GoReleaser binary image. Build and push it alongside the
-  # release so the chart's default ui.image is available.
-  web-ui:
-    name: 🧩 Release Web UI Image
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - name: 📑 Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: false
-
-      - name: ⚙️ Setup Docker Buildx
-        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
-
-      - name: 🔐 Login to GHCR
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: 🏗️ Build and push web UI image
-        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
-        with:
-          context: web/ui
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: |
-            ghcr.io/devantler-tech/ksail/web-ui:${{ github.ref_name }}
-            ghcr.io/devantler-tech/ksail/web-ui:latest
+  # The web UI is embedded into the operator binary (go:embed, built with -tags ui via the
+  # GoReleaser build) and served by the operator itself — there is no separate UI image.
 
   vscode-extension:
     name: 🧩 Release VSCode Extension
@@ -428,7 +395,6 @@ jobs:
     needs:
       [
         goreleaser,
-        web-ui,
         vscode-extension,
         mcp-publish,
         pages-deploy,

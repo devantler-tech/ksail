@@ -6,24 +6,18 @@ metadata:
   labels:
     {{- include "ksail-operator.labels" . | nindent 4 }}
 rules:
-  - apiGroups: ["ksail.io"]
-    resources: ["clusters"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-  - apiGroups: ["ksail.io"]
-    resources: ["clusters/status"]
-    verbs: ["get", "update", "patch"]
-  - apiGroups: ["ksail.io"]
-    resources: ["clusters/finalizers"]
-    verbs: ["update"]
-  - apiGroups: [""]
-    resources: ["secrets"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-  - apiGroups: [""]
-    resources: ["events"]
-    verbs: ["create", "patch"]
-  - apiGroups: ["coordination.k8s.io"]
-    resources: ["leases"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  # Provisioning a cluster in-cluster (a vcluster control plane) means installing a full application:
+  # the operator must create and manage namespaces, workloads, Services, ConfigMaps, PVCs and RBAC —
+  # including the ClusterRole/ClusterRoleBinding the vcluster syncer needs, which itself carries broad
+  # rights, so granting them requires equally broad rights (Kubernetes privilege-escalation rules).
+  # Like other cluster-lifecycle operators (Cluster API, the vcluster platform), KSail therefore runs
+  # with broad cluster access. This wildcard also covers the operator's own control loop: its
+  # ksail.io/clusters CRD, the kubeconfig Secrets it reads, the Events it emits, and the
+  # coordination.k8s.io Leases used for leader election. Set rbac.create=false to bind a narrower,
+  # self-managed role if your distribution set needs less.
+  - apiGroups: ["*"]
+    resources: ["*"]
+    verbs: ["*"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding

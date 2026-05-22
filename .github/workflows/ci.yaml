@@ -854,15 +854,15 @@ jobs:
           set -euo pipefail
           echo "=== defaults (operator only) ==="
           helm template ksail-operator charts/ksail-operator >/dev/null
-          echo "=== ui.enabled ==="
+          echo "=== ui.ingress.enabled ==="
           helm template ksail-operator charts/ksail-operator \
-            --set ui.enabled=true >/dev/null
+            --set ui.ingress.enabled=true >/dev/null
           echo "=== auth.oidc.enabled ==="
           # OIDC requires a redirectURL (or ui.ingress) plus a client secret;
           # the operator does not run here, so dummy values are sufficient to
           # exercise the secret/deployment templates.
           helm template ksail-operator charts/ksail-operator \
-            --set ui.enabled=true \
+            --set ui.ingress.enabled=true \
             --set auth.oidc.enabled=true \
             --set auth.oidc.issuerURL=https://dex.example \
             --set auth.oidc.clientID=ksail \

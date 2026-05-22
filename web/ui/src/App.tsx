@@ -1,34 +1,73 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { Plus, RotateCw } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ApiError,
   createCluster,
   deleteCluster,
   getConfig,
   listClusters,
-  loginPath,
   logout,
   type Cluster,
   type User,
 } from "./api.ts";
+import { AppShell } from "./components/AppShell.tsx";
+import { ClusterDetail } from "./components/ClusterDetail.tsx";
+import { ClustersTable } from "./components/ClustersTable.tsx";
+import { ConfirmDialog } from "./components/ConfirmDialog.tsx";
+import { CreateClusterDialog, type CreateClusterInput } from "./components/CreateClusterDialog.tsx";
+import { LoginScreen } from "./components/LoginScreen.tsx";
+import { EmptyState, ErrorBanner, TableSkeleton } from "./components/states.tsx";
+import { Button } from "./components/ui.tsx";
+import { useTheme } from "./hooks/useTheme.ts";
+import { useToast } from "./components/Toast.tsx";
 
-// Only distributions the operator can currently provision in-cluster (see
-// pkg/operator/provisioner.go buildDistributionConfig). Creating others would fail reconciliation.
+// Distributions the operator can currently provision in-cluster (see pkg/operator/provisioner.go).
 const DISTRIBUTIONS = ["VCluster"];
 
+const POLL_MS = 10000;
+
+function clusterKey(cluster: Cluster): string {
+  return `${cluster.metadata.namespace ?? "default"}/${cluster.metadata.name}`;
+}
+
+function errorMessage(err: unknown): string {
+  if (err instanceof ApiError) {
+    return err.message;
+  }
+
+  return err instanceof Error ? err.message : String(err);
+}
+
 export function App() {
-  const [readOnly, setReadOnly] = useState(true);
-  const [clusters, setClusters] = useState<Cluster[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { theme, toggle } = useTheme();
+  const toast = useToast();
+
+  const [readOnly, setReadOnly] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [needsLogin, setNeedsLogin] = useState(false);
-  // Guards against state updates from in-flight requests that resolve after the component unmounts
-  // (refresh runs from the interval, the button, and child callbacks, not only the init effect).
-  const mounted = useRef(true);
-  // Holds the polling interval so it can be stopped from refresh() on a 401 without unmounting.
-  const pollRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
 
-  const refresh = useCallback(async () => {
+  const [clusters, setClusters] = useState<Cluster[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Cluster | null>(null);
+
+  const mounted = useRef(true);
+  const pollRef = useRef<number | undefined>(undefined);
+
+  const selected = useMemo(
+    () => clusters.find((cluster) => clusterKey(cluster) === selectedKey) ?? null,
+    [clusters, selectedKey],
+  );
+
+  const refresh = useCallback(async (silent = false) => {
+    if (!silent) {
+      setRefreshing(true);
+    }
+
     try {
       const list = await listClusters();
       if (!mounted.current) {
@@ -41,16 +80,18 @@ export function App() {
         return;
       }
       if (err instanceof ApiError && err.status === 401) {
-        // Stop polling once the session is gone; otherwise the interval keeps firing
-        // unauthorized requests every 10s while the login screen is shown.
         if (pollRef.current) {
-          clearInterval(pollRef.current);
+          window.clearInterval(pollRef.current);
           pollRef.current = undefined;
         }
         setNeedsLogin(true);
         return;
       }
-      setError(String(err));
+      setError(errorMessage(err));
+    } finally {
+      if (mounted.current && !silent) {
+        setRefreshing(false);
+      }
     }
   }, []);
 
@@ -63,7 +104,7 @@ export function App() {
         config = await getConfig();
       } catch (err) {
         if (mounted.current) {
-          setError(String(err));
+          setError(errorMessage(err));
           setLoading(false);
         }
         return;
@@ -76,17 +117,16 @@ export function App() {
       setReadOnly(config.readOnly);
       setUser(config.user ?? null);
 
-      // When auth is enabled but no session exists yet, show the login screen and do not poll.
       if (config.authEnabled && !config.user) {
         setNeedsLogin(true);
         setLoading(false);
         return;
       }
 
-      await refresh();
+      await refresh(true);
       if (mounted.current) {
         setLoading(false);
-        pollRef.current = setInterval(() => void refresh(), 10000);
+        pollRef.current = window.setInterval(() => void refresh(true), POLL_MS);
       }
     }
 
@@ -95,220 +135,139 @@ export function App() {
     return () => {
       mounted.current = false;
       if (pollRef.current) {
-        clearInterval(pollRef.current);
+        window.clearInterval(pollRef.current);
         pollRef.current = undefined;
       }
     };
   }, [refresh]);
 
+  const handleCreate = useCallback(
+    async (input: CreateClusterInput) => {
+      try {
+        await createCluster({
+          metadata: { name: input.name, namespace: input.namespace },
+          spec: { cluster: { distribution: input.distribution } },
+        });
+        toast.success(`Cluster "${input.name}" created`);
+        await refresh(true);
+      } catch (err) {
+        toast.error(errorMessage(err));
+        throw err;
+      }
+    },
+    [refresh, toast],
+  );
+
+  const handleDelete = useCallback(async () => {
+    if (!deleteTarget) {
+      return;
+    }
+
+    const name = deleteTarget.metadata.name;
+    const namespace = deleteTarget.metadata.namespace ?? "default";
+    try {
+      await deleteCluster(namespace, name);
+      toast.success(`Deleting cluster "${name}"`);
+      await refresh(true);
+    } catch (err) {
+      toast.error(errorMessage(err));
+      throw err;
+    }
+  }, [deleteTarget, refresh, toast]);
+
   if (needsLogin) {
     return <LoginScreen />;
   }
 
-  return (
-    <div className="mx-auto max-w-5xl p-6 font-sans text-slate-800">
-      <header className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-bold">KSail Clusters</h1>
-        <div className="flex items-center gap-3">
-          {user && (
-            <span className="text-sm text-slate-500">{user.email ?? user.name ?? user.subject}</span>
-          )}
-          <button
-            type="button"
-            onClick={() => void refresh()}
-            className="rounded bg-slate-200 px-3 py-1 text-sm hover:bg-slate-300"
-          >
-            Refresh
-          </button>
-          {user && (
-            <button
-              type="button"
-              onClick={() => {
-                void logout().finally(() => setNeedsLogin(true));
-              }}
-              className="rounded bg-slate-200 px-3 py-1 text-sm hover:bg-slate-300"
-            >
-              Logout
-            </button>
-          )}
-        </div>
-      </header>
-
-      {readOnly && (
-        <div className="mb-4 rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
-          Read-only (GitOps-enforced). Clusters are managed declaratively from Git; mutating
-          actions are disabled.
-        </div>
-      )}
-
-      {error && (
-        <div className="mb-4 rounded border border-red-300 bg-red-50 p-3 text-sm text-red-800">
-          {error}
-        </div>
-      )}
-
-      {loading ? (
-        <p>Loading…</p>
-      ) : (
-        <ClusterTable
-          clusters={clusters}
-          readOnly={readOnly}
-          onChanged={refresh}
-          onError={setError}
-        />
-      )}
-
-      {!readOnly && !loading && <CreateForm onCreated={refresh} onError={setError} />}
-    </div>
+  const headerActions = (
+    <>
+      <Button variant="secondary" size="sm" onClick={() => void refresh()} loading={refreshing}>
+        {refreshing ? null : <RotateCw className="size-4" aria-hidden />}
+        Refresh
+      </Button>
+      {!readOnly ? (
+        <Button size="sm" onClick={() => setCreateOpen(true)}>
+          <Plus className="size-4" aria-hidden />
+          New cluster
+        </Button>
+      ) : null}
+    </>
   );
-}
-
-function LoginScreen() {
-  return (
-    <div className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-4 p-6 font-sans text-slate-800">
-      <h1 className="text-2xl font-bold">KSail</h1>
-      <p className="text-sm text-slate-500">Sign in to manage your clusters.</p>
-      <a
-        href={loginPath}
-        className="rounded bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700"
-      >
-        Login
-      </a>
-    </div>
-  );
-}
-
-function ClusterTable(props: {
-  clusters: Cluster[];
-  readOnly: boolean;
-  onChanged: () => Promise<void>;
-  onError: (message: string) => void;
-}) {
-  const { clusters, readOnly, onChanged, onError } = props;
-
-  if (clusters.length === 0) {
-    return <p className="text-slate-500">No clusters.</p>;
-  }
 
   return (
-    <table className="w-full border-collapse text-sm">
-      <thead>
-        <tr className="border-b text-left text-slate-500">
-          <th className="py-2">Name</th>
-          <th>Namespace</th>
-          <th>Distribution</th>
-          <th>Phase</th>
-          <th>Endpoint</th>
-          {!readOnly && <th></th>}
-        </tr>
-      </thead>
-      <tbody>
-        {clusters.map((cluster) => (
-          <tr key={`${cluster.metadata.namespace}/${cluster.metadata.name}`} className="border-b">
-            <td className="py-2 font-medium">{cluster.metadata.name}</td>
-            <td>{cluster.metadata.namespace ?? "default"}</td>
-            <td>{cluster.spec?.cluster?.distribution ?? "—"}</td>
-            <td>{cluster.status?.phase ?? "—"}</td>
-            <td className="font-mono text-xs">{cluster.status?.endpoint ?? "—"}</td>
-            {!readOnly && (
-              <td className="text-right">
-                <DeleteButton cluster={cluster} onDeleted={onChanged} onError={onError} />
-              </td>
-            )}
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  );
-}
-
-function DeleteButton(props: {
-  cluster: Cluster;
-  onDeleted: () => Promise<void>;
-  onError: (message: string) => void;
-}) {
-  const { cluster, onDeleted, onError } = props;
-
-  async function handleDelete() {
-    try {
-      await deleteCluster(cluster.metadata.namespace ?? "default", cluster.metadata.name);
-      await onDeleted();
-    } catch (err) {
-      onError(String(err));
-    }
-  }
-
-  return (
-    <button
-      type="button"
-      onClick={() => void handleDelete()}
-      className="rounded bg-red-100 px-2 py-1 text-xs text-red-700 hover:bg-red-200"
+    <AppShell
+      theme={theme}
+      onToggleTheme={toggle}
+      user={user}
+      onLogout={() => void logout().finally(() => setNeedsLogin(true))}
+      readOnly={readOnly}
+      headerActions={headerActions}
     >
-      Delete
-    </button>
-  );
-}
+      <div className="mx-auto max-w-6xl space-y-4">
+        {error && clusters.length > 0 ? (
+          <ErrorBanner message={error} onRetry={() => void refresh()} />
+        ) : null}
 
-function CreateForm(props: { onCreated: () => Promise<void>; onError: (message: string) => void }) {
-  const { onCreated, onError } = props;
-  const [name, setName] = useState("");
-  const [namespace, setNamespace] = useState("default");
-  const [distribution, setDistribution] = useState(DISTRIBUTIONS[0]);
+        {loading ? (
+          <TableSkeleton />
+        ) : error && clusters.length === 0 ? (
+          <ErrorBanner message={error} onRetry={() => void refresh()} />
+        ) : clusters.length === 0 ? (
+          <EmptyState
+            title="No clusters yet"
+            description={
+              readOnly
+                ? "Clusters are managed declaratively from Git (read-only mode)."
+                : "Create your first cluster to get started."
+            }
+            action={
+              !readOnly ? (
+                <Button onClick={() => setCreateOpen(true)}>
+                  <Plus className="size-4" aria-hidden />
+                  New cluster
+                </Button>
+              ) : undefined
+            }
+          />
+        ) : (
+          <ClustersTable
+            clusters={clusters}
+            readOnly={readOnly}
+            onSelect={(cluster) => setSelectedKey(clusterKey(cluster))}
+            onDelete={(cluster) => setDeleteTarget(cluster)}
+          />
+        )}
+      </div>
 
-  async function handleSubmit(event: FormEvent) {
-    event.preventDefault();
-    if (name.trim() === "") {
-      return;
-    }
+      <ClusterDetail cluster={selected} open={selected !== null} onClose={() => setSelectedKey(null)} />
 
-    try {
-      await createCluster({
-        metadata: { name, namespace },
-        spec: { cluster: { distribution } },
-      });
-      setName("");
-      await onCreated();
-    } catch (err) {
-      onError(String(err));
-    }
-  }
+      <CreateClusterDialog
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onCreate={handleCreate}
+        distributions={DISTRIBUTIONS}
+      />
 
-  return (
-    <form onSubmit={(event) => void handleSubmit(event)} className="mt-6 flex flex-wrap items-end gap-3">
-      <label className="flex flex-col text-sm">
-        Name
-        <input
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-          className="rounded border px-2 py-1"
-          placeholder="my-cluster"
-        />
-      </label>
-      <label className="flex flex-col text-sm">
-        Namespace
-        <input
-          value={namespace}
-          onChange={(event) => setNamespace(event.target.value)}
-          className="rounded border px-2 py-1"
-        />
-      </label>
-      <label className="flex flex-col text-sm">
-        Distribution
-        <select
-          value={distribution}
-          onChange={(event) => setDistribution(event.target.value)}
-          className="rounded border px-2 py-1"
-        >
-          {DISTRIBUTIONS.map((value) => (
-            <option key={value} value={value}>
-              {value}
-            </option>
-          ))}
-        </select>
-      </label>
-      <button type="submit" className="rounded bg-blue-600 px-4 py-1.5 text-sm text-white hover:bg-blue-700">
-        Create
-      </button>
-    </form>
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        title="Delete cluster"
+        description={
+          deleteTarget ? (
+            <>
+              This permanently deletes{" "}
+              <span className="font-medium text-slate-700 dark:text-slate-200">
+                {deleteTarget.metadata.name}
+              </span>{" "}
+              and its underlying resources. This action cannot be undone.
+            </>
+          ) : (
+            ""
+          )
+        }
+        confirmLabel="Delete"
+        onConfirm={handleDelete}
+        onClose={() => setDeleteTarget(null)}
+      />
+    </AppShell>
   );
 }

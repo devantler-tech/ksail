@@ -8,4 +8,6 @@ var (
 	NewScheme = newScheme
 	// ManagerOptions exposes managerOptions for testing.
 	ManagerOptions = managerOptions
+	// IsNodeReady exposes isNodeReady for testing.
+	IsNodeReady = isNodeReady
 )

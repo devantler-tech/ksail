@@ -78,6 +78,30 @@ type ProvisionerBuilder func(
 	cluster *v1alpha1.Cluster,
 ) (clusterprovisioner.Provisioner, error)
 
+// ObservedStatus is the runtime state of a provisioned cluster, gathered best-effort by a
+// StatusObserver. Zero-valued fields are treated as "not observed" and leave the existing status
+// untouched, so a transient observation failure never erases previously reported data.
+type ObservedStatus struct {
+	// Endpoint is the stable API server URL of the provisioned cluster.
+	Endpoint string
+	// KubeconfigSecret references the Secret holding the child cluster's kubeconfig.
+	KubeconfigSecret *v1alpha1.SecretReference
+	// NodesReady and NodesTotal are populated only when NodesObserved is true.
+	NodesReady    int32
+	NodesTotal    int32
+	NodesObserved bool
+}
+
+// StatusObserver gathers runtime status (endpoint, kubeconfig, node readiness) for a provisioned
+// cluster. It is optional and distribution-specific: the operator injects an implementation, while
+// tests may leave it nil. It is invoked best-effort, so it must tolerate a not-yet-ready cluster.
+// The reader is uncached (it reads a single Secret directly) to avoid caching every cluster Secret.
+type StatusObserver func(
+	ctx context.Context,
+	hub client.Reader,
+	cluster *v1alpha1.Cluster,
+) (ObservedStatus, error)
+
 // ClusterReconciler reconciles a Cluster object towards its desired state.
 type ClusterReconciler struct {
 	client.Client
@@ -86,6 +110,14 @@ type ClusterReconciler struct {
 
 	// NewProvisioner builds the provisioner used to create/delete the underlying cluster.
 	NewProvisioner ProvisionerBuilder
+
+	// ObserveStatus gathers runtime status (endpoint, node readiness) best-effort. Optional; nil
+	// disables runtime status reporting (endpoint/nodes stay empty).
+	ObserveStatus StatusObserver
+
+	// APIReader is an uncached reader used by ObserveStatus to read a single kubeconfig Secret
+	// without forcing the manager cache to watch every Secret. Falls back to the cached client.
+	APIReader client.Reader
 
 	// ReadyRequeue overrides the steady-state requeue interval (zero uses the default).
 	ReadyRequeue time.Duration
@@ -186,8 +218,10 @@ func (r *ClusterReconciler) reconcileNormal(
 		}
 	}
 
-	// Exists()/Create() only confirm the cluster is present, not that every workload is healthy.
-	// Deeper readiness (node/pod health, kubeconfig Secret) is reported by the monitoring follow-up.
+	// Gather runtime status (endpoint, kubeconfig, node readiness) best-effort: a failure here must
+	// not fail an otherwise-successful reconcile, and partial results are still applied.
+	r.observeStatus(ctx, cluster)
+
 	r.markReady(cluster)
 
 	statusErr := r.updateStatusIfChanged(ctx, cluster, before)
@@ -196,6 +230,39 @@ func (r *ClusterReconciler) reconcileNormal(
 	}
 
 	return ctrl.Result{RequeueAfter: r.readyRequeue()}, nil
+}
+
+// observeStatus populates runtime status fields (endpoint, kubeconfig ref, node counts) from the
+// optional StatusObserver. It is best-effort: observation errors are logged and partial results
+// applied, since a not-yet-reachable child cluster is expected shortly after provisioning.
+func (r *ClusterReconciler) observeStatus(ctx context.Context, cluster *v1alpha1.Cluster) {
+	if r.ObserveStatus == nil {
+		return
+	}
+
+	reader := r.APIReader
+	if reader == nil {
+		reader = r.Client
+	}
+
+	observed, err := r.ObserveStatus(ctx, reader, cluster)
+	if err != nil {
+		logf.FromContext(ctx).
+			Info("observe child cluster status (best-effort)", "error", err.Error())
+	}
+
+	if observed.Endpoint != "" {
+		cluster.Status.Endpoint = observed.Endpoint
+	}
+
+	if observed.KubeconfigSecret != nil {
+		cluster.Status.KubeconfigSecretRef = observed.KubeconfigSecret
+	}
+
+	if observed.NodesObserved {
+		cluster.Status.NodesReady = observed.NodesReady
+		cluster.Status.NodesTotal = observed.NodesTotal
+	}
 }
 
 // reconcileDelete tears down the underlying cluster and removes the finalizer.

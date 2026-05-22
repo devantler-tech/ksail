@@ -3,6 +3,10 @@ version: 2
 before:
   hooks:
     - go mod tidy
+    # Build the web UI into pkg/operator/ui/dist so the `-tags ui` build below embeds it into the
+    # binary. The operator then serves the dashboard itself (no separate UI image, no reverse proxy).
+    - npm --prefix web/ui ci
+    - npm --prefix web/ui run build
 
 builds:
   - binary: ksail
@@ -20,6 +24,8 @@ builds:
       - CGO_ENABLED=0
     flags:
       - -trimpath
+      # Embed the web UI built by the `before` hooks (pkg/operator/ui/embed.go).
+      - -tags=ui
     ldflags:
       - -s -w -X github.com/devantler-tech/ksail/v7/internal/buildmeta.Version={{.Version}} -X github.com/devantler-tech/ksail/v7/internal/buildmeta.Commit={{.Commit}} -X github.com/devantler-tech/ksail/v7/internal/buildmeta.Date={{.Date}}
     hooks:

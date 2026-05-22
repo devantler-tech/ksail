@@ -350,3 +350,63 @@ func TestProvisionedNameTruncatesLongNames(t *testing.T) {
 	// vcluster derives a namespace "vcluster-<name>"; it must fit the 63-char DNS-1123 label limit.
 	assert.LessOrEqual(t, len("vcluster-"+got), 63)
 }
+
+func TestReconcile_AppliesObservedStatus(t *testing.T) {
+	t.Parallel()
+
+	scheme := newScheme(t)
+	fakeClient := newFakeClient(scheme, newCluster(true))
+	reconciler := newReconciler(scheme, fakeClient, &fakeProvisioner{exists: true})
+	reconciler.ObserveStatus = func(
+		_ context.Context,
+		_ client.Reader,
+		_ *v1alpha1.Cluster,
+	) (controller.ObservedStatus, error) {
+		return controller.ObservedStatus{
+			Endpoint:         "https://child.svc:443",
+			KubeconfigSecret: &v1alpha1.SecretReference{Name: "vc-c1", Namespace: "vcluster-c1"},
+			NodesReady:       2,
+			NodesTotal:       3,
+			NodesObserved:    true,
+		}, nil
+	}
+
+	_, err := reconciler.Reconcile(context.Background(), request())
+	require.NoError(t, err)
+
+	var got v1alpha1.Cluster
+
+	require.NoError(t, fakeClient.Get(context.Background(), request().NamespacedName, &got))
+	assert.Equal(t, "https://child.svc:443", got.Status.Endpoint)
+	require.NotNil(t, got.Status.KubeconfigSecretRef)
+	assert.Equal(t, "vc-c1", got.Status.KubeconfigSecretRef.Name)
+	assert.Equal(t, int32(2), got.Status.NodesReady)
+	assert.Equal(t, int32(3), got.Status.NodesTotal)
+}
+
+func TestReconcile_ObserveStatusErrorIsBestEffort(t *testing.T) {
+	t.Parallel()
+
+	scheme := newScheme(t)
+	fakeClient := newFakeClient(scheme, newCluster(true))
+	reconciler := newReconciler(scheme, fakeClient, &fakeProvisioner{exists: true})
+	// Observation fails to reach the child cluster but still derives the endpoint.
+	reconciler.ObserveStatus = func(
+		_ context.Context,
+		_ client.Reader,
+		_ *v1alpha1.Cluster,
+	) (controller.ObservedStatus, error) {
+		return controller.ObservedStatus{Endpoint: "https://child.svc:443"}, errBoom
+	}
+
+	_, err := reconciler.Reconcile(context.Background(), request())
+	// A best-effort observation error must not fail the reconcile.
+	require.NoError(t, err)
+
+	var got v1alpha1.Cluster
+
+	require.NoError(t, fakeClient.Get(context.Background(), request().NamespacedName, &got))
+	assert.Equal(t, v1alpha1.ClusterPhaseReady, got.Status.Phase)
+	assert.Equal(t, "https://child.svc:443", got.Status.Endpoint)
+	assert.Zero(t, got.Status.NodesTotal, "nodes stay unset when not observed")
+}

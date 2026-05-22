@@ -1,14 +1,32 @@
 // Typed client for the KSail operator REST API.
 //
-// Requests are intentionally same-origin (/api/...): the UI container's nginx proxies /api to the
-// operator using the API_BASE_URL env var (see web/ui/default.conf.template), and the Helm chart
-// ingress routes /api to the operator Service. The SPA therefore needs no build-time base URL.
+// Requests are intentionally same-origin (/api/...): in production the operator serves both this
+// SPA and the REST API from one origin, so no reverse proxy or build-time base URL is needed. In
+// local development, the Vite dev server proxies /api to a locally-running operator.
+
+export interface Condition {
+  type: string;
+  status: "True" | "False" | "Unknown";
+  reason?: string;
+  message?: string;
+  lastTransitionTime?: string;
+  observedGeneration?: number;
+}
+
+export interface SecretReference {
+  name: string;
+  namespace?: string;
+}
 
 export interface ClusterStatus {
   phase?: string;
   endpoint?: string;
   nodesReady?: number;
   nodesTotal?: number;
+  conditions?: Condition[];
+  kubeconfigSecretRef?: SecretReference;
+  lastReconcileTime?: string;
+  observedGeneration?: number;
 }
 
 export interface ClusterSpec {
@@ -17,8 +35,15 @@ export interface ClusterSpec {
   gitOpsEngine?: string;
 }
 
+export interface ObjectMeta {
+  name: string;
+  namespace?: string;
+  creationTimestamp?: string;
+  labels?: Record<string, string>;
+}
+
 export interface Cluster {
-  metadata: { name: string; namespace?: string };
+  metadata: ObjectMeta;
   spec?: { cluster?: ClusterSpec };
   status?: ClusterStatus;
 }
@@ -52,21 +77,28 @@ export class ApiError extends Error {
   }
 }
 
+// detailFromBody pulls a human-readable error message out of the server's response body. The API
+// returns either {"error": "..."} or {"reason": "..."}; fall back to the raw text otherwise.
+function detailFromBody(body: string): { message: string; loginURL?: string } {
+  if (body === "") {
+    return { message: "" };
+  }
+  try {
+    const parsed = JSON.parse(body) as { error?: string; reason?: string; loginURL?: string };
+    return { message: parsed.error ?? parsed.reason ?? body, loginURL: parsed.loginURL };
+  } catch {
+    return { message: body };
+  }
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, init);
   if (!response.ok) {
-    // Surface the server-provided error body (e.g. the Kubernetes status message) so the UI can
-    // show something actionable instead of a bare status code.
     const body = (await response.text()).trim();
-    let loginURL: string | undefined;
-    try {
-      loginURL = (JSON.parse(body) as { loginURL?: string }).loginURL;
-    } catch {
-      // Body was not JSON; leave loginURL undefined.
-    }
-    const detail = body === "" ? "" : `: ${body}`;
+    const { message, loginURL } = detailFromBody(body);
+    const suffix = message === "" ? "" : `: ${message}`;
     throw new ApiError(
-      `${init?.method ?? "GET"} ${path}: ${response.status}${detail}`,
+      `${init?.method ?? "GET"} ${path} (${response.status})${suffix}`,
       response.status,
       loginURL,
     );

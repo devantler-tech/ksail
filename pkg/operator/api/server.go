@@ -9,7 +9,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"net/http"
+	"path"
 	"strings"
 	"time"
 
@@ -48,6 +50,9 @@ type Server struct {
 	BindAddress string
 	// OIDC configures app-driven OIDC authentication; empty IssuerURL disables it.
 	OIDC OIDCConfig
+	// UIFS is the embedded web UI served at the root path. Nil disables UI serving (API only),
+	// so the SPA and the API share one origin and no reverse proxy is needed.
+	UIFS fs.FS
 
 	// auth is built from OIDC at Start; nil means authentication is disabled.
 	auth *authenticator
@@ -112,7 +117,9 @@ func (s *Server) Start(ctx context.Context) error {
 	return nil
 }
 
-// Handler builds the HTTP routes wrapped in the read-only guard.
+// Handler builds the HTTP routes. The API is wrapped in the auth and read-only guards; when a UI
+// is embedded it is served unguarded at the root path so the login screen and its assets load
+// before authentication. Security headers are applied to every response.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 
@@ -131,7 +138,86 @@ func (s *Server) Handler() http.Handler {
 		mux.HandleFunc("POST /api/v1/auth/logout", s.auth.handleLogout)
 	}
 
-	return s.authGuard(s.readOnlyGuard(mux))
+	guardedAPI := s.authGuard(s.readOnlyGuard(mux))
+
+	var handler http.Handler = guardedAPI
+	if s.UIFS != nil {
+		handler = s.uiOrAPI(guardedAPI)
+	}
+
+	return securityHeaders(handler)
+}
+
+// uiOrAPI routes API and health paths to the guarded API and everything else to the embedded SPA.
+// The SPA is served outside the auth guard so the login screen and its assets load even before a
+// session exists; the SPA then discovers auth state via the (open) /api/v1/config endpoint.
+func (s *Server) uiOrAPI(api http.Handler) http.Handler {
+	spa := s.spaHandler()
+
+	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if isAPIPath(request.URL.Path) {
+			api.ServeHTTP(writer, request)
+
+			return
+		}
+
+		spa.ServeHTTP(writer, request)
+	})
+}
+
+// isAPIPath reports whether a request path is served by the REST API rather than the UI.
+func isAPIPath(requestPath string) bool {
+	return requestPath == "/healthz" ||
+		requestPath == "/readyz" ||
+		strings.HasPrefix(requestPath, "/api/")
+}
+
+// spaHandler serves the embedded SPA, falling back to index.html for unknown paths so client-side
+// routing works. Hashed assets under /assets/ are marked immutable; index.html is never cached so
+// new deployments take effect immediately.
+func (s *Server) spaHandler() http.Handler {
+	fileServer := http.FileServer(http.FS(s.UIFS))
+
+	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		name := strings.TrimPrefix(path.Clean(request.URL.Path), "/")
+		if name == "" {
+			name = "index.html"
+		}
+
+		info, err := fs.Stat(s.UIFS, name)
+		if err != nil || info.IsDir() {
+			// Unknown path: serve the SPA entry point so the client router (not the server) resolves it.
+			request = request.Clone(request.Context())
+			request.URL.Path = "/"
+		}
+
+		if strings.HasPrefix(request.URL.Path, "/assets/") {
+			writer.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		} else {
+			writer.Header().Set("Cache-Control", "no-cache")
+		}
+
+		fileServer.ServeHTTP(writer, request)
+	})
+}
+
+// securityHeaders applies conservative security headers to every response. The CSP allows only
+// same-origin resources (the SPA's bundled JS/CSS are same-origin and it makes no cross-origin
+// requests); 'unsafe-inline' is permitted for styles only, which React inline style attributes and
+// the bundled stylesheet require.
+func securityHeaders(next http.Handler) http.Handler {
+	const csp = "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; " +
+		"object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
+
+	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		header := writer.Header()
+		header.Set("X-Content-Type-Options", "nosniff")
+		header.Set("X-Frame-Options", "DENY")
+		header.Set("Referrer-Policy", "no-referrer")
+		header.Set("Content-Security-Policy", csp)
+
+		next.ServeHTTP(writer, request)
+	})
 }
 
 // authGuard requires a valid session for cluster endpoints when OIDC is enabled. Health checks,
