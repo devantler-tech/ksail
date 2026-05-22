@@ -1,0 +1,105 @@
+# Default values for the ksail-operator chart.
+
+# nameOverride / fullnameOverride let you customize the generated resource names.
+nameOverride: ""
+fullnameOverride: ""
+
+operator:
+  enabled: true
+  image:
+    repository: ghcr.io/devantler-tech/ksail
+    # tag defaults to the chart appVersion when empty.
+    tag: ""
+    pullPolicy: IfNotPresent
+  replicas: 1
+  # leaderElection ensures a single active operator when running multiple replicas.
+  leaderElection: true
+  # dockerSocket mounts the host Docker socket for Docker-based distributions (Kind/K3d).
+  # This is privileged and single-node; leave disabled and prefer VCluster/K3s in-cluster.
+  dockerSocket:
+    enabled: false
+  metricsBindAddress: "0"
+  healthProbeBindAddress: ":8081"
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      memory: 256Mi
+
+api:
+  # Port the operator REST API listens on (consumed by the UI). Set to 0 to disable the API.
+  bindPort: 8080
+
+# ui is the optional web dashboard. It talks to the operator REST API.
+#
+# readOnly is the single, user-controlled lock that governs the whole deployment. It is wired to
+# the operator API as --read-only (enforced server-side); the SPA reflects the mode at runtime via
+# GET /api/v1/config, so no separate UI env var is needed. It is intentionally independent of any
+# cluster's spec.cluster.gitOpsEngine: set it to true for GitOps-enforced environments so the Git
+# repository remains the single source of truth.
+ui:
+  enabled: false
+  readOnly: false
+  image:
+    repository: ghcr.io/devantler-tech/ksail-ui
+    tag: ""
+    pullPolicy: IfNotPresent
+  replicas: 1
+  service:
+    type: ClusterIP
+    port: 80
+  ingress:
+    enabled: false
+    className: ""
+    annotations: {}
+    hosts:
+      - host: ksail.local
+        paths:
+          - path: /
+            pathType: Prefix
+    tls: []
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      memory: 128Mi
+
+# auth enables app-driven OIDC authentication for the operator REST API (and therefore the UI),
+# in the style of Headlamp: the API itself owns the OIDC login/callback (a confidential client),
+# so clicking "Login" redirects the user to the configured provider (e.g. Dex), and after sign-in
+# the provider calls back to the API, which establishes a secure session cookie. The client secret
+# stays server-side. This closes the otherwise-unauthenticated API: when enabled, all cluster API
+# calls require a valid session.
+auth:
+  oidc:
+    enabled: false
+    # issuerURL is the OIDC issuer (discovery) URL, e.g. https://dex.example.com.
+    issuerURL: ""
+    clientID: ""
+    # clientSecret and sessionSecret are sensitive. Provide them inline (rendered into a Secret) or
+    # reference a pre-created Secret via existingSecret (keys: client-secret, session-secret).
+    clientSecret: ""
+    # sessionSecret signs the session cookie. When left empty and no existingSecret is set, the
+    # chart generates one (preserved across upgrades via lookup).
+    sessionSecret: ""
+    existingSecret: ""
+    # scopes requested from the issuer (openid is always included).
+    scopes: "openid email profile"
+    # redirectURL is the OIDC callback registered with the provider. Defaults to
+    # <scheme>://<first ingress host>/api/v1/auth/callback when ui.ingress is enabled.
+    redirectURL: ""
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+rbac:
+  create: true
+
+podAnnotations: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}

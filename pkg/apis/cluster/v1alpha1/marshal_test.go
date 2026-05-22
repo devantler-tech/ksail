@@ -169,7 +169,7 @@ func TestCluster_MarshalYAML(t *testing.T) {
 					Kind:       v1alpha1.Kind,
 					APIVersion: v1alpha1.APIVersion,
 				},
-				Metadata: v1alpha1.Metadata{
+				ObjectMeta: metav1.ObjectMeta{
 					Name: "my-cluster",
 				},
 			},
@@ -281,7 +281,7 @@ func TestCluster_MarshalRoundTrip(t *testing.T) {
 			Kind:       v1alpha1.Kind,
 			APIVersion: v1alpha1.APIVersion,
 		},
-		Metadata: v1alpha1.Metadata{
+		ObjectMeta: metav1.ObjectMeta{
 			Name: "roundtrip-cluster",
 		},
 		Spec: v1alpha1.Spec{
@@ -317,7 +317,7 @@ func TestCluster_MarshalRoundTrip(t *testing.T) {
 	// Verify key fields are preserved
 	assert.Equal(t, original.Kind, restored.Kind)
 	assert.Equal(t, original.APIVersion, restored.APIVersion)
-	assert.Equal(t, original.Metadata.Name, restored.Metadata.Name)
+	assert.Equal(t, original.Name, restored.Name)
 	assert.Equal(t, original.Spec.Editor, restored.Spec.Editor)
 	assert.Equal(t, original.Spec.Cluster.Distribution, restored.Spec.Cluster.Distribution)
 	assert.Equal(t, original.Spec.Cluster.CNI, restored.Spec.Cluster.CNI)

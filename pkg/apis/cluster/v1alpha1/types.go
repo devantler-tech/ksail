@@ -15,19 +15,36 @@ const (
 
 // --- Core Types ---
 
-// Metadata holds standard Kubernetes-style metadata for KSail resources.
-// Only the Name field is supported; namespace, labels, and annotations are not used.
-type Metadata struct {
-	Name string `json:"name,omitzero" jsonschema_description:"Cluster name (DNS-1123 compliant)"`
+// Cluster represents a KSail cluster configuration including API metadata and desired state.
+// It contains TypeMeta for API versioning information, ObjectMeta for the cluster name and
+// standard Kubernetes object metadata, Spec for the desired state, and Status for the
+// observed state when reconciled by the KSail operator.
+//
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:resource:shortName=ksail
+// +kubebuilder:printcolumn:name="Distribution",type=string,JSONPath=`.spec.cluster.distribution`
+// +kubebuilder:printcolumn:name="Provider",type=string,JSONPath=`.spec.cluster.provider`
+// +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.status.phase`
+// +kubebuilder:printcolumn:name="Endpoint",type=string,JSONPath=`.status.endpoint`
+// +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
+type Cluster struct {
+	metav1.TypeMeta   `json:",inline"            mapstructure:",squash"`
+	metav1.ObjectMeta `json:"metadata,omitempty" mapstructure:"metadata,omitempty"`
+
+	Spec   Spec          `json:"spec,omitzero"    mapstructure:"spec,omitempty"`
+	Status ClusterStatus `json:"status,omitempty" mapstructure:"-"`
 }
 
-// Cluster represents a KSail cluster configuration including API metadata and desired state.
-// It contains TypeMeta for API versioning information and Spec for the cluster specification.
-type Cluster struct {
-	metav1.TypeMeta `json:",inline" mapstructure:",squash"`
+// ClusterList contains a list of Cluster resources. It is required by controller-runtime
+// for list/watch operations on the Cluster custom resource.
+//
+// +kubebuilder:object:root=true
+type ClusterList struct {
+	metav1.TypeMeta `json:",inline"`
+	metav1.ListMeta `json:"metadata,omitempty"`
 
-	Metadata Metadata `json:"metadata,omitzero" mapstructure:"metadata,omitempty"`
-	Spec     Spec     `json:"spec,omitzero"     mapstructure:"spec,omitempty"`
+	Items []Cluster `json:"items"`
 }
 
 // Spec defines the desired state of a KSail cluster.

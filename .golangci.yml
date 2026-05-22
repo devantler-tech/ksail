@@ -60,6 +60,14 @@ linters:
         text: "var-naming: avoid meaningless package names"
         path: pkg/utils/doc.go
   settings:
+    recvcheck:
+      # controller-gen emits pointer-receiver DeepCopy methods; exclude them so types with
+      # value-receiver domain methods (e.g. ClusterSpec, LocalRegistry) are not flagged as mixing
+      # receiver styles.
+      exclusions:
+        - "*.DeepCopyInto"
+        - "*.DeepCopy"
+        - "*.DeepCopyObject"
     tagalign:
       align: false
       sort: true
