@@ -105,12 +105,13 @@ type StatusObserver func(
 ) (ObservedStatus, error)
 
 // ComponentInstaller installs the cluster's components (CNI/CSI/metrics-server/cert-manager/
-// load-balancer/policy-engine/GitOps) into the provisioned child cluster. Optional; nil disables
-// component installation. The reconciler invokes it with gating — only when components are not
-// already reconciled for the current generation — and treats it best-effort.
+// load-balancer/policy-engine/GitOps) into the provisioned child cluster. It receives the
+// provisioner so it can obtain child access via the provisioner's optional Connector capability.
+// Optional; nil disables component installation. The reconciler invokes it with gating — only when
+// components are not already reconciled for the current generation — and treats it best-effort.
 type ComponentInstaller func(
 	ctx context.Context,
-	hub client.Reader,
+	provisioner clusterprovisioner.Provisioner,
 	cluster *v1alpha1.Cluster,
 ) error
 
@@ -239,7 +240,7 @@ func (r *ClusterReconciler) reconcileNormal(
 	r.observeStatus(ctx, cluster)
 
 	// Install the spec's components into the child cluster (best-effort, gated by generation).
-	componentsOK := r.reconcileComponents(ctx, cluster)
+	componentsOK := r.reconcileComponents(ctx, provisioner, cluster)
 
 	r.markReady(cluster)
 
@@ -260,12 +261,16 @@ func (r *ClusterReconciler) reconcileNormal(
 // current generation, recording the outcome in the ComponentsReady condition. Best-effort: failures
 // are reported via the condition (not the reconcile error) and return false so the reconcile
 // requeues sooner. Returns true when components are up to date or there is nothing to install.
-func (r *ClusterReconciler) reconcileComponents(ctx context.Context, cluster *v1alpha1.Cluster) bool {
+func (r *ClusterReconciler) reconcileComponents(
+	ctx context.Context,
+	provisioner clusterprovisioner.Provisioner,
+	cluster *v1alpha1.Cluster,
+) bool {
 	if r.InstallComponents == nil || componentsUpToDate(cluster) {
 		return true
 	}
 
-	err := r.InstallComponents(ctx, r.reader(), cluster)
+	err := r.InstallComponents(ctx, provisioner, cluster)
 	if err != nil {
 		logf.FromContext(ctx).Info("install components (best-effort)", "error", err.Error())
 		apimeta.SetStatusCondition(&cluster.Status.Conditions, metav1.Condition{

@@ -36,6 +36,12 @@ const (
 	vclusterKubeconfigKey = "config"
 	// vclusterAPIServerPort is the API server port exposed by the vCluster pod.
 	vclusterAPIServerPort = 8443
+	// vclusterServiceAPIPort is the port the vCluster API Service exposes inside the host cluster.
+	vclusterServiceAPIPort = 443
+	// vclusterInClusterServerName is the TLS server name on the vCluster API server certificate. The
+	// in-cluster Service DNS name is not a SAN, so the served certificate is verified against this
+	// name (with the kubeconfig's CA) while connecting to the Service address.
+	vclusterInClusterServerName = "kubernetes"
 	// vclusterWaitTimeout is the maximum time to wait for vCluster readiness.
 	vclusterWaitTimeout = 10 * time.Minute
 	// vclusterWaitInterval is the polling interval when waiting for the cluster.
@@ -302,6 +308,57 @@ func (p *KubernetesProvisioner) Exists(ctx context.Context, name string) (bool, 
 	}
 
 	return true, nil
+}
+
+// Kubeconfig returns a kubeconfig for the named vCluster reachable from inside the host cluster
+// (where the operator runs), with the API server rewritten to the in-cluster Service address
+// (https://<name>.vcluster-<name>.svc:443) and the TLS server name set to the cert's SAN. It
+// satisfies the clusterprovisioner.Connector capability and returns clustererr.ErrKubeconfigNotReady
+// while the vc-<name> Secret has not been published yet.
+func (p *KubernetesProvisioner) Kubeconfig(ctx context.Context, name string) ([]byte, error) {
+	clusterName := p.clusterName
+	if clusterName == "" {
+		clusterName = name
+	}
+
+	if clusterName == "" {
+		return nil, fmt.Errorf("%w: vcluster name not set", clustererr.ErrConfigNil)
+	}
+
+	namespace := vclusterNamespacePrefix + clusterName
+	secretName := vclusterSecretPrefix + clusterName
+
+	secret, err := p.hostClientset.CoreV1().Secrets(namespace).Get(ctx, secretName, metav1.GetOptions{})
+	if apierrors.IsNotFound(err) {
+		return nil, clustererr.ErrKubeconfigNotReady
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("get vcluster kubeconfig secret %s/%s: %w", namespace, secretName, err)
+	}
+
+	raw := secret.Data[vclusterKubeconfigKey]
+	if len(raw) == 0 {
+		return nil, clustererr.ErrKubeconfigNotReady
+	}
+
+	config, err := clientcmd.Load(raw)
+	if err != nil {
+		return nil, fmt.Errorf("parse vcluster kubeconfig: %w", err)
+	}
+
+	endpoint := fmt.Sprintf("https://%s.%s.svc:%d", clusterName, namespace, vclusterServiceAPIPort)
+	for _, cluster := range config.Clusters {
+		cluster.Server = endpoint
+		cluster.TLSServerName = vclusterInClusterServerName
+	}
+
+	out, err := clientcmd.Write(*config)
+	if err != nil {
+		return nil, fmt.Errorf("serialize vcluster kubeconfig: %w", err)
+	}
+
+	return out, nil
 }
 
 // Start is not supported for Helm-based vClusters (they run as pods).

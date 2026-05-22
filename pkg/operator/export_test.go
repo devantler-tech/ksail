@@ -12,8 +12,6 @@ var (
 	IsNodeReady = isNodeReady
 	// ResolveProvider exposes resolveProvider for testing.
 	ResolveProvider = resolveProvider
-	// ComponentsSupported exposes componentsSupported for testing.
-	ComponentsSupported = componentsSupported
 	// RunInstallers exposes runInstallers for testing.
 	RunInstallers = runInstallers
 )

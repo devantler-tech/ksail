@@ -72,6 +72,19 @@ type ProviderAware interface {
 	SetProvider(p provider.Provider)
 }
 
+// Connector is an optional capability for provisioners whose provisioned (child) cluster is
+// reachable from where the operator runs. The operator uses Kubeconfig to obtain credentials for
+// installing components into the child cluster. Provisioners that cannot expose the child to the
+// operator (e.g. a kubeconfig bound to the Docker network, unreachable from a hub pod) omit it, and
+// the operator skips component installation for those clusters.
+type Connector interface {
+	// Kubeconfig returns a kubeconfig for the named provisioned cluster with its API server address
+	// rewritten to one reachable from where the operator runs (e.g. an in-cluster Service address),
+	// not necessarily from a CLI host. It returns clustererr.ErrKubeconfigNotReady when the child
+	// credentials have not been published yet, so the caller can retry.
+	Kubeconfig(ctx context.Context, name string) ([]byte, error)
+}
+
 // KubeconfigRefresher is an optional interface for provisioners that can
 // refresh the kubeconfig for a running cluster from a remote source.
 // This is needed for remote providers (e.g., Omni) where the kubeconfig

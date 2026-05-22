@@ -8,41 +8,58 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/operator"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/installer"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func clusterWithProvider(distribution v1alpha1.Distribution, provider v1alpha1.Provider) *v1alpha1.Cluster {
-	cluster := clusterWithDistribution("c1", distribution)
-	cluster.Spec.Cluster.Provider = provider
+// stubProvisioner satisfies clusterprovisioner.Provisioner without implementing Connector.
+type stubProvisioner struct{}
 
-	return cluster
+func (stubProvisioner) Create(context.Context, string) error         { return nil }
+func (stubProvisioner) Delete(context.Context, string) error         { return nil }
+func (stubProvisioner) Start(context.Context, string) error          { return nil }
+func (stubProvisioner) Stop(context.Context, string) error           { return nil }
+func (stubProvisioner) List(context.Context) ([]string, error)       { return nil, nil }
+func (stubProvisioner) Exists(context.Context, string) (bool, error) { return true, nil }
+
+// connectorProvisioner adds the Connector capability to stubProvisioner.
+type connectorProvisioner struct {
+	stubProvisioner
+
+	kubeconfig []byte
+	err        error
 }
 
-func TestComponentsSupported(t *testing.T) {
+func (c connectorProvisioner) Kubeconfig(context.Context, string) ([]byte, error) {
+	return c.kubeconfig, c.err
+}
+
+func TestInstallComponents_NoConnectorIsNoOp(t *testing.T) {
 	t.Parallel()
 
-	assert.True(
-		t,
-		operator.ComponentsSupported(
-			clusterWithProvider(v1alpha1.DistributionVCluster, v1alpha1.ProviderKubernetes),
-		),
-		"VCluster on the Kubernetes provider is supported",
+	// A provisioner without the Connector capability cannot expose the child cluster, so component
+	// install is skipped without error (e.g. the Docker provider, which is unreachable from a hub).
+	err := operator.InstallComponents(
+		context.Background(),
+		stubProvisioner{},
+		clusterWithDistribution("c1", v1alpha1.DistributionVanilla),
 	)
-	assert.False(
-		t,
-		operator.ComponentsSupported(
-			clusterWithProvider(v1alpha1.DistributionVCluster, v1alpha1.ProviderDocker),
-		),
-		"VCluster on Docker (Vind) has no hub-published kubeconfig",
+	require.NoError(t, err)
+}
+
+func TestInstallComponents_KubeconfigNotReadyPropagates(t *testing.T) {
+	t.Parallel()
+
+	// When the child kubeconfig is not published yet the error propagates so the reconcile requeues;
+	// the install never reaches Helm.
+	err := operator.InstallComponents(
+		context.Background(),
+		connectorProvisioner{err: clustererr.ErrKubeconfigNotReady},
+		clusterWithDistribution("c1", v1alpha1.DistributionVCluster),
 	)
-	assert.False(
-		t,
-		operator.ComponentsSupported(
-			clusterWithProvider(v1alpha1.DistributionVanilla, v1alpha1.ProviderKubernetes),
-		),
-		"non-VCluster distributions are not yet supported",
-	)
+	require.Error(t, err)
+	require.ErrorIs(t, err, clustererr.ErrKubeconfigNotReady)
 }
 
 // recordingInstaller records the order in which installers run and optionally fails.

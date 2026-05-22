@@ -59,8 +59,13 @@ type Connector interface {
 
 Provisioners implement `Connector` per distribution. The operator type-asserts
 `provisioner.(Connector)`; if absent, component install is skipped for that distribution (logged).
-**Phase 1 (below) special-cases VCluster via the Secret without the interface**, to ship value
-quickly; the `Connector` interface is introduced in Phase 2.
+
+**Status: Phase 2 implemented.** The `Connector` interface lives in
+`pkg/svc/provisioner/cluster` and the vcluster `KubernetesProvisioner.Kubeconfig` implements it
+(reading the `vc-<name>` Secret via its host clientset and rewriting the server to the in-cluster
+Service address). The operator's `InstallComponents` receives the provisioner and type-asserts
+`Connector` — the vcluster Secret special-case that Phase 1 carried in `pkg/operator` is gone. A
+shared `clustererr.ErrKubeconfigNotReady` sentinel signals "child not published yet → retry".
 
 ## 4. Reconcile model (idempotency)
 
@@ -124,12 +129,15 @@ component sets `Degraded` with the component name + message and triggers requeue
 
 ## 9. Phased rollout
 
-- **Phase 1 — VCluster + Kubernetes** (smallest verifiable slice): special-case the `vc-<name>`
-  Secret for child access; implement the condition-gated runner + ordering + status; reuse
-  `installer.Factory`. Unit tests + a lightweight in-cluster verify.
-- **Phase 2 — `Connector` interface**: add `Kubeconfig(ctx, name)` to the provisioner contract;
-  implement for the other Kubernetes-provider distros (Kind DinD, k3k, KWOK, Talos DinD). Generalize
-  the operator to use the interface instead of the vcluster special case.
+- **Phase 1 — VCluster + Kubernetes** (smallest verifiable slice) — **done**: special-cased the
+  `vc-<name>` Secret for child access; implemented the condition-gated runner + ordering + status;
+  reused `installer.Factory`. Unit tests + a lightweight in-cluster verify.
+- **Phase 2 — `Connector` interface** — **done (vcluster)**: added `Kubeconfig(ctx, name)` to the
+  provisioner contract and implemented it on the vcluster `KubernetesProvisioner`; generalized the
+  operator to use the interface instead of the vcluster special case. The other Kubernetes-provider
+  distros (Kind DinD, k3k, KWOK, Talos DinD) implement `Connector` next — each needs its own child
+  kubeconfig source (DinD pod / published Secret) and is unverifiable on the kind-in-kind dev hub
+  without the Gateway API CRDs, so they land as their environments become testable.
 - **Phase 3 — Docker provider**: requires the operator pod to reach the host Docker network
   (`DOCKER_HOST` + routable API); document the deployment requirement.
 - **Phase 4 — Cloud (EKS/Hetzner/Omni)**: obtain kubeconfig via cloud APIs using mounted credentials.

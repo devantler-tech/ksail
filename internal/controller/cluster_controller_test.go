@@ -425,7 +425,7 @@ func TestReconcile_InstallsComponentsOncePerGeneration(t *testing.T) {
 	calls := 0
 	reconciler.InstallComponents = func(
 		_ context.Context,
-		_ client.Reader,
+		_ clusterprovisioner.Provisioner,
 		_ *v1alpha1.Cluster,
 	) error {
 		calls++
@@ -458,7 +458,7 @@ func TestReconcile_ComponentFailureIsBestEffortAndRequeues(t *testing.T) {
 	reconciler := newReconciler(scheme, fakeClient, &fakeProvisioner{exists: true})
 	reconciler.InstallComponents = func(
 		_ context.Context,
-		_ client.Reader,
+		_ clusterprovisioner.Provisioner,
 		_ *v1alpha1.Cluster,
 	) error {
 		return errBoom
