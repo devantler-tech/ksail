@@ -37,13 +37,13 @@ Installers run against the **provisioned (child)** cluster, not the hub. The ope
 kubeconfig/helm client for the child. Today the `Provisioner` interface exposes **no** way to get
 this. Access differs per distribution × provider:
 
-| Distribution × Provider | How the child is reached | Feasible from operator now? |
-|---|---|---|
-| **VCluster + Kubernetes** | `vc-<name>` Secret in `vcluster-<name>` ns holds a kubeconfig; rewrite server → in-cluster Service `https://<name>.vcluster-<name>.svc:443`, `tls-server-name: kubernetes` (same trick the status observer uses) | **Yes** |
-| Vanilla/Talos/KWOK + Kubernetes (DinD) | API server runs in a DinD pod, exposed via Gateway API `TCPRoute`/NodePort; child kubeconfig must be extracted from the DinD pod / a published Secret | Needs plumbing |
-| K3s + Kubernetes (k3k) | k3k publishes a kubeconfig Secret for the virtual cluster | Needs plumbing |
-| any + Docker | kind/k3d write a kubeconfig to a path on the host's Docker network; not reachable from a hub pod without `DOCKER_HOST` + network routing | Needs plumbing |
-| EKS + AWS / Talos + Hetzner/Omni | kubeconfig obtained from the cloud API using operator-mounted credentials | Needs plumbing |
+| Distribution × Provider                | How the child is reached                                                                                                                                                                                         | Feasible from operator now? |
+|----------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------|
+| **VCluster + Kubernetes**              | `vc-<name>` Secret in `vcluster-<name>` ns holds a kubeconfig; rewrite server → in-cluster Service `https://<name>.vcluster-<name>.svc:443`, `tls-server-name: kubernetes` (same trick the status observer uses) | **Yes**                     |
+| Vanilla/Talos/KWOK + Kubernetes (DinD) | API server runs in a DinD pod, exposed via Gateway API `TCPRoute`/NodePort; child kubeconfig must be extracted from the DinD pod / a published Secret                                                            | Needs plumbing              |
+| K3s + Kubernetes (k3k)                 | k3k publishes a kubeconfig Secret for the virtual cluster                                                                                                                                                        | Needs plumbing              |
+| any + Docker                           | kind/k3d write a kubeconfig to a path on the host's Docker network; not reachable from a hub pod without `DOCKER_HOST` + network routing                                                                         | Needs plumbing              |
+| EKS + AWS / Talos + Hetzner/Omni       | kubeconfig obtained from the cloud API using operator-mounted credentials                                                                                                                                        | Needs plumbing              |
 
 **Proposed long-term contract** — extend the provisioner with an optional capability interface so
 the operator gets child access uniformly instead of special-casing:
