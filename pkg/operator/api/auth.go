@@ -301,7 +301,7 @@ func (a *authenticator) signedCookie(
 ) *http.Cookie {
 	// Secure is driven by config (true behind HTTPS, false for local HTTP port-forwards); cookies
 	// are always HttpOnly and SameSite=Lax.
-	return &http.Cookie{ //nolint:gosec // G124: Secure is set from SecureCookies; HttpOnly+SameSite set
+	return &http.Cookie{
 		Name:     name,
 		Value:    signValue(a.config.SessionSecret, payload),
 		Path:     path,
@@ -313,7 +313,7 @@ func (a *authenticator) signedCookie(
 }
 
 func expiredCookie(name, path string, secure bool) *http.Cookie {
-	return &http.Cookie{ //nolint:gosec // G124: clears a cookie; HttpOnly+SameSite set, Secure from config
+	return &http.Cookie{
 		Name:     name,
 		Value:    "",
 		Path:     path,
