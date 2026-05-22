@@ -365,31 +365,6 @@ The workflow also sets **`KSAIL_SPEC_CLUSTER_OMNI_MACHINECLASS`** to `ksail` via
 | `maintenance`   | Monthly (1st, 00:00 UTC)   | Old workflow run and image cleanup |
 | `sync-labels`   | Weekly (Monday, 07:00 UTC) | Label synchronization              |
 
-#### Agentic Workflows
-
-KSail uses [GitHub Agentic Workflows](https://github.github.com/gh-aw/) (`.github/workflows/*.md`) to automate continuous improvement tasks. These are AI-driven workflows that run on a schedule or on dispatch:
-
-| Workflow                     | Schedule                                    | Purpose                                                                    |
-|------------------------------|---------------------------------------------|----------------------------------------------------------------------------|
-| `repo-assist`                | Every 12h / On `/repo-assist`               | Issue triage, code quality, building, planning, and repository maintenance |
-| `daily-workflow-maintenance` | Daily (18:00 UTC)                           | CI/CD workflow updates, optimization, CI coaching, and dependency upgrades |
-| `daily-docs`                 | Daily (22:00 UTC) / On push / On `/unbloat` | Documentation sync with code changes, bloat reduction, and link fixing     |
-| `monthly-strategy`           | Monthly (1st, 02:49 UTC) / On dispatch      | Market research, competitive analysis, and Now/Next/Later roadmap planning |
-| `ci-doctor`                  | On CI failure                               | CI failure investigation, diagnostics, and Go-specific analysis            |
-
-Each agentic workflow creates a GitHub Discussion to coordinate its work and, depending on its purpose, may open draft PRs or create issues with incremental improvements. You can control them using the [`gh aw`](https://github.com/github/gh-aw) CLI extension:
-
-```sh
-# Install the gh-aw extension (prerequisite)
-gh ext install github/gh-aw
-
-# Manage a specific workflow
-gh aw disable daily-workflow-maintenance --repo devantler-tech/ksail
-gh aw enable daily-workflow-maintenance --repo devantler-tech/ksail
-gh aw run daily-workflow-maintenance --repo devantler-tech/ksail
-gh aw logs daily-workflow-maintenance --repo devantler-tech/ksail
-```
-
 ## CD
 
 ### Release Process

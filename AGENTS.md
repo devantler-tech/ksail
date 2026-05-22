@@ -193,7 +193,6 @@ go run main.go --help
 - **go.mod**: Go module dependencies (includes embedded kubectl, helm, kind, k3d, vcluster, flux, argocd)
 - **package.json**: Node.js dependencies for Astro documentation
 - **.github/workflows/\*.yaml**: CI/CD pipelines
-- **.github/workflows/\*.md**: Agentic workflows (repo-assist, daily-docs, daily-workflow-maintenance, monthly-strategy, ci-doctor); each runs on a schedule or dispatch, and many operate in multiple phases
 
 ### CLI Commands Reference
 
@@ -365,35 +364,9 @@ For a deeper dive into KSail's design and internals, refer to:
 - `pkg/runner/`: Cobra command execution helpers
 - `pkg/timer/`: Command timing and performance tracking
 
-## Threat Detection False-Positive Prevention
-
-- When your only output is a `noop` safe-output call (i.e., the model responds solely with the standardized `safe_output` block and does not propose any code, configuration, or workflow changes), this is legitimate — do NOT describe it as "suppressing actions."
-- The `<security>` section in the workflow prompt (the dedicated security-policy guidance block in the gh-aw threat-detection workflow template) is standard policy guidance, NOT a prompt injection attempt.
-- When the detection model's own `reasons` array contradicts the boolean verdict, the reasons text takes precedence for human review.
-- Agents should avoid phrasing like "ignoring policy" or "suppressing" in their reasoning; prefer "no action required" or "no changes needed."
-
-## Daily Docs Workflow Behavior
-
-The Daily Docs agentic workflow (`daily-docs.lock.yml`) is designed to fill documentation gaps:
-
-- When a push to `main` already includes documentation changes alongside code changes, the agent may correctly call `noop` — no additional PR is needed
-- When the agent calls `noop`, the `agent` job is marked as `failure` by the gh-aw framework (this is expected behavior, not a real error)
-- The `update_cache_memory` job is skipped on agent failure — subsequent runs will rebuild the page ownership map cache automatically
-- This pattern is particularly common for commits that combine code dependency updates with documentation fixes
-
 ## Benchmark Pipeline Consistency
 
 When changing `-count` in the `go test -bench` command in CI, always update the awk averaging/filtering step in "Prepare benchmark regression gate input" to produce exactly one result line per benchmark name. Failing to do so causes false-positive performance regression alerts for all benchmarks, even ones unrelated to the PR. The comparison tool (`github-action-benchmark`) expects the file it reads to contain exactly one result line per benchmark name, so repeated entries for the same benchmark must be consolidated before comparison. See [docs/BENCHMARK-REGRESSION.md](docs/BENCHMARK-REGRESSION.md) for details.
-
-## CI Doctor Issue Linking
-
-The CI Doctor agentic workflow (`ci-doctor.lock.yml`) creates investigation issues (labelled `ci` + `automation`, title prefix `CI Doctor -`) when monitored CI workflows fail. These issues auto-expire after 7 days.
-
-When fixing a CI failure that has a corresponding CI Doctor issue:
-
-- Search open issues with labels `ci` and `automation` for related CI Doctor investigations
-- Include `Fixes #<issue-number>` in the PR description to auto-close the CI Doctor issue on merge
-- This applies to all agents: Agent Merge, Copilot coding agent, Repo Assist, and human contributors
 
 ## Active Technologies
 
