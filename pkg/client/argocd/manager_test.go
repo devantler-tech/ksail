@@ -402,7 +402,7 @@ func TestManagerEnsure_WithCredentials_SetsUsernameAndPasswordInSecret(t *testin
 	require.NoError(t, err)
 	require.Equal(t, "myuser", secretValue(secret, "username"))
 	require.Equal(t, "mypassword", secretValue(secret, "password"))
-	require.Empty(t, secretValue(secret, "insecureOCIForceHttp"))
+	require.NotContains(t, secret.StringData, "insecureOCIForceHttp")
 }
 
 func TestManagerEnsure_SecureMode_OmitsInsecureOCIForceHttp(t *testing.T) {
@@ -426,7 +426,7 @@ func TestManagerEnsure_SecureMode_OmitsInsecureOCIForceHttp(t *testing.T) {
 		metav1.GetOptions{},
 	)
 	require.NoError(t, err)
-	require.Empty(t, secretValue(secret, "insecureOCIForceHttp"))
+	require.NotContains(t, secret.StringData, "insecureOCIForceHttp")
 }
 
 func TestManagerEnsure_EmptyApplicationName_DefaultsToKSail(t *testing.T) {
