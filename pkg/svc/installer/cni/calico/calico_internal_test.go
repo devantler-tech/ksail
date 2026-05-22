@@ -34,7 +34,10 @@ func TestDefaultCalicoValues(t *testing.T) {
 	t.Parallel()
 
 	values := calicoinstaller.DefaultCalicoValuesForTest()
-	assert.Empty(t, values, "default values should be empty map")
+
+	require.NotEmpty(t, values, "default values should disable goldmane and whisker")
+	assert.Equal(t, "false", values["goldmane.enabled"], "goldmane should be disabled by default")
+	assert.Equal(t, "false", values["whisker.enabled"], "whisker should be disabled by default")
 }
 
 func TestDefaultCalicoValues_HAEnabled(t *testing.T) {
