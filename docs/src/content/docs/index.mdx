@@ -56,6 +56,7 @@ Supported distributions run on different infrastructure providers:
 | Provider | Vanilla | K3s | Talos | VCluster | KWOK | EKS |
 |----------|---------|-----|-------|----------|------|-----|
 | Docker | ✅ (Kind) | ✅ (K3d) | ✅ | ✅ (Vind) | ✅ (kwokctl) | ❌ |
+| Kubernetes | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
 | Hetzner | — | — | ✅ | — | — | — |
 | Omni | — | — | ✅ | — | — | — |
 | AWS | — | — | — | — | — | 🚧 |
@@ -202,6 +203,9 @@ flowchart TD
 <CardGrid>
   <Card title="Docker" icon="laptop">
     Run Kubernetes nodes as Docker containers locally. Default provider for all distributions. [Learn more →](/providers/docker/)
+  </Card>
+  <Card title="Kubernetes (Nested)" icon="puzzle">
+    Run nested clusters as pods inside an existing Kubernetes cluster — no Docker required on the host. Supports Vanilla, K3s, Talos, VCluster, and KWOK. [Learn more →](/providers/kubernetes/)
   </Card>
   <Card title="Hetzner" icon="external">
     Deploy Talos clusters on affordable Hetzner Cloud servers with real load balancers and persistent volumes. [Learn more →](/providers/hetzner/)
