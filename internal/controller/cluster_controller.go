@@ -16,6 +16,8 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
@@ -465,17 +467,23 @@ func (r *ClusterReconciler) namespaceHasOnlyOperatorResources(
 		return false, nil
 	}
 
-	// Keep the namespace if it holds any workload or batch job. The list is bounded; one item is
-	// enough to know the namespace is in use.
+	// Keep the namespace if it holds any workload, batch job, networking object, or RBAC object. The
+	// list is bounded; one item is enough to know the namespace is in use. ServiceAccounts and
+	// ConfigMaps/Secrets need filtering (Kubernetes auto-creates some) and are handled separately.
 	presenceLists := []client.ObjectList{
 		&corev1.PodList{},
 		&corev1.ServiceList{},
 		&corev1.PersistentVolumeClaimList{},
 		&appsv1.DeploymentList{},
+		&appsv1.ReplicaSetList{},
 		&appsv1.StatefulSetList{},
 		&appsv1.DaemonSetList{},
 		&batchv1.JobList{},
 		&batchv1.CronJobList{},
+		&networkingv1.IngressList{},
+		&networkingv1.NetworkPolicyList{},
+		&rbacv1.RoleList{},
+		&rbacv1.RoleBindingList{},
 	}
 
 	for _, list := range presenceLists {
@@ -497,10 +505,15 @@ func (r *ClusterReconciler) namespaceHasOnlyOperatorResources(
 	return r.namespaceHasNoUserConfig(ctx, namespace)
 }
 
-// namespaceHasNoUserConfig reports whether the namespace holds no user-authored ConfigMaps or
-// Secrets, ignoring the resources Kubernetes provisions in every namespace (the kube-root-ca.crt
-// ConfigMap and the default ServiceAccount's token Secret). These need filtering rather than a
-// presence check, so they are listed in full (a namespace's config set is small).
+// defaultServiceAccountName is the ServiceAccount Kubernetes provisions in every namespace; it is
+// ignored when deciding whether a managed namespace still holds user resources.
+const defaultServiceAccountName = "default"
+
+// namespaceHasNoUserConfig reports whether the namespace holds no user-authored ConfigMaps,
+// Secrets, or ServiceAccounts, ignoring the objects Kubernetes provisions in every namespace (the
+// kube-root-ca.crt ConfigMap, the default ServiceAccount, and service-account token Secrets). These
+// need filtering rather than a presence check, so they are listed in full (a namespace's set is
+// small).
 func (r *ClusterReconciler) namespaceHasNoUserConfig(
 	ctx context.Context,
 	namespace string,
@@ -529,6 +542,19 @@ func (r *ClusterReconciler) namespaceHasNoUserConfig(
 
 	for index := range secrets.Items {
 		if secrets.Items[index].Type != corev1.SecretTypeServiceAccountToken {
+			return false, nil
+		}
+	}
+
+	var serviceAccounts corev1.ServiceAccountList
+
+	saErr := reader.List(ctx, &serviceAccounts, client.InNamespace(namespace))
+	if saErr != nil {
+		return false, fmt.Errorf("list serviceaccounts in %q: %w", namespace, saErr)
+	}
+
+	for index := range serviceAccounts.Items {
+		if serviceAccounts.Items[index].Name != defaultServiceAccountName {
 			return false, nil
 		}
 	}

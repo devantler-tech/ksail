@@ -4,13 +4,27 @@ export type Theme = "light" | "dark";
 
 const STORAGE_KEY = "ksail-theme";
 
+function prefersDark(): boolean {
+  try {
+    return window.matchMedia("(prefers-color-scheme: dark)").matches;
+  } catch {
+    return false;
+  }
+}
+
 function initialTheme(): Theme {
-  const stored = localStorage.getItem(STORAGE_KEY);
-  if (stored === "light" || stored === "dark") {
-    return stored;
+  // localStorage access can throw in privacy mode, sandboxed frames, or when storage is blocked;
+  // fall back to the system preference instead of crashing the initial render.
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored === "light" || stored === "dark") {
+      return stored;
+    }
+  } catch {
+    /* ignore: storage unavailable */
   }
 
-  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  return prefersDark() ? "dark" : "light";
 }
 
 // useTheme tracks the active light/dark theme, persists the choice, and toggles the `dark` class on
@@ -21,7 +35,11 @@ export function useTheme(): { theme: Theme; toggle: () => void } {
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", theme === "dark");
-    localStorage.setItem(STORAGE_KEY, theme);
+    try {
+      localStorage.setItem(STORAGE_KEY, theme);
+    } catch {
+      /* ignore: storage unavailable (theme still applies for this session) */
+    }
   }, [theme]);
 
   const toggle = useCallback(() => {
