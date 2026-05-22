@@ -1,6 +1,6 @@
 module github.com/devantler-tech/ksail/v7
 
-go 1.26.2
+go 1.26.3
 
 // Exclude the standalone google.golang.org/grpc/stats/opentelemetry module to avoid
 // ambiguous import errors. The opentelemetry stats package is included in the main
@@ -27,8 +27,8 @@ require (
 	github.com/mitchellh/go-wordwrap v1.0.1
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/samber/do/v2 v2.0.0
-	github.com/siderolabs/talos v1.13.0
-	github.com/siderolabs/talos/pkg/machinery v1.13.0
+	github.com/siderolabs/talos v1.13.2
+	github.com/siderolabs/talos/pkg/machinery v1.13.2
 	github.com/sirupsen/logrus v1.9.4
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
@@ -72,7 +72,7 @@ require (
 	github.com/loft-sh/log v0.0.0-20240219160058-26d83ffb46ac
 	github.com/loft-sh/vcluster v0.34.0
 	github.com/modelcontextprotocol/go-sdk v1.6.0
-	github.com/rancher/k3k v1.0.2
+	github.com/rancher/k3k v1.1.0
 	github.com/siderolabs/gen v0.8.6
 	github.com/siderolabs/go-kubernetes v0.2.37
 	github.com/siderolabs/go-retry v0.3.3
@@ -103,7 +103,7 @@ require (
 	cloud.google.com/go/storage v1.62.1 // indirect
 	codeberg.org/chavacava/garif v0.2.0 // indirect
 	codeberg.org/polyfloyd/go-errorlint v1.9.0 // indirect
-	cyphar.com/go-pathrs v0.2.1 // indirect
+	cyphar.com/go-pathrs v0.2.2 // indirect
 	dario.cat/mergo v1.0.2 // indirect
 	dev.gaijin.team/go/exhaustruct/v4 v4.0.0 // indirect
 	dev.gaijin.team/go/golib v0.6.0 // indirect
@@ -644,7 +644,7 @@ require (
 	github.com/mitchellh/reflectwalk v1.0.2 // indirect
 	github.com/moby/buildkit v0.26.3 // indirect
 	github.com/moby/docker-image-spec v1.3.1 // indirect
-	github.com/moby/go-archive v0.1.0 // indirect
+	github.com/moby/go-archive v0.2.0 // indirect
 	github.com/moby/locker v1.0.1 // indirect
 	github.com/moby/moby/api v1.54.2 // indirect
 	github.com/moby/moby/client v0.4.1 // indirect
@@ -879,11 +879,11 @@ require (
 	go.augendre.info/arangolint v0.3.1 // indirect
 	go.augendre.info/fatcontext v0.9.0 // indirect
 	go.etcd.io/bbolt v1.4.3 // indirect
-	go.etcd.io/etcd/api/v3 v3.6.10 // indirect
-	go.etcd.io/etcd/client/pkg/v3 v3.6.10 // indirect
-	go.etcd.io/etcd/client/v3 v3.6.10 // indirect
-	go.etcd.io/etcd/pkg/v3 v3.6.9 // indirect
-	go.etcd.io/etcd/server/v3 v3.6.9 // indirect
+	go.etcd.io/etcd/api/v3 v3.6.11 // indirect
+	go.etcd.io/etcd/client/pkg/v3 v3.6.11 // indirect
+	go.etcd.io/etcd/client/v3 v3.6.11 // indirect
+	go.etcd.io/etcd/pkg/v3 v3.6.11 // indirect
+	go.etcd.io/etcd/server/v3 v3.6.11 // indirect
 	go.etcd.io/raft/v3 v3.6.0 // indirect
 	go.mongodb.org/mongo-driver v1.17.9 // indirect
 	go.opencensus.io v0.24.0 // indirect
@@ -951,14 +951,14 @@ require (
 	k8s.io/cluster-bootstrap v0.35.0 // indirect
 	k8s.io/component-base v0.36.1 // indirect
 	k8s.io/component-helpers v0.36.1 // indirect
-	k8s.io/cri-api v0.35.4 // indirect
-	k8s.io/cri-client v0.35.0 // indirect
+	k8s.io/cri-api v0.36.0 // indirect
+	k8s.io/cri-client v0.36.0 // indirect
 	k8s.io/kube-aggregator v0.35.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20260330154417-16be699c7b31 // indirect
 	k8s.io/kube-proxy v0.33.0 // indirect
-	k8s.io/kube-scheduler v0.35.3 // indirect
-	k8s.io/kubelet v0.35.4 // indirect
-	k8s.io/kubernetes v1.35.4 // indirect
+	k8s.io/kube-scheduler v0.36.0 // indirect
+	k8s.io/kubelet v0.36.0 // indirect
+	k8s.io/kubernetes v1.36.0 // indirect
 	k8s.io/metrics v0.36.1 // indirect
 	k8s.io/streaming v0.36.1 // indirect
 	k8s.io/utils v0.0.0-20260319190234-28399d86e0b5 // indirect
@@ -1002,6 +1002,13 @@ replace (
 	// required by k9s, grype, and syft. This replace can be removed once
 	// https://github.com/loft-sh/log/pull/3 is merged and tagged.
 	github.com/loft-sh/log => github.com/devantler/log v0.0.0-20260407144227-16cc61ebdb79
+
+	// rancher/k3k v1.1.0 transitively requires moby/go-archive v0.2.0 (via
+	// testcontainers-go v0.42.0). v0.2.0 removed the Compression type alias from
+	// the package-level archive wrapper. Pinning back to v0.1.0 restores that
+	// alias. This replace can be removed once docker/docker ships a release
+	// compatible with moby/go-archive v0.2.0.
+	github.com/moby/go-archive => github.com/moby/go-archive v0.1.0
 )
 
 tool (
