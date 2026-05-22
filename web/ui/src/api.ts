@@ -32,6 +32,15 @@ export interface ClusterStatus {
 export interface ClusterSpec {
   distribution?: string;
   provider?: string;
+  controlPlanes?: number;
+  workers?: number;
+  cni?: string;
+  csi?: string;
+  cdi?: string;
+  metricsServer?: string;
+  loadBalancer?: string;
+  certManager?: string;
+  policyEngine?: string;
   gitOpsEngine?: string;
 }
 
@@ -129,6 +138,18 @@ export function listClusters(): Promise<ClusterList> {
 export function createCluster(cluster: Cluster): Promise<Cluster> {
   return request<Cluster>("/api/v1/clusters", {
     method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(cluster),
+  });
+}
+
+export function updateCluster(
+  namespace: string,
+  name: string,
+  cluster: Cluster,
+): Promise<Cluster> {
+  return request<Cluster>(`/api/v1/clusters/${namespace}/${name}`, {
+    method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(cluster),
   });

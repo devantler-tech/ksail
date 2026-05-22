@@ -1,9 +1,9 @@
-import { Check, CircleAlert, CircleCheck, CircleHelp, Copy } from "lucide-react";
+import { Check, CircleAlert, CircleCheck, CircleHelp, Copy, Pencil } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import type { Cluster, Condition } from "../api.ts";
 import { formatTimestamp, relativeAge } from "../lib/format.ts";
 import { StatusBadge } from "./StatusBadge.tsx";
-import { SlideOver } from "./ui.tsx";
+import { Button, SlideOver } from "./ui.tsx";
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -97,11 +97,15 @@ function SectionTitle({ children }: { children: ReactNode }) {
 export function ClusterDetail({
   cluster,
   open,
+  readOnly,
   onClose,
+  onEdit,
 }: {
   cluster: Cluster | null;
   open: boolean;
+  readOnly: boolean;
   onClose: () => void;
+  onEdit: (cluster: Cluster) => void;
 }) {
   const status = cluster?.status;
   const spec = cluster?.spec?.cluster;
@@ -117,15 +121,30 @@ export function ClusterDetail({
     >
       {cluster ? (
         <div>
-          <div className="mb-2">
+          <div className="mb-2 flex items-center justify-between gap-2">
             <StatusBadge phase={status?.phase} />
+            {!readOnly ? (
+              <Button variant="secondary" size="sm" onClick={() => onEdit(cluster)}>
+                <Pencil className="size-3.5" aria-hidden />
+                Edit
+              </Button>
+            ) : null}
           </div>
 
           <SectionTitle>Spec</SectionTitle>
           <dl className="divide-y divide-slate-100 dark:divide-slate-800">
-            <Row label="Distribution">{spec?.distribution ?? "—"}</Row>
-            <Row label="Provider">{spec?.provider ?? "—"}</Row>
-            <Row label="GitOps">{spec?.gitOpsEngine ?? "None"}</Row>
+            <Row label="Distribution">{spec?.distribution || "Vanilla"}</Row>
+            <Row label="Provider">{spec?.provider || "Docker"}</Row>
+            <Row label="Control planes">{spec?.controlPlanes ?? 1}</Row>
+            <Row label="Workers">{spec?.workers ?? 0}</Row>
+            <Row label="CNI">{spec?.cni || "Default"}</Row>
+            <Row label="CSI">{spec?.csi || "Default"}</Row>
+            <Row label="CDI">{spec?.cdi || "Default"}</Row>
+            <Row label="Metrics Server">{spec?.metricsServer || "Default"}</Row>
+            <Row label="Load Balancer">{spec?.loadBalancer || "Default"}</Row>
+            <Row label="Cert Manager">{spec?.certManager || "Enabled"}</Row>
+            <Row label="Policy Engine">{spec?.policyEngine || "None"}</Row>
+            <Row label="GitOps">{spec?.gitOpsEngine || "None"}</Row>
           </dl>
 
           <SectionTitle>Status</SectionTitle>

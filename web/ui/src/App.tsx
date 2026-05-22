@@ -7,14 +7,20 @@ import {
   getConfig,
   listClusters,
   logout,
+  updateCluster,
   type Cluster,
+  type ClusterSpec,
   type User,
 } from "./api.ts";
 import { AppShell } from "./components/AppShell.tsx";
 import { ClusterDetail } from "./components/ClusterDetail.tsx";
+import {
+  ClusterFormDialog,
+  type ClusterFormValues,
+  type FormMode,
+} from "./components/ClusterFormDialog.tsx";
 import { ClustersTable } from "./components/ClustersTable.tsx";
 import { ConfirmDialog } from "./components/ConfirmDialog.tsx";
-import { CreateClusterDialog, type CreateClusterInput } from "./components/CreateClusterDialog.tsx";
 import { LoginScreen } from "./components/LoginScreen.tsx";
 import { EmptyState, ErrorBanner, TableSkeleton } from "./components/states.tsx";
 import { Button } from "./components/ui.tsx";
@@ -35,6 +41,28 @@ function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
+// specFromValues maps the form fields to a ClusterSpec. Node counts are parsed to numbers; the
+// component enums are sent verbatim (default values serialize away server-side via omitzero).
+function specFromValues(values: ClusterFormValues): ClusterSpec {
+  const controlPlanes = Number.parseInt(values.controlPlanes, 10);
+  const workers = Number.parseInt(values.workers, 10);
+
+  return {
+    distribution: values.distribution,
+    provider: values.provider,
+    controlPlanes: Number.isNaN(controlPlanes) ? undefined : controlPlanes,
+    workers: Number.isNaN(workers) ? undefined : workers,
+    cni: values.cni,
+    csi: values.csi,
+    cdi: values.cdi,
+    metricsServer: values.metricsServer,
+    loadBalancer: values.loadBalancer,
+    certManager: values.certManager,
+    policyEngine: values.policyEngine,
+    gitOpsEngine: values.gitOpsEngine,
+  };
+}
+
 export function App() {
   const { theme, toggle } = useTheme();
   const toast = useToast();
@@ -49,7 +77,9 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
 
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
-  const [createOpen, setCreateOpen] = useState(false);
+  const [formOpen, setFormOpen] = useState(false);
+  const [formMode, setFormMode] = useState<FormMode>("create");
+  const [formInitial, setFormInitial] = useState<Cluster | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Cluster | null>(null);
 
   const mounted = useRef(true);
@@ -138,21 +168,45 @@ export function App() {
     };
   }, [refresh]);
 
-  const handleCreate = useCallback(
-    async (input: CreateClusterInput) => {
+  function openCreate() {
+    setFormMode("create");
+    setFormInitial(null);
+    setFormOpen(true);
+  }
+
+  function openEdit(cluster: Cluster) {
+    setFormMode("edit");
+    setFormInitial(cluster);
+    setFormOpen(true);
+  }
+
+  const handleSubmit = useCallback(
+    async (values: ClusterFormValues) => {
+      const spec = specFromValues(values);
       try {
-        await createCluster({
-          metadata: { name: input.name, namespace: input.namespace },
-          spec: { cluster: { distribution: input.distribution, provider: input.provider } },
-        });
-        toast.success(`Cluster "${input.name}" created`);
+        if (formMode === "edit" && formInitial) {
+          // Preserve spec fields the form does not manage (provider options, workload, chat, OIDC…).
+          const namespace = formInitial.metadata.namespace ?? "default";
+          await updateCluster(namespace, formInitial.metadata.name, {
+            metadata: { name: formInitial.metadata.name, namespace },
+            spec: { ...formInitial.spec, cluster: { ...formInitial.spec?.cluster, ...spec } },
+          });
+          toast.success(`Cluster "${formInitial.metadata.name}" updated`);
+        } else {
+          const name = values.name.trim();
+          await createCluster({
+            metadata: { name, namespace: values.namespace.trim() || "default" },
+            spec: { cluster: spec },
+          });
+          toast.success(`Cluster "${name}" created`);
+        }
         await refresh(true);
       } catch (err) {
         toast.error(errorMessage(err));
         throw err;
       }
     },
-    [refresh, toast],
+    [formMode, formInitial, refresh, toast],
   );
 
   const handleDelete = useCallback(async () => {
@@ -183,7 +237,7 @@ export function App() {
         Refresh
       </Button>
       {!readOnly ? (
-        <Button size="sm" onClick={() => setCreateOpen(true)}>
+        <Button size="sm" onClick={openCreate}>
           <Plus className="size-4" aria-hidden />
           New cluster
         </Button>
@@ -219,7 +273,7 @@ export function App() {
             }
             action={
               !readOnly ? (
-                <Button onClick={() => setCreateOpen(true)}>
+                <Button onClick={openCreate}>
                   <Plus className="size-4" aria-hidden />
                   New cluster
                 </Button>
@@ -231,17 +285,26 @@ export function App() {
             clusters={clusters}
             readOnly={readOnly}
             onSelect={(cluster) => setSelectedKey(clusterKey(cluster))}
+            onEdit={openEdit}
             onDelete={(cluster) => setDeleteTarget(cluster)}
           />
         )}
       </div>
 
-      <ClusterDetail cluster={selected} open={selected !== null} onClose={() => setSelectedKey(null)} />
+      <ClusterDetail
+        cluster={selected}
+        open={selected !== null}
+        readOnly={readOnly}
+        onClose={() => setSelectedKey(null)}
+        onEdit={openEdit}
+      />
 
-      <CreateClusterDialog
-        open={createOpen}
-        onClose={() => setCreateOpen(false)}
-        onCreate={handleCreate}
+      <ClusterFormDialog
+        open={formOpen}
+        mode={formMode}
+        initial={formInitial}
+        onSubmit={handleSubmit}
+        onClose={() => setFormOpen(false)}
       />
 
       <ConfirmDialog
