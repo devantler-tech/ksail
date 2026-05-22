@@ -18,6 +18,10 @@ Create a cluster:
 {{- if .Values.ui.enabled }}
 
 Web UI is enabled ({{ if .Values.ui.readOnly }}read-only{{ else }}ClickOps{{ end }} mode).
+{{- if .Values.auth.oidc.enabled }}
+OIDC authentication is enabled: API calls require sign-in via your provider.
+Register {{ include "ksail-operator.oidc.redirectURL" . }} as a redirect URI with your issuer.
+{{- end }}
 {{- if not .Values.ui.ingress.enabled }}
 Port-forward to reach it:
 

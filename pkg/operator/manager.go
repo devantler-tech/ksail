@@ -29,6 +29,8 @@ type Options struct {
 	APIBindAddress string
 	// ReadOnly puts the REST API in read-only mode, rejecting all mutating requests.
 	ReadOnly bool
+	// OIDC configures app-driven OIDC authentication for the REST API (disabled when empty).
+	OIDC api.OIDCConfig
 	// LeaderElection enables leader election to ensure a single active operator.
 	LeaderElection bool
 	// LeaderElectionID overrides the leader election lease name (optional).
@@ -110,6 +112,7 @@ func setupManager(mgr ctrl.Manager, opts Options) error {
 			Client:      mgr.GetClient(),
 			ReadOnly:    opts.ReadOnly,
 			BindAddress: opts.APIBindAddress,
+			OIDC:        opts.OIDC,
 		})
 		if apiErr != nil {
 			return fmt.Errorf("add API server: %w", apiErr)

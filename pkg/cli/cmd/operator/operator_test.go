@@ -26,6 +26,10 @@ func TestNewOperatorCmd(t *testing.T) {
 		"leader-elect",
 		"metrics-bind-address",
 		"health-probe-bind-address",
+		"oidc-issuer-url",
+		"oidc-client-id",
+		"oidc-redirect-url",
+		"oidc-scopes",
 	} {
 		require.NotNil(t, cmd.Flags().Lookup(name), "missing flag --%s", name)
 	}

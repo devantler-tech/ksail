@@ -54,3 +54,24 @@ app.kubernetes.io/component: ui
 {{- $tag := .Values.ui.image.tag | default .Chart.AppVersion -}}
 {{- printf "%s:%s" .Values.ui.image.repository $tag -}}
 {{- end -}}
+
+{{/* Name of the Secret holding the OIDC client and session secrets. */}}
+{{- define "ksail-operator.oidc.secretName" -}}
+{{- if .Values.auth.oidc.existingSecret -}}
+{{- .Values.auth.oidc.existingSecret -}}
+{{- else -}}
+{{- printf "%s-oidc" (include "ksail-operator.fullname" .) | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+{{- end -}}
+
+{{/* OIDC redirect (callback) URL: the explicit value, or derived from the first ingress host.
+     The callback is served by the operator REST API under /api, so it points at /api/v1/auth/callback. */}}
+{{- define "ksail-operator.oidc.redirectURL" -}}
+{{- if .Values.auth.oidc.redirectURL -}}
+{{- .Values.auth.oidc.redirectURL -}}
+{{- else -}}
+{{- $host := (first .Values.ui.ingress.hosts).host -}}
+{{- $scheme := ternary "https" "http" (gt (len .Values.ui.ingress.tls) 0) -}}
+{{- printf "%s://%s/api/v1/auth/callback" $scheme $host -}}
+{{- end -}}
+{{- end -}}

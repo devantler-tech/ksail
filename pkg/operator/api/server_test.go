@@ -62,7 +62,7 @@ func TestConfigReportsReadOnly(t *testing.T) {
 	recorder := doRequest(server.Handler(), http.MethodGet, "/api/v1/config", "")
 
 	assert.Equal(t, http.StatusOK, recorder.Code)
-	assert.JSONEq(t, `{"readOnly":true}`, recorder.Body.String())
+	assert.JSONEq(t, `{"readOnly":true,"authEnabled":false}`, recorder.Body.String())
 }
 
 func TestListClusters(t *testing.T) {
@@ -259,5 +259,48 @@ func TestConfigDefaultsWritable(t *testing.T) {
 	recorder := doRequest(server.Handler(), http.MethodGet, "/api/v1/config", "")
 
 	assert.Equal(t, http.StatusOK, recorder.Code)
-	assert.JSONEq(t, `{"readOnly":false}`, recorder.Body.String())
+	assert.JSONEq(t, `{"readOnly":false,"authEnabled":false}`, recorder.Body.String())
+}
+
+const sessionSecret = "0123456789abcdef0123456789abcdef"
+
+func TestAuthGuardRejectsUnauthenticated(t *testing.T) {
+	t.Parallel()
+
+	server := api.NewAuthTestServer(newClient(t, sampleCluster()), []byte(sessionSecret))
+
+	recorder := doRequest(server.Handler(), http.MethodGet, "/api/v1/clusters", "")
+
+	assert.Equal(t, http.StatusUnauthorized, recorder.Code)
+	assert.Contains(t, recorder.Body.String(), "loginURL")
+}
+
+func TestAuthGuardAllowsValidSession(t *testing.T) {
+	t.Parallel()
+
+	server := api.NewAuthTestServer(newClient(t, sampleCluster()), []byte(sessionSecret))
+
+	request := httptest.NewRequestWithContext(
+		context.Background(),
+		http.MethodGet,
+		"/api/v1/clusters",
+		nil,
+	)
+	request.AddCookie(server.NewSessionCookie("alice@example.com"))
+
+	recorder := httptest.NewRecorder()
+	server.Handler().ServeHTTP(recorder, request)
+
+	assert.Equal(t, http.StatusOK, recorder.Code)
+}
+
+func TestAuthGuardLeavesConfigOpen(t *testing.T) {
+	t.Parallel()
+
+	server := api.NewAuthTestServer(newClient(t), []byte(sessionSecret))
+
+	recorder := doRequest(server.Handler(), http.MethodGet, "/api/v1/config", "")
+
+	assert.Equal(t, http.StatusOK, recorder.Code)
+	assert.Contains(t, recorder.Body.String(), `"authEnabled":true`)
 }

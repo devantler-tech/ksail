@@ -27,8 +27,29 @@ export interface ClusterList {
   items?: Cluster[];
 }
 
+export interface User {
+  subject: string;
+  email?: string;
+  name?: string;
+}
+
 export interface Config {
   readOnly: boolean;
+  authEnabled: boolean;
+  user?: User;
+}
+
+// ApiError carries the HTTP status so callers can react to auth failures (401) specifically.
+export class ApiError extends Error {
+  readonly status: number;
+  readonly loginURL?: string;
+
+  constructor(message: string, status: number, loginURL?: string) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.loginURL = loginURL;
+  }
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -37,8 +58,18 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     // Surface the server-provided error body (e.g. the Kubernetes status message) so the UI can
     // show something actionable instead of a bare status code.
     const body = (await response.text()).trim();
+    let loginURL: string | undefined;
+    try {
+      loginURL = (JSON.parse(body) as { loginURL?: string }).loginURL;
+    } catch {
+      // Body was not JSON; leave loginURL undefined.
+    }
     const detail = body === "" ? "" : `: ${body}`;
-    throw new Error(`${init?.method ?? "GET"} ${path}: ${response.status}${detail}`);
+    throw new ApiError(
+      `${init?.method ?? "GET"} ${path}: ${response.status}${detail}`,
+      response.status,
+      loginURL,
+    );
   }
 
   if (response.status === 204) {
@@ -47,6 +78,13 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
   return (await response.json()) as T;
 }
+
+export function logout(): Promise<void> {
+  return request<void>("/api/v1/auth/logout", { method: "POST" });
+}
+
+// loginPath is where the app sends the user to start the OIDC flow (handled by the operator API).
+export const loginPath = "/api/v1/auth/login";
 
 export function getConfig(): Promise<Config> {
   return request<Config>("/api/v1/config");

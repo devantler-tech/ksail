@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -33,10 +34,11 @@ const (
 
 // Server serves the operator REST API. It implements controller-runtime's manager.Runnable.
 //
-// The API has no built-in authentication/authorization: any caller that can reach the listener
-// inherits the operator's RBAC. Do not expose it directly. Deploy it behind an authenticating
-// proxy (e.g. kube-rbac-proxy, OIDC, or mTLS), or keep it cluster-internal and rely on the
-// read-only lock. Per-user authn/z is a planned follow-up.
+// Authentication is optional and app-driven (see OIDCConfig): when configured, the API owns the
+// OIDC login/callback and requires a valid session for all cluster endpoints. When OIDC is not
+// configured the API has no built-in authn/z — any caller that can reach the listener inherits the
+// operator's RBAC, so keep it cluster-internal (and rely on the read-only lock) or enable OIDC.
+// The operator always acts with its own RBAC; OIDC provides authentication, not per-user authz.
 type Server struct {
 	// Client is the controller-runtime client used to read and mutate Cluster resources.
 	Client client.Client
@@ -44,6 +46,25 @@ type Server struct {
 	ReadOnly bool
 	// BindAddress is the address the HTTP server listens on (e.g. ":8080").
 	BindAddress string
+	// OIDC configures app-driven OIDC authentication; empty IssuerURL disables it.
+	OIDC OIDCConfig
+
+	// auth is built from OIDC at Start; nil means authentication is disabled.
+	auth *authenticator
+}
+
+// configResponse describes the deployment mode the SPA needs to render the correct UI.
+type configResponse struct {
+	ReadOnly    bool      `json:"readOnly"`
+	AuthEnabled bool      `json:"authEnabled"`
+	User        *userInfo `json:"user,omitempty"`
+}
+
+// userInfo is the authenticated identity surfaced to the SPA.
+type userInfo struct {
+	Subject string `json:"subject"`
+	Email   string `json:"email,omitempty"`
+	Name    string `json:"name,omitempty"`
 }
 
 // NeedLeaderElection reports that the API server runs on every replica, not only the leader,
@@ -54,6 +75,15 @@ func (s *Server) NeedLeaderElection() bool {
 
 // Start runs the HTTP server until the context is cancelled.
 func (s *Server) Start(ctx context.Context) error {
+	if s.OIDC.Enabled() && s.auth == nil {
+		auth, err := newAuthenticator(ctx, s.OIDC)
+		if err != nil {
+			return fmt.Errorf("set up OIDC authentication: %w", err)
+		}
+
+		s.auth = auth
+	}
+
 	server := &http.Server{
 		Addr:              s.BindAddress,
 		Handler:           s.Handler(),
@@ -95,7 +125,48 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PUT /api/v1/clusters/{namespace}/{name}", s.handleUpdateCluster)
 	mux.HandleFunc("DELETE /api/v1/clusters/{namespace}/{name}", s.handleDeleteCluster)
 
-	return s.readOnlyGuard(mux)
+	if s.auth != nil {
+		mux.HandleFunc("GET /api/v1/auth/login", s.auth.handleLogin)
+		mux.HandleFunc("GET /api/v1/auth/callback", s.auth.handleCallback)
+		mux.HandleFunc("POST /api/v1/auth/logout", s.auth.handleLogout)
+	}
+
+	return s.authGuard(s.readOnlyGuard(mux))
+}
+
+// authGuard requires a valid session for cluster endpoints when OIDC is enabled. Health checks,
+// the config endpoint, and the auth flow itself remain open so the SPA can detect the mode and log
+// in. When OIDC is disabled the guard is a pass-through.
+func (s *Server) authGuard(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if s.auth == nil || isOpenPath(request.URL.Path) {
+			next.ServeHTTP(writer, request)
+
+			return
+		}
+
+		_, ok := s.auth.currentUser(request)
+		if !ok {
+			writeJSON(writer, http.StatusUnauthorized, map[string]any{
+				"error":    "authentication required",
+				"loginURL": loginPath,
+			})
+
+			return
+		}
+
+		next.ServeHTTP(writer, request)
+	})
+}
+
+// isOpenPath reports whether a path is reachable without an authenticated session.
+func isOpenPath(path string) bool {
+	switch path {
+	case "/healthz", "/readyz", "/api/v1/config":
+		return true
+	default:
+		return strings.HasPrefix(path, "/api/v1/auth/")
+	}
 }
 
 // readOnlyGuard rejects mutating requests with 403 when the server is in read-only mode.
@@ -118,8 +189,21 @@ func (s *Server) handleHealth(writer http.ResponseWriter, _ *http.Request) {
 	writeJSON(writer, http.StatusOK, map[string]string{"status": "ok"})
 }
 
-func (s *Server) handleConfig(writer http.ResponseWriter, _ *http.Request) {
-	writeJSON(writer, http.StatusOK, map[string]bool{"readOnly": s.ReadOnly})
+func (s *Server) handleConfig(writer http.ResponseWriter, request *http.Request) {
+	response := configResponse{ReadOnly: s.ReadOnly, AuthEnabled: s.auth != nil}
+
+	if s.auth != nil {
+		claims, ok := s.auth.currentUser(request)
+		if ok {
+			response.User = &userInfo{
+				Subject: claims.Subject,
+				Email:   claims.Email,
+				Name:    claims.Name,
+			}
+		}
+	}
+
+	writeJSON(writer, http.StatusOK, response)
 }
 
 func (s *Server) handleListClusters(writer http.ResponseWriter, request *http.Request) {

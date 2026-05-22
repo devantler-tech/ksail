@@ -1,10 +1,14 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import {
+  ApiError,
   createCluster,
   deleteCluster,
   getConfig,
   listClusters,
+  loginPath,
+  logout,
   type Cluster,
+  type User,
 } from "./api.ts";
 
 // Only distributions the operator can currently provision in-cluster (see
@@ -16,6 +20,8 @@ export function App() {
   const [clusters, setClusters] = useState<Cluster[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<User | null>(null);
+  const [needsLogin, setNeedsLogin] = useState(false);
   // Guards against state updates from in-flight requests that resolve after the component unmounts
   // (refresh runs from the interval, the button, and child callbacks, not only the init effect).
   const mounted = useRef(true);
@@ -29,53 +35,95 @@ export function App() {
       setClusters(list.items ?? []);
       setError(null);
     } catch (err) {
-      if (mounted.current) {
-        setError(String(err));
+      if (!mounted.current) {
+        return;
       }
+      if (err instanceof ApiError && err.status === 401) {
+        setNeedsLogin(true);
+        return;
+      }
+      setError(String(err));
     }
   }, []);
 
   useEffect(() => {
     mounted.current = true;
+    let timer: ReturnType<typeof setInterval> | undefined;
 
     async function init() {
+      let config;
       try {
-        const config = await getConfig();
-        if (mounted.current) {
-          setReadOnly(config.readOnly);
-        }
+        config = await getConfig();
       } catch (err) {
         if (mounted.current) {
           setError(String(err));
+          setLoading(false);
         }
+        return;
+      }
+
+      if (!mounted.current) {
+        return;
+      }
+
+      setReadOnly(config.readOnly);
+      setUser(config.user ?? null);
+
+      // When auth is enabled but no session exists yet, show the login screen and do not poll.
+      if (config.authEnabled && !config.user) {
+        setNeedsLogin(true);
+        setLoading(false);
+        return;
       }
 
       await refresh();
       if (mounted.current) {
         setLoading(false);
+        timer = setInterval(() => void refresh(), 10000);
       }
     }
 
     void init();
-    const timer = setInterval(() => void refresh(), 10000);
 
     return () => {
       mounted.current = false;
-      clearInterval(timer);
+      if (timer) {
+        clearInterval(timer);
+      }
     };
   }, [refresh]);
+
+  if (needsLogin) {
+    return <LoginScreen />;
+  }
 
   return (
     <div className="mx-auto max-w-5xl p-6 font-sans text-slate-800">
       <header className="mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-bold">KSail Clusters</h1>
-        <button
-          type="button"
-          onClick={() => void refresh()}
-          className="rounded bg-slate-200 px-3 py-1 text-sm hover:bg-slate-300"
-        >
-          Refresh
-        </button>
+        <div className="flex items-center gap-3">
+          {user && (
+            <span className="text-sm text-slate-500">{user.email ?? user.name ?? user.subject}</span>
+          )}
+          <button
+            type="button"
+            onClick={() => void refresh()}
+            className="rounded bg-slate-200 px-3 py-1 text-sm hover:bg-slate-300"
+          >
+            Refresh
+          </button>
+          {user && (
+            <button
+              type="button"
+              onClick={() => {
+                void logout().finally(() => setNeedsLogin(true));
+              }}
+              className="rounded bg-slate-200 px-3 py-1 text-sm hover:bg-slate-300"
+            >
+              Logout
+            </button>
+          )}
+        </div>
       </header>
 
       {readOnly && (
@@ -103,6 +151,21 @@ export function App() {
       )}
 
       {!readOnly && !loading && <CreateForm onCreated={refresh} onError={setError} />}
+    </div>
+  );
+}
+
+function LoginScreen() {
+  return (
+    <div className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-4 p-6 font-sans text-slate-800">
+      <h1 className="text-2xl font-bold">KSail</h1>
+      <p className="text-sm text-slate-500">Sign in to manage your clusters.</p>
+      <a
+        href={loginPath}
+        className="rounded bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700"
+      >
+        Login
+      </a>
     </div>
   );
 }

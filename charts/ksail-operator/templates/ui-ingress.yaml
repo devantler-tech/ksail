@@ -25,7 +25,8 @@ spec:
       http:
         paths:
           {{- if $.Values.api.bindPort }}
-          # Route /api to the operator REST API Service so the same-origin SPA can reach it.
+          # Route /api to the operator REST API Service so the same-origin SPA (and the OIDC
+          # login/callback handled by the API) can reach it.
           - path: /api
             pathType: Prefix
             backend:

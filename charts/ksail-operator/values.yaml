@@ -66,6 +66,31 @@ ui:
     limits:
       memory: 128Mi
 
+# auth enables app-driven OIDC authentication for the operator REST API (and therefore the UI),
+# in the style of Headlamp: the API itself owns the OIDC login/callback (a confidential client),
+# so clicking "Login" redirects the user to the configured provider (e.g. Dex), and after sign-in
+# the provider calls back to the API, which establishes a secure session cookie. The client secret
+# stays server-side. This closes the otherwise-unauthenticated API: when enabled, all cluster API
+# calls require a valid session.
+auth:
+  oidc:
+    enabled: false
+    # issuerURL is the OIDC issuer (discovery) URL, e.g. https://dex.example.com.
+    issuerURL: ""
+    clientID: ""
+    # clientSecret and sessionSecret are sensitive. Provide them inline (rendered into a Secret) or
+    # reference a pre-created Secret via existingSecret (keys: client-secret, session-secret).
+    clientSecret: ""
+    # sessionSecret signs the session cookie. When left empty and no existingSecret is set, the
+    # chart generates one (preserved across upgrades via lookup).
+    sessionSecret: ""
+    existingSecret: ""
+    # scopes requested from the issuer (openid is always included).
+    scopes: "openid email profile"
+    # redirectURL is the OIDC callback registered with the provider. Defaults to
+    # <scheme>://<first ingress host>/api/v1/auth/callback when ui.ingress is enabled.
+    redirectURL: ""
+
 serviceAccount:
   create: true
   name: ""

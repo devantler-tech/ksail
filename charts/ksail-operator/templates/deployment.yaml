@@ -39,6 +39,25 @@ spec:
             {{- if .Values.ui.readOnly }}
             - --read-only
             {{- end }}
+            {{- if .Values.auth.oidc.enabled }}
+            - --oidc-issuer-url={{ .Values.auth.oidc.issuerURL }}
+            - --oidc-client-id={{ .Values.auth.oidc.clientID }}
+            - --oidc-redirect-url={{ include "ksail-operator.oidc.redirectURL" . }}
+            - --oidc-scopes={{ .Values.auth.oidc.scopes }}
+            {{- end }}
+          {{- if .Values.auth.oidc.enabled }}
+          env:
+            - name: KSAIL_OPERATOR_OIDC_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "ksail-operator.oidc.secretName" . }}
+                  key: client-secret
+            - name: KSAIL_OPERATOR_OIDC_SESSION_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "ksail-operator.oidc.secretName" . }}
+                  key: session-secret
+          {{- end }}
           ports:
             {{- if .Values.api.bindPort }}
             - name: api
