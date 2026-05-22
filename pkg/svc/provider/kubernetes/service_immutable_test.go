@@ -8,7 +8,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-func ipFamilyPolicyPtr(p corev1.IPFamilyPolicyType) *corev1.IPFamilyPolicyType { return &p }
+func ipFamilyPolicyPtr(p corev1.IPFamilyPolicy) *corev1.IPFamilyPolicy { return new(p) }
 
 //nolint:funlen // Table-driven test with many variants for a pure function.
 func TestPreserveImmutableServiceFields(t *testing.T) {
@@ -22,11 +22,11 @@ func TestPreserveImmutableServiceFields(t *testing.T) {
 		existingClusterIP      string
 		existingClusterIPs     []string
 		existingIPFamilies     []corev1.IPFamily
-		existingIPFamilyPolicy *corev1.IPFamilyPolicyType
+		existingIPFamilyPolicy *corev1.IPFamilyPolicy
 		wantClusterIP          string
 		wantClusterIPs         []string
 		wantIPFamilies         []corev1.IPFamily
-		wantIPFamilyPolicy     *corev1.IPFamilyPolicyType
+		wantIPFamilyPolicy     *corev1.IPFamilyPolicy
 		wantNodePorts          map[string]int32
 	}{
 		{
@@ -112,41 +112,66 @@ func TestPreserveImmutableServiceFields(t *testing.T) {
 		},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
 			svc := &corev1.Service{
 				Spec: corev1.ServiceSpec{
-					Ports: tc.svcPorts,
+					Ports: testCase.svcPorts,
 				},
 			}
 			existing := &corev1.Service{
 				Spec: corev1.ServiceSpec{
-					ClusterIP:      tc.existingClusterIP,
-					ClusterIPs:     tc.existingClusterIPs,
-					IPFamilies:     tc.existingIPFamilies,
-					IPFamilyPolicy: tc.existingIPFamilyPolicy,
-					Ports:          tc.existingPorts,
+					ClusterIP:      testCase.existingClusterIP,
+					ClusterIPs:     testCase.existingClusterIPs,
+					IPFamilies:     testCase.existingIPFamilies,
+					IPFamilyPolicy: testCase.existingIPFamilyPolicy,
+					Ports:          testCase.existingPorts,
 				},
 			}
 
-			kubeprovider.PreserveImmutableServiceFieldsForTest(svc, existing, tc.serviceType)
+			kubeprovider.PreserveImmutableServiceFieldsForTest(svc, existing, testCase.serviceType)
 
-			assert.Equal(t, tc.wantClusterIP, svc.Spec.ClusterIP, "ClusterIP should be copied from existing")
-			assert.Equal(t, tc.wantClusterIPs, svc.Spec.ClusterIPs, "ClusterIPs should be copied from existing")
-			assert.Equal(t, tc.wantIPFamilies, svc.Spec.IPFamilies, "IPFamilies should be copied from existing")
-			assert.Equal(t, tc.wantIPFamilyPolicy, svc.Spec.IPFamilyPolicy, "IPFamilyPolicy should be copied from existing")
-			for portName, wantNodePort := range tc.wantNodePorts {
+			assert.Equal(
+				t,
+				testCase.wantClusterIP,
+				svc.Spec.ClusterIP,
+				"ClusterIP should be copied from existing",
+			)
+			assert.Equal(
+				t,
+				testCase.wantClusterIPs,
+				svc.Spec.ClusterIPs,
+				"ClusterIPs should be copied from existing",
+			)
+			assert.Equal(
+				t,
+				testCase.wantIPFamilies,
+				svc.Spec.IPFamilies,
+				"IPFamilies should be copied from existing",
+			)
+			assert.Equal(
+				t,
+				testCase.wantIPFamilyPolicy,
+				svc.Spec.IPFamilyPolicy,
+				"IPFamilyPolicy should be copied from existing",
+			)
+
+			for portName, wantNodePort := range testCase.wantNodePorts {
 				found := false
+
 				for i := range svc.Spec.Ports {
 					if svc.Spec.Ports[i].Name == portName {
 						assert.Equal(t, wantNodePort, svc.Spec.Ports[i].NodePort,
 							"NodePort for %q should be %d", portName, wantNodePort)
+
 						found = true
+
 						break
 					}
 				}
+
 				if !found {
 					assert.Fail(t, "port not found in service spec",
 						"expected port %q to be present", portName)

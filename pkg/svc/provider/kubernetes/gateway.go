@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -245,11 +246,63 @@ func (p *Provider) exposeViaNodePort(
 		return nil, err
 	}
 
-	return &ExposureResult{
+	result := &ExposureResult{
 		Address: addr,
 		Port:    svc.Spec.Ports[0].NodePort,
 		Kind:    ExposureNodePort,
-	}, nil
+	}
+
+	warnNodePortReachability(result)
+
+	return result, nil
+}
+
+// warnNodePortReachability surfaces a reachability caveat when the nested API
+// server falls back to a NodePort. NodePort is the universal last-resort tier
+// (no Gateway or LoadBalancer was available), and the resolved endpoint is only
+// reachable from the host if the host cluster publishes that port — which Kind
+// on macOS/Windows (Docker Desktop) does not do for arbitrary NodePorts, so the
+// cluster is created but unusable from the host. The supported way to get a
+// stable, host-reachable endpoint is to set
+// spec.provider.kubernetes.gatewayClassName and install a TCPRoute-capable
+// Gateway controller.
+func warnNodePortReachability(result *ExposureResult) {
+	endpoint := net.JoinHostPort(result.Address, strconv.FormatInt(int64(result.Port), 10))
+
+	const guidance = "For a stable, host-reachable endpoint, set " +
+		"spec.provider.kubernetes.gatewayClassName and install a TCPRoute-capable " +
+		"Gateway controller (e.g. Envoy Gateway, Cilium, Istio)."
+
+	if isLoopbackAddress(result.Address) {
+		_, _ = fmt.Fprintf(os.Stderr,
+			"⚠ nested API server exposed via NodePort at %s, a loopback address that is "+
+				"typically NOT reachable from the host (common with Docker Desktop / Kind on "+
+				"macOS/Windows). %s\n",
+			endpoint, guidance,
+		)
+
+		return
+	}
+
+	_, _ = fmt.Fprintf(os.Stderr,
+		"note: nested API server exposed via NodePort at %s; ensure this address is "+
+			"reachable from your host. %s\n",
+		endpoint, guidance,
+	)
+}
+
+// isLoopbackAddress reports whether addr is a loopback endpoint. It covers both
+// literal loopback IPs (127.0.0.0/8, ::1) and the "localhost" hostname
+// (case-insensitive), which pickNodeAddress may return from the host REST
+// config and which net.ParseIP cannot classify.
+func isLoopbackAddress(addr string) bool {
+	if strings.EqualFold(addr, "localhost") {
+		return true
+	}
+
+	ip := net.ParseIP(addr)
+
+	return ip != nil && ip.IsLoopback()
 }
 
 // ensureService creates or updates the API server Service with the given type and selector.

@@ -326,7 +326,7 @@ func TestResolveVClusterName(t *testing.T) {
 func TestGetDefaultTalosPatches(t *testing.T) {
 	t.Parallel()
 
-	t.Run("no metrics server returns worker role label only", func(t *testing.T) {
+	t.Run("no metrics server, no provider, default CNI returns no patches", func(t *testing.T) {
 		t.Parallel()
 
 		mgr := configmanager.NewConfigManager(nil, "ksail.yaml")
@@ -339,8 +339,7 @@ func TestGetDefaultTalosPatches(t *testing.T) {
 		}
 
 		patches := mgr.GetDefaultTalosPatchesForTest()
-		require.Len(t, patches, 1)
-		assert.Contains(t, string(patches[0].Content), "node-role.kubernetes.io/worker")
+		assert.Empty(t, patches)
 	})
 
 	t.Run("metrics server enabled returns kubelet patches", func(t *testing.T) {
@@ -356,10 +355,9 @@ func TestGetDefaultTalosPatches(t *testing.T) {
 		}
 
 		patches := mgr.GetDefaultTalosPatchesForTest()
-		require.Len(t, patches, 3)
+		require.Len(t, patches, 2)
 		assert.Contains(t, string(patches[0].Content), "rotate-server-certificates")
 		assert.Contains(t, string(patches[1].Content), "kubelet-serving-cert-approver")
-		assert.Contains(t, string(patches[2].Content), "node-role.kubernetes.io/worker")
 	})
 
 	t.Run("hetzner provider returns external cloud provider patch", func(t *testing.T) {
@@ -375,14 +373,13 @@ func TestGetDefaultTalosPatches(t *testing.T) {
 		}
 
 		patches := mgr.GetDefaultTalosPatchesForTest()
-		require.Len(t, patches, 2)
+		require.Len(t, patches, 1)
 		assert.Contains(t, string(patches[0].Content), "externalCloudProvider")
 		assert.Contains(t, string(patches[0].Content), "enabled: true")
 		assert.Contains(t, string(patches[0].Content), "cloud-provider: external")
-		assert.Contains(t, string(patches[1].Content), "node-role.kubernetes.io/worker")
 	})
 
-	t.Run("docker provider returns worker role label only", func(t *testing.T) {
+	t.Run("docker provider returns no patches", func(t *testing.T) {
 		t.Parallel()
 
 		mgr := configmanager.NewConfigManager(nil, "ksail.yaml")
@@ -395,30 +392,31 @@ func TestGetDefaultTalosPatches(t *testing.T) {
 		}
 
 		patches := mgr.GetDefaultTalosPatchesForTest()
-		require.Len(t, patches, 1)
-		assert.Contains(t, string(patches[0].Content), "node-role.kubernetes.io/worker")
+		assert.Empty(t, patches)
 	})
 
-	t.Run("hetzner with metrics server returns all three patches", func(t *testing.T) {
-		t.Parallel()
+	t.Run(
+		"hetzner with metrics server returns kubelet and cloud provider patches",
+		func(t *testing.T) {
+			t.Parallel()
 
-		mgr := configmanager.NewConfigManager(nil, "ksail.yaml")
-		mgr.Config = &v1alpha1.Cluster{
-			Spec: v1alpha1.Spec{
-				Cluster: v1alpha1.ClusterSpec{
-					Provider:      v1alpha1.ProviderHetzner,
-					MetricsServer: v1alpha1.MetricsServerEnabled,
+			mgr := configmanager.NewConfigManager(nil, "ksail.yaml")
+			mgr.Config = &v1alpha1.Cluster{
+				Spec: v1alpha1.Spec{
+					Cluster: v1alpha1.ClusterSpec{
+						Provider:      v1alpha1.ProviderHetzner,
+						MetricsServer: v1alpha1.MetricsServerEnabled,
+					},
 				},
-			},
-		}
+			}
 
-		patches := mgr.GetDefaultTalosPatchesForTest()
-		require.Len(t, patches, 4)
-		assert.Contains(t, string(patches[0].Content), "rotate-server-certificates")
-		assert.Contains(t, string(patches[1].Content), "kubelet-serving-cert-approver")
-		assert.Contains(t, string(patches[2].Content), "externalCloudProvider")
-		assert.Contains(t, string(patches[3].Content), "node-role.kubernetes.io/worker")
-	})
+			patches := mgr.GetDefaultTalosPatchesForTest()
+			require.Len(t, patches, 3)
+			assert.Contains(t, string(patches[0].Content), "rotate-server-certificates")
+			assert.Contains(t, string(patches[1].Content), "kubelet-serving-cert-approver")
+			assert.Contains(t, string(patches[2].Content), "externalCloudProvider")
+		},
+	)
 
 	t.Run("cilium CNI returns disable CNI patch", func(t *testing.T) {
 		t.Parallel()
@@ -433,10 +431,9 @@ func TestGetDefaultTalosPatches(t *testing.T) {
 		}
 
 		patches := mgr.GetDefaultTalosPatchesForTest()
-		require.Len(t, patches, 2)
+		require.Len(t, patches, 1)
 		assert.Contains(t, string(patches[0].Content), "cni")
 		assert.Contains(t, string(patches[0].Content), "name: none")
-		assert.Contains(t, string(patches[1].Content), "node-role.kubernetes.io/worker")
 	})
 
 	t.Run("calico CNI returns disable CNI patch", func(t *testing.T) {
@@ -452,13 +449,12 @@ func TestGetDefaultTalosPatches(t *testing.T) {
 		}
 
 		patches := mgr.GetDefaultTalosPatchesForTest()
-		require.Len(t, patches, 2)
+		require.Len(t, patches, 1)
 		assert.Contains(t, string(patches[0].Content), "cni")
 		assert.Contains(t, string(patches[0].Content), "name: none")
-		assert.Contains(t, string(patches[1].Content), "node-role.kubernetes.io/worker")
 	})
 
-	t.Run("default CNI returns worker role label only", func(t *testing.T) {
+	t.Run("default CNI returns no patches", func(t *testing.T) {
 		t.Parallel()
 
 		mgr := configmanager.NewConfigManager(nil, "ksail.yaml")
@@ -471,8 +467,7 @@ func TestGetDefaultTalosPatches(t *testing.T) {
 		}
 
 		patches := mgr.GetDefaultTalosPatchesForTest()
-		require.Len(t, patches, 1)
-		assert.Contains(t, string(patches[0].Content), "node-role.kubernetes.io/worker")
+		assert.Empty(t, patches)
 	})
 
 	t.Run(
@@ -491,11 +486,10 @@ func TestGetDefaultTalosPatches(t *testing.T) {
 			}
 
 			patches := mgr.GetDefaultTalosPatchesForTest()
-			require.Len(t, patches, 4)
+			require.Len(t, patches, 3)
 			assert.Contains(t, string(patches[0].Content), "name: none")
 			assert.Contains(t, string(patches[1].Content), "rotate-server-certificates")
 			assert.Contains(t, string(patches[2].Content), "kubelet-serving-cert-approver")
-			assert.Contains(t, string(patches[3].Content), "node-role.kubernetes.io/worker")
 		},
 	)
 }

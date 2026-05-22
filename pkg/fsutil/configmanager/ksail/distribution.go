@@ -15,6 +15,7 @@ import (
 	kindconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/kind"
 	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
 	talosgenerator "github.com/devantler-tech/ksail/v7/pkg/fsutil/generator/talos"
+	"github.com/devantler-tech/ksail/v7/pkg/notify"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	k3dv1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
@@ -127,12 +128,13 @@ func (m *ConfigManager) loadTalosConfig() (*talosconfigmanager.Configs, error) {
 	// (e.g., permissions), we inject the patches as a fail-safe.
 	m.addKubeletCertRotationPatches(talosManager, patchesDir)
 
-	// Inject worker role label patch at runtime when the patch file doesn't
-	// already exist on disk. Projects initialized with this version+ have
-	// the patch file; older projects or manually-managed talos/ directories
-	// may not. The runtime injection ensures worker nodes always get the
-	// node-role.kubernetes.io/worker label.
-	m.addWorkerRoleLabelPatch(talosManager, patchesDir)
+	// Migrate away the legacy worker role label patch. Older projects scaffolded a
+	// talos/workers/worker-role-label.yaml that set node-role.kubernetes.io/worker via
+	// kubelet --node-labels (or machine.nodeLabels). Kubernetes 1.33+ rejects
+	// node-role.kubernetes.io/* labels passed through kubelet --node-labels, which crashes
+	// every worker kubelet. The label is purely cosmetic and unused by ksail, so we drop it
+	// and remove the stale patch file so it is no longer applied at create time.
+	m.removeWorkerRoleLabelPatch(patchesDir)
 
 	// Wire extensions from ksail.yaml so that machine.install.image is patched
 	// to use a Talos Image Factory installer containing the requested extensions.
@@ -196,67 +198,99 @@ func (m *ConfigManager) addKubeletCertRotationPatches(
 	}
 }
 
-// legacyWorkerRoleLabelPatchYAML is the exact content of the old scaffold that
-// used machine.nodeLabels. Only files matching this content exactly are fully migrated.
-const legacyWorkerRoleLabelPatchYAML = "machine:\n  nodeLabels:\n    node-role.kubernetes.io/worker: \"\"\n"
+// legacyWorkerRoleLabelPatchYAML is the machine.nodeLabels form of the worker role label
+// patch that older ksail versions scaffolded.
+const legacyWorkerRoleLabelPatchYAML = `machine:
+  nodeLabels:
+    node-role.kubernetes.io/worker: ""
+`
 
-// addWorkerRoleLabelPatch injects the worker role label patch at runtime
-// when the patch file does not exist on disk. This ensures existing
-// scaffolded projects (created before this patch was introduced) still
-// get the node-role.kubernetes.io/worker label on worker nodes.
+// kubeletWorkerRoleLabelPatchYAML is the kubelet --node-labels form of the worker role
+// label patch that more recent ksail versions scaffolded.
+const kubeletWorkerRoleLabelPatchYAML = `machine:
+  kubelet:
+    extraArgs:
+      node-labels: "node-role.kubernetes.io/worker="
+`
+
+// workerRoleLabelFailureModes explains why a node-role.kubernetes.io/worker patch breaks
+// worker nodes, covering both forms ksail historically generated. Shared across the migration
+// warnings so the remediation guidance stays accurate regardless of which form is found.
+const workerRoleLabelFailureModes = "Set via kubelet --node-labels the label is rejected by " +
+	"Kubernetes 1.33+ (worker kubelets fail to start); set via machine.nodeLabels it is " +
+	"blocked by the NodeRestriction admission controller after registration."
+
+// removeWorkerRoleLabelPatch deletes a stale worker role label patch file from disk.
 //
-// It also migrates existing patch files that use the legacy machine.nodeLabels
-// format to the kubelet.extraArgs["node-labels"] format. The old format causes
-// the Kubernetes NodeRestriction admission controller to block ALL label updates
-// from Talos's NodeApplyController on worker nodes.
-func (m *ConfigManager) addWorkerRoleLabelPatch(
-	talosManager *talosconfigmanager.ConfigManager,
-	patchesDir string,
-) {
-	if !workerRoleLabelPatchFileExists(patchesDir) {
-		talosManager.WithAdditionalPatches([]talosconfigmanager.Patch{workerRoleLabelPatch()})
-
-		return
-	}
-
-	// Migrate stale patch files that use machine.nodeLabels (broken on Hetzner
-	// due to NodeRestriction blocking kubelet from setting node-role.kubernetes.io/*).
+// ksail used to label worker nodes with node-role.kubernetes.io/worker, first via
+// machine.nodeLabels and later via kubelet --node-labels. Kubernetes 1.33+ rejects
+// node-role.kubernetes.io/* labels passed through kubelet --node-labels, which prevents
+// every worker kubelet from starting and makes the cluster unusable. The label is purely
+// cosmetic (it only populates the kubectl ROLE column) and nothing in ksail depends on it,
+// so it is no longer set at all.
+//
+// The patch file is auto-discovered and applied at create time, so leaving it on disk would
+// keep breaking existing projects. We delete it only when its content exactly matches one of
+// the two known ksail-generated scaffolds. A user-customized file that still carries the label
+// is left untouched, with a warning, so hand-edited config is never destroyed.
+func (m *ConfigManager) removeWorkerRoleLabelPatch(patchesDir string) {
 	patchFile := filepath.Join(patchesDir, "workers", "worker-role-label.yaml")
 
 	content, err := fsutil.ReadFileSafe(patchesDir, patchFile)
 	if err != nil {
-		// Cannot read safely (e.g. symlink escape) — inject runtime fallback so
-		// the worker role label is still set via kubelet.extraArgs at registration.
-		talosManager.WithAdditionalPatches([]talosconfigmanager.Patch{workerRoleLabelPatch()})
+		if errors.Is(err, os.ErrNotExist) {
+			// No patch file — the common case, nothing to migrate.
+			return
+		}
+
+		// The file exists but could not be read safely (e.g. a symlink escaping
+		// patchesDir, or a permission error). Warn rather than silently leaving a
+		// patch that may break worker kubelets.
+		m.warnWorkerRoleLabel(
+			"could not read talos/workers/worker-role-label.yaml (" + err.Error() +
+				"); if it sets node-role.kubernetes.io/worker, remove it manually. " +
+				workerRoleLabelFailureModes,
+		)
 
 		return
 	}
 
 	contentStr := strings.TrimSpace(string(content))
 
-	if contentStr == strings.TrimSpace(legacyWorkerRoleLabelPatchYAML) {
-		// Exact legacy scaffold — overwrite with the new format.
-		canonPath, pathErr := fsutil.EvalCanonicalPath(patchFile)
-		if pathErr != nil {
-			talosManager.WithAdditionalPatches([]talosconfigmanager.Patch{workerRoleLabelPatch()})
+	isKnownScaffold := contentStr == strings.TrimSpace(legacyWorkerRoleLabelPatchYAML) ||
+		contentStr == strings.TrimSpace(kubeletWorkerRoleLabelPatchYAML)
 
-			return
+	if isKnownScaffold {
+		// Remove the entry at its declared path. os.Remove does not follow the final
+		// symlink, so a symlinked entry is unlinked instead of deleting its target.
+		removeErr := os.Remove(patchFile)
+		if removeErr != nil {
+			m.warnWorkerRoleLabel(
+				"could not delete the obsolete talos/workers/worker-role-label.yaml (" +
+					removeErr.Error() + "); it sets node-role.kubernetes.io/worker, so " +
+					"remove it manually. " + workerRoleLabelFailureModes,
+			)
 		}
 
-		//nolint:mnd // standard restrictive file permission
-		writeErr := os.WriteFile(canonPath, []byte(talosgenerator.WorkerRoleLabelPatchYAML), 0o600)
-		if writeErr != nil {
-			// Write failed — inject the correct runtime patch as fallback so the
-			// worker role label is still set via kubelet.extraArgs at registration time.
-			talosManager.WithAdditionalPatches([]talosconfigmanager.Patch{workerRoleLabelPatch()})
-		}
-	} else if strings.Contains(contentStr, "node-role.kubernetes.io/worker") &&
-		strings.Contains(contentStr, "nodeLabels") {
-		// Customized file still contains the legacy worker role label in nodeLabels.
-		// We cannot safely rewrite user-customized content, but we inject the runtime
-		// kubelet.extraArgs patch so the worker role is at least set at registration time.
-		talosManager.WithAdditionalPatches([]talosconfigmanager.Patch{workerRoleLabelPatch()})
+		return
 	}
+
+	if strings.Contains(contentStr, "node-role.kubernetes.io/worker") {
+		m.warnWorkerRoleLabel(
+			"talos/workers/worker-role-label.yaml sets node-role.kubernetes.io/worker; " +
+				"remove that label. " + workerRoleLabelFailureModes,
+		)
+	}
+}
+
+// warnWorkerRoleLabel emits a warning about a stale or customized worker role label patch
+// that still sets node-role.kubernetes.io/worker.
+func (m *ConfigManager) warnWorkerRoleLabel(content string) {
+	notify.WriteMessage(notify.Message{
+		Type:    notify.WarningType,
+		Content: content,
+		Writer:  m.Writer,
+	})
 }
 
 // loadAndCacheDistributionConfig loads the distribution-specific configuration based on
@@ -381,10 +415,6 @@ func (m *ConfigManager) getDefaultTalosPatches() []talosconfigmanager.Patch {
 		patches = append(patches, externalCloudProviderPatches()...)
 	}
 
-	// Always label worker nodes with node-role.kubernetes.io/worker.
-	// This is worker-scoped so it only affects worker configs.
-	patches = append(patches, workerRoleLabelPatch())
-
 	return patches
 }
 
@@ -435,16 +465,6 @@ func kubeletPatchFilesExist(patchesDir string) bool {
 	_, err2 := os.Stat(csrApprover)
 
 	return err1 == nil && err2 == nil
-}
-
-// workerRoleLabelPatchFileExists returns true when the worker role label
-// patch file exists on disk. If the file is missing or stat fails for any
-// reason, returns false so that the runtime patch is injected as a fail-safe.
-func workerRoleLabelPatchFileExists(patchesDir string) bool {
-	patchFile := filepath.Join(patchesDir, "workers", "worker-role-label.yaml")
-	_, err := os.Stat(patchFile)
-
-	return err == nil
 }
 
 // ingressFirewallPatchPaths returns the expected ingress firewall patch file paths
@@ -659,17 +679,6 @@ func externalCloudProviderPatches() []talosconfigmanager.Patch {
 			Scope:   talosconfigmanager.PatchScopeCluster,
 			Content: []byte(talosgenerator.ExternalCloudProviderPatchYAML),
 		},
-	}
-}
-
-// workerRoleLabelPatch returns a Talos machine config patch that labels worker nodes
-// with node-role.kubernetes.io/worker. Used for runtime injection when no scaffolded
-// project exists (init=false). Worker-scoped so it only affects worker configs.
-func workerRoleLabelPatch() talosconfigmanager.Patch {
-	return talosconfigmanager.Patch{
-		Path:    "worker-role-label",
-		Scope:   talosconfigmanager.PatchScopeWorker,
-		Content: []byte(talosgenerator.WorkerRoleLabelPatchYAML),
 	}
 }
 

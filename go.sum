@@ -229,8 +229,8 @@ github.com/Masterminds/squirrel v1.5.4/go.mod h1:NNaOrjSoIDfDA40n7sr2tPNZRfjzjA4
 github.com/Microsoft/go-winio v0.5.2/go.mod h1:WpS1mjBmmwHBEWmogvA2mj8546UReBk4v8QkMxJ6pZY=
 github.com/Microsoft/go-winio v0.6.2 h1:F2VQgta7ecxGYO8k3ZZz3RS8fVIXVxONVUPlNERoyfY=
 github.com/Microsoft/go-winio v0.6.2/go.mod h1:yd8OoFMLzJbo9gZq8j5qaps8bJ9aShtEA8Ipt1oGCvU=
-github.com/Microsoft/hcsshim v0.14.0-rc.1 h1:qAPXKwGOkVn8LlqgBN8GS0bxZ83hOJpcjxzmlQKxKsQ=
-github.com/Microsoft/hcsshim v0.14.0-rc.1/go.mod h1:hTKFGbnDtQb1wHiOWv4v0eN+7boSWAHyK/tNAaYZL0c=
+github.com/Microsoft/hcsshim v0.14.1 h1:CMuB3fqQVfPdhyXhUqYdUmPUIOhJkmghCx3dJet8Cqs=
+github.com/Microsoft/hcsshim v0.14.1/go.mod h1:VnzvPLyWUhxiPVsJ31P6XadxCcTogTguBFDy/1GR/OM=
 github.com/MirrexOne/unqueryvet v1.4.0 h1:6KAkqqW2KUnkl9Z0VuTphC3IXRPoFqEkJEtyxxHj5eQ=
 github.com/MirrexOne/unqueryvet v1.4.0/go.mod h1:IWwCwMQlSWjAIteW0t+28Q5vouyktfujzYznSIWiuOg=
 github.com/NYTimes/gziphandler v1.1.1 h1:ZUDjpQae29j0ryrS0u/B8HZfJBtBQHjqw2rQ2cqUQ3I=
@@ -384,8 +384,8 @@ github.com/anubhav06/copa-grype v1.0.3-alpha.1/go.mod h1:JhE+hPD6XOcS2dfgw8MwOQV
 github.com/apparentlymart/go-textseg/v13 v13.0.0/go.mod h1:ZK2fH7c4NqDTLtiYLvIkEghdlcqw7yxLeM89kiTRPUo=
 github.com/apparentlymart/go-textseg/v15 v15.0.0 h1:uYvfpb3DyLSCGWnctWKGj857c6ew1u1fNQOlOtuGxQY=
 github.com/apparentlymart/go-textseg/v15 v15.0.0/go.mod h1:K8XmNZdhEBkdlyDdvbmmsvpAG721bKi0joRfFdHIWJ4=
-github.com/apricote/hcloud-upload-image/hcloudimages v1.3.0 h1:FVIKGSqpxdkO4+t1N8a8xu/xxc+13vHy2QaTAWICuQo=
-github.com/apricote/hcloud-upload-image/hcloudimages v1.3.0/go.mod h1:NiCZ7xGoYNbWeK9L083leB7/g5oa7SAOZq405XkUSeQ=
+github.com/apricote/hcloud-upload-image/hcloudimages v1.4.0 h1:h9cxSQo8uYn7y5zLEOQF/GjLuXAqU9eVHt6vY/XIM1Y=
+github.com/apricote/hcloud-upload-image/hcloudimages v1.4.0/go.mod h1:9452aAvFQ28wGKZOMWS6djWvoQwqhbfUg6I2zEQIUXI=
 github.com/aquasecurity/go-pep440-version v0.0.1 h1:8VKKQtH2aV61+0hovZS3T//rUF+6GDn18paFTVS0h0M=
 github.com/aquasecurity/go-pep440-version v0.0.1/go.mod h1:3naPe+Bp6wi3n4l5iBFCZgS0JG8vY6FT0H4NGhFJ+i4=
 github.com/aquasecurity/go-version v0.0.1 h1:4cNl516agK0TCn5F7mmYN+xVs1E3S45LkgZk3cbaW2E=
@@ -650,8 +650,8 @@ github.com/containerd/containerd v1.7.30 h1:/2vezDpLDVGGmkUXmlNPLCCNKHJ5BbC5tJB5
 github.com/containerd/containerd v1.7.30/go.mod h1:fek494vwJClULlTpExsmOyKCMUAbuVjlFsJQc4/j44M=
 github.com/containerd/containerd/api v1.10.0 h1:5n0oHYVBwN4VhoX9fFykCV9dF1/BvAXeg2F8W6UYq1o=
 github.com/containerd/containerd/api v1.10.0/go.mod h1:NBm1OAk8ZL+LG8R0ceObGxT5hbUYj7CzTmR3xh0DlMM=
-github.com/containerd/containerd/v2 v2.2.2 h1:mjVQdtfryzT7lOqs5EYUFZm8ioPVjOpkSoG1GJPxEMY=
-github.com/containerd/containerd/v2 v2.2.2/go.mod h1:5Jhevmv6/2J+Iu/A2xXAdUIdI5Ah/hfyO7okJ4AFIdY=
+github.com/containerd/containerd/v2 v2.2.4 h1:8x2UdXqww7NYqGNabQ7i1nAgB5LegzjC9KQzO/900iA=
+github.com/containerd/containerd/v2 v2.2.4/go.mod h1:YBcTO8D9149QY9zNmUjy04Mhuc4DlrZQ8FIOwKZEM7o=
 github.com/containerd/continuity v0.5.0 h1:7a85HZpCSs+1Zps0Ee3DPSuAWY+0SJM1JNM51nlEVDg=
 github.com/containerd/continuity v0.5.0/go.mod h1:/lNJvtJKUQStBzpVQ1+rasXO1LAWtUQssk28EZvJ3nE=
 github.com/containerd/errdefs v1.0.0 h1:tg5yIfIlQIrxYtu9ajqY42W3lpS19XqdxRQeEwYG8PI=
@@ -2232,8 +2232,8 @@ github.com/siderolabs/go-retry v0.3.3 h1:zKV+S1vumtO72E6sYsLlmIdV/G/GcYSBLiEx/c9
 github.com/siderolabs/go-retry v0.3.3/go.mod h1:Ff/VGc7v7un4uQg3DybgrmOWHEmJ8BzZds/XNn/BqMI=
 github.com/siderolabs/go-talos-support v0.2.1 h1:QVFhcmGw1ZTTXEtukBgrdjNxYbsPAOTMpopisV4EbgU=
 github.com/siderolabs/go-talos-support v0.2.1/go.mod h1:tfwP9mpPdmqLU8DuCDgcAd0ficLlJuB/XMtrIV8g+20=
-github.com/siderolabs/image-factory v1.3.0 h1:dP3Ype4yCnzvsDTIKiWUCTWesqt0TFratKnWIvLI6W8=
-github.com/siderolabs/image-factory v1.3.0/go.mod h1:p+dsI/tCMKJZCXyKdKtMET9t9TLr9Z82+vdSJqyATUc=
+github.com/siderolabs/image-factory v1.3.1 h1:mVUmlAq/QpjKNwbmE8qAYB9/9aUh/kcLgYqmDglpvoE=
+github.com/siderolabs/image-factory v1.3.1/go.mod h1:rxNZztD7PEG9coMhkjyTPXt8xh5Xb9/2g7bX6OUqAIc=
 github.com/siderolabs/net v0.4.0 h1:1bOgVay/ijPkJz4qct98nHsiB/ysLQU0KLoBC4qLm7I=
 github.com/siderolabs/net v0.4.0/go.mod h1:/ibG+Hm9HU27agp5r9Q3eZicEfjquzNzQNux5uEk0kM=
 github.com/siderolabs/omni/client v1.7.3 h1:1KPG5gpYb3Fz59vhINhFjjCCjSFyI5iLwt5NDuIXitQ=
@@ -2244,8 +2244,8 @@ github.com/siderolabs/protoenc v0.2.4 h1:D3Fpn2nQSQOhl8ZlAxijZAf7K6F8CM1uZq0afIG
 github.com/siderolabs/protoenc v0.2.4/go.mod h1:i5XLHjfv5vyi7LhQrSEo19HCA+lYtDd7CWxsoWp9XE8=
 github.com/siderolabs/talos v1.13.0 h1:4KXRbxCZ/8FtXRV/cEaouW8K/LjRkBLG7a42dsNLe8M=
 github.com/siderolabs/talos v1.13.0/go.mod h1:Lvg9a5c4rxCjl8fos3akomDn2mqWFXwzNPbgZMNnE94=
-github.com/siderolabs/talos/pkg/machinery v1.13.0 h1:nNfAUqgD/yOb4RZAc3xrQXKYllIK36RPaJacNQQC3TI=
-github.com/siderolabs/talos/pkg/machinery v1.13.0/go.mod h1:70Up2PI+g6wxW4rJ8AIlZO0MfQ8gglyfqsyBv0PdnSo=
+github.com/siderolabs/talos/pkg/machinery v1.13.2 h1:S7WJhBR+M+g6JgX9ht22Mb5cTg1cgWcoqRpr6/YY/fU=
+github.com/siderolabs/talos/pkg/machinery v1.13.2/go.mod h1:70Up2PI+g6wxW4rJ8AIlZO0MfQ8gglyfqsyBv0PdnSo=
 github.com/sigstore/cosign/v3 v3.0.6 h1:k8XaUd9pmLknHBst/v0rUGHVdB4D9cfaBmWUaMAOocE=
 github.com/sigstore/cosign/v3 v3.0.6/go.mod h1:ckLRkVecfUCYxL8isHODY9lwyKmDaRCPn00p6yFxHg0=
 github.com/sigstore/fulcio v1.8.5 h1:HYTD1/L5wlBp8JxsWxUf8hmfaNBBF/x3r3p5l6tZwbA=

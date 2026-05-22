@@ -111,20 +111,6 @@ func TestGenerate_AllowSchedulingSkipExisting(t *testing.T) {
 	})
 }
 
-// TestGenerate_WorkerRoleLabelSkipExisting verifies that the worker-role-label
-// patch is not overwritten when force is false.
-func TestGenerate_WorkerRoleLabelSkipExisting(t *testing.T) {
-	t.Parallel()
-
-	assertGenerateSkipExistingPreservesContent(t, &talosgenerator.Config{
-		PatchesDir:  "talos",
-		WorkerNodes: 1, // triggers worker-role-label patch
-	}, skipExistingFile{
-		relativePath: filepath.Join("talos", "workers", "worker-role-label.yaml"),
-		content:      "original",
-	})
-}
-
 // TestGenerate_DisableCNISkipExisting verifies that the disable-cni patch is
 // not overwritten when force is false.
 func TestGenerate_DisableCNISkipExisting(t *testing.T) {

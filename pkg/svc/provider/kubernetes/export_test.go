@@ -23,3 +23,6 @@ var ExposeViaLoadBalancerForTest = (*Provider).exposeViaLoadBalancer //nolint:go
 
 // PreserveImmutableServiceFieldsForTest exposes preserveImmutableServiceFields for unit testing.
 var PreserveImmutableServiceFieldsForTest = preserveImmutableServiceFields //nolint:gochecknoglobals
+
+// IsLoopbackAddressForTest exposes isLoopbackAddress for unit testing.
+var IsLoopbackAddressForTest = isLoopbackAddress //nolint:gochecknoglobals
