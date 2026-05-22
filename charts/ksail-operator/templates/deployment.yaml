@@ -45,7 +45,7 @@ spec:
               containerPort: {{ .Values.api.bindPort }}
             {{- end }}
             - name: health
-              containerPort: 8081
+              containerPort: {{ regexFind "[0-9]+$" .Values.operator.healthProbeBindAddress | int }}
           livenessProbe:
             httpGet:
               path: /healthz

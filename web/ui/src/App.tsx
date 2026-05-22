@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import {
   createCluster,
   deleteCluster,
@@ -16,34 +16,42 @@ export function App() {
   const [clusters, setClusters] = useState<Cluster[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  // Guards against state updates from in-flight requests that resolve after the component unmounts
+  // (refresh runs from the interval, the button, and child callbacks, not only the init effect).
+  const mounted = useRef(true);
 
   const refresh = useCallback(async () => {
     try {
       const list = await listClusters();
+      if (!mounted.current) {
+        return;
+      }
       setClusters(list.items ?? []);
       setError(null);
     } catch (err) {
-      setError(String(err));
+      if (mounted.current) {
+        setError(String(err));
+      }
     }
   }, []);
 
   useEffect(() => {
-    let active = true;
+    mounted.current = true;
 
     async function init() {
       try {
         const config = await getConfig();
-        if (active) {
+        if (mounted.current) {
           setReadOnly(config.readOnly);
         }
       } catch (err) {
-        if (active) {
+        if (mounted.current) {
           setError(String(err));
         }
       }
 
       await refresh();
-      if (active) {
+      if (mounted.current) {
         setLoading(false);
       }
     }
@@ -52,7 +60,7 @@ export function App() {
     const timer = setInterval(() => void refresh(), 10000);
 
     return () => {
-      active = false;
+      mounted.current = false;
       clearInterval(timer);
     };
   }, [refresh]);

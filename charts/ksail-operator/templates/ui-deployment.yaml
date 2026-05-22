@@ -1,4 +1,10 @@
 {{- if .Values.ui.enabled -}}
+{{- if not .Values.operator.enabled }}
+{{- fail "ui.enabled=true requires operator.enabled=true: the REST API the UI depends on runs in the operator process." }}
+{{- end }}
+{{- if not .Values.api.bindPort }}
+{{- fail "ui.enabled=true requires api.bindPort to be non-zero: the UI talks to the operator REST API." }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:

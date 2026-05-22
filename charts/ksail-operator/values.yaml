@@ -33,10 +33,11 @@ api:
 
 # ui is the optional web dashboard. It talks to the operator REST API.
 #
-# readOnly is the single, user-controlled lock that governs the whole deployment. It is wired
-# to BOTH the operator API (--read-only, enforced server-side) and the UI (UI_READ_ONLY).
-# It is intentionally independent of any cluster's spec.cluster.gitOpsEngine: set it to true
-# for GitOps-enforced environments so the Git repository remains the single source of truth.
+# readOnly is the single, user-controlled lock that governs the whole deployment. It is wired to
+# the operator API as --read-only (enforced server-side); the SPA reflects the mode at runtime via
+# GET /api/v1/config, so no separate UI env var is needed. It is intentionally independent of any
+# cluster's spec.cluster.gitOpsEngine: set it to true for GitOps-enforced environments so the Git
+# repository remains the single source of truth.
 ui:
   enabled: false
   readOnly: false
