@@ -54,7 +54,7 @@ Creates nodes as Hetzner Cloud servers for production-grade clusters. **Supporte
 > [!NOTE]
 > KSail only enables Hetzner-backed operations when `HCLOUD_TOKEN` is set; if it's unset, Hetzner is skipped.
 
-### Kubernetes
+### Kubernetes (Nested)
 
 Runs nested cluster nodes as pods inside an existing host Kubernetes cluster. No Docker daemon is required on the host machine — the nested cluster's API server is exposed via Gateway API (TCPRoute), LoadBalancer, or NodePort, making it routable after `ksail` exits. **Supported distributions:** Vanilla, K3s, Talos, VCluster, KWOK. See [Kubernetes Provider](/providers/kubernetes/).
 
