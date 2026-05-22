@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/devantler-tech/ksail/v7/internal/controller"
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -412,6 +413,70 @@ func TestReconcile_ObserveStatusErrorIsBestEffort(t *testing.T) {
 	assert.Equal(t, v1alpha1.ClusterPhaseReady, got.Status.Phase)
 	assert.Equal(t, "https://child.svc:443", got.Status.Endpoint)
 	assert.Zero(t, got.Status.NodesTotal, "nodes stay unset when not observed")
+}
+
+func TestReconcile_InstallsComponentsOncePerGeneration(t *testing.T) {
+	t.Parallel()
+
+	scheme := newScheme(t)
+	fakeClient := newFakeClient(scheme, newCluster(true))
+	reconciler := newReconciler(scheme, fakeClient, &fakeProvisioner{exists: true})
+
+	calls := 0
+	reconciler.InstallComponents = func(
+		_ context.Context,
+		_ client.Reader,
+		_ *v1alpha1.Cluster,
+	) error {
+		calls++
+
+		return nil
+	}
+
+	_, err := reconciler.Reconcile(context.Background(), request())
+	require.NoError(t, err)
+	assert.Equal(t, 1, calls)
+
+	var got v1alpha1.Cluster
+
+	require.NoError(t, fakeClient.Get(context.Background(), request().NamespacedName, &got))
+	condition := apimeta.FindStatusCondition(got.Status.Conditions, v1alpha1.ConditionComponentsReady)
+	require.NotNil(t, condition)
+	assert.Equal(t, metav1.ConditionTrue, condition.Status)
+
+	// A second reconcile at the same generation must not reinstall.
+	_, err = reconciler.Reconcile(context.Background(), request())
+	require.NoError(t, err)
+	assert.Equal(t, 1, calls, "components must not reinstall when up-to-date for the generation")
+}
+
+func TestReconcile_ComponentFailureIsBestEffortAndRequeues(t *testing.T) {
+	t.Parallel()
+
+	scheme := newScheme(t)
+	fakeClient := newFakeClient(scheme, newCluster(true))
+	reconciler := newReconciler(scheme, fakeClient, &fakeProvisioner{exists: true})
+	reconciler.InstallComponents = func(
+		_ context.Context,
+		_ client.Reader,
+		_ *v1alpha1.Cluster,
+	) error {
+		return errBoom
+	}
+
+	result, err := reconciler.Reconcile(context.Background(), request())
+	// A component-install failure must not fail the reconcile.
+	require.NoError(t, err)
+	assert.Equal(t, 10*time.Second, result.RequeueAfter, "should requeue at the transitional interval")
+
+	var got v1alpha1.Cluster
+
+	require.NoError(t, fakeClient.Get(context.Background(), request().NamespacedName, &got))
+	condition := apimeta.FindStatusCondition(got.Status.Conditions, v1alpha1.ConditionComponentsReady)
+	require.NotNil(t, condition)
+	assert.Equal(t, metav1.ConditionFalse, condition.Status)
+	// The cluster itself is still provisioned/Ready independent of component health.
+	assert.Equal(t, v1alpha1.ClusterPhaseReady, got.Status.Phase)
 }
 
 func managedNamespace(name string) *corev1.Namespace {

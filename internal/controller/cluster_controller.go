@@ -104,6 +104,16 @@ type StatusObserver func(
 	cluster *v1alpha1.Cluster,
 ) (ObservedStatus, error)
 
+// ComponentInstaller installs the cluster's components (CNI/CSI/metrics-server/cert-manager/
+// load-balancer/policy-engine/GitOps) into the provisioned child cluster. Optional; nil disables
+// component installation. The reconciler invokes it with gating — only when components are not
+// already reconciled for the current generation — and treats it best-effort.
+type ComponentInstaller func(
+	ctx context.Context,
+	hub client.Reader,
+	cluster *v1alpha1.Cluster,
+) error
+
 // ClusterReconciler reconciles a Cluster object towards its desired state.
 type ClusterReconciler struct {
 	client.Client
@@ -116,6 +126,10 @@ type ClusterReconciler struct {
 	// ObserveStatus gathers runtime status (endpoint, node readiness) best-effort. Optional; nil
 	// disables runtime status reporting (endpoint/nodes stay empty).
 	ObserveStatus StatusObserver
+
+	// InstallComponents installs the cluster's components into the provisioned child cluster.
+	// Optional; nil disables component installation.
+	InstallComponents ComponentInstaller
 
 	// APIReader is an uncached reader used by ObserveStatus to read a single kubeconfig Secret
 	// without forcing the manager cache to watch every Secret. Falls back to the cached client.
@@ -224,6 +238,9 @@ func (r *ClusterReconciler) reconcileNormal(
 	// not fail an otherwise-successful reconcile, and partial results are still applied.
 	r.observeStatus(ctx, cluster)
 
+	// Install the spec's components into the child cluster (best-effort, gated by generation).
+	componentsOK := r.reconcileComponents(ctx, cluster)
+
 	r.markReady(cluster)
 
 	statusErr := r.updateStatusIfChanged(ctx, cluster, before)
@@ -231,7 +248,59 @@ func (r *ClusterReconciler) reconcileNormal(
 		return ctrl.Result{}, statusErr
 	}
 
+	// Retry sooner while components are still being installed or have failed.
+	if !componentsOK {
+		return ctrl.Result{RequeueAfter: r.transitionalRequeue()}, nil
+	}
+
 	return ctrl.Result{RequeueAfter: r.readyRequeue()}, nil
+}
+
+// reconcileComponents installs the cluster's components when they are not already reconciled for the
+// current generation, recording the outcome in the ComponentsReady condition. Best-effort: failures
+// are reported via the condition (not the reconcile error) and return false so the reconcile
+// requeues sooner. Returns true when components are up to date or there is nothing to install.
+func (r *ClusterReconciler) reconcileComponents(ctx context.Context, cluster *v1alpha1.Cluster) bool {
+	if r.InstallComponents == nil || componentsUpToDate(cluster) {
+		return true
+	}
+
+	err := r.InstallComponents(ctx, r.reader(), cluster)
+	if err != nil {
+		logf.FromContext(ctx).Info("install components (best-effort)", "error", err.Error())
+		apimeta.SetStatusCondition(&cluster.Status.Conditions, metav1.Condition{
+			Type:               v1alpha1.ConditionComponentsReady,
+			Status:             metav1.ConditionFalse,
+			ObservedGeneration: cluster.Generation,
+			Reason:             "ComponentsFailed",
+			Message:            err.Error(),
+		})
+
+		return false
+	}
+
+	apimeta.SetStatusCondition(&cluster.Status.Conditions, metav1.Condition{
+		Type:               v1alpha1.ConditionComponentsReady,
+		Status:             metav1.ConditionTrue,
+		ObservedGeneration: cluster.Generation,
+		Reason:             reasonReconciled,
+		Message:            "Components installed and reconciled",
+	})
+
+	return true
+}
+
+// componentsUpToDate reports whether components have been installed for the cluster's current
+// generation (so a spec change re-triggers installation).
+func componentsUpToDate(cluster *v1alpha1.Cluster) bool {
+	condition := apimeta.FindStatusCondition(
+		cluster.Status.Conditions,
+		v1alpha1.ConditionComponentsReady,
+	)
+
+	return condition != nil &&
+		condition.Status == metav1.ConditionTrue &&
+		condition.ObservedGeneration == cluster.Generation
 }
 
 // observeStatus populates runtime status fields (endpoint, kubeconfig ref, node counts) from the

@@ -95,11 +95,12 @@ func managerOptions(scheme *runtime.Scheme, opts Options) ctrl.Options {
 // setupManager registers the reconciler, health probes, and (optionally) the REST API server.
 func setupManager(mgr ctrl.Manager, opts Options) error {
 	reconciler := &controller.ClusterReconciler{
-		Client:         mgr.GetClient(),
-		Scheme:         mgr.GetScheme(),
-		NewProvisioner: BuildProvisioner,
-		ObserveStatus:  ObserveVClusterStatus,
-		APIReader:      mgr.GetAPIReader(),
+		Client:            mgr.GetClient(),
+		Scheme:            mgr.GetScheme(),
+		NewProvisioner:    BuildProvisioner,
+		ObserveStatus:     ObserveVClusterStatus,
+		InstallComponents: InstallComponents,
+		APIReader:         mgr.GetAPIReader(),
 	}
 
 	reconcilerErr := reconciler.SetupWithManager(mgr)
