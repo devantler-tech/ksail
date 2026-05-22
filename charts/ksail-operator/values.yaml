@@ -42,7 +42,7 @@ ui:
   enabled: false
   readOnly: false
   image:
-    repository: ghcr.io/devantler-tech/ksail-ui
+    repository: ghcr.io/devantler-tech/ksail/web-ui
     tag: ""
     pullPolicy: IfNotPresent
   replicas: 1
