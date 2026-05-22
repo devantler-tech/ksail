@@ -1,0 +1,6 @@
+# The repo-root .gitignore ignores every `dist/` directory; re-include this one so the embed
+# placeholder (required by the go:embed directive in embed.go) is tracked, while still ignoring the
+# built SPA assets that are staged here at build time.
+!/dist/
+/dist/*
+!/dist/.gitkeep

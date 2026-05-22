@@ -1,0 +1,7 @@
+/ksail-desktop
+/dist/
+/build/
+*.app
+*.dmg
+*.zip
+*.tar.gz

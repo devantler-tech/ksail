@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"testing/fstest"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/operator/api"
@@ -57,7 +58,7 @@ func doRequest(handler http.Handler, method, target, body string) *httptest.Resp
 func TestConfigReportsReadOnly(t *testing.T) {
 	t.Parallel()
 
-	server := &api.Server{Client: newClient(t), ReadOnly: true}
+	server := &api.Server{Service: api.NewCRClusterService(newClient(t)), ReadOnly: true}
 
 	recorder := doRequest(server.Handler(), http.MethodGet, "/api/v1/config", "")
 
@@ -68,7 +69,7 @@ func TestConfigReportsReadOnly(t *testing.T) {
 func TestListClusters(t *testing.T) {
 	t.Parallel()
 
-	server := &api.Server{Client: newClient(t, sampleCluster())}
+	server := &api.Server{Service: api.NewCRClusterService(newClient(t, sampleCluster()))}
 
 	recorder := doRequest(server.Handler(), http.MethodGet, "/api/v1/clusters", "")
 
@@ -76,10 +77,65 @@ func TestListClusters(t *testing.T) {
 	assert.Contains(t, recorder.Body.String(), "c1")
 }
 
+// stubClusterService returns a fixed cluster list without any controller-runtime round-trip, so a
+// test can assert exactly what the REST layer serializes (the fake client prunes via MarshalJSON on
+// storage, which would mask the serialization being tested here).
+type stubClusterService struct {
+	clusters []v1alpha1.Cluster
+}
+
+func (s stubClusterService) List(_ context.Context) (*v1alpha1.ClusterList, error) {
+	return &v1alpha1.ClusterList{Items: s.clusters}, nil
+}
+
+func (s stubClusterService) Get(_ context.Context, _, _ string) (*v1alpha1.Cluster, error) {
+	return nil, api.ErrNotFound
+}
+
+func (s stubClusterService) Create(
+	_ context.Context,
+	cluster *v1alpha1.Cluster,
+) (*v1alpha1.Cluster, error) {
+	return cluster, nil
+}
+
+func (s stubClusterService) Update(
+	_ context.Context,
+	_, _ string,
+	cluster *v1alpha1.Cluster,
+) (*v1alpha1.Cluster, error) {
+	return cluster, nil
+}
+
+func (s stubClusterService) Delete(_ context.Context, _, _ string) error {
+	return nil
+}
+
+func TestListClustersIncludesDefaultValuedFields(t *testing.T) {
+	t.Parallel()
+
+	vanilla := v1alpha1.Cluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "van", Namespace: defaultNS},
+		Spec: v1alpha1.Spec{Cluster: v1alpha1.ClusterSpec{
+			Distribution: v1alpha1.DistributionVanilla,
+			Provider:     v1alpha1.ProviderDocker,
+		}},
+	}
+	server := &api.Server{Service: stubClusterService{clusters: []v1alpha1.Cluster{vanilla}}}
+
+	recorder := doRequest(server.Handler(), http.MethodGet, "/api/v1/clusters", "")
+
+	assert.Equal(t, http.StatusOK, recorder.Code)
+	// The REST API must surface default-valued fields so the UI can display them, unlike the
+	// config-file marshaler (v1alpha1.Cluster.MarshalJSON) that prunes defaults like Vanilla/Docker.
+	assert.Contains(t, recorder.Body.String(), `"distribution":"Vanilla"`)
+	assert.Contains(t, recorder.Body.String(), `"provider":"Docker"`)
+}
+
 func TestListClustersEmptyReturnsArray(t *testing.T) {
 	t.Parallel()
 
-	server := &api.Server{Client: newClient(t)}
+	server := &api.Server{Service: api.NewCRClusterService(newClient(t))}
 
 	recorder := doRequest(server.Handler(), http.MethodGet, "/api/v1/clusters", "")
 
@@ -91,7 +147,7 @@ func TestListClustersEmptyReturnsArray(t *testing.T) {
 func TestGetClusterNotFound(t *testing.T) {
 	t.Parallel()
 
-	server := &api.Server{Client: newClient(t)}
+	server := &api.Server{Service: api.NewCRClusterService(newClient(t))}
 
 	recorder := doRequest(server.Handler(), http.MethodGet, "/api/v1/clusters/default/missing", "")
 
@@ -101,7 +157,7 @@ func TestGetClusterNotFound(t *testing.T) {
 func TestCreateClusterOversizedBodyReturns413(t *testing.T) {
 	t.Parallel()
 
-	server := &api.Server{Client: newClient(t)}
+	server := &api.Server{Service: api.NewCRClusterService(newClient(t))}
 	// Body exceeds the 1 MiB cap, so the decode must surface 413, not a generic 400.
 	body := `{"metadata":{"name":"big","namespace":"default","labels":{"big":"` +
 		strings.Repeat("a", 1<<20) + `"}}}`
@@ -114,7 +170,7 @@ func TestCreateClusterOversizedBodyReturns413(t *testing.T) {
 func TestCreateClusterWhenWritable(t *testing.T) {
 	t.Parallel()
 
-	server := &api.Server{Client: newClient(t)}
+	server := &api.Server{Service: api.NewCRClusterService(newClient(t))}
 	body := `{"metadata":{"name":"new","namespace":"default"},"spec":{"cluster":{"distribution":"VCluster"}}}`
 
 	recorder := doRequest(server.Handler(), http.MethodPost, "/api/v1/clusters", body)
@@ -125,7 +181,7 @@ func TestCreateClusterWhenWritable(t *testing.T) {
 func TestReadOnlyRejectsCreate(t *testing.T) {
 	t.Parallel()
 
-	server := &api.Server{Client: newClient(t), ReadOnly: true}
+	server := &api.Server{Service: api.NewCRClusterService(newClient(t)), ReadOnly: true}
 	body := `{"metadata":{"name":"new","namespace":"default"}}`
 
 	recorder := doRequest(server.Handler(), http.MethodPost, "/api/v1/clusters", body)
@@ -137,7 +193,10 @@ func TestReadOnlyRejectsCreate(t *testing.T) {
 func TestReadOnlyRejectsDelete(t *testing.T) {
 	t.Parallel()
 
-	server := &api.Server{Client: newClient(t, sampleCluster()), ReadOnly: true}
+	server := &api.Server{
+		Service:  api.NewCRClusterService(newClient(t, sampleCluster())),
+		ReadOnly: true,
+	}
 
 	recorder := doRequest(server.Handler(), http.MethodDelete, "/api/v1/clusters/default/c1", "")
 
@@ -147,7 +206,10 @@ func TestReadOnlyRejectsDelete(t *testing.T) {
 func TestReadOnlyAllowsReads(t *testing.T) {
 	t.Parallel()
 
-	server := &api.Server{Client: newClient(t, sampleCluster()), ReadOnly: true}
+	server := &api.Server{
+		Service:  api.NewCRClusterService(newClient(t, sampleCluster())),
+		ReadOnly: true,
+	}
 
 	recorder := doRequest(server.Handler(), http.MethodGet, "/api/v1/clusters", "")
 
@@ -158,7 +220,7 @@ func TestDeleteClusterWhenWritable(t *testing.T) {
 	t.Parallel()
 
 	fakeClient := newClient(t, sampleCluster())
-	server := &api.Server{Client: fakeClient}
+	server := &api.Server{Service: api.NewCRClusterService(fakeClient)}
 
 	recorder := doRequest(server.Handler(), http.MethodDelete, "/api/v1/clusters/default/c1", "")
 
@@ -175,7 +237,7 @@ func TestDeleteClusterWhenWritable(t *testing.T) {
 func TestHealthz(t *testing.T) {
 	t.Parallel()
 
-	server := &api.Server{Client: newClient(t)}
+	server := &api.Server{Service: api.NewCRClusterService(newClient(t))}
 
 	recorder := doRequest(server.Handler(), http.MethodGet, "/healthz", "")
 
@@ -186,7 +248,7 @@ func TestUpdateClusterAppliesSpec(t *testing.T) {
 	t.Parallel()
 
 	fakeClient := newClient(t, sampleCluster())
-	server := &api.Server{Client: fakeClient}
+	server := &api.Server{Service: api.NewCRClusterService(fakeClient)}
 	body := `{"spec":{"cluster":{"distribution":"K3s"}}}`
 
 	recorder := doRequest(server.Handler(), http.MethodPut, "/api/v1/clusters/default/c1", body)
@@ -205,7 +267,7 @@ func TestUpdateClusterAppliesSpec(t *testing.T) {
 func TestUpdateClusterNotFound(t *testing.T) {
 	t.Parallel()
 
-	server := &api.Server{Client: newClient(t)}
+	server := &api.Server{Service: api.NewCRClusterService(newClient(t))}
 	body := `{"spec":{"cluster":{"distribution":"VCluster"}}}`
 
 	recorder := doRequest(
@@ -221,7 +283,7 @@ func TestCreateDefaultsNamespace(t *testing.T) {
 	t.Parallel()
 
 	fakeClient := newClient(t)
-	server := &api.Server{Client: fakeClient}
+	server := &api.Server{Service: api.NewCRClusterService(fakeClient)}
 	body := `{"metadata":{"name":"nons"},"spec":{"cluster":{"distribution":"VCluster"}}}`
 
 	recorder := doRequest(server.Handler(), http.MethodPost, "/api/v1/clusters", body)
@@ -239,7 +301,7 @@ func TestCreateSanitizesClientInput(t *testing.T) {
 	t.Parallel()
 
 	fakeClient := newClient(t)
-	server := &api.Server{Client: fakeClient}
+	server := &api.Server{Service: api.NewCRClusterService(fakeClient)}
 	// Client tries to set operator-managed fields; they must be stripped.
 	body := `{"metadata":{"name":"san","namespace":"default",` +
 		`"finalizers":["ksail.io/finalizer"],` +
@@ -269,7 +331,7 @@ func TestCreateSanitizesClientInput(t *testing.T) {
 func TestCreateConflictReturns409(t *testing.T) {
 	t.Parallel()
 
-	server := &api.Server{Client: newClient(t, sampleCluster())}
+	server := &api.Server{Service: api.NewCRClusterService(newClient(t, sampleCluster()))}
 	body := `{"metadata":{"name":"c1","namespace":"default"},"spec":{"cluster":{"distribution":"VCluster"}}}`
 
 	recorder := doRequest(server.Handler(), http.MethodPost, "/api/v1/clusters", body)
@@ -279,12 +341,61 @@ func TestCreateConflictReturns409(t *testing.T) {
 func TestConfigDefaultsWritable(t *testing.T) {
 	t.Parallel()
 
-	server := &api.Server{Client: newClient(t)}
+	server := &api.Server{Service: api.NewCRClusterService(newClient(t))}
 
 	recorder := doRequest(server.Handler(), http.MethodGet, "/api/v1/config", "")
 
 	assert.Equal(t, http.StatusOK, recorder.Code)
 	assert.JSONEq(t, `{"readOnly":false,"authEnabled":false}`, recorder.Body.String())
+}
+
+func TestStaticFSServesAssetsAndSPAFallback(t *testing.T) {
+	t.Parallel()
+
+	staticFS := fstest.MapFS{
+		"index.html":    {Data: []byte("<html>spa</html>")},
+		"assets/app.js": {Data: []byte("console.log(1)")},
+	}
+	server := &api.Server{
+		Service:  api.NewCRClusterService(newClient(t, sampleCluster())),
+		StaticFS: staticFS,
+	}
+
+	handler := server.Handler()
+
+	// Root serves index.html.
+	root := doRequest(handler, http.MethodGet, "/", "")
+	assert.Equal(t, http.StatusOK, root.Code)
+	assert.Contains(t, root.Body.String(), "<html>spa</html>")
+
+	// A real asset is served from the embedded FS.
+	asset := doRequest(handler, http.MethodGet, "/assets/app.js", "")
+	assert.Equal(t, http.StatusOK, asset.Code)
+	assert.Contains(t, asset.Body.String(), "console.log(1)")
+
+	// An unknown client-side route falls back to index.html (SPA routing).
+	spa := doRequest(handler, http.MethodGet, "/clusters/some/route", "")
+	assert.Equal(t, http.StatusOK, spa.Code)
+	assert.Contains(t, spa.Body.String(), "<html>spa</html>")
+
+	// API routes still take precedence over the static catch-all.
+	apiResp := doRequest(handler, http.MethodGet, "/api/v1/clusters", "")
+	assert.Equal(t, http.StatusOK, apiResp.Code)
+	assert.Contains(t, apiResp.Body.String(), "c1")
+}
+
+func TestConfigIncludesDistributions(t *testing.T) {
+	t.Parallel()
+
+	server := &api.Server{
+		Service:       api.NewCRClusterService(newClient(t)),
+		Distributions: []string{"Vanilla", "K3s", "VCluster"},
+	}
+
+	recorder := doRequest(server.Handler(), http.MethodGet, "/api/v1/config", "")
+
+	assert.Equal(t, http.StatusOK, recorder.Code)
+	assert.Contains(t, recorder.Body.String(), `"distributions":["Vanilla","K3s","VCluster"]`)
 }
 
 const sessionSecret = "0123456789abcdef0123456789abcdef"

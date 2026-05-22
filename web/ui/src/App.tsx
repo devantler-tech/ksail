@@ -11,9 +11,10 @@ import {
   type User,
 } from "./api.ts";
 
-// Only distributions the operator can currently provision in-cluster (see
-// pkg/operator/provisioner.go buildDistributionConfig). Creating others would fail reconciliation.
-const DISTRIBUTIONS = ["VCluster"];
+// Fallback create-form options used when the backend does not advertise its supported distributions
+// via config.distributions. The operator omits it and only provisions VCluster in-cluster; the local
+// `ksail cluster ui` backend advertises the locally creatable set.
+const DEFAULT_DISTRIBUTIONS = ["VCluster"];
 
 export function App() {
   const [readOnly, setReadOnly] = useState(true);
@@ -22,6 +23,7 @@ export function App() {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<User | null>(null);
   const [needsLogin, setNeedsLogin] = useState(false);
+  const [distributions, setDistributions] = useState<string[]>(DEFAULT_DISTRIBUTIONS);
   // Guards against state updates from in-flight requests that resolve after the component unmounts
   // (refresh runs from the interval, the button, and child callbacks, not only the init effect).
   const mounted = useRef(true);
@@ -75,6 +77,7 @@ export function App() {
 
       setReadOnly(config.readOnly);
       setUser(config.user ?? null);
+      setDistributions(config.distributions ?? DEFAULT_DISTRIBUTIONS);
 
       // When auth is enabled but no session exists yet, show the login screen and do not poll.
       if (config.authEnabled && !config.user) {
@@ -158,7 +161,9 @@ export function App() {
         />
       )}
 
-      {!readOnly && !loading && <CreateForm onCreated={refresh} onError={setError} />}
+      {!readOnly && !loading && (
+        <CreateForm distributions={distributions} onCreated={refresh} onError={setError} />
+      )}
     </div>
   );
 }
@@ -249,11 +254,15 @@ function DeleteButton(props: {
   );
 }
 
-function CreateForm(props: { onCreated: () => Promise<void>; onError: (message: string) => void }) {
-  const { onCreated, onError } = props;
+function CreateForm(props: {
+  distributions: string[];
+  onCreated: () => Promise<void>;
+  onError: (message: string) => void;
+}) {
+  const { distributions, onCreated, onError } = props;
   const [name, setName] = useState("");
   const [namespace, setNamespace] = useState("default");
-  const [distribution, setDistribution] = useState(DISTRIBUTIONS[0]);
+  const [distribution, setDistribution] = useState(distributions[0]);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -299,7 +308,7 @@ function CreateForm(props: { onCreated: () => Promise<void>; onError: (message: 
           onChange={(event) => setDistribution(event.target.value)}
           className="rounded border px-2 py-1"
         >
-          {DISTRIBUTIONS.map((value) => (
+          {distributions.map((value) => (
             <option key={value} value={value}>
               {value}
             </option>
