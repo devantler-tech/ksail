@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/devantler-tech/ksail/v7/internal/controller"
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 )
@@ -52,7 +53,7 @@ func buildDistributionConfig(
 
 	if distribution == v1alpha1.DistributionVCluster {
 		return &clusterprovisioner.DistributionConfig{
-			VCluster: &clusterprovisioner.VClusterConfig{Name: cluster.Name},
+			VCluster: &clusterprovisioner.VClusterConfig{Name: controller.ProvisionedName(cluster)},
 		}, nil
 	}
 

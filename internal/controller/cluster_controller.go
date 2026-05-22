@@ -39,6 +39,18 @@ const (
 	defaultTransitionalRequeue = 10 * time.Second
 )
 
+// ProvisionedName returns the name of the underlying cluster the operator provisions for a
+// Cluster resource. It is qualified with the resource namespace so two Cluster resources with the
+// same name in different namespaces never collide on the same underlying cluster (and its
+// kubeconfig). The Cluster CRD is namespaced, so name alone is not unique across the hub cluster.
+func ProvisionedName(cluster *v1alpha1.Cluster) string {
+	if cluster.Namespace == "" {
+		return cluster.Name
+	}
+
+	return cluster.Namespace + "-" + cluster.Name
+}
+
 // ProvisionerBuilder returns a distribution provisioner for the given Cluster. The operator
 // supplies a builder backed by the existing provisioner factory (forcing the Kubernetes
 // provider so clusters are provisioned in-cluster); tests supply a fake.
@@ -126,7 +138,7 @@ func (r *ClusterReconciler) reconcileNormal(
 		return r.fail(ctx, cluster, "ProvisionerError", err)
 	}
 
-	exists, err := provisioner.Exists(ctx, cluster.Name)
+	exists, err := provisioner.Exists(ctx, ProvisionedName(cluster))
 	if err != nil {
 		return r.fail(ctx, cluster, "ExistsCheckFailed", err)
 	}
@@ -185,7 +197,7 @@ func (r *ClusterReconciler) reconcileDelete(
 		return ctrl.Result{}, fmt.Errorf("build provisioner for deletion: %w", err)
 	}
 
-	delErr := provisioner.Delete(ctx, cluster.Name)
+	delErr := provisioner.Delete(ctx, ProvisionedName(cluster))
 	if delErr != nil {
 		// Return only the error: controller-runtime ignores Result when err != nil and applies
 		// its rate-limited backoff, so a RequeueAfter here would have no effect.
@@ -298,7 +310,7 @@ func (r *ClusterReconciler) provisionAndRecord(
 	cluster *v1alpha1.Cluster,
 	provisioner clusterprovisioner.Provisioner,
 ) error {
-	createErr := provisioner.Create(ctx, cluster.Name)
+	createErr := provisioner.Create(ctx, ProvisionedName(cluster))
 	if createErr != nil {
 		return fmt.Errorf("create cluster: %w", createErr)
 	}

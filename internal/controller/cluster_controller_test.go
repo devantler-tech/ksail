@@ -299,3 +299,33 @@ func TestReconcile_NoDriftSkipsUpdate(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 0, prov.updateCalls, "Update should not run when there is no drift")
 }
+
+func TestProvisionedName(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		namespace string
+		name      string
+		want      string
+	}{
+		"namespaced": {namespace: "team-a", name: "c1", want: "team-a-c1"},
+		"different namespace same name": {
+			namespace: "team-b",
+			name:      "c1",
+			want:      "team-b-c1",
+		},
+		"empty namespace falls back to name": {namespace: "", name: "c1", want: "c1"},
+	}
+
+	for testName, testCase := range tests {
+		t.Run(testName, func(t *testing.T) {
+			t.Parallel()
+
+			cluster := &v1alpha1.Cluster{
+				ObjectMeta: metav1.ObjectMeta{Name: testCase.name, Namespace: testCase.namespace},
+			}
+
+			assert.Equal(t, testCase.want, controller.ProvisionedName(cluster))
+		})
+	}
+}
