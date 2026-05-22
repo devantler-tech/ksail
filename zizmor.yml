@@ -2,9 +2,8 @@ rules:
   impostor-commit:
     # Temporary workaround: zizmor v1.23.1 fatally crashes (exit code 1) when
     # the impostor-commit audit receives a 403 from the GitHub API while
-    # verifying the SHA for github/gh-aw-actions referenced in
-    # agentics-maintenance.yml. The ignore list cannot prevent this crash
-    # because the API call is made before the ignore filter is applied.
+    # verifying an action's commit SHA. The ignore list cannot prevent this
+    # crash because the API call is made before the ignore filter is applied.
     # TODO: Replace with a narrow ignore list after upgrading from zizmor
     # v1.23.1 to a release that no longer fatally exits on GitHub API 403s.
     disable: true
@@ -15,62 +14,3 @@ rules:
     # TODO: Replace with a narrow ignore list after upgrading from zizmor
     # v1.23.1 to a release that no longer fatally exits on GitHub API 403s.
     disable: true
-  template-injection:
-    ignore:
-      - agentics-maintenance.yml
-      - ci-doctor.lock.yml
-      - daily-docs.lock.yml
-      - daily-workflow-maintenance.lock.yml
-      - repo-assist.lock.yml
-      - monthly-strategy.lock.yml
-  ref-version-mismatch:
-    ignore:
-      - agentics-maintenance.yml
-      - ci-doctor.lock.yml
-      - daily-docs.lock.yml
-      - daily-workflow-maintenance.lock.yml
-      - repo-assist.lock.yml
-      - monthly-strategy.lock.yml
-  excessive-permissions:
-    ignore:
-      - ci-doctor.lock.yml
-      - daily-docs.lock.yml
-      - daily-workflow-maintenance.lock.yml
-      - repo-assist.lock.yml
-      - monthly-strategy.lock.yml
-  artipacked:
-    ignore:
-      - ci-doctor.lock.yml
-      - daily-docs.lock.yml
-      - daily-workflow-maintenance.lock.yml
-      - repo-assist.lock.yml
-      - monthly-strategy.lock.yml
-  dangerous-triggers:
-    ignore:
-      - ci-doctor.lock.yml
-      - daily-docs.lock.yml
-      - daily-workflow-maintenance.lock.yml
-      - repo-assist.lock.yml
-      - monthly-strategy.lock.yml
-  unpinned-uses:
-    ignore:
-      - agentics-maintenance.yml
-      - ci-doctor.lock.yml
-      - daily-docs.lock.yml
-      - daily-workflow-maintenance.lock.yml
-      - repo-assist.lock.yml
-      - monthly-strategy.lock.yml
-  secrets-outside-env:
-    ignore:
-      - ci-doctor.lock.yml
-      - daily-docs.lock.yml
-      - daily-workflow-maintenance.lock.yml
-      - repo-assist.lock.yml
-      - monthly-strategy.lock.yml
-  bot-conditions:
-    ignore:
-      - ci-doctor.lock.yml
-      - daily-docs.lock.yml
-      - daily-workflow-maintenance.lock.yml
-      - repo-assist.lock.yml
-      - monthly-strategy.lock.yml
