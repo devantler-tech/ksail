@@ -378,6 +378,78 @@ func TestManagerUpdateTargetRevision_ReturnsErrorForNonExistentApplication(t *te
 	require.ErrorContains(t, err, "get Argo CD Application")
 }
 
+func TestManagerEnsure_WithCredentials_SetsUsernameAndPasswordInSecret(t *testing.T) {
+	t.Parallel()
+
+	testMgr := newTestManager(t)
+
+	opts := argocd.EnsureOptions{
+		RepositoryURL:   "oci://registry.example.com:5000/demo",
+		ApplicationName: "ksail",
+		TargetRevision:  "v1",
+		Username:        "myuser",
+		Password:        "mypassword",
+	}
+
+	err := testMgr.mgr.Ensure(context.Background(), opts)
+	require.NoError(t, err)
+
+	secret, err := testMgr.clientset.CoreV1().Secrets("argocd").Get(
+		context.Background(),
+		"ksail-local-registry-repo",
+		metav1.GetOptions{},
+	)
+	require.NoError(t, err)
+	require.Equal(t, "myuser", secretValue(secret, "username"))
+	require.Equal(t, "mypassword", secretValue(secret, "password"))
+	require.Empty(t, secretValue(secret, "insecureOCIForceHttp"))
+}
+
+func TestManagerEnsure_SecureMode_OmitsInsecureOCIForceHttp(t *testing.T) {
+	t.Parallel()
+
+	testMgr := newTestManager(t)
+
+	opts := argocd.EnsureOptions{
+		RepositoryURL:   "oci://registry.example.com:5000/demo",
+		ApplicationName: "ksail",
+		TargetRevision:  "v1",
+		Insecure:        false,
+	}
+
+	err := testMgr.mgr.Ensure(context.Background(), opts)
+	require.NoError(t, err)
+
+	secret, err := testMgr.clientset.CoreV1().Secrets("argocd").Get(
+		context.Background(),
+		"ksail-local-registry-repo",
+		metav1.GetOptions{},
+	)
+	require.NoError(t, err)
+	require.Empty(t, secretValue(secret, "insecureOCIForceHttp"))
+}
+
+func TestManagerEnsure_EmptyApplicationName_DefaultsToKSail(t *testing.T) {
+	t.Parallel()
+
+	testMgr := newTestManager(t)
+
+	opts := argocd.EnsureOptions{
+		RepositoryURL:  "oci://local-registry:5000/demo",
+		TargetRevision: "v1",
+		// ApplicationName intentionally omitted to trigger the default
+	}
+
+	err := testMgr.mgr.Ensure(context.Background(), opts)
+	require.NoError(t, err)
+
+	app, err := testMgr.dyn.Resource(testMgr.gvr).
+		Namespace("argocd").
+		Get(context.Background(), "ksail", metav1.GetOptions{})
+	require.NoError(t, err)
+	require.Equal(t, "ksail", app.GetName())
+}
+
 func getNestedString(t *testing.T, obj *unstructured.Unstructured, fields ...string) string {
 	t.Helper()
 
