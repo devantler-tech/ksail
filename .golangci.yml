@@ -2,7 +2,7 @@ version: "2"
 run:
   allow-parallel-runners: true
   modules-download-mode: readonly
-  go: "1.26.2"
+  go: "1.26.3"
 formatters:
   enable:
     - gci
@@ -71,6 +71,7 @@ linters:
         - github.com/opencontainers/runtime-spec
         - github.com/loft-sh/log
         - github.com/anchore/grype
+        - github.com/moby/go-archive
     wsl_v5:
       allow-first-in-block: true
       allow-whole-block: false
