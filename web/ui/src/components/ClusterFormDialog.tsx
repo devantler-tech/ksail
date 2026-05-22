@@ -142,7 +142,7 @@ export function ClusterFormDialog({
           placeholder="my-cluster"
           onChange={(event) => setField("name", event.target.value)}
         />
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <TextField
             label="Namespace"
             value={values.namespace}
@@ -188,7 +188,7 @@ export function ClusterFormDialog({
 
           {advancedOpen ? (
             <div className="mt-3 space-y-4">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <TextField
                   label="Control planes"
                   type="number"
@@ -204,7 +204,7 @@ export function ClusterFormDialog({
                   onChange={(event) => setField("workers", event.target.value)}
                 />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {COMPONENT_FIELDS.map((field) => (
                   <SelectField
                     key={field.key}

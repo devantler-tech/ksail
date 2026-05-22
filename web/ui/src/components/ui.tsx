@@ -131,22 +131,30 @@ export function Modal({
             leaveFrom="opacity-100 translate-y-0 scale-100"
             leaveTo="opacity-0 translate-y-2 scale-95"
           >
-            <DialogPanel className="w-full max-w-md rounded-xl bg-white p-5 shadow-2xl ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800">
-              <div className="flex items-start gap-3">
-                {icon}
-                <div className="min-w-0 flex-1">
-                  <DialogTitle className="text-base font-semibold text-slate-900 dark:text-white">
-                    {title}
-                  </DialogTitle>
-                  {description ? (
-                    <div className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                      {description}
-                    </div>
-                  ) : null}
+            {/* Cap the panel at the viewport height and scroll the body so tall forms stay usable on
+                small screens, while the footer (Cancel/Save) remains pinned and reachable. */}
+            <DialogPanel className="flex max-h-[calc(100dvh-2rem)] w-full max-w-md flex-col rounded-xl bg-white shadow-2xl ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800">
+              <div className="overflow-y-auto p-5">
+                <div className="flex items-start gap-3">
+                  {icon}
+                  <div className="min-w-0 flex-1">
+                    <DialogTitle className="text-base font-semibold text-slate-900 dark:text-white">
+                      {title}
+                    </DialogTitle>
+                    {description ? (
+                      <div className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                        {description}
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
+                {children ? <div className="mt-4">{children}</div> : null}
               </div>
-              {children ? <div className="mt-4">{children}</div> : null}
-              {footer ? <div className="mt-6 flex justify-end gap-2">{footer}</div> : null}
+              {footer ? (
+                <div className="flex shrink-0 justify-end gap-2 border-t border-slate-200 px-5 py-4 dark:border-slate-800">
+                  {footer}
+                </div>
+              ) : null}
             </DialogPanel>
           </TransitionChild>
         </div>
