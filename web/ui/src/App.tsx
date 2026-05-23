@@ -103,7 +103,9 @@ export function App() {
     [clusters, selectedKey],
   );
 
-  const refresh = useCallback(async (silent = false) => {
+  // refresh returns false when the session was lost (HTTP 401), so callers (e.g. init) can avoid
+  // starting/continuing the poll while the login screen is shown.
+  const refresh = useCallback(async (silent = false): Promise<boolean> => {
     if (!silent) {
       setRefreshing(true);
     }
@@ -111,13 +113,13 @@ export function App() {
     try {
       const list = await listClusters();
       if (!mounted.current) {
-        return;
+        return true;
       }
       setClusters(list.items ?? []);
       setError(null);
     } catch (err) {
       if (!mounted.current) {
-        return;
+        return true;
       }
       if (err instanceof ApiError && err.status === 401) {
         if (pollRef.current) {
@@ -125,7 +127,7 @@ export function App() {
           pollRef.current = undefined;
         }
         setNeedsLogin(true);
-        return;
+        return false;
       }
       setError(errorMessage(err));
     } finally {
@@ -133,6 +135,8 @@ export function App() {
         setRefreshing(false);
       }
     }
+
+    return true;
   }, []);
 
   useEffect(() => {
@@ -177,10 +181,14 @@ export function App() {
         return;
       }
 
-      await refresh(true);
+      const authOK = await refresh(true);
       if (mounted.current) {
         setLoading(false);
-        pollRef.current = window.setInterval(() => void refresh(true), POLL_MS);
+        // Only start polling if the initial load did not lose the session; otherwise the login
+        // screen is shown and a poll would just fire another unauthorized request.
+        if (authOK) {
+          pollRef.current = window.setInterval(() => void refresh(true), POLL_MS);
+        }
       }
     }
 

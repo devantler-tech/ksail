@@ -22,10 +22,21 @@ function CopyableEndpoint({ endpoint }: { endpoint: string }) {
     <button
       type="button"
       onClick={() => {
-        void navigator.clipboard?.writeText(endpoint).then(() => {
-          setCopied(true);
-          window.setTimeout(() => setCopied(false), 1500);
-        });
+        // navigator.clipboard is undefined on non-secure origins / some browsers; guard so the
+        // click never throws, and swallow a rejected write (e.g. denied permission).
+        const clipboard = navigator.clipboard;
+        if (!clipboard) {
+          return;
+        }
+        clipboard
+          .writeText(endpoint)
+          .then(() => {
+            setCopied(true);
+            window.setTimeout(() => setCopied(false), 1500);
+          })
+          .catch(() => {
+            /* ignore: clipboard write unavailable or denied */
+          });
       }}
       className="group inline-flex max-w-full items-center gap-1.5 rounded text-left"
       title="Copy endpoint"

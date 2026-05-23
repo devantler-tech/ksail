@@ -88,8 +88,6 @@ func (s *crClusterService) Create(
 	return sanitized, nil
 }
 
-// ensureNamespace creates the namespace on demand, labelled operator-managed so the reconciler can
-// clean it up on cluster deletion. An existing namespace (operator-managed or not) is left as-is.
 func (s *crClusterService) Update(
 	ctx context.Context,
 	namespace, name string,
