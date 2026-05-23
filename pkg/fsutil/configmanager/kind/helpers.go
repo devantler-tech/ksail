@@ -199,35 +199,49 @@ func ApplyOIDCPatches(kindConfig *kindv1alpha4.Cluster, oidc *v1alpha1.OIDCSpec)
 }
 
 // buildOIDCKubeadmPatch generates a kubeadm ClusterConfiguration patch with API server OIDC flags.
-// kubeadm v1beta4 apiServer.extraArgs is map[string]string, so values are plain strings.
+// kubeadm v1beta4 apiServer.extraArgs is a list of {name, value} entries (not a map); the map form
+// is silently ignored, so the flags must be emitted as list items for kubeadm to apply them.
 func buildOIDCKubeadmPatch(oidc *v1alpha1.OIDCSpec) string {
+	type arg struct {
+		name  string
+		value string
+	}
+
+	args := []arg{
+		{name: "oidc-issuer-url", value: oidc.IssuerURL},
+		{name: "oidc-client-id", value: oidc.ClientID},
+	}
+
+	if oidc.UsernameClaim != "" {
+		args = append(args, arg{name: "oidc-username-claim", value: oidc.UsernameClaim})
+	}
+
+	if oidc.UsernamePrefix != "" {
+		args = append(args, arg{name: "oidc-username-prefix", value: oidc.UsernamePrefix})
+	}
+
+	if oidc.GroupsClaim != "" {
+		args = append(args, arg{name: "oidc-groups-claim", value: oidc.GroupsClaim})
+	}
+
+	if oidc.GroupsPrefix != "" {
+		args = append(args, arg{name: "oidc-groups-prefix", value: oidc.GroupsPrefix})
+	}
+
+	if oidc.CAFile != "" {
+		args = append(args, arg{name: "oidc-ca-file", value: v1alpha1.OIDCCAContainerPath})
+	}
+
 	var builder strings.Builder
 
 	_, _ = fmt.Fprintf(&builder, "apiVersion: kubeadm.k8s.io/v1beta4\n")
 	_, _ = fmt.Fprintf(&builder, "kind: ClusterConfiguration\n")
 	_, _ = fmt.Fprintf(&builder, "apiServer:\n")
 	_, _ = fmt.Fprintf(&builder, "  extraArgs:\n")
-	_, _ = fmt.Fprintf(&builder, "    oidc-issuer-url: %q\n", oidc.IssuerURL)
-	_, _ = fmt.Fprintf(&builder, "    oidc-client-id: %q\n", oidc.ClientID)
 
-	if oidc.UsernameClaim != "" {
-		_, _ = fmt.Fprintf(&builder, "    oidc-username-claim: %q\n", oidc.UsernameClaim)
-	}
-
-	if oidc.UsernamePrefix != "" {
-		_, _ = fmt.Fprintf(&builder, "    oidc-username-prefix: %q\n", oidc.UsernamePrefix)
-	}
-
-	if oidc.GroupsClaim != "" {
-		_, _ = fmt.Fprintf(&builder, "    oidc-groups-claim: %q\n", oidc.GroupsClaim)
-	}
-
-	if oidc.GroupsPrefix != "" {
-		_, _ = fmt.Fprintf(&builder, "    oidc-groups-prefix: %q\n", oidc.GroupsPrefix)
-	}
-
-	if oidc.CAFile != "" {
-		_, _ = fmt.Fprintf(&builder, "    oidc-ca-file: %q\n", v1alpha1.OIDCCAContainerPath)
+	for _, a := range args {
+		_, _ = fmt.Fprintf(&builder, "    - name: %s\n", a.name)
+		_, _ = fmt.Fprintf(&builder, "      value: %q\n", a.value)
 	}
 
 	return builder.String()
