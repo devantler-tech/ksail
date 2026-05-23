@@ -388,14 +388,17 @@ func runCopilotCmdWithRetry(ctx context.Context, newCmd func() *exec.Cmd) error 
 	for attempt := 0; ; attempt++ {
 		err := newCmd().Run()
 		if errors.Is(err, syscall.ETXTBSY) && attempt < copilotExecMaxRetries {
-			// Interruptible backoff: respect context cancellation immediately
-			// rather than sleeping out the remaining window.
+			// Interruptible backoff: a cancelled or expired context aborts the
+			// loop and surfaces the cancellation reason rather than waiting out
+			// the timer and reporting the transient ETXTBSY.
 			timer := time.NewTimer(copilotExecRetryBackoff)
 			select {
 			case <-timer.C:
 				continue
 			case <-ctx.Done():
 				timer.Stop()
+
+				return ctx.Err() //nolint:wrapcheck // propagate cancellation as-is
 			}
 		}
 
