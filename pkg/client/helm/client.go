@@ -124,6 +124,10 @@ func (c *Client) RefreshDiscovery() error {
 	// RESTMapper. genericclioptions.ConfigFlags memoizes both its discovery
 	// client and REST mapper, so reusing the existing getter would keep serving
 	// the stale in-memory mapping even after the on-disk cache is invalidated.
+	// Preserve the current namespace so this only refreshes discovery and does
+	// not reset behavioral config set elsewhere (e.g. via SetNamespace).
+	namespace := c.settings.Namespace()
+
 	settings := helmv4cli.New()
 	if c.kubeConfig != "" {
 		settings.KubeConfig = c.kubeConfig
@@ -132,6 +136,8 @@ func (c *Client) RefreshDiscovery() error {
 	if c.kubeContext != "" {
 		settings.KubeContext = c.kubeContext
 	}
+
+	settings.SetNamespace(namespace)
 
 	c.settings = settings
 
