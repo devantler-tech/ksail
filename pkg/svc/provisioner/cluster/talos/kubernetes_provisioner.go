@@ -516,14 +516,12 @@ func (p *KubernetesProvisioner) setupDinDMirrors(
 		return fmt.Errorf("connect nested mirror registries to network: %w", err)
 	}
 
-	p.applyMirrorsToTalosConfig(clusterName)
-
-	return nil
+	return p.applyMirrorsToTalosConfig(clusterName)
 }
 
 // applyMirrorsToTalosConfig points the nested Talos machine config's
 // registries.mirrors at the in-DinD registry containers (by Docker DNS name).
-func (p *KubernetesProvisioner) applyMirrorsToTalosConfig(clusterName string) {
+func (p *KubernetesProvisioner) applyMirrorsToTalosConfig(clusterName string) error {
 	mirrors := make([]talosconfigmanager.MirrorRegistry, 0, len(p.mirrorSpecs))
 
 	for _, spec := range p.mirrorSpecs {
@@ -538,7 +536,12 @@ func (p *KubernetesProvisioner) applyMirrorsToTalosConfig(clusterName string) {
 		})
 	}
 
-	_ = p.inner.talosConfigs.ApplyMirrorRegistries(mirrors)
+	err := p.inner.talosConfigs.ApplyMirrorRegistries(mirrors)
+	if err != nil {
+		return fmt.Errorf("apply nested mirror registries to talos config: %w", err)
+	}
+
+	return nil
 }
 
 // setupDinD creates the namespace and DinD pod, then waits for readiness.
