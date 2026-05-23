@@ -18,7 +18,11 @@ inputs:
   timeout:
     description: Timeout per nested cluster create (seconds)
     required: false
-    default: "600"
+    # 900s (15m): nested Talos on the Kubernetes provider (Talos-in-pod inside a
+    # vCluster/Docker host) is the heaviest combination and intermittently exceeded
+    # 600s under CI load (exit 124). Headroom over trimming coverage — see the matrix
+    # in ci.yaml and docs note on not reducing nested-distro coverage for flakes.
+    default: "900"
 
 runs:
   using: composite
