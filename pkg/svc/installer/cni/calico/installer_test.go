@@ -354,14 +354,26 @@ func isCalicoOperatorSpec(spec *helm.ChartSpec) bool {
 	return spec != nil && spec.ChartName == "projectcalico/tigera-operator"
 }
 
-// expectCalicoCRDPhase sets up the CRD chart install and discovery refresh that
-// precede the operator chart install in the two-phase Calico install flow.
+// expectCalicoCRDPhase sets up the CRD chart install and the single post-CRD
+// discovery refresh that precede the operator chart install in the two-phase
+// Calico install flow (the no-retry / non-discovery-retry case).
 func expectCalicoCRDPhase(client *helm.MockInterface) {
+	expectCalicoCRDPhaseWithRefreshes(client, 1)
+}
+
+// expectCalicoCRDPhaseWithRefreshes is like expectCalicoCRDPhase but asserts an
+// exact RefreshDiscovery call count. One refresh always follows the CRD chart
+// install; each API-discovery-error retry of the operator install triggers one
+// additional refresh (see runInstallWithRetry). So the discovery-error retry
+// path expects 2 and the retry-exhausted path expects 8. Pinning the count means
+// a regression that drops the retry-triggered refresh is caught.
+func expectCalicoCRDPhaseWithRefreshes(client *helm.MockInterface, refreshes int) {
 	client.EXPECT().
 		InstallOrUpgradeChart(mock.Anything, mock.MatchedBy(isCalicoCRDSpec)).
 		Return(nil, nil).
 		Once()
 	client.EXPECT().
 		RefreshDiscovery().
-		Return(nil)
+		Return(nil).
+		Times(refreshes)
 }

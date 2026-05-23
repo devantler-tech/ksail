@@ -75,7 +75,9 @@ func TestInstaller_Install_APIDiscoveryErrorRetry(t *testing.T) {
 		AddRepository(mock.Anything, mock.Anything, mock.Anything).
 		Return(nil)
 
-	expectCalicoCRDPhase(client)
+	// Two refreshes expected: one after the CRD chart install, and one more
+	// before the operator-install retry (triggered by the API-discovery error).
+	expectCalicoCRDPhaseWithRefreshes(client, 2)
 
 	// The operator install hits the CRD-establishment race once; the retry
 	// (after a discovery refresh) succeeds.
@@ -117,7 +119,10 @@ func TestInstaller_Install_APIDiscoveryErrorRetryExhausted(t *testing.T) {
 		AddRepository(mock.Anything, mock.Anything, mock.Anything).
 		Return(nil)
 
-	expectCalicoCRDPhase(client)
+	// 8 operator attempts all fail with the discovery error. One refresh follows
+	// the CRD install; the 7 retries between the 8 attempts each refresh again
+	// (the final attempt breaks without refreshing) — 8 refreshes total.
+	expectCalicoCRDPhaseWithRefreshes(client, 8)
 
 	client.EXPECT().
 		InstallOrUpgradeChart(mock.Anything, mock.MatchedBy(isCalicoOperatorSpec)).
