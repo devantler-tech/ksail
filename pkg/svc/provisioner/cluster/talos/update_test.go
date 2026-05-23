@@ -25,6 +25,10 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 )
 
+// errClusterUnreachable simulates a kube-API connection failure for component
+// detection in GetCurrentConfig tests.
+var errClusterUnreachable = errors.New("dial tcp 10.0.0.1:6443: connect: connection refused")
+
 //nolint:funlen // Table-driven test with multiple node topology scenarios is clearer as single function
 func TestCountNodeRoles(t *testing.T) {
 	t.Parallel()
@@ -895,16 +899,13 @@ func TestMergePersistedState_ReturnsErrorForCorruptState(t *testing.T) {
 // degrading to a default baseline, which would make `cluster update` propose a
 // full reinstall of healthy components and only fail later mid-apply.
 func TestGetCurrentConfig_PropagatesDetectionError(t *testing.T) {
-	// Not parallel: t.Setenv isolates cluster-state lookups from the real ~/.ksail.
-	t.Setenv("HOME", t.TempDir())
-
-	errUnreachable := errors.New("dial tcp 10.0.0.1:6443: connect: connection refused")
+	t.Parallel()
 
 	helmClient := helm.NewMockInterface(t)
 	helmClient.On("ListReleases", mock.Anything).
-		Return(nil, errUnreachable)
+		Return(nil, errClusterUnreachable)
 	helmClient.On("ReleaseExists", mock.Anything, detector.ReleaseCilium, detector.NamespaceCilium).
-		Return(false, errUnreachable)
+		Return(false, errClusterUnreachable)
 
 	componentDetector := detector.NewComponentDetector(helmClient, fake.NewClientset(), nil)
 
@@ -914,11 +915,11 @@ func TestGetCurrentConfig_PropagatesDetectionError(t *testing.T) {
 
 	spec, providerSpec, err := provisioner.GetCurrentConfig(
 		context.Background(),
-		"unreachable-cluster",
+		"unreachable-cluster-"+t.Name(),
 	)
 
 	require.Error(t, err, "detection failure must be fatal, not silently swallowed")
-	require.ErrorIs(t, err, errUnreachable)
+	require.ErrorIs(t, err, errClusterUnreachable)
 	assert.Nil(t, spec, "no baseline spec should be returned when the cluster is unreachable")
 	assert.Nil(t, providerSpec)
 }
