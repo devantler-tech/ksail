@@ -194,6 +194,60 @@ func TestFormatDiffTable_MultipleRows(t *testing.T) {
 	assert.Contains(t, got, "c")
 }
 
+func TestFormatDiffTable_UnknownBaselineOnly(t *testing.T) {
+	t.Parallel()
+
+	diff := &clusterupdate.UpdateResult{
+		UnknownBaseline: []clusterupdate.Change{
+			{
+				Field:    "cluster.cni",
+				OldValue: clusterupdate.UnknownBaselineValue,
+				NewValue: "Cilium",
+				Category: clusterupdate.ChangeCategoryUnknown,
+			},
+		},
+	}
+	got := cluster.ExportFormatDiffTable(diff, 0)
+
+	assert.Contains(t, got, "cluster.cni")
+	assert.Contains(t, got, "Unknown")
+	assert.Contains(t, got, "Cilium")
+	assert.Contains(t, got, "⚪")
+	// The summary line must not claim confident configuration changes.
+	assert.Contains(t, got, "could not be read")
+	assert.NotContains(t, got, "Detected 0 configuration changes")
+}
+
+func TestFormatDiffTable_RealAndUnknownTogether(t *testing.T) {
+	t.Parallel()
+
+	diff := &clusterupdate.UpdateResult{
+		InPlaceChanges: []clusterupdate.Change{
+			{
+				Field:    "cluster.workers",
+				OldValue: "1",
+				NewValue: "3",
+				Category: clusterupdate.ChangeCategoryInPlace,
+			},
+		},
+		UnknownBaseline: []clusterupdate.Change{
+			{
+				Field:    "cluster.gitOpsEngine",
+				OldValue: clusterupdate.UnknownBaselineValue,
+				NewValue: "Flux",
+				Category: clusterupdate.ChangeCategoryUnknown,
+			},
+		},
+	}
+	got := cluster.ExportFormatDiffTable(diff, 1)
+
+	assert.Contains(t, got, "cluster.workers")
+	assert.Contains(t, got, "cluster.gitOpsEngine")
+	assert.Contains(t, got, "🟢")
+	assert.Contains(t, got, "⚪")
+	assert.Contains(t, got, "unknown baseline")
+}
+
 // ===========================================================================
 // stripDistributionPrefix — context name prefix stripping
 // ===========================================================================
