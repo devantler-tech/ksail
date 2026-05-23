@@ -150,6 +150,23 @@ func (c *Installer) chartSpec() *helm.ChartSpec {
 	}
 }
 
+// crdChartSpec returns the spec for the projectcalico.org.v3 chart, which
+// installs the projectcalico.org/v3 and operator.tigera.io CRDs. Since Calico
+// v3.30 these CRDs are no longer bundled in the tigera-operator chart, so they
+// must be installed first; otherwise the operator chart's Installation/APIServer
+// custom resources fail Helm manifest validation on a fresh cluster.
+func (c *Installer) crdChartSpec() *helm.ChartSpec {
+	return &helm.ChartSpec{
+		ReleaseName:     "calico-crds",
+		ChartName:       "projectcalico/projectcalico.org.v3",
+		Namespace:       "tigera-operator",
+		Version:         chartVersion(),
+		RepoURL:         "https://docs.tigera.io/calico/charts",
+		CreateNamespace: true,
+		Timeout:         c.GetTimeout(),
+	}
+}
+
 // --- internals ---
 
 func (c *Installer) helmInstallOrUpgradeCalico(ctx context.Context) error {
@@ -183,12 +200,46 @@ func (c *Installer) installCalico(ctx context.Context) error {
 		return fmt.Errorf("add calico repository: %w", addErr)
 	}
 
-	spec := c.chartSpec()
+	// Phase 1: install the CRDs (separate projectcalico.org.v3 chart since v3.30).
+	crdErr := c.runInstallWithRetry(ctx, client, c.crdChartSpec())
+	if crdErr != nil {
+		return fmt.Errorf("install calico CRDs: %w", crdErr)
+	}
+
+	// Phase 2: refresh Helm's cached API discovery so the operator chart install
+	// observes the operator.tigera.io CRDs just installed; otherwise its
+	// Installation/APIServer custom resources fail validation with
+	// "ensure CRDs are installed first".
+	refreshErr := client.RefreshDiscovery()
+	if refreshErr != nil {
+		return fmt.Errorf("refresh discovery after calico CRD install: %w", refreshErr)
+	}
+
+	// Phase 3: install the operator chart and its default custom resources.
+	operatorErr := c.runInstallWithRetry(ctx, client, c.chartSpec())
+	if operatorErr != nil {
+		return fmt.Errorf("install or upgrade calico: %w", operatorErr)
+	}
+
+	return nil
+}
+
+// runInstallWithRetry installs a chart, retrying transient bootstrap failures
+// (see shouldRetryInstall) with backoff. When a retry is triggered by an
+// API-discovery error, it refreshes Helm's cached discovery first so the retry
+// observes any CRDs registered since the previous attempt.
+func (c *Installer) runInstallWithRetry(
+	ctx context.Context,
+	client helm.Interface,
+	spec *helm.ChartSpec,
+) error {
 	spec.Atomic = true
 	spec.Silent = true
 	spec.UpgradeCRDs = true
 	spec.Wait = false
 	spec.WaitForJobs = false
+
+	var err error
 
 	for attempt := 1; attempt <= calicoInstallRetryAttempts; attempt++ {
 		err = c.attemptCalicoInstall(ctx, client, spec)
@@ -200,13 +251,20 @@ func (c *Installer) installCalico(ctx context.Context) error {
 			break
 		}
 
+		if isAPIDiscoveryError(err) {
+			refreshErr := client.RefreshDiscovery()
+			if refreshErr != nil {
+				return fmt.Errorf("refresh discovery before calico install retry: %w", refreshErr)
+			}
+		}
+
 		waitErr := c.retryBackoff(ctx)
 		if waitErr != nil {
 			return fmt.Errorf("wait before calico install retry: %w", waitErr)
 		}
 	}
 
-	return fmt.Errorf("install or upgrade calico: %w", err)
+	return err
 }
 
 // shouldRetryInstall reports whether a failed Calico install attempt should be

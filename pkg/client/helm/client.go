@@ -108,6 +108,45 @@ func newClient(
 	}, nil
 }
 
+// RefreshDiscovery invalidates cached Kubernetes API discovery so subsequent
+// operations observe CRDs (and other API resources) registered since the client
+// was created. See the Interface documentation for why this is required for
+// multi-chart installs that separate CRDs from the resources that use them.
+func (c *Client) RefreshDiscovery() error {
+	// Drop the on-disk discovery cache shared across RESTClientGetter instances
+	// for this cluster, so a freshly built RESTMapper re-reads it from the API.
+	discoveryClient, err := c.settings.RESTClientGetter().ToDiscoveryClient()
+	if err == nil {
+		discoveryClient.Invalidate()
+	}
+
+	// Rebuild settings to obtain a RESTClientGetter with a fresh, unmemoized
+	// RESTMapper. genericclioptions.ConfigFlags memoizes both its discovery
+	// client and REST mapper, so reusing the existing getter would keep serving
+	// the stale in-memory mapping even after the on-disk cache is invalidated.
+	settings := helmv4cli.New()
+	if c.kubeConfig != "" {
+		settings.KubeConfig = c.kubeConfig
+	}
+
+	if c.kubeContext != "" {
+		settings.KubeContext = c.kubeContext
+	}
+
+	c.settings = settings
+
+	initErr := c.actionConfig.Init(
+		settings.RESTClientGetter(),
+		settings.Namespace(),
+		os.Getenv("HELM_DRIVER"),
+	)
+	if initErr != nil {
+		return fmt.Errorf("reinitialize helm action config after discovery refresh: %w", initErr)
+	}
+
+	return nil
+}
+
 // InstallChart installs a Helm chart using the provided specification.
 func (c *Client) InstallChart(ctx context.Context, spec *ChartSpec) (*ReleaseInfo, error) {
 	return c.installRelease(ctx, spec, false)

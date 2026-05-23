@@ -75,13 +75,16 @@ func TestInstaller_Install_APIDiscoveryErrorRetry(t *testing.T) {
 		AddRepository(mock.Anything, mock.Anything, mock.Anything).
 		Return(nil)
 
-	// First install hits the CRD-establishment race; the retry succeeds.
+	expectCalicoCRDPhase(client)
+
+	// The operator install hits the CRD-establishment race once; the retry
+	// (after a discovery refresh) succeeds.
 	client.EXPECT().
-		InstallOrUpgradeChart(mock.Anything, mock.Anything).
+		InstallOrUpgradeChart(mock.Anything, mock.MatchedBy(isCalicoOperatorSpec)).
 		Return(nil, errCalicoRetryNoMatchesInstallation).
 		Once()
 	client.EXPECT().
-		InstallOrUpgradeChart(mock.Anything, mock.Anything).
+		InstallOrUpgradeChart(mock.Anything, mock.MatchedBy(isCalicoOperatorSpec)).
 		Return(nil, nil).
 		Once()
 
@@ -114,8 +117,10 @@ func TestInstaller_Install_APIDiscoveryErrorRetryExhausted(t *testing.T) {
 		AddRepository(mock.Anything, mock.Anything, mock.Anything).
 		Return(nil)
 
+	expectCalicoCRDPhase(client)
+
 	client.EXPECT().
-		InstallOrUpgradeChart(mock.Anything, mock.Anything).
+		InstallOrUpgradeChart(mock.Anything, mock.MatchedBy(isCalicoOperatorSpec)).
 		Return(nil, errCalicoRetryNoMatchesInstallation).
 		Times(8)
 
@@ -149,8 +154,9 @@ func TestInstaller_Install_ContextCanceled_Vanilla(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
+	// The CRD install (phase 1) is reached first and fails on the canceled context.
 	client.EXPECT().
-		InstallOrUpgradeChart(mock.Anything, mock.Anything).
+		InstallOrUpgradeChart(mock.Anything, mock.MatchedBy(isCalicoCRDSpec)).
 		Return(nil, context.Canceled)
 
 	err := installer.Install(ctx)
@@ -180,12 +186,14 @@ func TestInstaller_Install_K3s_APIServerUnavailableRetrySucceeds(t *testing.T) {
 		AddRepository(mock.Anything, mock.Anything, mock.Anything).
 		Return(nil)
 
+	expectCalicoCRDPhase(client)
+
 	client.EXPECT().
-		InstallOrUpgradeChart(mock.Anything, mock.Anything).
+		InstallOrUpgradeChart(mock.Anything, mock.MatchedBy(isCalicoOperatorSpec)).
 		Return(nil, errCalicoRetryAPIServerUnavailable).
 		Once()
 	client.EXPECT().
-		InstallOrUpgradeChart(mock.Anything, mock.Anything).
+		InstallOrUpgradeChart(mock.Anything, mock.MatchedBy(isCalicoOperatorSpec)).
 		Return(nil, nil).
 		Once()
 
@@ -216,8 +224,10 @@ func TestInstaller_Install_K3s_APIServerUnavailableRetryExhausted(t *testing.T) 
 		AddRepository(mock.Anything, mock.Anything, mock.Anything).
 		Return(nil)
 
+	expectCalicoCRDPhase(client)
+
 	client.EXPECT().
-		InstallOrUpgradeChart(mock.Anything, mock.Anything).
+		InstallOrUpgradeChart(mock.Anything, mock.MatchedBy(isCalicoOperatorSpec)).
 		Return(nil, errCalicoRetryAPIServerUnavailable).
 		Times(8)
 
@@ -250,9 +260,11 @@ func TestInstaller_Install_Vanilla_NoRetryOnAPIServerUnavailable(t *testing.T) {
 		AddRepository(mock.Anything, mock.Anything, mock.Anything).
 		Return(nil)
 
-	// Vanilla must NOT retry — InstallOrUpgradeChart is called exactly once.
+	expectCalicoCRDPhase(client)
+
+	// Vanilla must NOT retry — the operator install is called exactly once.
 	client.EXPECT().
-		InstallOrUpgradeChart(mock.Anything, mock.Anything).
+		InstallOrUpgradeChart(mock.Anything, mock.MatchedBy(isCalicoOperatorSpec)).
 		Return(nil, errCalicoRetryAPIServerUnavailable).
 		Once()
 
