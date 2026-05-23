@@ -5867,7 +5867,9 @@ func runClusterCreationWorkflow(
 	// If an explicit context is already configured, preserve it.
 	if ctx.ClusterCfg.Spec.Cluster.Connection.Context == "" {
 		clusterName := resolveClusterNameFromContext(ctx)
-		ctx.ClusterCfg.Spec.Cluster.Connection.Context = ctx.ClusterCfg.Spec.Cluster.Distribution.ContextName(
+		ctx.ClusterCfg.Spec.Cluster.Connection.Context = resolveCreatedContextName(
+			ctx.ClusterCfg.Spec.Cluster.Distribution,
+			ctx.ClusterCfg.Spec.Cluster.Provider,
 			clusterName,
 		)
 	}
@@ -5875,6 +5877,27 @@ func runClusterCreationWorkflow(
 	maybeImportCachedImages(cmd, ctx, deps.Timer)
 
 	return handlePostCreationSetup(cmd, ctx.ClusterCfg, deps.Timer)
+}
+
+// resolveCreatedContextName returns the kubeconfig context name a freshly created
+// cluster is written under, so post-creation setup (CNI install, helm, kubectl) can
+// target it. The Kubernetes provider runs K3s via the k3k operator, which writes a
+// "k3k-<name>" context rather than the standalone k3d "k3d-<name>" context; without
+// this, installing a CNI like Calico on a nested K3s cluster fails to find the
+// context. All other distribution/provider combinations use the standalone
+// distribution context name.
+func resolveCreatedContextName(
+	distribution v1alpha1.Distribution,
+	provider v1alpha1.Provider,
+	clusterName string,
+) string {
+	if clusterName != "" &&
+		provider == v1alpha1.ProviderKubernetes &&
+		distribution == v1alpha1.DistributionK3s {
+		return "k3k-" + clusterName
+	}
+
+	return distribution.ContextName(clusterName)
 }
 
 const startLongDesc = `Start a previously stopped Kubernetes cluster.

@@ -49,6 +49,15 @@ func ExportResolveClusterContext(kubeconfigPath, clusterName string) (string, er
 	return resolveClusterContext(kubeconfigPath, clusterName)
 }
 
+// ExportResolveCreatedContextName exports resolveCreatedContextName for testing.
+func ExportResolveCreatedContextName(
+	distribution v1alpha1.Distribution,
+	provider v1alpha1.Provider,
+	clusterName string,
+) string {
+	return resolveCreatedContextName(distribution, provider, clusterName)
+}
+
 // ExportWriteMetadata exports writeMetadata for testing.
 func ExportWriteMetadata(metadata *BackupMetadata, path string) error {
 	return writeMetadata(metadata, path)
