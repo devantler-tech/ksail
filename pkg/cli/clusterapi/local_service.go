@@ -405,6 +405,7 @@ func distributionConfig(
 	distribution v1alpha1.Distribution,
 	name string,
 ) (*clusterprovisioner.DistributionConfig, error) {
+	//nolint:exhaustive // K3s/VCluster/KWOK go through SimpleDistributionConfig; EKS is unavailable.
 	switch distribution {
 	case v1alpha1.DistributionVanilla:
 		// NewKindCluster sets the TypeMeta; SetDefaultsCluster adds the default control-plane node.
