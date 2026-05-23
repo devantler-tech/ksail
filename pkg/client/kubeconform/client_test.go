@@ -17,6 +17,17 @@ metadata:
   name: test-namespace
 `
 
+//nolint:gosec // G101: test manifest, not a hardcoded credential
+const testSecretManifest = `apiVersion: v1
+kind: Secret
+metadata:
+  name: test-secret
+  namespace: default
+type: Opaque
+data:
+  key: dmFsdWU=
+`
+
 func TestNewClient(t *testing.T) {
 	t.Parallel()
 
@@ -161,16 +172,7 @@ func TestValidateFile_SkipKinds(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Create a Secret manifest (which we'll skip)
-	//nolint:gosec // G101: This is a test secret manifest, not a hardcoded credential
-	secretManifest := `apiVersion: v1
-kind: Secret
-metadata:
-  name: test-secret
-  namespace: default
-type: Opaque
-data:
-  key: dmFsdWU=
-`
+	secretManifest := testSecretManifest
 	manifestPath := filepath.Join(tmpDir, "secret.yaml")
 
 	err := os.WriteFile(manifestPath, []byte(secretManifest), 0o600)

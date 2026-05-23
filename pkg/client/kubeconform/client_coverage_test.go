@@ -50,16 +50,7 @@ metadata:
 func TestValidateBytes_SkipKinds(t *testing.T) {
 	t.Parallel()
 
-	//nolint:gosec // G101: This is a test manifest, not a hardcoded credential
-	secretYAML := `apiVersion: v1
-kind: Secret
-metadata:
-  name: test-secret
-  namespace: default
-type: Opaque
-data:
-  key: dmFsdWU=
-`
+	secretYAML := testSecretManifest
 
 	client := kubeconform.NewClient()
 	opts := &kubeconform.ValidationOptions{
@@ -141,15 +132,7 @@ func TestValidateManifests_CancelledContext(t *testing.T) {
 func TestValidateManifests_SkipKinds(t *testing.T) {
 	t.Parallel()
 
-	yaml := `apiVersion: v1
-kind: Secret
-metadata:
-  name: test-secret
-  namespace: default
-type: Opaque
-data:
-  key: dmFsdWU=
-`
+	yaml := testSecretManifest
 
 	client := kubeconform.NewClient()
 	opts := &kubeconform.ValidationOptions{
