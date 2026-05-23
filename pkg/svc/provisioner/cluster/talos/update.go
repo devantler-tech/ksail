@@ -838,27 +838,28 @@ func (p *Provisioner) GetCurrentConfig(
 	}
 
 	// Detect installed components from the live cluster when the detector is available.
+	// A detection failure means the cluster is unreachable (kube API down, stale
+	// kubeconfig). Propagate it instead of silently falling back to a default
+	// baseline, which would make update propose a full reinstall of healthy
+	// components and only fail later mid-apply.
 	if p.componentDetector != nil {
 		detected, err := p.componentDetector.DetectComponents(
 			ctx,
 			v1alpha1.DistributionTalos,
 			provider,
 		)
-		if err == nil {
-			spec.CNI = detected.CNI
-			spec.CSI = detected.CSI
-			spec.MetricsServer = detected.MetricsServer
-			spec.LoadBalancer = detected.LoadBalancer
-			spec.CertManager = detected.CertManager
-			spec.PolicyEngine = detected.PolicyEngine
-			spec.GitOpsEngine = detected.GitOpsEngine
-			spec.Autoscaler.Node = detected.Autoscaler.Node
-		} else {
-			// Component detection failed (e.g. the Kubernetes API is unreachable).
-			// Mark these fields unknown so the diff surfaces them as "Unknown"
-			// rather than a confident diff against the default baseline.
-			clusterupdate.MarkComponentsUnknown(spec)
+		if err != nil {
+			return nil, nil, fmt.Errorf("detect components: %w", err)
 		}
+
+		spec.CNI = detected.CNI
+		spec.CSI = detected.CSI
+		spec.MetricsServer = detected.MetricsServer
+		spec.LoadBalancer = detected.LoadBalancer
+		spec.CertManager = detected.CertManager
+		spec.PolicyEngine = detected.PolicyEngine
+		spec.GitOpsEngine = detected.GitOpsEngine
+		spec.Autoscaler.Node = detected.Autoscaler.Node
 	}
 
 	// Introspect actual node counts from the running cluster
