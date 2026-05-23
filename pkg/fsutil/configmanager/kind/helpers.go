@@ -152,14 +152,16 @@ func ApplyImageVerificationPatches(kindConfig *kindv1alpha4.Cluster) {
 // APIServerFeatureGatesPatch is a kubeadm ClusterConfiguration patch that enables the
 // MutatingAdmissionPolicy feature gate and the admissionregistration.k8s.io/v1beta1 API.
 // Calico v3.30+ ships MutatingAdmissionPolicy resources in its CRD chart that require
-// this API to be served by the kube-apiserver. kubeadm v1beta4 apiServer.extraArgs is
-// map[string]string, so multiple extraArgs patches (e.g. OIDC) merge cleanly.
+// this API to be served by the kube-apiserver. kubeadm v1beta4 apiServer.extraArgs is a
+// list of {name, value} entries (merged by name), not a map.
 const APIServerFeatureGatesPatch = `apiVersion: kubeadm.k8s.io/v1beta4
 kind: ClusterConfiguration
 apiServer:
   extraArgs:
-    feature-gates: "MutatingAdmissionPolicy=true"
-    runtime-config: "admissionregistration.k8s.io/v1beta1=true"
+    - name: feature-gates
+      value: "MutatingAdmissionPolicy=true"
+    - name: runtime-config
+      value: "admissionregistration.k8s.io/v1beta1=true"
 `
 
 // ApplyAPIServerFeatureGatesPatches adds a kubeadm patch enabling the
