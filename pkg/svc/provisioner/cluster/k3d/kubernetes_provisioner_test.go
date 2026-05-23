@@ -40,6 +40,34 @@ func TestBuildClusterCR_ServerArgs(t *testing.T) {
 	})
 }
 
+func TestBuildClusterCR_Version(t *testing.T) {
+	t.Parallel()
+
+	t.Run("pins_version_when_configured", func(t *testing.T) {
+		t.Parallel()
+
+		provisioner, err := k3dprovisioner.NewK3kProvisioner(k3dprovisioner.K3kProvisionerConfig{
+			K3sVersion: "v1.36.1-k3s1",
+		})
+		require.NoError(t, err)
+
+		cluster := provisioner.BuildClusterCRForTest("test", "k3k-test", "10.0.0.1")
+
+		assert.Equal(t, "v1.36.1-k3s1", cluster.Spec.Version)
+	})
+
+	t.Run("leaves_version_empty_to_inherit_host", func(t *testing.T) {
+		t.Parallel()
+
+		provisioner, err := k3dprovisioner.NewK3kProvisioner(k3dprovisioner.K3kProvisionerConfig{})
+		require.NoError(t, err)
+
+		cluster := provisioner.BuildClusterCRForTest("test", "k3k-test", "10.0.0.1")
+
+		assert.Empty(t, cluster.Spec.Version)
+	})
+}
+
 func TestFirstRunningPodName(t *testing.T) {
 	t.Parallel()
 

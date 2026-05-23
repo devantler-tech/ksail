@@ -383,6 +383,11 @@ func (f DefaultFactory) createK3dKubernetesProvisioner(
 			PodCIDR:          opts.PodCIDR,
 			ServiceCIDR:      opts.ServiceCIDR,
 			ServerArgs:       serverArgs,
+			// Pin the nested K3s version to the standalone K3d version so the nested
+			// apiserver matches the proven standalone config (serves the
+			// admissionregistration.k8s.io/v1beta1 API that Calico's CRD chart needs),
+			// instead of inheriting the host cluster's possibly-older version.
+			K3sVersion: k3dconfigmanager.DefaultK3sVersion(),
 		},
 	)
 	if err != nil {

@@ -80,6 +80,11 @@ type K3kProvisioner struct {
 	podCIDR       string
 	serviceCIDR   string
 	serverArgs    []string
+	// k3sVersion pins the nested K3s version (image tag, e.g. "v1.36.1-k3s1"). Empty
+	// lets k3k inherit the host cluster's Kubernetes version. Pinned to the standalone
+	// K3d version so the nested apiserver matches the proven standalone config (e.g. it
+	// serves admissionregistration.k8s.io/v1beta1 for Calico's CRD chart).
+	k3sVersion string
 
 	// apiServerPortForward is a session port-forward to the nested k3k API server,
 	// established during Create so in-session post-creation setup (e.g. CNI install)
@@ -120,6 +125,9 @@ type K3kProvisionerConfig struct {
 	// ServerArgs are extra K3s server args (e.g. "--kube-apiserver-arg=...") passed
 	// through to the embedded k3s server via the k3k Cluster spec's serverArgs field.
 	ServerArgs []string
+	// K3sVersion pins the nested K3s version (image tag, e.g. "v1.36.1-k3s1"). Empty
+	// lets k3k inherit the host cluster's Kubernetes version.
+	K3sVersion string
 }
 
 // NewK3kProvisioner creates a K3kProvisioner for managing K3s clusters via k3k.
@@ -151,6 +159,7 @@ func NewK3kProvisioner(cfg K3kProvisionerConfig) (*K3kProvisioner, error) {
 		podCIDR:          cfg.PodCIDR,
 		serviceCIDR:      cfg.ServiceCIDR,
 		serverArgs:       cfg.ServerArgs,
+		k3sVersion:       cfg.K3sVersion,
 	}, nil
 }
 
@@ -583,6 +592,10 @@ func (p *K3kProvisioner) buildClusterCR(
 
 	if len(p.serverArgs) > 0 {
 		cluster.Spec.ServerArgs = p.serverArgs
+	}
+
+	if p.k3sVersion != "" {
+		cluster.Spec.Version = p.k3sVersion
 	}
 
 	if p.podCIDR != "" {
