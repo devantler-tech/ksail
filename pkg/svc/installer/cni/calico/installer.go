@@ -125,12 +125,21 @@ func (c *Installer) Uninstall(ctx context.Context) error {
 	}
 
 	// Since Calico v3.30 the CRDs are managed by a separate release (see
-	// crdChartSpec). Remove it after the operator release so uninstall is
-	// symmetric with install; this deletes the operator.tigera.io and
-	// projectcalico.org CRDs and any remaining custom resources of those kinds.
-	err = client.UninstallRelease(ctx, "calico-crds", "tigera-operator")
-	if err != nil {
-		return fmt.Errorf("failed to uninstall calico CRDs release: %w", err)
+	// crdChartSpec). Remove it after the operator release so uninstall is symmetric
+	// with install; this deletes the operator.tigera.io and projectcalico.org CRDs and
+	// any remaining custom resources of those kinds. Guard with ReleaseExists so
+	// uninstall stays a no-op on clusters created before the two-phase install (or where
+	// the CRD install never completed) rather than failing on a missing release.
+	crdsExist, existsErr := client.ReleaseExists(ctx, "calico-crds", "tigera-operator")
+	if existsErr != nil {
+		return fmt.Errorf("check calico CRDs release: %w", existsErr)
+	}
+
+	if crdsExist {
+		err = client.UninstallRelease(ctx, "calico-crds", "tigera-operator")
+		if err != nil {
+			return fmt.Errorf("failed to uninstall calico CRDs release: %w", err)
+		}
 	}
 
 	return nil

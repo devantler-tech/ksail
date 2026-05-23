@@ -217,8 +217,29 @@ func TestInstaller_Uninstall_Success(t *testing.T) {
 		UninstallRelease(mock.Anything, "calico", "tigera-operator").
 		Return(nil)
 	client.EXPECT().
+		ReleaseExists(mock.Anything, "calico-crds", "tigera-operator").
+		Return(true, nil)
+	client.EXPECT().
 		UninstallRelease(mock.Anything, "calico-crds", "tigera-operator").
 		Return(nil)
+
+	err := installer.Uninstall(context.Background())
+
+	require.NoError(t, err)
+}
+
+func TestInstaller_Uninstall_SkipsMissingCRDsRelease(t *testing.T) {
+	t.Parallel()
+
+	installer, client := newInstallerWithDistribution(t, v1alpha1.DistributionVanilla)
+	client.EXPECT().
+		UninstallRelease(mock.Anything, "calico", "tigera-operator").
+		Return(nil)
+	// The calico-crds release does not exist (e.g. cluster predates the two-phase
+	// install): uninstall must skip it rather than fail.
+	client.EXPECT().
+		ReleaseExists(mock.Anything, "calico-crds", "tigera-operator").
+		Return(false, nil)
 
 	err := installer.Uninstall(context.Background())
 
