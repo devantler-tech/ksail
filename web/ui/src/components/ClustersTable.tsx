@@ -171,7 +171,12 @@ export function ClustersTable({
                 aria-label={`View ${cluster.metadata.name}`}
                 onClick={() => onSelect(cluster)}
                 onKeyDown={(event) => {
-                  // Make the row selectable by keyboard (Enter/Space), not just mouse.
+                  // Make the row selectable by keyboard (Enter/Space), not just mouse. Ignore keys
+                  // that bubble up from the nested Edit/Delete buttons (event.target is the button,
+                  // not the row) so activating them does not also select the row.
+                  if (event.target !== event.currentTarget) {
+                    return;
+                  }
                   if (event.key === "Enter" || event.key === " ") {
                     event.preventDefault();
                     onSelect(cluster);

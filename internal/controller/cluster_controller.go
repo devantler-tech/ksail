@@ -112,11 +112,15 @@ type StatusObserver func(
 // provisioner so it can obtain child access via the provisioner's optional Connector capability.
 // Optional; nil disables component installation. The reconciler invokes it with gating — only when
 // components are not already reconciled for the current generation — and treats it best-effort.
+//
+// The returned applied is false when installation was skipped because it is not supported for this
+// cluster (e.g. the provisioner exposes no operator-reachable kubeconfig); the reconciler then
+// reports ComponentsReady=Unknown rather than a misleading True.
 type ComponentInstaller func(
 	ctx context.Context,
 	provisioner clusterprovisioner.Provisioner,
 	cluster *v1alpha1.Cluster,
-) error
+) (applied bool, err error)
 
 // ClusterReconciler reconciles a Cluster object towards its desired state.
 type ClusterReconciler struct {
@@ -273,7 +277,7 @@ func (r *ClusterReconciler) reconcileComponents(
 		return true
 	}
 
-	err := r.InstallComponents(ctx, provisioner, cluster)
+	applied, err := r.InstallComponents(ctx, provisioner, cluster)
 	if err != nil {
 		logf.FromContext(ctx).Info("install components (best-effort)", "error", err.Error())
 		apimeta.SetStatusCondition(&cluster.Status.Conditions, metav1.Condition{
@@ -287,6 +291,20 @@ func (r *ClusterReconciler) reconcileComponents(
 		return false
 	}
 
+	if !applied {
+		// Component installation is not supported for this cluster (e.g. the provisioner exposes no
+		// operator-reachable kubeconfig). Report Unknown rather than a misleading Ready=True.
+		apimeta.SetStatusCondition(&cluster.Status.Conditions, metav1.Condition{
+			Type:               v1alpha1.ConditionComponentsReady,
+			Status:             metav1.ConditionUnknown,
+			ObservedGeneration: cluster.Generation,
+			Reason:             "NotSupported",
+			Message:            "component installation is not supported for this distribution/provider",
+		})
+
+		return true
+	}
+
 	apimeta.SetStatusCondition(&cluster.Status.Conditions, metav1.Condition{
 		Type:               v1alpha1.ConditionComponentsReady,
 		Status:             metav1.ConditionTrue,
@@ -298,8 +316,10 @@ func (r *ClusterReconciler) reconcileComponents(
 	return true
 }
 
-// componentsUpToDate reports whether components have been installed for the cluster's current
-// generation (so a spec change re-triggers installation).
+// componentsUpToDate reports whether component reconciliation has settled for the cluster's current
+// generation (so a spec change re-triggers installation). A condition observed at the current
+// generation is settled unless it is False (a failure), which keeps retrying; True (installed) and
+// Unknown (not supported) are terminal for that generation.
 func componentsUpToDate(cluster *v1alpha1.Cluster) bool {
 	condition := apimeta.FindStatusCondition(
 		cluster.Status.Conditions,
@@ -307,8 +327,8 @@ func componentsUpToDate(cluster *v1alpha1.Cluster) bool {
 	)
 
 	return condition != nil &&
-		condition.Status == metav1.ConditionTrue &&
-		condition.ObservedGeneration == cluster.Generation
+		condition.ObservedGeneration == cluster.Generation &&
+		condition.Status != metav1.ConditionFalse
 }
 
 // observeStatus populates runtime status fields (endpoint, kubeconfig ref, node counts) from the

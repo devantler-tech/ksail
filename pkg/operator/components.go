@@ -42,11 +42,15 @@ var installOrder = []string{
 // capability: provisioners that can hand back an operator-reachable kubeconfig (today: VCluster on
 // the Kubernetes provider) get their components installed; others are a no-op until they implement
 // Connector (see design/operator-component-lifecycle.md).
+//
+// The returned applied is false when installation was skipped (no Connector), so the reconciler can
+// report ComponentsReady=Unknown rather than a misleading True. It is true once a Connector exists,
+// even if a subsequent step fails (the error then drives the status).
 func InstallComponents(
 	ctx context.Context,
 	provisioner clusterprovisioner.Provisioner,
 	cluster *v1alpha1.Cluster,
-) error {
+) (bool, error) {
 	log := logf.FromContext(ctx)
 
 	connector, ok := provisioner.(clusterprovisioner.Connector)
@@ -57,23 +61,23 @@ func InstallComponents(
 			"provider", cluster.Spec.Cluster.Provider,
 		)
 
-		return nil
+		return false, nil
 	}
 
 	raw, err := connector.Kubeconfig(ctx, controller.ProvisionedName(cluster))
 	if err != nil {
-		return fmt.Errorf("get child cluster kubeconfig: %w", err)
+		return true, fmt.Errorf("get child cluster kubeconfig: %w", err)
 	}
 
 	kubeconfigPath, cleanup, err := writeTempKubeconfig(raw)
 	if err != nil {
-		return err
+		return true, err
 	}
 	defer cleanup()
 
 	helmClient, err := helm.NewClient(kubeconfigPath, "")
 	if err != nil {
-		return fmt.Errorf("build helm client for child cluster: %w", err)
+		return true, fmt.Errorf("build helm client for child cluster: %w", err)
 	}
 
 	factory := installer.NewFactory(
@@ -87,10 +91,10 @@ func InstallComponents(
 
 	installers, err := factory.CreateInstallersForConfig(cluster)
 	if err != nil {
-		return fmt.Errorf("build installers: %w", err)
+		return true, fmt.Errorf("build installers: %w", err)
 	}
 
-	return runInstallers(ctx, installers)
+	return true, runInstallers(ctx, installers)
 }
 
 // writeTempKubeconfig writes the child kubeconfig bytes to a temp file and returns its path plus a

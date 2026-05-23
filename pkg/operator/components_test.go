@@ -49,27 +49,29 @@ func TestInstallComponents_NoConnectorIsNoOp(t *testing.T) {
 	t.Parallel()
 
 	// A provisioner without the Connector capability cannot expose the child cluster, so component
-	// install is skipped without error (e.g. the Docker provider, which is unreachable from a hub).
-	err := operator.InstallComponents(
+	// install is skipped (applied=false) without error (e.g. the Docker provider).
+	applied, err := operator.InstallComponents(
 		context.Background(),
 		stubProvisioner{},
 		clusterWithDistribution("c1", v1alpha1.DistributionVanilla),
 	)
 	require.NoError(t, err)
+	assert.False(t, applied, "skipped install must report applied=false")
 }
 
 func TestInstallComponents_KubeconfigNotReadyPropagates(t *testing.T) {
 	t.Parallel()
 
 	// When the child kubeconfig is not published yet the error propagates so the reconcile requeues;
-	// the install never reaches Helm.
-	err := operator.InstallComponents(
+	// the install never reaches Helm. A Connector exists, so applied is true.
+	applied, err := operator.InstallComponents(
 		context.Background(),
 		connectorProvisioner{err: clustererr.ErrKubeconfigNotReady},
 		clusterWithDistribution("c1", v1alpha1.DistributionVCluster),
 	)
 	require.Error(t, err)
 	require.ErrorIs(t, err, clustererr.ErrKubeconfigNotReady)
+	assert.True(t, applied, "a Connector exists, so the attempt is reported as applied")
 }
 
 // recordingInstaller records the order in which installers run and optionally fails.
