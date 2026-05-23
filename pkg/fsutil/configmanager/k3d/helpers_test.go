@@ -456,3 +456,14 @@ func TestResolveNetworkName(t *testing.T) {
 		})
 	}
 }
+
+func TestAPIServerFeatureGatesArgs(t *testing.T) {
+	t.Parallel()
+
+	args := k3d.APIServerFeatureGatesArgs()
+
+	assert.Equal(t, []string{
+		"--kube-apiserver-arg=feature-gates=MutatingAdmissionPolicy=true",
+		"--kube-apiserver-arg=runtime-config=admissionregistration.k8s.io/v1beta1=true",
+	}, args)
+}
