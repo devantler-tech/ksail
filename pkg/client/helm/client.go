@@ -115,10 +115,14 @@ func newClient(
 func (c *Client) RefreshDiscovery() error {
 	// Drop the on-disk discovery cache shared across RESTClientGetter instances
 	// for this cluster, so a freshly built RESTMapper re-reads it from the API.
+	// Fail fast if the discovery client can't be built rather than proceeding with a
+	// possibly stale cache (which would resurface the CRD/RESTMapper race downstream).
 	discoveryClient, err := c.settings.RESTClientGetter().ToDiscoveryClient()
-	if err == nil {
-		discoveryClient.Invalidate()
+	if err != nil {
+		return fmt.Errorf("get discovery client for cache invalidation: %w", err)
 	}
+
+	discoveryClient.Invalidate()
 
 	// Rebuild settings to obtain a RESTClientGetter with a fresh, unmemoized
 	// RESTMapper. genericclioptions.ConfigFlags memoizes both its discovery
