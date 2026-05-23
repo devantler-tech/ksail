@@ -293,6 +293,7 @@ func verifyCopilotCLI(ctx context.Context, cliPath string, env []string) error {
 
 	err := runCopilotCmdWithRetry(verifyCtx, func() *exec.Cmd {
 		output.Reset()
+
 		cmd := exec.CommandContext(verifyCtx, cliPath, "--version")
 		cmd.Env = env
 		cmd.Stdout = &output
@@ -365,6 +366,7 @@ func diagnoseCLIStartupFailure(
 
 	_ = runCopilotCmdWithRetry(diagCtx, func() *exec.Cmd {
 		stderr.Reset()
+
 		cmd := exec.CommandContext(diagCtx, cliPath, args...)
 		cmd.Env = diagEnv
 		cmd.Stderr = &stderr
@@ -385,20 +387,21 @@ func diagnoseCLIStartupFailure(
 func runCopilotCmdWithRetry(ctx context.Context, newCmd func() *exec.Cmd) error {
 	for attempt := 0; ; attempt++ {
 		err := newCmd().Run()
-		if !errors.Is(err, syscall.ETXTBSY) || attempt >= copilotExecMaxRetries {
-			return err
+		if errors.Is(err, syscall.ETXTBSY) && attempt < copilotExecMaxRetries {
+			// Interruptible backoff: respect context cancellation immediately
+			// rather than sleeping out the remaining window.
+			timer := time.NewTimer(copilotExecRetryBackoff)
+			select {
+			case <-timer.C:
+				continue
+			case <-ctx.Done():
+				timer.Stop()
+			}
 		}
 
-		// Interruptible backoff: respect context cancellation immediately
-		// rather than sleeping out the remaining window.
-		timer := time.NewTimer(copilotExecRetryBackoff)
-		select {
-		case <-ctx.Done():
-			timer.Stop()
-
-			return err
-		case <-timer.C:
-		}
+		// Callers wrap (or intentionally ignore) this error; the helper is a
+		// thin retry wrapper around the exec.Cmd.Run() they would call directly.
+		return err //nolint:wrapcheck // callers wrap; thin exec.Cmd.Run retry pass-through
 	}
 }
 
