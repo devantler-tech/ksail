@@ -2037,24 +2037,9 @@ func retryOnTransientError(
 			break
 		}
 
-		delay := netretry.ExponentialDelay(attempt, baseWait, maxWait)
-
-		notify.Warningf(
-			cmd.OutOrStdout(),
-			"attempt %d/%d failed (retrying in %s): %v",
-			attempt, maxAttempts, delay, lastErr,
-		)
-
-		retryTimer := time.NewTimer(delay)
-
-		select {
-		case <-ctx.Done():
-			if !retryTimer.Stop() {
-				<-retryTimer.C
-			}
-
-			return fmt.Errorf("retry cancelled: %w", ctx.Err())
-		case <-retryTimer.C:
+		waitErr := waitBeforeRetry(ctx, cmd, attempt, maxAttempts, baseWait, maxWait, lastErr)
+		if waitErr != nil {
+			return waitErr
 		}
 	}
 
@@ -2063,6 +2048,57 @@ func retryOnTransientError(
 	}
 
 	return fmt.Errorf("failed after %d attempts: %w", maxAttempts, lastErr)
+}
+
+// waitBeforeRetry blocks for the exponential backoff delay before the next
+// retry attempt, returning a non-nil error if the context is cancelled so the
+// caller stops retrying.
+func waitBeforeRetry(
+	ctx context.Context,
+	cmd *cobra.Command,
+	attempt, maxAttempts int,
+	baseWait, maxWait time.Duration,
+	lastErr error,
+) error {
+	// Stop immediately if the operation cancelled the context. Without this
+	// check the backoff timer below races ctx.Done() in the select: when the
+	// goroutine is descheduled past the (often sub-millisecond) delay, both
+	// cases are ready and select picks one at random, sometimes running an
+	// extra attempt.
+	ctxErr := ctx.Err()
+	if ctxErr != nil {
+		return fmt.Errorf("retry cancelled: %w", ctxErr)
+	}
+
+	delay := netretry.ExponentialDelay(attempt, baseWait, maxWait)
+
+	notify.Warningf(
+		cmd.OutOrStdout(),
+		"attempt %d/%d failed (retrying in %s): %v",
+		attempt, maxAttempts, delay, lastErr,
+	)
+
+	retryTimer := time.NewTimer(delay)
+
+	select {
+	case <-ctx.Done():
+		if !retryTimer.Stop() {
+			<-retryTimer.C
+		}
+
+		return fmt.Errorf("retry cancelled: %w", ctx.Err())
+	case <-retryTimer.C:
+		// Prioritize cancellation even when the timer also fired: select picks a
+		// ready case at random, so a context cancelled during the wait can still
+		// land here. Re-checking ctx.Err() keeps cancellation deterministic and
+		// prevents one extra retry attempt.
+		ctxErr = ctx.Err()
+		if ctxErr != nil {
+			return fmt.Errorf("retry cancelled: %w", ctxErr)
+		}
+
+		return nil
+	}
 }
 
 // getKubeconfigPath returns the kubeconfig path from config or default.
