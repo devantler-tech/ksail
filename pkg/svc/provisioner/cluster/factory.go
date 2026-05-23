@@ -339,13 +339,14 @@ func (f DefaultFactory) createK3dKubernetesProvisioner(
 ) (Provisioner, any, error) {
 	opts := cluster.Spec.Provider.Kubernetes
 
-	// resolveClusterNameFromContext normally extracts from k3dConfig.Name,
-	// but k3d config is skipped for the Kubernetes provider path.
-	// Derive from connection context (set by applyClusterNameOverride),
-	// stripping the "k3d-" prefix that ContextName() adds.
-	clusterName := strings.TrimPrefix(
-		cluster.Spec.Cluster.Connection.Context, "k3d-",
-	)
+	// resolveClusterNameFromContext normally extracts from k3dConfig.Name, but k3d
+	// config is skipped for the Kubernetes provider path. Derive from the connection
+	// context (set by applyClusterNameOverride). The Kubernetes provider writes a
+	// "k3k-<name>" context (via the k3k operator); standalone paths use "k3d-<name>".
+	// Strip whichever prefix is present so the k3k cluster/namespace name is correct.
+	clusterName := strings.TrimPrefix(cluster.Spec.Cluster.Connection.Context, "k3k-")
+	clusterName = strings.TrimPrefix(clusterName, "k3d-")
+
 	if clusterName == "" {
 		clusterName = cluster.Name
 	}
