@@ -313,12 +313,13 @@ func buildCertSANsPatch(sans []string) Patch {
 	}
 }
 
-// buildAPIServerFeatureGatesPatch builds a cluster-scope patch that enables the
+// APIServerFeatureGatesPatch builds a cluster-scope patch that enables the
 // MutatingAdmissionPolicy feature gate and the admissionregistration.k8s.io/v1beta1
 // API on the kube-apiserver. Calico v3.30+ ships MutatingAdmissionPolicy resources in
 // its CRD chart that require this API. Talos cluster.apiServer.extraArgs is a
-// string→string map, so values carry no leading dashes.
-func buildAPIServerFeatureGatesPatch() Patch {
+// string→string map, so values carry no leading dashes. Apply it only for clusters
+// using the Calico CNI.
+func APIServerFeatureGatesPatch() Patch {
 	content := "cluster:\n" +
 		"  apiServer:\n" +
 		"    extraArgs:\n" +

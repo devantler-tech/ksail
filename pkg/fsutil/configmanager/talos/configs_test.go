@@ -390,7 +390,7 @@ func TestConfigs_KubernetesVersion(t *testing.T) {
 func TestConfigs_Patches(t *testing.T) {
 	t.Parallel()
 
-	t.Run("includes the default api server feature-gate patch", func(t *testing.T) {
+	t.Run("returns nil when no patches configured", func(t *testing.T) {
 		t.Parallel()
 
 		manager := talos.NewConfigManager("", "patches-nil-test", "1.11.2", "10.5.0.0/24")
@@ -399,10 +399,7 @@ func TestConfigs_Patches(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, configs)
 
-		// Load always appends the API server feature-gate patch (required by Calico v3.30+).
-		patches := configs.Patches()
-		require.Len(t, patches, 1)
-		assert.Equal(t, "ksail-apiserver-feature-gates", patches[0].Path)
+		assert.Nil(t, configs.Patches())
 	})
 
 	t.Run("returns copy that does not mutate internal state", func(t *testing.T) {
@@ -422,10 +419,8 @@ func TestConfigs_Patches(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, configs)
 
-		// The additional patch comes first, followed by the always-appended
-		// API server feature-gate patch.
 		patches := configs.Patches()
-		require.Len(t, patches, 2)
+		require.Len(t, patches, 1)
 		assert.Equal(t, "test.yaml", patches[0].Path)
 
 		// Mutating the returned slice must not affect the internal state.

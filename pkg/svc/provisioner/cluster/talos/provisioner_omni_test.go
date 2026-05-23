@@ -127,15 +127,13 @@ func TestBuildOmniPatchInfos_NilConfigs(t *testing.T) {
 func TestBuildOmniPatchInfos_EmptyPatches(t *testing.T) {
 	t.Parallel()
 
-	// With no user patch files, the only patch is the default API server
-	// feature-gate patch that ConfigManager.Load always appends (required by Calico v3.30+).
+	// TalosConfigs with no patch files — patch list should be empty/nil
 	configs := createTestTalosConfigs(t, "test-cluster")
 	provisioner := talosprovisioner.NewProvisioner(configs, nil)
 
 	patches := provisioner.BuildOmniPatchInfosForTest()
 
-	require.Len(t, patches, 1)
-	assert.Equal(t, "ksail-apiserver-feature-gates", patches[0].Path)
+	assert.Empty(t, patches)
 }
 
 func TestBuildOmniPatchInfos_WithPatches(t *testing.T) {

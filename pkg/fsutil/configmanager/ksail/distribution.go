@@ -119,6 +119,16 @@ func (m *ConfigManager) loadTalosConfig() (*talosconfigmanager.Configs, error) {
 		return nil, fmt.Errorf("failed to add Hetzner patches: %w", err)
 	}
 
+	// Enable the MutatingAdmissionPolicy feature gate / v1beta1 admissionregistration
+	// API only for Calico, whose v3.30+ CRD chart ships MutatingAdmissionPolicy
+	// resources. Enabling it elsewhere makes other components (e.g. Kyverno) attempt
+	// to use the API and fail.
+	if m.Config.Spec.Cluster.CNI == v1alpha1.CNICalico {
+		talosManager.WithAdditionalPatches(
+			[]talosconfigmanager.Patch{talosconfigmanager.APIServerFeatureGatesPatch()},
+		)
+	}
+
 	// Inject kubelet cert rotation + CSR approver patches at runtime when
 	// metrics-server is enabled AND both patch files don't already exist on disk.
 	// Projects initialized with v7.4.0+ have the patch files; older projects

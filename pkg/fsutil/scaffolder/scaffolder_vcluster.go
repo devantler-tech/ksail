@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	vclusterconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/vcluster"
@@ -40,11 +41,12 @@ func (s *Scaffolder) generateVClusterConfig(output string, force bool) error {
 		"      image:\n" +
 		fmt.Sprintf("        tag: %s\n", vclusterconfigmanager.DefaultKubernetesVersion)
 
-	// Always emit the API server extraArgs block: the MutatingAdmissionPolicy feature
-	// gate / v1beta1 admissionregistration API is required by Calico v3.30+, and OIDC
-	// flags are appended when configured. Emitting a single block avoids duplicate
-	// apiServer keys in the generated values file.
-	header += buildVClusterAPIServerArgs(&s.KSailConfig.Spec.Cluster.OIDC)
+	// Emit a single API server extraArgs block combining (a) the MutatingAdmissionPolicy
+	// feature gate / v1beta1 admissionregistration API, required only by Calico v3.30+,
+	// and (b) OIDC flags when configured. A single block avoids duplicate apiServer keys;
+	// the block is omitted entirely when neither applies.
+	featureGates := s.KSailConfig.Spec.Cluster.CNI == v1alpha1.CNICalico
+	header += buildVClusterAPIServerArgs(featureGates, &s.KSailConfig.Spec.Cluster.OIDC)
 
 	// Add volume mounts to inject the OIDC CA certificate into the VCluster pod
 	if s.KSailConfig.Spec.Cluster.OIDC.Enabled() && s.KSailConfig.Spec.Cluster.OIDC.CAFile != "" {
@@ -71,53 +73,77 @@ func (s *Scaffolder) generateVClusterConfig(output string, force bool) error {
 }
 
 // buildVClusterAPIServerArgs generates the controlPlane.distro.k8s.apiServer.extraArgs
-// YAML fragment for the VCluster values file. It always enables the
+// YAML fragment for the VCluster values file. When featureGates is true it enables the
 // MutatingAdmissionPolicy feature gate / admissionregistration.k8s.io/v1beta1 API
-// (required by Calico v3.30+'s CRD chart) and appends OIDC flags when OIDC is
-// configured. Emitting a single apiServer block keeps the generated YAML valid.
-// Values are escaped with %q to handle YAML-special characters safely. When a CA file
-// is configured, the OIDC CA arg references OIDCCAContainerPath and a hostPath volume
-// mount is added (VCluster runs on a Docker-based host cluster where the host CA file
-// is already mounted at OIDCCAContainerPath on all nodes).
-func buildVClusterAPIServerArgs(oidc *v1alpha1.OIDCSpec) string {
+// (required by Calico v3.30+'s CRD chart); OIDC flags are appended when OIDC is
+// configured. The whole apiServer block is omitted when neither applies, and a single
+// block is emitted otherwise to keep the generated YAML valid. Values are escaped with
+// %q to handle YAML-special characters safely. When a CA file is configured, the OIDC CA
+// arg references OIDCCAContainerPath and a hostPath volume mount is added (VCluster runs
+// on a Docker-based host cluster where the host CA file is already mounted at
+// OIDCCAContainerPath on all nodes).
+func buildVClusterAPIServerArgs(featureGates bool, oidc *v1alpha1.OIDCSpec) string {
 	const (
 		featureGatesArg  = "--feature-gates=MutatingAdmissionPolicy=true"
 		runtimeConfigArg = "--runtime-config=admissionregistration.k8s.io/v1beta1=true"
 	)
 
-	result := "      apiServer:\n" +
-		"        extraArgs:\n" +
-		fmt.Sprintf("          - %q\n", featureGatesArg) +
-		fmt.Sprintf("          - %q\n", runtimeConfigArg)
+	var args []string
 
-	if oidc == nil || !oidc.Enabled() {
-		return result
+	if featureGates {
+		args = append(args, featureGatesArg, runtimeConfigArg)
 	}
 
-	result += fmt.Sprintf("          - %q\n", "--oidc-issuer-url="+oidc.IssuerURL) +
-		fmt.Sprintf("          - %q\n", "--oidc-client-id="+oidc.ClientID)
+	args = append(args, vClusterOIDCArgs(oidc)...)
+
+	if len(args) == 0 {
+		return ""
+	}
+
+	var builder strings.Builder
+
+	builder.WriteString("      apiServer:\n        extraArgs:\n")
+
+	for _, arg := range args {
+		fmt.Fprintf(&builder, "          - %q\n", arg)
+	}
+
+	return builder.String()
+}
+
+// vClusterOIDCArgs returns the kube-apiserver OIDC flags for the given config, or nil
+// when OIDC is not enabled.
+func vClusterOIDCArgs(oidc *v1alpha1.OIDCSpec) []string {
+	if oidc == nil || !oidc.Enabled() {
+		return nil
+	}
+
+	args := []string{
+		"--oidc-issuer-url=" + oidc.IssuerURL,
+		"--oidc-client-id=" + oidc.ClientID,
+	}
 
 	if oidc.UsernameClaim != "" {
-		result += fmt.Sprintf("          - %q\n", "--oidc-username-claim="+oidc.UsernameClaim)
+		args = append(args, "--oidc-username-claim="+oidc.UsernameClaim)
 	}
 
 	if oidc.UsernamePrefix != "" {
-		result += fmt.Sprintf("          - %q\n", "--oidc-username-prefix="+oidc.UsernamePrefix)
+		args = append(args, "--oidc-username-prefix="+oidc.UsernamePrefix)
 	}
 
 	if oidc.GroupsClaim != "" {
-		result += fmt.Sprintf("          - %q\n", "--oidc-groups-claim="+oidc.GroupsClaim)
+		args = append(args, "--oidc-groups-claim="+oidc.GroupsClaim)
 	}
 
 	if oidc.GroupsPrefix != "" {
-		result += fmt.Sprintf("          - %q\n", "--oidc-groups-prefix="+oidc.GroupsPrefix)
+		args = append(args, "--oidc-groups-prefix="+oidc.GroupsPrefix)
 	}
 
 	if oidc.CAFile != "" {
-		result += fmt.Sprintf("          - %q\n", "--oidc-ca-file="+v1alpha1.OIDCCAContainerPath)
+		args = append(args, "--oidc-ca-file="+v1alpha1.OIDCCAContainerPath)
 	}
 
-	return result
+	return args
 }
 
 // buildVClusterOIDCVolumes generates the YAML fragment for VCluster volume mounts

@@ -141,11 +141,6 @@ func (m *ConfigManager) Load(_ configmanager.LoadOptions) (*Configs, error) {
 	// Append additional runtime patches
 	patches = append(patches, m.additionalPatches...)
 
-	// Enable the MutatingAdmissionPolicy feature gate / v1beta1 admissionregistration
-	// API so Calico v3.30+'s CRD chart (which ships MutatingAdmissionPolicy resources)
-	// installs on Talos clusters.
-	patches = append(patches, buildAPIServerFeatureGatesPatch())
-
 	// Create Configs from patches (with extensions if configured)
 	configs, err := newConfigsWithExtensions(
 		m.clusterName,
