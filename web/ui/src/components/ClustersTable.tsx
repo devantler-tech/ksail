@@ -166,8 +166,18 @@ export function ClustersTable({
             {sorted.map((cluster) => (
               <tr
                 key={clusterKey(cluster)}
+                role="button"
+                tabIndex={0}
+                aria-label={`View ${cluster.metadata.name}`}
                 onClick={() => onSelect(cluster)}
-                className="cursor-pointer transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                onKeyDown={(event) => {
+                  // Make the row selectable by keyboard (Enter/Space), not just mouse.
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    onSelect(cluster);
+                  }
+                }}
+                className="cursor-pointer transition-colors hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 dark:hover:bg-slate-800/50"
               >
                 <td className={cx(td, "font-medium text-slate-900 dark:text-white")}>
                   {cluster.metadata.name}
