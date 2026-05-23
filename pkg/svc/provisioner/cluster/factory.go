@@ -194,6 +194,12 @@ func (f DefaultFactory) createKindProvisioner(
 		cluster.Spec.Cluster.Workers,
 	)
 
+	// Enable the MutatingAdmissionPolicy feature gate / v1beta1 admissionregistration
+	// API so Calico v3.30+'s CRD chart (which ships MutatingAdmissionPolicy resources)
+	// installs. Applied to control-plane nodes; must run AFTER applyKindNodeCounts since
+	// that function may replace the nodes slice.
+	kindconfigmanager.ApplyAPIServerFeatureGatesPatches(kindConfig)
+
 	// Apply kubelet certificate rotation patches when metrics-server is enabled.
 	// This must happen AFTER applyKindNodeCounts since that function may replace the nodes slice.
 	if cluster.Spec.Cluster.MetricsServer == v1alpha1.MetricsServerEnabled {
@@ -516,6 +522,10 @@ func (f DefaultFactory) createK3dProvisioner( //nolint:funlen // sequential setu
 
 	// Apply node count overrides from CLI flags / cluster-level config.
 	applyK3dNodeCounts(k3dConfig, cluster.Spec.Cluster.ControlPlanes, cluster.Spec.Cluster.Workers)
+
+	// Enable the MutatingAdmissionPolicy feature gate / v1beta1 admissionregistration
+	// API on the server nodes so Calico v3.30+'s CRD chart installs.
+	k3dconfigmanager.ApplyAPIServerFeatureGatesArgs(k3dConfig)
 
 	// Apply containerd image verifier plugin volume mount when image verification is enabled.
 	// This mounts the generated config.toml.tmpl into K3d node containers so K3s uses it

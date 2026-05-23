@@ -149,6 +149,56 @@ func ApplyImageVerificationPatches(kindConfig *kindv1alpha4.Cluster) {
 	)
 }
 
+// APIServerFeatureGatesPatch is a kubeadm ClusterConfiguration patch that enables the
+// MutatingAdmissionPolicy feature gate and the admissionregistration.k8s.io/v1beta1 API.
+// Calico v3.30+ ships MutatingAdmissionPolicy resources in its CRD chart that require
+// this API to be served by the kube-apiserver. kubeadm v1beta4 apiServer.extraArgs is
+// map[string]string, so multiple extraArgs patches (e.g. OIDC) merge cleanly.
+const APIServerFeatureGatesPatch = `apiVersion: kubeadm.k8s.io/v1beta4
+kind: ClusterConfiguration
+apiServer:
+  extraArgs:
+    feature-gates: "MutatingAdmissionPolicy=true"
+    runtime-config: "admissionregistration.k8s.io/v1beta1=true"
+`
+
+// ApplyAPIServerFeatureGatesPatches adds a kubeadm patch enabling the
+// MutatingAdmissionPolicy feature gate / admissionregistration.k8s.io/v1beta1 API to
+// every control-plane node. It is idempotent — it skips nodes that already carry the patch.
+func ApplyAPIServerFeatureGatesPatches(kindConfig *kindv1alpha4.Cluster) {
+	if len(kindConfig.Nodes) == 0 {
+		kindConfig.Nodes = []kindv1alpha4.Node{{
+			Role:  kindv1alpha4.ControlPlaneRole,
+			Image: DefaultKindNodeImage,
+		}}
+	}
+
+	for idx := range kindConfig.Nodes {
+		node := &kindConfig.Nodes[idx]
+		if node.Role != kindv1alpha4.ControlPlaneRole {
+			continue
+		}
+
+		if hasFeatureGatesPatch(node.KubeadmConfigPatches) {
+			continue
+		}
+
+		node.KubeadmConfigPatches = append(node.KubeadmConfigPatches, APIServerFeatureGatesPatch)
+	}
+}
+
+// hasFeatureGatesPatch reports whether the kubeadm patches already include the
+// API server feature-gate patch.
+func hasFeatureGatesPatch(patches []string) bool {
+	for _, patch := range patches {
+		if strings.Contains(patch, "MutatingAdmissionPolicy") {
+			return true
+		}
+	}
+
+	return false
+}
+
 // ApplyOIDCPatches adds kubeadm config patches to configure the API server with OIDC flags.
 // The patch is applied to all control-plane nodes via KubeadmConfigPatches.
 // When a CA file is configured, an extraMount is added to make the host CA file

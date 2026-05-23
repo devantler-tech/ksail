@@ -313,6 +313,25 @@ func buildCertSANsPatch(sans []string) Patch {
 	}
 }
 
+// buildAPIServerFeatureGatesPatch builds a cluster-scope patch that enables the
+// MutatingAdmissionPolicy feature gate and the admissionregistration.k8s.io/v1beta1
+// API on the kube-apiserver. Calico v3.30+ ships MutatingAdmissionPolicy resources in
+// its CRD chart that require this API. Talos cluster.apiServer.extraArgs is a
+// string→string map, so values carry no leading dashes.
+func buildAPIServerFeatureGatesPatch() Patch {
+	content := "cluster:\n" +
+		"  apiServer:\n" +
+		"    extraArgs:\n" +
+		"      feature-gates: MutatingAdmissionPolicy=true\n" +
+		"      runtime-config: admissionregistration.k8s.io/v1beta1=true\n"
+
+	return Patch{
+		Path:    "ksail-apiserver-feature-gates",
+		Scope:   PatchScopeCluster,
+		Content: []byte(content),
+	}
+}
+
 // WithSecrets creates a new Configs with the provided secrets bundle, preserving the cluster's
 // existing PKI (CA, certificates, tokens, bootstrap secrets) across config regeneration.
 // This is used during cluster update to ensure that newly generated machine configs for

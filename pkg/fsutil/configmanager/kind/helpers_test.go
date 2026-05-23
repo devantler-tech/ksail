@@ -6,6 +6,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	kind "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/kind"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	kindv1alpha4 "sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
 
@@ -291,5 +292,63 @@ func TestApplyImageVerificationPatches(t *testing.T) {
 
 		assert.Len(t, kindConfig.ContainerdConfigPatches, 1,
 			"calling ApplyImageVerificationPatches twice should not duplicate the patch")
+	})
+}
+
+func TestApplyAPIServerFeatureGatesPatches(t *testing.T) {
+	t.Parallel()
+
+	t.Run("adds_kubeadm_patch_to_control_plane", func(t *testing.T) {
+		t.Parallel()
+
+		kindConfig := &kindv1alpha4.Cluster{}
+
+		kind.ApplyAPIServerFeatureGatesPatches(kindConfig)
+
+		require.Len(t, kindConfig.Nodes, 1)
+		require.Len(t, kindConfig.Nodes[0].KubeadmConfigPatches, 1)
+		assert.Equal(
+			t,
+			kind.APIServerFeatureGatesPatch,
+			kindConfig.Nodes[0].KubeadmConfigPatches[0],
+		)
+		assert.Contains(
+			t,
+			kindConfig.Nodes[0].KubeadmConfigPatches[0],
+			"MutatingAdmissionPolicy=true",
+		)
+		assert.Contains(
+			t,
+			kindConfig.Nodes[0].KubeadmConfigPatches[0],
+			"admissionregistration.k8s.io/v1beta1=true",
+		)
+	})
+
+	t.Run("only_patches_control_plane_nodes", func(t *testing.T) {
+		t.Parallel()
+
+		kindConfig := &kindv1alpha4.Cluster{
+			Nodes: []kindv1alpha4.Node{
+				{Role: kindv1alpha4.ControlPlaneRole},
+				{Role: kindv1alpha4.WorkerRole},
+			},
+		}
+
+		kind.ApplyAPIServerFeatureGatesPatches(kindConfig)
+
+		assert.Len(t, kindConfig.Nodes[0].KubeadmConfigPatches, 1)
+		assert.Empty(t, kindConfig.Nodes[1].KubeadmConfigPatches)
+	})
+
+	t.Run("idempotent_does_not_duplicate_patch", func(t *testing.T) {
+		t.Parallel()
+
+		kindConfig := &kindv1alpha4.Cluster{}
+
+		kind.ApplyAPIServerFeatureGatesPatches(kindConfig)
+		kind.ApplyAPIServerFeatureGatesPatches(kindConfig)
+
+		require.Len(t, kindConfig.Nodes, 1)
+		assert.Len(t, kindConfig.Nodes[0].KubeadmConfigPatches, 1)
 	})
 }

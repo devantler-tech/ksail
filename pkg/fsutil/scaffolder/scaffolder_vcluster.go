@@ -40,14 +40,15 @@ func (s *Scaffolder) generateVClusterConfig(output string, force bool) error {
 		"      image:\n" +
 		fmt.Sprintf("        tag: %s\n", vclusterconfigmanager.DefaultKubernetesVersion)
 
-	// Append API server OIDC flags when OIDC is configured
-	if s.KSailConfig.Spec.Cluster.OIDC.Enabled() {
-		header += buildVClusterOIDCArgs(&s.KSailConfig.Spec.Cluster.OIDC)
+	// Always emit the API server extraArgs block: the MutatingAdmissionPolicy feature
+	// gate / v1beta1 admissionregistration API is required by Calico v3.30+, and OIDC
+	// flags are appended when configured. Emitting a single block avoids duplicate
+	// apiServer keys in the generated values file.
+	header += buildVClusterAPIServerArgs(&s.KSailConfig.Spec.Cluster.OIDC)
 
-		// Add volume mounts to inject the OIDC CA certificate into the VCluster pod
-		if s.KSailConfig.Spec.Cluster.OIDC.CAFile != "" {
-			header += buildVClusterOIDCVolumes()
-		}
+	// Add volume mounts to inject the OIDC CA certificate into the VCluster pod
+	if s.KSailConfig.Spec.Cluster.OIDC.Enabled() && s.KSailConfig.Spec.Cluster.OIDC.CAFile != "" {
+		header += buildVClusterOIDCVolumes()
 	}
 
 	content := []byte(header)
@@ -69,16 +70,31 @@ func (s *Scaffolder) generateVClusterConfig(output string, force bool) error {
 	return nil
 }
 
-// buildVClusterOIDCArgs generates the YAML fragment for VCluster API server OIDC extra args.
-// Values are escaped with %q to handle YAML-special characters safely.
-// When a CA file is configured, the API server arg references OIDCCAContainerPath and
-// a hostPath volume mount is added to make the CA available inside the VCluster pod.
-// This works because VCluster runs on a Docker-based host cluster (Kind/K3d) where the
-// host CA file is already mounted at OIDCCAContainerPath on all nodes.
-func buildVClusterOIDCArgs(oidc *v1alpha1.OIDCSpec) string {
+// buildVClusterAPIServerArgs generates the controlPlane.distro.k8s.apiServer.extraArgs
+// YAML fragment for the VCluster values file. It always enables the
+// MutatingAdmissionPolicy feature gate / admissionregistration.k8s.io/v1beta1 API
+// (required by Calico v3.30+'s CRD chart) and appends OIDC flags when OIDC is
+// configured. Emitting a single apiServer block keeps the generated YAML valid.
+// Values are escaped with %q to handle YAML-special characters safely. When a CA file
+// is configured, the OIDC CA arg references OIDCCAContainerPath and a hostPath volume
+// mount is added (VCluster runs on a Docker-based host cluster where the host CA file
+// is already mounted at OIDCCAContainerPath on all nodes).
+func buildVClusterAPIServerArgs(oidc *v1alpha1.OIDCSpec) string {
+	const (
+		featureGatesArg  = "--feature-gates=MutatingAdmissionPolicy=true"
+		runtimeConfigArg = "--runtime-config=admissionregistration.k8s.io/v1beta1=true"
+	)
+
 	result := "      apiServer:\n" +
 		"        extraArgs:\n" +
-		fmt.Sprintf("          - %q\n", "--oidc-issuer-url="+oidc.IssuerURL) +
+		fmt.Sprintf("          - %q\n", featureGatesArg) +
+		fmt.Sprintf("          - %q\n", runtimeConfigArg)
+
+	if oidc == nil || !oidc.Enabled() {
+		return result
+	}
+
+	result += fmt.Sprintf("          - %q\n", "--oidc-issuer-url="+oidc.IssuerURL) +
 		fmt.Sprintf("          - %q\n", "--oidc-client-id="+oidc.ClientID)
 
 	if oidc.UsernameClaim != "" {

@@ -411,6 +411,57 @@ func TestApplyImageVerificationVolumes(t *testing.T) {
 	})
 }
 
+func TestApplyAPIServerFeatureGatesArgs(t *testing.T) {
+	t.Parallel()
+
+	t.Run("adds_kube_apiserver_args_to_server_nodes", func(t *testing.T) {
+		t.Parallel()
+
+		k3dConfig := &v1alpha5.SimpleConfig{}
+		k3d.ApplyAPIServerFeatureGatesArgs(k3dConfig)
+
+		args := k3dConfig.Options.K3sOptions.ExtraArgs
+		assert.Len(t, args, 2)
+		assert.Equal(
+			t,
+			"--kube-apiserver-arg=feature-gates=MutatingAdmissionPolicy=true",
+			args[0].Arg,
+		)
+		assert.Equal(
+			t,
+			"--kube-apiserver-arg=runtime-config=admissionregistration.k8s.io/v1beta1=true",
+			args[1].Arg,
+		)
+
+		for _, arg := range args {
+			assert.Equal(t, []string{"server:*"}, arg.NodeFilters)
+		}
+	})
+
+	t.Run("appends_without_removing_existing", func(t *testing.T) {
+		t.Parallel()
+
+		k3dConfig := &v1alpha5.SimpleConfig{}
+		k3dConfig.Options.K3sOptions.ExtraArgs = []v1alpha5.K3sArgWithNodeFilters{
+			{Arg: "--kube-apiserver-arg=existing=true", NodeFilters: []string{"server:*"}},
+		}
+
+		k3d.ApplyAPIServerFeatureGatesArgs(k3dConfig)
+
+		assert.Len(t, k3dConfig.Options.K3sOptions.ExtraArgs, 3)
+	})
+
+	t.Run("idempotent_no_duplicate_when_called_twice", func(t *testing.T) {
+		t.Parallel()
+
+		k3dConfig := &v1alpha5.SimpleConfig{}
+		k3d.ApplyAPIServerFeatureGatesArgs(k3dConfig)
+		k3d.ApplyAPIServerFeatureGatesArgs(k3dConfig)
+
+		assert.Len(t, k3dConfig.Options.K3sOptions.ExtraArgs, 2)
+	})
+}
+
 func TestResolveNetworkName(t *testing.T) {
 	t.Parallel()
 
