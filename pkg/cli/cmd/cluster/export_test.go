@@ -135,6 +135,11 @@ func ExportDiffToJSON(diff *clusterupdate.UpdateResult) DiffJSONOutput {
 	return diffToJSON(diff)
 }
 
+// ExportReportNoApplicableChanges exports reportNoApplicableChanges for testing.
+func ExportReportNoApplicableChanges(cmd *cobra.Command, diff *clusterupdate.UpdateResult) {
+	reportNoApplicableChanges(cmd, diff)
+}
+
 // ExportOutputFormatJSON exports outputFormatJSON for testing.
 const ExportOutputFormatJSON = outputFormatJSON
 

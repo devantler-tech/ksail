@@ -450,3 +450,98 @@ func TestDisplayChangesSummary_EmptyChanges(t *testing.T) {
 	output := buf.String()
 	assert.Empty(t, output, "empty changes should produce no output")
 }
+
+func TestDiffToJSON_UnknownBaseline(t *testing.T) {
+	t.Parallel()
+
+	diff := &clusterupdate.UpdateResult{
+		UnknownBaseline: []clusterupdate.Change{
+			{
+				Field:    "cluster.cni",
+				OldValue: clusterupdate.UnknownBaselineValue,
+				NewValue: "Cilium",
+				Category: clusterupdate.ChangeCategoryUnknown,
+				Reason:   "current cluster state could not be read; baseline is unknown",
+			},
+		},
+	}
+
+	out := cluster.ExportDiffToJSON(diff)
+
+	// Unknown-baseline entries are surfaced separately and never counted as
+	// applicable changes.
+	assert.Equal(t, 0, out.TotalChanges)
+	assert.Len(t, out.UnknownBaseline, 1)
+	assert.Equal(t, "cluster.cni", out.UnknownBaseline[0].Field)
+	assert.Equal(t, "Unknown", out.UnknownBaseline[0].OldValue)
+	assert.Equal(t, "unknown", out.UnknownBaseline[0].Category)
+	assert.False(t, out.RequiresConfirmation)
+}
+
+func TestDisplayChangesSummary_UnknownBaselineOnly(t *testing.T) {
+	t.Parallel()
+
+	diff := &clusterupdate.UpdateResult{
+		UnknownBaseline: []clusterupdate.Change{
+			{
+				Field:    "cluster.gitOpsEngine",
+				OldValue: clusterupdate.UnknownBaselineValue,
+				NewValue: "Flux",
+				Category: clusterupdate.ChangeCategoryUnknown,
+			},
+		},
+	}
+	cmd := &cobra.Command{}
+
+	var buf bytes.Buffer
+	cmd.SetOut(&buf)
+
+	cluster.ExportDisplayChangesSummary(cmd, diff)
+
+	output := buf.String()
+	assert.Contains(t, output, "Change summary")
+	assert.Contains(t, output, "cluster.gitOpsEngine")
+	assert.Contains(t, output, "Unknown")
+	assert.Contains(t, output, "could not be read")
+}
+
+func TestReportNoApplicableChanges_UnknownVsClean(t *testing.T) {
+	t.Parallel()
+
+	t.Run("clean cluster", func(t *testing.T) {
+		t.Parallel()
+
+		cmd := &cobra.Command{}
+
+		var out bytes.Buffer
+
+		cmd.SetOut(&out)
+
+		cluster.ExportReportNoApplicableChanges(cmd, clusterupdate.NewEmptyUpdateResult())
+		assert.Contains(t, out.String(), "No changes detected")
+	})
+
+	t.Run("unknown baseline", func(t *testing.T) {
+		t.Parallel()
+
+		diff := clusterupdate.NewEmptyUpdateResult()
+		diff.UnknownBaseline = append(diff.UnknownBaseline, clusterupdate.Change{
+			Field:    "cluster.cni",
+			OldValue: clusterupdate.UnknownBaselineValue,
+			NewValue: "Cilium",
+			Category: clusterupdate.ChangeCategoryUnknown,
+		})
+
+		cmd := &cobra.Command{}
+
+		var errOut bytes.Buffer
+
+		cmd.SetErr(&errOut)
+
+		cluster.ExportReportNoApplicableChanges(cmd, diff)
+
+		got := errOut.String()
+		assert.Contains(t, got, "could not be read")
+		assert.NotContains(t, got, "No changes detected")
+	})
+}

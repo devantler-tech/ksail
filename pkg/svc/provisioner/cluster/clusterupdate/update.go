@@ -65,11 +65,18 @@ func DefaultCurrentSpec(
 	}
 }
 
-// MarkComponentsUnknown sets every component field that the detector probes from
-// the live cluster to the UnknownBaselineValue sentinel. Callers invoke this when
-// component detection fails (e.g. the Kubernetes API is unreachable) so that the
-// diff engine surfaces these fields as "Unknown" rather than fabricating a
-// confident diff from default values for components that may already be installed.
+// MarkComponentsUnknown sets each scalar component-enum field that the detector
+// probes from the live cluster (CNI, CSI, MetricsServer, LoadBalancer,
+// CertManager, PolicyEngine, GitOpsEngine) to the UnknownBaselineValue sentinel.
+// Callers invoke this when component detection fails (e.g. the Kubernetes API is
+// unreachable) so that the diff engine surfaces these fields as "Unknown" rather
+// than fabricating a confident diff from default values for components that may
+// already be installed.
+//
+// The node autoscaler (Autoscaler.Node) is also detector-derived but is
+// intentionally left unmodified here: it is a nested struct rather than a single
+// enum, so the diff engine instead skips its diff entirely when the component
+// baseline is unknown (see Engine.checkAutoscalerOptionsChange).
 func MarkComponentsUnknown(spec *v1alpha1.ClusterSpec) {
 	if spec == nil {
 		return
