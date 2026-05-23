@@ -2,6 +2,7 @@ package k3dprovisioner
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -52,6 +53,10 @@ const (
 	// port-forwardable when wiring the in-session nested API endpoint.
 	k3kAPIServerPFTimeout = 2 * time.Minute
 )
+
+// errNoRunningServerPod is recorded while polling for a port-forwardable k3k server
+// pod, so a port-forward timeout surfaces "pod not ready" rather than a bare deadline.
+var errNoRunningServerPod = errors.New("no running k3k server pod found")
 
 // K3kProvisioner creates and manages K3s clusters on a host Kubernetes cluster
 // using the rancher/k3k operator. Unlike the DinD approach used for Kind, k3k
@@ -194,6 +199,9 @@ func (p *K3kProvisioner) Create(ctx context.Context, name string) error {
 
 	err = p.connectAndMergeKubeconfig(ctx, clusterName, namespace, serverURL)
 	if err != nil {
+		// Avoid leaking the port-forward goroutine/listener if a later step fails.
+		p.closeAPIServerPortForward()
+
 		return err
 	}
 
@@ -214,10 +222,7 @@ func (p *K3kProvisioner) Delete(ctx context.Context, name string) error {
 		clusterName = name
 	}
 
-	if p.apiServerPortForward != nil {
-		p.apiServerPortForward.Close()
-		p.apiServerPortForward = nil
-	}
+	p.closeAPIServerPortForward()
 
 	namespace := k3kNamespacePrefix + clusterName
 
@@ -337,7 +342,10 @@ func (p *K3kProvisioner) startAPIServerPortForward(
 ) (string, error) {
 	selector := fmt.Sprintf("cluster=%s,role=server", clusterName)
 
-	var session *kubernetesprovider.PortForwardSession
+	var (
+		session *kubernetesprovider.PortForwardSession
+		lastErr error
+	)
 
 	err := wait.PollUntilContextTimeout(
 		ctx, k3kWaitInterval, k3kAPIServerPFTimeout, true,
@@ -351,6 +359,8 @@ func (p *K3kProvisioner) startAPIServerPortForward(
 
 			podName := firstRunningPodName(pods.Items)
 			if podName == "" {
+				lastErr = fmt.Errorf("%w (selector %q)", errNoRunningServerPod, selector)
+
 				return false, nil
 			}
 
@@ -358,8 +368,10 @@ func (p *K3kProvisioner) startAPIServerPortForward(
 				ctx, p.restConfig, namespace, podName, k3kAPIServerPort,
 			)
 			if pfErr != nil {
-				// The pod may not yet be accepting connections; keep polling rather
-				// than aborting so a not-yet-ready server pod is retried.
+				// The pod may not yet be accepting connections; record the cause and
+				// keep polling rather than aborting so a not-yet-ready pod is retried.
+				lastErr = pfErr
+
 				//nolint:nilerr // intentional: transient port-forward failure → retry
 				return false, nil
 			}
@@ -370,12 +382,28 @@ func (p *K3kProvisioner) startAPIServerPortForward(
 		},
 	)
 	if err != nil {
+		if lastErr != nil {
+			return "", fmt.Errorf(
+				"port-forward nested API server: %w; last attempt: %w",
+				err,
+				lastErr,
+			)
+		}
+
 		return "", fmt.Errorf("port-forward nested API server: %w", err)
 	}
 
 	p.apiServerPortForward = session
 
 	return "https://" + net.JoinHostPort("127.0.0.1", strconv.Itoa(session.LocalPort)), nil
+}
+
+// closeAPIServerPortForward tears down the nested API port-forward if one is active.
+func (p *K3kProvisioner) closeAPIServerPortForward() {
+	if p.apiServerPortForward != nil {
+		p.apiServerPortForward.Close()
+		p.apiServerPortForward = nil
+	}
 }
 
 // firstRunningPodName returns the name of the first Running pod, or "" if none are Running.
