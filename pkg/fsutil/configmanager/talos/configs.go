@@ -62,7 +62,7 @@ type Configs struct {
 // This is used when no scaffolded project exists and default configurations are needed.
 // It creates a valid config bundle with:
 //   - Cluster name: DefaultClusterName ("talos-default")
-//   - Kubernetes version: DefaultKubernetesVersion ("1.32.0")
+//   - Kubernetes version: DefaultKubernetesVersion ("1.36.0")
 //   - Network CIDR: DefaultNetworkCIDR ("10.5.0.0/24")
 //   - allowSchedulingOnControlPlanes: true (for single-node/control-plane-only clusters)
 func NewDefaultConfigs() (*Configs, error) {
