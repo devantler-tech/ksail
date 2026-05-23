@@ -10,12 +10,7 @@ import (
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
-	"github.com/devantler-tech/ksail/v7/pkg/k8s/readiness"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/installer/cni"
-	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	apiextensionsclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -35,9 +30,11 @@ type Installer struct {
 }
 
 const (
-	// calicoInstallRetryAttempts is the number of install attempts for K3s.
-	// K3s may experience transient API-unavailable errors during bootstrap even
-	// after the pre-install stability check passes, due to K3s's bootstrap sequence.
+	// calicoInstallRetryAttempts is the maximum number of Calico install attempts.
+	// Two transient, bootstrap-related failures are retried (see shouldRetryInstall):
+	// the tigera-operator CRD-establishment race on a freshly created cluster (all
+	// distributions), and K3s's transient API-server-unavailable errors that occur
+	// during its bootstrap sequence even after the pre-install stability check passes.
 	// Eight attempts with 15s backoff applies up to 7 waits between attempts,
 	// for a maximum of 105s ((8-1)×15s) of additional waiting.
 	// This covers the observed K3s stabilization window in CI (see recurring issues #4196, #4315).
@@ -193,22 +190,13 @@ func (c *Installer) installCalico(ctx context.Context) error {
 	spec.Wait = false
 	spec.WaitForJobs = false
 
-	// K3s can have transient API-unavailable failures during bootstrap even
-	// after the pre-install stability check passes, due to K3s's bootstrap
-	// sequence. Retry with backoff for K3s only; a single attempt is correct
-	// for other distributions where such errors indicate a genuine problem.
-	maxAttempts := 1
-	if c.distribution == v1alpha1.DistributionK3s {
-		maxAttempts = calicoInstallRetryAttempts
-	}
-
-	for attempt := 1; attempt <= maxAttempts; attempt++ {
+	for attempt := 1; attempt <= calicoInstallRetryAttempts; attempt++ {
 		err = c.attemptCalicoInstall(ctx, client, spec)
 		if err == nil {
 			return nil
 		}
 
-		if !isAPIServerUnavailableError(err) || attempt == maxAttempts {
+		if !c.shouldRetryInstall(err) || attempt == calicoInstallRetryAttempts {
 			break
 		}
 
@@ -221,9 +209,32 @@ func (c *Installer) installCalico(ctx context.Context) error {
 	return fmt.Errorf("install or upgrade calico: %w", err)
 }
 
-// attemptCalicoInstall performs a single Helm install attempt. If the install
-// fails with an API discovery error (CRDs not yet registered), it waits for
-// the CRDs to become established and retries once before returning.
+// shouldRetryInstall reports whether a failed Calico install attempt should be
+// retried with backoff.
+//
+// The tigera-operator chart validates its operator custom resources against the
+// cluster's API discovery during install. On a freshly created cluster the
+// operator CRDs may not be established yet, so the whole install is rejected
+// with an API-discovery error before any resource is applied — there is nothing
+// to wait for, but simply re-running the install re-applies the CRDs and, once
+// discovery has refreshed, the CRs validate. This transient race is retried for
+// every distribution.
+//
+// K3s additionally emits transient API-server-unavailable errors during its
+// bootstrap sequence even after the pre-install stability check passes; for
+// other distributions such an error indicates a genuine problem and is not
+// retried.
+func (c *Installer) shouldRetryInstall(err error) bool {
+	if isAPIDiscoveryError(err) {
+		return true
+	}
+
+	return c.distribution == v1alpha1.DistributionK3s && isAPIServerUnavailableError(err)
+}
+
+// attemptCalicoInstall performs a single Helm install (or upgrade) attempt.
+// Retrying transient bootstrap failures is the caller's responsibility; see
+// shouldRetryInstall.
 func (c *Installer) attemptCalicoInstall(
 	ctx context.Context,
 	client helm.Interface,
@@ -233,25 +244,8 @@ func (c *Installer) attemptCalicoInstall(
 	defer cancel()
 
 	err := helm.InstallChartWithRetry(installCtx, client, spec, "calico")
-	if err == nil {
-		return nil
-	}
-
-	if !isAPIDiscoveryError(err) {
+	if err != nil {
 		return fmt.Errorf("helm install calico: %w", err)
-	}
-
-	waitErr := c.waitForCalicoCRDs(ctx)
-	if waitErr != nil {
-		return fmt.Errorf("wait for calico CRDs: %w", waitErr)
-	}
-
-	retryCtx, retryCancel := context.WithTimeout(ctx, c.GetTimeout()+helm.ContextTimeoutBuffer)
-	defer retryCancel()
-
-	retryErr := helm.InstallChartWithRetry(retryCtx, client, spec, "calico")
-	if retryErr != nil {
-		return fmt.Errorf("helm install calico after CRD wait: %w", retryErr)
 	}
 
 	return nil
@@ -319,45 +313,6 @@ func talosCalicoValues() map[string]string {
 	}
 }
 
-func (c *Installer) waitForCalicoCRDs(ctx context.Context) error {
-	restConfig, err := k8s.BuildRESTConfig(c.GetKubeconfig(), c.GetContext())
-	if err != nil {
-		return fmt.Errorf("build REST config: %w", err)
-	}
-
-	client, err := apiextensionsclient.NewForConfig(restConfig)
-	if err != nil {
-		return fmt.Errorf("create apiextensions client: %w", err)
-	}
-
-	for _, name := range calicoCRDNames() {
-		pollErr := readiness.PollForReadiness(
-			ctx,
-			c.GetTimeout(),
-			func(ctx context.Context) (bool, error) {
-				crd, getErr := client.
-					ApiextensionsV1().
-					CustomResourceDefinitions().
-					Get(ctx, name, metav1.GetOptions{})
-				if k8serrors.IsNotFound(getErr) {
-					return false, nil
-				}
-
-				if getErr != nil {
-					return false, fmt.Errorf("get CRD %s: %w", name, getErr)
-				}
-
-				return isCRDEstablished(crd), nil
-			},
-		)
-		if pollErr != nil {
-			return fmt.Errorf("wait for CRD %s: %w", name, pollErr)
-		}
-	}
-
-	return nil
-}
-
 func isAPIDiscoveryError(err error) bool {
 	if err == nil {
 		return false
@@ -379,29 +334,6 @@ func isAPIServerUnavailableError(err error) bool {
 	return strings.Contains(errMsg, "cluster reachability check failed") ||
 		strings.Contains(errMsg, "kubernetes cluster unreachable") ||
 		strings.Contains(errMsg, "the server is currently unable to handle the request")
-}
-
-func isCRDEstablished(crd *apiextensionsv1.CustomResourceDefinition) bool {
-	for _, cond := range crd.Status.Conditions {
-		if cond.Type == apiextensionsv1.Established &&
-			cond.Status == apiextensionsv1.ConditionTrue {
-			return true
-		}
-	}
-
-	return false
-}
-
-func calicoCRDNames() []string {
-	// Goldmane and Whisker CRDs are excluded because those components are disabled
-	// in defaultCalicoValues (see the comment there). Waiting for CRDs of disabled
-	// components would block unnecessarily and obscure real failures.
-	return []string{
-		"imagesets.operator.tigera.io",
-		"installations.operator.tigera.io",
-		"managementclusterconnections.operator.tigera.io",
-		"tigerastatuses.operator.tigera.io",
-	}
 }
 
 func calicoNamespaces() []string {

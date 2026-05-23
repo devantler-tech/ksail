@@ -48,8 +48,11 @@ func TestInstaller_Install_TalosDistribution_Values(t *testing.T) {
 	assert.Contains(t, err.Error(), "privileged namespaces")
 }
 
-// TestInstaller_Install_APIDiscoveryErrorRetry verifies that when the first Helm install
-// returns an API discovery error, the installer waits for CRDs and retries.
+// TestInstaller_Install_APIDiscoveryErrorRetry verifies that an API-discovery
+// error (the tigera-operator CRDs were not yet established when the chart's
+// operator CRs were validated) is retried, and the install succeeds once the
+// re-run re-applies the CRDs and discovery refreshes. This must hold for
+// non-K3s distributions too, so Vanilla is used here.
 func TestInstaller_Install_APIDiscoveryErrorRetry(t *testing.T) {
 	t.Parallel()
 
@@ -62,28 +65,63 @@ func TestInstaller_Install_APIDiscoveryErrorRetry(t *testing.T) {
 		v1alpha1.DistributionVanilla,
 		false,
 	)
+	installer.SetRetryBackoffForTest(func(_ context.Context) error { return nil })
 
 	client.EXPECT().
 		GetReleaseStorageLabels(mock.Anything, "calico", "tigera-operator").
 		Return(nil, nil)
 
-	// First call: repo add succeeds
 	client.EXPECT().
 		AddRepository(mock.Anything, mock.Anything, mock.Anything).
 		Return(nil)
 
-	// First install call returns API discovery error
+	// First install hits the CRD-establishment race; the retry succeeds.
 	client.EXPECT().
 		InstallOrUpgradeChart(mock.Anything, mock.Anything).
 		Return(nil, errCalicoRetryNoMatchesInstallation).
 		Once()
+	client.EXPECT().
+		InstallOrUpgradeChart(mock.Anything, mock.Anything).
+		Return(nil, nil).
+		Once()
 
-	// The retry path calls waitForCalicoCRDs which uses k8s.BuildRESTConfig.
-	// With invalid kubeconfig, this fails.
+	err := installer.Install(context.Background())
+	require.NoError(t, err)
+}
+
+// TestInstaller_Install_APIDiscoveryErrorRetryExhausted verifies that a
+// persistent API-discovery error eventually fails after exhausting the retry
+// budget rather than retrying forever.
+func TestInstaller_Install_APIDiscoveryErrorRetryExhausted(t *testing.T) {
+	t.Parallel()
+
+	client := helm.NewMockInterface(t)
+	installer := calicoinstaller.NewInstallerWithDistribution(
+		client,
+		"/path/to/kubeconfig",
+		"test-context",
+		2*time.Minute,
+		v1alpha1.DistributionVanilla,
+		false,
+	)
+	installer.SetRetryBackoffForTest(func(_ context.Context) error { return nil })
+
+	client.EXPECT().
+		GetReleaseStorageLabels(mock.Anything, "calico", "tigera-operator").
+		Return(nil, nil)
+
+	client.EXPECT().
+		AddRepository(mock.Anything, mock.Anything, mock.Anything).
+		Return(nil)
+
+	client.EXPECT().
+		InstallOrUpgradeChart(mock.Anything, mock.Anything).
+		Return(nil, errCalicoRetryNoMatchesInstallation).
+		Times(8)
+
 	err := installer.Install(context.Background())
 	require.Error(t, err)
-	// The error should come from waitForCalicoCRDs (REST config build failure)
-	assert.Contains(t, err.Error(), "wait for calico CRDs")
+	assert.Contains(t, err.Error(), "install or upgrade calico")
 }
 
 // TestInstaller_Install_ContextCanceled_Vanilla verifies install fails on canceled context.
