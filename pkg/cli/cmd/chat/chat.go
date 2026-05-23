@@ -383,18 +383,22 @@ func diagnoseCLIStartupFailure(
 // execve before any I/O, so re-launching is safe; an exec.Cmd is single-use, so
 // each attempt builds a fresh one via newCmd. ctx bounds the total retry window.
 func runCopilotCmdWithRetry(ctx context.Context, newCmd func() *exec.Cmd) error {
-	var err error
-
 	for attempt := 0; ; attempt++ {
-		err = newCmd().Run()
-		if errors.Is(err, syscall.ETXTBSY) &&
-			attempt < copilotExecMaxRetries && ctx.Err() == nil {
-			time.Sleep(copilotExecRetryBackoff)
-
-			continue
+		err := newCmd().Run()
+		if !errors.Is(err, syscall.ETXTBSY) || attempt >= copilotExecMaxRetries {
+			return err
 		}
 
-		return err
+		// Interruptible backoff: respect context cancellation immediately
+		// rather than sleeping out the remaining window.
+		timer := time.NewTimer(copilotExecRetryBackoff)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+
+			return err
+		case <-timer.C:
+		}
 	}
 }
 
