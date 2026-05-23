@@ -350,8 +350,8 @@ func (f DefaultFactory) createK3dKubernetesProvisioner(
 
 	// Enable the MutatingAdmissionPolicy feature gate / v1beta1 admissionregistration
 	// API on the embedded k3s server only for Calico, whose v3.30+ CRD chart ships
-	// MutatingAdmissionPolicy resources. The Docker (K3d) path applies the equivalent
-	// flags via ExtraArgs; here they flow through the k3k Cluster spec's serverArgs.
+	// MutatingAdmissionPolicy resources that require this API. The flags flow through
+	// the k3k Cluster spec's serverArgs to the embedded k3s kube-apiserver.
 	var serverArgs []string
 	if cluster.Spec.Cluster.CNI == v1alpha1.CNICalico {
 		serverArgs = k3dconfigmanager.APIServerFeatureGatesArgs()

@@ -210,9 +210,8 @@ func ApplyOIDCCAVolume(k3dConfig *v1alpha5.SimpleConfig, hostCAPath string) erro
 // APIServerFeatureGatesArgs returns the K3s kube-apiserver args that enable the
 // MutatingAdmissionPolicy feature gate and the admissionregistration.k8s.io/v1beta1
 // API. Calico v3.30+'s CRD chart ships MutatingAdmissionPolicy / MutatingAdmissionPolicyBinding
-// resources that require this API to be served. The args use K3s "--kube-apiserver-arg=..."
-// form, which is consumable both as K3d ExtraArgs (Docker provider) and as k3k Cluster
-// serverArgs (Kubernetes provider).
+// resources that require this API to be served. The args use the K3s
+// "--kube-apiserver-arg=..." form, suitable for the k3k Cluster spec's serverArgs.
 func APIServerFeatureGatesArgs() []string {
 	return []string{
 		"--kube-apiserver-arg=feature-gates=MutatingAdmissionPolicy=true",
