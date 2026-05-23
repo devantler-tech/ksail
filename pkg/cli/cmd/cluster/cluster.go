@@ -1770,10 +1770,16 @@ func applyClusterNameOverride(ctx *localregistry.Context, name string) error {
 		ctx.KWOKConfig.Name = name
 	}
 
-	// Update the ksail.yaml context to match the distribution pattern
+	// Update the ksail.yaml context to match the pattern the created cluster uses.
+	// Must be provider-aware: the Kubernetes (k3k) provider writes a "k3k-<name>"
+	// context for K3s rather than the standalone "k3d-<name>", so post-creation CNI
+	// install can resolve it.
 	if ctx.ClusterCfg != nil {
-		dist := ctx.ClusterCfg.Spec.Cluster.Distribution
-		ctx.ClusterCfg.Spec.Cluster.Connection.Context = dist.ContextName(name)
+		ctx.ClusterCfg.Spec.Cluster.Connection.Context = resolveCreatedContextName(
+			ctx.ClusterCfg.Spec.Cluster.Distribution,
+			ctx.ClusterCfg.Spec.Cluster.Provider,
+			name,
+		)
 	}
 
 	return nil
