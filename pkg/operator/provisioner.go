@@ -8,7 +8,6 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/internal/controller"
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
-	k3dconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/k3d"
 	kindconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/kind"
 	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
@@ -95,14 +94,11 @@ func buildDistributionConfig(
 		distribution = v1alpha1.DistributionVanilla
 	}
 
+	//nolint:exhaustive // K3s, VCluster, and KWOK are handled via SimpleDistributionConfig (default).
 	switch distribution {
 	case v1alpha1.DistributionVanilla:
 		return &clusterprovisioner.DistributionConfig{
 			Kind: kindconfigmanager.NewKindCluster(name, "", ""),
-		}, nil
-	case v1alpha1.DistributionK3s:
-		return &clusterprovisioner.DistributionConfig{
-			K3d: k3dconfigmanager.NewK3dSimpleConfig(name, "", ""),
 		}, nil
 	case v1alpha1.DistributionTalos:
 		talosConfig, err := newTalosConfig(name)
@@ -111,19 +107,17 @@ func buildDistributionConfig(
 		}
 
 		return &clusterprovisioner.DistributionConfig{Talos: talosConfig}, nil
-	case v1alpha1.DistributionVCluster:
-		return &clusterprovisioner.DistributionConfig{
-			VCluster: &clusterprovisioner.VClusterConfig{Name: name},
-		}, nil
-	case v1alpha1.DistributionKWOK:
-		return &clusterprovisioner.DistributionConfig{
-			KWOK: &clusterprovisioner.KWOKConfig{Name: name},
-		}, nil
 	case v1alpha1.DistributionEKS:
 		return &clusterprovisioner.DistributionConfig{
 			EKS: &clusterprovisioner.EKSConfig{Name: name, Region: awsRegion(cluster)},
 		}, nil
 	default:
+		// K3s, VCluster, KWOK need only the name (shared with the local `ksail ui` backend).
+		config := clusterprovisioner.SimpleDistributionConfig(distribution, name)
+		if config != nil {
+			return config, nil
+		}
+
 		return nil, fmt.Errorf("%w: %q", ErrUnsupportedDistribution, distribution)
 	}
 }
