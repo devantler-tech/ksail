@@ -2,6 +2,7 @@ package chat
 
 import (
 	"context"
+	"os/exec"
 	"time"
 
 	copilot "github.com/github/copilot-sdk/go"
@@ -47,6 +48,27 @@ func GetDiagnoseCLIStartupFailure() func(context.Context, string, string, []stri
 func GetBuildDiagnosticBlock() func(context.Context, string, string, []string) string {
 	return buildDiagnosticBlock
 }
+
+// GetRunCopilotCmdWithRetry returns the runCopilotCmdWithRetry helper for testing.
+func GetRunCopilotCmdWithRetry() func(context.Context, func() *exec.Cmd) error {
+	return runCopilotCmdWithRetry
+}
+
+// GetVerifyCopilotCLI returns the verifyCopilotCLI function for testing.
+func GetVerifyCopilotCLI() func(context.Context, string, []string) error {
+	return verifyCopilotCLI
+}
+
+// GetRunCopilotAuthLogin returns the runCopilotAuthLogin function for testing.
+func GetRunCopilotAuthLogin() func(context.Context, string) error {
+	return runCopilotAuthLogin
+}
+
+// CopilotExecMaxRetries exports copilotExecMaxRetries for testing.
+const CopilotExecMaxRetries = copilotExecMaxRetries
+
+// CopilotExecRetryBackoff exports copilotExecRetryBackoff for testing.
+const CopilotExecRetryBackoff = copilotExecRetryBackoff
 
 // FormatDiagnosticOutput exposes the formatDiagnosticOutput formatting helper for
 // deterministic unit tests that verify block layout without subprocess execution.

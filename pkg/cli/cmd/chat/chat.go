@@ -58,6 +58,14 @@ const (
 	// Kept intentionally short: ksail chat is interactive, so a brief wait on
 	// failure to surface the real root cause is an acceptable trade-off.
 	diagnoseTimeout = 3 * time.Second
+	// copilotExecMaxRetries bounds re-attempts when launching the Copilot CLI
+	// races a concurrent fork. The SDK writes the CLI into its cache directory
+	// at runtime, so a fork that inherited a still-open write fd can make the
+	// kernel report the freshly written binary as "text file busy" (ETXTBSY).
+	copilotExecMaxRetries = 5
+	// copilotExecRetryBackoff is the pause between ETXTBSY re-attempts; the
+	// write fd is closed almost immediately, so a short wait clears the race.
+	copilotExecRetryBackoff = 10 * time.Millisecond
 	// startupErrFmt is the static format string for Copilot client startup errors.
 	// %w is the underlying error; %s is an optional diagnostic block (empty or
 	// "CLI diagnostic output:\n  ...\n\n").
@@ -281,17 +289,25 @@ func verifyCopilotCLI(ctx context.Context, cliPath string, env []string) error {
 	verifyCtx, cancel := context.WithTimeout(ctx, verifyTimeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(verifyCtx, cliPath, "--version")
-	cmd.Env = env
+	var output bytes.Buffer
 
-	output, err := cmd.CombinedOutput()
+	err := runCopilotCmdWithRetry(verifyCtx, func() *exec.Cmd {
+		output.Reset()
+
+		cmd := exec.CommandContext(verifyCtx, cliPath, "--version")
+		cmd.Env = env
+		cmd.Stdout = &output
+		cmd.Stderr = &output
+
+		return cmd
+	})
 	if err != nil {
 		return fmt.Errorf(
 			"copilot CLI at %q failed pre-flight check: %w (output: %s)\n\n"+
 				"To fix:\n"+
 				"  - Install or reinstall the Copilot CLI: npm install -g @github/copilot\n"+
 				"  - Or set COPILOT_CLI_PATH to a working copilot binary",
-			cliPath, err, strings.TrimSpace(string(output)),
+			cliPath, err, strings.TrimSpace(output.String()),
 		)
 	}
 
@@ -346,16 +362,50 @@ func diagnoseCLIStartupFailure(
 		diagEnv = append(append([]string{}, diagEnv...), "COPILOT_SDK_AUTH_TOKEN="+githubToken)
 	}
 
-	cmd := exec.CommandContext(diagCtx, cliPath, args...)
-	cmd.Env = diagEnv
-
 	var stderr bytes.Buffer
 
-	cmd.Stderr = &stderr
+	_ = runCopilotCmdWithRetry(diagCtx, func() *exec.Cmd {
+		stderr.Reset()
 
-	_ = cmd.Run()
+		cmd := exec.CommandContext(diagCtx, cliPath, args...)
+		cmd.Env = diagEnv
+		cmd.Stderr = &stderr
+
+		return cmd
+	})
 
 	return strings.TrimSpace(stderr.String())
+}
+
+// runCopilotCmdWithRetry runs the command produced by newCmd, rebuilding and
+// retrying it when launching the binary fails with ETXTBSY. The Copilot SDK
+// writes its CLI into a cache directory at runtime, so exec can race a
+// concurrent fork that inherited a still-open write fd and have the kernel
+// report the freshly written binary as "text file busy". ETXTBSY surfaces at
+// execve before any I/O, so re-launching is safe; an exec.Cmd is single-use, so
+// each attempt builds a fresh one via newCmd. ctx bounds the total retry window.
+func runCopilotCmdWithRetry(ctx context.Context, newCmd func() *exec.Cmd) error {
+	for attempt := 0; ; attempt++ {
+		err := newCmd().Run()
+		if errors.Is(err, syscall.ETXTBSY) && attempt < copilotExecMaxRetries {
+			// Interruptible backoff: a cancelled or expired context aborts the
+			// loop and surfaces the cancellation reason rather than waiting out
+			// the timer and reporting the transient ETXTBSY.
+			timer := time.NewTimer(copilotExecRetryBackoff)
+			select {
+			case <-timer.C:
+				continue
+			case <-ctx.Done():
+				timer.Stop()
+
+				return ctx.Err() //nolint:wrapcheck // propagate cancellation as-is
+			}
+		}
+
+		// Callers wrap (or intentionally ignore) this error; the helper is a
+		// thin retry wrapper around the exec.Cmd.Run() they would call directly.
+		return err //nolint:wrapcheck // callers wrap; thin exec.Cmd.Run retry pass-through
+	}
 }
 
 // filterEnvVars returns a copy of env with the specified variable names removed.
@@ -654,12 +704,14 @@ func hasNonBinarySuffix(name string) bool {
 // runCopilotAuthLogin spawns `copilot auth login` as an interactive subprocess.
 // cliPath is trusted user input from COPILOT_CLI_PATH or the Copilot SDK directory.
 func runCopilotAuthLogin(ctx context.Context, cliPath string) error {
-	cmd := exec.CommandContext(ctx, cliPath, "auth", "login")
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	err := runCopilotCmdWithRetry(ctx, func() *exec.Cmd {
+		cmd := exec.CommandContext(ctx, cliPath, "auth", "login")
+		cmd.Stdin = os.Stdin
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
 
-	err := cmd.Run()
+		return cmd
+	})
 	if err != nil {
 		return fmt.Errorf("copilot auth login failed: %w", err)
 	}
