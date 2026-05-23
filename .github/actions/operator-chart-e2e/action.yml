@@ -2,7 +2,7 @@ name: Operator Chart E2E
 description: |
   Smoke + API end-to-end test of the ksail-operator Helm chart on a throwaway
   kind cluster. Builds the operator image locally (no registry) with the web UI
-  embedded (-tags ui), loads it into kind, installs the chart in read-only mode,
+  embedded (go:embed), loads it into kind, installs the chart in read-only mode,
   and asserts the CRD registers, the operator rolls out, the REST API serves
   /readyz and /api/v1/config, mutations are rejected (403), and the operator
   serves the embedded SPA at / (same origin as the API — no separate UI
@@ -57,11 +57,15 @@ runs:
 
     - name: 🏗️ Build web UI bundle
       shell: bash
-      # Emits the SPA into pkg/operator/ui/dist so the `-tags ui` operator build embeds it.
+      # Build the SPA and stage it into pkg/webui/dist so the operator build embeds it (go:embed).
       run: |
         set -euo pipefail
         npm --prefix web/ui ci
         npm --prefix web/ui run build
+        rm -rf pkg/webui/dist
+        mkdir -p pkg/webui/dist
+        touch pkg/webui/dist/.gitkeep
+        cp -R web/ui/dist/. pkg/webui/dist/
 
     - name: 🏗️ Build operator image
       shell: bash
@@ -69,7 +73,7 @@ runs:
         # Match .goreleaser.yaml: a static (CGO_ENABLED=0) binary is required by
         # the distroless/static base in the root Dockerfile. The generate +
         # bundler hooks mirror the release build's pre-hooks so the embed
-        # directives resolve. -tags ui embeds the web UI built above.
+        # directives resolve. The web UI staged above is embedded via go:embed.
         GOPROXY: "https://proxy.golang.org|direct"
         GOMEMLIMIT: "6GiB"
         OPERATOR_IMAGE: ${{ inputs.operator-image }}
@@ -80,7 +84,7 @@ runs:
         ctx="$(mktemp -d)"
         mkdir -p "$ctx/linux/amd64"
         CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-          go build -tags ui -trimpath -ldflags="-s -w" -o "$ctx/linux/amd64/ksail" .
+          go build -trimpath -ldflags="-s -w" -o "$ctx/linux/amd64/ksail" .
         cp Dockerfile "$ctx/Dockerfile"
         docker build --build-arg TARGETPLATFORM=linux/amd64 -t "$OPERATOR_IMAGE" "$ctx"
         rm -rf "$ctx"

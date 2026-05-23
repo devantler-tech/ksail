@@ -3,13 +3,12 @@ version: 2
 before:
   hooks:
     - go mod tidy
-    # Build the web UI (Vite outputs to pkg/operator/ui/dist) so the `-tags ui` build below embeds it
-    # into the binary; the operator serves the dashboard itself (no separate UI image, no reverse
-    # proxy). Mirror the same assets into pkg/webui/dist so the embedded `ksail ui`/`desktop` server
-    # (pkg/webui/embed.go) serves them too. Built assets are gitignored, keeping the tree clean.
+    # Build the web UI and stage it into pkg/webui/dist so it is embedded in the release binary
+    # (see pkg/webui/embed.go) and served by both the operator and `ksail ui`/`desktop` — same origin
+    # as /api, no reverse proxy. Built assets are gitignored, so this keeps the working tree clean.
     - npm --prefix web/ui ci
     - npm --prefix web/ui run build
-    - sh -c 'rm -rf pkg/webui/dist && mkdir -p pkg/webui/dist && touch pkg/webui/dist/.gitkeep && cp -R pkg/operator/ui/dist/. pkg/webui/dist/'
+    - sh -c 'rm -rf pkg/webui/dist && mkdir -p pkg/webui/dist && touch pkg/webui/dist/.gitkeep && cp -R web/ui/dist/. pkg/webui/dist/'
 
 builds:
   - binary: ksail
@@ -27,8 +26,6 @@ builds:
       - CGO_ENABLED=0
     flags:
       - -trimpath
-      # Embed the web UI built by the `before` hooks (pkg/operator/ui/embed.go).
-      - -tags=ui
     ldflags:
       - -s -w -X github.com/devantler-tech/ksail/v7/internal/buildmeta.Version={{.Version}} -X github.com/devantler-tech/ksail/v7/internal/buildmeta.Commit={{.Commit}} -X github.com/devantler-tech/ksail/v7/internal/buildmeta.Date={{.Date}}
     hooks:

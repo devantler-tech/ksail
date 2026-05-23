@@ -78,8 +78,8 @@ jobs:
           HOMEBREW_GITHUB_API_TOKEN: ${{ secrets.HOMEBREW_GITHUB_API_TOKEN }}
           GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
 
-  # The web UI is embedded into the operator binary (go:embed, built with -tags ui via the
-  # GoReleaser build) and served by the operator itself — there is no separate UI image.
+  # The web UI is embedded into the binary (go:embed via pkg/webui, staged by the GoReleaser
+  # before-hook) and served by the operator and `ksail ui`/`desktop` themselves — no separate UI image.
 
   vscode-extension:
     name: 🧩 Release VSCode Extension

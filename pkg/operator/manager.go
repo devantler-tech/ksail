@@ -9,7 +9,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/internal/controller"
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/operator/api"
-	operatorui "github.com/devantler-tech/ksail/v7/pkg/operator/ui"
+	"github.com/devantler-tech/ksail/v7/pkg/webui"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -126,11 +126,10 @@ func setupManager(mgr ctrl.Manager, opts Options) error {
 			OIDC:        opts.OIDC,
 		}
 
-		// Serve the dashboard from the operator itself when a UI was embedded at build time
-		// (-tags ui), so the SPA and API share one origin and no reverse proxy is needed.
-		if assets, ok := operatorui.Assets(); ok {
-			server.StaticFS = assets
-		}
+		// Serve the dashboard from the operator itself (same origin as the API, no reverse proxy).
+		// webui.Assets always returns a filesystem; when the SPA was not built into pkg/webui/dist,
+		// it holds only a placeholder and the server renders a "UI not built" page.
+		server.StaticFS = webui.Assets()
 
 		apiErr := mgr.Add(server)
 		if apiErr != nil {
