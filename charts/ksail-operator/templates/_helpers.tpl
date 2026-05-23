@@ -27,13 +27,6 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 app.kubernetes.io/component: operator
 {{- end -}}
 
-{{/* Selector labels for the UI. */}}
-{{- define "ksail-operator.uiSelectorLabels" -}}
-app.kubernetes.io/name: {{ include "ksail-operator.name" . }}
-app.kubernetes.io/instance: {{ .Release.Name }}
-app.kubernetes.io/component: ui
-{{- end -}}
-
 {{/* ServiceAccount name. */}}
 {{- define "ksail-operator.serviceAccountName" -}}
 {{- if .Values.serviceAccount.create -}}
@@ -47,12 +40,6 @@ app.kubernetes.io/component: ui
 {{- define "ksail-operator.operatorImage" -}}
 {{- $tag := .Values.operator.image.tag | default .Chart.AppVersion -}}
 {{- printf "%s:%s" .Values.operator.image.repository $tag -}}
-{{- end -}}
-
-{{/* UI container image. */}}
-{{- define "ksail-operator.uiImage" -}}
-{{- $tag := .Values.ui.image.tag | default .Chart.AppVersion -}}
-{{- printf "%s:%s" .Values.ui.image.repository $tag -}}
 {{- end -}}
 
 {{/* Name of the Secret holding the OIDC client and session secrets. */}}

@@ -1,59 +1,142 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { Plus, RotateCw } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ApiError,
   createCluster,
   deleteCluster,
   getConfig,
+  getMeta,
   listClusters,
-  loginPath,
   logout,
+  updateCluster,
   type Cluster,
+  type ClusterMeta,
+  type ClusterSpec,
   type User,
 } from "./api.ts";
+import { MetaContext } from "./lib/meta.ts";
+import { AppShell } from "./components/AppShell.tsx";
+import { ClusterDetail } from "./components/ClusterDetail.tsx";
+import {
+  ClusterFormDialog,
+  type ClusterFormValues,
+  type FormMode,
+} from "./components/ClusterFormDialog.tsx";
+import { ClustersTable } from "./components/ClustersTable.tsx";
+import { ConfirmDialog } from "./components/ConfirmDialog.tsx";
+import { LoginScreen } from "./components/LoginScreen.tsx";
+import { EmptyState, ErrorBanner, TableSkeleton } from "./components/states.tsx";
+import { Button } from "./components/ui.tsx";
+import { useTheme } from "./hooks/useTheme.ts";
+import { useToast } from "./components/Toast.tsx";
 
-// Fallback create-form options used when the backend does not advertise its supported distributions
-// via config.distributions. The operator omits it and only provisions VCluster in-cluster; the local
-// `ksail ui` backend advertises the locally creatable set.
+const POLL_MS = 10000;
+
+// DEFAULT_DISTRIBUTIONS is the create-form distribution list used when the backend does not advertise
+// its supported set via config.distributions. The operator omits it (it only provisions VCluster
+// in-cluster); the local `ksail ui` backend advertises everything it can create locally. The
+// provider matrix and component options for whatever is selected still come from /api/v1/meta.
 const DEFAULT_DISTRIBUTIONS = ["VCluster"];
 
+function clusterKey(cluster: Cluster): string {
+  return `${cluster.metadata.namespace ?? "default"}/${cluster.metadata.name}`;
+}
+
+function errorMessage(err: unknown): string {
+  if (err instanceof ApiError) {
+    return err.message;
+  }
+
+  return err instanceof Error ? err.message : String(err);
+}
+
+// specFromValues maps the form fields to a ClusterSpec. Node counts are parsed to numbers; the
+// component enums are sent verbatim (default values serialize away server-side via omitzero).
+function specFromValues(values: ClusterFormValues): ClusterSpec {
+  const controlPlanes = Number.parseInt(values.controlPlanes, 10);
+  const workers = Number.parseInt(values.workers, 10);
+
+  // The form holds plain strings sourced from /api/v1/meta (the server's valid enum values); narrow
+  // them to the generated enum unions on the way out.
+  return {
+    distribution: values.distribution as ClusterSpec["distribution"],
+    provider: values.provider as ClusterSpec["provider"],
+    controlPlanes: Number.isNaN(controlPlanes) ? undefined : controlPlanes,
+    workers: Number.isNaN(workers) ? undefined : workers,
+    cni: values.cni as ClusterSpec["cni"],
+    csi: values.csi as ClusterSpec["csi"],
+    cdi: values.cdi as ClusterSpec["cdi"],
+    metricsServer: values.metricsServer as ClusterSpec["metricsServer"],
+    loadBalancer: values.loadBalancer as ClusterSpec["loadBalancer"],
+    certManager: values.certManager as ClusterSpec["certManager"],
+    policyEngine: values.policyEngine as ClusterSpec["policyEngine"],
+    gitOpsEngine: values.gitOpsEngine as ClusterSpec["gitOpsEngine"],
+  };
+}
+
 export function App() {
-  const [readOnly, setReadOnly] = useState(true);
-  const [clusters, setClusters] = useState<Cluster[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { theme, toggle } = useTheme();
+  const toast = useToast();
+
+  const [readOnly, setReadOnly] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [needsLogin, setNeedsLogin] = useState(false);
+  const [meta, setMeta] = useState<ClusterMeta | null>(null);
   const [distributions, setDistributions] = useState<string[]>(DEFAULT_DISTRIBUTIONS);
-  // Guards against state updates from in-flight requests that resolve after the component unmounts
-  // (refresh runs from the interval, the button, and child callbacks, not only the init effect).
-  const mounted = useRef(true);
-  // Holds the polling interval so it can be stopped from refresh() on a 401 without unmounting.
-  const pollRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
 
-  const refresh = useCallback(async () => {
+  const [clusters, setClusters] = useState<Cluster[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [formOpen, setFormOpen] = useState(false);
+  const [formMode, setFormMode] = useState<FormMode>("create");
+  const [formInitial, setFormInitial] = useState<Cluster | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Cluster | null>(null);
+
+  const mounted = useRef(true);
+  const pollRef = useRef<number | undefined>(undefined);
+
+  const selected = useMemo(
+    () => clusters.find((cluster) => clusterKey(cluster) === selectedKey) ?? null,
+    [clusters, selectedKey],
+  );
+
+  // refresh returns false when the session was lost (HTTP 401), so callers (e.g. init) can avoid
+  // starting/continuing the poll while the login screen is shown.
+  const refresh = useCallback(async (silent = false): Promise<boolean> => {
+    if (!silent) {
+      setRefreshing(true);
+    }
+
     try {
       const list = await listClusters();
       if (!mounted.current) {
-        return;
+        return true;
       }
       setClusters(list.items ?? []);
       setError(null);
     } catch (err) {
       if (!mounted.current) {
-        return;
+        return true;
       }
       if (err instanceof ApiError && err.status === 401) {
-        // Stop polling once the session is gone; otherwise the interval keeps firing
-        // unauthorized requests every 10s while the login screen is shown.
         if (pollRef.current) {
-          clearInterval(pollRef.current);
+          window.clearInterval(pollRef.current);
           pollRef.current = undefined;
         }
         setNeedsLogin(true);
-        return;
+        return false;
       }
-      setError(String(err));
+      setError(errorMessage(err));
+    } finally {
+      if (mounted.current && !silent) {
+        setRefreshing(false);
+      }
     }
+
+    return true;
   }, []);
 
   useEffect(() => {
@@ -65,7 +148,7 @@ export function App() {
         config = await getConfig();
       } catch (err) {
         if (mounted.current) {
-          setError(String(err));
+          setError(errorMessage(err));
           setLoading(false);
         }
         return;
@@ -79,17 +162,33 @@ export function App() {
       setUser(config.user ?? null);
       setDistributions(config.distributions ?? DEFAULT_DISTRIBUTIONS);
 
-      // When auth is enabled but no session exists yet, show the login screen and do not poll.
       if (config.authEnabled && !config.user) {
         setNeedsLogin(true);
         setLoading(false);
         return;
       }
 
-      await refresh();
+      try {
+        const clusterMeta = await getMeta();
+        if (mounted.current) {
+          setMeta(clusterMeta);
+        }
+      } catch (err) {
+        if (mounted.current) {
+          setError(errorMessage(err));
+          setLoading(false);
+        }
+        return;
+      }
+
+      const authOK = await refresh(true);
       if (mounted.current) {
         setLoading(false);
-        pollRef.current = setInterval(() => void refresh(), 10000);
+        // Only start polling if the initial load did not lose the session; otherwise the login
+        // screen is shown and a poll would just fire another unauthorized request.
+        if (authOK) {
+          pollRef.current = window.setInterval(() => void refresh(true), POLL_MS);
+        }
       }
     }
 
@@ -98,226 +197,178 @@ export function App() {
     return () => {
       mounted.current = false;
       if (pollRef.current) {
-        clearInterval(pollRef.current);
+        window.clearInterval(pollRef.current);
         pollRef.current = undefined;
       }
     };
   }, [refresh]);
 
+  function openCreate() {
+    setFormMode("create");
+    setFormInitial(null);
+    setFormOpen(true);
+  }
+
+  function openEdit(cluster: Cluster) {
+    setFormMode("edit");
+    setFormInitial(cluster);
+    setFormOpen(true);
+  }
+
+  const handleSubmit = useCallback(
+    async (values: ClusterFormValues) => {
+      const spec = specFromValues(values);
+      try {
+        if (formMode === "edit" && formInitial) {
+          // Preserve spec fields the form does not manage (provider options, workload, chat, OIDC…).
+          const namespace = formInitial.metadata.namespace ?? "default";
+          await updateCluster(namespace, formInitial.metadata.name, {
+            metadata: { name: formInitial.metadata.name, namespace },
+            spec: { ...formInitial.spec, cluster: { ...formInitial.spec?.cluster, ...spec } },
+          });
+          toast.success(`Cluster "${formInitial.metadata.name}" updated`);
+        } else {
+          const name = values.name.trim();
+          await createCluster({
+            metadata: { name, namespace: values.namespace.trim() || "default" },
+            spec: { cluster: spec },
+          });
+          toast.success(`Cluster "${name}" created`);
+        }
+        await refresh(true);
+      } catch (err) {
+        toast.error(errorMessage(err));
+        throw err;
+      }
+    },
+    [formMode, formInitial, refresh, toast],
+  );
+
+  const handleDelete = useCallback(async () => {
+    if (!deleteTarget) {
+      return;
+    }
+
+    const name = deleteTarget.metadata.name;
+    const namespace = deleteTarget.metadata.namespace ?? "default";
+    try {
+      await deleteCluster(namespace, name);
+      toast.success(`Deleting cluster "${name}"`);
+      await refresh(true);
+    } catch (err) {
+      toast.error(errorMessage(err));
+      throw err;
+    }
+  }, [deleteTarget, refresh, toast]);
+
   if (needsLogin) {
     return <LoginScreen />;
   }
 
-  return (
-    <div className="mx-auto max-w-5xl p-6 font-sans text-slate-800">
-      <header className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-bold">KSail Clusters</h1>
-        <div className="flex items-center gap-3">
-          {user && (
-            <span className="text-sm text-slate-500">{user.email ?? user.name ?? user.subject}</span>
-          )}
-          <button
-            type="button"
-            onClick={() => void refresh()}
-            className="rounded bg-slate-200 px-3 py-1 text-sm hover:bg-slate-300"
-          >
-            Refresh
-          </button>
-          {user && (
-            <button
-              type="button"
-              onClick={() => {
-                void logout().finally(() => setNeedsLogin(true));
-              }}
-              className="rounded bg-slate-200 px-3 py-1 text-sm hover:bg-slate-300"
-            >
-              Logout
-            </button>
-          )}
-        </div>
-      </header>
-
-      {readOnly && (
-        <div className="mb-4 rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
-          Read-only (GitOps-enforced). Clusters are managed declaratively from Git; mutating
-          actions are disabled.
-        </div>
-      )}
-
-      {error && (
-        <div className="mb-4 rounded border border-red-300 bg-red-50 p-3 text-sm text-red-800">
-          {error}
-        </div>
-      )}
-
-      {loading ? (
-        <p>Loading…</p>
-      ) : (
-        <ClusterTable
-          clusters={clusters}
-          readOnly={readOnly}
-          onChanged={refresh}
-          onError={setError}
-        />
-      )}
-
-      {!readOnly && !loading && (
-        <CreateForm distributions={distributions} onCreated={refresh} onError={setError} />
-      )}
-    </div>
+  const headerActions = (
+    <>
+      <Button variant="secondary" size="sm" onClick={() => void refresh()} loading={refreshing}>
+        {refreshing ? null : <RotateCw className="size-4" aria-hidden />}
+        Refresh
+      </Button>
+      {!readOnly ? (
+        <Button size="sm" onClick={openCreate}>
+          <Plus className="size-4" aria-hidden />
+          New cluster
+        </Button>
+      ) : null}
+    </>
   );
-}
-
-function LoginScreen() {
-  return (
-    <div className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-4 p-6 font-sans text-slate-800">
-      <h1 className="text-2xl font-bold">KSail</h1>
-      <p className="text-sm text-slate-500">Sign in to manage your clusters.</p>
-      <a
-        href={loginPath}
-        className="rounded bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700"
-      >
-        Login
-      </a>
-    </div>
-  );
-}
-
-function ClusterTable(props: {
-  clusters: Cluster[];
-  readOnly: boolean;
-  onChanged: () => Promise<void>;
-  onError: (message: string) => void;
-}) {
-  const { clusters, readOnly, onChanged, onError } = props;
-
-  if (clusters.length === 0) {
-    return <p className="text-slate-500">No clusters.</p>;
-  }
 
   return (
-    <table className="w-full border-collapse text-sm">
-      <thead>
-        <tr className="border-b text-left text-slate-500">
-          <th className="py-2">Name</th>
-          <th>Namespace</th>
-          <th>Distribution</th>
-          <th>Phase</th>
-          <th>Endpoint</th>
-          {!readOnly && <th></th>}
-        </tr>
-      </thead>
-      <tbody>
-        {clusters.map((cluster) => (
-          <tr key={`${cluster.metadata.namespace}/${cluster.metadata.name}`} className="border-b">
-            <td className="py-2 font-medium">{cluster.metadata.name}</td>
-            <td>{cluster.metadata.namespace ?? "default"}</td>
-            <td>{cluster.spec?.cluster?.distribution ?? "—"}</td>
-            <td>{cluster.status?.phase ?? "—"}</td>
-            <td className="font-mono text-xs">{cluster.status?.endpoint ?? "—"}</td>
-            {!readOnly && (
-              <td className="text-right">
-                <DeleteButton cluster={cluster} onDeleted={onChanged} onError={onError} />
-              </td>
-            )}
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  );
-}
-
-function DeleteButton(props: {
-  cluster: Cluster;
-  onDeleted: () => Promise<void>;
-  onError: (message: string) => void;
-}) {
-  const { cluster, onDeleted, onError } = props;
-
-  async function handleDelete() {
-    try {
-      await deleteCluster(cluster.metadata.namespace ?? "default", cluster.metadata.name);
-      await onDeleted();
-    } catch (err) {
-      onError(String(err));
-    }
-  }
-
-  return (
-    <button
-      type="button"
-      onClick={() => void handleDelete()}
-      className="rounded bg-red-100 px-2 py-1 text-xs text-red-700 hover:bg-red-200"
+    <MetaContext.Provider value={meta}>
+    <AppShell
+      theme={theme}
+      onToggleTheme={toggle}
+      user={user}
+      onLogout={() => void logout().finally(() => setNeedsLogin(true))}
+      readOnly={readOnly}
+      headerActions={headerActions}
     >
-      Delete
-    </button>
-  );
-}
+      <div className="mx-auto max-w-6xl space-y-4">
+        {error && clusters.length > 0 ? (
+          <ErrorBanner message={error} onRetry={() => void refresh()} />
+        ) : null}
 
-function CreateForm(props: {
-  distributions: string[];
-  onCreated: () => Promise<void>;
-  onError: (message: string) => void;
-}) {
-  const { distributions, onCreated, onError } = props;
-  const [name, setName] = useState("");
-  const [namespace, setNamespace] = useState("default");
-  const [distribution, setDistribution] = useState(distributions[0]);
+        {loading ? (
+          <TableSkeleton />
+        ) : error && clusters.length === 0 ? (
+          <ErrorBanner message={error} onRetry={() => void refresh()} />
+        ) : clusters.length === 0 ? (
+          <EmptyState
+            title="No clusters yet"
+            description={
+              readOnly
+                ? "Clusters are managed declaratively from Git (read-only mode)."
+                : "Create your first cluster to get started."
+            }
+            action={
+              !readOnly ? (
+                <Button onClick={openCreate}>
+                  <Plus className="size-4" aria-hidden />
+                  New cluster
+                </Button>
+              ) : undefined
+            }
+          />
+        ) : (
+          <ClustersTable
+            clusters={clusters}
+            readOnly={readOnly}
+            onSelect={(cluster) => setSelectedKey(clusterKey(cluster))}
+            onEdit={openEdit}
+            onDelete={(cluster) => setDeleteTarget(cluster)}
+          />
+        )}
+      </div>
 
-  async function handleSubmit(event: FormEvent) {
-    event.preventDefault();
-    if (name.trim() === "") {
-      return;
-    }
-
-    try {
-      await createCluster({
-        metadata: { name, namespace },
-        spec: { cluster: { distribution } },
-      });
-      setName("");
-      await onCreated();
-    } catch (err) {
-      onError(String(err));
-    }
-  }
-
-  return (
-    <form onSubmit={(event) => void handleSubmit(event)} className="mt-6 flex flex-wrap items-end gap-3">
-      <label className="flex flex-col text-sm">
-        Name
-        <input
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-          className="rounded border px-2 py-1"
-          placeholder="my-cluster"
+      {meta ? (
+        <ClusterDetail
+          cluster={selected}
+          open={selected !== null}
+          readOnly={readOnly}
+          onClose={() => setSelectedKey(null)}
+          onEdit={openEdit}
         />
-      </label>
-      <label className="flex flex-col text-sm">
-        Namespace
-        <input
-          value={namespace}
-          onChange={(event) => setNamespace(event.target.value)}
-          className="rounded border px-2 py-1"
+      ) : null}
+
+      {meta ? (
+        <ClusterFormDialog
+          open={formOpen}
+          mode={formMode}
+          initial={formInitial}
+          distributions={distributions}
+          onSubmit={handleSubmit}
+          onClose={() => setFormOpen(false)}
         />
-      </label>
-      <label className="flex flex-col text-sm">
-        Distribution
-        <select
-          value={distribution}
-          onChange={(event) => setDistribution(event.target.value)}
-          className="rounded border px-2 py-1"
-        >
-          {distributions.map((value) => (
-            <option key={value} value={value}>
-              {value}
-            </option>
-          ))}
-        </select>
-      </label>
-      <button type="submit" className="rounded bg-blue-600 px-4 py-1.5 text-sm text-white hover:bg-blue-700">
-        Create
-      </button>
-    </form>
+      ) : null}
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        title="Delete cluster"
+        description={
+          deleteTarget ? (
+            <>
+              This permanently deletes{" "}
+              <span className="font-medium text-slate-700 dark:text-slate-200">
+                {deleteTarget.metadata.name}
+              </span>{" "}
+              and its underlying resources. This action cannot be undone.
+            </>
+          ) : (
+            ""
+          )
+        }
+        confirmLabel="Delete"
+        onConfirm={handleDelete}
+        onClose={() => setDeleteTarget(null)}
+      />
+    </AppShell>
+    </MetaContext.Provider>
   );
 }

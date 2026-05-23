@@ -17,7 +17,6 @@ import (
 	"sync"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
-	k3dconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/k3d"
 	kindconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/kind"
 	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
 	"github.com/devantler-tech/ksail/v7/pkg/operator/api"
@@ -406,6 +405,7 @@ func distributionConfig(
 	distribution v1alpha1.Distribution,
 	name string,
 ) (*clusterprovisioner.DistributionConfig, error) {
+	//nolint:exhaustive // K3s/VCluster/KWOK go through SimpleDistributionConfig; EKS is unavailable.
 	switch distribution {
 	case v1alpha1.DistributionVanilla:
 		// NewKindCluster sets the TypeMeta; SetDefaultsCluster adds the default control-plane node.
@@ -414,23 +414,16 @@ func distributionConfig(
 		v1alpha4.SetDefaultsCluster(kindCluster)
 
 		return &clusterprovisioner.DistributionConfig{Kind: kindCluster}, nil
-	case v1alpha1.DistributionK3s:
-		return &clusterprovisioner.DistributionConfig{
-			K3d: k3dconfigmanager.NewK3dSimpleConfig(name, "", ""),
-		}, nil
 	case v1alpha1.DistributionTalos:
 		return &clusterprovisioner.DistributionConfig{Talos: &talosconfigmanager.Configs{}}, nil
-	case v1alpha1.DistributionVCluster:
-		return &clusterprovisioner.DistributionConfig{
-			VCluster: &clusterprovisioner.VClusterConfig{Name: name},
-		}, nil
-	case v1alpha1.DistributionKWOK:
-		return &clusterprovisioner.DistributionConfig{
-			KWOK: &clusterprovisioner.KWOKConfig{Name: name},
-		}, nil
-	case v1alpha1.DistributionEKS:
-		return nil, errDistributionUnavailable(distribution)
 	default:
+		// K3s, VCluster, KWOK need only the name (shared with the operator backend); EKS and any
+		// other distribution cannot be provisioned locally.
+		config := clusterprovisioner.SimpleDistributionConfig(distribution, name)
+		if config != nil {
+			return config, nil
+		}
+
 		return nil, errDistributionUnavailable(distribution)
 	}
 }

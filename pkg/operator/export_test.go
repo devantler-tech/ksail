@@ -8,4 +8,10 @@ var (
 	NewScheme = newScheme
 	// ManagerOptions exposes managerOptions for testing.
 	ManagerOptions = managerOptions
+	// IsNodeReady exposes isNodeReady for testing.
+	IsNodeReady = isNodeReady
+	// ResolveProvider exposes resolveProvider for testing.
+	ResolveProvider = resolveProvider
+	// RunInstallers exposes runInstallers for testing.
+	RunInstallers = runInstallers
 )

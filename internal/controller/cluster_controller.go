@@ -13,6 +13,11 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
+	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
+	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
@@ -78,6 +83,45 @@ type ProvisionerBuilder func(
 	cluster *v1alpha1.Cluster,
 ) (clusterprovisioner.Provisioner, error)
 
+// ObservedStatus is the runtime state of a provisioned cluster, gathered best-effort by a
+// StatusObserver. Zero-valued fields are treated as "not observed" and leave the existing status
+// untouched, so a transient observation failure never erases previously reported data.
+type ObservedStatus struct {
+	// Endpoint is the stable API server URL of the provisioned cluster.
+	Endpoint string
+	// KubeconfigSecret references the Secret holding the child cluster's kubeconfig.
+	KubeconfigSecret *v1alpha1.SecretReference
+	// NodesReady and NodesTotal are populated only when NodesObserved is true.
+	NodesReady    int32
+	NodesTotal    int32
+	NodesObserved bool
+}
+
+// StatusObserver gathers runtime status (endpoint, kubeconfig, node readiness) for a provisioned
+// cluster. It is optional and distribution-specific: the operator injects an implementation, while
+// tests may leave it nil. It is invoked best-effort, so it must tolerate a not-yet-ready cluster.
+// The reader is uncached (it reads a single Secret directly) to avoid caching every cluster Secret.
+type StatusObserver func(
+	ctx context.Context,
+	hub client.Reader,
+	cluster *v1alpha1.Cluster,
+) (ObservedStatus, error)
+
+// ComponentInstaller installs the cluster's components (CNI/CSI/metrics-server/cert-manager/
+// load-balancer/policy-engine/GitOps) into the provisioned child cluster. It receives the
+// provisioner so it can obtain child access via the provisioner's optional Connector capability.
+// Optional; nil disables component installation. The reconciler invokes it with gating — only when
+// components are not already reconciled for the current generation — and treats it best-effort.
+//
+// The returned applied is false when installation was skipped because it is not supported for this
+// cluster (e.g. the provisioner exposes no operator-reachable kubeconfig); the reconciler then
+// reports ComponentsReady=Unknown rather than a misleading True.
+type ComponentInstaller func(
+	ctx context.Context,
+	provisioner clusterprovisioner.Provisioner,
+	cluster *v1alpha1.Cluster,
+) (applied bool, err error)
+
 // ClusterReconciler reconciles a Cluster object towards its desired state.
 type ClusterReconciler struct {
 	client.Client
@@ -86,6 +130,18 @@ type ClusterReconciler struct {
 
 	// NewProvisioner builds the provisioner used to create/delete the underlying cluster.
 	NewProvisioner ProvisionerBuilder
+
+	// ObserveStatus gathers runtime status (endpoint, node readiness) best-effort. Optional; nil
+	// disables runtime status reporting (endpoint/nodes stay empty).
+	ObserveStatus StatusObserver
+
+	// InstallComponents installs the cluster's components into the provisioned child cluster.
+	// Optional; nil disables component installation.
+	InstallComponents ComponentInstaller
+
+	// APIReader is an uncached reader used by ObserveStatus to read a single kubeconfig Secret
+	// without forcing the manager cache to watch every Secret. Falls back to the cached client.
+	APIReader client.Reader
 
 	// ReadyRequeue overrides the steady-state requeue interval (zero uses the default).
 	ReadyRequeue time.Duration
@@ -186,8 +242,13 @@ func (r *ClusterReconciler) reconcileNormal(
 		}
 	}
 
-	// Exists()/Create() only confirm the cluster is present, not that every workload is healthy.
-	// Deeper readiness (node/pod health, kubeconfig Secret) is reported by the monitoring follow-up.
+	// Gather runtime status (endpoint, kubeconfig, node readiness) best-effort: a failure here must
+	// not fail an otherwise-successful reconcile, and partial results are still applied.
+	r.observeStatus(ctx, cluster)
+
+	// Install the spec's components into the child cluster (best-effort, gated by generation).
+	componentsOK := r.reconcileComponents(ctx, provisioner, cluster)
+
 	r.markReady(cluster)
 
 	statusErr := r.updateStatusIfChanged(ctx, cluster, before)
@@ -195,7 +256,107 @@ func (r *ClusterReconciler) reconcileNormal(
 		return ctrl.Result{}, statusErr
 	}
 
+	// Retry sooner while components are still being installed or have failed.
+	if !componentsOK {
+		return ctrl.Result{RequeueAfter: r.transitionalRequeue()}, nil
+	}
+
 	return ctrl.Result{RequeueAfter: r.readyRequeue()}, nil
+}
+
+// reconcileComponents installs the cluster's components when they are not already reconciled for the
+// current generation, recording the outcome in the ComponentsReady condition. Best-effort: failures
+// are reported via the condition (not the reconcile error) and return false so the reconcile
+// requeues sooner. Returns true when components are up to date or there is nothing to install.
+func (r *ClusterReconciler) reconcileComponents(
+	ctx context.Context,
+	provisioner clusterprovisioner.Provisioner,
+	cluster *v1alpha1.Cluster,
+) bool {
+	if r.InstallComponents == nil || componentsUpToDate(cluster) {
+		return true
+	}
+
+	applied, err := r.InstallComponents(ctx, provisioner, cluster)
+	if err != nil {
+		logf.FromContext(ctx).Info("install components (best-effort)", "error", err.Error())
+		apimeta.SetStatusCondition(&cluster.Status.Conditions, metav1.Condition{
+			Type:               v1alpha1.ConditionComponentsReady,
+			Status:             metav1.ConditionFalse,
+			ObservedGeneration: cluster.Generation,
+			Reason:             "ComponentsFailed",
+			Message:            err.Error(),
+		})
+
+		return false
+	}
+
+	if !applied {
+		// Component installation is not supported for this cluster (e.g. the provisioner exposes no
+		// operator-reachable kubeconfig). Report Unknown rather than a misleading Ready=True.
+		apimeta.SetStatusCondition(&cluster.Status.Conditions, metav1.Condition{
+			Type:               v1alpha1.ConditionComponentsReady,
+			Status:             metav1.ConditionUnknown,
+			ObservedGeneration: cluster.Generation,
+			Reason:             "NotSupported",
+			Message:            "component installation is not supported for this distribution/provider",
+		})
+
+		return true
+	}
+
+	apimeta.SetStatusCondition(&cluster.Status.Conditions, metav1.Condition{
+		Type:               v1alpha1.ConditionComponentsReady,
+		Status:             metav1.ConditionTrue,
+		ObservedGeneration: cluster.Generation,
+		Reason:             reasonReconciled,
+		Message:            "Components installed and reconciled",
+	})
+
+	return true
+}
+
+// componentsUpToDate reports whether component reconciliation has settled for the cluster's current
+// generation (so a spec change re-triggers installation). A condition observed at the current
+// generation is settled unless it is False (a failure), which keeps retrying; True (installed) and
+// Unknown (not supported) are terminal for that generation.
+func componentsUpToDate(cluster *v1alpha1.Cluster) bool {
+	condition := apimeta.FindStatusCondition(
+		cluster.Status.Conditions,
+		v1alpha1.ConditionComponentsReady,
+	)
+
+	return condition != nil &&
+		condition.ObservedGeneration == cluster.Generation &&
+		condition.Status != metav1.ConditionFalse
+}
+
+// observeStatus populates runtime status fields (endpoint, kubeconfig ref, node counts) from the
+// optional StatusObserver. It is best-effort: observation errors are logged and partial results
+// applied, since a not-yet-reachable child cluster is expected shortly after provisioning.
+func (r *ClusterReconciler) observeStatus(ctx context.Context, cluster *v1alpha1.Cluster) {
+	if r.ObserveStatus == nil {
+		return
+	}
+
+	observed, err := r.ObserveStatus(ctx, r.reader(), cluster)
+	if err != nil {
+		logf.FromContext(ctx).
+			Info("observe child cluster status (best-effort)", "error", err.Error())
+	}
+
+	if observed.Endpoint != "" {
+		cluster.Status.Endpoint = observed.Endpoint
+	}
+
+	if observed.KubeconfigSecret != nil {
+		cluster.Status.KubeconfigSecretRef = observed.KubeconfigSecret
+	}
+
+	if observed.NodesObserved {
+		cluster.Status.NodesReady = observed.NodesReady
+		cluster.Status.NodesTotal = observed.NodesTotal
+	}
 }
 
 // reconcileDelete tears down the underlying cluster and removes the finalizer.
@@ -230,7 +391,205 @@ func (r *ClusterReconciler) reconcileDelete(
 		return ctrl.Result{}, fmt.Errorf("remove finalizer: %w", err)
 	}
 
+	// Best-effort: remove the namespace if the operator created it and it now holds nothing else.
+	r.cleanupNamespace(ctx, cluster)
+
 	return ctrl.Result{}, nil
+}
+
+// cleanupNamespace deletes the Cluster's namespace when the operator created it (it carries the
+// managed-namespace label) and it no longer holds any other Cluster resources or user workloads.
+// It is best-effort: any failure is logged and ignored so it never blocks deletion. Namespaces the
+// operator did not create (e.g. "default" or user namespaces) are never touched.
+func (r *ClusterReconciler) cleanupNamespace(ctx context.Context, cluster *v1alpha1.Cluster) {
+	log := logf.FromContext(ctx)
+
+	name := cluster.Namespace
+	if name == "" {
+		return
+	}
+
+	reader := r.reader()
+
+	var namespace corev1.Namespace
+
+	getErr := reader.Get(ctx, client.ObjectKey{Name: name}, &namespace)
+	if getErr != nil {
+		return
+	}
+
+	if namespace.Labels[v1alpha1.ManagedNamespaceLabel] != "true" ||
+		!namespace.DeletionTimestamp.IsZero() {
+		return
+	}
+
+	empty, err := r.namespaceHasOnlyOperatorResources(ctx, name, cluster.Name)
+	if err != nil {
+		log.Info(
+			"namespace cleanup check failed (best-effort)",
+			"namespace",
+			name,
+			"error",
+			err.Error(),
+		)
+
+		return
+	}
+
+	if !empty {
+		return
+	}
+
+	delErr := r.Delete(ctx, &namespace)
+	if delErr != nil && !apierrors.IsNotFound(delErr) {
+		log.Info(
+			"delete operator-managed namespace (best-effort)",
+			"namespace",
+			name,
+			"error",
+			delErr.Error(),
+		)
+
+		return
+	}
+
+	log.Info("deleted operator-managed namespace", "namespace", name)
+}
+
+// rootCAConfigMapName is the ConfigMap Kubernetes injects into every namespace; it is ignored when
+// deciding whether a managed namespace still holds user data.
+const rootCAConfigMapName = "kube-root-ca.crt"
+
+// namespaceHasOnlyOperatorResources reports whether the namespace contains nothing other than the
+// Cluster being deleted: no other live Cluster resources, no user workloads or batch jobs, and no
+// user-authored ConfigMaps/Secrets. It is conservative — any such resource keeps the namespace —
+// so the operator never deletes a namespace that still holds user data.
+func (r *ClusterReconciler) namespaceHasOnlyOperatorResources(
+	ctx context.Context,
+	namespace, excludeCluster string,
+) (bool, error) {
+	reader := r.reader()
+
+	var clusters v1alpha1.ClusterList
+
+	listErr := reader.List(ctx, &clusters, client.InNamespace(namespace))
+	if listErr != nil {
+		return false, fmt.Errorf("list clusters in %q: %w", namespace, listErr)
+	}
+
+	for index := range clusters.Items {
+		other := &clusters.Items[index]
+		// Ignore the cluster being deleted and any other clusters already terminating.
+		if other.Name == excludeCluster || !other.DeletionTimestamp.IsZero() {
+			continue
+		}
+
+		return false, nil
+	}
+
+	// Keep the namespace if it holds any workload, batch job, networking object, or RBAC object. The
+	// list is bounded; one item is enough to know the namespace is in use. ServiceAccounts and
+	// ConfigMaps/Secrets need filtering (Kubernetes auto-creates some) and are handled separately.
+	presenceLists := []client.ObjectList{
+		&corev1.PodList{},
+		&corev1.ServiceList{},
+		&corev1.PersistentVolumeClaimList{},
+		&appsv1.DeploymentList{},
+		&appsv1.ReplicaSetList{},
+		&appsv1.StatefulSetList{},
+		&appsv1.DaemonSetList{},
+		&batchv1.JobList{},
+		&batchv1.CronJobList{},
+		&networkingv1.IngressList{},
+		&networkingv1.NetworkPolicyList{},
+		&rbacv1.RoleList{},
+		&rbacv1.RoleBindingList{},
+	}
+
+	for _, list := range presenceLists {
+		err := reader.List(ctx, list, client.InNamespace(namespace), client.Limit(1))
+		if err != nil {
+			return false, fmt.Errorf("list %T in %q: %w", list, namespace, err)
+		}
+
+		items, err := apimeta.ExtractList(list)
+		if err != nil {
+			return false, fmt.Errorf("extract %T: %w", list, err)
+		}
+
+		if len(items) > 0 {
+			return false, nil
+		}
+	}
+
+	return r.namespaceHasNoUserConfig(ctx, namespace)
+}
+
+// defaultServiceAccountName is the ServiceAccount Kubernetes provisions in every namespace; it is
+// ignored when deciding whether a managed namespace still holds user resources.
+const defaultServiceAccountName = "default"
+
+// namespaceHasNoUserConfig reports whether the namespace holds no user-authored ConfigMaps,
+// Secrets, or ServiceAccounts, ignoring the objects Kubernetes provisions in every namespace (the
+// kube-root-ca.crt ConfigMap, the default ServiceAccount, and service-account token Secrets). These
+// need filtering rather than a presence check, so they are listed in full (a namespace's set is
+// small).
+func (r *ClusterReconciler) namespaceHasNoUserConfig(
+	ctx context.Context,
+	namespace string,
+) (bool, error) {
+	reader := r.reader()
+
+	var configMaps corev1.ConfigMapList
+
+	cmErr := reader.List(ctx, &configMaps, client.InNamespace(namespace))
+	if cmErr != nil {
+		return false, fmt.Errorf("list configmaps in %q: %w", namespace, cmErr)
+	}
+
+	for index := range configMaps.Items {
+		if configMaps.Items[index].Name != rootCAConfigMapName {
+			return false, nil
+		}
+	}
+
+	var secrets corev1.SecretList
+
+	secretErr := reader.List(ctx, &secrets, client.InNamespace(namespace))
+	if secretErr != nil {
+		return false, fmt.Errorf("list secrets in %q: %w", namespace, secretErr)
+	}
+
+	for index := range secrets.Items {
+		if secrets.Items[index].Type != corev1.SecretTypeServiceAccountToken {
+			return false, nil
+		}
+	}
+
+	var serviceAccounts corev1.ServiceAccountList
+
+	saErr := reader.List(ctx, &serviceAccounts, client.InNamespace(namespace))
+	if saErr != nil {
+		return false, fmt.Errorf("list serviceaccounts in %q: %w", namespace, saErr)
+	}
+
+	for index := range serviceAccounts.Items {
+		if serviceAccounts.Items[index].Name != defaultServiceAccountName {
+			return false, nil
+		}
+	}
+
+	return true, nil
+}
+
+// reader returns the uncached API reader when available (avoids caching every namespace/workload),
+// falling back to the cached client.
+func (r *ClusterReconciler) reader() client.Reader {
+	if r.APIReader != nil {
+		return r.APIReader
+	}
+
+	return r.Client
 }
 
 // fail records a failure on the cluster status and returns a requeue so reconciliation retries.

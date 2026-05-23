@@ -161,6 +161,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /healthz", s.handleHealth)
 	mux.HandleFunc("GET /readyz", s.handleHealth)
 	mux.HandleFunc("GET /api/v1/config", s.handleConfig)
+	mux.HandleFunc("GET /api/v1/meta", s.handleMeta)
 	mux.HandleFunc("GET /api/v1/clusters", s.handleListClusters)
 	mux.HandleFunc("POST /api/v1/clusters", s.handleCreateCluster)
 	mux.HandleFunc("GET /api/v1/clusters/{namespace}/{name}", s.handleGetCluster)
@@ -179,7 +180,26 @@ func (s *Server) Handler() http.Handler {
 		mux.Handle("GET /", spaFileServer(s.StaticFS))
 	}
 
-	return s.authGuard(s.readOnlyGuard(mux))
+	return securityHeaders(s.authGuard(s.readOnlyGuard(mux)))
+}
+
+// securityHeaders applies conservative security headers to every response. The CSP allows only
+// same-origin resources (the SPA's bundled JS/CSS and the theme-init script are same-origin and it
+// makes no cross-origin requests); 'unsafe-inline' is permitted for styles only, which React inline
+// style attributes and the bundled stylesheet require.
+func securityHeaders(next http.Handler) http.Handler {
+	const csp = "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; " +
+		"object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
+
+	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		header := writer.Header()
+		header.Set("X-Content-Type-Options", "nosniff")
+		header.Set("X-Frame-Options", "DENY")
+		header.Set("Referrer-Policy", "no-referrer")
+		header.Set("Content-Security-Policy", csp)
+
+		next.ServeHTTP(writer, request)
+	})
 }
 
 // uiNotBuiltMessage is served when StaticFS is set but the SPA assets were never built (only the
@@ -241,14 +261,22 @@ func (s *Server) authGuard(next http.Handler) http.Handler {
 	})
 }
 
-// isOpenPath reports whether a path is reachable without an authenticated session.
+// isOpenPath reports whether a path is reachable without an authenticated session. Cluster API
+// paths stay guarded; everything else (health, config, meta, the auth flow, and the SPA's static
+// assets/client routes) is open so the login screen and its assets load before a session exists —
+// the SPA then discovers auth state via the (open) /api/v1/config endpoint.
 func isOpenPath(path string) bool {
 	switch path {
-	case "/healthz", "/readyz", "/api/v1/config":
+	case "/healthz", "/readyz", "/api/v1/config", "/api/v1/meta":
 		return true
-	default:
-		return strings.HasPrefix(path, "/api/v1/auth/")
 	}
+
+	if strings.HasPrefix(path, "/api/v1/auth/") {
+		return true
+	}
+
+	// Non-API paths are SPA static assets / client-side routes; serve them unauthenticated.
+	return !strings.HasPrefix(path, "/api/")
 }
 
 // readOnlyGuard rejects mutating cluster requests with 403 when the server is in read-only mode.
