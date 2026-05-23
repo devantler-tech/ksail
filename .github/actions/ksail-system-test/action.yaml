@@ -76,6 +76,12 @@ inputs:
       Only used when test-kubernetes-provider is 'true'.
     required: false
     default: "Vanilla,K3s,VCluster,Talos"
+  kubernetes-provider-cni:
+    description: |
+      Optional CNI to install in each nested Kubernetes-provider cluster (e.g.
+      "Calico"). Only used when test-kubernetes-provider is 'true'.
+    required: false
+    default: ""
 
 runs:
   using: composite
@@ -376,6 +382,7 @@ runs:
       uses: ./.github/actions/ksail-test-kubernetes-provider
       with:
         distributions: ${{ inputs.kubernetes-provider-distributions }}
+        cni: ${{ inputs.kubernetes-provider-cni }}
 
     # ── Phase 5 — Debug ──────────────────────────────────────────────
 

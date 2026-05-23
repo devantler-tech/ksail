@@ -19,6 +19,13 @@ inputs:
     description: Timeout per nested cluster create (seconds)
     required: false
     default: "600"
+  cni:
+    description: |
+      Optional CNI to install in each nested cluster (e.g. "Calico"). When empty,
+      the distribution default is used. Calico exercises the k3k serverArgs path
+      that enables the MutatingAdmissionPolicy / v1beta1 admissionregistration API.
+    required: false
+    default: ""
 
 runs:
   using: composite
@@ -28,6 +35,7 @@ runs:
       env:
         DISTRIBUTIONS: ${{ inputs.distributions }}
         TIMEOUT: ${{ inputs.timeout }}
+        CNI: ${{ inputs.cni }}
       run: |
         set -euo pipefail
         LOG_DIR="/tmp/ksail-system-test-logs/kubernetes-provider"
@@ -56,11 +64,14 @@ runs:
 
           # Create nested cluster
           echo "  ⏳ Creating $DIST cluster..."
+          CREATE_ARGS=(--distribution "$DIST" --provider Kubernetes --name "$NESTED_NAME")
+          if [ -n "$CNI" ]; then
+            CREATE_ARGS+=(--cni "$CNI")
+            echo "  ↳ using CNI: $CNI"
+          fi
           create_ok=false
           if timeout "$TIMEOUT" ksail cluster create \
-            --distribution "$DIST" \
-            --provider Kubernetes \
-            --name "$NESTED_NAME" \
+            "${CREATE_ARGS[@]}" \
             2>&1 | tee "$CREATE_LOG"; then
             create_ok=true
             echo "  ✅ $DIST create succeeded"
