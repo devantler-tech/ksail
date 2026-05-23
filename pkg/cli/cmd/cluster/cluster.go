@@ -7607,7 +7607,14 @@ func computeSpecOnlyDiff(
 
 	// Use component detection when available to get more accurate baseline.
 	componentDetector := buildComponentDetector(cmd, ctx)
-	if componentDetector != nil {
+	if componentDetector == nil {
+		// The detector's clients (Helm/K8s) could not be constructed, so live
+		// cluster state cannot be read at all. Treat this like a detection
+		// failure and mark the baseline Unknown rather than fabricating a
+		// confident diff against defaults. buildComponentDetector already logged
+		// the underlying reason.
+		clusterupdate.MarkComponentsUnknown(currentSpec)
+	} else {
 		detected, err := componentDetector.DetectComponents(
 			cmd.Context(),
 			ctx.ClusterCfg.Spec.Cluster.Distribution,
