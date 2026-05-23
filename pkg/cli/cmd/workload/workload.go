@@ -2088,6 +2088,15 @@ func waitBeforeRetry(
 
 		return fmt.Errorf("retry cancelled: %w", ctx.Err())
 	case <-retryTimer.C:
+		// Prioritize cancellation even when the timer also fired: select picks a
+		// ready case at random, so a context cancelled during the wait can still
+		// land here. Re-checking ctx.Err() keeps cancellation deterministic and
+		// prevents one extra retry attempt.
+		ctxErr = ctx.Err()
+		if ctxErr != nil {
+			return fmt.Errorf("retry cancelled: %w", ctxErr)
+		}
+
 		return nil
 	}
 }
