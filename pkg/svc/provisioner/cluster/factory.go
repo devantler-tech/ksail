@@ -25,6 +25,7 @@ import (
 	kwokprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/kwok"
 	talosprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/talos"
 	vclusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/vcluster"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/registry"
 	k3dv1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
@@ -64,6 +65,11 @@ type DistributionConfig struct {
 	KWOK *KWOKConfig
 	// EKS holds the pre-loaded EKS configuration.
 	EKS *EKSConfig
+	// MirrorSpecs holds resolved registry mirror specifications. For the Kubernetes
+	// provider these are applied inside the DinD environment so nested clusters pull
+	// through authenticated, caching mirrors (the host-level CLI mirror stage cannot
+	// reach the DinD daemon). Empty disables nested mirroring.
+	MirrorSpecs []registry.MirrorSpec
 }
 
 // EKSConfig holds EKS-specific configuration.
@@ -744,6 +750,7 @@ func (f DefaultFactory) createTalosKubernetesProvisioner(
 			ControlPlanes:    int(cluster.Spec.Cluster.ControlPlanes),
 			Workers:          int(cluster.Spec.Cluster.Workers),
 			Persistence:      opts.Persistence,
+			MirrorSpecs:      f.DistributionConfig.MirrorSpecs,
 		},
 	)
 	// jscpd:ignore-end

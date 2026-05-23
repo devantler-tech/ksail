@@ -1299,12 +1299,13 @@ func newProvisionerFactory(ctx *localregistry.Context) clusterprovisioner.Factor
 
 	return clusterprovisioner.DefaultFactory{
 		DistributionConfig: &clusterprovisioner.DistributionConfig{
-			Kind:     ctx.KindConfig,
-			K3d:      ctx.K3dConfig,
-			Talos:    ctx.TalosConfig,
-			VCluster: ctx.VClusterConfig,
-			KWOK:     ctx.KWOKConfig,
-			EKS:      ctx.EKSConfig,
+			Kind:        ctx.KindConfig,
+			K3d:         ctx.K3dConfig,
+			Talos:       ctx.TalosConfig,
+			VCluster:    ctx.VClusterConfig,
+			KWOK:        ctx.KWOKConfig,
+			EKS:         ctx.EKSConfig,
+			MirrorSpecs: ctx.MirrorSpecs,
 		},
 	}
 }
@@ -1316,6 +1317,35 @@ func configureProvisionerFactory(
 	ctx *localregistry.Context,
 ) {
 	deps.Factory = newProvisionerFactory(ctx)
+}
+
+// resolveNestedMirrorSpecs resolves registry mirror specs for the Kubernetes provider
+// and stores them on the context so the nested provisioner can set them up inside the
+// DinD environment. The host-level mirror stages are skipped for this provider
+// (NeedsLocalDocker is false), so nested clusters would otherwise pull images
+// anonymously and hit registry rate limits during boot. No-op for other providers.
+func resolveNestedMirrorSpecs(
+	cmd *cobra.Command,
+	cfgManager *ksailconfigmanager.ConfigManager,
+	ctx *localregistry.Context,
+) error {
+	if ctx.ClusterCfg.Spec.Cluster.Provider != v1alpha1.ProviderKubernetes {
+		return nil
+	}
+
+	specs, err := mirrorregistry.ResolveMirrorSpecs(
+		cmd,
+		cfgManager,
+		ctx.ClusterCfg,
+		ctx.TalosConfig,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to resolve nested mirror specs: %w", err)
+	}
+
+	ctx.MirrorSpecs = specs
+
+	return nil
 }
 
 // maybeImportCachedImages imports cached container images if configured.
@@ -5780,6 +5810,11 @@ func runClusterCreationWorkflow(
 	setupK3dCSI(ctx.ClusterCfg, ctx.K3dConfig)
 	setupK3dLoadBalancer(ctx.ClusterCfg, ctx.K3dConfig)
 	setupVClusterCNI(ctx.ClusterCfg, ctx.VClusterConfig)
+
+	err = resolveNestedMirrorSpecs(cmd, cfgManager, ctx)
+	if err != nil {
+		return err
+	}
 
 	configureProvisionerFactory(&deps, ctx)
 

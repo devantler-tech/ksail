@@ -62,6 +62,18 @@ inputs:
     description: GitHub Container Registry token (for external registry auth)
     required: false
     default: ""
+  dockerhub-user:
+    description: |
+      Docker Hub username. Passed to the Kubernetes-provider phase so nested
+      clusters pull through authenticated mirrors (avoiding upstream rate limits).
+    required: false
+    default: ""
+  dockerhub-token:
+    description: |
+      Docker Hub token/password. Passed to the Kubernetes-provider phase so nested
+      clusters pull through authenticated mirrors (avoiding upstream rate limits).
+    required: false
+    default: ""
   test-kubernetes-provider:
     description: |
       When 'true', runs an additional phase that tests the Kubernetes provider
@@ -376,6 +388,10 @@ runs:
       uses: ./.github/actions/ksail-test-kubernetes-provider
       with:
         distributions: ${{ inputs.kubernetes-provider-distributions }}
+        dockerhub-user: ${{ inputs.dockerhub-user }}
+        dockerhub-token: ${{ inputs.dockerhub-token }}
+        ghcr-user: ${{ inputs.ghcr-user }}
+        ghcr-token: ${{ inputs.ghcr-token }}
 
     # ── Phase 5 — Debug ──────────────────────────────────────────────
 

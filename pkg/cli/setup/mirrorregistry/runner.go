@@ -123,6 +123,19 @@ func RunStage(
 	)
 }
 
+// ResolveMirrorSpecs resolves the registry mirror specs for a cluster by merging
+// flag-specified specs with existing specs from hosts.toml files and Talos config.
+// It is used by the Kubernetes provider create path to seed the nested provisioner's
+// in-DinD mirror setup (the host-level mirror stages are skipped for that provider).
+func ResolveMirrorSpecs(
+	cmd *cobra.Command,
+	cfgManager *ksailconfigmanager.ConfigManager,
+	clusterCfg *v1alpha1.Cluster,
+	talosConfig *talosconfigmanager.Configs,
+) ([]registry.MirrorSpec, error) {
+	return resolveMirrorSpecs(cmd, cfgManager, clusterCfg, talosConfig)
+}
+
 // resolveMirrorSpecs merges flag-specified mirror specs with existing specs
 // from hosts.toml files and Talos config.
 func resolveMirrorSpecs(

@@ -1139,6 +1139,8 @@ jobs:
 
           ghcr-user: ${{ github.actor }}
           ghcr-token: ${{ secrets.GITHUB_TOKEN }}
+          dockerhub-user: ${{ vars.DOCKERHUB_USERNAME }}
+          dockerhub-token: ${{ secrets.DOCKERHUB_TOKEN }}
 
   benchmark:
     name: 📊 Benchmark

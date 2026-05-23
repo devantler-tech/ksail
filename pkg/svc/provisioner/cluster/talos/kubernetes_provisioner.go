@@ -9,8 +9,10 @@ import (
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	kubernetesprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/kubernetes"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/registry"
 	dockerclient "github.com/docker/docker/client"
 	"github.com/siderolabs/talos/pkg/provision"
 	"github.com/siderolabs/talos/pkg/provision/access"
@@ -37,6 +39,7 @@ type KubernetesProvisioner struct {
 	hostContext      string
 	kubeconfigPath   string
 	persistence      v1alpha1.KubernetesPersistence
+	mirrorSpecs      []registry.MirrorSpec
 	portForwards     []*kubernetesprovider.PortForwardSession
 }
 
@@ -67,6 +70,10 @@ type KubernetesProvisionerConfig struct {
 	Workers int
 	// Persistence holds PVC configuration for the DinD Docker data directory.
 	Persistence v1alpha1.KubernetesPersistence
+	// MirrorSpecs configures pull-through registry mirrors set up inside the DinD env
+	// so the nested cluster pulls images through authenticated, caching registries
+	// (avoiding anonymous upstream rate limits). Empty disables nested mirroring.
+	MirrorSpecs []registry.MirrorSpec
 }
 
 // NewKubernetesProvisioner creates a KubernetesProvisioner that wraps Talos with DinD lifecycle.
@@ -87,6 +94,7 @@ func NewKubernetesProvisioner(cfg KubernetesProvisionerConfig) (*KubernetesProvi
 		hostContext:      cfg.HostContext,
 		kubeconfigPath:   kubeconfigPath,
 		persistence:      cfg.Persistence,
+		mirrorSpecs:      cfg.MirrorSpecs,
 	}, nil
 }
 
@@ -191,6 +199,15 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 	err = p.inner.ensureTalosImage(ctx)
 	if err != nil {
 		return fmt.Errorf("ensure Talos image: %w", err)
+	}
+
+	// Set up authenticated pull-through registry mirrors inside DinD so the nested
+	// cluster pulls k8s/control-plane images through them (avoiding anonymous upstream
+	// rate limits that otherwise stall the kubelet). Must run before Bundle() so the
+	// mirror config is baked into the machine config the nodes boot with.
+	err = p.setupDinDMirrors(ctx, dindClient, clusterName)
+	if err != nil {
+		return fmt.Errorf("set up nested registry mirrors: %w", err)
 	}
 
 	configBundle := p.inner.talosConfigs.Bundle()
@@ -435,6 +452,93 @@ func (p *KubernetesProvisioner) discoverMappedPorts(
 	}
 
 	return talosPort, k8sPort, nil
+}
+
+// setupDinDMirrors stands up authenticated pull-through registry mirrors inside the
+// DinD Docker daemon, on the nested cluster's Docker network, and points the nested
+// Talos machine config at them. This mirrors what the Docker provider does on the host
+// for standalone clusters, so the nested cluster's containerd pulls images through
+// caching, credentialed registries instead of anonymously from upstream. No-op when no
+// mirror specs are configured.
+func (p *KubernetesProvisioner) setupDinDMirrors(
+	ctx context.Context,
+	dindClient dockerclient.APIClient,
+	clusterName string,
+) error {
+	if len(p.mirrorSpecs) == 0 {
+		return nil
+	}
+
+	writer := p.inner.logWriter
+
+	backend, err := registry.DefaultBackendFactory(dindClient)
+	if err != nil {
+		return fmt.Errorf("create nested registry backend: %w", err)
+	}
+
+	usedPorts, err := registry.CollectExistingRegistryPorts(ctx, backend)
+	if err != nil {
+		return fmt.Errorf("collect nested registry ports: %w", err)
+	}
+
+	upstreams := registry.BuildUpstreamLookup(p.mirrorSpecs)
+	registryInfos := registry.BuildRegistryInfosFromSpecs(
+		p.mirrorSpecs, upstreams, usedPorts, clusterName,
+	)
+
+	if len(registryInfos) == 0 {
+		return nil
+	}
+
+	// Create the pull-through registry containers inside DinD.
+	err = registry.SetupRegistries(ctx, backend, registryInfos, clusterName, "", writer)
+	if err != nil {
+		return fmt.Errorf("create nested mirror registries: %w", err)
+	}
+
+	// Pre-create the cluster network with the CIDR the Talos SDK uses for its Docker
+	// bridge (not the pod CIDR), so the SDK reuses it (same name/CIDR) when provisioning
+	// the nodes instead of creating a conflicting one.
+	networkCIDR := talosconfigmanager.DefaultNetworkCIDR
+
+	err = registry.EnsureNetwork(ctx, dindClient, clusterName, networkCIDR, writer)
+	if err != nil {
+		return fmt.Errorf("ensure nested cluster network: %w", err)
+	}
+
+	// Connect the registries with static IPs from the high end of the subnet so they
+	// don't claim the low addresses the Talos SDK assigns to nodes (e.g. 10.5.0.2),
+	// while remaining resolvable by container name via Docker DNS.
+	_, err = registry.ConnectRegistriesToNetworkWithStaticIPs(
+		ctx, dindClient, registryInfos, clusterName, networkCIDR, writer,
+	)
+	if err != nil {
+		return fmt.Errorf("connect nested mirror registries to network: %w", err)
+	}
+
+	p.applyMirrorsToTalosConfig(clusterName)
+
+	return nil
+}
+
+// applyMirrorsToTalosConfig points the nested Talos machine config's
+// registries.mirrors at the in-DinD registry containers (by Docker DNS name).
+func (p *KubernetesProvisioner) applyMirrorsToTalosConfig(clusterName string) {
+	mirrors := make([]talosconfigmanager.MirrorRegistry, 0, len(p.mirrorSpecs))
+
+	for _, spec := range p.mirrorSpecs {
+		containerName := registry.BuildRegistryName(clusterName, spec.Host)
+		username, password := spec.ResolveCredentials()
+
+		mirrors = append(mirrors, talosconfigmanager.MirrorRegistry{
+			Host:      spec.Host,
+			Endpoints: []string{"http://" + containerName + ":5000"},
+			Username:  username,
+			Password:  password,
+		})
+	}
+
+	_ = p.inner.talosConfigs.ApplyMirrorRegistries(mirrors)
 }
 
 // setupDinD creates the namespace and DinD pod, then waits for readiness.
