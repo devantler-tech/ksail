@@ -219,6 +219,18 @@ func APIServerFeatureGatesArgs() []string {
 	}
 }
 
+// APIServerFeatureGatesArgsForCNI returns the K3s kube-apiserver args required by the
+// given CNI, or nil when the CNI needs none. Only Calico (v3.30+, whose CRD chart ships
+// MutatingAdmissionPolicy resources) requires the MutatingAdmissionPolicy feature gate /
+// v1beta1 admissionregistration API.
+func APIServerFeatureGatesArgsForCNI(cni v1alpha1.CNI) []string {
+	if cni == v1alpha1.CNICalico {
+		return APIServerFeatureGatesArgs()
+	}
+
+	return nil
+}
+
 // ResolveNetworkName returns the Docker network name for a K3d cluster.
 // K3d uses "k3d-<clustername>" as the network naming convention.
 func ResolveNetworkName(clusterName string) string {

@@ -6,6 +6,7 @@ import (
 	k3dconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/k3d"
 	k3dprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/k3d"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestBuildClusterCR_ServerArgs(t *testing.T) {
@@ -15,7 +16,10 @@ func TestBuildClusterCR_ServerArgs(t *testing.T) {
 		t.Parallel()
 
 		serverArgs := k3dconfigmanager.APIServerFeatureGatesArgs()
-		provisioner := k3dprovisioner.NewK3kProvisionerWithServerArgsForTest(serverArgs)
+		provisioner, err := k3dprovisioner.NewK3kProvisioner(k3dprovisioner.K3kProvisionerConfig{
+			ServerArgs: serverArgs,
+		})
+		require.NoError(t, err)
 
 		cluster := provisioner.BuildClusterCRForTest("test", "k3k-test", "10.0.0.1")
 
@@ -25,7 +29,8 @@ func TestBuildClusterCR_ServerArgs(t *testing.T) {
 	t.Run("omits_server_args_when_none_configured", func(t *testing.T) {
 		t.Parallel()
 
-		provisioner := k3dprovisioner.NewK3kProvisionerWithServerArgsForTest(nil)
+		provisioner, err := k3dprovisioner.NewK3kProvisioner(k3dprovisioner.K3kProvisionerConfig{})
+		require.NoError(t, err)
 
 		cluster := provisioner.BuildClusterCRForTest("test", "k3k-test", "10.0.0.1")
 

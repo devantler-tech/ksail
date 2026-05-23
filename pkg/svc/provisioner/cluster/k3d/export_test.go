@@ -7,12 +7,6 @@ import (
 	k3kv1beta1 "github.com/rancher/k3k/pkg/apis/k3k.io/v1beta1"
 )
 
-// NewK3kProvisionerWithServerArgsForTest builds a minimal K3kProvisioner with only
-// serverArgs set, so buildClusterCR can be exercised without host-cluster clients.
-func NewK3kProvisionerWithServerArgsForTest(serverArgs []string) *K3kProvisioner {
-	return &K3kProvisioner{serverArgs: serverArgs}
-}
-
 // BuildClusterCRForTest exposes buildClusterCR for unit testing.
 func (p *K3kProvisioner) BuildClusterCRForTest(
 	clusterName, namespace, certSAN string,
