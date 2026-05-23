@@ -2,13 +2,16 @@ package talosprovisioner_test
 
 import (
 	"context"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
 	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/detector"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
 	omniprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/omni"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
@@ -17,8 +20,14 @@ import (
 	"github.com/siderolabs/omni/client/api/omni/specs"
 	omnires "github.com/siderolabs/omni/client/pkg/omni/resources/omni"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"k8s.io/client-go/kubernetes/fake"
 )
+
+// errClusterUnreachable simulates a kube-API connection failure for component
+// detection in GetCurrentConfig tests.
+var errClusterUnreachable = errors.New("dial tcp 10.0.0.1:6443: connect: connection refused")
 
 //nolint:funlen // Table-driven test with multiple node topology scenarios is clearer as single function
 func TestCountNodeRoles(t *testing.T) {
@@ -883,4 +892,34 @@ func TestMergePersistedState_ReturnsErrorForCorruptState(t *testing.T) {
 	err = provisioner.MergePersistedStateForTest(spec, clusterName)
 	require.Error(t, err, "corrupt state should return an error")
 	assert.Contains(t, err.Error(), "load persisted cluster state")
+}
+
+// TestGetCurrentConfig_PropagatesDetectionError verifies that an unreachable
+// cluster (component detection fails) produces a hard error instead of silently
+// degrading to a default baseline, which would make `cluster update` propose a
+// full reinstall of healthy components and only fail later mid-apply.
+func TestGetCurrentConfig_PropagatesDetectionError(t *testing.T) {
+	t.Parallel()
+
+	helmClient := helm.NewMockInterface(t)
+	helmClient.On("ListReleases", mock.Anything).
+		Return(nil, errClusterUnreachable)
+	helmClient.On("ReleaseExists", mock.Anything, detector.ReleaseCilium, detector.NamespaceCilium).
+		Return(false, errClusterUnreachable)
+
+	componentDetector := detector.NewComponentDetector(helmClient, fake.NewClientset(), nil)
+
+	provisioner := talosprovisioner.NewProvisioner(nil, nil).
+		WithComponentDetector(componentDetector).
+		WithLogWriter(io.Discard)
+
+	spec, providerSpec, err := provisioner.GetCurrentConfig(
+		context.Background(),
+		"unreachable-cluster-"+t.Name(),
+	)
+
+	require.Error(t, err, "detection failure must be fatal, not silently swallowed")
+	require.ErrorIs(t, err, errClusterUnreachable)
+	assert.Nil(t, spec, "no baseline spec should be returned when the cluster is unreachable")
+	assert.Nil(t, providerSpec)
 }
