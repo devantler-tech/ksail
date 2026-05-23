@@ -85,7 +85,11 @@ serviceAccount:
   annotations: {}
 
 rbac:
+  # create the operator's ClusterRole and ClusterRoleBinding. Set to false to bind your own role.
   create: true
+  # clusterAdmin grants a full wildcard ClusterRole (cluster-admin) instead of the least-privilege
+  # default. Opt in only if a distribution/component set needs resources the default does not cover.
+  clusterAdmin: false
 
 podAnnotations: {}
 nodeSelector: {}
