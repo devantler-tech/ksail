@@ -190,6 +190,57 @@ func TestDefaultCurrentSpec_TalosHetzner(t *testing.T) {
 	assert.Equal(t, v1alpha1.ProviderHetzner, spec.Provider)
 }
 
+// TestMarkComponentsUnknown sets the sentinel on every detector-derived component.
+func TestMarkComponentsUnknown(t *testing.T) {
+	t.Parallel()
+
+	spec := clusterupdate.DefaultCurrentSpec(
+		v1alpha1.DistributionTalos,
+		v1alpha1.ProviderHetzner,
+	)
+
+	clusterupdate.MarkComponentsUnknown(spec)
+
+	sentinel := clusterupdate.UnknownBaselineValue
+	assert.Equal(t, sentinel, string(spec.CNI))
+	assert.Equal(t, sentinel, string(spec.CSI))
+	assert.Equal(t, sentinel, string(spec.MetricsServer))
+	assert.Equal(t, sentinel, string(spec.LoadBalancer))
+	assert.Equal(t, sentinel, string(spec.CertManager))
+	assert.Equal(t, sentinel, string(spec.PolicyEngine))
+	assert.Equal(t, sentinel, string(spec.GitOpsEngine))
+
+	// Distribution and provider must remain known.
+	assert.Equal(t, v1alpha1.DistributionTalos, spec.Distribution)
+	assert.Equal(t, v1alpha1.ProviderHetzner, spec.Provider)
+}
+
+// TestMarkComponentsUnknown_NilIsSafe ensures the helper tolerates a nil spec.
+func TestMarkComponentsUnknown_NilIsSafe(t *testing.T) {
+	t.Parallel()
+
+	assert.NotPanics(t, func() { clusterupdate.MarkComponentsUnknown(nil) })
+}
+
+// TestHasUnknownBaseline reports unknown-baseline entries.
+func TestHasUnknownBaseline(t *testing.T) {
+	t.Parallel()
+
+	result := clusterupdate.NewEmptyUpdateResult()
+	assert.False(t, result.HasUnknownBaseline())
+
+	result.UnknownBaseline = append(result.UnknownBaseline, clusterupdate.Change{
+		Field:    "cluster.cni",
+		OldValue: clusterupdate.UnknownBaselineValue,
+		NewValue: "Cilium",
+		Category: clusterupdate.ChangeCategoryUnknown,
+	})
+
+	assert.True(t, result.HasUnknownBaseline())
+	// Unknown entries are informational and never counted as applicable changes.
+	assert.Zero(t, result.TotalChanges())
+}
+
 // TestChangeCategory_String tests the string representation of change categories.
 func TestChangeCategory_String(t *testing.T) {
 	t.Parallel()
@@ -203,7 +254,8 @@ func TestChangeCategory_String(t *testing.T) {
 		{"reboot-required", clusterupdate.ChangeCategoryRebootRequired, "reboot-required"},
 		{"recreate-required", clusterupdate.ChangeCategoryRecreateRequired, "recreate-required"},
 		{"wipe-required", clusterupdate.ChangeCategoryWipeRequired, "wipe-required"},
-		{"unknown", clusterupdate.ChangeCategory(999), "unknown"},
+		{"unknown-category", clusterupdate.ChangeCategoryUnknown, "unknown"},
+		{"out-of-range", clusterupdate.ChangeCategory(999), "unknown"},
 	}
 
 	for _, testCase := range tests {

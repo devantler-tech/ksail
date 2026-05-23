@@ -1526,3 +1526,97 @@ func TestEngine_TalosVersion_ChangeWhenOldEmptyNewSet(t *testing.T) {
 		clusterupdate.ChangeCategoryInPlace,
 	)
 }
+
+// findChange returns the first change with the given field, or nil.
+func findChange(changes []clusterupdate.Change, field string) *clusterupdate.Change {
+	for i := range changes {
+		if changes[i].Field == field {
+			return &changes[i]
+		}
+	}
+
+	return nil
+}
+
+func TestEngine_UnknownBaseline_SurfacesUnknownInsteadOfInPlace(t *testing.T) {
+	t.Parallel()
+
+	// Baseline could not be read from the cluster: every detector-derived
+	// component field is the Unknown sentinel.
+	old := clusterupdate.DefaultCurrentSpec(v1alpha1.DistributionTalos, v1alpha1.ProviderDocker)
+	clusterupdate.MarkComponentsUnknown(old)
+
+	// Desired config requests several active components, and leaves the load
+	// balancer and CSI at their defaults.
+	newer := clusterupdate.DefaultCurrentSpec(v1alpha1.DistributionTalos, v1alpha1.ProviderDocker)
+	newer.CNI = v1alpha1.CNICilium
+	newer.MetricsServer = v1alpha1.MetricsServerEnabled
+	newer.CertManager = v1alpha1.CertManagerEnabled
+	newer.PolicyEngine = v1alpha1.PolicyEngineKyverno
+	newer.GitOpsEngine = v1alpha1.GitOpsEngineFlux
+
+	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderDocker)
+	result := engine.ComputeDiff(old, newer, nil, nil)
+
+	// No fabricated in-place / reboot / recreate changes from the unknown baseline.
+	require.Zero(t, result.TotalChanges(),
+		"unknown baseline must not produce applicable changes")
+	require.True(t, result.HasUnknownBaseline())
+
+	wantFields := []string{
+		"cluster.cni",
+		"cluster.metricsServer",
+		"cluster.certManager",
+		"cluster.policyEngine",
+		"cluster.gitOpsEngine",
+	}
+	require.Len(t, result.UnknownBaseline, len(wantFields))
+
+	for _, field := range wantFields {
+		change := findChange(result.UnknownBaseline, field)
+		require.NotNilf(t, change, "expected unknown-baseline entry for %s", field)
+		require.Equal(t, clusterupdate.UnknownBaselineValue, change.OldValue)
+		require.Equal(t, clusterupdate.ChangeCategoryUnknown, change.Category)
+		require.NotEqual(t, clusterupdate.UnknownBaselineValue, change.NewValue)
+	}
+
+	// Components left at their defaults must not be reported, even as Unknown.
+	require.Nil(t, findChange(result.UnknownBaseline, "cluster.loadBalancer"))
+	require.Nil(t, findChange(result.UnknownBaseline, "cluster.csi"))
+}
+
+func TestEngine_UnknownBaseline_NoNoiseWhenDesiredMatchesDefaults(t *testing.T) {
+	t.Parallel()
+
+	old := clusterupdate.DefaultCurrentSpec(v1alpha1.DistributionTalos, v1alpha1.ProviderDocker)
+	clusterupdate.MarkComponentsUnknown(old)
+
+	// Desired config leaves every component at its default.
+	newer := clusterupdate.DefaultCurrentSpec(v1alpha1.DistributionTalos, v1alpha1.ProviderDocker)
+
+	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderDocker)
+	result := engine.ComputeDiff(old, newer, nil, nil)
+
+	require.Zero(t, result.TotalChanges())
+	require.False(t, result.HasUnknownBaseline(),
+		"defaults on both sides must not produce Unknown rows")
+}
+
+func TestEngine_UnknownBaseline_SkipsNodeAutoscalerDiff(t *testing.T) {
+	t.Parallel()
+
+	old := clusterupdate.DefaultCurrentSpec(v1alpha1.DistributionTalos, v1alpha1.ProviderDocker)
+	clusterupdate.MarkComponentsUnknown(old)
+
+	newer := clusterupdate.DefaultCurrentSpec(v1alpha1.DistributionTalos, v1alpha1.ProviderDocker)
+	newer.Autoscaler.Node.Enabled = true
+	newer.Autoscaler.Node.MaxNodesTotal = 5
+
+	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderDocker)
+	result := engine.ComputeDiff(old, newer, nil, nil)
+
+	// The node autoscaler is detector-derived; an unknown baseline must not
+	// fabricate an in-place "enable autoscaler" change.
+	require.Nil(t, findChange(result.InPlaceChanges, "cluster.autoscaler.node.enabled"))
+	require.Nil(t, findChange(result.UnknownBaseline, "cluster.autoscaler.node.enabled"))
+}
