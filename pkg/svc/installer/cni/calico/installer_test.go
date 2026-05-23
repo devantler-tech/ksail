@@ -216,6 +216,9 @@ func TestInstaller_Uninstall_Success(t *testing.T) {
 	client.EXPECT().
 		UninstallRelease(mock.Anything, "calico", "tigera-operator").
 		Return(nil)
+	client.EXPECT().
+		UninstallRelease(mock.Anything, "calico-crds", "tigera-operator").
+		Return(nil)
 
 	err := installer.Uninstall(context.Background())
 

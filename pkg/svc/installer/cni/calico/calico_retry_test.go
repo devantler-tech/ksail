@@ -49,10 +49,10 @@ func TestInstaller_Install_TalosDistribution_Values(t *testing.T) {
 }
 
 // TestInstaller_Install_APIDiscoveryErrorRetry verifies that an API-discovery
-// error (the tigera-operator CRDs were not yet established when the chart's
-// operator CRs were validated) is retried, and the install succeeds once the
-// re-run re-applies the CRDs and discovery refreshes. This must hold for
-// non-K3s distributions too, so Vanilla is used here.
+// error on the operator install (the operator.tigera.io CRDs installed by the
+// CRD chart are not yet visible to Helm's cached discovery) is retried, and the
+// install succeeds once discovery is refreshed. This must hold for non-K3s
+// distributions too, so Vanilla is used here.
 func TestInstaller_Install_APIDiscoveryErrorRetry(t *testing.T) {
 	t.Parallel()
 

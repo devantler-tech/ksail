@@ -124,6 +124,15 @@ func (c *Installer) Uninstall(ctx context.Context) error {
 		return fmt.Errorf("failed to uninstall calico release: %w", err)
 	}
 
+	// Since Calico v3.30 the CRDs are managed by a separate release (see
+	// crdChartSpec). Remove it after the operator release so uninstall is
+	// symmetric with install; this deletes the operator.tigera.io and
+	// projectcalico.org CRDs and any remaining custom resources of those kinds.
+	err = client.UninstallRelease(ctx, "calico-crds", "tigera-operator")
+	if err != nil {
+		return fmt.Errorf("failed to uninstall calico CRDs release: %w", err)
+	}
+
 	return nil
 }
 
@@ -270,12 +279,12 @@ func (c *Installer) runInstallWithRetry(
 // shouldRetryInstall reports whether a failed Calico install attempt should be
 // retried with backoff.
 //
-// The tigera-operator chart validates its operator custom resources against the
-// cluster's API discovery during install. On a freshly created cluster the
-// operator CRDs may not be established yet, so the whole install is rejected
-// with an API-discovery error before any resource is applied — there is nothing
-// to wait for, but simply re-running the install re-applies the CRDs and, once
-// discovery has refreshed, the CRs validate. This transient race is retried for
+// The operator chart validates its Installation/APIServer custom resources
+// against the cluster's API discovery during install. Right after the CRD chart
+// installs the operator.tigera.io CRDs, Helm's cached discovery may not yet list
+// them, so the operator install is rejected with an API-discovery error. The
+// retry succeeds once the CRDs are established and Helm's discovery cache has
+// been refreshed (see runInstallWithRetry); this transient race is retried for
 // every distribution.
 //
 // K3s additionally emits transient API-server-unavailable errors during its
@@ -301,9 +310,9 @@ func (c *Installer) attemptCalicoInstall(
 	installCtx, cancel := context.WithTimeout(ctx, c.GetTimeout()+helm.ContextTimeoutBuffer)
 	defer cancel()
 
-	err := helm.InstallChartWithRetry(installCtx, client, spec, "calico")
+	err := helm.InstallChartWithRetry(installCtx, client, spec, spec.ReleaseName)
 	if err != nil {
-		return fmt.Errorf("helm install calico: %w", err)
+		return fmt.Errorf("helm install %s: %w", spec.ReleaseName, err)
 	}
 
 	return nil
