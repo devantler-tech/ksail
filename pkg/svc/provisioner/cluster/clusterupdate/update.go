@@ -19,6 +19,14 @@ var ErrWipeRequired = errors.New("partition wipe required")
 // GetCurrentConfig to prevent false-positive diffs.
 const DefaultLocalRegistryAddress = "localhost:5050"
 
+// UnknownBaselineValue is the sentinel value assigned to a component field whose
+// current cluster state could not be read (e.g. the Kubernetes API was
+// unreachable). It is deliberately not a valid value for any component enum, so
+// it never collides with a genuine configuration value. The diff engine detects
+// this sentinel and surfaces the field as an "Unknown" baseline instead of
+// fabricating a confident diff against the default value. See MarkComponentsUnknown.
+const UnknownBaselineValue = "Unknown"
+
 // ApplyGitOpsLocalRegistryDefault mirrors the config system's GitOps-aware
 // default: when a GitOps engine is detected but no local registry is configured,
 // default to "localhost:5050". This prevents false-positive diffs when the update
@@ -57,6 +65,25 @@ func DefaultCurrentSpec(
 	}
 }
 
+// MarkComponentsUnknown sets every component field that the detector probes from
+// the live cluster to the UnknownBaselineValue sentinel. Callers invoke this when
+// component detection fails (e.g. the Kubernetes API is unreachable) so that the
+// diff engine surfaces these fields as "Unknown" rather than fabricating a
+// confident diff from default values for components that may already be installed.
+func MarkComponentsUnknown(spec *v1alpha1.ClusterSpec) {
+	if spec == nil {
+		return
+	}
+
+	spec.CNI = v1alpha1.CNI(UnknownBaselineValue)
+	spec.CSI = v1alpha1.CSI(UnknownBaselineValue)
+	spec.MetricsServer = v1alpha1.MetricsServer(UnknownBaselineValue)
+	spec.LoadBalancer = v1alpha1.LoadBalancer(UnknownBaselineValue)
+	spec.CertManager = v1alpha1.CertManager(UnknownBaselineValue)
+	spec.PolicyEngine = v1alpha1.PolicyEngine(UnknownBaselineValue)
+	spec.GitOpsEngine = v1alpha1.GitOpsEngine(UnknownBaselineValue)
+}
+
 // ChangeCategory classifies the impact of a configuration change.
 type ChangeCategory int
 
@@ -77,6 +104,13 @@ const (
 	// Examples: disk encryption migration (LUKS2), changes requiring formatted partitions.
 	// These changes are more disruptive than reboots but don't require full cluster recreation.
 	ChangeCategoryWipeRequired
+
+	// ChangeCategoryUnknown indicates the current value of a field could not be
+	// read from the cluster, so its baseline is unknown. Such entries are
+	// informational only: they are displayed in the change summary but never
+	// drive an in-place apply or a cluster recreation, because the tool cannot
+	// know whether a real change is required.
+	ChangeCategoryUnknown
 )
 
 // String returns a human-readable name for the change category.
@@ -90,6 +124,8 @@ func (c ChangeCategory) String() string {
 		return "recreate-required"
 	case ChangeCategoryWipeRequired:
 		return "wipe-required"
+	case ChangeCategoryUnknown:
+		return "unknown"
 	default:
 		return "unknown"
 	}
@@ -119,6 +155,9 @@ type UpdateResult struct {
 	RecreateRequired []Change
 	// WipeRequired lists changes that require partition wiping.
 	WipeRequired []Change
+	// UnknownBaseline lists fields whose current value could not be read from the
+	// cluster. These are informational only and never drive an apply or recreate.
+	UnknownBaseline []Change
 	// AppliedChanges lists changes that were successfully applied.
 	AppliedChanges []Change
 	// FailedChanges lists changes that failed to apply.
@@ -138,6 +177,7 @@ func NewEmptyUpdateResult() *UpdateResult {
 		RebootRequired:   make([]Change, 0),
 		RecreateRequired: make([]Change, 0),
 		WipeRequired:     make([]Change, 0),
+		UnknownBaseline:  make([]Change, 0),
 		AppliedChanges:   make([]Change, 0),
 		FailedChanges:    make([]Change, 0),
 	}
@@ -160,6 +200,7 @@ func NewUpdateResultFromDiff(diff *UpdateResult) *UpdateResult {
 		RebootRequired:   diff.RebootRequired,
 		RecreateRequired: diff.RecreateRequired,
 		WipeRequired:     diff.WipeRequired,
+		UnknownBaseline:  diff.UnknownBaseline,
 		AppliedChanges:   make([]Change, 0),
 		FailedChanges:    make([]Change, 0),
 	}
@@ -183,6 +224,12 @@ func (r *UpdateResult) HasRecreateRequired() bool {
 // HasWipeRequired returns true if there are changes requiring partition wipes.
 func (r *UpdateResult) HasWipeRequired() bool {
 	return len(r.WipeRequired) > 0
+}
+
+// HasUnknownBaseline returns true if any field's current value could not be read
+// from the cluster. Such entries are informational and never drive an apply.
+func (r *UpdateResult) HasUnknownBaseline() bool {
+	return len(r.UnknownBaseline) > 0
 }
 
 // NeedsUserConfirmation returns true if any changes require user confirmation.

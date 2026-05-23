@@ -142,8 +142,10 @@ const ExportOutputFormatJSON = outputFormatJSON
 const ExportOutputFormatText = outputFormatText
 
 // ExportFormatDiffTable exports formatDiffTable for benchmarking.
-func ExportFormatDiffTable(diff *clusterupdate.UpdateResult, totalChanges int) string {
-	return formatDiffTable(diff, totalChanges)
+// The trailing int is vestigial (formatDiffTable now derives counts from diff)
+// and is retained so existing benchmark call sites compile unchanged.
+func ExportFormatDiffTable(diff *clusterupdate.UpdateResult, _ int) string {
+	return formatDiffTable(diff)
 }
 
 // ExportStripParenthetical exports stripParenthetical for testing.

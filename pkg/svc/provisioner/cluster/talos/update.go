@@ -853,6 +853,11 @@ func (p *Provisioner) GetCurrentConfig(
 			spec.PolicyEngine = detected.PolicyEngine
 			spec.GitOpsEngine = detected.GitOpsEngine
 			spec.Autoscaler.Node = detected.Autoscaler.Node
+		} else {
+			// Component detection failed (e.g. the Kubernetes API is unreachable).
+			// Mark these fields unknown so the diff surfaces them as "Unknown"
+			// rather than a confident diff against the default baseline.
+			clusterupdate.MarkComponentsUnknown(spec)
 		}
 	}
 

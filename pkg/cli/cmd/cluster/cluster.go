@@ -6708,6 +6708,7 @@ type DiffJSONOutput struct {
 	RebootRequired       []ChangeJSON `json:"rebootRequired"`
 	RecreateRequired     []ChangeJSON `json:"recreateRequired"`
 	WipeRequired         []ChangeJSON `json:"wipeRequired"`
+	UnknownBaseline      []ChangeJSON `json:"unknownBaseline"`
 	RequiresConfirmation bool         `json:"requiresConfirmation"`
 }
 
@@ -6768,6 +6769,7 @@ func diffToJSON(diff *clusterupdate.UpdateResult) DiffJSONOutput {
 		RebootRequired:       convertChanges(diff.RebootRequired),
 		RecreateRequired:     convertChanges(diff.RecreateRequired),
 		WipeRequired:         convertChanges(diff.WipeRequired),
+		UnknownBaseline:      convertChanges(diff.UnknownBaseline),
 		RequiresConfirmation: diff.NeedsUserConfirmation(),
 	}
 }
@@ -6929,7 +6931,13 @@ func handleUpdateRunE(
 		// before falling back to recreation. No-op when nothing changed.
 		specDiff := computeSpecOnlyDiff(cmd, ctx)
 		if specDiff.TotalChanges() == 0 {
-			notify.Infof(cmd.OutOrStdout(), "No changes detected")
+			// Surface any unknown-baseline components so the user sees that the
+			// current state could not be read, then exit without recreating.
+			if specDiff.HasUnknownBaseline() {
+				displayChangesSummary(cmd, specDiff)
+			}
+
+			reportNoApplicableChanges(cmd, specDiff)
 
 			return nil
 		}
@@ -7608,9 +7616,12 @@ func computeSpecOnlyDiff(
 		if err != nil {
 			notify.Warningf(
 				cmd.ErrOrStderr(),
-				"Cannot detect live cluster components (drift detection may be incomplete): %v",
+				"Cannot detect live cluster components; baseline shown as Unknown: %v",
 				err,
 			)
+			// Mark detector-derived fields unknown so the diff surfaces them as
+			// "Unknown" rather than a confident diff against default values.
+			clusterupdate.MarkComponentsUnknown(currentSpec)
 		} else {
 			currentSpec.CNI = detected.CNI
 			currentSpec.CSI = detected.CSI
@@ -7785,7 +7796,7 @@ func applyOrReportChanges(
 	}
 
 	if !diff.HasInPlaceChanges() && !diff.HasRebootRequired() {
-		notify.Infof(cmd.OutOrStdout(), "No changes detected")
+		reportNoApplicableChanges(cmd, diff)
 
 		return nil
 	}
@@ -7823,14 +7834,35 @@ func applyOrReportChanges(
 	)
 }
 
+// reportNoApplicableChanges prints the appropriate message when there are no
+// changes to apply. It distinguishes a genuinely clean cluster from one whose
+// current state could not be read (unknown baseline), so the latter is not
+// reported as "No changes detected". Any unknown-baseline table is rendered by
+// the caller via displayChangesSummary before this is invoked.
+func reportNoApplicableChanges(cmd *cobra.Command, diff *clusterupdate.UpdateResult) {
+	if diff != nil && diff.HasUnknownBaseline() {
+		notify.Warningf(
+			cmd.ErrOrStderr(),
+			"Current cluster state could not be read for %d component(s); shown as "+
+				"Unknown. No changes applied.",
+			len(diff.UnknownBaseline),
+		)
+
+		return
+	}
+
+	notify.Infof(cmd.OutOrStdout(), "No changes detected")
+}
+
 // reportDryRun prints a summary for dry-run mode and confirms no changes were applied.
 // When --output json is set, emits machine-readable JSON only for the empty-diff case
-// (displayChangesSummary already emits JSON when TotalChanges() > 0).
+// (displayChangesSummary already emits JSON when there is anything to report).
 func reportDryRun(cmd *cobra.Command, diff *clusterupdate.UpdateResult) error {
 	if getOutputFormat(cmd) == outputFormatJSON {
-		// displayChangesSummary already emitted JSON when TotalChanges() > 0.
-		// Only emit JSON here for the empty-diff case so CI/MCP still get a result.
-		if diff != nil && diff.TotalChanges() == 0 {
+		// displayChangesSummary already emitted JSON when there were changes or an
+		// unknown baseline. Only emit JSON here for the genuinely empty case so
+		// CI/MCP still get a result.
+		if diff != nil && diff.TotalChanges() == 0 && !diff.HasUnknownBaseline() {
 			emitDiffJSON(cmd, diff)
 		}
 
@@ -7838,7 +7870,7 @@ func reportDryRun(cmd *cobra.Command, diff *clusterupdate.UpdateResult) error {
 	}
 
 	if diff != nil && diff.TotalChanges() == 0 {
-		notify.Infof(cmd.OutOrStdout(), "No changes detected")
+		reportNoApplicableChanges(cmd, diff)
 
 		return nil
 	}
@@ -7949,9 +7981,7 @@ func applyInPlaceChanges(
 // Fields with no change are omitted.
 // When --output json is set, emits machine-readable JSON instead of the table.
 func displayChangesSummary(cmd *cobra.Command, diff *clusterupdate.UpdateResult) {
-	totalChanges := diff.TotalChanges()
-
-	if totalChanges == 0 {
+	if diff.TotalChanges() == 0 && !diff.HasUnknownBaseline() {
 		return
 	}
 
@@ -7965,7 +7995,7 @@ func displayChangesSummary(cmd *cobra.Command, diff *clusterupdate.UpdateResult)
 
 	notify.Infof(
 		cmd.OutOrStdout(),
-		formatDiffTable(diff, totalChanges),
+		formatDiffTable(diff),
 	)
 }
 
@@ -7989,6 +8019,8 @@ func categoryIcon(cat clusterupdate.ChangeCategory) string {
 		return "🟡"
 	case clusterupdate.ChangeCategoryInPlace:
 		return "🟢"
+	case clusterupdate.ChangeCategoryUnknown:
+		return "⚪"
 	default:
 		return "⚪"
 	}
@@ -7996,12 +8028,13 @@ func categoryIcon(cat clusterupdate.ChangeCategory) string {
 
 // formatDiffTable builds the formatted diff table string.
 // The table has four columns: Component, Before, After, Impact.
-// Rows are ordered by severity: 🔴 recreate → ⚠️ wipe → 🟡 reboot → 🟢 in-place.
+// Rows are ordered by severity: 🔴 recreate → ⚠️ wipe → 🟡 reboot → 🟢 in-place → ⚪ unknown.
 func formatDiffTable(
 	diff *clusterupdate.UpdateResult,
-	totalChanges int,
 ) string {
-	rows := collectDiffRows(diff, totalChanges)
+	realChanges := diff.TotalChanges()
+	unknownCount := len(diff.UnknownBaseline)
+	rows := collectDiffRows(diff, realChanges+unknownCount)
 
 	// Column headers
 	const (
@@ -8023,9 +8056,9 @@ func formatDiffTable(
 
 	const perRowPadding = 16 // spacing + emoji + newline
 
-	block.Grow((totalChanges + tableOverheadRows) * (colW + colB + colA + colI + perRowPadding))
+	block.Grow((len(rows) + tableOverheadRows) * (colW + colB + colA + colI + perRowPadding))
 
-	writeSummaryLine(&block, totalChanges)
+	writeSummaryLine(&block, realChanges, unknownCount)
 	writeHeaderRow(&block, colW, colB, colA, hdrComponent, hdrBefore, hdrAfter, hdrImpact)
 	writeSeparatorRow(&block, colW, colB, colA, colI)
 	writeDataRows(&block, rows, colW, colB, colA)
@@ -8046,16 +8079,17 @@ func appendChangesAsRows(rows []diffRow, changes []clusterupdate.Change) []diffR
 }
 
 // collectDiffRows builds an ordered list of diff rows.
-// Order: 🔴 recreate-required → ⚠️ wipe-required → 🟡 reboot-required → 🟢 in-place.
+// Order: 🔴 recreate-required → ⚠️ wipe-required → 🟡 reboot-required → 🟢 in-place → ⚪ unknown.
 func collectDiffRows(
 	diff *clusterupdate.UpdateResult,
-	totalChanges int,
+	totalRows int,
 ) []diffRow {
-	rows := make([]diffRow, 0, totalChanges)
+	rows := make([]diffRow, 0, totalRows)
 	rows = appendChangesAsRows(rows, diff.RecreateRequired)
 	rows = appendChangesAsRows(rows, diff.WipeRequired)
 	rows = appendChangesAsRows(rows, diff.RebootRequired)
 	rows = appendChangesAsRows(rows, diff.InPlaceChanges)
+	rows = appendChangesAsRows(rows, diff.UnknownBaseline)
 
 	return rows
 }
@@ -8091,8 +8125,20 @@ func computeColumnWidths(
 	return widthComp, widthBefore, widthAfter, widthImpact
 }
 
-func writeSummaryLine(block *strings.Builder, totalChanges int) {
-	fmt.Fprintf(block, "Detected %d configuration changes:\n\n", totalChanges)
+func writeSummaryLine(block *strings.Builder, realChanges, unknownCount int) {
+	switch {
+	case unknownCount > 0 && realChanges > 0:
+		fmt.Fprintf(block,
+			"Detected %d configuration change(s); %d component(s) have an unknown "+
+				"baseline (current cluster state could not be read):\n\n",
+			realChanges, unknownCount)
+	case unknownCount > 0:
+		fmt.Fprintf(block,
+			"Current cluster state could not be read; %d component(s) shown as Unknown:\n\n",
+			unknownCount)
+	default:
+		fmt.Fprintf(block, "Detected %d configuration changes:\n\n", realChanges)
+	}
 }
 
 // headerIndent is the number of leading spaces in the header and separator rows.
@@ -8417,7 +8463,7 @@ func handleDiffRunE(
 	// This adds distribution-specific changes (e.g., node counts, Talos config).
 	mergeProvisionerDiff(cmd, ctx, diff)
 
-	if diff.TotalChanges() == 0 {
+	if diff.TotalChanges() == 0 && !diff.HasUnknownBaseline() {
 		if format == outputFormatJSON {
 			emitDiffJSON(cmd, diff)
 		} else {
@@ -8430,7 +8476,9 @@ func handleDiffRunE(
 	displayDiffResult(cmd, diff, format)
 
 	if exitCodeFlag {
-		return &DriftExitError{Changes: diff.TotalChanges()}
+		// An unknown baseline is treated as drift: the tool cannot confirm the
+		// cluster matches the desired configuration.
+		return &DriftExitError{Changes: diff.TotalChanges() + len(diff.UnknownBaseline)}
 	}
 
 	return nil
@@ -8452,7 +8500,7 @@ func displayDiffResult(
 
 	notify.Infof(
 		cmd.OutOrStdout(),
-		formatDiffTable(diff, diff.TotalChanges()),
+		formatDiffTable(diff),
 	)
 }
 
