@@ -113,6 +113,12 @@ func bindOperatorFlags(cmd *cobra.Command, opts *operatorsvc.Options, oidc *oidc
 		false,
 		"Run the REST API in read-only mode, rejecting all mutating requests",
 	)
+	cmd.Flags().BoolVar(
+		&opts.DevLogging,
+		"dev-logging",
+		false,
+		"Emit human-readable console logs instead of structured JSON (for local development)",
+	)
 	cmd.Flags().StringVar(
 		&oidc.issuerURL,
 		"oidc-issuer-url",

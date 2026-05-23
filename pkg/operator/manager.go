@@ -9,10 +9,12 @@ import (
 	"github.com/devantler-tech/ksail/v7/internal/controller"
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/operator/api"
+	"github.com/devantler-tech/ksail/v7/pkg/webui"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 )
 
@@ -35,11 +37,17 @@ type Options struct {
 	LeaderElection bool
 	// LeaderElectionID overrides the leader election lease name (optional).
 	LeaderElectionID string
+	// DevLogging selects human-readable console logs instead of production JSON logs.
+	DevLogging bool
 }
 
 // Run builds the controller-runtime manager, registers the Cluster reconciler, and blocks
 // until the supplied context is cancelled (e.g. on SIGTERM).
 func Run(ctx context.Context, opts Options) error {
+	// Configure controller-runtime's global logger. Without this, controller-runtime discards all
+	// logs (reconcile events, API server, errors) and prints a "SetLogger was never called" warning.
+	ctrl.SetLogger(zap.New(zap.UseDevMode(opts.DevLogging)))
+
 	scheme, err := newScheme()
 	if err != nil {
 		return err
@@ -87,9 +95,12 @@ func managerOptions(scheme *runtime.Scheme, opts Options) ctrl.Options {
 // setupManager registers the reconciler, health probes, and (optionally) the REST API server.
 func setupManager(mgr ctrl.Manager, opts Options) error {
 	reconciler := &controller.ClusterReconciler{
-		Client:         mgr.GetClient(),
-		Scheme:         mgr.GetScheme(),
-		NewProvisioner: BuildProvisioner,
+		Client:            mgr.GetClient(),
+		Scheme:            mgr.GetScheme(),
+		NewProvisioner:    BuildProvisioner,
+		ObserveStatus:     ObserveVClusterStatus,
+		InstallComponents: InstallComponents,
+		APIReader:         mgr.GetAPIReader(),
 	}
 
 	reconcilerErr := reconciler.SetupWithManager(mgr)
@@ -108,12 +119,19 @@ func setupManager(mgr ctrl.Manager, opts Options) error {
 	}
 
 	if opts.APIBindAddress != "" {
-		apiErr := mgr.Add(&api.Server{
+		server := &api.Server{
 			Service:     api.NewCRClusterService(mgr.GetClient()),
 			ReadOnly:    opts.ReadOnly,
 			BindAddress: opts.APIBindAddress,
 			OIDC:        opts.OIDC,
-		})
+		}
+
+		// Serve the dashboard from the operator itself (same origin as the API, no reverse proxy).
+		// webui.Assets always returns a filesystem; when the SPA was not built into pkg/webui/dist,
+		// it holds only a placeholder and the server renders a "UI not built" page.
+		server.StaticFS = webui.Assets()
+
+		apiErr := mgr.Add(server)
 		if apiErr != nil {
 			return fmt.Errorf("add API server: %w", apiErr)
 		}

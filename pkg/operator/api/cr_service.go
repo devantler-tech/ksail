@@ -5,6 +5,9 @@ import (
 	"fmt"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -70,6 +73,13 @@ func (s *crClusterService) Create(
 		sanitized.Namespace = defaultNamespace
 	}
 
+	// A Cluster cannot be created in a namespace that does not exist, so create it on demand. The
+	// namespace is labelled operator-managed so the reconciler can clean it up on deletion.
+	nsErr := s.ensureNamespace(ctx, sanitized.Namespace)
+	if nsErr != nil {
+		return nil, nsErr
+	}
+
 	err := s.client.Create(ctx, sanitized)
 	if err != nil {
 		return nil, fmt.Errorf("create cluster: %w", err)
@@ -113,6 +123,36 @@ func (s *crClusterService) Delete(ctx context.Context, namespace, name string) e
 	err := s.client.Delete(ctx, cluster)
 	if err != nil {
 		return fmt.Errorf("delete cluster: %w", err)
+	}
+
+	return nil
+}
+
+// ensureNamespace creates the namespace on demand, labelled operator-managed so the reconciler can
+// clean it up on cluster deletion. An existing namespace (operator-managed or not) is left as-is.
+func (s *crClusterService) ensureNamespace(ctx context.Context, name string) error {
+	var existing corev1.Namespace
+
+	getErr := s.client.Get(ctx, types.NamespacedName{Name: name}, &existing)
+	if getErr == nil {
+		return nil
+	}
+
+	if !apierrors.IsNotFound(getErr) {
+		return fmt.Errorf("check namespace %q: %w", name, getErr)
+	}
+
+	namespace := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   name,
+			Labels: map[string]string{v1alpha1.ManagedNamespaceLabel: "true"},
+		},
+	}
+
+	createErr := s.client.Create(ctx, namespace)
+	// Tolerate a concurrent creation (another request created it first).
+	if createErr != nil && !apierrors.IsAlreadyExists(createErr) {
+		return fmt.Errorf("create namespace %q: %w", name, createErr)
 	}
 
 	return nil

@@ -10,6 +10,10 @@ const (
 	ConditionProgressing = "Progressing"
 	// ConditionDegraded is True when reconciliation encountered an error.
 	ConditionDegraded = "Degraded"
+	// ConditionComponentsReady is True when the cluster's components (CNI, CSI, metrics-server,
+	// cert-manager, load-balancer, policy-engine, GitOps) are installed and reconciled. It is
+	// independent of ConditionReady (which reports that the cluster itself is provisioned).
+	ConditionComponentsReady = "ComponentsReady"
 )
 
 // ClusterStatus describes the observed state of a Cluster as reconciled by the KSail operator.
