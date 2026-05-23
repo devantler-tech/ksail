@@ -507,3 +507,33 @@ func TestResolveNetworkName(t *testing.T) {
 		})
 	}
 }
+
+func TestAPIServerFeatureGatesArgs(t *testing.T) {
+	t.Parallel()
+
+	args := k3d.APIServerFeatureGatesArgs()
+
+	assert.Equal(t, []string{
+		"--kube-apiserver-arg=feature-gates=MutatingAdmissionPolicy=true",
+		"--kube-apiserver-arg=runtime-config=admissionregistration.k8s.io/v1beta1=true",
+	}, args)
+}
+
+func TestAPIServerFeatureGatesArgsForCNI(t *testing.T) {
+	t.Parallel()
+
+	t.Run("returns_feature_gate_args_for_calico", func(t *testing.T) {
+		t.Parallel()
+
+		args := k3d.APIServerFeatureGatesArgsForCNI(v1alpha1.CNICalico)
+
+		assert.Equal(t, k3d.APIServerFeatureGatesArgs(), args)
+	})
+
+	t.Run("returns_nil_for_non_calico", func(t *testing.T) {
+		t.Parallel()
+
+		assert.Nil(t, k3d.APIServerFeatureGatesArgsForCNI(v1alpha1.CNICilium))
+		assert.Nil(t, k3d.APIServerFeatureGatesArgsForCNI(v1alpha1.CNIDefault))
+	})
+}

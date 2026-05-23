@@ -4,7 +4,15 @@ import (
 	"context"
 
 	"github.com/devantler-tech/ksail/v7/pkg/runner"
+	k3kv1beta1 "github.com/rancher/k3k/pkg/apis/k3k.io/v1beta1"
 )
+
+// BuildClusterCRForTest exposes buildClusterCR for unit testing.
+func (p *K3kProvisioner) BuildClusterCRForTest(
+	clusterName, namespace, certSAN string,
+) *k3kv1beta1.Cluster {
+	return p.buildClusterCR(clusterName, namespace, certSAN)
+}
 
 // WithRunnerForTest injects a command runner so lifecycle operations can be
 // exercised without invoking the real k3d runtime.

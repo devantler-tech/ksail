@@ -23,6 +23,13 @@ inputs:
     # 600s under CI load (exit 124). Headroom over trimming coverage — see the matrix
     # in ci.yaml and docs note on not reducing nested-distro coverage for flakes.
     default: "900"
+  cni:
+    description: |
+      Optional CNI to install in each nested cluster (e.g. "Calico"). When empty,
+      the distribution default is used. Calico exercises the k3k serverArgs path
+      that enables the MutatingAdmissionPolicy / v1beta1 admissionregistration API.
+    required: false
+    default: ""
   dockerhub-user:
     description: Docker Hub username for authenticated nested pull-through mirrors.
     required: false
@@ -48,6 +55,7 @@ runs:
       env:
         DISTRIBUTIONS: ${{ inputs.distributions }}
         TIMEOUT: ${{ inputs.timeout }}
+        CNI: ${{ inputs.cni }}
         # Mirror proxy credentials. Exported here so ksail expands the ${...}
         # placeholders in the --mirror-registry specs from its own process env,
         # keeping the secret values out of argv and the command log.
@@ -107,11 +115,14 @@ runs:
 
           # Create nested cluster
           echo "  ⏳ Creating $DIST cluster..."
+          CREATE_ARGS=(--distribution "$DIST" --provider Kubernetes --name "$NESTED_NAME")
+          if [ -n "$CNI" ]; then
+            CREATE_ARGS+=(--cni "$CNI")
+            echo "  ↳ using CNI: $CNI"
+          fi
           create_ok=false
           if timeout "$TIMEOUT" ksail cluster create \
-            --distribution "$DIST" \
-            --provider Kubernetes \
-            --name "$NESTED_NAME" \
+            "${CREATE_ARGS[@]}" \
             --mirror-registry "$MIRROR_ARG" \
             2>&1 | tee "$CREATE_LOG"; then
             create_ok=true

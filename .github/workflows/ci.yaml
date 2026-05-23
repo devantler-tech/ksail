@@ -1059,6 +1059,20 @@ jobs:
             init: true
             args: ""
             test-kubernetes-provider: "true"
+          # Validate Calico on the Kubernetes (k3k) provider. Calico v3.30+'s CRD
+          # chart ships MutatingAdmissionPolicy resources that need the v1beta1
+          # admissionregistration API enabled on the embedded k3s server via the k3k
+          # Cluster serverArgs. The default test-kubernetes-provider legs above use
+          # the distribution-default CNI, so this leg is the only one exercising the
+          # k3k+Calico serverArgs path. A unique host args value keeps this as a
+          # standalone matrix combination (not merged into the args="" Vanilla leg).
+          - distribution: Vanilla
+            provider: Docker
+            init: true
+            args: "--name k3k-calico-host"
+            test-kubernetes-provider: "true"
+            kubernetes-provider-distributions: "K3s"
+            kubernetes-provider-cni: "Calico"
           # NOTE: KWOK excluded — simulated nodes cannot run real workloads (DinD pods)
     steps:
       - name: 📄 Checkout
@@ -1136,6 +1150,8 @@ jobs:
           args: ${{ matrix.args }}
           apply-overlay-path: ".github/fixtures/podinfo-overlay"
           test-kubernetes-provider: ${{ matrix.test-kubernetes-provider || 'false' }}
+          kubernetes-provider-distributions: ${{ matrix.kubernetes-provider-distributions || 'Vanilla,K3s,VCluster,Talos' }}
+          kubernetes-provider-cni: ${{ matrix.kubernetes-provider-cni || '' }}
 
           ghcr-user: ${{ github.actor }}
           ghcr-token: ${{ secrets.GITHUB_TOKEN }}

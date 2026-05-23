@@ -69,6 +69,7 @@ type K3kProvisioner struct {
 	workers       int32
 	podCIDR       string
 	serviceCIDR   string
+	serverArgs    []string
 }
 
 // K3kProvisionerConfig holds configuration for creating a K3kProvisioner.
@@ -99,6 +100,9 @@ type K3kProvisionerConfig struct {
 	ServiceCIDR string
 	// HostContext is the kubeconfig context to use for the host cluster.
 	HostContext string
+	// ServerArgs are extra K3s server args (e.g. "--kube-apiserver-arg=...") passed
+	// through to the embedded k3s server via the k3k Cluster spec's serverArgs field.
+	ServerArgs []string
 }
 
 // NewK3kProvisioner creates a K3kProvisioner for managing K3s clusters via k3k.
@@ -129,6 +133,7 @@ func NewK3kProvisioner(cfg K3kProvisionerConfig) (*K3kProvisioner, error) {
 		workers:          workers,
 		podCIDR:          cfg.PodCIDR,
 		serviceCIDR:      cfg.ServiceCIDR,
+		serverArgs:       cfg.ServerArgs,
 	}, nil
 }
 
@@ -447,6 +452,10 @@ func (p *K3kProvisioner) buildClusterCR(
 			},
 			TLSSANs: tlsSANs,
 		},
+	}
+
+	if len(p.serverArgs) > 0 {
+		cluster.Spec.ServerArgs = p.serverArgs
 	}
 
 	if p.podCIDR != "" {
