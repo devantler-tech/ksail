@@ -3,7 +3,9 @@ package k3dprovisioner
 import (
 	"context"
 	"fmt"
+	"net"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -46,6 +48,9 @@ const (
 	k3kHelmTimeout = 5 * time.Minute
 	// k3kAPIServerPort is the API server port used by k3k clusters.
 	k3kAPIServerPort = 6443
+	// k3kAPIServerPFTimeout bounds how long Create waits for a server pod to become
+	// port-forwardable when wiring the in-session nested API endpoint.
+	k3kAPIServerPFTimeout = 2 * time.Minute
 )
 
 // K3kProvisioner creates and manages K3s clusters on a host Kubernetes cluster
@@ -70,6 +75,13 @@ type K3kProvisioner struct {
 	podCIDR       string
 	serviceCIDR   string
 	serverArgs    []string
+
+	// apiServerPortForward is a session port-forward to the nested k3k API server,
+	// established during Create so in-session post-creation setup (e.g. CNI install)
+	// can reach the nested API. The NodePort exposure address is not host-reachable on
+	// common setups (kind does not map NodePorts to the host). It lives for the CLI
+	// process and is closed on Delete.
+	apiServerPortForward *kubernetesprovider.PortForwardSession
 }
 
 // K3kProvisionerConfig holds configuration for creating a K3kProvisioner.
@@ -161,7 +173,26 @@ func (p *K3kProvisioner) Create(ctx context.Context, name string) error {
 		return err
 	}
 
-	err = p.connectAndMergeKubeconfig(ctx, clusterName, namespace, exposure.ServerURL())
+	// Point the kubeconfig at a session port-forward to the nested API server so
+	// in-process post-creation setup (e.g. installing Calico) can reach it. The
+	// NodePort exposure address is typically not host-reachable. Fall back to the
+	// exposure address if the port-forward cannot be established (default-CNI clusters
+	// do not need to reach the nested API during creation).
+	serverURL := exposure.ServerURL()
+
+	pfURL, pfErr := p.startAPIServerPortForward(ctx, clusterName, namespace)
+	if pfErr != nil {
+		_, _ = fmt.Fprintf(
+			os.Stdout,
+			"⚠ could not port-forward nested API server (%v); "+
+				"post-creation CNI install may be unreachable\n",
+			pfErr,
+		)
+	} else {
+		serverURL = pfURL
+	}
+
+	err = p.connectAndMergeKubeconfig(ctx, clusterName, namespace, serverURL)
 	if err != nil {
 		return err
 	}
@@ -181,6 +212,11 @@ func (p *K3kProvisioner) Delete(ctx context.Context, name string) error {
 	clusterName := p.clusterName
 	if clusterName == "" {
 		clusterName = name
+	}
+
+	if p.apiServerPortForward != nil {
+		p.apiServerPortForward.Close()
+		p.apiServerPortForward = nil
 	}
 
 	namespace := k3kNamespacePrefix + clusterName
@@ -288,6 +324,69 @@ func (p *K3kProvisioner) connectAndMergeKubeconfig(
 	}
 
 	return nil
+}
+
+// startAPIServerPortForward establishes a port-forward to a running k3k server pod's API
+// port and returns a host-reachable "https://127.0.0.1:<localPort>" server URL. The server
+// certificate includes a 127.0.0.1 SAN (see buildClusterCR), so TLS verification succeeds
+// over the forward. It polls for a Running server pod and retries the forward until one is
+// ready, since the pod may still be coming up just after the cluster reports Ready.
+func (p *K3kProvisioner) startAPIServerPortForward(
+	ctx context.Context,
+	clusterName, namespace string,
+) (string, error) {
+	selector := fmt.Sprintf("cluster=%s,role=server", clusterName)
+
+	var session *kubernetesprovider.PortForwardSession
+
+	err := wait.PollUntilContextTimeout(
+		ctx, k3kWaitInterval, k3kAPIServerPFTimeout, true,
+		func(ctx context.Context) (bool, error) {
+			pods, listErr := p.hostClientset.CoreV1().
+				Pods(namespace).
+				List(ctx, metav1.ListOptions{LabelSelector: selector})
+			if listErr != nil {
+				return false, fmt.Errorf("list k3k server pods: %w", listErr)
+			}
+
+			podName := firstRunningPodName(pods.Items)
+			if podName == "" {
+				return false, nil
+			}
+
+			pfSession, pfErr := p.k8sProvider.StartPortForwardInNamespace(
+				ctx, p.restConfig, namespace, podName, k3kAPIServerPort,
+			)
+			if pfErr != nil {
+				// The pod may not yet be accepting connections; keep polling rather
+				// than aborting so a not-yet-ready server pod is retried.
+				//nolint:nilerr // intentional: transient port-forward failure → retry
+				return false, nil
+			}
+
+			session = pfSession
+
+			return true, nil
+		},
+	)
+	if err != nil {
+		return "", fmt.Errorf("port-forward nested API server: %w", err)
+	}
+
+	p.apiServerPortForward = session
+
+	return "https://" + net.JoinHostPort("127.0.0.1", strconv.Itoa(session.LocalPort)), nil
+}
+
+// firstRunningPodName returns the name of the first Running pod, or "" if none are Running.
+func firstRunningPodName(pods []corev1.Pod) string {
+	for idx := range pods {
+		if pods[idx].Status.Phase == corev1.PodRunning {
+			return pods[idx].Name
+		}
+	}
+
+	return ""
 }
 
 // setupCluster installs the k3k operator, creates the cluster namespace, resolves a stable

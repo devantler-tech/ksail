@@ -7,6 +7,8 @@ import (
 	k3dprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/k3d"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func TestBuildClusterCR_ServerArgs(t *testing.T) {
@@ -36,4 +38,57 @@ func TestBuildClusterCR_ServerArgs(t *testing.T) {
 
 		assert.Nil(t, cluster.Spec.ServerArgs)
 	})
+}
+
+func TestFirstRunningPodName(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		pods     []corev1.Pod
+		expected string
+	}{
+		{
+			name:     "no pods",
+			pods:     nil,
+			expected: "",
+		},
+		{
+			name: "no running pods",
+			pods: []corev1.Pod{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "p1"},
+					Status:     corev1.PodStatus{Phase: corev1.PodPending},
+				},
+			},
+			expected: "",
+		},
+		{
+			name: "returns first running pod",
+			pods: []corev1.Pod{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "pending"},
+					Status:     corev1.PodStatus{Phase: corev1.PodPending},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "running-a"},
+					Status:     corev1.PodStatus{Phase: corev1.PodRunning},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "running-b"},
+					Status:     corev1.PodStatus{Phase: corev1.PodRunning},
+				},
+			},
+			expected: "running-a",
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := k3dprovisioner.FirstRunningPodNameForTest(testCase.pods)
+			assert.Equal(t, testCase.expected, got)
+		})
+	}
 }

@@ -5,7 +5,13 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/runner"
 	k3kv1beta1 "github.com/rancher/k3k/pkg/apis/k3k.io/v1beta1"
+	corev1 "k8s.io/api/core/v1"
 )
+
+// FirstRunningPodNameForTest exposes firstRunningPodName for unit testing.
+func FirstRunningPodNameForTest(pods []corev1.Pod) string {
+	return firstRunningPodName(pods)
+}
 
 // BuildClusterCRForTest exposes buildClusterCR for unit testing.
 func (p *K3kProvisioner) BuildClusterCRForTest(
