@@ -33,7 +33,10 @@ func TestExtractClusterNameFromContext_K3d(t *testing.T) {
 func TestExtractClusterNameFromContext_K3k(t *testing.T) {
 	t.Parallel()
 
-	clusterName := lifecycle.ExtractClusterNameFromContext("k3k-nested-k3s", v1alpha1.DistributionK3s)
+	clusterName := lifecycle.ExtractClusterNameFromContext(
+		"k3k-nested-k3s",
+		v1alpha1.DistributionK3s,
+	)
 	assert.Equal(t, "nested-k3s", clusterName)
 }
 
