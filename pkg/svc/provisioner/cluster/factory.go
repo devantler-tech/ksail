@@ -197,10 +197,9 @@ func (f DefaultFactory) createKindProvisioner(
 	// Enable the MutatingAdmissionPolicy feature gate / v1beta1 admissionregistration
 	// API only for Calico, whose v3.30+ CRD chart ships MutatingAdmissionPolicy
 	// resources. Enabling it elsewhere makes other components (e.g. Kyverno) attempt to
-	// use the API and fail. Must run AFTER applyKindNodeCounts since that function may
-	// replace the nodes slice.
+	// use the API and fail.
 	if cluster.Spec.Cluster.CNI == v1alpha1.CNICalico {
-		kindconfigmanager.ApplyAPIServerFeatureGatesPatches(kindConfig)
+		kindconfigmanager.ApplyAPIServerFeatureGates(kindConfig)
 	}
 
 	// Apply kubelet certificate rotation patches when metrics-server is enabled.

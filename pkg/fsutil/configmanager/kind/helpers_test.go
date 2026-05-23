@@ -6,7 +6,6 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	kind "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/kind"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	kindv1alpha4 "sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
 
@@ -295,60 +294,59 @@ func TestApplyImageVerificationPatches(t *testing.T) {
 	})
 }
 
-func TestApplyAPIServerFeatureGatesPatches(t *testing.T) {
+func TestApplyAPIServerFeatureGates(t *testing.T) {
 	t.Parallel()
 
-	t.Run("adds_kubeadm_patch_to_control_plane", func(t *testing.T) {
+	t.Run("sets_feature_gate_and_runtime_config", func(t *testing.T) {
 		t.Parallel()
 
 		kindConfig := &kindv1alpha4.Cluster{}
 
-		kind.ApplyAPIServerFeatureGatesPatches(kindConfig)
+		kind.ApplyAPIServerFeatureGates(kindConfig)
 
-		require.Len(t, kindConfig.Nodes, 1)
-		require.Len(t, kindConfig.Nodes[0].KubeadmConfigPatches, 1)
+		assert.True(
+			t,
+			kindConfig.FeatureGates[kind.APIServerMutatingAdmissionPolicyFeatureGate],
+		)
 		assert.Equal(
 			t,
-			kind.APIServerFeatureGatesPatch,
-			kindConfig.Nodes[0].KubeadmConfigPatches[0],
-		)
-		assert.Contains(
-			t,
-			kindConfig.Nodes[0].KubeadmConfigPatches[0],
-			"MutatingAdmissionPolicy=true",
-		)
-		assert.Contains(
-			t,
-			kindConfig.Nodes[0].KubeadmConfigPatches[0],
-			"admissionregistration.k8s.io/v1beta1=true",
+			"true",
+			kindConfig.RuntimeConfig[kind.APIServerAdmissionregistrationV1beta1RuntimeConfig],
 		)
 	})
 
-	t.Run("only_patches_control_plane_nodes", func(t *testing.T) {
+	t.Run("preserves_existing_feature_gates_and_runtime_config", func(t *testing.T) {
 		t.Parallel()
 
 		kindConfig := &kindv1alpha4.Cluster{
-			Nodes: []kindv1alpha4.Node{
-				{Role: kindv1alpha4.ControlPlaneRole},
-				{Role: kindv1alpha4.WorkerRole},
-			},
+			FeatureGates:  map[string]bool{"SomeOtherGate": true},
+			RuntimeConfig: map[string]string{"some.io/v1": "true"},
 		}
 
-		kind.ApplyAPIServerFeatureGatesPatches(kindConfig)
+		kind.ApplyAPIServerFeatureGates(kindConfig)
 
-		assert.Len(t, kindConfig.Nodes[0].KubeadmConfigPatches, 1)
-		assert.Empty(t, kindConfig.Nodes[1].KubeadmConfigPatches)
+		assert.True(t, kindConfig.FeatureGates["SomeOtherGate"])
+		assert.True(
+			t,
+			kindConfig.FeatureGates[kind.APIServerMutatingAdmissionPolicyFeatureGate],
+		)
+		assert.Equal(t, "true", kindConfig.RuntimeConfig["some.io/v1"])
+		assert.Equal(
+			t,
+			"true",
+			kindConfig.RuntimeConfig[kind.APIServerAdmissionregistrationV1beta1RuntimeConfig],
+		)
 	})
 
-	t.Run("idempotent_does_not_duplicate_patch", func(t *testing.T) {
+	t.Run("idempotent_when_called_twice", func(t *testing.T) {
 		t.Parallel()
 
 		kindConfig := &kindv1alpha4.Cluster{}
 
-		kind.ApplyAPIServerFeatureGatesPatches(kindConfig)
-		kind.ApplyAPIServerFeatureGatesPatches(kindConfig)
+		kind.ApplyAPIServerFeatureGates(kindConfig)
+		kind.ApplyAPIServerFeatureGates(kindConfig)
 
-		require.Len(t, kindConfig.Nodes, 1)
-		assert.Len(t, kindConfig.Nodes[0].KubeadmConfigPatches, 1)
+		assert.Len(t, kindConfig.FeatureGates, 1)
+		assert.Len(t, kindConfig.RuntimeConfig, 1)
 	})
 }
