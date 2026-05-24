@@ -353,6 +353,11 @@ func MergeTalosconfigBytesForTest(talosconfigPath string, newData []byte) error 
 //nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
 var RepresentativeServerTypeForTest = representativeServerType
 
+// CountServerNodesByRoleForTest exports countServerNodesByRole for unit testing.
+//
+//nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
+var CountServerNodesByRoleForTest = countServerNodesByRole
+
 // MachineClusterConfigForTest is the exported alias of machineClusterConfig for testing.
 type MachineClusterConfigForTest = machineClusterConfig
 

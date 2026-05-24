@@ -43,7 +43,7 @@ func (p *Provisioner) Update(
 
 	// Detect Hetzner server-type changes (rolling node replacement) and merge into
 	// diff before PrepareUpdate, so the --force gate and apply phase both see them.
-	p.mergeServerTypeRollingChanges(ctx, name, oldSpec, diff, diffErr)
+	p.mergeServerTypeRollingChanges(ctx, name, diff, diffErr)
 
 	result, proceed, prepErr := clusterupdate.PrepareUpdate(
 		diff, diffErr, opts, clustererr.ErrRecreationRequired,
@@ -101,14 +101,18 @@ func (p *Provisioner) mergeDisruptiveChanges(
 // configuration, and merges them into diff so that PrepareUpdate can gate them
 // (behind --force) and applyRollingRecreateChanges can apply them. It is a no-op
 // for non-Hetzner providers, or when the desired and running types already match.
+//
+// Change impact is classified from the *current* node inventory (not the desired
+// spec), so a control-plane roll is only offered when enough control planes are
+// actually present to preserve etcd quorum. A runtime guard in rollingReplaceRole
+// re-checks this immediately before any node is deleted.
 func (p *Provisioner) mergeServerTypeRollingChanges(
 	ctx context.Context,
 	name string,
-	oldSpec *v1alpha1.ClusterSpec,
 	diff *clusterupdate.UpdateResult,
 	diffErr error,
 ) {
-	if diffErr != nil || diff == nil || oldSpec == nil {
+	if diffErr != nil || diff == nil {
 		return
 	}
 
@@ -131,13 +135,14 @@ func (p *Provisioner) mergeServerTypeRollingChanges(
 
 	cpDesired := p.hetznerServerType(RoleControlPlane)
 	workerDesired := p.hetznerServerType(RoleWorker)
+	cpCount, workerCount := countServerNodesByRole(nodes)
 
 	appendServerTypeChange(diff, RoleControlPlane,
 		representativeServerType(nodes, RoleControlPlane, cpDesired), cpDesired,
-		clusterupdate.ControlPlaneServerTypeChangeCategory(int(oldSpec.ControlPlanes)))
+		clusterupdate.ControlPlaneServerTypeChangeCategory(cpCount))
 	appendServerTypeChange(diff, RoleWorker,
 		representativeServerType(nodes, RoleWorker, workerDesired), workerDesired,
-		clusterupdate.WorkerServerTypeChangeCategory(int(oldSpec.Workers)))
+		clusterupdate.WorkerServerTypeChangeCategory(workerCount))
 }
 
 // appendServerTypeChange appends a server-type change to the appropriate diff
@@ -1131,6 +1136,23 @@ func (p *Provisioner) introspectHetznerServerTypes(
 	if workerType != "" {
 		hetznerSpec.WorkerServerType = workerType
 	}
+}
+
+// countServerNodesByRole counts control-plane and worker nodes from a provider
+// node listing.
+func countServerNodesByRole(nodes []svcprovider.NodeInfo) (int, int) {
+	var controlPlanes, workers int
+
+	for _, node := range nodes {
+		switch node.Role {
+		case RoleControlPlane:
+			controlPlanes++
+		case RoleWorker:
+			workers++
+		}
+	}
+
+	return controlPlanes, workers
 }
 
 // representativeServerType returns a server type for the given role suitable for

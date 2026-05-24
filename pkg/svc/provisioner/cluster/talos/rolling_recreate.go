@@ -98,6 +98,16 @@ func (p *Provisioner) rollingReplaceRole(
 		return nil
 	}
 
+	// Runtime quorum guard: re-check the *current* control-plane count immediately
+	// before deleting any node. The diff-time classification can be stale if a
+	// scale-down ran earlier in the same update or nodes became unhealthy, so
+	// refuse to roll control planes below the etcd-quorum threshold.
+	if role == RoleControlPlane && len(existing) < clusterupdate.MinControlPlanesForRollingReplace {
+		return fmt.Errorf("%w: %d present, need at least %d",
+			ErrInsufficientControlPlanesForRoll,
+			len(existing), clusterupdate.MinControlPlanesForRollingReplace)
+	}
+
 	// Fail fast before mutating infrastructure if the new type is unavailable.
 	availErr := p.checkHetznerAvailabilityForRole(ctx, hzProvider, role)
 	if availErr != nil {
@@ -324,14 +334,16 @@ func (p *Provisioner) deleteK8sNode(
 	nodeName string,
 ) {
 	err := clientset.CoreV1().Nodes().Delete(ctx, nodeName, metav1.DeleteOptions{})
-	if err != nil && !apierrors.IsNotFound(err) {
+
+	switch {
+	case err == nil:
+		_, _ = fmt.Fprintf(p.logWriter, "    ✓ Removed stale node object %s\n", nodeName)
+	case apierrors.IsNotFound(err):
+		_, _ = fmt.Fprintf(p.logWriter, "    ✓ Node object %s already removed\n", nodeName)
+	default:
 		_, _ = fmt.Fprintf(p.logWriter,
 			"    ⚠ Failed to remove stale node object %s (best-effort): %v\n", nodeName, err)
-
-		return
 	}
-
-	_, _ = fmt.Fprintf(p.logWriter, "    ✓ Removed stale node object %s\n", nodeName)
 }
 
 // waitForReplacementNodeReady polls until the Kubernetes node backing the new

@@ -5,6 +5,7 @@ import (
 	"io"
 	"testing"
 
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	talosprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/talos"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
@@ -175,6 +176,26 @@ func TestAppendServerTypeChange(t *testing.T) { //nolint:funlen // table-driven 
 			assert.Len(t, diff.RecreateRequired, testCase.wantRecreate)
 		})
 	}
+}
+
+func TestCountServerNodesByRole(t *testing.T) {
+	t.Parallel()
+
+	nodes := []provider.NodeInfo{
+		{Name: testRollingNodeCP0, Role: talosprovisioner.RoleControlPlane},
+		{Name: testRollingNodeCP1, Role: talosprovisioner.RoleControlPlane},
+		{Name: "cp-2", Role: talosprovisioner.RoleControlPlane},
+		{Name: "worker-0", Role: talosprovisioner.RoleWorker},
+		{Name: "unknown-0", Role: "unknown"},
+	}
+
+	cp, worker := talosprovisioner.CountServerNodesByRoleForTest(nodes)
+	assert.Equal(t, 3, cp)
+	assert.Equal(t, 1, worker)
+
+	cpEmpty, workerEmpty := talosprovisioner.CountServerNodesByRoleForTest(nil)
+	assert.Equal(t, 0, cpEmpty)
+	assert.Equal(t, 0, workerEmpty)
 }
 
 func TestApplyRollingRecreateChanges_NoOp(t *testing.T) {
