@@ -100,6 +100,14 @@ type fieldRule struct {
 	// empty. Use this for fields that are optional in the user config — when the user
 	// hasn't set the field, any detected current value should not produce a diff.
 	skipWhenNewEmpty bool
+	// skipWhenOldEmpty, when true, skips the diff when the baseline (old) value is
+	// empty — i.e. the current value could not be introspected from the cluster and
+	// no persisted state supplied it. Use this for boot-time settings (e.g. the
+	// Talos ISO ID) that a running cluster cannot report: with no baseline, falling
+	// back to defaultVal would fabricate a perpetual false-positive diff whenever the
+	// user pins a non-default value. Mirrors checkLocalRegistryChange's handling,
+	// where an empty old value means "unknown", not a concrete value to diff against.
+	skipWhenOldEmpty bool
 }
 
 // scalarFieldRules returns the table of simple scalar field diff rules.
@@ -288,6 +296,14 @@ func (e *Engine) applyFieldRules(
 
 		oldVal := rule.getVal(oldSpec)
 
+		// The baseline could not be determined (not introspectable, no persisted
+		// state). Skip rather than diff against defaultVal, which would fabricate a
+		// false-positive change whenever the user pins a non-default value (e.g. the
+		// Talos ISO in stateless CI). See skipWhenOldEmpty.
+		if rule.skipWhenOldEmpty && oldVal == "" {
+			continue
+		}
+
 		// The baseline value could not be read from the cluster. Surface the
 		// field as Unknown instead of computing a confident diff against the
 		// default value (which would mislead the user into reinstalling
@@ -473,17 +489,26 @@ var talosFieldRules = []fieldRule{
 }
 
 // talosISORule is the ISO field rule used by the Talos field rules.
-// ISO is a boot-time setting (Hetzner Cloud ISO ID) that cannot be detected from
-// the running cluster. When the old spec has 0 (unknown/unset), getVal returns ""
-// so that the defaultVal substitution normalises both sides to the config default,
-// suppressing false-positive diffs.
+// ISO is a boot-time setting (Hetzner Cloud ISO ID) that a running cluster cannot
+// report, so the baseline is known only from persisted state. getVal returns ""
+// when ISO is 0 (unset). The two normalisation mechanisms are complementary:
+//   - skipWhenOldEmpty handles an unknown *baseline* (old == ""): the diff is
+//     skipped entirely (before appendChange), so we never fabricate a change
+//     against defaultVal when the user pins a non-default ISO in stateless CI.
+//   - defaultVal handles an unset *desired* value (new == "") against a known
+//     baseline: it normalises the desired side to DefaultTalosISO so an unpinned
+//     config does not diff against a non-zero persisted baseline.
+//
+// A genuine ISO change is still reported when both sides are known and differ,
+// and the desired ISO is always applied to newly provisioned nodes regardless.
 //
 //nolint:gochecknoglobals // Immutable field-rule; avoids per-call heap allocation.
 var talosISORule = fieldRule{
-	field:      "cluster.talos.iso",
-	category:   clusterupdate.ChangeCategoryInPlace,
-	reason:     "ISO change only affects newly provisioned nodes",
-	defaultVal: strconv.FormatInt(v1alpha1.DefaultTalosISO, 10),
+	field:            "cluster.talos.iso",
+	category:         clusterupdate.ChangeCategoryInPlace,
+	reason:           "ISO change only affects newly provisioned nodes",
+	skipWhenOldEmpty: true,
+	defaultVal:       strconv.FormatInt(v1alpha1.DefaultTalosISO, 10),
 	getVal: func(s *v1alpha1.ClusterSpec) string {
 		if s.Talos.ISO == 0 {
 			return ""

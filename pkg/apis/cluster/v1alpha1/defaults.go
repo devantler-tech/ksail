@@ -52,9 +52,12 @@ const (
 // Talos default values — canonical source for OptionsTalos struct tag defaults.
 const (
 	// DefaultTalosISO is the default Hetzner ISO/image ID for booting Talos
-	// Linux (matches `default:"122630"` struct tag).
-	// For ARM-based servers, set OptionsTalos.ISO to 122629.
-	DefaultTalosISO int64 = 122630
+	// Linux 1.12.4 x86 (matches `default:"125127"` struct tag). The prior default
+	// (122630, Talos 1.11.2) was deprecated and removed from Hetzner on 2026-03-18.
+	// For ARM-based servers, set OptionsTalos.ISO to the matching ARM ISO ID.
+	// Keep this in sync with the version-contract default in
+	// pkg/fsutil/configmanager/talos (currently TalosVersion1_12).
+	DefaultTalosISO int64 = 125127
 )
 
 // ExpectedDistributionConfigName returns the default config filename for a distribution.

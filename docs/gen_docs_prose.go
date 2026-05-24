@@ -308,7 +308,7 @@ Advanced configuration options are direct fields under ` + bt + `spec.cluster` +
 - ` + bt + `controlPlanes` + bt + ` – Number of control-plane nodes (default: ` + bt + `1` + bt + `)
 - ` + bt + `workers` + bt + ` – Number of worker nodes (default: ` + bt + `0` + bt + `)
 - ` + bt + `config` + bt + ` – Path to talosconfig file (default: ` + bt + `~/.talos/config` + bt + `)
-- ` + bt + `iso` + bt + ` – Cloud provider ISO/image ID for Talos Linux (default: ` + bt + `122630` + bt + ` for x86; use ` + bt + `122629` + bt + ` for ARM)
+- ` + bt + `iso` + bt + ` – Cloud provider ISO/image ID for Talos Linux (default: ` + bt + `125127` + bt + ` for Talos 1.12.4 x86; for ARM, look up the matching ISO ID under **Images → ISOs** in the Hetzner Cloud Console)
 
 **Hetzner options (` + bt + `spec.provider.hetzner` + bt + `):**
 
