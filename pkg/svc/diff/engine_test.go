@@ -1465,7 +1465,10 @@ func TestEngine_TalosISO_NoChangeWhenDesiredUnsetMatchesDefaultBaseline(t *testi
 
 	for _, c := range result.AllChanges() {
 		if c.Field == "cluster.talos.iso" {
-			t.Fatalf("expected no ISO diff when desired is unset and baseline equals default, got %+v", c)
+			t.Fatalf(
+				"expected no ISO diff when desired is unset and baseline equals default, got %+v",
+				c,
+			)
 		}
 	}
 }
