@@ -10,6 +10,15 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
+const (
+	testTypeCX22          = "cx22"
+	testTypeCX23          = "cx23"
+	testTypeCX33          = "cx33"
+	testRollingServerType = "cpx41"
+	testRollingNodeCP0    = "cp-0"
+	testRollingNodeCP1    = "cp-1"
+)
+
 func TestRolesFromRollingChanges(t *testing.T) {
 	t.Parallel()
 
@@ -19,7 +28,7 @@ func TestRolesFromRollingChanges(t *testing.T) {
 		wantCP     bool
 		wantWorker bool
 	}{
-		{name: "none", fields: nil, wantCP: false, wantWorker: false},
+		{name: "no fields", fields: nil, wantCP: false, wantWorker: false},
 		{
 			name:   "control plane only",
 			fields: []string{"provider.hetzner.controlPlaneServerType"},
@@ -70,13 +79,13 @@ func TestServersNeedingReplacement(t *testing.T) {
 	}
 
 	servers := []*hcloud.Server{
-		server("cp-1", "cx23"),
-		server("cp-2", "cpx41"),
+		server(testRollingNodeCP1, testTypeCX23),
+		server("cp-2", testRollingServerType),
 		server("cp-3", ""),
 		nil,
 	}
 
-	out := talosprovisioner.ServersNeedingReplacementForTest(servers, "cpx41")
+	out := talosprovisioner.ServersNeedingReplacementForTest(servers, testRollingServerType)
 
 	// cp-1 (wrong type), cp-3 (unknown type) need replacement; cp-2 matches; nil skipped.
 	names := make([]string, 0, len(out))
@@ -84,17 +93,17 @@ func TestServersNeedingReplacement(t *testing.T) {
 		names = append(names, srv.Name)
 	}
 
-	assert.ElementsMatch(t, []string{"cp-1", "cp-3"}, names)
+	assert.ElementsMatch(t, []string{testRollingNodeCP1, "cp-3"}, names)
 }
 
 func TestServersNeedingReplacement_CaseInsensitive(t *testing.T) {
 	t.Parallel()
 
 	servers := []*hcloud.Server{
-		{Name: "cp-1", ServerType: &hcloud.ServerType{Name: "CPX41"}},
+		{Name: testRollingNodeCP1, ServerType: &hcloud.ServerType{Name: "CPX41"}},
 	}
 
-	out := talosprovisioner.ServersNeedingReplacementForTest(servers, "cpx41")
+	out := talosprovisioner.ServersNeedingReplacementForTest(servers, testRollingServerType)
 	assert.Empty(t, out, "matching type (case-insensitive) should not need replacement")
 }
 
@@ -112,39 +121,39 @@ func TestAppendServerTypeChange(t *testing.T) { //nolint:funlen // table-driven 
 	}{
 		{
 			name:        "rolling control plane",
-			role:        "control-plane",
-			current:     "cx23",
-			desired:     "cpx41",
+			role:        talosprovisioner.RoleControlPlane,
+			current:     testTypeCX23,
+			desired:     testRollingServerType,
 			category:    clusterupdate.ChangeCategoryRollingRecreate,
 			wantRolling: 1,
 		},
 		{
 			name:         "recreate below quorum",
-			role:         "control-plane",
-			current:      "cx23",
-			desired:      "cpx41",
+			role:         talosprovisioner.RoleControlPlane,
+			current:      testTypeCX23,
+			desired:      testRollingServerType,
 			category:     clusterupdate.ChangeCategoryRecreateRequired,
 			wantRecreate: 1,
 		},
 		{
 			name:     "in-place worker no existing nodes is dropped",
-			role:     "worker",
-			current:  "cx23",
-			desired:  "cpx41",
+			role:     talosprovisioner.RoleWorker,
+			current:  testTypeCX23,
+			desired:  testRollingServerType,
 			category: clusterupdate.ChangeCategoryInPlace,
 		},
 		{
 			name:     "no change when types match",
-			role:     "worker",
-			current:  "cx23",
-			desired:  "cx23",
+			role:     talosprovisioner.RoleWorker,
+			current:  testTypeCX23,
+			desired:  testTypeCX23,
 			category: clusterupdate.ChangeCategoryRollingRecreate,
 		},
 		{
 			name:     "no change when current unknown",
-			role:     "worker",
+			role:     talosprovisioner.RoleWorker,
 			current:  "",
-			desired:  "cpx41",
+			desired:  testRollingServerType,
 			category: clusterupdate.ChangeCategoryRollingRecreate,
 		},
 	}

@@ -17,6 +17,7 @@ const (
 	testFieldControlPlanes = "cluster.controlPlanes"
 	testFieldWorkers       = "cluster.workers"
 	testTalosVersionOld    = "v1.11.2"
+	testServerTypeNew      = "cpx41"
 )
 
 func newBaseSpec() *v1alpha1.ClusterSpec {
@@ -654,14 +655,14 @@ func TestEngine_HetznerServerType_RollingRecreate(t *testing.T) {
 			name:          "control plane server type change with quorum redundancy",
 			controlPlanes: 3,
 			workers:       0,
-			mutate:        func(s *v1alpha1.ProviderSpec) { s.Hetzner.ControlPlaneServerType = "cpx41" },
+			mutate:        func(s *v1alpha1.ProviderSpec) { s.Hetzner.ControlPlaneServerType = testServerTypeNew },
 			field:         "provider.hetzner.controlPlaneServerType",
 		},
 		{
 			name:          "worker server type change with existing workers",
 			controlPlanes: 1,
 			workers:       2,
-			mutate:        func(s *v1alpha1.ProviderSpec) { s.Hetzner.WorkerServerType = "cpx41" },
+			mutate:        func(s *v1alpha1.ProviderSpec) { s.Hetzner.WorkerServerType = testServerTypeNew },
 			field:         "provider.hetzner.workerServerType",
 		},
 	}
@@ -690,7 +691,7 @@ func TestEngine_HetznerServerType_RollingRecreate(t *testing.T) {
 			}
 
 			assertSingleChange(t, result.RollingRecreate, testCase.field,
-				"cx23", "cpx41", clusterupdate.ChangeCategoryRollingRecreate)
+				"cx23", testServerTypeNew, clusterupdate.ChangeCategoryRollingRecreate)
 		})
 	}
 }
@@ -709,7 +710,7 @@ func TestEngine_HetznerControlPlaneServerType_RecreateBelowQuorum(t *testing.T) 
 			newer := clone(old)
 			oldProvider := newBaseProviderSpec()
 			newProvider := cloneProvider(oldProvider)
-			newProvider.Hetzner.ControlPlaneServerType = "cpx41"
+			newProvider.Hetzner.ControlPlaneServerType = testServerTypeNew
 
 			engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
 			result := engine.ComputeDiff(old, newer, oldProvider, newProvider)
@@ -723,7 +724,7 @@ func TestEngine_HetznerControlPlaneServerType_RecreateBelowQuorum(t *testing.T) 
 				result.RecreateRequired,
 				"provider.hetzner.controlPlaneServerType",
 				"cx23",
-				"cpx41",
+				testServerTypeNew,
 				clusterupdate.ChangeCategoryRecreateRequired,
 			)
 		})

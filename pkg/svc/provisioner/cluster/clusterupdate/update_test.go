@@ -15,6 +15,8 @@ var (
 	errRecreateRequired = errors.New("recreate required")
 )
 
+const fieldHetznerCPServerType = "provider.hetzner.controlPlaneServerType"
+
 func TestUpdateResult_NoChangesIsNoOp(t *testing.T) {
 	t.Parallel()
 
@@ -555,7 +557,7 @@ func TestPrepareUpdate_RollingRecreateBlocksWithoutForce(t *testing.T) {
 
 	diff := clusterupdate.NewEmptyUpdateResult()
 	diff.RollingRecreate = append(diff.RollingRecreate, clusterupdate.Change{
-		Field: "provider.hetzner.controlPlaneServerType",
+		Field: fieldHetznerCPServerType,
 	})
 	opts := clusterupdate.UpdateOptions{}
 
@@ -574,7 +576,7 @@ func TestPrepareUpdate_RollingRecreateAllowedWithForce(t *testing.T) {
 
 	diff := clusterupdate.NewEmptyUpdateResult()
 	diff.RollingRecreate = append(diff.RollingRecreate, clusterupdate.Change{
-		Field: "provider.hetzner.controlPlaneServerType",
+		Field: fieldHetznerCPServerType,
 	})
 	opts := clusterupdate.UpdateOptions{Force: true}
 
@@ -592,7 +594,7 @@ func TestUpdateResult_RollingRecreateChangesAreDetected(t *testing.T) {
 
 	result := clusterupdate.NewEmptyUpdateResult()
 	change := clusterupdate.Change{
-		Field:    "provider.hetzner.controlPlaneServerType",
+		Field:    fieldHetznerCPServerType,
 		OldValue: "cx23",
 		NewValue: "cpx41",
 		Category: clusterupdate.ChangeCategoryRollingRecreate,
