@@ -400,6 +400,7 @@ also `.github/instructions/`. **Shared machine:** only create/inspect/delete clu
 build binaries to `/tmp`, never `./ksail`.
 
 **Task menu** (pick the highest-value for the current repo state; not all):
+
 - **Triage** issues/PRs (label, add `triaged`, close obvious spam); one insightful comment on the
   oldest un-commented item; link related issues (check existing links first).
 - **Confident bug fixes** (`bug`/`good first issue`) → draft PR with `Fixes #N`, root cause, and a
