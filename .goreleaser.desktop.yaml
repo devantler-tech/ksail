@@ -61,6 +61,12 @@ archives:
 homebrew_casks:
   - name: ksail-desktop
     ids: [ksail-desktop]
+    # The release pipe is disabled (see above), so GoReleaser refuses to derive the default cask
+    # download URL ("release is disabled, cannot use default url_template"). Set it explicitly to the
+    # main repo's release assets — where the cd.yaml desktop-macos job uploads the archive via
+    # `gh release upload`. This is the same URL the default would have produced.
+    url:
+      template: "https://github.com/devantler-tech/ksail/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
     description: "KSail desktop app — manage local Kubernetes clusters in a native window"
     homepage: "https://ksail.devantler.tech"
     repository:
