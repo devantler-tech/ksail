@@ -486,13 +486,17 @@ var talosFieldRules = []fieldRule{
 
 // talosISORule is the ISO field rule used by the Talos field rules.
 // ISO is a boot-time setting (Hetzner Cloud ISO ID) that a running cluster cannot
-// report, so the baseline is known only from persisted state. When the old spec
-// has 0 (unknown/unset), getVal returns "" and skipWhenOldEmpty suppresses the
-// diff entirely — diffing against defaultVal instead would fabricate a perpetual
-// false-positive change whenever the user pins a non-default ISO (e.g. in
-// stateless CI, where no persisted state exists). A genuine ISO change is still
-// reported when a real baseline is available (old value non-zero), and the desired
-// ISO is always applied to newly provisioned nodes regardless of the diff.
+// report, so the baseline is known only from persisted state. getVal returns ""
+// when ISO is 0 (unset). The two normalisation mechanisms are complementary:
+//   - skipWhenOldEmpty handles an unknown *baseline* (old == ""): the diff is
+//     skipped entirely (before appendChange), so we never fabricate a change
+//     against defaultVal when the user pins a non-default ISO in stateless CI.
+//   - defaultVal handles an unset *desired* value (new == "") against a known
+//     baseline: it normalises the desired side to DefaultTalosISO so an unpinned
+//     config does not diff against a non-zero persisted baseline.
+//
+// A genuine ISO change is still reported when both sides are known and differ,
+// and the desired ISO is always applied to newly provisioned nodes regardless.
 //
 //nolint:gochecknoglobals // Immutable field-rule; avoids per-call heap allocation.
 var talosISORule = fieldRule{
@@ -500,6 +504,7 @@ var talosISORule = fieldRule{
 	category:         clusterupdate.ChangeCategoryInPlace,
 	reason:           "ISO change only affects newly provisioned nodes",
 	skipWhenOldEmpty: true,
+	defaultVal:       strconv.FormatInt(v1alpha1.DefaultTalosISO, 10),
 	getVal: func(s *v1alpha1.ClusterSpec) string {
 		if s.Talos.ISO == 0 {
 			return ""

@@ -555,10 +555,11 @@ func resolveControlPlaneIP(endpointIP, networkCIDR string) (string, error) {
 //
 // TalosVersion1_12 is the conservative default because the Hetzner bootstrap ISO
 // (ID 125127) runs Talos 1.12.4 in maintenance mode. Version contracts greater than 1.12
-// generate fields unknown to the 1.12.4 machined (e.g. machine.install.grubUseUKICmdline),
-// causing config apply to fail with "unknown keys found during decoding".
-// Update this default when Hetzner publishes a newer Talos bootstrap ISO (and bump
-// DefaultTalosISO in pkg/apis/cluster/v1alpha1 to match).
+// generate fields unknown to the 1.12.4 machined, causing config apply to fail with
+// "unknown keys found during decoding". (Note: machine.install.grubUseUKICmdline is
+// gated at >1.11, so the 1.12 default already emits it — it is not an example of a
+// post-1.12 field.) Update this default when Hetzner publishes a newer Talos bootstrap
+// ISO (and bump DefaultTalosISO in pkg/apis/cluster/v1alpha1 to match).
 func buildBaseGenOptions(
 	controlPlaneIP string,
 	versionContract *talosconfig.VersionContract,

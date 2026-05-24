@@ -1445,6 +1445,31 @@ func TestEngine_TalosISO_DetectedWhenBothNonZero(t *testing.T) {
 		clusterupdate.ChangeCategoryInPlace)
 }
 
+func TestEngine_TalosISO_NoChangeWhenDesiredUnsetMatchesDefaultBaseline(t *testing.T) {
+	t.Parallel()
+
+	// Persisted state supplies a known baseline equal to the default ISO while the
+	// config leaves talos.iso unset (0). defaultVal must normalise the desired side
+	// to the default so an unpinned config does not produce a false-positive diff
+	// against the baseline. skipWhenOldEmpty does not apply here — the baseline is
+	// known and non-zero.
+	old := newBaseSpec()
+	old.Distribution = v1alpha1.DistributionTalos
+	old.Talos.ISO = v1alpha1.DefaultTalosISO
+
+	newer := clone(old)
+	newer.Talos.ISO = 0
+
+	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
+	result := engine.ComputeDiff(old, newer, nil, nil)
+
+	for _, c := range result.AllChanges() {
+		if c.Field == "cluster.talos.iso" {
+			t.Fatalf("expected no ISO diff when desired is unset and baseline equals default, got %+v", c)
+		}
+	}
+}
+
 func TestEngine_TalosVersion_NoChangeWhenBothSet(t *testing.T) {
 	t.Parallel()
 
