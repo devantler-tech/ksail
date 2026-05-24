@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -13,7 +14,9 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	kubernetesprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/kubernetes"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/registry"
+	"github.com/docker/docker/api/types/container"
 	dockerclient "github.com/docker/docker/client"
+	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/siderolabs/talos/pkg/provision"
 	"github.com/siderolabs/talos/pkg/provision/access"
 	"k8s.io/client-go/dynamic"
@@ -281,6 +284,12 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 	// Bootstrap and wait for readiness
 	err = p.inner.bootstrapAndWaitForReady(ctx, clusterAccess)
 	if err != nil {
+		// TEMP diagnostic: dump nested Talos node + mirror container logs to
+		// understand why the kubelet stalls in "Preparing" (image pull) — is it
+		// using the mirror, is the upstream pull failing/auth-falling-back, or
+		// just slow on a cold cache? Remove once the root cause is confirmed.
+		p.dumpNestedDiagnostics(ctx, dindClient, clusterName)
+
 		return fmt.Errorf("bootstrap: %w", err)
 	}
 
@@ -542,6 +551,60 @@ func (p *KubernetesProvisioner) applyMirrorsToTalosConfig(clusterName string) er
 	}
 
 	return nil
+}
+
+// dumpNestedDiagnostics is a temporary, best-effort diagnostic that dumps the tail
+// of logs for every DinD container belonging to this cluster (the Talos node
+// containers and the pull-through mirror containers, all named with the cluster
+// prefix). It is invoked when the nested Talos bootstrap readiness check fails, to
+// reveal why the kubelet stalls in "Preparing" (e.g. image-pull errors on the node,
+// or upstream/auth failures on the mirrors). Remove once the cause is confirmed.
+func (p *KubernetesProvisioner) dumpNestedDiagnostics(
+	ctx context.Context,
+	dindClient dockerclient.APIClient,
+	clusterName string,
+) {
+	writer := p.inner.logWriter
+
+	containers, err := dindClient.ContainerList(ctx, container.ListOptions{All: true})
+	if err != nil {
+		_, _ = fmt.Fprintf(writer, "diagnostics: failed to list DinD containers: %v\n", err)
+
+		return
+	}
+
+	for idx := range containers {
+		cnt := containers[idx]
+
+		name := ""
+		if len(cnt.Names) > 0 {
+			name = strings.TrimPrefix(cnt.Names[0], "/")
+		}
+
+		if name == "" || !strings.Contains(name, clusterName) {
+			continue
+		}
+
+		_, _ = fmt.Fprintf(
+			writer,
+			"\n===== DinD container %q (image=%s state=%s) logs (tail 100) =====\n",
+			name, cnt.Image, cnt.State,
+		)
+
+		logs, logErr := dindClient.ContainerLogs(ctx, cnt.ID, container.LogsOptions{
+			ShowStdout: true,
+			ShowStderr: true,
+			Tail:       "100",
+		})
+		if logErr != nil {
+			_, _ = fmt.Fprintf(writer, "diagnostics: logs for %q failed: %v\n", name, logErr)
+
+			continue
+		}
+
+		_, _ = stdcopy.StdCopy(writer, writer, logs)
+		_ = logs.Close()
+	}
 }
 
 // setupDinD creates the namespace and DinD pod, then waits for readiness.
