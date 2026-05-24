@@ -550,9 +550,9 @@ func TestPrepareUpdate_WipeRequiredAllowedWithForce(t *testing.T) {
 	require.NoError(t, err)
 }
 
-// TestPrepareUpdate_RollingRecreateBlocksWithoutForce tests that rolling-recreate
-// changes block without --force.
-func TestPrepareUpdate_RollingRecreateBlocksWithoutForce(t *testing.T) {
+// TestPrepareUpdate_RollingRecreateBlocksWithoutConsent tests that rolling-recreate
+// changes block without explicit consent.
+func TestPrepareUpdate_RollingRecreateBlocksWithoutConsent(t *testing.T) {
 	t.Parallel()
 
 	diff := clusterupdate.NewEmptyUpdateResult()
@@ -569,9 +569,11 @@ func TestPrepareUpdate_RollingRecreateBlocksWithoutForce(t *testing.T) {
 	assert.ErrorIs(t, err, clusterupdate.ErrRollingRecreateRequired)
 }
 
-// TestPrepareUpdate_RollingRecreateAllowedWithForce tests that rolling-recreate
-// changes proceed with --force.
-func TestPrepareUpdate_RollingRecreateAllowedWithForce(t *testing.T) {
+// TestPrepareUpdate_RollingRecreateNotAuthorizedByForceAlone verifies that Force
+// alone does not authorize rolling node replacement: the dedicated
+// AllowRollingRecreate gate is required so confirming a wipe never implicitly
+// triggers a rolling replacement (and vice versa).
+func TestPrepareUpdate_RollingRecreateNotAuthorizedByForceAlone(t *testing.T) {
 	t.Parallel()
 
 	diff := clusterupdate.NewEmptyUpdateResult()
@@ -579,6 +581,25 @@ func TestPrepareUpdate_RollingRecreateAllowedWithForce(t *testing.T) {
 		Field: fieldHetznerCPServerType,
 	})
 	opts := clusterupdate.UpdateOptions{Force: true}
+
+	result, shouldContinue, err := clusterupdate.PrepareUpdate(diff, nil, opts, errRecreateRequired)
+
+	require.NotNil(t, result)
+	assert.False(t, shouldContinue)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, clusterupdate.ErrRollingRecreateRequired)
+}
+
+// TestPrepareUpdate_RollingRecreateAllowedWithConsent tests that rolling-recreate
+// changes proceed when AllowRollingRecreate is set.
+func TestPrepareUpdate_RollingRecreateAllowedWithConsent(t *testing.T) {
+	t.Parallel()
+
+	diff := clusterupdate.NewEmptyUpdateResult()
+	diff.RollingRecreate = append(diff.RollingRecreate, clusterupdate.Change{
+		Field: fieldHetznerCPServerType,
+	})
+	opts := clusterupdate.UpdateOptions{AllowRollingRecreate: true}
 
 	result, shouldContinue, err := clusterupdate.PrepareUpdate(diff, nil, opts, errRecreateRequired)
 

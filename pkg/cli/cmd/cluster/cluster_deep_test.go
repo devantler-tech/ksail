@@ -485,32 +485,32 @@ func TestConfirmDisruptiveChanges(t *testing.T) {
 	// skips the prompt when force is set). The interactive prompt branch reads a
 	// global TTY/stdin state that is not injectable, so it is left to E2E.
 	tests := []struct {
-		name        string
-		diff        *clusterupdate.UpdateResult
-		force       bool
-		wantForce   bool
-		wantProceed bool
+		name             string
+		diff             *clusterupdate.UpdateResult
+		force            bool
+		wantAllowRolling bool
+		wantProceed      bool
 	}{
 		{
-			name:        "no disruptive changes proceeds without elevating force",
-			diff:        inPlace,
-			force:       false,
-			wantForce:   false,
-			wantProceed: true,
+			name:             "no disruptive changes proceeds without elevating force",
+			diff:             inPlace,
+			force:            false,
+			wantAllowRolling: false,
+			wantProceed:      true,
 		},
 		{
-			name:        "rolling-recreate with --force proceeds with force",
-			diff:        rolling,
-			force:       true,
-			wantForce:   true,
-			wantProceed: true,
+			name:             "rolling-recreate with --force proceeds with force",
+			diff:             rolling,
+			force:            true,
+			wantAllowRolling: true,
+			wantProceed:      true,
 		},
 		{
-			name:        "reboot-only with --force proceeds with force",
-			diff:        reboot,
-			force:       true,
-			wantForce:   true,
-			wantProceed: true,
+			name:             "reboot-only with --force proceeds with force",
+			diff:             reboot,
+			force:            true,
+			wantAllowRolling: true,
+			wantProceed:      true,
 		},
 	}
 
@@ -522,13 +522,13 @@ func TestConfirmDisruptiveChanges(t *testing.T) {
 			cmd.SetOut(&bytes.Buffer{})
 			cmd.SetErr(&bytes.Buffer{})
 
-			force, proceed := cluster.ExportConfirmDisruptiveChanges(
+			allowRolling, proceed := cluster.ExportConfirmDisruptiveChanges(
 				cmd,
 				testCase.diff,
 				testCase.force,
 			)
 
-			assert.Equal(t, testCase.wantForce, force)
+			assert.Equal(t, testCase.wantAllowRolling, allowRolling)
 			assert.Equal(t, testCase.wantProceed, proceed)
 		})
 	}

@@ -321,12 +321,19 @@ func (r *UpdateResult) AllChanges() []Change {
 
 // UpdateOptions provides configuration for the update operation.
 type UpdateOptions struct {
-	// Force skips user confirmation for destructive changes.
+	// Force skips user confirmation for destructive changes. It also authorizes
+	// partition-wipe changes (e.g. disk encryption migration) that are detected
+	// during apply, so it must reflect an explicit --force, not merely an
+	// interactive confirmation of an unrelated change.
 	Force bool
 	// DryRun shows what would change without applying.
 	DryRun bool
 	// RollingReboot enables rolling reboots (one node at a time) for reboot-required changes.
 	RollingReboot bool
+	// AllowRollingRecreate authorizes rolling node replacement (e.g. a Hetzner
+	// server-type change). It is gated separately from Force so that confirming a
+	// rolling replacement never implicitly authorizes a partition wipe.
+	AllowRollingRecreate bool
 }
 
 // PrepareUpdate handles the common update preamble shared by provisioners:
@@ -369,8 +376,10 @@ func PrepareUpdate(
 	}
 
 	// Rolling node replacement is disruptive (nodes are drained and recreated one
-	// at a time) and needs explicit --force confirmation, consistent with wipes.
-	if diff.HasRollingRecreate() && !opts.Force {
+	// at a time) and needs explicit consent. It is gated on AllowRollingRecreate
+	// rather than Force so that authorizing it never implicitly authorizes a
+	// partition wipe detected during the same update.
+	if diff.HasRollingRecreate() && !opts.AllowRollingRecreate {
 		return result, false, fmt.Errorf(
 			"%w: %d change(s) require replacing nodes one at a time (use --force to proceed)",
 			ErrRollingRecreateRequired,

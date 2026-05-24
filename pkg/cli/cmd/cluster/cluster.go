@@ -7814,7 +7814,7 @@ func applyOrReportChanges(
 		return nil
 	}
 
-	confirmedForce, proceed := confirmDisruptiveChanges(cmd, diff, force)
+	allowRolling, proceed := confirmDisruptiveChanges(cmd, diff, force)
 	if !proceed {
 		notify.Infof(cmd.OutOrStdout(), "Update cancelled")
 
@@ -7825,19 +7825,19 @@ func applyOrReportChanges(
 
 	return applyInPlaceChanges(
 		cmd, updater, reconciler, clusterName,
-		currentSpec, ctx, diff, outputTimer, confirmedForce,
+		currentSpec, ctx, diff, outputTimer, force, allowRolling,
 	)
 }
 
 // confirmDisruptiveChanges prompts for confirmation when the diff contains
 // disruptive changes (node reboots or rolling node replacement) and --force/--yes
-// was not set. It returns the effective force to pass to the apply phase and
+// was not set. It returns whether rolling node replacement is authorized and
 // whether the update should proceed.
 //
-// An interactive confirmation grants Force only when rolling-recreate is present:
-// the provisioner gates rolling replacement behind Force in PrepareUpdate, while
-// granting Force for a reboot-only confirmation could unintentionally authorize an
-// unrelated wipe discovered during apply.
+// Rolling replacement is authorized by an explicit --force OR an interactive
+// confirmation. It is reported separately from Force (which governs partition
+// wipes) so that confirming a rolling replacement never implicitly authorizes a
+// wipe that may be discovered during apply and was not shown in the prompt.
 func confirmDisruptiveChanges(
 	cmd *cobra.Command,
 	diff *clusterupdate.UpdateResult,
@@ -7852,7 +7852,7 @@ func confirmDisruptiveChanges(
 	}
 
 	if !promptForDisruptiveChanges(cmd, diff) {
-		return force, false
+		return false, false
 	}
 
 	return force || diff.HasRollingRecreate(), true
@@ -7969,9 +7969,9 @@ func handleRecreateRequired(
 }
 
 // applyInPlaceChanges applies provisioner-level and component-level changes in-place.
-// The force flag carries the user's consent (via --force/--yes or an interactive
-// confirmation) for disruptive changes such as rolling node replacement, which the
-// provisioner gates behind UpdateOptions.Force in PrepareUpdate.
+// force reflects an explicit --force/--yes (and governs partition wipes), while
+// allowRolling carries consent for rolling node replacement (via --force or an
+// interactive confirmation); the provisioner gates each separately in PrepareUpdate.
 func applyInPlaceChanges(
 	cmd *cobra.Command,
 	updater clusterprovisioner.Updater,
@@ -7982,11 +7982,13 @@ func applyInPlaceChanges(
 	diff *clusterupdate.UpdateResult,
 	outputTimer timer.Timer,
 	force bool,
+	allowRolling bool,
 ) error {
 	updateOpts := clusterupdate.UpdateOptions{
-		DryRun:        false,
-		RollingReboot: true,
-		Force:         force,
+		DryRun:               false,
+		RollingReboot:        true,
+		Force:                force,
+		AllowRollingRecreate: allowRolling,
 	}
 
 	notify.Titlef(cmd.OutOrStdout(), "🔄", "Applying changes...")

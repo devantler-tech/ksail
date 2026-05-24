@@ -2,6 +2,7 @@ package talosprovisioner
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -163,26 +164,25 @@ func (p *Provisioner) rollingReplaceSingleNode(
 ) error {
 	oldIP := oldServer.PublicNet.IPv4.IP.String()
 
-	// 1. Cordon and drain the outgoing node (best-effort: it may be unregistered).
+	// 1. Cordon and drain the outgoing node before removing it.
 	oldNodeName, resolveErr := p.resolveNodeName(ctx, clientset, oldIP)
-	if resolveErr == nil {
-		_, _ = fmt.Fprintf(p.logWriter, "    Cordoning %s...\n", oldNodeName)
 
-		cordonErr := p.cordonNode(ctx, clientset, oldNodeName)
-		if cordonErr != nil {
-			return fmt.Errorf("cordon: %w", cordonErr)
-		}
-
-		_, _ = fmt.Fprintf(p.logWriter, "    Draining %s...\n", oldNodeName)
-
-		drainErr := p.drainNode(ctx, clientset, oldNodeName)
+	switch {
+	case resolveErr == nil:
+		drainErr := p.cordonAndDrain(ctx, clientset, oldNodeName)
 		if drainErr != nil {
-			return fmt.Errorf("drain: %w", drainErr)
+			return drainErr
 		}
-	} else {
+	case errors.Is(resolveErr, ErrNodeNotFoundByIP):
+		// The node is no longer registered in Kubernetes (e.g. a prior partial
+		// run already removed it). Skip drain and proceed with removal.
 		_, _ = fmt.Fprintf(p.logWriter,
-			"    ⚠ Could not resolve Kubernetes node for %s (%v); proceeding with removal\n",
-			oldIP, resolveErr)
+			"    ⚠ %s not registered in Kubernetes; proceeding with removal\n", oldIP)
+	default:
+		// A Kubernetes API failure (not a missing node): the node likely still
+		// exists, so abort rather than deleting it undrained and evicting its
+		// workloads abruptly.
+		return fmt.Errorf("resolve Kubernetes node for %s: %w", oldIP, resolveErr)
 	}
 
 	// 2. Control-plane etcd membership cleanup before removal.
@@ -252,6 +252,29 @@ func (p *Provisioner) configureAndWaitReplacement(
 	if readyErr != nil {
 		return fmt.Errorf("waiting for replacement %s to become Ready: %w",
 			newServer.Name, readyErr)
+	}
+
+	return nil
+}
+
+// cordonAndDrain cordons then drains the named Kubernetes node.
+func (p *Provisioner) cordonAndDrain(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	nodeName string,
+) error {
+	_, _ = fmt.Fprintf(p.logWriter, "    Cordoning %s...\n", nodeName)
+
+	cordonErr := p.cordonNode(ctx, clientset, nodeName)
+	if cordonErr != nil {
+		return fmt.Errorf("cordon: %w", cordonErr)
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "    Draining %s...\n", nodeName)
+
+	drainErr := p.drainNode(ctx, clientset, nodeName)
+	if drainErr != nil {
+		return fmt.Errorf("drain: %w", drainErr)
 	}
 
 	return nil
