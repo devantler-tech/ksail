@@ -286,8 +286,13 @@ func TestConfigManager_WithVersionContract_PropagatesContractToGeneratedConfig(t
 
 	cfgYAMLDefault, err := cpDefault.EncodeString()
 	require.NoError(t, err)
-	assert.Contains(t, cfgYAMLDefault, "grubUseUKICmdline",
-		"default contract (TalosVersion1_12) should emit grubUseUKICmdline; got:\n%s", cfgYAMLDefault)
+	assert.Contains(
+		t,
+		cfgYAMLDefault,
+		"grubUseUKICmdline",
+		"default contract (TalosVersion1_12) should emit grubUseUKICmdline; got:\n%s",
+		cfgYAMLDefault,
+	)
 }
 
 func TestConfigManager_WithVersionContract_InvalidatesCachedConfig(t *testing.T) {
