@@ -263,6 +263,10 @@ func appendChange(
 		result.RebootRequired = append(result.RebootRequired, change)
 	case clusterupdate.ChangeCategoryWipeRequired:
 		result.WipeRequired = append(result.WipeRequired, change)
+	case clusterupdate.ChangeCategoryUnknown:
+		// Unknown-baseline entries are produced by appendUnknownIfChanged, not
+		// here; route defensively so the category is never silently dropped.
+		result.UnknownBaseline = append(result.UnknownBaseline, change)
 	}
 }
 
@@ -278,15 +282,71 @@ func (e *Engine) applyFieldRules(
 			continue
 		}
 
+		oldVal := rule.getVal(oldSpec)
+
+		// The baseline value could not be read from the cluster. Surface the
+		// field as Unknown instead of computing a confident diff against the
+		// default value (which would mislead the user into reinstalling
+		// components that may already be healthy).
+		if oldVal == clusterupdate.UnknownBaselineValue {
+			e.appendUnknownIfChanged(result, rule, newVal)
+
+			continue
+		}
+
 		cat := rule.category
 		if rule.categoryFn != nil {
 			cat = rule.categoryFn()
 		}
 
 		appendChange(result, rule.field,
-			rule.getVal(oldSpec), newVal,
+			oldVal, newVal,
 			rule.defaultVal, rule.reason, cat)
 	}
+}
+
+// appendUnknownIfChanged appends an Unknown-baseline entry for a field whose
+// current value could not be read. To avoid noise, it only emits an entry when
+// the field's *default* baseline differs from the desired value — i.e. exactly
+// when a normal diff would have reported a change. Fields the user left at their
+// defaults produce no entry, since they would not have shown a change either.
+func (e *Engine) appendUnknownIfChanged(
+	result *clusterupdate.UpdateResult,
+	rule fieldRule,
+	newVal string,
+) {
+	defaultOld := rule.getVal(clusterupdate.DefaultCurrentSpec(e.distribution, e.provider))
+
+	// Mirror appendChange's default-value substitution so the comparison matches
+	// what a normal diff would have evaluated.
+	if rule.defaultVal != "" {
+		if defaultOld == "" {
+			defaultOld = rule.defaultVal
+		}
+
+		if newVal == "" {
+			newVal = rule.defaultVal
+		}
+	}
+
+	if defaultOld == newVal {
+		return
+	}
+
+	result.UnknownBaseline = append(result.UnknownBaseline, clusterupdate.Change{
+		Field:    rule.field,
+		OldValue: clusterupdate.UnknownBaselineValue,
+		NewValue: newVal,
+		Category: clusterupdate.ChangeCategoryUnknown,
+		Reason:   "current cluster state could not be read; baseline is unknown",
+	})
+}
+
+// componentBaselineUnknown reports whether the spec's detector-derived component
+// fields were marked unknown (see clusterupdate.MarkComponentsUnknown). Checking
+// CNI is sufficient because the marker sets all component fields together.
+func (e *Engine) componentBaselineUnknown(spec *v1alpha1.ClusterSpec) bool {
+	return string(spec.CNI) == clusterupdate.UnknownBaselineValue
 }
 
 // localRegistryReasonMap maps each distribution to the reason and category for a local registry change.
@@ -528,6 +588,16 @@ func (e *Engine) checkAutoscalerOptionsChange(
 	oldSpec, newSpec *v1alpha1.ClusterSpec,
 	result *clusterupdate.UpdateResult,
 ) {
+	// The node autoscaler is detector-derived. When the component baseline could
+	// not be read, skip its diff entirely (an unknown baseline is not "disabled")
+	// rather than fabricating an in-place install change. The pod autoscaler is
+	// config-only and unaffected.
+	if e.componentBaselineUnknown(oldSpec) {
+		e.checkAutoscalerPodScalarsChange(oldSpec.Autoscaler.Pod, newSpec.Autoscaler.Pod, result)
+
+		return
+	}
+
 	oldNode := oldSpec.Autoscaler.Node
 	newNode := newSpec.Autoscaler.Node
 
