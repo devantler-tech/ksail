@@ -98,16 +98,6 @@ func (p *Provisioner) rollingReplaceRole(
 		return nil
 	}
 
-	// Runtime quorum guard: re-check the *current* control-plane count immediately
-	// before deleting any node. The diff-time classification can be stale if a
-	// scale-down ran earlier in the same update or nodes became unhealthy, so
-	// refuse to roll control planes below the etcd-quorum threshold.
-	if role == RoleControlPlane && len(existing) < clusterupdate.MinControlPlanesForRollingReplace {
-		return fmt.Errorf("%w: %d present, need at least %d",
-			ErrInsufficientControlPlanesForRoll,
-			len(existing), clusterupdate.MinControlPlanesForRollingReplace)
-	}
-
 	// Fail fast before mutating infrastructure if the new type is unavailable.
 	availErr := p.checkHetznerAvailabilityForRole(ctx, hzProvider, role)
 	if availErr != nil {
@@ -120,6 +110,14 @@ func (p *Provisioner) rollingReplaceRole(
 	}
 
 	for idx, oldServer := range toReplace {
+		// Re-validate etcd-quorum redundancy against the live inventory before
+		// each deletion. A prior iteration, a concurrent scale-down, or a node
+		// failure could have reduced the count since the loop began.
+		guardErr := p.guardControlPlaneQuorum(ctx, hzProvider, clusterName, role)
+		if guardErr != nil {
+			return guardErr
+		}
+
 		_, _ = fmt.Fprintf(p.logWriter,
 			"  [%d/%d] Replacing %s server %s with type %s...\n",
 			idx+1, len(toReplace), role, oldServer.Name, desiredType)
@@ -137,6 +135,33 @@ func (p *Provisioner) rollingReplaceRole(
 		recordAppliedChange(result, role, oldServer.Name, "replaced")
 
 		_, _ = fmt.Fprintf(p.logWriter, "  ✓ Replaced %s server %s\n", role, oldServer.Name)
+	}
+
+	return nil
+}
+
+// guardControlPlaneQuorum refuses to proceed with a control-plane replacement
+// unless at least MinControlPlanesForRollingReplace control planes are currently
+// present, preserving etcd quorum when the outgoing node is deleted. It is a
+// no-op for non-control-plane roles.
+func (p *Provisioner) guardControlPlaneQuorum(
+	ctx context.Context,
+	hzProvider *hetzner.Provider,
+	clusterName, role string,
+) error {
+	if role != RoleControlPlane {
+		return nil
+	}
+
+	current, listErr := p.listHetznerNodesByRole(ctx, hzProvider, clusterName, role)
+	if listErr != nil {
+		return fmt.Errorf("failed to re-list %s nodes for quorum check: %w", role, listErr)
+	}
+
+	if len(current) < clusterupdate.MinControlPlanesForRollingReplace {
+		return fmt.Errorf("%w: %d present, need at least %d",
+			ErrInsufficientControlPlanesForRoll,
+			len(current), clusterupdate.MinControlPlanesForRollingReplace)
 	}
 
 	return nil

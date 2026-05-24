@@ -22,7 +22,7 @@ Changes are classified into the following categories:
   - Wipe-Required: Requires wiping node partitions (e.g. disk encryption
     migration); requires --force
   - Rolling-Recreate: Nodes are replaced one at a time (e.g. a Talos × Hetzner
-    server-type change); requires --force
+    server-type change); requires confirmation (or --force to skip the prompt)
   - Recreate-Required: Require full cluster recreation
 
 Use --dry-run to preview changes without applying them.
