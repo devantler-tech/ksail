@@ -63,6 +63,10 @@ runs:
         DOCKERHUB_TOKEN: ${{ inputs.dockerhub-token }}
         GHCR_USERNAME: ${{ inputs.ghcr-user }}
         GHCR_TOKEN: ${{ inputs.ghcr-token }}
+        # Opt into nested-cluster diagnostics: on a nested bootstrap failure, ksail
+        # dumps the cluster's DinD node + mirror container logs to help diagnose
+        # stalled image pulls. Off by default; enabled here for CI triage.
+        KSAIL_NESTED_DEBUG: "1"
       run: |
         set -euo pipefail
         LOG_DIR="/tmp/ksail-system-test-logs/kubernetes-provider"

@@ -284,10 +284,10 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 	// Bootstrap and wait for readiness
 	err = p.inner.bootstrapAndWaitForReady(ctx, clusterAccess)
 	if err != nil {
-		// TEMP diagnostic: dump nested Talos node + mirror container logs to
-		// understand why the kubelet stalls in "Preparing" (image pull) — is it
-		// using the mirror, is the upstream pull failing/auth-falling-back, or
-		// just slow on a cold cache? Remove once the root cause is confirmed.
+		// Opt-in (KSAIL_NESTED_DEBUG) diagnostic: dump nested Talos node + mirror
+		// container logs to understand why the kubelet stalls in "Preparing" (image
+		// pull) — is it using the mirror, is the upstream pull failing/auth-falling-
+		// back, or just slow on a cold cache? No-op unless the env var is set.
 		p.dumpNestedDiagnostics(ctx, dindClient, clusterName)
 
 		return fmt.Errorf("bootstrap: %w", err)
@@ -553,17 +553,28 @@ func (p *KubernetesProvisioner) applyMirrorsToTalosConfig(clusterName string) er
 	return nil
 }
 
-// dumpNestedDiagnostics is a temporary, best-effort diagnostic that dumps the tail
-// of logs for every DinD container belonging to this cluster (the Talos node
-// containers and the pull-through mirror containers, all named with the cluster
-// prefix). It is invoked when the nested Talos bootstrap readiness check fails, to
-// reveal why the kubelet stalls in "Preparing" (e.g. image-pull errors on the node,
-// or upstream/auth failures on the mirrors). Remove once the cause is confirmed.
+// nestedDebugEnvVar gates the nested-cluster diagnostic dump. It is off by default
+// (the dump streams container logs, which are verbose and could contain sensitive
+// data); set it to a non-empty value to opt in (CI enables it for the nested-provider
+// system test to capture bootstrap-failure diagnostics).
+const nestedDebugEnvVar = "KSAIL_NESTED_DEBUG"
+
+// dumpNestedDiagnostics is a best-effort, opt-in diagnostic that dumps the tail of
+// logs for the DinD containers belonging to this cluster (the Talos node containers
+// and the pull-through mirror containers, named "<cluster>-..."). It is invoked when
+// the nested Talos bootstrap readiness check fails, to reveal why the kubelet stalls
+// in "Preparing" (e.g. image-pull errors on the node, or upstream/auth failures on
+// the mirrors). It is a no-op unless KSAIL_NESTED_DEBUG is set, so the default path
+// only returns the bootstrap error without streaming logs.
 func (p *KubernetesProvisioner) dumpNestedDiagnostics(
 	ctx context.Context,
 	dindClient dockerclient.APIClient,
 	clusterName string,
 ) {
+	if os.Getenv(nestedDebugEnvVar) == "" {
+		return
+	}
+
 	writer := p.inner.logWriter
 
 	containers, err := dindClient.ContainerList(ctx, container.ListOptions{All: true})
@@ -573,6 +584,10 @@ func (p *KubernetesProvisioner) dumpNestedDiagnostics(
 		return
 	}
 
+	// Match only this cluster's containers by name prefix ("<cluster>-") so we don't
+	// accidentally capture (and stream logs from) unrelated containers.
+	prefix := clusterName + "-"
+
 	for idx := range containers {
 		cnt := containers[idx]
 
@@ -581,7 +596,7 @@ func (p *KubernetesProvisioner) dumpNestedDiagnostics(
 			name = strings.TrimPrefix(cnt.Names[0], "/")
 		}
 
-		if name == "" || !strings.Contains(name, clusterName) {
+		if !strings.HasPrefix(name, prefix) {
 			continue
 		}
 
