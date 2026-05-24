@@ -1,22 +1,26 @@
 package talosprovisioner_test
 
 import (
+	"context"
+	"io"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	talosprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/talos"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 )
 
 const (
-	testTypeCX22          = "cx22"
-	testTypeCX23          = "cx23"
-	testTypeCX33          = "cx33"
-	testRollingServerType = "cpx41"
-	testRollingNodeCP0    = "cp-0"
-	testRollingNodeCP1    = "cp-1"
+	testTypeCX22                 = "cx22"
+	testTypeCX23                 = "cx23"
+	testTypeCX33                 = "cx33"
+	testRollingServerType        = "cpx41"
+	testRollingNodeCP0           = "cp-0"
+	testRollingNodeCP1           = "cp-1"
+	testFieldHetznerCPServerType = "provider.hetzner.controlPlaneServerType"
 )
 
 func TestRolesFromRollingChanges(t *testing.T) {
@@ -31,7 +35,7 @@ func TestRolesFromRollingChanges(t *testing.T) {
 		{name: "no fields", fields: nil, wantCP: false, wantWorker: false},
 		{
 			name:   "control plane only",
-			fields: []string{"provider.hetzner.controlPlaneServerType"},
+			fields: []string{testFieldHetznerCPServerType},
 			wantCP: true,
 		},
 		{
@@ -42,7 +46,7 @@ func TestRolesFromRollingChanges(t *testing.T) {
 		{
 			name: "both",
 			fields: []string{
-				"provider.hetzner.controlPlaneServerType",
+				testFieldHetznerCPServerType,
 				"provider.hetzner.workerServerType",
 			},
 			wantCP:     true,
@@ -171,6 +175,35 @@ func TestAppendServerTypeChange(t *testing.T) { //nolint:funlen // table-driven 
 			assert.Len(t, diff.RecreateRequired, testCase.wantRecreate)
 		})
 	}
+}
+
+func TestApplyRollingRecreateChanges_NoOp(t *testing.T) {
+	t.Parallel()
+
+	t.Run("no rolling changes is a no-op", func(t *testing.T) {
+		t.Parallel()
+
+		provisioner := talosprovisioner.NewProvisioner(nil, nil).WithLogWriter(io.Discard)
+
+		err := provisioner.ApplyRollingRecreateChangesForTest(
+			context.Background(), "demo", clusterupdate.NewEmptyUpdateResult(),
+		)
+		require.NoError(t, err)
+	})
+
+	t.Run("rolling changes without a Hetzner provider is a no-op", func(t *testing.T) {
+		t.Parallel()
+
+		provisioner := talosprovisioner.NewProvisioner(nil, nil).WithLogWriter(io.Discard)
+
+		result := clusterupdate.NewEmptyUpdateResult()
+		result.RollingRecreate = append(result.RollingRecreate, clusterupdate.Change{
+			Field: "provider.hetzner.controlPlaneServerType",
+		})
+
+		err := provisioner.ApplyRollingRecreateChangesForTest(context.Background(), "demo", result)
+		require.NoError(t, err)
+	})
 }
 
 func TestNodeMatchesServer(t *testing.T) {

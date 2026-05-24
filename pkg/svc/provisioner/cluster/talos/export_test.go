@@ -438,6 +438,15 @@ func RolesFromRollingChangesForTest(changes []clusterupdate.Change) (bool, bool)
 	return rolesFromRollingChanges(changes)
 }
 
+// ApplyRollingRecreateChangesForTest exposes applyRollingRecreateChanges for unit testing.
+func (p *Provisioner) ApplyRollingRecreateChangesForTest(
+	ctx context.Context,
+	clusterName string,
+	result *clusterupdate.UpdateResult,
+) error {
+	return p.applyRollingRecreateChanges(ctx, clusterName, result)
+}
+
 // ServersNeedingReplacementForTest exposes serversNeedingReplacement for unit testing.
 func ServersNeedingReplacementForTest(
 	servers []*hcloud.Server,
