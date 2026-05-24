@@ -329,7 +329,7 @@ The merge is blocked until the failure is resolved. The CI includes a comprehens
 To test the Hetzner provider locally, you need:
 
 - **`HCLOUD_TOKEN`** – Hetzner Cloud API token with read/write permissions
-- **Talos ISO** – A Talos Linux ISO must be available in your Hetzner Cloud project. The ISO ID is specific to your project and may change over time; KSail currently assumes a default ID of `122630`, but you should look up the actual ID under **Images → ISOs** in the Hetzner Cloud Console and configure/use that value in your environment.
+- **Talos ISO** – A Talos Linux ISO must be available in your Hetzner Cloud project. The ISO ID is specific to your project and may change over time; KSail currently assumes a default ID of `125127` (Talos 1.12.4 x86), but you should look up the actual ID under **Images → ISOs** in the Hetzner Cloud Console and configure/use that value in your environment.
 
 **Note:** Some unit tests and CLI code paths enable Hetzner functionality when `HCLOUD_TOKEN` is set. If you’re not intentionally testing Hetzner, unset `HCLOUD_TOKEN` (or set it to an empty value) before running `go test ./...` to keep tests hermetic.
 

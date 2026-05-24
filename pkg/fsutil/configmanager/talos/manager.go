@@ -50,7 +50,7 @@ type ConfigManager struct {
 	// additionalPatches are runtime patches added programmatically.
 	additionalPatches []Patch
 	// versionContract controls which Talos version-gated config fields are generated.
-	// Defaults to TalosVersion1_11 for compatibility with Hetzner bootstrap ISOs.
+	// Defaults to TalosVersion1_12 for compatibility with Hetzner bootstrap ISOs.
 	versionContract *talosconfig.VersionContract
 	// extensions is the list of Talos Image Factory official extension names.
 	// When non-empty, machine.install.image is patched to use a factory installer.
@@ -84,7 +84,7 @@ func NewConfigManager(
 		kubernetesVersion: kubernetesVersion,
 		networkCIDR:       networkCIDR,
 		configLoaded:      false,
-		versionContract:   talosconfig.TalosVersion1_11,
+		versionContract:   talosconfig.TalosVersion1_12,
 	}
 }
 
@@ -92,9 +92,10 @@ func NewConfigManager(
 // The version contract controls which version-gated fields are included in the generated
 // machine config. Use this to opt into features introduced in newer Talos versions.
 //
-// The default is TalosVersion1_11, which is safe for Hetzner bootstrap ISOs (currently
-// Talos 1.11.2). Version contracts greater than 1.11 generate fields unknown to the
-// 1.11.2 machined (e.g. machine.install.grubUseUKICmdline), causing bootstrap failures.
+// The default is TalosVersion1_12, which is safe for Hetzner bootstrap ISOs (currently
+// Talos 1.12.4, ISO 125127). Version contracts greater than the booted machined's
+// version generate fields it does not recognise (e.g. machine.install.grubUseUKICmdline),
+// causing bootstrap failures.
 // Set a higher contract only when all bootstrap paths support the required Talos version.
 func (m *ConfigManager) WithVersionContract(contract *talosconfig.VersionContract) *ConfigManager {
 	m.versionContract = contract

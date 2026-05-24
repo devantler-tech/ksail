@@ -1402,19 +1402,23 @@ func TestEngine_TalosISO_SuppressedWhenOldUnknown(t *testing.T) {
 	t.Parallel()
 
 	// Simulate GetCurrentConfig returning 0 (unset) for ISO — the live cluster
-	// can't report what ISO it booted from.
+	// can't report what ISO it booted from, and no persisted state is available
+	// (e.g. a stateless CI runner).
 	old := newBaseSpec()
 	old.Distribution = v1alpha1.DistributionTalos
 	old.Talos.ISO = 0
 
+	// Pin a non-default ISO, as a real cluster does. This is the case that
+	// previously produced a perpetual false-positive diff: the unknown baseline
+	// was filled with DefaultTalosISO and compared against the pinned value.
 	newer := clone(old)
-	newer.Talos.ISO = v1alpha1.DefaultTalosISO
+	newer.Talos.ISO = v1alpha1.DefaultTalosISO + 1
 
 	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
 	result := engine.ComputeDiff(old, newer, nil, nil)
 
-	// ISO should NOT appear as a change because both sides normalise to the
-	// default ISO via the defaultVal mechanism.
+	// ISO must NOT appear as a change: with no baseline to compare against, the
+	// rule skips the field entirely rather than diffing against the default.
 	for _, c := range result.AllChanges() {
 		if c.Field == "cluster.talos.iso" {
 			t.Fatalf("expected no ISO diff when old value is 0 (unknown), got %+v", c)
