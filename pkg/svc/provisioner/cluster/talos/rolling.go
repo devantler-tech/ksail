@@ -285,8 +285,6 @@ func (p *Provisioner) rollingApplyRebootChanges(
 
 // rollingRebootSingleNode performs the cordon → drain → stage config → reboot →
 // wait → uncordon sequence for a single node.
-//
-//nolint:cyclop,funlen // sequential cordon/drain/stage/reboot/wait/uncordon steps
 func (p *Provisioner) rollingRebootSingleNode(
 	ctx context.Context,
 	clientset kubernetes.Interface,
