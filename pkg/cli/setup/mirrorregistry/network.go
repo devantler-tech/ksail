@@ -25,7 +25,10 @@ func EnsureDockerNetworkExists(
 	networkCIDR string,
 	writer io.Writer,
 ) error {
-	err := registry.EnsureNetwork(ctx, dockerClient, networkName, networkCIDR, writer)
+	// Host (non-DinD) networks use the standard MTU.
+	err := registry.EnsureNetwork(
+		ctx, dockerClient, networkName, networkCIDR, registry.DefaultNetworkMTU, writer,
+	)
 	if err != nil {
 		return fmt.Errorf("ensure docker network: %w", err)
 	}

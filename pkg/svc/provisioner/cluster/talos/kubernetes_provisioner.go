@@ -510,7 +510,11 @@ func (p *KubernetesProvisioner) setupDinDMirrors(
 	// the nodes instead of creating a conflicting one.
 	networkCIDR := talosconfigmanager.DefaultNetworkCIDR
 
-	err = registry.EnsureNetwork(ctx, dindClient, clusterName, networkCIDR, writer)
+	// Use the nested (DinD) MTU so registry/upstream and node↔mirror traffic fits the
+	// DinD pod's path MTU (1500 drops large TLS-handshake packets — see NestedNetworkMTU).
+	err = registry.EnsureNetwork(
+		ctx, dindClient, clusterName, networkCIDR, registry.NestedNetworkMTU, writer,
+	)
 	if err != nil {
 		return fmt.Errorf("ensure nested cluster network: %w", err)
 	}

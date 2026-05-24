@@ -16,16 +16,25 @@ import (
 // com.docker.network.driver.mtu to parse network state.
 const DefaultNetworkMTU = "1500"
 
+// NestedNetworkMTU is the MTU for cluster networks created inside a DinD environment
+// (the Kubernetes provider). The DinD pod sits behind the host cluster's pod network
+// (and, on CI, possibly a tunnel/NAT), so a 1500 MTU drops large packets (e.g. TLS
+// handshakes from pull-through mirrors to upstream registries). It matches the DinD
+// daemon's lowered bridge MTU. Keep in sync with kubernetesprovider's dindMTU.
+const NestedNetworkMTU = "1400"
+
 // EnsureNetwork creates a Docker network if it doesn't already exist.
 // This is used to pre-create the cluster network before registry setup, allowing
 // registry containers to be connected and accessible via Docker DNS when nodes start
 // pulling images during boot. The network is created with Talos-compatible labels and
-// CIDR so the Talos SDK recognizes and reuses it when creating the cluster.
+// CIDR so the Talos SDK recognizes and reuses it when creating the cluster. An empty
+// mtu falls back to DefaultNetworkMTU.
 func EnsureNetwork(
 	ctx context.Context,
 	dockerClient client.APIClient,
 	networkName string,
 	networkCIDR string,
+	mtu string,
 	writer io.Writer,
 ) error {
 	exists, err := networkExists(ctx, dockerClient, networkName, writer)
@@ -37,7 +46,7 @@ func EnsureNetwork(
 		return nil
 	}
 
-	return createDockerNetwork(ctx, dockerClient, networkName, networkCIDR, writer)
+	return createDockerNetwork(ctx, dockerClient, networkName, networkCIDR, mtu, writer)
 }
 
 // networkExists checks if a Docker network with the given name already exists.
@@ -76,6 +85,7 @@ func createDockerNetwork(
 	dockerClient client.APIClient,
 	networkName string,
 	networkCIDR string,
+	mtu string,
 	writer io.Writer,
 ) error {
 	notify.WriteMessage(notify.Message{
@@ -85,7 +95,7 @@ func createDockerNetwork(
 		Args:    []any{networkName},
 	})
 
-	createOptions := buildNetworkCreateOptions(networkName, networkCIDR)
+	createOptions := buildNetworkCreateOptions(networkName, networkCIDR, mtu)
 
 	_, err := dockerClient.NetworkCreate(ctx, networkName, createOptions)
 	if err != nil {
@@ -96,8 +106,13 @@ func createDockerNetwork(
 }
 
 // buildNetworkCreateOptions constructs the Docker network creation configuration
-// with Talos-compatible labels, CIDR, and bridge options.
-func buildNetworkCreateOptions(networkName, networkCIDR string) network.CreateOptions {
+// with Talos-compatible labels, CIDR, and bridge options. An empty mtu defaults to
+// DefaultNetworkMTU.
+func buildNetworkCreateOptions(networkName, networkCIDR, mtu string) network.CreateOptions {
+	if mtu == "" {
+		mtu = DefaultNetworkMTU
+	}
+
 	createOptions := network.CreateOptions{
 		Driver: "bridge",
 		// Use Talos labels so the SDK recognizes this as a Talos network.
@@ -111,7 +126,7 @@ func buildNetworkCreateOptions(networkName, networkCIDR string) network.CreateOp
 		Options: map[string]string{
 			"com.docker.network.bridge.enable_icc":           "true",
 			"com.docker.network.bridge.enable_ip_masquerade": "true",
-			"com.docker.network.driver.mtu":                  DefaultNetworkMTU,
+			"com.docker.network.driver.mtu":                  mtu,
 		},
 	}
 

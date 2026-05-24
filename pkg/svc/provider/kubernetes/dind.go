@@ -33,6 +33,14 @@ const (
 	// DinDAPIServerPort is the port the nested API server is exposed on (via Docker port mapping).
 	DinDAPIServerPort = 6443
 
+	// dindMTU is the MTU for the DinD Docker daemon's bridge. The DinD pod sits behind
+	// the host cluster's pod network (and, on CI, possibly a tunnel/NAT), so the path
+	// MTU to the internet can be below the default 1500. With 1500, large packets (e.g.
+	// the TLS handshake of a pull-through mirror reaching an upstream registry) are
+	// silently dropped — PMTU discovery is typically blackholed — producing "TLS
+	// handshake timeout". A conservative 1400 keeps egress packets within the path MTU.
+	dindMTU = 1400
+
 	// DinDPVCName is the name of the PVC for the Docker data directory.
 	DinDPVCName = "docker-data"
 
@@ -166,6 +174,10 @@ func buildDinDContainer() corev1.Container {
 	return corev1.Container{
 		Name:  DinDContainerName,
 		Image: DinDImage,
+		// Forwarded to dockerd by the dind entrypoint. Lower the bridge MTU so egress
+		// (e.g. pull-through mirrors reaching upstream registries) fits the DinD pod's
+		// path MTU instead of stalling on dropped TLS-handshake packets.
+		Args: []string{fmt.Sprintf("--mtu=%d", dindMTU)},
 		SecurityContext: &corev1.SecurityContext{
 			Privileged: &privileged,
 		},

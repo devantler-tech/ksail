@@ -285,7 +285,14 @@ func TestEnsureNetwork_ExistingNetwork_ShortCircuits(t *testing.T) {
 		Return([]network.Summary{{Name: "existing-net"}}, nil).
 		Once()
 
-	err := registry.EnsureNetwork(ctx, mockClient, "existing-net", "10.5.0.0/24", &bytes.Buffer{})
+	err := registry.EnsureNetwork(
+		ctx,
+		mockClient,
+		"existing-net",
+		"10.5.0.0/24",
+		registry.DefaultNetworkMTU,
+		&bytes.Buffer{},
+	)
 	require.NoError(t, err)
 }
 
@@ -310,7 +317,14 @@ func TestEnsureNetwork_CreatePath_SetsTalosLabelsOptionsAndSubnet(t *testing.T) 
 		Return(network.CreateResponse{}, nil).
 		Once()
 
-	err := registry.EnsureNetwork(ctx, mockClient, "new-net", "10.5.0.0/24", &bytes.Buffer{})
+	err := registry.EnsureNetwork(
+		ctx,
+		mockClient,
+		"new-net",
+		"10.5.0.0/24",
+		registry.DefaultNetworkMTU,
+		&bytes.Buffer{},
+	)
 	require.NoError(t, err)
 
 	assert.Equal(t, "bridge", captured.Driver)
@@ -345,7 +359,14 @@ func TestEnsureNetwork_EmptyCIDR_OmitsIPAM(t *testing.T) {
 		Return(network.CreateResponse{}, nil).
 		Once()
 
-	err := registry.EnsureNetwork(ctx, mockClient, "no-cidr", "", &bytes.Buffer{})
+	err := registry.EnsureNetwork(
+		ctx,
+		mockClient,
+		"no-cidr",
+		"",
+		registry.DefaultNetworkMTU,
+		&bytes.Buffer{},
+	)
 	require.NoError(t, err)
 	assert.Nil(t, captured.IPAM)
 }
@@ -361,7 +382,14 @@ func TestEnsureNetwork_NetworkListError_IsWrapped(t *testing.T) {
 		Return(nil, errNetworkBoom).
 		Once()
 
-	err := registry.EnsureNetwork(ctx, mockClient, "net", "10.5.0.0/24", &bytes.Buffer{})
+	err := registry.EnsureNetwork(
+		ctx,
+		mockClient,
+		"net",
+		"10.5.0.0/24",
+		registry.DefaultNetworkMTU,
+		&bytes.Buffer{},
+	)
 	require.ErrorIs(t, err, errNetworkBoom)
 	assert.Contains(t, err.Error(), "failed to list networks")
 }
@@ -381,7 +409,42 @@ func TestEnsureNetwork_NetworkCreateError_IsWrapped(t *testing.T) {
 		Return(network.CreateResponse{}, errNetworkBoom).
 		Once()
 
-	err := registry.EnsureNetwork(ctx, mockClient, "net", "10.5.0.0/24", &bytes.Buffer{})
+	err := registry.EnsureNetwork(
+		ctx,
+		mockClient,
+		"net",
+		"10.5.0.0/24",
+		registry.DefaultNetworkMTU,
+		&bytes.Buffer{},
+	)
 	require.ErrorIs(t, err, errNetworkBoom)
 	assert.Contains(t, err.Error(), "failed to create network")
+}
+
+func TestEnsureNetwork_HonorsCustomMTU(t *testing.T) {
+	t.Parallel()
+
+	mockClient := docker.NewMockAPIClient(t)
+	ctx := context.Background()
+
+	mockClient.EXPECT().
+		NetworkList(ctx, mock.Anything).
+		Return([]network.Summary{}, nil).
+		Once()
+
+	var captured network.CreateOptions
+
+	mockClient.EXPECT().
+		NetworkCreate(ctx, "nested-net", mock.Anything).
+		Run(func(_ context.Context, _ string, opts network.CreateOptions) {
+			captured = opts
+		}).
+		Return(network.CreateResponse{}, nil).
+		Once()
+
+	err := registry.EnsureNetwork(
+		ctx, mockClient, "nested-net", "10.5.0.0/24", registry.NestedNetworkMTU, &bytes.Buffer{},
+	)
+	require.NoError(t, err)
+	assert.Equal(t, registry.NestedNetworkMTU, captured.Options["com.docker.network.driver.mtu"])
 }
