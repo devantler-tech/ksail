@@ -10,10 +10,15 @@ project_name: ksail-desktop
 
 dist: dist-desktop
 
-# This runs as a second GoReleaser invocation (on a macOS runner) after the main release. Upload the
-# desktop archive to the release the main run already created, without touching its notes.
+# This runs as a second GoReleaser invocation (on a macOS runner) after the main release. Disable
+# GoReleaser's own release pipe entirely: `keep-existing` looks the release up via GitHub's
+# get-release-by-tag API, which does NOT return drafts, so it would not find the main run's draft and
+# would instead create a brand-new — and immediately published, hence immutable — release for the tag
+# (see #4874). The cd.yaml job uploads the built archive to the existing draft with `gh release upload`
+# instead. The Homebrew cask PR is still opened: the cask pipe builds its download URL from
+# owner/repo/tag (not from a created release object), so it works with the release pipe disabled.
 release:
-  mode: keep-existing
+  disable: true
 
 before:
   hooks:
@@ -56,6 +61,12 @@ archives:
 homebrew_casks:
   - name: ksail-desktop
     ids: [ksail-desktop]
+    # The release pipe is disabled (see above), so GoReleaser refuses to derive the default cask
+    # download URL ("release is disabled, cannot use default url_template"). Set it explicitly to the
+    # main repo's release assets — where the cd.yaml desktop-macos job uploads the archive via
+    # `gh release upload`. This is the same URL the default would have produced.
+    url:
+      template: "https://github.com/devantler-tech/ksail/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
     description: "KSail desktop app — manage local Kubernetes clusters in a native window"
     homepage: "https://ksail.devantler.tech"
     repository:

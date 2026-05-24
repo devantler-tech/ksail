@@ -739,7 +739,9 @@ func (r *ClusterReconciler) reconcileDrift(
 		ProvisionedName(cluster),
 		oldSpec,
 		newSpec,
-		clusterupdate.UpdateOptions{Force: true},
+		// Operator reconciles are non-interactive automation: authorize both
+		// partition wipes (Force) and rolling node replacement.
+		clusterupdate.UpdateOptions{Force: true, AllowRollingRecreate: true},
 	)
 	if err != nil {
 		return fmt.Errorf("update cluster: %w", err)

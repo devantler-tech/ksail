@@ -55,7 +55,7 @@ func (e *Engine) ComputeDiff(
 	e.checkLocalRegistryChange(oldSpec, newSpec, result)
 	e.checkVanillaOptionsChange(oldSpec, newSpec, result)
 	e.checkTalosOptionsChange(oldSpec, newSpec, result)
-	e.checkHetznerOptionsChange(oldProvider, newProvider, result)
+	e.checkHetznerOptionsChange(oldSpec, oldProvider, newProvider, result)
 	e.checkAutoscalerOptionsChange(oldSpec, newSpec, result)
 
 	return result
@@ -235,6 +235,8 @@ func (e *Engine) scalarFieldRules() []fieldRule {
 // appendChange appends a single diff change to the appropriate category slice in result.
 // Both applyFieldRules and applyProviderFieldRules delegate to this helper to
 // avoid duplicating the default-value substitution and category dispatch logic.
+//
+//nolint:cyclop // single dispatch switch over change categories
 func appendChange(
 	result *clusterupdate.UpdateResult,
 	field, oldVal, newVal, defaultVal, reason string,
@@ -271,6 +273,8 @@ func appendChange(
 		result.RebootRequired = append(result.RebootRequired, change)
 	case clusterupdate.ChangeCategoryWipeRequired:
 		result.WipeRequired = append(result.WipeRequired, change)
+	case clusterupdate.ChangeCategoryRollingRecreate:
+		result.RollingRecreate = append(result.RollingRecreate, change)
 	case clusterupdate.ChangeCategoryUnknown:
 		// Unknown-baseline entries are produced by appendUnknownIfChanged, not
 		// here; route defensively so the category is never silently dropped.
@@ -516,6 +520,7 @@ var talosISORule = fieldRule{
 
 // checkHetznerOptionsChange checks Hetzner-specific option changes.
 func (e *Engine) checkHetznerOptionsChange(
+	oldSpec *v1alpha1.ClusterSpec,
 	oldProvider, newProvider *v1alpha1.ProviderSpec,
 	result *clusterupdate.UpdateResult,
 ) {
@@ -528,6 +533,59 @@ func (e *Engine) checkHetznerOptionsChange(
 	}
 
 	e.applyProviderFieldRules(oldProvider, newProvider, result, hetznerFieldRules)
+	e.checkHetznerServerTypeChanges(oldSpec, oldProvider, newProvider, result)
+}
+
+// checkHetznerServerTypeChanges classifies control-plane and worker server-type
+// changes. Unlike the static hetznerFieldRules, their impact depends on the
+// running node counts: control planes can be rolled one at a time only when the
+// cluster has enough etcd-quorum redundancy, and workers are only rolled when
+// they exist. See clusterupdate.ControlPlaneServerTypeChangeCategory and
+// WorkerServerTypeChangeCategory.
+func (e *Engine) checkHetznerServerTypeChanges(
+	oldSpec *v1alpha1.ClusterSpec,
+	oldProvider, newProvider *v1alpha1.ProviderSpec,
+	result *clusterupdate.UpdateResult,
+) {
+	cpCategory := clusterupdate.ControlPlaneServerTypeChangeCategory(int(oldSpec.ControlPlanes))
+	appendChange(result, "provider.hetzner.controlPlaneServerType",
+		oldProvider.Hetzner.ControlPlaneServerType, newProvider.Hetzner.ControlPlaneServerType,
+		v1alpha1.DefaultHetznerServerType,
+		serverTypeChangeReason(RoleControlPlane, cpCategory), cpCategory)
+
+	workerCategory := clusterupdate.WorkerServerTypeChangeCategory(int(oldSpec.Workers))
+	appendChange(result, "provider.hetzner.workerServerType",
+		oldProvider.Hetzner.WorkerServerType, newProvider.Hetzner.WorkerServerType,
+		v1alpha1.DefaultHetznerServerType,
+		serverTypeChangeReason(RoleWorker, workerCategory), workerCategory)
+}
+
+// Role identifiers used when describing server-type changes.
+const (
+	// RoleControlPlane identifies control-plane nodes.
+	RoleControlPlane = "control-plane"
+	// RoleWorker identifies worker nodes.
+	RoleWorker = "worker"
+)
+
+// serverTypeChangeReason returns a human-readable explanation for a server-type
+// change classified into the given category.
+func serverTypeChangeReason(role string, category clusterupdate.ChangeCategory) string {
+	switch category {
+	case clusterupdate.ChangeCategoryRollingRecreate:
+		return "existing " + role + " servers are replaced one at a time to apply the new VM type"
+	case clusterupdate.ChangeCategoryRecreateRequired:
+		return "control plane lacks etcd-quorum redundancy to roll (need at least " +
+			strconv.Itoa(clusterupdate.MinControlPlanesForRollingReplace) +
+			" control planes); recreation is required to change VM type"
+	case clusterupdate.ChangeCategoryInPlace,
+		clusterupdate.ChangeCategoryRebootRequired,
+		clusterupdate.ChangeCategoryWipeRequired,
+		clusterupdate.ChangeCategoryUnknown:
+		return "new " + role + " servers use the new type; no existing nodes to replace"
+	default:
+		return "new " + role + " servers use the new type; no existing nodes to replace"
+	}
 }
 
 // providerFieldRule describes how to diff a single scalar field from ProviderSpec.
@@ -544,20 +602,6 @@ type providerFieldRule struct {
 //
 //nolint:gochecknoglobals // Immutable field-rule table; avoids per-call heap allocation.
 var hetznerFieldRules = []providerFieldRule{
-	{
-		field:      "provider.hetzner.controlPlaneServerType",
-		category:   clusterupdate.ChangeCategoryRecreateRequired,
-		reason:     "existing control-plane servers cannot change VM type",
-		getVal:     func(s *v1alpha1.ProviderSpec) string { return s.Hetzner.ControlPlaneServerType },
-		defaultVal: v1alpha1.DefaultHetznerServerType,
-	},
-	{
-		field:      "provider.hetzner.workerServerType",
-		category:   clusterupdate.ChangeCategoryInPlace,
-		reason:     "new worker servers will use the new type; existing workers unchanged",
-		getVal:     func(s *v1alpha1.ProviderSpec) string { return s.Hetzner.WorkerServerType },
-		defaultVal: v1alpha1.DefaultHetznerServerType,
-	},
 	{
 		field:      "provider.hetzner.location",
 		category:   clusterupdate.ChangeCategoryRecreateRequired,

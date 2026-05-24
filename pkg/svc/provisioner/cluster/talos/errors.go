@@ -87,4 +87,13 @@ var (
 	)
 	// ErrInvalidPort is returned when a port number is outside the valid TCP range [1, 65535].
 	ErrInvalidPort = errors.New("port out of valid range [1, 65535]")
+	// ErrReplacementServerNotCreated is returned when a rolling node replacement
+	// fails to produce a new server.
+	ErrReplacementServerNotCreated = errors.New("no replacement server was created")
+	// ErrInsufficientControlPlanesForRoll is returned when a rolling control-plane
+	// replacement is attempted with too few control planes currently present to
+	// preserve etcd quorum.
+	ErrInsufficientControlPlanesForRoll = errors.New(
+		"too few control planes present to roll without losing etcd quorum",
+	)
 )

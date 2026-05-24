@@ -17,6 +17,11 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
+const (
+	testFieldHetznerCPServerType = "provider.hetzner.controlPlaneServerType"
+	testFieldClusterCNI          = "cluster.cni"
+)
+
 func TestPrepareOutputPath(t *testing.T) {
 	t.Parallel()
 
@@ -267,6 +272,7 @@ func TestCategoryIcon(t *testing.T) {
 		want     string
 	}{
 		{"recreate", clusterupdate.ChangeCategoryRecreateRequired, "🔴"},
+		{"rolling-recreate", clusterupdate.ChangeCategoryRollingRecreate, "🟠"},
 		{"reboot", clusterupdate.ChangeCategoryRebootRequired, "🟡"},
 		{"in-place", clusterupdate.ChangeCategoryInPlace, "🟢"},
 		{"unknown", clusterupdate.ChangeCategory(99), "⚪"},
@@ -434,6 +440,139 @@ func TestDiffToJSON_AllCategories(t *testing.T) {
 	assert.True(t, out.RequiresConfirmation)
 	assert.Equal(t, "cni", out.InPlaceChanges[0].Field)
 	assert.Equal(t, "component swap", out.InPlaceChanges[0].Reason)
+}
+
+func TestDiffToJSON_RollingRecreate(t *testing.T) {
+	t.Parallel()
+
+	diff := &clusterupdate.UpdateResult{
+		RollingRecreate: []clusterupdate.Change{
+			{
+				Field:    testFieldHetznerCPServerType,
+				OldValue: "cx23",
+				NewValue: "cpx41",
+				Category: clusterupdate.ChangeCategoryRollingRecreate,
+				Reason:   "rolling node replacement",
+			},
+		},
+	}
+
+	out := cluster.ExportDiffToJSON(diff)
+	assert.Equal(t, 1, out.TotalChanges)
+	assert.Len(t, out.RollingRecreate, 1)
+	assert.True(t, out.RequiresConfirmation)
+	assert.Equal(t, "rolling-recreate", out.RollingRecreate[0].Category)
+	assert.Equal(t, testFieldHetznerCPServerType, out.RollingRecreate[0].Field)
+}
+
+func TestConfirmDisruptiveChanges(t *testing.T) {
+	t.Parallel()
+
+	rolling := &clusterupdate.UpdateResult{
+		RollingRecreate: []clusterupdate.Change{
+			{Field: testFieldHetznerCPServerType},
+		},
+	}
+	reboot := &clusterupdate.UpdateResult{
+		RebootRequired: []clusterupdate.Change{{Field: "cluster.cdi"}},
+	}
+	inPlace := &clusterupdate.UpdateResult{
+		InPlaceChanges: []clusterupdate.Change{{Field: testFieldClusterCNI}},
+	}
+
+	// Only branches that do not depend on TTY state are asserted: the
+	// no-disruptive-change path, and the --force path (ShouldSkipPrompt always
+	// skips the prompt when force is set). The interactive prompt branch reads a
+	// global TTY/stdin state that is not injectable, so it is left to E2E.
+	tests := []struct {
+		name             string
+		diff             *clusterupdate.UpdateResult
+		force            bool
+		wantAllowRolling bool
+		wantProceed      bool
+	}{
+		{
+			name:             "no disruptive changes proceeds without elevating force",
+			diff:             inPlace,
+			force:            false,
+			wantAllowRolling: false,
+			wantProceed:      true,
+		},
+		{
+			name:             "rolling-recreate with --force proceeds with force",
+			diff:             rolling,
+			force:            true,
+			wantAllowRolling: true,
+			wantProceed:      true,
+		},
+		{
+			name:             "reboot-only with --force proceeds with force",
+			diff:             reboot,
+			force:            true,
+			wantAllowRolling: true,
+			wantProceed:      true,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			cmd := &cobra.Command{}
+			cmd.SetOut(&bytes.Buffer{})
+			cmd.SetErr(&bytes.Buffer{})
+
+			allowRolling, proceed := cluster.ExportConfirmDisruptiveChanges(
+				cmd,
+				testCase.diff,
+				testCase.force,
+			)
+
+			assert.Equal(t, testCase.wantAllowRolling, allowRolling)
+			assert.Equal(t, testCase.wantProceed, proceed)
+		})
+	}
+}
+
+func TestReportFailedChanges(t *testing.T) {
+	t.Parallel()
+
+	t.Run("no failures writes nothing", func(t *testing.T) {
+		t.Parallel()
+
+		cmd := &cobra.Command{}
+
+		var buf bytes.Buffer
+
+		// reportFailedChanges writes via cmd.OutOrStderr(), which cobra backs with
+		// the out writer when set.
+		cmd.SetOut(&buf)
+
+		cluster.ExportReportFailedChanges(cmd, clusterupdate.NewEmptyUpdateResult())
+		assert.Empty(t, buf.String())
+	})
+
+	t.Run("failures are reported", func(t *testing.T) {
+		t.Parallel()
+
+		cmd := &cobra.Command{}
+
+		var buf bytes.Buffer
+
+		cmd.SetOut(&buf)
+
+		result := clusterupdate.NewEmptyUpdateResult()
+		result.FailedChanges = append(result.FailedChanges, clusterupdate.Change{
+			Field:  "cluster.controlPlanes",
+			Reason: "replacement failed",
+		})
+
+		cluster.ExportReportFailedChanges(cmd, result)
+
+		output := buf.String()
+		assert.Contains(t, output, "cluster.controlPlanes")
+		assert.Contains(t, output, "replacement failed")
+	})
 }
 
 func TestDisplayChangesSummary_EmptyChanges(t *testing.T) {

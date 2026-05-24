@@ -141,7 +141,9 @@ jobs:
   # The macOS desktop app ships as a Homebrew cask. The desktop app is a separate Go module that
   # links a system webview via CGO and cannot be cross-compiled in the main release, so this job runs
   # a second GoReleaser config on a macOS runner: it builds the darwin binary, packages it as a
-  # KSail.app bundle, uploads the archive to the release, and opens a cask PR on the homebrew tap.
+  # KSail.app bundle and opens a cask PR on the homebrew tap. GoReleaser's release pipe is disabled
+  # (see .goreleaser.desktop.yaml); a separate step uploads the archive to the draft via `gh release
+  # upload`, mirroring the desktop (linux/windows) and vscode-extension jobs.
   desktop-macos:
     name: 🧩 Release Desktop App (macOS cask)
     runs-on: macos-latest
@@ -177,9 +179,18 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HOMEBREW_GITHUB_API_TOKEN: ${{ secrets.HOMEBREW_GITHUB_API_TOKEN }}
 
+      # GoReleaser's release pipe is disabled (.goreleaser.desktop.yaml), so attach the macOS archive
+      # to the existing draft here — same pattern as the desktop (linux/windows) and vscode jobs.
+      - name: 📤 Upload desktop app to release
+        shell: bash
+        run: gh release upload "${GITHUB_REF#refs/tags/}" dist-desktop/KSail_*_darwin_*.zip --clobber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   # Linux and Windows desktop binaries are convenience downloads (no cask). They build on native
-  # runners (CGO + the system webview) and attach to the release. Intentionally not in
-  # publish-release's needs: a hiccup here should not block the rest of the release.
+  # runners (CGO + the system webview) and attach to the draft release. publish-release needs: this
+  # job so every asset is attached before the draft is published — once published the release is
+  # immutable, and any upload still in flight would 422 (see #4874).
   desktop:
     name: 🧩 Release Desktop App
     runs-on: ${{ matrix.os }}
@@ -528,6 +539,7 @@ jobs:
         pages-deploy,
         copilot-plugin,
         desktop-macos,
+        desktop,
       ]
     permissions:
       contents: write
@@ -545,25 +557,36 @@ jobs:
           script: |
             const tag = process.env.RELEASE_TAG;
 
-            // List releases and find the one matching the tag
+            // List releases and find the one(s) matching the tag
             // Note: getReleaseByTag does not return draft releases, so we use listReleases instead
-            let release;
+            let matching;
             try {
               const { data: releases } = await github.rest.repos.listReleases({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 per_page: 100,
               });
-              release = releases.find(r => r.tag_name === tag);
+              matching = releases.filter(r => r.tag_name === tag);
             } catch (error) {
               core.setFailed(`Failed to list releases: ${error.message}`);
               throw error;
             }
 
-            if (!release) {
+            if (matching.length === 0) {
               core.setFailed(`Release not found for tag ${tag}`);
               return;
             }
+
+            // More than one release for a tag means an asset job created a duplicate (e.g. a second
+            // GoReleaser run that couldn't see the draft) — see #4874. Bail before publishing rather
+            // than racing an immutable release into existence; the duplicate needs manual cleanup.
+            if (matching.length > 1) {
+              const ids = matching.map(r => `${r.id} (draft=${r.draft})`).join(', ');
+              core.setFailed(`Found ${matching.length} releases for tag ${tag}: ${ids}. Expected exactly one — manual cleanup required.`);
+              return;
+            }
+
+            const release = matching[0];
 
             if (!release.draft) {
               console.log(`Release ${tag} is already published`);
