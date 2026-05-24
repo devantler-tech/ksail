@@ -6820,6 +6820,8 @@ is supported for K3d, but most other changes require cluster recreation.
 Changes are classified into the following categories:
   - In-Place: Applied without disruption
   - Reboot-Required: Applied but may require node reboots
+  - Wipe-Required: Requires wiping node partitions (e.g. disk encryption
+    migration); requires --force
   - Rolling-Recreate: Nodes are replaced one at a time (e.g. a Talos × Hetzner
     server-type change); requires --force
   - Recreate-Required: Require full cluster recreation
@@ -7812,24 +7814,11 @@ func applyOrReportChanges(
 		return nil
 	}
 
-	// Disruptive changes (node reboots or rolling node replacement) require
-	// confirmation unless --force/--yes is set.
-	confirmedForce := force
-	if (diff.HasRebootRequired() || diff.HasRollingRecreate()) &&
-		!confirm.ShouldSkipPrompt(force) {
-		if !promptForDisruptiveChanges(cmd, diff) {
-			notify.Infof(cmd.OutOrStdout(), "Update cancelled")
+	confirmedForce, proceed := confirmDisruptiveChanges(cmd, diff, force)
+	if !proceed {
+		notify.Infof(cmd.OutOrStdout(), "Update cancelled")
 
-			return nil
-		}
-
-		// The provisioner gates rolling replacement behind Force in PrepareUpdate,
-		// so an interactive confirmation must grant Force for it to proceed. Only
-		// elevate for rolling-recreate: granting Force for a reboot-only confirmation
-		// could unintentionally authorize an unrelated wipe discovered during apply.
-		if diff.HasRollingRecreate() {
-			confirmedForce = true
-		}
+		return nil
 	}
 
 	reconciler := newComponentReconciler(cmd, ctx.ClusterCfg, clusterName)
@@ -7838,6 +7827,35 @@ func applyOrReportChanges(
 		cmd, updater, reconciler, clusterName,
 		currentSpec, ctx, diff, outputTimer, confirmedForce,
 	)
+}
+
+// confirmDisruptiveChanges prompts for confirmation when the diff contains
+// disruptive changes (node reboots or rolling node replacement) and --force/--yes
+// was not set. It returns the effective force to pass to the apply phase and
+// whether the update should proceed.
+//
+// An interactive confirmation grants Force only when rolling-recreate is present:
+// the provisioner gates rolling replacement behind Force in PrepareUpdate, while
+// granting Force for a reboot-only confirmation could unintentionally authorize an
+// unrelated wipe discovered during apply.
+func confirmDisruptiveChanges(
+	cmd *cobra.Command,
+	diff *clusterupdate.UpdateResult,
+	force bool,
+) (bool, bool) {
+	if !diff.HasRebootRequired() && !diff.HasRollingRecreate() {
+		return force, true
+	}
+
+	if confirm.ShouldSkipPrompt(force) {
+		return force, true
+	}
+
+	if !promptForDisruptiveChanges(cmd, diff) {
+		return force, false
+	}
+
+	return force || diff.HasRollingRecreate(), true
 }
 
 // promptForDisruptiveChanges warns about reboot-required and rolling-recreate

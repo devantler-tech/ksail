@@ -672,66 +672,73 @@ func TestEnsureAutoscalerSecretIfNeeded_ErrorWhenNoSchematic(t *testing.T) {
 }
 
 //nolint:funlen // Table-driven test with multiple node topology scenarios is clearer as single function
-func TestDetectHetznerServerTypes(t *testing.T) {
+func TestRepresentativeServerType(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name           string
-		nodes          []provider.NodeInfo
-		wantCPType     string
-		wantWorkerType string
+		name    string
+		nodes   []provider.NodeInfo
+		role    string
+		desired string
+		want    string
 	}{
 		{
-			name:           "empty node list returns empty strings",
-			nodes:          nil,
-			wantCPType:     "",
-			wantWorkerType: "",
+			name:    "empty node list returns empty string",
+			nodes:   nil,
+			role:    talosprovisioner.RoleControlPlane,
+			desired: "cx33",
+			want:    "",
 		},
 		{
-			name: "single control-plane node",
+			name: "all nodes match desired returns the common type",
+			nodes: []provider.NodeInfo{
+				{Name: "cp-0", Role: talosprovisioner.RoleControlPlane, ServerType: "cx33"},
+				{Name: "cp-1", Role: talosprovisioner.RoleControlPlane, ServerType: "cx33"},
+			},
+			role:    talosprovisioner.RoleControlPlane,
+			desired: "cx33",
+			want:    "cx33",
+		},
+		{
+			name: "all nodes on the old type returns the old type",
 			nodes: []provider.NodeInfo{
 				{Name: "cp-0", Role: talosprovisioner.RoleControlPlane, ServerType: "cx22"},
+				{Name: "cp-1", Role: talosprovisioner.RoleControlPlane, ServerType: "cx22"},
 			},
-			wantCPType:     "cx22",
-			wantWorkerType: "",
+			role:    talosprovisioner.RoleControlPlane,
+			desired: "cx33",
+			want:    "cx22",
 		},
 		{
-			name: "single worker node",
+			name: "mixed types after a partial run returns the differing type",
 			nodes: []provider.NodeInfo{
-				{Name: "worker-0", Role: talosprovisioner.RoleWorker, ServerType: "cx33"},
+				{Name: "cp-0", Role: talosprovisioner.RoleControlPlane, ServerType: "cx33"},
+				{Name: "cp-1", Role: talosprovisioner.RoleControlPlane, ServerType: "cx33"},
+				{Name: "cp-2", Role: talosprovisioner.RoleControlPlane, ServerType: "cx22"},
 			},
-			wantCPType:     "",
-			wantWorkerType: "cx33",
+			role:    talosprovisioner.RoleControlPlane,
+			desired: "cx33",
+			want:    "cx22",
 		},
 		{
-			name: "mixed nodes returns first of each role",
+			name: "case-insensitive match treats nodes as already on desired",
 			nodes: []provider.NodeInfo{
-				{Name: "cp-0", Role: talosprovisioner.RoleControlPlane, ServerType: "cx22"},
-				{Name: "cp-1", Role: talosprovisioner.RoleControlPlane, ServerType: "cx44"},
-				{Name: "worker-0", Role: talosprovisioner.RoleWorker, ServerType: "cx33"},
-				{Name: "worker-1", Role: talosprovisioner.RoleWorker, ServerType: "cx55"},
+				{Name: "cp-0", Role: talosprovisioner.RoleControlPlane, ServerType: "CX33"},
 			},
-			wantCPType:     "cx22",
-			wantWorkerType: "cx33",
+			role:    talosprovisioner.RoleControlPlane,
+			desired: "cx33",
+			want:    "CX33",
 		},
 		{
-			name: "skips nodes with empty ServerType",
+			name: "filters by role and skips empty server types",
 			nodes: []provider.NodeInfo{
 				{Name: "cp-0", Role: talosprovisioner.RoleControlPlane, ServerType: ""},
+				{Name: "worker-0", Role: talosprovisioner.RoleWorker, ServerType: "cx55"},
 				{Name: "cp-1", Role: talosprovisioner.RoleControlPlane, ServerType: "cx22"},
-				{Name: "worker-0", Role: talosprovisioner.RoleWorker, ServerType: ""},
 			},
-			wantCPType:     "cx22",
-			wantWorkerType: "",
-		},
-		{
-			name: "unknown roles are ignored",
-			nodes: []provider.NodeInfo{
-				{Name: "unknown-0", Role: "unknown", ServerType: "cx11"},
-				{Name: "cp-0", Role: talosprovisioner.RoleControlPlane, ServerType: "cx22"},
-			},
-			wantCPType:     "cx22",
-			wantWorkerType: "",
+			role:    talosprovisioner.RoleControlPlane,
+			desired: "cx33",
+			want:    "cx22",
 		},
 	}
 
@@ -739,10 +746,11 @@ func TestDetectHetznerServerTypes(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			cpType, workerType := talosprovisioner.DetectHetznerServerTypesForTest(testCase.nodes)
+			got := talosprovisioner.RepresentativeServerTypeForTest(
+				testCase.nodes, testCase.role, testCase.desired,
+			)
 
-			assert.Equal(t, testCase.wantCPType, cpType)
-			assert.Equal(t, testCase.wantWorkerType, workerType)
+			assert.Equal(t, testCase.want, got)
 		})
 	}
 }

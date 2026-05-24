@@ -129,13 +129,14 @@ func (p *Provisioner) mergeServerTypeRollingChanges(
 		return
 	}
 
-	currentCP, currentWorker := detectHetznerServerTypes(nodes)
+	cpDesired := p.hetznerServerType(RoleControlPlane)
+	workerDesired := p.hetznerServerType(RoleWorker)
 
 	appendServerTypeChange(diff, RoleControlPlane,
-		currentCP, p.hetznerServerType(RoleControlPlane),
+		representativeServerType(nodes, RoleControlPlane, cpDesired), cpDesired,
 		clusterupdate.ControlPlaneServerTypeChangeCategory(int(oldSpec.ControlPlanes)))
 	appendServerTypeChange(diff, RoleWorker,
-		currentWorker, p.hetznerServerType(RoleWorker),
+		representativeServerType(nodes, RoleWorker, workerDesired), workerDesired,
 		clusterupdate.WorkerServerTypeChangeCategory(int(oldSpec.Workers)))
 }
 
@@ -1121,40 +1122,44 @@ func (p *Provisioner) introspectHetznerServerTypes(
 		return
 	}
 
-	cpType, workerType := detectHetznerServerTypes(nodes)
+	cpType := representativeServerType(nodes, RoleControlPlane, hetznerSpec.ControlPlaneServerType)
 	if cpType != "" {
 		hetznerSpec.ControlPlaneServerType = cpType
 	}
 
+	workerType := representativeServerType(nodes, RoleWorker, hetznerSpec.WorkerServerType)
 	if workerType != "" {
 		hetznerSpec.WorkerServerType = workerType
 	}
 }
 
-// detectHetznerServerTypes determines the actual control-plane and worker
-// server types from a node listing. Returns empty strings when no nodes of
-// a given role are found.
-func detectHetznerServerTypes(nodes []svcprovider.NodeInfo) (string, string) {
-	var cpServerType, workerServerType string
+// representativeServerType returns a server type for the given role suitable for
+// diffing against desiredType. If any node of the role has a type different from
+// desiredType, that differing type is returned so the change is still detected when
+// a role holds mixed types (e.g. after a partially-completed rolling replacement).
+// When every node already matches (or the role has no node with a known type), the
+// first observed type is returned ("" when none).
+func representativeServerType(
+	nodes []svcprovider.NodeInfo,
+	role, desiredType string,
+) string {
+	var firstSeen string
 
 	for _, node := range nodes {
-		switch node.Role {
-		case RoleControlPlane:
-			if cpServerType == "" && node.ServerType != "" {
-				cpServerType = node.ServerType
-			}
-		case RoleWorker:
-			if workerServerType == "" && node.ServerType != "" {
-				workerServerType = node.ServerType
-			}
+		if node.Role != role || node.ServerType == "" {
+			continue
 		}
 
-		if cpServerType != "" && workerServerType != "" {
-			break
+		if firstSeen == "" {
+			firstSeen = node.ServerType
+		}
+
+		if !strings.EqualFold(node.ServerType, desiredType) {
+			return node.ServerType
 		}
 	}
 
-	return cpServerType, workerServerType
+	return firstSeen
 }
 
 // syncHetznerFirewallRules synchronizes the Hetzner Cloud Firewall rules to the

@@ -348,10 +348,10 @@ func MergeTalosconfigBytesForTest(talosconfigPath string, newData []byte) error 
 	return mergeTalosconfigBytes(talosconfigPath, newData)
 }
 
-// DetectHetznerServerTypesForTest exports detectHetznerServerTypes for unit testing.
+// RepresentativeServerTypeForTest exports representativeServerType for unit testing.
 //
 //nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
-var DetectHetznerServerTypesForTest = detectHetznerServerTypes
+var RepresentativeServerTypeForTest = representativeServerType
 
 // MachineClusterConfigForTest is the exported alias of machineClusterConfig for testing.
 type MachineClusterConfigForTest = machineClusterConfig
