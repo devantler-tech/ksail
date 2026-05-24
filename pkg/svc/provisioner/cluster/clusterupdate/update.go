@@ -13,6 +13,41 @@ import (
 // (e.g., disk encryption migration) and --force was not provided.
 var ErrWipeRequired = errors.New("partition wipe required")
 
+// ErrRollingRecreateRequired is returned when configuration changes require a
+// rolling node replacement (e.g., a Hetzner server-type change) and --force was
+// not provided.
+var ErrRollingRecreateRequired = errors.New("rolling node replacement required")
+
+// MinControlPlanesForRollingReplace is the minimum number of control-plane nodes
+// required to replace control planes one at a time while preserving etcd quorum.
+// With fewer nodes, removing one before its replacement joins would drop the
+// cluster below quorum, so a full recreation is required instead.
+const MinControlPlanesForRollingReplace = 3
+
+// ControlPlaneServerTypeChangeCategory classifies a control-plane server-type
+// change based on the number of running control-plane nodes. Clusters with
+// enough redundancy (>= MinControlPlanesForRollingReplace) can roll one node at
+// a time; smaller clusters must be recreated to avoid losing etcd quorum.
+func ControlPlaneServerTypeChangeCategory(controlPlanes int) ChangeCategory {
+	if controlPlanes >= MinControlPlanesForRollingReplace {
+		return ChangeCategoryRollingRecreate
+	}
+
+	return ChangeCategoryRecreateRequired
+}
+
+// WorkerServerTypeChangeCategory classifies a worker server-type change based on
+// the number of running worker nodes. When workers exist they are replaced one
+// at a time (rolling); with no existing workers the change only affects future
+// nodes and is applied in-place.
+func WorkerServerTypeChangeCategory(workers int) ChangeCategory {
+	if workers >= 1 {
+		return ChangeCategoryRollingRecreate
+	}
+
+	return ChangeCategoryInPlace
+}
+
 // DefaultLocalRegistryAddress is the default local registry address applied by
 // the config system when a GitOps engine is configured but no explicit
 // --local-registry flag was provided. Provisioners mirror this default in
@@ -118,6 +153,12 @@ const (
 	// drive an in-place apply or a cluster recreation, because the tool cannot
 	// know whether a real change is required.
 	ChangeCategoryUnknown
+
+	// ChangeCategoryRollingRecreate indicates the change is applied by replacing
+	// nodes one at a time (drain → delete → recreate with the new configuration),
+	// without recreating the whole cluster. Example: a Hetzner server-type change
+	// on a Talos cluster with enough redundancy to preserve etcd quorum.
+	ChangeCategoryRollingRecreate
 )
 
 // String returns a human-readable name for the change category.
@@ -131,6 +172,8 @@ func (c ChangeCategory) String() string {
 		return "recreate-required"
 	case ChangeCategoryWipeRequired:
 		return "wipe-required"
+	case ChangeCategoryRollingRecreate:
+		return "rolling-recreate"
 	case ChangeCategoryUnknown:
 		return "unknown"
 	default:
@@ -162,6 +205,9 @@ type UpdateResult struct {
 	RecreateRequired []Change
 	// WipeRequired lists changes that require partition wiping.
 	WipeRequired []Change
+	// RollingRecreate lists changes applied by replacing nodes one at a time
+	// (drain → delete → recreate) without recreating the whole cluster.
+	RollingRecreate []Change
 	// UnknownBaseline lists fields whose current value could not be read from the
 	// cluster. These are informational only and never drive an apply or recreate.
 	UnknownBaseline []Change
@@ -184,6 +230,7 @@ func NewEmptyUpdateResult() *UpdateResult {
 		RebootRequired:   make([]Change, 0),
 		RecreateRequired: make([]Change, 0),
 		WipeRequired:     make([]Change, 0),
+		RollingRecreate:  make([]Change, 0),
 		UnknownBaseline:  make([]Change, 0),
 		AppliedChanges:   make([]Change, 0),
 		FailedChanges:    make([]Change, 0),
@@ -207,6 +254,7 @@ func NewUpdateResultFromDiff(diff *UpdateResult) *UpdateResult {
 		RebootRequired:   diff.RebootRequired,
 		RecreateRequired: diff.RecreateRequired,
 		WipeRequired:     diff.WipeRequired,
+		RollingRecreate:  diff.RollingRecreate,
 		UnknownBaseline:  diff.UnknownBaseline,
 		AppliedChanges:   make([]Change, 0),
 		FailedChanges:    make([]Change, 0),
@@ -233,6 +281,12 @@ func (r *UpdateResult) HasWipeRequired() bool {
 	return len(r.WipeRequired) > 0
 }
 
+// HasRollingRecreate returns true if there are changes that require rolling
+// node replacement.
+func (r *UpdateResult) HasRollingRecreate() bool {
+	return len(r.RollingRecreate) > 0
+}
+
 // HasUnknownBaseline returns true if any field's current value could not be read
 // from the cluster. Such entries are informational and never drive an apply.
 func (r *UpdateResult) HasUnknownBaseline() bool {
@@ -240,15 +294,17 @@ func (r *UpdateResult) HasUnknownBaseline() bool {
 }
 
 // NeedsUserConfirmation returns true if any changes require user confirmation.
-// In-place changes can be applied silently; reboot, recreate, or wipe require confirmation.
+// In-place changes can be applied silently; reboot, recreate, wipe, or rolling
+// node replacement require confirmation.
 func (r *UpdateResult) NeedsUserConfirmation() bool {
-	return r.HasRebootRequired() || r.HasRecreateRequired() || r.HasWipeRequired()
+	return r.HasRebootRequired() || r.HasRecreateRequired() ||
+		r.HasWipeRequired() || r.HasRollingRecreate()
 }
 
 // TotalChanges returns the total number of detected changes.
 func (r *UpdateResult) TotalChanges() int {
 	return len(r.InPlaceChanges) + len(r.RebootRequired) +
-		len(r.RecreateRequired) + len(r.WipeRequired)
+		len(r.RecreateRequired) + len(r.WipeRequired) + len(r.RollingRecreate)
 }
 
 // AllChanges returns all detected changes in a single slice.
@@ -258,6 +314,7 @@ func (r *UpdateResult) AllChanges() []Change {
 	all = append(all, r.RebootRequired...)
 	all = append(all, r.RecreateRequired...)
 	all = append(all, r.WipeRequired...)
+	all = append(all, r.RollingRecreate...)
 
 	return all
 }
@@ -308,6 +365,16 @@ func PrepareUpdate(
 				"or see https://ksail.devantler.tech/guides/talos-disk-encryption/ for manual steps)",
 			ErrWipeRequired,
 			len(diff.WipeRequired),
+		)
+	}
+
+	// Rolling node replacement is disruptive (nodes are drained and recreated one
+	// at a time) and needs explicit --force confirmation, consistent with wipes.
+	if diff.HasRollingRecreate() && !opts.Force {
+		return result, false, fmt.Errorf(
+			"%w: %d change(s) require replacing nodes one at a time (use --force to proceed)",
+			ErrRollingRecreateRequired,
+			len(diff.RollingRecreate),
 		)
 	}
 

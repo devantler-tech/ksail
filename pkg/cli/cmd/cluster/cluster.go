@@ -6707,6 +6707,7 @@ type DiffJSONOutput struct {
 	InPlaceChanges       []ChangeJSON `json:"inPlaceChanges"`
 	RebootRequired       []ChangeJSON `json:"rebootRequired"`
 	RecreateRequired     []ChangeJSON `json:"recreateRequired"`
+	RollingRecreate      []ChangeJSON `json:"rollingRecreate"`
 	WipeRequired         []ChangeJSON `json:"wipeRequired"`
 	UnknownBaseline      []ChangeJSON `json:"unknownBaseline"`
 	RequiresConfirmation bool         `json:"requiresConfirmation"`
@@ -6768,6 +6769,7 @@ func diffToJSON(diff *clusterupdate.UpdateResult) DiffJSONOutput {
 		InPlaceChanges:       convertChanges(diff.InPlaceChanges),
 		RebootRequired:       convertChanges(diff.RebootRequired),
 		RecreateRequired:     convertChanges(diff.RecreateRequired),
+		RollingRecreate:      convertChanges(diff.RollingRecreate),
 		WipeRequired:         convertChanges(diff.WipeRequired),
 		UnknownBaseline:      convertChanges(diff.UnknownBaseline),
 		RequiresConfirmation: diff.NeedsUserConfirmation(),
@@ -6815,9 +6817,11 @@ cluster recreation (e.g., network settings, kubelet config, registry mirrors).
 For Kind/K3d clusters, in-place updates are more limited. Worker node scaling
 is supported for K3d, but most other changes require cluster recreation.
 
-Changes are classified into three categories:
+Changes are classified into the following categories:
   - In-Place: Applied without disruption
   - Reboot-Required: Applied but may require node reboots
+  - Rolling-Recreate: Nodes are replaced one at a time (e.g. a Talos × Hetzner
+    server-type change); requires --force
   - Recreate-Required: Require full cluster recreation
 
 Use --dry-run to preview changes without applying them.
@@ -7802,34 +7806,29 @@ func applyOrReportChanges(
 		return handleRecreateRequired(cmd, cfgManager, ctx, deps, clusterName, diff, force)
 	}
 
-	if !diff.HasInPlaceChanges() && !diff.HasRebootRequired() {
+	if !diff.HasInPlaceChanges() && !diff.HasRebootRequired() && !diff.HasRollingRecreate() {
 		reportNoApplicableChanges(cmd, diff)
 
 		return nil
 	}
 
-	// Reboot-required changes are disruptive — require confirmation unless --force
-	if diff.HasRebootRequired() && !confirm.ShouldSkipPrompt(force) {
-		var block strings.Builder
-
-		fmt.Fprintf(&block, "%d changes require node reboots:\n", len(diff.RebootRequired))
-
-		for _, change := range diff.RebootRequired {
-			fmt.Fprintf(&block, "  ⚠ %s: %s → %s. %s\n",
-				change.Field, change.OldValue, change.NewValue, change.Reason,
-			)
-		}
-
-		notify.Warningf(cmd.OutOrStderr(), "%s", strings.TrimRight(block.String(), "\n"))
-
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(),
-			"Type \"yes\" to proceed with reboot-required changes: ",
-		)
-
-		if !confirm.PromptForConfirmation(cmd.OutOrStdout()) {
+	// Disruptive changes (node reboots or rolling node replacement) require
+	// confirmation unless --force/--yes is set.
+	confirmedForce := force
+	if (diff.HasRebootRequired() || diff.HasRollingRecreate()) &&
+		!confirm.ShouldSkipPrompt(force) {
+		if !promptForDisruptiveChanges(cmd, diff) {
 			notify.Infof(cmd.OutOrStdout(), "Update cancelled")
 
 			return nil
+		}
+
+		// The provisioner gates rolling replacement behind Force in PrepareUpdate,
+		// so an interactive confirmation must grant Force for it to proceed. Only
+		// elevate for rolling-recreate: granting Force for a reboot-only confirmation
+		// could unintentionally authorize an unrelated wipe discovered during apply.
+		if diff.HasRollingRecreate() {
+			confirmedForce = true
 		}
 	}
 
@@ -7837,8 +7836,46 @@ func applyOrReportChanges(
 
 	return applyInPlaceChanges(
 		cmd, updater, reconciler, clusterName,
-		currentSpec, ctx, diff, outputTimer,
+		currentSpec, ctx, diff, outputTimer, confirmedForce,
 	)
+}
+
+// promptForDisruptiveChanges warns about reboot-required and rolling-recreate
+// changes and prompts the user to confirm. It returns true when the user
+// consents to proceed.
+func promptForDisruptiveChanges(cmd *cobra.Command, diff *clusterupdate.UpdateResult) bool {
+	var block strings.Builder
+
+	if diff.HasRollingRecreate() {
+		fmt.Fprintf(&block,
+			"%d change(s) require rolling node replacement (one node at a time):\n",
+			len(diff.RollingRecreate),
+		)
+
+		for _, change := range diff.RollingRecreate {
+			fmt.Fprintf(&block, "  ⚠ %s: %s → %s. %s\n",
+				change.Field, change.OldValue, change.NewValue, change.Reason,
+			)
+		}
+	}
+
+	if diff.HasRebootRequired() {
+		fmt.Fprintf(&block, "%d change(s) require node reboots:\n", len(diff.RebootRequired))
+
+		for _, change := range diff.RebootRequired {
+			fmt.Fprintf(&block, "  ⚠ %s: %s → %s. %s\n",
+				change.Field, change.OldValue, change.NewValue, change.Reason,
+			)
+		}
+	}
+
+	notify.Warningf(cmd.OutOrStderr(), "%s", strings.TrimRight(block.String(), "\n"))
+
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(),
+		"Type \"yes\" to proceed with these changes: ",
+	)
+
+	return confirm.PromptForConfirmation(cmd.OutOrStdout())
 }
 
 // reportNoApplicableChanges prints the appropriate message when there are no
@@ -7914,6 +7951,9 @@ func handleRecreateRequired(
 }
 
 // applyInPlaceChanges applies provisioner-level and component-level changes in-place.
+// The force flag carries the user's consent (via --force/--yes or an interactive
+// confirmation) for disruptive changes such as rolling node replacement, which the
+// provisioner gates behind UpdateOptions.Force in PrepareUpdate.
 func applyInPlaceChanges(
 	cmd *cobra.Command,
 	updater clusterprovisioner.Updater,
@@ -7923,10 +7963,12 @@ func applyInPlaceChanges(
 	ctx *localregistry.Context,
 	diff *clusterupdate.UpdateResult,
 	outputTimer timer.Timer,
+	force bool,
 ) error {
 	updateOpts := clusterupdate.UpdateOptions{
 		DryRun:        false,
 		RollingReboot: true,
+		Force:         force,
 	}
 
 	notify.Titlef(cmd.OutOrStdout(), "🔄", "Applying changes...")
@@ -7953,17 +7995,7 @@ func applyInPlaceChanges(
 		)
 	}
 
-	if len(result.FailedChanges) > 0 {
-		var failBlock strings.Builder
-
-		fmt.Fprintf(&failBlock, "%d changes failed to apply:\n", len(result.FailedChanges))
-
-		for _, change := range result.FailedChanges {
-			fmt.Fprintf(&failBlock, "  - %s: %s\n", change.Field, change.Reason)
-		}
-
-		notify.Errorf(cmd.OutOrStderr(), strings.TrimRight(failBlock.String(), "\n"))
-	}
+	reportFailedChanges(cmd, result)
 
 	if componentErr != nil {
 		return fmt.Errorf("some component changes failed to apply: %w", componentErr)
@@ -7982,9 +8014,27 @@ func applyInPlaceChanges(
 	return nil
 }
 
+// reportFailedChanges prints any failed changes from the update result to stderr.
+func reportFailedChanges(cmd *cobra.Command, result *clusterupdate.UpdateResult) {
+	if len(result.FailedChanges) == 0 {
+		return
+	}
+
+	var failBlock strings.Builder
+
+	fmt.Fprintf(&failBlock, "%d changes failed to apply:\n", len(result.FailedChanges))
+
+	for _, change := range result.FailedChanges {
+		fmt.Fprintf(&failBlock, "  - %s: %s\n", change.Field, change.Reason)
+	}
+
+	notify.Errorf(cmd.OutOrStderr(), strings.TrimRight(failBlock.String(), "\n"))
+}
+
 // displayChangesSummary outputs a human-readable summary of configuration changes
 // as a before/after table with one row per changed field and impact icons.
-// Rows are ordered by severity: recreate-required → wipe-required → reboot-required → in-place.
+// Rows are ordered by severity: recreate-required → rolling-recreate → wipe-required →
+// reboot-required → in-place.
 // Fields with no change are omitted.
 // When --output json is set, emits machine-readable JSON instead of the table.
 func displayChangesSummary(cmd *cobra.Command, diff *clusterupdate.UpdateResult) {
@@ -8020,6 +8070,8 @@ func categoryIcon(cat clusterupdate.ChangeCategory) string {
 	switch cat {
 	case clusterupdate.ChangeCategoryRecreateRequired:
 		return "🔴"
+	case clusterupdate.ChangeCategoryRollingRecreate:
+		return "🟠"
 	case clusterupdate.ChangeCategoryWipeRequired:
 		return "⚠️"
 	case clusterupdate.ChangeCategoryRebootRequired:
@@ -8035,7 +8087,8 @@ func categoryIcon(cat clusterupdate.ChangeCategory) string {
 
 // formatDiffTable builds the formatted diff table string.
 // The table has four columns: Component, Before, After, Impact.
-// Rows are ordered by severity: 🔴 recreate → ⚠️ wipe → 🟡 reboot → 🟢 in-place → ⚪ unknown.
+// Rows are ordered by severity: 🔴 recreate → 🟠 rolling-recreate → ⚠️ wipe →
+// 🟡 reboot → 🟢 in-place → ⚪ unknown.
 func formatDiffTable(
 	diff *clusterupdate.UpdateResult,
 ) string {
@@ -8086,13 +8139,15 @@ func appendChangesAsRows(rows []diffRow, changes []clusterupdate.Change) []diffR
 }
 
 // collectDiffRows builds an ordered list of diff rows.
-// Order: 🔴 recreate-required → ⚠️ wipe-required → 🟡 reboot-required → 🟢 in-place → ⚪ unknown.
+// Order: 🔴 recreate-required → 🟠 rolling-recreate → ⚠️ wipe-required →
+// 🟡 reboot-required → 🟢 in-place → ⚪ unknown.
 func collectDiffRows(
 	diff *clusterupdate.UpdateResult,
 	totalRows int,
 ) []diffRow {
 	rows := make([]diffRow, 0, totalRows)
 	rows = appendChangesAsRows(rows, diff.RecreateRequired)
+	rows = appendChangesAsRows(rows, diff.RollingRecreate)
 	rows = appendChangesAsRows(rows, diff.WipeRequired)
 	rows = appendChangesAsRows(rows, diff.RebootRequired)
 	rows = appendChangesAsRows(rows, diff.InPlaceChanges)

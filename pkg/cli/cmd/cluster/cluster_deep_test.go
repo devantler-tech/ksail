@@ -267,6 +267,7 @@ func TestCategoryIcon(t *testing.T) {
 		want     string
 	}{
 		{"recreate", clusterupdate.ChangeCategoryRecreateRequired, "🔴"},
+		{"rolling-recreate", clusterupdate.ChangeCategoryRollingRecreate, "🟠"},
 		{"reboot", clusterupdate.ChangeCategoryRebootRequired, "🟡"},
 		{"in-place", clusterupdate.ChangeCategoryInPlace, "🟢"},
 		{"unknown", clusterupdate.ChangeCategory(99), "⚪"},
@@ -434,6 +435,29 @@ func TestDiffToJSON_AllCategories(t *testing.T) {
 	assert.True(t, out.RequiresConfirmation)
 	assert.Equal(t, "cni", out.InPlaceChanges[0].Field)
 	assert.Equal(t, "component swap", out.InPlaceChanges[0].Reason)
+}
+
+func TestDiffToJSON_RollingRecreate(t *testing.T) {
+	t.Parallel()
+
+	diff := &clusterupdate.UpdateResult{
+		RollingRecreate: []clusterupdate.Change{
+			{
+				Field:    "provider.hetzner.controlPlaneServerType",
+				OldValue: "cx23",
+				NewValue: "cpx41",
+				Category: clusterupdate.ChangeCategoryRollingRecreate,
+				Reason:   "rolling node replacement",
+			},
+		},
+	}
+
+	out := cluster.ExportDiffToJSON(diff)
+	assert.Equal(t, 1, out.TotalChanges)
+	assert.Len(t, out.RollingRecreate, 1)
+	assert.True(t, out.RequiresConfirmation)
+	assert.Equal(t, "rolling-recreate", out.RollingRecreate[0].Category)
+	assert.Equal(t, "provider.hetzner.controlPlaneServerType", out.RollingRecreate[0].Field)
 }
 
 func TestDisplayChangesSummary_EmptyChanges(t *testing.T) {

@@ -640,6 +640,96 @@ func TestEngine_HetznerOptionsChange_InPlace(t *testing.T) {
 	}
 }
 
+func TestEngine_HetznerServerType_RollingRecreate(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		controlPlanes int32
+		workers       int32
+		mutate        func(spec *v1alpha1.ProviderSpec)
+		field         string
+	}{
+		{
+			name:          "control plane server type change with quorum redundancy",
+			controlPlanes: 3,
+			workers:       0,
+			mutate:        func(s *v1alpha1.ProviderSpec) { s.Hetzner.ControlPlaneServerType = "cpx41" },
+			field:         "provider.hetzner.controlPlaneServerType",
+		},
+		{
+			name:          "worker server type change with existing workers",
+			controlPlanes: 1,
+			workers:       2,
+			mutate:        func(s *v1alpha1.ProviderSpec) { s.Hetzner.WorkerServerType = "cpx41" },
+			field:         "provider.hetzner.workerServerType",
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			old := newBaseSpec()
+			old.ControlPlanes = testCase.controlPlanes
+			old.Workers = testCase.workers
+			newer := clone(old)
+			oldProvider := newBaseProviderSpec()
+			newProvider := cloneProvider(oldProvider)
+			testCase.mutate(newProvider)
+
+			engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
+			result := engine.ComputeDiff(old, newer, oldProvider, newProvider)
+
+			if !result.HasRollingRecreate() {
+				t.Fatal("server type change should require rolling recreate")
+			}
+
+			if result.HasRecreateRequired() {
+				t.Fatal("rolling-capable server type change should not require full recreate")
+			}
+
+			assertSingleChange(t, result.RollingRecreate, testCase.field,
+				"cx23", "cpx41", clusterupdate.ChangeCategoryRollingRecreate)
+		})
+	}
+}
+
+func TestEngine_HetznerControlPlaneServerType_RecreateBelowQuorum(t *testing.T) {
+	t.Parallel()
+
+	// With fewer than MinControlPlanesForRollingReplace control planes, a CP
+	// server-type change cannot roll without losing etcd quorum.
+	for _, controlPlanes := range []int32{1, 2} {
+		t.Run(strconv.Itoa(int(controlPlanes))+" control planes", func(t *testing.T) {
+			t.Parallel()
+
+			old := newBaseSpec()
+			old.ControlPlanes = controlPlanes
+			newer := clone(old)
+			oldProvider := newBaseProviderSpec()
+			newProvider := cloneProvider(oldProvider)
+			newProvider.Hetzner.ControlPlaneServerType = "cpx41"
+
+			engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
+			result := engine.ComputeDiff(old, newer, oldProvider, newProvider)
+
+			if result.HasRollingRecreate() {
+				t.Fatal("control-plane change below quorum should not roll")
+			}
+
+			assertSingleChange(
+				t,
+				result.RecreateRequired,
+				"provider.hetzner.controlPlaneServerType",
+				"cx23",
+				"cpx41",
+				clusterupdate.ChangeCategoryRecreateRequired,
+			)
+		})
+	}
+}
+
 func TestEngine_HetznerOptionsChange_SkippedForDocker(t *testing.T) {
 	t.Parallel()
 

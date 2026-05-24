@@ -547,3 +547,119 @@ func TestPrepareUpdate_WipeRequiredAllowedWithForce(t *testing.T) {
 	assert.True(t, shouldContinue)
 	require.NoError(t, err)
 }
+
+// TestPrepareUpdate_RollingRecreateBlocksWithoutForce tests that rolling-recreate
+// changes block without --force.
+func TestPrepareUpdate_RollingRecreateBlocksWithoutForce(t *testing.T) {
+	t.Parallel()
+
+	diff := clusterupdate.NewEmptyUpdateResult()
+	diff.RollingRecreate = append(diff.RollingRecreate, clusterupdate.Change{
+		Field: "provider.hetzner.controlPlaneServerType",
+	})
+	opts := clusterupdate.UpdateOptions{}
+
+	result, shouldContinue, err := clusterupdate.PrepareUpdate(diff, nil, opts, errRecreateRequired)
+
+	require.NotNil(t, result)
+	assert.False(t, shouldContinue)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, clusterupdate.ErrRollingRecreateRequired)
+}
+
+// TestPrepareUpdate_RollingRecreateAllowedWithForce tests that rolling-recreate
+// changes proceed with --force.
+func TestPrepareUpdate_RollingRecreateAllowedWithForce(t *testing.T) {
+	t.Parallel()
+
+	diff := clusterupdate.NewEmptyUpdateResult()
+	diff.RollingRecreate = append(diff.RollingRecreate, clusterupdate.Change{
+		Field: "provider.hetzner.controlPlaneServerType",
+	})
+	opts := clusterupdate.UpdateOptions{Force: true}
+
+	result, shouldContinue, err := clusterupdate.PrepareUpdate(diff, nil, opts, errRecreateRequired)
+
+	require.NotNil(t, result)
+	assert.True(t, shouldContinue)
+	require.NoError(t, err)
+}
+
+// TestUpdateResult_RollingRecreateChangesAreDetected verifies the helpers and
+// aggregations account for rolling-recreate changes.
+func TestUpdateResult_RollingRecreateChangesAreDetected(t *testing.T) {
+	t.Parallel()
+
+	result := clusterupdate.NewEmptyUpdateResult()
+	change := clusterupdate.Change{
+		Field:    "provider.hetzner.controlPlaneServerType",
+		OldValue: "cx23",
+		NewValue: "cpx41",
+		Category: clusterupdate.ChangeCategoryRollingRecreate,
+	}
+	result.RollingRecreate = append(result.RollingRecreate, change)
+
+	assert.Equal(t, 1, result.TotalChanges())
+	assert.True(t, result.HasRollingRecreate())
+	assert.True(t, result.NeedsUserConfirmation())
+	assert.False(t, result.HasInPlaceChanges())
+	assert.False(t, result.HasRecreateRequired())
+	assert.Contains(t, result.AllChanges(), change)
+}
+
+// TestNewUpdateResultFromDiff_CopiesRollingRecreate tests that
+// NewUpdateResultFromDiff copies RollingRecreate.
+func TestNewUpdateResultFromDiff_CopiesRollingRecreate(t *testing.T) {
+	t.Parallel()
+
+	diff := clusterupdate.NewEmptyUpdateResult()
+	diff.RollingRecreate = append(diff.RollingRecreate, clusterupdate.Change{
+		Field:    "provider.hetzner.workerServerType",
+		Category: clusterupdate.ChangeCategoryRollingRecreate,
+	})
+
+	result := clusterupdate.NewUpdateResultFromDiff(diff)
+
+	require.NotNil(t, result)
+	assert.Equal(t, diff.RollingRecreate, result.RollingRecreate)
+}
+
+// TestChangeCategory_RollingRecreateString tests the String representation.
+func TestChangeCategory_RollingRecreateString(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, "rolling-recreate", clusterupdate.ChangeCategoryRollingRecreate.String())
+}
+
+// TestControlPlaneServerTypeChangeCategory verifies the quorum-aware classification.
+func TestControlPlaneServerTypeChangeCategory(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		controlPlanes int
+		expected      clusterupdate.ChangeCategory
+	}{
+		{controlPlanes: 1, expected: clusterupdate.ChangeCategoryRecreateRequired},
+		{controlPlanes: 2, expected: clusterupdate.ChangeCategoryRecreateRequired},
+		{controlPlanes: 3, expected: clusterupdate.ChangeCategoryRollingRecreate},
+		{controlPlanes: 5, expected: clusterupdate.ChangeCategoryRollingRecreate},
+	}
+
+	for _, testCase := range tests {
+		assert.Equal(t, testCase.expected,
+			clusterupdate.ControlPlaneServerTypeChangeCategory(testCase.controlPlanes),
+			"controlPlanes=%d", testCase.controlPlanes)
+	}
+}
+
+// TestWorkerServerTypeChangeCategory verifies worker classification by node count.
+func TestWorkerServerTypeChangeCategory(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, clusterupdate.ChangeCategoryInPlace,
+		clusterupdate.WorkerServerTypeChangeCategory(0))
+	assert.Equal(t, clusterupdate.ChangeCategoryRollingRecreate,
+		clusterupdate.WorkerServerTypeChangeCategory(1))
+	assert.Equal(t, clusterupdate.ChangeCategoryRollingRecreate,
+		clusterupdate.WorkerServerTypeChangeCategory(4))
+}

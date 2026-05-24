@@ -41,6 +41,10 @@ func (p *Provisioner) Update(
 	// into diff before PrepareUpdate, so --dry-run includes wipe-required changes.
 	p.mergeDisruptiveChanges(ctx, name, diff, diffErr)
 
+	// Detect Hetzner server-type changes (rolling node replacement) and merge into
+	// diff before PrepareUpdate, so the --force gate and apply phase both see them.
+	p.mergeServerTypeRollingChanges(ctx, name, oldSpec, diff, diffErr)
+
 	result, proceed, prepErr := clusterupdate.PrepareUpdate(
 		diff, diffErr, opts, clustererr.ErrRecreationRequired,
 	)
@@ -92,6 +96,86 @@ func (p *Provisioner) mergeDisruptiveChanges(
 	}
 }
 
+// mergeServerTypeRollingChanges detects Hetzner control-plane / worker
+// server-type changes by comparing the running servers against the desired
+// configuration, and merges them into diff so that PrepareUpdate can gate them
+// (behind --force) and applyRollingRecreateChanges can apply them. It is a no-op
+// for non-Hetzner providers, or when the desired and running types already match.
+func (p *Provisioner) mergeServerTypeRollingChanges(
+	ctx context.Context,
+	name string,
+	oldSpec *v1alpha1.ClusterSpec,
+	diff *clusterupdate.UpdateResult,
+	diffErr error,
+) {
+	if diffErr != nil || diff == nil || oldSpec == nil {
+		return
+	}
+
+	if p.hetznerOpts == nil || p.infraProvider == nil {
+		return
+	}
+
+	clusterName := p.resolveClusterName(name)
+
+	nodes, listErr := p.infraProvider.ListNodes(ctx, clusterName)
+	if listErr != nil {
+		_, _ = fmt.Fprintf(
+			p.logWriter,
+			"  ⚠ Failed to detect server types for rolling update: %v\n",
+			listErr,
+		)
+
+		return
+	}
+
+	currentCP, currentWorker := detectHetznerServerTypes(nodes)
+
+	appendServerTypeChange(diff, RoleControlPlane,
+		currentCP, p.hetznerServerType(RoleControlPlane),
+		clusterupdate.ControlPlaneServerTypeChangeCategory(int(oldSpec.ControlPlanes)))
+	appendServerTypeChange(diff, RoleWorker,
+		currentWorker, p.hetznerServerType(RoleWorker),
+		clusterupdate.WorkerServerTypeChangeCategory(int(oldSpec.Workers)))
+}
+
+// appendServerTypeChange appends a server-type change to the appropriate diff
+// slice based on its classified category. It is a no-op when the current type is
+// unknown (no running nodes of the role), when the types match, or for the
+// in-place category (no existing nodes to replace).
+func appendServerTypeChange(
+	diff *clusterupdate.UpdateResult,
+	role, current, desired string,
+	category clusterupdate.ChangeCategory,
+) {
+	if current == "" || desired == "" || strings.EqualFold(current, desired) {
+		return
+	}
+
+	field := "provider.hetzner.workerServerType"
+	if role == RoleControlPlane {
+		field = "provider.hetzner.controlPlaneServerType"
+	}
+
+	change := clusterupdate.Change{
+		Field:    field,
+		OldValue: current,
+		NewValue: desired,
+		Category: category,
+		Reason:   "existing " + role + " servers are replaced one at a time to apply the new VM type",
+	}
+
+	switch category { //nolint:exhaustive // only rolling/recreate categories are actionable here
+	case clusterupdate.ChangeCategoryRollingRecreate:
+		diff.RollingRecreate = append(diff.RollingRecreate, change)
+	case clusterupdate.ChangeCategoryRecreateRequired:
+		change.Reason = "control plane lacks etcd-quorum redundancy to roll; recreation required"
+		diff.RecreateRequired = append(diff.RecreateRequired, change)
+	default:
+		// In-place: no existing nodes to replace; future nodes use the new type.
+	}
+}
+
 // applyUpdateChanges applies all update changes after PrepareUpdate succeeds.
 //
 //nolint:cyclop // sequential update workflow with multiple change categories
@@ -130,6 +214,11 @@ func (p *Provisioner) applyUpdateChanges(
 	scaleErr := p.applyNodeScalingChanges(ctx, clusterName, oldSpec, newSpec, result)
 	if scaleErr != nil {
 		return result, fmt.Errorf("failed to apply node scaling changes: %w", scaleErr)
+	}
+
+	rollErr := p.applyRollingRecreateChanges(ctx, clusterName, result)
+	if rollErr != nil {
+		return result, fmt.Errorf("failed to apply rolling recreate changes: %w", rollErr)
 	}
 
 	// Handle in-place config changes (NO_REBOOT mode).
@@ -558,6 +647,8 @@ func (p *Provisioner) applyRebootChangesIfNeeded(
 // autoscaler config secret (which embeds a worker config derived from the
 // bundle). This avoids unnecessary Talos API calls for no-op updates or
 // operations that don't touch machine configs (e.g., pure scale-down).
+//
+//nolint:cyclop // sequence of independent conditions that each warrant a secret sync
 func (p *Provisioner) needsSecretSync(
 	oldSpec, newSpec *v1alpha1.ClusterSpec,
 	diff *clusterupdate.UpdateResult,
@@ -569,6 +660,12 @@ func (p *Provisioner) needsSecretSync(
 	// Scale-up: new nodes need the existing cluster's PKI.
 	if oldSpec != nil && newSpec != nil &&
 		(newSpec.ControlPlanes > oldSpec.ControlPlanes || newSpec.Workers > oldSpec.Workers) {
+		return true
+	}
+
+	// Rolling node replacement creates new servers that must join with the
+	// existing cluster's PKI and endpoint.
+	if diff.HasRollingRecreate() {
 		return true
 	}
 

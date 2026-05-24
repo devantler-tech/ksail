@@ -12,7 +12,9 @@ import (
 	omniprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/omni"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	"github.com/docker/docker/api/types/container"
+	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	check "github.com/siderolabs/talos/pkg/cluster/check"
+	corev1 "k8s.io/api/core/v1"
 )
 
 // NodeWithRoleForTest is the exported alias of nodeWithRole for testing.
@@ -429,4 +431,36 @@ func (p *Provisioner) WithKernelModuleLoaderForTest(
 	p.kernelModuleLoader = f
 
 	return p
+}
+
+// RolesFromRollingChangesForTest exposes rolesFromRollingChanges for unit testing.
+func RolesFromRollingChangesForTest(changes []clusterupdate.Change) (bool, bool) {
+	return rolesFromRollingChanges(changes)
+}
+
+// ServersNeedingReplacementForTest exposes serversNeedingReplacement for unit testing.
+func ServersNeedingReplacementForTest(
+	servers []*hcloud.Server,
+	desiredType string,
+) []*hcloud.Server {
+	return serversNeedingReplacement(servers, desiredType)
+}
+
+// AppendServerTypeChangeForTest exposes appendServerTypeChange for unit testing.
+func AppendServerTypeChangeForTest(
+	diff *clusterupdate.UpdateResult,
+	role, current, desired string,
+	category clusterupdate.ChangeCategory,
+) {
+	appendServerTypeChange(diff, role, current, desired, category)
+}
+
+// NodeMatchesServerForTest exposes nodeMatchesServer for unit testing.
+func NodeMatchesServerForTest(node *corev1.Node, serverName, serverIP string) bool {
+	return nodeMatchesServer(node, serverName, serverIP)
+}
+
+// NodeIsReadyForTest exposes nodeIsReady for unit testing.
+func NodeIsReadyForTest(node *corev1.Node) bool {
+	return nodeIsReady(node)
 }
