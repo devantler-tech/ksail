@@ -12,7 +12,9 @@ import (
 	omniprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/omni"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	"github.com/docker/docker/api/types/container"
+	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	check "github.com/siderolabs/talos/pkg/cluster/check"
+	corev1 "k8s.io/api/core/v1"
 )
 
 // NodeWithRoleForTest is the exported alias of nodeWithRole for testing.
@@ -346,10 +348,15 @@ func MergeTalosconfigBytesForTest(talosconfigPath string, newData []byte) error 
 	return mergeTalosconfigBytes(talosconfigPath, newData)
 }
 
-// DetectHetznerServerTypesForTest exports detectHetznerServerTypes for unit testing.
+// RepresentativeServerTypeForTest exports representativeServerType for unit testing.
 //
 //nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
-var DetectHetznerServerTypesForTest = detectHetznerServerTypes
+var RepresentativeServerTypeForTest = representativeServerType
+
+// CountServerNodesByRoleForTest exports countServerNodesByRole for unit testing.
+//
+//nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
+var CountServerNodesByRoleForTest = countServerNodesByRole
 
 // MachineClusterConfigForTest is the exported alias of machineClusterConfig for testing.
 type MachineClusterConfigForTest = machineClusterConfig
@@ -429,4 +436,45 @@ func (p *Provisioner) WithKernelModuleLoaderForTest(
 	p.kernelModuleLoader = f
 
 	return p
+}
+
+// RolesFromRollingChangesForTest exposes rolesFromRollingChanges for unit testing.
+func RolesFromRollingChangesForTest(changes []clusterupdate.Change) (bool, bool) {
+	return rolesFromRollingChanges(changes)
+}
+
+// ApplyRollingRecreateChangesForTest exposes applyRollingRecreateChanges for unit testing.
+func (p *Provisioner) ApplyRollingRecreateChangesForTest(
+	ctx context.Context,
+	clusterName string,
+	result *clusterupdate.UpdateResult,
+) error {
+	return p.applyRollingRecreateChanges(ctx, clusterName, result)
+}
+
+// ServersNeedingReplacementForTest exposes serversNeedingReplacement for unit testing.
+func ServersNeedingReplacementForTest(
+	servers []*hcloud.Server,
+	desiredType string,
+) []*hcloud.Server {
+	return serversNeedingReplacement(servers, desiredType)
+}
+
+// AppendServerTypeChangeForTest exposes appendServerTypeChange for unit testing.
+func AppendServerTypeChangeForTest(
+	diff *clusterupdate.UpdateResult,
+	role, current, desired string,
+	category clusterupdate.ChangeCategory,
+) {
+	appendServerTypeChange(diff, role, current, desired, category)
+}
+
+// NodeMatchesServerForTest exposes nodeMatchesServer for unit testing.
+func NodeMatchesServerForTest(node *corev1.Node, serverName, serverIP string) bool {
+	return nodeMatchesServer(node, serverName, serverIP)
+}
+
+// NodeIsReadyForTest exposes nodeIsReady for unit testing.
+func NodeIsReadyForTest(node *corev1.Node) bool {
+	return nodeIsReady(node)
 }

@@ -41,6 +41,10 @@ func (p *Provisioner) Update(
 	// into diff before PrepareUpdate, so --dry-run includes wipe-required changes.
 	p.mergeDisruptiveChanges(ctx, name, diff, diffErr)
 
+	// Detect Hetzner server-type changes (rolling node replacement) and merge into
+	// diff before PrepareUpdate, so the --force gate and apply phase both see them.
+	p.mergeServerTypeRollingChanges(ctx, name, diff, diffErr)
+
 	result, proceed, prepErr := clusterupdate.PrepareUpdate(
 		diff, diffErr, opts, clustererr.ErrRecreationRequired,
 	)
@@ -92,6 +96,92 @@ func (p *Provisioner) mergeDisruptiveChanges(
 	}
 }
 
+// mergeServerTypeRollingChanges detects Hetzner control-plane / worker
+// server-type changes by comparing the running servers against the desired
+// configuration, and merges them into diff so that PrepareUpdate can gate them
+// (behind --force) and applyRollingRecreateChanges can apply them. It is a no-op
+// for non-Hetzner providers, or when the desired and running types already match.
+//
+// Change impact is classified from the *current* node inventory (not the desired
+// spec), so a control-plane roll is only offered when enough control planes are
+// actually present to preserve etcd quorum. A runtime guard in rollingReplaceRole
+// re-checks this immediately before any node is deleted.
+func (p *Provisioner) mergeServerTypeRollingChanges(
+	ctx context.Context,
+	name string,
+	diff *clusterupdate.UpdateResult,
+	diffErr error,
+) {
+	if diffErr != nil || diff == nil {
+		return
+	}
+
+	if p.hetznerOpts == nil || p.infraProvider == nil {
+		return
+	}
+
+	clusterName := p.resolveClusterName(name)
+
+	nodes, listErr := p.infraProvider.ListNodes(ctx, clusterName)
+	if listErr != nil {
+		_, _ = fmt.Fprintf(
+			p.logWriter,
+			"  ⚠ Failed to detect server types for rolling update: %v\n",
+			listErr,
+		)
+
+		return
+	}
+
+	cpDesired := p.hetznerServerType(RoleControlPlane)
+	workerDesired := p.hetznerServerType(RoleWorker)
+	cpCount, workerCount := countServerNodesByRole(nodes)
+
+	appendServerTypeChange(diff, RoleControlPlane,
+		representativeServerType(nodes, RoleControlPlane, cpDesired), cpDesired,
+		clusterupdate.ControlPlaneServerTypeChangeCategory(cpCount))
+	appendServerTypeChange(diff, RoleWorker,
+		representativeServerType(nodes, RoleWorker, workerDesired), workerDesired,
+		clusterupdate.WorkerServerTypeChangeCategory(workerCount))
+}
+
+// appendServerTypeChange appends a server-type change to the appropriate diff
+// slice based on its classified category. It is a no-op when the current type is
+// unknown (no running nodes of the role), when the types match, or for the
+// in-place category (no existing nodes to replace).
+func appendServerTypeChange(
+	diff *clusterupdate.UpdateResult,
+	role, current, desired string,
+	category clusterupdate.ChangeCategory,
+) {
+	if current == "" || desired == "" || strings.EqualFold(current, desired) {
+		return
+	}
+
+	field := "provider.hetzner.workerServerType"
+	if role == RoleControlPlane {
+		field = "provider.hetzner.controlPlaneServerType"
+	}
+
+	change := clusterupdate.Change{
+		Field:    field,
+		OldValue: current,
+		NewValue: desired,
+		Category: category,
+		Reason:   "existing " + role + " servers are replaced one at a time to apply the new VM type",
+	}
+
+	switch category { //nolint:exhaustive // only rolling/recreate categories are actionable here
+	case clusterupdate.ChangeCategoryRollingRecreate:
+		diff.RollingRecreate = append(diff.RollingRecreate, change)
+	case clusterupdate.ChangeCategoryRecreateRequired:
+		change.Reason = "control plane lacks etcd-quorum redundancy to roll; recreation required"
+		diff.RecreateRequired = append(diff.RecreateRequired, change)
+	default:
+		// In-place: no existing nodes to replace; future nodes use the new type.
+	}
+}
+
 // applyUpdateChanges applies all update changes after PrepareUpdate succeeds.
 //
 //nolint:cyclop // sequential update workflow with multiple change categories
@@ -130,6 +220,11 @@ func (p *Provisioner) applyUpdateChanges(
 	scaleErr := p.applyNodeScalingChanges(ctx, clusterName, oldSpec, newSpec, result)
 	if scaleErr != nil {
 		return result, fmt.Errorf("failed to apply node scaling changes: %w", scaleErr)
+	}
+
+	rollErr := p.applyRollingRecreateChanges(ctx, clusterName, result)
+	if rollErr != nil {
+		return result, fmt.Errorf("failed to apply rolling recreate changes: %w", rollErr)
 	}
 
 	// Handle in-place config changes (NO_REBOOT mode).
@@ -558,6 +653,8 @@ func (p *Provisioner) applyRebootChangesIfNeeded(
 // autoscaler config secret (which embeds a worker config derived from the
 // bundle). This avoids unnecessary Talos API calls for no-op updates or
 // operations that don't touch machine configs (e.g., pure scale-down).
+//
+//nolint:cyclop // sequence of independent conditions that each warrant a secret sync
 func (p *Provisioner) needsSecretSync(
 	oldSpec, newSpec *v1alpha1.ClusterSpec,
 	diff *clusterupdate.UpdateResult,
@@ -569,6 +666,12 @@ func (p *Provisioner) needsSecretSync(
 	// Scale-up: new nodes need the existing cluster's PKI.
 	if oldSpec != nil && newSpec != nil &&
 		(newSpec.ControlPlanes > oldSpec.ControlPlanes || newSpec.Workers > oldSpec.Workers) {
+		return true
+	}
+
+	// Rolling node replacement creates new servers that must join with the
+	// existing cluster's PKI and endpoint.
+	if diff.HasRollingRecreate() {
 		return true
 	}
 
@@ -1024,40 +1127,61 @@ func (p *Provisioner) introspectHetznerServerTypes(
 		return
 	}
 
-	cpType, workerType := detectHetznerServerTypes(nodes)
+	cpType := representativeServerType(nodes, RoleControlPlane, hetznerSpec.ControlPlaneServerType)
 	if cpType != "" {
 		hetznerSpec.ControlPlaneServerType = cpType
 	}
 
+	workerType := representativeServerType(nodes, RoleWorker, hetznerSpec.WorkerServerType)
 	if workerType != "" {
 		hetznerSpec.WorkerServerType = workerType
 	}
 }
 
-// detectHetznerServerTypes determines the actual control-plane and worker
-// server types from a node listing. Returns empty strings when no nodes of
-// a given role are found.
-func detectHetznerServerTypes(nodes []svcprovider.NodeInfo) (string, string) {
-	var cpServerType, workerServerType string
+// countServerNodesByRole counts control-plane and worker nodes from a provider
+// node listing.
+func countServerNodesByRole(nodes []svcprovider.NodeInfo) (int, int) {
+	var controlPlanes, workers int
 
 	for _, node := range nodes {
 		switch node.Role {
 		case RoleControlPlane:
-			if cpServerType == "" && node.ServerType != "" {
-				cpServerType = node.ServerType
-			}
+			controlPlanes++
 		case RoleWorker:
-			if workerServerType == "" && node.ServerType != "" {
-				workerServerType = node.ServerType
-			}
-		}
-
-		if cpServerType != "" && workerServerType != "" {
-			break
+			workers++
 		}
 	}
 
-	return cpServerType, workerServerType
+	return controlPlanes, workers
+}
+
+// representativeServerType returns a server type for the given role suitable for
+// diffing against desiredType. If any node of the role has a type different from
+// desiredType, that differing type is returned so the change is still detected when
+// a role holds mixed types (e.g. after a partially-completed rolling replacement).
+// When every node already matches (or the role has no node with a known type), the
+// first observed type is returned ("" when none).
+func representativeServerType(
+	nodes []svcprovider.NodeInfo,
+	role, desiredType string,
+) string {
+	var firstSeen string
+
+	for _, node := range nodes {
+		if node.Role != role || node.ServerType == "" {
+			continue
+		}
+
+		if firstSeen == "" {
+			firstSeen = node.ServerType
+		}
+
+		if !strings.EqualFold(node.ServerType, desiredType) {
+			return node.ServerType
+		}
+	}
+
+	return firstSeen
 }
 
 // syncHetznerFirewallRules synchronizes the Hetzner Cloud Firewall rules to the

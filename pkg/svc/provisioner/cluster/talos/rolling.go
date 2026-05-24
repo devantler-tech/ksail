@@ -285,8 +285,6 @@ func (p *Provisioner) rollingApplyRebootChanges(
 
 // rollingRebootSingleNode performs the cordon → drain → stage config → reboot →
 // wait → uncordon sequence for a single node.
-//
-//nolint:cyclop,funlen // sequential cordon/drain/stage/reboot/wait/uncordon steps
 func (p *Provisioner) rollingRebootSingleNode(
 	ctx context.Context,
 	clientset kubernetes.Interface,
@@ -297,18 +295,9 @@ func (p *Provisioner) rollingRebootSingleNode(
 		return fmt.Errorf("resolve node name: %w", err)
 	}
 
-	_, _ = fmt.Fprintf(p.logWriter, "    Cordoning %s (%s)...\n", nodeName, node.IP)
-
-	cordonErr := p.cordonNode(ctx, clientset, nodeName)
-	if cordonErr != nil {
-		return fmt.Errorf("cordon: %w", cordonErr)
-	}
-
-	_, _ = fmt.Fprintf(p.logWriter, "    Draining %s...\n", nodeName)
-
-	drainErr := p.drainNode(ctx, clientset, nodeName)
+	drainErr := p.cordonAndDrain(ctx, clientset, nodeName)
 	if drainErr != nil {
-		return fmt.Errorf("drain: %w", drainErr)
+		return drainErr
 	}
 
 	// Apply config with STAGED mode — config takes effect on next reboot.

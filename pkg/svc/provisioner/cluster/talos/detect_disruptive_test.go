@@ -571,6 +571,7 @@ func TestClassifyMachineConfigChanges(t *testing.T) { //nolint:funlen // table-d
 					rebootCount++
 				case clusterupdate.ChangeCategoryInPlace,
 					clusterupdate.ChangeCategoryRecreateRequired,
+					clusterupdate.ChangeCategoryRollingRecreate,
 					clusterupdate.ChangeCategoryUnknown:
 					// not counted in this test
 				}

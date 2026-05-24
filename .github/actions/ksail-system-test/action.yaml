@@ -82,6 +82,17 @@ inputs:
       "Calico"). Only used when test-kubernetes-provider is 'true'.
     required: false
     default: ""
+  rolling-resize-server-type:
+    description: |
+      Hetzner only. When set to a server type (e.g. "cx33"), runs an additional
+      step that changes the control-plane and worker server types in ksail.yaml
+      and applies them via `ksail cluster update --force`, exercising the rolling
+      node replacement path. Only roles with enough redundancy actually roll
+      (control planes require >= 3 nodes; workers require >= 1), so provision the
+      cluster with --control-planes 3 and/or --workers 1 for the path to run.
+      Leave empty to skip.
+    required: false
+    default: ""
 
 runs:
   using: composite
@@ -372,6 +383,42 @@ runs:
         fi
         echo "✅ No unexpected changes detected"
 
+    - name: 🧪 ksail cluster update — rolling server-type resize
+      id: cluster-update-rolling-resize
+      if: inputs.provider == 'Hetzner' && inputs.rolling-resize-server-type != ''
+      shell: bash
+      env:
+        DISTRIBUTION: ${{ inputs.distribution }}
+        PROVIDER: ${{ inputs.provider }}
+        ARGS: ${{ steps.resolve-args.outputs.args }}
+        NEW_SERVER_TYPE: ${{ inputs.rolling-resize-server-type }}
+      run: |
+        set -o pipefail
+        LOG_FILE="/tmp/ksail-system-test-logs/cluster-update-rolling-resize.log"
+        {
+        echo "=== Changing Hetzner server types to ${NEW_SERVER_TYPE} in ksail.yaml ==="
+        yq -i ".spec.provider.hetzner.controlPlaneServerType = \"${NEW_SERVER_TYPE}\"" ksail.yaml
+        yq -i ".spec.provider.hetzner.workerServerType = \"${NEW_SERVER_TYPE}\"" ksail.yaml
+
+        # Strip init-only flags that cluster update does not accept.
+        UPDATE_ARGS=$(echo "$ARGS" | sed 's/--image-verification [^ ]*//')
+        # shellcheck disable=SC2086
+        ksail cluster update --force --distribution "$DISTRIBUTION" --provider "$PROVIDER" $UPDATE_ARGS
+
+        echo "=== Verifying cluster is healthy after rolling resize ==="
+        ksail cluster info
+        } 2>&1 | tee "$LOG_FILE"
+
+        # The rolling path must have replaced at least one node (CP with >=3 nodes
+        # or a worker with >=1 node). A bare "No changes detected" means the cluster
+        # lacked the redundancy to roll — fail so the scenario is provisioned right.
+        if grep -q "No changes detected" "$LOG_FILE"; then
+          echo "❌ ERROR: No rolling replacement occurred. Provision the cluster with"
+          echo "   --control-planes 3 and/or --workers 1 so a role has enough nodes to roll."
+          exit 1
+        fi
+        echo "✅ Rolling server-type resize completed"
+
     # ── Phase 4b — Kubernetes Provider tests ─────────────────────────
     # Tests nested clusters on the Kubernetes provider using the active
     # host cluster. Only runs when test-kubernetes-provider is 'true'.
@@ -387,7 +434,7 @@ runs:
     # ── Phase 5 — Debug ──────────────────────────────────────────────
 
     - name: 🐞 Debug Kubernetes failure
-      if: failure() && (steps.cluster-create.outcome == 'failure' || steps.image-export-import-tests.outcome == 'failure' || steps.workload-watch-tests.outcome == 'failure' || steps.online-gen.outcome == 'failure' || steps.cluster-update-dry-run.outcome == 'failure' || steps.cluster-update.outcome == 'failure' || steps.kubernetes-provider-tests.outcome == 'failure')
+      if: failure() && (steps.cluster-create.outcome == 'failure' || steps.image-export-import-tests.outcome == 'failure' || steps.workload-watch-tests.outcome == 'failure' || steps.online-gen.outcome == 'failure' || steps.cluster-update-dry-run.outcome == 'failure' || steps.cluster-update.outcome == 'failure' || steps.cluster-update-rolling-resize.outcome == 'failure' || steps.kubernetes-provider-tests.outcome == 'failure')
       uses: ./.github/actions/debug-kubernetes-failure
       with:
         kubectl-command: "ksail workload"
