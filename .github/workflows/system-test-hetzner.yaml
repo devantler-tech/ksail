@@ -60,6 +60,11 @@ on:
         required: false
         type: number
         default: 0
+      rolling_resize_server_type:
+        description: "Rolling node replacement: new Hetzner server type (e.g. cx33). Needs control_planes>=3 or workers>=1. Leave empty to skip."
+        required: false
+        type: string
+        default: ""
   schedule:
     # Weekly: Sunday 03:00 UTC
     - cron: "0 3 * * 0"
@@ -263,6 +268,7 @@ jobs:
           args: ${{ steps.args.outputs.value }}
           apply-overlay-path: ".github/fixtures/podinfo-overlay"
           test-kubernetes-provider: ${{ matrix.suffix == 'default-init' && 'true' || 'false' }}
+          rolling-resize-server-type: ${{ github.event_name == 'workflow_dispatch' && inputs.rolling_resize_server_type || '' }}
 
           ghcr-user: ${{ github.actor }}
           ghcr-token: ${{ secrets.GITHUB_TOKEN }}

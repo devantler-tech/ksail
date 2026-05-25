@@ -30,6 +30,9 @@ func MergeProvisionerDiff(main, provisioner *clusterupdate.UpdateResult) {
 	main.RecreateRequired = appendUniqueChanges(
 		main.RecreateRequired, provisioner.RecreateRequired, existingFields,
 	)
+	main.RollingRecreate = appendUniqueChanges(
+		main.RollingRecreate, provisioner.RollingRecreate, existingFields,
+	)
 }
 
 // normalizeFieldName strips the "cluster." prefix for deduplication purposes,

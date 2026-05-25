@@ -55,7 +55,7 @@ func (e *Engine) ComputeDiff(
 	e.checkLocalRegistryChange(oldSpec, newSpec, result)
 	e.checkVanillaOptionsChange(oldSpec, newSpec, result)
 	e.checkTalosOptionsChange(oldSpec, newSpec, result)
-	e.checkHetznerOptionsChange(oldProvider, newProvider, result)
+	e.checkHetznerOptionsChange(oldSpec, oldProvider, newProvider, result)
 	e.checkAutoscalerOptionsChange(oldSpec, newSpec, result)
 
 	return result
@@ -100,6 +100,14 @@ type fieldRule struct {
 	// empty. Use this for fields that are optional in the user config — when the user
 	// hasn't set the field, any detected current value should not produce a diff.
 	skipWhenNewEmpty bool
+	// skipWhenOldEmpty, when true, skips the diff when the baseline (old) value is
+	// empty — i.e. the current value could not be introspected from the cluster and
+	// no persisted state supplied it. Use this for boot-time settings (e.g. the
+	// Talos ISO ID) that a running cluster cannot report: with no baseline, falling
+	// back to defaultVal would fabricate a perpetual false-positive diff whenever the
+	// user pins a non-default value. Mirrors checkLocalRegistryChange's handling,
+	// where an empty old value means "unknown", not a concrete value to diff against.
+	skipWhenOldEmpty bool
 }
 
 // scalarFieldRules returns the table of simple scalar field diff rules.
@@ -227,6 +235,8 @@ func (e *Engine) scalarFieldRules() []fieldRule {
 // appendChange appends a single diff change to the appropriate category slice in result.
 // Both applyFieldRules and applyProviderFieldRules delegate to this helper to
 // avoid duplicating the default-value substitution and category dispatch logic.
+//
+//nolint:cyclop // single dispatch switch over change categories
 func appendChange(
 	result *clusterupdate.UpdateResult,
 	field, oldVal, newVal, defaultVal, reason string,
@@ -263,6 +273,8 @@ func appendChange(
 		result.RebootRequired = append(result.RebootRequired, change)
 	case clusterupdate.ChangeCategoryWipeRequired:
 		result.WipeRequired = append(result.WipeRequired, change)
+	case clusterupdate.ChangeCategoryRollingRecreate:
+		result.RollingRecreate = append(result.RollingRecreate, change)
 	case clusterupdate.ChangeCategoryUnknown:
 		// Unknown-baseline entries are produced by appendUnknownIfChanged, not
 		// here; route defensively so the category is never silently dropped.
@@ -283,6 +295,14 @@ func (e *Engine) applyFieldRules(
 		}
 
 		oldVal := rule.getVal(oldSpec)
+
+		// The baseline could not be determined (not introspectable, no persisted
+		// state). Skip rather than diff against defaultVal, which would fabricate a
+		// false-positive change whenever the user pins a non-default value (e.g. the
+		// Talos ISO in stateless CI). See skipWhenOldEmpty.
+		if rule.skipWhenOldEmpty && oldVal == "" {
+			continue
+		}
 
 		// The baseline value could not be read from the cluster. Surface the
 		// field as Unknown instead of computing a confident diff against the
@@ -469,17 +489,26 @@ var talosFieldRules = []fieldRule{
 }
 
 // talosISORule is the ISO field rule used by the Talos field rules.
-// ISO is a boot-time setting (Hetzner Cloud ISO ID) that cannot be detected from
-// the running cluster. When the old spec has 0 (unknown/unset), getVal returns ""
-// so that the defaultVal substitution normalises both sides to the config default,
-// suppressing false-positive diffs.
+// ISO is a boot-time setting (Hetzner Cloud ISO ID) that a running cluster cannot
+// report, so the baseline is known only from persisted state. getVal returns ""
+// when ISO is 0 (unset). The two normalisation mechanisms are complementary:
+//   - skipWhenOldEmpty handles an unknown *baseline* (old == ""): the diff is
+//     skipped entirely (before appendChange), so we never fabricate a change
+//     against defaultVal when the user pins a non-default ISO in stateless CI.
+//   - defaultVal handles an unset *desired* value (new == "") against a known
+//     baseline: it normalises the desired side to DefaultTalosISO so an unpinned
+//     config does not diff against a non-zero persisted baseline.
+//
+// A genuine ISO change is still reported when both sides are known and differ,
+// and the desired ISO is always applied to newly provisioned nodes regardless.
 //
 //nolint:gochecknoglobals // Immutable field-rule; avoids per-call heap allocation.
 var talosISORule = fieldRule{
-	field:      "cluster.talos.iso",
-	category:   clusterupdate.ChangeCategoryInPlace,
-	reason:     "ISO change only affects newly provisioned nodes",
-	defaultVal: strconv.FormatInt(v1alpha1.DefaultTalosISO, 10),
+	field:            "cluster.talos.iso",
+	category:         clusterupdate.ChangeCategoryInPlace,
+	reason:           "ISO change only affects newly provisioned nodes",
+	skipWhenOldEmpty: true,
+	defaultVal:       strconv.FormatInt(v1alpha1.DefaultTalosISO, 10),
 	getVal: func(s *v1alpha1.ClusterSpec) string {
 		if s.Talos.ISO == 0 {
 			return ""
@@ -491,6 +520,7 @@ var talosISORule = fieldRule{
 
 // checkHetznerOptionsChange checks Hetzner-specific option changes.
 func (e *Engine) checkHetznerOptionsChange(
+	oldSpec *v1alpha1.ClusterSpec,
 	oldProvider, newProvider *v1alpha1.ProviderSpec,
 	result *clusterupdate.UpdateResult,
 ) {
@@ -503,6 +533,59 @@ func (e *Engine) checkHetznerOptionsChange(
 	}
 
 	e.applyProviderFieldRules(oldProvider, newProvider, result, hetznerFieldRules)
+	e.checkHetznerServerTypeChanges(oldSpec, oldProvider, newProvider, result)
+}
+
+// checkHetznerServerTypeChanges classifies control-plane and worker server-type
+// changes. Unlike the static hetznerFieldRules, their impact depends on the
+// running node counts: control planes can be rolled one at a time only when the
+// cluster has enough etcd-quorum redundancy, and workers are only rolled when
+// they exist. See clusterupdate.ControlPlaneServerTypeChangeCategory and
+// WorkerServerTypeChangeCategory.
+func (e *Engine) checkHetznerServerTypeChanges(
+	oldSpec *v1alpha1.ClusterSpec,
+	oldProvider, newProvider *v1alpha1.ProviderSpec,
+	result *clusterupdate.UpdateResult,
+) {
+	cpCategory := clusterupdate.ControlPlaneServerTypeChangeCategory(int(oldSpec.ControlPlanes))
+	appendChange(result, "provider.hetzner.controlPlaneServerType",
+		oldProvider.Hetzner.ControlPlaneServerType, newProvider.Hetzner.ControlPlaneServerType,
+		v1alpha1.DefaultHetznerServerType,
+		serverTypeChangeReason(RoleControlPlane, cpCategory), cpCategory)
+
+	workerCategory := clusterupdate.WorkerServerTypeChangeCategory(int(oldSpec.Workers))
+	appendChange(result, "provider.hetzner.workerServerType",
+		oldProvider.Hetzner.WorkerServerType, newProvider.Hetzner.WorkerServerType,
+		v1alpha1.DefaultHetznerServerType,
+		serverTypeChangeReason(RoleWorker, workerCategory), workerCategory)
+}
+
+// Role identifiers used when describing server-type changes.
+const (
+	// RoleControlPlane identifies control-plane nodes.
+	RoleControlPlane = "control-plane"
+	// RoleWorker identifies worker nodes.
+	RoleWorker = "worker"
+)
+
+// serverTypeChangeReason returns a human-readable explanation for a server-type
+// change classified into the given category.
+func serverTypeChangeReason(role string, category clusterupdate.ChangeCategory) string {
+	switch category {
+	case clusterupdate.ChangeCategoryRollingRecreate:
+		return "existing " + role + " servers are replaced one at a time to apply the new VM type"
+	case clusterupdate.ChangeCategoryRecreateRequired:
+		return "control plane lacks etcd-quorum redundancy to roll (need at least " +
+			strconv.Itoa(clusterupdate.MinControlPlanesForRollingReplace) +
+			" control planes); recreation is required to change VM type"
+	case clusterupdate.ChangeCategoryInPlace,
+		clusterupdate.ChangeCategoryRebootRequired,
+		clusterupdate.ChangeCategoryWipeRequired,
+		clusterupdate.ChangeCategoryUnknown:
+		return "new " + role + " servers use the new type; no existing nodes to replace"
+	default:
+		return "new " + role + " servers use the new type; no existing nodes to replace"
+	}
 }
 
 // providerFieldRule describes how to diff a single scalar field from ProviderSpec.
@@ -519,20 +602,6 @@ type providerFieldRule struct {
 //
 //nolint:gochecknoglobals // Immutable field-rule table; avoids per-call heap allocation.
 var hetznerFieldRules = []providerFieldRule{
-	{
-		field:      "provider.hetzner.controlPlaneServerType",
-		category:   clusterupdate.ChangeCategoryRecreateRequired,
-		reason:     "existing control-plane servers cannot change VM type",
-		getVal:     func(s *v1alpha1.ProviderSpec) string { return s.Hetzner.ControlPlaneServerType },
-		defaultVal: v1alpha1.DefaultHetznerServerType,
-	},
-	{
-		field:      "provider.hetzner.workerServerType",
-		category:   clusterupdate.ChangeCategoryInPlace,
-		reason:     "new worker servers will use the new type; existing workers unchanged",
-		getVal:     func(s *v1alpha1.ProviderSpec) string { return s.Hetzner.WorkerServerType },
-		defaultVal: v1alpha1.DefaultHetznerServerType,
-	},
 	{
 		field:      "provider.hetzner.location",
 		category:   clusterupdate.ChangeCategoryRecreateRequired,

@@ -16,9 +16,13 @@ cluster recreation (e.g., network settings, kubelet config, registry mirrors).
 For Kind/K3d clusters, in-place updates are more limited. Worker node scaling
 is supported for K3d, but most other changes require cluster recreation.
 
-Changes are classified into three categories:
+Changes are classified into the following categories:
   - In-Place: Applied without disruption
   - Reboot-Required: Applied but may require node reboots
+  - Wipe-Required: Requires wiping node partitions (e.g. disk encryption
+    migration); requires --force
+  - Rolling-Recreate: Nodes are replaced one at a time (e.g. a Talos × Hetzner
+    server-type change); requires confirmation (or --force to skip the prompt)
   - Recreate-Required: Require full cluster recreation
 
 Use --dry-run to preview changes without applying them.

@@ -271,7 +271,7 @@ func TestCluster_MarshalJSON_TalosDefaultsPruned(t *testing.T) {
 	jsonStr := string(data)
 	assert.NotContains(t, jsonStr, "controlPlanes")
 	assert.NotContains(t, jsonStr, "~/.talos/config")
-	assert.NotContains(t, jsonStr, "122630")
+	assert.NotContains(t, jsonStr, "125127")
 }
 
 func TestCluster_MarshalJSON_TalosNonDefaultsKept(t *testing.T) {

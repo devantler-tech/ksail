@@ -17,6 +17,7 @@ const (
 	testFieldControlPlanes = "cluster.controlPlanes"
 	testFieldWorkers       = "cluster.workers"
 	testTalosVersionOld    = "v1.11.2"
+	testServerTypeNew      = "cpx41"
 )
 
 func newBaseSpec() *v1alpha1.ClusterSpec {
@@ -636,6 +637,96 @@ func TestEngine_HetznerOptionsChange_InPlace(t *testing.T) {
 
 			assertSingleChange(t, result.InPlaceChanges, testCase.field,
 				testCase.oldValue, testCase.newValue, clusterupdate.ChangeCategoryInPlace)
+		})
+	}
+}
+
+func TestEngine_HetznerServerType_RollingRecreate(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		controlPlanes int32
+		workers       int32
+		mutate        func(spec *v1alpha1.ProviderSpec)
+		field         string
+	}{
+		{
+			name:          "control plane server type change with quorum redundancy",
+			controlPlanes: 3,
+			workers:       0,
+			mutate:        func(s *v1alpha1.ProviderSpec) { s.Hetzner.ControlPlaneServerType = testServerTypeNew },
+			field:         "provider.hetzner.controlPlaneServerType",
+		},
+		{
+			name:          "worker server type change with existing workers",
+			controlPlanes: 1,
+			workers:       2,
+			mutate:        func(s *v1alpha1.ProviderSpec) { s.Hetzner.WorkerServerType = testServerTypeNew },
+			field:         "provider.hetzner.workerServerType",
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			old := newBaseSpec()
+			old.ControlPlanes = testCase.controlPlanes
+			old.Workers = testCase.workers
+			newer := clone(old)
+			oldProvider := newBaseProviderSpec()
+			newProvider := cloneProvider(oldProvider)
+			testCase.mutate(newProvider)
+
+			engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
+			result := engine.ComputeDiff(old, newer, oldProvider, newProvider)
+
+			if !result.HasRollingRecreate() {
+				t.Fatal("server type change should require rolling recreate")
+			}
+
+			if result.HasRecreateRequired() {
+				t.Fatal("rolling-capable server type change should not require full recreate")
+			}
+
+			assertSingleChange(t, result.RollingRecreate, testCase.field,
+				"cx23", testServerTypeNew, clusterupdate.ChangeCategoryRollingRecreate)
+		})
+	}
+}
+
+func TestEngine_HetznerControlPlaneServerType_RecreateBelowQuorum(t *testing.T) {
+	t.Parallel()
+
+	// With fewer than MinControlPlanesForRollingReplace control planes, a CP
+	// server-type change cannot roll without losing etcd quorum.
+	for _, controlPlanes := range []int32{1, 2} {
+		t.Run(strconv.Itoa(int(controlPlanes))+" control planes", func(t *testing.T) {
+			t.Parallel()
+
+			old := newBaseSpec()
+			old.ControlPlanes = controlPlanes
+			newer := clone(old)
+			oldProvider := newBaseProviderSpec()
+			newProvider := cloneProvider(oldProvider)
+			newProvider.Hetzner.ControlPlaneServerType = testServerTypeNew
+
+			engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
+			result := engine.ComputeDiff(old, newer, oldProvider, newProvider)
+
+			if result.HasRollingRecreate() {
+				t.Fatal("control-plane change below quorum should not roll")
+			}
+
+			assertSingleChange(
+				t,
+				result.RecreateRequired,
+				"provider.hetzner.controlPlaneServerType",
+				"cx23",
+				testServerTypeNew,
+				clusterupdate.ChangeCategoryRecreateRequired,
+			)
 		})
 	}
 }
@@ -1402,19 +1493,23 @@ func TestEngine_TalosISO_SuppressedWhenOldUnknown(t *testing.T) {
 	t.Parallel()
 
 	// Simulate GetCurrentConfig returning 0 (unset) for ISO — the live cluster
-	// can't report what ISO it booted from.
+	// can't report what ISO it booted from, and no persisted state is available
+	// (e.g. a stateless CI runner).
 	old := newBaseSpec()
 	old.Distribution = v1alpha1.DistributionTalos
 	old.Talos.ISO = 0
 
+	// Pin a non-default ISO, as a real cluster does. This is the case that
+	// previously produced a perpetual false-positive diff: the unknown baseline
+	// was filled with DefaultTalosISO and compared against the pinned value.
 	newer := clone(old)
-	newer.Talos.ISO = v1alpha1.DefaultTalosISO
+	newer.Talos.ISO = v1alpha1.DefaultTalosISO + 1
 
 	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
 	result := engine.ComputeDiff(old, newer, nil, nil)
 
-	// ISO should NOT appear as a change because both sides normalise to the
-	// default ISO via the defaultVal mechanism.
+	// ISO must NOT appear as a change: with no baseline to compare against, the
+	// rule skips the field entirely rather than diffing against the default.
 	for _, c := range result.AllChanges() {
 		if c.Field == "cluster.talos.iso" {
 			t.Fatalf("expected no ISO diff when old value is 0 (unknown), got %+v", c)
@@ -1439,6 +1534,34 @@ func TestEngine_TalosISO_DetectedWhenBothNonZero(t *testing.T) {
 		strconv.FormatInt(v1alpha1.DefaultTalosISO, 10),
 		strconv.FormatInt(v1alpha1.DefaultTalosISO+1, 10),
 		clusterupdate.ChangeCategoryInPlace)
+}
+
+func TestEngine_TalosISO_NoChangeWhenDesiredUnsetMatchesDefaultBaseline(t *testing.T) {
+	t.Parallel()
+
+	// Persisted state supplies a known baseline equal to the default ISO while the
+	// config leaves talos.iso unset (0). defaultVal must normalise the desired side
+	// to the default so an unpinned config does not produce a false-positive diff
+	// against the baseline. skipWhenOldEmpty does not apply here — the baseline is
+	// known and non-zero.
+	old := newBaseSpec()
+	old.Distribution = v1alpha1.DistributionTalos
+	old.Talos.ISO = v1alpha1.DefaultTalosISO
+
+	newer := clone(old)
+	newer.Talos.ISO = 0
+
+	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
+	result := engine.ComputeDiff(old, newer, nil, nil)
+
+	for _, c := range result.AllChanges() {
+		if c.Field == "cluster.talos.iso" {
+			t.Fatalf(
+				"expected no ISO diff when desired is unset and baseline equals default, got %+v",
+				c,
+			)
+		}
+	}
 }
 
 func TestEngine_TalosVersion_NoChangeWhenBothSet(t *testing.T) {

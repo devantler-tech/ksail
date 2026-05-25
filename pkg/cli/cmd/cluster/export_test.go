@@ -144,6 +144,20 @@ func ExportDiffToJSON(diff *clusterupdate.UpdateResult) DiffJSONOutput {
 	return diffToJSON(diff)
 }
 
+// ExportConfirmDisruptiveChanges exports confirmDisruptiveChanges for testing.
+func ExportConfirmDisruptiveChanges(
+	cmd *cobra.Command,
+	diff *clusterupdate.UpdateResult,
+	force bool,
+) (bool, bool) {
+	return confirmDisruptiveChanges(cmd, diff, force)
+}
+
+// ExportReportFailedChanges exports reportFailedChanges for testing.
+func ExportReportFailedChanges(cmd *cobra.Command, result *clusterupdate.UpdateResult) {
+	reportFailedChanges(cmd, result)
+}
+
 // ExportReportNoApplicableChanges exports reportNoApplicableChanges for testing.
 func ExportReportNoApplicableChanges(cmd *cobra.Command, diff *clusterupdate.UpdateResult) {
 	reportNoApplicableChanges(cmd, diff)
