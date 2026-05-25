@@ -4,9 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
@@ -196,23 +194,22 @@ func (p *K3kProvisioner) Create(ctx context.Context, name string) error {
 	// chart needs admissionregistration.k8s.io/v1beta1 MutatingAdmissionPolicy).
 	p.dumpNestedK3sDiagnostics(ctx, clusterName, namespace)
 
-	// Point the kubeconfig at a session port-forward to the nested API server so
-	// in-process post-creation setup (e.g. installing Calico) can reach it. The
-	// NodePort exposure address is typically not host-reachable. Fall back to the
-	// exposure address if the port-forward cannot be established (default-CNI clusters
-	// do not need to reach the nested API during creation).
+	// Persist the stable exposure URL in the kubeconfig (so it stays valid after the
+	// CLI exits), and make it reachable for in-process post-creation setup (e.g.
+	// installing Calico) by binding a session port-forward to that same NodePort. The
+	// NodePort address is otherwise typically not host-reachable. Best-effort: if the
+	// forward can't be established, the persisted endpoint is still the stable address
+	// (default-CNI clusters don't need to reach the nested API during creation).
 	serverURL := exposure.ServerURL()
 
-	pfURL, pfErr := p.startAPIServerPortForward(ctx, clusterName, namespace)
-	if pfErr != nil {
+	err = p.startAPIServerPortForward(ctx, clusterName, namespace, int(exposure.Port))
+	if err != nil {
 		_, _ = fmt.Fprintf(
 			os.Stdout,
-			"⚠ could not port-forward nested API server (%v); "+
+			"⚠ could not port-forward nested API server on port %d (%v); "+
 				"post-creation CNI install may be unreachable\n",
-			pfErr,
+			exposure.Port, err,
 		)
-	} else {
-		serverURL = pfURL
 	}
 
 	err = p.connectAndMergeKubeconfig(ctx, clusterName, namespace, serverURL)
@@ -350,14 +347,16 @@ func (p *K3kProvisioner) connectAndMergeKubeconfig(
 }
 
 // startAPIServerPortForward establishes a port-forward to a running k3k server pod's API
-// port and returns a host-reachable "https://127.0.0.1:<localPort>" server URL. The server
-// certificate includes a 127.0.0.1 SAN (see buildClusterCR), so TLS verification succeeds
-// over the forward. It polls for a Running server pod and retries the forward until one is
-// ready, since the pod may still be coming up just after the cluster reports Ready.
+// port, bound to localPort on 127.0.0.1 so the stable exposure URL (https://127.0.0.1:
+// <localPort>) is reachable in-process. The server certificate includes a 127.0.0.1 SAN
+// (see buildClusterCR), so TLS verification succeeds over the forward. It polls for a
+// Running server pod and retries the forward until one is ready, since the pod may still be
+// coming up just after the cluster reports Ready.
 func (p *K3kProvisioner) startAPIServerPortForward(
 	ctx context.Context,
 	clusterName, namespace string,
-) (string, error) {
+	localPort int,
+) error {
 	selector := fmt.Sprintf("cluster=%s,role=server", clusterName)
 
 	var (
@@ -382,8 +381,8 @@ func (p *K3kProvisioner) startAPIServerPortForward(
 				return false, nil
 			}
 
-			pfSession, pfErr := p.k8sProvider.StartPortForwardInNamespace(
-				ctx, p.restConfig, namespace, podName, k3kAPIServerPort,
+			pfSession, pfErr := p.k8sProvider.StartPortForwardInNamespaceOnLocalPort(
+				ctx, p.restConfig, namespace, podName, k3kAPIServerPort, localPort,
 			)
 			if pfErr != nil {
 				// The pod may not yet be accepting connections; record the cause and
@@ -401,19 +400,19 @@ func (p *K3kProvisioner) startAPIServerPortForward(
 	)
 	if err != nil {
 		if lastErr != nil {
-			return "", fmt.Errorf(
+			return fmt.Errorf(
 				"port-forward nested API server: %w; last attempt: %w",
 				err,
 				lastErr,
 			)
 		}
 
-		return "", fmt.Errorf("port-forward nested API server: %w", err)
+		return fmt.Errorf("port-forward nested API server: %w", err)
 	}
 
 	p.apiServerPortForward = session
 
-	return "https://" + net.JoinHostPort("127.0.0.1", strconv.Itoa(session.LocalPort)), nil
+	return nil
 }
 
 // closeAPIServerPortForward tears down the nested API port-forward if one is active.

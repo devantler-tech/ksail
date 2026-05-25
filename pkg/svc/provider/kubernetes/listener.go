@@ -17,10 +17,14 @@ type localListener struct {
 	Port     int
 }
 
-// newLocalListener creates a TCP listener on a random localhost port and
-// extracts the assigned port number. On any error the listener is closed.
-func newLocalListener(ctx context.Context) (*localListener, error) {
-	listener, err := (&net.ListenConfig{}).Listen(ctx, "tcp", "127.0.0.1:0")
+// newLocalListener creates a TCP listener on the given localhost port and extracts the
+// assigned port number. A localPort of 0 binds a random free port; a non-zero value binds
+// that specific port (used to make a port-forward reachable at a stable, known address).
+// On any error the listener is closed.
+func newLocalListener(ctx context.Context, localPort int) (*localListener, error) {
+	listener, err := (&net.ListenConfig{}).Listen(
+		ctx, "tcp", fmt.Sprintf("127.0.0.1:%d", localPort),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("create listener: %w", err)
 	}
