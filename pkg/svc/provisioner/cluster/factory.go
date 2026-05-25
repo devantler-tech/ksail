@@ -332,6 +332,21 @@ apiServer:
 	}
 }
 
+// wrapK3kServerArgs works around a k3k operator bug: it joins Cluster.Spec.ServerArgs
+// with spaces into an unquoted shell assignment (EXTRA_ARGS={{.EXTRA_ARGS}}), which
+// breaks for multiple space-separated args (the shell treats only the first token as the
+// assignment and the rest as a command). Wrapping the args in a single single-quoted
+// element makes the assignment see one token, while the operator's later unquoted
+// `$EXTRA_ARGS` expansion word-splits it back into separate k3s flags. Returns nil for
+// empty input.
+func wrapK3kServerArgs(args []string) []string {
+	if len(args) == 0 {
+		return nil
+	}
+
+	return []string{"'" + strings.Join(args, " ") + "'"}
+}
+
 // createK3dKubernetesProvisioner creates a K3s provisioner that runs inside
 // a host Kubernetes cluster using the k3k operator.
 func (f DefaultFactory) createK3dKubernetesProvisioner(
@@ -366,7 +381,16 @@ func (f DefaultFactory) createK3dKubernetesProvisioner(
 	// Calico's v3.30+ CRD chart ships MutatingAdmissionPolicy resources that require the
 	// MutatingAdmissionPolicy feature gate / v1beta1 admissionregistration API. These flags
 	// flow through the k3k Cluster spec's serverArgs to the embedded k3s kube-apiserver.
-	serverArgs := k3dconfigmanager.APIServerFeatureGatesArgsForCNI(cluster.Spec.Cluster.CNI)
+	//
+	// The k3k operator joins serverArgs with spaces into an UNQUOTED shell assignment
+	// (EXTRA_ARGS={{.EXTRA_ARGS}}), which breaks for multiple space-separated args (the
+	// shell treats only the first token as the assignment and the rest as a command), so
+	// the feature-gate flags never reach `k3s server $EXTRA_ARGS`. Wrap them in a single
+	// single-quoted element: the assignment then sees one token (EXTRA_ARGS='a b' → "a b")
+	// and the later unquoted $EXTRA_ARGS expansion word-splits it back into separate flags.
+	serverArgs := wrapK3kServerArgs(
+		k3dconfigmanager.APIServerFeatureGatesArgsForCNI(cluster.Spec.Cluster.CNI),
+	)
 
 	provisioner, err := k3dprovisioner.NewK3kProvisioner(
 		k3dprovisioner.K3kProvisionerConfig{
