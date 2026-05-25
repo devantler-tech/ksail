@@ -465,11 +465,30 @@ func buildHostClusterClients(
 	return clientsFromRESTConfig(restConfig)
 }
 
+// hostClientQPS and hostClientBurst raise the host-cluster REST client throughput above
+// client-go's restrictive defaults (5 QPS / 10 burst). The nested-provider provisioners
+// poll the host cluster heavily — k3k Cluster status, vCluster kubeconfig secrets, pods —
+// across several nested clusters, and the default rate limiter deadlines under load
+// ("client rate limiter Wait returned an error: context deadline exceeded").
+const (
+	hostClientQPS   = 50
+	hostClientBurst = 100
+)
+
 // clientsFromRESTConfig builds the typed and dynamic clients used by the Kubernetes-provider
-// provisioners from an already-resolved REST config.
+// provisioners from an already-resolved REST config. It raises the client rate-limiter
+// throughput (unless already configured) so readiness polling survives host-cluster load.
 func clientsFromRESTConfig(
 	restConfig *rest.Config,
 ) (kubernetes.Interface, *rest.Config, dynamic.Interface, error) {
+	if restConfig.QPS == 0 {
+		restConfig.QPS = hostClientQPS
+	}
+
+	if restConfig.Burst == 0 {
+		restConfig.Burst = hostClientBurst
+	}
+
 	clientset, err := kubernetes.NewForConfig(restConfig)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("create host clientset: %w", err)
