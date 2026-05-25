@@ -52,6 +52,10 @@ const (
 	// k3kAPIServerPFTimeout bounds how long Create waits for a server pod to become
 	// port-forwardable when wiring the in-session nested API endpoint.
 	k3kAPIServerPFTimeout = 2 * time.Minute
+
+	// nestedDebugEnvVar gates opt-in nested-cluster diagnostics (matches the value the
+	// CI nested-provider test sets and the Talos provisioner checks).
+	nestedDebugEnvVar = "KSAIL_NESTED_DEBUG"
 )
 
 // errNoRunningServerPod is recorded while polling for a port-forwardable k3k server
@@ -186,6 +190,11 @@ func (p *K3kProvisioner) Create(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
+
+	// Opt-in (KSAIL_NESTED_DEBUG) diagnostic: confirm the pinned K3s version and
+	// feature-gate serverArgs actually reached the nested apiserver (Calico's CRD
+	// chart needs admissionregistration.k8s.io/v1beta1 MutatingAdmissionPolicy).
+	p.dumpNestedK3sDiagnostics(ctx, clusterName, namespace)
 
 	// Point the kubeconfig at a session port-forward to the nested API server so
 	// in-process post-creation setup (e.g. installing Calico) can reach it. The
@@ -412,6 +421,65 @@ func (p *K3kProvisioner) closeAPIServerPortForward() {
 	if p.apiServerPortForward != nil {
 		p.apiServerPortForward.Close()
 		p.apiServerPortForward = nil
+	}
+}
+
+// dumpNestedK3sDiagnostics is an opt-in (KSAIL_NESTED_DEBUG) diagnostic that prints the
+// k3k Cluster CR's Version/ServerArgs (what ksail requested) and the resolved k3s server
+// pod's image + command/args (what the operator created). It reveals whether the pinned
+// K3s version and feature-gate serverArgs actually reach the nested apiserver — e.g. so
+// it serves admissionregistration.k8s.io/v1beta1 for Calico's CRD chart. No-op unless the
+// env var is set.
+func (p *K3kProvisioner) dumpNestedK3sDiagnostics(
+	ctx context.Context,
+	clusterName, namespace string,
+) {
+	if os.Getenv(nestedDebugEnvVar) == "" {
+		return
+	}
+
+	writer := os.Stdout
+
+	// What ksail asked the operator for.
+	restClient, _, err := p.buildK3kRESTClient()
+	if err == nil {
+		cluster := &k3kv1beta1.Cluster{}
+
+		getErr := restClient.Get().
+			AbsPath("/apis/k3k.io/v1beta1").
+			Namespace(namespace).
+			Resource("clusters").
+			Name(clusterName).
+			Do(ctx).
+			Into(cluster)
+		if getErr == nil {
+			_, _ = fmt.Fprintf(writer,
+				"diagnostics: k3k Cluster %q spec.version=%q spec.serverArgs=%v\n",
+				clusterName, cluster.Spec.Version, cluster.Spec.ServerArgs)
+		}
+	}
+
+	// What the operator actually created: the image reveals the effective K3s version,
+	// and the command/args reveal whether the feature-gate serverArgs reached the server.
+	pods, err := p.hostClientset.CoreV1().
+		Pods(namespace).
+		List(ctx, metav1.ListOptions{
+			LabelSelector: fmt.Sprintf("cluster=%s,role=server", clusterName),
+		})
+	if err != nil {
+		_, _ = fmt.Fprintf(writer, "diagnostics: list k3k server pods failed: %v\n", err)
+
+		return
+	}
+
+	for idx := range pods.Items {
+		pod := pods.Items[idx]
+		for cIdx := range pod.Spec.Containers {
+			cnt := pod.Spec.Containers[cIdx]
+			_, _ = fmt.Fprintf(writer,
+				"diagnostics: server pod %q container %q image=%q command=%v args=%v\n",
+				pod.Name, cnt.Name, cnt.Image, cnt.Command, cnt.Args)
+		}
 	}
 }
 
