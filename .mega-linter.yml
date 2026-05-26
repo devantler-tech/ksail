@@ -22,8 +22,12 @@ EXCLUDED_DIRECTORIES:
   - schemas
   - .agents
 # web/ui is a self-contained Vite/React app with its own toolchain (tsc + vite build, run in CI),
-# so it is excluded from the repo-wide linters here.
-FILTER_REGEX_EXCLUDE: (megalinter-reports/.*|web/ui/.*)
+# so it is excluded from the repo-wide linters here. desktop/ is a separate cgo Go module
+# (webview C bindings, kept out of the static ksail binary); MegaLinter's containerized Go
+# analysis cannot import "C" without the desktop C deps installed, so it fails with
+# "could not import C" / "webview.HintNone unknown invalid type". Real CI builds and tests
+# desktop/ via dedicated jobs, so exclude it from the repo-wide linters here too.
+FILTER_REGEX_EXCLUDE: (megalinter-reports/.*|web/ui/.*|desktop/.*)
 SPELL_LYCHEE_FILTER_REGEX_EXCLUDE: (AGENTS\.md|.*\.mdx|docs/src/.*\.md)
 # Helm chart templates contain Go template directives ({{ ... }}) and are not valid standalone
 # YAML; generated CRDs (controller-gen output) are large and machine-managed. Exclude both from
