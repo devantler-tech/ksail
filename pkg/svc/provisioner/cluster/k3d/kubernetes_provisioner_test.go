@@ -55,14 +55,14 @@ func TestEnsureNamespace_LabelsPrivilegedPodSecurity(t *testing.T) {
 	err = provisioner.EnsureNamespaceForTest(context.Background(), "k3k-nested-k3s")
 	require.NoError(t, err)
 
-	ns, err := clientset.CoreV1().Namespaces().Get(
+	namespace, err := clientset.CoreV1().Namespaces().Get(
 		context.Background(), "k3k-nested-k3s", metav1.GetOptions{},
 	)
 	require.NoError(t, err)
 
 	// The k3k server is privileged; the namespace must opt into the privileged Pod Security
 	// standard so hosts that default to "baseline" (e.g. Talos) do not reject the server pod.
-	assert.Equal(t, "privileged", ns.Labels["pod-security.kubernetes.io/enforce"])
+	assert.Equal(t, "privileged", namespace.Labels["pod-security.kubernetes.io/enforce"])
 }
 
 func TestBuildClusterCR_Version(t *testing.T) {
