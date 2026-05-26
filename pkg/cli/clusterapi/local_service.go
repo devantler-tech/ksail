@@ -279,9 +279,28 @@ func (s *Service) runCreate(ctx context.Context, name string, distribution v1alp
 }
 
 func (s *Service) runDelete(ctx context.Context, name string, distribution v1alpha1.Distribution) {
-	err := s.runProvisioner(ctx, name, distribution, func(p clusterprovisioner.Provisioner) error {
-		return p.Delete(ctx, name)
-	})
+	err := s.runProvisioner(
+		ctx,
+		name,
+		distribution,
+		func(provisioner clusterprovisioner.Provisioner) error {
+			// Deleting must be idempotent: a failed create (or a cluster removed out-of-band) leaves a
+			// tracked entry with no underlying cluster to delete. Probe Exists first and treat "already
+			// gone" as success, so the entry is cleared below. Otherwise Delete returns
+			// ErrClusterNotFound, the job is pinned Failed, and the UI row can never be dismissed — the
+			// user is forced to restart the app or fall back to `ksail cluster delete --name`.
+			exists, existsErr := provisioner.Exists(ctx, name)
+			if existsErr != nil {
+				return fmt.Errorf("check cluster existence: %w", existsErr)
+			}
+
+			if !exists {
+				return nil
+			}
+
+			return provisioner.Delete(ctx, name)
+		},
+	)
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
