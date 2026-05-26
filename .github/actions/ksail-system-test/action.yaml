@@ -431,31 +431,12 @@ runs:
         fi
         echo "✅ Rolling server-type resize completed"
 
-    # ── Phase 4b — Kubernetes Provider tests ─────────────────────────
-    # Tests nested clusters on the Kubernetes provider using the active
-    # host cluster. Only runs when test-kubernetes-provider is 'true'.
-
-    - name: 🧪 Kubernetes Provider Tests (nested clusters)
-      id: kubernetes-provider-tests
-      if: inputs.test-kubernetes-provider == 'true'
-      uses: ./.github/actions/ksail-test-kubernetes-provider
-      with:
-        distributions: ${{ inputs.kubernetes-provider-distributions }}
-        cni: ${{ inputs.kubernetes-provider-cni }}
-        dockerhub-user: ${{ inputs.dockerhub-user }}
-        dockerhub-token: ${{ inputs.dockerhub-token }}
-        ghcr-user: ${{ inputs.ghcr-user }}
-        ghcr-token: ${{ inputs.ghcr-token }}
-
-    # ── Phase 5 — Debug ──────────────────────────────────────────────
-
-    - name: 🐞 Debug Kubernetes failure
-      if: failure() && (steps.cluster-create.outcome == 'failure' || steps.image-export-import-tests.outcome == 'failure' || steps.workload-watch-tests.outcome == 'failure' || steps.online-gen.outcome == 'failure' || steps.cluster-update-dry-run.outcome == 'failure' || steps.cluster-update.outcome == 'failure' || steps.cluster-update-rolling-resize.outcome == 'failure' || steps.kubernetes-provider-tests.outcome == 'failure')
-      uses: ./.github/actions/debug-kubernetes-failure
-      with:
-        kubectl-command: "ksail workload"
-
-    # ── Phase 6 — Lifecycle tests ────────────────────────────────────
+    # ── Phase 4b — Lifecycle tests (stop/start) ──────────────────────
+    # Exercise stop/start on the freshly-created cluster BEFORE the heavy
+    # nested-provider suite. Running it here keeps single-node etcd recovery
+    # after restart from competing with the nested suite's resource load on
+    # the same host, which otherwise made recovery (and this scenario)
+    # unreliable on shared CI runners.
 
     - name: 🧪 ksail cluster stop
       shell: bash
@@ -506,6 +487,32 @@ runs:
           exit 1
         fi
         } 2>&1 | tee /tmp/ksail-system-test-logs/cluster-start.log
+
+    # ── Phase 4c — Kubernetes Provider tests ─────────────────────────
+    # Tests nested clusters on the Kubernetes provider using the active
+    # host cluster. Runs last (after the lifecycle stop/start) so its
+    # resource load does not affect etcd recovery. Only runs when
+    # test-kubernetes-provider is 'true'.
+
+    - name: 🧪 Kubernetes Provider Tests (nested clusters)
+      id: kubernetes-provider-tests
+      if: inputs.test-kubernetes-provider == 'true'
+      uses: ./.github/actions/ksail-test-kubernetes-provider
+      with:
+        distributions: ${{ inputs.kubernetes-provider-distributions }}
+        cni: ${{ inputs.kubernetes-provider-cni }}
+        dockerhub-user: ${{ inputs.dockerhub-user }}
+        dockerhub-token: ${{ inputs.dockerhub-token }}
+        ghcr-user: ${{ inputs.ghcr-user }}
+        ghcr-token: ${{ inputs.ghcr-token }}
+
+    # ── Phase 5 — Debug ──────────────────────────────────────────────
+
+    - name: 🐞 Debug Kubernetes failure
+      if: failure() && (steps.cluster-create.outcome == 'failure' || steps.image-export-import-tests.outcome == 'failure' || steps.workload-watch-tests.outcome == 'failure' || steps.online-gen.outcome == 'failure' || steps.cluster-update-dry-run.outcome == 'failure' || steps.cluster-update.outcome == 'failure' || steps.cluster-update-rolling-resize.outcome == 'failure' || steps.kubernetes-provider-tests.outcome == 'failure')
+      uses: ./.github/actions/debug-kubernetes-failure
+      with:
+        kubectl-command: "ksail workload"
 
     - name: 🧪 ksail cluster switch
       shell: bash
