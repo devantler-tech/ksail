@@ -28,7 +28,10 @@
     "**/*mocks*.go",
     "**/*_test.go",
     "**/zz_generated*.go",
-    "**/patches/**"
+    "**/patches/**",
+    "**/vsce/**",
+    "**/web/ui/**",
+    "**/desktop/**"
   ],
   "reporters": ["html", "markdown"],
   "threshold": 0
