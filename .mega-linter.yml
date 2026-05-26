@@ -14,13 +14,6 @@ DISABLE_LINTERS:
   - REPOSITORY_TRIVY
   - SPELL_CSPELL
 
-# zizmor resolves action tags via the GitHub API; MegaLinter strips GITHUB_TOKEN from the
-# linter environment by default, so zizmor falls back to unauthenticated requests and fails
-# with HTTP 401 ("couldn't list tags for actions/checkout"). Allow the token through so zizmor
-# can authenticate (same fix as go-template's .mega-linter.yml).
-ACTION_ZIZMOR_UNSECURED_ENV_VARIABLES:
-  - GITHUB_TOKEN
-
 # EXCLUDE FILTERS
 EXCLUDED_DIRECTORIES:
   - megalinter-reports
