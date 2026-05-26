@@ -623,6 +623,13 @@ func (p *K3kProvisioner) ensureNamespace(ctx context.Context, namespace string) 
 			Labels: map[string]string{
 				"ksail.io/managed-by": "ksail",
 				"ksail.io/cluster":    p.clusterName,
+				// The k3k server runs embedded k3s and requires a privileged container.
+				// Hosts that enforce Pod Security Admission at the "baseline" level (e.g.
+				// Talos, which defaults namespaces to baseline) would otherwise reject the
+				// server StatefulSet's pod with a "violates PodSecurity baseline: privileged"
+				// FailedCreate error, leaving the k3k cluster stuck Provisioning. Opt this
+				// dedicated namespace into the privileged standard so the server can start.
+				"pod-security.kubernetes.io/enforce": "privileged",
 			},
 		},
 	}

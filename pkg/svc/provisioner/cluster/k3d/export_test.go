@@ -20,6 +20,11 @@ func (p *K3kProvisioner) BuildClusterCRForTest(
 	return p.buildClusterCR(clusterName, namespace, certSAN)
 }
 
+// EnsureNamespaceForTest exposes ensureNamespace for unit testing.
+func (p *K3kProvisioner) EnsureNamespaceForTest(ctx context.Context, namespace string) error {
+	return p.ensureNamespace(ctx, namespace)
+}
+
 // WithRunnerForTest injects a command runner so lifecycle operations can be
 // exercised without invoking the real k3d runtime.
 func (k *Provisioner) WithRunnerForTest(r runner.CommandRunner) *Provisioner {

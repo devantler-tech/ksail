@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 )
 
 var (
@@ -350,4 +351,39 @@ func TestBuildValuesFiles_ExtraSAN(t *testing.T) {
 
 		assert.NotContains(t, string(content), "extraSANs:")
 	})
+}
+
+func TestBuildValuesFiles_DisablesPersistence(t *testing.T) {
+	t.Parallel()
+
+	files, cleanup, err := vclusterprovisioner.BuildValuesFilesForTest("", false, "1.2.3.4")
+	require.NoError(t, err)
+
+	defer cleanup()
+
+	require.NotEmpty(t, files)
+
+	content, err := os.ReadFile(files[0])
+	require.NoError(t, err)
+
+	// Parse the defaults so we assert valid YAML structure, not just substrings — the
+	// persistence block must merge cleanly alongside distro and proxy under controlPlane.
+	var parsed struct {
+		ControlPlane struct {
+			StatefulSet struct {
+				Persistence struct {
+					VolumeClaim struct {
+						Enabled bool `yaml:"enabled"`
+					} `yaml:"volumeClaim"`
+				} `yaml:"persistence"`
+			} `yaml:"statefulSet"`
+		} `yaml:"controlPlane"`
+	}
+
+	require.NoError(t, yaml.Unmarshal(content, &parsed))
+	assert.False(
+		t,
+		parsed.ControlPlane.StatefulSet.Persistence.VolumeClaim.Enabled,
+		"vCluster persistence must be disabled so it does not require a host StorageClass",
+	)
 }

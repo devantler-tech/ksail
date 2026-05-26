@@ -811,6 +811,14 @@ func buildValuesFiles(
 		vclusterconfigmanager.DefaultKubernetesVersion,
 	)
 
+	// Use an emptyDir-backed data volume instead of a PersistentVolumeClaim. The default
+	// (volumeClaim.enabled: auto) provisions a PVC for the k8s distro, which stays Pending
+	// forever on a host cluster without a default StorageClass (e.g. a Talos host), leaving
+	// the vCluster pod unschedulable and its kubeconfig secret never written. Nested clusters
+	// created via the Kubernetes provider are ephemeral, so disabling persistence is both safe
+	// and host-agnostic (it also works on hosts that do provide a StorageClass).
+	defaultsContent += "  statefulSet:\n    persistence:\n      volumeClaim:\n        enabled: false\n"
+
 	if extraSAN != "" {
 		// Add the stable exposure address to the vCluster proxy certificate SANs so kubectl
 		// verifies TLS when connecting via the exposure address.

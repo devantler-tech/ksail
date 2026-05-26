@@ -1,6 +1,7 @@
 package k3dprovisioner_test
 
 import (
+	"context"
 	"testing"
 
 	k3dconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/k3d"
@@ -9,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	k8sfake "k8s.io/client-go/kubernetes/fake"
 )
 
 func TestBuildClusterCR_ServerArgs(t *testing.T) {
@@ -38,6 +40,29 @@ func TestBuildClusterCR_ServerArgs(t *testing.T) {
 
 		assert.Nil(t, cluster.Spec.ServerArgs)
 	})
+}
+
+func TestEnsureNamespace_LabelsPrivilegedPodSecurity(t *testing.T) {
+	t.Parallel()
+
+	clientset := k8sfake.NewClientset()
+	provisioner, err := k3dprovisioner.NewK3kProvisioner(k3dprovisioner.K3kProvisionerConfig{
+		HostClientset: clientset,
+		ClusterName:   "nested-k3s",
+	})
+	require.NoError(t, err)
+
+	err = provisioner.EnsureNamespaceForTest(context.Background(), "k3k-nested-k3s")
+	require.NoError(t, err)
+
+	ns, err := clientset.CoreV1().Namespaces().Get(
+		context.Background(), "k3k-nested-k3s", metav1.GetOptions{},
+	)
+	require.NoError(t, err)
+
+	// The k3k server is privileged; the namespace must opt into the privileged Pod Security
+	// standard so hosts that default to "baseline" (e.g. Talos) do not reject the server pod.
+	assert.Equal(t, "privileged", ns.Labels["pod-security.kubernetes.io/enforce"])
 }
 
 func TestBuildClusterCR_Version(t *testing.T) {
