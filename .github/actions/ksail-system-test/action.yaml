@@ -488,6 +488,27 @@ runs:
         fi
         } 2>&1 | tee /tmp/ksail-system-test-logs/cluster-start.log
 
+    # Gate the next steps on the host API+RBAC being ready after the restart.
+    # ksail cluster start (Kind/K3d) returns once the container is started, but the
+    # API server's authorizer can briefly 403 admin requests while it warms up after
+    # a restart. The nested-provider suite's first action (create namespace on the
+    # host) would otherwise race that window and fail with a transient "forbidden".
+    - name: ⏳ Wait for host cluster ready after start
+      shell: bash
+      run: |
+        {
+        for i in $(seq 1 30); do
+          if ksail workload get namespace kube-system >/dev/null 2>&1; then
+            echo "✅ host cluster API/RBAC ready after start"
+            exit 0
+          fi
+          echo "⏳ waiting for host cluster readiness after start ($i/30)…"
+          sleep 5
+        done
+        echo "❌ host cluster not ready after start"
+        exit 1
+        } 2>&1 | tee /tmp/ksail-system-test-logs/post-start-readiness.log
+
     # ── Phase 4c — Kubernetes Provider tests ─────────────────────────
     # Tests nested clusters on the Kubernetes provider using the active
     # host cluster. Runs last (after the lifecycle stop/start) so its
