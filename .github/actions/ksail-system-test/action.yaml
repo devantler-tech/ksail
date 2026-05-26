@@ -481,14 +481,17 @@ runs:
         {
         CLUSTER_NAME=$(echo "$ARGS" | grep -oP '(?<=--name\s)\S+' || true)
         start_succeeded=false
+        # Per-attempt timeout (900s) must exceed the provisioner's internal readiness wait
+        # (Talos Docker readiness is up to 10m, since etcd recovery after a stop/start can be
+        # slow on a loaded runner) so the wait can complete instead of being killed mid-check.
         for attempt in 1 2 3; do
           if [ -n "$CLUSTER_NAME" ]; then
-            if timeout 600 ksail cluster start --provider "$PROVIDER" --name "$CLUSTER_NAME"; then
+            if timeout 900 ksail cluster start --provider "$PROVIDER" --name "$CLUSTER_NAME"; then
               start_succeeded=true
               break
             fi
           else
-            if timeout 600 ksail cluster start; then
+            if timeout 900 ksail cluster start; then
               start_succeeded=true
               break
             fi
