@@ -125,11 +125,16 @@ func webhookCABundlesReady(ctx context.Context, clientset kubernetes.Interface) 
 }
 
 // isDeadlineError reports whether err represents the webhook-readiness deadline being
-// reached — either a genuine context.DeadlineExceeded, the context already being done, or
-// the client-go rate limiter declining to wait past the imminent deadline (which is
-// semantically a timeout but is not wrapped as context.DeadlineExceeded).
+// reached — either a genuine context.DeadlineExceeded, the context's deadline having
+// elapsed, or the client-go rate limiter declining to wait past the imminent deadline
+// (which is semantically a timeout but is not wrapped as context.DeadlineExceeded).
+//
+// Cancellation (context.Canceled) is deliberately NOT treated as a deadline: a caller that
+// cancels the install must see that propagate rather than have it normalized to a benign
+// best-effort timeout.
 func isDeadlineError(ctx context.Context, err error) bool {
-	if errors.Is(err, context.DeadlineExceeded) || ctx.Err() != nil {
+	if errors.Is(err, context.DeadlineExceeded) ||
+		errors.Is(ctx.Err(), context.DeadlineExceeded) {
 		return true
 	}
 

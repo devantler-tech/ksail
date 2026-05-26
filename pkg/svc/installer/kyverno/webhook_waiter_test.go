@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	kyvernoinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/kyverno"
 	"github.com/stretchr/testify/assert"
@@ -25,8 +26,13 @@ func TestIsDeadlineError(t *testing.T) {
 
 	liveCtx := context.Background()
 
-	doneCtx, cancel := context.WithCancel(context.Background())
-	cancel()
+	// A context whose deadline is already in the past reports context.DeadlineExceeded.
+	deadlineCtx, cancelDL := context.WithDeadline(context.Background(), time.Now().Add(-time.Hour))
+	t.Cleanup(cancelDL)
+
+	// A cancelled context reports context.Canceled — this must NOT be treated as a deadline.
+	canceledCtx, cancelC := context.WithCancel(context.Background())
+	cancelC()
 
 	tests := map[string]struct {
 		ctx  context.Context //nolint:containedctx // table-driven input for the classifier
@@ -43,10 +49,15 @@ func TestIsDeadlineError(t *testing.T) {
 			err:  errRateLimiterDeadline,
 			want: true,
 		},
-		"context already done": {
-			ctx:  doneCtx,
+		"context deadline already exceeded": {
+			ctx:  deadlineCtx,
 			err:  errArbitrary,
 			want: true,
+		},
+		"cancelled context is not a deadline": {
+			ctx:  canceledCtx,
+			err:  errArbitrary,
+			want: false,
 		},
 		"unrelated error with live context": {
 			ctx:  liveCtx,
