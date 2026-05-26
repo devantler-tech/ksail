@@ -545,10 +545,28 @@ func (p *K3kProvisioner) setupCluster(
 
 	err = p.waitForClusterReady(ctx, clusterName, namespace)
 	if err != nil {
+		p.dumpNestedK3sFailureDiagnostics(ctx, namespace)
+
 		return nil, fmt.Errorf("wait for k3k cluster ready: %w", err)
 	}
 
 	return exposure, nil
+}
+
+// dumpNestedK3sFailureDiagnostics is an opt-in (KSAIL_NESTED_DEBUG) diagnostic that dumps the
+// stuck nested cluster's pod states, events, and logs (the k3k server pods in the cluster
+// namespace and the k3k operator in k3k-system) when the cluster never reaches Ready. It
+// reveals why the embedded k3s server fails to start on a given host (image pull, scheduling,
+// or crash). No-op unless the env var is set.
+func (p *K3kProvisioner) dumpNestedK3sFailureDiagnostics(ctx context.Context, namespace string) {
+	if os.Getenv(nestedDebugEnvVar) == "" {
+		return
+	}
+
+	_, _ = fmt.Fprint(
+		os.Stdout,
+		k8s.DumpNamespaceDiagnostics(ctx, p.hostClientset, namespace, k3kSystemNamespace),
+	)
 }
 
 // ensureK3kOperator installs the k3k Helm chart if it isn't already present.
