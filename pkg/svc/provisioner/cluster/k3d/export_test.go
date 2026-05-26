@@ -32,6 +32,21 @@ func (k *Provisioner) WithListClustersRawForTest(
 	return k
 }
 
+// WithWaitForReadyForTest injects a stub readiness waiter so Start can be
+// exercised without a live cluster.
+func (k *Provisioner) WithWaitForReadyForTest(
+	f func(ctx context.Context, kubeconfigPath, contextName string) error,
+) *Provisioner {
+	k.waitForReady = f
+
+	return k
+}
+
+// KubeconfigForTest returns the kubeconfig field for testing purposes.
+func (k *Provisioner) KubeconfigForTest() string {
+	return k.kubeconfig
+}
+
 // ParseClusterNamesForTest exposes parseClusterNames for unit testing.
 func ParseClusterNamesForTest(output string) ([]string, error) {
 	return parseClusterNames(output)

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	runner "github.com/devantler-tech/ksail/v7/pkg/runner"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/detector"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
@@ -29,6 +30,10 @@ var (
 	logrusConfigOnce sync.Once //nolint:gochecknoglobals // Required for one-time logrus initialization
 )
 
+// defaultKubeconfigPath is where k3d writes (and updates the current context in)
+// the kubeconfig when no explicit path is configured.
+const defaultKubeconfigPath = "~/.kube/config"
+
 // Provisioner executes k3d lifecycle commands via Cobra.
 type Provisioner struct {
 	simpleCfg  *v1alpha5.SimpleConfig
@@ -40,6 +45,14 @@ type Provisioner struct {
 	// defaultListClustersRaw; tests override it via export_test.go.
 	listClustersRaw   func(ctx context.Context) (string, error)
 	componentDetector *detector.ComponentDetector
+	// kubeconfig is the path k3d writes the cluster's kubeconfig to. Used to
+	// build a client for the post-start readiness wait. Defaults to
+	// defaultKubeconfigPath; override via WithKubeconfig.
+	kubeconfig string
+	// waitForReady blocks until the cluster is genuinely ready (API reachable
+	// and a basic authorized read succeeds). It is a seam so tests can run
+	// Start() without a live cluster. Defaults to k8s.WaitForClusterReady.
+	waitForReady func(ctx context.Context, kubeconfigPath, contextName string) error
 }
 
 // NewProvisioner constructs a new command-backed provisioner.
@@ -62,13 +75,26 @@ func NewProvisioner(
 	})
 
 	prov := &Provisioner{
-		simpleCfg:  simpleCfg,
-		configPath: configPath,
-		runner:     runner.NewCobraCommandRunner(nil, nil),
+		simpleCfg:    simpleCfg,
+		configPath:   configPath,
+		runner:       runner.NewCobraCommandRunner(nil, nil),
+		kubeconfig:   defaultKubeconfigPath,
+		waitForReady: k8s.WaitForClusterReady,
 	}
 	prov.listClustersRaw = prov.defaultListClustersRaw
 
 	return prov
+}
+
+// WithKubeconfig sets the kubeconfig path used to build a client for the
+// post-start readiness wait. An empty path leaves the default unchanged.
+// Returns the provisioner for chaining.
+func (k *Provisioner) WithKubeconfig(path string) *Provisioner {
+	if strings.TrimSpace(path) != "" {
+		k.kubeconfig = path
+	}
+
+	return k
 }
 
 // Create provisions a k3d cluster using the native Cobra command.
@@ -117,9 +143,12 @@ func (k *Provisioner) Delete(ctx context.Context, name string) error {
 	)
 }
 
-// Start resumes a stopped k3d cluster via Cobra.
+// Start resumes a stopped k3d cluster via Cobra, then waits for the cluster to
+// be genuinely ready (API reachable + a basic authorized read succeeds) so
+// callers get a usable cluster rather than one that races the API server's
+// authorizer warm-up.
 func (k *Provisioner) Start(ctx context.Context, name string) error {
-	return k.runLifecycleCommand(
+	err := k.runLifecycleCommand(
 		ctx,
 		clustercommand.NewCmdClusterStart,
 		nil,
@@ -127,6 +156,23 @@ func (k *Provisioner) Start(ctx context.Context, name string) error {
 		"cluster start",
 		nil,
 	)
+	if err != nil {
+		return err
+	}
+
+	target := k.resolveName(name)
+	if target == "" {
+		// Without a resolved name we cannot derive the kubeconfig context, so
+		// fall back to the prior behavior of returning once k3d reports started.
+		return nil
+	}
+
+	err = k.waitForReady(ctx, k.kubeconfig, "k3d-"+target)
+	if err != nil {
+		return fmt.Errorf("wait for k3d cluster ready: %w", err)
+	}
+
+	return nil
 }
 
 // Stop halts a running k3d cluster via Cobra.

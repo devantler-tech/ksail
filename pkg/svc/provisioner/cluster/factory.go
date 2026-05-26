@@ -570,7 +570,7 @@ func (f DefaultFactory) createK3dProvisioner( //nolint:funlen // sequential setu
 	provisioner := k3dprovisioner.CreateProvisioner(
 		k3dConfig,
 		tempConfigPath,
-	)
+	).WithKubeconfig(cluster.Spec.Cluster.Connection.Kubeconfig)
 
 	if f.ComponentDetector != nil {
 		provisioner.WithComponentDetector(f.ComponentDetector)

@@ -11,6 +11,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil/marshaller"
+	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	runner "github.com/devantler-tech/ksail/v7/pkg/runner"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/detector"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
@@ -112,6 +113,10 @@ type Provisioner struct {
 	infraProvider     provider.Provider
 	runner            runner.CommandRunner
 	componentDetector *detector.ComponentDetector
+	// waitForReady blocks until the cluster is genuinely ready (API reachable
+	// and a basic authorized read succeeds). It is a seam so tests can run
+	// Start() without a live cluster. Defaults to k8s.WaitForClusterReady.
+	waitForReady func(ctx context.Context, kubeconfigPath, contextName string) error
 }
 
 // NewProvisioner constructs a Provisioner with explicit dependencies
@@ -146,6 +151,7 @@ func NewProvisionerWithRunner(
 		kindSDKProvider: kindSDKProvider,
 		infraProvider:   infraProvider,
 		runner:          runner,
+		waitForReady:    k8s.WaitForClusterReady,
 	}
 }
 
@@ -265,11 +271,26 @@ func (k *Provisioner) Delete(ctx context.Context, name string) error {
 }
 
 // Start starts a kind cluster.
-// Delegates to the infrastructure provider for container operations.
+// Delegates to the infrastructure provider for container operations, then waits
+// for the cluster to be genuinely ready (API reachable + a basic authorized
+// read succeeds) so callers get a usable cluster rather than one that races the
+// API server's authorizer warm-up.
 func (k *Provisioner) Start(ctx context.Context, name string) error {
-	return k.withProvider(ctx, name, "start", func(ctx context.Context, clusterName string) error {
+	err := k.withProvider(ctx, name, "start", func(ctx context.Context, clusterName string) error {
 		return k.infraProvider.StartNodes(ctx, clusterName)
 	})
+	if err != nil {
+		return err
+	}
+
+	target := setName(name, k.kindConfig.Name)
+
+	err = k.waitForReady(ctx, k.kubeConfig, "kind-"+target)
+	if err != nil {
+		return fmt.Errorf("wait for kind cluster ready: %w", err)
+	}
+
+	return nil
 }
 
 // Stop stops a kind cluster.

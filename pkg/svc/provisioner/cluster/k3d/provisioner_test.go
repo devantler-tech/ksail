@@ -267,7 +267,8 @@ func TestProvisioner_StartStop(t *testing.T) {
 				Return(runner.CommandResult{}, nil)
 
 			prov := k3dprovisioner.NewProvisioner(&v1alpha5.SimpleConfig{}, "").
-				WithRunnerForTest(mockRunner)
+				WithRunnerForTest(mockRunner).
+				WithWaitForReadyForTest(func(_ context.Context, _, _ string) error { return nil })
 
 			require.NoError(t, testCase.call(context.Background(), prov))
 		})
@@ -281,11 +282,90 @@ func TestProvisioner_StartStop(t *testing.T) {
 				Return(runner.CommandResult{}, errRunnerBoom)
 
 			prov := k3dprovisioner.NewProvisioner(&v1alpha5.SimpleConfig{}, "").
-				WithRunnerForTest(mockRunner)
+				WithRunnerForTest(mockRunner).
+				WithWaitForReadyForTest(func(_ context.Context, _, _ string) error {
+					t.Error("readiness wait must not run when k3d start fails")
+
+					return nil
+				})
 
 			require.ErrorIs(t, testCase.call(context.Background(), prov), errRunnerBoom)
 		})
 	}
+}
+
+// TestProvisioner_StartWaitsForReady verifies Start waits for cluster readiness
+// after k3d reports started, passing the configured kubeconfig and the
+// k3d-<name> context.
+func TestProvisioner_StartWaitsForReady(t *testing.T) {
+	t.Parallel()
+
+	mockRunner := runner.NewMockCommandRunner(t)
+	mockRunner.EXPECT().
+		Run(mock.Anything, mock.Anything, mock.Anything).
+		Return(runner.CommandResult{}, nil)
+
+	var (
+		gotKubeconfig string
+		gotContext    string
+		called        bool
+	)
+
+	prov := k3dprovisioner.NewProvisioner(namedConfig("alpha"), "").
+		WithRunnerForTest(mockRunner).
+		WithKubeconfig("/custom/kubeconfig").
+		WithWaitForReadyForTest(func(_ context.Context, kubeconfigPath, contextName string) error {
+			called = true
+			gotKubeconfig = kubeconfigPath
+			gotContext = contextName
+
+			return nil
+		})
+
+	require.NoError(t, prov.Start(context.Background(), ""))
+	assert.True(t, called, "Start() should wait for cluster readiness")
+	assert.Equal(t, "/custom/kubeconfig", gotKubeconfig, "readiness wait kubeconfig path")
+	assert.Equal(t, "k3d-alpha", gotContext, "readiness wait context name")
+}
+
+// TestProvisioner_StartReturnsWaitForReadyError verifies a readiness failure is
+// surfaced from Start.
+func TestProvisioner_StartReturnsWaitForReadyError(t *testing.T) {
+	t.Parallel()
+
+	mockRunner := runner.NewMockCommandRunner(t)
+	mockRunner.EXPECT().
+		Run(mock.Anything, mock.Anything, mock.Anything).
+		Return(runner.CommandResult{}, nil)
+
+	prov := k3dprovisioner.NewProvisioner(namedConfig("alpha"), "").
+		WithRunnerForTest(mockRunner).
+		WithWaitForReadyForTest(func(_ context.Context, _, _ string) error { return errRunnerBoom })
+
+	err := prov.Start(context.Background(), "")
+
+	require.ErrorIs(t, err, errRunnerBoom)
+	assert.ErrorContains(t, err, "wait for k3d cluster ready")
+}
+
+// TestProvisioner_DefaultKubeconfig verifies the kubeconfig defaults to the
+// standard path and that WithKubeconfig ignores an empty override.
+func TestProvisioner_DefaultKubeconfig(t *testing.T) {
+	t.Parallel()
+
+	prov := k3dprovisioner.NewProvisioner(nil, "")
+	assert.Equal(t, "~/.kube/config", prov.KubeconfigForTest())
+
+	prov.WithKubeconfig("")
+	assert.Equal(
+		t,
+		"~/.kube/config",
+		prov.KubeconfigForTest(),
+		"empty path must not override default",
+	)
+
+	prov.WithKubeconfig("/explicit")
+	assert.Equal(t, "/explicit", prov.KubeconfigForTest())
 }
 
 // TestParseClusterNames covers the JSON parsing helper directly.
