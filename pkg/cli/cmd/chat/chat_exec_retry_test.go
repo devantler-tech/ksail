@@ -2,6 +2,7 @@ package chat_test
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -41,6 +42,39 @@ func openWriteLockedExecutable(t *testing.T) string {
 	t.Cleanup(func() { _ = file.Close() })
 
 	return path
+}
+
+// writeSettledExecutable writes a runnable script and then execs it until the
+// launch no longer races a concurrent fork that still holds a write fd to the
+// freshly written file (which Linux reports as ETXTBSY). The only write fd to
+// the file comes from the single os.WriteFile in writeExecutable, so once any
+// launch returns a non-ETXTBSY result no process holds a write fd and every
+// subsequent exec is deterministic.
+//
+// Use this when a test asserts an exact exec attempt count. Heavy parallel CI
+// load can otherwise inject a transient ETXTBSY into the file's first exec,
+// which runCopilotCmdWithRetry legitimately retries — inflating the count and
+// flaking the assertion. On macOS ETXTBSY is not enforced here, so the loop
+// returns after a single exec.
+func writeSettledExecutable(t *testing.T, content string) string {
+	t.Helper()
+
+	path := writeExecutable(t, content)
+
+	deadline := time.Now().Add(2 * time.Second)
+
+	for {
+		err := exec.CommandContext(context.Background(), path).Run() //nolint:gosec // test fixture
+		if !errors.Is(err, syscall.ETXTBSY) {
+			return path
+		}
+
+		if time.Now().After(deadline) {
+			t.Fatal("freshly written script never settled: exec kept returning ETXTBSY")
+		}
+
+		time.Sleep(chat.CopilotExecRetryBackoff)
+	}
 }
 
 func TestVerifyCopilotCLI(t *testing.T) {
@@ -112,7 +146,7 @@ func TestRunCopilotCmdWithRetry(t *testing.T) {
 	t.Run("returns nil and runs once on success", func(t *testing.T) {
 		t.Parallel()
 
-		script := writeExecutable(t, "#!/bin/sh\nexit 0\n")
+		script := writeSettledExecutable(t, "#!/bin/sh\nexit 0\n")
 		attempts := 0
 
 		err := run(context.Background(), func() *exec.Cmd {
@@ -128,7 +162,7 @@ func TestRunCopilotCmdWithRetry(t *testing.T) {
 	t.Run("does not retry a non-ETXTBSY failure", func(t *testing.T) {
 		t.Parallel()
 
-		script := writeExecutable(t, "#!/bin/sh\nexit 1\n")
+		script := writeSettledExecutable(t, "#!/bin/sh\nexit 1\n")
 		attempts := 0
 
 		err := run(context.Background(), func() *exec.Cmd {
