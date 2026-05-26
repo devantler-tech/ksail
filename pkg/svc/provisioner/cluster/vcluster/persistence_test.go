@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	vclusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/vcluster"
@@ -39,11 +40,18 @@ func writeUserValues(t *testing.T, content string) string {
 	return path
 }
 
-// persistenceValues builds a vcluster.yaml snippet setting one persistence volumeClaim field,
-// e.g. claimLine "enabled: true" or "storageClass: fast".
-func persistenceValues(claimLine string) string {
-	return "controlPlane:\n  statefulSet:\n    persistence:\n      volumeClaim:\n        " +
-		claimLine + "\n"
+// persistenceValues builds a vcluster.yaml snippet setting the given persistence volumeClaim
+// fields, e.g. persistenceValues("enabled: false", "storageClass: fast").
+func persistenceValues(claimLines ...string) string {
+	var builder strings.Builder
+
+	builder.WriteString("controlPlane:\n  statefulSet:\n    persistence:\n      volumeClaim:\n")
+
+	for _, line := range claimLines {
+		builder.WriteString("        " + line + "\n")
+	}
+
+	return builder.String()
 }
 
 func TestResolvePersistenceDisabled(t *testing.T) {
@@ -71,6 +79,13 @@ func TestResolvePersistenceDisabled(t *testing.T) {
 			storageClassValues,
 			false,
 			true,
+		},
+		// enabled:false wins over a stray storageClass — honored as emptyDir, no fail.
+		"enabled:false + storageClass, no StorageClass -> honor": {
+			false,
+			persistenceValues("enabled: false", "storageClass: fast"),
+			false,
+			false,
 		},
 	}
 
@@ -114,6 +129,11 @@ func TestUserPersistenceIntent(t *testing.T) {
 		"enabled false":    {persistenceValues("enabled: false"), false, true},
 		"enabled auto":     {persistenceValues("enabled: auto"), false, false},
 		"storageClass set": {persistenceValues("storageClass: fast"), true, false},
+		"enabled false wins over storageClass": {
+			persistenceValues("enabled: false", "storageClass: fast"),
+			false,
+			true,
+		},
 		"unrelated values": {
 			"controlPlane:\n  distro:\n    k8s:\n      image:\n        tag: v1.31.0\n",
 			false,

@@ -119,8 +119,13 @@ func userPersistenceIntent(userValuesPath string) (bool, bool, error) {
 	}
 
 	claim := probe.ControlPlane.StatefulSet.Persistence.VolumeClaim
-	wants := claim.Enabled.Bool() || strings.TrimSpace(claim.StorageClass) != ""
+
+	// An explicit volumeClaim.enabled: false takes precedence and is honored as a disable,
+	// even when a storageClass is also set — otherwise the combination would be read as both
+	// "wants" and "disables" and fail fast instead of using emptyDir as the user asked for.
 	disables := strings.EqualFold(strings.TrimSpace(string(claim.Enabled)), "false")
+	wants := !disables &&
+		(claim.Enabled.Bool() || strings.TrimSpace(claim.StorageClass) != "")
 
 	return wants, disables, nil
 }
