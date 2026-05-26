@@ -189,7 +189,17 @@ func (p *KubernetesProvisioner) Create(
 		CreateNamespace: false,
 	}
 
-	valuesFiles, cleanup, err := buildValuesFiles(p.valuesPath, p.disableFlannel, exposure.Address)
+	// Resolve the storage precedence (explicit vcluster.yaml > host StorageClass auto-detect >
+	// emptyDir default) before deploying. This fails fast if the user requested persistent
+	// storage the host cannot provide, and otherwise decides whether to force emptyDir.
+	disablePersistence, err := resolvePersistenceDisabled(ctx, p.hostClientset, p.valuesPath)
+	if err != nil {
+		return fmt.Errorf("resolve vCluster persistence: %w", err)
+	}
+
+	valuesFiles, cleanup, err := buildValuesFiles(
+		p.valuesPath, p.disableFlannel, exposure.Address, disablePersistence,
+	)
 	if err != nil {
 		return fmt.Errorf("prepare values files: %w", err)
 	}
