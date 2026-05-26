@@ -93,8 +93,16 @@ func writePodSummary(builder *strings.Builder, pod *corev1.Pod) {
 		}
 	}
 
+	// Pending/initializing pods often have no ContainerStatuses yet, so use the spec
+	// container count as the expected total (falling back to the status count) to avoid
+	// a misleading "ready=0/0" for a pod that is still pulling images or scheduling.
+	total := len(pod.Spec.Containers)
+	if total == 0 {
+		total = len(pod.Status.ContainerStatuses)
+	}
+
 	fmt.Fprintf(builder, "\n  pod %s: phase=%s ready=%d/%d node=%q",
-		pod.Name, pod.Status.Phase, ready, len(pod.Status.ContainerStatuses), pod.Spec.NodeName)
+		pod.Name, pod.Status.Phase, ready, total, pod.Spec.NodeName)
 
 	for idx := range pod.Status.ContainerStatuses {
 		status := pod.Status.ContainerStatuses[idx]

@@ -67,6 +67,26 @@ func TestDumpNamespaceDiagnostics_ReportsPodStateEventsAndLogs(t *testing.T) {
 	}
 }
 
+func TestDumpNamespaceDiagnostics_PendingPodUsesSpecContainerCount(t *testing.T) {
+	t.Parallel()
+
+	// A pod still scheduling/pulling has no ContainerStatuses yet; the expected total
+	// must come from the spec so the output is "ready=0/2", not a misleading "ready=0/0".
+	clientset := k8sfake.NewClientset(
+		&corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{Name: "server-0", Namespace: "k3k-nested"},
+			Spec: corev1.PodSpec{
+				Containers: []corev1.Container{{Name: "k3s"}, {Name: "sidecar"}},
+			},
+			Status: corev1.PodStatus{Phase: corev1.PodPending},
+		},
+	)
+
+	report := k8s.DumpNamespaceDiagnostics(context.Background(), clientset, "k3k-nested")
+
+	assert.Contains(t, report, "pod server-0: phase=Pending ready=0/2")
+}
+
 func TestDumpNamespaceDiagnostics_EmptyNamespace(t *testing.T) {
 	t.Parallel()
 
