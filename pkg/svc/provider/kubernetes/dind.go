@@ -98,6 +98,39 @@ func (p *Provider) CreateDinDPod(
 	return nil
 }
 
+// WaitForDefaultServiceAccount waits until the namespace's default ServiceAccount exists.
+// Kubernetes' ServiceAccount controller provisions it asynchronously after the namespace is
+// created; creating a pod (which references the default SA) before it exists fails with
+// "error looking up service account <ns>/default: serviceaccount default not found". The lag
+// is most pronounced right after a cluster restart, when the controller is still reconciling.
+func (p *Provider) WaitForDefaultServiceAccount(ctx context.Context, clusterName string) error {
+	namespace := NamespaceName(clusterName)
+	deadline := time.Now().Add(dindReadyTimeout)
+
+	for {
+		_, err := p.client.CoreV1().
+			ServiceAccounts(namespace).
+			Get(ctx, "default", metav1.GetOptions{})
+		if err == nil {
+			return nil
+		}
+
+		if !errors.IsNotFound(err) {
+			return fmt.Errorf("get default service account in %s: %w", namespace, err)
+		}
+
+		if time.Now().After(deadline) {
+			return fmt.Errorf("%w: %s/default", ErrDefaultServiceAccountNotReady, namespace)
+		}
+
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("waiting for default service account: %w", ctx.Err())
+		case <-time.After(dindReadyPollInterval):
+		}
+	}
+}
+
 // WaitForDinD waits until the Docker daemon inside the DinD pod is ready to accept connections.
 func (p *Provider) WaitForDinD(ctx context.Context, clusterName string) error {
 	namespace := NamespaceName(clusterName)
