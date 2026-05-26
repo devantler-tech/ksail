@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 )
@@ -24,6 +25,12 @@ const (
 
 	// waitBackoffMultiplier is the exponential backoff multiplier for the wait interval.
 	waitBackoffMultiplier = 2
+
+	// initialPollInterval is the starting backoff interval between readiness
+	// polls. Kept small so readiness is detected promptly after the API server
+	// reports ready (and so unit tests don't pay a fixed startup delay); it
+	// grows by waitBackoffMultiplier up to maxWaitInterval.
+	initialPollInterval = 100 * time.Millisecond
 
 	// maxWaitInterval is the maximum backoff interval between API server readiness polls.
 	maxWaitInterval = 5 * time.Second
@@ -83,6 +90,13 @@ func WaitForClusterReady(ctx context.Context, kubeconfigPath, contextName string
 		return fmt.Errorf("resolve kubeconfig path: %w", err)
 	}
 
+	// Canonicalize (resolve symlinks) before loading, since the path may come
+	// from user/config input — aligns with the repo's path-safety practices.
+	resolvedPath, err = fsutil.EvalCanonicalPath(resolvedPath)
+	if err != nil {
+		return fmt.Errorf("canonicalize kubeconfig path: %w", err)
+	}
+
 	err = WaitForAPIServer(ctx, resolvedPath, contextName)
 	if err != nil {
 		return err
@@ -105,7 +119,7 @@ func waitForAuthorizedRead(ctx context.Context, clientset kubernetes.Interface) 
 	waitCtx, cancel := context.WithTimeout(ctx, waitForAuthorizedReadTimeout)
 	defer cancel()
 
-	interval := 1 * time.Second
+	interval := initialPollInterval
 
 	for {
 		_, err := clientset.CoreV1().Namespaces().List(waitCtx, metav1.ListOptions{Limit: 1})
