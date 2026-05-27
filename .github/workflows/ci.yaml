@@ -1017,11 +1017,7 @@ jobs:
       contents: read
       packages: write
     strategy:
-      # fail-fast: false so a single failing leg does not cancel its siblings. This surfaces
-      # every failing distribution/arg combination in one run (aligning with the goal of
-      # making all CI errors visible and blocking) instead of masking later legs behind the
-      # first failure, and it lets the diagnostic-bearing legs run to completion.
-      fail-fast: false
+      fail-fast: true
       max-parallel: 15
       matrix:
         distribution: [KWOK, Vanilla, K3s, VCluster, Talos]
