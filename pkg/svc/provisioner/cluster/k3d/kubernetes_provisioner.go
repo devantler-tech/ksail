@@ -2,6 +2,7 @@ package k3dprovisioner
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -46,7 +47,18 @@ const (
 	k3kHelmTimeout = 5 * time.Minute
 	// k3kAPIServerPort is the API server port used by k3k clusters.
 	k3kAPIServerPort = 6443
+	// k3kAPIServerPFTimeout bounds how long Create waits for a server pod to become
+	// port-forwardable when wiring the in-session nested API endpoint.
+	k3kAPIServerPFTimeout = 2 * time.Minute
+
+	// nestedDebugEnvVar gates opt-in nested-cluster diagnostics (matches the value the
+	// CI nested-provider test sets and the Talos provisioner checks).
+	nestedDebugEnvVar = "KSAIL_NESTED_DEBUG"
 )
+
+// errNoRunningServerPod is recorded while polling for a port-forwardable k3k server
+// pod, so a port-forward timeout surfaces "pod not ready" rather than a bare deadline.
+var errNoRunningServerPod = errors.New("no running k3k server pod found")
 
 // K3kProvisioner creates and manages K3s clusters on a host Kubernetes cluster
 // using the rancher/k3k operator. Unlike the DinD approach used for Kind, k3k
@@ -70,6 +82,18 @@ type K3kProvisioner struct {
 	podCIDR       string
 	serviceCIDR   string
 	serverArgs    []string
+	// k3sVersion pins the nested K3s version (image tag, e.g. "v1.36.1-k3s1"). Empty
+	// lets k3k inherit the host cluster's Kubernetes version. Pinned to the standalone
+	// K3d version so the nested apiserver matches the proven standalone config (e.g. it
+	// serves admissionregistration.k8s.io/v1beta1 for Calico's CRD chart).
+	k3sVersion string
+
+	// apiServerPortForward is a session port-forward to the nested k3k API server,
+	// established during Create so in-session post-creation setup (e.g. CNI install)
+	// can reach the nested API. The NodePort exposure address is not host-reachable on
+	// common setups (kind does not map NodePorts to the host). It lives for the CLI
+	// process and is closed on Delete.
+	apiServerPortForward *kubernetesprovider.PortForwardSession
 }
 
 // K3kProvisionerConfig holds configuration for creating a K3kProvisioner.
@@ -103,6 +127,9 @@ type K3kProvisionerConfig struct {
 	// ServerArgs are extra K3s server args (e.g. "--kube-apiserver-arg=...") passed
 	// through to the embedded k3s server via the k3k Cluster spec's serverArgs field.
 	ServerArgs []string
+	// K3sVersion pins the nested K3s version (image tag, e.g. "v1.36.1-k3s1"). Empty
+	// lets k3k inherit the host cluster's Kubernetes version.
+	K3sVersion string
 }
 
 // NewK3kProvisioner creates a K3kProvisioner for managing K3s clusters via k3k.
@@ -134,6 +161,7 @@ func NewK3kProvisioner(cfg K3kProvisionerConfig) (*K3kProvisioner, error) {
 		podCIDR:          cfg.PodCIDR,
 		serviceCIDR:      cfg.ServiceCIDR,
 		serverArgs:       cfg.ServerArgs,
+		k3sVersion:       cfg.K3sVersion,
 	}, nil
 }
 
@@ -161,8 +189,34 @@ func (p *K3kProvisioner) Create(ctx context.Context, name string) error {
 		return err
 	}
 
-	err = p.connectAndMergeKubeconfig(ctx, clusterName, namespace, exposure.ServerURL())
+	// Opt-in (KSAIL_NESTED_DEBUG) diagnostic: confirm the pinned K3s version and
+	// feature-gate serverArgs actually reached the nested apiserver (Calico's CRD
+	// chart needs admissionregistration.k8s.io/v1beta1 MutatingAdmissionPolicy).
+	p.dumpNestedK3sDiagnostics(ctx, clusterName, namespace)
+
+	// Persist the stable exposure URL in the kubeconfig (so it stays valid after the
+	// CLI exits), and make it reachable for in-process post-creation setup (e.g.
+	// installing Calico) by binding a session port-forward to that same NodePort. The
+	// NodePort address is otherwise typically not host-reachable. Best-effort: if the
+	// forward can't be established, the persisted endpoint is still the stable address
+	// (default-CNI clusters don't need to reach the nested API during creation).
+	serverURL := exposure.ServerURL()
+
+	err = p.startAPIServerPortForward(ctx, clusterName, namespace, int(exposure.Port))
 	if err != nil {
+		_, _ = fmt.Fprintf(
+			os.Stdout,
+			"⚠ could not port-forward nested API server on port %d (%v); "+
+				"post-creation CNI install may be unreachable\n",
+			exposure.Port, err,
+		)
+	}
+
+	err = p.connectAndMergeKubeconfig(ctx, clusterName, namespace, serverURL)
+	if err != nil {
+		// Avoid leaking the port-forward goroutine/listener if a later step fails.
+		p.closeAPIServerPortForward()
+
 		return err
 	}
 
@@ -182,6 +236,8 @@ func (p *K3kProvisioner) Delete(ctx context.Context, name string) error {
 	if clusterName == "" {
 		clusterName = name
 	}
+
+	p.closeAPIServerPortForward()
 
 	namespace := k3kNamespacePrefix + clusterName
 
@@ -290,6 +346,153 @@ func (p *K3kProvisioner) connectAndMergeKubeconfig(
 	return nil
 }
 
+// startAPIServerPortForward establishes a port-forward to a running k3k server pod's API
+// port, bound to localPort on 127.0.0.1 so the stable exposure URL (https://127.0.0.1:
+// <localPort>) is reachable in-process. The server certificate includes a 127.0.0.1 SAN
+// (see buildClusterCR), so TLS verification succeeds over the forward. It polls for a
+// Running server pod and retries the forward until one is ready, since the pod may still be
+// coming up just after the cluster reports Ready.
+func (p *K3kProvisioner) startAPIServerPortForward(
+	ctx context.Context,
+	clusterName, namespace string,
+	localPort int,
+) error {
+	selector := fmt.Sprintf("cluster=%s,role=server", clusterName)
+
+	var (
+		session *kubernetesprovider.PortForwardSession
+		lastErr error
+	)
+
+	err := wait.PollUntilContextTimeout(
+		ctx, k3kWaitInterval, k3kAPIServerPFTimeout, true,
+		func(ctx context.Context) (bool, error) {
+			pods, listErr := p.hostClientset.CoreV1().
+				Pods(namespace).
+				List(ctx, metav1.ListOptions{LabelSelector: selector})
+			if listErr != nil {
+				return false, fmt.Errorf("list k3k server pods: %w", listErr)
+			}
+
+			podName := firstRunningPodName(pods.Items)
+			if podName == "" {
+				lastErr = fmt.Errorf("%w (selector %q)", errNoRunningServerPod, selector)
+
+				return false, nil
+			}
+
+			pfSession, pfErr := p.k8sProvider.StartPortForwardInNamespaceOnLocalPort(
+				ctx, p.restConfig, namespace, podName, k3kAPIServerPort, localPort,
+			)
+			if pfErr != nil {
+				// The pod may not yet be accepting connections; record the cause and
+				// keep polling rather than aborting so a not-yet-ready pod is retried.
+				lastErr = pfErr
+
+				//nolint:nilerr // intentional: transient port-forward failure → retry
+				return false, nil
+			}
+
+			session = pfSession
+
+			return true, nil
+		},
+	)
+	if err != nil {
+		if lastErr != nil {
+			return fmt.Errorf(
+				"port-forward nested API server: %w; last attempt: %w",
+				err,
+				lastErr,
+			)
+		}
+
+		return fmt.Errorf("port-forward nested API server: %w", err)
+	}
+
+	p.apiServerPortForward = session
+
+	return nil
+}
+
+// closeAPIServerPortForward tears down the nested API port-forward if one is active.
+func (p *K3kProvisioner) closeAPIServerPortForward() {
+	if p.apiServerPortForward != nil {
+		p.apiServerPortForward.Close()
+		p.apiServerPortForward = nil
+	}
+}
+
+// dumpNestedK3sDiagnostics is an opt-in (KSAIL_NESTED_DEBUG) diagnostic that prints the
+// k3k Cluster CR's Version/ServerArgs (what ksail requested) and the resolved k3s server
+// pod's image + command/args (what the operator created). It reveals whether the pinned
+// K3s version and feature-gate serverArgs actually reach the nested apiserver — e.g. so
+// it serves admissionregistration.k8s.io/v1beta1 for Calico's CRD chart. No-op unless the
+// env var is set.
+func (p *K3kProvisioner) dumpNestedK3sDiagnostics(
+	ctx context.Context,
+	clusterName, namespace string,
+) {
+	if os.Getenv(nestedDebugEnvVar) == "" {
+		return
+	}
+
+	writer := os.Stdout
+
+	// What ksail asked the operator for.
+	restClient, _, err := p.buildK3kRESTClient()
+	if err == nil {
+		cluster := &k3kv1beta1.Cluster{}
+
+		getErr := restClient.Get().
+			AbsPath("/apis/k3k.io/v1beta1").
+			Namespace(namespace).
+			Resource("clusters").
+			Name(clusterName).
+			Do(ctx).
+			Into(cluster)
+		if getErr == nil {
+			_, _ = fmt.Fprintf(writer,
+				"diagnostics: k3k Cluster %q spec.version=%q spec.serverArgs=%v\n",
+				clusterName, cluster.Spec.Version, cluster.Spec.ServerArgs)
+		}
+	}
+
+	// What the operator actually created: the image reveals the effective K3s version,
+	// and the command/args reveal whether the feature-gate serverArgs reached the server.
+	pods, err := p.hostClientset.CoreV1().
+		Pods(namespace).
+		List(ctx, metav1.ListOptions{
+			LabelSelector: fmt.Sprintf("cluster=%s,role=server", clusterName),
+		})
+	if err != nil {
+		_, _ = fmt.Fprintf(writer, "diagnostics: list k3k server pods failed: %v\n", err)
+
+		return
+	}
+
+	for idx := range pods.Items {
+		pod := pods.Items[idx]
+		for cIdx := range pod.Spec.Containers {
+			cnt := pod.Spec.Containers[cIdx]
+			_, _ = fmt.Fprintf(writer,
+				"diagnostics: server pod %q container %q image=%q command=%v args=%v\n",
+				pod.Name, cnt.Name, cnt.Image, cnt.Command, cnt.Args)
+		}
+	}
+}
+
+// firstRunningPodName returns the name of the first Running pod, or "" if none are Running.
+func firstRunningPodName(pods []corev1.Pod) string {
+	for idx := range pods {
+		if pods[idx].Status.Phase == corev1.PodRunning {
+			return pods[idx].Name
+		}
+	}
+
+	return ""
+}
+
 // setupCluster installs the k3k operator, creates the cluster namespace, resolves a stable
 // server-side API exposure, creates the Cluster CR (with the exposure address in its cert SANs),
 // and waits for the cluster to become ready. It returns the resolved exposure.
@@ -342,10 +545,28 @@ func (p *K3kProvisioner) setupCluster(
 
 	err = p.waitForClusterReady(ctx, clusterName, namespace)
 	if err != nil {
+		p.dumpNestedK3sFailureDiagnostics(ctx, namespace)
+
 		return nil, fmt.Errorf("wait for k3k cluster ready: %w", err)
 	}
 
 	return exposure, nil
+}
+
+// dumpNestedK3sFailureDiagnostics is an opt-in (KSAIL_NESTED_DEBUG) diagnostic that dumps the
+// stuck nested cluster's pod states, events, and logs (the k3k server pods in the cluster
+// namespace and the k3k operator in k3k-system) when the cluster never reaches Ready. It
+// reveals why the embedded k3s server fails to start on a given host (image pull, scheduling,
+// or crash). No-op unless the env var is set.
+func (p *K3kProvisioner) dumpNestedK3sFailureDiagnostics(ctx context.Context, namespace string) {
+	if os.Getenv(nestedDebugEnvVar) == "" {
+		return
+	}
+
+	_, _ = fmt.Fprint(
+		os.Stdout,
+		k8s.DumpNamespaceDiagnostics(ctx, p.hostClientset, namespace, k3kSystemNamespace),
+	)
 }
 
 // ensureK3kOperator installs the k3k Helm chart if it isn't already present.
@@ -402,6 +623,13 @@ func (p *K3kProvisioner) ensureNamespace(ctx context.Context, namespace string) 
 			Labels: map[string]string{
 				"ksail.io/managed-by": "ksail",
 				"ksail.io/cluster":    p.clusterName,
+				// The k3k server runs embedded k3s and requires a privileged container.
+				// Hosts that enforce Pod Security Admission at the "baseline" level (e.g.
+				// Talos, which defaults namespaces to baseline) would otherwise reject the
+				// server StatefulSet's pod with a "violates PodSecurity baseline: privileged"
+				// FailedCreate error, leaving the k3k cluster stuck Provisioning. Opt this
+				// dedicated namespace into the privileged standard so the server can start.
+				"pod-security.kubernetes.io/enforce": "privileged",
 			},
 		},
 	}
@@ -456,6 +684,10 @@ func (p *K3kProvisioner) buildClusterCR(
 
 	if len(p.serverArgs) > 0 {
 		cluster.Spec.ServerArgs = p.serverArgs
+	}
+
+	if p.k3sVersion != "" {
+		cluster.Spec.Version = p.k3sVersion
 	}
 
 	if p.podCIDR != "" {

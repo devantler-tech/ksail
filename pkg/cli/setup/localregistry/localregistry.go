@@ -106,6 +106,11 @@ type Context struct {
 	VClusterConfig *clusterprovisioner.VClusterConfig
 	KWOKConfig     *clusterprovisioner.KWOKConfig
 	EKSConfig      *clusterprovisioner.EKSConfig
+	// MirrorSpecs holds resolved registry mirror specifications for the Kubernetes
+	// provider. The nested provisioner sets these up inside the DinD environment so
+	// nested clusters pull through authenticated, caching mirrors. Nil for other
+	// providers, which handle mirrors via host-level Docker stages.
+	MirrorSpecs []registry.MirrorSpec
 }
 
 // NewContextFromConfigManager creates a Context from a config manager.

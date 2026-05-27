@@ -470,3 +470,27 @@ func TestCreateK3dProvisioner_ImageVerificationDisabledNoVolumeMount(t *testing.
 		)
 	}
 }
+
+func TestWrapK3kServerArgs(t *testing.T) {
+	t.Parallel()
+
+	t.Run("nil for empty", func(t *testing.T) {
+		t.Parallel()
+		assert.Nil(t, clusterprovisioner.ExportWrapK3kServerArgs(nil))
+		assert.Nil(t, clusterprovisioner.ExportWrapK3kServerArgs([]string{}))
+	})
+
+	t.Run("wraps multiple args in one single-quoted element", func(t *testing.T) {
+		t.Parallel()
+
+		got := clusterprovisioner.ExportWrapK3kServerArgs([]string{
+			"--kube-apiserver-arg=feature-gates=MutatingAdmissionPolicy=true",
+			"--kube-apiserver-arg=runtime-config=admissionregistration.k8s.io/v1beta1=true",
+		})
+
+		assert.Equal(t, []string{
+			"'--kube-apiserver-arg=feature-gates=MutatingAdmissionPolicy=true " +
+				"--kube-apiserver-arg=runtime-config=admissionregistration.k8s.io/v1beta1=true'",
+		}, got)
+	})
+}

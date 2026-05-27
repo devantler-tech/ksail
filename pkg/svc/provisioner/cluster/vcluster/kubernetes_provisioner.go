@@ -46,6 +46,9 @@ const (
 	vclusterWaitTimeout = 10 * time.Minute
 	// vclusterWaitInterval is the polling interval when waiting for the cluster.
 	vclusterWaitInterval = 5 * time.Second
+	// nestedDebugEnvVar gates opt-in nested-cluster diagnostics (matches the value the
+	// CI workflow sets to capture why a nested vCluster fails to come up on a given host).
+	nestedDebugEnvVar = "KSAIL_NESTED_DEBUG"
 )
 
 // KubernetesProvisioner provisions vCluster instances on a host Kubernetes cluster
@@ -186,7 +189,17 @@ func (p *KubernetesProvisioner) Create(
 		CreateNamespace: false,
 	}
 
-	valuesFiles, cleanup, err := buildValuesFiles(p.valuesPath, p.disableFlannel, exposure.Address)
+	// Resolve the storage precedence (explicit vcluster.yaml > host StorageClass auto-detect >
+	// emptyDir default) before deploying. This fails fast if the user requested persistent
+	// storage the host cannot provide, and otherwise decides whether to force emptyDir.
+	disablePersistence, err := resolvePersistenceDisabled(ctx, p.hostClientset, p.valuesPath)
+	if err != nil {
+		return fmt.Errorf("resolve vCluster persistence: %w", err)
+	}
+
+	valuesFiles, cleanup, err := buildValuesFiles(
+		p.valuesPath, p.disableFlannel, exposure.Address, disablePersistence,
+	)
 	if err != nil {
 		return fmt.Errorf("prepare values files: %w", err)
 	}
@@ -212,6 +225,8 @@ func (p *KubernetesProvisioner) Create(
 
 	kubeconfigData, err := p.waitForKubeconfigSecret(ctx, clusterName, namespace)
 	if err != nil {
+		p.dumpNestedVClusterFailureDiagnostics(ctx, namespace)
+
 		return fmt.Errorf("get kubeconfig secret: %w", err)
 	}
 
@@ -397,6 +412,21 @@ func (p *KubernetesProvisioner) List(ctx context.Context) ([]string, error) {
 	}
 
 	return names, nil
+}
+
+// dumpNestedVClusterFailureDiagnostics is an opt-in (KSAIL_NESTED_DEBUG) diagnostic that dumps
+// the vCluster namespace's pod states, events, and logs when the kubeconfig Secret never
+// appears. It reveals why the vCluster control-plane pod fails to become Ready on a given host
+// (image pull, scheduling, or crash). No-op unless the env var is set.
+func (p *KubernetesProvisioner) dumpNestedVClusterFailureDiagnostics(
+	ctx context.Context,
+	namespace string,
+) {
+	if os.Getenv(nestedDebugEnvVar) == "" {
+		return
+	}
+
+	_, _ = fmt.Fprint(os.Stdout, k8s.DumpNamespaceDiagnostics(ctx, p.hostClientset, namespace))
 }
 
 // waitForKubeconfigSecret polls for the vc-<name> Secret until it contains

@@ -33,6 +33,14 @@ const (
 	// DinDAPIServerPort is the port the nested API server is exposed on (via Docker port mapping).
 	DinDAPIServerPort = 6443
 
+	// dindMTU is the MTU for the DinD Docker daemon's bridge. The DinD pod sits behind
+	// the host cluster's pod network (and, on CI, possibly a tunnel/NAT), so the path
+	// MTU to the internet can be below the default 1500. With 1500, large packets (e.g.
+	// the TLS handshake of a pull-through mirror reaching an upstream registry) are
+	// silently dropped — PMTU discovery is typically blackholed — producing "TLS
+	// handshake timeout". A conservative 1400 keeps egress packets within the path MTU.
+	dindMTU = 1400
+
 	// DinDPVCName is the name of the PVC for the Docker data directory.
 	DinDPVCName = "docker-data"
 
@@ -88,6 +96,39 @@ func (p *Provider) CreateDinDPod(
 	}
 
 	return nil
+}
+
+// WaitForDefaultServiceAccount waits until the namespace's default ServiceAccount exists.
+// Kubernetes' ServiceAccount controller provisions it asynchronously after the namespace is
+// created; creating a pod (which references the default SA) before it exists fails with
+// "error looking up service account <ns>/default: serviceaccount default not found". The lag
+// is most pronounced right after a cluster restart, when the controller is still reconciling.
+func (p *Provider) WaitForDefaultServiceAccount(ctx context.Context, clusterName string) error {
+	namespace := NamespaceName(clusterName)
+	deadline := time.Now().Add(dindReadyTimeout)
+
+	for {
+		_, err := p.client.CoreV1().
+			ServiceAccounts(namespace).
+			Get(ctx, "default", metav1.GetOptions{})
+		if err == nil {
+			return nil
+		}
+
+		if !errors.IsNotFound(err) {
+			return fmt.Errorf("get default service account in %s: %w", namespace, err)
+		}
+
+		if time.Now().After(deadline) {
+			return fmt.Errorf("%w: %s/default", ErrDefaultServiceAccountNotReady, namespace)
+		}
+
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("waiting for default service account: %w", ctx.Err())
+		case <-time.After(dindReadyPollInterval):
+		}
+	}
 }
 
 // WaitForDinD waits until the Docker daemon inside the DinD pod is ready to accept connections.
@@ -166,6 +207,10 @@ func buildDinDContainer() corev1.Container {
 	return corev1.Container{
 		Name:  DinDContainerName,
 		Image: DinDImage,
+		// Forwarded to dockerd by the dind entrypoint. Lower the bridge MTU so egress
+		// (e.g. pull-through mirrors reaching upstream registries) fits the DinD pod's
+		// path MTU instead of stalling on dropped TLS-handshake packets.
+		Args: []string{fmt.Sprintf("--mtu=%d", dindMTU)},
 		SecurityContext: &corev1.SecurityContext{
 			Privileged: &privileged,
 		},

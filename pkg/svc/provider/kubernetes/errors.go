@@ -30,6 +30,13 @@ var (
 	// ErrDinDNotReady is returned when the DinD pod did not become ready in time.
 	ErrDinDNotReady = errors.New("DinD pod did not become ready within timeout")
 
+	// ErrDefaultServiceAccountNotReady is returned when a namespace's default ServiceAccount
+	// is not created within the timeout (the ServiceAccount controller provisions it
+	// asynchronously, which can lag after a cluster restart).
+	ErrDefaultServiceAccountNotReady = errors.New(
+		"default service account not created within timeout",
+	)
+
 	// ErrDinDNoIP is returned when the DinD pod has no IP assigned.
 	ErrDinDNoIP = errors.New("DinD pod has no IP assigned")
 
