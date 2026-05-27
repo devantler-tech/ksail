@@ -202,6 +202,7 @@ func extractClusterNameFromContext(clusterCfg *v1alpha1.Cluster) string {
 // ExtractClusterNameFromContext extracts the cluster name from a context string.
 // For kind clusters, contexts follow the pattern "kind-<cluster-name>".
 // For k3d clusters, contexts follow the pattern "k3d-<cluster-name>".
+// K3s on the Kubernetes provider (k3k) instead writes "k3k-<cluster-name>".
 // Returns empty string if the context doesn't match the expected pattern.
 func ExtractClusterNameFromContext(context string, distribution v1alpha1.Distribution) string {
 	prefix, ok := distributionContextPrefixes[distribution]
@@ -211,6 +212,15 @@ func ExtractClusterNameFromContext(context string, distribution v1alpha1.Distrib
 
 	if clusterName, found := strings.CutPrefix(context, prefix); found {
 		return clusterName
+	}
+
+	// K3s run via the k3k operator (Kubernetes provider) uses a "k3k-" context rather
+	// than the standalone "k3d-". Accept it so name resolution works for nested K3s
+	// (must mirror resolveCreatedContextName, which sets this context on create).
+	if distribution == v1alpha1.DistributionK3s {
+		if clusterName, found := strings.CutPrefix(context, "k3k-"); found {
+			return clusterName
+		}
 	}
 
 	return ""

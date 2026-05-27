@@ -1,5 +1,7 @@
 package kubernetes
 
+import "context"
+
 // ExtractGatewayPortForTest exposes extractGatewayPort for unit testing.
 var ExtractGatewayPortForTest = extractGatewayPort //nolint:gochecknoglobals
 
@@ -26,3 +28,14 @@ var PreserveImmutableServiceFieldsForTest = preserveImmutableServiceFields //nol
 
 // IsLoopbackAddressForTest exposes isLoopbackAddress for unit testing.
 var IsLoopbackAddressForTest = isLoopbackAddress //nolint:gochecknoglobals
+
+// NewLocalListenerForTest exposes newLocalListener for unit testing. It returns the
+// bound port and a close function.
+func NewLocalListenerForTest(ctx context.Context, localPort int) (int, func() error, error) {
+	l, err := newLocalListener(ctx, localPort)
+	if err != nil {
+		return 0, nil, err
+	}
+
+	return l.Port, l.Listener.Close, nil
+}

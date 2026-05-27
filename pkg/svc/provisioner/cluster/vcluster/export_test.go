@@ -15,6 +15,15 @@ var WaitForNetworkRemovalForTest = waitForNetworkRemoval
 // BuildValuesFilesForTest exposes buildValuesFiles for unit testing.
 var BuildValuesFilesForTest = buildValuesFiles
 
+// ResolvePersistenceDisabledForTest exposes resolvePersistenceDisabled for unit testing.
+var ResolvePersistenceDisabledForTest = resolvePersistenceDisabled
+
+// UserPersistenceIntentForTest exposes userPersistenceIntent for unit testing.
+var UserPersistenceIntentForTest = userPersistenceIntent
+
+// ErrPersistentStorageUnavailableForTest exposes errPersistentStorageUnavailable for unit testing.
+var ErrPersistentStorageUnavailableForTest = errPersistentStorageUnavailable
+
 // NetworkExistsFnForTest exposes the networkExistsFn type for unit testing.
 type NetworkExistsFnForTest = networkExistsFn
 

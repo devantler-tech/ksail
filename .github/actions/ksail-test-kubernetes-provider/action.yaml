@@ -18,12 +18,32 @@ inputs:
   timeout:
     description: Timeout per nested cluster create (seconds)
     required: false
-    default: "600"
+    # 900s (15m): nested Talos on the Kubernetes provider (Talos-in-pod inside a
+    # vCluster/Docker host) is the heaviest combination and intermittently exceeded
+    # 600s under CI load (exit 124). Headroom over trimming coverage — see the matrix
+    # in ci.yaml and docs note on not reducing nested-distro coverage for flakes.
+    default: "900"
   cni:
     description: |
       Optional CNI to install in each nested cluster (e.g. "Calico"). When empty,
       the distribution default is used. Calico exercises the k3k serverArgs path
       that enables the MutatingAdmissionPolicy / v1beta1 admissionregistration API.
+    required: false
+    default: ""
+  dockerhub-user:
+    description: Docker Hub username for authenticated nested pull-through mirrors.
+    required: false
+    default: ""
+  dockerhub-token:
+    description: Docker Hub token/password for authenticated nested pull-through mirrors.
+    required: false
+    default: ""
+  ghcr-user:
+    description: GHCR username for authenticated nested pull-through mirrors.
+    required: false
+    default: ""
+  ghcr-token:
+    description: GHCR token for authenticated nested pull-through mirrors.
     required: false
     default: ""
 
@@ -36,6 +56,17 @@ runs:
         DISTRIBUTIONS: ${{ inputs.distributions }}
         TIMEOUT: ${{ inputs.timeout }}
         CNI: ${{ inputs.cni }}
+        # Mirror proxy credentials. Exported here so ksail expands the ${...}
+        # placeholders in the --mirror-registry specs from its own process env,
+        # keeping the secret values out of argv and the command log.
+        DOCKERHUB_USERNAME: ${{ inputs.dockerhub-user }}
+        DOCKERHUB_TOKEN: ${{ inputs.dockerhub-token }}
+        GHCR_USERNAME: ${{ inputs.ghcr-user }}
+        GHCR_TOKEN: ${{ inputs.ghcr-token }}
+        # Opt into nested-cluster diagnostics: on a nested bootstrap failure, ksail
+        # dumps the cluster's DinD node + mirror container logs to help diagnose
+        # stalled image pulls. Off by default; enabled here for CI triage.
+        KSAIL_NESTED_DEBUG: "1"
       run: |
         set -euo pipefail
         LOG_DIR="/tmp/ksail-system-test-logs/kubernetes-provider"
@@ -45,6 +76,30 @@ runs:
         HOST_CONTEXT="$(kubectl config current-context)"
         echo "Host cluster context: $HOST_CONTEXT"
         echo "Distributions to test: $DISTRIBUTIONS"
+        echo ""
+
+        # Build authenticated pull-through mirror specs for the nested clusters.
+        # The host-level mirror cache is invisible to the DinD daemon, so nested
+        # clusters set up their own mirrors inside DinD. Authentication (vs. the
+        # anonymous defaults) is what lifts the upstream rate limits that stall
+        # the nested kubelet under CI concurrency. Credentials are passed as
+        # ${ENV} placeholders that ksail expands internally; we only attach them
+        # when BOTH halves are present, so the partial-credentials guard never
+        # trips (e.g. forks without secrets fall back to anonymous mirrors).
+        MIRRORS=()
+        if [ -n "${DOCKERHUB_USERNAME:-}" ] && [ -n "${DOCKERHUB_TOKEN:-}" ]; then
+          MIRRORS+=('${DOCKERHUB_USERNAME}:${DOCKERHUB_TOKEN}@docker.io=https://registry-1.docker.io')
+        else
+          MIRRORS+=('docker.io=https://registry-1.docker.io')
+        fi
+        if [ -n "${GHCR_USERNAME:-}" ] && [ -n "${GHCR_TOKEN:-}" ]; then
+          MIRRORS+=('${GHCR_USERNAME}:${GHCR_TOKEN}@ghcr.io=https://ghcr.io')
+        else
+          MIRRORS+=('ghcr.io=https://ghcr.io')
+        fi
+        MIRRORS+=('quay.io=https://quay.io' 'registry.k8s.io=https://registry.k8s.io')
+        MIRROR_ARG="$(IFS=,; printf '%s' "${MIRRORS[*]}")"
+        echo "Nested mirror registries: ${#MIRRORS[@]} (docker.io/ghcr.io authenticated when secrets present)"
         echo ""
 
         FAILED=0
@@ -72,6 +127,7 @@ runs:
           create_ok=false
           if timeout "$TIMEOUT" ksail cluster create \
             "${CREATE_ARGS[@]}" \
+            --mirror-registry "$MIRROR_ARG" \
             2>&1 | tee "$CREATE_LOG"; then
             create_ok=true
             echo "  ✅ $DIST create succeeded"

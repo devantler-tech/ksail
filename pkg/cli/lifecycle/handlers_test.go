@@ -28,6 +28,18 @@ func TestExtractClusterNameFromContext_K3d(t *testing.T) {
 	assert.Equal(t, "my-app", clusterName)
 }
 
+// TestExtractClusterNameFromContext_K3k tests cluster name extraction for K3s run
+// via the k3k operator (Kubernetes provider), which uses a "k3k-" context prefix.
+func TestExtractClusterNameFromContext_K3k(t *testing.T) {
+	t.Parallel()
+
+	clusterName := lifecycle.ExtractClusterNameFromContext(
+		"k3k-nested-k3s",
+		v1alpha1.DistributionK3s,
+	)
+	assert.Equal(t, "nested-k3s", clusterName)
+}
+
 // TestExtractClusterNameFromContext_Talos tests cluster name extraction for Talos.
 func TestExtractClusterNameFromContext_Talos(t *testing.T) {
 	t.Parallel()
