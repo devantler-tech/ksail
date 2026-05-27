@@ -2,6 +2,7 @@
   "ignore": [
     "**/node_modules/**",
     "**/.git/**",
+    "**/vsce/**",
     "**/.github/aw/logs/**",
     "**/.rbenv/**",
     "**/.venv/**",

@@ -10,6 +10,7 @@ DISABLE_LINTERS:
   - REPOSITORY_CHECKOV
   - REPOSITORY_GITLEAKS
   - REPOSITORY_GRYPE
+  - REPOSITORY_OSV_SCANNER # Disabled: `osv-scanner scan source` builds Go packages and cannot compile the CGO `desktop/` webview package in the MegaLinter container ("could not import C"). Dependency vulnerabilities are managed via Dependabot (consistent with GRYPE/TRIVY being disabled).
   - REPOSITORY_SECRETLINT
   - REPOSITORY_TRIVY
   - SPELL_CSPELL

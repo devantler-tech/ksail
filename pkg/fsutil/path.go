@@ -47,3 +47,31 @@ func ExpandHomePath(path string) (string, error) {
 
 	return path, nil
 }
+
+// ListYAMLFiles returns the paths of .yaml/.yml files directly within dir
+// (non-recursive), skipping subdirectories. The dir argument is used as given —
+// callers are responsible for any canonicalization (e.g. EvalCanonicalPath or
+// filepath.Clean) before calling. Returned paths are dir joined with each entry name.
+func ListYAMLFiles(dir string) ([]string, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, fmt.Errorf("read directory %s: %w", dir, err)
+	}
+
+	var paths []string
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		name := entry.Name()
+		if !strings.HasSuffix(name, ".yaml") && !strings.HasSuffix(name, ".yml") {
+			continue
+		}
+
+		paths = append(paths, filepath.Join(dir, name))
+	}
+
+	return paths, nil
+}
