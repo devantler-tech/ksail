@@ -199,6 +199,8 @@ func expectCovCalicoInstall(t *testing.T, client *helm.MockInterface, installErr
 		).
 		Return(nil)
 
+	expectCalicoCRDPhase(client)
+
 	client.EXPECT().
 		InstallOrUpgradeChart(
 			mock.Anything,

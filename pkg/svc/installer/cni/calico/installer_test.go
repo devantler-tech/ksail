@@ -216,6 +216,30 @@ func TestInstaller_Uninstall_Success(t *testing.T) {
 	client.EXPECT().
 		UninstallRelease(mock.Anything, "calico", "tigera-operator").
 		Return(nil)
+	client.EXPECT().
+		ReleaseExists(mock.Anything, "calico-crds", "tigera-operator").
+		Return(true, nil)
+	client.EXPECT().
+		UninstallRelease(mock.Anything, "calico-crds", "tigera-operator").
+		Return(nil)
+
+	err := installer.Uninstall(context.Background())
+
+	require.NoError(t, err)
+}
+
+func TestInstaller_Uninstall_SkipsMissingCRDsRelease(t *testing.T) {
+	t.Parallel()
+
+	installer, client := newInstallerWithDistribution(t, v1alpha1.DistributionVanilla)
+	client.EXPECT().
+		UninstallRelease(mock.Anything, "calico", "tigera-operator").
+		Return(nil)
+	// The calico-crds release does not exist (e.g. cluster predates the two-phase
+	// install): uninstall must skip it rather than fail.
+	client.EXPECT().
+		ReleaseExists(mock.Anything, "calico-crds", "tigera-operator").
+		Return(false, nil)
 
 	err := installer.Uninstall(context.Background())
 
@@ -293,16 +317,17 @@ func expectCalicoInstall(t *testing.T, client *helm.MockInterface, installErr er
 		).
 		Return(nil)
 
+	expectCalicoCRDPhase(client)
+
 	client.EXPECT().
 		InstallOrUpgradeChart(
 			mock.Anything,
 			mock.MatchedBy(func(spec *helm.ChartSpec) bool {
-				if spec == nil {
+				if !isCalicoOperatorSpec(spec) {
 					return false
 				}
 
 				assert.Equal(t, "calico", spec.ReleaseName)
-				assert.Equal(t, "projectcalico/tigera-operator", spec.ChartName)
 				assert.Equal(t, "tigera-operator", spec.Namespace)
 				assert.Equal(t, "https://docs.tigera.io/calico/charts", spec.RepoURL)
 				assert.True(t, spec.CreateNamespace)
@@ -317,4 +342,38 @@ func expectCalicoInstall(t *testing.T, client *helm.MockInterface, installErr er
 			}),
 		).
 		Return(nil, installErr)
+}
+
+// isCalicoCRDSpec reports whether spec targets the projectcalico.org.v3 CRD chart.
+func isCalicoCRDSpec(spec *helm.ChartSpec) bool {
+	return spec != nil && spec.ChartName == "projectcalico/projectcalico.org.v3"
+}
+
+// isCalicoOperatorSpec reports whether spec targets the tigera-operator chart.
+func isCalicoOperatorSpec(spec *helm.ChartSpec) bool {
+	return spec != nil && spec.ChartName == "projectcalico/tigera-operator"
+}
+
+// expectCalicoCRDPhase sets up the CRD chart install and the single post-CRD
+// discovery refresh that precede the operator chart install in the two-phase
+// Calico install flow (the no-retry / non-discovery-retry case).
+func expectCalicoCRDPhase(client *helm.MockInterface) {
+	expectCalicoCRDPhaseWithRefreshes(client, 1)
+}
+
+// expectCalicoCRDPhaseWithRefreshes is like expectCalicoCRDPhase but asserts an
+// exact RefreshDiscovery call count. One refresh always follows the CRD chart
+// install; each API-discovery-error retry of the operator install triggers one
+// additional refresh (see runInstallWithRetry). So the discovery-error retry
+// path expects 2 and the retry-exhausted path expects 8. Pinning the count means
+// a regression that drops the retry-triggered refresh is caught.
+func expectCalicoCRDPhaseWithRefreshes(client *helm.MockInterface, refreshes int) {
+	client.EXPECT().
+		InstallOrUpgradeChart(mock.Anything, mock.MatchedBy(isCalicoCRDSpec)).
+		Return(nil, nil).
+		Once()
+	client.EXPECT().
+		RefreshDiscovery().
+		Return(nil).
+		Times(refreshes)
 }

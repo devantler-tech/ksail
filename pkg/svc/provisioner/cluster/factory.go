@@ -25,6 +25,7 @@ import (
 	kwokprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/kwok"
 	talosprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/talos"
 	vclusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/vcluster"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/registry"
 	k3dv1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
@@ -64,6 +65,11 @@ type DistributionConfig struct {
 	KWOK *KWOKConfig
 	// EKS holds the pre-loaded EKS configuration.
 	EKS *EKSConfig
+	// MirrorSpecs holds resolved registry mirror specifications. For the Kubernetes
+	// provider these are applied inside the DinD environment so nested clusters pull
+	// through authenticated, caching mirrors (the host-level CLI mirror stage cannot
+	// reach the DinD daemon). Empty disables nested mirroring.
+	MirrorSpecs []registry.MirrorSpec
 }
 
 // EKSConfig holds EKS-specific configuration.
@@ -194,6 +200,14 @@ func (f DefaultFactory) createKindProvisioner(
 		cluster.Spec.Cluster.Workers,
 	)
 
+	// Enable the MutatingAdmissionPolicy feature gate / v1beta1 admissionregistration
+	// API only for Calico, whose v3.30+ CRD chart ships MutatingAdmissionPolicy
+	// resources. Enabling it elsewhere makes other components (e.g. Kyverno) attempt to
+	// use the API and fail.
+	if cluster.Spec.Cluster.CNI == v1alpha1.CNICalico {
+		kindconfigmanager.ApplyAPIServerFeatureGates(kindConfig)
+	}
+
 	// Apply kubelet certificate rotation patches when metrics-server is enabled.
 	// This must happen AFTER applyKindNodeCounts since that function may replace the nodes slice.
 	if cluster.Spec.Cluster.MetricsServer == v1alpha1.MetricsServerEnabled {
@@ -318,6 +332,21 @@ apiServer:
 	}
 }
 
+// wrapK3kServerArgs works around a k3k operator bug: it joins Cluster.Spec.ServerArgs
+// with spaces into an unquoted shell assignment (EXTRA_ARGS={{.EXTRA_ARGS}}), which
+// breaks for multiple space-separated args (the shell treats only the first token as the
+// assignment and the rest as a command). Wrapping the args in a single single-quoted
+// element makes the assignment see one token, while the operator's later unquoted
+// `$EXTRA_ARGS` expansion word-splits it back into separate k3s flags. Returns nil for
+// empty input.
+func wrapK3kServerArgs(args []string) []string {
+	if len(args) == 0 {
+		return nil
+	}
+
+	return []string{"'" + strings.Join(args, " ") + "'"}
+}
+
 // createK3dKubernetesProvisioner creates a K3s provisioner that runs inside
 // a host Kubernetes cluster using the k3k operator.
 func (f DefaultFactory) createK3dKubernetesProvisioner(
@@ -325,13 +354,14 @@ func (f DefaultFactory) createK3dKubernetesProvisioner(
 ) (Provisioner, any, error) {
 	opts := cluster.Spec.Provider.Kubernetes
 
-	// resolveClusterNameFromContext normally extracts from k3dConfig.Name,
-	// but k3d config is skipped for the Kubernetes provider path.
-	// Derive from connection context (set by applyClusterNameOverride),
-	// stripping the "k3d-" prefix that ContextName() adds.
-	clusterName := strings.TrimPrefix(
-		cluster.Spec.Cluster.Connection.Context, "k3d-",
-	)
+	// resolveClusterNameFromContext normally extracts from k3dConfig.Name, but k3d
+	// config is skipped for the Kubernetes provider path. Derive from the connection
+	// context (set by applyClusterNameOverride). The Kubernetes provider writes a
+	// "k3k-<name>" context (via the k3k operator); standalone paths use "k3d-<name>".
+	// Strip whichever prefix is present so the k3k cluster/namespace name is correct.
+	clusterName := strings.TrimPrefix(cluster.Spec.Cluster.Connection.Context, "k3k-")
+	clusterName = strings.TrimPrefix(clusterName, "k3d-")
+
 	if clusterName == "" {
 		clusterName = cluster.Name
 	}
@@ -351,7 +381,16 @@ func (f DefaultFactory) createK3dKubernetesProvisioner(
 	// Calico's v3.30+ CRD chart ships MutatingAdmissionPolicy resources that require the
 	// MutatingAdmissionPolicy feature gate / v1beta1 admissionregistration API. These flags
 	// flow through the k3k Cluster spec's serverArgs to the embedded k3s kube-apiserver.
-	serverArgs := k3dconfigmanager.APIServerFeatureGatesArgsForCNI(cluster.Spec.Cluster.CNI)
+	//
+	// The k3k operator joins serverArgs with spaces into an UNQUOTED shell assignment
+	// (EXTRA_ARGS={{.EXTRA_ARGS}}), which breaks for multiple space-separated args (the
+	// shell treats only the first token as the assignment and the rest as a command), so
+	// the feature-gate flags never reach `k3s server $EXTRA_ARGS`. Wrap them in a single
+	// single-quoted element: the assignment then sees one token (EXTRA_ARGS='a b' → "a b")
+	// and the later unquoted $EXTRA_ARGS expansion word-splits it back into separate flags.
+	serverArgs := wrapK3kServerArgs(
+		k3dconfigmanager.APIServerFeatureGatesArgsForCNI(cluster.Spec.Cluster.CNI),
+	)
 
 	provisioner, err := k3dprovisioner.NewK3kProvisioner(
 		k3dprovisioner.K3kProvisionerConfig{
@@ -368,6 +407,11 @@ func (f DefaultFactory) createK3dKubernetesProvisioner(
 			PodCIDR:          opts.PodCIDR,
 			ServiceCIDR:      opts.ServiceCIDR,
 			ServerArgs:       serverArgs,
+			// Pin the nested K3s version to the standalone K3d version so the nested
+			// apiserver matches the proven standalone config (serves the
+			// admissionregistration.k8s.io/v1beta1 API that Calico's CRD chart needs),
+			// instead of inheriting the host cluster's possibly-older version.
+			K3sVersion: k3dconfigmanager.DefaultK3sVersion(),
 		},
 	)
 	if err != nil {
@@ -421,11 +465,30 @@ func buildHostClusterClients(
 	return clientsFromRESTConfig(restConfig)
 }
 
+// hostClientQPS and hostClientBurst raise the host-cluster REST client throughput above
+// client-go's restrictive defaults (5 QPS / 10 burst). The nested-provider provisioners
+// poll the host cluster heavily — k3k Cluster status, vCluster kubeconfig secrets, pods —
+// across several nested clusters, and the default rate limiter deadlines under load
+// ("client rate limiter Wait returned an error: context deadline exceeded").
+const (
+	hostClientQPS   = 50
+	hostClientBurst = 100
+)
+
 // clientsFromRESTConfig builds the typed and dynamic clients used by the Kubernetes-provider
-// provisioners from an already-resolved REST config.
+// provisioners from an already-resolved REST config. It raises the client rate-limiter
+// throughput (unless already configured) so readiness polling survives host-cluster load.
 func clientsFromRESTConfig(
 	restConfig *rest.Config,
 ) (kubernetes.Interface, *rest.Config, dynamic.Interface, error) {
+	if restConfig.QPS == 0 {
+		restConfig.QPS = hostClientQPS
+	}
+
+	if restConfig.Burst == 0 {
+		restConfig.Burst = hostClientBurst
+	}
+
 	clientset, err := kubernetes.NewForConfig(restConfig)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("create host clientset: %w", err)
@@ -522,6 +585,14 @@ func (f DefaultFactory) createK3dProvisioner( //nolint:funlen // sequential setu
 
 	// Apply node count overrides from CLI flags / cluster-level config.
 	applyK3dNodeCounts(k3dConfig, cluster.Spec.Cluster.ControlPlanes, cluster.Spec.Cluster.Workers)
+
+	// Enable the MutatingAdmissionPolicy feature gate / v1beta1 admissionregistration
+	// API on the server nodes only for Calico, whose v3.30+ CRD chart ships
+	// MutatingAdmissionPolicy resources. Enabling it elsewhere makes other components
+	// (e.g. Kyverno) attempt to use the API and fail.
+	if cluster.Spec.Cluster.CNI == v1alpha1.CNICalico {
+		k3dconfigmanager.ApplyAPIServerFeatureGatesArgs(k3dConfig)
+	}
 
 	// Apply containerd image verifier plugin volume mount when image verification is enabled.
 	// This mounts the generated config.toml.tmpl into K3d node containers so K3s uses it
@@ -734,6 +805,7 @@ func (f DefaultFactory) createTalosKubernetesProvisioner(
 			ControlPlanes:    int(cluster.Spec.Cluster.ControlPlanes),
 			Workers:          int(cluster.Spec.Cluster.Workers),
 			Persistence:      opts.Persistence,
+			MirrorSpecs:      f.DistributionConfig.MirrorSpecs,
 		},
 	)
 	// jscpd:ignore-end

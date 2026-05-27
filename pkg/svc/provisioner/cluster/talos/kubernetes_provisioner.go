@@ -6,12 +6,17 @@ import (
 	"net"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	kubernetesprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/kubernetes"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/registry"
+	"github.com/docker/docker/api/types/container"
 	dockerclient "github.com/docker/docker/client"
+	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/siderolabs/talos/pkg/provision"
 	"github.com/siderolabs/talos/pkg/provision/access"
 	"k8s.io/client-go/dynamic"
@@ -37,6 +42,7 @@ type KubernetesProvisioner struct {
 	hostContext      string
 	kubeconfigPath   string
 	persistence      v1alpha1.KubernetesPersistence
+	mirrorSpecs      []registry.MirrorSpec
 	portForwards     []*kubernetesprovider.PortForwardSession
 }
 
@@ -67,6 +73,10 @@ type KubernetesProvisionerConfig struct {
 	Workers int
 	// Persistence holds PVC configuration for the DinD Docker data directory.
 	Persistence v1alpha1.KubernetesPersistence
+	// MirrorSpecs configures pull-through registry mirrors set up inside the DinD env
+	// so the nested cluster pulls images through authenticated, caching registries
+	// (avoiding anonymous upstream rate limits). Empty disables nested mirroring.
+	MirrorSpecs []registry.MirrorSpec
 }
 
 // NewKubernetesProvisioner creates a KubernetesProvisioner that wraps Talos with DinD lifecycle.
@@ -87,6 +97,7 @@ func NewKubernetesProvisioner(cfg KubernetesProvisionerConfig) (*KubernetesProvi
 		hostContext:      cfg.HostContext,
 		kubeconfigPath:   kubeconfigPath,
 		persistence:      cfg.Persistence,
+		mirrorSpecs:      cfg.MirrorSpecs,
 	}, nil
 }
 
@@ -193,6 +204,15 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 		return fmt.Errorf("ensure Talos image: %w", err)
 	}
 
+	// Set up authenticated pull-through registry mirrors inside DinD so the nested
+	// cluster pulls k8s/control-plane images through them (avoiding anonymous upstream
+	// rate limits that otherwise stall the kubelet). Must run before Bundle() so the
+	// mirror config is baked into the machine config the nodes boot with.
+	err = p.setupDinDMirrors(ctx, dindClient, clusterName)
+	if err != nil {
+		return fmt.Errorf("set up nested registry mirrors: %w", err)
+	}
+
 	configBundle := p.inner.talosConfigs.Bundle()
 
 	provisionStart := time.Now()
@@ -264,6 +284,12 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 	// Bootstrap and wait for readiness
 	err = p.inner.bootstrapAndWaitForReady(ctx, clusterAccess)
 	if err != nil {
+		// Opt-in (KSAIL_NESTED_DEBUG) diagnostic: dump nested Talos node + mirror
+		// container logs to understand why the kubelet stalls in "Preparing" (image
+		// pull) — is it using the mirror, is the upstream pull failing/auth-falling-
+		// back, or just slow on a cold cache? No-op unless the env var is set.
+		p.dumpNestedDiagnostics(ctx, dindClient, clusterName)
+
 		return fmt.Errorf("bootstrap: %w", err)
 	}
 
@@ -435,6 +461,169 @@ func (p *KubernetesProvisioner) discoverMappedPorts(
 	}
 
 	return talosPort, k8sPort, nil
+}
+
+// setupDinDMirrors stands up authenticated pull-through registry mirrors inside the
+// DinD Docker daemon, on the nested cluster's Docker network, and points the nested
+// Talos machine config at them. This mirrors what the Docker provider does on the host
+// for standalone clusters, so the nested cluster's containerd pulls images through
+// caching, credentialed registries instead of anonymously from upstream. No-op when no
+// mirror specs are configured.
+func (p *KubernetesProvisioner) setupDinDMirrors(
+	ctx context.Context,
+	dindClient dockerclient.APIClient,
+	clusterName string,
+) error {
+	if len(p.mirrorSpecs) == 0 {
+		return nil
+	}
+
+	writer := p.inner.logWriter
+
+	backend, err := registry.DefaultBackendFactory(dindClient)
+	if err != nil {
+		return fmt.Errorf("create nested registry backend: %w", err)
+	}
+
+	usedPorts, err := registry.CollectExistingRegistryPorts(ctx, backend)
+	if err != nil {
+		return fmt.Errorf("collect nested registry ports: %w", err)
+	}
+
+	upstreams := registry.BuildUpstreamLookup(p.mirrorSpecs)
+	registryInfos := registry.BuildRegistryInfosFromSpecs(
+		p.mirrorSpecs, upstreams, usedPorts, clusterName,
+	)
+
+	if len(registryInfos) == 0 {
+		return nil
+	}
+
+	// Create the pull-through registry containers inside DinD.
+	err = registry.SetupRegistries(ctx, backend, registryInfos, clusterName, "", writer)
+	if err != nil {
+		return fmt.Errorf("create nested mirror registries: %w", err)
+	}
+
+	// Pre-create the cluster network with the CIDR the Talos SDK uses for its Docker
+	// bridge (not the pod CIDR), so the SDK reuses it (same name/CIDR) when provisioning
+	// the nodes instead of creating a conflicting one.
+	networkCIDR := talosconfigmanager.DefaultNetworkCIDR
+
+	// Use the nested (DinD) MTU so registry/upstream and node↔mirror traffic fits the
+	// DinD pod's path MTU (1500 drops large TLS-handshake packets — see NestedNetworkMTU).
+	err = registry.EnsureNetwork(
+		ctx, dindClient, clusterName, networkCIDR, registry.NestedNetworkMTU, writer,
+	)
+	if err != nil {
+		return fmt.Errorf("ensure nested cluster network: %w", err)
+	}
+
+	// Connect the registries with static IPs from the high end of the subnet so they
+	// don't claim the low addresses the Talos SDK assigns to nodes (e.g. 10.5.0.2),
+	// while remaining resolvable by container name via Docker DNS.
+	_, err = registry.ConnectRegistriesToNetworkWithStaticIPs(
+		ctx, dindClient, registryInfos, clusterName, networkCIDR, writer,
+	)
+	if err != nil {
+		return fmt.Errorf("connect nested mirror registries to network: %w", err)
+	}
+
+	return p.applyMirrorsToTalosConfig(clusterName)
+}
+
+// applyMirrorsToTalosConfig points the nested Talos machine config's
+// registries.mirrors at the in-DinD registry containers (by Docker DNS name).
+func (p *KubernetesProvisioner) applyMirrorsToTalosConfig(clusterName string) error {
+	mirrors := make([]talosconfigmanager.MirrorRegistry, 0, len(p.mirrorSpecs))
+
+	for _, spec := range p.mirrorSpecs {
+		containerName := registry.BuildRegistryName(clusterName, spec.Host)
+		username, password := spec.ResolveCredentials()
+
+		mirrors = append(mirrors, talosconfigmanager.MirrorRegistry{
+			Host:      spec.Host,
+			Endpoints: []string{"http://" + containerName + ":5000"},
+			Username:  username,
+			Password:  password,
+		})
+	}
+
+	err := p.inner.talosConfigs.ApplyMirrorRegistries(mirrors)
+	if err != nil {
+		return fmt.Errorf("apply nested mirror registries to talos config: %w", err)
+	}
+
+	return nil
+}
+
+// nestedDebugEnvVar gates the nested-cluster diagnostic dump. It is off by default
+// (the dump streams container logs, which are verbose and could contain sensitive
+// data); set it to a non-empty value to opt in (CI enables it for the nested-provider
+// system test to capture bootstrap-failure diagnostics).
+const nestedDebugEnvVar = "KSAIL_NESTED_DEBUG"
+
+// dumpNestedDiagnostics is a best-effort, opt-in diagnostic that dumps the tail of
+// logs for the DinD containers belonging to this cluster (the Talos node containers
+// and the pull-through mirror containers, named "<cluster>-..."). It is invoked when
+// the nested Talos bootstrap readiness check fails, to reveal why the kubelet stalls
+// in "Preparing" (e.g. image-pull errors on the node, or upstream/auth failures on
+// the mirrors). It is a no-op unless KSAIL_NESTED_DEBUG is set, so the default path
+// only returns the bootstrap error without streaming logs.
+func (p *KubernetesProvisioner) dumpNestedDiagnostics(
+	ctx context.Context,
+	dindClient dockerclient.APIClient,
+	clusterName string,
+) {
+	if os.Getenv(nestedDebugEnvVar) == "" {
+		return
+	}
+
+	writer := p.inner.logWriter
+
+	containers, err := dindClient.ContainerList(ctx, container.ListOptions{All: true})
+	if err != nil {
+		_, _ = fmt.Fprintf(writer, "diagnostics: failed to list DinD containers: %v\n", err)
+
+		return
+	}
+
+	// Match only this cluster's containers by name prefix ("<cluster>-") so we don't
+	// accidentally capture (and stream logs from) unrelated containers.
+	prefix := clusterName + "-"
+
+	for idx := range containers {
+		cnt := containers[idx]
+
+		name := ""
+		if len(cnt.Names) > 0 {
+			name = strings.TrimPrefix(cnt.Names[0], "/")
+		}
+
+		if !strings.HasPrefix(name, prefix) {
+			continue
+		}
+
+		_, _ = fmt.Fprintf(
+			writer,
+			"\n===== DinD container %q (image=%s state=%s) logs (tail 100) =====\n",
+			name, cnt.Image, cnt.State,
+		)
+
+		logs, logErr := dindClient.ContainerLogs(ctx, cnt.ID, container.LogsOptions{
+			ShowStdout: true,
+			ShowStderr: true,
+			Tail:       "100",
+		})
+		if logErr != nil {
+			_, _ = fmt.Fprintf(writer, "diagnostics: logs for %q failed: %v\n", name, logErr)
+
+			continue
+		}
+
+		_, _ = stdcopy.StdCopy(writer, writer, logs)
+		_ = logs.Close()
+	}
 }
 
 // setupDinD creates the namespace and DinD pod, then waits for readiness.

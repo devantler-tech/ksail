@@ -6,6 +6,11 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
+// IsDeadlineErrorForTest exposes isDeadlineError for unit testing.
+//
+//nolint:gochecknoglobals // test seam for the deadline-error classifier
+var IsDeadlineErrorForTest = isDeadlineError
+
 // SetNewClientsetFn overrides the clientset factory for testing.
 // Returns a cleanup function that restores the original factory.
 func SetNewClientsetFn(
