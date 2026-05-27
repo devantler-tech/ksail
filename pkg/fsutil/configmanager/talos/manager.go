@@ -29,8 +29,11 @@ const (
 	DefaultPatchesDir = "talos"
 	// DefaultNetworkCIDR is the default CIDR for the cluster network.
 	DefaultNetworkCIDR = "10.5.0.0/24"
-	// DefaultKubernetesVersion is the default Kubernetes version.
-	DefaultKubernetesVersion = "1.32.0"
+	// DefaultKubernetesVersion is the default Kubernetes version. It must be >= 1.34
+	// so the admissionregistration.k8s.io/v1beta1 API (MutatingAdmissionPolicy) is
+	// available for Calico v3.30+; 1.36.0 is the embedded Talos machinery's own
+	// default and matches the other distributions.
+	DefaultKubernetesVersion = "1.36.0"
 	// DefaultClusterName is the default cluster name for Talos clusters.
 	DefaultClusterName = "talos-default"
 )

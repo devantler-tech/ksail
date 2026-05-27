@@ -1116,3 +1116,57 @@ func TestRunDiagnoseJSONReport_WithFindings(t *testing.T) {
 	assert.Contains(t, out, `"reason": "CrashLoopBackOff"`)
 	assert.Contains(t, out, `"remediation": "Check pod logs for errors."`)
 }
+
+func TestResolveCreatedContextName(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		distribution v1alpha1.Distribution
+		provider     v1alpha1.Provider
+		clusterName  string
+		expected     string
+	}{
+		{
+			name:         "k3s on kubernetes provider uses k3k prefix",
+			distribution: v1alpha1.DistributionK3s,
+			provider:     v1alpha1.ProviderKubernetes,
+			clusterName:  "nested-k3s",
+			expected:     "k3k-nested-k3s",
+		},
+		{
+			name:         "k3s on docker provider uses standalone k3d prefix",
+			distribution: v1alpha1.DistributionK3s,
+			provider:     v1alpha1.ProviderDocker,
+			clusterName:  "my-cluster",
+			expected:     "k3d-my-cluster",
+		},
+		{
+			name:         "vanilla on kubernetes provider uses standalone kind prefix",
+			distribution: v1alpha1.DistributionVanilla,
+			provider:     v1alpha1.ProviderKubernetes,
+			clusterName:  "nested-vanilla",
+			expected:     "kind-nested-vanilla",
+		},
+		{
+			name:         "empty cluster name returns empty",
+			distribution: v1alpha1.DistributionK3s,
+			provider:     v1alpha1.ProviderKubernetes,
+			clusterName:  "",
+			expected:     "",
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := cluster.ExportResolveCreatedContextName(
+				testCase.distribution,
+				testCase.provider,
+				testCase.clusterName,
+			)
+			assert.Equal(t, testCase.expected, got)
+		})
+	}
+}

@@ -5,13 +5,24 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/runner"
 	k3kv1beta1 "github.com/rancher/k3k/pkg/apis/k3k.io/v1beta1"
+	corev1 "k8s.io/api/core/v1"
 )
+
+// FirstRunningPodNameForTest exposes firstRunningPodName for unit testing.
+func FirstRunningPodNameForTest(pods []corev1.Pod) string {
+	return firstRunningPodName(pods)
+}
 
 // BuildClusterCRForTest exposes buildClusterCR for unit testing.
 func (p *K3kProvisioner) BuildClusterCRForTest(
 	clusterName, namespace, certSAN string,
 ) *k3kv1beta1.Cluster {
 	return p.buildClusterCR(clusterName, namespace, certSAN)
+}
+
+// EnsureNamespaceForTest exposes ensureNamespace for unit testing.
+func (p *K3kProvisioner) EnsureNamespaceForTest(ctx context.Context, namespace string) error {
+	return p.ensureNamespace(ctx, namespace)
 }
 
 // WithRunnerForTest injects a command runner so lifecycle operations can be

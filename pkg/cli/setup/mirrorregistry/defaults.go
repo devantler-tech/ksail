@@ -74,11 +74,13 @@ func getConfigOrDefaultMirrors(
 	return getProviderDefaultMirrors(provider)
 }
 
-// getProviderDefaultMirrors returns default mirrors for providers that support local Docker mirrors.
-// Cloud providers (Hetzner, Omni, and AWS) and the Kubernetes provider cannot access local Docker
-// containers, so they get no defaults.
+// getProviderDefaultMirrors returns default mirrors for providers that can run local
+// Docker registry containers. The Docker provider runs them on the host; the Kubernetes
+// provider runs them inside the DinD environment alongside the nested cluster. Cloud
+// providers (Hetzner, Omni, AWS) run nodes remotely with no reachable local Docker daemon,
+// so they get no defaults.
 func getProviderDefaultMirrors(provider v1alpha1.Provider) []string {
-	if !provider.NeedsLocalDocker() {
+	if !provider.NeedsLocalDocker() && provider != v1alpha1.ProviderKubernetes {
 		return []string{}
 	}
 
