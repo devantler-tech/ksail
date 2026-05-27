@@ -90,8 +90,9 @@ func NewProvisioner(
 // post-start readiness wait. An empty path leaves the default unchanged.
 // Returns the provisioner for chaining.
 func (k *Provisioner) WithKubeconfig(path string) *Provisioner {
-	if strings.TrimSpace(path) != "" {
-		k.kubeconfig = path
+	trimmed := strings.TrimSpace(path)
+	if trimmed != "" {
+		k.kubeconfig = trimmed
 	}
 
 	return k

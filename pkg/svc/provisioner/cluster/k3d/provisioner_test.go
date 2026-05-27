@@ -366,6 +366,14 @@ func TestProvisioner_DefaultKubeconfig(t *testing.T) {
 
 	prov.WithKubeconfig("/explicit")
 	assert.Equal(t, "/explicit", prov.KubeconfigForTest())
+
+	prov.WithKubeconfig("  /spaced/config  ")
+	assert.Equal(
+		t,
+		"/spaced/config",
+		prov.KubeconfigForTest(),
+		"surrounding whitespace must be trimmed before storing",
+	)
 }
 
 // TestParseClusterNames covers the JSON parsing helper directly.
