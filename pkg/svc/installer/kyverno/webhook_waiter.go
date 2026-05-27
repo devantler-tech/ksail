@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
@@ -69,37 +70,73 @@ func (i *Installer) waitForWebhookReady(ctx context.Context) error {
 	}
 
 	err = readiness.PollForReadiness(ctx, remaining, func(ctx context.Context) (bool, error) {
-		webhook, err := clientset.AdmissionregistrationV1().
-			MutatingWebhookConfigurations().
-			Get(ctx, kyvernoResourceWebhookName, metav1.GetOptions{})
-		if err != nil {
-			if apierrors.IsNotFound(err) {
-				// Not yet created — keep polling
-				return false, nil
-			}
-
-			return false, fmt.Errorf(
-				"getting MutatingWebhookConfiguration %q: %w",
-				kyvernoResourceWebhookName,
-				err,
-			)
-		}
-
-		if len(webhook.Webhooks) == 0 {
-			return false, nil
-		}
-
-		for _, wh := range webhook.Webhooks {
-			if len(wh.ClientConfig.CABundle) == 0 {
-				return false, nil
-			}
-		}
-
-		return true, nil
+		return webhookCABundlesReady(ctx, clientset)
 	})
 	if err != nil {
+		// The webhook readiness wait is best-effort: callers treat a deadline timeout as
+		// non-fatal because the webhook uses failurePolicy: Ignore. When the poll runs out
+		// the clock, client-go's REST rate limiter can surface the timeout as
+		// "client rate limiter Wait returned an error: rate: Wait(n=1) would exceed context
+		// deadline" instead of a clean context.DeadlineExceeded (the limiter declines to
+		// wait past the imminent deadline). Normalize that variant to context.DeadlineExceeded
+		// so the best-effort caller doesn't treat a slow-but-harmless webhook as a fatal error.
+		if isDeadlineError(ctx, err) {
+			return fmt.Errorf("polling Kyverno webhook readiness: %w", context.DeadlineExceeded)
+		}
+
 		return fmt.Errorf("polling Kyverno webhook readiness: %w", err)
 	}
 
 	return nil
+}
+
+// webhookCABundlesReady reports whether the Kyverno resource MutatingWebhookConfiguration
+// exists and every webhook entry has a non-empty caBundle. A not-yet-created config or an
+// empty caBundle means the admission controller has not finished initialising its TLS
+// certificate, so the poll should continue.
+func webhookCABundlesReady(ctx context.Context, clientset kubernetes.Interface) (bool, error) {
+	webhook, err := clientset.AdmissionregistrationV1().
+		MutatingWebhookConfigurations().
+		Get(ctx, kyvernoResourceWebhookName, metav1.GetOptions{})
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			// Not yet created — keep polling
+			return false, nil
+		}
+
+		return false, fmt.Errorf(
+			"getting MutatingWebhookConfiguration %q: %w",
+			kyvernoResourceWebhookName,
+			err,
+		)
+	}
+
+	if len(webhook.Webhooks) == 0 {
+		return false, nil
+	}
+
+	for _, wh := range webhook.Webhooks {
+		if len(wh.ClientConfig.CABundle) == 0 {
+			return false, nil
+		}
+	}
+
+	return true, nil
+}
+
+// isDeadlineError reports whether err represents the webhook-readiness deadline being
+// reached — either a genuine context.DeadlineExceeded, the context's deadline having
+// elapsed, or the client-go rate limiter declining to wait past the imminent deadline
+// (which is semantically a timeout but is not wrapped as context.DeadlineExceeded).
+//
+// Cancellation (context.Canceled) is deliberately NOT treated as a deadline: a caller that
+// cancels the install must see that propagate rather than have it normalized to a benign
+// best-effort timeout.
+func isDeadlineError(ctx context.Context, err error) bool {
+	if errors.Is(err, context.DeadlineExceeded) ||
+		errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return true
+	}
+
+	return strings.Contains(err.Error(), "would exceed context deadline")
 }

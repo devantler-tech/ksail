@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 )
 
 var (
@@ -320,7 +321,12 @@ func TestBuildValuesFiles_ExtraSAN(t *testing.T) {
 	t.Run("adds proxy extraSANs when address provided", func(t *testing.T) {
 		t.Parallel()
 
-		files, cleanup, err := vclusterprovisioner.BuildValuesFilesForTest("", false, "5.6.7.8")
+		files, cleanup, err := vclusterprovisioner.BuildValuesFilesForTest(
+			"",
+			false,
+			"5.6.7.8",
+			false,
+		)
 		require.NoError(t, err)
 
 		defer cleanup()
@@ -338,7 +344,7 @@ func TestBuildValuesFiles_ExtraSAN(t *testing.T) {
 	t.Run("omits proxy extraSANs when address empty", func(t *testing.T) {
 		t.Parallel()
 
-		files, cleanup, err := vclusterprovisioner.BuildValuesFilesForTest("", false, "")
+		files, cleanup, err := vclusterprovisioner.BuildValuesFilesForTest("", false, "", false)
 		require.NoError(t, err)
 
 		defer cleanup()
@@ -349,5 +355,57 @@ func TestBuildValuesFiles_ExtraSAN(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.NotContains(t, string(content), "extraSANs:")
+	})
+}
+
+func TestBuildValuesFiles_Persistence(t *testing.T) {
+	t.Parallel()
+
+	t.Run("appends emptyDir override last when persistence disabled", func(t *testing.T) {
+		t.Parallel()
+
+		files, cleanup, err := vclusterprovisioner.BuildValuesFilesForTest("", false, "", true)
+		require.NoError(t, err)
+
+		defer cleanup()
+
+		// With no user values, the files are [defaults, emptyDir-override]; the override must
+		// be LAST so it wins over defaults and user values.
+		require.Len(t, files, 2)
+
+		content, err := os.ReadFile(files[1])
+		require.NoError(t, err)
+
+		var parsed struct {
+			ControlPlane struct {
+				StatefulSet struct {
+					Persistence struct {
+						VolumeClaim struct {
+							Enabled bool `yaml:"enabled"`
+						} `yaml:"volumeClaim"`
+					} `yaml:"persistence"`
+				} `yaml:"statefulSet"`
+			} `yaml:"controlPlane"`
+		}
+
+		require.NoError(t, yaml.Unmarshal(content, &parsed))
+		assert.False(t, parsed.ControlPlane.StatefulSet.Persistence.VolumeClaim.Enabled)
+	})
+
+	t.Run("no persistence override when not disabled", func(t *testing.T) {
+		t.Parallel()
+
+		files, cleanup, err := vclusterprovisioner.BuildValuesFilesForTest("", false, "", false)
+		require.NoError(t, err)
+
+		defer cleanup()
+
+		// No user values and no override → only the defaults file, with no persistence block.
+		require.Len(t, files, 1)
+
+		content, err := os.ReadFile(files[0])
+		require.NoError(t, err)
+
+		assert.NotContains(t, string(content), "persistence:")
 	})
 }

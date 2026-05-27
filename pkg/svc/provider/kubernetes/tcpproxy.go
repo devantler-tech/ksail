@@ -33,10 +33,14 @@ type tcpProxy struct {
 	requestID int
 }
 
-// newTCPProxy creates a TCP proxy listening on a random local port that forwards
-// to the given remote pod port via the SPDY dialer.
-func newTCPProxy(ctx context.Context, dialer httpstream.Dialer, remotePort int) (*tcpProxy, error) {
-	listener, err := newLocalListener(ctx)
+// newTCPProxy creates a TCP proxy listening on the given local port (0 = random) that
+// forwards to the given remote pod port via the SPDY dialer.
+func newTCPProxy(
+	ctx context.Context,
+	dialer httpstream.Dialer,
+	remotePort, localPort int,
+) (*tcpProxy, error) {
+	listener, err := newLocalListener(ctx, localPort)
 	if err != nil {
 		return nil, fmt.Errorf("tcp proxy: %w", err)
 	}

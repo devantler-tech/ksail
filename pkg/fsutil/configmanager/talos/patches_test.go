@@ -234,7 +234,7 @@ func TestConstants(t *testing.T) {
 	// Test that default constants are exported and have expected values
 	assert.Equal(t, "talos", talos.DefaultPatchesDir)
 	assert.Equal(t, "10.5.0.0/24", talos.DefaultNetworkCIDR)
-	assert.Equal(t, "1.32.0", talos.DefaultKubernetesVersion)
+	assert.Equal(t, "1.36.0", talos.DefaultKubernetesVersion)
 	assert.NotEmpty(t, talos.DefaultClusterName)
 	assert.Contains(t, talos.DefaultTalosImage, "talos")
 }

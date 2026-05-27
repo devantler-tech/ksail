@@ -126,4 +126,11 @@ type Interface interface {
 		ctx context.Context,
 		releaseName, namespace string,
 	) (map[string]any, error)
+	// RefreshDiscovery invalidates cached Kubernetes API discovery so subsequent
+	// operations observe CRDs (and other API resources) registered since the
+	// client was created. Helm caches discovery both on disk and in an in-memory
+	// RESTMapper; when CRDs are installed by one release and the custom resources
+	// that depend on them by another, the second install fails with "ensure CRDs
+	// are installed first" unless discovery is refreshed in between.
+	RefreshDiscovery() error
 }
