@@ -151,7 +151,7 @@ func configFingerprint(configBytes []byte) string {
 }
 
 // fetchRunningControlPlaneConfig discovers a control-plane node and returns its
-// running Talos machine config provider. It returns found=false when no
+// running Talos machine config provider. It returns (nil, false, nil) when no
 // control-plane node is reachable so callers can treat "cannot compare" as "no
 // detected drift" rather than failing the update. Shared by
 // detectDisruptiveConfigChanges and detectInPlaceMachineConfigDrift.
