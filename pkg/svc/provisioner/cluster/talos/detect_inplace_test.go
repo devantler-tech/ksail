@@ -2,11 +2,14 @@ package talosprovisioner_test
 
 import (
 	"testing"
+	"time"
 
-	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
+	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
 	talosprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/talos"
 	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
+	"github.com/siderolabs/talos/pkg/machinery/config/configloader"
 	taloscontainer "github.com/siderolabs/talos/pkg/machinery/config/container"
+	"github.com/siderolabs/talos/pkg/machinery/config/generate/secrets"
 	"github.com/siderolabs/talos/pkg/machinery/config/types/v1alpha1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -14,7 +17,7 @@ import (
 
 const sysctlRmemMax = "net.core.rmem_max"
 
-// wrapConfig wraps a v1alpha1.Config as a full Talos config provider (with Bytes()).
+// wrapConfig wraps a v1alpha1.Config as a full Talos config provider (with EncodeBytes()).
 func wrapConfig(cfg *v1alpha1.Config) talosconfig.Provider {
 	return taloscontainer.NewV1Alpha1(cfg)
 }
@@ -30,7 +33,7 @@ func baseConfig() *v1alpha1.Config {
 	}
 }
 
-func TestDiffMachineConfig(t *testing.T) { //nolint:funlen // table-driven tests
+func TestMachineConfigDiff(t *testing.T) { //nolint:funlen // table-driven tests
 	t.Parallel()
 
 	tests := []struct {
@@ -83,43 +86,74 @@ func TestDiffMachineConfig(t *testing.T) { //nolint:funlen // table-driven tests
 			desired := baseConfig()
 			testCase.mutate(desired)
 
-			changes, err := talosprovisioner.DiffMachineConfigForTest(
+			diff, err := talosprovisioner.MachineConfigDiffForTest(
 				wrapConfig(running),
 				wrapConfig(desired),
 			)
 			require.NoError(t, err)
 
-			if !testCase.wantDrift {
-				assert.Empty(t, changes, "identical configs must not report drift")
-
-				return
+			if testCase.wantDrift {
+				assert.NotEmpty(t, diff, "drift must produce a non-empty diff")
+			} else {
+				assert.Empty(t, diff, "identical configs must produce an empty diff")
 			}
-
-			require.Len(t, changes, 1)
-			assert.Equal(t, talosprovisioner.MachineConfigFieldForTest, changes[0].Field)
-			assert.Equal(t, clusterupdate.ChangeCategoryInPlace, changes[0].Category)
-			assert.NotEqual(
-				t,
-				changes[0].OldValue,
-				changes[0].NewValue,
-				"fingerprints must differ when configs drift",
-			)
 		})
 	}
+}
+
+// TestMachineConfigDiff_NoFalsePositiveOnUnchangedConfig guards the
+// generation+alignment path against phantom drift: it generates a real ksail
+// Talos config, parses it back (as Talos does on apply+store+read), then runs
+// the detection's alignment (extract secrets+endpoint, regenerate) and asserts
+// the diff is empty. This catches regressions where alignment or rendering
+// introduces drift on an unchanged config. (It cannot cover node-side
+// serialization, which only the Talos system test exercises.)
+func TestMachineConfigDiff_NoFalsePositiveOnUnchangedConfig(t *testing.T) {
+	t.Parallel()
+
+	configs, err := talosconfigmanager.NewDefaultConfigs()
+	require.NoError(t, err)
+
+	appliedBytes, err := configs.ControlPlane().Bytes()
+	require.NoError(t, err)
+
+	// "running" = node-like config: a parse round-trip of what ksail applied.
+	running, err := configloader.NewFromBytes(appliedBytes)
+	require.NoError(t, err)
+
+	// Reproduce alignedDesiredControlPlaneConfig against the running config.
+	bundle := secrets.NewBundleFromConfig(secrets.NewFixedClock(time.Now()), running)
+	aligned, err := configs.WithSecrets(bundle)
+	require.NoError(t, err)
+
+	if endpoint := running.Cluster().Endpoint().Hostname(); endpoint != "" {
+		aligned, err = aligned.WithEndpoint(endpoint)
+		require.NoError(t, err)
+	}
+
+	diff, err := talosprovisioner.MachineConfigDiffForTest(running, aligned.ControlPlane())
+	require.NoError(t, err)
+
+	assert.Empty(t, diff, "an unchanged config must not report drift after alignment")
 }
 
 func TestConfigFingerprint(t *testing.T) {
 	t.Parallel()
 
-	first := talosprovisioner.ConfigFingerprintForTest([]byte("alpha"))
-	second := talosprovisioner.ConfigFingerprintForTest([]byte("beta"))
+	running := wrapConfig(baseConfig())
 
-	assert.Len(t, first, 12, "fingerprint length is fixed")
-	assert.NotEqual(t, first, second, "different inputs produce different fingerprints")
+	changed := baseConfig()
+	changed.MachineConfig.MachineSysctls["kernel.kptr_restrict"] = "2"
+
+	fpRunning := talosprovisioner.ConfigFingerprintForTest(running)
+	fpChanged := talosprovisioner.ConfigFingerprintForTest(wrapConfig(changed))
+
+	assert.Len(t, fpRunning, 12, "fingerprint length is fixed")
 	assert.Equal(
 		t,
-		first,
-		talosprovisioner.ConfigFingerprintForTest([]byte("alpha")),
-		"fingerprint is deterministic",
+		fpRunning,
+		talosprovisioner.ConfigFingerprintForTest(wrapConfig(baseConfig())),
+		"fingerprint is deterministic for equal configs",
 	)
+	assert.NotEqual(t, fpRunning, fpChanged, "different configs produce different fingerprints")
 }

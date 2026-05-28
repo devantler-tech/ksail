@@ -1,16 +1,18 @@
 package talosprovisioner
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/cosi-project/runtime/pkg/safe"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
+	"github.com/siderolabs/talos/pkg/machinery/config/configdiff"
+	"github.com/siderolabs/talos/pkg/machinery/config/encoder"
 	"github.com/siderolabs/talos/pkg/machinery/config/generate/secrets"
 	talosresconfig "github.com/siderolabs/talos/pkg/machinery/resources/config"
 )
@@ -19,6 +21,14 @@ import (
 // fingerprint in the change summary — enough to distinguish two renders at a
 // glance without dumping the whole config into the table.
 const fingerprintLength = 12
+
+// redactedSecretPlaceholder replaces secret values before diffing/fingerprinting
+// so the comparison never trips on PKI and any surfaced diff is safe to print.
+const redactedSecretPlaceholder = "<redacted>"
+
+// maxDriftDiffLines caps how much of the machine-config diff is echoed to the
+// change summary so it stays readable; the full config is re-applied regardless.
+const maxDriftDiffLines = 60
 
 // MachineConfigField is the change field reported when the rendered Talos
 // machine config drifts from what is running on the nodes.
@@ -31,18 +41,25 @@ const MachineConfigField = "machine.config"
 // Talos patch files (everything under talos/, e.g. sysctls, kubelet config,
 // user namespaces, registries, API-server flags) are NOT part of ksail's
 // ClusterSpec, so the spec-level diff engine cannot see them. This compares the
-// fully rendered desired config against the running node config, which catches
-// any patch change — additions, edits, and removals alike — rather than a
-// hand-picked set of fields. Surfacing it from DiffConfig both shows the drift
-// in the change summary and triggers applyInPlaceConfigChanges, which re-pushes
-// the full machine config to every node (NO_REBOOT).
+// desired config against the running node config, which catches any patch change
+// — additions, edits, and removals alike — rather than a hand-picked set of
+// fields. Surfacing it from DiffConfig both shows the drift in the change
+// summary and triggers applyInPlaceConfigChanges, which re-pushes the full
+// machine config to every node (NO_REBOOT).
+//
+// The comparison uses configdiff.DiffConfigs — the same canonical, sorted-key,
+// comments-stripped diff that `talosctl apply-config --dry-run` uses — run
+// in-process. That normalisation is essential: a naive Bytes() comparison trips
+// on the doc/example comments and field ordering that a freshly-rendered config
+// carries but a node's stored config does not, producing phantom drift on an
+// unchanged cluster.
 //
 // The desired config is first realigned with the running cluster's PKI and
 // endpoint (see alignedDesiredControlPlaneConfig); without that, the
 // freshly-generated secrets and CIDR-derived endpoint that p.talosConfigs holds
-// at diff time would read as drift on every run. After alignment the only
-// remaining differences are genuine config/patch content — which is exactly
-// what cluster update should reconcile onto the nodes.
+// at diff time would read as drift on every run. Secrets are additionally
+// redacted on both sides before diffing as defence-in-depth and to keep the
+// surfaced diff safe to print.
 //
 // Caveats (accepted: ksail owns the node machine config):
 //   - Config not managed by ksail's bundle reads as drift and is reconciled away
@@ -80,15 +97,50 @@ func (p *Provisioner) detectInPlaceMachineConfigDrift(
 		return nil, nil
 	}
 
-	return diffMachineConfig(runningConfig, desiredConfig)
+	diff, err := machineConfigDiff(runningConfig, desiredConfig)
+	if err != nil {
+		return nil, err
+	}
+
+	if diff == "" {
+		return nil, nil
+	}
+
+	p.logMachineConfigDrift(diff)
+
+	return []clusterupdate.Change{
+		{
+			Field:    MachineConfigField,
+			OldValue: configFingerprint(runningConfig),
+			NewValue: configFingerprint(desiredConfig),
+			Category: clusterupdate.ChangeCategoryInPlace,
+			Reason:   "Talos machine config (patches) differs from running nodes; re-applied without reboot",
+		},
+	}, nil
+}
+
+// machineConfigDiff returns the Talos-native textual diff between the running and
+// desired configs, with secrets redacted. An empty string means no drift. It
+// delegates to configdiff.DiffConfigs, which encodes both sides with the
+// canonical, comments-stripped encoder before diffing.
+func machineConfigDiff(runningConfig, desiredConfig talosconfig.Provider) (string, error) {
+	diff, err := configdiff.DiffConfigs(
+		runningConfig.RedactSecrets(redactedSecretPlaceholder),
+		desiredConfig.RedactSecrets(redactedSecretPlaceholder),
+	)
+	if err != nil {
+		return "", fmt.Errorf("compute machine config diff: %w", err)
+	}
+
+	return diff, nil
 }
 
 // alignedDesiredControlPlaneConfig rebuilds the desired control-plane config with
 // the running cluster's PKI (extracted from the running config) and endpoint, so
-// a byte comparison reflects only patch/content drift rather than the
-// freshly-generated secrets and default endpoint that p.talosConfigs carries at
-// diff time. This mirrors syncSecretsFromCluster, which the apply phase relies on
-// so that pushed configs match the running cluster's PKI.
+// the diff reflects only patch/content drift rather than the freshly-generated
+// secrets and default endpoint that p.talosConfigs carries at diff time. This
+// mirrors syncSecretsFromCluster, which the apply phase relies on so that pushed
+// configs match the running cluster's PKI.
 func (p *Provisioner) alignedDesiredControlPlaneConfig(
 	runningConfig talosconfig.Provider,
 ) (talosconfig.Provider, error) {
@@ -110,42 +162,37 @@ func (p *Provisioner) alignedDesiredControlPlaneConfig(
 	return aligned.ControlPlane(), nil
 }
 
-// diffMachineConfig compares the rendered bytes of the running and desired
-// configs and returns a single in-place change when they differ. Both are
-// marshalled by the same Talos encoder, so semantically-equal configs produce
-// identical bytes; the fingerprints surface a before/after delta in the summary
-// without dumping the whole config.
-func diffMachineConfig(
-	runningConfig, desiredConfig talosconfig.Provider,
-) ([]clusterupdate.Change, error) {
-	runningBytes, err := runningConfig.Bytes()
-	if err != nil {
-		return nil, fmt.Errorf("marshal running machine config: %w", err)
+// logMachineConfigDrift prints the (already secret-redacted) diff so operators
+// can see what changed, truncated to keep the change summary readable.
+func (p *Provisioner) logMachineConfigDrift(diff string) {
+	lines := strings.Split(strings.TrimRight(diff, "\n"), "\n")
+	if len(lines) > maxDriftDiffLines {
+		omitted := len(lines) - maxDriftDiffLines
+		lines = append(
+			lines[:maxDriftDiffLines],
+			fmt.Sprintf("... (%d more diff lines)", omitted),
+		)
 	}
 
-	desiredBytes, err := desiredConfig.Bytes()
-	if err != nil {
-		return nil, fmt.Errorf("marshal desired machine config: %w", err)
-	}
-
-	if bytes.Equal(runningBytes, desiredBytes) {
-		return nil, nil
-	}
-
-	return []clusterupdate.Change{
-		{
-			Field:    MachineConfigField,
-			OldValue: configFingerprint(runningBytes),
-			NewValue: configFingerprint(desiredBytes),
-			Category: clusterupdate.ChangeCategoryInPlace,
-			Reason:   "Talos machine config (patches) differs from running nodes; re-applied without reboot",
-		},
-	}, nil
+	_, _ = fmt.Fprintf(
+		p.logWriter,
+		"  Machine config drift (secrets redacted):\n%s\n",
+		strings.Join(lines, "\n"),
+	)
 }
 
-// configFingerprint returns a short, stable hex fingerprint of a rendered config.
-func configFingerprint(configBytes []byte) string {
-	sum := sha256.Sum256(configBytes)
+// configFingerprint returns a short, stable hex fingerprint of a provider's
+// redacted, canonical, comments-stripped encoding — the same normalisation
+// machineConfigDiff uses, so equal fingerprints imply an empty diff.
+func configFingerprint(provider talosconfig.Provider) string {
+	canonical, err := provider.
+		RedactSecrets(redactedSecretPlaceholder).
+		EncodeBytes(encoder.WithComments(encoder.CommentsDisabled))
+	if err != nil {
+		return "unknown"
+	}
+
+	sum := sha256.Sum256(canonical)
 
 	return hex.EncodeToString(sum[:])[:fingerprintLength]
 }
