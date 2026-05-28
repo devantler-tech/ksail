@@ -396,6 +396,16 @@ var CNINameForTest = cniName
 //nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
 var DiskQuotaEnabledForTest = diskQuotaEnabled
 
+// DetectInPlaceMachineConfigChangesForTest exposes detectInPlaceMachineConfigChanges for unit testing.
+//
+//nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
+var DetectInPlaceMachineConfigChangesForTest = detectInPlaceMachineConfigChanges
+
+// StringMapsEqualForTest exposes stringMapsEqual for unit testing.
+//
+//nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
+var StringMapsEqualForTest = stringMapsEqual
+
 // ValidateCurrentContextCAForTest exposes validateCurrentContextCA for unit testing.
 //
 //nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.

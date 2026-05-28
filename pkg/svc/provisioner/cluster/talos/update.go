@@ -249,9 +249,15 @@ func (p *Provisioner) applyUpdateChanges(
 }
 
 // DiffConfig computes the differences between current and desired configurations.
+//
+// Besides comparing the spec-level node counts, it performs a live comparison of
+// in-place-applicable machine tunables (sysctls/sysfs) against the running
+// control-plane node. Those come from Talos patch files that are not part of the
+// ClusterSpec, so this is the only place drift in them surfaces — both in the
+// change summary and as the trigger for re-pushing config to existing nodes.
 func (p *Provisioner) DiffConfig(
-	_ context.Context,
-	_ string,
+	ctx context.Context,
+	name string,
 	oldSpec, newSpec *v1alpha1.ClusterSpec,
 ) (*clusterupdate.UpdateResult, error) {
 	// Talos clusters support in-place changes for most config paths.
@@ -287,7 +293,37 @@ func (p *Provisioner) DiffConfig(
 		})
 	}
 
+	p.appendInPlaceMachineConfigDrift(ctx, name, result)
+
 	return result, nil
+}
+
+// appendInPlaceMachineConfigDrift detects drift in in-place-applicable machine
+// tunables (sysctls/sysfs) against the running control-plane node and appends any
+// changes to the diff. Detection failures are non-fatal and logged: they must not
+// turn DiffConfig into an error, or callers (computeUpdateDiff, the drift display)
+// would drop the spec-level diff entirely. A clean unreachable cluster yields no
+// changes (the guard short-circuits before any network call when configs are
+// absent, e.g. in unit tests).
+func (p *Provisioner) appendInPlaceMachineConfigDrift(
+	ctx context.Context,
+	name string,
+	result *clusterupdate.UpdateResult,
+) {
+	clusterName := p.resolveClusterName(name)
+
+	changes, err := p.detectInPlaceMachineConfigDrift(ctx, clusterName)
+	if err != nil {
+		_, _ = fmt.Fprintf(
+			p.logWriter,
+			"  ⚠ Failed to detect machine config drift: %v\n",
+			err,
+		)
+
+		return
+	}
+
+	result.InPlaceChanges = append(result.InPlaceChanges, changes...)
 }
 
 // applyNodeScalingChanges handles adding or removing Talos nodes.
