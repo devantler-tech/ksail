@@ -316,7 +316,8 @@ func (p *Provisioner) appendInPlaceMachineConfigDrift(
 	if err != nil {
 		_, _ = fmt.Fprintf(
 			p.logWriter,
-			"  ⚠ Failed to detect machine config drift: %v\n",
+			"  ⚠ Failed to detect machine config drift for cluster %q: %v\n",
+			clusterName,
 			err,
 		)
 
