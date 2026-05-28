@@ -4,7 +4,6 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/devantler-tech/ksail/v7)](https://goreportcard.com/report/github.com/devantler-tech/ksail/v7)
 [![License](https://img.shields.io/badge/License-PolyForm--Shield--1.0.0-blue.svg)](https://polyformproject.org/licenses/shield/1.0.0)
 [![Go Reference](https://pkg.go.dev/badge/github.com/devantler-tech/ksail/v7.svg)](https://pkg.go.dev/github.com/devantler-tech/ksail/v7)
-[![codecov](https://codecov.io/gh/devantler-tech/ksail/graph/badge.svg?token=HSUfhaiXwq)](https://app.codecov.io/gh/devantler-tech/ksail)
 [![CI - KSail](https://github.com/devantler-tech/ksail/actions/workflows/ci.yaml/badge.svg)](https://github.com/devantler-tech/ksail/actions/workflows/ci.yaml)
 [![MCP Registry](https://img.shields.io/badge/MCP_Registry-io.github.devantler--tech/ksail-blue?logo=github)](https://github.com/mcp)
 
