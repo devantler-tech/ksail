@@ -42,9 +42,11 @@ builds:
     ldflags:
       - -s -w
     hooks:
-      # Generate the bundle Info.plist with the release version for inclusion in the archive.
+      # Generate the bundle Info.plist (with the release version) and the Dock/Finder icon for
+      # inclusion in the archive.
       post:
         - cmd: bash desktop/scripts/make-info-plist.sh "{{ .Version }}" "desktop/build/Info.plist"
+        - cmd: bash desktop/scripts/make-icns.sh "desktop/resources/icon.png" "desktop/build/AppIcon.icns"
 
 archives:
   - id: ksail-desktop
@@ -52,11 +54,13 @@ archives:
     formats: [zip]
     wrap_in_directory: false
     name_template: "KSail_{{ .Version }}_darwin_{{ .Arch }}"
-    # The build emits KSail.app/Contents/MacOS/ksail-desktop; add the Info.plist alongside it so the
-    # archive holds a complete KSail.app bundle.
+    # The build emits KSail.app/Contents/MacOS/ksail-desktop; add the Info.plist and AppIcon.icns
+    # alongside it so the archive holds a complete, icon-bearing KSail.app bundle.
     files:
       - src: desktop/build/Info.plist
         dst: KSail.app/Contents/Info.plist
+      - src: desktop/build/AppIcon.icns
+        dst: KSail.app/Contents/Resources/AppIcon.icns
 
 homebrew_casks:
   - name: ksail-desktop
