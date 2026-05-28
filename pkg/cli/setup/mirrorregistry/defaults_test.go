@@ -238,6 +238,24 @@ func TestGetMirrorRegistriesWithDefaults(t *testing.T) {
 			provider:       v1alpha1.ProviderOmni,
 			expectedResult: []string{},
 		},
+		// Kubernetes provider tests - defaults apply (nested clusters run their own
+		// pull-through mirrors inside the DinD environment, unlike cloud providers).
+		{
+			name:           "Kubernetes: no flag, no config -> defaults",
+			flagValues:     nil,
+			flagChanged:    false,
+			configValues:   nil,
+			provider:       v1alpha1.ProviderKubernetes,
+			expectedResult: mirrorregistry.DefaultMirrors,
+		},
+		{
+			name:           "Kubernetes: flag with values -> flag replaces defaults",
+			flagValues:     []string{"docker.io=https://registry-1.docker.io"},
+			flagChanged:    true,
+			configValues:   nil,
+			provider:       v1alpha1.ProviderKubernetes,
+			expectedResult: []string{"docker.io=https://registry-1.docker.io"},
+		},
 	}
 
 	for _, testCase := range tests {

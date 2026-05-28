@@ -21,4 +21,7 @@ chmod +x "$app/Contents/MacOS/$executable"
 
 bash "$script_dir/make-info-plist.sh" "$version" "$app/Contents/Info.plist"
 
+# Generate the Dock/Finder icon (referenced by CFBundleIconFile=AppIcon in the Info.plist).
+bash "$script_dir/make-icns.sh" "$script_dir/../resources/icon.png" "$app/Contents/Resources/AppIcon.icns"
+
 echo "built $app (version $version)"

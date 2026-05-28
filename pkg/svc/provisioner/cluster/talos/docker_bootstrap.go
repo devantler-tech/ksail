@@ -16,10 +16,13 @@ const (
 	// ready during initial creation. Docker clusters typically become ready in 5-7 minutes;
 	// 10 minutes provides sufficient margin while failing faster than the cloud default.
 	dockerClusterCreateTimeout = 10 * time.Minute
-	// dockerClusterReadinessTimeout defines how long to wait for Docker cluster to become ready
-	// after a start operation. Since the cluster is already bootstrapped, it should come up
-	// faster than a fresh create.
-	dockerClusterReadinessTimeout = 3 * time.Minute
+	// dockerClusterReadinessTimeout defines how long to wait for a Docker cluster to become
+	// ready after a start operation. Although the cluster is already bootstrapped, etcd
+	// quorum/leader re-election after a stop/start can be slow on a loaded CI runner —
+	// especially right after exercising the nested Kubernetes-provider suite on the same host —
+	// and was observed taking ~8–9 minutes there. Match the create timeout so a legitimately
+	// slow restart is not mistaken for a failure.
+	dockerClusterReadinessTimeout = 10 * time.Minute
 )
 
 // waitForDockerClusterReadyAfterStart waits for a Docker cluster to be ready after starting.

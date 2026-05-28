@@ -62,7 +62,7 @@ type Configs struct {
 // This is used when no scaffolded project exists and default configurations are needed.
 // It creates a valid config bundle with:
 //   - Cluster name: DefaultClusterName ("talos-default")
-//   - Kubernetes version: DefaultKubernetesVersion ("1.32.0")
+//   - Kubernetes version: DefaultKubernetesVersion ("1.36.0")
 //   - Network CIDR: DefaultNetworkCIDR ("10.5.0.0/24")
 //   - allowSchedulingOnControlPlanes: true (for single-node/control-plane-only clusters)
 func NewDefaultConfigs() (*Configs, error) {
@@ -308,6 +308,26 @@ func buildCertSANsPatch(sans []string) Patch {
 
 	return Patch{
 		Path:    "ksail-exposure-cert-sans",
+		Scope:   PatchScopeCluster,
+		Content: []byte(content),
+	}
+}
+
+// APIServerFeatureGatesPatch builds a cluster-scope patch that enables the
+// MutatingAdmissionPolicy feature gate and the admissionregistration.k8s.io/v1beta1
+// API on the kube-apiserver. Calico v3.30+ ships MutatingAdmissionPolicy resources in
+// its CRD chart that require this API. Talos cluster.apiServer.extraArgs is a
+// string→string map, so values carry no leading dashes. Apply it only for clusters
+// using the Calico CNI.
+func APIServerFeatureGatesPatch() Patch {
+	content := "cluster:\n" +
+		"  apiServer:\n" +
+		"    extraArgs:\n" +
+		"      feature-gates: MutatingAdmissionPolicy=true\n" +
+		"      runtime-config: admissionregistration.k8s.io/v1beta1=true\n"
+
+	return Patch{
+		Path:    "ksail-apiserver-feature-gates",
 		Scope:   PatchScopeCluster,
 		Content: []byte(content),
 	}

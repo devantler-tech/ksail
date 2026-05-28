@@ -343,6 +343,68 @@ func TestStartErrorDockerStartFailed(t *testing.T) {
 	)
 }
 
+func TestStartWaitsForReady(t *testing.T) {
+	t.Parallel()
+	provisioner, infraProvider, _ := newProvisionerForTest(t)
+	infraProvider.On("StartNodes", mock.Anything, "cfg-name").Return(nil)
+
+	var (
+		gotKubeconfig string
+		gotContext    string
+		called        bool
+	)
+
+	provisioner.WithWaitForReadyForTest(
+		func(_ context.Context, kubeconfigPath, contextName string) error {
+			called = true
+			gotKubeconfig = kubeconfigPath
+			gotContext = contextName
+
+			return nil
+		},
+	)
+
+	err := provisioner.Start(context.Background(), "")
+
+	require.NoError(t, err, "Start()")
+	assert.True(t, called, "Start() should wait for cluster readiness")
+	assert.Equal(t, "~/.kube/config", gotKubeconfig, "readiness wait kubeconfig path")
+	assert.Equal(t, "kind-cfg-name", gotContext, "readiness wait context name")
+}
+
+func TestStartReturnsWaitForReadyError(t *testing.T) {
+	t.Parallel()
+	provisioner, infraProvider, _ := newProvisionerForTest(t)
+	infraProvider.On("StartNodes", mock.Anything, "cfg-name").Return(nil)
+
+	provisioner.WithWaitForReadyForTest(
+		func(_ context.Context, _, _ string) error { return errStartClusterFailed },
+	)
+
+	err := provisioner.Start(context.Background(), "")
+
+	require.ErrorIs(t, err, errStartClusterFailed, "Start()")
+	assert.ErrorContains(t, err, "wait for kind cluster ready", "Start()")
+}
+
+func TestStartSkipsWaitWhenStartNodesFails(t *testing.T) {
+	t.Parallel()
+	provisioner, infraProvider, _ := newProvisionerForTest(t)
+	infraProvider.On("StartNodes", mock.Anything, "cfg-name").Return(errStartClusterFailed)
+
+	provisioner.WithWaitForReadyForTest(
+		func(_ context.Context, _, _ string) error {
+			t.Error("readiness wait must not run when StartNodes fails")
+
+			return nil
+		},
+	)
+
+	err := provisioner.Start(context.Background(), "")
+
+	require.Error(t, err, "Start() should fail when StartNodes fails")
+}
+
 func TestStopErrorClusterNotFound(t *testing.T) {
 	t.Parallel()
 	runClusterNotFoundTest(t, "Stop", func(p *kindprovisioner.Provisioner) error {
@@ -414,6 +476,8 @@ func newProvisionerForTest(
 		kindProvider,
 		infraProvider,
 		runner,
+	).WithWaitForReadyForTest(
+		func(_ context.Context, _, _ string) error { return nil },
 	)
 
 	return provisioner, infraProvider, runner

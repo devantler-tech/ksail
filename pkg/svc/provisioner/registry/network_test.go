@@ -3,13 +3,18 @@ package registry_test
 import (
 	"bytes"
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/client/docker"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/registry"
+	"github.com/docker/docker/api/types/network"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
+
+var errNetworkBoom = errors.New("boom")
 
 // --- calculateRegistryIPs ---
 
@@ -263,4 +268,183 @@ func TestCleanupRegistries_EmptyRegistries_ReturnsNil(t *testing.T) {
 	)
 
 	require.NoError(t, err)
+}
+
+// --- EnsureNetwork ---
+
+func TestEnsureNetwork_ExistingNetwork_ShortCircuits(t *testing.T) {
+	t.Parallel()
+
+	mockClient := docker.NewMockAPIClient(t)
+	ctx := context.Background()
+
+	// Network already exists: NetworkList returns a match, so NetworkCreate must
+	// not be called (the strict mock fails the test if it is).
+	mockClient.EXPECT().
+		NetworkList(ctx, mock.Anything).
+		Return([]network.Summary{{Name: "existing-net"}}, nil).
+		Once()
+
+	err := registry.EnsureNetwork(
+		ctx,
+		mockClient,
+		"existing-net",
+		"10.5.0.0/24",
+		registry.DefaultNetworkMTU,
+		&bytes.Buffer{},
+	)
+	require.NoError(t, err)
+}
+
+func TestEnsureNetwork_CreatePath_SetsTalosLabelsOptionsAndSubnet(t *testing.T) {
+	t.Parallel()
+
+	mockClient := docker.NewMockAPIClient(t)
+	ctx := context.Background()
+
+	mockClient.EXPECT().
+		NetworkList(ctx, mock.Anything).
+		Return([]network.Summary{}, nil).
+		Once()
+
+	var captured network.CreateOptions
+
+	mockClient.EXPECT().
+		NetworkCreate(ctx, "new-net", mock.Anything).
+		Run(func(_ context.Context, _ string, opts network.CreateOptions) {
+			captured = opts
+		}).
+		Return(network.CreateResponse{}, nil).
+		Once()
+
+	err := registry.EnsureNetwork(
+		ctx,
+		mockClient,
+		"new-net",
+		"10.5.0.0/24",
+		registry.DefaultNetworkMTU,
+		&bytes.Buffer{},
+	)
+	require.NoError(t, err)
+
+	assert.Equal(t, "bridge", captured.Driver)
+	assert.Equal(t, "true", captured.Labels["talos.owned"])
+	assert.Equal(t, "new-net", captured.Labels["talos.cluster.name"])
+	assert.Equal(t, registry.DefaultNetworkMTU, captured.Options["com.docker.network.driver.mtu"])
+	assert.Equal(t, "true", captured.Options["com.docker.network.bridge.enable_icc"])
+	assert.Equal(t, "true", captured.Options["com.docker.network.bridge.enable_ip_masquerade"])
+	require.NotNil(t, captured.IPAM)
+	require.Len(t, captured.IPAM.Config, 1)
+	assert.Equal(t, "10.5.0.0/24", captured.IPAM.Config[0].Subnet)
+}
+
+func TestEnsureNetwork_EmptyCIDR_OmitsIPAM(t *testing.T) {
+	t.Parallel()
+
+	mockClient := docker.NewMockAPIClient(t)
+	ctx := context.Background()
+
+	mockClient.EXPECT().
+		NetworkList(ctx, mock.Anything).
+		Return([]network.Summary{}, nil).
+		Once()
+
+	var captured network.CreateOptions
+
+	mockClient.EXPECT().
+		NetworkCreate(ctx, "no-cidr", mock.Anything).
+		Run(func(_ context.Context, _ string, opts network.CreateOptions) {
+			captured = opts
+		}).
+		Return(network.CreateResponse{}, nil).
+		Once()
+
+	err := registry.EnsureNetwork(
+		ctx,
+		mockClient,
+		"no-cidr",
+		"",
+		registry.DefaultNetworkMTU,
+		&bytes.Buffer{},
+	)
+	require.NoError(t, err)
+	assert.Nil(t, captured.IPAM)
+}
+
+func TestEnsureNetwork_NetworkListError_IsWrapped(t *testing.T) {
+	t.Parallel()
+
+	mockClient := docker.NewMockAPIClient(t)
+	ctx := context.Background()
+
+	mockClient.EXPECT().
+		NetworkList(ctx, mock.Anything).
+		Return(nil, errNetworkBoom).
+		Once()
+
+	err := registry.EnsureNetwork(
+		ctx,
+		mockClient,
+		"net",
+		"10.5.0.0/24",
+		registry.DefaultNetworkMTU,
+		&bytes.Buffer{},
+	)
+	require.ErrorIs(t, err, errNetworkBoom)
+	assert.Contains(t, err.Error(), "failed to list networks")
+}
+
+func TestEnsureNetwork_NetworkCreateError_IsWrapped(t *testing.T) {
+	t.Parallel()
+
+	mockClient := docker.NewMockAPIClient(t)
+	ctx := context.Background()
+
+	mockClient.EXPECT().
+		NetworkList(ctx, mock.Anything).
+		Return([]network.Summary{}, nil).
+		Once()
+	mockClient.EXPECT().
+		NetworkCreate(ctx, "net", mock.Anything).
+		Return(network.CreateResponse{}, errNetworkBoom).
+		Once()
+
+	err := registry.EnsureNetwork(
+		ctx,
+		mockClient,
+		"net",
+		"10.5.0.0/24",
+		registry.DefaultNetworkMTU,
+		&bytes.Buffer{},
+	)
+	require.ErrorIs(t, err, errNetworkBoom)
+	assert.Contains(t, err.Error(), "failed to create network")
+}
+
+func TestEnsureNetwork_HonorsCustomMTU(t *testing.T) {
+	t.Parallel()
+
+	mockClient := docker.NewMockAPIClient(t)
+	ctx := context.Background()
+
+	mockClient.EXPECT().
+		NetworkList(ctx, mock.Anything).
+		Return([]network.Summary{}, nil).
+		Once()
+
+	var captured network.CreateOptions
+
+	mockClient.EXPECT().
+		NetworkCreate(ctx, "nested-net", mock.Anything).
+		Run(func(_ context.Context, _ string, opts network.CreateOptions) {
+			captured = opts
+		}).
+		Return(network.CreateResponse{}, nil).
+		Once()
+
+	err := registry.EnsureNetwork(
+		ctx, mockClient, "nested-net", "10.5.0.0/24", registry.NestedNetworkMTU, &bytes.Buffer{},
+	)
+	require.NoError(t, err)
+	assert.Equal(t, registry.NestedNetworkMTU, captured.Options["com.docker.network.driver.mtu"])
 }

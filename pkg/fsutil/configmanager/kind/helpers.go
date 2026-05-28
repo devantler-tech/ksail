@@ -149,6 +149,35 @@ func ApplyImageVerificationPatches(kindConfig *kindv1alpha4.Cluster) {
 	)
 }
 
+// APIServerMutatingAdmissionPolicyFeatureGate is the feature gate enabling the
+// MutatingAdmissionPolicy admission feature.
+const APIServerMutatingAdmissionPolicyFeatureGate = "MutatingAdmissionPolicy"
+
+// APIServerAdmissionregistrationV1beta1RuntimeConfig is the runtime-config key that
+// serves the admissionregistration.k8s.io/v1beta1 API (which carries
+// MutatingAdmissionPolicy / MutatingAdmissionPolicyBinding).
+const APIServerAdmissionregistrationV1beta1RuntimeConfig = "admissionregistration.k8s.io/v1beta1"
+
+// ApplyAPIServerFeatureGates enables the MutatingAdmissionPolicy feature gate and the
+// admissionregistration.k8s.io/v1beta1 API on the kube-apiserver using Kind's native
+// featureGates / runtimeConfig fields. Kind translates these into the kube-apiserver
+// --feature-gates / --runtime-config flags (KubeadmConfigPatches for apiServer.extraArgs
+// did not reliably reach the apiserver). Calico v3.30+ ships MutatingAdmissionPolicy
+// resources in its CRD chart that require this API. Idempotent.
+func ApplyAPIServerFeatureGates(kindConfig *kindv1alpha4.Cluster) {
+	if kindConfig.FeatureGates == nil {
+		kindConfig.FeatureGates = map[string]bool{}
+	}
+
+	kindConfig.FeatureGates[APIServerMutatingAdmissionPolicyFeatureGate] = true
+
+	if kindConfig.RuntimeConfig == nil {
+		kindConfig.RuntimeConfig = map[string]string{}
+	}
+
+	kindConfig.RuntimeConfig[APIServerAdmissionregistrationV1beta1RuntimeConfig] = "true"
+}
+
 // ApplyOIDCPatches adds kubeadm config patches to configure the API server with OIDC flags.
 // The patch is applied to all control-plane nodes via KubeadmConfigPatches.
 // When a CA file is configured, an extraMount is added to make the host CA file

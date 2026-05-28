@@ -20,6 +20,15 @@ func (p *Provider) SetupDinD(
 		return fmt.Errorf("ensure namespace: %w", err)
 	}
 
+	// The DinD pod references the namespace's default ServiceAccount, which the
+	// ServiceAccount controller provisions asynchronously. Wait for it so pod creation
+	// does not race ahead with "serviceaccount default not found" (notably right after a
+	// cluster restart, when the controller is still reconciling new namespaces).
+	err = p.WaitForDefaultServiceAccount(ctx, clusterName)
+	if err != nil {
+		return fmt.Errorf("wait for default service account: %w", err)
+	}
+
 	err = p.CreateDinDPod(ctx, clusterName, distribution, persistence)
 	if err != nil {
 		return fmt.Errorf("create DinD pod: %w", err)

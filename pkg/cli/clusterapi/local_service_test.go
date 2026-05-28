@@ -2,6 +2,7 @@ package clusterapi_test
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"sync"
 	"testing"
@@ -11,6 +12,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/cli/clusterapi"
 	"github.com/devantler-tech/ksail/v7/pkg/operator/api"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -18,6 +20,13 @@ import (
 const (
 	eventuallyTimeout = 2 * time.Second
 	eventuallyTick    = 10 * time.Millisecond
+)
+
+// Static sentinel errors used to drive provisioner failures in tests (err113 forbids inline
+// errors.New at the call site).
+var (
+	errSimulatedCreateFailure = errors.New("simulated create failure")
+	errSimulatedDeleteFailure = errors.New("docker refused to remove container")
 )
 
 // fakeProvisioner is an in-memory clusterprovisioner.Provisioner. Its List reflects the clusters it
@@ -65,6 +74,12 @@ func (f *fakeProvisioner) Delete(_ context.Context, name string) error {
 
 	if f.deleteErr != nil {
 		return f.deleteErr
+	}
+
+	// Mirror the real provisioners (e.g. Kind): deleting a cluster that does not exist returns
+	// ErrClusterNotFound rather than silently succeeding.
+	if !slices.Contains(f.clusters, name) {
+		return clustererr.ErrClusterNotFound
 	}
 
 	f.clusters = slices.DeleteFunc(f.clusters, func(existing string) bool {
@@ -251,6 +266,74 @@ func TestDeleteIsAsyncAndRemovesCluster(t *testing.T) {
 	}, eventuallyTimeout, eventuallyTick)
 
 	assert.Equal(t, []string{"old"}, provisioner.deletedNames())
+}
+
+// TestDeleteClearsFailedClusterWithNoUnderlyingCluster reproduces the bug where a cluster left in
+// the Failed phase by a failed create could never be removed from the web UI: deleting it called
+// the provisioner's Delete, which returned ErrClusterNotFound (there is no cluster to delete), and
+// the entry was pinned Failed forever. Deleting must instead be idempotent and clear the entry.
+func TestDeleteClearsFailedClusterWithNoUnderlyingCluster(t *testing.T) {
+	t.Parallel()
+
+	// createErr makes the background create fail, leaving "broken" tracked as Failed with no live
+	// cluster behind it (List/Exists report it absent, exactly like a half-finished Kind create).
+	provisioner := &fakeProvisioner{createErr: errSimulatedCreateFailure}
+	service := newTestService(map[v1alpha1.Distribution]*fakeProvisioner{
+		v1alpha1.DistributionVanilla: provisioner,
+	})
+
+	_, err := service.Create(
+		context.Background(),
+		clusterFor("broken", v1alpha1.DistributionVanilla),
+	)
+	require.NoError(t, err)
+
+	require.Eventually(t, func() bool {
+		list, listErr := service.List(context.Background())
+		require.NoError(t, listErr)
+
+		phase, ok := phaseOf(list, "broken")
+
+		return ok && phase == v1alpha1.ClusterPhaseFailed
+	}, eventuallyTimeout, eventuallyTick)
+
+	// Deleting the Failed cluster must clear it from the list, not re-pin it as Failed.
+	require.NoError(t, service.Delete(context.Background(), "default", "broken"))
+
+	require.Eventually(t, func() bool {
+		list, listErr := service.List(context.Background())
+		require.NoError(t, listErr)
+
+		_, present := phaseOf(list, "broken")
+
+		return !present
+	}, eventuallyTimeout, eventuallyTick)
+}
+
+// TestDeleteKeepsClusterFailedWhenDeletionErrors ensures a genuine deletion failure (the cluster
+// exists but Delete errors) still surfaces as Failed, so real problems are not hidden by the
+// idempotent "already gone" handling above.
+func TestDeleteKeepsClusterFailedWhenDeletionErrors(t *testing.T) {
+	t.Parallel()
+
+	provisioner := &fakeProvisioner{
+		clusters:  []string{"stuck"},
+		deleteErr: errSimulatedDeleteFailure,
+	}
+	service := newTestService(map[v1alpha1.Distribution]*fakeProvisioner{
+		v1alpha1.DistributionVanilla: provisioner,
+	})
+
+	require.NoError(t, service.Delete(context.Background(), "default", "stuck"))
+
+	require.Eventually(t, func() bool {
+		list, listErr := service.List(context.Background())
+		require.NoError(t, listErr)
+
+		phase, ok := phaseOf(list, "stuck")
+
+		return ok && phase == v1alpha1.ClusterPhaseFailed
+	}, eventuallyTimeout, eventuallyTick)
 }
 
 func TestCreateValidatesInput(t *testing.T) {
