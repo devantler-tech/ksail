@@ -55,6 +55,48 @@ func ReadFileSafe(basePath, filePath string) ([]byte, error) {
 	return data, nil
 }
 
+// ForEachYAMLFile walks the .yaml/.yml files (non-recursively) in dir and calls
+// callback with each file's path and contents. The directory is canonicalized
+// and each file is read with ReadFileSafe, so reads are confined to dir.
+// Iteration stops early and returns the error if callback returns a non-nil
+// error (callers can use a sentinel error to break on a match).
+func ForEachYAMLFile(dir string, callback func(path string, content []byte) error) error {
+	canonDir, err := EvalCanonicalPath(dir)
+	if err != nil {
+		return fmt.Errorf("resolving directory %s: %w", dir, err)
+	}
+
+	entries, err := os.ReadDir(canonDir)
+	if err != nil {
+		return fmt.Errorf("reading directory %s: %w", canonDir, err)
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		name := entry.Name()
+		if !strings.HasSuffix(name, ".yaml") && !strings.HasSuffix(name, ".yml") {
+			continue
+		}
+
+		filePath := filepath.Join(canonDir, name)
+
+		content, readErr := ReadFileSafe(canonDir, filePath)
+		if readErr != nil {
+			return fmt.Errorf("reading %s: %w", filePath, readErr)
+		}
+
+		callbackErr := callback(filePath, content)
+		if callbackErr != nil {
+			return callbackErr
+		}
+	}
+
+	return nil
+}
+
 // EvalCanonicalPath returns the absolute, symlink-resolved form of a path.
 // If the path itself does not exist, it resolves the parent directory's symlinks
 // and appends the final component, so that containment checks remain accurate for

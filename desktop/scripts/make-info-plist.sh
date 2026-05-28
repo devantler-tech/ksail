@@ -19,6 +19,7 @@ cat >"$out" <<PLIST
   <key>CFBundleDisplayName</key><string>KSail</string>
   <key>CFBundleIdentifier</key><string>tech.devantler.ksail.desktop</string>
   <key>CFBundleExecutable</key><string>ksail-desktop</string>
+  <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>CFBundleVersion</key><string>${version}</string>
   <key>CFBundleShortVersionString</key><string>${version}</string>
   <key>CFBundlePackageType</key><string>APPL</string>

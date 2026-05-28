@@ -10,6 +10,7 @@ package clusterapi
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"slices"
@@ -21,6 +22,7 @@ import (
 	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
 	"github.com/devantler-tech/ksail/v7/pkg/operator/api"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
 
@@ -286,7 +288,12 @@ func (s *Service) runDelete(ctx context.Context, name string, distribution v1alp
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if err != nil {
+	// Deleting must be idempotent. ErrClusterNotFound means there is nothing to delete — a failed
+	// create that produced no cluster, a cluster removed out-of-band, or a race where it vanished
+	// between enumeration and Delete. Treat it as success and clear the tracked entry; otherwise the
+	// job stays pinned Failed and the UI row can never be dismissed (forcing an app restart or a
+	// fallback to `ksail cluster delete --name`). Only genuine failures are surfaced as Failed.
+	if err != nil && !errors.Is(err, clustererr.ErrClusterNotFound) {
 		slog.Error("cluster deletion failed",
 			"cluster", name, "distribution", distribution, "error", err)
 

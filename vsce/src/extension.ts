@@ -108,18 +108,24 @@ export async function activate(
     );
   }
 
+  // Refresh all KSail-related Kubernetes views (the cloud explorer tree plus the
+  // Kubernetes extension's cloud and cluster explorers) when they are available.
+  const refreshAllViews = (): void => {
+    cloudTreeProvider.refresh();
+    if (cloudExplorerAPI.available) {
+      cloudExplorerAPI.api.refresh();
+    }
+    if (clusterExplorerAPI.available) {
+      clusterExplorerAPI.api.refresh();
+    }
+  };
+
   // Register with the Kubernetes extension's Cluster Provider ("Create Cluster" wizard)
   const clusterProviderAPI = await k8s.extension.clusterProvider.v1;
   if (clusterProviderAPI.available) {
     const ksailClusterProvider = createKSailClusterProvider(outputChannel, () => {
       // Refresh cloud explorer when a cluster is created via the wizard
-      cloudTreeProvider.refresh();
-      if (cloudExplorerAPI.available) {
-        cloudExplorerAPI.api.refresh();
-      }
-      if (clusterExplorerAPI.available) {
-        clusterExplorerAPI.api.refresh();
-      }
+      refreshAllViews();
     });
     clusterProviderAPI.api.register(ksailClusterProvider);
     outputChannel.appendLine("Registered KSail with Kubernetes Cluster Provider");
@@ -138,13 +144,7 @@ export async function activate(
     // Refresh on context switch
     context.subscriptions.push(
       configAPI.api.onDidChangeContext(() => {
-        cloudTreeProvider.refresh();
-        if (cloudExplorerAPI.available) {
-          cloudExplorerAPI.api.refresh();
-        }
-        if (clusterExplorerAPI.available) {
-          clusterExplorerAPI.api.refresh();
-        }
+        refreshAllViews();
       })
     );
 
@@ -160,13 +160,7 @@ export async function activate(
     // Refresh on kubeconfig path change
     context.subscriptions.push(
       configAPI.api.onDidChangeKubeconfigPath(() => {
-        cloudTreeProvider.refresh();
-        if (cloudExplorerAPI.available) {
-          cloudExplorerAPI.api.refresh();
-        }
-        if (clusterExplorerAPI.available) {
-          clusterExplorerAPI.api.refresh();
-        }
+        refreshAllViews();
       })
     );
 
