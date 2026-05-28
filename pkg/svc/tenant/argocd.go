@@ -1,9 +1,9 @@
 package tenant
 
 import (
+	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
@@ -11,6 +11,10 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/tenant/gitprovider"
 	"sigs.k8s.io/yaml"
 )
+
+// errFoundRBACCM is a sentinel used to stop YAML iteration once the
+// argocd-rbac-cm ConfigMap is found; it is never returned to callers.
+var errFoundRBACCM = errors.New("argocd-rbac-cm found")
 
 const (
 	appProjectKind    = "AppProject"
@@ -390,39 +394,22 @@ func isTenantPolicyLine(line, tenantName string) bool {
 // Returns the file path if found, or empty string if not found.
 // Supports multi-document YAML files separated by "---".
 func FindArgoCDRBACCM(dir string) (string, error) {
-	canonDir, err := fsutil.EvalCanonicalPath(dir)
-	if err != nil {
-		return "", fmt.Errorf("resolving directory %s: %w", dir, err)
+	var found string
+
+	err := fsutil.ForEachYAMLFile(dir, func(filePath string, content []byte) error {
+		if containsArgoCDRBACCM(content) {
+			found = filePath
+
+			return errFoundRBACCM
+		}
+
+		return nil
+	})
+	if err != nil && !errors.Is(err, errFoundRBACCM) {
+		return "", fmt.Errorf("scanning %s for %s: %w", dir, rbacConfigMapName, err)
 	}
 
-	entries, err := os.ReadDir(canonDir)
-	if err != nil {
-		return "", fmt.Errorf("reading directory %s: %w", canonDir, err)
-	}
-
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-
-		name := entry.Name()
-		if !strings.HasSuffix(name, ".yaml") && !strings.HasSuffix(name, ".yml") {
-			continue
-		}
-
-		filePath := filepath.Join(canonDir, name)
-
-		data, readErr := fsutil.ReadFileSafe(canonDir, filePath)
-		if readErr != nil {
-			return "", fmt.Errorf("reading %s: %w", filePath, readErr)
-		}
-
-		if containsArgoCDRBACCM(data) {
-			return filePath, nil
-		}
-	}
-
-	return "", nil
+	return found, nil
 }
 
 // containsArgoCDRBACCM checks whether YAML data (possibly multi-document)

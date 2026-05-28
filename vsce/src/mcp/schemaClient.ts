@@ -307,12 +307,7 @@ export async function getEnumValues(
   toolName: string,
   propertyName: string
 ): Promise<string[] | undefined> {
-  const tool = await getToolSchema(toolName);
-  if (!tool?.inputSchema?.properties) {
-    return undefined;
-  }
-
-  const propSchema = tool.inputSchema.properties[propertyName];
+  const propSchema = await getPropertySchema(toolName, propertyName);
   return propSchema?.enum;
 }
 
@@ -323,13 +318,20 @@ export async function getPropertyDescription(
   toolName: string,
   propertyName: string
 ): Promise<string | undefined> {
-  const tool = await getToolSchema(toolName);
-  if (!tool?.inputSchema?.properties) {
-    return undefined;
-  }
-
-  const propSchema = tool.inputSchema.properties[propertyName];
+  const propSchema = await getPropertySchema(toolName, propertyName);
   return propSchema?.description;
+}
+
+/**
+ * Get a single property's schema from a tool's input schema, or undefined if
+ * the tool, its input schema, or the property is absent.
+ */
+async function getPropertySchema(
+  toolName: string,
+  propertyName: string
+): Promise<McpPropertySchema | undefined> {
+  const tool = await getToolSchema(toolName);
+  return tool?.inputSchema?.properties?.[propertyName];
 }
 
 /**
