@@ -360,11 +360,13 @@ func (p *Provisioner) checkHetznerAvailabilityForRole(
 
 	_, _ = fmt.Fprintf(p.logWriter, "Checking server type availability for %s...\n", role)
 
-	err := hzProvider.CheckServerAvailability(
+	err := hzProvider.CheckServerAvailabilityWithRetry(
 		ctx,
 		[]string{serverType},
 		p.hetznerOpts.Location,
 		p.hetznerOpts.FallbackLocations,
+		hetzner.DefaultMaxAvailabilityCheckRetries,
+		p.logWriter,
 	)
 	if err != nil {
 		return fmt.Errorf("server availability check failed for %s: %w", role, err)

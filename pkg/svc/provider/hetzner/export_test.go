@@ -2,6 +2,7 @@
 package hetzner
 
 import (
+	"context"
 	"io"
 	"time"
 
@@ -52,6 +53,31 @@ var DeduplicateServerTypesForTest = deduplicateServerTypes
 
 // BuildLocationListForTest exports buildLocationList for testing.
 var BuildLocationListForTest = buildLocationList
+
+// IsRetryableAvailabilityErrorForTest exports isRetryableAvailabilityError for testing.
+var IsRetryableAvailabilityErrorForTest = isRetryableAvailabilityError
+
+// CheckServerAvailabilityWithRetryForTest exposes the internal availability retry
+// loop with an injectable delay function so tests avoid real backoff sleeps.
+func (p *Provider) CheckServerAvailabilityWithRetryForTest(
+	ctx context.Context,
+	serverTypes []string,
+	primaryLocation string,
+	fallbackLocations []string,
+	maxAttempts int,
+	logWriter io.Writer,
+	delayFunc func(int) time.Duration,
+) error {
+	return p.checkServerAvailabilityWithRetry(
+		ctx,
+		serverTypes,
+		primaryLocation,
+		fallbackLocations,
+		maxAttempts,
+		logWriter,
+		delayFunc,
+	)
+}
 
 // NewSnapshotManagerWithUploaderForTest creates a SnapshotManager with a custom uploader,
 // allowing tests to inject a mock without hitting real Hetzner upload infrastructure.
