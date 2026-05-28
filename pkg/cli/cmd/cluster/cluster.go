@@ -1299,12 +1299,13 @@ func newProvisionerFactory(ctx *localregistry.Context) clusterprovisioner.Factor
 
 	return clusterprovisioner.DefaultFactory{
 		DistributionConfig: &clusterprovisioner.DistributionConfig{
-			Kind:     ctx.KindConfig,
-			K3d:      ctx.K3dConfig,
-			Talos:    ctx.TalosConfig,
-			VCluster: ctx.VClusterConfig,
-			KWOK:     ctx.KWOKConfig,
-			EKS:      ctx.EKSConfig,
+			Kind:        ctx.KindConfig,
+			K3d:         ctx.K3dConfig,
+			Talos:       ctx.TalosConfig,
+			VCluster:    ctx.VClusterConfig,
+			KWOK:        ctx.KWOKConfig,
+			EKS:         ctx.EKSConfig,
+			MirrorSpecs: ctx.MirrorSpecs,
 		},
 	}
 }
@@ -1316,6 +1317,35 @@ func configureProvisionerFactory(
 	ctx *localregistry.Context,
 ) {
 	deps.Factory = newProvisionerFactory(ctx)
+}
+
+// resolveNestedMirrorSpecs resolves registry mirror specs for the Kubernetes provider
+// and stores them on the context so the nested provisioner can set them up inside the
+// DinD environment. The host-level mirror stages are skipped for this provider
+// (NeedsLocalDocker is false), so nested clusters would otherwise pull images
+// anonymously and hit registry rate limits during boot. No-op for other providers.
+func resolveNestedMirrorSpecs(
+	cmd *cobra.Command,
+	cfgManager *ksailconfigmanager.ConfigManager,
+	ctx *localregistry.Context,
+) error {
+	if ctx.ClusterCfg.Spec.Cluster.Provider != v1alpha1.ProviderKubernetes {
+		return nil
+	}
+
+	specs, err := mirrorregistry.ResolveMirrorSpecs(
+		cmd,
+		cfgManager,
+		ctx.ClusterCfg,
+		ctx.TalosConfig,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to resolve nested mirror specs: %w", err)
+	}
+
+	ctx.MirrorSpecs = specs
+
+	return nil
 }
 
 // maybeImportCachedImages imports cached container images if configured.
@@ -1740,10 +1770,16 @@ func applyClusterNameOverride(ctx *localregistry.Context, name string) error {
 		ctx.KWOKConfig.Name = name
 	}
 
-	// Update the ksail.yaml context to match the distribution pattern
+	// Update the ksail.yaml context to match the pattern the created cluster uses.
+	// Must be provider-aware: the Kubernetes (k3k) provider writes a "k3k-<name>"
+	// context for K3s rather than the standalone "k3d-<name>", so post-creation CNI
+	// install can resolve it.
 	if ctx.ClusterCfg != nil {
-		dist := ctx.ClusterCfg.Spec.Cluster.Distribution
-		ctx.ClusterCfg.Spec.Cluster.Connection.Context = dist.ContextName(name)
+		ctx.ClusterCfg.Spec.Cluster.Connection.Context = resolveCreatedContextName(
+			ctx.ClusterCfg.Spec.Cluster.Distribution,
+			ctx.ClusterCfg.Spec.Cluster.Provider,
+			name,
+		)
 	}
 
 	return nil
@@ -5781,6 +5817,11 @@ func runClusterCreationWorkflow(
 	setupK3dLoadBalancer(ctx.ClusterCfg, ctx.K3dConfig)
 	setupVClusterCNI(ctx.ClusterCfg, ctx.VClusterConfig)
 
+	err = resolveNestedMirrorSpecs(cmd, cfgManager, ctx)
+	if err != nil {
+		return err
+	}
+
 	configureProvisionerFactory(&deps, ctx)
 
 	err = executeClusterLifecycle(cmd, ctx.ClusterCfg, deps)
@@ -5832,7 +5873,9 @@ func runClusterCreationWorkflow(
 	// If an explicit context is already configured, preserve it.
 	if ctx.ClusterCfg.Spec.Cluster.Connection.Context == "" {
 		clusterName := resolveClusterNameFromContext(ctx)
-		ctx.ClusterCfg.Spec.Cluster.Connection.Context = ctx.ClusterCfg.Spec.Cluster.Distribution.ContextName(
+		ctx.ClusterCfg.Spec.Cluster.Connection.Context = resolveCreatedContextName(
+			ctx.ClusterCfg.Spec.Cluster.Distribution,
+			ctx.ClusterCfg.Spec.Cluster.Provider,
 			clusterName,
 		)
 	}
@@ -5840,6 +5883,27 @@ func runClusterCreationWorkflow(
 	maybeImportCachedImages(cmd, ctx, deps.Timer)
 
 	return handlePostCreationSetup(cmd, ctx.ClusterCfg, deps.Timer)
+}
+
+// resolveCreatedContextName returns the kubeconfig context name a freshly created
+// cluster is written under, so post-creation setup (CNI install, helm, kubectl) can
+// target it. The Kubernetes provider runs K3s via the k3k operator, which writes a
+// "k3k-<name>" context rather than the standalone k3d "k3d-<name>" context; without
+// this, installing a CNI like Calico on a nested K3s cluster fails to find the
+// context. All other distribution/provider combinations use the standalone
+// distribution context name.
+func resolveCreatedContextName(
+	distribution v1alpha1.Distribution,
+	provider v1alpha1.Provider,
+	clusterName string,
+) string {
+	if clusterName != "" &&
+		provider == v1alpha1.ProviderKubernetes &&
+		distribution == v1alpha1.DistributionK3s {
+		return "k3k-" + clusterName
+	}
+
+	return distribution.ContextName(clusterName)
 }
 
 const startLongDesc = `Start a previously stopped Kubernetes cluster.

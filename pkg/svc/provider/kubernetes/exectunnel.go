@@ -50,7 +50,7 @@ func newExecTunnel(
 	namespace, podName, container string,
 	targetPort int,
 ) (*execTunnel, error) {
-	listener, err := newLocalListener(ctx)
+	listener, err := newLocalListener(ctx, 0)
 	if err != nil {
 		return nil, fmt.Errorf("exec tunnel: %w", err)
 	}

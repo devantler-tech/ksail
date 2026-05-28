@@ -1,8 +1,10 @@
 package fsutil_test
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
+	"sort"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
@@ -147,6 +149,163 @@ func testReadFileSafeMissingFile(t *testing.T) {
 
 	_, err := fsutil.ReadFileSafe(base, missing)
 	assert.ErrorContains(t, err, "failed to read file", "ReadFileSafe")
+}
+
+// errStopIteration is a sentinel used by callbacks to break out of ForEachYAMLFile
+// early; see the "callback early stop" subtest.
+var errStopIteration = errors.New("stop")
+
+// testYAMLFileA is reused across ForEachYAMLFile subtests; extracted to satisfy goconst.
+const testYAMLFileA = "a.yaml"
+
+func TestForEachYAMLFile(t *testing.T) {
+	t.Parallel()
+
+	t.Run("yaml extension filter", testForEachYAMLFileExtensionFilter)
+	t.Run("non-recursive walk skips subdirectories", testForEachYAMLFileNonRecursive)
+	t.Run("callback early stop returns sentinel", testForEachYAMLFileCallbackEarlyStop)
+	t.Run("symlink escape rejected", testForEachYAMLFileSymlinkEscape)
+	t.Run("missing directory returns error", testForEachYAMLFileMissingDir)
+	t.Run("empty directory invokes no callback", testForEachYAMLFileEmptyDir)
+}
+
+func testForEachYAMLFileExtensionFilter(t *testing.T) {
+	t.Helper()
+	t.Parallel()
+
+	dir := t.TempDir()
+	// .yaml and .yml should be visited; .txt, .json, .yaml.bak should not.
+	yamlFiles := map[string]string{
+		testYAMLFileA: "kind: A",
+		"b.yml":       "kind: B",
+		"ignore.txt":  "no",
+		"c.json":      `{"kind":"C"}`,
+		"d.yaml.bak":  "backup",
+	}
+	for name, content := range yamlFiles {
+		err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o600)
+		require.NoError(t, err, "WriteFile %s", name)
+	}
+
+	var visited []string
+
+	visitedContent := make(map[string]string)
+
+	err := fsutil.ForEachYAMLFile(dir, func(path string, content []byte) error {
+		name := filepath.Base(path)
+		visited = append(visited, name)
+		visitedContent[name] = string(content)
+
+		return nil
+	})
+
+	require.NoError(t, err, "ForEachYAMLFile")
+	sort.Strings(visited)
+	assert.Equal(t, []string{testYAMLFileA, "b.yml"}, visited, "only .yaml/.yml visited")
+	assert.Equal(t, "kind: A", visitedContent[testYAMLFileA], "a.yaml content passed to callback")
+	assert.Equal(t, "kind: B", visitedContent["b.yml"], "b.yml content passed to callback")
+}
+
+func testForEachYAMLFileNonRecursive(t *testing.T) {
+	t.Helper()
+	t.Parallel()
+
+	dir := t.TempDir()
+	err := os.WriteFile(filepath.Join(dir, "top.yaml"), []byte("top"), 0o600)
+	require.NoError(t, err, "WriteFile top.yaml")
+
+	sub := filepath.Join(dir, "nested")
+	require.NoError(t, os.Mkdir(sub, 0o700), "Mkdir nested")
+	require.NoError(t,
+		os.WriteFile(filepath.Join(sub, "child.yaml"), []byte("child"), 0o600),
+		"WriteFile child.yaml")
+
+	var visited []string
+
+	err = fsutil.ForEachYAMLFile(dir, func(path string, _ []byte) error {
+		visited = append(visited, filepath.Base(path))
+
+		return nil
+	})
+
+	require.NoError(t, err, "ForEachYAMLFile")
+	assert.Equal(t, []string{"top.yaml"}, visited, "subdirectory entries not visited")
+}
+
+func testForEachYAMLFileCallbackEarlyStop(t *testing.T) {
+	t.Helper()
+	t.Parallel()
+
+	dir := t.TempDir()
+	// Three YAML files; callback stops on the first one it sees.
+	for _, name := range []string{testYAMLFileA, "b.yaml", "c.yaml"} {
+		require.NoError(t,
+			os.WriteFile(filepath.Join(dir, name), []byte(name), 0o600),
+			"WriteFile %s", name)
+	}
+
+	calls := 0
+	err := fsutil.ForEachYAMLFile(dir, func(_ string, _ []byte) error {
+		calls++
+
+		return errStopIteration
+	})
+
+	require.ErrorIs(t, err, errStopIteration, "ForEachYAMLFile propagates callback error verbatim")
+	assert.Equal(t, 1, calls, "iteration stops after first callback error")
+}
+
+func testForEachYAMLFileSymlinkEscape(t *testing.T) {
+	t.Helper()
+	t.Parallel()
+
+	// A YAML symlink inside dir that resolves to a file outside dir must be
+	// rejected by the underlying ReadFileSafe, surfacing ErrPathOutsideBase.
+	outsideDir := t.TempDir()
+	secret := filepath.Join(outsideDir, "secret.yaml")
+	require.NoError(t, os.WriteFile(secret, []byte("secret"), 0o600), "WriteFile secret")
+
+	dir := t.TempDir()
+	link := filepath.Join(dir, "escape.yaml")
+	require.NoError(t, os.Symlink(secret, link), "Symlink")
+
+	err := fsutil.ForEachYAMLFile(dir, func(_ string, _ []byte) error {
+		t.Fatalf("callback must not run for symlink that escapes dir")
+
+		return nil
+	})
+
+	require.ErrorIs(t, err, fsutil.ErrPathOutsideBase, "symlink escape rejected")
+}
+
+func testForEachYAMLFileMissingDir(t *testing.T) {
+	t.Helper()
+	t.Parallel()
+
+	dir := filepath.Join(t.TempDir(), "does-not-exist")
+
+	err := fsutil.ForEachYAMLFile(dir, func(_ string, _ []byte) error {
+		t.Fatalf("callback must not run for missing directory")
+
+		return nil
+	})
+
+	require.Error(t, err, "missing directory returns error")
+}
+
+func testForEachYAMLFileEmptyDir(t *testing.T) {
+	t.Helper()
+	t.Parallel()
+
+	dir := t.TempDir()
+
+	err := fsutil.ForEachYAMLFile(dir, func(_ string, _ []byte) error {
+		t.Fatalf("callback must not run for empty directory")
+
+		return nil
+	})
+
+	require.NoError(t, err, "empty directory completes without error")
 }
 
 //nolint:paralleltest,tparallel // Cannot use t.Parallel() with t.Chdir()

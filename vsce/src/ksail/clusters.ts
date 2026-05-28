@@ -302,6 +302,38 @@ export async function detectClusterStatus(
 }
 
 /**
+ * Run a `ksail cluster` command and throw a descriptive error on failure.
+ */
+async function runClusterCommand(
+  args: string[],
+  failVerb: string,
+  outputChannel?: vscode.OutputChannel
+): Promise<void> {
+  const result = await runKsailCommand(args, undefined, outputChannel);
+
+  if (result.exitCode !== 0) {
+    throw new Error(`Failed to ${failVerb} cluster: ${result.stderr || result.stdout}`);
+  }
+}
+
+/**
+ * Run a `ksail cluster <verb>` command that takes only an optional --name.
+ */
+async function runNamedClusterCommand(
+  verb: string,
+  name?: string,
+  outputChannel?: vscode.OutputChannel
+): Promise<void> {
+  const args = ["cluster", verb];
+
+  if (name) {
+    args.push("--name", name);
+  }
+
+  await runClusterCommand(args, verb, outputChannel);
+}
+
+/**
  * Create a cluster
  *
  * Note: The CLI reads ksail.yaml from the current working directory automatically.
@@ -318,11 +350,7 @@ export async function createCluster(
   }
   addCommonClusterArgs(args, options);
 
-  const result = await runKsailCommand(args, undefined, outputChannel);
-
-  if (result.exitCode !== 0) {
-    throw new Error(`Failed to create cluster: ${result.stderr || result.stdout}`);
-  }
+  await runClusterCommand(args, "create", outputChannel);
 }
 
 /**
@@ -344,11 +372,7 @@ export async function deleteCluster(
     args.push("--force");
   }
 
-  const result = await runKsailCommand(args, undefined, outputChannel);
-
-  if (result.exitCode !== 0) {
-    throw new Error(`Failed to delete cluster: ${result.stderr || result.stdout}`);
-  }
+  await runClusterCommand(args, "delete", outputChannel);
 }
 
 /**
@@ -358,17 +382,7 @@ export async function startCluster(
   name?: string,
   outputChannel?: vscode.OutputChannel
 ): Promise<void> {
-  const args = ["cluster", "start"];
-
-  if (name) {
-    args.push("--name", name);
-  }
-
-  const result = await runKsailCommand(args, undefined, outputChannel);
-
-  if (result.exitCode !== 0) {
-    throw new Error(`Failed to start cluster: ${result.stderr || result.stdout}`);
-  }
+  await runNamedClusterCommand("start", name, outputChannel);
 }
 
 /**
@@ -378,17 +392,7 @@ export async function stopCluster(
   name?: string,
   outputChannel?: vscode.OutputChannel
 ): Promise<void> {
-  const args = ["cluster", "stop"];
-
-  if (name) {
-    args.push("--name", name);
-  }
-
-  const result = await runKsailCommand(args, undefined, outputChannel);
-
-  if (result.exitCode !== 0) {
-    throw new Error(`Failed to stop cluster: ${result.stderr || result.stdout}`);
-  }
+  await runNamedClusterCommand("stop", name, outputChannel);
 }
 
 /**
@@ -409,11 +413,7 @@ export async function initCluster(
     args.push("--force");
   }
 
-  const result = await runKsailCommand(args, undefined, outputChannel);
-
-  if (result.exitCode !== 0) {
-    throw new Error(`Failed to init cluster: ${result.stderr || result.stdout}`);
-  }
+  await runClusterCommand(args, "init", outputChannel);
 }
 
 /**
@@ -423,17 +423,7 @@ export async function updateCluster(
   name?: string,
   outputChannel?: vscode.OutputChannel
 ): Promise<void> {
-  const args = ["cluster", "update"];
-
-  if (name) {
-    args.push("--name", name);
-  }
-
-  const result = await runKsailCommand(args, undefined, outputChannel);
-
-  if (result.exitCode !== 0) {
-    throw new Error(`Failed to update cluster: ${result.stderr || result.stdout}`);
-  }
+  await runNamedClusterCommand("update", name, outputChannel);
 }
 
 /**
