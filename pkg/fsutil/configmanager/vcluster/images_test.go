@@ -1,13 +1,58 @@
 package vcluster_test
 
 import (
+	_ "embed"
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/vcluster"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// dockerfileForTest is an independent embed of the package's Dockerfile so the
+// "MatchesDockerfile" tests below can parse it without going through the same parser
+// the production code uses. Reusing the production parser would make those tests a
+// tautology; parsing the file independently catches drift in the production regex or
+// in the Dockerfile format.
+//
+//go:embed Dockerfile
+var dockerfileForTest string
+
+// parseImageTagFromDockerfile is a deliberately independent implementation (simple line
+// scan + string ops, NOT regex) that extracts the tag for the given image repo from the
+// embedded Dockerfile. Keeping this distinct from the production regex-based parser is
+// the whole point of the MatchesDockerfile tests — see dockerfileForTest's comment.
+func parseImageTagFromDockerfile(t *testing.T, repo string) string {
+	t.Helper()
+
+	const fromPrefix = "FROM "
+
+	prefix := repo + ":"
+
+	for raw := range strings.SplitSeq(dockerfileForTest, "\n") {
+		line := strings.TrimSpace(raw)
+
+		ref, ok := strings.CutPrefix(line, fromPrefix)
+		if !ok {
+			continue
+		}
+
+		// Strip optional @sha256:... digest suffix so we get the tag alone.
+		if i := strings.Index(ref, "@"); i >= 0 {
+			ref = ref[:i]
+		}
+
+		if tag, ok := strings.CutPrefix(ref, prefix); ok {
+			return tag
+		}
+	}
+
+	t.Fatalf("Dockerfile contains no FROM line for repo %q", repo)
+
+	return ""
+}
 
 // TestChartVersion verifies that ChartVersion returns a valid semantic version.
 func TestChartVersion(t *testing.T) {
@@ -31,7 +76,7 @@ func TestChartVersion_MatchesDockerfileFormat(t *testing.T) {
 	version := vcluster.ChartVersion()
 
 	// The chart version is extracted from the Dockerfile line:
-	// FROM ghcr.io/loft-sh/vcluster-pro:0.34.0
+	// FROM ghcr.io/loft-sh/vcluster-pro:<tag>
 	// Expected format: semver with optional pre-release suffix
 	assert.Regexp(t,
 		`^\d+\.\d+\.\d+(-[a-zA-Z0-9.-]+)?$`,
@@ -62,7 +107,7 @@ func TestDefaultKubernetesVersion_MatchesDockerfileFormat(t *testing.T) {
 	version := vcluster.DefaultKubernetesVersion
 
 	// The Kubernetes version is extracted from the Dockerfile line:
-	// FROM ghcr.io/loft-sh/kubernetes:v1.35.3
+	// FROM ghcr.io/loft-sh/kubernetes:<tag>
 	// Expected format: v-prefixed semver with optional suffix
 	assert.Regexp(
 		t,
@@ -115,38 +160,38 @@ func TestDefaultKubernetesVersion_Stability(t *testing.T) {
 	)
 }
 
-// TestChartVersion_ExpectedValue verifies the chart version matches the current Dockerfile content.
-func TestChartVersion_ExpectedValue(t *testing.T) {
+// TestChartVersion_MatchesDockerfile verifies the production parser's chart version matches
+// the Dockerfile, parsed independently here. This is a tripwire for drift in the production
+// parser (regex bug, Dockerfile format change) and — unlike a hardcoded expected value — it
+// does NOT need manual updating when Dependabot bumps the Dockerfile. Dependabot does not
+// update test code (see dependabot-core#13383), so a hardcoded expected value turns every
+// bump into a red main branch; this dynamic check avoids that without losing the tripwire.
+func TestChartVersion_MatchesDockerfile(t *testing.T) {
 	t.Parallel()
 
-	version := vcluster.ChartVersion()
+	expected := parseImageTagFromDockerfile(t, "ghcr.io/loft-sh/vcluster-pro")
 
-	// This test documents the current Dockerfile content.
-	// Dependabot is configured to update this image but may not track it (dependabot-core#13383);
-	// update manually if needed.
-	// FROM ghcr.io/loft-sh/vcluster-pro:0.34.0
 	assert.Equal(
 		t,
-		"0.34.0",
-		version,
-		"ChartVersion should match current Dockerfile (update this test when manually bumping the version)",
+		expected,
+		vcluster.ChartVersion(),
+		"ChartVersion() must match the tag in the Dockerfile (production parser drift?)",
 	)
 }
 
-// TestDefaultKubernetesVersion_ExpectedValue verifies the K8s version matches the current Dockerfile content.
-func TestDefaultKubernetesVersion_ExpectedValue(t *testing.T) {
+// TestDefaultKubernetesVersion_MatchesDockerfile verifies the production parser's Kubernetes
+// version matches the Dockerfile, parsed independently here. See the longer comment on
+// TestChartVersion_MatchesDockerfile for the rationale (in short: tripwire that survives
+// Dependabot bumps).
+func TestDefaultKubernetesVersion_MatchesDockerfile(t *testing.T) {
 	t.Parallel()
 
-	version := vcluster.DefaultKubernetesVersion
+	expected := parseImageTagFromDockerfile(t, "ghcr.io/loft-sh/kubernetes")
 
-	// This test documents the current Dockerfile content.
-	// Dependabot is configured to update this image but may not track it (dependabot-core#13383);
-	// update manually if needed.
-	// FROM ghcr.io/loft-sh/kubernetes:v1.35.3
 	assert.Equal(
 		t,
-		"v1.35.3",
-		version,
-		"DefaultKubernetesVersion should match current Dockerfile (update this test when manually bumping the version)",
+		expected,
+		vcluster.DefaultKubernetesVersion,
+		"DefaultKubernetesVersion must match the tag in the Dockerfile (production parser drift?)",
 	)
 }

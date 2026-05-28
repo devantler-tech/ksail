@@ -4,4 +4,4 @@
 # Image mappings:
 # - ghcr.io/getsops/sops → SOPS binary version (used by init container)
 
-FROM ghcr.io/getsops/sops:v3.12.2
+FROM ghcr.io/getsops/sops:v3.13.1
