@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/devantler-tech/ksail/v7/pkg/envvar"
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	configmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager"
 	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
 	"sigs.k8s.io/yaml"
@@ -221,43 +221,19 @@ func (m *ConfigManager) ValidateConfigs() (*Configs, error) {
 	return configs, nil
 }
 
-// forEachYAMLFile iterates over YAML files in a directory and calls the callback for each.
-// This is a shared helper to avoid code duplication between manager and patches.
+// forEachYAMLFile iterates over YAML files in a directory and calls the callback
+// for each, with environment variables expanded in the file content. It delegates
+// directory walking and path-safe reads to fsutil.ForEachYAMLFile so the traversal
+// logic is shared across the codebase.
 func forEachYAMLFile(dir string, callback func(filePath string, content []byte) error) error {
-	cleanDir := filepath.Clean(dir)
-
-	entries, err := os.ReadDir(cleanDir)
-	if err != nil {
-		return fmt.Errorf("failed to read directory %s: %w", cleanDir, err)
-	}
-
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-
-		name := entry.Name()
-		if !strings.HasSuffix(name, ".yaml") && !strings.HasSuffix(name, ".yml") {
-			continue
-		}
-
-		filePath := filepath.Join(cleanDir, filepath.Clean(name))
-
-		content, readErr := os.ReadFile(filePath) //nolint:gosec // Path from validated directory
-		if readErr != nil {
-			return fmt.Errorf("failed to read file '%s': %w", filePath, readErr)
-		}
-
-		// Expand environment variables in file content
-		content = envvar.ExpandBytes(content)
-
-		callbackErr := callback(filePath, content)
-		if callbackErr != nil {
-			return callbackErr
-		}
-	}
-
-	return nil
+	// Thin adapter: fsutil.ForEachYAMLFile wraps its own traversal errors and the
+	// callbacks supplied by talos callers wrap theirs, so this pass-through does
+	// not re-wrap.
+	//nolint:wrapcheck // pass-through adapter; fsutil and callbacks wrap their own errors
+	return fsutil.ForEachYAMLFile(dir, func(filePath string, content []byte) error {
+		// Expand environment variables in file content before handing to the caller.
+		return callback(filePath, envvar.ExpandBytes(content))
+	})
 }
 
 // validateYAMLFilesInDir checks that all .yaml and .yml files in a directory are valid YAML.
