@@ -114,7 +114,7 @@ func (p *Provisioner) detectInPlaceMachineConfigDrift(
 			OldValue: configFingerprint(runningConfig),
 			NewValue: configFingerprint(desiredConfig),
 			Category: clusterupdate.ChangeCategoryInPlace,
-			Reason:   "Talos machine config (patches) differs from running nodes; re-applied without reboot",
+			Reason:   "Talos machine config (patches) differs from running nodes; will be re-applied without reboot",
 		},
 	}, nil
 }
