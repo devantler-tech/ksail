@@ -195,18 +195,7 @@ export async function runClusterInitWizard(): Promise<ClusterInitOptions | undef
     prompt: "Enter a name for your cluster",
     placeholder: "my-cluster",
     value: "local",
-    validateInput: (value) => {
-      if (!value) {
-        return "Cluster name is required";
-      }
-      if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(value)) {
-        return "Must be lowercase alphanumeric, may contain hyphens, cannot start/end with hyphen";
-      }
-      if (value.length > 63) {
-        return "Must be 63 characters or less";
-      }
-      return undefined;
-    },
+    validateInput: (value) => validateClusterName(value),
   });
   if (!name) { return undefined; }
 
@@ -644,6 +633,24 @@ function getGitopsDescription(gitops: string): string {
 // ============================================================================
 
 /**
+ * Validate a cluster name against DNS-1123 label rules.
+ * Returns an error message, or undefined when the name is valid.
+ */
+function validateClusterName(value: string): string | undefined {
+  if (!value) {
+    return "Cluster name is required";
+  }
+  // DNS-1123 validation
+  if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(value)) {
+    return "Must be lowercase alphanumeric, may contain hyphens, cannot start/end with hyphen";
+  }
+  if (value.length > 63) {
+    return "Must be 63 characters or less";
+  }
+  return undefined;
+}
+
+/**
  * Prompt for cluster name with DNS-1123 validation
  */
 export async function promptClusterName(defaultValue?: string): Promise<string | undefined> {
@@ -651,19 +658,7 @@ export async function promptClusterName(defaultValue?: string): Promise<string |
     prompt: "Enter cluster name",
     placeHolder: "my-cluster",
     value: defaultValue,
-    validateInput: (value) => {
-      if (!value) {
-        return "Cluster name is required";
-      }
-      // DNS-1123 validation
-      if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(value)) {
-        return "Must be lowercase alphanumeric, may contain hyphens, cannot start/end with hyphen";
-      }
-      if (value.length > 63) {
-        return "Must be 63 characters or less";
-      }
-      return undefined;
-    },
+    validateInput: (value) => validateClusterName(value),
   });
 
   return name;
