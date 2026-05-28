@@ -251,9 +251,9 @@ func (p *Provisioner) applyUpdateChanges(
 // DiffConfig computes the differences between current and desired configurations.
 //
 // Besides comparing the spec-level node counts, it performs a live comparison of
-// in-place-applicable machine tunables (sysctls/sysfs) against the running
-// control-plane node. Those come from Talos patch files that are not part of the
-// ClusterSpec, so this is the only place drift in them surfaces — both in the
+// the fully rendered machine config (which embeds every Talos patch file under
+// talos/) against the running control-plane node. Those patches are not part of
+// the ClusterSpec, so this is the only place drift in them surfaces — both in the
 // change summary and as the trigger for re-pushing config to existing nodes.
 func (p *Provisioner) DiffConfig(
 	ctx context.Context,
@@ -298,9 +298,9 @@ func (p *Provisioner) DiffConfig(
 	return result, nil
 }
 
-// appendInPlaceMachineConfigDrift detects drift in in-place-applicable machine
-// tunables (sysctls/sysfs) against the running control-plane node and appends any
-// changes to the diff. Detection failures are non-fatal and logged: they must not
+// appendInPlaceMachineConfigDrift detects drift between the rendered Talos
+// machine config (all patch files) and the running control-plane node, appending
+// any change to the diff. Detection failures are non-fatal and logged: they must not
 // turn DiffConfig into an error, or callers (computeUpdateDiff, the drift display)
 // would drop the spec-level diff entirely. A clean unreachable cluster yields no
 // changes (the guard short-circuits before any network call when configs are

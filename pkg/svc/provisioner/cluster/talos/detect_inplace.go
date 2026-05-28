@@ -1,47 +1,62 @@
 package talosprovisioner
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
-	"strconv"
+	"time"
 
 	"github.com/cosi-project/runtime/pkg/safe"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
+	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
+	"github.com/siderolabs/talos/pkg/machinery/config/generate/secrets"
 	talosresconfig "github.com/siderolabs/talos/pkg/machinery/resources/config"
 )
 
-// detectInPlaceMachineConfigDrift compares in-place-applicable machine config
-// fields (currently machine.sysctls and machine.sysfs) between the running
-// control-plane node and the desired configuration, returning in-place changes
-// when they differ.
+// fingerprintLength is the number of hex characters shown for a machine-config
+// fingerprint in the change summary — enough to distinguish two renders at a
+// glance without dumping the whole config into the table.
+const fingerprintLength = 12
+
+// MachineConfigField is the change field reported when the rendered Talos
+// machine config drifts from what is running on the nodes.
+const MachineConfigField = "machine.config"
+
+// detectInPlaceMachineConfigDrift reports whether the desired Talos machine
+// config differs from what is running on the control-plane node, returning a
+// single in-place change when it does.
 //
-// These fields come from user-managed Talos patch files (e.g.
-// talos/cluster/sysctls.yaml) and are NOT represented in ksail's ClusterSpec, so
-// the spec-level diff engine cannot see them. Without this live comparison,
-// `ksail cluster update` has no signal that a patch file changed: the update
-// either short-circuits ("no changes") or runs without ever pushing the new
-// config to existing nodes. Surfacing the drift here (via DiffConfig) both shows
-// it in the change summary and triggers applyInPlaceConfigChanges, which
-// re-pushes the full machine config — carrying every patch — to each node.
+// Talos patch files (everything under talos/, e.g. sysctls, kubelet config,
+// user namespaces, registries, API-server flags) are NOT part of ksail's
+// ClusterSpec, so the spec-level diff engine cannot see them. This compares the
+// fully rendered desired config against the running node config, which catches
+// any patch change — additions, edits, and removals alike — rather than a
+// hand-picked set of fields. Surfacing it from DiffConfig both shows the drift
+// in the change summary and triggers applyInPlaceConfigChanges, which re-pushes
+// the full machine config to every node (NO_REBOOT).
 //
-// The comparison is intentionally secret-independent (it only inspects the
-// tunable maps), so it never false-positives on PKI differences. That matters
-// because detection runs before syncSecretsFromCluster: p.talosConfigs still
-// holds freshly-generated PKI here, but the tunables it carries are already the
-// patched, final values. By the time the change is applied, secret sync has run
-// (the in-place change makes needsSecretSync return true), so the pushed config
-// has the cluster's real PKI and the new tunables together.
+// The desired config is first realigned with the running cluster's PKI and
+// endpoint (see alignedDesiredControlPlaneConfig); without that, the
+// freshly-generated secrets and CIDR-derived endpoint that p.talosConfigs holds
+// at diff time would read as drift on every run. After alignment the only
+// remaining differences are genuine config/patch content — which is exactly
+// what cluster update should reconcile onto the nodes.
 //
-// Only a control-plane node is inspected, matching detectDisruptiveConfigChanges:
-// cluster-wide patches under talos/cluster/ apply to every node, and the apply
-// step pushes the per-role config to all nodes regardless. Worker-only patch
-// drift is not detected here (a future enhancement, like per-node comparison).
+// Caveats (accepted: ksail owns the node machine config):
+//   - Config not managed by ksail's bundle reads as drift and is reconciled away
+//     on the next apply, the same as any other config push.
+//   - A ksail/Talos version bump can change the rendered defaults, causing one
+//     benign, idempotent re-apply; it is self-limiting once applied.
+//   - Only a control-plane node is inspected (matching detectDisruptiveConfigChanges);
+//     this covers all cluster-wide patches under talos/cluster/. Worker-only
+//     patch drift is a future enhancement.
 func (p *Provisioner) detectInPlaceMachineConfigDrift(
 	ctx context.Context,
 	clusterName string,
 ) ([]clusterupdate.Change, error) {
-	// Omni owns node configuration via its own API; pushing config directly is
-	// not how Omni-managed clusters reconcile. Skip when configs are unavailable.
+	// Omni owns node configuration via its own API; skip when configs are absent.
 	if p.talosConfigs == nil || p.omniOpts != nil {
 		return nil, nil
 	}
@@ -56,115 +71,94 @@ func (p *Provisioner) detectInPlaceMachineConfigDrift(
 		return nil, nil
 	}
 
-	desiredConfig := p.talosConfigs.ControlPlane()
+	desiredConfig, err := p.alignedDesiredControlPlaneConfig(runningConfig)
+	if err != nil {
+		return nil, err
+	}
+
 	if desiredConfig == nil {
 		return nil, nil
 	}
 
-	return detectInPlaceMachineConfigChanges(runningConfig, desiredConfig), nil
+	return diffMachineConfig(runningConfig, desiredConfig)
 }
 
-// detectInPlaceMachineConfigChanges compares the machine tunables that Talos can
-// apply to a running node without a reboot. Both sysctls and sysfs are written
-// live to /proc/sys and /sys respectively, so a change is classified in-place.
-func detectInPlaceMachineConfigChanges(
-	runningConfig, desiredConfig machineClusterConfig,
-) []clusterupdate.Change {
-	// At most one change per inspected field (sysctls, sysfs).
-	changes := make([]clusterupdate.Change, 0, initialChangeCapacity)
+// alignedDesiredControlPlaneConfig rebuilds the desired control-plane config with
+// the running cluster's PKI (extracted from the running config) and endpoint, so
+// a byte comparison reflects only patch/content drift rather than the
+// freshly-generated secrets and default endpoint that p.talosConfigs carries at
+// diff time. This mirrors syncSecretsFromCluster, which the apply phase relies on
+// so that pushed configs match the running cluster's PKI.
+func (p *Provisioner) alignedDesiredControlPlaneConfig(
+	runningConfig talosconfig.Provider,
+) (talosconfig.Provider, error) {
+	bundle := secrets.NewBundleFromConfig(secrets.NewFixedClock(time.Now()), runningConfig)
 
-	changes = append(changes, detectStringMapFieldChange(
-		"machine.sysctls",
-		"kernel sysctls re-applied to existing nodes without reboot",
-		sysctlsOf(runningConfig),
-		sysctlsOf(desiredConfig),
-	)...)
-	changes = append(changes, detectStringMapFieldChange(
-		"machine.sysfs",
-		"sysfs attributes re-applied to existing nodes without reboot",
-		sysfsOf(runningConfig),
-		sysfsOf(desiredConfig),
-	)...)
+	aligned, err := p.talosConfigs.WithSecrets(bundle)
+	if err != nil {
+		return nil, fmt.Errorf("align secrets for config drift comparison: %w", err)
+	}
 
-	return changes
+	endpointIP := runningConfig.Cluster().Endpoint().Hostname()
+	if endpointIP != "" {
+		aligned, err = aligned.WithEndpoint(endpointIP)
+		if err != nil {
+			return nil, fmt.Errorf("align endpoint for config drift comparison: %w", err)
+		}
+	}
+
+	return aligned.ControlPlane(), nil
 }
 
-// detectStringMapFieldChange returns a single in-place change when two string
-// maps differ. OldValue/NewValue report the entry count, matching the compact
-// before/after style of the change summary table.
-func detectStringMapFieldChange(
-	field, reason string,
-	running, desired map[string]string,
-) []clusterupdate.Change {
-	if stringMapsEqual(running, desired) {
-		return nil
+// diffMachineConfig compares the rendered bytes of the running and desired
+// configs and returns a single in-place change when they differ. Both are
+// marshalled by the same Talos encoder, so semantically-equal configs produce
+// identical bytes; the fingerprints surface a before/after delta in the summary
+// without dumping the whole config.
+func diffMachineConfig(
+	runningConfig, desiredConfig talosconfig.Provider,
+) ([]clusterupdate.Change, error) {
+	runningBytes, err := runningConfig.Bytes()
+	if err != nil {
+		return nil, fmt.Errorf("marshal running machine config: %w", err)
+	}
+
+	desiredBytes, err := desiredConfig.Bytes()
+	if err != nil {
+		return nil, fmt.Errorf("marshal desired machine config: %w", err)
+	}
+
+	if bytes.Equal(runningBytes, desiredBytes) {
+		return nil, nil
 	}
 
 	return []clusterupdate.Change{
 		{
-			Field:    field,
-			OldValue: strconv.Itoa(len(running)),
-			NewValue: strconv.Itoa(len(desired)),
+			Field:    MachineConfigField,
+			OldValue: configFingerprint(runningBytes),
+			NewValue: configFingerprint(desiredBytes),
 			Category: clusterupdate.ChangeCategoryInPlace,
-			Reason:   reason,
+			Reason:   "Talos machine config (patches) differs from running nodes; re-applied without reboot",
 		},
-	}
+	}, nil
 }
 
-// stringMapsEqual reports whether two string maps have identical entries. A nil
-// map and an empty map are treated as equal (both represent "unset").
-func stringMapsEqual(left, right map[string]string) bool {
-	if len(left) != len(right) {
-		return false
-	}
+// configFingerprint returns a short, stable hex fingerprint of a rendered config.
+func configFingerprint(configBytes []byte) string {
+	sum := sha256.Sum256(configBytes)
 
-	for key, value := range left {
-		if other, ok := right[key]; !ok || other != value {
-			return false
-		}
-	}
-
-	return true
-}
-
-// sysctlsOf returns the machine sysctls map, guarding against nil config/machine
-// sections so live configs missing a machine stanza compare as "unset".
-func sysctlsOf(cfg machineClusterConfig) map[string]string {
-	if cfg == nil {
-		return nil
-	}
-
-	machine := cfg.Machine()
-	if machine == nil {
-		return nil
-	}
-
-	return machine.Sysctls()
-}
-
-// sysfsOf returns the machine sysfs map, with the same nil-safety as sysctlsOf.
-func sysfsOf(cfg machineClusterConfig) map[string]string {
-	if cfg == nil {
-		return nil
-	}
-
-	machine := cfg.Machine()
-	if machine == nil {
-		return nil
-	}
-
-	return machine.Sysfs()
+	return hex.EncodeToString(sum[:])[:fingerprintLength]
 }
 
 // fetchRunningControlPlaneConfig discovers a control-plane node and returns its
-// running Talos machine config. It returns (nil, nil) when no control-plane node
-// is reachable so callers can treat "cannot compare" as "no detected drift"
-// rather than failing the update. Shared by detectDisruptiveConfigChanges and
-// detectInPlaceMachineConfigDrift.
+// running Talos machine config provider. It returns found=false when no
+// control-plane node is reachable so callers can treat "cannot compare" as "no
+// detected drift" rather than failing the update. Shared by
+// detectDisruptiveConfigChanges and detectInPlaceMachineConfigDrift.
 func (p *Provisioner) fetchRunningControlPlaneConfig(
 	ctx context.Context,
 	clusterName string,
-) (machineClusterConfig, bool, error) {
+) (talosconfig.Provider, bool, error) {
 	nodes, err := p.getNodesByRole(ctx, clusterName)
 	if err != nil {
 		return nil, false, fmt.Errorf("failed to discover nodes for config comparison: %w", err)
@@ -207,5 +201,5 @@ func (p *Provisioner) fetchRunningControlPlaneConfig(
 		)
 	}
 
-	return machineConfig.Config(), true, nil
+	return machineConfig.Provider(), true, nil
 }

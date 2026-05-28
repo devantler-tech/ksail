@@ -396,15 +396,18 @@ var CNINameForTest = cniName
 //nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
 var DiskQuotaEnabledForTest = diskQuotaEnabled
 
-// DetectInPlaceMachineConfigChangesForTest exposes detectInPlaceMachineConfigChanges for unit testing.
+// DiffMachineConfigForTest exposes diffMachineConfig for unit testing.
 //
 //nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
-var DetectInPlaceMachineConfigChangesForTest = detectInPlaceMachineConfigChanges
+var DiffMachineConfigForTest = diffMachineConfig
 
-// StringMapsEqualForTest exposes stringMapsEqual for unit testing.
+// ConfigFingerprintForTest exposes configFingerprint for unit testing.
 //
 //nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
-var StringMapsEqualForTest = stringMapsEqual
+var ConfigFingerprintForTest = configFingerprint
+
+// MachineConfigFieldForTest exposes the machine.config change field for unit testing.
+const MachineConfigFieldForTest = MachineConfigField
 
 // ValidateCurrentContextCAForTest exposes validateCurrentContextCA for unit testing.
 //

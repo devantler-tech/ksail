@@ -5,101 +5,73 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	talosprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/talos"
+	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
+	taloscontainer "github.com/siderolabs/talos/pkg/machinery/config/container"
 	"github.com/siderolabs/talos/pkg/machinery/config/types/v1alpha1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-const (
-	sysctlRmemMax = "net.core.rmem_max"
-	sysctlKptr    = "kernel.kptr_restrict"
-	fieldSysctls  = "machine.sysctls"
-	fieldSysfs    = "machine.sysfs"
-)
+const sysctlRmemMax = "net.core.rmem_max"
 
-// machineCfgWithTunables builds a minimal Talos config carrying only the
-// in-place-applicable machine tunables (sysctls/sysfs) under test.
-func machineCfgWithTunables(sysctls, sysfs map[string]string) *v1alpha1.Config {
+// wrapConfig wraps a v1alpha1.Config as a full Talos config provider (with Bytes()).
+func wrapConfig(cfg *v1alpha1.Config) talosconfig.Provider {
+	return taloscontainer.NewV1Alpha1(cfg)
+}
+
+// baseConfig returns a minimal config used as the "running" baseline; tests
+// clone it and mutate individual fields to assert that any drift is detected.
+func baseConfig() *v1alpha1.Config {
 	return &v1alpha1.Config{
 		MachineConfig: &v1alpha1.MachineConfig{
-			MachineSysctls: sysctls,
-			MachineSysfs:   sysfs,
+			MachineSysctls: map[string]string{sysctlRmemMax: "1"},
 		},
 		ClusterConfig: &v1alpha1.ClusterConfig{},
 	}
 }
 
-func TestDetectInPlaceMachineConfigChanges(t *testing.T) { //nolint:funlen // table-driven tests
+func TestDiffMachineConfig(t *testing.T) { //nolint:funlen // table-driven tests
 	t.Parallel()
 
 	tests := []struct {
-		name           string
-		running        talosprovisioner.MachineClusterConfigForTest
-		desired        talosprovisioner.MachineClusterConfigForTest
-		expectedFields []string
+		name      string
+		mutate    func(*v1alpha1.Config)
+		wantDrift bool
 	}{
 		{
-			name: "no changes when sysctls and sysfs match",
-			running: machineCfgWithTunables(
-				map[string]string{sysctlRmemMax: "1"},
-				nil,
-			),
-			desired: machineCfgWithTunables(
-				map[string]string{sysctlRmemMax: "1"},
-				nil,
-			),
-			expectedFields: nil,
+			name:      "no drift when configs are identical",
+			mutate:    func(*v1alpha1.Config) {},
+			wantDrift: false,
 		},
 		{
-			name:           "no changes when nil and empty sysctls are equivalent",
-			running:        machineCfgWithTunables(nil, nil),
-			desired:        machineCfgWithTunables(map[string]string{}, map[string]string{}),
-			expectedFields: nil,
+			name: "drift on sysctl added (the platform#1618 hardening case)",
+			mutate: func(c *v1alpha1.Config) {
+				c.MachineConfig.MachineSysctls["kernel.kptr_restrict"] = "2"
+			},
+			wantDrift: true,
 		},
 		{
-			name:    "detect sysctl added (the platform#1618 hardening case)",
-			running: machineCfgWithTunables(map[string]string{sysctlRmemMax: "1"}, nil),
-			desired: machineCfgWithTunables(map[string]string{
-				sysctlRmemMax: "1",
-				sysctlKptr:    "2",
-			}, nil),
-			expectedFields: []string{fieldSysctls},
+			name: "drift on sysctl removed",
+			mutate: func(c *v1alpha1.Config) {
+				c.MachineConfig.MachineSysctls = map[string]string{}
+			},
+			wantDrift: true,
 		},
 		{
-			name: "detect sysctl value changed",
-			running: machineCfgWithTunables(
-				map[string]string{sysctlKptr: "1"},
-				nil,
-			),
-			desired: machineCfgWithTunables(
-				map[string]string{sysctlKptr: "2"},
-				nil,
-			),
-			expectedFields: []string{fieldSysctls},
+			name: "drift on machine.files change (not a sysctl)",
+			mutate: func(c *v1alpha1.Config) {
+				c.MachineConfig.MachineFiles = []*v1alpha1.MachineFile{
+					{FilePath: "/var/etc/foo", FileContent: "bar", FilePermissions: 0o644},
+				}
+			},
+			wantDrift: true,
 		},
 		{
-			name:           "detect sysctl removed",
-			running:        machineCfgWithTunables(map[string]string{"a": "1", "b": "2"}, nil),
-			desired:        machineCfgWithTunables(map[string]string{"a": "1"}, nil),
-			expectedFields: []string{fieldSysctls},
-		},
-		{
-			name:           "detect sysfs changed",
-			running:        machineCfgWithTunables(nil, map[string]string{"x": "1"}),
-			desired:        machineCfgWithTunables(nil, map[string]string{"x": "2"}),
-			expectedFields: []string{fieldSysfs},
-		},
-		{
-			name: "detect both sysctls and sysfs changed",
-			running: machineCfgWithTunables(
-				map[string]string{"a": "1"},
-				map[string]string{"x": "1"},
-			),
-			desired: machineCfgWithTunables(
-				map[string]string{"a": "2"},
-				map[string]string{"x": "2"},
-			),
-			expectedFields: []string{fieldSysctls, fieldSysfs},
+			name: "drift on cluster-level change (not machine-scoped)",
+			mutate: func(c *v1alpha1.Config) {
+				c.ClusterConfig.ClusterID = "changed-cluster-id"
+			},
+			wantDrift: true,
 		},
 	}
 
@@ -107,72 +79,47 @@ func TestDetectInPlaceMachineConfigChanges(t *testing.T) { //nolint:funlen // ta
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			changes := talosprovisioner.DetectInPlaceMachineConfigChangesForTest(
-				testCase.running,
-				testCase.desired,
+			running := baseConfig()
+			desired := baseConfig()
+			testCase.mutate(desired)
+
+			changes, err := talosprovisioner.DiffMachineConfigForTest(
+				wrapConfig(running),
+				wrapConfig(desired),
 			)
+			require.NoError(t, err)
 
-			require.Len(t, changes, len(testCase.expectedFields))
+			if !testCase.wantDrift {
+				assert.Empty(t, changes, "identical configs must not report drift")
 
-			for i, field := range testCase.expectedFields {
-				assert.Equal(t, field, changes[i].Field)
-				assert.Equal(
-					t,
-					clusterupdate.ChangeCategoryInPlace,
-					changes[i].Category,
-					"machine tunable drift must be classified in-place (applied without reboot)",
-				)
+				return
 			}
+
+			require.Len(t, changes, 1)
+			assert.Equal(t, talosprovisioner.MachineConfigFieldForTest, changes[0].Field)
+			assert.Equal(t, clusterupdate.ChangeCategoryInPlace, changes[0].Category)
+			assert.NotEqual(
+				t,
+				changes[0].OldValue,
+				changes[0].NewValue,
+				"fingerprints must differ when configs drift",
+			)
 		})
 	}
 }
 
-func TestStringMapsEqual(t *testing.T) {
+func TestConfigFingerprint(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name     string
-		left     map[string]string
-		right    map[string]string
-		expected bool
-	}{
-		{name: "both nil", left: nil, right: nil, expected: true},
-		{name: "nil and empty", left: nil, right: map[string]string{}, expected: true},
-		{
-			name:     "equal single entry",
-			left:     map[string]string{"a": "1"},
-			right:    map[string]string{"a": "1"},
-			expected: true,
-		},
-		{
-			name:     "different value",
-			left:     map[string]string{"a": "1"},
-			right:    map[string]string{"a": "2"},
-			expected: false,
-		},
-		{
-			name:     "different length",
-			left:     map[string]string{"a": "1"},
-			right:    map[string]string{"a": "1", "b": "2"},
-			expected: false,
-		},
-		{
-			name:     "different key same length",
-			left:     map[string]string{"a": "1"},
-			right:    map[string]string{"b": "1"},
-			expected: false,
-		},
-	}
+	first := talosprovisioner.ConfigFingerprintForTest([]byte("alpha"))
+	second := talosprovisioner.ConfigFingerprintForTest([]byte("beta"))
 
-	for _, testCase := range tests {
-		t.Run(testCase.name, func(t *testing.T) {
-			t.Parallel()
-
-			assert.Equal(
-				t,
-				testCase.expected,
-				talosprovisioner.StringMapsEqualForTest(testCase.left, testCase.right),
-			)
-		})
-	}
+	assert.Len(t, first, 12, "fingerprint length is fixed")
+	assert.NotEqual(t, first, second, "different inputs produce different fingerprints")
+	assert.Equal(
+		t,
+		first,
+		talosprovisioner.ConfigFingerprintForTest([]byte("alpha")),
+		"fingerprint is deterministic",
+	)
 }
