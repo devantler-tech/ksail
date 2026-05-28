@@ -49,6 +49,19 @@ const (
 	DefaultHetznerServerLimit int32 = 10
 )
 
+// DefaultHetznerFallbackLocations returns the default fallback datacenter
+// locations tried when server creation fails in the primary location due to
+// resource unavailability. All entries are in the eu-central network zone —
+// matching the hardcoded network subnet zone (see the Hetzner provider's
+// EnsureNetwork) and the default fsn1 primary location — so fallback servers can
+// still join the cluster's private network. Slice defaults cannot be expressed
+// via a `default:` struct tag, so this is the canonical source applied in code.
+// A fresh slice is returned on each call so callers may safely retain or mutate
+// the result without affecting the package-level default.
+func DefaultHetznerFallbackLocations() []string {
+	return []string{"nbg1", "hel1"}
+}
+
 // Talos default values — canonical source for OptionsTalos struct tag defaults.
 const (
 	// DefaultTalosISO is the default Hetzner ISO/image ID for booting Talos
