@@ -4,4 +4,4 @@
 # Image mappings:
 # - quay.io/metallb/controller → chart version (strip v prefix from tag)
 
-FROM quay.io/metallb/controller:v0.15.3@sha256:6698ccc54c380913816ed1fd0758637ec87dd79da419c4ab170a2c26c158ab89
+FROM quay.io/metallb/controller:v0.16.1@sha256:f51ab515de9ccd20dc3dccb093e48df8adddac019326c456f449e55ba91b6420
