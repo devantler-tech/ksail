@@ -81,7 +81,7 @@ require (
 	github.com/siderolabs/omni/client v1.7.3
 	golang.org/x/oauth2 v0.36.0
 	golang.org/x/text v0.37.0
-	google.golang.org/grpc v1.81.0
+	google.golang.org/grpc v1.81.1
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/klog/v2 v2.140.0
 	sigs.k8s.io/kwok v0.7.1-0.20260414082732-bea15031f3ec
