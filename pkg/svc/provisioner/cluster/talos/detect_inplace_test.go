@@ -203,6 +203,80 @@ func TestBuildDesiredNodeConfig_DetectsRemoval(t *testing.T) {
 	assert.Contains(t, diff, sysctlKptr, "the removed sysctl key must appear in the diff")
 }
 
+// runningAtKubernetesVersion renders a control-plane config at the given
+// Kubernetes version and parses it back, as a node would store and return it.
+func runningAtKubernetesVersion(t *testing.T, version string) talosconfig.Provider {
+	t.Helper()
+
+	configs, err := talosconfigmanager.NewDefaultConfigsWithPatches(nil)
+	require.NoError(t, err)
+
+	configs, err = configs.WithKubernetesVersion(version)
+	require.NoError(t, err)
+
+	configBytes, err := configs.ControlPlane().Bytes()
+	require.NoError(t, err)
+
+	running, err := configloader.NewFromBytes(configBytes)
+	require.NoError(t, err)
+
+	return running
+}
+
+// TestBuildDesiredNodeConfig_PreservesRunningKubernetesVersion is the core
+// regression guard for issue #4936: when no Kubernetes version is pinned, an
+// update must render the desired config at the version already running on the
+// cluster (here older than KSail's built-in default), so it reports no drift and
+// never proposes an unrequested — possibly Talos-incompatible — upgrade.
+func TestBuildDesiredNodeConfig_PreservesRunningKubernetesVersion(t *testing.T) {
+	t.Parallel()
+
+	// Cluster is running an older Kubernetes version than the built-in default.
+	running := runningAtKubernetesVersion(t, "1.32.0")
+
+	// Desired configs use the built-in default (e.g. 1.36.0); no version pinned.
+	desiredConfigs, err := talosconfigmanager.NewDefaultConfigsWithPatches(nil)
+	require.NoError(t, err)
+	require.NotEqual(t, "1.32.0", desiredConfigs.KubernetesVersion(),
+		"precondition: default must differ from the running version")
+
+	prov := talosprovisioner.NewProvisioner(desiredConfigs, nil) // nil options => unpinned
+
+	desired, err := prov.BuildDesiredNodeConfigForTest(running, talosprovisioner.RoleControlPlane)
+	require.NoError(t, err)
+
+	diff, err := talosprovisioner.MachineConfigDiffForTest(running, desired)
+	require.NoError(t, err)
+	assert.Empty(t, diff,
+		"unpinned update must track the running Kubernetes version (no unrequested upgrade)")
+}
+
+// TestBuildDesiredNodeConfig_PinnedKubernetesVersionAppliesUpgrade verifies the
+// other half: when a Kubernetes version IS pinned, the desired config keeps that
+// version, so an intentional change relative to the running cluster is detected.
+func TestBuildDesiredNodeConfig_PinnedKubernetesVersionAppliesUpgrade(t *testing.T) {
+	t.Parallel()
+
+	running := runningAtKubernetesVersion(t, "1.32.0")
+
+	// Desired configs are built at a different version, and the user pinned it.
+	desiredConfigs, err := talosconfigmanager.NewDefaultConfigsWithPatches(nil)
+	require.NoError(t, err)
+
+	desiredConfigs, err = desiredConfigs.WithKubernetesVersion("1.33.0")
+	require.NoError(t, err)
+
+	options := talosprovisioner.NewOptions().WithKubernetesVersion("1.33.0")
+	prov := talosprovisioner.NewProvisioner(desiredConfigs, options)
+
+	desired, err := prov.BuildDesiredNodeConfigForTest(running, talosprovisioner.RoleControlPlane)
+	require.NoError(t, err)
+
+	diff, err := talosprovisioner.MachineConfigDiffForTest(running, desired)
+	require.NoError(t, err)
+	assert.NotEmpty(t, diff, "a pinned version differing from running must be detected")
+}
+
 func TestConfigFingerprint(t *testing.T) {
 	t.Parallel()
 

@@ -18,6 +18,14 @@ type OptionsTalos struct {
 	// with or without the "v" prefix (e.g., "v1.11.2" or "1.11.2").
 	// When empty, KSail uses its built-in default version.
 	Version string `json:"version,omitzero"`
+	// KubernetesVersion mirrors spec.cluster.kubernetesVersion for the provisioner.
+	// It is populated by the cluster factory from the top-level field and is the raw
+	// value (possibly with a "v" prefix); only its presence is significant. The
+	// provisioner uses it to decide whether the user pinned a version: when empty,
+	// `cluster update` renders the desired machine config at the version already
+	// running on the cluster so an unrelated update never proposes an unrequested
+	// upgrade. Not user-facing in ksail.yaml — derived at runtime.
+	KubernetesVersion string `json:"-"`
 	// ControlPlanes is the number of control-plane nodes (default: 1).
 	//
 	// Deprecated: use spec.cluster.controlPlanes. This field is kept as a

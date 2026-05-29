@@ -88,7 +88,25 @@ func NewDefaultConfigs() (*Configs, error) {
 // (e.g., kubelet-csr-approver inlineManifests when metrics-server is enabled).
 //
 // The additional patches are applied after the default allowSchedulingOnControlPlanes patch.
+// The Kubernetes version is DefaultKubernetesVersion; use
+// NewDefaultConfigsWithVersionAndPatches to honor a pin or a Talos-compatible default.
 func NewDefaultConfigsWithPatches(additionalPatches []Patch) (*Configs, error) {
+	return NewDefaultConfigsWithVersionAndPatches(DefaultKubernetesVersion, additionalPatches)
+}
+
+// NewDefaultConfigsWithVersionAndPatches is like NewDefaultConfigsWithPatches but
+// targets a specific Kubernetes version. It is used when no scaffolded talos/ dir
+// exists so the default config still honors an explicit pin or a Talos-compatible
+// default (spec.cluster.kubernetesVersion / capped default) rather than always
+// using DefaultKubernetesVersion. An empty kubernetesVersion falls back to the default.
+func NewDefaultConfigsWithVersionAndPatches(
+	kubernetesVersion string,
+	additionalPatches []Patch,
+) (*Configs, error) {
+	if kubernetesVersion == "" {
+		kubernetesVersion = DefaultKubernetesVersion
+	}
+
 	// Default configs are used for control-plane-only clusters (no workers),
 	// so we need to allow scheduling on control-plane nodes.
 	allowSchedulingPatch := Patch{
@@ -103,7 +121,7 @@ func NewDefaultConfigsWithPatches(additionalPatches []Patch) (*Configs, error) {
 
 	return newConfigs(
 		DefaultClusterName,
-		DefaultKubernetesVersion,
+		kubernetesVersion,
 		DefaultNetworkCIDR,
 		patches,
 		nil,
@@ -359,6 +377,51 @@ func (c *Configs) WithSecrets(existingSecrets *secrets.Bundle) (*Configs, error)
 	return newConfigsWithEndpointAndSecrets(
 		c.Name,
 		kubernetesVersion,
+		networkCIDR,
+		c.endpoint,
+		c.patches,
+		existingSecrets,
+		c.versionContract,
+		c.extensions,
+	)
+}
+
+// WithKubernetesVersion creates a new Configs that targets the given Kubernetes
+// version, regenerating the bundle so the kubelet, kube-apiserver,
+// kube-controller-manager, and kube-scheduler image tags all match. The existing
+// PKI is preserved so the regenerated config still aligns with a running cluster.
+//
+// This is used during cluster update to render the desired machine config at the
+// Kubernetes version actually running on the cluster (rather than KSail's built-in
+// default), so an unrelated update never proposes an unrequested Kubernetes
+// upgrade. The version is normalised to drop any "v" prefix.
+//
+// Returns a new Configs instance; the original is not modified. Returns the
+// original unchanged when version is empty or already matches.
+func (c *Configs) WithKubernetesVersion(version string) (*Configs, error) {
+	version = normalizeKubernetesVersion(version)
+	if version == "" || version == c.kubernetesVersion {
+		return c, nil
+	}
+
+	networkCIDR := c.networkCIDR
+	if networkCIDR == "" {
+		networkCIDR = DefaultNetworkCIDR
+	}
+
+	// Preserve the existing PKI so the regenerated config keeps matching the
+	// running cluster's CA, tokens, and bootstrap secrets.
+	var existingSecrets *secrets.Bundle
+	if c.bundle != nil && c.bundle.ControlPlaneCfg != nil {
+		existingSecrets = secrets.NewBundleFromConfig(
+			secrets.NewFixedClock(time.Now()),
+			c.bundle.ControlPlaneCfg,
+		)
+	}
+
+	return newConfigsWithEndpointAndSecrets(
+		c.Name,
+		version,
 		networkCIDR,
 		c.endpoint,
 		c.patches,

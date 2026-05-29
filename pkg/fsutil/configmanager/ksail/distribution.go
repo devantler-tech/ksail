@@ -3,6 +3,7 @@ package configmanager
 import (
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
@@ -100,7 +101,7 @@ func (m *ConfigManager) loadTalosConfig() (*talosconfigmanager.Configs, error) {
 	talosManager := talosconfigmanager.NewConfigManager(
 		patchesDir,
 		clusterName,
-		"", // Use default Kubernetes version
+		m.resolveTalosKubernetesVersion(),
 		"", // Use default network CIDR
 	)
 
@@ -302,6 +303,54 @@ func (m *ConfigManager) removeWorkerRoleLabelPatch(patchesDir string) {
 	}
 }
 
+// resolveTalosKubernetesVersion resolves the Kubernetes version for Talos config
+// generation: it honours an explicit pin (spec.cluster.kubernetesVersion), otherwise
+// uses the built-in default capped to one the pinned Talos release
+// (spec.cluster.talos.version) supports, warning when the default is capped. On an
+// existing cluster the provisioner further prefers the running version when unpinned,
+// so an unrelated update never forces a Kubernetes upgrade.
+func (m *ConfigManager) resolveTalosKubernetesVersion() string {
+	version := talosconfigmanager.ResolveKubernetesVersion(
+		m.Config.Spec.Cluster.Talos.Version,
+		m.Config.Spec.Cluster.KubernetesVersion,
+	)
+	warnKubernetesVersionCapped(m.Config, version, m.Writer)
+
+	return version
+}
+
+// warnKubernetesVersionCapped emits a warning when KSail had to cap its built-in
+// default Kubernetes version to keep it compatible with the pinned Talos release.
+// It is a no-op when the user pinned a Kubernetes version explicitly, when no
+// Talos version is pinned, or when the default needed no capping — so it only
+// surfaces in the narrow case it is meant to explain.
+func warnKubernetesVersionCapped(cfg *v1alpha1.Cluster, resolvedVersion string, out io.Writer) {
+	if strings.TrimSpace(cfg.Spec.Cluster.KubernetesVersion) != "" {
+		return
+	}
+
+	if strings.TrimSpace(cfg.Spec.Cluster.Talos.Version) == "" {
+		return
+	}
+
+	if resolvedVersion == talosconfigmanager.DefaultKubernetesVersion {
+		return
+	}
+
+	notify.WriteMessage(notify.Message{
+		Type: notify.WarningType,
+		Content: fmt.Sprintf(
+			"Kubernetes %s is too new for the pinned Talos version %s; "+
+				"defaulting to compatible Kubernetes %s. "+
+				"Set spec.cluster.kubernetesVersion to choose a different version.",
+			talosconfigmanager.DefaultKubernetesVersion,
+			cfg.Spec.Cluster.Talos.Version,
+			resolvedVersion,
+		),
+		Writer: out,
+	})
+}
+
 // warnWorkerRoleLabel emits a warning about a stale or customized worker role label patch
 // that still sets node-role.kubernetes.io/worker.
 func (m *ConfigManager) warnWorkerRoleLabel(content string) {
@@ -387,7 +436,13 @@ func (m *ConfigManager) cacheTalosConfig() error {
 		// metrics-server cannot validate kubelet TLS certificates (missing IP SANs).
 		patches := m.getDefaultTalosPatches()
 
-		talosConfig, err = talosconfigmanager.NewDefaultConfigsWithPatches(patches)
+		// Resolve the Kubernetes version here too (not just in loadTalosConfig): with
+		// no scaffolded talos/ dir, this fallback must still honor a pin or cap the
+		// default to the pinned Talos version — otherwise a pinned older Talos would
+		// be paired with an incompatible default Kubernetes version.
+		talosConfig, err = talosconfigmanager.NewDefaultConfigsWithVersionAndPatches(
+			m.resolveTalosKubernetesVersion(), patches,
+		)
 		if err != nil {
 			return fmt.Errorf("failed to create default Talos config: %w", err)
 		}

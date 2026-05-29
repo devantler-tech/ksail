@@ -665,6 +665,23 @@ func applyK3dNodeCounts(k3dConfig *k3dv1alpha5.SimpleConfig, controlPlanes, work
 	k3dConfig.Agents = int(workers)
 }
 
+// talosOptsFromCluster builds the OptionsTalos passed to the Talos provisioner,
+// overlaying the distribution-agnostic cluster fields (node counts, Kubernetes
+// version) that the provisioner consumes. The node-count fields bridge the
+// deprecated Talos-scoped aliases during the migration window; KubernetesVersion
+// carries the top-level spec.cluster.kubernetesVersion pin so the provisioner can
+// tell whether the user pinned a version (vs. tracking the running one on update).
+func talosOptsFromCluster(cluster *v1alpha1.Cluster) v1alpha1.OptionsTalos {
+	talosOpts := cluster.Spec.Cluster.Talos
+	//nolint:staticcheck // intentional: bridging deprecated field
+	talosOpts.ControlPlanes = cluster.Spec.Cluster.ControlPlanes
+	//nolint:staticcheck // intentional: bridging deprecated field
+	talosOpts.Workers = cluster.Spec.Cluster.Workers
+	talosOpts.KubernetesVersion = cluster.Spec.Cluster.KubernetesVersion
+
+	return talosOpts
+}
+
 func (f DefaultFactory) createTalosProvisioner(
 	cluster *v1alpha1.Cluster,
 ) (Provisioner, any, error) {
@@ -693,13 +710,8 @@ func (f DefaultFactory) createTalosProvisioner(
 	// services will become ready shortly after bootstrap completes.
 	skipCNIChecks := true
 
-	// Overlay cluster-level node counts onto Talos options for downstream consumers.
-	// Bridges the deprecated Talos-scoped fields during the migration window.
-	talosOpts := cluster.Spec.Cluster.Talos
-	//nolint:staticcheck // intentional: bridging deprecated field
-	talosOpts.ControlPlanes = cluster.Spec.Cluster.ControlPlanes
-	//nolint:staticcheck // intentional: bridging deprecated field
-	talosOpts.Workers = cluster.Spec.Cluster.Workers
+	// Overlay cluster-level fields (node counts, Kubernetes version) onto Talos options.
+	talosOpts := talosOptsFromCluster(cluster)
 
 	// Propagate autoscaler-enabled flag to Hetzner options so the provisioner
 	// can create the cluster-autoscaler-config Secret during bootstrap.
@@ -770,11 +782,7 @@ func (f DefaultFactory) createTalosKubernetesProvisioner(
 
 	// Create a full inner Talos Provisioner (Docker provider type).
 	// The Docker client will be injected at Create() time after DinD is ready.
-	talosOpts := cluster.Spec.Cluster.Talos
-	//nolint:staticcheck // intentional: bridging deprecated field
-	talosOpts.ControlPlanes = cluster.Spec.Cluster.ControlPlanes
-	//nolint:staticcheck // intentional: bridging deprecated field
-	talosOpts.Workers = cluster.Spec.Cluster.Workers
+	talosOpts := talosOptsFromCluster(cluster)
 
 	innerProvisioner, err := talosprovisioner.CreateProvisioner(
 		f.DistributionConfig.Talos,

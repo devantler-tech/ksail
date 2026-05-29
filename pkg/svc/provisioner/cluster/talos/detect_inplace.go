@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/cosi-project/runtime/pkg/safe"
+	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
 	"github.com/siderolabs/talos/pkg/machinery/config/configdiff"
@@ -141,6 +142,11 @@ func (p *Provisioner) buildDesiredNodeConfig(
 		}
 	}
 
+	aligned, err = p.alignKubernetesVersion(aligned, running)
+	if err != nil {
+		return nil, err
+	}
+
 	desired := aligned.ControlPlane()
 	if role == RoleWorker {
 		desired = aligned.Worker()
@@ -151,6 +157,34 @@ func (p *Provisioner) buildDesiredNodeConfig(
 	}
 
 	return graftNodeManagedSections(desired, running)
+}
+
+// alignKubernetesVersion renders the desired config at the Kubernetes version
+// already running on the cluster when the user has not pinned one
+// (spec.cluster.kubernetesVersion). Without this, an unrelated update would
+// regenerate the desired config at KSail's built-in default — which, after KSail
+// bumps that default, reads as an unrequested (and possibly Talos-incompatible)
+// Kubernetes upgrade. When a version is pinned, the pin is left in place so an
+// intentional change is still detected and applied.
+func (p *Provisioner) alignKubernetesVersion(
+	aligned *talosconfigmanager.Configs,
+	running talosconfig.Provider,
+) (*talosconfigmanager.Configs, error) {
+	if p.options != nil && strings.TrimSpace(p.options.KubernetesVersion) != "" {
+		return aligned, nil
+	}
+
+	runningVersion := talosconfigmanager.KubernetesVersionFromProvider(running)
+	if runningVersion == "" {
+		return aligned, nil
+	}
+
+	updated, err := aligned.WithKubernetesVersion(runningVersion)
+	if err != nil {
+		return nil, fmt.Errorf("align Kubernetes version for config comparison: %w", err)
+	}
+
+	return updated, nil
 }
 
 // graftNodeManagedSections copies the machine-config sections that ksail injects

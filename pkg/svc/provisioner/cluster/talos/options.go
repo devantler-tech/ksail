@@ -37,6 +37,14 @@ type Options struct {
 	// NetworkCIDR is the CIDR for the cluster network.
 	NetworkCIDR string
 
+	// KubernetesVersion holds the user's explicit Kubernetes version pin
+	// (spec.cluster.kubernetesVersion), empty when unset. It is the raw
+	// value (possibly with a "v" prefix); only its presence is significant.
+	// When empty, the provisioner renders the desired machine config at the
+	// Kubernetes version already running on the cluster so an unrelated update
+	// never proposes an unrequested upgrade.
+	KubernetesVersion string
+
 	// KubeconfigPath is the path to write the kubeconfig.
 	KubeconfigPath string
 
@@ -102,6 +110,15 @@ func (o *Options) WithNetworkCIDR(cidr string) *Options {
 	if cidr != "" {
 		o.NetworkCIDR = cidr
 	}
+
+	return o
+}
+
+// WithKubernetesVersion records the user's explicit Kubernetes version pin.
+// The value is stored verbatim (its presence, not its exact form, drives the
+// running-version-preservation logic during update).
+func (o *Options) WithKubernetesVersion(version string) *Options {
+	o.KubernetesVersion = version
 
 	return o
 }

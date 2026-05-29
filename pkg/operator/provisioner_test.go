@@ -53,6 +53,32 @@ func TestBuildDistributionConfig_Vanilla(t *testing.T) {
 	assert.Equal(t, "c1", config.Kind.Name)
 }
 
+func TestBuildDistributionConfig_TalosCapsKubernetesVersion(t *testing.T) {
+	t.Parallel()
+
+	// Talos 1.12 supports Kubernetes <= 1.35, so the built-in default must be capped.
+	cluster := clusterWithDistribution("c1", v1alpha1.DistributionTalos)
+	cluster.Spec.Cluster.Talos.Version = "v1.12.4"
+
+	config, err := operator.BuildDistributionConfig(cluster)
+	require.NoError(t, err)
+	require.NotNil(t, config.Talos)
+	assert.Equal(t, "1.35.0", config.Talos.KubernetesVersion(),
+		"operator must cap the default Kubernetes version to the pinned Talos version")
+}
+
+func TestBuildDistributionConfig_TalosHonorsKubernetesVersionPin(t *testing.T) {
+	t.Parallel()
+
+	cluster := clusterWithDistribution("c1", v1alpha1.DistributionTalos)
+	cluster.Spec.Cluster.KubernetesVersion = "v1.31.0"
+
+	config, err := operator.BuildDistributionConfig(cluster)
+	require.NoError(t, err)
+	require.NotNil(t, config.Talos)
+	assert.Equal(t, "1.31.0", config.Talos.KubernetesVersion())
+}
+
 func TestBuildDistributionConfig_K3s(t *testing.T) {
 	t.Parallel()
 

@@ -34,6 +34,9 @@ type Patch = talosconfigmanager.Patch
 // WarnDeprecatedTalosPatchFieldsForTest exposes warnDeprecatedTalosPatchFields for testing.
 var WarnDeprecatedTalosPatchFieldsForTest = warnDeprecatedTalosPatchFields
 
+// WarnKubernetesVersionCappedForTest exposes warnKubernetesVersionCapped for testing.
+var WarnKubernetesVersionCappedForTest = warnKubernetesVersionCapped
+
 // MigrateDeprecatedNodeCountsForTest exposes migrateDeprecatedNodeCounts for testing.
 var MigrateDeprecatedNodeCountsForTest = migrateDeprecatedNodeCounts
 
