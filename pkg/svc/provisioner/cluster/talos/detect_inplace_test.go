@@ -132,6 +132,48 @@ func TestBuildDesiredNodeConfig_NoFalsePositive(t *testing.T) {
 	assert.Empty(t, diff, "an unchanged config must not report drift")
 }
 
+// TestBuildDesiredNodeConfig_PreservesCreateInjectedMirrors reproduces the Docker
+// system-test scenario: the running config carries registry mirrors injected at
+// create (which a regenerate lacks). An unchanged config must still report no
+// drift because the mirrors are grafted from running.
+func TestBuildDesiredNodeConfig_PreservesCreateInjectedMirrors(t *testing.T) {
+	t.Parallel()
+
+	patch := sysctlPatch("machine:\n  sysctls:\n    net.core.rmem_max: \"1\"\n")
+
+	runningConfigs, err := talosconfigmanager.NewDefaultConfigsWithPatches(
+		[]talosconfigmanager.Patch{patch},
+	)
+	require.NoError(t, err)
+
+	// Mirrors are injected at create only (ApplyMirrorRegistries), like the DinD flow.
+	err = runningConfigs.ApplyMirrorRegistries([]talosconfigmanager.MirrorRegistry{
+		{Host: "docker.io", Endpoints: []string{mirrorEndpoint}},
+	})
+	require.NoError(t, err)
+
+	runningBytes, err := runningConfigs.ControlPlane().Bytes()
+	require.NoError(t, err)
+
+	running, err := configloader.NewFromBytes(runningBytes)
+	require.NoError(t, err)
+
+	// Desired configs are regenerated without mirrors (create-only transform).
+	desiredConfigs, err := talosconfigmanager.NewDefaultConfigsWithPatches(
+		[]talosconfigmanager.Patch{patch},
+	)
+	require.NoError(t, err)
+
+	prov := talosprovisioner.NewProvisioner(desiredConfigs, nil)
+
+	desired, err := prov.BuildDesiredNodeConfigForTest(running, talosprovisioner.RoleControlPlane)
+	require.NoError(t, err)
+
+	diff, err := talosprovisioner.MachineConfigDiffForTest(running, desired)
+	require.NoError(t, err)
+	assert.Empty(t, diff, "create-injected mirrors must not read as drift on an unchanged config")
+}
+
 // TestBuildDesiredNodeConfig_DetectsRemoval is the key test for the fix: a sysctl
 // removed from the patch files must be detected as drift (and thus removed on apply).
 func TestBuildDesiredNodeConfig_DetectsRemoval(t *testing.T) {
