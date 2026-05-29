@@ -236,7 +236,7 @@ func (e *Engine) scalarFieldRules() []fieldRule {
 // Both applyFieldRules and applyProviderFieldRules delegate to this helper to
 // avoid duplicating the default-value substitution and category dispatch logic.
 //
-//nolint:cyclop // single dispatch switch over change categories
+
 func appendChange(
 	result *clusterupdate.UpdateResult,
 	field, oldVal, newVal, defaultVal, reason string,
