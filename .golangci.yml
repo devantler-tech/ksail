@@ -79,6 +79,7 @@ linters:
         - github.com/opencontainers/runtime-spec
         - github.com/loft-sh/log
         - github.com/anchore/grype
+        - github.com/kubescape/kubescape/v3
         - github.com/moby/go-archive
     wsl_v5:
       allow-first-in-block: true
