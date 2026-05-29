@@ -12,6 +12,7 @@ import (
 	"github.com/cosi-project/runtime/pkg/safe"
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
+	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
 	svcprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
@@ -1030,6 +1031,11 @@ func (p *Provisioner) GetCurrentConfig(
 	// false-positive diffs when the user pins a version in config.
 	spec.Talos.Version = p.introspectTalosVersion(ctx)
 
+	// Detect the running Kubernetes version so a pinned
+	// spec.cluster.kubernetesVersion that matches the cluster does not read as a
+	// change. Empty when the cluster cannot be reached.
+	spec.KubernetesVersion = p.introspectKubernetesVersion(ctx)
+
 	// Build provider spec if we have Hetzner options configured.
 	// Server types are introspected from the running Hetzner servers so
 	// that changes (e.g., cx22 -> cx33) appear in the diff. Other Hetzner
@@ -1143,6 +1149,27 @@ func (p *Provisioner) introspectTalosVersion(ctx context.Context) string {
 	}
 
 	return version
+}
+
+// introspectKubernetesVersion reports the Kubernetes version running on the
+// cluster, read from a control-plane node's machine config (kube-apiserver image
+// tag). Returns an empty string when the version cannot be determined (e.g. no
+// control-plane node reachable, no Talos API access, or an Omni-managed cluster);
+// in that case the diff engine simply has no baseline to compare a pinned version
+// against. Omni-managed clusters are skipped because Omni owns node configuration.
+func (p *Provisioner) introspectKubernetesVersion(ctx context.Context) string {
+	if p.omniOpts != nil {
+		return ""
+	}
+
+	clusterName := p.resolveClusterName("")
+
+	running, found, err := p.fetchRunningControlPlaneConfig(ctx, clusterName)
+	if err != nil || !found {
+		return ""
+	}
+
+	return talosconfigmanager.KubernetesVersionFromProvider(running)
 }
 
 // countNodeRoles counts control-plane and worker nodes from a list of nodeWithRole.

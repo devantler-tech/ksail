@@ -700,6 +700,9 @@ func (f DefaultFactory) createTalosProvisioner(
 	talosOpts.ControlPlanes = cluster.Spec.Cluster.ControlPlanes
 	//nolint:staticcheck // intentional: bridging deprecated field
 	talosOpts.Workers = cluster.Spec.Cluster.Workers
+	// Bridge the top-level Kubernetes version pin so the provisioner can tell
+	// whether the user pinned a version (vs. tracking the running one on update).
+	talosOpts.KubernetesVersion = cluster.Spec.Cluster.KubernetesVersion
 
 	// Propagate autoscaler-enabled flag to Hetzner options so the provisioner
 	// can create the cluster-autoscaler-config Secret during bootstrap.
@@ -775,6 +778,7 @@ func (f DefaultFactory) createTalosKubernetesProvisioner(
 	talosOpts.ControlPlanes = cluster.Spec.Cluster.ControlPlanes
 	//nolint:staticcheck // intentional: bridging deprecated field
 	talosOpts.Workers = cluster.Spec.Cluster.Workers
+	talosOpts.KubernetesVersion = cluster.Spec.Cluster.KubernetesVersion
 
 	innerProvisioner, err := talosprovisioner.CreateProvisioner(
 		f.DistributionConfig.Talos,

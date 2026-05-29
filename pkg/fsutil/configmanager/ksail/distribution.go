@@ -3,6 +3,7 @@ package configmanager
 import (
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
@@ -97,10 +98,21 @@ func (m *ConfigManager) loadTalosConfig() (*talosconfigmanager.Configs, error) {
 	// Uses ResolveClusterName helper which handles the "admin@<cluster-name>" pattern.
 	clusterName := talosconfigmanager.ResolveClusterName(m.Config, nil)
 
+	// Resolve the Kubernetes version to deploy: honour an explicit pin
+	// (spec.cluster.kubernetesVersion), otherwise use the built-in default
+	// capped to one the pinned Talos release (spec.cluster.talos.version) supports.
+	// On an existing cluster the provisioner further prefers the running version
+	// when unpinned, so an unrelated update never forces a Kubernetes upgrade.
+	kubernetesVersion := talosconfigmanager.ResolveKubernetesVersion(
+		m.Config.Spec.Cluster.Talos.Version,
+		m.Config.Spec.Cluster.KubernetesVersion,
+	)
+	warnKubernetesVersionCapped(m.Config, kubernetesVersion, m.Writer)
+
 	talosManager := talosconfigmanager.NewConfigManager(
 		patchesDir,
 		clusterName,
-		"", // Use default Kubernetes version
+		kubernetesVersion,
 		"", // Use default network CIDR
 	)
 
@@ -300,6 +312,38 @@ func (m *ConfigManager) removeWorkerRoleLabelPatch(patchesDir string) {
 				"remove that label. " + workerRoleLabelFailureModes,
 		)
 	}
+}
+
+// warnKubernetesVersionCapped emits an informational message when KSail had to
+// cap its built-in default Kubernetes version to keep it compatible with the
+// pinned Talos release. It is a no-op when the user pinned a Kubernetes version
+// explicitly, when no Talos version is pinned, or when the default needed no
+// capping — so it only surfaces in the narrow case it is meant to explain.
+func warnKubernetesVersionCapped(cfg *v1alpha1.Cluster, resolvedVersion string, out io.Writer) {
+	if strings.TrimSpace(cfg.Spec.Cluster.KubernetesVersion) != "" {
+		return
+	}
+
+	if strings.TrimSpace(cfg.Spec.Cluster.Talos.Version) == "" {
+		return
+	}
+
+	if resolvedVersion == talosconfigmanager.DefaultKubernetesVersion {
+		return
+	}
+
+	notify.WriteMessage(notify.Message{
+		Type: notify.WarningType,
+		Content: fmt.Sprintf(
+			"Kubernetes %s is too new for the pinned Talos version %s; "+
+				"defaulting to compatible Kubernetes %s. "+
+				"Set spec.cluster.kubernetesVersion to choose a different version.",
+			talosconfigmanager.DefaultKubernetesVersion,
+			cfg.Spec.Cluster.Talos.Version,
+			resolvedVersion,
+		),
+		Writer: out,
+	})
 }
 
 // warnWorkerRoleLabel emits a warning about a stale or customized worker role label patch

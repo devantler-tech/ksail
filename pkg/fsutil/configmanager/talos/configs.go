@@ -368,6 +368,51 @@ func (c *Configs) WithSecrets(existingSecrets *secrets.Bundle) (*Configs, error)
 	)
 }
 
+// WithKubernetesVersion creates a new Configs that targets the given Kubernetes
+// version, regenerating the bundle so the kubelet, kube-apiserver,
+// kube-controller-manager, and kube-scheduler image tags all match. The existing
+// PKI is preserved so the regenerated config still aligns with a running cluster.
+//
+// This is used during cluster update to render the desired machine config at the
+// Kubernetes version actually running on the cluster (rather than KSail's built-in
+// default), so an unrelated update never proposes an unrequested Kubernetes
+// upgrade. The version is normalised to drop any "v" prefix.
+//
+// Returns a new Configs instance; the original is not modified. Returns the
+// original unchanged when version is empty or already matches.
+func (c *Configs) WithKubernetesVersion(version string) (*Configs, error) {
+	version = normalizeKubernetesVersion(version)
+	if version == "" || version == c.kubernetesVersion {
+		return c, nil
+	}
+
+	networkCIDR := c.networkCIDR
+	if networkCIDR == "" {
+		networkCIDR = DefaultNetworkCIDR
+	}
+
+	// Preserve the existing PKI so the regenerated config keeps matching the
+	// running cluster's CA, tokens, and bootstrap secrets.
+	var existingSecrets *secrets.Bundle
+	if c.bundle != nil && c.bundle.ControlPlaneCfg != nil {
+		existingSecrets = secrets.NewBundleFromConfig(
+			secrets.NewFixedClock(time.Now()),
+			c.bundle.ControlPlaneCfg,
+		)
+	}
+
+	return newConfigsWithEndpointAndSecrets(
+		c.Name,
+		version,
+		networkCIDR,
+		c.endpoint,
+		c.patches,
+		existingSecrets,
+		c.versionContract,
+		c.extensions,
+	)
+}
+
 // ExtractSecrets extracts the secrets bundle from the current config for reuse.
 // Returns nil if the bundle or control plane config is not set.
 func (c *Configs) ExtractSecrets() *secrets.Bundle {
