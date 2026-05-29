@@ -76,10 +76,10 @@ function computeUpdates(
   return updates;
 }
 
-function sourceLabel(credential: CredentialSetting): string {
+function sourceLabel(credential: CredentialSetting, secureStorage: boolean): string {
   switch (credential.source) {
     case "store":
-      return "Stored securely";
+      return secureStorage ? "Stored securely" : "Stored (this session only)";
     case "env":
       return `From ${credential.envVar}`;
     default:
@@ -103,12 +103,15 @@ export function SettingsPage({ onSaved }: { onSaved?: () => void }) {
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  // Defaults to true so the "not persisted" warning never flashes before the first load resolves it.
+  const [secureStorage, setSecureStorage] = useState(true);
 
   const load = useCallback(async () => {
     try {
       const response = await getSettings();
       setCredentials(response.credentials);
       setDrafts(initDrafts(response.credentials));
+      setSecureStorage(response.secureStorageAvailable);
       setError(null);
     } catch (err) {
       setError(errorMessage(err));
@@ -137,6 +140,7 @@ export function SettingsPage({ onSaved }: { onSaved?: () => void }) {
       const response = await updateSettings({ updates });
       setCredentials(response.credentials);
       setDrafts(initDrafts(response.credentials));
+      setSecureStorage(response.secureStorageAvailable);
       toast.success("Settings saved");
       onSaved?.();
     } catch (err) {
@@ -166,9 +170,19 @@ export function SettingsPage({ onSaved }: { onSaved?: () => void }) {
     <div className="mx-auto max-w-3xl space-y-6">
       <p className="text-sm text-slate-500 dark:text-slate-400">
         Configure the credentials KSail uses to reach each cloud provider. Each credential resolves
-        from a stored value when set, otherwise from the named environment variable. Stored secrets
-        are kept in your operating system's secure store, never written to disk in plain text.
+        from a stored value when set, otherwise from the named environment variable.
+        {secureStorage
+          ? " Stored secrets are kept in your operating system's secure store, never written to disk in plain text."
+          : ""}
       </p>
+
+      {!secureStorage ? (
+        <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-700/60 dark:bg-amber-900/20 dark:text-amber-300">
+          No OS secure store is available, so secret values entered here are kept only for this
+          running session and are <strong>not persisted</strong> — they are lost on restart. For
+          durable credentials, set the environment variables shown below instead.
+        </p>
+      ) : null}
 
       {groupByProvider(credentials).map(([provider, group]) => (
         <section
@@ -208,7 +222,7 @@ export function SettingsPage({ onSaved }: { onSaved?: () => void }) {
                       onChange={(event) => setDraft(credential.key, { value: event.target.value })}
                     />
                     <div className="mt-1 flex items-center justify-between gap-2 text-xs text-slate-500 dark:text-slate-400">
-                      <span>{sourceLabel(credential)}</span>
+                      <span>{sourceLabel(credential, secureStorage)}</span>
                       {credential.stored ? (
                         <label className="inline-flex items-center gap-1">
                           <input

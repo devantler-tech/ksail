@@ -40,10 +40,13 @@ func NewServer() *api.Server {
 	// environment resolution when the store or settings file is unavailable), and expose the Settings
 	// page so credentials can be configured without shell env — important for a Dock/Finder-launched
 	// desktop app, which does not inherit the shell environment.
-	manager := newCredentialManager()
+	manager, secureStorageAvailable := newCredentialManager()
 	if manager != nil {
 		service.UseCredentials(manager)
-		server.Settings = settingsService{manager: manager}
+		server.Settings = settingsService{
+			manager:                manager,
+			secureStorageAvailable: secureStorageAvailable,
+		}
 	}
 
 	return server

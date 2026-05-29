@@ -11,9 +11,11 @@ import (
 )
 
 // newCredentialManager builds the credential manager backing the local UI's resolution, env overlay,
-// and Settings page. It degrades gracefully: a corrupt settings file or an unusable OS secure store
-// yields nil (the caller then falls back to plain environment resolution with no Settings page).
-func newCredentialManager() *credentials.Manager {
+// and Settings page. It degrades gracefully: a corrupt settings file yields nil (the caller then
+// falls back to plain environment resolution with no Settings page). The returned bool reports
+// whether secret values persist in an OS secure store; when false, the Settings page still works but
+// must signal that secrets are not securely persisted.
+func newCredentialManager() (*credentials.Manager, bool) {
 	store, persistent := credentials.DetectStore()
 	if !persistent {
 		slog.Warn("OS secure store unavailable; credential overrides will not persist " +
@@ -24,7 +26,7 @@ func newCredentialManager() *credentials.Manager {
 	if err != nil {
 		slog.Warn("credential settings unavailable", "error", err)
 
-		return nil
+		return nil, false
 	}
 
 	overlayErr := manager.Overlay()
@@ -32,13 +34,16 @@ func newCredentialManager() *credentials.Manager {
 		slog.Warn("failed to apply stored credentials to the environment", "error", overlayErr)
 	}
 
-	return manager
+	return manager, persistent
 }
 
 // settingsService adapts a credentials.Manager to the operator API's SettingsService, mapping the
 // domain status/update types onto the wire types and translating validation errors to client errors.
 type settingsService struct {
 	manager *credentials.Manager
+	// secureStorageAvailable is false when credentials fall back to an in-memory store (no OS secure
+	// store). It is surfaced to the SPA so it does not claim secrets are securely persisted.
+	secureStorageAvailable bool
 }
 
 func (s settingsService) Get(_ context.Context) (api.SettingsResponse, error) {
@@ -47,7 +52,10 @@ func (s settingsService) Get(_ context.Context) (api.SettingsResponse, error) {
 		return api.SettingsResponse{}, fmt.Errorf("read credential settings: %w", err)
 	}
 
-	return api.SettingsResponse{Credentials: toCredentialSettings(statuses)}, nil
+	return api.SettingsResponse{
+		Credentials:            toCredentialSettings(statuses),
+		SecureStorageAvailable: s.secureStorageAvailable,
+	}, nil
 }
 
 func (s settingsService) Update(

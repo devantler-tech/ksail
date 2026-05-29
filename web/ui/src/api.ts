@@ -124,6 +124,10 @@ export interface CredentialSetting {
 
 export interface SettingsResponse {
   credentials: CredentialSetting[];
+  // False when no OS secure store (keychain) is reachable: secrets entered here are kept only in
+  // memory for the running process and are lost on restart. The page surfaces this so it never
+  // implies secrets are securely persisted.
+  secureStorageAvailable: boolean;
 }
 
 // CredentialUpdate mutates one credential. Omit a field to leave it unchanged; send envVar="" to

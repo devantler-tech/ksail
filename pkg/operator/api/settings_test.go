@@ -68,6 +68,7 @@ func TestGetSettingsReturnsCredentials(t *testing.T) {
 			Credentials: []api.CredentialSetting{
 				{Key: "hetzner.token", Provider: "Hetzner", EnvVar: "HCLOUD_TOKEN", Secret: true},
 			},
+			SecureStorageAvailable: true,
 		}},
 	}
 
@@ -76,6 +77,7 @@ func TestGetSettingsReturnsCredentials(t *testing.T) {
 	assert.Equal(t, http.StatusOK, recorder.Code)
 	assert.Contains(t, recorder.Body.String(), `"key":"hetzner.token"`)
 	assert.Contains(t, recorder.Body.String(), `"secret":true`)
+	assert.Contains(t, recorder.Body.String(), `"secureStorageAvailable":true`)
 }
 
 func TestUpdateSettingsDecodesAndDelegates(t *testing.T) {

@@ -36,6 +36,14 @@ type settings struct {
 	EnvVars map[Key]string `json:"envVars,omitempty"`
 }
 
+// envSnapshot records what a process environment variable held before Overlay first overrode it, so
+// the original (e.g. a value inherited from the shell) can be restored when the stored override is
+// cleared or its variable name changes — preserving the store → os.Getenv resolution order.
+type envSnapshot struct {
+	value   string
+	present bool
+}
+
 // Manager ties the secure Store together with the env-var-name settings file. It is the single
 // object the local UI backend uses to resolve, overlay, inspect, and update provider credentials.
 // It implements Resolver. Safe for concurrent use.
@@ -43,10 +51,12 @@ type Manager struct {
 	store    Store
 	mu       sync.RWMutex
 	settings settings
-	// exported tracks the environment-variable names this Manager has set via Overlay, so it can
-	// unset stale ones (cleared secrets, renamed variables) without touching variables inherited
-	// from the shell.
-	exported map[string]struct{}
+	// exported maps each environment-variable name this Manager has set via Overlay to the value the
+	// variable held *before* the first override. When a name is no longer backed by a stored value
+	// (cleared secret or renamed variable) it is restored to that original — re-set if it was present,
+	// unset if not — rather than blindly unset, so clearing a keychain override falls back to the
+	// inherited shell value instead of erasing it.
+	exported map[string]envSnapshot
 }
 
 // NewManager loads the settings file and returns a Manager backed by store. A missing settings file
@@ -57,7 +67,7 @@ func NewManager(store Store) (*Manager, error) {
 		return nil, err
 	}
 
-	return &Manager{store: store, settings: loaded, exported: map[string]struct{}{}}, nil
+	return &Manager{store: store, settings: loaded, exported: map[string]envSnapshot{}}, nil
 }
 
 // EnvVar returns the environment-variable name key resolves from: the configured override, or the
@@ -120,25 +130,46 @@ func (m *Manager) Overlay() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	// Drop variables we exported on a previous Overlay that are no longer desired.
-	for name := range m.exported {
-		if _, keep := desired[name]; !keep {
-			_ = os.Unsetenv(name)
+	// Restore variables we exported on a previous Overlay that are no longer desired (cleared secret
+	// or renamed variable) to the value they held before we overrode them — re-setting an inherited
+	// value rather than erasing it — so resolution falls back to the environment as intended.
+	for name, original := range m.exported {
+		if _, keep := desired[name]; keep {
+			continue
 		}
+
+		restoreEnv(name, original)
+		delete(m.exported, name)
 	}
 
-	m.exported = make(map[string]struct{}, len(desired))
-
 	for name, value := range desired {
+		// Capture the pre-override value the first time we set a given variable so a later clear can
+		// restore it. If we already track the name, the current value is our own override from a prior
+		// Overlay, not the inherited original — so do not recapture it.
+		if _, tracked := m.exported[name]; !tracked {
+			original, present := os.LookupEnv(name)
+			m.exported[name] = envSnapshot{value: original, present: present}
+		}
+
 		setErr := os.Setenv(name, value)
 		if setErr != nil {
 			return fmt.Errorf("export %q to environment: %w", name, setErr)
 		}
-
-		m.exported[name] = struct{}{}
 	}
 
 	return nil
+}
+
+// restoreEnv returns a variable to the snapshot captured before Overlay overrode it: the original
+// value when it was present, otherwise unset.
+func restoreEnv(name string, original envSnapshot) {
+	if original.present {
+		_ = os.Setenv(name, original.value)
+
+		return
+	}
+
+	_ = os.Unsetenv(name)
 }
 
 // CredentialStatus describes a single credential for the Settings UI. It never carries a secret

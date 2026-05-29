@@ -21,6 +21,10 @@ type SettingsService interface {
 // SettingsResponse is the settings payload the SPA renders.
 type SettingsResponse struct {
 	Credentials []CredentialSetting `json:"credentials"`
+	// SecureStorageAvailable is false when no OS secure store (keychain) is reachable. In that mode
+	// secret values entered here are held only in memory for the running process and are lost on
+	// restart; the SPA surfaces this so it never implies secrets are securely persisted.
+	SecureStorageAvailable bool `json:"secureStorageAvailable"`
 }
 
 // CredentialSetting describes one provider credential's configuration and resolution source. Secret

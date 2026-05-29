@@ -113,6 +113,31 @@ func TestManager_OverlayUnsetsClearedSecret(t *testing.T) {
 		"clearing a stored secret must unset the previously-exported variable")
 }
 
+// TestManager_OverlayRestoresInheritedValueOnClear verifies that when a stored override is layered on
+// top of a variable inherited from the shell, clearing the override RESTORES the inherited value
+// rather than erasing it — preserving the documented store -> os.Getenv resolution order.
+func TestManager_OverlayRestoresInheritedValueOnClear(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	envVar := credentials.DefaultEnvVar(credentials.HetznerToken)
+	t.Setenv(envVar, "from-shell")
+
+	manager, _ := newManager(t)
+
+	// Storing a value overlays it on top of the inherited shell value.
+	require.NoError(t, manager.Update([]credentials.CredentialUpdate{
+		{Key: credentials.HetznerToken, Value: new("from-store")},
+	}))
+	assert.Equal(t, "from-store", os.Getenv(envVar))
+
+	// Clearing the stored value must restore the inherited shell value, not unset the variable.
+	require.NoError(t, manager.Update([]credentials.CredentialUpdate{
+		{Key: credentials.HetznerToken, Value: new("")},
+	}))
+	assert.Equal(t, "from-shell", os.Getenv(envVar),
+		"clearing a stored override must fall back to the inherited environment value")
+}
+
 func TestManager_UpdateRejectsUnknownKey(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 
