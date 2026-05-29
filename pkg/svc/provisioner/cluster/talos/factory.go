@@ -249,6 +249,10 @@ func applyHetznerDefaults(opts v1alpha1.OptionsHetzner) v1alpha1.OptionsHetzner 
 		opts.TokenEnvVar = v1alpha1.DefaultHetznerTokenEnvVar
 	}
 
+	if len(opts.FallbackLocations) == 0 {
+		opts.FallbackLocations = v1alpha1.DefaultHetznerFallbackLocations()
+	}
+
 	return opts
 }
 

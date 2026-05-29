@@ -32,6 +32,44 @@ func extractCredentials(credPart string) (string, string) {
 	return credPart, ""
 }
 
+// registryCredentialMask is the placeholder substituted for a registry password
+// (such as a GHCR Personal Access Token) when a registry spec is rendered in
+// diffs or other CLI output, so the secret is never printed in cleartext.
+const registryCredentialMask = "****"
+
+// RedactRegistryCredentials returns the registry spec with its password component
+// replaced by a fixed mask, so secrets such as a GHCR Personal Access Token are
+// never printed in cleartext. The username, host, port, and path are preserved so
+// diff output still shows what structurally changed. Specs without a "user:pass@"
+// credential prefix, or with an empty password, are returned unchanged.
+//
+// The credential boundaries mirror [LocalRegistry.Parse]: the credentials are the
+// segment before the first "@", and the password is everything after the first
+// ":" within that segment. Mirroring Parse guarantees that whatever
+// [LocalRegistry.ResolveCredentials] would surface as the password is exactly
+// what gets masked here.
+func RedactRegistryCredentials(registry string) string {
+	atIdx := strings.Index(registry, "@")
+	if atIdx <= 0 {
+		return registry
+	}
+
+	// Password exists only when there is a ":" within the credential segment
+	// (matching extractCredentials' colonIdx > 0 requirement).
+	colonIdx := strings.Index(registry[:atIdx], ":")
+	if colonIdx <= 0 {
+		return registry
+	}
+
+	// Empty password (e.g. "user:@host" or an unset "${TOKEN}" expanded away):
+	// nothing secret to mask, and masking would misleadingly imply a password.
+	if registry[colonIdx+1:atIdx] == "" {
+		return registry
+	}
+
+	return registry[:colonIdx+1] + registryCredentialMask + registry[atIdx:]
+}
+
 // parseHostAndPort parses the host:port portion of a registry spec.
 // Returns host, port, and whether an explicit port was provided.
 func parseHostAndPort(spec string) (string, int32, bool) {
@@ -139,24 +177,6 @@ func (r LocalRegistry) ResolveCredentials() (username, password string) {
 	parsed := r.Parse()
 
 	return envvar.Expand(parsed.Username), envvar.Expand(parsed.Password)
-}
-
-// RegistryWithoutCredentials returns the registry specification with any
-// "[user:pass@]" credential prefix removed, preserving the
-// host[:port][/path[:tag]] remainder. Strings without credentials are returned
-// trimmed but otherwise unchanged, and the result is idempotent.
-//
-// It exists so that resolved credentials — e.g. an expanded ${GITHUB_TOKEN} —
-// are never written to persisted cluster state or surfaced in update diffs.
-// The credential boundary mirrors Parse: the first "@" separates the optional
-// credentials from the host.
-func RegistryWithoutCredentials(registry string) string {
-	spec := strings.TrimSpace(registry)
-	if atIdx := strings.Index(spec, "@"); atIdx > 0 {
-		return spec[atIdx+1:]
-	}
-
-	return spec
 }
 
 // HasCredentials returns true if the registry has non-empty username or password configured.

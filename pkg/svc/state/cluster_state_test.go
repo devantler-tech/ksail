@@ -191,22 +191,22 @@ func TestSaveClusterSpec_CreatesDirectories(t *testing.T) {
 	}
 }
 
-// TestSaveClusterSpec_StripsRegistryCredentials is a regression test for a
+// TestSaveClusterSpec_RedactsRegistryCredentials is a regression test for a
 // security issue where `ksail cluster update` persisted the resolved registry
-// password (e.g. an expanded ${GITHUB_TOKEN}) to spec.json in cleartext. The
-// persisted spec is only an update-diff baseline, never a credential source —
-// registry auth is resolved at use-time from the live config — so credentials
-// must be stripped before the spec is written to disk.
-func TestSaveClusterSpec_StripsRegistryCredentials(t *testing.T) {
+// password (e.g. an expanded ${GITHUB_TOKEN} / GHCR PAT) to spec.json in
+// cleartext. The persisted spec is only an update-diff baseline, never a
+// credential source — registry auth is resolved at use-time from the live
+// config — so the password must be masked before the spec is written to disk.
+func TestSaveClusterSpec_RedactsRegistryCredentials(t *testing.T) {
 	t.Parallel()
 
 	const (
-		marker   = "ghp_REGRESSIONSENTINEL000000000000"
-		dirtyReg = "ksail-bot:" + marker + "@ghcr.io/org/repo"
-		cleanReg = "ghcr.io/org/repo"
+		marker      = "ghp_REGRESSIONSENTINEL000000000000"
+		dirtyReg    = "ksail-bot:" + marker + "@ghcr.io/org/repo"
+		redactedReg = "ksail-bot:****@ghcr.io/org/repo"
 	)
 
-	clusterName := "test-strip-creds-" + t.Name()
+	clusterName := "test-redact-creds-" + t.Name()
 	t.Cleanup(func() { _ = state.DeleteClusterState(clusterName) })
 
 	spec := &v1alpha1.ClusterSpec{
@@ -227,9 +227,10 @@ func TestSaveClusterSpec_StripsRegistryCredentials(t *testing.T) {
 		t.Fatalf("persisted spec.json leaked the resolved registry credential:\n%s", raw)
 	}
 
-	// The non-secret host/path must still be persisted for the diff baseline.
-	if !strings.Contains(string(raw), cleanReg) {
-		t.Fatalf("persisted spec.json missing credential-free registry %q:\n%s", cleanReg, raw)
+	// The password must be masked, with the username/host/path left intact for
+	// the diff baseline.
+	if !strings.Contains(string(raw), redactedReg) {
+		t.Fatalf("persisted spec.json missing redacted registry %q:\n%s", redactedReg, raw)
 	}
 
 	// The caller's in-memory spec must be untouched so live registry operations
@@ -239,14 +240,14 @@ func TestSaveClusterSpec_StripsRegistryCredentials(t *testing.T) {
 			spec.LocalRegistry.Registry, dirtyReg)
 	}
 
-	// The baseline round-trips to the credential-free form.
+	// The baseline round-trips to the redacted form.
 	loaded, err := state.LoadClusterSpec(clusterName)
 	if err != nil {
 		t.Fatalf("LoadClusterSpec failed: %v", err)
 	}
 
-	if loaded.LocalRegistry.Registry != cleanReg {
-		t.Errorf("loaded registry: got %q, want %q", loaded.LocalRegistry.Registry, cleanReg)
+	if loaded.LocalRegistry.Registry != redactedReg {
+		t.Errorf("loaded registry: got %q, want %q", loaded.LocalRegistry.Registry, redactedReg)
 	}
 }
 

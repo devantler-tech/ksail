@@ -236,7 +236,7 @@ func (e *Engine) scalarFieldRules() []fieldRule {
 // Both applyFieldRules and applyProviderFieldRules delegate to this helper to
 // avoid duplicating the default-value substitution and category dispatch logic.
 //
-//nolint:cyclop // single dispatch switch over change categories
+
 func appendChange(
 	result *clusterupdate.UpdateResult,
 	field, oldVal, newVal, defaultVal, reason string,
@@ -256,15 +256,22 @@ func appendChange(
 		return
 	}
 
-	change := clusterupdate.Change{
+	routeChange(result, clusterupdate.Change{
 		Field:    field,
 		OldValue: oldVal,
 		NewValue: newVal,
 		Category: category,
 		Reason:   reason,
-	}
+	})
+}
 
-	switch category {
+// routeChange appends a fully-formed change to the result slice matching its
+// category. Unlike appendChange it performs no equality check or default
+// substitution, so callers that have already decided a change occurred (and may
+// have transformed the displayed values, e.g. redacting secrets) can route it
+// without the value-based short-circuit dropping the entry.
+func routeChange(result *clusterupdate.UpdateResult, change clusterupdate.Change) {
+	switch change.Category {
 	case clusterupdate.ChangeCategoryRecreateRequired:
 		result.RecreateRequired = append(result.RecreateRequired, change)
 	case clusterupdate.ChangeCategoryInPlace:
@@ -423,18 +430,34 @@ func (e *Engine) checkLocalRegistryChange(
 		return
 	}
 
-	// Compare and display the registry without credentials. The persisted
-	// baseline never stores them (see state.SaveClusterSpec) while the desired
-	// spec may carry a resolved ${ENV} secret, so stripping both keeps the
-	// comparison consistent and prevents a credential from leaking into the
-	// update diff. A credentials-only change is intentionally not surfaced;
-	// credentials are resolved fresh at use-time.
-	if entry, ok := localRegistryReasonMap[e.distribution]; ok {
-		appendChange(result, "cluster.localRegistry.registry",
-			v1alpha1.RegistryWithoutCredentials(oldSpec.LocalRegistry.Registry),
-			v1alpha1.RegistryWithoutCredentials(newSpec.LocalRegistry.Registry),
-			"", entry.reason, entry.category)
+	reasonCategory, ok := localRegistryReasonMap[e.distribution]
+	if !ok {
+		return
 	}
+
+	// Compare on the credential-redacted specs. The persisted baseline stores the
+	// registry with its password masked (see state.SaveClusterSpec) while the
+	// desired spec is env-expanded to the live secret, so comparing raw values
+	// would report a spurious change on every update. Redacting both first keeps
+	// the comparison stable and keeps the password out of the diff table, JSON
+	// output, and recreate/reboot warnings. This Change is display-only — apply
+	// logic resolves credentials from the spec, never from the diff. A
+	// credentials-only rotation is consequently not surfaced: the baseline no
+	// longer carries the password to compare against.
+	oldRegistry := v1alpha1.RedactRegistryCredentials(oldSpec.LocalRegistry.Registry)
+	newRegistry := v1alpha1.RedactRegistryCredentials(newSpec.LocalRegistry.Registry)
+
+	if oldRegistry == newRegistry {
+		return
+	}
+
+	routeChange(result, clusterupdate.Change{
+		Field:    "cluster.localRegistry.registry",
+		OldValue: oldRegistry,
+		NewValue: newRegistry,
+		Category: reasonCategory.category,
+		Reason:   reasonCategory.reason,
+	})
 }
 
 // checkVanillaOptionsChange checks Vanilla (Kind) specific option changes.
