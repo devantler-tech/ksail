@@ -448,9 +448,9 @@ func (p *Provisioner) applyNodeConfig(
 		return
 	}
 
-	patched, err := applyUserPatches(running, p.talosConfigs.Patches(), node.Role)
+	desired, err := p.buildDesiredNodeConfig(running, node.Role)
 	if err != nil {
-		p.recordNodeConfigFailure(node, result, fmt.Sprintf("apply patches: %v", err))
+		p.recordNodeConfigFailure(node, result, fmt.Sprintf("build desired config: %v", err))
 
 		return
 	}
@@ -458,7 +458,7 @@ func (p *Provisioner) applyNodeConfig(
 	err = p.applyConfigWithMode(
 		ctx,
 		node.IP,
-		patched,
+		desired,
 		machineapi.ApplyConfigurationRequest_NO_REBOOT,
 	)
 	if err != nil {

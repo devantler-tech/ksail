@@ -14,6 +14,7 @@ import (
 	"github.com/docker/docker/api/types/container"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	check "github.com/siderolabs/talos/pkg/cluster/check"
+	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -406,15 +407,18 @@ var MachineConfigDiffForTest = machineConfigDiff
 //nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
 var ConfigFingerprintForTest = configFingerprint
 
-// ApplyUserPatchesForTest exposes applyUserPatches for unit testing.
+// GraftNodeManagedSectionsForTest exposes graftNodeManagedSections for unit testing.
 //
 //nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
-var ApplyUserPatchesForTest = applyUserPatches
+var GraftNodeManagedSectionsForTest = graftNodeManagedSections
 
-// PatchAppliesToRoleForTest exposes patchAppliesToRole for unit testing.
-//
-//nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
-var PatchAppliesToRoleForTest = patchAppliesToRole
+// BuildDesiredNodeConfigForTest exposes buildDesiredNodeConfig for unit testing.
+func (p *Provisioner) BuildDesiredNodeConfigForTest(
+	running talosconfig.Provider,
+	role string,
+) (talosconfig.Provider, error) {
+	return p.buildDesiredNodeConfig(running, role)
+}
 
 // MachineConfigFieldForTest exposes the machine.config change field for unit testing.
 const MachineConfigFieldForTest = MachineConfigField

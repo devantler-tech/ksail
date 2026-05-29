@@ -4,16 +4,18 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/cosi-project/runtime/pkg/safe"
-	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
 	"github.com/siderolabs/talos/pkg/machinery/config/configdiff"
-	"github.com/siderolabs/talos/pkg/machinery/config/configpatcher"
 	"github.com/siderolabs/talos/pkg/machinery/config/encoder"
+	"github.com/siderolabs/talos/pkg/machinery/config/generate/secrets"
+	"github.com/siderolabs/talos/pkg/machinery/config/types/v1alpha1"
 	talosresconfig "github.com/siderolabs/talos/pkg/machinery/resources/config"
 )
 
@@ -31,35 +33,35 @@ const redactedSecretPlaceholder = "<redacted>"
 const maxDriftDiffLines = 60
 
 // MachineConfigField is the change field reported when the desired Talos machine
-// config patches differ from what is running on the nodes.
+// config differs from what is running on the nodes.
 const MachineConfigField = "machine.config"
 
-// detectInPlaceMachineConfigDrift reports whether applying ksail's user patches
-// to the running control-plane config would change it, returning a single
-// in-place change when it would.
+// errNoRoleConfig is returned when the desired config has no machine config for a
+// node's role (control-plane/worker) — an unexpected state for a valid cluster.
+var errNoRoleConfig = errors.New("no Talos machine config available for node role")
+
+// detectInPlaceMachineConfigDrift reports whether the desired Talos machine
+// config (base config + current patch files) differs from what is running on the
+// control-plane node, returning a single in-place change when it does.
 //
 // Talos patch files (everything under talos/, e.g. sysctls, kubelet config,
 // user namespaces, registries, API-server flags) are NOT part of ksail's
-// ClusterSpec, so the spec-level diff engine cannot see them. This overlays the
-// user patches onto the node's *running* config and diffs the result against it,
-// which catches any patch change (additions and edits) generally — rather than a
-// hand-picked set of fields.
+// ClusterSpec, so the spec-level diff engine cannot see them. This compares the
+// fully *regenerated* desired config against the running node config, which
+// catches any patch change generally — additions, edits, AND removals (a key
+// dropped from a patch file is simply absent from the regenerated config).
 //
-// Comparing against the running config (rather than a freshly regenerated one)
-// is what makes this reliable: the running config already carries every
-// create-time/runtime-injected setting (registry-mirror endpoints, PKI, the
-// real cluster endpoint), so those never read as drift. Only the user patch
-// content surfaces. The diff itself uses configdiff.DiffConfigs — the canonical,
-// comments-stripped diff that `talosctl apply-config --dry-run` uses — and both
-// sides are secret-redacted as defence-in-depth and to keep the diff safe to log.
+// The desired config is realigned with the running cluster's PKI and endpoint,
+// and the node-managed sections that ksail injects post-generation at create
+// (registry-mirror endpoints, cert SANs — see buildDesiredNodeConfig) are grafted
+// from the running config, so none of those read as drift. The diff itself uses
+// configdiff.DiffConfigs — the canonical, comments-stripped diff that
+// `talosctl apply-config --dry-run` uses — with secrets redacted on both sides.
 //
-// applyInPlaceConfigChanges applies the very same running+patches config, so
-// detection and apply are consistent.
+// applyInPlaceConfigChanges applies the very same desired config, so detection
+// and apply are consistent (including removals).
 //
 // Caveats:
-//   - Patch *removals* are not detected: strategic-merge patches add/override but
-//     do not delete keys from the running config, so dropping a key from a patch
-//     file is a no-op here (a future enhancement could diff against a full render).
 //   - Only a control-plane node is inspected (matching detectDisruptiveConfigChanges);
 //     cluster-wide patches under talos/cluster/ apply to every node. Worker-only
 //     patch drift is a future enhancement.
@@ -82,12 +84,12 @@ func (p *Provisioner) detectInPlaceMachineConfigDrift(
 		return nil, nil
 	}
 
-	patched, err := applyUserPatches(running, p.talosConfigs.Patches(), RoleControlPlane)
+	desired, err := p.buildDesiredNodeConfig(running, RoleControlPlane)
 	if err != nil {
 		return nil, err
 	}
 
-	diff, err := machineConfigDiff(running, patched)
+	diff, err := machineConfigDiff(running, desired)
 	if err != nil {
 		return nil, err
 	}
@@ -102,67 +104,88 @@ func (p *Provisioner) detectInPlaceMachineConfigDrift(
 		{
 			Field:    MachineConfigField,
 			OldValue: configFingerprint(running),
-			NewValue: configFingerprint(patched),
+			NewValue: configFingerprint(desired),
 			Category: clusterupdate.ChangeCategoryInPlace,
 			Reason:   "Talos machine config (patches) differs from running nodes; will be re-applied without reboot",
 		},
 	}, nil
 }
 
-// applyUserPatches overlays ksail's user-authored Talos patches (scoped to the
-// node role) onto the running config and returns the result. Because the base is
-// the running node config, all create-time/runtime-injected settings (mirror
-// endpoints, PKI, endpoint) are preserved — only the user patch content is
-// applied. Returns the running config unchanged when no patches target the role.
-func applyUserPatches(
+// buildDesiredNodeConfig produces the config ksail wants on a node: the freshly
+// regenerated config (base + current patch files) for the node's role, realigned
+// with the running cluster's PKI and endpoint, then with the node-managed sections
+// grafted from the running config.
+//
+// Regenerating (rather than patching the running config) is what makes patch
+// *removals* detectable: a key dropped from a patch file is simply absent from
+// the regenerated config. The graft then restores the settings ksail injects
+// post-generation at create — which are not user patches and must not read as
+// drift. It returns the running config unchanged if a role config can't be built.
+func (p *Provisioner) buildDesiredNodeConfig(
 	running talosconfig.Provider,
-	patches []talosconfigmanager.Patch,
 	role string,
 ) (talosconfig.Provider, error) {
-	configPatches := make([]configpatcher.Patch, 0, len(patches))
+	bundle := secrets.NewBundleFromConfig(secrets.NewFixedClock(time.Now()), running)
 
-	for _, patch := range patches {
-		if !patchAppliesToRole(patch.Scope, role) {
-			continue
-		}
-
-		loaded, loadErr := configpatcher.LoadPatch(patch.Content)
-		if loadErr != nil {
-			return nil, fmt.Errorf("load patch %s: %w", patch.Path, loadErr)
-		}
-
-		configPatches = append(configPatches, loaded)
-	}
-
-	if len(configPatches) == 0 {
-		return running, nil
-	}
-
-	out, err := configpatcher.Apply(configpatcher.WithConfig(running), configPatches)
+	aligned, err := p.talosConfigs.WithSecrets(bundle)
 	if err != nil {
-		return nil, fmt.Errorf("apply patches to running config: %w", err)
+		return nil, fmt.Errorf("align secrets for config comparison: %w", err)
 	}
 
-	patched, err := out.Config()
-	if err != nil {
-		return nil, fmt.Errorf("read patched config: %w", err)
+	endpointIP := running.Cluster().Endpoint().Hostname()
+	if endpointIP != "" {
+		aligned, err = aligned.WithEndpoint(endpointIP)
+		if err != nil {
+			return nil, fmt.Errorf("align endpoint for config comparison: %w", err)
+		}
 	}
 
-	return patched, nil
+	desired := aligned.ControlPlane()
+	if role == RoleWorker {
+		desired = aligned.Worker()
+	}
+
+	if desired == nil {
+		return nil, fmt.Errorf("%w: %s", errNoRoleConfig, role)
+	}
+
+	return graftNodeManagedSections(desired, running)
 }
 
-// patchAppliesToRole reports whether a patch's scope targets the given node role.
-func patchAppliesToRole(scope talosconfigmanager.PatchScope, role string) bool {
-	switch scope {
-	case talosconfigmanager.PatchScopeCluster:
-		return true
-	case talosconfigmanager.PatchScopeControlPlane:
-		return role == RoleControlPlane
-	case talosconfigmanager.PatchScopeWorker:
-		return role == RoleWorker
-	default:
-		return false
+// graftNodeManagedSections copies the machine-config sections that ksail injects
+// post-generation at create — registry mirrors/auth and cert SANs — from the
+// running config into the desired config, so they don't read as drift. These are
+// node/setup-managed (not user patch content); the apply re-pushes them verbatim.
+//
+// If ksail gains another post-generation machine-config transform, graft its
+// section here too (otherwise it will surface as phantom drift).
+//
+//nolint:staticcheck // MachineRegistries is deprecated but still functional in Talos v1.x
+func graftNodeManagedSections(
+	desired, running talosconfig.Provider,
+) (talosconfig.Provider, error) {
+	runningRaw := running.RawV1Alpha1()
+	if runningRaw == nil || runningRaw.MachineConfig == nil {
+		return desired, nil
 	}
+
+	grafted, err := desired.PatchV1Alpha1(func(cfg *v1alpha1.Config) error {
+		if cfg.MachineConfig == nil {
+			return nil
+		}
+
+		// Registry mirrors + auth: injected by ApplyMirrorRegistries at create.
+		cfg.MachineConfig.MachineRegistries = runningRaw.MachineConfig.MachineRegistries
+		// Cert SANs: appended by WithCertSANs at create (e.g. DinD exposure address).
+		cfg.MachineConfig.MachineCertSANs = runningRaw.MachineConfig.MachineCertSANs
+
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("graft node-managed config sections: %w", err)
+	}
+
+	return grafted, nil
 }
 
 // machineConfigDiff returns the Talos-native textual diff between two configs,
