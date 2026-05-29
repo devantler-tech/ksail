@@ -249,9 +249,17 @@ func (p *Provisioner) applyUpdateChanges(
 }
 
 // DiffConfig computes the differences between current and desired configurations.
+//
+// Besides comparing the spec-level node counts, it performs a live comparison of
+// the regenerated desired machine config (base config + every Talos patch file
+// under talos/, with create-time node-managed sections such as registry mirrors
+// and cert SANs preserved from the running config) against the running
+// control-plane node. Those patches are not part of the ClusterSpec, so this is
+// the only place drift in them surfaces — including patch removals — both in the
+// change summary and as the trigger for re-pushing config to existing nodes.
 func (p *Provisioner) DiffConfig(
-	_ context.Context,
-	_ string,
+	ctx context.Context,
+	name string,
 	oldSpec, newSpec *v1alpha1.ClusterSpec,
 ) (*clusterupdate.UpdateResult, error) {
 	// Talos clusters support in-place changes for most config paths.
@@ -287,7 +295,38 @@ func (p *Provisioner) DiffConfig(
 		})
 	}
 
+	p.appendInPlaceMachineConfigDrift(ctx, name, result)
+
 	return result, nil
+}
+
+// appendInPlaceMachineConfigDrift detects drift between the rendered Talos
+// machine config (all patch files) and the running control-plane node, appending
+// any change to the diff. Detection failures are non-fatal and logged: they must not
+// turn DiffConfig into an error, or callers (computeUpdateDiff, the drift display)
+// would drop the spec-level diff entirely. A clean unreachable cluster yields no
+// changes (the guard short-circuits before any network call when configs are
+// absent, e.g. in unit tests).
+func (p *Provisioner) appendInPlaceMachineConfigDrift(
+	ctx context.Context,
+	name string,
+	result *clusterupdate.UpdateResult,
+) {
+	clusterName := p.resolveClusterName(name)
+
+	changes, err := p.detectInPlaceMachineConfigDrift(ctx, clusterName)
+	if err != nil {
+		_, _ = fmt.Fprintf(
+			p.logWriter,
+			"  ⚠ Failed to detect machine config drift for cluster %q: %v\n",
+			clusterName,
+			err,
+		)
+
+		return
+	}
+
+	result.InPlaceChanges = append(result.InPlaceChanges, changes...)
 }
 
 // applyNodeScalingChanges handles adding or removing Talos nodes.
@@ -360,9 +399,15 @@ func (p *Provisioner) scaleByProvider(
 	return nil
 }
 
-// applyInPlaceConfigChanges applies configuration changes that don't require reboots.
-// Uses ApplyConfiguration with NO_REBOOT mode for Talos-supported fields.
-// Control-plane nodes receive the ControlPlane() config and worker nodes receive the Worker() config.
+// applyInPlaceConfigChanges applies user patch changes to running nodes without a
+// reboot. For each node it overlays the role-scoped user patches onto the node's
+// running config and pushes the result via ApplyConfiguration (NO_REBOOT).
+//
+// Using running+patches (rather than a freshly regenerated config) preserves the
+// create-time/runtime-injected settings the node already carries — registry-mirror
+// endpoints, PKI, the real cluster endpoint — which a regenerated config would
+// drop. This mirrors detectInPlaceMachineConfigDrift, so detection and apply stay
+// consistent.
 func (p *Provisioner) applyInPlaceConfigChanges(
 	ctx context.Context,
 	clusterName string,
@@ -384,66 +429,76 @@ func (p *Provisioner) applyInPlaceConfigChanges(
 		return nil
 	}
 
-	// Apply the appropriate config to each node based on its role
 	for _, node := range nodes {
-		config := p.talosConfigs.ControlPlane()
-		if node.Role == RoleWorker {
-			config = p.talosConfigs.Worker()
-		}
-
-		if config == nil {
-			_, _ = fmt.Fprintf(
-				p.logWriter, "  ⚠ No config available for %s node %s\n",
-				node.Role, node.IP,
-			)
-
-			continue
-		}
-
-		p.applyNodeConfig(ctx, node, config, result)
+		p.applyNodeConfig(ctx, node, result)
 	}
 
 	return nil
 }
 
-// applyNodeConfig applies the appropriate config to a single node and records the result.
+// applyNodeConfig overlays the role-scoped user patches onto a node's running
+// config and applies the result (NO_REBOOT), recording success or failure.
 func (p *Provisioner) applyNodeConfig(
 	ctx context.Context,
 	node nodeWithRole,
-	config talosconfig.Provider,
 	result *clusterupdate.UpdateResult,
 ) {
-	err := p.applyConfigWithMode(
+	running, err := p.fetchNodeConfig(ctx, node.IP)
+	if err != nil {
+		p.recordNodeConfigFailure(node, result, fmt.Sprintf("fetch running config: %v", err))
+
+		return
+	}
+
+	desired, err := p.buildDesiredNodeConfig(running, node.Role)
+	if err != nil {
+		p.recordNodeConfigFailure(node, result, fmt.Sprintf("build desired config: %v", err))
+
+		return
+	}
+
+	err = p.applyConfigWithMode(
 		ctx,
 		node.IP,
-		config,
+		desired,
 		machineapi.ApplyConfigurationRequest_NO_REBOOT,
 	)
 	if err != nil {
-		_, _ = fmt.Fprintf(
-			p.logWriter, "  ⚠ Failed to apply config to %s (%s): %v\n",
-			node.IP, node.Role, err,
-		)
+		p.recordNodeConfigFailure(node, result, fmt.Sprintf("apply %s config: %v", node.Role, err))
 
-		result.FailedChanges = append(result.FailedChanges, clusterupdate.Change{
-			Field:    "talos.config",
-			NewValue: node.IP,
-			Category: clusterupdate.ChangeCategoryInPlace,
-			Reason:   fmt.Sprintf("failed to apply %s config: %v", node.Role, err),
-		})
-	} else {
-		_, _ = fmt.Fprintf(
-			p.logWriter, "  ✓ Config applied to %s (%s, no reboot)\n",
-			node.IP, node.Role,
-		)
-
-		result.AppliedChanges = append(result.AppliedChanges, clusterupdate.Change{
-			Field:    "talos.config",
-			NewValue: node.IP,
-			Category: clusterupdate.ChangeCategoryInPlace,
-			Reason:   node.Role + " config applied successfully",
-		})
+		return
 	}
+
+	_, _ = fmt.Fprintf(
+		p.logWriter, "  ✓ Config applied to %s (%s, no reboot)\n",
+		node.IP, node.Role,
+	)
+
+	result.AppliedChanges = append(result.AppliedChanges, clusterupdate.Change{
+		Field:    "talos.config",
+		NewValue: node.IP,
+		Category: clusterupdate.ChangeCategoryInPlace,
+		Reason:   node.Role + " config applied successfully",
+	})
+}
+
+// recordNodeConfigFailure logs and records a failed node config application.
+func (p *Provisioner) recordNodeConfigFailure(
+	node nodeWithRole,
+	result *clusterupdate.UpdateResult,
+	reason string,
+) {
+	_, _ = fmt.Fprintf(
+		p.logWriter, "  ⚠ Config update failed on %s (%s): %s\n",
+		node.IP, node.Role, reason,
+	)
+
+	result.FailedChanges = append(result.FailedChanges, clusterupdate.Change{
+		Field:    "talos.config",
+		NewValue: node.IP,
+		Category: clusterupdate.ChangeCategoryInPlace,
+		Reason:   reason,
+	})
 }
 
 // applyRebootRequiredChanges applies changes that require node reboots.
