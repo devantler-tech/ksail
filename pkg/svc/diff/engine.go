@@ -236,7 +236,7 @@ func (e *Engine) scalarFieldRules() []fieldRule {
 // Both applyFieldRules and applyProviderFieldRules delegate to this helper to
 // avoid duplicating the default-value substitution and category dispatch logic.
 //
-//nolint:cyclop // single dispatch switch over change categories
+
 func appendChange(
 	result *clusterupdate.UpdateResult,
 	field, oldVal, newVal, defaultVal, reason string,
@@ -256,15 +256,22 @@ func appendChange(
 		return
 	}
 
-	change := clusterupdate.Change{
+	routeChange(result, clusterupdate.Change{
 		Field:    field,
 		OldValue: oldVal,
 		NewValue: newVal,
 		Category: category,
 		Reason:   reason,
-	}
+	})
+}
 
-	switch category {
+// routeChange appends a fully-formed change to the result slice matching its
+// category. Unlike appendChange it performs no equality check or default
+// substitution, so callers that have already decided a change occurred (and may
+// have transformed the displayed values, e.g. redacting secrets) can route it
+// without the value-based short-circuit dropping the entry.
+func routeChange(result *clusterupdate.UpdateResult, change clusterupdate.Change) {
+	switch change.Category {
 	case clusterupdate.ChangeCategoryRecreateRequired:
 		result.RecreateRequired = append(result.RecreateRequired, change)
 	case clusterupdate.ChangeCategoryInPlace:
@@ -423,11 +430,33 @@ func (e *Engine) checkLocalRegistryChange(
 		return
 	}
 
-	if rc, ok := localRegistryReasonMap[e.distribution]; ok {
-		appendChange(result, "cluster.localRegistry.registry",
-			oldSpec.LocalRegistry.Registry, newSpec.LocalRegistry.Registry,
-			"", rc.reason, rc.category)
+	reasonCategory, ok := localRegistryReasonMap[e.distribution]
+	if !ok {
+		return
 	}
+
+	oldRegistry := oldSpec.LocalRegistry.Registry
+	newRegistry := newSpec.LocalRegistry.Registry
+
+	// Detect the change on the raw specs so a credentials-only change (e.g. a
+	// rotated registry password / GHCR PAT) is still reported, then route it with
+	// the password redacted. The registry spec embeds credentials in
+	// [user:pass@]host form and is env-expanded before diffing, so emitting it
+	// verbatim would leak the resolved secret into the diff table, JSON output,
+	// and recreate/reboot warnings. This Change is display-only — apply logic
+	// resolves credentials from the spec, never from the diff — so redacting the
+	// stored value here is safe.
+	if oldRegistry == newRegistry {
+		return
+	}
+
+	routeChange(result, clusterupdate.Change{
+		Field:    "cluster.localRegistry.registry",
+		OldValue: v1alpha1.RedactRegistryCredentials(oldRegistry),
+		NewValue: v1alpha1.RedactRegistryCredentials(newRegistry),
+		Category: reasonCategory.category,
+		Reason:   reasonCategory.reason,
+	})
 }
 
 // checkVanillaOptionsChange checks Vanilla (Kind) specific option changes.

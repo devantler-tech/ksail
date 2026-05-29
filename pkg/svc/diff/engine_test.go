@@ -412,6 +412,55 @@ func TestEngine_LocalRegistryChange_OldEmpty_Skipped(t *testing.T) {
 	}
 }
 
+func TestEngine_LocalRegistryChange_RedactsPassword(t *testing.T) {
+	t.Parallel()
+
+	old := newBaseSpec()
+	old.LocalRegistry.Registry = "GITHUB_ACTOR:ghp_oldsecret@ghcr.io/org"
+
+	newer := clone(old)
+	newer.LocalRegistry.Registry = "GITHUB_ACTOR:ghp_newsecret@ghcr.io/neworg"
+
+	engine := diff.NewEngine(v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
+	result := engine.ComputeDiff(old, newer, nil, nil)
+
+	// Vanilla registry changes are recreate-required; the PAT must be masked while
+	// the username, host, and path stay visible.
+	assertSingleChange(t, result.RecreateRequired, "cluster.localRegistry.registry",
+		"GITHUB_ACTOR:****@ghcr.io/org", "GITHUB_ACTOR:****@ghcr.io/neworg",
+		clusterupdate.ChangeCategoryRecreateRequired)
+
+	// Defense-in-depth: the resolved PAT must not appear in any emitted change value.
+	for _, change := range result.AllChanges() {
+		if strings.Contains(change.OldValue, "ghp_oldsecret") ||
+			strings.Contains(change.NewValue, "ghp_newsecret") {
+			t.Errorf("registry diff leaked PAT: old=%q new=%q", change.OldValue, change.NewValue)
+		}
+	}
+}
+
+func TestEngine_LocalRegistryChange_PasswordOnly_StillDetected(t *testing.T) {
+	t.Parallel()
+
+	// Only the password (PAT) rotates; host, user, and path are unchanged. The
+	// change must still be detected even though both redacted values are identical,
+	// because detection runs on the raw specs before redaction.
+	old := newBaseSpec()
+	old.Distribution = v1alpha1.DistributionTalos
+	old.LocalRegistry.Registry = "user:OLDPAT@ghcr.io/org"
+
+	newer := clone(old)
+	newer.LocalRegistry.Registry = "user:NEWPAT@ghcr.io/org"
+
+	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderDocker)
+	result := engine.ComputeDiff(old, newer, nil, nil)
+
+	change := findChange(result.InPlaceChanges, "cluster.localRegistry.registry")
+	require.NotNil(t, change, "a credentials-only registry change must still be detected")
+	require.Equal(t, "user:****@ghcr.io/org", change.OldValue)
+	require.Equal(t, "user:****@ghcr.io/org", change.NewValue)
+}
+
 func TestEngine_VanillaOptionsChange(t *testing.T) {
 	t.Parallel()
 
