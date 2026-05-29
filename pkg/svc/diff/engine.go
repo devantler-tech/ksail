@@ -435,25 +435,26 @@ func (e *Engine) checkLocalRegistryChange(
 		return
 	}
 
-	oldRegistry := oldSpec.LocalRegistry.Registry
-	newRegistry := newSpec.LocalRegistry.Registry
+	// Compare on the credential-redacted specs. The persisted baseline stores the
+	// registry with its password masked (see state.SaveClusterSpec) while the
+	// desired spec is env-expanded to the live secret, so comparing raw values
+	// would report a spurious change on every update. Redacting both first keeps
+	// the comparison stable and keeps the password out of the diff table, JSON
+	// output, and recreate/reboot warnings. This Change is display-only — apply
+	// logic resolves credentials from the spec, never from the diff. A
+	// credentials-only rotation is consequently not surfaced: the baseline no
+	// longer carries the password to compare against.
+	oldRegistry := v1alpha1.RedactRegistryCredentials(oldSpec.LocalRegistry.Registry)
+	newRegistry := v1alpha1.RedactRegistryCredentials(newSpec.LocalRegistry.Registry)
 
-	// Detect the change on the raw specs so a credentials-only change (e.g. a
-	// rotated registry password / GHCR PAT) is still reported, then route it with
-	// the password redacted. The registry spec embeds credentials in
-	// [user:pass@]host form and is env-expanded before diffing, so emitting it
-	// verbatim would leak the resolved secret into the diff table, JSON output,
-	// and recreate/reboot warnings. This Change is display-only — apply logic
-	// resolves credentials from the spec, never from the diff — so redacting the
-	// stored value here is safe.
 	if oldRegistry == newRegistry {
 		return
 	}
 
 	routeChange(result, clusterupdate.Change{
 		Field:    "cluster.localRegistry.registry",
-		OldValue: v1alpha1.RedactRegistryCredentials(oldRegistry),
-		NewValue: v1alpha1.RedactRegistryCredentials(newRegistry),
+		OldValue: oldRegistry,
+		NewValue: newRegistry,
 		Category: reasonCategory.category,
 		Reason:   reasonCategory.reason,
 	})

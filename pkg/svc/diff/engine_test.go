@@ -439,12 +439,17 @@ func TestEngine_LocalRegistryChange_RedactsPassword(t *testing.T) {
 	}
 }
 
-func TestEngine_LocalRegistryChange_PasswordOnly_StillDetected(t *testing.T) {
+// TestEngine_LocalRegistryChange_PasswordOnly_NotSurfaced verifies that a
+// password-only rotation is NOT reported as a diff. Because the persisted
+// baseline no longer stores the password (state.SaveClusterSpec masks it so a
+// GHCR PAT is never written to disk), checkLocalRegistryChange compares the
+// redacted forms — so a change confined to the password yields two identical
+// redacted values and is intentionally not surfaced. This supersedes the
+// earlier raw-comparison behaviour, which could only detect such a rotation by
+// keeping the cleartext secret in the baseline.
+func TestEngine_LocalRegistryChange_PasswordOnly_NotSurfaced(t *testing.T) {
 	t.Parallel()
 
-	// Only the password (PAT) rotates; host, user, and path are unchanged. The
-	// change must still be detected even though both redacted values are identical,
-	// because detection runs on the raw specs before redaction.
 	old := newBaseSpec()
 	old.Distribution = v1alpha1.DistributionTalos
 	old.LocalRegistry.Registry = "user:OLDPAT@ghcr.io/org"
@@ -455,10 +460,11 @@ func TestEngine_LocalRegistryChange_PasswordOnly_StillDetected(t *testing.T) {
 	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderDocker)
 	result := engine.ComputeDiff(old, newer, nil, nil)
 
-	change := findChange(result.InPlaceChanges, "cluster.localRegistry.registry")
-	require.NotNil(t, change, "a credentials-only registry change must still be detected")
-	require.Equal(t, "user:****@ghcr.io/org", change.OldValue)
-	require.Equal(t, "user:****@ghcr.io/org", change.NewValue)
+	for _, change := range result.AllChanges() {
+		if change.Field == "cluster.localRegistry.registry" {
+			t.Fatalf("password-only change must not be surfaced; got %+v", change)
+		}
+	}
 }
 
 func TestEngine_VanillaOptionsChange(t *testing.T) {
