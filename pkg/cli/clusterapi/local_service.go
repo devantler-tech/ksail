@@ -510,23 +510,18 @@ func distributionConfig(
 }
 
 // talosDistributionConfig builds a fully-initialized Talos config bundle named after the cluster
-// (PKI is baked in at name time and cannot change later), mirroring the operator's create path. The
-// same bundle works for Talos on Docker, Hetzner, or Omni; the factory selects the provider from the
-// cluster spec.
+// (PKI is baked in at name time and cannot change later), via the same shared helper the operator
+// uses. The bundle works for Talos on Docker, Hetzner, or Omni; the factory selects the provider
+// from the cluster spec.
 func talosDistributionConfig(
 	name string,
 ) (*clusterprovisioner.DistributionConfig, error) {
-	configs, err := talosconfigmanager.NewDefaultConfigs()
+	configs, err := talosconfigmanager.NewDefaultConfigsWithName(name)
 	if err != nil {
-		return nil, fmt.Errorf("build talos config: %w", err)
+		return nil, fmt.Errorf("talos distribution config: %w", err)
 	}
 
-	named, err := configs.WithName(name)
-	if err != nil {
-		return nil, fmt.Errorf("name talos config: %w", err)
-	}
-
-	return &clusterprovisioner.DistributionConfig{Talos: named}, nil
+	return &clusterprovisioner.DistributionConfig{Talos: configs}, nil
 }
 
 // eksDistributionConfig renders an eksctl ClusterConfig (region from the AWS_REGION environment,

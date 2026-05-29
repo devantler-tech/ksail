@@ -123,19 +123,15 @@ func buildDistributionConfig(
 }
 
 // newTalosConfig builds a default Talos config bundle named after the provisioned cluster. The
-// cluster name is baked into the PKI, so it must be set via WithName (which regenerates the bundle).
+// cluster name is baked into the PKI, so it must be set at build time. Shared with the local
+// `ksail ui` create path via talosconfigmanager.NewDefaultConfigsWithName.
 func newTalosConfig(name string) (*talosconfigmanager.Configs, error) {
-	configs, err := talosconfigmanager.NewDefaultConfigs()
+	configs, err := talosconfigmanager.NewDefaultConfigsWithName(name)
 	if err != nil {
-		return nil, fmt.Errorf("build talos config: %w", err)
+		return nil, fmt.Errorf("operator talos config: %w", err)
 	}
 
-	named, err := configs.WithName(name)
-	if err != nil {
-		return nil, fmt.Errorf("name talos config: %w", err)
-	}
-
-	return named, nil
+	return configs, nil
 }
 
 // awsRegion resolves the EKS region from the environment variable named by the cluster's AWS
