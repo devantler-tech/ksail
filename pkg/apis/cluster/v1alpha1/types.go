@@ -113,7 +113,7 @@ type ClusterSpec struct {
 	// Set this to intentionally install or move to a specific Kubernetes version.
 	// For orchestrated upgrades across the cluster prefer `cluster update
 	// --update-kubernetes`.
-	KubernetesVersion string `json:"kubernetesVersion,omitzero" jsonschema:"description=Kubernetes version to deploy (Talos distribution). When unset, cluster update preserves the running version and new clusters default to one compatible with the pinned Talos version."` //nolint:lll
+	KubernetesVersion string `json:"kubernetesVersion,omitzero" jsonschema:"description=Kubernetes version to deploy (Talos distribution). When unset: cluster update preserves the running version and new clusters use a default compatible with the pinned Talos version."` //nolint:lll
 
 	// OIDC defines OIDC authentication configuration.
 	// When issuerURL is set, KSail configures the API server with OIDC flags
