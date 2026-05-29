@@ -319,11 +319,11 @@ func (m *ConfigManager) resolveTalosKubernetesVersion() string {
 	return version
 }
 
-// warnKubernetesVersionCapped emits an informational message when KSail had to
-// cap its built-in default Kubernetes version to keep it compatible with the
-// pinned Talos release. It is a no-op when the user pinned a Kubernetes version
-// explicitly, when no Talos version is pinned, or when the default needed no
-// capping — so it only surfaces in the narrow case it is meant to explain.
+// warnKubernetesVersionCapped emits a warning when KSail had to cap its built-in
+// default Kubernetes version to keep it compatible with the pinned Talos release.
+// It is a no-op when the user pinned a Kubernetes version explicitly, when no
+// Talos version is pinned, or when the default needed no capping — so it only
+// surfaces in the narrow case it is meant to explain.
 func warnKubernetesVersionCapped(cfg *v1alpha1.Cluster, resolvedVersion string, out io.Writer) {
 	if strings.TrimSpace(cfg.Spec.Cluster.KubernetesVersion) != "" {
 		return
