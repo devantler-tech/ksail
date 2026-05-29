@@ -319,6 +319,7 @@ Advanced configuration options are direct fields under ` + bt + `spec.cluster` +
 - ` + bt + `networkCidr` + bt + ` – Network CIDR block (default: ` + bt + `10.0.0.0/16` + bt + `)
 - ` + bt + `sshKeyName` + bt + ` – SSH key name for server access (optional)
 - ` + bt + `tokenEnvVar` + bt + ` – Environment variable for API token (default: ` + bt + `HCLOUD_TOKEN` + bt + `)
+- ` + bt + `fallbackLocations` + bt + ` – Alternative locations to try when the primary is at capacity (default: ` + bt + `nbg1` + bt + `, ` + bt + `hel1` + bt + `)
 
 **Vanilla options (` + bt + `spec.cluster.vanilla` + bt + `):**
 
