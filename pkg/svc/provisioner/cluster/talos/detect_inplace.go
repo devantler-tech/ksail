@@ -120,7 +120,8 @@ func (p *Provisioner) detectInPlaceMachineConfigDrift(
 // *removals* detectable: a key dropped from a patch file is simply absent from
 // the regenerated config. The graft then restores the settings ksail injects
 // post-generation at create — which are not user patches and must not read as
-// drift. It returns the running config unchanged if a role config can't be built.
+// drift. It returns an error if secret/endpoint alignment fails or the desired
+// config has no machine config for the node's role.
 func (p *Provisioner) buildDesiredNodeConfig(
 	running talosconfig.Provider,
 	role string,
