@@ -88,7 +88,25 @@ func NewDefaultConfigs() (*Configs, error) {
 // (e.g., kubelet-csr-approver inlineManifests when metrics-server is enabled).
 //
 // The additional patches are applied after the default allowSchedulingOnControlPlanes patch.
+// The Kubernetes version is DefaultKubernetesVersion; use
+// NewDefaultConfigsWithVersionAndPatches to honor a pin or a Talos-compatible default.
 func NewDefaultConfigsWithPatches(additionalPatches []Patch) (*Configs, error) {
+	return NewDefaultConfigsWithVersionAndPatches(DefaultKubernetesVersion, additionalPatches)
+}
+
+// NewDefaultConfigsWithVersionAndPatches is like NewDefaultConfigsWithPatches but
+// targets a specific Kubernetes version. It is used when no scaffolded talos/ dir
+// exists so the default config still honors an explicit pin or a Talos-compatible
+// default (spec.cluster.kubernetesVersion / capped default) rather than always
+// using DefaultKubernetesVersion. An empty kubernetesVersion falls back to the default.
+func NewDefaultConfigsWithVersionAndPatches(
+	kubernetesVersion string,
+	additionalPatches []Patch,
+) (*Configs, error) {
+	if kubernetesVersion == "" {
+		kubernetesVersion = DefaultKubernetesVersion
+	}
+
 	// Default configs are used for control-plane-only clusters (no workers),
 	// so we need to allow scheduling on control-plane nodes.
 	allowSchedulingPatch := Patch{
@@ -103,7 +121,7 @@ func NewDefaultConfigsWithPatches(additionalPatches []Patch) (*Configs, error) {
 
 	return newConfigs(
 		DefaultClusterName,
-		DefaultKubernetesVersion,
+		kubernetesVersion,
 		DefaultNetworkCIDR,
 		patches,
 		nil,

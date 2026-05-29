@@ -88,6 +88,26 @@ func TestResolveKubernetesVersion_CappedIsTalosCompatible(t *testing.T) {
 	assert.Equal(t, "1.35.0", resolved)
 }
 
+func TestNewDefaultConfigsWithVersionAndPatches(t *testing.T) {
+	t.Parallel()
+
+	t.Run("targets the given version", func(t *testing.T) {
+		t.Parallel()
+
+		configs, err := talos.NewDefaultConfigsWithVersionAndPatches("1.35.0", nil)
+		require.NoError(t, err)
+		assert.Equal(t, "1.35.0", configs.KubernetesVersion())
+	})
+
+	t.Run("empty version falls back to the default", func(t *testing.T) {
+		t.Parallel()
+
+		configs, err := talos.NewDefaultConfigsWithVersionAndPatches("", nil)
+		require.NoError(t, err)
+		assert.Equal(t, talos.DefaultKubernetesVersion, configs.KubernetesVersion())
+	})
+}
+
 func TestKubernetesVersionFromProvider(t *testing.T) {
 	t.Parallel()
 

@@ -436,7 +436,13 @@ func (m *ConfigManager) cacheTalosConfig() error {
 		// metrics-server cannot validate kubelet TLS certificates (missing IP SANs).
 		patches := m.getDefaultTalosPatches()
 
-		talosConfig, err = talosconfigmanager.NewDefaultConfigsWithPatches(patches)
+		// Resolve the Kubernetes version here too (not just in loadTalosConfig): with
+		// no scaffolded talos/ dir, this fallback must still honor a pin or cap the
+		// default to the pinned Talos version — otherwise a pinned older Talos would
+		// be paired with an incompatible default Kubernetes version.
+		talosConfig, err = talosconfigmanager.NewDefaultConfigsWithVersionAndPatches(
+			m.resolveTalosKubernetesVersion(), patches,
+		)
 		if err != nil {
 			return fmt.Errorf("failed to create default Talos config: %w", err)
 		}
