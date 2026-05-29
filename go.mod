@@ -643,7 +643,7 @@ require (
 	github.com/mitchellh/hashstructure/v2 v2.0.2 // indirect
 	github.com/mitchellh/mapstructure v1.5.1-0.20231216201459-8508981c8b6c // indirect
 	github.com/mitchellh/reflectwalk v1.0.2 // indirect
-	github.com/moby/buildkit v0.26.3 // indirect
+	github.com/moby/buildkit v0.28.1 // indirect
 	github.com/moby/docker-image-spec v1.3.1 // indirect
 	github.com/moby/go-archive v0.2.0 // indirect
 	github.com/moby/locker v1.0.1 // indirect
@@ -825,7 +825,7 @@ require (
 	github.com/tomarrell/wrapcheck/v2 v2.12.0 // indirect
 	github.com/tommy-muehle/go-mnd/v2 v2.5.1 // indirect
 	github.com/tonistiigi/dchapes-mode v0.0.0-20250318174251-73d941a28323 // indirect
-	github.com/tonistiigi/fsutil v0.0.0-20250605211040-586307ad452f // indirect
+	github.com/tonistiigi/fsutil v0.0.0-20251211185533-a2aa163d723f // indirect
 	github.com/tonistiigi/go-csvvalue v0.0.0-20240814133006-030d3b2625d0 // indirect
 	github.com/tonistiigi/units v0.0.0-20180711220420-6950e57a87ea // indirect
 	github.com/tonistiigi/vt100 v0.0.0-20240514184818-90bafcd6abab // indirect
@@ -891,7 +891,7 @@ require (
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/contrib/detectors/gcp v1.43.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.68.0 // indirect
-	go.opentelemetry.io/contrib/instrumentation/net/http/httptrace/otelhttptrace v0.61.0 // indirect
+	go.opentelemetry.io/contrib/instrumentation/net/http/httptrace/otelhttptrace v0.63.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.68.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/runtime v0.62.0 // indirect
 	go.opentelemetry.io/otel v1.43.0 // indirect
@@ -998,6 +998,20 @@ replace (
 	// everything on the monolith type system.
 	github.com/docker/cli => github.com/docker/cli v28.3.1+incompatible
 	github.com/docker/docker => github.com/docker/docker v28.5.2+incompatible
+
+	// kubescape v3.0.48 (the latest v3 tag) calls
+	// authprovider.DockerAuthProviderConfig{ConfigFile: ...} in core/core/patch.go,
+	// an API buildkit removed in v0.28.0. The buildkit HIGH advisories
+	// CVE-2026-33747 / CVE-2026-33748 are fixed only in v0.28.1+, so KSail must move
+	// buildkit past v0.28.0 — at which point upstream patch.go no longer compiles.
+	// Every kubescape build that fixes patch.go (master, v4.x) also bumps
+	// docker/buildx to v0.33, which migrates to the moby/moby/client split modules
+	// that conflict with the docker monolith pin below (required by k3d). This fork
+	// is v3.0.48 + the one-line upstream-master patch.go fix, keeping everything on
+	// the monolith type system. Remove once kubescape ships a tagged v3 release that
+	// fixes patch.go without forcing the moby/moby split (or once KSail migrates to
+	// the split universe).
+	github.com/kubescape/kubescape/v3 => github.com/devantler/kubescape/v3 v3.0.49-0.20260529230755-084b6f1ebcc8
 
 	// loft-sh/log uses tablewriter v0.0.5 API which is incompatible with v1.x
 	// required by k9s, grype, and syft. This replace can be removed once
