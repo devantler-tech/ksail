@@ -278,6 +278,22 @@ func TestSaveClusterSpec_FilePermissions(t *testing.T) {
 	assertMode(t, filepath.Join(clusterDir, "spec.json"), 0o600)
 }
 
+// TestSaveClusterSpec_NilSpec verifies that persisting a nil spec is a harmless
+// no-op write rather than a panic. The credential sanitizer deep-copies the
+// spec before masking, and a nil deep copy must not be dereferenced — this
+// guards that nil branch against a regression.
+func TestSaveClusterSpec_NilSpec(t *testing.T) {
+	t.Parallel()
+
+	clusterName := "test-nil-spec-" + t.Name()
+	t.Cleanup(func() { _ = state.DeleteClusterState(clusterName) })
+
+	err := state.SaveClusterSpec(clusterName, nil)
+	if err != nil {
+		t.Fatalf("SaveClusterSpec(nil) should not error, got: %v", err)
+	}
+}
+
 // readPersistedSpec returns the raw on-disk spec.json bytes for a cluster so
 // tests can assert on exactly what was written.
 func readPersistedSpec(t *testing.T, clusterName string) []byte {
