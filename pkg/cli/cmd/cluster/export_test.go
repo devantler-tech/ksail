@@ -18,6 +18,7 @@ import (
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/state"
+	"github.com/devantler-tech/ksail/v7/pkg/timer"
 	v1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -156,6 +157,30 @@ func ExportConfirmDisruptiveChanges(
 // ExportReportFailedChanges exports reportFailedChanges for testing.
 func ExportReportFailedChanges(cmd *cobra.Command, result *clusterupdate.UpdateResult) {
 	reportFailedChanges(cmd, result)
+}
+
+// ErrUpdateChangesFailed exports errUpdateChangesFailed for testing.
+var ErrUpdateChangesFailed = errUpdateChangesFailed
+
+// ExportApplyInPlaceChanges exposes applyInPlaceChanges for testing. It builds
+// the component reconciler internally so the unexported type is not needed.
+func ExportApplyInPlaceChanges(
+	cmd *cobra.Command,
+	updater clusterprovisioner.Updater,
+	clusterName string,
+	currentSpec *v1alpha1.ClusterSpec,
+	ctx *localregistry.Context,
+	diff *clusterupdate.UpdateResult,
+	outputTimer timer.Timer,
+	force bool,
+	allowRolling bool,
+) error {
+	reconciler := newComponentReconciler(cmd, ctx.ClusterCfg, clusterName)
+
+	return applyInPlaceChanges(
+		cmd, updater, reconciler, clusterName,
+		currentSpec, ctx, diff, outputTimer, force, allowRolling,
+	)
 }
 
 // ExportReportNoApplicableChanges exports reportNoApplicableChanges for testing.

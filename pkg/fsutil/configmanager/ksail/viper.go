@@ -29,38 +29,56 @@ const (
 func InitializeViper(configFilePath string) (*viper.Viper, error) {
 	viperInstance := viper.New()
 
-	if configFilePath != "" {
-		// Canonicalize the user-supplied path: expand ~, make absolute, resolve symlinks.
-		expanded, err := fsutil.ExpandHomePath(configFilePath)
-		if err != nil {
-			return nil, fmt.Errorf("expanding config path %q: %w", configFilePath, err)
-		}
-
-		canonical, err := fsutil.EvalCanonicalPath(expanded)
-		if err != nil {
-			return nil, fmt.Errorf("canonicalizing config path %q: %w", configFilePath, err)
-		}
-
-		configFilePath = canonical
-		// Use the explicit config file path — skip name/type/path discovery.
-		// Still set config type so Viper can decode files without a .yaml/.yml extension.
-		viperInstance.SetConfigFile(configFilePath)
-		viperInstance.SetConfigType("yaml")
-	} else {
-		// Configure file settings first (highest precedence after flags/env)
-		configureViperFileSettings(viperInstance)
-
-		// Add standard configuration paths
-		configureViperPaths(viperInstance)
-
-		// Setup directory traversal for parent directories
-		addParentDirectoriesToViperPaths(viperInstance)
+	err := configureViperConfigSource(viperInstance, configFilePath)
+	if err != nil {
+		return nil, err
 	}
 
 	// Setup environment variable handling (higher precedence than config files)
 	configureViperEnvironment(viperInstance)
 
 	return viperInstance, nil
+}
+
+// configureViperConfigSource points the given Viper instance at its configuration
+// source. When configFilePath is non-empty the exact (canonicalized) file is used
+// and directory discovery is skipped; otherwise standard name-based discovery and
+// parent-directory traversal are configured.
+//
+// It operates on an existing instance — rather than constructing a fresh one — so
+// callers can switch an already-bound Viper to an explicit --config file without
+// dropping flag bindings registered via BindPFlag.
+func configureViperConfigSource(viperInstance *viper.Viper, configFilePath string) error {
+	if configFilePath != "" {
+		// Canonicalize the user-supplied path: expand ~, make absolute, resolve symlinks.
+		expanded, err := fsutil.ExpandHomePath(configFilePath)
+		if err != nil {
+			return fmt.Errorf("expanding config path %q: %w", configFilePath, err)
+		}
+
+		canonical, err := fsutil.EvalCanonicalPath(expanded)
+		if err != nil {
+			return fmt.Errorf("canonicalizing config path %q: %w", configFilePath, err)
+		}
+
+		// Use the explicit config file path — skip name/type/path discovery.
+		// Still set config type so Viper can decode files without a .yaml/.yml extension.
+		viperInstance.SetConfigFile(canonical)
+		viperInstance.SetConfigType("yaml")
+
+		return nil
+	}
+
+	// Configure file settings first (highest precedence after flags/env)
+	configureViperFileSettings(viperInstance)
+
+	// Add standard configuration paths
+	configureViperPaths(viperInstance)
+
+	// Setup directory traversal for parent directories
+	addParentDirectoriesToViperPaths(viperInstance)
+
+	return nil
 }
 
 // configureViperFileSettings sets up file-related configuration for Viper.

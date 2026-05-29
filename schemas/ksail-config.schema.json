@@ -286,6 +286,10 @@
               "minimum": 0,
               "description": "Number of worker nodes to create for the cluster (provider/distribution-agnostic)"
             },
+            "kubernetesVersion": {
+              "type": "string",
+              "description": "Kubernetes version to deploy (Talos distribution). When unset: cluster update preserves the running version and new clusters use a default compatible with the pinned Talos version."
+            },
             "oidc": {
               "properties": {
                 "issuerURL": {

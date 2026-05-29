@@ -18,6 +18,9 @@ const (
 	testFieldWorkers       = "cluster.workers"
 	testTalosVersionOld    = "v1.11.2"
 	testServerTypeNew      = "cpx41"
+
+	testFieldKubernetesVersion = "cluster.kubernetesVersion"
+	testK8sVersionOld          = "1.32.0"
 )
 
 func newBaseSpec() *v1alpha1.ClusterSpec {
@@ -502,47 +505,58 @@ func TestEngine_VanillaOptionsChange_SkippedForNonVanilla(t *testing.T) {
 	}
 }
 
+// talosOptionsChangeCases drives TestEngine_TalosOptionsChange. Kept at package
+// scope so the test function stays within the funlen limit.
+//
+//nolint:gochecknoglobals // table-driven test cases.
+var talosOptionsChangeCases = []struct {
+	name     string
+	mutate   func(spec *v1alpha1.ClusterSpec)
+	field    string
+	oldValue string
+	newValue string
+}{
+	{
+		name:     "version pin change",
+		mutate:   func(s *v1alpha1.ClusterSpec) { s.Talos.Version = "v1.12.0" },
+		field:    "cluster.talos.version",
+		oldValue: "",
+		newValue: "v1.12.0",
+	},
+	{
+		name:     "kubernetes version pin change",
+		mutate:   func(s *v1alpha1.ClusterSpec) { s.KubernetesVersion = "1.34.0" },
+		field:    testFieldKubernetesVersion,
+		oldValue: "",
+		newValue: "1.34.0",
+	},
+	{
+		name:     "control plane count change",
+		mutate:   func(s *v1alpha1.ClusterSpec) { s.ControlPlanes = 3 },
+		field:    testFieldControlPlanes,
+		oldValue: "1",
+		newValue: "3",
+	},
+	{
+		name:     "worker count change",
+		mutate:   func(s *v1alpha1.ClusterSpec) { s.Workers = 2 },
+		field:    testFieldWorkers,
+		oldValue: "0",
+		newValue: "2",
+	},
+	{
+		name:     "ISO change",
+		mutate:   func(s *v1alpha1.ClusterSpec) { s.Talos.ISO = v1alpha1.DefaultTalosISO - 1 },
+		field:    "cluster.talos.iso",
+		oldValue: strconv.FormatInt(v1alpha1.DefaultTalosISO, 10),
+		newValue: strconv.FormatInt(v1alpha1.DefaultTalosISO-1, 10),
+	},
+}
+
 func TestEngine_TalosOptionsChange(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name     string
-		mutate   func(spec *v1alpha1.ClusterSpec)
-		field    string
-		oldValue string
-		newValue string
-	}{
-		{
-			name:     "version pin change",
-			mutate:   func(s *v1alpha1.ClusterSpec) { s.Talos.Version = "v1.12.0" },
-			field:    "cluster.talos.version",
-			oldValue: "",
-			newValue: "v1.12.0",
-		},
-		{
-			name:     "control plane count change",
-			mutate:   func(s *v1alpha1.ClusterSpec) { s.ControlPlanes = 3 },
-			field:    testFieldControlPlanes,
-			oldValue: "1",
-			newValue: "3",
-		},
-		{
-			name:     "worker count change",
-			mutate:   func(s *v1alpha1.ClusterSpec) { s.Workers = 2 },
-			field:    testFieldWorkers,
-			oldValue: "0",
-			newValue: "2",
-		},
-		{
-			name:     "ISO change",
-			mutate:   func(s *v1alpha1.ClusterSpec) { s.Talos.ISO = v1alpha1.DefaultTalosISO - 1 },
-			field:    "cluster.talos.iso",
-			oldValue: strconv.FormatInt(v1alpha1.DefaultTalosISO, 10),
-			newValue: strconv.FormatInt(v1alpha1.DefaultTalosISO-1, 10),
-		},
-	}
-
-	for _, testCase := range tests {
+	for _, testCase := range talosOptionsChangeCases {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -1679,6 +1693,70 @@ func TestEngine_TalosVersion_ChangeWhenNewDiffers(t *testing.T) {
 	assertSingleChange(
 		t, result.InPlaceChanges,
 		"cluster.talos.version", testTalosVersionOld, "v1.13.0",
+		clusterupdate.ChangeCategoryInPlace,
+	)
+}
+
+func TestEngine_TalosKubernetesVersion_NoChangeWhenNewEmpty(t *testing.T) {
+	t.Parallel()
+
+	// The cluster reports a running Kubernetes version (introspected baseline) but
+	// the user has not pinned one — the provisioner tracks the running version, so
+	// no spec-level change should be emitted.
+	old := newBaseSpec()
+	old.Distribution = v1alpha1.DistributionTalos
+	old.KubernetesVersion = testK8sVersionOld
+
+	newer := clone(old)
+	newer.KubernetesVersion = ""
+
+	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
+	result := engine.ComputeDiff(old, newer, nil, nil)
+
+	for _, c := range result.AllChanges() {
+		if c.Field == testFieldKubernetesVersion {
+			t.Fatalf("expected no kubernetesVersion diff when new version is empty, got %+v", c)
+		}
+	}
+}
+
+func TestEngine_TalosKubernetesVersion_NoChangeWhenMatches(t *testing.T) {
+	t.Parallel()
+
+	// User pins the same version the cluster runs; the "v" prefix must not matter.
+	old := newBaseSpec()
+	old.Distribution = v1alpha1.DistributionTalos
+	old.KubernetesVersion = testK8sVersionOld
+
+	newer := clone(old)
+	newer.KubernetesVersion = "v" + testK8sVersionOld
+
+	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
+	result := engine.ComputeDiff(old, newer, nil, nil)
+
+	for _, c := range result.AllChanges() {
+		if c.Field == testFieldKubernetesVersion {
+			t.Fatalf("expected no kubernetesVersion diff when values match, got %+v", c)
+		}
+	}
+}
+
+func TestEngine_TalosKubernetesVersion_ChangeWhenNewDiffers(t *testing.T) {
+	t.Parallel()
+
+	old := newBaseSpec()
+	old.Distribution = v1alpha1.DistributionTalos
+	old.KubernetesVersion = testK8sVersionOld
+
+	newer := clone(old)
+	newer.KubernetesVersion = "v1.34.0"
+
+	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
+	result := engine.ComputeDiff(old, newer, nil, nil)
+
+	assertSingleChange(
+		t, result.InPlaceChanges,
+		testFieldKubernetesVersion, testK8sVersionOld, "1.34.0",
 		clusterupdate.ChangeCategoryInPlace,
 	)
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/cosi-project/runtime/pkg/safe"
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
+	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
 	svcprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
@@ -1026,9 +1027,9 @@ func (p *Provisioner) GetCurrentConfig(
 	spec.ControlPlanes = controlPlanes
 	spec.Workers = workers
 
-	// Detect the running Talos version from the cluster to avoid
-	// false-positive diffs when the user pins a version in config.
-	spec.Talos.Version = p.introspectTalosVersion(ctx)
+	// Detect running Talos OS and Kubernetes versions to avoid false-positive
+	// diffs when the user pins those versions in config.
+	p.introspectVersions(ctx, spec)
 
 	// Build provider spec if we have Hetzner options configured.
 	// Server types are introspected from the running Hetzner servers so
@@ -1113,6 +1114,15 @@ func (p *Provisioner) introspectNodeCounts(ctx context.Context) (int32, int32) {
 	return 1, 0
 }
 
+// introspectVersions sets the running Talos OS and Kubernetes versions on spec so
+// that a pinned spec.cluster.talos.version / spec.cluster.kubernetesVersion that
+// matches the cluster does not read as a change. Either is left empty when the
+// cluster cannot be reached.
+func (p *Provisioner) introspectVersions(ctx context.Context, spec *v1alpha1.ClusterSpec) {
+	spec.Talos.Version = p.introspectTalosVersion(ctx)
+	spec.KubernetesVersion = p.introspectKubernetesVersion(ctx)
+}
+
 // introspectTalosVersion queries a control-plane node for the running Talos
 // version. Returns an empty string when the version cannot be determined
 // (e.g., no Talos API access); in that case the diff engine will report a
@@ -1143,6 +1153,27 @@ func (p *Provisioner) introspectTalosVersion(ctx context.Context) string {
 	}
 
 	return version
+}
+
+// introspectKubernetesVersion reports the Kubernetes version running on the
+// cluster, read from a control-plane node's machine config (kube-apiserver image
+// tag). Returns an empty string when the version cannot be determined (e.g. no
+// control-plane node reachable, no Talos API access, or an Omni-managed cluster);
+// in that case the diff engine simply has no baseline to compare a pinned version
+// against. Omni-managed clusters are skipped because Omni owns node configuration.
+func (p *Provisioner) introspectKubernetesVersion(ctx context.Context) string {
+	if p.omniOpts != nil {
+		return ""
+	}
+
+	clusterName := p.resolveClusterName("")
+
+	running, found, err := p.fetchRunningControlPlaneConfig(ctx, clusterName)
+	if err != nil || !found {
+		return ""
+	}
+
+	return talosconfigmanager.KubernetesVersionFromProvider(running)
 }
 
 // countNodeRoles counts control-plane and worker nodes from a list of nodeWithRole.

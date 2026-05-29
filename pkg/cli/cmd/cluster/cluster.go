@@ -7690,6 +7690,12 @@ func handleRecreateRequired(
 	return executeRecreateFlow(cmd, cfgManager, ctx, deps, clusterName, force)
 }
 
+// errUpdateChangesFailed signals that one or more changes failed to apply during
+// an in-place cluster update. reportFailedChanges has already printed the
+// per-change details; this sentinel exists so cobra surfaces a non-zero exit
+// (issue #4935) instead of reporting success on a partial or fully-failed apply.
+var errUpdateChangesFailed = errors.New("one or more changes failed to apply")
+
 // applyInPlaceChanges applies provisioner-level and component-level changes in-place.
 // force reflects an explicit --force/--yes (and governs partition wipes), while
 // allowRolling carries consent for rolling node replacement (via --force or an
@@ -7739,18 +7745,26 @@ func applyInPlaceChanges(
 
 	reportFailedChanges(cmd, result)
 
-	if componentErr != nil {
-		return fmt.Errorf("some component changes failed to apply: %w", componentErr)
+	// A non-empty FailedChanges set means the apply was partial or fully failed.
+	// Provisioner-level failures (e.g. a rejected Talos config) are recorded in
+	// result.FailedChanges with a nil Update error, and reconcileComponents
+	// appends component-level failures there too. Return a non-nil error so cobra
+	// exits non-zero — otherwise automation gating on the exit code treats a
+	// failed update as success (issue #4935). Skip the state save: a partial apply
+	// no longer matches the desired spec, so it must not become the saved baseline.
+	if result.HasFailedChanges() {
+		if componentErr != nil {
+			return fmt.Errorf("%w: %w", errUpdateChangesFailed, componentErr)
+		}
+
+		return errUpdateChangesFailed
 	}
 
-	// Persist the updated ClusterSpec for future update baselines.
-	// Only save when all changes applied successfully: failed changes mean
-	// the cluster state is partially applied and does not match the desired spec.
-	if len(result.FailedChanges) == 0 {
-		saveErr := state.SaveClusterSpec(clusterName, &ctx.ClusterCfg.Spec.Cluster)
-		if saveErr != nil {
-			notify.Warningf(cmd.OutOrStderr(), "failed to save cluster state: %v", saveErr)
-		}
+	// Persist the updated ClusterSpec for future update baselines now that every
+	// change applied successfully.
+	saveErr := state.SaveClusterSpec(clusterName, &ctx.ClusterCfg.Spec.Cluster)
+	if saveErr != nil {
+		notify.Warningf(cmd.OutOrStderr(), "failed to save cluster state: %v", saveErr)
 	}
 
 	return nil

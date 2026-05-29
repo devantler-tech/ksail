@@ -243,6 +243,26 @@ func TestHasUnknownBaseline(t *testing.T) {
 	assert.Zero(t, result.TotalChanges())
 }
 
+// TestHasFailedChanges reports whether any change failed to apply. A non-empty
+// FailedChanges set must be treated as a failed update (issue #4935).
+func TestHasFailedChanges(t *testing.T) {
+	t.Parallel()
+
+	result := clusterupdate.NewEmptyUpdateResult()
+	assert.False(t, result.HasFailedChanges())
+
+	result.FailedChanges = append(result.FailedChanges, clusterupdate.Change{
+		Field:    "talos.config",
+		Category: clusterupdate.ChangeCategoryInPlace,
+		Reason:   "apply control-plane config: rpc error",
+	})
+
+	assert.True(t, result.HasFailedChanges())
+	// Failed changes are execution outcomes, not detected diff changes, so they
+	// are not counted by TotalChanges.
+	assert.Zero(t, result.TotalChanges())
+}
+
 // TestChangeCategory_String tests the string representation of change categories.
 func TestChangeCategory_String(t *testing.T) {
 	t.Parallel()

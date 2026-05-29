@@ -66,7 +66,7 @@ require (
 	github.com/github/copilot-sdk/go v0.3.0
 	github.com/go-jose/go-jose/v4 v4.1.4
 	github.com/google/go-github/v72 v72.0.0
-	github.com/hetznercloud/hcloud-go/v2 v2.40.0
+	github.com/hetznercloud/hcloud-go/v2 v2.41.2
 	github.com/invopop/jsonschema v0.14.0
 	github.com/kubescape/kubescape/v3 v3.0.48
 	github.com/kubescape/opa-utils v0.0.298

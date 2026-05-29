@@ -489,6 +489,61 @@ func TestConfigs_WithSecrets(t *testing.T) {
 	})
 }
 
+func TestConfigs_WithKubernetesVersion(t *testing.T) {
+	t.Parallel()
+
+	t.Run("regenerates at the new version preserving PKI", func(t *testing.T) {
+		t.Parallel()
+
+		manager := talos.NewConfigManager("", "k8s-version-cluster", "1.32.0", "10.5.0.0/24")
+		configs, err := manager.Load(configmanager.LoadOptions{})
+		require.NoError(t, err)
+
+		rebuilt, err := configs.WithKubernetesVersion("1.33.0")
+		require.NoError(t, err)
+
+		assert.Equal(t, "1.33.0", rebuilt.KubernetesVersion())
+		assert.Contains(t, rebuilt.ControlPlane().Cluster().APIServer().Image(), ":v1.33.0")
+
+		// PKI is preserved so the regenerated config still matches the cluster.
+		assert.Equal(t,
+			configs.ControlPlane().Cluster().IssuingCA().Crt,
+			rebuilt.ControlPlane().Cluster().IssuingCA().Crt,
+			"cluster CA should be preserved across version change",
+		)
+		assert.Equal(t, "k8s-version-cluster", rebuilt.GetClusterName())
+	})
+
+	t.Run("normalises a v prefix", func(t *testing.T) {
+		t.Parallel()
+
+		manager := talos.NewConfigManager("", "k8s-version-vprefix", "1.32.0", "10.5.0.0/24")
+		configs, err := manager.Load(configmanager.LoadOptions{})
+		require.NoError(t, err)
+
+		rebuilt, err := configs.WithKubernetesVersion("v1.34.1")
+		require.NoError(t, err)
+
+		assert.Equal(t, "1.34.1", rebuilt.KubernetesVersion())
+	})
+
+	t.Run("returns same config for empty or matching version", func(t *testing.T) {
+		t.Parallel()
+
+		manager := talos.NewConfigManager("", "k8s-version-noop", "1.32.0", "10.5.0.0/24")
+		configs, err := manager.Load(configmanager.LoadOptions{})
+		require.NoError(t, err)
+
+		same, err := configs.WithKubernetesVersion("")
+		require.NoError(t, err)
+		assert.Same(t, configs, same, "empty version should be a no-op")
+
+		same, err = configs.WithKubernetesVersion("v1.32.0")
+		require.NoError(t, err)
+		assert.Same(t, configs, same, "matching version should be a no-op")
+	})
+}
+
 func TestConfigs_WithCertSANs(t *testing.T) {
 	t.Parallel()
 

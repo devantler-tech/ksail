@@ -293,6 +293,14 @@ func (r *UpdateResult) HasUnknownBaseline() bool {
 	return len(r.UnknownBaseline) > 0
 }
 
+// HasFailedChanges returns true if one or more changes failed to apply. A
+// non-empty FailedChanges set means the live cluster only partially matches the
+// desired spec, so callers must treat the update as failed (non-zero exit)
+// rather than reporting success.
+func (r *UpdateResult) HasFailedChanges() bool {
+	return len(r.FailedChanges) > 0
+}
+
 // NeedsUserConfirmation returns true if any changes require user confirmation.
 // In-place changes can be applied silently; reboot, recreate, wipe, or rolling
 // node replacement require confirmation.

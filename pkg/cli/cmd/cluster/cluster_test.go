@@ -4460,6 +4460,93 @@ func TestReconcileComponents_MixedKnownAndUnknown(t *testing.T) {
 	assert.Empty(t, result.FailedChanges)
 }
 
+// fakeUpdater is a test clusterprovisioner.Updater whose Update returns a preset
+// result and error, letting tests drive applyInPlaceChanges deterministically.
+type fakeUpdater struct {
+	result *clusterupdate.UpdateResult
+	err    error
+}
+
+func (f *fakeUpdater) Update(
+	_ context.Context,
+	_ string,
+	_, _ *v1alpha1.ClusterSpec,
+	_ clusterupdate.UpdateOptions,
+) (*clusterupdate.UpdateResult, error) {
+	return f.result, f.err
+}
+
+func (f *fakeUpdater) DiffConfig(
+	_ context.Context,
+	_ string,
+	_, _ *v1alpha1.ClusterSpec,
+) (*clusterupdate.UpdateResult, error) {
+	return clusterupdate.NewEmptyUpdateResult(), nil
+}
+
+func (f *fakeUpdater) GetCurrentConfig(
+	_ context.Context,
+	_ string,
+) (*v1alpha1.ClusterSpec, *v1alpha1.ProviderSpec, error) {
+	return nil, nil, nil
+}
+
+// TestApplyInPlaceChanges_FailedChangesReturnError verifies that provisioner-level
+// failures — recorded in result.FailedChanges with a nil Update error, as the
+// Talos provisioner does for a rejected machine config — make applyInPlaceChanges
+// return a non-nil error so the command exits non-zero (issue #4935). Before the
+// fix it returned nil and automation gating on the exit code saw a failed update
+// as success.
+func TestApplyInPlaceChanges_FailedChangesReturnError(t *testing.T) {
+	t.Parallel()
+
+	result := clusterupdate.NewEmptyUpdateResult()
+	result.FailedChanges = append(result.FailedChanges, clusterupdate.Change{
+		Field:  "talos.config",
+		Reason: "apply control-plane config: rpc error",
+	})
+
+	// A non-component in-place change keeps reconcileComponents a no-op, so the
+	// only failure originates from the provisioner — isolating the bug's path.
+	diff := clusterupdate.NewEmptyUpdateResult()
+	diff.InPlaceChanges = append(diff.InPlaceChanges, clusterupdate.Change{
+		Field: "controlPlanes", OldValue: "1", NewValue: "3",
+	})
+
+	ctx := &localregistry.Context{ClusterCfg: &v1alpha1.Cluster{}}
+
+	err := cluster.ExportApplyInPlaceChanges(
+		newReconcileTestCmd(), &fakeUpdater{result: result},
+		"update-exit-code-fail", &v1alpha1.ClusterSpec{}, ctx, diff,
+		nil, false, false,
+	)
+
+	require.Error(t, err)
+	require.ErrorIs(t, err, cluster.ErrUpdateChangesFailed)
+}
+
+// TestApplyInPlaceChanges_NoFailuresSucceeds verifies the happy path: with no
+// failed changes, applyInPlaceChanges returns nil so a clean update still exits
+// zero.
+func TestApplyInPlaceChanges_NoFailuresSucceeds(t *testing.T) {
+	t.Parallel()
+
+	result := clusterupdate.NewEmptyUpdateResult()
+	result.AppliedChanges = append(result.AppliedChanges, clusterupdate.Change{
+		Field: "controlPlanes", OldValue: "1", NewValue: "3",
+	})
+
+	ctx := &localregistry.Context{ClusterCfg: &v1alpha1.Cluster{}}
+
+	err := cluster.ExportApplyInPlaceChanges(
+		newReconcileTestCmd(), &fakeUpdater{result: result},
+		"update-exit-code-ok", &v1alpha1.ClusterSpec{}, ctx,
+		clusterupdate.NewEmptyUpdateResult(), nil, false, false,
+	)
+
+	require.NoError(t, err)
+}
+
 // TestRestoreErrorConstants verifies that all sentinel error variables
 // defined in restore.go are non-nil and have meaningful messages.
 func TestRestoreErrorConstants(t *testing.T) {
