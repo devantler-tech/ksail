@@ -406,6 +406,16 @@ var MachineConfigDiffForTest = machineConfigDiff
 //nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
 var ConfigFingerprintForTest = configFingerprint
 
+// ApplyUserPatchesForTest exposes applyUserPatches for unit testing.
+//
+//nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
+var ApplyUserPatchesForTest = applyUserPatches
+
+// PatchAppliesToRoleForTest exposes patchAppliesToRole for unit testing.
+//
+//nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
+var PatchAppliesToRoleForTest = patchAppliesToRole
+
 // MachineConfigFieldForTest exposes the machine.config change field for unit testing.
 const MachineConfigFieldForTest = MachineConfigField
 
