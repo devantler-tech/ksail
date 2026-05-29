@@ -64,7 +64,8 @@ func (s settingsService) Update(
 	}
 
 	err := s.manager.Update(updates)
-	if errors.Is(err, credentials.ErrInvalidEnvVarName) {
+	if errors.Is(err, credentials.ErrInvalidEnvVarName) ||
+		errors.Is(err, credentials.ErrUnknownCredential) {
 		return api.SettingsResponse{}, fmt.Errorf("%w: %w", api.ErrInvalid, err)
 	}
 

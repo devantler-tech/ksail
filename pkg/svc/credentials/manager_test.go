@@ -90,6 +90,38 @@ func TestManager_UpdateStoresAndClearsSecret(t *testing.T) {
 	assert.False(t, present)
 }
 
+func TestManager_OverlayUnsetsClearedSecret(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	envVar := credentials.DefaultEnvVar(credentials.HetznerToken)
+	t.Setenv(envVar, "")
+
+	manager, _ := newManager(t)
+
+	require.NoError(t, manager.Update([]credentials.CredentialUpdate{
+		{Key: credentials.HetznerToken, Value: new("stored-secret")},
+	}))
+	assert.Equal(t, "stored-secret", os.Getenv(envVar))
+
+	// Clearing the stored secret must remove it from the process env, not leave it lingering.
+	require.NoError(t, manager.Update([]credentials.CredentialUpdate{
+		{Key: credentials.HetznerToken, Value: new("")},
+	}))
+	assert.Empty(t, os.Getenv(envVar),
+		"clearing a stored secret must unset the previously-exported variable")
+}
+
+func TestManager_UpdateRejectsUnknownKey(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	manager, _ := newManager(t)
+
+	err := manager.Update([]credentials.CredentialUpdate{
+		{Key: credentials.Key("nope.nope"), Value: new("x")},
+	})
+	require.ErrorIs(t, err, credentials.ErrUnknownCredential)
+}
+
 func TestManager_UpdateRejectsInvalidEnvVarName(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 

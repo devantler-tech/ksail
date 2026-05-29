@@ -17,9 +17,11 @@ import (
 	"path/filepath"
 	"slices"
 	"sort"
+	"strings"
 	"sync"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	kindconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/kind"
 	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil/scaffolder"
@@ -542,8 +544,10 @@ func eksDistributionConfig(
 	}, nil
 }
 
-// writeEKSConfig renders and writes the eks.yaml for a cluster, returning its path. The name is
-// guarded so it can only ever be a single path segment under ~/.ksail/clusters (no traversal).
+// writeEKSConfig renders and writes the eks.yaml for a cluster, returning its path. The name must be
+// a single path segment, and the resolved directory is verified to stay under ~/.ksail/clusters even
+// after symlink resolution, so neither a crafted name nor a symlinked cluster directory can redirect
+// the write outside the intended tree.
 func writeEKSConfig(name, region string) (string, error) {
 	if !filepath.IsLocal(name) {
 		return "", fmt.Errorf(
@@ -558,23 +562,50 @@ func writeEKSConfig(name, region string) (string, error) {
 		return "", fmt.Errorf("resolve home directory: %w", err)
 	}
 
-	dir := filepath.Join(home, ".ksail", "clusters", name)
+	clustersRoot := filepath.Join(home, ".ksail", "clusters")
 
-	mkErr := os.MkdirAll(dir, eksConfigDirMode)
+	mkErr := os.MkdirAll(filepath.Join(clustersRoot, name), eksConfigDirMode)
 	if mkErr != nil {
 		return "", fmt.Errorf("create eks config directory: %w", mkErr)
+	}
+
+	dir, err := canonicalClusterDir(clustersRoot, name)
+	if err != nil {
+		return "", err
 	}
 
 	configPath := filepath.Join(dir, scaffolder.EKSConfigFile)
 	content := scaffolder.RenderEKSConfig(scaffolder.DefaultEKSConfigParams(name, region))
 
-	// configPath is rooted at ~/.ksail/clusters/<name> and name is guarded by filepath.IsLocal above.
-	writeErr := os.WriteFile(configPath, content, eksConfigFileMode) //nolint:gosec // see above
+	// dir is canonicalized and verified within ~/.ksail/clusters by canonicalClusterDir above.
+	//nolint:gosec // configPath is contained within ~/.ksail/clusters (see canonicalClusterDir)
+	writeErr := os.WriteFile(configPath, content, eksConfigFileMode)
 	if writeErr != nil {
 		return "", fmt.Errorf("write eks config: %w", writeErr)
 	}
 
 	return configPath, nil
+}
+
+// canonicalClusterDir canonicalizes ~/.ksail/clusters/<name> (resolving symlinks) and confirms it
+// remains within the canonical clusters root, rejecting any path that escapes it.
+func canonicalClusterDir(clustersRoot, name string) (string, error) {
+	canonicalRoot, err := fsutil.EvalCanonicalPath(clustersRoot)
+	if err != nil {
+		return "", fmt.Errorf("canonicalize clusters directory: %w", err)
+	}
+
+	canonicalDir, err := fsutil.EvalCanonicalPath(filepath.Join(clustersRoot, name))
+	if err != nil {
+		return "", fmt.Errorf("canonicalize eks config directory: %w", err)
+	}
+
+	rel, err := filepath.Rel(canonicalRoot, canonicalDir)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+		return "", fmt.Errorf("%w: eks config path escapes %s", api.ErrInvalid, canonicalRoot)
+	}
+
+	return canonicalDir, nil
 }
 
 func errDistributionUnavailable(distribution v1alpha1.Distribution) error {

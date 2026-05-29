@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sync"
 )
 
@@ -26,6 +27,9 @@ var envVarNamePattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 // ErrInvalidEnvVarName indicates a configured environment-variable name is not a valid identifier.
 var ErrInvalidEnvVarName = errors.New("invalid environment variable name")
 
+// ErrUnknownCredential indicates an update referenced a credential key KSail does not recognize.
+var ErrUnknownCredential = errors.New("unknown credential")
+
 // settings holds the non-secret, file-persisted configuration: per-credential overrides of the
 // environment-variable name a credential resolves from. Secret values live in the Store, never here.
 type settings struct {
@@ -39,6 +43,10 @@ type Manager struct {
 	store    Store
 	mu       sync.RWMutex
 	settings settings
+	// exported tracks the environment-variable names this Manager has set via Overlay, so it can
+	// unset stale ones (cleared secrets, renamed variables) without touching variables inherited
+	// from the shell.
+	exported map[string]struct{}
 }
 
 // NewManager loads the settings file and returns a Manager backed by store. A missing settings file
@@ -49,7 +57,7 @@ func NewManager(store Store) (*Manager, error) {
 		return nil, err
 	}
 
-	return &Manager{store: store, settings: loaded}, nil
+	return &Manager{store: store, settings: loaded, exported: map[string]struct{}{}}, nil
 }
 
 // EnvVar returns the environment-variable name key resolves from: the configured override, or the
@@ -81,25 +89,46 @@ func (m *Manager) Value(key Key) string {
 	return os.Getenv(name)
 }
 
-// Overlay exports every stored credential into the process environment under its configured
-// variable name. This makes secure-store overrides visible to provider factories and subprocesses
-// (e.g. eksctl) that read os.Getenv — notably for a desktop app launched from the Dock/Finder,
-// which does not inherit the shell environment. Call it at startup and after each update.
+// Overlay reconciles the process environment to match the stored credentials: it exports every
+// stored value under its configured variable name and unsets any variable it previously exported
+// that is no longer backed by a stored value (a cleared secret) or whose variable name changed. It
+// only touches variables it set itself, never ones inherited from the shell. This makes secure-store
+// overrides visible to provider factories and subprocesses (e.g. eksctl) — notably for a desktop app
+// launched from the Dock/Finder, which does not inherit the shell environment. Call it at startup
+// and after each update.
 func (m *Manager) Overlay() error {
+	desired := make(map[string]string)
+
 	for _, key := range AllKeys() {
 		value, ok, err := m.store.Get(key)
 		if err != nil {
 			return fmt.Errorf("read %q from store: %w", key, err)
 		}
 
-		if !ok || value == "" {
-			continue
+		if ok && value != "" {
+			desired[m.EnvVar(key)] = value
+		}
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	// Drop variables we exported on a previous Overlay that are no longer desired.
+	for name := range m.exported {
+		if _, keep := desired[name]; !keep {
+			_ = os.Unsetenv(name)
+		}
+	}
+
+	m.exported = make(map[string]struct{}, len(desired))
+
+	for name, value := range desired {
+		setErr := os.Setenv(name, value)
+		if setErr != nil {
+			return fmt.Errorf("export %q to environment: %w", name, setErr)
 		}
 
-		setErr := os.Setenv(m.EnvVar(key), value)
-		if setErr != nil {
-			return fmt.Errorf("export %q to environment: %w", key, setErr)
-		}
+		m.exported[name] = struct{}{}
 	}
 
 	return nil
@@ -176,8 +205,15 @@ type CredentialUpdate struct {
 }
 
 // Update applies env-var-name and stored-value changes, persists the settings file, writes secret
-// changes to the store, and re-runs Overlay so the changes take effect without a restart.
+// changes to the store, and re-runs Overlay so the changes take effect without a restart. Updates
+// referencing unknown credential keys are rejected so junk is never persisted to disk or the store.
 func (m *Manager) Update(updates []CredentialUpdate) error {
+	for _, update := range updates {
+		if !slices.Contains(AllKeys(), update.Key) {
+			return fmt.Errorf("%w: %q", ErrUnknownCredential, update.Key)
+		}
+	}
+
 	err := m.applyEnvVarOverrides(updates)
 	if err != nil {
 		return err
