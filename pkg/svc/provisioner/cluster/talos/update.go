@@ -251,9 +251,11 @@ func (p *Provisioner) applyUpdateChanges(
 // DiffConfig computes the differences between current and desired configurations.
 //
 // Besides comparing the spec-level node counts, it performs a live comparison of
-// the fully rendered machine config (which embeds every Talos patch file under
-// talos/) against the running control-plane node. Those patches are not part of
-// the ClusterSpec, so this is the only place drift in them surfaces — both in the
+// the regenerated desired machine config (base config + every Talos patch file
+// under talos/, with create-time node-managed sections such as registry mirrors
+// and cert SANs preserved from the running config) against the running
+// control-plane node. Those patches are not part of the ClusterSpec, so this is
+// the only place drift in them surfaces — including patch removals — both in the
 // change summary and as the trigger for re-pushing config to existing nodes.
 func (p *Provisioner) DiffConfig(
 	ctx context.Context,
@@ -487,7 +489,7 @@ func (p *Provisioner) recordNodeConfigFailure(
 	reason string,
 ) {
 	_, _ = fmt.Fprintf(
-		p.logWriter, "  ⚠ Failed to apply config to %s (%s): %s\n",
+		p.logWriter, "  ⚠ Config update failed on %s (%s): %s\n",
 		node.IP, node.Role, reason,
 	)
 
