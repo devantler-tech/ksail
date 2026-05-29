@@ -48,6 +48,10 @@ homebrew_casks:
       branch: "goreleaser/{{ .ProjectName }}-{{ .Tag }}"
       pull_request:
         enabled: true
+        # Open as a draft so the tap cannot auto-merge it while the GitHub release is still a draft
+        # (the cask download URL would 404 for `brew install`). The cd.yaml `homebrew` job marks the
+        # PR ready after `publish-release` flips the release public, letting the tap merge it then.
+        draft: true
     hooks:
       post:
         install: |
