@@ -215,7 +215,23 @@ func (s *Service) Create(
 		)
 	}
 
+	// Default an omitted provider to the distribution's natural one (Docker for local distributions,
+	// AWS for EKS) and reject invalid (distribution, provider) combinations such as EKS+Docker before
+	// any work is enqueued — otherwise the provisioner would silently provision the wrong backend
+	// (e.g. AWS) while the job and returned cluster are labelled with the requested provider.
 	provider := cluster.Spec.Cluster.Provider
+	if provider == "" {
+		provider = v1alpha1.DefaultProviderForDistribution(distribution)
+	}
+
+	err := provider.ValidateForDistribution(distribution)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", api.ErrInvalid, err)
+	}
+
+	// Persist the defaulted/validated provider so the background goroutine, the job record, and the
+	// returned cluster all agree on the backend that will actually be provisioned.
+	cluster.Spec.Cluster.Provider = provider
 
 	live := s.enumerate(ctx)
 
@@ -549,9 +565,13 @@ func eksDistributionConfig(
 // after symlink resolution, so neither a crafted name nor a symlinked cluster directory can redirect
 // the write outside the intended tree.
 func writeEKSConfig(name, region string) (string, error) {
-	if !filepath.IsLocal(name) {
+	// The name becomes exactly one directory under ~/.ksail/clusters, so it must be a single path
+	// segment. filepath.IsLocal alone is insufficient — it still permits multi-segment names like
+	// "foo/bar" and ".", which would redirect the write into an unintended nested directory — so also
+	// require the name to equal its own base element and reject the "." / ".." specials.
+	if !filepath.IsLocal(name) || name != filepath.Base(name) || name == "." || name == ".." {
 		return "", fmt.Errorf(
-			"%w: cluster name %q is not a valid path segment",
+			"%w: cluster name %q must be a single path segment",
 			api.ErrInvalid,
 			name,
 		)
