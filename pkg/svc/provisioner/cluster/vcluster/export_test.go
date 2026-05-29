@@ -6,6 +6,9 @@ import "time"
 // IsTransientCreateErrorForTest exposes isTransientCreateError for unit testing.
 var IsTransientCreateErrorForTest = isTransientCreateError
 
+// VClusterReadyTimeoutForTest exposes vclusterReadyTimeout for unit testing.
+var VClusterReadyTimeoutForTest = vclusterReadyTimeout
+
 // CreateWithRetryForTest exposes createWithRetry for unit testing.
 var CreateWithRetryForTest = createWithRetry
 

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
+	"github.com/devantler-tech/ksail/v7/pkg/envvar"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	kubernetesprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/kubernetes"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
@@ -39,7 +40,10 @@ const (
 	k3kKubeconfigSecretSuffix = "kubeconfig"
 	// k3kKubeconfigKey is the key in the kubeconfig Secret.
 	k3kKubeconfigKey = "kubeconfig.yaml"
-	// k3kWaitTimeout is the maximum time to wait for the k3k cluster to become ready.
+	// k3kWaitTimeout is the default maximum time to wait for the k3k cluster to become
+	// ready. Overridable via the KSAIL_NESTED_READY_TIMEOUT environment variable (see
+	// nestedReadyTimeoutEnvVar / k3kReadyTimeout) so CI can grant a slow-but-healthy
+	// nested cluster more headroom under runner contention without changing the default.
 	k3kWaitTimeout = 10 * time.Minute
 	// k3kWaitInterval is the polling interval when waiting for the cluster.
 	k3kWaitInterval = 5 * time.Second
@@ -54,6 +58,10 @@ const (
 	// nestedDebugEnvVar gates opt-in nested-cluster diagnostics (matches the value the
 	// CI nested-provider test sets and the Talos provisioner checks).
 	nestedDebugEnvVar = "KSAIL_NESTED_DEBUG"
+	// nestedReadyTimeoutEnvVar overrides k3kWaitTimeout with a Go duration (e.g. "15m").
+	// Matches the value the CI nested-provider action exports; lets a slow-but-healthy
+	// nested cluster under runner contention avoid a premature context-deadline failure.
+	nestedReadyTimeoutEnvVar = "KSAIL_NESTED_READY_TIMEOUT"
 )
 
 // errNoRunningServerPod is recorded while polling for a port-forwardable k3k server
@@ -736,6 +744,12 @@ func (p *K3kProvisioner) createClusterCR(
 	return nil
 }
 
+// k3kReadyTimeout returns the readiness wait budget for nested k3k clusters,
+// honoring the KSAIL_NESTED_READY_TIMEOUT override and falling back to k3kWaitTimeout.
+func k3kReadyTimeout() time.Duration {
+	return envvar.Duration(nestedReadyTimeoutEnvVar, k3kWaitTimeout)
+}
+
 // waitForClusterReady polls the k3k Cluster status until it reports Ready.
 func (p *K3kProvisioner) waitForClusterReady(
 	ctx context.Context,
@@ -747,7 +761,7 @@ func (p *K3kProvisioner) waitForClusterReady(
 	}
 
 	err = wait.PollUntilContextTimeout(
-		ctx, k3kWaitInterval, k3kWaitTimeout, true,
+		ctx, k3kWaitInterval, k3kReadyTimeout(), true,
 		func(ctx context.Context) (bool, error) {
 			cluster := &k3kv1beta1.Cluster{}
 
@@ -825,7 +839,7 @@ func (p *K3kProvisioner) waitForKubeconfigSecret(
 	var kubeconfigData []byte
 
 	err := wait.PollUntilContextTimeout(
-		ctx, k3kWaitInterval, k3kWaitTimeout, true,
+		ctx, k3kWaitInterval, k3kReadyTimeout(), true,
 		func(ctx context.Context) (bool, error) {
 			secret, err := p.hostClientset.CoreV1().Secrets(namespace).Get(
 				ctx, secretName, metav1.GetOptions{},
