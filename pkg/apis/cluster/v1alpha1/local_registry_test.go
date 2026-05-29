@@ -288,3 +288,43 @@ func TestLocalRegistry_ResolvedPath(t *testing.T) {
 		})
 	}
 }
+
+func TestRedactRegistryCredentials(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		registry string
+		expected string
+	}{
+		{"empty", "", ""},
+		{"no_credentials_with_port", "localhost:5050", "localhost:5050"},
+		{"no_credentials_with_path", "ghcr.io/org/repo", "ghcr.io/org/repo"},
+		{"username_only_no_password", "user@ghcr.io", "user@ghcr.io"},
+		{"empty_password", "user:@ghcr.io", "user:@ghcr.io"},
+		{"masks_pat", "user:ghp_secret@ghcr.io/org", "user:****@ghcr.io/org"},
+		{
+			"masks_pat_keeps_port_and_path",
+			"user:ghp_secret@ghcr.io:443/org/repo:tag",
+			"user:****@ghcr.io:443/org/repo:tag",
+		},
+		{
+			"masks_resolved_github_actor_credentials",
+			"GITHUB_ACTOR:ghp_abc123@ghcr.io/devantler-tech",
+			"GITHUB_ACTOR:****@ghcr.io/devantler-tech",
+		},
+		{"masks_password_containing_colons", "user:p:a:ss@ghcr.io", "user:****@ghcr.io"},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			assert.Equal(
+				t,
+				testCase.expected,
+				v1alpha1.RedactRegistryCredentials(testCase.registry),
+			)
+		})
+	}
+}
