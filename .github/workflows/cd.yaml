@@ -86,7 +86,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
-      contents: write
+      contents: read
     defaults:
       run:
         working-directory: vsce
@@ -153,7 +153,7 @@ jobs:
     runs-on: macos-latest
     timeout-minutes: 40
     permissions:
-      contents: write
+      contents: read
     steps:
       - name: 📑 Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -201,7 +201,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 40
     permissions:
-      contents: write
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -652,8 +652,10 @@ jobs:
               continue
             fi
             echo "Promoting ${TAP}#${pr} (${branch})"
-            gh pr ready "$pr" --repo "$TAP"
-            # Belt-and-suspenders alongside the tap's own auto-merge automation.
+            # Both gh calls are non-fatal under `set -e`: the PR may already be ready, or auto-merge
+            # may already be enabled by the tap's own automation — neither should fail the job.
+            gh pr ready "$pr" --repo "$TAP" \
+              || echo "::warning::Could not mark ${TAP}#${pr} ready; it may already be ready"
             gh pr merge "$pr" --repo "$TAP" --auto --squash \
               || echo "::warning::Could not enable auto-merge for ${TAP}#${pr}; the tap automation may still merge it"
           done
