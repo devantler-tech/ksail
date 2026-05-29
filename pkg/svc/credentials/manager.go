@@ -105,9 +105,16 @@ func (m *Manager) Overlay() error {
 			return fmt.Errorf("read %q from store: %w", key, err)
 		}
 
-		if ok && value != "" {
-			desired[m.EnvVar(key)] = value
+		if !ok || value == "" {
+			continue
 		}
+
+		// Export under the configured variable name (what discovery resolves) and also under the
+		// provider's default name. The create path builds provider specs with the default *EnvVar
+		// fields and eksctl reads AWS_REGION directly, so exporting under the default too keeps a
+		// stored value usable for creation even when a custom variable name is configured.
+		desired[m.EnvVar(key)] = value
+		desired[DefaultEnvVar(key)] = value
 	}
 
 	m.mu.Lock()

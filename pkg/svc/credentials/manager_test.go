@@ -66,6 +66,8 @@ func TestManager_OverlayExportsStoredSecretsUnderConfiguredName(t *testing.T) {
 	require.NoError(t, manager.Overlay())
 	assert.Equal(t, "secret-token", os.Getenv("MY_HCLOUD"),
 		"overlay must export the stored value under the configured variable name")
+	assert.Equal(t, "secret-token", os.Getenv(credentials.DefaultEnvVar(credentials.HetznerToken)),
+		"overlay must also export under the default name so the create path/eksctl see it")
 }
 
 func TestManager_UpdateStoresAndClearsSecret(t *testing.T) {

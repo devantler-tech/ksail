@@ -147,12 +147,16 @@ func kubernetesClusters(infos []kubernetesprovider.ClusterInfo) []Cluster {
 	return clusters
 }
 
-// awsConfigured reports whether AWS credentials appear set up: static keys or a named profile in
-// the environment, or a shared credentials/config file under ~/.aws. Region alone does not count.
+// awsConfigured reports whether AWS credentials appear set up: a complete pair of static keys or a
+// named profile in the environment, or a shared credentials/config file under ~/.aws. Static
+// credentials need BOTH the access key ID and the secret access key — neither alone lets eksctl
+// authenticate — so a lone access key ID does not count. Region alone does not count either.
 func (d *Discoverer) awsConfigured() bool {
 	resolver := d.resolver()
-	if resolver.Value(credentials.AWSAccessKeyID) != "" ||
-		resolver.Value(credentials.AWSProfile) != "" {
+
+	hasStaticKeys := resolver.Value(credentials.AWSAccessKeyID) != "" &&
+		resolver.Value(credentials.AWSSecretAccessKey) != ""
+	if hasStaticKeys || resolver.Value(credentials.AWSProfile) != "" {
 		return true
 	}
 

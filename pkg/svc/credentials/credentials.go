@@ -2,9 +2,10 @@
 //
 // A credential resolves from a secure-store override (set via the UI Settings page) when present,
 // otherwise from the process environment under a configurable key name that defaults to each
-// provider's conventional variable (e.g. HCLOUD_TOKEN). This package currently provides the
-// environment-only resolver; the secure-store-backed resolver and the Settings persistence are
-// layered on top in a later change without altering the Resolver contract consumers depend on.
+// provider's conventional variable (e.g. HCLOUD_TOKEN). It provides the credential Key/Resolver
+// contract together with EnvResolver (environment-only), the secure Store (OS keyring + in-memory),
+// and Manager, which layers the keyring store and a settings file on top of that contract to back
+// the UI Settings page and export resolved values into the process environment.
 package credentials
 
 import (

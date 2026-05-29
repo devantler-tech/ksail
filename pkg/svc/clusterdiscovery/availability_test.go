@@ -116,16 +116,49 @@ func TestAvailability_AWSRequiresEksctl(t *testing.T) {
 	assert.False(t, got.Available)
 	assert.Contains(t, got.Reason, "eksctl")
 
-	// eksctl present + credentials => available.
+	// eksctl present + a complete pair of static credentials => available.
 	ready := &clusterdiscovery.Discoverer{
 		LookPath: lookPathFound,
-		Resolver: mapResolver{credentials.AWSAccessKeyID: "AKIA..."},
+		Resolver: mapResolver{
+			credentials.AWSAccessKeyID:     "AKIA...",
+			credentials.AWSSecretAccessKey: "secret...",
+		},
 	}
 	got = availabilityFor(
 		ready.Availability(context.Background(), []v1alpha1.Provider{v1alpha1.ProviderAWS}),
 		v1alpha1.ProviderAWS,
 	)
 	assert.True(t, got.Available)
+}
+
+// TestAvailability_AWSRequiresBothStaticKeys verifies a lone access key ID (no secret, no profile,
+// no shared ~/.aws files) does not mark AWS available. HOME is pointed at an empty temp dir so the
+// shared-config check is deterministic.
+func TestAvailability_AWSRequiresBothStaticKeys(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	lookPath := lookPathFound
+
+	idOnly := availabilityFor(
+		(&clusterdiscovery.Discoverer{
+			LookPath: lookPath,
+			Resolver: mapResolver{credentials.AWSAccessKeyID: "AKIA..."},
+		}).Availability(context.Background(), []v1alpha1.Provider{v1alpha1.ProviderAWS}),
+		v1alpha1.ProviderAWS,
+	)
+	assert.False(t, idOnly.Available, "access key ID alone must not enable AWS")
+
+	bothKeys := availabilityFor(
+		(&clusterdiscovery.Discoverer{
+			LookPath: lookPath,
+			Resolver: mapResolver{
+				credentials.AWSAccessKeyID:     "AKIA...",
+				credentials.AWSSecretAccessKey: "secret...",
+			},
+		}).Availability(context.Background(), []v1alpha1.Provider{v1alpha1.ProviderAWS}),
+		v1alpha1.ProviderAWS,
+	)
+	assert.True(t, bothKeys.Available, "a complete static key pair must enable AWS")
 }
 
 func TestAvailability_KubernetesRequiresHostKubeconfig(t *testing.T) {
