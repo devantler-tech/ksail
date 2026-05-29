@@ -75,7 +75,7 @@ func SaveClusterSpec(clusterName string, spec *v1alpha1.ClusterSpec) error {
 		return fmt.Errorf("failed to create state directory %s: %w", dir, err)
 	}
 
-	data, err := json.MarshalIndent(spec, "", "  ")
+	data, err := json.MarshalIndent(sanitizeSpecForPersistence(spec), "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal cluster spec: %w", err)
 	}
@@ -86,6 +86,27 @@ func SaveClusterSpec(clusterName string, spec *v1alpha1.ClusterSpec) error {
 	}
 
 	return nil
+}
+
+// sanitizeSpecForPersistence returns a copy of spec that is safe to write to
+// disk. The persisted spec is only ever used as an update-diff baseline; it is
+// never a credential source (registry auth is always resolved at use-time from
+// the live config via LocalRegistry.ResolveCredentials). Resolved registry
+// credentials — e.g. an expanded ${GITHUB_TOKEN} — must therefore never be
+// written to ~/.ksail in cleartext, so they are stripped here. The work is done
+// on a deep copy so the caller's in-memory spec, which may still drive registry
+// operations after the save, is left untouched.
+func sanitizeSpecForPersistence(spec *v1alpha1.ClusterSpec) *v1alpha1.ClusterSpec {
+	if spec == nil {
+		return nil
+	}
+
+	sanitized := spec.DeepCopy()
+	sanitized.LocalRegistry.Registry = v1alpha1.RegistryWithoutCredentials(
+		sanitized.LocalRegistry.Registry,
+	)
+
+	return sanitized
 }
 
 // LoadClusterSpec loads a previously saved ClusterSpec for a cluster.

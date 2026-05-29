@@ -141,6 +141,24 @@ func (r LocalRegistry) ResolveCredentials() (username, password string) {
 	return envvar.Expand(parsed.Username), envvar.Expand(parsed.Password)
 }
 
+// RegistryWithoutCredentials returns the registry specification with any
+// "[user:pass@]" credential prefix removed, preserving the
+// host[:port][/path[:tag]] remainder. Strings without credentials are returned
+// trimmed but otherwise unchanged, and the result is idempotent.
+//
+// It exists so that resolved credentials — e.g. an expanded ${GITHUB_TOKEN} —
+// are never written to persisted cluster state or surfaced in update diffs.
+// The credential boundary mirrors Parse: the first "@" separates the optional
+// credentials from the host.
+func RegistryWithoutCredentials(registry string) string {
+	spec := strings.TrimSpace(registry)
+	if atIdx := strings.Index(spec, "@"); atIdx > 0 {
+		return spec[atIdx+1:]
+	}
+
+	return spec
+}
+
 // HasCredentials returns true if the registry has non-empty username or password configured.
 func (r LocalRegistry) HasCredentials() bool {
 	parsed := r.Parse()

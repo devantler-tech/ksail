@@ -423,10 +423,17 @@ func (e *Engine) checkLocalRegistryChange(
 		return
 	}
 
-	if rc, ok := localRegistryReasonMap[e.distribution]; ok {
+	// Compare and display the registry without credentials. The persisted
+	// baseline never stores them (see state.SaveClusterSpec) while the desired
+	// spec may carry a resolved ${ENV} secret, so stripping both keeps the
+	// comparison consistent and prevents a credential from leaking into the
+	// update diff. A credentials-only change is intentionally not surfaced;
+	// credentials are resolved fresh at use-time.
+	if entry, ok := localRegistryReasonMap[e.distribution]; ok {
 		appendChange(result, "cluster.localRegistry.registry",
-			oldSpec.LocalRegistry.Registry, newSpec.LocalRegistry.Registry,
-			"", rc.reason, rc.category)
+			v1alpha1.RegistryWithoutCredentials(oldSpec.LocalRegistry.Registry),
+			v1alpha1.RegistryWithoutCredentials(newSpec.LocalRegistry.Registry),
+			"", entry.reason, entry.category)
 	}
 }
 

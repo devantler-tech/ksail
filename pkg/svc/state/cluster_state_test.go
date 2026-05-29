@@ -3,6 +3,7 @@ package state_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -187,5 +188,126 @@ func TestSaveClusterSpec_CreatesDirectories(t *testing.T) {
 	_, statErr := os.Stat(statePath)
 	if os.IsNotExist(statErr) {
 		t.Fatalf("state file not created at %s", statePath)
+	}
+}
+
+// TestSaveClusterSpec_StripsRegistryCredentials is a regression test for a
+// security issue where `ksail cluster update` persisted the resolved registry
+// password (e.g. an expanded ${GITHUB_TOKEN}) to spec.json in cleartext. The
+// persisted spec is only an update-diff baseline, never a credential source —
+// registry auth is resolved at use-time from the live config — so credentials
+// must be stripped before the spec is written to disk.
+func TestSaveClusterSpec_StripsRegistryCredentials(t *testing.T) {
+	t.Parallel()
+
+	const (
+		marker   = "ghp_REGRESSIONSENTINEL000000000000"
+		dirtyReg = "ksail-bot:" + marker + "@ghcr.io/org/repo"
+		cleanReg = "ghcr.io/org/repo"
+	)
+
+	clusterName := "test-strip-creds-" + t.Name()
+	t.Cleanup(func() { _ = state.DeleteClusterState(clusterName) })
+
+	spec := &v1alpha1.ClusterSpec{
+		Distribution:  v1alpha1.DistributionTalos,
+		Provider:      v1alpha1.ProviderDocker,
+		LocalRegistry: v1alpha1.LocalRegistry{Registry: dirtyReg},
+	}
+
+	err := state.SaveClusterSpec(clusterName, spec)
+	if err != nil {
+		t.Fatalf("SaveClusterSpec failed: %v", err)
+	}
+
+	raw := readPersistedSpec(t, clusterName)
+
+	// The resolved secret must never reach disk, even transiently.
+	if strings.Contains(string(raw), marker) {
+		t.Fatalf("persisted spec.json leaked the resolved registry credential:\n%s", raw)
+	}
+
+	// The non-secret host/path must still be persisted for the diff baseline.
+	if !strings.Contains(string(raw), cleanReg) {
+		t.Fatalf("persisted spec.json missing credential-free registry %q:\n%s", cleanReg, raw)
+	}
+
+	// The caller's in-memory spec must be untouched so live registry operations
+	// can still resolve credentials after the save.
+	if spec.LocalRegistry.Registry != dirtyReg {
+		t.Errorf("SaveClusterSpec mutated caller's spec: got %q, want %q",
+			spec.LocalRegistry.Registry, dirtyReg)
+	}
+
+	// The baseline round-trips to the credential-free form.
+	loaded, err := state.LoadClusterSpec(clusterName)
+	if err != nil {
+		t.Fatalf("LoadClusterSpec failed: %v", err)
+	}
+
+	if loaded.LocalRegistry.Registry != cleanReg {
+		t.Errorf("loaded registry: got %q, want %q", loaded.LocalRegistry.Registry, cleanReg)
+	}
+}
+
+// TestSaveClusterSpec_FilePermissions verifies the state directory and file are
+// created with locked-down permissions (0700 / 0600) so that even a transient
+// write is never group- or world-readable.
+func TestSaveClusterSpec_FilePermissions(t *testing.T) {
+	t.Parallel()
+
+	clusterName := "test-perms-" + t.Name()
+	t.Cleanup(func() { _ = state.DeleteClusterState(clusterName) })
+
+	err := state.SaveClusterSpec(
+		clusterName,
+		&v1alpha1.ClusterSpec{Distribution: v1alpha1.DistributionVanilla},
+	)
+	if err != nil {
+		t.Fatalf("SaveClusterSpec failed: %v", err)
+	}
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatalf("UserHomeDir failed: %v", err)
+	}
+
+	clusterDir := filepath.Join(home, ".ksail", "clusters", clusterName)
+	assertMode(t, clusterDir, 0o700)
+	assertMode(t, filepath.Join(clusterDir, "spec.json"), 0o600)
+}
+
+// readPersistedSpec returns the raw on-disk spec.json bytes for a cluster so
+// tests can assert on exactly what was written.
+func readPersistedSpec(t *testing.T, clusterName string) []byte {
+	t.Helper()
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatalf("UserHomeDir failed: %v", err)
+	}
+
+	statePath := filepath.Join(home, ".ksail", "clusters", clusterName, "spec.json")
+
+	raw, err := os.ReadFile(statePath) //nolint:gosec // path built from home + test cluster name
+	if err != nil {
+		t.Fatalf("reading persisted state failed: %v", err)
+	}
+
+	return raw
+}
+
+// assertMode fails the test if the file at path does not have exactly the
+// expected permission bits.
+func assertMode(t *testing.T, path string, want os.FileMode) {
+	t.Helper()
+
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat %s: %v", path, err)
+	}
+
+	if got := info.Mode().Perm(); got != want {
+		t.Errorf("%s mode: got %#o, want %#o", path, got, want)
 	}
 }

@@ -412,6 +412,57 @@ func TestEngine_LocalRegistryChange_OldEmpty_Skipped(t *testing.T) {
 	}
 }
 
+// TestEngine_LocalRegistryChange_CredentialsOnly_NoDiff verifies that a change
+// confined to the registry credentials (e.g. a rotated ${GITHUB_TOKEN}) is not
+// surfaced as a diff. The persisted baseline is credential-free while the
+// desired spec may carry a resolved secret, so the comparison must ignore
+// credentials to avoid a spurious every-update change.
+func TestEngine_LocalRegistryChange_CredentialsOnly_NoDiff(t *testing.T) {
+	t.Parallel()
+
+	old := newBaseSpec()
+	old.Distribution = v1alpha1.DistributionTalos
+	old.LocalRegistry.Registry = "ghcr.io/org/repo"
+
+	newer := clone(old)
+	newer.LocalRegistry.Registry = "ksail-bot:ghp_RESOLVEDSECRET@ghcr.io/org/repo"
+
+	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderDocker)
+	result := engine.ComputeDiff(old, newer, nil, nil)
+
+	for _, change := range result.AllChanges() {
+		if change.Field == "cluster.localRegistry.registry" {
+			t.Fatalf("credentials-only change should not be surfaced; got %+v", change)
+		}
+	}
+}
+
+// TestEngine_LocalRegistryChange_DoesNotLeakCredentials verifies that when the
+// registry host/path genuinely changes, the diff fires but neither the old nor
+// new displayed value contains the resolved credential.
+func TestEngine_LocalRegistryChange_DoesNotLeakCredentials(t *testing.T) {
+	t.Parallel()
+
+	old := newBaseSpec()
+	old.Distribution = v1alpha1.DistributionTalos
+	old.LocalRegistry.Registry = "ksail-bot:ghp_OLDSECRET@ghcr.io/org/repo"
+
+	newer := clone(old)
+	newer.LocalRegistry.Registry = "ksail-bot:ghp_NEWSECRET@ghcr.io/org/other"
+
+	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderDocker)
+	result := engine.ComputeDiff(old, newer, nil, nil)
+
+	assertSingleChange(t, result.InPlaceChanges, "cluster.localRegistry.registry",
+		"ghcr.io/org/repo", "ghcr.io/org/other", clusterupdate.ChangeCategoryInPlace)
+
+	for _, change := range result.AllChanges() {
+		if strings.Contains(change.OldValue, "ghp_") || strings.Contains(change.NewValue, "ghp_") {
+			t.Fatalf("diff leaked a registry credential: %+v", change)
+		}
+	}
+}
+
 func TestEngine_VanillaOptionsChange(t *testing.T) {
 	t.Parallel()
 

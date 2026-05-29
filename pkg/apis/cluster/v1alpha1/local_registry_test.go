@@ -216,6 +216,50 @@ func TestLocalRegistry_Parse_Credentials(t *testing.T) {
 	}
 }
 
+func TestRegistryWithoutCredentials(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		registry string
+		want     string
+	}{
+		{name: "empty", registry: "", want: ""},
+		{name: "no_credentials", registry: "reg.example/no-creds", want: "reg.example/no-creds"},
+		{name: "local_no_credentials", registry: "localhost:15050", want: "localhost:15050"},
+		{
+			name:     "user_and_password",
+			registry: "admin:secret@reg.example:5000/path",
+			want:     "reg.example:5000/path",
+		},
+		{name: "user_only", registry: "admin@reg.example/foo", want: "reg.example/foo"},
+		{
+			name:     "resolved_token",
+			registry: "ksail-bot:ghp_TOKEN@reg.example:443/org",
+			want:     "reg.example:443/org",
+		},
+		{
+			name:     "env_placeholder",
+			registry: "${USER}:${PASS}@reg.example/team",
+			want:     "reg.example/team",
+		},
+		{name: "whitespace_trimmed", registry: "  reg.example/space  ", want: "reg.example/space"},
+		{name: "idempotent", registry: "reg.example:443/again", want: "reg.example:443/again"},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := v1alpha1.RegistryWithoutCredentials(testCase.registry)
+			assert.Equal(t, testCase.want, got)
+
+			// Stripping must be idempotent: a credential-free string is unchanged.
+			assert.Equal(t, testCase.want, v1alpha1.RegistryWithoutCredentials(got))
+		})
+	}
+}
+
 func TestLocalRegistry_ResolvedHost(t *testing.T) {
 	t.Parallel()
 
