@@ -1027,14 +1027,9 @@ func (p *Provisioner) GetCurrentConfig(
 	spec.ControlPlanes = controlPlanes
 	spec.Workers = workers
 
-	// Detect the running Talos version from the cluster to avoid
-	// false-positive diffs when the user pins a version in config.
-	spec.Talos.Version = p.introspectTalosVersion(ctx)
-
-	// Detect the running Kubernetes version so a pinned
-	// spec.cluster.kubernetesVersion that matches the cluster does not read as a
-	// change. Empty when the cluster cannot be reached.
-	spec.KubernetesVersion = p.introspectKubernetesVersion(ctx)
+	// Detect running Talos OS and Kubernetes versions to avoid false-positive
+	// diffs when the user pins those versions in config.
+	p.introspectVersions(ctx, spec)
 
 	// Build provider spec if we have Hetzner options configured.
 	// Server types are introspected from the running Hetzner servers so
@@ -1117,6 +1112,15 @@ func (p *Provisioner) introspectNodeCounts(ctx context.Context) (int32, int32) {
 	}
 
 	return 1, 0
+}
+
+// introspectVersions sets the running Talos OS and Kubernetes versions on spec so
+// that a pinned spec.cluster.talos.version / spec.cluster.kubernetesVersion that
+// matches the cluster does not read as a change. Either is left empty when the
+// cluster cannot be reached.
+func (p *Provisioner) introspectVersions(ctx context.Context, spec *v1alpha1.ClusterSpec) {
+	spec.Talos.Version = p.introspectTalosVersion(ctx)
+	spec.KubernetesVersion = p.introspectKubernetesVersion(ctx)
 }
 
 // introspectTalosVersion queries a control-plane node for the running Talos

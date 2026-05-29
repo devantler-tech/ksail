@@ -505,54 +505,58 @@ func TestEngine_VanillaOptionsChange_SkippedForNonVanilla(t *testing.T) {
 	}
 }
 
+// talosOptionsChangeCases drives TestEngine_TalosOptionsChange. Kept at package
+// scope so the test function stays within the funlen limit.
+//
+//nolint:gochecknoglobals // table-driven test cases.
+var talosOptionsChangeCases = []struct {
+	name     string
+	mutate   func(spec *v1alpha1.ClusterSpec)
+	field    string
+	oldValue string
+	newValue string
+}{
+	{
+		name:     "version pin change",
+		mutate:   func(s *v1alpha1.ClusterSpec) { s.Talos.Version = "v1.12.0" },
+		field:    "cluster.talos.version",
+		oldValue: "",
+		newValue: "v1.12.0",
+	},
+	{
+		name:     "kubernetes version pin change",
+		mutate:   func(s *v1alpha1.ClusterSpec) { s.KubernetesVersion = "1.34.0" },
+		field:    testFieldKubernetesVersion,
+		oldValue: "",
+		newValue: "1.34.0",
+	},
+	{
+		name:     "control plane count change",
+		mutate:   func(s *v1alpha1.ClusterSpec) { s.ControlPlanes = 3 },
+		field:    testFieldControlPlanes,
+		oldValue: "1",
+		newValue: "3",
+	},
+	{
+		name:     "worker count change",
+		mutate:   func(s *v1alpha1.ClusterSpec) { s.Workers = 2 },
+		field:    testFieldWorkers,
+		oldValue: "0",
+		newValue: "2",
+	},
+	{
+		name:     "ISO change",
+		mutate:   func(s *v1alpha1.ClusterSpec) { s.Talos.ISO = v1alpha1.DefaultTalosISO - 1 },
+		field:    "cluster.talos.iso",
+		oldValue: strconv.FormatInt(v1alpha1.DefaultTalosISO, 10),
+		newValue: strconv.FormatInt(v1alpha1.DefaultTalosISO-1, 10),
+	},
+}
+
 func TestEngine_TalosOptionsChange(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name     string
-		mutate   func(spec *v1alpha1.ClusterSpec)
-		field    string
-		oldValue string
-		newValue string
-	}{
-		{
-			name:     "version pin change",
-			mutate:   func(s *v1alpha1.ClusterSpec) { s.Talos.Version = "v1.12.0" },
-			field:    "cluster.talos.version",
-			oldValue: "",
-			newValue: "v1.12.0",
-		},
-		{
-			name:     "kubernetes version pin change",
-			mutate:   func(s *v1alpha1.ClusterSpec) { s.KubernetesVersion = "1.34.0" },
-			field:    testFieldKubernetesVersion,
-			oldValue: "",
-			newValue: "1.34.0",
-		},
-		{
-			name:     "control plane count change",
-			mutate:   func(s *v1alpha1.ClusterSpec) { s.ControlPlanes = 3 },
-			field:    testFieldControlPlanes,
-			oldValue: "1",
-			newValue: "3",
-		},
-		{
-			name:     "worker count change",
-			mutate:   func(s *v1alpha1.ClusterSpec) { s.Workers = 2 },
-			field:    testFieldWorkers,
-			oldValue: "0",
-			newValue: "2",
-		},
-		{
-			name:     "ISO change",
-			mutate:   func(s *v1alpha1.ClusterSpec) { s.Talos.ISO = v1alpha1.DefaultTalosISO - 1 },
-			field:    "cluster.talos.iso",
-			oldValue: strconv.FormatInt(v1alpha1.DefaultTalosISO, 10),
-			newValue: strconv.FormatInt(v1alpha1.DefaultTalosISO-1, 10),
-		},
-	}
-
-	for _, testCase := range tests {
+	for _, testCase := range talosOptionsChangeCases {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 

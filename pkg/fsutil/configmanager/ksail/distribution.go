@@ -98,21 +98,10 @@ func (m *ConfigManager) loadTalosConfig() (*talosconfigmanager.Configs, error) {
 	// Uses ResolveClusterName helper which handles the "admin@<cluster-name>" pattern.
 	clusterName := talosconfigmanager.ResolveClusterName(m.Config, nil)
 
-	// Resolve the Kubernetes version to deploy: honour an explicit pin
-	// (spec.cluster.kubernetesVersion), otherwise use the built-in default
-	// capped to one the pinned Talos release (spec.cluster.talos.version) supports.
-	// On an existing cluster the provisioner further prefers the running version
-	// when unpinned, so an unrelated update never forces a Kubernetes upgrade.
-	kubernetesVersion := talosconfigmanager.ResolveKubernetesVersion(
-		m.Config.Spec.Cluster.Talos.Version,
-		m.Config.Spec.Cluster.KubernetesVersion,
-	)
-	warnKubernetesVersionCapped(m.Config, kubernetesVersion, m.Writer)
-
 	talosManager := talosconfigmanager.NewConfigManager(
 		patchesDir,
 		clusterName,
-		kubernetesVersion,
+		m.resolveTalosKubernetesVersion(),
 		"", // Use default network CIDR
 	)
 
@@ -312,6 +301,22 @@ func (m *ConfigManager) removeWorkerRoleLabelPatch(patchesDir string) {
 				"remove that label. " + workerRoleLabelFailureModes,
 		)
 	}
+}
+
+// resolveTalosKubernetesVersion resolves the Kubernetes version for Talos config
+// generation: it honours an explicit pin (spec.cluster.kubernetesVersion), otherwise
+// uses the built-in default capped to one the pinned Talos release
+// (spec.cluster.talos.version) supports, warning when the default is capped. On an
+// existing cluster the provisioner further prefers the running version when unpinned,
+// so an unrelated update never forces a Kubernetes upgrade.
+func (m *ConfigManager) resolveTalosKubernetesVersion() string {
+	version := talosconfigmanager.ResolveKubernetesVersion(
+		m.Config.Spec.Cluster.Talos.Version,
+		m.Config.Spec.Cluster.KubernetesVersion,
+	)
+	warnKubernetesVersionCapped(m.Config, version, m.Writer)
+
+	return version
 }
 
 // warnKubernetesVersionCapped emits an informational message when KSail had to
