@@ -266,14 +266,17 @@ func (m *ConfigManager) resolveConfigFile() error {
 
 	m.ConfigFile = cfgPath
 
-	// Re-initialize Viper with the explicit config file path so it
-	// skips directory traversal and uses the exact file.
-	v, viperErr := InitializeViper(cfgPath)
-	if viperErr != nil {
-		return fmt.Errorf("invalid --config path: %w", viperErr)
+	// Point the existing Viper at the explicit config file so it skips directory
+	// traversal and uses the exact file. Reconfigure in place rather than
+	// replacing the instance, so that flag bindings registered via BindPFlag at
+	// command construction (e.g. --dry-run, --force, --update-kubernetes) are
+	// preserved. Replacing the instance silently dropped those bindings, making
+	// such flags revert to their defaults whenever --config was passed — e.g.
+	// `cluster update --config <file> --dry-run` applied changes for real (#4934).
+	err = configureViperConfigSource(m.Viper, cfgPath)
+	if err != nil {
+		return fmt.Errorf("invalid --config path: %w", err)
 	}
-
-	m.Viper = v
 
 	return nil
 }

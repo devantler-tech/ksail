@@ -1449,3 +1449,71 @@ func TestLazyConfigFlagResolution_DefaultDiscovery(t *testing.T) {
 
 	require.NoError(t, root.Execute())
 }
+
+// TestExplicitConfigFlagPreservesBoundFlags verifies that flag bindings registered
+// via BindPFlag at command-construction time survive the lazy --config resolution
+// performed during Load. Behavioral flags such as --dry-run are read directly via
+// cfgManager.Viper.GetBool(...); if resolving --config replaces the Viper instance
+// (dropping its bindings), those flags silently revert to their defaults.
+//
+// Regression test for https://github.com/devantler-tech/ksail/issues/4934:
+// `cluster update --dry-run` applied changes instead of previewing them when
+// combined with the global --config flag, because --dry-run read false from a
+// freshly-constructed (binding-less) Viper.
+//
+//nolint:paralleltest // Uses t.Chdir to isolate file system state for config loading.
+func TestExplicitConfigFlagPreservesBoundFlags(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Chdir(tempDir)
+
+	workloadDir := filepath.Join(tempDir, "k8s")
+	require.NoError(t, os.MkdirAll(workloadDir, 0o750))
+
+	kindCfg := "apiVersion: kind.x-k8s.io/v1alpha4\nkind: Cluster\nname: dryrun-test\n"
+	kindPath := filepath.Join(tempDir, "kind.yaml")
+	require.NoError(t, os.WriteFile(kindPath, []byte(kindCfg), 0o600))
+
+	// Config file in a non-standard location so Load must re-resolve it from the
+	// --config flag (the code path that previously replaced the Viper instance).
+	altConfig := "apiVersion: ksail.io/v1alpha1\n" +
+		"kind: Cluster\n" +
+		"spec:\n" +
+		"  cluster:\n" +
+		"    distribution: Vanilla\n" +
+		"    distributionConfig: " + kindPath + "\n" +
+		"    connection:\n" +
+		"      context: kind-dryrun-test\n" +
+		"  workload:\n" +
+		"    sourceDirectory: k8s\n"
+	altPath := filepath.Join(tempDir, "custom-config.yaml")
+	require.NoError(t, os.WriteFile(altPath, []byte(altConfig), 0o600))
+
+	root := &cobra.Command{Use: "root"}
+	root.PersistentFlags().String("config", "", "config file")
+
+	child := &cobra.Command{Use: "child"}
+	root.AddCommand(child)
+
+	selectors := configmanager.DefaultClusterFieldSelectors()
+	mgr := configmanager.NewCommandConfigManager(child, selectors)
+
+	// Register a behavioral flag bound to Viper at construction time, mirroring
+	// how `cluster update` binds --dry-run.
+	child.Flags().Bool("dry-run", false, "preview changes")
+	require.NoError(t, mgr.Viper.BindPFlag("dry-run", child.Flags().Lookup("dry-run")))
+
+	root.SetArgs([]string{"child", "--config", altPath, "--dry-run"})
+
+	child.RunE = func(_ *cobra.Command, _ []string) error {
+		_, err := mgr.Load(configmanagerinterface.LoadOptions{Silent: true})
+		require.NoError(t, err)
+
+		// The --dry-run binding must still be readable after Load resolved --config.
+		assert.True(t, mgr.Viper.GetBool("dry-run"),
+			"--dry-run binding must survive lazy --config resolution in Load")
+
+		return nil
+	}
+
+	require.NoError(t, root.Execute())
+}
