@@ -40,6 +40,23 @@ jobs:
           go-version-file: go.mod
           cache: false
 
+      # Resolve the desktop module against a fresh, empty module cache.
+      #
+      # The desktop binary is a SEPARATE Go module (desktop/) that pulls the whole main module in via
+      # `replace => ../`, so its go.mod/go.sum must independently cover every transitive dependency.
+      # They do — `go mod tidy` is a no-op and a cold `go build`/`go list -deps` resolves cleanly both
+      # locally and in CI's Tidy check. But GitHub runner images ship a PRE-POPULATED GOMODCACHE, and
+      # with Go's pruned module graph that warm cache makes `go build` materialize a larger graph than
+      # the (correct, tidy) go.mod/go.sum cover. Resolution then fails deterministically — "updates to
+      # go.mod needed" here, "missing go.sum entry" under GoReleaser on macOS — and retries don't help
+      # because it is not transient. Pointing at a clean GOMODCACHE makes CI resolve cold, exactly like
+      # a clean local build. (Module caching stays off — see Setup Go's cache:false — so nothing is
+      # saved/restored across runs; this avoids zizmor's cache-poisoning surface, it does not add one.)
+      - name: 🧹 Use a clean Go module cache
+        run: |
+          mkdir -p "$RUNNER_TEMP/desktop-modcache"
+          echo "GOMODCACHE=$RUNNER_TEMP/desktop-modcache" >> "$GITHUB_ENV"
+
       - name: ⚙️ Setup Node.js
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0 # zizmor: ignore[cache-poisoning]
         with:
@@ -62,10 +79,9 @@ jobs:
 
       - name: 🏗️ Build desktop app
         working-directory: desktop
-        # Module caching is disabled (see Setup Go), so each run resolves the desktop binary's large
-        # dependency set cold. That occasionally surfaces a transient "updates to go.mod needed"
-        # resolution flake on the runner; retry rather than fail the job. go.mod completeness is
-        # enforced by the separate Tidy check, so a genuinely incomplete go.mod still fails CI there.
+        # The clean GOMODCACHE step above is what makes resolution succeed; because every run now
+        # downloads the large dependency set cold from the proxy, wrap the build in a short retry to
+        # ride out a transient network hiccup mid-download. (This guards the download, not resolution.)
         run: |
           for attempt in 1 2 3; do
             echo "::group::desktop build (attempt ${attempt})"
@@ -99,14 +115,23 @@ jobs:
           go-version-file: go.mod
           cache: false
 
+      # See the Linux job's "Use a clean Go module cache" step for the full rationale: the runner's
+      # pre-baked GOMODCACHE breaks the separate desktop module's (correct, tidy) resolution under
+      # Go's pruned module graph. Resolve cold from a fresh cache so GoReleaser's build succeeds.
+      - name: 🧹 Use a clean Go module cache
+        run: |
+          mkdir -p "$RUNNER_TEMP/desktop-modcache"
+          echo "GOMODCACHE=$RUNNER_TEMP/desktop-modcache" >> "$GITHUB_ENV"
+
       - name: ⚙️ Setup Node.js
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0 # zizmor: ignore[cache-poisoning]
         with:
           node-version: "24"
 
-      # Pre-download the desktop binary's modules (with retry) so GoReleaser's build resolves from a
-      # warm cache and does not hit the transient cold-resolution flake the Linux job guards against.
-      - name: 📦 Warm Go module cache (desktop)
+      # Populate the clean GOMODCACHE (set above) so GoReleaser resolves cold from a freshly downloaded
+      # cache rather than the runner's pre-baked one. Front-loading the download with a retry rides out
+      # a transient network hiccup and attributes any download failure here rather than inside GoReleaser.
+      - name: 📦 Pre-download desktop modules (clean cache)
         working-directory: desktop
         run: |
           for attempt in 1 2 3; do
