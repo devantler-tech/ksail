@@ -179,7 +179,7 @@ require (
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/hashicorp/go-safetemp v1.0.0 // indirect
 	github.com/hashicorp/go-version v1.8.0 // indirect
-	github.com/hetznercloud/hcloud-go/v2 v2.40.0 // indirect
+	github.com/hetznercloud/hcloud-go/v2 v2.41.2 // indirect
 	github.com/huandu/xstrings v1.5.0 // indirect
 	github.com/ianlancetaylor/demangle v0.0.0-20250417193237-f615e6bd150b // indirect
 	github.com/imdario/mergo v0.3.16 // indirect

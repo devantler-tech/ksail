@@ -40,23 +40,6 @@ jobs:
           go-version-file: go.mod
           cache: false
 
-      # Resolve the desktop module against a fresh, empty module cache.
-      #
-      # The desktop binary is a SEPARATE Go module (desktop/) that pulls the whole main module in via
-      # `replace => ../`, so its go.mod/go.sum must independently cover every transitive dependency.
-      # They do — `go mod tidy` is a no-op and a cold `go build`/`go list -deps` resolves cleanly both
-      # locally and in CI's Tidy check. But GitHub runner images ship a PRE-POPULATED GOMODCACHE, and
-      # with Go's pruned module graph that warm cache makes `go build` materialize a larger graph than
-      # the (correct, tidy) go.mod/go.sum cover. Resolution then fails deterministically — "updates to
-      # go.mod needed" here, "missing go.sum entry" under GoReleaser on macOS — and retries don't help
-      # because it is not transient. Pointing at a clean GOMODCACHE makes CI resolve cold, exactly like
-      # a clean local build. (Module caching stays off — see Setup Go's cache:false — so nothing is
-      # saved/restored across runs; this avoids zizmor's cache-poisoning surface, it does not add one.)
-      - name: 🧹 Use a clean Go module cache
-        run: |
-          mkdir -p "$RUNNER_TEMP/desktop-modcache"
-          echo "GOMODCACHE=$RUNNER_TEMP/desktop-modcache" >> "$GITHUB_ENV"
-
       - name: ⚙️ Setup Node.js
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0 # zizmor: ignore[cache-poisoning]
         with:
@@ -77,24 +60,19 @@ jobs:
           touch pkg/webui/dist/.gitkeep
           cp -R web/ui/dist/. pkg/webui/dist/
 
+      # The desktop app is a SEPARATE Go module that vendors the main module via `replace => ../`, so
+      # its go.mod/go.sum must independently track the main module's dependency graph. The main repo's
+      # Tidy check does not cover it, so a dependency bump in the root module (e.g. hcloud-go) can
+      # leave desktop/go.{mod,sum} stale and break this build with a cryptic "updates to go.mod
+      # needed" / "missing go.sum entry". Fail fast with a clear, actionable message instead: run
+      # `go -C desktop mod tidy` and commit the result.
+      - name: 🧹 Verify desktop module is tidy
+        working-directory: desktop
+        run: go mod tidy -diff
+
       - name: 🏗️ Build desktop app
         working-directory: desktop
-        # The clean GOMODCACHE step above is what makes resolution succeed; because every run now
-        # downloads the large dependency set cold from the proxy, wrap the build in a short retry to
-        # ride out a transient network hiccup mid-download. (This guards the download, not resolution.)
-        run: |
-          for attempt in 1 2 3; do
-            echo "::group::desktop build (attempt ${attempt})"
-            if go build -o ksail-desktop .; then
-              echo "::endgroup::"
-              exit 0
-            fi
-            echo "::endgroup::"
-            echo "::warning::desktop build attempt ${attempt} failed; retrying in 15s"
-            sleep 15
-          done
-          echo "::error::desktop build failed after 3 attempts"
-          exit 1
+        run: go build -o ksail-desktop .
 
   # Validate the full macOS desktop release pipeline (build into KSail.app, archive, cask
   # generation) without publishing. --snapshot needs no secrets, so this runs on fork PRs too.
@@ -115,34 +93,10 @@ jobs:
           go-version-file: go.mod
           cache: false
 
-      # See the Linux job's "Use a clean Go module cache" step for the full rationale: the runner's
-      # pre-baked GOMODCACHE breaks the separate desktop module's (correct, tidy) resolution under
-      # Go's pruned module graph. Resolve cold from a fresh cache so GoReleaser's build succeeds.
-      - name: 🧹 Use a clean Go module cache
-        run: |
-          mkdir -p "$RUNNER_TEMP/desktop-modcache"
-          echo "GOMODCACHE=$RUNNER_TEMP/desktop-modcache" >> "$GITHUB_ENV"
-
       - name: ⚙️ Setup Node.js
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0 # zizmor: ignore[cache-poisoning]
         with:
           node-version: "24"
-
-      # Populate the clean GOMODCACHE (set above) so GoReleaser resolves cold from a freshly downloaded
-      # cache rather than the runner's pre-baked one. Front-loading the download with a retry rides out
-      # a transient network hiccup and attributes any download failure here rather than inside GoReleaser.
-      - name: 📦 Pre-download desktop modules (clean cache)
-        working-directory: desktop
-        run: |
-          for attempt in 1 2 3; do
-            if go mod download; then
-              exit 0
-            fi
-            echo "::warning::go mod download attempt ${attempt} failed; retrying in 15s"
-            sleep 15
-          done
-          echo "::error::go mod download failed after 3 attempts"
-          exit 1
 
       - name: 🏗️ Run GoReleaser (snapshot)
         uses: goreleaser/goreleaser-action@5daf1e915a5f0af01ddbcd89a43b8061ff4f1a89 # v7.2.2
