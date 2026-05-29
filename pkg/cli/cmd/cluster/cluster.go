@@ -47,6 +47,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil/scaffolder"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/clusterdiscovery"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/detector"
 	clusterdetector "github.com/devantler-tech/ksail/v7/pkg/svc/detector/cluster"
 	specdiff "github.com/devantler-tech/ksail/v7/pkg/svc/diff"
@@ -56,7 +57,6 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
 	dockerprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/docker"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/hetzner"
-	kubernetesprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/kubernetes"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/omni"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
@@ -70,16 +70,13 @@ import (
 	"github.com/docker/docker/client"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
-	omniclient "github.com/siderolabs/omni/client/pkg/client"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"golang.org/x/sync/errgroup"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/cli-runtime/pkg/genericiooptions"
-	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
-	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 	sigsyaml "sigs.k8s.io/yaml"
 )
 
@@ -3799,24 +3796,16 @@ func resolveInitTargetPath(cfgManager *ksailconfigmanager.ConfigManager) (string
 // ErrUnsupportedProvider re-exports the shared error for backward compatibility.
 var ErrUnsupportedProvider = clustererr.ErrUnsupportedProvider
 
-// allDistributions returns all supported distributions.
+// allDistributions returns the Docker-based distributions enumerated when listing local clusters.
+// It delegates to clusterdiscovery so the CLI and the web UI share one source of truth.
 func allDistributions() []v1alpha1.Distribution {
-	return []v1alpha1.Distribution{
-		v1alpha1.DistributionVanilla,
-		v1alpha1.DistributionK3s,
-		v1alpha1.DistributionTalos,
-		v1alpha1.DistributionVCluster,
-		v1alpha1.DistributionKWOK,
-	}
+	return clusterdiscovery.LocalDistributions()
 }
 
-// allProviders returns all supported providers.
+// allProviders returns the providers `ksail cluster list` queries by default (Docker, Hetzner,
+// Omni). It delegates to clusterdiscovery.DefaultProviders.
 func allProviders() []v1alpha1.Provider {
-	return []v1alpha1.Provider{
-		v1alpha1.ProviderDocker,
-		v1alpha1.ProviderHetzner,
-		v1alpha1.ProviderOmni,
-	}
+	return clusterdiscovery.DefaultProviders()
 }
 
 // listResult holds a cluster name with its provider and distribution for display purposes.
@@ -3825,12 +3814,6 @@ type listResult struct {
 	Distribution v1alpha1.Distribution
 	ClusterName  string
 	TTL          *state.TTLInfo // nil if no TTL has been set for this cluster
-}
-
-// clusterWithDistribution pairs a cluster name with its distribution.
-type clusterWithDistribution struct {
-	Name         string
-	Distribution v1alpha1.Distribution
 }
 
 // tableColumnGap is the minimum gap between columns in table output.
@@ -3901,77 +3884,67 @@ func NewListCmd(runtimeContainer *di.Runtime) *cobra.Command {
 // ListDeps captures dependencies needed for the list command logic.
 type ListDeps struct {
 	// DistributionFactoryCreator is an optional function that creates factories for distributions.
-	// If nil, real factories with empty configs are used.
-	// This is primarily for testing purposes.
+	// If nil, real factories with empty configs are used. Primarily for testing: it is routed into
+	// the shared clusterdiscovery.Discoverer as the Docker provider's factory.
 	DistributionFactoryCreator func(v1alpha1.Distribution) clusterprovisioner.Factory
-
-	// HetznerProvider is an optional Hetzner provider for listing Hetzner clusters.
-	// If nil, a real provider will be created if HCLOUD_TOKEN is set.
-	HetznerProvider *hetzner.Provider
-
-	// OmniProvider is an optional Omni provider for listing Omni clusters.
-	// If nil, a real provider will be created if OMNI_SERVICE_ACCOUNT_KEY is set.
-	OmniProvider *omni.Provider
-
-	// KubernetesProvider is an optional Kubernetes provider for listing Kubernetes-hosted clusters.
-	// If nil, a real provider will be created using KSAIL_HOST_KUBECONFIG/KSAIL_HOST_CONTEXT env vars
-	// or the default kubeconfig (~/.kube/config) if those are not set.
-	KubernetesProvider *kubernetesprovider.Provider
 }
 
-// HandleListRunE handles the list command.
+// HandleListRunE handles the list command. It delegates cluster enumeration to the shared
+// clusterdiscovery service (the same one the local web UI uses) and formats the results as a table.
 // Exported for testing purposes.
 func HandleListRunE(
 	cmd *cobra.Command,
 	providerFilter v1alpha1.Provider,
 	deps ListDeps,
 ) error {
-	// Determine which providers to query
 	providers := resolveProviders(providerFilter)
 
-	// Collect clusters from all providers
-	var allResults []listResult
-
-	for _, prov := range providers {
-		clusters, err := getProviderClusters(cmd.Context(), deps, prov)
-		if err != nil {
-			// Log warning but continue with other providers
-			_, _ = fmt.Fprintf(
-				cmd.ErrOrStderr(),
-				"Warning: failed to list %s clusters: %v\n",
-				prov,
-				err,
-			)
-
-			continue
-		}
-
-		for _, cluster := range clusters {
-			ttlInfo, ttlErr := state.LoadClusterTTL(cluster.Name)
-			if ttlErr != nil && !errors.Is(ttlErr, state.ErrTTLNotSet) {
-				notify.Warningf(
-					cmd.ErrOrStderr(),
-					"failed to load TTL for cluster %q: %v",
-					cluster.Name,
-					ttlErr,
-				)
-			}
-
-			var ttl *state.TTLInfo
-			if ttlErr == nil {
-				ttl = ttlInfo
-			}
-
-			allResults = append(allResults, listResult{
-				Provider:     prov,
-				Distribution: cluster.Distribution,
-				ClusterName:  cluster.Name,
-				TTL:          ttl,
-			})
+	discoverer := &clusterdiscovery.Discoverer{}
+	if deps.DistributionFactoryCreator != nil {
+		discoverer.DockerFactory = func(
+			distribution v1alpha1.Distribution,
+		) (clusterprovisioner.Factory, error) {
+			return deps.DistributionFactoryCreator(distribution), nil
 		}
 	}
 
-	// Display results
+	clusters, failures := discoverer.Discover(cmd.Context(), providers)
+
+	for _, failure := range failures {
+		_, _ = fmt.Fprintf(
+			cmd.ErrOrStderr(),
+			"Warning: failed to list %s clusters: %v\n",
+			failure.Provider,
+			failure.Err,
+		)
+	}
+
+	allResults := make([]listResult, 0, len(clusters))
+
+	for _, cluster := range clusters {
+		ttlInfo, ttlErr := state.LoadClusterTTL(cluster.Name)
+		if ttlErr != nil && !errors.Is(ttlErr, state.ErrTTLNotSet) {
+			notify.Warningf(
+				cmd.ErrOrStderr(),
+				"failed to load TTL for cluster %q: %v",
+				cluster.Name,
+				ttlErr,
+			)
+		}
+
+		var ttl *state.TTLInfo
+		if ttlErr == nil {
+			ttl = ttlInfo
+		}
+
+		allResults = append(allResults, listResult{
+			Provider:     cluster.Provider,
+			Distribution: cluster.Distribution,
+			ClusterName:  cluster.Name,
+			TTL:          ttl,
+		})
+	}
+
 	displayListResults(cmd.OutOrStdout(), providers, allResults)
 
 	return nil
@@ -3984,321 +3957,6 @@ func resolveProviders(filter v1alpha1.Provider) []v1alpha1.Provider {
 	}
 
 	return []v1alpha1.Provider{filter}
-}
-
-// getProviderClusters returns all clusters for a given provider.
-func getProviderClusters(
-	ctx context.Context,
-	deps ListDeps,
-	provider v1alpha1.Provider,
-) ([]clusterWithDistribution, error) {
-	switch provider {
-	case v1alpha1.ProviderDocker:
-		return getDockerClusters(ctx, deps)
-	case v1alpha1.ProviderHetzner:
-		return getHetznerClusters(ctx, deps)
-	case v1alpha1.ProviderOmni:
-		return getOmniClusters(ctx, deps)
-	case v1alpha1.ProviderAWS:
-		// EKS cluster listing goes through the EKS API; not yet implemented
-		// in the local list path. Return an empty slice so `cluster list`
-		// does not error when AWS is configured in a profile.
-		return nil, nil
-	case v1alpha1.ProviderKubernetes:
-		return getKubernetesClusters(ctx, deps)
-	default:
-		return nil, fmt.Errorf("%w: %s", ErrUnsupportedProvider, provider)
-	}
-}
-
-// getDockerClusters returns all Docker-based clusters across all distributions.
-// Results are deduplicated by cluster name because different distributions
-// (Kind, K3d, Talos, VCluster) each manage their own namespace and a cluster
-// name uniquely identifies a cluster within the Docker provider.
-func getDockerClusters(ctx context.Context, deps ListDeps) ([]clusterWithDistribution, error) {
-	seen := make(map[string]struct{})
-
-	var allClusters []clusterWithDistribution
-
-	for _, dist := range allDistributions() {
-		clusters, err := getDistributionClusters(ctx, deps, dist)
-		if err != nil {
-			// Log and continue - don't fail on one distribution
-			continue
-		}
-
-		for _, c := range clusters {
-			if _, ok := seen[c]; !ok {
-				seen[c] = struct{}{}
-				allClusters = append(allClusters, clusterWithDistribution{
-					Name:         c,
-					Distribution: dist,
-				})
-			}
-		}
-	}
-
-	return allClusters, nil
-}
-
-// getHetznerClusters returns all Hetzner-based clusters.
-func getHetznerClusters(ctx context.Context, deps ListDeps) ([]clusterWithDistribution, error) {
-	// Use injected provider if available (for testing)
-	if deps.HetznerProvider != nil {
-		clusters, err := deps.HetznerProvider.ListAllClusters(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("failed to list Hetzner clusters: %w", err)
-		}
-
-		return toTalosClusters(clusters), nil
-	}
-
-	// Check for HCLOUD_TOKEN
-	token := os.Getenv("HCLOUD_TOKEN")
-	if token == "" {
-		// No token, skip Hetzner silently
-		return nil, nil
-	}
-
-	client := hcloud.NewClient(hcloud.WithToken(token))
-	provider := hetzner.NewProvider(client)
-
-	clusters, err := provider.ListAllClusters(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list Hetzner clusters: %w", err)
-	}
-
-	return toTalosClusters(clusters), nil
-}
-
-// getOmniClusters returns all Omni-based clusters.
-func getOmniClusters(ctx context.Context, deps ListDeps) ([]clusterWithDistribution, error) {
-	// Use injected provider if available (for testing)
-	if deps.OmniProvider != nil {
-		clusters, err := deps.OmniProvider.ListAllClusters(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("failed to list Omni clusters: %w", err)
-		}
-
-		return toTalosClusters(clusters), nil
-	}
-
-	// Check for OMNI_SERVICE_ACCOUNT_KEY
-	serviceAccountKey := os.Getenv("OMNI_SERVICE_ACCOUNT_KEY")
-	if serviceAccountKey == "" {
-		// No key, skip Omni silently
-		return nil, nil
-	}
-
-	// Check for OMNI_ENDPOINT
-	endpoint := os.Getenv("OMNI_ENDPOINT")
-	if endpoint == "" {
-		// No endpoint, skip Omni silently
-		return nil, nil
-	}
-
-	client, err := omniclient.New(
-		endpoint,
-		omniclient.WithServiceAccount(serviceAccountKey),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create Omni client: %w", err)
-	}
-
-	provider := omni.NewProvider(client)
-
-	clusters, err := provider.ListAllClusters(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list Omni clusters: %w", err)
-	}
-
-	return toTalosClusters(clusters), nil
-}
-
-// getKubernetesClusters returns all clusters hosted on the Kubernetes provider.
-func getKubernetesClusters(ctx context.Context, deps ListDeps) ([]clusterWithDistribution, error) {
-	// Use injected provider if available (for testing)
-	if deps.KubernetesProvider != nil {
-		infos, err := deps.KubernetesProvider.ListAllClustersWithDistribution(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("failed to list Kubernetes clusters: %w", err)
-		}
-
-		return toKubernetesClusters(infos), nil
-	}
-
-	prov, err := getKubernetesProviderFromConfig()
-	if err != nil {
-		return nil, err
-	}
-
-	if prov == nil {
-		return []clusterWithDistribution{}, nil
-	}
-
-	infos, err := prov.ListAllClustersWithDistribution(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list Kubernetes clusters: %w", err)
-	}
-
-	return toKubernetesClusters(infos), nil
-}
-
-// getKubernetesProviderFromConfig creates a Kubernetes provider from the host config.
-func getKubernetesProviderFromConfig() (*kubernetesprovider.Provider, error) {
-	// Resolve kubeconfig: prefer KSAIL_HOST_KUBECONFIG env var, fall back to default.
-	kubeconfigPath := os.Getenv("KSAIL_HOST_KUBECONFIG")
-	if kubeconfigPath == "" {
-		kubeconfigPath = k8s.DefaultKubeconfigPath()
-	}
-
-	expandedPath, err := fsutil.ExpandHomePath(kubeconfigPath)
-	if err != nil {
-		return nil, fmt.Errorf("expand kubeconfig path: %w", err)
-	}
-
-	// Skip silently when the kubeconfig file does not exist.
-	//nolint:gosec // path is user-controlled kubeconfig, safe and canonicalized below
-	_, statErr := os.Stat(expandedPath)
-	if os.IsNotExist(statErr) {
-		return nil, nil //nolint:nilnil
-	}
-
-	canonicalPath, err := fsutil.EvalCanonicalPath(expandedPath)
-	if err != nil {
-		return nil, fmt.Errorf("canonicalize kubeconfig path: %w", err)
-	}
-
-	hostContext := os.Getenv("KSAIL_HOST_CONTEXT")
-
-	restConfig, err := k8s.BuildRESTConfig(canonicalPath, hostContext)
-	if err != nil {
-		// If the kubeconfig is present but invalid or unreachable, skip silently.
-		return nil, nil //nolint:nilnil,nilerr // intentionally swallow: host cluster unavailable
-	}
-
-	clientset, err := kubernetes.NewForConfig(restConfig)
-	if err != nil {
-		return nil, fmt.Errorf("create Kubernetes client: %w", err)
-	}
-
-	prov, err := kubernetesprovider.NewProvider(clientset, v1alpha1.OptionsKubernetes{})
-	if err != nil {
-		return nil, fmt.Errorf("create Kubernetes provider: %w", err)
-	}
-
-	return prov, nil
-}
-
-// toKubernetesClusters converts ClusterInfo to clusterWithDistribution,
-// mapping the distribution label string to a v1alpha1.Distribution enum value.
-func toKubernetesClusters(infos []kubernetesprovider.ClusterInfo) []clusterWithDistribution {
-	result := make([]clusterWithDistribution, 0, len(infos))
-
-	for _, info := range infos {
-		var dist v1alpha1.Distribution
-
-		err := dist.Set(info.Distribution)
-		if err != nil {
-			dist = v1alpha1.DistributionVanilla
-		}
-
-		result = append(result, clusterWithDistribution{
-			Name:         info.Name,
-			Distribution: dist,
-		})
-	}
-
-	return result
-}
-
-// Hetzner and Omni providers only support Talos.
-func toTalosClusters(names []string) []clusterWithDistribution {
-	result := make([]clusterWithDistribution, 0, len(names))
-	for _, name := range names {
-		result = append(result, clusterWithDistribution{
-			Name:         name,
-			Distribution: v1alpha1.DistributionTalos,
-		})
-	}
-
-	return result
-}
-
-func getDistributionClusters(
-	ctx context.Context,
-	deps ListDeps,
-	distribution v1alpha1.Distribution,
-) ([]string, error) {
-	// Create a minimal cluster config for the factory
-	clusterCfg := &v1alpha1.Cluster{
-		Spec: v1alpha1.Spec{
-			Cluster: v1alpha1.ClusterSpec{
-				Distribution: distribution,
-			},
-		},
-	}
-
-	// Use custom factory creator if provided (for testing), otherwise create real factory.
-	var factory clusterprovisioner.Factory
-	if deps.DistributionFactoryCreator != nil {
-		factory = deps.DistributionFactoryCreator(distribution)
-	} else {
-		// Create a factory with an empty config for the distribution.
-		// For list operations, we only need the provisioner type, not specific config data.
-		factory = clusterprovisioner.DefaultFactory{
-			DistributionConfig: createEmptyDistributionConfig(distribution),
-		}
-	}
-
-	provisioner, _, err := factory.Create(ctx, clusterCfg)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create provisioner for %s: %w", distribution, err)
-	}
-
-	clusters, err := provisioner.List(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list %s clusters: %w", distribution, err)
-	}
-
-	return clusters, nil
-}
-
-// createEmptyDistributionConfig creates an empty distribution config for the given distribution.
-// This is used for list operations where we only need the provisioner type, not specific config data.
-func createEmptyDistributionConfig(
-	distribution v1alpha1.Distribution,
-) *clusterprovisioner.DistributionConfig {
-	switch distribution {
-	case v1alpha1.DistributionVanilla:
-		return &clusterprovisioner.DistributionConfig{
-			Kind: &v1alpha4.Cluster{},
-		}
-	case v1alpha1.DistributionK3s:
-		return &clusterprovisioner.DistributionConfig{
-			K3d: &v1alpha5.SimpleConfig{},
-		}
-	case v1alpha1.DistributionTalos:
-		return &clusterprovisioner.DistributionConfig{
-			Talos: &talosconfigmanager.Configs{},
-		}
-	case v1alpha1.DistributionVCluster:
-		return &clusterprovisioner.DistributionConfig{
-			VCluster: &clusterprovisioner.VClusterConfig{},
-		}
-	case v1alpha1.DistributionKWOK:
-		return &clusterprovisioner.DistributionConfig{
-			KWOK: &clusterprovisioner.KWOKConfig{},
-		}
-	case v1alpha1.DistributionEKS:
-		return &clusterprovisioner.DistributionConfig{
-			EKS: &clusterprovisioner.EKSConfig{},
-		}
-	default:
-		return &clusterprovisioner.DistributionConfig{
-			Kind: &v1alpha4.Cluster{},
-		}
-	}
 }
 
 // tableRow holds pre-formatted strings for a single row in the cluster list table.

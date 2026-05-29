@@ -3,6 +3,7 @@ package clusterapi_test
 import (
 	"context"
 	"errors"
+	"os"
 	"slices"
 	"sync"
 	"testing"
@@ -347,7 +348,11 @@ func TestCreateValidatesInput(t *testing.T) {
 	_, err = service.Create(context.Background(), clusterFor("noDist", ""))
 	require.ErrorIs(t, err, api.ErrInvalid)
 
-	_, err = service.Create(context.Background(), clusterFor("talos", v1alpha1.DistributionTalos))
+	// An unknown distribution cannot be provisioned locally.
+	_, err = service.Create(
+		context.Background(),
+		clusterFor("bogus", v1alpha1.Distribution("Bogus")),
+	)
 	require.ErrorIs(t, err, api.ErrNotSupported)
 }
 
@@ -404,5 +409,73 @@ func TestDeleteUnknownClusterReturnsNotFound(t *testing.T) {
 func TestCreatableDistributions(t *testing.T) {
 	t.Parallel()
 
-	assert.Equal(t, []string{"Vanilla", "K3s", "VCluster"}, clusterapi.CreatableDistributions())
+	assert.Equal(t,
+		[]string{"Vanilla", "K3s", "Talos", "VCluster", "KWOK", "EKS"},
+		clusterapi.CreatableDistributions(),
+	)
+}
+
+// recordingFactory captures the cluster the provisioner factory is asked to build, but only for the
+// create call (which sets a non-empty provider) — discovery's enumerate calls leave it empty.
+type recordingFactory struct {
+	sink chan<- *v1alpha1.Cluster
+}
+
+func (f recordingFactory) Create(
+	_ context.Context,
+	cluster *v1alpha1.Cluster,
+) (clusterprovisioner.Provisioner, any, error) {
+	if cluster.Spec.Cluster.Provider != "" {
+		select {
+		case f.sink <- cluster.DeepCopy():
+		default:
+		}
+	}
+
+	return &fakeProvisioner{}, nil, nil
+}
+
+// TestEKSConfigForCreate writes a region-stamped eks.yaml under ~/.ksail so the EKS provisioner has
+// the on-disk config it requires. The region comes from AWS_REGION (which Settings/overlay set).
+func TestEKSConfigForCreate(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("AWS_REGION", "eu-central-1")
+
+	configPath, region, err := clusterapi.ExportEKSConfigForCreate("prod")
+	require.NoError(t, err)
+	assert.Equal(t, "eu-central-1", region)
+	assert.FileExists(t, configPath)
+
+	data, err := os.ReadFile(configPath) //nolint:gosec // test-controlled path under a temp HOME.
+	require.NoError(t, err)
+	assert.Contains(t, string(data), "name: prod")
+	assert.Contains(t, string(data), "region: eu-central-1")
+}
+
+// TestCreatePassesProviderToFactory is the Phase 4 regression guard: the create path must route the
+// requested provider (and distribution) to the factory, so a Talos/Hetzner request provisions on
+// Hetzner rather than silently falling back to local Docker.
+func TestCreatePassesProviderToFactory(t *testing.T) {
+	t.Parallel()
+
+	captured := make(chan *v1alpha1.Cluster, 1)
+	service := clusterapi.NewTestService(
+		func(_ v1alpha1.Distribution, _ string) (clusterprovisioner.Factory, error) {
+			return recordingFactory{sink: captured}, nil
+		},
+	)
+
+	cluster := clusterFor("prod", v1alpha1.DistributionTalos)
+	cluster.Spec.Cluster.Provider = v1alpha1.ProviderHetzner
+
+	_, err := service.Create(context.Background(), cluster)
+	require.NoError(t, err)
+
+	select {
+	case built := <-captured:
+		assert.Equal(t, v1alpha1.DistributionTalos, built.Spec.Cluster.Distribution)
+		assert.Equal(t, v1alpha1.ProviderHetzner, built.Spec.Cluster.Provider)
+	case <-time.After(eventuallyTimeout):
+		t.Fatal("factory was never asked to build the requested Talos/Hetzner cluster")
+	}
 }

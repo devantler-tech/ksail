@@ -11,6 +11,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/cli/clusterapi"
 	"github.com/devantler-tech/ksail/v7/pkg/operator/api"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/clusterdiscovery"
 	"github.com/devantler-tech/ksail/v7/pkg/webui"
 )
 
@@ -19,14 +20,47 @@ import (
 const Host = "127.0.0.1"
 
 // NewServer returns the API server that serves the web UI plus a REST API backed by the local
-// cluster lifecycle (Docker-based providers/provisioners).
+// cluster lifecycle (Docker-based and, where credentials are present, cloud providers).
 func NewServer() *api.Server {
-	return &api.Server{
-		Service:       clusterapi.NewService(),
+	service := clusterapi.NewService()
+
+	server := &api.Server{
+		Service:       service,
 		ReadOnly:      false,
 		Distributions: clusterapi.CreatableDistributions(),
 		StaticFS:      webui.Assets(),
+		// Gate the create form on which providers this machine can actually reach (Docker running,
+		// HCLOUD_TOKEN set, eksctl installed, …). The operator leaves this nil and offers all providers.
+		ProviderStatus: func(ctx context.Context) []api.ProviderInfo {
+			return toProviderInfos(service.Availability(ctx))
+		},
 	}
+
+	// Resolve credentials through the OS secure store + Settings overrides (falling back to plain
+	// environment resolution when the store or settings file is unavailable), and expose the Settings
+	// page so credentials can be configured without shell env — important for a Dock/Finder-launched
+	// desktop app, which does not inherit the shell environment.
+	manager := newCredentialManager()
+	if manager != nil {
+		service.UseCredentials(manager)
+		server.Settings = settingsService{manager: manager}
+	}
+
+	return server
+}
+
+// toProviderInfos maps the discovery availability report onto the API's wire type.
+func toProviderInfos(availabilities []clusterdiscovery.Availability) []api.ProviderInfo {
+	infos := make([]api.ProviderInfo, len(availabilities))
+	for index, availability := range availabilities {
+		infos[index] = api.ProviderInfo{
+			Name:      string(availability.Provider),
+			Available: availability.Available,
+			Reason:    availability.Reason,
+		}
+	}
+
+	return infos
 }
 
 // Listen binds a loopback listener on the given port (0 picks a free port) and returns the listener

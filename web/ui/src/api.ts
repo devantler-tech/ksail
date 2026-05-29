@@ -86,12 +86,56 @@ export interface User {
   name?: string;
 }
 
+// ProviderInfo reports whether an infrastructure provider is usable on the serving backend, with a
+// human-readable reason when it is not.
+export interface ProviderInfo {
+  name: string;
+  available: boolean;
+  reason?: string;
+}
+
 export interface Config {
   readOnly: boolean;
   authEnabled: boolean;
   user?: User;
   // distributions the create form should offer. Absent when the backend relies on the SPA default.
   distributions?: string[];
+  // providers reports per-provider availability so the create form can gate options to providers the
+  // backend can actually reach. Absent when the backend does not gate (the operator), in which case
+  // every provider valid for a distribution is offered.
+  providers?: ProviderInfo[];
+  // settingsEnabled is true when the backend exposes the credential-settings endpoints (the local UI
+  // backend). The operator omits it, so the Settings page stays hidden there.
+  settingsEnabled?: boolean;
+}
+
+// CredentialSetting describes one provider credential in the Settings page. Secret values are never
+// returned (only `stored`/`source`); non-secret values (region, profile, endpoint) carry `value`.
+export interface CredentialSetting {
+  key: string;
+  provider: string;
+  label: string;
+  envVar: string;
+  secret: boolean;
+  stored: boolean;
+  source: "store" | "env" | "unset";
+  value?: string;
+}
+
+export interface SettingsResponse {
+  credentials: CredentialSetting[];
+}
+
+// CredentialUpdate mutates one credential. Omit a field to leave it unchanged; send envVar="" to
+// reset to the default variable name, or value="" to clear a stored secret.
+export interface CredentialUpdate {
+  key: string;
+  envVar?: string;
+  value?: string;
+}
+
+export interface SettingsUpdateRequest {
+  updates: CredentialUpdate[];
 }
 
 // ApiError carries the HTTP status so callers can react to auth failures (401) specifically.
@@ -154,6 +198,18 @@ export function getConfig(): Promise<Config> {
 
 export function getMeta(): Promise<ClusterMeta> {
   return request<ClusterMeta>("/api/v1/meta");
+}
+
+export function getSettings(): Promise<SettingsResponse> {
+  return request<SettingsResponse>("/api/v1/settings");
+}
+
+export function updateSettings(req: SettingsUpdateRequest): Promise<SettingsResponse> {
+  return request<SettingsResponse>("/api/v1/settings", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(req),
+  });
 }
 
 export function listClusters(): Promise<ClusterList> {

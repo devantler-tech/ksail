@@ -1,8 +1,28 @@
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
-import type { Cluster, ClusterMeta } from "../api.ts";
-import { COMPONENT_LABELS, preferredProvider, useMeta } from "../lib/meta.ts";
+import type { Cluster, ClusterMeta, ProviderInfo } from "../api.ts";
+import {
+  availableProviders,
+  COMPONENT_LABELS,
+  preferredProvider,
+  unavailableProviders,
+  useMeta,
+} from "../lib/meta.ts";
 import { Button, Modal, SelectField, TextField } from "./ui.tsx";
+
+// creatableDistributions narrows the offered distributions to those that still have at least one
+// available provider once provider gating (providerStatus) is applied. With no gating it is the
+// full list unchanged.
+function creatableDistributions(
+  meta: ClusterMeta,
+  distributions: string[],
+  providerStatus: ProviderInfo[] | null | undefined,
+): string[] {
+  return distributions.filter(
+    (distribution) =>
+      availableProviders(meta.providers[distribution] ?? [], providerStatus).length > 0,
+  );
+}
 
 export interface ClusterFormValues {
   name: string;
@@ -33,14 +53,21 @@ function componentDefaults(meta: ClusterMeta): Record<string, string> {
   return defaults;
 }
 
-function createDefaults(meta: ClusterMeta, distributions: string[]): ClusterFormValues {
-  const distribution = distributions[0] ?? meta.distributions[0] ?? "";
+function createDefaults(
+  meta: ClusterMeta,
+  distributions: string[],
+  providerStatus: ProviderInfo[] | null | undefined,
+): ClusterFormValues {
+  const offered = creatableDistributions(meta, distributions, providerStatus);
+  const distribution = offered[0] ?? distributions[0] ?? meta.distributions[0] ?? "";
   const defaults = componentDefaults(meta);
   return {
     name: "",
     namespace: "default",
     distribution,
-    provider: preferredProvider(meta.providers[distribution] ?? []),
+    provider: preferredProvider(
+      availableProviders(meta.providers[distribution] ?? [], providerStatus),
+    ),
     controlPlanes: "1",
     workers: "0",
     cni: defaults.cni ?? "",
@@ -86,6 +113,7 @@ export function ClusterFormDialog({
   mode,
   initial,
   distributions,
+  providerStatus,
   onSubmit,
   onClose,
 }: {
@@ -95,12 +123,15 @@ export function ClusterFormDialog({
   // distributions the create form offers (backend-advertised via config.distributions). The
   // provider matrix and component options for the selected one still come from /api/v1/meta.
   distributions: string[];
+  // providerStatus gates which providers are offered (backend-advertised via config.providers).
+  // null/undefined means no gating (the operator), so every valid provider is offered.
+  providerStatus?: ProviderInfo[] | null;
   onSubmit: (values: ClusterFormValues) => Promise<void>;
   onClose: () => void;
 }) {
   const meta = useMeta();
   const [values, setValues] = useState<ClusterFormValues>(() =>
-    createDefaults(meta, distributions),
+    createDefaults(meta, distributions, providerStatus),
   );
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -113,13 +144,23 @@ export function ClusterFormDialog({
     setValues(
       mode === "edit" && initial
         ? valuesFromCluster(initial, meta, distributions)
-        : createDefaults(meta, distributions),
+        : createDefaults(meta, distributions, providerStatus),
     );
     setAdvancedOpen(false);
-  }, [open, mode, initial, meta, distributions]);
+  }, [open, mode, initial, meta, distributions, providerStatus]);
 
   const isEdit = mode === "edit";
-  const providers = meta.providers[values.distribution] ?? [];
+
+  // Edit keeps the cluster's fixed distribution/provider (the selects are disabled); create gates
+  // the offered options to what the backend reports as available.
+  const offeredDistributions = isEdit
+    ? distributions
+    : creatableDistributions(meta, distributions, providerStatus);
+  const offeredProviders = isEdit
+    ? (meta.providers[values.distribution] ?? [])
+    : availableProviders(meta.providers[values.distribution] ?? [], providerStatus);
+  const blockedProviders = isEdit ? [] : unavailableProviders(providerStatus);
+  const noProvidersAvailable = !isEdit && offeredDistributions.length === 0;
 
   function setField<K extends keyof ClusterFormValues>(key: K, value: ClusterFormValues[K]) {
     setValues((current) => ({ ...current, [key]: value }));
@@ -129,13 +170,15 @@ export function ClusterFormDialog({
     setValues((current) => ({
       ...current,
       distribution: value,
-      provider: preferredProvider(meta.providers[value] ?? []),
+      provider: preferredProvider(
+        availableProviders(meta.providers[value] ?? [], providerStatus),
+      ),
     }));
   }
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    if (values.name.trim() === "" || submitting) {
+    if (values.name.trim() === "" || submitting || noProvidersAvailable) {
       return;
     }
 
@@ -165,13 +208,24 @@ export function ClusterFormDialog({
           <Button variant="secondary" onClick={onClose} disabled={submitting}>
             Cancel
           </Button>
-          <Button type="submit" form="cluster-form" loading={submitting}>
+          <Button
+            type="submit"
+            form="cluster-form"
+            loading={submitting}
+            disabled={noProvidersAvailable}
+          >
             {isEdit ? "Save" : "Create"}
           </Button>
         </>
       }
     >
       <form id="cluster-form" onSubmit={(event) => void handleSubmit(event)} className="space-y-4">
+        {noProvidersAvailable ? (
+          <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800 ring-1 ring-inset ring-amber-600/20 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-500/30">
+            No providers are available. Start Docker, or configure cloud credentials in Settings, to
+            create a cluster.
+          </p>
+        ) : null}
         <TextField
           label="Name"
           value={values.name}
@@ -193,7 +247,7 @@ export function ClusterFormDialog({
             disabled={isEdit}
             onChange={(event) => handleDistributionChange(event.target.value)}
           >
-            {distributions.map((value) => (
+            {offeredDistributions.map((value) => (
               <option key={value} value={value}>
                 {value}
               </option>
@@ -203,15 +257,26 @@ export function ClusterFormDialog({
         <SelectField
           label="Provider"
           value={values.provider}
-          disabled={isEdit}
+          disabled={isEdit || offeredProviders.length === 0}
           onChange={(event) => setField("provider", event.target.value)}
         >
-          {providers.map((value) => (
+          {offeredProviders.map((value) => (
             <option key={value} value={value}>
               {value}
             </option>
           ))}
         </SelectField>
+        {blockedProviders.length > 0 ? (
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            Unavailable:{" "}
+            {blockedProviders
+              .map((provider) =>
+                provider.reason ? `${provider.name} (${provider.reason})` : provider.name,
+              )
+              .join(", ")}
+            . Configure credentials in Settings to enable them.
+          </p>
+        ) : null}
 
         <div className="border-t border-slate-200 pt-2 dark:border-slate-800">
           <button
