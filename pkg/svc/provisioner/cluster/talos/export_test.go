@@ -415,9 +415,10 @@ var GraftNodeManagedSectionsForTest = graftNodeManagedSections
 // BuildDesiredNodeConfigForTest exposes buildDesiredNodeConfig for unit testing.
 func (p *Provisioner) BuildDesiredNodeConfigForTest(
 	running talosconfig.Provider,
+	secretsSource talosconfig.Provider,
 	role string,
 ) (talosconfig.Provider, error) {
-	return p.buildDesiredNodeConfig(running, role)
+	return p.buildDesiredNodeConfig(running, secretsSource, role)
 }
 
 // MachineConfigFieldForTest exposes the machine.config change field for unit testing.
