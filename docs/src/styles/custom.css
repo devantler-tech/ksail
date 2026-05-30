@@ -195,7 +195,6 @@ body {
   letter-spacing: -0.035em;
   background: linear-gradient(180deg, var(--sl-color-white), color-mix(in oklab, var(--ksail-cyan-bright) 65%, var(--sl-color-white)));
   background-clip: text;
-  background-clip: text;
   color: transparent;
 }
 
@@ -357,7 +356,6 @@ pre {
 
 /* ----------------------------------------------------------------------- */
 header.header {
-  backdrop-filter: blur(12px);
   backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--sl-color-hairline);
 }
