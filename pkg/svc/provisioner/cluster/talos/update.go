@@ -430,18 +430,45 @@ func (p *Provisioner) applyInPlaceConfigChanges(
 		return nil
 	}
 
+	// The desired-config rebuild needs the cluster PKI, which only a control-plane
+	// node carries. Resolve one control-plane config up front and reuse it as the
+	// secrets source for every node — seeding the rebuild from a worker's own config
+	// fails with "failed to parse PEM block" (#4963). All control-planes share the
+	// same PKI, so any one is a valid source.
+	secretsSource := p.fetchSecretsSource(ctx, clusterName)
+
 	for _, node := range nodes {
-		p.applyNodeConfig(ctx, node, result)
+		p.applyNodeConfig(ctx, node, secretsSource, result)
 	}
 
 	return nil
 }
 
+// fetchSecretsSource returns a control-plane node's running config, used to seed
+// the per-node desired-config rebuild with the cluster PKI. It returns nil when no
+// control-plane is reachable; callers then fall back to each node's own config,
+// which carries complete PKI only on control-plane nodes (see buildDesiredNodeConfig
+// and #4963).
+func (p *Provisioner) fetchSecretsSource(
+	ctx context.Context,
+	clusterName string,
+) talosconfig.Provider {
+	cpConfig, found, err := p.fetchRunningControlPlaneConfig(ctx, clusterName)
+	if err != nil || !found {
+		return nil
+	}
+
+	return cpConfig
+}
+
 // applyNodeConfig overlays the role-scoped user patches onto a node's running
-// config and applies the result (NO_REBOOT), recording success or failure.
+// config and applies the result (NO_REBOOT), recording success or failure. The
+// secretsSource (a control-plane config) supplies the cluster PKI for the rebuild;
+// see buildDesiredNodeConfig.
 func (p *Provisioner) applyNodeConfig(
 	ctx context.Context,
 	node nodeWithRole,
+	secretsSource talosconfig.Provider,
 	result *clusterupdate.UpdateResult,
 ) {
 	running, err := p.fetchNodeConfig(ctx, node.IP)
@@ -451,7 +478,7 @@ func (p *Provisioner) applyNodeConfig(
 		return
 	}
 
-	desired, err := p.buildDesiredNodeConfig(running, node.Role)
+	desired, err := p.buildDesiredNodeConfig(running, secretsSource, node.Role)
 	if err != nil {
 		p.recordNodeConfigFailure(node, result, fmt.Sprintf("build desired config: %v", err))
 
