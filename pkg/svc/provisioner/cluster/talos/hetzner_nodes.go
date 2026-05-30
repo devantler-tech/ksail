@@ -133,25 +133,26 @@ func (p *Provisioner) createHetznerNodes(
 		group.Go(func() error {
 			nodeName, nameErr := hetznerNodeName(opts.ClusterName, opts.Role, nodeIndex+1)
 			if nameErr != nil {
+				// Validation failure: record it and skip provisioning (no billable
+				// server created). The goroutine still returns nil; the error is
+				// surfaced by collectCreatedHetznerServers reading results.
 				results[nodeIndex] = hetznerNodeCreationResult{name: nodeName, err: nameErr}
+			} else {
+				server, err := hzProvider.CreateServerWithRetry(ctx, hetzner.CreateServerOpts{
+					Name:             nodeName,
+					ServerType:       opts.ServerType,
+					ISOID:            opts.ISOID,
+					ImageID:          opts.ImageID,
+					Location:         opts.Location,
+					Labels:           hetzner.NodeLabels(opts.ClusterName, opts.Role, nodeIndex+1),
+					NetworkID:        infra.NetworkID,
+					PlacementGroupID: infra.PlacementGroupID,
+					SSHKeyID:         infra.SSHKeyID,
+					FirewallIDs:      []int64{infra.FirewallID},
+				}, retryOpts)
 
-				return nil // validation failure collected in results; skip provisioning
+				results[nodeIndex] = hetznerNodeCreationResult{name: nodeName, server: server, err: err}
 			}
-
-			server, err := hzProvider.CreateServerWithRetry(ctx, hetzner.CreateServerOpts{
-				Name:             nodeName,
-				ServerType:       opts.ServerType,
-				ISOID:            opts.ISOID,
-				ImageID:          opts.ImageID,
-				Location:         opts.Location,
-				Labels:           hetzner.NodeLabels(opts.ClusterName, opts.Role, nodeIndex+1),
-				NetworkID:        infra.NetworkID,
-				PlacementGroupID: infra.PlacementGroupID,
-				SSHKeyID:         infra.SSHKeyID,
-				FirewallIDs:      []int64{infra.FirewallID},
-			}, retryOpts)
-
-			results[nodeIndex] = hetznerNodeCreationResult{name: nodeName, server: server, err: err}
 
 			return nil // errors collected in results
 		})
