@@ -6,10 +6,10 @@ Each `*.tape` is a VHS script that runs **real `ksail` commands**. Rendering pro
 MP4 in [`../public/demos/`](../public/demos/) (served at `/demos/<name>.{gif,mp4}`), which are
 committed so the published site serves them without a build-time render step.
 
-| Tape | Demo | Docker? |
-|------|------|---------|
-| `cluster-init.tape` | Quick start: `cluster init`, the declarative `ksail.yaml`, switching distribution | no |
-| `cluster-lifecycle.tape` | Full lifecycle on a real Kind cluster: create → info → deploy → delete | **yes** |
+| Tape                     | Demo                                                                              | Docker? |
+|--------------------------|-----------------------------------------------------------------------------------|---------|
+| `cluster-init.tape`      | Quick start: `cluster init`, the declarative `ksail.yaml`, switching distribution | no      |
+| `cluster-lifecycle.tape` | Full lifecycle on a real Kind cluster: create → info → deploy → delete            | **yes** |
 
 ## Regenerate
 
@@ -51,7 +51,7 @@ Pick the format per page — GIF for short clips (autoplays in plain markdown an
 These are baked into the existing tapes; keep them in mind when adding new ones.
 
 - **No on-screen setup.** VHS's `Hide`/`Show` is broken in 0.11.0 (hidden commands still render), and
-  VHS launches bash with `--norc` and injects its own `> ` prompt (so `~/.bashrc`/`PS1` overrides are
+  VHS launches bash with `--norc` and injects its own `>` prompt (so `~/.bashrc`/`PS1` overrides are
   ignored). The workaround is structural: `render.sh` runs the tape from a clean scratch dir, so demo
   commands start from a blank project with nothing to `cd`/`source`/`clear` on camera.
 - **ASCII only in `Type`.** An em-dash (`—`) and other non-ASCII corrupt VHS typing — it drops/reorders

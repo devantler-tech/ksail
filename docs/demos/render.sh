@@ -36,7 +36,7 @@ trap '"$DEMOS_DIR/.bin/ksail" cluster delete --name ksail-demo --force >/dev/nul
 
 # Warm the OS page cache: the first cold run of the ~300MB binary is ~3s, which
 # would otherwise race the Sleep timings in the (cache-warm) recordings.
-( cd "$(mktemp -d)" && ksail cluster init >/dev/null 2>&1 || true )
+(cd "$(mktemp -d)" && ksail cluster init >/dev/null 2>&1 || true)
 
 # Shrink a rendered GIF. Lossless first; long, heavy-scroll demos (lifecycle)
 # stay multi-MB even so, so those get downscaled + mild lossy — the matching
@@ -45,7 +45,7 @@ optimize_gif() {
   local f="$1" size
   command -v gifsicle >/dev/null 2>&1 || return 0
   gifsicle -O3 -b "$f"
-  size=$(wc -c < "$f")
+  size=$(wc -c <"$f")
   if [ "$size" -gt 1258291 ]; then # > 1.2 MiB
     gifsicle -O3 --lossy=60 --resize-width 900 -b "$f"
   fi
@@ -60,11 +60,14 @@ else
 fi
 
 for tape in "${tapes[@]}"; do
-  [ -f "$tape" ] || { echo "skip: $tape not found" >&2; continue; }
+  [ -f "$tape" ] || {
+    echo "skip: $tape not found" >&2
+    continue
+  }
   name="${tape%.tape}"
   echo "==> rendering $tape"
   scratch="$(mktemp -d)"
-  ( cd "$scratch" && vhs "$DEMOS_DIR/$tape" )
+  (cd "$scratch" && vhs "$DEMOS_DIR/$tape")
   for ext in gif mp4 webm; do
     [ -f "$scratch/$name.$ext" ] && mv -f "$scratch/$name.$ext" "$OUT_DIR/$name.$ext"
   done
