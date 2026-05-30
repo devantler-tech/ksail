@@ -364,3 +364,13 @@ header.header {
 footer {
   text-align: center;
 }
+
+/* Terminal demo recordings (GIF/MP4) — see docs/demos/ */
+.demo-recording {
+  display: block;
+  width: 100%;
+  max-width: 860px;
+  margin: 1.5rem auto;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 30%);
+}
