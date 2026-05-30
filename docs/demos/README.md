@@ -56,9 +56,19 @@ These are baked into the existing tapes; keep them in mind when adding new ones.
   commands start from a blank project with nothing to `cd`/`source`/`clear` on camera.
 - **ASCII only in `Type`.** An em-dash (`—`) and other non-ASCII corrupt VHS typing — it drops/reorders
   characters, and a dropped leading `#` turns a comment into a command. Keep typed lines plain ASCII.
-- **Let commands finish before typing the next line.** A slow command (cold binary load, API calls)
-  whose output is still flushing will collide with the next `Type`. The cache warm-up plus generous
-  `Sleep`s after `create`/`info` handle this; bump the `Sleep` if you see interleaved output.
+- **Wait for commands to finish — don't guess with `Sleep`.** A slow command (`cluster create`,
+  `rollout status`) whose output is still streaming will collide with the next `Type`, interleaving
+  the typed line into the command's output. Put a bare `Wait` after the command's `Enter`: it blocks
+  until the shell prompt returns (VHS matches the prompt on the last line, so mid-command streaming
+  never triggers it). Pair it with `Set WaitTimeout` long enough for the slowest command (e.g. `180s`
+  to cover a cold `cluster create` that pulls images). Use `Sleep` only for *readability* pauses —
+  holding finished output on screen long enough to read — never as a substitute for `Wait`.
+- **Speed up playback gently, and compensate.** `Set PlaybackSpeed` scales the *whole* recording —
+  typing, reading pauses, and command output alike. A mild value (≤ 1.25) is useful to trim long
+  real-time command waits (e.g. `cluster create`), but anything aggressive (the old 1.5) makes the
+  readable parts flash by. If you do speed up, size `TypingSpeed` and the reading `Sleep`s for their
+  *post-speed-up* duration — e.g. at 1.25 a `Sleep 5200ms` reads as ~4.2 s — so typing and pauses
+  stay comfortable. `cluster-init` needs no speed-up (no slow commands); only `cluster-lifecycle` does.
 - **`Output` paths are relative** to the scratch dir — use a bare filename (`Output "name.gif"`);
   `render.sh` moves it to `../public/demos/`.
 - **Destructive commands prompt.** `ksail cluster delete` asks for confirmation; use `--force` in tapes

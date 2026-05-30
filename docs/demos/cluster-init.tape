@@ -15,36 +15,45 @@ Set MarginFill "#1e1e2e"
 Set BorderRadius 10
 Set WindowBar Colorful
 Set Theme "Catppuccin Mocha"
-Set TypingSpeed 45ms
+Set TypingSpeed 50ms
+# Wait for each command's prompt to return before typing the next line, so output
+# never collides with the following command. Generous timeout for a cold binary.
+Set WaitTimeout 30s
 
-Sleep 800ms
+Sleep 1s
 Type "# 1. Scaffold a GitOps-ready cluster project"
-Sleep 300ms
+Sleep 700ms
 Enter
 Type "ksail cluster init"
-Sleep 300ms
+Sleep 400ms
 Enter
-Sleep 2000ms
+Wait
+Sleep 2800ms
 
 Type "# 2. The whole cluster, declaratively"
-Sleep 300ms
+Sleep 700ms
 Enter
 Type "cat ksail.yaml"
+Sleep 400ms
 Enter
-Sleep 2200ms
+Wait
+Sleep 3s
 
 Type "# 3. Switch distribution in one command"
-Sleep 300ms
+Sleep 700ms
 Enter
 Type "ksail cluster init --distribution K3s --force"
-Sleep 300ms
+Sleep 400ms
 Enter
-Sleep 2000ms
+Wait
+Sleep 2800ms
 Type "cat ksail.yaml"
+Sleep 400ms
 Enter
-Sleep 2500ms
+Wait
+Sleep 3500ms
 
 Type "# Ready to launch: ksail cluster create"
-Sleep 300ms
+Sleep 700ms
 Enter
-Sleep 2200ms
+Sleep 3s
