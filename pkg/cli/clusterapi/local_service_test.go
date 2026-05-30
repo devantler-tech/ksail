@@ -3,6 +3,7 @@ package clusterapi_test
 import (
 	"context"
 	"errors"
+	"os"
 	"slices"
 	"sync"
 	"testing"
@@ -347,8 +348,19 @@ func TestCreateValidatesInput(t *testing.T) {
 	_, err = service.Create(context.Background(), clusterFor("noDist", ""))
 	require.ErrorIs(t, err, api.ErrInvalid)
 
-	_, err = service.Create(context.Background(), clusterFor("talos", v1alpha1.DistributionTalos))
+	// An unknown distribution cannot be provisioned locally.
+	_, err = service.Create(
+		context.Background(),
+		clusterFor("bogus", v1alpha1.Distribution("Bogus")),
+	)
 	require.ErrorIs(t, err, api.ErrNotSupported)
+
+	// An invalid (distribution, provider) combination is rejected before any work is enqueued, so the
+	// provisioner can never silently provision a backend that disagrees with the requested provider.
+	eksOnDocker := clusterFor("eks-on-docker", v1alpha1.DistributionEKS)
+	eksOnDocker.Spec.Cluster.Provider = v1alpha1.ProviderDocker
+	_, err = service.Create(context.Background(), eksOnDocker)
+	require.ErrorIs(t, err, api.ErrInvalid)
 }
 
 func TestCreateRejectsExistingCluster(t *testing.T) {
@@ -404,5 +416,120 @@ func TestDeleteUnknownClusterReturnsNotFound(t *testing.T) {
 func TestCreatableDistributions(t *testing.T) {
 	t.Parallel()
 
-	assert.Equal(t, []string{"Vanilla", "K3s", "VCluster"}, clusterapi.CreatableDistributions())
+	assert.Equal(t,
+		[]string{"Vanilla", "K3s", "Talos", "VCluster", "KWOK", "EKS"},
+		clusterapi.CreatableDistributions(),
+	)
+}
+
+// recordingFactory captures the cluster the provisioner factory is asked to build, but only for the
+// create call (which sets a non-empty provider) — discovery's enumerate calls leave it empty.
+type recordingFactory struct {
+	sink chan<- *v1alpha1.Cluster
+}
+
+func (f recordingFactory) Create(
+	_ context.Context,
+	cluster *v1alpha1.Cluster,
+) (clusterprovisioner.Provisioner, any, error) {
+	if cluster.Spec.Cluster.Provider != "" {
+		select {
+		case f.sink <- cluster.DeepCopy():
+		default:
+		}
+	}
+
+	return &fakeProvisioner{}, nil, nil
+}
+
+// TestEKSConfigForCreate writes a region-stamped eks.yaml under ~/.ksail so the EKS provisioner has
+// the on-disk config it requires. The region comes from AWS_REGION (which Settings/overlay set).
+func TestEKSConfigForCreate(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("AWS_REGION", "eu-central-1")
+
+	configPath, region, err := clusterapi.ExportEKSConfigForCreate("prod")
+	require.NoError(t, err)
+	assert.Equal(t, "eu-central-1", region)
+	assert.FileExists(t, configPath)
+
+	data, err := os.ReadFile(configPath) //nolint:gosec // test-controlled path under a temp HOME.
+	require.NoError(t, err)
+	assert.Contains(t, string(data), "name: prod")
+	assert.Contains(t, string(data), "region: eu-central-1")
+}
+
+// TestEKSConfigRejectsNonSegmentName guards the path-traversal hardening: the cluster name becomes a
+// single directory under ~/.ksail/clusters, so names containing separators or the "."/".." specials
+// must be rejected rather than redirecting the write into an unintended directory.
+func TestEKSConfigRejectsNonSegmentName(t *testing.T) {
+	t.Parallel()
+
+	for _, name := range []string{"foo/bar", ".", "..", "../escape", "/abs"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			_, _, err := clusterapi.ExportEKSConfigForCreate(name)
+			require.ErrorIs(t, err, api.ErrInvalid)
+		})
+	}
+}
+
+// TestCreatePassesProviderToFactory is the Phase 4 regression guard: the create path must route the
+// requested provider (and distribution) to the factory, so a Talos/Hetzner request provisions on
+// Hetzner rather than silently falling back to local Docker.
+func TestCreatePassesProviderToFactory(t *testing.T) {
+	t.Parallel()
+
+	captured := make(chan *v1alpha1.Cluster, 1)
+	service := clusterapi.NewTestService(
+		func(_ v1alpha1.Distribution, _ string) (clusterprovisioner.Factory, error) {
+			return recordingFactory{sink: captured}, nil
+		},
+	)
+
+	cluster := clusterFor("prod", v1alpha1.DistributionTalos)
+	cluster.Spec.Cluster.Provider = v1alpha1.ProviderHetzner
+
+	_, err := service.Create(context.Background(), cluster)
+	require.NoError(t, err)
+
+	select {
+	case built := <-captured:
+		assert.Equal(t, v1alpha1.DistributionTalos, built.Spec.Cluster.Distribution)
+		assert.Equal(t, v1alpha1.ProviderHetzner, built.Spec.Cluster.Provider)
+	case <-time.After(eventuallyTimeout):
+		t.Fatal("factory was never asked to build the requested Talos/Hetzner cluster")
+	}
+}
+
+// TestCreateDefaultsEKSProviderToAWS guards the provider-defaulting fix: an EKS create request with
+// no explicit provider must default to AWS (not the global Docker default), so the returned cluster
+// is labelled AWS and the factory is asked to provision the AWS backend.
+func TestCreateDefaultsEKSProviderToAWS(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("AWS_REGION", "eu-central-1")
+
+	captured := make(chan *v1alpha1.Cluster, 1)
+	service := clusterapi.NewTestService(
+		func(_ v1alpha1.Distribution, _ string) (clusterprovisioner.Factory, error) {
+			return recordingFactory{sink: captured}, nil
+		},
+	)
+
+	// Provider intentionally left empty — Create must default it to AWS for EKS.
+	created, err := service.Create(
+		context.Background(),
+		clusterFor("prod-eks", v1alpha1.DistributionEKS),
+	)
+	require.NoError(t, err)
+	assert.Equal(t, v1alpha1.ProviderAWS, created.Spec.Cluster.Provider,
+		"an EKS request without a provider must default to AWS")
+
+	select {
+	case built := <-captured:
+		assert.Equal(t, v1alpha1.ProviderAWS, built.Spec.Cluster.Provider)
+	case <-time.After(eventuallyTimeout):
+		t.Fatal("factory was never asked to build the EKS cluster with a defaulted AWS provider")
+	}
 }

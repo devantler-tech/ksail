@@ -408,24 +408,6 @@ func ExportComponentLabel(value string) string {
 	return componentLabel(value)
 }
 
-// ClusterWithDistributionInfo is an exported view of clusterWithDistribution for testing.
-type ClusterWithDistributionInfo struct {
-	Name         string
-	Distribution v1alpha1.Distribution
-}
-
-// ExportToTalosClusters exports toTalosClusters for testing.
-func ExportToTalosClusters(names []string) []ClusterWithDistributionInfo {
-	raw := toTalosClusters(names)
-
-	out := make([]ClusterWithDistributionInfo, len(raw))
-	for i, r := range raw {
-		out[i] = ClusterWithDistributionInfo(r)
-	}
-
-	return out
-}
-
 // ExportDisplayClusterIdentity exports displayClusterIdentity for testing.
 func ExportDisplayClusterIdentity(writer io.Writer, info *clusterdetector.Info) {
 	displayClusterIdentity(writer, info)

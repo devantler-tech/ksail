@@ -13,14 +13,21 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"slices"
 	"sort"
+	"strings"
 	"sync"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	kindconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/kind"
 	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil/scaffolder"
 	"github.com/devantler-tech/ksail/v7/pkg/operator/api"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/clusterdiscovery"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/credentials"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
@@ -31,6 +38,12 @@ import (
 // stable value is reported and the namespace path segment is otherwise ignored.
 const localNamespace = "default"
 
+// File modes for the generated EKS config under ~/.ksail/clusters/<name>.
+const (
+	eksConfigDirMode  = 0o700
+	eksConfigFileMode = 0o600
+)
+
 // FactoryFunc builds a provisioner factory for a distribution. The name is used by distributions
 // whose provisioner reads the cluster name from its config (VCluster, KWOK). It is injectable so
 // tests can substitute mock provisioners.
@@ -39,6 +52,7 @@ type FactoryFunc func(distribution v1alpha1.Distribution, name string) (clusterp
 // job tracks an in-flight or recently finished create/delete operation for a single cluster.
 type job struct {
 	distribution v1alpha1.Distribution
+	provider     v1alpha1.Provider
 	phase        v1alpha1.ClusterPhase
 	err          error
 }
@@ -50,16 +64,26 @@ var _ api.ClusterService = (*Service)(nil)
 type Service struct {
 	newFactory FactoryFunc
 
+	// discoverer enumerates existing clusters across providers for List/Get; discoverProviders is
+	// the set it queries. NewService queries every provider the machine can reach so cloud clusters
+	// (Hetzner/Omni/EKS) are visible, not just local Docker ones.
+	discoverer        *clusterdiscovery.Discoverer
+	discoverProviders []v1alpha1.Provider
+
 	mu   sync.Mutex
 	jobs map[string]*job
 }
 
 // NewService returns a local ClusterService backed by the real provisioner factory.
 func NewService() *Service {
-	return &Service{
-		newFactory: defaultFactory,
-		jobs:       map[string]*job{},
+	service := &Service{
+		newFactory:        defaultFactory,
+		discoverProviders: clusterdiscovery.AllProviders(),
+		jobs:              map[string]*job{},
 	}
+	service.discoverer = &clusterdiscovery.Discoverer{DockerFactory: service.dockerFactory}
+
+	return service
 }
 
 // CreatableDistributions returns the distributions the local UI can provision. It feeds the
@@ -75,39 +99,42 @@ func CreatableDistributions() []string {
 	return out
 }
 
-// creatableDistributions is the MVP set of locally provisionable distributions.
+// creatableDistributions is the set the UI can provision. It spans Docker-based and cloud
+// distributions; the SPA further gates each one to providers that are actually available (Docker
+// running, HCLOUD_TOKEN set, eksctl installed, …) via the config endpoint's provider status, so a
+// cloud distribution only appears once its provider's credentials are configured.
 func creatableDistributions() []v1alpha1.Distribution {
-	return []v1alpha1.Distribution{
-		v1alpha1.DistributionVanilla,
-		v1alpha1.DistributionK3s,
-		v1alpha1.DistributionVCluster,
-	}
-}
-
-// listDistributions is the set enumerated when listing existing clusters. It is broader than the
-// creatable set so clusters created out-of-band (e.g. via the CLI) still appear.
-func listDistributions() []v1alpha1.Distribution {
 	return []v1alpha1.Distribution{
 		v1alpha1.DistributionVanilla,
 		v1alpha1.DistributionK3s,
 		v1alpha1.DistributionTalos,
 		v1alpha1.DistributionVCluster,
 		v1alpha1.DistributionKWOK,
+		v1alpha1.DistributionEKS,
 	}
 }
 
-// List returns the union of clusters discovered from the providers and clusters tracked in the job
+// listEntry is the merged view of a cluster's distribution, provider, and phase while assembling
+// the list response.
+type listEntry struct {
+	distribution v1alpha1.Distribution
+	provider     v1alpha1.Provider
+	phase        v1alpha1.ClusterPhase
+}
+
+// List returns the union of clusters discovered across providers and clusters tracked in the job
 // store (in-flight creates/deletes). Job state takes precedence so a cluster mid-create shows
 // Provisioning and one mid-delete shows Deleting even before the provider reflects it.
 func (s *Service) List(ctx context.Context) (*v1alpha1.ClusterList, error) {
 	live := s.enumerate(ctx)
 
-	merged := make(map[string]v1alpha1.ClusterPhase, len(live))
-	dists := make(map[string]v1alpha1.Distribution, len(live))
-
-	for name, dist := range live {
-		merged[name] = v1alpha1.ClusterPhaseReady
-		dists[name] = dist
+	merged := make(map[string]listEntry, len(live))
+	for name, cluster := range live {
+		merged[name] = listEntry{
+			distribution: cluster.Distribution,
+			provider:     cluster.Provider,
+			phase:        v1alpha1.ClusterPhaseReady,
+		}
 	}
 
 	s.mu.Lock()
@@ -121,8 +148,11 @@ func (s *Service) List(ctx context.Context) (*v1alpha1.ClusterList, error) {
 			}
 		}
 
-		merged[name] = current.phase
-		dists[name] = current.distribution
+		merged[name] = listEntry{
+			distribution: current.distribution,
+			provider:     current.provider,
+			phase:        current.phase,
+		}
 	}
 	s.mu.Unlock()
 
@@ -135,7 +165,8 @@ func (s *Service) List(ctx context.Context) (*v1alpha1.ClusterList, error) {
 
 	items := make([]v1alpha1.Cluster, 0, len(names))
 	for _, name := range names {
-		items = append(items, newCluster(name, dists[name], merged[name]))
+		entry := merged[name]
+		items = append(items, newCluster(name, entry.distribution, entry.provider, entry.phase))
 	}
 
 	return &v1alpha1.ClusterList{Items: items}, nil
@@ -184,6 +215,24 @@ func (s *Service) Create(
 		)
 	}
 
+	// Default an omitted provider to the distribution's natural one (Docker for local distributions,
+	// AWS for EKS) and reject invalid (distribution, provider) combinations such as EKS+Docker before
+	// any work is enqueued — otherwise the provisioner would silently provision the wrong backend
+	// (e.g. AWS) while the job and returned cluster are labelled with the requested provider.
+	provider := cluster.Spec.Cluster.Provider
+	if provider == "" {
+		provider = v1alpha1.DefaultProviderForDistribution(distribution)
+	}
+
+	err := provider.ValidateForDistribution(distribution)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", api.ErrInvalid, err)
+	}
+
+	// Persist the defaulted/validated provider so the background goroutine, the job record, and the
+	// returned cluster all agree on the backend that will actually be provisioned.
+	cluster.Spec.Cluster.Provider = provider
+
 	live := s.enumerate(ctx)
 
 	s.mu.Lock()
@@ -197,12 +246,16 @@ func (s *Service) Create(
 		return nil, fmt.Errorf("%w: %q", api.ErrAlreadyExists, name)
 	}
 
-	s.jobs[name] = &job{distribution: distribution, phase: v1alpha1.ClusterPhaseProvisioning}
+	s.jobs[name] = &job{
+		distribution: distribution,
+		provider:     provider,
+		phase:        v1alpha1.ClusterPhaseProvisioning,
+	}
 	s.mu.Unlock()
 
-	go s.runCreate(context.WithoutCancel(ctx), name, distribution)
+	go s.runCreate(context.WithoutCancel(ctx), name, cluster.Spec)
 
-	created := newCluster(name, distribution, v1alpha1.ClusterPhaseProvisioning)
+	created := newCluster(name, distribution, provider, v1alpha1.ClusterPhaseProvisioning)
 
 	return &created, nil
 }
@@ -219,43 +272,76 @@ func (s *Service) Update(
 // Delete starts deleting a cluster and returns immediately, marking it Deleting. The deletion runs
 // in a background goroutine.
 func (s *Service) Delete(ctx context.Context, _, name string) error {
-	distribution, ok := s.resolveDistribution(ctx, name)
+	distribution, provider, ok := s.resolveCluster(ctx, name)
 	if !ok {
 		return fmt.Errorf("%w: %q", api.ErrNotFound, name)
 	}
 
 	s.mu.Lock()
-	s.jobs[name] = &job{distribution: distribution, phase: v1alpha1.ClusterPhaseDeleting}
+	s.jobs[name] = &job{
+		distribution: distribution,
+		provider:     provider,
+		phase:        v1alpha1.ClusterPhaseDeleting,
+	}
 	s.mu.Unlock()
 
-	go s.runDelete(context.WithoutCancel(ctx), name, distribution)
+	// Reconstruct the spec the provisioner needs to target the right provider. Provider options
+	// (server types, etc.) are irrelevant for deletion, so distribution + provider suffice.
+	spec := v1alpha1.Spec{
+		Cluster: v1alpha1.ClusterSpec{Distribution: distribution, Provider: provider},
+	}
+
+	go s.runDelete(context.WithoutCancel(ctx), name, spec)
 
 	return nil
 }
 
-// resolveDistribution finds the distribution of an existing cluster, checking live providers first
-// and then the job store (for clusters still being provisioned).
-func (s *Service) resolveDistribution(
+// Availability reports per-provider availability across the providers this service discovers. The
+// web UI uses it to gate create-form options to providers the machine can actually reach.
+func (s *Service) Availability(ctx context.Context) []clusterdiscovery.Availability {
+	return s.discoverer.Availability(ctx, s.discoverProviders)
+}
+
+// UseCredentials points discovery and availability at a credential resolver (e.g. one backed by the
+// OS secure store and the Settings page), so listing and gating reflect Settings overrides, not just
+// raw environment variables. With no resolver set, discovery resolves credentials from the
+// environment under their default variable names.
+func (s *Service) UseCredentials(resolver credentials.Resolver) {
+	s.discoverer.Resolver = resolver
+}
+
+// resolveCluster finds the distribution and provider of an existing cluster, checking live
+// providers first and then the job store (for clusters still being provisioned).
+func (s *Service) resolveCluster(
 	ctx context.Context,
 	name string,
-) (v1alpha1.Distribution, bool) {
+) (v1alpha1.Distribution, v1alpha1.Provider, bool) {
 	live := s.enumerate(ctx)
-	if dist, ok := live[name]; ok {
-		return dist, true
+	if cluster, ok := live[name]; ok {
+		return cluster.Distribution, cluster.Provider, true
 	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	if current, ok := s.jobs[name]; ok {
-		return current.distribution, true
+		return current.distribution, current.provider, true
 	}
 
-	return "", false
+	return "", "", false
 }
 
-func (s *Service) runCreate(ctx context.Context, name string, distribution v1alpha1.Distribution) {
-	err := s.runProvisioner(ctx, name, distribution, func(p clusterprovisioner.Provisioner) error {
+// dockerFactory adapts the Service's provisioner factory to the discovery DockerFactory shape,
+// reusing the same (injectable) factory the create/delete paths use. The cluster name is irrelevant
+// for listing, so it is empty.
+func (s *Service) dockerFactory(
+	distribution v1alpha1.Distribution,
+) (clusterprovisioner.Factory, error) {
+	return s.newFactory(distribution, "")
+}
+
+func (s *Service) runCreate(ctx context.Context, name string, spec v1alpha1.Spec) {
+	err := s.runProvisioner(ctx, name, spec, func(p clusterprovisioner.Provisioner) error {
 		return p.Create(ctx, name)
 	})
 
@@ -269,7 +355,7 @@ func (s *Service) runCreate(ctx context.Context, name string, distribution v1alp
 
 	if err != nil {
 		slog.Error("cluster creation failed",
-			"cluster", name, "distribution", distribution, "error", err)
+			"cluster", name, "distribution", spec.Cluster.Distribution, "error", err)
 
 		current.phase = v1alpha1.ClusterPhaseFailed
 		current.err = err
@@ -280,8 +366,8 @@ func (s *Service) runCreate(ctx context.Context, name string, distribution v1alp
 	current.phase = v1alpha1.ClusterPhaseReady
 }
 
-func (s *Service) runDelete(ctx context.Context, name string, distribution v1alpha1.Distribution) {
-	err := s.runProvisioner(ctx, name, distribution, func(p clusterprovisioner.Provisioner) error {
+func (s *Service) runDelete(ctx context.Context, name string, spec v1alpha1.Spec) {
+	err := s.runProvisioner(ctx, name, spec, func(p clusterprovisioner.Provisioner) error {
 		return p.Delete(ctx, name)
 	})
 
@@ -295,7 +381,7 @@ func (s *Service) runDelete(ctx context.Context, name string, distribution v1alp
 	// fallback to `ksail cluster delete --name`). Only genuine failures are surfaced as Failed.
 	if err != nil && !errors.Is(err, clustererr.ErrClusterNotFound) {
 		slog.Error("cluster deletion failed",
-			"cluster", name, "distribution", distribution, "error", err)
+			"cluster", name, "distribution", spec.Cluster.Distribution, "error", err)
 
 		current := s.jobs[name]
 		if current != nil {
@@ -309,14 +395,15 @@ func (s *Service) runDelete(ctx context.Context, name string, distribution v1alp
 	delete(s.jobs, name)
 }
 
-// runProvisioner builds a provisioner for the distribution and runs the supplied action against it.
+// runProvisioner builds a provisioner for the requested spec and runs the supplied action against
+// it. The spec carries the provider (so Talos routes to Hetzner/Omni/Docker) and node counts.
 func (s *Service) runProvisioner(
 	ctx context.Context,
 	name string,
-	distribution v1alpha1.Distribution,
+	spec v1alpha1.Spec,
 	action func(clusterprovisioner.Provisioner) error,
 ) error {
-	provisioner, err := s.buildProvisioner(ctx, distribution, name)
+	provisioner, err := s.buildProvisioner(ctx, spec, name)
 	if err != nil {
 		return err
 	}
@@ -324,26 +411,21 @@ func (s *Service) runProvisioner(
 	return action(provisioner)
 }
 
-// enumerate discovers existing clusters across the local distributions, keyed by name. Errors for
-// individual distributions are swallowed (best-effort), matching `ksail cluster list`.
-func (s *Service) enumerate(ctx context.Context) map[string]v1alpha1.Distribution {
-	found := make(map[string]v1alpha1.Distribution)
+// enumerate discovers existing clusters across every configured provider, keyed by name (the first
+// provider to report a name wins). Per-provider failures are logged and skipped (best-effort) so a
+// single unreachable provider never blanks the list; this matches `ksail cluster list`.
+func (s *Service) enumerate(ctx context.Context) map[string]clusterdiscovery.Cluster {
+	clusters, failures := s.discoverer.Discover(ctx, s.discoverProviders)
 
-	for _, distribution := range listDistributions() {
-		provisioner, err := s.buildProvisioner(ctx, distribution, "")
-		if err != nil {
-			continue
-		}
+	for _, failure := range failures {
+		slog.Warn("cluster discovery failed for provider",
+			"provider", failure.Provider, "error", failure.Err)
+	}
 
-		names, listErr := provisioner.List(ctx)
-		if listErr != nil {
-			continue
-		}
-
-		for _, name := range names {
-			if _, ok := found[name]; !ok {
-				found[name] = distribution
-			}
+	found := make(map[string]clusterdiscovery.Cluster, len(clusters))
+	for _, cluster := range clusters {
+		if _, ok := found[cluster.Name]; !ok {
+			found[cluster.Name] = cluster
 		}
 	}
 
@@ -352,17 +434,20 @@ func (s *Service) enumerate(ctx context.Context) map[string]v1alpha1.Distributio
 
 func (s *Service) buildProvisioner(
 	ctx context.Context,
-	distribution v1alpha1.Distribution,
+	spec v1alpha1.Spec,
 	name string,
 ) (clusterprovisioner.Provisioner, error) {
+	distribution := spec.Cluster.Distribution
+
 	factory, err := s.newFactory(distribution, name)
 	if err != nil {
 		return nil, err
 	}
 
-	cluster := &v1alpha1.Cluster{
-		Spec: v1alpha1.Spec{Cluster: v1alpha1.ClusterSpec{Distribution: distribution}},
-	}
+	// Pass the full requested spec so the factory routes to the right provider (e.g. Talos →
+	// Hetzner/Omni/Docker) and honors node counts and provider options, not just the distribution.
+	cluster := &v1alpha1.Cluster{Spec: spec}
+	cluster.Name = name
 
 	provisioner, _, err := factory.Create(ctx, cluster)
 	if err != nil {
@@ -372,18 +457,24 @@ func (s *Service) buildProvisioner(
 	return provisioner, nil
 }
 
-// newCluster builds the Kubernetes-shaped Cluster the web UI consumes from a local cluster's name,
-// distribution, and phase.
+// newCluster builds the Kubernetes-shaped Cluster the web UI consumes from a discovered (or
+// in-flight) cluster's name, distribution, provider, and phase. An empty provider defaults to
+// Docker (the local default), so older job entries and Docker clusters render correctly.
 func newCluster(
 	name string,
 	distribution v1alpha1.Distribution,
+	provider v1alpha1.Provider,
 	phase v1alpha1.ClusterPhase,
 ) v1alpha1.Cluster {
+	if provider == "" {
+		provider = v1alpha1.ProviderDocker
+	}
+
 	cluster := v1alpha1.Cluster{}
 	cluster.Name = name
 	cluster.Namespace = localNamespace
 	cluster.Spec.Cluster.Distribution = distribution
-	cluster.Spec.Cluster.Provider = v1alpha1.ProviderDocker
+	cluster.Spec.Cluster.Provider = provider
 	cluster.Status.Phase = phase
 
 	return cluster
@@ -412,7 +503,7 @@ func distributionConfig(
 	distribution v1alpha1.Distribution,
 	name string,
 ) (*clusterprovisioner.DistributionConfig, error) {
-	//nolint:exhaustive // K3s/VCluster/KWOK go through SimpleDistributionConfig; EKS is unavailable.
+	//nolint:exhaustive // K3s/VCluster/KWOK go through SimpleDistributionConfig (default case).
 	switch distribution {
 	case v1alpha1.DistributionVanilla:
 		// NewKindCluster sets the TypeMeta; SetDefaultsCluster adds the default control-plane node.
@@ -422,10 +513,11 @@ func distributionConfig(
 
 		return &clusterprovisioner.DistributionConfig{Kind: kindCluster}, nil
 	case v1alpha1.DistributionTalos:
-		return &clusterprovisioner.DistributionConfig{Talos: &talosconfigmanager.Configs{}}, nil
+		return talosDistributionConfig(name)
+	case v1alpha1.DistributionEKS:
+		return eksDistributionConfig(name)
 	default:
-		// K3s, VCluster, KWOK need only the name (shared with the operator backend); EKS and any
-		// other distribution cannot be provisioned locally.
+		// K3s, VCluster, KWOK need only the name (shared with the operator backend).
 		config := clusterprovisioner.SimpleDistributionConfig(distribution, name)
 		if config != nil {
 			return config, nil
@@ -433,6 +525,107 @@ func distributionConfig(
 
 		return nil, errDistributionUnavailable(distribution)
 	}
+}
+
+// talosDistributionConfig builds a fully-initialized Talos config bundle named after the cluster
+// (PKI is baked in at name time and cannot change later), via the same shared helper the operator
+// uses. The bundle works for Talos on Docker, Hetzner, or Omni; the factory selects the provider
+// from the cluster spec.
+func talosDistributionConfig(
+	name string,
+) (*clusterprovisioner.DistributionConfig, error) {
+	configs, err := talosconfigmanager.NewDefaultConfigsWithName(name)
+	if err != nil {
+		return nil, fmt.Errorf("talos distribution config: %w", err)
+	}
+
+	return &clusterprovisioner.DistributionConfig{Talos: configs}, nil
+}
+
+// eksDistributionConfig renders an eksctl ClusterConfig (region from the AWS_REGION environment,
+// which the credential overlay populates from Settings) and writes it under ~/.ksail/clusters/<name>
+// so the EKS provisioner has the on-disk config it requires to create the cluster.
+func eksDistributionConfig(
+	name string,
+) (*clusterprovisioner.DistributionConfig, error) {
+	region := os.Getenv(credentials.DefaultEnvVar(credentials.AWSRegion))
+
+	configPath, err := writeEKSConfig(name, region)
+	if err != nil {
+		return nil, err
+	}
+
+	return &clusterprovisioner.DistributionConfig{
+		EKS: &clusterprovisioner.EKSConfig{Name: name, Region: region, ConfigPath: configPath},
+	}, nil
+}
+
+// writeEKSConfig renders and writes the eks.yaml for a cluster, returning its path. The name must be
+// a single path segment, and the resolved directory is verified to stay under ~/.ksail/clusters even
+// after symlink resolution, so neither a crafted name nor a symlinked cluster directory can redirect
+// the write outside the intended tree.
+func writeEKSConfig(name, region string) (string, error) {
+	// The name becomes exactly one directory under ~/.ksail/clusters, so it must be a single path
+	// segment. filepath.IsLocal alone is insufficient — it still permits multi-segment names like
+	// "foo/bar" and ".", which would redirect the write into an unintended nested directory — so also
+	// require the name to equal its own base element and reject the "." / ".." specials.
+	if !filepath.IsLocal(name) || name != filepath.Base(name) || name == "." || name == ".." {
+		return "", fmt.Errorf(
+			"%w: cluster name %q must be a single path segment",
+			api.ErrInvalid,
+			name,
+		)
+	}
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("resolve home directory: %w", err)
+	}
+
+	clustersRoot := filepath.Join(home, ".ksail", "clusters")
+
+	mkErr := os.MkdirAll(filepath.Join(clustersRoot, name), eksConfigDirMode)
+	if mkErr != nil {
+		return "", fmt.Errorf("create eks config directory: %w", mkErr)
+	}
+
+	dir, err := canonicalClusterDir(clustersRoot, name)
+	if err != nil {
+		return "", err
+	}
+
+	configPath := filepath.Join(dir, scaffolder.EKSConfigFile)
+	content := scaffolder.RenderEKSConfig(scaffolder.DefaultEKSConfigParams(name, region))
+
+	// dir is canonicalized and verified within ~/.ksail/clusters by canonicalClusterDir above.
+	//nolint:gosec // configPath is contained within ~/.ksail/clusters (see canonicalClusterDir)
+	writeErr := os.WriteFile(configPath, content, eksConfigFileMode)
+	if writeErr != nil {
+		return "", fmt.Errorf("write eks config: %w", writeErr)
+	}
+
+	return configPath, nil
+}
+
+// canonicalClusterDir canonicalizes ~/.ksail/clusters/<name> (resolving symlinks) and confirms it
+// remains within the canonical clusters root, rejecting any path that escapes it.
+func canonicalClusterDir(clustersRoot, name string) (string, error) {
+	canonicalRoot, err := fsutil.EvalCanonicalPath(clustersRoot)
+	if err != nil {
+		return "", fmt.Errorf("canonicalize clusters directory: %w", err)
+	}
+
+	canonicalDir, err := fsutil.EvalCanonicalPath(filepath.Join(clustersRoot, name))
+	if err != nil {
+		return "", fmt.Errorf("canonicalize eks config directory: %w", err)
+	}
+
+	rel, err := filepath.Rel(canonicalRoot, canonicalDir)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+		return "", fmt.Errorf("%w: eks config path escapes %s", api.ErrInvalid, canonicalRoot)
+	}
+
+	return canonicalDir, nil
 }
 
 func errDistributionUnavailable(distribution v1alpha1.Distribution) error {

@@ -6968,26 +6968,6 @@ func TestComponentLabel_ActiveValue(t *testing.T) {
 	assert.Equal(t, "Cilium", cluster.ExportComponentLabel("Cilium"))
 }
 
-func TestToTalosClusters_Empty(t *testing.T) {
-	t.Parallel()
-
-	result := cluster.ExportToTalosClusters(nil)
-	assert.Empty(t, result)
-}
-
-func TestToTalosClusters_MultipleNames(t *testing.T) {
-	t.Parallel()
-
-	names := []string{"cluster-a", "cluster-b"}
-	result := cluster.ExportToTalosClusters(names)
-
-	require.Len(t, result, 2)
-	assert.Equal(t, "cluster-a", result[0].Name)
-	assert.Equal(t, v1alpha1.DistributionTalos, result[0].Distribution)
-	assert.Equal(t, "cluster-b", result[1].Name)
-	assert.Equal(t, v1alpha1.DistributionTalos, result[1].Distribution)
-}
-
 func TestDisplayClusterIdentity_AllFields(t *testing.T) {
 	t.Parallel()
 

@@ -79,6 +79,7 @@ require (
 	github.com/siderolabs/go-retry v0.3.3
 	github.com/siderolabs/image-factory v1.3.1
 	github.com/siderolabs/omni/client v1.7.3
+	github.com/zalando/go-keyring v0.2.6
 	golang.org/x/oauth2 v0.36.0
 	golang.org/x/text v0.37.0
 	google.golang.org/grpc v1.81.1
@@ -332,6 +333,7 @@ require (
 	github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467 // indirect
 	github.com/cyphar/filepath-securejoin v0.6.1 // indirect
 	github.com/daixiang0/gci v0.13.7 // indirect
+	github.com/danieljoos/wincred v1.2.3 // indirect
 	github.com/dave/dst v0.27.3 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.4.0 // indirect
@@ -442,6 +444,7 @@ require (
 	github.com/goccy/go-json v0.10.5 // indirect
 	github.com/goccy/go-yaml v1.19.2 // indirect
 	github.com/gocsaf/csaf/v3 v3.5.1 // indirect
+	github.com/godbus/dbus/v5 v5.2.2 // indirect
 	github.com/godoc-lint/godoc-lint v0.11.1 // indirect
 	github.com/gofrs/flock v0.13.0 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect

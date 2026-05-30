@@ -83,6 +83,24 @@ func NewDefaultConfigs() (*Configs, error) {
 	)
 }
 
+// NewDefaultConfigsWithName builds a default Talos config bundle named after the given cluster. The
+// cluster name is baked into the PKI, so it must be set via WithName (which regenerates the bundle).
+// It is the shared "default Talos config for cluster <name>" used by both the operator and the local
+// `ksail ui` create paths.
+func NewDefaultConfigsWithName(name string) (*Configs, error) {
+	configs, err := NewDefaultConfigs()
+	if err != nil {
+		return nil, fmt.Errorf("build talos config: %w", err)
+	}
+
+	named, err := configs.WithName(name)
+	if err != nil {
+		return nil, fmt.Errorf("name talos config: %w", err)
+	}
+
+	return named, nil
+}
+
 // NewDefaultConfigsWithPatches creates a new Talos Configs with default settings plus additional patches.
 // This is used when no scaffolded project exists but additional runtime patches are needed
 // (e.g., kubelet-csr-approver inlineManifests when metrics-server is enabled).
