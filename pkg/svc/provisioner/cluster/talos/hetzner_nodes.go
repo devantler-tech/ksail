@@ -459,23 +459,9 @@ func (p *Provisioner) applyConfigToNode(
 
 	p.logf("  Applying config to %s (%s)...\n", server.Name, serverIP)
 
-	cfgBytes, err := config.Bytes()
+	cfgBytes, err := marshalConfigWithHostname(config, server.Name)
 	if err != nil {
-		return fmt.Errorf("failed to marshal config: %w", err)
-	}
-
-	// Overlay the per-node hostname so it matches the Hetzner server name. The
-	// Hetzner CCM (cloud-provider: external) matches Kubernetes Nodes to servers
-	// by name, so a node that boots with the generic Talos hostname (talos-xxxxx)
-	// never gets initialized by the CCM and never joins the cluster. KSail boots
-	// scaled-up nodes from the public Talos ISO (the metal platform), which has no
-	// cloud metadata to derive the hostname from, so it must be set explicitly.
-	// Patching the marshaled bytes (rather than the shared talosconfig.Provider)
-	// keeps this safe for the parallel per-node apply, which reuses one config
-	// across goroutines.
-	cfgBytes, err = patchTalosHostname(cfgBytes, server.Name)
-	if err != nil {
-		return fmt.Errorf("failed to set hostname for %s: %w", server.Name, err)
+		return err
 	}
 
 	var lastErr error
@@ -522,6 +508,29 @@ func (p *Provisioner) applyConfigToNode(
 		server.Name,
 		errors.Join(errRetriesExhausted, lastErr),
 	)
+}
+
+// marshalConfigWithHostname marshals the role config to bytes and overlays the
+// per-node hostname so it matches the Hetzner server name. The Hetzner CCM
+// (cloud-provider: external) matches Kubernetes Nodes to servers by name, so a
+// node that boots with the generic Talos hostname (talos-xxxxx) never gets
+// initialized by the CCM and never joins the cluster. KSail boots scaled-up
+// nodes from the public Talos ISO (the metal platform), which has no cloud
+// metadata to derive the hostname from, so it must be set explicitly. Patching
+// the marshaled bytes (rather than the shared talosconfig.Provider) keeps this
+// safe for the parallel per-node apply, which reuses one config across goroutines.
+func marshalConfigWithHostname(config talosconfig.Provider, serverName string) ([]byte, error) {
+	cfgBytes, err := config.Bytes()
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal config: %w", err)
+	}
+
+	cfgBytes, err = patchTalosHostname(cfgBytes, serverName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to set hostname for %s: %w", serverName, err)
+	}
+
+	return cfgBytes, nil
 }
 
 // patchTalosHostname overlays machine.network.hostname onto marshaled Talos
