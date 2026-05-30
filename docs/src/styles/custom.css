@@ -5,11 +5,14 @@
    ========================================================================= */
 
 /* ----------------------------------------------------------------------- */
+
 /*  Typography                                                             */
+
 /* ----------------------------------------------------------------------- */
 :root {
-  --sl-font: "Hanken Grotesque", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  --sl-font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --sl-font: "Hanken Grotesque", -apple-system, blinkmacsystemfont, "Segoe UI", roboto, helvetica, arial, sans-serif;
+  --sl-font-mono: "JetBrains Mono", ui-monospace, sfmono-regular, menlo, consolas, monospace;
+
   /* Distinctive display face for headings and the hero. */
   --ksail-font-display: "Bricolage Grotesque", var(--sl-font);
 
@@ -19,6 +22,7 @@
   --ksail-coral: #ff8a5b;
 
   /* ---- Color — dark theme (primary) ---- */
+
   /* Cool, blue-tinted neutral ramp (light text → near-bg). */
   --sl-color-white: #f3f9fd;
   --sl-color-gray-1: #dce8f1;
@@ -32,7 +36,7 @@
 
   /* Surfaces. */
   --sl-color-bg: #07121f;
-  --sl-color-bg-nav: rgba(8, 19, 32, 0.72);
+  --sl-color-bg-nav: rgb(8 19 32 / 72%);
   --sl-color-bg-sidebar: #0a1827;
   --sl-color-bg-inline-code: #122739;
   --sl-color-bg-gradient: linear-gradient(180deg, #0b1c2d, var(--sl-color-bg));
@@ -52,11 +56,13 @@
   --ksail-surface: #0d2032;
   --ksail-surface-raised: #112940;
   --ksail-border: #1d344c;
-  --ksail-glow: 0 0 0 1px #ffffff10, 0 18px 48px -24px #000000cc;
+  --ksail-glow: 0 0 0 1px #ffffff10, 0 18px 48px -24px #000c;
 }
 
 /* ----------------------------------------------------------------------- */
+
 /*  Color — light theme                                                    */
+
 /* ----------------------------------------------------------------------- */
 :root[data-theme="light"] {
   --sl-color-white: #0a1622;
@@ -67,31 +73,29 @@
   --sl-color-gray-5: #b6cadb;
   --sl-color-gray-6: #dce8f1;
   --sl-color-gray-7: #eef4f9;
-  --sl-color-black: #ffffff;
-
+  --sl-color-black: #fff;
   --sl-color-bg: #f7fbfe;
-  --sl-color-bg-nav: rgba(247, 251, 254, 0.78);
+  --sl-color-bg-nav: rgb(247 251 254 / 78%);
   --sl-color-bg-sidebar: #eef5fa;
   --sl-color-bg-inline-code: #e3eef6;
   --sl-color-bg-gradient: linear-gradient(180deg, #eaf4fb, var(--sl-color-bg));
-
   --sl-color-hairline: #0a16221a;
   --sl-color-hairline-light: #0a162210;
   --sl-color-hairline-shade: #0a162214;
-
   --sl-color-accent-low: #d4ecf5;
   --sl-color-accent: #0d7ea3;
   --sl-color-accent-high: #064f68;
   --sl-color-text-accent: #0b6e8f;
-
-  --ksail-surface: #ffffff;
-  --ksail-surface-raised: #ffffff;
+  --ksail-surface: #fff;
+  --ksail-surface-raised: #fff;
   --ksail-border: #c9dcea;
   --ksail-glow: 0 0 0 1px #0a16220d, 0 16px 40px -28px #1c405a59;
 }
 
 /* ----------------------------------------------------------------------- */
+
 /*  Global atmosphere & base                                               */
+
 /* ----------------------------------------------------------------------- */
 html {
   scroll-behavior: smooth;
@@ -105,7 +109,7 @@ body {
   background-attachment: fixed;
   background-repeat: no-repeat;
   -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
+  text-rendering: optimizelegibility;
 }
 
 ::selection {
@@ -136,18 +140,21 @@ body {
 }
 
 /* Links pick up the accent with a subtle underline that grows on hover. */
-.sl-markdown-content a:not(.card):not(.sl-link-button) {
+.sl-markdown-content a:not(.card, .sl-link-button) {
   text-underline-offset: 0.2em;
   text-decoration-thickness: 1px;
   text-decoration-color: color-mix(in oklab, var(--sl-color-text-accent) 45%, transparent);
   transition: text-decoration-color 0.15s ease;
 }
-.sl-markdown-content a:not(.card):not(.sl-link-button):hover {
+
+.sl-markdown-content a:not(.card, .sl-link-button):hover {
   text-decoration-color: var(--sl-color-text-accent);
 }
 
 /* ----------------------------------------------------------------------- */
+
 /*  Hero (splash homepage)                                                 */
+
 /* ----------------------------------------------------------------------- */
 .hero {
   position: relative;
@@ -167,7 +174,7 @@ body {
   background:
     radial-gradient(120% 130% at 88% -20%, color-mix(in oklab, var(--ksail-cyan) 22%, transparent), transparent 52%),
     radial-gradient(110% 120% at -10% 120%, color-mix(in oklab, #4aa9cc 26%, transparent), transparent 55%),
-    linear-gradient(165deg, #e9f5fc 0%, #f3fafe 60%, #ffffff 100%);
+    linear-gradient(165deg, #e9f5fc 0%, #f3fafe 60%, #fff 100%);
 }
 
 /* Faint nautical-chart graticule behind the hero content. */
@@ -187,7 +194,7 @@ body {
   line-height: 1.02;
   letter-spacing: -0.035em;
   background: linear-gradient(180deg, var(--sl-color-white), color-mix(in oklab, var(--ksail-cyan-bright) 65%, var(--sl-color-white)));
-  -webkit-background-clip: text;
+  background-clip: text;
   background-clip: text;
   color: transparent;
 }
@@ -219,7 +226,9 @@ body {
 }
 
 /* ----------------------------------------------------------------------- */
+
 /*  Buttons (hero actions)                                                 */
+
 /* ----------------------------------------------------------------------- */
 .sl-link-button {
   border-radius: 0.7rem;
@@ -233,6 +242,7 @@ body {
   border: 1px solid transparent;
   box-shadow: 0 10px 30px -12px color-mix(in oklab, var(--ksail-cyan) 70%, transparent);
 }
+
 .sl-link-button.primary:hover {
   transform: translateY(-2px);
   box-shadow: 0 16px 36px -12px color-mix(in oklab, var(--ksail-cyan) 80%, transparent);
@@ -243,6 +253,7 @@ body {
   background: color-mix(in oklab, var(--sl-color-white) 4%, transparent);
   color: var(--sl-color-white);
 }
+
 .sl-link-button:not(.primary):hover {
   transform: translateY(-2px);
   border-color: var(--ksail-cyan);
@@ -251,7 +262,9 @@ body {
 }
 
 /* ----------------------------------------------------------------------- */
+
 /*  Cards & CardGrid                                                       */
+
 /* ----------------------------------------------------------------------- */
 .card {
   border: 1px solid var(--ksail-border);
@@ -259,21 +272,26 @@ body {
   background: color-mix(in oklab, var(--ksail-surface) 75%, transparent);
   transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
 }
+
 .card:hover {
   transform: translateY(-3px);
   border-color: color-mix(in oklab, var(--ksail-cyan) 55%, var(--ksail-border));
   box-shadow: var(--ksail-glow);
 }
+
 .card .icon {
   color: var(--ksail-cyan-bright);
 }
+
 .card .title {
   font-family: var(--ksail-font-display);
   letter-spacing: -0.01em;
 }
 
 /* ----------------------------------------------------------------------- */
+
 /*  Code blocks & inline code                                              */
+
 /* ----------------------------------------------------------------------- */
 pre {
   border-radius: 0.85rem;
@@ -289,7 +307,9 @@ pre {
 }
 
 /* ----------------------------------------------------------------------- */
+
 /*  Tables — readable, bordered, no forced nowrap                          */
+
 /* ----------------------------------------------------------------------- */
 .sl-markdown-content table {
   display: table;
@@ -301,26 +321,30 @@ pre {
   overflow: hidden;
   white-space: normal;
 }
+
 .sl-markdown-content :is(th, td) {
   border: none;
   border-bottom: 1px solid var(--sl-color-hairline);
   padding: 0.6rem 0.9rem;
 }
+
 .sl-markdown-content thead th {
   background: color-mix(in oklab, var(--ksail-cyan) 10%, var(--ksail-surface));
   font-family: var(--ksail-font-display);
   font-weight: 600;
   border-bottom: 1px solid var(--ksail-border);
 }
+
 .sl-markdown-content tbody tr:last-child :is(th, td) {
   border-bottom: none;
 }
+
 .sl-markdown-content tbody tr:hover td {
   background: color-mix(in oklab, var(--ksail-cyan) 6%, transparent);
 }
 
 /* Allow wide tables to scroll on small screens without breaking layout. */
-@media (max-width: 50rem) {
+@media (width <= 50rem) {
   .sl-markdown-content table {
     display: block;
     overflow-x: auto;
@@ -328,11 +352,13 @@ pre {
 }
 
 /* ----------------------------------------------------------------------- */
+
 /*  Navigation & misc polish                                               */
+
 /* ----------------------------------------------------------------------- */
 header.header {
   backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--sl-color-hairline);
 }
 
