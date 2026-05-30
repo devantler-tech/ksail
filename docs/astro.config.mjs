@@ -20,14 +20,35 @@ export default defineConfig({
   integrations: [
     mermaid(),
     starlight({
-      title: "🛥️🐳 KSail",
+      title: "KSail",
       description: "Documentation for KSail - CLI tool for creating, maintaining and operating Kubernetes clusters. ☸️",
+      head: [
+        // PNG favicon fallback for browsers that don't support SVG favicons.
+        {
+          tag: "link",
+          attrs: { rel: "icon", type: "image/png", href: "/favicon.png", sizes: "512x512" },
+        },
+        {
+          tag: "link",
+          attrs: { rel: "preconnect", href: "https://fonts.googleapis.com" },
+        },
+        {
+          tag: "link",
+          attrs: { rel: "preconnect", href: "https://fonts.gstatic.com", crossorigin: true },
+        },
+        {
+          tag: "link",
+          attrs: {
+            rel: "stylesheet",
+            href: "https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Hanken+Grotesque:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap",
+          },
+        },
+      ],
       logo: {
-        dark: "./src/assets/logo-dark.png",
-        light: "./src/assets/logo-light.png",
+        src: "./src/assets/logo.svg",
         replacesTitle: false,
       },
-      favicon: "./src/assets/favicon.png",
+      favicon: "/favicon.svg",
       social: [
         {
           icon: "github",
