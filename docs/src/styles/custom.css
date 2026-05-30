@@ -17,12 +17,8 @@
   --ksail-cyan: #2ec4e6;
   --ksail-cyan-bright: #8fe3f4;
   --ksail-coral: #ff8a5b;
-}
 
-/* ----------------------------------------------------------------------- */
-/*  Color — dark theme (primary)                                           */
-/* ----------------------------------------------------------------------- */
-:root {
+  /* ---- Color — dark theme (primary) ---- */
   /* Cool, blue-tinted neutral ramp (light text → near-bg). */
   --sl-color-white: #f3f9fd;
   --sl-color-gray-1: #dce8f1;
