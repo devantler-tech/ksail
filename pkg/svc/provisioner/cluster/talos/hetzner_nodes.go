@@ -151,7 +151,11 @@ func (p *Provisioner) createHetznerNodes(
 					FirewallIDs:      []int64{infra.FirewallID},
 				}, retryOpts)
 
-				results[nodeIndex] = hetznerNodeCreationResult{name: nodeName, server: server, err: err}
+				results[nodeIndex] = hetznerNodeCreationResult{
+					name:   nodeName,
+					server: server,
+					err:    err,
+				}
 			}
 
 			return nil // errors collected in results
