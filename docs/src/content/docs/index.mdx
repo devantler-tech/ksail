@@ -16,9 +16,11 @@ hero:
     - text: View on GitHub
       link: https://github.com/devantler-tech/ksail
       icon: external
+      variant: secondary
 ---
 
 import { Card, CardGrid } from "@astrojs/starlight/components";
+import Features from "../../components/Features.astro";
 
 ## Why KSail?
 
@@ -26,18 +28,22 @@ Setting up and operating Kubernetes clusters often requires juggling multiple CL
 
 ## Key Features
 
-- 📦 **One Binary** — Embeds cluster provisioning, GitOps engines, and deployment tooling. No tool sprawl.
-- ☸️ **Simple Clusters** — Spin up Vanilla, K3s, Talos, VCluster, KWOK, or EKS clusters with one command. Same workflow across distributions.
-- 🔓 **No Lock-In** — Uses native configs (`kind.yaml`, `k3d.yaml`, Talos patches, `vcluster.yaml`, `kwok/`). Run clusters with or without KSail.
-- 📥 **Mirror Registries** — Avoid rate limits, and store images once. Same mirrors used by different clusters.
-- 📄 **Everything as Code** — Cluster settings, distribution configs, and workloads in version-controlled files.
-- 🔄 **GitOps Native** — Built-in Flux or ArgoCD support with bootstrap, push, and reconcile commands.
-- 🏢 **Multi-Tenancy** — Generate RBAC isolation, GitOps sync resources, and scaffold tenant repositories with `ksail tenant create` and `ksail tenant delete`.
-- ⚙️ **Customizable Stack** — Select your CNI, CSI, policy engine, cert-manager, and mirror registries.
-- 🔐 **SOPS Built In** — Encrypt, decrypt, and edit secrets with integrated cipher commands.
-- 💾 **Backup & Restore** — Export cluster resources to a compressed archive and restore to any cluster with provenance labels.
-- 🤖 **AI Assistant** — Interactive chat powered by GitHub Copilot for configuration and troubleshooting.
-- 💻 **VS Code Extension** — Manage clusters from VS Code via VS Code Kubernetes extension integration (Cloud Explorer and Cluster Explorer), wizards, and command palette.
+export const features = [
+  { icon: "📦", title: "One Binary", body: "Embeds cluster provisioning, GitOps engines, and deployment tooling. No tool sprawl." },
+  { icon: "☸️", title: "Simple Clusters", body: "Spin up Vanilla, K3s, Talos, VCluster, KWOK, or EKS clusters with one command. Same workflow across distributions." },
+  { icon: "🔓", title: "No Lock-In", body: "Uses native configs (<code>kind.yaml</code>, <code>k3d.yaml</code>, Talos patches, <code>vcluster.yaml</code>, <code>kwok/</code>). Run clusters with or without KSail." },
+  { icon: "📥", title: "Mirror Registries", body: "Avoid rate limits, and store images once. Same mirrors used by different clusters." },
+  { icon: "📄", title: "Everything as Code", body: "Cluster settings, distribution configs, and workloads in version-controlled files." },
+  { icon: "🔄", title: "GitOps Native", body: "Built-in Flux or ArgoCD support with bootstrap, push, and reconcile commands." },
+  { icon: "🏢", title: "Multi-Tenancy", body: "Generate RBAC isolation, GitOps sync resources, and scaffold tenant repositories with <code>ksail tenant create</code> and <code>ksail tenant delete</code>." },
+  { icon: "⚙️", title: "Customizable Stack", body: "Select your CNI, CSI, policy engine, cert-manager, and mirror registries." },
+  { icon: "🔐", title: "SOPS Built In", body: "Encrypt, decrypt, and edit secrets with integrated cipher commands." },
+  { icon: "💾", title: "Backup & Restore", body: "Export cluster resources to a compressed archive and restore to any cluster with provenance labels." },
+  { icon: "🤖", title: "AI Assistant", body: "Interactive chat powered by GitHub Copilot for configuration and troubleshooting." },
+  { icon: "💻", title: "VS Code Extension", body: "Manage clusters from VS Code via the Kubernetes extension (Cloud Explorer and Cluster Explorer), wizards, and command palette." },
+];
+
+<Features items={features} />
 
 ## Prerequisites
 

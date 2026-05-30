@@ -1,25 +1,366 @@
-/* Custom styles for KSail documentation */
+/* =========================================================================
+   KSail documentation — "Ocean Depth" theme
+   A maritime design system: deep navy water, a bright navigation-cyan accent,
+   and a warm signal-coral pop. Dark-first, with a clear light counterpart.
+   ========================================================================= */
 
-/* Force dark mode as default */
+/* ----------------------------------------------------------------------- */
+
+/*  Typography                                                             */
+
+/* ----------------------------------------------------------------------- */
 :root {
-  --sl-color-accent-low: #1a365d;
-  --sl-color-accent: #3182ce;
-  --sl-color-accent-high: #63b3ed;
+  --sl-font: "Hanken Grotesque", -apple-system, blinkmacsystemfont, "Segoe UI", roboto, helvetica, arial, sans-serif;
+  --sl-font-mono: "JetBrains Mono", ui-monospace, sfmono-regular, menlo, consolas, monospace;
+
+  /* Distinctive display face for headings and the hero. */
+  --ksail-font-display: "Bricolage Grotesque", var(--sl-font);
+
+  /* Brand accents, theme-independent. */
+  --ksail-cyan: #2ec4e6;
+  --ksail-cyan-bright: #8fe3f4;
+  --ksail-coral: #ff8a5b;
+
+  /* ---- Color — dark theme (primary) ---- */
+
+  /* Cool, blue-tinted neutral ramp (light text → near-bg). */
+  --sl-color-white: #f3f9fd;
+  --sl-color-gray-1: #dce8f1;
+  --sl-color-gray-2: #b3c4d3;
+  --sl-color-gray-3: #809aae;
+  --sl-color-gray-4: #4d6478;
+  --sl-color-gray-5: #2b3f54;
+  --sl-color-gray-6: #14273a;
+  --sl-color-gray-7: #0d1d2c;
+  --sl-color-black: #081320;
+
+  /* Surfaces. */
+  --sl-color-bg: #07121f;
+  --sl-color-bg-nav: rgb(8 19 32 / 72%);
+  --sl-color-bg-sidebar: #0a1827;
+  --sl-color-bg-inline-code: #122739;
+  --sl-color-bg-gradient: linear-gradient(180deg, #0b1c2d, var(--sl-color-bg));
+
+  /* Hairlines. */
+  --sl-color-hairline: #ffffff14;
+  --sl-color-hairline-light: #ffffff0d;
+  --sl-color-hairline-shade: #00000040;
+
+  /* Accent — navigation cyan. */
+  --sl-color-accent-low: #0b3346;
+  --sl-color-accent: #1f9cbe;
+  --sl-color-accent-high: var(--ksail-cyan-bright);
+  --sl-color-text-accent: var(--ksail-cyan-bright);
+
+  /* KSail-specific surface tokens used by components below. */
+  --ksail-surface: #0d2032;
+  --ksail-surface-raised: #112940;
+  --ksail-border: #1d344c;
+  --ksail-glow: 0 0 0 1px #ffffff10, 0 18px 48px -24px #000c;
 }
 
-/* Improve code block styling */
+/* ----------------------------------------------------------------------- */
+
+/*  Color — light theme                                                    */
+
+/* ----------------------------------------------------------------------- */
+:root[data-theme="light"] {
+  --sl-color-white: #0a1622;
+  --sl-color-gray-1: #16293a;
+  --sl-color-gray-2: #2f4659;
+  --sl-color-gray-3: #56708a;
+  --sl-color-gray-4: #7c93a8;
+  --sl-color-gray-5: #b6cadb;
+  --sl-color-gray-6: #dce8f1;
+  --sl-color-gray-7: #eef4f9;
+  --sl-color-black: #fff;
+  --sl-color-bg: #f7fbfe;
+  --sl-color-bg-nav: rgb(247 251 254 / 78%);
+  --sl-color-bg-sidebar: #eef5fa;
+  --sl-color-bg-inline-code: #e3eef6;
+  --sl-color-bg-gradient: linear-gradient(180deg, #eaf4fb, var(--sl-color-bg));
+  --sl-color-hairline: #0a16221a;
+  --sl-color-hairline-light: #0a162210;
+  --sl-color-hairline-shade: #0a162214;
+  --sl-color-accent-low: #d4ecf5;
+  --sl-color-accent: #0d7ea3;
+  --sl-color-accent-high: #064f68;
+  --sl-color-text-accent: #0b6e8f;
+  --ksail-surface: #fff;
+  --ksail-surface-raised: #fff;
+  --ksail-border: #c9dcea;
+  --ksail-glow: 0 0 0 1px #0a16220d, 0 16px 40px -28px #1c405a59;
+}
+
+/* ----------------------------------------------------------------------- */
+
+/*  Global atmosphere & base                                               */
+
+/* ----------------------------------------------------------------------- */
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--sl-color-bg);
+  background-image:
+    radial-gradient(60rem 40rem at 100% -10%, color-mix(in oklab, var(--ksail-cyan) 12%, transparent), transparent 60%),
+    radial-gradient(50rem 40rem at -10% 8%, color-mix(in oklab, #1d6f9c 14%, transparent), transparent 55%);
+  background-attachment: fixed;
+  background-repeat: no-repeat;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizelegibility;
+}
+
+::selection {
+  background: color-mix(in oklab, var(--ksail-cyan) 35%, transparent);
+  color: var(--sl-color-white);
+}
+
+:focus-visible {
+  outline: 2px solid var(--ksail-cyan);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+/* Headings wear the display face. */
+.sl-markdown-content :is(h1, h2, h3, h4),
+.hero h1,
+.site-title {
+  font-family: var(--ksail-font-display);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+/* A clean full-width rule under each major section heading. */
+.sl-markdown-content .sl-heading-wrapper.level-h2 {
+  padding-bottom: 0.4rem;
+  margin-bottom: 0.5rem;
+  border-bottom: 1px solid var(--sl-color-hairline);
+}
+
+/* Links pick up the accent with a subtle underline that grows on hover. */
+.sl-markdown-content a:not(.card, .sl-link-button) {
+  text-underline-offset: 0.2em;
+  text-decoration-thickness: 1px;
+  text-decoration-color: color-mix(in oklab, var(--sl-color-text-accent) 45%, transparent);
+  transition: text-decoration-color 0.15s ease;
+}
+
+.sl-markdown-content a:not(.card, .sl-link-button):hover {
+  text-decoration-color: var(--sl-color-text-accent);
+}
+
+/* ----------------------------------------------------------------------- */
+
+/*  Hero (splash homepage)                                                 */
+
+/* ----------------------------------------------------------------------- */
+.hero {
+  position: relative;
+  padding: clamp(1.75rem, 5vw, 4rem) clamp(1.25rem, 4vw, 3.5rem);
+  border-radius: 1.5rem;
+  overflow: hidden;
+  isolation: isolate;
+  border: 1px solid var(--sl-color-hairline);
+  background:
+    radial-gradient(120% 130% at 88% -20%, color-mix(in oklab, var(--ksail-cyan) 22%, transparent), transparent 52%),
+    radial-gradient(110% 120% at -10% 120%, color-mix(in oklab, #1a6f9e 26%, transparent), transparent 55%),
+    linear-gradient(165deg, #0d2740 0%, #091a2b 55%, #07131f 100%);
+  box-shadow: var(--ksail-glow);
+}
+
+:root[data-theme="light"] .hero {
+  background:
+    radial-gradient(120% 130% at 88% -20%, color-mix(in oklab, var(--ksail-cyan) 22%, transparent), transparent 52%),
+    radial-gradient(110% 120% at -10% 120%, color-mix(in oklab, #4aa9cc 26%, transparent), transparent 55%),
+    linear-gradient(165deg, #e9f5fc 0%, #f3fafe 60%, #fff 100%);
+}
+
+/* Faint nautical-chart graticule behind the hero content. */
+.hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background-image: radial-gradient(circle, var(--sl-color-hairline) 1px, transparent 1.4px);
+  background-size: 24px 24px;
+  mask-image: radial-gradient(120% 100% at 50% 0%, #000 30%, transparent 80%);
+  opacity: 0.6;
+}
+
+.hero h1 {
+  font-size: clamp(2.5rem, 6vw, 4rem);
+  line-height: 1.02;
+  letter-spacing: -0.035em;
+  background: linear-gradient(180deg, var(--sl-color-white), color-mix(in oklab, var(--ksail-cyan-bright) 65%, var(--sl-color-white)));
+  background-clip: text;
+  color: transparent;
+}
+
+.hero .tagline {
+  font-size: clamp(1.05rem, 1.6vw, 1.3rem);
+  color: var(--sl-color-gray-2);
+  max-width: 34ch;
+  line-height: 1.5;
+}
+
+/* Hero illustration: framed porthole with depth shadow and a slow float. */
+.hero img {
+  border-radius: 1.25rem;
+  box-shadow:
+    0 0 0 1px var(--sl-color-hairline),
+    0 30px 70px -30px #000000d9;
+  animation: ksail-float 9s ease-in-out infinite;
+}
+
+@keyframes ksail-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero img { animation: none; }
+  html { scroll-behavior: auto; }
+}
+
+/* ----------------------------------------------------------------------- */
+
+/*  Buttons (hero actions)                                                 */
+
+/* ----------------------------------------------------------------------- */
+.sl-link-button {
+  border-radius: 0.7rem;
+  font-weight: 600;
+  transition: transform 0.15s ease, box-shadow 0.2s ease, background 0.2s ease, border-color 0.2s ease;
+}
+
+.sl-link-button.primary {
+  background: linear-gradient(135deg, var(--ksail-cyan-bright), var(--ksail-cyan));
+  color: #04222e;
+  border: 1px solid transparent;
+  box-shadow: 0 10px 30px -12px color-mix(in oklab, var(--ksail-cyan) 70%, transparent);
+}
+
+.sl-link-button.primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 16px 36px -12px color-mix(in oklab, var(--ksail-cyan) 80%, transparent);
+}
+
+.sl-link-button:not(.primary) {
+  border: 1px solid var(--ksail-border);
+  background: color-mix(in oklab, var(--sl-color-white) 4%, transparent);
+  color: var(--sl-color-white);
+}
+
+.sl-link-button:not(.primary):hover {
+  transform: translateY(-2px);
+  border-color: var(--ksail-cyan);
+  color: var(--ksail-cyan-bright);
+  background: color-mix(in oklab, var(--ksail-cyan) 10%, transparent);
+}
+
+/* ----------------------------------------------------------------------- */
+
+/*  Cards & CardGrid                                                       */
+
+/* ----------------------------------------------------------------------- */
+.card {
+  border: 1px solid var(--ksail-border);
+  border-radius: 1rem;
+  background: color-mix(in oklab, var(--ksail-surface) 75%, transparent);
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.card:hover {
+  transform: translateY(-3px);
+  border-color: color-mix(in oklab, var(--ksail-cyan) 55%, var(--ksail-border));
+  box-shadow: var(--ksail-glow);
+}
+
+.card .icon {
+  color: var(--ksail-cyan-bright);
+}
+
+.card .title {
+  font-family: var(--ksail-font-display);
+  letter-spacing: -0.01em;
+}
+
+/* ----------------------------------------------------------------------- */
+
+/*  Code blocks & inline code                                              */
+
+/* ----------------------------------------------------------------------- */
 pre {
-  border-radius: 0.5rem;
+  border-radius: 0.85rem;
+  border: 1px solid var(--sl-color-hairline);
+  box-shadow: var(--sl-color-hairline-shade) 0 12px 30px -22px;
 }
 
-/* Better table styling */
-table {
-  display: block;
-  overflow-x: auto;
-  white-space: nowrap;
+:not(pre) > code {
+  border: 1px solid var(--sl-color-hairline);
+  border-radius: 0.4rem;
+  padding: 0.15em 0.4em;
+  font-size: 0.85em;
 }
 
-/* Footer attribution */
+/* ----------------------------------------------------------------------- */
+
+/*  Tables — readable, bordered, no forced nowrap                          */
+
+/* ----------------------------------------------------------------------- */
+.sl-markdown-content table {
+  display: table;
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 1px solid var(--ksail-border);
+  border-radius: 0.75rem;
+  overflow: hidden;
+  white-space: normal;
+}
+
+.sl-markdown-content :is(th, td) {
+  border: none;
+  border-bottom: 1px solid var(--sl-color-hairline);
+  padding: 0.6rem 0.9rem;
+}
+
+.sl-markdown-content thead th {
+  background: color-mix(in oklab, var(--ksail-cyan) 10%, var(--ksail-surface));
+  font-family: var(--ksail-font-display);
+  font-weight: 600;
+  border-bottom: 1px solid var(--ksail-border);
+}
+
+.sl-markdown-content tbody tr:last-child :is(th, td) {
+  border-bottom: none;
+}
+
+.sl-markdown-content tbody tr:hover td {
+  background: color-mix(in oklab, var(--ksail-cyan) 6%, transparent);
+}
+
+/* Allow wide tables to scroll on small screens without breaking layout. */
+@media (width <= 50rem) {
+  .sl-markdown-content table {
+    display: block;
+    overflow-x: auto;
+  }
+}
+
+/* ----------------------------------------------------------------------- */
+
+/*  Navigation & misc polish                                               */
+
+/* ----------------------------------------------------------------------- */
+header.header {
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--sl-color-hairline);
+}
+
+/* Footer attribution. */
 footer {
   text-align: center;
 }
