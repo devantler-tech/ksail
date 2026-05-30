@@ -96,4 +96,11 @@ var (
 	ErrInsufficientControlPlanesForRoll = errors.New(
 		"too few control planes present to roll without losing etcd quorum",
 	)
+	// ErrNodeNameTooLong is returned when a generated Hetzner node name exceeds the
+	// 63-character DNS-1123 label limit. The node name doubles as the Talos
+	// hostname and the Kubernetes node name the Hetzner CCM matches against, so an
+	// over-long name would fail config apply or register a node the CCM cannot
+	// match. The cluster name is capped at 63, but appending "-<role>-<index>" can
+	// still overflow the limit.
+	ErrNodeNameTooLong = errors.New("generated node name exceeds maximum length")
 )

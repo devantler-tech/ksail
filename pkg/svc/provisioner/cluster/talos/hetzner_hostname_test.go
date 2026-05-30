@@ -6,6 +6,7 @@ package talosprovisioner_test
 
 import (
 	"bytes"
+	"strings"
 	"testing"
 
 	configmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager"
@@ -121,4 +122,31 @@ func TestPatchTalosHostname_InvalidConfigErrors(t *testing.T) {
 
 	_, err := talosprovisioner.PatchTalosHostname([]byte("{"), "prod-worker-4")
 	require.Error(t, err)
+}
+
+// TestHetznerNodeName_WithinLimit verifies a normal node name is formatted and
+// accepted.
+func TestHetznerNodeName_WithinLimit(t *testing.T) {
+	t.Parallel()
+
+	name, err := talosprovisioner.HetznerNodeName("prod", "worker", 4)
+	require.NoError(t, err)
+	assert.Equal(t, "prod-worker-4", name)
+}
+
+// TestHetznerNodeName_ExceedsLimit verifies that a cluster name which is itself
+// valid (<= 63 chars) but whose "-<role>-<index>" suffix pushes the node name
+// past the 63-character DNS-1123 label limit is rejected before provisioning —
+// the case the Hetzner CCM name-matching depends on (issue #4962 review).
+func TestHetznerNodeName_ExceedsLimit(t *testing.T) {
+	t.Parallel()
+
+	// A maximally-long but currently-valid cluster name (63 chars). Appending
+	// "-worker-1" (9 chars) yields 72 > 63.
+	clusterName := strings.Repeat("a", talosprovisioner.MaxNodeNameLength)
+
+	name, err := talosprovisioner.HetznerNodeName(clusterName, "worker", 1)
+	require.ErrorIs(t, err, talosprovisioner.ErrNodeNameTooLong)
+	assert.Contains(t, name, clusterName,
+		"formatted name is still returned so callers can use it in diagnostics")
 }

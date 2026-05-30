@@ -105,7 +105,13 @@ func (p *Provisioner) launchHetznerScaleCreation(
 	for nodeIdx := range count {
 		group.Go(func() error {
 			nodeNumber := nextIndex + nodeIdx
-			nodeName := fmt.Sprintf("%s-%s-%d", clusterName, role, nodeNumber)
+
+			nodeName, nameErr := hetznerNodeName(clusterName, role, nodeNumber)
+			if nameErr != nil {
+				results[nodeIdx] = hetznerNodeCreationResult{name: nodeName, err: nameErr}
+
+				return nil // validation failure collected in results; skip provisioning
+			}
 
 			server, createErr := hzProvider.CreateServerWithRetry(ctx, hetzner.CreateServerOpts{
 				Name:             nodeName,

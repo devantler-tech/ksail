@@ -26,6 +26,32 @@ import (
 // A value of 3 balances throughput and API rate-limit headroom.
 const maxConcurrentHetznerOps = 3
 
+// maxNodeNameLength is the maximum length of a Hetzner node name. The name is
+// used as the Hetzner server name, the Talos hostname (set in applyConfigToNode),
+// and the Kubernetes node name the Hetzner CCM matches against — all DNS-1123
+// labels capped at 63 characters. ValidateClusterName already caps the cluster
+// name at 63, but the "-<role>-<index>" suffix can push the composed name past
+// the limit, so the full node name must be validated too.
+const maxNodeNameLength = 63
+
+// hetznerNodeName formats and validates the name for a Hetzner node. It is the
+// single source of node-name construction for the create, scale-up, and
+// rolling-recreate paths, so the 63-character DNS-1123 label limit is enforced
+// consistently before any (billable) server is provisioned. The formatted name
+// is always returned, even when it is rejected, so callers can use it in
+// diagnostics and failure records.
+func hetznerNodeName(clusterName, role string, index int) (string, error) {
+	name := fmt.Sprintf("%s-%s-%d", clusterName, role, index)
+	if len(name) > maxNodeNameLength {
+		return name, fmt.Errorf(
+			"%w: %q is %d characters (max %d); shorten the cluster name",
+			ErrNodeNameTooLong, name, len(name), maxNodeNameLength,
+		)
+	}
+
+	return name, nil
+}
+
 // Apply-configuration retry defaults for transient Talos API handshake races.
 const (
 	talosApplyConfigMaxAttempts   = 3
@@ -105,7 +131,12 @@ func (p *Provisioner) createHetznerNodes(
 
 	for nodeIndex := range opts.Count {
 		group.Go(func() error {
-			nodeName := fmt.Sprintf("%s-%s-%d", opts.ClusterName, opts.Role, nodeIndex+1)
+			nodeName, nameErr := hetznerNodeName(opts.ClusterName, opts.Role, nodeIndex+1)
+			if nameErr != nil {
+				results[nodeIndex] = hetznerNodeCreationResult{name: nodeName, err: nameErr}
+
+				return nil // validation failure collected in results; skip provisioning
+			}
 
 			server, err := hzProvider.CreateServerWithRetry(ctx, hetzner.CreateServerOpts{
 				Name:             nodeName,
