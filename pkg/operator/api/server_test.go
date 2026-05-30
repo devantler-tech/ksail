@@ -400,6 +400,44 @@ func TestConfigIncludesDistributions(t *testing.T) {
 	assert.Contains(t, recorder.Body.String(), `"distributions":["Vanilla","K3s","VCluster"]`)
 }
 
+func TestConfigOmitsProvidersWhenStatusUnset(t *testing.T) {
+	t.Parallel()
+
+	// The operator leaves ProviderStatus nil; the SPA then offers every provider (no gating).
+	server := &api.Server{Service: api.NewCRClusterService(newClient(t))}
+
+	recorder := doRequest(server.Handler(), http.MethodGet, "/api/v1/config", "")
+
+	assert.Equal(t, http.StatusOK, recorder.Code)
+	assert.NotContains(t, recorder.Body.String(), `"providers"`)
+}
+
+func TestConfigIncludesProviderStatusWhenSet(t *testing.T) {
+	t.Parallel()
+
+	server := &api.Server{
+		Service: api.NewCRClusterService(newClient(t)),
+		ProviderStatus: func(context.Context) []api.ProviderInfo {
+			return []api.ProviderInfo{
+				{Name: "Docker", Available: true},
+				{Name: "Hetzner", Available: false, Reason: "HCLOUD_TOKEN is not set"},
+			}
+		},
+	}
+
+	recorder := doRequest(server.Handler(), http.MethodGet, "/api/v1/config", "")
+
+	assert.Equal(t, http.StatusOK, recorder.Code)
+	body := recorder.Body.String()
+	assert.Contains(t, body, `"providers"`)
+	assert.Contains(t, body, `"name":"Docker","available":true`)
+	assert.Contains(
+		t,
+		body,
+		`"name":"Hetzner","available":false,"reason":"HCLOUD_TOKEN is not set"`,
+	)
+}
+
 const sessionSecret = "0123456789abcdef0123456789abcdef"
 
 func TestAuthGuardRejectsUnauthenticated(t *testing.T) {

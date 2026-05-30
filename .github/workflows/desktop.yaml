@@ -60,6 +60,16 @@ jobs:
           touch pkg/webui/dist/.gitkeep
           cp -R web/ui/dist/. pkg/webui/dist/
 
+      # The desktop app is a SEPARATE Go module that vendors the main module via `replace => ../`, so
+      # its go.mod/go.sum must independently track the main module's dependency graph. The main repo's
+      # Tidy check does not cover it, so a dependency bump in the root module (e.g. hcloud-go) can
+      # leave desktop/go.{mod,sum} stale and break this build with a cryptic "updates to go.mod
+      # needed" / "missing go.sum entry". Fail fast with a clear, actionable message instead: run
+      # `go -C desktop mod tidy` and commit the result.
+      - name: 🧹 Verify desktop module is tidy
+        working-directory: desktop
+        run: go mod tidy -diff
+
       - name: 🏗️ Build desktop app
         working-directory: desktop
         run: go build -o ksail-desktop .

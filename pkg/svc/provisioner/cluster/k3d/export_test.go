@@ -2,11 +2,17 @@ package k3dprovisioner
 
 import (
 	"context"
+	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/runner"
 	k3kv1beta1 "github.com/rancher/k3k/pkg/apis/k3k.io/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 )
+
+// K3kReadyTimeoutForTest exposes k3kReadyTimeout for unit testing.
+func K3kReadyTimeoutForTest() time.Duration {
+	return k3kReadyTimeout()
+}
 
 // FirstRunningPodNameForTest exposes firstRunningPodName for unit testing.
 func FirstRunningPodNameForTest(pods []corev1.Pod) string {

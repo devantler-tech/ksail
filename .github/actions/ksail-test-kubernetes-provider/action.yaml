@@ -18,11 +18,23 @@ inputs:
   timeout:
     description: Timeout per nested cluster create (seconds)
     required: false
-    # 900s (15m): nested Talos on the Kubernetes provider (Talos-in-pod inside a
-    # vCluster/Docker host) is the heaviest combination and intermittently exceeded
-    # 600s under CI load (exit 124). Headroom over trimming coverage — see the matrix
-    # in ci.yaml and docs note on not reducing nested-distro coverage for flakes.
-    default: "900"
+    # 1200s (20m): the shell wrapper must stay ABOVE the provisioner's internal Go
+    # readiness deadline (ready-timeout, default 15m) so a slow-but-healthy nested
+    # cluster surfaces a clean Go "context deadline exceeded" rather than a shell
+    # "exit 124", and so nested Talos (Talos-in-pod inside a vCluster/Docker host —
+    # the heaviest combination, which intermittently exceeded the old 600s under CI
+    # load) keeps headroom. Headroom over trimming coverage — see #4891, the matrix
+    # in ci.yaml, and the docs note on not reducing nested-distro coverage for flakes.
+    default: "1200"
+  ready-timeout:
+    description: |
+      Go duration budget for a nested cluster to report ready (k3k "poll cluster
+      ready" / vCluster "wait for kubeconfig secret"). Exported as
+      KSAIL_NESTED_READY_TIMEOUT so a slow-but-healthy nested cluster under runner
+      contention is not failed prematurely at the 10m default (#4891). Keep the
+      `timeout` input above this value so the Go deadline wins over the shell kill.
+    required: false
+    default: "15m"
   cni:
     description: |
       Optional CNI to install in each nested cluster (e.g. "Calico"). When empty,
@@ -55,6 +67,10 @@ runs:
       env:
         DISTRIBUTIONS: ${{ inputs.distributions }}
         TIMEOUT: ${{ inputs.timeout }}
+        # Override the provisioner's internal readiness deadline (k3k poll-cluster-ready
+        # / vCluster kubeconfig-secret wait) so a slow-but-healthy nested cluster under
+        # runner contention is not failed prematurely at the 10m default. See #4891.
+        KSAIL_NESTED_READY_TIMEOUT: ${{ inputs.ready-timeout }}
         CNI: ${{ inputs.cni }}
         # Mirror proxy credentials. Exported here so ksail expands the ${...}
         # placeholders in the --mirror-registry specs from its own process env,
@@ -162,6 +178,22 @@ runs:
 
           # Restore host context in case nested cluster creation changed it.
           kubectl config use-context "$HOST_CONTEXT" 2>/dev/null || true
+
+          # Settle (bounded, best-effort, non-fatal): wait for the deleted cluster's
+          # namespaces to finish terminating before the next create. `ksail cluster
+          # delete` issues an async namespace delete (k3k-/vcluster-/ksail-<name>,
+          # each a suffix of $NESTED_NAME) and returns before finalizers complete;
+          # without this the prior cluster's still-terminating pods bleed load into the
+          # next nested create and can push k3k/vCluster readiness past its deadline (#4891).
+          echo "  ⏳ Waiting for $DIST resources to drain..."
+          SETTLE_DEADLINE=$((SECONDS + 120))
+          while [ "$SECONDS" -lt "$SETTLE_DEADLINE" ]; do
+            if [ -z "$(kubectl get ns -o name 2>/dev/null | grep -iF "$NESTED_NAME" || true)" ]; then
+              echo "  ✅ $DIST resources drained"
+              break
+            fi
+            sleep 5
+          done
 
           echo ""
         done

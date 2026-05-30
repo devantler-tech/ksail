@@ -135,6 +135,7 @@ linters:
             - github.com/loft-sh/log
             - github.com/loft-sh/vcluster
             - github.com/yannh
+            - github.com/zalando/go-keyring
             - filippo.io/age
             - golang.design/x
             - golang.org/x/oauth2
