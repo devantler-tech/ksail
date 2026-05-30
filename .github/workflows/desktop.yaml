@@ -7,6 +7,11 @@ on:
       - "pkg/cli/uiserver/**"
       - "pkg/webui/**"
       - "web/ui/**"
+      # The desktop module vendors the main module via `replace => ../`, so a root
+      # dependency bump (which touches only go.mod/go.sum) can break the desktop
+      # build. Trigger on those too so drift is caught here, not at release time.
+      - "go.mod"
+      - "go.sum"
       - ".goreleaser.desktop.yaml"
       - ".github/workflows/desktop.yaml"
   push:
@@ -16,6 +21,8 @@ on:
       - "pkg/cli/uiserver/**"
       - "pkg/webui/**"
       - "web/ui/**"
+      - "go.mod"
+      - "go.sum"
       - ".goreleaser.desktop.yaml"
       - ".github/workflows/desktop.yaml"
 
