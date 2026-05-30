@@ -285,7 +285,10 @@ jobs:
     name: 🧩 Release Copilot CLI Plugin
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    needs: [goreleaser]
+    # Runs in parallel with the other releases — it only opens an auto-merging version-bump
+    # PR and consumes no GoReleaser artifact, so it does not wait on `goreleaser`. The gated
+    # `publish-release` and `pages-deploy` jobs both list it in `needs`, so a failure here
+    # still blocks the GitHub release publish and the docs deploy.
     environment: ci
     permissions:
       contents: write
@@ -457,7 +460,9 @@ jobs:
   pages-build:
     name: 📄 Build Pages
     runs-on: ubuntu-latest
-    needs: [goreleaser]
+    # Runs in parallel with the other releases (no GoReleaser artifact dependency). The
+    # gated `pages-deploy` and `publish-release` jobs both list it in `needs`, so a docs
+    # build failure blocks both the Pages deploy and the GitHub release publish.
     timeout-minutes: 10
     permissions:
       contents: read
@@ -521,7 +526,19 @@ jobs:
   pages-deploy:
     name: 🚀 Deploy Pages
     runs-on: ubuntu-latest
-    needs: [pages-build]
+    # Gate the docs deploy on ALL releases (not just `pages-build`) so a partial release
+    # failure never pushes a fresh docs site. Runs in parallel with `publish-release` —
+    # neither depends on the other; both fan in from the same set of release jobs.
+    needs:
+      [
+        goreleaser,
+        vscode-extension,
+        desktop-macos,
+        desktop,
+        copilot-plugin,
+        mcp-publish,
+        pages-build,
+      ]
     timeout-minutes: 10
     permissions:
       pages: write
@@ -535,15 +552,20 @@ jobs:
     name: 📢 Publish Release
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    # Gate on ALL releases so the draft is published only when every release succeeded.
+    # Runs in parallel with `pages-deploy` (it no longer lists it in `needs`) — both fan in
+    # from the same release jobs, so the GitHub release publish and the docs deploy happen
+    # concurrently. `pages-build` replaces the former `pages-deploy` edge: the release is
+    # gated on the docs *building*, not on Pages having deployed.
     needs:
       [
         goreleaser,
         vscode-extension,
         mcp-publish,
-        pages-deploy,
         copilot-plugin,
         desktop-macos,
         desktop,
+        pages-build,
       ]
     permissions:
       contents: write
