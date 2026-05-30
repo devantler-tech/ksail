@@ -24,6 +24,15 @@ import { Card, CardGrid } from "@astrojs/starlight/components";
 
 Setting up and operating Kubernetes clusters often requires juggling multiple CLI tools, writing bespoke scripts, and dealing with inconsistent workflows. KSail removes the tooling overhead so you can focus on your workloads.
 
+## See It in Action
+
+From nothing to a running Kubernetes cluster, a deployed workload, and a clean teardown — all with `ksail`:
+
+<video class="demo-recording" autoplay loop muted playsinline controls aria-label="KSail full cluster lifecycle demo">
+  <source src="/demos/cluster-lifecycle.mp4" type="video/mp4" />
+  <img class="demo-recording" src="/demos/cluster-lifecycle.gif" alt="KSail creates a real Kind cluster, shows cluster info, deploys an nginx workload that reaches Running, then deletes the cluster" />
+</video>
+
 ## Key Features
 
 - 📦 **One Binary** — Embeds cluster provisioning, GitOps engines, and deployment tooling. No tool sprawl.
@@ -62,6 +71,10 @@ Supported distributions run on different infrastructure providers:
 | AWS | — | — | — | — | — | 🚧 |
 
 ## Quick Start
+
+Scaffold a project and explore the declarative config — distribution and all:
+
+<img class="demo-recording" src="/demos/cluster-init.gif" alt="ksail cluster init scaffolds ksail.yaml and kind.yaml, cat shows the minimal declarative config, and re-running with --distribution K3s switches the distribution" />
 
 ```bash
 # 1. Initialize a new project
