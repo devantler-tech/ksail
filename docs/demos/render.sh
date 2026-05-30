@@ -20,8 +20,8 @@ DEMOS_DIR="$PWD"
 OUT_DIR="$DEMOS_DIR/../public/demos"
 
 if ! command -v vhs >/dev/null 2>&1; then
-  echo "vhs not found — install it with: brew install vhs" >&2
-  exit 1
+	echo "vhs not found — install it with: brew install vhs" >&2
+	exit 1
 fi
 
 echo "==> building ksail"
@@ -42,37 +42,37 @@ trap '"$DEMOS_DIR/.bin/ksail" cluster delete --name ksail-demo --force >/dev/nul
 # stay multi-MB even so, so those get downscaled + mild lossy — the matching
 # .mp4 keeps full resolution for crisp embedding where size matters less.
 optimize_gif() {
-  local f="$1" size
-  command -v gifsicle >/dev/null 2>&1 || return 0
-  gifsicle -O3 -b "$f"
-  size=$(wc -c <"$f")
-  if [ "$size" -gt 1258291 ]; then # > 1.2 MiB
-    gifsicle -O3 --lossy=60 --resize-width 900 -b "$f"
-  fi
+	local f="$1" size
+	command -v gifsicle >/dev/null 2>&1 || return 0
+	gifsicle -O3 -b "$f"
+	size=$(wc -c <"$f")
+	if [ "$size" -gt 1258291 ]; then # > 1.2 MiB
+		gifsicle -O3 --lossy=60 --resize-width 900 -b "$f"
+	fi
 }
 
 shopt -s nullglob
 if [ "$#" -gt 0 ]; then
-  tapes=()
-  for name in "$@"; do tapes+=("${name%.tape}.tape"); done
+	tapes=()
+	for name in "$@"; do tapes+=("${name%.tape}.tape"); done
 else
-  tapes=(*.tape)
+	tapes=(*.tape)
 fi
 
 for tape in "${tapes[@]}"; do
-  [ -f "$tape" ] || {
-    echo "skip: $tape not found" >&2
-    continue
-  }
-  name="${tape%.tape}"
-  echo "==> rendering $tape"
-  scratch="$(mktemp -d)"
-  (cd "$scratch" && vhs "$DEMOS_DIR/$tape")
-  for ext in gif mp4 webm; do
-    [ -f "$scratch/$name.$ext" ] && mv -f "$scratch/$name.$ext" "$OUT_DIR/$name.$ext"
-  done
-  rm -rf "$scratch"
-  [ -f "$OUT_DIR/$name.gif" ] && optimize_gif "$OUT_DIR/$name.gif"
+	[ -f "$tape" ] || {
+		echo "skip: $tape not found" >&2
+		continue
+	}
+	name="${tape%.tape}"
+	echo "==> rendering $tape"
+	scratch="$(mktemp -d)"
+	(cd "$scratch" && vhs "$DEMOS_DIR/$tape")
+	for ext in gif mp4 webm; do
+		[ -f "$scratch/$name.$ext" ] && mv -f "$scratch/$name.$ext" "$OUT_DIR/$name.$ext"
+	done
+	rm -rf "$scratch"
+	[ -f "$OUT_DIR/$name.gif" ] && optimize_gif "$OUT_DIR/$name.gif"
 done
 
 echo "==> done — output in ${OUT_DIR}"
