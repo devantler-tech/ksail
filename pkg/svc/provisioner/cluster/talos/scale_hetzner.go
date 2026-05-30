@@ -105,24 +105,31 @@ func (p *Provisioner) launchHetznerScaleCreation(
 	for nodeIdx := range count {
 		group.Go(func() error {
 			nodeNumber := nextIndex + nodeIdx
-			nodeName := fmt.Sprintf("%s-%s-%d", clusterName, role, nodeNumber)
 
-			server, createErr := hzProvider.CreateServerWithRetry(ctx, hetzner.CreateServerOpts{
-				Name:             nodeName,
-				ServerType:       p.hetznerServerType(role),
-				ISOID:            p.talosOpts.ISO,
-				Location:         p.hetznerOpts.Location,
-				Labels:           hetzner.NodeLabels(clusterName, role, nodeNumber),
-				NetworkID:        infra.NetworkID,
-				PlacementGroupID: infra.PlacementGroupID,
-				SSHKeyID:         infra.SSHKeyID,
-				FirewallIDs:      []int64{infra.FirewallID},
-			}, retryOpts)
+			nodeName, nameErr := hetznerNodeName(clusterName, role, nodeNumber)
+			if nameErr != nil {
+				// Validation failure: record it and skip provisioning (no billable
+				// server created). The goroutine still returns nil; the error is
+				// surfaced when addHetznerNodes reads results.
+				results[nodeIdx] = hetznerNodeCreationResult{name: nodeName, err: nameErr}
+			} else {
+				server, createErr := hzProvider.CreateServerWithRetry(ctx, hetzner.CreateServerOpts{
+					Name:             nodeName,
+					ServerType:       p.hetznerServerType(role),
+					ISOID:            p.talosOpts.ISO,
+					Location:         p.hetznerOpts.Location,
+					Labels:           hetzner.NodeLabels(clusterName, role, nodeNumber),
+					NetworkID:        infra.NetworkID,
+					PlacementGroupID: infra.PlacementGroupID,
+					SSHKeyID:         infra.SSHKeyID,
+					FirewallIDs:      []int64{infra.FirewallID},
+				}, retryOpts)
 
-			results[nodeIdx] = hetznerNodeCreationResult{
-				name:   nodeName,
-				server: server,
-				err:    createErr,
+				results[nodeIdx] = hetznerNodeCreationResult{
+					name:   nodeName,
+					server: server,
+					err:    createErr,
+				}
 			}
 
 			return nil // errors collected in results
