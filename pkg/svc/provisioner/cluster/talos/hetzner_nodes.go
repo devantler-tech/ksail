@@ -18,6 +18,7 @@ import (
 	talosclient "github.com/siderolabs/talos/pkg/machinery/client"
 	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
 	"github.com/siderolabs/talos/pkg/machinery/config/bundle"
+	"github.com/siderolabs/talos/pkg/machinery/config/configpatcher"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -427,6 +428,20 @@ func (p *Provisioner) applyConfigToNode(
 		return fmt.Errorf("failed to marshal config: %w", err)
 	}
 
+	// Overlay the per-node hostname so it matches the Hetzner server name. The
+	// Hetzner CCM (cloud-provider: external) matches Kubernetes Nodes to servers
+	// by name, so a node that boots with the generic Talos hostname (talos-xxxxx)
+	// never gets initialized by the CCM and never joins the cluster. KSail boots
+	// scaled-up nodes from the public Talos ISO (the metal platform), which has no
+	// cloud metadata to derive the hostname from, so it must be set explicitly.
+	// Patching the marshaled bytes (rather than the shared talosconfig.Provider)
+	// keeps this safe for the parallel per-node apply, which reuses one config
+	// across goroutines.
+	cfgBytes, err = patchTalosHostname(cfgBytes, server.Name)
+	if err != nil {
+		return fmt.Errorf("failed to set hostname for %s: %w", server.Name, err)
+	}
+
 	var lastErr error
 
 	for attempt := 1; attempt <= talosApplyConfigMaxAttempts; attempt++ {
@@ -471,6 +486,34 @@ func (p *Provisioner) applyConfigToNode(
 		server.Name,
 		errors.Join(errRetriesExhausted, lastErr),
 	)
+}
+
+// patchTalosHostname overlays machine.network.hostname onto marshaled Talos
+// machine-config bytes via a strategic-merge patch, returning the patched bytes.
+// It operates on bytes rather than a shared talosconfig.Provider so it is safe to
+// call concurrently for each node during a parallel config apply (each call gets
+// its own copy). The hostname is the Hetzner server name, which is DNS-1123
+// compliant by construction (<cluster>-<role>-<index>, with cluster name
+// pre-validated), so it is a valid Talos hostname.
+func patchTalosHostname(cfgBytes []byte, hostname string) ([]byte, error) {
+	patch, err := configpatcher.LoadPatch(
+		fmt.Appendf(nil, "machine:\n  network:\n    hostname: %s\n", hostname),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("load hostname patch: %w", err)
+	}
+
+	out, err := configpatcher.Apply(configpatcher.WithBytes(cfgBytes), []configpatcher.Patch{patch})
+	if err != nil {
+		return nil, fmt.Errorf("apply hostname patch: %w", err)
+	}
+
+	patched, err := out.Bytes()
+	if err != nil {
+		return nil, fmt.Errorf("encode patched config: %w", err)
+	}
+
+	return patched, nil
 }
 
 // attemptApplyConfig creates a single-use insecure Talos client and attempts to
