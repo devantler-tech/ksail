@@ -71,6 +71,10 @@ homebrew_casks:
     # `gh release upload`. This is the same URL the default would have produced.
     url:
       template: "https://github.com/devantler-tech/ksail/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
+      # The download URL host (github.com) differs from the homepage host
+      # (ksail.devantler.tech), so `brew audit --strict` requires the URL to be
+      # marked `verified:` with a trusted prefix.
+      verified: "github.com/devantler-tech/ksail/"
     description: "KSail desktop app — manage local Kubernetes clusters in a native window"
     homepage: "https://ksail.devantler.tech"
     repository:

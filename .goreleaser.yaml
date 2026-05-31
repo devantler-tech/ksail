@@ -41,6 +41,11 @@ archives:
 
 homebrew_casks:
   - name: ksail
+    # The download URL host (github.com) differs from the homepage host
+    # (ksail.devantler.tech), so `brew audit --strict` requires the URL to be
+    # marked `verified:` with a trusted prefix. Applied to the default url_template.
+    url:
+      verified: "github.com/devantler-tech/ksail/"
     description: "KSail is a CLI tool to manage clusters and workloads."
     homepage: "https://ksail.devantler.tech"
     repository:
