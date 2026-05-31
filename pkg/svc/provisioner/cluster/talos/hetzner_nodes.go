@@ -1,10 +1,12 @@
 package talosprovisioner
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"strconv"
 	"strings"
@@ -20,7 +22,13 @@ import (
 	"github.com/siderolabs/talos/pkg/machinery/config/bundle"
 	"github.com/siderolabs/talos/pkg/machinery/config/configpatcher"
 	"golang.org/x/sync/errgroup"
+	"gopkg.in/yaml.v3"
 )
+
+// yamlIndent is the indentation width used when re-encoding Talos config
+// documents. Talos uses 4-space indentation; matching it keeps re-encoded output
+// stylistically consistent with the original.
+const yamlIndent = 4
 
 // maxConcurrentHetznerOps caps the number of Hetzner API operations executed in parallel.
 // A value of 3 balances throughput and API rate-limit headroom.
@@ -533,6 +541,11 @@ func marshalConfigWithHostname(config talosconfig.Provider, serverName string) (
 	return cfgBytes, nil
 }
 
+// hostnameConfigKind is the document kind of the standalone Talos HostnameConfig
+// network document. Talos emits one (defaulting to `auto: stable`) in generated
+// machine configs, and it conflicts with a static machine.network.hostname.
+const hostnameConfigKind = "HostnameConfig"
+
 // patchTalosHostname overlays machine.network.hostname onto marshaled Talos
 // machine-config bytes via a strategic-merge patch, returning the patched bytes.
 // It operates on bytes rather than a shared talosconfig.Provider so it is safe to
@@ -540,6 +553,14 @@ func marshalConfigWithHostname(config talosconfig.Provider, serverName string) (
 // its own copy). The hostname is the Hetzner server name, which is DNS-1123
 // compliant by construction (<cluster>-<role>-<index>, with cluster name
 // pre-validated), so it is a valid Talos hostname.
+//
+// Talos generated machine configs carry a standalone HostnameConfig network
+// document (defaulting to `auto: stable`). Once machine.network.hostname is set,
+// that document conflicts with the v1alpha1 hostname ("static hostname is already
+// set in v1alpha1 config", #4969), so it is stripped here. This leaves the
+// hostname in a single representation, making the function idempotent: applying it
+// to a config that already has machine.network.hostname set (the scale-up and
+// rolling-recreate base config) still yields a config the node accepts.
 func patchTalosHostname(cfgBytes []byte, hostname string) ([]byte, error) {
 	patch, err := configpatcher.LoadPatch(
 		fmt.Appendf(nil, "machine:\n  network:\n    hostname: %s\n", hostname),
@@ -558,7 +579,57 @@ func patchTalosHostname(cfgBytes []byte, hostname string) ([]byte, error) {
 		return nil, fmt.Errorf("encode patched config: %w", err)
 	}
 
-	return patched, nil
+	return stripHostnameConfigDocuments(patched)
+}
+
+// stripHostnameConfigDocuments removes any standalone HostnameConfig document from
+// a (possibly multi-document) Talos config YAML, re-encoding the remaining
+// documents. Removing it resolves the conflict with a static
+// machine.network.hostname (see patchTalosHostname). The v1alpha1 MachineConfig
+// document (and any other documents) are preserved semantically: decoding to a
+// generic map and re-encoding can reorder keys and drop comments/formatting, but
+// the configuration values the node consumes are unchanged.
+func stripHostnameConfigDocuments(cfgBytes []byte) ([]byte, error) {
+	decoder := yaml.NewDecoder(bytes.NewReader(cfgBytes))
+
+	var buf bytes.Buffer
+
+	encoder := yaml.NewEncoder(&buf)
+	encoder.SetIndent(yamlIndent)
+
+	for {
+		var doc map[string]any
+
+		decodeErr := decoder.Decode(&doc)
+		if errors.Is(decodeErr, io.EOF) {
+			break
+		}
+
+		if decodeErr != nil {
+			return nil, fmt.Errorf("decode config document: %w", decodeErr)
+		}
+
+		if doc == nil {
+			continue
+		}
+
+		kind, _ := doc["kind"].(string)
+		if kind == hostnameConfigKind {
+			continue
+		}
+
+		encodeErr := encoder.Encode(doc)
+		if encodeErr != nil {
+			return nil, fmt.Errorf("re-encode config document: %w", encodeErr)
+		}
+	}
+
+	closeErr := encoder.Close()
+	if closeErr != nil {
+		return nil, fmt.Errorf("flush re-encoded config: %w", closeErr)
+	}
+
+	return buf.Bytes(), nil
 }
 
 // attemptApplyConfig creates a single-use insecure Talos client and attempts to
