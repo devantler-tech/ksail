@@ -117,6 +117,11 @@ func TestApplyKwokCertSANs(t *testing.T) {
 	cleanup, err := prov.ApplyKwokCertSANsForTest("203.0.113.7")
 	require.NoError(t, err)
 	require.NotNil(t, cleanup)
+	// Guard against an early assertion failure leaving the temp config dir
+	// behind / configPath unrestored. cleanup is idempotent (RemoveAll on a
+	// gone dir is a no-op, configPath is re-set to the same value), so the
+	// explicit cleanup() call below remains safe.
+	t.Cleanup(cleanup)
 
 	dir := prov.ConfigPathForTest()
 	assert.NotEqual(t, originalConfigPath, dir, "configPath should point at the temp config dir")
