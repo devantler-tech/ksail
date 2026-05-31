@@ -12,10 +12,46 @@ import (
 	configmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager"
 	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
 	talosprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/talos"
+	"github.com/siderolabs/talos/pkg/machinery/config/configloader"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
 )
+
+// nodeRuntimeMode is a minimal config.validation RuntimeMode that reports the
+// metal platform (an installation is required, not in a container). It mirrors
+// the mode a Hetzner node booted from the public Talos ISO validates a config
+// under, exercising the same container-level conflict validation that rejects a
+// HostnameConfig document coexisting with a static machine.network.hostname.
+type nodeRuntimeMode struct{}
+
+func (nodeRuntimeMode) String() string        { return "metal" }
+func (nodeRuntimeMode) RequiresInstall() bool { return true }
+func (nodeRuntimeMode) InContainer() bool     { return false }
+
+// countHostnameConfigDocs returns the number of standalone HostnameConfig
+// documents in a (possibly multi-document) Talos config YAML.
+func countHostnameConfigDocs(t *testing.T, cfgBytes []byte) int {
+	t.Helper()
+
+	decoder := yaml.NewDecoder(bytes.NewReader(cfgBytes))
+	count := 0
+
+	for {
+		var doc map[string]any
+
+		err := decoder.Decode(&doc)
+		if err != nil {
+			break
+		}
+
+		if kind, _ := doc["kind"].(string); kind == "HostnameConfig" {
+			count++
+		}
+	}
+
+	return count
+}
 
 // machineConfigView is a minimal view over a Talos MachineConfig document, used
 // to assert on the fields the hostname patch must set and preserve without
@@ -122,6 +158,76 @@ func TestPatchTalosHostname_InvalidConfigErrors(t *testing.T) {
 
 	_, err := talosprovisioner.PatchTalosHostname([]byte("{"), "prod-worker-4")
 	require.Error(t, err)
+}
+
+// TestPatchTalosHostname_NodeAccepts verifies the patched config passes the same
+// container-level validation the Talos node runs on ApplyConfiguration. Talos
+// generated configs carry a standalone HostnameConfig document (auto: stable);
+// once machine.network.hostname is set it conflicts with that document ("static
+// hostname is already set in v1alpha1 config"), which is the regression in #4969
+// that left scaled-up Hetzner workers unable to apply their config and join.
+// The patch must remove the conflicting document so exactly one hostname
+// representation remains and the node accepts the config.
+func TestPatchTalosHostname_NodeAccepts(t *testing.T) {
+	t.Parallel()
+
+	workerBytes := workerConfigBytes(t, "prod")
+	require.Positive(t, countHostnameConfigDocs(t, workerBytes),
+		"precondition: generated worker config carries a standalone HostnameConfig document")
+
+	patched, err := talosprovisioner.PatchTalosHostname(workerBytes, "prod-worker-4")
+	require.NoError(t, err)
+
+	assert.Zero(
+		t,
+		countHostnameConfigDocs(t, patched),
+		"the conflicting HostnameConfig document must be removed so only one hostname representation remains",
+	)
+
+	provider, err := configloader.NewFromBytes(patched)
+	require.NoError(t, err, "patched config must load")
+
+	_, err = provider.Validate(nodeRuntimeMode{})
+	require.NoError(
+		t,
+		err,
+		"node-side validation must accept the patched config (no static-vs-HostnameConfig conflict)",
+	)
+
+	doc := firstMachineConfigDoc(t, patched)
+	assert.Equal(t, "prod-worker-4", doc.Machine.Network.Hostname,
+		"hostname must be set to the Hetzner server name so the CCM can match the Node")
+}
+
+// TestPatchTalosHostname_Idempotent verifies that re-patching a config that
+// already has machine.network.hostname set still yields a node-acceptable config
+// with the hostname set once. This is the scale-up and rolling-recreate case:
+// applyConfigToNode is the shared chokepoint, and its base config (rebuilt from
+// the running cluster's PKI) can already carry the static hostname, so a
+// non-idempotent patch would reintroduce the #4969 conflict.
+func TestPatchTalosHostname_Idempotent(t *testing.T) {
+	t.Parallel()
+
+	workerBytes := workerConfigBytes(t, "prod")
+
+	once, err := talosprovisioner.PatchTalosHostname(workerBytes, "prod-worker-4")
+	require.NoError(t, err)
+
+	twice, err := talosprovisioner.PatchTalosHostname(once, "prod-worker-4")
+	require.NoError(t, err)
+
+	assert.Zero(t, countHostnameConfigDocs(t, twice),
+		"re-patching must not reintroduce a HostnameConfig document")
+
+	provider, err := configloader.NewFromBytes(twice)
+	require.NoError(t, err, "re-patched config must load")
+
+	_, err = provider.Validate(nodeRuntimeMode{})
+	require.NoError(t, err, "re-patched config must remain node-acceptable")
+
+	doc := firstMachineConfigDoc(t, twice)
+	assert.Equal(t, "prod-worker-4", doc.Machine.Network.Hostname,
+		"hostname must remain the server name after re-patching")
 }
 
 // TestHetznerNodeName_WithinLimit verifies a normal node name is formatted and
