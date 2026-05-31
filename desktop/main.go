@@ -39,6 +39,10 @@ func main() {
 }
 
 func run() error {
+	// Import the user's shell environment when launched from the macOS GUI, before the UI server
+	// and the cluster providers it drives read credentials such as HCLOUD_TOKEN from it.
+	hydrateLoginShellEnv()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -62,6 +66,7 @@ func run() error {
 
 	view.SetTitle(windowTitle)
 	view.SetSize(windowWidth, windowHeight, webview.HintNone)
+	installNativeMenu()
 	view.Navigate(url)
 	view.Run() // blocks until the window is closed
 
