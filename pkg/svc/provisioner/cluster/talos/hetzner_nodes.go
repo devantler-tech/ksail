@@ -586,7 +586,9 @@ func patchTalosHostname(cfgBytes []byte, hostname string) ([]byte, error) {
 // a (possibly multi-document) Talos config YAML, re-encoding the remaining
 // documents. Removing it resolves the conflict with a static
 // machine.network.hostname (see patchTalosHostname). The v1alpha1 MachineConfig
-// document (and any other documents) are preserved verbatim.
+// document (and any other documents) are preserved semantically: decoding to a
+// generic map and re-encoding can reorder keys and drop comments/formatting, but
+// the configuration values the node consumes are unchanged.
 func stripHostnameConfigDocuments(cfgBytes []byte) ([]byte, error) {
 	decoder := yaml.NewDecoder(bytes.NewReader(cfgBytes))
 

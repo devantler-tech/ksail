@@ -6,6 +6,8 @@ package talosprovisioner_test
 
 import (
 	"bytes"
+	"errors"
+	"io"
 	"strings"
 	"testing"
 
@@ -40,10 +42,12 @@ func countHostnameConfigDocs(t *testing.T, cfgBytes []byte) int {
 	for {
 		var doc map[string]any
 
-		err := decoder.Decode(&doc)
-		if err != nil {
+		decodeErr := decoder.Decode(&doc)
+		if errors.Is(decodeErr, io.EOF) {
 			break
 		}
+
+		require.NoError(t, decodeErr)
 
 		if kind, _ := doc["kind"].(string); kind == "HostnameConfig" {
 			count++
