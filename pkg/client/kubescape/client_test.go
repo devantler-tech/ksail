@@ -20,9 +20,9 @@ func TestScanOptions(t *testing.T) {
 	t.Parallel()
 
 	opts := &kubescape.ScanOptions{
-		Frameworks:          []string{"nsa", "mitre"},
-		Format:              "json",
-		Output:              "/tmp/results.json",
+		Frameworks:          []string{testFwNSA, testFwMitre},
+		Format:              testFormatJSON,
+		Output:              testOutputPath,
 		ComplianceThreshold: 80,
 		Verbose:             true,
 	}
@@ -31,20 +31,20 @@ func TestScanOptions(t *testing.T) {
 		t.Fatalf("expected 2 frameworks, got %d", len(opts.Frameworks))
 	}
 
-	if opts.Frameworks[0] != "nsa" {
-		t.Fatalf("expected first framework to be %q, got %q", "nsa", opts.Frameworks[0])
+	if opts.Frameworks[0] != testFwNSA {
+		t.Fatalf("expected first framework to be %q, got %q", testFwNSA, opts.Frameworks[0])
 	}
 
-	if opts.Frameworks[1] != "mitre" {
-		t.Fatalf("expected second framework to be %q, got %q", "mitre", opts.Frameworks[1])
+	if opts.Frameworks[1] != testFwMitre {
+		t.Fatalf("expected second framework to be %q, got %q", testFwMitre, opts.Frameworks[1])
 	}
 
-	if opts.Format != "json" {
-		t.Fatalf("expected Format to be %q, got %q", "json", opts.Format)
+	if opts.Format != testFormatJSON {
+		t.Fatalf("expected Format to be %q, got %q", testFormatJSON, opts.Format)
 	}
 
-	if opts.Output != "/tmp/results.json" {
-		t.Fatalf("expected Output to be %q, got %q", "/tmp/results.json", opts.Output)
+	if opts.Output != testOutputPath {
+		t.Fatalf("expected Output to be %q, got %q", testOutputPath, opts.Output)
 	}
 
 	if opts.ComplianceThreshold != 80 {
