@@ -41,6 +41,8 @@ archives:
 
 homebrew_casks:
   - name: ksail
+    description: "KSail is a CLI tool to manage clusters and workloads."
+    homepage: "https://ksail.devantler.tech"
     repository:
       owner: devantler-tech
       name: homebrew-tap
