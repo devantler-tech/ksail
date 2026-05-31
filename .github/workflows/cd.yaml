@@ -391,6 +391,10 @@ jobs:
     name: 📤 Publish to MCP Registry
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # Needs `goreleaser` for the published GHCR image that server.json points at, but runs in
+    # parallel with `publish-release` and `pages-deploy` — neither lists it in `needs`. The MCP
+    # registry publish references the container image (pushed by `goreleaser`), not the GitHub
+    # release, so it is independent of the draft→published flip and need not gate it.
     needs: [goreleaser]
     permissions:
       id-token: write
@@ -526,9 +530,10 @@ jobs:
   pages-deploy:
     name: 🚀 Deploy Pages
     runs-on: ubuntu-latest
-    # Gate the docs deploy on ALL releases (not just `pages-build`) so a partial release
-    # failure never pushes a fresh docs site. Runs in parallel with `publish-release` —
-    # neither depends on the other; both fan in from the same set of release jobs.
+    # Gate the docs deploy on the artifact-producing releases (not just `pages-build`) so a
+    # partial release failure never pushes a fresh docs site. Runs in parallel with
+    # `publish-release` and `mcp-publish` — none depends on the others. `mcp-publish` is
+    # excluded from `needs` because the MCP registry publish is independent of the docs site.
     needs:
       [
         goreleaser,
@@ -536,7 +541,6 @@ jobs:
         desktop-macos,
         desktop,
         copilot-plugin,
-        mcp-publish,
         pages-build,
       ]
     timeout-minutes: 10
@@ -552,16 +556,17 @@ jobs:
     name: 📢 Publish Release
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    # Gate on ALL releases so the draft is published only when every release succeeded.
-    # Runs in parallel with `pages-deploy` (it no longer lists it in `needs`) — both fan in
-    # from the same release jobs, so the GitHub release publish and the docs deploy happen
-    # concurrently. `pages-build` replaces the former `pages-deploy` edge: the release is
-    # gated on the docs *building*, not on Pages having deployed.
+    # Gate on the artifact-producing releases so the draft is published only when every asset
+    # job succeeded. Runs in parallel with `pages-deploy` and `mcp-publish` — none lists the
+    # others in `needs`, so the GitHub release publish, the docs deploy, and the MCP registry
+    # publish all happen concurrently. `mcp-publish` is excluded because it references the GHCR
+    # image (from `goreleaser`), not the GitHub release, so it need not gate the publish.
+    # `pages-build` replaces the former `pages-deploy` edge: the release is gated on the docs
+    # *building*, not on Pages having deployed.
     needs:
       [
         goreleaser,
         vscode-extension,
-        mcp-publish,
         copilot-plugin,
         desktop-macos,
         desktop,
