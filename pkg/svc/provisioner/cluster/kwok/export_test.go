@@ -28,3 +28,18 @@ func (p *Provisioner) ResolveNameForTest(name string) string {
 func (p *Provisioner) ResolveConfigPathForTest() (string, func(), error) {
 	return p.resolveConfigPath()
 }
+
+// DiscoverAPIServerPortForTest exposes discoverAPIServerPort for unit testing.
+func (p *KubernetesProvisioner) DiscoverAPIServerPortForTest(name string) (int, error) {
+	return p.discoverAPIServerPort(name)
+}
+
+// ApplyKwokCertSANsForTest exposes applyKwokCertSANs for unit testing.
+func (p *KubernetesProvisioner) ApplyKwokCertSANsForTest(address string) (func(), error) {
+	return p.applyKwokCertSANs(address)
+}
+
+// ConfigPathForTest returns the inner provisioner's configPath for assertions.
+func (p *KubernetesProvisioner) ConfigPathForTest() string {
+	return p.configPath
+}
