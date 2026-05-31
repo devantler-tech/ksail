@@ -75,10 +75,10 @@ type machineConfigView struct {
 }
 
 // workerConfigBytes builds a real Talos worker machine config for a cluster.
-func workerConfigBytes(t *testing.T, clusterName string) []byte {
+func workerConfigBytes(t *testing.T) []byte {
 	t.Helper()
 
-	manager := talosconfigmanager.NewConfigManager("", clusterName, "1.32.0", "10.5.0.0/24")
+	manager := talosconfigmanager.NewConfigManager("", "prod", "1.32.0", "10.5.0.0/24")
 
 	configs, err := manager.Load(configmanager.LoadOptions{})
 	require.NoError(t, err)
@@ -124,7 +124,7 @@ func firstMachineConfigDoc(t *testing.T, cfgBytes []byte) machineConfigView {
 func TestPatchTalosHostname_SetsHostname(t *testing.T) {
 	t.Parallel()
 
-	workerBytes := workerConfigBytes(t, "prod")
+	workerBytes := workerConfigBytes(t)
 
 	patched, err := talosprovisioner.PatchTalosHostname(workerBytes, "prod-worker-4")
 	require.NoError(t, err)
@@ -140,7 +140,7 @@ func TestPatchTalosHostname_SetsHostname(t *testing.T) {
 func TestPatchTalosHostname_PreservesConfig(t *testing.T) {
 	t.Parallel()
 
-	workerBytes := workerConfigBytes(t, "prod")
+	workerBytes := workerConfigBytes(t)
 	before := firstMachineConfigDoc(t, workerBytes)
 	require.NotEmpty(t, before.Cluster.CA.Crt, "precondition: worker config carries a cluster CA")
 
@@ -175,7 +175,7 @@ func TestPatchTalosHostname_InvalidConfigErrors(t *testing.T) {
 func TestPatchTalosHostname_NodeAccepts(t *testing.T) {
 	t.Parallel()
 
-	workerBytes := workerConfigBytes(t, "prod")
+	workerBytes := workerConfigBytes(t)
 	require.Positive(t, countHostnameConfigDocs(t, workerBytes),
 		"precondition: generated worker config carries a standalone HostnameConfig document")
 
@@ -212,7 +212,7 @@ func TestPatchTalosHostname_NodeAccepts(t *testing.T) {
 func TestPatchTalosHostname_Idempotent(t *testing.T) {
 	t.Parallel()
 
-	workerBytes := workerConfigBytes(t, "prod")
+	workerBytes := workerConfigBytes(t)
 
 	once, err := talosprovisioner.PatchTalosHostname(workerBytes, "prod-worker-4")
 	require.NoError(t, err)
