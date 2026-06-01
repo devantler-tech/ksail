@@ -46,8 +46,11 @@ homebrew_casks:
     # marked `verified:` with a trusted prefix. Applied to the default url_template.
     url:
       verified: "github.com/devantler-tech/ksail/"
-    description: "KSail is a CLI tool to manage clusters and workloads."
-    homepage: "https://ksail.devantler.tech"
+    # `brew style` (Cask/Desc) rejects a desc that starts with the cask token
+    # ("ksail") or ends with a full stop; keep it a plain noun phrase.
+    description: "CLI tool to manage Kubernetes clusters and workloads"
+    # Trailing slash required by `brew style` (Cask/HomepageUrlStyling).
+    homepage: "https://ksail.devantler.tech/"
     repository:
       owner: devantler-tech
       name: homebrew-tap
@@ -61,10 +64,10 @@ homebrew_casks:
         draft: true
     hooks:
       post:
+        # Single-line body: use the modifier form so `brew style`
+        # (Style/IfUnlessModifier) is satisfied.
         install: |
-          if OS.mac?
-            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/ksail"]
-          end
+          system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/ksail"] if OS.mac?
     commit_author:
       signing:
         enabled: true
