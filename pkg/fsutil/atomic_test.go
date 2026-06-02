@@ -122,8 +122,7 @@ func TestAtomicWriteFile_CreateTempError(t *testing.T) {
 	path := filepath.Join(dir, "does-not-exist", "config.yaml")
 
 	err := fsutil.AtomicWriteFile(path, []byte("data"), 0o600)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "create temp file")
+	require.ErrorContains(t, err, "create temp file")
 
 	_, statErr := os.Stat(path)
 	assert.True(t, os.IsNotExist(statErr), "no target file should be created on failure")
@@ -146,7 +145,6 @@ func TestAtomicWriteFile_RenameError(t *testing.T) {
 	require.NoError(t, os.Mkdir(path, 0o750))
 
 	err := fsutil.AtomicWriteFile(path, []byte("data"), 0o600)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "rename temp file")
+	require.ErrorContains(t, err, "rename temp file")
 	assertNoTempLeftover(t, dir)
 }
