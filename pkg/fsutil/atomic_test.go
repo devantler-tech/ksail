@@ -65,7 +65,7 @@ func TestAtomicWriteFile_EmptyData(t *testing.T) {
 func TestAtomicWriteFile_AppliesPermissions(t *testing.T) {
 	t.Parallel()
 
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == windowsGOOS {
 		t.Skip("Unix permission bits are not modelled on Windows")
 	}
 
@@ -136,7 +136,7 @@ func TestAtomicWriteFile_CreateTempError(t *testing.T) {
 func TestAtomicWriteFile_RenameError(t *testing.T) {
 	t.Parallel()
 
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == windowsGOOS {
 		t.Skip("Windows takes the remove-and-retry rename branch for an existing destination")
 	}
 
