@@ -664,7 +664,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: 🍺 Mark cask PRs ready and enable auto-merge
+      - name: 🍺 Style-clean cask PRs, then mark ready and enable auto-merge
         env:
           GH_TOKEN: ${{ secrets.HOMEBREW_GITHUB_API_TOKEN }}
           TAP: devantler-tech/homebrew-tap
@@ -679,6 +679,36 @@ jobs:
               continue
             fi
             echo "Promoting ${TAP}#${pr} (${branch})"
+
+            # GoReleaser's cask template emits a few `brew style` offenses no config knob can reach
+            # (Layout/ArgumentAlignment on url/verified, Cask/StanzaOrder for the custom_block stanzas).
+            # Autocorrect them on the PR branch before promoting so the cask that lands in the tap is
+            # brew-style-clean — letting the tap enforce a `brew style` gate (devantler-tech/homebrew-tap#734).
+            # Fail-soft throughout: a style/clone/push hiccup must never block the release; the cask
+            # still lands (uncorrected) exactly as it does today.
+            work="$(mktemp -d)"
+            if git clone --depth 1 --branch "$branch" \
+                "https://x-access-token:${GH_TOKEN}@github.com/${TAP}.git" "$work" 2>/dev/null; then
+              if brew style --fix "$work/Casks/${name}.rb"; then
+                if git -C "$work" diff --quiet; then
+                  echo "${name} cask already brew-style-clean; nothing to autocorrect"
+                else
+                  git -C "$work" \
+                      -c user.name='github-actions[bot]' \
+                      -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+                      commit -am 'style: brew style --fix generated cask' \
+                    && git -C "$work" push \
+                    && echo "Pushed brew style --fix autocorrections to ${branch}" \
+                    || echo "::warning::Could not push brew style --fix autocorrections to ${branch}; promoting as-is"
+                fi
+              else
+                echo "::warning::brew style --fix could not fully clean ${name}; promoting cask as-is"
+              fi
+            else
+              echo "::warning::Could not clone ${TAP}#${branch} for brew style --fix; promoting as-is"
+            fi
+            rm -rf "$work"
+
             # Both gh calls are non-fatal under `set -e`: the PR may already be ready, or auto-merge
             # may already be enabled by the tap's own automation — neither should fail the job.
             gh pr ready "$pr" --repo "$TAP" \
