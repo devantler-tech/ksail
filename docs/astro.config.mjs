@@ -28,6 +28,17 @@ export default defineConfig({
         replacesTitle: false,
       },
       favicon: "./src/assets/favicon.png",
+      head: [
+        // Umami privacy-first web analytics (self-hosted on the platform).
+        {
+          tag: "script",
+          attrs: {
+            src: "https://analytics.platform.devantler.tech/script.js",
+            "data-website-id": "27f83d6b-8ce4-4239-9387-eabc7f57cd68",
+            defer: true,
+          },
+        },
+      ],
       social: [
         {
           icon: "github",
