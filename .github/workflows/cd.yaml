@@ -686,10 +686,17 @@ jobs:
             # brew-style-clean — letting the tap enforce a `brew style` gate (devantler-tech/homebrew-tap#734).
             # Fail-soft throughout: a style/clone/push hiccup must never block the release; the cask
             # still lands (uncorrected) exactly as it does today.
-            work="$(mktemp -d)"
-            if git clone --depth 1 --branch "$branch" \
-                "https://x-access-token:${GH_TOKEN}@github.com/${TAP}.git" "$work" 2>/dev/null; then
-              if brew style --fix "$work/Casks/${name}.rb"; then
+            # `mktemp -d` under `set -e` would abort the job on a tempdir failure; guard it so a
+            # hiccup just skips the (best-effort) autocorrect and still promotes the cask below.
+            if work="$(mktemp -d)"; then
+              if git clone --depth 1 --branch "$branch" \
+                  "https://x-access-token:${GH_TOKEN}@github.com/${TAP}.git" "$work" 2>/dev/null; then
+                # `brew style --fix` can apply partial autocorrections yet still exit non-zero when
+                # offenses remain. Run it fail-soft and commit whatever diff it produced regardless of
+                # exit status, so partial cleanups are never discarded (and a failure never blocks the
+                # release).
+                brew style --fix "$work/Casks/${name}.rb" \
+                  || echo "::warning::brew style --fix exited non-zero for ${name}; committing any partial autocorrections"
                 if git -C "$work" diff --quiet; then
                   echo "${name} cask already brew-style-clean; nothing to autocorrect"
                 else
@@ -702,12 +709,12 @@ jobs:
                     || echo "::warning::Could not push brew style --fix autocorrections to ${branch}; promoting as-is"
                 fi
               else
-                echo "::warning::brew style --fix could not fully clean ${name}; promoting cask as-is"
+                echo "::warning::Could not clone ${TAP} branch ${branch} for brew style --fix; promoting as-is"
               fi
+              rm -rf "$work"
             else
-              echo "::warning::Could not clone ${TAP}#${branch} for brew style --fix; promoting as-is"
+              echo "::warning::Could not create tempdir for brew style --fix; promoting ${name} cask as-is"
             fi
-            rm -rf "$work"
 
             # Both gh calls are non-fatal under `set -e`: the PR may already be ready, or auto-merge
             # may already be enabled by the tap's own automation — neither should fail the job.
