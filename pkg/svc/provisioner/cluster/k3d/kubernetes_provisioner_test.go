@@ -2,7 +2,9 @@ package k3dprovisioner_test
 
 import (
 	"context"
+	"os"
 	"testing"
+	"time"
 
 	k3dconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/k3d"
 	k3dprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/k3d"
@@ -39,6 +41,22 @@ func TestBuildClusterCR_ServerArgs(t *testing.T) {
 		cluster := provisioner.BuildClusterCRForTest("test", "k3k-test", "10.0.0.1")
 
 		assert.Nil(t, cluster.Spec.ServerArgs)
+	})
+}
+
+func TestK3kReadyTimeout(t *testing.T) {
+	// Uses t.Setenv, so it cannot run in parallel.
+	t.Run("defaults to ten minutes when unset", func(t *testing.T) {
+		t.Setenv("KSAIL_NESTED_READY_TIMEOUT", "placeholder")
+		require.NoError(t, os.Unsetenv("KSAIL_NESTED_READY_TIMEOUT"))
+
+		assert.Equal(t, 10*time.Minute, k3dprovisioner.K3kReadyTimeoutForTest())
+	})
+
+	t.Run("honors KSAIL_NESTED_READY_TIMEOUT override", func(t *testing.T) {
+		t.Setenv("KSAIL_NESTED_READY_TIMEOUT", "15m")
+
+		assert.Equal(t, 15*time.Minute, k3dprovisioner.K3kReadyTimeoutForTest())
 	})
 }
 

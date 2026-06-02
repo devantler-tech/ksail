@@ -1,0 +1,77 @@
+package credentials_test
+
+import (
+	"testing"
+
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/credentials"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/omni"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+// TestDefaultEnvVar_MatchesCanonicalSources guards against drift between this package's locally
+// declared default variable names and the canonical defaults owned by the API/provider packages.
+func TestDefaultEnvVar_MatchesCanonicalSources(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(
+		t,
+		v1alpha1.DefaultHetznerTokenEnvVar,
+		credentials.DefaultEnvVar(credentials.HetznerToken),
+	)
+	assert.Equal(t, omni.DefaultEndpointEnvVar, credentials.DefaultEnvVar(credentials.OmniEndpoint))
+	assert.Equal(t,
+		omni.DefaultServiceAccountKeyEnvVar,
+		credentials.DefaultEnvVar(credentials.OmniServiceAccountKey),
+	)
+	// AWS defaults mirror the struct-tag defaults on v1alpha1.OptionsAWS (no exported constants).
+	assert.Equal(t, "AWS_REGION", credentials.DefaultEnvVar(credentials.AWSRegion))
+	assert.Equal(t, "AWS_PROFILE", credentials.DefaultEnvVar(credentials.AWSProfile))
+	assert.Equal(t, "AWS_ACCESS_KEY_ID", credentials.DefaultEnvVar(credentials.AWSAccessKeyID))
+	assert.Equal(
+		t,
+		"AWS_SECRET_ACCESS_KEY",
+		credentials.DefaultEnvVar(credentials.AWSSecretAccessKey),
+	)
+	assert.Equal(t, "AWS_SESSION_TOKEN", credentials.DefaultEnvVar(credentials.AWSSessionToken))
+}
+
+func TestDefaultEnvVar_UnknownKeyIsEmpty(t *testing.T) {
+	t.Parallel()
+
+	assert.Empty(t, credentials.DefaultEnvVar(credentials.Key("nope.nope")))
+}
+
+func TestEnvResolver_ReadsProcessEnvironment(t *testing.T) {
+	t.Setenv(v1alpha1.DefaultHetznerTokenEnvVar, "tok-123")
+
+	var resolver credentials.EnvResolver
+
+	assert.Equal(t, v1alpha1.DefaultHetznerTokenEnvVar, resolver.EnvVar(credentials.HetznerToken))
+	assert.Equal(t, "tok-123", resolver.Value(credentials.HetznerToken))
+}
+
+func TestEnvResolver_UnsetCredentialIsEmpty(t *testing.T) {
+	t.Setenv(credentials.DefaultEnvVar(credentials.OmniEndpoint), "")
+
+	var resolver credentials.EnvResolver
+
+	assert.Empty(t, resolver.Value(credentials.OmniEndpoint))
+}
+
+func TestAllKeys_CoversEveryKeyWithDefault(t *testing.T) {
+	t.Parallel()
+
+	keys := credentials.AllKeys()
+	require.NotEmpty(t, keys)
+
+	for _, key := range keys {
+		assert.NotEmptyf(
+			t,
+			credentials.DefaultEnvVar(key),
+			"key %q must have a default env var",
+			key,
+		)
+	}
+}

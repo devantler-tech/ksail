@@ -12,6 +12,7 @@ import (
 	"github.com/cosi-project/runtime/pkg/safe"
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
+	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
 	svcprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
@@ -429,18 +430,45 @@ func (p *Provisioner) applyInPlaceConfigChanges(
 		return nil
 	}
 
+	// The desired-config rebuild needs the cluster PKI, which only a control-plane
+	// node carries. Resolve one control-plane config up front and reuse it as the
+	// secrets source for every node — seeding the rebuild from a worker's own config
+	// fails with "failed to parse PEM block" (#4963). All control-planes share the
+	// same PKI, so any one is a valid source.
+	secretsSource := p.fetchSecretsSource(ctx, clusterName)
+
 	for _, node := range nodes {
-		p.applyNodeConfig(ctx, node, result)
+		p.applyNodeConfig(ctx, node, secretsSource, result)
 	}
 
 	return nil
 }
 
+// fetchSecretsSource returns a control-plane node's running config, used to seed
+// the per-node desired-config rebuild with the cluster PKI. It returns nil when no
+// control-plane is reachable; callers then fall back to each node's own config,
+// which carries complete PKI only on control-plane nodes (see buildDesiredNodeConfig
+// and #4963).
+func (p *Provisioner) fetchSecretsSource(
+	ctx context.Context,
+	clusterName string,
+) talosconfig.Provider {
+	cpConfig, found, err := p.fetchRunningControlPlaneConfig(ctx, clusterName)
+	if err != nil || !found {
+		return nil
+	}
+
+	return cpConfig
+}
+
 // applyNodeConfig overlays the role-scoped user patches onto a node's running
-// config and applies the result (NO_REBOOT), recording success or failure.
+// config and applies the result (NO_REBOOT), recording success or failure. The
+// secretsSource (a control-plane config) supplies the cluster PKI for the rebuild;
+// see buildDesiredNodeConfig.
 func (p *Provisioner) applyNodeConfig(
 	ctx context.Context,
 	node nodeWithRole,
+	secretsSource talosconfig.Provider,
 	result *clusterupdate.UpdateResult,
 ) {
 	running, err := p.fetchNodeConfig(ctx, node.IP)
@@ -450,7 +478,7 @@ func (p *Provisioner) applyNodeConfig(
 		return
 	}
 
-	desired, err := p.buildDesiredNodeConfig(running, node.Role)
+	desired, err := p.buildDesiredNodeConfig(running, secretsSource, node.Role)
 	if err != nil {
 		p.recordNodeConfigFailure(node, result, fmt.Sprintf("build desired config: %v", err))
 
@@ -1026,9 +1054,9 @@ func (p *Provisioner) GetCurrentConfig(
 	spec.ControlPlanes = controlPlanes
 	spec.Workers = workers
 
-	// Detect the running Talos version from the cluster to avoid
-	// false-positive diffs when the user pins a version in config.
-	spec.Talos.Version = p.introspectTalosVersion(ctx)
+	// Detect running Talos OS and Kubernetes versions to avoid false-positive
+	// diffs when the user pins those versions in config.
+	p.introspectVersions(ctx, spec)
 
 	// Build provider spec if we have Hetzner options configured.
 	// Server types are introspected from the running Hetzner servers so
@@ -1113,6 +1141,15 @@ func (p *Provisioner) introspectNodeCounts(ctx context.Context) (int32, int32) {
 	return 1, 0
 }
 
+// introspectVersions sets the running Talos OS and Kubernetes versions on spec so
+// that a pinned spec.cluster.talos.version / spec.cluster.kubernetesVersion that
+// matches the cluster does not read as a change. Either is left empty when the
+// cluster cannot be reached.
+func (p *Provisioner) introspectVersions(ctx context.Context, spec *v1alpha1.ClusterSpec) {
+	spec.Talos.Version = p.introspectTalosVersion(ctx)
+	spec.KubernetesVersion = p.introspectKubernetesVersion(ctx)
+}
+
 // introspectTalosVersion queries a control-plane node for the running Talos
 // version. Returns an empty string when the version cannot be determined
 // (e.g., no Talos API access); in that case the diff engine will report a
@@ -1143,6 +1180,27 @@ func (p *Provisioner) introspectTalosVersion(ctx context.Context) string {
 	}
 
 	return version
+}
+
+// introspectKubernetesVersion reports the Kubernetes version running on the
+// cluster, read from a control-plane node's machine config (kube-apiserver image
+// tag). Returns an empty string when the version cannot be determined (e.g. no
+// control-plane node reachable, no Talos API access, or an Omni-managed cluster);
+// in that case the diff engine simply has no baseline to compare a pinned version
+// against. Omni-managed clusters are skipped because Omni owns node configuration.
+func (p *Provisioner) introspectKubernetesVersion(ctx context.Context) string {
+	if p.omniOpts != nil {
+		return ""
+	}
+
+	clusterName := p.resolveClusterName("")
+
+	running, found, err := p.fetchRunningControlPlaneConfig(ctx, clusterName)
+	if err != nil || !found {
+		return ""
+	}
+
+	return talosconfigmanager.KubernetesVersionFromProvider(running)
 }
 
 // countNodeRoles counts control-plane and worker nodes from a list of nodeWithRole.

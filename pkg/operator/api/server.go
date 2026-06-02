@@ -50,6 +50,17 @@ type Server struct {
 	// back to its built-in default (VCluster), so the operator can leave it unset.
 	Distributions []string
 
+	// ProviderStatus reports which infrastructure providers are usable on this backend (e.g. the
+	// local UI gates create options on whether HCLOUD_TOKEN is set, Docker is running, etc.). When
+	// nil the SPA does not gate by provider — it offers every provider valid for a distribution (the
+	// operator leaves it nil, since it provisions via the cluster CR regardless of local credentials).
+	ProviderStatus func(ctx context.Context) []ProviderInfo
+
+	// Settings, when non-nil, enables the credential-settings endpoints and the SPA's Settings page.
+	// Only the local UI backend sets it; the operator leaves it nil (credentials are managed
+	// in-cluster), so the settings routes are not registered and the Settings page stays hidden.
+	Settings SettingsService
+
 	// StaticFS, when non-nil, serves the embedded web UI (SPA) for any route the API does not handle,
 	// falling back to index.html for client-side routing. The operator leaves it nil (nginx serves
 	// the UI separately); `ksail ui` sets it to the embedded assets.
@@ -61,10 +72,20 @@ type Server struct {
 
 // configResponse describes the deployment mode the SPA needs to render the correct UI.
 type configResponse struct {
-	ReadOnly      bool      `json:"readOnly"`
-	AuthEnabled   bool      `json:"authEnabled"`
-	User          *userInfo `json:"user,omitempty"`
-	Distributions []string  `json:"distributions,omitempty"`
+	ReadOnly        bool           `json:"readOnly"`
+	AuthEnabled     bool           `json:"authEnabled"`
+	User            *userInfo      `json:"user,omitempty"`
+	Distributions   []string       `json:"distributions,omitempty"`
+	Providers       []ProviderInfo `json:"providers,omitempty"`
+	SettingsEnabled bool           `json:"settingsEnabled,omitempty"`
+}
+
+// ProviderInfo reports whether an infrastructure provider is usable on the serving backend, with a
+// human-readable reason when it is not. The SPA uses it to gate the create form's provider options.
+type ProviderInfo struct {
+	Name      string `json:"name"`
+	Available bool   `json:"available"`
+	Reason    string `json:"reason,omitempty"`
 }
 
 // userInfo is the authenticated identity surfaced to the SPA.
@@ -167,6 +188,13 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/clusters/{namespace}/{name}", s.handleGetCluster)
 	mux.HandleFunc("PUT /api/v1/clusters/{namespace}/{name}", s.handleUpdateCluster)
 	mux.HandleFunc("DELETE /api/v1/clusters/{namespace}/{name}", s.handleDeleteCluster)
+
+	// Credential settings are local-UI-only: registered only when a SettingsService is provided, so
+	// the operator's API surface is unchanged.
+	if s.Settings != nil {
+		mux.HandleFunc("GET /api/v1/settings", s.handleGetSettings)
+		mux.HandleFunc("PUT /api/v1/settings", s.handleUpdateSettings)
+	}
 
 	if s.auth != nil {
 		mux.HandleFunc("GET /api/v1/auth/login", s.auth.handleLogin)
@@ -304,9 +332,14 @@ func (s *Server) handleHealth(writer http.ResponseWriter, _ *http.Request) {
 
 func (s *Server) handleConfig(writer http.ResponseWriter, request *http.Request) {
 	response := configResponse{
-		ReadOnly:      s.ReadOnly,
-		AuthEnabled:   s.auth != nil,
-		Distributions: s.Distributions,
+		ReadOnly:        s.ReadOnly,
+		AuthEnabled:     s.auth != nil,
+		Distributions:   s.Distributions,
+		SettingsEnabled: s.Settings != nil,
+	}
+
+	if s.ProviderStatus != nil {
+		response.Providers = s.ProviderStatus(request.Context())
 	}
 
 	if s.auth != nil {

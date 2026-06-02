@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
@@ -501,6 +502,23 @@ var talosFieldRules = []fieldRule{
 		// skipWhenNewEmpty suppresses false-positive diffs when the user has not
 		// pinned a version in ksail.yaml. The detected running version is
 		// informational; absence of a desired version means "no constraint".
+		skipWhenNewEmpty: true,
+	},
+	{
+		// Top-level field (spec.cluster.kubernetesVersion); only the Talos
+		// distribution honors it, so the rule lives here rather than in the
+		// distribution-agnostic rules to avoid false diffs for Kind/K3d/EKS.
+		field:    "cluster.kubernetesVersion",
+		category: clusterupdate.ChangeCategoryInPlace,
+		reason:   "Kubernetes version change re-renders the machine config and is applied to nodes",
+		// Normalise both sides to drop any "v" prefix so "v1.32.0" and "1.32.0"
+		// (the introspected baseline form) compare equal.
+		getVal: func(s *v1alpha1.ClusterSpec) string {
+			return strings.TrimPrefix(strings.TrimSpace(s.KubernetesVersion), "v")
+		},
+		// skipWhenNewEmpty: when the user has not pinned a Kubernetes version, the
+		// provisioner tracks the running version (no upgrade), so there is no
+		// spec-level change to report regardless of the detected baseline.
 		skipWhenNewEmpty: true,
 	},
 	{

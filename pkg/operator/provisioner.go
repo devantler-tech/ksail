@@ -101,7 +101,15 @@ func buildDistributionConfig(
 			Kind: kindconfigmanager.NewKindCluster(name, "", ""),
 		}, nil
 	case v1alpha1.DistributionTalos:
-		talosConfig, err := newTalosConfig(name)
+		// Honor the Kubernetes version pin / cap the default to the pinned Talos
+		// version, matching the CLI so the operator never deploys an incompatible
+		// Kubernetes version.
+		kubernetesVersion := talosconfigmanager.ResolveKubernetesVersion(
+			cluster.Spec.Cluster.Talos.Version,
+			cluster.Spec.Cluster.KubernetesVersion,
+		)
+
+		talosConfig, err := newTalosConfig(name, kubernetesVersion)
 		if err != nil {
 			return nil, err
 		}
@@ -122,10 +130,14 @@ func buildDistributionConfig(
 	}
 }
 
-// newTalosConfig builds a default Talos config bundle named after the provisioned cluster. The
-// cluster name is baked into the PKI, so it must be set via WithName (which regenerates the bundle).
-func newTalosConfig(name string) (*talosconfigmanager.Configs, error) {
-	configs, err := talosconfigmanager.NewDefaultConfigs()
+// newTalosConfig builds a default Talos config bundle named after the provisioned cluster, at the
+// given Kubernetes version. The cluster name is baked into the PKI, so it must be set via WithName
+// (which regenerates the bundle).
+func newTalosConfig(name, kubernetesVersion string) (*talosconfigmanager.Configs, error) {
+	configs, err := talosconfigmanager.NewDefaultConfigsWithVersionAndPatches(
+		kubernetesVersion,
+		nil,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("build talos config: %w", err)
 	}

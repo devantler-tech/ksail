@@ -12,10 +12,12 @@ import {
   type Cluster,
   type ClusterMeta,
   type ClusterSpec,
+  type ProviderInfo,
   type User,
 } from "./api.ts";
 import { MetaContext } from "./lib/meta.ts";
-import { AppShell } from "./components/AppShell.tsx";
+import { AppShell, type View } from "./components/AppShell.tsx";
+import { SettingsPage } from "./components/SettingsPage.tsx";
 import { ClusterDetail } from "./components/ClusterDetail.tsx";
 import {
   ClusterFormDialog,
@@ -83,6 +85,10 @@ export function App() {
   const [needsLogin, setNeedsLogin] = useState(false);
   const [meta, setMeta] = useState<ClusterMeta | null>(null);
   const [distributions, setDistributions] = useState<string[]>(DEFAULT_DISTRIBUTIONS);
+  // providerStatus gates the create form's provider options. null = backend does not gate (operator).
+  const [providerStatus, setProviderStatus] = useState<ProviderInfo[] | null>(null);
+  const [settingsEnabled, setSettingsEnabled] = useState(false);
+  const [view, setView] = useState<View>("clusters");
 
   const [clusters, setClusters] = useState<Cluster[]>([]);
   const [loading, setLoading] = useState(true);
@@ -139,6 +145,24 @@ export function App() {
     return true;
   }, []);
 
+  // reloadConfig re-fetches deployment config after a change that can affect it (e.g. saving
+  // credential settings flips provider availability), so the create form's gating stays current
+  // without a full page reload.
+  const reloadConfig = useCallback(async () => {
+    try {
+      const config = await getConfig();
+      if (!mounted.current) {
+        return;
+      }
+      setReadOnly(config.readOnly);
+      setDistributions(config.distributions ?? DEFAULT_DISTRIBUTIONS);
+      setProviderStatus(config.providers ?? null);
+      setSettingsEnabled(config.settingsEnabled ?? false);
+    } catch {
+      // Non-fatal: keep the current config if the refresh fails.
+    }
+  }, []);
+
   useEffect(() => {
     mounted.current = true;
 
@@ -161,6 +185,8 @@ export function App() {
       setReadOnly(config.readOnly);
       setUser(config.user ?? null);
       setDistributions(config.distributions ?? DEFAULT_DISTRIBUTIONS);
+      setProviderStatus(config.providers ?? null);
+      setSettingsEnabled(config.settingsEnabled ?? false);
 
       if (config.authEnabled && !config.user) {
         setNeedsLogin(true);
@@ -265,20 +291,22 @@ export function App() {
     return <LoginScreen />;
   }
 
-  const headerActions = (
-    <>
-      <Button variant="secondary" size="sm" onClick={() => void refresh()} loading={refreshing}>
-        {refreshing ? null : <RotateCw className="size-4" aria-hidden />}
-        Refresh
-      </Button>
-      {!readOnly ? (
-        <Button size="sm" onClick={openCreate}>
-          <Plus className="size-4" aria-hidden />
-          New cluster
+  // Header actions (Refresh / New cluster) belong to the Clusters view only.
+  const headerActions =
+    view === "clusters" ? (
+      <>
+        <Button variant="secondary" size="sm" onClick={() => void refresh()} loading={refreshing}>
+          {refreshing ? null : <RotateCw className="size-4" aria-hidden />}
+          Refresh
         </Button>
-      ) : null}
-    </>
-  );
+        {!readOnly ? (
+          <Button size="sm" onClick={openCreate}>
+            <Plus className="size-4" aria-hidden />
+            New cluster
+          </Button>
+        ) : null}
+      </>
+    ) : null;
 
   return (
     <MetaContext.Provider value={meta}>
@@ -288,8 +316,14 @@ export function App() {
       user={user}
       onLogout={() => void logout().finally(() => setNeedsLogin(true))}
       readOnly={readOnly}
+      view={view}
+      onNavigate={setView}
+      settingsEnabled={settingsEnabled}
       headerActions={headerActions}
     >
+      {view === "settings" ? (
+        <SettingsPage onSaved={() => void reloadConfig()} />
+      ) : (
       <div className="mx-auto max-w-6xl space-y-4">
         {error && clusters.length > 0 ? (
           <ErrorBanner message={error} onRetry={() => void refresh()} />
@@ -326,6 +360,7 @@ export function App() {
           />
         )}
       </div>
+      )}
 
       {meta ? (
         <ClusterDetail
@@ -343,6 +378,7 @@ export function App() {
           mode={formMode}
           initial={formInitial}
           distributions={distributions}
+          providerStatus={providerStatus}
           onSubmit={handleSubmit}
           onClose={() => setFormOpen(false)}
         />

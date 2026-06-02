@@ -398,6 +398,36 @@ func TestProvider_IsCloud(t *testing.T) {
 	}
 }
 
+func TestDefaultProviderForDistribution(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		distribution v1alpha1.Distribution
+		want         v1alpha1.Provider
+	}{
+		{"vanilla_defaults_docker", v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker},
+		{"k3s_defaults_docker", v1alpha1.DistributionK3s, v1alpha1.ProviderDocker},
+		{"talos_defaults_docker", v1alpha1.DistributionTalos, v1alpha1.ProviderDocker},
+		{"vcluster_defaults_docker", v1alpha1.DistributionVCluster, v1alpha1.ProviderDocker},
+		{"kwok_defaults_docker", v1alpha1.DistributionKWOK, v1alpha1.ProviderDocker},
+		{"eks_defaults_aws", v1alpha1.DistributionEKS, v1alpha1.ProviderAWS},
+		{"unknown_defaults_empty", v1alpha1.Distribution("Bogus"), v1alpha1.Provider("")},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			assert.Equal(
+				t,
+				testCase.want,
+				v1alpha1.DefaultProviderForDistribution(testCase.distribution),
+			)
+		})
+	}
+}
+
 func TestProvider_ValidateForDistribution_ValidCombinations(t *testing.T) {
 	t.Parallel()
 

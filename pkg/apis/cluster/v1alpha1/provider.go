@@ -92,6 +92,19 @@ func supportedProviders(distribution Distribution) []Provider {
 	}
 }
 
+// DefaultProviderForDistribution returns the conventional default provider for a distribution: the
+// first provider it supports (Docker for the local distributions, AWS for EKS). It returns "" for an
+// unknown distribution. Callers use this to default an omitted provider before validating, so an
+// EKS request without an explicit provider resolves to AWS rather than the global Docker default.
+func DefaultProviderForDistribution(distribution Distribution) Provider {
+	supported := supportedProviders(distribution)
+	if len(supported) == 0 {
+		return ""
+	}
+
+	return supported[0]
+}
+
 // IsCloud returns true if the provider is a cloud provider (Hetzner, Omni, or AWS).
 // Cloud providers run nodes on remote servers and cannot access local Docker infrastructure.
 func (p *Provider) IsCloud() bool {

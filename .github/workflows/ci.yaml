@@ -132,6 +132,7 @@ jobs:
       vsce-deps: ${{ steps.filter.outputs.vsce-deps }}
       copilot-plugin: ${{ steps.filter.outputs.copilot-plugin }}
       operator-chart: ${{ steps.filter.outputs.operator-chart }}
+      desktop: ${{ steps.filter.outputs.desktop }}
     steps:
       - name: 📄 Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -269,11 +270,22 @@ jobs:
               - 'Dockerfile'
               - '.github/actions/operator-chart-e2e/**'
               - '.github/workflows/ci.yaml'
+            desktop:
+              # The desktop app is a SEPARATE Go module that vendors the main
+              # module via `replace => ../`, so its go.{mod,sum} must track the
+              # main module's dependency graph independently. A root dependency
+              # bump (go.mod/go.sum) does NOT touch desktop/**, so it must be
+              # listed here or desktop drift slips through to release. Keep
+              # go.mod/go.sum in this filter.
+              - 'desktop/**'
+              - 'go.mod'
+              - 'go.sum'
+              - '.github/workflows/ci.yaml'
 
   ci-go:
     name: ✅ Validate Go Project
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    uses: devantler-tech/reusable-workflows/.github/workflows/validate-go-project.yaml@45fc27ed85612da89daaf032d59266b830d7ab14 # v4.0.0
+    uses: devantler-tech/reusable-workflows/.github/workflows/validate-go-project.yaml@8d882e6868d7d7207a708ec1f5ff33b1c90a1770 # v5.4.0
     permissions:
       contents: write
       issues: write
@@ -1119,7 +1131,7 @@ jobs:
 
       - name: 🔐 Login to Docker Hub
         if: ${{ vars.DOCKERHUB_USERNAME != '' }}
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
         with:
           username: ${{ vars.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }} # zizmor: ignore[secrets-outside-env] - third-party action input, no environment scoping available
@@ -1342,6 +1354,36 @@ jobs:
           comment-on-alert: false
           summary-always: false
 
+  verify-desktop-tidy:
+    name: 🧩 Verify Desktop Module Tidy
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [changes]
+    if: github.event_name != 'merge_group' && needs.changes.outputs.desktop == 'true'
+    permissions:
+      contents: read
+    steps:
+      - name: 📄 Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: ⚙️ Setup Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      # The desktop app is a SEPARATE Go module that vendors the main module via `replace => ../`,
+      # so its go.{mod,sum} must independently track the main module's dependency graph. A root
+      # dependency bump can leave desktop/go.{mod,sum} stale and break the release-time desktop build
+      # with a cryptic "updates to go.mod needed". The full desktop build lives in desktop.yaml; this
+      # is a fast, REQUIRED gate that blocks the drift on the PR instead of failing at release. Fix
+      # with `go -C desktop mod tidy` and commit the result.
+      - name: 🧹 Verify desktop module is tidy
+        working-directory: desktop
+        run: go mod tidy -diff
+
   require-checks-in-pr:
     name: CI - Required Checks
     runs-on: ubuntu-latest
@@ -1368,6 +1410,7 @@ jobs:
         benchmark,
         operator-chart-lint,
         operator-chart-e2e,
+        verify-desktop-tidy,
       ]
     if: ${{ always() }}
     steps:
@@ -1394,3 +1437,4 @@ jobs:
             ${{ needs.benchmark.result }}
             ${{ needs.operator-chart-lint.result }}
             ${{ needs.operator-chart-e2e.result }}
+            ${{ needs.verify-desktop-tidy.result }}

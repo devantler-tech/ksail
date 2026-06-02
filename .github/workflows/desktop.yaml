@@ -7,6 +7,11 @@ on:
       - "pkg/cli/uiserver/**"
       - "pkg/webui/**"
       - "web/ui/**"
+      # The desktop module vendors the main module via `replace => ../`, so a root
+      # dependency bump (which touches only go.mod/go.sum) can break the desktop
+      # build. Trigger on those too so drift is caught here, not at release time.
+      - "go.mod"
+      - "go.sum"
       - ".goreleaser.desktop.yaml"
       - ".github/workflows/desktop.yaml"
   push:
@@ -16,6 +21,8 @@ on:
       - "pkg/cli/uiserver/**"
       - "pkg/webui/**"
       - "web/ui/**"
+      - "go.mod"
+      - "go.sum"
       - ".goreleaser.desktop.yaml"
       - ".github/workflows/desktop.yaml"
 
@@ -59,6 +66,16 @@ jobs:
           mkdir -p pkg/webui/dist
           touch pkg/webui/dist/.gitkeep
           cp -R web/ui/dist/. pkg/webui/dist/
+
+      # The desktop app is a SEPARATE Go module that vendors the main module via `replace => ../`, so
+      # its go.mod/go.sum must independently track the main module's dependency graph. The main repo's
+      # Tidy check does not cover it, so a dependency bump in the root module (e.g. hcloud-go) can
+      # leave desktop/go.{mod,sum} stale and break this build with a cryptic "updates to go.mod
+      # needed" / "missing go.sum entry". Fail fast with a clear, actionable message instead: run
+      # `go -C desktop mod tidy` and commit the result.
+      - name: 🧹 Verify desktop module is tidy
+        working-directory: desktop
+        run: go mod tidy -diff
 
       - name: 🏗️ Build desktop app
         working-directory: desktop

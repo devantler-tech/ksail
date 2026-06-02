@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/cosi-project/runtime/pkg/safe"
+	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
 	"github.com/siderolabs/talos/pkg/machinery/config/configdiff"
@@ -39,6 +40,17 @@ const MachineConfigField = "machine.config"
 // errNoRoleConfig is returned when the desired config has no machine config for a
 // node's role (control-plane/worker) — an unexpected state for a valid cluster.
 var errNoRoleConfig = errors.New("no Talos machine config available for node role")
+
+// errMissingControlPlanePKI is returned when the secrets source used to realign a
+// desired config lacks the cluster CA private key. That key lives only on
+// control-plane nodes; worker configs carry certificates but no CA private keys.
+// Seeding a full config-bundle regeneration from a worker config therefore fails
+// deep inside Talos with an opaque "failed to parse PEM block" (#4963). Surfacing
+// this named error instead makes the precondition actionable.
+var errMissingControlPlanePKI = errors.New(
+	"secrets source lacks control-plane PKI (cluster CA private key); " +
+		"a control-plane node's config is required to realign worker configs",
+)
 
 // detectInPlaceMachineConfigDrift reports whether the desired Talos machine
 // config (base config + current patch files) differs from what is running on the
@@ -84,7 +96,7 @@ func (p *Provisioner) detectInPlaceMachineConfigDrift(
 		return nil, nil
 	}
 
-	desired, err := p.buildDesiredNodeConfig(running, RoleControlPlane)
+	desired, err := p.buildDesiredNodeConfig(running, running, RoleControlPlane)
 	if err != nil {
 		return nil, err
 	}
@@ -120,13 +132,30 @@ func (p *Provisioner) detectInPlaceMachineConfigDrift(
 // *removals* detectable: a key dropped from a patch file is simply absent from
 // the regenerated config. The graft then restores the settings ksail injects
 // post-generation at create — which are not user patches and must not read as
-// drift. It returns an error if secret/endpoint alignment fails or the desired
-// config has no machine config for the node's role.
+// drift. secretsSource supplies the cluster PKI for realignment and must be a
+// control-plane node's config (see the body); pass nil to use running. It returns
+// an error if the secrets source lacks control-plane PKI, if secret/endpoint
+// alignment fails, or if the desired config has no machine config for the role.
 func (p *Provisioner) buildDesiredNodeConfig(
 	running talosconfig.Provider,
+	secretsSource talosconfig.Provider,
 	role string,
 ) (talosconfig.Provider, error) {
-	bundle := secrets.NewBundleFromConfig(secrets.NewFixedClock(time.Now()), running)
+	// The cluster PKI used to realign the regenerated config must come from a
+	// control-plane node: worker configs carry only certificates (no CA private
+	// keys, no etcd/aggregator/service-account material), so seeding the rebuild
+	// from a worker config fails inside Talos with an opaque "failed to parse PEM
+	// block" (#4963). Fall back to running only when no explicit source is given —
+	// valid when running is itself a control-plane config (e.g. drift detection).
+	if secretsSource == nil {
+		secretsSource = running
+	}
+
+	if !hasControlPlanePKI(secretsSource) {
+		return nil, errMissingControlPlanePKI
+	}
+
+	bundle := secrets.NewBundleFromConfig(secrets.NewFixedClock(time.Now()), secretsSource)
 
 	aligned, err := p.talosConfigs.WithSecrets(bundle)
 	if err != nil {
@@ -141,6 +170,11 @@ func (p *Provisioner) buildDesiredNodeConfig(
 		}
 	}
 
+	aligned, err = p.alignKubernetesVersion(aligned, running)
+	if err != nil {
+		return nil, err
+	}
+
 	desired := aligned.ControlPlane()
 	if role == RoleWorker {
 		desired = aligned.Worker()
@@ -151,6 +185,45 @@ func (p *Provisioner) buildDesiredNodeConfig(
 	}
 
 	return graftNodeManagedSections(desired, running)
+}
+
+// hasControlPlanePKI reports whether a config provider carries the cluster CA
+// private key. That key is present only on control-plane nodes; worker configs
+// include the cluster CA certificate but not its key. Without it, regenerating a
+// full Talos config bundle (which re-issues certificates) cannot proceed and Talos
+// fails with an opaque "failed to parse PEM block".
+func hasControlPlanePKI(provider talosconfig.Provider) bool {
+	ca := provider.Cluster().IssuingCA()
+
+	return ca != nil && len(ca.Key) > 0
+}
+
+// alignKubernetesVersion renders the desired config at the Kubernetes version
+// already running on the cluster when the user has not pinned one
+// (spec.cluster.kubernetesVersion). Without this, an unrelated update would
+// regenerate the desired config at KSail's built-in default — which, after KSail
+// bumps that default, reads as an unrequested (and possibly Talos-incompatible)
+// Kubernetes upgrade. When a version is pinned, the pin is left in place so an
+// intentional change is still detected and applied.
+func (p *Provisioner) alignKubernetesVersion(
+	aligned *talosconfigmanager.Configs,
+	running talosconfig.Provider,
+) (*talosconfigmanager.Configs, error) {
+	if p.options != nil && strings.TrimSpace(p.options.KubernetesVersion) != "" {
+		return aligned, nil
+	}
+
+	runningVersion := talosconfigmanager.KubernetesVersionFromProvider(running)
+	if runningVersion == "" {
+		return aligned, nil
+	}
+
+	updated, err := aligned.WithKubernetesVersion(runningVersion)
+	if err != nil {
+		return nil, fmt.Errorf("align Kubernetes version for config comparison: %w", err)
+	}
+
+	return updated, nil
 }
 
 // graftNodeManagedSections copies the machine-config sections that ksail injects

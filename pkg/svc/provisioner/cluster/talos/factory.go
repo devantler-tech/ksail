@@ -91,6 +91,7 @@ func newProvisionerFromOptions(
 		WithKubeconfigPath(kubeconfigPath).
 		WithKubeconfigContext(kubeconfigContext).
 		WithTalosconfigPath(talosconfigPath).
+		WithKubernetesVersion(opts.KubernetesVersion).
 		WithSkipCNIChecks(skipCNIChecks)
 
 	// Override the default Talos container image when a version pin is set.

@@ -71,8 +71,15 @@ homebrew_casks:
     # `gh release upload`. This is the same URL the default would have produced.
     url:
       template: "https://github.com/devantler-tech/ksail/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
-    description: "KSail desktop app — manage local Kubernetes clusters in a native window"
-    homepage: "https://ksail.devantler.tech"
+      # The download URL host (github.com) differs from the homepage host
+      # (ksail.devantler.tech), so `brew audit --strict` requires the URL to be
+      # marked `verified:` with a trusted prefix.
+      verified: "github.com/devantler-tech/ksail/"
+    # `brew style` (Cask/Desc) rejects a desc that starts with the cask token
+    # ("ksail-desktop") or ends with a full stop; keep it a plain noun phrase.
+    description: "Native desktop app to manage local Kubernetes clusters"
+    # Trailing slash required by `brew style` (Cask/HomepageUrlStyling).
+    homepage: "https://ksail.devantler.tech/"
     repository:
       owner: devantler-tech
       name: homebrew-tap
@@ -84,8 +91,13 @@ homebrew_casks:
         # (the cask download URL would 404 for `brew install`). The cd.yaml `homebrew` job marks the
         # PR ready after `publish-release` flips the release public, letting the tap merge it then.
         draft: true
-    # The cask schema has no first-class `app` field; install the bundle via a custom stanza.
+    # The cask schema has no first-class `app` or `depends_on` field; emit both via a custom stanza.
+    # `depends_on macos` satisfies `brew style` (Homebrew/OSDependsOn) for this macOS-only GUI cask;
+    # ">= :big_sur" matches the Go toolchain's minimum supported macOS. The cd.yaml `homebrew` job
+    # runs `brew style --fix`, which reorders these stanzas into canonical position before the cask
+    # lands in the tap.
     custom_block: |
+      depends_on macos: ">= :big_sur"
       app "KSail.app"
     # Symlink the CLI from inside the installed app (the canonical GUI-app-with-CLI cask pattern),
     # so `ksail-desktop` is on PATH and `ksail desktop` finds it. Without this, GoReleaser would
@@ -94,7 +106,7 @@ homebrew_casks:
       - "#{appdir}/KSail.app/Contents/MacOS/ksail-desktop"
     hooks:
       post:
+        # Single-line body: use the modifier form so `brew style`
+        # (Style/IfUnlessModifier) is satisfied.
         install: |
-          if OS.mac?
-            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/KSail.app"]
-          end
+          system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/KSail.app"] if OS.mac?

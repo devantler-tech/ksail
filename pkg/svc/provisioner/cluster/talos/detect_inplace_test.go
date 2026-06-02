@@ -124,7 +124,9 @@ func TestBuildDesiredNodeConfig_NoFalsePositive(t *testing.T) {
 
 	prov := talosprovisioner.NewProvisioner(configs, nil)
 
-	desired, err := prov.BuildDesiredNodeConfigForTest(running, talosprovisioner.RoleControlPlane)
+	desired, err := prov.BuildDesiredNodeConfigForTest(
+		running, running, talosprovisioner.RoleControlPlane,
+	)
 	require.NoError(t, err)
 
 	diff, err := talosprovisioner.MachineConfigDiffForTest(running, desired)
@@ -166,7 +168,9 @@ func TestBuildDesiredNodeConfig_PreservesCreateInjectedMirrors(t *testing.T) {
 
 	prov := talosprovisioner.NewProvisioner(desiredConfigs, nil)
 
-	desired, err := prov.BuildDesiredNodeConfigForTest(running, talosprovisioner.RoleControlPlane)
+	desired, err := prov.BuildDesiredNodeConfigForTest(
+		running, running, talosprovisioner.RoleControlPlane,
+	)
 	require.NoError(t, err)
 
 	diff, err := talosprovisioner.MachineConfigDiffForTest(running, desired)
@@ -194,13 +198,93 @@ func TestBuildDesiredNodeConfig_DetectsRemoval(t *testing.T) {
 
 	prov := talosprovisioner.NewProvisioner(desiredConfigs, nil)
 
-	desired, err := prov.BuildDesiredNodeConfigForTest(running, talosprovisioner.RoleControlPlane)
+	desired, err := prov.BuildDesiredNodeConfigForTest(
+		running, running, talosprovisioner.RoleControlPlane,
+	)
 	require.NoError(t, err)
 
 	diff, err := talosprovisioner.MachineConfigDiffForTest(running, desired)
 	require.NoError(t, err)
 	assert.NotEmpty(t, diff, "removing a sysctl from a patch must be detected as drift")
 	assert.Contains(t, diff, sysctlKptr, "the removed sysctl key must appear in the diff")
+}
+
+// runningAtKubernetesVersion renders a control-plane config at the given
+// Kubernetes version and parses it back, as a node would store and return it.
+func runningAtKubernetesVersion(t *testing.T, version string) talosconfig.Provider {
+	t.Helper()
+
+	configs, err := talosconfigmanager.NewDefaultConfigsWithPatches(nil)
+	require.NoError(t, err)
+
+	configs, err = configs.WithKubernetesVersion(version)
+	require.NoError(t, err)
+
+	configBytes, err := configs.ControlPlane().Bytes()
+	require.NoError(t, err)
+
+	running, err := configloader.NewFromBytes(configBytes)
+	require.NoError(t, err)
+
+	return running
+}
+
+// TestBuildDesiredNodeConfig_PreservesRunningKubernetesVersion is the core
+// regression guard for issue #4936: when no Kubernetes version is pinned, an
+// update must render the desired config at the version already running on the
+// cluster (here older than KSail's built-in default), so it reports no drift and
+// never proposes an unrequested — possibly Talos-incompatible — upgrade.
+func TestBuildDesiredNodeConfig_PreservesRunningKubernetesVersion(t *testing.T) {
+	t.Parallel()
+
+	// Cluster is running an older Kubernetes version than the built-in default.
+	running := runningAtKubernetesVersion(t, "1.32.0")
+
+	// Desired configs use the built-in default (e.g. 1.36.0); no version pinned.
+	desiredConfigs, err := talosconfigmanager.NewDefaultConfigsWithPatches(nil)
+	require.NoError(t, err)
+	require.NotEqual(t, "1.32.0", desiredConfigs.KubernetesVersion(),
+		"precondition: default must differ from the running version")
+
+	prov := talosprovisioner.NewProvisioner(desiredConfigs, nil) // nil options => unpinned
+
+	desired, err := prov.BuildDesiredNodeConfigForTest(
+		running, running, talosprovisioner.RoleControlPlane,
+	)
+	require.NoError(t, err)
+
+	diff, err := talosprovisioner.MachineConfigDiffForTest(running, desired)
+	require.NoError(t, err)
+	assert.Empty(t, diff,
+		"unpinned update must track the running Kubernetes version (no unrequested upgrade)")
+}
+
+// TestBuildDesiredNodeConfig_PinnedKubernetesVersionAppliesUpgrade verifies the
+// other half: when a Kubernetes version IS pinned, the desired config keeps that
+// version, so an intentional change relative to the running cluster is detected.
+func TestBuildDesiredNodeConfig_PinnedKubernetesVersionAppliesUpgrade(t *testing.T) {
+	t.Parallel()
+
+	running := runningAtKubernetesVersion(t, "1.32.0")
+
+	// Desired configs are built at a different version, and the user pinned it.
+	desiredConfigs, err := talosconfigmanager.NewDefaultConfigsWithPatches(nil)
+	require.NoError(t, err)
+
+	desiredConfigs, err = desiredConfigs.WithKubernetesVersion("1.33.0")
+	require.NoError(t, err)
+
+	options := talosprovisioner.NewOptions().WithKubernetesVersion("1.33.0")
+	prov := talosprovisioner.NewProvisioner(desiredConfigs, options)
+
+	desired, err := prov.BuildDesiredNodeConfigForTest(
+		running, running, talosprovisioner.RoleControlPlane,
+	)
+	require.NoError(t, err)
+
+	diff, err := talosprovisioner.MachineConfigDiffForTest(running, desired)
+	require.NoError(t, err)
+	assert.NotEmpty(t, diff, "a pinned version differing from running must be detected")
 }
 
 func TestConfigFingerprint(t *testing.T) {
@@ -226,4 +310,100 @@ func TestConfigFingerprint(t *testing.T) {
 		),
 		"different configs produce different fingerprints",
 	)
+}
+
+// workerRunningFromPatches generates a config and returns the WORKER side parsed
+// back, as an existing worker node would store and return it. Unlike a
+// control-plane config it carries the cluster CA certificate but no CA private
+// keys — the shape that triggered #4963.
+func workerRunningFromPatches(
+	t *testing.T,
+	patches ...talosconfigmanager.Patch,
+) talosconfig.Provider {
+	t.Helper()
+
+	configs, err := talosconfigmanager.NewDefaultConfigsWithPatches(patches)
+	require.NoError(t, err)
+
+	workerBytes, err := configs.Worker().Bytes()
+	require.NoError(t, err)
+
+	running, err := configloader.NewFromBytes(workerBytes)
+	require.NoError(t, err)
+
+	return running
+}
+
+// TestBuildDesiredNodeConfig_WorkerUsesControlPlaneSecrets is the regression guard
+// for issue #4963: rebuilding an existing worker's desired config must seed the
+// cluster PKI from a control-plane config, because worker configs carry no CA
+// private keys. Before the fix this failed with "align secrets for config
+// comparison: failed to create config bundle: failed to parse PEM block", silently
+// skipping in-place machine.config changes on every existing worker.
+func TestBuildDesiredNodeConfig_WorkerUsesControlPlaneSecrets(t *testing.T) {
+	t.Parallel()
+
+	patch := sysctlPatch("machine:\n  sysctls:\n    net.core.rmem_max: \"1\"\n")
+
+	configs, err := talosconfigmanager.NewDefaultConfigsWithPatches(
+		[]talosconfigmanager.Patch{patch},
+	)
+	require.NoError(t, err)
+
+	// running is the worker's own config (no CA private keys); the secrets source
+	// is a control-plane config (full PKI) — exactly how the apply path threads it.
+	workerBytes, err := configs.Worker().Bytes()
+	require.NoError(t, err)
+
+	workerRunning, err := configloader.NewFromBytes(workerBytes)
+	require.NoError(t, err)
+
+	cpBytes, err := configs.ControlPlane().Bytes()
+	require.NoError(t, err)
+
+	cpSecretsSource, err := configloader.NewFromBytes(cpBytes)
+	require.NoError(t, err)
+
+	prov := talosprovisioner.NewProvisioner(configs, nil)
+
+	desired, err := prov.BuildDesiredNodeConfigForTest(
+		workerRunning, cpSecretsSource, talosprovisioner.RoleWorker,
+	)
+	require.NoError(t, err,
+		"worker desired-config build must succeed when seeded with control-plane PKI")
+
+	desiredBytes, err := desired.Bytes()
+	require.NoError(t, err)
+	assert.Contains(t, string(desiredBytes), "type: worker",
+		"the produced config is the worker config")
+	assert.Contains(t, string(desiredBytes), sysctlRmemMax,
+		"the patched sysctl reaches the worker config")
+}
+
+// TestBuildDesiredNodeConfig_WorkerSecretsSourceIsActionable verifies that seeding
+// the rebuild from a worker config (no cluster CA private key) yields a clear,
+// named error naming the control-plane PKI requirement, rather than Talos's opaque
+// "failed to parse PEM block" (the issue's "Expected" clause).
+func TestBuildDesiredNodeConfig_WorkerSecretsSourceIsActionable(t *testing.T) {
+	t.Parallel()
+
+	patch := sysctlPatch("machine:\n  sysctls:\n    net.core.rmem_max: \"1\"\n")
+	workerRunning := workerRunningFromPatches(t, patch)
+
+	configs, err := talosconfigmanager.NewDefaultConfigsWithPatches(
+		[]talosconfigmanager.Patch{patch},
+	)
+	require.NoError(t, err)
+
+	prov := talosprovisioner.NewProvisioner(configs, nil)
+
+	// Worker config as both running and secrets source — the pre-fix bug shape.
+	_, err = prov.BuildDesiredNodeConfigForTest(
+		workerRunning, workerRunning, talosprovisioner.RoleWorker,
+	)
+	require.Error(t, err)
+	assert.NotContains(t, err.Error(), "failed to parse PEM block",
+		"must not surface Talos's opaque PEM error")
+	assert.Contains(t, err.Error(), "control-plane",
+		"error names the control-plane PKI requirement")
 }
