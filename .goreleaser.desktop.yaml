@@ -91,8 +91,13 @@ homebrew_casks:
         # (the cask download URL would 404 for `brew install`). The cd.yaml `homebrew` job marks the
         # PR ready after `publish-release` flips the release public, letting the tap merge it then.
         draft: true
-    # The cask schema has no first-class `app` field; install the bundle via a custom stanza.
+    # The cask schema has no first-class `app` or `depends_on` field; emit both via a custom stanza.
+    # `depends_on macos` satisfies `brew style` (Homebrew/OSDependsOn) for this macOS-only GUI cask;
+    # ">= :big_sur" matches the Go toolchain's minimum supported macOS. The cd.yaml `homebrew` job
+    # runs `brew style --fix`, which reorders these stanzas into canonical position before the cask
+    # lands in the tap.
     custom_block: |
+      depends_on macos: ">= :big_sur"
       app "KSail.app"
     # Symlink the CLI from inside the installed app (the canonical GUI-app-with-CLI cask pattern),
     # so `ksail-desktop` is on PATH and `ksail desktop` finds it. Without this, GoReleaser would
