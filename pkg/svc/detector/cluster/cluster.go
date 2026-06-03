@@ -380,6 +380,15 @@ func checkHetznerOwnership(
 		if server.PublicNet.IPv6.IP != nil && server.PublicNet.IPv6.IP.String() == ipAddress {
 			return true, nil
 		}
+
+		// Check private-network IPs: an IPv4-less control plane has no public IP, so
+		// its kubeconfig/talos endpoint (the ipAddress being matched here) is the
+		// node's private-network IP.
+		for _, privateNet := range server.PrivateNet {
+			if privateNet.IP != nil && privateNet.IP.String() == ipAddress {
+				return true, nil
+			}
+		}
 	}
 
 	return false, nil
