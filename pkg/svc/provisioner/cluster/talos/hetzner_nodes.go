@@ -197,9 +197,12 @@ func (p *Provisioner) collectCreatedHetznerServers(
 
 		servers = append(servers, res.server)
 
+		// hetznerNodeTalosAddress only fails when the server has neither a public
+		// IPv4 nor a private-network IP (or the address is not yet populated), so the
+		// placeholder must not claim a specific cause.
 		addr, addrErr := hetznerNodeTalosAddress(res.server)
 		if addrErr != nil {
-			addr = "no public IP"
+			addr = "address unavailable"
 		}
 
 		_, _ = fmt.Fprintf(
