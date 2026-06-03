@@ -2247,8 +2247,8 @@ github.com/siderolabs/protoenc v0.2.4 h1:D3Fpn2nQSQOhl8ZlAxijZAf7K6F8CM1uZq0afIG
 github.com/siderolabs/protoenc v0.2.4/go.mod h1:i5XLHjfv5vyi7LhQrSEo19HCA+lYtDd7CWxsoWp9XE8=
 github.com/siderolabs/talos v1.13.2 h1:8jQBnNjRmm5r4Zm2ydGyDeL3SvpT5aJa/4c1o4t55gI=
 github.com/siderolabs/talos v1.13.2/go.mod h1:GhSoVtXLzxZ/FB7QNcvbgtDZZPBBwOmA62SWkI9/EyU=
-github.com/siderolabs/talos/pkg/machinery v1.13.2 h1:S7WJhBR+M+g6JgX9ht22Mb5cTg1cgWcoqRpr6/YY/fU=
-github.com/siderolabs/talos/pkg/machinery v1.13.2/go.mod h1:70Up2PI+g6wxW4rJ8AIlZO0MfQ8gglyfqsyBv0PdnSo=
+github.com/siderolabs/talos/pkg/machinery v1.13.3 h1:+8pPT7UZUSxbmwAor81/uleQla9cItwww1Aps4XuQPI=
+github.com/siderolabs/talos/pkg/machinery v1.13.3/go.mod h1:RdU2CNuyxPLXpxVYgJlK3XxIw0QIleSR3I8T+x1cxZU=
 github.com/sigstore/cosign/v3 v3.0.6 h1:k8XaUd9pmLknHBst/v0rUGHVdB4D9cfaBmWUaMAOocE=
 github.com/sigstore/cosign/v3 v3.0.6/go.mod h1:ckLRkVecfUCYxL8isHODY9lwyKmDaRCPn00p6yFxHg0=
 github.com/sigstore/fulcio v1.8.5 h1:HYTD1/L5wlBp8JxsWxUf8hmfaNBBF/x3r3p5l6tZwbA=
