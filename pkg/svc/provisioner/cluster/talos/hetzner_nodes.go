@@ -398,18 +398,41 @@ func (p *Provisioner) waitForServerReachable(
 ) error {
 	serverIP := server.PublicNet.IPv4.IP.String()
 
-	err := retry.Constant(clusterReadinessTimeout, retry.WithUnits(longRetryInterval)).
+	err := dialTCPUntilReachable(ctx, serverIP, clusterReadinessTimeout, longRetryInterval)
+	if err != nil {
+		return fmt.Errorf(
+			"timeout waiting for %s to become reachable after install: %w",
+			server.Name,
+			err,
+		)
+	}
+
+	return nil
+}
+
+// dialTCPUntilReachable polls ip:talosAPIPort until a TCP connection succeeds or
+// the context is done, retrying every interval up to timeout. A successful dial
+// means the Talos apid service is accepting connections on the node. This is
+// shared by the Hetzner install/reboot wait (waitForServerReachable) and the
+// Docker scale-up wait (waitForNewDockerNodesReachable); each caller wraps the
+// returned error with its own server/node context.
+func dialTCPUntilReachable(
+	ctx context.Context,
+	nodeIP string,
+	timeout, interval time.Duration,
+) error {
+	err := retry.Constant(timeout, retry.WithUnits(interval)).
 		RetryWithContext(ctx, func(ctx context.Context) error {
 			dialer := &net.Dialer{Timeout: retryInterval}
 
 			conn, dialErr := dialer.DialContext(
 				ctx,
 				"tcp",
-				net.JoinHostPort(serverIP, strconv.Itoa(talosAPIPort)),
+				net.JoinHostPort(nodeIP, strconv.Itoa(talosAPIPort)),
 			)
 			if dialErr != nil {
 				return retry.ExpectedError(
-					fmt.Errorf("waiting for server to become reachable: %w", dialErr),
+					fmt.Errorf("waiting for Talos API to become reachable: %w", dialErr),
 				)
 			}
 
@@ -418,11 +441,7 @@ func (p *Provisioner) waitForServerReachable(
 			return nil
 		})
 	if err != nil {
-		return fmt.Errorf(
-			"timeout waiting for %s to become reachable after install: %w",
-			server.Name,
-			err,
-		)
+		return fmt.Errorf("dialing Talos API at %s: %w", nodeIP, err)
 	}
 
 	return nil

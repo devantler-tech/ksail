@@ -137,7 +137,66 @@ func (p *Provisioner) addDockerNodes(
 		return err
 	}
 
-	return p.collectResults(results, role, result)
+	return p.recordAndWaitForNewDockerNodes(ctx, results, specs, role, result)
+}
+
+// recordAndWaitForNewDockerNodes records each container-creation outcome, then —
+// when every container was created successfully — blocks until the new nodes'
+// Talos APIs are reachable. The reachability wait is the Docker-side analog of
+// the Hetzner waitForServersToBeReachable scale-up guard: ContainerStart returns
+// before apid is listening inside the container, so without it the update's
+// subsequent in-place config reconciliation (fetchNodeConfig) races the boot and
+// a just-started node yields "connection refused", recorded as a spurious failed
+// change.
+func (p *Provisioner) recordAndWaitForNewDockerNodes(
+	ctx context.Context,
+	results []nodeResult,
+	specs []nodeSpec,
+	role string,
+	result *clusterupdate.UpdateResult,
+) error {
+	collectErr := p.collectResults(results, role, result)
+	if collectErr != nil {
+		// A container that failed to create won't become reachable; the failure
+		// is already recorded, so surface it without waiting.
+		return collectErr
+	}
+
+	return p.waitForNewDockerNodesReachable(ctx, specs)
+}
+
+// waitForNewDockerNodesReachable blocks until every newly-created node's Talos
+// API (apid) is accepting connections, polling each node's container IP in
+// parallel (bounded by maxConcurrentContainerOps). It is a no-op for an empty
+// slice. This is the Docker-side analog of waitForServersToBeReachable; see
+// recordAndWaitForNewDockerNodes for why the wait is needed.
+func (p *Provisioner) waitForNewDockerNodesReachable(
+	ctx context.Context,
+	specs []nodeSpec,
+) error {
+	if len(specs) == 0 {
+		return nil
+	}
+
+	group, _ := errgroup.WithContext(ctx)
+	group.SetLimit(maxConcurrentContainerOps)
+
+	for _, spec := range specs {
+		group.Go(func() error {
+			p.logf("  Waiting for Talos API on %s (%s)...\n", spec.name, spec.ip)
+
+			checkErr := p.nodeReachabilityCheck(ctx, spec.ip.String())
+			if checkErr != nil {
+				return fmt.Errorf("timeout waiting for Talos API on %s: %w", spec.name, checkErr)
+			}
+
+			p.logf("  ✓ Talos API reachable on %s\n", spec.name)
+
+			return nil
+		})
+	}
+
+	return group.Wait() //nolint:wrapcheck // per-node errors are wrapped in the closure above
 }
 
 // preCalculateNodeSpecs determines the name and static IP for each node to be created.
