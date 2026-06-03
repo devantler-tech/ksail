@@ -145,8 +145,13 @@ Because KSail manages each node over its Talos API, an IPv4-less node changes ho
 
 **IPv4-less control planes.** Disabling `controlPlanePublicIPv4` makes the generated kubeconfig and
 talosconfig point at the control plane's **private** IP, so `kubectl`/`ksail` only work from inside
-the private network (or behind a load balancer / floating IP you place in front). Validation rejects
-a role left with no public IPv4, no public IPv6, **and** no private network.
+the private network (or behind a load balancer / floating IP you place in front).
+
+**Reachability.** Because an IPv4-less node is driven entirely over the private network, KSail must be
+able to route into it. If KSail can't reach an IPv4-less node's Talos API, provisioning fails with an
+actionable error pointing at the private-network-route and egress prerequisites above (rather than an
+opaque timeout). KSail also warns at config time when a role disables both IP families, since that
+node then depends on a NAT gateway for egress.
 
 **Autoscaler nodes.** Autoscaler-created nodes inherit the **worker** public-net setting
 **cluster-wide** (KSail sets `HCLOUD_PUBLIC_IPV4`/`HCLOUD_PUBLIC_IPV6` on the cluster-autoscaler).
