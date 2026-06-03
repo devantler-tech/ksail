@@ -598,6 +598,21 @@
               "type": "string",
               "description": "Path to the kustomization directory relative to sourceDirectory. When set, Flux Sync.Path is configured to this path so Flux uses the specified kustomization as the entry point instead of requiring a root kustomization.yaml."
             },
+            "flux": {
+              "properties": {
+                "operatorVersion": {
+                  "type": "string",
+                  "description": "Flux operator Helm chart version for the bootstrap seed. Empty uses KSail's pinned version. Ignored once a GitOps repo owns the flux-operator release."
+                },
+                "distributionVersion": {
+                  "type": "string",
+                  "description": "FluxInstance spec.distribution.version for the bootstrap seed. Empty uses KSail's default (2.x). A repo-declared FluxInstance takes precedence."
+                }
+              },
+              "additionalProperties": false,
+              "type": "object",
+              "description": "Flux bootstrap version pins (operator chart and FluxInstance distribution). Empty values use KSail's pinned versions; a GitOps repo that declares these becomes the steady-state owner."
+            },
             "watch": {
               "properties": {
                 "hooks": {

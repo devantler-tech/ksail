@@ -18,6 +18,7 @@ func TestChartSpec_Fields(t *testing.T) {
 
 	timeout := 3 * time.Minute
 	client := helm.NewMockInterface(t)
+	expectNoExistingFluxRelease(t, client)
 
 	// Capture the ChartSpec via an Install call so we can inspect it.
 	var capturedSpec *helm.ChartSpec
@@ -33,7 +34,7 @@ func TestChartSpec_Fields(t *testing.T) {
 		).
 		Return(nil, nil)
 
-	installer := fluxinstaller.NewInstaller(client, timeout)
+	installer := fluxinstaller.NewInstaller(client, timeout, "")
 
 	err := installer.Install(t.Context())
 	require.NoError(t, err)
@@ -75,6 +76,7 @@ func TestChartSpec_DifferentTimeouts(t *testing.T) {
 			t.Parallel()
 
 			client := helm.NewMockInterface(t)
+			expectNoExistingFluxRelease(t, client)
 
 			var capturedSpec *helm.ChartSpec
 
@@ -89,7 +91,7 @@ func TestChartSpec_DifferentTimeouts(t *testing.T) {
 				).
 				Return(nil, nil)
 
-			installer := fluxinstaller.NewInstaller(client, tt.timeout)
+			installer := fluxinstaller.NewInstaller(client, tt.timeout, "")
 			err := installer.Install(t.Context())
 			require.NoError(t, err)
 			assert.Equal(t, tt.timeout, capturedSpec.Timeout)
@@ -104,6 +106,7 @@ func TestHelmInstallOrUpgrade_ContextTimeout(t *testing.T) {
 
 	timeout := 2 * time.Minute
 	client := helm.NewMockInterface(t)
+	expectNoExistingFluxRelease(t, client)
 
 	client.EXPECT().
 		InstallOrUpgradeChart(
@@ -115,7 +118,7 @@ func TestHelmInstallOrUpgrade_ContextTimeout(t *testing.T) {
 		).
 		Return(nil, nil)
 
-	installer := fluxinstaller.NewInstaller(client, timeout)
+	installer := fluxinstaller.NewInstaller(client, timeout, "")
 
 	err := installer.Install(t.Context())
 	require.NoError(t, err)

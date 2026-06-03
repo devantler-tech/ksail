@@ -82,6 +82,35 @@ func (e *Engine) CheckWorkloadTag(
 		clusterupdate.ChangeCategoryInPlace)
 }
 
+// CheckFluxDistributionVersion compares the running FluxInstance's
+// spec.distribution.version against the desired version (resolved from a
+// repo-declared FluxInstance, spec.workload.flux.distributionVersion, or the
+// default) and appends an in-place change when they differ. Only relevant for
+// the Flux engine. The caller passes oldVersion=="" when the FluxInstance cannot
+// be introspected (e.g. it does not exist yet), which suppresses the diff so a
+// non-introspectable seed never produces a false-positive change.
+func (e *Engine) CheckFluxDistributionVersion(
+	oldVersion, newVersion string,
+	gitOpsEngine v1alpha1.GitOpsEngine,
+	result *clusterupdate.UpdateResult,
+) {
+	if gitOpsEngine != v1alpha1.GitOpsEngineFlux {
+		return
+	}
+
+	// An empty baseline means the running version could not be introspected
+	// (e.g. the FluxInstance does not exist yet); suppress the diff so a
+	// non-introspectable seed never produces a false-positive change.
+	if oldVersion == "" {
+		return
+	}
+
+	appendChange(result, "cluster.workload.flux.distributionVersion",
+		oldVersion, newVersion, "",
+		"Flux distribution version can be updated in-place by re-asserting the FluxInstance",
+		clusterupdate.ChangeCategoryInPlace)
+}
+
 // fieldRule describes how to diff a single scalar field.
 type fieldRule struct {
 	field    string

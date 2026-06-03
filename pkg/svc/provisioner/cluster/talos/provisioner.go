@@ -154,9 +154,16 @@ type Provisioner struct {
 	// talosClientFactory creates a Talos client for the given node IP.
 	// Tests can override this via export_test.go to inject a mock.
 	talosClientFactory func(ctx context.Context, ip string) (kubeconfigFetcher, error)
-	logWriter          io.Writer
-	logMu              sync.Mutex
-	componentDetector  *detector.ComponentDetector
+	// nodeReachabilityCheck reports when a node's Talos API (apid) is accepting
+	// connections at ip:talosAPIPort, retrying until it succeeds or the context is
+	// done. It gates Docker scale-up: a freshly started container returns from
+	// ContainerStart before apid is listening, so the update's in-place config
+	// reconciliation must wait for it. Defaults to a TCP dial loop; tests override
+	// it via export_test.go to avoid real network I/O.
+	nodeReachabilityCheck func(ctx context.Context, ip string) error
+	logWriter             io.Writer
+	logMu                 sync.Mutex
+	componentDetector     *detector.ComponentDetector
 	// imagePullRetry controls retry behavior for Docker image pulls.
 	// Tests can override this via WithImagePullRetryConfig to use near-zero delays.
 	imagePullRetry imagePullRetryConfig
@@ -193,6 +200,10 @@ func NewProvisioner(
 
 	prov.talosClientFactory = func(ctx context.Context, ip string) (kubeconfigFetcher, error) {
 		return prov.createTalosClient(ctx, ip)
+	}
+
+	prov.nodeReachabilityCheck = func(ctx context.Context, ip string) error {
+		return dialTCPUntilReachable(ctx, ip, talosAPIWaitTimeout, retryInterval)
 	}
 
 	return prov

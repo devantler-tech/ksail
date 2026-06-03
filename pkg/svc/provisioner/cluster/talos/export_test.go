@@ -56,6 +56,42 @@ func (p *Provisioner) RemoveDockerNodesForTest(
 	return p.removeDockerNodes(ctx, clusterName, role, count, result)
 }
 
+// WithNodeReachabilityCheckForTest overrides the per-node Talos API reachability
+// check. Full scale-up flow tests use it to avoid real TCP dials against the
+// (unroutable) static container IPs assigned to mock-created containers.
+func (p *Provisioner) WithNodeReachabilityCheckForTest(
+	fn func(ctx context.Context, ip string) error,
+) *Provisioner {
+	p.nodeReachabilityCheck = fn
+
+	return p
+}
+
+// WaitForNewDockerNodesReachableForTest exposes waitForNewDockerNodesReachable
+// for unit testing. Each IP in nodeIPs is turned into a node spec (the IP doubles
+// as the node name in log/error output).
+func (p *Provisioner) WaitForNewDockerNodesReachableForTest(
+	ctx context.Context,
+	nodeIPs []string,
+) error {
+	specs := make([]nodeSpec, len(nodeIPs))
+	for i, ip := range nodeIPs {
+		specs[i] = nodeSpec{name: ip, ip: netip.MustParseAddr(ip)}
+	}
+
+	return p.waitForNewDockerNodesReachable(ctx, specs)
+}
+
+// WaitForNewHetznerNodesReachableForTest exposes waitForNewHetznerNodesReachable
+// for unit testing.
+func (p *Provisioner) WaitForNewHetznerNodesReachableForTest(
+	ctx context.Context,
+	servers []*hcloud.Server,
+	role string,
+) error {
+	return p.waitForNewHetznerNodesReachable(ctx, servers, role)
+}
+
 // CreateOmniProviderForTest exposes createOmniProvider for unit testing.
 func CreateOmniProviderForTest(opts v1alpha1.OptionsOmni) error {
 	_, err := createOmniProvider(opts)

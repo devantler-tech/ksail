@@ -4202,14 +4202,15 @@ func (r *componentReconciler) handlerForField(
 	field string,
 ) (func(context.Context, clusterupdate.Change) error, bool) {
 	handlers := map[string]func(context.Context, clusterupdate.Change) error{
-		"cluster.cni":           r.reconcileCNI,
-		"cluster.csi":           r.reconcileCSI,
-		"cluster.metricsServer": r.reconcileMetricsServer,
-		"cluster.loadBalancer":  r.reconcileLoadBalancer,
-		"cluster.certManager":   r.reconcileCertManager,
-		"cluster.policyEngine":  r.reconcilePolicyEngine,
-		"cluster.gitOpsEngine":  r.reconcileGitOpsEngine,
-		"cluster.workload.tag":  r.reconcileWorkloadTag,
+		"cluster.cni":                               r.reconcileCNI,
+		"cluster.csi":                               r.reconcileCSI,
+		"cluster.metricsServer":                     r.reconcileMetricsServer,
+		"cluster.loadBalancer":                      r.reconcileLoadBalancer,
+		"cluster.certManager":                       r.reconcileCertManager,
+		"cluster.policyEngine":                      r.reconcilePolicyEngine,
+		"cluster.gitOpsEngine":                      r.reconcileGitOpsEngine,
+		"cluster.workload.tag":                      r.reconcileWorkloadTag,
+		"cluster.workload.flux.distributionVersion": r.reconcileFluxVersion,
 	}
 
 	if handler, ok := handlers[field]; ok {
@@ -4470,7 +4471,11 @@ func (r *componentReconciler) uninstallGitOpsEngine(
 			return fmt.Errorf("failed to create helm client for Flux uninstall: %w", err)
 		}
 
-		fluxInst := r.factories.Flux(helmClient, defaultReconcileTimeout)
+		fluxInst := r.factories.Flux(
+			helmClient,
+			defaultReconcileTimeout,
+			r.clusterCfg.Spec.Workload.Flux.OperatorVersion,
+		)
 
 		err = fluxInst.Uninstall(ctx)
 		if err != nil {
@@ -4489,6 +4494,42 @@ func (r *componentReconciler) uninstallGitOpsEngine(
 	default:
 		return nil
 	}
+}
+
+// reconcileFluxVersion re-asserts the FluxInstance so a changed
+// spec.workload.flux.distributionVersion (or a newly repo-declared FluxInstance)
+// takes effect in-place on cluster update. Flux only — ArgoCD has no equivalent
+// distribution version.
+func (r *componentReconciler) reconcileFluxVersion(
+	ctx context.Context,
+	_ clusterupdate.Change,
+) error {
+	if r.clusterCfg.Spec.Cluster.GitOpsEngine != v1alpha1.GitOpsEngineFlux {
+		return nil
+	}
+
+	kubeconfigPath, err := kubeconfig.GetKubeconfigPathFromConfig(r.clusterCfg)
+	if err != nil {
+		return fmt.Errorf("failed to get kubeconfig path: %w", err)
+	}
+
+	registryHost, err := setup.ResolveRegistryHostForCluster(ctx, r.clusterCfg, r.clusterName)
+	if err != nil {
+		return fmt.Errorf("resolve registry host for flux: %w", err)
+	}
+
+	err = fluxinstaller.SetupInstance(
+		ctx,
+		kubeconfigPath,
+		r.clusterCfg,
+		r.clusterName,
+		registryHost,
+	)
+	if err != nil {
+		return fmt.Errorf("setup flux instance: %w", err)
+	}
+
+	return nil
 }
 
 // reconcileWorkloadTag updates the GitOps sync resource (FluxInstance or ArgoCD
@@ -6234,7 +6275,7 @@ func SetFluxInstallerFactoryForTests(
 ) func() {
 	return overrideInstallerFactory(func(f *setup.InstallerFactories) {
 		// Wrap the simplified test factory to match the Flux factory signature
-		f.Flux = func(_ helm.Interface, _ time.Duration) installer.Installer {
+		f.Flux = func(_ helm.Interface, _ time.Duration, _ string) installer.Installer {
 			inst, _ := factory(nil) // clusterCfg not used in test factory
 
 			return inst
@@ -7317,6 +7358,9 @@ func computeUpdateDiff(
 	// Check for workload tag drift (stale GitOps sync ref)
 	checkWorkloadTagDrift(cmd, ctx, diffEngine, diff)
 
+	// Check for Flux distribution-version drift (spec.workload.flux.distributionVersion)
+	checkFluxDistributionVersionDrift(cmd, ctx, diffEngine, diff)
+
 	return currentSpec, diff, nil
 }
 
@@ -7389,6 +7433,9 @@ func computeSpecOnlyDiff(
 
 	// Check for workload tag drift (stale GitOps sync ref)
 	checkWorkloadTagDrift(cmd, ctx, diffEngine, diff)
+
+	// Check for Flux distribution-version drift (spec.workload.flux.distributionVersion)
+	checkFluxDistributionVersionDrift(cmd, ctx, diffEngine, diff)
 
 	return diff
 }
@@ -7485,6 +7532,55 @@ func checkWorkloadTagDrift(
 	}
 
 	diffEngine.CheckWorkloadTag(currentTag, desiredTag, gitOpsEngine, diff)
+}
+
+// checkFluxDistributionVersionDrift queries the running FluxInstance for its
+// spec.distribution.version and compares it against the version KSail would seed
+// (from spec.workload.flux.distributionVersion or a repo-declared FluxInstance).
+// If they differ, an in-place change is appended so cluster update re-asserts the
+// FluxInstance. Flux only. Errors during cluster queries are logged as warnings
+// and skipped — they should not block the rest of the update.
+func checkFluxDistributionVersionDrift(
+	cmd *cobra.Command,
+	ctx *localregistry.Context,
+	diffEngine *specdiff.Engine,
+	diff *clusterupdate.UpdateResult,
+) {
+	gitOpsEngine := ctx.ClusterCfg.Spec.Cluster.GitOpsEngine
+	if gitOpsEngine != v1alpha1.GitOpsEngineFlux {
+		return
+	}
+
+	kubeconfigPath, err := kubeconfig.GetKubeconfigPathFromConfig(ctx.ClusterCfg)
+	if err != nil {
+		notify.Warningf(cmd.OutOrStderr(),
+			"Cannot resolve kubeconfig path for Flux distribution-version drift detection: %v", err)
+
+		return
+	}
+
+	instance, err := fluxinstaller.GetCurrentFluxInstance(cmd.Context(), kubeconfigPath)
+	if err != nil {
+		notify.Warningf(cmd.OutOrStderr(),
+			"Cannot query current Flux distribution version for drift detection: %v", err)
+
+		return
+	}
+
+	// A missing FluxInstance (or an empty version) means there is nothing to
+	// compare against yet — no drift.
+	if instance == nil || instance.Spec.Distribution.Version == "" {
+		return
+	}
+
+	desiredVersion := fluxinstaller.ResolveDesiredDistributionVersion(ctx.ClusterCfg)
+
+	diffEngine.CheckFluxDistributionVersion(
+		instance.Spec.Distribution.Version,
+		desiredVersion,
+		gitOpsEngine,
+		diff,
+	)
 }
 
 // getCurrentArgoCDTargetRevision queries the ArgoCD Application for its current

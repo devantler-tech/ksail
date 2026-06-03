@@ -144,7 +144,13 @@ func (p *Provisioner) launchHetznerScaleCreation(
 	return results, nil
 }
 
-// configureNewHetznerNodes waits for Talos API on new servers and applies config.
+// configureNewHetznerNodes waits for the Talos API on new servers, applies their
+// role config, then blocks until the nodes finish installing and reboot. Applying
+// config triggers a Talos install-to-disk and automatic reboot during which the
+// Talos API is unreachable; waiting before returning keeps scale-up consistent with
+// initial create and rolling replace, and prevents the in-place config
+// reconciliation that runs next in Update from racing the reboot (the cause of the
+// spurious "connection refused" failure when fetching a just-created node's config).
 func (p *Provisioner) configureNewHetznerNodes(
 	ctx context.Context,
 	servers []*hcloud.Server,
@@ -200,6 +206,35 @@ func (p *Provisioner) configureNewHetznerNodes(
 
 			return fmt.Errorf("failed to apply config to %s: %w", res.serverName, res.err)
 		}
+	}
+
+	// The config just applied triggers a Talos install-to-disk and an automatic
+	// reboot on each new node; block until they come back so the in-place config
+	// reconciliation that runs next in Update does not race the reboot.
+	return p.waitForNewHetznerNodesReachable(ctx, servers, role)
+}
+
+// waitForNewHetznerNodesReachable blocks until newly created nodes finish
+// installing Talos to disk and reboot, so their Talos API is reachable again.
+//
+// Applying machine config to a freshly created node triggers an install and an
+// automatic reboot; during that window the node's Talos API refuses connections.
+// Returning before the nodes recover lets the in-place config reconciliation that
+// runs next in Update (applyInPlaceConfigChanges) race the reboot and record a
+// spurious "connection refused" failure when it fetches the new node's running
+// config. Mirrors configureAndWaitReplacement (rolling replace) and
+// detachOrWaitForReboot (initial create), which already wait for this reboot.
+func (p *Provisioner) waitForNewHetznerNodesReachable(
+	ctx context.Context,
+	servers []*hcloud.Server,
+	role string,
+) error {
+	_, _ = fmt.Fprintf(p.logWriter,
+		"  Waiting for %d new %s node(s) to install and reboot...\n", len(servers), role)
+
+	err := p.waitForServersToBeReachable(ctx, servers)
+	if err != nil {
+		return fmt.Errorf("waiting for new %s node(s) to become reachable: %w", role, err)
 	}
 
 	return nil
