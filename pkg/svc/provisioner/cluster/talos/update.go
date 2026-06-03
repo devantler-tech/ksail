@@ -938,7 +938,10 @@ func (p *Provisioner) getHetznerNodesByRole(
 			continue
 		}
 
-		ip := server.PublicNet.IPv4.IP.String()
+		ip, addrErr := hetznerNodeTalosAddress(server)
+		if addrErr != nil {
+			continue
+		}
 
 		nodes = append(nodes, nodeWithRole{IP: ip, Role: node.Role})
 	}

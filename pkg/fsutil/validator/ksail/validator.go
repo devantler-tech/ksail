@@ -105,6 +105,7 @@ func (v *Validator) Validate(config *v1alpha1.Cluster) *validator.ValidationResu
 	v.validateRegistry(config, result)
 	v.validateFlux(config, result)
 	v.validateAutoscalerConfig(config, result)
+	v.validatePublicNet(config, result)
 
 	return result
 }
@@ -609,4 +610,63 @@ func (v *Validator) validateAutoscalerConfig(
 			FixSuggestion: "Review spec.cluster.autoscaler.node configuration",
 		})
 	}
+}
+
+// validatePublicNet validates the Hetzner per-role public-net (IPv4/IPv6) toggles.
+// It errors on a structurally unreachable combination and warns when a role is left
+// with no public networking (valid only with NAT-gateway egress on the private
+// network and KSail running with private-network reachability).
+func (v *Validator) validatePublicNet(
+	config *v1alpha1.Cluster,
+	result *validator.ValidationResult,
+) {
+	if config.Spec.Cluster.Provider != v1alpha1.ProviderHetzner {
+		return
+	}
+
+	hetzner := &config.Spec.Provider.Hetzner
+
+	// KSail always provisions a private network for Hetzner clusters.
+	const hasPrivateNetwork = true
+
+	err := v1alpha1.ValidateHetznerPublicNet(hetzner, hasPrivateNetwork)
+	if err != nil {
+		result.AddError(validator.ValidationError{
+			Field:         "spec.provider.hetzner",
+			Message:       err.Error(),
+			FixSuggestion: "Enable a public IP family or attach the node to a private network",
+		})
+	}
+
+	v.warnFullyPrivateRole(
+		"worker",
+		!hetzner.WorkerIPv4Enabled() && !hetzner.WorkerIPv6Enabled(),
+		result,
+	)
+	v.warnFullyPrivateRole(
+		"control-plane",
+		!hetzner.ControlPlaneIPv4Enabled() && !hetzner.ControlPlaneIPv6Enabled(),
+		result,
+	)
+}
+
+// warnFullyPrivateRole adds a warning when a Hetzner node role has no public IPv4 or
+// IPv6. Such nodes only work when the private network provides egress (a NAT gateway)
+// and KSail can reach the node's Talos API over the private network.
+func (v *Validator) warnFullyPrivateRole(
+	role string,
+	fullyPrivate bool,
+	result *validator.ValidationResult,
+) {
+	if !fullyPrivate {
+		return
+	}
+
+	result.AddWarning(validator.ValidationError{
+		Field: "spec.provider.hetzner",
+		Message: role + " nodes have no public IPv4 or IPv6; they require a NAT gateway " +
+			"on the private network for egress (image pulls, Hetzner API, cluster join), " +
+			"and KSail must run with private-network reachability to manage them",
+		FixSuggestion: "Provision a NAT gateway on the private network, or enable a public IP family",
+	})
 }

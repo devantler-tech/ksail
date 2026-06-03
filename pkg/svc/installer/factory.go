@@ -69,7 +69,7 @@ func (f *Factory) CreateInstallersForConfig(cfg *v1alpha1.Cluster) (map[string]I
 	f.addCSIInstallers(installers, cfg, haEnabled)
 	f.addLoadBalancerInstaller(installers, cfg, haEnabled)
 
-	err := f.addClusterAutoscalerInstaller(installers, spec, haEnabled)
+	err := f.addClusterAutoscalerInstaller(installers, spec, cfg.Spec.Provider.Hetzner, haEnabled)
 	if err != nil {
 		return nil, err
 	}
@@ -361,14 +361,18 @@ func (f *Factory) needsHcloudCCM(spec v1alpha1.ClusterSpec) bool {
 func (f *Factory) addClusterAutoscalerInstaller(
 	installers map[string]Installer,
 	spec v1alpha1.ClusterSpec,
+	hetzner v1alpha1.OptionsHetzner,
 	haEnabled bool,
 ) error {
 	if !f.needsClusterAutoscaler(spec) {
 		return nil
 	}
 
+	// Autoscaler-created nodes are workers; they inherit the worker public-net
+	// setting cluster-wide (the Hetzner cluster-autoscaler has no per-pool knob).
 	inst, err := clusterautoscalerinstaller.NewInstaller(
 		f.helmClient, f.timeout, spec.Autoscaler.Node, haEnabled,
+		hetzner.WorkerIPv4Enabled(), hetzner.WorkerIPv6Enabled(),
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create cluster-autoscaler installer: %w", err)

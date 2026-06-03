@@ -528,6 +528,18 @@ spec:
                         items:
                           type: string
                         type: array
+                      controlPlanePublicIPv4:
+                        description: |-
+                          ControlPlanePublicIPv4 controls whether control-plane nodes are assigned a public IPv4.
+                          nil (default) or true assigns a public IPv4 (billed). false provisions IPv4-less control
+                          planes; the kube/talos endpoint is then derived from the private-network IP so the cluster
+                          is reachable only from inside the private network.
+                        type: boolean
+                      controlPlanePublicIPv6:
+                        description: |-
+                          ControlPlanePublicIPv6 controls whether control-plane nodes are assigned a public IPv6.
+                          nil (default) or true assigns a public IPv6 (free on Hetzner). false disables it.
+                        type: boolean
                       controlPlaneServerType:
                         description: |-
                           ControlPlaneServerType is the Hetzner server type for control-plane nodes.
@@ -606,6 +618,19 @@ spec:
                           TokenEnvVar is the environment variable containing the Hetzner API token.
                           Defaults to "HCLOUD_TOKEN".
                         type: string
+                      workerPublicIPv4:
+                        description: |-
+                          WorkerPublicIPv4 controls whether worker nodes are assigned a public IPv4 address.
+                          nil (default) or true assigns a public IPv4 (billed by Hetzner). false provisions
+                          IPv4-less workers; ksail then reaches their Talos API over the private network — which
+                          requires ksail to have private-network reachability — and the nodes need egress via a
+                          NAT gateway (or working IPv6) for image pulls, the Hetzner API, and cluster join.
+                        type: boolean
+                      workerPublicIPv6:
+                        description: |-
+                          WorkerPublicIPv6 controls whether worker nodes are assigned a public IPv6 address.
+                          nil (default) or true assigns a public IPv6 (free on Hetzner). false disables it.
+                        type: boolean
                       workerServerType:
                         description: |-
                           WorkerServerType is the Hetzner server type for worker nodes.

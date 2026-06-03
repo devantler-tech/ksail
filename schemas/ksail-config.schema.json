@@ -473,6 +473,22 @@
                   "type": "array",
                   "description": "CIDR blocks allowed to access the Kubernetes API and Talos API on control-plane nodes. When empty defaults to 0.0.0.0/0 and ::/0 (open to all IPv4 and IPv6)."
                 },
+                "workerPublicIPv4": {
+                  "type": "boolean",
+                  "description": "Assign a public IPv4 to worker nodes. Defaults to true. Set false for IPv4-less workers reached over the private network (requires private-network reachability and NAT egress)."
+                },
+                "workerPublicIPv6": {
+                  "type": "boolean",
+                  "description": "Assign a public IPv6 to worker nodes. Defaults to true."
+                },
+                "controlPlanePublicIPv4": {
+                  "type": "boolean",
+                  "description": "Assign a public IPv4 to control-plane nodes. Defaults to true. Set false for IPv4-less control planes whose endpoint is the private-network IP (cluster reachable only from inside the private network)."
+                },
+                "controlPlanePublicIPv6": {
+                  "type": "boolean",
+                  "description": "Assign a public IPv6 to control-plane nodes. Defaults to true."
+                },
                 "autoscalerNodePoolNames": {
                   "items": {
                     "type": "string"

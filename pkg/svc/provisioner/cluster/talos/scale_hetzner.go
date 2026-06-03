@@ -99,6 +99,8 @@ func (p *Provisioner) launchHetznerScaleCreation(
 ) ([]hetznerNodeCreationResult, error) {
 	results := make([]hetznerNodeCreationResult, count)
 
+	enableIPv4, enableIPv6 := p.hetznerPublicNetForRole(role)
+
 	group, _ := errgroup.WithContext(ctx)
 	group.SetLimit(maxConcurrentHetznerOps)
 
@@ -123,6 +125,8 @@ func (p *Provisioner) launchHetznerScaleCreation(
 					PlacementGroupID: infra.PlacementGroupID,
 					SSHKeyID:         infra.SSHKeyID,
 					FirewallIDs:      []int64{infra.FirewallID},
+					EnableIPv4:       enableIPv4,
+					EnableIPv6:       enableIPv6,
 				}, retryOpts)
 
 				results[nodeIdx] = hetznerNodeCreationResult{
@@ -262,8 +266,10 @@ func (p *Provisioner) removeHetznerNodes(
 
 		// Best-effort etcd cleanup for control-plane nodes
 		if role == RoleControlPlane {
-			serverIP := server.PublicNet.IPv4.IP.String()
-			p.etcdCleanupBeforeRemoval(ctx, serverIP)
+			serverIP, addrErr := hetznerNodeTalosAddress(server)
+			if addrErr == nil {
+				p.etcdCleanupBeforeRemoval(ctx, serverIP)
+			}
 		}
 
 		err = p.deleteHetznerServer(ctx, hzProvider, server)
@@ -367,6 +373,25 @@ func (p *Provisioner) hetznerServerType(role string) string {
 	}
 
 	return p.hetznerOpts.WorkerServerType
+}
+
+// hetznerPublicNetForRole returns the public IPv4/IPv6 toggles for the given role as
+// *bool values suitable for hetzner.CreateServerOpts. Nil toggles (the result when no
+// Hetzner options are configured) default to a public IP, matching Hetzner's behavior.
+func (p *Provisioner) hetznerPublicNetForRole(role string) (*bool, *bool) {
+	if p.hetznerOpts == nil {
+		return nil, nil
+	}
+
+	ipv4 := p.hetznerOpts.WorkerIPv4Enabled()
+	ipv6 := p.hetznerOpts.WorkerIPv6Enabled()
+
+	if role == RoleControlPlane {
+		ipv4 = p.hetznerOpts.ControlPlaneIPv4Enabled()
+		ipv6 = p.hetznerOpts.ControlPlaneIPv6Enabled()
+	}
+
+	return &ipv4, &ipv6
 }
 
 // hetznerRetryOpts builds retry options from Hetzner configuration.

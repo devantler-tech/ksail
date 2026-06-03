@@ -569,3 +569,27 @@ func ValidateNestedCIDRs(podCIDR, serviceCIDR string) error {
 
 	return nil
 }
+
+// ValidateHetznerPublicNet rejects a Hetzner node configuration that would leave a
+// role unreachable and unable to egress: no public IPv4, no public IPv6, and no
+// private network. KSail always provisions a private network for Hetzner clusters,
+// so hasPrivateNetwork is normally true and this guard is defensive — it surfaces a
+// clear error instead of an opaque provisioning failure should that ever change.
+// Disabling public IPv4 (or even both families) while a private network is present
+// is a supported configuration: KSail reaches such nodes over the private network and
+// the operator is responsible for egress (NAT gateway or working IPv6).
+func ValidateHetznerPublicNet(hetzner *OptionsHetzner, hasPrivateNetwork bool) error {
+	if hetzner == nil || hasPrivateNetwork {
+		return nil
+	}
+
+	if !hetzner.WorkerIPv4Enabled() && !hetzner.WorkerIPv6Enabled() {
+		return fmt.Errorf("%w: worker", ErrHetznerNodeUnreachable)
+	}
+
+	if !hetzner.ControlPlaneIPv4Enabled() && !hetzner.ControlPlaneIPv6Enabled() {
+		return fmt.Errorf("%w: control-plane", ErrHetznerNodeUnreachable)
+	}
+
+	return nil
+}

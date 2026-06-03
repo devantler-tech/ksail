@@ -132,6 +132,8 @@ func (p *Provisioner) createHetznerNodes(
 		retryOpts.AllowPlacementFallback = p.hetznerOpts.PlacementGroupFallbackToNone
 	}
 
+	enableIPv4, enableIPv6 := p.hetznerPublicNetForRole(opts.Role)
+
 	results := make([]hetznerNodeCreationResult, opts.Count)
 
 	group, _ := errgroup.WithContext(ctx)
@@ -157,6 +159,8 @@ func (p *Provisioner) createHetznerNodes(
 					PlacementGroupID: infra.PlacementGroupID,
 					SSHKeyID:         infra.SSHKeyID,
 					FirewallIDs:      []int64{infra.FirewallID},
+					EnableIPv4:       enableIPv4,
+					EnableIPv6:       enableIPv6,
 				}, retryOpts)
 
 				results[nodeIndex] = hetznerNodeCreationResult{
@@ -193,12 +197,17 @@ func (p *Provisioner) collectCreatedHetznerServers(
 
 		servers = append(servers, res.server)
 
+		addr, addrErr := hetznerNodeTalosAddress(res.server)
+		if addrErr != nil {
+			addr = "no public IP"
+		}
+
 		_, _ = fmt.Fprintf(
 			p.logWriter,
 			"  ✓ %s node %s created (IP: %s)\n",
 			role,
 			res.name,
-			res.server.PublicNet.IPv4.IP.String(),
+			addr,
 		)
 	}
 
@@ -230,7 +239,11 @@ func (p *Provisioner) waitForHetznerTalosAPI(
 	servers []*hcloud.Server,
 ) error {
 	return runParallelOnServers(ctx, servers, len(servers), func(server *hcloud.Server) error {
-		serverIP := server.PublicNet.IPv4.IP.String()
+		serverIP, addrErr := hetznerNodeTalosAddress(server)
+		if addrErr != nil {
+			return addrErr
+		}
+
 		endpoint := fmt.Sprintf("%s:%d", serverIP, talosAPIPort)
 
 		p.logf("  Waiting for Talos API on %s (%s)...\n", server.Name, endpoint)
@@ -396,7 +409,10 @@ func (p *Provisioner) waitForServerReachable(
 	ctx context.Context,
 	server *hcloud.Server,
 ) error {
-	serverIP := server.PublicNet.IPv4.IP.String()
+	serverIP, addrErr := hetznerNodeTalosAddress(server)
+	if addrErr != nil {
+		return addrErr
+	}
 
 	err := dialTCPUntilReachable(ctx, serverIP, clusterReadinessTimeout, longRetryInterval)
 	if err != nil {
@@ -482,7 +498,10 @@ func (p *Provisioner) applyConfigToNode(
 	server *hcloud.Server,
 	config talosconfig.Provider,
 ) error {
-	serverIP := server.PublicNet.IPv4.IP.String()
+	serverIP, addrErr := hetznerNodeTalosAddress(server)
+	if addrErr != nil {
+		return addrErr
+	}
 
 	p.logf("  Applying config to %s (%s)...\n", server.Name, serverIP)
 
