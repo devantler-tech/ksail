@@ -149,6 +149,29 @@ spec:
 			expectFound: false,
 		},
 		{
+			name: "ignores FluxInstance in a different namespace",
+			setupFiles: func(t *testing.T, dir string) {
+				t.Helper()
+
+				content := `apiVersion: fluxcd.controlplane.io/v1
+kind: FluxInstance
+metadata:
+  name: flux
+  namespace: other-namespace
+spec:
+  distribution:
+    version: "2.x"
+`
+				err := os.WriteFile(
+					filepath.Join(dir, "wrong-ns.yaml"),
+					[]byte(content),
+					testFilePermissions,
+				)
+				require.NoError(t, err)
+			},
+			expectFound: false,
+		},
+		{
 			name: "finds FluxInstance in subdirectory",
 			setupFiles: func(t *testing.T, dir string) {
 				t.Helper()

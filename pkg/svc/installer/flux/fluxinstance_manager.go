@@ -362,12 +362,13 @@ func repoFluxDistribution(clusterCfg *v1alpha1.Cluster) (gitops.FluxDistribution
 		sourceDir = v1alpha1.DefaultSourceDirectory
 	}
 
-	// Canonicalize for symlink safety; fall back to the raw path when it cannot
-	// be resolved (e.g. the directory does not exist yet) — the detector tolerates
-	// a missing directory and returns an empty result.
+	// Canonicalize for symlink safety. If the path cannot be resolved, skip repo
+	// detection (no override) rather than walking a non-canonical path — falling
+	// back to the raw path would reintroduce the symlink-escape risk this guards
+	// against.
 	canonical, err := fsutil.EvalCanonicalPath(sourceDir)
 	if err != nil {
-		canonical = sourceDir
+		return gitops.FluxDistribution{}, nil //nolint:nilerr // unresolved path => skip detection
 	}
 
 	dist, err := gitops.NewCRDetector(canonical).FindFluxInstanceDistribution()

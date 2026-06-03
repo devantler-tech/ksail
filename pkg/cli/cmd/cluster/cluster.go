@@ -7559,10 +7559,7 @@ func checkFluxDistributionVersionDrift(
 		return
 	}
 
-	currentVersion, err := fluxinstaller.GetCurrentDistributionVersion(
-		cmd.Context(),
-		kubeconfigPath,
-	)
+	instance, err := fluxinstaller.GetCurrentFluxInstance(cmd.Context(), kubeconfigPath)
 	if err != nil {
 		notify.Warningf(cmd.OutOrStderr(),
 			"Cannot query current Flux distribution version for drift detection: %v", err)
@@ -7570,14 +7567,20 @@ func checkFluxDistributionVersionDrift(
 		return
 	}
 
-	// Empty current version means the FluxInstance does not exist yet — no drift.
-	if currentVersion == "" {
+	// A missing FluxInstance (or an empty version) means there is nothing to
+	// compare against yet — no drift.
+	if instance == nil || instance.Spec.Distribution.Version == "" {
 		return
 	}
 
 	desiredVersion := fluxinstaller.ResolveDesiredDistributionVersion(ctx.ClusterCfg)
 
-	diffEngine.CheckFluxDistributionVersion(currentVersion, desiredVersion, gitOpsEngine, diff)
+	diffEngine.CheckFluxDistributionVersion(
+		instance.Spec.Distribution.Version,
+		desiredVersion,
+		gitOpsEngine,
+		diff,
+	)
 }
 
 // getCurrentArgoCDTargetRevision queries the ArgoCD Application for its current

@@ -98,6 +98,13 @@ func (e *Engine) CheckFluxDistributionVersion(
 		return
 	}
 
+	// An empty baseline means the running version could not be introspected
+	// (e.g. the FluxInstance does not exist yet); suppress the diff so a
+	// non-introspectable seed never produces a false-positive change.
+	if oldVersion == "" {
+		return
+	}
+
 	appendChange(result, "cluster.workload.flux.distributionVersion",
 		oldVersion, newVersion, "",
 		"Flux distribution version can be updated in-place by re-asserting the FluxInstance",

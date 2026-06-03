@@ -888,7 +888,7 @@ func TestWaitForFluxInstanceReady_ReadyFalse(t *testing.T) {
 }
 
 //nolint:paralleltest // Cannot run in parallel due to global mock
-func TestGetCurrentDistributionVersion(t *testing.T) {
+func TestGetCurrentFluxInstance(t *testing.T) {
 	mockClient := &mockFluxClient{
 		getFunc: func(
 			_ context.Context,
@@ -915,14 +915,15 @@ func TestGetCurrentDistributionVersion(t *testing.T) {
 	})
 	defer restoreConfig()
 
-	version, err := fluxinstaller.GetCurrentDistributionVersion(context.Background(), "kubeconfig")
+	instance, err := fluxinstaller.GetCurrentFluxInstance(context.Background(), "kubeconfig")
 
 	require.NoError(t, err)
-	assert.Equal(t, "2.8.x", version)
+	require.NotNil(t, instance)
+	assert.Equal(t, "2.8.x", instance.Spec.Distribution.Version)
 }
 
 //nolint:paralleltest // Cannot run in parallel due to global mock
-func TestGetCurrentDistributionVersion_NotFound(t *testing.T) {
+func TestGetCurrentFluxInstance_NotFound(t *testing.T) {
 	mockClient := &mockFluxClient{
 		getFunc: func(
 			_ context.Context,
@@ -944,10 +945,10 @@ func TestGetCurrentDistributionVersion_NotFound(t *testing.T) {
 	})
 	defer restoreConfig()
 
-	version, err := fluxinstaller.GetCurrentDistributionVersion(context.Background(), "kubeconfig")
+	instance, err := fluxinstaller.GetCurrentFluxInstance(context.Background(), "kubeconfig")
 
 	require.NoError(t, err)
-	assert.Empty(t, version)
+	assert.Nil(t, instance)
 }
 
 //nolint:paralleltest // Cannot run in parallel due to global mock

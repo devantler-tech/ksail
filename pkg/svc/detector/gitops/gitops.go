@@ -61,7 +61,12 @@ func NewCRDetector(sourceDir string) *CRDetector {
 // FindFluxInstance searches for an existing KSail-managed FluxInstance CR.
 // Returns the file path if found, empty string otherwise.
 func (d *CRDetector) FindFluxInstance() (string, error) {
-	return d.findCR(FluxInstanceAPIVersion, FluxInstanceKind, FluxInstanceDefaultName)
+	return d.findCR(
+		FluxInstanceAPIVersion,
+		FluxInstanceKind,
+		FluxInstanceDefaultName,
+		FluxInstanceNamespace,
+	)
 }
 
 // FluxDistribution captures the spec.distribution block of a repo-declared
@@ -120,6 +125,7 @@ func (d *CRDetector) FindFluxInstanceDistribution() (FluxDistribution, error) {
 			FluxInstanceAPIVersion,
 			FluxInstanceKind,
 			FluxInstanceDefaultName,
+			FluxInstanceNamespace,
 		) {
 			continue
 		}
@@ -147,11 +153,14 @@ func (d *CRDetector) FindArgoCDApplication() (string, error) {
 		ArgoCDApplicationAPIVersion,
 		ArgoCDApplicationKind,
 		ArgoCDApplicationDefaultName,
+		ArgoCDNamespace,
 	)
 }
 
 // findCR searches recursively for a CR matching the given criteria.
-func (d *CRDetector) findCR(apiVersion, kind, defaultName string) (string, error) {
+func (d *CRDetector) findCR(
+	apiVersion, kind, defaultName, defaultNamespace string,
+) (string, error) {
 	_, err := os.Stat(d.sourceDir)
 	if os.IsNotExist(err) {
 		return "", nil
@@ -172,7 +181,7 @@ func (d *CRDetector) findCR(apiVersion, kind, defaultName string) (string, error
 			return nil
 		}
 
-		match, matchErr := d.checkFile(path, apiVersion, kind, defaultName)
+		match, matchErr := d.checkFile(path, apiVersion, kind, defaultName, defaultNamespace)
 		if matchErr != nil {
 			// Skip files that can't be parsed
 			return nil //nolint:nilerr // intentionally skip unparseable files
@@ -194,7 +203,9 @@ func (d *CRDetector) findCR(apiVersion, kind, defaultName string) (string, error
 }
 
 // checkFile checks if a file contains a matching CR.
-func (d *CRDetector) checkFile(path, apiVersion, kind, defaultName string) (bool, error) {
+func (d *CRDetector) checkFile(
+	path, apiVersion, kind, defaultName, defaultNamespace string,
+) (bool, error) {
 	// G304: path is validated via WalkDir starting from trusted sourceDir
 	data, err := os.ReadFile(path) //nolint:gosec // path is validated via WalkDir
 	if err != nil {
@@ -215,7 +226,7 @@ func (d *CRDetector) checkFile(path, apiVersion, kind, defaultName string) (bool
 			continue
 		}
 
-		if d.isMatchingCR(resource, apiVersion, kind, defaultName) {
+		if d.isMatchingCR(resource, apiVersion, kind, defaultName, defaultNamespace) {
 			return true, nil
 		}
 	}
@@ -226,10 +237,19 @@ func (d *CRDetector) checkFile(path, apiVersion, kind, defaultName string) (bool
 // isMatchingCR checks if a resource matches the detection criteria.
 func (d *CRDetector) isMatchingCR(
 	resource k8sResource,
-	apiVersion, kind, defaultName string,
+	apiVersion, kind, defaultName, defaultNamespace string,
 ) bool {
 	// Must match apiVersion and kind
 	if resource.APIVersion != apiVersion || resource.Kind != kind {
+		return false
+	}
+
+	// Must live in the namespace KSail manages for this resource type. An
+	// explicit namespace that differs is rejected so a same-named CR in another
+	// namespace (e.g. a FluxInstance named "flux" outside flux-system) is not
+	// mistaken for the KSail-managed one. An omitted namespace is tolerated
+	// (the manifest may rely on its Kustomization to set it).
+	if resource.Metadata.Namespace != "" && resource.Metadata.Namespace != defaultNamespace {
 		return false
 	}
 

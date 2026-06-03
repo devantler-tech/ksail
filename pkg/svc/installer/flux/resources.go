@@ -248,24 +248,25 @@ func WaitForFluxReady(
 	return nil
 }
 
-// GetCurrentSyncRef queries the running FluxInstance in the cluster and returns
-// its spec.sync.ref value. Returns empty string if the FluxInstance does not exist
-// or has no sync configuration.
+// GetCurrentFluxInstance loads the running FluxInstance (flux/flux-system) from
+// the cluster. Returns (nil, nil) when it does not exist. Callers read whichever
+// spec fields they need (e.g. sync.ref via GetCurrentSyncRef, or
+// distribution.version for drift detection on cluster update).
 //
 //nolint:contextcheck // nil-guard consistent with SetupInstance/WaitForFluxReady
-func GetCurrentSyncRef(ctx context.Context, kubeconfig string) (string, error) {
+func GetCurrentFluxInstance(ctx context.Context, kubeconfig string) (*FluxInstance, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 
 	restConfig, err := loadRESTConfig(kubeconfig)
 	if err != nil {
-		return "", fmt.Errorf("build REST config: %w", err)
+		return nil, fmt.Errorf("build REST config: %w", err)
 	}
 
 	fluxClient, err := newFluxResourcesClient(restConfig)
 	if err != nil {
-		return "", fmt.Errorf("create flux client: %w", err)
+		return nil, fmt.Errorf("create flux client: %w", err)
 	}
 
 	instance := &FluxInstance{}
@@ -277,56 +278,29 @@ func GetCurrentSyncRef(ctx context.Context, kubeconfig string) (string, error) {
 	err = fluxClient.Get(ctx, key, instance)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			return "", nil
+			return nil, nil //nolint:nilnil // (nil, nil) signals "FluxInstance absent"
 		}
 
-		return "", fmt.Errorf("get FluxInstance %s/%s: %w", key.Namespace, key.Name, err)
+		return nil, fmt.Errorf("get FluxInstance %s/%s: %w", key.Namespace, key.Name, err)
 	}
 
-	if instance.Spec.Sync != nil {
+	return instance, nil
+}
+
+// GetCurrentSyncRef queries the running FluxInstance in the cluster and returns
+// its spec.sync.ref value. Returns empty string if the FluxInstance does not exist
+// or has no sync configuration.
+func GetCurrentSyncRef(ctx context.Context, kubeconfig string) (string, error) {
+	instance, err := GetCurrentFluxInstance(ctx, kubeconfig)
+	if err != nil {
+		return "", err
+	}
+
+	if instance != nil && instance.Spec.Sync != nil {
 		return instance.Spec.Sync.Ref, nil
 	}
 
 	return "", nil
-}
-
-// GetCurrentDistributionVersion queries the running FluxInstance in the cluster
-// and returns its spec.distribution.version. Returns an empty string if the
-// FluxInstance does not exist. Used to detect distribution-version drift on
-// cluster update.
-//
-//nolint:contextcheck // nil-guard consistent with GetCurrentSyncRef
-func GetCurrentDistributionVersion(ctx context.Context, kubeconfig string) (string, error) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-
-	restConfig, err := loadRESTConfig(kubeconfig)
-	if err != nil {
-		return "", fmt.Errorf("build REST config: %w", err)
-	}
-
-	fluxClient, err := newFluxResourcesClient(restConfig)
-	if err != nil {
-		return "", fmt.Errorf("create flux client: %w", err)
-	}
-
-	instance := &FluxInstance{}
-	key := client.ObjectKey{
-		Name:      fluxInstanceDefaultName,
-		Namespace: fluxclient.DefaultNamespace,
-	}
-
-	err = fluxClient.Get(ctx, key, instance)
-	if err != nil {
-		if apierrors.IsNotFound(err) {
-			return "", nil
-		}
-
-		return "", fmt.Errorf("get FluxInstance %s/%s: %w", key.Namespace, key.Name, err)
-	}
-
-	return instance.Spec.Distribution.Version, nil
 }
 
 // ResolveDesiredDistributionVersion computes the FluxInstance distribution
