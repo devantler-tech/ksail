@@ -178,16 +178,19 @@ func (p *Provisioner) waitForNewDockerNodesReachable(
 		return nil
 	}
 
-	group, _ := errgroup.WithContext(ctx)
+	// Use the errgroup's derived context so the first failed probe cancels the
+	// siblings still waiting, rather than letting them run out their own timeout.
+	group, groupCtx := errgroup.WithContext(ctx)
 	group.SetLimit(maxConcurrentContainerOps)
 
 	for _, spec := range specs {
 		group.Go(func() error {
-			p.logf("  Waiting for Talos API on %s (%s)...\n", spec.name, spec.ip)
+			nodeIP := spec.ip.String()
+			p.logf("  Waiting for Talos API on %s (%s)...\n", spec.name, nodeIP)
 
-			checkErr := p.nodeReachabilityCheck(ctx, spec.ip.String())
+			checkErr := p.nodeReachabilityCheck(groupCtx, nodeIP)
 			if checkErr != nil {
-				return fmt.Errorf("timeout waiting for Talos API on %s: %w", spec.name, checkErr)
+				return fmt.Errorf("waiting for Talos API on %s: %w", spec.name, checkErr)
 			}
 
 			p.logf("  ✓ Talos API reachable on %s\n", spec.name)
