@@ -467,12 +467,12 @@ jobs:
     name: 📤 Auto-Commit Generated Changes
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    needs: [changes, generate]
+    needs: [changes, generate, verify-desktop-tidy]
     if: >-
       always()
       && github.event_name != 'merge_group'
       && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
-      && needs.generate.result == 'success'
+      && (needs.generate.result == 'success' || needs.verify-desktop-tidy.result == 'success')
     permissions:
       contents: write
       pull-requests: write
@@ -1367,6 +1367,8 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
+          repository: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
       - name: ⚙️ Setup Go
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
@@ -1374,15 +1376,46 @@ jobs:
           go-version-file: go.mod
           cache: false
 
-      # The desktop app is a SEPARATE Go module that vendors the main module via `replace => ../`,
-      # so its go.{mod,sum} must independently track the main module's dependency graph. A root
-      # dependency bump can leave desktop/go.{mod,sum} stale and break the release-time desktop build
-      # with a cryptic "updates to go.mod needed". The full desktop build lives in desktop.yaml; this
-      # is a fast, REQUIRED gate that blocks the drift on the PR instead of failing at release. Fix
-      # with `go -C desktop mod tidy` and commit the result.
-      - name: 🧹 Verify desktop module is tidy
+      # The desktop app is a SEPARATE Go module that vendors the main module via `replace => ../`, so
+      # its go.{mod,sum} must independently track the main module's dependency graph. A root dependency
+      # bump (e.g. a dependabot gomod PR) touches only the root go.{mod,sum} and leaves desktop stale,
+      # which would break the release-time desktop build with a cryptic "updates to go.mod needed".
+      # Rather than hard-fail and force a manual `go -C desktop mod tidy`, self-heal the same way
+      # generated files are synced: run tidy, capture the diff as a patch artifact, and let the
+      # 📤 Auto-Commit Generated Changes job apply it to the PR branch. Fork PRs — which that job cannot
+      # push to — still hard-fail with actionable guidance.
+      - name: 🧹 Tidy desktop module
         working-directory: desktop
-        run: go mod tidy -diff
+        run: go mod tidy
+
+      - name: 📤 Upload patch
+        run: |
+          git add -N .
+          git diff > /tmp/desktop-tidy.patch
+          if [ -s /tmp/desktop-tidy.patch ]; then
+            echo "Desktop module drift detected; patch will be auto-committed on same-repo PRs."
+          else
+            echo "Desktop module already tidy."
+          fi
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: desktop-tidy-patch
+          path: /tmp/desktop-tidy.patch
+          if-no-files-found: ignore
+          retention-days: 1
+
+      - name: ❌ Fail if desktop module is out of date (fork PR)
+        if: >-
+          github.event_name == 'pull_request'
+          && github.event.pull_request.head.repo.full_name != github.repository
+        shell: bash
+        run: |
+          if [ -s /tmp/desktop-tidy.patch ]; then
+            echo "::error::desktop/go.{mod,sum} are out of date. Please run 'go -C desktop mod tidy' locally and commit the result."
+            echo ""
+            cat /tmp/desktop-tidy.patch
+            exit 1
+          fi
 
   require-checks-in-pr:
     name: CI - Required Checks
