@@ -35,3 +35,23 @@ func hetznerNodeTalosAddress(server *hcloud.Server) (string, error) {
 
 	return "", fmt.Errorf("%w: %s", ErrNodeNoReachableAddress, server.Name)
 }
+
+// diagnoseUnreachableNode enriches a Talos-API connection/timeout failure with
+// actionable guidance when the node is IPv4-less. KSail reaches such a node only over
+// the private network, so a failure here almost always means KSail has no route into
+// the Hetzner private network, or the node has no egress to finish booting — neither
+// of which is visible from the cluster config, so it can only be diagnosed at runtime.
+// For nodes that have a public IPv4 (the default), the original error is returned
+// unchanged. A nil error is passed through.
+func diagnoseUnreachableNode(server *hcloud.Server, err error) error {
+	if err == nil || server == nil || !server.PublicNet.IPv4.IsUnspecified() {
+		return err
+	}
+
+	return fmt.Errorf(
+		"%w: node %s is IPv4-less and was reached over its private network; ensure ksail "+
+			"runs with a route into the Hetzner private network (from inside the network, a "+
+			"VPN, or a bastion) and that the node has egress (a NAT gateway or working IPv6): %w",
+		ErrPrivateNetworkUnreachable, server.Name, err,
+	)
+}

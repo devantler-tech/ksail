@@ -1,6 +1,7 @@
 package talosprovisioner_test
 
 import (
+	"errors"
 	"net"
 	"testing"
 
@@ -9,6 +10,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// errTestDialTimeout is a static error used to simulate a Talos-API dial failure.
+var errTestDialTimeout = errors.New("dial timeout")
 
 // addrTestServer builds an *hcloud.Server with the given public IPv4 and/or
 // private-network IP (empty string omits that address).
@@ -60,4 +64,47 @@ func TestHetznerNodeTalosAddress(t *testing.T) {
 			assert.Equal(t, testCase.want, got)
 		})
 	}
+}
+
+func TestDiagnoseUnreachableNode(t *testing.T) {
+	t.Parallel()
+
+	baseErr := errTestDialTimeout
+
+	t.Run("EnrichesIPv4LessNodeFailure", func(t *testing.T) {
+		t.Parallel()
+
+		got := talosprovisioner.DiagnoseUnreachableNode(addrTestServer("", "10.0.0.9"), baseErr)
+
+		require.ErrorIs(t, got, talosprovisioner.ErrPrivateNetworkUnreachable)
+		require.ErrorIs(t, got, baseErr)
+		assert.Contains(t, got.Error(), "addr-node")
+	})
+
+	t.Run("PassesThroughForPublicIPv4Node", func(t *testing.T) {
+		t.Parallel()
+
+		got := talosprovisioner.DiagnoseUnreachableNode(
+			addrTestServer("203.0.113.5", "10.0.0.5"),
+			baseErr,
+		)
+
+		require.Equal(t, baseErr, got)
+		require.NotErrorIs(t, got, talosprovisioner.ErrPrivateNetworkUnreachable)
+	})
+
+	t.Run("PassesThroughNilError", func(t *testing.T) {
+		t.Parallel()
+
+		require.NoError(
+			t,
+			talosprovisioner.DiagnoseUnreachableNode(addrTestServer("", "10.0.0.9"), nil),
+		)
+	})
+
+	t.Run("PassesThroughNilServer", func(t *testing.T) {
+		t.Parallel()
+
+		require.Equal(t, baseErr, talosprovisioner.DiagnoseUnreachableNode(nil, baseErr))
+	})
 }

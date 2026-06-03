@@ -44,12 +44,6 @@ var ErrInvalidIngressFirewall = errors.New("invalid ingress firewall")
 // ErrInvalidPlacementGroupStrategy is returned when an invalid placement group strategy is specified.
 var ErrInvalidPlacementGroupStrategy = errors.New("invalid placement group strategy")
 
-// ErrHetznerNodeUnreachable is returned when a Hetzner node role is configured with no public
-// IPv4, no public IPv6, and no private network, leaving KSail no address to reach the node.
-var ErrHetznerNodeUnreachable = errors.New(
-	"hetzner node role has no public IPv4, no public IPv6, and no private network",
-)
-
 // ErrInvalidDistributionProviderCombination is returned when the distribution and provider combination is invalid.
 var ErrInvalidDistributionProviderCombination = errors.New(
 	"invalid distribution and provider combination",

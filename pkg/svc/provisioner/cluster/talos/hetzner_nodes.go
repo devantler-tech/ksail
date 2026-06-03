@@ -282,7 +282,10 @@ func (p *Provisioner) waitForHetznerTalosAPI(
 				return nil
 			})
 		if err != nil {
-			return fmt.Errorf("timeout waiting for Talos API on %s: %w", server.Name, err)
+			return diagnoseUnreachableNode(
+				server,
+				fmt.Errorf("timeout waiting for Talos API on %s: %w", server.Name, err),
+			)
 		}
 
 		p.logf("  ✓ Talos API reachable on %s\n", server.Name)
@@ -419,11 +422,11 @@ func (p *Provisioner) waitForServerReachable(
 
 	err := dialTCPUntilReachable(ctx, serverIP, clusterReadinessTimeout, longRetryInterval)
 	if err != nil {
-		return fmt.Errorf(
+		return diagnoseUnreachableNode(server, fmt.Errorf(
 			"timeout waiting for %s to become reachable after install: %w",
 			server.Name,
 			err,
-		)
+		))
 	}
 
 	return nil

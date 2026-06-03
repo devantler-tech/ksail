@@ -612,10 +612,12 @@ func (v *Validator) validateAutoscalerConfig(
 	}
 }
 
-// validatePublicNet validates the Hetzner per-role public-net (IPv4/IPv6) toggles.
-// It errors on a structurally unreachable combination and warns when a role is left
-// with no public networking (valid only with NAT-gateway egress on the private
-// network and KSail running with private-network reachability).
+// validatePublicNet warns when a Hetzner role is left with no public networking.
+// There is no config-time error to raise: KSail always provisions and attaches a
+// private network, so a node can never end up with neither a public IP nor a private
+// network. Whether KSail can actually reach an IPv4-less node over that private
+// network is validated at provisioning time (see diagnoseUnreachableNode in the Talos
+// provisioner), since it depends on the runtime environment, not the config.
 func (v *Validator) validatePublicNet(
 	config *v1alpha1.Cluster,
 	result *validator.ValidationResult,
@@ -625,18 +627,6 @@ func (v *Validator) validatePublicNet(
 	}
 
 	hetzner := &config.Spec.Provider.Hetzner
-
-	// KSail always provisions a private network for Hetzner clusters.
-	const hasPrivateNetwork = true
-
-	err := v1alpha1.ValidateHetznerPublicNet(hetzner, hasPrivateNetwork)
-	if err != nil {
-		result.AddError(validator.ValidationError{
-			Field:         "spec.provider.hetzner",
-			Message:       err.Error(),
-			FixSuggestion: "Enable a public IP family or attach the node to a private network",
-		})
-	}
 
 	v.warnFullyPrivateRole(
 		"worker",
