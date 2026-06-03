@@ -56,6 +56,16 @@ func (p *Provisioner) RemoveDockerNodesForTest(
 	return p.removeDockerNodes(ctx, clusterName, role, count, result)
 }
 
+// WaitForNewHetznerNodesReachableForTest exposes waitForNewHetznerNodesReachable
+// for unit testing.
+func (p *Provisioner) WaitForNewHetznerNodesReachableForTest(
+	ctx context.Context,
+	servers []*hcloud.Server,
+	role string,
+) error {
+	return p.waitForNewHetznerNodesReachable(ctx, servers, role)
+}
+
 // CreateOmniProviderForTest exposes createOmniProvider for unit testing.
 func CreateOmniProviderForTest(opts v1alpha1.OptionsOmni) error {
 	_, err := createOmniProvider(opts)
