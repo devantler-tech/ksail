@@ -80,6 +80,16 @@ var (
 	// ErrHcloudTokenNotSet is returned when the Hetzner Cloud API token environment
 	// variable is not set but is required for autoscaler secret creation.
 	ErrHcloudTokenNotSet = errors.New("hcloud API token environment variable is not set")
+	// ErrAutoscalerUserDataTooLarge is returned when the gzip-compressed,
+	// base64-encoded autoscaler worker config still exceeds Hetzner's 32 KiB
+	// user_data limit. Hetzner would otherwise reject every scale-up with
+	// "invalid input in field 'user_data'"; failing here surfaces the problem at
+	// cluster create/update time instead of silently at the next scale-up.
+	ErrAutoscalerUserDataTooLarge = errors.New(
+		"autoscaler worker config exceeds Hetzner's 32 KiB user_data limit even after gzip " +
+			"compression: move large inline patches or extraManifests out of the Talos worker " +
+			"config and deliver them via GitOps",
+	)
 	// ErrDrainPodRetrieval is returned when listing pods for drain encounters errors.
 	ErrDrainPodRetrieval = errors.New("failed to retrieve pods for drain")
 	// ErrNodeNotFoundByIP is returned when no Kubernetes node matches the given IP.
