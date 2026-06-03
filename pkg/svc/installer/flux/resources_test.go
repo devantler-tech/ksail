@@ -888,6 +888,69 @@ func TestWaitForFluxInstanceReady_ReadyFalse(t *testing.T) {
 }
 
 //nolint:paralleltest // Cannot run in parallel due to global mock
+func TestGetCurrentDistributionVersion(t *testing.T) {
+	mockClient := &mockFluxClient{
+		getFunc: func(
+			_ context.Context,
+			_ client.ObjectKey,
+			obj client.Object,
+			_ ...client.GetOption,
+		) error {
+			instance, ok := obj.(*fluxinstaller.FluxInstance)
+			require.True(t, ok, "expected FluxInstance type")
+
+			instance.Spec.Distribution.Version = "2.8.x"
+
+			return nil
+		},
+	}
+
+	restoreClient := fluxinstaller.SetNewFluxResourcesClient(func(*rest.Config) (any, error) {
+		return mockClient, nil
+	})
+	defer restoreClient()
+
+	restoreConfig := fluxinstaller.SetLoadRESTConfig(func(string) (*rest.Config, error) {
+		return &rest.Config{}, nil
+	})
+	defer restoreConfig()
+
+	version, err := fluxinstaller.GetCurrentDistributionVersion(context.Background(), "kubeconfig")
+
+	require.NoError(t, err)
+	assert.Equal(t, "2.8.x", version)
+}
+
+//nolint:paralleltest // Cannot run in parallel due to global mock
+func TestGetCurrentDistributionVersion_NotFound(t *testing.T) {
+	mockClient := &mockFluxClient{
+		getFunc: func(
+			_ context.Context,
+			_ client.ObjectKey,
+			_ client.Object,
+			_ ...client.GetOption,
+		) error {
+			return apierrors.NewNotFound(schema.GroupResource{}, "flux")
+		},
+	}
+
+	restoreClient := fluxinstaller.SetNewFluxResourcesClient(func(*rest.Config) (any, error) {
+		return mockClient, nil
+	})
+	defer restoreClient()
+
+	restoreConfig := fluxinstaller.SetLoadRESTConfig(func(string) (*rest.Config, error) {
+		return &rest.Config{}, nil
+	})
+	defer restoreConfig()
+
+	version, err := fluxinstaller.GetCurrentDistributionVersion(context.Background(), "kubeconfig")
+
+	require.NoError(t, err)
+	assert.Empty(t, version)
+}
+
+//nolint:paralleltest // Cannot run in parallel due to global mock
 func TestWaitForFluxInstanceReady_NotFound(t *testing.T) {
 	// Removed t.Parallel() to avoid test pollution with global mock
 	callCount := 0

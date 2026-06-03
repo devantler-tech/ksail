@@ -32,7 +32,7 @@ spec:
 		})).
 		Return(manifest, nil)
 
-	installer := fluxinstaller.NewInstaller(client, 5*time.Minute)
+	installer := fluxinstaller.NewInstaller(client, 5*time.Minute, "")
 
 	images, err := installer.Images(context.Background())
 
@@ -51,7 +51,7 @@ func TestFluxInstaller_Images_TemplateError(t *testing.T) {
 		TemplateChart(mock.Anything, mock.Anything).
 		Return("", assert.AnError)
 
-	installer := fluxinstaller.NewInstaller(client, 5*time.Minute)
+	installer := fluxinstaller.NewInstaller(client, 5*time.Minute, "")
 
 	_, err := installer.Images(context.Background())
 
@@ -67,7 +67,7 @@ func TestFluxInstaller_Images_EmptyManifest(t *testing.T) {
 		TemplateChart(mock.Anything, mock.Anything).
 		Return("", nil)
 
-	installer := fluxinstaller.NewInstaller(client, 5*time.Minute)
+	installer := fluxinstaller.NewInstaller(client, 5*time.Minute, "")
 
 	images, err := installer.Images(context.Background())
 

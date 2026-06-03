@@ -64,6 +64,82 @@ func (d *CRDetector) FindFluxInstance() (string, error) {
 	return d.findCR(FluxInstanceAPIVersion, FluxInstanceKind, FluxInstanceDefaultName)
 }
 
+// FluxDistribution captures the spec.distribution block of a repo-declared
+// FluxInstance. Empty fields mean the repo did not specify that value.
+type FluxDistribution struct {
+	Version  string
+	Registry string
+	Artifact string
+}
+
+// fluxInstanceDoc is the minimal shape needed to read a FluxInstance's
+// spec.distribution block from a single YAML document.
+type fluxInstanceDoc struct {
+	Spec struct {
+		Distribution struct {
+			Version  string `yaml:"version"`
+			Registry string `yaml:"registry"`
+			Artifact string `yaml:"artifact"`
+		} `yaml:"distribution"`
+	} `yaml:"spec"`
+}
+
+// FindFluxInstanceDistribution locates a repo-declared KSail-managed FluxInstance
+// and returns its spec.distribution block. Returns a zero-value FluxDistribution
+// when no FluxInstance is declared (or it omits a distribution block); callers
+// treat empty fields as "no override".
+func (d *CRDetector) FindFluxInstanceDistribution() (FluxDistribution, error) {
+	path, err := d.FindFluxInstance()
+	if err != nil {
+		return FluxDistribution{}, err
+	}
+
+	if path == "" {
+		return FluxDistribution{}, nil
+	}
+
+	// G304: path comes from FindFluxInstance's WalkDir over the trusted sourceDir.
+	data, err := os.ReadFile(path) //nolint:gosec // path validated via WalkDir
+	if err != nil {
+		return FluxDistribution{}, fmt.Errorf("reading FluxInstance file: %w", err)
+	}
+
+	for _, doc := range splitYAMLDocuments(data) {
+		if len(doc) == 0 {
+			continue
+		}
+
+		var probe k8sResource
+
+		if yaml.Unmarshal(doc, &probe) != nil {
+			continue
+		}
+
+		if !d.isMatchingCR(
+			probe,
+			FluxInstanceAPIVersion,
+			FluxInstanceKind,
+			FluxInstanceDefaultName,
+		) {
+			continue
+		}
+
+		var parsed fluxInstanceDoc
+
+		if yaml.Unmarshal(doc, &parsed) != nil {
+			continue
+		}
+
+		return FluxDistribution{
+			Version:  parsed.Spec.Distribution.Version,
+			Registry: parsed.Spec.Distribution.Registry,
+			Artifact: parsed.Spec.Distribution.Artifact,
+		}, nil
+	}
+
+	return FluxDistribution{}, nil
+}
+
 // FindArgoCDApplication searches for an existing KSail-managed ArgoCD Application CR.
 // Returns the file path if found, empty string otherwise.
 func (d *CRDetector) FindArgoCDApplication() (string, error) {

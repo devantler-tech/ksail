@@ -12,6 +12,8 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	dockerclient "github.com/devantler-tech/ksail/v7/pkg/client/docker"
 	fluxclient "github.com/devantler-tech/ksail/v7/pkg/client/flux"
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/detector/gitops"
 	registry "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/registry"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -75,6 +77,14 @@ func (m *instanceManager) setup(
 	}
 
 	fluxInstance, err := buildInstance(clusterCfg, clusterName, registryHostOverride)
+	if err != nil {
+		return err
+	}
+
+	// Align the seeded distribution with ksail.yaml config and any repo-declared
+	// FluxInstance so the bootstrap seed matches the GitOps steady-state owner
+	// (prevents version flapping). The computed sync block is left untouched.
+	err = applyDistributionOverride(fluxInstance, clusterCfg)
 	if err != nil {
 		return err
 	}
@@ -307,6 +317,65 @@ func buildInstance(
 			},
 		},
 	}, nil
+}
+
+// applyDistributionOverride aligns the FluxInstance's spec.distribution with the
+// configured and repo-declared versions, following the precedence:
+// repo-declared FluxInstance > spec.workload.flux.distributionVersion > default.
+// Only spec.distribution is modified; the computed sync block is preserved.
+func applyDistributionOverride(instance *FluxInstance, clusterCfg *v1alpha1.Cluster) error {
+	// Config seed (spec.workload.flux.distributionVersion) overrides the default.
+	configVersion := strings.TrimSpace(clusterCfg.Spec.Workload.Flux.DistributionVersion)
+	if configVersion != "" {
+		instance.Spec.Distribution.Version = configVersion
+	}
+
+	// A repo-declared FluxInstance is the steady-state owner; its distribution
+	// block takes precedence over both the config seed and the default, so the
+	// bootstrap seed matches what Flux will reconcile (no version flap).
+	repoDist, err := repoFluxDistribution(clusterCfg)
+	if err != nil {
+		return err
+	}
+
+	if repoDist.Version != "" {
+		instance.Spec.Distribution.Version = repoDist.Version
+	}
+
+	if repoDist.Registry != "" {
+		instance.Spec.Distribution.Registry = repoDist.Registry
+	}
+
+	if repoDist.Artifact != "" {
+		instance.Spec.Distribution.Artifact = repoDist.Artifact
+	}
+
+	return nil
+}
+
+// repoFluxDistribution resolves the distribution block of a repo-declared
+// FluxInstance in the cluster's source directory. Returns a zero-value
+// FluxDistribution when none is declared or the source directory is absent.
+func repoFluxDistribution(clusterCfg *v1alpha1.Cluster) (gitops.FluxDistribution, error) {
+	sourceDir := strings.TrimSpace(clusterCfg.Spec.Workload.SourceDirectory)
+	if sourceDir == "" {
+		sourceDir = v1alpha1.DefaultSourceDirectory
+	}
+
+	// Canonicalize for symlink safety; fall back to the raw path when it cannot
+	// be resolved (e.g. the directory does not exist yet) — the detector tolerates
+	// a missing directory and returns an empty result.
+	canonical, err := fsutil.EvalCanonicalPath(sourceDir)
+	if err != nil {
+		canonical = sourceDir
+	}
+
+	dist, err := gitops.NewCRDetector(canonical).FindFluxInstanceDistribution()
+	if err != nil {
+		return gitops.FluxDistribution{}, fmt.Errorf("detect repo FluxInstance: %w", err)
+	}
+
+	return dist, nil
 }
 
 // buildExternalRegistryURL builds the OCI URL for an external registry.

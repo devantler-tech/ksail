@@ -290,6 +290,71 @@ func GetCurrentSyncRef(ctx context.Context, kubeconfig string) (string, error) {
 	return "", nil
 }
 
+// GetCurrentDistributionVersion queries the running FluxInstance in the cluster
+// and returns its spec.distribution.version. Returns an empty string if the
+// FluxInstance does not exist. Used to detect distribution-version drift on
+// cluster update.
+//
+//nolint:contextcheck // nil-guard consistent with GetCurrentSyncRef
+func GetCurrentDistributionVersion(ctx context.Context, kubeconfig string) (string, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	restConfig, err := loadRESTConfig(kubeconfig)
+	if err != nil {
+		return "", fmt.Errorf("build REST config: %w", err)
+	}
+
+	fluxClient, err := newFluxResourcesClient(restConfig)
+	if err != nil {
+		return "", fmt.Errorf("create flux client: %w", err)
+	}
+
+	instance := &FluxInstance{}
+	key := client.ObjectKey{
+		Name:      fluxInstanceDefaultName,
+		Namespace: fluxclient.DefaultNamespace,
+	}
+
+	err = fluxClient.Get(ctx, key, instance)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return "", nil
+		}
+
+		return "", fmt.Errorf("get FluxInstance %s/%s: %w", key.Namespace, key.Name, err)
+	}
+
+	return instance.Spec.Distribution.Version, nil
+}
+
+// ResolveDesiredDistributionVersion computes the FluxInstance distribution
+// version KSail would seed, following the precedence: repo-declared FluxInstance
+// > spec.workload.flux.distributionVersion > the built-in default ("2.x"). This
+// mirrors the override applied by applyDistributionOverride and is used for
+// distribution-version drift detection on cluster update.
+func ResolveDesiredDistributionVersion(clusterCfg *v1alpha1.Cluster) string {
+	version := fluxDistributionVersion
+
+	if clusterCfg == nil {
+		return version
+	}
+
+	if configVersion := strings.TrimSpace(
+		clusterCfg.Spec.Workload.Flux.DistributionVersion,
+	); configVersion != "" {
+		version = configVersion
+	}
+
+	repoDist, err := repoFluxDistribution(clusterCfg)
+	if err == nil && repoDist.Version != "" {
+		version = repoDist.Version
+	}
+
+	return version
+}
+
 // ResolveDesiredTag computes the desired OCI artifact tag using the standard
 // resolution priority: workload.tag > registry-embedded tag > default "dev".
 // This is the same logic used by buildInstance and buildArgoCDEnsureOptions.

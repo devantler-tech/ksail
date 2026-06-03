@@ -23,6 +23,11 @@ func BuildDockerConfigJSON(registry, username, password string) ([]byte, error) 
 	return buildDockerConfigJSON(registry, username, password)
 }
 
+// ApplyDistributionOverride exports applyDistributionOverride for testing.
+func ApplyDistributionOverride(instance *FluxInstance, clusterCfg *v1alpha1.Cluster) error {
+	return applyDistributionOverride(instance, clusterCfg)
+}
+
 // BuildExternalRegistryURL exports buildExternalRegistryURL for testing.
 func BuildExternalRegistryURL(localRegistry v1alpha1.LocalRegistry) (string, string, string) {
 	return buildExternalRegistryURL(localRegistry)

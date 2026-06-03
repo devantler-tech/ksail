@@ -136,6 +136,7 @@ type WorkloadSpec struct {
 	ValidateOnPush    bool        `default:"false" json:"validateOnPush,omitzero"    jsonschema_description:"Validate manifests against schemas before pushing (validation disabled by default)"`                                                                                                                                                                         //nolint:lll
 	Tag               string      `default:"dev"   json:"tag,omitzero"               jsonschema_description:"OCI artifact tag used for workload push and GitOps reconciliation (Flux OCIRepository and ArgoCD Application). Push priority: CLI oci:// ref > this field > registry-embedded tag > dev. Reconciliation priority: this field > registry-embedded tag > dev"` //nolint:lll
 	KustomizationFile string      `default:""      json:"kustomizationFile,omitzero" jsonschema_description:"Path to the kustomization directory relative to sourceDirectory. When set, Flux Sync.Path is configured to this path so Flux uses the specified kustomization as the entry point instead of requiring a root kustomization.yaml."`                           //nolint:lll
+	Flux              FluxConfig  `                json:"flux,omitzero"              jsonschema_description:"Flux bootstrap version pins (operator chart and FluxInstance distribution). Empty values use KSail's pinned versions; a GitOps repo that declares these becomes the steady-state owner."`                                                                    //nolint:lll
 	Watch             WatchConfig `                json:"watch,omitzero"             jsonschema_description:"Configuration for the workload watch command (pre-apply hooks, etc.)"`                                                                                                                                                                                       //nolint:lll
 }
 
@@ -144,6 +145,23 @@ type WatchConfig struct {
 	// Hooks are shell commands to run before each apply cycle.
 	// Hooks execute sequentially via "sh -c"; if any hook fails, the apply is skipped for that cycle.
 	Hooks []string `json:"hooks,omitzero" jsonschema_description:"Shell commands to run before each apply (e.g. docker build, make generate). Executed sequentially; if any hook fails the apply is skipped."` //nolint:lll
+}
+
+// FluxConfig pins the versions KSail uses when it seeds Flux during cluster
+// bootstrap. Both fields are optional; an empty value means KSail uses its
+// built-in pinned version. They configure only the bootstrap seed — once a
+// GitOps repository owns the flux-operator HelmRelease or the FluxInstance,
+// that repository becomes the steady-state owner of the version and KSail defers.
+type FluxConfig struct {
+	// OperatorVersion pins the Flux operator Helm chart version KSail installs
+	// when it seeds the operator. When empty, KSail uses its built-in pinned
+	// version. Ignored once a GitOps repo owns the flux-operator release — KSail
+	// never re-installs over a Helm release managed by Flux or ArgoCD.
+	OperatorVersion string `json:"operatorVersion,omitzero" jsonschema_description:"Flux operator Helm chart version for the bootstrap seed. Empty uses KSail's pinned version. Ignored once a GitOps repo owns the flux-operator release."` //nolint:lll
+	// DistributionVersion pins the FluxInstance spec.distribution.version KSail
+	// seeds. When empty, KSail uses its default ("2.x"). A repo-declared
+	// FluxInstance's distribution.version takes precedence over this value.
+	DistributionVersion string `json:"distributionVersion,omitzero" jsonschema_description:"FluxInstance spec.distribution.version for the bootstrap seed. Empty uses KSail's default (2.x). A repo-declared FluxInstance takes precedence."` //nolint:lll
 }
 
 // ChatSpec defines AI chat assistant configuration.

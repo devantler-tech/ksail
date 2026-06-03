@@ -18,7 +18,7 @@ func TestNewInstaller(t *testing.T) {
 	timeout := 5 * time.Minute
 
 	client := helm.NewMockInterface(t)
-	installer := fluxinstaller.NewInstaller(client, timeout)
+	installer := fluxinstaller.NewInstaller(client, timeout, "")
 
 	assert.NotNil(t, installer)
 }
@@ -77,6 +77,7 @@ func newFluxInstallerWithDefaults(
 	installer := fluxinstaller.NewInstaller(
 		client,
 		5*time.Second,
+		"",
 	)
 
 	return installer, client
@@ -84,6 +85,7 @@ func newFluxInstallerWithDefaults(
 
 func expectFluxInstall(t *testing.T, client *helm.MockInterface, installErr error) {
 	t.Helper()
+	expectNoExistingFluxRelease(t, client)
 	client.EXPECT().
 		InstallOrUpgradeChart(
 			mock.Anything,
@@ -101,6 +103,61 @@ func expectFluxInstall(t *testing.T, client *helm.MockInterface, installErr erro
 			}),
 		).
 		Return(nil, installErr)
+}
+
+// expectNoExistingFluxRelease sets up GetReleaseStorageLabels to report that no
+// flux-operator release storage exists yet, exercising the seed-if-absent path.
+func expectNoExistingFluxRelease(t *testing.T, client *helm.MockInterface) {
+	t.Helper()
+	client.EXPECT().
+		GetReleaseStorageLabels(mock.Anything, "flux-operator", "flux-system").
+		Return(nil, helm.ErrNoReleaseStorage)
+}
+
+// TestFluxInstallerSkipsWhenGitOpsManaged verifies the operator install is
+// skipped (deferred) when the flux-operator release Secret is already owned by a
+// GitOps controller — InstallOrUpgradeChart must not be called.
+func TestFluxInstallerSkipsWhenGitOpsManaged(t *testing.T) {
+	t.Parallel()
+
+	installer, client := newFluxInstallerWithDefaults(t)
+	client.EXPECT().
+		GetReleaseStorageLabels(mock.Anything, "flux-operator", "flux-system").
+		Return(map[string]string{"helm.toolkit.fluxcd.io/name": "flux-operator"}, nil)
+
+	// No InstallOrUpgradeChart expectation: the mock fails the test if it is called.
+	err := installer.Install(context.Background())
+
+	require.NoError(t, err)
+}
+
+// TestFluxInstallerOperatorVersionOverride verifies a configured operator version
+// is used as the chart version instead of the embedded Dockerfile pin.
+func TestFluxInstallerOperatorVersionOverride(t *testing.T) {
+	t.Parallel()
+
+	client := helm.NewMockInterface(t)
+	installer := fluxinstaller.NewInstaller(client, 5*time.Second, "0.99.0")
+	expectNoExistingFluxRelease(t, client)
+
+	var capturedSpec *helm.ChartSpec
+
+	client.EXPECT().
+		InstallOrUpgradeChart(
+			mock.Anything,
+			mock.MatchedBy(func(spec *helm.ChartSpec) bool {
+				capturedSpec = spec
+
+				return true
+			}),
+		).
+		Return(nil, nil)
+
+	err := installer.Install(context.Background())
+
+	require.NoError(t, err)
+	require.NotNil(t, capturedSpec)
+	assert.Equal(t, "0.99.0", capturedSpec.Version)
 }
 
 func expectFluxUninstall(t *testing.T, client *helm.MockInterface, err error) {
