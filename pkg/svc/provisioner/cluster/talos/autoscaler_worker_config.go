@@ -1,6 +1,8 @@
 package talosprovisioner
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/base64"
 	"fmt"
@@ -18,6 +20,13 @@ import (
 const (
 	autoscalerConfigSecretName      = "cluster-autoscaler-config"
 	autoscalerConfigSecretNamespace = "kube-system"
+
+	// hetznerUserDataLimitBytes is Hetzner Cloud's hard ceiling on a server's
+	// user_data field (32 KiB). The cluster-autoscaler base64-decodes the
+	// HCLOUD_CLOUD_INIT secret value exactly once and passes the result verbatim
+	// as user_data, so that post-decode payload must stay within this limit or
+	// Hetzner rejects every scale-up with "invalid input in field 'user_data'".
+	hetznerUserDataLimitBytes = 32768
 )
 
 // GenerateAutoscalerWorkerConfig generates a stripped Talos worker config
@@ -60,17 +69,72 @@ func GenerateAutoscalerWorkerConfig(workerConfig talosconfig.Provider) ([]byte, 
 	return cfgBytes, nil
 }
 
+// encodeAutoscalerCloudInit encodes a Talos worker machine config for delivery
+// to autoscaler-provisioned Hetzner nodes and returns the value to store under
+// the HCLOUD_CLOUD_INIT secret key.
+//
+// The cluster-autoscaler base64-decodes HCLOUD_CLOUD_INIT exactly once and
+// assigns the result verbatim to the new server's user_data. Two constraints
+// shape the encoding:
+//
+//   - Size: Hetzner caps user_data at 32 KiB, but a full Talos worker config is
+//     ~40 KiB of YAML and overflows it (issue #5015).
+//   - Encoding: hcloud-go JSON-marshals user_data as a string, so it must be
+//     valid UTF-8 — raw gzip bytes would be mangled by JSON's invalid-byte
+//     replacement.
+//
+// Both hold when user_data = base64(gzip(config)): gzip shrinks the config to a
+// few KiB and the base64 wrapper keeps it ASCII. The Talos hcloud platform
+// base64-decodes user_data (maybeBase64Decode) and then un-gzips it (gzip magic
+// is auto-detected) before parsing — supported by every KSail-targeted Talos
+// version (the hcloud base64 decode landed in Talos v1.8, 2024).
+//
+// The returned value is base64(user_data): the autoscaler strips this outer
+// base64 layer, leaving base64(gzip(config)) as the user_data Hetzner stores.
+func encodeAutoscalerCloudInit(workerConfigYAML []byte) (string, error) {
+	var compressed bytes.Buffer
+
+	gzipWriter := gzip.NewWriter(&compressed)
+
+	_, err := gzipWriter.Write(workerConfigYAML)
+	if err != nil {
+		return "", fmt.Errorf("gzip autoscaler worker config: %w", err)
+	}
+
+	err = gzipWriter.Close()
+	if err != nil {
+		return "", fmt.Errorf("finalize gzip autoscaler worker config: %w", err)
+	}
+
+	// userData is exactly what Hetzner stores and what its 32 KiB limit governs.
+	userData := base64.StdEncoding.EncodeToString(compressed.Bytes())
+	if len(userData) > hetznerUserDataLimitBytes {
+		return "", fmt.Errorf(
+			"%w: compressed user_data is %d bytes (limit %d)",
+			ErrAutoscalerUserDataTooLarge,
+			len(userData),
+			hetznerUserDataLimitBytes,
+		)
+	}
+
+	return base64.StdEncoding.EncodeToString([]byte(userData)), nil
+}
+
 // ApplyAutoscalerConfigSecret creates or updates the cluster-autoscaler-config
-// Secret in kube-system. The Secret holds the Hetzner snapshot image ID and a
-// base64-encoded Talos worker config that Kubernetes Cluster Autoscaler uses
-// as cloud-init user-data when provisioning new worker nodes.
+// Secret in kube-system. The Secret holds the Hetzner snapshot image ID and the
+// gzip-compressed, base64-encoded Talos worker config that Kubernetes Cluster
+// Autoscaler uses as cloud-init user-data when provisioning new worker nodes
+// (see encodeAutoscalerCloudInit for the encoding rationale).
 func ApplyAutoscalerConfigSecret(
 	ctx context.Context,
 	kubeclient kubernetes.Interface,
 	snapshotImageID string,
 	workerConfigYAML []byte,
 ) error {
-	encodedConfig := base64.StdEncoding.EncodeToString(workerConfigYAML)
+	encodedConfig, err := encodeAutoscalerCloudInit(workerConfigYAML)
+	if err != nil {
+		return err
+	}
 
 	desiredData := map[string][]byte{
 		"hcloud_image":      []byte(snapshotImageID),

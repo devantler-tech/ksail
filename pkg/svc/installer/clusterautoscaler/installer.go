@@ -28,7 +28,11 @@ const (
 	AutoscalerConfigHcloudImageKey = "hcloud_image"
 
 	// AutoscalerConfigHcloudCloudInitKey is the key in AutoscalerConfigSecretName that
-	// holds the base64-encoded cloud-init user-data for new autoscaler worker nodes.
+	// holds the cloud-init user-data for new autoscaler worker nodes. The value is
+	// base64(base64(gzip(workerConfig))): the autoscaler strips the outer base64
+	// layer, leaving base64(gzip(workerConfig)) as the Hetzner user_data, which the
+	// Talos hcloud platform base64-decodes and un-gzips before parsing. This keeps
+	// the payload under Hetzner's 32 KiB user_data limit (issue #5015).
 	AutoscalerConfigHcloudCloudInitKey = "hcloud_cloud_init"
 )
 
