@@ -125,13 +125,7 @@ func (p *Provisioner) createHetznerNodes(
 
 	_, _ = fmt.Fprintf(p.logWriter, "Creating %d %s node(s)...\n", opts.Count, opts.Role)
 
-	retryOpts := hetzner.ServerRetryOpts{LogWriter: p.syncLogWriter()}
-
-	if p.hetznerOpts != nil {
-		retryOpts.FallbackLocations = p.hetznerOpts.FallbackLocations
-		retryOpts.AllowPlacementFallback = p.hetznerOpts.PlacementGroupFallbackToNone
-	}
-
+	retryOpts := p.hetznerServerRetryOpts()
 	enableIPv4, enableIPv6 := p.hetznerPublicNetForRole(opts.Role)
 
 	results := make([]hetznerNodeCreationResult, opts.Count)
@@ -180,6 +174,20 @@ func (p *Provisioner) createHetznerNodes(
 	}
 
 	return p.collectCreatedHetznerServers(results, opts.Role)
+}
+
+// hetznerServerRetryOpts builds the server-creation retry options from the
+// provisioner's Hetzner configuration, applying location/placement fallbacks
+// when configured.
+func (p *Provisioner) hetznerServerRetryOpts() hetzner.ServerRetryOpts {
+	retryOpts := hetzner.ServerRetryOpts{LogWriter: p.syncLogWriter()}
+
+	if p.hetznerOpts != nil {
+		retryOpts.FallbackLocations = p.hetznerOpts.FallbackLocations
+		retryOpts.AllowPlacementFallback = p.hetznerOpts.PlacementGroupFallbackToNone
+	}
+
+	return retryOpts
 }
 
 // collectCreatedHetznerServers processes creation results sequentially, logging each success

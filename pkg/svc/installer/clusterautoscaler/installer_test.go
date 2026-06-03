@@ -412,6 +412,39 @@ func runExpanderTest(
 	require.NoError(t, err)
 }
 
+// assertValuesYamlContents asserts that the rendered cluster-autoscaler values
+// YAML contains every required section and key field.
+func assertValuesYamlContents(t *testing.T, valuesYaml string) {
+	t.Helper()
+
+	required := []string{
+		"cloudProvider: hetzner",
+		"autoscalingGroups:",
+		"name: pool1",
+		"instanceType: cx23",
+		"region: fsn1",
+		"expander: least-waste",
+		"scale-down-unneeded-time: 15m",
+		"max-nodes-total: 10",
+		"scale-down-delay-after-add: 5m",
+		"scale-down-delay-after-delete: 2m",
+		"extraEnvSecrets:",
+		"HCLOUD_TOKEN:",
+		"HCLOUD_NETWORK:",
+		"HCLOUD_IMAGE:",
+		"HCLOUD_CLOUD_INIT:",
+		"cluster-autoscaler-config",
+		"tolerations:",
+		"node-role.kubernetes.io/control-plane",
+		"nodeSelector:",
+		"rbac:",
+		"resources:",
+	}
+	for _, want := range required {
+		assert.Contains(t, valuesYaml, want)
+	}
+}
+
 // TestClusterAutoscalerInstaller_ValuesYaml_Contents verifies that the rendered
 // YAML contains all required sections and key fields by inspecting the ChartSpec
 // via mock assertions.
@@ -445,28 +478,7 @@ func TestClusterAutoscalerInstaller_ValuesYaml_Contents(t *testing.T) {
 				assert.True(t, spec.Wait)
 				assert.True(t, spec.WaitForJobs)
 
-				// Verify all required sections are present.
-				assert.Contains(t, spec.ValuesYaml, "cloudProvider: hetzner")
-				assert.Contains(t, spec.ValuesYaml, "autoscalingGroups:")
-				assert.Contains(t, spec.ValuesYaml, "name: pool1")
-				assert.Contains(t, spec.ValuesYaml, "instanceType: cx23")
-				assert.Contains(t, spec.ValuesYaml, "region: fsn1")
-				assert.Contains(t, spec.ValuesYaml, "expander: least-waste")
-				assert.Contains(t, spec.ValuesYaml, "scale-down-unneeded-time: 15m")
-				assert.Contains(t, spec.ValuesYaml, "max-nodes-total: 10")
-				assert.Contains(t, spec.ValuesYaml, "scale-down-delay-after-add: 5m")
-				assert.Contains(t, spec.ValuesYaml, "scale-down-delay-after-delete: 2m")
-				assert.Contains(t, spec.ValuesYaml, "extraEnvSecrets:")
-				assert.Contains(t, spec.ValuesYaml, "HCLOUD_TOKEN:")
-				assert.Contains(t, spec.ValuesYaml, "HCLOUD_NETWORK:")
-				assert.Contains(t, spec.ValuesYaml, "HCLOUD_IMAGE:")
-				assert.Contains(t, spec.ValuesYaml, "HCLOUD_CLOUD_INIT:")
-				assert.Contains(t, spec.ValuesYaml, "cluster-autoscaler-config")
-				assert.Contains(t, spec.ValuesYaml, "tolerations:")
-				assert.Contains(t, spec.ValuesYaml, "node-role.kubernetes.io/control-plane")
-				assert.Contains(t, spec.ValuesYaml, "nodeSelector:")
-				assert.Contains(t, spec.ValuesYaml, "rbac:")
-				assert.Contains(t, spec.ValuesYaml, "resources:")
+				assertValuesYamlContents(t, spec.ValuesYaml)
 
 				return true
 			}),
