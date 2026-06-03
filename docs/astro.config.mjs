@@ -49,8 +49,9 @@ export default defineConfig({
           attrs: {
             src: "https://analytics.platform.devantler.tech/script.js",
             "data-website-id": "27f83d6b-8ce4-4239-9387-eabc7f57cd68",
-            // Restrict to the trusted host so the public website-id can't be
-            // used to send events from a spoofed site.
+            // Client-side host allowlist: the tracker only sends events when
+            // the page is served from this host, keeping forks, previews and
+            // local builds out of analytics (not a server-side spoof guard).
             "data-domains": "ksail.devantler.tech",
             defer: true,
           },
