@@ -1,4 +1,4 @@
-name: Update Copilot Skills
+name: Update Agent Skills
 on:
   workflow_dispatch:
   schedule:
@@ -11,10 +11,10 @@ concurrency:
 permissions: {}
 
 jobs:
-  update-copilot-skills:
+  update-agent-skills:
     permissions:
       contents: write
       pull-requests: write
-    uses: devantler-tech/reusable-workflows/.github/workflows/update-copilot-skills.yaml@ad99c16f59e9e205d1cbd4d511c949aa353670b7 # v1.39.0+ (post skills-lock refactor)
+    uses: devantler-tech/reusable-workflows/.github/workflows/update-agent-skills.yaml@d4d382168eeef3d08606ed7c6fb2671e3d4170fc # v5.5.2
     with:
       dir: .agents/skills
