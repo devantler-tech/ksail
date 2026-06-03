@@ -394,6 +394,73 @@ func TestCluster_MarshalJSON_HetznerNonDefaultsKept(t *testing.T) {
 	assert.Contains(t, jsonStr, "hel1")
 }
 
+func TestOptionsHetzner_PublicNetAccessors(t *testing.T) {
+	t.Parallel()
+
+	boolTrue := true
+	boolFalse := false
+
+	tests := []struct {
+		name    string
+		toggle  *bool
+		enabled bool
+	}{
+		{name: "NilDefaultsToEnabled", toggle: nil, enabled: true},
+		{name: "ExplicitTrueEnabled", toggle: &boolTrue, enabled: true},
+		{name: "ExplicitFalseDisabled", toggle: &boolFalse, enabled: false},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			opts := v1alpha1.OptionsHetzner{
+				WorkerPublicIPv4:       testCase.toggle,
+				WorkerPublicIPv6:       testCase.toggle,
+				ControlPlanePublicIPv4: testCase.toggle,
+				ControlPlanePublicIPv6: testCase.toggle,
+			}
+
+			assert.Equal(t, testCase.enabled, opts.WorkerIPv4Enabled())
+			assert.Equal(t, testCase.enabled, opts.WorkerIPv6Enabled())
+			assert.Equal(t, testCase.enabled, opts.ControlPlaneIPv4Enabled())
+			assert.Equal(t, testCase.enabled, opts.ControlPlaneIPv6Enabled())
+		})
+	}
+}
+
+func TestCluster_MarshalJSON_HetznerPublicNet(t *testing.T) {
+	t.Parallel()
+
+	boolFalse := false
+	cluster := v1alpha1.Cluster{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       v1alpha1.Kind,
+			APIVersion: v1alpha1.APIVersion,
+		},
+		Spec: v1alpha1.Spec{
+			Provider: v1alpha1.ProviderSpec{
+				Hetzner: v1alpha1.OptionsHetzner{
+					// Only the worker IPv4 toggle is set; the other three remain nil
+					// and must be pruned from the output (omitzero on a nil pointer).
+					WorkerPublicIPv4: &boolFalse,
+				},
+			},
+		},
+	}
+
+	data, err := json.Marshal(&cluster)
+	require.NoError(t, err)
+
+	jsonStr := string(data)
+	// The explicit false must round-trip (not be pruned like a value-typed zero bool).
+	assert.Contains(t, jsonStr, `"workerPublicIPv4":false`)
+	// The other three toggles are nil and must be pruned.
+	assert.NotContains(t, jsonStr, "workerPublicIPv6")
+	assert.NotContains(t, jsonStr, "controlPlanePublicIPv4")
+	assert.NotContains(t, jsonStr, "controlPlanePublicIPv6")
+}
+
 // ---------------------------------------------------------------------------
 // Marshal: Workload defaults — exercises pruneByDefaultTag for string/bool
 // ---------------------------------------------------------------------------

@@ -67,6 +67,67 @@ func TestBuildServerCreateOpts(t *testing.T) {
 	}
 }
 
+func TestBuildServerCreateOpts_PublicNet(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name           string
+		enableIPv4     *bool
+		enableIPv6     *bool
+		wantEnableIPv4 bool
+		wantEnableIPv6 bool
+	}{
+		{
+			name:           "NilTogglesDefaultToBothEnabled",
+			enableIPv4:     nil,
+			enableIPv6:     nil,
+			wantEnableIPv4: true,
+			wantEnableIPv6: true,
+		},
+		{
+			name:           "IPv4LessKeepsIPv6",
+			enableIPv4:     new(false),
+			enableIPv6:     nil,
+			wantEnableIPv4: false,
+			wantEnableIPv6: true,
+		},
+		{
+			name:           "BothDisabled",
+			enableIPv4:     new(false),
+			enableIPv6:     new(false),
+			wantEnableIPv4: false,
+			wantEnableIPv6: false,
+		},
+		{
+			name:           "ExplicitlyBothEnabled",
+			enableIPv4:     new(true),
+			enableIPv6:     new(true),
+			wantEnableIPv4: true,
+			wantEnableIPv6: true,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			result, err := hetzner.BuildServerCreateOptsForTest(hetzner.CreateServerOpts{
+				Name:       "test-node",
+				ServerType: "cx22",
+				ISOID:      12345,
+				Location:   "fsn1",
+				EnableIPv4: testCase.enableIPv4,
+				EnableIPv6: testCase.enableIPv6,
+			})
+
+			require.NoError(t, err)
+			require.NotNil(t, result.PublicNet, "PublicNet must always be set explicitly")
+			assert.Equal(t, testCase.wantEnableIPv4, result.PublicNet.EnableIPv4)
+			assert.Equal(t, testCase.wantEnableIPv6, result.PublicNet.EnableIPv6)
+		})
+	}
+}
+
 func TestBuildServerCreateOpts_InvalidArgs(t *testing.T) {
 	t.Parallel()
 

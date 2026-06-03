@@ -112,13 +112,17 @@ func getJSONFieldName(field reflect.StructField) string {
 // convertValue converts a reflect.Value to a serializable value.
 // Returns nil for zero/empty values that should be omitted.
 func convertValue(val reflect.Value) any {
-	// Handle pointers first
+	// Handle pointers first. A non-nil pointer field represents an explicit
+	// choice — the nil/non-nil distinction is the entire reason the field is a
+	// pointer (e.g. *bool: nil=unset, &false=explicitly disabled) — so its value
+	// is emitted even when it is the scalar zero value. Value (non-pointer) zero
+	// values are still omitted by convertByKind.
 	if val.Kind() == reflect.Pointer {
 		if val.IsNil() {
 			return nil
 		}
 
-		val = val.Elem()
+		return convertNonNilPointer(val.Elem())
 	}
 
 	// Handle interface values
@@ -131,6 +135,43 @@ func convertValue(val reflect.Value) any {
 	}
 
 	return convertByKind(val)
+}
+
+// convertNonNilPointer converts the dereferenced value of a non-nil pointer
+// field, preserving scalar zero values (false, 0, "") that convertByKind would
+// otherwise omit. Without this a *bool set to false would be silently dropped on
+// marshal and revert to its default on the next load. Composite and other kinds
+// delegate to convertByKind's normal (zero-omitting) handling.
+func convertNonNilPointer(val reflect.Value) any {
+	if val.Kind() == reflect.Interface {
+		if val.IsNil() {
+			return nil
+		}
+
+		val = val.Elem()
+	}
+
+	//nolint:exhaustive // composite and remaining kinds delegate to convertByKind
+	switch val.Kind() {
+	case reflect.Bool:
+		return val.Bool()
+
+	case reflect.String:
+		return val.String()
+
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		if val.Type() == reflect.TypeFor[time.Duration]() {
+			return val.Interface().(time.Duration).String() //nolint:forcetypeassert // known type
+		}
+
+		return val.Int()
+
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return val.Uint()
+
+	default:
+		return convertByKind(val)
+	}
 }
 
 // convertByKind handles the actual type conversion.

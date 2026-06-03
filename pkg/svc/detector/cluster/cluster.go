@@ -367,22 +367,41 @@ func checkHetznerOwnership(
 			continue
 		}
 
-		if server == nil {
-			continue
-		}
-
-		// Check public IPv4
-		if server.PublicNet.IPv4.IP != nil && server.PublicNet.IPv4.IP.String() == ipAddress {
-			return true, nil
-		}
-
-		// Check public IPv6
-		if server.PublicNet.IPv6.IP != nil && server.PublicNet.IPv6.IP.String() == ipAddress {
+		if serverHasIP(server, ipAddress) {
 			return true, nil
 		}
 	}
 
 	return false, nil
+}
+
+// serverHasIP reports whether the server exposes ipAddress on any of its public
+// or private networks. An IPv4-less control plane has no public IP, so its
+// kubeconfig/talos endpoint (the ipAddress being matched here) is the node's
+// private-network IP.
+func serverHasIP(server *hcloud.Server, ipAddress string) bool {
+	if server == nil {
+		return false
+	}
+
+	// Check public IPv4
+	if server.PublicNet.IPv4.IP != nil && server.PublicNet.IPv4.IP.String() == ipAddress {
+		return true
+	}
+
+	// Check public IPv6
+	if server.PublicNet.IPv6.IP != nil && server.PublicNet.IPv6.IP.String() == ipAddress {
+		return true
+	}
+
+	// Check private-network IPs.
+	for _, privateNet := range server.PrivateNet {
+		if privateNet.IP != nil && privateNet.IP.String() == ipAddress {
+			return true
+		}
+	}
+
+	return false
 }
 
 // ResolveKubeconfigPath returns the kubeconfig path, resolving defaults if empty

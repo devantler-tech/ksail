@@ -518,6 +518,26 @@ func (in *OptionsHetzner) DeepCopyInto(out *OptionsHetzner) {
 		*out = make([]string, len(*in))
 		copy(*out, *in)
 	}
+	if in.WorkerPublicIPv4 != nil {
+		in, out := &in.WorkerPublicIPv4, &out.WorkerPublicIPv4
+		*out = new(bool)
+		**out = **in
+	}
+	if in.WorkerPublicIPv6 != nil {
+		in, out := &in.WorkerPublicIPv6, &out.WorkerPublicIPv6
+		*out = new(bool)
+		**out = **in
+	}
+	if in.ControlPlanePublicIPv4 != nil {
+		in, out := &in.ControlPlanePublicIPv4, &out.ControlPlanePublicIPv4
+		*out = new(bool)
+		**out = **in
+	}
+	if in.ControlPlanePublicIPv6 != nil {
+		in, out := &in.ControlPlanePublicIPv6, &out.ControlPlanePublicIPv6
+		*out = new(bool)
+		**out = **in
+	}
 	if in.AutoscalerNodePoolNames != nil {
 		in, out := &in.AutoscalerNodePoolNames, &out.AutoscalerNodePoolNames
 		*out = make([]string, len(*in))

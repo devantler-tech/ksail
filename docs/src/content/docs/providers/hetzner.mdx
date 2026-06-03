@@ -88,6 +88,14 @@ spec:
       # When empty, both APIs are open to 0.0.0.0/0 and ::/0 (all IPv4 and IPv6).
       # Applied to both the Hetzner Cloud Firewall and the Talos OS-level ingress firewall.
       # allowedCidrs: ["203.0.113.0/24", "198.51.100.0/24"]
+      # Per-role public networking (default: both IPv4 and IPv6 enabled).
+      # Set workerPublicIPv4: false for IPv4-less workers reached over the private
+      # network — requires KSail to run with private-network reachability and a NAT
+      # gateway (or working IPv6) for egress. See "IPv4-less nodes" below.
+      # workerPublicIPv4: true
+      # workerPublicIPv6: true
+      # controlPlanePublicIPv4: true
+      # controlPlanePublicIPv6: true
       # Maximum Hetzner servers for this cluster (default: 10)
       # serverLimit: 10
 ```
@@ -107,7 +115,53 @@ spec:
 | `hetzner.placementGroupFallbackToNone` | bool | `false` | Fall back to no placement group on capacity issues |
 | `hetzner.ingressFirewall` | string | `Enabled` | Talos OS-level ingress firewall (`Enabled` or `Disabled`). Generates `NetworkDefaultActionConfig` + `NetworkRuleConfig` patches as defense-in-depth alongside the Hetzner Cloud Firewall. |
 | `hetzner.allowedCidrs` | list | _(empty)_ | CIDR blocks allowed to access the Kubernetes API (6443) and Talos API (50000) on control-plane nodes. When empty, both APIs are open to `0.0.0.0/0` and `::/0`. Applied to both the Hetzner Cloud Firewall and the Talos OS-level ingress firewall for defense-in-depth. Example: `["203.0.113.0/24", "2001:db8::/32"]` |
+| `hetzner.workerPublicIPv4` | bool | `true` | Assign a public IPv4 to worker nodes. Set `false` for IPv4-less workers reached over the private network. See [IPv4-less nodes](#ipv4-less-nodes). |
+| `hetzner.workerPublicIPv6` | bool | `true` | Assign a public IPv6 to worker nodes (IPv6 is free on Hetzner). |
+| `hetzner.controlPlanePublicIPv4` | bool | `true` | Assign a public IPv4 to control-plane nodes. Set `false` for IPv4-less control planes; the kube/talos endpoint then resolves to the private-network IP (cluster reachable only from inside the private network). |
+| `hetzner.controlPlanePublicIPv6` | bool | `true` | Assign a public IPv6 to control-plane nodes. |
 | `hetzner.serverLimit` | int | `10` | Maximum total Hetzner servers for this cluster. Validated only when Hetzner node autoscaling is enabled — checks `control-planes + workers + effective autoscaler capacity`, where effective autoscaler capacity is `sum(pool.max)` or, when `autoscaler.node.maxNodesTotal > 0`, `min(sum(pool.max), autoscaler.node.maxNodesTotal)`. Set to `0` to use the default of 10. |
+
+### IPv4-less Nodes
+
+By default every Hetzner node receives a public IPv4 (billed, ~€0.50/mo each) and a public IPv6
+(free). Setting `workerPublicIPv4: false` (and/or `controlPlanePublicIPv4: false`) provisions nodes
+**without a public IPv4**, reducing both cost and public attack surface — the node is no longer
+directly reachable from the internet.
+
+Because KSail manages each node over its Talos API, an IPv4-less node changes how KSail reaches it:
+
+- **KSail connects over the private network.** When a node has no public IPv4, KSail uses the node's
+  private-network IP for the Talos API, config apply, bootstrap, and (for control planes) the
+  kube/talos endpoint. **This requires KSail itself to have a route into the private network** — run
+  KSail from inside the network, over a VPN/WireGuard, or via a bastion. Without that route,
+  provisioning hangs waiting for the Talos API.
+- **Nodes still need egress.** A node with no public IPv4 cannot pull container images, reach the
+  Hetzner API (CCM/CSI), or join the cluster unless the private network provides egress. Provide a
+  **NAT gateway** on the private network, or rely on public IPv6 where every required registry is
+  reachable over IPv6.
+- **IPv6-only egress is unreliable for image pulls.** `ghcr.io` (and some other registries) are not
+  consistently reachable over IPv6, so an IPv4-less node relying solely on IPv6 egress may fail to
+  pull images. A NAT gateway is the robust option.
+
+**IPv4-less control planes.** Disabling `controlPlanePublicIPv4` makes the generated kubeconfig and
+talosconfig point at the control plane's **private** IP, so `kubectl`/`ksail` only work from inside
+the private network (or behind a load balancer / floating IP you place in front).
+
+**Reachability.** Because an IPv4-less node is driven entirely over the private network, KSail must be
+able to route into it. If KSail can't reach an IPv4-less node's Talos API, provisioning fails with an
+actionable error pointing at the private-network-route and egress prerequisites above (rather than an
+opaque timeout). KSail also warns at config time when a role disables both IP families, since that
+node then depends on a NAT gateway for egress.
+
+**Autoscaler nodes.** Autoscaler-created nodes inherit the **worker** public-net setting
+**cluster-wide** (KSail sets `HCLOUD_PUBLIC_IPV4`/`HCLOUD_PUBLIC_IPV6` on the cluster-autoscaler).
+The upstream Hetzner cluster-autoscaler has no per-pool public-net control, so all autoscaler pools
+share the worker setting.
+
+**Load balancers.** KSail does not create Hetzner load balancers, but when you expose Services with
+the Hetzner CCM and your nodes are IPv4-less, annotate the Service with
+`load-balancer.hetzner.cloud/use-private-ip: "true"` so the load balancer targets nodes by their
+private IP.
 
 ### Talos options for Hetzner clusters
 

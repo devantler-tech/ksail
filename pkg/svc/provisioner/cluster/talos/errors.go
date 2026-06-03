@@ -8,6 +8,15 @@ var (
 	ErrDockerNotAvailable = errors.New("docker is not available: ensure Docker is running")
 	// ErrClusterAlreadyExists is returned when attempting to create a cluster that already exists.
 	ErrClusterAlreadyExists = errors.New("cluster already exists")
+	// ErrNodeNoReachableAddress is returned when a Hetzner server has neither a public
+	// IPv4 nor a private-network IP, so KSail has no address to reach its Talos API.
+	ErrNodeNoReachableAddress = errors.New("hetzner node has no reachable address")
+	// ErrPrivateNetworkUnreachable is returned when KSail cannot reach an IPv4-less
+	// Hetzner node's Talos API over the private network — typically because KSail has
+	// no route into the private network or the node lacks egress.
+	ErrPrivateNetworkUnreachable = errors.New(
+		"hetzner private network is unreachable from ksail",
+	)
 	// ErrInvalidPatch is returned when a patch file is invalid.
 	ErrInvalidPatch = errors.New("invalid patch file")
 	// ErrNotImplemented is returned when a method is not yet implemented.
