@@ -43,6 +43,19 @@ export default defineConfig({
             href: "https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Hanken+Grotesque:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap",
           },
         },
+        // Umami privacy-first web analytics (self-hosted on the platform).
+        {
+          tag: "script",
+          attrs: {
+            src: "https://analytics.platform.devantler.tech/script.js",
+            "data-website-id": "27f83d6b-8ce4-4239-9387-eabc7f57cd68",
+            // Client-side host allowlist: the tracker only sends events when
+            // the page is served from this host, keeping forks, previews and
+            // local builds out of analytics (not a server-side spoof guard).
+            "data-domains": "ksail.devantler.tech",
+            defer: true,
+          },
+        },
       ],
       logo: {
         src: "./src/assets/logo.svg",
