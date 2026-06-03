@@ -15,6 +15,6 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
-    uses: devantler-tech/reusable-workflows/.github/workflows/update-copilot-skills.yaml@26f77bf515895dc8b750130ea4625a9fd8648c9c # v1.39.0+ (post skills-lock refactor)
+    uses: devantler-tech/reusable-workflows/.github/workflows/update-copilot-skills.yaml@ad99c16f59e9e205d1cbd4d511c949aa353670b7 # v1.39.0+ (post skills-lock refactor)
     with:
       dir: .agents/skills
