@@ -149,6 +149,29 @@ spec:
 			expectFound: false,
 		},
 		{
+			name: "ignores FluxInstance in a different namespace",
+			setupFiles: func(t *testing.T, dir string) {
+				t.Helper()
+
+				content := `apiVersion: fluxcd.controlplane.io/v1
+kind: FluxInstance
+metadata:
+  name: flux
+  namespace: other-namespace
+spec:
+  distribution:
+    version: "2.x"
+`
+				err := os.WriteFile(
+					filepath.Join(dir, "wrong-ns.yaml"),
+					[]byte(content),
+					testFilePermissions,
+				)
+				require.NoError(t, err)
+			},
+			expectFound: false,
+		},
+		{
 			name: "finds FluxInstance in subdirectory",
 			setupFiles: func(t *testing.T, dir string) {
 				t.Helper()
@@ -252,6 +275,92 @@ metadata:
 			expectFound:    true,
 			expectFilename: "valid.yaml",
 		},
+	}
+}
+
+func writeYAMLFile(t *testing.T, dir, name, content string) {
+	t.Helper()
+
+	err := os.WriteFile(filepath.Join(dir, name), []byte(content), testFilePermissions)
+	require.NoError(t, err)
+}
+
+//nolint:funlen // Table-driven test cases are necessarily verbose.
+func TestCRDetector_FindFluxInstanceDistribution(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		setupFile func(t *testing.T, dir string)
+		expect    gitops.FluxDistribution
+	}{
+		{
+			name:      "no FluxInstance returns zero value",
+			setupFile: func(_ *testing.T, _ string) {},
+			expect:    gitops.FluxDistribution{},
+		},
+		{
+			name: "reads full distribution block",
+			setupFile: func(t *testing.T, dir string) {
+				t.Helper()
+
+				content := `apiVersion: fluxcd.controlplane.io/v1
+kind: FluxInstance
+metadata:
+  name: flux
+  namespace: flux-system
+spec:
+  distribution:
+    version: "2.8.x"
+    registry: "ghcr.io/fluxcd"
+    artifact: "oci://example.com/manifests:latest"
+`
+				writeYAMLFile(t, dir, "flux.yaml", content)
+			},
+			expect: gitops.FluxDistribution{
+				Version:  "2.8.x",
+				Registry: "ghcr.io/fluxcd",
+				Artifact: "oci://example.com/manifests:latest",
+			},
+		},
+		{
+			name: "reads version-only distribution",
+			setupFile: func(t *testing.T, dir string) {
+				t.Helper()
+
+				writeYAMLFile(t, dir, "flux.yaml", fluxInstanceContent)
+			},
+			expect: gitops.FluxDistribution{Version: "2.x"},
+		},
+		{
+			name: "reads distribution from multi-document YAML",
+			setupFile: func(t *testing.T, dir string) {
+				t.Helper()
+
+				content := `apiVersion: v1
+kind: Namespace
+metadata:
+  name: flux-system
+---
+` + fluxInstanceContent
+				writeYAMLFile(t, dir, "multi.yaml", content)
+			},
+			expect: gitops.FluxDistribution{Version: "2.x"},
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			tempDir := t.TempDir()
+			testCase.setupFile(t, tempDir)
+
+			det := gitops.NewCRDetector(tempDir)
+			dist, err := det.FindFluxInstanceDistribution()
+			require.NoError(t, err)
+			require.Equal(t, testCase.expect, dist)
+		})
 	}
 }
 

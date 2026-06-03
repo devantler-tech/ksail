@@ -61,7 +61,7 @@ func (f *Factory) CreateInstallersForConfig(cfg *v1alpha1.Cluster) (map[string]I
 	spec := cfg.Spec.Cluster
 	haEnabled := IsHAEnabled(spec.TotalNodeCount())
 
-	f.addGitOpsInstaller(installers, spec, haEnabled)
+	f.addGitOpsInstaller(installers, spec, cfg.Spec.Workload.Flux.OperatorVersion, haEnabled)
 	f.addCNIInstaller(installers, spec, haEnabled)
 	f.addPolicyEngineInstaller(installers, spec, haEnabled)
 	f.addCertManagerInstaller(installers, spec, haEnabled)
@@ -121,6 +121,7 @@ func (f *Factory) GetImagesForCluster(
 func (f *Factory) addGitOpsInstaller(
 	installers map[string]Installer,
 	spec v1alpha1.ClusterSpec,
+	operatorVersion string,
 	haEnabled bool,
 ) {
 	switch spec.GitOpsEngine {
@@ -128,6 +129,7 @@ func (f *Factory) addGitOpsInstaller(
 		installers["flux"] = fluxinstaller.NewInstaller(
 			f.helmClient,
 			max(f.timeout, FluxInstallTimeout),
+			operatorVersion,
 		)
 	case v1alpha1.GitOpsEngineArgoCD:
 		installers["argocd"] = argocdinstaller.NewInstaller(

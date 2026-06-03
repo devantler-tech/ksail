@@ -1167,6 +1167,77 @@ func assertWorkloadTagChange(
 	}
 }
 
+const (
+	distVerOld = "2.x"
+	distVerNew = "2.8.x"
+)
+
+func TestEngine_CheckFluxDistributionVersion(t *testing.T) {
+	t.Parallel()
+
+	engine := diff.NewEngine(v1alpha1.DistributionVanilla, v1alpha1.ProviderDocker)
+
+	tests := []struct {
+		name         string
+		oldVersion   string
+		newVersion   string
+		gitOpsEngine v1alpha1.GitOpsEngine
+		wantChanges  int
+	}{
+		{"no gitops engine", distVerOld, distVerNew, v1alpha1.GitOpsEngineNone, 0},
+		{"argocd not applicable", distVerOld, distVerNew, v1alpha1.GitOpsEngineArgoCD, 0},
+		{"same version no change", distVerNew, distVerNew, v1alpha1.GitOpsEngineFlux, 0},
+		{"flux version drift", distVerOld, distVerNew, v1alpha1.GitOpsEngineFlux, 1},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			result := &clusterupdate.UpdateResult{}
+			engine.CheckFluxDistributionVersion(
+				testCase.oldVersion, testCase.newVersion, testCase.gitOpsEngine, result,
+			)
+
+			if got := result.TotalChanges(); got != testCase.wantChanges {
+				t.Errorf("want %d changes, got %d", testCase.wantChanges, got)
+			}
+
+			if testCase.wantChanges > 0 {
+				assertFluxDistributionVersionChange(
+					t, result, testCase.oldVersion, testCase.newVersion,
+				)
+			}
+		})
+	}
+}
+
+func assertFluxDistributionVersionChange(
+	t *testing.T,
+	result *clusterupdate.UpdateResult,
+	oldVersion, newVersion string,
+) {
+	t.Helper()
+
+	changes := result.InPlaceChanges
+	if len(changes) != 1 {
+		t.Fatalf("expected 1 in-place change, got %d", len(changes))
+	}
+
+	change := changes[0]
+	if change.Field != "cluster.workload.flux.distributionVersion" {
+		t.Errorf("expected field cluster.workload.flux.distributionVersion, got %s", change.Field)
+	}
+
+	if change.OldValue != oldVersion {
+		t.Errorf("expected old value %q, got %q", oldVersion, change.OldValue)
+	}
+
+	if change.NewValue != newVersion {
+		t.Errorf("expected new value %q, got %q", newVersion, change.NewValue)
+	}
+}
+
 func TestEngine_TalosBaselineNodeCountDetected_WhenAutoscalingEnabled(t *testing.T) {
 	t.Parallel()
 

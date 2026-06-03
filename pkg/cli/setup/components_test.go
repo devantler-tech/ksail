@@ -405,7 +405,7 @@ func TestInstallFluxSilent_InstallError(t *testing.T) {
 		HelmClientFactory: func(_ *v1alpha1.Cluster) (*helm.Client, string, error) {
 			return nil, "", nil
 		},
-		Flux: func(_ helm.Interface, _ time.Duration) installer.Installer {
+		Flux: func(_ helm.Interface, _ time.Duration, _ string) installer.Installer {
 			return &mockInstaller{installErr: fmt.Errorf("flux install: %w", errFluxInstallFailed)}
 		},
 	}

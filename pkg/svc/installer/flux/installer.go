@@ -2,7 +2,9 @@ package fluxinstaller
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
@@ -11,24 +13,55 @@ import (
 
 // Installer implements the installer.Installer interface for Flux.
 type Installer struct {
-	timeout time.Duration
-	client  helm.Interface
+	timeout         time.Duration
+	client          helm.Interface
+	operatorVersion string
 }
 
-// NewInstaller creates a new Flux installer instance.
+// NewInstaller creates a new Flux installer instance. operatorVersion pins the
+// flux-operator Helm chart version to seed; when empty, the version embedded in
+// the package Dockerfile (chartVersion) is used as the fallback.
 func NewInstaller(
 	client helm.Interface,
 	timeout time.Duration,
+	operatorVersion string,
 ) *Installer {
 	return &Installer{
-		client:  client,
-		timeout: timeout,
+		client:          client,
+		timeout:         timeout,
+		operatorVersion: operatorVersion,
 	}
 }
 
 // Install installs or upgrades the Flux Operator via its OCI Helm chart.
+//
+// Seed-if-absent: when the flux-operator Helm release is already owned by a
+// GitOps controller — a repo-declared HelmRelease reconciled by Flux, or a
+// release adopted by ArgoCD — the install is skipped so KSail defers to that
+// owner instead of re-asserting its pinned version. This prevents the operator
+// version from flapping/downgrading when the GitOps repository owns it. For
+// everyone else the behavior is unchanged: KSail seeds (or upgrades to) its
+// configured/pinned version.
 func (b *Installer) Install(ctx context.Context) error {
-	err := b.helmInstallOrUpgrade(ctx)
+	spec := b.chartSpec()
+
+	labels, err := b.client.GetReleaseStorageLabels(ctx, spec.ReleaseName, spec.Namespace)
+	if err != nil && !errors.Is(err, helm.ErrNoReleaseStorage) {
+		return fmt.Errorf("check flux-operator release ownership: %w", err)
+	}
+
+	if controller, managed := helmutil.IsGitOpsManaged(labels); managed {
+		fmt.Fprintf(
+			os.Stderr,
+			"flux-operator: skipping install — release %q is managed by %s\n",
+			spec.ReleaseName,
+			controller,
+		)
+
+		return nil
+	}
+
+	err = b.helmInstallOrUpgrade(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to install Flux operator: %w", err)
 	}
@@ -67,7 +100,7 @@ func (b *Installer) chartSpec() *helm.ChartSpec {
 		ReleaseName:     "flux-operator",
 		ChartName:       "oci://ghcr.io/controlplaneio-fluxcd/charts/flux-operator",
 		Namespace:       "flux-system",
-		Version:         chartVersion(),
+		Version:         b.resolveOperatorVersion(),
 		CreateNamespace: true,
 		Atomic:          true,
 		UpgradeCRDs:     true,
@@ -78,6 +111,16 @@ func (b *Installer) chartSpec() *helm.ChartSpec {
 		// "unrecognized format" warnings that confuse users if printed.
 		Silent: true,
 	}
+}
+
+// resolveOperatorVersion returns the configured operator version when set,
+// otherwise the version pinned in the embedded Dockerfile (chartVersion).
+func (b *Installer) resolveOperatorVersion() string {
+	if b.operatorVersion != "" {
+		return b.operatorVersion
+	}
+
+	return chartVersion()
 }
 
 // --- internals ---

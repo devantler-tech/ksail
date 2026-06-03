@@ -740,6 +740,28 @@ spec:
               workload:
                 description: WorkloadSpec defines workload-related configuration.
                 properties:
+                  flux:
+                    description: |-
+                      FluxConfig pins the versions KSail uses when it seeds Flux during cluster
+                      bootstrap. Both fields are optional; an empty value means KSail uses its
+                      built-in pinned version. They configure only the bootstrap seed — once a
+                      GitOps repository owns the flux-operator HelmRelease or the FluxInstance,
+                      that repository becomes the steady-state owner of the version and KSail defers.
+                    properties:
+                      distributionVersion:
+                        description: |-
+                          DistributionVersion pins the FluxInstance spec.distribution.version KSail
+                          seeds. When empty, KSail uses its default ("2.x"). A repo-declared
+                          FluxInstance's distribution.version takes precedence over this value.
+                        type: string
+                      operatorVersion:
+                        description: |-
+                          OperatorVersion pins the Flux operator Helm chart version KSail installs
+                          when it seeds the operator. When empty, KSail uses its built-in pinned
+                          version. Ignored once a GitOps repo owns the flux-operator release — KSail
+                          never re-installs over a Helm release managed by Flux or ArgoCD.
+                        type: string
+                    type: object
                   kustomizationFile:
                     type: string
                   sourceDirectory:
