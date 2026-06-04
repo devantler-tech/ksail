@@ -47,6 +47,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil/scaffolder"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/clusterdiscovery"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/detector"
 	clusterdetector "github.com/devantler-tech/ksail/v7/pkg/svc/detector/cluster"
 	specdiff "github.com/devantler-tech/ksail/v7/pkg/svc/diff"
@@ -56,7 +57,6 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
 	dockerprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/docker"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/hetzner"
-	kubernetesprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/kubernetes"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/omni"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
@@ -70,16 +70,13 @@ import (
 	"github.com/docker/docker/client"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
-	omniclient "github.com/siderolabs/omni/client/pkg/client"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"golang.org/x/sync/errgroup"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/cli-runtime/pkg/genericiooptions"
-	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
-	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 	sigsyaml "sigs.k8s.io/yaml"
 )
 
@@ -1299,12 +1296,13 @@ func newProvisionerFactory(ctx *localregistry.Context) clusterprovisioner.Factor
 
 	return clusterprovisioner.DefaultFactory{
 		DistributionConfig: &clusterprovisioner.DistributionConfig{
-			Kind:     ctx.KindConfig,
-			K3d:      ctx.K3dConfig,
-			Talos:    ctx.TalosConfig,
-			VCluster: ctx.VClusterConfig,
-			KWOK:     ctx.KWOKConfig,
-			EKS:      ctx.EKSConfig,
+			Kind:        ctx.KindConfig,
+			K3d:         ctx.K3dConfig,
+			Talos:       ctx.TalosConfig,
+			VCluster:    ctx.VClusterConfig,
+			KWOK:        ctx.KWOKConfig,
+			EKS:         ctx.EKSConfig,
+			MirrorSpecs: ctx.MirrorSpecs,
 		},
 	}
 }
@@ -1316,6 +1314,35 @@ func configureProvisionerFactory(
 	ctx *localregistry.Context,
 ) {
 	deps.Factory = newProvisionerFactory(ctx)
+}
+
+// resolveNestedMirrorSpecs resolves registry mirror specs for the Kubernetes provider
+// and stores them on the context so the nested provisioner can set them up inside the
+// DinD environment. The host-level mirror stages are skipped for this provider
+// (NeedsLocalDocker is false), so nested clusters would otherwise pull images
+// anonymously and hit registry rate limits during boot. No-op for other providers.
+func resolveNestedMirrorSpecs(
+	cmd *cobra.Command,
+	cfgManager *ksailconfigmanager.ConfigManager,
+	ctx *localregistry.Context,
+) error {
+	if ctx.ClusterCfg.Spec.Cluster.Provider != v1alpha1.ProviderKubernetes {
+		return nil
+	}
+
+	specs, err := mirrorregistry.ResolveMirrorSpecs(
+		cmd,
+		cfgManager,
+		ctx.ClusterCfg,
+		ctx.TalosConfig,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to resolve nested mirror specs: %w", err)
+	}
+
+	ctx.MirrorSpecs = specs
+
+	return nil
 }
 
 // maybeImportCachedImages imports cached container images if configured.
@@ -1740,10 +1767,16 @@ func applyClusterNameOverride(ctx *localregistry.Context, name string) error {
 		ctx.KWOKConfig.Name = name
 	}
 
-	// Update the ksail.yaml context to match the distribution pattern
+	// Update the ksail.yaml context to match the pattern the created cluster uses.
+	// Must be provider-aware: the Kubernetes (k3k) provider writes a "k3k-<name>"
+	// context for K3s rather than the standalone "k3d-<name>", so post-creation CNI
+	// install can resolve it.
 	if ctx.ClusterCfg != nil {
-		dist := ctx.ClusterCfg.Spec.Cluster.Distribution
-		ctx.ClusterCfg.Spec.Cluster.Connection.Context = dist.ContextName(name)
+		ctx.ClusterCfg.Spec.Cluster.Connection.Context = resolveCreatedContextName(
+			ctx.ClusterCfg.Spec.Cluster.Distribution,
+			ctx.ClusterCfg.Spec.Cluster.Provider,
+			name,
+		)
 	}
 
 	return nil
@@ -1850,7 +1883,7 @@ func resolveFallbackName(ctx *localregistry.Context) string {
 	}
 
 	// Fall back to metadata.name from ksail.yaml
-	if name := strings.TrimSpace(ctx.ClusterCfg.Metadata.Name); name != "" {
+	if name := strings.TrimSpace(ctx.ClusterCfg.Name); name != "" {
 		return name
 	}
 
@@ -2900,7 +2933,7 @@ func NewDiagnoseCmd(_ *di.Runtime) *cobra.Command {
 	var (
 		nameFlag     string
 		providerFlag v1alpha1.Provider
-		formatFlag   string
+		outputFlag   string
 	)
 
 	cmd := &cobra.Command{
@@ -2909,7 +2942,7 @@ func NewDiagnoseCmd(_ *di.Runtime) *cobra.Command {
 		Long:         diagnoseLongDesc,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runDiagnoseCmd(cmd, nameFlag, providerFlag, formatFlag)
+			return runDiagnoseCmd(cmd, nameFlag, providerFlag, outputFlag)
 		},
 	}
 
@@ -2929,8 +2962,8 @@ func NewDiagnoseCmd(_ *di.Runtime) *cobra.Command {
 	)
 
 	cmd.Flags().StringVar(
-		&formatFlag,
-		"format",
+		&outputFlag,
+		"output",
 		"text",
 		"Output format: text or json. Use json for machine-readable structured output.",
 	)
@@ -2945,9 +2978,9 @@ func runDiagnoseCmd(
 	cmd *cobra.Command,
 	nameFlag string,
 	providerFlag v1alpha1.Provider,
-	formatFlag string,
+	outputFlag string,
 ) error {
-	format := strings.ToLower(formatFlag)
+	format := strings.ToLower(outputFlag)
 	if format != outputFormatText && format != outputFormatJSON {
 		return fmt.Errorf(
 			"%w: %q (expected %q or %q)",
@@ -3017,6 +3050,9 @@ func runDiagnoseTextReport(report k8s.DiagnoseReport, writer io.Writer) error {
 func runDiagnoseJSONReport(report k8s.DiagnoseReport, w io.Writer) error {
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
+	// Keep '<', '>', '&' literal (e.g. in remediation hints like "<name>")
+	// instead of HTML-escaping them; this is CLI output, not HTML.
+	enc.SetEscapeHTML(false)
 
 	err := enc.Encode(report)
 	if err != nil {
@@ -3065,23 +3101,56 @@ func runInfoCmd(
 		displayProviderStatus(writer, resolved.Provider, resolved.ClusterName, status)
 	}
 
-	// Phase 2: Attempt kubectl cluster-info
-	kubeErr := tryKubeClusterInfo(cmd, resolved.KubeconfigPath)
-	hasKubeInfo := kubeErr == nil
+	// Resolve the requested cluster's kubeconfig context. Phases 2 and 3 are
+	// scoped to it so a non-existent cluster does not silently fall back to the
+	// kubeconfig's current context (which would misreport an unrelated cluster
+	// as the requested one). An empty result means no context matched.
+	contextName, ctxErr := resolveClusterContext(resolved.KubeconfigPath, resolved.ClusterName)
+	if errors.Is(ctxErr, ErrAmbiguousCluster) {
+		// Surface the ambiguity (like 'cluster switch') instead of silently
+		// behaving like "not found".
+		return ctxErr
+	}
+
+	// Phase 2: Attempt kubectl cluster-info, scoped to the resolved context.
+	hasKubeInfo := tryScopedKubeInfo(
+		cmd, writer, resolved.KubeconfigPath, contextName, hasProviderInfo,
+	)
+
+	// Phase 3: Append KSail details (TTL, components). Only when we resolved a
+	// context — displayKSailDetails would otherwise fall back to the current
+	// context and reintroduce the cross-cluster false-positive.
+	if hasProviderInfo || hasKubeInfo {
+		displayKSailDetails(cmd, resolved.KubeconfigPath, contextName)
+
+		return nil
+	}
+
+	return buildNoInfoError(resolved.ClusterName, provErr)
+}
+
+// tryScopedKubeInfo runs kubectl cluster-info scoped to contextName, skipping
+// entirely when it is empty (falling back to the current context there is the
+// cross-cluster false-positive we are preventing). When the API is unreachable
+// but provider info is present, it prints an "unreachable" notice. It returns
+// whether kube info was obtained.
+func tryScopedKubeInfo(
+	cmd *cobra.Command,
+	writer io.Writer,
+	kubeconfigPath, contextName string,
+	hasProviderInfo bool,
+) bool {
+	hasKubeInfo := false
+	if contextName != "" {
+		hasKubeInfo = tryKubeClusterInfo(cmd, kubeconfigPath, contextName) == nil
+	}
 
 	if !hasKubeInfo && hasProviderInfo {
 		_, _ = fmt.Fprintln(writer)
 		_, _ = fmt.Fprintln(writer, "  Kubernetes API: unreachable")
 	}
 
-	// Phase 3: Append KSail details (TTL, components)
-	if hasProviderInfo || hasKubeInfo {
-		displayKSailDetails(cmd, resolved.KubeconfigPath)
-
-		return nil
-	}
-
-	return buildNoInfoError(resolved.ClusterName, provErr)
+	return hasKubeInfo
 }
 
 // classifyProviderError returns nil for soft errors that mean "no provider info"
@@ -3111,6 +3180,36 @@ func buildNoInfoError(clusterName string, provErr error) error {
 		errNoClusterInfo,
 		clusterName,
 	)
+}
+
+// resolveClusterContext returns the kubeconfig context name for the requested
+// cluster. It reuses the same name→context resolution as 'cluster switch' so
+// 'cluster info' only inspects the cluster it was asked about.
+//
+// It returns ("", nil) when the kubeconfig cannot be read or parsed (best
+// effort — callers fall back to provider info), ("", ErrContextNotFound) when
+// no context matches, and ("", ErrAmbiguousCluster) when the name matches more
+// than one context. Callers should surface the ambiguity error rather than
+// treating it as "not found".
+//
+
+func resolveClusterContext(kubeconfigPath, clusterName string) (string, error) {
+	canonicalPath, err := fsutil.EvalCanonicalPath(kubeconfigPath)
+	if err != nil {
+		return "", nil //nolint:nilerr // unresolvable kubeconfig path is non-fatal for info
+	}
+
+	configBytes, err := os.ReadFile(canonicalPath) //nolint:gosec // canonicalized above
+	if err != nil {
+		return "", nil //nolint:nilerr // unreadable kubeconfig is non-fatal for info
+	}
+
+	config, err := clientcmd.Load(configBytes)
+	if err != nil {
+		return "", nil //nolint:nilerr // unparseable kubeconfig is non-fatal for info
+	}
+
+	return resolveContextName(config, clusterName)
 }
 
 // getProviderStatus queries the infrastructure provider for cluster status.
@@ -3275,7 +3374,7 @@ const (
 // output to cmd's writer. Output is buffered during retries so that failed
 // attempts do not leak partial output. Returns nil on success, an error if
 // the Kubernetes API is unreachable after all attempts.
-func tryKubeClusterInfo(cmd *cobra.Command, kubeconfigPath string) error {
+func tryKubeClusterInfo(cmd *cobra.Command, kubeconfigPath, contextName string) error {
 	var lastErr error
 
 	for attempt := 1; attempt <= clusterInfoMaxAttempts; attempt++ {
@@ -3287,7 +3386,7 @@ func tryKubeClusterInfo(cmd *cobra.Command, kubeconfigPath string) error {
 			ErrOut: io.Discard,
 		})
 
-		kubeCmd := kubectlClient.CreateClusterInfoCommand(kubeconfigPath)
+		kubeCmd := kubectlClient.CreateClusterInfoCommand(kubeconfigPath, contextName)
 
 		// Suppress kubectl's own error output
 		kubeCmd.SetErr(io.Discard)
@@ -3320,8 +3419,16 @@ func tryKubeClusterInfo(cmd *cobra.Command, kubeconfigPath string) error {
 // displayKSailDetails appends KSail-specific cluster metadata after kubectl output.
 // This includes cluster identity (name, distribution, provider), TTL status,
 // and enabled component summary from persisted state. Each section fails gracefully.
-func displayKSailDetails(cmd *cobra.Command, kubeconfigPath string) {
-	info, err := clusterdetector.DetectInfo(kubeconfigPath, "")
+//
+// It requires a resolved contextName: with an empty context, DetectInfo would
+// fall back to the kubeconfig current context and could report an unrelated
+// cluster, so details are skipped entirely in that case.
+func displayKSailDetails(cmd *cobra.Command, kubeconfigPath, contextName string) {
+	if contextName == "" {
+		return
+	}
+
+	info, err := clusterdetector.DetectInfo(kubeconfigPath, contextName)
 	if err != nil || info == nil {
 		// If detection fails, skip KSail details because cluster identity could not be determined.
 		return
@@ -3694,24 +3801,16 @@ func resolveInitTargetPath(cfgManager *ksailconfigmanager.ConfigManager) (string
 // ErrUnsupportedProvider re-exports the shared error for backward compatibility.
 var ErrUnsupportedProvider = clustererr.ErrUnsupportedProvider
 
-// allDistributions returns all supported distributions.
+// allDistributions returns the Docker-based distributions enumerated when listing local clusters.
+// It delegates to clusterdiscovery so the CLI and the web UI share one source of truth.
 func allDistributions() []v1alpha1.Distribution {
-	return []v1alpha1.Distribution{
-		v1alpha1.DistributionVanilla,
-		v1alpha1.DistributionK3s,
-		v1alpha1.DistributionTalos,
-		v1alpha1.DistributionVCluster,
-		v1alpha1.DistributionKWOK,
-	}
+	return clusterdiscovery.LocalDistributions()
 }
 
-// allProviders returns all supported providers.
+// allProviders returns the providers `ksail cluster list` queries by default (Docker, Hetzner,
+// Omni). It delegates to clusterdiscovery.DefaultProviders.
 func allProviders() []v1alpha1.Provider {
-	return []v1alpha1.Provider{
-		v1alpha1.ProviderDocker,
-		v1alpha1.ProviderHetzner,
-		v1alpha1.ProviderOmni,
-	}
+	return clusterdiscovery.DefaultProviders()
 }
 
 // listResult holds a cluster name with its provider and distribution for display purposes.
@@ -3720,12 +3819,6 @@ type listResult struct {
 	Distribution v1alpha1.Distribution
 	ClusterName  string
 	TTL          *state.TTLInfo // nil if no TTL has been set for this cluster
-}
-
-// clusterWithDistribution pairs a cluster name with its distribution.
-type clusterWithDistribution struct {
-	Name         string
-	Distribution v1alpha1.Distribution
 }
 
 // tableColumnGap is the minimum gap between columns in table output.
@@ -3796,77 +3889,67 @@ func NewListCmd(runtimeContainer *di.Runtime) *cobra.Command {
 // ListDeps captures dependencies needed for the list command logic.
 type ListDeps struct {
 	// DistributionFactoryCreator is an optional function that creates factories for distributions.
-	// If nil, real factories with empty configs are used.
-	// This is primarily for testing purposes.
+	// If nil, real factories with empty configs are used. Primarily for testing: it is routed into
+	// the shared clusterdiscovery.Discoverer as the Docker provider's factory.
 	DistributionFactoryCreator func(v1alpha1.Distribution) clusterprovisioner.Factory
-
-	// HetznerProvider is an optional Hetzner provider for listing Hetzner clusters.
-	// If nil, a real provider will be created if HCLOUD_TOKEN is set.
-	HetznerProvider *hetzner.Provider
-
-	// OmniProvider is an optional Omni provider for listing Omni clusters.
-	// If nil, a real provider will be created if OMNI_SERVICE_ACCOUNT_KEY is set.
-	OmniProvider *omni.Provider
-
-	// KubernetesProvider is an optional Kubernetes provider for listing Kubernetes-hosted clusters.
-	// If nil, a real provider will be created using KSAIL_HOST_KUBECONFIG/KSAIL_HOST_CONTEXT env vars
-	// or the default kubeconfig (~/.kube/config) if those are not set.
-	KubernetesProvider *kubernetesprovider.Provider
 }
 
-// HandleListRunE handles the list command.
+// HandleListRunE handles the list command. It delegates cluster enumeration to the shared
+// clusterdiscovery service (the same one the local web UI uses) and formats the results as a table.
 // Exported for testing purposes.
 func HandleListRunE(
 	cmd *cobra.Command,
 	providerFilter v1alpha1.Provider,
 	deps ListDeps,
 ) error {
-	// Determine which providers to query
 	providers := resolveProviders(providerFilter)
 
-	// Collect clusters from all providers
-	var allResults []listResult
-
-	for _, prov := range providers {
-		clusters, err := getProviderClusters(cmd.Context(), deps, prov)
-		if err != nil {
-			// Log warning but continue with other providers
-			_, _ = fmt.Fprintf(
-				cmd.ErrOrStderr(),
-				"Warning: failed to list %s clusters: %v\n",
-				prov,
-				err,
-			)
-
-			continue
-		}
-
-		for _, cluster := range clusters {
-			ttlInfo, ttlErr := state.LoadClusterTTL(cluster.Name)
-			if ttlErr != nil && !errors.Is(ttlErr, state.ErrTTLNotSet) {
-				notify.Warningf(
-					cmd.ErrOrStderr(),
-					"failed to load TTL for cluster %q: %v",
-					cluster.Name,
-					ttlErr,
-				)
-			}
-
-			var ttl *state.TTLInfo
-			if ttlErr == nil {
-				ttl = ttlInfo
-			}
-
-			allResults = append(allResults, listResult{
-				Provider:     prov,
-				Distribution: cluster.Distribution,
-				ClusterName:  cluster.Name,
-				TTL:          ttl,
-			})
+	discoverer := &clusterdiscovery.Discoverer{}
+	if deps.DistributionFactoryCreator != nil {
+		discoverer.DockerFactory = func(
+			distribution v1alpha1.Distribution,
+		) (clusterprovisioner.Factory, error) {
+			return deps.DistributionFactoryCreator(distribution), nil
 		}
 	}
 
-	// Display results
+	clusters, failures := discoverer.Discover(cmd.Context(), providers)
+
+	for _, failure := range failures {
+		_, _ = fmt.Fprintf(
+			cmd.ErrOrStderr(),
+			"Warning: failed to list %s clusters: %v\n",
+			failure.Provider,
+			failure.Err,
+		)
+	}
+
+	allResults := make([]listResult, 0, len(clusters))
+
+	for _, cluster := range clusters {
+		ttlInfo, ttlErr := state.LoadClusterTTL(cluster.Name)
+		if ttlErr != nil && !errors.Is(ttlErr, state.ErrTTLNotSet) {
+			notify.Warningf(
+				cmd.ErrOrStderr(),
+				"failed to load TTL for cluster %q: %v",
+				cluster.Name,
+				ttlErr,
+			)
+		}
+
+		var ttl *state.TTLInfo
+		if ttlErr == nil {
+			ttl = ttlInfo
+		}
+
+		allResults = append(allResults, listResult{
+			Provider:     cluster.Provider,
+			Distribution: cluster.Distribution,
+			ClusterName:  cluster.Name,
+			TTL:          ttl,
+		})
+	}
+
 	displayListResults(cmd.OutOrStdout(), providers, allResults)
 
 	return nil
@@ -3879,321 +3962,6 @@ func resolveProviders(filter v1alpha1.Provider) []v1alpha1.Provider {
 	}
 
 	return []v1alpha1.Provider{filter}
-}
-
-// getProviderClusters returns all clusters for a given provider.
-func getProviderClusters(
-	ctx context.Context,
-	deps ListDeps,
-	provider v1alpha1.Provider,
-) ([]clusterWithDistribution, error) {
-	switch provider {
-	case v1alpha1.ProviderDocker:
-		return getDockerClusters(ctx, deps)
-	case v1alpha1.ProviderHetzner:
-		return getHetznerClusters(ctx, deps)
-	case v1alpha1.ProviderOmni:
-		return getOmniClusters(ctx, deps)
-	case v1alpha1.ProviderAWS:
-		// EKS cluster listing goes through the EKS API; not yet implemented
-		// in the local list path. Return an empty slice so `cluster list`
-		// does not error when AWS is configured in a profile.
-		return nil, nil
-	case v1alpha1.ProviderKubernetes:
-		return getKubernetesClusters(ctx, deps)
-	default:
-		return nil, fmt.Errorf("%w: %s", ErrUnsupportedProvider, provider)
-	}
-}
-
-// getDockerClusters returns all Docker-based clusters across all distributions.
-// Results are deduplicated by cluster name because different distributions
-// (Kind, K3d, Talos, VCluster) each manage their own namespace and a cluster
-// name uniquely identifies a cluster within the Docker provider.
-func getDockerClusters(ctx context.Context, deps ListDeps) ([]clusterWithDistribution, error) {
-	seen := make(map[string]struct{})
-
-	var allClusters []clusterWithDistribution
-
-	for _, dist := range allDistributions() {
-		clusters, err := getDistributionClusters(ctx, deps, dist)
-		if err != nil {
-			// Log and continue - don't fail on one distribution
-			continue
-		}
-
-		for _, c := range clusters {
-			if _, ok := seen[c]; !ok {
-				seen[c] = struct{}{}
-				allClusters = append(allClusters, clusterWithDistribution{
-					Name:         c,
-					Distribution: dist,
-				})
-			}
-		}
-	}
-
-	return allClusters, nil
-}
-
-// getHetznerClusters returns all Hetzner-based clusters.
-func getHetznerClusters(ctx context.Context, deps ListDeps) ([]clusterWithDistribution, error) {
-	// Use injected provider if available (for testing)
-	if deps.HetznerProvider != nil {
-		clusters, err := deps.HetznerProvider.ListAllClusters(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("failed to list Hetzner clusters: %w", err)
-		}
-
-		return toTalosClusters(clusters), nil
-	}
-
-	// Check for HCLOUD_TOKEN
-	token := os.Getenv("HCLOUD_TOKEN")
-	if token == "" {
-		// No token, skip Hetzner silently
-		return nil, nil
-	}
-
-	client := hcloud.NewClient(hcloud.WithToken(token))
-	provider := hetzner.NewProvider(client)
-
-	clusters, err := provider.ListAllClusters(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list Hetzner clusters: %w", err)
-	}
-
-	return toTalosClusters(clusters), nil
-}
-
-// getOmniClusters returns all Omni-based clusters.
-func getOmniClusters(ctx context.Context, deps ListDeps) ([]clusterWithDistribution, error) {
-	// Use injected provider if available (for testing)
-	if deps.OmniProvider != nil {
-		clusters, err := deps.OmniProvider.ListAllClusters(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("failed to list Omni clusters: %w", err)
-		}
-
-		return toTalosClusters(clusters), nil
-	}
-
-	// Check for OMNI_SERVICE_ACCOUNT_KEY
-	serviceAccountKey := os.Getenv("OMNI_SERVICE_ACCOUNT_KEY")
-	if serviceAccountKey == "" {
-		// No key, skip Omni silently
-		return nil, nil
-	}
-
-	// Check for OMNI_ENDPOINT
-	endpoint := os.Getenv("OMNI_ENDPOINT")
-	if endpoint == "" {
-		// No endpoint, skip Omni silently
-		return nil, nil
-	}
-
-	client, err := omniclient.New(
-		endpoint,
-		omniclient.WithServiceAccount(serviceAccountKey),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create Omni client: %w", err)
-	}
-
-	provider := omni.NewProvider(client)
-
-	clusters, err := provider.ListAllClusters(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list Omni clusters: %w", err)
-	}
-
-	return toTalosClusters(clusters), nil
-}
-
-// getKubernetesClusters returns all clusters hosted on the Kubernetes provider.
-func getKubernetesClusters(ctx context.Context, deps ListDeps) ([]clusterWithDistribution, error) {
-	// Use injected provider if available (for testing)
-	if deps.KubernetesProvider != nil {
-		infos, err := deps.KubernetesProvider.ListAllClustersWithDistribution(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("failed to list Kubernetes clusters: %w", err)
-		}
-
-		return toKubernetesClusters(infos), nil
-	}
-
-	prov, err := getKubernetesProviderFromConfig()
-	if err != nil {
-		return nil, err
-	}
-
-	if prov == nil {
-		return []clusterWithDistribution{}, nil
-	}
-
-	infos, err := prov.ListAllClustersWithDistribution(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list Kubernetes clusters: %w", err)
-	}
-
-	return toKubernetesClusters(infos), nil
-}
-
-// getKubernetesProviderFromConfig creates a Kubernetes provider from the host config.
-func getKubernetesProviderFromConfig() (*kubernetesprovider.Provider, error) {
-	// Resolve kubeconfig: prefer KSAIL_HOST_KUBECONFIG env var, fall back to default.
-	kubeconfigPath := os.Getenv("KSAIL_HOST_KUBECONFIG")
-	if kubeconfigPath == "" {
-		kubeconfigPath = k8s.DefaultKubeconfigPath()
-	}
-
-	expandedPath, err := fsutil.ExpandHomePath(kubeconfigPath)
-	if err != nil {
-		return nil, fmt.Errorf("expand kubeconfig path: %w", err)
-	}
-
-	// Skip silently when the kubeconfig file does not exist.
-	//nolint:gosec // path is user-controlled kubeconfig, safe and canonicalized below
-	_, statErr := os.Stat(expandedPath)
-	if os.IsNotExist(statErr) {
-		return nil, nil //nolint:nilnil
-	}
-
-	canonicalPath, err := fsutil.EvalCanonicalPath(expandedPath)
-	if err != nil {
-		return nil, fmt.Errorf("canonicalize kubeconfig path: %w", err)
-	}
-
-	hostContext := os.Getenv("KSAIL_HOST_CONTEXT")
-
-	restConfig, err := k8s.BuildRESTConfig(canonicalPath, hostContext)
-	if err != nil {
-		// If the kubeconfig is present but invalid or unreachable, skip silently.
-		return nil, nil //nolint:nilnil,nilerr // intentionally swallow: host cluster unavailable
-	}
-
-	clientset, err := kubernetes.NewForConfig(restConfig)
-	if err != nil {
-		return nil, fmt.Errorf("create Kubernetes client: %w", err)
-	}
-
-	prov, err := kubernetesprovider.NewProvider(clientset, v1alpha1.OptionsKubernetes{})
-	if err != nil {
-		return nil, fmt.Errorf("create Kubernetes provider: %w", err)
-	}
-
-	return prov, nil
-}
-
-// toKubernetesClusters converts ClusterInfo to clusterWithDistribution,
-// mapping the distribution label string to a v1alpha1.Distribution enum value.
-func toKubernetesClusters(infos []kubernetesprovider.ClusterInfo) []clusterWithDistribution {
-	result := make([]clusterWithDistribution, 0, len(infos))
-
-	for _, info := range infos {
-		var dist v1alpha1.Distribution
-
-		err := dist.Set(info.Distribution)
-		if err != nil {
-			dist = v1alpha1.DistributionVanilla
-		}
-
-		result = append(result, clusterWithDistribution{
-			Name:         info.Name,
-			Distribution: dist,
-		})
-	}
-
-	return result
-}
-
-// Hetzner and Omni providers only support Talos.
-func toTalosClusters(names []string) []clusterWithDistribution {
-	result := make([]clusterWithDistribution, 0, len(names))
-	for _, name := range names {
-		result = append(result, clusterWithDistribution{
-			Name:         name,
-			Distribution: v1alpha1.DistributionTalos,
-		})
-	}
-
-	return result
-}
-
-func getDistributionClusters(
-	ctx context.Context,
-	deps ListDeps,
-	distribution v1alpha1.Distribution,
-) ([]string, error) {
-	// Create a minimal cluster config for the factory
-	clusterCfg := &v1alpha1.Cluster{
-		Spec: v1alpha1.Spec{
-			Cluster: v1alpha1.ClusterSpec{
-				Distribution: distribution,
-			},
-		},
-	}
-
-	// Use custom factory creator if provided (for testing), otherwise create real factory.
-	var factory clusterprovisioner.Factory
-	if deps.DistributionFactoryCreator != nil {
-		factory = deps.DistributionFactoryCreator(distribution)
-	} else {
-		// Create a factory with an empty config for the distribution.
-		// For list operations, we only need the provisioner type, not specific config data.
-		factory = clusterprovisioner.DefaultFactory{
-			DistributionConfig: createEmptyDistributionConfig(distribution),
-		}
-	}
-
-	provisioner, _, err := factory.Create(ctx, clusterCfg)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create provisioner for %s: %w", distribution, err)
-	}
-
-	clusters, err := provisioner.List(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list %s clusters: %w", distribution, err)
-	}
-
-	return clusters, nil
-}
-
-// createEmptyDistributionConfig creates an empty distribution config for the given distribution.
-// This is used for list operations where we only need the provisioner type, not specific config data.
-func createEmptyDistributionConfig(
-	distribution v1alpha1.Distribution,
-) *clusterprovisioner.DistributionConfig {
-	switch distribution {
-	case v1alpha1.DistributionVanilla:
-		return &clusterprovisioner.DistributionConfig{
-			Kind: &v1alpha4.Cluster{},
-		}
-	case v1alpha1.DistributionK3s:
-		return &clusterprovisioner.DistributionConfig{
-			K3d: &v1alpha5.SimpleConfig{},
-		}
-	case v1alpha1.DistributionTalos:
-		return &clusterprovisioner.DistributionConfig{
-			Talos: &talosconfigmanager.Configs{},
-		}
-	case v1alpha1.DistributionVCluster:
-		return &clusterprovisioner.DistributionConfig{
-			VCluster: &clusterprovisioner.VClusterConfig{},
-		}
-	case v1alpha1.DistributionKWOK:
-		return &clusterprovisioner.DistributionConfig{
-			KWOK: &clusterprovisioner.KWOKConfig{},
-		}
-	case v1alpha1.DistributionEKS:
-		return &clusterprovisioner.DistributionConfig{
-			EKS: &clusterprovisioner.EKSConfig{},
-		}
-	default:
-		return &clusterprovisioner.DistributionConfig{
-			Kind: &v1alpha4.Cluster{},
-		}
-	}
 }
 
 // tableRow holds pre-formatted strings for a single row in the cluster list table.
@@ -4439,14 +4207,15 @@ func (r *componentReconciler) handlerForField(
 	field string,
 ) (func(context.Context, clusterupdate.Change) error, bool) {
 	handlers := map[string]func(context.Context, clusterupdate.Change) error{
-		"cluster.cni":           r.reconcileCNI,
-		"cluster.csi":           r.reconcileCSI,
-		"cluster.metricsServer": r.reconcileMetricsServer,
-		"cluster.loadBalancer":  r.reconcileLoadBalancer,
-		"cluster.certManager":   r.reconcileCertManager,
-		"cluster.policyEngine":  r.reconcilePolicyEngine,
-		"cluster.gitOpsEngine":  r.reconcileGitOpsEngine,
-		"cluster.workload.tag":  r.reconcileWorkloadTag,
+		"cluster.cni":                               r.reconcileCNI,
+		"cluster.csi":                               r.reconcileCSI,
+		"cluster.metricsServer":                     r.reconcileMetricsServer,
+		"cluster.loadBalancer":                      r.reconcileLoadBalancer,
+		"cluster.certManager":                       r.reconcileCertManager,
+		"cluster.policyEngine":                      r.reconcilePolicyEngine,
+		"cluster.gitOpsEngine":                      r.reconcileGitOpsEngine,
+		"cluster.workload.tag":                      r.reconcileWorkloadTag,
+		"cluster.workload.flux.distributionVersion": r.reconcileFluxVersion,
 	}
 
 	if handler, ok := handlers[field]; ok {
@@ -4707,7 +4476,11 @@ func (r *componentReconciler) uninstallGitOpsEngine(
 			return fmt.Errorf("failed to create helm client for Flux uninstall: %w", err)
 		}
 
-		fluxInst := r.factories.Flux(helmClient, defaultReconcileTimeout)
+		fluxInst := r.factories.Flux(
+			helmClient,
+			defaultReconcileTimeout,
+			r.clusterCfg.Spec.Workload.Flux.OperatorVersion,
+		)
 
 		err = fluxInst.Uninstall(ctx)
 		if err != nil {
@@ -4726,6 +4499,42 @@ func (r *componentReconciler) uninstallGitOpsEngine(
 	default:
 		return nil
 	}
+}
+
+// reconcileFluxVersion re-asserts the FluxInstance so a changed
+// spec.workload.flux.distributionVersion (or a newly repo-declared FluxInstance)
+// takes effect in-place on cluster update. Flux only — ArgoCD has no equivalent
+// distribution version.
+func (r *componentReconciler) reconcileFluxVersion(
+	ctx context.Context,
+	_ clusterupdate.Change,
+) error {
+	if r.clusterCfg.Spec.Cluster.GitOpsEngine != v1alpha1.GitOpsEngineFlux {
+		return nil
+	}
+
+	kubeconfigPath, err := kubeconfig.GetKubeconfigPathFromConfig(r.clusterCfg)
+	if err != nil {
+		return fmt.Errorf("failed to get kubeconfig path: %w", err)
+	}
+
+	registryHost, err := setup.ResolveRegistryHostForCluster(ctx, r.clusterCfg, r.clusterName)
+	if err != nil {
+		return fmt.Errorf("resolve registry host for flux: %w", err)
+	}
+
+	err = fluxinstaller.SetupInstance(
+		ctx,
+		kubeconfigPath,
+		r.clusterCfg,
+		r.clusterName,
+		registryHost,
+	)
+	if err != nil {
+		return fmt.Errorf("setup flux instance: %w", err)
+	}
+
+	return nil
 }
 
 // reconcileWorkloadTag updates the GitOps sync resource (FluxInstance or ArgoCD
@@ -5639,7 +5448,7 @@ func loadAndValidateClusterConfig(
 	// Apply cluster name override: --name flag takes priority, then metadata.name
 	nameOverride := cfgManager.Viper.GetString("name")
 	if nameOverride == "" {
-		nameOverride = ctx.ClusterCfg.Metadata.Name
+		nameOverride = ctx.ClusterCfg.Name
 	}
 
 	if nameOverride != "" {
@@ -5712,6 +5521,11 @@ func runClusterCreationWorkflow(
 	setupK3dLoadBalancer(ctx.ClusterCfg, ctx.K3dConfig)
 	setupVClusterCNI(ctx.ClusterCfg, ctx.VClusterConfig)
 
+	err = resolveNestedMirrorSpecs(cmd, cfgManager, ctx)
+	if err != nil {
+		return err
+	}
+
 	configureProvisionerFactory(&deps, ctx)
 
 	err = executeClusterLifecycle(cmd, ctx.ClusterCfg, deps)
@@ -5763,7 +5577,9 @@ func runClusterCreationWorkflow(
 	// If an explicit context is already configured, preserve it.
 	if ctx.ClusterCfg.Spec.Cluster.Connection.Context == "" {
 		clusterName := resolveClusterNameFromContext(ctx)
-		ctx.ClusterCfg.Spec.Cluster.Connection.Context = ctx.ClusterCfg.Spec.Cluster.Distribution.ContextName(
+		ctx.ClusterCfg.Spec.Cluster.Connection.Context = resolveCreatedContextName(
+			ctx.ClusterCfg.Spec.Cluster.Distribution,
+			ctx.ClusterCfg.Spec.Cluster.Provider,
 			clusterName,
 		)
 	}
@@ -5771,6 +5587,27 @@ func runClusterCreationWorkflow(
 	maybeImportCachedImages(cmd, ctx, deps.Timer)
 
 	return handlePostCreationSetup(cmd, ctx.ClusterCfg, deps.Timer)
+}
+
+// resolveCreatedContextName returns the kubeconfig context name a freshly created
+// cluster is written under, so post-creation setup (CNI install, helm, kubectl) can
+// target it. The Kubernetes provider runs K3s via the k3k operator, which writes a
+// "k3k-<name>" context rather than the standalone k3d "k3d-<name>" context; without
+// this, installing a CNI like Calico on a nested K3s cluster fails to find the
+// context. All other distribution/provider combinations use the standalone
+// distribution context name.
+func resolveCreatedContextName(
+	distribution v1alpha1.Distribution,
+	provider v1alpha1.Provider,
+	clusterName string,
+) string {
+	if clusterName != "" &&
+		provider == v1alpha1.ProviderKubernetes &&
+		distribution == v1alpha1.DistributionK3s {
+		return "k3k-" + clusterName
+	}
+
+	return distribution.ContextName(clusterName)
 }
 
 const startLongDesc = `Start a previously stopped Kubernetes cluster.
@@ -6235,9 +6072,14 @@ func stripParenthetical(input string) string {
 
 // switchContext loads the kubeconfig, resolves the cluster name to a context, and sets current-context.
 //
-//nolint:gosec // G304: kubeconfigPath is resolved from trusted config or default
+
 func switchContext(kubeconfigPath, clusterName string) (string, error) {
-	configBytes, err := os.ReadFile(kubeconfigPath)
+	canonicalPath, err := fsutil.EvalCanonicalPath(kubeconfigPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to read kubeconfig: %w", err)
+	}
+
+	configBytes, err := os.ReadFile(canonicalPath) //nolint:gosec // canonicalized above
 	if err != nil {
 		return "", fmt.Errorf("failed to read kubeconfig: %w", err)
 	}
@@ -6259,7 +6101,7 @@ func switchContext(kubeconfigPath, clusterName string) (string, error) {
 		return "", fmt.Errorf("failed to serialize kubeconfig: %w", err)
 	}
 
-	err = os.WriteFile(kubeconfigPath, result, switchKubeconfigFileMode)
+	err = fsutil.AtomicWriteFile(canonicalPath, result, switchKubeconfigFileMode)
 	if err != nil {
 		return "", fmt.Errorf("failed to write kubeconfig: %w", err)
 	}
@@ -6443,7 +6285,7 @@ func SetFluxInstallerFactoryForTests(
 ) func() {
 	return overrideInstallerFactory(func(f *setup.InstallerFactories) {
 		// Wrap the simplified test factory to match the Flux factory signature
-		f.Flux = func(_ helm.Interface, _ time.Duration) installer.Installer {
+		f.Flux = func(_ helm.Interface, _ time.Duration, _ string) installer.Installer {
 			inst, _ := factory(nil) // clusterCfg not used in test factory
 
 			return inst
@@ -6638,7 +6480,9 @@ type DiffJSONOutput struct {
 	InPlaceChanges       []ChangeJSON `json:"inPlaceChanges"`
 	RebootRequired       []ChangeJSON `json:"rebootRequired"`
 	RecreateRequired     []ChangeJSON `json:"recreateRequired"`
+	RollingRecreate      []ChangeJSON `json:"rollingRecreate"`
 	WipeRequired         []ChangeJSON `json:"wipeRequired"`
+	UnknownBaseline      []ChangeJSON `json:"unknownBaseline"`
 	RequiresConfirmation bool         `json:"requiresConfirmation"`
 }
 
@@ -6698,7 +6542,9 @@ func diffToJSON(diff *clusterupdate.UpdateResult) DiffJSONOutput {
 		InPlaceChanges:       convertChanges(diff.InPlaceChanges),
 		RebootRequired:       convertChanges(diff.RebootRequired),
 		RecreateRequired:     convertChanges(diff.RecreateRequired),
+		RollingRecreate:      convertChanges(diff.RollingRecreate),
 		WipeRequired:         convertChanges(diff.WipeRequired),
+		UnknownBaseline:      convertChanges(diff.UnknownBaseline),
 		RequiresConfirmation: diff.NeedsUserConfirmation(),
 	}
 }
@@ -6707,15 +6553,24 @@ func diffToJSON(diff *clusterupdate.UpdateResult) DiffJSONOutput {
 func emitDiffJSON(cmd *cobra.Command, diff *clusterupdate.UpdateResult) {
 	out := diffToJSON(diff)
 
-	data, err := json.MarshalIndent(out, "", "  ")
+	var buf bytes.Buffer
+
+	enc := json.NewEncoder(&buf)
+	enc.SetIndent("", "  ")
+	// Keep '<', '>', '&' literal instead of \u-escaping them; this is CLI
+	// output, not HTML.
+	enc.SetEscapeHTML(false)
+
+	err := enc.Encode(out)
 	if err != nil {
-		// json.MarshalIndent on a plain struct with only basic types never fails.
+		// Encoding a plain struct with only basic types never fails.
 		notify.Errorf(cmd.OutOrStderr(), "failed to marshal diff to JSON: %v", err)
 
 		return
 	}
 
-	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s\n", data)
+	// enc.Encode already appends a trailing newline.
+	_, _ = fmt.Fprint(cmd.OutOrStdout(), buf.String())
 }
 
 // NewUpdateCmd creates the cluster update command.
@@ -6735,9 +6590,13 @@ cluster recreation (e.g., network settings, kubelet config, registry mirrors).
 For Kind/K3d clusters, in-place updates are more limited. Worker node scaling
 is supported for K3d, but most other changes require cluster recreation.
 
-Changes are classified into three categories:
+Changes are classified into the following categories:
   - In-Place: Applied without disruption
   - Reboot-Required: Applied but may require node reboots
+  - Wipe-Required: Requires wiping node partitions (e.g. disk encryption
+    migration); requires --force
+  - Rolling-Recreate: Nodes are replaced one at a time (e.g. a Talos × Hetzner
+    server-type change); requires confirmation (or --force to skip the prompt)
   - Recreate-Required: Require full cluster recreation
 
 Use --dry-run to preview changes without applying them.
@@ -6825,6 +6684,13 @@ func handleUpdateRunE(
 		return err
 	}
 
+	// Fail fast when the user pinned a context the kubeconfig cannot resolve, so
+	// update never reports "No changes detected" for a cluster it could not inspect.
+	err = ensureConfiguredContextResolvable(ctx.ClusterCfg)
+	if err != nil {
+		return err
+	}
+
 	// Handle version upgrades when requested
 	updateK8s := cfgManager.Viper.GetBool("update-kubernetes")
 	updateDist := cfgManager.Viper.GetBool("update-distribution")
@@ -6851,7 +6717,13 @@ func handleUpdateRunE(
 		// before falling back to recreation. No-op when nothing changed.
 		specDiff := computeSpecOnlyDiff(cmd, ctx)
 		if specDiff.TotalChanges() == 0 {
-			notify.Infof(cmd.OutOrStdout(), "No changes detected")
+			// Surface any unknown-baseline components so the user sees that the
+			// current state could not be read, then exit without recreating.
+			if specDiff.HasUnknownBaseline() {
+				displayChangesSummary(cmd, specDiff)
+			}
+
+			reportNoApplicableChanges(cmd, specDiff)
 
 			return nil
 		}
@@ -7356,6 +7228,36 @@ func createAndVerifyProvisioner(
 	return provisioner, nil
 }
 
+// ensureConfiguredContextResolvable fails the update when the user pinned a kube
+// context in spec.cluster.connection.context that does not exist in the resolved
+// kubeconfig. Without this guard an unresolvable pinned context lets the GitOps
+// drift probes fail silently (they only warn) while the command still reports
+// "No changes detected" — falsely reassuring, because KSail could not inspect the
+// cluster it was told to manage. When no context is pinned, KSail derives one and
+// this is a no-op.
+//
+// Call this only after the kubeconfig has been refreshed (createAndVerifyProvisioner),
+// so remote providers (e.g. Omni) that materialise the context on demand are not
+// rejected prematurely.
+func ensureConfiguredContextResolvable(clusterCfg *v1alpha1.Cluster) error {
+	contextName := strings.TrimSpace(clusterCfg.Spec.Cluster.Connection.Context)
+	if contextName == "" {
+		return nil
+	}
+
+	kubeconfigPath, err := kubeconfig.GetKubeconfigPathFromConfig(clusterCfg)
+	if err != nil {
+		return fmt.Errorf("resolve kubeconfig path: %w", err)
+	}
+
+	err = k8s.ValidateContextExists(kubeconfigPath, contextName)
+	if err != nil {
+		return fmt.Errorf("configured spec.cluster.connection.context is not usable: %w", err)
+	}
+
+	return nil
+}
+
 //nolint:gochecknoglobals // dependency injection for tests
 var isKubeconfigStaleFunc = kubeconfighook.IsKubeconfigStale
 
@@ -7447,13 +7349,7 @@ func buildComponentDetector(
 		return nil
 	}
 
-	k8sContext := ctx.ClusterCfg.Spec.Cluster.Connection.Context
-	if k8sContext == "" {
-		clusterName := resolveClusterNameFromContext(ctx)
-		k8sContext = ctx.ClusterCfg.Spec.Cluster.Distribution.ContextName(clusterName)
-	}
-
-	k8sClientset, err := k8s.NewClientset(kubeconfig, k8sContext)
+	k8sClientset, err := k8s.NewClientset(kubeconfig, resolveKubeContext(ctx))
 	if err != nil {
 		notify.Warningf(cmd.OutOrStderr(),
 			"Cannot create K8s clientset for component detection, using defaults: %v", err)
@@ -7465,6 +7361,25 @@ func buildComponentDetector(
 	dockerClient, _ := docker.GetDockerClient()
 
 	return detector.NewComponentDetector(helmClient, k8sClientset, dockerClient)
+}
+
+// resolveKubeContext returns the kube context KSail should use to query the
+// cluster it manages: the pinned spec.cluster.connection.context when set,
+// otherwise the context name derived from the distribution and cluster name.
+// The component detector and the GitOps drift probes share this resolution so
+// they all target the configured cluster rather than the ambient
+// current-context (which may point elsewhere).
+func resolveKubeContext(ctx *localregistry.Context) string {
+	// Trim to match ensureConfiguredContextResolvable: a whitespace-padded pinned
+	// context must resolve to the same value the guard validated, otherwise it
+	// would pass the guard yet break the REST clients the probes build.
+	k8sContext := strings.TrimSpace(ctx.ClusterCfg.Spec.Cluster.Connection.Context)
+	if k8sContext == "" {
+		clusterName := resolveClusterNameFromContext(ctx)
+		k8sContext = ctx.ClusterCfg.Spec.Cluster.Distribution.ContextName(clusterName)
+	}
+
+	return k8sContext
 }
 
 // computeUpdateDiff retrieves current config and computes the full diff.
@@ -7503,6 +7418,9 @@ func computeUpdateDiff(
 	// Check for workload tag drift (stale GitOps sync ref)
 	checkWorkloadTagDrift(cmd, ctx, diffEngine, diff)
 
+	// Check for Flux distribution-version drift (spec.workload.flux.distributionVersion)
+	checkFluxDistributionVersionDrift(cmd, ctx, diffEngine, diff)
+
 	return currentSpec, diff, nil
 }
 
@@ -7521,7 +7439,14 @@ func computeSpecOnlyDiff(
 
 	// Use component detection when available to get more accurate baseline.
 	componentDetector := buildComponentDetector(cmd, ctx)
-	if componentDetector != nil {
+	if componentDetector == nil {
+		// The detector's clients (Helm/K8s) could not be constructed, so live
+		// cluster state cannot be read at all. Treat this like a detection
+		// failure and mark the baseline Unknown rather than fabricating a
+		// confident diff against defaults. buildComponentDetector already logged
+		// the underlying reason.
+		clusterupdate.MarkComponentsUnknown(currentSpec)
+	} else {
 		detected, err := componentDetector.DetectComponents(
 			cmd.Context(),
 			ctx.ClusterCfg.Spec.Cluster.Distribution,
@@ -7530,9 +7455,12 @@ func computeSpecOnlyDiff(
 		if err != nil {
 			notify.Warningf(
 				cmd.ErrOrStderr(),
-				"Cannot detect live cluster components (drift detection may be incomplete): %v",
+				"Cannot detect live cluster components; baseline shown as Unknown: %v",
 				err,
 			)
+			// Mark detector-derived fields unknown so the diff surfaces them as
+			// "Unknown" rather than a confident diff against default values.
+			clusterupdate.MarkComponentsUnknown(currentSpec)
 		} else {
 			currentSpec.CNI = detected.CNI
 			currentSpec.CSI = detected.CSI
@@ -7565,6 +7493,9 @@ func computeSpecOnlyDiff(
 
 	// Check for workload tag drift (stale GitOps sync ref)
 	checkWorkloadTagDrift(cmd, ctx, diffEngine, diff)
+
+	// Check for Flux distribution-version drift (spec.workload.flux.distributionVersion)
+	checkFluxDistributionVersionDrift(cmd, ctx, diffEngine, diff)
 
 	return diff
 }
@@ -7636,14 +7567,17 @@ func checkWorkloadTagDrift(
 	}
 
 	desiredTag := fluxinstaller.ResolveDesiredTag(ctx.ClusterCfg)
+	kubeContext := resolveKubeContext(ctx)
 
 	var currentTag string
 
 	switch gitOpsEngine { //nolint:exhaustive // None/empty already filtered above
 	case v1alpha1.GitOpsEngineFlux:
-		currentTag, err = fluxinstaller.GetCurrentSyncRef(cmd.Context(), kubeconfigPath)
+		currentTag, err = fluxinstaller.GetCurrentSyncRef(
+			cmd.Context(), kubeconfigPath, kubeContext)
 	case v1alpha1.GitOpsEngineArgoCD:
-		currentTag, err = getCurrentArgoCDTargetRevision(cmd.Context(), kubeconfigPath)
+		currentTag, err = getCurrentArgoCDTargetRevision(
+			cmd.Context(), kubeconfigPath, kubeContext)
 	default:
 		return
 	}
@@ -7663,13 +7597,63 @@ func checkWorkloadTagDrift(
 	diffEngine.CheckWorkloadTag(currentTag, desiredTag, gitOpsEngine, diff)
 }
 
+// checkFluxDistributionVersionDrift queries the running FluxInstance for its
+// spec.distribution.version and compares it against the version KSail would seed
+// (from spec.workload.flux.distributionVersion or a repo-declared FluxInstance).
+// If they differ, an in-place change is appended so cluster update re-asserts the
+// FluxInstance. Flux only. Errors during cluster queries are logged as warnings
+// and skipped — they should not block the rest of the update.
+func checkFluxDistributionVersionDrift(
+	cmd *cobra.Command,
+	ctx *localregistry.Context,
+	diffEngine *specdiff.Engine,
+	diff *clusterupdate.UpdateResult,
+) {
+	gitOpsEngine := ctx.ClusterCfg.Spec.Cluster.GitOpsEngine
+	if gitOpsEngine != v1alpha1.GitOpsEngineFlux {
+		return
+	}
+
+	kubeconfigPath, err := kubeconfig.GetKubeconfigPathFromConfig(ctx.ClusterCfg)
+	if err != nil {
+		notify.Warningf(cmd.OutOrStderr(),
+			"Cannot resolve kubeconfig path for Flux distribution-version drift detection: %v", err)
+
+		return
+	}
+
+	instance, err := fluxinstaller.GetCurrentFluxInstance(
+		cmd.Context(), kubeconfigPath, resolveKubeContext(ctx))
+	if err != nil {
+		notify.Warningf(cmd.OutOrStderr(),
+			"Cannot query current Flux distribution version for drift detection: %v", err)
+
+		return
+	}
+
+	// A missing FluxInstance (or an empty version) means there is nothing to
+	// compare against yet — no drift.
+	if instance == nil || instance.Spec.Distribution.Version == "" {
+		return
+	}
+
+	desiredVersion := fluxinstaller.ResolveDesiredDistributionVersion(ctx.ClusterCfg)
+
+	diffEngine.CheckFluxDistributionVersion(
+		instance.Spec.Distribution.Version,
+		desiredVersion,
+		gitOpsEngine,
+		diff,
+	)
+}
+
 // getCurrentArgoCDTargetRevision queries the ArgoCD Application for its current
 // targetRevision. Returns empty string if the Application does not exist.
 func getCurrentArgoCDTargetRevision(
 	goCtx context.Context,
-	kubeconfigPath string,
+	kubeconfigPath, kubeContext string,
 ) (string, error) {
-	mgr, err := argocdclient.NewManagerFromKubeconfig(kubeconfigPath)
+	mgr, err := argocdclient.NewManagerFromKubeconfig(kubeconfigPath, kubeContext)
 	if err != nil {
 		return "", fmt.Errorf("create argocd manager: %w", err)
 	}
@@ -7706,53 +7690,123 @@ func applyOrReportChanges(
 		return handleRecreateRequired(cmd, cfgManager, ctx, deps, clusterName, diff, force)
 	}
 
-	if !diff.HasInPlaceChanges() && !diff.HasRebootRequired() {
-		notify.Infof(cmd.OutOrStdout(), "No changes detected")
+	if !diff.HasInPlaceChanges() && !diff.HasRebootRequired() && !diff.HasRollingRecreate() {
+		reportNoApplicableChanges(cmd, diff)
 
 		return nil
 	}
 
-	// Reboot-required changes are disruptive — require confirmation unless --force
-	if diff.HasRebootRequired() && !confirm.ShouldSkipPrompt(force) {
-		var block strings.Builder
+	allowRolling, proceed := confirmDisruptiveChanges(cmd, diff, force)
+	if !proceed {
+		notify.Infof(cmd.OutOrStdout(), "Update cancelled")
 
-		fmt.Fprintf(&block, "%d changes require node reboots:\n", len(diff.RebootRequired))
-
-		for _, change := range diff.RebootRequired {
-			fmt.Fprintf(&block, "  ⚠ %s: %s → %s. %s\n",
-				change.Field, change.OldValue, change.NewValue, change.Reason,
-			)
-		}
-
-		notify.Warningf(cmd.OutOrStderr(), "%s", strings.TrimRight(block.String(), "\n"))
-
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(),
-			"Type \"yes\" to proceed with reboot-required changes: ",
-		)
-
-		if !confirm.PromptForConfirmation(cmd.OutOrStdout()) {
-			notify.Infof(cmd.OutOrStdout(), "Update cancelled")
-
-			return nil
-		}
+		return nil
 	}
 
 	reconciler := newComponentReconciler(cmd, ctx.ClusterCfg, clusterName)
 
 	return applyInPlaceChanges(
 		cmd, updater, reconciler, clusterName,
-		currentSpec, ctx, diff, outputTimer,
+		currentSpec, ctx, diff, outputTimer, force, allowRolling,
 	)
+}
+
+// confirmDisruptiveChanges prompts for confirmation when the diff contains
+// disruptive changes (node reboots or rolling node replacement) and --force/--yes
+// was not set. It returns whether rolling node replacement is authorized and
+// whether the update should proceed.
+//
+// Rolling replacement is authorized by an explicit --force OR an interactive
+// confirmation. It is reported separately from Force (which governs partition
+// wipes) so that confirming a rolling replacement never implicitly authorizes a
+// wipe that may be discovered during apply and was not shown in the prompt.
+func confirmDisruptiveChanges(
+	cmd *cobra.Command,
+	diff *clusterupdate.UpdateResult,
+	force bool,
+) (bool, bool) {
+	if !diff.HasRebootRequired() && !diff.HasRollingRecreate() {
+		return force, true
+	}
+
+	if confirm.ShouldSkipPrompt(force) {
+		return force, true
+	}
+
+	if !promptForDisruptiveChanges(cmd, diff) {
+		return false, false
+	}
+
+	return force || diff.HasRollingRecreate(), true
+}
+
+// promptForDisruptiveChanges warns about reboot-required and rolling-recreate
+// changes and prompts the user to confirm. It returns true when the user
+// consents to proceed.
+func promptForDisruptiveChanges(cmd *cobra.Command, diff *clusterupdate.UpdateResult) bool {
+	var block strings.Builder
+
+	if diff.HasRollingRecreate() {
+		fmt.Fprintf(&block,
+			"%d change(s) require rolling node replacement (one node at a time):\n",
+			len(diff.RollingRecreate),
+		)
+
+		for _, change := range diff.RollingRecreate {
+			fmt.Fprintf(&block, "  ⚠ %s: %s → %s. %s\n",
+				change.Field, change.OldValue, change.NewValue, change.Reason,
+			)
+		}
+	}
+
+	if diff.HasRebootRequired() {
+		fmt.Fprintf(&block, "%d change(s) require node reboots:\n", len(diff.RebootRequired))
+
+		for _, change := range diff.RebootRequired {
+			fmt.Fprintf(&block, "  ⚠ %s: %s → %s. %s\n",
+				change.Field, change.OldValue, change.NewValue, change.Reason,
+			)
+		}
+	}
+
+	notify.Warningf(cmd.OutOrStderr(), "%s", strings.TrimRight(block.String(), "\n"))
+
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(),
+		"Type \"yes\" to proceed with these changes: ",
+	)
+
+	return confirm.PromptForConfirmation(cmd.OutOrStdout())
+}
+
+// reportNoApplicableChanges prints the appropriate message when there are no
+// changes to apply. It distinguishes a genuinely clean cluster from one whose
+// current state could not be read (unknown baseline), so the latter is not
+// reported as "No changes detected". Any unknown-baseline table is rendered by
+// the caller via displayChangesSummary before this is invoked.
+func reportNoApplicableChanges(cmd *cobra.Command, diff *clusterupdate.UpdateResult) {
+	if diff != nil && diff.HasUnknownBaseline() {
+		notify.Warningf(
+			cmd.ErrOrStderr(),
+			"Current cluster state could not be read for %d component(s); shown as "+
+				"Unknown. No changes applied.",
+			len(diff.UnknownBaseline),
+		)
+
+		return
+	}
+
+	notify.Infof(cmd.OutOrStdout(), "No changes detected")
 }
 
 // reportDryRun prints a summary for dry-run mode and confirms no changes were applied.
 // When --output json is set, emits machine-readable JSON only for the empty-diff case
-// (displayChangesSummary already emits JSON when TotalChanges() > 0).
+// (displayChangesSummary already emits JSON when there is anything to report).
 func reportDryRun(cmd *cobra.Command, diff *clusterupdate.UpdateResult) error {
 	if getOutputFormat(cmd) == outputFormatJSON {
-		// displayChangesSummary already emitted JSON when TotalChanges() > 0.
-		// Only emit JSON here for the empty-diff case so CI/MCP still get a result.
-		if diff != nil && diff.TotalChanges() == 0 {
+		// displayChangesSummary already emitted JSON when there were changes or an
+		// unknown baseline. Only emit JSON here for the genuinely empty case so
+		// CI/MCP still get a result.
+		if diff != nil && diff.TotalChanges() == 0 && !diff.HasUnknownBaseline() {
 			emitDiffJSON(cmd, diff)
 		}
 
@@ -7760,7 +7814,7 @@ func reportDryRun(cmd *cobra.Command, diff *clusterupdate.UpdateResult) error {
 	}
 
 	if diff != nil && diff.TotalChanges() == 0 {
-		notify.Infof(cmd.OutOrStdout(), "No changes detected")
+		reportNoApplicableChanges(cmd, diff)
 
 		return nil
 	}
@@ -7796,7 +7850,16 @@ func handleRecreateRequired(
 	return executeRecreateFlow(cmd, cfgManager, ctx, deps, clusterName, force)
 }
 
+// errUpdateChangesFailed signals that one or more changes failed to apply during
+// an in-place cluster update. reportFailedChanges has already printed the
+// per-change details; this sentinel exists so cobra surfaces a non-zero exit
+// (issue #4935) instead of reporting success on a partial or fully-failed apply.
+var errUpdateChangesFailed = errors.New("one or more changes failed to apply")
+
 // applyInPlaceChanges applies provisioner-level and component-level changes in-place.
+// force reflects an explicit --force/--yes (and governs partition wipes), while
+// allowRolling carries consent for rolling node replacement (via --force or an
+// interactive confirmation); the provisioner gates each separately in PrepareUpdate.
 func applyInPlaceChanges(
 	cmd *cobra.Command,
 	updater clusterprovisioner.Updater,
@@ -7806,10 +7869,14 @@ func applyInPlaceChanges(
 	ctx *localregistry.Context,
 	diff *clusterupdate.UpdateResult,
 	outputTimer timer.Timer,
+	force bool,
+	allowRolling bool,
 ) error {
 	updateOpts := clusterupdate.UpdateOptions{
-		DryRun:        false,
-		RollingReboot: true,
+		DryRun:               false,
+		RollingReboot:        true,
+		Force:                force,
+		AllowRollingRecreate: allowRolling,
 	}
 
 	notify.Titlef(cmd.OutOrStdout(), "🔄", "Applying changes...")
@@ -7836,44 +7903,58 @@ func applyInPlaceChanges(
 		)
 	}
 
-	if len(result.FailedChanges) > 0 {
-		var failBlock strings.Builder
+	reportFailedChanges(cmd, result)
 
-		fmt.Fprintf(&failBlock, "%d changes failed to apply:\n", len(result.FailedChanges))
-
-		for _, change := range result.FailedChanges {
-			fmt.Fprintf(&failBlock, "  - %s: %s\n", change.Field, change.Reason)
+	// A non-empty FailedChanges set means the apply was partial or fully failed.
+	// Provisioner-level failures (e.g. a rejected Talos config) are recorded in
+	// result.FailedChanges with a nil Update error, and reconcileComponents
+	// appends component-level failures there too. Return a non-nil error so cobra
+	// exits non-zero — otherwise automation gating on the exit code treats a
+	// failed update as success (issue #4935). Skip the state save: a partial apply
+	// no longer matches the desired spec, so it must not become the saved baseline.
+	if result.HasFailedChanges() {
+		if componentErr != nil {
+			return fmt.Errorf("%w: %w", errUpdateChangesFailed, componentErr)
 		}
 
-		notify.Errorf(cmd.OutOrStderr(), strings.TrimRight(failBlock.String(), "\n"))
+		return errUpdateChangesFailed
 	}
 
-	if componentErr != nil {
-		return fmt.Errorf("some component changes failed to apply: %w", componentErr)
-	}
-
-	// Persist the updated ClusterSpec for future update baselines.
-	// Only save when all changes applied successfully: failed changes mean
-	// the cluster state is partially applied and does not match the desired spec.
-	if len(result.FailedChanges) == 0 {
-		saveErr := state.SaveClusterSpec(clusterName, &ctx.ClusterCfg.Spec.Cluster)
-		if saveErr != nil {
-			notify.Warningf(cmd.OutOrStderr(), "failed to save cluster state: %v", saveErr)
-		}
+	// Persist the updated ClusterSpec for future update baselines now that every
+	// change applied successfully.
+	saveErr := state.SaveClusterSpec(clusterName, &ctx.ClusterCfg.Spec.Cluster)
+	if saveErr != nil {
+		notify.Warningf(cmd.OutOrStderr(), "failed to save cluster state: %v", saveErr)
 	}
 
 	return nil
 }
 
+// reportFailedChanges prints any failed changes from the update result to stderr.
+func reportFailedChanges(cmd *cobra.Command, result *clusterupdate.UpdateResult) {
+	if len(result.FailedChanges) == 0 {
+		return
+	}
+
+	var failBlock strings.Builder
+
+	fmt.Fprintf(&failBlock, "%d changes failed to apply:\n", len(result.FailedChanges))
+
+	for _, change := range result.FailedChanges {
+		fmt.Fprintf(&failBlock, "  - %s: %s\n", change.Field, change.Reason)
+	}
+
+	notify.Errorf(cmd.OutOrStderr(), strings.TrimRight(failBlock.String(), "\n"))
+}
+
 // displayChangesSummary outputs a human-readable summary of configuration changes
 // as a before/after table with one row per changed field and impact icons.
-// Rows are ordered by severity: recreate-required → wipe-required → reboot-required → in-place.
+// Rows are ordered by severity: recreate-required → rolling-recreate → wipe-required →
+// reboot-required → in-place.
 // Fields with no change are omitted.
 // When --output json is set, emits machine-readable JSON instead of the table.
 func displayChangesSummary(cmd *cobra.Command, diff *clusterupdate.UpdateResult) {
-	totalChanges := diff.TotalChanges()
-
-	if totalChanges == 0 {
+	if diff.TotalChanges() == 0 && !diff.HasUnknownBaseline() {
 		return
 	}
 
@@ -7887,7 +7968,7 @@ func displayChangesSummary(cmd *cobra.Command, diff *clusterupdate.UpdateResult)
 
 	notify.Infof(
 		cmd.OutOrStdout(),
-		formatDiffTable(diff, totalChanges),
+		formatDiffTable(diff),
 	)
 }
 
@@ -7905,12 +7986,16 @@ func categoryIcon(cat clusterupdate.ChangeCategory) string {
 	switch cat {
 	case clusterupdate.ChangeCategoryRecreateRequired:
 		return "🔴"
+	case clusterupdate.ChangeCategoryRollingRecreate:
+		return "🟠"
 	case clusterupdate.ChangeCategoryWipeRequired:
 		return "⚠️"
 	case clusterupdate.ChangeCategoryRebootRequired:
 		return "🟡"
 	case clusterupdate.ChangeCategoryInPlace:
 		return "🟢"
+	case clusterupdate.ChangeCategoryUnknown:
+		return "⚪"
 	default:
 		return "⚪"
 	}
@@ -7918,12 +8003,14 @@ func categoryIcon(cat clusterupdate.ChangeCategory) string {
 
 // formatDiffTable builds the formatted diff table string.
 // The table has four columns: Component, Before, After, Impact.
-// Rows are ordered by severity: 🔴 recreate → ⚠️ wipe → 🟡 reboot → 🟢 in-place.
+// Rows are ordered by severity: 🔴 recreate → 🟠 rolling-recreate → ⚠️ wipe →
+// 🟡 reboot → 🟢 in-place → ⚪ unknown.
 func formatDiffTable(
 	diff *clusterupdate.UpdateResult,
-	totalChanges int,
 ) string {
-	rows := collectDiffRows(diff, totalChanges)
+	realChanges := diff.TotalChanges()
+	unknownCount := len(diff.UnknownBaseline)
+	rows := collectDiffRows(diff, realChanges+unknownCount)
 
 	// Column headers
 	const (
@@ -7945,9 +8032,9 @@ func formatDiffTable(
 
 	const perRowPadding = 16 // spacing + emoji + newline
 
-	block.Grow((totalChanges + tableOverheadRows) * (colW + colB + colA + colI + perRowPadding))
+	block.Grow((len(rows) + tableOverheadRows) * (colW + colB + colA + colI + perRowPadding))
 
-	writeSummaryLine(&block, totalChanges)
+	writeSummaryLine(&block, realChanges, unknownCount)
 	writeHeaderRow(&block, colW, colB, colA, hdrComponent, hdrBefore, hdrAfter, hdrImpact)
 	writeSeparatorRow(&block, colW, colB, colA, colI)
 	writeDataRows(&block, rows, colW, colB, colA)
@@ -7968,16 +8055,19 @@ func appendChangesAsRows(rows []diffRow, changes []clusterupdate.Change) []diffR
 }
 
 // collectDiffRows builds an ordered list of diff rows.
-// Order: 🔴 recreate-required → ⚠️ wipe-required → 🟡 reboot-required → 🟢 in-place.
+// Order: 🔴 recreate-required → 🟠 rolling-recreate → ⚠️ wipe-required →
+// 🟡 reboot-required → 🟢 in-place → ⚪ unknown.
 func collectDiffRows(
 	diff *clusterupdate.UpdateResult,
-	totalChanges int,
+	totalRows int,
 ) []diffRow {
-	rows := make([]diffRow, 0, totalChanges)
+	rows := make([]diffRow, 0, totalRows)
 	rows = appendChangesAsRows(rows, diff.RecreateRequired)
+	rows = appendChangesAsRows(rows, diff.RollingRecreate)
 	rows = appendChangesAsRows(rows, diff.WipeRequired)
 	rows = appendChangesAsRows(rows, diff.RebootRequired)
 	rows = appendChangesAsRows(rows, diff.InPlaceChanges)
+	rows = appendChangesAsRows(rows, diff.UnknownBaseline)
 
 	return rows
 }
@@ -8013,8 +8103,20 @@ func computeColumnWidths(
 	return widthComp, widthBefore, widthAfter, widthImpact
 }
 
-func writeSummaryLine(block *strings.Builder, totalChanges int) {
-	fmt.Fprintf(block, "Detected %d configuration changes:\n\n", totalChanges)
+func writeSummaryLine(block *strings.Builder, realChanges, unknownCount int) {
+	switch {
+	case unknownCount > 0 && realChanges > 0:
+		fmt.Fprintf(block,
+			"Detected %d configuration change(s); %d component(s) have an unknown "+
+				"baseline (current cluster state could not be read):\n\n",
+			realChanges, unknownCount)
+	case unknownCount > 0:
+		fmt.Fprintf(block,
+			"Current cluster state could not be read; %d component(s) shown as Unknown:\n\n",
+			unknownCount)
+	default:
+		fmt.Fprintf(block, "Detected %d configuration changes:\n\n", realChanges)
+	}
 }
 
 // headerIndent is the number of leading spaces in the header and separator rows.
@@ -8339,7 +8441,7 @@ func handleDiffRunE(
 	// This adds distribution-specific changes (e.g., node counts, Talos config).
 	mergeProvisionerDiff(cmd, ctx, diff)
 
-	if diff.TotalChanges() == 0 {
+	if diff.TotalChanges() == 0 && !diff.HasUnknownBaseline() {
 		if format == outputFormatJSON {
 			emitDiffJSON(cmd, diff)
 		} else {
@@ -8352,7 +8454,9 @@ func handleDiffRunE(
 	displayDiffResult(cmd, diff, format)
 
 	if exitCodeFlag {
-		return &DriftExitError{Changes: diff.TotalChanges()}
+		// An unknown baseline is treated as drift: the tool cannot confirm the
+		// cluster matches the desired configuration.
+		return &DriftExitError{Changes: diff.TotalChanges() + len(diff.UnknownBaseline)}
 	}
 
 	return nil
@@ -8374,7 +8478,7 @@ func displayDiffResult(
 
 	notify.Infof(
 		cmd.OutOrStdout(),
-		formatDiffTable(diff, diff.TotalChanges()),
+		formatDiffTable(diff),
 	)
 }
 

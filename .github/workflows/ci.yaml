@@ -131,6 +131,8 @@ jobs:
       docs-deps: ${{ steps.filter.outputs.docs-deps }}
       vsce-deps: ${{ steps.filter.outputs.vsce-deps }}
       copilot-plugin: ${{ steps.filter.outputs.copilot-plugin }}
+      operator-chart: ${{ steps.filter.outputs.operator-chart }}
+      desktop: ${{ steps.filter.outputs.desktop }}
     steps:
       - name: 📄 Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -255,17 +257,41 @@ jobs:
               - '.github/plugin/**'
               - '.claude-plugin/**'
               - '.github/workflows/ci.yaml'
+            operator-chart:
+              # Operator Helm chart E2E. Covers the chart, the web UI, the
+              # operator runtime (`ksail operator` subcommand), the reconciler,
+              # the Cluster CRD types, and the image build inputs.
+              - 'charts/ksail-operator/**'
+              - 'web/ui/**'
+              - 'pkg/operator/**'
+              - 'internal/controller/**'
+              - 'pkg/cli/cmd/operator/**'
+              - 'pkg/apis/**'
+              - 'Dockerfile'
+              - '.github/actions/operator-chart-e2e/**'
+              - '.github/workflows/ci.yaml'
+            desktop:
+              # The desktop app is a SEPARATE Go module that vendors the main
+              # module via `replace => ../`, so its go.{mod,sum} must track the
+              # main module's dependency graph independently. A root dependency
+              # bump (go.mod/go.sum) does NOT touch desktop/**, so it must be
+              # listed here or desktop drift slips through to release. Keep
+              # go.mod/go.sum in this filter.
+              - 'desktop/**'
+              - 'go.mod'
+              - 'go.sum'
+              - '.github/workflows/ci.yaml'
 
   ci-go:
     name: ✅ Validate Go Project
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    uses: devantler-tech/reusable-workflows/.github/workflows/validate-go-project.yaml@26f77bf515895dc8b750130ea4625a9fd8648c9c # v3.1.4
+    uses: devantler-tech/reusable-workflows/.github/workflows/validate-go-project.yaml@bfb04968a21911d080d082e54cef52e0216cffef # v5.4.6
     permissions:
       contents: write
       issues: write
       pull-requests: write
+      code-quality: write
     secrets:
-      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
       APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
 
   # Gate: wait for the org-wide Required Workflow "✅ Validate Go Project" to
@@ -368,7 +394,7 @@ jobs:
           output-path: /usr/local/bin/ksail
 
   generate:
-    name: 📝 Generate Schema & Docs
+    name: 📝 Generate Schema, CRD & Docs
     runs-on: ubuntu-latest
     timeout-minutes: 25
     # Depend on build-artifact so the Go build cache is warm by the time
@@ -400,6 +426,10 @@ jobs:
         if: needs.changes.outputs.schema == 'true'
         run: go generate ./schemas/...
 
+      - name: 📐 Generate CRD & DeepCopy
+        if: needs.changes.outputs.schema == 'true'
+        run: go generate ./pkg/apis/...
+
       - name: 📚 Generate reference documentation
         if: needs.changes.outputs.cli == 'true'
         run: go generate ./docs/...
@@ -427,7 +457,7 @@ jobs:
         shell: bash
         run: |
           if [ -s /tmp/generate.patch ]; then
-            echo "::error::Generated files are out of date. Please run 'go generate ./schemas/...' and 'go generate ./docs/...' locally and commit the results."
+            echo "::error::Generated files are out of date. Please run 'go generate ./schemas/...', 'go generate ./pkg/apis/...', and 'go generate ./docs/...' locally and commit the results."
             echo ""
             cat /tmp/generate.patch
             exit 1
@@ -437,12 +467,12 @@ jobs:
     name: 📤 Auto-Commit Generated Changes
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    needs: [changes, generate]
+    needs: [changes, generate, verify-desktop-tidy]
     if: >-
       always()
       && github.event_name != 'merge_group'
       && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
-      && needs.generate.result == 'success'
+      && (needs.generate.result == 'success' || needs.verify-desktop-tidy.result == 'success')
     permissions:
       contents: write
       pull-requests: write
@@ -569,6 +599,94 @@ jobs:
             --ignore github.com/cyberphone/json-canonicalization \
             --ignore github.com/deitch/magic
 
+  home-isolation:
+    name: 🏠 Home Isolation Guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    needs: [changes]
+    if: github.event_name != 'merge_group' && needs.changes.outputs.code == 'true'
+    permissions:
+      contents: read
+    steps:
+      - name: 📄 Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: ⚙️ Setup Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version-file: go.mod
+
+      - name: 🏠 Verify tests never touch the real home directory
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Preserve Go caches so redirecting $HOME does not trigger a cold
+          # rebuild and so build/module artifacts land outside the sandbox.
+          GOCACHE="$(go env GOCACHE)"
+          GOMODCACHE="$(go env GOMODCACHE)"
+          GOPATH="$(go env GOPATH)"
+          export GOCACHE GOMODCACHE GOPATH
+
+          sandbox="$(mktemp -d)"
+          trap 'rm -rf "$sandbox"' EXIT
+          mkdir -p "$sandbox/.kube" "$sandbox/.ksail"
+          cat > "$sandbox/.kube/config" <<'EOF'
+          apiVersion: v1
+          kind: Config
+          current-context: admin@home-isolation-guard
+          clusters:
+            - cluster:
+                server: https://localhost:6443
+              name: home-isolation-guard
+          contexts:
+            - context:
+                cluster: home-isolation-guard
+                user: admin@home-isolation-guard
+              name: admin@home-isolation-guard
+          users:
+            - name: admin@home-isolation-guard
+          EOF
+          printf '{"recent":["__home_isolation_guard__"]}' > "$sandbox/.ksail/switch-history.json"
+
+          kube_before="$(sha256sum "$sandbox/.kube/config" | cut -d' ' -f1)"
+          hist_before="$(sha256sum "$sandbox/.ksail/switch-history.json" | cut -d' ' -f1)"
+          tree_before="$(find "$sandbox/.kube" "$sandbox/.ksail" | sort)"
+
+          # Run the whole suite with $HOME redirected to the sandbox. Test
+          # pass/fail is the main test workflow's job; this guard only asserts
+          # that no test mutated the real home directory, so failures here are
+          # tolerated.
+          HOME="$sandbox" go test ./... >/dev/null 2>&1 || true
+
+          # Capture the post-run state with errexit disabled: a test that
+          # deletes the canary files/dirs is itself a violation, and the empty
+          # captures below will differ from the "before" values and trip the
+          # actionable ::error:: messages rather than aborting the step.
+          set +e
+          kube_after="$(sha256sum "$sandbox/.kube/config" 2>/dev/null | cut -d' ' -f1)"
+          hist_after="$(sha256sum "$sandbox/.ksail/switch-history.json" 2>/dev/null | cut -d' ' -f1)"
+          tree_after="$(find "$sandbox/.kube" "$sandbox/.ksail" 2>/dev/null | sort)"
+          set -e
+
+          status=0
+          if [ "$kube_before" != "$kube_after" ]; then
+            echo "::error::A test mutated \$HOME/.kube/config. Add a homeenv.Run/Isolate TestMain to the offending package (see internal/testutil/homeenv)."
+            status=1
+          fi
+          if [ "$hist_before" != "$hist_after" ]; then
+            echo "::error::A test mutated \$HOME/.ksail/switch-history.json. Add a homeenv.Run/Isolate TestMain to the offending package."
+            status=1
+          fi
+          if [ "$tree_before" != "$tree_after" ]; then
+            echo "::error::A test created or removed files under \$HOME/.kube or \$HOME/.ksail. Add a homeenv.Run/Isolate TestMain to the offending package."
+            diff <(printf '%s\n' "$tree_before") <(printf '%s\n' "$tree_after") || true
+            status=1
+          fi
+          exit "$status"
+
   audit-docs:
     name: 🔍 Audit Docs Dependencies
     runs-on: ubuntu-latest
@@ -578,12 +696,12 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: � Checkout
+      - name: 📄 Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
 
-      - name: �🔍 NPM Audit and Fix
+      - name: 🔍 NPM Audit and Fix
         uses: ./.github/actions/npm-audit-and-fix
         with:
           working-directory: docs
@@ -600,12 +718,12 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: � Checkout
+      - name: 📄 Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
 
-      - name: �🔍 NPM Audit and Fix
+      - name: 🔍 NPM Audit and Fix
         uses: ./.github/actions/npm-audit-and-fix
         with:
           working-directory: vsce
@@ -730,6 +848,72 @@ jobs:
           # MCP server must point at the ksail binary
           jq -e '.mcpServers.ksail.command == "ksail"' copilot-plugin/.mcp.json >/dev/null
 
+  operator-chart-lint:
+    name: ⛵ Operator Chart Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [changes]
+    if: github.event_name != 'merge_group' && needs.changes.outputs.operator-chart == 'true'
+    permissions:
+      contents: read
+    steps:
+      - name: 📄 Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: 🔍 Helm lint
+        run: helm lint charts/ksail-operator
+
+      - name: 📐 Helm template (value permutations)
+        run: |
+          set -euo pipefail
+          echo "=== defaults (operator only) ==="
+          helm template ksail-operator charts/ksail-operator >/dev/null
+          echo "=== ui.ingress.enabled ==="
+          helm template ksail-operator charts/ksail-operator \
+            --set ui.ingress.enabled=true >/dev/null
+          echo "=== auth.oidc.enabled ==="
+          # OIDC requires a redirectURL (or ui.ingress) plus a client secret;
+          # the operator does not run here, so dummy values are sufficient to
+          # exercise the secret/deployment templates.
+          helm template ksail-operator charts/ksail-operator \
+            --set ui.ingress.enabled=true \
+            --set auth.oidc.enabled=true \
+            --set auth.oidc.issuerURL=https://dex.example \
+            --set auth.oidc.clientID=ksail \
+            --set auth.oidc.clientSecret=dummy \
+            --set auth.oidc.redirectURL=https://ksail.local/api/v1/auth/callback >/dev/null
+          echo "✅ All chart template permutations rendered"
+
+  operator-chart-e2e:
+    name: ⛵ Operator Chart E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [changes]
+    # Local images only — no secrets/GHCR — so this also runs on fork PRs.
+    if: >-
+      !cancelled()
+      && (
+        (github.event_name == 'pull_request' && needs.changes.outputs.operator-chart == 'true')
+        || github.event_name == 'workflow_dispatch'
+      )
+    permissions:
+      contents: read
+    steps:
+      - name: 📄 Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: ⚙️ Setup Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version-file: go.mod
+
+      - name: 🧪 Run Operator Chart E2E
+        uses: ./.github/actions/operator-chart-e2e
+
   warm-helm-cache:
     name: 🔥 Warm Helm Cache
     runs-on: ubuntu-latest
@@ -819,7 +1003,10 @@ jobs:
   system-test-docker:
     name: 🧪 System Test (Docker)
     runs-on: ubuntu-latest
-    timeout-minutes: 75
+    # The Talos host + full nested Kubernetes-provider coverage (Vanilla,K3s,VCluster,Talos)
+    # has a ~77-min worst case. 120 gives comfortable headroom to absorb runtime variance
+    # without trimming test coverage.
+    timeout-minutes: 120
     needs:
       [
         changes,
@@ -842,7 +1029,11 @@ jobs:
       contents: read
       packages: write
     strategy:
-      fail-fast: true
+      # fail-fast: false so a single failing leg does not cancel its siblings. This surfaces
+      # every failing distribution/arg combination in one run (aligning with the goal of
+      # making all CI errors visible and blocking) instead of masking later legs behind the
+      # first failure, and it lets the diagnostic-bearing legs run to completion.
+      fail-fast: false
       max-parallel: 15
       matrix:
         distribution: [KWOK, Vanilla, K3s, VCluster, Talos]
@@ -862,8 +1053,8 @@ jobs:
             init: true
             args: "--name system-test-cluster-with-image-verification --image-verification Enabled"
           # Enable Kubernetes provider tests on the default (init=true, args="")
-          # entry for each distribution. This tests all 5 nested distributions
-          # on each host type, once per matrix.
+          # entry for each distribution. This tests all 4 nested distributions
+          # (Vanilla,K3s,VCluster,Talos) on each host type, once per matrix.
           - distribution: Vanilla
             provider: Docker
             init: true
@@ -884,6 +1075,20 @@ jobs:
             init: true
             args: ""
             test-kubernetes-provider: "true"
+          # Validate Calico on the Kubernetes (k3k) provider. Calico v3.30+'s CRD
+          # chart ships MutatingAdmissionPolicy resources that need the v1beta1
+          # admissionregistration API enabled on the embedded k3s server via the k3k
+          # Cluster serverArgs. The default test-kubernetes-provider legs above use
+          # the distribution-default CNI, so this leg is the only one exercising the
+          # k3k+Calico serverArgs path. A unique host args value keeps this as a
+          # standalone matrix combination (not merged into the args="" Vanilla leg).
+          - distribution: Vanilla
+            provider: Docker
+            init: true
+            args: "--name k3k-calico-host"
+            test-kubernetes-provider: "true"
+            kubernetes-provider-distributions: "K3s"
+            kubernetes-provider-cni: "Calico"
           # NOTE: KWOK excluded — simulated nodes cannot run real workloads (DinD pods)
     steps:
       - name: 📄 Checkout
@@ -926,7 +1131,7 @@ jobs:
 
       - name: 🔐 Login to Docker Hub
         if: ${{ vars.DOCKERHUB_USERNAME != '' }}
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
         with:
           username: ${{ vars.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }} # zizmor: ignore[secrets-outside-env] - third-party action input, no environment scoping available
@@ -961,9 +1166,13 @@ jobs:
           args: ${{ matrix.args }}
           apply-overlay-path: ".github/fixtures/podinfo-overlay"
           test-kubernetes-provider: ${{ matrix.test-kubernetes-provider || 'false' }}
+          kubernetes-provider-distributions: ${{ matrix.kubernetes-provider-distributions || 'Vanilla,K3s,VCluster,Talos' }}
+          kubernetes-provider-cni: ${{ matrix.kubernetes-provider-cni || '' }}
 
           ghcr-user: ${{ github.actor }}
           ghcr-token: ${{ secrets.GITHUB_TOKEN }}
+          dockerhub-user: ${{ vars.DOCKERHUB_USERNAME }}
+          dockerhub-token: ${{ secrets.DOCKERHUB_TOKEN }}
 
   benchmark:
     name: 📊 Benchmark
@@ -1145,6 +1354,69 @@ jobs:
           comment-on-alert: false
           summary-always: false
 
+  verify-desktop-tidy:
+    name: 🧩 Verify Desktop Module Tidy
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [changes]
+    if: github.event_name != 'merge_group' && needs.changes.outputs.desktop == 'true'
+    permissions:
+      contents: read
+    steps:
+      - name: 📄 Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+          repository: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+
+      - name: ⚙️ Setup Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      # The desktop app is a SEPARATE Go module that vendors the main module via `replace => ../`, so
+      # its go.{mod,sum} must independently track the main module's dependency graph. A root dependency
+      # bump (e.g. a dependabot gomod PR) touches only the root go.{mod,sum} and leaves desktop stale,
+      # which would break the release-time desktop build with a cryptic "updates to go.mod needed".
+      # Rather than hard-fail and force a manual `go -C desktop mod tidy`, self-heal the same way
+      # generated files are synced: run tidy, capture the diff as a patch artifact, and let the
+      # 📤 Auto-Commit Generated Changes job apply it to the PR branch. Fork PRs — which that job cannot
+      # push to — still hard-fail with actionable guidance.
+      - name: 🧹 Tidy desktop module
+        working-directory: desktop
+        run: go mod tidy
+
+      - name: 📤 Upload patch
+        run: |
+          git add -N .
+          git diff > /tmp/desktop-tidy.patch
+          if [ -s /tmp/desktop-tidy.patch ]; then
+            echo "Desktop module drift detected; patch will be auto-committed on same-repo PRs."
+          else
+            echo "Desktop module already tidy."
+          fi
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: desktop-tidy-patch
+          path: /tmp/desktop-tidy.patch
+          if-no-files-found: ignore
+          retention-days: 1
+
+      - name: ❌ Fail if desktop module is out of date (fork PR)
+        if: >-
+          github.event_name == 'pull_request'
+          && github.event.pull_request.head.repo.full_name != github.repository
+        shell: bash
+        run: |
+          if [ -s /tmp/desktop-tidy.patch ]; then
+            echo "::error::desktop/go.{mod,sum} are out of date. Please run 'go -C desktop mod tidy' locally and commit the result."
+            echo ""
+            cat /tmp/desktop-tidy.patch
+            exit 1
+          fi
+
   require-checks-in-pr:
     name: CI - Required Checks
     runs-on: ubuntu-latest
@@ -1160,13 +1432,22 @@ jobs:
         auto-commit,
         warm-helm-cache,
         warm-mirror-cache,
+        system-test-docker,
         license-check,
+        home-isolation,
+        audit-docs,
+        audit-vsce,
         build-docs,
+        vscode-extension,
+        copilot-plugin,
         benchmark,
+        operator-chart-lint,
+        operator-chart-e2e,
+        verify-desktop-tidy,
       ]
     if: ${{ always() }}
     steps:
-      - uses: devantler-tech/actions/require-checks-in-pr@61ae89ec83b943bd3a486fdcaf91cb66fd6b8760 # feat/require-checks-in-pr
+      - uses: devantler-tech/actions/aggregate-job-checks@6916c45ed8dc22e62cb12f021480e29732d03575 # v5.1.0
         with:
           job-results: >-
             ${{ needs.rate-limit-gate.result }}
@@ -1178,6 +1459,15 @@ jobs:
             ${{ needs.auto-commit.result }}
             ${{ needs.warm-helm-cache.result }}
             ${{ needs.warm-mirror-cache.result }}
+            ${{ needs.system-test-docker.result }}
             ${{ needs.license-check.result }}
+            ${{ needs.home-isolation.result }}
+            ${{ needs.audit-docs.result }}
+            ${{ needs.audit-vsce.result }}
             ${{ needs.build-docs.result }}
+            ${{ needs.vscode-extension.result }}
+            ${{ needs.copilot-plugin.result }}
             ${{ needs.benchmark.result }}
+            ${{ needs.operator-chart-lint.result }}
+            ${{ needs.operator-chart-e2e.result }}
+            ${{ needs.verify-desktop-tidy.result }}

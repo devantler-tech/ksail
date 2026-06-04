@@ -2,14 +2,11 @@ package talosprovisioner
 
 import (
 	"context"
-	"fmt"
 	"strconv"
 
-	"github.com/cosi-project/runtime/pkg/safe"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	talosconfigtypes "github.com/siderolabs/talos/pkg/machinery/config/config"
 	"github.com/siderolabs/talos/pkg/machinery/constants"
-	talosresconfig "github.com/siderolabs/talos/pkg/machinery/resources/config"
 )
 
 const (
@@ -48,49 +45,21 @@ func (p *Provisioner) detectDisruptiveConfigChanges(
 		return nil, nil
 	}
 
-	nodes, err := p.getNodesByRole(ctx, clusterName)
-	if err != nil {
-		return nil, fmt.Errorf("failed to discover nodes for config change detection: %w", err)
-	}
-
 	// Compare against a single control-plane node. Encryption config patches
 	// are cluster-wide (applied to all nodes from the same patch files), so
 	// checking one CP node is sufficient for detecting pending migrations.
 	// Per-node comparison would be needed for partial migration recovery
 	// (future enhancement).
-	var cpIP string
-
-	for _, node := range nodes {
-		if node.Role == RoleControlPlane {
-			cpIP = node.IP
-
-			break
-		}
+	runningConfig, found, err := p.fetchRunningControlPlaneConfig(ctx, clusterName)
+	if err != nil {
+		return nil, err
 	}
 
-	if cpIP == "" {
+	if !found {
 		return nil, nil
 	}
 
-	talosClient, err := p.createTalosClient(ctx, cpIP)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create Talos client for config comparison: %w", err)
-	}
-
-	defer talosClient.Close() //nolint:errcheck
-
-	machineConfig, err := safe.StateGet[*talosresconfig.MachineConfig](
-		ctx,
-		talosClient.COSI,
-		talosresconfig.NewMachineConfig(nil).Metadata(),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch running machine config from %s: %w", cpIP, err)
-	}
-
-	runningConfig := machineConfig.Config()
 	desiredConfig := p.talosConfigs.ControlPlane()
-
 	if desiredConfig == nil {
 		return nil, nil
 	}

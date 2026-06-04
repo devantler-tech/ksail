@@ -1,0 +1,524 @@
+// Package api serves the KSail operator's REST/JSON API over the Cluster custom resource.
+// It is a thin layer over the controller-runtime client and is registered as a manager
+// Runnable. When read-only mode is enabled, all mutating verbs are rejected server-side so the
+// optional web UI cannot diverge from a GitOps-enforced source of truth.
+package api
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io/fs"
+	"net"
+	"net/http"
+	"path"
+	"strings"
+	"time"
+
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
+)
+
+const (
+	readHeaderTimeout = 10 * time.Second
+	shutdownTimeout   = 5 * time.Second
+	// maxRequestBodyBytes caps decoded request bodies to guard against oversized payloads.
+	maxRequestBodyBytes = 1 << 20 // 1 MiB
+)
+
+// Server serves the operator REST API. It implements controller-runtime's manager.Runnable.
+//
+// Authentication is optional and app-driven (see OIDCConfig): when configured, the API owns the
+// OIDC login/callback and requires a valid session for all cluster endpoints. When OIDC is not
+// configured the API has no built-in authn/z — any caller that can reach the listener inherits the
+// operator's RBAC, so keep it cluster-internal (and rely on the read-only lock) or enable OIDC.
+// The operator always acts with its own RBAC; OIDC provides authentication, not per-user authz.
+type Server struct {
+	// Service is the backend the cluster handlers delegate to (controller-runtime-backed in the
+	// operator, CLI-lifecycle-backed for `ksail ui`).
+	Service ClusterService
+	// ReadOnly rejects all mutating requests with HTTP 403 when true.
+	ReadOnly bool
+	// BindAddress is the address the HTTP server listens on (e.g. ":8080").
+	BindAddress string
+	// OIDC configures app-driven OIDC authentication; empty IssuerURL disables it.
+	OIDC OIDCConfig
+
+	// Distributions lists the distributions the create form should offer. When empty the SPA falls
+	// back to its built-in default (VCluster), so the operator can leave it unset.
+	Distributions []string
+
+	// ProviderStatus reports which infrastructure providers are usable on this backend (e.g. the
+	// local UI gates create options on whether HCLOUD_TOKEN is set, Docker is running, etc.). When
+	// nil the SPA does not gate by provider — it offers every provider valid for a distribution (the
+	// operator leaves it nil, since it provisions via the cluster CR regardless of local credentials).
+	ProviderStatus func(ctx context.Context) []ProviderInfo
+
+	// Settings, when non-nil, enables the credential-settings endpoints and the SPA's Settings page.
+	// Only the local UI backend sets it; the operator leaves it nil (credentials are managed
+	// in-cluster), so the settings routes are not registered and the Settings page stays hidden.
+	Settings SettingsService
+
+	// StaticFS, when non-nil, serves the embedded web UI (SPA) for any route the API does not handle,
+	// falling back to index.html for client-side routing. The operator leaves it nil (nginx serves
+	// the UI separately); `ksail ui` sets it to the embedded assets.
+	StaticFS fs.FS
+
+	// auth is built from OIDC at Start; nil means authentication is disabled.
+	auth *authenticator
+}
+
+// configResponse describes the deployment mode the SPA needs to render the correct UI.
+type configResponse struct {
+	ReadOnly        bool           `json:"readOnly"`
+	AuthEnabled     bool           `json:"authEnabled"`
+	User            *userInfo      `json:"user,omitempty"`
+	Distributions   []string       `json:"distributions,omitempty"`
+	Providers       []ProviderInfo `json:"providers,omitempty"`
+	SettingsEnabled bool           `json:"settingsEnabled,omitempty"`
+}
+
+// ProviderInfo reports whether an infrastructure provider is usable on the serving backend, with a
+// human-readable reason when it is not. The SPA uses it to gate the create form's provider options.
+type ProviderInfo struct {
+	Name      string `json:"name"`
+	Available bool   `json:"available"`
+	Reason    string `json:"reason,omitempty"`
+}
+
+// userInfo is the authenticated identity surfaced to the SPA.
+type userInfo struct {
+	Subject string `json:"subject"`
+	Email   string `json:"email,omitempty"`
+	Name    string `json:"name,omitempty"`
+}
+
+// fullCluster serializes a Cluster with its complete field values. v1alpha1.Cluster.MarshalJSON
+// prunes fields that equal their defaults (e.g. distribution=Vanilla, provider=Docker) to keep
+// config files clean; a UI-facing API instead needs those values so the web UI can display them.
+// Defining a distinct type drops the custom MarshalJSON, falling back to struct-tag marshaling.
+type fullCluster v1alpha1.Cluster
+
+// fullClusterList is the list response shape the SPA consumes ({"items":[...]}), with each item
+// serialized in full (see fullCluster).
+type fullClusterList struct {
+	Items []fullCluster `json:"items"`
+}
+
+func toFullClusterList(list *v1alpha1.ClusterList) fullClusterList {
+	items := make([]fullCluster, 0, len(list.Items))
+	for index := range list.Items {
+		items = append(items, fullCluster(list.Items[index]))
+	}
+
+	return fullClusterList{Items: items}
+}
+
+// NeedLeaderElection reports that the API server runs on every replica, not only the leader,
+// so reads remain available on standby replicas.
+func (s *Server) NeedLeaderElection() bool {
+	return false
+}
+
+// Start runs the HTTP server on BindAddress until the context is cancelled. It satisfies
+// controller-runtime's manager.Runnable for the operator.
+func (s *Server) Start(ctx context.Context) error {
+	var listenConfig net.ListenConfig
+
+	listener, err := listenConfig.Listen(ctx, "tcp", s.BindAddress)
+	if err != nil {
+		return fmt.Errorf("listen on %s: %w", s.BindAddress, err)
+	}
+
+	return s.Serve(ctx, listener)
+}
+
+// Serve runs the HTTP server on the supplied listener until the context is cancelled. Binding the
+// listener separately lets callers (e.g. `ksail ui`) discover the chosen port before serving
+// when port 0 is requested.
+func (s *Server) Serve(ctx context.Context, listener net.Listener) error {
+	if s.OIDC.Enabled() && s.auth == nil {
+		auth, err := newAuthenticator(ctx, s.OIDC)
+		if err != nil {
+			return fmt.Errorf("set up OIDC authentication: %w", err)
+		}
+
+		s.auth = auth
+	}
+
+	server := &http.Server{
+		Handler:           s.Handler(),
+		ReadHeaderTimeout: readHeaderTimeout,
+	}
+
+	go func() {
+		<-ctx.Done()
+
+		// Derive from ctx (without cancellation, since it is already cancelled) so shutdown
+		// keeps a bounded deadline while remaining linked to the parent context values.
+		shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), shutdownTimeout)
+		defer cancel()
+
+		_ = server.Shutdown(shutdownCtx)
+	}()
+
+	logf.FromContext(ctx).
+		Info("starting KSail API server", "address", listener.Addr().String(), "readOnly", s.ReadOnly)
+
+	err := server.Serve(listener)
+	if err != nil && !errors.Is(err, http.ErrServerClosed) {
+		return fmt.Errorf("api server: %w", err)
+	}
+
+	return nil
+}
+
+// Handler builds the HTTP routes wrapped in the read-only guard.
+func (s *Server) Handler() http.Handler {
+	mux := http.NewServeMux()
+
+	mux.HandleFunc("GET /healthz", s.handleHealth)
+	mux.HandleFunc("GET /readyz", s.handleHealth)
+	mux.HandleFunc("GET /api/v1/config", s.handleConfig)
+	mux.HandleFunc("GET /api/v1/meta", s.handleMeta)
+	mux.HandleFunc("GET /api/v1/clusters", s.handleListClusters)
+	mux.HandleFunc("POST /api/v1/clusters", s.handleCreateCluster)
+	mux.HandleFunc("GET /api/v1/clusters/{namespace}/{name}", s.handleGetCluster)
+	mux.HandleFunc("PUT /api/v1/clusters/{namespace}/{name}", s.handleUpdateCluster)
+	mux.HandleFunc("DELETE /api/v1/clusters/{namespace}/{name}", s.handleDeleteCluster)
+
+	// Credential settings are local-UI-only: registered only when a SettingsService is provided, so
+	// the operator's API surface is unchanged.
+	if s.Settings != nil {
+		mux.HandleFunc("GET /api/v1/settings", s.handleGetSettings)
+		mux.HandleFunc("PUT /api/v1/settings", s.handleUpdateSettings)
+	}
+
+	if s.auth != nil {
+		mux.HandleFunc("GET /api/v1/auth/login", s.auth.handleLogin)
+		mux.HandleFunc("GET /api/v1/auth/callback", s.auth.handleCallback)
+		mux.HandleFunc("POST /api/v1/auth/logout", s.auth.handleLogout)
+	}
+
+	// Serve the embedded SPA on every route the API does not handle (more specific patterns above
+	// take precedence). Only wired when StaticFS is set, so the operator's API-only mode is unchanged.
+	if s.StaticFS != nil {
+		mux.Handle("GET /", spaFileServer(s.StaticFS))
+	}
+
+	return securityHeaders(s.authGuard(s.readOnlyGuard(mux)))
+}
+
+// securityHeaders applies conservative security headers to every response. The CSP allows only
+// same-origin resources (the SPA's bundled JS/CSS and the theme-init script are same-origin and it
+// makes no cross-origin requests); 'unsafe-inline' is permitted for styles only, which React inline
+// style attributes and the bundled stylesheet require.
+func securityHeaders(next http.Handler) http.Handler {
+	const csp = "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; " +
+		"object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
+
+	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		header := writer.Header()
+		header.Set("X-Content-Type-Options", "nosniff")
+		header.Set("X-Frame-Options", "DENY")
+		header.Set("Referrer-Policy", "no-referrer")
+		header.Set("Content-Security-Policy", csp)
+
+		next.ServeHTTP(writer, request)
+	})
+}
+
+// uiNotBuiltMessage is served when StaticFS is set but the SPA assets were never built (only the
+// embed placeholder is present).
+const uiNotBuiltMessage = `<!doctype html><html><head><meta charset="utf-8">` +
+	`<title>KSail UI</title></head><body style="font-family:sans-serif;padding:2rem">` +
+	`<h1>KSail web UI not built</h1>` +
+	`<p>Run <code>make ui</code> and rebuild the binary to embed the web UI.</p>` +
+	`</body></html>`
+
+// spaFileServer serves files from fsys, falling back to index.html for unknown paths so the SPA can
+// own client-side routing (mirrors the nginx try_files behavior used by the operator's UI image).
+func spaFileServer(fsys fs.FS) http.Handler {
+	fileServer := http.FileServer(http.FS(fsys))
+
+	index, err := fs.ReadFile(fsys, "index.html")
+	if err != nil {
+		index = []byte(uiNotBuiltMessage)
+	}
+
+	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		name := strings.TrimPrefix(path.Clean(request.URL.Path), "/")
+		if name != "" {
+			_, statErr := fs.Stat(fsys, name)
+			if statErr == nil {
+				fileServer.ServeHTTP(writer, request)
+
+				return
+			}
+		}
+
+		writer.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = writer.Write(index)
+	})
+}
+
+// authGuard requires a valid session for cluster endpoints when OIDC is enabled. Health checks,
+// the config endpoint, and the auth flow itself remain open so the SPA can detect the mode and log
+// in. When OIDC is disabled the guard is a pass-through.
+func (s *Server) authGuard(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if s.auth == nil || isOpenPath(request.URL.Path) {
+			next.ServeHTTP(writer, request)
+
+			return
+		}
+
+		_, ok := s.auth.currentUser(request)
+		if !ok {
+			writeJSON(writer, http.StatusUnauthorized, map[string]any{
+				"error":    "authentication required",
+				"loginURL": loginPath,
+			})
+
+			return
+		}
+
+		next.ServeHTTP(writer, request)
+	})
+}
+
+// isOpenPath reports whether a path is reachable without an authenticated session. Cluster API
+// paths stay guarded; everything else (health, config, meta, the auth flow, and the SPA's static
+// assets/client routes) is open so the login screen and its assets load before a session exists —
+// the SPA then discovers auth state via the (open) /api/v1/config endpoint.
+func isOpenPath(path string) bool {
+	switch path {
+	case "/healthz", "/readyz", "/api/v1/config", "/api/v1/meta":
+		return true
+	}
+
+	if strings.HasPrefix(path, "/api/v1/auth/") {
+		return true
+	}
+
+	// Non-API paths are SPA static assets / client-side routes; serve them unauthenticated.
+	return !strings.HasPrefix(path, "/api/")
+}
+
+// readOnlyGuard rejects mutating cluster requests with 403 when the server is in read-only mode.
+// Auth endpoints (e.g. POST /api/v1/auth/logout) are exempt: read-only constrains cluster
+// mutations, not session management, so users must still be able to log out.
+func (s *Server) readOnlyGuard(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		isAuthPath := strings.HasPrefix(request.URL.Path, "/api/v1/auth/")
+		if s.ReadOnly && isMutating(request.Method) && !isAuthPath {
+			writeJSON(writer, http.StatusForbidden, map[string]any{
+				"readOnly": true,
+				"reason":   "UI is configured read-only (GitOps-enforced)",
+			})
+
+			return
+		}
+
+		next.ServeHTTP(writer, request)
+	})
+}
+
+func (s *Server) handleHealth(writer http.ResponseWriter, _ *http.Request) {
+	writeJSON(writer, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func (s *Server) handleConfig(writer http.ResponseWriter, request *http.Request) {
+	response := configResponse{
+		ReadOnly:        s.ReadOnly,
+		AuthEnabled:     s.auth != nil,
+		Distributions:   s.Distributions,
+		SettingsEnabled: s.Settings != nil,
+	}
+
+	if s.ProviderStatus != nil {
+		response.Providers = s.ProviderStatus(request.Context())
+	}
+
+	if s.auth != nil {
+		claims, ok := s.auth.currentUser(request)
+		if ok {
+			response.User = &userInfo{
+				Subject: claims.Subject,
+				Email:   claims.Email,
+				Name:    claims.Name,
+			}
+		}
+	}
+
+	writeJSON(writer, http.StatusOK, response)
+}
+
+func (s *Server) handleListClusters(writer http.ResponseWriter, request *http.Request) {
+	list, err := s.Service.List(request.Context())
+	if err != nil {
+		writeClientError(writer, err)
+
+		return
+	}
+
+	writeJSON(writer, http.StatusOK, toFullClusterList(list))
+}
+
+func (s *Server) handleGetCluster(writer http.ResponseWriter, request *http.Request) {
+	cluster, err := s.Service.Get(
+		request.Context(),
+		request.PathValue("namespace"),
+		request.PathValue("name"),
+	)
+	if err != nil {
+		writeClientError(writer, err)
+
+		return
+	}
+
+	writeJSON(writer, http.StatusOK, (*fullCluster)(cluster))
+}
+
+func (s *Server) handleCreateCluster(writer http.ResponseWriter, request *http.Request) {
+	decoded, err := decodeCluster(writer, request)
+	if err != nil {
+		writeDecodeError(writer, err)
+
+		return
+	}
+
+	created, createErr := s.Service.Create(request.Context(), decoded)
+	if createErr != nil {
+		writeClientError(writer, createErr)
+
+		return
+	}
+
+	writeJSON(writer, http.StatusCreated, (*fullCluster)(created))
+}
+
+func (s *Server) handleUpdateCluster(writer http.ResponseWriter, request *http.Request) {
+	decoded, err := decodeCluster(writer, request)
+	if err != nil {
+		writeDecodeError(writer, err)
+
+		return
+	}
+
+	updated, updateErr := s.Service.Update(
+		request.Context(),
+		request.PathValue("namespace"),
+		request.PathValue("name"),
+		decoded,
+	)
+	if updateErr != nil {
+		writeClientError(writer, updateErr)
+
+		return
+	}
+
+	writeJSON(writer, http.StatusOK, (*fullCluster)(updated))
+}
+
+func (s *Server) handleDeleteCluster(writer http.ResponseWriter, request *http.Request) {
+	err := s.Service.Delete(
+		request.Context(),
+		request.PathValue("namespace"),
+		request.PathValue("name"),
+	)
+	if err != nil {
+		writeClientError(writer, err)
+
+		return
+	}
+
+	writer.WriteHeader(http.StatusNoContent)
+}
+
+func isMutating(method string) bool {
+	switch method {
+	case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
+		return true
+	default:
+		return false
+	}
+}
+
+func decodeCluster(writer http.ResponseWriter, request *http.Request) (*v1alpha1.Cluster, error) {
+	var cluster v1alpha1.Cluster
+
+	// Cap the request body to guard against oversized payloads when exposed via Ingress.
+	limited := http.MaxBytesReader(writer, request.Body, maxRequestBodyBytes)
+
+	err := json.NewDecoder(limited).Decode(&cluster)
+	if err != nil {
+		return nil, fmt.Errorf("decode cluster: %w", err)
+	}
+
+	return &cluster, nil
+}
+
+func writeJSON(writer http.ResponseWriter, status int, body any) {
+	data, err := json.Marshal(body)
+	if err != nil {
+		writer.WriteHeader(http.StatusInternalServerError)
+
+		return
+	}
+
+	writer.Header().Set("Content-Type", "application/json")
+	writer.WriteHeader(status)
+
+	_, _ = writer.Write(data)
+}
+
+func writeError(writer http.ResponseWriter, status int, err error) {
+	writeJSON(writer, status, map[string]string{"error": err.Error()})
+}
+
+// writeDecodeError maps a request-body decode failure to the most appropriate status: 413 when the
+// body exceeded maxRequestBodyBytes, otherwise 400 for malformed JSON.
+func writeDecodeError(writer http.ResponseWriter, err error) {
+	var maxBytesErr *http.MaxBytesError
+	if errors.As(err, &maxBytesErr) {
+		writeError(writer, http.StatusRequestEntityTooLarge, err)
+
+		return
+	}
+
+	writeError(writer, http.StatusBadRequest, err)
+}
+
+func writeClientError(writer http.ResponseWriter, err error) {
+	writeError(writer, clientErrorStatus(err), err)
+}
+
+// clientErrorStatus maps a backend error to the closest HTTP status code so clients and the UI can
+// react appropriately instead of treating everything as a 500. It recognizes both the ClusterService
+// sentinels (returned by the local CLI backend) and Kubernetes apierrors (returned by the operator's
+// controller-runtime backend).
+func clientErrorStatus(err error) int {
+	switch {
+	case errors.Is(err, ErrNotFound), apierrors.IsNotFound(err):
+		return http.StatusNotFound
+	case errors.Is(err, ErrAlreadyExists),
+		apierrors.IsConflict(err),
+		apierrors.IsAlreadyExists(err):
+		return http.StatusConflict
+	case errors.Is(err, ErrInvalid), apierrors.IsInvalid(err):
+		return http.StatusUnprocessableEntity
+	case errors.Is(err, ErrNotSupported):
+		return http.StatusNotImplemented
+	case apierrors.IsBadRequest(err):
+		return http.StatusBadRequest
+	case apierrors.IsUnauthorized(err):
+		return http.StatusUnauthorized
+	case apierrors.IsForbidden(err):
+		return http.StatusForbidden
+	default:
+		return http.StatusInternalServerError
+	}
+}

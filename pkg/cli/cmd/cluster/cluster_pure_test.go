@@ -194,6 +194,60 @@ func TestFormatDiffTable_MultipleRows(t *testing.T) {
 	assert.Contains(t, got, "c")
 }
 
+func TestFormatDiffTable_UnknownBaselineOnly(t *testing.T) {
+	t.Parallel()
+
+	diff := &clusterupdate.UpdateResult{
+		UnknownBaseline: []clusterupdate.Change{
+			{
+				Field:    "cluster.cni",
+				OldValue: clusterupdate.UnknownBaselineValue,
+				NewValue: "Cilium",
+				Category: clusterupdate.ChangeCategoryUnknown,
+			},
+		},
+	}
+	got := cluster.ExportFormatDiffTable(diff, 0)
+
+	assert.Contains(t, got, "cluster.cni")
+	assert.Contains(t, got, "Unknown")
+	assert.Contains(t, got, "Cilium")
+	assert.Contains(t, got, "⚪")
+	// The summary line must not claim confident configuration changes.
+	assert.Contains(t, got, "could not be read")
+	assert.NotContains(t, got, "Detected 0 configuration changes")
+}
+
+func TestFormatDiffTable_RealAndUnknownTogether(t *testing.T) {
+	t.Parallel()
+
+	diff := &clusterupdate.UpdateResult{
+		InPlaceChanges: []clusterupdate.Change{
+			{
+				Field:    "cluster.workers",
+				OldValue: "1",
+				NewValue: "3",
+				Category: clusterupdate.ChangeCategoryInPlace,
+			},
+		},
+		UnknownBaseline: []clusterupdate.Change{
+			{
+				Field:    "cluster.gitOpsEngine",
+				OldValue: clusterupdate.UnknownBaselineValue,
+				NewValue: "Flux",
+				Category: clusterupdate.ChangeCategoryUnknown,
+			},
+		},
+	}
+	got := cluster.ExportFormatDiffTable(diff, 1)
+
+	assert.Contains(t, got, "cluster.workers")
+	assert.Contains(t, got, "cluster.gitOpsEngine")
+	assert.Contains(t, got, "🟢")
+	assert.Contains(t, got, "⚪")
+	assert.Contains(t, got, "unknown baseline")
+}
+
 // ===========================================================================
 // stripDistributionPrefix — context name prefix stripping
 // ===========================================================================
@@ -1000,6 +1054,38 @@ func TestRunDiagnoseJSONReport_HealthyCluster(t *testing.T) {
 	assert.Contains(t, out, `"findings": []`)
 }
 
+// TestRunDiagnoseJSONReport_DoesNotEscapeHTML verifies the fix for the JSON
+// HTML-escaping issue: '<', '>', '&' (e.g. in remediation hints like "<name>")
+// appear literally instead of being </>/&-escaped.
+func TestRunDiagnoseJSONReport_DoesNotEscapeHTML(t *testing.T) {
+	t.Parallel()
+
+	report := k8s.DiagnoseReport{
+		ClusterName: "broken-cluster",
+		HealthScore: 90,
+		Findings: []k8s.DiagnoseFinding{
+			{
+				Severity:    k8s.DiagnoseSeverityWarning,
+				Resource:    "pvc/stuck (default)",
+				Reason:      "PVC is stuck in Pending phase",
+				Remediation: "Run 'ksail workload describe pvc/<name> -n <namespace>'.",
+			},
+		},
+	}
+
+	var buf strings.Builder
+
+	err := cluster.ExportRunDiagnoseJSONReport(report, &buf)
+	require.NoError(t, err)
+
+	out := buf.String()
+	// With HTML-escaping disabled, '<', '>' and '&' appear literally. If
+	// escaping were enabled they would be emitted as their unicode escape
+	// sequences instead, so the literal substring assertions below would fail.
+	assert.Contains(t, out, "<name>")
+	assert.Contains(t, out, "<namespace>")
+}
+
 func TestRunDiagnoseJSONReport_WithFindings(t *testing.T) {
 	t.Parallel()
 
@@ -1029,4 +1115,58 @@ func TestRunDiagnoseJSONReport_WithFindings(t *testing.T) {
 	assert.Contains(t, out, `"resource": "pod/crash-pod (default)"`)
 	assert.Contains(t, out, `"reason": "CrashLoopBackOff"`)
 	assert.Contains(t, out, `"remediation": "Check pod logs for errors."`)
+}
+
+func TestResolveCreatedContextName(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		distribution v1alpha1.Distribution
+		provider     v1alpha1.Provider
+		clusterName  string
+		expected     string
+	}{
+		{
+			name:         "k3s on kubernetes provider uses k3k prefix",
+			distribution: v1alpha1.DistributionK3s,
+			provider:     v1alpha1.ProviderKubernetes,
+			clusterName:  "nested-k3s",
+			expected:     "k3k-nested-k3s",
+		},
+		{
+			name:         "k3s on docker provider uses standalone k3d prefix",
+			distribution: v1alpha1.DistributionK3s,
+			provider:     v1alpha1.ProviderDocker,
+			clusterName:  "my-cluster",
+			expected:     "k3d-my-cluster",
+		},
+		{
+			name:         "vanilla on kubernetes provider uses standalone kind prefix",
+			distribution: v1alpha1.DistributionVanilla,
+			provider:     v1alpha1.ProviderKubernetes,
+			clusterName:  "nested-vanilla",
+			expected:     "kind-nested-vanilla",
+		},
+		{
+			name:         "empty cluster name returns empty",
+			distribution: v1alpha1.DistributionK3s,
+			provider:     v1alpha1.ProviderKubernetes,
+			clusterName:  "",
+			expected:     "",
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := cluster.ExportResolveCreatedContextName(
+				testCase.distribution,
+				testCase.provider,
+				testCase.clusterName,
+			)
+			assert.Equal(t, testCase.expected, got)
+		})
+	}
 }

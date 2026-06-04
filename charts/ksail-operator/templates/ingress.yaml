@@ -1,0 +1,45 @@
+{{- if .Values.ui.ingress.enabled -}}
+{{- if not .Values.operator.enabled }}
+{{- fail "ui.ingress.enabled=true requires operator.enabled=true: the operator serves both the UI and the REST API." }}
+{{- end }}
+{{- if not .Values.api.bindPort }}
+{{- fail "ui.ingress.enabled=true requires api.bindPort to be non-zero: the operator serves the UI and API on that port." }}
+{{- end }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "ksail-operator.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ksail-operator.labels" . | nindent 4 }}
+    app.kubernetes.io/component: operator
+  {{- with .Values.ui.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with .Values.ui.ingress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  {{- with .Values.ui.ingress.tls }}
+  tls:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  rules:
+    {{- range .Values.ui.ingress.hosts }}
+    - host: {{ .host | quote }}
+      http:
+        paths:
+          {{- range .paths }}
+          # The operator serves the SPA at / and the REST API (and OIDC login/callback) at /api on
+          # one origin, so every path routes to the single operator Service — no reverse proxy.
+          - path: {{ .path }}
+            pathType: {{ .pathType }}
+            backend:
+              service:
+                name: {{ include "ksail-operator.fullname" $ }}
+                port:
+                  number: {{ $.Values.api.bindPort }}
+          {{- end }}
+    {{- end }}
+{{- end }}

@@ -112,13 +112,17 @@ func getJSONFieldName(field reflect.StructField) string {
 // convertValue converts a reflect.Value to a serializable value.
 // Returns nil for zero/empty values that should be omitted.
 func convertValue(val reflect.Value) any {
-	// Handle pointers first
+	// Handle pointers first. A non-nil pointer field represents an explicit
+	// choice — the nil/non-nil distinction is the entire reason the field is a
+	// pointer (e.g. *bool: nil=unset, &false=explicitly disabled) — so its value
+	// is emitted even when it is the scalar zero value. Value (non-pointer) zero
+	// values are still omitted by convertByKind.
 	if val.Kind() == reflect.Pointer {
 		if val.IsNil() {
 			return nil
 		}
 
-		val = val.Elem()
+		return convertNonNilPointer(val.Elem())
 	}
 
 	// Handle interface values
@@ -131,6 +135,43 @@ func convertValue(val reflect.Value) any {
 	}
 
 	return convertByKind(val)
+}
+
+// convertNonNilPointer converts the dereferenced value of a non-nil pointer
+// field, preserving scalar zero values (false, 0, "") that convertByKind would
+// otherwise omit. Without this a *bool set to false would be silently dropped on
+// marshal and revert to its default on the next load. Composite and other kinds
+// delegate to convertByKind's normal (zero-omitting) handling.
+func convertNonNilPointer(val reflect.Value) any {
+	if val.Kind() == reflect.Interface {
+		if val.IsNil() {
+			return nil
+		}
+
+		val = val.Elem()
+	}
+
+	//nolint:exhaustive // composite and remaining kinds delegate to convertByKind
+	switch val.Kind() {
+	case reflect.Bool:
+		return val.Bool()
+
+	case reflect.String:
+		return val.String()
+
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		if val.Type() == reflect.TypeFor[time.Duration]() {
+			return val.Interface().(time.Duration).String() //nolint:forcetypeassert // known type
+		}
+
+		return val.Int()
+
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return val.Uint()
+
+	default:
+		return convertByKind(val)
+	}
 }
 
 // convertByKind handles the actual type conversion.
@@ -234,6 +275,18 @@ func handleStructValue(val reflect.Value) any {
 		return dur.Duration.String()
 	}
 
+	// Special handling for metav1.Time. The embedded time.Time has no exported fields, so the
+	// generic struct walk below would drop it; emit RFC3339 (matching Kubernetes serialization)
+	// so operator-populated status timestamps round-trip correctly.
+	if val.Type() == reflect.TypeFor[metav1.Time]() {
+		t := val.Interface().(metav1.Time) //nolint:forcetypeassert // known type
+		if t.IsZero() {
+			return nil
+		}
+
+		return t.UTC().Format(time.RFC3339)
+	}
+
 	// For other structs, recursively convert
 	mapped := structToMap(val)
 	if len(mapped) == 0 {
@@ -244,6 +297,13 @@ func handleStructValue(val reflect.Value) any {
 }
 
 // pruneClusterDefaults zeroes fields that match default values so they are omitted when marshalled.
+//
+// Note: this runs inside Cluster.MarshalJSON, which is shared by the CLI config writer and by
+// controller-runtime when the operator serializes objects for the API server. It must NOT strip
+// ObjectMeta (namespace, finalizers, resourceVersion, ...) or operator writes would break. The
+// reflection-based marshaller already omits zero values, so a CLI-constructed Cluster (empty
+// ObjectMeta beyond name, zero creationTimestamp, empty status) emits only metadata.name without
+// leaking API-server-populated fields.
 func pruneClusterDefaults(cluster Cluster) Cluster {
 	// Distribution defaults - needed for context derivation
 	distribution := cluster.Spec.Cluster.Distribution
@@ -292,6 +352,8 @@ func contextDependentPruneRules(distribution Distribution) []pruneRule {
 // Defaulter is implemented by types that have a non-zero default value.
 // When marshalling, fields matching their default will be omitted.
 // To add a new type with a default, just implement this interface on the type.
+//
+// +kubebuilder:object:generate=false
 type Defaulter interface {
 	Default() any
 }

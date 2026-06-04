@@ -1,0 +1,444 @@
+package talosprovisioner
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"strings"
+
+	"github.com/devantler-tech/ksail/v7/pkg/k8s/readiness"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/hetzner"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
+	"github.com/hetznercloud/hcloud-go/v2/hcloud"
+	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
+)
+
+// applyRollingRecreateChanges replaces Hetzner nodes one at a time to apply a
+// server-type change recorded in result.RollingRecreate. Workers are replaced
+// before control planes to minimise control-plane disruption. Each replacement
+// drains and removes the outgoing node (with etcd membership cleanup for control
+// planes), provisions a server with the new type, applies config so it rejoins
+// the cluster, and waits for it to become Ready before moving on — preserving
+// etcd quorum throughout.
+func (p *Provisioner) applyRollingRecreateChanges(
+	ctx context.Context,
+	clusterName string,
+	result *clusterupdate.UpdateResult,
+) error {
+	if len(result.RollingRecreate) == 0 {
+		return nil
+	}
+
+	// Rolling node replacement is only implemented for the Hetzner provider.
+	// Other providers never classify server-type changes as rolling-recreate.
+	if p.hetznerOpts == nil || p.infraProvider == nil {
+		return nil
+	}
+
+	rollControlPlane, rollWorker := rolesFromRollingChanges(result.RollingRecreate)
+
+	clientset, err := p.createK8sClient(clusterName)
+	if err != nil {
+		return err
+	}
+
+	if rollWorker {
+		workerErr := p.rollingReplaceRole(ctx, clientset, clusterName, RoleWorker, result)
+		if workerErr != nil {
+			return workerErr
+		}
+	}
+
+	if rollControlPlane {
+		cpErr := p.rollingReplaceRole(ctx, clientset, clusterName, RoleControlPlane, result)
+		if cpErr != nil {
+			return cpErr
+		}
+	}
+
+	return nil
+}
+
+// rolesFromRollingChanges reports which roles have a rolling server-type change.
+func rolesFromRollingChanges(changes []clusterupdate.Change) (bool, bool) {
+	var controlPlane, worker bool
+
+	for _, change := range changes {
+		switch change.Field {
+		case "provider.hetzner.controlPlaneServerType":
+			controlPlane = true
+		case "provider.hetzner.workerServerType":
+			worker = true
+		}
+	}
+
+	return controlPlane, worker
+}
+
+// rollingReplaceRole replaces every node of the given role whose server type
+// differs from the desired type, one at a time.
+func (p *Provisioner) rollingReplaceRole(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	clusterName, role string,
+	result *clusterupdate.UpdateResult,
+) error {
+	hzProvider, existing, err := p.hetznerNodesForRole(ctx, clusterName, role)
+	if err != nil {
+		return err
+	}
+
+	desiredType := p.hetznerServerType(role)
+
+	toReplace := serversNeedingReplacement(existing, desiredType)
+	if len(toReplace) == 0 {
+		return nil
+	}
+
+	// Fail fast before mutating infrastructure if the new type is unavailable.
+	availErr := p.checkHetznerAvailabilityForRole(ctx, hzProvider, role)
+	if availErr != nil {
+		return availErr
+	}
+
+	infra, infraErr := p.ensureHetznerInfra(ctx, hzProvider, clusterName)
+	if infraErr != nil {
+		return fmt.Errorf("failed to ensure Hetzner infrastructure: %w", infraErr)
+	}
+
+	for idx, oldServer := range toReplace {
+		// Re-validate etcd-quorum redundancy against the live inventory before
+		// each deletion. A prior iteration, a concurrent scale-down, or a node
+		// failure could have reduced the count since the loop began.
+		guardErr := p.guardControlPlaneQuorum(ctx, hzProvider, clusterName, role)
+		if guardErr != nil {
+			return guardErr
+		}
+
+		_, _ = fmt.Fprintf(p.logWriter,
+			"  [%d/%d] Replacing %s server %s with type %s...\n",
+			idx+1, len(toReplace), role, oldServer.Name, desiredType)
+
+		replaceErr := p.rollingReplaceSingleNode(
+			ctx, clientset, hzProvider, clusterName, role, oldServer, infra,
+		)
+		if replaceErr != nil {
+			recordFailedChange(result, role, oldServer.Name, replaceErr)
+
+			return fmt.Errorf("failed to replace %s server %s: %w",
+				role, oldServer.Name, replaceErr)
+		}
+
+		recordAppliedChange(result, role, oldServer.Name, "replaced")
+
+		_, _ = fmt.Fprintf(p.logWriter, "  ✓ Replaced %s server %s\n", role, oldServer.Name)
+	}
+
+	return nil
+}
+
+// guardControlPlaneQuorum refuses to proceed with a control-plane replacement
+// unless at least MinControlPlanesForRollingReplace control planes are currently
+// present, preserving etcd quorum when the outgoing node is deleted. It is a
+// no-op for non-control-plane roles.
+func (p *Provisioner) guardControlPlaneQuorum(
+	ctx context.Context,
+	hzProvider *hetzner.Provider,
+	clusterName, role string,
+) error {
+	if role != RoleControlPlane {
+		return nil
+	}
+
+	current, listErr := p.listHetznerNodesByRole(ctx, hzProvider, clusterName, role)
+	if listErr != nil {
+		return fmt.Errorf("failed to re-list %s nodes for quorum check: %w", role, listErr)
+	}
+
+	if len(current) < clusterupdate.MinControlPlanesForRollingReplace {
+		return fmt.Errorf("%w: %d present, need at least %d",
+			ErrInsufficientControlPlanesForRoll,
+			len(current), clusterupdate.MinControlPlanesForRollingReplace)
+	}
+
+	return nil
+}
+
+// serversNeedingReplacement returns servers whose type differs from desiredType.
+func serversNeedingReplacement(
+	servers []*hcloud.Server,
+	desiredType string,
+) []*hcloud.Server {
+	out := make([]*hcloud.Server, 0, len(servers))
+
+	for _, server := range servers {
+		if server == nil {
+			continue
+		}
+
+		if server.ServerType == nil || !strings.EqualFold(server.ServerType.Name, desiredType) {
+			out = append(out, server)
+		}
+	}
+
+	return out
+}
+
+// rollingReplaceSingleNode performs the drain → remove → recreate → rejoin
+// sequence for a single node, blocking until the replacement is Ready.
+func (p *Provisioner) rollingReplaceSingleNode(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	hzProvider *hetzner.Provider,
+	clusterName, role string,
+	oldServer *hcloud.Server,
+	infra HetznerInfra,
+) error {
+	oldIP, addrErr := hetznerNodeTalosAddress(oldServer)
+	if addrErr != nil {
+		return fmt.Errorf("resolving address for %s: %w", oldServer.Name, addrErr)
+	}
+
+	// 1. Cordon and drain the outgoing node before removing it.
+	oldNodeName, resolveErr := p.resolveNodeName(ctx, clientset, oldIP)
+
+	switch {
+	case resolveErr == nil:
+		drainErr := p.cordonAndDrain(ctx, clientset, oldNodeName)
+		if drainErr != nil {
+			return drainErr
+		}
+	case errors.Is(resolveErr, ErrNodeNotFoundByIP):
+		// The node is no longer registered in Kubernetes (e.g. a prior partial
+		// run already removed it). Skip drain and proceed with removal.
+		_, _ = fmt.Fprintf(p.logWriter,
+			"    ⚠ %s not registered in Kubernetes; proceeding with removal\n", oldIP)
+	default:
+		// A Kubernetes API failure (not a missing node): the node likely still
+		// exists, so abort rather than deleting it undrained and evicting its
+		// workloads abruptly.
+		return fmt.Errorf("resolve Kubernetes node for %s: %w", oldIP, resolveErr)
+	}
+
+	// 2. Control-plane etcd membership cleanup before removal.
+	if role == RoleControlPlane {
+		p.etcdCleanupBeforeRemoval(ctx, oldIP)
+	}
+
+	// 3. Delete the outgoing Hetzner server.
+	deleteErr := p.deleteHetznerServer(ctx, hzProvider, oldServer)
+	if deleteErr != nil {
+		return deleteErr
+	}
+
+	// 4. Remove the now-stale Kubernetes node object (best-effort).
+	if oldNodeName != "" {
+		p.deleteK8sNode(ctx, clientset, oldNodeName)
+	}
+
+	// 5. Provision the replacement server with the new type and let it rejoin.
+	newServer, createErr := p.createReplacementServer(ctx, hzProvider, clusterName, role, infra)
+	if createErr != nil {
+		return createErr
+	}
+
+	return p.configureAndWaitReplacement(ctx, clientset, newServer, role)
+}
+
+// configureAndWaitReplacement waits for the Talos API on a freshly provisioned
+// replacement server, applies its role config so it rejoins the cluster, then
+// blocks until it has installed, rebooted, and become Ready in Kubernetes.
+func (p *Provisioner) configureAndWaitReplacement(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	newServer *hcloud.Server,
+	role string,
+) error {
+	servers := []*hcloud.Server{newServer}
+
+	_, _ = fmt.Fprintf(p.logWriter,
+		"    Waiting for Talos API on replacement %s...\n", newServer.Name)
+
+	apiErr := p.waitForHetznerTalosAPI(ctx, servers)
+	if apiErr != nil {
+		return fmt.Errorf("waiting for Talos API on replacement %s: %w", newServer.Name, apiErr)
+	}
+
+	config := p.configForRole(role)
+	if config == nil {
+		return fmt.Errorf("%w: %s", ErrNoConfigForRole, role)
+	}
+
+	applyErr := p.applyConfigToNode(ctx, newServer, config)
+	if applyErr != nil {
+		return fmt.Errorf("applying config to replacement %s: %w", newServer.Name, applyErr)
+	}
+
+	reachErr := p.waitForServersToBeReachable(ctx, servers)
+	if reachErr != nil {
+		return fmt.Errorf("waiting for replacement %s to become reachable: %w",
+			newServer.Name, reachErr)
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter,
+		"    Waiting for replacement %s to rejoin and become Ready...\n", newServer.Name)
+
+	readyErr := p.waitForReplacementNodeReady(ctx, clientset, newServer)
+	if readyErr != nil {
+		return fmt.Errorf("waiting for replacement %s to become Ready: %w",
+			newServer.Name, readyErr)
+	}
+
+	return nil
+}
+
+// cordonAndDrain cordons then drains the named Kubernetes node.
+func (p *Provisioner) cordonAndDrain(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	nodeName string,
+) error {
+	_, _ = fmt.Fprintf(p.logWriter, "    Cordoning %s...\n", nodeName)
+
+	cordonErr := p.cordonNode(ctx, clientset, nodeName)
+	if cordonErr != nil {
+		return fmt.Errorf("cordon: %w", cordonErr)
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "    Draining %s...\n", nodeName)
+
+	drainErr := p.drainNode(ctx, clientset, nodeName)
+	if drainErr != nil {
+		return fmt.Errorf("drain: %w", drainErr)
+	}
+
+	return nil
+}
+
+// createReplacementServer provisions a single new server for the role using the
+// next available node index (computed after the outgoing server was deleted, so
+// names do not collide).
+func (p *Provisioner) createReplacementServer(
+	ctx context.Context,
+	hzProvider *hetzner.Provider,
+	clusterName, role string,
+	infra HetznerInfra,
+) (*hcloud.Server, error) {
+	existing, listErr := p.listHetznerNodesByRole(ctx, hzProvider, clusterName, role)
+	if listErr != nil {
+		return nil, fmt.Errorf("failed to list %s nodes: %w", role, listErr)
+	}
+
+	nextIndex := nextHetznerNodeIndex(existing, clusterName, role)
+
+	creationResults, createErr := p.launchHetznerScaleCreation(
+		ctx, hzProvider, clusterName, role, infra, p.hetznerRetryOpts(), nextIndex, 1,
+	)
+	if createErr != nil {
+		return nil, createErr
+	}
+
+	servers, collectErr := p.collectCreatedHetznerServers(creationResults, role)
+	if collectErr != nil {
+		return nil, collectErr
+	}
+
+	if len(servers) == 0 {
+		return nil, fmt.Errorf("%w: %s", ErrReplacementServerNotCreated, role)
+	}
+
+	return servers[0], nil
+}
+
+// deleteK8sNode removes a stale Kubernetes node object on a best-effort basis.
+// A missing node is treated as success; other failures are logged but not fatal,
+// since the Talos/etcd-level removal has already happened.
+func (p *Provisioner) deleteK8sNode(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	nodeName string,
+) {
+	err := clientset.CoreV1().Nodes().Delete(ctx, nodeName, metav1.DeleteOptions{})
+
+	switch {
+	case err == nil:
+		_, _ = fmt.Fprintf(p.logWriter, "    ✓ Removed stale node object %s\n", nodeName)
+	case apierrors.IsNotFound(err):
+		_, _ = fmt.Fprintf(p.logWriter, "    ✓ Node object %s already removed\n", nodeName)
+	default:
+		_, _ = fmt.Fprintf(p.logWriter,
+			"    ⚠ Failed to remove stale node object %s (best-effort): %v\n", nodeName, err)
+	}
+}
+
+// waitForReplacementNodeReady polls until the Kubernetes node backing the new
+// server reports Ready=True. The node is matched by name (Talos derives the
+// hostname from the Hetzner server name) or by its public IP.
+func (p *Provisioner) waitForReplacementNodeReady(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	server *hcloud.Server,
+) error {
+	serverIP, addrErr := hetznerNodeTalosAddress(server)
+	if addrErr != nil {
+		return fmt.Errorf("resolving address for %s: %w", server.Name, addrErr)
+	}
+
+	pollErr := readiness.PollForReadiness(
+		ctx,
+		nodeReadinessTimeout,
+		func(ctx context.Context) (bool, error) {
+			nodes, err := clientset.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+			if err != nil {
+				return false, nil //nolint:nilerr // returning nil to continue polling
+			}
+
+			for i := range nodes.Items {
+				node := &nodes.Items[i]
+				if !nodeMatchesServer(node, server.Name, serverIP) {
+					continue
+				}
+
+				return nodeIsReady(node), nil
+			}
+
+			return false, nil
+		},
+	)
+	if pollErr != nil {
+		return fmt.Errorf("wait for replacement node %s readiness: %w", server.Name, pollErr)
+	}
+
+	return nil
+}
+
+// nodeMatchesServer reports whether a Kubernetes node corresponds to the given
+// Hetzner server, matching on node name (case-insensitive) or public IP address.
+func nodeMatchesServer(node *corev1.Node, serverName, serverIP string) bool {
+	if strings.EqualFold(node.Name, serverName) {
+		return true
+	}
+
+	for _, addr := range node.Status.Addresses {
+		if (addr.Type == corev1.NodeInternalIP || addr.Type == corev1.NodeExternalIP) &&
+			addr.Address == serverIP {
+			return true
+		}
+	}
+
+	return false
+}
+
+// nodeIsReady reports whether a node has condition Ready=True.
+func nodeIsReady(node *corev1.Node) bool {
+	for _, cond := range node.Status.Conditions {
+		if cond.Type == corev1.NodeReady && cond.Status == corev1.ConditionTrue {
+			return true
+		}
+	}
+
+	return false
+}

@@ -54,6 +54,10 @@ Creates nodes as Hetzner Cloud servers for production-grade clusters. **Supporte
 > [!NOTE]
 > KSail only enables Hetzner-backed operations when `HCLOUD_TOKEN` is set; if it's unset, Hetzner is skipped.
 
+### Kubernetes (Nested)
+
+Runs nested cluster nodes as pods inside an existing host Kubernetes cluster. No Docker daemon is required on the host machine — the nested cluster's API server is exposed via Gateway API (TCPRoute), LoadBalancer, or NodePort, making it routable after `ksail` exits. **Supported distributions:** Vanilla, K3s, Talos, VCluster, KWOK. See [Kubernetes Provider](/providers/kubernetes/).
+
 ### Omni
 
 Manages Talos clusters through the [Sidero Omni](https://www.siderolabs.com/omni/) SaaS API. **Supported distributions:** Talos. **Requirements:** a Sidero Omni account, a service account key, and an Omni API endpoint. See [Omni Provider](/providers/omni/), [Omni docs](https://omni.siderolabs.com/docs/), and [Talos on Omni](https://omni.siderolabs.com/docs/how-to-guides/how-to-create-a-cluster/).

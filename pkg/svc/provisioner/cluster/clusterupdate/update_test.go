@@ -15,6 +15,8 @@ var (
 	errRecreateRequired = errors.New("recreate required")
 )
 
+const fieldHetznerCPServerType = "provider.hetzner.controlPlaneServerType"
+
 func TestUpdateResult_NoChangesIsNoOp(t *testing.T) {
 	t.Parallel()
 
@@ -190,6 +192,77 @@ func TestDefaultCurrentSpec_TalosHetzner(t *testing.T) {
 	assert.Equal(t, v1alpha1.ProviderHetzner, spec.Provider)
 }
 
+// TestMarkComponentsUnknown sets the sentinel on every detector-derived component.
+func TestMarkComponentsUnknown(t *testing.T) {
+	t.Parallel()
+
+	spec := clusterupdate.DefaultCurrentSpec(
+		v1alpha1.DistributionTalos,
+		v1alpha1.ProviderHetzner,
+	)
+
+	clusterupdate.MarkComponentsUnknown(spec)
+
+	sentinel := clusterupdate.UnknownBaselineValue
+	assert.Equal(t, sentinel, string(spec.CNI))
+	assert.Equal(t, sentinel, string(spec.CSI))
+	assert.Equal(t, sentinel, string(spec.MetricsServer))
+	assert.Equal(t, sentinel, string(spec.LoadBalancer))
+	assert.Equal(t, sentinel, string(spec.CertManager))
+	assert.Equal(t, sentinel, string(spec.PolicyEngine))
+	assert.Equal(t, sentinel, string(spec.GitOpsEngine))
+
+	// Distribution and provider must remain known.
+	assert.Equal(t, v1alpha1.DistributionTalos, spec.Distribution)
+	assert.Equal(t, v1alpha1.ProviderHetzner, spec.Provider)
+}
+
+// TestMarkComponentsUnknown_NilIsSafe ensures the helper tolerates a nil spec.
+func TestMarkComponentsUnknown_NilIsSafe(t *testing.T) {
+	t.Parallel()
+
+	assert.NotPanics(t, func() { clusterupdate.MarkComponentsUnknown(nil) })
+}
+
+// TestHasUnknownBaseline reports unknown-baseline entries.
+func TestHasUnknownBaseline(t *testing.T) {
+	t.Parallel()
+
+	result := clusterupdate.NewEmptyUpdateResult()
+	assert.False(t, result.HasUnknownBaseline())
+
+	result.UnknownBaseline = append(result.UnknownBaseline, clusterupdate.Change{
+		Field:    "cluster.cni",
+		OldValue: clusterupdate.UnknownBaselineValue,
+		NewValue: "Cilium",
+		Category: clusterupdate.ChangeCategoryUnknown,
+	})
+
+	assert.True(t, result.HasUnknownBaseline())
+	// Unknown entries are informational and never counted as applicable changes.
+	assert.Zero(t, result.TotalChanges())
+}
+
+// TestHasFailedChanges reports whether any change failed to apply. A non-empty
+// FailedChanges set must be treated as a failed update (issue #4935).
+func TestHasFailedChanges(t *testing.T) {
+	t.Parallel()
+
+	result := clusterupdate.NewEmptyUpdateResult()
+	assert.False(t, result.HasFailedChanges())
+
+	result.FailedChanges = append(result.FailedChanges, clusterupdate.Change{
+		Field:    "talos.config",
+		Category: clusterupdate.ChangeCategoryInPlace,
+		Reason:   "apply control-plane config: rpc error",
+	})
+
+	assert.True(t, result.HasFailedChanges())
+	// Failed changes are execution outcomes, not detected diff changes, so they
+	// are not counted by TotalChanges.
+	assert.Zero(t, result.TotalChanges())
+}
+
 // TestChangeCategory_String tests the string representation of change categories.
 func TestChangeCategory_String(t *testing.T) {
 	t.Parallel()
@@ -203,7 +276,8 @@ func TestChangeCategory_String(t *testing.T) {
 		{"reboot-required", clusterupdate.ChangeCategoryRebootRequired, "reboot-required"},
 		{"recreate-required", clusterupdate.ChangeCategoryRecreateRequired, "recreate-required"},
 		{"wipe-required", clusterupdate.ChangeCategoryWipeRequired, "wipe-required"},
-		{"unknown", clusterupdate.ChangeCategory(999), "unknown"},
+		{"unknown-category", clusterupdate.ChangeCategoryUnknown, "unknown"},
+		{"out-of-range", clusterupdate.ChangeCategory(999), "unknown"},
 	}
 
 	for _, testCase := range tests {
@@ -494,4 +568,141 @@ func TestPrepareUpdate_WipeRequiredAllowedWithForce(t *testing.T) {
 	require.NotNil(t, result)
 	assert.True(t, shouldContinue)
 	require.NoError(t, err)
+}
+
+// TestPrepareUpdate_RollingRecreateBlocksWithoutConsent tests that rolling-recreate
+// changes block without explicit consent.
+func TestPrepareUpdate_RollingRecreateBlocksWithoutConsent(t *testing.T) {
+	t.Parallel()
+
+	diff := clusterupdate.NewEmptyUpdateResult()
+	diff.RollingRecreate = append(diff.RollingRecreate, clusterupdate.Change{
+		Field: fieldHetznerCPServerType,
+	})
+	opts := clusterupdate.UpdateOptions{}
+
+	result, shouldContinue, err := clusterupdate.PrepareUpdate(diff, nil, opts, errRecreateRequired)
+
+	require.NotNil(t, result)
+	assert.False(t, shouldContinue)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, clusterupdate.ErrRollingRecreateRequired)
+}
+
+// TestPrepareUpdate_RollingRecreateNotAuthorizedByForceAlone verifies that Force
+// alone does not authorize rolling node replacement: the dedicated
+// AllowRollingRecreate gate is required so confirming a wipe never implicitly
+// triggers a rolling replacement (and vice versa).
+func TestPrepareUpdate_RollingRecreateNotAuthorizedByForceAlone(t *testing.T) {
+	t.Parallel()
+
+	diff := clusterupdate.NewEmptyUpdateResult()
+	diff.RollingRecreate = append(diff.RollingRecreate, clusterupdate.Change{
+		Field: fieldHetznerCPServerType,
+	})
+	opts := clusterupdate.UpdateOptions{Force: true}
+
+	result, shouldContinue, err := clusterupdate.PrepareUpdate(diff, nil, opts, errRecreateRequired)
+
+	require.NotNil(t, result)
+	assert.False(t, shouldContinue)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, clusterupdate.ErrRollingRecreateRequired)
+}
+
+// TestPrepareUpdate_RollingRecreateAllowedWithConsent tests that rolling-recreate
+// changes proceed when AllowRollingRecreate is set.
+func TestPrepareUpdate_RollingRecreateAllowedWithConsent(t *testing.T) {
+	t.Parallel()
+
+	diff := clusterupdate.NewEmptyUpdateResult()
+	diff.RollingRecreate = append(diff.RollingRecreate, clusterupdate.Change{
+		Field: fieldHetznerCPServerType,
+	})
+	opts := clusterupdate.UpdateOptions{AllowRollingRecreate: true}
+
+	result, shouldContinue, err := clusterupdate.PrepareUpdate(diff, nil, opts, errRecreateRequired)
+
+	require.NotNil(t, result)
+	assert.True(t, shouldContinue)
+	require.NoError(t, err)
+}
+
+// TestUpdateResult_RollingRecreateChangesAreDetected verifies the helpers and
+// aggregations account for rolling-recreate changes.
+func TestUpdateResult_RollingRecreateChangesAreDetected(t *testing.T) {
+	t.Parallel()
+
+	result := clusterupdate.NewEmptyUpdateResult()
+	change := clusterupdate.Change{
+		Field:    fieldHetznerCPServerType,
+		OldValue: "cx23",
+		NewValue: "cpx41",
+		Category: clusterupdate.ChangeCategoryRollingRecreate,
+	}
+	result.RollingRecreate = append(result.RollingRecreate, change)
+
+	assert.Equal(t, 1, result.TotalChanges())
+	assert.True(t, result.HasRollingRecreate())
+	assert.True(t, result.NeedsUserConfirmation())
+	assert.False(t, result.HasInPlaceChanges())
+	assert.False(t, result.HasRecreateRequired())
+	assert.Contains(t, result.AllChanges(), change)
+}
+
+// TestNewUpdateResultFromDiff_CopiesRollingRecreate tests that
+// NewUpdateResultFromDiff copies RollingRecreate.
+func TestNewUpdateResultFromDiff_CopiesRollingRecreate(t *testing.T) {
+	t.Parallel()
+
+	diff := clusterupdate.NewEmptyUpdateResult()
+	diff.RollingRecreate = append(diff.RollingRecreate, clusterupdate.Change{
+		Field:    "provider.hetzner.workerServerType",
+		Category: clusterupdate.ChangeCategoryRollingRecreate,
+	})
+
+	result := clusterupdate.NewUpdateResultFromDiff(diff)
+
+	require.NotNil(t, result)
+	assert.Equal(t, diff.RollingRecreate, result.RollingRecreate)
+}
+
+// TestChangeCategory_RollingRecreateString tests the String representation.
+func TestChangeCategory_RollingRecreateString(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, "rolling-recreate", clusterupdate.ChangeCategoryRollingRecreate.String())
+}
+
+// TestControlPlaneServerTypeChangeCategory verifies the quorum-aware classification.
+func TestControlPlaneServerTypeChangeCategory(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		controlPlanes int
+		expected      clusterupdate.ChangeCategory
+	}{
+		{controlPlanes: 1, expected: clusterupdate.ChangeCategoryRecreateRequired},
+		{controlPlanes: 2, expected: clusterupdate.ChangeCategoryRecreateRequired},
+		{controlPlanes: 3, expected: clusterupdate.ChangeCategoryRollingRecreate},
+		{controlPlanes: 5, expected: clusterupdate.ChangeCategoryRollingRecreate},
+	}
+
+	for _, testCase := range tests {
+		assert.Equal(t, testCase.expected,
+			clusterupdate.ControlPlaneServerTypeChangeCategory(testCase.controlPlanes),
+			"controlPlanes=%d", testCase.controlPlanes)
+	}
+}
+
+// TestWorkerServerTypeChangeCategory verifies worker classification by node count.
+func TestWorkerServerTypeChangeCategory(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, clusterupdate.ChangeCategoryInPlace,
+		clusterupdate.WorkerServerTypeChangeCategory(0))
+	assert.Equal(t, clusterupdate.ChangeCategoryRollingRecreate,
+		clusterupdate.WorkerServerTypeChangeCategory(1))
+	assert.Equal(t, clusterupdate.ChangeCategoryRollingRecreate,
+		clusterupdate.WorkerServerTypeChangeCategory(4))
 }

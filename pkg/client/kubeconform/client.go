@@ -9,7 +9,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
+	"github.com/devantler-tech/ksail/v7/pkg/client/netretry"
 	"github.com/yannh/kubeconform/pkg/validator"
 )
 
@@ -19,52 +21,85 @@ var ErrValidationFailed = errors.New("validation failed")
 const (
 	// schemaCacheDirPerm is the permission for the schema cache directory.
 	schemaCacheDirPerm = 0o700
+
+	// defaultValidateMaxRetryAttempts bounds how many times a validation is
+	// retried when a schema download hits a transient network error.
+	defaultValidateMaxRetryAttempts = 3
+	// defaultValidateRetryBaseWait is the initial backoff between retries.
+	defaultValidateRetryBaseWait = 500 * time.Millisecond
+	// defaultValidateRetryMaxWait caps the backoff between retries.
+	defaultValidateRetryMaxWait = 5 * time.Second
 )
 
 // Client provides kubeconform validation functionality.
-type Client struct{}
+type Client struct {
+	// maxRetryAttempts bounds retries for transient schema-download failures.
+	maxRetryAttempts int
+	// retryBaseWait is the initial exponential-backoff delay between retries.
+	retryBaseWait time.Duration
+	// retryMaxWait caps the exponential-backoff delay between retries.
+	retryMaxWait time.Duration
+}
 
 // NewClient creates a new kubeconform client.
 func NewClient() *Client {
-	return &Client{}
+	return &Client{
+		maxRetryAttempts: defaultValidateMaxRetryAttempts,
+		retryBaseWait:    defaultValidateRetryBaseWait,
+		retryMaxWait:     defaultValidateRetryMaxWait,
+	}
 }
 
 // ValidateFile validates a single Kubernetes manifest file.
 func (c *Client) ValidateFile(ctx context.Context, filePath string, opts *ValidationOptions) error {
-	if opts == nil {
-		opts = &ValidationOptions{}
-	}
-
-	// Check context before starting
+	// Check context before starting so a cancelled context is reported before any I/O.
 	if ctx.Err() != nil {
 		return fmt.Errorf("%w", ctx.Err())
 	}
 
-	// Open the file
-	file, err := os.Open(filePath) //nolint:gosec // filePath is provided by the caller
+	// Read the whole file up front so a transient schema-download failure can be retried
+	// without re-opening the file.
+	data, err := os.ReadFile(filePath) //nolint:gosec // filePath is provided by the caller
 	if err != nil {
 		return fmt.Errorf("open file %s: %w", filePath, err)
 	}
 
-	defer func() {
-		_ = file.Close()
-	}()
-
-	// Create validator
-	kubeValidator, err := c.createValidator(opts)
-	if err != nil {
-		return fmt.Errorf("create validator: %w", err)
-	}
-
-	// Validate resources from file
-	results := kubeValidator.Validate(filePath, file)
-
-	// Check for validation errors
-	return c.processResults(results)
+	return c.validateData(ctx, filePath, data, opts)
 }
 
 // ValidateBytes validates Kubernetes manifests from raw bytes while preserving the source name.
 func (c *Client) ValidateBytes(
+	ctx context.Context,
+	sourceName string,
+	data []byte,
+	opts *ValidationOptions,
+) error {
+	return c.validateData(ctx, sourceName, data, opts)
+}
+
+// ValidateManifests validates Kubernetes manifests from a reader (e.g., kustomize build output).
+func (c *Client) ValidateManifests(
+	ctx context.Context,
+	reader io.Reader,
+	opts *ValidationOptions,
+) error {
+	// Check context before starting so a cancelled context is reported before any I/O.
+	if ctx.Err() != nil {
+		return fmt.Errorf("%w", ctx.Err())
+	}
+
+	// Buffer the reader so a transient schema-download failure can be retried.
+	data, err := io.ReadAll(reader)
+	if err != nil {
+		return fmt.Errorf("read manifests: %w", err)
+	}
+
+	return c.validateData(ctx, "stdin", data, opts)
+}
+
+// validateData runs kubeconform validation over data, retrying transient
+// schema-download failures. It is the shared core of the public Validate* methods.
+func (c *Client) validateData(
 	ctx context.Context,
 	sourceName string,
 	data []byte,
@@ -83,40 +118,45 @@ func (c *Client) ValidateBytes(
 		return fmt.Errorf("create validator: %w", err)
 	}
 
-	results := kubeValidator.Validate(sourceName, io.NopCloser(bytes.NewReader(data)))
+	return c.validateWithRetry(ctx, func() error {
+		results := kubeValidator.Validate(sourceName, io.NopCloser(bytes.NewReader(data)))
 
-	return c.processResults(results)
+		return c.processResults(results)
+	})
 }
 
-// ValidateManifests validates Kubernetes manifests from a reader (e.g., kustomize build output).
-func (c *Client) ValidateManifests(
-	ctx context.Context,
-	reader io.Reader,
-	opts *ValidationOptions,
-) error {
-	if opts == nil {
-		opts = &ValidationOptions{}
+// validateWithRetry runs validate up to c.maxRetryAttempts times, retrying only
+// when the error is a transient network error per netretry.IsRetryable.
+// kubeconform downloads JSON schemas from a remote registry, and those fetches
+// can fail with transient errors such as "unexpected EOF" that would otherwise
+// red an entire validation run. Successfully-downloaded schemas are cached, so a
+// retry re-fetches only what failed. The returned error is left unwrapped to
+// preserve ErrValidationFailed identity for callers using errors.Is.
+func (c *Client) validateWithRetry(ctx context.Context, validate func() error) error {
+	maxAttempts := max(c.maxRetryAttempts, 1)
+
+	var lastErr error
+
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		lastErr = validate()
+		if lastErr == nil {
+			return nil
+		}
+
+		if !netretry.IsRetryable(lastErr) || attempt == maxAttempts {
+			break
+		}
+
+		delay := netretry.ExponentialDelay(attempt, c.retryBaseWait, c.retryMaxWait)
+
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("%w", ctx.Err())
+		case <-time.After(delay):
+		}
 	}
 
-	// Check context before starting
-	if ctx.Err() != nil {
-		return fmt.Errorf("%w", ctx.Err())
-	}
-
-	// Create validator
-	kubeValidator, err := c.createValidator(opts)
-	if err != nil {
-		return fmt.Errorf("create validator: %w", err)
-	}
-
-	// Wrap reader in ReadCloser
-	rc := io.NopCloser(reader)
-
-	// Validate resources from reader
-	results := kubeValidator.Validate("stdin", rc)
-
-	// Check for validation errors
-	return c.processResults(results)
+	return lastErr
 }
 
 // processResults processes validation results and returns an error if validation failed.

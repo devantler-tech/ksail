@@ -4,7 +4,6 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/devantler-tech/ksail/v7)](https://goreportcard.com/report/github.com/devantler-tech/ksail/v7)
 [![License](https://img.shields.io/badge/License-PolyForm--Shield--1.0.0-blue.svg)](https://polyformproject.org/licenses/shield/1.0.0)
 [![Go Reference](https://pkg.go.dev/badge/github.com/devantler-tech/ksail/v7.svg)](https://pkg.go.dev/github.com/devantler-tech/ksail/v7)
-[![codecov](https://codecov.io/gh/devantler-tech/ksail/graph/badge.svg?token=HSUfhaiXwq)](https://app.codecov.io/gh/devantler-tech/ksail)
 [![CI - KSail](https://github.com/devantler-tech/ksail/actions/workflows/ci.yaml/badge.svg)](https://github.com/devantler-tech/ksail/actions/workflows/ci.yaml)
 [![MCP Registry](https://img.shields.io/badge/MCP_Registry-io.github.devantler--tech/ksail-blue?logo=github)](https://github.com/mcp)
 
@@ -60,16 +59,16 @@ Continue with the [Getting Started guide](https://ksail.devantler.tech/) for Git
 
 ## What KSail Bundles
 
-| Category                 | Built-in Capabilities                                       |
-|--------------------------|-------------------------------------------------------------|
-| Cluster Provisioning     | Kind, K3d, Talos, VCluster (Vind), KWOK (kwokctl), EKS      |
-| Container Orchestration  | kubectl, Helm, Kustomize                                    |
-| GitOps Engines           | Flux, ArgoCD                                                |
-| Secrets Management       | SOPS with Age encryption                                    |
-| Manifest Validation      | Kubeconform                                                 |
-| Cluster Operations       | K9s, backup & restore, multi-tenancy (`ksail tenant`)       |
-| AI Integration           | Chat assistant (Copilot SDK), MCP server, VS Code extension |
-| Infrastructure Providers | Docker (local), Hetzner Cloud, Sidero Omni, AWS             |
+| Category                 | Built-in Capabilities                                                |
+|--------------------------|----------------------------------------------------------------------|
+| Cluster Provisioning     | Kind, K3d, Talos, VCluster (Vind), KWOK (kwokctl), EKS               |
+| Container Orchestration  | kubectl, Helm, Kustomize                                             |
+| GitOps Engines           | Flux, ArgoCD                                                         |
+| Secrets Management       | SOPS with Age encryption                                             |
+| Manifest Validation      | Kubeconform                                                          |
+| Cluster Operations       | K9s, backup & restore, multi-tenancy (`ksail tenant`)                |
+| AI Integration           | Chat assistant (Copilot SDK), MCP server, VS Code extension          |
+| Infrastructure Providers | Docker (local), Kubernetes (nested), Hetzner Cloud, Sidero Omni, AWS |
 
 See the [feature overview](https://ksail.devantler.tech/features/) and [architecture guide](https://ksail.devantler.tech/architecture/) for details.
 
@@ -81,12 +80,13 @@ See the [feature overview](https://ksail.devantler.tech/features/) and [architec
 | 🍎 macOS                                      | arm64        |
 | ⊞ Windows (native untested; WSL2 recommended) | amd64, arm64 |
 
-| Provider | Vanilla  | K3s     | Talos | VCluster | KWOK        | EKS |
-|----------|----------|---------|-------|----------|-------------|-----|
-| Docker   | ✅ (Kind) | ✅ (K3d) | ✅     | ✅ (Vind) | ✅ (kwokctl) | ❌   |
-| Hetzner  | —        | —       | ✅     | —        | —           | —   |
-| Omni     | —        | —       | ✅     | —        | —           | —   |
-| AWS      | —        | —       | —     | —        | —           | 🚧  |
+| Provider   | Vanilla  | K3s     | Talos | VCluster | KWOK        | EKS |
+|------------|----------|---------|-------|----------|-------------|-----|
+| Docker     | ✅ (Kind) | ✅ (K3d) | ✅     | ✅ (Vind) | ✅ (kwokctl) | ❌   |
+| Kubernetes | ✅        | ✅       | ✅     | ✅        | ✅           | ❌   |
+| Hetzner    | —        | —       | ✅     | —        | —           | —   |
+| Omni       | —        | —       | ✅     | —        | —           | —   |
+| AWS        | —        | —       | —     | —        | —           | 🚧  |
 
 ## Community & Support
 

@@ -23,7 +23,11 @@ func (p *Provisioner) bootstrapHetznerCluster(
 	bootstrapNode *hcloud.Server,
 	configBundle *bundle.Bundle,
 ) error {
-	nodeIP := bootstrapNode.PublicNet.IPv4.IP.String()
+	nodeIP, addrErr := hetznerNodeTalosAddress(bootstrapNode)
+	if addrErr != nil {
+		return addrErr
+	}
+
 	talosConfig := configBundle.TalosConfig()
 
 	_, _ = fmt.Fprintf(
@@ -180,7 +184,11 @@ func (p *Provisioner) saveHetznerKubeconfig(
 	controlPlaneNode *hcloud.Server,
 	configBundle *bundle.Bundle,
 ) error {
-	nodeIP := controlPlaneNode.PublicNet.IPv4.IP.String()
+	nodeIP, addrErr := hetznerNodeTalosAddress(controlPlaneNode)
+	if addrErr != nil {
+		return addrErr
+	}
+
 	talosConfig := configBundle.TalosConfig()
 
 	// Create authenticated client
@@ -200,8 +208,10 @@ func (p *Provisioner) saveHetznerKubeconfig(
 		return fmt.Errorf("failed to fetch kubeconfig: %w", err)
 	}
 
-	// The kubeconfig from Talos uses internal IPs. For Hetzner, we need to use the public IP.
-	// Rewrite the server endpoint to use the public IP.
+	// The kubeconfig from Talos uses internal IPs. Rewrite the server endpoint to the
+	// node's reachable address: its public IPv4, or its private-network IP when the
+	// control plane is IPv4-less (in which case the kubeconfig only works from inside
+	// the private network).
 	kubeconfig, err = rewriteKubeconfigEndpoint(
 		kubeconfig,
 		"https://"+net.JoinHostPort(nodeIP, "6443"),
@@ -220,16 +230,20 @@ func (p *Provisioner) saveHetznerKubeconfig(
 }
 
 // newHetznerClusterWithEndpoint constructs a HetznerClusterResult with the
-// Kubernetes API endpoint derived from the first control-plane server's public IPv4.
+// Kubernetes API endpoint derived from the first control-plane server's reachable
+// address (its public IPv4, or its private-network IP when the control plane is
+// IPv4-less).
 func newHetznerClusterWithEndpoint(
 	clusterName string,
 	controlPlaneServers []*hcloud.Server,
 	workerServers []*hcloud.Server,
 ) (*HetznerClusterResult, error) {
-	kubeEndpoint := "https://" + net.JoinHostPort(
-		controlPlaneServers[0].PublicNet.IPv4.IP.String(),
-		"6443",
-	)
+	cpIP, addrErr := hetznerNodeTalosAddress(controlPlaneServers[0])
+	if addrErr != nil {
+		return nil, addrErr
+	}
+
+	kubeEndpoint := "https://" + net.JoinHostPort(cpIP, "6443")
 
 	return NewHetznerClusterResult(clusterName, controlPlaneServers, workerServers, kubeEndpoint)
 }

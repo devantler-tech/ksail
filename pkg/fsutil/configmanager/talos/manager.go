@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/devantler-tech/ksail/v7/pkg/envvar"
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	configmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager"
 	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
 	"sigs.k8s.io/yaml"
@@ -29,8 +29,11 @@ const (
 	DefaultPatchesDir = "talos"
 	// DefaultNetworkCIDR is the default CIDR for the cluster network.
 	DefaultNetworkCIDR = "10.5.0.0/24"
-	// DefaultKubernetesVersion is the default Kubernetes version.
-	DefaultKubernetesVersion = "1.32.0"
+	// DefaultKubernetesVersion is the default Kubernetes version. It must be >= 1.34
+	// so the admissionregistration.k8s.io/v1beta1 API (MutatingAdmissionPolicy) is
+	// available for Calico v3.30+; 1.36.0 is the embedded Talos machinery's own
+	// default and matches the other distributions.
+	DefaultKubernetesVersion = "1.36.0"
 	// DefaultClusterName is the default cluster name for Talos clusters.
 	DefaultClusterName = "talos-default"
 )
@@ -50,7 +53,7 @@ type ConfigManager struct {
 	// additionalPatches are runtime patches added programmatically.
 	additionalPatches []Patch
 	// versionContract controls which Talos version-gated config fields are generated.
-	// Defaults to TalosVersion1_11 for compatibility with Hetzner bootstrap ISOs.
+	// Defaults to TalosVersion1_12 for compatibility with Hetzner bootstrap ISOs.
 	versionContract *talosconfig.VersionContract
 	// extensions is the list of Talos Image Factory official extension names.
 	// When non-empty, machine.install.image is patched to use a factory installer.
@@ -84,7 +87,7 @@ func NewConfigManager(
 		kubernetesVersion: kubernetesVersion,
 		networkCIDR:       networkCIDR,
 		configLoaded:      false,
-		versionContract:   talosconfig.TalosVersion1_11,
+		versionContract:   talosconfig.TalosVersion1_12,
 	}
 }
 
@@ -92,9 +95,10 @@ func NewConfigManager(
 // The version contract controls which version-gated fields are included in the generated
 // machine config. Use this to opt into features introduced in newer Talos versions.
 //
-// The default is TalosVersion1_11, which is safe for Hetzner bootstrap ISOs (currently
-// Talos 1.11.2). Version contracts greater than 1.11 generate fields unknown to the
-// 1.11.2 machined (e.g. machine.install.grubUseUKICmdline), causing bootstrap failures.
+// The default is TalosVersion1_12, which is safe for Hetzner bootstrap ISOs (currently
+// Talos 1.12.4, ISO 125127). Version contracts greater than the booted machined's
+// version generate fields it does not recognise (e.g. machine.install.grubUseUKICmdline),
+// causing bootstrap failures.
 // Set a higher contract only when all bootstrap paths support the required Talos version.
 func (m *ConfigManager) WithVersionContract(contract *talosconfig.VersionContract) *ConfigManager {
 	m.versionContract = contract
@@ -173,9 +177,9 @@ func (m *ConfigManager) ValidatePatchDirectory() (string, error) {
 
 	// Validate YAML files in each subdirectory
 	subdirs := []string{
-		filepath.Join(m.patchesDir, "cluster"),
-		filepath.Join(m.patchesDir, "control-planes"),
-		filepath.Join(m.patchesDir, "workers"),
+		filepath.Join(m.patchesDir, PatchSubdirCluster),
+		filepath.Join(m.patchesDir, PatchSubdirControlPlanes),
+		filepath.Join(m.patchesDir, PatchSubdirWorkers),
 	}
 
 	for _, dir := range subdirs {
@@ -217,43 +221,19 @@ func (m *ConfigManager) ValidateConfigs() (*Configs, error) {
 	return configs, nil
 }
 
-// forEachYAMLFile iterates over YAML files in a directory and calls the callback for each.
-// This is a shared helper to avoid code duplication between manager and patches.
+// forEachYAMLFile iterates over YAML files in a directory and calls the callback
+// for each, with environment variables expanded in the file content. It delegates
+// directory walking and path-safe reads to fsutil.ForEachYAMLFile so the traversal
+// logic is shared across the codebase.
 func forEachYAMLFile(dir string, callback func(filePath string, content []byte) error) error {
-	cleanDir := filepath.Clean(dir)
-
-	entries, err := os.ReadDir(cleanDir)
-	if err != nil {
-		return fmt.Errorf("failed to read directory %s: %w", cleanDir, err)
-	}
-
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-
-		name := entry.Name()
-		if !strings.HasSuffix(name, ".yaml") && !strings.HasSuffix(name, ".yml") {
-			continue
-		}
-
-		filePath := filepath.Join(cleanDir, filepath.Clean(name))
-
-		content, readErr := os.ReadFile(filePath) //nolint:gosec // Path from validated directory
-		if readErr != nil {
-			return fmt.Errorf("failed to read file '%s': %w", filePath, readErr)
-		}
-
-		// Expand environment variables in file content
-		content = envvar.ExpandBytes(content)
-
-		callbackErr := callback(filePath, content)
-		if callbackErr != nil {
-			return callbackErr
-		}
-	}
-
-	return nil
+	// Thin adapter: fsutil.ForEachYAMLFile wraps its own traversal errors and the
+	// callbacks supplied by talos callers wrap theirs, so this pass-through does
+	// not re-wrap.
+	//nolint:wrapcheck // pass-through adapter; fsutil and callbacks wrap their own errors
+	return fsutil.ForEachYAMLFile(dir, func(filePath string, content []byte) error {
+		// Expand environment variables in file content before handing to the caller.
+		return callback(filePath, envvar.ExpandBytes(content))
+	})
 }
 
 // validateYAMLFilesInDir checks that all .yaml and .yml files in a directory are valid YAML.

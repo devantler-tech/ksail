@@ -3,6 +3,12 @@ version: 2
 before:
   hooks:
     - go mod tidy
+    # Build the web UI and stage it into pkg/webui/dist so it is embedded in the release binary
+    # (see pkg/webui/embed.go) and served by both the operator and `ksail ui`/`desktop` — same origin
+    # as /api, no reverse proxy. Built assets are gitignored, so this keeps the working tree clean.
+    - npm --prefix web/ui ci
+    - npm --prefix web/ui run build
+    - sh -c 'rm -rf pkg/webui/dist && mkdir -p pkg/webui/dist && touch pkg/webui/dist/.gitkeep && cp -R web/ui/dist/. pkg/webui/dist/'
 
 builds:
   - binary: ksail
@@ -35,6 +41,16 @@ archives:
 
 homebrew_casks:
   - name: ksail
+    # The download URL host (github.com) differs from the homepage host
+    # (ksail.devantler.tech), so `brew audit --strict` requires the URL to be
+    # marked `verified:` with a trusted prefix. Applied to the default url_template.
+    url:
+      verified: "github.com/devantler-tech/ksail/"
+    # `brew style` (Cask/Desc) rejects a desc that starts with the cask token
+    # ("ksail") or ends with a full stop; keep it a plain noun phrase.
+    description: "CLI tool to manage Kubernetes clusters and workloads"
+    # Trailing slash required by `brew style` (Cask/HomepageUrlStyling).
+    homepage: "https://ksail.devantler.tech/"
     repository:
       owner: devantler-tech
       name: homebrew-tap
@@ -42,12 +58,16 @@ homebrew_casks:
       branch: "goreleaser/{{ .ProjectName }}-{{ .Tag }}"
       pull_request:
         enabled: true
+        # Open as a draft so the tap cannot auto-merge it while the GitHub release is still a draft
+        # (the cask download URL would 404 for `brew install`). The cd.yaml `homebrew` job marks the
+        # PR ready after `publish-release` flips the release public, letting the tap merge it then.
+        draft: true
     hooks:
       post:
+        # Single-line body: use the modifier form so `brew style`
+        # (Style/IfUnlessModifier) is satisfied.
         install: |
-          if OS.mac?
-            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/ksail"]
-          end
+          system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/ksail"] if OS.mac?
     commit_author:
       signing:
         enabled: true
@@ -97,6 +117,9 @@ changelog:
 
 release:
   draft: true
+  extra_files:
+    # Attach the Cluster CRD so it can be applied without the Helm chart.
+    - glob: ./charts/ksail-operator/crds/*.yaml
   footer: |
     ## Quick Start
 

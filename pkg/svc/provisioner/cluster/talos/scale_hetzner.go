@@ -99,30 +99,41 @@ func (p *Provisioner) launchHetznerScaleCreation(
 ) ([]hetznerNodeCreationResult, error) {
 	results := make([]hetznerNodeCreationResult, count)
 
+	enableIPv4, enableIPv6 := p.hetznerPublicNetForRole(role)
+
 	group, _ := errgroup.WithContext(ctx)
 	group.SetLimit(maxConcurrentHetznerOps)
 
 	for nodeIdx := range count {
 		group.Go(func() error {
 			nodeNumber := nextIndex + nodeIdx
-			nodeName := fmt.Sprintf("%s-%s-%d", clusterName, role, nodeNumber)
 
-			server, createErr := hzProvider.CreateServerWithRetry(ctx, hetzner.CreateServerOpts{
-				Name:             nodeName,
-				ServerType:       p.hetznerServerType(role),
-				ISOID:            p.talosOpts.ISO,
-				Location:         p.hetznerOpts.Location,
-				Labels:           hetzner.NodeLabels(clusterName, role, nodeNumber),
-				NetworkID:        infra.NetworkID,
-				PlacementGroupID: infra.PlacementGroupID,
-				SSHKeyID:         infra.SSHKeyID,
-				FirewallIDs:      []int64{infra.FirewallID},
-			}, retryOpts)
+			nodeName, nameErr := hetznerNodeName(clusterName, role, nodeNumber)
+			if nameErr != nil {
+				// Validation failure: record it and skip provisioning (no billable
+				// server created). The goroutine still returns nil; the error is
+				// surfaced when addHetznerNodes reads results.
+				results[nodeIdx] = hetznerNodeCreationResult{name: nodeName, err: nameErr}
+			} else {
+				server, createErr := hzProvider.CreateServerWithRetry(ctx, hetzner.CreateServerOpts{
+					Name:             nodeName,
+					ServerType:       p.hetznerServerType(role),
+					ISOID:            p.talosOpts.ISO,
+					Location:         p.hetznerOpts.Location,
+					Labels:           hetzner.NodeLabels(clusterName, role, nodeNumber),
+					NetworkID:        infra.NetworkID,
+					PlacementGroupID: infra.PlacementGroupID,
+					SSHKeyID:         infra.SSHKeyID,
+					FirewallIDs:      []int64{infra.FirewallID},
+					EnableIPv4:       enableIPv4,
+					EnableIPv6:       enableIPv6,
+				}, retryOpts)
 
-			results[nodeIdx] = hetznerNodeCreationResult{
-				name:   nodeName,
-				server: server,
-				err:    createErr,
+				results[nodeIdx] = hetznerNodeCreationResult{
+					name:   nodeName,
+					server: server,
+					err:    createErr,
+				}
 			}
 
 			return nil // errors collected in results
@@ -137,7 +148,13 @@ func (p *Provisioner) launchHetznerScaleCreation(
 	return results, nil
 }
 
-// configureNewHetznerNodes waits for Talos API on new servers and applies config.
+// configureNewHetznerNodes waits for the Talos API on new servers, applies their
+// role config, then blocks until the nodes finish installing and reboot. Applying
+// config triggers a Talos install-to-disk and automatic reboot during which the
+// Talos API is unreachable; waiting before returning keeps scale-up consistent with
+// initial create and rolling replace, and prevents the in-place config
+// reconciliation that runs next in Update from racing the reboot (the cause of the
+// spurious "connection refused" failure when fetching a just-created node's config).
 func (p *Provisioner) configureNewHetznerNodes(
 	ctx context.Context,
 	servers []*hcloud.Server,
@@ -195,6 +212,35 @@ func (p *Provisioner) configureNewHetznerNodes(
 		}
 	}
 
+	// The config just applied triggers a Talos install-to-disk and an automatic
+	// reboot on each new node; block until they come back so the in-place config
+	// reconciliation that runs next in Update does not race the reboot.
+	return p.waitForNewHetznerNodesReachable(ctx, servers, role)
+}
+
+// waitForNewHetznerNodesReachable blocks until newly created nodes finish
+// installing Talos to disk and reboot, so their Talos API is reachable again.
+//
+// Applying machine config to a freshly created node triggers an install and an
+// automatic reboot; during that window the node's Talos API refuses connections.
+// Returning before the nodes recover lets the in-place config reconciliation that
+// runs next in Update (applyInPlaceConfigChanges) race the reboot and record a
+// spurious "connection refused" failure when it fetches the new node's running
+// config. Mirrors configureAndWaitReplacement (rolling replace) and
+// detachOrWaitForReboot (initial create), which already wait for this reboot.
+func (p *Provisioner) waitForNewHetznerNodesReachable(
+	ctx context.Context,
+	servers []*hcloud.Server,
+	role string,
+) error {
+	_, _ = fmt.Fprintf(p.logWriter,
+		"  Waiting for %d new %s node(s) to install and reboot...\n", len(servers), role)
+
+	err := p.waitForServersToBeReachable(ctx, servers)
+	if err != nil {
+		return fmt.Errorf("waiting for new %s node(s) to become reachable: %w", role, err)
+	}
+
 	return nil
 }
 
@@ -220,8 +266,10 @@ func (p *Provisioner) removeHetznerNodes(
 
 		// Best-effort etcd cleanup for control-plane nodes
 		if role == RoleControlPlane {
-			serverIP := server.PublicNet.IPv4.IP.String()
-			p.etcdCleanupBeforeRemoval(ctx, serverIP)
+			serverIP, addrErr := hetznerNodeTalosAddress(server)
+			if addrErr == nil {
+				p.etcdCleanupBeforeRemoval(ctx, serverIP)
+			}
 		}
 
 		err = p.deleteHetznerServer(ctx, hzProvider, server)
@@ -327,6 +375,25 @@ func (p *Provisioner) hetznerServerType(role string) string {
 	return p.hetznerOpts.WorkerServerType
 }
 
+// hetznerPublicNetForRole returns the public IPv4/IPv6 toggles for the given role as
+// *bool values suitable for hetzner.CreateServerOpts. Nil toggles (the result when no
+// Hetzner options are configured) default to a public IP, matching Hetzner's behavior.
+func (p *Provisioner) hetznerPublicNetForRole(role string) (*bool, *bool) {
+	if p.hetznerOpts == nil {
+		return nil, nil
+	}
+
+	ipv4 := p.hetznerOpts.WorkerIPv4Enabled()
+	ipv6 := p.hetznerOpts.WorkerIPv6Enabled()
+
+	if role == RoleControlPlane {
+		ipv4 = p.hetznerOpts.ControlPlaneIPv4Enabled()
+		ipv6 = p.hetznerOpts.ControlPlaneIPv6Enabled()
+	}
+
+	return &ipv4, &ipv6
+}
+
 // hetznerRetryOpts builds retry options from Hetzner configuration.
 func (p *Provisioner) hetznerRetryOpts() hetzner.ServerRetryOpts {
 	opts := hetzner.ServerRetryOpts{
@@ -360,11 +427,13 @@ func (p *Provisioner) checkHetznerAvailabilityForRole(
 
 	_, _ = fmt.Fprintf(p.logWriter, "Checking server type availability for %s...\n", role)
 
-	err := hzProvider.CheckServerAvailability(
+	err := hzProvider.CheckServerAvailabilityWithRetry(
 		ctx,
 		[]string{serverType},
 		p.hetznerOpts.Location,
 		p.hetznerOpts.FallbackLocations,
+		hetzner.DefaultMaxAvailabilityCheckRetries,
+		p.logWriter,
 	)
 	if err != nil {
 		return fmt.Errorf("server availability check failed for %s: %w", role, err)

@@ -23,7 +23,7 @@ permissions:
 
 jobs:
   goreleaser:
-    name: Release with GoReleaser
+    name: 🧩 Release CLI
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
@@ -51,10 +51,10 @@ jobs:
           cache: false
 
       - name: ⚙️ Setup Docker Buildx
-        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
 
       - name: 🔐 Login to GHCR
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -62,13 +62,13 @@ jobs:
 
       - name: 🔐 Login to Docker Hub
         if: ${{ vars.DOCKERHUB_USERNAME != '' }}
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
         with:
           username: ${{ vars.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: 🏗️ Run GoReleaser
-        uses: goreleaser/goreleaser-action@1a80836c5c9d9e5755a25cb59ec6f45a3b5f41a8 # v7.2.1
+        uses: goreleaser/goreleaser-action@5daf1e915a5f0af01ddbcd89a43b8061ff4f1a89 # v7.2.2
         with:
           distribution: goreleaser
           version: "~> v2"
@@ -78,13 +78,15 @@ jobs:
           HOMEBREW_GITHUB_API_TOKEN: ${{ secrets.HOMEBREW_GITHUB_API_TOKEN }}
           GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
 
+  # The web UI is embedded into the binary (go:embed via pkg/webui, staged by the GoReleaser
+  # before-hook) and served by the operator and `ksail ui`/`desktop` themselves — no separate UI image.
+
   vscode-extension:
     name: 🧩 Release VSCode Extension
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    needs: [goreleaser]
     permissions:
-      contents: write
+      contents: read
     defaults:
       run:
         working-directory: vsce
@@ -130,16 +132,163 @@ jobs:
         env:
           VERSION: ${{ steps.get_version.outputs.version }}
 
-      - name: 📤 Upload VSIX to release
-        run: gh release upload "${GITHUB_REF#refs/tags/}" ksail_*.vsix --clobber
+      - name: 📤 Upload VSIX artifact
+        # Action inputs are workspace-relative — the job's `working-directory: vsce` default applies
+        # only to `run` steps — so the vsix lives under vsce/. publish-release attaches it to the draft.
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: release-vscode
+          path: vsce/ksail_*.vsix
+          if-no-files-found: error
+
+  # The macOS desktop app ships as a Homebrew cask. The desktop app is a separate Go module that
+  # links a system webview via CGO and cannot be cross-compiled in the main release, so this job runs
+  # a second GoReleaser config on a macOS runner: it builds the darwin binary, packages it as a
+  # KSail.app bundle and opens a *draft* cask PR on the homebrew tap (the `homebrew` job marks it ready
+  # after publication). GoReleaser's release pipe is disabled (see .goreleaser.desktop.yaml); the built
+  # archive is emitted as a workflow artifact and attached to the draft by `publish-release`. No
+  # `needs: [goreleaser]` — this builds in parallel with the CLI release.
+  desktop-macos:
+    name: 🧩 Release Desktop App (macOS cask)
+    runs-on: macos-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    steps:
+      - name: 📑 Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: ⚙️ Setup Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: ⚙️ Setup Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0 # zizmor: ignore[cache-poisoning]
+        with:
+          node-version: "24"
+
+      - name: 🏗️ Run GoReleaser (desktop cask)
+        uses: goreleaser/goreleaser-action@5daf1e915a5f0af01ddbcd89a43b8061ff4f1a89 # v7.2.2
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --clean --config .goreleaser.desktop.yaml
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HOMEBREW_GITHUB_API_TOKEN: ${{ secrets.HOMEBREW_GITHUB_API_TOKEN }}
+
+      # GoReleaser's release pipe is disabled (.goreleaser.desktop.yaml). Emit the macOS archive as a
+      # workflow artifact; `publish-release` attaches it to the draft before publishing, so every asset
+      # is present before the release is locked by immutable releases (see #4874).
+      - name: 📤 Upload desktop archive artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: release-desktop-macos
+          path: dist-desktop/KSail_*_darwin_*.zip
+          if-no-files-found: error
+
+  # Linux and Windows desktop binaries are convenience downloads (no cask). They build on native
+  # runners (CGO + the system webview) in parallel with the CLI release and emit their archives as
+  # workflow artifacts; `publish-release` attaches them to the draft before publishing, so every asset
+  # is present before the release is locked by immutable releases (see #4874).
+  desktop:
+    name: 🧩 Release Desktop App
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # ubuntu-22.04 ships libwebkit2gtk-4.0-dev, which webview_go's cgo requires (24.04 only
+          # has 4.1).
+          - { os: ubuntu-22.04, goos: linux, arch: amd64, ext: "" }
+          - { os: windows-latest, goos: windows, arch: amd64, ext: ".exe" }
+    steps:
+      - name: 📑 Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: ⚙️ Setup Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: ⚙️ Setup Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0 # zizmor: ignore[cache-poisoning]
+        with:
+          node-version: "24"
+
+      - name: 🐧 Install Linux webview dependencies
+        if: matrix.goos == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev
+
+      - name: 🏷️ Extract version from tag
+        id: get_version
+        shell: bash
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+
+      - name: 🏗️ Build and stage web UI
+        shell: bash
+        run: |
+          npm --prefix web/ui ci
+          npm --prefix web/ui run build
+          rm -rf pkg/webui/dist
+          mkdir -p pkg/webui/dist
+          touch pkg/webui/dist/.gitkeep
+          cp -R web/ui/dist/. pkg/webui/dist/
+
+      - name: 🏗️ Build desktop app
+        shell: bash
+        run: cd desktop && go build -ldflags "-s -w" -o "ksail-desktop${{ matrix.ext }}" .
+
+      # Package so the artifact extracts to the name the `ksail desktop` launcher looks for: a
+      # ksail-desktop binary the user puts on their PATH. Naming mirrors the main GoReleaser archives.
+      - name: 📦 Package desktop app
+        id: package
+        shell: bash
+        env:
+          VERSION: ${{ steps.get_version.outputs.version }}
+          GOOS: ${{ matrix.goos }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          case "$GOOS" in
+            linux)
+              artifact="ksail-desktop_${VERSION}_linux_${ARCH}.tar.gz"
+              tar -C desktop -czf "$artifact" ksail-desktop
+              ;;
+            windows)
+              artifact="ksail-desktop_${VERSION}_windows_${ARCH}.zip"
+              7z a "$artifact" "./desktop/ksail-desktop.exe"
+              ;;
+          esac
+          echo "artifact=$artifact" >> "$GITHUB_OUTPUT"
+
+      - name: 📤 Upload desktop archive artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: release-desktop-${{ matrix.goos }}
+          path: ${{ steps.package.outputs.artifact }}
+          if-no-files-found: error
 
   copilot-plugin:
     name: 🧩 Release Copilot CLI Plugin
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    needs: [goreleaser]
+    # Runs in parallel with the other releases — it only opens an auto-merging version-bump
+    # PR and consumes no GoReleaser artifact, so it does not wait on `goreleaser`. The gated
+    # `publish-release` and `pages-deploy` jobs both list it in `needs`, so a failure here
+    # still blocks the GitHub release publish and the docs deploy.
     environment: ci
     permissions:
       contents: write
@@ -242,6 +391,10 @@ jobs:
     name: 📤 Publish to MCP Registry
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # Needs `goreleaser` for the published GHCR image that server.json points at, but runs in
+    # parallel with `publish-release` and `pages-deploy` — neither lists it in `needs`. The MCP
+    # registry publish references the container image (pushed by `goreleaser`), not the GitHub
+    # release, so it is independent of the draft→published flip and need not gate it.
     needs: [goreleaser]
     permissions:
       id-token: write
@@ -311,7 +464,9 @@ jobs:
   pages-build:
     name: 📄 Build Pages
     runs-on: ubuntu-latest
-    needs: [goreleaser]
+    # Runs in parallel with the other releases (no GoReleaser artifact dependency). The
+    # gated `pages-deploy` and `publish-release` jobs both list it in `needs`, so a docs
+    # build failure blocks both the Pages deploy and the GitHub release publish.
     timeout-minutes: 10
     permissions:
       contents: read
@@ -375,7 +530,19 @@ jobs:
   pages-deploy:
     name: 🚀 Deploy Pages
     runs-on: ubuntu-latest
-    needs: [pages-build]
+    # Gate the docs deploy on the artifact-producing releases (not just `pages-build`) so a
+    # partial release failure never pushes a fresh docs site. Runs in parallel with
+    # `publish-release` and `mcp-publish` — none depends on the others. `mcp-publish` is
+    # excluded from `needs` because the MCP registry publish is independent of the docs site.
+    needs:
+      [
+        goreleaser,
+        vscode-extension,
+        desktop-macos,
+        desktop,
+        copilot-plugin,
+        pages-build,
+      ]
     timeout-minutes: 10
     permissions:
       pages: write
@@ -389,14 +556,45 @@ jobs:
     name: 📢 Publish Release
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    # Gate on the artifact-producing releases so the draft is published only when every asset
+    # job succeeded. Runs in parallel with `pages-deploy` and `mcp-publish` — none lists the
+    # others in `needs`, so the GitHub release publish, the docs deploy, and the MCP registry
+    # publish all happen concurrently. `mcp-publish` is excluded because it references the GHCR
+    # image (from `goreleaser`), not the GitHub release, so it need not gate the publish.
+    # `pages-build` replaces the former `pages-deploy` edge: the release is gated on the docs
+    # *building*, not on Pages having deployed.
     needs:
-      [goreleaser, vscode-extension, mcp-publish, pages-deploy, copilot-plugin]
+      [
+        goreleaser,
+        vscode-extension,
+        copilot-plugin,
+        desktop-macos,
+        desktop,
+        pages-build,
+      ]
     permissions:
       contents: write
     steps:
       - name: 🏷️ Extract version from tag
         id: get_version
         run: echo "version=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+
+      - name: 📥 Download release asset artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: release-*
+          merge-multiple: true
+          path: dist-assets
+
+      # Attach the desktop archives and the VSIX to the draft BEFORE publishing. Once published the
+      # release is immutable and late uploads 422 (see #4874); all asset jobs gate this one, so every
+      # artifact exists here and is attached immediately before the draft→published flip below.
+      - name: 📤 Attach assets to draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ steps.get_version.outputs.version }}
+        run: gh release upload "$RELEASE_TAG" dist-assets/* --clobber
 
       - name: 📢 Publish draft release
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
@@ -407,25 +605,36 @@ jobs:
           script: |
             const tag = process.env.RELEASE_TAG;
 
-            // List releases and find the one matching the tag
+            // List releases and find the one(s) matching the tag
             // Note: getReleaseByTag does not return draft releases, so we use listReleases instead
-            let release;
+            let matching;
             try {
               const { data: releases } = await github.rest.repos.listReleases({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 per_page: 100,
               });
-              release = releases.find(r => r.tag_name === tag);
+              matching = releases.filter(r => r.tag_name === tag);
             } catch (error) {
               core.setFailed(`Failed to list releases: ${error.message}`);
               throw error;
             }
 
-            if (!release) {
+            if (matching.length === 0) {
               core.setFailed(`Release not found for tag ${tag}`);
               return;
             }
+
+            // More than one release for a tag means an asset job created a duplicate (e.g. a second
+            // GoReleaser run that couldn't see the draft) — see #4874. Bail before publishing rather
+            // than racing an immutable release into existence; the duplicate needs manual cleanup.
+            if (matching.length > 1) {
+              const ids = matching.map(r => `${r.id} (draft=${r.draft})`).join(', ');
+              core.setFailed(`Found ${matching.length} releases for tag ${tag}: ${ids}. Expected exactly one — manual cleanup required.`);
+              return;
+            }
+
+            const release = matching[0];
 
             if (!release.draft) {
               console.log(`Release ${tag} is already published`);
@@ -441,3 +650,76 @@ jobs:
             });
 
             console.log(`Successfully published release ${tag}`);
+
+  # GoReleaser opens the Homebrew cask PRs during the build (CLI in `goreleaser`, macOS in
+  # `desktop-macos`) as DRAFTS, so the tap cannot merge them while the cask still points at a draft
+  # (not-yet-public, 404) release. Now that `publish-release` has made the release public, mark both
+  # PRs ready and enable auto-merge so the tap lands them — keeping the tap bump strictly after the
+  # GitHub release exists. Branch names mirror `.goreleaser*.yaml` (goreleaser/<project>-<tag>).
+  homebrew:
+    name: 🍺 Promote Homebrew cask PRs
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [publish-release]
+    permissions:
+      contents: read
+    steps:
+      - name: 🍺 Style-clean cask PRs, then mark ready and enable auto-merge
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_GITHUB_API_TOKEN }}
+          TAP: devantler-tech/homebrew-tap
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          for name in ksail ksail-desktop; do
+            branch="goreleaser/${name}-${TAG}"
+            pr="$(gh pr list --repo "$TAP" --head "$branch" --state open --json number --jq '.[0].number // empty')"
+            if [ -z "$pr" ]; then
+              echo "::warning::No open cask PR found on $TAP for branch ${branch}; skipping"
+              continue
+            fi
+            echo "Promoting ${TAP}#${pr} (${branch})"
+
+            # GoReleaser's cask template emits a few `brew style` offenses no config knob can reach
+            # (Layout/ArgumentAlignment on url/verified, Cask/StanzaOrder for the custom_block stanzas).
+            # Autocorrect them on the PR branch before promoting so the cask that lands in the tap is
+            # brew-style-clean — letting the tap enforce a `brew style` gate (devantler-tech/homebrew-tap#734).
+            # Fail-soft throughout: a style/clone/push hiccup must never block the release; the cask
+            # still lands (uncorrected) exactly as it does today.
+            # `mktemp -d` under `set -e` would abort the job on a tempdir failure; guard it so a
+            # hiccup just skips the (best-effort) autocorrect and still promotes the cask below.
+            if work="$(mktemp -d)"; then
+              if git clone --depth 1 --branch "$branch" \
+                  "https://x-access-token:${GH_TOKEN}@github.com/${TAP}.git" "$work" 2>/dev/null; then
+                # `brew style --fix` can apply partial autocorrections yet still exit non-zero when
+                # offenses remain. Run it fail-soft and commit whatever diff it produced regardless of
+                # exit status, so partial cleanups are never discarded (and a failure never blocks the
+                # release).
+                brew style --fix "$work/Casks/${name}.rb" \
+                  || echo "::warning::brew style --fix exited non-zero for ${name}; committing any partial autocorrections"
+                if git -C "$work" diff --quiet; then
+                  echo "${name} cask already brew-style-clean; nothing to autocorrect"
+                else
+                  git -C "$work" \
+                      -c user.name='github-actions[bot]' \
+                      -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+                      commit -am 'style: brew style --fix generated cask' \
+                    && git -C "$work" push \
+                    && echo "Pushed brew style --fix autocorrections to ${branch}" \
+                    || echo "::warning::Could not push brew style --fix autocorrections to ${branch}; promoting as-is"
+                fi
+              else
+                echo "::warning::Could not clone ${TAP} branch ${branch} for brew style --fix; promoting as-is"
+              fi
+              rm -rf "$work"
+            else
+              echo "::warning::Could not create tempdir for brew style --fix; promoting ${name} cask as-is"
+            fi
+
+            # Both gh calls are non-fatal under `set -e`: the PR may already be ready, or auto-merge
+            # may already be enabled by the tap's own automation — neither should fail the job.
+            gh pr ready "$pr" --repo "$TAP" \
+              || echo "::warning::Could not mark ${TAP}#${pr} ready; it may already be ready"
+            gh pr merge "$pr" --repo "$TAP" --auto --squash \
+              || echo "::warning::Could not enable auto-merge for ${TAP}#${pr}; the tap automation may still merge it"
+          done

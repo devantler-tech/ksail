@@ -15,19 +15,36 @@ const (
 
 // --- Core Types ---
 
-// Metadata holds standard Kubernetes-style metadata for KSail resources.
-// Only the Name field is supported; namespace, labels, and annotations are not used.
-type Metadata struct {
-	Name string `json:"name,omitzero" jsonschema_description:"Cluster name (DNS-1123 compliant)"`
+// Cluster represents a KSail cluster configuration including API metadata and desired state.
+// It contains TypeMeta for API versioning information, ObjectMeta for the cluster name and
+// standard Kubernetes object metadata, Spec for the desired state, and Status for the
+// observed state when reconciled by the KSail operator.
+//
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:resource:shortName=ksail
+// +kubebuilder:printcolumn:name="Distribution",type=string,JSONPath=`.spec.cluster.distribution`
+// +kubebuilder:printcolumn:name="Provider",type=string,JSONPath=`.spec.cluster.provider`
+// +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.status.phase`
+// +kubebuilder:printcolumn:name="Endpoint",type=string,JSONPath=`.status.endpoint`
+// +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
+type Cluster struct {
+	metav1.TypeMeta   `json:",inline"            mapstructure:",squash"`
+	metav1.ObjectMeta `json:"metadata,omitempty" mapstructure:"metadata,omitempty"`
+
+	Spec   Spec          `json:"spec,omitzero"    mapstructure:"spec,omitempty"`
+	Status ClusterStatus `json:"status,omitempty" mapstructure:"-"`
 }
 
-// Cluster represents a KSail cluster configuration including API metadata and desired state.
-// It contains TypeMeta for API versioning information and Spec for the cluster specification.
-type Cluster struct {
-	metav1.TypeMeta `json:",inline" mapstructure:",squash"`
+// ClusterList contains a list of Cluster resources. It is required by controller-runtime
+// for list/watch operations on the Cluster custom resource.
+//
+// +kubebuilder:object:root=true
+type ClusterList struct {
+	metav1.TypeMeta `json:",inline"`
+	metav1.ListMeta `json:"metadata,omitempty"`
 
-	Metadata Metadata `json:"metadata,omitzero" mapstructure:"metadata,omitempty"`
-	Spec     Spec     `json:"spec,omitzero"     mapstructure:"spec,omitempty"`
+	Items []Cluster `json:"items"`
 }
 
 // Spec defines the desired state of a KSail cluster.
@@ -80,6 +97,24 @@ type ClusterSpec struct {
 	// Supersedes spec.cluster.talos.workers (deprecated; aliased on load).
 	Workers int32 `json:"workers,omitzero" jsonschema:"description=Number of worker nodes to create for the cluster (provider/distribution-agnostic),minimum=0"` //nolint:lll
 
+	// KubernetesVersion pins the Kubernetes version to deploy. Accepts values with
+	// or without the "v" prefix (e.g., "v1.32.0" or "1.32.0"). Currently honored by
+	// the Talos distribution (Docker/Hetzner); for Kind, K3d, and EKS the version is
+	// set in the distribution config (kind.yaml/k3d.yaml/eks.yaml) instead.
+	//
+	// When empty, KSail does NOT force a Kubernetes version on an existing cluster:
+	// `cluster update` keeps the version already running so an unrelated change
+	// (e.g. scaling workers) never triggers an unrequested Kubernetes upgrade. For
+	// brand-new Talos clusters it uses a built-in default, capped to a version
+	// compatible with the pinned Talos release (spec.cluster.talos.version) — so a
+	// pinned older Talos version is never paired with a Kubernetes version it cannot
+	// run.
+	//
+	// Set this to intentionally install or move to a specific Kubernetes version.
+	// For orchestrated upgrades across the cluster prefer `cluster update
+	// --update-kubernetes`.
+	KubernetesVersion string `json:"kubernetesVersion,omitzero" jsonschema:"description=Kubernetes version to deploy (Talos distribution). When unset: cluster update preserves the running version and new clusters use a default compatible with the pinned Talos version."` //nolint:lll
+
 	// OIDC defines OIDC authentication configuration.
 	// When issuerURL is set, KSail configures the API server with OIDC flags
 	// and sets up kubeconfig with exec-based OIDC credentials.
@@ -101,6 +136,7 @@ type WorkloadSpec struct {
 	ValidateOnPush    bool             `default:"false" json:"validateOnPush,omitzero"    jsonschema_description:"Validate manifests against schemas before pushing (validation disabled by default)"`                                                                                                                                                                         //nolint:lll
 	Tag               string           `default:"dev"   json:"tag,omitzero"               jsonschema_description:"OCI artifact tag used for workload push and GitOps reconciliation (Flux OCIRepository and ArgoCD Application). Push priority: CLI oci:// ref > this field > registry-embedded tag > dev. Reconciliation priority: this field > registry-embedded tag > dev"` //nolint:lll
 	KustomizationFile string           `default:""      json:"kustomizationFile,omitzero" jsonschema_description:"Path to the kustomization directory relative to sourceDirectory. When set, Flux Sync.Path is configured to this path so Flux uses the specified kustomization as the entry point instead of requiring a root kustomization.yaml."`                           //nolint:lll
+	Flux              FluxConfig       `                json:"flux,omitzero"              jsonschema_description:"Flux bootstrap version pins (operator chart and FluxInstance distribution). Empty values use KSail's pinned versions; a GitOps repo that declares these becomes the steady-state owner."`                                                                    //nolint:lll
 	Watch             WatchConfig      `                json:"watch,omitzero"             jsonschema_description:"Configuration for the workload watch command (pre-apply hooks, etc.)"`                                                                                                                                                                                       //nolint:lll
 	Validation        ValidationConfig `json:"validation,omitzero" jsonschema_description:"Configuration for the workload validate command (additional kinds to skip, etc.)."`                                                                                                                                                                                                 //nolint:lll
 }
@@ -120,6 +156,23 @@ type WatchConfig struct {
 	// Hooks are shell commands to run before each apply cycle.
 	// Hooks execute sequentially via "sh -c"; if any hook fails, the apply is skipped for that cycle.
 	Hooks []string `json:"hooks,omitzero" jsonschema_description:"Shell commands to run before each apply (e.g. docker build, make generate). Executed sequentially; if any hook fails the apply is skipped."` //nolint:lll
+}
+
+// FluxConfig pins the versions KSail uses when it seeds Flux during cluster
+// bootstrap. Both fields are optional; an empty value means KSail uses its
+// built-in pinned version. They configure only the bootstrap seed — once a
+// GitOps repository owns the flux-operator HelmRelease or the FluxInstance,
+// that repository becomes the steady-state owner of the version and KSail defers.
+type FluxConfig struct {
+	// OperatorVersion pins the Flux operator Helm chart version KSail installs
+	// when it seeds the operator. When empty, KSail uses its built-in pinned
+	// version. Ignored once a GitOps repo owns the flux-operator release — KSail
+	// never re-installs over a Helm release managed by Flux or ArgoCD.
+	OperatorVersion string `json:"operatorVersion,omitzero" jsonschema_description:"Flux operator Helm chart version for the bootstrap seed. Empty uses KSail's pinned version. Ignored once a GitOps repo owns the flux-operator release."` //nolint:lll
+	// DistributionVersion pins the FluxInstance spec.distribution.version KSail
+	// seeds. When empty, KSail uses its default ("2.x"). A repo-declared
+	// FluxInstance's distribution.version takes precedence over this value.
+	DistributionVersion string `json:"distributionVersion,omitzero" jsonschema_description:"FluxInstance spec.distribution.version for the bootstrap seed. Empty uses KSail's default (2.x). A repo-declared FluxInstance takes precedence."` //nolint:lll
 }
 
 // ChatSpec defines AI chat assistant configuration.

@@ -260,7 +260,23 @@ func TestConfigManager_WithVersionContract_PropagatesContractToGeneratedConfig(t
 
 	tmpDir := t.TempDir()
 
-	// Default contract (TalosVersion1_11) must not emit grubUseUKICmdline.
+	// An explicit lower contract (TalosVersion1_11) must not emit grubUseUKICmdline,
+	// which is gated at contracts greater than 1.11.
+	manager111 := talos.NewConfigManager(tmpDir, "test-cluster", "1.32.0", "10.5.0.0/24").
+		WithVersionContract(talosconfig.TalosVersion1_11)
+	configs111, err := manager111.Load(configmanager.LoadOptions{})
+	require.NoError(t, err)
+
+	cp111 := configs111.ControlPlane()
+	require.NotNil(t, cp111)
+
+	cfgYAML111, err := cp111.EncodeString()
+	require.NoError(t, err)
+	assert.NotContains(t, cfgYAML111, "grubUseUKICmdline",
+		"TalosVersion1_11 should not emit grubUseUKICmdline")
+
+	// The default contract (TalosVersion1_12) must emit grubUseUKICmdline, which the
+	// default Hetzner bootstrap ISO (Talos 1.12.4) understands.
 	managerDefault := talos.NewConfigManager(tmpDir, "test-cluster", "1.32.0", "10.5.0.0/24")
 	configsDefault, err := managerDefault.Load(configmanager.LoadOptions{})
 	require.NoError(t, err)
@@ -270,22 +286,13 @@ func TestConfigManager_WithVersionContract_PropagatesContractToGeneratedConfig(t
 
 	cfgYAMLDefault, err := cpDefault.EncodeString()
 	require.NoError(t, err)
-	assert.NotContains(t, cfgYAMLDefault, "grubUseUKICmdline",
-		"TalosVersion1_11 should not emit grubUseUKICmdline")
-
-	// TalosVersion1_13 contract must emit grubUseUKICmdline.
-	manager113 := talos.NewConfigManager(tmpDir, "test-cluster", "1.32.0", "10.5.0.0/24").
-		WithVersionContract(talosconfig.TalosVersion1_13)
-	configs113, err := manager113.Load(configmanager.LoadOptions{})
-	require.NoError(t, err)
-
-	cp113 := configs113.ControlPlane()
-	require.NotNil(t, cp113)
-
-	cfgYAML113, err := cp113.EncodeString()
-	require.NoError(t, err)
-	assert.Contains(t, cfgYAML113, "grubUseUKICmdline",
-		"TalosVersion1_13 should emit grubUseUKICmdline; got:\n%s", cfgYAML113)
+	assert.Contains(
+		t,
+		cfgYAMLDefault,
+		"grubUseUKICmdline",
+		"default contract (TalosVersion1_12) should emit grubUseUKICmdline; got:\n%s",
+		cfgYAMLDefault,
+	)
 }
 
 func TestConfigManager_WithVersionContract_InvalidatesCachedConfig(t *testing.T) {

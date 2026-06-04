@@ -329,7 +329,7 @@ The merge is blocked until the failure is resolved. The CI includes a comprehens
 To test the Hetzner provider locally, you need:
 
 - **`HCLOUD_TOKEN`** – Hetzner Cloud API token with read/write permissions
-- **Talos ISO** – A Talos Linux ISO must be available in your Hetzner Cloud project. The ISO ID is specific to your project and may change over time; KSail currently assumes a default ID of `122630`, but you should look up the actual ID under **Images → ISOs** in the Hetzner Cloud Console and configure/use that value in your environment.
+- **Talos ISO** – A Talos Linux ISO must be available in your Hetzner Cloud project. The ISO ID is specific to your project and may change over time; KSail currently assumes a default ID of `125127` (Talos 1.12.4 x86), but you should look up the actual ID under **Images → ISOs** in the Hetzner Cloud Console and configure/use that value in your environment.
 
 **Note:** Some unit tests and CLI code paths enable Hetzner functionality when `HCLOUD_TOKEN` is set. If you’re not intentionally testing Hetzner, unset `HCLOUD_TOKEN` (or set it to an empty value) before running `go test ./...` to keep tests hermetic.
 
@@ -364,31 +364,6 @@ The workflow also sets **`KSAIL_SPEC_CLUSTER_OMNI_MACHINECLASS`** to `ksail` via
 | `update-skills` | Daily (06:00 UTC)          | Copilot skills upgrades            |
 | `maintenance`   | Monthly (1st, 00:00 UTC)   | Old workflow run and image cleanup |
 | `sync-labels`   | Weekly (Monday, 07:00 UTC) | Label synchronization              |
-
-#### Agentic Workflows
-
-KSail uses [GitHub Agentic Workflows](https://github.github.com/gh-aw/) (`.github/workflows/*.md`) to automate continuous improvement tasks. These are AI-driven workflows that run on a schedule or on dispatch:
-
-| Workflow                     | Schedule                                    | Purpose                                                                    |
-|------------------------------|---------------------------------------------|----------------------------------------------------------------------------|
-| `repo-assist`                | Every 12h / On `/repo-assist`               | Issue triage, code quality, building, planning, and repository maintenance |
-| `daily-workflow-maintenance` | Daily (18:00 UTC)                           | CI/CD workflow updates, optimization, CI coaching, and dependency upgrades |
-| `daily-docs`                 | Daily (22:00 UTC) / On push / On `/unbloat` | Documentation sync with code changes, bloat reduction, and link fixing     |
-| `monthly-strategy`           | Monthly (1st, 02:49 UTC) / On dispatch      | Market research, competitive analysis, and Now/Next/Later roadmap planning |
-| `ci-doctor`                  | On CI failure                               | CI failure investigation, diagnostics, and Go-specific analysis            |
-
-Each agentic workflow creates a GitHub Discussion to coordinate its work and, depending on its purpose, may open draft PRs or create issues with incremental improvements. You can control them using the [`gh aw`](https://github.com/github/gh-aw) CLI extension:
-
-```sh
-# Install the gh-aw extension (prerequisite)
-gh ext install github/gh-aw
-
-# Manage a specific workflow
-gh aw disable daily-workflow-maintenance --repo devantler-tech/ksail
-gh aw enable daily-workflow-maintenance --repo devantler-tech/ksail
-gh aw run daily-workflow-maintenance --repo devantler-tech/ksail
-gh aw logs daily-workflow-maintenance --repo devantler-tech/ksail
-```
 
 ## CD
 

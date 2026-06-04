@@ -108,7 +108,7 @@ func TestArgoCDCollector_FailingApplication_OperationError(t *testing.T) {
 	require.Len(t, report.Sections, 1)
 
 	section := report.Sections[0]
-	assert.Equal(t, "Failing Applications", section.Heading)
+	assert.Equal(t, "Applications", section.Heading)
 	require.Len(t, section.Resources, 1)
 	assert.Equal(t, "myapp", section.Resources[0].Name)
 	assert.Equal(t, "OperationState/Error", section.Resources[0].Reason)

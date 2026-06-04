@@ -42,7 +42,7 @@ var (
 // InstallerFactories holds factory functions for creating component installers.
 // These can be overridden in tests for dependency injection.
 type InstallerFactories struct {
-	Flux               func(client helm.Interface, timeout time.Duration) installer.Installer
+	Flux               func(client helm.Interface, timeout time.Duration, operatorVersion string) installer.Installer
 	CertManager        func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error)
 	CSI                func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error)
 	PolicyEngine       func(clusterCfg *v1alpha1.Cluster) (installer.Installer, error)
@@ -181,9 +181,11 @@ func clusterAutoscalerFactory(
 
 		timeout := installer.GetInstallTimeout(clusterCfg)
 		haEnabled := installer.IsHAEnabled(clusterCfg.Spec.Cluster.TotalNodeCount())
+		hetzner := clusterCfg.Spec.Provider.Hetzner
 
 		return clusterautoscalerinstaller.NewInstaller(
 			helmClient, timeout, clusterCfg.Spec.Cluster.Autoscaler.Node, haEnabled,
+			hetzner.WorkerIPv4Enabled(), hetzner.WorkerIPv6Enabled(),
 		)
 	}
 }
@@ -263,8 +265,12 @@ func DefaultInstallerFactories() *InstallerFactories {
 	// Set HelmClientFactory first as other factories depend on it
 	factories.HelmClientFactory = HelmClientForCluster
 
-	factories.Flux = func(client helm.Interface, timeout time.Duration) installer.Installer {
-		return fluxinstaller.NewInstaller(client, timeout)
+	factories.Flux = func(
+		client helm.Interface,
+		timeout time.Duration,
+		operatorVersion string,
+	) installer.Installer {
+		return fluxinstaller.NewInstaller(client, timeout, operatorVersion)
 	}
 
 	factories.CertManager = haHelmInstallerFactory(

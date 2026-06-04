@@ -399,8 +399,10 @@ func ValidateAutoscalerConfig(
 	return validateHetznerCapacity(cluster, provider, autoscaler)
 }
 
-// validateHetznerCapacity checks that controlPlanes+workers+effectivePoolCapacity ≤ serverLimit
-// when provider is Hetzner and node autoscaling is enabled.
+// validateHetznerCapacity checks that the reachable total node count stays within
+// serverLimit when provider is Hetzner and node autoscaling is enabled. The reachable
+// total is controlPlanes+workers+poolCapacity, clamped by MaxNodesTotal (the
+// cluster-wide --max-nodes-total ceiling) when that global cap is set.
 func validateHetznerCapacity(
 	cluster *ClusterSpec,
 	provider *ProviderSpec,
@@ -426,22 +428,33 @@ func validateHetznerCapacity(
 		poolCapacity += pool.Max
 	}
 
-	effectivePoolCapacity := poolCapacity
-	if autoscaler.MaxNodesTotal > 0 && autoscaler.MaxNodesTotal < effectivePoolCapacity {
-		effectivePoolCapacity = autoscaler.MaxNodesTotal
+	// MaxNodesTotal is the cluster-wide node ceiling (control-planes + workers +
+	// autoscaler nodes), passed verbatim to the cluster-autoscaler --max-nodes-total
+	// flag, which the autoscaler evaluates against the count of ALL nodes. Without it
+	// the cluster can grow to the static baseline plus the full pool capacity; with it,
+	// growth stops at MaxNodesTotal. The reachable total must stay within serverLimit.
+	//
+	// The clamp never drops below the static baseline (control-planes + workers): those
+	// nodes are provisioned unconditionally, independent of the autoscaler ceiling, so a
+	// MaxNodesTotal smaller than the baseline must not hide a baseline that already
+	// exceeds serverLimit.
+	baseline := cluster.ControlPlanes + cluster.Workers
+
+	reachableTotal := baseline + poolCapacity
+	if autoscaler.MaxNodesTotal > 0 && autoscaler.MaxNodesTotal < reachableTotal {
+		reachableTotal = max(autoscaler.MaxNodesTotal, baseline)
 	}
 
-	total := cluster.ControlPlanes + cluster.Workers + effectivePoolCapacity
-	if total > serverLimit {
+	if reachableTotal > serverLimit {
 		return fmt.Errorf(
-			"%w: controlPlanes(%d)+workers(%d)+effectivePoolCapacity(%d, poolCapacity(%d))=%d exceeds serverLimit(%d)", //nolint:lll
+			"%w: reachableTotal(%d) exceeds serverLimit(%d): controlPlanes(%d)+workers(%d)+poolCapacity(%d), maxNodesTotal(%d)", //nolint:lll
 			ErrAutoscalerExceedsServerLimit,
+			reachableTotal,
+			serverLimit,
 			cluster.ControlPlanes,
 			cluster.Workers,
-			effectivePoolCapacity,
 			poolCapacity,
-			total,
-			serverLimit,
+			autoscaler.MaxNodesTotal,
 		)
 	}
 

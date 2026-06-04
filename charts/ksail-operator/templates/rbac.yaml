@@ -1,0 +1,87 @@
+{{- if .Values.rbac.create -}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "ksail-operator.fullname" . }}
+  labels:
+    {{- include "ksail-operator.labels" . | nindent 4 }}
+rules:
+{{- if .Values.rbac.clusterAdmin }}
+  # Opt-in escape hatch (rbac.clusterAdmin=true): grant full cluster access. Use only when a
+  # distribution/component set needs resources beyond the least-privilege defaults below.
+  - apiGroups: ["*"]
+    resources: ["*"]
+    verbs: ["*"]
+{{- else }}
+  # Least-privilege default. Provisioning a vcluster in-cluster installs its Helm chart into the hub,
+  # so the operator must manage the namespaces, workloads, Services, ConfigMaps, Secrets, PVCs and
+  # RBAC that chart creates. If a distribution/component set needs more, set rbac.clusterAdmin=true,
+  # or bind your own role with rbac.create=false.
+  # Operator control loop: the Cluster CRD (+ status/finalizers) and leader-election Leases.
+  - apiGroups: ["ksail.io"]
+    resources: ["clusters", "clusters/status", "clusters/finalizers"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete", "deletecollection"]
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete", "deletecollection"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+  # Namespace lifecycle: auto-create on cluster create, and the resources the cleanup-on-delete check
+  # inspects to decide a managed namespace holds nothing else.
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+  # Resources the vcluster Helm chart creates in the hub (and that the namespace-cleanup check lists).
+  - apiGroups: [""]
+    resources:
+      - secrets
+      - configmaps
+      - services
+      - serviceaccounts
+      - persistentvolumeclaims
+      - pods
+      - endpoints
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete", "deletecollection"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets", "daemonsets", "replicasets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete", "deletecollection"]
+  - apiGroups: ["batch"]
+    resources: ["jobs", "cronjobs"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete", "deletecollection"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses", "networkpolicies"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete", "deletecollection"]
+  - apiGroups: ["policy"]
+    resources: ["poddisruptionbudgets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete", "deletecollection"]
+  # vcluster ships CRDs and (when gatewayClassName is set) a Gateway/TCPRoute for API exposure.
+  - apiGroups: ["apiextensions.k8s.io"]
+    resources: ["customresourcedefinitions"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete", "deletecollection"]
+  - apiGroups: ["gateway.networking.k8s.io"]
+    resources: ["gateways", "gatewayclasses", "tcproutes", "httproutes"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete", "deletecollection"]
+  # The vcluster syncer needs its own (broad) ClusterRole/RoleBinding. Creating RBAC that grants
+  # rights the operator itself lacks requires the bind/escalate verbs (privilege-escalation rules).
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["roles", "rolebindings", "clusterroles", "clusterrolebindings"]
+    verbs:
+      ["get", "list", "watch", "create", "update", "patch", "delete", "deletecollection", "bind", "escalate"]
+{{- end }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "ksail-operator.fullname" . }}
+  labels:
+    {{- include "ksail-operator.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "ksail-operator.fullname" . }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "ksail-operator.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}

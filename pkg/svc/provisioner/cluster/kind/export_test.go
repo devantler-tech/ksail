@@ -1,10 +1,24 @@
 package kindprovisioner
 
-import "sigs.k8s.io/kind/pkg/log"
+import (
+	"context"
+
+	"sigs.k8s.io/kind/pkg/log"
+)
 
 // KubeConfigForTest returns the kubeConfig field for testing purposes.
 func (k *Provisioner) KubeConfigForTest() string {
 	return k.kubeConfig
+}
+
+// WithWaitForReadyForTest injects a stub readiness waiter so Start can be
+// exercised without a live cluster.
+func (k *Provisioner) WithWaitForReadyForTest(
+	f func(ctx context.Context, kubeconfigPath, contextName string) error,
+) *Provisioner {
+	k.waitForReady = f
+
+	return k
 }
 
 // NewStreamLoggerForTest creates a streamLogger for testing.

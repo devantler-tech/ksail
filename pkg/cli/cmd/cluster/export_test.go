@@ -18,6 +18,7 @@ import (
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/state"
+	"github.com/devantler-tech/ksail/v7/pkg/timer"
 	v1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -42,6 +43,30 @@ func ExportSetupK3dCNI(clusterCfg *v1alpha1.Cluster, k3dConfig *v1alpha5.SimpleC
 // ExportResolveClusterNameFromContext exports resolveClusterNameFromContext for testing.
 func ExportResolveClusterNameFromContext(ctx *localregistry.Context) string {
 	return resolveClusterNameFromContext(ctx)
+}
+
+// ExportResolveClusterContext exports resolveClusterContext for testing.
+func ExportResolveClusterContext(kubeconfigPath, clusterName string) (string, error) {
+	return resolveClusterContext(kubeconfigPath, clusterName)
+}
+
+// ExportEnsureConfiguredContextResolvable exports ensureConfiguredContextResolvable for testing.
+func ExportEnsureConfiguredContextResolvable(clusterCfg *v1alpha1.Cluster) error {
+	return ensureConfiguredContextResolvable(clusterCfg)
+}
+
+// ExportResolveKubeContext exports resolveKubeContext for testing.
+func ExportResolveKubeContext(ctx *localregistry.Context) string {
+	return resolveKubeContext(ctx)
+}
+
+// ExportResolveCreatedContextName exports resolveCreatedContextName for testing.
+func ExportResolveCreatedContextName(
+	distribution v1alpha1.Distribution,
+	provider v1alpha1.Provider,
+	clusterName string,
+) string {
+	return resolveCreatedContextName(distribution, provider, clusterName)
 }
 
 // ExportWriteMetadata exports writeMetadata for testing.
@@ -130,6 +155,49 @@ func ExportDiffToJSON(diff *clusterupdate.UpdateResult) DiffJSONOutput {
 	return diffToJSON(diff)
 }
 
+// ExportConfirmDisruptiveChanges exports confirmDisruptiveChanges for testing.
+func ExportConfirmDisruptiveChanges(
+	cmd *cobra.Command,
+	diff *clusterupdate.UpdateResult,
+	force bool,
+) (bool, bool) {
+	return confirmDisruptiveChanges(cmd, diff, force)
+}
+
+// ExportReportFailedChanges exports reportFailedChanges for testing.
+func ExportReportFailedChanges(cmd *cobra.Command, result *clusterupdate.UpdateResult) {
+	reportFailedChanges(cmd, result)
+}
+
+// ErrUpdateChangesFailed exports errUpdateChangesFailed for testing.
+var ErrUpdateChangesFailed = errUpdateChangesFailed
+
+// ExportApplyInPlaceChanges exposes applyInPlaceChanges for testing. It builds
+// the component reconciler internally so the unexported type is not needed.
+func ExportApplyInPlaceChanges(
+	cmd *cobra.Command,
+	updater clusterprovisioner.Updater,
+	clusterName string,
+	currentSpec *v1alpha1.ClusterSpec,
+	ctx *localregistry.Context,
+	diff *clusterupdate.UpdateResult,
+	outputTimer timer.Timer,
+	force bool,
+	allowRolling bool,
+) error {
+	reconciler := newComponentReconciler(cmd, ctx.ClusterCfg, clusterName)
+
+	return applyInPlaceChanges(
+		cmd, updater, reconciler, clusterName,
+		currentSpec, ctx, diff, outputTimer, force, allowRolling,
+	)
+}
+
+// ExportReportNoApplicableChanges exports reportNoApplicableChanges for testing.
+func ExportReportNoApplicableChanges(cmd *cobra.Command, diff *clusterupdate.UpdateResult) {
+	reportNoApplicableChanges(cmd, diff)
+}
+
 // ExportOutputFormatJSON exports outputFormatJSON for testing.
 const ExportOutputFormatJSON = outputFormatJSON
 
@@ -137,8 +205,10 @@ const ExportOutputFormatJSON = outputFormatJSON
 const ExportOutputFormatText = outputFormatText
 
 // ExportFormatDiffTable exports formatDiffTable for benchmarking.
-func ExportFormatDiffTable(diff *clusterupdate.UpdateResult, totalChanges int) string {
-	return formatDiffTable(diff, totalChanges)
+// The trailing int is vestigial (formatDiffTable now derives counts from diff)
+// and is retained so existing benchmark call sites compile unchanged.
+func ExportFormatDiffTable(diff *clusterupdate.UpdateResult, _ int) string {
+	return formatDiffTable(diff)
 }
 
 // ExportStripParenthetical exports stripParenthetical for testing.
@@ -346,24 +416,6 @@ func ExportEnsureLocalRegistriesReady(
 // ExportComponentLabel exports componentLabel for testing.
 func ExportComponentLabel(value string) string {
 	return componentLabel(value)
-}
-
-// ClusterWithDistributionInfo is an exported view of clusterWithDistribution for testing.
-type ClusterWithDistributionInfo struct {
-	Name         string
-	Distribution v1alpha1.Distribution
-}
-
-// ExportToTalosClusters exports toTalosClusters for testing.
-func ExportToTalosClusters(names []string) []ClusterWithDistributionInfo {
-	raw := toTalosClusters(names)
-
-	out := make([]ClusterWithDistributionInfo, len(raw))
-	for i, r := range raw {
-		out[i] = ClusterWithDistributionInfo(r)
-	}
-
-	return out
 }
 
 // ExportDisplayClusterIdentity exports displayClusterIdentity for testing.

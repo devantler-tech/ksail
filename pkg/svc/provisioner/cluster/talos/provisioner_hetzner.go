@@ -138,12 +138,16 @@ func (p *Provisioner) updateConfigsWithEndpoint(
 		return clustererr.ErrNoControlPlaneNodes
 	}
 
-	// Regenerate configs with the first control-plane node's public IP as the endpoint.
-	// This is necessary because:
+	// Regenerate configs with the first control-plane node's reachable IP as the
+	// endpoint. This is necessary because:
 	// 1. The original configs were generated with internal network IPs
-	// 2. Hetzner nodes are accessed via their public IPs
+	// 2. KSail reaches Hetzner nodes via their public IPv4, or their private-network
+	//    IP when the node is IPv4-less
 	// 3. The endpoint IP is embedded in certificates and must match
-	firstCPIP := controlPlaneServers[0].PublicNet.IPv4.IP.String()
+	firstCPIP, addrErr := hetznerNodeTalosAddress(controlPlaneServers[0])
+	if addrErr != nil {
+		return addrErr
+	}
 
 	_, _ = fmt.Fprintf(p.logWriter, "Regenerating configs with endpoint IP %s...\n", firstCPIP)
 
@@ -603,11 +607,13 @@ func (p *Provisioner) checkHetznerAvailability(
 
 	_, _ = fmt.Fprintf(p.logWriter, "Checking server type availability...\n")
 
-	err := hzProvider.CheckServerAvailability(
+	err := hzProvider.CheckServerAvailabilityWithRetry(
 		ctx,
 		serverTypes,
 		p.hetznerOpts.Location,
 		p.hetznerOpts.FallbackLocations,
+		hetzner.DefaultMaxAvailabilityCheckRetries,
+		p.logWriter,
 	)
 	if err != nil {
 		return fmt.Errorf("server availability check failed: %w", err)

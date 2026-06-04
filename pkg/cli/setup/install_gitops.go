@@ -39,7 +39,7 @@ func InstallFluxSilent(
 	}
 
 	timeout := max(installer.GetInstallTimeout(clusterCfg), installer.FluxInstallTimeout)
-	fluxInst := factories.Flux(helmClient, timeout)
+	fluxInst := factories.Flux(helmClient, timeout, clusterCfg.Spec.Workload.Flux.OperatorVersion)
 
 	installErr := fluxInst.Install(ctx)
 	if installErr != nil {
@@ -72,7 +72,7 @@ func EnsureArgoCDResources(
 		return fmt.Errorf("ensure argocd sops-age secret: %w", err)
 	}
 
-	mgr, err := argocdgitops.NewManagerFromKubeconfig(kubeconfigPath)
+	mgr, err := argocdgitops.NewManagerFromKubeconfig(kubeconfigPath, "")
 	if err != nil {
 		return fmt.Errorf("create argocd manager: %w", err)
 	}

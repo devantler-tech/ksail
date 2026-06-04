@@ -44,8 +44,6 @@ const (
 	ingressFirewallRulesFileName = "ingress-firewall-rules.yaml"
 	// oidcFileName is the name of the OIDC API server configuration patch file.
 	oidcFileName = "oidc.yaml"
-	// workerRoleLabelFileName is the name of the worker role label patch file.
-	workerRoleLabelFileName = "worker-role-label.yaml"
 )
 
 // KubeletServingCertApproverManifestURL is the URL for the kubelet-serving-cert-approver manifest.
@@ -91,32 +89,6 @@ machine:
   kubelet:
     extraArgs:
       cloud-provider: external
-`
-
-// WorkerRoleLabelPatchYAML is the Talos machine config patch YAML that labels worker nodes
-// with the standard Kubernetes worker role. This is the single source of truth for the patch
-// content, shared between the generator (file-based scaffolding) and the runtime config manager
-// (in-memory patch injection when no scaffolded project exists).
-//
-// Talos does not set node-role.kubernetes.io/worker on worker nodes by default (unlike
-// control-plane nodes which receive node-role.kubernetes.io/control-plane automatically).
-// Without this label, kubectl shows <none> for the worker role column and operators that
-// target workers by role label cannot find them.
-//
-// This uses kubelet.extraArgs["node-labels"] instead of machine.nodeLabels because:
-//   - machine.nodeLabels is applied post-registration by Talos's NodeApplyController using
-//     the kubelet kubeconfig (limited RBAC)
-//   - The Kubernetes NodeRestriction admission controller blocks kubelet from modifying
-//     node-role.kubernetes.io/* labels after initial registration
-//   - kubelet --node-labels sets labels AT registration time, when NodeRestriction allows them
-//   - If node-role.kubernetes.io/worker is in machine.nodeLabels, the NodeApplyController
-//     fails on the entire update, blocking ALL user-defined labels (e.g. Longhorn labels)
-//
-// See: https://kubernetes.io/docs/reference/access-authn-authz/admission-controllers/#noderestriction
-const WorkerRoleLabelPatchYAML = `machine:
-  kubelet:
-    extraArgs:
-      node-labels: "node-role.kubernetes.io/worker="
 `
 
 // ErrConfigRequired is returned when a nil config is provided.
@@ -262,11 +234,6 @@ func (g *Generator) getDirectoriesWithPatches(
 		dirs["cluster"] = true
 	}
 
-	// Worker role label patch goes to workers/
-	if model.WorkerNodes > 0 {
-		dirs["workers"] = true
-	}
-
 	// Disable CNI patch goes to cluster/
 	if model.DisableDefaultCNI {
 		dirs["cluster"] = true
@@ -316,103 +283,68 @@ func (g *Generator) getDirectoriesWithPatches(
 }
 
 // generateConditionalPatches generates optional patches based on the configuration.
-//
-//nolint:cyclop,funlen,gocognit // Sequential conditional patch generation - each condition is independent and simple.
+// Each entry pairs a condition on the model with the generator to run when that
+// condition holds; generators run in declaration order and the first error aborts.
 func (g *Generator) generateConditionalPatches(
 	rootPath string,
 	model *Config,
 	force bool,
 ) error {
-	// Generate mirror registries patch if configured
-	if len(model.MirrorRegistries) > 0 {
-		err := g.generateMirrorRegistriesPatch(rootPath, model.MirrorRegistries, force)
-		if err != nil {
-			return err
-		}
+	patches := []struct {
+		when     bool
+		generate func() error
+	}{
+		{len(model.MirrorRegistries) > 0, func() error {
+			return g.generateMirrorRegistriesPatch(rootPath, model.MirrorRegistries, force)
+		}},
+		// Allow scheduling on control planes when no workers are configured.
+		{model.WorkerNodes == 0, func() error {
+			return g.generateAllowSchedulingPatch(rootPath, force)
+		}},
+		// Disable the default CNI when an alternative CNI is requested.
+		{model.DisableDefaultCNI, func() error {
+			return g.generateDisableCNIPatch(rootPath, force)
+		}},
+		// Kubelet cert rotation enables secure metrics-server TLS; the csr-approver
+		// (installed via inlineManifests during bootstrap) signs the rotated certs.
+		// Both patches share the one condition and are emitted together (rotation
+		// first, then approver) so the pair can never drift out of sync.
+		{model.EnableKubeletCertRotation, func() error {
+			err := g.generateKubeletCertRotationPatch(rootPath, force)
+			if err != nil {
+				return err
+			}
+
+			return g.generateKubeletCSRApproverPatch(rootPath, force)
+		}},
+		// Cluster-name patch when a custom cluster name is specified.
+		{model.ClusterName != "", func() error {
+			return g.generateClusterNamePatch(rootPath, model.ClusterName, force)
+		}},
+		{model.EnableImageVerification, func() error {
+			return g.generateImageVerificationPatch(rootPath, force)
+		}},
+		{model.DisableCDI, func() error {
+			return g.generateDisableCDIPatch(rootPath, force)
+		}},
+		{model.EnableExternalCloudProvider, func() error {
+			return g.generateExternalCloudProviderPatch(rootPath, force)
+		}},
+		// Ingress firewall documents when enabled (Hetzner defense-in-depth).
+		{model.EnableIngressFirewall, func() error {
+			return g.generateIngressFirewallPatches(rootPath, model, force)
+		}},
+		{model.EnableOIDC, func() error {
+			return g.generateOIDCPatch(rootPath, model, force)
+		}},
 	}
 
-	// Generate allow-scheduling-on-control-planes patch when no workers are configured
-	if model.WorkerNodes == 0 {
-		err := g.generateAllowSchedulingPatch(rootPath, force)
-		if err != nil {
-			return err
-		}
-	}
-
-	// Generate worker role label patch when workers are configured
-	if model.WorkerNodes > 0 {
-		err := g.generateWorkerRoleLabelPatch(rootPath, force)
-		if err != nil {
-			return err
-		}
-	}
-
-	// Generate disable-default-cni patch when alternative CNI is requested
-	if model.DisableDefaultCNI {
-		err := g.generateDisableCNIPatch(rootPath, force)
-		if err != nil {
-			return err
-		}
-	}
-
-	// Generate kubelet-cert-rotation patch for secure metrics-server TLS.
-	// The kubelet-csr-approver is installed via inlineManifests during bootstrap.
-	if model.EnableKubeletCertRotation {
-		err := g.generateKubeletCertRotationPatch(rootPath, force)
-		if err != nil {
-			return err
+	for _, patch := range patches {
+		if !patch.when {
+			continue
 		}
 
-		// Generate kubelet-csr-approver patch to install the CSR approver during bootstrap
-		err = g.generateKubeletCSRApproverPatch(rootPath, force)
-		if err != nil {
-			return err
-		}
-	}
-
-	// Generate cluster-name patch when custom cluster name is specified
-	if model.ClusterName != "" {
-		err := g.generateClusterNamePatch(rootPath, model.ClusterName, force)
-		if err != nil {
-			return err
-		}
-	}
-
-	// Generate image verification config document when enabled
-	if model.EnableImageVerification {
-		err := g.generateImageVerificationPatch(rootPath, force)
-		if err != nil {
-			return err
-		}
-	}
-
-	// Generate disable-cdi patch when CDI should be turned off
-	if model.DisableCDI {
-		err := g.generateDisableCDIPatch(rootPath, force)
-		if err != nil {
-			return err
-		}
-	}
-
-	// Generate external cloud provider patch when cloud provider integration is needed
-	if model.EnableExternalCloudProvider {
-		err := g.generateExternalCloudProviderPatch(rootPath, force)
-		if err != nil {
-			return err
-		}
-	}
-
-	// Generate ingress firewall documents when enabled (Hetzner defense-in-depth)
-	if model.EnableIngressFirewall {
-		err := g.generateIngressFirewallPatches(rootPath, model, force)
-		if err != nil {
-			return err
-		}
-	}
-
-	// Generate OIDC API server configuration patch when enabled
-	if model.EnableOIDC {
-		err := g.generateOIDCPatch(rootPath, model, force)
+		err := patch.generate()
 		if err != nil {
 			return err
 		}
@@ -556,29 +488,6 @@ func (g *Generator) generateAllowSchedulingPatch(
 	err := os.WriteFile(patchPath, []byte(patchContent), filePerm)
 	if err != nil {
 		return fmt.Errorf("failed to create allow-scheduling-on-control-planes patch: %w", err)
-	}
-
-	return nil
-}
-
-// generateWorkerRoleLabelPatch creates a Talos patch file that labels worker nodes
-// with node-role.kubernetes.io/worker. This goes into the workers/ directory so it
-// only applies to worker machine configs.
-func (g *Generator) generateWorkerRoleLabelPatch(
-	rootPath string,
-	force bool,
-) error {
-	patchPath := filepath.Join(rootPath, "workers", workerRoleLabelFileName)
-
-	// Check if file already exists
-	_, statErr := os.Stat(patchPath)
-	if statErr == nil && !force {
-		return nil
-	}
-
-	err := os.WriteFile(patchPath, []byte(WorkerRoleLabelPatchYAML), filePerm)
-	if err != nil {
-		return fmt.Errorf("failed to create worker-role-label patch: %w", err)
 	}
 
 	return nil

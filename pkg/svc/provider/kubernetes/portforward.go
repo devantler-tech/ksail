@@ -48,7 +48,7 @@ func (p *Provider) StartPortForward(
 ) (*PortForwardSession, error) {
 	namespace := NamespaceName(clusterName)
 
-	return startProxy(ctx, restConfig, namespace, podName, podPort)
+	return startProxy(ctx, restConfig, namespace, podName, podPort, 0)
 }
 
 // StartPortForwardInNamespace opens a resilient port-forward from a random local port to the
@@ -60,7 +60,22 @@ func (p *Provider) StartPortForwardInNamespace(
 	podName string,
 	podPort int,
 ) (*PortForwardSession, error) {
-	return startProxy(ctx, restConfig, namespace, podName, podPort)
+	return startProxy(ctx, restConfig, namespace, podName, podPort, 0)
+}
+
+// StartPortForwardInNamespaceOnLocalPort is like StartPortForwardInNamespace but binds the
+// local end to a specific port instead of a random one. This lets callers persist a stable,
+// known endpoint (e.g. the exposure NodePort) in the kubeconfig while the forward provides
+// in-process reachability. localPort of 0 falls back to a random port.
+func (p *Provider) StartPortForwardInNamespaceOnLocalPort(
+	ctx context.Context,
+	restConfig *rest.Config,
+	namespace string,
+	podName string,
+	podPort int,
+	localPort int,
+) (*PortForwardSession, error) {
+	return startProxy(ctx, restConfig, namespace, podName, podPort, localPort)
 }
 
 // StartExecTunnel opens a TCP tunnel from a random local port to the specified
@@ -129,7 +144,7 @@ func startProxy(
 	ctx context.Context,
 	restConfig *rest.Config,
 	namespace, podName string,
-	podPort int,
+	podPort, localPort int,
 ) (*PortForwardSession, error) {
 	apiURL, err := url.Parse(restConfig.Host)
 	if err != nil {
@@ -153,7 +168,7 @@ func startProxy(
 		apiURL,
 	)
 
-	proxy, err := newTCPProxy(ctx, dialer, podPort)
+	proxy, err := newTCPProxy(ctx, dialer, podPort, localPort)
 	if err != nil {
 		return nil, fmt.Errorf("create TCP proxy: %w", err)
 	}

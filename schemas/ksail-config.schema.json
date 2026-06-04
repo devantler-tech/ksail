@@ -248,7 +248,7 @@
                     "maxNodesTotal": {
                       "type": "integer",
                       "minimum": 0,
-                      "description": "Maximum total nodes allowed across all node pools. Set to 0 to disable the global cap; when the global cap is disabled the effective cap is the sum of all pool max values"
+                      "description": "Maximum total number of nodes in the cluster (control-planes + workers + autoscaler nodes). Passed verbatim to the cluster-autoscaler --max-nodes-total flag — the autoscaler evaluates it against the count of ALL nodes so this is the whole-cluster ceiling and not an autoscaler-only budget. Set to 0 to disable the global cap; growth is then bounded only by the per-pool max values and serverLimit. Should be \u003c= serverLimit"
                     },
                     "expander": {
                       "type": "string",
@@ -285,6 +285,10 @@
               "type": "integer",
               "minimum": 0,
               "description": "Number of worker nodes to create for the cluster (provider/distribution-agnostic)"
+            },
+            "kubernetesVersion": {
+              "type": "string",
+              "description": "Kubernetes version to deploy (Talos distribution). When unset: cluster update preserves the running version and new clusters use a default compatible with the pinned Talos version."
             },
             "oidc": {
               "properties": {
@@ -444,7 +448,8 @@
                   "items": {
                     "type": "string"
                   },
-                  "type": "array"
+                  "type": "array",
+                  "description": "Alternative datacenter locations to try when server creation in the primary location fails due to resource unavailability. When empty defaults to nbg1 and hel1 (both in the eu-central network zone matching the default fsn1 primary location)."
                 },
                 "placementGroupFallbackToNone": {
                   "type": "boolean"
@@ -459,7 +464,7 @@
                 "serverLimit": {
                   "type": "integer",
                   "minimum": 0,
-                  "description": "Maximum total Hetzner servers allowed for this cluster (control-planes + workers + autoscaler pool capacity). Set to 0 to use the default limit of 10"
+                  "description": "Maximum total Hetzner servers allowed for this cluster — the account/project quota. Validation rejects configs whose reachable total (control-planes + workers + pool capacity clamped by autoscaler.node.maxNodesTotal when set) exceeds it. Set to 0 to use the default limit of 10"
                 },
                 "allowedCidrs": {
                   "items": {
@@ -467,6 +472,22 @@
                   },
                   "type": "array",
                   "description": "CIDR blocks allowed to access the Kubernetes API and Talos API on control-plane nodes. When empty defaults to 0.0.0.0/0 and ::/0 (open to all IPv4 and IPv6)."
+                },
+                "workerPublicIPv4": {
+                  "type": "boolean",
+                  "description": "Assign a public IPv4 to worker nodes. Defaults to true. Set false for IPv4-less workers reached over the private network (requires private-network reachability and NAT egress)."
+                },
+                "workerPublicIPv6": {
+                  "type": "boolean",
+                  "description": "Assign a public IPv6 to worker nodes. Defaults to true."
+                },
+                "controlPlanePublicIPv4": {
+                  "type": "boolean",
+                  "description": "Assign a public IPv4 to control-plane nodes. Defaults to true. Set false for IPv4-less control planes whose endpoint is the private-network IP (cluster reachable only from inside the private network)."
+                },
+                "controlPlanePublicIPv6": {
+                  "type": "boolean",
+                  "description": "Assign a public IPv6 to control-plane nodes. Defaults to true."
                 },
                 "autoscalerNodePoolNames": {
                   "items": {
@@ -592,6 +613,21 @@
             "kustomizationFile": {
               "type": "string",
               "description": "Path to the kustomization directory relative to sourceDirectory. When set, Flux Sync.Path is configured to this path so Flux uses the specified kustomization as the entry point instead of requiring a root kustomization.yaml."
+            },
+            "flux": {
+              "properties": {
+                "operatorVersion": {
+                  "type": "string",
+                  "description": "Flux operator Helm chart version for the bootstrap seed. Empty uses KSail's pinned version. Ignored once a GitOps repo owns the flux-operator release."
+                },
+                "distributionVersion": {
+                  "type": "string",
+                  "description": "FluxInstance spec.distribution.version for the bootstrap seed. Empty uses KSail's default (2.x). A repo-declared FluxInstance takes precedence."
+                }
+              },
+              "additionalProperties": false,
+              "type": "object",
+              "description": "Flux bootstrap version pins (operator chart and FluxInstance distribution). Empty values use KSail's pinned versions; a GitOps repo that declares these becomes the steady-state owner."
             },
             "watch": {
               "properties": {

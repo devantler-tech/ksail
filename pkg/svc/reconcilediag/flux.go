@@ -57,11 +57,11 @@ func (c *FluxCollector) Collect(ctx context.Context) *Report {
 
 	report.Sections = append(
 		report.Sections,
-		c.collectFailingCRs(ctx, "Failing Kustomizations", fluxGVRKustomizations(), fluxNamespace),
-		c.collectFailingCRs(ctx, "Failing HelmReleases", fluxGVRHelmReleases(), ""),
+		c.collectFailingCRs(ctx, "Kustomizations", fluxGVRKustomizations(), fluxNamespace),
+		c.collectFailingCRs(ctx, "HelmReleases", fluxGVRHelmReleases(), ""),
 		c.collectFailingCRs(
 			ctx,
-			"Failing OCIRepositories",
+			"OCIRepositories",
 			fluxGVROCIRepositories(),
 			fluxNamespace,
 		),

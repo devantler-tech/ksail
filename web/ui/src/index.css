@@ -1,0 +1,21 @@
+@import "tailwindcss";
+
+/* Class-based dark mode: `dark:` utilities apply under a `.dark` ancestor (toggled on <html> by the
+   theme hook and the no-flash init script in index.html). */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  :root.dark {
+    color-scheme: dark;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+}

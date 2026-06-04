@@ -60,6 +60,11 @@ on:
         required: false
         type: number
         default: 0
+      rolling_resize_server_type:
+        description: "Rolling node replacement: new Hetzner server type (e.g. cx33). Needs control_planes>=3 or workers>=1. Leave empty to skip."
+        required: false
+        type: string
+        default: ""
   schedule:
     # Weekly: Sunday 03:00 UTC
     - cron: "0 3 * * 0"
@@ -195,7 +200,7 @@ jobs:
 
       - name: 🔐 Login to Docker Hub
         if: steps.turnstyle.outcome == 'success' && vars.DOCKERHUB_USERNAME != ''
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
         with:
           username: ${{ vars.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }} # zizmor: ignore[secrets-outside-env] - third-party action input, no environment scoping available
@@ -263,6 +268,7 @@ jobs:
           args: ${{ steps.args.outputs.value }}
           apply-overlay-path: ".github/fixtures/podinfo-overlay"
           test-kubernetes-provider: ${{ matrix.suffix == 'default-init' && 'true' || 'false' }}
+          rolling-resize-server-type: ${{ github.event_name == 'workflow_dispatch' && inputs.rolling_resize_server_type || '' }}
 
           ghcr-user: ${{ github.actor }}
           ghcr-token: ${{ secrets.GITHUB_TOKEN }}

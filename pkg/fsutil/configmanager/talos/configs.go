@@ -62,7 +62,7 @@ type Configs struct {
 // This is used when no scaffolded project exists and default configurations are needed.
 // It creates a valid config bundle with:
 //   - Cluster name: DefaultClusterName ("talos-default")
-//   - Kubernetes version: DefaultKubernetesVersion ("1.32.0")
+//   - Kubernetes version: DefaultKubernetesVersion ("1.36.0")
 //   - Network CIDR: DefaultNetworkCIDR ("10.5.0.0/24")
 //   - allowSchedulingOnControlPlanes: true (for single-node/control-plane-only clusters)
 func NewDefaultConfigs() (*Configs, error) {
@@ -83,12 +83,48 @@ func NewDefaultConfigs() (*Configs, error) {
 	)
 }
 
+// NewDefaultConfigsWithName builds a default Talos config bundle named after the given cluster. The
+// cluster name is baked into the PKI, so it must be set via WithName (which regenerates the bundle).
+// It is the shared "default Talos config for cluster <name>" used by both the operator and the local
+// `ksail ui` create paths.
+func NewDefaultConfigsWithName(name string) (*Configs, error) {
+	configs, err := NewDefaultConfigs()
+	if err != nil {
+		return nil, fmt.Errorf("build talos config: %w", err)
+	}
+
+	named, err := configs.WithName(name)
+	if err != nil {
+		return nil, fmt.Errorf("name talos config: %w", err)
+	}
+
+	return named, nil
+}
+
 // NewDefaultConfigsWithPatches creates a new Talos Configs with default settings plus additional patches.
 // This is used when no scaffolded project exists but additional runtime patches are needed
 // (e.g., kubelet-csr-approver inlineManifests when metrics-server is enabled).
 //
 // The additional patches are applied after the default allowSchedulingOnControlPlanes patch.
+// The Kubernetes version is DefaultKubernetesVersion; use
+// NewDefaultConfigsWithVersionAndPatches to honor a pin or a Talos-compatible default.
 func NewDefaultConfigsWithPatches(additionalPatches []Patch) (*Configs, error) {
+	return NewDefaultConfigsWithVersionAndPatches(DefaultKubernetesVersion, additionalPatches)
+}
+
+// NewDefaultConfigsWithVersionAndPatches is like NewDefaultConfigsWithPatches but
+// targets a specific Kubernetes version. It is used when no scaffolded talos/ dir
+// exists so the default config still honors an explicit pin or a Talos-compatible
+// default (spec.cluster.kubernetesVersion / capped default) rather than always
+// using DefaultKubernetesVersion. An empty kubernetesVersion falls back to the default.
+func NewDefaultConfigsWithVersionAndPatches(
+	kubernetesVersion string,
+	additionalPatches []Patch,
+) (*Configs, error) {
+	if kubernetesVersion == "" {
+		kubernetesVersion = DefaultKubernetesVersion
+	}
+
 	// Default configs are used for control-plane-only clusters (no workers),
 	// so we need to allow scheduling on control-plane nodes.
 	allowSchedulingPatch := Patch{
@@ -103,7 +139,7 @@ func NewDefaultConfigsWithPatches(additionalPatches []Patch) (*Configs, error) {
 
 	return newConfigs(
 		DefaultClusterName,
-		DefaultKubernetesVersion,
+		kubernetesVersion,
 		DefaultNetworkCIDR,
 		patches,
 		nil,
@@ -313,6 +349,26 @@ func buildCertSANsPatch(sans []string) Patch {
 	}
 }
 
+// APIServerFeatureGatesPatch builds a cluster-scope patch that enables the
+// MutatingAdmissionPolicy feature gate and the admissionregistration.k8s.io/v1beta1
+// API on the kube-apiserver. Calico v3.30+ ships MutatingAdmissionPolicy resources in
+// its CRD chart that require this API. Talos cluster.apiServer.extraArgs is a
+// string→string map, so values carry no leading dashes. Apply it only for clusters
+// using the Calico CNI.
+func APIServerFeatureGatesPatch() Patch {
+	content := "cluster:\n" +
+		"  apiServer:\n" +
+		"    extraArgs:\n" +
+		"      feature-gates: MutatingAdmissionPolicy=true\n" +
+		"      runtime-config: admissionregistration.k8s.io/v1beta1=true\n"
+
+	return Patch{
+		Path:    "ksail-apiserver-feature-gates",
+		Scope:   PatchScopeCluster,
+		Content: []byte(content),
+	}
+}
+
 // WithSecrets creates a new Configs with the provided secrets bundle, preserving the cluster's
 // existing PKI (CA, certificates, tokens, bootstrap secrets) across config regeneration.
 // This is used during cluster update to ensure that newly generated machine configs for
@@ -339,6 +395,51 @@ func (c *Configs) WithSecrets(existingSecrets *secrets.Bundle) (*Configs, error)
 	return newConfigsWithEndpointAndSecrets(
 		c.Name,
 		kubernetesVersion,
+		networkCIDR,
+		c.endpoint,
+		c.patches,
+		existingSecrets,
+		c.versionContract,
+		c.extensions,
+	)
+}
+
+// WithKubernetesVersion creates a new Configs that targets the given Kubernetes
+// version, regenerating the bundle so the kubelet, kube-apiserver,
+// kube-controller-manager, and kube-scheduler image tags all match. The existing
+// PKI is preserved so the regenerated config still aligns with a running cluster.
+//
+// This is used during cluster update to render the desired machine config at the
+// Kubernetes version actually running on the cluster (rather than KSail's built-in
+// default), so an unrelated update never proposes an unrequested Kubernetes
+// upgrade. The version is normalised to drop any "v" prefix.
+//
+// Returns a new Configs instance; the original is not modified. Returns the
+// original unchanged when version is empty or already matches.
+func (c *Configs) WithKubernetesVersion(version string) (*Configs, error) {
+	version = normalizeKubernetesVersion(version)
+	if version == "" || version == c.kubernetesVersion {
+		return c, nil
+	}
+
+	networkCIDR := c.networkCIDR
+	if networkCIDR == "" {
+		networkCIDR = DefaultNetworkCIDR
+	}
+
+	// Preserve the existing PKI so the regenerated config keeps matching the
+	// running cluster's CA, tokens, and bootstrap secrets.
+	var existingSecrets *secrets.Bundle
+	if c.bundle != nil && c.bundle.ControlPlaneCfg != nil {
+		existingSecrets = secrets.NewBundleFromConfig(
+			secrets.NewFixedClock(time.Now()),
+			c.bundle.ControlPlaneCfg,
+		)
+	}
+
+	return newConfigsWithEndpointAndSecrets(
+		c.Name,
+		version,
 		networkCIDR,
 		c.endpoint,
 		c.patches,
@@ -489,7 +590,7 @@ func (c *Configs) NetworkCIDR() string {
 
 // newConfigs creates Configs from patches with the given cluster parameters.
 // The endpoint is calculated from the network CIDR.
-// If versionContract is nil, it defaults to TalosVersion1_11 for compatibility with Hetzner
+// If versionContract is nil, it defaults to TalosVersion1_12 for compatibility with Hetzner
 // bootstrap ISOs.
 func newConfigs(
 	clusterName string,
@@ -551,19 +652,21 @@ func resolveControlPlaneIP(endpointIP, networkCIDR string) (string, error) {
 }
 
 // buildBaseGenOptions creates the base generate options for Talos config generation.
-// If versionContract is nil, it defaults to TalosVersion1_11.
+// If versionContract is nil, it defaults to TalosVersion1_12.
 //
-// TalosVersion1_11 is the conservative default because the Hetzner bootstrap ISO
-// (ID 122630) runs Talos 1.11.2 in maintenance mode. Version contracts greater than 1.11
-// generate fields unknown to the 1.11.2 machined (e.g. machine.install.grubUseUKICmdline),
-// causing config apply to fail with "unknown keys found during decoding".
-// Update this default when Hetzner publishes a newer Talos bootstrap ISO.
+// TalosVersion1_12 is the conservative default because the Hetzner bootstrap ISO
+// (ID 125127) runs Talos 1.12.4 in maintenance mode. Version contracts greater than 1.12
+// generate fields unknown to the 1.12.4 machined, causing config apply to fail with
+// "unknown keys found during decoding". (Note: machine.install.grubUseUKICmdline is
+// gated at >1.11, so the 1.12 default already emits it — it is not an example of a
+// post-1.12 field.) Update this default when Hetzner publishes a newer Talos bootstrap
+// ISO (and bump DefaultTalosISO in pkg/apis/cluster/v1alpha1 to match).
 func buildBaseGenOptions(
 	controlPlaneIP string,
 	versionContract *talosconfig.VersionContract,
 ) []generate.Option {
 	if versionContract == nil {
-		versionContract = talosconfig.TalosVersion1_11
+		versionContract = talosconfig.TalosVersion1_12
 	}
 
 	return []generate.Option{
@@ -614,7 +717,7 @@ func buildBundleOptions(
 // newConfigsWithEndpointAndSecrets creates Configs with an explicit endpoint IP while preserving
 // an existing secrets bundle. This is used by WithEndpoint to regenerate configs with a new
 // endpoint without regenerating the PKI (CA, keys, tokens), which would cause certificate mismatches.
-// If versionContract is nil, it defaults to TalosVersion1_11.
+// If versionContract is nil, it defaults to TalosVersion1_12.
 func newConfigsWithEndpointAndSecrets(
 	clusterName string,
 	kubernetesVersion string,
@@ -627,7 +730,7 @@ func newConfigsWithEndpointAndSecrets(
 ) (*Configs, error) {
 	// Default nil versionContract so the stored and generated values always match.
 	if versionContract == nil {
-		versionContract = talosconfig.TalosVersion1_11
+		versionContract = talosconfig.TalosVersion1_12
 	}
 
 	clusterPatches, controlPlanePatches, workerPatches, err := categorizePatchesByScope(patches)

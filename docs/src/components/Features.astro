@@ -1,0 +1,119 @@
+---
+/**
+ * Features — a responsive grid of product highlights for the splash page.
+ * Each item renders an emoji "tile", a display-face title, and a short blurb.
+ *
+ * Usage (from MDX):
+ *   <Features items={[{ icon: "📦", title: "One Binary", body: "…" }, …]} />
+ */
+interface FeatureItem {
+  icon: string;
+  title: string;
+  body: string;
+}
+
+interface Props {
+  items: FeatureItem[];
+}
+
+const { items } = Astro.props;
+---
+
+<div class="ksail-features not-content">
+  {
+    items.map((item) => (
+      <article class="feature">
+        <span class="tile" aria-hidden="true">{item.icon}</span>
+        <h3 class="title">{item.title}</h3>
+        <p class="body" set:html={item.body} />
+      </article>
+    ))
+  }
+</div>
+
+<style>
+  .ksail-features {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr));
+    gap: 1rem;
+    margin-top: 1.5rem;
+  }
+
+  .feature {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+    padding: 1.4rem;
+    border-radius: 1rem;
+    border: 1px solid var(--ksail-border);
+    background: color-mix(in oklab, var(--ksail-surface) 70%, transparent);
+    overflow: hidden;
+    transition:
+      transform 0.18s ease,
+      border-color 0.18s ease,
+      box-shadow 0.18s ease;
+  }
+
+  /* A thin accent line along the top edge that lights up on hover. */
+  .feature::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--ksail-cyan), transparent);
+    opacity: 0;
+    transition: opacity 0.2s ease;
+  }
+
+  .feature:hover {
+    transform: translateY(-4px);
+    border-color: color-mix(in oklab, var(--ksail-cyan) 55%, var(--ksail-border));
+    box-shadow: var(--ksail-glow);
+  }
+  .feature:hover::before {
+    opacity: 1;
+  }
+
+  .tile {
+    display: grid;
+    place-items: center;
+    width: 2.9rem;
+    height: 2.9rem;
+    font-size: 1.5rem;
+    line-height: 1;
+    border-radius: 0.8rem;
+    background: linear-gradient(
+      135deg,
+      color-mix(in oklab, var(--ksail-cyan) 24%, transparent),
+      color-mix(in oklab, var(--ksail-cyan) 6%, transparent)
+    );
+    border: 1px solid color-mix(in oklab, var(--ksail-cyan) 32%, var(--ksail-border));
+  }
+
+  .title {
+    margin: 0;
+    font-family: var(--ksail-font-display);
+    font-size: 1.1rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    color: var(--sl-color-white);
+  }
+
+  .body {
+    margin: 0;
+    font-size: 0.92rem;
+    line-height: 1.55;
+    color: var(--sl-color-gray-2);
+  }
+
+  .body :global(code) {
+    font-size: 0.85em;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .feature {
+      transition: none;
+    }
+  }
+</style>

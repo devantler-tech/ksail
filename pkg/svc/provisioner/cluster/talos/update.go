@@ -12,6 +12,7 @@ import (
 	"github.com/cosi-project/runtime/pkg/safe"
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
+	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
 	svcprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
@@ -40,6 +41,10 @@ func (p *Provisioner) Update(
 	// Detect disruptive config changes (encryption, CNI, disk quota) and merge
 	// into diff before PrepareUpdate, so --dry-run includes wipe-required changes.
 	p.mergeDisruptiveChanges(ctx, name, diff, diffErr)
+
+	// Detect Hetzner server-type changes (rolling node replacement) and merge into
+	// diff before PrepareUpdate, so the --force gate and apply phase both see them.
+	p.mergeServerTypeRollingChanges(ctx, name, diff, diffErr)
 
 	result, proceed, prepErr := clusterupdate.PrepareUpdate(
 		diff, diffErr, opts, clustererr.ErrRecreationRequired,
@@ -92,6 +97,92 @@ func (p *Provisioner) mergeDisruptiveChanges(
 	}
 }
 
+// mergeServerTypeRollingChanges detects Hetzner control-plane / worker
+// server-type changes by comparing the running servers against the desired
+// configuration, and merges them into diff so that PrepareUpdate can gate them
+// (behind --force) and applyRollingRecreateChanges can apply them. It is a no-op
+// for non-Hetzner providers, or when the desired and running types already match.
+//
+// Change impact is classified from the *current* node inventory (not the desired
+// spec), so a control-plane roll is only offered when enough control planes are
+// actually present to preserve etcd quorum. A runtime guard in rollingReplaceRole
+// re-checks this immediately before any node is deleted.
+func (p *Provisioner) mergeServerTypeRollingChanges(
+	ctx context.Context,
+	name string,
+	diff *clusterupdate.UpdateResult,
+	diffErr error,
+) {
+	if diffErr != nil || diff == nil {
+		return
+	}
+
+	if p.hetznerOpts == nil || p.infraProvider == nil {
+		return
+	}
+
+	clusterName := p.resolveClusterName(name)
+
+	nodes, listErr := p.infraProvider.ListNodes(ctx, clusterName)
+	if listErr != nil {
+		_, _ = fmt.Fprintf(
+			p.logWriter,
+			"  ⚠ Failed to detect server types for rolling update: %v\n",
+			listErr,
+		)
+
+		return
+	}
+
+	cpDesired := p.hetznerServerType(RoleControlPlane)
+	workerDesired := p.hetznerServerType(RoleWorker)
+	cpCount, workerCount := countServerNodesByRole(nodes)
+
+	appendServerTypeChange(diff, RoleControlPlane,
+		representativeServerType(nodes, RoleControlPlane, cpDesired), cpDesired,
+		clusterupdate.ControlPlaneServerTypeChangeCategory(cpCount))
+	appendServerTypeChange(diff, RoleWorker,
+		representativeServerType(nodes, RoleWorker, workerDesired), workerDesired,
+		clusterupdate.WorkerServerTypeChangeCategory(workerCount))
+}
+
+// appendServerTypeChange appends a server-type change to the appropriate diff
+// slice based on its classified category. It is a no-op when the current type is
+// unknown (no running nodes of the role), when the types match, or for the
+// in-place category (no existing nodes to replace).
+func appendServerTypeChange(
+	diff *clusterupdate.UpdateResult,
+	role, current, desired string,
+	category clusterupdate.ChangeCategory,
+) {
+	if current == "" || desired == "" || strings.EqualFold(current, desired) {
+		return
+	}
+
+	field := "provider.hetzner.workerServerType"
+	if role == RoleControlPlane {
+		field = "provider.hetzner.controlPlaneServerType"
+	}
+
+	change := clusterupdate.Change{
+		Field:    field,
+		OldValue: current,
+		NewValue: desired,
+		Category: category,
+		Reason:   "existing " + role + " servers are replaced one at a time to apply the new VM type",
+	}
+
+	switch category { //nolint:exhaustive // only rolling/recreate categories are actionable here
+	case clusterupdate.ChangeCategoryRollingRecreate:
+		diff.RollingRecreate = append(diff.RollingRecreate, change)
+	case clusterupdate.ChangeCategoryRecreateRequired:
+		change.Reason = "control plane lacks etcd-quorum redundancy to roll; recreation required"
+		diff.RecreateRequired = append(diff.RecreateRequired, change)
+	default:
+		// In-place: no existing nodes to replace; future nodes use the new type.
+	}
+}
+
 // applyUpdateChanges applies all update changes after PrepareUpdate succeeds.
 //
 //nolint:cyclop // sequential update workflow with multiple change categories
@@ -132,6 +223,11 @@ func (p *Provisioner) applyUpdateChanges(
 		return result, fmt.Errorf("failed to apply node scaling changes: %w", scaleErr)
 	}
 
+	rollErr := p.applyRollingRecreateChanges(ctx, clusterName, result)
+	if rollErr != nil {
+		return result, fmt.Errorf("failed to apply rolling recreate changes: %w", rollErr)
+	}
+
 	// Handle in-place config changes (NO_REBOOT mode).
 	if p.shouldApplyInPlaceChanges(diff) {
 		cfgErr := p.applyInPlaceConfigChanges(ctx, clusterName, result)
@@ -154,9 +250,17 @@ func (p *Provisioner) applyUpdateChanges(
 }
 
 // DiffConfig computes the differences between current and desired configurations.
+//
+// Besides comparing the spec-level node counts, it performs a live comparison of
+// the regenerated desired machine config (base config + every Talos patch file
+// under talos/, with create-time node-managed sections such as registry mirrors
+// and cert SANs preserved from the running config) against the running
+// control-plane node. Those patches are not part of the ClusterSpec, so this is
+// the only place drift in them surfaces — including patch removals — both in the
+// change summary and as the trigger for re-pushing config to existing nodes.
 func (p *Provisioner) DiffConfig(
-	_ context.Context,
-	_ string,
+	ctx context.Context,
+	name string,
 	oldSpec, newSpec *v1alpha1.ClusterSpec,
 ) (*clusterupdate.UpdateResult, error) {
 	// Talos clusters support in-place changes for most config paths.
@@ -192,7 +296,38 @@ func (p *Provisioner) DiffConfig(
 		})
 	}
 
+	p.appendInPlaceMachineConfigDrift(ctx, name, result)
+
 	return result, nil
+}
+
+// appendInPlaceMachineConfigDrift detects drift between the rendered Talos
+// machine config (all patch files) and the running control-plane node, appending
+// any change to the diff. Detection failures are non-fatal and logged: they must not
+// turn DiffConfig into an error, or callers (computeUpdateDiff, the drift display)
+// would drop the spec-level diff entirely. A clean unreachable cluster yields no
+// changes (the guard short-circuits before any network call when configs are
+// absent, e.g. in unit tests).
+func (p *Provisioner) appendInPlaceMachineConfigDrift(
+	ctx context.Context,
+	name string,
+	result *clusterupdate.UpdateResult,
+) {
+	clusterName := p.resolveClusterName(name)
+
+	changes, err := p.detectInPlaceMachineConfigDrift(ctx, clusterName)
+	if err != nil {
+		_, _ = fmt.Fprintf(
+			p.logWriter,
+			"  ⚠ Failed to detect machine config drift for cluster %q: %v\n",
+			clusterName,
+			err,
+		)
+
+		return
+	}
+
+	result.InPlaceChanges = append(result.InPlaceChanges, changes...)
 }
 
 // applyNodeScalingChanges handles adding or removing Talos nodes.
@@ -265,9 +400,15 @@ func (p *Provisioner) scaleByProvider(
 	return nil
 }
 
-// applyInPlaceConfigChanges applies configuration changes that don't require reboots.
-// Uses ApplyConfiguration with NO_REBOOT mode for Talos-supported fields.
-// Control-plane nodes receive the ControlPlane() config and worker nodes receive the Worker() config.
+// applyInPlaceConfigChanges applies user patch changes to running nodes without a
+// reboot. For each node it overlays the role-scoped user patches onto the node's
+// running config and pushes the result via ApplyConfiguration (NO_REBOOT).
+//
+// Using running+patches (rather than a freshly regenerated config) preserves the
+// create-time/runtime-injected settings the node already carries — registry-mirror
+// endpoints, PKI, the real cluster endpoint — which a regenerated config would
+// drop. This mirrors detectInPlaceMachineConfigDrift, so detection and apply stay
+// consistent.
 func (p *Provisioner) applyInPlaceConfigChanges(
 	ctx context.Context,
 	clusterName string,
@@ -289,66 +430,103 @@ func (p *Provisioner) applyInPlaceConfigChanges(
 		return nil
 	}
 
-	// Apply the appropriate config to each node based on its role
+	// The desired-config rebuild needs the cluster PKI, which only a control-plane
+	// node carries. Resolve one control-plane config up front and reuse it as the
+	// secrets source for every node — seeding the rebuild from a worker's own config
+	// fails with "failed to parse PEM block" (#4963). All control-planes share the
+	// same PKI, so any one is a valid source.
+	secretsSource := p.fetchSecretsSource(ctx, clusterName)
+
 	for _, node := range nodes {
-		config := p.talosConfigs.ControlPlane()
-		if node.Role == RoleWorker {
-			config = p.talosConfigs.Worker()
-		}
-
-		if config == nil {
-			_, _ = fmt.Fprintf(
-				p.logWriter, "  ⚠ No config available for %s node %s\n",
-				node.Role, node.IP,
-			)
-
-			continue
-		}
-
-		p.applyNodeConfig(ctx, node, config, result)
+		p.applyNodeConfig(ctx, node, secretsSource, result)
 	}
 
 	return nil
 }
 
-// applyNodeConfig applies the appropriate config to a single node and records the result.
+// fetchSecretsSource returns a control-plane node's running config, used to seed
+// the per-node desired-config rebuild with the cluster PKI. It returns nil when no
+// control-plane is reachable; callers then fall back to each node's own config,
+// which carries complete PKI only on control-plane nodes (see buildDesiredNodeConfig
+// and #4963).
+func (p *Provisioner) fetchSecretsSource(
+	ctx context.Context,
+	clusterName string,
+) talosconfig.Provider {
+	cpConfig, found, err := p.fetchRunningControlPlaneConfig(ctx, clusterName)
+	if err != nil || !found {
+		return nil
+	}
+
+	return cpConfig
+}
+
+// applyNodeConfig overlays the role-scoped user patches onto a node's running
+// config and applies the result (NO_REBOOT), recording success or failure. The
+// secretsSource (a control-plane config) supplies the cluster PKI for the rebuild;
+// see buildDesiredNodeConfig.
 func (p *Provisioner) applyNodeConfig(
 	ctx context.Context,
 	node nodeWithRole,
-	config talosconfig.Provider,
+	secretsSource talosconfig.Provider,
 	result *clusterupdate.UpdateResult,
 ) {
-	err := p.applyConfigWithMode(
+	running, err := p.fetchNodeConfig(ctx, node.IP)
+	if err != nil {
+		p.recordNodeConfigFailure(node, result, fmt.Sprintf("fetch running config: %v", err))
+
+		return
+	}
+
+	desired, err := p.buildDesiredNodeConfig(running, secretsSource, node.Role)
+	if err != nil {
+		p.recordNodeConfigFailure(node, result, fmt.Sprintf("build desired config: %v", err))
+
+		return
+	}
+
+	err = p.applyConfigWithMode(
 		ctx,
 		node.IP,
-		config,
+		desired,
 		machineapi.ApplyConfigurationRequest_NO_REBOOT,
 	)
 	if err != nil {
-		_, _ = fmt.Fprintf(
-			p.logWriter, "  ⚠ Failed to apply config to %s (%s): %v\n",
-			node.IP, node.Role, err,
-		)
+		p.recordNodeConfigFailure(node, result, fmt.Sprintf("apply %s config: %v", node.Role, err))
 
-		result.FailedChanges = append(result.FailedChanges, clusterupdate.Change{
-			Field:    "talos.config",
-			NewValue: node.IP,
-			Category: clusterupdate.ChangeCategoryInPlace,
-			Reason:   fmt.Sprintf("failed to apply %s config: %v", node.Role, err),
-		})
-	} else {
-		_, _ = fmt.Fprintf(
-			p.logWriter, "  ✓ Config applied to %s (%s, no reboot)\n",
-			node.IP, node.Role,
-		)
-
-		result.AppliedChanges = append(result.AppliedChanges, clusterupdate.Change{
-			Field:    "talos.config",
-			NewValue: node.IP,
-			Category: clusterupdate.ChangeCategoryInPlace,
-			Reason:   node.Role + " config applied successfully",
-		})
+		return
 	}
+
+	_, _ = fmt.Fprintf(
+		p.logWriter, "  ✓ Config applied to %s (%s, no reboot)\n",
+		node.IP, node.Role,
+	)
+
+	result.AppliedChanges = append(result.AppliedChanges, clusterupdate.Change{
+		Field:    "talos.config",
+		NewValue: node.IP,
+		Category: clusterupdate.ChangeCategoryInPlace,
+		Reason:   node.Role + " config applied successfully",
+	})
+}
+
+// recordNodeConfigFailure logs and records a failed node config application.
+func (p *Provisioner) recordNodeConfigFailure(
+	node nodeWithRole,
+	result *clusterupdate.UpdateResult,
+	reason string,
+) {
+	_, _ = fmt.Fprintf(
+		p.logWriter, "  ⚠ Config update failed on %s (%s): %s\n",
+		node.IP, node.Role, reason,
+	)
+
+	result.FailedChanges = append(result.FailedChanges, clusterupdate.Change{
+		Field:    "talos.config",
+		NewValue: node.IP,
+		Category: clusterupdate.ChangeCategoryInPlace,
+		Reason:   reason,
+	})
 }
 
 // applyRebootRequiredChanges applies changes that require node reboots.
@@ -558,6 +736,8 @@ func (p *Provisioner) applyRebootChangesIfNeeded(
 // autoscaler config secret (which embeds a worker config derived from the
 // bundle). This avoids unnecessary Talos API calls for no-op updates or
 // operations that don't touch machine configs (e.g., pure scale-down).
+//
+//nolint:cyclop // sequence of independent conditions that each warrant a secret sync
 func (p *Provisioner) needsSecretSync(
 	oldSpec, newSpec *v1alpha1.ClusterSpec,
 	diff *clusterupdate.UpdateResult,
@@ -569,6 +749,12 @@ func (p *Provisioner) needsSecretSync(
 	// Scale-up: new nodes need the existing cluster's PKI.
 	if oldSpec != nil && newSpec != nil &&
 		(newSpec.ControlPlanes > oldSpec.ControlPlanes || newSpec.Workers > oldSpec.Workers) {
+		return true
+	}
+
+	// Rolling node replacement creates new servers that must join with the
+	// existing cluster's PKI and endpoint.
+	if diff.HasRollingRecreate() {
 		return true
 	}
 
@@ -752,7 +938,13 @@ func (p *Provisioner) getHetznerNodesByRole(
 			continue
 		}
 
-		ip := server.PublicNet.IPv4.IP.String()
+		// Fail closed: a node with no reachable address would otherwise be silently
+		// dropped from the set used for config reconcile, upgrade, wipe, and version
+		// introspection, risking an inconsistent update that reports success.
+		ip, addrErr := hetznerNodeTalosAddress(server)
+		if addrErr != nil {
+			return nil, fmt.Errorf("resolving address for node %s: %w", node.Name, addrErr)
+		}
 
 		nodes = append(nodes, nodeWithRole{IP: ip, Role: node.Role})
 	}
@@ -838,22 +1030,28 @@ func (p *Provisioner) GetCurrentConfig(
 	}
 
 	// Detect installed components from the live cluster when the detector is available.
+	// A detection failure means the cluster is unreachable (kube API down, stale
+	// kubeconfig). Propagate it instead of silently falling back to a default
+	// baseline, which would make update propose a full reinstall of healthy
+	// components and only fail later mid-apply.
 	if p.componentDetector != nil {
 		detected, err := p.componentDetector.DetectComponents(
 			ctx,
 			v1alpha1.DistributionTalos,
 			provider,
 		)
-		if err == nil {
-			spec.CNI = detected.CNI
-			spec.CSI = detected.CSI
-			spec.MetricsServer = detected.MetricsServer
-			spec.LoadBalancer = detected.LoadBalancer
-			spec.CertManager = detected.CertManager
-			spec.PolicyEngine = detected.PolicyEngine
-			spec.GitOpsEngine = detected.GitOpsEngine
-			spec.Autoscaler.Node = detected.Autoscaler.Node
+		if err != nil {
+			return nil, nil, fmt.Errorf("detect components: %w", err)
 		}
+
+		spec.CNI = detected.CNI
+		spec.CSI = detected.CSI
+		spec.MetricsServer = detected.MetricsServer
+		spec.LoadBalancer = detected.LoadBalancer
+		spec.CertManager = detected.CertManager
+		spec.PolicyEngine = detected.PolicyEngine
+		spec.GitOpsEngine = detected.GitOpsEngine
+		spec.Autoscaler.Node = detected.Autoscaler.Node
 	}
 
 	// Introspect actual node counts from the running cluster
@@ -862,9 +1060,9 @@ func (p *Provisioner) GetCurrentConfig(
 	spec.ControlPlanes = controlPlanes
 	spec.Workers = workers
 
-	// Detect the running Talos version from the cluster to avoid
-	// false-positive diffs when the user pins a version in config.
-	spec.Talos.Version = p.introspectTalosVersion(ctx)
+	// Detect running Talos OS and Kubernetes versions to avoid false-positive
+	// diffs when the user pins those versions in config.
+	p.introspectVersions(ctx, spec)
 
 	// Build provider spec if we have Hetzner options configured.
 	// Server types are introspected from the running Hetzner servers so
@@ -949,6 +1147,15 @@ func (p *Provisioner) introspectNodeCounts(ctx context.Context) (int32, int32) {
 	return 1, 0
 }
 
+// introspectVersions sets the running Talos OS and Kubernetes versions on spec so
+// that a pinned spec.cluster.talos.version / spec.cluster.kubernetesVersion that
+// matches the cluster does not read as a change. Either is left empty when the
+// cluster cannot be reached.
+func (p *Provisioner) introspectVersions(ctx context.Context, spec *v1alpha1.ClusterSpec) {
+	spec.Talos.Version = p.introspectTalosVersion(ctx)
+	spec.KubernetesVersion = p.introspectKubernetesVersion(ctx)
+}
+
 // introspectTalosVersion queries a control-plane node for the running Talos
 // version. Returns an empty string when the version cannot be determined
 // (e.g., no Talos API access); in that case the diff engine will report a
@@ -979,6 +1186,27 @@ func (p *Provisioner) introspectTalosVersion(ctx context.Context) string {
 	}
 
 	return version
+}
+
+// introspectKubernetesVersion reports the Kubernetes version running on the
+// cluster, read from a control-plane node's machine config (kube-apiserver image
+// tag). Returns an empty string when the version cannot be determined (e.g. no
+// control-plane node reachable, no Talos API access, or an Omni-managed cluster);
+// in that case the diff engine simply has no baseline to compare a pinned version
+// against. Omni-managed clusters are skipped because Omni owns node configuration.
+func (p *Provisioner) introspectKubernetesVersion(ctx context.Context) string {
+	if p.omniOpts != nil {
+		return ""
+	}
+
+	clusterName := p.resolveClusterName("")
+
+	running, found, err := p.fetchRunningControlPlaneConfig(ctx, clusterName)
+	if err != nil || !found {
+		return ""
+	}
+
+	return talosconfigmanager.KubernetesVersionFromProvider(running)
 }
 
 // countNodeRoles counts control-plane and worker nodes from a list of nodeWithRole.
@@ -1018,40 +1246,61 @@ func (p *Provisioner) introspectHetznerServerTypes(
 		return
 	}
 
-	cpType, workerType := detectHetznerServerTypes(nodes)
+	cpType := representativeServerType(nodes, RoleControlPlane, hetznerSpec.ControlPlaneServerType)
 	if cpType != "" {
 		hetznerSpec.ControlPlaneServerType = cpType
 	}
 
+	workerType := representativeServerType(nodes, RoleWorker, hetznerSpec.WorkerServerType)
 	if workerType != "" {
 		hetznerSpec.WorkerServerType = workerType
 	}
 }
 
-// detectHetznerServerTypes determines the actual control-plane and worker
-// server types from a node listing. Returns empty strings when no nodes of
-// a given role are found.
-func detectHetznerServerTypes(nodes []svcprovider.NodeInfo) (string, string) {
-	var cpServerType, workerServerType string
+// countServerNodesByRole counts control-plane and worker nodes from a provider
+// node listing.
+func countServerNodesByRole(nodes []svcprovider.NodeInfo) (int, int) {
+	var controlPlanes, workers int
 
 	for _, node := range nodes {
 		switch node.Role {
 		case RoleControlPlane:
-			if cpServerType == "" && node.ServerType != "" {
-				cpServerType = node.ServerType
-			}
+			controlPlanes++
 		case RoleWorker:
-			if workerServerType == "" && node.ServerType != "" {
-				workerServerType = node.ServerType
-			}
-		}
-
-		if cpServerType != "" && workerServerType != "" {
-			break
+			workers++
 		}
 	}
 
-	return cpServerType, workerServerType
+	return controlPlanes, workers
+}
+
+// representativeServerType returns a server type for the given role suitable for
+// diffing against desiredType. If any node of the role has a type different from
+// desiredType, that differing type is returned so the change is still detected when
+// a role holds mixed types (e.g. after a partially-completed rolling replacement).
+// When every node already matches (or the role has no node with a known type), the
+// first observed type is returned ("" when none).
+func representativeServerType(
+	nodes []svcprovider.NodeInfo,
+	role, desiredType string,
+) string {
+	var firstSeen string
+
+	for _, node := range nodes {
+		if node.Role != role || node.ServerType == "" {
+			continue
+		}
+
+		if firstSeen == "" {
+			firstSeen = node.ServerType
+		}
+
+		if !strings.EqualFold(node.ServerType, desiredType) {
+			return node.ServerType
+		}
+	}
+
+	return firstSeen
 }
 
 // syncHetznerFirewallRules synchronizes the Hetzner Cloud Firewall rules to the

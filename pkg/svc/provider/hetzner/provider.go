@@ -31,6 +31,11 @@ const (
 	IPv6CIDRBits = 128
 	// DefaultMaxServerCreateRetries is the number of retry attempts for server creation.
 	DefaultMaxServerCreateRetries = 3
+	// DefaultMaxAvailabilityCheckRetries is the number of attempts for the server-type
+	// availability precheck. When a server type is temporarily unavailable in all
+	// configured locations, the check is retried with backoff so transient Hetzner
+	// capacity shortages have a chance to clear before create/scale operations abort.
+	DefaultMaxAvailabilityCheckRetries = 5
 	// DefaultRetryBaseDelay is the base delay for exponential backoff.
 	DefaultRetryBaseDelay = 2 * time.Second
 	// DefaultRetryMaxDelay is the maximum delay between retry attempts.

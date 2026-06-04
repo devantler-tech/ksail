@@ -864,6 +864,40 @@ func TestScaffoldForceUpdatesModTime(t *testing.T) {
 	}
 }
 
+// TestScaffold_KWOK_RegeneratesMissingFile verifies the fix for #4836: the KWOK
+// scaffolder writes its files individually, so deleting one inner file and
+// re-running init without --force regenerates that single file instead of
+// treating the whole kwok/ directory as one already-present unit.
+func TestScaffold_KWOK_RegeneratesMissingFile(t *testing.T) {
+	t.Parallel()
+
+	output := t.TempDir()
+
+	subject := scaffolder.NewScaffolder(createKWOKCluster("kwok-repair"), io.Discard, nil)
+	require.NoError(t, subject.Scaffold(output, false))
+
+	kwokDir := filepath.Join(output, scaffolder.KWOKConfigDir)
+	files := []string{
+		"kustomization.yaml",
+		scaffolder.KWOKSimulationFile,
+		scaffolder.KWOKNodeNotReadyFile,
+		scaffolder.KWOKPodFailureFile,
+	}
+
+	for _, file := range files {
+		require.FileExists(t, filepath.Join(kwokDir, file))
+	}
+
+	// Remove a single inner file and re-run init WITHOUT --force.
+	require.NoError(t, os.Remove(filepath.Join(kwokDir, scaffolder.KWOKPodFailureFile)))
+	require.NoError(t, subject.Scaffold(output, false))
+
+	// The removed file is restored and the others are left intact.
+	for _, file := range files {
+		require.FileExists(t, filepath.Join(kwokDir, file))
+	}
+}
+
 // Test case definitions.
 type scaffoldTestCase struct {
 	name        string
@@ -1551,7 +1585,7 @@ func TestScaffoldTalos_CreatesDirectoryStructure(t *testing.T) {
 	expectedPaths := []string{
 		filepath.Join(tempDir, scaffolder.TalosConfigDir, "cluster", ".gitkeep"),
 		filepath.Join(tempDir, scaffolder.TalosConfigDir, "control-planes", ".gitkeep"),
-		filepath.Join(tempDir, scaffolder.TalosConfigDir, "workers", "worker-role-label.yaml"),
+		filepath.Join(tempDir, scaffolder.TalosConfigDir, "workers", ".gitkeep"),
 		filepath.Join(tempDir, "ksail.yaml"),
 		filepath.Join(tempDir, "k8s", "kustomization.yaml"),
 	}

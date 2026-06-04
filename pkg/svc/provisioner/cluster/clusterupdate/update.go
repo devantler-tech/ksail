@@ -13,11 +13,54 @@ import (
 // (e.g., disk encryption migration) and --force was not provided.
 var ErrWipeRequired = errors.New("partition wipe required")
 
+// ErrRollingRecreateRequired is returned when configuration changes require a
+// rolling node replacement (e.g., a Hetzner server-type change) and --force was
+// not provided.
+var ErrRollingRecreateRequired = errors.New("rolling node replacement required")
+
+// MinControlPlanesForRollingReplace is the minimum number of control-plane nodes
+// required to replace control planes one at a time while preserving etcd quorum.
+// With fewer nodes, removing one before its replacement joins would drop the
+// cluster below quorum, so a full recreation is required instead.
+const MinControlPlanesForRollingReplace = 3
+
+// ControlPlaneServerTypeChangeCategory classifies a control-plane server-type
+// change based on the number of running control-plane nodes. Clusters with
+// enough redundancy (>= MinControlPlanesForRollingReplace) can roll one node at
+// a time; smaller clusters must be recreated to avoid losing etcd quorum.
+func ControlPlaneServerTypeChangeCategory(controlPlanes int) ChangeCategory {
+	if controlPlanes >= MinControlPlanesForRollingReplace {
+		return ChangeCategoryRollingRecreate
+	}
+
+	return ChangeCategoryRecreateRequired
+}
+
+// WorkerServerTypeChangeCategory classifies a worker server-type change based on
+// the number of running worker nodes. When workers exist they are replaced one
+// at a time (rolling); with no existing workers the change only affects future
+// nodes and is applied in-place.
+func WorkerServerTypeChangeCategory(workers int) ChangeCategory {
+	if workers >= 1 {
+		return ChangeCategoryRollingRecreate
+	}
+
+	return ChangeCategoryInPlace
+}
+
 // DefaultLocalRegistryAddress is the default local registry address applied by
 // the config system when a GitOps engine is configured but no explicit
 // --local-registry flag was provided. Provisioners mirror this default in
 // GetCurrentConfig to prevent false-positive diffs.
 const DefaultLocalRegistryAddress = "localhost:5050"
+
+// UnknownBaselineValue is the sentinel value assigned to a component field whose
+// current cluster state could not be read (e.g. the Kubernetes API was
+// unreachable). It is deliberately not a valid value for any component enum, so
+// it never collides with a genuine configuration value. The diff engine detects
+// this sentinel and surfaces the field as an "Unknown" baseline instead of
+// fabricating a confident diff against the default value. See MarkComponentsUnknown.
+const UnknownBaselineValue = "Unknown"
 
 // ApplyGitOpsLocalRegistryDefault mirrors the config system's GitOps-aware
 // default: when a GitOps engine is detected but no local registry is configured,
@@ -57,6 +100,32 @@ func DefaultCurrentSpec(
 	}
 }
 
+// MarkComponentsUnknown sets each scalar component-enum field that the detector
+// probes from the live cluster (CNI, CSI, MetricsServer, LoadBalancer,
+// CertManager, PolicyEngine, GitOpsEngine) to the UnknownBaselineValue sentinel.
+// Callers invoke this when component detection fails (e.g. the Kubernetes API is
+// unreachable) so that the diff engine surfaces these fields as "Unknown" rather
+// than fabricating a confident diff from default values for components that may
+// already be installed.
+//
+// The node autoscaler (Autoscaler.Node) is also detector-derived but is
+// intentionally left unmodified here: it is a nested struct rather than a single
+// enum, so the diff engine instead skips its diff entirely when the component
+// baseline is unknown (see Engine.checkAutoscalerOptionsChange).
+func MarkComponentsUnknown(spec *v1alpha1.ClusterSpec) {
+	if spec == nil {
+		return
+	}
+
+	spec.CNI = v1alpha1.CNI(UnknownBaselineValue)
+	spec.CSI = v1alpha1.CSI(UnknownBaselineValue)
+	spec.MetricsServer = v1alpha1.MetricsServer(UnknownBaselineValue)
+	spec.LoadBalancer = v1alpha1.LoadBalancer(UnknownBaselineValue)
+	spec.CertManager = v1alpha1.CertManager(UnknownBaselineValue)
+	spec.PolicyEngine = v1alpha1.PolicyEngine(UnknownBaselineValue)
+	spec.GitOpsEngine = v1alpha1.GitOpsEngine(UnknownBaselineValue)
+}
+
 // ChangeCategory classifies the impact of a configuration change.
 type ChangeCategory int
 
@@ -77,6 +146,19 @@ const (
 	// Examples: disk encryption migration (LUKS2), changes requiring formatted partitions.
 	// These changes are more disruptive than reboots but don't require full cluster recreation.
 	ChangeCategoryWipeRequired
+
+	// ChangeCategoryUnknown indicates the current value of a field could not be
+	// read from the cluster, so its baseline is unknown. Such entries are
+	// informational only: they are displayed in the change summary but never
+	// drive an in-place apply or a cluster recreation, because the tool cannot
+	// know whether a real change is required.
+	ChangeCategoryUnknown
+
+	// ChangeCategoryRollingRecreate indicates the change is applied by replacing
+	// nodes one at a time (drain → delete → recreate with the new configuration),
+	// without recreating the whole cluster. Example: a Hetzner server-type change
+	// on a Talos cluster with enough redundancy to preserve etcd quorum.
+	ChangeCategoryRollingRecreate
 )
 
 // String returns a human-readable name for the change category.
@@ -90,6 +172,10 @@ func (c ChangeCategory) String() string {
 		return "recreate-required"
 	case ChangeCategoryWipeRequired:
 		return "wipe-required"
+	case ChangeCategoryRollingRecreate:
+		return "rolling-recreate"
+	case ChangeCategoryUnknown:
+		return "unknown"
 	default:
 		return "unknown"
 	}
@@ -119,6 +205,12 @@ type UpdateResult struct {
 	RecreateRequired []Change
 	// WipeRequired lists changes that require partition wiping.
 	WipeRequired []Change
+	// RollingRecreate lists changes applied by replacing nodes one at a time
+	// (drain → delete → recreate) without recreating the whole cluster.
+	RollingRecreate []Change
+	// UnknownBaseline lists fields whose current value could not be read from the
+	// cluster. These are informational only and never drive an apply or recreate.
+	UnknownBaseline []Change
 	// AppliedChanges lists changes that were successfully applied.
 	AppliedChanges []Change
 	// FailedChanges lists changes that failed to apply.
@@ -138,6 +230,8 @@ func NewEmptyUpdateResult() *UpdateResult {
 		RebootRequired:   make([]Change, 0),
 		RecreateRequired: make([]Change, 0),
 		WipeRequired:     make([]Change, 0),
+		RollingRecreate:  make([]Change, 0),
+		UnknownBaseline:  make([]Change, 0),
 		AppliedChanges:   make([]Change, 0),
 		FailedChanges:    make([]Change, 0),
 	}
@@ -160,6 +254,8 @@ func NewUpdateResultFromDiff(diff *UpdateResult) *UpdateResult {
 		RebootRequired:   diff.RebootRequired,
 		RecreateRequired: diff.RecreateRequired,
 		WipeRequired:     diff.WipeRequired,
+		RollingRecreate:  diff.RollingRecreate,
+		UnknownBaseline:  diff.UnknownBaseline,
 		AppliedChanges:   make([]Change, 0),
 		FailedChanges:    make([]Change, 0),
 	}
@@ -185,16 +281,38 @@ func (r *UpdateResult) HasWipeRequired() bool {
 	return len(r.WipeRequired) > 0
 }
 
+// HasRollingRecreate returns true if there are changes that require rolling
+// node replacement.
+func (r *UpdateResult) HasRollingRecreate() bool {
+	return len(r.RollingRecreate) > 0
+}
+
+// HasUnknownBaseline returns true if any field's current value could not be read
+// from the cluster. Such entries are informational and never drive an apply.
+func (r *UpdateResult) HasUnknownBaseline() bool {
+	return len(r.UnknownBaseline) > 0
+}
+
+// HasFailedChanges returns true if one or more changes failed to apply. A
+// non-empty FailedChanges set means the live cluster only partially matches the
+// desired spec, so callers must treat the update as failed (non-zero exit)
+// rather than reporting success.
+func (r *UpdateResult) HasFailedChanges() bool {
+	return len(r.FailedChanges) > 0
+}
+
 // NeedsUserConfirmation returns true if any changes require user confirmation.
-// In-place changes can be applied silently; reboot, recreate, or wipe require confirmation.
+// In-place changes can be applied silently; reboot, recreate, wipe, or rolling
+// node replacement require confirmation.
 func (r *UpdateResult) NeedsUserConfirmation() bool {
-	return r.HasRebootRequired() || r.HasRecreateRequired() || r.HasWipeRequired()
+	return r.HasRebootRequired() || r.HasRecreateRequired() ||
+		r.HasWipeRequired() || r.HasRollingRecreate()
 }
 
 // TotalChanges returns the total number of detected changes.
 func (r *UpdateResult) TotalChanges() int {
 	return len(r.InPlaceChanges) + len(r.RebootRequired) +
-		len(r.RecreateRequired) + len(r.WipeRequired)
+		len(r.RecreateRequired) + len(r.WipeRequired) + len(r.RollingRecreate)
 }
 
 // AllChanges returns all detected changes in a single slice.
@@ -204,18 +322,26 @@ func (r *UpdateResult) AllChanges() []Change {
 	all = append(all, r.RebootRequired...)
 	all = append(all, r.RecreateRequired...)
 	all = append(all, r.WipeRequired...)
+	all = append(all, r.RollingRecreate...)
 
 	return all
 }
 
 // UpdateOptions provides configuration for the update operation.
 type UpdateOptions struct {
-	// Force skips user confirmation for destructive changes.
+	// Force skips user confirmation for destructive changes. It also authorizes
+	// partition-wipe changes (e.g. disk encryption migration) that are detected
+	// during apply, so it must reflect an explicit --force, not merely an
+	// interactive confirmation of an unrelated change.
 	Force bool
 	// DryRun shows what would change without applying.
 	DryRun bool
 	// RollingReboot enables rolling reboots (one node at a time) for reboot-required changes.
 	RollingReboot bool
+	// AllowRollingRecreate authorizes rolling node replacement (e.g. a Hetzner
+	// server-type change). It is gated separately from Force so that confirming a
+	// rolling replacement never implicitly authorizes a partition wipe.
+	AllowRollingRecreate bool
 }
 
 // PrepareUpdate handles the common update preamble shared by provisioners:
@@ -254,6 +380,18 @@ func PrepareUpdate(
 				"or see https://ksail.devantler.tech/guides/talos-disk-encryption/ for manual steps)",
 			ErrWipeRequired,
 			len(diff.WipeRequired),
+		)
+	}
+
+	// Rolling node replacement is disruptive (nodes are drained and recreated one
+	// at a time) and needs explicit consent. It is gated on AllowRollingRecreate
+	// rather than Force so that authorizing it never implicitly authorizes a
+	// partition wipe detected during the same update.
+	if diff.HasRollingRecreate() && !opts.AllowRollingRecreate {
+		return result, false, fmt.Errorf(
+			"%w: %d change(s) require replacing nodes one at a time (use --force to proceed)",
+			ErrRollingRecreateRequired,
+			len(diff.RollingRecreate),
 		)
 	}
 

@@ -18,6 +18,13 @@ ksail cluster create
 
 > The generated config files work directly with `kind`, `k3d`, `talosctl`, and `vcluster` — KSail is a superset.
 
+The full lifecycle — create a real cluster, inspect it, deploy a workload, and tear it down:
+
+<video class="demo-recording" autoplay loop muted playsinline controls aria-label="KSail full cluster lifecycle demo">
+  <source src="/demos/cluster-lifecycle.mp4" type="video/mp4" />
+  <img class="demo-recording" src="/demos/cluster-lifecycle.gif" alt="KSail creates a real Kind cluster, shows cluster info, deploys an nginx workload that reaches Running, then deletes the cluster" />
+</video>
+
 ## Ephemeral Clusters
 
 Use `--ttl` to create a cluster that auto-destroys after a set duration. See [Ephemeral Clusters](/features/ephemeral-clusters/) for usage patterns and tips.

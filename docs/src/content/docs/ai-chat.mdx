@@ -173,7 +173,7 @@ You can also run the command directly:
 
 ```bash
 ksail cluster diagnose          # human-readable
-ksail cluster diagnose --format json   # machine-readable (healthScore and findings[])
+ksail cluster diagnose --output json   # machine-readable (healthScore and findings[])
 ```
 
 The command works with Vanilla, K3s, Talos, and VCluster, and exits 0 even when failures are reported (non-zero means the Kubernetes API could not be queried — e.g., the cluster is unreachable or credentials lack sufficient permissions).

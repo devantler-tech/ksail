@@ -18,6 +18,14 @@ type OptionsTalos struct {
 	// with or without the "v" prefix (e.g., "v1.11.2" or "1.11.2").
 	// When empty, KSail uses its built-in default version.
 	Version string `json:"version,omitzero"`
+	// KubernetesVersion mirrors spec.cluster.kubernetesVersion for the provisioner.
+	// It is populated by the cluster factory from the top-level field and is the raw
+	// value (possibly with a "v" prefix); only its presence is significant. The
+	// provisioner uses it to decide whether the user pinned a version: when empty,
+	// `cluster update` renders the desired machine config at the version already
+	// running on the cluster so an unrelated update never proposes an unrequested
+	// upgrade. Not user-facing in ksail.yaml — derived at runtime.
+	KubernetesVersion string `json:"-"`
 	// ControlPlanes is the number of control-plane nodes (default: 1).
 	//
 	// Deprecated: use spec.cluster.controlPlanes. This field is kept as a
@@ -37,9 +45,11 @@ type OptionsTalos struct {
 	// ISO is the cloud provider's ISO/image ID for booting Talos Linux.
 	// Only used when targeting cloud providers (e.g., Hetzner Cloud).
 	// For Hetzner: See https://docs.hetzner.cloud/changelog for available Talos ISOs.
-	// Defaults to 122630 (Talos Linux 1.11.2 x86). Use 122629 for ARM.
+	// Defaults to 125127 (Talos Linux 1.12.4 x86). The prior default 122630
+	// (Talos 1.11.2) was removed from Hetzner on 2026-03-18. For ARM, look up the
+	// matching Talos ISO ID in the Hetzner Cloud Console (Images → ISOs).
 	// When SchematicID is set, ISO is ignored in favour of a pre-built snapshot.
-	ISO int64 `default:"122630" json:"iso,omitzero"`
+	ISO int64 `default:"125127" json:"iso,omitzero"`
 	// SchematicID is the Talos factory schematic ID used to build a Hetzner snapshot image.
 	// When set, KSail uploads a Talos OS disk snapshot using this schematic ID and Version
 	// instead of booting from the cloud ISO specified in ISO.
@@ -129,7 +139,7 @@ type OptionsHetzner struct {
 	// server creation fails in the primary location due to resource unavailability.
 	// Defaults to ["nbg1", "hel1"] (Nuremberg, Helsinki) as fallbacks for fsn1 (Falkenstein).
 	// All locations should be in the same network zone (eu-central) for consistency.
-	FallbackLocations []string `json:"fallbackLocations,omitzero"`
+	FallbackLocations []string `json:"fallbackLocations,omitzero" jsonschema:"description=Alternative datacenter locations to try when server creation in the primary location fails due to resource unavailability. When empty defaults to nbg1 and hel1 (both in the eu-central network zone matching the default fsn1 primary location)."` //nolint:lll
 	// PlacementGroupFallbackToNone allows automatic fallback to no placement group
 	// when spread placement constraints cannot be satisfied (e.g., due to datacenter capacity).
 	// When true and placement fails, retries server creation without a placement group.
@@ -146,13 +156,30 @@ type OptionsHetzner struct {
 	// the configured autoscaler capacity from exceeding the account/project server quota.
 	// When set to 0, KSail uses DefaultHetznerServerLimit instead of treating 0 as an explicit
 	// limit. Defaults to DefaultHetznerServerLimit (10).
-	ServerLimit int32 `default:"10" json:"serverLimit,omitzero" jsonschema:"description=Maximum total Hetzner servers allowed for this cluster (control-planes + workers + autoscaler pool capacity). Set to 0 to use the default limit of 10,minimum=0"` //nolint:lll
+	ServerLimit int32 `default:"10" json:"serverLimit,omitzero" jsonschema:"description=Maximum total Hetzner servers allowed for this cluster — the account/project quota. Validation rejects configs whose reachable total (control-planes + workers + pool capacity clamped by autoscaler.node.maxNodesTotal when set) exceeds it. Set to 0 to use the default limit of 10,minimum=0"` //nolint:lll
 	// AllowedCIDRs restricts public access to the Kubernetes API (6443) and Talos API (50000)
 	// on control-plane nodes to the specified CIDR blocks. When empty, both APIs are open
 	// to the entire internet (0.0.0.0/0 and ::/0). Applied to both the Hetzner Cloud Firewall
 	// and the Talos OS-level ingress firewall for defense-in-depth.
 	// Examples: ["203.0.113.0/24", "198.51.100.0/24"]
 	AllowedCIDRs []string `json:"allowedCidrs,omitzero" jsonschema:"description=CIDR blocks allowed to access the Kubernetes API and Talos API on control-plane nodes. When empty defaults to 0.0.0.0/0 and ::/0 (open to all IPv4 and IPv6)."` //nolint:lll
+	// WorkerPublicIPv4 controls whether worker nodes are assigned a public IPv4 address.
+	// nil (default) or true assigns a public IPv4 (billed by Hetzner). false provisions
+	// IPv4-less workers; ksail then reaches their Talos API over the private network — which
+	// requires ksail to have private-network reachability — and the nodes need egress via a
+	// NAT gateway (or working IPv6) for image pulls, the Hetzner API, and cluster join.
+	WorkerPublicIPv4 *bool `json:"workerPublicIPv4,omitzero" jsonschema_description:"Assign a public IPv4 to worker nodes. Defaults to true. Set false for IPv4-less workers reached over the private network (requires private-network reachability and NAT egress)."` //nolint:lll
+	// WorkerPublicIPv6 controls whether worker nodes are assigned a public IPv6 address.
+	// nil (default) or true assigns a public IPv6 (free on Hetzner). false disables it.
+	WorkerPublicIPv6 *bool `json:"workerPublicIPv6,omitzero" jsonschema_description:"Assign a public IPv6 to worker nodes. Defaults to true."` //nolint:lll
+	// ControlPlanePublicIPv4 controls whether control-plane nodes are assigned a public IPv4.
+	// nil (default) or true assigns a public IPv4 (billed). false provisions IPv4-less control
+	// planes; the kube/talos endpoint is then derived from the private-network IP so the cluster
+	// is reachable only from inside the private network.
+	ControlPlanePublicIPv4 *bool `json:"controlPlanePublicIPv4,omitzero" jsonschema_description:"Assign a public IPv4 to control-plane nodes. Defaults to true. Set false for IPv4-less control planes whose endpoint is the private-network IP (cluster reachable only from inside the private network)."` //nolint:lll
+	// ControlPlanePublicIPv6 controls whether control-plane nodes are assigned a public IPv6.
+	// nil (default) or true assigns a public IPv6 (free on Hetzner). false disables it.
+	ControlPlanePublicIPv6 *bool `json:"controlPlanePublicIPv6,omitzero" jsonschema_description:"Assign a public IPv6 to control-plane nodes. Defaults to true."` //nolint:lll
 	// AutoscalerNodePoolNames lists the node-group names configured in the
 	// Kubernetes Cluster Autoscaler for this cluster. When non-empty, KSail
 	// deletes servers labelled with hcloud/node-group=<name> during cluster
@@ -224,6 +251,37 @@ func HetznerNetworkCIDR(spec Spec) string {
 	}
 
 	return DefaultHetznerNetworkCIDR
+}
+
+// publicNetEnabled reports whether a *bool public-net toggle is enabled, treating
+// nil (unset) as enabled — Hetzner's default is to assign both a public IPv4 and a
+// public IPv6 to every server.
+func publicNetEnabled(toggle *bool) bool {
+	return toggle == nil || *toggle
+}
+
+// WorkerIPv4Enabled reports whether worker nodes should be assigned a public IPv4.
+// Defaults to true when unset.
+func (o *OptionsHetzner) WorkerIPv4Enabled() bool {
+	return publicNetEnabled(o.WorkerPublicIPv4)
+}
+
+// WorkerIPv6Enabled reports whether worker nodes should be assigned a public IPv6.
+// Defaults to true when unset.
+func (o *OptionsHetzner) WorkerIPv6Enabled() bool {
+	return publicNetEnabled(o.WorkerPublicIPv6)
+}
+
+// ControlPlaneIPv4Enabled reports whether control-plane nodes should be assigned a
+// public IPv4. Defaults to true when unset.
+func (o *OptionsHetzner) ControlPlaneIPv4Enabled() bool {
+	return publicNetEnabled(o.ControlPlanePublicIPv4)
+}
+
+// ControlPlaneIPv6Enabled reports whether control-plane nodes should be assigned a
+// public IPv6. Defaults to true when unset.
+func (o *OptionsHetzner) ControlPlaneIPv6Enabled() bool {
+	return publicNetEnabled(o.ControlPlanePublicIPv6)
 }
 
 // ciliumVXLANPort is the UDP port used by Cilium for VXLAN encapsulation.

@@ -286,3 +286,32 @@ func TestUpdateAPIServiceTargetPort(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, int32(32456), svc.Spec.Ports[0].TargetPort.IntVal)
 }
+
+func TestIsLoopbackAddress(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		addr string
+		want bool
+	}{
+		{name: "ipv4 loopback", addr: "127.0.0.1", want: true},
+		{name: "ipv4 loopback range", addr: "127.0.0.2", want: true},
+		{name: "ipv6 loopback", addr: "::1", want: true},
+		{name: "localhost", addr: "localhost", want: true},
+		{name: "localhost upper", addr: "LOCALHOST", want: true},
+		{name: "localhost mixed", addr: "LocalHost", want: true},
+		{name: "private ipv4", addr: testNodeInternalIP, want: false},
+		{name: "public ipv4", addr: testServerIP, want: false},
+		{name: "hostname", addr: "example.com", want: false},
+		{name: "empty", addr: "", want: false},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			assert.Equal(t, testCase.want, kubeprovider.IsLoopbackAddressForTest(testCase.addr))
+		})
+	}
+}

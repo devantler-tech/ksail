@@ -17,14 +17,6 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Install gh-aw extension
-        uses: github/gh-aw-actions/setup-cli@23453ecc01928d28ee1e773e403b216b29e89a5b # v0.74.2
-        with:
-          version: v0.68.2
-      - name: Verify gh-aw installation
-        run: gh aw version
-        env:
-          GH_TOKEN: ${{ github.token }}
       - name: 📄 Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -35,7 +27,7 @@ jobs:
           cache: true
           go-version-file: ./go.mod
       - name: 🔧 Setup golangci-lint
-        uses: golangci/golangci-lint-action@1e7e51e771db61008b38414a730f564565cf7c20
+        uses: golangci/golangci-lint-action@82606bf257cbaff209d206a39f5134f0cfbfd2ee
         with:
           install-only: true
       - name: 🔧 Install mockery

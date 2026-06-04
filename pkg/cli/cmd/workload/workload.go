@@ -1975,6 +1975,16 @@ var errGitOpsEngineRequired = errors.New(
 		"set 'spec.gitOpsEngine: Flux|ArgoCD' in ksail.yaml",
 )
 
+// Sentinels wrapping the per-resource progress-group failures. These are the
+// verbose, multi-resource errors whose joined chain is replaced by the concise
+// diagnostics summary once the report has been printed (see
+// runReconcileWithDiagnostics). Other, more specific reconcile errors keep their
+// original actionable message.
+var (
+	errKustomizationReconcile = errors.New("reconcile kustomizations")
+	errApplicationReconcile   = errors.New("reconcile argocd applications")
+)
+
 // Shared constants for reconciliation.
 const (
 	defaultReconcileTimeout       = 5 * time.Minute
@@ -2038,24 +2048,9 @@ func retryOnTransientError(
 			break
 		}
 
-		delay := netretry.ExponentialDelay(attempt, baseWait, maxWait)
-
-		notify.Warningf(
-			cmd.OutOrStdout(),
-			"attempt %d/%d failed (retrying in %s): %v",
-			attempt, maxAttempts, delay, lastErr,
-		)
-
-		retryTimer := time.NewTimer(delay)
-
-		select {
-		case <-ctx.Done():
-			if !retryTimer.Stop() {
-				<-retryTimer.C
-			}
-
-			return fmt.Errorf("retry cancelled: %w", ctx.Err())
-		case <-retryTimer.C:
+		waitErr := waitBeforeRetry(ctx, cmd, attempt, maxAttempts, baseWait, maxWait, lastErr)
+		if waitErr != nil {
+			return waitErr
 		}
 	}
 
@@ -2064,6 +2059,57 @@ func retryOnTransientError(
 	}
 
 	return fmt.Errorf("failed after %d attempts: %w", maxAttempts, lastErr)
+}
+
+// waitBeforeRetry blocks for the exponential backoff delay before the next
+// retry attempt, returning a non-nil error if the context is cancelled so the
+// caller stops retrying.
+func waitBeforeRetry(
+	ctx context.Context,
+	cmd *cobra.Command,
+	attempt, maxAttempts int,
+	baseWait, maxWait time.Duration,
+	lastErr error,
+) error {
+	// Stop immediately if the operation cancelled the context. Without this
+	// check the backoff timer below races ctx.Done() in the select: when the
+	// goroutine is descheduled past the (often sub-millisecond) delay, both
+	// cases are ready and select picks one at random, sometimes running an
+	// extra attempt.
+	ctxErr := ctx.Err()
+	if ctxErr != nil {
+		return fmt.Errorf("retry cancelled: %w", ctxErr)
+	}
+
+	delay := netretry.ExponentialDelay(attempt, baseWait, maxWait)
+
+	notify.Warningf(
+		cmd.OutOrStdout(),
+		"attempt %d/%d failed (retrying in %s): %v",
+		attempt, maxAttempts, delay, lastErr,
+	)
+
+	retryTimer := time.NewTimer(delay)
+
+	select {
+	case <-ctx.Done():
+		if !retryTimer.Stop() {
+			<-retryTimer.C
+		}
+
+		return fmt.Errorf("retry cancelled: %w", ctx.Err())
+	case <-retryTimer.C:
+		// Prioritize cancellation even when the timer also fired: select picks a
+		// ready case at random, so a context cancelled during the wait can still
+		// land here. Re-checking ctx.Err() keeps cancellation deterministic and
+		// prevents one extra retry attempt.
+		ctxErr = ctx.Err()
+		if ctxErr != nil {
+			return fmt.Errorf("retry cancelled: %w", ctxErr)
+		}
+
+		return nil
+	}
 }
 
 // getKubeconfigPath returns the kubeconfig path from config or default.
@@ -2219,23 +2265,60 @@ func runReconcileWithDiagnostics(
 			)
 		},
 	)
-	if err != nil {
-		// Skip diagnostics when the user explicitly cancelled (Ctrl+C) to avoid
-		// blocking for the diagnostic timeout after a deliberate abort.
-		if !errors.Is(cmd.Context().Err(), context.Canceled) {
-			reconcilediag.Diagnose(
-				context.WithoutCancel(cmd.Context()),
-				cmd.ErrOrStderr(),
-				kubeconfigPath,
-				gitOpsEngine,
-			)
-		}
+	if err == nil {
+		return nil
+	}
 
+	// Skip diagnostics when the user explicitly cancelled (Ctrl+C) to avoid
+	// blocking for the diagnostic timeout after a deliberate abort.
+	if errors.Is(cmd.Context().Err(), context.Canceled) {
 		return err
 	}
 
-	return nil
+	// Diagnostics render to stdout, alongside the rest of the command's progress
+	// UI, rather than stderr. The error executor redirects stderr into a buffer
+	// and re-emits it as the command error; writing the report there would bundle
+	// the whole report into the error message and re-indent it under a single
+	// symbol. Stdout keeps the report rendering with its own formatting.
+	report := reconcilediag.Diagnose(
+		context.WithoutCancel(cmd.Context()),
+		cmd.OutOrStdout(),
+		kubeconfigPath,
+		gitOpsEngine,
+	)
+
+	// For the verbose per-resource reconcile failures, replace the joined error
+	// chain with a concise one-line summary — the actionable detail is already in
+	// the diagnostics report printed above. Other, more specific errors keep their
+	// original message.
+	if summary := report.Summary(); summary != "" && isAggregatedReconcileError(err) {
+		return &reconcileSummaryError{summary: summary, cause: err}
+	}
+
+	return err
 }
+
+// isAggregatedReconcileError reports whether err is one of the per-resource
+// progress-group failures whose joined chain should be collapsed to the
+// diagnostics summary.
+func isAggregatedReconcileError(err error) bool {
+	return errors.Is(err, errKustomizationReconcile) || errors.Is(err, errApplicationReconcile)
+}
+
+// reconcileSummaryError carries a concise, de-duplicated summary of a failed
+// reconciliation for display, while preserving the underlying error chain for
+// errors.Is/errors.As consumers. The full reconciliation detail is shown in the
+// diagnostics report printed before this error is returned.
+type reconcileSummaryError struct {
+	summary string
+	cause   error
+}
+
+// Error returns the concise summary message.
+func (e *reconcileSummaryError) Error() string { return e.summary }
+
+// Unwrap exposes the underlying reconciliation error chain.
+func (e *reconcileSummaryError) Unwrap() error { return e.cause }
 
 // autoDetectGitOpsEngine detects the GitOps engine from the cluster.
 func autoDetectGitOpsEngine(
@@ -2445,6 +2528,14 @@ func resetStuckHelmReleases(
 	}
 }
 
+// errDependencyBlocked is the sentinel wrapped by cascade failures: a
+// kustomization that cannot reconcile because one of its dependencies already
+// failed. It deliberately does not embed the upstream error — repeating the
+// root-cause message at every level of a deep dependency chain is what made the
+// failure output unreadable. The upstream failure is reported on its own row in
+// the reconciliation diagnostics instead.
+var errDependencyBlocked = errors.New("blocked by failed dependency")
+
 // failedKustomizations tracks kustomizations that have permanently failed.
 // When an upstream kustomization fails, all dependents fail immediately
 // instead of waiting for the full timeout.
@@ -2457,20 +2548,14 @@ func (f *failedKustomizations) record(name string, err error) {
 	f.m.Store(name, err)
 }
 
-// checkDependencies returns an error if any dependency has permanently failed.
-// Returns nil if all dependencies are still healthy or pending.
+// checkDependencies returns an error if any dependency has already failed.
+// Returns nil if all dependencies are still healthy or pending. The error names
+// only the direct dependency that blocked this kustomization; the upstream
+// failure surfaces on its own diagnostics row, so it is not repeated here.
 func (f *failedKustomizations) checkDependencies(dependsOn []string) error {
 	for _, dep := range dependsOn {
-		if val, ok := f.m.Load(dep); ok {
-			depErr, ok := val.(error)
-			if !ok {
-				continue
-			}
-
-			return fmt.Errorf(
-				"dependency %q failed: %w - fix the upstream kustomization first",
-				dep, depErr,
-			)
+		if _, ok := f.m.Load(dep); ok {
+			return fmt.Errorf("%w %q", errDependencyBlocked, dep)
 		}
 	}
 
@@ -2528,7 +2613,7 @@ func reconcileFluxKustomizationsWithProgress(
 
 	err = ksGroup.Run(deadlineCtx, tasks...)
 	if err != nil {
-		return fmt.Errorf("reconcile kustomizations: %w", err)
+		return fmt.Errorf("%w: %w", errKustomizationReconcile, err)
 	}
 
 	return nil
@@ -2801,7 +2886,7 @@ func reconcileArgoCD(
 
 	err = appGroup.Run(deadlineCtx, tasks...)
 	if err != nil {
-		return fmt.Errorf("reconcile argocd applications: %w", err)
+		return fmt.Errorf("%w: %w", errApplicationReconcile, err)
 	}
 
 	return nil

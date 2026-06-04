@@ -12,7 +12,10 @@ import (
 	omniprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/omni"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	"github.com/docker/docker/api/types/container"
+	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	check "github.com/siderolabs/talos/pkg/cluster/check"
+	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
+	corev1 "k8s.io/api/core/v1"
 )
 
 // NodeWithRoleForTest is the exported alias of nodeWithRole for testing.
@@ -51,6 +54,42 @@ func (p *Provisioner) RemoveDockerNodesForTest(
 	result *clusterupdate.UpdateResult,
 ) error {
 	return p.removeDockerNodes(ctx, clusterName, role, count, result)
+}
+
+// WithNodeReachabilityCheckForTest overrides the per-node Talos API reachability
+// check. Full scale-up flow tests use it to avoid real TCP dials against the
+// (unroutable) static container IPs assigned to mock-created containers.
+func (p *Provisioner) WithNodeReachabilityCheckForTest(
+	fn func(ctx context.Context, ip string) error,
+) *Provisioner {
+	p.nodeReachabilityCheck = fn
+
+	return p
+}
+
+// WaitForNewDockerNodesReachableForTest exposes waitForNewDockerNodesReachable
+// for unit testing. Each IP in nodeIPs is turned into a node spec (the IP doubles
+// as the node name in log/error output).
+func (p *Provisioner) WaitForNewDockerNodesReachableForTest(
+	ctx context.Context,
+	nodeIPs []string,
+) error {
+	specs := make([]nodeSpec, len(nodeIPs))
+	for i, ip := range nodeIPs {
+		specs[i] = nodeSpec{name: ip, ip: netip.MustParseAddr(ip)}
+	}
+
+	return p.waitForNewDockerNodesReachable(ctx, specs)
+}
+
+// WaitForNewHetznerNodesReachableForTest exposes waitForNewHetznerNodesReachable
+// for unit testing.
+func (p *Provisioner) WaitForNewHetznerNodesReachableForTest(
+	ctx context.Context,
+	servers []*hcloud.Server,
+	role string,
+) error {
+	return p.waitForNewHetznerNodesReachable(ctx, servers, role)
 }
 
 // CreateOmniProviderForTest exposes createOmniProvider for unit testing.
@@ -346,10 +385,15 @@ func MergeTalosconfigBytesForTest(talosconfigPath string, newData []byte) error 
 	return mergeTalosconfigBytes(talosconfigPath, newData)
 }
 
-// DetectHetznerServerTypesForTest exports detectHetznerServerTypes for unit testing.
+// RepresentativeServerTypeForTest exports representativeServerType for unit testing.
 //
 //nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
-var DetectHetznerServerTypesForTest = detectHetznerServerTypes
+var RepresentativeServerTypeForTest = representativeServerType
+
+// CountServerNodesByRoleForTest exports countServerNodesByRole for unit testing.
+//
+//nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
+var CountServerNodesByRoleForTest = countServerNodesByRole
 
 // MachineClusterConfigForTest is the exported alias of machineClusterConfig for testing.
 type MachineClusterConfigForTest = machineClusterConfig
@@ -388,6 +432,33 @@ var CNINameForTest = cniName
 //
 //nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
 var DiskQuotaEnabledForTest = diskQuotaEnabled
+
+// MachineConfigDiffForTest exposes machineConfigDiff for unit testing.
+//
+//nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
+var MachineConfigDiffForTest = machineConfigDiff
+
+// ConfigFingerprintForTest exposes configFingerprint for unit testing.
+//
+//nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
+var ConfigFingerprintForTest = configFingerprint
+
+// GraftNodeManagedSectionsForTest exposes graftNodeManagedSections for unit testing.
+//
+//nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
+var GraftNodeManagedSectionsForTest = graftNodeManagedSections
+
+// BuildDesiredNodeConfigForTest exposes buildDesiredNodeConfig for unit testing.
+func (p *Provisioner) BuildDesiredNodeConfigForTest(
+	running talosconfig.Provider,
+	secretsSource talosconfig.Provider,
+	role string,
+) (talosconfig.Provider, error) {
+	return p.buildDesiredNodeConfig(running, secretsSource, role)
+}
+
+// MachineConfigFieldForTest exposes the machine.config change field for unit testing.
+const MachineConfigFieldForTest = MachineConfigField
 
 // ValidateCurrentContextCAForTest exposes validateCurrentContextCA for unit testing.
 //
@@ -429,4 +500,45 @@ func (p *Provisioner) WithKernelModuleLoaderForTest(
 	p.kernelModuleLoader = f
 
 	return p
+}
+
+// RolesFromRollingChangesForTest exposes rolesFromRollingChanges for unit testing.
+func RolesFromRollingChangesForTest(changes []clusterupdate.Change) (bool, bool) {
+	return rolesFromRollingChanges(changes)
+}
+
+// ApplyRollingRecreateChangesForTest exposes applyRollingRecreateChanges for unit testing.
+func (p *Provisioner) ApplyRollingRecreateChangesForTest(
+	ctx context.Context,
+	clusterName string,
+	result *clusterupdate.UpdateResult,
+) error {
+	return p.applyRollingRecreateChanges(ctx, clusterName, result)
+}
+
+// ServersNeedingReplacementForTest exposes serversNeedingReplacement for unit testing.
+func ServersNeedingReplacementForTest(
+	servers []*hcloud.Server,
+	desiredType string,
+) []*hcloud.Server {
+	return serversNeedingReplacement(servers, desiredType)
+}
+
+// AppendServerTypeChangeForTest exposes appendServerTypeChange for unit testing.
+func AppendServerTypeChangeForTest(
+	diff *clusterupdate.UpdateResult,
+	role, current, desired string,
+	category clusterupdate.ChangeCategory,
+) {
+	appendServerTypeChange(diff, role, current, desired, category)
+}
+
+// NodeMatchesServerForTest exposes nodeMatchesServer for unit testing.
+func NodeMatchesServerForTest(node *corev1.Node, serverName, serverIP string) bool {
+	return nodeMatchesServer(node, serverName, serverIP)
+}
+
+// NodeIsReadyForTest exposes nodeIsReady for unit testing.
+func NodeIsReadyForTest(node *corev1.Node) bool {
+	return nodeIsReady(node)
 }

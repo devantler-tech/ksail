@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"slices"
-	"strings"
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -18,7 +16,6 @@ import (
 	hcloudccminstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/hcloudccm"
 	metallbinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/metallb"
 	metricsserverinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/metricsserver"
-	"k8s.io/client-go/tools/clientcmd"
 )
 
 // HelmClientForCluster creates a Helm client configured for the cluster.
@@ -59,27 +56,12 @@ func HelmClientForCluster(clusterCfg *v1alpha1.Cluster) (*helm.Client, string, e
 // validateKubeconfigContext checks that the specified context exists in the kubeconfig file.
 // Returns a descriptive error listing available contexts when the target context is missing.
 func validateKubeconfigContext(kubeconfigPath, contextName string) error {
-	config, err := clientcmd.LoadFromFile(kubeconfigPath)
+	err := k8s.ValidateContextExists(kubeconfigPath, contextName)
 	if err != nil {
-		return fmt.Errorf("failed to load kubeconfig for context validation: %w", err)
+		return fmt.Errorf("validate kubeconfig context: %w", err)
 	}
 
-	if _, exists := config.Contexts[contextName]; exists {
-		return nil
-	}
-
-	available := make([]string, 0, len(config.Contexts))
-	for name := range config.Contexts {
-		available = append(available, name)
-	}
-
-	slices.Sort(available)
-
-	return fmt.Errorf(
-		"%w: %q not found in %s (available: %s)",
-		k8s.ErrKubeconfigContextNotFound,
-		contextName, kubeconfigPath, strings.Join(available, ", "),
-	)
+	return nil
 }
 
 // NeedsMetricsServerInstall determines if metrics-server needs to be installed.

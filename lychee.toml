@@ -30,12 +30,9 @@ user_agent = "Mozilla/5.0 (compatible; lychee-link-checker; +https://github.com/
 # ── Exclusions ────────────────────────────────────────────────────────
 # Files that should never be scanned:
 #   - package-lock.json: registry tarball URLs that are not browsable.
-#   - .github/workflows/*.md: agentic workflow templates that contain
-#     placeholder variables ({run_url}, {workflow_name}) — not real URLs.
 exclude_path = [
   "docs/package-lock.json",
   "vsce/package-lock.json",
-  ".github/workflows/*.md",
 ]
 
 # URL patterns to ignore (applied after successful URL construction).
@@ -44,7 +41,9 @@ exclude_path = [
 #   - \$%7B: shell variable template URLs (${VAR} URL-encoded, not real URLs).
 #   - siderolabs.com/platform/saas-for-kubernetes: intermittently returns
 #     HTTP 500 in CI environments; content is stable, link is not broken.
-#   - localhost: loopback addresses used as GitHub API endpoint overrides in
-#     agentic workflow env vars (e.g. GITHUB_API_URL=https://localhost:18443/…);
-#     never reachable from the lychee runner.
-exclude = ['^/', '%s', '\$%7B', 'siderolabs\.com/platform/saas-for-kubernetes', 'localhost', 'www\.gnu\.org/licenses/gpl-3\.0']
+#   - localhost / 127.0.0.1: loopback addresses used as port-forward targets in
+#     the operator chart E2E (http://127.0.0.1:18080/readyz, …); never reachable
+#     from the lychee runner.
+#   - ksail.local: placeholder OIDC redirect/ingress host in chart template
+#     permutations; an unresolvable .local address, not a real link.
+exclude = ['^/', '%s', '\$%7B', 'siderolabs\.com/platform/saas-for-kubernetes', 'localhost', '127\.0\.0\.1', 'ksail\.local', 'www\.gnu\.org/licenses/gpl-3\.0']

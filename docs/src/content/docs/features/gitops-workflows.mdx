@@ -33,6 +33,37 @@ See [Declarative Configuration](/configuration/declarative-configuration/) for t
 
 `ksail cluster update` detects when the live GitOps sync ref (Flux OCIRepository tag or ArgoCD `targetRevision`) has drifted from the configured `spec.workload.tag` and reconciles it in-place — no manual intervention required. This keeps the cluster's GitOps engine aligned with your declared configuration automatically.
 
+## Bootstrap → GitOps handoff (Flux)
+
+KSail's Flux install is a **bootstrap seed**, not a steady-state owner. Because Flux must exist before it can sync anything, `ksail cluster create` installs the `flux-operator` Helm chart and creates a `FluxInstance` CR so the operator can start reconciling your repository. Once your repository declares those same resources, the **repository becomes the steady-state owner** and KSail defers to it — so the two never flap against each other.
+
+### Seed-if-absent operator
+
+On every `cluster create`/`update`, KSail checks the `flux-operator` Helm release before installing:
+
+- If the release is already **owned by a GitOps controller** (its Helm storage Secret carries a Flux `helm.toolkit.fluxcd.io/name` label, or an ArgoCD `argocd.argoproj.io/managed-by` label), KSail **skips the install** and prints `flux-operator: skipping install — release "flux-operator" is managed by <controller>`. This means a repo-declared `flux-operator` HelmRelease owns the version, and repeated KSail runs never downgrade or flap it.
+- Otherwise KSail seeds (or upgrades to) its configured/pinned version, exactly as before.
+
+For your HelmRelease to be adopted, it must target Helm release **`flux-operator`** in namespace **`flux-system`** (the release KSail seeds). Flux then adopts that release on its next reconcile.
+
+### Repo-declared FluxInstance
+
+If your source directory declares a `FluxInstance` named **`flux`** in **`flux-system`** (or one labelled `app.kubernetes.io/managed-by: ksail`), KSail reads its `spec.distribution` block and seeds the FluxInstance with **that** distribution `version` (and `registry`/`artifact` when present) instead of its built-in default — so the seed matches what Flux will reconcile. KSail always keeps its own **computed `spec.sync` block** (the OCI source pointing at your registry), so GitOps sync keeps working after bootstrap regardless of what the repo's FluxInstance specifies for `sync`.
+
+### Pinning the seed from `ksail.yaml`
+
+If you do not want to maintain a full HelmRelease/FluxInstance in the repo, pin the seed versions directly (Renovate-trackable):
+
+```yaml
+spec:
+  workload:
+    flux:
+      operatorVersion: 0.50.0   # flux-operator Helm chart version to seed (empty = KSail's pinned version)
+      distributionVersion: 2.x  # FluxInstance spec.distribution.version to seed (empty = KSail's default)
+```
+
+Precedence: a repo-declared `FluxInstance` distribution version **>** `spec.workload.flux.distributionVersion` **>** KSail's default. For the operator, `spec.workload.flux.operatorVersion` sets the seed version, but a repo-owned `flux-operator` release always wins (KSail defers to it as above). `ksail cluster update` detects and reconciles a changed `distributionVersion` in-place. See [Declarative Configuration](/configuration/declarative-configuration/) for the full `spec.workload.flux` reference.
+
 ## Commands
 
 | Command                    | Description                            |

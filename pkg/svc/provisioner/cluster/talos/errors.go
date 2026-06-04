@@ -8,6 +8,15 @@ var (
 	ErrDockerNotAvailable = errors.New("docker is not available: ensure Docker is running")
 	// ErrClusterAlreadyExists is returned when attempting to create a cluster that already exists.
 	ErrClusterAlreadyExists = errors.New("cluster already exists")
+	// ErrNodeNoReachableAddress is returned when a Hetzner server has neither a public
+	// IPv4 nor a private-network IP, so KSail has no address to reach its Talos API.
+	ErrNodeNoReachableAddress = errors.New("hetzner node has no reachable address")
+	// ErrPrivateNetworkUnreachable is returned when KSail cannot reach an IPv4-less
+	// Hetzner node's Talos API over the private network — typically because KSail has
+	// no route into the private network or the node lacks egress.
+	ErrPrivateNetworkUnreachable = errors.New(
+		"hetzner private network is unreachable from ksail",
+	)
 	// ErrInvalidPatch is returned when a patch file is invalid.
 	ErrInvalidPatch = errors.New("invalid patch file")
 	// ErrNotImplemented is returned when a method is not yet implemented.
@@ -71,6 +80,16 @@ var (
 	// ErrHcloudTokenNotSet is returned when the Hetzner Cloud API token environment
 	// variable is not set but is required for autoscaler secret creation.
 	ErrHcloudTokenNotSet = errors.New("hcloud API token environment variable is not set")
+	// ErrAutoscalerUserDataTooLarge is returned when the gzip-compressed,
+	// base64-encoded autoscaler worker config still exceeds Hetzner's 32 KiB
+	// user_data limit. Hetzner would otherwise reject every scale-up with
+	// "invalid input in field 'user_data'"; failing here surfaces the problem at
+	// cluster create/update time instead of silently at the next scale-up.
+	ErrAutoscalerUserDataTooLarge = errors.New(
+		"autoscaler worker config exceeds Hetzner's 32 KiB user_data limit even after gzip " +
+			"compression: move large inline patches or extraManifests out of the Talos worker " +
+			"config and deliver them via GitOps",
+	)
 	// ErrDrainPodRetrieval is returned when listing pods for drain encounters errors.
 	ErrDrainPodRetrieval = errors.New("failed to retrieve pods for drain")
 	// ErrNodeNotFoundByIP is returned when no Kubernetes node matches the given IP.
@@ -87,4 +106,20 @@ var (
 	)
 	// ErrInvalidPort is returned when a port number is outside the valid TCP range [1, 65535].
 	ErrInvalidPort = errors.New("port out of valid range [1, 65535]")
+	// ErrReplacementServerNotCreated is returned when a rolling node replacement
+	// fails to produce a new server.
+	ErrReplacementServerNotCreated = errors.New("no replacement server was created")
+	// ErrInsufficientControlPlanesForRoll is returned when a rolling control-plane
+	// replacement is attempted with too few control planes currently present to
+	// preserve etcd quorum.
+	ErrInsufficientControlPlanesForRoll = errors.New(
+		"too few control planes present to roll without losing etcd quorum",
+	)
+	// ErrNodeNameTooLong is returned when a generated Hetzner node name exceeds the
+	// 63-character DNS-1123 label limit. The node name doubles as the Talos
+	// hostname and the Kubernetes node name the Hetzner CCM matches against, so an
+	// over-long name would fail config apply or register a node the CCM cannot
+	// match. The cluster name is capped at 63, but appending "-<role>-<index>" can
+	// still overflow the limit.
+	ErrNodeNameTooLong = errors.New("generated node name exceeds maximum length")
 )

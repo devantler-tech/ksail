@@ -91,6 +91,12 @@ func customizeSchema(schema *jsonschema.Schema) {
 	// Restore root-level spec requirement.
 	schema.Required = []string{"spec"}
 
+	// The Cluster type carries a Status subresource for the operator, but ksail.yaml never
+	// contains status, so it is omitted from the configuration schema.
+	if schema.Properties != nil {
+		schema.Properties.Delete("status")
+	}
+
 	// Set kind/apiVersion enums from constants.
 	if schema.Properties != nil {
 		if p, ok := schema.Properties.Get("kind"); ok && p != nil {
@@ -151,6 +157,23 @@ func customTypeMapper(t reflect.Type) *jsonschema.Schema {
 		return &jsonschema.Schema{
 			Type:    "string",
 			Pattern: "^[0-9]+(ns|us|µs|ms|s|m|h)$",
+		}
+	}
+
+	// Special case for metav1.ObjectMeta. The Cluster embeds full Kubernetes object metadata
+	// for the operator/CRD, but ksail.yaml only supports the cluster name, so the configuration
+	// schema exposes just metadata.name (matching the previous custom Metadata type).
+	if t == reflect.TypeFor[metav1.ObjectMeta]() {
+		props := jsonschema.NewProperties()
+		props.Set("name", &jsonschema.Schema{
+			Type:        "string",
+			Description: "Cluster name (DNS-1123 compliant)",
+		})
+
+		return &jsonschema.Schema{
+			Type:                 "object",
+			Properties:           props,
+			AdditionalProperties: jsonschema.FalseSchema,
 		}
 	}
 

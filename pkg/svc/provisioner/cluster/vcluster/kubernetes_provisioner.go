@@ -6,6 +6,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/devantler-tech/ksail/v7/pkg/envvar"
 	vclusterconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/vcluster"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	kubernetesprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/kubernetes"
@@ -36,10 +37,26 @@ const (
 	vclusterKubeconfigKey = "config"
 	// vclusterAPIServerPort is the API server port exposed by the vCluster pod.
 	vclusterAPIServerPort = 8443
-	// vclusterWaitTimeout is the maximum time to wait for vCluster readiness.
+	// vclusterServiceAPIPort is the port the vCluster API Service exposes inside the host cluster.
+	vclusterServiceAPIPort = 443
+	// vclusterInClusterServerName is the TLS server name on the vCluster API server certificate. The
+	// in-cluster Service DNS name is not a SAN, so the served certificate is verified against this
+	// name (with the kubeconfig's CA) while connecting to the Service address.
+	vclusterInClusterServerName = "kubernetes"
+	// vclusterWaitTimeout is the default maximum time to wait for vCluster readiness.
+	// Overridable via the KSAIL_NESTED_READY_TIMEOUT environment variable (see
+	// nestedReadyTimeoutEnvVar / vclusterReadyTimeout) so CI can grant a slow-but-healthy
+	// nested cluster more headroom under runner contention without changing the default.
 	vclusterWaitTimeout = 10 * time.Minute
 	// vclusterWaitInterval is the polling interval when waiting for the cluster.
 	vclusterWaitInterval = 5 * time.Second
+	// nestedDebugEnvVar gates opt-in nested-cluster diagnostics (matches the value the
+	// CI workflow sets to capture why a nested vCluster fails to come up on a given host).
+	nestedDebugEnvVar = "KSAIL_NESTED_DEBUG"
+	// nestedReadyTimeoutEnvVar overrides vclusterWaitTimeout with a Go duration (e.g. "15m").
+	// Matches the value the CI nested-provider action exports; lets a slow-but-healthy
+	// nested cluster under runner contention avoid a premature context-deadline failure.
+	nestedReadyTimeoutEnvVar = "KSAIL_NESTED_READY_TIMEOUT"
 )
 
 // KubernetesProvisioner provisions vCluster instances on a host Kubernetes cluster
@@ -180,7 +197,17 @@ func (p *KubernetesProvisioner) Create(
 		CreateNamespace: false,
 	}
 
-	valuesFiles, cleanup, err := buildValuesFiles(p.valuesPath, p.disableFlannel, exposure.Address)
+	// Resolve the storage precedence (explicit vcluster.yaml > host StorageClass auto-detect >
+	// emptyDir default) before deploying. This fails fast if the user requested persistent
+	// storage the host cannot provide, and otherwise decides whether to force emptyDir.
+	disablePersistence, err := resolvePersistenceDisabled(ctx, p.hostClientset, p.valuesPath)
+	if err != nil {
+		return fmt.Errorf("resolve vCluster persistence: %w", err)
+	}
+
+	valuesFiles, cleanup, err := buildValuesFiles(
+		p.valuesPath, p.disableFlannel, exposure.Address, disablePersistence,
+	)
 	if err != nil {
 		return fmt.Errorf("prepare values files: %w", err)
 	}
@@ -206,6 +233,8 @@ func (p *KubernetesProvisioner) Create(
 
 	kubeconfigData, err := p.waitForKubeconfigSecret(ctx, clusterName, namespace)
 	if err != nil {
+		p.dumpNestedVClusterFailureDiagnostics(ctx, namespace)
+
 		return fmt.Errorf("get kubeconfig secret: %w", err)
 	}
 
@@ -304,6 +333,64 @@ func (p *KubernetesProvisioner) Exists(ctx context.Context, name string) (bool, 
 	return true, nil
 }
 
+// Kubeconfig returns a kubeconfig for the named vCluster reachable from inside the host cluster
+// (where the operator runs), with the API server rewritten to the in-cluster Service address
+// (https://<name>.vcluster-<name>.svc:443) and the TLS server name set to the cert's SAN. It
+// satisfies the clusterprovisioner.Connector capability and returns clustererr.ErrKubeconfigNotReady
+// while the vc-<name> Secret has not been published yet.
+func (p *KubernetesProvisioner) Kubeconfig(ctx context.Context, name string) ([]byte, error) {
+	clusterName := p.clusterName
+	if clusterName == "" {
+		clusterName = name
+	}
+
+	if clusterName == "" {
+		return nil, fmt.Errorf("%w: vcluster name not set", clustererr.ErrConfigNil)
+	}
+
+	namespace := vclusterNamespacePrefix + clusterName
+	secretName := vclusterSecretPrefix + clusterName
+
+	secret, err := p.hostClientset.CoreV1().
+		Secrets(namespace).
+		Get(ctx, secretName, metav1.GetOptions{})
+	if apierrors.IsNotFound(err) {
+		return nil, clustererr.ErrKubeconfigNotReady
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf(
+			"get vcluster kubeconfig secret %s/%s: %w",
+			namespace,
+			secretName,
+			err,
+		)
+	}
+
+	raw := secret.Data[vclusterKubeconfigKey]
+	if len(raw) == 0 {
+		return nil, clustererr.ErrKubeconfigNotReady
+	}
+
+	config, err := clientcmd.Load(raw)
+	if err != nil {
+		return nil, fmt.Errorf("parse vcluster kubeconfig: %w", err)
+	}
+
+	endpoint := fmt.Sprintf("https://%s.%s.svc:%d", clusterName, namespace, vclusterServiceAPIPort)
+	for _, cluster := range config.Clusters {
+		cluster.Server = endpoint
+		cluster.TLSServerName = vclusterInClusterServerName
+	}
+
+	out, err := clientcmd.Write(*config)
+	if err != nil {
+		return nil, fmt.Errorf("serialize vcluster kubeconfig: %w", err)
+	}
+
+	return out, nil
+}
+
 // Start is not supported for Helm-based vClusters (they run as pods).
 func (p *KubernetesProvisioner) Start(_ context.Context, _ string) error {
 	return fmt.Errorf(
@@ -335,6 +422,28 @@ func (p *KubernetesProvisioner) List(ctx context.Context) ([]string, error) {
 	return names, nil
 }
 
+// dumpNestedVClusterFailureDiagnostics is an opt-in (KSAIL_NESTED_DEBUG) diagnostic that dumps
+// the vCluster namespace's pod states, events, and logs when the kubeconfig Secret never
+// appears. It reveals why the vCluster control-plane pod fails to become Ready on a given host
+// (image pull, scheduling, or crash). No-op unless the env var is set.
+func (p *KubernetesProvisioner) dumpNestedVClusterFailureDiagnostics(
+	ctx context.Context,
+	namespace string,
+) {
+	if os.Getenv(nestedDebugEnvVar) == "" {
+		return
+	}
+
+	_, _ = fmt.Fprint(os.Stdout, k8s.DumpNamespaceDiagnostics(ctx, p.hostClientset, namespace))
+}
+
+// vclusterReadyTimeout returns the readiness wait budget for nested vCluster
+// instances, honoring the KSAIL_NESTED_READY_TIMEOUT override and falling back
+// to vclusterWaitTimeout.
+func vclusterReadyTimeout() time.Duration {
+	return envvar.Duration(nestedReadyTimeoutEnvVar, vclusterWaitTimeout)
+}
+
 // waitForKubeconfigSecret polls for the vc-<name> Secret until it contains
 // the kubeconfig data, matching the approach used by the vCluster SDK itself.
 func (p *KubernetesProvisioner) waitForKubeconfigSecret(
@@ -345,7 +454,7 @@ func (p *KubernetesProvisioner) waitForKubeconfigSecret(
 	var kubeconfigData []byte
 
 	err := wait.PollUntilContextTimeout(
-		ctx, vclusterWaitInterval, vclusterWaitTimeout, true,
+		ctx, vclusterWaitInterval, vclusterReadyTimeout(), true,
 		func(ctx context.Context) (bool, error) {
 			secret, err := p.hostClientset.CoreV1().Secrets(namespace).Get(
 				ctx, secretName, metav1.GetOptions{},

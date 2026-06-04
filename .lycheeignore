@@ -21,10 +21,6 @@ https://pkg.go.dev/github.com/devantler-tech/ksail/
 # Part of templated code
 https://x-access-token/
 
-# GitHub Agentic Workflows documentation (LLM-optimized format)
-https://githubnext.github.io/gh-aw/llms-create-agentic-workflows.txt
-https://githubnext.github.io/gh-aw/_llms-txt/agentic-workflows.txt
-
 # Intermittent Network Errors (siderolabs.com returns 500 occasionally in CI)
 https://www.siderolabs.com/
 
@@ -58,9 +54,6 @@ https://fluxcd.io/flux/concepts/
 https://fluxcd.io/flux/guides/mozilla-sops/
 https://gateway-api.sigs.k8s.io/
 https://github.com/owner/repo/actions/runs/12345
-https://githubnext.github.io/gh-aw/path/
-https://githubnext.github.io/gh-aw/reference/
-https://githubnext.github.io/gh-aw/setup/
 https://helm.sh/
 https://helm.sh/docs/
 https://just-the-docs.com/

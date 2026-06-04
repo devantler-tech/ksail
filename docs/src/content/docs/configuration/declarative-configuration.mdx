@@ -204,6 +204,7 @@ Editor command for interactive workflows (e.g., `code --wait`, `vim`). Falls bac
 | `importImages` | string | – | Path to tar archive with container images to import after cluster creation but before component installation |
 | `controlPlanes` | int32 | `1` | Number of control-plane nodes to create for the cluster (provider/distribution-agnostic) |
 | `workers` | int32 | – | Number of worker nodes to create for the cluster (provider/distribution-agnostic) |
+| `kubernetesVersion` | string | – | Kubernetes version to deploy (Talos distribution). When unset: cluster update preserves the running version and new clusters use a default compatible with the pinned Talos version. |
 | `oidc` | OIDCSpec | – | OIDC authentication configuration for the API server and kubeconfig |
 | `vanilla` | OptionsVanilla | – |  |
 | `talos` | OptionsTalos | – |  |
@@ -347,7 +348,12 @@ Advanced configuration options are direct fields under `spec.cluster`. See [Sche
 - `controlPlanes` – Number of control-plane nodes (default: `1`)
 - `workers` – Number of worker nodes (default: `0`)
 - `config` – Path to talosconfig file (default: `~/.talos/config`)
-- `iso` – Cloud provider ISO/image ID for Talos Linux (default: `122630` for x86; use `122629` for ARM)
+- `version` – Pin the Talos OS version (e.g. `v1.12.4`); caps upgrades and selects the node image (default: built-in)
+- `iso` – Cloud provider ISO/image ID for Talos Linux (default: `125127` for Talos 1.12.4 x86; for ARM, look up the matching ISO ID under **Images → ISOs** in the Hetzner Cloud Console)
+
+The Kubernetes version is set at the top level (`spec.cluster.kubernetesVersion`), not under `talos`:
+
+- `kubernetesVersion` – Pin the Kubernetes version (e.g. `v1.32.0`). When unset, `cluster update` keeps the version already running (no unrequested upgrade) and new clusters default to one compatible with the pinned `talos.version`
 
 **Hetzner options (`spec.provider.hetzner`):**
 
@@ -358,6 +364,7 @@ Advanced configuration options are direct fields under `spec.cluster`. See [Sche
 - `networkCidr` – Network CIDR block (default: `10.0.0.0/16`)
 - `sshKeyName` – SSH key name for server access (optional)
 - `tokenEnvVar` – Environment variable for API token (default: `HCLOUD_TOKEN`)
+- `fallbackLocations` – Alternative locations to try when the primary is at capacity (default: `nbg1`, `hel1`)
 
 **Vanilla options (`spec.cluster.vanilla`):**
 
@@ -371,7 +378,9 @@ Advanced configuration options are direct fields under `spec.cluster`. See [Sche
 | `validateOnPush` | boolean | `false` | Validate manifests against schemas before pushing (validation disabled by default) |
 | `tag` | string | `dev` | OCI artifact tag used for workload push and GitOps reconciliation (Flux OCIRepository and ArgoCD Application). Push priority: CLI oci:// ref > this field > registry-embedded tag > dev. Reconciliation priority: this field > registry-embedded tag > dev |
 | `kustomizationFile` | string | – | Path to the kustomization directory relative to sourceDirectory. When set, Flux Sync.Path is configured to this path so Flux uses the specified kustomization as the entry point instead of requiring a root kustomization.yaml. |
+| `flux` | FluxConfig | – | Flux bootstrap version pins (operator chart and FluxInstance distribution). Empty values use KSail's pinned versions; a GitOps repo that declares these becomes the steady-state owner. |
 | `watch` | WatchConfig | – | Configuration for the workload watch command (pre-apply hooks, etc.) |
+| `validation` | ValidationConfig | – | Configuration for the workload validate command (additional kinds to skip, etc.). |
 
 
 ### spec.chat (ChatSpec)

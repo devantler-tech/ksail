@@ -1,12 +1,16 @@
 package kind_test
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	kind "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/kind"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	kindv1alpha4 "sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
+	"sigs.k8s.io/yaml"
 )
 
 func TestResolveClusterName_NilConfigs(t *testing.T) {
@@ -292,4 +296,172 @@ func TestApplyImageVerificationPatches(t *testing.T) {
 		assert.Len(t, kindConfig.ContainerdConfigPatches, 1,
 			"calling ApplyImageVerificationPatches twice should not duplicate the patch")
 	})
+}
+
+func TestApplyAPIServerFeatureGates(t *testing.T) {
+	t.Parallel()
+
+	t.Run("sets_feature_gate_and_runtime_config", func(t *testing.T) {
+		t.Parallel()
+
+		kindConfig := &kindv1alpha4.Cluster{}
+
+		kind.ApplyAPIServerFeatureGates(kindConfig)
+
+		assert.True(
+			t,
+			kindConfig.FeatureGates[kind.APIServerMutatingAdmissionPolicyFeatureGate],
+		)
+		assert.Equal(
+			t,
+			"true",
+			kindConfig.RuntimeConfig[kind.APIServerAdmissionregistrationV1beta1RuntimeConfig],
+		)
+	})
+
+	t.Run("preserves_existing_feature_gates_and_runtime_config", func(t *testing.T) {
+		t.Parallel()
+
+		kindConfig := &kindv1alpha4.Cluster{
+			FeatureGates:  map[string]bool{"SomeOtherGate": true},
+			RuntimeConfig: map[string]string{"some.io/v1": "true"},
+		}
+
+		kind.ApplyAPIServerFeatureGates(kindConfig)
+
+		assert.True(t, kindConfig.FeatureGates["SomeOtherGate"])
+		assert.True(
+			t,
+			kindConfig.FeatureGates[kind.APIServerMutatingAdmissionPolicyFeatureGate],
+		)
+		assert.Equal(t, "true", kindConfig.RuntimeConfig["some.io/v1"])
+		assert.Equal(
+			t,
+			"true",
+			kindConfig.RuntimeConfig[kind.APIServerAdmissionregistrationV1beta1RuntimeConfig],
+		)
+	})
+
+	t.Run("idempotent_when_called_twice", func(t *testing.T) {
+		t.Parallel()
+
+		kindConfig := &kindv1alpha4.Cluster{}
+
+		kind.ApplyAPIServerFeatureGates(kindConfig)
+		kind.ApplyAPIServerFeatureGates(kindConfig)
+
+		assert.Len(t, kindConfig.FeatureGates, 1)
+		assert.Len(t, kindConfig.RuntimeConfig, 1)
+	})
+}
+
+// oidcExtraArgs unmarshals a generated kubeadm patch and returns its
+// apiServer.extraArgs as a name->value map. Parsing into a list of {name,value}
+// entries fails unless the patch uses the v1beta4 list form, so a successful
+// parse doubles as an assertion that the map form was not emitted.
+func oidcExtraArgs(t *testing.T, patch string) map[string]string {
+	t.Helper()
+
+	var parsed struct {
+		APIServer struct {
+			ExtraArgs []struct {
+				Name  string `json:"name"`
+				Value string `json:"value"`
+			} `json:"extraArgs"`
+		} `json:"apiServer"`
+	}
+
+	require.NoError(t, yaml.Unmarshal([]byte(patch), &parsed))
+
+	got := make(map[string]string, len(parsed.APIServer.ExtraArgs))
+	for _, a := range parsed.APIServer.ExtraArgs {
+		got[a.Name] = a.Value
+	}
+
+	return got
+}
+
+func TestApplyOIDCPatches_NilAddsNoPatch(t *testing.T) {
+	t.Parallel()
+
+	kindConfig := &kindv1alpha4.Cluster{
+		Nodes: []kindv1alpha4.Node{{Role: kindv1alpha4.ControlPlaneRole}},
+	}
+
+	require.NoError(t, kind.ApplyOIDCPatches(kindConfig, nil))
+	assert.Empty(t, kindConfig.Nodes[0].KubeadmConfigPatches)
+}
+
+func TestApplyOIDCPatches_DisabledAddsNoPatch(t *testing.T) {
+	t.Parallel()
+
+	kindConfig := &kindv1alpha4.Cluster{
+		Nodes: []kindv1alpha4.Node{{Role: kindv1alpha4.ControlPlaneRole}},
+	}
+
+	require.NoError(t, kind.ApplyOIDCPatches(kindConfig, &v1alpha1.OIDCSpec{}))
+	assert.Empty(t, kindConfig.Nodes[0].KubeadmConfigPatches)
+}
+
+func TestApplyOIDCPatches_EmitsV1beta4ListForm(t *testing.T) {
+	t.Parallel()
+
+	oidc := &v1alpha1.OIDCSpec{
+		IssuerURL:      "https://dex.example.com",
+		ClientID:       "ksail",
+		UsernameClaim:  "email",
+		UsernamePrefix: "oidc:",
+		GroupsClaim:    "groups",
+		GroupsPrefix:   "oidc:",
+	}
+
+	kindConfig := &kindv1alpha4.Cluster{
+		Nodes: []kindv1alpha4.Node{{Role: kindv1alpha4.ControlPlaneRole}},
+	}
+
+	require.NoError(t, kind.ApplyOIDCPatches(kindConfig, oidc))
+	require.Len(t, kindConfig.Nodes[0].KubeadmConfigPatches, 1)
+
+	patch := kindConfig.Nodes[0].KubeadmConfigPatches[0]
+
+	// kubeadm v1beta4 silently ignores the map form ("    oidc-issuer-url: ..."),
+	// so guard against regressing to it.
+	assert.NotContains(t, patch, "\n    oidc-issuer-url:")
+	assert.Contains(t, patch, "apiVersion: kubeadm.k8s.io/v1beta4")
+
+	assert.Equal(t, map[string]string{
+		"oidc-issuer-url":      "https://dex.example.com",
+		"oidc-client-id":       "ksail",
+		"oidc-username-claim":  "email",
+		"oidc-username-prefix": "oidc:",
+		"oidc-groups-claim":    "groups",
+		"oidc-groups-prefix":   "oidc:",
+	}, oidcExtraArgs(t, patch))
+}
+
+func TestApplyOIDCPatches_CAFileAddsArgAndMounts(t *testing.T) {
+	t.Parallel()
+
+	caFile := filepath.Join(t.TempDir(), "oidc-ca.crt")
+	require.NoError(t, os.WriteFile(caFile, []byte("test-ca"), 0o600))
+
+	oidc := &v1alpha1.OIDCSpec{
+		IssuerURL: "https://dex.example.com",
+		ClientID:  "ksail",
+		CAFile:    caFile,
+	}
+
+	kindConfig := &kindv1alpha4.Cluster{
+		Nodes: []kindv1alpha4.Node{{Role: kindv1alpha4.ControlPlaneRole}},
+	}
+
+	require.NoError(t, kind.ApplyOIDCPatches(kindConfig, oidc))
+	require.Len(t, kindConfig.Nodes[0].KubeadmConfigPatches, 1)
+
+	args := oidcExtraArgs(t, kindConfig.Nodes[0].KubeadmConfigPatches[0])
+	assert.Equal(t, v1alpha1.OIDCCAContainerPath, args["oidc-ca-file"])
+
+	require.Len(t, kindConfig.Nodes[0].ExtraMounts, 1)
+	mount := kindConfig.Nodes[0].ExtraMounts[0]
+	assert.Equal(t, v1alpha1.OIDCCAContainerPath, mount.ContainerPath)
 }

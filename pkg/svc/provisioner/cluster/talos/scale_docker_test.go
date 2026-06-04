@@ -31,7 +31,10 @@ func newScaleProvisioner(
 
 	return talosprovisioner.NewProvisioner(configs, talosprovisioner.NewOptions()).
 		WithDockerClient(mockClient).
-		WithLogWriter(io.Discard)
+		WithLogWriter(io.Discard).
+		// Stub the post-create Talos API reachability wait: mock-created containers
+		// get unroutable static IPs, so a real TCP dial would block until timeout.
+		WithNodeReachabilityCheckForTest(func(context.Context, string) error { return nil })
 }
 
 // loadConfigs builds a TalosConfigs from a fresh temp directory.
@@ -208,6 +211,41 @@ func TestAddDockerNodes_ListExistingFails_ReturnsError(t *testing.T) {
 	require.Error(t, err)
 	require.ErrorContains(t, err, "failed to list")
 	assert.Empty(t, result.AppliedChanges)
+}
+
+// newReachabilityProvisioner builds a Provisioner that keeps the real (TCP-dial)
+// node reachability check, so the wait behavior itself is exercised.
+func newReachabilityProvisioner(t *testing.T) *talosprovisioner.Provisioner {
+	t.Helper()
+
+	return talosprovisioner.NewProvisioner(nil, talosprovisioner.NewOptions()).
+		WithLogWriter(io.Discard)
+}
+
+func TestWaitForNewDockerNodesReachable_EmptyInput_NoOp(t *testing.T) {
+	t.Parallel()
+
+	provisioner := newReachabilityProvisioner(t)
+
+	err := provisioner.WaitForNewDockerNodesReachableForTest(context.Background(), nil)
+
+	require.NoError(t, err)
+}
+
+func TestWaitForNewDockerNodesReachable_CancelledContext_ReturnsError(t *testing.T) {
+	t.Parallel()
+
+	provisioner := newReachabilityProvisioner(t)
+
+	// Cancel up front so the dial loop bails immediately instead of waiting for
+	// the node to ever become reachable.
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err := provisioner.WaitForNewDockerNodesReachableForTest(ctx, []string{"10.255.255.1"})
+
+	require.Error(t, err)
+	require.ErrorContains(t, err, "10.255.255.1")
 }
 
 func TestRemoveDockerNodes_Workers_RemovesAll(t *testing.T) {

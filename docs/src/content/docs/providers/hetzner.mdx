@@ -21,7 +21,7 @@ The Hetzner provider is ideal when you:
 
 1. **Hetzner Cloud account** — Sign up at [hetzner.com/cloud](https://www.hetzner.com/cloud/)
 2. **API token** — Create one in the [Hetzner Cloud Console](https://console.hetzner.cloud/) → Project → Security → API Tokens (read/write permissions)
-3. **Talos ISO or Schematic** — Either a Talos Linux ISO must be available in your Hetzner Cloud project (x86 default: `122630`, ARM: `122629`), or a [Talos factory schematic ID](https://factory.talos.dev) can be provided via `spec.cluster.talos.schematicId` so KSail builds the snapshot automatically. See [Talos options](/configuration/declarative-configuration/#distribution-and-tool-options).
+3. **Talos ISO or Schematic** — Either a Talos Linux ISO must be available in your Hetzner Cloud project (x86 default: `125127` for Talos 1.12.4; for ARM, look up the matching ISO ID in the Hetzner Cloud Console), or a [Talos factory schematic ID](https://factory.talos.dev) can be provided via `spec.cluster.talos.schematicId` so KSail builds the snapshot automatically. See [Talos options](/configuration/declarative-configuration/#distribution-and-tool-options).
 4. **Docker** — Required locally for `ksail` CLI operations
 
 ## Configuration
@@ -55,9 +55,10 @@ spec:
     controlPlanes: 1
     workers: 2
     talos:
-      # ISO image ID for Hetzner (default: 122630 for x86, use 122629 for ARM)
+      # ISO image ID for Hetzner (default: 125127 for Talos 1.12.4 x86;
+      # look up the matching ARM ISO ID in the Hetzner Cloud Console).
       # Ignored when schematicId is set — KSail builds a snapshot instead.
-      iso: 122630
+      iso: 125127
       # Optional: Talos factory schematic ID. When set, KSail builds a Hetzner
       # snapshot from the Talos factory URL and uses it instead of the ISO.
       # Obtain a schematic ID from https://factory.talos.dev.
@@ -87,6 +88,14 @@ spec:
       # When empty, both APIs are open to 0.0.0.0/0 and ::/0 (all IPv4 and IPv6).
       # Applied to both the Hetzner Cloud Firewall and the Talos OS-level ingress firewall.
       # allowedCidrs: ["203.0.113.0/24", "198.51.100.0/24"]
+      # Per-role public networking (default: both IPv4 and IPv6 enabled).
+      # Set workerPublicIPv4: false for IPv4-less workers reached over the private
+      # network — requires KSail to run with private-network reachability and a NAT
+      # gateway (or working IPv6) for egress. See "IPv4-less nodes" below.
+      # workerPublicIPv4: true
+      # workerPublicIPv6: true
+      # controlPlanePublicIPv4: true
+      # controlPlanePublicIPv6: true
       # Maximum Hetzner servers for this cluster (default: 10)
       # serverLimit: 10
 ```
@@ -106,13 +115,59 @@ spec:
 | `hetzner.placementGroupFallbackToNone` | bool | `false` | Fall back to no placement group on capacity issues |
 | `hetzner.ingressFirewall` | string | `Enabled` | Talos OS-level ingress firewall (`Enabled` or `Disabled`). Generates `NetworkDefaultActionConfig` + `NetworkRuleConfig` patches as defense-in-depth alongside the Hetzner Cloud Firewall. |
 | `hetzner.allowedCidrs` | list | _(empty)_ | CIDR blocks allowed to access the Kubernetes API (6443) and Talos API (50000) on control-plane nodes. When empty, both APIs are open to `0.0.0.0/0` and `::/0`. Applied to both the Hetzner Cloud Firewall and the Talos OS-level ingress firewall for defense-in-depth. Example: `["203.0.113.0/24", "2001:db8::/32"]` |
-| `hetzner.serverLimit` | int | `10` | Maximum total Hetzner servers for this cluster. Validated only when Hetzner node autoscaling is enabled — checks `control-planes + workers + effective autoscaler capacity`, where effective autoscaler capacity is `sum(pool.max)` or, when `autoscaler.node.maxNodesTotal > 0`, `min(sum(pool.max), autoscaler.node.maxNodesTotal)`. Set to `0` to use the default of 10. |
+| `hetzner.workerPublicIPv4` | bool | `true` | Assign a public IPv4 to worker nodes. Set `false` for IPv4-less workers reached over the private network. See [IPv4-less nodes](#ipv4-less-nodes). |
+| `hetzner.workerPublicIPv6` | bool | `true` | Assign a public IPv6 to worker nodes (IPv6 is free on Hetzner). |
+| `hetzner.controlPlanePublicIPv4` | bool | `true` | Assign a public IPv4 to control-plane nodes. Set `false` for IPv4-less control planes; the kube/talos endpoint then resolves to the private-network IP (cluster reachable only from inside the private network). |
+| `hetzner.controlPlanePublicIPv6` | bool | `true` | Assign a public IPv6 to control-plane nodes. |
+| `hetzner.serverLimit` | int | `10` | Maximum total Hetzner servers for this cluster (your project quota). Validated only when Hetzner node autoscaling is enabled — KSail rejects configs whose **reachable total** exceeds it, where the reachable total is `control-planes + workers + sum(pool.max)`, clamped to `autoscaler.node.maxNodesTotal` when that global cap is set. Set to `0` to use the default of 10. |
+
+### IPv4-less Nodes
+
+By default every Hetzner node receives a public IPv4 (billed, ~€0.50/mo each) and a public IPv6
+(free). Setting `workerPublicIPv4: false` (and/or `controlPlanePublicIPv4: false`) provisions nodes
+**without a public IPv4**, reducing both cost and public attack surface — the node is no longer
+directly reachable from the internet.
+
+Because KSail manages each node over its Talos API, an IPv4-less node changes how KSail reaches it:
+
+- **KSail connects over the private network.** When a node has no public IPv4, KSail uses the node's
+  private-network IP for the Talos API, config apply, bootstrap, and (for control planes) the
+  kube/talos endpoint. **This requires KSail itself to have a route into the private network** — run
+  KSail from inside the network, over a VPN/WireGuard, or via a bastion. Without that route,
+  provisioning hangs waiting for the Talos API.
+- **Nodes still need egress.** A node with no public IPv4 cannot pull container images, reach the
+  Hetzner API (CCM/CSI), or join the cluster unless the private network provides egress. Provide a
+  **NAT gateway** on the private network, or rely on public IPv6 where every required registry is
+  reachable over IPv6.
+- **IPv6-only egress is unreliable for image pulls.** `ghcr.io` (and some other registries) are not
+  consistently reachable over IPv6, so an IPv4-less node relying solely on IPv6 egress may fail to
+  pull images. A NAT gateway is the robust option.
+
+**IPv4-less control planes.** Disabling `controlPlanePublicIPv4` makes the generated kubeconfig and
+talosconfig point at the control plane's **private** IP, so `kubectl`/`ksail` only work from inside
+the private network (or behind a load balancer / floating IP you place in front).
+
+**Reachability.** Because an IPv4-less node is driven entirely over the private network, KSail must be
+able to route into it. If KSail can't reach an IPv4-less node's Talos API, provisioning fails with an
+actionable error pointing at the private-network-route and egress prerequisites above (rather than an
+opaque timeout). KSail also warns at config time when a role disables both IP families, since that
+node then depends on a NAT gateway for egress.
+
+**Autoscaler nodes.** Autoscaler-created nodes inherit the **worker** public-net setting
+**cluster-wide** (KSail sets `HCLOUD_PUBLIC_IPV4`/`HCLOUD_PUBLIC_IPV6` on the cluster-autoscaler).
+The upstream Hetzner cluster-autoscaler has no per-pool public-net control, so all autoscaler pools
+share the worker setting.
+
+**Load balancers.** KSail does not create Hetzner load balancers, but when you expose Services with
+the Hetzner CCM and your nodes are IPv4-less, annotate the Service with
+`load-balancer.hetzner.cloud/use-private-ip: "true"` so the load balancer targets nodes by their
+private IP.
 
 ### Talos options for Hetzner clusters
 
 | Field | Type | Default | Description |
 | --- | --- | --- | --- |
-| `talos.iso` | int | `122630` | Hetzner Cloud ISO/image ID for Talos (use `122629` for ARM). Ignored when `schematicId` is set. |
+| `talos.iso` | int | `125127` | Hetzner Cloud ISO/image ID for Talos 1.12.4 x86 (look up the matching ARM ID in the Hetzner Cloud Console). Ignored when `schematicId` is set. |
 | `talos.schematicId` | string | _(empty)_ | [Talos factory](https://factory.talos.dev) schematic ID. When set, KSail automatically builds and manages a Hetzner snapshot image instead of booting from the ISO. `spec.cluster.talos.version` must also be set. Not supported for ARM64 server types (`cax*`). The snapshot is deleted when `ksail cluster delete --delete-storage` is run. |
 
 ### Autoscaler Configuration
@@ -126,7 +181,7 @@ spec:
       node:
         enabled: true
         expander: LeastWaste       # LeastWaste | LeastNodes | Random (Price is not supported for Hetzner)
-        maxNodesTotal: 20          # 0 = no global cap (sum of pool maxes applies)
+        maxNodesTotal: 20          # whole-cluster node ceiling (--max-nodes-total); 0 = no cap
         scaleDownUnneededTime: 10m
         pools:
           - name: workers-fsn1
@@ -144,14 +199,14 @@ spec:
         vertical: Disabled         # Enabled | Disabled (reserved for future VPA support; not yet implemented)
   provider:
     hetzner:
-      serverLimit: 20              # Must be ≥ controlPlanes + workers + effective pool capacity (capped by maxNodesTotal when set)
+      serverLimit: 20              # project quota; must be ≥ the reachable total (controlPlanes + workers + sum(pool.max), capped by maxNodesTotal)
 ```
 
 | Field | Type | Default | Description |
 | --- | --- | --- | --- |
 | `autoscaler.node.enabled` | bool | `false` | `true` — defer node scaling to an external autoscaler; `false` — KSail manages node counts directly |
 | `autoscaler.node.expander` | string | `LeastWaste` | Expander strategy: `LeastWaste`, `LeastNodes`, `Random`. (`Price` is rejected by KSail with a validation error for the Hetzner provider, because the Hetzner cloud provider does not implement the pricing API.) |
-| `autoscaler.node.maxNodesTotal` | int | `0` | Maximum total nodes across all pools. `0` disables the global cap. |
+| `autoscaler.node.maxNodesTotal` | int | `0` | Maximum total nodes in the **whole cluster** (control-planes + workers + autoscaler nodes), passed to the cluster-autoscaler `--max-nodes-total` flag — not an autoscaler-only budget. `0` disables the global cap. Should be ≤ `serverLimit`. |
 | `autoscaler.node.scaleDownUnneededTime` | string | `10m` | How long a node must be unneeded before it is eligible for scale-down (e.g. `10m`) |
 | `autoscaler.node.pools[].name` | string | — | Unique pool name (DNS-1123 label, max 63 chars) |
 | `autoscaler.node.pools[].serverType` | string | — | Hetzner server type for this pool (e.g. `cx23`, `cax11`) |
@@ -162,7 +217,7 @@ spec:
 | `autoscaler.pod.vertical` | string | `Disabled` | Reserved for future VPA support; not yet implemented. |
 
 > [!NOTE]
-> `spec.provider.hetzner.serverLimit` guards against exceeding your Hetzner Cloud project quota. KSail rejects configurations where `controlPlanes + workers + effectivePoolCapacity` exceeds `serverLimit`, where `effectivePoolCapacity` is `sum(pool.max)` capped by `autoscaler.node.maxNodesTotal` when that global cap is set. Raise this limit to match your actual Hetzner project quota.
+> `spec.provider.hetzner.serverLimit` guards against exceeding your Hetzner Cloud project quota. KSail rejects configurations where the **reachable total** exceeds `serverLimit`, where the reachable total is `controlPlanes + workers + sum(pool.max)`, clamped to `autoscaler.node.maxNodesTotal` when that global cap is set. Because `maxNodesTotal` is the whole-cluster ceiling (the value passed to the autoscaler's `--max-nodes-total`), set it ≤ `serverLimit`. Raise `serverLimit` to match your actual Hetzner project quota.
 
 ## Quick Start
 
@@ -326,7 +381,7 @@ spec:
 
 **Placement group errors** — Hetzner limits spread placement groups to 10 servers per datacenter. Reduce your node count or set `placementGroupStrategy: "None"`. For best-effort HA, set `placementGroupFallbackToNone: true` to fall back automatically when spread placement fails.
 
-**`autoscaler configuration exceeds Hetzner server limit`** — The total node capacity (`controlPlanes + workers + effectivePoolCapacity`) exceeds `hetzner.serverLimit`. Increase `serverLimit` or reduce your pool `max` values (or lower `maxNodesTotal` to cap the effective pool capacity).
+**`autoscaler configuration exceeds Hetzner server limit`** — The reachable total node count (`controlPlanes + workers + sum(pool.max)`, clamped by `maxNodesTotal` when set) exceeds `hetzner.serverLimit`. Increase `serverLimit`, reduce your pool `max` values, or lower `maxNodesTotal` to cap the cluster total.
 
 **`cloud provider requires an external registry`** — Hetzner Cloud servers cannot reach Docker-based local registries running on your machine. When `spec.cluster.localRegistry` is enabled, it must point to an internet-accessible registry (e.g., `ghcr.io/myorg`). KSail returns this error early if a non-external registry is configured.
 

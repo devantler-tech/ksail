@@ -336,3 +336,73 @@ func TestValidate_TalosConfigName(t *testing.T) {
 	result := v.Validate(config)
 	require.NotNil(t, result)
 }
+
+// TestValidate_HetznerPublicNetWarnsFullyPrivateWorker verifies that disabling both
+// public IP families on Hetzner workers produces a NAT-egress warning (not an error).
+//
+//nolint:varnamelen // short-lived validator handle, matching sibling validator tests
+func TestValidate_HetznerPublicNetWarnsFullyPrivateWorker(t *testing.T) {
+	t.Parallel()
+
+	v := ksailvalidator.NewValidator()
+	disabled := false
+
+	config := &v1alpha1.Cluster{
+		TypeMeta: metav1.TypeMeta{Kind: "Cluster", APIVersion: "ksail.io/v1alpha1"},
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				Distribution: v1alpha1.DistributionTalos,
+				Provider:     v1alpha1.ProviderHetzner,
+			},
+			Provider: v1alpha1.ProviderSpec{
+				Hetzner: v1alpha1.OptionsHetzner{
+					WorkerPublicIPv4: &disabled,
+					WorkerPublicIPv6: &disabled,
+				},
+			},
+		},
+	}
+
+	result := v.Validate(config)
+
+	assert.True(t, result.HasWarnings(), "fully-private worker should warn")
+
+	for _, e := range result.Errors {
+		assert.NotEqual(t, "spec.provider.hetzner", e.Field,
+			"fully-private worker with a private network must not be an error")
+	}
+}
+
+// TestValidate_HetznerPublicNetSkippedForNonHetzner verifies the public-net check is
+// provider-gated: a non-Hetzner provider yields no public-net warnings.
+//
+//nolint:varnamelen // short-lived validator handle, matching sibling validator tests
+func TestValidate_HetznerPublicNetSkippedForNonHetzner(t *testing.T) {
+	t.Parallel()
+
+	v := ksailvalidator.NewValidator()
+	disabled := false
+
+	config := &v1alpha1.Cluster{
+		TypeMeta: metav1.TypeMeta{Kind: "Cluster", APIVersion: "ksail.io/v1alpha1"},
+		Spec: v1alpha1.Spec{
+			Cluster: v1alpha1.ClusterSpec{
+				Distribution: v1alpha1.DistributionTalos,
+				Provider:     v1alpha1.ProviderDocker,
+			},
+			Provider: v1alpha1.ProviderSpec{
+				Hetzner: v1alpha1.OptionsHetzner{
+					WorkerPublicIPv4: &disabled,
+					WorkerPublicIPv6: &disabled,
+				},
+			},
+		},
+	}
+
+	result := v.Validate(config)
+
+	for _, w := range result.Warnings {
+		assert.NotEqual(t, "spec.provider.hetzner", w.Field,
+			"non-Hetzner provider must not emit public-net warnings")
+	}
+}

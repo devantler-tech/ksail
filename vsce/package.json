@@ -15,7 +15,7 @@
     "url": "https://github.com/devantler-tech/ksail/issues"
   },
   "engines": {
-    "vscode": "^1.118.0"
+    "vscode": "^1.120.0"
   },
   "categories": [
     "Machine Learning",
@@ -292,18 +292,18 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@types/node": "^25.8.0",
+    "@types/node": "^25.9.1",
     "@types/vscode": "^1.120.0",
-    "@typescript-eslint/eslint-plugin": "^8.59.3",
-    "@typescript-eslint/parser": "^8.59.3",
+    "@typescript-eslint/eslint-plugin": "^8.60.0",
+    "@typescript-eslint/parser": "^8.59.4",
     "@vscode/test-cli": "^0.0.12",
     "@vscode/test-electron": "^2.4.0",
     "@vscode/vsce": "^3.9.1",
     "esbuild": "^0.28.0",
-    "eslint": "^10.3.0",
+    "eslint": "^10.4.0",
     "npm-run-all": "^4.1.5",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.59.3"
+    "typescript-eslint": "^8.60.0"
   },
   "overrides": {
     "serialize-javascript": "^7.0.3",

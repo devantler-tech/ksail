@@ -40,17 +40,7 @@ func (s *Scaffolder) generateEKSConfig(output string, force bool) error {
 		return nil
 	}
 
-	content := fmt.Appendf(nil, eksDefaultConfigTemplate,
-		defaultEKSClusterName,
-		defaultEKSRegion,
-		defaultEKSVersion,
-		defaultEKSNodeGroupName,
-		defaultEKSInstanceType,
-		defaultEKSDesiredCapacity,
-		defaultEKSMinSize,
-		defaultEKSMaxSize,
-		defaultEKSAMIFamily,
-	)
+	content := RenderEKSConfig(DefaultEKSConfigParams(defaultEKSClusterName, defaultEKSRegion))
 
 	err := os.WriteFile(configPath, content, filePerm)
 	if err != nil {
@@ -67,6 +57,56 @@ func (s *Scaffolder) generateEKSConfig(output string, force bool) error {
 	s.notifyFileAction(EKSConfigFile, existed)
 
 	return nil
+}
+
+// EKSConfigParams are the values rendered into an eksctl ClusterConfig. It is the single shape used
+// both by `ksail init` scaffolding and by runtime EKS provisioning (e.g. the web UI), so the
+// generated config never drifts between the two.
+type EKSConfigParams struct {
+	ClusterName       string
+	Region            string
+	KubernetesVersion string
+	NodeGroupName     string
+	InstanceType      string
+	AMIFamily         string
+	DesiredCapacity   int32
+	MinSize           int32
+	MaxSize           int32
+}
+
+// DefaultEKSConfigParams returns the default eksctl parameters with the given cluster name and
+// region applied. An empty region falls back to the scaffolding default.
+func DefaultEKSConfigParams(clusterName, region string) EKSConfigParams {
+	if region == "" {
+		region = defaultEKSRegion
+	}
+
+	return EKSConfigParams{
+		ClusterName:       clusterName,
+		Region:            region,
+		KubernetesVersion: defaultEKSVersion,
+		NodeGroupName:     defaultEKSNodeGroupName,
+		InstanceType:      defaultEKSInstanceType,
+		AMIFamily:         defaultEKSAMIFamily,
+		DesiredCapacity:   defaultEKSDesiredCapacity,
+		MinSize:           defaultEKSMinSize,
+		MaxSize:           defaultEKSMaxSize,
+	}
+}
+
+// RenderEKSConfig renders an eksctl ClusterConfig YAML document from params.
+func RenderEKSConfig(params EKSConfigParams) []byte {
+	return fmt.Appendf(nil, eksDefaultConfigTemplate,
+		params.ClusterName,
+		params.Region,
+		params.KubernetesVersion,
+		params.NodeGroupName,
+		params.InstanceType,
+		params.DesiredCapacity,
+		params.MinSize,
+		params.MaxSize,
+		params.AMIFamily,
+	)
 }
 
 // eksDefaultConfigTemplate is the scaffolded eksctl ClusterConfig.
