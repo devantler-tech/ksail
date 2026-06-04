@@ -223,6 +223,16 @@ var errGitOpsEngineRequired = errors.New(
 		"set 'spec.gitOpsEngine: Flux|ArgoCD' in ksail.yaml",
 )
 
+// Sentinels wrapping the per-resource progress-group failures. These are the
+// verbose, multi-resource errors whose joined chain is replaced by the concise
+// diagnostics summary once the report has been printed (see
+// runReconcileWithDiagnostics). Other, more specific reconcile errors keep their
+// original actionable message.
+var (
+	errKustomizationReconcile = errors.New("reconcile kustomizations")
+	errApplicationReconcile   = errors.New("reconcile argocd applications")
+)
+
 // Shared constants for reconciliation.
 const (
 	defaultReconcileTimeout       = 5 * time.Minute

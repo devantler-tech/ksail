@@ -72,7 +72,7 @@ func EnsureArgoCDResources(
 		return fmt.Errorf("ensure argocd sops-age secret: %w", err)
 	}
 
-	mgr, err := argocdgitops.NewManagerFromKubeconfig(kubeconfigPath)
+	mgr, err := argocdgitops.NewManagerFromKubeconfig(kubeconfigPath, "")
 	if err != nil {
 		return fmt.Errorf("create argocd manager: %w", err)
 	}

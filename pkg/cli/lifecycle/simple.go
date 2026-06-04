@@ -84,22 +84,25 @@ func NewSimpleLifecycleCmd(config SimpleLifecycleConfig) *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVarP(
-		&nameFlag,
-		"name",
-		"n",
-		"",
-		"Name of the cluster to target",
-	)
-
-	cmd.Flags().VarP(
-		&providerFlag,
-		"provider",
-		"p",
-		fmt.Sprintf("Provider to use (%s)", providerFlag.ValidValues()),
-	)
+	BindNameAndProviderFlags(cmd, &nameFlag, &providerFlag)
 
 	return cmd
+}
+
+// BindNameAndProviderFlags registers the shared --name and --provider flags used
+// by cluster-targeting commands (start, stop, info, diagnose).
+func BindNameAndProviderFlags(
+	cmd *cobra.Command,
+	nameFlag *string,
+	providerFlag *v1alpha1.Provider,
+) {
+	cmd.Flags().StringVarP(nameFlag, "name", "n", "", "Name of the cluster to target")
+	cmd.Flags().VarP(
+		providerFlag,
+		"provider",
+		"p",
+		fmt.Sprintf("Provider to use (%s)", strings.Join(providerFlag.ValidValues(), ", ")),
+	)
 }
 
 // ResolvedClusterInfo contains the resolved cluster name, provider, and kubeconfig path.
