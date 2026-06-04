@@ -1,6 +1,9 @@
 //nolint:gochecknoglobals // export_test.go pattern requires global variables to expose internal functions
 package kwokprovisioner
 
+// KwokControllerImageVersionForTest exposes kwokControllerImageVersion for unit testing.
+const KwokControllerImageVersionForTest = kwokControllerImageVersion
+
 // IsTransientCreateErrorForTest exposes isTransientCreateError for unit testing.
 var IsTransientCreateErrorForTest = isTransientCreateError
 
