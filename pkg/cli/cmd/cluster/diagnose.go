@@ -15,6 +15,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/cli/lifecycle"
 	"github.com/devantler-tech/ksail/v7/pkg/client/kubectl"
 	"github.com/devantler-tech/ksail/v7/pkg/di"
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
 	clusterdetector "github.com/devantler-tech/ksail/v7/pkg/svc/detector/cluster"
@@ -309,10 +310,13 @@ func buildNoInfoError(clusterName string, provErr error) error {
 // no context matches, and ("", ErrAmbiguousCluster) when the name matches more
 // than one context. Callers should surface the ambiguity error rather than
 // treating it as "not found".
-//
-//nolint:gosec // G304: kubeconfigPath is resolved from trusted config or default.
 func resolveClusterContext(kubeconfigPath, clusterName string) (string, error) {
-	configBytes, err := os.ReadFile(kubeconfigPath)
+	canonicalPath, err := fsutil.EvalCanonicalPath(kubeconfigPath)
+	if err != nil {
+		return "", nil //nolint:nilerr // unresolvable kubeconfig path is non-fatal for info
+	}
+
+	configBytes, err := os.ReadFile(canonicalPath) //nolint:gosec // canonicalized above
 	if err != nil {
 		return "", nil //nolint:nilerr // unreadable kubeconfig is non-fatal for info
 	}

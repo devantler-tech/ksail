@@ -25,6 +25,16 @@ const (
 	messageField      = "message"
 	kustomizeAPIGroup = "kustomize.toolkit.fluxcd.io"
 	kustomizationKind = "Kustomization"
+
+	appsName              = "apps"
+	infraControllersName  = "infrastructure-controllers"
+	kustomizationsHeading = "Kustomizations"
+	helmReleasesHeading   = "HelmReleases"
+	dependencyNotReady    = "DependencyNotReady"
+	healthCheckFailed     = "HealthCheckFailed"
+	progressingReason     = "Progressing"
+	inProgressMsg         = "in progress"
+	infraDepNotReadyMsg   = "dependency 'flux-system/infrastructure' is not ready"
 )
 
 // Flux GVRs used in tests.
@@ -137,7 +147,7 @@ func TestFluxCollector_FailingKustomization(t *testing.T) {
 	require.Len(t, report.Sections, 3)
 
 	kustSection := report.Sections[0]
-	assert.Equal(t, "Failing Kustomizations", kustSection.Heading)
+	assert.Equal(t, "Kustomizations", kustSection.Heading)
 	require.Len(t, kustSection.Resources, 1)
 	assert.Equal(t, "apps", kustSection.Resources[0].Name)
 	assert.Equal(t, "HealthCheckFailed", kustSection.Resources[0].Reason)
@@ -172,7 +182,7 @@ func TestFluxCollector_FailingHelmRelease(t *testing.T) {
 	require.False(t, report.IsEmpty())
 
 	hrSection := report.Sections[1]
-	assert.Equal(t, "Failing HelmReleases", hrSection.Heading)
+	assert.Equal(t, "HelmReleases", hrSection.Heading)
 	require.Len(t, hrSection.Resources, 1)
 	assert.Equal(t, "cert-manager", hrSection.Resources[0].Name)
 	assert.Equal(t, "cert-manager", hrSection.Resources[0].Namespace)
@@ -206,7 +216,7 @@ func TestFluxCollector_FailingOCIRepository(t *testing.T) {
 	require.False(t, report.IsEmpty())
 
 	ociSection := report.Sections[2]
-	assert.Equal(t, "Failing OCIRepositories", ociSection.Heading)
+	assert.Equal(t, "OCIRepositories", ociSection.Heading)
 	require.Len(t, ociSection.Resources, 1)
 	assert.Equal(t, "OCIPullFailed", ociSection.Resources[0].Reason)
 }

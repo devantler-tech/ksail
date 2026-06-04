@@ -416,10 +416,13 @@ func stripParenthetical(input string) string {
 }
 
 // switchContext loads the kubeconfig, resolves the cluster name to a context, and sets current-context.
-//
-//nolint:gosec // G304: kubeconfigPath is resolved from trusted config or default
 func switchContext(kubeconfigPath, clusterName string) (string, error) {
-	configBytes, err := os.ReadFile(kubeconfigPath)
+	canonicalPath, err := fsutil.EvalCanonicalPath(kubeconfigPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to read kubeconfig: %w", err)
+	}
+
+	configBytes, err := os.ReadFile(canonicalPath) //nolint:gosec // canonicalized above
 	if err != nil {
 		return "", fmt.Errorf("failed to read kubeconfig: %w", err)
 	}
@@ -441,7 +444,7 @@ func switchContext(kubeconfigPath, clusterName string) (string, error) {
 		return "", fmt.Errorf("failed to serialize kubeconfig: %w", err)
 	}
 
-	err = os.WriteFile(kubeconfigPath, result, switchKubeconfigFileMode)
+	err = fsutil.AtomicWriteFile(canonicalPath, result, switchKubeconfigFileMode)
 	if err != nil {
 		return "", fmt.Errorf("failed to write kubeconfig: %w", err)
 	}

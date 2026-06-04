@@ -242,6 +242,17 @@ func ExportCheckKustomizationDependencies(f *ExportFailedKustomizations, depends
 	return f.checkDependencies(dependsOn)
 }
 
+// ExportErrDependencyBlocked exposes the cascade sentinel for testing.
+func ExportErrDependencyBlocked() error { return errDependencyBlocked }
+
+// ExportErrKustomizationReconcile exposes the kustomization-reconcile sentinel for testing.
+func ExportErrKustomizationReconcile() error { return errKustomizationReconcile }
+
+// ExportIsAggregatedReconcileError exposes isAggregatedReconcileError for testing.
+func ExportIsAggregatedReconcileError(err error) bool {
+	return isAggregatedReconcileError(err)
+}
+
 // ExportPollUntilKustomizationReady exposes pollUntilKustomizationReady for testing.
 func ExportPollUntilKustomizationReady(
 	ctx context.Context,
