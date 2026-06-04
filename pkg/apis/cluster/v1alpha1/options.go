@@ -156,7 +156,7 @@ type OptionsHetzner struct {
 	// the configured autoscaler capacity from exceeding the account/project server quota.
 	// When set to 0, KSail uses DefaultHetznerServerLimit instead of treating 0 as an explicit
 	// limit. Defaults to DefaultHetznerServerLimit (10).
-	ServerLimit int32 `default:"10" json:"serverLimit,omitzero" jsonschema:"description=Maximum total Hetzner servers allowed for this cluster (control-planes + workers + autoscaler pool capacity). Set to 0 to use the default limit of 10,minimum=0"` //nolint:lll
+	ServerLimit int32 `default:"10" json:"serverLimit,omitzero" jsonschema:"description=Maximum total Hetzner servers allowed for this cluster — the account/project quota. Validation rejects configs whose reachable total (control-planes + workers + pool capacity clamped by autoscaler.node.maxNodesTotal when set) exceeds it. Set to 0 to use the default limit of 10,minimum=0"` //nolint:lll
 	// AllowedCIDRs restricts public access to the Kubernetes API (6443) and Talos API (50000)
 	// on control-plane nodes to the specified CIDR blocks. When empty, both APIs are open
 	// to the entire internet (0.0.0.0/0 and ::/0). Applied to both the Hetzner Cloud Firewall
