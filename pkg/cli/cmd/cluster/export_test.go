@@ -23,6 +23,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
 
 // ExportShouldPushOCIArtifact exports ShouldPushOCIArtifact for testing.
@@ -445,6 +446,17 @@ func ExportClassifyRestoreError(err error, stderr, policy string) error {
 // ExportStripDistributionPrefix exports stripDistributionPrefix for testing.
 func ExportStripDistributionPrefix(contextName string) string {
 	return stripDistributionPrefix(contextName)
+}
+
+// ExportResolveContextName builds a kubeconfig containing the given context names
+// and resolves clusterName against it, exposing resolveContextName for testing.
+func ExportResolveContextName(contextNames []string, clusterName string) (string, error) {
+	config := clientcmdapi.NewConfig()
+	for _, name := range contextNames {
+		config.Contexts[name] = clientcmdapi.NewContext()
+	}
+
+	return resolveContextName(config, clusterName)
 }
 
 // ExportIsEmptyYAML exports isEmptyYAML for testing.
