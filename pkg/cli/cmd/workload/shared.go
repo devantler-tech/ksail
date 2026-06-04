@@ -205,13 +205,16 @@ func wrapWithKubeconfigResolution(cmd *cobra.Command) {
 	cmd.PersistentPreRun = nil
 }
 
-// resolveGitOpsEngine determines GitOps engine from config.
+// resolveGitOpsEngine determines the GitOps engine from config, normalizing an
+// unset ("") value to GitOpsEngineNone so callers (e.g. push's BuildOptions)
+// never see an empty engine. This matches how reconcile.go treats "" as None.
 func resolveGitOpsEngine(cfg *v1alpha1.Cluster) v1alpha1.GitOpsEngine {
-	if cfg.Spec.Cluster.GitOpsEngine != v1alpha1.GitOpsEngineNone {
-		return cfg.Spec.Cluster.GitOpsEngine
+	engine := cfg.Spec.Cluster.GitOpsEngine
+	if engine == "" || engine == v1alpha1.GitOpsEngineNone {
+		return v1alpha1.GitOpsEngineNone
 	}
 
-	return v1alpha1.GitOpsEngineNone
+	return engine
 }
 
 // Shared errors.
