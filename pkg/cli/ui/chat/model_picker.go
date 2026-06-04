@@ -44,16 +44,8 @@ func (m *Model) handleModelPickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.modelFilterActive = true
 
 		return m, nil
-	case "up", "k":
-		if m.modelPickerIndex > 0 {
-			m.modelPickerIndex--
-		}
-
-		return m, nil
-	case keyDown, "j":
-		if m.modelPickerIndex < totalItems-1 {
-			m.modelPickerIndex++
-		}
+	case "up", "k", keyDown, "j":
+		movePickerIndex(msg.String(), &m.modelPickerIndex, totalItems)
 
 		return m, nil
 	case keyEnter:

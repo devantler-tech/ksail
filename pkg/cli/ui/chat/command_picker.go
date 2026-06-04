@@ -166,16 +166,8 @@ func (m *Model) getRegisteredCommands() []copilot.CommandDefinition {
 // handleCommandPickerKey handles keyboard input when the command picker popup is active.
 func (m *Model) handleCommandPickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
-	case "up", "k":
-		if m.commandPickerIndex > 0 {
-			m.commandPickerIndex--
-		}
-
-		return m, nil
-	case keyDown, "j":
-		if m.commandPickerIndex < len(m.filteredCommands)-1 {
-			m.commandPickerIndex++
-		}
+	case "up", "k", keyDown, "j":
+		movePickerIndex(msg.String(), &m.commandPickerIndex, len(m.filteredCommands))
 
 		return m, nil
 	case keyEnter:
@@ -209,16 +201,8 @@ func (m *Model) handleCommandPickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // handleOptionPickerKey handles keyboard input when the option picker popup is active.
 func (m *Model) handleOptionPickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
-	case "up", "k":
-		if m.optionPickerIndex > 0 {
-			m.optionPickerIndex--
-		}
-
-		return m, nil
-	case keyDown, "j":
-		if m.optionPickerIndex < len(m.filteredOptions)-1 {
-			m.optionPickerIndex++
-		}
+	case "up", "k", keyDown, "j":
+		movePickerIndex(msg.String(), &m.optionPickerIndex, len(m.filteredOptions))
 
 		return m, nil
 	case keyEnter:

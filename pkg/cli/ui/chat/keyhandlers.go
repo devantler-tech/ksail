@@ -182,6 +182,22 @@ func (m *Model) handleQuit() (tea.Model, tea.Cmd) {
 	return m, tea.Quit
 }
 
+// movePickerIndex applies up/down (k/j) navigation to *index, clamping it to
+// [0, total). Picker key handlers share this single bounds-checked implementation
+// instead of repeating the same up/down arithmetic.
+func movePickerIndex(key string, index *int, total int) {
+	switch key {
+	case "up", "k":
+		if *index > 0 {
+			*index--
+		}
+	case keyDown, "j":
+		if *index < total-1 {
+			*index++
+		}
+	}
+}
+
 // handleEscape handles the escape key.
 func (m *Model) handleEscape() (tea.Model, tea.Cmd) {
 	if m.isStreaming {
