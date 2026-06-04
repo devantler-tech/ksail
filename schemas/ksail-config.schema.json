@@ -606,6 +606,20 @@
               "additionalProperties": false,
               "type": "object",
               "description": "Configuration for the workload watch command (pre-apply hooks, etc.)"
+            },
+            "validation": {
+              "properties": {
+                "skipKinds": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array",
+                  "description": "Additional Kubernetes kinds to skip during 'ksail workload validate' (Secrets are already skipped separately). Use for CRDs whose CRDs-catalog schema is stale or missing, which kubeconform would otherwise reject."
+                }
+              },
+              "additionalProperties": false,
+              "type": "object",
+              "description": "Configuration for the workload validate command (additional kinds to skip, etc.)."
             }
           },
           "additionalProperties": false,

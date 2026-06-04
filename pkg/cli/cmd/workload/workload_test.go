@@ -934,6 +934,103 @@ sops:
 	}
 }
 
+// invalidConfigMapManifest has a string `data` where a map is required, so it
+// fails kubeconform validation (a type violation, even in non-strict mode)
+// unless the ConfigMap kind is skipped.
+const invalidConfigMapManifest = `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: test-config
+data: "invalid structure"
+`
+
+//nolint:paralleltest // Cannot use t.Parallel() with t.Chdir() - they are incompatible
+func TestValidateCmdWithSkipKindsFlag(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	err := os.WriteFile(filepath.Join(tmpDir, "configmap.yaml"), []byte(invalidConfigMapManifest), 0o600)
+	if err != nil {
+		t.Fatalf("failed to write manifest: %v", err)
+	}
+
+	// Chdir so config discovery starts from an empty (config-less) directory.
+	t.Chdir(tmpDir)
+
+	// Without skipping the kind, validation fails.
+	failCmd := workload.NewValidateCmd()
+	failCmd.SetArgs([]string{"."})
+
+	var failOut bytes.Buffer
+
+	failCmd.SetOut(&failOut)
+	failCmd.SetErr(&failOut)
+
+	if execErr := failCmd.Execute(); execErr == nil {
+		t.Fatal("expected validation to fail without --skip-kinds")
+	}
+
+	// With --skip-kinds=ConfigMap the resource is skipped and validation passes.
+	passCmd := workload.NewValidateCmd()
+	passCmd.SetArgs([]string{"--skip-kinds=ConfigMap", "."})
+
+	var passOut bytes.Buffer
+
+	passCmd.SetOut(&passOut)
+	passCmd.SetErr(&passOut)
+
+	if execErr := passCmd.Execute(); execErr != nil {
+		t.Fatalf("expected validation with --skip-kinds=ConfigMap to succeed, got: %v", execErr)
+	}
+}
+
+//nolint:paralleltest // Cannot use t.Parallel() with t.Chdir() - they are incompatible
+func TestValidateCmdWithSkipKindsFromConfig(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	manifestDir := filepath.Join(tmpDir, "k8s")
+	if err := os.MkdirAll(manifestDir, 0o750); err != nil {
+		t.Fatalf("failed to create manifest dir: %v", err)
+	}
+
+	err := os.WriteFile(
+		filepath.Join(manifestDir, "configmap.yaml"),
+		[]byte(invalidConfigMapManifest),
+		0o600,
+	)
+	if err != nil {
+		t.Fatalf("failed to write manifest: %v", err)
+	}
+
+	// ksail.yaml in the working directory declares the kind to skip.
+	ksailYAML := `apiVersion: ksail.io/v1alpha1
+kind: Cluster
+metadata:
+  name: test
+spec:
+  workload:
+    validation:
+      skipKinds:
+        - ConfigMap
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "ksail.yaml"), []byte(ksailYAML), 0o600); err != nil {
+		t.Fatalf("failed to write ksail.yaml: %v", err)
+	}
+
+	t.Chdir(tmpDir)
+
+	cmd := workload.NewValidateCmd()
+	cmd.SetArgs([]string{"k8s"})
+
+	var output bytes.Buffer
+
+	cmd.SetOut(&output)
+	cmd.SetErr(&output)
+
+	if execErr := cmd.Execute(); execErr != nil {
+		t.Fatalf("expected validation with spec.workload.validation.skipKinds to succeed, got: %v", execErr)
+	}
+}
+
 //nolint:paralleltest // Cannot use t.Parallel() with t.Chdir() - they are incompatible
 func TestValidateCmdWithDefaultPath(t *testing.T) {
 	// Note: Cannot use t.Parallel() here because we use t.Chdir()
