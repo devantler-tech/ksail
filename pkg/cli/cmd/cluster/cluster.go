@@ -6674,6 +6674,13 @@ func handleUpdateRunE(
 		return err
 	}
 
+	// Fail fast when the user pinned a context the kubeconfig cannot resolve, so
+	// update never reports "No changes detected" for a cluster it could not inspect.
+	err = ensureConfiguredContextResolvable(ctx.ClusterCfg)
+	if err != nil {
+		return err
+	}
+
 	// Handle version upgrades when requested
 	updateK8s := cfgManager.Viper.GetBool("update-kubernetes")
 	updateDist := cfgManager.Viper.GetBool("update-distribution")
@@ -7211,6 +7218,36 @@ func createAndVerifyProvisioner(
 	return provisioner, nil
 }
 
+// ensureConfiguredContextResolvable fails the update when the user pinned a kube
+// context in spec.cluster.connection.context that does not exist in the resolved
+// kubeconfig. Without this guard an unresolvable pinned context lets the GitOps
+// drift probes fail silently (they only warn) while the command still reports
+// "No changes detected" — falsely reassuring, because KSail could not inspect the
+// cluster it was told to manage. When no context is pinned, KSail derives one and
+// this is a no-op.
+//
+// Call this only after the kubeconfig has been refreshed (createAndVerifyProvisioner),
+// so remote providers (e.g. Omni) that materialise the context on demand are not
+// rejected prematurely.
+func ensureConfiguredContextResolvable(clusterCfg *v1alpha1.Cluster) error {
+	contextName := strings.TrimSpace(clusterCfg.Spec.Cluster.Connection.Context)
+	if contextName == "" {
+		return nil
+	}
+
+	kubeconfigPath, err := kubeconfig.GetKubeconfigPathFromConfig(clusterCfg)
+	if err != nil {
+		return fmt.Errorf("resolve kubeconfig path: %w", err)
+	}
+
+	err = k8s.ValidateContextExists(kubeconfigPath, contextName)
+	if err != nil {
+		return fmt.Errorf("configured spec.cluster.connection.context is not usable: %w", err)
+	}
+
+	return nil
+}
+
 //nolint:gochecknoglobals // dependency injection for tests
 var isKubeconfigStaleFunc = kubeconfighook.IsKubeconfigStale
 
@@ -7302,13 +7339,7 @@ func buildComponentDetector(
 		return nil
 	}
 
-	k8sContext := ctx.ClusterCfg.Spec.Cluster.Connection.Context
-	if k8sContext == "" {
-		clusterName := resolveClusterNameFromContext(ctx)
-		k8sContext = ctx.ClusterCfg.Spec.Cluster.Distribution.ContextName(clusterName)
-	}
-
-	k8sClientset, err := k8s.NewClientset(kubeconfig, k8sContext)
+	k8sClientset, err := k8s.NewClientset(kubeconfig, resolveKubeContext(ctx))
 	if err != nil {
 		notify.Warningf(cmd.OutOrStderr(),
 			"Cannot create K8s clientset for component detection, using defaults: %v", err)
@@ -7320,6 +7351,25 @@ func buildComponentDetector(
 	dockerClient, _ := docker.GetDockerClient()
 
 	return detector.NewComponentDetector(helmClient, k8sClientset, dockerClient)
+}
+
+// resolveKubeContext returns the kube context KSail should use to query the
+// cluster it manages: the pinned spec.cluster.connection.context when set,
+// otherwise the context name derived from the distribution and cluster name.
+// The component detector and the GitOps drift probes share this resolution so
+// they all target the configured cluster rather than the ambient
+// current-context (which may point elsewhere).
+func resolveKubeContext(ctx *localregistry.Context) string {
+	// Trim to match ensureConfiguredContextResolvable: a whitespace-padded pinned
+	// context must resolve to the same value the guard validated, otherwise it
+	// would pass the guard yet break the REST clients the probes build.
+	k8sContext := strings.TrimSpace(ctx.ClusterCfg.Spec.Cluster.Connection.Context)
+	if k8sContext == "" {
+		clusterName := resolveClusterNameFromContext(ctx)
+		k8sContext = ctx.ClusterCfg.Spec.Cluster.Distribution.ContextName(clusterName)
+	}
+
+	return k8sContext
 }
 
 // computeUpdateDiff retrieves current config and computes the full diff.
@@ -7507,14 +7557,17 @@ func checkWorkloadTagDrift(
 	}
 
 	desiredTag := fluxinstaller.ResolveDesiredTag(ctx.ClusterCfg)
+	kubeContext := resolveKubeContext(ctx)
 
 	var currentTag string
 
 	switch gitOpsEngine { //nolint:exhaustive // None/empty already filtered above
 	case v1alpha1.GitOpsEngineFlux:
-		currentTag, err = fluxinstaller.GetCurrentSyncRef(cmd.Context(), kubeconfigPath)
+		currentTag, err = fluxinstaller.GetCurrentSyncRef(
+			cmd.Context(), kubeconfigPath, kubeContext)
 	case v1alpha1.GitOpsEngineArgoCD:
-		currentTag, err = getCurrentArgoCDTargetRevision(cmd.Context(), kubeconfigPath)
+		currentTag, err = getCurrentArgoCDTargetRevision(
+			cmd.Context(), kubeconfigPath, kubeContext)
 	default:
 		return
 	}
@@ -7559,7 +7612,8 @@ func checkFluxDistributionVersionDrift(
 		return
 	}
 
-	instance, err := fluxinstaller.GetCurrentFluxInstance(cmd.Context(), kubeconfigPath)
+	instance, err := fluxinstaller.GetCurrentFluxInstance(
+		cmd.Context(), kubeconfigPath, resolveKubeContext(ctx))
 	if err != nil {
 		notify.Warningf(cmd.OutOrStderr(),
 			"Cannot query current Flux distribution version for drift detection: %v", err)
@@ -7587,9 +7641,9 @@ func checkFluxDistributionVersionDrift(
 // targetRevision. Returns empty string if the Application does not exist.
 func getCurrentArgoCDTargetRevision(
 	goCtx context.Context,
-	kubeconfigPath string,
+	kubeconfigPath, kubeContext string,
 ) (string, error) {
-	mgr, err := argocdclient.NewManagerFromKubeconfig(kubeconfigPath)
+	mgr, err := argocdclient.NewManagerFromKubeconfig(kubeconfigPath, kubeContext)
 	if err != nil {
 		return "", fmt.Errorf("create argocd manager: %w", err)
 	}

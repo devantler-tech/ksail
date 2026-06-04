@@ -115,7 +115,7 @@ func SetNewFluxResourcesClient(fn func(*rest.Config) (any, error)) func() {
 }
 
 // SetLoadRESTConfig allows tests to replace loadRESTConfig with a stub.
-func SetLoadRESTConfig(fn func(string) (*rest.Config, error)) func() {
+func SetLoadRESTConfig(fn func(string, string) (*rest.Config, error)) func() {
 	original := loadRESTConfig
 	loadRESTConfig = fn
 

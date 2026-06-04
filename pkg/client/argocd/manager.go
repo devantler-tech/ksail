@@ -31,9 +31,12 @@ func NewManager(clientset kubernetes.Interface, dyn dynamic.Interface) *ManagerI
 	return &ManagerImpl{clientset: clientset, dynamic: dyn}
 }
 
-// NewManagerFromKubeconfig creates a manager by building Kubernetes clients from kubeconfig.
-func NewManagerFromKubeconfig(kubeconfig string) (*ManagerImpl, error) {
-	restConfig, err := k8s.BuildRESTConfig(kubeconfig, "")
+// NewManagerFromKubeconfig creates a manager by building Kubernetes clients from
+// the kubeconfig and the given context. An empty context falls back to the
+// kubeconfig's current-context; drift-detection callers pass the configured
+// spec.cluster.connection.context so they target the intended cluster.
+func NewManagerFromKubeconfig(kubeconfig, kubeContext string) (*ManagerImpl, error) {
+	restConfig, err := k8s.BuildRESTConfig(kubeconfig, kubeContext)
 	if err != nil {
 		return nil, fmt.Errorf("build rest config: %w", err)
 	}

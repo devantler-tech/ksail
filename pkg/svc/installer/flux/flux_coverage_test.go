@@ -128,7 +128,7 @@ func TestEnsureDefaultResources_NilClusterConfig(t *testing.T) {
 
 //nolint:paralleltest // Mutates shared test seams exposed by export_test.go.
 func TestEnsureDefaultResources_NilContext(t *testing.T) {
-	restoreREST := fluxinstaller.SetLoadRESTConfig(func(_ string) (*rest.Config, error) {
+	restoreREST := fluxinstaller.SetLoadRESTConfig(func(_, _ string) (*rest.Config, error) {
 		return &rest.Config{Host: "https://127.0.0.1:6443"}, nil
 	})
 	defer restoreREST()
@@ -147,7 +147,7 @@ func TestEnsureDefaultResources_NilContext(t *testing.T) {
 
 //nolint:paralleltest // Mutates shared test seams exposed by export_test.go.
 func TestEnsureDefaultResources_ArtifactNotPushed(t *testing.T) {
-	restoreREST := fluxinstaller.SetLoadRESTConfig(func(_ string) (*rest.Config, error) {
+	restoreREST := fluxinstaller.SetLoadRESTConfig(func(_, _ string) (*rest.Config, error) {
 		return &rest.Config{Host: "https://127.0.0.1:6443"}, nil
 	})
 	defer restoreREST()
@@ -164,7 +164,7 @@ func TestEnsureDefaultResources_ArtifactNotPushed(t *testing.T) {
 
 //nolint:paralleltest // Mutates shared test seams exposed by export_test.go.
 func TestEnsureDefaultResources_LoadRESTConfigError(t *testing.T) {
-	restoreREST := fluxinstaller.SetLoadRESTConfig(func(_ string) (*rest.Config, error) {
+	restoreREST := fluxinstaller.SetLoadRESTConfig(func(_, _ string) (*rest.Config, error) {
 		return nil, errors.New("config error")
 	})
 	defer restoreREST()
@@ -193,7 +193,7 @@ func TestSetupInstance_NilClusterConfig(t *testing.T) {
 
 //nolint:paralleltest // Mutates shared test seams exposed by export_test.go.
 func TestSetupInstance_NilContext(t *testing.T) {
-	restoreREST := fluxinstaller.SetLoadRESTConfig(func(_ string) (*rest.Config, error) {
+	restoreREST := fluxinstaller.SetLoadRESTConfig(func(_, _ string) (*rest.Config, error) {
 		return &rest.Config{Host: "https://127.0.0.1:6443"}, nil
 	})
 	defer restoreREST()
@@ -210,7 +210,7 @@ func TestSetupInstance_NilContext(t *testing.T) {
 
 //nolint:paralleltest // Mutates shared test seams exposed by export_test.go.
 func TestSetupInstance_LoadRESTConfigError(t *testing.T) {
-	restoreREST := fluxinstaller.SetLoadRESTConfig(func(_ string) (*rest.Config, error) {
+	restoreREST := fluxinstaller.SetLoadRESTConfig(func(_, _ string) (*rest.Config, error) {
 		return nil, errors.New("config error")
 	})
 	defer restoreREST()
@@ -229,7 +229,7 @@ func TestSetupInstance_LoadRESTConfigError(t *testing.T) {
 
 //nolint:paralleltest // Mutates shared test seams exposed by export_test.go.
 func TestWaitForFluxReady_LoadRESTConfigError(t *testing.T) {
-	restoreREST := fluxinstaller.SetLoadRESTConfig(func(_ string) (*rest.Config, error) {
+	restoreREST := fluxinstaller.SetLoadRESTConfig(func(_, _ string) (*rest.Config, error) {
 		return nil, errors.New("no config")
 	})
 	defer restoreREST()
@@ -241,7 +241,7 @@ func TestWaitForFluxReady_LoadRESTConfigError(t *testing.T) {
 
 //nolint:paralleltest // Mutates shared test seams exposed by export_test.go.
 func TestWaitForFluxReady_NilContext(t *testing.T) {
-	restoreREST := fluxinstaller.SetLoadRESTConfig(func(_ string) (*rest.Config, error) {
+	restoreREST := fluxinstaller.SetLoadRESTConfig(func(_, _ string) (*rest.Config, error) {
 		return nil, errors.New("no config")
 	})
 	defer restoreREST()
