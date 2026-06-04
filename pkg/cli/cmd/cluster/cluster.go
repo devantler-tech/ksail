@@ -3192,7 +3192,7 @@ func buildNoInfoError(clusterName string, provErr error) error {
 // than one context. Callers should surface the ambiguity error rather than
 // treating it as "not found".
 //
-//nolint:gosec // G304: kubeconfigPath is resolved from trusted config or default.
+
 func resolveClusterContext(kubeconfigPath, clusterName string) (string, error) {
 	canonicalPath, err := fsutil.EvalCanonicalPath(kubeconfigPath)
 	if err != nil {
@@ -6072,7 +6072,7 @@ func stripParenthetical(input string) string {
 
 // switchContext loads the kubeconfig, resolves the cluster name to a context, and sets current-context.
 //
-//nolint:gosec // G304: kubeconfigPath is resolved from trusted config or default
+
 func switchContext(kubeconfigPath, clusterName string) (string, error) {
 	canonicalPath, err := fsutil.EvalCanonicalPath(kubeconfigPath)
 	if err != nil {
