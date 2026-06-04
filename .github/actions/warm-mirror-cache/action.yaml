@@ -147,6 +147,18 @@ runs:
         echo "images-hash=$IMAGES_HASH" >> "$GITHUB_OUTPUT"
         echo "🔑 Images hash: $IMAGES_HASH"
 
+        # Compute a separate hash of just the KWOK control plane image refs so the
+        # KWOK pre-load tar can be cached under its own key, independent of the four
+        # mirror volumes. A GitHub Actions cache entry is immutable once saved, so a
+        # KWOK tar that failed to save (e.g. a transient registry.k8s.io error) could
+        # never be repaired in place under the shared mirror-cache key — every later
+        # KWOK leg then pulled live and stalled. With its own key the tar self-heals:
+        # it is only ever saved when produced successfully, so an absent entry is
+        # retried on the next warm run. See issues #4058 / #4069 / #4495.
+        KWOK_IMAGES_HASH=$(grep '^FROM ' pkg/svc/provisioner/cluster/kwok/Dockerfile.controlplane | sed 's/^FROM //' | sort -u | sha256sum | cut -c1-12)
+        echo "kwok-images-hash=$KWOK_IMAGES_HASH" >> "$GITHUB_OUTPUT"
+        echo "🔑 KWOK images hash: $KWOK_IMAGES_HASH"
+
         # Compute a separate hash of just the distribution node image refs (k3s,
         # kind, talos) so the dist-node pre-load tars can be cached under their own
         # key, independent of the four mirror volumes. A GitHub Actions cache entry
@@ -180,6 +192,7 @@ runs:
         RUNNER_OS: ${{ runner.os }}
         RUNNER_ARCH: ${{ runner.arch }}
         IMAGES_HASH: ${{ steps.extract-images.outputs.images-hash }}
+        KWOK_IMAGES_HASH: ${{ steps.extract-images.outputs.kwok-images-hash }}
         DIST_NODE_IMAGES_HASH: ${{ steps.extract-images.outputs.dist-node-images-hash }}
       run: |
         # Use hash of extracted image list to invalidate when images change
@@ -187,6 +200,13 @@ runs:
         CACHE_KEY="mirror-cache-${CACHE_VERSION}-${IMAGES_HASH}-${RUNNER_OS}-${RUNNER_ARCH}"
         echo "cache-key=$CACHE_KEY" >> "$GITHUB_OUTPUT"
         echo "📦 Cache key: $CACHE_KEY"
+
+        # The KWOK control plane pre-load tar is cached under its own key (keyed on
+        # just the KWOK image refs) so it is (re)generated independently of the four
+        # mirror volumes.
+        KWOK_CACHE_KEY="kwok-controlplane-${CACHE_VERSION}-${KWOK_IMAGES_HASH}-${RUNNER_OS}-${RUNNER_ARCH}"
+        echo "kwok-cache-key=$KWOK_CACHE_KEY" >> "$GITHUB_OUTPUT"
+        echo "📦 KWOK cache key: $KWOK_CACHE_KEY"
 
         # The distribution node pre-load tars are cached under their own key (keyed
         # on just the k3s/kind/talos image refs) so they are (re)generated
@@ -203,6 +223,16 @@ runs:
         key: ${{ steps.generate-key.outputs.cache-key }}
         restore-keys: |
           mirror-cache-${{ inputs.cache-version }}-
+
+    - name: 📥 Restore KWOK control plane cache
+      id: restore-kwok-cache
+      uses: actions/cache/restore@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+      with:
+        path: /tmp/kwok-cache
+        # Exact match only (no restore-keys): a KWOK tar from a different tag set is
+        # useless — kwokctl's "docker inspect" would miss the new tags and pull live
+        # anyway — so a miss must trigger a fresh, correctly-tagged save below.
+        key: ${{ steps.generate-key.outputs.kwok-cache-key }}
 
     - name: 📥 Restore distribution node cache
       id: restore-dist-node-cache
@@ -223,14 +253,14 @@ runs:
         if [ -d "/tmp/mirror-cache" ] && [ -n "$(ls -A /tmp/mirror-cache 2>/dev/null)" ]; then
           echo "✅ Cache restored, checking completeness..."
           # Check for all 4 mirror volumes (using KSail's naming convention).
-          # kwok-control-plane.tar is optional: its creation is non-fatal in the
-          # warm step, so its absence must not invalidate an otherwise complete cache.
+          # The KWOK control plane tar is cached under its own key (see the KWOK
+          # cache steps), so it is intentionally not part of this completeness check.
           if [ -f "/tmp/mirror-cache/docker.io.tar" ] && \
              [ -f "/tmp/mirror-cache/ghcr.io.tar" ] && \
              [ -f "/tmp/mirror-cache/quay.io.tar" ] && \
              [ -f "/tmp/mirror-cache/registry.k8s.io.tar" ]; then
             echo "complete=true" >> "$GITHUB_OUTPUT"
-            echo "✅ Cache complete: 4 mirror volumes present (kwok-control-plane.tar is optional)"
+            echo "✅ Cache complete: 4 mirror volumes present"
           else
             echo "complete=false" >> "$GITHUB_OUTPUT"
             echo "⚠️ Cache incomplete, will re-warm"
@@ -405,33 +435,51 @@ runs:
 
     - name: 🐳 Save KWOK control plane images
       id: save-kwok-images
-      if: steps.check-cache.outputs.complete != 'true'
+      # Gated on the KWOK cache (not the mirror-volume cache): regenerate the tar
+      # whenever its own cache is missing, regardless of mirror-volume state. This
+      # is the targeted re-save path — it never re-pulls or re-exports the four
+      # mirror volumes just because the KWOK tar is missing.
+      if: steps.restore-kwok-cache.outputs.cache-hit != 'true'
       shell: bash
       run: |
-        echo "🐳 Saving KWOK control plane images for Docker pre-loading on test runners..."
+        echo "🐳 Preparing KWOK control plane images for Docker pre-loading on test runners..."
+        mkdir -p /tmp/kwok-cache
 
-        # KWOK images were pulled through registry.k8s.io-mirror as localhost:5003/...
-        # Retag them to canonical registry.k8s.io/... so kwokctl's "docker inspect" finds them.
-        # kwokctl's EnsureImage() checks "docker inspect <image>" first; if found, no pull occurs.
+        # Ensure each control plane image is present locally under its canonical
+        # registry.k8s.io reference so kwokctl's EnsureImage() ("docker inspect
+        # <image>" first; skip the pull if found) hits. During a full mirror warm the
+        # images were already pulled as localhost:5003/... and only need retagging;
+        # on a targeted refresh (mirror cache complete but KWOK cache missing) the
+        # mirror is not running, so fall back to a direct pull of just these few
+        # images. Either path avoids the parallel KWOK matrix hammering
+        # registry.k8s.io. See issue #4058.
         while IFS= read -r image; do
-          prefix_stripped="${image#registry.k8s.io/}"
-          if [ "$prefix_stripped" != "$image" ]; then
-            mirror_ref="localhost:5003/$prefix_stripped"
-            docker tag "$mirror_ref" "$image" 2>/dev/null && echo "  ✅ Tagged: $image" || echo "  ⚠️ Failed to tag: $image"
+          [ -z "$image" ] && continue
+          if docker image inspect "$image" >/dev/null 2>&1; then
+            continue
           fi
+          mirror_ref="localhost:5003/${image#registry.k8s.io/}"
+          if docker image inspect "$mirror_ref" >/dev/null 2>&1; then
+            docker tag "$mirror_ref" "$image" && echo "  ✅ Tagged from mirror: $image" && continue
+          fi
+          echo "  ⬇️ Pulling directly: $image"
+          docker pull "$image" --quiet || echo "  ⚠️ Failed to obtain: $image"
         done < <(grep '^FROM ' pkg/svc/provisioner/cluster/kwok/Dockerfile.controlplane | sed 's/^FROM //')
 
-        # Save all KWOK control plane images as a single tar for docker load on test runners.
-        # Non-fatal: if any image wasn't tagged (e.g. mirror pull failed), skip saving rather than
-        # aborting the whole cache step — kwokctl will pull missing images directly at test time.
+        # Save all KWOK control plane images as a single tar for docker load on test
+        # runners. Non-fatal: if any image is missing, skip the save (and the cache
+        # save below) rather than persisting a partial tar — kwokctl pulls the missing
+        # images directly at test time, and the next warm run retries the save.
         KWOK_IMAGES=$(grep '^FROM ' pkg/svc/provisioner/cluster/kwok/Dockerfile.controlplane | awk '{print $2}' | tr '\n' ' ')
         # shellcheck disable=SC2086
-        if docker save $KWOK_IMAGES -o /tmp/mirror-cache/kwok-control-plane.tar 2>/dev/null; then
-          SIZE=$(du -h /tmp/mirror-cache/kwok-control-plane.tar | cut -f1)
+        if docker save $KWOK_IMAGES -o /tmp/kwok-cache/kwok-control-plane.tar 2>/dev/null; then
+          SIZE=$(du -h /tmp/kwok-cache/kwok-control-plane.tar | cut -f1)
+          echo "saved=true" >> "$GITHUB_OUTPUT"
           echo "✅ KWOK control plane images saved: $SIZE"
         else
+          echo "saved=false" >> "$GITHUB_OUTPUT"
           echo "⚠️ Failed to save KWOK control plane images — they will be pulled by kwokctl at test time"
-          rm -f /tmp/mirror-cache/kwok-control-plane.tar
+          rm -f /tmp/kwok-cache/kwok-control-plane.tar
         fi
 
     - name: 🐳 Save distribution node images
@@ -572,8 +620,8 @@ runs:
         # Save all three tars, counting successes. The dist-node cache is only saved
         # (below) when ALL three were produced — a cache entry is immutable once
         # written, so persisting a partial set would defeat the self-heal: the
-        # missing tar could never be repaired under this key. A short count short of
-        # three leaves the key absent so the next warm run retries from scratch.
+        # missing tar could never be repaired under this key. A count short of three
+        # leaves the key absent so the next warm run retries from scratch.
         SAVED_COUNT=0
         save_image "pkg/fsutil/configmanager/k3d/Dockerfile"   "k3s-node"   "K3s"   && SAVED_COUNT=$((SAVED_COUNT + 1))
         save_image "pkg/fsutil/configmanager/kind/Dockerfile"  "kind-node"  "Kind"  && SAVED_COUNT=$((SAVED_COUNT + 1))
@@ -617,14 +665,6 @@ runs:
           echo "✅ All 4 required mirror cache volumes exported successfully"
         fi
 
-        # Verify KWOK control plane tar (non-fatal: kwokctl falls back to live pull if missing)
-        if [ -f "/tmp/mirror-cache/kwok-control-plane.tar" ]; then
-          SIZE=$(du -h "/tmp/mirror-cache/kwok-control-plane.tar" | cut -f1)
-          echo "  ✅ kwok-control-plane.tar ($SIZE)"
-        else
-          echo "  ⚠️ kwok-control-plane.tar - MISSING (KWOK tests will pull from registry.k8s.io)"
-        fi
-
     - name: 🧹 Cleanup containers
       if: always() && steps.check-cache.outputs.complete != 'true'
       shell: bash
@@ -638,6 +678,17 @@ runs:
       with:
         path: /tmp/mirror-cache
         key: ${{ steps.generate-key.outputs.cache-key }}
+
+    - name: 💾 Save KWOK control plane cache
+      # Only save when the tar was actually produced (saved == 'true'). A cache
+      # entry is immutable once written, so persisting a partial/empty tar here
+      # would defeat the self-heal: skipping the save leaves the key absent and the
+      # next warm run retries it.
+      if: steps.restore-kwok-cache.outputs.cache-hit != 'true' && steps.save-kwok-images.outputs.saved == 'true'
+      uses: actions/cache/save@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+      with:
+        path: /tmp/kwok-cache
+        key: ${{ steps.generate-key.outputs.kwok-cache-key }}
 
     - name: 💾 Save distribution node cache
       # Only save when all three tars were produced (saved == 'true'). A cache entry

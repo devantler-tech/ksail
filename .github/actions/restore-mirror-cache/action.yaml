@@ -82,6 +82,13 @@ runs:
         echo "images-hash=$IMAGES_HASH" >> "$GITHUB_OUTPUT"
         echo "🔑 Images hash: $IMAGES_HASH"
 
+        # Compute the KWOK control plane image hash (must match warm-mirror-cache
+        # exactly). The KWOK pre-load tar lives in its own cache entry so it can be
+        # regenerated independently of the four mirror volumes.
+        KWOK_IMAGES_HASH=$(grep '^FROM ' pkg/svc/provisioner/cluster/kwok/Dockerfile.controlplane | sed 's/^FROM //' | sort -u | sha256sum | cut -c1-12)
+        echo "kwok-images-hash=$KWOK_IMAGES_HASH" >> "$GITHUB_OUTPUT"
+        echo "🔑 KWOK images hash: $KWOK_IMAGES_HASH"
+
         # Compute the distribution node image hash (must match warm-mirror-cache
         # exactly). The dist-node pre-load tars live in their own cache entry so they
         # can be regenerated independently of the four mirror volumes.
@@ -101,10 +108,15 @@ runs:
         RUNNER_OS: ${{ runner.os }}
         RUNNER_ARCH: ${{ runner.arch }}
         IMAGES_HASH: ${{ steps.extract-images.outputs.images-hash }}
+        KWOK_IMAGES_HASH: ${{ steps.extract-images.outputs.kwok-images-hash }}
         DIST_NODE_IMAGES_HASH: ${{ steps.extract-images.outputs.dist-node-images-hash }}
       run: |
         CACHE_KEY="mirror-cache-${CACHE_VERSION}-${IMAGES_HASH}-${RUNNER_OS}-${RUNNER_ARCH}"
         echo "cache-key=$CACHE_KEY" >> "$GITHUB_OUTPUT"
+
+        # Must match warm-mirror-cache's KWOK cache key exactly.
+        KWOK_CACHE_KEY="kwok-controlplane-${CACHE_VERSION}-${KWOK_IMAGES_HASH}-${RUNNER_OS}-${RUNNER_ARCH}"
+        echo "kwok-cache-key=$KWOK_CACHE_KEY" >> "$GITHUB_OUTPUT"
 
         # Must match warm-mirror-cache's dist-node cache key exactly.
         DIST_NODE_CACHE_KEY="dist-node-${CACHE_VERSION}-${DIST_NODE_IMAGES_HASH}-${RUNNER_OS}-${RUNNER_ARCH}"
@@ -118,6 +130,16 @@ runs:
         key: ${{ steps.generate-key.outputs.cache-key }}
         restore-keys: |
           mirror-cache-${{ inputs.cache-version }}-
+
+    - name: 📥 Restore KWOK control plane cache
+      id: restore-kwok-cache
+      uses: actions/cache/restore@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+      with:
+        path: /tmp/kwok-cache
+        # Exact match only (no restore-keys): a tar from a different tag set would
+        # miss kwokctl's "docker inspect" anyway, so a miss simply falls back to a
+        # live pull (with the provisioner's create retry) rather than a stale load.
+        key: ${{ steps.generate-key.outputs.kwok-cache-key }}
 
     - name: 📥 Restore distribution node cache
       id: restore-dist-node-cache
@@ -181,16 +203,18 @@ runs:
         fi
 
     - name: 🐳 Load KWOK control plane images
-      if: steps.restore-cache.outputs.cache-hit == 'true'
+      if: steps.restore-kwok-cache.outputs.cache-hit == 'true'
       shell: bash
       run: |
         # Pre-load KWOK control plane images into Docker's local cache.
         # kwokctl's EnsureImage() calls "docker inspect <image>" before pulling;
         # if the image already exists locally, the pull is skipped entirely.
         # This avoids Google Artifact Registry rate limits when many KWOK test
-        # jobs run in parallel. See issue #4058 for context.
-        if [ -f "/tmp/mirror-cache/kwok-control-plane.tar" ]; then
-          docker load -i /tmp/mirror-cache/kwok-control-plane.tar
+        # jobs run in parallel. See issue #4058 for context. The tar is cached
+        # under its own key (see warm-mirror-cache) so it is decoupled from the
+        # four mirror volumes.
+        if [ -f "/tmp/kwok-cache/kwok-control-plane.tar" ]; then
+          docker load -i /tmp/kwok-cache/kwok-control-plane.tar
           echo "✅ KWOK control plane images pre-loaded (kwokctl will skip registry.k8s.io pulls)"
         else
           echo "⚠️ KWOK control plane tar not found in cache. KWOK tests will pull from registry.k8s.io."
