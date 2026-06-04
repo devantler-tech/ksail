@@ -57,12 +57,14 @@ var (
 	fluxAPIAvailabilityPollInterval = 2 * time.Second
 )
 
-// loadRESTConfig creates a REST config from a kubeconfig path.
+// loadRESTConfig builds a REST config from a kubeconfig path and optional
+// context. An empty context falls back to the kubeconfig's current-context;
+// drift-detection callers pass the configured spec.cluster.connection.context
+// so they query the intended cluster rather than the ambient current-context.
+// It is a package var so tests can stub it via SetLoadRESTConfig.
 //
 //nolint:gochecknoglobals // Allows mocking REST config for tests
-var loadRESTConfig = func(kubeconfig string) (*rest.Config, error) {
-	return k8s.BuildRESTConfig(kubeconfig, "")
-}
+var loadRESTConfig = k8s.BuildRESTConfig
 
 // setupParams holds the components needed for Flux setup operations.
 // Context is passed separately to setupFluxCore to avoid embedding it in a struct.
@@ -145,7 +147,7 @@ func EnsureDefaultResources(
 		ctx = context.Background()
 	}
 
-	restConfig, err := loadRESTConfig(kubeconfig)
+	restConfig, err := loadRESTConfig(kubeconfig, "")
 	if err != nil {
 		return err
 	}
@@ -202,7 +204,7 @@ func SetupInstance(
 		ctx = context.Background()
 	}
 
-	restConfig, err := loadRESTConfig(kubeconfig)
+	restConfig, err := loadRESTConfig(kubeconfig, "")
 	if err != nil {
 		return err
 	}
@@ -227,7 +229,7 @@ func WaitForFluxReady(
 		ctx = context.Background()
 	}
 
-	restConfig, err := loadRESTConfig(kubeconfig)
+	restConfig, err := loadRESTConfig(kubeconfig, "")
 	if err != nil {
 		return err
 	}
@@ -254,12 +256,15 @@ func WaitForFluxReady(
 // distribution.version for drift detection on cluster update).
 //
 //nolint:contextcheck // nil-guard consistent with SetupInstance/WaitForFluxReady
-func GetCurrentFluxInstance(ctx context.Context, kubeconfig string) (*FluxInstance, error) {
+func GetCurrentFluxInstance(
+	ctx context.Context,
+	kubeconfig, kubeContext string,
+) (*FluxInstance, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 
-	restConfig, err := loadRESTConfig(kubeconfig)
+	restConfig, err := loadRESTConfig(kubeconfig, kubeContext)
 	if err != nil {
 		return nil, fmt.Errorf("build REST config: %w", err)
 	}
@@ -290,8 +295,8 @@ func GetCurrentFluxInstance(ctx context.Context, kubeconfig string) (*FluxInstan
 // GetCurrentSyncRef queries the running FluxInstance in the cluster and returns
 // its spec.sync.ref value. Returns empty string if the FluxInstance does not exist
 // or has no sync configuration.
-func GetCurrentSyncRef(ctx context.Context, kubeconfig string) (string, error) {
-	instance, err := GetCurrentFluxInstance(ctx, kubeconfig)
+func GetCurrentSyncRef(ctx context.Context, kubeconfig, kubeContext string) (string, error) {
+	instance, err := GetCurrentFluxInstance(ctx, kubeconfig, kubeContext)
 	if err != nil {
 		return "", err
 	}
