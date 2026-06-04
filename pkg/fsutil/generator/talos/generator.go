@@ -307,10 +307,13 @@ func (g *Generator) generateConditionalPatches(
 		}},
 		// Kubelet cert rotation enables secure metrics-server TLS; the csr-approver
 		// (installed via inlineManifests during bootstrap) signs the rotated certs.
+		// Both patches share the one condition and are emitted together (rotation
+		// first, then approver) so the pair can never drift out of sync.
 		{model.EnableKubeletCertRotation, func() error {
-			return g.generateKubeletCertRotationPatch(rootPath, force)
-		}},
-		{model.EnableKubeletCertRotation, func() error {
+			if err := g.generateKubeletCertRotationPatch(rootPath, force); err != nil {
+				return err
+			}
+
 			return g.generateKubeletCSRApproverPatch(rootPath, force)
 		}},
 		// Cluster-name patch when a custom cluster name is specified.
