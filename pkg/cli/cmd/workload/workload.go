@@ -3276,7 +3276,8 @@ func resolveValidatePath(cmd *cobra.Command, args []string) (string, error) {
 func configuredSkipKinds(cmd *cobra.Command) []string {
 	var configFile string
 
-	if cfgPath, err := flags.GetConfigPath(cmd); err == nil {
+	cfgPath, pathErr := flags.GetConfigPath(cmd)
+	if pathErr == nil {
 		configFile = cfgPath
 	}
 
