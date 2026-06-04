@@ -18,20 +18,22 @@ import (
 const diagnosticTimeout = 15 * time.Second
 
 // Diagnose collects and writes a targeted diagnostic report for a failed
-// GitOps reconciliation. It is best-effort: if client creation or collection
-// fails, the error is silently swallowed to avoid masking the original
-// reconciliation error.
+// GitOps reconciliation, returning the collected report (nil when none could be
+// gathered). It is best-effort: if client creation or collection fails, the
+// error is silently swallowed to avoid masking the original reconciliation
+// error. Callers may use the returned report's Summary to produce a concise
+// command error instead of dumping the full reconciliation error chain.
 func Diagnose(
 	ctx context.Context,
 	writer io.Writer,
 	kubeconfigPath string,
 	engine v1alpha1.GitOpsEngine,
-) {
+) *Report {
 	// Guard against unsupported engines before doing any filesystem or client
 	// work — diagnostics are only meaningful for Flux and ArgoCD clusters.
 	// This makes unsupported values a cheap no-op.
 	if engine != v1alpha1.GitOpsEngineFlux && engine != v1alpha1.GitOpsEngineArgoCD {
-		return
+		return nil
 	}
 
 	diagCtx, cancel := context.WithTimeout(ctx, diagnosticTimeout)
@@ -39,7 +41,7 @@ func Diagnose(
 
 	dynClient, clientset, err := buildDiagClients(kubeconfigPath)
 	if err != nil {
-		return
+		return nil
 	}
 
 	var report *Report
@@ -58,6 +60,8 @@ func Diagnose(
 	if report != nil {
 		report.Write(writer)
 	}
+
+	return report
 }
 
 // buildDiagClients creates the Kubernetes clients needed for diagnostics.
