@@ -18,6 +18,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 	corev1client "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/util/retry"
 )
@@ -264,6 +265,36 @@ const (
 	hcloudSecretNamespace = "kube-system"
 )
 
+// newSecretKubeclient builds a Kubernetes clientset from the provisioner's
+// configured kubeconfig for managing Hetzner-related secrets. purpose is woven
+// into the error messages to identify the calling context.
+func (p *Provisioner) newSecretKubeclient(purpose string) (*kubernetes.Clientset, error) {
+	if p.options.KubeconfigPath == "" {
+		return nil, fmt.Errorf(
+			"creating kubeclient for %s: %w",
+			purpose,
+			k8s.ErrKubeconfigPathEmpty,
+		)
+	}
+
+	expandedPath, err := fsutil.ExpandHomePath(p.options.KubeconfigPath)
+	if err != nil {
+		return nil, fmt.Errorf("expanding kubeconfig path for %s: %w", purpose, err)
+	}
+
+	kubeconfigPath, err := fsutil.EvalCanonicalPath(expandedPath)
+	if err != nil {
+		return nil, fmt.Errorf("canonicalizing kubeconfig path for %s: %w", purpose, err)
+	}
+
+	kubeclient, err := k8s.NewClientset(kubeconfigPath, p.options.KubeconfigContext)
+	if err != nil {
+		return nil, fmt.Errorf("creating kubeclient for %s: %w", purpose, err)
+	}
+
+	return kubeclient, nil
+}
+
 // ensureHcloudSecret creates or updates the "hcloud" Secret in kube-system with
 // the API token and network name. The cluster autoscaler Helm chart reads both
 // keys from this secret. Normally created by hcloud-ccm during cluster create,
@@ -285,23 +316,9 @@ func (p *Provisioner) ensureHcloudSecret(ctx context.Context, clusterName string
 		networkName = clusterName + hetzner.NetworkSuffix
 	}
 
-	if p.options.KubeconfigPath == "" {
-		return fmt.Errorf("creating kubeclient for hcloud secret: %w", k8s.ErrKubeconfigPathEmpty)
-	}
-
-	expandedPath, err := fsutil.ExpandHomePath(p.options.KubeconfigPath)
+	kubeclient, err := p.newSecretKubeclient("hcloud secret")
 	if err != nil {
-		return fmt.Errorf("expanding kubeconfig path for hcloud secret: %w", err)
-	}
-
-	kubeconfigPath, err := fsutil.EvalCanonicalPath(expandedPath)
-	if err != nil {
-		return fmt.Errorf("canonicalizing kubeconfig path for hcloud secret: %w", err)
-	}
-
-	kubeclient, err := k8s.NewClientset(kubeconfigPath, p.options.KubeconfigContext)
-	if err != nil {
-		return fmt.Errorf("creating kubeclient for hcloud secret: %w", err)
+		return err
 	}
 
 	desiredData := map[string][]byte{
@@ -409,26 +426,9 @@ func (p *Provisioner) ensureAutoscalerSecret(
 
 	_, _ = fmt.Fprintf(p.logWriter, "Applying cluster-autoscaler config secret...\n")
 
-	if p.options.KubeconfigPath == "" {
-		return fmt.Errorf(
-			"creating kubeclient for autoscaler secret: %w",
-			k8s.ErrKubeconfigPathEmpty,
-		)
-	}
-
-	expandedPath, err := fsutil.ExpandHomePath(p.options.KubeconfigPath)
+	kubeclient, err := p.newSecretKubeclient("autoscaler secret")
 	if err != nil {
-		return fmt.Errorf("expanding kubeconfig path for autoscaler secret: %w", err)
-	}
-
-	kubeconfigPath, err := fsutil.EvalCanonicalPath(expandedPath)
-	if err != nil {
-		return fmt.Errorf("canonicalizing kubeconfig path for autoscaler secret: %w", err)
-	}
-
-	kubeclient, err := k8s.NewClientset(kubeconfigPath, p.options.KubeconfigContext)
-	if err != nil {
-		return fmt.Errorf("creating kubeclient for autoscaler secret: %w", err)
+		return err
 	}
 
 	workerConfigYAML, err := GenerateAutoscalerWorkerConfig(configBundle.Worker())
