@@ -525,8 +525,8 @@ github.com/loft-sh/image v0.0.0-20250818103249-5e7d53b59343 h1:ADOGhVZ995JR3mqdL
 github.com/loft-sh/image v0.0.0-20250818103249-5e7d53b59343/go.mod h1:niVPRwWFUSA8FihY9e5hGAp5IbKmbCdckGxJGSTKTUs=
 github.com/loft-sh/utils v0.0.29 h1:P/MObccXToAZy2QoJSQDJ+OJx1qHitpFHEVj3QBSNJs=
 github.com/loft-sh/utils v0.0.29/go.mod h1:9hlX9cGpWHg3mNi/oBlv3X4ePGDMK66k8MbOZGFMDTI=
-github.com/loft-sh/vcluster v0.34.0 h1:LSqWssnvvm7zDl8kr28aQaiTnRziHg3WdS8bmbuVxHI=
-github.com/loft-sh/vcluster v0.34.0/go.mod h1:cjV3WXviimeG4XT3PMA3fi+2jNbyaBB4iJeDd8jbHVM=
+github.com/loft-sh/vcluster v0.34.1 h1:LENQeaokG+gRUf7Hppstkdj+i0m7cQFUph84TPOtC1E=
+github.com/loft-sh/vcluster v0.34.1/go.mod h1:cjV3WXviimeG4XT3PMA3fi+2jNbyaBB4iJeDd8jbHVM=
 github.com/magefile/mage v1.15.0 h1:BvGheCMAsG3bWUDbZ8AyXXpCNwU9u5CB6sM+HNb9HYg=
 github.com/magefile/mage v1.15.0/go.mod h1:z5UZb/iS3GoOSn0JgWuiw7dxlurVYTu+/jHXqQg881A=
 github.com/maruel/natural v1.1.1 h1:Hja7XhhmvEFhcByqDoHz9QZbkWey+COd9xWfCfn1ioo=
