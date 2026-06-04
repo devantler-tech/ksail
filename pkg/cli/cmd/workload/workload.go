@@ -3283,7 +3283,14 @@ func configuredSkipKinds(cmd *cobra.Command) []string {
 	cfgManager := configmanager.NewConfigManager(io.Discard, configFile)
 
 	cfg, err := cfgManager.Load(
-		configmanagerinterface.LoadOptions{Silent: true, SkipValidation: true},
+		// SkipDistributionConfig avoids loading distribution-specific config
+		// (e.g. Talos PKI generation) on every validate run; only the workload
+		// config is read here.
+		configmanagerinterface.LoadOptions{
+			Silent:                 true,
+			SkipValidation:         true,
+			SkipDistributionConfig: true,
+		},
 	)
 	if err != nil || !cfgManager.IsConfigFileFound() {
 		return nil

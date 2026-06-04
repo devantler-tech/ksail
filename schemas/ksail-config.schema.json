@@ -650,7 +650,7 @@
                     "type": "string"
                   },
                   "type": "array",
-                  "description": "Additional Kubernetes kinds to skip during 'ksail workload validate' (Secrets are already skipped separately). Use for CRDs whose CRDs-catalog schema is stale or missing, which kubeconform would otherwise reject."
+                  "description": "Additional Kubernetes kinds to skip during 'ksail workload validate' (Secrets are skipped by default via --skip-secrets). Use for CRDs whose CRDs-catalog schema is stale or missing, which kubeconform would otherwise reject."
                 }
               },
               "additionalProperties": false,

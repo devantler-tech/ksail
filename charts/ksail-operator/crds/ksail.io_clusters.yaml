@@ -802,9 +802,9 @@ spec:
                       skipKinds:
                         description: |-
                           SkipKinds lists additional Kubernetes kinds to skip during validation.
-                          Kubernetes Secrets are always skipped separately (see the --skip-secrets flag);
-                          this is for skipping CRDs whose schema in the CRDs-catalog is stale or missing,
-                          which kubeconform would otherwise reject (e.g. valid newer fields flagged as
+                          Kubernetes Secrets are skipped by default via --skip-secrets; this is for
+                          skipping CRDs whose schema in the CRDs-catalog is stale or missing, which
+                          kubeconform would otherwise reject (e.g. valid newer fields flagged as
                           "additional properties not allowed").
                         items:
                           type: string

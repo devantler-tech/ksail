@@ -144,11 +144,11 @@ type WorkloadSpec struct {
 // ValidationConfig defines configuration for the workload validate command.
 type ValidationConfig struct {
 	// SkipKinds lists additional Kubernetes kinds to skip during validation.
-	// Kubernetes Secrets are always skipped separately (see the --skip-secrets flag);
-	// this is for skipping CRDs whose schema in the CRDs-catalog is stale or missing,
-	// which kubeconform would otherwise reject (e.g. valid newer fields flagged as
+	// Kubernetes Secrets are skipped by default via --skip-secrets; this is for
+	// skipping CRDs whose schema in the CRDs-catalog is stale or missing, which
+	// kubeconform would otherwise reject (e.g. valid newer fields flagged as
 	// "additional properties not allowed").
-	SkipKinds []string `json:"skipKinds,omitzero" jsonschema_description:"Additional Kubernetes kinds to skip during 'ksail workload validate' (Secrets are already skipped separately). Use for CRDs whose CRDs-catalog schema is stale or missing, which kubeconform would otherwise reject."` //nolint:lll
+	SkipKinds []string `json:"skipKinds,omitzero" jsonschema_description:"Additional Kubernetes kinds to skip during 'ksail workload validate' (Secrets are skipped by default via --skip-secrets). Use for CRDs whose CRDs-catalog schema is stale or missing, which kubeconform would otherwise reject."` //nolint:lll
 }
 
 // WatchConfig defines configuration for the workload watch command.
