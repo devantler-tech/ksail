@@ -45,7 +45,7 @@ func NewCreateCmd(_ *di.Runtime) *cobra.Command {
 		createCmd.Annotations = make(map[string]string)
 	}
 
-	createCmd.Annotations[annotations.AnnotationPermission] = "write"
+	createCmd.Annotations[annotations.AnnotationPermission] = permissionWrite
 
 	// Re-resolve kubeconfig after flags are parsed, honoring --config.
 	wrapWithKubeconfigResolution(createCmd)

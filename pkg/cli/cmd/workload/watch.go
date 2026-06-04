@@ -986,9 +986,11 @@ func scanForDeletedFiles(snapshot fileSnapshot) string {
 //
 // Unlike the fsnotify path, polling bypasses the shared debounce state
 // entirely. The polling interval (3s) already provides natural debouncing,
-// and a blocking send ensures the change is reliably delivered to the
-// apply worker — it cannot be silently dropped by a generation mismatch
-// or a non-blocking channel send.
+// and a blocking send guarantees at least one apply runs for the detected
+// change. A later fsnotify event may still coalesce with it before it is
+// applied (enqueueIfCurrent drains applyCh and the apply reflects the
+// newest state), so the guarantee is "an apply will happen", not
+// one-for-one delivery of each individual poll event.
 func pollForChanges(ctx context.Context, dir string, applyCh chan string, debug bool) {
 	snapshot := buildFileSnapshot(dir)
 

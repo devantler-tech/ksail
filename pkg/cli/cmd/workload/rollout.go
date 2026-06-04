@@ -17,7 +17,7 @@ func NewRolloutCmd() *cobra.Command {
 		cmd.Annotations = make(map[string]string)
 	}
 
-	cmd.Annotations[annotations.AnnotationPermission] = "write"
+	cmd.Annotations[annotations.AnnotationPermission] = permissionWrite
 
 	return cmd
 }

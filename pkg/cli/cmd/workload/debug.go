@@ -103,6 +103,9 @@ var ErrNonZeroExitCode = errors.New("container process exited with non-zero code
 // ErrNoIPAddress is returned when a container has no IP address.
 var ErrNoIPAddress = errors.New("no IP address found for container")
 
+// errStdinFDOverflow is returned when the stdin file descriptor overflows int.
+var errStdinFDOverflow = errors.New("stdin file descriptor overflows int")
+
 // ErrHostModePositionalArgs is returned when kubectl-style positional args are
 // used with --host mode.
 var ErrHostModePositionalArgs = errors.New(
