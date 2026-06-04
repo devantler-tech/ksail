@@ -10,7 +10,8 @@ Switch the active kubeconfig context to the named cluster.
 
 This command accepts a cluster name and automatically resolves it to the
 correct kubeconfig context by checking all supported distribution prefixes
-(kind-, k3d-, admin@, vcluster-docker_).
+(kind-, k3d-, k3k-, admin@, vcluster-docker_, kwok-). The k3k- prefix matches
+nested K3s clusters on the Kubernetes provider, and kwok- matches KWOK clusters.
 
 If multiple distributions have contexts for the same cluster name, the
 command returns an error listing the matching contexts.

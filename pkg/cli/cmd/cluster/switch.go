@@ -143,7 +143,8 @@ const switchLongDesc = `Switch the active kubeconfig context to the named cluste
 
 This command accepts a cluster name and automatically resolves it to the
 correct kubeconfig context by checking all supported distribution prefixes
-(kind-, k3d-, admin@, vcluster-docker_).
+(kind-, k3d-, k3k-, admin@, vcluster-docker_, kwok-). The k3k- prefix matches
+nested K3s clusters on the Kubernetes provider, and kwok- matches KWOK clusters.
 
 If multiple distributions have contexts for the same cluster name, the
 command returns an error listing the matching contexts.
@@ -349,27 +350,7 @@ func resolveContextName(
 	// present if the name was copied from enriched list output.
 	cleanName := stripParenthetical(clusterName)
 
-	var matches []string
-
-	for _, dist := range v1alpha1.ValidDistributions() {
-		candidate := dist.ContextName(cleanName)
-
-		if _, exists := config.Contexts[candidate]; exists {
-			matches = append(matches, candidate)
-		}
-	}
-
-	// Fallback: if no distribution-prefix match was found, look for contexts
-	// that contain the cluster name as a substring. This handles providers like
-	// Omni whose kubeconfig context format (<org>-<cluster>-<sa>) doesn't
-	// follow the standard distribution prefix conventions.
-	if len(matches) == 0 {
-		for ctxName := range config.Contexts {
-			if strings.Contains(ctxName, cleanName) {
-				matches = append(matches, ctxName)
-			}
-		}
-	}
+	matches := matchContextsForName(config, cleanName)
 
 	switch len(matches) {
 	case 0:
@@ -398,6 +379,48 @@ func resolveContextName(
 			strings.Join(matches, ", "),
 		)
 	}
+}
+
+// matchContextsForName returns the kubeconfig context names that correspond to
+// the given (already cleaned) cluster name. It checks every known distribution
+// prefix plus the "k3k-" prefix used by nested K3s clusters on the Kubernetes
+// provider, then falls back to substring matching for providers (e.g. Omni)
+// whose context format doesn't follow the standard prefix conventions.
+func matchContextsForName(config *clientcmdapi.Config, cleanName string) []string {
+	var matches []string
+
+	for _, dist := range v1alpha1.ValidDistributions() {
+		candidate := dist.ContextName(cleanName)
+
+		if _, exists := config.Contexts[candidate]; exists {
+			matches = append(matches, candidate)
+		}
+	}
+
+	// K3s run via the k3k operator (Kubernetes provider) writes a "k3k-" context
+	// rather than the standalone "k3d-". Add it as an explicit candidate so nested
+	// K3s clusters resolve deterministically instead of falling back to substring
+	// matching (mirrors resolveCreatedContextName and lifecycle.ExtractClusterNameFromContext).
+	if cleanName != "" {
+		k3kCandidate := "k3k-" + cleanName
+		if _, exists := config.Contexts[k3kCandidate]; exists {
+			matches = append(matches, k3kCandidate)
+		}
+	}
+
+	// Fallback: if no distribution-prefix match was found, look for contexts
+	// that contain the cluster name as a substring. This handles providers like
+	// Omni whose kubeconfig context format (<org>-<cluster>-<sa>) doesn't
+	// follow the standard distribution prefix conventions.
+	if len(matches) == 0 {
+		for ctxName := range config.Contexts {
+			if strings.Contains(ctxName, cleanName) {
+				matches = append(matches, ctxName)
+			}
+		}
+	}
+
+	return matches
 }
 
 // stripParenthetical removes a trailing " (<text>)" suffix from input.
@@ -509,6 +532,14 @@ func stripDistributionPrefix(contextName string) string {
 		if after, found := strings.CutPrefix(contextName, prefix); found {
 			return after
 		}
+	}
+
+	// K3s run via the k3k operator (Kubernetes provider) uses a "k3k-" context
+	// rather than the standalone "k3d-"; recognize it so nested K3s clusters appear
+	// in shell completion and the interactive picker (mirrors
+	// lifecycle.ExtractClusterNameFromContext).
+	if after, found := strings.CutPrefix(contextName, "k3k-"); found {
+		return after
 	}
 
 	return ""
