@@ -280,40 +280,35 @@ func firstNonEmpty(ptrs ...*string) string {
 	return ""
 }
 
-// formatPermissionKind converts a permission kind to a human-readable tool name.
-//
-//nolint:cyclop // exhaustive type-switch over permission kinds
-func formatPermissionKind(kind copilot.PermissionRequestKind) string {
-	switch kind {
-	case copilot.PermissionRequestKindShell:
-		return "Shell Command"
-	case copilot.PermissionRequestKindWrite:
-		return "File Write"
-	case copilot.PermissionRequestKindRead:
-		return "File Read"
-	case copilot.PermissionRequestKindURL:
-		return "URL"
-	case copilot.PermissionRequestKindMcp:
-		return "MCP Tool"
-	case copilot.PermissionRequestKindCustomTool:
-		return "Custom Tool"
-	case copilot.PermissionRequestKindMemory:
-		return "Memory"
-	case copilot.PermissionRequestKindHook:
-		return "Hook"
-	default:
-		// Capitalize and format the kind
-		kindStr := string(kind)
-		if kindStr == "" {
-			return unknownOperation
-		}
-		// Replace underscores with spaces and title case.
-		// English titlecase is appropriate for all SDK permission kinds (shell, file_edit, etc.)
-		formatted := strings.ReplaceAll(kindStr, "_", " ")
-		caser := cases.Title(language.English)
+// permissionKindLabels maps known permission kinds to human-readable tool names.
+var permissionKindLabels = map[copilot.PermissionRequestKind]string{
+	copilot.PermissionRequestKindShell:      "Shell Command",
+	copilot.PermissionRequestKindWrite:      "File Write",
+	copilot.PermissionRequestKindRead:       "File Read",
+	copilot.PermissionRequestKindURL:        "URL",
+	copilot.PermissionRequestKindMcp:        "MCP Tool",
+	copilot.PermissionRequestKindCustomTool: "Custom Tool",
+	copilot.PermissionRequestKindMemory:     "Memory",
+	copilot.PermissionRequestKindHook:       "Hook",
+}
 
-		return caser.String(formatted)
+// formatPermissionKind converts a permission kind to a human-readable tool name.
+func formatPermissionKind(kind copilot.PermissionRequestKind) string {
+	if label, ok := permissionKindLabels[kind]; ok {
+		return label
 	}
+
+	// Unknown kind: replace underscores with spaces and title-case it
+	// (e.g. "file_edit" -> "File Edit"). English titlecase suits all SDK kinds.
+	kindStr := string(kind)
+	if kindStr == "" {
+		return unknownOperation
+	}
+
+	formatted := strings.ReplaceAll(kindStr, "_", " ")
+	caser := cases.Title(language.English)
+
+	return caser.String(formatted)
 }
 
 // IsReadOperation determines if a permission request is for a read-only operation.
