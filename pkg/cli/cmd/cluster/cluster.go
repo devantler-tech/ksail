@@ -7360,7 +7360,10 @@ func buildComponentDetector(
 // they all target the configured cluster rather than the ambient
 // current-context (which may point elsewhere).
 func resolveKubeContext(ctx *localregistry.Context) string {
-	k8sContext := ctx.ClusterCfg.Spec.Cluster.Connection.Context
+	// Trim to match ensureConfiguredContextResolvable: a whitespace-padded pinned
+	// context must resolve to the same value the guard validated, otherwise it
+	// would pass the guard yet break the REST clients the probes build.
+	k8sContext := strings.TrimSpace(ctx.ClusterCfg.Spec.Cluster.Connection.Context)
 	if k8sContext == "" {
 		clusterName := resolveClusterNameFromContext(ctx)
 		k8sContext = ctx.ClusterCfg.Spec.Cluster.Distribution.ContextName(clusterName)

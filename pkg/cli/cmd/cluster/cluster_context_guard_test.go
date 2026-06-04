@@ -97,3 +97,19 @@ func TestResolveKubeContext_PrefersConfiguredContext(t *testing.T) {
 
 	assert.Equal(t, "admin@prod", got)
 }
+
+// TestResolveKubeContext_TrimsConfiguredContext verifies that a whitespace-padded
+// pinned context is trimmed, so the value the drift probes use to build REST
+// clients matches what ensureConfiguredContextResolvable validated (which trims).
+// Otherwise " admin@prod " would pass the guard yet fail the probes, reintroducing
+// the very warnings this guard exists to remove.
+func TestResolveKubeContext_TrimsConfiguredContext(t *testing.T) {
+	t.Parallel()
+
+	cfg := &v1alpha1.Cluster{}
+	cfg.Spec.Cluster.Connection.Context = "  admin@prod  "
+
+	got := cluster.ExportResolveKubeContext(&localregistry.Context{ClusterCfg: cfg})
+
+	assert.Equal(t, "admin@prod", got)
+}
