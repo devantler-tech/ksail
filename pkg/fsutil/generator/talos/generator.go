@@ -310,7 +310,8 @@ func (g *Generator) generateConditionalPatches(
 		// Both patches share the one condition and are emitted together (rotation
 		// first, then approver) so the pair can never drift out of sync.
 		{model.EnableKubeletCertRotation, func() error {
-			if err := g.generateKubeletCertRotationPatch(rootPath, force); err != nil {
+			err := g.generateKubeletCertRotationPatch(rootPath, force)
+			if err != nil {
 				return err
 			}
 
