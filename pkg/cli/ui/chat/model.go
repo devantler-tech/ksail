@@ -535,29 +535,10 @@ func (m *Model) Update(
 		return m, nil
 
 	case spinner.TickMsg:
-		// Always update spinner to keep it ticking
-		var cmd tea.Cmd
-
-		m.spinner, cmd = m.spinner.Update(msg)
-		cmds = append(cmds, cmd)
-		// Update viewport content if there are active tools or streaming to animate spinners
-		if m.isStreaming || m.hasRunningTools() {
-			m.updateViewportContent()
-		}
+		cmds = append(cmds, m.handleSpinnerTick(msg))
 	}
 
-	// Update sub-components
-	if !m.isStreaming {
-		var taCmd tea.Cmd
-
-		m.textarea, taCmd = m.textarea.Update(msg)
-		cmds = append(cmds, taCmd)
-	}
-
-	var vpCmd tea.Cmd
-
-	m.viewport, vpCmd = m.viewport.Update(msg)
-	cmds = append(cmds, vpCmd)
+	cmds = append(cmds, m.updateSubcomponents(msg)...)
 
 	return m, tea.Batch(cmds...)
 }
@@ -597,6 +578,43 @@ func (m *Model) View() string {
 	output := lipgloss.JoinVertical(lipgloss.Left, sections...)
 
 	return lipgloss.NewStyle().MaxWidth(m.width).Render(output)
+}
+
+// handleSpinnerTick advances the spinner and refreshes the viewport while there
+// is animated content (active tools or an in-flight stream), returning the
+// spinner's tick command so the animation keeps running.
+func (m *Model) handleSpinnerTick(msg spinner.TickMsg) tea.Cmd {
+	var cmd tea.Cmd
+
+	m.spinner, cmd = m.spinner.Update(msg)
+
+	// Refresh the viewport so streaming/tool spinners keep animating.
+	if m.isStreaming || m.hasRunningTools() {
+		m.updateViewportContent()
+	}
+
+	return cmd
+}
+
+// updateSubcomponents forwards msg to the textarea (only when not streaming, so
+// streamed output does not capture typing) and to the viewport, returning their
+// commands.
+func (m *Model) updateSubcomponents(msg tea.Msg) []tea.Cmd {
+	var cmds []tea.Cmd
+
+	if !m.isStreaming {
+		var taCmd tea.Cmd
+
+		m.textarea, taCmd = m.textarea.Update(msg)
+		cmds = append(cmds, taCmd)
+	}
+
+	var vpCmd tea.Cmd
+
+	m.viewport, vpCmd = m.viewport.Update(msg)
+	cmds = append(cmds, vpCmd)
+
+	return cmds
 }
 
 // handleStreamEvent dispatches streaming-related events to their specific handlers.
