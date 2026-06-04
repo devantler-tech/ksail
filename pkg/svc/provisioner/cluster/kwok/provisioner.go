@@ -2,6 +2,7 @@ package kwokprovisioner
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -47,21 +48,72 @@ const createMaxAttempts = 3
 // registry rate limit time to reset.
 const createRetryDelay = 30 * time.Second
 
+// createAttemptTimeout bounds a single kwokctl create attempt. KWOK creation
+// pulls real control-plane images from registry.k8s.io; under heavy CI
+// parallelism a pull can stall (a half-open TCP connection that neither
+// progresses nor errors) and block indefinitely. Without a per-attempt
+// timeout the create would hang until the CI job's own timeout, leaving a
+// required check perpetually "in progress" and blocking the PR merge. The
+// timeout is generous enough never to interrupt a legitimately slow but
+// progressing create (healthy CI creates finish within a few minutes) while
+// still rescuing a genuine hang. On timeout the partial cluster is cleaned up
+// and the create is retried, the same as any other transient failure.
+const createAttemptTimeout = 8 * time.Minute
+
 // transientCreateErrors returns error substrings that indicate transient
-// infrastructure failures during KWOK cluster creation.
-// "toomanyrequests" / "TOOMANYREQUESTS" are returned by Docker / Google
-// Artifact Registry when per-region per-minute quota is exceeded.
-// "Quota exceeded" appears in the Google Artifact Registry error detail.
-// Network-level errors cover transient infrastructure conditions on CI runners.
+// infrastructure failures during KWOK cluster creation that may succeed on
+// retry. Almost all stem from pulling the control-plane images from
+// registry.k8s.io (Google Artifact Registry, backed by regional AWS S3
+// buckets) while many KWOK jobs pull the same images concurrently.
+//
+//   - "toomanyrequests" / "TOOMANYREQUESTS" / "Quota exceeded": Docker / Google
+//     Artifact Registry per-region per-minute quota exceeded (see #4069).
+//   - "NoSuchBucket" / "unknown blob" / "blob unknown" / "manifest unknown" /
+//     "failed to resolve reference": transient registry/CDN backend errors —
+//     e.g. an S3 bucket briefly returning NoSuchBucket mid-pull (see #4495).
+//   - "download failed" / "error pulling image" / "failed to pull" /
+//     "received unexpected HTTP status" / "registry is unavailable": generic
+//     pull failures surfaced by kwok's image puller and the Docker daemon.
+//   - "Internal Server Error" / "Bad Gateway" / "Service Unavailable" /
+//     "Gateway Timeout" / "Gateway Time-out": transient 5xx from the registry.
+//   - Network/transport errors ("i/o timeout", "connection reset by peer",
+//     "TLS handshake timeout", "unexpected EOF", "deadline exceeded",
+//     "request canceled") and DNS errors ("no such host", "server
+//     misbehaving", "temporary failure in name resolution") cover transient
+//     infrastructure conditions on CI runners.
 func transientCreateErrors() []string {
 	return []string{
+		// Registry rate limiting.
 		"toomanyrequests",
 		"TOOMANYREQUESTS",
 		"Quota exceeded",
+		// Registry / CDN backend errors.
+		"NoSuchBucket",
+		"unknown blob",
+		"blob unknown",
+		"manifest unknown",
+		"failed to resolve reference",
+		"download failed",
+		"error pulling image",
+		"failed to pull",
+		"received unexpected HTTP status",
+		"registry is unavailable",
+		// Transient registry 5xx responses.
+		"Internal Server Error",
+		"Bad Gateway",
+		"Service Unavailable",
+		"Gateway Timeout",
+		"Gateway Time-out",
+		// Network / transport errors.
 		"i/o timeout",
 		"connection reset by peer",
 		"TLS handshake timeout",
+		"unexpected EOF",
+		"deadline exceeded",
+		"request canceled",
+		// DNS errors.
 		"no such host",
+		"server misbehaving",
 		"temporary failure in name resolution",
 	}
 }
@@ -86,11 +138,14 @@ type kwokCreateFn func(ctx context.Context) error
 // kwokCleanupFn is called between retry attempts to delete a partially-created cluster.
 type kwokCleanupFn func(ctx context.Context)
 
-// createWithRetry calls create and retries on transient errors. Between
-// attempts, cleanup is called to remove the partially-created cluster,
-// followed by a delay to allow rate limits to reset.
+// createWithRetry calls create and retries on transient errors. Each attempt
+// is bounded by attemptTimeout so a stalled image pull is interrupted and
+// retried instead of hanging indefinitely. Between attempts, cleanup is called
+// to remove the partially-created cluster, followed by a delay to allow rate
+// limits to reset.
 func createWithRetry(
 	ctx context.Context,
+	attemptTimeout time.Duration,
 	retryDelay time.Duration,
 	create kwokCreateFn,
 	cleanup kwokCleanupFn,
@@ -113,9 +168,24 @@ func createWithRetry(
 			}
 		}
 
-		lastErr = create(ctx)
+		var timedOut bool
+
+		timedOut, lastErr = runCreateAttempt(ctx, attemptTimeout, create)
 		if lastErr == nil {
 			return nil
+		}
+
+		if timedOut {
+			fmt.Fprintf(
+				os.Stderr,
+				"KWOK cluster create attempt %d/%d timed out after %s (treating as transient): %v\n",
+				attempt+1,
+				createMaxAttempts,
+				attemptTimeout,
+				lastErr,
+			)
+
+			continue
 		}
 
 		if !isTransientCreateError(lastErr) {
@@ -132,6 +202,30 @@ func createWithRetry(
 		"failed to create KWOK cluster after %d attempts: %w",
 		createMaxAttempts, lastErr,
 	)
+}
+
+// runCreateAttempt runs a single create attempt under a timeout derived from
+// ctx. It returns whether the attempt was aborted by its own timeout and the
+// create error (if any). A timeout is reported only when the per-attempt
+// deadline fired while the parent context was still alive — a stalled create
+// that should be retried — and not when the parent context itself was
+// cancelled, which must propagate and stop the retry loop.
+func runCreateAttempt(
+	ctx context.Context,
+	attemptTimeout time.Duration,
+	create kwokCreateFn,
+) (bool, error) {
+	attemptCtx, cancel := context.WithTimeout(ctx, attemptTimeout)
+	defer cancel()
+
+	err := create(attemptCtx)
+	if err == nil {
+		return false, nil
+	}
+
+	timedOut := errors.Is(attemptCtx.Err(), context.DeadlineExceeded) && ctx.Err() == nil
+
+	return timedOut, err
 }
 
 // globalMu serialises access to process-global state that kwokctl
@@ -230,7 +324,13 @@ func (p *Provisioner) CreateCluster(ctx context.Context, name string) error {
 		}
 	}
 
-	return createWithRetry(ctx, createRetryDelay, createAttempt, cleanupAttempt)
+	return createWithRetry(
+		ctx,
+		createAttemptTimeout,
+		createRetryDelay,
+		createAttempt,
+		cleanupAttempt,
+	)
 }
 
 // ScaleNodes creates one simulated node so the kube-scheduler can place pods.
