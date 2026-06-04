@@ -324,7 +324,7 @@ func TestReport_Write_OrdersRootsBeforeCascades(t *testing.T) {
 					Reason:  dependencyNotReady,
 					Message: "dependency 'flux-system/infrastructure-controllers' is not ready",
 				},
-				{Name: infraControllersName, Reason: "Progressing", Message: "in progress"},
+				{Name: infraControllersName, Reason: progressingReason, Message: inProgressMsg},
 			},
 		}},
 	}
@@ -341,6 +341,60 @@ func TestReport_Write_OrdersRootsBeforeCascades(t *testing.T) {
 	require.NotEqual(t, -1, appsIdx)
 	assert.Less(t, rootIdx, infraIdx, "active root must come before its dependents")
 	assert.Less(t, infraIdx, appsIdx, "a resource must appear below what it is blocked by")
+}
+
+func TestReport_Write_OrdersSameNameAcrossNamespaces(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+
+	// Two HelmReleases share the name "app" in different namespaces. Depth must be
+	// keyed by displayName (namespace-qualified), not the bare Name — otherwise the
+	// two collide and "a/app" (deeper) would sort above "z/app" (shallower) on the
+	// alphabetical tiebreak. Chain: shared/base (root) → z/app → a/app.
+	report := &reconcilediag.Report{
+		Sections: []reconcilediag.ResourceSection{{
+			Heading: helmReleasesHeading,
+			Resources: []reconcilediag.FailingResource{
+				{
+					Name:      "app",
+					Namespace: "a",
+					Reason:    dependencyNotReady,
+					Message:   "dependency 'z/app' is not ready",
+				},
+				{
+					Name:      "app",
+					Namespace: "z",
+					Reason:    dependencyNotReady,
+					Message:   "dependency 'shared/base' is not ready",
+				},
+				{
+					Name:      "base",
+					Namespace: "shared",
+					Reason:    progressingReason,
+					Message:   inProgressMsg,
+				},
+			},
+		}},
+	}
+
+	report.Write(&buf)
+	output := buf.String()
+
+	rootIdx := strings.Index(output, "► shared/base")
+	zIdx := strings.Index(output, "· z/app")
+	aIdx := strings.Index(output, "· a/app")
+
+	require.NotEqual(t, -1, rootIdx)
+	require.NotEqual(t, -1, zIdx)
+	require.NotEqual(t, -1, aIdx)
+	assert.Less(t, rootIdx, zIdx, "active root must come first")
+	assert.Less(
+		t,
+		zIdx,
+		aIdx,
+		"z/app (depth 0) must precede a/app (depth 1) despite the alphabetical tiebreak",
+	)
 }
 
 // reportSummaryCase is one Report.Summary scenario.
@@ -415,8 +469,8 @@ func TestReport_Summary_CountsBlockedAndFallbacks(t *testing.T) {
 			report: kustSection(
 				reconcilediag.FailingResource{
 					Name:    infraControllersName,
-					Reason:  "Progressing",
-					Message: "in progress",
+					Reason:  progressingReason,
+					Message: inProgressMsg,
 				},
 				reconcilediag.FailingResource{
 					Name:    "infrastructure",
@@ -440,7 +494,7 @@ func TestReport_Summary_CountsBlockedAndFallbacks(t *testing.T) {
 					Message: "dependency 'x' is not ready",
 				},
 			),
-			want: "reconciliation failed: 1 resources not ready",
+			want: "reconciliation failed: 1 resource not ready",
 		},
 		{
 			name:   "pods only, no resources",

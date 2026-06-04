@@ -32,6 +32,8 @@ const (
 	helmReleasesHeading   = "HelmReleases"
 	dependencyNotReady    = "DependencyNotReady"
 	healthCheckFailed     = "HealthCheckFailed"
+	progressingReason     = "Progressing"
+	inProgressMsg         = "in progress"
 	infraDepNotReadyMsg   = "dependency 'flux-system/infrastructure' is not ready"
 )
 

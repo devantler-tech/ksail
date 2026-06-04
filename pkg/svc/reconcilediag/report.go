@@ -162,6 +162,22 @@ func extractBlocker(message string) string {
 	return dep
 }
 
+// dependencyKey pulls the dependency reference from a DependencyNotReady message
+// as a key that matches the dependency's displayName: the Flux default namespace
+// ("flux-system/") prefix is stripped so default-namespace resources match their
+// bare displayName, while any other namespace is preserved so same-named
+// resources in different namespaces stay distinct. Returns "" when no dependency
+// is named. Used for dependency-depth ordering; extractBlocker is used for the
+// (intentionally bare) "blocked by" row text.
+func dependencyKey(message string) string {
+	match := dependencyMessageRe.FindStringSubmatch(message)
+	if match == nil {
+		return ""
+	}
+
+	return strings.TrimPrefix(match[1], fluxNamespace+"/")
+}
+
 // cleanMessage normalizes a condition or event message for compact display:
 // it collapses whitespace, compresses bracketed resource lists to a count,
 // strips sub-second duration precision, and truncates to maxDetailLen.
@@ -449,7 +465,7 @@ func sortedResources(resources []FailingResource) []FailingResource {
 		}
 
 		if left.state() == stateBlocked {
-			if dl, dr := depth[left.Name], depth[right.Name]; dl != dr {
+			if dl, dr := depth[left.displayName()], depth[right.displayName()]; dl != dr {
 				return dl - dr
 			}
 		}
@@ -460,18 +476,20 @@ func sortedResources(resources []FailingResource) []FailingResource {
 	return sorted
 }
 
-// blockedDepths returns, for each blocked resource, the number of blocked
-// ancestors above it in the dependency chain (0 = blocked directly by a
-// root/non-blocked resource). The walk is bounded by the number of blocked
-// resources so a dependency cycle cannot loop forever.
+// blockedDepths returns, for each blocked resource (keyed by displayName), the
+// number of blocked ancestors above it in the dependency chain (0 = blocked
+// directly by a root/non-blocked resource). Keying by displayName and matching
+// edges via dependencyKey keeps same-named resources in different namespaces
+// distinct. The walk is bounded by the number of blocked resources so a
+// dependency cycle cannot loop forever.
 func blockedDepths(resources []FailingResource) map[string]int {
 	blocker := make(map[string]string)
 	blocked := make(map[string]bool)
 
 	for _, res := range resources {
 		if res.state() == stateBlocked {
-			blocked[res.Name] = true
-			blocker[res.Name] = extractBlocker(res.Message)
+			blocked[res.displayName()] = true
+			blocker[res.displayName()] = dependencyKey(res.Message)
 		}
 	}
 
@@ -502,7 +520,7 @@ func formatSummary(roots []FailingResource, blocked int) string {
 	switch len(roots) {
 	case 0:
 		if blocked > 0 {
-			return fmt.Sprintf("reconciliation failed: %d resources not ready", blocked)
+			return "reconciliation failed: " + pluralizeResources(blocked) + " not ready"
 		}
 
 		return "reconciliation failed — see diagnostics above"
@@ -520,10 +538,19 @@ func formatSummary(roots []FailingResource, blocked int) string {
 		}
 
 		return fmt.Sprintf(
-			"reconciliation failed: %d resources not ready (%s)%s",
-			len(roots), strings.Join(names, ", "), blockedSuffix(blocked),
+			"reconciliation failed: %s not ready (%s)%s",
+			pluralizeResources(len(roots)), strings.Join(names, ", "), blockedSuffix(blocked),
 		)
 	}
+}
+
+// pluralizeResources returns "1 resource" or "N resources" with correct grammar.
+func pluralizeResources(count int) string {
+	if count == 1 {
+		return "1 resource"
+	}
+
+	return fmt.Sprintf("%d resources", count)
 }
 
 // blockedSuffix returns the trailing "; N dependent(s) blocked" clause, or "".
