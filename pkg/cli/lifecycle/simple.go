@@ -101,7 +101,7 @@ func BindNameAndProviderFlags(
 		providerFlag,
 		"provider",
 		"p",
-		fmt.Sprintf("Provider to use (%s)", providerFlag.ValidValues()),
+		fmt.Sprintf("Provider to use (%s)", strings.Join(providerFlag.ValidValues(), ", ")),
 	)
 }
 

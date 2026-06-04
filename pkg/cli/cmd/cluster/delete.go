@@ -84,7 +84,7 @@ func NewDeleteCmd(runtimeContainer *di.Runtime) *cobra.Command {
 func registerDeleteFlags(cmd *cobra.Command, flags *deleteFlags) {
 	cmd.Flags().StringVarP(&flags.name, "name", "n", "", "Name of the cluster to delete")
 	cmd.Flags().VarP(&flags.provider, "provider", "p",
-		fmt.Sprintf("Provider to use (%s)", flags.provider.ValidValues()))
+		fmt.Sprintf("Provider to use (%s)", strings.Join(flags.provider.ValidValues(), ", ")))
 	cmd.Flags().StringVarP(&flags.kubeconfig, "kubeconfig", "k", "",
 		"Path to kubeconfig file for context cleanup")
 	cmd.Flags().BoolVar(&flags.storage, "delete-storage", false,

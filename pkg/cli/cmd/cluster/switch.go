@@ -660,7 +660,10 @@ func SetFluxInstallerFactoryForTests(
 	return overrideInstallerFactory(func(f *setup.InstallerFactories) {
 		// Wrap the simplified test factory to match the Flux factory signature
 		f.Flux = func(_ helm.Interface, _ time.Duration, _ string) installer.Installer {
-			inst, _ := factory(nil) // clusterCfg not used in test factory
+			inst, err := factory(nil) // clusterCfg not used in test factory
+			if err != nil {
+				panic(fmt.Sprintf("test Flux installer factory returned an error: %v", err))
+			}
 
 			return inst
 		}
