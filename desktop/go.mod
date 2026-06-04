@@ -302,7 +302,7 @@ require (
 	github.com/siderolabs/omni/client v1.7.3 // indirect
 	github.com/siderolabs/proto-codec v0.1.4 // indirect
 	github.com/siderolabs/protoenc v0.2.4 // indirect
-	github.com/siderolabs/talos v1.13.2 // indirect
+	github.com/siderolabs/talos v1.13.3 // indirect
 	github.com/siderolabs/talos/pkg/machinery v1.13.3 // indirect
 	github.com/sirupsen/logrus v1.9.4 // indirect
 	github.com/skratchdot/open-golang v0.0.0-20200116055534-eef842397966 // indirect
@@ -393,15 +393,15 @@ require (
 	k8s.io/cluster-bootstrap v0.35.0 // indirect
 	k8s.io/component-base v0.36.1 // indirect
 	k8s.io/component-helpers v0.36.1 // indirect
-	k8s.io/cri-api v0.36.0 // indirect
+	k8s.io/cri-api v0.36.1 // indirect
 	k8s.io/cri-client v0.36.0 // indirect
 	k8s.io/klog/v2 v2.140.0 // indirect
 	k8s.io/kube-aggregator v0.35.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20260330154417-16be699c7b31 // indirect
 	k8s.io/kube-proxy v0.33.0 // indirect
-	k8s.io/kube-scheduler v0.36.0 // indirect
+	k8s.io/kube-scheduler v0.36.1 // indirect
 	k8s.io/kubectl v0.36.1 // indirect
-	k8s.io/kubelet v0.36.0 // indirect
+	k8s.io/kubelet v0.36.1 // indirect
 	k8s.io/kubernetes v1.36.0 // indirect
 	k8s.io/metrics v0.36.1 // indirect
 	k8s.io/streaming v0.36.1 // indirect
