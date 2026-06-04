@@ -433,9 +433,16 @@ func validateHetznerCapacity(
 	// flag, which the autoscaler evaluates against the count of ALL nodes. Without it
 	// the cluster can grow to the static baseline plus the full pool capacity; with it,
 	// growth stops at MaxNodesTotal. The reachable total must stay within serverLimit.
-	reachableTotal := cluster.ControlPlanes + cluster.Workers + poolCapacity
+	//
+	// The clamp never drops below the static baseline (control-planes + workers): those
+	// nodes are provisioned unconditionally, independent of the autoscaler ceiling, so a
+	// MaxNodesTotal smaller than the baseline must not hide a baseline that already
+	// exceeds serverLimit.
+	baseline := cluster.ControlPlanes + cluster.Workers
+
+	reachableTotal := baseline + poolCapacity
 	if autoscaler.MaxNodesTotal > 0 && autoscaler.MaxNodesTotal < reachableTotal {
-		reachableTotal = autoscaler.MaxNodesTotal
+		reachableTotal = max(autoscaler.MaxNodesTotal, baseline)
 	}
 
 	if reachableTotal > serverLimit {

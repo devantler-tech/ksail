@@ -636,6 +636,39 @@ func TestValidateAutoscalerConfig(t *testing.T) {
 			errContains: "exceeds serverLimit",
 		},
 		{
+			// A MaxNodesTotal below the static baseline must not hide a baseline that
+			// already exceeds serverLimit: control-planes + workers are provisioned
+			// unconditionally, regardless of the autoscaler ceiling. baseline 8 alone
+			// exceeds serverLimit(6); clamping reachableTotal down to MaxNodesTotal(5)
+			// must not drop below the baseline → 8 > 6 → rejected.
+			name: "capacity guard: maxNodesTotal below baseline cannot hide baseline over serverLimit",
+			cluster: &v1alpha1.ClusterSpec{
+				Provider:      v1alpha1.ProviderHetzner,
+				ControlPlanes: 4,
+				Workers:       4,
+				Autoscaler: v1alpha1.AutoscalerConfig{
+					Node: v1alpha1.NodeAutoscalerConfig{
+						Enabled:       true,
+						MaxNodesTotal: 5,
+						Pools: []v1alpha1.NodePool{
+							{
+								Name:       "workers",
+								ServerType: "cx23",
+								Location:   "fsn1",
+								Min:        1,
+								Max:        2,
+							},
+						},
+					},
+				},
+			},
+			provider: &v1alpha1.ProviderSpec{
+				Hetzner: v1alpha1.OptionsHetzner{ServerLimit: 6},
+			},
+			wantErr:     v1alpha1.ErrAutoscalerExceedsServerLimit,
+			errContains: "exceeds serverLimit",
+		},
+		{
 			name: "capacity guard: negative maxNodesTotal is invalid",
 			cluster: &v1alpha1.ClusterSpec{
 				Provider:      v1alpha1.ProviderHetzner,
