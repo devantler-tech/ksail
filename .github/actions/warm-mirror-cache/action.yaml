@@ -507,11 +507,21 @@ runs:
         # not running, so fall back to a direct pull of just these few images. Either
         # path avoids the parallel test matrix hammering Docker Hub / GHCR.
 
+        # True when the local image referenced by $1 is recorded under the manifest
+        # digest $2 (checked against its RepoDigests). docker save exports by tag, so
+        # without this a stale tag-only image pointing at a different digest could be
+        # saved under our digest-derived cache key. See issue #4301.
+        image_has_digest() {
+          local digests
+          digests=$(docker image inspect "$1" --format '{{range .RepoDigests}}{{println .}}{{end}}' 2>/dev/null) || return 1
+          [[ "$digests" == *"@${2}"* ]]
+        }
+
         save_image() {
           local dockerfile="$1"
           local tar_name="$2"
           local description="$3"
-          local IMAGE NORMALIZED TAG_TARGET MIRROR_TAG SIZE from_line
+          local IMAGE NORMALIZED TAG_TARGET MIRROR_TAG SIZE from_line PINNED_DIGEST
 
           # Robust FROM parsing: skip optional --platform=... flags and
           # ignore trailing AS <stage>. Handles both simple and multi-stage
@@ -551,6 +561,8 @@ runs:
 
           # Strip digest generically (handles any algorithm, not just sha256)
           TAG_TARGET="${NORMALIZED%%@*}"
+          # The pinned manifest digest, if any (empty for tag-only refs)
+          case "$NORMALIZED" in *@*) PINNED_DIGEST="${NORMALIZED##*@}" ;; *) PINNED_DIGEST="" ;; esac
 
           # The image was pulled in the "Pull images through mirrors" step.
           # Try to find it either under the mirror ref or the canonical name.
@@ -576,18 +588,36 @@ runs:
           # Direct-pull fallback for the self-heal / targeted-refresh path: when the
           # four mirror volumes are already cached the mirror registries were never
           # created this run, so neither the canonical tag nor the localhost mirror
-          # ref exists locally. Pull the exact digest-pinned reference straight from
-          # upstream. docker pull of a tag+digest ref fetches by digest WITHOUT
-          # creating the tag-only reference, so tag it explicitly for the docker save
-          # below (which saves by tag).
-          if ! docker image inspect "$TAG_TARGET" >/dev/null 2>&1; then
-            echo "  ⬇️ Pulling directly: $NORMALIZED"
-            if docker pull "$NORMALIZED" --quiet 2>/dev/null; then
+          # ref exists locally. Pull the exact digest-pinned reference from upstream.
+          #
+          # For a digest-pinned ref, base the presence check on whether a LOCAL image
+          # actually carries the pinned digest — not merely whether the tag-only
+          # $TAG_TARGET exists. A stale tag-only image could point at a different
+          # digest, and saving that would persist the wrong image under a cache key
+          # derived from the pinned digest. After pulling, (re)tag the exact digest
+          # ref to $TAG_TARGET: docker pull of a tag+digest ref fetches by digest
+          # without creating the tag-only ref, and this also overwrites a stale tag.
+          if [ -n "$PINNED_DIGEST" ]; then
+            if ! image_has_digest "$TAG_TARGET" "$PINNED_DIGEST"; then
+              echo "  ⬇️ Pulling directly: $NORMALIZED"
+              docker pull "$NORMALIZED" --quiet 2>/dev/null || true
               docker tag "$NORMALIZED" "$TAG_TARGET" 2>/dev/null || true
             fi
+          elif ! docker image inspect "$TAG_TARGET" >/dev/null 2>&1; then
+            echo "  ⬇️ Pulling directly: $NORMALIZED"
+            docker pull "$NORMALIZED" --quiet 2>/dev/null || true
           fi
 
-          if ! docker image inspect "$TAG_TARGET" >/dev/null 2>&1; then
+          # Final correctness gate: for a digest-pinned ref, only proceed if
+          # $TAG_TARGET now resolves to the pinned digest (a failed pull may leave a
+          # stale image behind — never save that). Returning 1 leaves the dist-node
+          # cache unsaved so the next warm run retries.
+          if [ -n "$PINNED_DIGEST" ]; then
+            if ! image_has_digest "$TAG_TARGET" "$PINNED_DIGEST"; then
+              echo "  ⚠️ $description image not available at pinned digest: $NORMALIZED"
+              return 1
+            fi
+          elif ! docker image inspect "$TAG_TARGET" >/dev/null 2>&1; then
             echo "  ⚠️ $description image not available locally: $TAG_TARGET"
             return 1
           fi
