@@ -20,7 +20,7 @@ type PodAutoscalerConfig struct {
 type NodeAutoscalerConfig struct {
 	Enabled               bool               `json:"enabled,omitzero"`
 	Pools                 []NodePool         `json:"pools,omitzero"`
-	MaxNodesTotal         int32              `json:"maxNodesTotal,omitzero"         jsonschema:"description=Maximum total nodes allowed across all node pools. Set to 0 to disable the global cap; when the global cap is disabled the effective cap is the sum of all pool max values,minimum=0"` //nolint:lll
+	MaxNodesTotal         int32              `json:"maxNodesTotal,omitzero"         jsonschema:"description=Maximum total number of nodes in the cluster (control-planes + workers + autoscaler nodes). Passed verbatim to the cluster-autoscaler --max-nodes-total flag — the autoscaler evaluates it against the count of ALL nodes so this is the whole-cluster ceiling and not an autoscaler-only budget. Set to 0 to disable the global cap; growth is then bounded only by the per-pool max values and serverLimit. Should be <= serverLimit,minimum=0"` //nolint:lll
 	Expander              AutoscalerExpander `json:"expander,omitzero"`
 	ScaleDownUnneededTime string             `json:"scaleDownUnneededTime,omitzero" jsonschema:"description=How long a node should be unneeded before it is eligible for scale down (e.g. 10m)"` //nolint:lll
 }
