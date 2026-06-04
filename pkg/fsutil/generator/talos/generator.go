@@ -283,95 +283,64 @@ func (g *Generator) getDirectoriesWithPatches(
 }
 
 // generateConditionalPatches generates optional patches based on the configuration.
-//
-//nolint:cyclop,funlen,gocognit // Sequential conditional patch generation - each condition is independent and simple.
+// Each entry pairs a condition on the model with the generator to run when that
+// condition holds; generators run in declaration order and the first error aborts.
 func (g *Generator) generateConditionalPatches(
 	rootPath string,
 	model *Config,
 	force bool,
 ) error {
-	// Generate mirror registries patch if configured
-	if len(model.MirrorRegistries) > 0 {
-		err := g.generateMirrorRegistriesPatch(rootPath, model.MirrorRegistries, force)
-		if err != nil {
-			return err
-		}
+	patches := []struct {
+		when     bool
+		generate func() error
+	}{
+		{len(model.MirrorRegistries) > 0, func() error {
+			return g.generateMirrorRegistriesPatch(rootPath, model.MirrorRegistries, force)
+		}},
+		// Allow scheduling on control planes when no workers are configured.
+		{model.WorkerNodes == 0, func() error {
+			return g.generateAllowSchedulingPatch(rootPath, force)
+		}},
+		// Disable the default CNI when an alternative CNI is requested.
+		{model.DisableDefaultCNI, func() error {
+			return g.generateDisableCNIPatch(rootPath, force)
+		}},
+		// Kubelet cert rotation enables secure metrics-server TLS; the csr-approver
+		// (installed via inlineManifests during bootstrap) signs the rotated certs.
+		{model.EnableKubeletCertRotation, func() error {
+			return g.generateKubeletCertRotationPatch(rootPath, force)
+		}},
+		{model.EnableKubeletCertRotation, func() error {
+			return g.generateKubeletCSRApproverPatch(rootPath, force)
+		}},
+		// Cluster-name patch when a custom cluster name is specified.
+		{model.ClusterName != "", func() error {
+			return g.generateClusterNamePatch(rootPath, model.ClusterName, force)
+		}},
+		{model.EnableImageVerification, func() error {
+			return g.generateImageVerificationPatch(rootPath, force)
+		}},
+		{model.DisableCDI, func() error {
+			return g.generateDisableCDIPatch(rootPath, force)
+		}},
+		{model.EnableExternalCloudProvider, func() error {
+			return g.generateExternalCloudProviderPatch(rootPath, force)
+		}},
+		// Ingress firewall documents when enabled (Hetzner defense-in-depth).
+		{model.EnableIngressFirewall, func() error {
+			return g.generateIngressFirewallPatches(rootPath, model, force)
+		}},
+		{model.EnableOIDC, func() error {
+			return g.generateOIDCPatch(rootPath, model, force)
+		}},
 	}
 
-	// Generate allow-scheduling-on-control-planes patch when no workers are configured
-	if model.WorkerNodes == 0 {
-		err := g.generateAllowSchedulingPatch(rootPath, force)
-		if err != nil {
-			return err
-		}
-	}
-
-	// Generate disable-default-cni patch when alternative CNI is requested
-	if model.DisableDefaultCNI {
-		err := g.generateDisableCNIPatch(rootPath, force)
-		if err != nil {
-			return err
-		}
-	}
-
-	// Generate kubelet-cert-rotation patch for secure metrics-server TLS.
-	// The kubelet-csr-approver is installed via inlineManifests during bootstrap.
-	if model.EnableKubeletCertRotation {
-		err := g.generateKubeletCertRotationPatch(rootPath, force)
-		if err != nil {
-			return err
+	for _, patch := range patches {
+		if !patch.when {
+			continue
 		}
 
-		// Generate kubelet-csr-approver patch to install the CSR approver during bootstrap
-		err = g.generateKubeletCSRApproverPatch(rootPath, force)
-		if err != nil {
-			return err
-		}
-	}
-
-	// Generate cluster-name patch when custom cluster name is specified
-	if model.ClusterName != "" {
-		err := g.generateClusterNamePatch(rootPath, model.ClusterName, force)
-		if err != nil {
-			return err
-		}
-	}
-
-	// Generate image verification config document when enabled
-	if model.EnableImageVerification {
-		err := g.generateImageVerificationPatch(rootPath, force)
-		if err != nil {
-			return err
-		}
-	}
-
-	// Generate disable-cdi patch when CDI should be turned off
-	if model.DisableCDI {
-		err := g.generateDisableCDIPatch(rootPath, force)
-		if err != nil {
-			return err
-		}
-	}
-
-	// Generate external cloud provider patch when cloud provider integration is needed
-	if model.EnableExternalCloudProvider {
-		err := g.generateExternalCloudProviderPatch(rootPath, force)
-		if err != nil {
-			return err
-		}
-	}
-
-	// Generate ingress firewall documents when enabled (Hetzner defense-in-depth)
-	if model.EnableIngressFirewall {
-		err := g.generateIngressFirewallPatches(rootPath, model, force)
-		if err != nil {
-			return err
-		}
-	}
-
-	// Generate OIDC API server configuration patch when enabled
-	if model.EnableOIDC {
-		err := g.generateOIDCPatch(rootPath, model, force)
+		err := patch.generate()
 		if err != nil {
 			return err
 		}
