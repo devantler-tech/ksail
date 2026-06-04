@@ -45,7 +45,7 @@ func (c *ArgoCDCollector) Collect(ctx context.Context) *Report {
 // safeCollectCRs handles panic recovery (e.g., when CRDs are not installed) so
 // diagnostic collection never crashes the CLI.
 func (c *ArgoCDCollector) collectFailingApplications(ctx context.Context) ResourceSection {
-	section := ResourceSection{Heading: "Failing Applications"}
+	section := ResourceSection{Heading: "Applications"}
 
 	apps := safeCollectCRs(ctx, c.Dynamic, argoCDGVRApplications(), argoCDNamespace)
 
