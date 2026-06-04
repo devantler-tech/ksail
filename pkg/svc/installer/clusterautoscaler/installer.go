@@ -57,16 +57,21 @@ type Installer struct {
 // when either is false the autoscaler is configured (via HCLOUD_PUBLIC_IPV4/IPV6) so
 // new nodes match the worker public-net setting. The Hetzner cluster-autoscaler only
 // supports this cluster-wide, not per node pool.
+// baselineNodes is the static node count (control-planes + static workers) the
+// autoscaler does not manage. It is added to the autoscaler-only MaxNodesTotal budget
+// to derive the chart's max-nodes-total flag, which the cluster-autoscaler evaluates
+// against the total node count (baseline + autoscaler) — see buildChartValues.
 func NewInstaller(
 	client helm.Interface,
 	timeout time.Duration,
 	nodeAutoscaler v1alpha1.NodeAutoscalerConfig,
 	haEnabled bool,
 	workerPublicIPv4, workerPublicIPv6 bool,
+	baselineNodes int32,
 ) (*Installer, error) {
 	extraEnv := hetznerPublicNetEnv(workerPublicIPv4, workerPublicIPv6)
 
-	valuesYaml, err := buildValuesYaml(nodeAutoscaler, haEnabled, extraEnv)
+	valuesYaml, err := buildValuesYaml(nodeAutoscaler, haEnabled, extraEnv, baselineNodes)
 	if err != nil {
 		return nil, fmt.Errorf("clusterautoscaler: failed to build chart values: %w", err)
 	}
@@ -182,8 +187,9 @@ func buildValuesYaml(
 	cfg v1alpha1.NodeAutoscalerConfig,
 	haEnabled bool,
 	extraEnv map[string]string,
+	baselineNodes int32,
 ) (string, error) {
-	vals := buildChartValues(cfg, haEnabled, extraEnv)
+	vals := buildChartValues(cfg, haEnabled, extraEnv, baselineNodes)
 
 	out, err := yaml.Marshal(vals)
 	if err != nil {
@@ -212,11 +218,29 @@ func hetznerPublicNetEnv(workerPublicIPv4, workerPublicIPv6 bool) map[string]str
 	return env
 }
 
+// effectiveMaxNodesTotal converts the autoscaler-only MaxNodesTotal budget into the
+// value for the chart's max-nodes-total flag. The cluster-autoscaler enforces
+// --max-nodes-total against the count of ALL nodes in the cluster (the static baseline
+// of control-planes + static workers, which it does not manage, plus the nodes it
+// creates), whereas KSail's MaxNodesTotal (and ValidateAutoscalerConfig) means the
+// autoscaler-only portion on top of that baseline. So the flag must be
+// baseline + budget. A budget of 0 disables the global cap, so the flag is left at 0
+// (omitted) — adding the baseline there would instead cap the cluster at its baseline
+// and block all scale-up.
+func effectiveMaxNodesTotal(maxNodesTotal, baselineNodes int32) int32 {
+	if maxNodesTotal <= 0 {
+		return 0
+	}
+
+	return baselineNodes + maxNodesTotal
+}
+
 // buildChartValues constructs the typed Helm values struct from the given config.
 func buildChartValues(
 	cfg v1alpha1.NodeAutoscalerConfig,
 	haEnabled bool,
 	extraEnv map[string]string,
+	baselineNodes int32,
 ) chartValues {
 	scaleDownTime := cfg.ScaleDownUnneededTime
 	if scaleDownTime == "" {
@@ -237,7 +261,7 @@ func buildChartValues(
 		ExtraArgs: chartExtraArgs{
 			Expander:              expanderToHelmValue(cfg.Expander),
 			ScaleDownUnneededTime: scaleDownTime,
-			MaxNodesTotal:         cfg.MaxNodesTotal,
+			MaxNodesTotal:         effectiveMaxNodesTotal(cfg.MaxNodesTotal, baselineNodes),
 			ScaleDownAfterAdd:     "5m",
 			ScaleDownAfterDelete:  "2m",
 			OkTotalUnreadyCount:   defaultOkTotalUnreadyCount,

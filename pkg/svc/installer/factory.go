@@ -373,6 +373,7 @@ func (f *Factory) addClusterAutoscalerInstaller(
 	inst, err := clusterautoscalerinstaller.NewInstaller(
 		f.helmClient, f.timeout, spec.Autoscaler.Node, haEnabled,
 		hetzner.WorkerIPv4Enabled(), hetzner.WorkerIPv6Enabled(),
+		spec.ControlPlanes+spec.Workers,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create cluster-autoscaler installer: %w", err)

@@ -23,7 +23,7 @@ func TestNewInstaller(t *testing.T) {
 
 	client := helm.NewMockInterface(t)
 	installer, err := clusterautoscalerinstaller.NewInstaller(
-		client, 5*time.Minute, v1alpha1.NodeAutoscalerConfig{}, false, true, true,
+		client, 5*time.Minute, v1alpha1.NodeAutoscalerConfig{}, false, true, true, 0,
 	)
 	require.NoError(t, err)
 
@@ -35,7 +35,7 @@ func TestNewInstaller_HAEnabled(t *testing.T) {
 
 	client := helm.NewMockInterface(t)
 	installer, err := clusterautoscalerinstaller.NewInstaller(
-		client, 5*time.Minute, v1alpha1.NodeAutoscalerConfig{}, true, true, true,
+		client, 5*time.Minute, v1alpha1.NodeAutoscalerConfig{}, true, true, true, 0,
 	)
 	require.NoError(t, err)
 	require.NotNil(t, installer)
@@ -108,7 +108,7 @@ func assertHAValuesYaml(
 		Return(nil, nil)
 
 	installer, err := clusterautoscalerinstaller.NewInstaller(
-		client, 5*time.Second, cfg, haEnabled, true, true,
+		client, 5*time.Second, cfg, haEnabled, true, true, 0,
 	)
 	require.NoError(t, err)
 
@@ -198,6 +198,7 @@ func assertPublicNetValuesYaml(
 		false,
 		ipv4,
 		ipv6,
+		0,
 	)
 	require.NoError(t, err)
 
@@ -314,6 +315,7 @@ func TestClusterAutoscalerInstaller_ValuesYaml_NodePools(t *testing.T) {
 		false,
 		true,
 		true,
+		0,
 	)
 	require.NoError(t, err)
 
@@ -404,6 +406,7 @@ func runExpanderTest(
 		false,
 		true,
 		true,
+		0,
 	)
 	require.NoError(t, err)
 	require.NotNil(t, installer)
@@ -492,6 +495,7 @@ func TestClusterAutoscalerInstaller_ValuesYaml_Contents(t *testing.T) {
 		false,
 		true,
 		true,
+		0,
 	)
 	require.NoError(t, err)
 	err = installer.Install(context.Background())
@@ -535,6 +539,7 @@ func TestClusterAutoscalerInstaller_ValuesYaml_DefaultScaleDownTime(t *testing.T
 		false,
 		true,
 		true,
+		0,
 	)
 	require.NoError(t, err)
 	err = installer.Install(context.Background())
@@ -578,6 +583,103 @@ func TestClusterAutoscalerInstaller_ValuesYaml_MaxNodesTotalOmittedWhenZero(t *t
 		false,
 		true,
 		true,
+		0,
+	)
+	require.NoError(t, err)
+	err = installer.Install(context.Background())
+	require.NoError(t, err)
+}
+
+// TestClusterAutoscalerInstaller_ValuesYaml_MaxNodesTotalIncludesBaseline verifies
+// that the rendered max-nodes-total is the static baseline (control-planes + static
+// workers) plus the autoscaler-only MaxNodesTotal budget. The cluster-autoscaler
+// counts the baseline it does not manage against --max-nodes-total, so the flag must
+// include it (regression guard for ksail#5017).
+func TestClusterAutoscalerInstaller_ValuesYaml_MaxNodesTotalIncludesBaseline(t *testing.T) {
+	t.Parallel()
+
+	cfg := v1alpha1.NodeAutoscalerConfig{
+		MaxNodesTotal: 4,
+	}
+
+	const baselineNodes = int32(6) // e.g. 3 control-planes + 3 static workers
+
+	client := helm.NewMockInterface(t)
+	client.EXPECT().
+		GetReleaseStorageLabels(mock.Anything, mock.Anything, mock.Anything).
+		Return(nil, nil)
+	expectAddRepository(t, client, nil)
+	client.EXPECT().
+		InstallOrUpgradeChart(
+			mock.Anything,
+			mock.MatchedBy(func(spec *helm.ChartSpec) bool {
+				assert.Contains(
+					t,
+					spec.ValuesYaml,
+					"max-nodes-total: 10",
+					"max-nodes-total should be baseline(6) + MaxNodesTotal(4) = 10",
+				)
+
+				return true
+			}),
+		).
+		Return(nil, nil)
+
+	installer, err := clusterautoscalerinstaller.NewInstaller(
+		client,
+		5*time.Second,
+		cfg,
+		false,
+		true,
+		true,
+		baselineNodes,
+	)
+	require.NoError(t, err)
+	err = installer.Install(context.Background())
+	require.NoError(t, err)
+}
+
+// TestClusterAutoscalerInstaller_ValuesYaml_MaxNodesTotalOmittedWhenZeroWithBaseline
+// verifies that a 0 budget disables the global cap even when a baseline is present —
+// adding the baseline there would cap the cluster at its baseline and block scale-up.
+func TestClusterAutoscalerInstaller_ValuesYaml_MaxNodesTotalOmittedWhenZeroWithBaseline(
+	t *testing.T,
+) {
+	t.Parallel()
+
+	cfg := v1alpha1.NodeAutoscalerConfig{
+		MaxNodesTotal: 0,
+	}
+
+	client := helm.NewMockInterface(t)
+	client.EXPECT().
+		GetReleaseStorageLabels(mock.Anything, mock.Anything, mock.Anything).
+		Return(nil, nil)
+	expectAddRepository(t, client, nil)
+	client.EXPECT().
+		InstallOrUpgradeChart(
+			mock.Anything,
+			mock.MatchedBy(func(spec *helm.ChartSpec) bool {
+				assert.NotContains(
+					t,
+					spec.ValuesYaml,
+					"max-nodes-total",
+					"max-nodes-total should stay omitted when MaxNodesTotal=0 despite a baseline",
+				)
+
+				return true
+			}),
+		).
+		Return(nil, nil)
+
+	installer, err := clusterautoscalerinstaller.NewInstaller(
+		client,
+		5*time.Second,
+		cfg,
+		false,
+		true,
+		true,
+		6,
 	)
 	require.NoError(t, err)
 	err = installer.Install(context.Background())
@@ -605,6 +707,7 @@ func newInstallerWithDefaults(t *testing.T) (
 		false,
 		true,
 		true,
+		0,
 	)
 	require.NoError(t, err)
 
