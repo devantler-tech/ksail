@@ -197,7 +197,10 @@ func (p *Provisioner) rollingReplaceSingleNode(
 	oldServer *hcloud.Server,
 	infra HetznerInfra,
 ) error {
-	oldIP := oldServer.PublicNet.IPv4.IP.String()
+	oldIP, addrErr := hetznerNodeTalosAddress(oldServer)
+	if addrErr != nil {
+		return fmt.Errorf("resolving address for %s: %w", oldServer.Name, addrErr)
+	}
 
 	// 1. Cordon and drain the outgoing node before removing it.
 	oldNodeName, resolveErr := p.resolveNodeName(ctx, clientset, oldIP)
@@ -379,7 +382,10 @@ func (p *Provisioner) waitForReplacementNodeReady(
 	clientset kubernetes.Interface,
 	server *hcloud.Server,
 ) error {
-	serverIP := server.PublicNet.IPv4.IP.String()
+	serverIP, addrErr := hetznerNodeTalosAddress(server)
+	if addrErr != nil {
+		return fmt.Errorf("resolving address for %s: %w", server.Name, addrErr)
+	}
 
 	pollErr := readiness.PollForReadiness(
 		ctx,

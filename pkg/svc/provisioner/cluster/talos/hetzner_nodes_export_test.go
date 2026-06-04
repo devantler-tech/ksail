@@ -18,5 +18,17 @@ var PatchTalosHostname = patchTalosHostname
 //nolint:gochecknoglobals // export_test.go pattern requires global variables to expose internal functions
 var HetznerNodeName = hetznerNodeName
 
+// HetznerNodeTalosAddress exposes hetznerNodeTalosAddress for tests in the
+// talosprovisioner_test package.
+//
+//nolint:gochecknoglobals // export_test.go pattern requires global variables to expose internal functions
+var HetznerNodeTalosAddress = hetznerNodeTalosAddress
+
+// DiagnoseUnreachableNode exposes diagnoseUnreachableNode for tests in the
+// talosprovisioner_test package.
+//
+//nolint:gochecknoglobals // export_test.go pattern requires global variables to expose internal functions
+var DiagnoseUnreachableNode = diagnoseUnreachableNode
+
 // MaxNodeNameLength exposes maxNodeNameLength for tests.
 const MaxNodeNameLength = maxNodeNameLength

@@ -125,12 +125,8 @@ func (p *Provisioner) createHetznerNodes(
 
 	_, _ = fmt.Fprintf(p.logWriter, "Creating %d %s node(s)...\n", opts.Count, opts.Role)
 
-	retryOpts := hetzner.ServerRetryOpts{LogWriter: p.syncLogWriter()}
-
-	if p.hetznerOpts != nil {
-		retryOpts.FallbackLocations = p.hetznerOpts.FallbackLocations
-		retryOpts.AllowPlacementFallback = p.hetznerOpts.PlacementGroupFallbackToNone
-	}
+	retryOpts := p.hetznerServerRetryOpts()
+	enableIPv4, enableIPv6 := p.hetznerPublicNetForRole(opts.Role)
 
 	results := make([]hetznerNodeCreationResult, opts.Count)
 
@@ -157,6 +153,8 @@ func (p *Provisioner) createHetznerNodes(
 					PlacementGroupID: infra.PlacementGroupID,
 					SSHKeyID:         infra.SSHKeyID,
 					FirewallIDs:      []int64{infra.FirewallID},
+					EnableIPv4:       enableIPv4,
+					EnableIPv6:       enableIPv6,
 				}, retryOpts)
 
 				results[nodeIndex] = hetznerNodeCreationResult{
@@ -178,6 +176,20 @@ func (p *Provisioner) createHetznerNodes(
 	return p.collectCreatedHetznerServers(results, opts.Role)
 }
 
+// hetznerServerRetryOpts builds the server-creation retry options from the
+// provisioner's Hetzner configuration, applying location/placement fallbacks
+// when configured.
+func (p *Provisioner) hetznerServerRetryOpts() hetzner.ServerRetryOpts {
+	retryOpts := hetzner.ServerRetryOpts{LogWriter: p.syncLogWriter()}
+
+	if p.hetznerOpts != nil {
+		retryOpts.FallbackLocations = p.hetznerOpts.FallbackLocations
+		retryOpts.AllowPlacementFallback = p.hetznerOpts.PlacementGroupFallbackToNone
+	}
+
+	return retryOpts
+}
+
 // collectCreatedHetznerServers processes creation results sequentially, logging each success
 // and returning the first failure with the node name included in the error.
 func (p *Provisioner) collectCreatedHetznerServers(
@@ -193,12 +205,20 @@ func (p *Provisioner) collectCreatedHetznerServers(
 
 		servers = append(servers, res.server)
 
+		// hetznerNodeTalosAddress only fails when the server has neither a public
+		// IPv4 nor a private-network IP (or the address is not yet populated), so the
+		// placeholder must not claim a specific cause.
+		addr, addrErr := hetznerNodeTalosAddress(res.server)
+		if addrErr != nil {
+			addr = "address unavailable"
+		}
+
 		_, _ = fmt.Fprintf(
 			p.logWriter,
 			"  ✓ %s node %s created (IP: %s)\n",
 			role,
 			res.name,
-			res.server.PublicNet.IPv4.IP.String(),
+			addr,
 		)
 	}
 
@@ -230,7 +250,11 @@ func (p *Provisioner) waitForHetznerTalosAPI(
 	servers []*hcloud.Server,
 ) error {
 	return runParallelOnServers(ctx, servers, len(servers), func(server *hcloud.Server) error {
-		serverIP := server.PublicNet.IPv4.IP.String()
+		serverIP, addrErr := hetznerNodeTalosAddress(server)
+		if addrErr != nil {
+			return addrErr
+		}
+
 		endpoint := fmt.Sprintf("%s:%d", serverIP, talosAPIPort)
 
 		p.logf("  Waiting for Talos API on %s (%s)...\n", server.Name, endpoint)
@@ -266,7 +290,10 @@ func (p *Provisioner) waitForHetznerTalosAPI(
 				return nil
 			})
 		if err != nil {
-			return fmt.Errorf("timeout waiting for Talos API on %s: %w", server.Name, err)
+			return diagnoseUnreachableNode(
+				server,
+				fmt.Errorf("timeout waiting for Talos API on %s: %w", server.Name, err),
+			)
 		}
 
 		p.logf("  ✓ Talos API reachable on %s\n", server.Name)
@@ -396,15 +423,18 @@ func (p *Provisioner) waitForServerReachable(
 	ctx context.Context,
 	server *hcloud.Server,
 ) error {
-	serverIP := server.PublicNet.IPv4.IP.String()
+	serverIP, addrErr := hetznerNodeTalosAddress(server)
+	if addrErr != nil {
+		return addrErr
+	}
 
 	err := dialTCPUntilReachable(ctx, serverIP, clusterReadinessTimeout, longRetryInterval)
 	if err != nil {
-		return fmt.Errorf(
+		return diagnoseUnreachableNode(server, fmt.Errorf(
 			"timeout waiting for %s to become reachable after install: %w",
 			server.Name,
 			err,
-		)
+		))
 	}
 
 	return nil
@@ -482,7 +512,10 @@ func (p *Provisioner) applyConfigToNode(
 	server *hcloud.Server,
 	config talosconfig.Provider,
 ) error {
-	serverIP := server.PublicNet.IPv4.IP.String()
+	serverIP, addrErr := hetznerNodeTalosAddress(server)
+	if addrErr != nil {
+		return addrErr
+	}
 
 	p.logf("  Applying config to %s (%s)...\n", server.Name, serverIP)
 

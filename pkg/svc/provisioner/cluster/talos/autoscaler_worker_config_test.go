@@ -1,8 +1,14 @@
 package talosprovisioner_test
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
+	"crypto/rand"
 	"encoding/base64"
+	"fmt"
+	"io"
+	"strings"
 	"testing"
 
 	talosprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/talos"
@@ -45,6 +51,55 @@ func newTestWorkerProvider() *taloscontainer.Container {
 			},
 		},
 	})
+}
+
+// decodeAutoscalerCloudInit reverses encodeAutoscalerCloudInit the way the live
+// chain does: the cluster-autoscaler strips the outer base64 layer to form
+// user_data, the Talos hcloud platform base64-decodes user_data again
+// (maybeBase64Decode), and the platform config loader un-gzips the result before
+// parsing. The recovered bytes must equal the original worker config.
+func decodeAutoscalerCloudInit(t *testing.T, secretValue []byte) []byte {
+	t.Helper()
+
+	userData, err := base64.StdEncoding.DecodeString(string(secretValue))
+	require.NoError(t, err, "autoscaler base64 layer")
+
+	compressed, err := base64.StdEncoding.DecodeString(string(userData))
+	require.NoError(t, err, "Talos maybeBase64Decode layer")
+
+	gzipReader, err := gzip.NewReader(bytes.NewReader(compressed))
+	require.NoError(t, err, "gzip header")
+
+	defer func() { require.NoError(t, gzipReader.Close()) }()
+
+	decompressed, err := io.ReadAll(gzipReader)
+	require.NoError(t, err)
+
+	return decompressed
+}
+
+// autoscalerUserData returns the inner layer of the secret value: the exact
+// bytes Hetzner stores as user_data (base64(gzip(config))), against which the
+// 32 KiB limit is enforced.
+func autoscalerUserData(t *testing.T, secretValue []byte) []byte {
+	t.Helper()
+
+	userData, err := base64.StdEncoding.DecodeString(string(secretValue))
+	require.NoError(t, err)
+
+	return userData
+}
+
+// isASCII reports whether every byte is in the 7-bit ASCII range. user_data must
+// be ASCII so hcloud-go's JSON marshaling does not corrupt it with U+FFFD.
+func isASCII(b []byte) bool {
+	for _, c := range b {
+		if c > 0x7F {
+			return false
+		}
+	}
+
+	return true
 }
 
 // --- GenerateAutoscalerWorkerConfig ---
@@ -181,8 +236,7 @@ func TestApplyAutoscalerConfigSecret_CreatesNewSecret(t *testing.T) {
 
 	assert.Equal(t, []byte(snapshotID), secret.Data["hcloud_image"])
 
-	wantEncoded := base64.StdEncoding.EncodeToString(workerConfig)
-	assert.Equal(t, []byte(wantEncoded), secret.Data["hcloud_cloud_init"])
+	assert.Equal(t, workerConfig, decodeAutoscalerCloudInit(t, secret.Data["hcloud_cloud_init"]))
 }
 
 func TestApplyAutoscalerConfigSecret_PreservesExtraKeysOnUpdate(t *testing.T) {
@@ -222,8 +276,7 @@ func TestApplyAutoscalerConfigSecret_PreservesExtraKeysOnUpdate(t *testing.T) {
 	// Desired keys must be updated.
 	assert.Equal(t, []byte(snapshotID), secret.Data["hcloud_image"])
 
-	wantEncoded := base64.StdEncoding.EncodeToString(workerConfig)
-	assert.Equal(t, []byte(wantEncoded), secret.Data["hcloud_cloud_init"])
+	assert.Equal(t, workerConfig, decodeAutoscalerCloudInit(t, secret.Data["hcloud_cloud_init"]))
 
 	// Extra key must be preserved (merge, not replace).
 	assert.Equal(t, []byte("extra-value"), secret.Data["extra_key"])
@@ -264,8 +317,7 @@ func TestApplyAutoscalerConfigSecret_UpdatesExistingSecret(t *testing.T) {
 
 	assert.Equal(t, []byte(snapshotID), secret.Data["hcloud_image"])
 
-	wantEncoded := base64.StdEncoding.EncodeToString(workerConfig)
-	assert.Equal(t, []byte(wantEncoded), secret.Data["hcloud_cloud_init"])
+	assert.Equal(t, workerConfig, decodeAutoscalerCloudInit(t, secret.Data["hcloud_cloud_init"]))
 }
 
 // newConflictClientset returns a fake clientset pre-seeded with an existing
@@ -336,6 +388,95 @@ func TestApplyAutoscalerConfigSecret_CreateConflictFallsBackToUpdate(t *testing.
 
 	assert.Equal(t, []byte("new-image"), updated.Data["hcloud_image"])
 
-	wantEncoded := base64.StdEncoding.EncodeToString([]byte("new-config"))
-	assert.Equal(t, []byte(wantEncoded), updated.Data["hcloud_cloud_init"])
+	assert.Equal(
+		t,
+		[]byte("new-config"),
+		decodeAutoscalerCloudInit(t, updated.Data["hcloud_cloud_init"]),
+	)
+}
+
+// largeWorkerConfigYAML builds a worker-config-shaped YAML blob larger than
+// Hetzner's 32 KiB user_data limit — the situation from issue #5015 where the
+// raw config overflowed. It mixes a high-entropy PKI chunk (incompressible) with
+// repetitive structure (compressible), mirroring a real Talos worker config.
+func largeWorkerConfigYAML(t *testing.T) []byte {
+	t.Helper()
+
+	pki := make([]byte, 3072)
+	_, err := rand.Read(pki)
+	require.NoError(t, err)
+
+	var builder strings.Builder
+
+	builder.WriteString("version: v1alpha1\nmachine:\n  type: worker\n  ca:\n    crt: ")
+	builder.WriteString(base64.StdEncoding.EncodeToString(pki))
+	builder.WriteString("\n  registries:\n    mirrors:\n")
+
+	for i := range 400 {
+		fmt.Fprintf(
+			&builder,
+			"      registry-%d.example.com:\n        endpoints:\n          - https://mirror.example.com/v2\n",
+			i,
+		)
+	}
+
+	return []byte(builder.String())
+}
+
+// A realistic ~40 KiB worker config (the size that overflowed Hetzner's raw
+// user_data limit in issue #5015) must compress to a user_data payload that is
+// both under 32 KiB and ASCII, and must round-trip back to the original config.
+func TestApplyAutoscalerConfigSecret_CompressesLargeConfigUnderLimit(t *testing.T) {
+	t.Parallel()
+
+	clientset := fake.NewClientset()
+	largeConfig := largeWorkerConfigYAML(t)
+
+	require.Greater(t, len(largeConfig), 32768,
+		"test fixture must exceed Hetzner's raw user_data limit to be representative")
+
+	err := talosprovisioner.ApplyAutoscalerConfigSecret(
+		context.Background(), clientset, "123456789", largeConfig,
+	)
+	require.NoError(t, err)
+
+	secret, err := clientset.CoreV1().Secrets("kube-system").Get(
+		context.Background(), "cluster-autoscaler-config", metav1.GetOptions{},
+	)
+	require.NoError(t, err)
+
+	userData := autoscalerUserData(t, secret.Data["hcloud_cloud_init"])
+
+	assert.LessOrEqual(t, len(userData), 32768,
+		"gzip must bring user_data under Hetzner's 32 KiB limit")
+	assert.True(t, isASCII(userData),
+		"user_data must be ASCII so hcloud-go JSON marshaling does not corrupt it")
+	assert.Equal(t, largeConfig, decodeAutoscalerCloudInit(t, secret.Data["hcloud_cloud_init"]),
+		"config must round-trip through the autoscaler + Talos decode chain")
+}
+
+// When even the gzip-compressed config exceeds Hetzner's 32 KiB user_data limit,
+// ApplyAutoscalerConfigSecret must fail fast (at cluster create/update) rather
+// than write a secret that would silently break the next scale-up.
+func TestApplyAutoscalerConfigSecret_RejectsOversizedConfig(t *testing.T) {
+	t.Parallel()
+
+	clientset := fake.NewClientset()
+
+	// Incompressible random bytes large enough that base64(gzip(data)) still
+	// exceeds 32 KiB, exercising the fail-fast guard.
+	incompressible := make([]byte, 40000)
+	_, err := rand.Read(incompressible)
+	require.NoError(t, err)
+
+	err = talosprovisioner.ApplyAutoscalerConfigSecret(
+		context.Background(), clientset, "123456789", incompressible,
+	)
+	require.ErrorIs(t, err, talosprovisioner.ErrAutoscalerUserDataTooLarge)
+
+	// The guard must fire before any Secret is written.
+	_, getErr := clientset.CoreV1().Secrets("kube-system").Get(
+		context.Background(), "cluster-autoscaler-config", metav1.GetOptions{},
+	)
+	assert.True(t, apierrors.IsNotFound(getErr))
 }

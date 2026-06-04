@@ -28,7 +28,11 @@ const (
 	AutoscalerConfigHcloudImageKey = "hcloud_image"
 
 	// AutoscalerConfigHcloudCloudInitKey is the key in AutoscalerConfigSecretName that
-	// holds the base64-encoded cloud-init user-data for new autoscaler worker nodes.
+	// holds the cloud-init user-data for new autoscaler worker nodes. The value is
+	// base64(base64(gzip(workerConfig))): the autoscaler strips the outer base64
+	// layer, leaving base64(gzip(workerConfig)) as the Hetzner user_data, which the
+	// Talos hcloud platform base64-decodes and un-gzips before parsing. This keeps
+	// the payload under Hetzner's 32 KiB user_data limit (issue #5015).
 	AutoscalerConfigHcloudCloudInitKey = "hcloud_cloud_init"
 )
 
@@ -49,13 +53,20 @@ type Installer struct {
 // node pools, expander strategy, scale-down timing, and node count limits.
 // When haEnabled is true the chart is configured with replicas=2
 // for fast failover via leader election.
+// workerPublicIPv4/workerPublicIPv6 mirror the Hetzner worker public-net toggles;
+// when either is false the autoscaler is configured (via HCLOUD_PUBLIC_IPV4/IPV6) so
+// new nodes match the worker public-net setting. The Hetzner cluster-autoscaler only
+// supports this cluster-wide, not per node pool.
 func NewInstaller(
 	client helm.Interface,
 	timeout time.Duration,
 	nodeAutoscaler v1alpha1.NodeAutoscalerConfig,
 	haEnabled bool,
+	workerPublicIPv4, workerPublicIPv6 bool,
 ) (*Installer, error) {
-	valuesYaml, err := buildValuesYaml(nodeAutoscaler, haEnabled)
+	extraEnv := hetznerPublicNetEnv(workerPublicIPv4, workerPublicIPv6)
+
+	valuesYaml, err := buildValuesYaml(nodeAutoscaler, haEnabled, extraEnv)
 	if err != nil {
 		return nil, fmt.Errorf("clusterautoscaler: failed to build chart values: %w", err)
 	}
@@ -93,6 +104,7 @@ type chartValues struct {
 	CloudProvider     string               `json:"cloudProvider"`
 	AutoscalingGroups []autoscalingGroup   `json:"autoscalingGroups,omitempty"`
 	ExtraArgs         chartExtraArgs       `json:"extraArgs"`
+	ExtraEnv          map[string]string    `json:"extraEnv,omitempty"`
 	ExtraEnvSecrets   chartExtraEnvSecrets `json:"extraEnvSecrets"`
 	Tolerations       []chartToleration    `json:"tolerations"`
 	NodeSelector      map[string]string    `json:"nodeSelector"`
@@ -166,8 +178,12 @@ type chartResources struct {
 // from the given NodeAutoscalerConfig. It uses a typed struct marshaled via
 // sigs.k8s.io/yaml to prevent YAML injection from user-supplied strings.
 // When haEnabled is true an extra standby replica is configured.
-func buildValuesYaml(cfg v1alpha1.NodeAutoscalerConfig, haEnabled bool) (string, error) {
-	vals := buildChartValues(cfg, haEnabled)
+func buildValuesYaml(
+	cfg v1alpha1.NodeAutoscalerConfig,
+	haEnabled bool,
+	extraEnv map[string]string,
+) (string, error) {
+	vals := buildChartValues(cfg, haEnabled, extraEnv)
 
 	out, err := yaml.Marshal(vals)
 	if err != nil {
@@ -177,8 +193,31 @@ func buildValuesYaml(cfg v1alpha1.NodeAutoscalerConfig, haEnabled bool) (string,
 	return string(out), nil
 }
 
+// hetznerPublicNetEnv builds the cluster-autoscaler extraEnv entries that disable
+// public IPs on autoscaler-created nodes. The Hetzner cluster-autoscaler controls
+// public IPs globally via HCLOUD_PUBLIC_IPV4 / HCLOUD_PUBLIC_IPV6 (not per node pool),
+// so autoscaler nodes inherit the worker public-net setting cluster-wide. Only the
+// disabling entries are emitted; unset means the autoscaler default (public IP) applies.
+func hetznerPublicNetEnv(workerPublicIPv4, workerPublicIPv6 bool) map[string]string {
+	env := map[string]string{}
+
+	if !workerPublicIPv4 {
+		env["HCLOUD_PUBLIC_IPV4"] = "false"
+	}
+
+	if !workerPublicIPv6 {
+		env["HCLOUD_PUBLIC_IPV6"] = "false"
+	}
+
+	return env
+}
+
 // buildChartValues constructs the typed Helm values struct from the given config.
-func buildChartValues(cfg v1alpha1.NodeAutoscalerConfig, haEnabled bool) chartValues {
+func buildChartValues(
+	cfg v1alpha1.NodeAutoscalerConfig,
+	haEnabled bool,
+	extraEnv map[string]string,
+) chartValues {
 	scaleDownTime := cfg.ScaleDownUnneededTime
 	if scaleDownTime == "" {
 		scaleDownTime = defaultScaleDownUnneededTime
@@ -204,18 +243,8 @@ func buildChartValues(cfg v1alpha1.NodeAutoscalerConfig, haEnabled bool) chartVa
 			OkTotalUnreadyCount:   defaultOkTotalUnreadyCount,
 			V:                     "4",
 		},
-		ExtraEnvSecrets: chartExtraEnvSecrets{
-			HcloudToken:   chartSecretRef{Name: "hcloud", Key: "token"},
-			HcloudNetwork: chartSecretRef{Name: "hcloud", Key: "network"},
-			HcloudImage: chartSecretRef{
-				Name: AutoscalerConfigSecretName,
-				Key:  AutoscalerConfigHcloudImageKey,
-			},
-			HcloudCloudInit: chartSecretRef{
-				Name: AutoscalerConfigSecretName,
-				Key:  AutoscalerConfigHcloudCloudInitKey,
-			},
-		},
+		ExtraEnv:        extraEnv,
+		ExtraEnvSecrets: buildExtraEnvSecrets(),
 		Tolerations: []chartToleration{
 			{
 				Key:      "node-role.kubernetes.io/control-plane",
@@ -234,6 +263,24 @@ func buildChartValues(cfg v1alpha1.NodeAutoscalerConfig, haEnabled bool) chartVa
 		Resources: chartResources{
 			Requests: chartResourceRequests{CPU: "50m", Memory: "128Mi"},
 			Limits:   chartResourceLimits{Memory: "256Mi"},
+		},
+	}
+}
+
+// buildExtraEnvSecrets returns the secret-backed environment variables the
+// cluster-autoscaler reads: the Hetzner token and network (from the "hcloud"
+// secret) and the snapshot image and cloud-init (from the autoscaler config secret).
+func buildExtraEnvSecrets() chartExtraEnvSecrets {
+	return chartExtraEnvSecrets{
+		HcloudToken:   chartSecretRef{Name: "hcloud", Key: "token"},
+		HcloudNetwork: chartSecretRef{Name: "hcloud", Key: "network"},
+		HcloudImage: chartSecretRef{
+			Name: AutoscalerConfigSecretName,
+			Key:  AutoscalerConfigHcloudImageKey,
+		},
+		HcloudCloudInit: chartSecretRef{
+			Name: AutoscalerConfigSecretName,
+			Key:  AutoscalerConfigHcloudCloudInitKey,
 		},
 	}
 }

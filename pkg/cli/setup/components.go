@@ -181,9 +181,11 @@ func clusterAutoscalerFactory(
 
 		timeout := installer.GetInstallTimeout(clusterCfg)
 		haEnabled := installer.IsHAEnabled(clusterCfg.Spec.Cluster.TotalNodeCount())
+		hetzner := clusterCfg.Spec.Provider.Hetzner
 
 		return clusterautoscalerinstaller.NewInstaller(
 			helmClient, timeout, clusterCfg.Spec.Cluster.Autoscaler.Node, haEnabled,
+			hetzner.WorkerIPv4Enabled(), hetzner.WorkerIPv6Enabled(),
 		)
 	}
 }
