@@ -970,7 +970,8 @@ func TestValidateCmdWithSkipKindsFlag(t *testing.T) {
 	failCmd.SetOut(&failOut)
 	failCmd.SetErr(&failOut)
 
-	if execErr := failCmd.Execute(); execErr == nil {
+	err = failCmd.Execute()
+	if err == nil {
 		t.Fatal("expected validation to fail without --skip-kinds")
 	}
 
@@ -983,8 +984,9 @@ func TestValidateCmdWithSkipKindsFlag(t *testing.T) {
 	passCmd.SetOut(&passOut)
 	passCmd.SetErr(&passOut)
 
-	if execErr := passCmd.Execute(); execErr != nil {
-		t.Fatalf("expected validation with --skip-kinds=ConfigMap to succeed, got: %v", execErr)
+	err = passCmd.Execute()
+	if err != nil {
+		t.Fatalf("expected validation with --skip-kinds=ConfigMap to succeed, got: %v", err)
 	}
 }
 
@@ -993,11 +995,13 @@ func TestValidateCmdWithSkipKindsFromConfig(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	manifestDir := filepath.Join(tmpDir, "k8s")
-	if err := os.MkdirAll(manifestDir, 0o750); err != nil {
+
+	err := os.MkdirAll(manifestDir, 0o750)
+	if err != nil {
 		t.Fatalf("failed to create manifest dir: %v", err)
 	}
 
-	err := os.WriteFile(
+	err = os.WriteFile(
 		filepath.Join(manifestDir, "configmap.yaml"),
 		[]byte(invalidConfigMapManifest),
 		0o600,
@@ -1017,11 +1021,12 @@ spec:
       skipKinds:
         - ConfigMap
 `
-	if err := os.WriteFile(
+	err = os.WriteFile(
 		filepath.Join(tmpDir, "ksail.yaml"),
 		[]byte(ksailYAML),
 		0o600,
-	); err != nil {
+	)
+	if err != nil {
 		t.Fatalf("failed to write ksail.yaml: %v", err)
 	}
 
@@ -1035,10 +1040,11 @@ spec:
 	cmd.SetOut(&output)
 	cmd.SetErr(&output)
 
-	if execErr := cmd.Execute(); execErr != nil {
+	err = cmd.Execute()
+	if err != nil {
 		t.Fatalf(
 			"expected validation with spec.workload.validation.skipKinds to succeed, got: %v",
-			execErr,
+			err,
 		)
 	}
 }
