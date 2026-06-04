@@ -3192,9 +3192,14 @@ func buildNoInfoError(clusterName string, provErr error) error {
 // than one context. Callers should surface the ambiguity error rather than
 // treating it as "not found".
 //
-//nolint:gosec // G304: kubeconfigPath is resolved from trusted config or default.
+
 func resolveClusterContext(kubeconfigPath, clusterName string) (string, error) {
-	configBytes, err := os.ReadFile(kubeconfigPath)
+	canonicalPath, err := fsutil.EvalCanonicalPath(kubeconfigPath)
+	if err != nil {
+		return "", nil //nolint:nilerr // unresolvable kubeconfig path is non-fatal for info
+	}
+
+	configBytes, err := os.ReadFile(canonicalPath) //nolint:gosec // canonicalized above
 	if err != nil {
 		return "", nil //nolint:nilerr // unreadable kubeconfig is non-fatal for info
 	}
@@ -6067,9 +6072,14 @@ func stripParenthetical(input string) string {
 
 // switchContext loads the kubeconfig, resolves the cluster name to a context, and sets current-context.
 //
-//nolint:gosec // G304: kubeconfigPath is resolved from trusted config or default
+
 func switchContext(kubeconfigPath, clusterName string) (string, error) {
-	configBytes, err := os.ReadFile(kubeconfigPath)
+	canonicalPath, err := fsutil.EvalCanonicalPath(kubeconfigPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to read kubeconfig: %w", err)
+	}
+
+	configBytes, err := os.ReadFile(canonicalPath) //nolint:gosec // canonicalized above
 	if err != nil {
 		return "", fmt.Errorf("failed to read kubeconfig: %w", err)
 	}
@@ -6091,7 +6101,7 @@ func switchContext(kubeconfigPath, clusterName string) (string, error) {
 		return "", fmt.Errorf("failed to serialize kubeconfig: %w", err)
 	}
 
-	err = os.WriteFile(kubeconfigPath, result, switchKubeconfigFileMode)
+	err = fsutil.AtomicWriteFile(canonicalPath, result, switchKubeconfigFileMode)
 	if err != nil {
 		return "", fmt.Errorf("failed to write kubeconfig: %w", err)
 	}
