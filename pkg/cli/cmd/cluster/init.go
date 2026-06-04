@@ -312,36 +312,3 @@ type listResult struct {
 
 // tableColumnGap is the minimum gap between columns in table output.
 const tableColumnGap = 3
-
-const listLongDesc = `List all Kubernetes clusters managed by KSail.
-
-By default, lists clusters from all distributions across all providers.
-Use --provider to filter results to a specific provider.
-
-Output Format:
-  PROVIDER   DISTRIBUTION   CLUSTER
-  docker     Vanilla        dev-cluster
-  docker     K3s            test-cluster
-  hetzner    Talos          prod-cluster
-
-When any cluster has a TTL set, a TTL column is included:
-  PROVIDER   DISTRIBUTION   CLUSTER       TTL
-  docker     K3s            dev-cluster   2h 30m
-
-The PROVIDER and CLUSTER values from the output can be used directly
-with other cluster commands:
-  ksail cluster delete --name <cluster> --provider <provider>
-  ksail cluster stop --name <cluster> --provider <provider>
-
-Examples:
-  # List all clusters
-  ksail cluster list
-
-  # List only Docker-based clusters
-  ksail cluster list --provider Docker
-
-  # List only Hetzner clusters
-  ksail cluster list --provider Hetzner
-
-  # List only Omni clusters
-  ksail cluster list --provider Omni`

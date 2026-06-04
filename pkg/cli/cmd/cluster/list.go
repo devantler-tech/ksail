@@ -23,6 +23,39 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const listLongDesc = `List all Kubernetes clusters managed by KSail.
+
+By default, lists clusters from all distributions across all providers.
+Use --provider to filter results to a specific provider.
+
+Output Format:
+  PROVIDER   DISTRIBUTION   CLUSTER
+  docker     Vanilla        dev-cluster
+  docker     K3s            test-cluster
+  hetzner    Talos          prod-cluster
+
+When any cluster has a TTL set, a TTL column is included:
+  PROVIDER   DISTRIBUTION   CLUSTER       TTL
+  docker     K3s            dev-cluster   2h 30m
+
+The PROVIDER and CLUSTER values from the output can be used directly
+with other cluster commands:
+  ksail cluster delete --name <cluster> --provider <provider>
+  ksail cluster stop --name <cluster> --provider <provider>
+
+Examples:
+  # List all clusters
+  ksail cluster list
+
+  # List only Docker-based clusters
+  ksail cluster list --provider Docker
+
+  # List only Hetzner clusters
+  ksail cluster list --provider Hetzner
+
+  # List only Omni clusters
+  ksail cluster list --provider Omni`
+
 // NewListCmd creates the list command for clusters.
 func NewListCmd(runtimeContainer *di.Runtime) *cobra.Command {
 	var providerFilter v1alpha1.Provider
@@ -772,36 +805,4 @@ func (r *componentReconciler) uninstallWithFactory(
 	}
 
 	return nil
-}
-
-// ErrInvalidResourcePolicy is returned when an unsupported
-// existing-resource-policy value is provided.
-var ErrInvalidResourcePolicy = errors.New(
-	"invalid existing-resource-policy: must be 'none' or 'update'",
-)
-
-const (
-	// resourcePolicyNone skips resources that already exist in the cluster.
-	resourcePolicyNone = "none"
-	// resourcePolicyUpdate updates resources that already exist in the cluster.
-	resourcePolicyUpdate = "update"
-)
-
-// ErrInvalidTarPath is returned when a tar entry contains a path
-// traversal attempt.
-var ErrInvalidTarPath = errors.New("invalid tar entry path")
-
-// ErrSymlinkInArchive is returned when a tar archive contains
-// symbolic or hard links, which are not supported.
-var ErrSymlinkInArchive = errors.New(
-	"symbolic and hard links are not supported in backup archives",
-)
-
-// ErrRestoreFailed is returned when one or more resources fail to restore.
-var ErrRestoreFailed = errors.New("resource restore failed")
-
-type restoreFlags struct {
-	inputPath              string
-	existingResourcePolicy string
-	dryRun                 bool
 }

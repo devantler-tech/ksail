@@ -1,9 +1,8 @@
 package cluster
 
 import (
-	"fmt"
-
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/lifecycle"
 	"github.com/devantler-tech/ksail/v7/pkg/di"
 	"github.com/spf13/cobra"
 )
@@ -28,49 +27,7 @@ func NewInfoCmd(_ *di.Runtime) *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVarP(
-		&nameFlag,
-		"name",
-		"n",
-		"",
-		"Name of the cluster to target",
-	)
-
-	cmd.Flags().VarP(
-		&providerFlag,
-		"provider",
-		"p",
-		fmt.Sprintf("Provider to use (%s)", providerFlag.ValidValues()),
-	)
+	lifecycle.BindNameAndProviderFlags(cmd, &nameFlag, &providerFlag)
 
 	return cmd
 }
-
-// diagnoseLongDesc describes the `ksail cluster diagnose` command.
-const diagnoseLongDesc = `Surface failing Kubernetes resources for the ` +
-	`current cluster.
-
-This command inspects the live cluster via the Kubernetes API and reports
-any pods that are not running successfully, any nodes that are not Ready,
-and any PersistentVolumeClaims stuck in Pending phase. Each finding
-includes a severity classification and, where a known failure pattern is
-detected, a proactive remediation suggestion.
-
-A health score (0–100) summarises overall cluster health: each critical
-finding deducts 25 points and each warning deducts 10 points.
-
-The output is intentionally compact so it can be consumed directly by users
-or by the KSail AI chat assistant (ksail chat) and MCP server, which expose
-this command as part of the cluster_read tool. When used from the AI
-assistant the output is fed back as context so Copilot can explain the root
-cause and suggest remediation.
-
-The cluster is resolved in the following priority order:
-  1. From --name flag
-  2. From ksail.yaml config file (if present)
-  3. From current kubeconfig context
-
-Exit code 0 is returned even when pod or node failures are reported.
-A non-zero exit code indicates the Kubernetes API could not be queried
-(e.g., the cluster is unreachable or the credentials lack sufficient
-permissions).`

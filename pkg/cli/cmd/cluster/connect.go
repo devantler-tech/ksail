@@ -1,18 +1,15 @@
 package cluster
 
 import (
-	"context"
 	"fmt"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/editor"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/kubeconfig"
-	"github.com/devantler-tech/ksail/v7/pkg/cli/lifecycle"
 	"github.com/devantler-tech/ksail/v7/pkg/client/k9s"
 	"github.com/devantler-tech/ksail/v7/pkg/di"
 	configmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/ksail"
-	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	"github.com/spf13/cobra"
 )
 
@@ -126,31 +123,4 @@ func setupEditorEnv(editorFlag string, cfg *v1alpha1.Cluster) func() {
 
 	// Set environment variables for connect command
 	return resolver.SetEnvVars(editorCmd, "connect")
-}
-
-// NOTE: Some imports above (configmanager, k3dconfigmanager, kindconfigmanager,
-// talosconfigmanager, etc.) are used by functions that remain in this file
-// (loadClusterConfiguration, resolveClusterNameFromContext, etc.)
-
-const (
-	k3sDisableMetricsServerFlag = "--disable=metrics-server"
-	k3sDisableLocalStorageFlag  = "--disable=local-storage"
-	k3sDisableServiceLBFlag     = "--disable=servicelb"
-	k3sDisableTraefikFlag       = "--disable=traefik"
-	k3sFlanelBackendNoneFlag    = "--flannel-backend=none"
-	k3sDisableNetworkPolicyFlag = "--disable-network-policy"
-)
-
-// newCreateLifecycleConfig creates the lifecycle configuration for cluster creation.
-func newCreateLifecycleConfig() lifecycle.Config {
-	return lifecycle.Config{
-		TitleEmoji:         "🚀",
-		TitleContent:       "Create cluster...",
-		ActivityContent:    "creating cluster",
-		SuccessContent:     "cluster created",
-		ErrorMessagePrefix: "failed to create cluster",
-		Action: func(ctx context.Context, provisioner clusterprovisioner.Provisioner, clusterName string) error {
-			return provisioner.Create(ctx, clusterName)
-		},
-	}
 }

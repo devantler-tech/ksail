@@ -13,6 +13,27 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// diffLongDesc describes the `ksail cluster diff` command.
+const diffLongDesc = `Compare the desired cluster configuration (ksail.yaml) against the live
+cluster state and report any drift.
+
+This command detects installed components via the Kubernetes API and Helm
+release history, then compares them against the configuration defined in
+ksail.yaml. Changes are classified by impact (in-place, reboot-required,
+recreate-required, wipe-required) — the same categories used by
+'ksail cluster update'.
+
+No changes are applied to the cluster; this is a read-only operation.
+
+The cluster is resolved in the following priority order:
+  1. From the --name flag override
+  2. From metadata.name in the ksail.yaml config file
+  3. From the current kubeconfig context
+
+Use --output json for machine-readable output suitable for CI pipelines.
+Use --exit-code to return exit code 2 when drift is detected (useful for
+CI gates and monitoring scripts).`
+
 // NewDiffCmd creates the cluster diff command.
 func NewDiffCmd(runtimeContainer *di.Runtime) *cobra.Command {
 	var exitCodeFlag bool

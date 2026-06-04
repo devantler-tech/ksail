@@ -29,6 +29,33 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const deleteLongDesc = `Destroy a cluster.
+
+The cluster is resolved in the following priority order:
+  1. From --name flag
+  2. From ksail.yaml config file (if present)
+  3. From current kubeconfig context
+
+The provider is resolved in the following priority order:
+  1. From --provider flag
+  2. From ksail.yaml config file (if present)
+  3. Defaults to Docker
+
+The kubeconfig is resolved in the following priority order:
+  1. From --kubeconfig flag
+  2. From KUBECONFIG environment variable
+  3. From ksail.yaml config file (if present)
+  4. Defaults to ~/.kube/config`
+
+// deleteFlags holds all the flags for the delete command.
+type deleteFlags struct {
+	name       string
+	provider   v1alpha1.Provider
+	kubeconfig string
+	storage    bool
+	force      bool
+}
+
 // NewDeleteCmd creates and returns the delete command.
 // Delete uses --name and --provider flags to determine the cluster to delete.
 func NewDeleteCmd(runtimeContainer *di.Runtime) *cobra.Command {

@@ -29,6 +29,38 @@ import (
 	sigsyaml "sigs.k8s.io/yaml"
 )
 
+// ErrInvalidResourcePolicy is returned when an unsupported
+// existing-resource-policy value is provided.
+var ErrInvalidResourcePolicy = errors.New(
+	"invalid existing-resource-policy: must be 'none' or 'update'",
+)
+
+const (
+	// resourcePolicyNone skips resources that already exist in the cluster.
+	resourcePolicyNone = "none"
+	// resourcePolicyUpdate updates resources that already exist in the cluster.
+	resourcePolicyUpdate = "update"
+)
+
+// ErrInvalidTarPath is returned when a tar entry contains a path
+// traversal attempt.
+var ErrInvalidTarPath = errors.New("invalid tar entry path")
+
+// ErrSymlinkInArchive is returned when a tar archive contains
+// symbolic or hard links, which are not supported.
+var ErrSymlinkInArchive = errors.New(
+	"symbolic and hard links are not supported in backup archives",
+)
+
+// ErrRestoreFailed is returned when one or more resources fail to restore.
+var ErrRestoreFailed = errors.New("resource restore failed")
+
+type restoreFlags struct {
+	inputPath              string
+	existingResourcePolicy string
+	dryRun                 bool
+}
+
 // NewRestoreCmd creates the cluster restore command.
 func NewRestoreCmd(_ *di.Runtime) *cobra.Command {
 	flags := &restoreFlags{
@@ -453,7 +485,12 @@ func restoreResourceType(
 		}
 	}
 
-	_, _ = fmt.Fprintf(writer, "   Restored %s\n", resourceType)
+	// Only report success when every file for this type restored; partial
+	// failures are surfaced via the per-file warnings above and the overall
+	// ErrRestoreFailed the caller returns.
+	if len(errs) == 0 {
+		_, _ = fmt.Fprintf(writer, "   Restored %s\n", resourceType)
+	}
 
 	return errs, nil
 }
@@ -1003,17 +1040,3 @@ func resolveCreatedContextName(
 
 	return distribution.ContextName(clusterName)
 }
-
-const startLongDesc = `Start a previously stopped Kubernetes cluster.
-
-The cluster is resolved in the following priority order:
-  1. From --name flag
-  2. From ksail.yaml config file (if present)
-  3. From current kubeconfig context
-
-The provider is resolved in the following priority order:
-  1. From --provider flag
-  2. From ksail.yaml config file (if present)
-  3. Defaults to Docker
-
-Supported distributions are automatically detected from existing clusters.`

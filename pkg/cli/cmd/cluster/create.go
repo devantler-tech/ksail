@@ -1,6 +1,7 @@
 package cluster
 
 import (
+	"context"
 	"fmt"
 	"slices"
 	"strings"
@@ -29,6 +30,31 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const (
+	k3sDisableMetricsServerFlag = "--disable=metrics-server"
+	k3sDisableLocalStorageFlag  = "--disable=local-storage"
+	k3sDisableServiceLBFlag     = "--disable=servicelb"
+	k3sDisableTraefikFlag       = "--disable=traefik"
+	k3sFlanelBackendNoneFlag    = "--flannel-backend=none"
+	k3sDisableNetworkPolicyFlag = "--disable-network-policy"
+	// k3dAllServersNodeFilter targets all server (control-plane) nodes when applying K3s extra args.
+	k3dAllServersNodeFilter = "server:*"
+)
+
+// newCreateLifecycleConfig creates the lifecycle configuration for cluster creation.
+func newCreateLifecycleConfig() lifecycle.Config {
+	return lifecycle.Config{
+		TitleEmoji:         "🚀",
+		TitleContent:       "Create cluster...",
+		ActivityContent:    "creating cluster",
+		SuccessContent:     "cluster created",
+		ErrorMessagePrefix: "failed to create cluster",
+		Action: func(ctx context.Context, provisioner clusterprovisioner.Provisioner, clusterName string) error {
+			return provisioner.Create(ctx, clusterName)
+		},
+	}
+}
+
 // NewCreateCmd wires the cluster create command using the shared runtime container.
 func NewCreateCmd(runtimeContainer *di.Runtime) *cobra.Command {
 	cmd := &cobra.Command{
@@ -52,8 +78,6 @@ func NewCreateCmd(runtimeContainer *di.Runtime) *cobra.Command {
 }
 
 // handleCreateRunE executes cluster creation with mirror registry setup and CNI installation.
-//
-
 func handleCreateRunE(
 	cmd *cobra.Command,
 	cfgManager *ksailconfigmanager.ConfigManager,
@@ -414,10 +438,6 @@ func maybeDisableK3dFeature(
 	)
 }
 
-// k3dAllServersNodeFilter is the K3d node filter that targets all server
-// (control-plane) nodes when applying K3s extra args.
-const k3dAllServersNodeFilter = "server:*"
-
 // setupK3dCNI configures K3d to disable flannel and network policy when a non-default
 // CNI (Cilium or Calico) is selected. Without this, K3s starts with flannel enabled,
 // causing conflicts when the custom CNI is installed post-creation.
@@ -743,31 +763,4 @@ func maybeWaitForTTL(
 
 	// Block and wait for TTL, then auto-destroy.
 	return waitForTTLAndDelete(cmd, clusterName, clusterCfg, ttl)
-}
-
-const deleteLongDesc = `Destroy a cluster.
-
-The cluster is resolved in the following priority order:
-  1. From --name flag
-  2. From ksail.yaml config file (if present)
-  3. From current kubeconfig context
-
-The provider is resolved in the following priority order:
-  1. From --provider flag
-  2. From ksail.yaml config file (if present)
-  3. Defaults to Docker
-
-The kubeconfig is resolved in the following priority order:
-  1. From --kubeconfig flag
-  2. From KUBECONFIG environment variable
-  3. From ksail.yaml config file (if present)
-  4. Defaults to ~/.kube/config`
-
-// deleteFlags holds all the flags for the delete command.
-type deleteFlags struct {
-	name       string
-	provider   v1alpha1.Provider
-	kubeconfig string
-	storage    bool
-	force      bool
 }
