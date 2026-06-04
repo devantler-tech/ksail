@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	"k8s.io/client-go/kubernetes"
@@ -97,6 +99,38 @@ func BuildRESTConfig(kubeconfig, context string) (*rest.Config, error) {
 	applyDefaults(restConfig)
 
 	return restConfig, nil
+}
+
+// ValidateContextExists checks that contextName exists in the kubeconfig at
+// kubeconfigPath. It returns nil when the context is present, a wrapped
+// ErrKubeconfigContextNotFound (listing the available contexts) when it is
+// absent, and a wrapped load error when the kubeconfig cannot be read.
+//
+// This gives callers a deterministic, actionable check for a user-pinned
+// context — clearer than the generic "no configuration has been provided"
+// error client-go raises when an unresolved current-context is used.
+func ValidateContextExists(kubeconfigPath, contextName string) error {
+	config, err := clientcmd.LoadFromFile(kubeconfigPath)
+	if err != nil {
+		return fmt.Errorf("load kubeconfig for context validation: %w", err)
+	}
+
+	if _, exists := config.Contexts[contextName]; exists {
+		return nil
+	}
+
+	available := make([]string, 0, len(config.Contexts))
+	for name := range config.Contexts {
+		available = append(available, name)
+	}
+
+	slices.Sort(available)
+
+	return fmt.Errorf(
+		"%w: %q not found in %s (available: %s)",
+		ErrKubeconfigContextNotFound,
+		contextName, kubeconfigPath, strings.Join(available, ", "),
+	)
 }
 
 // applyDefaults sets client-side rate limiter defaults on a REST config.

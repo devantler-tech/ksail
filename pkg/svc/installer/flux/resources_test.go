@@ -910,12 +910,12 @@ func TestGetCurrentFluxInstance(t *testing.T) {
 	})
 	defer restoreClient()
 
-	restoreConfig := fluxinstaller.SetLoadRESTConfig(func(string) (*rest.Config, error) {
+	restoreConfig := fluxinstaller.SetLoadRESTConfig(func(string, string) (*rest.Config, error) {
 		return &rest.Config{}, nil
 	})
 	defer restoreConfig()
 
-	instance, err := fluxinstaller.GetCurrentFluxInstance(context.Background(), "kubeconfig")
+	instance, err := fluxinstaller.GetCurrentFluxInstance(context.Background(), "kubeconfig", "")
 
 	require.NoError(t, err)
 	require.NotNil(t, instance)
@@ -940,15 +940,57 @@ func TestGetCurrentFluxInstance_NotFound(t *testing.T) {
 	})
 	defer restoreClient()
 
-	restoreConfig := fluxinstaller.SetLoadRESTConfig(func(string) (*rest.Config, error) {
+	restoreConfig := fluxinstaller.SetLoadRESTConfig(func(string, string) (*rest.Config, error) {
 		return &rest.Config{}, nil
 	})
 	defer restoreConfig()
 
-	instance, err := fluxinstaller.GetCurrentFluxInstance(context.Background(), "kubeconfig")
+	instance, err := fluxinstaller.GetCurrentFluxInstance(context.Background(), "kubeconfig", "")
 
 	require.NoError(t, err)
 	assert.Nil(t, instance)
+}
+
+// TestGetCurrentFluxInstance_ForwardsContext verifies that the kube context is
+// forwarded to the REST config builder, so drift detection queries the cluster
+// pinned in spec.cluster.connection.context rather than the ambient
+// current-context.
+//
+//nolint:paralleltest // Cannot run in parallel due to global mock
+func TestGetCurrentFluxInstance_ForwardsContext(t *testing.T) {
+	var gotContext string
+
+	restoreConfig := fluxinstaller.SetLoadRESTConfig(func(_, context string) (*rest.Config, error) {
+		gotContext = context
+
+		return nil, errors.New("stub: stop before building client")
+	})
+	defer restoreConfig()
+
+	_, err := fluxinstaller.GetCurrentFluxInstance(context.Background(), "kubeconfig", "admin@prod")
+
+	require.Error(t, err)
+	assert.Equal(t, "admin@prod", gotContext)
+}
+
+// TestGetCurrentSyncRef_ForwardsContext verifies that GetCurrentSyncRef threads
+// the kube context through to the REST config builder.
+//
+//nolint:paralleltest // Cannot run in parallel due to global mock
+func TestGetCurrentSyncRef_ForwardsContext(t *testing.T) {
+	var gotContext string
+
+	restoreConfig := fluxinstaller.SetLoadRESTConfig(func(_, context string) (*rest.Config, error) {
+		gotContext = context
+
+		return nil, errors.New("stub: stop before building client")
+	})
+	defer restoreConfig()
+
+	_, err := fluxinstaller.GetCurrentSyncRef(context.Background(), "kubeconfig", "admin@prod")
+
+	require.Error(t, err)
+	assert.Equal(t, "admin@prod", gotContext)
 }
 
 //nolint:paralleltest // Cannot run in parallel due to global mock
@@ -1071,7 +1113,7 @@ func TestWaitForFluxReady_DiagnosticsIncludedOnTimeout(t *testing.T) {
 	defer restoreFlux()
 
 	// Mock loadRESTConfig to return a dummy config without hitting the filesystem.
-	restoreLoad := fluxinstaller.SetLoadRESTConfig(func(_ string) (*rest.Config, error) {
+	restoreLoad := fluxinstaller.SetLoadRESTConfig(func(_, _ string) (*rest.Config, error) {
 		return &rest.Config{}, nil
 	})
 	defer restoreLoad()
@@ -1132,7 +1174,7 @@ func TestEnsureDefaultResources_DiagnosticsIncludedOnTimeout(t *testing.T) {
 	defer restoreFlux()
 
 	// Mock loadRESTConfig to avoid hitting the filesystem.
-	restoreLoad := fluxinstaller.SetLoadRESTConfig(func(_ string) (*rest.Config, error) {
+	restoreLoad := fluxinstaller.SetLoadRESTConfig(func(_, _ string) (*rest.Config, error) {
 		return &rest.Config{}, nil
 	})
 	defer restoreLoad()
