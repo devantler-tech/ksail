@@ -303,7 +303,7 @@ require (
 	github.com/siderolabs/proto-codec v0.1.4 // indirect
 	github.com/siderolabs/protoenc v0.2.4 // indirect
 	github.com/siderolabs/talos v1.13.2 // indirect
-	github.com/siderolabs/talos/pkg/machinery v1.13.2 // indirect
+	github.com/siderolabs/talos/pkg/machinery v1.13.3 // indirect
 	github.com/sirupsen/logrus v1.9.4 // indirect
 	github.com/skratchdot/open-golang v0.0.0-20200116055534-eef842397966 // indirect
 	github.com/smallstep/pkcs7 v0.1.1 // indirect
