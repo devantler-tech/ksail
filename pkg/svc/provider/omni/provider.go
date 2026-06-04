@@ -220,7 +220,9 @@ func (p *Provider) CreateCluster(
 		out = io.Discard
 	}
 
-	err := operations.SyncTemplate(ctx, templateReader, out, p.st, operations.SyncOptions{})
+	// root is nil: KSail passes an in-memory template with no external file
+	// patches, so file access stays unrestricted (the pre-1.8.0 behavior).
+	err := operations.SyncTemplate(ctx, templateReader, out, p.st, operations.SyncOptions{}, nil)
 	if err != nil {
 		return fmt.Errorf("failed to sync template to Omni: %w", err)
 	}
