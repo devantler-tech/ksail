@@ -90,8 +90,13 @@ func ctrlCQuitCases() []ctrlCQuitCase {
 func TestCtrlC_SavesSessionFromEveryUIState(t *testing.T) {
 	for _, testCase := range ctrlCQuitCases() {
 		t.Run(testCase.name, func(t *testing.T) {
-			// Fresh HOME per case so the saved file proves THIS Ctrl+C wrote it.
-			t.Setenv("HOME", t.TempDir())
+			// Fresh home per case so the saved file proves THIS Ctrl+C wrote it.
+			// Set both HOME and USERPROFILE (os.UserHomeDir consults USERPROFILE on
+			// Windows) to the same dir so the test is portable, matching the
+			// internal/testutil/homeenv helper.
+			homeDir := t.TempDir()
+			t.Setenv("HOME", homeDir)
+			t.Setenv("USERPROFILE", homeDir)
 
 			model := newCtrlCTestModel(t)
 			testCase.setup(model)
