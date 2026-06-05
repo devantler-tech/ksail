@@ -130,7 +130,7 @@ func TestCreateServerWithRetry_SuccessFirstAttempt(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /servers", func(writer http.ResponseWriter, _ *http.Request) {
 		calls.Add(1)
-		writeJSONResponse(t, writer, serverCreateResp(createdServerID, 1))
+		writeJSONResponse(t, writer, serverCreateResp())
 	})
 
 	prov := newRetryTestProvider(t, mux)
@@ -174,7 +174,7 @@ func TestCreateServerWithRetry_PlacementFallbackSucceeds(t *testing.T) {
 
 		_, hasGroup := body["placement_group"]
 		secondHadGroup.Store(hasGroup)
-		writeJSONResponse(t, writer, serverCreateResp(createdServerID, 1))
+		writeJSONResponse(t, writer, serverCreateResp())
 	})
 
 	prov := newRetryTestProvider(t, mux)
@@ -225,7 +225,7 @@ func TestCreateServerWithRetry_LocationFallbackSucceeds(t *testing.T) {
 		}
 
 		fallbackCalls.Add(1)
-		writeJSONResponse(t, writer, serverCreateResp(createdServerID, 1))
+		writeJSONResponse(t, writer, serverCreateResp())
 	})
 
 	prov := newRetryTestProvider(t, mux)
@@ -311,7 +311,7 @@ func TestCreateServerWithRetry_RetryThenSuccess(t *testing.T) {
 			return
 		}
 
-		writeJSONResponse(t, writer, serverCreateResp(createdServerID, 1))
+		writeJSONResponse(t, writer, serverCreateResp())
 	})
 
 	prov := newRetryTestProvider(t, mux)
