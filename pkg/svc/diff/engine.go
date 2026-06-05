@@ -406,6 +406,11 @@ func (e *Engine) componentBaselineUnknown(spec *v1alpha1.ClusterSpec) bool {
 	return string(spec.CNI) == clusterupdate.UnknownBaselineValue
 }
 
+// reasonRegistryIndependentOfOS explains why VCluster, KWOK, and EKS can change their registry
+// configuration in place: none of them manages the registry through the node OS, so no node-level
+// reconfiguration or cluster recreate is required.
+const reasonRegistryIndependentOfOS = "VCluster/KWOK/EKS manage registry independently of the node OS"
+
 // localRegistryReasonMap maps each distribution to the reason and category for a local registry change.
 // For Kind, registry changes require recreate (containerd config is baked in).
 // For all other distributions, registry mirrors can be updated in-place.
@@ -429,15 +434,15 @@ var localRegistryReasonMap = map[v1alpha1.Distribution]struct {
 		category: clusterupdate.ChangeCategoryInPlace,
 	},
 	v1alpha1.DistributionVCluster: {
-		reason:   "VCluster/KWOK/EKS manage registry independently of the node OS",
+		reason:   reasonRegistryIndependentOfOS,
 		category: clusterupdate.ChangeCategoryInPlace,
 	},
 	v1alpha1.DistributionKWOK: {
-		reason:   "VCluster/KWOK/EKS manage registry independently of the node OS",
+		reason:   reasonRegistryIndependentOfOS,
 		category: clusterupdate.ChangeCategoryInPlace,
 	},
 	v1alpha1.DistributionEKS: {
-		reason:   "VCluster/KWOK/EKS manage registry independently of the node OS",
+		reason:   reasonRegistryIndependentOfOS,
 		category: clusterupdate.ChangeCategoryInPlace,
 	},
 }
