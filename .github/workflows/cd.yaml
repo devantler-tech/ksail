@@ -556,15 +556,15 @@ jobs:
     name: 📢 Publish Release
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    # The CLI release IS the release: the `goreleaser` job creates the draft with the CLI
-    # tarballs, checksums, and Cluster CRD already attached. The VSIX and desktop archives are
-    # convenience assets attached below. Publish whenever the CLI built (`goreleaser` succeeded),
-    # regardless of the convenience-asset jobs, so a desktop/VSIX/docs/plugin failure can never
-    # strand the fully-built CLI release as a permanent, unpublished draft (see #5060). `needs`
-    # still lists every asset job so this waits for them and attaches whatever they produced — the
-    # `if` below (replacing the default all-success gate added in #4874) is what lets the publish
-    # proceed when a convenience job failed. The failed job keeps its own red status, so the CD run
-    # stays loud. Runs in parallel with `pages-deploy` and `mcp-publish`.
+    # Gate on EVERY artifact-producing asset job so the draft is flipped to published only when the
+    # release is COMPLETE (CLI tarballs + checksums + CRD, VSIX, and every desktop archive present).
+    # Immutable releases (see #4874) forbid adding assets after the flip, so completeness must be
+    # guaranteed before it. This is the maintainer's required invariant: a published release is always
+    # complete (#5061). The inverse failure — an asset job failing and leaving an unpublished draft —
+    # is prevented up front by the `Release` workflow, which validates every artifact BEFORE the tag is
+    # created, and backstopped by `cleanup-failed-release` below, which deletes the orphaned draft and
+    # tag if a publish is ever blocked so no empty/incomplete tag flows downstream (#5060).
+    # Runs in parallel with `pages-deploy` and `mcp-publish`.
     needs:
       [
         goreleaser,
@@ -574,7 +574,6 @@ jobs:
         desktop,
         pages-build,
       ]
-    if: always() && needs.goreleaser.result == 'success'
     permissions:
       contents: write
     steps:
@@ -582,52 +581,22 @@ jobs:
         id: get_version
         run: echo "version=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
 
-      # Surface any convenience-asset job that did not succeed so the published release's missing
-      # assets are explained in the run log. These are convenience downloads / side-effects that do
-      # not block the CLI release; the failed job's own red status keeps the CD run loud (see #5060).
-      - name: 🔎 Report missing convenience assets
-        if: >-
-          needs.vscode-extension.result != 'success' ||
-          needs.desktop-macos.result != 'success' ||
-          needs.desktop.result != 'success' ||
-          needs.copilot-plugin.result != 'success' ||
-          needs.pages-build.result != 'success'
-        env:
-          VSCODE: ${{ needs.vscode-extension.result }}
-          DESKTOP_MACOS: ${{ needs.desktop-macos.result }}
-          DESKTOP: ${{ needs.desktop.result }}
-          COPILOT: ${{ needs.copilot-plugin.result }}
-          PAGES: ${{ needs.pages-build.result }}
-        run: |
-          echo "::warning title=Publishing CLI release without some convenience assets::A non-CLI asset job did not succeed; the complete CLI release is being published anyway (see #5060)."
-          echo "Job outcomes: vscode-extension=$VSCODE desktop-macos=$DESKTOP_MACOS desktop=$DESKTOP copilot-plugin=$COPILOT pages-build=$PAGES"
-          echo "The CLI tarballs, checksums, and Cluster CRD are attached by GoReleaser and present. Published releases are immutable (see #4874), so adding a missing convenience asset requires a new patch release."
-
       - name: 📥 Download release asset artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           pattern: release-*
           merge-multiple: true
           path: dist-assets
-        # A failed convenience-asset job leaves its artifact absent; never let that block the publish.
-        continue-on-error: true
 
-      # Attach whatever convenience assets exist to the draft BEFORE publishing. Once published the
-      # release is immutable and late uploads 422 (see #4874), so this is the last chance to attach.
-      # Guard the glob so an empty set (every convenience job failed) still publishes the CLI release.
-      - name: 📤 Attach available assets to draft release
+      # Attach the desktop archives and the VSIX to the draft BEFORE publishing. Once published the
+      # release is immutable and late uploads 422 (see #4874); all asset jobs gate this one, so every
+      # artifact exists here and is attached immediately before the draft→published flip below.
+      - name: 📤 Attach assets to draft release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ steps.get_version.outputs.version }}
-        run: |
-          shopt -s nullglob
-          assets=(dist-assets/*)
-          if [ ${#assets[@]} -eq 0 ]; then
-            echo "::warning::No convenience assets (VSIX / desktop archives) to attach; publishing the CLI release without them."
-          else
-            gh release upload "$RELEASE_TAG" "${assets[@]}" --clobber
-          fi
+        run: gh release upload "$RELEASE_TAG" dist-assets/* --clobber
 
       - name: 📢 Publish draft release
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
@@ -756,3 +725,60 @@ jobs:
             gh pr merge "$pr" --repo "$TAP" --auto --squash \
               || echo "::warning::Could not enable auto-merge for ${TAP}#${pr}; the tap automation may still merge it"
           done
+
+  # Backstop for the immutable-release model: if the release did NOT publish — any asset job failed,
+  # or the publish step bailed (so `publish-release` is skipped or failed) — delete the orphaned draft
+  # AND the tag so an incomplete/empty release never lingers or flows downstream to tag-tracking
+  # consumers (see #5060, #5061). The `Release` workflow validates every artifact BEFORE the tag is
+  # cut, so this should rarely fire — only on a post-tag transient (a GitHub/registry blip during the
+  # real build). On the happy path `publish-release` succeeds and this is skipped. Recovery is to
+  # re-run the `Release` workflow: it recomputes the same version and re-tags after validation.
+  cleanup-failed-release:
+    name: 🧹 Clean up incomplete release
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [publish-release]
+    if: always() && needs.publish-release.result != 'success'
+    permissions:
+      contents: write
+    steps:
+      - name: 🧹 Delete orphaned draft release and tag
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const tag = process.env.RELEASE_TAG;
+            const { owner, repo } = context.repo;
+
+            // listReleases returns drafts (getReleaseByTag does not), so use it to find everything
+            // attached to this tag.
+            const { data: releases } = await github.rest.repos.listReleases({ owner, repo, per_page: 100 });
+            const forTag = releases.filter(r => r.tag_name === tag);
+            const drafts = forTag.filter(r => r.draft);
+            const published = forTag.filter(r => !r.draft);
+
+            // Always remove orphaned draft releases for this tag.
+            for (const d of drafts) {
+              await github.rest.repos.deleteRelease({ owner, repo, release_id: d.id });
+              console.log(`Deleted orphaned draft release ${tag} (id=${d.id}).`);
+            }
+
+            // Never delete the tag of a release that DID publish: a published (complete) release is
+            // immutable and legitimate. Only a tag with no published release is an orphan.
+            if (published.length > 0) {
+              console.log(`A published release exists for ${tag}; keeping the tag.`);
+              return;
+            }
+
+            try {
+              await github.rest.git.deleteRef({ owner, repo, ref: `tags/${tag}` });
+              console.log(`Deleted orphaned tag ${tag}; downstream tag-tracking consumers will not see an empty release.`);
+            } catch (error) {
+              if (error.status === 404 || error.status === 422) {
+                console.log(`Tag ${tag} already absent; nothing to delete.`);
+              } else {
+                throw error;
+              }
+            }
