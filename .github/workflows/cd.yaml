@@ -556,13 +556,15 @@ jobs:
     name: 📢 Publish Release
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    # Gate on the artifact-producing releases so the draft is published only when every asset
-    # job succeeded. Runs in parallel with `pages-deploy` and `mcp-publish` — none lists the
-    # others in `needs`, so the GitHub release publish, the docs deploy, and the MCP registry
-    # publish all happen concurrently. `mcp-publish` is excluded because it references the GHCR
-    # image (from `goreleaser`), not the GitHub release, so it need not gate the publish.
-    # `pages-build` replaces the former `pages-deploy` edge: the release is gated on the docs
-    # *building*, not on Pages having deployed.
+    # The CLI release IS the release: the `goreleaser` job creates the draft with the CLI
+    # tarballs, checksums, and Cluster CRD already attached. The VSIX and desktop archives are
+    # convenience assets attached below. Publish whenever the CLI built (`goreleaser` succeeded),
+    # regardless of the convenience-asset jobs, so a desktop/VSIX/docs/plugin failure can never
+    # strand the fully-built CLI release as a permanent, unpublished draft (see #5060). `needs`
+    # still lists every asset job so this waits for them and attaches whatever they produced — the
+    # `if` below (replacing the default all-success gate added in #4874) is what lets the publish
+    # proceed when a convenience job failed. The failed job keeps its own red status, so the CD run
+    # stays loud. Runs in parallel with `pages-deploy` and `mcp-publish`.
     needs:
       [
         goreleaser,
@@ -572,6 +574,7 @@ jobs:
         desktop,
         pages-build,
       ]
+    if: always() && needs.goreleaser.result == 'success'
     permissions:
       contents: write
     steps:
@@ -579,22 +582,52 @@ jobs:
         id: get_version
         run: echo "version=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
 
+      # Surface any convenience-asset job that did not succeed so the published release's missing
+      # assets are explained in the run log. These are convenience downloads / side-effects that do
+      # not block the CLI release; the failed job's own red status keeps the CD run loud (see #5060).
+      - name: 🔎 Report missing convenience assets
+        if: >-
+          needs.vscode-extension.result != 'success' ||
+          needs.desktop-macos.result != 'success' ||
+          needs.desktop.result != 'success' ||
+          needs.copilot-plugin.result != 'success' ||
+          needs.pages-build.result != 'success'
+        env:
+          VSCODE: ${{ needs.vscode-extension.result }}
+          DESKTOP_MACOS: ${{ needs.desktop-macos.result }}
+          DESKTOP: ${{ needs.desktop.result }}
+          COPILOT: ${{ needs.copilot-plugin.result }}
+          PAGES: ${{ needs.pages-build.result }}
+        run: |
+          echo "::warning title=Publishing CLI release without some convenience assets::A non-CLI asset job did not succeed; the complete CLI release is being published anyway (see #5060)."
+          echo "Job outcomes: vscode-extension=$VSCODE desktop-macos=$DESKTOP_MACOS desktop=$DESKTOP copilot-plugin=$COPILOT pages-build=$PAGES"
+          echo "The CLI tarballs, checksums, and Cluster CRD are attached by GoReleaser and present. Published releases are immutable (see #4874), so adding a missing convenience asset requires a new patch release."
+
       - name: 📥 Download release asset artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           pattern: release-*
           merge-multiple: true
           path: dist-assets
+        # A failed convenience-asset job leaves its artifact absent; never let that block the publish.
+        continue-on-error: true
 
-      # Attach the desktop archives and the VSIX to the draft BEFORE publishing. Once published the
-      # release is immutable and late uploads 422 (see #4874); all asset jobs gate this one, so every
-      # artifact exists here and is attached immediately before the draft→published flip below.
-      - name: 📤 Attach assets to draft release
+      # Attach whatever convenience assets exist to the draft BEFORE publishing. Once published the
+      # release is immutable and late uploads 422 (see #4874), so this is the last chance to attach.
+      # Guard the glob so an empty set (every convenience job failed) still publishes the CLI release.
+      - name: 📤 Attach available assets to draft release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ steps.get_version.outputs.version }}
-        run: gh release upload "$RELEASE_TAG" dist-assets/* --clobber
+        run: |
+          shopt -s nullglob
+          assets=(dist-assets/*)
+          if [ ${#assets[@]} -eq 0 ]; then
+            echo "::warning::No convenience assets (VSIX / desktop archives) to attach; publishing the CLI release without them."
+          else
+            gh release upload "$RELEASE_TAG" "${assets[@]}" --clobber
+          fi
 
       - name: 📢 Publish draft release
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
