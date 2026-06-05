@@ -11,6 +11,6 @@ permissions:
 
 jobs:
   todos:
-    uses: devantler-tech/reusable-workflows/.github/workflows/scan-for-todo-comments.yaml@699cae1d98f6e2759cce88bb243fc5ae6578e007 # v5.1.0
+    uses: devantler-tech/reusable-workflows/.github/workflows/scan-for-todo-comments.yaml@1dc3c2267580c42cfb138a46c46d1856d1b91b7b # v5.5.4
     secrets:
       APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
