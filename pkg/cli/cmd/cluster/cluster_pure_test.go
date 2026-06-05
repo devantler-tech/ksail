@@ -262,6 +262,35 @@ func TestStripDistributionPrefix_EmptyReturnsEmpty(t *testing.T) {
 	assert.Empty(t, cluster.ExportStripDistributionPrefix(""))
 }
 
+func TestStripDistributionPrefix_K3kReturnsClusterName(t *testing.T) {
+	t.Parallel()
+	// Nested K3s clusters (k3k operator on the Kubernetes provider) use a "k3k-"
+	// context prefix rather than the standalone "k3d-"; they must still be stripped
+	// to the bare cluster name so they appear in completion and the picker.
+	assert.Equal(t, "nested", cluster.ExportStripDistributionPrefix("k3k-nested"))
+}
+
+// ===========================================================================
+// resolveContextName — cluster name → kubeconfig context resolution
+// ===========================================================================
+
+func TestResolveContextName_K3kNestedK3sResolvesDeterministically(t *testing.T) {
+	t.Parallel()
+
+	// Nested K3s clusters (k3k operator on the Kubernetes provider) use a "k3k-"
+	// context prefix rather than the standalone "k3d-". The explicit k3k- candidate
+	// must win so resolution stays deterministic instead of falling back to substring
+	// matching — which would also match the unrelated context below and report the
+	// name as ambiguous.
+	got, err := cluster.ExportResolveContextName(
+		[]string{"k3k-nested", "external-nested-ctx"},
+		"nested",
+	)
+
+	require.NoError(t, err)
+	assert.Equal(t, "k3k-nested", got)
+}
+
 // ===========================================================================
 // isEmptyYAML — empty YAML detection
 // ===========================================================================
