@@ -32,10 +32,7 @@ func (m *Model) handleReasoningPickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case keyEnter:
 		return m.selectReasoningEffort()
 	case keyCtrlC:
-		m.cleanup()
-		m.quitting = true
-
-		return m, tea.Quit
+		return m.handleQuit()
 	}
 
 	return m, nil

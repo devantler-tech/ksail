@@ -64,10 +64,8 @@ func (m *Model) handleElicitationKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.declineElicitation()
 	case keyCtrlC:
 		m.cancelElicitation()
-		m.cleanup()
-		m.quitting = true
 
-		return m, tea.Quit
+		return m.handleQuit()
 	case keyTab:
 		return m.navigateElicitationField(1)
 	case "shift+tab":

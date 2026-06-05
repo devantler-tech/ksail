@@ -37,10 +37,8 @@ func (m *Model) handlePermissionKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.pendingPermission.response <- false
 
 		m.pendingPermission = nil
-		m.cleanup()
-		m.quitting = true
 
-		return m, tea.Quit
+		return m.handleQuit()
 	}
 
 	return m, nil

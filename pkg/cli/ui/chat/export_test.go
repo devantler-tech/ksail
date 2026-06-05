@@ -372,6 +372,16 @@ var ExportGetShowSessionPicker = func(m *Model) bool {
 	return m.showSessionPicker
 }
 
+// ExportSetModelFilterActive sets Model.modelFilterActive for testing.
+var ExportSetModelFilterActive = func(m *Model, active bool) {
+	m.modelFilterActive = active
+}
+
+// ExportSetSessionFilterActive sets Model.sessionFilterActive for testing.
+var ExportSetSessionFilterActive = func(m *Model, active bool) {
+	m.sessionFilterActive = active
+}
+
 // ExportTruncateString exposes truncateString for testing.
 var ExportTruncateString = truncateString
 
