@@ -190,6 +190,6 @@ jobs:
   release:
     name: 🎉 Create Release
     needs: [validate-cli, validate-desktop, validate-vsix, validate-docs]
-    uses: devantler-tech/reusable-workflows/.github/workflows/create-release.yaml@1dc3c2267580c42cfb138a46c46d1856d1b91b7b # v5.5.4
+    uses: devantler-tech/reusable-workflows/.github/workflows/create-release.yaml@e67eb6e14b733748c43a4e0df1c572fdd0ae3773 # v5.5.6
     secrets:
       APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
