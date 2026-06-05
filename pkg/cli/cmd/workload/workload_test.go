@@ -1021,6 +1021,7 @@ spec:
       skipKinds:
         - ConfigMap
 `
+
 	err = os.WriteFile(
 		filepath.Join(tmpDir, "ksail.yaml"),
 		[]byte(ksailYAML),
