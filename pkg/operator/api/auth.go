@@ -292,6 +292,23 @@ func (a *authenticator) readState(request *http.Request) (stateData, bool) {
 	return state, true
 }
 
+// newAuthCookie builds an auth cookie shared by signedCookie and expiredCookie.
+// All auth cookies are HttpOnly with SameSite=Lax. Secure is caller-driven:
+// true behind HTTPS, false for local HTTP port-forwards (a Secure cookie would
+// otherwise be dropped by the browser over plain HTTP).
+func newAuthCookie(name, value, path string, maxAge int, secure bool) *http.Cookie {
+	//nolint:gosec // G124 false positive: Secure is config-driven by design (see doc comment).
+	return &http.Cookie{
+		Name:     name,
+		Value:    value,
+		Path:     path,
+		MaxAge:   maxAge,
+		HttpOnly: true,
+		Secure:   secure,
+		SameSite: http.SameSiteLaxMode,
+	}
+}
+
 // signedCookie builds an HttpOnly cookie whose value is the HMAC-signed payload.
 func (a *authenticator) signedCookie(
 	name string,
@@ -299,29 +316,17 @@ func (a *authenticator) signedCookie(
 	path string,
 	maxAge int,
 ) *http.Cookie {
-	// Secure is driven by config (true behind HTTPS, false for local HTTP port-forwards); cookies
-	// are always HttpOnly and SameSite=Lax.
-	return &http.Cookie{
-		Name:     name,
-		Value:    signValue(a.config.SessionSecret, payload),
-		Path:     path,
-		MaxAge:   maxAge,
-		HttpOnly: true,
-		Secure:   a.config.SecureCookies,
-		SameSite: http.SameSiteLaxMode,
-	}
+	return newAuthCookie(
+		name,
+		signValue(a.config.SessionSecret, payload),
+		path,
+		maxAge,
+		a.config.SecureCookies,
+	)
 }
 
 func expiredCookie(name, path string, secure bool) *http.Cookie {
-	return &http.Cookie{
-		Name:     name,
-		Value:    "",
-		Path:     path,
-		MaxAge:   -1,
-		HttpOnly: true,
-		Secure:   secure,
-		SameSite: http.SameSiteLaxMode,
-	}
+	return newAuthCookie(name, "", path, -1, secure)
 }
 
 // signValue returns "<base64(payload)>.<base64(hmac)>" using HMAC-SHA256.
