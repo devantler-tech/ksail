@@ -10,6 +10,15 @@ concurrency:
 permissions:
   contents: read
 
+# Mirror cd.yaml's release-build environment so validation behaves exactly like the real CD build:
+# the pipe (|) in GOPROXY falls through to `direct` on ANY proxy error (incl. 403), hardening against
+# transient proxy.golang.org blips, and GOMEMLIMIT keeps GoReleaser's multi-binary linker under the
+# runner's memory. Without these a transient proxy error or a linker OOM could fail validation — and
+# thus skip tagging — even when CD would have succeeded, defeating the point of validating first.
+env:
+  GOPROXY: "https://proxy.golang.org|direct"
+  GOMEMLIMIT: "6GiB"
+
 # Validate-before-tag (see #5060, #5061): every release artifact is built in snapshot / no-publish
 # mode BEFORE `create-release` (semantic-release) computes the version and pushes the tag. A build
 # failure fails a `validate-*` job, which skips `create-release`, so the tag — and the CD build it

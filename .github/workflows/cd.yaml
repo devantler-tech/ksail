@@ -759,17 +759,21 @@ jobs:
             const drafts = forTag.filter(r => r.draft);
             const published = forTag.filter(r => !r.draft);
 
-            // Always remove orphaned draft releases for this tag.
+            // If a published release coexists with a draft for this tag, we're in the ambiguous
+            // duplicate-release case (#4874) — the draft may hold the ONLY complete artifact set, so
+            // auto-deleting it could strand an incomplete published release as the only survivor.
+            // Leave both the draft(s) and the tag for manual investigation (mirrors publish-release's
+            // matching>1 bail), and never delete a tag that backs a published release.
+            if (published.length > 0) {
+              core.warning(`A published release exists for ${tag} alongside ${drafts.length} draft(s); leaving the draft(s) and the tag for manual cleanup (see #4874).`);
+              return;
+            }
+
+            // No published release for this tag — the draft(s), if any, are orphans from a blocked
+            // publish. Remove them and the tag so no empty/incomplete release flows downstream.
             for (const d of drafts) {
               await github.rest.repos.deleteRelease({ owner, repo, release_id: d.id });
               console.log(`Deleted orphaned draft release ${tag} (id=${d.id}).`);
-            }
-
-            // Never delete the tag of a release that DID publish: a published (complete) release is
-            // immutable and legitimate. Only a tag with no published release is an orphan.
-            if (published.length > 0) {
-              console.log(`A published release exists for ${tag}; keeping the tag.`);
-              return;
             }
 
             try {
