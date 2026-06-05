@@ -268,7 +268,7 @@ const (
 // newSecretKubeclient builds a Kubernetes clientset from the provisioner's
 // configured kubeconfig for managing Hetzner-related secrets. purpose is woven
 // into the error messages to identify the calling context.
-func (p *Provisioner) newSecretKubeclient(purpose string) (*kubernetes.Clientset, error) {
+func (p *Provisioner) newSecretKubeclient(purpose string) (kubernetes.Interface, error) {
 	if p.options.KubeconfigPath == "" {
 		return nil, fmt.Errorf(
 			"creating kubeclient for %s: %w",
