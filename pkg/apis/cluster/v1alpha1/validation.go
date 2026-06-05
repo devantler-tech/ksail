@@ -209,8 +209,8 @@ func isLocalMirrorSpec(spec string) bool {
 	// Check for local patterns in the spec
 	// These patterns indicate local Docker container references that won't work on cloud providers
 	localPatterns := []string{
-		"localhost",
-		"127.0.0.1",
+		localhostHost,
+		loopbackIP,
 		"0.0.0.0",
 		"host.docker.internal",
 		"[::1]", // IPv6 localhost
