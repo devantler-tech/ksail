@@ -186,8 +186,7 @@ func HandleInitRunE(
 		return err
 	}
 
-	applyOIDCExtraScopeFlag(cmd, clusterCfg)
-	applyAllowedCIDRsFlag(cmd, clusterCfg)
+	applyClusterMutationFlags(cmd, clusterCfg)
 
 	err = validatePostFlagInitConfig(clusterCfg)
 	if err != nil {
