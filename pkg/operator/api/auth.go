@@ -297,7 +297,6 @@ func (a *authenticator) readState(request *http.Request) (stateData, bool) {
 // true behind HTTPS, false for local HTTP port-forwards (a Secure cookie would
 // otherwise be dropped by the browser over plain HTTP).
 func newAuthCookie(name, value, path string, maxAge int, secure bool) *http.Cookie {
-	//nolint:gosec // G124 false positive: Secure is config-driven by design (see doc comment).
 	return &http.Cookie{
 		Name:     name,
 		Value:    value,
