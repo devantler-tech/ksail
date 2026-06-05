@@ -93,15 +93,22 @@ runs:
           *)     echo "❌ Unsupported runner architecture: $RUNNER_ARCH"; exit 1 ;;
         esac
         tmpdir="$(mktemp -d)"
+        # A pinned version that resolves to a draft, deleted, or never-cut release makes
+        # `gh release download` fail with an opaque "release not found"; the same happens when a
+        # published release is missing the linux_<arch> asset. Wrap it so CI gets an actionable
+        # message naming the version and the exact failure modes instead (see #5060).
         if [ "$KSAIL_VERSION" = "latest" ]; then
-          gh release download --repo devantler-tech/ksail \
-            --pattern "ksail_*_linux_${GOARCH}.tar.gz" \
-            --dir "$tmpdir"
+          download_args=(--repo devantler-tech/ksail)
         else
-          gh release download "v${KSAIL_VERSION}" \
-            --repo devantler-tech/ksail \
-            --pattern "ksail_*_linux_${GOARCH}.tar.gz" \
-            --dir "$tmpdir"
+          download_args=("v${KSAIL_VERSION}" --repo devantler-tech/ksail)
+        fi
+        if ! gh release download "${download_args[@]}" \
+          --pattern "ksail_*_linux_${GOARCH}.tar.gz" \
+          --dir "$tmpdir"; then
+          echo "::error::Could not download KSail '${KSAIL_VERSION}' (linux_${GOARCH})." >&2
+          echo "::error::The release may not exist, may be an unpublished draft, or may be missing the linux_${GOARCH} asset." >&2
+          echo "::error::Pin a published version from https://github.com/devantler-tech/ksail/releases." >&2
+          exit 1
         fi
         tar -xzf "$tmpdir"/ksail_*_linux_${GOARCH}.tar.gz -C "$tmpdir"
         sudo install "$tmpdir/ksail" /usr/local/bin/ksail

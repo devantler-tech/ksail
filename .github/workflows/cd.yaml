@@ -556,13 +556,15 @@ jobs:
     name: 📢 Publish Release
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    # Gate on the artifact-producing releases so the draft is published only when every asset
-    # job succeeded. Runs in parallel with `pages-deploy` and `mcp-publish` — none lists the
-    # others in `needs`, so the GitHub release publish, the docs deploy, and the MCP registry
-    # publish all happen concurrently. `mcp-publish` is excluded because it references the GHCR
-    # image (from `goreleaser`), not the GitHub release, so it need not gate the publish.
-    # `pages-build` replaces the former `pages-deploy` edge: the release is gated on the docs
-    # *building*, not on Pages having deployed.
+    # Gate on EVERY artifact-producing asset job so the draft is flipped to published only when the
+    # release is COMPLETE (CLI tarballs + checksums + CRD, VSIX, and every desktop archive present).
+    # Immutable releases (see #4874) forbid adding assets after the flip, so completeness must be
+    # guaranteed before it. This is the maintainer's required invariant: a published release is always
+    # complete (#5061). The inverse failure — an asset job failing and leaving an unpublished draft —
+    # is prevented up front by the `Release` workflow, which validates every artifact BEFORE the tag is
+    # created, and backstopped by `cleanup-failed-release` below, which deletes the orphaned draft and
+    # tag if a publish is ever blocked so no empty/incomplete tag flows downstream (#5060).
+    # Runs in parallel with `pages-deploy` and `mcp-publish`.
     needs:
       [
         goreleaser,
@@ -723,3 +725,64 @@ jobs:
             gh pr merge "$pr" --repo "$TAP" --auto --squash \
               || echo "::warning::Could not enable auto-merge for ${TAP}#${pr}; the tap automation may still merge it"
           done
+
+  # Backstop for the immutable-release model: if the release did NOT publish — any asset job failed,
+  # or the publish step bailed (so `publish-release` is skipped or failed) — delete the orphaned draft
+  # AND the tag so an incomplete/empty release never lingers or flows downstream to tag-tracking
+  # consumers (see #5060, #5061). The `Release` workflow validates every artifact BEFORE the tag is
+  # cut, so this should rarely fire — only on a post-tag transient (a GitHub/registry blip during the
+  # real build). On the happy path `publish-release` succeeds and this is skipped. Recovery is to
+  # re-run the `Release` workflow: it recomputes the same version and re-tags after validation.
+  cleanup-failed-release:
+    name: 🧹 Clean up incomplete release
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [publish-release]
+    if: always() && needs.publish-release.result != 'success'
+    permissions:
+      contents: write
+    steps:
+      - name: 🧹 Delete orphaned draft release and tag
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const tag = process.env.RELEASE_TAG;
+            const { owner, repo } = context.repo;
+
+            // listReleases returns drafts (getReleaseByTag does not), so use it to find everything
+            // attached to this tag.
+            const { data: releases } = await github.rest.repos.listReleases({ owner, repo, per_page: 100 });
+            const forTag = releases.filter(r => r.tag_name === tag);
+            const drafts = forTag.filter(r => r.draft);
+            const published = forTag.filter(r => !r.draft);
+
+            // If a published release coexists with a draft for this tag, we're in the ambiguous
+            // duplicate-release case (#4874) — the draft may hold the ONLY complete artifact set, so
+            // auto-deleting it could strand an incomplete published release as the only survivor.
+            // Leave both the draft(s) and the tag for manual investigation (mirrors publish-release's
+            // matching>1 bail), and never delete a tag that backs a published release.
+            if (published.length > 0) {
+              core.warning(`A published release exists for ${tag} alongside ${drafts.length} draft(s); leaving the draft(s) and the tag for manual cleanup (see #4874).`);
+              return;
+            }
+
+            // No published release for this tag — the draft(s), if any, are orphans from a blocked
+            // publish. Remove them and the tag so no empty/incomplete release flows downstream.
+            for (const d of drafts) {
+              await github.rest.repos.deleteRelease({ owner, repo, release_id: d.id });
+              console.log(`Deleted orphaned draft release ${tag} (id=${d.id}).`);
+            }
+
+            try {
+              await github.rest.git.deleteRef({ owner, repo, ref: `tags/${tag}` });
+              console.log(`Deleted orphaned tag ${tag}; downstream tag-tracking consumers will not see an empty release.`);
+            } catch (error) {
+              if (error.status === 404 || error.status === 422) {
+                console.log(`Tag ${tag} already absent; nothing to delete.`);
+              } else {
+                throw error;
+              }
+            }
