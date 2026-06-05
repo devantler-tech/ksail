@@ -21,6 +21,11 @@ const (
 	autoscalerConfigSecretName      = "cluster-autoscaler-config"
 	autoscalerConfigSecretNamespace = "kube-system"
 
+	// autoscalerDeploymentSelector matches the cluster-autoscaler Deployment via
+	// the standard Helm instance label. It must stay in sync with the chart
+	// ReleaseName ("cluster-autoscaler") in pkg/svc/installer/clusterautoscaler.
+	autoscalerDeploymentSelector = "app.kubernetes.io/instance=cluster-autoscaler"
+
 	// hetznerUserDataLimitBytes is Hetzner Cloud's hard ceiling on a server's
 	// user_data field (32 KiB). The cluster-autoscaler base64-decodes the
 	// HCLOUD_CLOUD_INIT secret value exactly once and passes the result verbatim
@@ -125,15 +130,20 @@ func encodeAutoscalerCloudInit(workerConfigYAML []byte) (string, error) {
 // gzip-compressed, base64-encoded Talos worker config that Kubernetes Cluster
 // Autoscaler uses as cloud-init user-data when provisioning new worker nodes
 // (see encodeAutoscalerCloudInit for the encoding rationale).
+//
+// It returns whether the Secret's data was created or changed. The autoscaler
+// reads these keys as environment variables (valueFrom.secretKeyRef), which
+// Kubernetes does not live-reload, so a true result means callers must restart
+// the autoscaler Deployment for the new config to reach freshly provisioned nodes.
 func ApplyAutoscalerConfigSecret(
 	ctx context.Context,
 	kubeclient kubernetes.Interface,
 	snapshotImageID string,
 	workerConfigYAML []byte,
-) error {
+) (bool, error) {
 	encodedConfig, err := encodeAutoscalerCloudInit(workerConfigYAML)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	desiredData := map[string][]byte{
@@ -154,7 +164,7 @@ func ApplyAutoscalerConfigSecret(
 	existing, err := secretsClient.Get(ctx, autoscalerConfigSecretName, metav1.GetOptions{})
 	if err != nil {
 		if !apierrors.IsNotFound(err) {
-			return fmt.Errorf("get autoscaler config secret: %w", err)
+			return false, fmt.Errorf("get autoscaler config secret: %w", err)
 		}
 
 		return createOrUpdateAutoscalerSecretOnConflict(ctx, kubeclient, secret)
@@ -165,43 +175,44 @@ func ApplyAutoscalerConfigSecret(
 
 // createOrUpdateAutoscalerSecretOnConflict creates the Secret. If a concurrent
 // caller already created it between the outer Get and this Create, it falls
-// back to a merge-update to stay idempotent.
+// back to a merge-update to stay idempotent. It returns whether the Secret's data
+// was created or changed.
 func createOrUpdateAutoscalerSecretOnConflict(
 	ctx context.Context,
 	client kubernetes.Interface,
 	secret *corev1.Secret,
-) error {
+) (bool, error) {
 	secretsClient := client.CoreV1().Secrets(autoscalerConfigSecretNamespace)
 
 	_, err := secretsClient.Create(ctx, secret, metav1.CreateOptions{})
 	if err != nil {
 		if !apierrors.IsAlreadyExists(err) {
-			return fmt.Errorf("create autoscaler config secret: %w", err)
+			return false, fmt.Errorf("create autoscaler config secret: %w", err)
 		}
 
 		existing, getErr := secretsClient.Get(ctx, autoscalerConfigSecretName, metav1.GetOptions{})
 		if getErr != nil {
-			return fmt.Errorf("get autoscaler config secret after conflict: %w", getErr)
+			return false, fmt.Errorf("get autoscaler config secret after conflict: %w", getErr)
 		}
 
 		return updateAutoscalerSecretIfNeeded(ctx, client, existing, secret.Data)
 	}
 
-	return nil
+	return true, nil
 }
 
 // updateAutoscalerSecretIfNeeded merges the desired keys into the existing
 // Secret. It skips the update when all desired keys already match to avoid
 // unnecessary API calls. RetryOnConflict handles 409 responses from concurrent
-// updaters.
+// updaters. It returns whether the Secret's data was changed.
 func updateAutoscalerSecretIfNeeded(
 	ctx context.Context,
 	client kubernetes.Interface,
 	existing *corev1.Secret,
 	desiredData map[string][]byte,
-) error {
+) (bool, error) {
 	if !k8s.MergeSecretData(existing, desiredData) {
-		return nil
+		return false, nil
 	}
 
 	secretsClient := client.CoreV1().Secrets(autoscalerConfigSecretNamespace)
@@ -224,8 +235,8 @@ func updateAutoscalerSecretIfNeeded(
 		return nil
 	})
 	if retryErr != nil {
-		return fmt.Errorf("failed to update autoscaler config secret: %w", retryErr)
+		return false, fmt.Errorf("failed to update autoscaler config secret: %w", retryErr)
 	}
 
-	return nil
+	return true, nil
 }

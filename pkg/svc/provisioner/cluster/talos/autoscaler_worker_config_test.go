@@ -219,7 +219,7 @@ func TestApplyAutoscalerConfigSecret_CreatesNewSecret(t *testing.T) {
 	snapshotID := "123456789"
 	workerConfig := []byte("machine:\n  type: worker\n")
 
-	err := talosprovisioner.ApplyAutoscalerConfigSecret(
+	_, err := talosprovisioner.ApplyAutoscalerConfigSecret(
 		context.Background(),
 		clientset,
 		snapshotID,
@@ -237,6 +237,29 @@ func TestApplyAutoscalerConfigSecret_CreatesNewSecret(t *testing.T) {
 	assert.Equal(t, []byte(snapshotID), secret.Data["hcloud_image"])
 
 	assert.Equal(t, workerConfig, decodeAutoscalerCloudInit(t, secret.Data["hcloud_cloud_init"]))
+}
+
+func TestApplyAutoscalerConfigSecret_ReturnsChangedFlag(t *testing.T) {
+	t.Parallel()
+
+	clientset := fake.NewClientset()
+	workerConfig := []byte("machine:\n  type: worker\n")
+
+	// First apply creates the secret => changed.
+	changed, err := talosprovisioner.ApplyAutoscalerConfigSecret(
+		context.Background(), clientset, "123456789", workerConfig,
+	)
+	require.NoError(t, err)
+	assert.True(t, changed, "creating the secret must report a change")
+
+	// Re-applying identical inputs is a no-op => not changed. This is what gates
+	// the autoscaler Deployment restart, so an unrelated `cluster update` does not
+	// needlessly bounce the autoscaler.
+	changed, err = talosprovisioner.ApplyAutoscalerConfigSecret(
+		context.Background(), clientset, "123456789", workerConfig,
+	)
+	require.NoError(t, err)
+	assert.False(t, changed, "re-applying identical config must report no change")
 }
 
 func TestApplyAutoscalerConfigSecret_PreservesExtraKeysOnUpdate(t *testing.T) {
@@ -258,7 +281,7 @@ func TestApplyAutoscalerConfigSecret_PreservesExtraKeysOnUpdate(t *testing.T) {
 	snapshotID := "111111111"
 	workerConfig := []byte("machine:\n  type: worker\n")
 
-	err := talosprovisioner.ApplyAutoscalerConfigSecret(
+	_, err := talosprovisioner.ApplyAutoscalerConfigSecret(
 		context.Background(),
 		clientset,
 		snapshotID,
@@ -300,7 +323,7 @@ func TestApplyAutoscalerConfigSecret_UpdatesExistingSecret(t *testing.T) {
 	snapshotID := "987654321"
 	workerConfig := []byte("machine:\n  type: worker\n  install:\n    wipe: true\n")
 
-	err := talosprovisioner.ApplyAutoscalerConfigSecret(
+	_, err := talosprovisioner.ApplyAutoscalerConfigSecret(
 		context.Background(),
 		clientset,
 		snapshotID,
@@ -375,7 +398,7 @@ func TestApplyAutoscalerConfigSecret_CreateConflictFallsBackToUpdate(t *testing.
 	}
 	clientset := newConflictClientset(preExisting)
 
-	err := talosprovisioner.ApplyAutoscalerConfigSecret(
+	_, err := talosprovisioner.ApplyAutoscalerConfigSecret(
 		context.Background(), clientset, "new-image", []byte("new-config"),
 	)
 	require.NoError(t, err)
@@ -435,7 +458,7 @@ func TestApplyAutoscalerConfigSecret_CompressesLargeConfigUnderLimit(t *testing.
 	require.Greater(t, len(largeConfig), 32768,
 		"test fixture must exceed Hetzner's raw user_data limit to be representative")
 
-	err := talosprovisioner.ApplyAutoscalerConfigSecret(
+	_, err := talosprovisioner.ApplyAutoscalerConfigSecret(
 		context.Background(), clientset, "123456789", largeConfig,
 	)
 	require.NoError(t, err)
@@ -469,7 +492,7 @@ func TestApplyAutoscalerConfigSecret_RejectsOversizedConfig(t *testing.T) {
 	_, err := rand.Read(incompressible)
 	require.NoError(t, err)
 
-	err = talosprovisioner.ApplyAutoscalerConfigSecret(
+	_, err = talosprovisioner.ApplyAutoscalerConfigSecret(
 		context.Background(), clientset, "123456789", incompressible,
 	)
 	require.ErrorIs(t, err, talosprovisioner.ErrAutoscalerUserDataTooLarge)

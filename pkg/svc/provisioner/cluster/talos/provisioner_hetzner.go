@@ -251,8 +251,10 @@ func (p *Provisioner) bootstrapAndFinalize(
 		_, _ = fmt.Fprintf(p.logWriter, "  ✓ Cluster is ready\n")
 	}
 
-	// Create the cluster-autoscaler-config Secret when applicable.
-	err = p.ensureAutoscalerSecret(ctx, configBundle, snapshotImageID)
+	// Create the cluster-autoscaler-config Secret when applicable. No restart on
+	// create: the autoscaler Deployment is installed afterwards and starts with
+	// this config.
+	err = p.ensureAutoscalerSecret(ctx, configBundle, snapshotImageID, false)
 	if err != nil {
 		return err
 	}
@@ -415,10 +417,19 @@ func (p *Provisioner) updateHcloudSecret(
 
 // ensureAutoscalerSecret creates the cluster-autoscaler-config Secret when the
 // node autoscaler is enabled and bootstrap used a snapshot image.
+//
+// When restartIfChanged is true (cluster update) and the Secret's data actually
+// changed, it rolls the running cluster-autoscaler Deployment so it reloads the
+// new config — the autoscaler reads the Secret as environment variables, which
+// Kubernetes does not live-reload, so without the restart new nodes would keep
+// booting from the stale Kubernetes version / snapshot. On cluster create
+// restartIfChanged is false: the Deployment does not exist yet (the installer
+// runs afterwards and starts with the correct config).
 func (p *Provisioner) ensureAutoscalerSecret(
 	ctx context.Context,
 	configBundle *bundle.Bundle,
 	snapshotImageID int64,
+	restartIfChanged bool,
 ) error {
 	if p.hetznerOpts == nil || !p.hetznerOpts.NodeAutoscalerEnabled || snapshotImageID <= 0 {
 		return nil
@@ -436,7 +447,7 @@ func (p *Provisioner) ensureAutoscalerSecret(
 		return fmt.Errorf("generating autoscaler worker config: %w", err)
 	}
 
-	err = ApplyAutoscalerConfigSecret(
+	changed, err := ApplyAutoscalerConfigSecret(
 		ctx,
 		kubeclient,
 		strconv.FormatInt(snapshotImageID, 10),
@@ -447,6 +458,42 @@ func (p *Provisioner) ensureAutoscalerSecret(
 	}
 
 	_, _ = fmt.Fprintf(p.logWriter, "  ✓ Cluster autoscaler config secret created\n")
+
+	if restartIfChanged && changed {
+		return p.restartAutoscalerAfterConfigChange(ctx, kubeclient)
+	}
+
+	return nil
+}
+
+// restartAutoscalerAfterConfigChange rolls the cluster-autoscaler Deployment so it
+// reloads the cluster-autoscaler-config Secret. A missing Deployment is not an
+// error — the autoscaler may not be installed yet, in which case its next install
+// starts with the current config.
+func (p *Provisioner) restartAutoscalerAfterConfigChange(
+	ctx context.Context,
+	kubeclient kubernetes.Interface,
+) error {
+	restarted, err := k8s.RolloutRestartDeploymentsByLabel(
+		ctx,
+		kubeclient,
+		autoscalerConfigSecretNamespace,
+		autoscalerDeploymentSelector,
+	)
+	if err != nil {
+		return fmt.Errorf("restarting cluster-autoscaler after config change: %w", err)
+	}
+
+	if restarted == 0 {
+		_, _ = fmt.Fprintf(
+			p.logWriter,
+			"  ⓘ cluster-autoscaler not running; it will use the updated config when installed\n",
+		)
+
+		return nil
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "  ✓ Restarted cluster-autoscaler to load the updated config\n")
 
 	return nil
 }
