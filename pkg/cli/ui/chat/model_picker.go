@@ -51,10 +51,7 @@ func (m *Model) handleModelPickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case keyEnter:
 		return m.selectModel(totalItems)
 	case keyCtrlC:
-		m.cleanup()
-		m.quitting = true
-
-		return m, tea.Quit
+		return m.handleQuit()
 	}
 
 	return m, nil
@@ -82,10 +79,7 @@ func (m *Model) handleModelFilterKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 		return m, nil
 	case keyCtrlC:
-		m.cleanup()
-		m.quitting = true
-
-		return m, tea.Quit
+		return m.handleQuit()
 	default:
 		if msg.Type == tea.KeyRunes {
 			m.modelFilterText += string(msg.Runes)
