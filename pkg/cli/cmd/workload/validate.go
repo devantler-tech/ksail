@@ -209,8 +209,9 @@ func resolveValidatePath(cmd *cobra.Command, args []string) (string, error) {
 
 // configuredSkipKinds loads ksail.yaml (honoring --config) and returns the
 // configured spec.workload.validation.skipKinds. It returns nil when no config
-// file is found or the field is unset, and never fails validation on a config
-// load error — the built-in skips still apply.
+// file is found or the field is unset. A config file that exists but fails to
+// load does not fail validation (the built-in skips still apply) but emits a
+// warning so the omission is not silent.
 func configuredSkipKinds(cmd *cobra.Command) []string {
 	var configFile string
 
@@ -231,7 +232,21 @@ func configuredSkipKinds(cmd *cobra.Command) []string {
 			SkipDistributionConfig: true,
 		},
 	)
-	if err != nil || !cfgManager.IsConfigFileFound() {
+	if err != nil {
+		// A config file exists but couldn't be read/parsed. Don't fail
+		// validation, but warn so a typo or unreadable ksail.yaml doesn't
+		// silently validate kinds that were meant to be skipped.
+		notify.WriteMessage(notify.Message{
+			Type:    notify.WarningType,
+			Content: "could not read spec.workload.validation.skipKinds from ksail.yaml: %v",
+			Args:    []any{err},
+			Writer:  cmd.ErrOrStderr(),
+		})
+
+		return nil
+	}
+
+	if !cfgManager.IsConfigFileFound() {
 		return nil
 	}
 

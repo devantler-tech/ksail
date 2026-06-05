@@ -1021,6 +1021,7 @@ spec:
       skipKinds:
         - ConfigMap
 `
+
 	err = os.WriteFile(
 		filepath.Join(tmpDir, "ksail.yaml"),
 		[]byte(ksailYAML),
@@ -1046,6 +1047,52 @@ spec:
 			"expected validation with spec.workload.validation.skipKinds to succeed, got: %v",
 			err,
 		)
+	}
+}
+
+//nolint:paralleltest // Cannot use t.Parallel() with t.Chdir() - they are incompatible
+func TestValidateCmdWarnsOnUnreadableConfig(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	manifestDir := filepath.Join(tmpDir, "k8s")
+
+	err := os.MkdirAll(manifestDir, 0o750)
+	if err != nil {
+		t.Fatalf("failed to create manifest dir: %v", err)
+	}
+
+	err = os.WriteFile(
+		filepath.Join(manifestDir, "namespace.yaml"),
+		[]byte(validNamespaceManifest),
+		0o600,
+	)
+	if err != nil {
+		t.Fatalf("failed to write manifest: %v", err)
+	}
+
+	// A ksail.yaml that exists but does not parse.
+	err = os.WriteFile(filepath.Join(tmpDir, "ksail.yaml"), []byte("foo: [bar"), 0o600)
+	if err != nil {
+		t.Fatalf("failed to write ksail.yaml: %v", err)
+	}
+
+	t.Chdir(tmpDir)
+
+	cmd := workload.NewValidateCmd()
+	cmd.SetArgs([]string{"k8s"})
+
+	var output bytes.Buffer
+
+	cmd.SetOut(&output)
+	cmd.SetErr(&output)
+
+	err = cmd.Execute()
+	if err != nil {
+		t.Fatalf("expected validation to succeed despite unreadable config, got: %v", err)
+	}
+
+	if !strings.Contains(output.String(), "skipKinds") {
+		t.Errorf("expected a warning mentioning skipKinds, got: %q", output.String())
 	}
 }
 
