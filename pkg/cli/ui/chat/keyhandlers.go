@@ -182,9 +182,10 @@ func (m *Model) handleQuit() (tea.Model, tea.Cmd) {
 	return m, tea.Quit
 }
 
-// movePickerIndex applies up/down (k/j) navigation to *index, clamping it to
-// [0, total). Picker key handlers share this single bounds-checked implementation
-// instead of repeating the same up/down arithmetic.
+// movePickerIndex steps *index for up/down (k/j) navigation: "up"/"k" moves it
+// toward 0 and "down"/"j" toward total-1, stopping at those bounds. It guards each
+// step from leaving [0, total) but does not re-clamp an index that is already out
+// of range. Picker key handlers share this instead of repeating the up/down arithmetic.
 func movePickerIndex(key string, index *int, total int) {
 	switch key {
 	case "up", "k":
