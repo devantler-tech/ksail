@@ -297,7 +297,7 @@ require (
 	github.com/siderolabs/go-procfs v0.1.2 // indirect
 	github.com/siderolabs/go-retry v0.3.3 // indirect
 	github.com/siderolabs/go-talos-support v0.2.1 // indirect
-	github.com/siderolabs/image-factory v1.3.1 // indirect
+	github.com/siderolabs/image-factory v1.3.2 // indirect
 	github.com/siderolabs/net v0.4.0 // indirect
 	github.com/siderolabs/omni/client v1.8.0 // indirect
 	github.com/siderolabs/proto-codec v0.1.4 // indirect
