@@ -117,6 +117,28 @@ spec:
   replicas: ${REPLICA_COUNT:-2}
 ```
 
+### Skip Validation for Specific Kinds
+
+`workload validate` checks each resource against its JSON schema from the [CRDs-catalog](https://github.com/datreeio/CRDs-catalog). When a CRD's catalog schema is **stale or missing**, kubeconform can reject otherwise-valid manifests — for example flagging a newer field as `additional properties ... not allowed`. (Kubernetes `Secret`s are already skipped by default to avoid SOPS-related failures.)
+
+Skip such kinds with the `--skip-kinds` flag:
+
+```bash
+ksail workload validate --skip-kinds Coroot,SealedSecret
+```
+
+…or, so it also applies in CI (the `ksail-cluster` action with `validate: "true"`), via `ksail.yaml`:
+
+```yaml
+spec:
+  workload:
+    validation:
+      skipKinds:
+        - Coroot
+```
+
+The flag and the configured kinds are merged. Skip only the kinds whose schema is genuinely unavailable — skipped resources are not validated at all.
+
 ### Use `workload validate` Before Pushing
 
 Combine `workload validate` with `workload push` in your workflow to catch schema errors before they enter the GitOps pipeline:

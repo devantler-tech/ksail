@@ -132,12 +132,23 @@ func (c ClusterSpec) TotalNodeCount() int32 {
 
 // WorkloadSpec defines workload-related configuration.
 type WorkloadSpec struct {
-	SourceDirectory   string      `default:"k8s"   json:"sourceDirectory,omitzero"   jsonschema_description:"Path to the directory containing Kubernetes manifests. Used as the default path by validate, watch, and push when no explicit path argument is given."`                                                                                                      //nolint:lll
-	ValidateOnPush    bool        `default:"false" json:"validateOnPush,omitzero"    jsonschema_description:"Validate manifests against schemas before pushing (validation disabled by default)"`                                                                                                                                                                         //nolint:lll
-	Tag               string      `default:"dev"   json:"tag,omitzero"               jsonschema_description:"OCI artifact tag used for workload push and GitOps reconciliation (Flux OCIRepository and ArgoCD Application). Push priority: CLI oci:// ref > this field > registry-embedded tag > dev. Reconciliation priority: this field > registry-embedded tag > dev"` //nolint:lll
-	KustomizationFile string      `default:""      json:"kustomizationFile,omitzero" jsonschema_description:"Path to the kustomization directory relative to sourceDirectory. When set, Flux Sync.Path is configured to this path so Flux uses the specified kustomization as the entry point instead of requiring a root kustomization.yaml."`                           //nolint:lll
-	Flux              FluxConfig  `                json:"flux,omitzero"              jsonschema_description:"Flux bootstrap version pins (operator chart and FluxInstance distribution). Empty values use KSail's pinned versions; a GitOps repo that declares these becomes the steady-state owner."`                                                                    //nolint:lll
-	Watch             WatchConfig `                json:"watch,omitzero"             jsonschema_description:"Configuration for the workload watch command (pre-apply hooks, etc.)"`                                                                                                                                                                                       //nolint:lll
+	SourceDirectory   string           `default:"k8s"   json:"sourceDirectory,omitzero"   jsonschema_description:"Path to the directory containing Kubernetes manifests. Used as the default path by validate, watch, and push when no explicit path argument is given."`                                                                                                      //nolint:lll
+	ValidateOnPush    bool             `default:"false" json:"validateOnPush,omitzero"    jsonschema_description:"Validate manifests against schemas before pushing (validation disabled by default)"`                                                                                                                                                                         //nolint:lll
+	Tag               string           `default:"dev"   json:"tag,omitzero"               jsonschema_description:"OCI artifact tag used for workload push and GitOps reconciliation (Flux OCIRepository and ArgoCD Application). Push priority: CLI oci:// ref > this field > registry-embedded tag > dev. Reconciliation priority: this field > registry-embedded tag > dev"` //nolint:lll
+	KustomizationFile string           `default:""      json:"kustomizationFile,omitzero" jsonschema_description:"Path to the kustomization directory relative to sourceDirectory. When set, Flux Sync.Path is configured to this path so Flux uses the specified kustomization as the entry point instead of requiring a root kustomization.yaml."`                           //nolint:lll
+	Flux              FluxConfig       `                json:"flux,omitzero"              jsonschema_description:"Flux bootstrap version pins (operator chart and FluxInstance distribution). Empty values use KSail's pinned versions; a GitOps repo that declares these becomes the steady-state owner."`                                                                    //nolint:lll
+	Watch             WatchConfig      `                json:"watch,omitzero"             jsonschema_description:"Configuration for the workload watch command (pre-apply hooks, etc.)"`                                                                                                                                                                                       //nolint:lll
+	Validation        ValidationConfig `                json:"validation,omitzero"        jsonschema_description:"Configuration for the workload validate command (additional kinds to skip, etc.)."`                                                                                                                                                                          //nolint:lll
+}
+
+// ValidationConfig defines configuration for the workload validate command.
+type ValidationConfig struct {
+	// SkipKinds lists additional Kubernetes kinds to skip during validation.
+	// Kubernetes Secrets are skipped by default via --skip-secrets; this is for
+	// skipping CRDs whose schema in the CRDs-catalog is stale or missing, which
+	// kubeconform would otherwise reject (e.g. valid newer fields flagged as
+	// "additional properties not allowed").
+	SkipKinds []string `json:"skipKinds,omitzero" jsonschema_description:"Additional Kubernetes kinds to skip during 'ksail workload validate' (Secrets are skipped by default via --skip-secrets). Use for CRDs whose CRDs-catalog schema is stale or missing, which kubeconform would otherwise reject."` //nolint:lll
 }
 
 // WatchConfig defines configuration for the workload watch command.

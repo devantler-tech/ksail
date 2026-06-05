@@ -50,6 +50,7 @@ func NewValidateCmd() *cobra.Command {
 		skipSecrets          bool
 		strict               bool
 		ignoreMissingSchemas bool
+		skipKinds            []string
 	)
 
 	cmd := &cobra.Command{
@@ -92,21 +93,37 @@ By default, Kubernetes Secrets are skipped to avoid validation failures due to S
 				skipSecrets,
 				strict,
 				ignoreMissingSchemas,
+				skipKinds,
 			)
 		},
 	}
 
-	// Add flags
-	cmd.Flags().BoolVar(&skipSecrets, "skip-secrets", true, "Skip validation of Kubernetes Secrets")
-	cmd.Flags().BoolVar(&strict, "strict", false, "Enable strict validation mode")
+	addValidateFlags(cmd, &skipSecrets, &strict, &ignoreMissingSchemas, &skipKinds)
+
+	return cmd
+}
+
+// addValidateFlags registers the flags for the validate command.
+func addValidateFlags(
+	cmd *cobra.Command,
+	skipSecrets, strict, ignoreMissingSchemas *bool,
+	skipKinds *[]string,
+) {
+	cmd.Flags().BoolVar(skipSecrets, "skip-secrets", true, "Skip validation of Kubernetes Secrets")
+	cmd.Flags().BoolVar(strict, "strict", false, "Enable strict validation mode")
 	cmd.Flags().BoolVar(
-		&ignoreMissingSchemas,
+		ignoreMissingSchemas,
 		"ignore-missing-schemas",
 		true,
 		"Ignore resources with missing schemas",
 	)
-
-	return cmd
+	cmd.Flags().StringSliceVar(
+		skipKinds,
+		"skip-kinds",
+		nil,
+		"Additional Kubernetes kinds to skip during validation "+
+			"(merged with spec.workload.validation.skipKinds from ksail.yaml)",
+	)
 }
 
 func runValidateCmd(
@@ -116,6 +133,7 @@ func runValidateCmd(
 	skipSecrets bool,
 	strict bool,
 	ignoreMissingSchemas bool,
+	skipKinds []string,
 ) error {
 	path, err := resolveValidatePath(cmd, args)
 	if err != nil {
@@ -144,6 +162,13 @@ func runValidateCmd(
 	if skipSecrets {
 		validationOpts.SkipKinds = append(validationOpts.SkipKinds, "Secret")
 	}
+
+	// Additional kinds to skip come from the --skip-kinds flag and from
+	// spec.workload.validation.skipKinds in ksail.yaml. This lets a repo opt out
+	// of validating CRDs whose CRDs-catalog schema is stale or missing (which
+	// kubeconform would otherwise reject as "additional properties not allowed").
+	validationOpts.SkipKinds = append(validationOpts.SkipKinds, skipKinds...)
+	validationOpts.SkipKinds = append(validationOpts.SkipKinds, configuredSkipKinds(cmd)...)
 
 	return validatePath(ctx, cmd, path, kubeconformClient, validationOpts)
 }
@@ -180,6 +205,52 @@ func resolveValidatePath(cmd *cobra.Command, args []string) (string, error) {
 	default:
 		return ".", nil
 	}
+}
+
+// configuredSkipKinds loads ksail.yaml (honoring --config) and returns the
+// configured spec.workload.validation.skipKinds. It returns nil when no config
+// file is found or the field is unset. A config file that exists but fails to
+// load does not fail validation (the built-in skips still apply) but emits a
+// warning so the omission is not silent.
+func configuredSkipKinds(cmd *cobra.Command) []string {
+	var configFile string
+
+	cfgPath, pathErr := flags.GetConfigPath(cmd)
+	if pathErr == nil {
+		configFile = cfgPath
+	}
+
+	cfgManager := configmanager.NewConfigManager(io.Discard, configFile)
+
+	cfg, err := cfgManager.Load(
+		// SkipDistributionConfig avoids loading distribution-specific config
+		// (e.g. Talos PKI generation) on every validate run; only the workload
+		// config is read here.
+		configmanagerinterface.LoadOptions{
+			Silent:                 true,
+			SkipValidation:         true,
+			SkipDistributionConfig: true,
+		},
+	)
+	if err != nil {
+		// A config file exists but couldn't be read/parsed. Don't fail
+		// validation, but warn so a typo or unreadable ksail.yaml doesn't
+		// silently validate kinds that were meant to be skipped.
+		notify.WriteMessage(notify.Message{
+			Type:    notify.WarningType,
+			Content: "could not read spec.workload.validation.skipKinds from ksail.yaml: %v",
+			Args:    []any{err},
+			Writer:  cmd.ErrOrStderr(),
+		})
+
+		return nil
+	}
+
+	if !cfgManager.IsConfigFileFound() {
+		return nil
+	}
+
+	return cfg.Spec.Workload.Validation.SkipKinds
 }
 
 // validatePath validates all manifests in the given path.
