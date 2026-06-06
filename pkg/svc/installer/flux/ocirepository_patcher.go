@@ -57,49 +57,6 @@ func (p *ociRepositoryPatcher) waitForAPI(ctx context.Context) error {
 	return nil
 }
 
-// ensureInsecure patches the OCIRepository with insecure: true for local registries.
-// Uses a dynamic Kubernetes client to bypass REST mapper cache issues.
-func (p *ociRepositoryPatcher) ensureInsecure(ctx context.Context) error {
-	waitCtx, cancel := context.WithTimeout(ctx, p.apiWaiter.timeout)
-	defer cancel()
-
-	ticker := time.NewTicker(p.apiWaiter.interval)
-	defer ticker.Stop()
-
-	// Define the GVR for OCIRepository - bypasses REST mapper cache.
-	ociRepoGVR := schema.GroupVersionResource{
-		Group:    sourcev1.GroupVersion.Group,
-		Version:  sourcev1.GroupVersion.Version,
-		Resource: "ocirepositories",
-	}
-
-	var lastErr error
-
-	for {
-		result, err := p.tryPatchInsecure(ctx, waitCtx, ociRepoGVR)
-
-		switch result {
-		case patchSuccess:
-			return nil
-		case patchRetry:
-			lastErr = err
-		case patchFailed:
-			return err
-		}
-
-		select {
-		case <-waitCtx.Done():
-			if lastErr == nil {
-				lastErr = waitCtx.Err()
-			}
-
-			return fmt.Errorf("timed out waiting for OCIRepository: %w", lastErr)
-		case <-ticker.C:
-			// Continue retry loop
-		}
-	}
-}
-
 type patchResult int
 
 const (
@@ -108,57 +65,22 @@ const (
 	patchFailed
 )
 
-// tryPatchInsecure attempts to patch the OCIRepository once.
-// Returns whether to retry, succeed, or fail permanently.
-func (p *ociRepositoryPatcher) tryPatchInsecure(
-	ctx context.Context,
-	waitCtx context.Context,
-	gvr schema.GroupVersionResource,
-) (patchResult, error) {
-	dynamicClient, clientErr := dynamic.NewForConfig(p.restConfig)
-	if clientErr != nil {
-		return patchRetry, fmt.Errorf("failed to create dynamic client: %w", clientErr)
-	}
-
-	// Get the OCIRepository
-	unstructuredRepo, err := dynamicClient.Resource(gvr).
-		Namespace(fluxclient.DefaultNamespace).
-		Get(waitCtx, defaultOCIRepositoryName, metav1.GetOptions{})
-	if err != nil {
-		if apierrors.IsNotFound(err) {
-			return patchRetry, errOCIRepositoryCreateTimout
+// ensureInsecure patches the OCIRepository with insecure: true for local registries.
+// Uses a dynamic Kubernetes client (via patchOCIRepository) to bypass REST mapper cache issues.
+func (p *ociRepositoryPatcher) ensureInsecure(ctx context.Context) error {
+	return p.patchOCIRepository(ctx, "insecure", func(obj map[string]any) (bool, error) {
+		insecure, found, _ := unstructured.NestedBool(obj, "spec", "insecure")
+		if found && insecure {
+			return true, nil
 		}
 
-		return patchRetry, fmt.Errorf("failed to get OCIRepository: %w", err)
-	}
+		err := unstructured.SetNestedField(obj, true, "spec", "insecure")
+		if err != nil {
+			return false, fmt.Errorf("failed to set insecure field: %w", err)
+		}
 
-	// Check if already insecure
-	insecure, found, _ := unstructured.NestedBool(unstructuredRepo.Object, "spec", "insecure")
-	if found && insecure {
-		return patchSuccess, nil
-	}
-
-	// Patch to set insecure: true
-	err = unstructured.SetNestedField(unstructuredRepo.Object, true, "spec", "insecure")
-	if err != nil {
-		return patchFailed, fmt.Errorf("failed to set insecure field: %w", err)
-	}
-
-	_, updateErr := dynamicClient.Resource(gvr).
-		Namespace(fluxclient.DefaultNamespace).
-		Update(ctx, unstructuredRepo, metav1.UpdateOptions{})
-	if updateErr == nil {
-		return patchSuccess, nil
-	}
-
-	if isTransientAPIError(updateErr) {
-		return patchRetry, fmt.Errorf("transient error updating OCIRepository: %w", updateErr)
-	}
-
-	return patchFailed, fmt.Errorf(
-		"failed to update OCIRepository %s/%s: %w",
-		fluxclient.DefaultNamespace, defaultOCIRepositoryName, updateErr,
-	)
+		return false, nil
+	})
 }
 
 // buildVerifyPatch renders the OCIRepository spec.verify block from KSail's
