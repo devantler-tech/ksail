@@ -1367,7 +1367,21 @@ func (p *Provisioner) ensureAutoscalerSecretIfNeeded(
 	// Restart the autoscaler when the config changed so it reloads the new
 	// Kubernetes version / snapshot baked into the Secret (read as env vars,
 	// which Kubernetes does not live-reload).
-	return p.ensureAutoscalerSecret(ctx, configBundle, snapshotImageID, true)
+	changed, err := p.ensureAutoscalerSecret(ctx, configBundle, snapshotImageID, true)
+	if err != nil {
+		return err
+	}
+
+	// When the config changed (a Talos/Kubernetes version bump), recycle the
+	// existing autoscaler nodes so they follow the new baseline instead of
+	// drifting on the old versions. The refreshed Secret alone only fixes newly
+	// provisioned nodes; the in-place rolling upgrade never touches autoscaler
+	// nodes because they are not KSail-owned. A no-op when nothing changed.
+	if !changed {
+		return nil
+	}
+
+	return p.recycleAutoscalerNodes(ctx, clusterName)
 }
 
 // hasSchematicConfigured reports whether a Talos schematic ID is available
