@@ -6,6 +6,11 @@ https://registry-1.docker.io/
 https://ghcr.io/
 https://quay.io/
 
+# Hetzner Helm chart repo serves the index at /index.yaml; the bare base URL
+# returns 404. The URL is the required `repository:` field in Chart.yaml for
+# the hcloud-cloud-controller-manager and hcloud-csi dependency pins.
+https://charts.hetzner.cloud/
+
 # GitHub repository paths used in kustomize (not web URLs)
 https://github.com/stefanprodan/podinfo//kustomize
 
