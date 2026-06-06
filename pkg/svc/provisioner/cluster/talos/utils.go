@@ -136,14 +136,10 @@ func (p *Provisioner) getRunningTalosVersion(ctx context.Context, nodeIP string)
 
 	defer talosClient.Close() //nolint:errcheck
 
-	resp, err := talosClient.Version(ctx)
+	tag, err := versionTagFromClient(ctx, talosClient)
 	if err != nil {
-		return "", fmt.Errorf("querying Talos version on %s: %w", nodeIP, err)
+		return "", fmt.Errorf("node %s: %w", nodeIP, err)
 	}
 
-	if len(resp.GetMessages()) == 0 || resp.GetMessages()[0].GetVersion() == nil {
-		return "", fmt.Errorf("node %s: %w", nodeIP, ErrEmptyVersionResponse)
-	}
-
-	return resp.GetMessages()[0].GetVersion().GetTag(), nil
+	return tag, nil
 }

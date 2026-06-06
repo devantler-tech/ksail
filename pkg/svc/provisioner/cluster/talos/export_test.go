@@ -304,6 +304,11 @@ func InstallerImageFromTagForTest(tag string) string {
 	return installerImageFromTag(tag)
 }
 
+// SupportsLifecycleUpgradeAPIForTest exposes supportsLifecycleUpgradeAPI for unit testing.
+func SupportsLifecycleUpgradeAPIForTest(versionTag string) bool {
+	return supportsLifecycleUpgradeAPI(versionTag)
+}
+
 // ResolveInstallerImageForTest exposes resolveInstallerImage for unit testing.
 func (p *Provisioner) ResolveInstallerImageForTest(toVersion string) string {
 	return p.resolveInstallerImage(toVersion)
