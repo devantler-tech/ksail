@@ -314,6 +314,14 @@ func (p *Provisioner) applyHetznerConfigs(
 	cpConfig := configBundle.ControlPlane()
 	workerConfig := configBundle.Worker()
 
+	// Warn once if the user supplied their own HostnameConfig (e.g. auto: off):
+	// KSail overrides it with the server name for CCM compatibility (see
+	// warnIfOverridingUserHostname), and the override should be visible, not silent.
+	cpBytes, bytesErr := cpConfig.Bytes()
+	if bytesErr == nil {
+		p.warnIfOverridingUserHostname(cpBytes)
+	}
+
 	allServers := make([]*hcloud.Server, 0, len(controlPlaneServers)+len(workerServers))
 	configs := make([]talosconfig.Provider, 0, len(controlPlaneServers)+len(workerServers))
 
@@ -682,6 +690,67 @@ func stripHostnameConfigDocuments(cfgBytes []byte) ([]byte, error) {
 	}
 
 	return buf.Bytes(), nil
+}
+
+// userHostnameConfigSummary inspects a (possibly multi-document) Talos config and
+// returns a short description of a USER-authored HostnameConfig document that
+// KSail's per-node static hostname overrides (and stripHostnameConfigDocuments
+// removes) on Hetzner — or "" when the only HostnameConfig present is the Talos
+// SDK default (`auto: stable`). The SDK emits `auto: stable` by default on Talos
+// 1.13+; that is exactly the setting that renames nodes to talos-xxxxx and breaks
+// the Hetzner CCM, so stripping it is silent. Anything else (`auto: off` or a
+// static `hostname:`) is a deliberate user hostname strategy, so KSail warns
+// before overriding it rather than discarding it silently.
+//
+// Best-effort and never errors: an unparseable document simply yields "".
+func userHostnameConfigSummary(cfgBytes []byte) string {
+	decoder := yaml.NewDecoder(bytes.NewReader(cfgBytes))
+
+	for {
+		var doc map[string]any
+
+		decodeErr := decoder.Decode(&doc)
+		if decodeErr != nil {
+			return "" // EOF or malformed: nothing actionable to report
+		}
+
+		if kind, _ := doc["kind"].(string); kind != hostnameConfigKind {
+			continue
+		}
+
+		if hostname, _ := doc["hostname"].(string); hostname != "" {
+			return "hostname: " + hostname
+		}
+
+		// HostnameConfig.auto accepts only "stable" (the SDK default) and "off".
+		auto, _ := doc["auto"].(string)
+		if auto != "" && !strings.EqualFold(auto, "stable") {
+			return "auto: " + auto
+		}
+
+		return "" // SDK default (auto: stable / unset) — overridden silently
+	}
+}
+
+// warnIfOverridingUserHostname emits a one-line warning when cfgBytes carries a
+// user-authored HostnameConfig that KSail will override with the per-node static
+// hostname (the Hetzner server name) and strip from the applied config. On Hetzner
+// the node hostname is not a free choice: it must equal the server name or the
+// Hetzner CCM never initializes the Node (#4962), so KSail owns it — but the
+// override is now visible instead of silent. No-op when only the SDK default
+// HostnameConfig is present.
+func (p *Provisioner) warnIfOverridingUserHostname(cfgBytes []byte) {
+	summary := userHostnameConfigSummary(cfgBytes)
+	if summary == "" {
+		return
+	}
+
+	p.logf(
+		"  ⚠ Overriding user HostnameConfig (%s) with the Hetzner server name; "+
+			"the Hetzner CCM matches Nodes to servers by name, so KSail manages the "+
+			"node hostname and drops the HostnameConfig document from the applied config.\n",
+		summary,
+	)
 }
 
 // attemptApplyConfig creates a single-use insecure Talos client and attempts to

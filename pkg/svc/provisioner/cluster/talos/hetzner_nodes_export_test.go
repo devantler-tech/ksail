@@ -12,6 +12,12 @@ var IsRetryableTalosApplyConfigError = isRetryableTalosApplyConfigError
 //nolint:gochecknoglobals // export_test.go pattern requires global variables to expose internal functions
 var PatchTalosHostname = patchTalosHostname
 
+// UserHostnameConfigSummary exposes userHostnameConfigSummary for tests in the
+// talosprovisioner_test package.
+//
+//nolint:gochecknoglobals // export_test.go pattern requires global variables to expose internal functions
+var UserHostnameConfigSummary = userHostnameConfigSummary
+
 // HetznerNodeName exposes hetznerNodeName for tests in the
 // talosprovisioner_test package.
 //
