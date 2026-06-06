@@ -356,10 +356,102 @@ func TestBuildDesiredNodeConfig_PreservesNodeHostname(t *testing.T) {
 	assert.Equal(t, "prod-control-plane-1", desired.RawV1Alpha1().Hostname(),
 		"the per-node static hostname must be preserved so the node keeps its name on reboot")
 
+	// The fix hinges on stripping the conflicting standalone HostnameConfig
+	// document: the grafted config must carry the static hostname in exactly one
+	// representation, so the node accepts it (no "static hostname is already set"
+	// conflict, #4969) on ApplyConfiguration.
+	desiredBytes, err := desired.Bytes()
+	require.NoError(t, err)
+	assert.Zero(t, countHostnameConfigDocs(t, desiredBytes),
+		"the conflicting HostnameConfig document must be stripped after grafting")
+
+	_, err = desired.Validate(nodeRuntimeMode{})
+	require.NoError(t, err,
+		"grafted config must pass node-side validation (no static-vs-HostnameConfig conflict)")
+
 	diff, err := talosprovisioner.MachineConfigDiffForTest(running, desired)
 	require.NoError(t, err)
 	assert.Empty(t, diff,
 		"a create-injected hostname must not read as drift on an unchanged config")
+}
+
+// TestBuildDesiredNodeConfig_PreservesNodeHostname_Worker is the worker-role
+// counterpart: the rename bug affects workers too. On Hetzner, workers also get a
+// create-injected static hostname (marshalConfigWithHostname is applied to worker
+// servers), and applyInPlaceConfigChanges rebuilds each worker's config via
+// buildDesiredNodeConfig. A worker's own config carries no CA private keys, so the
+// rebuild is seeded from a control-plane secrets source (#4963) — exactly how the
+// apply path threads it.
+func TestBuildDesiredNodeConfig_PreservesNodeHostname_Worker(t *testing.T) {
+	t.Parallel()
+
+	patch := sysctlPatch("machine:\n  sysctls:\n    net.core.rmem_max: \"1\"\n")
+
+	// One cluster bundle backs the running worker, the control-plane secrets source,
+	// and the provisioner's desired configs — modelling reality, where every node
+	// shares the cluster PKI. (Distinct bundles would diff on CA certs, not hostname.)
+	configs, err := talosconfigmanager.NewDefaultConfigsWithPatches(
+		[]talosconfigmanager.Patch{patch},
+	)
+	require.NoError(t, err)
+
+	// The worker's running config carries the create-injected static hostname.
+	workerBytes, err := configs.Worker().Bytes()
+	require.NoError(t, err)
+
+	workerWithHostname, err := talosprovisioner.PatchTalosHostname(workerBytes, "prod-worker-1")
+	require.NoError(t, err)
+
+	workerRunning, err := configloader.NewFromBytes(workerWithHostname)
+	require.NoError(t, err)
+
+	require.Equal(t, "prod-worker-1", workerRunning.RawV1Alpha1().Hostname(),
+		"precondition: running worker config carries the create-injected static hostname")
+
+	// Workers carry no CA private keys; the rebuild is seeded from a control-plane
+	// config of the same cluster (matching PKI), as the apply path threads it (#4963).
+	cpBytes, err := configs.ControlPlane().Bytes()
+	require.NoError(t, err)
+
+	cpSecretsSource, err := configloader.NewFromBytes(cpBytes)
+	require.NoError(t, err)
+
+	prov := talosprovisioner.NewProvisioner(configs, nil)
+
+	desired, err := prov.BuildDesiredNodeConfigForTest(
+		workerRunning, cpSecretsSource, talosprovisioner.RoleWorker,
+	)
+	require.NoError(t, err)
+
+	assert.Equal(t, "prod-worker-1", desired.RawV1Alpha1().Hostname(),
+		"the worker's per-node static hostname must be preserved so it keeps its name on reboot")
+
+	desiredBytes, err := desired.Bytes()
+	require.NoError(t, err)
+	assert.Zero(
+		t,
+		countHostnameConfigDocs(t, desiredBytes),
+		"the conflicting HostnameConfig document must be stripped after grafting the worker hostname",
+	)
+
+	_, err = desired.Validate(nodeRuntimeMode{})
+	require.NoError(
+		t,
+		err,
+		"grafted worker config must pass node-side validation (no static-vs-HostnameConfig conflict)",
+	)
+
+	// Scope the drift check to the hostname: the empty-diff guarantee is covered by
+	// the control-plane test. A worker config carries no apiserver image, so
+	// buildDesiredNodeConfig cannot realign its Kubernetes version (see
+	// alignKubernetesVersion / #4936) — an orthogonal, pre-existing difference that
+	// must not mask, nor be conflated with, the hostname assertion.
+	diff, err := talosprovisioner.MachineConfigDiffForTest(workerRunning, desired)
+	require.NoError(t, err)
+	assert.NotContains(t, diff, "HostnameConfig",
+		"the grafted worker config must not reintroduce a standalone HostnameConfig document")
+	assert.NotContains(t, diff, "hostname:",
+		"the worker's static hostname must not drift (no add/remove of machine.network.hostname)")
 }
 
 // TestBuildDesiredNodeConfig_NoHostnameLeavesConfigUnchanged verifies the Docker
