@@ -2,13 +2,13 @@ package k8s
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
-	appsv1client "k8s.io/client-go/kubernetes/typed/apps/v1"
-	"k8s.io/client-go/util/retry"
 )
 
 // RolloutRestartAnnotation is the pod-template annotation that triggers a rolling
@@ -21,7 +21,10 @@ const RolloutRestartAnnotation = "kubectl.kubernetes.io/restartedAt"
 // RolloutRestartDeploymentsByLabel triggers a rolling restart of every Deployment
 // in namespace whose labels match labelSelector, the same way
 // `kubectl rollout restart deployment -l <selector>` does: it stamps each pod
-// template's RolloutRestartAnnotation with the current time.
+// template's RolloutRestartAnnotation with the current time via a strategic-merge
+// patch. The patch merges the annotation into any existing pod-template
+// annotations rather than replacing them, and is atomic — so, unlike a
+// get-modify-update, it needs no optimistic-concurrency retry.
 //
 // Callers that rewrite a Secret or ConfigMap consumed via env-var valueFrom must
 // call this for the change to reach the running pods. A selector that matches no
@@ -40,13 +43,25 @@ func RolloutRestartDeploymentsByLabel(
 		return 0, fmt.Errorf("listing deployments %q in %s: %w", labelSelector, namespace, err)
 	}
 
-	timestamp := time.Now().Format(time.RFC3339)
+	patch, err := rolloutRestartPatch()
+	if err != nil {
+		return 0, err
+	}
+
 	restarted := 0
 
 	for index := range list.Items {
-		err = restartDeployment(ctx, deploymentsClient, list.Items[index].Name, timestamp)
+		name := list.Items[index].Name
+
+		_, err = deploymentsClient.Patch(
+			ctx,
+			name,
+			types.StrategicMergePatchType,
+			patch,
+			metav1.PatchOptions{},
+		)
 		if err != nil {
-			return restarted, err
+			return restarted, fmt.Errorf("restarting deployment %s: %w", name, err)
 		}
 
 		restarted++
@@ -55,35 +70,26 @@ func RolloutRestartDeploymentsByLabel(
 	return restarted, nil
 }
 
-// restartDeployment stamps a single Deployment's pod-template restart annotation,
-// retrying on optimistic-concurrency conflicts.
-func restartDeployment(
-	ctx context.Context,
-	deploymentsClient appsv1client.DeploymentInterface,
-	name, timestamp string,
-) error {
-	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		deployment, getErr := deploymentsClient.Get(ctx, name, metav1.GetOptions{})
-		if getErr != nil {
-			return fmt.Errorf("getting deployment %s: %w", name, getErr)
-		}
-
-		if deployment.Spec.Template.Annotations == nil {
-			deployment.Spec.Template.Annotations = map[string]string{}
-		}
-
-		deployment.Spec.Template.Annotations[RolloutRestartAnnotation] = timestamp
-
-		_, updateErr := deploymentsClient.Update(ctx, deployment, metav1.UpdateOptions{})
-		if updateErr != nil {
-			return fmt.Errorf("restarting deployment %s: %w", name, updateErr)
-		}
-
-		return nil
-	})
-	if retryErr != nil {
-		return fmt.Errorf("rolling restart of deployment %s: %w", name, retryErr)
+// rolloutRestartPatch builds the strategic-merge patch body that stamps the pod
+// template's RolloutRestartAnnotation with the current time, the same mutation
+// `kubectl rollout restart` applies.
+func rolloutRestartPatch() ([]byte, error) {
+	patch := map[string]any{
+		"spec": map[string]any{
+			"template": map[string]any{
+				"metadata": map[string]any{
+					"annotations": map[string]string{
+						RolloutRestartAnnotation: time.Now().Format(time.RFC3339),
+					},
+				},
+			},
+		},
 	}
 
-	return nil
+	data, err := json.Marshal(patch)
+	if err != nil {
+		return nil, fmt.Errorf("building rollout-restart patch: %w", err)
+	}
+
+	return data, nil
 }
