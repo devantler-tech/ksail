@@ -63,7 +63,7 @@ func IsTransientAPIError(err error) bool {
 }
 
 // BuildVerifyPatch exports buildVerifyPatch for testing.
-func BuildVerifyPatch(cfg v1alpha1.WorkloadVerifySpec) map[string]any {
+func BuildVerifyPatch(cfg v1alpha1.FluxVerifySpec) map[string]any {
 	return buildVerifyPatch(cfg)
 }
 

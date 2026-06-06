@@ -18,28 +18,28 @@ const (
 	providerKey     = "provider"
 )
 
-func TestWorkloadVerifySpecEnabled(t *testing.T) {
+func TestFluxVerifySpecEnabled(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
 		name string
-		spec v1alpha1.WorkloadVerifySpec
+		spec v1alpha1.FluxVerifySpec
 		want bool
 	}{
 		{
 			name: "empty is disabled",
-			spec: v1alpha1.WorkloadVerifySpec{},
+			spec: v1alpha1.FluxVerifySpec{},
 			want: false,
 		},
 		{
 			name: "whitespace provider is disabled",
-			spec: v1alpha1.WorkloadVerifySpec{Provider: blankWhitespace},
+			spec: v1alpha1.FluxVerifySpec{Provider: blankWhitespace},
 			want: false,
 		},
 		{
 			name: "matchers without provider is disabled",
-			spec: v1alpha1.WorkloadVerifySpec{
-				MatchOIDCIdentity: []v1alpha1.WorkloadVerifyOIDCIdentity{
+			spec: v1alpha1.FluxVerifySpec{
+				MatchOIDCIdentity: []v1alpha1.FluxVerifyOIDCIdentity{
 					{Issuer: "x", Subject: "y"},
 				},
 			},
@@ -47,7 +47,7 @@ func TestWorkloadVerifySpecEnabled(t *testing.T) {
 		},
 		{
 			name: "cosign provider is enabled",
-			spec: v1alpha1.WorkloadVerifySpec{Provider: providerCosign},
+			spec: v1alpha1.FluxVerifySpec{Provider: providerCosign},
 			want: true,
 		},
 	}
@@ -66,24 +66,24 @@ func TestBuildVerifyPatch(t *testing.T) {
 
 	tests := []struct {
 		name string
-		spec v1alpha1.WorkloadVerifySpec
+		spec v1alpha1.FluxVerifySpec
 		want map[string]any
 	}{
 		{
 			name: "provider only",
-			spec: v1alpha1.WorkloadVerifySpec{Provider: providerCosign},
+			spec: v1alpha1.FluxVerifySpec{Provider: providerCosign},
 			want: map[string]any{providerKey: providerCosign},
 		},
 		{
 			name: "provider is trimmed",
-			spec: v1alpha1.WorkloadVerifySpec{Provider: "  notation  "},
+			spec: v1alpha1.FluxVerifySpec{Provider: "  notation  "},
 			want: map[string]any{providerKey: "notation"},
 		},
 		{
 			name: "key-based with secretRef",
-			spec: v1alpha1.WorkloadVerifySpec{
+			spec: v1alpha1.FluxVerifySpec{
 				Provider:  providerCosign,
-				SecretRef: v1alpha1.WorkloadVerifySecretRef{Name: "cosign-public-key"},
+				SecretRef: v1alpha1.FluxVerifySecretRef{Name: "cosign-public-key"},
 			},
 			want: map[string]any{
 				providerKey: providerCosign,
@@ -92,9 +92,9 @@ func TestBuildVerifyPatch(t *testing.T) {
 		},
 		{
 			name: "blank secretRef name is omitted",
-			spec: v1alpha1.WorkloadVerifySpec{
+			spec: v1alpha1.FluxVerifySpec{
 				Provider:  providerCosign,
-				SecretRef: v1alpha1.WorkloadVerifySecretRef{Name: blankWhitespace},
+				SecretRef: v1alpha1.FluxVerifySecretRef{Name: blankWhitespace},
 			},
 			want: map[string]any{providerKey: providerCosign},
 		},
@@ -112,9 +112,9 @@ func TestBuildVerifyPatch(t *testing.T) {
 func TestBuildVerifyPatchCosignKeyless(t *testing.T) {
 	t.Parallel()
 
-	spec := v1alpha1.WorkloadVerifySpec{
+	spec := v1alpha1.FluxVerifySpec{
 		Provider: providerCosign,
-		MatchOIDCIdentity: []v1alpha1.WorkloadVerifyOIDCIdentity{
+		MatchOIDCIdentity: []v1alpha1.FluxVerifyOIDCIdentity{
 			{
 				Issuer:  `^https://token\.actions\.githubusercontent\.com$`,
 				Subject: `^https://github\.com/org/repo/\.github/workflows/cd\.yaml@refs/.*$`,
@@ -140,9 +140,9 @@ func TestBuildVerifyPatchCosignKeyless(t *testing.T) {
 func TestApplyVerifySetsVerifyOnEmptyObject(t *testing.T) {
 	t.Parallel()
 
-	desired := fluxinstaller.BuildVerifyPatch(v1alpha1.WorkloadVerifySpec{
+	desired := fluxinstaller.BuildVerifyPatch(v1alpha1.FluxVerifySpec{
 		Provider:          providerCosign,
-		MatchOIDCIdentity: []v1alpha1.WorkloadVerifyOIDCIdentity{{Issuer: "i", Subject: "s"}},
+		MatchOIDCIdentity: []v1alpha1.FluxVerifyOIDCIdentity{{Issuer: "i", Subject: "s"}},
 	})
 	obj := map[string]any{"spec": map[string]any{"url": "oci://example.com/repo"}}
 
@@ -159,7 +159,7 @@ func TestApplyVerifySetsVerifyOnEmptyObject(t *testing.T) {
 func TestApplyVerifyIsIdempotent(t *testing.T) {
 	t.Parallel()
 
-	desired := fluxinstaller.BuildVerifyPatch(v1alpha1.WorkloadVerifySpec{Provider: providerCosign})
+	desired := fluxinstaller.BuildVerifyPatch(v1alpha1.FluxVerifySpec{Provider: providerCosign})
 	obj := map[string]any{}
 
 	// First application sets the field and reports an update is needed.
@@ -179,7 +179,7 @@ func TestApplyVerifyUpdatesWhenDifferent(t *testing.T) {
 	obj := map[string]any{
 		"spec": map[string]any{"verify": map[string]any{providerKey: "notation"}},
 	}
-	desired := fluxinstaller.BuildVerifyPatch(v1alpha1.WorkloadVerifySpec{Provider: providerCosign})
+	desired := fluxinstaller.BuildVerifyPatch(v1alpha1.FluxVerifySpec{Provider: providerCosign})
 
 	done, err := fluxinstaller.ApplyVerify(obj, desired)
 	require.NoError(t, err)

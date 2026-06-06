@@ -65,7 +65,7 @@ type FluxKustomizationStatus struct {
 	Conditions []metav1.Condition `json:"conditions,omitzero"`
 }
 
-// WorkloadVerifySpec configures signature verification for the flux-system
+// FluxVerifySpec configures signature verification for the flux-system
 // OCIRepository that KSail generates and owns when gitOpsEngine is Flux. KSail
 // renders it onto that OCIRepository's spec.verify (Flux's native
 // OCIRepository.spec.verify) so Flux rejects any artifact whose signature fails
@@ -73,21 +73,21 @@ type FluxKustomizationStatus struct {
 // OCIRepository, a hand-written in-repo override would fight reconciliation — so
 // verification is configured here instead. Has no effect for other GitOps
 // engines (e.g. ArgoCD).
-type WorkloadVerifySpec struct {
-	Provider          string                       `json:"provider,omitzero"          jsonschema:"enum=cosign,enum=notation" jsonschema_description:"Signature verification technology for the generated Flux OCIRepository (cosign or notation). Set to enable verification; empty disables it. Applies only when gitOpsEngine is Flux."`         //nolint:lll
-	SecretRef         WorkloadVerifySecretRef      `json:"secretRef,omitzero"                                                jsonschema_description:"Reference to a Kubernetes Secret in the flux-system namespace holding the trusted public keys or certificates. Used for key-based cosign or notation verification; omit for cosign keyless."` //nolint:lll
-	MatchOIDCIdentity []WorkloadVerifyOIDCIdentity `json:"matchOIDCIdentity,omitzero"                                        jsonschema_description:"Identity matchers for cosign keyless verification. The artifact is accepted if any matcher matches the signing identity in the Fulcio certificate."`                                          //nolint:lll,tagliatelle // mirrors Flux OCIRepository.spec.verify.matchOIDCIdentity casing
+type FluxVerifySpec struct {
+	Provider          string                   `json:"provider,omitzero"          jsonschema:"enum=cosign,enum=notation" jsonschema_description:"Signature verification technology for the generated Flux OCIRepository (cosign or notation). Set to enable verification; empty disables it. Applies only when gitOpsEngine is Flux."`         //nolint:lll
+	SecretRef         FluxVerifySecretRef      `json:"secretRef,omitzero"                                                jsonschema_description:"Reference to a Kubernetes Secret in the flux-system namespace holding the trusted public keys or certificates. Used for key-based cosign or notation verification; omit for cosign keyless."` //nolint:lll
+	MatchOIDCIdentity []FluxVerifyOIDCIdentity `json:"matchOIDCIdentity,omitzero"                                        jsonschema_description:"Identity matchers for cosign keyless verification. The artifact is accepted if any matcher matches the signing identity in the Fulcio certificate."`                                          //nolint:lll,tagliatelle // mirrors Flux OCIRepository.spec.verify.matchOIDCIdentity casing
 }
 
-// WorkloadVerifySecretRef references the Kubernetes Secret holding the trusted
+// FluxVerifySecretRef references the Kubernetes Secret holding the trusted
 // public keys or certificates used for signature verification.
-type WorkloadVerifySecretRef struct {
+type FluxVerifySecretRef struct {
 	Name string `json:"name,omitzero" jsonschema_description:"Name of the Kubernetes Secret in the flux-system namespace containing the trusted public keys or certificates."` //nolint:lll
 }
 
-// WorkloadVerifyOIDCIdentity is a cosign keyless identity matcher. Both fields
+// FluxVerifyOIDCIdentity is a cosign keyless identity matcher. Both fields
 // are Go regular expressions matched against the Fulcio signing certificate.
-type WorkloadVerifyOIDCIdentity struct {
+type FluxVerifyOIDCIdentity struct {
 	Issuer  string `json:"issuer,omitzero"  jsonschema_description:"Go regular expression matched against the OIDC issuer in the Fulcio certificate (e.g. ^https://token\\.actions\\.githubusercontent\\.com$)."`                        //nolint:lll
 	Subject string `json:"subject,omitzero" jsonschema_description:"Go regular expression matched against the identity subject in the Fulcio certificate (e.g. ^https://github\\.com/org/repo/\\.github/workflows/cd\\.yaml@refs/.*$)."` //nolint:lll
 }
@@ -95,6 +95,6 @@ type WorkloadVerifyOIDCIdentity struct {
 // Enabled reports whether signature verification is configured. Verification
 // requires a provider; an empty provider leaves the generated OCIRepository
 // without a spec.verify block.
-func (v WorkloadVerifySpec) Enabled() bool {
+func (v FluxVerifySpec) Enabled() bool {
 	return strings.TrimSpace(v.Provider) != ""
 }

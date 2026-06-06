@@ -623,55 +623,55 @@
                 "distributionVersion": {
                   "type": "string",
                   "description": "FluxInstance spec.distribution.version for the bootstrap seed. Empty uses KSail's default (2.x). A repo-declared FluxInstance takes precedence."
-                }
-              },
-              "additionalProperties": false,
-              "type": "object",
-              "description": "Flux bootstrap version pins (operator chart and FluxInstance distribution). Empty values use KSail's pinned versions; a GitOps repo that declares these becomes the steady-state owner."
-            },
-            "verify": {
-              "properties": {
-                "provider": {
-                  "type": "string",
-                  "enum": [
-                    "cosign",
-                    "notation"
-                  ],
-                  "description": "Signature verification technology for the generated Flux OCIRepository (cosign or notation). Set to enable verification; empty disables it. Applies only when gitOpsEngine is Flux."
                 },
-                "secretRef": {
+                "verify": {
                   "properties": {
-                    "name": {
+                    "provider": {
                       "type": "string",
-                      "description": "Name of the Kubernetes Secret in the flux-system namespace containing the trusted public keys or certificates."
+                      "enum": [
+                        "cosign",
+                        "notation"
+                      ],
+                      "description": "Signature verification technology for the generated Flux OCIRepository (cosign or notation). Set to enable verification; empty disables it. Applies only when gitOpsEngine is Flux."
+                    },
+                    "secretRef": {
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "description": "Name of the Kubernetes Secret in the flux-system namespace containing the trusted public keys or certificates."
+                        }
+                      },
+                      "additionalProperties": false,
+                      "type": "object",
+                      "description": "Reference to a Kubernetes Secret in the flux-system namespace holding the trusted public keys or certificates. Used for key-based cosign or notation verification; omit for cosign keyless."
+                    },
+                    "matchOIDCIdentity": {
+                      "items": {
+                        "properties": {
+                          "issuer": {
+                            "type": "string",
+                            "description": "Go regular expression matched against the OIDC issuer in the Fulcio certificate (e.g. ^https://token\\.actions\\.githubusercontent\\.com$)."
+                          },
+                          "subject": {
+                            "type": "string",
+                            "description": "Go regular expression matched against the identity subject in the Fulcio certificate (e.g. ^https://github\\.com/org/repo/\\.github/workflows/cd\\.yaml@refs/.*$)."
+                          }
+                        },
+                        "additionalProperties": false,
+                        "type": "object"
+                      },
+                      "type": "array",
+                      "description": "Identity matchers for cosign keyless verification. The artifact is accepted if any matcher matches the signing identity in the Fulcio certificate."
                     }
                   },
                   "additionalProperties": false,
                   "type": "object",
-                  "description": "Reference to a Kubernetes Secret in the flux-system namespace holding the trusted public keys or certificates. Used for key-based cosign or notation verification; omit for cosign keyless."
-                },
-                "matchOIDCIdentity": {
-                  "items": {
-                    "properties": {
-                      "issuer": {
-                        "type": "string",
-                        "description": "Go regular expression matched against the OIDC issuer in the Fulcio certificate (e.g. ^https://token\\.actions\\.githubusercontent\\.com$)."
-                      },
-                      "subject": {
-                        "type": "string",
-                        "description": "Go regular expression matched against the identity subject in the Fulcio certificate (e.g. ^https://github\\.com/org/repo/\\.github/workflows/cd\\.yaml@refs/.*$)."
-                      }
-                    },
-                    "additionalProperties": false,
-                    "type": "object"
-                  },
-                  "type": "array",
-                  "description": "Identity matchers for cosign keyless verification. The artifact is accepted if any matcher matches the signing identity in the Fulcio certificate."
+                  "description": "Signature verification (cosign/notation) rendered onto the flux-system OCIRepository KSail generates, so Flux rejects artifacts whose signature fails verification. Empty disables it."
                 }
               },
               "additionalProperties": false,
               "type": "object",
-              "description": "Signature verification (cosign/notation) for the flux-system OCIRepository KSail generates. When set with gitOpsEngine Flux, KSail renders spec.verify onto that OCIRepository so Flux rejects artifacts that fail verification. No effect for other engines."
+              "description": "Flux bootstrap configuration: operator/distribution version pins and signature verification for the generated OCIRepository. Empty values use KSail's pinned versions; a GitOps repo that declares these becomes the steady-state owner."
             },
             "watch": {
               "properties": {

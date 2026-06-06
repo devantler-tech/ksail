@@ -132,14 +132,13 @@ func (c ClusterSpec) TotalNodeCount() int32 {
 
 // WorkloadSpec defines workload-related configuration.
 type WorkloadSpec struct {
-	SourceDirectory   string             `default:"k8s"   json:"sourceDirectory,omitzero"   jsonschema_description:"Path to the directory containing Kubernetes manifests. Used as the default path by validate, watch, and push when no explicit path argument is given."`                                                                                                         //nolint:lll
-	ValidateOnPush    bool               `default:"false" json:"validateOnPush,omitzero"    jsonschema_description:"Validate manifests against schemas before pushing (validation disabled by default)"`                                                                                                                                                                            //nolint:lll
-	Tag               string             `default:"dev"   json:"tag,omitzero"               jsonschema_description:"OCI artifact tag used for workload push and GitOps reconciliation (Flux OCIRepository and ArgoCD Application). Push priority: CLI oci:// ref > this field > registry-embedded tag > dev. Reconciliation priority: this field > registry-embedded tag > dev"`    //nolint:lll
-	KustomizationFile string             `default:""      json:"kustomizationFile,omitzero" jsonschema_description:"Path to the kustomization directory relative to sourceDirectory. When set, Flux Sync.Path is configured to this path so Flux uses the specified kustomization as the entry point instead of requiring a root kustomization.yaml."`                              //nolint:lll
-	Flux              FluxConfig         `                json:"flux,omitzero"              jsonschema_description:"Flux bootstrap version pins (operator chart and FluxInstance distribution). Empty values use KSail's pinned versions; a GitOps repo that declares these becomes the steady-state owner."`                                                                       //nolint:lll
-	Verify            WorkloadVerifySpec `                json:"verify,omitzero"            jsonschema_description:"Signature verification (cosign/notation) for the flux-system OCIRepository KSail generates. When set with gitOpsEngine Flux, KSail renders spec.verify onto that OCIRepository so Flux rejects artifacts that fail verification. No effect for other engines."` //nolint:lll
-	Watch             WatchConfig        `                json:"watch,omitzero"             jsonschema_description:"Configuration for the workload watch command (pre-apply hooks, etc.)"`                                                                                                                                                                                          //nolint:lll
-	Validation        ValidationConfig   `                json:"validation,omitzero"        jsonschema_description:"Configuration for the workload validate command (additional kinds to skip, etc.)."`                                                                                                                                                                             //nolint:lll
+	SourceDirectory   string           `default:"k8s"   json:"sourceDirectory,omitzero"   jsonschema_description:"Path to the directory containing Kubernetes manifests. Used as the default path by validate, watch, and push when no explicit path argument is given."`                                                                                                      //nolint:lll
+	ValidateOnPush    bool             `default:"false" json:"validateOnPush,omitzero"    jsonschema_description:"Validate manifests against schemas before pushing (validation disabled by default)"`                                                                                                                                                                         //nolint:lll
+	Tag               string           `default:"dev"   json:"tag,omitzero"               jsonschema_description:"OCI artifact tag used for workload push and GitOps reconciliation (Flux OCIRepository and ArgoCD Application). Push priority: CLI oci:// ref > this field > registry-embedded tag > dev. Reconciliation priority: this field > registry-embedded tag > dev"` //nolint:lll
+	KustomizationFile string           `default:""      json:"kustomizationFile,omitzero" jsonschema_description:"Path to the kustomization directory relative to sourceDirectory. When set, Flux Sync.Path is configured to this path so Flux uses the specified kustomization as the entry point instead of requiring a root kustomization.yaml."`                           //nolint:lll
+	Flux              FluxConfig       `                json:"flux,omitzero"              jsonschema_description:"Flux bootstrap configuration: operator/distribution version pins and signature verification for the generated OCIRepository. Empty values use KSail's pinned versions; a GitOps repo that declares these becomes the steady-state owner."`                   //nolint:lll
+	Watch             WatchConfig      `                json:"watch,omitzero"             jsonschema_description:"Configuration for the workload watch command (pre-apply hooks, etc.)"`                                                                                                                                                                                       //nolint:lll
+	Validation        ValidationConfig `                json:"validation,omitzero"        jsonschema_description:"Configuration for the workload validate command (additional kinds to skip, etc.)."`                                                                                                                                                                          //nolint:lll
 }
 
 // ValidationConfig defines configuration for the workload validate command.
@@ -159,11 +158,13 @@ type WatchConfig struct {
 	Hooks []string `json:"hooks,omitzero" jsonschema_description:"Shell commands to run before each apply (e.g. docker build, make generate). Executed sequentially; if any hook fails the apply is skipped."` //nolint:lll
 }
 
-// FluxConfig pins the versions KSail uses when it seeds Flux during cluster
-// bootstrap. Both fields are optional; an empty value means KSail uses its
-// built-in pinned version. They configure only the bootstrap seed — once a
-// GitOps repository owns the flux-operator HelmRelease or the FluxInstance,
-// that repository becomes the steady-state owner of the version and KSail defers.
+// FluxConfig holds the Flux-specific bootstrap configuration KSail applies when
+// it seeds Flux during cluster bootstrap: the operator/distribution version pins
+// and signature verification for the OCIRepository KSail generates. The version
+// pins are optional (an empty value means KSail uses its built-in pinned
+// version) and configure only the bootstrap seed — once a GitOps repository owns
+// the flux-operator HelmRelease or the FluxInstance, that repository becomes the
+// steady-state owner and KSail defers.
 type FluxConfig struct {
 	// OperatorVersion pins the Flux operator Helm chart version KSail installs
 	// when it seeds the operator. When empty, KSail uses its built-in pinned
@@ -174,6 +175,9 @@ type FluxConfig struct {
 	// seeds. When empty, KSail uses its default ("2.x"). A repo-declared
 	// FluxInstance's distribution.version takes precedence over this value.
 	DistributionVersion string `json:"distributionVersion,omitzero" jsonschema_description:"FluxInstance spec.distribution.version for the bootstrap seed. Empty uses KSail's default (2.x). A repo-declared FluxInstance takes precedence."` //nolint:lll
+	// Verify configures cosign/notation signature verification rendered onto the
+	// generated flux-system OCIRepository. Empty leaves verification off.
+	Verify FluxVerifySpec `json:"verify,omitzero" jsonschema_description:"Signature verification (cosign/notation) rendered onto the flux-system OCIRepository KSail generates, so Flux rejects artifacts whose signature fails verification. Empty disables it."` //nolint:lll
 }
 
 // ChatSpec defines AI chat assistant configuration.

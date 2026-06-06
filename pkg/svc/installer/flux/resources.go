@@ -403,16 +403,16 @@ func ensureLocalRegistryInsecureIfNeeded(
 }
 
 // ensureVerifyIfConfigured patches OCIRepository.spec.verify when the user has
-// configured spec.workload.verify. Verification applies to any registry (it is
-// the established pattern for signed artifacts published to GHCR), so unlike the
-// insecure patch it is not gated on the registry being local. A no-op when
+// configured spec.workload.flux.verify. Verification applies to any registry (it
+// is the established pattern for signed artifacts published to GHCR), so unlike
+// the insecure patch it is not gated on the registry being local. A no-op when
 // verification is not configured.
 func ensureVerifyIfConfigured(
 	ctx context.Context,
 	patcher *ociRepositoryPatcher,
 	clusterCfg *v1alpha1.Cluster,
 ) error {
-	verify := clusterCfg.Spec.Workload.Verify
+	verify := clusterCfg.Spec.Workload.Flux.Verify
 	if !verify.Enabled() {
 		return nil
 	}

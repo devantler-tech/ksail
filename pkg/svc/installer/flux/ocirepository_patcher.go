@@ -163,7 +163,7 @@ func (p *ociRepositoryPatcher) tryPatchInsecure(
 
 // buildVerifyPatch renders the OCIRepository spec.verify block from KSail's
 // workload verify config as an unstructured map suitable for SetNestedMap.
-func buildVerifyPatch(cfg v1alpha1.WorkloadVerifySpec) map[string]any {
+func buildVerifyPatch(cfg v1alpha1.FluxVerifySpec) map[string]any {
 	verify := map[string]any{"provider": strings.TrimSpace(cfg.Provider)}
 
 	if name := strings.TrimSpace(cfg.SecretRef.Name); name != "" {
@@ -208,7 +208,7 @@ func applyVerify(obj map[string]any, desired map[string]any) (bool, error) {
 // block idempotently via a dynamic client (bypassing REST mapper cache issues).
 func (p *ociRepositoryPatcher) ensureVerify(
 	ctx context.Context,
-	cfg v1alpha1.WorkloadVerifySpec,
+	cfg v1alpha1.FluxVerifySpec,
 ) error {
 	desired := buildVerifyPatch(cfg)
 
