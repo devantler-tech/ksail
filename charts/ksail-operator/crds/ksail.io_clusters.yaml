@@ -767,11 +767,13 @@ spec:
                 properties:
                   flux:
                     description: |-
-                      FluxConfig pins the versions KSail uses when it seeds Flux during cluster
-                      bootstrap. Both fields are optional; an empty value means KSail uses its
-                      built-in pinned version. They configure only the bootstrap seed — once a
-                      GitOps repository owns the flux-operator HelmRelease or the FluxInstance,
-                      that repository becomes the steady-state owner of the version and KSail defers.
+                      FluxConfig holds the Flux-specific bootstrap configuration KSail applies when
+                      it seeds Flux during cluster bootstrap: the operator/distribution version pins
+                      and signature verification for the OCIRepository KSail generates. The version
+                      pins are optional (an empty value means KSail uses its built-in pinned
+                      version) and configure only the bootstrap seed — once a GitOps repository owns
+                      the flux-operator HelmRelease or the FluxInstance, that repository becomes the
+                      steady-state owner and KSail defers.
                     properties:
                       distributionVersion:
                         description: |-
@@ -786,6 +788,34 @@ spec:
                           version. Ignored once a GitOps repo owns the flux-operator release — KSail
                           never re-installs over a Helm release managed by Flux or ArgoCD.
                         type: string
+                      verify:
+                        description: |-
+                          Verify configures cosign/notation signature verification rendered onto the
+                          generated flux-system OCIRepository. Empty leaves verification off.
+                        properties:
+                          matchOIDCIdentity:
+                            items:
+                              description: |-
+                                FluxVerifyOIDCIdentity is a cosign keyless identity matcher. Both fields
+                                are Go regular expressions matched against the Fulcio signing certificate.
+                              properties:
+                                issuer:
+                                  type: string
+                                subject:
+                                  type: string
+                              type: object
+                            type: array
+                          provider:
+                            type: string
+                          secretRef:
+                            description: |-
+                              FluxVerifySecretRef references the Kubernetes Secret holding the trusted
+                              public keys or certificates used for signature verification.
+                            properties:
+                              name:
+                                type: string
+                            type: object
+                        type: object
                     type: object
                   kustomizationFile:
                     type: string
