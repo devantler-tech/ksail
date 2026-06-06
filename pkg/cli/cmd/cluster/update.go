@@ -217,8 +217,45 @@ func handleUpdateRunE(
 	// Display changes summary
 	displayChangesSummary(cmd, diff)
 
+	// A plain `cluster update` reports a changed Talos version pin as an in-place
+	// change, but the pin only governs future image selection / the upgrade cap —
+	// it does NOT upgrade the running OS. Without --update-distribution the bump is
+	// effectively a silent no-op, so warn and point at the gating flag.
+	if !updateDist {
+		warnTalosVersionPinIgnored(cmd, diff)
+	}
+
 	return applyOrReportChanges(cmd, cfgManager, ctx, deps, updater,
 		clusterName, currentSpec, diff, outputTimer)
+}
+
+// talosVersionField is the diff field path for the Talos OS version pin
+// (spec.cluster.talos.version), as classified by the diff engine.
+const talosVersionField = "cluster.talos.version"
+
+// warnTalosVersionPinIgnored emits a warning when a plain `cluster update`
+// (without --update-distribution) detects a changed spec.cluster.talos.version
+// pin it will not act on. The diff engine classifies the pin change as in-place
+// because it only affects future image selection and the Kubernetes upgrade cap,
+// so the running Talos OS is left at its current version. The warning makes that
+// silent no-op explicit and hints the gating flag so the operator isn't left
+// believing the OS was upgraded.
+func warnTalosVersionPinIgnored(cmd *cobra.Command, diff *clusterupdate.UpdateResult) {
+	for _, change := range diff.AllChanges() {
+		if change.Field != talosVersionField {
+			continue
+		}
+
+		notify.Warningf(cmd.OutOrStderr(),
+			"Talos version pin changed (%s → %s) but a plain update does not upgrade "+
+				"the running OS; the pin only affects future image selection.",
+			change.OldValue, change.NewValue)
+		notify.Infof(cmd.OutOrStderr(),
+			"Run 'ksail cluster update --update-distribution' to upgrade the Talos OS "+
+				"to the pinned version.")
+
+		return
+	}
 }
 
 // handleVersionUpgrades orchestrates Kubernetes and/or distribution version upgrades.

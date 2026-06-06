@@ -151,6 +151,11 @@ func ExportDisplayChangesSummary(cmd *cobra.Command, diff *clusterupdate.UpdateR
 	displayChangesSummary(cmd, diff)
 }
 
+// ExportWarnTalosVersionPinIgnored exports warnTalosVersionPinIgnored for testing.
+func ExportWarnTalosVersionPinIgnored(cmd *cobra.Command, diff *clusterupdate.UpdateResult) {
+	warnTalosVersionPinIgnored(cmd, diff)
+}
+
 // ExportDiffToJSON exports diffToJSON for testing.
 func ExportDiffToJSON(diff *clusterupdate.UpdateResult) DiffJSONOutput {
 	return diffToJSON(diff)

@@ -4379,6 +4379,73 @@ func TestReconcileComponents_UnknownField_Skipped(t *testing.T) {
 	assert.Empty(t, result.FailedChanges, "unknown field should not be recorded as failed")
 }
 
+// TestWarnTalosVersionPinIgnored verifies that a plain `cluster update` warns and
+// hints --update-distribution when it detects a changed Talos version pin it will
+// not act on, and stays silent otherwise (issue #5094).
+func TestWarnTalosVersionPinIgnored(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name      string
+		diff      *clusterupdate.UpdateResult
+		wantWarn  bool
+		wantParts []string
+	}{
+		{
+			name: "talos version pin change warns and hints the gating flag",
+			diff: &clusterupdate.UpdateResult{
+				InPlaceChanges: []clusterupdate.Change{
+					{Field: "cluster.talos.version", OldValue: "v1.8.0", NewValue: "v1.9.0"},
+				},
+			},
+			wantWarn:  true,
+			wantParts: []string{"v1.8.0", "v1.9.0", "--update-distribution"},
+		},
+		{
+			name: "unrelated change stays silent",
+			diff: &clusterupdate.UpdateResult{
+				InPlaceChanges: []clusterupdate.Change{
+					{Field: "cluster.nodes", OldValue: "1", NewValue: "3"},
+				},
+			},
+			wantWarn: false,
+		},
+		{
+			name:     "empty diff stays silent",
+			diff:     &clusterupdate.UpdateResult{},
+			wantWarn: false,
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			cmd := newReconcileTestCmd()
+
+			// The helper writes via cmd.OutOrStderr(), which cobra resolves to the
+			// out writer (then os.Stderr). Capture both to one buffer so the test
+			// sees the output regardless of cobra's fallback.
+			var out bytes.Buffer
+			cmd.SetOut(&out)
+			cmd.SetErr(&out)
+
+			cluster.ExportWarnTalosVersionPinIgnored(cmd, testCase.diff)
+
+			got := out.String()
+
+			if testCase.wantWarn {
+				for _, part := range testCase.wantParts {
+					assert.Contains(t, got, part,
+						"warning should mention %q", part)
+				}
+			} else {
+				assert.Empty(t, got, "no warning expected for this diff")
+			}
+		})
+	}
+}
+
 // TestReconcileComponents_RecordsFailedChange verifies that a component error is captured
 // in result.FailedChanges while processing of remaining changes continues.
 //
