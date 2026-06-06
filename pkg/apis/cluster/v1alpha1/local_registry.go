@@ -89,7 +89,10 @@ func parseHostAndPort(spec string) (string, int32, bool) {
 	return spec, 0, false
 }
 
-const localhostHost = "localhost"
+const (
+	localhostHost = "localhost"
+	loopbackIP    = "127.0.0.1"
+)
 
 // resolveDefaultPort returns the appropriate default port based on host.
 func resolveDefaultPort(host string, hasExplicitPort bool) int32 {
@@ -97,7 +100,7 @@ func resolveDefaultPort(host string, hasExplicitPort bool) int32 {
 		return 0 // Will be set by caller
 	}
 
-	if host == localhostHost || host == "127.0.0.1" {
+	if host == localhostHost || host == loopbackIP {
 		return DefaultLocalRegistryPort
 	}
 
@@ -191,7 +194,7 @@ func (r LocalRegistry) HasCredentials() bool {
 func (r LocalRegistry) IsExternal() bool {
 	parsed := r.Parse()
 
-	return parsed.Host != "" && parsed.Host != "localhost" && parsed.Host != "127.0.0.1"
+	return parsed.Host != "" && parsed.Host != localhostHost && parsed.Host != loopbackIP
 }
 
 // ResolvedHost returns the registry host from the parsed spec, defaulting to "localhost".

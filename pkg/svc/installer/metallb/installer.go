@@ -23,6 +23,10 @@ const (
 	metallbChartName = "metallb/metallb"
 	defaultIPRange   = "172.18.255.200-172.18.255.250"
 
+	// metallbAPIGroup and metallbAPIVersion identify MetalLB's CRD GroupVersion.
+	metallbAPIGroup   = "metallb.io"
+	metallbAPIVersion = "v1beta1"
+
 	// crdPollInterval is the interval between CRD readiness checks.
 	crdPollInterval = 2 * time.Second
 	// crdPollTimeout is the maximum time to wait for MetalLB CRDs to be registered.
@@ -168,8 +172,8 @@ func (m *Installer) waitForCRDsWithOptions(
 	pollInterval, pollTimeout time.Duration,
 ) error {
 	ipAddressPoolGVR := schema.GroupVersionResource{
-		Group:    "metallb.io",
-		Version:  "v1beta1",
+		Group:    metallbAPIGroup,
+		Version:  metallbAPIVersion,
 		Resource: "ipaddresspools",
 	}
 
@@ -215,8 +219,8 @@ func (m *Installer) ensureIPAddressPool(
 	client dynamic.Interface,
 ) error {
 	gvr := schema.GroupVersionResource{
-		Group:    "metallb.io",
-		Version:  "v1beta1",
+		Group:    metallbAPIGroup,
+		Version:  metallbAPIVersion,
 		Resource: "ipaddresspools",
 	}
 
@@ -253,8 +257,8 @@ func (m *Installer) ensureL2Advertisement(
 	client dynamic.Interface,
 ) error {
 	gvr := schema.GroupVersionResource{
-		Group:    "metallb.io",
-		Version:  "v1beta1",
+		Group:    metallbAPIGroup,
+		Version:  metallbAPIVersion,
 		Resource: "l2advertisements",
 	}
 

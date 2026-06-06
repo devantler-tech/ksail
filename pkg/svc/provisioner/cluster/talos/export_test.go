@@ -303,6 +303,21 @@ func InstallerImageFromTagForTest(tag string) string {
 	return installerImageFromTag(tag)
 }
 
+// ResolveInstallerImageForTest exposes resolveInstallerImage for unit testing.
+func (p *Provisioner) ResolveInstallerImageForTest(toVersion string) string {
+	return p.resolveInstallerImage(toVersion)
+}
+
+// ResolveSchematicIDForTest exposes resolveSchematicID for unit testing.
+func (p *Provisioner) ResolveSchematicIDForTest() string {
+	return p.resolveSchematicID()
+}
+
+// HasSchematicConfiguredForTest exposes hasSchematicConfigured for unit testing.
+func (p *Provisioner) HasSchematicConfiguredForTest() bool {
+	return p.hasSchematicConfigured()
+}
+
 // RenameKubeconfigContextForTest exposes k8s.RenameKubeconfigContext for unit testing.
 func RenameKubeconfigContextForTest(kubeconfigData []byte, desiredContext string) ([]byte, error) {
 	result, err := k8s.RenameKubeconfigContext(kubeconfigData, desiredContext)
