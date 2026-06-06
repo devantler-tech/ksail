@@ -110,6 +110,15 @@ func applyAllowedCIDRsFlag(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster) {
 	clusterCfg.Spec.Provider.Hetzner.AllowedCIDRs = cidrs
 }
 
+// applyClusterMutationFlags merges the non-Viper CLI flag overrides
+// (--oidc-extra-scope and --allowed-cidrs) into the cluster config. Centralizing
+// the set keeps every mutation command (create, update, init) applying the same
+// flags; a new manually-merged flag is added here once rather than at each call site.
+func applyClusterMutationFlags(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster) {
+	applyOIDCExtraScopeFlag(cmd, clusterCfg)
+	applyAllowedCIDRsFlag(cmd, clusterCfg)
+}
+
 // setupMutationCmdFlags creates the shared config manager and registers the
 // common flags (--mirror-registry and --name) used by cluster mutation commands.
 // Returns the config manager for further flag bindings.
