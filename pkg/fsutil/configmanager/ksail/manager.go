@@ -269,8 +269,8 @@ func (m *ConfigManager) resolveConfigFile() error {
 	// Point the existing Viper at the explicit config file so it skips directory
 	// traversal and uses the exact file. Reconfigure in place rather than
 	// replacing the instance, so that flag bindings registered via BindPFlag at
-	// command construction (e.g. --dry-run, --force, --update-kubernetes) are
-	// preserved. Replacing the instance silently dropped those bindings, making
+	// command construction (e.g. --dry-run, --force) are preserved. Replacing the
+	// instance silently dropped those bindings, making
 	// such flags revert to their defaults whenever --config was passed — e.g.
 	// `cluster update --config <file> --dry-run` applied changes for real (#4934).
 	err = configureViperConfigSource(m.Viper, cfgPath)

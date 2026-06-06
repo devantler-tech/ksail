@@ -119,6 +119,11 @@ func configureViperEnvironment(viperInstance *viper.Viper) {
 		"spec.cluster.omni.machineclass",
 		"KSAIL_SPEC_CLUSTER_OMNI_MACHINECLASS",
 	)
+	_ = viperInstance.BindEnv(
+		"spec.cluster.kubernetesversion",
+		"KSAIL_SPEC_CLUSTER_KUBERNETES_VERSION",
+	)
+	_ = viperInstance.BindEnv("spec.cluster.talos.version", "KSAIL_SPEC_CLUSTER_TALOS_VERSION")
 }
 
 // addParentDirectoriesToViperPaths adds parent directories containing ksail.yaml to Viper's search paths.

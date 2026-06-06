@@ -142,6 +142,16 @@ func TestDistributionImageRef_Empty(t *testing.T) {
 	}
 }
 
+func TestPinnedDistributionVersion_Empty(t *testing.T) {
+	t.Parallel()
+
+	provisioner := k3dprovisioner.NewProvisioner(nil, "")
+
+	if got := provisioner.PinnedDistributionVersion(); got != "" {
+		t.Errorf("PinnedDistributionVersion() = %q, want %q", got, "")
+	}
+}
+
 func TestVersionSuffix_K3s(t *testing.T) {
 	t.Parallel()
 

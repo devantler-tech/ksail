@@ -110,15 +110,23 @@ spec:
 
 ## Version Upgrades
 
-Two flags let you upgrade a running cluster to the latest stable versions without editing config files:
+`ksail cluster update` reconciles the cluster's distribution and Kubernetes versions declaratively on every run — there are no opt-in upgrade flags. Each version follows one of two rules:
 
-- `--update-distribution` — upgrades distributions that have a separate distribution image (for example, Talos) to the latest stable OCI image tag. This is a no-op for Vanilla (Kind) and K3s (K3d) since their distribution version is tied to the Kubernetes version.
-- `--update-kubernetes` — upgrades the Kubernetes control plane to the latest stable version. For Vanilla (Kind) and K3s (K3d), this also upgrades the distribution since both are bundled into a single image.
+- **Unset → follow latest.** When you do not declare a version, KSail upgrades toward the latest stable version available in the OCI registry.
+- **Set → pin.** When you declare a version, KSail reconciles toward exactly that version (and never downgrades). Declare it in `ksail.yaml` (`spec.cluster.kubernetesVersion` and, for Talos, `spec.cluster.talos.version`) or per invocation with `--kubernetes-version` / `--distribution-version`. Precedence is flag > environment variable > config file > default.
 
 ```bash
-# Upgrade both distribution and Kubernetes at once
-ksail cluster update --update-distribution --update-kubernetes
+# Follow the latest stable versions (nothing pinned)
+ksail cluster update
+
+# Pin a specific Kubernetes version for this run
+ksail cluster update --kubernetes-version v1.34.0
+
+# Pin the Talos OS version
+ksail cluster update --distribution-version v1.13.3
 ```
+
+The same fields apply at creation time: `ksail cluster create` provisions at the declared version, or at KSail's built-in default (the latest version this KSail build supports) when unset.
 
 **Upgrade strategy by distribution:**
 
@@ -128,9 +136,9 @@ ksail cluster update --update-distribution --update-kubernetes
 | **Vanilla (Kind)** | Recreation | Cluster is deleted and recreated at the target version |
 | **K3s (K3d)** | Recreation | Cluster is deleted and recreated at the target version |
 | **VCluster** | Recreation | Cluster is deleted and recreated using KSail's embedded vCluster/Kubernetes defaults; versions only advance when those defaults change (for example, after updating KSail) |
-| **KWOK** | Not supported | `--update-kubernetes` and `--update-distribution` are not supported for KWOK; the controller image is pinned to the version bundled with KSail |
+| **KWOK** | Not supported | KWOK has no version reconciliation; the controller image is pinned to the version bundled with KSail |
 
-For Talos (rolling upgrades), KSail steps through intermediate versions sequentially before reaching the final target. For recreation-based distributions, KSail skips intermediate versions and recreates the cluster once at the latest available target version. You will be prompted for confirmation before any recreation; pass `--force` or `--yes` (`-y`) to skip the prompt.
+For Talos (rolling upgrades), KSail steps through intermediate versions sequentially before reaching the final target. For recreation-based distributions, KSail skips intermediate versions and recreates the cluster once at the target version. You will be prompted for confirmation before any recreation; pass `--force` or `--yes` (`-y`) to skip the prompt.
 
 ## CLI Reference
 
