@@ -269,6 +269,10 @@ runs:
           echo "complete=false" >> "$GITHUB_OUTPUT"
         fi
 
+    - name: 📥 Pre-pull registry image
+      if: steps.check-cache.outputs.complete != 'true'
+      uses: ./.github/actions/pull-registry-image
+
     - name: 🐳 Create mirror registries
       id: create-mirrors
       if: steps.check-cache.outputs.complete != 'true'

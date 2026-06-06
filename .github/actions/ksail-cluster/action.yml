@@ -205,22 +205,7 @@ runs:
 
     - name: 📥 Pre-pull registry image
       if: inputs.provider == 'Docker'
-      shell: bash
-      run: |
-        pulled=false
-        for attempt in 1 2 3; do
-          if docker pull registry:3; then
-            echo "✅ registry:3 image pulled successfully"
-            pulled=true
-            break
-          fi
-          echo "⚠️ registry:3 pull attempt $attempt failed, retrying in 5s…"
-          sleep 5
-        done
-        if [ "$pulled" = false ]; then
-          echo "❌ Failed to pull registry:3 after 3 attempts"
-          exit 1
-        fi
+      uses: ./.github/actions/pull-registry-image
 
     - name: 📥 Pre-pull distribution images
       if: inputs.provider == 'Docker'
