@@ -20,6 +20,7 @@ import (
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	dockerclient "github.com/docker/docker/client"
+	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
 	"github.com/siderolabs/talos/pkg/provision"
 	"github.com/siderolabs/talos/pkg/provision/providers"
 )
@@ -161,9 +162,14 @@ type Provisioner struct {
 	// reconciliation must wait for it. Defaults to a TCP dial loop; tests override
 	// it via export_test.go to avoid real network I/O.
 	nodeReachabilityCheck func(ctx context.Context, ip string) error
-	logWriter             io.Writer
-	logMu                 sync.Mutex
-	componentDetector     *detector.ComponentDetector
+	// nodeConfigFetcher returns the running Talos machine config for a node by IP.
+	// Defaults to fetchNodeConfig; tests override it via export_test.go to inject a
+	// known running config without real Talos API connectivity (used by the rolling
+	// reboot's staged-config rebuild — see buildStagedNodeConfig).
+	nodeConfigFetcher func(ctx context.Context, nodeIP string) (talosconfig.Provider, error)
+	logWriter         io.Writer
+	logMu             sync.Mutex
+	componentDetector *detector.ComponentDetector
 	// imagePullRetry controls retry behavior for Docker image pulls.
 	// Tests can override this via WithImagePullRetryConfig to use near-zero delays.
 	imagePullRetry imagePullRetryConfig
@@ -205,6 +211,8 @@ func NewProvisioner(
 	prov.nodeReachabilityCheck = func(ctx context.Context, ip string) error {
 		return dialTCPUntilReachable(ctx, ip, talosAPIWaitTimeout, retryInterval)
 	}
+
+	prov.nodeConfigFetcher = prov.fetchNodeConfig
 
 	return prov
 }
