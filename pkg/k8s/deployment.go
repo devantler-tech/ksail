@@ -2,7 +2,6 @@ package k8s
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"time"
 
@@ -43,10 +42,14 @@ func RolloutRestartDeploymentsByLabel(
 		return 0, fmt.Errorf("listing deployments %q in %s: %w", labelSelector, namespace, err)
 	}
 
-	patch, err := rolloutRestartPatch()
-	if err != nil {
-		return 0, err
-	}
+	// Build the strategic-merge patch once; every matched Deployment gets the same
+	// restart timestamp. %q on the constant annotation key and the RFC3339 timestamp
+	// yields valid JSON, the same mutation `kubectl rollout restart` applies.
+	patch := fmt.Appendf(nil,
+		`{"spec":{"template":{"metadata":{"annotations":{%q:%q}}}}}`,
+		RolloutRestartAnnotation,
+		time.Now().Format(time.RFC3339),
+	)
 
 	restarted := 0
 
@@ -68,28 +71,4 @@ func RolloutRestartDeploymentsByLabel(
 	}
 
 	return restarted, nil
-}
-
-// rolloutRestartPatch builds the strategic-merge patch body that stamps the pod
-// template's RolloutRestartAnnotation with the current time, the same mutation
-// `kubectl rollout restart` applies.
-func rolloutRestartPatch() ([]byte, error) {
-	patch := map[string]any{
-		"spec": map[string]any{
-			"template": map[string]any{
-				"metadata": map[string]any{
-					"annotations": map[string]string{
-						RolloutRestartAnnotation: time.Now().Format(time.RFC3339),
-					},
-				},
-			},
-		},
-	}
-
-	data, err := json.Marshal(patch)
-	if err != nil {
-		return nil, fmt.Errorf("building rollout-restart patch: %w", err)
-	}
-
-	return data, nil
 }
