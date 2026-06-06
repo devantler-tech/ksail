@@ -12,6 +12,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/k8s/readiness"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	machineapi "github.com/siderolabs/talos/pkg/machinery/api/machine"
+	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -257,13 +258,20 @@ func (p *Provisioner) rollingApplyRebootChanges(
 
 	ordered := sortNodesWorkersFirst(nodes)
 
+	// The staged-config rebuild needs the cluster PKI, which only a control-plane
+	// node carries. Resolve one control-plane config up front and reuse it as the
+	// secrets source for every node — seeding the rebuild from a worker's own config
+	// fails with "failed to parse PEM block" (#4963). All control-planes share the
+	// same PKI, so any one is a valid source (mirrors applyInPlaceConfigChanges).
+	secretsSource := p.fetchSecretsSource(ctx, clusterName)
+
 	for i, node := range ordered {
 		_, _ = fmt.Fprintf(p.logWriter,
 			"  [%d/%d] Rolling reboot for %s (%s)...\n",
 			i+1, len(ordered), node.IP, node.Role,
 		)
 
-		rebootErr := p.rollingRebootSingleNode(ctx, clientset, node)
+		rebootErr := p.rollingRebootSingleNode(ctx, clientset, node, secretsSource)
 		if rebootErr != nil {
 			recordFailedChange(result, node.Role, node.IP, rebootErr)
 
@@ -284,11 +292,14 @@ func (p *Provisioner) rollingApplyRebootChanges(
 }
 
 // rollingRebootSingleNode performs the cordon → drain → stage config → reboot →
-// wait → uncordon sequence for a single node.
+// wait → uncordon sequence for a single node. secretsSource is a control-plane
+// config supplying the cluster PKI for the staged-config rebuild (see
+// stageNodeConfigForReboot).
 func (p *Provisioner) rollingRebootSingleNode(
 	ctx context.Context,
 	clientset kubernetes.Interface,
 	node nodeWithRole,
+	secretsSource talosconfig.Provider,
 ) error {
 	nodeName, err := p.resolveNodeName(ctx, clientset, node.IP)
 	if err != nil {
@@ -300,24 +311,9 @@ func (p *Provisioner) rollingRebootSingleNode(
 		return drainErr
 	}
 
-	// Apply config with STAGED mode — config takes effect on next reboot.
-	if p.talosConfigs != nil {
-		config := p.talosConfigs.ControlPlane()
-		if node.Role == RoleWorker {
-			config = p.talosConfigs.Worker()
-		}
-
-		if config != nil {
-			_, _ = fmt.Fprintf(p.logWriter, "    Staging config on %s...\n", node.IP)
-
-			stageErr := p.applyConfigWithMode(
-				ctx, node.IP, config,
-				machineapi.ApplyConfigurationRequest_STAGED,
-			)
-			if stageErr != nil {
-				return fmt.Errorf("stage config: %w", stageErr)
-			}
-		}
+	stageErr := p.stageNodeConfigForReboot(ctx, node, secretsSource)
+	if stageErr != nil {
+		return stageErr
 	}
 
 	_, _ = fmt.Fprintf(p.logWriter, "    Rebooting %s...\n", node.IP)
@@ -342,4 +338,65 @@ func (p *Provisioner) rollingRebootSingleNode(
 	}
 
 	return nil
+}
+
+// stageNodeConfigForReboot stages the node's desired machine config with STAGED
+// mode, so it takes effect on the next reboot. The config is rebuilt from the
+// node's running config through buildDesiredNodeConfig — the same machinery the
+// in-place reconcile uses — so the per-node sections ksail injects post-generation
+// at create/scale (static hostname, registry mirrors, cert SANs) survive the
+// reboot. Staging the raw regenerated talosConfigs.ControlPlane()/Worker() instead
+// would silently revert them: e.g. dropping machine.network.hostname so a Hetzner
+// node re-registers under a generated talos-xxxxx name once it reboots — the same
+// class of bug fixed for the in-place path in detect_inplace.go (graftNodeHostname).
+// It is a no-op when no Talos config is loaded (nothing to stage).
+func (p *Provisioner) stageNodeConfigForReboot(
+	ctx context.Context,
+	node nodeWithRole,
+	secretsSource talosconfig.Provider,
+) error {
+	if p.talosConfigs == nil {
+		return nil
+	}
+
+	config, err := p.buildStagedNodeConfig(ctx, node, secretsSource)
+	if err != nil {
+		return err
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter, "    Staging config on %s...\n", node.IP)
+
+	stageErr := p.applyConfigWithMode(
+		ctx, node.IP, config,
+		machineapi.ApplyConfigurationRequest_STAGED,
+	)
+	if stageErr != nil {
+		return fmt.Errorf("stage config: %w", stageErr)
+	}
+
+	return nil
+}
+
+// buildStagedNodeConfig builds the machine config to STAGE on a node ahead of a
+// rolling reboot: the node's running config regenerated through
+// buildDesiredNodeConfig, which preserves the per-node post-generation transforms
+// (static hostname, registry mirrors, cert SANs) instead of reverting to the
+// freshly regenerated base config. secretsSource supplies the cluster PKI and must
+// be a control-plane config (see buildDesiredNodeConfig and #4963).
+func (p *Provisioner) buildStagedNodeConfig(
+	ctx context.Context,
+	node nodeWithRole,
+	secretsSource talosconfig.Provider,
+) (talosconfig.Provider, error) {
+	running, err := p.nodeConfigFetcher(ctx, node.IP)
+	if err != nil {
+		return nil, fmt.Errorf("fetch running config: %w", err)
+	}
+
+	desired, err := p.buildDesiredNodeConfig(running, secretsSource, node.Role)
+	if err != nil {
+		return nil, fmt.Errorf("build desired config: %w", err)
+	}
+
+	return desired, nil
 }

@@ -487,6 +487,27 @@ func (p *Provisioner) BuildDesiredNodeConfigForTest(
 	return p.buildDesiredNodeConfig(running, secretsSource, role)
 }
 
+// WithNodeConfigFetcherForTest overrides the running-config fetcher so unit tests
+// can drive the rolling-reboot staged-config rebuild (buildStagedNodeConfig)
+// without real Talos API connectivity.
+func (p *Provisioner) WithNodeConfigFetcherForTest(
+	fn func(ctx context.Context, nodeIP string) (talosconfig.Provider, error),
+) *Provisioner {
+	p.nodeConfigFetcher = fn
+
+	return p
+}
+
+// BuildStagedNodeConfigForTest exposes buildStagedNodeConfig — the rolling-reboot
+// staged-config rebuild — for unit testing.
+func (p *Provisioner) BuildStagedNodeConfigForTest(
+	ctx context.Context,
+	node NodeWithRoleForTest,
+	secretsSource talosconfig.Provider,
+) (talosconfig.Provider, error) {
+	return p.buildStagedNodeConfig(ctx, node, secretsSource)
+}
+
 // MachineConfigFieldForTest exposes the machine.config change field for unit testing.
 const MachineConfigFieldForTest = MachineConfigField
 
