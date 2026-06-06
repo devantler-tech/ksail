@@ -2,6 +2,7 @@ package localpathstorageinstaller
 
 import (
 	"context"
+	_ "embed"
 	"errors"
 	"fmt"
 	"io"
@@ -14,20 +15,33 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s/readiness"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/image"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/image/parser"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/cli-runtime/pkg/genericiooptions"
 )
 
+//go:embed Dockerfile
+var dockerfile string
+
 // ErrManifestFetchFailed is returned when the manifest cannot be fetched from the remote URL.
 var ErrManifestFetchFailed = errors.New("failed to fetch manifest")
 
-const (
-	// localPathProvisionerVersion is the version of Rancher local-path-provisioner to install.
-	localPathProvisionerVersion = "v0.0.32"
-	// localPathProvisionerManifestURL is the URL to the local-path-provisioner manifest.
-	localPathProvisionerManifestURL = "https://raw.githubusercontent.com/rancher/local-path-provisioner/" +
-		localPathProvisionerVersion + "/deploy/local-path-storage.yaml"
-)
+// localPathProvisionerVersion returns the pinned Rancher local-path-provisioner version,
+// extracted from the embedded Dockerfile (kept in sync by Dependabot). The image tag
+// matches the upstream release tag used in the manifest URL path.
+func localPathProvisionerVersion() string {
+	return parser.ParseImageFromDockerfile(
+		dockerfile,
+		`FROM\s+docker\.io/rancher/local-path-provisioner:([^\s@]+)`,
+		"local-path-provisioner",
+	)
+}
+
+// localPathProvisionerManifestURL returns the upstream manifest URL for the pinned version.
+func localPathProvisionerManifestURL() string {
+	return "https://raw.githubusercontent.com/rancher/local-path-provisioner/" +
+		localPathProvisionerVersion() + "/deploy/local-path-storage.yaml"
+}
 
 // Installer installs local-path-provisioner on Kind and Talos clusters.
 type Installer struct {
@@ -78,7 +92,7 @@ func (l *Installer) Images(ctx context.Context) ([]string, error) {
 	req, err := http.NewRequestWithContext(
 		ctx,
 		http.MethodGet,
-		localPathProvisionerManifestURL,
+		localPathProvisionerManifestURL(),
 		nil,
 	)
 	if err != nil {
@@ -147,7 +161,7 @@ func (l *Installer) applyManifest(ctx context.Context) error {
 
 	applyCmd := kubectlClient.CreateApplyCommand(l.kubeconfig)
 
-	args := []string{"-f", localPathProvisionerManifestURL}
+	args := []string{"-f", localPathProvisionerManifestURL()}
 	if l.context != "" {
 		args = append(args, "--context", l.context)
 	}

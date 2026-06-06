@@ -173,3 +173,42 @@ updates:
       default-days: 7
     schedule:
       interval: daily
+
+  - package-ecosystem: docker
+    registries: [dockerhub]
+    directory: /pkg/svc/installer/localpathstorage # local-path-provisioner image tag == release tag (embedded in Go via go:embed)
+    cooldown:
+      default-days: 7
+    schedule:
+      interval: daily
+
+  # Helm chart version pins whose chart version diverges from the app/image tag, so they
+  # cannot be tracked via a Dockerfile FROM directive. Tracked via the native helm
+  # ecosystem reading a Chart.yaml dependency (embedded in Go via go:embed).
+  - package-ecosystem: helm
+    directory: /pkg/svc/installer/clusterautoscaler # cluster-autoscaler chart version
+    cooldown:
+      default-days: 7
+    schedule:
+      interval: daily
+
+  - package-ecosystem: helm
+    directory: /pkg/svc/installer/hcloudccm # hcloud-cloud-controller-manager chart version
+    cooldown:
+      default-days: 7
+    schedule:
+      interval: daily
+
+  - package-ecosystem: helm
+    directory: /pkg/svc/installer/hetznercsi # hcloud-csi chart version
+    cooldown:
+      default-days: 7
+    schedule:
+      interval: daily
+
+  - package-ecosystem: helm
+    directory: /pkg/svc/installer/metricsserver # metrics-server chart version
+    cooldown:
+      default-days: 7
+    schedule:
+      interval: daily

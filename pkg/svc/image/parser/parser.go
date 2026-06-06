@@ -3,6 +3,8 @@ package parser
 import (
 	"fmt"
 	"regexp"
+
+	"gopkg.in/yaml.v3"
 )
 
 // minMatchCount is the minimum number of regex matches required to extract the image reference.
@@ -32,6 +34,46 @@ func ParseImageFromDockerfile(dockerfileContent, pattern, imageName string) stri
 	}
 
 	return matches[1]
+}
+
+// ParseChartVersionFromChartYaml extracts the pinned version of the named Helm chart
+// dependency from an embedded Chart.yaml. This keeps Go code in sync with Dependabot's
+// helm ecosystem automatically, used for charts whose version diverges from their
+// app/image tag and therefore cannot be tracked via a Dockerfile FROM directive.
+// Panics if the document cannot be parsed or the named dependency is absent - this
+// catches embedding/format issues at init time.
+func ParseChartVersionFromChartYaml(chartYAMLContent, dependencyName string) string {
+	var chart struct {
+		Dependencies []struct {
+			Name    string `yaml:"name"`
+			Version string `yaml:"version"`
+		} `yaml:"dependencies"`
+	}
+
+	err := yaml.Unmarshal([]byte(chartYAMLContent), &chart)
+	if err != nil {
+		panic(
+			fmt.Sprintf(
+				"failed to parse embedded Chart.yaml for %s dependency: %v",
+				dependencyName,
+				err,
+			),
+		)
+	}
+
+	for _, dep := range chart.Dependencies {
+		if dep.Name == dependencyName {
+			return dep.Version
+		}
+	}
+
+	panic(
+		fmt.Sprintf(
+			"failed to find %s dependency version in embedded Chart.yaml - "+
+				"check that Chart.yaml exists and lists the dependency",
+			dependencyName,
+		),
+	)
 }
 
 // ParseAllImagesFromDockerfile extracts all container image references from FROM
