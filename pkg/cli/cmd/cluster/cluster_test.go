@@ -6405,21 +6405,23 @@ func TestNewUpdateCmd(t *testing.T) { //nolint:cyclop // flag assertion test
 		t.Error("expected --yes flag to exist")
 	}
 
-	updateK8sFlag := cmd.Flags().Lookup("update-kubernetes")
-	if updateK8sFlag == nil {
-		t.Error("expected --update-kubernetes flag to exist")
-	} else if updateK8sFlag.DefValue != "false" {
-		t.Errorf("expected --update-kubernetes default to be false, got %q", updateK8sFlag.DefValue)
+	// Declarative version flags replace the removed opt-in upgrade flags.
+	if cmd.Flags().Lookup("kubernetes-version") == nil {
+		t.Error("expected --kubernetes-version flag to exist")
 	}
 
-	updateDistFlag := cmd.Flags().Lookup("update-distribution")
-	if updateDistFlag == nil {
-		t.Error("expected --update-distribution flag to exist")
-	} else if updateDistFlag.DefValue != "false" {
-		t.Errorf(
-			"expected --update-distribution default to be false, got %q",
-			updateDistFlag.DefValue,
-		)
+	if cmd.Flags().Lookup("distribution-version") == nil {
+		t.Error("expected --distribution-version flag to exist")
+	}
+
+	// The opt-in upgrade flags were removed in favour of declarative version
+	// reconciliation (unset = follow latest, set = pin).
+	if cmd.Flags().Lookup("update-kubernetes") != nil {
+		t.Error("expected --update-kubernetes flag to be removed")
+	}
+
+	if cmd.Flags().Lookup("update-distribution") != nil {
+		t.Error("expected --update-distribution flag to be removed")
 	}
 }
 

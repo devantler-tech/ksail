@@ -231,6 +231,17 @@ func (p *Provisioner) DistributionImageRef() string {
 	return talosImageRepository
 }
 
+// PinnedDistributionVersion returns the pinned Talos OS version
+// (spec.cluster.talos.version), or "" when unset so the cluster follows the
+// latest supported version.
+func (p *Provisioner) PinnedDistributionVersion() string {
+	if p.talosOpts == nil {
+		return ""
+	}
+
+	return strings.TrimSpace(p.talosOpts.Version)
+}
+
 // VersionSuffix returns an empty string since Talos uses plain semver tags.
 func (p *Provisioner) VersionSuffix() string {
 	return ""

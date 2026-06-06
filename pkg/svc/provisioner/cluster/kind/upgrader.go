@@ -51,9 +51,15 @@ func (k *Provisioner) KubernetesImageRef() string {
 
 // DistributionImageRef returns an empty string because Kind's distribution
 // version is the same as the Kubernetes version — there is no separate
-// distribution image. The `--update-distribution` flag is intentionally a
-// no-op for Kind; use `--update-kubernetes` to upgrade both.
+// distribution image. Distribution-version reconciliation is therefore a no-op
+// for Kind; the Kubernetes-version reconciliation upgrades both together.
 func (k *Provisioner) DistributionImageRef() string {
+	return ""
+}
+
+// PinnedDistributionVersion always returns "" because Kind has no distribution
+// version separate from Kubernetes; pin it via spec.cluster.kubernetesVersion.
+func (k *Provisioner) PinnedDistributionVersion() string {
 	return ""
 }
 

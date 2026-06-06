@@ -98,22 +98,22 @@ type ClusterSpec struct {
 	Workers int32 `json:"workers,omitzero" jsonschema:"description=Number of worker nodes to create for the cluster (provider/distribution-agnostic),minimum=0"` //nolint:lll
 
 	// KubernetesVersion pins the Kubernetes version to deploy. Accepts values with
-	// or without the "v" prefix (e.g., "v1.32.0" or "1.32.0"). Currently honored by
-	// the Talos distribution (Docker/Hetzner); for Kind, K3d, and EKS the version is
-	// set in the distribution config (kind.yaml/k3d.yaml/eks.yaml) instead.
+	// or without the "v" prefix (e.g., "v1.32.0" or "1.32.0"). Honored by the Talos
+	// distribution (Docker/Hetzner); for Kind, K3d, and EKS the version is set in the
+	// distribution config (kind.yaml/k3d.yaml/eks.yaml) instead.
 	//
-	// When empty, KSail does NOT force a Kubernetes version on an existing cluster:
-	// `cluster update` keeps the version already running so an unrelated change
-	// (e.g. scaling workers) never triggers an unrequested Kubernetes upgrade. For
-	// brand-new Talos clusters it uses a built-in default, capped to a version
-	// compatible with the pinned Talos release (spec.cluster.talos.version) — so a
-	// pinned older Talos version is never paired with a Kubernetes version it cannot
-	// run.
+	// When set, KSail reconciles toward this version: `cluster create` provisions at
+	// it and `cluster update` upgrades the cluster toward it (skipping downgrades).
+	// For brand-new Talos clusters an unset value uses a built-in default capped to a
+	// version compatible with the pinned Talos release (spec.cluster.talos.version),
+	// so a pinned older Talos version is never paired with a Kubernetes version it
+	// cannot run.
 	//
-	// Set this to intentionally install or move to a specific Kubernetes version.
-	// For orchestrated upgrades across the cluster prefer `cluster update
-	// --update-kubernetes`.
-	KubernetesVersion string `json:"kubernetesVersion,omitzero" jsonschema:"description=Kubernetes version to deploy (Talos distribution). When unset: cluster update preserves the running version and new clusters use a default compatible with the pinned Talos version."` //nolint:lll
+	// When unset, `cluster update` follows the latest stable Kubernetes version
+	// available in the OCI registry (an in-place rolling upgrade for Talos; a
+	// confirmation-gated recreation for Kind/K3d). Override per invocation with the
+	// --kubernetes-version flag (precedence: flag > env > config > default).
+	KubernetesVersion string `json:"kubernetesVersion,omitzero" jsonschema:"description=Kubernetes version to deploy. When set: cluster create/update reconcile toward it. When unset: cluster update follows the latest stable version and new clusters use a default compatible with the pinned Talos version."` //nolint:lll
 
 	// OIDC defines OIDC authentication configuration.
 	// When issuerURL is set, KSail configures the API server with OIDC flags

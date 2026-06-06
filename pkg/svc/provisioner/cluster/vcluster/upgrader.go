@@ -58,6 +58,12 @@ func (p *Provisioner) DistributionImageRef() string {
 	return distributionImageRepository
 }
 
+// PinnedDistributionVersion always returns "" because VCluster exposes no
+// user-facing distribution version pin; it follows the latest supported version.
+func (p *Provisioner) PinnedDistributionVersion() string {
+	return ""
+}
+
 // VersionSuffix returns an empty string since VCluster uses plain semver tags.
 func (p *Provisioner) VersionSuffix() string {
 	return ""
