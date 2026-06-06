@@ -672,7 +672,15 @@ jobs:
   homebrew:
     name: 🍺 Promote and merge Homebrew cask PRs
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    # Backstop only — the script self-bounds its runtime: brew-style prep (2 clones + `brew style`,
+    # which can bootstrap rubocop on a cold Linuxbrew runner) + `sleep 30` + two sequential
+    # `merge_cask_pr` polls that are additive (each computes `SECONDS + 600`, and bash `SECONDS` is
+    # whole-job elapsed time, never reset) for up to 600s apiece = ~1230s of polling. Worst case is
+    # ~prep + 30s + 1200s, which crowds a 25-min budget; a kill mid-poll would skip the second cask's
+    # fail-soft `--auto` fallback and exit non-zero, failing an already-published release. Keep this
+    # comfortably above the script's own ceiling so its fail-soft logic — not this timeout — is the
+    # binding limit.
+    timeout-minutes: 35
     needs: [publish-release]
     permissions:
       contents: read
@@ -722,7 +730,10 @@ jobs:
           prs=()
           for name in ksail ksail-desktop; do
             branch="goreleaser/${name}-${TAG}"
-            pr="$(gh pr list --repo "$TAP" --head "$branch" --state open --json number --jq '.[0].number // empty')"
+            # `|| true` keeps the job fail-soft: a transient `gh pr list` failure (5xx, rate limit,
+            # network blip) must not abort the step under `set -e` after the release is already public —
+            # the `-z "$pr"` guard below then warns and skips, same as the no-PR-found case.
+            pr="$(gh pr list --repo "$TAP" --head "$branch" --state open --json number --jq '.[0].number // empty' 2>/dev/null || true)"
             if [ -z "$pr" ]; then
               echo "::warning::No open cask PR found on $TAP for branch ${branch}; skipping"
               continue
