@@ -1,0 +1,41 @@
+name: Pull registry image
+description: >-
+  Reliably obtain the registry:3 image that backs KSail's local pull-through
+  mirror registries. Anonymous Docker Hub pulls from shared GitHub Actions
+  runner IPs are throttled and time out (the single most frequent CI flake), so
+  this pulls from Google's Docker Hub pull-through mirror first and falls back to
+  Docker Hub, re-tagging the result to registry:3 for callers.
+
+runs:
+  using: composite
+  steps:
+    - name: 📥 Obtain registry:3 image
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        # mirror.gcr.io is Google's anonymous pull-through cache for Docker Hub;
+        # it is not subject to Docker Hub's per-IP anonymous rate limits, which is
+        # what causes the recurring "registry:3 pull timeout" flake on shared CI
+        # runners. Try the mirror first, then fall back to Docker Hub directly,
+        # and re-tag whichever source succeeds to the canonical registry:3.
+        obtain_registry_image() {
+          local ref attempt
+          for ref in mirror.gcr.io/library/registry:3 registry:3; do
+            for attempt in 1 2 3; do
+              if docker pull --quiet "$ref"; then
+                docker tag "$ref" registry:3
+                echo "✅ registry:3 obtained from ${ref}"
+                return 0
+              fi
+              echo "⚠️ pull ${ref} attempt ${attempt}/3 failed; retrying in $((attempt * 5))s…"
+              sleep "$((attempt * 5))"
+            done
+          done
+          return 1
+        }
+
+        if ! obtain_registry_image; then
+          echo "❌ Failed to obtain registry:3 from mirror.gcr.io and Docker Hub"
+          exit 1
+        fi
