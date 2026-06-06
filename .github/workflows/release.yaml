@@ -2,6 +2,13 @@
 name: Release
 on:
   workflow_dispatch:
+  # Auto-release: every push to main runs semantic-release (create-release.yaml).
+  # Its commit-analyzer cuts a new vX.Y.Z tag only when the merged commits warrant
+  # one (fix: → patch, feat: → minor, BREAKING CHANGE/! → major) and no-ops otherwise
+  # (chore:/docs:/ci:). The tag push then triggers cd.yaml's GoReleaser publish.
+  push:
+    branches:
+      - main
 
 concurrency:
   group: "Release"
