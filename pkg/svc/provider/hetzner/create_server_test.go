@@ -45,10 +45,10 @@ func successTestAction(id int64) isoBootTestAction {
 	return isoBootTestAction{ID: id, Status: "success", Progress: 100}
 }
 
-func serverCreateResp(serverID, actionID int64) isoBootTestServerCreateResp {
+func serverCreateResp() isoBootTestServerCreateResp {
 	return isoBootTestServerCreateResp{
-		Server: isoBootTestServerSummary{ID: serverID},
-		Action: successTestAction(actionID),
+		Server: isoBootTestServerSummary{ID: createdServerID},
+		Action: successTestAction(1),
 	}
 }
 
@@ -63,7 +63,7 @@ func registerCreateServerHandlers(
 	mux.HandleFunc("POST /servers", func(w http.ResponseWriter, r *http.Request) {
 		*createBody, _ = io.ReadAll(r.Body)
 
-		writeJSONResponse(t, w, serverCreateResp(123, 1))
+		writeJSONResponse(t, w, serverCreateResp())
 	})
 	mux.HandleFunc(
 		"POST /servers/123/actions/attach_iso",

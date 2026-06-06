@@ -55,6 +55,11 @@ const (
 	// credentialParts is the expected number of parts when splitting username:password.
 	credentialParts = 2
 
+	// localhostHost is the canonical local registry host.
+	localhostHost = "localhost"
+	// specField is the top-level "spec" key navigated in GitOps custom resources.
+	specField = "spec"
+
 	// Flux stores registry credentials as a Docker config secret.
 	fluxSecretNamespace = "flux-system"
 	fluxSecretName      = "ksail-registry-credentials" //nolint:gosec // Not a credential, just a secret name
@@ -95,7 +100,7 @@ func parseHostPort(hostPort string) hostPortInfo {
 
 // isExternalHost checks if a host is external (not localhost).
 func isExternalHost(host string) bool {
-	return !strings.HasPrefix(host, "localhost") &&
+	return !strings.HasPrefix(host, localhostHost) &&
 		!strings.HasPrefix(host, "127.0.0.1") &&
 		!strings.HasSuffix(host, ".localhost")
 }
@@ -170,7 +175,7 @@ func translateInternalHostname(ctx context.Context, info *Info) error {
 	}
 
 	// Successfully resolved - update info to use localhost
-	info.Host = "localhost"
+	info.Host = localhostHost
 	info.Port = int32(port) //nolint:gosec // port validated by Docker API
 	info.IsExternal = false
 

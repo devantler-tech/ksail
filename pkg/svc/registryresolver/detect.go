@@ -140,8 +140,8 @@ func DetectRegistryFromFlux(ctx context.Context) (*Info, error) {
 		},
 		namespace:  "flux-system",
 		name:       "flux",
-		urlPath:    []string{"spec", "sync", "url"},
-		refPath:    []string{"spec", "sync", "ref"},
+		urlPath:    []string{specField, "sync", "url"},
+		refPath:    []string{specField, "sync", "ref"},
 		errNoURL:   ErrFluxNoSyncURL,
 		sourceName: "FluxInstance",
 	})
@@ -157,8 +157,8 @@ func DetectRegistryFromArgoCD(ctx context.Context) (*Info, error) {
 		},
 		namespace:  "argocd",
 		name:       "ksail",
-		urlPath:    []string{"spec", "source", "repoURL"},
-		refPath:    []string{"spec", "source", "targetRevision"},
+		urlPath:    []string{specField, "source", "repoURL"},
+		refPath:    []string{specField, "source", "targetRevision"},
 		errNoURL:   ErrArgoCDNoRepoURL,
 		sourceName: "ArgoCD",
 	})
@@ -187,7 +187,7 @@ func DetectRegistryFromDocker(ctx context.Context, clusterName string) (*Info, e
 		)
 		if portErr == nil {
 			return &Info{
-				Host:       "localhost",
+				Host:       localhostHost,
 				Port:       int32(port), //nolint:gosec // port validated by Docker API
 				Repository: "",          // Will be derived from source directory
 				IsExternal: false,
@@ -216,7 +216,7 @@ func DetectRegistryFromDocker(ctx context.Context, clusterName string) (*Info, e
 	}
 
 	return &Info{
-		Host:       "localhost",
+		Host:       localhostHost,
 		Port:       int32(port), //nolint:gosec // port validated by Docker API
 		Repository: "",          // Will be derived from source directory
 		IsExternal: false,
