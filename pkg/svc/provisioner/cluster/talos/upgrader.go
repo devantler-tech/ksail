@@ -38,7 +38,11 @@ func (p *Provisioner) UpgradeDistribution(
 	}
 
 	clusterName = p.resolveClusterName(clusterName)
-	installerImage := installerImageFromTag(toVersion)
+	// Use the schematic-aware installer image so the rolling OS upgrade preserves
+	// configured system extensions (Image Factory installer), matching the
+	// create/snapshot/autoscaler paths. Falls back to the bare upstream installer
+	// only when no schematic is configured. See issue #5077.
+	installerImage := p.resolveInstallerImage(toVersion)
 
 	_, _ = fmt.Fprintf(p.logWriter,
 		"  Upgrading Talos from %s to %s...\n", fromVersion, toVersion,

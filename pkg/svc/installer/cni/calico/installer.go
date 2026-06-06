@@ -41,6 +41,9 @@ const (
 	// The previous 5×10s (40s) window proved insufficient after 5+ occurrences.
 	calicoInstallRetryAttempts = 8
 	calicoInstallRetryBackoff  = 15 * time.Second
+
+	// calicoChartsRepoURL is the Tigera Helm chart repository serving the Calico charts.
+	calicoChartsRepoURL = "https://docs.tigera.io/calico/charts"
 )
 
 // NewInstaller creates a new Calico installer instance.
@@ -161,7 +164,7 @@ func (c *Installer) chartSpec() *helm.ChartSpec {
 		ChartName:       "projectcalico/tigera-operator",
 		Namespace:       "tigera-operator",
 		Version:         chartVersion(),
-		RepoURL:         "https://docs.tigera.io/calico/charts",
+		RepoURL:         calicoChartsRepoURL,
 		CreateNamespace: true,
 		SetJSONVals:     c.getCalicoValues(),
 		Timeout:         c.GetTimeout(),
@@ -179,7 +182,7 @@ func (c *Installer) crdChartSpec() *helm.ChartSpec {
 		ChartName:       "projectcalico/projectcalico.org.v3",
 		Namespace:       "tigera-operator",
 		Version:         chartVersion(),
-		RepoURL:         "https://docs.tigera.io/calico/charts",
+		RepoURL:         calicoChartsRepoURL,
 		CreateNamespace: true,
 		Timeout:         c.GetTimeout(),
 	}
@@ -210,7 +213,7 @@ func (c *Installer) installCalico(ctx context.Context) error {
 	// repeating the AddRepository call on every outer retry iteration.
 	repoEntry := &helm.RepositoryEntry{
 		Name: "projectcalico",
-		URL:  "https://docs.tigera.io/calico/charts",
+		URL:  calicoChartsRepoURL,
 	}
 
 	addErr := client.AddRepository(ctx, repoEntry, c.GetTimeout())
