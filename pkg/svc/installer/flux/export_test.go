@@ -62,6 +62,23 @@ func IsTransientAPIError(err error) bool {
 	return isTransientAPIError(err)
 }
 
+// BuildVerifyPatch exports buildVerifyPatch for testing.
+func BuildVerifyPatch(cfg v1alpha1.WorkloadVerifySpec) map[string]any {
+	return buildVerifyPatch(cfg)
+}
+
+// ApplyVerify exports applyVerify for testing.
+func ApplyVerify(obj map[string]any, desired map[string]any) (bool, error) {
+	return applyVerify(obj, desired)
+}
+
+// EnsureVerifyIfConfiguredNoop exercises the no-op path of
+// ensureVerifyIfConfigured (verification disabled) with a nil patcher, to
+// confirm the guard returns before dereferencing the patcher.
+func EnsureVerifyIfConfiguredNoop(ctx context.Context, clusterCfg *v1alpha1.Cluster) error {
+	return ensureVerifyIfConfigured(ctx, nil, clusterCfg)
+}
+
 // NormalizeFluxPath exports normalizeFluxPath(kustomizationFile) for testing.
 // kustomizationFile is the path to the Flux kustomization entry point directory
 // that is normalized into the Flux Sync.Path used by the installer.

@@ -3,8 +3,11 @@ package fluxinstaller
 import (
 	"context"
 	"fmt"
+	"reflect"
+	"strings"
 	"time"
 
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	fluxclient "github.com/devantler-tech/ksail/v7/pkg/client/flux"
 	sourcev1 "github.com/fluxcd/source-controller/api/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -139,6 +142,164 @@ func (p *ociRepositoryPatcher) tryPatchInsecure(
 	err = unstructured.SetNestedField(unstructuredRepo.Object, true, "spec", "insecure")
 	if err != nil {
 		return patchFailed, fmt.Errorf("failed to set insecure field: %w", err)
+	}
+
+	_, updateErr := dynamicClient.Resource(gvr).
+		Namespace(fluxclient.DefaultNamespace).
+		Update(ctx, unstructuredRepo, metav1.UpdateOptions{})
+	if updateErr == nil {
+		return patchSuccess, nil
+	}
+
+	if isTransientAPIError(updateErr) {
+		return patchRetry, fmt.Errorf("transient error updating OCIRepository: %w", updateErr)
+	}
+
+	return patchFailed, fmt.Errorf(
+		"failed to update OCIRepository %s/%s: %w",
+		fluxclient.DefaultNamespace, defaultOCIRepositoryName, updateErr,
+	)
+}
+
+// buildVerifyPatch renders the OCIRepository spec.verify block from KSail's
+// workload verify config as an unstructured map suitable for SetNestedMap.
+func buildVerifyPatch(cfg v1alpha1.WorkloadVerifySpec) map[string]any {
+	verify := map[string]any{"provider": strings.TrimSpace(cfg.Provider)}
+
+	if name := strings.TrimSpace(cfg.SecretRef.Name); name != "" {
+		verify["secretRef"] = map[string]any{"name": name}
+	}
+
+	if len(cfg.MatchOIDCIdentity) > 0 {
+		matchers := make([]any, 0, len(cfg.MatchOIDCIdentity))
+		for _, identity := range cfg.MatchOIDCIdentity {
+			matchers = append(matchers, map[string]any{
+				"issuer":  identity.Issuer,
+				"subject": identity.Subject,
+			})
+		}
+
+		verify["matchOIDCIdentity"] = matchers
+	}
+
+	return verify
+}
+
+// applyVerify sets spec.verify on the OCIRepository object to the desired block.
+// It reports done=true when the field already matches, so re-bootstrapping an
+// already-verified OCIRepository performs no needless update.
+func applyVerify(obj map[string]any, desired map[string]any) (bool, error) {
+	current, found, err := unstructured.NestedMap(obj, "spec", "verify")
+	if err == nil && found && reflect.DeepEqual(current, desired) {
+		return true, nil
+	}
+
+	setErr := unstructured.SetNestedMap(obj, desired, "spec", "verify")
+	if setErr != nil {
+		return false, fmt.Errorf("failed to set verify field: %w", setErr)
+	}
+
+	return false, nil
+}
+
+// ensureVerify patches the flux-system OCIRepository with spec.verify so Flux
+// verifies artifact signatures (cosign/notation) at pull time. It mirrors
+// ensureInsecure: poll until the OCIRepository exists, then apply the verify
+// block idempotently via a dynamic client (bypassing REST mapper cache issues).
+func (p *ociRepositoryPatcher) ensureVerify(
+	ctx context.Context,
+	cfg v1alpha1.WorkloadVerifySpec,
+) error {
+	desired := buildVerifyPatch(cfg)
+
+	return p.patchOCIRepository(ctx, "verify", func(obj map[string]any) (bool, error) {
+		return applyVerify(obj, desired)
+	})
+}
+
+// patchOCIRepository polls for the flux-system OCIRepository and applies a
+// mutation to it, retrying on not-found/transient errors until the configured
+// timeout. The apply callback returns done=true to stop without updating (e.g.
+// the field already has the desired value).
+func (p *ociRepositoryPatcher) patchOCIRepository(
+	ctx context.Context,
+	fieldName string,
+	apply func(obj map[string]any) (done bool, err error),
+) error {
+	waitCtx, cancel := context.WithTimeout(ctx, p.apiWaiter.timeout)
+	defer cancel()
+
+	ticker := time.NewTicker(p.apiWaiter.interval)
+	defer ticker.Stop()
+
+	ociRepoGVR := schema.GroupVersionResource{
+		Group:    sourcev1.GroupVersion.Group,
+		Version:  sourcev1.GroupVersion.Version,
+		Resource: "ocirepositories",
+	}
+
+	var lastErr error
+
+	for {
+		result, err := p.tryPatch(ctx, waitCtx, ociRepoGVR, apply)
+
+		switch result {
+		case patchSuccess:
+			return nil
+		case patchRetry:
+			lastErr = err
+		case patchFailed:
+			return err
+		}
+
+		select {
+		case <-waitCtx.Done():
+			if lastErr == nil {
+				lastErr = waitCtx.Err()
+			}
+
+			return fmt.Errorf(
+				"timed out waiting for OCIRepository %s patch: %w",
+				fieldName,
+				lastErr,
+			)
+		case <-ticker.C:
+			// Continue retry loop
+		}
+	}
+}
+
+// tryPatch fetches the OCIRepository once and applies the mutation callback.
+// Returns whether to retry, succeed, or fail permanently.
+func (p *ociRepositoryPatcher) tryPatch(
+	ctx context.Context,
+	waitCtx context.Context,
+	gvr schema.GroupVersionResource,
+	apply func(obj map[string]any) (done bool, err error),
+) (patchResult, error) {
+	dynamicClient, clientErr := dynamic.NewForConfig(p.restConfig)
+	if clientErr != nil {
+		return patchRetry, fmt.Errorf("failed to create dynamic client: %w", clientErr)
+	}
+
+	unstructuredRepo, err := dynamicClient.Resource(gvr).
+		Namespace(fluxclient.DefaultNamespace).
+		Get(waitCtx, defaultOCIRepositoryName, metav1.GetOptions{})
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return patchRetry, errOCIRepositoryCreateTimout
+		}
+
+		return patchRetry, fmt.Errorf("failed to get OCIRepository: %w", err)
+	}
+
+	done, applyErr := apply(unstructuredRepo.Object)
+	if applyErr != nil {
+		return patchFailed, applyErr
+	}
+
+	if done {
+		return patchSuccess, nil
 	}
 
 	_, updateErr := dynamicClient.Resource(gvr).

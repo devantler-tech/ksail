@@ -810,6 +810,40 @@ spec:
                           type: string
                         type: array
                     type: object
+                  verify:
+                    description: |-
+                      WorkloadVerifySpec configures signature verification for the flux-system
+                      OCIRepository that KSail generates and owns when gitOpsEngine is Flux. KSail
+                      renders it onto that OCIRepository's spec.verify (Flux's native
+                      OCIRepository.spec.verify) so Flux rejects any artifact whose signature fails
+                      verification at pull time. Because KSail owns and continuously reconciles the
+                      OCIRepository, a hand-written in-repo override would fight reconciliation — so
+                      verification is configured here instead. Has no effect for other GitOps
+                      engines (e.g. ArgoCD).
+                    properties:
+                      matchOIDCIdentity:
+                        items:
+                          description: |-
+                            WorkloadVerifyOIDCIdentity is a cosign keyless identity matcher. Both fields
+                            are Go regular expressions matched against the Fulcio signing certificate.
+                          properties:
+                            issuer:
+                              type: string
+                            subject:
+                              type: string
+                          type: object
+                        type: array
+                      provider:
+                        type: string
+                      secretRef:
+                        description: |-
+                          WorkloadVerifySecretRef references the Kubernetes Secret holding the trusted
+                          public keys or certificates used for signature verification.
+                        properties:
+                          name:
+                            type: string
+                        type: object
+                    type: object
                   watch:
                     description: WatchConfig defines configuration for the workload
                       watch command.
