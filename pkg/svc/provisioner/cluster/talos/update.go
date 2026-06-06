@@ -1371,17 +1371,5 @@ func (p *Provisioner) ensureAutoscalerSecretIfNeeded(
 // (either explicit via talosOpts.SchematicID or auto-computed from extensions
 // via talosConfigs.SchematicID()).
 func (p *Provisioner) hasSchematicConfigured() bool {
-	if p.talosOpts != nil {
-		if strings.TrimSpace(p.talosOpts.SchematicID) != "" {
-			return true
-		}
-	}
-
-	if p.talosConfigs != nil {
-		if strings.TrimSpace(p.talosConfigs.SchematicID()) != "" {
-			return true
-		}
-	}
-
-	return false
+	return p.resolveSchematicID() != ""
 }
