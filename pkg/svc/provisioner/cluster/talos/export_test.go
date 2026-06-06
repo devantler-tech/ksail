@@ -410,6 +410,28 @@ func (p *Provisioner) WithTalosConfigsForTest(
 	return p
 }
 
+// WithHetznerOptsForTest sets hetznerOpts on the provisioner for unit testing.
+func (p *Provisioner) WithHetznerOptsForTest(
+	opts *v1alpha1.OptionsHetzner,
+) *Provisioner {
+	p.hetznerOpts = opts
+
+	return p
+}
+
+// ManagesHostnameForTest exposes managesHostname for unit testing.
+func (p *Provisioner) ManagesHostnameForTest() bool {
+	return p.managesHostname()
+}
+
+// MarshalNodeConfigForTest exposes marshalNodeConfig for unit testing.
+func (p *Provisioner) MarshalNodeConfigForTest(
+	config talosconfig.Provider,
+	serverName string,
+) ([]byte, error) {
+	return p.marshalNodeConfig(config, serverName)
+}
+
 // MergeTalosconfigBytesForTest exposes mergeTalosconfigBytes for unit testing.
 func MergeTalosconfigBytesForTest(talosconfigPath string, newData []byte) error {
 	return mergeTalosconfigBytes(talosconfigPath, newData)

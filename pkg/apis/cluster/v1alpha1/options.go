@@ -183,6 +183,17 @@ type OptionsHetzner struct {
 	// ControlPlanePublicIPv6 controls whether control-plane nodes are assigned a public IPv6.
 	// nil (default) or true assigns a public IPv6 (free on Hetzner). false disables it.
 	ControlPlanePublicIPv6 *bool `json:"controlPlanePublicIPv6,omitzero" jsonschema_description:"Assign a public IPv6 to control-plane nodes. Defaults to true."` //nolint:lll
+	// ManagedHostname controls whether KSail manages the Talos node hostname.
+	// nil (default) or true: KSail injects a per-node static machine.network.hostname
+	// equal to the Hetzner server name and strips any HostnameConfig document, because
+	// the Hetzner cloud-controller-manager matches Kubernetes Nodes to servers by name
+	// (a node booting with a generated talos-xxxxx name is never initialized — #4962).
+	// false: KSail leaves the hostname alone — it does not inject a static hostname and
+	// preserves your HostnameConfig documents (e.g. auto: off). You then own node naming
+	// and must ensure each node's hostname equals its Hetzner server name (e.g. via
+	// HostnameConfig auto: off relying on platform/DHCP metadata); otherwise the CCM will
+	// not initialize the Nodes. Intended to be set before cluster creation.
+	ManagedHostname *bool `json:"managedHostname,omitzero" jsonschema_description:"Whether KSail manages the Talos node hostname to match the Hetzner server name (required by the Hetzner CCM). Defaults to true. Set false to own node naming yourself via Talos HostnameConfig — you must then keep node names equal to server names or the CCM will not initialize Nodes."` //nolint:lll
 	// AutoscalerNodePoolNames lists the node-group names configured in the
 	// Kubernetes Cluster Autoscaler for this cluster. When non-empty, KSail
 	// deletes servers labelled with hcloud/node-group=<name> during cluster

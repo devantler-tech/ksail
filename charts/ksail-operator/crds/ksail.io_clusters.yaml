@@ -571,6 +571,19 @@ spec:
                           Examples: "fsn1" (Falkenstein), "nbg1" (Nuremberg), "hel1" (Helsinki).
                           Defaults to "fsn1".
                         type: string
+                      managedHostname:
+                        description: |-
+                          ManagedHostname controls whether KSail manages the Talos node hostname.
+                          nil (default) or true: KSail injects a per-node static machine.network.hostname
+                          equal to the Hetzner server name and strips any HostnameConfig document, because
+                          the Hetzner cloud-controller-manager matches Kubernetes Nodes to servers by name
+                          (a node booting with a generated talos-xxxxx name is never initialized — #4962).
+                          false: KSail leaves the hostname alone — it does not inject a static hostname and
+                          preserves your HostnameConfig documents (e.g. auto: off). You then own node naming
+                          and must ensure each node's hostname equals its Hetzner server name (e.g. via
+                          HostnameConfig auto: off relying on platform/DHCP metadata); otherwise the CCM will
+                          not initialize the Nodes. Intended to be set before cluster creation.
+                        type: boolean
                       networkCidr:
                         description: |-
                           NetworkCIDR is the CIDR block for the private network.

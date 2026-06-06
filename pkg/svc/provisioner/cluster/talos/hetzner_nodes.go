@@ -314,13 +314,10 @@ func (p *Provisioner) applyHetznerConfigs(
 	cpConfig := configBundle.ControlPlane()
 	workerConfig := configBundle.Worker()
 
-	// Warn once if the user supplied their own HostnameConfig (e.g. auto: off):
-	// KSail overrides it with the server name for CCM compatibility (see
-	// warnIfOverridingUserHostname), and the override should be visible, not silent.
-	cpBytes, bytesErr := cpConfig.Bytes()
-	if bytesErr == nil {
-		p.warnIfOverridingUserHostname(cpBytes)
-	}
+	// Surface KSail's hostname-management posture once at create: an override
+	// warning when managing (default) and a user HostnameConfig is present, or a
+	// "you own node naming" warning when opted out.
+	p.warnHostnameManagement(cpConfig)
 
 	allServers := make([]*hcloud.Server, 0, len(controlPlaneServers)+len(workerServers))
 	configs := make([]talosconfig.Provider, 0, len(controlPlaneServers)+len(workerServers))
@@ -527,7 +524,11 @@ func (p *Provisioner) applyConfigToNode(
 
 	p.logf("  Applying config to %s (%s)...\n", server.Name, serverIP)
 
-	cfgBytes, err := marshalConfigWithHostname(config, server.Name)
+	// When KSail manages the hostname (the default), overlay the per-node static
+	// hostname (server name) and strip HostnameConfig documents for CCM
+	// compatibility. When the user opted out (managedHostname: false), apply the
+	// config as-is so their HostnameConfig strategy is preserved.
+	cfgBytes, err := p.marshalNodeConfig(config, server.Name)
 	if err != nil {
 		return err
 	}
@@ -596,6 +597,38 @@ func marshalConfigWithHostname(config talosconfig.Provider, serverName string) (
 	cfgBytes, err = patchTalosHostname(cfgBytes, serverName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to set hostname for %s: %w", serverName, err)
+	}
+
+	return cfgBytes, nil
+}
+
+// managesHostname reports whether KSail should manage the Talos node hostname on
+// Hetzner — inject the server-name static hostname and strip HostnameConfig
+// documents. Defaults to true; users opt out via
+// spec.provider.hetzner.managedHostname: false to own node naming themselves (see
+// the field doc and #4962).
+func (p *Provisioner) managesHostname() bool {
+	return p.hetznerOpts == nil ||
+		p.hetznerOpts.ManagedHostname == nil ||
+		*p.hetznerOpts.ManagedHostname
+}
+
+// marshalNodeConfig returns the config bytes to apply to a Hetzner node. When KSail
+// manages the hostname (default), it overlays the server-name static hostname and
+// strips HostnameConfig documents (marshalConfigWithHostname). When the user opted
+// out via managedHostname: false, it returns the config unchanged so a user-supplied
+// HostnameConfig (e.g. auto: off) survives.
+func (p *Provisioner) marshalNodeConfig(
+	config talosconfig.Provider,
+	serverName string,
+) ([]byte, error) {
+	if p.managesHostname() {
+		return marshalConfigWithHostname(config, serverName)
+	}
+
+	cfgBytes, err := config.Bytes()
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal config: %w", err)
 	}
 
 	return cfgBytes, nil
@@ -748,9 +781,36 @@ func (p *Provisioner) warnIfOverridingUserHostname(cfgBytes []byte) {
 	p.logf(
 		"  ⚠ Overriding user HostnameConfig (%s) with the Hetzner server name; "+
 			"the Hetzner CCM matches Nodes to servers by name, so KSail manages the "+
-			"node hostname and drops the HostnameConfig document from the applied config.\n",
+			"node hostname and drops the HostnameConfig document from the applied config. "+
+			"Set spec.provider.hetzner.managedHostname: false to own node naming yourself.\n",
 		summary,
 	)
+}
+
+// warnHostnameManagement surfaces KSail's hostname-management posture. When KSail
+// manages the hostname (default), it warns if the config carries a user
+// HostnameConfig that will be overridden. When the user opted out
+// (managedHostname: false), it warns that the user now owns node naming and must
+// keep node names equal to Hetzner server names or the CCM will not initialize the
+// Nodes (#4962).
+func (p *Provisioner) warnHostnameManagement(config talosconfig.Provider) {
+	if !p.managesHostname() {
+		p.logf(
+			"  ⚠ KSail hostname management is disabled " +
+				"(spec.provider.hetzner.managedHostname: false); ensure each node's hostname " +
+				"equals its Hetzner server name (e.g. via HostnameConfig auto: off) or the " +
+				"Hetzner CCM will not initialize the Nodes.\n",
+		)
+
+		return
+	}
+
+	cfgBytes, err := config.Bytes()
+	if err != nil {
+		return
+	}
+
+	p.warnIfOverridingUserHostname(cfgBytes)
 }
 
 // attemptApplyConfig creates a single-use insecure Talos client and attempts to

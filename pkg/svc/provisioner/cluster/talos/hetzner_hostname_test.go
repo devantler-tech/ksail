@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	configmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager"
 	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
 	talosprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/talos"
@@ -326,4 +327,83 @@ func TestUserHostnameConfigSummary_SDKDefaultGeneratedConfig(t *testing.T) {
 
 	assert.Empty(t, talosprovisioner.UserHostnameConfigSummary(workerBytes),
 		"the SDK default (auto: stable) must not be flagged as user intent")
+}
+
+// TestManagesHostname verifies the opt-out resolution: KSail manages the hostname
+// by default (nil hetznerOpts or nil ManagedHostname) and only steps aside when
+// the user explicitly sets managedHostname: false.
+func TestManagesHostname(t *testing.T) {
+	t.Parallel()
+
+	enabled := true
+	disabled := false
+
+	tests := []struct {
+		name string
+		opts *v1alpha1.OptionsHetzner
+		want bool
+	}{
+		{"nil hetznerOpts defaults to managed", nil, true},
+		{"nil ManagedHostname defaults to managed", &v1alpha1.OptionsHetzner{}, true},
+		{"explicit true manages", &v1alpha1.OptionsHetzner{ManagedHostname: &enabled}, true},
+		{"explicit false opts out", &v1alpha1.OptionsHetzner{ManagedHostname: &disabled}, false},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			prov := talosprovisioner.NewProvisioner(nil, nil).
+				WithHetznerOptsForTest(testCase.opts)
+			assert.Equal(t, testCase.want, prov.ManagesHostnameForTest())
+		})
+	}
+}
+
+// TestMarshalNodeConfig_ManagedInjectsServerHostname verifies that, by default,
+// marshalNodeConfig overlays the per-node static hostname (the server name) and
+// strips the conflicting HostnameConfig document — the CCM-compatible behavior.
+func TestMarshalNodeConfig_ManagedInjectsServerHostname(t *testing.T) {
+	t.Parallel()
+
+	worker, err := configloader.NewFromBytes(workerConfigBytes(t))
+	require.NoError(t, err)
+
+	prov := talosprovisioner.NewProvisioner(nil, nil) // nil hetznerOpts => managed (default)
+
+	out, err := prov.MarshalNodeConfigForTest(worker, "prod-worker-1")
+	require.NoError(t, err)
+
+	doc := firstMachineConfigDoc(t, out)
+	assert.Equal(t, "prod-worker-1", doc.Machine.Network.Hostname,
+		"managed: the static hostname is set to the Hetzner server name")
+	assert.Zero(t, countHostnameConfigDocs(t, out),
+		"managed: the conflicting HostnameConfig document is stripped")
+}
+
+// TestMarshalNodeConfig_UnmanagedPreservesHostnameConfig verifies the opt-out: with
+// managedHostname: false, marshalNodeConfig applies the config unchanged — no static
+// hostname is injected and the user's HostnameConfig document survives.
+func TestMarshalNodeConfig_UnmanagedPreservesHostnameConfig(t *testing.T) {
+	t.Parallel()
+
+	workerBytes := workerConfigBytes(t)
+	require.Positive(t, countHostnameConfigDocs(t, workerBytes),
+		"precondition: generated config carries a HostnameConfig document")
+
+	worker, err := configloader.NewFromBytes(workerBytes)
+	require.NoError(t, err)
+
+	disabled := false
+	prov := talosprovisioner.NewProvisioner(nil, nil).
+		WithHetznerOptsForTest(&v1alpha1.OptionsHetzner{ManagedHostname: &disabled})
+
+	out, err := prov.MarshalNodeConfigForTest(worker, "prod-worker-1")
+	require.NoError(t, err)
+
+	doc := firstMachineConfigDoc(t, out)
+	assert.Empty(t, doc.Machine.Network.Hostname,
+		"unmanaged: KSail does not inject a static hostname")
+	assert.Positive(t, countHostnameConfigDocs(t, out),
+		"unmanaged: the user's HostnameConfig document is preserved")
 }

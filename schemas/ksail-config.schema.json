@@ -489,6 +489,10 @@
                   "type": "boolean",
                   "description": "Assign a public IPv6 to control-plane nodes. Defaults to true."
                 },
+                "managedHostname": {
+                  "type": "boolean",
+                  "description": "Whether KSail manages the Talos node hostname to match the Hetzner server name (required by the Hetzner CCM). Defaults to true. Set false to own node naming yourself via Talos HostnameConfig — you must then keep node names equal to server names or the CCM will not initialize Nodes."
+                },
                 "autoscalerNodePoolNames": {
                   "items": {
                     "type": "string"

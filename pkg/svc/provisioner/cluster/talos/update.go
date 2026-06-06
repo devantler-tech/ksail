@@ -437,10 +437,12 @@ func (p *Provisioner) applyInPlaceConfigChanges(
 	// same PKI, so any one is a valid source.
 	secretsSource := p.fetchSecretsSource(ctx, clusterName)
 
-	// On Hetzner, buildDesiredNodeConfig strips any user HostnameConfig and imposes
-	// the server-name static hostname for CCM compatibility. Surface that override
-	// once per update so a user's talos/cluster/hostname.yaml isn't silently dropped.
-	if p.hetznerOpts != nil {
+	// On Hetzner, when KSail manages the hostname (default), buildDesiredNodeConfig
+	// strips any user HostnameConfig and imposes the server-name static hostname for
+	// CCM compatibility. Surface that override once per update so a user's
+	// talos/cluster/hostname.yaml isn't silently dropped. When the user opted out,
+	// no override happens (the running nodes carry no static hostname), so stay quiet.
+	if p.hetznerOpts != nil && p.managesHostname() {
 		cpBytes, bytesErr := p.talosConfigs.ControlPlane().Bytes()
 		if bytesErr == nil {
 			p.warnIfOverridingUserHostname(cpBytes)
