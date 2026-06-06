@@ -590,11 +590,6 @@ func (in *OptionsHetzner) DeepCopyInto(out *OptionsHetzner) {
 		*out = new(bool)
 		**out = **in
 	}
-	if in.ManagedHostname != nil {
-		in, out := &in.ManagedHostname, &out.ManagedHostname
-		*out = new(bool)
-		**out = **in
-	}
 	if in.AutoscalerNodePoolNames != nil {
 		in, out := &in.AutoscalerNodePoolNames, &out.AutoscalerNodePoolNames
 		*out = make([]string, len(*in))
