@@ -14,6 +14,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
 	"github.com/siderolabs/talos/pkg/machinery/config/configdiff"
+	"github.com/siderolabs/talos/pkg/machinery/config/configloader"
 	"github.com/siderolabs/talos/pkg/machinery/config/encoder"
 	"github.com/siderolabs/talos/pkg/machinery/config/generate/secrets"
 	"github.com/siderolabs/talos/pkg/machinery/config/types/v1alpha1"
@@ -184,7 +185,59 @@ func (p *Provisioner) buildDesiredNodeConfig(
 		return nil, fmt.Errorf("%w: %s", errNoRoleConfig, role)
 	}
 
-	return graftNodeManagedSections(desired, running)
+	grafted, err := graftNodeManagedSections(desired, running)
+	if err != nil {
+		return nil, err
+	}
+
+	return graftNodeHostname(grafted, running)
+}
+
+// graftNodeHostname preserves the per-node static hostname
+// (machine.network.hostname) that ksail injects post-generation on Hetzner nodes
+// via patchTalosHostname at create/scale time — so the Hetzner CCM can match the
+// Kubernetes Node to its server. That hostname is neither in the base config nor
+// in any user patch, so a freshly regenerated desired config omits it and instead
+// carries the SDK's default standalone HostnameConfig document (auto: stable).
+// Grafting it here keeps the hostname out of the drift diff and, on apply,
+// prevents the node from re-registering under a generated talos-xxxxx name on its
+// next reboot (e.g. during a Talos OS upgrade via `ksail cluster update`).
+//
+// When the running node has no static hostname (e.g. Docker nodes, which derive
+// their hostname from the container), desired is returned unchanged so its own
+// HostnameConfig document — which already matches running — is preserved.
+func graftNodeHostname(
+	desired, running talosconfig.Provider,
+) (talosconfig.Provider, error) {
+	runningRaw := running.RawV1Alpha1()
+	if runningRaw == nil {
+		return desired, nil
+	}
+
+	hostname := runningRaw.Hostname()
+	if hostname == "" {
+		return desired, nil
+	}
+
+	desiredBytes, err := desired.Bytes()
+	if err != nil {
+		return nil, fmt.Errorf("encode desired config for hostname graft: %w", err)
+	}
+
+	// patchTalosHostname sets machine.network.hostname and strips the conflicting
+	// standalone HostnameConfig document, mirroring the create-time transform so
+	// the grafted config matches what the node already runs.
+	patched, err := patchTalosHostname(desiredBytes, hostname)
+	if err != nil {
+		return nil, fmt.Errorf("graft node hostname %q: %w", hostname, err)
+	}
+
+	provider, err := configloader.NewFromBytes(patched)
+	if err != nil {
+		return nil, fmt.Errorf("reload config after hostname graft: %w", err)
+	}
+
+	return provider, nil
 }
 
 // hasControlPlanePKI reports whether a config provider carries the cluster CA
@@ -232,7 +285,9 @@ func (p *Provisioner) alignKubernetesVersion(
 // node/setup-managed (not user patch content); the apply re-pushes them verbatim.
 //
 // If ksail gains another post-generation machine-config transform, graft its
-// section here too (otherwise it will surface as phantom drift).
+// section here too (otherwise it will surface as phantom drift). The per-node
+// hostname is a separate-document transform, so it is grafted in graftNodeHostname
+// rather than here.
 //
 //nolint:staticcheck // MachineRegistries is deprecated but still functional in Talos v1.x
 func graftNodeManagedSections(
