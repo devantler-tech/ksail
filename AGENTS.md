@@ -387,7 +387,7 @@ PR** as the checkpoint (the maintainer's promotion to "ready" is the go-signal);
 trusted-author PRs to merge** (incl. dependency major bumps) once required checks are green and
 threads resolved, **never merge external PRs** and never self-merge your own unreviewed drafts;
 trusted authors are the GitHub logins `devantler`, `ksail-bot`, `dependabot[bot]`,
-`github-actions[bot]`, `renovate[bot]`, and `Copilot`; never push to `main`. This section adds
+`github-actions[bot]`, and `renovate[bot]`; never push to `main`. This section adds
 KSail-specifics.
 
 **Recommended local validation before any PR** (matches `CONTRIBUTING.md`; CI re-runs equivalents
