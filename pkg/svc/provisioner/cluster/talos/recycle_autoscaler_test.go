@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
 )
@@ -133,4 +134,48 @@ func TestWaitForAutoscalerRollout_NotReadyTimesOut(t *testing.T) {
 
 	err := prov.WaitForAutoscalerRolloutForTest(ctx, clientset)
 	require.Error(t, err)
+}
+
+// nodeWithIP builds a Ready Kubernetes node reachable at the given internal IP.
+func nodeWithIP(name, ip string) *corev1.Node {
+	return &corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{Name: name},
+		Status: corev1.NodeStatus{
+			Addresses: []corev1.NodeAddress{{Type: corev1.NodeInternalIP, Address: ip}},
+		},
+	}
+}
+
+func TestDrainResolvedNode_NotRegisteredReturnsEmpty(t *testing.T) {
+	t.Parallel()
+
+	prov := talosprovisioner.NewProvisioner(nil, nil).WithLogWriter(io.Discard)
+
+	// No node matches the IP, so the node is treated as already gone: drain is
+	// skipped and the caller is told to proceed with removal.
+	nodeName, err := prov.DrainResolvedNodeForTest(
+		context.Background(), fake.NewClientset(), "10.0.0.9",
+	)
+
+	require.NoError(t, err)
+	assert.Empty(t, nodeName)
+}
+
+func TestDrainResolvedNode_DrainsRegisteredNode(t *testing.T) {
+	t.Parallel()
+
+	prov := talosprovisioner.NewProvisioner(nil, nil).WithLogWriter(io.Discard)
+	clientset := fake.NewClientset(nodeWithIP("as-node", "10.0.0.5"))
+
+	nodeName, err := prov.DrainResolvedNodeForTest(context.Background(), clientset, "10.0.0.5")
+
+	require.NoError(t, err)
+	assert.Equal(t, "as-node", nodeName)
+
+	// The node must be cordoned (marked unschedulable) as part of the drain.
+	node, getErr := clientset.CoreV1().Nodes().Get(
+		context.Background(), "as-node", metav1.GetOptions{},
+	)
+	require.NoError(t, getErr)
+	assert.True(t, node.Spec.Unschedulable, "drained node must be cordoned")
 }

@@ -413,6 +413,15 @@ func (p *Provisioner) WaitForAutoscalerRolloutForTest(
 	return p.waitForAutoscalerRollout(ctx, clientset)
 }
 
+// DrainResolvedNodeForTest exposes drainResolvedNode for unit testing.
+func (p *Provisioner) DrainResolvedNodeForTest(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	nodeIP string,
+) (string, error) {
+	return p.drainResolvedNode(ctx, clientset, nodeIP)
+}
+
 // WithTalosOptsForTest sets talosOpts on the provisioner for unit testing.
 func (p *Provisioner) WithTalosOptsForTest(
 	opts *v1alpha1.OptionsTalos,

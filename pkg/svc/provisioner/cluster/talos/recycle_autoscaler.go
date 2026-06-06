@@ -2,7 +2,6 @@ package talosprovisioner
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -121,25 +120,9 @@ func (p *Provisioner) recycleSingleAutoscalerNode(
 	}
 
 	// 1. Cordon and drain the outgoing node before removing it.
-	nodeName, resolveErr := p.resolveNodeName(ctx, clientset, serverIP)
-
-	switch {
-	case resolveErr == nil:
-		drainErr := p.cordonAndDrain(ctx, clientset, nodeName)
-		if drainErr != nil {
-			return drainErr
-		}
-	case errors.Is(resolveErr, ErrNodeNotFoundByIP):
-		// The server is no longer registered in Kubernetes (e.g. the autoscaler
-		// already scaled it down, or a prior partial run removed it). Skip drain
-		// and proceed with removal.
-		_, _ = fmt.Fprintf(p.logWriter,
-			"    ⚠ %s not registered in Kubernetes; proceeding with removal\n", serverIP)
-	default:
-		// A Kubernetes API failure (not a missing node): the node likely still
-		// exists, so abort rather than deleting it undrained and evicting its
-		// workloads abruptly.
-		return fmt.Errorf("resolve Kubernetes node for %s: %w", serverIP, resolveErr)
+	nodeName, drainErr := p.drainResolvedNode(ctx, clientset, serverIP)
+	if drainErr != nil {
+		return drainErr
 	}
 
 	// 2. Delete the outgoing Hetzner server.
