@@ -21,6 +21,9 @@ const autoscalerSelector = "app.kubernetes.io/instance=cluster-autoscaler"
 // errListFailed is a static sentinel for the List-error reactor test.
 var errListFailed = errors.New("list deployments failed")
 
+// errPatchFailed is a static sentinel for the Patch-error reactor test.
+var errPatchFailed = errors.New("patch deployment failed")
+
 // newLabeledDeployment builds a Deployment in kube-system carrying the
 // cluster-autoscaler instance label, optionally pre-seeded with pod-template
 // annotations so tests can assert they are preserved.
@@ -96,5 +99,27 @@ func TestRolloutRestartDeploymentsByLabel_ListError(t *testing.T) {
 		context.Background(), clientset, "kube-system", autoscalerSelector,
 	)
 	require.ErrorIs(t, err, errListFailed)
+	assert.Equal(t, 0, restarted)
+}
+
+func TestRolloutRestartDeploymentsByLabel_PatchError(t *testing.T) {
+	t.Parallel()
+
+	// A matched Deployment whose Patch fails must surface the error and report it
+	// as not-restarted.
+	clientset := k8sfake.NewClientset(newLabeledDeployment("cluster-autoscaler", nil))
+
+	clientset.PrependReactor(
+		"patch",
+		"deployments",
+		func(_ k8stesting.Action) (bool, runtime.Object, error) {
+			return true, nil, errPatchFailed
+		},
+	)
+
+	restarted, err := k8s.RolloutRestartDeploymentsByLabel(
+		context.Background(), clientset, "kube-system", autoscalerSelector,
+	)
+	require.ErrorIs(t, err, errPatchFailed)
 	assert.Equal(t, 0, restarted)
 }

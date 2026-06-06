@@ -457,7 +457,11 @@ func (p *Provisioner) ensureAutoscalerSecret(
 		return fmt.Errorf("applying autoscaler config secret: %w", err)
 	}
 
-	_, _ = fmt.Fprintf(p.logWriter, "  ✓ Cluster autoscaler config secret created\n")
+	if changed {
+		_, _ = fmt.Fprintf(p.logWriter, "  ✓ Cluster autoscaler config secret applied\n")
+	} else {
+		_, _ = fmt.Fprintf(p.logWriter, "  ✓ Cluster autoscaler config secret already up to date\n")
+	}
 
 	if restartIfChanged && changed {
 		return p.restartAutoscalerAfterConfigChange(ctx, kubeclient)

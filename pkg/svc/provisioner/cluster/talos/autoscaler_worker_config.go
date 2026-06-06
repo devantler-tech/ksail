@@ -8,6 +8,7 @@ import (
 	"fmt"
 
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
+	clusterautoscalerinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/clusterautoscaler"
 	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
 	"github.com/siderolabs/talos/pkg/machinery/config/types/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
@@ -21,10 +22,10 @@ const (
 	autoscalerConfigSecretName      = "cluster-autoscaler-config"
 	autoscalerConfigSecretNamespace = "kube-system"
 
-	// autoscalerDeploymentSelector matches the cluster-autoscaler Deployment via
-	// the standard Helm instance label. It must stay in sync with the chart
-	// ReleaseName ("cluster-autoscaler") in pkg/svc/installer/clusterautoscaler.
-	autoscalerDeploymentSelector = "app.kubernetes.io/instance=cluster-autoscaler"
+	// autoscalerDeploymentSelector matches the cluster-autoscaler Deployment via the
+	// standard Helm instance label, derived from the installer's ReleaseName so the
+	// selector and the chart that stamps the label cannot drift apart.
+	autoscalerDeploymentSelector = "app.kubernetes.io/instance=" + clusterautoscalerinstaller.ReleaseName
 
 	// hetznerUserDataLimitBytes is Hetzner Cloud's hard ceiling on a server's
 	// user_data field (32 KiB). The cluster-autoscaler base64-decodes the
@@ -204,7 +205,9 @@ func createOrUpdateAutoscalerSecretOnConflict(
 // updateAutoscalerSecretIfNeeded merges the desired keys into the existing
 // Secret. It skips the update when all desired keys already match to avoid
 // unnecessary API calls. RetryOnConflict handles 409 responses from concurrent
-// updaters. It returns whether the Secret's data was changed.
+// updaters. It returns true only when it actually performed an update — if a
+// concurrent writer already applied the desired data, it reports false so the
+// caller does not roll the autoscaler for a Secret it did not change.
 func updateAutoscalerSecretIfNeeded(
 	ctx context.Context,
 	client kubernetes.Interface,
@@ -216,6 +219,7 @@ func updateAutoscalerSecretIfNeeded(
 	}
 
 	secretsClient := client.CoreV1().Secrets(autoscalerConfigSecretNamespace)
+	updated := false
 
 	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		latest, getErr := secretsClient.Get(ctx, autoscalerConfigSecretName, metav1.GetOptions{})
@@ -232,11 +236,13 @@ func updateAutoscalerSecretIfNeeded(
 			return fmt.Errorf("update autoscaler config secret: %w", updateErr)
 		}
 
+		updated = true
+
 		return nil
 	})
 	if retryErr != nil {
 		return false, fmt.Errorf("failed to update autoscaler config secret: %w", retryErr)
 	}
 
-	return true, nil
+	return updated, nil
 }
