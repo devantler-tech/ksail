@@ -301,6 +301,12 @@ func TestUserHostnameConfigSummary(t *testing.T) {
 				machineDoc + "auto: \"off\"\n",
 			want: "auto: off",
 		},
+		{
+			name: "static hostname after a MachineConfig document is detected",
+			cfg: "version: v1alpha1\nmachine:\n  type: worker\n---\n" +
+				"apiVersion: v1alpha1\nkind: HostnameConfig\nhostname: my-custom-hostname\n",
+			want: "hostname: my-custom-hostname",
+		},
 	}
 
 	for _, testCase := range tests {
@@ -326,4 +332,36 @@ func TestUserHostnameConfigSummary_SDKDefaultGeneratedConfig(t *testing.T) {
 
 	assert.Empty(t, talosprovisioner.UserHostnameConfigSummary(workerBytes),
 		"the SDK default (auto: stable) must not be flagged as user intent")
+}
+
+// TestWarnIfOverridingUserHostname_EmitsForUserConfig verifies the user-facing
+// behavior of this change: when a user-authored HostnameConfig is present, KSail
+// logs a visible warning that it is overriding it (rather than discarding silently).
+func TestWarnIfOverridingUserHostname_EmitsForUserConfig(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+
+	prov := talosprovisioner.NewProvisioner(nil, nil).WithLogWriter(&buf)
+	prov.WarnIfOverridingUserHostnameForTest(
+		[]byte("apiVersion: v1alpha1\nkind: HostnameConfig\nauto: \"off\"\n"),
+	)
+
+	assert.Contains(t, buf.String(), "Overriding user HostnameConfig (auto: off)",
+		"a user HostnameConfig override must be surfaced, not silent")
+}
+
+// TestWarnIfOverridingUserHostname_SilentForSDKDefault verifies the warning is a
+// no-op for the SDK default (auto: stable) — KSail strips that silently because it
+// is exactly the setting that renames nodes, not a user hostname strategy.
+func TestWarnIfOverridingUserHostname_SilentForSDKDefault(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+
+	prov := talosprovisioner.NewProvisioner(nil, nil).WithLogWriter(&buf)
+	prov.WarnIfOverridingUserHostnameForTest(workerConfigBytes(t))
+
+	assert.Empty(t, buf.String(),
+		"the SDK default HostnameConfig must be stripped silently (no warning)")
 }

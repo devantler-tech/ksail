@@ -18,6 +18,12 @@ var PatchTalosHostname = patchTalosHostname
 //nolint:gochecknoglobals // export_test.go pattern requires global variables to expose internal functions
 var UserHostnameConfigSummary = userHostnameConfigSummary
 
+// WarnIfOverridingUserHostnameForTest exposes warnIfOverridingUserHostname for
+// tests in the talosprovisioner_test package.
+func (p *Provisioner) WarnIfOverridingUserHostnameForTest(cfgBytes []byte) {
+	p.warnIfOverridingUserHostname(cfgBytes)
+}
+
 // HetznerNodeName exposes hetznerNodeName for tests in the
 // talosprovisioner_test package.
 //

@@ -440,10 +440,15 @@ func (p *Provisioner) applyInPlaceConfigChanges(
 	// On Hetzner, buildDesiredNodeConfig strips any user HostnameConfig and imposes
 	// the server-name static hostname for CCM compatibility. Surface that override
 	// once per update so a user's talos/cluster/hostname.yaml isn't silently dropped.
+	// ControlPlane() returns nil when the bundle is not fully loaded (the guard above
+	// only checks p.talosConfigs itself), so nil-check before calling Bytes().
 	if p.hetznerOpts != nil {
-		cpBytes, bytesErr := p.talosConfigs.ControlPlane().Bytes()
-		if bytesErr == nil {
-			p.warnIfOverridingUserHostname(cpBytes)
+		cpConfig := p.talosConfigs.ControlPlane()
+		if cpConfig != nil {
+			cpBytes, bytesErr := cpConfig.Bytes()
+			if bytesErr == nil {
+				p.warnIfOverridingUserHostname(cpBytes)
+			}
 		}
 	}
 
