@@ -287,6 +287,111 @@ func TestBuildDesiredNodeConfig_PinnedKubernetesVersionAppliesUpgrade(t *testing
 	assert.NotEmpty(t, diff, "a pinned version differing from running must be detected")
 }
 
+// runningWithHostname renders a config for the given role and injects the static
+// machine.network.hostname the same way create does on Hetzner (PatchTalosHostname:
+// set machine.network.hostname, strip the conflicting standalone HostnameConfig
+// document), then parses it back as a node would store and return it.
+func runningWithHostname(
+	t *testing.T,
+	role, hostname string,
+	patches ...talosconfigmanager.Patch,
+) talosconfig.Provider {
+	t.Helper()
+
+	configs, err := talosconfigmanager.NewDefaultConfigsWithPatches(patches)
+	require.NoError(t, err)
+
+	roleConfig := configs.ControlPlane()
+	if role == talosprovisioner.RoleWorker {
+		roleConfig = configs.Worker()
+	}
+
+	roleBytes, err := roleConfig.Bytes()
+	require.NoError(t, err)
+
+	withHostname, err := talosprovisioner.PatchTalosHostname(roleBytes, hostname)
+	require.NoError(t, err)
+
+	running, err := configloader.NewFromBytes(withHostname)
+	require.NoError(t, err)
+
+	return running
+}
+
+// TestBuildDesiredNodeConfig_PreservesNodeHostname is the regression guard for the
+// node-rename bug: on Hetzner the per-node static hostname (machine.network.hostname)
+// is injected post-generation at create (PatchTalosHostname) so the Hetzner CCM can
+// match the Kubernetes Node to its server. It is neither in the base config nor in
+// any user patch, so a freshly regenerated desired config omits it and instead
+// carries the SDK's default standalone HostnameConfig document (auto: stable).
+// Without grafting the running hostname, an update (a) surfaces the hostname as
+// phantom drift and (b) strips the static hostname when applied, so the node
+// re-registers under a generated talos-xxxxx name on its next reboot (e.g. during a
+// Talos OS upgrade via `ksail cluster update`).
+func TestBuildDesiredNodeConfig_PreservesNodeHostname(t *testing.T) {
+	t.Parallel()
+
+	patch := sysctlPatch("machine:\n  sysctls:\n    net.core.rmem_max: \"1\"\n")
+	running := runningWithHostname(
+		t, talosprovisioner.RoleControlPlane, "prod-control-plane-1", patch,
+	)
+
+	require.Equal(t, "prod-control-plane-1", running.RawV1Alpha1().Hostname(),
+		"precondition: running config carries the create-injected static hostname")
+
+	// Desired configs are regenerated from the same patches — without the hostname,
+	// which is a create-only post-generation transform (like registry mirrors).
+	desiredConfigs, err := talosconfigmanager.NewDefaultConfigsWithPatches(
+		[]talosconfigmanager.Patch{patch},
+	)
+	require.NoError(t, err)
+
+	prov := talosprovisioner.NewProvisioner(desiredConfigs, nil)
+
+	desired, err := prov.BuildDesiredNodeConfigForTest(
+		running, running, talosprovisioner.RoleControlPlane,
+	)
+	require.NoError(t, err)
+
+	assert.Equal(t, "prod-control-plane-1", desired.RawV1Alpha1().Hostname(),
+		"the per-node static hostname must be preserved so the node keeps its name on reboot")
+
+	diff, err := talosprovisioner.MachineConfigDiffForTest(running, desired)
+	require.NoError(t, err)
+	assert.Empty(t, diff,
+		"a create-injected hostname must not read as drift on an unchanged config")
+}
+
+// TestBuildDesiredNodeConfig_NoHostnameLeavesConfigUnchanged verifies the Docker
+// path is unaffected: a node with no static machine.network.hostname (it derives
+// its hostname from the container) keeps the regenerated config's own hostname
+// representation, so grafting is a no-op and reports no drift.
+func TestBuildDesiredNodeConfig_NoHostnameLeavesConfigUnchanged(t *testing.T) {
+	t.Parallel()
+
+	patch := sysctlPatch("machine:\n  sysctls:\n    net.core.rmem_max: \"1\"\n")
+	running := runningFromPatches(t, patch)
+
+	require.Empty(t, running.RawV1Alpha1().Hostname(),
+		"precondition: a non-Hetzner node carries no static hostname")
+
+	desiredConfigs, err := talosconfigmanager.NewDefaultConfigsWithPatches(
+		[]talosconfigmanager.Patch{patch},
+	)
+	require.NoError(t, err)
+
+	prov := talosprovisioner.NewProvisioner(desiredConfigs, nil)
+
+	desired, err := prov.BuildDesiredNodeConfigForTest(
+		running, running, talosprovisioner.RoleControlPlane,
+	)
+	require.NoError(t, err)
+
+	diff, err := talosprovisioner.MachineConfigDiffForTest(running, desired)
+	require.NoError(t, err)
+	assert.Empty(t, diff, "a node without a static hostname must not report drift")
+}
+
 func TestConfigFingerprint(t *testing.T) {
 	t.Parallel()
 
