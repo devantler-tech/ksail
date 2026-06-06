@@ -1364,7 +1364,10 @@ func (p *Provisioner) ensureAutoscalerSecretIfNeeded(
 		return fmt.Errorf("looking up snapshot image for autoscaler secret: %w", err)
 	}
 
-	return p.ensureAutoscalerSecret(ctx, configBundle, snapshotImageID)
+	// Restart the autoscaler when the config changed so it reloads the new
+	// Kubernetes version / snapshot baked into the Secret (read as env vars,
+	// which Kubernetes does not live-reload).
+	return p.ensureAutoscalerSecret(ctx, configBundle, snapshotImageID, true)
 }
 
 // hasSchematicConfigured reports whether a Talos schematic ID is available

@@ -16,6 +16,7 @@ import (
 	check "github.com/siderolabs/talos/pkg/cluster/check"
 	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/client-go/kubernetes"
 )
 
 // NodeWithRoleForTest is the exported alias of nodeWithRole for testing.
@@ -375,6 +376,15 @@ func (p *Provisioner) EnsureAutoscalerSecretIfNeededForTest(
 	clusterName string,
 ) error {
 	return p.ensureAutoscalerSecretIfNeeded(ctx, clusterName)
+}
+
+// RestartAutoscalerAfterConfigChangeForTest exposes restartAutoscalerAfterConfigChange
+// for unit testing.
+func (p *Provisioner) RestartAutoscalerAfterConfigChangeForTest(
+	ctx context.Context,
+	kubeclient kubernetes.Interface,
+) error {
+	return p.restartAutoscalerAfterConfigChange(ctx, kubeclient)
 }
 
 // WithTalosOptsForTest sets talosOpts on the provisioner for unit testing.

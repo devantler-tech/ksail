@@ -8,6 +8,7 @@ import (
 	"fmt"
 
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
+	clusterautoscalerinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/clusterautoscaler"
 	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
 	"github.com/siderolabs/talos/pkg/machinery/config/types/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
@@ -20,6 +21,11 @@ import (
 const (
 	autoscalerConfigSecretName      = "cluster-autoscaler-config"
 	autoscalerConfigSecretNamespace = "kube-system"
+
+	// autoscalerDeploymentSelector matches the cluster-autoscaler Deployment via the
+	// standard Helm instance label, derived from the installer's ReleaseName so the
+	// selector and the chart that stamps the label cannot drift apart.
+	autoscalerDeploymentSelector = "app.kubernetes.io/instance=" + clusterautoscalerinstaller.ReleaseName
 
 	// hetznerUserDataLimitBytes is Hetzner Cloud's hard ceiling on a server's
 	// user_data field (32 KiB). The cluster-autoscaler base64-decodes the
@@ -125,15 +131,20 @@ func encodeAutoscalerCloudInit(workerConfigYAML []byte) (string, error) {
 // gzip-compressed, base64-encoded Talos worker config that Kubernetes Cluster
 // Autoscaler uses as cloud-init user-data when provisioning new worker nodes
 // (see encodeAutoscalerCloudInit for the encoding rationale).
+//
+// It returns whether the Secret's data was created or changed. The autoscaler
+// reads these keys as environment variables (valueFrom.secretKeyRef), which
+// Kubernetes does not live-reload, so a true result means callers must restart
+// the autoscaler Deployment for the new config to reach freshly provisioned nodes.
 func ApplyAutoscalerConfigSecret(
 	ctx context.Context,
 	kubeclient kubernetes.Interface,
 	snapshotImageID string,
 	workerConfigYAML []byte,
-) error {
+) (bool, error) {
 	encodedConfig, err := encodeAutoscalerCloudInit(workerConfigYAML)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	desiredData := map[string][]byte{
@@ -154,7 +165,7 @@ func ApplyAutoscalerConfigSecret(
 	existing, err := secretsClient.Get(ctx, autoscalerConfigSecretName, metav1.GetOptions{})
 	if err != nil {
 		if !apierrors.IsNotFound(err) {
-			return fmt.Errorf("get autoscaler config secret: %w", err)
+			return false, fmt.Errorf("get autoscaler config secret: %w", err)
 		}
 
 		return createOrUpdateAutoscalerSecretOnConflict(ctx, kubeclient, secret)
@@ -165,46 +176,50 @@ func ApplyAutoscalerConfigSecret(
 
 // createOrUpdateAutoscalerSecretOnConflict creates the Secret. If a concurrent
 // caller already created it between the outer Get and this Create, it falls
-// back to a merge-update to stay idempotent.
+// back to a merge-update to stay idempotent. It returns whether the Secret's data
+// was created or changed.
 func createOrUpdateAutoscalerSecretOnConflict(
 	ctx context.Context,
 	client kubernetes.Interface,
 	secret *corev1.Secret,
-) error {
+) (bool, error) {
 	secretsClient := client.CoreV1().Secrets(autoscalerConfigSecretNamespace)
 
 	_, err := secretsClient.Create(ctx, secret, metav1.CreateOptions{})
 	if err != nil {
 		if !apierrors.IsAlreadyExists(err) {
-			return fmt.Errorf("create autoscaler config secret: %w", err)
+			return false, fmt.Errorf("create autoscaler config secret: %w", err)
 		}
 
 		existing, getErr := secretsClient.Get(ctx, autoscalerConfigSecretName, metav1.GetOptions{})
 		if getErr != nil {
-			return fmt.Errorf("get autoscaler config secret after conflict: %w", getErr)
+			return false, fmt.Errorf("get autoscaler config secret after conflict: %w", getErr)
 		}
 
 		return updateAutoscalerSecretIfNeeded(ctx, client, existing, secret.Data)
 	}
 
-	return nil
+	return true, nil
 }
 
 // updateAutoscalerSecretIfNeeded merges the desired keys into the existing
 // Secret. It skips the update when all desired keys already match to avoid
 // unnecessary API calls. RetryOnConflict handles 409 responses from concurrent
-// updaters.
+// updaters. It returns true only when it actually performed an update — if a
+// concurrent writer already applied the desired data, it reports false so the
+// caller does not roll the autoscaler for a Secret it did not change.
 func updateAutoscalerSecretIfNeeded(
 	ctx context.Context,
 	client kubernetes.Interface,
 	existing *corev1.Secret,
 	desiredData map[string][]byte,
-) error {
+) (bool, error) {
 	if !k8s.MergeSecretData(existing, desiredData) {
-		return nil
+		return false, nil
 	}
 
 	secretsClient := client.CoreV1().Secrets(autoscalerConfigSecretNamespace)
+	updated := false
 
 	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		latest, getErr := secretsClient.Get(ctx, autoscalerConfigSecretName, metav1.GetOptions{})
@@ -221,11 +236,13 @@ func updateAutoscalerSecretIfNeeded(
 			return fmt.Errorf("update autoscaler config secret: %w", updateErr)
 		}
 
+		updated = true
+
 		return nil
 	})
 	if retryErr != nil {
-		return fmt.Errorf("failed to update autoscaler config secret: %w", retryErr)
+		return false, fmt.Errorf("failed to update autoscaler config secret: %w", retryErr)
 	}
 
-	return nil
+	return updated, nil
 }

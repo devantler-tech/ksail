@@ -18,6 +18,12 @@ const (
 	defaultScaleDownUnneededTime = "10m"
 	defaultOkTotalUnreadyCount   = 3
 
+	// ReleaseName is the Helm release name for the cluster-autoscaler chart, which
+	// the chart also stamps as the app.kubernetes.io/instance label value. The Talos
+	// provisioner selects on that label to roll the Deployment when its config Secret
+	// changes, so both derive from this single constant rather than drifting.
+	ReleaseName = "cluster-autoscaler"
+
 	// AutoscalerConfigSecretName is the Kubernetes Secret containing per-cluster
 	// autoscaler parameters (cloud-init template, base image tag). It is created by
 	// the Talos provisioner's ApplyAutoscalerConfigSecret before the installer runs.
@@ -73,7 +79,7 @@ func NewInstaller(
 
 	return &Installer{
 		Base: helmutil.NewBase(
-			"cluster-autoscaler",
+			ReleaseName,
 			client,
 			timeout,
 			&helm.RepositoryEntry{
@@ -81,7 +87,7 @@ func NewInstaller(
 				URL:  repoURL,
 			},
 			&helm.ChartSpec{
-				ReleaseName: "cluster-autoscaler",
+				ReleaseName: ReleaseName,
 				ChartName:   "autoscaler/cluster-autoscaler",
 				Namespace:   namespace,
 				Version:     chartVersion(),
