@@ -71,6 +71,10 @@ func main() {
 	// A menu-bar/system-tray icon for quick access: show/hide the window or quit without going through
 	// the Dock. Must be configured before Run() (which blocks until shutdown).
 	tray := app.SystemTray.New()
+	// SetIcon uses the full-color app icon, scaled to the status-bar thickness. The macOS menu-bar
+	// idiom is a monochrome template image (SetTemplateIcon) that auto-inverts for light/dark bars —
+	// but that needs a dedicated alpha-only mark (the color tile cannot be reused as a template), so a
+	// proper menu-bar glyph is a branding follow-up. The color icon renders acceptably meanwhile.
 	tray.SetIcon(trayIcon)
 
 	trayMenu := app.NewMenu()
