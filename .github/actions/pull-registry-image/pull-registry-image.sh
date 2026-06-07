@@ -20,22 +20,22 @@ set -euo pipefail
 # runners. Try the mirror first, then fall back to Docker Hub directly,
 # and re-tag whichever source succeeds to the canonical registry:3.
 obtain_registry_image() {
-  local ref attempt
-  for ref in mirror.gcr.io/library/registry:3 registry:3; do
-    for attempt in 1 2 3; do
-      if docker pull --quiet "$ref"; then
-        docker tag "$ref" registry:3
-        echo "✅ registry:3 obtained from ${ref}"
-        return 0
-      fi
-      echo "⚠️ pull ${ref} attempt ${attempt}/3 failed; retrying in $((attempt * 5))s…"
-      sleep "$((attempt * 5))"
-    done
-  done
-  return 1
+	local ref attempt
+	for ref in mirror.gcr.io/library/registry:3 registry:3; do
+		for attempt in 1 2 3; do
+			if docker pull --quiet "$ref"; then
+				docker tag "$ref" registry:3
+				echo "✅ registry:3 obtained from ${ref}"
+				return 0
+			fi
+			echo "⚠️ pull ${ref} attempt ${attempt}/3 failed; retrying in $((attempt * 5))s…"
+			sleep "$((attempt * 5))"
+		done
+	done
+	return 1
 }
 
 if ! obtain_registry_image; then
-  echo "❌ Failed to obtain registry:3 from mirror.gcr.io and Docker Hub"
-  exit 1
+	echo "❌ Failed to obtain registry:3 from mirror.gcr.io and Docker Hub"
+	exit 1
 fi
