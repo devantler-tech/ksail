@@ -78,6 +78,10 @@ type configResponse struct {
 	Distributions   []string       `json:"distributions,omitempty"`
 	Providers       []ProviderInfo `json:"providers,omitempty"`
 	SettingsEnabled bool           `json:"settingsEnabled,omitempty"`
+	// Capabilities reports which optional operations the serving backend supports so the SPA can gate
+	// affordances (e.g. cluster edit) it cannot fulfill. Always present (no omitempty): an absent
+	// field would force the SPA to guess, and the false zero-value is meaningful.
+	Capabilities Capabilities `json:"capabilities"`
 }
 
 // ProviderInfo reports whether an infrastructure provider is usable on the serving backend, with a
@@ -336,6 +340,7 @@ func (s *Server) handleConfig(writer http.ResponseWriter, request *http.Request)
 		AuthEnabled:     s.auth != nil,
 		Distributions:   s.Distributions,
 		SettingsEnabled: s.Settings != nil,
+		Capabilities:    serviceCapabilities(s.Service),
 	}
 
 	if s.ProviderStatus != nil {

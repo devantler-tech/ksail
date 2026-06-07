@@ -388,6 +388,16 @@ func TestUpdateIsNotSupported(t *testing.T) {
 	require.ErrorIs(t, err, api.ErrNotSupported)
 }
 
+func TestCapabilitiesReportsNoClusterUpdate(t *testing.T) {
+	t.Parallel()
+
+	// The local backend cannot update in place (see TestUpdateIsNotSupported); it must report that
+	// via CapabilityReporter so the SPA hides the edit affordance rather than offering a 501.
+	service := newTestService(nil)
+
+	assert.False(t, service.Capabilities().ClusterUpdate)
+}
+
 func TestGetIgnoresNamespaceAndReturnsNotFound(t *testing.T) {
 	t.Parallel()
 

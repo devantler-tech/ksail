@@ -4,6 +4,7 @@ import {
   ApiError,
   createCluster,
   deleteCluster,
+  fullCapabilities,
   getConfig,
   getMeta,
   listClusters,
@@ -81,6 +82,9 @@ export function App() {
   const toast = useToast();
 
   const [readOnly, setReadOnly] = useState(false);
+  // canUpdate reflects the backend's clusterUpdate capability. The local UI/desktop backend cannot
+  // update a cluster in place, so the edit affordance is hidden there; the operator can, so it shows.
+  const [canUpdate, setCanUpdate] = useState(fullCapabilities.clusterUpdate);
   const [user, setUser] = useState<User | null>(null);
   const [needsLogin, setNeedsLogin] = useState(false);
   const [meta, setMeta] = useState<ClusterMeta | null>(null);
@@ -155,6 +159,7 @@ export function App() {
         return;
       }
       setReadOnly(config.readOnly);
+      setCanUpdate(config.capabilities?.clusterUpdate ?? fullCapabilities.clusterUpdate);
       setDistributions(config.distributions ?? DEFAULT_DISTRIBUTIONS);
       setProviderStatus(config.providers ?? null);
       setSettingsEnabled(config.settingsEnabled ?? false);
@@ -183,6 +188,7 @@ export function App() {
       }
 
       setReadOnly(config.readOnly);
+      setCanUpdate(config.capabilities?.clusterUpdate ?? fullCapabilities.clusterUpdate);
       setUser(config.user ?? null);
       setDistributions(config.distributions ?? DEFAULT_DISTRIBUTIONS);
       setProviderStatus(config.providers ?? null);
@@ -291,6 +297,10 @@ export function App() {
     return <LoginScreen />;
   }
 
+  // canEdit gates the edit affordance: editing requires both a writable UI and a backend that can
+  // apply spec changes in place. Delete stays gated on readOnly alone (the local backend supports it).
+  const canEdit = !readOnly && canUpdate;
+
   // Header actions (Refresh / New cluster) belong to the Clusters view only.
   const headerActions =
     view === "clusters" ? (
@@ -354,6 +364,7 @@ export function App() {
           <ClustersTable
             clusters={clusters}
             readOnly={readOnly}
+            canEdit={canEdit}
             onSelect={(cluster) => setSelectedKey(clusterKey(cluster))}
             onEdit={openEdit}
             onDelete={(cluster) => setDeleteTarget(cluster)}
@@ -366,7 +377,7 @@ export function App() {
         <ClusterDetail
           cluster={selected}
           open={selected !== null}
-          readOnly={readOnly}
+          canEdit={canEdit}
           onClose={() => setSelectedKey(null)}
           onEdit={openEdit}
         />

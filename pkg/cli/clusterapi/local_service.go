@@ -57,8 +57,12 @@ type job struct {
 	err          error
 }
 
-// Ensure Service satisfies the operator REST API's backend contract.
-var _ api.ClusterService = (*Service)(nil)
+// Ensure Service satisfies the operator REST API's backend contract, including the optional
+// capability reporter the SPA uses to gate edit affordances.
+var (
+	_ api.ClusterService     = (*Service)(nil)
+	_ api.CapabilityReporter = (*Service)(nil)
+)
 
 // Service implements api.ClusterService over the local provider/provisioner lifecycle.
 type Service struct {
@@ -84,6 +88,14 @@ func NewService() *Service {
 	service.discoverer = &clusterdiscovery.Discoverer{DockerFactory: service.dockerFactory}
 
 	return service
+}
+
+// Capabilities reports the operations the local backend supports. In-place cluster update is not
+// supported locally — a local cluster's configuration is managed through its config files and
+// `ksail cluster update`, not the API (see Update) — so the SPA hides the edit affordance rather
+// than offering a button that returns 501.
+func (s *Service) Capabilities() api.Capabilities {
+	return api.Capabilities{ClusterUpdate: false}
 }
 
 // CreatableDistributions returns the distributions the local UI can provision. It feeds the

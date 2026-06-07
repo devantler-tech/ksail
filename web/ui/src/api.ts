@@ -94,10 +94,26 @@ export interface ProviderInfo {
   reason?: string;
 }
 
+// Capabilities reports which optional operations the serving backend supports so the SPA can gate
+// affordances it cannot fulfill. The local `ksail ui`/desktop backend manages cluster configuration
+// via files and reports clusterUpdate=false (the SPA then hides the edit affordance); the operator
+// patches the Cluster CR and reports true. New flags are added here as the UI surface grows.
+export interface Capabilities {
+  clusterUpdate: boolean;
+}
+
+// fullCapabilities mirrors the backend's default for a service that does not report capabilities:
+// the full surface is assumed. Used when config.capabilities is absent so a missing field never
+// silently disables a working action.
+export const fullCapabilities: Capabilities = { clusterUpdate: true };
+
 export interface Config {
   readOnly: boolean;
   authEnabled: boolean;
   user?: User;
+  // capabilities the serving backend supports. Absent only against an older backend; treat absence
+  // as the full surface (see fullCapabilities).
+  capabilities?: Capabilities;
   // distributions the create form should offer. Absent when the backend relies on the SPA default.
   distributions?: string[];
   // providers reports per-provider availability so the create form can gate options to providers the
