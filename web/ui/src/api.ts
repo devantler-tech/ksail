@@ -100,12 +100,15 @@ export interface ProviderInfo {
 // patches the Cluster CR and reports true. New flags are added here as the UI surface grows.
 export interface Capabilities {
   clusterUpdate: boolean;
+  // workloadRead is true when the backend can read live Kubernetes resources from a target cluster
+  // (the read-only workload browser). The SPA shows the Resources view only then.
+  workloadRead: boolean;
 }
 
-// fullCapabilities mirrors the backend's default for a service that does not report capabilities:
-// the full surface is assumed. Used when config.capabilities is absent so a missing field never
-// silently disables a working action.
-export const fullCapabilities: Capabilities = { clusterUpdate: true };
+// fullCapabilities mirrors the backend's default for a service that does not report capabilities.
+// clusterUpdate defaults true (assume a working action rather than hiding it); workloadRead defaults
+// false because the resource endpoints may not exist on a mismatched older backend and would 404.
+export const fullCapabilities: Capabilities = { clusterUpdate: true, workloadRead: false };
 
 export interface Config {
   readOnly: boolean;
@@ -262,4 +265,80 @@ export function updateCluster(
 
 export function deleteCluster(namespace: string, name: string): Promise<void> {
   return request<void>(`/api/v1/clusters/${namespace}/${name}`, { method: "DELETE" });
+}
+
+// K8sObject is a loose view of an unstructured Kubernetes object: the backend returns each resource
+// in its native JSON shape, so only the fields the browser reads are typed; the rest is passthrough.
+export interface K8sObject {
+  apiVersion?: string;
+  kind?: string;
+  metadata?: {
+    name?: string;
+    namespace?: string;
+    creationTimestamp?: string;
+    [key: string]: unknown;
+  };
+  status?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export interface K8sList {
+  items?: K8sObject[];
+}
+
+// RESOURCE_KINDS mirrors the backend's curated allowlist (api.ResourceKindNames). The backend rejects
+// anything outside its own allowlist regardless, so this list only drives the kind selector.
+export const RESOURCE_KINDS = [
+  "Pod",
+  "Deployment",
+  "StatefulSet",
+  "DaemonSet",
+  "ReplicaSet",
+  "Job",
+  "CronJob",
+  "Service",
+  "Ingress",
+  "ConfigMap",
+  "PersistentVolumeClaim",
+  "Event",
+  "Node",
+  "Namespace",
+] as const;
+
+// listResources fetches resources of a kind from a cluster. resourceNamespace narrows a namespaced
+// kind to one namespace; omit it to list across all namespaces.
+export function listResources(
+  namespace: string,
+  name: string,
+  kind: string,
+  resourceNamespace?: string,
+): Promise<K8sList> {
+  const params = new URLSearchParams({ kind });
+  if (resourceNamespace) {
+    params.set("namespace", resourceNamespace);
+  }
+
+  return request<K8sList>(
+    `/api/v1/clusters/${namespace}/${name}/resources?${params.toString()}`,
+  );
+}
+
+// getResource fetches a single resource by kind + name (and namespace for namespaced kinds).
+export function getResource(
+  namespace: string,
+  name: string,
+  kind: string,
+  resourceName: string,
+  resourceNamespace?: string,
+): Promise<K8sObject> {
+  const params = new URLSearchParams();
+  if (resourceNamespace) {
+    params.set("namespace", resourceNamespace);
+  }
+
+  const query = params.toString() ? `?${params.toString()}` : "";
+
+  return request<K8sObject>(
+    `/api/v1/clusters/${namespace}/${name}/resources/${kind}/${resourceName}${query}`,
+  );
 }
