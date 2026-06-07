@@ -329,6 +329,20 @@ When `spec.cluster.talos.schematicId` is set, KSail manages a Hetzner Cloud **sn
 > [!NOTE]
 > Snapshots are scoped per cluster name, so deleting one cluster does not affect snapshots used by another cluster with the same schematic.
 
+### Autoscaler Node Upgrades
+
+Autoscaler-managed nodes are provisioned by the [Cluster Autoscaler](https://github.com/kubernetes/autoscaler) itself — booting the Talos snapshot and worker config baked into the `cluster-autoscaler-config` Secret — not by KSail directly. They are therefore **not** part of the in-place rolling Talos/Kubernetes upgrade `ksail cluster update` runs against the static control planes and workers (those are matched by the `ksail.owned` label; autoscaler nodes are not).
+
+To keep them on the baseline, when a `ksail cluster update` changes the Talos or Kubernetes version, KSail:
+
+1. Rebuilds the Talos snapshot at the new version and refreshes the `cluster-autoscaler-config` Secret (so **new** autoscaler nodes boot the new version), then restarts the cluster-autoscaler to load it.
+2. **Recycles the existing autoscaler nodes** so they follow the new baseline instead of drifting: after the restarted autoscaler is ready, each autoscaler node is cordoned and drained one at a time (through the Kubernetes eviction API, honoring PodDisruptionBudgets) and its Hetzner server is deleted. The cluster-autoscaler then provisions any still-needed capacity from the refreshed snapshot on demand.
+
+This mirrors the upstream Cluster Autoscaler model — the autoscaler owns node _creation_, so KSail removes the stale nodes and lets the autoscaler replace them rather than upgrading ephemeral, compute-only nodes in place. Recycling runs only when the version actually changes; a no-op `cluster update` leaves autoscaler nodes untouched.
+
+> [!NOTE]
+> Recycling drains nodes one at a time, so a strict PodDisruptionBudget can slow or block it. Pods that cannot be evicted within the drain timeout fail the update so the condition surfaces rather than abruptly evicting workloads.
+
 ### List Clusters
 
 ```bash
@@ -349,7 +363,7 @@ Displays Kubernetes control-plane and core service endpoints for the current con
 ksail cluster update
 ```
 
-Applies in-place changes to components (CNI, GitOps engine, cert-manager, etc.). Node scaling changes for Talos are applied in-place. Changes to `hetzner.location`, `hetzner.controlPlaneServerType`, or `hetzner.networkCidr` require cluster recreation. See the [Update Behavior table](/support-matrix/#update-behavior) for details.
+Applies in-place changes to components (CNI, GitOps engine, cert-manager, etc.). Node scaling changes for Talos are applied in-place. A Talos or Kubernetes version bump rolls the static nodes in place and **recycles autoscaler nodes** so they follow the new baseline (see [Autoscaler Node Upgrades](#autoscaler-node-upgrades)). Changes to `hetzner.location`, `hetzner.controlPlaneServerType`, or `hetzner.networkCidr` require cluster recreation. See the [Update Behavior table](/support-matrix/#update-behavior) for details.
 
 ### Deploy with LoadBalancer
 
@@ -388,4 +402,3 @@ spec:
 **`context deadline exceeded` or connection errors** — Verify `HCLOUD_TOKEN` is valid and has read/write permissions. Check connectivity with `curl -sI https://api.hetzner.cloud/v1/servers -H "Authorization: Bearer $HCLOUD_TOKEN"`.
 
 **Cluster deletion leaves orphaned resources** — If `ksail cluster delete` is interrupted, manually clean up in the [Hetzner Cloud Console](https://console.hetzner.cloud/): delete servers, load balancers, networks, and placement groups associated with your cluster name.
-

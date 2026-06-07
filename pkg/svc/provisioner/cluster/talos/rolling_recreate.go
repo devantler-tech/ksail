@@ -203,24 +203,9 @@ func (p *Provisioner) rollingReplaceSingleNode(
 	}
 
 	// 1. Cordon and drain the outgoing node before removing it.
-	oldNodeName, resolveErr := p.resolveNodeName(ctx, clientset, oldIP)
-
-	switch {
-	case resolveErr == nil:
-		drainErr := p.cordonAndDrain(ctx, clientset, oldNodeName)
-		if drainErr != nil {
-			return drainErr
-		}
-	case errors.Is(resolveErr, ErrNodeNotFoundByIP):
-		// The node is no longer registered in Kubernetes (e.g. a prior partial
-		// run already removed it). Skip drain and proceed with removal.
-		_, _ = fmt.Fprintf(p.logWriter,
-			"    ⚠ %s not registered in Kubernetes; proceeding with removal\n", oldIP)
-	default:
-		// A Kubernetes API failure (not a missing node): the node likely still
-		// exists, so abort rather than deleting it undrained and evicting its
-		// workloads abruptly.
-		return fmt.Errorf("resolve Kubernetes node for %s: %w", oldIP, resolveErr)
+	oldNodeName, drainErr := p.drainResolvedNode(ctx, clientset, oldIP)
+	if drainErr != nil {
+		return drainErr
 	}
 
 	// 2. Control-plane etcd membership cleanup before removal.
@@ -293,6 +278,38 @@ func (p *Provisioner) configureAndWaitReplacement(
 	}
 
 	return nil
+}
+
+// drainResolvedNode cordons and drains the Kubernetes node backing the given Talos
+// node IP, returning its resolved node name. It returns "" with no error when the
+// node is not registered in Kubernetes — e.g. already removed by a prior run or
+// scaled down by the autoscaler — so the caller can still remove the underlying
+// server. A node whose lookup fails for any other reason (a Kubernetes API error,
+// not a missing node) is returned as an error so callers fail closed rather than
+// deleting an undrained node and abruptly evicting its workloads.
+func (p *Provisioner) drainResolvedNode(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	nodeIP string,
+) (string, error) {
+	nodeName, resolveErr := p.resolveNodeName(ctx, clientset, nodeIP)
+
+	switch {
+	case resolveErr == nil:
+		drainErr := p.cordonAndDrain(ctx, clientset, nodeName)
+		if drainErr != nil {
+			return "", drainErr
+		}
+
+		return nodeName, nil
+	case errors.Is(resolveErr, ErrNodeNotFoundByIP):
+		_, _ = fmt.Fprintf(p.logWriter,
+			"    ⚠ %s not registered in Kubernetes; proceeding with removal\n", nodeIP)
+
+		return "", nil
+	default:
+		return "", fmt.Errorf("resolve Kubernetes node for %s: %w", nodeIP, resolveErr)
+	}
 }
 
 // cordonAndDrain cordons then drains the named Kubernetes node.

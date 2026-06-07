@@ -312,13 +312,81 @@ func (p *Provider) DeleteNodes(ctx context.Context, clusterName string) error {
 	return nil
 }
 
-// DeleteAutoscalerNodes deletes all servers created by the Kubernetes Cluster
-// Autoscaler for the given cluster. Autoscaler-managed servers are identified
-// by the hcloud/node-group label matching one of the configured pool names AND
-// by membership in the cluster's private network (<clusterName>-network).
+// ListAutoscalerNodes returns the servers created by the Kubernetes Cluster
+// Autoscaler for the given cluster. Autoscaler-managed servers are identified by
+// the hcloud/node-group label matching one of the configured pool names AND by
+// membership in the cluster's private network (<clusterName>-network).
 //
-// The network guard prevents accidental cross-cluster deletion when pool names
-// are reused across clusters in the same Hetzner project.
+// The network guard prevents cross-cluster bleed when pool names are reused
+// across clusters in the same Hetzner project. Servers matched by more than one
+// pool selector are returned once. If poolNames is empty, it returns no servers
+// without making any API calls.
+func (p *Provider) ListAutoscalerNodes(
+	ctx context.Context,
+	clusterName string,
+	poolNames []string,
+) ([]*hcloud.Server, error) {
+	if len(poolNames) == 0 {
+		return nil, nil
+	}
+
+	if p.client == nil {
+		return nil, provider.ErrProviderUnavailable
+	}
+
+	networkName := clusterName + NetworkSuffix
+
+	// Resolve the cluster network's ID for the membership guard. Servers returned
+	// by a list call carry only the private network's ID (the API omits its name),
+	// so the guard must compare IDs, not names. A missing network means the cluster
+	// is gone — there is nothing to match.
+	network, _, err := p.client.Network.GetByName(ctx, networkName)
+	if err != nil {
+		return nil, fmt.Errorf("getting cluster network %s: %w", networkName, err)
+	}
+
+	if network == nil {
+		return nil, nil
+	}
+
+	seen := make(map[int64]struct{})
+
+	var autoscalerServers []*hcloud.Server
+
+	for _, poolName := range poolNames {
+		labelSelector := fmt.Sprintf("%s=%s", LabelAutoscalerNodeGroup, poolName)
+
+		servers, listErr := p.listServersByLabelSelector(ctx, labelSelector)
+		if listErr != nil {
+			return nil, fmt.Errorf(
+				"failed to list autoscaler servers for pool %s: %w",
+				poolName,
+				listErr,
+			)
+		}
+
+		for _, server := range servers {
+			// Guard: only include servers that belong to this cluster's network to
+			// avoid touching servers from another cluster that happens to use the
+			// same pool name in the same Hetzner project.
+			if !serverInNetwork(server, network.ID) {
+				continue
+			}
+
+			if _, dup := seen[server.ID]; dup {
+				continue
+			}
+
+			seen[server.ID] = struct{}{}
+			autoscalerServers = append(autoscalerServers, server)
+		}
+	}
+
+	return autoscalerServers, nil
+}
+
+// DeleteAutoscalerNodes deletes all servers created by the Kubernetes Cluster
+// Autoscaler for the given cluster (identified as in ListAutoscalerNodes).
 //
 // The method is idempotent: servers that have already been deleted are silently
 // skipped. If poolNames is empty, the method returns nil without making any API
@@ -328,53 +396,34 @@ func (p *Provider) DeleteAutoscalerNodes(
 	clusterName string,
 	poolNames []string,
 ) error {
-	if len(poolNames) == 0 {
-		return nil
+	servers, err := p.ListAutoscalerNodes(ctx, clusterName, poolNames)
+	if err != nil {
+		return err
 	}
 
-	if p.client == nil {
-		return provider.ErrProviderUnavailable
-	}
-
-	networkName := clusterName + NetworkSuffix
-
-	for _, poolName := range poolNames {
-		labelSelector := fmt.Sprintf("%s=%s", LabelAutoscalerNodeGroup, poolName)
-
-		servers, err := p.listServersByLabelSelector(ctx, labelSelector)
-		if err != nil {
-			return fmt.Errorf("failed to list autoscaler servers for pool %s: %w", poolName, err)
-		}
-
-		for _, server := range servers {
-			// Guard: only delete servers that belong to this cluster's network to
-			// avoid accidentally deleting servers from another cluster that
-			// happens to use the same pool name in the same Hetzner project.
-			if !serverInNetwork(server, networkName) {
+	for _, server := range servers {
+		_, _, deleteErr := p.client.Server.DeleteWithResult(ctx, server)
+		if deleteErr != nil {
+			var hcloudErr *hcloud.Error
+			if errors.As(deleteErr, &hcloudErr) && hcloudErr.Code == hcloud.ErrorCodeNotFound {
 				continue
 			}
 
-			_, _, deleteErr := p.client.Server.DeleteWithResult(ctx, server)
-			if deleteErr != nil {
-				var hcloudErr *hcloud.Error
-				if errors.As(deleteErr, &hcloudErr) && hcloudErr.Code == hcloud.ErrorCodeNotFound {
-					continue
-				}
-
-				return fmt.Errorf("failed to delete autoscaler server %s (cluster %s, pool %s): %w",
-					server.Name, clusterName, poolName, deleteErr)
-			}
+			return fmt.Errorf("failed to delete autoscaler server %s (cluster %s): %w",
+				server.Name, clusterName, deleteErr)
 		}
 	}
 
 	return nil
 }
 
-// serverInNetwork reports whether the given server is attached to the named
-// private network.
-func serverInNetwork(server *hcloud.Server, networkName string) bool {
+// serverInNetwork reports whether the given server is attached to the private
+// network with the given ID. Server list responses populate each PrivateNet
+// entry's Network with its ID only (the name is empty), so membership must be
+// tested by ID.
+func serverInNetwork(server *hcloud.Server, networkID int64) bool {
 	for _, privateNet := range server.PrivateNet {
-		if privateNet.Network != nil && privateNet.Network.Name == networkName {
+		if privateNet.Network != nil && privateNet.Network.ID == networkID {
 			return true
 		}
 	}

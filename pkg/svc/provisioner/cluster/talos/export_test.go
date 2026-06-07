@@ -392,6 +392,36 @@ func (p *Provisioner) RestartAutoscalerAfterConfigChangeForTest(
 	return p.restartAutoscalerAfterConfigChange(ctx, kubeclient)
 }
 
+// SortServersByNameForTest exposes sortServersByName for unit testing.
+func SortServersByNameForTest(servers []*hcloud.Server) []*hcloud.Server {
+	return sortServersByName(servers)
+}
+
+// RecycleAutoscalerNodesForTest exposes recycleAutoscalerNodes for unit testing.
+func (p *Provisioner) RecycleAutoscalerNodesForTest(
+	ctx context.Context,
+	clusterName string,
+) error {
+	return p.recycleAutoscalerNodes(ctx, clusterName)
+}
+
+// WaitForAutoscalerRolloutForTest exposes waitForAutoscalerRollout for unit testing.
+func (p *Provisioner) WaitForAutoscalerRolloutForTest(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+) error {
+	return p.waitForAutoscalerRollout(ctx, clientset)
+}
+
+// DrainResolvedNodeForTest exposes drainResolvedNode for unit testing.
+func (p *Provisioner) DrainResolvedNodeForTest(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	nodeIP string,
+) (string, error) {
+	return p.drainResolvedNode(ctx, clientset, nodeIP)
+}
+
 // WithTalosOptsForTest sets talosOpts on the provisioner for unit testing.
 func (p *Provisioner) WithTalosOptsForTest(
 	opts *v1alpha1.OptionsTalos,
