@@ -67,7 +67,8 @@ func TestConfigReportsReadOnly(t *testing.T) {
 	assert.Equal(t, http.StatusOK, recorder.Code)
 	assert.JSONEq(
 		t,
-		`{"readOnly":true,"authEnabled":false,"capabilities":{"clusterUpdate":true,"workloadRead":false}}`,
+		`{"readOnly":true,"authEnabled":false,`+
+			`"capabilities":{"clusterUpdate":true,"workloadRead":false,"workloadWrite":false}}`,
 		recorder.Body.String(),
 	)
 }
@@ -366,7 +367,8 @@ func TestConfigDefaultsWritable(t *testing.T) {
 	assert.Equal(t, http.StatusOK, recorder.Code)
 	assert.JSONEq(
 		t,
-		`{"readOnly":false,"authEnabled":false,"capabilities":{"clusterUpdate":true,"workloadRead":false}}`,
+		`{"readOnly":false,"authEnabled":false,`+
+			`"capabilities":{"clusterUpdate":true,"workloadRead":false,"workloadWrite":false}}`,
 		recorder.Body.String(),
 	)
 }
@@ -386,7 +388,7 @@ func TestConfigReportsServiceCapabilities(t *testing.T) {
 	assert.Contains(
 		t,
 		recorder.Body.String(),
-		`"capabilities":{"clusterUpdate":false,"workloadRead":false}`,
+		`"capabilities":{"clusterUpdate":false,"workloadRead":false,"workloadWrite":false}`,
 	)
 }
 
@@ -403,7 +405,7 @@ func TestConfigDefaultsToFullCapabilities(t *testing.T) {
 	assert.Contains(
 		t,
 		recorder.Body.String(),
-		`"capabilities":{"clusterUpdate":true,"workloadRead":false}`,
+		`"capabilities":{"clusterUpdate":true,"workloadRead":false,"workloadWrite":false}`,
 	)
 }
 

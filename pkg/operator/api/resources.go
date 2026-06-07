@@ -11,6 +11,14 @@ import (
 
 const groupApps = "apps"
 
+// Workload kind names referenced in both the allowlist and the scalable/restartable predicates.
+const (
+	kindDeployment  = "Deployment"
+	kindStatefulSet = "StatefulSet"
+	kindDaemonSet   = "DaemonSet"
+	kindReplicaSet  = "ReplicaSet"
+)
+
 // ResourceQuery selects a set of resources to list from a target cluster.
 type ResourceQuery struct {
 	// Kind is one of the curated browsable kinds (see ResourceKindFor / ResourceKindNames).
@@ -82,10 +90,10 @@ func resourceKindTable() map[string]ResourceKind {
 		"Event":                 namespacedKind("", "events"),
 		"Node":                  clusterScopedKind("", "nodes"),
 		"Namespace":             clusterScopedKind("", "namespaces"),
-		"Deployment":            namespacedKind(groupApps, "deployments"),
-		"StatefulSet":           namespacedKind(groupApps, "statefulsets"),
-		"DaemonSet":             namespacedKind(groupApps, "daemonsets"),
-		"ReplicaSet":            namespacedKind(groupApps, "replicasets"),
+		kindDeployment:          namespacedKind(groupApps, "deployments"),
+		kindStatefulSet:         namespacedKind(groupApps, "statefulsets"),
+		kindDaemonSet:           namespacedKind(groupApps, "daemonsets"),
+		kindReplicaSet:          namespacedKind(groupApps, "replicasets"),
 		"Job":                   namespacedKind("batch", "jobs"),
 		"CronJob":               namespacedKind("batch", "cronjobs"),
 		"Ingress":               namespacedKind("networking.k8s.io", "ingresses"),
@@ -115,4 +123,50 @@ func ResourceKindNames() []string {
 	sort.Strings(names)
 
 	return names
+}
+
+// ScaleRequest is the JSON body of a scale request.
+type ScaleRequest struct {
+	Replicas int32 `json:"replicas"`
+}
+
+// ResourceWriter is an optional interface a ClusterService may implement to expose a SMALL, safe set
+// of write actions on browsable resources: scale, rollout restart, and delete. When the serving
+// ClusterService implements it, the server registers the mutating resource routes (still subject to
+// the read-only guard) and advertises capabilities.workloadWrite=true; otherwise the SPA hides the
+// action affordances. Apply/exec/secrets are separate, later features — not part of this surface.
+type ResourceWriter interface {
+	// ScaleResource sets the replica count of a scalable workload (see ResourceKindScalable).
+	ScaleResource(
+		ctx context.Context,
+		namespace, name string,
+		ref ResourceRef,
+		replicas int32,
+	) error
+	// RestartResource triggers a rolling restart of a workload (see ResourceKindRestartable).
+	RestartResource(ctx context.Context, namespace, name string, ref ResourceRef) error
+	// DeleteResource deletes any allowlisted resource.
+	DeleteResource(ctx context.Context, namespace, name string, ref ResourceRef) error
+}
+
+// ResourceKindScalable reports whether a kind supports `scale` (and is in the allowlist). Used to
+// validate requests and to drive the SPA's scale affordance.
+func ResourceKindScalable(kind string) bool {
+	switch kind {
+	case kindDeployment, kindStatefulSet, kindReplicaSet:
+		return true
+	default:
+		return false
+	}
+}
+
+// ResourceKindRestartable reports whether a kind supports rollout restart (a pod-template annotation
+// bump). Delete applies to any allowlisted kind, so it has no dedicated predicate.
+func ResourceKindRestartable(kind string) bool {
+	switch kind {
+	case kindDeployment, kindStatefulSet, kindDaemonSet:
+		return true
+	default:
+		return false
+	}
 }

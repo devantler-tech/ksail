@@ -3,18 +3,23 @@ package clusterapi
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	"github.com/devantler-tech/ksail/v7/pkg/operator/api"
 	clusterdetector "github.com/devantler-tech/ksail/v7/pkg/svc/detector/cluster"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/tools/clientcmd"
 )
 
-// Ensure the local backend exposes the read-only resource browser.
-var _ api.ResourceService = (*Service)(nil)
+// Ensure the local backend exposes the read-only resource browser and the safe write actions.
+var (
+	_ api.ResourceService = (*Service)(nil)
+	_ api.ResourceWriter  = (*Service)(nil)
+)
 
 // dynamicClientFunc builds a dynamic client for the named local cluster. Injectable so tests can
 // substitute a fake client instead of resolving a real kubeconfig context.
@@ -114,4 +119,97 @@ func (s *Service) GetResource(
 	}
 
 	return obj, nil
+}
+
+// ScaleResource sets the replica count of a scalable workload via a merge patch on spec.replicas.
+func (s *Service) ScaleResource(
+	ctx context.Context,
+	_, name string,
+	ref api.ResourceRef,
+	replicas int32,
+) error {
+	if !api.ResourceKindScalable(ref.Kind) {
+		return fmt.Errorf("%w: %q is not scalable", api.ErrInvalid, ref.Kind)
+	}
+
+	if replicas < 0 {
+		return fmt.Errorf("%w: replicas must be >= 0", api.ErrInvalid)
+	}
+
+	kind, err := api.ResourceKindFor(ref.Kind)
+	if err != nil {
+		return fmt.Errorf("resolve resource kind: %w", err)
+	}
+
+	client, err := s.newDynamicClient(ctx, name)
+	if err != nil {
+		return err
+	}
+
+	patch := fmt.Appendf(nil, `{"spec":{"replicas":%d}}`, replicas)
+
+	_, err = client.Resource(kind.GVR).Namespace(ref.Namespace).
+		Patch(ctx, ref.Name, types.MergePatchType, patch, metav1.PatchOptions{})
+	if err != nil {
+		return fmt.Errorf("scale %s %q: %w", ref.Kind, ref.Name, err)
+	}
+
+	return nil
+}
+
+// RestartResource triggers a rolling restart by stamping the pod template's restartedAt annotation —
+// the same mechanism `kubectl rollout restart` uses.
+func (s *Service) RestartResource(ctx context.Context, _, name string, ref api.ResourceRef) error {
+	if !api.ResourceKindRestartable(ref.Kind) {
+		return fmt.Errorf("%w: %q does not support rollout restart", api.ErrInvalid, ref.Kind)
+	}
+
+	kind, err := api.ResourceKindFor(ref.Kind)
+	if err != nil {
+		return fmt.Errorf("resolve resource kind: %w", err)
+	}
+
+	client, err := s.newDynamicClient(ctx, name)
+	if err != nil {
+		return err
+	}
+
+	patch := fmt.Appendf(
+		nil,
+		`{"spec":{"template":{"metadata":{"annotations":{"kubectl.kubernetes.io/restartedAt":%q}}}}}`,
+		time.Now().Format(time.RFC3339),
+	)
+
+	_, err = client.Resource(kind.GVR).Namespace(ref.Namespace).
+		Patch(ctx, ref.Name, types.MergePatchType, patch, metav1.PatchOptions{})
+	if err != nil {
+		return fmt.Errorf("restart %s %q: %w", ref.Kind, ref.Name, err)
+	}
+
+	return nil
+}
+
+// DeleteResource deletes any allowlisted resource (namespaced or cluster-scoped).
+func (s *Service) DeleteResource(ctx context.Context, _, name string, ref api.ResourceRef) error {
+	kind, err := api.ResourceKindFor(ref.Kind)
+	if err != nil {
+		return fmt.Errorf("resolve resource kind: %w", err)
+	}
+
+	client, err := s.newDynamicClient(ctx, name)
+	if err != nil {
+		return err
+	}
+
+	var deleter dynamic.ResourceInterface = client.Resource(kind.GVR)
+	if kind.Namespaced {
+		deleter = client.Resource(kind.GVR).Namespace(ref.Namespace)
+	}
+
+	err = deleter.Delete(ctx, ref.Name, metav1.DeleteOptions{})
+	if err != nil {
+		return fmt.Errorf("delete %s %q: %w", ref.Kind, ref.Name, err)
+	}
+
+	return nil
 }

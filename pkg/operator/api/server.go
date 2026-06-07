@@ -214,6 +214,24 @@ func (s *Server) Handler() http.Handler {
 		)
 	}
 
+	// Safe write actions (scale, rollout restart, delete) on browsable resources, registered only when
+	// the backend implements ResourceWriter. These are mutating verbs, so the read-only guard rejects
+	// them with 403 when the UI is read-only.
+	if _, ok := s.Service.(ResourceWriter); ok {
+		mux.HandleFunc(
+			"PUT /api/v1/clusters/{namespace}/{name}/resources/{kind}/{rname}/scale",
+			s.handleScaleResource,
+		)
+		mux.HandleFunc(
+			"POST /api/v1/clusters/{namespace}/{name}/resources/{kind}/{rname}/restart",
+			s.handleRestartResource,
+		)
+		mux.HandleFunc(
+			"DELETE /api/v1/clusters/{namespace}/{name}/resources/{kind}/{rname}",
+			s.handleDeleteResource,
+		)
+	}
+
 	// Credential settings are local-UI-only: registered only when a SettingsService is provided, so
 	// the operator's API surface is unchanged.
 	if s.Settings != nil {
@@ -360,6 +378,7 @@ func (s *Server) handleConfig(writer http.ResponseWriter, request *http.Request)
 	// workloadRead is true exactly when the resource endpoints are registered (the backend implements
 	// ResourceService), so the SPA's gate can never diverge from whether the routes exist.
 	_, capabilities.WorkloadRead = s.Service.(ResourceService)
+	_, capabilities.WorkloadWrite = s.Service.(ResourceWriter)
 
 	response := configResponse{
 		ReadOnly:        s.ReadOnly,
@@ -528,6 +547,102 @@ func (s *Server) handleGetResource(writer http.ResponseWriter, request *http.Req
 	}
 
 	writeJSON(writer, http.StatusOK, obj)
+}
+
+// resourceRefFrom builds a ResourceRef from the request's path values and namespace query param.
+func resourceRefFrom(request *http.Request) ResourceRef {
+	return ResourceRef{
+		Kind:      request.PathValue("kind"),
+		Namespace: request.URL.Query().Get("namespace"),
+		Name:      request.PathValue("rname"),
+	}
+}
+
+func (s *Server) resourceWriter() (ResourceWriter, bool) {
+	svc, ok := s.Service.(ResourceWriter)
+
+	return svc, ok
+}
+
+func (s *Server) handleScaleResource(writer http.ResponseWriter, request *http.Request) {
+	svc, ok := s.resourceWriter()
+	if !ok {
+		writeClientError(writer, ErrNotSupported)
+
+		return
+	}
+
+	var scale ScaleRequest
+
+	limited := http.MaxBytesReader(writer, request.Body, maxRequestBodyBytes)
+
+	err := json.NewDecoder(limited).Decode(&scale)
+	if err != nil {
+		writeDecodeError(writer, fmt.Errorf("decode scale request: %w", err))
+
+		return
+	}
+
+	err = svc.ScaleResource(
+		request.Context(),
+		request.PathValue("namespace"),
+		request.PathValue("name"),
+		resourceRefFrom(request),
+		scale.Replicas,
+	)
+	if err != nil {
+		writeClientError(writer, err)
+
+		return
+	}
+
+	writer.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleRestartResource(writer http.ResponseWriter, request *http.Request) {
+	svc, ok := s.resourceWriter()
+	if !ok {
+		writeClientError(writer, ErrNotSupported)
+
+		return
+	}
+
+	err := svc.RestartResource(
+		request.Context(),
+		request.PathValue("namespace"),
+		request.PathValue("name"),
+		resourceRefFrom(request),
+	)
+	if err != nil {
+		writeClientError(writer, err)
+
+		return
+	}
+
+	writer.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleDeleteResource(writer http.ResponseWriter, request *http.Request) {
+	svc, ok := s.resourceWriter()
+	if !ok {
+		writeClientError(writer, ErrNotSupported)
+
+		return
+	}
+
+	err := svc.DeleteResource(
+		request.Context(),
+		request.PathValue("namespace"),
+		request.PathValue("name"),
+		resourceRefFrom(request),
+	)
+	if err != nil {
+		writeClientError(writer, err)
+
+		return
+	}
+
+	writer.WriteHeader(http.StatusNoContent)
 }
 
 func isMutating(method string) bool {
