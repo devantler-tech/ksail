@@ -12,7 +12,6 @@ import {
   updateCluster,
   type Cluster,
   type ClusterMeta,
-  type ClusterSpec,
   type ProviderInfo,
   type User,
 } from "./api.ts";
@@ -24,6 +23,7 @@ import { SecretsView } from "./components/SecretsView.tsx";
 import { ClusterDetail } from "./components/ClusterDetail.tsx";
 import {
   ClusterFormDialog,
+  specFromValues,
   type ClusterFormValues,
   type FormMode,
 } from "./components/ClusterFormDialog.tsx";
@@ -52,30 +52,6 @@ function errorMessage(err: unknown): string {
   }
 
   return err instanceof Error ? err.message : String(err);
-}
-
-// specFromValues maps the form fields to a ClusterSpec. Node counts are parsed to numbers; the
-// component enums are sent verbatim (default values serialize away server-side via omitzero).
-function specFromValues(values: ClusterFormValues): ClusterSpec {
-  const controlPlanes = Number.parseInt(values.controlPlanes, 10);
-  const workers = Number.parseInt(values.workers, 10);
-
-  // The form holds plain strings sourced from /api/v1/meta (the server's valid enum values); narrow
-  // them to the generated enum unions on the way out.
-  return {
-    distribution: values.distribution as ClusterSpec["distribution"],
-    provider: values.provider as ClusterSpec["provider"],
-    controlPlanes: Number.isNaN(controlPlanes) ? undefined : controlPlanes,
-    workers: Number.isNaN(workers) ? undefined : workers,
-    cni: values.cni as ClusterSpec["cni"],
-    csi: values.csi as ClusterSpec["csi"],
-    cdi: values.cdi as ClusterSpec["cdi"],
-    metricsServer: values.metricsServer as ClusterSpec["metricsServer"],
-    loadBalancer: values.loadBalancer as ClusterSpec["loadBalancer"],
-    certManager: values.certManager as ClusterSpec["certManager"],
-    policyEngine: values.policyEngine as ClusterSpec["policyEngine"],
-    gitOpsEngine: values.gitOpsEngine as ClusterSpec["gitOpsEngine"],
-  };
 }
 
 export function App() {
@@ -317,6 +293,23 @@ export function App() {
     [formMode, formInitial, refresh, toast],
   );
 
+  // handleSubmitRaw creates a cluster from a YAML-authored Cluster (the create dialog's YAML mode),
+  // preserving every field the YAML carries (lossless full-spec) rather than projecting through the
+  // form fields.
+  const handleSubmitRaw = useCallback(
+    async (cluster: Cluster) => {
+      try {
+        await createCluster(cluster);
+        toast.success(`Cluster "${cluster.metadata.name}" created`);
+        await refresh(true);
+      } catch (err) {
+        toast.error(errorMessage(err));
+        throw err;
+      }
+    },
+    [refresh, toast],
+  );
+
   const handleDelete = useCallback(async () => {
     if (!deleteTarget) {
       return;
@@ -361,114 +354,111 @@ export function App() {
 
   return (
     <MetaContext.Provider value={meta}>
-    <AppShell
-      theme={theme}
-      onToggleTheme={toggle}
-      user={user}
-      onLogout={() => void logout().finally(() => setNeedsLogin(true))}
-      readOnly={readOnly}
-      view={view}
-      onNavigate={setView}
-      settingsEnabled={settingsEnabled}
-      workloadEnabled={canBrowse}
-      secretsEnabled={canCipher}
-      headerActions={headerActions}
-    >
-      {view === "settings" ? (
-        <SettingsPage onSaved={() => void reloadConfig()} />
-      ) : view === "secrets" ? (
-        <SecretsView />
-      ) : view === "resources" ? (
-        <ResourcesView
-          clusters={clusters}
-          canWrite={!readOnly && canManage}
-          canApply={!readOnly && canApply}
-          canExec={!readOnly && canExecCap}
-        />
-      ) : (
-      <div className="mx-auto max-w-6xl space-y-4">
-        {error && clusters.length > 0 ? (
-          <ErrorBanner message={error} onRetry={() => void refresh()} />
-        ) : null}
-
-        {loading ? (
-          <TableSkeleton />
-        ) : error && clusters.length === 0 ? (
-          <ErrorBanner message={error} onRetry={() => void refresh()} />
-        ) : clusters.length === 0 ? (
-          <EmptyState
-            title="No clusters yet"
-            description={
-              readOnly
-                ? "Clusters are managed declaratively from Git (read-only mode)."
-                : "Create your first cluster to get started."
-            }
-            action={
-              !readOnly ? (
-                <Button onClick={openCreate}>
-                  <Plus className="size-4" aria-hidden />
-                  New cluster
-                </Button>
-              ) : undefined
-            }
+      <AppShell
+        theme={theme}
+        onToggleTheme={toggle}
+        user={user}
+        onLogout={() => void logout().finally(() => setNeedsLogin(true))}
+        readOnly={readOnly}
+        view={view}
+        onNavigate={setView}
+        settingsEnabled={settingsEnabled}
+        workloadEnabled={canBrowse}
+        secretsEnabled={canCipher}
+        headerActions={headerActions}
+      >
+        {view === "settings" ? (
+          <SettingsPage onSaved={() => void reloadConfig()} />
+        ) : view === "secrets" ? (
+          <SecretsView />
+        ) : view === "resources" ? (
+          <ResourcesView
+            clusters={clusters}
+            canWrite={!readOnly && canManage}
+            canApply={!readOnly && canApply}
+            canExec={!readOnly && canExecCap}
           />
         ) : (
-          <ClustersTable
-            clusters={clusters}
-            readOnly={readOnly}
-            canEdit={canEdit}
-            onSelect={(cluster) => setSelectedKey(clusterKey(cluster))}
-            onEdit={openEdit}
-            onDelete={(cluster) => setDeleteTarget(cluster)}
-          />
+          <div className="mx-auto max-w-6xl space-y-4">
+            {error && clusters.length > 0 ? <ErrorBanner message={error} onRetry={() => void refresh()} /> : null}
+
+            {loading ? (
+              <TableSkeleton />
+            ) : error && clusters.length === 0 ? (
+              <ErrorBanner message={error} onRetry={() => void refresh()} />
+            ) : clusters.length === 0 ? (
+              <EmptyState
+                title="No clusters yet"
+                description={
+                  readOnly
+                    ? "Clusters are managed declaratively from Git (read-only mode)."
+                    : "Create your first cluster to get started."
+                }
+                action={
+                  !readOnly ? (
+                    <Button onClick={openCreate}>
+                      <Plus className="size-4" aria-hidden />
+                      New cluster
+                    </Button>
+                  ) : undefined
+                }
+              />
+            ) : (
+              <ClustersTable
+                clusters={clusters}
+                readOnly={readOnly}
+                canEdit={canEdit}
+                onSelect={(cluster) => setSelectedKey(clusterKey(cluster))}
+                onEdit={openEdit}
+                onDelete={(cluster) => setDeleteTarget(cluster)}
+              />
+            )}
+          </div>
         )}
-      </div>
-      )}
 
-      {meta ? (
-        <ClusterDetail
-          cluster={selected}
-          open={selected !== null}
-          canEdit={canEdit}
-          canDownloadKubeconfig={canKubeconfig}
-          onClose={() => setSelectedKey(null)}
-          onEdit={openEdit}
+        {meta ? (
+          <ClusterDetail
+            cluster={selected}
+            open={selected !== null}
+            canEdit={canEdit}
+            canDownloadKubeconfig={canKubeconfig}
+            onClose={() => setSelectedKey(null)}
+            onEdit={openEdit}
+          />
+        ) : null}
+
+        {meta ? (
+          <ClusterFormDialog
+            open={formOpen}
+            mode={formMode}
+            initial={formInitial}
+            distributions={distributions}
+            providerStatus={providerStatus}
+            onSubmit={handleSubmit}
+            onSubmitRaw={handleSubmitRaw}
+            onClose={() => setFormOpen(false)}
+          />
+        ) : null}
+
+        <ConfirmDialog
+          open={deleteTarget !== null}
+          title="Delete cluster"
+          description={
+            deleteTarget ? (
+              <>
+                This permanently deletes{" "}
+                <span className="font-medium text-slate-700 dark:text-slate-200">{deleteTarget.metadata.name}</span> and
+                its underlying resources. This action cannot be undone.
+              </>
+            ) : (
+              ""
+            )
+          }
+          confirmLabel="Delete"
+          onConfirm={handleDelete}
+          onClose={() => setDeleteTarget(null)}
         />
-      ) : null}
-
-      {meta ? (
-        <ClusterFormDialog
-          open={formOpen}
-          mode={formMode}
-          initial={formInitial}
-          distributions={distributions}
-          providerStatus={providerStatus}
-          onSubmit={handleSubmit}
-          onClose={() => setFormOpen(false)}
-        />
-      ) : null}
-
-      <ConfirmDialog
-        open={deleteTarget !== null}
-        title="Delete cluster"
-        description={
-          deleteTarget ? (
-            <>
-              This permanently deletes{" "}
-              <span className="font-medium text-slate-700 dark:text-slate-200">
-                {deleteTarget.metadata.name}
-              </span>{" "}
-              and its underlying resources. This action cannot be undone.
-            </>
-          ) : (
-            ""
-          )
-        }
-        confirmLabel="Delete"
-        onConfirm={handleDelete}
-        onClose={() => setDeleteTarget(null)}
-      />
-    </AppShell>
+      </AppShell>
     </MetaContext.Provider>
   );
 }
