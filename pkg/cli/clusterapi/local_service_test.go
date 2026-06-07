@@ -16,6 +16,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const (
@@ -335,6 +336,80 @@ func TestDeleteKeepsClusterFailedWhenDeletionErrors(t *testing.T) {
 
 		return ok && phase == v1alpha1.ClusterPhaseFailed
 	}, eventuallyTimeout, eventuallyTick)
+}
+
+// conditionsOf returns the status conditions of the named cluster in a list, or nil if absent.
+func conditionsOf(list *v1alpha1.ClusterList, name string) []metav1.Condition {
+	for i := range list.Items {
+		if list.Items[i].Name == name {
+			return list.Items[i].Status.Conditions
+		}
+	}
+
+	return nil
+}
+
+func TestCreateFailureSurfacesReasonInCondition(t *testing.T) {
+	t.Parallel()
+
+	provisioner := &fakeProvisioner{createErr: errSimulatedCreateFailure}
+	service := newTestService(map[v1alpha1.Distribution]*fakeProvisioner{
+		v1alpha1.DistributionVCluster: provisioner,
+	})
+
+	_, err := service.Create(
+		context.Background(),
+		clusterFor("boom", v1alpha1.DistributionVCluster),
+	)
+	require.NoError(t, err)
+
+	var conditions []metav1.Condition
+
+	// A failed create must surface its reason on the cluster's conditions so the UI can show why,
+	// rather than a bare "Failed" with no detail.
+	require.Eventually(t, func() bool {
+		list, listErr := service.List(context.Background())
+		require.NoError(t, listErr)
+
+		phase, ok := phaseOf(list, "boom")
+		if !ok || phase != v1alpha1.ClusterPhaseFailed {
+			return false
+		}
+
+		conditions = conditionsOf(list, "boom")
+
+		return len(conditions) > 0
+	}, eventuallyTimeout, eventuallyTick)
+
+	require.Len(t, conditions, 1)
+	assert.Equal(t, "Error", conditions[0].Reason)
+	assert.Contains(t, conditions[0].Message, errSimulatedCreateFailure.Error())
+}
+
+func TestProvisioningSurfacesProgressCondition(t *testing.T) {
+	t.Parallel()
+
+	gate := make(chan struct{})
+	provisioner := &fakeProvisioner{createGate: gate}
+	service := newTestService(map[v1alpha1.Distribution]*fakeProvisioner{
+		v1alpha1.DistributionVCluster: provisioner,
+	})
+
+	_, err := service.Create(
+		context.Background(),
+		clusterFor("wip", v1alpha1.DistributionVCluster),
+	)
+	require.NoError(t, err)
+
+	// While the create goroutine is gated, the cluster carries a Provisioning condition.
+	list, err := service.List(context.Background())
+	require.NoError(t, err)
+
+	conditions := conditionsOf(list, "wip")
+	require.Len(t, conditions, 1)
+	assert.Equal(t, "Provisioning", conditions[0].Reason)
+
+	close(gate)
 }
 
 func TestCreateValidatesInput(t *testing.T) {
