@@ -534,11 +534,7 @@ func (s *Server) handleGetResource(writer http.ResponseWriter, request *http.Req
 		request.Context(),
 		request.PathValue("namespace"),
 		request.PathValue("name"),
-		ResourceRef{
-			Kind:      request.PathValue("kind"),
-			Namespace: request.URL.Query().Get("namespace"),
-			Name:      request.PathValue("rname"),
-		},
+		resourceRefFrom(request),
 	)
 	if err != nil {
 		writeClientError(writer, err)

@@ -2,6 +2,7 @@ import { RotateCw } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
   ApiError,
+  CLUSTER_SCOPED_KINDS,
   deleteResource,
   listResources,
   RESOURCE_KINDS,
@@ -132,11 +133,7 @@ export function ResourcesView({
       return undefined;
     }
 
-    // selectedClusterKey is `${namespace}/${name}`; both segments are DNS labels (no "/"), so the
-    // first slash separates them.
-    const slash = selectedClusterKey.indexOf("/");
-    const clusterNamespace = selectedClusterKey.slice(0, slash);
-    const clusterName = selectedClusterKey.slice(slash + 1);
+    const [clusterNamespace, clusterName] = splitClusterKey(selectedClusterKey);
 
     let cancelled = false;
     setLoading(true);
@@ -290,6 +287,12 @@ export function ResourcesView({
                     className="flex items-center gap-1.5"
                     onSubmit={(event) => {
                       event.preventDefault();
+                      const replicas = scaleValue.trim() === "" ? Number.NaN : Number(scaleValue);
+                      if (!Number.isInteger(replicas) || replicas < 0) {
+                        toast.error("Enter a non-negative whole number of replicas");
+
+                        return;
+                      }
                       const [namespace, clusterName] = splitClusterKey(selectedClusterKey);
                       runAction("Scaled", () =>
                         scaleResource(
@@ -297,7 +300,7 @@ export function ResourcesView({
                           clusterName,
                           kind,
                           selected.metadata?.name ?? "",
-                          Number(scaleValue),
+                          replicas,
                           selected.metadata?.namespace,
                         ),
                       );
@@ -337,9 +340,16 @@ export function ResourcesView({
                     Restart
                   </Button>
                 ) : null}
-                <Button size="sm" variant="danger" onClick={() => setDeleteOpen(true)}>
-                  Delete
-                </Button>
+                {CLUSTER_SCOPED_KINDS.includes(kind) ? null : (
+                  <Button
+                    size="sm"
+                    variant="danger"
+                    disabled={actionBusy}
+                    onClick={() => setDeleteOpen(true)}
+                  >
+                    Delete
+                  </Button>
+                )}
               </div>
             ) : null}
             <pre className="overflow-x-auto rounded-lg bg-slate-50 p-3 text-xs leading-relaxed text-slate-800 dark:bg-slate-800/50 dark:text-slate-200">

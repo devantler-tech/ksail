@@ -197,6 +197,34 @@ func TestDeleteResource(t *testing.T) {
 	assert.Empty(t, list.Items)
 }
 
+func TestDeleteRejectsClusterScopedKind(t *testing.T) {
+	t.Parallel()
+
+	service := newTestService(nil)
+	injectFakeDynamic(service)
+
+	// Node is cluster-scoped: deletion is intentionally not allowed from the workload browser.
+	err := service.DeleteResource(
+		context.Background(), "default", "c1",
+		api.ResourceRef{Kind: "Node", Name: "node-1"},
+	)
+	require.ErrorIs(t, err, api.ErrInvalid)
+}
+
+func TestScaleRejectsMissingNamespace(t *testing.T) {
+	t.Parallel()
+
+	service := newTestService(nil)
+	injectFakeDynamic(service)
+
+	// A namespaced kind addressed without a namespace is rejected as invalid (422), not an opaque 500.
+	err := service.ScaleResource(
+		context.Background(), "default", "c1",
+		api.ResourceRef{Kind: kindDeployment, Name: nameWeb}, 2,
+	)
+	require.ErrorIs(t, err, api.ErrInvalid)
+}
+
 const kindProdKubeconfig = `apiVersion: v1
 kind: Config
 current-context: kind-prod

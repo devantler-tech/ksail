@@ -334,6 +334,9 @@ export function listResources(
 // ResourceKindRestartable); the backend rejects unsupported kinds regardless.
 export const SCALABLE_KINDS = ["Deployment", "StatefulSet", "ReplicaSet"];
 export const RESTARTABLE_KINDS = ["Deployment", "StatefulSet", "DaemonSet"];
+// CLUSTER_SCOPED_KINDS are not deletable from the workload browser — the backend rejects a delete of
+// these high-blast-radius cluster-scoped kinds, so the SPA hides the Delete affordance for them.
+export const CLUSTER_SCOPED_KINDS = ["Node", "Namespace"];
 
 function resourcePath(
   namespace: string,

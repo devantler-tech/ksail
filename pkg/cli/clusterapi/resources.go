@@ -62,6 +62,36 @@ func contextForCluster(kubeconfigPath, clusterName string) (string, error) {
 	return "", fmt.Errorf("%w: no kubeconfig context for cluster %q", api.ErrNotFound, clusterName)
 }
 
+// resolveKindAndClient resolves an allowlisted kind to its GVR mapping and builds a dynamic client
+// for the named cluster — the shared preamble of every resource read/write method.
+func (s *Service) resolveKindAndClient(
+	ctx context.Context,
+	clusterName, kindName string,
+) (api.ResourceKind, dynamic.Interface, error) {
+	kind, err := api.ResourceKindFor(kindName)
+	if err != nil {
+		return api.ResourceKind{}, nil, fmt.Errorf("resolve resource kind: %w", err)
+	}
+
+	client, err := s.newDynamicClient(ctx, clusterName)
+	if err != nil {
+		return api.ResourceKind{}, nil, err
+	}
+
+	return kind, client, nil
+}
+
+// requireNamespace returns an ErrInvalid-wrapped error (→ 422) when a namespaced kind is addressed
+// without a namespace, so single-resource write actions surface a clear message instead of an opaque
+// API-server 500 from an empty-namespace request.
+func requireNamespace(kind api.ResourceKind, ref api.ResourceRef) error {
+	if kind.Namespaced && ref.Namespace == "" {
+		return fmt.Errorf("%w: namespace is required for %q", api.ErrInvalid, ref.Kind)
+	}
+
+	return nil
+}
+
 // ListResources lists resources of the requested (allowlisted) kind from the named cluster. A
 // namespaced kind with an empty query namespace lists across all namespaces.
 func (s *Service) ListResources(
@@ -69,12 +99,7 @@ func (s *Service) ListResources(
 	_, name string,
 	query api.ResourceQuery,
 ) (*unstructured.UnstructuredList, error) {
-	kind, err := api.ResourceKindFor(query.Kind)
-	if err != nil {
-		return nil, fmt.Errorf("resolve resource kind: %w", err)
-	}
-
-	client, err := s.newDynamicClient(ctx, name)
+	kind, client, err := s.resolveKindAndClient(ctx, name, query.Kind)
 	if err != nil {
 		return nil, err
 	}
@@ -98,12 +123,7 @@ func (s *Service) GetResource(
 	_, name string,
 	ref api.ResourceRef,
 ) (*unstructured.Unstructured, error) {
-	kind, err := api.ResourceKindFor(ref.Kind)
-	if err != nil {
-		return nil, fmt.Errorf("resolve resource kind: %w", err)
-	}
-
-	client, err := s.newDynamicClient(ctx, name)
+	kind, client, err := s.resolveKindAndClient(ctx, name, ref.Kind)
 	if err != nil {
 		return nil, err
 	}
@@ -136,12 +156,12 @@ func (s *Service) ScaleResource(
 		return fmt.Errorf("%w: replicas must be >= 0", api.ErrInvalid)
 	}
 
-	kind, err := api.ResourceKindFor(ref.Kind)
+	kind, client, err := s.resolveKindAndClient(ctx, name, ref.Kind)
 	if err != nil {
-		return fmt.Errorf("resolve resource kind: %w", err)
+		return err
 	}
 
-	client, err := s.newDynamicClient(ctx, name)
+	err = requireNamespace(kind, ref)
 	if err != nil {
 		return err
 	}
@@ -158,18 +178,19 @@ func (s *Service) ScaleResource(
 }
 
 // RestartResource triggers a rolling restart by stamping the pod template's restartedAt annotation —
-// the same mechanism `kubectl rollout restart` uses.
+// the same mechanism `kubectl rollout restart` uses. The stamp is nanosecond-resolution so two
+// restarts issued within the same second still change the value and reliably roll the workload.
 func (s *Service) RestartResource(ctx context.Context, _, name string, ref api.ResourceRef) error {
 	if !api.ResourceKindRestartable(ref.Kind) {
 		return fmt.Errorf("%w: %q does not support rollout restart", api.ErrInvalid, ref.Kind)
 	}
 
-	kind, err := api.ResourceKindFor(ref.Kind)
+	kind, client, err := s.resolveKindAndClient(ctx, name, ref.Kind)
 	if err != nil {
-		return fmt.Errorf("resolve resource kind: %w", err)
+		return err
 	}
 
-	client, err := s.newDynamicClient(ctx, name)
+	err = requireNamespace(kind, ref)
 	if err != nil {
 		return err
 	}
@@ -177,7 +198,7 @@ func (s *Service) RestartResource(ctx context.Context, _, name string, ref api.R
 	patch := fmt.Appendf(
 		nil,
 		`{"spec":{"template":{"metadata":{"annotations":{"kubectl.kubernetes.io/restartedAt":%q}}}}}`,
-		time.Now().Format(time.RFC3339),
+		time.Now().Format(time.RFC3339Nano),
 	)
 
 	_, err = client.Resource(kind.GVR).Namespace(ref.Namespace).
@@ -189,24 +210,30 @@ func (s *Service) RestartResource(ctx context.Context, _, name string, ref api.R
 	return nil
 }
 
-// DeleteResource deletes any allowlisted resource (namespaced or cluster-scoped).
+// DeleteResource deletes a namespaced allowlisted resource. Cluster-scoped kinds (Node, Namespace)
+// are intentionally NOT deletable from the workload browser — those are high-blast-radius operations
+// (a Namespace delete cascades to everything in it) better left to the CLI.
 func (s *Service) DeleteResource(ctx context.Context, _, name string, ref api.ResourceRef) error {
-	kind, err := api.ResourceKindFor(ref.Kind)
-	if err != nil {
-		return fmt.Errorf("resolve resource kind: %w", err)
-	}
-
-	client, err := s.newDynamicClient(ctx, name)
+	kind, client, err := s.resolveKindAndClient(ctx, name, ref.Kind)
 	if err != nil {
 		return err
 	}
 
-	var deleter dynamic.ResourceInterface = client.Resource(kind.GVR)
-	if kind.Namespaced {
-		deleter = client.Resource(kind.GVR).Namespace(ref.Namespace)
+	if !kind.Namespaced {
+		return fmt.Errorf(
+			"%w: cluster-scoped %q cannot be deleted from the workload browser",
+			api.ErrInvalid,
+			ref.Kind,
+		)
 	}
 
-	err = deleter.Delete(ctx, ref.Name, metav1.DeleteOptions{})
+	err = requireNamespace(kind, ref)
+	if err != nil {
+		return err
+	}
+
+	err = client.Resource(kind.GVR).Namespace(ref.Namespace).
+		Delete(ctx, ref.Name, metav1.DeleteOptions{})
 	if err != nil {
 		return fmt.Errorf("delete %s %q: %w", ref.Kind, ref.Name, err)
 	}
