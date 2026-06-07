@@ -109,13 +109,15 @@ function SectionTitle({ children }: { children: ReactNode }) {
 export function ClusterDetail({
   cluster,
   open,
-  readOnly,
+  canEdit,
   onClose,
   onEdit,
 }: {
   cluster: Cluster | null;
   open: boolean;
-  readOnly: boolean;
+  // canEdit gates the Edit button: it requires both a writable UI and a backend that supports
+  // in-place updates (false on the local `ksail ui`/desktop backend).
+  canEdit: boolean;
   onClose: () => void;
   onEdit: (cluster: Cluster) => void;
 }) {
@@ -141,7 +143,7 @@ export function ClusterDetail({
         <div>
           <div className="mb-2 flex items-center justify-between gap-2">
             <StatusBadge phase={status?.phase} />
-            {!readOnly ? (
+            {canEdit ? (
               <Button variant="secondary" size="sm" onClick={() => onEdit(cluster)}>
                 <Pencil className="size-3.5" aria-hidden />
                 Edit

@@ -104,12 +104,16 @@ function SortHeader({
 export function ClustersTable({
   clusters,
   readOnly,
+  canEdit,
   onSelect,
   onEdit,
   onDelete,
 }: {
   clusters: Cluster[];
   readOnly: boolean;
+  // canEdit gates the per-row edit button independently of delete: a backend may allow delete but
+  // not in-place update (the local `ksail ui`/desktop backend), so edit is hidden while delete stays.
+  canEdit: boolean;
   onSelect: (cluster: Cluster) => void;
   onEdit: (cluster: Cluster) => void;
   onDelete: (cluster: Cluster) => void;
@@ -207,31 +211,31 @@ export function ClustersTable({
                 </td>
                 <td className={cx(td, "text-right")}>
                   <div className="flex items-center justify-end gap-1">
+                    {canEdit ? (
+                      <button
+                        type="button"
+                        aria-label={`Edit ${cluster.metadata.name}`}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onEdit(cluster);
+                        }}
+                        className="rounded-md p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-700 dark:hover:text-slate-200"
+                      >
+                        <Pencil className="size-4" />
+                      </button>
+                    ) : null}
                     {!readOnly ? (
-                      <>
-                        <button
-                          type="button"
-                          aria-label={`Edit ${cluster.metadata.name}`}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            onEdit(cluster);
-                          }}
-                          className="rounded-md p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-700 dark:hover:text-slate-200"
-                        >
-                          <Pencil className="size-4" />
-                        </button>
-                        <button
-                          type="button"
-                          aria-label={`Delete ${cluster.metadata.name}`}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            onDelete(cluster);
-                          }}
-                          className="rounded-md p-1.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10 dark:hover:text-red-400"
-                        >
-                          <Trash2 className="size-4" />
-                        </button>
-                      </>
+                      <button
+                        type="button"
+                        aria-label={`Delete ${cluster.metadata.name}`}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onDelete(cluster);
+                        }}
+                        className="rounded-md p-1.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10 dark:hover:text-red-400"
+                      >
+                        <Trash2 className="size-4" />
+                      </button>
                     ) : null}
                     <ChevronRight className="size-4 text-slate-300 dark:text-slate-600" aria-hidden />
                   </div>

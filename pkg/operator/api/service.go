@@ -46,3 +46,38 @@ type ClusterService interface {
 	// Delete removes a cluster.
 	Delete(ctx context.Context, namespace, name string) error
 }
+
+// Capabilities reports which optional operations a backend supports, so the SPA can hide affordances
+// a backend cannot fulfill instead of offering an action that fails. It is served on
+// /api/v1/config under "capabilities". New capability flags are added here as the UI surface grows
+// (e.g. workload reads, log streaming, exec), and each backend reports the subset it implements.
+type Capabilities struct {
+	// ClusterUpdate reports whether the backend can apply spec changes to an existing cluster
+	// (PUT /api/v1/clusters/{namespace}/{name}). The operator patches the Cluster custom resource and
+	// supports it; the local CLI backend manages cluster configuration via files and does not, so the
+	// SPA hides the edit affordance there rather than offering an action that returns 501.
+	ClusterUpdate bool `json:"clusterUpdate"`
+}
+
+// CapabilityReporter is an optional interface a ClusterService may implement to advertise which
+// operations it supports. A ClusterService that does not implement it is assumed to support the full
+// surface (see fullCapabilities) — the operator's controller-runtime backend relies on this default.
+type CapabilityReporter interface {
+	Capabilities() Capabilities
+}
+
+// fullCapabilities is the capability set assumed for a ClusterService that does not implement
+// CapabilityReporter: every operation is supported.
+func fullCapabilities() Capabilities {
+	return Capabilities{ClusterUpdate: true}
+}
+
+// serviceCapabilities returns the capabilities a ClusterService advertises, defaulting to the full
+// surface when it does not implement CapabilityReporter.
+func serviceCapabilities(service ClusterService) Capabilities {
+	if reporter, ok := service.(CapabilityReporter); ok {
+		return reporter.Capabilities()
+	}
+
+	return fullCapabilities()
+}
