@@ -416,18 +416,13 @@ func validatePoolTaint(poolName string, idx int, taint NodePoolTaint) error {
 		)
 	}
 
-	if taint.Value != "" {
-		if errs := validation.IsValidLabelValue(taint.Value); len(errs) > 0 {
-			return fmt.Errorf(
-				"%w: pool %q taint[%d] %q value %q: %s",
-				ErrInvalidPoolTaint,
-				poolName,
-				idx,
-				taint.Key,
-				taint.Value,
-				strings.Join(errs, "; "),
-			)
-		}
+	// An empty taint value is valid (IsValidLabelValue accepts ""), so this runs
+	// unconditionally.
+	if errs := validation.IsValidLabelValue(taint.Value); len(errs) > 0 {
+		return fmt.Errorf(
+			"%w: pool %q taint[%d] %q value %q: %s",
+			ErrInvalidPoolTaint, poolName, idx, taint.Key, taint.Value, strings.Join(errs, "; "),
+		)
 	}
 
 	if !slices.Contains(ValidTaintEffects(), taint.Effect) {

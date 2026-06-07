@@ -66,18 +66,15 @@ func (f DefaultFactory) createTalosProvisioner(
 	// cloud-init worker configs and the HCLOUD_CLUSTER_CONFIG (pool labels/taints).
 	hetznerOpts.AutoscalerNodePools = cluster.Spec.Cluster.Autoscaler.Node.Pools
 
-	// Derive pool names from the new autoscaler pools config so that the
-	// delete path can clean up autoscaler-managed Hetzner servers.
-	if len(hetznerOpts.AutoscalerNodePoolNames) == 0 {
-		pools := cluster.Spec.Cluster.Autoscaler.Node.Pools
-		if len(pools) > 0 {
-			names := make([]string, len(pools))
-			for i, pool := range pools {
-				names[i] = pool.Name
-			}
-
-			hetznerOpts.AutoscalerNodePoolNames = names
+	// Derive pool names from the pools config so that the delete path can clean up
+	// autoscaler-managed Hetzner servers.
+	if len(hetznerOpts.AutoscalerNodePoolNames) == 0 && len(hetznerOpts.AutoscalerNodePools) > 0 {
+		names := make([]string, len(hetznerOpts.AutoscalerNodePools))
+		for i, pool := range hetznerOpts.AutoscalerNodePools {
+			names[i] = pool.Name
 		}
+
+		hetznerOpts.AutoscalerNodePoolNames = names
 	}
 
 	provisioner, err := talosprovisioner.CreateProvisioner(

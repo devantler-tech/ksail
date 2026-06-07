@@ -27,11 +27,6 @@ func (e *TaintEffect) ValidValues() []string {
 	}
 }
 
-// String returns the string representation of the TaintEffect.
-func (e *TaintEffect) String() string {
-	return string(*e)
-}
-
 // ValidTaintEffects returns all valid taint effects.
 func ValidTaintEffects() []TaintEffect {
 	return []TaintEffect{

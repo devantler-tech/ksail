@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	clusterautoscalerinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/clusterautoscaler"
 	talosprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/talos"
 	"github.com/siderolabs/talos/pkg/machinery/config/configloader"
 	taloscontainer "github.com/siderolabs/talos/pkg/machinery/config/container"
@@ -28,8 +29,8 @@ import (
 )
 
 // clusterConfigSecretKey is the Secret key under which the HCLOUD_CLUSTER_CONFIG
-// JSON is stored (mirrors clusterautoscalerinstaller.AutoscalerConfigHcloudClusterConfigKey).
-const clusterConfigSecretKey = "hcloud_cluster_config"
+// JSON is stored.
+const clusterConfigSecretKey = clusterautoscalerinstaller.AutoscalerConfigHcloudClusterConfigKey
 
 // newTestWorkerProvider builds a minimal v1alpha1 Config wrapped in a Provider
 // for use across autoscaler worker config tests.
@@ -108,11 +109,12 @@ func decodePoolCloudInit(t *testing.T, cloudInit string) []byte {
 	return decompressed
 }
 
-// singlePoolConfig builds a one-pool AutoscalerPoolConfig slice for tests that
-// only exercise the encode/secret machinery and not per-pool labels/taints.
-func singlePoolConfig(name string, workerConfig []byte) []talosprovisioner.AutoscalerPoolConfig {
+// singlePoolConfig builds a one-pool AutoscalerPoolConfig slice (pool "pool1")
+// for tests that only exercise the encode/secret machinery and not per-pool
+// labels/taints.
+func singlePoolConfig(workerConfig []byte) []talosprovisioner.AutoscalerPoolConfig {
 	return []talosprovisioner.AutoscalerPoolConfig{
-		{Name: name, WorkerConfigYAML: workerConfig},
+		{Name: "pool1", WorkerConfigYAML: workerConfig},
 	}
 }
 
@@ -314,7 +316,7 @@ func TestApplyAutoscalerConfigSecret_CreatesNewSecret(t *testing.T) {
 		context.Background(),
 		clientset,
 		snapshotID,
-		singlePoolConfig("pool1", workerConfig),
+		singlePoolConfig(workerConfig),
 	)
 	require.NoError(t, err)
 
@@ -384,7 +386,7 @@ func TestApplyAutoscalerConfigSecret_ReturnsChangedFlag(t *testing.T) {
 	t.Parallel()
 
 	clientset := fake.NewClientset()
-	pools := singlePoolConfig("pool1", []byte("machine:\n  type: worker\n"))
+	pools := singlePoolConfig([]byte("machine:\n  type: worker\n"))
 
 	// First apply creates the secret => changed.
 	changed, err := talosprovisioner.ApplyAutoscalerConfigSecret(
@@ -427,7 +429,7 @@ func TestApplyAutoscalerConfigSecret_PreservesExtraKeysOnUpdate(t *testing.T) {
 		context.Background(),
 		clientset,
 		snapshotID,
-		singlePoolConfig("pool1", workerConfig),
+		singlePoolConfig(workerConfig),
 	)
 	require.NoError(t, err)
 
@@ -469,7 +471,7 @@ func TestApplyAutoscalerConfigSecret_UpdatesExistingSecret(t *testing.T) {
 		context.Background(),
 		clientset,
 		snapshotID,
-		singlePoolConfig("pool1", workerConfig),
+		singlePoolConfig(workerConfig),
 	)
 	require.NoError(t, err)
 
@@ -542,7 +544,7 @@ func TestApplyAutoscalerConfigSecret_CreateConflictFallsBackToUpdate(t *testing.
 	newConfig := []byte("machine:\n  type: worker\n  # new\n")
 
 	_, err := talosprovisioner.ApplyAutoscalerConfigSecret(
-		context.Background(), clientset, "new-image", singlePoolConfig("pool1", newConfig),
+		context.Background(), clientset, "new-image", singlePoolConfig(newConfig),
 	)
 	require.NoError(t, err)
 
@@ -598,7 +600,7 @@ func TestApplyAutoscalerConfigSecret_CompressesLargeConfigUnderLimit(t *testing.
 		"test fixture must exceed Hetzner's raw user_data limit to be representative")
 
 	_, err := talosprovisioner.ApplyAutoscalerConfigSecret(
-		context.Background(), clientset, "123456789", singlePoolConfig("pool1", largeConfig),
+		context.Background(), clientset, "123456789", singlePoolConfig(largeConfig),
 	)
 	require.NoError(t, err)
 
@@ -633,7 +635,7 @@ func TestApplyAutoscalerConfigSecret_RejectsOversizedConfig(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = talosprovisioner.ApplyAutoscalerConfigSecret(
-		context.Background(), clientset, "123456789", singlePoolConfig("pool1", incompressible),
+		context.Background(), clientset, "123456789", singlePoolConfig(incompressible),
 	)
 	require.ErrorIs(t, err, talosprovisioner.ErrAutoscalerUserDataTooLarge)
 
