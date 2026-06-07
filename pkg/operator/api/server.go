@@ -5,6 +5,7 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -232,6 +233,12 @@ func (s *Server) Handler() http.Handler {
 		)
 	}
 
+	// Kubeconfig export, registered only when the backend implements KubeconfigProvider (the local
+	// backend). A read (GET), so the read-only guard does not apply.
+	if _, ok := s.Service.(KubeconfigProvider); ok {
+		mux.HandleFunc("GET /api/v1/clusters/{namespace}/{name}/kubeconfig", s.handleKubeconfig)
+	}
+
 	// Credential settings are local-UI-only: registered only when a SettingsService is provided, so
 	// the operator's API surface is unchanged.
 	if s.Settings != nil {
@@ -379,6 +386,7 @@ func (s *Server) handleConfig(writer http.ResponseWriter, request *http.Request)
 	// ResourceService), so the SPA's gate can never diverge from whether the routes exist.
 	_, capabilities.WorkloadRead = s.Service.(ResourceService)
 	_, capabilities.WorkloadWrite = s.Service.(ResourceWriter)
+	_, capabilities.KubeconfigDownload = s.Service.(KubeconfigProvider)
 
 	response := configResponse{
 		ReadOnly:        s.ReadOnly,
@@ -639,6 +647,35 @@ func (s *Server) handleDeleteResource(writer http.ResponseWriter, request *http.
 	}
 
 	writer.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleKubeconfig(writer http.ResponseWriter, request *http.Request) {
+	provider, ok := s.Service.(KubeconfigProvider)
+	if !ok {
+		writeClientError(writer, ErrNotSupported)
+
+		return
+	}
+
+	name := request.PathValue("name")
+
+	kubeconfig, err := provider.Kubeconfig(request.Context(), request.PathValue("namespace"), name)
+	if err != nil {
+		writeClientError(writer, err)
+
+		return
+	}
+
+	filename := name + ".kubeconfig"
+
+	// Served as a non-HTML attachment with nosniff so the browser downloads it and never renders the
+	// bytes as a document. ServeContent (not a raw Write) handles the body, honouring the Content-Type
+	// set here rather than sniffing it.
+	writer.Header().Set("Content-Type", "application/yaml")
+	writer.Header().Set("X-Content-Type-Options", "nosniff")
+	writer.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
+
+	http.ServeContent(writer, request, filename, time.Time{}, bytes.NewReader(kubeconfig))
 }
 
 func isMutating(method string) bool {

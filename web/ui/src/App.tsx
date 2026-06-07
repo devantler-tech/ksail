@@ -91,6 +91,8 @@ export function App() {
   // canManage reflects the backend's workloadWrite capability (scale/restart/delete). Combined with
   // !readOnly before the action UI is shown.
   const [canManage, setCanManage] = useState(fullCapabilities.workloadWrite);
+  // canKubeconfig reflects the backend's kubeconfigDownload capability (the local backend).
+  const [canKubeconfig, setCanKubeconfig] = useState(fullCapabilities.kubeconfigDownload);
   const [user, setUser] = useState<User | null>(null);
   const [needsLogin, setNeedsLogin] = useState(false);
   const [meta, setMeta] = useState<ClusterMeta | null>(null);
@@ -169,6 +171,7 @@ export function App() {
       setCanUpdate(config.capabilities?.clusterUpdate ?? fullCapabilities.clusterUpdate);
       setCanBrowse(config.capabilities?.workloadRead ?? fullCapabilities.workloadRead);
       setCanManage(config.capabilities?.workloadWrite ?? fullCapabilities.workloadWrite);
+      setCanKubeconfig(config.capabilities?.kubeconfigDownload ?? fullCapabilities.kubeconfigDownload);
       setDistributions(config.distributions ?? DEFAULT_DISTRIBUTIONS);
       setProviderStatus(config.providers ?? null);
       setSettingsEnabled(config.settingsEnabled ?? false);
@@ -200,6 +203,7 @@ export function App() {
       setCanUpdate(config.capabilities?.clusterUpdate ?? fullCapabilities.clusterUpdate);
       setCanBrowse(config.capabilities?.workloadRead ?? fullCapabilities.workloadRead);
       setCanManage(config.capabilities?.workloadWrite ?? fullCapabilities.workloadWrite);
+      setCanKubeconfig(config.capabilities?.kubeconfigDownload ?? fullCapabilities.kubeconfigDownload);
       setUser(config.user ?? null);
       setDistributions(config.distributions ?? DEFAULT_DISTRIBUTIONS);
       setProviderStatus(config.providers ?? null);
@@ -405,6 +409,7 @@ export function App() {
           cluster={selected}
           open={selected !== null}
           canEdit={canEdit}
+          canDownloadKubeconfig={canKubeconfig}
           onClose={() => setSelectedKey(null)}
           onEdit={openEdit}
         />

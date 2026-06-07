@@ -67,6 +67,17 @@ type Capabilities struct {
 	// restart, delete) on browsable resources — true exactly when the serving ClusterService
 	// implements ResourceWriter. The SPA still combines it with !readOnly before showing the actions.
 	WorkloadWrite bool `json:"workloadWrite"`
+	// KubeconfigDownload reports whether the backend can export a portable kubeconfig for a cluster —
+	// true exactly when the serving ClusterService implements KubeconfigProvider. The local backend
+	// extracts the cluster's context from the user's kubeconfig; the operator does not implement it.
+	KubeconfigDownload bool `json:"kubeconfigDownload"`
+}
+
+// KubeconfigProvider is an optional interface a ClusterService may implement to export a portable,
+// single-context kubeconfig for a cluster (so the SPA can offer a "Download kubeconfig" action). The
+// returned bytes are a complete kubeconfig YAML scoped to just the named cluster's context.
+type KubeconfigProvider interface {
+	Kubeconfig(ctx context.Context, namespace, name string) ([]byte, error)
 }
 
 // CapabilityReporter is an optional interface a ClusterService may implement to advertise which
