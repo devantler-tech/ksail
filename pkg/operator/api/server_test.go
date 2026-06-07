@@ -67,7 +67,7 @@ func TestConfigReportsReadOnly(t *testing.T) {
 	assert.Equal(t, http.StatusOK, recorder.Code)
 	assert.JSONEq(
 		t,
-		`{"readOnly":true,"authEnabled":false,"capabilities":{"clusterUpdate":true}}`,
+		`{"readOnly":true,"authEnabled":false,"capabilities":{"clusterUpdate":true,"workloadRead":false}}`,
 		recorder.Body.String(),
 	)
 }
@@ -366,7 +366,7 @@ func TestConfigDefaultsWritable(t *testing.T) {
 	assert.Equal(t, http.StatusOK, recorder.Code)
 	assert.JSONEq(
 		t,
-		`{"readOnly":false,"authEnabled":false,"capabilities":{"clusterUpdate":true}}`,
+		`{"readOnly":false,"authEnabled":false,"capabilities":{"clusterUpdate":true,"workloadRead":false}}`,
 		recorder.Body.String(),
 	)
 }
@@ -383,7 +383,11 @@ func TestConfigReportsServiceCapabilities(t *testing.T) {
 	recorder := doRequest(server.Handler(), http.MethodGet, "/api/v1/config", "")
 
 	assert.Equal(t, http.StatusOK, recorder.Code)
-	assert.Contains(t, recorder.Body.String(), `"capabilities":{"clusterUpdate":false}`)
+	assert.Contains(
+		t,
+		recorder.Body.String(),
+		`"capabilities":{"clusterUpdate":false,"workloadRead":false}`,
+	)
 }
 
 func TestConfigDefaultsToFullCapabilities(t *testing.T) {
@@ -396,7 +400,11 @@ func TestConfigDefaultsToFullCapabilities(t *testing.T) {
 	recorder := doRequest(server.Handler(), http.MethodGet, "/api/v1/config", "")
 
 	assert.Equal(t, http.StatusOK, recorder.Code)
-	assert.Contains(t, recorder.Body.String(), `"capabilities":{"clusterUpdate":true}`)
+	assert.Contains(
+		t,
+		recorder.Body.String(),
+		`"capabilities":{"clusterUpdate":true,"workloadRead":false}`,
+	)
 }
 
 func TestStaticFSServesAssetsAndSPAFallback(t *testing.T) {

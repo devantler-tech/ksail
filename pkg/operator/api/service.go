@@ -57,6 +57,12 @@ type Capabilities struct {
 	// supports it; the local CLI backend manages cluster configuration via files and does not, so the
 	// SPA hides the edit affordance there rather than offering an action that returns 501.
 	ClusterUpdate bool `json:"clusterUpdate"`
+	// WorkloadRead reports whether the backend can read live Kubernetes resources from a target
+	// cluster (the read-only workload browser). It is true exactly when the serving ClusterService
+	// implements ResourceService; the SPA shows the Resources view only then. Derived from the
+	// interface in handleConfig rather than reported via CapabilityReporter, so it cannot drift from
+	// whether the endpoints are actually registered.
+	WorkloadRead bool `json:"workloadRead"`
 }
 
 // CapabilityReporter is an optional interface a ClusterService may implement to advertise which

@@ -202,6 +202,18 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PUT /api/v1/clusters/{namespace}/{name}", s.handleUpdateCluster)
 	mux.HandleFunc("DELETE /api/v1/clusters/{namespace}/{name}", s.handleDeleteCluster)
 
+	// Read-only resource browser, registered only when the backend implements ResourceService (so the
+	// operator's API surface and any backend without live-cluster access are unchanged). These
+	// patterns are strictly more specific than the cluster get/update/delete routes, so the mux routes
+	// them without conflict.
+	if _, ok := s.Service.(ResourceService); ok {
+		mux.HandleFunc("GET /api/v1/clusters/{namespace}/{name}/resources", s.handleListResources)
+		mux.HandleFunc(
+			"GET /api/v1/clusters/{namespace}/{name}/resources/{kind}/{rname}",
+			s.handleGetResource,
+		)
+	}
+
 	// Credential settings are local-UI-only: registered only when a SettingsService is provided, so
 	// the operator's API surface is unchanged.
 	if s.Settings != nil {
@@ -344,12 +356,17 @@ func (s *Server) handleHealth(writer http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *Server) handleConfig(writer http.ResponseWriter, request *http.Request) {
+	capabilities := serviceCapabilities(s.Service)
+	// workloadRead is true exactly when the resource endpoints are registered (the backend implements
+	// ResourceService), so the SPA's gate can never diverge from whether the routes exist.
+	_, capabilities.WorkloadRead = s.Service.(ResourceService)
+
 	response := configResponse{
 		ReadOnly:        s.ReadOnly,
 		AuthEnabled:     s.auth != nil,
 		Distributions:   s.Distributions,
 		SettingsEnabled: s.Settings != nil,
-		Capabilities:    serviceCapabilities(s.Service),
+		Capabilities:    capabilities,
 	}
 
 	if s.ProviderStatus != nil {
@@ -450,6 +467,67 @@ func (s *Server) handleDeleteCluster(writer http.ResponseWriter, request *http.R
 	}
 
 	writer.WriteHeader(http.StatusNoContent)
+}
+
+// resourceService returns the backend's ResourceService, or false when it does not implement one
+// (the routes are only registered when it does, so this is belt-and-suspenders).
+func (s *Server) resourceService() (ResourceService, bool) {
+	svc, ok := s.Service.(ResourceService)
+
+	return svc, ok
+}
+
+func (s *Server) handleListResources(writer http.ResponseWriter, request *http.Request) {
+	svc, ok := s.resourceService()
+	if !ok {
+		writeClientError(writer, ErrNotSupported)
+
+		return
+	}
+
+	list, err := svc.ListResources(
+		request.Context(),
+		request.PathValue("namespace"),
+		request.PathValue("name"),
+		ResourceQuery{
+			Kind:      request.URL.Query().Get("kind"),
+			Namespace: request.URL.Query().Get("namespace"),
+		},
+	)
+	if err != nil {
+		writeClientError(writer, err)
+
+		return
+	}
+
+	writeJSON(writer, http.StatusOK, list)
+}
+
+func (s *Server) handleGetResource(writer http.ResponseWriter, request *http.Request) {
+	svc, ok := s.resourceService()
+	if !ok {
+		writeClientError(writer, ErrNotSupported)
+
+		return
+	}
+
+	obj, err := svc.GetResource(
+		request.Context(),
+		request.PathValue("namespace"),
+		request.PathValue("name"),
+		ResourceRef{
+			Kind:      request.PathValue("kind"),
+			Namespace: request.URL.Query().Get("namespace"),
+			Name:      request.PathValue("rname"),
+		},
+	)
+	if err != nil {
+		writeClientError(writer, err)
+
+		return
+	}
+
+	writeJSON(writer, http.StatusOK, obj)
 }
 
 func isMutating(method string) bool {
