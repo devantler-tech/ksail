@@ -6,8 +6,21 @@ import (
 	"io"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/gorilla/websocket"
+)
+
+const (
+	// execKeepaliveInterval is how often the exec session re-validates the auth session (honouring
+	// OIDC expiry mid-stream, like the SSE handler) and pings the client.
+	execKeepaliveInterval = 30 * time.Second
+	// execPongWait is the read deadline; a missing pong (half-open client) past it tears the session
+	// down so the goroutine and remote exec stream don't leak. It exceeds the ping interval so a live
+	// client always refreshes the deadline in time.
+	execPongWait = 70 * time.Second
+	// execPingTimeout bounds a single ping write.
+	execPingTimeout = 10 * time.Second
 )
 
 // execClientMessage is a frame from the browser terminal: stdin data or a resize event.
@@ -92,44 +105,39 @@ func (s *Server) handleExec(writer http.ResponseWriter, request *http.Request) {
 	}
 	defer func() { _ = conn.Close() }()
 
-	s.runExecSession(
-		request.Context(),
-		conn,
-		svc,
-		request.PathValue("namespace"),
-		request.PathValue("name"),
-		ExecRequest{
-			Namespace: query.Get("namespace"),
-			Pod:       query.Get("pod"),
-			Container: query.Get("container"),
-			Command:   command,
-		},
-	)
+	s.runExecSession(request, conn, svc, ExecRequest{
+		Namespace: query.Get("namespace"),
+		Pod:       query.Get("pod"),
+		Container: query.Get("container"),
+		Command:   command,
+	})
 }
 
 // runExecSession bridges the WebSocket connection to the ExecService: client frames feed stdin/resize,
 // the executor's stdout streams back as frames. It returns when the session ends or the client leaves.
 func (s *Server) runExecSession(
-	ctx context.Context,
+	request *http.Request,
 	conn *websocket.Conn,
 	svc ExecService,
-	clusterNamespace, clusterName string,
-	request ExecRequest,
+	execRequest ExecRequest,
 ) {
 	stdinReader, stdinWriter := io.Pipe()
 	resize := make(chan TerminalSize, 1)
 	output := &execWSWriter{conn: conn}
 
-	sessionCtx, cancel := context.WithCancel(ctx)
+	sessionCtx, cancel := context.WithCancel(request.Context())
 	defer cancel()
 
 	go execReadPump(conn, stdinWriter, resize, cancel)
+	go s.execWatchdog(sessionCtx, conn, request, cancel)
 
-	err := svc.Exec(sessionCtx, clusterNamespace, clusterName, request, ExecStreams{
-		Stdin:  stdinReader,
-		Stdout: output,
-		Resize: resize,
-	})
+	err := svc.Exec(
+		sessionCtx,
+		request.PathValue("namespace"),
+		request.PathValue("name"),
+		execRequest,
+		ExecStreams{Stdin: stdinReader, Stdout: output, Resize: resize},
+	)
 	if err != nil {
 		output.send("error", err.Error())
 	}
@@ -146,6 +154,13 @@ func execReadPump(
 	resize chan<- TerminalSize,
 	cancel context.CancelFunc,
 ) {
+	// A pong (sent by the client in reply to the watchdog's pings) refreshes the read deadline; if a
+	// half-open client stops ponging, ReadJSON fails past execPongWait and the session tears down.
+	_ = conn.SetReadDeadline(time.Now().Add(execPongWait))
+	conn.SetPongHandler(func(string) error {
+		return conn.SetReadDeadline(time.Now().Add(execPongWait))
+	})
+
 	defer func() {
 		_ = stdin.Close()
 
@@ -171,6 +186,41 @@ func execReadPump(
 			select {
 			case resize <- TerminalSize{Rows: msg.Rows, Cols: msg.Cols}:
 			default:
+			}
+		}
+	}
+}
+
+// execWatchdog re-validates the auth session on a ticker (so an interactive shell honours OIDC expiry
+// mid-stream rather than outliving SessionTTL, matching the SSE handler) and pings the client to keep
+// the connection alive / detect a half-open peer. Cancelling tears down the exec stream.
+func (s *Server) execWatchdog(
+	ctx context.Context,
+	conn *websocket.Conn,
+	request *http.Request,
+	cancel context.CancelFunc,
+) {
+	ticker := time.NewTicker(execKeepaliveInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if !s.sessionValid(request) {
+				cancel()
+
+				return
+			}
+
+			err := conn.WriteControl(
+				websocket.PingMessage,
+				nil,
+				time.Now().Add(execPingTimeout),
+			)
+			if err != nil {
+				return
 			}
 		}
 	}

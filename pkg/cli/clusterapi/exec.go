@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	"github.com/devantler-tech/ksail/v7/pkg/operator/api"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
@@ -25,16 +24,9 @@ func defaultExecClient(
 	_ context.Context,
 	clusterName string,
 ) (kubernetes.Interface, *rest.Config, error) {
-	kubeconfigPath := k8s.DefaultKubeconfigPath()
-
-	contextName, err := contextForCluster(kubeconfigPath, clusterName)
+	restConfig, err := restConfigForCluster(clusterName)
 	if err != nil {
 		return nil, nil, err
-	}
-
-	restConfig, err := k8s.BuildRESTConfig(kubeconfigPath, contextName)
-	if err != nil {
-		return nil, nil, fmt.Errorf("build rest config for %q: %w", clusterName, err)
 	}
 
 	clientset, err := kubernetes.NewForConfig(restConfig)

@@ -54,7 +54,13 @@ export function ExecTerminal({
       sendResize();
     };
     socket.onmessage = (event) => {
-      const message = JSON.parse(event.data as string) as { op: string; data?: string };
+      let message: { op: string; data?: string };
+      try {
+        message = JSON.parse(event.data as string) as { op: string; data?: string };
+      } catch {
+        return; // ignore a malformed/binary frame rather than throwing in the handler
+      }
+
       if (message.op === "stdout") {
         term.write(message.data ?? "");
       } else if (message.op === "error") {
@@ -86,6 +92,12 @@ export function ExecTerminal({
       observer.disconnect();
       dataSub.dispose();
       resizeSub.dispose();
+      // Detach the handlers before closing: the WebSocket `close` event fires in a later task, so an
+      // attached onclose/onmessage/onopen would otherwise run against the already-disposed Terminal.
+      socket.onopen = null;
+      socket.onmessage = null;
+      socket.onclose = null;
+      socket.onerror = null;
       socket.close();
       term.dispose();
     };
