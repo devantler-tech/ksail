@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"fmt"
-	"sort"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -21,7 +20,7 @@ const (
 
 // ResourceQuery selects a set of resources to list from a target cluster.
 type ResourceQuery struct {
-	// Kind is one of the curated browsable kinds (see ResourceKindFor / ResourceKindNames).
+	// Kind is one of the curated browsable kinds (see ResourceKindFor).
 	Kind string
 	// Namespace restricts a namespaced kind to one namespace; empty lists across all namespaces.
 	Namespace string
@@ -110,21 +109,6 @@ func ResourceKindFor(kind string) (ResourceKind, error) {
 
 	return resourceKind, nil
 }
-
-// ResourceKindNames returns the curated browsable kinds, sorted, for the SPA's kind selector.
-func ResourceKindNames() []string {
-	table := resourceKindTable()
-	names := make([]string, 0, len(table))
-
-	for name := range table {
-		names = append(names, name)
-	}
-
-	sort.Strings(names)
-
-	return names
-}
-
 // ScaleRequest is the JSON body of a scale request.
 type ScaleRequest struct {
 	Replicas int32 `json:"replicas"`
