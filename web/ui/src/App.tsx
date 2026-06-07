@@ -20,6 +20,7 @@ import { MetaContext } from "./lib/meta.ts";
 import { AppShell, type View } from "./components/AppShell.tsx";
 import { SettingsPage } from "./components/SettingsPage.tsx";
 import { ResourcesView } from "./components/ResourcesView.tsx";
+import { SecretsView } from "./components/SecretsView.tsx";
 import { ClusterDetail } from "./components/ClusterDetail.tsx";
 import {
   ClusterFormDialog,
@@ -95,6 +96,8 @@ export function App() {
   const [canKubeconfig, setCanKubeconfig] = useState(fullCapabilities.kubeconfigDownload);
   // canApply reflects the backend's applyManifests capability.
   const [canApply, setCanApply] = useState(fullCapabilities.applyManifests);
+  // canCipher reflects the backend's secretsCipher capability (local SOPS).
+  const [canCipher, setCanCipher] = useState(fullCapabilities.secretsCipher);
   const [user, setUser] = useState<User | null>(null);
   const [needsLogin, setNeedsLogin] = useState(false);
   const [meta, setMeta] = useState<ClusterMeta | null>(null);
@@ -175,6 +178,7 @@ export function App() {
       setCanManage(config.capabilities?.workloadWrite ?? fullCapabilities.workloadWrite);
       setCanKubeconfig(config.capabilities?.kubeconfigDownload ?? fullCapabilities.kubeconfigDownload);
       setCanApply(config.capabilities?.applyManifests ?? fullCapabilities.applyManifests);
+      setCanCipher(config.capabilities?.secretsCipher ?? fullCapabilities.secretsCipher);
       setDistributions(config.distributions ?? DEFAULT_DISTRIBUTIONS);
       setProviderStatus(config.providers ?? null);
       setSettingsEnabled(config.settingsEnabled ?? false);
@@ -208,6 +212,7 @@ export function App() {
       setCanManage(config.capabilities?.workloadWrite ?? fullCapabilities.workloadWrite);
       setCanKubeconfig(config.capabilities?.kubeconfigDownload ?? fullCapabilities.kubeconfigDownload);
       setCanApply(config.capabilities?.applyManifests ?? fullCapabilities.applyManifests);
+      setCanCipher(config.capabilities?.secretsCipher ?? fullCapabilities.secretsCipher);
       setUser(config.user ?? null);
       setDistributions(config.distributions ?? DEFAULT_DISTRIBUTIONS);
       setProviderStatus(config.providers ?? null);
@@ -362,10 +367,13 @@ export function App() {
       onNavigate={setView}
       settingsEnabled={settingsEnabled}
       workloadEnabled={canBrowse}
+      secretsEnabled={canCipher}
       headerActions={headerActions}
     >
       {view === "settings" ? (
         <SettingsPage onSaved={() => void reloadConfig()} />
+      ) : view === "secrets" ? (
+        <SecretsView />
       ) : view === "resources" ? (
         <ResourcesView
           clusters={clusters}
