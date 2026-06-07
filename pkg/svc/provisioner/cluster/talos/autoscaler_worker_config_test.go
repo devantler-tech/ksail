@@ -104,10 +104,17 @@ func isASCII(b []byte) bool {
 
 // --- GenerateAutoscalerWorkerConfig ---
 
-func TestGenerateAutoscalerWorkerConfig_StrippingLogic(t *testing.T) {
-	t.Parallel()
+// generateAndParseAutoscalerConfig runs GenerateAutoscalerWorkerConfig on the
+// given provider and returns the parsed v1alpha1 machine config, asserting the
+// generate + parse round-trip succeeds. Shared by the stripping-logic and marker
+// tests so each stays focused on its own assertions.
+func generateAndParseAutoscalerConfig(
+	t *testing.T,
+	provider *taloscontainer.Container,
+) *v1alpha1.Config {
+	t.Helper()
 
-	result, err := talosprovisioner.GenerateAutoscalerWorkerConfig(newTestWorkerProvider())
+	result, err := talosprovisioner.GenerateAutoscalerWorkerConfig(provider)
 	require.NoError(t, err)
 	require.NotEmpty(t, result)
 
@@ -117,6 +124,14 @@ func TestGenerateAutoscalerWorkerConfig_StrippingLogic(t *testing.T) {
 	rawCfg := parsed.RawV1Alpha1()
 	require.NotNil(t, rawCfg)
 	require.NotNil(t, rawCfg.MachineConfig)
+
+	return rawCfg
+}
+
+func TestGenerateAutoscalerWorkerConfig_StrippingLogic(t *testing.T) {
+	t.Parallel()
+
+	rawCfg := generateAndParseAutoscalerConfig(t, newTestWorkerProvider())
 
 	t.Run("sets install.wipe to true", func(t *testing.T) {
 		t.Parallel()
@@ -148,18 +163,6 @@ func TestGenerateAutoscalerWorkerConfig_StrippingLogic(t *testing.T) {
 		assert.Contains(t, rawCfg.MachineConfig.MachineNodeLabels, "keep-this-label")
 	})
 
-	t.Run("stamps the autoscaled marker label", func(t *testing.T) {
-		t.Parallel()
-
-		// The marker discriminates autoscaler nodes from static baseline workers,
-		// which never run through this generator and so never carry it.
-		assert.Equal(
-			t,
-			"true",
-			rawCfg.MachineConfig.MachineNodeLabels[talosprovisioner.LabelAutoscaled],
-		)
-	})
-
 	t.Run("preserves kubelet extra mounts", func(t *testing.T) {
 		t.Parallel()
 
@@ -171,6 +174,20 @@ func TestGenerateAutoscalerWorkerConfig_StrippingLogic(t *testing.T) {
 			rawCfg.MachineConfig.MachineKubelet.KubeletExtraMounts[0].Destination,
 		)
 	})
+}
+
+func TestGenerateAutoscalerWorkerConfig_StampsAutoscaledMarker(t *testing.T) {
+	t.Parallel()
+
+	rawCfg := generateAndParseAutoscalerConfig(t, newTestWorkerProvider())
+
+	// The marker discriminates autoscaler nodes from static baseline workers,
+	// which never run through this generator and so never carry it.
+	assert.Equal(
+		t,
+		"true",
+		rawCfg.MachineConfig.MachineNodeLabels[talosprovisioner.LabelAutoscaled],
+	)
 }
 
 func TestGenerateAutoscalerWorkerConfig_NilInput(t *testing.T) {
