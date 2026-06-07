@@ -109,6 +109,7 @@ func ResourceKindFor(kind string) (ResourceKind, error) {
 
 	return resourceKind, nil
 }
+
 // ScaleRequest is the JSON body of a scale request.
 type ScaleRequest struct {
 	Replicas int32 `json:"replicas"`
