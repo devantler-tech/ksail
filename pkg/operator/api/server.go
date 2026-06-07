@@ -28,6 +28,10 @@ const (
 	maxRequestBodyBytes = 1 << 20 // 1 MiB
 )
 
+// errorJSONKey is the JSON object key carrying a human-readable error message in API and SSE error
+// responses. The SPA parses both with the same logic, so the key is shared.
+const errorJSONKey = "error"
+
 // Server serves the operator REST API. It implements controller-runtime's manager.Runnable.
 //
 // Authentication is optional and app-driven (see OIDCConfig): when configured, the API owns the
@@ -65,6 +69,10 @@ type Server struct {
 	// falling back to index.html for client-side routing. The operator leaves it nil (nginx serves
 	// the UI separately); `ksail ui` sets it to the embedded assets.
 	StaticFS fs.FS
+
+	// EventsInterval is how often the SSE events stream (GET /api/v1/events) re-checks the backend for
+	// changes. Zero selects defaultEventsInterval; tests set it low to observe ticks quickly.
+	EventsInterval time.Duration
 
 	// auth is built from OIDC at Start; nil means authentication is disabled.
 	auth *authenticator
@@ -188,6 +196,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/config", s.handleConfig)
 	mux.HandleFunc("GET /api/v1/meta", s.handleMeta)
 	mux.HandleFunc("GET /api/v1/clusters", s.handleListClusters)
+	mux.HandleFunc("GET /api/v1/events", s.handleEvents)
 	mux.HandleFunc("POST /api/v1/clusters", s.handleCreateCluster)
 	mux.HandleFunc("GET /api/v1/clusters/{namespace}/{name}", s.handleGetCluster)
 	mux.HandleFunc("PUT /api/v1/clusters/{namespace}/{name}", s.handleUpdateCluster)
@@ -282,8 +291,8 @@ func (s *Server) authGuard(next http.Handler) http.Handler {
 		_, ok := s.auth.currentUser(request)
 		if !ok {
 			writeJSON(writer, http.StatusUnauthorized, map[string]any{
-				"error":    "authentication required",
-				"loginURL": loginPath,
+				errorJSONKey: "authentication required",
+				"loginURL":   loginPath,
 			})
 
 			return
@@ -481,7 +490,7 @@ func writeJSON(writer http.ResponseWriter, status int, body any) {
 }
 
 func writeError(writer http.ResponseWriter, status int, err error) {
-	writeJSON(writer, status, map[string]string{"error": err.Error()})
+	writeJSON(writer, status, map[string]string{errorJSONKey: err.Error()})
 }
 
 // writeDecodeError maps a request-body decode failure to the most appropriate status: 413 when the

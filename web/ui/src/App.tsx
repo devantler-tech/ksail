@@ -31,9 +31,8 @@ import { LoginScreen } from "./components/LoginScreen.tsx";
 import { EmptyState, ErrorBanner, TableSkeleton } from "./components/states.tsx";
 import { Button } from "./components/ui.tsx";
 import { useTheme } from "./hooks/useTheme.ts";
+import { useClusterStream } from "./hooks/useClusterStream.ts";
 import { useToast } from "./components/Toast.tsx";
-
-const POLL_MS = 10000;
 
 // DEFAULT_DISTRIBUTIONS is the create-form distribution list used when the backend does not advertise
 // its supported set via config.distributions. The operator omits it (it only provisions VCluster
@@ -104,9 +103,11 @@ export function App() {
   const [formMode, setFormMode] = useState<FormMode>("create");
   const [formInitial, setFormInitial] = useState<Cluster | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Cluster | null>(null);
+  // streamReady gates the live SSE subscription: open it only after the initial load succeeded
+  // without losing the session (see init), so it never races the auth handshake.
+  const [streamReady, setStreamReady] = useState(false);
 
   const mounted = useRef(true);
-  const pollRef = useRef<number | undefined>(undefined);
 
   const selected = useMemo(
     () => clusters.find((cluster) => clusterKey(cluster) === selectedKey) ?? null,
@@ -132,10 +133,9 @@ export function App() {
         return true;
       }
       if (err instanceof ApiError && err.status === 401) {
-        if (pollRef.current) {
-          window.clearInterval(pollRef.current);
-          pollRef.current = undefined;
-        }
+        // Session lost: stop the live stream and show the login screen. Disabling the stream tears
+        // down the EventSource (see useClusterStream) so it stops retrying against a 401.
+        setStreamReady(false);
         setNeedsLogin(true);
         return false;
       }
@@ -216,10 +216,11 @@ export function App() {
       const authOK = await refresh(true);
       if (mounted.current) {
         setLoading(false);
-        // Only start polling if the initial load did not lose the session; otherwise the login
-        // screen is shown and a poll would just fire another unauthorized request.
+        // Live updates flow over the SSE stream (see useClusterStream). Enable it only if the initial
+        // load did not lose the session; otherwise the login screen is shown and a stream would just
+        // reconnect against a 401.
         if (authOK) {
-          pollRef.current = window.setInterval(() => void refresh(true), POLL_MS);
+          setStreamReady(true);
         }
       }
     }
@@ -228,12 +229,24 @@ export function App() {
 
     return () => {
       mounted.current = false;
-      if (pollRef.current) {
-        window.clearInterval(pollRef.current);
-        pollRef.current = undefined;
-      }
     };
   }, [refresh]);
+
+  // Live cluster updates over SSE, replacing client-side polling. On a stream error we re-sync via
+  // refresh(), which also detects a lost session (401) and surfaces the login screen.
+  useClusterStream({
+    enabled: streamReady && !needsLogin,
+    onClusters: (items) => {
+      if (!mounted.current) {
+        return;
+      }
+      setClusters(items);
+      setError(null);
+    },
+    onError: () => {
+      void refresh(true);
+    },
+  });
 
   function openCreate() {
     setFormMode("create");

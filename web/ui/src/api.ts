@@ -212,6 +212,10 @@ export function logout(): Promise<void> {
 // loginPath is where the app sends the user to start the OIDC flow (handled by the operator API).
 export const loginPath = "/api/v1/auth/login";
 
+// eventsPath is the Server-Sent Events stream the SPA subscribes to for live updates (cluster list
+// changes today). It is same-origin, so EventSource sends the session cookie automatically.
+export const eventsPath = "/api/v1/events";
+
 export function getConfig(): Promise<Config> {
   return request<Config>("/api/v1/config");
 }
