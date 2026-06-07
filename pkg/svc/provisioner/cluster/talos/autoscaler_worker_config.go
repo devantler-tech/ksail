@@ -35,11 +35,26 @@ const (
 	hetznerUserDataLimitBytes = 32768
 )
 
+// LabelAutoscaled is a Kubernetes node label stamped on every
+// autoscaler-provisioned worker node and on no static baseline worker, giving
+// downstream workloads a discriminator to key node affinity off of (e.g. a soft
+// preference for baseline nodes so autoscaler nodes stay empty and scale down).
+//
+// It is applied via the worker config's machine.nodeLabels (kubelet
+// --node-labels) so it lands on the real Node object. The Hetzner cluster
+// autoscaler deliberately does NOT push its per-pool nodeConfigs[].labels to the
+// kubelet — those only seed the in-memory scheduling-simulation template — so
+// stamping the label in the worker cloud-init is the canonical mechanism (see
+// kubernetes/autoscaler#8492, closed as working-as-intended).
+const LabelAutoscaled = "ksail.io/autoscaled"
+
 // GenerateAutoscalerWorkerConfig generates a stripped Talos worker config
 // suitable for autoscaler-provisioned compute-only nodes. It sets
 // machine.install.wipe to true, removes machine.disks (autoscaler nodes have
-// no attached Hetzner Volumes), and removes the Longhorn storage node label
-// while preserving machine.kubelet.extraMounts for CSI consumer access.
+// no attached Hetzner Volumes), removes the Longhorn storage node label while
+// preserving machine.kubelet.extraMounts for CSI consumer access, and stamps the
+// LabelAutoscaled marker node label so workloads can tell autoscaler nodes apart
+// from static baseline workers.
 func GenerateAutoscalerWorkerConfig(workerConfig talosconfig.Provider) ([]byte, error) {
 	if workerConfig == nil {
 		return nil, ErrNilWorkerConfig
@@ -59,7 +74,12 @@ func GenerateAutoscalerWorkerConfig(workerConfig talosconfig.Provider) ([]byte, 
 
 		cfg.MachineConfig.MachineDisks = nil //nolint:staticcheck // deprecated; v1alpha1.Config has no replacement field
 
+		if cfg.MachineConfig.MachineNodeLabels == nil {
+			cfg.MachineConfig.MachineNodeLabels = map[string]string{}
+		}
+
 		delete(cfg.MachineConfig.MachineNodeLabels, "node.longhorn.io/create-default-disk")
+		cfg.MachineConfig.MachineNodeLabels[LabelAutoscaled] = "true"
 
 		return nil
 	})

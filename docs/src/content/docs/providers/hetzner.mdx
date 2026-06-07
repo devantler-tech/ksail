@@ -219,6 +219,13 @@ spec:
 > [!NOTE]
 > `spec.provider.hetzner.serverLimit` guards against exceeding your Hetzner Cloud project quota. KSail rejects configurations where the **reachable total** exceeds `serverLimit`, where the reachable total is `controlPlanes + workers + sum(pool.max)`, clamped to `autoscaler.node.maxNodesTotal` when that global cap is set. Because `maxNodesTotal` is the whole-cluster ceiling (the value passed to the autoscaler's `--max-nodes-total`), set it ≤ `serverLimit`. Raise `serverLimit` to match your actual Hetzner project quota.
 
+#### Distinguishing autoscaler nodes from baseline workers
+
+KSail stamps the Kubernetes node label `ksail.io/autoscaled=true` on every autoscaler-provisioned worker, and on no static baseline worker. This gives workloads a discriminator to key node affinity off of — for example a **soft** `preferredDuringSchedulingIgnoredDuringExecution` nodeAffinity preferring nodes where `ksail.io/autoscaled` `DoesNotExist`, so pods land on baseline workers first and only spill onto autoscaler nodes under real pressure (keeping autoscaler nodes empty and quick to scale down).
+
+> [!NOTE]
+> The label is applied via the autoscaler worker's Talos `machine.nodeLabels` (the kubelet `--node-labels` flag), so it lands on the real `Node` object. The upstream Hetzner cluster-autoscaler deliberately does **not** push its per-pool `nodeConfigs[].labels`/`taints` to the kubelet — those only seed the in-memory template node used for scheduling simulation and scale-from-zero (see [kubernetes/autoscaler#8492](https://github.com/kubernetes/autoscaler/issues/8492), closed as working-as-intended). Stamping the label in the worker cloud-init is therefore the canonical mechanism.
+
 ## Quick Start
 
 ### Step 1: Configure API Token

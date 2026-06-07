@@ -148,6 +148,18 @@ func TestGenerateAutoscalerWorkerConfig_StrippingLogic(t *testing.T) {
 		assert.Contains(t, rawCfg.MachineConfig.MachineNodeLabels, "keep-this-label")
 	})
 
+	t.Run("stamps the autoscaled marker label", func(t *testing.T) {
+		t.Parallel()
+
+		// The marker discriminates autoscaler nodes from static baseline workers,
+		// which never run through this generator and so never carry it.
+		assert.Equal(
+			t,
+			"true",
+			rawCfg.MachineConfig.MachineNodeLabels[talosprovisioner.LabelAutoscaled],
+		)
+	})
+
 	t.Run("preserves kubelet extra mounts", func(t *testing.T) {
 		t.Parallel()
 
@@ -210,6 +222,14 @@ func TestGenerateAutoscalerWorkerConfig_NilMachineConfig(t *testing.T) {
 	require.NotNil(t, rawCfg.MachineConfig.MachineInstall)
 	require.NotNil(t, rawCfg.MachineConfig.MachineInstall.InstallWipe)
 	assert.True(t, *rawCfg.MachineConfig.MachineInstall.InstallWipe)
+
+	// The marker label must be stamped even when the source bundle carried no
+	// node labels at all (nil MachineNodeLabels), exercising the nil-map guard.
+	assert.Equal(
+		t,
+		"true",
+		rawCfg.MachineConfig.MachineNodeLabels[talosprovisioner.LabelAutoscaled],
+	)
 }
 
 func TestApplyAutoscalerConfigSecret_CreatesNewSecret(t *testing.T) {
