@@ -532,8 +532,9 @@ func reportPinnedUpgradePreamble(
 
 	switch skipReason {
 	case pinnedVersionAlreadyAtIt:
-		notify.Infof(cmd.OutOrStdout(), "%s is already at pinned version %s", label, pinnedVersion)
-
+		// Already at the pin is a no-op for this dimension; stay silent so the run
+		// only reports diffs, applied changes, and skip/success/fail outcomes. The
+		// overall "No changes detected" line already covers this case.
 		return pinnedVersion, false, nil
 	case pinnedVersionNewer:
 		notify.Infof(cmd.OutOrStdout(),
