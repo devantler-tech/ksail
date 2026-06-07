@@ -22,7 +22,14 @@ The operator reconciles `Cluster` resources (`ksail.io/v1alpha1`) so you can pro
 
 ## Installing
 
-The chart is installed from the repository checkout:
+Each KSail release publishes the chart as an OCI artifact to GHCR. Install a pinned version (replace `<version>` with a [release](https://github.com/devantler-tech/ksail/releases) version, e.g. `7.35.0`):
+
+```sh
+helm install ksail-operator oci://ghcr.io/devantler-tech/charts/ksail-operator \
+  --version <version> --namespace ksail-system --create-namespace
+```
+
+Or install from the repository checkout:
 
 ```sh
 helm install ksail-operator charts/ksail-operator --namespace ksail-system --create-namespace
