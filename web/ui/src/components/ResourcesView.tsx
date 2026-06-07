@@ -44,28 +44,47 @@ export function ResourcesView({ clusters }: { clusters: Cluster[] }) {
   const [kind, setKind] = useState<string>("Pod");
   const [namespaceFilter, setNamespaceFilter] = useState("");
   const [items, setItems] = useState<K8sObject[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(clusters.length > 0);
+  // hasFetched gates the empty state so the skeleton (not "No <kind>") shows until the first list
+  // resolves — including the window where clusters arrive over SSE after mount.
+  const [hasFetched, setHasFetched] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<K8sObject | null>(null);
   const [nonce, setNonce] = useState(0);
 
-  const cluster =
-    clusters.find((candidate) => clusterKey(candidate) === selectedClusterKey) ?? clusters[0] ?? null;
-
-  // Re-fetch when the cluster, kind, or an explicit refresh (nonce) changes. The namespace filter is
-  // applied client-side (below), so editing it does not trigger a request per keystroke.
+  // Keep the selection in sync with the live list: snap to the first cluster when the selection is
+  // empty (no clusters at mount) or its cluster was removed (e.g. deleted while this view is open),
+  // so the dropdown's value and the cluster actually fetched never diverge.
   useEffect(() => {
-    if (!cluster) {
-      setItems([]);
+    if (clusters.length === 0) {
+      return;
+    }
 
+    if (!clusters.some((candidate) => clusterKey(candidate) === selectedClusterKey)) {
+      setSelectedClusterKey(clusterKey(clusters[0]));
+    }
+  }, [clusters, selectedClusterKey]);
+
+  // Re-fetch when the selected cluster, kind, or an explicit refresh (nonce) changes. Deps are
+  // PRIMITIVES only (selectedClusterKey is "namespace/name") — not the cluster object — so live
+  // cluster-list status churn pushed over SSE does not trigger spurious resource refetches. The
+  // namespace filter is applied client-side (below), so editing it issues no request per keystroke.
+  useEffect(() => {
+    if (selectedClusterKey === "") {
       return undefined;
     }
+
+    // selectedClusterKey is `${namespace}/${name}`; both segments are DNS labels (no "/"), so the
+    // first slash separates them.
+    const slash = selectedClusterKey.indexOf("/");
+    const clusterNamespace = selectedClusterKey.slice(0, slash);
+    const clusterName = selectedClusterKey.slice(slash + 1);
 
     let cancelled = false;
     setLoading(true);
     setError(null);
 
-    listResources(cluster.metadata.namespace ?? "default", cluster.metadata.name, kind)
+    listResources(clusterNamespace, clusterName, kind)
       .then((list) => {
         if (!cancelled) {
           setItems(list.items ?? []);
@@ -80,14 +99,14 @@ export function ResourcesView({ clusters }: { clusters: Cluster[] }) {
       .finally(() => {
         if (!cancelled) {
           setLoading(false);
+          setHasFetched(true);
         }
       });
 
     return () => {
       cancelled = true;
     };
-    // selectedClusterKey drives `cluster`; including it (not the derived object) keeps deps stable.
-  }, [cluster, kind, nonce]);
+  }, [selectedClusterKey, kind, nonce]);
 
   const filtered = useMemo(() => {
     const query = namespaceFilter.trim().toLowerCase();
@@ -147,11 +166,11 @@ export function ResourcesView({ clusters }: { clusters: Cluster[] }) {
         </Button>
       </div>
 
-      {error ? <ErrorBanner message={error} onRetry={() => setNonce((value) => value + 1)} /> : null}
-
-      {loading ? (
+      {error ? (
+        <ErrorBanner message={error} onRetry={() => setNonce((value) => value + 1)} />
+      ) : loading || !hasFetched ? (
         <TableSkeleton />
-      ) : filtered.length === 0 && !error ? (
+      ) : filtered.length === 0 ? (
         <EmptyState title={`No ${kind} resources`} description="Nothing to show for this selection." />
       ) : (
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">

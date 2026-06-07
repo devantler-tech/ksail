@@ -322,23 +322,3 @@ export function listResources(
     `/api/v1/clusters/${namespace}/${name}/resources?${params.toString()}`,
   );
 }
-
-// getResource fetches a single resource by kind + name (and namespace for namespaced kinds).
-export function getResource(
-  namespace: string,
-  name: string,
-  kind: string,
-  resourceName: string,
-  resourceNamespace?: string,
-): Promise<K8sObject> {
-  const params = new URLSearchParams();
-  if (resourceNamespace) {
-    params.set("namespace", resourceNamespace);
-  }
-
-  const query = params.toString() ? `?${params.toString()}` : "";
-
-  return request<K8sObject>(
-    `/api/v1/clusters/${namespace}/${name}/resources/${kind}/${resourceName}${query}`,
-  );
-}
