@@ -189,11 +189,17 @@ spec:
             location: fsn1
             min: 1
             max: 5
-          - name: workers-nbg1
+          - name: gpu-nbg1
             serverType: cx33
             location: nbg1
             min: 0
             max: 3
+            labels:                  # applied to every node in this pool
+              workload: gpu
+            taints:                  # only pods that tolerate this land here
+              - key: dedicated
+                value: gpu
+                effect: NoSchedule
       pod:
         horizontal: Disabled       # Enabled | Disabled (pod autoscaler setting; metrics-server is configured separately)
         vertical: Disabled         # Enabled | Disabled (reserved for future VPA support; not yet implemented)
@@ -213,6 +219,8 @@ spec:
 | `autoscaler.node.pools[].location` | string | — | Hetzner datacenter location for this pool (e.g. `fsn1`) |
 | `autoscaler.node.pools[].min` | int | — | Minimum nodes in this pool |
 | `autoscaler.node.pools[].max` | int | — | Maximum nodes in this pool |
+| `autoscaler.node.pools[].labels` | map | _(none)_ | Kubernetes node labels applied to every node in this pool (see [Per-pool labels and taints](#per-pool-labels-and-taints)). Keys must be valid Kubernetes label keys. |
+| `autoscaler.node.pools[].taints[]` | list | _(none)_ | Kubernetes node taints applied to every node in this pool. Each entry has `key` (required), `value` (optional), and `effect` (`NoSchedule`, `PreferNoSchedule`, or `NoExecute`). |
 | `autoscaler.pod.horizontal` | string | `Disabled` | `Enabled` activates HPA support. Metrics-server is a prerequisite — configure it separately via `spec.cluster.metricsServer`. |
 | `autoscaler.pod.vertical` | string | `Disabled` | Reserved for future VPA support; not yet implemented. |
 
@@ -225,6 +233,17 @@ KSail stamps the Kubernetes node label `ksail.io/autoscaled=true` on every autos
 
 > [!NOTE]
 > The label is applied via the autoscaler worker's Talos `machine.nodeLabels` (the kubelet `--node-labels` flag), so it lands on the real `Node` object. The upstream Hetzner cluster-autoscaler deliberately does **not** push its per-pool `nodeConfigs[].labels`/`taints` to the kubelet — those only seed the in-memory template node used for scheduling simulation and scale-from-zero (see [kubernetes/autoscaler#8492](https://github.com/kubernetes/autoscaler/issues/8492), closed as working-as-intended). Stamping the label in the worker cloud-init is therefore the canonical mechanism.
+
+#### Per-pool labels and taints
+
+Each pool can declare `labels` and `taints` that KSail applies to **every** node provisioned in that pool — useful for steering workloads onto a specific pool (`nodeSelector`/`nodeAffinity`) or reserving a pool for tolerating workloads (e.g. GPU nodes).
+
+KSail applies them through **two complementary mechanisms** so they are correct both on the live node and during scaling decisions:
+
+1. **On the real `Node`** — baked into each pool's Talos worker cloud-init as `machine.nodeLabels` / `machine.nodeTaints`, which Talos reconciles onto the `Node` (this is what actually labels/taints the running node, per the mechanism described above).
+2. **On the scale-from-zero template** — mirrored into the autoscaler's per-pool `nodeConfigs[].labels`/`taints` so the autoscaler knows, *before any node of the pool exists*, that scaling the pool would produce nodes carrying those labels/taints. Without this, the autoscaler would never scale a tainted pool up from zero (no template node tolerates the pending pod) and could scale the wrong pool for a label-selecting pod.
+
+Under the hood this is delivered via the autoscaler's `HCLOUD_CLUSTER_CONFIG` (per-pool cloud-init, image, labels, and taints), which KSail writes to the `cluster-autoscaler-config` Secret. Changing a pool's labels or taints on `ksail cluster update` is applied in place and recycles that pool's existing autoscaler nodes so they pick up the change.
 
 ## Quick Start
 

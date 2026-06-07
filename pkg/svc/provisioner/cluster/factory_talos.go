@@ -62,6 +62,10 @@ func (f DefaultFactory) createTalosProvisioner(
 	hetznerOpts.NodeAutoscalerEnabled = cluster.Spec.Cluster.Autoscaler.Node.Enabled ||
 		cluster.Spec.Cluster.NodeAutoscaling == v1alpha1.NodeAutoscalingEnabled
 
+	// Carry the full pool definitions so the provisioner can build per-pool
+	// cloud-init worker configs and the HCLOUD_CLUSTER_CONFIG (pool labels/taints).
+	hetznerOpts.AutoscalerNodePools = cluster.Spec.Cluster.Autoscaler.Node.Pools
+
 	// Derive pool names from the new autoscaler pools config so that the
 	// delete path can clean up autoscaler-managed Hetzner servers.
 	if len(hetznerOpts.AutoscalerNodePoolNames) == 0 {
