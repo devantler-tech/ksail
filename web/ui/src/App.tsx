@@ -19,6 +19,7 @@ import {
 import { MetaContext } from "./lib/meta.ts";
 import { AppShell, type View } from "./components/AppShell.tsx";
 import { SettingsPage } from "./components/SettingsPage.tsx";
+import { ResourcesView } from "./components/ResourcesView.tsx";
 import { ClusterDetail } from "./components/ClusterDetail.tsx";
 import {
   ClusterFormDialog,
@@ -84,6 +85,9 @@ export function App() {
   // canUpdate reflects the backend's clusterUpdate capability. The local UI/desktop backend cannot
   // update a cluster in place, so the edit affordance is hidden there; the operator can, so it shows.
   const [canUpdate, setCanUpdate] = useState(fullCapabilities.clusterUpdate);
+  // canBrowse reflects the backend's workloadRead capability: whether the read-only resource browser
+  // endpoints exist. The Resources view + nav item are shown only when true.
+  const [canBrowse, setCanBrowse] = useState(fullCapabilities.workloadRead);
   const [user, setUser] = useState<User | null>(null);
   const [needsLogin, setNeedsLogin] = useState(false);
   const [meta, setMeta] = useState<ClusterMeta | null>(null);
@@ -160,6 +164,7 @@ export function App() {
       }
       setReadOnly(config.readOnly);
       setCanUpdate(config.capabilities?.clusterUpdate ?? fullCapabilities.clusterUpdate);
+      setCanBrowse(config.capabilities?.workloadRead ?? fullCapabilities.workloadRead);
       setDistributions(config.distributions ?? DEFAULT_DISTRIBUTIONS);
       setProviderStatus(config.providers ?? null);
       setSettingsEnabled(config.settingsEnabled ?? false);
@@ -189,6 +194,7 @@ export function App() {
 
       setReadOnly(config.readOnly);
       setCanUpdate(config.capabilities?.clusterUpdate ?? fullCapabilities.clusterUpdate);
+      setCanBrowse(config.capabilities?.workloadRead ?? fullCapabilities.workloadRead);
       setUser(config.user ?? null);
       setDistributions(config.distributions ?? DEFAULT_DISTRIBUTIONS);
       setProviderStatus(config.providers ?? null);
@@ -342,10 +348,13 @@ export function App() {
       view={view}
       onNavigate={setView}
       settingsEnabled={settingsEnabled}
+      workloadEnabled={canBrowse}
       headerActions={headerActions}
     >
       {view === "settings" ? (
         <SettingsPage onSaved={() => void reloadConfig()} />
+      ) : view === "resources" ? (
+        <ResourcesView clusters={clusters} />
       ) : (
       <div className="mx-auto max-w-6xl space-y-4">
         {error && clusters.length > 0 ? (

@@ -89,6 +89,10 @@ type Service struct {
 	discoverer        *clusterdiscovery.Discoverer
 	discoverProviders []v1alpha1.Provider
 
+	// newDynamicClient builds a dynamic client for a named cluster (the read-only resource browser).
+	// Injectable so tests can substitute a fake client instead of resolving a real kubeconfig context.
+	newDynamicClient dynamicClientFunc
+
 	mu   sync.Mutex
 	jobs map[string]*job
 }
@@ -98,6 +102,7 @@ func NewService() *Service {
 	service := &Service{
 		newFactory:        defaultFactory,
 		discoverProviders: clusterdiscovery.AllProviders(),
+		newDynamicClient:  defaultDynamicClient,
 		jobs:              map[string]*job{},
 	}
 	service.discoverer = &clusterdiscovery.Discoverer{DockerFactory: service.dockerFactory}
