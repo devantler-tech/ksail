@@ -76,6 +76,23 @@ machine:
           - http://${REGISTRY:-localhost:5000}
 ```
 
+Because patch files are expanded too, you can inject **registry credentials** into the Talos
+machine config as config-as-code — keeping the secret in the environment, never committed. This is
+the supported way to give nodes registry auth (for example, so containerd can fetch cosign
+signatures for **private** packages during image verification) without passing credentials via CLI
+flags:
+
+```yaml
+# talos/cluster/registry-auth.yaml - Credentials are injected from the environment at load time
+machine:
+  registries:
+    config:
+      ghcr.io:
+        auth:
+          username: my-user
+          password: ${GHCR_TOKEN} # expanded at load; commit the placeholder, not the token
+```
+
 ### Example: Credentials
 
 ```yaml
