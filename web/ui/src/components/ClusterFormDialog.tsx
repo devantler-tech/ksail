@@ -398,7 +398,8 @@ export function ClusterFormDialog({
             />
             {yamlError ? <p className="text-sm text-red-600 dark:text-red-400">{yamlError}</p> : null}
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              Edit the full ksail.yaml. Switching to Form parses it back; Create applies it as-is.
+              Edit the full ksail.yaml. Create applies every field as-is; switching to Form keeps only the fields the
+              form models.
             </p>
           </div>
         ) : (
@@ -417,7 +418,7 @@ export function ClusterFormDialog({
                 <option value="">Start from a template…</option>
                 {CREATE_TEMPLATES.filter((template) => offeredDistributions.includes(template.distribution)).map(
                   (template) => (
-                    <option key={template.id} value={template.id}>
+                    <option key={template.id} value={template.id} title={template.description}>
                       {template.label}
                     </option>
                   ),
