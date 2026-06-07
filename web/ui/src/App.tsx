@@ -98,6 +98,8 @@ export function App() {
   const [canApply, setCanApply] = useState(fullCapabilities.applyManifests);
   // canCipher reflects the backend's secretsCipher capability (local SOPS).
   const [canCipher, setCanCipher] = useState(fullCapabilities.secretsCipher);
+  // canExecCap reflects the backend's workloadExec capability (the in-browser terminal).
+  const [canExecCap, setCanExecCap] = useState(fullCapabilities.workloadExec);
   const [user, setUser] = useState<User | null>(null);
   const [needsLogin, setNeedsLogin] = useState(false);
   const [meta, setMeta] = useState<ClusterMeta | null>(null);
@@ -179,6 +181,7 @@ export function App() {
       setCanKubeconfig(config.capabilities?.kubeconfigDownload ?? fullCapabilities.kubeconfigDownload);
       setCanApply(config.capabilities?.applyManifests ?? fullCapabilities.applyManifests);
       setCanCipher(config.capabilities?.secretsCipher ?? fullCapabilities.secretsCipher);
+      setCanExecCap(config.capabilities?.workloadExec ?? fullCapabilities.workloadExec);
       setDistributions(config.distributions ?? DEFAULT_DISTRIBUTIONS);
       setProviderStatus(config.providers ?? null);
       setSettingsEnabled(config.settingsEnabled ?? false);
@@ -213,6 +216,7 @@ export function App() {
       setCanKubeconfig(config.capabilities?.kubeconfigDownload ?? fullCapabilities.kubeconfigDownload);
       setCanApply(config.capabilities?.applyManifests ?? fullCapabilities.applyManifests);
       setCanCipher(config.capabilities?.secretsCipher ?? fullCapabilities.secretsCipher);
+      setCanExecCap(config.capabilities?.workloadExec ?? fullCapabilities.workloadExec);
       setUser(config.user ?? null);
       setDistributions(config.distributions ?? DEFAULT_DISTRIBUTIONS);
       setProviderStatus(config.providers ?? null);
@@ -379,6 +383,7 @@ export function App() {
           clusters={clusters}
           canWrite={!readOnly && canManage}
           canApply={!readOnly && canApply}
+          canExec={!readOnly && canExecCap}
         />
       ) : (
       <div className="mx-auto max-w-6xl space-y-4">
