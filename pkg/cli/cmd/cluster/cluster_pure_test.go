@@ -1199,3 +1199,99 @@ func TestResolveCreatedContextName(t *testing.T) {
 		})
 	}
 }
+
+// ===========================================================================
+// normalizePinnedVersion — pinned-version normalization & downgrade guard
+// ===========================================================================
+
+const (
+	// testPinCurrent is the running version used as the baseline in the
+	// normalizePinnedVersion cases; testPinNewer is a pin strictly newer than it.
+	testPinCurrent = "v1.8.0"
+	testPinNewer   = "v1.9.0"
+)
+
+func TestNormalizePinnedVersion(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		rawPinned   string
+		current     string
+		wantVersion string
+		wantReason  cluster.ExportPinnedVersionSkipReason
+	}{
+		{
+			name:        "newer pin proceeds with upgrade",
+			rawPinned:   testPinNewer,
+			current:     testPinCurrent,
+			wantVersion: testPinNewer,
+			wantReason:  cluster.ExportPinnedVersionProceed,
+		},
+		{
+			name:        "missing v prefix is normalized",
+			rawPinned:   "1.9.0",
+			current:     testPinCurrent,
+			wantVersion: testPinNewer,
+			wantReason:  cluster.ExportPinnedVersionProceed,
+		},
+		{
+			name:        "pin equal to current is a no-op",
+			rawPinned:   testPinCurrent,
+			current:     testPinCurrent,
+			wantVersion: testPinCurrent,
+			wantReason:  cluster.ExportPinnedVersionAlreadyAtIt,
+		},
+		{
+			name:        "older pin than current skips the downgrade",
+			rawPinned:   "v1.7.0",
+			current:     testPinCurrent,
+			wantVersion: "v1.7.0",
+			wantReason:  cluster.ExportPinnedVersionNewer,
+		},
+		{
+			name:        "unparseable current version falls through to proceed",
+			rawPinned:   testPinNewer,
+			current:     "",
+			wantVersion: testPinNewer,
+			wantReason:  cluster.ExportPinnedVersionProceed,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			gotVersion, gotReason, err := cluster.ExportNormalizePinnedVersion(
+				testCase.rawPinned, testCase.current,
+			)
+			require.NoError(t, err)
+			assert.Equal(t, testCase.wantVersion, gotVersion)
+			assert.Equal(t, testCase.wantReason, gotReason)
+		})
+	}
+}
+
+func TestNormalizePinnedVersion_EmptyPinReturnsError(t *testing.T) {
+	t.Parallel()
+
+	for _, raw := range []string{"", "   "} {
+		gotVersion, gotReason, err := cluster.ExportNormalizePinnedVersion(raw, testPinCurrent)
+		require.ErrorIs(t, err, cluster.ErrEmptyPinnedVersion)
+		assert.Empty(t, gotVersion)
+		assert.Equal(t, cluster.ExportPinnedVersionProceed, gotReason)
+	}
+}
+
+func TestNormalizePinnedVersion_InvalidPinReturnsError(t *testing.T) {
+	t.Parallel()
+
+	gotVersion, gotReason, err := cluster.ExportNormalizePinnedVersion(
+		"not-a-version", testPinCurrent,
+	)
+	require.Error(t, err)
+	require.NotErrorIs(t, err, cluster.ErrEmptyPinnedVersion)
+	assert.Contains(t, err.Error(), "invalid pinned Talos version")
+	assert.Empty(t, gotVersion)
+	assert.Equal(t, cluster.ExportPinnedVersionProceed, gotReason)
+}

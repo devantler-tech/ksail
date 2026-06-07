@@ -37,4 +37,28 @@ type NodePool struct {
 	Min int32 `json:"min" jsonschema:"minimum=0"`
 	// Max is the maximum number of nodes in this pool.
 	Max int32 `json:"max" jsonschema:"minimum=0"`
+	// Labels are Kubernetes node labels applied to every node provisioned in this
+	// pool. They are baked into the pool's Talos worker config (machine.nodeLabels)
+	// so they land on the real Node object, and are also attributed to the pool's
+	// scale-from-zero template so the autoscaler scales the pool for pods that
+	// select these labels. Keys must be valid Kubernetes label keys.
+	Labels map[string]string `json:"labels,omitzero" jsonschema:"description=Kubernetes node labels applied to every node in this pool (via Talos machine.nodeLabels and the autoscaler scale-from-zero template)."` //nolint:lll
+	// Taints are Kubernetes node taints applied to every node provisioned in this
+	// pool. They are baked into the pool's Talos worker config (machine.nodeTaints)
+	// so they land on the real Node object, and are also attributed to the pool's
+	// scale-from-zero template so the autoscaler only scales the pool for pods that
+	// tolerate the taints.
+	Taints []NodePoolTaint `json:"taints,omitzero" jsonschema:"description=Kubernetes node taints applied to every node in this pool (via Talos machine.nodeTaints and the autoscaler scale-from-zero template)."` //nolint:lll
+}
+
+// NodePoolTaint defines a Kubernetes node taint applied to every node in an
+// autoscaler node pool.
+type NodePoolTaint struct {
+	// Key is the taint key. Must be a valid Kubernetes label key (an optional
+	// DNS-subdomain prefix followed by a name segment).
+	Key string `json:"key" jsonschema:"minLength=1"`
+	// Value is the optional taint value.
+	Value string `json:"value,omitzero"`
+	// Effect is the scheduling effect: NoSchedule, PreferNoSchedule, or NoExecute.
+	Effect TaintEffect `json:"effect"`
 }
