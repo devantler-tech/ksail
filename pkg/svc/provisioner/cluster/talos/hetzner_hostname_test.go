@@ -260,3 +260,108 @@ func TestHetznerNodeName_ExceedsLimit(t *testing.T) {
 	assert.Contains(t, name, clusterName,
 		"formatted name is still returned so callers can use it in diagnostics")
 }
+
+// TestUserHostnameConfigSummary verifies that the origin-aware detector flags a
+// user-authored HostnameConfig (auto: off or a static hostname) — so the override
+// can be warned about, not silently discarded — while treating the Talos SDK
+// default (auto: stable) and an absent HostnameConfig as nothing to warn about.
+func TestUserHostnameConfigSummary(t *testing.T) {
+	t.Parallel()
+
+	machineDoc := "apiVersion: v1alpha1\nkind: HostnameConfig\n"
+
+	tests := []struct {
+		name string
+		cfg  string
+		want string
+	}{
+		{
+			name: "auto off is user intent",
+			cfg:  machineDoc + "auto: \"off\"\n",
+			want: "auto: off",
+		},
+		{
+			name: "static hostname is user intent",
+			cfg:  "apiVersion: v1alpha1\nkind: HostnameConfig\nhostname: my-node\n",
+			want: "hostname: my-node",
+		},
+		{
+			name: "auto stable is the SDK default (not flagged)",
+			cfg:  machineDoc + "auto: stable\n",
+			want: "",
+		},
+		{
+			name: "no HostnameConfig document (not flagged)",
+			cfg:  "apiVersion: v1alpha1\nkind: SideroLinkConfig\napiUrl: https://example\n",
+			want: "",
+		},
+		{
+			name: "HostnameConfig after a MachineConfig document is still detected",
+			cfg: "version: v1alpha1\nmachine:\n  type: worker\n---\n" +
+				machineDoc + "auto: \"off\"\n",
+			want: "auto: off",
+		},
+		{
+			name: "static hostname after a MachineConfig document is detected",
+			cfg: "version: v1alpha1\nmachine:\n  type: worker\n---\n" +
+				"apiVersion: v1alpha1\nkind: HostnameConfig\nhostname: my-custom-hostname\n",
+			want: "hostname: my-custom-hostname",
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := talosprovisioner.UserHostnameConfigSummary([]byte(testCase.cfg))
+			assert.Equal(t, testCase.want, got)
+		})
+	}
+}
+
+// TestUserHostnameConfigSummary_SDKDefaultGeneratedConfig verifies that a freshly
+// generated Talos worker config — which carries the SDK default HostnameConfig
+// (auto: stable) — is NOT flagged, so KSail does not warn on the common case where
+// the user supplied no hostname strategy of their own.
+func TestUserHostnameConfigSummary_SDKDefaultGeneratedConfig(t *testing.T) {
+	t.Parallel()
+
+	workerBytes := workerConfigBytes(t)
+	require.Positive(t, countHostnameConfigDocs(t, workerBytes),
+		"precondition: generated config carries the SDK default HostnameConfig document")
+
+	assert.Empty(t, talosprovisioner.UserHostnameConfigSummary(workerBytes),
+		"the SDK default (auto: stable) must not be flagged as user intent")
+}
+
+// TestWarnIfOverridingUserHostname_EmitsForUserConfig verifies the user-facing
+// behavior of this change: when a user-authored HostnameConfig is present, KSail
+// logs a visible warning that it is overriding it (rather than discarding silently).
+func TestWarnIfOverridingUserHostname_EmitsForUserConfig(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+
+	prov := talosprovisioner.NewProvisioner(nil, nil).WithLogWriter(&buf)
+	prov.WarnIfOverridingUserHostnameForTest(
+		[]byte("apiVersion: v1alpha1\nkind: HostnameConfig\nauto: \"off\"\n"),
+	)
+
+	assert.Contains(t, buf.String(), "Overriding user HostnameConfig (auto: off)",
+		"a user HostnameConfig override must be surfaced, not silent")
+}
+
+// TestWarnIfOverridingUserHostname_SilentForSDKDefault verifies the warning is a
+// no-op for the SDK default (auto: stable) — KSail strips that silently because it
+// is exactly the setting that renames nodes, not a user hostname strategy.
+func TestWarnIfOverridingUserHostname_SilentForSDKDefault(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+
+	prov := talosprovisioner.NewProvisioner(nil, nil).WithLogWriter(&buf)
+	prov.WarnIfOverridingUserHostnameForTest(workerConfigBytes(t))
+
+	assert.Empty(t, buf.String(),
+		"the SDK default HostnameConfig must be stripped silently (no warning)")
+}
