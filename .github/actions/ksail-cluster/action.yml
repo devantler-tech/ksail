@@ -205,7 +205,43 @@ runs:
 
     - name: 📥 Pre-pull registry image
       if: inputs.provider == 'Docker'
-      uses: ./.github/actions/pull-registry-image
+      shell: bash
+      # Inlined rather than `uses: ./.github/actions/pull-registry-image`: a `./`
+      # path inside a composite action resolves against the *consumer's*
+      # workspace, not this repo, so the local reference breaks every external
+      # caller of ksail-cluster (actions/runner#1348). Pinning a repo-qualified
+      # ref instead would force a post-release version bump on every tag, so the
+      # logic lives here directly. Keep it in sync with the standalone
+      # .github/actions/pull-registry-image action used internally by
+      # warm-mirror-cache.
+      run: |
+        set -euo pipefail
+
+        # mirror.gcr.io is Google's anonymous pull-through cache for Docker Hub;
+        # it is not subject to Docker Hub's per-IP anonymous rate limits, which is
+        # what causes the recurring "registry:3 pull timeout" flake on shared CI
+        # runners. Try the mirror first, then fall back to Docker Hub directly,
+        # and re-tag whichever source succeeds to the canonical registry:3.
+        obtain_registry_image() {
+          local ref attempt
+          for ref in mirror.gcr.io/library/registry:3 registry:3; do
+            for attempt in 1 2 3; do
+              if docker pull --quiet "$ref"; then
+                docker tag "$ref" registry:3
+                echo "✅ registry:3 obtained from ${ref}"
+                return 0
+              fi
+              echo "⚠️ pull ${ref} attempt ${attempt}/3 failed; retrying in $((attempt * 5))s…"
+              sleep "$((attempt * 5))"
+            done
+          done
+          return 1
+        }
+
+        if ! obtain_registry_image; then
+          echo "❌ Failed to obtain registry:3 from mirror.gcr.io and Docker Hub"
+          exit 1
+        fi
 
     - name: 📥 Pre-pull distribution images
       if: inputs.provider == 'Docker'

@@ -6,6 +6,11 @@ description: >-
   this pulls from Google's Docker Hub pull-through mirror first and falls back to
   Docker Hub, re-tagging the result to registry:3 for callers.
 
+# NOTE: This pull logic is duplicated inline in
+# .github/actions/ksail-cluster/action.yml, because that action is consumed
+# externally and a `./` reference would resolve against the consumer's workspace
+# (actions/runner#1348). Keep the two copies in sync. This standalone action is
+# used internally by warm-mirror-cache, where `./` works fine.
 runs:
   using: composite
   steps:
