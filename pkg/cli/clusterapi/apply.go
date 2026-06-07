@@ -73,8 +73,11 @@ func defaultApplyClient(
 	return dynamicClient, mapper, nil
 }
 
-// splitManifests splits multi-document YAML into individual, trimmed, non-empty documents.
-func splitManifests(data []byte) [][]byte {
+// splitManifests splits multi-document YAML into individual, trimmed, non-empty documents. A
+// malformed document separator (e.g. `--- junk`) is surfaced as an ErrInvalid-wrapped error rather
+// than silently dropping the in-progress and following documents (which would apply a subset and
+// report a false success).
+func splitManifests(data []byte) ([][]byte, error) {
 	reader := yamlutil.NewYAMLReader(bufio.NewReader(bytes.NewReader(data)))
 
 	var docs [][]byte
@@ -86,7 +89,7 @@ func splitManifests(data []byte) [][]byte {
 		}
 
 		if err != nil {
-			break
+			return nil, fmt.Errorf("%w: %w", api.ErrInvalid, err)
 		}
 
 		doc = bytes.TrimSpace(doc)
@@ -95,7 +98,7 @@ func splitManifests(data []byte) [][]byte {
 		}
 	}
 
-	return docs
+	return docs, nil
 }
 
 // ApplyManifests server-side-applies each document in the supplied multi-document YAML to the named
@@ -107,7 +110,11 @@ func (s *Service) ApplyManifests(
 	manifests []byte,
 	dryRun bool,
 ) ([]api.ApplyResult, error) {
-	docs := splitManifests(manifests)
+	docs, err := splitManifests(manifests)
+	if err != nil {
+		return nil, err
+	}
+
 	if len(docs) == 0 {
 		return nil, fmt.Errorf("%w: no manifests provided", api.ErrInvalid)
 	}

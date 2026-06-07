@@ -1,16 +1,8 @@
-import { useState } from "react";
-import { ApiError, applyManifests, type ApplyResult } from "../api.ts";
+import { useEffect, useState } from "react";
+import { applyManifests, errorMessage, type ApplyResult } from "../api.ts";
 import { cx } from "../lib/cx.ts";
 import { useToast } from "./Toast.tsx";
 import { Button, SlideOver } from "./ui.tsx";
-
-function errorMessage(err: unknown): string {
-  if (err instanceof ApiError) {
-    return err.message;
-  }
-
-  return err instanceof Error ? err.message : String(err);
-}
 
 const PLACEHOLDER =
   "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: example\n  namespace: default\ndata:\n  key: value";
@@ -37,6 +29,14 @@ export function ApplyManifestsDialog({
   const [results, setResults] = useState<ApplyResult[] | null>(null);
   const [lastDryRun, setLastDryRun] = useState(false);
   const [busy, setBusy] = useState(false);
+
+  // The dialog is mounted permanently (only `open` toggles visibility), so clear prior results when
+  // it (re)opens or the target cluster changes — otherwise a previous cluster's results could render
+  // under a different cluster's header after close → switch → reopen.
+  useEffect(() => {
+    setResults(null);
+    setLastDryRun(false);
+  }, [open, clusterNamespace, clusterName]);
 
   function run(dryRun: boolean) {
     if (manifests.trim() === "") {

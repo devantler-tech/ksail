@@ -189,6 +189,12 @@ export class ApiError extends Error {
   }
 }
 
+// errorMessage extracts a human-readable string from an unknown thrown value. ApiError extends Error,
+// so its message (which already carries the server detail) is used directly.
+export function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
 // detailFromBody pulls a human-readable error message out of the server's response body. The API
 // returns either {"error": "..."} or {"reason": "..."}; fall back to the raw text otherwise.
 function detailFromBody(body: string): { message: string; loginURL?: string } {

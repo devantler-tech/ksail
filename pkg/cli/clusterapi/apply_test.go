@@ -110,6 +110,23 @@ func TestApplyManifestsEmpty(t *testing.T) {
 	require.ErrorIs(t, err, api.ErrInvalid)
 }
 
+func TestApplyManifestsRejectsMalformedSeparator(t *testing.T) {
+	t.Parallel()
+
+	service := clusterapi.NewTestService(nil)
+	injectFakeApply(service)
+
+	// A separator line with trailing junk makes the YAML reader error mid-stream. It must be surfaced
+	// (422), not swallowed — otherwise only the first doc applies and a false success is reported.
+	manifest := []byte(
+		"apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm1\n  namespace: x\n" +
+			"--- junk\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cm2\n  namespace: x\n",
+	)
+
+	_, err := service.ApplyManifests(context.Background(), "default", "c1", manifest, false)
+	require.ErrorIs(t, err, api.ErrInvalid)
+}
+
 func TestApplyManifestsRejectsMissingName(t *testing.T) {
 	t.Parallel()
 

@@ -186,6 +186,8 @@ export function ResourcesView({
     );
   }
 
+  const [selectedNamespace, selectedName] = splitClusterKey(selectedClusterKey);
+
   return (
     <div className="mx-auto max-w-6xl space-y-4">
       <div className="flex flex-wrap items-end gap-3">
@@ -407,8 +409,8 @@ export function ResourcesView({
       <ApplyManifestsDialog
         open={applyOpen}
         onClose={() => setApplyOpen(false)}
-        clusterNamespace={splitClusterKey(selectedClusterKey)[0]}
-        clusterName={splitClusterKey(selectedClusterKey)[1]}
+        clusterNamespace={selectedNamespace}
+        clusterName={selectedName}
         onApplied={() => setNonce((value) => value + 1)}
       />
     </div>
