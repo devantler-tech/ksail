@@ -112,6 +112,13 @@ var ErrPoolLocationEmpty = errors.New("pool location must not be empty")
 // ErrInvalidPoolCapacity is returned when a node pool has a negative min or max value.
 var ErrInvalidPoolCapacity = errors.New("invalid pool capacity")
 
+// ErrInvalidPoolLabel is returned when a node pool label key or value is not a
+// valid Kubernetes label key/value.
+var ErrInvalidPoolLabel = errors.New("invalid pool label")
+
+// ErrInvalidPoolTaint is returned when a node pool taint key, value, or effect is invalid.
+var ErrInvalidPoolTaint = errors.New("invalid pool taint")
+
 // ErrInvalidMaxNodesTotal is returned when MaxNodesTotal is negative.
 var ErrInvalidMaxNodesTotal = errors.New("invalid maxNodesTotal")
 

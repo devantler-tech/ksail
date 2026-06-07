@@ -3,6 +3,7 @@ package talosprovisioner
 import (
 	"context"
 	"fmt"
+	"maps"
 	"os"
 	"slices"
 	"strconv"
@@ -444,16 +445,16 @@ func (p *Provisioner) ensureAutoscalerSecret(
 		return false, err
 	}
 
-	workerConfigYAML, err := GenerateAutoscalerWorkerConfig(configBundle.Worker())
+	poolConfigs, err := p.buildAutoscalerPoolConfigs(configBundle)
 	if err != nil {
-		return false, fmt.Errorf("generating autoscaler worker config: %w", err)
+		return false, err
 	}
 
 	changed, err := ApplyAutoscalerConfigSecret(
 		ctx,
 		kubeclient,
 		strconv.FormatInt(snapshotImageID, 10),
-		workerConfigYAML,
+		poolConfigs,
 	)
 	if err != nil {
 		return false, fmt.Errorf("applying autoscaler config secret: %w", err)
@@ -470,6 +471,75 @@ func (p *Provisioner) ensureAutoscalerSecret(
 	}
 
 	return changed, p.restartAutoscalerAfterConfigChange(ctx, kubeclient)
+}
+
+// buildAutoscalerPoolConfigs builds the per-pool autoscaler configs from the
+// configured node pools and the cluster's base worker config. Each pool gets its
+// own cloud-init worker config with the pool's labels/taints baked into
+// machine.nodeLabels/nodeTaints (so they land on the real Node), plus the same
+// labels/taints attributed to its scale-from-zero template node. PatchV1Alpha1
+// deep-copies the base config, so per-pool patches do not leak across pools.
+func (p *Provisioner) buildAutoscalerPoolConfigs(
+	configBundle *bundle.Bundle,
+) ([]AutoscalerPoolConfig, error) {
+	pools := p.hetznerOpts.AutoscalerNodePools
+	poolConfigs := make([]AutoscalerPoolConfig, 0, len(pools))
+
+	for _, pool := range pools {
+		taints := poolTaintsToCoreV1(pool.Taints)
+
+		workerConfigYAML, err := GenerateAutoscalerWorkerConfig(
+			configBundle.Worker(),
+			pool.Labels,
+			taints,
+		)
+		if err != nil {
+			return nil, fmt.Errorf(
+				"generating autoscaler worker config for pool %q: %w", pool.Name, err,
+			)
+		}
+
+		poolConfigs = append(poolConfigs, AutoscalerPoolConfig{
+			Name:             pool.Name,
+			WorkerConfigYAML: workerConfigYAML,
+			Labels:           autoscalerTemplateLabels(pool.Labels),
+			Taints:           taints,
+		})
+	}
+
+	return poolConfigs, nil
+}
+
+// poolTaintsToCoreV1 converts ksail node-pool taints to corev1 taints for the
+// autoscaler scale-from-zero template and the Talos nodeTaints encoding.
+func poolTaintsToCoreV1(taints []v1alpha1.NodePoolTaint) []corev1.Taint {
+	if len(taints) == 0 {
+		return nil
+	}
+
+	out := make([]corev1.Taint, 0, len(taints))
+	for _, taint := range taints {
+		out = append(out, corev1.Taint{
+			Key:    taint.Key,
+			Value:  taint.Value,
+			Effect: corev1.TaintEffect(taint.Effect),
+		})
+	}
+
+	return out
+}
+
+// autoscalerTemplateLabels returns the labels the autoscaler should attribute to
+// a pool's scale-from-zero template node: the pool's labels plus the
+// LabelAutoscaled marker every autoscaler node carries on the real Node. Keeping
+// the template in sync with the real node labels lets the autoscaler correctly
+// decide whether scaling the pool would satisfy a pending pod's node selector.
+func autoscalerTemplateLabels(poolLabels map[string]string) map[string]string {
+	labels := make(map[string]string, len(poolLabels)+1)
+	maps.Copy(labels, poolLabels)
+	labels[LabelAutoscaled] = "true"
+
+	return labels
 }
 
 // restartAutoscalerAfterConfigChange rolls the cluster-autoscaler Deployment so it
