@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/client-go/dynamic"
 )
 
@@ -24,6 +25,14 @@ func ContextForCluster(kubeconfigPath, clusterName string) (string, error) {
 // read from, so tests can point at a temp kubeconfig instead of the user's real one.
 func (s *Service) SetKubeconfigPathForTest(path string) {
 	s.kubeconfigPath = func() string { return path }
+}
+
+// SetApplyClientForTest overrides the apply-client builder so manifest-apply tests can inject a fake
+// dynamic client + a static REST mapper instead of resolving a real cluster.
+func (s *Service) SetApplyClientForTest(
+	build func(ctx context.Context, clusterName string) (dynamic.Interface, meta.RESTMapper, error),
+) {
+	s.newApplyClient = build
 }
 
 // NewTestService returns a Service whose provisioner factory is overridden, so black-box tests can

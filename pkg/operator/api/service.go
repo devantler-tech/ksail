@@ -71,6 +71,10 @@ type Capabilities struct {
 	// true exactly when the serving ClusterService implements KubeconfigProvider. The local backend
 	// extracts the cluster's context from the user's kubeconfig; the operator does not implement it.
 	KubeconfigDownload bool `json:"kubeconfigDownload"`
+	// ApplyManifests reports whether the backend can server-side-apply raw manifests to a cluster —
+	// true exactly when the serving ClusterService implements ApplyService. Combined with !readOnly
+	// before the SPA shows the apply affordance.
+	ApplyManifests bool `json:"applyManifests"`
 }
 
 // KubeconfigProvider is an optional interface a ClusterService may implement to export a portable,

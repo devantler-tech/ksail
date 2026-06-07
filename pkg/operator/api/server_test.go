@@ -68,7 +68,8 @@ func TestConfigReportsReadOnly(t *testing.T) {
 	assert.JSONEq(
 		t,
 		`{"readOnly":true,"authEnabled":false,`+
-			`"capabilities":{"clusterUpdate":true,"workloadRead":false,"workloadWrite":false,"kubeconfigDownload":false}}`,
+			`"capabilities":{"clusterUpdate":true,"workloadRead":false,`+
+			`"workloadWrite":false,"kubeconfigDownload":false,"applyManifests":false}}`,
 		recorder.Body.String(),
 	)
 }
@@ -368,7 +369,8 @@ func TestConfigDefaultsWritable(t *testing.T) {
 	assert.JSONEq(
 		t,
 		`{"readOnly":false,"authEnabled":false,`+
-			`"capabilities":{"clusterUpdate":true,"workloadRead":false,"workloadWrite":false,"kubeconfigDownload":false}}`,
+			`"capabilities":{"clusterUpdate":true,"workloadRead":false,`+
+			`"workloadWrite":false,"kubeconfigDownload":false,"applyManifests":false}}`,
 		recorder.Body.String(),
 	)
 }
@@ -388,7 +390,8 @@ func TestConfigReportsServiceCapabilities(t *testing.T) {
 	assert.Contains(
 		t,
 		recorder.Body.String(),
-		`"capabilities":{"clusterUpdate":false,"workloadRead":false,"workloadWrite":false,"kubeconfigDownload":false}`,
+		`"capabilities":{"clusterUpdate":false,"workloadRead":false,`+
+			`"workloadWrite":false,"kubeconfigDownload":false,"applyManifests":false}`,
 	)
 }
 
@@ -405,7 +408,8 @@ func TestConfigDefaultsToFullCapabilities(t *testing.T) {
 	assert.Contains(
 		t,
 		recorder.Body.String(),
-		`"capabilities":{"clusterUpdate":true,"workloadRead":false,"workloadWrite":false,"kubeconfigDownload":false}`,
+		`"capabilities":{"clusterUpdate":true,"workloadRead":false,`+
+			`"workloadWrite":false,"kubeconfigDownload":false,"applyManifests":false}`,
 	)
 }
 
