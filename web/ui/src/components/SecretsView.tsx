@@ -41,20 +41,38 @@ function OutputBlock({ label, value }: { label: string; value: string }) {
   );
 }
 
+function FormatSelect({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  return (
+    <SelectField
+      label="Format"
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      className="min-w-32"
+    >
+      {SECRET_FORMATS.map((format) => (
+        <option key={format} value={format}>
+          {format.toUpperCase()}
+        </option>
+      ))}
+    </SelectField>
+  );
+}
+
 // SecretsView is a local SOPS tool: encrypt a plaintext document for an age recipient, and decrypt a
 // SOPS document with the local age keys. Shown only when the backend advertises secretsCipher (the
 // local `ksail ui`/desktop backend); the operator has no local keys.
 export function SecretsView() {
   const toast = useToast();
   const [recipients, setRecipients] = useState<string[]>([]);
-  const [format, setFormat] = useState("yaml");
 
   const [recipient, setRecipient] = useState("");
   const [plaintext, setPlaintext] = useState("");
+  const [encryptFormat, setEncryptFormat] = useState("yaml");
   const [encrypted, setEncrypted] = useState("");
   const [encryptBusy, setEncryptBusy] = useState(false);
 
   const [encryptedInput, setEncryptedInput] = useState("");
+  const [decryptFormat, setDecryptFormat] = useState("yaml");
   const [decrypted, setDecrypted] = useState("");
   const [decryptBusy, setDecryptBusy] = useState(false);
 
@@ -75,7 +93,7 @@ export function SecretsView() {
 
     setEncryptBusy(true);
     setEncrypted("");
-    encryptSecret(plaintext, recipient, format)
+    encryptSecret(plaintext, recipient, encryptFormat)
       .then((response) => {
         setEncrypted(response.encrypted);
         toast.success("Encrypted");
@@ -93,7 +111,7 @@ export function SecretsView() {
 
     setDecryptBusy(true);
     setDecrypted("");
-    decryptSecret(encryptedInput, format)
+    decryptSecret(encryptedInput, decryptFormat)
       .then((response) => {
         setDecrypted(response.plaintext);
         toast.success("Decrypted");
@@ -104,24 +122,10 @@ export function SecretsView() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-5">
-      <div className="flex items-end gap-3">
-        <SelectField
-          label="Format"
-          value={format}
-          onChange={(event) => setFormat(event.target.value)}
-          className="min-w-32"
-        >
-          {SECRET_FORMATS.map((value) => (
-            <option key={value} value={value}>
-              {value.toUpperCase()}
-            </option>
-          ))}
-        </SelectField>
-      </div>
-
       <div className="grid gap-6 lg:grid-cols-2">
         <section className="space-y-3 rounded-xl border border-slate-200 p-4 dark:border-slate-800">
           <h2 className="text-sm font-semibold text-slate-900 dark:text-white">Encrypt</h2>
+          <FormatSelect value={encryptFormat} onChange={setEncryptFormat} />
           <SelectField
             label="Recipient (age public key)"
             value={recipient}
@@ -150,6 +154,7 @@ export function SecretsView() {
 
         <section className="space-y-3 rounded-xl border border-slate-200 p-4 dark:border-slate-800">
           <h2 className="text-sm font-semibold text-slate-900 dark:text-white">Decrypt</h2>
+          <FormatSelect value={decryptFormat} onChange={setDecryptFormat} />
           <textarea
             value={encryptedInput}
             onChange={(event) => setEncryptedInput(event.target.value)}

@@ -270,6 +270,10 @@ func (s *Server) registerCapabilityRoutes(mux *http.ServeMux) {
 	}
 
 	// SOPS secret cipher with local age keys (CipherService). Cluster-independent local crypto.
+	// encrypt/decrypt are POST, so the read-only guard rejects them in read-only mode. This is
+	// intentional: a read-only deployment locks down secret operations entirely — including decrypt,
+	// which would otherwise reveal plaintext. The local `ksail ui`/desktop backend runs writable, so
+	// this only bites a deliberately read-only deployment that also opts into the cipher service.
 	if _, ok := s.Service.(CipherService); ok {
 		mux.HandleFunc("GET /api/v1/secrets/recipients", s.handleCipherRecipients)
 		mux.HandleFunc("POST /api/v1/secrets/encrypt", s.handleSecretEncrypt)
