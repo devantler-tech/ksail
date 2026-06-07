@@ -1399,6 +1399,49 @@ func TestEngine_AutoscalerPoolModified(t *testing.T) {
 		"5", "10", clusterupdate.ChangeCategoryInPlace)
 }
 
+func TestEngine_AutoscalerPoolLabelsAndTaintsModified(t *testing.T) {
+	t.Parallel()
+
+	old := newBaseSpec()
+	old.Autoscaler.Node.Pools = []v1alpha1.NodePool{
+		{Name: "workers-fsn1", ServerType: "cx23", Location: "fsn1", Min: 1, Max: 5},
+	}
+	newer := clone(old)
+	newer.Autoscaler.Node.Pools = []v1alpha1.NodePool{
+		{
+			Name: "workers-fsn1", ServerType: "cx23", Location: "fsn1", Min: 1, Max: 5,
+			Labels: map[string]string{"workload": "gpu"},
+			Taints: []v1alpha1.NodePoolTaint{
+				{Key: "dedicated", Value: "gpu", Effect: v1alpha1.TaintEffectNoSchedule},
+			},
+		},
+	}
+
+	engine := diff.NewEngine(v1alpha1.DistributionTalos, v1alpha1.ProviderHetzner)
+	result := engine.ComputeDiff(old, newer, nil, nil)
+
+	if !result.HasInPlaceChanges() {
+		t.Fatal("pool labels/taints modification should produce in-place changes")
+	}
+
+	assertSingleChange(
+		t,
+		result.InPlaceChanges,
+		"cluster.autoscaler.node.pools[workers-fsn1].labels",
+		"",
+		"workload=gpu",
+		clusterupdate.ChangeCategoryInPlace,
+	)
+	assertSingleChange(
+		t,
+		result.InPlaceChanges,
+		"cluster.autoscaler.node.pools[workers-fsn1].taints",
+		"",
+		"dedicated=gpu:NoSchedule",
+		clusterupdate.ChangeCategoryInPlace,
+	)
+}
+
 func TestEngine_AutoscalerPodHorizontalChange(t *testing.T) {
 	t.Parallel()
 
