@@ -98,6 +98,9 @@ type Service struct {
 	// needs GVK→resource resolution). Injectable for tests (fake client + static mapper).
 	newApplyClient applyClientFunc
 
+	// newExecClient builds a clientset + rest.Config for a named cluster (pod exec). Injectable.
+	newExecClient execClientFunc
+
 	// kubeconfigPath resolves the kubeconfig file the resource browser / kubeconfig export read from.
 	// Injectable so tests can point at a temp kubeconfig instead of the user's real one.
 	kubeconfigPath func() string
@@ -113,6 +116,7 @@ func NewService() *Service {
 		discoverProviders: clusterdiscovery.AllProviders(),
 		newDynamicClient:  defaultDynamicClient,
 		newApplyClient:    defaultApplyClient,
+		newExecClient:     defaultExecClient,
 		kubeconfigPath:    k8s.DefaultKubeconfigPath,
 		jobs:              map[string]*job{},
 	}
