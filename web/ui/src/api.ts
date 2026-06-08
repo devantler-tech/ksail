@@ -115,6 +115,9 @@ export interface Capabilities {
   // secretsCipher is true when the backend can encrypt/decrypt secrets with SOPS via local age keys
   // (the local backend). The SPA shows the Secrets view only then.
   secretsCipher: boolean;
+  // workloadLogs is true when the backend can stream a pod container's logs (the in-browser log
+  // viewer). Logs are read-only, so the SPA shows the action without combining it with !readOnly.
+  workloadLogs: boolean;
 }
 
 // fullCapabilities mirrors the backend's default for a service that does not report capabilities.
@@ -128,7 +131,29 @@ export const fullCapabilities: Capabilities = {
   kubeconfigDownload: false,
   applyManifests: false,
   secretsCipher: false,
+  workloadLogs: false,
 };
+
+// logsEventSourceURL builds the same-origin SSE URL for streaming a pod container's logs. EventSource
+// is same-origin and GET-only (no headers), which suits the read-only, cookie-authenticated log
+// stream — and works in the Wails desktop (SSE passes through the asset server, unlike WebSockets).
+export function logsEventSourceURL(
+  namespace: string,
+  name: string,
+  podNamespace: string,
+  pod: string,
+  container: string,
+): string {
+  const params = new URLSearchParams({ pod, follow: "true", tail: "1000" });
+  if (podNamespace) {
+    params.set("namespace", podNamespace);
+  }
+  if (container) {
+    params.set("container", container);
+  }
+
+  return `/api/v1/clusters/${namespace}/${name}/logs?${params.toString()}`;
+}
 
 export interface Config {
   readOnly: boolean;
@@ -220,11 +245,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const body = (await response.text()).trim();
     const { message, loginURL } = detailFromBody(body);
     const suffix = message === "" ? "" : `: ${message}`;
-    throw new ApiError(
-      `${init?.method ?? "GET"} ${path} (${response.status})${suffix}`,
-      response.status,
-      loginURL,
-    );
+    throw new ApiError(`${init?.method ?? "GET"} ${path} (${response.status})${suffix}`, response.status, loginURL);
   }
 
   if (response.status === 204) {
@@ -277,11 +298,7 @@ export function createCluster(cluster: Cluster): Promise<Cluster> {
   });
 }
 
-export function updateCluster(
-  namespace: string,
-  name: string,
-  cluster: Cluster,
-): Promise<Cluster> {
+export function updateCluster(namespace: string, name: string, cluster: Cluster): Promise<Cluster> {
   return request<Cluster>(`/api/v1/clusters/${namespace}/${name}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
@@ -344,9 +361,7 @@ export function listResources(
     params.set("namespace", resourceNamespace);
   }
 
-  return request<K8sList>(
-    `/api/v1/clusters/${namespace}/${name}/resources?${params.toString()}`,
-  );
+  return request<K8sList>(`/api/v1/clusters/${namespace}/${name}/resources?${params.toString()}`);
 }
 
 // SCALABLE_KINDS / RESTARTABLE_KINDS mirror the backend predicates (ResourceKindScalable /
@@ -454,10 +469,9 @@ export function restartResource(
   resourceName: string,
   resourceNamespace?: string,
 ): Promise<void> {
-  return request<void>(
-    resourcePath(namespace, name, kind, resourceName, resourceNamespace, "/restart"),
-    { method: "POST" },
-  );
+  return request<void>(resourcePath(namespace, name, kind, resourceName, resourceNamespace, "/restart"), {
+    method: "POST",
+  });
 }
 
 // deleteResource deletes a resource.
@@ -482,11 +496,7 @@ export function cipherRecipients(): Promise<{ recipients: string[] }> {
 }
 
 // encryptSecret SOPS-encrypts plaintext for the given age recipient (empty = the local default).
-export function encryptSecret(
-  plaintext: string,
-  recipient: string,
-  format: string,
-): Promise<{ encrypted: string }> {
+export function encryptSecret(plaintext: string, recipient: string, format: string): Promise<{ encrypted: string }> {
   return request<{ encrypted: string }>("/api/v1/secrets/encrypt", {
     method: "POST",
     headers: { "Content-Type": "application/json" },

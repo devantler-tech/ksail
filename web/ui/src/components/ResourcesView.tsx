@@ -1,4 +1,4 @@
-import { FileCode, RotateCw } from "lucide-react";
+import { FileCode, RotateCw, ScrollText } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
   ApiError,
@@ -16,13 +16,13 @@ import {
 import { cx } from "../lib/cx.ts";
 import { relativeAge } from "../lib/format.ts";
 import { ApplyManifestsDialog } from "./ApplyManifestsDialog.tsx";
+import { LogViewer } from "./LogViewer.tsx";
 import { ConfirmDialog } from "./ConfirmDialog.tsx";
 import { EmptyState, ErrorBanner, TableSkeleton } from "./states.tsx";
 import { useToast } from "./Toast.tsx";
 import { Button, SelectField, SlideOver, TextField } from "./ui.tsx";
 
-const th =
-  "px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400";
+const th = "px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400";
 const td = "px-4 py-3 align-middle";
 
 function clusterKey(cluster: Cluster): string {
@@ -57,6 +57,13 @@ function currentReplicas(obj: K8sObject): number {
   return spec?.replicas ?? 0;
 }
 
+// podContainers reads spec.containers[].name from a Pod object (for the logs container picker).
+function podContainers(obj: K8sObject): string[] {
+  const spec = obj.spec as { containers?: { name?: string }[] } | undefined;
+
+  return (spec?.containers ?? []).map((entry) => entry.name ?? "").filter((entry) => entry !== "");
+}
+
 // ResourcesView is the read-only workload browser: pick a cluster + resource kind, optionally filter
 // by namespace (client-side), and inspect any object's raw manifest. Backed by the ResourceService
 // endpoints; shown only when the backend advertises capabilities.workloadRead.
@@ -64,6 +71,7 @@ export function ResourcesView({
   clusters,
   canWrite,
   canApply,
+  canLogs,
 }: {
   clusters: Cluster[];
   // canWrite gates the write actions (scale/restart/delete) — true only when the backend advertises
@@ -71,11 +79,12 @@ export function ResourcesView({
   canWrite: boolean;
   // canApply gates the Apply YAML action (applyManifests && !readOnly).
   canApply: boolean;
+  // canLogs gates the Logs action on Pods. Logs are read-only, so this is just workloadLogs (no
+  // !readOnly), letting log viewing work even in read-only/GitOps mode.
+  canLogs: boolean;
 }) {
   const toast = useToast();
-  const [selectedClusterKey, setSelectedClusterKey] = useState(
-    clusters[0] ? clusterKey(clusters[0]) : "",
-  );
+  const [selectedClusterKey, setSelectedClusterKey] = useState(clusters[0] ? clusterKey(clusters[0]) : "");
   const [kind, setKind] = useState<string>("Pod");
   const [namespaceFilter, setNamespaceFilter] = useState("");
   const [items, setItems] = useState<K8sObject[]>([]);
@@ -91,6 +100,9 @@ export function ResourcesView({
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [actionBusy, setActionBusy] = useState(false);
   const [applyOpen, setApplyOpen] = useState(false);
+  // Logs target: the Pod being viewed (null = closed) + the chosen container.
+  const [logPod, setLogPod] = useState<K8sObject | null>(null);
+  const [logContainer, setLogContainer] = useState("");
 
   // Seed the scale input from the selected object's current replica count whenever it changes.
   useEffect(() => {
@@ -178,12 +190,7 @@ export function ResourcesView({
   }, [items, namespaceFilter]);
 
   if (clusters.length === 0) {
-    return (
-      <EmptyState
-        title="No clusters"
-        description="Create or connect a cluster to browse its resources."
-      />
-    );
+    return <EmptyState title="No clusters" description="Create or connect a cluster to browse its resources." />;
   }
 
   const [selectedNamespace, selectedName] = splitClusterKey(selectedClusterKey);
@@ -203,12 +210,7 @@ export function ResourcesView({
             </option>
           ))}
         </SelectField>
-        <SelectField
-          label="Kind"
-          value={kind}
-          onChange={(event) => setKind(event.target.value)}
-          className="min-w-40"
-        >
+        <SelectField label="Kind" value={kind} onChange={(event) => setKind(event.target.value)} className="min-w-40">
           {RESOURCE_KINDS.map((name) => (
             <option key={name} value={name}>
               {name}
@@ -269,9 +271,7 @@ export function ResourcesView({
                     <td className={cx(td, "font-medium text-slate-900 dark:text-white")}>
                       {item.metadata?.name ?? "—"}
                     </td>
-                    <td
-                      className={cx(td, "hidden text-sm text-slate-600 sm:table-cell dark:text-slate-300")}
-                    >
+                    <td className={cx(td, "hidden text-sm text-slate-600 sm:table-cell dark:text-slate-300")}>
                       {item.metadata?.namespace ?? "—"}
                     </td>
                     <td className={cx(td, "text-sm text-slate-500 tabular-nums dark:text-slate-400")}>
@@ -293,9 +293,9 @@ export function ResourcesView({
       >
         {selected ? (
           <div className="space-y-3">
-            {canWrite ? (
+            {canWrite || (canLogs && kind === "Pod") ? (
               <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-3 dark:border-slate-800">
-                {SCALABLE_KINDS.includes(kind) ? (
+                {canWrite && SCALABLE_KINDS.includes(kind) ? (
                   <form
                     className="flex items-center gap-1.5"
                     onSubmit={(event) => {
@@ -332,7 +332,7 @@ export function ResourcesView({
                     </Button>
                   </form>
                 ) : null}
-                {RESTARTABLE_KINDS.includes(kind) ? (
+                {canWrite && RESTARTABLE_KINDS.includes(kind) ? (
                   <Button
                     size="sm"
                     variant="secondary"
@@ -353,16 +353,26 @@ export function ResourcesView({
                     Restart
                   </Button>
                 ) : null}
-                {CLUSTER_SCOPED_KINDS.includes(kind) ? null : (
+                {canLogs && kind === "Pod" ? (
                   <Button
                     size="sm"
-                    variant="danger"
-                    disabled={actionBusy}
-                    onClick={() => setDeleteOpen(true)}
+                    variant="secondary"
+                    onClick={() => {
+                      const containers = podContainers(selected);
+                      setLogContainer(containers[0] ?? "");
+                      setLogPod(selected);
+                      setSelected(null);
+                    }}
                   >
+                    <ScrollText className="size-3.5" aria-hidden />
+                    Logs
+                  </Button>
+                ) : null}
+                {canWrite && !CLUSTER_SCOPED_KINDS.includes(kind) ? (
+                  <Button size="sm" variant="danger" disabled={actionBusy} onClick={() => setDeleteOpen(true)}>
                     Delete
                   </Button>
-                )}
+                ) : null}
               </div>
             ) : null}
             <pre className="overflow-x-auto rounded-lg bg-slate-50 p-3 text-xs leading-relaxed text-slate-800 dark:bg-slate-800/50 dark:text-slate-200">
@@ -379,11 +389,9 @@ export function ResourcesView({
           selected ? (
             <>
               This permanently deletes{" "}
-              <span className="font-medium text-slate-700 dark:text-slate-200">
-                {selected.metadata?.name}
-              </span>
-              {selected.metadata?.namespace ? ` in namespace ${selected.metadata.namespace}` : ""}. This
-              action cannot be undone.
+              <span className="font-medium text-slate-700 dark:text-slate-200">{selected.metadata?.name}</span>
+              {selected.metadata?.namespace ? ` in namespace ${selected.metadata.namespace}` : ""}. This action cannot
+              be undone.
             </>
           ) : (
             ""
@@ -413,6 +421,38 @@ export function ResourcesView({
         clusterName={selectedName}
         onApplied={() => setNonce((value) => value + 1)}
       />
+
+      <SlideOver
+        open={logPod !== null}
+        onClose={() => setLogPod(null)}
+        title={`Logs · ${logPod?.metadata?.name ?? ""}`}
+        subtitle={logPod?.metadata?.namespace ? `namespace: ${logPod.metadata.namespace}` : ""}
+      >
+        {logPod ? (
+          <div className="space-y-3">
+            {podContainers(logPod).length > 1 ? (
+              <SelectField
+                label="Container"
+                value={logContainer}
+                onChange={(event) => setLogContainer(event.target.value)}
+              >
+                {podContainers(logPod).map((containerName) => (
+                  <option key={containerName} value={containerName}>
+                    {containerName}
+                  </option>
+                ))}
+              </SelectField>
+            ) : null}
+            <LogViewer
+              clusterNamespace={selectedNamespace}
+              clusterName={selectedName}
+              podNamespace={logPod.metadata?.namespace ?? ""}
+              pod={logPod.metadata?.name ?? ""}
+              container={logContainer}
+            />
+          </div>
+        ) : null}
+      </SlideOver>
     </div>
   );
 }

@@ -95,6 +95,8 @@ export function App() {
   const [canApply, setCanApply] = useState(fullCapabilities.applyManifests);
   // canCipher reflects the backend's secretsCipher capability (local SOPS).
   const [canCipher, setCanCipher] = useState(fullCapabilities.secretsCipher);
+  // canLogs reflects the backend's workloadLogs capability (the in-browser log viewer).
+  const [canLogs, setCanLogs] = useState(fullCapabilities.workloadLogs);
   const [user, setUser] = useState<User | null>(null);
   const [needsLogin, setNeedsLogin] = useState(false);
   const [meta, setMeta] = useState<ClusterMeta | null>(null);
@@ -171,6 +173,7 @@ export function App() {
     setCanKubeconfig(config.capabilities?.kubeconfigDownload ?? fullCapabilities.kubeconfigDownload);
     setCanApply(config.capabilities?.applyManifests ?? fullCapabilities.applyManifests);
     setCanCipher(config.capabilities?.secretsCipher ?? fullCapabilities.secretsCipher);
+    setCanLogs(config.capabilities?.workloadLogs ?? fullCapabilities.workloadLogs);
     setDistributions(config.distributions ?? DEFAULT_DISTRIBUTIONS);
     setProviderStatus(config.providers ?? null);
     setSettingsEnabled(config.settingsEnabled ?? false);
@@ -370,7 +373,12 @@ export function App() {
         ) : view === "secrets" ? (
           <SecretsView />
         ) : view === "resources" ? (
-          <ResourcesView clusters={clusters} canWrite={!readOnly && canManage} canApply={!readOnly && canApply} />
+          <ResourcesView
+            clusters={clusters}
+            canWrite={!readOnly && canManage}
+            canApply={!readOnly && canApply}
+            canLogs={canLogs}
+          />
         ) : (
           <div className="mx-auto max-w-6xl space-y-4">
             {error && clusters.length > 0 ? <ErrorBanner message={error} onRetry={() => void refresh()} /> : null}
