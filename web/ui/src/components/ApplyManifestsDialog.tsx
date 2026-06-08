@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { applyManifests, errorMessage, type ApplyResult } from "../api.ts";
 import { cx } from "../lib/cx.ts";
 import { useToast } from "./Toast.tsx";
@@ -29,6 +29,10 @@ export function ApplyManifestsDialog({
   const [results, setResults] = useState<ApplyResult[] | null>(null);
   const [lastDryRun, setLastDryRun] = useState(false);
   const [busy, setBusy] = useState(false);
+  // A hidden file input drives the "Load from file…" button. In the desktop webview (WKWebView /
+  // WebView2 / WebKitGTK) this opens the OS-native file picker; in a browser it opens the browser's —
+  // so manifests can be loaded from disk on every surface with no Wails-specific binding.
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // The dialog is mounted permanently (only `open` toggles visibility), so clear prior results when
   // it (re)opens or the target cluster changes — otherwise a previous cluster's results could render
@@ -38,9 +42,30 @@ export function ApplyManifestsDialog({
     setLastDryRun(false);
   }, [open, clusterNamespace, clusterName]);
 
+  // loadFromFiles reads the picked file(s) and appends them to the editor as a multi-document stream
+  // (joined with the YAML "---" separator), so a whole directory of manifests can be staged at once and
+  // combined with anything already pasted. Empty files are skipped; a read failure surfaces as a toast.
+  async function loadFromFiles(files: FileList) {
+    try {
+      const contents = await Promise.all(Array.from(files).map((file) => file.text()));
+      const loaded = contents.map((text) => text.trim()).filter(Boolean).join("\n---\n");
+      if (loaded === "") {
+        return;
+      }
+
+      setManifests((current) =>
+        current.trim() === "" ? loaded : `${current.trimEnd()}\n---\n${loaded}`,
+      );
+      setResults(null);
+      toast.success(`Loaded ${files.length} file(s)`);
+    } catch (err) {
+      toast.error(errorMessage(err));
+    }
+  }
+
   function run(dryRun: boolean) {
     if (manifests.trim() === "") {
-      toast.error("Paste one or more Kubernetes manifests first");
+      toast.error("Add one or more Kubernetes manifests first (paste or load a file)");
 
       return;
     }
@@ -86,7 +111,25 @@ export function ApplyManifestsDialog({
           rows={16}
           className="w-full rounded-lg border border-slate-300 bg-white p-3 font-mono text-xs text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
         />
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".yaml,.yml,.json,.txt"
+          multiple
+          className="hidden"
+          onChange={(event) => {
+            const { files } = event.target;
+            if (files && files.length > 0) {
+              void loadFromFiles(files);
+            }
+            // Reset so picking the same file again still fires onChange.
+            event.target.value = "";
+          }}
+        />
         <div className="flex items-center gap-2">
+          <Button variant="secondary" onClick={() => fileInputRef.current?.click()}>
+            Load from file…
+          </Button>
           <Button variant="secondary" onClick={() => run(true)} loading={busy}>
             Validate (dry run)
           </Button>
