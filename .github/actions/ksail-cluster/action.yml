@@ -188,13 +188,19 @@ runs:
       shell: bash
       run: |
         echo "📦 Importing mirror registry volumes..."
+        # Pull the tar-utility busybox via mirror.gcr.io (anonymous pull-through
+        # cache), not Docker Hub: the runner's Docker Hub login makes a direct
+        # pull count against the authenticated rate limit and leak the dckr_jti
+        # token into error logs on throttle. mirror.gcr.io is anonymous and not
+        # rate-limited. It re-serializes manifests, so the upstream digest can't
+        # be pinned through it — tag-pinned, like registry:3 in pull-registry-image.sh.
         for registry in docker.io ghcr.io quay.io registry.k8s.io; do
           if [ -f "/tmp/ksail-mirror-cache/${registry}.tar" ]; then
             docker volume create "$registry" 2>/dev/null || true
             if docker run --rm \
               -v "${registry}":/volume \
               -v /tmp/ksail-mirror-cache:/backup:ro \
-              busybox:1.37@sha256:b3255e7dfbcd10cb367af0d409747d511aeb66dfac98cf30e97e87e4207dd76f \
+              mirror.gcr.io/library/busybox:1.37 \
               sh -c "cd /volume && tar -xf /backup/${registry}.tar"; then
               echo "  ✅ Restored $registry mirror cache"
             else
@@ -467,13 +473,15 @@ runs:
       shell: bash
       run: |
         echo "📦 Exporting mirror registry volumes for caching..."
+        # busybox via mirror.gcr.io (anonymous), not Docker Hub — avoids the
+        # authenticated rate limit and dckr_jti leak. See the import step above.
         mkdir -p /tmp/ksail-mirror-cache
         for registry in docker.io ghcr.io quay.io registry.k8s.io; do
           if docker volume inspect "$registry" > /dev/null 2>&1; then
             if docker run --rm \
               -v "${registry}":/volume:ro \
               -v /tmp/ksail-mirror-cache:/backup \
-              busybox:1.37@sha256:b3255e7dfbcd10cb367af0d409747d511aeb66dfac98cf30e97e87e4207dd76f \
+              mirror.gcr.io/library/busybox:1.37 \
               sh -c "cd /volume && tar -cf /backup/${registry}.tar ."; then
               echo "  ✅ Exported $registry"
             else
