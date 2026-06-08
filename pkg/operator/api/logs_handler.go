@@ -42,6 +42,8 @@ func (s *Server) handleLogs(writer http.ResponseWriter, request *http.Request) {
 		return
 	}
 
+	// tail bounds the initial backlog. An unset/invalid value uses the default; tail=0 streams from the
+	// start (the whole backlog), per the LogService contract (TailLines is applied only when > 0).
 	tail := int64(logDefaultTailLines)
 
 	parsed, parseErr := strconv.ParseInt(query.Get("tail"), 10, 64)
@@ -126,6 +128,9 @@ func (s *Server) streamLogLines(
 			if !s.sessionValid(request) {
 				return
 			}
+			// Keep an idle follow stream alive (a silent pod emits no lines), matching handleEvents.
+			writeSSEComment(writer, heartbeatComment)
+			flusher.Flush()
 		}
 	}
 }
