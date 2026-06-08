@@ -603,7 +603,14 @@ func (s *Server) handleScaleResource(writer http.ResponseWriter, request *http.R
 	writer.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Server) handleRestartResource(writer http.ResponseWriter, request *http.Request) {
+// runResourceWrite invokes a no-body ResourceWriter action (rollout restart, delete) and writes 204 —
+// mapping a backend without ResourceWriter to 501 and a service error to its client status. Shared by
+// the restart/delete handlers; handleScaleResource is separate because it first decodes a body.
+func (s *Server) runResourceWrite(
+	writer http.ResponseWriter,
+	request *http.Request,
+	invoke func(svc ResourceWriter, ctx context.Context, namespace, name string, ref ResourceRef) error,
+) {
 	svc, ok := s.resourceWriter()
 	if !ok {
 		writeClientError(writer, ErrNotSupported)
@@ -611,7 +618,8 @@ func (s *Server) handleRestartResource(writer http.ResponseWriter, request *http
 		return
 	}
 
-	err := svc.RestartResource(
+	err := invoke(
+		svc,
 		request.Context(),
 		request.PathValue("namespace"),
 		request.PathValue("name"),
@@ -626,27 +634,24 @@ func (s *Server) handleRestartResource(writer http.ResponseWriter, request *http
 	writer.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Server) handleDeleteResource(writer http.ResponseWriter, request *http.Request) {
-	svc, ok := s.resourceWriter()
-	if !ok {
-		writeClientError(writer, ErrNotSupported)
-
-		return
-	}
-
-	err := svc.DeleteResource(
-		request.Context(),
-		request.PathValue("namespace"),
-		request.PathValue("name"),
-		resourceRefFrom(request),
+func (s *Server) handleRestartResource(writer http.ResponseWriter, request *http.Request) {
+	s.runResourceWrite(
+		writer,
+		request,
+		func(svc ResourceWriter, ctx context.Context, namespace, name string, ref ResourceRef) error {
+			return svc.RestartResource(ctx, namespace, name, ref)
+		},
 	)
-	if err != nil {
-		writeClientError(writer, err)
+}
 
-		return
-	}
-
-	writer.WriteHeader(http.StatusNoContent)
+func (s *Server) handleDeleteResource(writer http.ResponseWriter, request *http.Request) {
+	s.runResourceWrite(
+		writer,
+		request,
+		func(svc ResourceWriter, ctx context.Context, namespace, name string, ref ResourceRef) error {
+			return svc.DeleteResource(ctx, namespace, name, ref)
+		},
+	)
 }
 
 func (s *Server) handleKubeconfig(writer http.ResponseWriter, request *http.Request) {
