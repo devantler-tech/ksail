@@ -3,6 +3,7 @@ package talosprovisioner
 import (
 	"context"
 	"fmt"
+	"io"
 	"slices"
 	"strings"
 	"time"
@@ -19,12 +20,31 @@ import (
 	kubedrain "k8s.io/kubectl/pkg/drain"
 )
 
-// drainTimeout is the maximum duration to wait for pod eviction during node drain.
-const drainTimeout = 120 * time.Second
+// defaultDrainTimeout is the maximum duration to wait for pod eviction during a
+// node drain when spec.cluster.talos.drainTimeout is not set. The previous value
+// of two minutes was too aggressive for production clusters: graceful eviction of
+// PodDisruptionBudget-protected workloads (e.g. Longhorn instance-managers whose
+// replicas must rebuild elsewhere, or databases that must fail over) routinely
+// takes several minutes, and overrunning it aborted the whole update. It is
+// aligned with nodeReadinessTimeout.
+const defaultDrainTimeout = 10 * time.Minute
+
+// drainSkipWaitForDeleteSeconds tells the drain helper to stop waiting on a pod
+// once its DeletionTimestamp is older than this many seconds. The node is about to
+// be rebooted or destroyed, so a pod that has accepted eviction but is slow to
+// terminate (e.g. a Job pod stuck in Terminating) must not consume the entire
+// drain budget while the rest of the node waits behind it.
+const drainSkipWaitForDeleteSeconds = 60
 
 // nodeReadinessTimeout is the timeout for waiting for a single node to become ready
 // after reboot.
 const nodeReadinessTimeout = 10 * time.Minute
+
+// uncordonCleanupTimeout bounds the best-effort uncordon performed after a drain
+// failure (see cordonAndDrain). It runs on a context detached from the (possibly
+// already-cancelled or unreachable-API) parent, so it needs its own deadline to
+// avoid hanging an already-failing update.
+const uncordonCleanupTimeout = 30 * time.Second
 
 // setNodeSchedulable marks a Kubernetes node as schedulable or unschedulable.
 func (p *Provisioner) setNodeSchedulable(
@@ -83,23 +103,59 @@ func (p *Provisioner) uncordonNode(
 	return p.setNodeSchedulable(ctx, clientset, nodeName, true)
 }
 
-// drainNode evicts all pods from a Kubernetes node.
+// drainTimeout returns the configured per-node drain timeout, falling back to
+// defaultDrainTimeout when unset or non-positive.
+func (p *Provisioner) drainTimeout() time.Duration {
+	if p.options != nil && p.options.DrainTimeout > 0 {
+		return p.options.DrainTimeout
+	}
+
+	return defaultDrainTimeout
+}
+
+// newDrainHelper builds the kubectl drain helper used by drainNode. It is split
+// out so the timeout / skip-wait / eviction-bypass wiring can be unit-tested
+// without a live cluster. When disableEviction is true the helper deletes pods
+// directly instead of going through the Eviction API, bypassing
+// PodDisruptionBudgets (see drainNode for when that is enabled).
+func newDrainHelper(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	timeout time.Duration,
+	disableEviction bool,
+	logWriter io.Writer,
+) *kubedrain.Helper {
+	return &kubedrain.Helper{
+		Ctx:    ctx,
+		Client: clientset,
+		// Force is kubectl-drain's flag to also remove standalone pods not backed by
+		// a controller; it is unrelated to KSail's --force (which sets disableEviction).
+		Force:                           true,
+		IgnoreAllDaemonSets:             true,
+		DeleteEmptyDirData:              true,
+		Timeout:                         timeout,
+		GracePeriodSeconds:              -1, // use pod's terminationGracePeriodSeconds
+		SkipWaitForDeleteTimeoutSeconds: drainSkipWaitForDeleteSeconds,
+		DisableEviction:                 disableEviction,
+		Out:                             logWriter,
+		ErrOut:                          logWriter,
+	}
+}
+
+// drainNode evicts all pods from a Kubernetes node. The wait budget is
+// p.drainTimeout(); pods already terminating past drainSkipWaitForDeleteSeconds
+// no longer block it. When p.drainForce is set (an explicit --force/--yes on the
+// update) the drain deletes pods directly, bypassing PodDisruptionBudgets so the
+// roll can complete even when a budget would never allow graceful eviction (e.g.
+// a single-replica StatefulSet) — at the cost of the disruption the budget
+// guards against.
 func (p *Provisioner) drainNode(
 	ctx context.Context,
 	clientset kubernetes.Interface,
 	nodeName string,
 ) error {
-	drainer := &kubedrain.Helper{
-		Ctx:                 ctx,
-		Client:              clientset,
-		Force:               true,
-		IgnoreAllDaemonSets: true,
-		DeleteEmptyDirData:  true,
-		Timeout:             drainTimeout,
-		GracePeriodSeconds:  -1, // use pod's terminationGracePeriodSeconds
-		Out:                 p.logWriter,
-		ErrOut:              p.logWriter,
-	}
+	timeout := p.drainTimeout()
+	drainer := newDrainHelper(ctx, clientset, timeout, p.drainForce, p.logWriter)
 
 	pods, errs := drainer.GetPodsForDeletion(nodeName)
 	if len(errs) > 0 {
@@ -108,7 +164,15 @@ func (p *Provisioner) drainNode(
 
 	deleteErr := drainer.DeleteOrEvictPods(pods.Pods())
 	if deleteErr != nil {
-		return fmt.Errorf("drain node %s: %w", nodeName, deleteErr)
+		// Don't suggest --force when it is already in effect (drainForce set).
+		hint := ""
+		if !p.drainForce {
+			hint = "; raise spec.cluster.talos.drainTimeout (or --drain-timeout) to give " +
+				"workloads more time, or re-run with --force to delete pods bypassing " +
+				"PodDisruptionBudgets"
+		}
+
+		return fmt.Errorf("drain node %s (timeout %s): %w%s", nodeName, timeout, deleteErr, hint)
 	}
 
 	return nil

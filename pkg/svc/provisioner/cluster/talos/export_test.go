@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/netip"
+	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
@@ -17,6 +18,7 @@ import (
 	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
+	kubedrain "k8s.io/kubectl/pkg/drain"
 )
 
 // NodeWithRoleForTest is the exported alias of nodeWithRole for testing.
@@ -420,6 +422,36 @@ func (p *Provisioner) DrainResolvedNodeForTest(
 	nodeIP string,
 ) (string, error) {
 	return p.drainResolvedNode(ctx, clientset, nodeIP)
+}
+
+// CordonAndDrainForTest exposes cordonAndDrain for unit testing.
+func (p *Provisioner) CordonAndDrainForTest(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	nodeName string,
+) error {
+	return p.cordonAndDrain(ctx, clientset, nodeName)
+}
+
+// DrainTimeoutForTest exposes drainTimeout for unit testing.
+func (p *Provisioner) DrainTimeoutForTest() time.Duration {
+	return p.drainTimeout()
+}
+
+// SetDrainForceForTest sets the request-scoped drainForce flag for unit testing.
+func (p *Provisioner) SetDrainForceForTest(force bool) {
+	p.drainForce = force
+}
+
+// NewDrainHelperForTest exposes newDrainHelper for unit testing.
+func NewDrainHelperForTest(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	timeout time.Duration,
+	disableEviction bool,
+	logWriter io.Writer,
+) *kubedrain.Helper {
+	return newDrainHelper(ctx, clientset, timeout, disableEviction, logWriter)
 }
 
 // WithTalosOptsForTest sets talosOpts on the provisioner for unit testing.
