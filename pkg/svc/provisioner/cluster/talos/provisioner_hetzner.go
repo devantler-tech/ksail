@@ -98,10 +98,10 @@ func (p *Provisioner) createHetznerNodeGroups(
 	clusterName string,
 	imageID int64,
 ) ([]*hcloud.Server, []*hcloud.Server, error) {
-	isoID := p.talosOpts.ISO
-	if imageID > 0 {
-		isoID = 0 // snapshot takes precedence; ISO is not used
-	}
+	// A snapshot image takes precedence over the maintenance-mode ISO; the same
+	// boot-source rule is shared with scale-up and rolling-recreate so all node
+	// creation paths boot the cluster's Talos version (see hetznerBootSource).
+	isoID, imageID := hetznerBootSource(p.talosOpts.ISO, imageID)
 
 	controlPlaneServers, err := p.createHetznerNodes(ctx, hzProvider, infra, HetznerNodeGroupOpts{
 		ClusterName: clusterName,
