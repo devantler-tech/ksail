@@ -14,6 +14,7 @@ package main
 import (
 	_ "embed"
 	"log"
+	"runtime"
 
 	"github.com/devantler-tech/ksail/v7/pkg/cli/uiserver"
 
@@ -27,11 +28,19 @@ const (
 	windowHeight = 820
 )
 
-// trayIcon is the menu-bar/system-tray image (the app icon). Embedded so the single binary needs no
-// external asset at runtime.
+// trayIcon is the full-color app icon, used for the Windows/Linux system tray (their trays render a
+// color image, not a monochrome template). Embedded so the single binary needs no external asset.
 //
 //go:embed resources/icon.png
 var trayIcon []byte
+
+// menuBarIcon is the macOS menu-bar glyph: a monochrome, alpha-only silhouette of the twin-sail
+// sloop mark (no badge tile), generated from resources/menubar-icon.svg. macOS treats it as a
+// template image (NSImage setTemplate:YES) and auto-inverts it for light/dark menu bars. It is a
+// high-res square PNG that Wails scales down to the status-bar thickness.
+//
+//go:embed resources/menubar-icon.png
+var menuBarIcon []byte
 
 func main() {
 	// Import the user's login-shell environment when launched from Finder/Dock/Spotlight (macOS
@@ -71,11 +80,15 @@ func main() {
 	// A menu-bar/system-tray icon for quick access: show/hide the window or quit without going through
 	// the Dock. Must be configured before Run() (which blocks until shutdown).
 	tray := app.SystemTray.New()
-	// SetIcon uses the full-color app icon, scaled to the status-bar thickness. The macOS menu-bar
-	// idiom is a monochrome template image (SetTemplateIcon) that auto-inverts for light/dark bars —
-	// but that needs a dedicated alpha-only mark (the color tile cannot be reused as a template), so a
-	// proper menu-bar glyph is a branding follow-up. The color icon renders acceptably meanwhile.
-	tray.SetIcon(trayIcon)
+	// macOS: use a monochrome template image so the glyph auto-inverts for light/dark menu bars (the
+	// native idiom). Elsewhere use the full-color icon: Windows' SetTemplateIcon is a no-op (it would
+	// leave the tray blank) and Linux trays render the image as-is with no auto-inversion, so the
+	// alpha-only template would be near-invisible there.
+	if runtime.GOOS == "darwin" {
+		tray.SetTemplateIcon(menuBarIcon)
+	} else {
+		tray.SetIcon(trayIcon)
+	}
 
 	trayMenu := app.NewMenu()
 	trayMenu.Add("Show KSail").OnClick(func(_ *application.Context) { window.Show() })
