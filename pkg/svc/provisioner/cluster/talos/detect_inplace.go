@@ -94,11 +94,18 @@ func (p *Provisioner) detectInPlaceMachineConfigDrift(
 		return nil, nil
 	}
 
+	// List the cluster's nodes once; both the control-plane and worker drift checks
+	// resolve their representative node from this single listing.
+	nodes, err := p.getNodesByRole(ctx, clusterName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to discover nodes for config comparison: %w", err)
+	}
+
 	// The cluster PKI (CA private key) needed to realign any regenerated config
 	// lives only on control-plane nodes; resolve one control-plane config up front
-	// and reuse it as the secrets source for both the control-plane and worker
-	// drift checks (worker configs carry no CA private key — see #4963).
-	cpRunning, found, err := p.fetchRunningControlPlaneConfig(ctx, clusterName)
+	// and reuse it as the secrets source for both drift checks (worker configs
+	// carry no CA private key — see #4963).
+	cpRunning, found, err := p.fetchNodeConfigForRole(ctx, nodes, RoleControlPlane)
 	if err != nil {
 		return nil, err
 	}
@@ -108,15 +115,11 @@ func (p *Provisioner) detectInPlaceMachineConfigDrift(
 		return nil, nil
 	}
 
-	var changes []clusterupdate.Change
-
 	// Control-plane node: catches cluster-wide and control-plane-scoped patch drift.
-	cpChanges, err := p.detectRoleMachineConfigDrift(cpRunning, cpRunning, RoleControlPlane)
+	changes, err := p.detectRoleMachineConfigDrift(cpRunning, cpRunning, RoleControlPlane)
 	if err != nil {
 		return nil, err
 	}
-
-	changes = append(changes, cpChanges...)
 
 	// Worker node: catches worker-scoped patch drift, invisible to the
 	// control-plane check above. The control-plane config supplies the PKI.
@@ -124,7 +127,7 @@ func (p *Provisioner) detectInPlaceMachineConfigDrift(
 	// Best-effort: a worker being unreachable must not suppress the control-plane
 	// drift already detected (and pushed), so a worker-detection failure is logged
 	// and skipped rather than aborting the whole detection.
-	workerChanges, workerErr := p.detectWorkerMachineConfigDrift(ctx, clusterName, cpRunning)
+	workerChanges, workerErr := p.detectWorkerMachineConfigDrift(ctx, nodes, cpRunning)
 	if workerErr != nil {
 		_, _ = fmt.Fprintf(
 			p.logWriter,
@@ -135,9 +138,7 @@ func (p *Provisioner) detectInPlaceMachineConfigDrift(
 		return changes, nil
 	}
 
-	changes = append(changes, workerChanges...)
-
-	return changes, nil
+	return append(changes, workerChanges...), nil
 }
 
 // detectWorkerMachineConfigDrift compares the desired worker config (base +
@@ -148,10 +149,10 @@ func (p *Provisioner) detectInPlaceMachineConfigDrift(
 // control-plane PKI (#4963), exactly as the apply path threads it.
 func (p *Provisioner) detectWorkerMachineConfigDrift(
 	ctx context.Context,
-	clusterName string,
+	nodes []nodeWithRole,
 	secretsSource talosconfig.Provider,
 ) ([]clusterupdate.Change, error) {
-	running, found, err := p.fetchRunningWorkerConfig(ctx, clusterName)
+	running, found, err := p.fetchNodeConfigForRole(ctx, nodes, RoleWorker)
 	if err != nil {
 		return nil, err
 	}
@@ -468,33 +469,24 @@ func (p *Provisioner) fetchRunningControlPlaneConfig(
 	ctx context.Context,
 	clusterName string,
 ) (talosconfig.Provider, bool, error) {
-	return p.fetchRunningConfigForRole(ctx, clusterName, RoleControlPlane)
-}
-
-// fetchRunningWorkerConfig discovers a worker node and returns its running Talos
-// machine config provider. It returns (nil, false, nil) when the cluster has no
-// worker nodes, so callers treat a control-plane-only cluster as "no worker drift
-// to compare" rather than an error.
-func (p *Provisioner) fetchRunningWorkerConfig(
-	ctx context.Context,
-	clusterName string,
-) (talosconfig.Provider, bool, error) {
-	return p.fetchRunningConfigForRole(ctx, clusterName, RoleWorker)
-}
-
-// fetchRunningConfigForRole discovers the first node of the given role and
-// returns its running Talos machine config provider. It returns (nil, false, nil)
-// when no node of that role is reachable so callers can treat "cannot compare" as
-// "no detected drift" rather than failing the update.
-func (p *Provisioner) fetchRunningConfigForRole(
-	ctx context.Context,
-	clusterName, role string,
-) (talosconfig.Provider, bool, error) {
 	nodes, err := p.getNodesByRole(ctx, clusterName)
 	if err != nil {
 		return nil, false, fmt.Errorf("failed to discover nodes for config comparison: %w", err)
 	}
 
+	return p.fetchNodeConfigForRole(ctx, nodes, RoleControlPlane)
+}
+
+// fetchNodeConfigForRole returns the running Talos machine config of the first
+// node of the given role from an already-discovered node set, so callers that
+// need more than one role's config list the cluster's nodes only once. It returns
+// (nil, false, nil) when no node of that role is present, so callers can treat
+// "cannot compare" as "no detected drift" rather than failing the update.
+func (p *Provisioner) fetchNodeConfigForRole(
+	ctx context.Context,
+	nodes []nodeWithRole,
+	role string,
+) (talosconfig.Provider, bool, error) {
 	var nodeIP string
 
 	for _, node := range nodes {
