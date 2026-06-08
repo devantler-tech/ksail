@@ -50,6 +50,10 @@ const (
 // ErrInvalidCookie is the sentinel returned by VerifySignedValue for a malformed/tampered cookie.
 var ErrInvalidCookie = errInvalidCookie
 
+// ClientErrorStatus exposes the unexported error→HTTP-status mapper to black-box tests so the
+// backend-error → status-code contract (CLI sentinels + Kubernetes apierrors) can be pinned directly.
+func ClientErrorStatus(err error) int { return clientErrorStatus(err) }
+
 // SignValue HMAC-signs a payload, exposing the unexported helper to black-box tests.
 func SignValue(secret, payload []byte) string { return signValue(secret, payload) }
 

@@ -112,17 +112,22 @@ export interface Capabilities {
   // applyManifests is true when the backend can server-side-apply raw manifests. The SPA combines it
   // with !readOnly before showing the Apply YAML action.
   applyManifests: boolean;
+  // secretsCipher is true when the backend can encrypt/decrypt secrets with SOPS via local age keys
+  // (the local backend). The SPA shows the Secrets view only then.
+  secretsCipher: boolean;
 }
 
 // fullCapabilities mirrors the backend's default for a service that does not report capabilities.
 // clusterUpdate defaults true (assume a working action rather than hiding it); the workload +
-// kubeconfig + apply flags default false because their endpoints may not exist on an older backend.
+// kubeconfig + apply + cipher flags default false because their endpoints may not exist on an older
+// backend.
 export const fullCapabilities: Capabilities = {
   clusterUpdate: true,
   workloadRead: false,
   workloadWrite: false,
   kubeconfigDownload: false,
   applyManifests: false,
+  secretsCipher: false,
 };
 
 export interface Config {
@@ -465,5 +470,35 @@ export function deleteResource(
 ): Promise<void> {
   return request<void>(resourcePath(namespace, name, kind, resourceName, resourceNamespace, ""), {
     method: "DELETE",
+  });
+}
+
+// SECRET_FORMATS are the SOPS store formats the cipher view offers.
+export const SECRET_FORMATS = ["yaml", "json"];
+
+// cipherRecipients lists the age public keys available locally (for the encrypt recipient selector).
+export function cipherRecipients(): Promise<{ recipients: string[] }> {
+  return request<{ recipients: string[] }>("/api/v1/secrets/recipients");
+}
+
+// encryptSecret SOPS-encrypts plaintext for the given age recipient (empty = the local default).
+export function encryptSecret(
+  plaintext: string,
+  recipient: string,
+  format: string,
+): Promise<{ encrypted: string }> {
+  return request<{ encrypted: string }>("/api/v1/secrets/encrypt", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ plaintext, recipient, format }),
+  });
+}
+
+// decryptSecret decrypts a SOPS document using the local age keys.
+export function decryptSecret(encrypted: string, format: string): Promise<{ plaintext: string }> {
+  return request<{ plaintext: string }>("/api/v1/secrets/decrypt", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ encrypted, format }),
   });
 }

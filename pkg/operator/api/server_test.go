@@ -69,7 +69,7 @@ func TestConfigReportsReadOnly(t *testing.T) {
 		t,
 		`{"readOnly":true,"authEnabled":false,`+
 			`"capabilities":{"clusterUpdate":true,"workloadRead":false,`+
-			`"workloadWrite":false,"kubeconfigDownload":false,"applyManifests":false}}`,
+			`"workloadWrite":false,"kubeconfigDownload":false,"applyManifests":false,"secretsCipher":false}}`,
 		recorder.Body.String(),
 	)
 }
@@ -370,7 +370,7 @@ func TestConfigDefaultsWritable(t *testing.T) {
 		t,
 		`{"readOnly":false,"authEnabled":false,`+
 			`"capabilities":{"clusterUpdate":true,"workloadRead":false,`+
-			`"workloadWrite":false,"kubeconfigDownload":false,"applyManifests":false}}`,
+			`"workloadWrite":false,"kubeconfigDownload":false,"applyManifests":false,"secretsCipher":false}}`,
 		recorder.Body.String(),
 	)
 }
@@ -391,7 +391,7 @@ func TestConfigReportsServiceCapabilities(t *testing.T) {
 		t,
 		recorder.Body.String(),
 		`"capabilities":{"clusterUpdate":false,"workloadRead":false,`+
-			`"workloadWrite":false,"kubeconfigDownload":false,"applyManifests":false}`,
+			`"workloadWrite":false,"kubeconfigDownload":false,"applyManifests":false,"secretsCipher":false}`,
 	)
 }
 
@@ -409,7 +409,7 @@ func TestConfigDefaultsToFullCapabilities(t *testing.T) {
 		t,
 		recorder.Body.String(),
 		`"capabilities":{"clusterUpdate":true,"workloadRead":false,`+
-			`"workloadWrite":false,"kubeconfigDownload":false,"applyManifests":false}`,
+			`"workloadWrite":false,"kubeconfigDownload":false,"applyManifests":false,"secretsCipher":false}`,
 	)
 }
 
