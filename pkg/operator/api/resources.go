@@ -109,7 +109,11 @@ func resourceKindTable() map[string]ResourceKind {
 		// GitOps CRs (Flux + ArgoCD), browsable read-only so the reconciliation status (status
 		// conditions) is visible. A kind whose CRD is not installed lists with an error, surfaced as a
 		// normal error in the browser. Versions are the cluster-served ones, not all v1.
-		"Kustomization": namespacedKindVersion("kustomize.toolkit.fluxcd.io", "v1", "kustomizations"),
+		"Kustomization": namespacedKindVersion(
+			"kustomize.toolkit.fluxcd.io",
+			"v1",
+			"kustomizations",
+		),
 		"HelmRelease":   namespacedKindVersion("helm.toolkit.fluxcd.io", "v2", "helmreleases"),
 		"GitRepository": namespacedKindVersion("source.toolkit.fluxcd.io", "v1", "gitrepositories"),
 		"OCIRepository": namespacedKindVersion("source.toolkit.fluxcd.io", "v1", "ocirepositories"),
