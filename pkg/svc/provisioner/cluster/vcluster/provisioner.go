@@ -288,22 +288,14 @@ func createWithRetry(
 		}
 
 		if strings.Contains(lastErr.Error(), dbusErrorSubstring) {
-			recoverErr := tryDBusRecovery(ctx, globalFlags, clusterName, logger, recoverDBus)
-			if recoverErr == nil {
+			done, recoverErr := recoverFromDBusRace(
+				ctx, globalFlags, clusterName, logger, recoverDBus, attempt,
+			)
+			if done {
 				return nil
 			}
 
-			// In-place recovery failed (D-Bus still not ready, join token not yet
-			// written, or a transient install-script download failure). Fall back to a
-			// full delete-and-retry instead of giving up: a fresh container on the next
-			// attempt usually clears the underlying systemd/D-Bus race that in-place
-			// recovery cannot. Recorded as lastErr so the final message is actionable.
 			lastErr = recoverErr
-
-			logger.Warnf(
-				"vCluster D-Bus recovery failed (attempt %d/%d), retrying fresh: %v",
-				attempt+1, createMaxAttempts, recoverErr,
-			)
 
 			continue
 		}
@@ -323,6 +315,34 @@ func createWithRetry(
 		"failed to create vCluster after %d attempts: %w",
 		createMaxAttempts, lastErr,
 	)
+}
+
+// recoverFromDBusRace attempts the fast in-place D-Bus recovery and reports
+// whether the cluster is now up. It returns done=true on success (createWithRetry
+// should return nil). On failure it returns done=false with the error so
+// createWithRetry falls back to a full delete-and-retry instead of giving up: a
+// fresh container on the next attempt usually clears the underlying systemd/D-Bus
+// race (D-Bus not ready, join token not yet written, or a transient install-script
+// download failure) that in-place recovery cannot.
+func recoverFromDBusRace(
+	ctx context.Context,
+	globalFlags *flags.GlobalFlags,
+	clusterName string,
+	logger loftlog.Logger,
+	recoverDBus dbusRecoverFn,
+	attempt int,
+) (bool, error) {
+	recoverErr := tryDBusRecovery(ctx, globalFlags, clusterName, logger, recoverDBus)
+	if recoverErr == nil {
+		return true, nil
+	}
+
+	logger.Warnf(
+		"vCluster D-Bus recovery failed (attempt %d/%d), retrying fresh: %v",
+		attempt+1, createMaxAttempts, recoverErr,
+	)
+
+	return false, recoverErr
 }
 
 // tryDBusRecovery handles the D-Bus race condition where CreateDocker fails
