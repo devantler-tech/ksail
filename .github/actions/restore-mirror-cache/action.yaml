@@ -158,13 +158,21 @@ runs:
       run: |
         echo "📦 Importing mirror registry volumes..."
 
+        # Pull the tar-utility busybox via mirror.gcr.io (Google's anonymous
+        # pull-through cache), not Docker Hub: the runner is logged in to Docker
+        # Hub, so a direct pull counts against the authenticated rate limit and
+        # leaks the session's dckr_jti token into error logs when throttled.
+        # mirror.gcr.io is anonymous and not rate-limited. It re-serializes
+        # manifests, so the upstream digest can't be pinned through it — we pin
+        # by tag, exactly like registry:3 in pull-registry-image.sh.
+
         # Import docker.io mirror volume
         if [ -f "/tmp/mirror-cache/docker.io.tar" ]; then
           docker volume create docker.io 2>/dev/null || true
           docker run --rm \
             -v docker.io:/volume \
             -v /tmp/mirror-cache:/backup:ro \
-            busybox:1.37@sha256:b3255e7dfbcd10cb367af0d409747d511aeb66dfac98cf30e97e87e4207dd76f \
+            mirror.gcr.io/library/busybox:1.37 \
             sh -c "cd /volume && tar -xf /backup/docker.io.tar" || echo "⚠️ Failed to import docker.io mirror"
           echo "✅ Restored docker.io mirror cache"
         fi
@@ -175,7 +183,7 @@ runs:
           docker run --rm \
             -v ghcr.io:/volume \
             -v /tmp/mirror-cache:/backup:ro \
-            busybox:1.37@sha256:b3255e7dfbcd10cb367af0d409747d511aeb66dfac98cf30e97e87e4207dd76f \
+            mirror.gcr.io/library/busybox:1.37 \
             sh -c "cd /volume && tar -xf /backup/ghcr.io.tar" || echo "⚠️ Failed to import ghcr.io mirror"
           echo "✅ Restored ghcr.io mirror cache"
         fi
@@ -186,7 +194,7 @@ runs:
           docker run --rm \
             -v quay.io:/volume \
             -v /tmp/mirror-cache:/backup:ro \
-            busybox:1.37@sha256:b3255e7dfbcd10cb367af0d409747d511aeb66dfac98cf30e97e87e4207dd76f \
+            mirror.gcr.io/library/busybox:1.37 \
             sh -c "cd /volume && tar -xf /backup/quay.io.tar" || echo "⚠️ Failed to import quay.io mirror"
           echo "✅ Restored quay.io mirror cache"
         fi
@@ -197,7 +205,7 @@ runs:
           docker run --rm \
             -v registry.k8s.io:/volume \
             -v /tmp/mirror-cache:/backup:ro \
-            busybox:1.37@sha256:b3255e7dfbcd10cb367af0d409747d511aeb66dfac98cf30e97e87e4207dd76f \
+            mirror.gcr.io/library/busybox:1.37 \
             sh -c "cd /volume && tar -xf /backup/registry.k8s.io.tar" || echo "⚠️ Failed to import registry.k8s.io mirror"
           echo "✅ Restored registry.k8s.io mirror cache"
         fi
