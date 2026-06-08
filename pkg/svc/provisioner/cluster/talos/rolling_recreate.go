@@ -356,7 +356,7 @@ func (p *Provisioner) createReplacementServer(
 	// node it replaces and can parse the cluster's machine config (see hetznerBootSource).
 	imageID, snapErr := p.ensureSnapshotImage(ctx, clusterName)
 	if snapErr != nil {
-		return nil, fmt.Errorf("failed to ensure Talos snapshot image: %w", snapErr)
+		return nil, snapErr
 	}
 
 	creationResults, createErr := p.launchHetznerScaleCreation(

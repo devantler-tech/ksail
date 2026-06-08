@@ -61,7 +61,7 @@ func (p *Provisioner) addHetznerNodes(
 	// Talos that cannot parse newer config documents (see hetznerBootSource).
 	imageID, err := p.ensureSnapshotImage(ctx, clusterName)
 	if err != nil {
-		return fmt.Errorf("failed to ensure Talos snapshot image: %w", err)
+		return err
 	}
 
 	creationResults, err := p.launchHetznerScaleCreation(
@@ -111,8 +111,6 @@ func (p *Provisioner) launchHetznerScaleCreation(
 ) ([]hetznerNodeCreationResult, error) {
 	results := make([]hetznerNodeCreationResult, count)
 
-	enableIPv4, enableIPv6 := p.hetznerPublicNetForRole(role)
-
 	group, _ := errgroup.WithContext(ctx)
 	group.SetLimit(maxConcurrentHetznerOps)
 
@@ -128,7 +126,7 @@ func (p *Provisioner) launchHetznerScaleCreation(
 				results[nodeIdx] = hetznerNodeCreationResult{name: nodeName, err: nameErr}
 			} else {
 				server, createErr := hzProvider.CreateServerWithRetry(ctx, p.hetznerScaleServerOpts(
-					clusterName, role, nodeName, nodeNumber, infra, imageID, enableIPv4, enableIPv6,
+					clusterName, role, nodeName, nodeNumber, infra, imageID,
 				), retryOpts)
 
 				results[nodeIdx] = hetznerNodeCreationResult{
@@ -179,9 +177,9 @@ func (p *Provisioner) hetznerScaleServerOpts(
 	nodeNumber int,
 	infra HetznerInfra,
 	imageID int64,
-	enableIPv4, enableIPv6 *bool,
 ) hetzner.CreateServerOpts {
 	isoID, image := hetznerBootSource(p.talosOpts.ISO, imageID)
+	enableIPv4, enableIPv6 := p.hetznerPublicNetForRole(role)
 
 	return hetzner.CreateServerOpts{
 		Name:             nodeName,

@@ -8,17 +8,14 @@ import "github.com/devantler-tech/ksail/v7/pkg/svc/provider/hetzner"
 //nolint:gochecknoglobals // export_test.go pattern requires global variables to expose internal functions
 var HetznerBootSource = hetznerBootSource
 
-// HetznerScaleServerOptsForTest exposes hetznerScaleServerOpts for tests, defaulting
-// the per-role public-net toggles to nil (Hetzner's default).
+// HetznerScaleServerOptsForTest exposes hetznerScaleServerOpts for tests.
 func (p *Provisioner) HetznerScaleServerOptsForTest(
 	clusterName, role, nodeName string,
 	nodeNumber int,
 	infra HetznerInfra,
 	imageID int64,
 ) hetzner.CreateServerOpts {
-	return p.hetznerScaleServerOpts(
-		clusterName, role, nodeName, nodeNumber, infra, imageID, nil, nil,
-	)
+	return p.hetznerScaleServerOpts(clusterName, role, nodeName, nodeNumber, infra, imageID)
 }
 
 // IsRetryableTalosApplyConfigError exposes the unexported helper for tests in
