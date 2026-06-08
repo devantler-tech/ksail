@@ -194,6 +194,12 @@ func (p *Provisioner) applyUpdateChanges(
 	result *clusterupdate.UpdateResult,
 	opts clusterupdate.UpdateOptions,
 ) (*clusterupdate.UpdateResult, error) {
+	// An explicit --force/--yes also authorizes node drains to delete pods directly,
+	// bypassing PodDisruptionBudgets so a rolling reboot/recreate can complete even
+	// when a budget would never permit graceful eviction (see drainNode). Scope it to
+	// this update by setting it on the (per-invocation) provisioner here.
+	p.drainForce = opts.Force
+
 	// Sync Hetzner Cloud Firewall rules to the hardened set.
 	syncErr := p.syncHetznerFirewallRules(ctx, clusterName)
 	if syncErr != nil {

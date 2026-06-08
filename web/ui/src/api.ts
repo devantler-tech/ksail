@@ -106,15 +106,28 @@ export interface Capabilities {
   // workloadWrite is true when the backend exposes the safe write actions (scale, rollout restart,
   // delete). The SPA combines it with !readOnly before showing the action affordances.
   workloadWrite: boolean;
+  // kubeconfigDownload is true when the backend can export a portable kubeconfig for a cluster (the
+  // local backend). The SPA shows the Download-kubeconfig action only then.
+  kubeconfigDownload: boolean;
+  // applyManifests is true when the backend can server-side-apply raw manifests. The SPA combines it
+  // with !readOnly before showing the Apply YAML action.
+  applyManifests: boolean;
+  // secretsCipher is true when the backend can encrypt/decrypt secrets with SOPS via local age keys
+  // (the local backend). The SPA shows the Secrets view only then.
+  secretsCipher: boolean;
 }
 
 // fullCapabilities mirrors the backend's default for a service that does not report capabilities.
-// clusterUpdate defaults true (assume a working action rather than hiding it); the workload flags
-// default false because their endpoints may not exist on a mismatched older backend and would 404.
+// clusterUpdate defaults true (assume a working action rather than hiding it); the workload +
+// kubeconfig + apply + cipher flags default false because their endpoints may not exist on an older
+// backend.
 export const fullCapabilities: Capabilities = {
   clusterUpdate: true,
   workloadRead: false,
   workloadWrite: false,
+  kubeconfigDownload: false,
+  applyManifests: false,
+  secretsCipher: false,
 };
 
 export interface Config {
@@ -179,6 +192,12 @@ export class ApiError extends Error {
     this.status = status;
     this.loginURL = loginURL;
   }
+}
+
+// errorMessage extracts a human-readable string from an unknown thrown value. ApiError extends Error,
+// so its message (which already carries the server detail) is used directly.
+export function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
 }
 
 // detailFromBody pulls a human-readable error message out of the server's response body. The API
@@ -338,6 +357,61 @@ export const RESTARTABLE_KINDS = ["Deployment", "StatefulSet", "DaemonSet"];
 // these high-blast-radius cluster-scoped kinds, so the SPA hides the Delete affordance for them.
 export const CLUSTER_SCOPED_KINDS = ["Node", "Namespace"];
 
+// downloadKubeconfig fetches the cluster's portable kubeconfig and triggers a browser download. It
+// streams the bytes into a Blob rather than navigating, so an error response surfaces as an ApiError
+// (and a toast) instead of replacing the page.
+export async function downloadKubeconfig(namespace: string, name: string): Promise<void> {
+  const path = `/api/v1/clusters/${namespace}/${name}/kubeconfig`;
+  const response = await fetch(path);
+  if (!response.ok) {
+    const body = (await response.text()).trim();
+    const { message } = detailFromBody(body);
+    const suffix = message === "" ? "" : `: ${message}`;
+    throw new ApiError(`GET ${path} (${response.status})${suffix}`, response.status);
+  }
+
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `${name}.kubeconfig`;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
+// ApplyResult is the per-document outcome of an apply request.
+export interface ApplyResult {
+  kind: string;
+  name: string;
+  namespace?: string;
+  status: "applied" | "error";
+  error?: string;
+}
+
+export interface ApplyResponse {
+  results: ApplyResult[];
+  dryRun: boolean;
+}
+
+// applyManifests server-side-applies multi-document YAML to a cluster. dryRun validates without
+// persisting. The body is raw YAML (text/yaml), not JSON.
+export function applyManifests(
+  namespace: string,
+  name: string,
+  manifests: string,
+  dryRun: boolean,
+): Promise<ApplyResponse> {
+  const query = dryRun ? "?dryRun=true" : "";
+
+  return request<ApplyResponse>(`/api/v1/clusters/${namespace}/${name}/apply${query}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/yaml" },
+    body: manifests,
+  });
+}
+
 function resourcePath(
   namespace: string,
   name: string,
@@ -396,5 +470,35 @@ export function deleteResource(
 ): Promise<void> {
   return request<void>(resourcePath(namespace, name, kind, resourceName, resourceNamespace, ""), {
     method: "DELETE",
+  });
+}
+
+// SECRET_FORMATS are the SOPS store formats the cipher view offers.
+export const SECRET_FORMATS = ["yaml", "json"];
+
+// cipherRecipients lists the age public keys available locally (for the encrypt recipient selector).
+export function cipherRecipients(): Promise<{ recipients: string[] }> {
+  return request<{ recipients: string[] }>("/api/v1/secrets/recipients");
+}
+
+// encryptSecret SOPS-encrypts plaintext for the given age recipient (empty = the local default).
+export function encryptSecret(
+  plaintext: string,
+  recipient: string,
+  format: string,
+): Promise<{ encrypted: string }> {
+  return request<{ encrypted: string }>("/api/v1/secrets/encrypt", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ plaintext, recipient, format }),
+  });
+}
+
+// decryptSecret decrypts a SOPS document using the local age keys.
+export function decryptSecret(encrypted: string, format: string): Promise<{ plaintext: string }> {
+  return request<{ plaintext: string }>("/api/v1/secrets/decrypt", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ encrypted, format }),
   });
 }
