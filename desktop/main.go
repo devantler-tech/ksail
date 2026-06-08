@@ -12,7 +12,9 @@
 package main
 
 import (
+	_ "embed"
 	"log"
+	"runtime"
 
 	"github.com/devantler-tech/ksail/v7/pkg/cli/uiserver"
 
@@ -25,6 +27,20 @@ const (
 	windowWidth  = 1100
 	windowHeight = 820
 )
+
+// trayIcon is the full-color app icon, used for the Windows/Linux system tray (their trays render a
+// color image, not a monochrome template). Embedded so the single binary needs no external asset.
+//
+//go:embed resources/icon.png
+var trayIcon []byte
+
+// menuBarIcon is the macOS menu-bar glyph: a monochrome, alpha-only silhouette of the twin-sail
+// sloop mark (no badge tile), generated from resources/menubar-icon.svg. macOS treats it as a
+// template image (NSImage setTemplate:YES) and auto-inverts it for light/dark menu bars. It is a
+// high-res square PNG that Wails scales down to the status-bar thickness.
+//
+//go:embed resources/menubar-icon.png
+var menuBarIcon []byte
 
 func main() {
 	// Import the user's login-shell environment when launched from Finder/Dock/Spotlight (macOS
@@ -55,11 +71,31 @@ func main() {
 	// the hand-rolled Cocoa menu the previous webview_go shell required. Windows/WebView2 and
 	// Linux/WebKitGTK handle clipboard shortcuts natively.
 
-	app.Window.NewWithOptions(application.WebviewWindowOptions{
+	window := app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Title:  windowTitle,
 		Width:  windowWidth,
 		Height: windowHeight,
 	})
+
+	// A menu-bar/system-tray icon for quick access: show/hide the window or quit without going through
+	// the Dock. Must be configured before Run() (which blocks until shutdown).
+	tray := app.SystemTray.New()
+	// macOS: use a monochrome template image so the glyph auto-inverts for light/dark menu bars (the
+	// native idiom). Elsewhere use the full-color icon: Windows' SetTemplateIcon is a no-op (it would
+	// leave the tray blank) and Linux trays render the image as-is with no auto-inversion, so the
+	// alpha-only template would be near-invisible there.
+	if runtime.GOOS == "darwin" {
+		tray.SetTemplateIcon(menuBarIcon)
+	} else {
+		tray.SetIcon(trayIcon)
+	}
+
+	trayMenu := app.NewMenu()
+	trayMenu.Add("Show KSail").OnClick(func(_ *application.Context) { window.Show() })
+	trayMenu.Add("Hide KSail").OnClick(func(_ *application.Context) { window.Hide() })
+	trayMenu.AddSeparator()
+	trayMenu.Add("Quit KSail").OnClick(func(_ *application.Context) { app.Quit() })
+	tray.SetMenu(trayMenu)
 
 	err := app.Run()
 	if err != nil {
