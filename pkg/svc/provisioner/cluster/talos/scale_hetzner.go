@@ -44,41 +44,9 @@ func (p *Provisioner) addHetznerNodes(
 
 	nextIndex := nextHetznerNodeIndex(existing, clusterName, role)
 
-	// Verify server type availability before creating infrastructure
-	err = p.checkHetznerAvailabilityForRole(ctx, hzProvider, role)
-	if err != nil {
-		return err
-	}
-
-	infra, err := p.ensureHetznerInfra(ctx, hzProvider, clusterName)
-	if err != nil {
-		return fmt.Errorf("failed to ensure Hetzner infrastructure: %w", err)
-	}
-
-	// Boot new nodes from the cluster's Talos snapshot image (built at the
-	// configured talos.version) when one is configured, exactly like initial
-	// create. Falling back to the maintenance-mode ISO here would boot an older
-	// Talos that cannot parse newer config documents (see hetznerBootSource).
-	imageID, err := p.ensureSnapshotImage(ctx, clusterName)
-	if err != nil {
-		return err
-	}
-
-	creationResults, err := p.launchHetznerScaleCreation(
-		ctx, hzProvider, clusterName, role, infra, p.hetznerRetryOpts(), nextIndex, count, imageID,
+	servers, err := p.provisionHetznerScaleServers(
+		ctx, hzProvider, clusterName, role, nextIndex, count, result,
 	)
-	if err != nil {
-		return err
-	}
-
-	// Record all creation failures before processing so recordFailedChange is sequential.
-	for _, res := range creationResults {
-		if res.err != nil {
-			recordFailedChange(result, role, res.name, res.err)
-		}
-	}
-
-	servers, err := p.collectCreatedHetznerServers(creationResults, role)
 	if err != nil {
 		return err
 	}
@@ -93,6 +61,55 @@ func (p *Provisioner) addHetznerNodes(
 	}
 
 	return nil
+}
+
+// provisionHetznerScaleServers runs the pre-flight checks (server-type
+// availability, shared infrastructure, Talos snapshot image), creates count new
+// servers for role starting at nextIndex, and returns the ones that came up.
+// Per-node creation failures are recorded on result; the successfully created
+// servers are returned for config apply by the caller.
+func (p *Provisioner) provisionHetznerScaleServers(
+	ctx context.Context,
+	hzProvider *hetzner.Provider,
+	clusterName, role string,
+	nextIndex, count int,
+	result *clusterupdate.UpdateResult,
+) ([]*hcloud.Server, error) {
+	// Verify server type availability before creating infrastructure.
+	err := p.checkHetznerAvailabilityForRole(ctx, hzProvider, role)
+	if err != nil {
+		return nil, err
+	}
+
+	infra, err := p.ensureHetznerInfra(ctx, hzProvider, clusterName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to ensure Hetzner infrastructure: %w", err)
+	}
+
+	// Boot new nodes from the cluster's Talos snapshot image (built at the
+	// configured talos.version) when one is configured, exactly like initial
+	// create. Falling back to the maintenance-mode ISO here would boot an older
+	// Talos that cannot parse newer config documents (see hetznerBootSource).
+	imageID, err := p.ensureSnapshotImage(ctx, clusterName)
+	if err != nil {
+		return nil, err
+	}
+
+	creationResults, err := p.launchHetznerScaleCreation(
+		ctx, hzProvider, clusterName, role, infra, p.hetznerRetryOpts(), nextIndex, count, imageID,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	// Record all creation failures before processing so recordFailedChange is sequential.
+	for _, res := range creationResults {
+		if res.err != nil {
+			recordFailedChange(result, role, res.name, res.err)
+		}
+	}
+
+	return p.collectCreatedHetznerServers(creationResults, role)
 }
 
 // launchHetznerScaleCreation creates count Hetzner servers starting at nextIndex, in parallel.
