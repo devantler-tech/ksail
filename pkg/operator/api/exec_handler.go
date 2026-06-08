@@ -103,6 +103,7 @@ func (s *Server) handleExec(writer http.ResponseWriter, request *http.Request) {
 	if err != nil {
 		return // Upgrade already wrote the error response.
 	}
+
 	defer func() { _ = conn.Close() }()
 
 	s.runExecSession(request, conn, svc, ExecRequest{
