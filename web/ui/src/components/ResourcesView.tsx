@@ -1,4 +1,4 @@
-import { RotateCw } from "lucide-react";
+import { FileCode, RotateCw } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
   ApiError,
@@ -15,6 +15,7 @@ import {
 } from "../api.ts";
 import { cx } from "../lib/cx.ts";
 import { relativeAge } from "../lib/format.ts";
+import { ApplyManifestsDialog } from "./ApplyManifestsDialog.tsx";
 import { ConfirmDialog } from "./ConfirmDialog.tsx";
 import { EmptyState, ErrorBanner, TableSkeleton } from "./states.tsx";
 import { useToast } from "./Toast.tsx";
@@ -62,11 +63,14 @@ function currentReplicas(obj: K8sObject): number {
 export function ResourcesView({
   clusters,
   canWrite,
+  canApply,
 }: {
   clusters: Cluster[];
   // canWrite gates the write actions (scale/restart/delete) — true only when the backend advertises
   // workloadWrite AND the UI is not read-only.
   canWrite: boolean;
+  // canApply gates the Apply YAML action (applyManifests && !readOnly).
+  canApply: boolean;
 }) {
   const toast = useToast();
   const [selectedClusterKey, setSelectedClusterKey] = useState(
@@ -86,6 +90,7 @@ export function ResourcesView({
   const [scaleValue, setScaleValue] = useState("0");
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [actionBusy, setActionBusy] = useState(false);
+  const [applyOpen, setApplyOpen] = useState(false);
 
   // Seed the scale input from the selected object's current replica count whenever it changes.
   useEffect(() => {
@@ -181,6 +186,8 @@ export function ResourcesView({
     );
   }
 
+  const [selectedNamespace, selectedName] = splitClusterKey(selectedClusterKey);
+
   return (
     <div className="mx-auto max-w-6xl space-y-4">
       <div className="flex flex-wrap items-end gap-3">
@@ -219,6 +226,12 @@ export function ResourcesView({
           {loading ? null : <RotateCw className="size-4" aria-hidden />}
           Refresh
         </Button>
+        {canApply && selectedClusterKey !== "" ? (
+          <Button variant="secondary" onClick={() => setApplyOpen(true)}>
+            <FileCode className="size-4" aria-hidden />
+            Apply YAML
+          </Button>
+        ) : null}
       </div>
 
       {error ? (
@@ -391,6 +404,14 @@ export function ResourcesView({
           }
         }}
         onClose={() => setDeleteOpen(false)}
+      />
+
+      <ApplyManifestsDialog
+        open={applyOpen}
+        onClose={() => setApplyOpen(false)}
+        clusterNamespace={selectedNamespace}
+        clusterName={selectedName}
+        onApplied={() => setNonce((value) => value + 1)}
       />
     </div>
   );

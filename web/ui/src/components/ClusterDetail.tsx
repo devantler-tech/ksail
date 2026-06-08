@@ -1,9 +1,10 @@
-import { Check, CircleAlert, CircleCheck, CircleHelp, Copy, Pencil } from "lucide-react";
+import { Check, CircleAlert, CircleCheck, CircleHelp, Copy, Download, Pencil } from "lucide-react";
 import { useState, type ReactNode } from "react";
-import type { Cluster, Condition } from "../api.ts";
+import { ApiError, downloadKubeconfig, type Cluster, type Condition } from "../api.ts";
 import { formatTimestamp, relativeAge } from "../lib/format.ts";
 import { COMPONENT_LABELS, useMeta } from "../lib/meta.ts";
 import { StatusBadge } from "./StatusBadge.tsx";
+import { useToast } from "./Toast.tsx";
 import { Button, SlideOver } from "./ui.tsx";
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
@@ -110,6 +111,7 @@ export function ClusterDetail({
   cluster,
   open,
   canEdit,
+  canDownloadKubeconfig,
   onClose,
   onEdit,
 }: {
@@ -118,9 +120,13 @@ export function ClusterDetail({
   // canEdit gates the Edit button: it requires both a writable UI and a backend that supports
   // in-place updates (false on the local `ksail ui`/desktop backend).
   canEdit: boolean;
+  // canDownloadKubeconfig gates the kubeconfig export button (the local backend supports it).
+  canDownloadKubeconfig: boolean;
   onClose: () => void;
   onEdit: (cluster: Cluster) => void;
 }) {
+  const toast = useToast();
+  const [downloading, setDownloading] = useState(false);
   const meta = useMeta();
   const status = cluster?.status;
   const spec = cluster?.spec?.cluster;
@@ -143,12 +149,36 @@ export function ClusterDetail({
         <div>
           <div className="mb-2 flex items-center justify-between gap-2">
             <StatusBadge phase={status?.phase} />
-            {canEdit ? (
-              <Button variant="secondary" size="sm" onClick={() => onEdit(cluster)}>
-                <Pencil className="size-3.5" aria-hidden />
-                Edit
-              </Button>
-            ) : null}
+            <div className="flex items-center gap-2">
+              {canDownloadKubeconfig ? (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  loading={downloading}
+                  onClick={() => {
+                    setDownloading(true);
+                    downloadKubeconfig(namespace, cluster.metadata.name)
+                      .catch((err: unknown) =>
+                        toast.error(
+                          err instanceof ApiError || err instanceof Error
+                            ? err.message
+                            : String(err),
+                        ),
+                      )
+                      .finally(() => setDownloading(false));
+                  }}
+                >
+                  {downloading ? null : <Download className="size-3.5" aria-hidden />}
+                  Kubeconfig
+                </Button>
+              ) : null}
+              {canEdit ? (
+                <Button variant="secondary" size="sm" onClick={() => onEdit(cluster)}>
+                  <Pencil className="size-3.5" aria-hidden />
+                  Edit
+                </Button>
+              ) : null}
+            </div>
           </div>
 
           <SectionTitle>Spec</SectionTitle>
