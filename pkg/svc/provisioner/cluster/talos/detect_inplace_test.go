@@ -604,3 +604,141 @@ func TestBuildDesiredNodeConfig_WorkerSecretsSourceIsActionable(t *testing.T) {
 	assert.Contains(t, err.Error(), "control-plane",
 		"error names the control-plane PKI requirement")
 }
+
+// parseConfig round-trips a provider through its serialized bytes, as a node
+// would store and return it over the Talos API.
+func parseConfig(t *testing.T, provider talosconfig.Provider) talosconfig.Provider {
+	t.Helper()
+
+	configBytes, err := provider.Bytes()
+	require.NoError(t, err)
+
+	parsed, err := configloader.NewFromBytes(configBytes)
+	require.NoError(t, err)
+
+	return parsed
+}
+
+// workerSysctlPatch builds a worker-scoped user patch from raw YAML content. A
+// worker-scoped patch only reaches the worker config (talos/workers/), never the
+// control-plane config.
+func workerSysctlPatch(content string) talosconfigmanager.Patch {
+	return talosconfigmanager.Patch{
+		Path:    "workers/test-patch.yaml",
+		Scope:   talosconfigmanager.PatchScopeWorker,
+		Content: []byte(content),
+	}
+}
+
+// TestDetectMachineConfigDrift_WorkerScopedPatchOnlyDetectedAtWorkerRole is the
+// regression guard for the bug where `ksail cluster update` never pushed
+// worker-scoped Talos patch changes to worker nodes: drift detection inspected
+// only a control-plane node, where worker patches never appear, so the change was
+// invisible and the (role-correct) apply path never ran.
+//
+// It asserts both halves: a worker-only patch change is (a) NOT visible at the
+// control-plane role — exactly why a CP-only check missed it — and (b) IS
+// detected at the worker role, so the update now applies it to the correct nodes.
+func TestDetectMachineConfigDrift_WorkerScopedPatchOnlyDetectedAtWorkerRole(t *testing.T) {
+	t.Parallel()
+
+	workerPatch := workerSysctlPatch("machine:\n  sysctls:\n    net.core.rmem_max: \"1\"\n")
+
+	// The running cluster was created WITHOUT the worker patch.
+	runningConfigs, err := talosconfigmanager.NewDefaultConfigsWithPatches(nil)
+	require.NoError(t, err)
+
+	cpRunning := parseConfig(t, runningConfigs.ControlPlane())
+	workerRunning := parseConfig(t, runningConfigs.Worker())
+
+	// The desired config now carries the new worker-scoped patch.
+	desiredConfigs, err := talosconfigmanager.NewDefaultConfigsWithPatches(
+		[]talosconfigmanager.Patch{workerPatch},
+	)
+	require.NoError(t, err)
+
+	prov := talosprovisioner.NewProvisioner(desiredConfigs, nil)
+
+	// (a) Control-plane role: a worker patch never touches the control-plane
+	// config, so no drift is reported — the blind spot the old CP-only check had.
+	cpChanges, err := prov.DetectRoleMachineConfigDriftForTest(
+		cpRunning, cpRunning, talosprovisioner.RoleControlPlane,
+	)
+	require.NoError(t, err)
+	assert.Empty(t, cpChanges, "a worker-scoped patch must not surface as control-plane drift")
+
+	// (b) Worker role: the same change IS detected, seeded with control-plane PKI.
+	workerChanges, err := prov.DetectRoleMachineConfigDriftForTest(
+		workerRunning, cpRunning, talosprovisioner.RoleWorker,
+	)
+	require.NoError(t, err)
+	require.Len(
+		t,
+		workerChanges,
+		1,
+		"a worker-scoped patch change must be detected at the worker role",
+	)
+	assert.Equal(t, talosprovisioner.MachineConfigField, workerChanges[0].Field)
+	assert.Contains(t, workerChanges[0].Reason, "worker",
+		"the change reason names the worker role for operator clarity")
+}
+
+// TestDetectMachineConfigDrift_CleanWorkerNoDrift is the no-false-positive guard
+// for worker drift detection: when the running worker already reflects the
+// desired worker patches, the worker role reports no drift — so an unrelated
+// update neither needlessly re-pushes nor churns worker configs.
+func TestDetectMachineConfigDrift_CleanWorkerNoDrift(t *testing.T) {
+	t.Parallel()
+
+	workerPatch := workerSysctlPatch("machine:\n  sysctls:\n    net.core.rmem_max: \"1\"\n")
+
+	configs, err := talosconfigmanager.NewDefaultConfigsWithPatches(
+		[]talosconfigmanager.Patch{workerPatch},
+	)
+	require.NoError(t, err)
+
+	workerRunning := parseConfig(t, configs.Worker())
+	cpSecretsSource := parseConfig(t, configs.ControlPlane())
+
+	prov := talosprovisioner.NewProvisioner(configs, nil)
+
+	changes, err := prov.DetectRoleMachineConfigDriftForTest(
+		workerRunning, cpSecretsSource, talosprovisioner.RoleWorker,
+	)
+	require.NoError(t, err)
+	assert.Empty(t, changes, "an unchanged worker config must not report drift")
+}
+
+// TestDetectMachineConfigDrift_WorkerTracksRunningKubernetesVersion guards the
+// worker analogue of #4936: when the cluster runs an older Kubernetes version
+// than KSail's built-in default and no version is pinned, worker drift detection
+// must track the running version (read from the kubelet image) rather than
+// proposing an unrequested worker kubelet upgrade.
+func TestDetectMachineConfigDrift_WorkerTracksRunningKubernetesVersion(t *testing.T) {
+	t.Parallel()
+
+	// Running cluster is at an older Kubernetes version than the built-in default.
+	runningConfigs, err := talosconfigmanager.NewDefaultConfigsWithPatches(nil)
+	require.NoError(t, err)
+
+	runningConfigs, err = runningConfigs.WithKubernetesVersion("1.32.0")
+	require.NoError(t, err)
+
+	workerRunning := parseConfig(t, runningConfigs.Worker())
+	cpSecretsSource := parseConfig(t, runningConfigs.ControlPlane())
+
+	// Desired configs use the built-in default (newer); no version pinned.
+	desiredConfigs, err := talosconfigmanager.NewDefaultConfigsWithPatches(nil)
+	require.NoError(t, err)
+	require.NotEqual(t, "1.32.0", desiredConfigs.KubernetesVersion(),
+		"precondition: default must differ from the running version")
+
+	prov := talosprovisioner.NewProvisioner(desiredConfigs, nil) // nil options => unpinned
+
+	changes, err := prov.DetectRoleMachineConfigDriftForTest(
+		workerRunning, cpSecretsSource, talosprovisioner.RoleWorker,
+	)
+	require.NoError(t, err)
+	assert.Empty(t, changes,
+		"unpinned update must track the running worker Kubernetes version (no unrequested upgrade)")
+}
