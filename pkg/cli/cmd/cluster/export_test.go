@@ -217,6 +217,23 @@ func ExportStripParenthetical(s string) string {
 	return stripParenthetical(s)
 }
 
+// ExportPinnedVersionSkipReason is a test-visible alias for pinnedVersionSkipReason.
+type ExportPinnedVersionSkipReason = pinnedVersionSkipReason
+
+// Test-visible aliases for the pinnedVersionSkipReason sentinels.
+const (
+	ExportPinnedVersionProceed     = pinnedVersionProceed
+	ExportPinnedVersionAlreadyAtIt = pinnedVersionAlreadyAtIt
+	ExportPinnedVersionNewer       = pinnedVersionNewer
+)
+
+// ExportNormalizePinnedVersion exposes normalizePinnedVersion for testing.
+func ExportNormalizePinnedVersion(
+	rawPinnedVersion, currentVersion string,
+) (string, ExportPinnedVersionSkipReason, error) {
+	return normalizePinnedVersion(rawPinnedVersion, currentVersion)
+}
+
 // ExportListResult is a test-visible alias for listResult.
 type ExportListResult = listResult
 
