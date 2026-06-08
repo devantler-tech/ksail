@@ -102,6 +102,16 @@ spec:
                               description: NodePool defines a Hetzner node pool managed
                                 by the cluster autoscaler.
                               properties:
+                                labels:
+                                  additionalProperties:
+                                    type: string
+                                  description: |-
+                                    Labels are Kubernetes node labels applied to every node provisioned in this
+                                    pool. They are baked into the pool's Talos worker config (machine.nodeLabels)
+                                    so they land on the real Node object, and are also attributed to the pool's
+                                    scale-from-zero template so the autoscaler scales the pool for pods that
+                                    select these labels. Keys must be valid Kubernetes label keys.
+                                  type: object
                                 location:
                                   description: Location is the Hetzner datacenter
                                     location for this pool (e.g. "fsn1", "nbg1").
@@ -124,6 +134,32 @@ spec:
                                   description: ServerType is the Hetzner server type
                                     for nodes in this pool (e.g. "cx23", "cax11").
                                   type: string
+                                taints:
+                                  description: |-
+                                    Taints are Kubernetes node taints applied to every node provisioned in this
+                                    pool. They are baked into the pool's Talos worker config (machine.nodeTaints)
+                                    so they land on the real Node object, and are also attributed to the pool's
+                                    scale-from-zero template so the autoscaler only scales the pool for pods that
+                                    tolerate the taints.
+                                  items:
+                                    description: |-
+                                      NodePoolTaint defines a Kubernetes node taint applied to every node in an
+                                      autoscaler node pool.
+                                    properties:
+                                      effect:
+                                        description: 'Effect is the scheduling effect:
+                                          NoSchedule, PreferNoSchedule, or NoExecute.'
+                                        type: string
+                                      key:
+                                        description: |-
+                                          Key is the taint key. Must be a valid Kubernetes label key (an optional
+                                          DNS-subdomain prefix followed by a name segment).
+                                        type: string
+                                      value:
+                                        description: Value is the optional taint value.
+                                        type: string
+                                    type: object
+                                  type: array
                               type: object
                             type: array
                           scaleDownUnneededTime:

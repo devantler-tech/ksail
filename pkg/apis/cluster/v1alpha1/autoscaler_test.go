@@ -344,6 +344,121 @@ func TestValidateAutoscalerConfig(t *testing.T) {
 			wantErr: v1alpha1.ErrPoolLocationEmpty,
 		},
 		{
+			name: "pool with valid labels and taints",
+			cluster: &v1alpha1.ClusterSpec{
+				Autoscaler: v1alpha1.AutoscalerConfig{
+					Node: v1alpha1.NodeAutoscalerConfig{
+						Pools: []v1alpha1.NodePool{
+							{
+								Name:       "gpu",
+								ServerType: "cx23",
+								Location:   "fsn1",
+								Min:        0,
+								Max:        3,
+								Labels: map[string]string{
+									"workload":               "gpu",
+									"team.example.com/owner": "ml",
+								},
+								Taints: []v1alpha1.NodePoolTaint{
+									{
+										Key:    "dedicated",
+										Value:  "gpu",
+										Effect: v1alpha1.TaintEffectNoSchedule,
+									},
+									{Key: "spot", Effect: v1alpha1.TaintEffectNoExecute},
+								},
+							},
+						},
+					},
+				},
+			},
+			wantErr: nil,
+		},
+		{
+			name: "pool with invalid label key is invalid",
+			cluster: &v1alpha1.ClusterSpec{
+				Autoscaler: v1alpha1.AutoscalerConfig{
+					Node: v1alpha1.NodeAutoscalerConfig{
+						Pools: []v1alpha1.NodePool{
+							{
+								Name:       "workers",
+								ServerType: "cx23",
+								Location:   "fsn1",
+								Min:        1,
+								Max:        5,
+								Labels:     map[string]string{"Invalid Key!": "value"},
+							},
+						},
+					},
+				},
+			},
+			wantErr: v1alpha1.ErrInvalidPoolLabel,
+		},
+		{
+			name: "pool with invalid label value is invalid",
+			cluster: &v1alpha1.ClusterSpec{
+				Autoscaler: v1alpha1.AutoscalerConfig{
+					Node: v1alpha1.NodeAutoscalerConfig{
+						Pools: []v1alpha1.NodePool{
+							{
+								Name:       "workers",
+								ServerType: "cx23",
+								Location:   "fsn1",
+								Min:        1,
+								Max:        5,
+								Labels:     map[string]string{"workload": "not a valid value!"},
+							},
+						},
+					},
+				},
+			},
+			wantErr: v1alpha1.ErrInvalidPoolLabel,
+		},
+		{
+			name: "pool with invalid taint key is invalid",
+			cluster: &v1alpha1.ClusterSpec{
+				Autoscaler: v1alpha1.AutoscalerConfig{
+					Node: v1alpha1.NodeAutoscalerConfig{
+						Pools: []v1alpha1.NodePool{
+							{
+								Name:       "workers",
+								ServerType: "cx23",
+								Location:   "fsn1",
+								Min:        1,
+								Max:        5,
+								Taints: []v1alpha1.NodePoolTaint{
+									{Key: "bad key", Effect: v1alpha1.TaintEffectNoSchedule},
+								},
+							},
+						},
+					},
+				},
+			},
+			wantErr: v1alpha1.ErrInvalidPoolTaint,
+		},
+		{
+			name: "pool with invalid taint effect is invalid",
+			cluster: &v1alpha1.ClusterSpec{
+				Autoscaler: v1alpha1.AutoscalerConfig{
+					Node: v1alpha1.NodeAutoscalerConfig{
+						Pools: []v1alpha1.NodePool{
+							{
+								Name:       "workers",
+								ServerType: "cx23",
+								Location:   "fsn1",
+								Min:        1,
+								Max:        5,
+								Taints: []v1alpha1.NodePoolTaint{
+									{Key: "dedicated", Value: "gpu", Effect: "Nonsense"},
+								},
+							},
+						},
+					},
+				},
+			},
+			wantErr: v1alpha1.ErrInvalidPoolTaint,
+		},
+		{
 			name: "node autoscaler enabled with no pools is invalid",
 			cluster: &v1alpha1.ClusterSpec{
 				Provider: v1alpha1.ProviderHetzner,

@@ -206,9 +206,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # ubuntu-22.04 ships libwebkit2gtk-4.0-dev, which webview_go's cgo requires (24.04 only
-          # has 4.1).
-          - { os: ubuntu-22.04, goos: linux, arch: amd64, ext: "" }
+          # Wails v3's default Linux build targets GTK4 + WebKitGTK 6.0 (libgtk-4-dev +
+          # libwebkitgtk-6.0-dev), available on ubuntu-24.04 (22.04 only ships legacy webkit2gtk).
+          - { os: ubuntu-24.04, goos: linux, arch: amd64, ext: "" }
           - { os: windows-latest, goos: windows, arch: amd64, ext: ".exe" }
     steps:
       - name: 📑 Checkout
@@ -231,7 +231,7 @@ jobs:
         if: matrix.goos == 'linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev
+          sudo apt-get install -y libgtk-4-dev libwebkitgtk-6.0-dev
 
       - name: 🏷️ Extract version from tag
         id: get_version
@@ -387,6 +387,48 @@ jobs:
             echo "::warning::Auto-merge could not be enabled; the PR must be merged manually or auto-merge must be enabled in repository settings."
           fi
 
+  operator-chart:
+    name: ⛵ Release Operator Chart
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Runs in parallel with the other releases. The chart is a standalone OCI artifact that only
+    # *references* the operator image (ghcr.io/devantler-tech/ksail) by tag — it neither pulls nor
+    # embeds it — so it does not wait on `goreleaser`; the matching image is pushed concurrently and
+    # exists by the time anyone installs the chart. The gated `publish-release` and `pages-deploy` jobs
+    # both list it in `needs` (just like the other publication jobs), so a chart publish failure blocks
+    # the GitHub release publish and the docs deploy.
+    permissions:
+      contents: read # checkout
+      packages: write # push the chart to GHCR as an OCI artifact
+    steps:
+      - name: 📑 Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: 🏷️ Extract version from tag
+        id: get_version
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+
+      - name: 🔐 Login to GHCR
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # helm is pre-installed on ubuntu-latest runners (CI's operator-chart-lint relies on this too).
+      # Pin the chart version AND appVersion to the release version so the published chart pulls the
+      # matching operator image (operator.image.tag defaults to .Chart.AppVersion); helm bundles crds/
+      # automatically. The chart lands at ghcr.io/devantler-tech/charts/ksail-operator:<version>.
+      - name: 📦 Package and push operator chart
+        env:
+          VERSION: ${{ steps.get_version.outputs.version }}
+        run: |
+          set -euo pipefail
+          helm package charts/ksail-operator --version "$VERSION" --app-version "$VERSION"
+          helm push "ksail-operator-${VERSION}.tgz" oci://ghcr.io/devantler-tech/charts
+
   mcp-publish:
     name: 📤 Publish to MCP Registry
     runs-on: ubuntu-latest
@@ -541,6 +583,7 @@ jobs:
         desktop-macos,
         desktop,
         copilot-plugin,
+        operator-chart,
         pages-build,
       ]
     timeout-minutes: 10
@@ -572,6 +615,7 @@ jobs:
         copilot-plugin,
         desktop-macos,
         desktop,
+        operator-chart,
         pages-build,
       ]
     permissions:
