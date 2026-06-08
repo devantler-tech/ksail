@@ -27,6 +27,8 @@ func defaultClusterMutationFieldSelectors() []ksailconfigmanager.FieldSelector[v
 		ksailconfigmanager.DefaultCSIFieldSelector(),
 		ksailconfigmanager.DefaultCDIFieldSelector(),
 		ksailconfigmanager.DefaultImportImagesFieldSelector(),
+		ksailconfigmanager.KubernetesVersionFieldSelector(),
+		ksailconfigmanager.DistributionVersionFieldSelector(),
 		ksailconfigmanager.ControlPlanesFieldSelector(),
 		ksailconfigmanager.WorkersFieldSelector(),
 		ksailconfigmanager.NodeAutoscalingFieldSelector(), //nolint:staticcheck // backward compat
@@ -108,6 +110,15 @@ func applyAllowedCIDRsFlag(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster) {
 	}
 
 	clusterCfg.Spec.Provider.Hetzner.AllowedCIDRs = cidrs
+}
+
+// applyClusterMutationFlags merges the non-Viper CLI flag overrides
+// (--oidc-extra-scope and --allowed-cidrs) into the cluster config. Centralizing
+// the set keeps every mutation command (create, update, init) applying the same
+// flags; a new manually-merged flag is added here once rather than at each call site.
+func applyClusterMutationFlags(cmd *cobra.Command, clusterCfg *v1alpha1.Cluster) {
+	applyOIDCExtraScopeFlag(cmd, clusterCfg)
+	applyAllowedCIDRsFlag(cmd, clusterCfg)
 }
 
 // setupMutationCmdFlags creates the shared config manager and registers the

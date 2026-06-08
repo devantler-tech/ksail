@@ -38,7 +38,11 @@ func (p *Provisioner) UpgradeDistribution(
 	}
 
 	clusterName = p.resolveClusterName(clusterName)
-	installerImage := installerImageFromTag(toVersion)
+	// Use the schematic-aware installer image so the rolling OS upgrade preserves
+	// configured system extensions (Image Factory installer), matching the
+	// create/snapshot/autoscaler paths. Falls back to the bare upstream installer
+	// only when no schematic is configured. See issue #5077.
+	installerImage := p.resolveInstallerImage(toVersion)
 
 	_, _ = fmt.Fprintf(p.logWriter,
 		"  Upgrading Talos from %s to %s...\n", fromVersion, toVersion,
@@ -225,6 +229,17 @@ func (p *Provisioner) KubernetesImageRef() string {
 // DistributionImageRef returns the OCI repository for Talos node images.
 func (p *Provisioner) DistributionImageRef() string {
 	return talosImageRepository
+}
+
+// PinnedDistributionVersion returns the pinned Talos OS version
+// (spec.cluster.talos.version), or "" when unset so the cluster follows the
+// latest supported version.
+func (p *Provisioner) PinnedDistributionVersion() string {
+	if p.talosOpts == nil {
+		return ""
+	}
+
+	return strings.TrimSpace(p.talosOpts.Version)
 }
 
 // VersionSuffix returns an empty string since Talos uses plain semver tags.

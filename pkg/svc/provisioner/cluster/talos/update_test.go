@@ -173,9 +173,9 @@ func TestUpdateSkipsOmniInPlaceConfigApply(t *testing.T) {
 }
 
 // TestUpdateDoesNotAttemptVersionUpgrade verifies that Update() does not
-// implicitly attempt Talos OS version upgrades. Version upgrades are only
-// triggered via the explicit --update-distribution flag which goes through
-// the UpgradeDistribution() path (not Update()).
+// implicitly attempt Talos OS version upgrades. Version upgrades are handled
+// separately by cluster update's version reconciliation, which goes through the
+// UpgradeDistribution() path (not Update()).
 // The provisioner is instantiated WITHOUT Omni options so any accidental
 // reintroduction of an upgrade step would surface as a failure (no Omni
 // guard to silently skip it).

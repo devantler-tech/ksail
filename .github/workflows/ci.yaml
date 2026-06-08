@@ -285,7 +285,7 @@ jobs:
   ci-go:
     name: ✅ Validate Go Project
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    uses: devantler-tech/reusable-workflows/.github/workflows/validate-go-project.yaml@e67eb6e14b733748c43a4e0df1c572fdd0ae3773 # v5.5.6
+    uses: devantler-tech/reusable-workflows/.github/workflows/validate-go-project.yaml@6b44cfb837e545a8179b0cc97a63b7c694cb9287 # v5.5.7
     permissions:
       contents: write
       issues: write
@@ -416,6 +416,38 @@ jobs:
           persist-credentials: false
           repository: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name || github.repository }}
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+
+      - name: 🧹 Free disk space
+        # `go generate ./docs/...` re-links the full embedded-CLI import graph
+        # (kubectl, helm, kind, k3d, vcluster, flux, argocd, eksctl, …) into a
+        # large binary; on a stock ubuntu-latest runner the linker can exhaust
+        # disk ("no space left on device"). Reclaim space generation does not
+        # need before Go is set up. Mirrors the system-test job's step (no
+        # `docker system prune` here — this job never touches Docker). Each
+        # removal is best-effort: missing paths are not an error.
+        run: |
+          set -euo pipefail
+          before=$(df --output=avail -BG / | tail -1 | tr -dc '0-9')
+          sudo rm -rf \
+            /usr/local/lib/android \
+            /usr/share/dotnet \
+            /opt/ghc \
+            /usr/local/share/boost \
+            /usr/share/swift \
+            /opt/hostedtoolcache/CodeQL \
+            /opt/hostedtoolcache/PyPy \
+            /opt/hostedtoolcache/Ruby \
+            /opt/hostedtoolcache/Python \
+            /usr/local/share/chromium \
+            /usr/local/share/powershell \
+            /usr/local/julia* \
+            /usr/local/aws-cli \
+            /usr/local/aws-sam-cli \
+            /usr/share/gradle* \
+            /usr/share/az* \
+            /usr/share/miniconda || true
+          after=$(df --output=avail -BG / | tail -1 | tr -dc '0-9')
+          echo "Free disk space on /: ${before}G -> ${after}G (gained $((after - before))G)"
 
       - name: ⚙️ Setup Go
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
@@ -1447,7 +1479,7 @@ jobs:
       ]
     if: ${{ always() }}
     steps:
-      - uses: devantler-tech/actions/aggregate-job-checks@cbfd433920d036c336b00b35af4c82f8e700affe # v5.4.0
+      - uses: devantler-tech/actions/aggregate-job-checks@8ce19528eda1ef50f3d028b685c53aebaed6ae62 # v5.4.1
         with:
           job-results: >-
             ${{ needs.rate-limit-gate.result }}

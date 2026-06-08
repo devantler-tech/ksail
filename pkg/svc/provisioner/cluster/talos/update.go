@@ -437,6 +437,21 @@ func (p *Provisioner) applyInPlaceConfigChanges(
 	// same PKI, so any one is a valid source.
 	secretsSource := p.fetchSecretsSource(ctx, clusterName)
 
+	// On Hetzner, buildDesiredNodeConfig strips any user HostnameConfig and imposes
+	// the server-name static hostname for CCM compatibility. Surface that override
+	// once per update so a user's talos/cluster/hostname.yaml isn't silently dropped.
+	// ControlPlane() returns nil when the bundle is not fully loaded (the guard above
+	// only checks p.talosConfigs itself), so nil-check before calling Bytes().
+	if p.hetznerOpts != nil {
+		cpConfig := p.talosConfigs.ControlPlane()
+		if cpConfig != nil {
+			cpBytes, bytesErr := cpConfig.Bytes()
+			if bytesErr == nil {
+				p.warnIfOverridingUserHostname(cpBytes)
+			}
+		}
+	}
+
 	for _, node := range nodes {
 		p.applyNodeConfig(ctx, node, secretsSource, result)
 	}
@@ -1364,24 +1379,29 @@ func (p *Provisioner) ensureAutoscalerSecretIfNeeded(
 		return fmt.Errorf("looking up snapshot image for autoscaler secret: %w", err)
 	}
 
-	return p.ensureAutoscalerSecret(ctx, configBundle, snapshotImageID)
+	// Restart the autoscaler when the config changed so it reloads the new
+	// Kubernetes version / snapshot baked into the Secret (read as env vars,
+	// which Kubernetes does not live-reload).
+	changed, err := p.ensureAutoscalerSecret(ctx, configBundle, snapshotImageID, true)
+	if err != nil {
+		return err
+	}
+
+	// When the config changed (a Talos/Kubernetes version bump), recycle the
+	// existing autoscaler nodes so they follow the new baseline instead of
+	// drifting on the old versions. The refreshed Secret alone only fixes newly
+	// provisioned nodes; the in-place rolling upgrade never touches autoscaler
+	// nodes because they are not KSail-owned. A no-op when nothing changed.
+	if !changed {
+		return nil
+	}
+
+	return p.recycleAutoscalerNodes(ctx, clusterName)
 }
 
 // hasSchematicConfigured reports whether a Talos schematic ID is available
 // (either explicit via talosOpts.SchematicID or auto-computed from extensions
 // via talosConfigs.SchematicID()).
 func (p *Provisioner) hasSchematicConfigured() bool {
-	if p.talosOpts != nil {
-		if strings.TrimSpace(p.talosOpts.SchematicID) != "" {
-			return true
-		}
-	}
-
-	if p.talosConfigs != nil {
-		if strings.TrimSpace(p.talosConfigs.SchematicID()) != "" {
-			return true
-		}
-	}
-
-	return false
+	return p.resolveSchematicID() != ""
 }

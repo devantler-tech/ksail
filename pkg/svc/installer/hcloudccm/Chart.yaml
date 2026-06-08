@@ -1,0 +1,15 @@
+# This file is the source of truth for the hcloud-cloud-controller-manager Helm chart
+# version used in Go code. Dependabot's helm ecosystem updates the dependency version
+# below, and Go code reads it via go:embed + parser.ParseChartVersionFromChartYaml.
+#
+# This is not a deployable chart - it exists solely so Dependabot can track the pinned
+# chart version. The chart version diverges from the CCM image version, so it cannot be
+# tracked via a Dockerfile FROM directive like the image-pinned installers.
+apiVersion: v2
+name: ksail-hcloudccm-pin
+description: Dependabot version pin for the hcloud-cloud-controller-manager Helm chart (not a deployable chart).
+version: 0.0.0
+dependencies:
+  - name: hcloud-cloud-controller-manager
+    version: 1.31.1
+    repository: https://charts.hetzner.cloud

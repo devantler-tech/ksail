@@ -18,22 +18,28 @@ const (
 	defaultScaleDownUnneededTime = "10m"
 	defaultOkTotalUnreadyCount   = 3
 
+	// ReleaseName is the Helm release name for the cluster-autoscaler chart, which
+	// the chart also stamps as the app.kubernetes.io/instance label value. The Talos
+	// provisioner selects on that label to roll the Deployment when its config Secret
+	// changes, so both derive from this single constant rather than drifting.
+	ReleaseName = "cluster-autoscaler"
+
 	// AutoscalerConfigSecretName is the Kubernetes Secret containing per-cluster
 	// autoscaler parameters (cloud-init template, base image tag). It is created by
 	// the Talos provisioner's ApplyAutoscalerConfigSecret before the installer runs.
 	AutoscalerConfigSecretName = "cluster-autoscaler-config"
 
-	// AutoscalerConfigHcloudImageKey is the key in AutoscalerConfigSecretName that
-	// holds the Hetzner image name used when provisioning new autoscaler worker nodes.
-	AutoscalerConfigHcloudImageKey = "hcloud_image"
-
-	// AutoscalerConfigHcloudCloudInitKey is the key in AutoscalerConfigSecretName that
-	// holds the cloud-init user-data for new autoscaler worker nodes. The value is
-	// base64(base64(gzip(workerConfig))): the autoscaler strips the outer base64
-	// layer, leaving base64(gzip(workerConfig)) as the Hetzner user_data, which the
-	// Talos hcloud platform base64-decodes and un-gzips before parsing. This keeps
-	// the payload under Hetzner's 32 KiB user_data limit (issue #5015).
-	AutoscalerConfigHcloudCloudInitKey = "hcloud_cloud_init"
+	// AutoscalerConfigHcloudClusterConfigKey is the key in AutoscalerConfigSecretName
+	// that holds the Hetzner cluster-autoscaler's HCLOUD_CLUSTER_CONFIG value: a
+	// base64-encoded JSON document carrying the snapshot image (imagesForArch) and
+	// per-pool node configuration (nodeConfigs[<pool>] = {cloudInit, labels, taints}).
+	// It replaces the legacy single-image / single-cloud-init keys (HCLOUD_IMAGE,
+	// HCLOUD_CLOUD_INIT), enabling per-pool labels and taints. Each pool's cloudInit
+	// is base64(gzip(workerConfig)) — used verbatim as the Hetzner user_data, which
+	// the Talos hcloud platform base64-decodes and un-gzips before parsing, keeping
+	// each payload under Hetzner's 32 KiB user_data limit (issue #5015). The value is
+	// written by the Talos provisioner's ApplyAutoscalerConfigSecret.
+	AutoscalerConfigHcloudClusterConfigKey = "hcloud_cluster_config"
 )
 
 // Installer installs or upgrades the Kubernetes Cluster Autoscaler.
@@ -73,7 +79,7 @@ func NewInstaller(
 
 	return &Installer{
 		Base: helmutil.NewBase(
-			"cluster-autoscaler",
+			ReleaseName,
 			client,
 			timeout,
 			&helm.RepositoryEntry{
@@ -81,7 +87,7 @@ func NewInstaller(
 				URL:  repoURL,
 			},
 			&helm.ChartSpec{
-				ReleaseName: "cluster-autoscaler",
+				ReleaseName: ReleaseName,
 				ChartName:   "autoscaler/cluster-autoscaler",
 				Namespace:   namespace,
 				Version:     chartVersion(),
@@ -138,10 +144,9 @@ type chartSecretRef struct {
 
 //nolint:tagliatelle // Helm chart requires UPPER_SNAKE_CASE env var keys.
 type chartExtraEnvSecrets struct {
-	HcloudToken     chartSecretRef `json:"HCLOUD_TOKEN"`
-	HcloudNetwork   chartSecretRef `json:"HCLOUD_NETWORK"`
-	HcloudImage     chartSecretRef `json:"HCLOUD_IMAGE"`
-	HcloudCloudInit chartSecretRef `json:"HCLOUD_CLOUD_INIT"`
+	HcloudToken         chartSecretRef `json:"HCLOUD_TOKEN"`
+	HcloudNetwork       chartSecretRef `json:"HCLOUD_NETWORK"`
+	HcloudClusterConfig chartSecretRef `json:"HCLOUD_CLUSTER_CONFIG"`
 }
 
 type chartToleration struct {
@@ -269,18 +274,16 @@ func buildChartValues(
 
 // buildExtraEnvSecrets returns the secret-backed environment variables the
 // cluster-autoscaler reads: the Hetzner token and network (from the "hcloud"
-// secret) and the snapshot image and cloud-init (from the autoscaler config secret).
+// secret) and the per-pool cluster config (from the autoscaler config secret).
+// HCLOUD_CLUSTER_CONFIG carries the snapshot image and per-pool cloud-init,
+// labels, and taints, superseding the legacy HCLOUD_IMAGE / HCLOUD_CLOUD_INIT.
 func buildExtraEnvSecrets() chartExtraEnvSecrets {
 	return chartExtraEnvSecrets{
 		HcloudToken:   chartSecretRef{Name: "hcloud", Key: "token"},
 		HcloudNetwork: chartSecretRef{Name: "hcloud", Key: "network"},
-		HcloudImage: chartSecretRef{
+		HcloudClusterConfig: chartSecretRef{
 			Name: AutoscalerConfigSecretName,
-			Key:  AutoscalerConfigHcloudImageKey,
-		},
-		HcloudCloudInit: chartSecretRef{
-			Name: AutoscalerConfigSecretName,
-			Key:  AutoscalerConfigHcloudCloudInitKey,
+			Key:  AutoscalerConfigHcloudClusterConfigKey,
 		},
 	}
 }

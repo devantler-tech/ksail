@@ -406,6 +406,11 @@ func (e *Engine) componentBaselineUnknown(spec *v1alpha1.ClusterSpec) bool {
 	return string(spec.CNI) == clusterupdate.UnknownBaselineValue
 }
 
+// reasonRegistryIndependentOfOS explains why VCluster, KWOK, and EKS can change their registry
+// configuration in place: none of them manages the registry through the node OS, so no node-level
+// reconfiguration or cluster recreate is required.
+const reasonRegistryIndependentOfOS = "VCluster/KWOK/EKS manage registry independently of the node OS"
+
 // localRegistryReasonMap maps each distribution to the reason and category for a local registry change.
 // For Kind, registry changes require recreate (containerd config is baked in).
 // For all other distributions, registry mirrors can be updated in-place.
@@ -429,15 +434,15 @@ var localRegistryReasonMap = map[v1alpha1.Distribution]struct {
 		category: clusterupdate.ChangeCategoryInPlace,
 	},
 	v1alpha1.DistributionVCluster: {
-		reason:   "VCluster/KWOK/EKS manage registry independently of the node OS",
+		reason:   reasonRegistryIndependentOfOS,
 		category: clusterupdate.ChangeCategoryInPlace,
 	},
 	v1alpha1.DistributionKWOK: {
-		reason:   "VCluster/KWOK/EKS manage registry independently of the node OS",
+		reason:   reasonRegistryIndependentOfOS,
 		category: clusterupdate.ChangeCategoryInPlace,
 	},
 	v1alpha1.DistributionEKS: {
-		reason:   "VCluster/KWOK/EKS manage registry independently of the node OS",
+		reason:   reasonRegistryIndependentOfOS,
 		category: clusterupdate.ChangeCategoryInPlace,
 	},
 }
@@ -912,5 +917,57 @@ func (e *Engine) checkAutoscalerPoolsModified(
 			strconv.Itoa(int(oldPool.Max)), strconv.Itoa(int(newPool.Max)), "",
 			"pool max can be updated in-place via Helm chart upgrade",
 			clusterupdate.ChangeCategoryInPlace)
+
+		appendChange(result, poolField+".labels",
+			formatPoolLabels(oldPool.Labels), formatPoolLabels(newPool.Labels), "",
+			"pool labels updated in-place (autoscaler config secret + Helm upgrade); "+
+				"existing autoscaler nodes are recycled to pick up the change",
+			clusterupdate.ChangeCategoryInPlace)
+
+		appendChange(result, poolField+".taints",
+			formatPoolTaints(oldPool.Taints), formatPoolTaints(newPool.Taints), "",
+			"pool taints updated in-place (autoscaler config secret + Helm upgrade); "+
+				"existing autoscaler nodes are recycled to pick up the change",
+			clusterupdate.ChangeCategoryInPlace)
 	}
+}
+
+// formatPoolLabels renders a pool's labels as a stable, sorted "k=v,k=v" string
+// for diffing. The empty string represents no labels.
+func formatPoolLabels(labels map[string]string) string {
+	if len(labels) == 0 {
+		return ""
+	}
+
+	keys := make([]string, 0, len(labels))
+	for key := range labels {
+		keys = append(keys, key)
+	}
+
+	slices.Sort(keys)
+
+	parts := make([]string, 0, len(keys))
+	for _, key := range keys {
+		parts = append(parts, key+"="+labels[key])
+	}
+
+	return strings.Join(parts, ",")
+}
+
+// formatPoolTaints renders a pool's taints as a stable, sorted "k=v:Effect,..."
+// string for diffing. Taints form a set on the node, so the output is sorted to
+// avoid spurious diffs on reorder. The empty string represents no taints.
+func formatPoolTaints(taints []v1alpha1.NodePoolTaint) string {
+	if len(taints) == 0 {
+		return ""
+	}
+
+	parts := make([]string, 0, len(taints))
+	for _, taint := range taints {
+		parts = append(parts, taint.Key+"="+taint.Value+":"+string(taint.Effect))
+	}
+
+	slices.Sort(parts)
+
+	return strings.Join(parts, ",")
 }

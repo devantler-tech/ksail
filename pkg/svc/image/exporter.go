@@ -21,6 +21,15 @@ import (
 // File permission constant.
 const dirPerm = 0o750
 
+const (
+	// ctrCommand is the containerd CLI binary used to manage images on cluster nodes.
+	ctrCommand = "ctr"
+	// ctrNamespaceArg selects containerd's k8s.io namespace for all ctr invocations.
+	ctrNamespaceArg = "--namespace=k8s.io"
+	// ctrImages is the ctr subcommand group for image operations.
+	ctrImages = "images"
+)
+
 // Error definitions.
 var (
 	// ErrNoNodes is returned when no cluster nodes are found.
@@ -279,7 +288,7 @@ func (e *Exporter) listImagesInNode(
 	nodeName string,
 ) ([]string, error) {
 	// Build ctr command to list images
-	cmd := []string{"ctr", "--namespace=k8s.io", "images", "list", "-q"}
+	cmd := []string{ctrCommand, ctrNamespaceArg, ctrImages, "list", "-q"}
 
 	output, err := e.executor.ExecInContainer(ctx, nodeName, cmd)
 	if err != nil {
@@ -592,9 +601,9 @@ func (e *Exporter) refreshSingleImageContent(
 
 func buildCtrImagesRmCommand(imageRef string) []string {
 	return []string{
-		"ctr",
-		"--namespace=k8s.io",
-		"images",
+		ctrCommand,
+		ctrNamespaceArg,
+		ctrImages,
 		"rm",
 		imageRef,
 	}
@@ -602,9 +611,9 @@ func buildCtrImagesRmCommand(imageRef string) []string {
 
 func buildCtrPullCommand(platform string, imageRef string) []string {
 	return []string{
-		"ctr",
-		"--namespace=k8s.io",
-		"images",
+		ctrCommand,
+		ctrNamespaceArg,
+		ctrImages,
 		"pull",
 		"--platform",
 		platform,
@@ -614,8 +623,8 @@ func buildCtrPullCommand(platform string, imageRef string) []string {
 
 func buildCtrContentFetchCommand(platform string, imageRef string) []string {
 	return []string{
-		"ctr",
-		"--namespace=k8s.io",
+		ctrCommand,
+		ctrNamespaceArg,
 		"content",
 		"fetch",
 		"--platform",
@@ -673,9 +682,9 @@ func (e *Exporter) tryExportImages(
 	cmd := make([]string, 0, 7+len(images)) //nolint:mnd // fixed args + images
 	cmd = append(
 		cmd,
-		"ctr",
-		"--namespace=k8s.io",
-		"images",
+		ctrCommand,
+		ctrNamespaceArg,
+		ctrImages,
 		"export",
 		"--platform",
 		platform,

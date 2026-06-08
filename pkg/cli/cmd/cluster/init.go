@@ -65,6 +65,9 @@ func InitFieldSelectors() []ksailconfigmanager.FieldSelector[v1alpha1.Cluster] {
 	selectors = append(selectors, ksailconfigmanager.DefaultCertManagerFieldSelector())
 	selectors = append(selectors, ksailconfigmanager.DefaultPolicyEngineFieldSelector())
 	selectors = append(selectors, ksailconfigmanager.DefaultImportImagesFieldSelector())
+	// Declarative version selectors (unset = follow latest, set = pin)
+	selectors = append(selectors, ksailconfigmanager.KubernetesVersionFieldSelector())
+	selectors = append(selectors, ksailconfigmanager.DistributionVersionFieldSelector())
 	// Unified node count selectors for all distributions
 	selectors = append(selectors, ksailconfigmanager.ControlPlanesFieldSelector())
 	selectors = append(selectors, ksailconfigmanager.WorkersFieldSelector())
@@ -186,8 +189,7 @@ func HandleInitRunE(
 		return err
 	}
 
-	applyOIDCExtraScopeFlag(cmd, clusterCfg)
-	applyAllowedCIDRsFlag(cmd, clusterCfg)
+	applyClusterMutationFlags(cmd, clusterCfg)
 
 	err = validatePostFlagInitConfig(clusterCfg)
 	if err != nil {

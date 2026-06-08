@@ -71,6 +71,18 @@ func TestProvisioner_WithTalosOptions(t *testing.T) {
 	assert.Same(t, p, result)
 }
 
+func TestProvisioner_PinnedDistributionVersion(t *testing.T) {
+	t.Parallel()
+
+	// No pinned Talos version configured → empty (follow the latest version).
+	assert.Empty(t, talosprovisioner.NewProvisioner(nil, nil).PinnedDistributionVersion())
+
+	// A pinned version is returned, trimmed of surrounding whitespace.
+	pinned := talosprovisioner.NewProvisioner(nil, nil).
+		WithTalosOptions(v1alpha1.OptionsTalos{Version: "  v1.13.3  "})
+	assert.Equal(t, "v1.13.3", pinned.PinnedDistributionVersion())
+}
+
 func TestProvisioner_WithDockerClient(t *testing.T) {
 	t.Parallel()
 

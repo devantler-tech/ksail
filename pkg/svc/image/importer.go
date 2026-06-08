@@ -195,7 +195,7 @@ func (i *Importer) importImagesToNode(
 	// Note: We don't use --all-platforms because multi-platform images may have
 	// manifests for platforms whose layers aren't present, causing import to fail.
 	cmd := []string{
-		"ctr", "--namespace=k8s.io", "images", "import",
+		ctrCommand, ctrNamespaceArg, ctrImages, "import",
 		"--digests",
 		tmpPath,
 	}

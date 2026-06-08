@@ -202,6 +202,37 @@ func WorkersFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	}
 }
 
+// KubernetesVersionFieldSelector returns a field selector for the Kubernetes
+// version (spec.cluster.kubernetesVersion).
+//
+// DefaultValue is intentionally omitted so an unset version stays at its zero
+// value: `cluster create`/`cluster update` then follow the latest supported
+// Kubernetes version, while a set value pins it. Writing a default here would
+// make "unset" indistinguishable from an explicit pin.
+func KubernetesVersionFieldSelector() FieldSelector[v1alpha1.Cluster] {
+	return FieldSelector[v1alpha1.Cluster]{
+		Selector: func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.KubernetesVersion },
+		Description: "Kubernetes version to deploy and reconcile toward. When unset KSail follows " +
+			"the latest supported version; set it to pin a specific version. Honored by the Talos " +
+			"distribution; Kind/K3d/EKS carry the version in their distribution config instead.",
+	}
+}
+
+// DistributionVersionFieldSelector returns a field selector for the distribution
+// version (spec.cluster.talos.version, the Talos OS version).
+//
+// DefaultValue is intentionally omitted so an unset version stays at its zero
+// value: `cluster create`/`cluster update` then follow the latest supported
+// version, while a set value pins it.
+func DistributionVersionFieldSelector() FieldSelector[v1alpha1.Cluster] {
+	return FieldSelector[v1alpha1.Cluster]{
+		Selector: func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.Talos.Version },
+		Description: "Distribution version to deploy and reconcile toward (Talos OS version). When " +
+			"unset KSail follows the latest supported version; set it to pin a specific version. " +
+			"Other distributions carry their version in the distribution config.",
+	}
+}
+
 // DefaultImportImagesFieldSelector creates a standard field selector for import-images.
 func DefaultImportImagesFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	return FieldSelector[v1alpha1.Cluster]{

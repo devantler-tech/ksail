@@ -2,6 +2,13 @@
 name: Release
 on:
   workflow_dispatch:
+  # Auto-release: every push to main runs semantic-release (create-release.yaml).
+  # Its commit-analyzer cuts a new vX.Y.Z tag only when the merged commits warrant
+  # one (fix: → patch, feat: → minor, BREAKING CHANGE/! → major) and no-ops otherwise
+  # (chore:/docs:/ci:). The tag push then triggers cd.yaml's GoReleaser publish.
+  push:
+    branches:
+      - main
 
 concurrency:
   group: "Release"
@@ -10,186 +17,9 @@ concurrency:
 permissions:
   contents: read
 
-# Mirror cd.yaml's release-build environment so validation behaves exactly like the real CD build:
-# the pipe (|) in GOPROXY falls through to `direct` on ANY proxy error (incl. 403), hardening against
-# transient proxy.golang.org blips, and GOMEMLIMIT keeps GoReleaser's multi-binary linker under the
-# runner's memory. Without these a transient proxy error or a linker OOM could fail validation — and
-# thus skip tagging — even when CD would have succeeded, defeating the point of validating first.
-env:
-  GOPROXY: "https://proxy.golang.org|direct"
-  GOMEMLIMIT: "6GiB"
-
-# Validate-before-tag (see #5060, #5061): every release artifact is built in snapshot / no-publish
-# mode BEFORE `create-release` (semantic-release) computes the version and pushes the tag. A build
-# failure fails a `validate-*` job, which skips `create-release`, so the tag — and the CD build it
-# would trigger — is never created. This makes an empty/incomplete tag impossible for the common
-# (build-failure) case; a rare post-tag transient is cleaned up by cd.yaml's `cleanup-failed-release`.
-# The `validate-*` jobs mirror the BUILD halves of cd.yaml's `goreleaser` / `desktop` / `vscode-extension`
-# / `pages-build` jobs (minus publishing) — keep them in sync when those jobs change, or a drift could
-# let a build that passes validation fail in CD and re-introduce the empty tag.
 jobs:
-  validate-cli:
-    name: 🔍 Validate CLI build (snapshot)
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    permissions:
-      contents: read
-    steps:
-      - name: 📑 Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-
-      - name: 🧹 Cleanup node
-        run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
-          sudo docker image prune --all --force
-          sudo docker builder prune -a
-
-      - name: ⚙️ Setup Go
-        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
-        with:
-          go-version-file: go.mod
-          cache: false
-
-      - name: ⚙️ Setup Docker Buildx
-        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
-
-      # `release --snapshot` builds every binary, archive, and Docker image and renders the cask WITHOUT
-      # a tag and WITHOUT publishing (no GitHub release, no Docker push, no cask PR) — the same
-      # .goreleaser.yaml CD uses, so a pass here means CD's real `goreleaser` run will build too. The
-      # cask-token envs are set empty only to keep templating safe; the publish pipes that read them are
-      # skipped in snapshot mode.
-      - name: 🏗️ Run GoReleaser (snapshot)
-        uses: goreleaser/goreleaser-action@5daf1e915a5f0af01ddbcd89a43b8061ff4f1a89 # v7.2.2
-        with:
-          distribution: goreleaser
-          version: "~> v2"
-          args: release --snapshot --clean
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-          HOMEBREW_GITHUB_API_TOKEN: ""
-          GPG_PRIVATE_KEY: ""
-
-  validate-desktop:
-    name: 🔍 Validate Desktop build (snapshot)
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 40
-    permissions:
-      contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - { os: macos-latest, goos: darwin }
-          # ubuntu-22.04 ships libwebkit2gtk-4.0-dev, which webview_go's cgo requires (24.04 only has 4.1).
-          - { os: ubuntu-22.04, goos: linux }
-          - { os: windows-latest, goos: windows }
-    steps:
-      - name: 📑 Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: false
-
-      - name: ⚙️ Setup Go
-        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
-        with:
-          go-version-file: go.mod
-          cache: false
-
-      - name: ⚙️ Setup Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0 # zizmor: ignore[cache-poisoning]
-        with:
-          node-version: "24"
-
-      - name: 🐧 Install Linux webview dependencies
-        if: matrix.goos == 'linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev
-
-      - name: 🏗️ Build and stage web UI
-        shell: bash
-        run: |
-          npm --prefix web/ui ci
-          npm --prefix web/ui run build
-          rm -rf pkg/webui/dist
-          mkdir -p pkg/webui/dist
-          touch pkg/webui/dist/.gitkeep
-          cp -R web/ui/dist/. pkg/webui/dist/
-
-      # Mirrors cd.yaml's desktop build (CGO + system webview). We only need it to COMPILE on every OS
-      # to guarantee CD's desktop jobs will; the binary is thrown away. CGO_ENABLED=1 matches the
-      # desktop module's webview requirement (see .goreleaser.desktop.yaml).
-      - name: 🏗️ Build desktop app
-        shell: bash
-        env:
-          CGO_ENABLED: "1"
-        run: cd desktop && go build -ldflags "-s -w" -o ksail-desktop-validate .
-
-  validate-vsix:
-    name: 🔍 Validate VSCode Extension build
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    permissions:
-      contents: read
-    defaults:
-      run:
-        working-directory: vsce
-    steps:
-      - name: 📄 Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: false
-
-      - name: ⚙️ Setup Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0 # zizmor: ignore[cache-poisoning]
-        with:
-          node-version: "24"
-
-      - name: 📦 Install dependencies
-        run: npm ci
-
-      - name: 🏗️ Compile
-        run: npm run compile
-
-      - name: 📦 Package extension
-        run: npm run package
-
-  validate-docs:
-    name: 🔍 Validate Docs build
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: read
-    steps:
-      - name: 📑 Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: false
-
-      - name: ⚙️ Setup Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0 # zizmor: ignore[cache-poisoning]
-        with:
-          node-version: "24"
-          cache: "npm"
-          cache-dependency-path: docs/package-lock.json
-
-      - name: 📦 Install dependencies
-        working-directory: docs
-        run: npm ci
-
-      - name: 🏗️ Build with Astro
-        working-directory: docs
-        run: npm run build
-
-  # Only after EVERY artifact has been validated does semantic-release compute the version and push the
-  # tag (which then triggers cd.yaml). A failed validation skips this job, so no tag is created — an
-  # empty/incomplete tag can never flow downstream from a build failure (see #5060, #5061).
   release:
     name: 🎉 Create Release
-    needs: [validate-cli, validate-desktop, validate-vsix, validate-docs]
-    uses: devantler-tech/reusable-workflows/.github/workflows/create-release.yaml@e67eb6e14b733748c43a4e0df1c572fdd0ae3773 # v5.5.6
+    uses: devantler-tech/reusable-workflows/.github/workflows/create-release.yaml@6b44cfb837e545a8179b0cc97a63b7c694cb9287 # v5.5.7
     secrets:
       APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}

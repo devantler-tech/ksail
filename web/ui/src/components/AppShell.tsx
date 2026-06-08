@@ -1,4 +1,4 @@
-import { Boxes, Lock, LogOut, Moon, Server, Settings, Sun } from "lucide-react";
+import { Boxes, KeyRound, Layers, Lock, LogOut, Moon, Server, Settings, Sun } from "lucide-react";
 import type { ReactNode } from "react";
 import type { Theme } from "../hooks/useTheme.ts";
 import type { User } from "../api.ts";
@@ -6,7 +6,7 @@ import { IconButton } from "./ui.tsx";
 
 // View is the top-level SPA section. Routing is view-state (no router dependency), matching the
 // existing single-page architecture.
-export type View = "clusters" | "settings";
+export type View = "clusters" | "resources" | "secrets" | "settings";
 
 function NavItem({
   icon,
@@ -35,7 +35,12 @@ function NavItem({
   );
 }
 
-const VIEW_TITLES: Record<View, string> = { clusters: "Clusters", settings: "Settings" };
+const VIEW_TITLES: Record<View, string> = {
+  clusters: "Clusters",
+  resources: "Resources",
+  secrets: "Secrets",
+  settings: "Settings",
+};
 
 export function AppShell({
   theme,
@@ -46,6 +51,8 @@ export function AppShell({
   view,
   onNavigate,
   settingsEnabled,
+  workloadEnabled,
+  secretsEnabled,
   headerActions,
   children,
 }: {
@@ -57,6 +64,8 @@ export function AppShell({
   view: View;
   onNavigate: (view: View) => void;
   settingsEnabled: boolean;
+  workloadEnabled: boolean;
+  secretsEnabled: boolean;
   headerActions?: ReactNode;
   children: ReactNode;
 }) {
@@ -76,6 +85,22 @@ export function AppShell({
             active={view === "clusters"}
             onClick={() => onNavigate("clusters")}
           />
+          {workloadEnabled ? (
+            <NavItem
+              icon={<Layers className="size-4" aria-hidden />}
+              label="Resources"
+              active={view === "resources"}
+              onClick={() => onNavigate("resources")}
+            />
+          ) : null}
+          {secretsEnabled ? (
+            <NavItem
+              icon={<KeyRound className="size-4" aria-hidden />}
+              label="Secrets"
+              active={view === "secrets"}
+              onClick={() => onNavigate("secrets")}
+            />
+          ) : null}
           {settingsEnabled ? (
             <NavItem
               icon={<Settings className="size-4" aria-hidden />}

@@ -6,6 +6,8 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+
+	"k8s.io/apimachinery/pkg/util/validation"
 )
 
 // clusterNameRegex matches DNS-1123 subdomain names: lowercase alphanumeric with optional hyphens.
@@ -304,47 +306,20 @@ func validateExpanderForProvider(
 	return nil
 }
 
-// validateNodePools checks each NodePool for name validity, min ≤ max, and uniqueness.
+// validateNodePools checks each NodePool for name validity, min ≤ max, valid
+// labels/taints, and uniqueness.
 func validateNodePools(pools []NodePool) error {
 	seen := make(map[string]struct{}, len(pools))
 
 	for idx, pool := range pools {
-		if len(pool.Name) > PoolNameMaxLength {
-			return fmt.Errorf(
-				"%w: pool[%d] %q exceeds max %d characters (got %d)",
-				ErrInvalidPoolName, idx, pool.Name, PoolNameMaxLength, len(pool.Name),
-			)
+		fieldErr := validateNodePoolFields(pool, idx)
+		if fieldErr != nil {
+			return fieldErr
 		}
 
-		if !poolNameRegex.MatchString(pool.Name) {
-			return fmt.Errorf(
-				"%w: pool[%d] %q must be a DNS-1123 label "+
-					"(lowercase letters, numbers, and hyphens; "+
-					"must start and end with a lowercase alphanumeric character)",
-				ErrInvalidPoolName, idx, pool.Name,
-			)
-		}
-
-		if pool.ServerType == "" {
-			return fmt.Errorf("%w: pool[%d] %q", ErrPoolServerTypeEmpty, idx, pool.Name)
-		}
-
-		if pool.Location == "" {
-			return fmt.Errorf("%w: pool[%d] %q", ErrPoolLocationEmpty, idx, pool.Name)
-		}
-
-		if pool.Min < 0 || pool.Max < 0 {
-			return fmt.Errorf(
-				"%w: pool %q has negative min=%d or max=%d",
-				ErrInvalidPoolCapacity, pool.Name, pool.Min, pool.Max,
-			)
-		}
-
-		if pool.Min > pool.Max {
-			return fmt.Errorf(
-				"%w: pool %q has min=%d > max=%d",
-				ErrPoolMinExceedsMax, pool.Name, pool.Min, pool.Max,
-			)
+		labelTaintErr := validatePoolLabelsAndTaints(pool)
+		if labelTaintErr != nil {
+			return labelTaintErr
 		}
 
 		if _, exists := seen[pool.Name]; exists {
@@ -352,6 +327,110 @@ func validateNodePools(pools []NodePool) error {
 		}
 
 		seen[pool.Name] = struct{}{}
+	}
+
+	return nil
+}
+
+// validateNodePoolFields checks a single pool's name, server type, location, and
+// capacity (min/max) fields.
+func validateNodePoolFields(pool NodePool, idx int) error {
+	if len(pool.Name) > PoolNameMaxLength {
+		return fmt.Errorf(
+			"%w: pool[%d] %q exceeds max %d characters (got %d)",
+			ErrInvalidPoolName, idx, pool.Name, PoolNameMaxLength, len(pool.Name),
+		)
+	}
+
+	if !poolNameRegex.MatchString(pool.Name) {
+		return fmt.Errorf(
+			"%w: pool[%d] %q must be a DNS-1123 label "+
+				"(lowercase letters, numbers, and hyphens; "+
+				"must start and end with a lowercase alphanumeric character)",
+			ErrInvalidPoolName, idx, pool.Name,
+		)
+	}
+
+	if pool.ServerType == "" {
+		return fmt.Errorf("%w: pool[%d] %q", ErrPoolServerTypeEmpty, idx, pool.Name)
+	}
+
+	if pool.Location == "" {
+		return fmt.Errorf("%w: pool[%d] %q", ErrPoolLocationEmpty, idx, pool.Name)
+	}
+
+	if pool.Min < 0 || pool.Max < 0 {
+		return fmt.Errorf(
+			"%w: pool %q has negative min=%d or max=%d",
+			ErrInvalidPoolCapacity, pool.Name, pool.Min, pool.Max,
+		)
+	}
+
+	if pool.Min > pool.Max {
+		return fmt.Errorf(
+			"%w: pool %q has min=%d > max=%d",
+			ErrPoolMinExceedsMax, pool.Name, pool.Min, pool.Max,
+		)
+	}
+
+	return nil
+}
+
+// validatePoolLabelsAndTaints checks that a pool's Kubernetes node labels and
+// taints are well-formed: label keys/values and taint keys/values must satisfy
+// the Kubernetes label syntax, and taint effects must be one of the supported
+// effects.
+func validatePoolLabelsAndTaints(pool NodePool) error {
+	for key, value := range pool.Labels {
+		if errs := validation.IsQualifiedName(key); len(errs) > 0 {
+			return fmt.Errorf(
+				"%w: pool %q label key %q: %s",
+				ErrInvalidPoolLabel, pool.Name, key, strings.Join(errs, "; "),
+			)
+		}
+
+		if errs := validation.IsValidLabelValue(value); len(errs) > 0 {
+			return fmt.Errorf(
+				"%w: pool %q label %q value %q: %s",
+				ErrInvalidPoolLabel, pool.Name, key, value, strings.Join(errs, "; "),
+			)
+		}
+	}
+
+	for idx, taint := range pool.Taints {
+		taintErr := validatePoolTaint(pool.Name, idx, taint)
+		if taintErr != nil {
+			return taintErr
+		}
+	}
+
+	return nil
+}
+
+// validatePoolTaint validates a single pool taint's key, value, and effect.
+func validatePoolTaint(poolName string, idx int, taint NodePoolTaint) error {
+	if errs := validation.IsQualifiedName(taint.Key); len(errs) > 0 {
+		return fmt.Errorf(
+			"%w: pool %q taint[%d] key %q: %s",
+			ErrInvalidPoolTaint, poolName, idx, taint.Key, strings.Join(errs, "; "),
+		)
+	}
+
+	// An empty taint value is valid (IsValidLabelValue accepts ""), so this runs
+	// unconditionally.
+	if errs := validation.IsValidLabelValue(taint.Value); len(errs) > 0 {
+		return fmt.Errorf(
+			"%w: pool %q taint[%d] %q value %q: %s",
+			ErrInvalidPoolTaint, poolName, idx, taint.Key, taint.Value, strings.Join(errs, "; "),
+		)
+	}
+
+	if !slices.Contains(ValidTaintEffects(), taint.Effect) {
+		return fmt.Errorf(
+			"%w: pool %q taint[%d] %q has invalid effect %q (valid: %s, %s, %s)",
+			ErrInvalidPoolTaint, poolName, idx, taint.Key, taint.Effect,
+			TaintEffectNoSchedule, TaintEffectPreferNoSchedule, TaintEffectNoExecute,
+		)
 	}
 
 	return nil

@@ -1,6 +1,39 @@
 package clusterapi
 
-import "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+import (
+	"context"
+
+	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/client-go/dynamic"
+)
+
+// SetDynamicClientForTest overrides the dynamic-client builder so resource-browser tests can inject a
+// fake client instead of resolving a real kubeconfig context.
+func (s *Service) SetDynamicClientForTest(
+	build func(ctx context.Context, clusterName string) (dynamic.Interface, error),
+) {
+	s.newDynamicClient = build
+}
+
+// ContextForCluster exposes contextForCluster for black-box tests of name→context resolution.
+func ContextForCluster(kubeconfigPath, clusterName string) (string, error) {
+	return contextForCluster(kubeconfigPath, clusterName)
+}
+
+// SetKubeconfigPathForTest overrides the kubeconfig path the resource browser / kubeconfig export
+// read from, so tests can point at a temp kubeconfig instead of the user's real one.
+func (s *Service) SetKubeconfigPathForTest(path string) {
+	s.kubeconfigPath = func() string { return path }
+}
+
+// SetApplyClientForTest overrides the apply-client builder so manifest-apply tests can inject a fake
+// dynamic client + a static REST mapper instead of resolving a real cluster.
+func (s *Service) SetApplyClientForTest(
+	build func(ctx context.Context, clusterName string) (dynamic.Interface, meta.RESTMapper, error),
+) {
+	s.newApplyClient = build
+}
 
 // NewTestService returns a Service whose provisioner factory is overridden, so black-box tests can
 // substitute fake provisioners without touching the real Docker-backed factory. Discovery is

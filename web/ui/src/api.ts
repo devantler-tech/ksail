@@ -94,10 +94,49 @@ export interface ProviderInfo {
   reason?: string;
 }
 
+// Capabilities reports which optional operations the serving backend supports so the SPA can gate
+// affordances it cannot fulfill. The local `ksail ui`/desktop backend manages cluster configuration
+// via files and reports clusterUpdate=false (the SPA then hides the edit affordance); the operator
+// patches the Cluster CR and reports true. New flags are added here as the UI surface grows.
+export interface Capabilities {
+  clusterUpdate: boolean;
+  // workloadRead is true when the backend can read live Kubernetes resources from a target cluster
+  // (the read-only workload browser). The SPA shows the Resources view only then.
+  workloadRead: boolean;
+  // workloadWrite is true when the backend exposes the safe write actions (scale, rollout restart,
+  // delete). The SPA combines it with !readOnly before showing the action affordances.
+  workloadWrite: boolean;
+  // kubeconfigDownload is true when the backend can export a portable kubeconfig for a cluster (the
+  // local backend). The SPA shows the Download-kubeconfig action only then.
+  kubeconfigDownload: boolean;
+  // applyManifests is true when the backend can server-side-apply raw manifests. The SPA combines it
+  // with !readOnly before showing the Apply YAML action.
+  applyManifests: boolean;
+  // secretsCipher is true when the backend can encrypt/decrypt secrets with SOPS via local age keys
+  // (the local backend). The SPA shows the Secrets view only then.
+  secretsCipher: boolean;
+}
+
+// fullCapabilities mirrors the backend's default for a service that does not report capabilities.
+// clusterUpdate defaults true (assume a working action rather than hiding it); the workload +
+// kubeconfig + apply + cipher flags default false because their endpoints may not exist on an older
+// backend.
+export const fullCapabilities: Capabilities = {
+  clusterUpdate: true,
+  workloadRead: false,
+  workloadWrite: false,
+  kubeconfigDownload: false,
+  applyManifests: false,
+  secretsCipher: false,
+};
+
 export interface Config {
   readOnly: boolean;
   authEnabled: boolean;
   user?: User;
+  // capabilities the serving backend supports. Absent only against an older backend; treat absence
+  // as the full surface (see fullCapabilities).
+  capabilities?: Capabilities;
   // distributions the create form should offer. Absent when the backend relies on the SPA default.
   distributions?: string[];
   // providers reports per-provider availability so the create form can gate options to providers the
@@ -155,6 +194,12 @@ export class ApiError extends Error {
   }
 }
 
+// errorMessage extracts a human-readable string from an unknown thrown value. ApiError extends Error,
+// so its message (which already carries the server detail) is used directly.
+export function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
 // detailFromBody pulls a human-readable error message out of the server's response body. The API
 // returns either {"error": "..."} or {"reason": "..."}; fall back to the raw text otherwise.
 function detailFromBody(body: string): { message: string; loginURL?: string } {
@@ -195,6 +240,10 @@ export function logout(): Promise<void> {
 
 // loginPath is where the app sends the user to start the OIDC flow (handled by the operator API).
 export const loginPath = "/api/v1/auth/login";
+
+// eventsPath is the Server-Sent Events stream the SPA subscribes to for live updates (cluster list
+// changes today). It is same-origin, so EventSource sends the session cookie automatically.
+export const eventsPath = "/api/v1/events";
 
 export function getConfig(): Promise<Config> {
   return request<Config>("/api/v1/config");
@@ -242,4 +291,214 @@ export function updateCluster(
 
 export function deleteCluster(namespace: string, name: string): Promise<void> {
   return request<void>(`/api/v1/clusters/${namespace}/${name}`, { method: "DELETE" });
+}
+
+// K8sObject is a loose view of an unstructured Kubernetes object: the backend returns each resource
+// in its native JSON shape, so only the fields the browser reads are typed; the rest is passthrough.
+export interface K8sObject {
+  apiVersion?: string;
+  kind?: string;
+  metadata?: {
+    name?: string;
+    namespace?: string;
+    creationTimestamp?: string;
+    [key: string]: unknown;
+  };
+  status?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export interface K8sList {
+  items?: K8sObject[];
+}
+
+// RESOURCE_KINDS mirrors the backend's curated allowlist (api.ResourceKindNames). The backend rejects
+// anything outside its own allowlist regardless, so this list only drives the kind selector.
+export const RESOURCE_KINDS = [
+  "Pod",
+  "Deployment",
+  "StatefulSet",
+  "DaemonSet",
+  "ReplicaSet",
+  "Job",
+  "CronJob",
+  "Service",
+  "Ingress",
+  "ConfigMap",
+  "PersistentVolumeClaim",
+  "Event",
+  "Node",
+  "Namespace",
+] as const;
+
+// listResources fetches resources of a kind from a cluster. resourceNamespace narrows a namespaced
+// kind to one namespace; omit it to list across all namespaces.
+export function listResources(
+  namespace: string,
+  name: string,
+  kind: string,
+  resourceNamespace?: string,
+): Promise<K8sList> {
+  const params = new URLSearchParams({ kind });
+  if (resourceNamespace) {
+    params.set("namespace", resourceNamespace);
+  }
+
+  return request<K8sList>(
+    `/api/v1/clusters/${namespace}/${name}/resources?${params.toString()}`,
+  );
+}
+
+// SCALABLE_KINDS / RESTARTABLE_KINDS mirror the backend predicates (ResourceKindScalable /
+// ResourceKindRestartable); the backend rejects unsupported kinds regardless.
+export const SCALABLE_KINDS = ["Deployment", "StatefulSet", "ReplicaSet"];
+export const RESTARTABLE_KINDS = ["Deployment", "StatefulSet", "DaemonSet"];
+// CLUSTER_SCOPED_KINDS are not deletable from the workload browser — the backend rejects a delete of
+// these high-blast-radius cluster-scoped kinds, so the SPA hides the Delete affordance for them.
+export const CLUSTER_SCOPED_KINDS = ["Node", "Namespace"];
+
+// downloadKubeconfig fetches the cluster's portable kubeconfig and triggers a browser download. It
+// streams the bytes into a Blob rather than navigating, so an error response surfaces as an ApiError
+// (and a toast) instead of replacing the page.
+export async function downloadKubeconfig(namespace: string, name: string): Promise<void> {
+  const path = `/api/v1/clusters/${namespace}/${name}/kubeconfig`;
+  const response = await fetch(path);
+  if (!response.ok) {
+    const body = (await response.text()).trim();
+    const { message } = detailFromBody(body);
+    const suffix = message === "" ? "" : `: ${message}`;
+    throw new ApiError(`GET ${path} (${response.status})${suffix}`, response.status);
+  }
+
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `${name}.kubeconfig`;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
+// ApplyResult is the per-document outcome of an apply request.
+export interface ApplyResult {
+  kind: string;
+  name: string;
+  namespace?: string;
+  status: "applied" | "error";
+  error?: string;
+}
+
+export interface ApplyResponse {
+  results: ApplyResult[];
+  dryRun: boolean;
+}
+
+// applyManifests server-side-applies multi-document YAML to a cluster. dryRun validates without
+// persisting. The body is raw YAML (text/yaml), not JSON.
+export function applyManifests(
+  namespace: string,
+  name: string,
+  manifests: string,
+  dryRun: boolean,
+): Promise<ApplyResponse> {
+  const query = dryRun ? "?dryRun=true" : "";
+
+  return request<ApplyResponse>(`/api/v1/clusters/${namespace}/${name}/apply${query}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/yaml" },
+    body: manifests,
+  });
+}
+
+function resourcePath(
+  namespace: string,
+  name: string,
+  kind: string,
+  resourceName: string,
+  resourceNamespace: string | undefined,
+  suffix: string,
+): string {
+  const params = new URLSearchParams();
+  if (resourceNamespace) {
+    params.set("namespace", resourceNamespace);
+  }
+
+  const query = params.toString() ? `?${params.toString()}` : "";
+
+  return `/api/v1/clusters/${namespace}/${name}/resources/${kind}/${resourceName}${suffix}${query}`;
+}
+
+// scaleResource sets the replica count of a scalable workload.
+export function scaleResource(
+  namespace: string,
+  name: string,
+  kind: string,
+  resourceName: string,
+  replicas: number,
+  resourceNamespace?: string,
+): Promise<void> {
+  return request<void>(resourcePath(namespace, name, kind, resourceName, resourceNamespace, "/scale"), {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ replicas }),
+  });
+}
+
+// restartResource triggers a rolling restart of a workload.
+export function restartResource(
+  namespace: string,
+  name: string,
+  kind: string,
+  resourceName: string,
+  resourceNamespace?: string,
+): Promise<void> {
+  return request<void>(
+    resourcePath(namespace, name, kind, resourceName, resourceNamespace, "/restart"),
+    { method: "POST" },
+  );
+}
+
+// deleteResource deletes a resource.
+export function deleteResource(
+  namespace: string,
+  name: string,
+  kind: string,
+  resourceName: string,
+  resourceNamespace?: string,
+): Promise<void> {
+  return request<void>(resourcePath(namespace, name, kind, resourceName, resourceNamespace, ""), {
+    method: "DELETE",
+  });
+}
+
+// SECRET_FORMATS are the SOPS store formats the cipher view offers.
+export const SECRET_FORMATS = ["yaml", "json"];
+
+// cipherRecipients lists the age public keys available locally (for the encrypt recipient selector).
+export function cipherRecipients(): Promise<{ recipients: string[] }> {
+  return request<{ recipients: string[] }>("/api/v1/secrets/recipients");
+}
+
+// encryptSecret SOPS-encrypts plaintext for the given age recipient (empty = the local default).
+export function encryptSecret(
+  plaintext: string,
+  recipient: string,
+  format: string,
+): Promise<{ encrypted: string }> {
+  return request<{ encrypted: string }>("/api/v1/secrets/encrypt", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ plaintext, recipient, format }),
+  });
+}
+
+// decryptSecret decrypts a SOPS document using the local age keys.
+export function decryptSecret(encrypted: string, format: string): Promise<{ plaintext: string }> {
+  return request<{ plaintext: string }>("/api/v1/secrets/decrypt", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ encrypted, format }),
+  });
 }

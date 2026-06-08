@@ -87,6 +87,16 @@ func TestDistributionImageRef(t *testing.T) {
 	}
 }
 
+func TestPinnedDistributionVersion_Empty(t *testing.T) {
+	t.Parallel()
+
+	provisioner := vclusterprovisioner.NewProvisioner("test", "", false, nil)
+
+	if got := provisioner.PinnedDistributionVersion(); got != "" {
+		t.Errorf("PinnedDistributionVersion() = %q, want %q", got, "")
+	}
+}
+
 func TestVersionSuffix_Empty(t *testing.T) {
 	t.Parallel()
 

@@ -90,8 +90,7 @@ func handleCreateRunE(
 		return err
 	}
 
-	applyOIDCExtraScopeFlag(cmd, ctx.ClusterCfg)
-	applyAllowedCIDRsFlag(cmd, ctx.ClusterCfg)
+	applyClusterMutationFlags(cmd, ctx.ClusterCfg)
 
 	// Re-validate OIDC after merging CLI scope flags which can change ExtraScopes
 	err = v1alpha1.ValidateOIDCConfig(&ctx.ClusterCfg.Spec.Cluster.OIDC)

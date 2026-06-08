@@ -1,119 +1,104 @@
-// Command ksail-desktop runs the KSail web UI in a native desktop window.
+// Command ksail-desktop runs the KSail web UI in a native desktop window using Wails v3.
 //
-// It reuses the same in-process server as `ksail ui` (pkg/cli/uiserver): the server serves the
-// embedded SPA and a REST API backed by the local cluster lifecycle on a loopback port, and a native
-// system webview (no bundled browser engine) renders it. Closing the window stops the server.
+// It reuses the same in-process server as `ksail ui` (pkg/cli/uiserver): NewServer().Handler() is an
+// http.Handler that serves the embedded SPA plus the REST API + SSE backed by the local cluster
+// lifecycle. That handler is given to the Wails webview as its AssetServer handler, so the SPA, the
+// REST endpoints, and the Server-Sent Events stream are all served same-origin (at the wails://wails
+// production origin) with no loopback TCP port, no CORS, and no SPA changes — the same SPA the
+// operator and `ksail ui` serve in a browser.
 //
-// This is a separate Go module so its CGO/webview dependency stays out of the main, statically
-// linked `ksail` binary.
+// This is a separate Go module so its CGO/webview dependency stays out of the main, statically linked
+// `ksail` binary.
 package main
 
 import (
-	"context"
-	"errors"
-	"fmt"
+	_ "embed"
 	"log"
-	"net/http"
-	"time"
+	"runtime"
 
 	"github.com/devantler-tech/ksail/v7/pkg/cli/uiserver"
-	//nolint:depguard // webview is the desktop app's UI runtime; the CLI module's allowlist does not apply here.
-	webview "github.com/webview/webview_go"
+
+	//nolint:depguard // wails is the desktop app's UI runtime; the CLI module's allowlist does not apply here.
+	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
 const (
-	windowTitle    = "KSail"
-	windowWidth    = 1100
-	windowHeight   = 820
-	readyTimeout   = 30 * time.Second
-	readyPollEvery = 200 * time.Millisecond
+	windowTitle  = "KSail"
+	windowWidth  = 1100
+	windowHeight = 820
 )
 
-var errServerNotReady = errors.New("ksail ui server did not become ready")
+// trayIcon is the full-color app icon, used for the Windows/Linux system tray (their trays render a
+// color image, not a monochrome template). Embedded so the single binary needs no external asset.
+//
+//go:embed resources/icon.png
+var trayIcon []byte
+
+// menuBarIcon is the macOS menu-bar glyph: a monochrome, alpha-only silhouette of the twin-sail
+// sloop mark (no badge tile), generated from resources/menubar-icon.svg. macOS treats it as a
+// template image (NSImage setTemplate:YES) and auto-inverts it for light/dark menu bars. It is a
+// high-res square PNG that Wails scales down to the status-bar thickness.
+//
+//go:embed resources/menubar-icon.png
+var menuBarIcon []byte
 
 func main() {
-	err := run()
+	// Import the user's login-shell environment when launched from Finder/Dock/Spotlight (macOS
+	// LaunchServices does not source shell profiles), so cluster providers that read HCLOUD_TOKEN,
+	// OMNI_SERVICE_ACCOUNT_KEY, KUBECONFIG, PATH additions, etc. behave the same as a terminal launch.
+	// No-op on other platforms and when the environment is already populated. Must run before
+	// NewServer() builds the credential manager.
+	hydrateLoginShellEnv()
+
+	// The same configured server `ksail ui` uses (local cluster lifecycle, embedded SPA, credential
+	// settings). Its Handler() is handed to the Wails AssetServer; we never bind a TCP listener.
+	server := uiserver.NewServer()
+
+	app := application.New(application.Options{
+		Name:        windowTitle,
+		Description: "Native desktop app to manage local Kubernetes clusters",
+		// AssetServer in Handler-only mode: every webview request (the SPA at "/", /api/v1/*, and the
+		// /api/v1/events SSE stream) is served by our handler. The asset server wraps the response
+		// writer in a contentTypeSniffer that implements http.Flusher and, once a Content-Type is set,
+		// passes writes straight through to the webview without buffering — so SSE streams live.
+		Assets: application.AssetOptions{
+			Handler: server.Handler(),
+		},
+	})
+
+	// The application menu is intentionally left unset: macOS applies DefaultApplicationMenu() (which
+	// includes the standard Edit menu — Cut/Copy/Paste/Select All — wired to the webview), replacing
+	// the hand-rolled Cocoa menu the previous webview_go shell required. Windows/WebView2 and
+	// Linux/WebKitGTK handle clipboard shortcuts natively.
+
+	window := app.Window.NewWithOptions(application.WebviewWindowOptions{
+		Title:  windowTitle,
+		Width:  windowWidth,
+		Height: windowHeight,
+	})
+
+	// A menu-bar/system-tray icon for quick access: show/hide the window or quit without going through
+	// the Dock. Must be configured before Run() (which blocks until shutdown).
+	tray := app.SystemTray.New()
+	// macOS: use a monochrome template image so the glyph auto-inverts for light/dark menu bars (the
+	// native idiom). Elsewhere use the full-color icon: Windows' SetTemplateIcon is a no-op (it would
+	// leave the tray blank) and Linux trays render the image as-is with no auto-inversion, so the
+	// alpha-only template would be near-invisible there.
+	if runtime.GOOS == "darwin" {
+		tray.SetTemplateIcon(menuBarIcon)
+	} else {
+		tray.SetIcon(trayIcon)
+	}
+
+	trayMenu := app.NewMenu()
+	trayMenu.Add("Show KSail").OnClick(func(_ *application.Context) { window.Show() })
+	trayMenu.Add("Hide KSail").OnClick(func(_ *application.Context) { window.Hide() })
+	trayMenu.AddSeparator()
+	trayMenu.Add("Quit KSail").OnClick(func(_ *application.Context) { app.Quit() })
+	tray.SetMenu(trayMenu)
+
+	err := app.Run()
 	if err != nil {
 		log.Fatalf("ksail-desktop: %v", err)
 	}
-}
-
-func run() error {
-	// Import the user's shell environment when launched from the macOS GUI, before the UI server
-	// and the cluster providers it drives read credentials such as HCLOUD_TOKEN from it.
-	hydrateLoginShellEnv()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	listener, url, err := uiserver.Listen(ctx, 0)
-	if err != nil {
-		return fmt.Errorf("start ui server: %w", err)
-	}
-
-	server := uiserver.NewServer()
-
-	serveErr := make(chan error, 1)
-	go func() { serveErr <- server.Serve(ctx, listener) }()
-
-	readyErr := waitForReady(ctx, url+"readyz")
-	if readyErr != nil {
-		return readyErr
-	}
-
-	view := webview.New(false)
-	defer view.Destroy()
-
-	view.SetTitle(windowTitle)
-	view.SetSize(windowWidth, windowHeight, webview.HintNone)
-	installNativeMenu()
-	view.Navigate(url)
-	view.Run() // blocks until the window is closed
-
-	// Stop the server and surface any non-graceful shutdown error.
-	cancel()
-
-	shutdownErr := <-serveErr
-	if shutdownErr != nil {
-		return fmt.Errorf("ui server: %w", shutdownErr)
-	}
-
-	return nil
-}
-
-// waitForReady polls the server's /readyz endpoint until it returns 200 or the timeout elapses.
-func waitForReady(ctx context.Context, readyURL string) error {
-	deadline := time.Now().Add(readyTimeout)
-
-	for {
-		if probeReady(ctx, readyURL) {
-			return nil
-		}
-
-		if time.Now().After(deadline) {
-			return fmt.Errorf("%w within %s", errServerNotReady, readyTimeout)
-		}
-
-		select {
-		case <-ctx.Done():
-			return fmt.Errorf("waiting for ui server: %w", ctx.Err())
-		case <-time.After(readyPollEvery):
-		}
-	}
-}
-
-func probeReady(ctx context.Context, readyURL string) bool {
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, readyURL, nil)
-	if err != nil {
-		return false
-	}
-
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		return false
-	}
-
-	defer func() { _ = response.Body.Close() }()
-
-	return response.StatusCode == http.StatusOK
 }

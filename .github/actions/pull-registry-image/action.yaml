@@ -1,0 +1,19 @@
+name: Pull registry image
+description: >-
+  Reliably obtain the registry:3 image that backs KSail's local pull-through
+  mirror registries. Anonymous Docker Hub pulls from shared GitHub Actions
+  runner IPs are throttled and time out (the single most frequent CI flake), so
+  this pulls from Google's Docker Hub pull-through mirror first and falls back to
+  Docker Hub, re-tagging the result to registry:3 for callers.
+
+runs:
+  using: composite
+  steps:
+    - name: 📥 Obtain registry:3 image
+      shell: bash
+      # The logic lives in the co-located pull-registry-image.sh so the
+      # ksail-cluster action can reuse the exact same script via
+      # $GITHUB_ACTION_PATH (see that action's "Pre-pull registry image" step).
+      # $GITHUB_ACTION_PATH is this action's own directory, so the script sits
+      # right beside this file.
+      run: bash "$GITHUB_ACTION_PATH/pull-registry-image.sh"

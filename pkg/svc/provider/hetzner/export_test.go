@@ -45,6 +45,9 @@ var NormalizeNodeRoleForTest = normalizeNodeRole
 // LBInNetworkForTest exports lbInNetwork for testing.
 var LBInNetworkForTest = lbInNetwork
 
+// ServerInNetworkForTest exports serverInNetwork for testing.
+var ServerInNetworkForTest = serverInNetwork
+
 // AvailableLocationsForTest exports availableLocations for testing.
 var AvailableLocationsForTest = availableLocations
 

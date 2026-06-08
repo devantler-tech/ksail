@@ -5,10 +5,12 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"net"
 	"net/http"
@@ -27,6 +29,10 @@ const (
 	// maxRequestBodyBytes caps decoded request bodies to guard against oversized payloads.
 	maxRequestBodyBytes = 1 << 20 // 1 MiB
 )
+
+// errorJSONKey is the JSON object key carrying a human-readable error message in API and SSE error
+// responses. The SPA parses both with the same logic, so the key is shared.
+const errorJSONKey = "error"
 
 // Server serves the operator REST API. It implements controller-runtime's manager.Runnable.
 //
@@ -66,6 +72,10 @@ type Server struct {
 	// the UI separately); `ksail ui` sets it to the embedded assets.
 	StaticFS fs.FS
 
+	// EventsInterval is how often the SSE events stream (GET /api/v1/events) re-checks the backend for
+	// changes. Zero selects defaultEventsInterval; tests set it low to observe ticks quickly.
+	EventsInterval time.Duration
+
 	// auth is built from OIDC at Start; nil means authentication is disabled.
 	auth *authenticator
 }
@@ -78,6 +88,10 @@ type configResponse struct {
 	Distributions   []string       `json:"distributions,omitempty"`
 	Providers       []ProviderInfo `json:"providers,omitempty"`
 	SettingsEnabled bool           `json:"settingsEnabled,omitempty"`
+	// Capabilities reports which optional operations the serving backend supports so the SPA can gate
+	// affordances (e.g. cluster edit) it cannot fulfill. Always present (no omitempty): an absent
+	// field would force the SPA to guess, and the false zero-value is meaningful.
+	Capabilities Capabilities `json:"capabilities"`
 }
 
 // ProviderInfo reports whether an infrastructure provider is usable on the serving backend, with a
@@ -184,10 +198,13 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/config", s.handleConfig)
 	mux.HandleFunc("GET /api/v1/meta", s.handleMeta)
 	mux.HandleFunc("GET /api/v1/clusters", s.handleListClusters)
+	mux.HandleFunc("GET /api/v1/events", s.handleEvents)
 	mux.HandleFunc("POST /api/v1/clusters", s.handleCreateCluster)
 	mux.HandleFunc("GET /api/v1/clusters/{namespace}/{name}", s.handleGetCluster)
 	mux.HandleFunc("PUT /api/v1/clusters/{namespace}/{name}", s.handleUpdateCluster)
 	mux.HandleFunc("DELETE /api/v1/clusters/{namespace}/{name}", s.handleDeleteCluster)
+
+	s.registerCapabilityRoutes(mux)
 
 	// Credential settings are local-UI-only: registered only when a SettingsService is provided, so
 	// the operator's API surface is unchanged.
@@ -209,6 +226,59 @@ func (s *Server) Handler() http.Handler {
 	}
 
 	return securityHeaders(s.authGuard(s.readOnlyGuard(mux)))
+}
+
+// registerCapabilityRoutes wires the optional endpoints whose presence is gated on the backend
+// implementing the matching interface (so the operator's API-only surface is unchanged). Each block's
+// routes are only reachable when the corresponding capability is advertised in /api/v1/config.
+func (s *Server) registerCapabilityRoutes(mux *http.ServeMux) {
+	// Read-only resource browser (ResourceService). These patterns are strictly more specific than the
+	// cluster get/update/delete routes, so the mux routes them without conflict.
+	if _, ok := s.Service.(ResourceService); ok {
+		mux.HandleFunc("GET /api/v1/clusters/{namespace}/{name}/resources", s.handleListResources)
+		mux.HandleFunc(
+			"GET /api/v1/clusters/{namespace}/{name}/resources/{kind}/{rname}",
+			s.handleGetResource,
+		)
+	}
+
+	// Safe write actions (scale, rollout restart, delete) on browsable resources (ResourceWriter).
+	// Mutating verbs, so the read-only guard rejects them with 403 when the UI is read-only.
+	if _, ok := s.Service.(ResourceWriter); ok {
+		mux.HandleFunc(
+			"PUT /api/v1/clusters/{namespace}/{name}/resources/{kind}/{rname}/scale",
+			s.handleScaleResource,
+		)
+		mux.HandleFunc(
+			"POST /api/v1/clusters/{namespace}/{name}/resources/{kind}/{rname}/restart",
+			s.handleRestartResource,
+		)
+		mux.HandleFunc(
+			"DELETE /api/v1/clusters/{namespace}/{name}/resources/{kind}/{rname}",
+			s.handleDeleteResource,
+		)
+	}
+
+	// Kubeconfig export (KubeconfigProvider). A read (GET), so the read-only guard does not apply.
+	if _, ok := s.Service.(KubeconfigProvider); ok {
+		mux.HandleFunc("GET /api/v1/clusters/{namespace}/{name}/kubeconfig", s.handleKubeconfig)
+	}
+
+	// Manifest apply (ApplyService). A mutating verb, so the read-only guard rejects it in read-only.
+	if _, ok := s.Service.(ApplyService); ok {
+		mux.HandleFunc("POST /api/v1/clusters/{namespace}/{name}/apply", s.handleApply)
+	}
+
+	// SOPS secret cipher with local age keys (CipherService). Cluster-independent local crypto.
+	// encrypt/decrypt are POST, so the read-only guard rejects them in read-only mode. This is
+	// intentional: a read-only deployment locks down secret operations entirely — including decrypt,
+	// which would otherwise reveal plaintext. The local `ksail ui`/desktop backend runs writable, so
+	// this only bites a deliberately read-only deployment that also opts into the cipher service.
+	if _, ok := s.Service.(CipherService); ok {
+		mux.HandleFunc("GET /api/v1/secrets/recipients", s.handleCipherRecipients)
+		mux.HandleFunc("POST /api/v1/secrets/encrypt", s.handleSecretEncrypt)
+		mux.HandleFunc("POST /api/v1/secrets/decrypt", s.handleSecretDecrypt)
+	}
 }
 
 // securityHeaders applies conservative security headers to every response. The CSP allows only
@@ -278,8 +348,8 @@ func (s *Server) authGuard(next http.Handler) http.Handler {
 		_, ok := s.auth.currentUser(request)
 		if !ok {
 			writeJSON(writer, http.StatusUnauthorized, map[string]any{
-				"error":    "authentication required",
-				"loginURL": loginPath,
+				errorJSONKey: "authentication required",
+				"loginURL":   loginPath,
 			})
 
 			return
@@ -331,11 +401,21 @@ func (s *Server) handleHealth(writer http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *Server) handleConfig(writer http.ResponseWriter, request *http.Request) {
+	capabilities := serviceCapabilities(s.Service)
+	// workloadRead is true exactly when the resource endpoints are registered (the backend implements
+	// ResourceService), so the SPA's gate can never diverge from whether the routes exist.
+	_, capabilities.WorkloadRead = s.Service.(ResourceService)
+	_, capabilities.WorkloadWrite = s.Service.(ResourceWriter)
+	_, capabilities.KubeconfigDownload = s.Service.(KubeconfigProvider)
+	_, capabilities.ApplyManifests = s.Service.(ApplyService)
+	_, capabilities.SecretsCipher = s.Service.(CipherService)
+
 	response := configResponse{
 		ReadOnly:        s.ReadOnly,
 		AuthEnabled:     s.auth != nil,
 		Distributions:   s.Distributions,
 		SettingsEnabled: s.Settings != nil,
+		Capabilities:    capabilities,
 	}
 
 	if s.ProviderStatus != nil {
@@ -438,6 +518,300 @@ func (s *Server) handleDeleteCluster(writer http.ResponseWriter, request *http.R
 	writer.WriteHeader(http.StatusNoContent)
 }
 
+// resourceService returns the backend's ResourceService, or false when it does not implement one
+// (the routes are only registered when it does, so this is belt-and-suspenders).
+func (s *Server) resourceService() (ResourceService, bool) {
+	svc, ok := s.Service.(ResourceService)
+
+	return svc, ok
+}
+
+func (s *Server) handleListResources(writer http.ResponseWriter, request *http.Request) {
+	svc, ok := s.resourceService()
+	if !ok {
+		writeClientError(writer, ErrNotSupported)
+
+		return
+	}
+
+	list, err := svc.ListResources(
+		request.Context(),
+		request.PathValue("namespace"),
+		request.PathValue("name"),
+		ResourceQuery{
+			Kind:      request.URL.Query().Get("kind"),
+			Namespace: request.URL.Query().Get("namespace"),
+		},
+	)
+	if err != nil {
+		writeClientError(writer, err)
+
+		return
+	}
+
+	writeJSON(writer, http.StatusOK, list)
+}
+
+func (s *Server) handleGetResource(writer http.ResponseWriter, request *http.Request) {
+	svc, ok := s.resourceService()
+	if !ok {
+		writeClientError(writer, ErrNotSupported)
+
+		return
+	}
+
+	obj, err := svc.GetResource(
+		request.Context(),
+		request.PathValue("namespace"),
+		request.PathValue("name"),
+		resourceRefFrom(request),
+	)
+	if err != nil {
+		writeClientError(writer, err)
+
+		return
+	}
+
+	writeJSON(writer, http.StatusOK, obj)
+}
+
+// resourceRefFrom builds a ResourceRef from the request's path values and namespace query param.
+func resourceRefFrom(request *http.Request) ResourceRef {
+	return ResourceRef{
+		Kind:      request.PathValue("kind"),
+		Namespace: request.URL.Query().Get("namespace"),
+		Name:      request.PathValue("rname"),
+	}
+}
+
+func (s *Server) resourceWriter() (ResourceWriter, bool) {
+	svc, ok := s.Service.(ResourceWriter)
+
+	return svc, ok
+}
+
+func (s *Server) handleScaleResource(writer http.ResponseWriter, request *http.Request) {
+	svc, ok := s.resourceWriter()
+	if !ok {
+		writeClientError(writer, ErrNotSupported)
+
+		return
+	}
+
+	var scale ScaleRequest
+
+	limited := http.MaxBytesReader(writer, request.Body, maxRequestBodyBytes)
+
+	err := json.NewDecoder(limited).Decode(&scale)
+	if err != nil {
+		writeDecodeError(writer, fmt.Errorf("decode scale request: %w", err))
+
+		return
+	}
+
+	err = svc.ScaleResource(
+		request.Context(),
+		request.PathValue("namespace"),
+		request.PathValue("name"),
+		resourceRefFrom(request),
+		scale.Replicas,
+	)
+	if err != nil {
+		writeClientError(writer, err)
+
+		return
+	}
+
+	writer.WriteHeader(http.StatusNoContent)
+}
+
+// runResourceWrite invokes a no-body ResourceWriter action (rollout restart, delete) and writes 204 —
+// mapping a backend without ResourceWriter to 501 and a service error to its client status. Shared by
+// the restart/delete handlers; handleScaleResource is separate because it first decodes a body.
+func (s *Server) runResourceWrite(
+	writer http.ResponseWriter,
+	request *http.Request,
+	invoke func(svc ResourceWriter, ctx context.Context, namespace, name string, ref ResourceRef) error,
+) {
+	svc, ok := s.resourceWriter()
+	if !ok {
+		writeClientError(writer, ErrNotSupported)
+
+		return
+	}
+
+	err := invoke(
+		svc,
+		request.Context(),
+		request.PathValue("namespace"),
+		request.PathValue("name"),
+		resourceRefFrom(request),
+	)
+	if err != nil {
+		writeClientError(writer, err)
+
+		return
+	}
+
+	writer.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleRestartResource(writer http.ResponseWriter, request *http.Request) {
+	s.runResourceWrite(
+		writer,
+		request,
+		func(svc ResourceWriter, ctx context.Context, namespace, name string, ref ResourceRef) error {
+			return svc.RestartResource(ctx, namespace, name, ref)
+		},
+	)
+}
+
+func (s *Server) handleDeleteResource(writer http.ResponseWriter, request *http.Request) {
+	s.runResourceWrite(
+		writer,
+		request,
+		func(svc ResourceWriter, ctx context.Context, namespace, name string, ref ResourceRef) error {
+			return svc.DeleteResource(ctx, namespace, name, ref)
+		},
+	)
+}
+
+func (s *Server) handleKubeconfig(writer http.ResponseWriter, request *http.Request) {
+	provider, ok := s.Service.(KubeconfigProvider)
+	if !ok {
+		writeClientError(writer, ErrNotSupported)
+
+		return
+	}
+
+	name := request.PathValue("name")
+
+	kubeconfig, err := provider.Kubeconfig(request.Context(), request.PathValue("namespace"), name)
+	if err != nil {
+		writeClientError(writer, err)
+
+		return
+	}
+
+	filename := name + ".kubeconfig"
+
+	// Served as a non-HTML attachment with nosniff so the browser downloads it and never renders the
+	// bytes as a document. ServeContent (not a raw Write) handles the body, honouring the Content-Type
+	// set here rather than sniffing it.
+	writer.Header().Set("Content-Type", "application/yaml")
+	writer.Header().Set("X-Content-Type-Options", "nosniff")
+	writer.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
+
+	http.ServeContent(writer, request, filename, time.Time{}, bytes.NewReader(kubeconfig))
+}
+
+func (s *Server) handleApply(writer http.ResponseWriter, request *http.Request) {
+	svc, ok := s.Service.(ApplyService)
+	if !ok {
+		writeClientError(writer, ErrNotSupported)
+
+		return
+	}
+
+	limited := http.MaxBytesReader(writer, request.Body, maxRequestBodyBytes)
+
+	manifests, err := io.ReadAll(limited)
+	if err != nil {
+		writeDecodeError(writer, fmt.Errorf("read manifests: %w", err))
+
+		return
+	}
+
+	dryRun := request.URL.Query().Get("dryRun") == "true"
+
+	results, err := svc.ApplyManifests(
+		request.Context(),
+		request.PathValue("namespace"),
+		request.PathValue("name"),
+		manifests,
+		dryRun,
+	)
+	if err != nil {
+		writeClientError(writer, err)
+
+		return
+	}
+
+	writeJSON(writer, http.StatusOK, map[string]any{"results": results, "dryRun": dryRun})
+}
+
+func (s *Server) handleCipherRecipients(writer http.ResponseWriter, request *http.Request) {
+	svc, ok := s.Service.(CipherService)
+	if !ok {
+		writeClientError(writer, ErrNotSupported)
+
+		return
+	}
+
+	recipients, err := svc.CipherRecipients(request.Context())
+	if err != nil {
+		writeClientError(writer, err)
+
+		return
+	}
+
+	if recipients == nil {
+		recipients = []string{}
+	}
+
+	writeJSON(writer, http.StatusOK, map[string]any{"recipients": recipients})
+}
+
+func (s *Server) handleSecretEncrypt(writer http.ResponseWriter, request *http.Request) {
+	svc, ok := s.Service.(CipherService)
+	if !ok {
+		writeClientError(writer, ErrNotSupported)
+
+		return
+	}
+
+	var req SecretEncryptRequest
+
+	err := decodeJSON(writer, request, &req)
+	if err != nil {
+		return
+	}
+
+	encrypted, err := svc.EncryptSecret(request.Context(), req.Plaintext, req.Recipient, req.Format)
+	if err != nil {
+		writeClientError(writer, err)
+
+		return
+	}
+
+	writeJSON(writer, http.StatusOK, map[string]any{"encrypted": encrypted})
+}
+
+func (s *Server) handleSecretDecrypt(writer http.ResponseWriter, request *http.Request) {
+	svc, ok := s.Service.(CipherService)
+	if !ok {
+		writeClientError(writer, ErrNotSupported)
+
+		return
+	}
+
+	var req SecretDecryptRequest
+
+	err := decodeJSON(writer, request, &req)
+	if err != nil {
+		return
+	}
+
+	plaintext, err := svc.DecryptSecret(request.Context(), req.Encrypted, req.Format)
+	if err != nil {
+		writeClientError(writer, err)
+
+		return
+	}
+
+	writeJSON(writer, http.StatusOK, map[string]any{"plaintext": plaintext})
+}
+
 func isMutating(method string) bool {
 	switch method {
 	case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
@@ -445,6 +819,22 @@ func isMutating(method string) bool {
 	default:
 		return false
 	}
+}
+
+// decodeJSON decodes a size-capped JSON request body into v. On failure it writes the appropriate
+// error response (413 if oversized, else 400) and returns the error so the handler returns early.
+func decodeJSON(writer http.ResponseWriter, request *http.Request, value any) error {
+	limited := http.MaxBytesReader(writer, request.Body, maxRequestBodyBytes)
+
+	err := json.NewDecoder(limited).Decode(value)
+	if err != nil {
+		wrapped := fmt.Errorf("decode request: %w", err)
+		writeDecodeError(writer, wrapped)
+
+		return wrapped
+	}
+
+	return nil
 }
 
 func decodeCluster(writer http.ResponseWriter, request *http.Request) (*v1alpha1.Cluster, error) {
@@ -476,7 +866,7 @@ func writeJSON(writer http.ResponseWriter, status int, body any) {
 }
 
 func writeError(writer http.ResponseWriter, status int, err error) {
-	writeJSON(writer, status, map[string]string{"error": err.Error()})
+	writeJSON(writer, status, map[string]string{errorJSONKey: err.Error()})
 }
 
 // writeDecodeError maps a request-body decode failure to the most appropriate status: 413 when the

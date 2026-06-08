@@ -120,7 +120,14 @@ func setupFluxCore(ctx context.Context, params setupParams) error {
 	}
 
 	// For local Docker registries (not external like GHCR), patch OCIRepository to use insecure HTTP
-	return ensureLocalRegistryInsecureIfNeeded(ctx, ociPatcher, params.clusterCfg)
+	err = ensureLocalRegistryInsecureIfNeeded(ctx, ociPatcher, params.clusterCfg)
+	if err != nil {
+		return err
+	}
+
+	// When spec.workload.verify is configured, patch OCIRepository.spec.verify so
+	// Flux verifies artifact signatures (cosign/notation) at pull time.
+	return ensureVerifyIfConfigured(ctx, ociPatcher, params.clusterCfg)
 }
 
 // EnsureDefaultResources configures a default FluxInstance so the operator can
@@ -393,6 +400,24 @@ func ensureLocalRegistryInsecureIfNeeded(
 	}
 
 	return patcher.ensureInsecure(ctx)
+}
+
+// ensureVerifyIfConfigured patches OCIRepository.spec.verify when the user has
+// configured spec.workload.flux.verify. Verification applies to any registry (it
+// is the established pattern for signed artifacts published to GHCR), so unlike
+// the insecure patch it is not gated on the registry being local. A no-op when
+// verification is not configured.
+func ensureVerifyIfConfigured(
+	ctx context.Context,
+	patcher *ociRepositoryPatcher,
+	clusterCfg *v1alpha1.Cluster,
+) error {
+	verify := clusterCfg.Spec.Workload.Flux.Verify
+	if !verify.Enabled() {
+		return nil
+	}
+
+	return patcher.ensureVerify(ctx, verify)
 }
 
 // newDynamicClient creates a controller-runtime client with a dynamic REST mapper.

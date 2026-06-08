@@ -16,6 +16,7 @@ import (
 	check "github.com/siderolabs/talos/pkg/cluster/check"
 	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/client-go/kubernetes"
 )
 
 // NodeWithRoleForTest is the exported alias of nodeWithRole for testing.
@@ -303,6 +304,26 @@ func InstallerImageFromTagForTest(tag string) string {
 	return installerImageFromTag(tag)
 }
 
+// SupportsLifecycleUpgradeAPIForTest exposes supportsLifecycleUpgradeAPI for unit testing.
+func SupportsLifecycleUpgradeAPIForTest(versionTag string) bool {
+	return supportsLifecycleUpgradeAPI(versionTag)
+}
+
+// ResolveInstallerImageForTest exposes resolveInstallerImage for unit testing.
+func (p *Provisioner) ResolveInstallerImageForTest(toVersion string) string {
+	return p.resolveInstallerImage(toVersion)
+}
+
+// ResolveSchematicIDForTest exposes resolveSchematicID for unit testing.
+func (p *Provisioner) ResolveSchematicIDForTest() string {
+	return p.resolveSchematicID()
+}
+
+// HasSchematicConfiguredForTest exposes hasSchematicConfigured for unit testing.
+func (p *Provisioner) HasSchematicConfiguredForTest() bool {
+	return p.hasSchematicConfigured()
+}
+
 // RenameKubeconfigContextForTest exposes k8s.RenameKubeconfigContext for unit testing.
 func RenameKubeconfigContextForTest(kubeconfigData []byte, desiredContext string) ([]byte, error) {
 	result, err := k8s.RenameKubeconfigContext(kubeconfigData, desiredContext)
@@ -360,6 +381,45 @@ func (p *Provisioner) EnsureAutoscalerSecretIfNeededForTest(
 	clusterName string,
 ) error {
 	return p.ensureAutoscalerSecretIfNeeded(ctx, clusterName)
+}
+
+// RestartAutoscalerAfterConfigChangeForTest exposes restartAutoscalerAfterConfigChange
+// for unit testing.
+func (p *Provisioner) RestartAutoscalerAfterConfigChangeForTest(
+	ctx context.Context,
+	kubeclient kubernetes.Interface,
+) error {
+	return p.restartAutoscalerAfterConfigChange(ctx, kubeclient)
+}
+
+// SortServersByNameForTest exposes sortServersByName for unit testing.
+func SortServersByNameForTest(servers []*hcloud.Server) []*hcloud.Server {
+	return sortServersByName(servers)
+}
+
+// RecycleAutoscalerNodesForTest exposes recycleAutoscalerNodes for unit testing.
+func (p *Provisioner) RecycleAutoscalerNodesForTest(
+	ctx context.Context,
+	clusterName string,
+) error {
+	return p.recycleAutoscalerNodes(ctx, clusterName)
+}
+
+// WaitForAutoscalerRolloutForTest exposes waitForAutoscalerRollout for unit testing.
+func (p *Provisioner) WaitForAutoscalerRolloutForTest(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+) error {
+	return p.waitForAutoscalerRollout(ctx, clientset)
+}
+
+// DrainResolvedNodeForTest exposes drainResolvedNode for unit testing.
+func (p *Provisioner) DrainResolvedNodeForTest(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	nodeIP string,
+) (string, error) {
+	return p.drainResolvedNode(ctx, clientset, nodeIP)
 }
 
 // WithTalosOptsForTest sets talosOpts on the provisioner for unit testing.
@@ -455,6 +515,27 @@ func (p *Provisioner) BuildDesiredNodeConfigForTest(
 	role string,
 ) (talosconfig.Provider, error) {
 	return p.buildDesiredNodeConfig(running, secretsSource, role)
+}
+
+// WithNodeConfigFetcherForTest overrides the running-config fetcher so unit tests
+// can drive the rolling-reboot staged-config rebuild (buildStagedNodeConfig)
+// without real Talos API connectivity.
+func (p *Provisioner) WithNodeConfigFetcherForTest(
+	fn func(ctx context.Context, nodeIP string) (talosconfig.Provider, error),
+) *Provisioner {
+	p.nodeConfigFetcher = fn
+
+	return p
+}
+
+// BuildStagedNodeConfigForTest exposes buildStagedNodeConfig — the rolling-reboot
+// staged-config rebuild — for unit testing.
+func (p *Provisioner) BuildStagedNodeConfigForTest(
+	ctx context.Context,
+	node NodeWithRoleForTest,
+	secretsSource talosconfig.Provider,
+) (talosconfig.Provider, error) {
+	return p.buildStagedNodeConfig(ctx, node, secretsSource)
 }
 
 // MachineConfigFieldForTest exposes the machine.config change field for unit testing.

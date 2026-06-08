@@ -260,21 +260,22 @@ For cloud volumes, use the `hcloud-volumes` storage class installed automaticall
 
 ### Talos Upgrades
 
-To upgrade the Talos OS version, pass `--update-distribution` to `ksail cluster update`:
+`ksail cluster update` reconciles the Talos OS version automatically: it follows the latest supported version when `spec.cluster.talos.version` is unset, or reconciles toward the pinned version when it is set (also overridable per run with `--distribution-version`). The same field governs `ksail cluster create`.
 
 ```bash
-ksail cluster update --update-distribution
+# Follow the latest supported Talos version
+ksail cluster update
+
+# Pin a specific Talos OS version
+ksail cluster update --distribution-version v1.13.3
 ```
 
-KSail performs a rolling upgrade using the Talos LifecycleService API (Talos 1.13+):
+KSail performs a rolling upgrade, one node at a time:
 
 1. Worker nodes are upgraded one at a time
 2. Control-plane nodes are upgraded one at a time after all workers complete
 
-For each node, KSail pulls the installer image, triggers the upgrade, and waits for the node to be ready before proceeding.
-
-> [!NOTE]
-> Upgrades require the running cluster to already be on Talos 1.13+. For clusters on older versions, first upgrade to 1.13 manually using the [Talos upgrade docs](https://www.talos.dev/latest/talos-guides/upgrading-talos/).
+For each node, KSail selects the upgrade API based on the node's running Talos version — nodes on Talos 1.13+ use the LifecycleService/ImageService APIs, while older nodes (for example 1.12.x) use the legacy MachineService upgrade API — then triggers the upgrade and waits for the node to be ready before proceeding.
 
 > [!NOTE]
 > Omni-managed clusters are excluded from KSail-driven upgrades — Omni handles OS upgrades externally through its own cluster lifecycle management.

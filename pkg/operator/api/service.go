@@ -46,3 +46,67 @@ type ClusterService interface {
 	// Delete removes a cluster.
 	Delete(ctx context.Context, namespace, name string) error
 }
+
+// Capabilities reports which optional operations a backend supports, so the SPA can hide affordances
+// a backend cannot fulfill instead of offering an action that fails. It is served on
+// /api/v1/config under "capabilities". New capability flags are added here as the UI surface grows
+// (e.g. workload reads, log streaming, exec), and each backend reports the subset it implements.
+type Capabilities struct {
+	// ClusterUpdate reports whether the backend can apply spec changes to an existing cluster
+	// (PUT /api/v1/clusters/{namespace}/{name}). The operator patches the Cluster custom resource and
+	// supports it; the local CLI backend manages cluster configuration via files and does not, so the
+	// SPA hides the edit affordance there rather than offering an action that returns 501.
+	ClusterUpdate bool `json:"clusterUpdate"`
+	// WorkloadRead reports whether the backend can read live Kubernetes resources from a target
+	// cluster (the read-only workload browser). It is true exactly when the serving ClusterService
+	// implements ResourceService; the SPA shows the Resources view only then. Derived from the
+	// interface in handleConfig rather than reported via CapabilityReporter, so it cannot drift from
+	// whether the endpoints are actually registered.
+	WorkloadRead bool `json:"workloadRead"`
+	// WorkloadWrite reports whether the backend exposes the safe write actions (scale, rollout
+	// restart, delete) on browsable resources — true exactly when the serving ClusterService
+	// implements ResourceWriter. The SPA still combines it with !readOnly before showing the actions.
+	WorkloadWrite bool `json:"workloadWrite"`
+	// KubeconfigDownload reports whether the backend can export a portable kubeconfig for a cluster —
+	// true exactly when the serving ClusterService implements KubeconfigProvider. The local backend
+	// extracts the cluster's context from the user's kubeconfig; the operator does not implement it.
+	KubeconfigDownload bool `json:"kubeconfigDownload"`
+	// ApplyManifests reports whether the backend can server-side-apply raw manifests to a cluster —
+	// true exactly when the serving ClusterService implements ApplyService. Combined with !readOnly
+	// before the SPA shows the apply affordance.
+	ApplyManifests bool `json:"applyManifests"`
+	// SecretsCipher reports whether the backend can encrypt/decrypt secrets with SOPS using the local
+	// age keys — true exactly when the serving ClusterService implements CipherService. The SPA shows
+	// the Secrets view only then (local backend only; the operator has no local keys).
+	SecretsCipher bool `json:"secretsCipher"`
+}
+
+// KubeconfigProvider is an optional interface a ClusterService may implement to export a portable,
+// single-context kubeconfig for a cluster (so the SPA can offer a "Download kubeconfig" action). The
+// returned bytes are a complete kubeconfig YAML scoped to just the named cluster's context.
+type KubeconfigProvider interface {
+	Kubeconfig(ctx context.Context, namespace, name string) ([]byte, error)
+}
+
+// CapabilityReporter is an optional interface a ClusterService may implement to advertise which
+// operations it supports. A ClusterService that does not implement it is assumed to support the full
+// surface (see fullCapabilities) — the operator's controller-runtime backend relies on this default.
+type CapabilityReporter interface {
+	Capabilities() Capabilities
+}
+
+// fullCapabilities is the capability set assumed for a ClusterService that does not implement
+// CapabilityReporter: every operation is supported.
+func fullCapabilities() Capabilities {
+	return Capabilities{ClusterUpdate: true}
+}
+
+// serviceCapabilities returns the capabilities a ClusterService advertises, defaulting to the full
+// surface when it does not implement CapabilityReporter.
+func serviceCapabilities(service ClusterService) Capabilities {
+	if reporter, ok := service.(CapabilityReporter); ok {
+		return reporter.Capabilities()
+	}
+
+	return fullCapabilities()
+}

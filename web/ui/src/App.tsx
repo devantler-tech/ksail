@@ -4,6 +4,7 @@ import {
   ApiError,
   createCluster,
   deleteCluster,
+  fullCapabilities,
   getConfig,
   getMeta,
   listClusters,
@@ -12,27 +13,25 @@ import {
   type Cluster,
   type ClusterMeta,
   type ClusterSpec,
+  type Config,
   type ProviderInfo,
   type User,
 } from "./api.ts";
 import { MetaContext } from "./lib/meta.ts";
 import { AppShell, type View } from "./components/AppShell.tsx";
 import { SettingsPage } from "./components/SettingsPage.tsx";
+import { ResourcesView } from "./components/ResourcesView.tsx";
+import { SecretsView } from "./components/SecretsView.tsx";
 import { ClusterDetail } from "./components/ClusterDetail.tsx";
-import {
-  ClusterFormDialog,
-  type ClusterFormValues,
-  type FormMode,
-} from "./components/ClusterFormDialog.tsx";
+import { ClusterFormDialog, type ClusterFormValues, type FormMode } from "./components/ClusterFormDialog.tsx";
 import { ClustersTable } from "./components/ClustersTable.tsx";
 import { ConfirmDialog } from "./components/ConfirmDialog.tsx";
 import { LoginScreen } from "./components/LoginScreen.tsx";
 import { EmptyState, ErrorBanner, TableSkeleton } from "./components/states.tsx";
 import { Button } from "./components/ui.tsx";
 import { useTheme } from "./hooks/useTheme.ts";
+import { useClusterStream } from "./hooks/useClusterStream.ts";
 import { useToast } from "./components/Toast.tsx";
-
-const POLL_MS = 10000;
 
 // DEFAULT_DISTRIBUTIONS is the create-form distribution list used when the backend does not advertise
 // its supported set via config.distributions. The operator omits it (it only provisions VCluster
@@ -81,6 +80,21 @@ export function App() {
   const toast = useToast();
 
   const [readOnly, setReadOnly] = useState(false);
+  // canUpdate reflects the backend's clusterUpdate capability. The local UI/desktop backend cannot
+  // update a cluster in place, so the edit affordance is hidden there; the operator can, so it shows.
+  const [canUpdate, setCanUpdate] = useState(fullCapabilities.clusterUpdate);
+  // canBrowse reflects the backend's workloadRead capability: whether the read-only resource browser
+  // endpoints exist. The Resources view + nav item are shown only when true.
+  const [canBrowse, setCanBrowse] = useState(fullCapabilities.workloadRead);
+  // canManage reflects the backend's workloadWrite capability (scale/restart/delete). Combined with
+  // !readOnly before the action UI is shown.
+  const [canManage, setCanManage] = useState(fullCapabilities.workloadWrite);
+  // canKubeconfig reflects the backend's kubeconfigDownload capability (the local backend).
+  const [canKubeconfig, setCanKubeconfig] = useState(fullCapabilities.kubeconfigDownload);
+  // canApply reflects the backend's applyManifests capability.
+  const [canApply, setCanApply] = useState(fullCapabilities.applyManifests);
+  // canCipher reflects the backend's secretsCipher capability (local SOPS).
+  const [canCipher, setCanCipher] = useState(fullCapabilities.secretsCipher);
   const [user, setUser] = useState<User | null>(null);
   const [needsLogin, setNeedsLogin] = useState(false);
   const [meta, setMeta] = useState<ClusterMeta | null>(null);
@@ -100,9 +114,11 @@ export function App() {
   const [formMode, setFormMode] = useState<FormMode>("create");
   const [formInitial, setFormInitial] = useState<Cluster | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Cluster | null>(null);
+  // streamReady gates the live SSE subscription: open it only after the initial load succeeded
+  // without losing the session (see init), so it never races the auth handshake.
+  const [streamReady, setStreamReady] = useState(false);
 
   const mounted = useRef(true);
-  const pollRef = useRef<number | undefined>(undefined);
 
   const selected = useMemo(
     () => clusters.find((cluster) => clusterKey(cluster) === selectedKey) ?? null,
@@ -128,10 +144,9 @@ export function App() {
         return true;
       }
       if (err instanceof ApiError && err.status === 401) {
-        if (pollRef.current) {
-          window.clearInterval(pollRef.current);
-          pollRef.current = undefined;
-        }
+        // Session lost: stop the live stream and show the login screen. Disabling the stream tears
+        // down the EventSource (see useClusterStream) so it stops retrying against a 401.
+        setStreamReady(false);
         setNeedsLogin(true);
         return false;
       }
@@ -145,6 +160,22 @@ export function App() {
     return true;
   }, []);
 
+  // applyConfig maps the deployment config onto UI state: read-only, the capability gates, and the
+  // create-form options. Shared by the initial load and reloadConfig so the (growing) capability list
+  // lives in one place. The state setters are stable, so this is safe to memoize with no deps.
+  const applyConfig = useCallback((config: Config) => {
+    setReadOnly(config.readOnly);
+    setCanUpdate(config.capabilities?.clusterUpdate ?? fullCapabilities.clusterUpdate);
+    setCanBrowse(config.capabilities?.workloadRead ?? fullCapabilities.workloadRead);
+    setCanManage(config.capabilities?.workloadWrite ?? fullCapabilities.workloadWrite);
+    setCanKubeconfig(config.capabilities?.kubeconfigDownload ?? fullCapabilities.kubeconfigDownload);
+    setCanApply(config.capabilities?.applyManifests ?? fullCapabilities.applyManifests);
+    setCanCipher(config.capabilities?.secretsCipher ?? fullCapabilities.secretsCipher);
+    setDistributions(config.distributions ?? DEFAULT_DISTRIBUTIONS);
+    setProviderStatus(config.providers ?? null);
+    setSettingsEnabled(config.settingsEnabled ?? false);
+  }, []);
+
   // reloadConfig re-fetches deployment config after a change that can affect it (e.g. saving
   // credential settings flips provider availability), so the create form's gating stays current
   // without a full page reload.
@@ -154,14 +185,11 @@ export function App() {
       if (!mounted.current) {
         return;
       }
-      setReadOnly(config.readOnly);
-      setDistributions(config.distributions ?? DEFAULT_DISTRIBUTIONS);
-      setProviderStatus(config.providers ?? null);
-      setSettingsEnabled(config.settingsEnabled ?? false);
+      applyConfig(config);
     } catch {
       // Non-fatal: keep the current config if the refresh fails.
     }
-  }, []);
+  }, [applyConfig]);
 
   useEffect(() => {
     mounted.current = true;
@@ -182,11 +210,8 @@ export function App() {
         return;
       }
 
-      setReadOnly(config.readOnly);
+      applyConfig(config);
       setUser(config.user ?? null);
-      setDistributions(config.distributions ?? DEFAULT_DISTRIBUTIONS);
-      setProviderStatus(config.providers ?? null);
-      setSettingsEnabled(config.settingsEnabled ?? false);
 
       if (config.authEnabled && !config.user) {
         setNeedsLogin(true);
@@ -210,10 +235,11 @@ export function App() {
       const authOK = await refresh(true);
       if (mounted.current) {
         setLoading(false);
-        // Only start polling if the initial load did not lose the session; otherwise the login
-        // screen is shown and a poll would just fire another unauthorized request.
+        // Live updates flow over the SSE stream (see useClusterStream). Enable it only if the initial
+        // load did not lose the session; otherwise the login screen is shown and a stream would just
+        // reconnect against a 401.
         if (authOK) {
-          pollRef.current = window.setInterval(() => void refresh(true), POLL_MS);
+          setStreamReady(true);
         }
       }
     }
@@ -222,12 +248,24 @@ export function App() {
 
     return () => {
       mounted.current = false;
-      if (pollRef.current) {
-        window.clearInterval(pollRef.current);
-        pollRef.current = undefined;
-      }
     };
   }, [refresh]);
+
+  // Live cluster updates over SSE, replacing client-side polling. On a stream error we re-sync via
+  // refresh(), which also detects a lost session (401) and surfaces the login screen.
+  useClusterStream({
+    enabled: streamReady && !needsLogin,
+    onClusters: (items) => {
+      if (!mounted.current) {
+        return;
+      }
+      setClusters(items);
+      setError(null);
+    },
+    onError: () => {
+      void refresh(true);
+    },
+  });
 
   function openCreate() {
     setFormMode("create");
@@ -291,6 +329,10 @@ export function App() {
     return <LoginScreen />;
   }
 
+  // canEdit gates the edit affordance: editing requires both a writable UI and a backend that can
+  // apply spec changes in place. Delete stays gated on readOnly alone (the local backend supports it).
+  const canEdit = !readOnly && canUpdate;
+
   // Header actions (Refresh / New cluster) belong to the Clusters view only.
   const headerActions =
     view === "clusters" ? (
@@ -310,101 +352,105 @@ export function App() {
 
   return (
     <MetaContext.Provider value={meta}>
-    <AppShell
-      theme={theme}
-      onToggleTheme={toggle}
-      user={user}
-      onLogout={() => void logout().finally(() => setNeedsLogin(true))}
-      readOnly={readOnly}
-      view={view}
-      onNavigate={setView}
-      settingsEnabled={settingsEnabled}
-      headerActions={headerActions}
-    >
-      {view === "settings" ? (
-        <SettingsPage onSaved={() => void reloadConfig()} />
-      ) : (
-      <div className="mx-auto max-w-6xl space-y-4">
-        {error && clusters.length > 0 ? (
-          <ErrorBanner message={error} onRetry={() => void refresh()} />
+      <AppShell
+        theme={theme}
+        onToggleTheme={toggle}
+        user={user}
+        onLogout={() => void logout().finally(() => setNeedsLogin(true))}
+        readOnly={readOnly}
+        view={view}
+        onNavigate={setView}
+        settingsEnabled={settingsEnabled}
+        workloadEnabled={canBrowse}
+        secretsEnabled={canCipher}
+        headerActions={headerActions}
+      >
+        {view === "settings" ? (
+          <SettingsPage onSaved={() => void reloadConfig()} />
+        ) : view === "secrets" ? (
+          <SecretsView />
+        ) : view === "resources" ? (
+          <ResourcesView clusters={clusters} canWrite={!readOnly && canManage} canApply={!readOnly && canApply} />
+        ) : (
+          <div className="mx-auto max-w-6xl space-y-4">
+            {error && clusters.length > 0 ? <ErrorBanner message={error} onRetry={() => void refresh()} /> : null}
+
+            {loading ? (
+              <TableSkeleton />
+            ) : error && clusters.length === 0 ? (
+              <ErrorBanner message={error} onRetry={() => void refresh()} />
+            ) : clusters.length === 0 ? (
+              <EmptyState
+                title="No clusters yet"
+                description={
+                  readOnly
+                    ? "Clusters are managed declaratively from Git (read-only mode)."
+                    : "Create your first cluster to get started."
+                }
+                action={
+                  !readOnly ? (
+                    <Button onClick={openCreate}>
+                      <Plus className="size-4" aria-hidden />
+                      New cluster
+                    </Button>
+                  ) : undefined
+                }
+              />
+            ) : (
+              <ClustersTable
+                clusters={clusters}
+                readOnly={readOnly}
+                canEdit={canEdit}
+                onSelect={(cluster) => setSelectedKey(clusterKey(cluster))}
+                onEdit={openEdit}
+                onDelete={(cluster) => setDeleteTarget(cluster)}
+              />
+            )}
+          </div>
+        )}
+
+        {meta ? (
+          <ClusterDetail
+            cluster={selected}
+            open={selected !== null}
+            canEdit={canEdit}
+            canDownloadKubeconfig={canKubeconfig}
+            onClose={() => setSelectedKey(null)}
+            onEdit={openEdit}
+          />
         ) : null}
 
-        {loading ? (
-          <TableSkeleton />
-        ) : error && clusters.length === 0 ? (
-          <ErrorBanner message={error} onRetry={() => void refresh()} />
-        ) : clusters.length === 0 ? (
-          <EmptyState
-            title="No clusters yet"
-            description={
-              readOnly
-                ? "Clusters are managed declaratively from Git (read-only mode)."
-                : "Create your first cluster to get started."
-            }
-            action={
-              !readOnly ? (
-                <Button onClick={openCreate}>
-                  <Plus className="size-4" aria-hidden />
-                  New cluster
-                </Button>
-              ) : undefined
-            }
+        {meta ? (
+          <ClusterFormDialog
+            open={formOpen}
+            mode={formMode}
+            initial={formInitial}
+            distributions={distributions}
+            providerStatus={providerStatus}
+            onSubmit={handleSubmit}
+            onClose={() => setFormOpen(false)}
           />
-        ) : (
-          <ClustersTable
-            clusters={clusters}
-            readOnly={readOnly}
-            onSelect={(cluster) => setSelectedKey(clusterKey(cluster))}
-            onEdit={openEdit}
-            onDelete={(cluster) => setDeleteTarget(cluster)}
-          />
-        )}
-      </div>
-      )}
+        ) : null}
 
-      {meta ? (
-        <ClusterDetail
-          cluster={selected}
-          open={selected !== null}
-          readOnly={readOnly}
-          onClose={() => setSelectedKey(null)}
-          onEdit={openEdit}
+        <ConfirmDialog
+          open={deleteTarget !== null}
+          title="Delete cluster"
+          description={
+            deleteTarget ? (
+              <>
+                This permanently deletes{" "}
+                <span className="font-medium text-slate-700 dark:text-slate-200">{deleteTarget.metadata.name}</span> and
+                its underlying resources. This action cannot be undone.
+              </>
+            ) : (
+              ""
+            )
+          }
+          confirmLabel="Delete"
+          onConfirm={handleDelete}
+          onClose={() => setDeleteTarget(null)}
         />
-      ) : null}
-
-      {meta ? (
-        <ClusterFormDialog
-          open={formOpen}
-          mode={formMode}
-          initial={formInitial}
-          distributions={distributions}
-          providerStatus={providerStatus}
-          onSubmit={handleSubmit}
-          onClose={() => setFormOpen(false)}
-        />
-      ) : null}
-
-      <ConfirmDialog
-        open={deleteTarget !== null}
-        title="Delete cluster"
-        description={
-          deleteTarget ? (
-            <>
-              This permanently deletes{" "}
-              <span className="font-medium text-slate-700 dark:text-slate-200">
-                {deleteTarget.metadata.name}
-              </span>{" "}
-              and its underlying resources. This action cannot be undone.
-            </>
-          ) : (
-            ""
-          )
-        }
-        confirmLabel="Delete"
-        onConfirm={handleDelete}
-        onClose={() => setDeleteTarget(null)}
-      />
-    </AppShell>
+      </AppShell>
     </MetaContext.Provider>
   );
 }

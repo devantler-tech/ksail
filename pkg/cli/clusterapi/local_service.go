@@ -19,17 +19,20 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	kindconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/kind"
 	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil/scaffolder"
+	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	"github.com/devantler-tech/ksail/v7/pkg/operator/api"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/clusterdiscovery"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/credentials"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
 
@@ -55,10 +58,27 @@ type job struct {
 	provider     v1alpha1.Provider
 	phase        v1alpha1.ClusterPhase
 	err          error
+	// startedAt is when the operation began; it drives the status condition's transition time so the
+	// UI can show how long a create/delete has been running or has been failed.
+	startedAt time.Time
 }
 
-// Ensure Service satisfies the operator REST API's backend contract.
-var _ api.ClusterService = (*Service)(nil)
+// message returns the human-readable detail for the job's current phase: the failure reason when the
+// job failed, otherwise empty (the phase itself conveys an in-flight operation).
+func (j *job) message() string {
+	if j.err != nil {
+		return j.err.Error()
+	}
+
+	return ""
+}
+
+// Ensure Service satisfies the operator REST API's backend contract, including the optional
+// capability reporter the SPA uses to gate edit affordances.
+var (
+	_ api.ClusterService     = (*Service)(nil)
+	_ api.CapabilityReporter = (*Service)(nil)
+)
 
 // Service implements api.ClusterService over the local provider/provisioner lifecycle.
 type Service struct {
@@ -70,6 +90,18 @@ type Service struct {
 	discoverer        *clusterdiscovery.Discoverer
 	discoverProviders []v1alpha1.Provider
 
+	// newDynamicClient builds a dynamic client for a named cluster (the read-only resource browser).
+	// Injectable so tests can substitute a fake client instead of resolving a real kubeconfig context.
+	newDynamicClient dynamicClientFunc
+
+	// newApplyClient builds a dynamic client + REST mapper for a named cluster (manifest apply, which
+	// needs GVK→resource resolution). Injectable for tests (fake client + static mapper).
+	newApplyClient applyClientFunc
+
+	// kubeconfigPath resolves the kubeconfig file the resource browser / kubeconfig export read from.
+	// Injectable so tests can point at a temp kubeconfig instead of the user's real one.
+	kubeconfigPath func() string
+
 	mu   sync.Mutex
 	jobs map[string]*job
 }
@@ -79,11 +111,22 @@ func NewService() *Service {
 	service := &Service{
 		newFactory:        defaultFactory,
 		discoverProviders: clusterdiscovery.AllProviders(),
+		newDynamicClient:  defaultDynamicClient,
+		newApplyClient:    defaultApplyClient,
+		kubeconfigPath:    k8s.DefaultKubeconfigPath,
 		jobs:              map[string]*job{},
 	}
 	service.discoverer = &clusterdiscovery.Discoverer{DockerFactory: service.dockerFactory}
 
 	return service
+}
+
+// Capabilities reports the operations the local backend supports. In-place cluster update is not
+// supported locally — a local cluster's configuration is managed through its config files and
+// `ksail cluster update`, not the API (see Update) — so the SPA hides the edit affordance rather
+// than offering a button that returns 501.
+func (s *Service) Capabilities() api.Capabilities {
+	return api.Capabilities{ClusterUpdate: false}
 }
 
 // CreatableDistributions returns the distributions the local UI can provision. It feeds the
@@ -115,11 +158,14 @@ func creatableDistributions() []v1alpha1.Distribution {
 }
 
 // listEntry is the merged view of a cluster's distribution, provider, and phase while assembling
-// the list response.
+// the list response. For job-tracked clusters it also carries the operation's detail (failure reason)
+// and start time so List can attach a status condition the UI surfaces.
 type listEntry struct {
 	distribution v1alpha1.Distribution
 	provider     v1alpha1.Provider
 	phase        v1alpha1.ClusterPhase
+	message      string
+	since        time.Time
 }
 
 // List returns the union of clusters discovered across providers and clusters tracked in the job
@@ -152,6 +198,8 @@ func (s *Service) List(ctx context.Context) (*v1alpha1.ClusterList, error) {
 			distribution: current.distribution,
 			provider:     current.provider,
 			phase:        current.phase,
+			message:      current.message(),
+			since:        current.startedAt,
 		}
 	}
 	s.mu.Unlock()
@@ -166,7 +214,14 @@ func (s *Service) List(ctx context.Context) (*v1alpha1.ClusterList, error) {
 	items := make([]v1alpha1.Cluster, 0, len(names))
 	for _, name := range names {
 		entry := merged[name]
-		items = append(items, newCluster(name, entry.distribution, entry.provider, entry.phase))
+		cluster := newCluster(name, entry.distribution, entry.provider, entry.phase)
+
+		condition, ok := jobConditionFor(entry.phase, entry.message, entry.since)
+		if ok {
+			cluster.Status.Conditions = []metav1.Condition{condition}
+		}
+
+		items = append(items, cluster)
 	}
 
 	return &v1alpha1.ClusterList{Items: items}, nil
@@ -250,6 +305,7 @@ func (s *Service) Create(
 		distribution: distribution,
 		provider:     provider,
 		phase:        v1alpha1.ClusterPhaseProvisioning,
+		startedAt:    time.Now(),
 	}
 	s.mu.Unlock()
 
@@ -282,6 +338,7 @@ func (s *Service) Delete(ctx context.Context, _, name string) error {
 		distribution: distribution,
 		provider:     provider,
 		phase:        v1alpha1.ClusterPhaseDeleting,
+		startedAt:    time.Now(),
 	}
 	s.mu.Unlock()
 
@@ -478,6 +535,43 @@ func newCluster(
 	cluster.Status.Phase = phase
 
 	return cluster
+}
+
+// jobConditionFor builds the status condition describing an in-flight or failed local operation, so
+// the UI's detail view surfaces why a cluster is Provisioning/Deleting or — most usefully — the
+// reason it Failed (which the list otherwise drops). It returns ok=false for any other phase: a Ready
+// cluster discovered from a provider carries no synthetic condition. The condition uses the
+// conventional Ready type so the existing UI renders it, and `since` becomes its transition time.
+func jobConditionFor(
+	phase v1alpha1.ClusterPhase,
+	message string,
+	since time.Time,
+) (metav1.Condition, bool) {
+	var reason, detail string
+
+	switch phase {
+	case v1alpha1.ClusterPhaseProvisioning:
+		reason, detail = "Provisioning", "Creating cluster"
+	case v1alpha1.ClusterPhaseDeleting:
+		reason, detail = "Deleting", "Deleting cluster"
+	case v1alpha1.ClusterPhaseFailed:
+		reason, detail = "Error", message
+	case v1alpha1.ClusterPhaseReady,
+		v1alpha1.ClusterPhasePending,
+		v1alpha1.ClusterPhaseUpdating:
+		// Ready/Pending/Updating clusters carry no synthetic job condition.
+		return metav1.Condition{}, false
+	default:
+		return metav1.Condition{}, false
+	}
+
+	return metav1.Condition{
+		Type:               "Ready",
+		Status:             metav1.ConditionFalse,
+		Reason:             reason,
+		Message:            detail,
+		LastTransitionTime: metav1.NewTime(since),
+	}, true
 }
 
 func isCreatable(distribution v1alpha1.Distribution) bool {

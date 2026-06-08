@@ -102,6 +102,16 @@ spec:
                               description: NodePool defines a Hetzner node pool managed
                                 by the cluster autoscaler.
                               properties:
+                                labels:
+                                  additionalProperties:
+                                    type: string
+                                  description: |-
+                                    Labels are Kubernetes node labels applied to every node provisioned in this
+                                    pool. They are baked into the pool's Talos worker config (machine.nodeLabels)
+                                    so they land on the real Node object, and are also attributed to the pool's
+                                    scale-from-zero template so the autoscaler scales the pool for pods that
+                                    select these labels. Keys must be valid Kubernetes label keys.
+                                  type: object
                                 location:
                                   description: Location is the Hetzner datacenter
                                     location for this pool (e.g. "fsn1", "nbg1").
@@ -124,6 +134,32 @@ spec:
                                   description: ServerType is the Hetzner server type
                                     for nodes in this pool (e.g. "cx23", "cax11").
                                   type: string
+                                taints:
+                                  description: |-
+                                    Taints are Kubernetes node taints applied to every node provisioned in this
+                                    pool. They are baked into the pool's Talos worker config (machine.nodeTaints)
+                                    so they land on the real Node object, and are also attributed to the pool's
+                                    scale-from-zero template so the autoscaler only scales the pool for pods that
+                                    tolerate the taints.
+                                  items:
+                                    description: |-
+                                      NodePoolTaint defines a Kubernetes node taint applied to every node in an
+                                      autoscaler node pool.
+                                    properties:
+                                      effect:
+                                        description: 'Effect is the scheduling effect:
+                                          NoSchedule, PreferNoSchedule, or NoExecute.'
+                                        type: string
+                                      key:
+                                        description: |-
+                                          Key is the taint key. Must be a valid Kubernetes label key (an optional
+                                          DNS-subdomain prefix followed by a name segment).
+                                        type: string
+                                      value:
+                                        description: Value is the optional taint value.
+                                        type: string
+                                    type: object
+                                  type: array
                               type: object
                             type: array
                           scaleDownUnneededTime:
@@ -190,21 +226,21 @@ spec:
                   kubernetesVersion:
                     description: |-
                       KubernetesVersion pins the Kubernetes version to deploy. Accepts values with
-                      or without the "v" prefix (e.g., "v1.32.0" or "1.32.0"). Currently honored by
-                      the Talos distribution (Docker/Hetzner); for Kind, K3d, and EKS the version is
-                      set in the distribution config (kind.yaml/k3d.yaml/eks.yaml) instead.
+                      or without the "v" prefix (e.g., "v1.32.0" or "1.32.0"). Honored by the Talos
+                      distribution (Docker/Hetzner); for Kind, K3d, and EKS the version is set in the
+                      distribution config (kind.yaml/k3d.yaml/eks.yaml) instead.
 
-                      When empty, KSail does NOT force a Kubernetes version on an existing cluster:
-                      `cluster update` keeps the version already running so an unrelated change
-                      (e.g. scaling workers) never triggers an unrequested Kubernetes upgrade. For
-                      brand-new Talos clusters it uses a built-in default, capped to a version
-                      compatible with the pinned Talos release (spec.cluster.talos.version) — so a
-                      pinned older Talos version is never paired with a Kubernetes version it cannot
-                      run.
+                      When set, KSail reconciles toward this version: `cluster create` provisions at
+                      it and `cluster update` upgrades the cluster toward it (skipping downgrades).
+                      For brand-new Talos clusters an unset value uses a built-in default capped to a
+                      version compatible with the pinned Talos release (spec.cluster.talos.version),
+                      so a pinned older Talos version is never paired with a Kubernetes version it
+                      cannot run.
 
-                      Set this to intentionally install or move to a specific Kubernetes version.
-                      For orchestrated upgrades across the cluster prefer `cluster update
-                      --update-kubernetes`.
+                      When unset, `cluster update` follows the latest stable Kubernetes version
+                      available in the OCI registry (an in-place rolling upgrade for Talos; a
+                      confirmation-gated recreation for Kind/K3d). Override per invocation with the
+                      --kubernetes-version flag (precedence: flag > env > config > default).
                     type: string
                   loadBalancer:
                     description: LoadBalancer defines the LoadBalancer options for
@@ -425,11 +461,14 @@ spec:
                         type: string
                       version:
                         description: |-
-                          Version pins the Talos OS version used for cluster creation and upgrades.
-                          When set, KSail uses this version as the Docker container image tag and
-                          caps `--update-distribution` upgrades at this version. Accepts values
-                          with or without the "v" prefix (e.g., "v1.11.2" or "1.11.2").
-                          When empty, KSail uses its built-in default version.
+                          Version pins the Talos OS (distribution) version used for cluster creation and
+                          upgrades. When set, KSail uses this version as the Docker container image tag
+                          and `cluster update` reconciles the cluster toward it (skipping downgrades).
+                          Accepts values with or without the "v" prefix (e.g., "v1.11.2" or "1.11.2").
+                          When empty, `cluster create` uses KSail's built-in default version and
+                          `cluster update` follows the latest stable version available in the OCI
+                          registry. Override per invocation with the --distribution-version flag
+                          (precedence: flag > env > config > default).
                         type: string
                       workers:
                         description: |-
@@ -767,11 +806,13 @@ spec:
                 properties:
                   flux:
                     description: |-
-                      FluxConfig pins the versions KSail uses when it seeds Flux during cluster
-                      bootstrap. Both fields are optional; an empty value means KSail uses its
-                      built-in pinned version. They configure only the bootstrap seed — once a
-                      GitOps repository owns the flux-operator HelmRelease or the FluxInstance,
-                      that repository becomes the steady-state owner of the version and KSail defers.
+                      FluxConfig holds the Flux-specific bootstrap configuration KSail applies when
+                      it seeds Flux during cluster bootstrap: the operator/distribution version pins
+                      and signature verification for the OCIRepository KSail generates. The version
+                      pins are optional (an empty value means KSail uses its built-in pinned
+                      version) and configure only the bootstrap seed — once a GitOps repository owns
+                      the flux-operator HelmRelease or the FluxInstance, that repository becomes the
+                      steady-state owner and KSail defers.
                     properties:
                       distributionVersion:
                         description: |-
@@ -786,6 +827,34 @@ spec:
                           version. Ignored once a GitOps repo owns the flux-operator release — KSail
                           never re-installs over a Helm release managed by Flux or ArgoCD.
                         type: string
+                      verify:
+                        description: |-
+                          Verify configures cosign/notation signature verification rendered onto the
+                          generated flux-system OCIRepository. Empty leaves verification off.
+                        properties:
+                          matchOIDCIdentity:
+                            items:
+                              description: |-
+                                FluxVerifyOIDCIdentity is a cosign keyless identity matcher. Both fields
+                                are Go regular expressions matched against the Fulcio signing certificate.
+                              properties:
+                                issuer:
+                                  type: string
+                                subject:
+                                  type: string
+                              type: object
+                            type: array
+                          provider:
+                            type: string
+                          secretRef:
+                            description: |-
+                              FluxVerifySecretRef references the Kubernetes Secret holding the trusted
+                              public keys or certificates used for signature verification.
+                            properties:
+                              name:
+                                type: string
+                            type: object
+                        type: object
                     type: object
                   kustomizationFile:
                     type: string

@@ -12,11 +12,14 @@ type OptionsVanilla struct {
 
 // OptionsTalos defines options specific to the Talos distribution.
 type OptionsTalos struct {
-	// Version pins the Talos OS version used for cluster creation and upgrades.
-	// When set, KSail uses this version as the Docker container image tag and
-	// caps `--update-distribution` upgrades at this version. Accepts values
-	// with or without the "v" prefix (e.g., "v1.11.2" or "1.11.2").
-	// When empty, KSail uses its built-in default version.
+	// Version pins the Talos OS (distribution) version used for cluster creation and
+	// upgrades. When set, KSail uses this version as the Docker container image tag
+	// and `cluster update` reconciles the cluster toward it (skipping downgrades).
+	// Accepts values with or without the "v" prefix (e.g., "v1.11.2" or "1.11.2").
+	// When empty, `cluster create` uses KSail's built-in default version and
+	// `cluster update` follows the latest stable version available in the OCI
+	// registry. Override per invocation with the --distribution-version flag
+	// (precedence: flag > env > config > default).
 	Version string `json:"version,omitzero"`
 	// KubernetesVersion mirrors spec.cluster.kubernetesVersion for the provisioner.
 	// It is populated by the cluster factory from the top-level field and is the raw
@@ -192,6 +195,12 @@ type OptionsHetzner struct {
 	// the cluster-autoscaler-config Secret during bootstrap.
 	// Not user-facing in ksail.yaml — derived at runtime.
 	NodeAutoscalerEnabled bool `json:"-"`
+	// AutoscalerNodePools carries the full autoscaler node pool definitions
+	// (spec.cluster.autoscaler.node.pools) so the Talos provisioner can build
+	// per-pool cloud-init worker configs and the HCLOUD_CLUSTER_CONFIG that
+	// carries each pool's labels and taints. Not user-facing in ksail.yaml —
+	// derived at runtime by the cluster factory.
+	AutoscalerNodePools []NodePool `json:"-"`
 }
 
 // OptionsOmni defines options specific to the Sidero Omni provider.

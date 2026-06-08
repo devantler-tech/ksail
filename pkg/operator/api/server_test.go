@@ -65,7 +65,13 @@ func TestConfigReportsReadOnly(t *testing.T) {
 	recorder := doRequest(server.Handler(), http.MethodGet, "/api/v1/config", "")
 
 	assert.Equal(t, http.StatusOK, recorder.Code)
-	assert.JSONEq(t, `{"readOnly":true,"authEnabled":false}`, recorder.Body.String())
+	assert.JSONEq(
+		t,
+		`{"readOnly":true,"authEnabled":false,`+
+			`"capabilities":{"clusterUpdate":true,"workloadRead":false,`+
+			`"workloadWrite":false,"kubeconfigDownload":false,"applyManifests":false,"secretsCipher":false}}`,
+		recorder.Body.String(),
+	)
 }
 
 func TestListClusters(t *testing.T) {
@@ -111,6 +117,18 @@ func (s stubClusterService) Update(
 
 func (s stubClusterService) Delete(_ context.Context, _, _ string) error {
 	return nil
+}
+
+// capabilityStub is a ClusterService that also implements api.CapabilityReporter, so a test can
+// assert the reported capabilities flow through /api/v1/config.
+type capabilityStub struct {
+	stubClusterService
+
+	capabilities api.Capabilities
+}
+
+func (s capabilityStub) Capabilities() api.Capabilities {
+	return s.capabilities
 }
 
 func TestListClustersIncludesDefaultValuedFields(t *testing.T) {
@@ -348,7 +366,51 @@ func TestConfigDefaultsWritable(t *testing.T) {
 	recorder := doRequest(server.Handler(), http.MethodGet, "/api/v1/config", "")
 
 	assert.Equal(t, http.StatusOK, recorder.Code)
-	assert.JSONEq(t, `{"readOnly":false,"authEnabled":false}`, recorder.Body.String())
+	assert.JSONEq(
+		t,
+		`{"readOnly":false,"authEnabled":false,`+
+			`"capabilities":{"clusterUpdate":true,"workloadRead":false,`+
+			`"workloadWrite":false,"kubeconfigDownload":false,"applyManifests":false,"secretsCipher":false}}`,
+		recorder.Body.String(),
+	)
+}
+
+func TestConfigReportsServiceCapabilities(t *testing.T) {
+	t.Parallel()
+
+	// A backend that cannot update clusters in place (the local UI/desktop backend) reports it via
+	// CapabilityReporter, and the config endpoint surfaces it so the SPA hides the edit affordance.
+	server := &api.Server{
+		Service: capabilityStub{capabilities: api.Capabilities{ClusterUpdate: false}},
+	}
+
+	recorder := doRequest(server.Handler(), http.MethodGet, "/api/v1/config", "")
+
+	assert.Equal(t, http.StatusOK, recorder.Code)
+	assert.Contains(
+		t,
+		recorder.Body.String(),
+		`"capabilities":{"clusterUpdate":false,"workloadRead":false,`+
+			`"workloadWrite":false,"kubeconfigDownload":false,"applyManifests":false,"secretsCipher":false}`,
+	)
+}
+
+func TestConfigDefaultsToFullCapabilities(t *testing.T) {
+	t.Parallel()
+
+	// A backend that does not implement CapabilityReporter (the operator's CR backend) is assumed to
+	// support the full surface, so clusterUpdate is true.
+	server := &api.Server{Service: api.NewCRClusterService(newClient(t))}
+
+	recorder := doRequest(server.Handler(), http.MethodGet, "/api/v1/config", "")
+
+	assert.Equal(t, http.StatusOK, recorder.Code)
+	assert.Contains(
+		t,
+		recorder.Body.String(),
+		`"capabilities":{"clusterUpdate":true,"workloadRead":false,`+
+			`"workloadWrite":false,"kubeconfigDownload":false,"applyManifests":false,"secretsCipher":false}`,
+	)
 }
 
 func TestStaticFSServesAssetsAndSPAFallback(t *testing.T) {
