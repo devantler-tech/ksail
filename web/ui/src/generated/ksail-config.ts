@@ -75,7 +75,7 @@ export interface KSailClusterConfiguration {
             max?: number;
           }[];
           /**
-           * Maximum total nodes allowed across all node pools. Set to 0 to disable the global cap; when the global cap is disabled the effective cap is the sum of all pool max values
+           * Maximum total number of nodes in the cluster (control-planes + workers + autoscaler nodes). Passed verbatim to the cluster-autoscaler --max-nodes-total flag — the autoscaler evaluates it against the count of ALL nodes so this is the whole-cluster ceiling and not an autoscaler-only budget. Set to 0 to disable the global cap; growth is then bounded only by the per-pool max values and serverLimit. Should be <= serverLimit
            */
           maxNodesTotal?: number;
           expander?: "Price" | "LeastWaste" | "LeastNodes" | "Random";
@@ -97,6 +97,10 @@ export interface KSailClusterConfiguration {
        * Number of worker nodes to create for the cluster (provider/distribution-agnostic)
        */
       workers?: number;
+      /**
+       * Kubernetes version to deploy. When set: cluster create/update reconcile toward it. When unset: cluster update follows the latest stable version and new clusters use a default compatible with the pinned Talos version.
+       */
+      kubernetesVersion?: string;
       /**
        * OIDC authentication configuration for the API server and kubeconfig
        */
@@ -170,17 +174,36 @@ export interface KSailClusterConfiguration {
         tokenEnvVar?: string;
         placementGroupStrategy?: "None" | "Spread";
         placementGroup?: string;
+        /**
+         * Alternative datacenter locations to try when server creation in the primary location fails due to resource unavailability. When empty defaults to nbg1 and hel1 (both in the eu-central network zone matching the default fsn1 primary location).
+         */
         fallbackLocations?: string[];
         placementGroupFallbackToNone?: boolean;
         ingressFirewall?: "Enabled" | "Disabled";
         /**
-         * Maximum total Hetzner servers allowed for this cluster (control-planes + workers + autoscaler pool capacity). Set to 0 to use the default limit of 10
+         * Maximum total Hetzner servers allowed for this cluster — the account/project quota. Validation rejects configs whose reachable total (control-planes + workers + pool capacity clamped by autoscaler.node.maxNodesTotal when set) exceeds it. Set to 0 to use the default limit of 10
          */
         serverLimit?: number;
         /**
          * CIDR blocks allowed to access the Kubernetes API and Talos API on control-plane nodes. When empty defaults to 0.0.0.0/0 and ::/0 (open to all IPv4 and IPv6).
          */
         allowedCidrs?: string[];
+        /**
+         * Assign a public IPv4 to worker nodes. Defaults to true. Set false for IPv4-less workers reached over the private network (requires private-network reachability and NAT egress).
+         */
+        workerPublicIPv4?: boolean;
+        /**
+         * Assign a public IPv6 to worker nodes. Defaults to true.
+         */
+        workerPublicIPv6?: boolean;
+        /**
+         * Assign a public IPv4 to control-plane nodes. Defaults to true. Set false for IPv4-less control planes whose endpoint is the private-network IP (cluster reachable only from inside the private network).
+         */
+        controlPlanePublicIPv4?: boolean;
+        /**
+         * Assign a public IPv6 to control-plane nodes. Defaults to true.
+         */
+        controlPlanePublicIPv6?: boolean;
         autoscalerNodePoolNames?: string[];
       };
       omni?: {
@@ -232,6 +255,50 @@ export interface KSailClusterConfiguration {
        */
       kustomizationFile?: string;
       /**
+       * Flux bootstrap configuration: operator/distribution version pins and signature verification for the generated OCIRepository. Empty values use KSail's pinned versions; a GitOps repo that declares these becomes the steady-state owner.
+       */
+      flux?: {
+        /**
+         * Flux operator Helm chart version for the bootstrap seed. Empty uses KSail's pinned version. Ignored once a GitOps repo owns the flux-operator release.
+         */
+        operatorVersion?: string;
+        /**
+         * FluxInstance spec.distribution.version for the bootstrap seed. Empty uses KSail's default (2.x). A repo-declared FluxInstance takes precedence.
+         */
+        distributionVersion?: string;
+        /**
+         * Signature verification (cosign/notation) rendered onto the flux-system OCIRepository KSail generates, so Flux rejects artifacts whose signature fails verification. Empty disables it.
+         */
+        verify?: {
+          /**
+           * Signature verification technology for the generated Flux OCIRepository (cosign or notation). Set to enable verification; empty disables it. Applies only when gitOpsEngine is Flux.
+           */
+          provider?: "cosign" | "notation";
+          /**
+           * Reference to a Kubernetes Secret in the flux-system namespace holding the trusted public keys or certificates. Used for key-based cosign or notation verification; omit for cosign keyless.
+           */
+          secretRef?: {
+            /**
+             * Name of the Kubernetes Secret in the flux-system namespace containing the trusted public keys or certificates.
+             */
+            name?: string;
+          };
+          /**
+           * Identity matchers for cosign keyless verification. The artifact is accepted if any matcher matches the signing identity in the Fulcio certificate.
+           */
+          matchOIDCIdentity?: {
+            /**
+             * Go regular expression matched against the OIDC issuer in the Fulcio certificate (e.g. ^https://token\.actions\.githubusercontent\.com$).
+             */
+            issuer?: string;
+            /**
+             * Go regular expression matched against the identity subject in the Fulcio certificate (e.g. ^https://github\.com/org/repo/\.github/workflows/cd\.yaml@refs/.*$).
+             */
+            subject?: string;
+          }[];
+        };
+      };
+      /**
        * Configuration for the workload watch command (pre-apply hooks, etc.)
        */
       watch?: {
@@ -239,6 +306,15 @@ export interface KSailClusterConfiguration {
          * Shell commands to run before each apply (e.g. docker build, make generate). Executed sequentially; if any hook fails the apply is skipped.
          */
         hooks?: string[];
+      };
+      /**
+       * Configuration for the workload validate command (additional kinds to skip, etc.).
+       */
+      validation?: {
+        /**
+         * Additional Kubernetes kinds to skip during 'ksail workload validate' (Secrets are skipped by default via --skip-secrets). Use for CRDs whose CRDs-catalog schema is stale or missing, which kubeconform would otherwise reject.
+         */
+        skipKinds?: string[];
       };
     };
     chat?: {

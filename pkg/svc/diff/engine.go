@@ -917,5 +917,57 @@ func (e *Engine) checkAutoscalerPoolsModified(
 			strconv.Itoa(int(oldPool.Max)), strconv.Itoa(int(newPool.Max)), "",
 			"pool max can be updated in-place via Helm chart upgrade",
 			clusterupdate.ChangeCategoryInPlace)
+
+		appendChange(result, poolField+".labels",
+			formatPoolLabels(oldPool.Labels), formatPoolLabels(newPool.Labels), "",
+			"pool labels updated in-place (autoscaler config secret + Helm upgrade); "+
+				"existing autoscaler nodes are recycled to pick up the change",
+			clusterupdate.ChangeCategoryInPlace)
+
+		appendChange(result, poolField+".taints",
+			formatPoolTaints(oldPool.Taints), formatPoolTaints(newPool.Taints), "",
+			"pool taints updated in-place (autoscaler config secret + Helm upgrade); "+
+				"existing autoscaler nodes are recycled to pick up the change",
+			clusterupdate.ChangeCategoryInPlace)
 	}
+}
+
+// formatPoolLabels renders a pool's labels as a stable, sorted "k=v,k=v" string
+// for diffing. The empty string represents no labels.
+func formatPoolLabels(labels map[string]string) string {
+	if len(labels) == 0 {
+		return ""
+	}
+
+	keys := make([]string, 0, len(labels))
+	for key := range labels {
+		keys = append(keys, key)
+	}
+
+	slices.Sort(keys)
+
+	parts := make([]string, 0, len(keys))
+	for _, key := range keys {
+		parts = append(parts, key+"="+labels[key])
+	}
+
+	return strings.Join(parts, ",")
+}
+
+// formatPoolTaints renders a pool's taints as a stable, sorted "k=v:Effect,..."
+// string for diffing. Taints form a set on the node, so the output is sorted to
+// avoid spurious diffs on reorder. The empty string represents no taints.
+func formatPoolTaints(taints []v1alpha1.NodePoolTaint) string {
+	if len(taints) == 0 {
+		return ""
+	}
+
+	parts := make([]string, 0, len(taints))
+	for _, taint := range taints {
+		parts = append(parts, taint.Key+"="+taint.Value+":"+string(taint.Effect))
+	}
+
+	slices.Sort(parts)
+
+	return strings.Join(parts, ",")
 }
