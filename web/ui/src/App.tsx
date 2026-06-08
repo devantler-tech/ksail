@@ -88,6 +88,9 @@ export function App() {
   // canBrowse reflects the backend's workloadRead capability: whether the read-only resource browser
   // endpoints exist. The Resources view + nav item are shown only when true.
   const [canBrowse, setCanBrowse] = useState(fullCapabilities.workloadRead);
+  // canManage reflects the backend's workloadWrite capability (scale/restart/delete). Combined with
+  // !readOnly before the action UI is shown.
+  const [canManage, setCanManage] = useState(fullCapabilities.workloadWrite);
   const [user, setUser] = useState<User | null>(null);
   const [needsLogin, setNeedsLogin] = useState(false);
   const [meta, setMeta] = useState<ClusterMeta | null>(null);
@@ -165,6 +168,7 @@ export function App() {
       setReadOnly(config.readOnly);
       setCanUpdate(config.capabilities?.clusterUpdate ?? fullCapabilities.clusterUpdate);
       setCanBrowse(config.capabilities?.workloadRead ?? fullCapabilities.workloadRead);
+      setCanManage(config.capabilities?.workloadWrite ?? fullCapabilities.workloadWrite);
       setDistributions(config.distributions ?? DEFAULT_DISTRIBUTIONS);
       setProviderStatus(config.providers ?? null);
       setSettingsEnabled(config.settingsEnabled ?? false);
@@ -195,6 +199,7 @@ export function App() {
       setReadOnly(config.readOnly);
       setCanUpdate(config.capabilities?.clusterUpdate ?? fullCapabilities.clusterUpdate);
       setCanBrowse(config.capabilities?.workloadRead ?? fullCapabilities.workloadRead);
+      setCanManage(config.capabilities?.workloadWrite ?? fullCapabilities.workloadWrite);
       setUser(config.user ?? null);
       setDistributions(config.distributions ?? DEFAULT_DISTRIBUTIONS);
       setProviderStatus(config.providers ?? null);
@@ -354,7 +359,7 @@ export function App() {
       {view === "settings" ? (
         <SettingsPage onSaved={() => void reloadConfig()} />
       ) : view === "resources" ? (
-        <ResourcesView clusters={clusters} />
+        <ResourcesView clusters={clusters} canWrite={!readOnly && canManage} />
       ) : (
       <div className="mx-auto max-w-6xl space-y-4">
         {error && clusters.length > 0 ? (

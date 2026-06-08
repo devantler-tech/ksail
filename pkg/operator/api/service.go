@@ -63,6 +63,10 @@ type Capabilities struct {
 	// interface in handleConfig rather than reported via CapabilityReporter, so it cannot drift from
 	// whether the endpoints are actually registered.
 	WorkloadRead bool `json:"workloadRead"`
+	// WorkloadWrite reports whether the backend exposes the safe write actions (scale, rollout
+	// restart, delete) on browsable resources — true exactly when the serving ClusterService
+	// implements ResourceWriter. The SPA still combines it with !readOnly before showing the actions.
+	WorkloadWrite bool `json:"workloadWrite"`
 }
 
 // CapabilityReporter is an optional interface a ClusterService may implement to advertise which

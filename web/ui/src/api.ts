@@ -103,12 +103,19 @@ export interface Capabilities {
   // workloadRead is true when the backend can read live Kubernetes resources from a target cluster
   // (the read-only workload browser). The SPA shows the Resources view only then.
   workloadRead: boolean;
+  // workloadWrite is true when the backend exposes the safe write actions (scale, rollout restart,
+  // delete). The SPA combines it with !readOnly before showing the action affordances.
+  workloadWrite: boolean;
 }
 
 // fullCapabilities mirrors the backend's default for a service that does not report capabilities.
-// clusterUpdate defaults true (assume a working action rather than hiding it); workloadRead defaults
-// false because the resource endpoints may not exist on a mismatched older backend and would 404.
-export const fullCapabilities: Capabilities = { clusterUpdate: true, workloadRead: false };
+// clusterUpdate defaults true (assume a working action rather than hiding it); the workload flags
+// default false because their endpoints may not exist on a mismatched older backend and would 404.
+export const fullCapabilities: Capabilities = {
+  clusterUpdate: true,
+  workloadRead: false,
+  workloadWrite: false,
+};
 
 export interface Config {
   readOnly: boolean;
@@ -321,4 +328,73 @@ export function listResources(
   return request<K8sList>(
     `/api/v1/clusters/${namespace}/${name}/resources?${params.toString()}`,
   );
+}
+
+// SCALABLE_KINDS / RESTARTABLE_KINDS mirror the backend predicates (ResourceKindScalable /
+// ResourceKindRestartable); the backend rejects unsupported kinds regardless.
+export const SCALABLE_KINDS = ["Deployment", "StatefulSet", "ReplicaSet"];
+export const RESTARTABLE_KINDS = ["Deployment", "StatefulSet", "DaemonSet"];
+// CLUSTER_SCOPED_KINDS are not deletable from the workload browser — the backend rejects a delete of
+// these high-blast-radius cluster-scoped kinds, so the SPA hides the Delete affordance for them.
+export const CLUSTER_SCOPED_KINDS = ["Node", "Namespace"];
+
+function resourcePath(
+  namespace: string,
+  name: string,
+  kind: string,
+  resourceName: string,
+  resourceNamespace: string | undefined,
+  suffix: string,
+): string {
+  const params = new URLSearchParams();
+  if (resourceNamespace) {
+    params.set("namespace", resourceNamespace);
+  }
+
+  const query = params.toString() ? `?${params.toString()}` : "";
+
+  return `/api/v1/clusters/${namespace}/${name}/resources/${kind}/${resourceName}${suffix}${query}`;
+}
+
+// scaleResource sets the replica count of a scalable workload.
+export function scaleResource(
+  namespace: string,
+  name: string,
+  kind: string,
+  resourceName: string,
+  replicas: number,
+  resourceNamespace?: string,
+): Promise<void> {
+  return request<void>(resourcePath(namespace, name, kind, resourceName, resourceNamespace, "/scale"), {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ replicas }),
+  });
+}
+
+// restartResource triggers a rolling restart of a workload.
+export function restartResource(
+  namespace: string,
+  name: string,
+  kind: string,
+  resourceName: string,
+  resourceNamespace?: string,
+): Promise<void> {
+  return request<void>(
+    resourcePath(namespace, name, kind, resourceName, resourceNamespace, "/restart"),
+    { method: "POST" },
+  );
+}
+
+// deleteResource deletes a resource.
+export function deleteResource(
+  namespace: string,
+  name: string,
+  kind: string,
+  resourceName: string,
+  resourceNamespace?: string,
+): Promise<void> {
+  return request<void>(resourcePath(namespace, name, kind, resourceName, resourceNamespace, ""), {
+    method: "DELETE",
+  });
 }

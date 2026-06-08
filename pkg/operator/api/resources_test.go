@@ -38,6 +38,114 @@ func (r resourceStub) GetResource(
 	return r.obj, nil
 }
 
+// writerStub additionally implements api.ResourceWriter, recording the action it received.
+type writerStub struct {
+	resourceStub
+
+	scaledTo  int32
+	restarted bool
+	deleted   bool
+}
+
+func (w *writerStub) ScaleResource(
+	_ context.Context, _, _ string, _ api.ResourceRef, replicas int32,
+) error {
+	w.scaledTo = replicas
+
+	return nil
+}
+
+func (w *writerStub) RestartResource(_ context.Context, _, _ string, _ api.ResourceRef) error {
+	w.restarted = true
+
+	return nil
+}
+
+func (w *writerStub) DeleteResource(_ context.Context, _, _ string, _ api.ResourceRef) error {
+	w.deleted = true
+
+	return nil
+}
+
+func TestConfigReportsWorkloadWriteForResourceWriter(t *testing.T) {
+	t.Parallel()
+
+	server := &api.Server{Service: &writerStub{}}
+
+	recorder := doRequest(server.Handler(), http.MethodGet, "/api/v1/config", "")
+
+	assert.Equal(t, http.StatusOK, recorder.Code)
+	assert.Contains(t, recorder.Body.String(), `"workloadWrite":true`)
+}
+
+func TestScaleResourceEndpoint(t *testing.T) {
+	t.Parallel()
+
+	stub := &writerStub{}
+	server := &api.Server{Service: stub}
+
+	recorder := doRequest(
+		server.Handler(),
+		http.MethodPut,
+		"/api/v1/clusters/default/c1/resources/Deployment/web/scale?namespace=x",
+		`{"replicas":3}`,
+	)
+
+	assert.Equal(t, http.StatusNoContent, recorder.Code)
+	assert.Equal(t, int32(3), stub.scaledTo)
+}
+
+func TestRestartResourceEndpoint(t *testing.T) {
+	t.Parallel()
+
+	stub := &writerStub{}
+	server := &api.Server{Service: stub}
+
+	recorder := doRequest(
+		server.Handler(),
+		http.MethodPost,
+		"/api/v1/clusters/default/c1/resources/Deployment/web/restart?namespace=x",
+		"",
+	)
+
+	assert.Equal(t, http.StatusNoContent, recorder.Code)
+	assert.True(t, stub.restarted)
+}
+
+func TestDeleteResourceEndpoint(t *testing.T) {
+	t.Parallel()
+
+	stub := &writerStub{}
+	server := &api.Server{Service: stub}
+
+	recorder := doRequest(
+		server.Handler(),
+		http.MethodDelete,
+		"/api/v1/clusters/default/c1/resources/Pod/p1?namespace=x",
+		"",
+	)
+
+	assert.Equal(t, http.StatusNoContent, recorder.Code)
+	assert.True(t, stub.deleted)
+}
+
+func TestWriteEndpointsBlockedWhenReadOnly(t *testing.T) {
+	t.Parallel()
+
+	stub := &writerStub{}
+	server := &api.Server{Service: stub, ReadOnly: true}
+
+	recorder := doRequest(
+		server.Handler(),
+		http.MethodPut,
+		"/api/v1/clusters/default/c1/resources/Deployment/web/scale?namespace=x",
+		`{"replicas":3}`,
+	)
+
+	assert.Equal(t, http.StatusForbidden, recorder.Code)
+	assert.Equal(t, int32(0), stub.scaledTo)
+}
+
 func TestResourceKindForAllowlist(t *testing.T) {
 	t.Parallel()
 
