@@ -204,47 +204,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PUT /api/v1/clusters/{namespace}/{name}", s.handleUpdateCluster)
 	mux.HandleFunc("DELETE /api/v1/clusters/{namespace}/{name}", s.handleDeleteCluster)
 
-	// Read-only resource browser, registered only when the backend implements ResourceService (so the
-	// operator's API surface and any backend without live-cluster access are unchanged). These
-	// patterns are strictly more specific than the cluster get/update/delete routes, so the mux routes
-	// them without conflict.
-	if _, ok := s.Service.(ResourceService); ok {
-		mux.HandleFunc("GET /api/v1/clusters/{namespace}/{name}/resources", s.handleListResources)
-		mux.HandleFunc(
-			"GET /api/v1/clusters/{namespace}/{name}/resources/{kind}/{rname}",
-			s.handleGetResource,
-		)
-	}
-
-	// Safe write actions (scale, rollout restart, delete) on browsable resources, registered only when
-	// the backend implements ResourceWriter. These are mutating verbs, so the read-only guard rejects
-	// them with 403 when the UI is read-only.
-	if _, ok := s.Service.(ResourceWriter); ok {
-		mux.HandleFunc(
-			"PUT /api/v1/clusters/{namespace}/{name}/resources/{kind}/{rname}/scale",
-			s.handleScaleResource,
-		)
-		mux.HandleFunc(
-			"POST /api/v1/clusters/{namespace}/{name}/resources/{kind}/{rname}/restart",
-			s.handleRestartResource,
-		)
-		mux.HandleFunc(
-			"DELETE /api/v1/clusters/{namespace}/{name}/resources/{kind}/{rname}",
-			s.handleDeleteResource,
-		)
-	}
-
-	// Kubeconfig export, registered only when the backend implements KubeconfigProvider (the local
-	// backend). A read (GET), so the read-only guard does not apply.
-	if _, ok := s.Service.(KubeconfigProvider); ok {
-		mux.HandleFunc("GET /api/v1/clusters/{namespace}/{name}/kubeconfig", s.handleKubeconfig)
-	}
-
-	// Manifest apply, registered only when the backend implements ApplyService. A mutating verb, so
-	// the read-only guard rejects it with 403 when the UI is read-only.
-	if _, ok := s.Service.(ApplyService); ok {
-		mux.HandleFunc("POST /api/v1/clusters/{namespace}/{name}/apply", s.handleApply)
-	}
+	s.registerCapabilityRoutes(mux)
 
 	// Credential settings are local-UI-only: registered only when a SettingsService is provided, so
 	// the operator's API surface is unchanged.
@@ -266,6 +226,59 @@ func (s *Server) Handler() http.Handler {
 	}
 
 	return securityHeaders(s.authGuard(s.readOnlyGuard(mux)))
+}
+
+// registerCapabilityRoutes wires the optional endpoints whose presence is gated on the backend
+// implementing the matching interface (so the operator's API-only surface is unchanged). Each block's
+// routes are only reachable when the corresponding capability is advertised in /api/v1/config.
+func (s *Server) registerCapabilityRoutes(mux *http.ServeMux) {
+	// Read-only resource browser (ResourceService). These patterns are strictly more specific than the
+	// cluster get/update/delete routes, so the mux routes them without conflict.
+	if _, ok := s.Service.(ResourceService); ok {
+		mux.HandleFunc("GET /api/v1/clusters/{namespace}/{name}/resources", s.handleListResources)
+		mux.HandleFunc(
+			"GET /api/v1/clusters/{namespace}/{name}/resources/{kind}/{rname}",
+			s.handleGetResource,
+		)
+	}
+
+	// Safe write actions (scale, rollout restart, delete) on browsable resources (ResourceWriter).
+	// Mutating verbs, so the read-only guard rejects them with 403 when the UI is read-only.
+	if _, ok := s.Service.(ResourceWriter); ok {
+		mux.HandleFunc(
+			"PUT /api/v1/clusters/{namespace}/{name}/resources/{kind}/{rname}/scale",
+			s.handleScaleResource,
+		)
+		mux.HandleFunc(
+			"POST /api/v1/clusters/{namespace}/{name}/resources/{kind}/{rname}/restart",
+			s.handleRestartResource,
+		)
+		mux.HandleFunc(
+			"DELETE /api/v1/clusters/{namespace}/{name}/resources/{kind}/{rname}",
+			s.handleDeleteResource,
+		)
+	}
+
+	// Kubeconfig export (KubeconfigProvider). A read (GET), so the read-only guard does not apply.
+	if _, ok := s.Service.(KubeconfigProvider); ok {
+		mux.HandleFunc("GET /api/v1/clusters/{namespace}/{name}/kubeconfig", s.handleKubeconfig)
+	}
+
+	// Manifest apply (ApplyService). A mutating verb, so the read-only guard rejects it in read-only.
+	if _, ok := s.Service.(ApplyService); ok {
+		mux.HandleFunc("POST /api/v1/clusters/{namespace}/{name}/apply", s.handleApply)
+	}
+
+	// SOPS secret cipher with local age keys (CipherService). Cluster-independent local crypto.
+	// encrypt/decrypt are POST, so the read-only guard rejects them in read-only mode. This is
+	// intentional: a read-only deployment locks down secret operations entirely — including decrypt,
+	// which would otherwise reveal plaintext. The local `ksail ui`/desktop backend runs writable, so
+	// this only bites a deliberately read-only deployment that also opts into the cipher service.
+	if _, ok := s.Service.(CipherService); ok {
+		mux.HandleFunc("GET /api/v1/secrets/recipients", s.handleCipherRecipients)
+		mux.HandleFunc("POST /api/v1/secrets/encrypt", s.handleSecretEncrypt)
+		mux.HandleFunc("POST /api/v1/secrets/decrypt", s.handleSecretDecrypt)
+	}
 }
 
 // securityHeaders applies conservative security headers to every response. The CSP allows only
@@ -395,6 +408,7 @@ func (s *Server) handleConfig(writer http.ResponseWriter, request *http.Request)
 	_, capabilities.WorkloadWrite = s.Service.(ResourceWriter)
 	_, capabilities.KubeconfigDownload = s.Service.(KubeconfigProvider)
 	_, capabilities.ApplyManifests = s.Service.(ApplyService)
+	_, capabilities.SecretsCipher = s.Service.(CipherService)
 
 	response := configResponse{
 		ReadOnly:        s.ReadOnly,
@@ -726,6 +740,78 @@ func (s *Server) handleApply(writer http.ResponseWriter, request *http.Request) 
 	writeJSON(writer, http.StatusOK, map[string]any{"results": results, "dryRun": dryRun})
 }
 
+func (s *Server) handleCipherRecipients(writer http.ResponseWriter, request *http.Request) {
+	svc, ok := s.Service.(CipherService)
+	if !ok {
+		writeClientError(writer, ErrNotSupported)
+
+		return
+	}
+
+	recipients, err := svc.CipherRecipients(request.Context())
+	if err != nil {
+		writeClientError(writer, err)
+
+		return
+	}
+
+	if recipients == nil {
+		recipients = []string{}
+	}
+
+	writeJSON(writer, http.StatusOK, map[string]any{"recipients": recipients})
+}
+
+func (s *Server) handleSecretEncrypt(writer http.ResponseWriter, request *http.Request) {
+	svc, ok := s.Service.(CipherService)
+	if !ok {
+		writeClientError(writer, ErrNotSupported)
+
+		return
+	}
+
+	var req SecretEncryptRequest
+
+	err := decodeJSON(writer, request, &req)
+	if err != nil {
+		return
+	}
+
+	encrypted, err := svc.EncryptSecret(request.Context(), req.Plaintext, req.Recipient, req.Format)
+	if err != nil {
+		writeClientError(writer, err)
+
+		return
+	}
+
+	writeJSON(writer, http.StatusOK, map[string]any{"encrypted": encrypted})
+}
+
+func (s *Server) handleSecretDecrypt(writer http.ResponseWriter, request *http.Request) {
+	svc, ok := s.Service.(CipherService)
+	if !ok {
+		writeClientError(writer, ErrNotSupported)
+
+		return
+	}
+
+	var req SecretDecryptRequest
+
+	err := decodeJSON(writer, request, &req)
+	if err != nil {
+		return
+	}
+
+	plaintext, err := svc.DecryptSecret(request.Context(), req.Encrypted, req.Format)
+	if err != nil {
+		writeClientError(writer, err)
+
+		return
+	}
+
+	writeJSON(writer, http.StatusOK, map[string]any{"plaintext": plaintext})
+}
+
 func isMutating(method string) bool {
 	switch method {
 	case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
@@ -733,6 +819,22 @@ func isMutating(method string) bool {
 	default:
 		return false
 	}
+}
+
+// decodeJSON decodes a size-capped JSON request body into v. On failure it writes the appropriate
+// error response (413 if oversized, else 400) and returns the error so the handler returns early.
+func decodeJSON(writer http.ResponseWriter, request *http.Request, value any) error {
+	limited := http.MaxBytesReader(writer, request.Body, maxRequestBodyBytes)
+
+	err := json.NewDecoder(limited).Decode(value)
+	if err != nil {
+		wrapped := fmt.Errorf("decode request: %w", err)
+		writeDecodeError(writer, wrapped)
+
+		return wrapped
+	}
+
+	return nil
 }
 
 func decodeCluster(writer http.ResponseWriter, request *http.Request) (*v1alpha1.Cluster, error) {

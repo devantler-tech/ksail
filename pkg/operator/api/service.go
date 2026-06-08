@@ -75,6 +75,10 @@ type Capabilities struct {
 	// true exactly when the serving ClusterService implements ApplyService. Combined with !readOnly
 	// before the SPA shows the apply affordance.
 	ApplyManifests bool `json:"applyManifests"`
+	// SecretsCipher reports whether the backend can encrypt/decrypt secrets with SOPS using the local
+	// age keys — true exactly when the serving ClusterService implements CipherService. The SPA shows
+	// the Secrets view only then (local backend only; the operator has no local keys).
+	SecretsCipher bool `json:"secretsCipher"`
 }
 
 // KubeconfigProvider is an optional interface a ClusterService may implement to export a portable,
