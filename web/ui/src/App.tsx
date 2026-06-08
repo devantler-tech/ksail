@@ -31,6 +31,8 @@ import { EmptyState, ErrorBanner, TableSkeleton } from "./components/states.tsx"
 import { Button } from "./components/ui.tsx";
 import { useTheme } from "./hooks/useTheme.ts";
 import { useClusterStream } from "./hooks/useClusterStream.ts";
+import { useDeepLinks } from "./hooks/useDeepLinks.ts";
+import type { DeepLinkTarget } from "./lib/deepLink.ts";
 import { useToast } from "./components/Toast.tsx";
 
 // DEFAULT_DISTRIBUTIONS is the create-form distribution list used when the backend does not advertise
@@ -190,6 +192,18 @@ export function App() {
       // Non-fatal: keep the current config if the refresh fails.
     }
   }, [applyConfig]);
+
+  // Navigate in response to a ksail:// deep link from the desktop shell (no-op in the browser). Stable
+  // setters → empty deps.
+  const navigateDeepLink = useCallback((target: DeepLinkTarget) => {
+    if (target.view) {
+      setView(target.view);
+    }
+    if (target.clusterKey) {
+      setSelectedKey(target.clusterKey);
+    }
+  }, []);
+  useDeepLinks(navigateDeepLink);
 
   useEffect(() => {
     mounted.current = true;
