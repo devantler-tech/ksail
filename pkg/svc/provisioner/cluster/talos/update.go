@@ -1359,7 +1359,7 @@ func (p *Provisioner) ensureAutoscalerSecretIfNeeded(
 	diff *clusterupdate.UpdateResult,
 	result *clusterupdate.UpdateResult,
 ) error {
-	if p.hetznerOpts == nil || !p.hetznerOpts.NodeAutoscalerEnabled || p.talosConfigs == nil {
+	if !p.autoscalerSecretApplicable() {
 		return nil
 	}
 
@@ -1450,6 +1450,13 @@ func autoscalerRecycleRequired(diff *clusterupdate.UpdateResult, imageChanged bo
 
 	return diff.HasRebootRequired() || diff.HasWipeRequired() ||
 		diff.HasRecreateRequired() || diff.HasRollingRecreate()
+}
+
+// autoscalerSecretApplicable reports whether the cluster-autoscaler-config Secret
+// can be managed: the provider is Hetzner, the node autoscaler is enabled, and a
+// Talos config bundle is loaded to derive the worker config from.
+func (p *Provisioner) autoscalerSecretApplicable() bool {
+	return p.hetznerOpts != nil && p.hetznerOpts.NodeAutoscalerEnabled && p.talosConfigs != nil
 }
 
 // hasSchematicConfigured reports whether a Talos schematic ID is available
