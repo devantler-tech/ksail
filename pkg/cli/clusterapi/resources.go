@@ -206,6 +206,35 @@ func (s *Service) mergePatch(
 	return nil
 }
 
+// ReconcileResource triggers an immediate GitOps reconcile by stamping the engine-specific
+// annotation — the same mechanism `flux reconcile` / an ArgoCD refresh use. Flux watches
+// reconcile.fluxcd.io/requestedAt (nanosecond stamp so repeats differ); ArgoCD watches
+// argocd.argoproj.io/refresh.
+func (s *Service) ReconcileResource(
+	ctx context.Context,
+	_, name string,
+	ref api.ResourceRef,
+) error {
+	if !api.ResourceKindReconcilable(ref.Kind) {
+		return fmt.Errorf("%w: %q does not support reconcile", api.ErrInvalid, ref.Kind)
+	}
+
+	key, value := reconcileAnnotation(ref.Kind)
+	patch := fmt.Appendf(nil, `{"metadata":{"annotations":{%q:%q}}}`, key, value)
+
+	return s.mergePatch(ctx, name, "reconcile", ref, patch)
+}
+
+// reconcileAnnotation returns the metadata annotation (key, value) that triggers a reconcile for the
+// kind's GitOps engine.
+func reconcileAnnotation(kind string) (string, string) {
+	if kind == "Application" {
+		return "argocd.argoproj.io/refresh", "normal"
+	}
+
+	return "reconcile.fluxcd.io/requestedAt", time.Now().Format(time.RFC3339Nano)
+}
+
 // DeleteResource deletes a namespaced allowlisted resource. Cluster-scoped kinds (Node, Namespace)
 // are intentionally NOT deletable from the workload browser — those are high-blast-radius operations
 // (a Namespace delete cascades to everything in it) better left to the CLI.
