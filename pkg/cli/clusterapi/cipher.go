@@ -171,6 +171,7 @@ func cipherRecipients() ([]string, error) {
 
 		return nil, fmt.Errorf("open age key file: %w", err)
 	}
+
 	defer func() { _ = file.Close() }()
 
 	var recipients []string
