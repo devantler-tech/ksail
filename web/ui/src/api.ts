@@ -106,15 +106,19 @@ export interface Capabilities {
   // workloadWrite is true when the backend exposes the safe write actions (scale, rollout restart,
   // delete). The SPA combines it with !readOnly before showing the action affordances.
   workloadWrite: boolean;
+  // kubeconfigDownload is true when the backend can export a portable kubeconfig for a cluster (the
+  // local backend). The SPA shows the Download-kubeconfig action only then.
+  kubeconfigDownload: boolean;
 }
 
 // fullCapabilities mirrors the backend's default for a service that does not report capabilities.
-// clusterUpdate defaults true (assume a working action rather than hiding it); the workload flags
-// default false because their endpoints may not exist on a mismatched older backend and would 404.
+// clusterUpdate defaults true (assume a working action rather than hiding it); the workload +
+// kubeconfig flags default false because their endpoints may not exist on a mismatched older backend.
 export const fullCapabilities: Capabilities = {
   clusterUpdate: true,
   workloadRead: false,
   workloadWrite: false,
+  kubeconfigDownload: false,
 };
 
 export interface Config {
@@ -337,6 +341,30 @@ export const RESTARTABLE_KINDS = ["Deployment", "StatefulSet", "DaemonSet"];
 // CLUSTER_SCOPED_KINDS are not deletable from the workload browser — the backend rejects a delete of
 // these high-blast-radius cluster-scoped kinds, so the SPA hides the Delete affordance for them.
 export const CLUSTER_SCOPED_KINDS = ["Node", "Namespace"];
+
+// downloadKubeconfig fetches the cluster's portable kubeconfig and triggers a browser download. It
+// streams the bytes into a Blob rather than navigating, so an error response surfaces as an ApiError
+// (and a toast) instead of replacing the page.
+export async function downloadKubeconfig(namespace: string, name: string): Promise<void> {
+  const path = `/api/v1/clusters/${namespace}/${name}/kubeconfig`;
+  const response = await fetch(path);
+  if (!response.ok) {
+    const body = (await response.text()).trim();
+    const { message } = detailFromBody(body);
+    const suffix = message === "" ? "" : `: ${message}`;
+    throw new ApiError(`GET ${path} (${response.status})${suffix}`, response.status);
+  }
+
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `${name}.kubeconfig`;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
 
 function resourcePath(
   namespace: string,

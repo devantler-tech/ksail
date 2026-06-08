@@ -20,6 +20,12 @@ func ContextForCluster(kubeconfigPath, clusterName string) (string, error) {
 	return contextForCluster(kubeconfigPath, clusterName)
 }
 
+// SetKubeconfigPathForTest overrides the kubeconfig path the resource browser / kubeconfig export
+// read from, so tests can point at a temp kubeconfig instead of the user's real one.
+func (s *Service) SetKubeconfigPathForTest(path string) {
+	s.kubeconfigPath = func() string { return path }
+}
+
 // NewTestService returns a Service whose provisioner factory is overridden, so black-box tests can
 // substitute fake provisioners without touching the real Docker-backed factory. Discovery is
 // restricted to the Docker provider so tests stay hermetic — they never reach out to cloud
