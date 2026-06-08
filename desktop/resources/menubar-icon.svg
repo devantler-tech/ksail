@@ -1,0 +1,21 @@
+<svg width="360" height="360" viewBox="76 78 360 360" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!--
+    Monochrome menu-bar glyph: the twin-sail sloop MARK from docs/src/assets/logo.svg
+    (mainsail + jib + wave) with the same scale(1.12) rig transform, but with the navy
+    badge tile dropped and every shape filled solid black on transparency. macOS uses the
+    alpha channel as a template image (NSImage setTemplate:YES), auto-inverting it for
+    light/dark menu bars. The mark is centred in a square viewBox with menu-bar padding so
+    it is not distorted when Wails forces the icon to a square status-bar thickness.
+
+    Regenerate the PNG (high-res; Wails scales it to the ~22pt status-bar thickness):
+      rsvg-convert -w 88 -h 88 menubar-icon.svg -o menubar-icon.png
+  -->
+  <g transform="translate(256 258) scale(1.12) translate(-256 -258)">
+    <!-- mainsail (aft) -->
+    <path d="M266 340 L266 142 Q360 224 364 340 Z" fill="#000000"/>
+    <!-- jib (fore) -->
+    <path d="M246 340 L246 172 Q178 244 150 340 Z" fill="#000000"/>
+    <!-- wave -->
+    <path d="M124 352 C170 338 202 366 256 352 C310 338 342 366 388 352 L388 374 C342 388 310 360 256 374 C202 388 170 360 124 374 Z" fill="#000000"/>
+  </g>
+</svg>
