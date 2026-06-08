@@ -94,6 +94,10 @@ type Service struct {
 	// Injectable so tests can substitute a fake client instead of resolving a real kubeconfig context.
 	newDynamicClient dynamicClientFunc
 
+	// newApplyClient builds a dynamic client + REST mapper for a named cluster (manifest apply, which
+	// needs GVK→resource resolution). Injectable for tests (fake client + static mapper).
+	newApplyClient applyClientFunc
+
 	// kubeconfigPath resolves the kubeconfig file the resource browser / kubeconfig export read from.
 	// Injectable so tests can point at a temp kubeconfig instead of the user's real one.
 	kubeconfigPath func() string
@@ -108,6 +112,7 @@ func NewService() *Service {
 		newFactory:        defaultFactory,
 		discoverProviders: clusterdiscovery.AllProviders(),
 		newDynamicClient:  defaultDynamicClient,
+		newApplyClient:    defaultApplyClient,
 		kubeconfigPath:    k8s.DefaultKubeconfigPath,
 		jobs:              map[string]*job{},
 	}

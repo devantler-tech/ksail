@@ -93,6 +93,8 @@ export function App() {
   const [canManage, setCanManage] = useState(fullCapabilities.workloadWrite);
   // canKubeconfig reflects the backend's kubeconfigDownload capability (the local backend).
   const [canKubeconfig, setCanKubeconfig] = useState(fullCapabilities.kubeconfigDownload);
+  // canApply reflects the backend's applyManifests capability.
+  const [canApply, setCanApply] = useState(fullCapabilities.applyManifests);
   const [user, setUser] = useState<User | null>(null);
   const [needsLogin, setNeedsLogin] = useState(false);
   const [meta, setMeta] = useState<ClusterMeta | null>(null);
@@ -172,6 +174,7 @@ export function App() {
       setCanBrowse(config.capabilities?.workloadRead ?? fullCapabilities.workloadRead);
       setCanManage(config.capabilities?.workloadWrite ?? fullCapabilities.workloadWrite);
       setCanKubeconfig(config.capabilities?.kubeconfigDownload ?? fullCapabilities.kubeconfigDownload);
+      setCanApply(config.capabilities?.applyManifests ?? fullCapabilities.applyManifests);
       setDistributions(config.distributions ?? DEFAULT_DISTRIBUTIONS);
       setProviderStatus(config.providers ?? null);
       setSettingsEnabled(config.settingsEnabled ?? false);
@@ -204,6 +207,7 @@ export function App() {
       setCanBrowse(config.capabilities?.workloadRead ?? fullCapabilities.workloadRead);
       setCanManage(config.capabilities?.workloadWrite ?? fullCapabilities.workloadWrite);
       setCanKubeconfig(config.capabilities?.kubeconfigDownload ?? fullCapabilities.kubeconfigDownload);
+      setCanApply(config.capabilities?.applyManifests ?? fullCapabilities.applyManifests);
       setUser(config.user ?? null);
       setDistributions(config.distributions ?? DEFAULT_DISTRIBUTIONS);
       setProviderStatus(config.providers ?? null);
@@ -363,7 +367,11 @@ export function App() {
       {view === "settings" ? (
         <SettingsPage onSaved={() => void reloadConfig()} />
       ) : view === "resources" ? (
-        <ResourcesView clusters={clusters} canWrite={!readOnly && canManage} />
+        <ResourcesView
+          clusters={clusters}
+          canWrite={!readOnly && canManage}
+          canApply={!readOnly && canApply}
+        />
       ) : (
       <div className="mx-auto max-w-6xl space-y-4">
         {error && clusters.length > 0 ? (

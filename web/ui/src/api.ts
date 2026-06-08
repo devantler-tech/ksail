@@ -109,16 +109,20 @@ export interface Capabilities {
   // kubeconfigDownload is true when the backend can export a portable kubeconfig for a cluster (the
   // local backend). The SPA shows the Download-kubeconfig action only then.
   kubeconfigDownload: boolean;
+  // applyManifests is true when the backend can server-side-apply raw manifests. The SPA combines it
+  // with !readOnly before showing the Apply YAML action.
+  applyManifests: boolean;
 }
 
 // fullCapabilities mirrors the backend's default for a service that does not report capabilities.
 // clusterUpdate defaults true (assume a working action rather than hiding it); the workload +
-// kubeconfig flags default false because their endpoints may not exist on a mismatched older backend.
+// kubeconfig + apply flags default false because their endpoints may not exist on an older backend.
 export const fullCapabilities: Capabilities = {
   clusterUpdate: true,
   workloadRead: false,
   workloadWrite: false,
   kubeconfigDownload: false,
+  applyManifests: false,
 };
 
 export interface Config {
@@ -183,6 +187,12 @@ export class ApiError extends Error {
     this.status = status;
     this.loginURL = loginURL;
   }
+}
+
+// errorMessage extracts a human-readable string from an unknown thrown value. ApiError extends Error,
+// so its message (which already carries the server detail) is used directly.
+export function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
 }
 
 // detailFromBody pulls a human-readable error message out of the server's response body. The API
@@ -364,6 +374,37 @@ export async function downloadKubeconfig(namespace: string, name: string): Promi
   anchor.click();
   anchor.remove();
   URL.revokeObjectURL(url);
+}
+
+// ApplyResult is the per-document outcome of an apply request.
+export interface ApplyResult {
+  kind: string;
+  name: string;
+  namespace?: string;
+  status: "applied" | "error";
+  error?: string;
+}
+
+export interface ApplyResponse {
+  results: ApplyResult[];
+  dryRun: boolean;
+}
+
+// applyManifests server-side-applies multi-document YAML to a cluster. dryRun validates without
+// persisting. The body is raw YAML (text/yaml), not JSON.
+export function applyManifests(
+  namespace: string,
+  name: string,
+  manifests: string,
+  dryRun: boolean,
+): Promise<ApplyResponse> {
+  const query = dryRun ? "?dryRun=true" : "";
+
+  return request<ApplyResponse>(`/api/v1/clusters/${namespace}/${name}/apply${query}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/yaml" },
+    body: manifests,
+  });
 }
 
 function resourcePath(

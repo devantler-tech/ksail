@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"net"
 	"net/http"
@@ -239,6 +240,12 @@ func (s *Server) Handler() http.Handler {
 		mux.HandleFunc("GET /api/v1/clusters/{namespace}/{name}/kubeconfig", s.handleKubeconfig)
 	}
 
+	// Manifest apply, registered only when the backend implements ApplyService. A mutating verb, so
+	// the read-only guard rejects it with 403 when the UI is read-only.
+	if _, ok := s.Service.(ApplyService); ok {
+		mux.HandleFunc("POST /api/v1/clusters/{namespace}/{name}/apply", s.handleApply)
+	}
+
 	// Credential settings are local-UI-only: registered only when a SettingsService is provided, so
 	// the operator's API surface is unchanged.
 	if s.Settings != nil {
@@ -387,6 +394,7 @@ func (s *Server) handleConfig(writer http.ResponseWriter, request *http.Request)
 	_, capabilities.WorkloadRead = s.Service.(ResourceService)
 	_, capabilities.WorkloadWrite = s.Service.(ResourceWriter)
 	_, capabilities.KubeconfigDownload = s.Service.(KubeconfigProvider)
+	_, capabilities.ApplyManifests = s.Service.(ApplyService)
 
 	response := configResponse{
 		ReadOnly:        s.ReadOnly,
@@ -681,6 +689,41 @@ func (s *Server) handleKubeconfig(writer http.ResponseWriter, request *http.Requ
 	writer.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
 
 	http.ServeContent(writer, request, filename, time.Time{}, bytes.NewReader(kubeconfig))
+}
+
+func (s *Server) handleApply(writer http.ResponseWriter, request *http.Request) {
+	svc, ok := s.Service.(ApplyService)
+	if !ok {
+		writeClientError(writer, ErrNotSupported)
+
+		return
+	}
+
+	limited := http.MaxBytesReader(writer, request.Body, maxRequestBodyBytes)
+
+	manifests, err := io.ReadAll(limited)
+	if err != nil {
+		writeDecodeError(writer, fmt.Errorf("read manifests: %w", err))
+
+		return
+	}
+
+	dryRun := request.URL.Query().Get("dryRun") == "true"
+
+	results, err := svc.ApplyManifests(
+		request.Context(),
+		request.PathValue("namespace"),
+		request.PathValue("name"),
+		manifests,
+		dryRun,
+	)
+	if err != nil {
+		writeClientError(writer, err)
+
+		return
+	}
+
+	writeJSON(writer, http.StatusOK, map[string]any{"results": results, "dryRun": dryRun})
 }
 
 func isMutating(method string) bool {
