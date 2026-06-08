@@ -72,6 +72,7 @@ func (s *Server) handleLogs(writer http.ResponseWriter, request *http.Request) {
 
 		return
 	}
+
 	defer func() { _ = stream.Close() }()
 
 	setSSEHeaders(writer)
