@@ -346,6 +346,13 @@ export const RESOURCE_KINDS = [
   "Event",
   "Node",
   "Namespace",
+  // GitOps CRs (Flux + ArgoCD). Browsable read-only; selecting one on a cluster without that CRD
+  // lists with an error (surfaced in the view).
+  "Kustomization",
+  "HelmRelease",
+  "GitRepository",
+  "OCIRepository",
+  "Application",
 ] as const;
 
 // listResources fetches resources of a kind from a cluster. resourceNamespace narrows a namespaced
