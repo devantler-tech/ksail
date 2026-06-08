@@ -104,14 +104,9 @@ func (s *Service) ListResources(
 		return nil, err
 	}
 
-	var lister dynamic.ResourceInterface = client.Resource(kind.GVR)
-	if kind.Namespaced && query.Namespace != "" {
-		lister = client.Resource(kind.GVR).Namespace(query.Namespace)
-	}
-
-	list, err := lister.List(ctx, metav1.ListOptions{})
+	list, err := api.ListResourcesWith(ctx, client, kind, query)
 	if err != nil {
-		return nil, fmt.Errorf("list %s: %w", query.Kind, err)
+		return nil, fmt.Errorf("read resources from cluster %q: %w", name, err)
 	}
 
 	return list, nil
@@ -128,14 +123,9 @@ func (s *Service) GetResource(
 		return nil, err
 	}
 
-	var getter dynamic.ResourceInterface = client.Resource(kind.GVR)
-	if kind.Namespaced {
-		getter = client.Resource(kind.GVR).Namespace(ref.Namespace)
-	}
-
-	obj, err := getter.Get(ctx, ref.Name, metav1.GetOptions{})
+	obj, err := api.GetResourceWith(ctx, client, kind, ref)
 	if err != nil {
-		return nil, fmt.Errorf("get %s %q: %w", ref.Kind, ref.Name, err)
+		return nil, fmt.Errorf("read resource from cluster %q: %w", name, err)
 	}
 
 	return obj, nil

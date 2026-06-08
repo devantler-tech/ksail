@@ -11,6 +11,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/operator/api"
 	"github.com/devantler-tech/ksail/v7/pkg/webui"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/dynamic"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
@@ -119,8 +120,15 @@ func setupManager(mgr ctrl.Manager, opts Options) error {
 	}
 
 	if opts.APIBindAddress != "" {
+		hub := mgr.GetClient()
+		// Resolve a dynamic client for a cluster's managed (vcluster) child cluster, so the dashboard's
+		// resource browser works against the operator backend too — not just the local `ksail ui`.
+		newChildClient := func(ctx context.Context, cluster *v1alpha1.Cluster) (dynamic.Interface, error) {
+			return childClusterDynamicClient(ctx, hub, cluster)
+		}
+
 		server := &api.Server{
-			Service:     api.NewCRClusterService(mgr.GetClient()),
+			Service:     api.NewCRClusterServiceWithResources(hub, newChildClient),
 			ReadOnly:    opts.ReadOnly,
 			BindAddress: opts.APIBindAddress,
 			OIDC:        opts.OIDC,
