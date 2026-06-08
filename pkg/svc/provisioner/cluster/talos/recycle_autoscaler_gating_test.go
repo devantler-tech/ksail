@@ -122,6 +122,16 @@ func TestSnapshotImageIDFromSecret_UnreadableReturnsEmpty(t *testing.T) {
 	}
 }
 
+func TestCurrentAutoscalerSnapshotImageID_NoKubeconfigReturnsEmpty(t *testing.T) {
+	t.Parallel()
+
+	// With no kubeconfig configured, newSecretKubeclient errors and the probe
+	// degrades to "" — treated as "no detectable image change" by callers.
+	prov := talosprovisioner.NewProvisioner(nil, nil).WithLogWriter(io.Discard)
+
+	assert.Empty(t, prov.CurrentAutoscalerSnapshotImageIDForTest(context.Background()))
+}
+
 func TestApplyInPlaceToAutoscalerNodes_NoopWhenNotHetzner(t *testing.T) {
 	t.Parallel()
 

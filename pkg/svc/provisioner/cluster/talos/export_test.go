@@ -397,6 +397,12 @@ func SnapshotImageIDFromSecretForTest(secret *corev1.Secret) string {
 	return snapshotImageIDFromSecret(secret)
 }
 
+// CurrentAutoscalerSnapshotImageIDForTest exposes currentAutoscalerSnapshotImageID
+// for unit testing.
+func (p *Provisioner) CurrentAutoscalerSnapshotImageIDForTest(ctx context.Context) string {
+	return p.currentAutoscalerSnapshotImageID(ctx)
+}
+
 // ApplyInPlaceToAutoscalerNodesForTest exposes applyInPlaceToAutoscalerNodes for unit testing.
 func (p *Provisioner) ApplyInPlaceToAutoscalerNodesForTest(
 	ctx context.Context,
