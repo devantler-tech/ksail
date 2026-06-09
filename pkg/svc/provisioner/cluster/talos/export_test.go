@@ -578,6 +578,16 @@ func (p *Provisioner) BuildDesiredNodeConfigForTest(
 	return p.buildDesiredNodeConfig(running, secretsSource, role)
 }
 
+// DetectRoleMachineConfigDriftForTest exposes detectRoleMachineConfigDrift for
+// unit testing per-role (control-plane vs worker) patch drift detection.
+func (p *Provisioner) DetectRoleMachineConfigDriftForTest(
+	running talosconfig.Provider,
+	secretsSource talosconfig.Provider,
+	role string,
+) ([]clusterupdate.Change, error) {
+	return p.detectRoleMachineConfigDrift(running, secretsSource, role)
+}
+
 // WithNodeConfigFetcherForTest overrides the running-config fetcher so unit tests
 // can drive the rolling-reboot staged-config rebuild (buildStagedNodeConfig)
 // without real Talos API connectivity.
