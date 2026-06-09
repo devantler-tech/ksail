@@ -378,11 +378,40 @@ func (p *Provisioner) PreBootChecksCountForTest() int {
 }
 
 // EnsureAutoscalerSecretIfNeededForTest exposes ensureAutoscalerSecretIfNeeded for unit testing.
+// diff and result default to a nil diff and a fresh result when callers exercise the
+// guard/no-op paths; pass explicit values to cover the recycle-vs-in-place branch.
 func (p *Provisioner) EnsureAutoscalerSecretIfNeededForTest(
 	ctx context.Context,
 	clusterName string,
 ) error {
-	return p.ensureAutoscalerSecretIfNeeded(ctx, clusterName)
+	return p.ensureAutoscalerSecretIfNeeded(
+		ctx, clusterName, nil, clusterupdate.NewEmptyUpdateResult(),
+	)
+}
+
+// AutoscalerRecycleRequiredForTest exposes autoscalerRecycleRequired for unit testing.
+func AutoscalerRecycleRequiredForTest(diff *clusterupdate.UpdateResult, imageChanged bool) bool {
+	return autoscalerRecycleRequired(diff, imageChanged)
+}
+
+// SnapshotImageIDFromSecretForTest exposes snapshotImageIDFromSecret for unit testing.
+func SnapshotImageIDFromSecretForTest(secret *corev1.Secret) string {
+	return snapshotImageIDFromSecret(secret)
+}
+
+// CurrentAutoscalerSnapshotImageIDForTest exposes currentAutoscalerSnapshotImageID
+// for unit testing.
+func (p *Provisioner) CurrentAutoscalerSnapshotImageIDForTest(ctx context.Context) string {
+	return p.currentAutoscalerSnapshotImageID(ctx)
+}
+
+// ApplyInPlaceToAutoscalerNodesForTest exposes applyInPlaceToAutoscalerNodes for unit testing.
+func (p *Provisioner) ApplyInPlaceToAutoscalerNodesForTest(
+	ctx context.Context,
+	clusterName string,
+	result *clusterupdate.UpdateResult,
+) error {
+	return p.applyInPlaceToAutoscalerNodes(ctx, clusterName, result)
 }
 
 // RestartAutoscalerAfterConfigChangeForTest exposes restartAutoscalerAfterConfigChange

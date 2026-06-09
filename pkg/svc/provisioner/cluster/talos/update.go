@@ -247,7 +247,7 @@ func (p *Provisioner) applyUpdateChanges(
 		return result, fmt.Errorf("failed to apply reboot-required changes: %w", rebootErr)
 	}
 
-	secretErr = p.ensureAutoscalerSecretIfNeeded(ctx, clusterName)
+	secretErr = p.ensureAutoscalerSecretIfNeeded(ctx, clusterName, diff, result)
 	if secretErr != nil {
 		return result, fmt.Errorf("failed to ensure autoscaler config secret: %w", secretErr)
 	}
@@ -1353,11 +1353,19 @@ func (p *Provisioner) syncHetznerFirewallRules(
 // autoscaling is disabled, the provider is not Hetzner, or the config bundle
 // is unavailable. Returns ErrAutoscalerRequiresSchematic early when no
 // schematic is configured, before performing any side effects.
+//
+// When the Secret changes it brings existing autoscaler nodes to the new baseline
+// — but only as disruptively as the change demands (see
+// propagateAutoscalerBaseline): a NO_REBOOT in-place apply for config-only drift,
+// a drain-and-replace recycle only when a new boot image or a reboot-class change
+// genuinely requires fresh nodes.
 func (p *Provisioner) ensureAutoscalerSecretIfNeeded(
 	ctx context.Context,
 	clusterName string,
+	diff *clusterupdate.UpdateResult,
+	result *clusterupdate.UpdateResult,
 ) error {
-	if p.hetznerOpts == nil || !p.hetznerOpts.NodeAutoscalerEnabled || p.talosConfigs == nil {
+	if !p.autoscalerSecretApplicable() {
 		return nil
 	}
 
@@ -1385,6 +1393,10 @@ func (p *Provisioner) ensureAutoscalerSecretIfNeeded(
 		return fmt.Errorf("looking up snapshot image for autoscaler secret: %w", err)
 	}
 
+	// Read the snapshot image existing nodes booted from before the Secret is
+	// overwritten, so a Talos OS bump (new boot image) can be detected below.
+	prevImageID := p.currentAutoscalerSnapshotImageID(ctx)
+
 	// Restart the autoscaler when the config changed so it reloads the new
 	// Kubernetes version / snapshot baked into the Secret (read as env vars,
 	// which Kubernetes does not live-reload).
@@ -1393,16 +1405,64 @@ func (p *Provisioner) ensureAutoscalerSecretIfNeeded(
 		return err
 	}
 
-	// When the config changed (a Talos/Kubernetes version bump), recycle the
-	// existing autoscaler nodes so they follow the new baseline instead of
-	// drifting on the old versions. The refreshed Secret alone only fixes newly
-	// provisioned nodes; the in-place rolling upgrade never touches autoscaler
-	// nodes because they are not KSail-owned. A no-op when nothing changed.
+	// The refreshed Secret alone only fixes newly provisioned nodes; existing
+	// autoscaler nodes are not KSail-owned, so the in-place rolling apply and
+	// rolling reboot never touch them. Bring them to the new baseline only when
+	// the Secret actually changed. A no-op when nothing changed.
 	if !changed {
 		return nil
 	}
 
-	return p.recycleAutoscalerNodes(ctx, clusterName)
+	imageChanged := prevImageID != "" && prevImageID != strconv.FormatInt(snapshotImageID, 10)
+
+	return p.propagateAutoscalerBaseline(ctx, clusterName, diff, imageChanged, result)
+}
+
+// propagateAutoscalerBaseline brings existing autoscaler nodes to the refreshed
+// baseline, choosing the least disruptive mechanism the change allows. A new boot
+// image (Talos OS bump) or a reboot/wipe/recreate-class change can only reach an
+// immutable Talos node by replacing it, so those recycle (drain → delete → the
+// autoscaler re-provisions from the new template). A config-only change that Talos
+// can apply with NO_REBOOT is pushed in place instead — no drain, so it never
+// stalls on a PodDisruptionBudget the way a recycle can.
+func (p *Provisioner) propagateAutoscalerBaseline(
+	ctx context.Context,
+	clusterName string,
+	diff *clusterupdate.UpdateResult,
+	imageChanged bool,
+	result *clusterupdate.UpdateResult,
+) error {
+	if autoscalerRecycleRequired(diff, imageChanged) {
+		return p.recycleAutoscalerNodes(ctx, clusterName)
+	}
+
+	return p.applyInPlaceToAutoscalerNodes(ctx, clusterName, result)
+}
+
+// autoscalerRecycleRequired reports whether the refreshed baseline can only reach
+// existing autoscaler nodes by replacing them. That is true when the Talos boot
+// image changed (a new snapshot an already-booted node cannot adopt in place) or
+// when the diff carries a reboot/wipe/recreate/rolling-recreate change Talos
+// cannot apply with NO_REBOOT. A nil diff (no classification available) defers to
+// the image signal alone, defaulting to the non-disruptive in-place path.
+func autoscalerRecycleRequired(diff *clusterupdate.UpdateResult, imageChanged bool) bool {
+	if imageChanged {
+		return true
+	}
+
+	if diff == nil {
+		return false
+	}
+
+	return diff.HasRebootRequired() || diff.HasWipeRequired() ||
+		diff.HasRecreateRequired() || diff.HasRollingRecreate()
+}
+
+// autoscalerSecretApplicable reports whether the cluster-autoscaler-config Secret
+// can be managed: the provider is Hetzner, the node autoscaler is enabled, and a
+// Talos config bundle is loaded to derive the worker config from.
+func (p *Provisioner) autoscalerSecretApplicable() bool {
+	return p.hetznerOpts != nil && p.hetznerOpts.NodeAutoscalerEnabled && p.talosConfigs != nil
 }
 
 // hasSchematicConfigured reports whether a Talos schematic ID is available
