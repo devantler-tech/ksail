@@ -97,6 +97,52 @@ function ContainerPicker({
   );
 }
 
+// resourceStatus derives an at-a-glance health/reconcile status for the table: a Ready condition
+// (Flux/ArgoCD GitOps CRs and many others expose one), else a phase (Pods, PVCs, …). Returns null when
+// the object carries no recognizable status.
+function resourceStatus(obj: K8sObject): { label: string; ok: boolean } | null {
+  const status = obj.status as
+    | { conditions?: { type?: string; status?: string; reason?: string }[]; phase?: string }
+    | undefined;
+  if (!status) {
+    return null;
+  }
+
+  const ready = status.conditions?.find((condition) => condition.type === "Ready");
+  if (ready) {
+    if (ready.status === "True") {
+      return { label: "Ready", ok: true };
+    }
+
+    return { label: ready.reason ? `Not Ready: ${ready.reason}` : "Not Ready", ok: false };
+  }
+
+  if (typeof status.phase === "string" && status.phase !== "") {
+    const healthy = ["Running", "Active", "Succeeded", "Bound", "Available"].includes(status.phase);
+
+    return { label: status.phase, ok: healthy };
+  }
+
+  return null;
+}
+
+// StatusBadge renders a resource's derived status with a colour dot (green = ok, amber = not).
+function StatusBadge({ obj }: { obj: K8sObject }) {
+  const status = resourceStatus(obj);
+  if (!status) {
+    return <span className="text-slate-400">—</span>;
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span className={cx("size-1.5 rounded-full", status.ok ? "bg-emerald-500" : "bg-amber-500")} aria-hidden />
+      <span className={status.ok ? "text-slate-600 dark:text-slate-300" : "text-amber-700 dark:text-amber-400"}>
+        {status.label}
+      </span>
+    </span>
+  );
+}
+
 // ResourcesView is the read-only workload browser: pick a cluster + resource kind, optionally filter
 // by namespace (client-side), and inspect any object's raw manifest. Backed by the ResourceService
 // endpoints; shown only when the backend advertises capabilities.workloadRead.
@@ -289,6 +335,7 @@ export function ResourcesView({
                 <tr>
                   <th className={th}>Name</th>
                   <th className={cx(th, "hidden sm:table-cell")}>Namespace</th>
+                  <th className={th}>Status</th>
                   <th className={th}>Age</th>
                 </tr>
               </thead>
@@ -312,6 +359,9 @@ export function ResourcesView({
                     </td>
                     <td className={cx(td, "hidden text-sm text-slate-600 sm:table-cell dark:text-slate-300")}>
                       {item.metadata?.namespace ?? "—"}
+                    </td>
+                    <td className={cx(td, "text-sm")}>
+                      <StatusBadge obj={item} />
                     </td>
                     <td className={cx(td, "text-sm text-slate-500 tabular-nums dark:text-slate-400")}>
                       {relativeAge(item.metadata?.creationTimestamp)}

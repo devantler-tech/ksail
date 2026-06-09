@@ -163,6 +163,28 @@ func TestResourceKindForAllowlist(t *testing.T) {
 	require.ErrorIs(t, err, api.ErrInvalid)
 }
 
+func TestResourceKindForGitOps(t *testing.T) {
+	t.Parallel()
+
+	// GitOps CRs resolve at their served (non-v1) versions.
+	helm, err := api.ResourceKindFor("HelmRelease")
+	require.NoError(t, err)
+	assert.Equal(t, "helm.toolkit.fluxcd.io", helm.GVR.Group)
+	assert.Equal(t, "v2", helm.GVR.Version)
+	assert.Equal(t, "helmreleases", helm.GVR.Resource)
+	assert.True(t, helm.Namespaced)
+
+	kustomization, err := api.ResourceKindFor("Kustomization")
+	require.NoError(t, err)
+	assert.Equal(t, "kustomize.toolkit.fluxcd.io", kustomization.GVR.Group)
+	assert.Equal(t, "v1", kustomization.GVR.Version)
+
+	app, err := api.ResourceKindFor("Application")
+	require.NoError(t, err)
+	assert.Equal(t, "argoproj.io", app.GVR.Group)
+	assert.Equal(t, "v1alpha1", app.GVR.Version)
+}
+
 func TestConfigReportsWorkloadReadForResourceService(t *testing.T) {
 	t.Parallel()
 
