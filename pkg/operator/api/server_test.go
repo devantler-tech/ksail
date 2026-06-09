@@ -417,6 +417,19 @@ func TestConfigDefaultsToFullCapabilities(t *testing.T) {
 	)
 }
 
+func TestConfigReportsMode(t *testing.T) {
+	t.Parallel()
+
+	// The serving surface (operator vs. local `ksail ui`) is reported so the SPA can label the UI
+	// accurately; it is omitted when unset.
+	server := &api.Server{Service: api.NewCRClusterService(newClient(t)), Mode: api.ModeOperator}
+
+	recorder := doRequest(server.Handler(), http.MethodGet, "/api/v1/config", "")
+
+	assert.Equal(t, http.StatusOK, recorder.Code)
+	assert.Contains(t, recorder.Body.String(), `"mode":"operator"`)
+}
+
 func TestStaticFSServesAssetsAndSPAFallback(t *testing.T) {
 	t.Parallel()
 
