@@ -8,7 +8,7 @@ const PREFIX = "ksail://";
 // parseDeepLink turns a ksail:// URL into a navigation target, or null if it is not a recognized
 // ksail:// link. Supported forms:
 //   ksail://                              → the clusters view
-//   ksail://clusters | resources | secrets | settings
+//   ksail://clusters | overview | resources | events | secrets | settings
 //   ksail://cluster/<name>                → clusters view, select default/<name>
 //   ksail://cluster/<namespace>/<name>    → clusters view, select <namespace>/<name>
 // Cluster selection keys are "namespace/name" to match App.tsx's clusterKey().
@@ -46,7 +46,9 @@ export function parseDeepLink(raw: string): DeepLinkTarget | null {
         clusterKey: rest.length === 1 ? `default/${rest[0]}` : `${rest[0]}/${rest[1]}`,
       };
     case "clusters":
+    case "overview":
     case "resources":
+    case "events":
     case "secrets":
     case "settings":
       return { view: head };

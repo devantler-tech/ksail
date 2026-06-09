@@ -132,6 +132,7 @@ func setupManager(mgr ctrl.Manager, opts Options) error {
 			ReadOnly:    opts.ReadOnly,
 			BindAddress: opts.APIBindAddress,
 			OIDC:        opts.OIDC,
+			Mode:        api.ModeOperator,
 		}
 
 		// Serve the dashboard from the operator itself (same origin as the API, no reverse proxy).

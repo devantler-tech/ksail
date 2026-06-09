@@ -1,5 +1,6 @@
-import { FileCode, RotateCw, ScrollText, SquareTerminal } from "lucide-react";
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { ChevronDown, ChevronsUpDown, ChevronUp, Copy, FileCode, RotateCw, ScrollText, SquareTerminal } from "lucide-react";
+import { lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from "react";
+import yaml from "js-yaml";
 import {
   ApiError,
   CLUSTER_SCOPED_KINDS,
@@ -17,7 +18,9 @@ import {
 } from "../api.ts";
 import { cx } from "../lib/cx.ts";
 import { relativeAge } from "../lib/format.ts";
+import { clusterKey, eventFields, eventLastSeenMs, splitClusterKey, type EventFields } from "../lib/k8s.ts";
 import { ApplyManifestsDialog } from "./ApplyManifestsDialog.tsx";
+import { EventTypeBadge } from "./EventsView.tsx";
 import { LogViewer } from "./LogViewer.tsx";
 import { ConfirmDialog } from "./ConfirmDialog.tsx";
 
@@ -33,10 +36,6 @@ import { Button, SelectField, SlideOver, TextField } from "./ui.tsx";
 const th = "px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400";
 const td = "px-4 py-3 align-middle";
 
-function clusterKey(cluster: Cluster): string {
-  return `${cluster.metadata.namespace ?? "default"}/${cluster.metadata.name}`;
-}
-
 function errorMessage(err: unknown): string {
   if (err instanceof ApiError) {
     return err.message;
@@ -51,11 +50,50 @@ function objectKey(obj: K8sObject, index: number): string {
   return `${meta?.namespace ?? ""}/${meta?.name ?? index}`;
 }
 
-// splitClusterKey parses "namespace/name" into its segments (both are DNS labels, no "/").
-function splitClusterKey(key: string): [string, string] {
-  const slash = key.indexOf("/");
+type SortKey = "name" | "namespace" | "status" | "age";
+type SortDir = "asc" | "desc";
 
-  return [key.slice(0, slash), key.slice(slash + 1)];
+// createdMs returns an object's creation time in epoch ms (0 when absent/invalid), for age sorting.
+function createdMs(obj: K8sObject): number {
+  const value = obj.metadata?.creationTimestamp;
+  const ms = value ? new Date(value).getTime() : 0;
+
+  return Number.isNaN(ms) ? 0 : ms;
+}
+
+// SortHeader renders a sortable column header (mirrors the ClustersTable idiom).
+function SortHeader({
+  label,
+  sortKey,
+  active,
+  dir,
+  onSort,
+  className,
+}: {
+  label: ReactNode;
+  sortKey: SortKey;
+  active: boolean;
+  dir: SortDir;
+  onSort: (key: SortKey) => void;
+  className?: string;
+}) {
+  const Indicator = active ? (dir === "asc" ? ChevronUp : ChevronDown) : ChevronsUpDown;
+
+  return (
+    <th className={cx(th, className)} aria-sort={active ? (dir === "asc" ? "ascending" : "descending") : "none"}>
+      <button
+        type="button"
+        onClick={() => onSort(sortKey)}
+        className="group inline-flex items-center gap-1 uppercase tracking-wide hover:text-slate-700 dark:hover:text-slate-200"
+      >
+        {label}
+        <Indicator
+          className={cx("size-3.5", active ? "text-slate-500 dark:text-slate-300" : "text-slate-300 dark:text-slate-600")}
+          aria-hidden
+        />
+      </button>
+    </th>
+  );
 }
 
 // currentReplicas reads spec.replicas from an unstructured object, defaulting to 0.
@@ -145,6 +183,136 @@ function StatusBadge({ obj }: { obj: K8sObject }) {
   );
 }
 
+// compareResources orders two objects for the active sort column. Status sorts by the derived status
+// label so equal-health rows group together.
+function compareResources(a: K8sObject, b: K8sObject, key: SortKey): number {
+  switch (key) {
+    case "name":
+      return (a.metadata?.name ?? "").localeCompare(b.metadata?.name ?? "");
+    case "namespace":
+      return (a.metadata?.namespace ?? "").localeCompare(b.metadata?.namespace ?? "");
+    case "status":
+      return (resourceStatus(a)?.label ?? "").localeCompare(resourceStatus(b)?.label ?? "");
+    case "age":
+      return createdMs(a) - createdMs(b);
+    default:
+      return 0;
+  }
+}
+
+// toYaml serializes an object to YAML for the detail view, falling back to pretty JSON if the object
+// somehow cannot be represented as YAML (never expected for Kubernetes objects).
+function toYaml(obj: unknown): string {
+  try {
+    return yaml.dump(obj, { noRefs: true, sortKeys: false });
+  } catch {
+    return JSON.stringify(obj, null, 2);
+  }
+}
+
+// ObjectCondition is the normalized status condition rendered in the detail view's Conditions table.
+type ObjectCondition = { type: string; status: string; reason: string; message: string };
+
+// objectConditions reads status.conditions from an unstructured object (Deployments, Pods, GitOps CRs,
+// and many others expose them), returning [] when absent.
+function objectConditions(obj: K8sObject): ObjectCondition[] {
+  const status = obj.status as { conditions?: unknown } | undefined;
+  const conditions = Array.isArray(status?.conditions) ? status.conditions : [];
+
+  return conditions
+    .map((entry) => {
+      const cond = (entry ?? {}) as Record<string, unknown>;
+
+      return {
+        type: typeof cond.type === "string" ? cond.type : "",
+        status: typeof cond.status === "string" ? cond.status : "",
+        reason: typeof cond.reason === "string" ? cond.reason : "",
+        message: typeof cond.message === "string" ? cond.message : "",
+      };
+    })
+    .filter((cond) => cond.type !== "");
+}
+
+// ConditionsTable renders an object's status conditions; nothing when the object has none.
+function ConditionsTable({ obj }: { obj: K8sObject }) {
+  const conditions = objectConditions(obj);
+  if (conditions.length === 0) {
+    return null;
+  }
+
+  return (
+    <section>
+      <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Conditions</h4>
+      <div className="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800">
+        <table className="min-w-full divide-y divide-slate-200 text-sm dark:divide-slate-800">
+          <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+            {conditions.map((cond) => (
+              <tr key={cond.type}>
+                <td className="px-3 py-2 font-medium text-slate-700 dark:text-slate-200">{cond.type}</td>
+                <td className="px-3 py-2">
+                  <span
+                    className={cx(
+                      "inline-flex items-center gap-1.5",
+                      cond.status === "True"
+                        ? "text-emerald-600 dark:text-emerald-400"
+                        : cond.status === "False"
+                          ? "text-amber-600 dark:text-amber-400"
+                          : "text-slate-500 dark:text-slate-400",
+                    )}
+                  >
+                    <span
+                      className={cx(
+                        "size-1.5 rounded-full",
+                        cond.status === "True" ? "bg-emerald-500" : cond.status === "False" ? "bg-amber-500" : "bg-slate-400",
+                      )}
+                      aria-hidden
+                    />
+                    {cond.status || "—"}
+                  </span>
+                </td>
+                <td className="px-3 py-2 text-slate-600 dark:text-slate-300">
+                  <div className="font-medium">{cond.reason || "—"}</div>
+                  {cond.message ? <div className="text-xs text-slate-500 dark:text-slate-400">{cond.message}</div> : null}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+// RelatedEvents renders the recent events that target the selected resource; nothing when there are
+// none (or while loading produced none).
+function RelatedEvents({ events }: { events: EventFields[] }) {
+  if (events.length === 0) {
+    return null;
+  }
+
+  return (
+    <section>
+      <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+        Related events
+      </h4>
+      <ul className="space-y-2">
+        {events.map((event, index) => (
+          <li key={`${event.reason}-${index}`} className="flex items-start gap-2 text-sm">
+            <EventTypeBadge type={event.type} />
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <span className="font-medium text-slate-700 dark:text-slate-200">{event.reason || "Event"}</span>
+                <span className="ml-auto shrink-0 text-xs tabular-nums text-slate-400">{relativeAge(event.lastSeen)}</span>
+              </div>
+              <p className="break-words text-xs text-slate-500 dark:text-slate-400">{event.message}</p>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 // ResourcesView is the read-only workload browser: pick a cluster + resource kind, optionally filter
 // by namespace (client-side), and inspect any object's raw manifest. Backed by the ResourceService
 // endpoints; shown only when the backend advertises capabilities.workloadRead.
@@ -171,6 +339,9 @@ export function ResourcesView({
   const [selectedClusterKey, setSelectedClusterKey] = useState(clusters[0] ? clusterKey(clusters[0]) : "");
   const [kind, setKind] = useState<string>("Pod");
   const [namespaceFilter, setNamespaceFilter] = useState("");
+  const [nameFilter, setNameFilter] = useState("");
+  const [sortKey, setSortKey] = useState<SortKey>("name");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [items, setItems] = useState<K8sObject[]>([]);
   const [loading, setLoading] = useState(clusters.length > 0);
   // hasFetched gates the empty state so the skeleton (not "No <kind>") shows until the first list
@@ -190,6 +361,12 @@ export function ResourcesView({
   // Exec target: the Pod being exec'd (null = closed) + the chosen container.
   const [execPod, setExecPod] = useState<K8sObject | null>(null);
   const [execContainer, setExecContainer] = useState("");
+  // detailFormat is the manifest rendering of the selected resource (kubectl-familiar YAML by
+  // default). It is a persistent preference — kept across selections, not reset per resource.
+  const [detailFormat, setDetailFormat] = useState<"yaml" | "json">("yaml");
+  // relatedEvents holds the recent events targeting the selected resource (its namespace, matched by
+  // involvedObject), shown in the detail panel.
+  const [relatedEvents, setRelatedEvents] = useState<EventFields[]>([]);
 
   // Seed the scale input from the selected object's current replica count whenever it changes.
   useEffect(() => {
@@ -197,6 +374,52 @@ export function ResourcesView({
       setScaleValue(String(currentReplicas(selected)));
     }
   }, [selected]);
+
+  // Fetch the events targeting the selected resource (its own namespace, matched by involvedObject),
+  // for the detail panel's "Related events" section. Skipped for Events themselves and unnamed
+  // objects. Best-effort: a failure just yields no related events.
+  useEffect(() => {
+    const name = selected?.metadata?.name ?? "";
+    if (!selected || name === "" || kind === "Event") {
+      setRelatedEvents([]);
+
+      return undefined;
+    }
+
+    const [clusterNamespace, clusterName] = splitClusterKey(selectedClusterKey);
+    let cancelled = false;
+
+    listResources(clusterNamespace, clusterName, "Event", selected.metadata?.namespace)
+      .then((list) => {
+        if (cancelled) {
+          return;
+        }
+        const related = (list.items ?? [])
+          .map(eventFields)
+          .filter((event) => event.objectName === name && (event.objectKind === "" || event.objectKind === kind))
+          .sort((a, b) => eventLastSeenMs(b) - eventLastSeenMs(a))
+          .slice(0, 10);
+        setRelatedEvents(related);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setRelatedEvents([]);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selected, kind, selectedClusterKey]);
+
+  function handleSort(key: SortKey) {
+    if (key === sortKey) {
+      setSortDir((current) => (current === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+  }
 
   // runAction performs a write action on the selected resource, then toasts the outcome, closes the
   // detail panel, and refetches the list so it reflects the change.
@@ -267,14 +490,50 @@ export function ResourcesView({
     };
   }, [selectedClusterKey, kind, nonce]);
 
+  // Apply the namespace + name filters (client-side) and sort by the active column with a stable
+  // namespace/name tiebreak so equal values keep a deterministic order across refreshes.
   const filtered = useMemo(() => {
-    const query = namespaceFilter.trim().toLowerCase();
-    if (query === "") {
-      return items;
+    const nsQuery = namespaceFilter.trim().toLowerCase();
+    const nameQuery = nameFilter.trim().toLowerCase();
+
+    const matched = items.filter((item) => {
+      const ns = (item.metadata?.namespace ?? "").toLowerCase();
+      const nm = (item.metadata?.name ?? "").toLowerCase();
+
+      return (nsQuery === "" || ns.includes(nsQuery)) && (nameQuery === "" || nm.includes(nameQuery));
+    });
+
+    const factor = sortDir === "asc" ? 1 : -1;
+
+    return [...matched].sort((a, b) => {
+      const primary = compareResources(a, b, sortKey) * factor;
+
+      return primary !== 0 ? primary : objectKey(a, 0).localeCompare(objectKey(b, 0));
+    });
+  }, [items, namespaceFilter, nameFilter, sortKey, sortDir]);
+
+  // The selected resource serialized for the detail panel, in the chosen format.
+  const manifestText = useMemo(() => {
+    if (!selected) {
+      return "";
     }
 
-    return items.filter((item) => (item.metadata?.namespace ?? "").toLowerCase().includes(query));
-  }, [items, namespaceFilter]);
+    return detailFormat === "yaml" ? toYaml(selected) : JSON.stringify(selected, null, 2);
+  }, [selected, detailFormat]);
+
+  // copyManifest copies the serialized manifest to the clipboard and toasts the outcome.
+  function copyManifest() {
+    if (!navigator.clipboard) {
+      toast.error("Clipboard unavailable");
+
+      return;
+    }
+
+    navigator.clipboard
+      .writeText(manifestText)
+      .then(() => toast.success("Copied to clipboard"))
+      .catch(() => toast.error("Copy failed"));
+  }
 
   if (clusters.length === 0) {
     return <EmptyState title="No clusters" description="Create or connect a cluster to browse its resources." />;
@@ -311,6 +570,13 @@ export function ResourcesView({
           onChange={(event) => setNamespaceFilter(event.target.value)}
           className="min-w-44"
         />
+        <TextField
+          label="Name filter"
+          placeholder="all names"
+          value={nameFilter}
+          onChange={(event) => setNameFilter(event.target.value)}
+          className="min-w-44"
+        />
         <Button variant="secondary" onClick={() => setNonce((value) => value + 1)} loading={loading}>
           {loading ? null : <RotateCw className="size-4" aria-hidden />}
           Refresh
@@ -335,10 +601,17 @@ export function ResourcesView({
             <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-800">
               <thead className="bg-slate-50 dark:bg-slate-800/50">
                 <tr>
-                  <th className={th}>Name</th>
-                  <th className={cx(th, "hidden sm:table-cell")}>Namespace</th>
-                  <th className={th}>Status</th>
-                  <th className={th}>Age</th>
+                  <SortHeader label="Name" sortKey="name" active={sortKey === "name"} dir={sortDir} onSort={handleSort} />
+                  <SortHeader
+                    label="Namespace"
+                    sortKey="namespace"
+                    active={sortKey === "namespace"}
+                    dir={sortDir}
+                    onSort={handleSort}
+                    className="hidden sm:table-cell"
+                  />
+                  <SortHeader label="Status" sortKey="status" active={sortKey === "status"} dir={sortDir} onSort={handleSort} />
+                  <SortHeader label="Age" sortKey="age" active={sortKey === "age"} dir={sortDir} onSort={handleSort} />
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -504,9 +777,37 @@ export function ResourcesView({
                 ) : null}
               </div>
             ) : null}
-            <pre className="overflow-x-auto rounded-lg bg-slate-50 p-3 text-xs leading-relaxed text-slate-800 dark:bg-slate-800/50 dark:text-slate-200">
-              {JSON.stringify(selected, null, 2)}
-            </pre>
+            <ConditionsTable obj={selected} />
+            <RelatedEvents events={relatedEvents} />
+            <section>
+              <div className="mb-2 flex items-center justify-between">
+                <div className="inline-flex overflow-hidden rounded-md ring-1 ring-inset ring-slate-300 dark:ring-slate-700">
+                  {(["yaml", "json"] as const).map((format) => (
+                    <button
+                      key={format}
+                      type="button"
+                      onClick={() => setDetailFormat(format)}
+                      aria-pressed={detailFormat === format}
+                      className={cx(
+                        "px-2.5 py-1 text-xs font-medium transition-colors",
+                        detailFormat === format
+                          ? "bg-blue-600 text-white"
+                          : "bg-white text-slate-600 hover:bg-slate-50 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700",
+                      )}
+                    >
+                      {format.toUpperCase()}
+                    </button>
+                  ))}
+                </div>
+                <Button variant="ghost" size="sm" onClick={copyManifest}>
+                  <Copy className="size-3.5" aria-hidden />
+                  Copy
+                </Button>
+              </div>
+              <pre className="overflow-x-auto rounded-lg bg-slate-50 p-3 text-xs leading-relaxed text-slate-800 dark:bg-slate-800/50 dark:text-slate-200">
+                {manifestText}
+              </pre>
+            </section>
           </div>
         ) : null}
       </SlideOver>

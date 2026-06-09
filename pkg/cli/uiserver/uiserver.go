@@ -27,6 +27,7 @@ func NewServer() *api.Server {
 	server := &api.Server{
 		Service:       service,
 		ReadOnly:      false,
+		Mode:          api.ModeLocal,
 		Distributions: clusterapi.CreatableDistributions(),
 		StaticFS:      webui.Assets(),
 		// Gate the create form on which providers this machine can actually reach (Docker running,

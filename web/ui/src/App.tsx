@@ -1,5 +1,16 @@
-import { Plus, RotateCw } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Activity,
+  KeyRound,
+  Layers,
+  LayoutDashboard,
+  Moon,
+  Plus,
+  RotateCw,
+  Server,
+  Settings,
+  Sun,
+} from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   ApiError,
   createCluster,
@@ -17,9 +28,13 @@ import {
   type User,
 } from "./api.ts";
 import { MetaContext } from "./lib/meta.ts";
+import { surfaceLabel } from "./lib/surface.ts";
 import { AppShell, type View } from "./components/AppShell.tsx";
 import { SettingsPage } from "./components/SettingsPage.tsx";
 import { ResourcesView } from "./components/ResourcesView.tsx";
+import { OverviewView } from "./components/OverviewView.tsx";
+import { EventsView } from "./components/EventsView.tsx";
+import { CommandPalette, type Command } from "./components/CommandPalette.tsx";
 import { SecretsView } from "./components/SecretsView.tsx";
 import { ClusterDetail } from "./components/ClusterDetail.tsx";
 import {
@@ -36,6 +51,7 @@ import { Button } from "./components/ui.tsx";
 import { useTheme } from "./hooks/useTheme.ts";
 import { useClusterStream } from "./hooks/useClusterStream.ts";
 import { useDeepLinks } from "./hooks/useDeepLinks.ts";
+import { useDesktopCommands, type DesktopCommand } from "./hooks/useDesktopCommands.ts";
 import type { DeepLinkTarget } from "./lib/deepLink.ts";
 import { useToast } from "./components/Toast.tsx";
 
@@ -88,7 +104,10 @@ export function App() {
   // providerStatus gates the create form's provider options. null = backend does not gate (operator).
   const [providerStatus, setProviderStatus] = useState<ProviderInfo[] | null>(null);
   const [settingsEnabled, setSettingsEnabled] = useState(false);
+  const [mode, setMode] = useState<Config["mode"]>(undefined);
   const [view, setView] = useState<View>("clusters");
+  // paletteOpen controls the ⌘K command palette overlay.
+  const [paletteOpen, setPaletteOpen] = useState(false);
 
   const [clusters, setClusters] = useState<Cluster[]>([]);
   const [loading, setLoading] = useState(true);
@@ -162,6 +181,7 @@ export function App() {
     setDistributions(config.distributions ?? DEFAULT_DISTRIBUTIONS);
     setProviderStatus(config.providers ?? null);
     setSettingsEnabled(config.settingsEnabled ?? false);
+    setMode(config.mode);
   }, []);
 
   // reloadConfig re-fetches deployment config after a change that can affect it (e.g. saving
@@ -190,6 +210,38 @@ export function App() {
     }
   }, []);
   useDeepLinks(navigateDeepLink);
+
+  // ⌘K / Ctrl+K toggles the command palette from anywhere in the app.
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setPaletteOpen((open) => !open);
+      }
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  // Native desktop menu commands (no-op in the browser). Mirrors the command palette's actions so the
+  // menu and ⌘K stay in sync. The setters, refresh, and toggle are all stable.
+  const handleDesktopCommand = useCallback(
+    (command: DesktopCommand) => {
+      if (command === "refresh") {
+        void refresh();
+      } else if (command === "toggle-theme") {
+        toggle();
+      } else if (command === "new-cluster" && !readOnly) {
+        setFormMode("create");
+        setFormInitial(null);
+        setFormOpen(true);
+      }
+    },
+    [refresh, toggle, readOnly],
+  );
+  useDesktopCommands(handleDesktopCommand);
 
   useEffect(() => {
     mounted.current = true;
@@ -367,6 +419,65 @@ export function App() {
       </>
     ) : null;
 
+  // navTo builds a "Go to <view>" palette command. Centralizes the shared label/run/hint shape.
+  const navTo = (target: View, label: string, icon: ReactNode): Command => ({
+    id: `nav-${target}`,
+    label: `Go to ${label}`,
+    hint: "Navigate",
+    icon,
+    run: () => setView(target),
+  });
+
+  // Command palette entries: navigation, common actions, and jump-to-cluster. Built each render
+  // (cheap) from the live clusters list and the capability gates, so it stays in sync with the nav.
+  const commands: Command[] = [
+    navTo("clusters", "Clusters", <Server className="size-4" aria-hidden />),
+    ...(canBrowse
+      ? [
+          navTo("overview", "Overview", <LayoutDashboard className="size-4" aria-hidden />),
+          navTo("resources", "Resources", <Layers className="size-4" aria-hidden />),
+          navTo("events", "Events", <Activity className="size-4" aria-hidden />),
+        ]
+      : []),
+    ...(canCipher ? [navTo("secrets", "Secrets", <KeyRound className="size-4" aria-hidden />)] : []),
+    ...(settingsEnabled ? [navTo("settings", "Settings", <Settings className="size-4" aria-hidden />)] : []),
+    {
+      id: "action-refresh",
+      label: "Refresh clusters",
+      hint: "Action",
+      icon: <RotateCw className="size-4" aria-hidden />,
+      run: () => {
+        setView("clusters");
+        void refresh();
+      },
+    },
+    ...(!readOnly
+      ? [{ id: "action-new", label: "New cluster", hint: "Action", icon: <Plus className="size-4" aria-hidden />, run: openCreate }]
+      : []),
+    {
+      id: "action-theme",
+      label: theme === "dark" ? "Switch to light theme" : "Switch to dark theme",
+      hint: "Action",
+      icon: theme === "dark" ? <Sun className="size-4" aria-hidden /> : <Moon className="size-4" aria-hidden />,
+      run: toggle,
+    },
+    ...clusters.map((cluster) => {
+      const key = clusterKey(cluster);
+
+      return {
+        id: `cluster-${key}`,
+        label: cluster.metadata.name,
+        hint: "Cluster",
+        icon: <Server className="size-4" aria-hidden />,
+        keywords: key,
+        run: () => {
+          setView("clusters");
+          setSelectedKey(key);
+        },
+      };
+    }),
+  ];
+
   return (
     <MetaContext.Provider value={meta}>
       <AppShell
@@ -380,12 +491,18 @@ export function App() {
         settingsEnabled={settingsEnabled}
         workloadEnabled={canBrowse}
         secretsEnabled={canCipher}
+        surfaceLabel={surfaceLabel(mode)}
+        onOpenCommandPalette={() => setPaletteOpen(true)}
         headerActions={headerActions}
       >
         {view === "settings" ? (
           <SettingsPage onSaved={() => void reloadConfig()} />
         ) : view === "secrets" ? (
           <SecretsView />
+        ) : view === "overview" ? (
+          <OverviewView clusters={clusters} />
+        ) : view === "events" ? (
+          <EventsView clusters={clusters} />
         ) : view === "resources" ? (
           <ResourcesView
             clusters={clusters}
@@ -474,6 +591,8 @@ export function App() {
           onConfirm={handleDelete}
           onClose={() => setDeleteTarget(null)}
         />
+
+        <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} commands={commands} />
       </AppShell>
     </MetaContext.Provider>
   );
