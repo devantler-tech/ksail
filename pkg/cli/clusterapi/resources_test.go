@@ -2,6 +2,7 @@ package clusterapi_test
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -330,6 +331,49 @@ users:
   - name: kind-prod
     user: {}
 `
+
+// errNoKubeContext stands in for a dynamic-client resolution failure (e.g. no matching kubeconfig
+// context) in the write-action error-propagation test.
+var errNoKubeContext = errors.New("no kubeconfig context")
+
+// TestWriteActionsSurfaceClientResolutionError confirms each write action propagates a failure to
+// build the dynamic client (e.g. no matching kubeconfig context) instead of swallowing it.
+func TestWriteActionsSurfaceClientResolutionError(t *testing.T) {
+	t.Parallel()
+
+	deploy := api.ResourceRef{Kind: kindDeployment, Namespace: "x", Name: nameWeb}
+	kust := api.ResourceRef{Kind: "Kustomization", Namespace: "x", Name: nameApps}
+
+	actions := map[string]func(*clusterapi.Service) error{
+		"scale": func(s *clusterapi.Service) error {
+			return s.ScaleResource(context.Background(), "default", "c1", deploy, 2)
+		},
+		"restart": func(s *clusterapi.Service) error {
+			return s.RestartResource(context.Background(), "default", "c1", deploy)
+		},
+		"delete": func(s *clusterapi.Service) error {
+			return s.DeleteResource(context.Background(), "default", "c1", deploy)
+		},
+		"reconcile": func(s *clusterapi.Service) error {
+			return s.ReconcileResource(context.Background(), "default", "c1", kust)
+		},
+	}
+
+	for name, action := range actions {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			service := newTestService(nil)
+			service.SetDynamicClientForTest(
+				func(_ context.Context, _ string) (dynamic.Interface, error) {
+					return nil, errNoKubeContext
+				},
+			)
+
+			require.ErrorIs(t, action(service), errNoKubeContext)
+		})
+	}
+}
 
 func TestContextForCluster(t *testing.T) {
 	t.Parallel()

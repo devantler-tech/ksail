@@ -322,20 +322,41 @@ func TestCRConnectedReconcileRejectsNonReconcilableKind(t *testing.T) {
 	require.ErrorIs(t, err, api.ErrInvalid)
 }
 
-// TestCRConnectedWriteResolverError confirms a failure to connect to the child cluster surfaces from a
-// write action (not just the read paths).
+// TestCRConnectedWriteResolverError confirms a failure to connect to the child cluster surfaces from
+// every write action (not just the read paths).
 func TestCRConnectedWriteResolverError(t *testing.T) {
 	t.Parallel()
+
+	deploy := api.ResourceRef{Kind: kindDeployment, Namespace: nsDefault, Name: deploymentName}
+	kust := api.ResourceRef{Kind: "Kustomization", Namespace: "flux-system", Name: "apps"}
+
+	actions := map[string]func(api.ResourceWriter) error{
+		"scale": func(w api.ResourceWriter) error {
+			return w.ScaleResource(context.Background(), defaultNS, sampleClusterID, deploy, 2)
+		},
+		"restart": func(w api.ResourceWriter) error {
+			return w.RestartResource(context.Background(), defaultNS, sampleClusterID, deploy)
+		},
+		"delete": func(w api.ResourceWriter) error {
+			return w.DeleteResource(context.Background(), defaultNS, sampleClusterID, deploy)
+		},
+		"reconcile": func(w api.ResourceWriter) error {
+			return w.ReconcileResource(context.Background(), defaultNS, sampleClusterID, kust)
+		},
+	}
 
 	resolver := func(context.Context, *v1alpha1.Cluster) (dynamic.Interface, error) {
 		return nil, errResolveBoom
 	}
-	service := api.NewCRClusterServiceWithResources(newClient(t, sampleCluster()), resolver)
-	writer, _ := service.(api.ResourceWriter)
 
-	err := writer.ScaleResource(
-		context.Background(), defaultNS, sampleClusterID,
-		api.ResourceRef{Kind: kindDeployment, Namespace: nsDefault, Name: deploymentName}, 2,
-	)
-	require.ErrorIs(t, err, errResolveBoom)
+	for name, action := range actions {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			service := api.NewCRClusterServiceWithResources(newClient(t, sampleCluster()), resolver)
+			writer, _ := service.(api.ResourceWriter)
+
+			require.ErrorIs(t, action(writer), errResolveBoom)
+		})
+	}
 }
