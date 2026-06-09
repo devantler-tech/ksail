@@ -405,6 +405,22 @@ func (p *Provisioner) CurrentAutoscalerSnapshotImageIDForTest(ctx context.Contex
 	return p.currentAutoscalerSnapshotImageID(ctx)
 }
 
+// AutoscalerTemplateDriftForTest exposes autoscalerTemplateDrift for unit testing.
+func AutoscalerTemplateDriftForTest(
+	existing *corev1.Secret,
+	pools []AutoscalerPoolConfig,
+) ([]clusterupdate.Change, error) {
+	return autoscalerTemplateDrift(existing, pools)
+}
+
+// DetectAutoscalerTemplateDriftForTest exposes detectAutoscalerTemplateDrift for
+// unit testing.
+func (p *Provisioner) DetectAutoscalerTemplateDriftForTest(
+	ctx context.Context,
+) ([]clusterupdate.Change, error) {
+	return p.detectAutoscalerTemplateDrift(ctx)
+}
+
 // ApplyInPlaceToAutoscalerNodesForTest exposes applyInPlaceToAutoscalerNodes for unit testing.
 func (p *Provisioner) ApplyInPlaceToAutoscalerNodesForTest(
 	ctx context.Context,

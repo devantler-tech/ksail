@@ -304,7 +304,34 @@ func (p *Provisioner) DiffConfig(
 
 	p.appendInPlaceMachineConfigDrift(ctx, name, result)
 
+	err := p.appendAutoscalerTemplateDrift(ctx, result)
+	if err != nil {
+		return result, err
+	}
+
 	return result, nil
+}
+
+// appendAutoscalerTemplateDrift detects drift between the rendered worker
+// bootstrap template and the cluster-autoscaler-config Secret, appending an
+// in-place change when it differs or is absent so a worker-only talos/ patch
+// change is not silently dropped from `cluster update` (#5194). Environmental
+// detection failures are non-fatal (see detectAutoscalerTemplateDrift); a
+// deterministic render failure (e.g. ErrAutoscalerUserDataTooLarge) is surfaced,
+// aborting the update loudly rather than shipping a broken template to future
+// autoscaler nodes.
+func (p *Provisioner) appendAutoscalerTemplateDrift(
+	ctx context.Context,
+	result *clusterupdate.UpdateResult,
+) error {
+	changes, err := p.detectAutoscalerTemplateDrift(ctx)
+	if err != nil {
+		return err
+	}
+
+	result.InPlaceChanges = append(result.InPlaceChanges, changes...)
+
+	return nil
 }
 
 // appendInPlaceMachineConfigDrift detects drift between the rendered Talos
