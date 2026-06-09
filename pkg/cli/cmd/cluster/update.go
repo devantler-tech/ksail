@@ -75,7 +75,10 @@ Use --output json to emit a machine-readable diff for CI/MCP consumption.`,
 	cfgManager := setupMutationCmdFlags(cmd)
 
 	cmd.Flags().Bool("force", false,
-		"Skip confirmation prompt and proceed with cluster recreation")
+		"Skip confirmation prompts and proceed with cluster recreation. Also makes node "+
+			"drains delete pods directly, bypassing PodDisruptionBudgets, so a rolling "+
+			"reboot/recreate completes even when a budget would block graceful eviction "+
+			"(may cause workload disruption or data loss)")
 	_ = cfgManager.Viper.BindPFlag("force", cmd.Flags().Lookup("force"))
 
 	cmd.Flags().BoolP("yes", "y", false,
@@ -304,7 +307,15 @@ func reconcileKubernetesVersion(
 	currentVersions *clusterupdate.VersionInfo,
 	force, dryRun bool,
 ) (bool, error) {
-	if pin := strings.TrimSpace(ctx.ClusterCfg.Spec.Cluster.KubernetesVersion); pin != "" {
+	// An explicit spec.cluster.kubernetesVersion wins; otherwise the upgrader may
+	// pin the Kubernetes version implicitly (VCluster bakes it into the embedded SDK
+	// image, so it cannot be reached by a discovery-driven recreation).
+	pin := strings.TrimSpace(ctx.ClusterCfg.Spec.Cluster.KubernetesVersion)
+	if pin == "" {
+		pin = strings.TrimSpace(upgrader.PinnedKubernetesVersion())
+	}
+
+	if pin != "" {
 		return executePinnedKubernetesUpgrade(
 			cmd, cfgManager, ctx, deps, upgrader, clusterName, pin,
 			currentVersions.KubernetesVersion, force, dryRun,
@@ -711,12 +722,17 @@ func normalizePinnedVersion(
 		)
 	}
 
-	if currentVersion == pinnedVersion {
+	// Already at the pin is a no-op. Compare parsed semver, not raw strings, so a
+	// v-prefix mismatch does not hide the no-op — e.g. a distribution whose pin is
+	// the unprefixed SDK version "0.34.1" against a current "0.34.1" (VCluster's
+	// ChartVersion()) must still resolve to "already at it" rather than triggering a
+	// phantom upgrade.
+	current, curErr := versionresolver.ParseVersion(currentVersion)
+	if currentVersion == pinnedVersion || (curErr == nil && pinned.Equal(current)) {
 		return pinnedVersion, pinnedVersionAlreadyAtIt, nil
 	}
 
 	// Guard against downgrades: skip if the cluster is already newer than the pin.
-	current, curErr := versionresolver.ParseVersion(currentVersion)
 	if curErr == nil && pinned.Less(current) {
 		return pinnedVersion, pinnedVersionNewer, nil
 	}

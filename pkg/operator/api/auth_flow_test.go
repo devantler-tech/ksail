@@ -20,8 +20,10 @@ import (
 )
 
 const (
-	flowSecret  = "0123456789abcdef0123456789abcdef"
-	testSubject = "alice"
+	flowSecret       = "0123456789abcdef0123456789abcdef"
+	testSubject      = "alice"
+	flowClientSecret = "client-secret"
+	flowRedirectURL  = "https://app.example/api/v1/auth/callback"
 )
 
 // mockIDP is a minimal OIDC provider (discovery + JWKS + token endpoints) for exercising the
@@ -35,6 +37,11 @@ type mockIDP struct {
 	email    string
 	name     string
 	nonce    string // embedded in the next issued id_token
+
+	// Optional knobs for exercising callback failure modes (zero values preserve the happy path).
+	tokenStatus int           // HTTP status for the token endpoint (0 == 200 OK)
+	omitIDToken bool          // when true the token response carries no id_token
+	idTokenTTL  time.Duration // id_token lifetime relative to now (0 == 1h)
 }
 
 func newMockIDP(t *testing.T) *mockIDP {
@@ -95,24 +102,39 @@ func (idp *mockIDP) routes(pub crypto.PublicKey) http.Handler {
 	})
 
 	mux.HandleFunc("/token", func(writer http.ResponseWriter, _ *http.Request) {
-		writeJSONRaw(writer, map[string]any{
+		if idp.tokenStatus != 0 {
+			writer.WriteHeader(idp.tokenStatus)
+
+			return
+		}
+
+		response := map[string]any{
 			"access_token": "access-token",
 			"token_type":   "Bearer",
 			"expires_in":   3600,
-			"id_token":     idp.signIDToken(),
-		})
+		}
+		if !idp.omitIDToken {
+			response["id_token"] = idp.signIDToken()
+		}
+
+		writeJSONRaw(writer, response)
 	})
 
 	return mux
 }
 
 func (idp *mockIDP) signIDToken() string {
+	ttl := idp.idTokenTTL
+	if ttl == 0 {
+		ttl = time.Hour
+	}
+
 	now := time.Now()
 	claims := map[string]any{
 		"iss":   idp.server.URL,
 		"sub":   idp.subject,
 		"aud":   idp.clientID,
-		"exp":   now.Add(time.Hour).Unix(),
+		"exp":   now.Add(ttl).Unix(),
 		"iat":   now.Unix(),
 		"nonce": idp.nonce,
 		"email": idp.email,
@@ -172,8 +194,8 @@ func TestOIDCLoginCallbackFlow(t *testing.T) {
 	auth, err := api.NewAuthenticator(context.Background(), api.OIDCConfig{
 		IssuerURL:     idp.server.URL,
 		ClientID:      idp.clientID,
-		ClientSecret:  "client-secret",
-		RedirectURL:   "https://app.example/api/v1/auth/callback",
+		ClientSecret:  flowClientSecret,
+		RedirectURL:   flowRedirectURL,
 		Scopes:        []string{"email", "profile"},
 		SessionSecret: secret,
 		SessionTTL:    time.Hour,

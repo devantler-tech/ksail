@@ -242,6 +242,13 @@ func (p *Provisioner) PinnedDistributionVersion() string {
 	return strings.TrimSpace(p.talosOpts.Version)
 }
 
+// PinnedKubernetesVersion returns "" because Talos follows the OCI-discovered
+// Kubernetes version (or spec.cluster.kubernetesVersion when set), not an
+// SDK-embedded pin.
+func (p *Provisioner) PinnedKubernetesVersion() string {
+	return ""
+}
+
 // VersionSuffix returns an empty string since Talos uses plain semver tags.
 func (p *Provisioner) VersionSuffix() string {
 	return ""

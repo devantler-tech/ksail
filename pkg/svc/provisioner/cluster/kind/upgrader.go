@@ -63,6 +63,13 @@ func (k *Provisioner) PinnedDistributionVersion() string {
 	return ""
 }
 
+// PinnedKubernetesVersion returns "" because Kind follows the OCI-discovered
+// Kubernetes version (or spec.cluster.kubernetesVersion when set); recreation can
+// legitimately reach the discovered node-image version.
+func (k *Provisioner) PinnedKubernetesVersion() string {
+	return ""
+}
+
 // VersionSuffix returns an empty string because Kind uses plain semver tags.
 func (k *Provisioner) VersionSuffix() string {
 	return ""

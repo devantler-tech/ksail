@@ -36,9 +36,14 @@ app.kubernetes.io/component: operator
 {{- end -}}
 {{- end -}}
 
-{{/* Operator container image. */}}
+{{/* Operator container image.
+     The release pipeline (cd.yaml) stamps appVersion to the bare release version
+     (e.g. "7.41.0"), but goreleaser publishes the image with the git tag, which
+     is "v"-prefixed (e.g. "v7.41.0"). So the default tag must be the "v"-prefixed
+     appVersion, or `image.tag: ""` resolves to a non-existent tag and the pod
+     ImagePullBackOffs. An explicit operator.image.tag is used verbatim. */}}
 {{- define "ksail-operator.operatorImage" -}}
-{{- $tag := .Values.operator.image.tag | default .Chart.AppVersion -}}
+{{- $tag := .Values.operator.image.tag | default (printf "v%s" (.Chart.AppVersion | trimPrefix "v")) -}}
 {{- printf "%s:%s" .Values.operator.image.repository $tag -}}
 {{- end -}}
 

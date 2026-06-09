@@ -26,6 +26,17 @@ cat >"$out" <<PLIST
   <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
   <key>LSMinimumSystemVersion</key><string>10.15</string>
   <key>NSHighResolutionCapable</key><true/>
+  <key>CFBundleURLTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleURLName</key><string>tech.devantler.ksail.desktop</string>
+      <key>CFBundleTypeRole</key><string>Viewer</string>
+      <key>CFBundleURLSchemes</key>
+      <array>
+        <string>ksail</string>
+      </array>
+    </dict>
+  </array>
 </dict>
 </plist>
 PLIST
