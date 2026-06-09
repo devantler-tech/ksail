@@ -280,8 +280,9 @@ func reconcileDistributionVersion(
 	force, dryRun bool,
 ) (bool, error) {
 	if pin := upgrader.PinnedDistributionVersion(); pin != "" {
-		return false, executePinnedDistributionUpgrade(
-			cmd, upgrader, clusterName, pin, currentVersions.DistributionVersion, dryRun,
+		return executePinnedDistributionUpgrade(
+			cmd, cfgManager, ctx, deps, upgrader, clusterName, pin,
+			currentVersions.DistributionVersion, force, dryRun,
 		)
 	}
 
@@ -576,34 +577,34 @@ func reportPinnedUpgradePreamble(
 
 // executePinnedDistributionUpgrade handles Talos distribution upgrades when a version pin is set.
 // It reconciles the distribution toward the pinned version, guarding against downgrades and
-// honoring dry-run via reportPinnedUpgradePreamble.
+// honoring dry-run via reportPinnedUpgradePreamble. The bool return reports whether the cluster
+// was recreated (Docker-provider Talos reaches a new version by recreation, not in-place upgrade).
 func executePinnedDistributionUpgrade(
 	cmd *cobra.Command,
+	cfgManager *ksailconfigmanager.ConfigManager,
+	ctx *localregistry.Context,
+	deps lifecycle.Deps,
 	upgrader clusterupdate.Upgrader,
 	clusterName string,
 	rawPinnedVersion string,
 	currentVersion string,
-	dryRun bool,
-) error {
+	force, dryRun bool,
+) (bool, error) {
 	pinnedVersion, proceed, err := reportPinnedUpgradePreamble(
 		cmd, "distribution", rawPinnedVersion, currentVersion, dryRun,
 	)
 	if err != nil || !proceed {
-		return err
+		return false, err
 	}
 
 	upgradeErr := upgrader.UpgradeDistribution(
 		cmd.Context(), clusterName, currentVersion, pinnedVersion,
 	)
 	if upgradeErr != nil {
-		if errors.Is(upgradeErr, clustererr.ErrUpgradeSkipped) {
-			notify.Infof(cmd.OutOrStdout(), "distribution upgrade skipped: %v", upgradeErr)
-
-			return nil
-		}
-
-		return fmt.Errorf("distribution upgrade to pinned version %s failed: %w",
-			pinnedVersion, upgradeErr)
+		return handlePinnedDistributionUpgradeError(
+			cmd, cfgManager, ctx, deps, upgrader,
+			clusterName, pinnedVersion, currentVersion, force, upgradeErr,
+		)
 	}
 
 	notify.WriteMessage(notify.Message{
@@ -612,7 +613,46 @@ func executePinnedDistributionUpgrade(
 		Writer:  cmd.OutOrStdout(),
 	})
 
-	return nil
+	return false, nil
+}
+
+// handlePinnedDistributionUpgradeError maps an UpgradeDistribution error to the
+// right outcome: a skipped upgrade is informational, a recreation-required result
+// recreates the cluster at the pinned version (Docker-provider Talos cannot
+// upgrade its OS in place — it is changed by recreation), and any other error is
+// surfaced. Mirrors handlePinnedKubernetesUpgradeError.
+func handlePinnedDistributionUpgradeError(
+	cmd *cobra.Command,
+	cfgManager *ksailconfigmanager.ConfigManager,
+	ctx *localregistry.Context,
+	deps lifecycle.Deps,
+	upgrader clusterupdate.Upgrader,
+	clusterName, pinnedVersion, currentVersion string,
+	force bool,
+	upgradeErr error,
+) (bool, error) {
+	if errors.Is(upgradeErr, clustererr.ErrUpgradeSkipped) {
+		notify.Infof(cmd.OutOrStdout(), "distribution upgrade skipped: %v", upgradeErr)
+
+		return false, nil
+	}
+
+	if errors.Is(upgradeErr, clustererr.ErrRecreationRequired) {
+		prepErr := upgrader.PrepareConfigForVersion("distribution", pinnedVersion)
+		if prepErr != nil {
+			return false, fmt.Errorf(
+				"failed to prepare config for distribution %s: %w", pinnedVersion, prepErr,
+			)
+		}
+
+		return true, handleRecreationUpgrade(
+			cmd, cfgManager, ctx, deps, clusterName,
+			"distribution", currentVersion, pinnedVersion, force,
+		)
+	}
+
+	return false, fmt.Errorf("distribution upgrade to pinned version %s failed: %w",
+		pinnedVersion, upgradeErr)
 }
 
 // executePinnedKubernetesUpgrade reconciles the Kubernetes version toward an
