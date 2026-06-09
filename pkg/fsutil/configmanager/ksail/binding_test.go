@@ -316,6 +316,11 @@ func TestGenerateFlagName(t *testing.T) {
 		{"Context field", &manager.Config.Spec.Cluster.Connection.Context, "context"},
 		{"Kubeconfig field", &manager.Config.Spec.Cluster.Connection.Kubeconfig, "kubeconfig"},
 		{"Timeout field", &manager.Config.Spec.Cluster.Connection.Timeout, "timeout"},
+		{
+			"DrainTimeout field",
+			&manager.Config.Spec.Cluster.Talos.DrainTimeout,
+			"drain-timeout",
+		},
 		{"CNI field", &manager.Config.Spec.Cluster.CNI, "cni"},
 		{"CSI field", &manager.Config.Spec.Cluster.CSI, "csi"},
 		{"CDI field", &manager.Config.Spec.Cluster.CDI, "cdi"},
