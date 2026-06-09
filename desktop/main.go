@@ -12,6 +12,7 @@
 package main
 
 import (
+	"context"
 	_ "embed"
 	"log"
 	"runtime"
@@ -22,6 +23,10 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/application"
 	//nolint:depguard // wails is the desktop app's UI runtime; the CLI module's allowlist does not apply here.
 	"github.com/wailsapp/wails/v3/pkg/events"
+	//nolint:depguard // wails services are the desktop app's UI runtime; the CLI allowlist does not apply here.
+	"github.com/wailsapp/wails/v3/pkg/services/dock"
+	//nolint:depguard // wails services are the desktop app's UI runtime; the CLI allowlist does not apply here.
+	"github.com/wailsapp/wails/v3/pkg/services/notifications"
 )
 
 const (
@@ -56,6 +61,12 @@ func main() {
 	// settings). Its Handler() is handed to the Wails AssetServer; we never bind a TCP listener.
 	server := uiserver.NewServer()
 
+	// Native notification + dock-badge services. Registered with the app (so their platform impls
+	// start) and retained here so the cluster-status watcher can drive them. SendNotification/SetBadge
+	// degrade gracefully where unsupported (e.g. an unsigned build, or a platform without a dock).
+	notifSvc := notifications.New()
+	dockSvc := dock.New()
+
 	// window is assigned just below; the single-instance callback closes over it so a relayed deep link
 	// can reach it. Declared first because the callback is part of the options passed to New().
 	var window *application.WebviewWindow
@@ -63,6 +74,10 @@ func main() {
 	app := application.New(application.Options{
 		Name:        windowTitle,
 		Description: "Native desktop app to manage local Kubernetes clusters",
+		Services: []application.Service{
+			application.NewService(notifSvc),
+			application.NewService(dockSvc),
+		},
 		// AssetServer in Handler-only mode: every webview request (the SPA at "/", /api/v1/*, and the
 		// /api/v1/events SSE stream) is served by our handler. The asset server wraps the response
 		// writer in a contentTypeSniffer that implements http.Flusher and, once a Content-Type is set,
@@ -82,16 +97,17 @@ func main() {
 		},
 	})
 
-	// The application menu is intentionally left unset: macOS applies DefaultApplicationMenu() (which
-	// includes the standard Edit menu — Cut/Copy/Paste/Select All — wired to the webview), replacing
-	// the hand-rolled Cocoa menu the previous webview_go shell required. Windows/WebView2 and
-	// Linux/WebKitGTK handle clipboard shortcuts natively.
-
 	window = app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Title:  windowTitle,
 		Width:  windowWidth,
 		Height: windowHeight,
 	})
+
+	// Build on DefaultApplicationMenu (which provides the standard App/Edit menus — Cut/Copy/Paste/
+	// Select All — wired to the webview) and add a "View" menu that navigates the SPA and runs common
+	// actions through the same event bridge ksail:// deep links use. Keeping the default base preserves
+	// macOS clipboard shortcuts; Windows/WebView2 and Linux/WebKitGTK handle clipboard natively.
+	installApplicationMenu(app, window)
 
 	// Restore the window to where it was last left (position + size) and keep persisting changes so it
 	// reopens there next time; falls back to these centered defaults on first launch. See
@@ -125,6 +141,14 @@ func main() {
 	trayMenu.AddSeparator()
 	trayMenu.Add("Quit KSail").OnClick(func(_ *application.Context) { app.Quit() })
 	tray.SetMenu(trayMenu)
+
+	// Watch local cluster status for the lifetime of the app: a native notification when a cluster
+	// reaches Ready/Failed, and an in-progress count on the dock badge. The context is cancelled when
+	// Run returns (app quit), stopping the poll loop.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go watchClusterStatus(ctx, server.Service, notifSvc, dockSvc)
 
 	err := app.Run()
 	if err != nil {
