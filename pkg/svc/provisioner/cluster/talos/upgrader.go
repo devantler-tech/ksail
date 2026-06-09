@@ -25,6 +25,8 @@ const (
 // UpgradeDistribution performs a rolling Talos OS upgrade from fromVersion to
 // toVersion using the LifecycleService API.
 // Omni-managed clusters are skipped since Omni handles upgrades externally.
+// Docker-provider (container-mode) clusters are skipped because Talos cannot
+// upgrade its OS in place inside a container — see the comment below.
 func (p *Provisioner) UpgradeDistribution(
 	ctx context.Context,
 	clusterName string,
@@ -34,6 +36,25 @@ func (p *Provisioner) UpgradeDistribution(
 		return fmt.Errorf(
 			"talos upgrades are managed externally by Omni: %w",
 			clustererr.ErrUpgradeSkipped,
+		)
+	}
+
+	// Container-mode (Docker provider) Talos nodes cannot perform an in-place OS
+	// upgrade. Talos masks out the Upgrade capability for container mode in its
+	// capability matrix, so BOTH the legacy MachineService.Upgrade and the newer
+	// LifecycleService.Upgrade (Talos >= 1.13) reject with
+	// "FailedPrecondition: method is not supported in container mode". The OS
+	// version of a Docker cluster is fixed by its node image at create time; the
+	// only way to change it is to recreate the cluster. Skip the upgrade with an
+	// actionable message instead of attempting an RPC that always fails. Hetzner
+	// and Omni clusters run on real machines and upgrade normally.
+	// (Routing mirrors Create/Delete/Exists: hetznerOpts==nil && omniOpts==nil =>
+	// Docker; omniOpts is already excluded above.)
+	if p.hetznerOpts == nil {
+		return fmt.Errorf(
+			"in-place Talos OS upgrade (%s → %s) is not supported for the Docker provider; "+
+				"recreate the cluster to change the Talos version: %w",
+			fromVersion, toVersion, clustererr.ErrUpgradeSkipped,
 		)
 	}
 
