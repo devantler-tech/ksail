@@ -3,10 +3,12 @@ package api
 import (
 	"context"
 	"fmt"
+	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
 )
 
@@ -235,4 +237,140 @@ func ResourceKindReconcilable(kind string) bool {
 	default:
 		return false
 	}
+}
+
+// requireNamespace returns an ErrInvalid-wrapped error (→ 422) when a namespaced kind is addressed
+// without a namespace, so single-resource write actions surface a clear message instead of an opaque
+// API-server 500 from an empty-namespace request.
+func requireNamespace(kind ResourceKind, ref ResourceRef) error {
+	if kind.Namespaced && ref.Namespace == "" {
+		return fmt.Errorf("%w: namespace is required for %q", ErrInvalid, ref.Kind)
+	}
+
+	return nil
+}
+
+// mergePatchWith resolves the allowlisted kind, requires a namespace for the target, and applies a
+// JSON merge patch via the dynamic client. verb labels the error ("scale", "restart", "reconcile").
+// Shared by the scale/restart/reconcile write actions so the resolve-and-patch boilerplate lives in
+// one place across the local and operator backends.
+func mergePatchWith(
+	ctx context.Context,
+	dyn dynamic.Interface,
+	verb string,
+	ref ResourceRef,
+	patch []byte,
+) error {
+	kind, err := ResourceKindFor(ref.Kind)
+	if err != nil {
+		return err
+	}
+
+	err = requireNamespace(kind, ref)
+	if err != nil {
+		return err
+	}
+
+	_, err = dyn.Resource(kind.GVR).Namespace(ref.Namespace).
+		Patch(ctx, ref.Name, types.MergePatchType, patch, metav1.PatchOptions{})
+	if err != nil {
+		return fmt.Errorf("%s %s %q: %w", verb, ref.Kind, ref.Name, err)
+	}
+
+	return nil
+}
+
+// ScaleResourceWith sets the replica count of a scalable workload via a merge patch on spec.replicas.
+// Shared by the local and operator ResourceWriter backends; the only per-backend difference is how the
+// dynamic client is obtained.
+func ScaleResourceWith(
+	ctx context.Context,
+	dyn dynamic.Interface,
+	ref ResourceRef,
+	replicas int32,
+) error {
+	if !ResourceKindScalable(ref.Kind) {
+		return fmt.Errorf("%w: %q is not scalable", ErrInvalid, ref.Kind)
+	}
+
+	if replicas < 0 {
+		return fmt.Errorf("%w: replicas must be >= 0", ErrInvalid)
+	}
+
+	patch := fmt.Appendf(nil, `{"spec":{"replicas":%d}}`, replicas)
+
+	return mergePatchWith(ctx, dyn, "scale", ref, patch)
+}
+
+// RestartResourceWith triggers a rolling restart by stamping the pod template's restartedAt annotation
+// — the same mechanism `kubectl rollout restart` uses. The stamp is nanosecond-resolution so two
+// restarts issued within the same second still change the value and reliably roll the workload.
+func RestartResourceWith(ctx context.Context, dyn dynamic.Interface, ref ResourceRef) error {
+	if !ResourceKindRestartable(ref.Kind) {
+		return fmt.Errorf("%w: %q does not support rollout restart", ErrInvalid, ref.Kind)
+	}
+
+	patch := fmt.Appendf(
+		nil,
+		`{"spec":{"template":{"metadata":{"annotations":{"kubectl.kubernetes.io/restartedAt":%q}}}}}`,
+		time.Now().Format(time.RFC3339Nano),
+	)
+
+	return mergePatchWith(ctx, dyn, "restart", ref, patch)
+}
+
+// ReconcileResourceWith triggers an immediate GitOps reconcile by stamping the engine-specific
+// annotation — the same mechanism `flux reconcile` / an ArgoCD refresh use. Flux watches
+// reconcile.fluxcd.io/requestedAt (nanosecond stamp so repeats differ); ArgoCD watches
+// argocd.argoproj.io/refresh.
+func ReconcileResourceWith(ctx context.Context, dyn dynamic.Interface, ref ResourceRef) error {
+	if !ResourceKindReconcilable(ref.Kind) {
+		return fmt.Errorf("%w: %q does not support reconcile", ErrInvalid, ref.Kind)
+	}
+
+	key, value := reconcileAnnotation(ref.Kind)
+	patch := fmt.Appendf(nil, `{"metadata":{"annotations":{%q:%q}}}`, key, value)
+
+	return mergePatchWith(ctx, dyn, "reconcile", ref, patch)
+}
+
+// reconcileAnnotation returns the metadata annotation (key, value) that triggers a reconcile for the
+// kind's GitOps engine.
+func reconcileAnnotation(kind string) (string, string) {
+	if kind == "Application" {
+		return "argocd.argoproj.io/refresh", "normal"
+	}
+
+	return "reconcile.fluxcd.io/requestedAt", time.Now().Format(time.RFC3339Nano)
+}
+
+// DeleteResourceWith deletes a namespaced allowlisted resource. Cluster-scoped kinds (Node, Namespace)
+// are intentionally NOT deletable from the workload browser — those are high-blast-radius operations
+// (a Namespace delete cascades to everything in it) better left to the CLI. Shared by both backends.
+func DeleteResourceWith(ctx context.Context, dyn dynamic.Interface, ref ResourceRef) error {
+	kind, err := ResourceKindFor(ref.Kind)
+	if err != nil {
+		return err
+	}
+
+	if !kind.Namespaced {
+		return fmt.Errorf(
+			"%w: cluster-scoped %q cannot be deleted from the workload browser",
+			ErrInvalid,
+			ref.Kind,
+		)
+	}
+
+	err = requireNamespace(kind, ref)
+	if err != nil {
+		return err
+	}
+
+	err = dyn.Resource(kind.GVR).Namespace(ref.Namespace).
+		Delete(ctx, ref.Name, metav1.DeleteOptions{})
+	if err != nil {
+		return fmt.Errorf("delete %s %q: %w", ref.Kind, ref.Name, err)
+	}
+
+	return nil
 }

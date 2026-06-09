@@ -28,8 +28,12 @@ type crConnectedClusterService struct {
 	newDynamicClient childDynamicClientFunc
 }
 
-// Ensure the connected operator backend exposes the read-only resource browser.
-var _ ResourceService = (*crConnectedClusterService)(nil)
+// Ensure the connected operator backend exposes the read-only resource browser and the safe write
+// actions (scale, rollout restart, delete, GitOps reconcile).
+var (
+	_ ResourceService = (*crConnectedClusterService)(nil)
+	_ ResourceWriter  = (*crConnectedClusterService)(nil)
+)
 
 // NewCRClusterServiceWithResources returns an operator ClusterService that can also browse resources in
 // each cluster's managed child cluster, using newDynamicClient to connect to it.
@@ -79,6 +83,68 @@ func (s *crConnectedClusterService) GetResource(
 	}
 
 	return GetResourceWith(ctx, dyn, kind, ref)
+}
+
+// ScaleResource sets the replica count of a scalable workload in the named cluster's managed child
+// cluster. The validation and merge-patch logic is shared with the local backend via
+// api.ScaleResourceWith; only the dynamic-client resolution (the vcluster connection) differs.
+func (s *crConnectedClusterService) ScaleResource(
+	ctx context.Context,
+	namespace, name string,
+	ref ResourceRef,
+	replicas int32,
+) error {
+	dyn, err := s.dynamicClientForCluster(ctx, namespace, name)
+	if err != nil {
+		return err
+	}
+
+	return ScaleResourceWith(ctx, dyn, ref, replicas)
+}
+
+// RestartResource triggers a rolling restart of a workload in the named cluster's managed child
+// cluster.
+func (s *crConnectedClusterService) RestartResource(
+	ctx context.Context,
+	namespace, name string,
+	ref ResourceRef,
+) error {
+	dyn, err := s.dynamicClientForCluster(ctx, namespace, name)
+	if err != nil {
+		return err
+	}
+
+	return RestartResourceWith(ctx, dyn, ref)
+}
+
+// ReconcileResource triggers an immediate GitOps reconcile of a Flux/ArgoCD resource in the named
+// cluster's managed child cluster.
+func (s *crConnectedClusterService) ReconcileResource(
+	ctx context.Context,
+	namespace, name string,
+	ref ResourceRef,
+) error {
+	dyn, err := s.dynamicClientForCluster(ctx, namespace, name)
+	if err != nil {
+		return err
+	}
+
+	return ReconcileResourceWith(ctx, dyn, ref)
+}
+
+// DeleteResource deletes a namespaced allowlisted resource from the named cluster's managed child
+// cluster.
+func (s *crConnectedClusterService) DeleteResource(
+	ctx context.Context,
+	namespace, name string,
+	ref ResourceRef,
+) error {
+	dyn, err := s.dynamicClientForCluster(ctx, namespace, name)
+	if err != nil {
+		return err
+	}
+
+	return DeleteResourceWith(ctx, dyn, ref)
 }
 
 // dynamicClientForCluster resolves the named Cluster CR and builds a dynamic client against its managed
