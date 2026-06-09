@@ -280,6 +280,12 @@ func (s *Server) registerCapabilityRoutes(mux *http.ServeMux) {
 		mux.HandleFunc("POST /api/v1/secrets/decrypt", s.handleSecretDecrypt)
 	}
 
+	// Pod log streaming (LogService) over SSE — a GET, read-only, so it is not gated by the read-only
+	// guard (logs don't mutate). Registered only when the backend implements LogService.
+	if _, ok := s.Service.(LogService); ok {
+		mux.HandleFunc("GET /api/v1/clusters/{namespace}/{name}/logs", s.handleLogs)
+	}
+
 	// Pod exec terminal (ExecService). A WebSocket upgrade (GET); the handler refuses it in read-only
 	// mode itself, since exec can run arbitrary commands and the method-based guard would let the GET
 	// through.
@@ -416,6 +422,7 @@ func (s *Server) handleConfig(writer http.ResponseWriter, request *http.Request)
 	_, capabilities.KubeconfigDownload = s.Service.(KubeconfigProvider)
 	_, capabilities.ApplyManifests = s.Service.(ApplyService)
 	_, capabilities.SecretsCipher = s.Service.(CipherService)
+	_, capabilities.WorkloadLogs = s.Service.(LogService)
 	_, capabilities.WorkloadExec = s.Service.(ExecService)
 
 	response := configResponse{

@@ -75,6 +75,8 @@ export function App() {
   const [canApply, setCanApply] = useState(fullCapabilities.applyManifests);
   // canCipher reflects the backend's secretsCipher capability (local SOPS).
   const [canCipher, setCanCipher] = useState(fullCapabilities.secretsCipher);
+  // canLogs reflects the backend's workloadLogs capability (the in-browser log viewer).
+  const [canLogs, setCanLogs] = useState(fullCapabilities.workloadLogs);
   // canExecCap reflects the backend's workloadExec capability (the in-browser terminal).
   const [canExecCap, setCanExecCap] = useState(fullCapabilities.workloadExec);
   const [user, setUser] = useState<User | null>(null);
@@ -153,6 +155,7 @@ export function App() {
     setCanKubeconfig(config.capabilities?.kubeconfigDownload ?? fullCapabilities.kubeconfigDownload);
     setCanApply(config.capabilities?.applyManifests ?? fullCapabilities.applyManifests);
     setCanCipher(config.capabilities?.secretsCipher ?? fullCapabilities.secretsCipher);
+    setCanLogs(config.capabilities?.workloadLogs ?? fullCapabilities.workloadLogs);
     setCanExecCap(config.capabilities?.workloadExec ?? fullCapabilities.workloadExec);
     setDistributions(config.distributions ?? DEFAULT_DISTRIBUTIONS);
     setProviderStatus(config.providers ?? null);
@@ -374,6 +377,7 @@ export function App() {
             clusters={clusters}
             canWrite={!readOnly && canManage}
             canApply={!readOnly && canApply}
+            canLogs={canLogs}
             canExec={!readOnly && canExecCap}
           />
         ) : (
