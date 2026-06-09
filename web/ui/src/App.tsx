@@ -12,6 +12,8 @@ import {
   updateCluster,
   type Cluster,
   type ClusterMeta,
+  type ClusterSpec,
+  type Config,
   type ProviderInfo,
   type User,
 } from "./api.ts";
@@ -141,6 +143,23 @@ export function App() {
     return true;
   }, []);
 
+  // applyConfig maps the deployment config onto UI state: read-only, the capability gates, and the
+  // create-form options. Shared by the initial load and reloadConfig so the (growing) capability list
+  // lives in one place. The state setters are stable, so this is safe to memoize with no deps.
+  const applyConfig = useCallback((config: Config) => {
+    setReadOnly(config.readOnly);
+    setCanUpdate(config.capabilities?.clusterUpdate ?? fullCapabilities.clusterUpdate);
+    setCanBrowse(config.capabilities?.workloadRead ?? fullCapabilities.workloadRead);
+    setCanManage(config.capabilities?.workloadWrite ?? fullCapabilities.workloadWrite);
+    setCanKubeconfig(config.capabilities?.kubeconfigDownload ?? fullCapabilities.kubeconfigDownload);
+    setCanApply(config.capabilities?.applyManifests ?? fullCapabilities.applyManifests);
+    setCanCipher(config.capabilities?.secretsCipher ?? fullCapabilities.secretsCipher);
+    setCanExecCap(config.capabilities?.workloadExec ?? fullCapabilities.workloadExec);
+    setDistributions(config.distributions ?? DEFAULT_DISTRIBUTIONS);
+    setProviderStatus(config.providers ?? null);
+    setSettingsEnabled(config.settingsEnabled ?? false);
+  }, []);
+
   // reloadConfig re-fetches deployment config after a change that can affect it (e.g. saving
   // credential settings flips provider availability), so the create form's gating stays current
   // without a full page reload.
@@ -150,21 +169,11 @@ export function App() {
       if (!mounted.current) {
         return;
       }
-      setReadOnly(config.readOnly);
-      setCanUpdate(config.capabilities?.clusterUpdate ?? fullCapabilities.clusterUpdate);
-      setCanBrowse(config.capabilities?.workloadRead ?? fullCapabilities.workloadRead);
-      setCanManage(config.capabilities?.workloadWrite ?? fullCapabilities.workloadWrite);
-      setCanKubeconfig(config.capabilities?.kubeconfigDownload ?? fullCapabilities.kubeconfigDownload);
-      setCanApply(config.capabilities?.applyManifests ?? fullCapabilities.applyManifests);
-      setCanCipher(config.capabilities?.secretsCipher ?? fullCapabilities.secretsCipher);
-      setCanExecCap(config.capabilities?.workloadExec ?? fullCapabilities.workloadExec);
-      setDistributions(config.distributions ?? DEFAULT_DISTRIBUTIONS);
-      setProviderStatus(config.providers ?? null);
-      setSettingsEnabled(config.settingsEnabled ?? false);
+      applyConfig(config);
     } catch {
       // Non-fatal: keep the current config if the refresh fails.
     }
-  }, []);
+  }, [applyConfig]);
 
   useEffect(() => {
     mounted.current = true;
@@ -185,18 +194,8 @@ export function App() {
         return;
       }
 
-      setReadOnly(config.readOnly);
-      setCanUpdate(config.capabilities?.clusterUpdate ?? fullCapabilities.clusterUpdate);
-      setCanBrowse(config.capabilities?.workloadRead ?? fullCapabilities.workloadRead);
-      setCanManage(config.capabilities?.workloadWrite ?? fullCapabilities.workloadWrite);
-      setCanKubeconfig(config.capabilities?.kubeconfigDownload ?? fullCapabilities.kubeconfigDownload);
-      setCanApply(config.capabilities?.applyManifests ?? fullCapabilities.applyManifests);
-      setCanCipher(config.capabilities?.secretsCipher ?? fullCapabilities.secretsCipher);
-      setCanExecCap(config.capabilities?.workloadExec ?? fullCapabilities.workloadExec);
+      applyConfig(config);
       setUser(config.user ?? null);
-      setDistributions(config.distributions ?? DEFAULT_DISTRIBUTIONS);
-      setProviderStatus(config.providers ?? null);
-      setSettingsEnabled(config.settingsEnabled ?? false);
 
       if (config.authEnabled && !config.user) {
         setNeedsLogin(true);

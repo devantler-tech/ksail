@@ -417,6 +417,38 @@ jobs:
           repository: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name || github.repository }}
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
+      - name: 🧹 Free disk space
+        # `go generate ./docs/...` re-links the full embedded-CLI import graph
+        # (kubectl, helm, kind, k3d, vcluster, flux, argocd, eksctl, …) into a
+        # large binary; on a stock ubuntu-latest runner the linker can exhaust
+        # disk ("no space left on device"). Reclaim space generation does not
+        # need before Go is set up. Mirrors the system-test job's step (no
+        # `docker system prune` here — this job never touches Docker). Each
+        # removal is best-effort: missing paths are not an error.
+        run: |
+          set -euo pipefail
+          before=$(df --output=avail -BG / | tail -1 | tr -dc '0-9')
+          sudo rm -rf \
+            /usr/local/lib/android \
+            /usr/share/dotnet \
+            /opt/ghc \
+            /usr/local/share/boost \
+            /usr/share/swift \
+            /opt/hostedtoolcache/CodeQL \
+            /opt/hostedtoolcache/PyPy \
+            /opt/hostedtoolcache/Ruby \
+            /opt/hostedtoolcache/Python \
+            /usr/local/share/chromium \
+            /usr/local/share/powershell \
+            /usr/local/julia* \
+            /usr/local/aws-cli \
+            /usr/local/aws-sam-cli \
+            /usr/share/gradle* \
+            /usr/share/az* \
+            /usr/share/miniconda || true
+          after=$(df --output=avail -BG / | tail -1 | tr -dc '0-9')
+          echo "Free disk space on /: ${before}G -> ${after}G (gained $((after - before))G)"
+
       - name: ⚙️ Setup Go
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
         with:

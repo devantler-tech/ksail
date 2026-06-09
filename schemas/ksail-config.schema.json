@@ -238,6 +238,38 @@
                           "max": {
                             "type": "integer",
                             "minimum": 0
+                          },
+                          "labels": {
+                            "additionalProperties": {
+                              "type": "string"
+                            },
+                            "type": "object",
+                            "description": "Kubernetes node labels applied to every node in this pool (via Talos machine.nodeLabels and the autoscaler scale-from-zero template)."
+                          },
+                          "taints": {
+                            "items": {
+                              "properties": {
+                                "key": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "value": {
+                                  "type": "string"
+                                },
+                                "effect": {
+                                  "type": "string",
+                                  "enum": [
+                                    "NoSchedule",
+                                    "PreferNoSchedule",
+                                    "NoExecute"
+                                  ]
+                                }
+                              },
+                              "additionalProperties": false,
+                              "type": "object"
+                            },
+                            "type": "array",
+                            "description": "Kubernetes node taints applied to every node in this pool (via Talos machine.nodeTaints and the autoscaler scale-from-zero template)."
                           }
                         },
                         "additionalProperties": false,
@@ -400,6 +432,10 @@
                     "Enabled",
                     "Disabled"
                   ]
+                },
+                "drainTimeout": {
+                  "type": "string",
+                  "pattern": "^[0-9]+(ns|us|µs|ms|s|m|h)$"
                 }
               },
               "additionalProperties": false,

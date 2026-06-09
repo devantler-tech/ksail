@@ -1,5 +1,7 @@
 package v1alpha1
 
+import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 // --- Distribution-specific Options Types ---
 
 // OptionsVanilla defines options specific to the Vanilla distribution (uses Kind with Docker provider).
@@ -78,6 +80,14 @@ type OptionsTalos struct {
 	// in the Talos patches directory with commented-out examples for keyless (Cosign/OIDC)
 	// and public key verification rules. Requires Talos 1.13+.
 	ImageVerification ImageVerification `json:"imageVerification,omitzero"`
+	// DrainTimeout is the per-node pod-eviction budget for rolling node drains during
+	// `cluster update` (rolling reboot and Hetzner server-type rolling-recreate). When
+	// unset, KSail uses 10m. Increase it for clusters whose stateful workloads need
+	// longer to evict gracefully — e.g. Longhorn volume rebuilds or database failovers
+	// gated by PodDisruptionBudgets. A drain that exceeds this budget aborts the update;
+	// re-run with --force to delete pods bypassing PodDisruptionBudgets instead.
+	// Override per invocation with --drain-timeout. Example: "15m".
+	DrainTimeout metav1.Duration `json:"drainTimeout,omitzero"`
 }
 
 // PortMapping defines a mapping between a container port and a host port.
@@ -195,6 +205,12 @@ type OptionsHetzner struct {
 	// the cluster-autoscaler-config Secret during bootstrap.
 	// Not user-facing in ksail.yaml — derived at runtime.
 	NodeAutoscalerEnabled bool `json:"-"`
+	// AutoscalerNodePools carries the full autoscaler node pool definitions
+	// (spec.cluster.autoscaler.node.pools) so the Talos provisioner can build
+	// per-pool cloud-init worker configs and the HCLOUD_CLUSTER_CONFIG that
+	// carries each pool's labels and taints. Not user-facing in ksail.yaml —
+	// derived at runtime by the cluster factory.
+	AutoscalerNodePools []NodePool `json:"-"`
 }
 
 // OptionsOmni defines options specific to the Sidero Omni provider.

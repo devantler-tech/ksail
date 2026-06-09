@@ -75,7 +75,10 @@ Use --output json to emit a machine-readable diff for CI/MCP consumption.`,
 	cfgManager := setupMutationCmdFlags(cmd)
 
 	cmd.Flags().Bool("force", false,
-		"Skip confirmation prompt and proceed with cluster recreation")
+		"Skip confirmation prompts and proceed with cluster recreation. Also makes node "+
+			"drains delete pods directly, bypassing PodDisruptionBudgets, so a rolling "+
+			"reboot/recreate completes even when a budget would block graceful eviction "+
+			"(may cause workload disruption or data loss)")
 	_ = cfgManager.Viper.BindPFlag("force", cmd.Flags().Lookup("force"))
 
 	cmd.Flags().BoolP("yes", "y", false,
@@ -532,8 +535,9 @@ func reportPinnedUpgradePreamble(
 
 	switch skipReason {
 	case pinnedVersionAlreadyAtIt:
-		notify.Infof(cmd.OutOrStdout(), "%s is already at pinned version %s", label, pinnedVersion)
-
+		// Already at the pin is a no-op for this dimension; stay silent so the run
+		// only reports diffs, applied changes, and skip/success/fail outcomes. The
+		// overall "No changes detected" line already covers this case.
 		return pinnedVersion, false, nil
 	case pinnedVersionNewer:
 		notify.Infof(cmd.OutOrStdout(),

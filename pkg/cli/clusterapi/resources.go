@@ -175,25 +175,9 @@ func (s *Service) ScaleResource(
 		return fmt.Errorf("%w: replicas must be >= 0", api.ErrInvalid)
 	}
 
-	kind, client, err := s.resolveKindAndClient(ctx, name, ref.Kind)
-	if err != nil {
-		return err
-	}
-
-	err = requireNamespace(kind, ref)
-	if err != nil {
-		return err
-	}
-
 	patch := fmt.Appendf(nil, `{"spec":{"replicas":%d}}`, replicas)
 
-	_, err = client.Resource(kind.GVR).Namespace(ref.Namespace).
-		Patch(ctx, ref.Name, types.MergePatchType, patch, metav1.PatchOptions{})
-	if err != nil {
-		return fmt.Errorf("scale %s %q: %w", ref.Kind, ref.Name, err)
-	}
-
-	return nil
+	return s.mergePatch(ctx, name, "scale", ref, patch)
 }
 
 // RestartResource triggers a rolling restart by stamping the pod template's restartedAt annotation —
@@ -204,6 +188,24 @@ func (s *Service) RestartResource(ctx context.Context, _, name string, ref api.R
 		return fmt.Errorf("%w: %q does not support rollout restart", api.ErrInvalid, ref.Kind)
 	}
 
+	patch := fmt.Appendf(
+		nil,
+		`{"spec":{"template":{"metadata":{"annotations":{"kubectl.kubernetes.io/restartedAt":%q}}}}}`,
+		time.Now().Format(time.RFC3339Nano),
+	)
+
+	return s.mergePatch(ctx, name, "restart", ref, patch)
+}
+
+// mergePatch resolves the kind + dynamic client for the named cluster, requires a namespace for the
+// target, and applies a JSON merge patch. verb labels the error ("scale", "restart"). Shared by the
+// scale/restart write actions so the resolve-and-patch boilerplate lives in one place.
+func (s *Service) mergePatch(
+	ctx context.Context,
+	name, verb string,
+	ref api.ResourceRef,
+	patch []byte,
+) error {
 	kind, client, err := s.resolveKindAndClient(ctx, name, ref.Kind)
 	if err != nil {
 		return err
@@ -214,16 +216,10 @@ func (s *Service) RestartResource(ctx context.Context, _, name string, ref api.R
 		return err
 	}
 
-	patch := fmt.Appendf(
-		nil,
-		`{"spec":{"template":{"metadata":{"annotations":{"kubectl.kubernetes.io/restartedAt":%q}}}}}`,
-		time.Now().Format(time.RFC3339Nano),
-	)
-
 	_, err = client.Resource(kind.GVR).Namespace(ref.Namespace).
 		Patch(ctx, ref.Name, types.MergePatchType, patch, metav1.PatchOptions{})
 	if err != nil {
-		return fmt.Errorf("restart %s %q: %w", ref.Kind, ref.Name, err)
+		return fmt.Errorf("%s %s %q: %w", verb, ref.Kind, ref.Name, err)
 	}
 
 	return nil
