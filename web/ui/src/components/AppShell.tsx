@@ -15,13 +15,17 @@ import {
   Sun,
 } from "lucide-react";
 import { Fragment, useState, type ReactNode } from "react";
+import type { Cluster, User } from "../api.ts";
 import type { Theme } from "../hooks/useTheme.ts";
-import type { User } from "../api.ts";
+import { ClusterSwitcher } from "./ClusterSwitcher.tsx";
 import { IconButton } from "./ui.tsx";
 
-// View is the top-level SPA section. Routing is view-state (no router dependency), matching the
-// existing single-page architecture.
+// View is the top-level SPA section. Cluster-scoped views (overview/resources/events) operate on the
+// active cluster; the rest are global. Routing is view-state (no router dependency).
 export type View = "clusters" | "overview" | "resources" | "events" | "secrets" | "settings";
+
+// CLUSTER_VIEWS are the views that require an active cluster (the drill-in workspace).
+export const CLUSTER_VIEWS: View[] = ["overview", "resources", "events"];
 
 const VIEW_TITLES: Record<View, string> = {
   clusters: "Clusters",
@@ -32,7 +36,6 @@ const VIEW_TITLES: Record<View, string> = {
   settings: "Settings",
 };
 
-// NavEntry describes one sidebar/drawer destination and whether the serving backend enables it.
 type NavEntry = { view: View; label: string; icon: ReactNode; enabled: boolean };
 
 function NavItem({
@@ -63,7 +66,14 @@ function NavItem({
   );
 }
 
-// Brand is the logo lockup shown at the top of the sidebar and the mobile drawer.
+function SectionLabel({ children }: { children: ReactNode }) {
+  return (
+    <div className="px-3 pb-1 pt-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+      {children}
+    </div>
+  );
+}
+
 function Brand() {
   return (
     <div className="flex h-14 items-center gap-2 border-b border-slate-200 px-5 dark:border-slate-800">
@@ -81,6 +91,9 @@ export function AppShell({
   readOnly,
   view,
   onNavigate,
+  clusters,
+  activeClusterKey,
+  onSelectCluster,
   settingsEnabled,
   workloadEnabled,
   secretsEnabled,
@@ -96,49 +109,62 @@ export function AppShell({
   readOnly: boolean;
   view: View;
   onNavigate: (view: View) => void;
+  clusters: Cluster[];
+  // activeClusterKey is the cluster the workspace is drilled into (null = none; cluster zone hidden).
+  activeClusterKey: string | null;
+  onSelectCluster: (key: string) => void;
   settingsEnabled: boolean;
   workloadEnabled: boolean;
   secretsEnabled: boolean;
-  // surfaceLabel names the running surface (e.g. "Operator", "Local", "Desktop") for the sidebar
-  // footer, so the same SPA brands itself correctly across the operator, `ksail ui`, and desktop.
   surfaceLabel: string;
-  // onOpenCommandPalette opens the ⌘K command palette; the header renders a trigger when provided.
   onOpenCommandPalette?: () => void;
   headerActions?: ReactNode;
   children: ReactNode;
 }) {
-  // drawerOpen controls the mobile nav drawer (the sidebar is hidden below the md breakpoint).
   const [drawerOpen, setDrawerOpen] = useState(false);
 
-  const navEntries: NavEntry[] = [
-    { view: "clusters", label: "Clusters", icon: <Server className="size-4" aria-hidden />, enabled: true },
-    {
-      view: "overview",
-      label: "Overview",
-      icon: <LayoutDashboard className="size-4" aria-hidden />,
-      enabled: workloadEnabled,
-    },
+  // Cluster-scoped nav (under the switcher): Overview is always available for an active cluster (its
+  // spec/status/conditions come from the cluster object); Resources/Events need the workload-read API.
+  const clusterNav: NavEntry[] = [
+    { view: "overview", label: "Overview", icon: <LayoutDashboard className="size-4" aria-hidden />, enabled: true },
     { view: "resources", label: "Resources", icon: <Layers className="size-4" aria-hidden />, enabled: workloadEnabled },
     { view: "events", label: "Events", icon: <Activity className="size-4" aria-hidden />, enabled: workloadEnabled },
+  ];
+
+  const globalNav: NavEntry[] = [
+    { view: "clusters", label: "Clusters", icon: <Server className="size-4" aria-hidden />, enabled: true },
     { view: "secrets", label: "Secrets", icon: <KeyRound className="size-4" aria-hidden />, enabled: secretsEnabled },
     { view: "settings", label: "Settings", icon: <Settings className="size-4" aria-hidden />, enabled: settingsEnabled },
   ];
 
-  // navList renders the gated destinations. onPick wraps onNavigate so the mobile drawer can also
-  // close itself on selection; the desktop sidebar passes onNavigate directly.
-  const navList = (onPick: (next: View) => void) => (
-    <nav className="flex-1 space-y-1 p-3">
-      {navEntries
-        .filter((entry) => entry.enabled)
-        .map((entry) => (
-          <NavItem
-            key={entry.view}
-            icon={entry.icon}
-            label={entry.label}
-            active={view === entry.view}
-            onClick={() => onPick(entry.view)}
-          />
-        ))}
+  const renderNav = (entries: NavEntry[], onPick: (next: View) => void) =>
+    entries
+      .filter((entry) => entry.enabled)
+      .map((entry) => (
+        <NavItem
+          key={entry.view}
+          icon={entry.icon}
+          label={entry.label}
+          active={view === entry.view}
+          onClick={() => onPick(entry.view)}
+        />
+      ));
+
+  // navContent renders the two zones — the cluster workspace (switcher + scoped nav, only when a
+  // cluster is active) above the always-present global zone. onPick lets the drawer close on navigate.
+  const navContent = (onPick: (next: View) => void) => (
+    <nav className="flex flex-1 flex-col gap-1 overflow-y-auto p-3">
+      {activeClusterKey ? (
+        <>
+          <div className="pb-1">
+            <ClusterSwitcher clusters={clusters} activeKey={activeClusterKey} onSelect={onSelectCluster} />
+          </div>
+          {renderNav(clusterNav, onPick)}
+          <div className="my-2 border-t border-slate-200 dark:border-slate-800" />
+          <SectionLabel>Manage</SectionLabel>
+        </>
+      ) : null}
+      {renderNav(globalNav, onPick)}
     </nav>
   );
 
@@ -149,9 +175,9 @@ export function AppShell({
   return (
     <div className="flex h-full">
       {/* Persistent sidebar at md+; replaced by the drawer below md. */}
-      <aside className="hidden w-60 shrink-0 flex-col border-r border-slate-200 bg-white md:flex dark:border-slate-800 dark:bg-slate-900">
+      <aside className="hidden w-64 shrink-0 flex-col border-r border-slate-200 bg-white md:flex dark:border-slate-800 dark:bg-slate-900">
         <Brand />
-        {navList(onNavigate)}
+        {navContent(onNavigate)}
         {footer}
       </aside>
 
@@ -179,9 +205,9 @@ export function AppShell({
               leaveFrom="translate-x-0"
               leaveTo="-translate-x-full"
             >
-              <DialogPanel className="flex w-64 max-w-[80%] flex-col border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+              <DialogPanel className="flex w-72 max-w-[85%] flex-col border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
                 <Brand />
-                {navList((next) => {
+                {navContent((next) => {
                   onNavigate(next);
                   setDrawerOpen(false);
                 })}

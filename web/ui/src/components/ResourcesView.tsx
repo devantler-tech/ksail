@@ -1,5 +1,5 @@
-import { ChevronDown, ChevronsUpDown, ChevronUp, Copy, FileCode, RotateCw, ScrollText, SquareTerminal } from "lucide-react";
-import { lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from "react";
+import { Copy, FileCode, RotateCw, ScrollText, SquareTerminal } from "lucide-react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import yaml from "js-yaml";
 import {
   ApiError,
@@ -20,7 +20,7 @@ import { cx } from "../lib/cx.ts";
 import { relativeAge } from "../lib/format.ts";
 import { clusterKey, eventFields, eventLastSeenMs, splitClusterKey, type EventFields } from "../lib/k8s.ts";
 import { ApplyManifestsDialog } from "./ApplyManifestsDialog.tsx";
-import { EventTypeBadge } from "./EventsView.tsx";
+import { EventList } from "./EventList.tsx";
 import { LogViewer } from "./LogViewer.tsx";
 import { ConfirmDialog } from "./ConfirmDialog.tsx";
 
@@ -29,12 +29,11 @@ import { ConfirmDialog } from "./ConfirmDialog.tsx";
 const ExecTerminal = lazy(() =>
   import("./ExecTerminal.tsx").then((module) => ({ default: module.ExecTerminal })),
 );
-import { EmptyState, ErrorBanner, TableSkeleton } from "./states.tsx";
+import { useResourceList } from "../hooks/useResourceList.ts";
+import { EmptyState } from "./states.tsx";
+import { DataStates, SortHeader, TableCard, td, useSort } from "./table.tsx";
 import { useToast } from "./Toast.tsx";
 import { Button, SelectField, SlideOver, TextField } from "./ui.tsx";
-
-const th = "px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400";
-const td = "px-4 py-3 align-middle";
 
 function errorMessage(err: unknown): string {
   if (err instanceof ApiError) {
@@ -51,7 +50,6 @@ function objectKey(obj: K8sObject, index: number): string {
 }
 
 type SortKey = "name" | "namespace" | "status" | "age";
-type SortDir = "asc" | "desc";
 
 // createdMs returns an object's creation time in epoch ms (0 when absent/invalid), for age sorting.
 function createdMs(obj: K8sObject): number {
@@ -59,41 +57,6 @@ function createdMs(obj: K8sObject): number {
   const ms = value ? new Date(value).getTime() : 0;
 
   return Number.isNaN(ms) ? 0 : ms;
-}
-
-// SortHeader renders a sortable column header (mirrors the ClustersTable idiom).
-function SortHeader({
-  label,
-  sortKey,
-  active,
-  dir,
-  onSort,
-  className,
-}: {
-  label: ReactNode;
-  sortKey: SortKey;
-  active: boolean;
-  dir: SortDir;
-  onSort: (key: SortKey) => void;
-  className?: string;
-}) {
-  const Indicator = active ? (dir === "asc" ? ChevronUp : ChevronDown) : ChevronsUpDown;
-
-  return (
-    <th className={cx(th, className)} aria-sort={active ? (dir === "asc" ? "ascending" : "descending") : "none"}>
-      <button
-        type="button"
-        onClick={() => onSort(sortKey)}
-        className="group inline-flex items-center gap-1 uppercase tracking-wide hover:text-slate-700 dark:hover:text-slate-200"
-      >
-        {label}
-        <Indicator
-          className={cx("size-3.5", active ? "text-slate-500 dark:text-slate-300" : "text-slate-300 dark:text-slate-600")}
-          aria-hidden
-        />
-      </button>
-    </th>
-  );
 }
 
 // currentReplicas reads spec.replicas from an unstructured object, defaulting to 0.
@@ -295,20 +258,7 @@ function RelatedEvents({ events }: { events: EventFields[] }) {
       <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
         Related events
       </h4>
-      <ul className="space-y-2">
-        {events.map((event, index) => (
-          <li key={`${event.reason}-${index}`} className="flex items-start gap-2 text-sm">
-            <EventTypeBadge type={event.type} />
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <span className="font-medium text-slate-700 dark:text-slate-200">{event.reason || "Event"}</span>
-                <span className="ml-auto shrink-0 text-xs tabular-nums text-slate-400">{relativeAge(event.lastSeen)}</span>
-              </div>
-              <p className="break-words text-xs text-slate-500 dark:text-slate-400">{event.message}</p>
-            </div>
-          </li>
-        ))}
-      </ul>
+      <EventList events={events} />
     </section>
   );
 }
@@ -317,13 +267,14 @@ function RelatedEvents({ events }: { events: EventFields[] }) {
 // by namespace (client-side), and inspect any object's raw manifest. Backed by the ResourceService
 // endpoints; shown only when the backend advertises capabilities.workloadRead.
 export function ResourcesView({
-  clusters,
+  cluster,
   canWrite,
   canApply,
   canLogs,
   canExec,
 }: {
-  clusters: Cluster[];
+  // cluster is the active cluster from the workspace context (the single fetch target; no selector).
+  cluster: Cluster | null;
   // canWrite gates the write actions (scale/restart/delete) — true only when the backend advertises
   // workloadWrite AND the UI is not read-only.
   canWrite: boolean;
@@ -336,20 +287,16 @@ export function ResourcesView({
   canExec: boolean;
 }) {
   const toast = useToast();
-  const [selectedClusterKey, setSelectedClusterKey] = useState(clusters[0] ? clusterKey(clusters[0]) : "");
+  // clusterId is the active cluster's "namespace/name" — the fetch target shared by every request.
+  const clusterId = cluster ? clusterKey(cluster) : "";
   const [kind, setKind] = useState<string>("Pod");
   const [namespaceFilter, setNamespaceFilter] = useState("");
   const [nameFilter, setNameFilter] = useState("");
-  const [sortKey, setSortKey] = useState<SortKey>("name");
-  const [sortDir, setSortDir] = useState<SortDir>("asc");
-  const [items, setItems] = useState<K8sObject[]>([]);
-  const [loading, setLoading] = useState(clusters.length > 0);
-  // hasFetched gates the empty state so the skeleton (not "No <kind>") shows until the first list
-  // resolves — including the window where clusters arrive over SSE after mount.
-  const [hasFetched, setHasFetched] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { sortKey, sortDir, toggleSort } = useSort<SortKey>("name");
+  // The list, its load/error state, and refresh() come from the shared hook (the Events view uses it
+  // too). hasFetched keeps the skeleton showing until the first list resolves.
+  const { items, loading, hasFetched, error, refresh } = useResourceList(clusterId, kind);
   const [selected, setSelected] = useState<K8sObject | null>(null);
-  const [nonce, setNonce] = useState(0);
   // Action state for the selected resource (scale/restart/delete).
   const [scaleValue, setScaleValue] = useState("0");
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -386,7 +333,7 @@ export function ResourcesView({
       return undefined;
     }
 
-    const [clusterNamespace, clusterName] = splitClusterKey(selectedClusterKey);
+    const [clusterNamespace, clusterName] = splitClusterKey(clusterId);
     let cancelled = false;
 
     listResources(clusterNamespace, clusterName, "Event", selected.metadata?.namespace)
@@ -410,16 +357,7 @@ export function ResourcesView({
     return () => {
       cancelled = true;
     };
-  }, [selected, kind, selectedClusterKey]);
-
-  function handleSort(key: SortKey) {
-    if (key === sortKey) {
-      setSortDir((current) => (current === "asc" ? "desc" : "asc"));
-    } else {
-      setSortKey(key);
-      setSortDir("asc");
-    }
-  }
+  }, [selected, kind, clusterId]);
 
   // runAction performs a write action on the selected resource, then toasts the outcome, closes the
   // detail panel, and refetches the list so it reflects the change.
@@ -432,63 +370,11 @@ export function ResourcesView({
         toast.success(`${verb} ${targetName}`);
         setSelected(null);
         setDeleteOpen(false);
-        setNonce((value) => value + 1);
+        refresh();
       })
       .catch((err: unknown) => toast.error(errorMessage(err)))
       .finally(() => setActionBusy(false));
   }
-
-  // Keep the selection in sync with the live list: snap to the first cluster when the selection is
-  // empty (no clusters at mount) or its cluster was removed (e.g. deleted while this view is open),
-  // so the dropdown's value and the cluster actually fetched never diverge.
-  useEffect(() => {
-    if (clusters.length === 0) {
-      return;
-    }
-
-    if (!clusters.some((candidate) => clusterKey(candidate) === selectedClusterKey)) {
-      setSelectedClusterKey(clusterKey(clusters[0]));
-    }
-  }, [clusters, selectedClusterKey]);
-
-  // Re-fetch when the selected cluster, kind, or an explicit refresh (nonce) changes. Deps are
-  // PRIMITIVES only (selectedClusterKey is "namespace/name") — not the cluster object — so live
-  // cluster-list status churn pushed over SSE does not trigger spurious resource refetches. The
-  // namespace filter is applied client-side (below), so editing it issues no request per keystroke.
-  useEffect(() => {
-    if (selectedClusterKey === "") {
-      return undefined;
-    }
-
-    const [clusterNamespace, clusterName] = splitClusterKey(selectedClusterKey);
-
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-
-    listResources(clusterNamespace, clusterName, kind)
-      .then((list) => {
-        if (!cancelled) {
-          setItems(list.items ?? []);
-        }
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) {
-          setError(errorMessage(err));
-          setItems([]);
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setLoading(false);
-          setHasFetched(true);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedClusterKey, kind, nonce]);
 
   // Apply the namespace + name filters (client-side) and sort by the active column with a stable
   // namespace/name tiebreak so equal values keep a deterministic order across refreshes.
@@ -535,27 +421,15 @@ export function ResourcesView({
       .catch(() => toast.error("Copy failed"));
   }
 
-  if (clusters.length === 0) {
-    return <EmptyState title="No clusters" description="Create or connect a cluster to browse its resources." />;
+  if (!cluster) {
+    return <EmptyState title="No cluster selected" description="Choose a cluster to browse its resources." />;
   }
 
-  const [selectedNamespace, selectedName] = splitClusterKey(selectedClusterKey);
+  const [selectedNamespace, selectedName] = splitClusterKey(clusterId);
 
   return (
     <div className="mx-auto max-w-6xl space-y-4">
       <div className="flex flex-wrap items-end gap-3">
-        <SelectField
-          label="Cluster"
-          value={selectedClusterKey}
-          onChange={(event) => setSelectedClusterKey(event.target.value)}
-          className="min-w-44"
-        >
-          {clusters.map((candidate) => (
-            <option key={clusterKey(candidate)} value={clusterKey(candidate)}>
-              {candidate.metadata.name}
-            </option>
-          ))}
-        </SelectField>
         <SelectField label="Kind" value={kind} onChange={(event) => setKind(event.target.value)} className="min-w-40">
           {RESOURCE_KINDS.map((name) => (
             <option key={name} value={name}>
@@ -577,11 +451,11 @@ export function ResourcesView({
           onChange={(event) => setNameFilter(event.target.value)}
           className="min-w-44"
         />
-        <Button variant="secondary" onClick={() => setNonce((value) => value + 1)} loading={loading}>
+        <Button variant="secondary" onClick={() => refresh()} loading={loading}>
           {loading ? null : <RotateCw className="size-4" aria-hidden />}
           Refresh
         </Button>
-        {canApply && selectedClusterKey !== "" ? (
+        {canApply && clusterId !== "" ? (
           <Button variant="secondary" onClick={() => setApplyOpen(true)}>
             <FileCode className="size-4" aria-hidden />
             Apply YAML
@@ -589,29 +463,28 @@ export function ResourcesView({
         ) : null}
       </div>
 
-      {error ? (
-        <ErrorBanner message={error} onRetry={() => setNonce((value) => value + 1)} />
-      ) : loading || !hasFetched ? (
-        <TableSkeleton />
-      ) : filtered.length === 0 ? (
-        <EmptyState title={`No ${kind} resources`} description="Nothing to show for this selection." />
-      ) : (
-        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-800">
-              <thead className="bg-slate-50 dark:bg-slate-800/50">
+      <DataStates
+        error={error}
+        loading={loading || !hasFetched}
+        empty={filtered.length === 0}
+        emptyTitle={`No ${kind} resources`}
+        emptyDescription="Nothing to show for this selection."
+        onRetry={refresh}
+      >
+        <TableCard>
+          <thead className="bg-slate-50 dark:bg-slate-800/50">
                 <tr>
-                  <SortHeader label="Name" sortKey="name" active={sortKey === "name"} dir={sortDir} onSort={handleSort} />
+                  <SortHeader label="Name" sortKey="name" activeKey={sortKey} dir={sortDir} onSort={toggleSort} />
                   <SortHeader
                     label="Namespace"
                     sortKey="namespace"
-                    active={sortKey === "namespace"}
+                    activeKey={sortKey}
                     dir={sortDir}
-                    onSort={handleSort}
+                    onSort={toggleSort}
                     className="hidden sm:table-cell"
                   />
-                  <SortHeader label="Status" sortKey="status" active={sortKey === "status"} dir={sortDir} onSort={handleSort} />
-                  <SortHeader label="Age" sortKey="age" active={sortKey === "age"} dir={sortDir} onSort={handleSort} />
+                  <SortHeader label="Status" sortKey="status" activeKey={sortKey} dir={sortDir} onSort={toggleSort} />
+                  <SortHeader label="Age" sortKey="age" activeKey={sortKey} dir={sortDir} onSort={toggleSort} />
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -644,10 +517,8 @@ export function ResourcesView({
                   </tr>
                 ))}
               </tbody>
-            </table>
-          </div>
-        </div>
-      )}
+        </TableCard>
+      </DataStates>
 
       <SlideOver
         open={selected !== null}
@@ -670,7 +541,7 @@ export function ResourcesView({
 
                         return;
                       }
-                      const [namespace, clusterName] = splitClusterKey(selectedClusterKey);
+                      const [namespace, clusterName] = splitClusterKey(clusterId);
                       runAction("Scaled", () =>
                         scaleResource(
                           {
@@ -704,7 +575,7 @@ export function ResourcesView({
                     variant="secondary"
                     loading={actionBusy}
                     onClick={() => {
-                      const [namespace, clusterName] = splitClusterKey(selectedClusterKey);
+                      const [namespace, clusterName] = splitClusterKey(clusterId);
                       runAction("Restarted", () =>
                         restartResource({
                           namespace,
@@ -725,7 +596,7 @@ export function ResourcesView({
                     variant="secondary"
                     loading={actionBusy}
                     onClick={() => {
-                      const [namespace, clusterName] = splitClusterKey(selectedClusterKey);
+                      const [namespace, clusterName] = splitClusterKey(clusterId);
                       runAction("Reconciling", () =>
                         reconcileResource({
                           namespace,
@@ -829,7 +700,7 @@ export function ResourcesView({
         }
         confirmLabel="Delete"
         onConfirm={async () => {
-          const [namespace, clusterName] = splitClusterKey(selectedClusterKey);
+          const [namespace, clusterName] = splitClusterKey(clusterId);
           const targetName = selected?.metadata?.name ?? "";
           try {
             await deleteResource({
@@ -841,7 +712,7 @@ export function ResourcesView({
             });
             toast.success(`Deleted ${targetName}`);
             setSelected(null);
-            setNonce((value) => value + 1);
+            refresh();
           } catch (err) {
             toast.error(errorMessage(err));
             throw err;
@@ -855,7 +726,7 @@ export function ResourcesView({
         onClose={() => setApplyOpen(false)}
         clusterNamespace={selectedNamespace}
         clusterName={selectedName}
-        onApplied={() => setNonce((value) => value + 1)}
+        onApplied={() => refresh()}
       />
 
       <SlideOver

@@ -29,14 +29,14 @@ import {
 } from "./api.ts";
 import { MetaContext } from "./lib/meta.ts";
 import { surfaceLabel } from "./lib/surface.ts";
-import { AppShell, type View } from "./components/AppShell.tsx";
+import { clusterKey } from "./lib/k8s.ts";
+import { AppShell, CLUSTER_VIEWS, type View } from "./components/AppShell.tsx";
 import { SettingsPage } from "./components/SettingsPage.tsx";
 import { ResourcesView } from "./components/ResourcesView.tsx";
 import { OverviewView } from "./components/OverviewView.tsx";
 import { EventsView } from "./components/EventsView.tsx";
 import { CommandPalette, type Command } from "./components/CommandPalette.tsx";
 import { SecretsView } from "./components/SecretsView.tsx";
-import { ClusterDetail } from "./components/ClusterDetail.tsx";
 import {
   ClusterFormDialog,
   specFromValues,
@@ -60,10 +60,6 @@ import { useToast } from "./components/Toast.tsx";
 // in-cluster); the local `ksail ui` backend advertises everything it can create locally. The
 // provider matrix and component options for whatever is selected still come from /api/v1/meta.
 const DEFAULT_DISTRIBUTIONS = ["VCluster"];
-
-function clusterKey(cluster: Cluster): string {
-  return `${cluster.metadata.namespace ?? "default"}/${cluster.metadata.name}`;
-}
 
 function errorMessage(err: unknown): string {
   if (err instanceof ApiError) {
@@ -114,7 +110,9 @@ export function App() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  // activeClusterKey is the cluster the workspace is drilled into (the single source of "which
+  // cluster" — there is no per-view selector). null = not in a cluster (the Clusters list is shown).
+  const [activeClusterKey, setActiveClusterKey] = useState<string | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [formMode, setFormMode] = useState<FormMode>("create");
   const [formInitial, setFormInitial] = useState<Cluster | null>(null);
@@ -125,10 +123,39 @@ export function App() {
 
   const mounted = useRef(true);
 
-  const selected = useMemo(
-    () => clusters.find((cluster) => clusterKey(cluster) === selectedKey) ?? null,
-    [clusters, selectedKey],
+  const activeCluster = useMemo(
+    () => clusters.find((cluster) => clusterKey(cluster) === activeClusterKey) ?? null,
+    [clusters, activeClusterKey],
   );
+
+  // enterCluster drills into a cluster's workspace, landing on its Overview. Used by the Clusters list,
+  // deep links, and the command palette.
+  const enterCluster = useCallback((key: string) => {
+    setActiveClusterKey(key);
+    setView("overview");
+  }, []);
+
+  // selectCluster switches the active cluster from the sidebar switcher, keeping the current
+  // cluster-scoped view (so switching while on Resources stays on Resources); otherwise lands on
+  // Overview.
+  const selectCluster = useCallback((key: string) => {
+    setActiveClusterKey(key);
+    setView((current) => (CLUSTER_VIEWS.includes(current) ? current : "overview"));
+  }, []);
+
+  // Clear the cluster context when the active cluster disappears from the live list (e.g. deleted),
+  // and bounce cluster-scoped views back to the Clusters list when no cluster is active.
+  useEffect(() => {
+    if (activeClusterKey && !clusters.some((cluster) => clusterKey(cluster) === activeClusterKey)) {
+      setActiveClusterKey(null);
+    }
+  }, [clusters, activeClusterKey]);
+
+  useEffect(() => {
+    if (!activeClusterKey && CLUSTER_VIEWS.includes(view)) {
+      setView("clusters");
+    }
+  }, [activeClusterKey, view]);
 
   // refresh returns false when the session was lost (HTTP 401), so callers (e.g. init) can avoid
   // starting/continuing the poll while the login screen is shown.
@@ -199,16 +226,21 @@ export function App() {
     }
   }, [applyConfig]);
 
-  // Navigate in response to a ksail:// deep link from the desktop shell (no-op in the browser). Stable
-  // setters → empty deps.
-  const navigateDeepLink = useCallback((target: DeepLinkTarget) => {
-    if (target.view) {
-      setView(target.view);
-    }
-    if (target.clusterKey) {
-      setSelectedKey(target.clusterKey);
-    }
-  }, []);
+  // Navigate in response to a ksail:// deep link from the desktop shell (no-op in the browser). A
+  // cluster target drills into that cluster (active + Overview); otherwise it switches the view.
+  const navigateDeepLink = useCallback(
+    (target: DeepLinkTarget) => {
+      if (target.clusterKey) {
+        enterCluster(target.clusterKey);
+
+        return;
+      }
+      if (target.view) {
+        setView(target.view);
+      }
+    },
+    [enterCluster],
+  );
   useDeepLinks(navigateDeepLink);
 
   // ⌘K / Ctrl+K toggles the command palette from anywhere in the app.
@@ -430,11 +462,13 @@ export function App() {
 
   // Command palette entries: navigation, common actions, and jump-to-cluster. Built each render
   // (cheap) from the live clusters list and the capability gates, so it stays in sync with the nav.
+  // The cluster-scoped views require an active cluster (same gate as the sidebar); choosing a cluster
+  // entry drills in.
   const commands: Command[] = [
     navTo("clusters", "Clusters", <Server className="size-4" aria-hidden />),
-    ...(canBrowse
+    ...(activeClusterKey ? [navTo("overview", "Overview", <LayoutDashboard className="size-4" aria-hidden />)] : []),
+    ...(activeClusterKey && canBrowse
       ? [
-          navTo("overview", "Overview", <LayoutDashboard className="size-4" aria-hidden />),
           navTo("resources", "Resources", <Layers className="size-4" aria-hidden />),
           navTo("events", "Events", <Activity className="size-4" aria-hidden />),
         ]
@@ -467,13 +501,10 @@ export function App() {
       return {
         id: `cluster-${key}`,
         label: cluster.metadata.name,
-        hint: "Cluster",
+        hint: "Open cluster",
         icon: <Server className="size-4" aria-hidden />,
         keywords: key,
-        run: () => {
-          setView("clusters");
-          setSelectedKey(key);
-        },
+        run: () => enterCluster(key),
       };
     }),
   ];
@@ -488,6 +519,9 @@ export function App() {
         readOnly={readOnly}
         view={view}
         onNavigate={setView}
+        clusters={clusters}
+        activeClusterKey={activeClusterKey}
+        onSelectCluster={selectCluster}
         settingsEnabled={settingsEnabled}
         workloadEnabled={canBrowse}
         secretsEnabled={canCipher}
@@ -500,12 +534,20 @@ export function App() {
         ) : view === "secrets" ? (
           <SecretsView />
         ) : view === "overview" ? (
-          <OverviewView clusters={clusters} />
+          <OverviewView
+            cluster={activeCluster}
+            canBrowse={canBrowse}
+            canEdit={canEdit}
+            canDelete={!readOnly}
+            canDownloadKubeconfig={canKubeconfig}
+            onEdit={openEdit}
+            onDelete={(cluster) => setDeleteTarget(cluster)}
+          />
         ) : view === "events" ? (
-          <EventsView clusters={clusters} />
+          <EventsView cluster={activeCluster} />
         ) : view === "resources" ? (
           <ResourcesView
-            clusters={clusters}
+            cluster={activeCluster}
             canWrite={!readOnly && canManage}
             canApply={!readOnly && canApply}
             canLogs={canLogs}
@@ -541,24 +583,13 @@ export function App() {
                 clusters={clusters}
                 readOnly={readOnly}
                 canEdit={canEdit}
-                onSelect={(cluster) => setSelectedKey(clusterKey(cluster))}
+                onSelect={(cluster) => enterCluster(clusterKey(cluster))}
                 onEdit={openEdit}
                 onDelete={(cluster) => setDeleteTarget(cluster)}
               />
             )}
           </div>
         )}
-
-        {meta ? (
-          <ClusterDetail
-            cluster={selected}
-            open={selected !== null}
-            canEdit={canEdit}
-            canDownloadKubeconfig={canKubeconfig}
-            onClose={() => setSelectedKey(null)}
-            onEdit={openEdit}
-          />
-        ) : null}
 
         {meta ? (
           <ClusterFormDialog
