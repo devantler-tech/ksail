@@ -365,7 +365,7 @@ func TestBuildDesiredNodeConfig_PreservesNodeHostname(t *testing.T) {
 	assert.Zero(t, countHostnameConfigDocs(t, desiredBytes),
 		"the conflicting HostnameConfig document must be stripped after grafting")
 
-	_, err = desired.Validate(nodeRuntimeMode{})
+	_, err = desired.ValidateAsClient(nodeRuntimeMode{})
 	require.NoError(t, err,
 		"grafted config must pass node-side validation (no static-vs-HostnameConfig conflict)")
 
@@ -434,7 +434,7 @@ func TestBuildDesiredNodeConfig_PreservesNodeHostname_Worker(t *testing.T) {
 		"the conflicting HostnameConfig document must be stripped after grafting the worker hostname",
 	)
 
-	_, err = desired.Validate(nodeRuntimeMode{})
+	_, err = desired.ValidateAsClient(nodeRuntimeMode{})
 	require.NoError(
 		t,
 		err,

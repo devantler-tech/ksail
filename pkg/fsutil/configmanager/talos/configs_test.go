@@ -202,14 +202,14 @@ func TestConfigs_HostDNS_Enabled(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, configs)
 
-	cp := configs.ControlPlane()
-	require.NotNil(t, cp)
+	controlPlane := configs.ControlPlane()
+	require.NotNil(t, controlPlane)
 
 	// Talos v1.14 moved host DNS out of machine.features into a dedicated
 	// network resolver document; the provider exposes it via the unified
 	// NetworkHostDNSConfig accessor (which falls back to the v1alpha1 features
 	// config), so KSail's generated config keeps host DNS enabled.
-	hostDNS := cp.NetworkHostDNSConfig()
+	hostDNS := controlPlane.NetworkHostDNSConfig()
 	require.NotNil(t, hostDNS, "HostDNS config should not be nil")
 
 	// These are required for container mode to work properly

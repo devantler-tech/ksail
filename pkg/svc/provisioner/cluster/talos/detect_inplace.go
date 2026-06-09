@@ -142,28 +142,9 @@ func (p *Provisioner) buildDesiredNodeConfig(
 	secretsSource talosconfig.Provider,
 	role string,
 ) (talosconfig.Provider, error) {
-	// The cluster PKI used to realign the regenerated config must come from a
-	// control-plane node: worker configs carry only certificates (no CA private
-	// keys, no etcd/aggregator/service-account material), so seeding the rebuild
-	// from a worker config fails inside Talos with an opaque "failed to parse PEM
-	// block" (#4963). Fall back to running only when no explicit source is given —
-	// valid when running is itself a control-plane config (e.g. drift detection).
-	if secretsSource == nil {
-		secretsSource = running
-	}
-
-	if !hasControlPlanePKI(secretsSource) {
-		return nil, errMissingControlPlanePKI
-	}
-
-	bundle, err := secrets.NewBundleFromConfig(secrets.NewFixedClock(time.Now()), secretsSource)
+	aligned, err := p.alignSecretsFromSource(running, secretsSource)
 	if err != nil {
-		return nil, fmt.Errorf("derive secrets bundle for config comparison: %w", err)
-	}
-
-	aligned, err := p.talosConfigs.WithSecrets(bundle)
-	if err != nil {
-		return nil, fmt.Errorf("align secrets for config comparison: %w", err)
+		return nil, err
 	}
 
 	endpointIP := running.Cluster().Endpoint().Hostname()
@@ -194,6 +175,37 @@ func (p *Provisioner) buildDesiredNodeConfig(
 	}
 
 	return graftNodeHostname(grafted, running)
+}
+
+// alignSecretsFromSource regenerates the desired config bundle realigned with the
+// running cluster's PKI. That PKI must come from a control-plane node: worker
+// configs carry only certificates (no CA private keys, no etcd/aggregator/
+// service-account material), so seeding the rebuild from a worker config fails
+// inside Talos with an opaque "failed to parse PEM block" (#4963). secretsSource
+// falls back to running only when no explicit source is given — valid when running
+// is itself a control-plane config (e.g. drift detection).
+func (p *Provisioner) alignSecretsFromSource(
+	running, secretsSource talosconfig.Provider,
+) (*talosconfigmanager.Configs, error) {
+	if secretsSource == nil {
+		secretsSource = running
+	}
+
+	if !hasControlPlanePKI(secretsSource) {
+		return nil, errMissingControlPlanePKI
+	}
+
+	bundle, err := secrets.NewBundleFromConfig(secrets.NewFixedClock(time.Now()), secretsSource)
+	if err != nil {
+		return nil, fmt.Errorf("derive secrets bundle for config comparison: %w", err)
+	}
+
+	aligned, err := p.talosConfigs.WithSecrets(bundle)
+	if err != nil {
+		return nil, fmt.Errorf("align secrets for config comparison: %w", err)
+	}
+
+	return aligned, nil
 }
 
 // graftNodeHostname preserves the per-node static hostname
