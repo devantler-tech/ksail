@@ -395,6 +395,16 @@ spec:
                           future minor release.
                         format: int32
                         type: integer
+                      drainTimeout:
+                        description: |-
+                          DrainTimeout is the per-node pod-eviction budget for rolling node drains during
+                          `cluster update` (rolling reboot and Hetzner server-type rolling-recreate). When
+                          unset, KSail uses 10m. Increase it for clusters whose stateful workloads need
+                          longer to evict gracefully — e.g. Longhorn volume rebuilds or database failovers
+                          gated by PodDisruptionBudgets. A drain that exceeds this budget aborts the update;
+                          re-run with --force to delete pods bypassing PodDisruptionBudgets instead.
+                          Override per invocation with --drain-timeout. Example: "15m".
+                        type: string
                       extensions:
                         description: |-
                           Extensions lists Talos Image Factory official system extension names to include in the

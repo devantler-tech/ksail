@@ -55,7 +55,8 @@ var errMissingControlPlanePKI = errors.New(
 
 // detectInPlaceMachineConfigDrift reports whether the desired Talos machine
 // config (base config + current patch files) differs from what is running on the
-// control-plane node, returning a single in-place change when it does.
+// cluster, returning one in-place change per role (control-plane, worker) that
+// has drifted.
 //
 // Talos patch files (everything under talos/, e.g. sysctls, kubelet config,
 // user namespaces, registries, API-server flags) are NOT part of ksail's
@@ -64,6 +65,15 @@ var errMissingControlPlanePKI = errors.New(
 // catches any patch change generally — additions, edits, AND removals (a key
 // dropped from a patch file is simply absent from the regenerated config).
 //
+// Both a control-plane and a worker node are inspected so that role-scoped
+// patches are detected on the role they actually target: worker-scoped patches
+// (talos/workers/) never reach the control-plane config, so a control-plane-only
+// check would silently miss them — and the apply path, which is already
+// role-correct, would never run because nothing was detected. The control-plane
+// node covers cluster-wide (talos/cluster/) and control-plane-scoped
+// (talos/control-planes/) patches; the worker node covers cluster-wide and
+// worker-scoped patches.
+//
 // The desired config is realigned with the running cluster's PKI and endpoint,
 // and the node-managed sections that ksail injects post-generation at create
 // (registry-mirror endpoints, cert SANs — see buildDesiredNodeConfig) are grafted
@@ -71,13 +81,10 @@ var errMissingControlPlanePKI = errors.New(
 // configdiff.DiffConfigs — the canonical, comments-stripped diff that
 // `talosctl apply-config --dry-run` uses — with secrets redacted on both sides.
 //
-// applyInPlaceConfigChanges applies the very same desired config, so detection
-// and apply are consistent (including removals).
+// applyInPlaceConfigChanges applies the very same desired config to every node,
+// so detection and apply are consistent (including removals).
 //
 // Caveats:
-//   - Only a control-plane node is inspected (matching detectDisruptiveConfigChanges);
-//     cluster-wide patches under talos/cluster/ apply to every node. Worker-only
-//     patch drift is a future enhancement.
 //   - Omni-managed clusters are skipped (Omni owns node configuration).
 func (p *Provisioner) detectInPlaceMachineConfigDrift(
 	ctx context.Context,
@@ -87,7 +94,18 @@ func (p *Provisioner) detectInPlaceMachineConfigDrift(
 		return nil, nil
 	}
 
-	running, found, err := p.fetchRunningControlPlaneConfig(ctx, clusterName)
+	// List the cluster's nodes once; both the control-plane and worker drift checks
+	// resolve their representative node from this single listing.
+	nodes, err := p.getNodesByRole(ctx, clusterName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to discover nodes for config comparison: %w", err)
+	}
+
+	// The cluster PKI (CA private key) needed to realign any regenerated config
+	// lives only on control-plane nodes; resolve one control-plane config up front
+	// and reuse it as the secrets source for both drift checks (worker configs
+	// carry no CA private key — see #4963).
+	cpRunning, found, err := p.fetchNodeConfigForRole(ctx, nodes, RoleControlPlane)
 	if err != nil {
 		return nil, err
 	}
@@ -97,7 +115,66 @@ func (p *Provisioner) detectInPlaceMachineConfigDrift(
 		return nil, nil
 	}
 
-	desired, err := p.buildDesiredNodeConfig(running, running, RoleControlPlane)
+	// Control-plane node: catches cluster-wide and control-plane-scoped patch drift.
+	changes, err := p.detectRoleMachineConfigDrift(cpRunning, cpRunning, RoleControlPlane)
+	if err != nil {
+		return nil, err
+	}
+
+	// Worker node: catches worker-scoped patch drift, invisible to the
+	// control-plane check above. The control-plane config supplies the PKI.
+	//
+	// Best-effort: a worker being unreachable must not suppress the control-plane
+	// drift already detected (and pushed), so a worker-detection failure is logged
+	// and skipped rather than aborting the whole detection.
+	workerChanges, workerErr := p.detectWorkerMachineConfigDrift(ctx, nodes, cpRunning)
+	if workerErr != nil {
+		_, _ = fmt.Fprintf(
+			p.logWriter,
+			"  ⚠ Failed to detect worker machine config drift: %v\n",
+			workerErr,
+		)
+
+		return changes, nil
+	}
+
+	return append(changes, workerChanges...), nil
+}
+
+// detectWorkerMachineConfigDrift compares the desired worker config (base +
+// cluster/worker patch files) against a running worker node, returning a change
+// when they differ. It is a no-op (no changes) when the cluster has no worker
+// nodes. secretsSource must be a control-plane config: worker configs carry no
+// cluster CA private key, so the desired-config rebuild is seeded from the
+// control-plane PKI (#4963), exactly as the apply path threads it.
+func (p *Provisioner) detectWorkerMachineConfigDrift(
+	ctx context.Context,
+	nodes []nodeWithRole,
+	secretsSource talosconfig.Provider,
+) ([]clusterupdate.Change, error) {
+	running, found, err := p.fetchNodeConfigForRole(ctx, nodes, RoleWorker)
+	if err != nil {
+		return nil, err
+	}
+
+	if !found {
+		return nil, nil
+	}
+
+	return p.detectRoleMachineConfigDrift(running, secretsSource, RoleWorker)
+}
+
+// detectRoleMachineConfigDrift reports whether the desired Talos machine config
+// for the given role (base + the role's patch files) differs from the running
+// config of a node in that role, returning a single in-place change when it does
+// and no changes when the configs match. secretsSource supplies the cluster PKI
+// for the desired-config rebuild and must be a control-plane config (see
+// buildDesiredNodeConfig); pass running itself for the control-plane role.
+func (p *Provisioner) detectRoleMachineConfigDrift(
+	running, secretsSource talosconfig.Provider,
+	role string,
+) ([]clusterupdate.Change, error) {
+	desired, err := p.buildDesiredNodeConfig(running, secretsSource, role)
 	if err != nil {
 		return nil, err
 	}
@@ -119,7 +196,11 @@ func (p *Provisioner) detectInPlaceMachineConfigDrift(
 			OldValue: configFingerprint(running),
 			NewValue: configFingerprint(desired),
 			Category: clusterupdate.ChangeCategoryInPlace,
-			Reason:   "Talos machine config (patches) differs from running nodes; will be re-applied without reboot",
+			Reason: fmt.Sprintf(
+				"Talos machine config (patches) differs from running %s nodes; "+
+					"will be re-applied without reboot",
+				role,
+			),
 		},
 	}, nil
 }
@@ -171,7 +252,14 @@ func (p *Provisioner) buildDesiredNodeConfig(
 		}
 	}
 
-	aligned, err = p.alignKubernetesVersion(aligned, running)
+	// Align the Kubernetes version from secretsSource (a control-plane config),
+	// not running: a parsed worker config has no explicit kube-apiserver image, so
+	// its KubernetesVersionFromProvider resolves to the Talos machinery's bundled
+	// default version rather than the cluster's actual running version — which
+	// would read as (and apply) a phantom worker kubelet upgrade on every update.
+	// The control-plane config carries the authoritative apiserver version. For the
+	// control-plane drift path secretsSource == running, so this is a no-op there.
+	aligned, err = p.alignKubernetesVersion(aligned, secretsSource)
 	if err != nil {
 		return nil, err
 	}
@@ -258,15 +346,20 @@ func hasControlPlanePKI(provider talosconfig.Provider) bool {
 // bumps that default, reads as an unrequested (and possibly Talos-incompatible)
 // Kubernetes upgrade. When a version is pinned, the pin is left in place so an
 // intentional change is still detected and applied.
+//
+// versionSource is the running config the version is read from; callers pass a
+// control-plane config because only it carries the authoritative kube-apiserver
+// image tag (a parsed worker config defaults that image to the Talos machinery's
+// bundled version).
 func (p *Provisioner) alignKubernetesVersion(
 	aligned *talosconfigmanager.Configs,
-	running talosconfig.Provider,
+	versionSource talosconfig.Provider,
 ) (*talosconfigmanager.Configs, error) {
 	if p.options != nil && strings.TrimSpace(p.options.KubernetesVersion) != "" {
 		return aligned, nil
 	}
 
-	runningVersion := talosconfigmanager.KubernetesVersionFromProvider(running)
+	runningVersion := talosconfigmanager.KubernetesVersionFromProvider(versionSource)
 	if runningVersion == "" {
 		return aligned, nil
 	}
@@ -381,21 +474,34 @@ func (p *Provisioner) fetchRunningControlPlaneConfig(
 		return nil, false, fmt.Errorf("failed to discover nodes for config comparison: %w", err)
 	}
 
-	var cpIP string
+	return p.fetchNodeConfigForRole(ctx, nodes, RoleControlPlane)
+}
+
+// fetchNodeConfigForRole returns the running Talos machine config of the first
+// node of the given role from an already-discovered node set, so callers that
+// need more than one role's config list the cluster's nodes only once. It returns
+// (nil, false, nil) when no node of that role is present, so callers can treat
+// "cannot compare" as "no detected drift" rather than failing the update.
+func (p *Provisioner) fetchNodeConfigForRole(
+	ctx context.Context,
+	nodes []nodeWithRole,
+	role string,
+) (talosconfig.Provider, bool, error) {
+	var nodeIP string
 
 	for _, node := range nodes {
-		if node.Role == RoleControlPlane {
-			cpIP = node.IP
+		if node.Role == role {
+			nodeIP = node.IP
 
 			break
 		}
 	}
 
-	if cpIP == "" {
+	if nodeIP == "" {
 		return nil, false, nil
 	}
 
-	config, err := p.fetchNodeConfig(ctx, cpIP)
+	config, err := p.fetchNodeConfig(ctx, nodeIP)
 	if err != nil {
 		return nil, false, err
 	}

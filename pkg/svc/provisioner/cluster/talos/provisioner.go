@@ -179,6 +179,12 @@ type Provisioner struct {
 	// deleteStorage controls whether Talos snapshot images are deleted alongside the cluster.
 	// When true, DeleteTalosSnapshots is called during cluster deletion on Hetzner.
 	deleteStorage bool
+	// drainForce, when true, makes node drains delete pods directly instead of via
+	// the Eviction API, bypassing PodDisruptionBudgets. It is request-scoped: set
+	// from UpdateOptions.Force at the start of an update (see applyUpdateChanges)
+	// and read by drainNode. The provisioner is created per command invocation and
+	// used sequentially, so a field is safe here.
+	drainForce bool
 }
 
 // NewProvisioner creates a new Provisioner.

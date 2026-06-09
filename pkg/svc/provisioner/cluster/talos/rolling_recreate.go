@@ -329,6 +329,23 @@ func (p *Provisioner) cordonAndDrain(
 
 	drainErr := p.drainNode(ctx, clientset, nodeName)
 	if drainErr != nil {
+		// The drain runs before the node is removed, so a failure aborts the update
+		// with the node still cordoned. Uncordon it (best-effort) so the cluster
+		// returns to its prior schedulable state instead of permanently losing the
+		// node's capacity. Detach from the parent ctx (which may already be cancelled,
+		// e.g. Ctrl-C) but bound the cleanup so an unreachable API can't hang it.
+		cleanupCtx, cancel := context.WithTimeout(
+			context.WithoutCancel(ctx), uncordonCleanupTimeout,
+		)
+		defer cancel()
+
+		uncordonErr := p.uncordonNode(cleanupCtx, clientset, nodeName)
+		if uncordonErr != nil {
+			_, _ = fmt.Fprintf(p.logWriter,
+				"    ⚠ Failed to uncordon %s after drain failure (best-effort): %v\n",
+				nodeName, uncordonErr)
+		}
+
 		return fmt.Errorf("drain: %w", drainErr)
 	}
 
@@ -351,8 +368,16 @@ func (p *Provisioner) createReplacementServer(
 
 	nextIndex := nextHetznerNodeIndex(existing, clusterName, role)
 
+	// Boot the replacement from the cluster's Talos snapshot image (when configured)
+	// rather than the maintenance-mode ISO, so it runs the same Talos version as the
+	// node it replaces and can parse the cluster's machine config (see hetznerBootSource).
+	imageID, snapErr := p.ensureSnapshotImage(ctx, clusterName)
+	if snapErr != nil {
+		return nil, snapErr
+	}
+
 	creationResults, createErr := p.launchHetznerScaleCreation(
-		ctx, hzProvider, clusterName, role, infra, p.hetznerRetryOpts(), nextIndex, 1,
+		ctx, hzProvider, clusterName, role, infra, p.hetznerRetryOpts(), nextIndex, 1, imageID,
 	)
 	if createErr != nil {
 		return nil, createErr

@@ -285,6 +285,13 @@ func (s *Server) registerCapabilityRoutes(mux *http.ServeMux) {
 	if _, ok := s.Service.(LogService); ok {
 		mux.HandleFunc("GET /api/v1/clusters/{namespace}/{name}/logs", s.handleLogs)
 	}
+
+	// Pod exec terminal (ExecService). A WebSocket upgrade (GET); the handler refuses it in read-only
+	// mode itself, since exec can run arbitrary commands and the method-based guard would let the GET
+	// through.
+	if _, ok := s.Service.(ExecService); ok {
+		mux.HandleFunc("GET /api/v1/clusters/{namespace}/{name}/exec", s.handleExec)
+	}
 }
 
 // securityHeaders applies conservative security headers to every response. The CSP allows only
@@ -416,6 +423,7 @@ func (s *Server) handleConfig(writer http.ResponseWriter, request *http.Request)
 	_, capabilities.ApplyManifests = s.Service.(ApplyService)
 	_, capabilities.SecretsCipher = s.Service.(CipherService)
 	_, capabilities.WorkloadLogs = s.Service.(LogService)
+	_, capabilities.WorkloadExec = s.Service.(ExecService)
 
 	response := configResponse{
 		ReadOnly:        s.ReadOnly,

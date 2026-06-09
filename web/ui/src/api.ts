@@ -118,12 +118,15 @@ export interface Capabilities {
   // workloadLogs is true when the backend can stream a pod container's logs (the in-browser log
   // viewer). Logs are read-only, so the SPA shows the action without combining it with !readOnly.
   workloadLogs: boolean;
+  // workloadExec is true when the backend can exec into a pod container (the in-browser terminal).
+  // The SPA combines it with !readOnly before showing the Exec action.
+  workloadExec: boolean;
 }
 
 // fullCapabilities mirrors the backend's default for a service that does not report capabilities.
 // clusterUpdate defaults true (assume a working action rather than hiding it); the workload +
-// kubeconfig + apply + cipher flags default false because their endpoints may not exist on an older
-// backend.
+// kubeconfig + apply + cipher + exec flags default false because their endpoints may not exist on an
+// older backend.
 export const fullCapabilities: Capabilities = {
   clusterUpdate: true,
   workloadRead: false,
@@ -132,6 +135,7 @@ export const fullCapabilities: Capabilities = {
   applyManifests: false,
   secretsCipher: false,
   workloadLogs: false,
+  workloadExec: false,
 };
 
 // logsEventSourceURL builds the same-origin SSE URL for streaming a pod container's logs. EventSource
@@ -514,4 +518,26 @@ export function decryptSecret(encrypted: string, format: string): Promise<{ plai
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ encrypted, format }),
   });
+}
+
+// execWebSocketURL builds the same-origin WebSocket URL for an exec session into a pod container.
+// (In the Wails desktop, a loopback listener provides a ws:// origin; the browser surfaces are
+// same-origin off window.location.)
+export function execWebSocketURL(
+  namespace: string,
+  name: string,
+  podNamespace: string,
+  pod: string,
+  container: string,
+): string {
+  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+  const params = new URLSearchParams({ pod });
+  if (podNamespace) {
+    params.set("namespace", podNamespace);
+  }
+  if (container) {
+    params.set("container", container);
+  }
+
+  return `${protocol}//${window.location.host}/api/v1/clusters/${namespace}/${name}/exec?${params.toString()}`;
 }
