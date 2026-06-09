@@ -191,7 +191,7 @@ func TestPatchTalosHostname_NodeAccepts(t *testing.T) {
 	provider, err := configloader.NewFromBytes(patched)
 	require.NoError(t, err, "patched config must load")
 
-	_, err = provider.Validate(nodeRuntimeMode{})
+	_, err = provider.ValidateAsClient(nodeRuntimeMode{})
 	require.NoError(
 		t,
 		err,
@@ -226,7 +226,7 @@ func TestPatchTalosHostname_Idempotent(t *testing.T) {
 	provider, err := configloader.NewFromBytes(twice)
 	require.NoError(t, err, "re-patched config must load")
 
-	_, err = provider.Validate(nodeRuntimeMode{})
+	_, err = provider.ValidateAsClient(nodeRuntimeMode{})
 	require.NoError(t, err, "re-patched config must remain node-acceptable")
 
 	doc := firstMachineConfigDoc(t, twice)

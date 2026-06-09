@@ -889,10 +889,13 @@ func (p *Provisioner) fetchClusterSecretsAndEndpoint(
 
 	runningConfig := machineConfig.Config()
 
-	existingSecrets := secrets.NewBundleFromConfig(
+	existingSecrets, err := secrets.NewBundleFromConfig(
 		secrets.NewFixedClock(time.Now()),
 		runningConfig,
 	)
+	if err != nil {
+		return nil, "", fmt.Errorf("extracting secrets bundle from running config: %w", err)
+	}
 
 	// Read the endpoint from the running cluster's config rather than deriving
 	// it from node IPs. This avoids non-deterministic ordering in HA clusters
