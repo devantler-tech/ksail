@@ -1243,6 +1243,24 @@ func TestNormalizePinnedVersion(t *testing.T) {
 			wantReason:  cluster.ExportPinnedVersionAlreadyAtIt,
 		},
 		{
+			// Regression for the VCluster phantom-upgrade bug: an unprefixed SDK pin
+			// ("0.34.1", VCluster's ChartVersion()) must still match an unprefixed
+			// current of the same version via parsed-semver equality, not raw strings.
+			name:        "unprefixed pin equal to unprefixed current is a no-op",
+			rawPinned:   "0.34.1",
+			current:     "0.34.1",
+			wantVersion: "v0.34.1",
+			wantReason:  cluster.ExportPinnedVersionAlreadyAtIt,
+		},
+		{
+			// Cross-prefix equality: pin normalizes to "v..." while current is raw.
+			name:        "unprefixed pin equal to v-prefixed current is a no-op",
+			rawPinned:   "0.34.1",
+			current:     "v0.34.1",
+			wantVersion: "v0.34.1",
+			wantReason:  cluster.ExportPinnedVersionAlreadyAtIt,
+		},
+		{
 			name:        "older pin than current skips the downgrade",
 			rawPinned:   "v1.7.0",
 			current:     testPinCurrent,

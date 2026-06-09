@@ -62,6 +62,13 @@ func (p *Provisioner) PinnedDistributionVersion() string {
 	return ""
 }
 
+// PinnedKubernetesVersion returns "" because K3d follows the OCI-discovered
+// Kubernetes version (or spec.cluster.kubernetesVersion when set); recreation can
+// legitimately reach the discovered K3s image version.
+func (p *Provisioner) PinnedKubernetesVersion() string {
+	return ""
+}
+
 // VersionSuffix returns "k3s" to match K3s image tags like "v1.35.3-k3s1".
 func (p *Provisioner) VersionSuffix() string {
 	return "k3s"
