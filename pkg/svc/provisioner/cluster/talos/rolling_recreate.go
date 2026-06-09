@@ -368,8 +368,16 @@ func (p *Provisioner) createReplacementServer(
 
 	nextIndex := nextHetznerNodeIndex(existing, clusterName, role)
 
+	// Boot the replacement from the cluster's Talos snapshot image (when configured)
+	// rather than the maintenance-mode ISO, so it runs the same Talos version as the
+	// node it replaces and can parse the cluster's machine config (see hetznerBootSource).
+	imageID, snapErr := p.ensureSnapshotImage(ctx, clusterName)
+	if snapErr != nil {
+		return nil, snapErr
+	}
+
 	creationResults, createErr := p.launchHetznerScaleCreation(
-		ctx, hzProvider, clusterName, role, infra, p.hetznerRetryOpts(), nextIndex, 1,
+		ctx, hzProvider, clusterName, role, infra, p.hetznerRetryOpts(), nextIndex, 1, imageID,
 	)
 	if createErr != nil {
 		return nil, createErr
