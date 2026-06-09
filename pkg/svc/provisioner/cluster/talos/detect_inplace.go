@@ -156,7 +156,10 @@ func (p *Provisioner) buildDesiredNodeConfig(
 		return nil, errMissingControlPlanePKI
 	}
 
-	bundle := secrets.NewBundleFromConfig(secrets.NewFixedClock(time.Now()), secretsSource)
+	bundle, err := secrets.NewBundleFromConfig(secrets.NewFixedClock(time.Now()), secretsSource)
+	if err != nil {
+		return nil, fmt.Errorf("derive secrets bundle for config comparison: %w", err)
+	}
 
 	aligned, err := p.talosConfigs.WithSecrets(bundle)
 	if err != nil {

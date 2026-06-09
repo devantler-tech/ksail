@@ -205,14 +205,15 @@ func TestConfigs_HostDNS_Enabled(t *testing.T) {
 	cp := configs.ControlPlane()
 	require.NotNil(t, cp)
 
-	features := cp.Machine().Features()
-	require.NotNil(t, features, "Machine features should not be nil")
-
-	hostDNS := features.HostDNS()
+	// Talos v1.14 moved host DNS out of machine.features into a dedicated
+	// network resolver document; the provider exposes it via the unified
+	// NetworkHostDNSConfig accessor (which falls back to the v1alpha1 features
+	// config), so KSail's generated config keeps host DNS enabled.
+	hostDNS := cp.NetworkHostDNSConfig()
 	require.NotNil(t, hostDNS, "HostDNS config should not be nil")
 
 	// These are required for container mode to work properly
-	assert.True(t, hostDNS.Enabled(), "HostDNS should be enabled for container mode")
+	assert.True(t, hostDNS.HostDNSEnabled(), "HostDNS should be enabled for container mode")
 	assert.True(
 		t,
 		hostDNS.ForwardKubeDNSToHost(),
@@ -445,7 +446,8 @@ func TestConfigs_WithSecrets(t *testing.T) {
 		require.NoError(t, err)
 
 		// Extract secrets from config1
-		secrets1 := configs1.ExtractSecrets()
+		secrets1, err := configs1.ExtractSecrets()
+		require.NoError(t, err)
 		require.NotNil(t, secrets1)
 
 		// Rebuild config2 with config1's secrets
@@ -592,7 +594,8 @@ func TestConfigs_ExtractSecrets(t *testing.T) {
 		configs, err := manager.Load(configmanager.LoadOptions{})
 		require.NoError(t, err)
 
-		secretsBundle := configs.ExtractSecrets()
+		secretsBundle, err := configs.ExtractSecrets()
+		require.NoError(t, err)
 		require.NotNil(t, secretsBundle)
 		assert.NotNil(t, secretsBundle.Certs)
 		assert.NotNil(t, secretsBundle.Certs.K8s)
@@ -605,6 +608,8 @@ func TestConfigs_ExtractSecrets(t *testing.T) {
 		t.Parallel()
 
 		configs := &talos.Configs{}
-		assert.Nil(t, configs.ExtractSecrets())
+		bundle, err := configs.ExtractSecrets()
+		require.NoError(t, err)
+		assert.Nil(t, bundle)
 	})
 }

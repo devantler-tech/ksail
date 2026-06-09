@@ -260,10 +260,15 @@ func (c *Configs) WithEndpoint(endpointIP string) (*Configs, error) {
 	// Extract existing secrets bundle to preserve PKI across endpoint changes
 	var existingSecrets *secrets.Bundle
 	if c.bundle != nil && c.bundle.ControlPlaneCfg != nil {
-		existingSecrets = secrets.NewBundleFromConfig(
+		bundle, err := secrets.NewBundleFromConfig(
 			secrets.NewFixedClock(time.Now()),
 			c.bundle.ControlPlaneCfg,
 		)
+		if err != nil {
+			return nil, fmt.Errorf("extracting existing secrets bundle: %w", err)
+		}
+
+		existingSecrets = bundle
 	}
 
 	// Regenerate the bundle with the new endpoint but preserved secrets
@@ -304,10 +309,15 @@ func (c *Configs) WithCertSANs(sans []string) (*Configs, error) {
 
 	var existingSecrets *secrets.Bundle
 	if c.bundle != nil && c.bundle.ControlPlaneCfg != nil {
-		existingSecrets = secrets.NewBundleFromConfig(
+		bundle, err := secrets.NewBundleFromConfig(
 			secrets.NewFixedClock(time.Now()),
 			c.bundle.ControlPlaneCfg,
 		)
+		if err != nil {
+			return nil, fmt.Errorf("extracting existing secrets bundle: %w", err)
+		}
+
+		existingSecrets = bundle
 	}
 
 	patches := make([]Patch, 0, len(c.patches)+1)
@@ -431,10 +441,15 @@ func (c *Configs) WithKubernetesVersion(version string) (*Configs, error) {
 	// running cluster's CA, tokens, and bootstrap secrets.
 	var existingSecrets *secrets.Bundle
 	if c.bundle != nil && c.bundle.ControlPlaneCfg != nil {
-		existingSecrets = secrets.NewBundleFromConfig(
+		bundle, err := secrets.NewBundleFromConfig(
 			secrets.NewFixedClock(time.Now()),
 			c.bundle.ControlPlaneCfg,
 		)
+		if err != nil {
+			return nil, fmt.Errorf("extracting existing secrets bundle: %w", err)
+		}
+
+		existingSecrets = bundle
 	}
 
 	return newConfigsWithEndpointAndSecrets(
@@ -450,16 +465,22 @@ func (c *Configs) WithKubernetesVersion(version string) (*Configs, error) {
 }
 
 // ExtractSecrets extracts the secrets bundle from the current config for reuse.
-// Returns nil if the bundle or control plane config is not set.
-func (c *Configs) ExtractSecrets() *secrets.Bundle {
+// Returns nil if the bundle or control plane config is not set, or an error if
+// the secrets bundle cannot be derived from the control plane config.
+func (c *Configs) ExtractSecrets() (*secrets.Bundle, error) {
 	if c.bundle == nil || c.bundle.ControlPlaneCfg == nil {
-		return nil
+		return nil, nil //nolint:nilnil // nil bundle is a valid "not set" result, not an error
 	}
 
-	return secrets.NewBundleFromConfig(
+	bundle, err := secrets.NewBundleFromConfig(
 		secrets.NewFixedClock(time.Now()),
 		c.bundle.ControlPlaneCfg,
 	)
+	if err != nil {
+		return nil, fmt.Errorf("extracting secrets bundle: %w", err)
+	}
+
+	return bundle, nil
 }
 
 // KubernetesVersion returns the Kubernetes version used for this config.

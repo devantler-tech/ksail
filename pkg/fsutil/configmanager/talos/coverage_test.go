@@ -144,7 +144,8 @@ func TestConfigs_WithSecretsAndEndpoint_PreservesBoth(t *testing.T) {
 	require.NoError(t, err)
 
 	// Extract secrets from the running config (as fetchClusterSecretsAndEndpoint does)
-	existingSecrets := runningConfigs.ExtractSecrets()
+	existingSecrets, err := runningConfigs.ExtractSecrets()
+	require.NoError(t, err)
 	require.NotNil(t, existingSecrets)
 
 	// Extract endpoint from running config (as fetchClusterSecretsAndEndpoint does).
