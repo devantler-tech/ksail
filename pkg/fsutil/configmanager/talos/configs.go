@@ -259,6 +259,7 @@ func (c *Configs) WithEndpoint(endpointIP string) (*Configs, error) {
 
 	// Extract existing secrets bundle to preserve PKI across endpoint changes
 	var existingSecrets *secrets.Bundle
+
 	if c.bundle != nil && c.bundle.ControlPlaneCfg != nil {
 		bundle, err := secrets.NewBundleFromConfig(
 			secrets.NewFixedClock(time.Now()),
@@ -308,6 +309,7 @@ func (c *Configs) WithCertSANs(sans []string) (*Configs, error) {
 	}
 
 	var existingSecrets *secrets.Bundle
+
 	if c.bundle != nil && c.bundle.ControlPlaneCfg != nil {
 		bundle, err := secrets.NewBundleFromConfig(
 			secrets.NewFixedClock(time.Now()),
@@ -440,6 +442,7 @@ func (c *Configs) WithKubernetesVersion(version string) (*Configs, error) {
 	// Preserve the existing PKI so the regenerated config keeps matching the
 	// running cluster's CA, tokens, and bootstrap secrets.
 	var existingSecrets *secrets.Bundle
+
 	if c.bundle != nil && c.bundle.ControlPlaneCfg != nil {
 		bundle, err := secrets.NewBundleFromConfig(
 			secrets.NewFixedClock(time.Now()),
