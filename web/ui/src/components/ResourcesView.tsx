@@ -309,12 +309,14 @@ export function ResourcesView({
                       const [namespace, clusterName] = splitClusterKey(selectedClusterKey);
                       runAction("Scaled", () =>
                         scaleResource(
-                          namespace,
-                          clusterName,
-                          kind,
-                          selected.metadata?.name ?? "",
+                          {
+                            namespace,
+                            name: clusterName,
+                            kind,
+                            resourceName: selected.metadata?.name ?? "",
+                            resourceNamespace: selected.metadata?.namespace,
+                          },
                           replicas,
-                          selected.metadata?.namespace,
                         ),
                       );
                     }}
@@ -340,13 +342,13 @@ export function ResourcesView({
                     onClick={() => {
                       const [namespace, clusterName] = splitClusterKey(selectedClusterKey);
                       runAction("Restarted", () =>
-                        restartResource(
+                        restartResource({
                           namespace,
-                          clusterName,
+                          name: clusterName,
                           kind,
-                          selected.metadata?.name ?? "",
-                          selected.metadata?.namespace,
-                        ),
+                          resourceName: selected.metadata?.name ?? "",
+                          resourceNamespace: selected.metadata?.namespace,
+                        }),
                       );
                     }}
                   >
@@ -402,7 +404,13 @@ export function ResourcesView({
           const [namespace, clusterName] = splitClusterKey(selectedClusterKey);
           const targetName = selected?.metadata?.name ?? "";
           try {
-            await deleteResource(namespace, clusterName, kind, targetName, selected?.metadata?.namespace);
+            await deleteResource({
+              namespace,
+              name: clusterName,
+              kind,
+              resourceName: targetName,
+              resourceNamespace: selected?.metadata?.namespace,
+            });
             toast.success(`Deleted ${targetName}`);
             setSelected(null);
             setNonce((value) => value + 1);

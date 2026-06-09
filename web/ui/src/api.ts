@@ -445,16 +445,35 @@ function resourcePath(
   return `/api/v1/clusters/${namespace}/${name}/resources/${kind}/${resourceName}${suffix}${query}`;
 }
 
+// ResourceAction identifies a single resource targeted by a mutating action (scale/restart/delete).
+// namespace/name are the CLUSTER's; resourceName/resourceNamespace are the resource's own.
+export type ResourceAction = {
+  namespace: string;
+  name: string;
+  kind: string;
+  resourceName: string;
+  resourceNamespace?: string;
+};
+
+// mutateResource issues a mutating request against a resource's action endpoint — the shared core of
+// scale/restart/delete, so each only differs by its path suffix and request init.
+function mutateResource(target: ResourceAction, suffix: string, init: RequestInit): Promise<void> {
+  return request<void>(
+    resourcePath(
+      target.namespace,
+      target.name,
+      target.kind,
+      target.resourceName,
+      target.resourceNamespace,
+      suffix,
+    ),
+    init,
+  );
+}
+
 // scaleResource sets the replica count of a scalable workload.
-export function scaleResource(
-  namespace: string,
-  name: string,
-  kind: string,
-  resourceName: string,
-  replicas: number,
-  resourceNamespace?: string,
-): Promise<void> {
-  return request<void>(resourcePath(namespace, name, kind, resourceName, resourceNamespace, "/scale"), {
+export function scaleResource(target: ResourceAction, replicas: number): Promise<void> {
+  return mutateResource(target, "/scale", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ replicas }),
@@ -462,29 +481,13 @@ export function scaleResource(
 }
 
 // restartResource triggers a rolling restart of a workload.
-export function restartResource(
-  namespace: string,
-  name: string,
-  kind: string,
-  resourceName: string,
-  resourceNamespace?: string,
-): Promise<void> {
-  return request<void>(resourcePath(namespace, name, kind, resourceName, resourceNamespace, "/restart"), {
-    method: "POST",
-  });
+export function restartResource(target: ResourceAction): Promise<void> {
+  return mutateResource(target, "/restart", { method: "POST" });
 }
 
 // deleteResource deletes a resource.
-export function deleteResource(
-  namespace: string,
-  name: string,
-  kind: string,
-  resourceName: string,
-  resourceNamespace?: string,
-): Promise<void> {
-  return request<void>(resourcePath(namespace, name, kind, resourceName, resourceNamespace, ""), {
-    method: "DELETE",
-  });
+export function deleteResource(target: ResourceAction): Promise<void> {
+  return mutateResource(target, "", { method: "DELETE" });
 }
 
 // SECRET_FORMATS are the SOPS store formats the cipher view offers.
