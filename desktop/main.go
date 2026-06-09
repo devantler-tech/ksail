@@ -20,6 +20,8 @@ import (
 
 	//nolint:depguard // wails is the desktop app's UI runtime; the CLI module's allowlist does not apply here.
 	"github.com/wailsapp/wails/v3/pkg/application"
+	//nolint:depguard // wails is the desktop app's UI runtime; the CLI module's allowlist does not apply here.
+	"github.com/wailsapp/wails/v3/pkg/events"
 )
 
 const (
@@ -54,6 +56,10 @@ func main() {
 	// settings). Its Handler() is handed to the Wails AssetServer; we never bind a TCP listener.
 	server := uiserver.NewServer()
 
+	// window is assigned just below; the single-instance callback closes over it so a relayed deep link
+	// can reach it. Declared first because the callback is part of the options passed to New().
+	var window *application.WebviewWindow
+
 	app := application.New(application.Options{
 		Name:        windowTitle,
 		Description: "Native desktop app to manage local Kubernetes clusters",
@@ -64,6 +70,16 @@ func main() {
 		Assets: application.AssetOptions{
 			Handler: server.Handler(),
 		},
+		// Single instance: a second launch (e.g. opening a ksail:// link while the app is running)
+		// relays its arguments to the running instance instead of starting a duplicate window. On macOS
+		// the launched URL is captured and appended to the relayed Args (see deeplink.go + Wails v3).
+		SingleInstance: &application.SingleInstanceOptions{
+			UniqueID: appUniqueID,
+			OnSecondInstanceLaunch: func(data application.SecondInstanceData) {
+				url, _ := firstDeepLink(data.Args)
+				handleDeepLink(window, url)
+			},
+		},
 	})
 
 	// The application menu is intentionally left unset: macOS applies DefaultApplicationMenu() (which
@@ -71,7 +87,7 @@ func main() {
 	// the hand-rolled Cocoa menu the previous webview_go shell required. Windows/WebView2 and
 	// Linux/WebKitGTK handle clipboard shortcuts natively.
 
-	window := app.Window.NewWithOptions(application.WebviewWindowOptions{
+	window = app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Title:  windowTitle,
 		Width:  windowWidth,
 		Height: windowHeight,
@@ -81,6 +97,14 @@ func main() {
 	// reopens there next time; falls back to these centered defaults on first launch. See
 	// trackWindowState.
 	trackWindowState(app, window)
+
+	// A cold launch via a ksail:// link (the app was not already running) delivers the URL through this
+	// application event once the run loop is up; a launch while already running goes through the
+	// SingleInstance relay configured above.
+	app.Event.OnApplicationEvent(
+		events.Common.ApplicationLaunchedWithUrl,
+		func(event *application.ApplicationEvent) { handleDeepLink(window, event.Context().URL()) },
+	)
 
 	// A menu-bar/system-tray icon for quick access: show/hide the window or quit without going through
 	// the Dock. Must be configured before Run() (which blocks until shutdown).
