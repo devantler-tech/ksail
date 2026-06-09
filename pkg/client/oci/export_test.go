@@ -15,3 +15,12 @@ var ShouldWriteAtRoot = shouldWriteAtRoot
 
 // CollectManifestFiles exports collectManifestFiles for testing.
 var CollectManifestFiles = collectManifestFiles
+
+// ClassifyRegistryError exports classifyRegistryError for testing.
+var ClassifyRegistryError = classifyRegistryError
+
+// IsNotFoundError exports isNotFoundError for testing.
+var IsNotFoundError = isNotFoundError
+
+// BuildRemoteOptionsWithAuth exports buildRemoteOptionsWithAuth for testing.
+var BuildRemoteOptionsWithAuth = buildRemoteOptionsWithAuth
