@@ -76,9 +76,23 @@ type Server struct {
 	// changes. Zero selects defaultEventsInterval; tests set it low to observe ticks quickly.
 	EventsInterval time.Duration
 
+	// Mode labels the deployment surface for the SPA's branding: ModeOperator (in-cluster operator) or
+	// ModeLocal (the local `ksail ui` backend). Empty is treated as the operator by the SPA. The
+	// desktop shell overrides the label client-side when served from the wails:// origin.
+	Mode string
+
 	// auth is built from OIDC at Start; nil means authentication is disabled.
 	auth *authenticator
 }
+
+// Deployment modes reported to the SPA via /api/v1/config (the "mode" field) so it can label the
+// running surface accurately.
+const (
+	// ModeOperator is reported by the in-cluster operator backend.
+	ModeOperator = "operator"
+	// ModeLocal is reported by the local `ksail ui` / desktop backend.
+	ModeLocal = "local"
+)
 
 // configResponse describes the deployment mode the SPA needs to render the correct UI.
 type configResponse struct {
@@ -88,6 +102,9 @@ type configResponse struct {
 	Distributions   []string       `json:"distributions,omitempty"`
 	Providers       []ProviderInfo `json:"providers,omitempty"`
 	SettingsEnabled bool           `json:"settingsEnabled,omitempty"`
+	// Mode labels the serving surface (ModeOperator / ModeLocal) so the SPA renders accurate branding.
+	// Omitted when unset; the SPA treats absence as the operator.
+	Mode string `json:"mode,omitempty"`
 	// Capabilities reports which optional operations the serving backend supports so the SPA can gate
 	// affordances (e.g. cluster edit) it cannot fulfill. Always present (no omitempty): an absent
 	// field would force the SPA to guess, and the false zero-value is meaningful.
@@ -435,6 +452,7 @@ func (s *Server) handleConfig(writer http.ResponseWriter, request *http.Request)
 		Distributions:   s.Distributions,
 		SettingsEnabled: s.Settings != nil,
 		Capabilities:    capabilities,
+		Mode:            s.Mode,
 	}
 
 	if s.ProviderStatus != nil {

@@ -1,3 +1,11 @@
+// epochMs parses an ISO timestamp to epoch milliseconds, returning 0 when absent or invalid. Used for
+// time-based sorting (newest/oldest) where an unparseable value should sort as the epoch.
+export function epochMs(iso?: string): number {
+  const ms = iso ? new Date(iso).getTime() : 0;
+
+  return Number.isNaN(ms) ? 0 : ms;
+}
+
 // relativeAge renders a compact "time since" label (e.g. "5m", "3h", "2d") from an ISO timestamp.
 export function relativeAge(iso?: string): string {
   if (!iso) {

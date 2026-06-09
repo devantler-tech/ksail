@@ -1,22 +1,13 @@
-import { ChevronDown, ChevronRight, ChevronsUpDown, ChevronUp, Pencil, Trash2 } from "lucide-react";
-import { useMemo, useState, type ReactNode } from "react";
+import { ChevronRight, Pencil, Trash2 } from "lucide-react";
+import { useMemo } from "react";
 import type { Cluster } from "../api.ts";
 import { cx } from "../lib/cx.ts";
-import { relativeAge } from "../lib/format.ts";
+import { epochMs, relativeAge } from "../lib/format.ts";
+import { clusterKey } from "../lib/k8s.ts";
 import { StatusBadge } from "./StatusBadge.tsx";
+import { SortHeader, td, th, useSort } from "./table.tsx";
 
 type SortKey = "name" | "namespace" | "distribution" | "provider" | "status" | "nodes" | "age";
-type SortDir = "asc" | "desc";
-
-function clusterKey(cluster: Cluster): string {
-  return `${cluster.metadata.namespace ?? "default"}/${cluster.metadata.name}`;
-}
-
-function createdMs(cluster: Cluster): number {
-  const value = cluster.metadata.creationTimestamp;
-  const ms = value ? new Date(value).getTime() : 0;
-  return Number.isNaN(ms) ? 0 : ms;
-}
 
 // compareBySortKey returns the ordering of two clusters for the active sort column.
 function compareBySortKey(a: Cluster, b: Cluster, key: SortKey): number {
@@ -34,14 +25,11 @@ function compareBySortKey(a: Cluster, b: Cluster, key: SortKey): number {
     case "nodes":
       return (a.status?.nodesReady ?? -1) - (b.status?.nodesReady ?? -1);
     case "age":
-      return createdMs(a) - createdMs(b);
+      return epochMs(a.metadata.creationTimestamp) - epochMs(b.metadata.creationTimestamp);
     default:
       return 0;
   }
 }
-
-const th = "px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400";
-const td = "px-4 py-3 align-middle";
 
 function NodeCount({ cluster }: { cluster: Cluster }) {
   const total = cluster.status?.nodesTotal;
@@ -64,43 +52,6 @@ function NodeCount({ cluster }: { cluster: Cluster }) {
   );
 }
 
-function SortHeader({
-  label,
-  sortKey,
-  active,
-  dir,
-  onSort,
-  className,
-}: {
-  label: ReactNode;
-  sortKey: SortKey;
-  active: boolean;
-  dir: SortDir;
-  onSort: (key: SortKey) => void;
-  className?: string;
-}) {
-  const Indicator = active ? (dir === "asc" ? ChevronUp : ChevronDown) : ChevronsUpDown;
-
-  return (
-    <th
-      className={cx(th, className)}
-      aria-sort={active ? (dir === "asc" ? "ascending" : "descending") : "none"}
-    >
-      <button
-        type="button"
-        onClick={() => onSort(sortKey)}
-        className="group inline-flex items-center gap-1 uppercase tracking-wide hover:text-slate-700 dark:hover:text-slate-200"
-      >
-        {label}
-        <Indicator
-          className={cx("size-3.5", active ? "text-slate-500 dark:text-slate-300" : "text-slate-300 dark:text-slate-600")}
-          aria-hidden
-        />
-      </button>
-    </th>
-  );
-}
-
 export function ClustersTable({
   clusters,
   readOnly,
@@ -118,17 +69,7 @@ export function ClustersTable({
   onEdit: (cluster: Cluster) => void;
   onDelete: (cluster: Cluster) => void;
 }) {
-  const [sortKey, setSortKey] = useState<SortKey>("name");
-  const [sortDir, setSortDir] = useState<SortDir>("asc");
-
-  function handleSort(key: SortKey) {
-    if (key === sortKey) {
-      setSortDir((current) => (current === "asc" ? "desc" : "asc"));
-    } else {
-      setSortKey(key);
-      setSortDir("asc");
-    }
-  }
+  const { sortKey, sortDir, toggleSort } = useSort<SortKey>("name");
 
   // Sort a copy with a stable namespace/name tiebreaker so equal values keep a deterministic order
   // and the list never reorders between refreshes (the API list order is not guaranteed).
@@ -140,7 +81,7 @@ export function ClustersTable({
     });
   }, [clusters, sortKey, sortDir]);
 
-  const headerProps = { active: false, dir: sortDir, onSort: handleSort } as const;
+  const headerProps = { activeKey: sortKey, dir: sortDir, onSort: toggleSort } as const;
 
   return (
     <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
@@ -148,19 +89,13 @@ export function ClustersTable({
         <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-800">
           <thead className="bg-slate-50 dark:bg-slate-800/50">
             <tr>
-              <SortHeader {...headerProps} label="Name" sortKey="name" active={sortKey === "name"} />
-              <SortHeader {...headerProps} label="Namespace" sortKey="namespace" active={sortKey === "namespace"} />
-              <SortHeader {...headerProps} label="Distribution" sortKey="distribution" active={sortKey === "distribution"} />
-              <SortHeader
-                {...headerProps}
-                label="Provider"
-                sortKey="provider"
-                active={sortKey === "provider"}
-                className="hidden sm:table-cell"
-              />
-              <SortHeader {...headerProps} label="Status" sortKey="status" active={sortKey === "status"} />
-              <SortHeader {...headerProps} label="Nodes" sortKey="nodes" active={sortKey === "nodes"} />
-              <SortHeader {...headerProps} label="Age" sortKey="age" active={sortKey === "age"} />
+              <SortHeader {...headerProps} label="Name" sortKey="name" />
+              <SortHeader {...headerProps} label="Namespace" sortKey="namespace" />
+              <SortHeader {...headerProps} label="Distribution" sortKey="distribution" />
+              <SortHeader {...headerProps} label="Provider" sortKey="provider" className="hidden sm:table-cell" />
+              <SortHeader {...headerProps} label="Status" sortKey="status" />
+              <SortHeader {...headerProps} label="Nodes" sortKey="nodes" />
+              <SortHeader {...headerProps} label="Age" sortKey="age" />
               <th className={cx(th, "w-10")}>
                 <span className="sr-only">Actions</span>
               </th>

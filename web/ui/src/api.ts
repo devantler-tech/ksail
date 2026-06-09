@@ -175,6 +175,9 @@ export interface Config {
   // settingsEnabled is true when the backend exposes the credential-settings endpoints (the local UI
   // backend). The operator omits it, so the Settings page stays hidden there.
   settingsEnabled?: boolean;
+  // mode labels the serving surface ("operator" | "local") so the SPA can brand itself accurately.
+  // Absent against an older backend; the desktop shell (wails:// origin) overrides the label anyway.
+  mode?: "operator" | "local";
 }
 
 // CredentialSetting describes one provider credential in the Settings page. Secret values are never
