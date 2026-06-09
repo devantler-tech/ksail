@@ -441,12 +441,20 @@ type Upgrader interface {
 	// Returns empty string if the distribution version equals the Kubernetes version.
 	DistributionImageRef() string
 
-	// PinnedDistributionVersion returns the distribution version pinned in
-	// configuration (e.g. spec.cluster.talos.version for Talos), or "" when no
-	// distribution version is pinned and the cluster should follow the latest
-	// supported version. Distributions whose version is the Kubernetes version
-	// (Kind/K3d/VCluster) always return "" — pin them via spec.cluster.kubernetesVersion.
+	// PinnedDistributionVersion returns the distribution version pinned for the
+	// cluster, or "" when the distribution version is OCI-discovered and the
+	// cluster should follow the latest supported version. Talos pins it via
+	// spec.cluster.talos.version; VCluster pins it implicitly to the embedded SDK
+	// chart version (it cannot be changed by recreation). Kind/K3d have no separate
+	// distribution image (their version is the Kubernetes version) and return "".
 	PinnedDistributionVersion() string
+
+	// PinnedKubernetesVersion returns the Kubernetes version pinned implicitly by
+	// the distribution itself (independently of spec.cluster.kubernetesVersion), or
+	// "" when the Kubernetes version is OCI-discovered. VCluster bakes its
+	// Kubernetes version into the embedded SDK image, so it cannot be reached by a
+	// discovery-driven recreation and is reported here; Talos/Kind/K3d return "".
+	PinnedKubernetesVersion() string
 
 	// VersionSuffix returns the tag suffix used by the distribution (e.g., "k3s" for K3s).
 	// Returns empty string for distributions that use plain semver tags.

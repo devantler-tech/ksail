@@ -257,6 +257,10 @@ func (s *Server) registerCapabilityRoutes(mux *http.ServeMux) {
 			"DELETE /api/v1/clusters/{namespace}/{name}/resources/{kind}/{rname}",
 			s.handleDeleteResource,
 		)
+		mux.HandleFunc(
+			"POST /api/v1/clusters/{namespace}/{name}/resources/{kind}/{rname}/reconcile",
+			s.handleReconcileResource,
+		)
 	}
 
 	// Kubeconfig export (KubeconfigProvider). A read (GET), so the read-only guard does not apply.
@@ -278,6 +282,12 @@ func (s *Server) registerCapabilityRoutes(mux *http.ServeMux) {
 		mux.HandleFunc("GET /api/v1/secrets/recipients", s.handleCipherRecipients)
 		mux.HandleFunc("POST /api/v1/secrets/encrypt", s.handleSecretEncrypt)
 		mux.HandleFunc("POST /api/v1/secrets/decrypt", s.handleSecretDecrypt)
+	}
+
+	// Pod log streaming (LogService) over SSE — a GET, read-only, so it is not gated by the read-only
+	// guard (logs don't mutate). Registered only when the backend implements LogService.
+	if _, ok := s.Service.(LogService); ok {
+		mux.HandleFunc("GET /api/v1/clusters/{namespace}/{name}/logs", s.handleLogs)
 	}
 
 	// Pod exec terminal (ExecService). A WebSocket upgrade (GET); the handler refuses it in read-only
@@ -416,6 +426,7 @@ func (s *Server) handleConfig(writer http.ResponseWriter, request *http.Request)
 	_, capabilities.KubeconfigDownload = s.Service.(KubeconfigProvider)
 	_, capabilities.ApplyManifests = s.Service.(ApplyService)
 	_, capabilities.SecretsCipher = s.Service.(CipherService)
+	_, capabilities.WorkloadLogs = s.Service.(LogService)
 	_, capabilities.WorkloadExec = s.Service.(ExecService)
 
 	response := configResponse{
@@ -670,6 +681,16 @@ func (s *Server) handleRestartResource(writer http.ResponseWriter, request *http
 		request,
 		func(svc ResourceWriter, ctx context.Context, namespace, name string, ref ResourceRef) error {
 			return svc.RestartResource(ctx, namespace, name, ref)
+		},
+	)
+}
+
+func (s *Server) handleReconcileResource(writer http.ResponseWriter, request *http.Request) {
+	s.runResourceWrite(
+		writer,
+		request,
+		func(svc ResourceWriter, ctx context.Context, namespace, name string, ref ResourceRef) error {
+			return svc.ReconcileResource(ctx, namespace, name, ref)
 		},
 	)
 }

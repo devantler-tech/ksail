@@ -83,6 +83,14 @@ func TestProvisioner_PinnedDistributionVersion(t *testing.T) {
 	assert.Equal(t, "v1.13.3", pinned.PinnedDistributionVersion())
 }
 
+func TestProvisioner_PinnedKubernetesVersion(t *testing.T) {
+	t.Parallel()
+
+	// Talos has no SDK-embedded Kubernetes pin; it follows OCI discovery /
+	// spec.cluster.kubernetesVersion.
+	assert.Empty(t, talosprovisioner.NewProvisioner(nil, nil).PinnedKubernetesVersion())
+}
+
 func TestProvisioner_WithDockerClient(t *testing.T) {
 	t.Parallel()
 

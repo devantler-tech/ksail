@@ -24,6 +24,7 @@ const (
 	kindPod        = "Pod"
 	kindDeployment = "Deployment"
 	nameWeb        = "web"
+	nameApps       = "apps"
 )
 
 func testPod(namespace, name string) *corev1.Pod {
@@ -41,6 +42,20 @@ func testDeployment(namespace, name string, replicas int32) *appsv1.Deployment {
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
 		Spec:       appsv1.DeploymentSpec{Replicas: &count},
 	}
+}
+
+// testGitOpsCR builds an unstructured Flux/ArgoCD custom resource. The fake dynamic client guesses
+// its GVR from the GVK (Kustomization→kustomizations, Application→applications), matching the
+// allowlist mapping, so reconcile (a merge-patch) round-trips without registering real CRD schemes.
+func testGitOpsCR(apiVersion, kind, namespace, name string) *unstructured.Unstructured {
+	return &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": apiVersion,
+		"kind":       kind,
+		"metadata": map[string]any{
+			"name":      name,
+			"namespace": namespace,
+		},
+	}}
 }
 
 func injectFakeDynamic(service *clusterapi.Service, objects ...runtime.Object) {
@@ -163,6 +178,80 @@ func TestRestartResourceStampsAnnotation(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, found)
 	assert.NotEmpty(t, stamp)
+}
+
+func TestReconcileRejectsNonReconcilableKind(t *testing.T) {
+	t.Parallel()
+
+	service := newTestService(nil)
+	injectFakeDynamic(service, testPod("x", "p1"))
+
+	// Reconcile is only valid for GitOps CRs (Flux/ArgoCD); a Pod is rejected before any client call.
+	err := service.ReconcileResource(
+		context.Background(), "default", "c1",
+		api.ResourceRef{Kind: kindPod, Namespace: "x", Name: "p1"},
+	)
+	require.ErrorIs(t, err, api.ErrInvalid)
+}
+
+func TestReconcileResourceStampsFluxAnnotation(t *testing.T) {
+	t.Parallel()
+
+	service := newTestService(nil)
+	injectFakeDynamic(
+		service,
+		testGitOpsCR("kustomize.toolkit.fluxcd.io/v1", "Kustomization", "flux-system", nameApps),
+	)
+
+	err := service.ReconcileResource(
+		context.Background(), "default", "c1",
+		api.ResourceRef{Kind: "Kustomization", Namespace: "flux-system", Name: nameApps},
+	)
+	require.NoError(t, err)
+
+	obj, err := service.GetResource(
+		context.Background(), "default", "c1",
+		api.ResourceRef{Kind: "Kustomization", Namespace: "flux-system", Name: nameApps},
+	)
+	require.NoError(t, err)
+
+	// Flux watches reconcile.fluxcd.io/requestedAt; the stamp is a non-empty RFC3339Nano timestamp.
+	stamp, found, err := unstructured.NestedString(
+		obj.Object, "metadata", "annotations", "reconcile.fluxcd.io/requestedAt",
+	)
+	require.NoError(t, err)
+	require.True(t, found)
+	assert.NotEmpty(t, stamp)
+}
+
+func TestReconcileResourceStampsArgoCDAnnotation(t *testing.T) {
+	t.Parallel()
+
+	service := newTestService(nil)
+	injectFakeDynamic(
+		service,
+		testGitOpsCR("argoproj.io/v1alpha1", "Application", "argocd", nameApps),
+	)
+
+	err := service.ReconcileResource(
+		context.Background(), "default", "c1",
+		api.ResourceRef{Kind: "Application", Namespace: "argocd", Name: nameApps},
+	)
+	require.NoError(t, err)
+
+	obj, err := service.GetResource(
+		context.Background(), "default", "c1",
+		api.ResourceRef{Kind: "Application", Namespace: "argocd", Name: nameApps},
+	)
+	require.NoError(t, err)
+
+	// ArgoCD refreshes on argocd.argoproj.io/refresh=normal (not a timestamp like Flux).
+	refresh, found, err := unstructured.NestedString(
+		obj.Object, "metadata", "annotations", "argocd.argoproj.io/refresh",
+	)
+	require.NoError(t, err)
+	require.True(t, found)
+	assert.Equal(t, "normal", refresh)
 }
 
 func TestRestartRejectsNonRestartableKind(t *testing.T) {

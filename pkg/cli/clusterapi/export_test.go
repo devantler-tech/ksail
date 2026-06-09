@@ -6,6 +6,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
 )
 
 // SetDynamicClientForTest overrides the dynamic-client builder so resource-browser tests can inject a
@@ -14,6 +15,14 @@ func (s *Service) SetDynamicClientForTest(
 	build func(ctx context.Context, clusterName string) (dynamic.Interface, error),
 ) {
 	s.newDynamicClient = build
+}
+
+// SetLogClientForTest overrides the clientset builder so pod-log tests can inject a fake clientset
+// instead of resolving a real kubeconfig context.
+func (s *Service) SetLogClientForTest(
+	build func(ctx context.Context, clusterName string) (kubernetes.Interface, error),
+) {
+	s.newLogClient = build
 }
 
 // ContextForCluster exposes contextForCluster for black-box tests of name→context resolution.

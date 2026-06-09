@@ -1209,18 +1209,25 @@ const (
 	// normalizePinnedVersion cases; testPinNewer is a pin strictly newer than it.
 	testPinCurrent = "v1.8.0"
 	testPinNewer   = "v1.9.0"
+	// testPinSDKRaw is the unprefixed SDK pin (VCluster's ChartVersion()) used in
+	// the phantom-upgrade regression cases; testPinSDKNorm is its normalized form.
+	testPinSDKRaw  = "0.34.1"
+	testPinSDKNorm = "v0.34.1"
 )
 
-func TestNormalizePinnedVersion(t *testing.T) {
-	t.Parallel()
+// normalizePinnedVersionCase is one ExportNormalizePinnedVersion table case.
+type normalizePinnedVersionCase struct {
+	name        string
+	rawPinned   string
+	current     string
+	wantVersion string
+	wantReason  cluster.ExportPinnedVersionSkipReason
+}
 
-	tests := []struct {
-		name        string
-		rawPinned   string
-		current     string
-		wantVersion string
-		wantReason  cluster.ExportPinnedVersionSkipReason
-	}{
+// normalizePinnedVersionCases returns the happy-path normalization/downgrade
+// cases. Kept separate from the test body so the table doesn't trip funlen.
+func normalizePinnedVersionCases() []normalizePinnedVersionCase {
+	return []normalizePinnedVersionCase{
 		{
 			name:        "newer pin proceeds with upgrade",
 			rawPinned:   testPinNewer,
@@ -1243,6 +1250,24 @@ func TestNormalizePinnedVersion(t *testing.T) {
 			wantReason:  cluster.ExportPinnedVersionAlreadyAtIt,
 		},
 		{
+			// Regression for the VCluster phantom-upgrade bug: an unprefixed SDK pin
+			// ("0.34.1", VCluster's ChartVersion()) must still match an unprefixed
+			// current of the same version via parsed-semver equality, not raw strings.
+			name:        "unprefixed pin equal to unprefixed current is a no-op",
+			rawPinned:   testPinSDKRaw,
+			current:     testPinSDKRaw,
+			wantVersion: testPinSDKNorm,
+			wantReason:  cluster.ExportPinnedVersionAlreadyAtIt,
+		},
+		{
+			// Cross-prefix equality: pin normalizes to "v..." while current is raw.
+			name:        "unprefixed pin equal to v-prefixed current is a no-op",
+			rawPinned:   testPinSDKRaw,
+			current:     testPinSDKNorm,
+			wantVersion: testPinSDKNorm,
+			wantReason:  cluster.ExportPinnedVersionAlreadyAtIt,
+		},
+		{
 			name:        "older pin than current skips the downgrade",
 			rawPinned:   "v1.7.0",
 			current:     testPinCurrent,
@@ -1257,8 +1282,12 @@ func TestNormalizePinnedVersion(t *testing.T) {
 			wantReason:  cluster.ExportPinnedVersionProceed,
 		},
 	}
+}
 
-	for _, testCase := range tests {
+func TestNormalizePinnedVersion(t *testing.T) {
+	t.Parallel()
+
+	for _, testCase := range normalizePinnedVersionCases() {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 

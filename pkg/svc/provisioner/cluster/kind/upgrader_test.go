@@ -161,6 +161,16 @@ func TestPinnedDistributionVersion_Empty(t *testing.T) {
 	}
 }
 
+func TestPinnedKubernetesVersion_Empty(t *testing.T) {
+	t.Parallel()
+
+	provisioner := kindprovisioner.NewProvisioner(nil, "", nil, nil)
+
+	if got := provisioner.PinnedKubernetesVersion(); got != "" {
+		t.Errorf("PinnedKubernetesVersion() = %q, want %q", got, "")
+	}
+}
+
 func TestVersionSuffix_Empty(t *testing.T) {
 	t.Parallel()
 
