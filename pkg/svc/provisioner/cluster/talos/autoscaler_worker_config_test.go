@@ -785,6 +785,29 @@ func TestAutoscalerTemplateDrift_ReportsDriftWhenKeyMissing(t *testing.T) {
 	assert.Equal(t, "<absent>", changes[0].OldValue, "no existing template to fingerprint")
 }
 
+// A Secret whose stored cluster-config value is unreadable (corrupt base64) must
+// be treated as drift so the apply path regenerates it, rather than the update
+// crashing on or trusting a malformed template.
+func TestAutoscalerTemplateDrift_ReportsDriftWhenStoredValueCorrupt(t *testing.T) {
+	t.Parallel()
+
+	corrupt := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "cluster-autoscaler-config",
+			Namespace: autoscalerNamespace,
+		},
+		Data: map[string][]byte{clusterConfigSecretKey: []byte("!!!not-valid-base64!!!")},
+	}
+	pools := []talosprovisioner.AutoscalerPoolConfig{
+		autoscalerPoolFor(t, "pool1", newTestWorkerProvider(), nil),
+	}
+
+	changes, err := talosprovisioner.AutoscalerTemplateDriftForTest(corrupt, pools)
+	require.NoError(t, err)
+	require.Len(t, changes, 1, "an unreadable stored template must report drift")
+	assert.Equal(t, "<absent>", changes[0].OldValue)
+}
+
 // The comparison redacts secrets (PKI), so a template that differs ONLY in PKI —
 // which syncSecretsFromCluster legitimately realigns during apply (#4963) — must
 // NOT report drift, or every run would falsely show "changes detected".
