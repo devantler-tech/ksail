@@ -5,6 +5,8 @@ import {
   CLUSTER_SCOPED_KINDS,
   deleteResource,
   listResources,
+  RECONCILABLE_KINDS,
+  reconcileResource,
   RESOURCE_KINDS,
   RESTARTABLE_KINDS,
   restartResource,
@@ -442,6 +444,27 @@ export function ResourcesView({
                     }}
                   >
                     Restart
+                  </Button>
+                ) : null}
+                {canWrite && RECONCILABLE_KINDS.includes(kind) ? (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    loading={actionBusy}
+                    onClick={() => {
+                      const [namespace, clusterName] = splitClusterKey(selectedClusterKey);
+                      runAction("Reconciling", () =>
+                        reconcileResource({
+                          namespace,
+                          name: clusterName,
+                          kind,
+                          resourceName: selected.metadata?.name ?? "",
+                          resourceNamespace: selected.metadata?.namespace,
+                        }),
+                      );
+                    }}
+                  >
+                    Reconcile
                   </Button>
                 ) : null}
                 {canLogs && kind === "Pod" ? (

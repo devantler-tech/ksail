@@ -257,6 +257,10 @@ func (s *Server) registerCapabilityRoutes(mux *http.ServeMux) {
 			"DELETE /api/v1/clusters/{namespace}/{name}/resources/{kind}/{rname}",
 			s.handleDeleteResource,
 		)
+		mux.HandleFunc(
+			"POST /api/v1/clusters/{namespace}/{name}/resources/{kind}/{rname}/reconcile",
+			s.handleReconcileResource,
+		)
 	}
 
 	// Kubeconfig export (KubeconfigProvider). A read (GET), so the read-only guard does not apply.
@@ -677,6 +681,16 @@ func (s *Server) handleRestartResource(writer http.ResponseWriter, request *http
 		request,
 		func(svc ResourceWriter, ctx context.Context, namespace, name string, ref ResourceRef) error {
 			return svc.RestartResource(ctx, namespace, name, ref)
+		},
+	)
+}
+
+func (s *Server) handleReconcileResource(writer http.ResponseWriter, request *http.Request) {
+	s.runResourceWrite(
+		writer,
+		request,
+		func(svc ResourceWriter, ctx context.Context, namespace, name string, ref ResourceRef) error {
+			return svc.ReconcileResource(ctx, namespace, name, ref)
 		},
 	)
 }

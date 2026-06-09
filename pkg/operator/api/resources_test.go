@@ -42,9 +42,10 @@ func (r resourceStub) GetResource(
 type writerStub struct {
 	resourceStub
 
-	scaledTo  int32
-	restarted bool
-	deleted   bool
+	scaledTo   int32
+	restarted  bool
+	deleted    bool
+	reconciled bool
 }
 
 func (w *writerStub) ScaleResource(
@@ -63,6 +64,12 @@ func (w *writerStub) RestartResource(_ context.Context, _, _ string, _ api.Resou
 
 func (w *writerStub) DeleteResource(_ context.Context, _, _ string, _ api.ResourceRef) error {
 	w.deleted = true
+
+	return nil
+}
+
+func (w *writerStub) ReconcileResource(_ context.Context, _, _ string, _ api.ResourceRef) error {
+	w.reconciled = true
 
 	return nil
 }
@@ -110,6 +117,23 @@ func TestRestartResourceEndpoint(t *testing.T) {
 
 	assert.Equal(t, http.StatusNoContent, recorder.Code)
 	assert.True(t, stub.restarted)
+}
+
+func TestReconcileResourceEndpoint(t *testing.T) {
+	t.Parallel()
+
+	stub := &writerStub{}
+	server := &api.Server{Service: stub}
+
+	recorder := doRequest(
+		server.Handler(),
+		http.MethodPost,
+		"/api/v1/clusters/default/c1/resources/Kustomization/apps/reconcile?namespace=flux-system",
+		"",
+	)
+
+	assert.Equal(t, http.StatusNoContent, recorder.Code)
+	assert.True(t, stub.reconciled)
 }
 
 func TestDeleteResourceEndpoint(t *testing.T) {

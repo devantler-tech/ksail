@@ -165,6 +165,20 @@ func TestRestartResourceStampsAnnotation(t *testing.T) {
 	assert.NotEmpty(t, stamp)
 }
 
+func TestReconcileRejectsNonReconcilableKind(t *testing.T) {
+	t.Parallel()
+
+	service := newTestService(nil)
+	injectFakeDynamic(service, testPod("x", "p1"))
+
+	// Reconcile is only valid for GitOps CRs (Flux/ArgoCD); a Pod is rejected before any client call.
+	err := service.ReconcileResource(
+		context.Background(), "default", "c1",
+		api.ResourceRef{Kind: kindPod, Namespace: "x", Name: "p1"},
+	)
+	require.ErrorIs(t, err, api.ErrInvalid)
+}
+
 func TestRestartRejectsNonRestartableKind(t *testing.T) {
 	t.Parallel()
 

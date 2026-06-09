@@ -154,6 +154,9 @@ type ResourceWriter interface {
 	RestartResource(ctx context.Context, namespace, name string, ref ResourceRef) error
 	// DeleteResource deletes any allowlisted resource.
 	DeleteResource(ctx context.Context, namespace, name string, ref ResourceRef) error
+	// ReconcileResource triggers an immediate GitOps reconcile of a Flux/ArgoCD resource (see
+	// ResourceKindReconcilable).
+	ReconcileResource(ctx context.Context, namespace, name string, ref ResourceRef) error
 }
 
 // ResourceKindScalable reports whether a kind supports `scale` (and is in the allowlist). Used to
@@ -172,6 +175,18 @@ func ResourceKindScalable(kind string) bool {
 func ResourceKindRestartable(kind string) bool {
 	switch kind {
 	case kindDeployment, kindStatefulSet, kindDaemonSet:
+		return true
+	default:
+		return false
+	}
+}
+
+// ResourceKindReconcilable reports whether a kind supports an immediate GitOps reconcile — the Flux
+// CRs (annotated reconcile.fluxcd.io/requestedAt) and the ArgoCD Application (annotated
+// argocd.argoproj.io/refresh). Drives the SPA's Reconcile affordance and validates requests.
+func ResourceKindReconcilable(kind string) bool {
+	switch kind {
+	case "Kustomization", "HelmRelease", "GitRepository", "OCIRepository", "Application":
 		return true
 	default:
 		return false

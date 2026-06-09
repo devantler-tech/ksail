@@ -377,6 +377,8 @@ export function listResources(
 
 // SCALABLE_KINDS / RESTARTABLE_KINDS mirror the backend predicates (ResourceKindScalable /
 // ResourceKindRestartable); the backend rejects unsupported kinds regardless.
+// RECONCILABLE_KINDS mirrors ResourceKindReconcilable — the GitOps CRs that support a reconcile.
+export const RECONCILABLE_KINDS = ["Kustomization", "HelmRelease", "GitRepository", "OCIRepository", "Application"];
 export const SCALABLE_KINDS = ["Deployment", "StatefulSet", "ReplicaSet"];
 export const RESTARTABLE_KINDS = ["Deployment", "StatefulSet", "DaemonSet"];
 // CLUSTER_SCOPED_KINDS are not deletable from the workload browser — the backend rejects a delete of
@@ -494,6 +496,11 @@ export function scaleResource(target: ResourceAction, replicas: number): Promise
 // restartResource triggers a rolling restart of a workload.
 export function restartResource(target: ResourceAction): Promise<void> {
   return mutateResource(target, "/restart", { method: "POST" });
+}
+
+// reconcileResource triggers an immediate GitOps reconcile (Flux/ArgoCD) of a resource.
+export function reconcileResource(target: ResourceAction): Promise<void> {
+  return mutateResource(target, "/reconcile", { method: "POST" });
 }
 
 // deleteResource deletes a resource.
