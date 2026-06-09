@@ -1,5 +1,5 @@
-import { FileCode, RotateCw } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { FileCode, RotateCw, SquareTerminal } from "lucide-react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import {
   ApiError,
   CLUSTER_SCOPED_KINDS,
@@ -17,6 +17,12 @@ import { cx } from "../lib/cx.ts";
 import { relativeAge } from "../lib/format.ts";
 import { ApplyManifestsDialog } from "./ApplyManifestsDialog.tsx";
 import { ConfirmDialog } from "./ConfirmDialog.tsx";
+
+// ExecTerminal pulls in xterm.js (~250 kB), so it is code-split: the chunk loads only when a terminal
+// is actually opened, keeping it out of the initial bundle.
+const ExecTerminal = lazy(() =>
+  import("./ExecTerminal.tsx").then((module) => ({ default: module.ExecTerminal })),
+);
 import { EmptyState, ErrorBanner, TableSkeleton } from "./states.tsx";
 import { useToast } from "./Toast.tsx";
 import { Button, SelectField, SlideOver, TextField } from "./ui.tsx";
@@ -57,6 +63,13 @@ function currentReplicas(obj: K8sObject): number {
   return spec?.replicas ?? 0;
 }
 
+// podContainers reads spec.containers[].name from a Pod object (for the exec container picker).
+function podContainers(obj: K8sObject): string[] {
+  const spec = obj.spec as { containers?: { name?: string }[] } | undefined;
+
+  return (spec?.containers ?? []).map((container) => container.name ?? "").filter((name) => name !== "");
+}
+
 // ResourcesView is the read-only workload browser: pick a cluster + resource kind, optionally filter
 // by namespace (client-side), and inspect any object's raw manifest. Backed by the ResourceService
 // endpoints; shown only when the backend advertises capabilities.workloadRead.
@@ -64,6 +77,7 @@ export function ResourcesView({
   clusters,
   canWrite,
   canApply,
+  canExec,
 }: {
   clusters: Cluster[];
   // canWrite gates the write actions (scale/restart/delete) — true only when the backend advertises
@@ -71,6 +85,8 @@ export function ResourcesView({
   canWrite: boolean;
   // canApply gates the Apply YAML action (applyManifests && !readOnly).
   canApply: boolean;
+  // canExec gates the Exec terminal action on Pods (workloadExec && !readOnly).
+  canExec: boolean;
 }) {
   const toast = useToast();
   const [selectedClusterKey, setSelectedClusterKey] = useState(
@@ -91,6 +107,9 @@ export function ResourcesView({
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [actionBusy, setActionBusy] = useState(false);
   const [applyOpen, setApplyOpen] = useState(false);
+  // Exec target: the Pod being exec'd (null = closed) + the chosen container.
+  const [execPod, setExecPod] = useState<K8sObject | null>(null);
+  const [execContainer, setExecContainer] = useState("");
 
   // Seed the scale input from the selected object's current replica count whenever it changes.
   useEffect(() => {
@@ -293,9 +312,9 @@ export function ResourcesView({
       >
         {selected ? (
           <div className="space-y-3">
-            {canWrite ? (
+            {canWrite || (canExec && kind === "Pod") ? (
               <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-3 dark:border-slate-800">
-                {SCALABLE_KINDS.includes(kind) ? (
+                {canWrite && SCALABLE_KINDS.includes(kind) ? (
                   <form
                     className="flex items-center gap-1.5"
                     onSubmit={(event) => {
@@ -332,7 +351,7 @@ export function ResourcesView({
                     </Button>
                   </form>
                 ) : null}
-                {RESTARTABLE_KINDS.includes(kind) ? (
+                {canWrite && RESTARTABLE_KINDS.includes(kind) ? (
                   <Button
                     size="sm"
                     variant="secondary"
@@ -353,7 +372,22 @@ export function ResourcesView({
                     Restart
                   </Button>
                 ) : null}
-                {CLUSTER_SCOPED_KINDS.includes(kind) ? null : (
+                {canExec && kind === "Pod" ? (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => {
+                      const containers = podContainers(selected);
+                      setExecContainer(containers[0] ?? "");
+                      setExecPod(selected);
+                      setSelected(null);
+                    }}
+                  >
+                    <SquareTerminal className="size-3.5" aria-hidden />
+                    Exec
+                  </Button>
+                ) : null}
+                {canWrite && !CLUSTER_SCOPED_KINDS.includes(kind) ? (
                   <Button
                     size="sm"
                     variant="danger"
@@ -362,7 +396,7 @@ export function ResourcesView({
                   >
                     Delete
                   </Button>
-                )}
+                ) : null}
               </div>
             ) : null}
             <pre className="overflow-x-auto rounded-lg bg-slate-50 p-3 text-xs leading-relaxed text-slate-800 dark:bg-slate-800/50 dark:text-slate-200">
@@ -413,6 +447,42 @@ export function ResourcesView({
         clusterName={selectedName}
         onApplied={() => setNonce((value) => value + 1)}
       />
+
+      <SlideOver
+        open={execPod !== null}
+        onClose={() => setExecPod(null)}
+        title={`Exec · ${execPod?.metadata?.name ?? ""}`}
+        subtitle={execPod?.metadata?.namespace ? `namespace: ${execPod.metadata.namespace}` : ""}
+      >
+        {execPod ? (
+          <div className="space-y-3">
+            {podContainers(execPod).length > 1 ? (
+              <SelectField
+                label="Container"
+                value={execContainer}
+                onChange={(event) => setExecContainer(event.target.value)}
+              >
+                {podContainers(execPod).map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </SelectField>
+            ) : null}
+            <Suspense
+              fallback={<div className="text-sm text-slate-500 dark:text-slate-400">Loading terminal…</div>}
+            >
+              <ExecTerminal
+                clusterNamespace={selectedNamespace}
+                clusterName={selectedName}
+                podNamespace={execPod.metadata?.namespace ?? ""}
+                pod={execPod.metadata?.name ?? ""}
+                container={execContainer}
+              />
+            </Suspense>
+          </div>
+        ) : null}
+      </SlideOver>
     </div>
   );
 }

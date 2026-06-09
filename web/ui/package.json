@@ -13,6 +13,8 @@
   },
   "dependencies": {
     "@headlessui/react": "^2.2.10",
+    "@xterm/addon-fit": "^0.10.0",
+    "@xterm/xterm": "^5.5.0",
     "lucide-react": "^1.16.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1"

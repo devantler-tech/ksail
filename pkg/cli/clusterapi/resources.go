@@ -12,6 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 )
 
@@ -60,6 +61,24 @@ func contextForCluster(kubeconfigPath, clusterName string) (string, error) {
 	}
 
 	return "", fmt.Errorf("%w: no kubeconfig context for cluster %q", api.ErrNotFound, clusterName)
+}
+
+// restConfigForCluster resolves the cluster's kubeconfig context by name and builds a *rest.Config —
+// the shared preamble for the apply (dynamic + RESTMapper) and exec (clientset) client builders.
+func restConfigForCluster(clusterName string) (*rest.Config, error) {
+	kubeconfigPath := k8s.DefaultKubeconfigPath()
+
+	contextName, err := contextForCluster(kubeconfigPath, clusterName)
+	if err != nil {
+		return nil, err
+	}
+
+	restConfig, err := k8s.BuildRESTConfig(kubeconfigPath, contextName)
+	if err != nil {
+		return nil, fmt.Errorf("build rest config for %q: %w", clusterName, err)
+	}
+
+	return restConfig, nil
 }
 
 // resolveKindAndClient resolves an allowlisted kind to its GVR mapping and builds a dynamic client
