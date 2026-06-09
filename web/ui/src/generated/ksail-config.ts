@@ -73,6 +73,20 @@ export interface KSailClusterConfiguration {
             location?: string;
             min?: number;
             max?: number;
+            /**
+             * Kubernetes node labels applied to every node in this pool (via Talos machine.nodeLabels and the autoscaler scale-from-zero template).
+             */
+            labels?: {
+              [k: string]: string;
+            };
+            /**
+             * Kubernetes node taints applied to every node in this pool (via Talos machine.nodeTaints and the autoscaler scale-from-zero template).
+             */
+            taints?: {
+              key?: string;
+              value?: string;
+              effect?: "NoSchedule" | "PreferNoSchedule" | "NoExecute";
+            }[];
           }[];
           /**
            * Maximum total number of nodes in the cluster (control-planes + workers + autoscaler nodes). Passed verbatim to the cluster-autoscaler --max-nodes-total flag — the autoscaler evaluates it against the count of ALL nodes so this is the whole-cluster ceiling and not an autoscaler-only budget. Set to 0 to disable the global cap; growth is then bounded only by the per-pool max values and serverLimit. Should be <= serverLimit
@@ -161,6 +175,7 @@ export interface KSailClusterConfiguration {
           protocol?: "TCP" | "UDP";
         }[];
         imageVerification?: "Enabled" | "Disabled";
+        drainTimeout?: string;
       };
     };
     provider?: {

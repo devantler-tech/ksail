@@ -83,6 +83,10 @@ type Capabilities struct {
 	// viewer) — true exactly when the serving ClusterService implements LogService. Logs are
 	// read-only, so the SPA shows the action regardless of readOnly (unlike the write actions).
 	WorkloadLogs bool `json:"workloadLogs"`
+	// WorkloadExec reports whether the backend can exec into a pod container (the in-browser
+	// terminal) — true exactly when the serving ClusterService implements ExecService. The SPA
+	// combines it with !readOnly before showing the terminal (exec can run arbitrary commands).
+	WorkloadExec bool `json:"workloadExec"`
 }
 
 // KubeconfigProvider is an optional interface a ClusterService may implement to export a portable,

@@ -233,6 +233,23 @@ func DistributionVersionFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	}
 }
 
+// DrainTimeoutFieldSelector returns a field selector for the per-node drain
+// timeout (spec.cluster.talos.drainTimeout) used during `cluster update`.
+//
+// DefaultValue is intentionally omitted so an unset value stays at its zero
+// duration: the Talos provisioner then applies its built-in 10m default. Writing
+// a default here would eagerly populate the spec field, which is unnecessary since
+// the fallback lives at the provisioner layer.
+func DrainTimeoutFieldSelector() FieldSelector[v1alpha1.Cluster] {
+	return FieldSelector[v1alpha1.Cluster]{
+		Selector: func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.Talos.DrainTimeout },
+		Description: "Per-node pod-eviction budget for rolling node drains during cluster update " +
+			"(default 10m when unset). Increase it for stateful workloads that need longer to evict " +
+			"gracefully (e.g. Longhorn rebuilds, database failovers). On timeout the update aborts; " +
+			"re-run with --force to delete pods bypassing PodDisruptionBudgets. Talos only.",
+	}
+}
+
 // DefaultImportImagesFieldSelector creates a standard field selector for import-images.
 func DefaultImportImagesFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	return FieldSelector[v1alpha1.Cluster]{

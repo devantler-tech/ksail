@@ -1,5 +1,5 @@
-import { FileCode, RotateCw, ScrollText } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { FileCode, RotateCw, ScrollText, SquareTerminal } from "lucide-react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import {
   ApiError,
   CLUSTER_SCOPED_KINDS,
@@ -20,6 +20,12 @@ import { relativeAge } from "../lib/format.ts";
 import { ApplyManifestsDialog } from "./ApplyManifestsDialog.tsx";
 import { LogViewer } from "./LogViewer.tsx";
 import { ConfirmDialog } from "./ConfirmDialog.tsx";
+
+// ExecTerminal pulls in xterm.js (~250 kB), so it is code-split: the chunk loads only when a terminal
+// is actually opened, keeping it out of the initial bundle.
+const ExecTerminal = lazy(() =>
+  import("./ExecTerminal.tsx").then((module) => ({ default: module.ExecTerminal })),
+);
 import { EmptyState, ErrorBanner, TableSkeleton } from "./states.tsx";
 import { useToast } from "./Toast.tsx";
 import { Button, SelectField, SlideOver, TextField } from "./ui.tsx";
@@ -59,11 +65,38 @@ function currentReplicas(obj: K8sObject): number {
   return spec?.replicas ?? 0;
 }
 
-// podContainers reads spec.containers[].name from a Pod object (for the logs container picker).
+// podContainers reads spec.containers[].name from a Pod object (for the logs/exec container picker).
 function podContainers(obj: K8sObject): string[] {
   const spec = obj.spec as { containers?: { name?: string }[] } | undefined;
 
-  return (spec?.containers ?? []).map((entry) => entry.name ?? "").filter((entry) => entry !== "");
+  return (spec?.containers ?? []).map((container) => container.name ?? "").filter((name) => name !== "");
+}
+
+// ContainerPicker renders a container selector for a multi-container Pod (nothing for single-container
+// Pods). Shared by the Logs and Exec slide-overs so the picker markup lives in one place.
+function ContainerPicker({
+  pod,
+  value,
+  onChange,
+}: {
+  pod: K8sObject;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const containers = podContainers(pod);
+  if (containers.length <= 1) {
+    return null;
+  }
+
+  return (
+    <SelectField label="Container" value={value} onChange={(event) => onChange(event.target.value)}>
+      {containers.map((name) => (
+        <option key={name} value={name}>
+          {name}
+        </option>
+      ))}
+    </SelectField>
+  );
 }
 
 // resourceStatus derives an at-a-glance health/reconcile status for the table: a Ready condition
@@ -120,6 +153,7 @@ export function ResourcesView({
   canWrite,
   canApply,
   canLogs,
+  canExec,
 }: {
   clusters: Cluster[];
   // canWrite gates the write actions (scale/restart/delete) — true only when the backend advertises
@@ -130,6 +164,8 @@ export function ResourcesView({
   // canLogs gates the Logs action on Pods. Logs are read-only, so this is just workloadLogs (no
   // !readOnly), letting log viewing work even in read-only/GitOps mode.
   canLogs: boolean;
+  // canExec gates the Exec terminal action on Pods (workloadExec && !readOnly).
+  canExec: boolean;
 }) {
   const toast = useToast();
   const [selectedClusterKey, setSelectedClusterKey] = useState(clusters[0] ? clusterKey(clusters[0]) : "");
@@ -151,6 +187,9 @@ export function ResourcesView({
   // Logs target: the Pod being viewed (null = closed) + the chosen container.
   const [logPod, setLogPod] = useState<K8sObject | null>(null);
   const [logContainer, setLogContainer] = useState("");
+  // Exec target: the Pod being exec'd (null = closed) + the chosen container.
+  const [execPod, setExecPod] = useState<K8sObject | null>(null);
+  const [execContainer, setExecContainer] = useState("");
 
   // Seed the scale input from the selected object's current replica count whenever it changes.
   useEffect(() => {
@@ -345,7 +384,7 @@ export function ResourcesView({
       >
         {selected ? (
           <div className="space-y-3">
-            {canWrite || (canLogs && kind === "Pod") ? (
+            {canWrite || ((canLogs || canExec) && kind === "Pod") ? (
               <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-3 dark:border-slate-800">
                 {canWrite && SCALABLE_KINDS.includes(kind) ? (
                   <form
@@ -361,12 +400,14 @@ export function ResourcesView({
                       const [namespace, clusterName] = splitClusterKey(selectedClusterKey);
                       runAction("Scaled", () =>
                         scaleResource(
-                          namespace,
-                          clusterName,
-                          kind,
-                          selected.metadata?.name ?? "",
+                          {
+                            namespace,
+                            name: clusterName,
+                            kind,
+                            resourceName: selected.metadata?.name ?? "",
+                            resourceNamespace: selected.metadata?.namespace,
+                          },
                           replicas,
-                          selected.metadata?.namespace,
                         ),
                       );
                     }}
@@ -392,13 +433,13 @@ export function ResourcesView({
                     onClick={() => {
                       const [namespace, clusterName] = splitClusterKey(selectedClusterKey);
                       runAction("Restarted", () =>
-                        restartResource(
+                        restartResource({
                           namespace,
-                          clusterName,
+                          name: clusterName,
                           kind,
-                          selected.metadata?.name ?? "",
-                          selected.metadata?.namespace,
-                        ),
+                          resourceName: selected.metadata?.name ?? "",
+                          resourceNamespace: selected.metadata?.namespace,
+                        }),
                       );
                     }}
                   >
@@ -413,13 +454,13 @@ export function ResourcesView({
                     onClick={() => {
                       const [namespace, clusterName] = splitClusterKey(selectedClusterKey);
                       runAction("Reconciling", () =>
-                        reconcileResource(
+                        reconcileResource({
                           namespace,
-                          clusterName,
+                          name: clusterName,
                           kind,
-                          selected.metadata?.name ?? "",
-                          selected.metadata?.namespace,
-                        ),
+                          resourceName: selected.metadata?.name ?? "",
+                          resourceNamespace: selected.metadata?.namespace,
+                        }),
                       );
                     }}
                   >
@@ -439,6 +480,21 @@ export function ResourcesView({
                   >
                     <ScrollText className="size-3.5" aria-hidden />
                     Logs
+                  </Button>
+                ) : null}
+                {canExec && kind === "Pod" ? (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => {
+                      const containers = podContainers(selected);
+                      setExecContainer(containers[0] ?? "");
+                      setExecPod(selected);
+                      setSelected(null);
+                    }}
+                  >
+                    <SquareTerminal className="size-3.5" aria-hidden />
+                    Exec
                   </Button>
                 ) : null}
                 {canWrite && !CLUSTER_SCOPED_KINDS.includes(kind) ? (
@@ -475,7 +531,13 @@ export function ResourcesView({
           const [namespace, clusterName] = splitClusterKey(selectedClusterKey);
           const targetName = selected?.metadata?.name ?? "";
           try {
-            await deleteResource(namespace, clusterName, kind, targetName, selected?.metadata?.namespace);
+            await deleteResource({
+              namespace,
+              name: clusterName,
+              kind,
+              resourceName: targetName,
+              resourceNamespace: selected?.metadata?.namespace,
+            });
             toast.success(`Deleted ${targetName}`);
             setSelected(null);
             setNonce((value) => value + 1);
@@ -503,19 +565,7 @@ export function ResourcesView({
       >
         {logPod ? (
           <div className="space-y-3">
-            {podContainers(logPod).length > 1 ? (
-              <SelectField
-                label="Container"
-                value={logContainer}
-                onChange={(event) => setLogContainer(event.target.value)}
-              >
-                {podContainers(logPod).map((containerName) => (
-                  <option key={containerName} value={containerName}>
-                    {containerName}
-                  </option>
-                ))}
-              </SelectField>
-            ) : null}
+            <ContainerPicker pod={logPod} value={logContainer} onChange={setLogContainer} />
             <LogViewer
               clusterNamespace={selectedNamespace}
               clusterName={selectedName}
@@ -523,6 +573,30 @@ export function ResourcesView({
               pod={logPod.metadata?.name ?? ""}
               container={logContainer}
             />
+          </div>
+        ) : null}
+      </SlideOver>
+
+      <SlideOver
+        open={execPod !== null}
+        onClose={() => setExecPod(null)}
+        title={`Exec · ${execPod?.metadata?.name ?? ""}`}
+        subtitle={execPod?.metadata?.namespace ? `namespace: ${execPod.metadata.namespace}` : ""}
+      >
+        {execPod ? (
+          <div className="space-y-3">
+            <ContainerPicker pod={execPod} value={execContainer} onChange={setExecContainer} />
+            <Suspense
+              fallback={<div className="text-sm text-slate-500 dark:text-slate-400">Loading terminal…</div>}
+            >
+              <ExecTerminal
+                clusterNamespace={selectedNamespace}
+                clusterName={selectedName}
+                podNamespace={execPod.metadata?.namespace ?? ""}
+                pod={execPod.metadata?.name ?? ""}
+                container={execContainer}
+              />
+            </Suspense>
           </div>
         ) : null}
       </SlideOver>

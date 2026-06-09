@@ -9,6 +9,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/k8s/readiness"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/hetzner"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -23,9 +24,11 @@ const autoscalerRolloutTimeout = 5 * time.Minute
 
 // recycleAutoscalerNodes drains and deletes the cluster-autoscaler-managed nodes so
 // the autoscaler re-provisions any still-needed capacity from the refreshed Talos
-// snapshot + worker config. It is invoked only after the cluster-autoscaler-config
-// Secret actually changed (a Talos/Kubernetes version bump), so existing autoscaler
-// nodes follow the new baseline instead of drifting on the old versions.
+// snapshot + worker config. It is the disruptive propagation path, reserved for
+// changes an already-booted node cannot adopt in place: a new Talos boot image
+// (snapshot/OS bump) or a reboot/wipe/recreate-class change. Config-only drift that
+// Talos applies with NO_REBOOT goes through applyInPlaceToAutoscalerNodes instead,
+// so it never drains — see autoscalerRecycleRequired for the gate.
 //
 // Why this is needed: `cluster update` upgrades only KSail-owned nodes in place
 // (control planes + static workers, listed via the ksail.owned label). Autoscaler
@@ -40,27 +43,20 @@ const autoscalerRolloutTimeout = 5 * time.Minute
 // demand. Compute-only autoscaler nodes hold no persistent storage and no etcd
 // membership, so replace-by-recreation is the idiomatic, lossless path.
 func (p *Provisioner) recycleAutoscalerNodes(ctx context.Context, clusterName string) error {
-	if p.hetznerOpts == nil || !p.hetznerOpts.NodeAutoscalerEnabled ||
-		len(p.hetznerOpts.AutoscalerNodePoolNames) == 0 {
-		return nil
-	}
-
-	hzProvider, err := p.hetznerProvider()
+	servers, err := p.listAutoscalerServers(ctx, clusterName)
 	if err != nil {
 		return err
-	}
-
-	servers, err := hzProvider.ListAutoscalerNodes(
-		ctx, clusterName, p.hetznerOpts.AutoscalerNodePoolNames,
-	)
-	if err != nil {
-		return fmt.Errorf("listing autoscaler nodes to recycle: %w", err)
 	}
 
 	if len(servers) == 0 {
 		_, _ = fmt.Fprintf(p.logWriter, "  ⓘ No autoscaler nodes to recycle\n")
 
 		return nil
+	}
+
+	hzProvider, err := p.hetznerProvider()
+	if err != nil {
+		return err
 	}
 
 	clientset, err := p.createK8sClient(clusterName)
@@ -76,6 +72,89 @@ func (p *Provisioner) recycleAutoscalerNodes(ctx context.Context, clusterName st
 	}
 
 	return p.recycleAutoscalerServers(ctx, clientset, hzProvider, sortServersByName(servers))
+}
+
+// listAutoscalerServers returns the running autoscaler-managed servers for the
+// cluster, or nil when the node autoscaler is disabled or no pools are configured.
+// Both the recycle and in-place propagation paths enumerate nodes this way, so the
+// disabled-guard and per-pool lookup live in one place.
+func (p *Provisioner) listAutoscalerServers(
+	ctx context.Context,
+	clusterName string,
+) ([]*hcloud.Server, error) {
+	if p.hetznerOpts == nil || !p.hetznerOpts.NodeAutoscalerEnabled ||
+		len(p.hetznerOpts.AutoscalerNodePoolNames) == 0 {
+		return nil, nil
+	}
+
+	hzProvider, err := p.hetznerProvider()
+	if err != nil {
+		return nil, err
+	}
+
+	servers, err := hzProvider.ListAutoscalerNodes(
+		ctx, clusterName, p.hetznerOpts.AutoscalerNodePoolNames,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("listing autoscaler nodes: %w", err)
+	}
+
+	return servers, nil
+}
+
+// applyInPlaceToAutoscalerNodes pushes the refreshed worker configuration to the
+// running autoscaler nodes with a NO_REBOOT apply — the same non-disruptive path
+// KSail-owned workers get for in-place changes. It is the counterpart to
+// recycleAutoscalerNodes for config-only drift: because it never cordons or drains,
+// a strict PodDisruptionBudget (e.g. a singleton with maxUnavailable: 0) can no
+// longer stall the whole update the way a recycle's eviction loop can.
+//
+// Each node is reconciled independently via applyNodeConfig, which overlays the
+// role-scoped worker patches onto the node's *running* config — preserving the
+// create/boot-time settings an autoscaler node already carries (its server-name
+// hostname, the autoscaled marker, pool labels/taints) while still landing the new
+// patch. Per-node failures are recorded on result (surfacing as a failed update)
+// rather than aborting the loop, so one unreachable node does not block the rest.
+func (p *Provisioner) applyInPlaceToAutoscalerNodes(
+	ctx context.Context,
+	clusterName string,
+	result *clusterupdate.UpdateResult,
+) error {
+	servers, err := p.listAutoscalerServers(ctx, clusterName)
+	if err != nil {
+		return err
+	}
+
+	if len(servers) == 0 {
+		_, _ = fmt.Fprintf(p.logWriter, "  ⓘ No autoscaler nodes to reconcile\n")
+
+		return nil
+	}
+
+	_, _ = fmt.Fprintf(p.logWriter,
+		"Applying refreshed config to %d autoscaler node(s) in place (no reboot)...\n",
+		len(servers))
+
+	// buildDesiredNodeConfig rebuilds each node's config from its running config +
+	// the cluster PKI, which only a control-plane node carries; seed it from one
+	// up front and reuse it for every node (see fetchSecretsSource / #4963).
+	secretsSource := p.fetchSecretsSource(ctx, clusterName)
+
+	for _, server := range sortServersByName(servers) {
+		serverIP, addrErr := hetznerNodeTalosAddress(server)
+		if addrErr != nil {
+			p.recordNodeConfigFailure(
+				nodeWithRole{IP: server.Name, Role: RoleWorker}, result,
+				fmt.Sprintf("resolve address: %v", addrErr),
+			)
+
+			continue
+		}
+
+		p.applyNodeConfig(ctx, nodeWithRole{IP: serverIP, Role: RoleWorker}, secretsSource, result)
+	}
+
+	return nil
 }
 
 // recycleAutoscalerServers recycles the given autoscaler servers one at a time,

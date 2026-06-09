@@ -12,7 +12,6 @@ import {
   updateCluster,
   type Cluster,
   type ClusterMeta,
-  type ClusterSpec,
   type Config,
   type ProviderInfo,
   type User,
@@ -23,7 +22,12 @@ import { SettingsPage } from "./components/SettingsPage.tsx";
 import { ResourcesView } from "./components/ResourcesView.tsx";
 import { SecretsView } from "./components/SecretsView.tsx";
 import { ClusterDetail } from "./components/ClusterDetail.tsx";
-import { ClusterFormDialog, type ClusterFormValues, type FormMode } from "./components/ClusterFormDialog.tsx";
+import {
+  ClusterFormDialog,
+  specFromValues,
+  type ClusterFormValues,
+  type FormMode,
+} from "./components/ClusterFormDialog.tsx";
 import { ClustersTable } from "./components/ClustersTable.tsx";
 import { ConfirmDialog } from "./components/ConfirmDialog.tsx";
 import { LoginScreen } from "./components/LoginScreen.tsx";
@@ -51,30 +55,6 @@ function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
-// specFromValues maps the form fields to a ClusterSpec. Node counts are parsed to numbers; the
-// component enums are sent verbatim (default values serialize away server-side via omitzero).
-function specFromValues(values: ClusterFormValues): ClusterSpec {
-  const controlPlanes = Number.parseInt(values.controlPlanes, 10);
-  const workers = Number.parseInt(values.workers, 10);
-
-  // The form holds plain strings sourced from /api/v1/meta (the server's valid enum values); narrow
-  // them to the generated enum unions on the way out.
-  return {
-    distribution: values.distribution as ClusterSpec["distribution"],
-    provider: values.provider as ClusterSpec["provider"],
-    controlPlanes: Number.isNaN(controlPlanes) ? undefined : controlPlanes,
-    workers: Number.isNaN(workers) ? undefined : workers,
-    cni: values.cni as ClusterSpec["cni"],
-    csi: values.csi as ClusterSpec["csi"],
-    cdi: values.cdi as ClusterSpec["cdi"],
-    metricsServer: values.metricsServer as ClusterSpec["metricsServer"],
-    loadBalancer: values.loadBalancer as ClusterSpec["loadBalancer"],
-    certManager: values.certManager as ClusterSpec["certManager"],
-    policyEngine: values.policyEngine as ClusterSpec["policyEngine"],
-    gitOpsEngine: values.gitOpsEngine as ClusterSpec["gitOpsEngine"],
-  };
-}
-
 export function App() {
   const { theme, toggle } = useTheme();
   const toast = useToast();
@@ -97,6 +77,8 @@ export function App() {
   const [canCipher, setCanCipher] = useState(fullCapabilities.secretsCipher);
   // canLogs reflects the backend's workloadLogs capability (the in-browser log viewer).
   const [canLogs, setCanLogs] = useState(fullCapabilities.workloadLogs);
+  // canExecCap reflects the backend's workloadExec capability (the in-browser terminal).
+  const [canExecCap, setCanExecCap] = useState(fullCapabilities.workloadExec);
   const [user, setUser] = useState<User | null>(null);
   const [needsLogin, setNeedsLogin] = useState(false);
   const [meta, setMeta] = useState<ClusterMeta | null>(null);
@@ -174,6 +156,7 @@ export function App() {
     setCanApply(config.capabilities?.applyManifests ?? fullCapabilities.applyManifests);
     setCanCipher(config.capabilities?.secretsCipher ?? fullCapabilities.secretsCipher);
     setCanLogs(config.capabilities?.workloadLogs ?? fullCapabilities.workloadLogs);
+    setCanExecCap(config.capabilities?.workloadExec ?? fullCapabilities.workloadExec);
     setDistributions(config.distributions ?? DEFAULT_DISTRIBUTIONS);
     setProviderStatus(config.providers ?? null);
     setSettingsEnabled(config.settingsEnabled ?? false);
@@ -311,6 +294,23 @@ export function App() {
     [formMode, formInitial, refresh, toast],
   );
 
+  // handleSubmitRaw creates a cluster from a YAML-authored Cluster (the create dialog's YAML mode),
+  // preserving every field the YAML carries (lossless full-spec) rather than projecting through the
+  // form fields.
+  const handleSubmitRaw = useCallback(
+    async (cluster: Cluster) => {
+      try {
+        await createCluster(cluster);
+        toast.success(`Cluster "${cluster.metadata.name}" created`);
+        await refresh(true);
+      } catch (err) {
+        toast.error(errorMessage(err));
+        throw err;
+      }
+    },
+    [refresh, toast],
+  );
+
   const handleDelete = useCallback(async () => {
     if (!deleteTarget) {
       return;
@@ -378,6 +378,7 @@ export function App() {
             canWrite={!readOnly && canManage}
             canApply={!readOnly && canApply}
             canLogs={canLogs}
+            canExec={!readOnly && canExecCap}
           />
         ) : (
           <div className="mx-auto max-w-6xl space-y-4">
@@ -436,6 +437,7 @@ export function App() {
             distributions={distributions}
             providerStatus={providerStatus}
             onSubmit={handleSubmit}
+            onSubmitRaw={handleSubmitRaw}
             onClose={() => setFormOpen(false)}
           />
         ) : null}

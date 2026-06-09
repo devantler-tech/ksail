@@ -258,16 +258,74 @@ func TestCreateWithRetry_DBusErrorTriggersRecovery(t *testing.T) {
 	assert.Equal(t, 1, recoverCalls, "D-Bus recovery should be called once")
 }
 
-func TestCreateWithRetry_DBusRecoveryFailure(t *testing.T) {
+// TestCreateWithRetry_DBusRecoveryFailureFallsBackToRetry is the regression guard
+// for the hardening: when in-place D-Bus recovery fails, create must fall back to
+// a full delete-and-retry (fresh container) rather than giving up — the fresh
+// container on the next attempt usually clears the systemd/D-Bus race. Previously
+// a single failed in-place recovery aborted the whole create (issue #2261).
+func TestCreateWithRetry_DBusRecoveryFailureFallsBackToRetry(t *testing.T) {
 	t.Parallel()
 
+	createCalls := 0
 	create := func(_ context.Context, _ *cli.CreateOptions, _ *flags.GlobalFlags, _ string, _ loftlog.Logger) error {
+		createCalls++
+		if createCalls == 1 {
+			return errDBus // first attempt hits the D-Bus race
+		}
+
+		return nil // a fresh container on retry succeeds
+	}
+
+	cleanupCalls := 0
+	cleanup := func(_ context.Context, _ *flags.GlobalFlags, _ string, _ loftlog.Logger) {
+		cleanupCalls++
+	}
+
+	recoverCalls := 0
+	recoverDBus := func(_ context.Context, _ *flags.GlobalFlags, _ string, _ loftlog.Logger) error {
+		recoverCalls++
+
+		return errDBusRecover // in-place recovery fails
+	}
+
+	err := vclusterprovisioner.CreateWithRetryForTest(
+		context.Background(),
+		&cli.CreateOptions{},
+		&flags.GlobalFlags{},
+		"test-cluster",
+		newTestLogger(),
+		time.Millisecond,
+		create, cleanup, recoverDBus,
+	)
+
+	require.NoError(t, err, "a failed in-place D-Bus recovery must fall back to a full retry")
+	assert.Equal(t, 2, createCalls, "create runs again on a fresh container after recovery fails")
+	assert.Equal(t, 1, recoverCalls, "in-place recovery is attempted once before falling back")
+	assert.Equal(t, 1, cleanupCalls, "cleanup runs before the fresh retry")
+}
+
+// TestCreateWithRetry_DBusRecoveryPersistentFailureExhaustsAttempts verifies the
+// other half: when both the D-Bus race AND its in-place recovery persist on every
+// attempt, create exhausts its retries and surfaces an actionable, wrapped error.
+func TestCreateWithRetry_DBusRecoveryPersistentFailureExhaustsAttempts(t *testing.T) {
+	t.Parallel()
+
+	createCalls := 0
+	create := func(_ context.Context, _ *cli.CreateOptions, _ *flags.GlobalFlags, _ string, _ loftlog.Logger) error {
+		createCalls++
+
 		return errDBus
 	}
 
-	cleanup := func(_ context.Context, _ *flags.GlobalFlags, _ string, _ loftlog.Logger) {}
+	cleanupCalls := 0
+	cleanup := func(_ context.Context, _ *flags.GlobalFlags, _ string, _ loftlog.Logger) {
+		cleanupCalls++
+	}
 
+	recoverCalls := 0
 	recoverDBus := func(_ context.Context, _ *flags.GlobalFlags, _ string, _ loftlog.Logger) error {
+		recoverCalls++
+
 		return errDBusRecover
 	}
 
@@ -282,8 +340,12 @@ func TestCreateWithRetry_DBusRecoveryFailure(t *testing.T) {
 	)
 
 	require.Error(t, err)
+	require.ErrorContains(t, err, "after 5 attempts")
 	require.ErrorContains(t, err, "D-Bus recovery failed")
 	require.ErrorIs(t, err, errDBusRecover)
+	assert.Equal(t, 5, createCalls, "create is attempted maxAttempts times")
+	assert.Equal(t, 5, recoverCalls, "in-place recovery is attempted on every attempt")
+	assert.Equal(t, 4, cleanupCalls, "cleanup runs before retries 2 through 5")
 }
 
 func TestCreateWithRetry_ContextCancellation(t *testing.T) {

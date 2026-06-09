@@ -8,7 +8,8 @@ operator:
   enabled: true
   image:
     repository: ghcr.io/devantler-tech/ksail
-    # tag defaults to the chart appVersion when empty.
+    # tag defaults to v<appVersion> (the v-prefixed chart appVersion, matching the
+    # released image tag) when empty.
     tag: ""
     pullPolicy: IfNotPresent
   replicas: 1
