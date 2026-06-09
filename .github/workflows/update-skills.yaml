@@ -15,6 +15,6 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
-    uses: devantler-tech/reusable-workflows/.github/workflows/update-agent-skills.yaml@e5d0f20a87d50518123513d07d633c243af6c1e6 # v5.5.8
+    uses: devantler-tech/reusable-workflows/.github/workflows/update-agent-skills.yaml@7d3a08e3cc284c6fa14a056d5df7702ec0978d59 # v5.5.10
     with:
       dir: .agents/skills
