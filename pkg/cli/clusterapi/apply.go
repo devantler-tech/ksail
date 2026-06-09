@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	"github.com/devantler-tech/ksail/v7/pkg/operator/api"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -43,16 +42,9 @@ func defaultApplyClient(
 	_ context.Context,
 	clusterName string,
 ) (dynamic.Interface, meta.RESTMapper, error) {
-	kubeconfigPath := k8s.DefaultKubeconfigPath()
-
-	contextName, err := contextForCluster(kubeconfigPath, clusterName)
+	restConfig, err := restConfigForCluster(clusterName)
 	if err != nil {
 		return nil, nil, err
-	}
-
-	restConfig, err := k8s.BuildRESTConfig(kubeconfigPath, contextName)
-	if err != nil {
-		return nil, nil, fmt.Errorf("build rest config for %q: %w", clusterName, err)
 	}
 
 	dynamicClient, err := dynamic.NewForConfig(restConfig)

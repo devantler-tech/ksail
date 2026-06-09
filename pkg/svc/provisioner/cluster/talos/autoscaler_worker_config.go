@@ -210,6 +210,52 @@ func buildClusterConfigSecretValue(
 	return base64.StdEncoding.EncodeToString(jsonBytes), nil
 }
 
+// snapshotImageIDFromSecret decodes the amd64 snapshot image ID currently stored
+// in a cluster-autoscaler-config Secret's HCLOUD_CLUSTER_CONFIG value. It is used
+// to detect a Talos OS bump (a new boot image) across an update: a changed image
+// ID means existing autoscaler nodes booted from an older snapshot and can only
+// adopt the new one by being replaced. It returns "" when the key is absent or
+// the value cannot be decoded, so callers treat an unreadable baseline as "no
+// detectable image change" rather than forcing a disruptive recycle.
+func snapshotImageIDFromSecret(secret *corev1.Secret) string {
+	raw := secret.Data[clusterautoscalerinstaller.AutoscalerConfigHcloudClusterConfigKey]
+	if len(raw) == 0 {
+		return ""
+	}
+
+	jsonBytes, err := base64.StdEncoding.DecodeString(string(raw))
+	if err != nil {
+		return ""
+	}
+
+	var clusterConfig hcloudClusterConfig
+	if json.Unmarshal(jsonBytes, &clusterConfig) != nil {
+		return ""
+	}
+
+	return clusterConfig.ImagesForArch.Amd64
+}
+
+// currentAutoscalerSnapshotImageID returns the amd64 snapshot image ID currently
+// recorded in the cluster-autoscaler-config Secret, or "" when the Secret is
+// absent or unreadable. It is best-effort: an empty result simply means no boot
+// image change can be detected, so the caller falls back to the diff-based gate.
+func (p *Provisioner) currentAutoscalerSnapshotImageID(ctx context.Context) string {
+	kubeclient, err := p.newSecretKubeclient("autoscaler snapshot probe")
+	if err != nil {
+		return ""
+	}
+
+	secret, err := kubeclient.CoreV1().
+		Secrets(autoscalerConfigSecretNamespace).
+		Get(ctx, autoscalerConfigSecretName, metav1.GetOptions{})
+	if err != nil {
+		return ""
+	}
+
+	return snapshotImageIDFromSecret(secret)
+}
+
 // compressWorkerConfigToUserData encodes a Talos worker machine config into the
 // value the autoscaler stores verbatim as a Hetzner server's user_data.
 //

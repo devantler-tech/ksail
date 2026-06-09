@@ -217,6 +217,19 @@ func TestStandardFieldSelectors(t *testing.T) {
 				assertPointerSame(t, ptr, &cluster.Spec.Cluster.ImportImages)
 			},
 		},
+		{
+			name:    "drain timeout",
+			factory: configmanager.DrainTimeoutFieldSelector,
+			expectedDesc: "Per-node pod-eviction budget for rolling node drains during cluster update " +
+				"(default 10m when unset). Increase it for stateful workloads that need longer to evict " +
+				"gracefully (e.g. Longhorn rebuilds, database failovers). On timeout the update aborts; " +
+				"re-run with --force to delete pods bypassing PodDisruptionBudgets. Talos only.",
+			expectedDefault: nil,
+			assertPointer: func(t *testing.T, cluster *v1alpha1.Cluster, ptr any) {
+				t.Helper()
+				assertPointerSame(t, ptr, &cluster.Spec.Cluster.Talos.DrainTimeout)
+			},
+		},
 	}
 
 	for _, testCase := range cases {

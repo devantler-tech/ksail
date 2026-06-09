@@ -77,6 +77,11 @@ func main() {
 		Height: windowHeight,
 	})
 
+	// Restore the window to where it was last left (position + size) and keep persisting changes so it
+	// reopens there next time; falls back to these centered defaults on first launch. See
+	// trackWindowState.
+	trackWindowState(app, window)
+
 	// A menu-bar/system-tray icon for quick access: show/hide the window or quit without going through
 	// the Dock. Must be configured before Run() (which blocks until shutdown).
 	tray := app.SystemTray.New()

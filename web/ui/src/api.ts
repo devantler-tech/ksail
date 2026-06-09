@@ -118,12 +118,15 @@ export interface Capabilities {
   // workloadLogs is true when the backend can stream a pod container's logs (the in-browser log
   // viewer). Logs are read-only, so the SPA shows the action without combining it with !readOnly.
   workloadLogs: boolean;
+  // workloadExec is true when the backend can exec into a pod container (the in-browser terminal).
+  // The SPA combines it with !readOnly before showing the Exec action.
+  workloadExec: boolean;
 }
 
 // fullCapabilities mirrors the backend's default for a service that does not report capabilities.
 // clusterUpdate defaults true (assume a working action rather than hiding it); the workload +
-// kubeconfig + apply + cipher flags default false because their endpoints may not exist on an older
-// backend.
+// kubeconfig + apply + cipher + exec flags default false because their endpoints may not exist on an
+// older backend.
 export const fullCapabilities: Capabilities = {
   clusterUpdate: true,
   workloadRead: false,
@@ -132,6 +135,7 @@ export const fullCapabilities: Capabilities = {
   applyManifests: false,
   secretsCipher: false,
   workloadLogs: false,
+  workloadExec: false,
 };
 
 // logsEventSourceURL builds the same-origin SSE URL for streaming a pod container's logs. EventSource
@@ -454,16 +458,35 @@ function resourcePath(
   return `/api/v1/clusters/${namespace}/${name}/resources/${kind}/${resourceName}${suffix}${query}`;
 }
 
+// ResourceAction identifies a single resource targeted by a mutating action (scale/restart/delete).
+// namespace/name are the CLUSTER's; resourceName/resourceNamespace are the resource's own.
+export type ResourceAction = {
+  namespace: string;
+  name: string;
+  kind: string;
+  resourceName: string;
+  resourceNamespace?: string;
+};
+
+// mutateResource issues a mutating request against a resource's action endpoint — the shared core of
+// scale/restart/delete, so each only differs by its path suffix and request init.
+function mutateResource(target: ResourceAction, suffix: string, init: RequestInit): Promise<void> {
+  return request<void>(
+    resourcePath(
+      target.namespace,
+      target.name,
+      target.kind,
+      target.resourceName,
+      target.resourceNamespace,
+      suffix,
+    ),
+    init,
+  );
+}
+
 // scaleResource sets the replica count of a scalable workload.
-export function scaleResource(
-  namespace: string,
-  name: string,
-  kind: string,
-  resourceName: string,
-  replicas: number,
-  resourceNamespace?: string,
-): Promise<void> {
-  return request<void>(resourcePath(namespace, name, kind, resourceName, resourceNamespace, "/scale"), {
+export function scaleResource(target: ResourceAction, replicas: number): Promise<void> {
+  return mutateResource(target, "/scale", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ replicas }),
@@ -471,42 +494,18 @@ export function scaleResource(
 }
 
 // restartResource triggers a rolling restart of a workload.
-export function restartResource(
-  namespace: string,
-  name: string,
-  kind: string,
-  resourceName: string,
-  resourceNamespace?: string,
-): Promise<void> {
-  return request<void>(resourcePath(namespace, name, kind, resourceName, resourceNamespace, "/restart"), {
-    method: "POST",
-  });
+export function restartResource(target: ResourceAction): Promise<void> {
+  return mutateResource(target, "/restart", { method: "POST" });
 }
 
 // reconcileResource triggers an immediate GitOps reconcile (Flux/ArgoCD) of a resource.
-export function reconcileResource(
-  namespace: string,
-  name: string,
-  kind: string,
-  resourceName: string,
-  resourceNamespace?: string,
-): Promise<void> {
-  return request<void>(resourcePath(namespace, name, kind, resourceName, resourceNamespace, "/reconcile"), {
-    method: "POST",
-  });
+export function reconcileResource(target: ResourceAction): Promise<void> {
+  return mutateResource(target, "/reconcile", { method: "POST" });
 }
 
 // deleteResource deletes a resource.
-export function deleteResource(
-  namespace: string,
-  name: string,
-  kind: string,
-  resourceName: string,
-  resourceNamespace?: string,
-): Promise<void> {
-  return request<void>(resourcePath(namespace, name, kind, resourceName, resourceNamespace, ""), {
-    method: "DELETE",
-  });
+export function deleteResource(target: ResourceAction): Promise<void> {
+  return mutateResource(target, "", { method: "DELETE" });
 }
 
 // SECRET_FORMATS are the SOPS store formats the cipher view offers.
@@ -533,4 +532,26 @@ export function decryptSecret(encrypted: string, format: string): Promise<{ plai
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ encrypted, format }),
   });
+}
+
+// execWebSocketURL builds the same-origin WebSocket URL for an exec session into a pod container.
+// (In the Wails desktop, a loopback listener provides a ws:// origin; the browser surfaces are
+// same-origin off window.location.)
+export function execWebSocketURL(
+  namespace: string,
+  name: string,
+  podNamespace: string,
+  pod: string,
+  container: string,
+): string {
+  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+  const params = new URLSearchParams({ pod });
+  if (podNamespace) {
+    params.set("namespace", podNamespace);
+  }
+  if (container) {
+    params.set("container", container);
+  }
+
+  return `${protocol}//${window.location.host}/api/v1/clusters/${namespace}/${name}/exec?${params.toString()}`;
 }
