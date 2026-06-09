@@ -12,7 +12,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -49,13 +48,13 @@ func ObserveVClusterStatus(
 		return controller.ObservedStatus{}, nil
 	}
 
-	name := controller.ProvisionedName(cluster)
-	namespace := vclusterNamespacePrefix + name
-	secretName := vclusterSecretPrefix + name
+	conn := vclusterConnectionFor(cluster)
 
 	var secret corev1.Secret
 
-	err := hub.Get(ctx, types.NamespacedName{Namespace: namespace, Name: secretName}, &secret)
+	key := types.NamespacedName{Namespace: conn.namespace, Name: conn.secretName}
+
+	err := hub.Get(ctx, key, &secret)
 	if apierrors.IsNotFound(err) {
 		// The provisioner has not published the kubeconfig yet; nothing to report this pass.
 		return controller.ObservedStatus{}, nil
@@ -65,18 +64,15 @@ func ObserveVClusterStatus(
 		return controller.ObservedStatus{}, fmt.Errorf("get vcluster kubeconfig secret: %w", err)
 	}
 
-	// In-cluster API endpoint: the vcluster Service is named <name> in namespace vcluster-<name>.
-	endpoint := fmt.Sprintf("https://%s.%s.svc:%d", name, namespace, vclusterAPIPort)
-
 	observed := controller.ObservedStatus{
-		Endpoint: endpoint,
+		Endpoint: conn.endpoint,
 		KubeconfigSecret: &v1alpha1.SecretReference{
-			Namespace: namespace,
-			Name:      secretName,
+			Namespace: conn.namespace,
+			Name:      conn.secretName,
 		},
 	}
 
-	ready, total, err := countNodes(ctx, secret.Data[vclusterKubeconfigKey], endpoint)
+	ready, total, err := countNodes(ctx, secret.Data[vclusterKubeconfigKey], conn.endpoint)
 	if err != nil {
 		// Endpoint and Secret reference are still useful; surface the node-count failure for logging.
 		return observed, fmt.Errorf("count vcluster nodes: %w", err)
@@ -96,19 +92,10 @@ func countNodes(
 	kubeconfig []byte,
 	endpoint string,
 ) (int32, int32, error) {
-	if len(kubeconfig) == 0 {
-		return 0, 0, errMissingKubeconfig
-	}
-
-	restConfig, err := clientcmd.RESTConfigFromKubeConfig(kubeconfig)
+	restConfig, err := restConfigForChild(kubeconfig, endpoint)
 	if err != nil {
-		return 0, 0, fmt.Errorf("parse kubeconfig: %w", err)
+		return 0, 0, err
 	}
-
-	// The kubeconfig points at a local port-forward address; reach the API server at its in-cluster
-	// Service instead, verifying the served certificate against its actual SAN.
-	restConfig.Host = endpoint
-	restConfig.ServerName = vclusterServerName
 
 	clientset, err := kubernetes.NewForConfig(restConfig)
 	if err != nil {

@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/dynamic"
 )
 
 const groupApps = "apps"
@@ -130,6 +132,48 @@ func ResourceKindFor(kind string) (ResourceKind, error) {
 	}
 
 	return resourceKind, nil
+}
+
+// ListResourcesWith lists a resolved kind from a dynamic client, scoped to query.Namespace for a
+// namespaced kind (empty Namespace lists across all namespaces). It is shared by the local and
+// operator backends so the only per-backend difference is how the dynamic client is obtained.
+func ListResourcesWith(
+	ctx context.Context,
+	dyn dynamic.Interface,
+	kind ResourceKind,
+	query ResourceQuery,
+) (*unstructured.UnstructuredList, error) {
+	lister := dynamic.ResourceInterface(dyn.Resource(kind.GVR))
+	if kind.Namespaced && query.Namespace != "" {
+		lister = dyn.Resource(kind.GVR).Namespace(query.Namespace)
+	}
+
+	list, err := lister.List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("list %s: %w", query.Kind, err)
+	}
+
+	return list, nil
+}
+
+// GetResourceWith fetches a single resolved resource from a dynamic client. Shared by both backends.
+func GetResourceWith(
+	ctx context.Context,
+	dyn dynamic.Interface,
+	kind ResourceKind,
+	ref ResourceRef,
+) (*unstructured.Unstructured, error) {
+	getter := dynamic.ResourceInterface(dyn.Resource(kind.GVR))
+	if kind.Namespaced {
+		getter = dyn.Resource(kind.GVR).Namespace(ref.Namespace)
+	}
+
+	obj, err := getter.Get(ctx, ref.Name, metav1.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("get %s %q: %w", ref.Kind, ref.Name, err)
+	}
+
+	return obj, nil
 }
 
 // ScaleRequest is the JSON body of a scale request.
