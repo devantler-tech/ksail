@@ -12,7 +12,6 @@ import {
   updateCluster,
   type Cluster,
   type ClusterMeta,
-  type ClusterSpec,
   type Config,
   type ProviderInfo,
   type User,
