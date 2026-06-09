@@ -14,7 +14,7 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
-import { ApiError, downloadKubeconfig, listResources, type Cluster, type Condition, type K8sObject } from "../api.ts";
+import { downloadKubeconfig, errorMessage, listResources, type Cluster, type Condition, type K8sObject } from "../api.ts";
 import { cx } from "../lib/cx.ts";
 import { formatTimestamp, relativeAge } from "../lib/format.ts";
 import {
@@ -30,7 +30,7 @@ import {
 import { COMPONENT_LABELS, useMeta } from "../lib/meta.ts";
 import { EventList } from "./EventList.tsx";
 import { StatusBadge } from "./StatusBadge.tsx";
-import { EmptyState, ErrorBanner } from "./states.tsx";
+import { EmptyState } from "./states.tsx";
 import { Button } from "./ui.tsx";
 import { useToast } from "./Toast.tsx";
 
@@ -189,10 +189,6 @@ function conditionIcon(status: Condition["status"]) {
   return <CircleHelp className="size-4 shrink-0 text-amber-500" aria-hidden />;
 }
 
-function errorMessage(err: unknown): string {
-  return err instanceof ApiError || err instanceof Error ? err.message : String(err);
-}
-
 // OverviewView is the cluster home: the cluster's spec, status, and conditions (formerly the cluster
 // detail panel) alongside live health composed from the read-only resource endpoints. It operates on
 // the active cluster from the workspace context — there is no cluster selector here.
@@ -219,7 +215,6 @@ export function OverviewView({
   const toast = useToast();
   const [health, setHealth] = useState<LiveHealth | null>(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [nonce, setNonce] = useState(0);
   const [downloading, setDownloading] = useState(false);
 
@@ -235,17 +230,13 @@ export function OverviewView({
     const [namespace, name] = splitClusterKey(key);
     let cancelled = false;
     setLoading(true);
-    setError(null);
 
+    // loadHealth never rejects — each per-kind fetch swallows its own error (see listKind) so one
+    // missing/forbidden kind degrades to empty cards rather than failing the whole dashboard.
     loadHealth(namespace, name)
       .then((result) => {
         if (!cancelled) {
           setHealth(result);
-        }
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) {
-          setError(errorMessage(err));
         }
       })
       .finally(() => {
@@ -322,8 +313,6 @@ export function OverviewView({
           ) : null}
         </div>
       </div>
-
-      {error ? <ErrorBanner message={error} onRetry={() => setNonce((value) => value + 1)} /> : null}
 
       {/* Live health (workload-read only). */}
       {canBrowse ? (

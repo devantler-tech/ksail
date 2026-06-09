@@ -1,4 +1,5 @@
 import type { Cluster, K8sObject } from "../api.ts";
+import { epochMs } from "./format.ts";
 
 // clusterKey is the "namespace/name" identity used to address a cluster across the SPA (matches the
 // key App.tsx selects on). splitClusterKey is its inverse; both are DNS labels, so name has no "/".
@@ -62,13 +63,7 @@ export function eventFields(obj: K8sObject): EventFields {
 
 // eventLastSeenMs returns the event's last-seen time in epoch ms for sorting (0 when unknown).
 export function eventLastSeenMs(fields: EventFields): number {
-  if (!fields.lastSeen) {
-    return 0;
-  }
-
-  const ms = new Date(fields.lastSeen).getTime();
-
-  return Number.isNaN(ms) ? 0 : ms;
+  return epochMs(fields.lastSeen);
 }
 
 // nodeReady reports whether a Node's Ready condition is True.

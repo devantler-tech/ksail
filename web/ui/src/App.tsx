@@ -15,6 +15,7 @@ import {
   ApiError,
   createCluster,
   deleteCluster,
+  errorMessage,
   fullCapabilities,
   getConfig,
   getMeta,
@@ -60,14 +61,6 @@ import { useToast } from "./components/Toast.tsx";
 // in-cluster); the local `ksail ui` backend advertises everything it can create locally. The
 // provider matrix and component options for whatever is selected still come from /api/v1/meta.
 const DEFAULT_DISTRIBUTIONS = ["VCluster"];
-
-function errorMessage(err: unknown): string {
-  if (err instanceof ApiError) {
-    return err.message;
-  }
-
-  return err instanceof Error ? err.message : String(err);
-}
 
 export function App() {
   const { theme, toggle } = useTheme();

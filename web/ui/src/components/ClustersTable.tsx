@@ -2,18 +2,12 @@ import { ChevronRight, Pencil, Trash2 } from "lucide-react";
 import { useMemo } from "react";
 import type { Cluster } from "../api.ts";
 import { cx } from "../lib/cx.ts";
-import { relativeAge } from "../lib/format.ts";
+import { epochMs, relativeAge } from "../lib/format.ts";
 import { clusterKey } from "../lib/k8s.ts";
 import { StatusBadge } from "./StatusBadge.tsx";
 import { SortHeader, td, th, useSort } from "./table.tsx";
 
 type SortKey = "name" | "namespace" | "distribution" | "provider" | "status" | "nodes" | "age";
-
-function createdMs(cluster: Cluster): number {
-  const value = cluster.metadata.creationTimestamp;
-  const ms = value ? new Date(value).getTime() : 0;
-  return Number.isNaN(ms) ? 0 : ms;
-}
 
 // compareBySortKey returns the ordering of two clusters for the active sort column.
 function compareBySortKey(a: Cluster, b: Cluster, key: SortKey): number {
@@ -31,7 +25,7 @@ function compareBySortKey(a: Cluster, b: Cluster, key: SortKey): number {
     case "nodes":
       return (a.status?.nodesReady ?? -1) - (b.status?.nodesReady ?? -1);
     case "age":
-      return createdMs(a) - createdMs(b);
+      return epochMs(a.metadata.creationTimestamp) - epochMs(b.metadata.creationTimestamp);
     default:
       return 0;
   }

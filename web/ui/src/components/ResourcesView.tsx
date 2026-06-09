@@ -2,9 +2,9 @@ import { Copy, FileCode, RotateCw, ScrollText, SquareTerminal } from "lucide-rea
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import yaml from "js-yaml";
 import {
-  ApiError,
   CLUSTER_SCOPED_KINDS,
   deleteResource,
+  errorMessage,
   listResources,
   RECONCILABLE_KINDS,
   reconcileResource,
@@ -17,7 +17,7 @@ import {
   type K8sObject,
 } from "../api.ts";
 import { cx } from "../lib/cx.ts";
-import { relativeAge } from "../lib/format.ts";
+import { epochMs, relativeAge } from "../lib/format.ts";
 import { clusterKey, eventFields, eventLastSeenMs, splitClusterKey, type EventFields } from "../lib/k8s.ts";
 import { ApplyManifestsDialog } from "./ApplyManifestsDialog.tsx";
 import { EventList } from "./EventList.tsx";
@@ -35,14 +35,6 @@ import { DataStates, SortHeader, TableCard, td, useSort } from "./table.tsx";
 import { useToast } from "./Toast.tsx";
 import { Button, SelectField, SlideOver, TextField } from "./ui.tsx";
 
-function errorMessage(err: unknown): string {
-  if (err instanceof ApiError) {
-    return err.message;
-  }
-
-  return err instanceof Error ? err.message : String(err);
-}
-
 function objectKey(obj: K8sObject, index: number): string {
   const meta = obj.metadata;
 
@@ -50,14 +42,6 @@ function objectKey(obj: K8sObject, index: number): string {
 }
 
 type SortKey = "name" | "namespace" | "status" | "age";
-
-// createdMs returns an object's creation time in epoch ms (0 when absent/invalid), for age sorting.
-function createdMs(obj: K8sObject): number {
-  const value = obj.metadata?.creationTimestamp;
-  const ms = value ? new Date(value).getTime() : 0;
-
-  return Number.isNaN(ms) ? 0 : ms;
-}
 
 // currentReplicas reads spec.replicas from an unstructured object, defaulting to 0.
 function currentReplicas(obj: K8sObject): number {
@@ -157,7 +141,7 @@ function compareResources(a: K8sObject, b: K8sObject, key: SortKey): number {
     case "status":
       return (resourceStatus(a)?.label ?? "").localeCompare(resourceStatus(b)?.label ?? "");
     case "age":
-      return createdMs(a) - createdMs(b);
+      return epochMs(a.metadata?.creationTimestamp) - epochMs(b.metadata?.creationTimestamp);
     default:
       return 0;
   }
@@ -455,7 +439,7 @@ export function ResourcesView({
           {loading ? null : <RotateCw className="size-4" aria-hidden />}
           Refresh
         </Button>
-        {canApply && clusterId !== "" ? (
+        {canApply ? (
           <Button variant="secondary" onClick={() => setApplyOpen(true)}>
             <FileCode className="size-4" aria-hidden />
             Apply YAML
