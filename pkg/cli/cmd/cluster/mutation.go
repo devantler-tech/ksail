@@ -29,6 +29,7 @@ func defaultClusterMutationFieldSelectors() []ksailconfigmanager.FieldSelector[v
 		ksailconfigmanager.DefaultImportImagesFieldSelector(),
 		ksailconfigmanager.KubernetesVersionFieldSelector(),
 		ksailconfigmanager.DistributionVersionFieldSelector(),
+		ksailconfigmanager.DrainTimeoutFieldSelector(),
 		ksailconfigmanager.ControlPlanesFieldSelector(),
 		ksailconfigmanager.WorkersFieldSelector(),
 		ksailconfigmanager.NodeAutoscalingFieldSelector(), //nolint:staticcheck // backward compat

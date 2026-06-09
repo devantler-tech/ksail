@@ -115,12 +115,18 @@ export interface Capabilities {
   // secretsCipher is true when the backend can encrypt/decrypt secrets with SOPS via local age keys
   // (the local backend). The SPA shows the Secrets view only then.
   secretsCipher: boolean;
+  // workloadLogs is true when the backend can stream a pod container's logs (the in-browser log
+  // viewer). Logs are read-only, so the SPA shows the action without combining it with !readOnly.
+  workloadLogs: boolean;
+  // workloadExec is true when the backend can exec into a pod container (the in-browser terminal).
+  // The SPA combines it with !readOnly before showing the Exec action.
+  workloadExec: boolean;
 }
 
 // fullCapabilities mirrors the backend's default for a service that does not report capabilities.
 // clusterUpdate defaults true (assume a working action rather than hiding it); the workload +
-// kubeconfig + apply + cipher flags default false because their endpoints may not exist on an older
-// backend.
+// kubeconfig + apply + cipher + exec flags default false because their endpoints may not exist on an
+// older backend.
 export const fullCapabilities: Capabilities = {
   clusterUpdate: true,
   workloadRead: false,
@@ -128,7 +134,30 @@ export const fullCapabilities: Capabilities = {
   kubeconfigDownload: false,
   applyManifests: false,
   secretsCipher: false,
+  workloadLogs: false,
+  workloadExec: false,
 };
+
+// logsEventSourceURL builds the same-origin SSE URL for streaming a pod container's logs. EventSource
+// is same-origin and GET-only (no headers), which suits the read-only, cookie-authenticated log
+// stream — and works in the Wails desktop (SSE passes through the asset server, unlike WebSockets).
+export function logsEventSourceURL(
+  namespace: string,
+  name: string,
+  podNamespace: string,
+  pod: string,
+  container: string,
+): string {
+  const params = new URLSearchParams({ pod, follow: "true", tail: "1000" });
+  if (podNamespace) {
+    params.set("namespace", podNamespace);
+  }
+  if (container) {
+    params.set("container", container);
+  }
+
+  return `/api/v1/clusters/${namespace}/${name}/logs?${params.toString()}`;
+}
 
 export interface Config {
   readOnly: boolean;
@@ -220,11 +249,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const body = (await response.text()).trim();
     const { message, loginURL } = detailFromBody(body);
     const suffix = message === "" ? "" : `: ${message}`;
-    throw new ApiError(
-      `${init?.method ?? "GET"} ${path} (${response.status})${suffix}`,
-      response.status,
-      loginURL,
-    );
+    throw new ApiError(`${init?.method ?? "GET"} ${path} (${response.status})${suffix}`, response.status, loginURL);
   }
 
   if (response.status === 204) {
@@ -277,11 +302,7 @@ export function createCluster(cluster: Cluster): Promise<Cluster> {
   });
 }
 
-export function updateCluster(
-  namespace: string,
-  name: string,
-  cluster: Cluster,
-): Promise<Cluster> {
+export function updateCluster(namespace: string, name: string, cluster: Cluster): Promise<Cluster> {
   return request<Cluster>(`/api/v1/clusters/${namespace}/${name}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
@@ -329,6 +350,13 @@ export const RESOURCE_KINDS = [
   "Event",
   "Node",
   "Namespace",
+  // GitOps CRs (Flux + ArgoCD). Browsable read-only; selecting one on a cluster without that CRD
+  // lists with an error (surfaced in the view).
+  "Kustomization",
+  "HelmRelease",
+  "GitRepository",
+  "OCIRepository",
+  "Application",
 ] as const;
 
 // listResources fetches resources of a kind from a cluster. resourceNamespace narrows a namespaced
@@ -344,13 +372,13 @@ export function listResources(
     params.set("namespace", resourceNamespace);
   }
 
-  return request<K8sList>(
-    `/api/v1/clusters/${namespace}/${name}/resources?${params.toString()}`,
-  );
+  return request<K8sList>(`/api/v1/clusters/${namespace}/${name}/resources?${params.toString()}`);
 }
 
 // SCALABLE_KINDS / RESTARTABLE_KINDS mirror the backend predicates (ResourceKindScalable /
 // ResourceKindRestartable); the backend rejects unsupported kinds regardless.
+// RECONCILABLE_KINDS mirrors ResourceKindReconcilable — the GitOps CRs that support a reconcile.
+export const RECONCILABLE_KINDS = ["Kustomization", "HelmRelease", "GitRepository", "OCIRepository", "Application"];
 export const SCALABLE_KINDS = ["Deployment", "StatefulSet", "ReplicaSet"];
 export const RESTARTABLE_KINDS = ["Deployment", "StatefulSet", "DaemonSet"];
 // CLUSTER_SCOPED_KINDS are not deletable from the workload browser — the backend rejects a delete of
@@ -430,16 +458,35 @@ function resourcePath(
   return `/api/v1/clusters/${namespace}/${name}/resources/${kind}/${resourceName}${suffix}${query}`;
 }
 
+// ResourceAction identifies a single resource targeted by a mutating action (scale/restart/delete).
+// namespace/name are the CLUSTER's; resourceName/resourceNamespace are the resource's own.
+export type ResourceAction = {
+  namespace: string;
+  name: string;
+  kind: string;
+  resourceName: string;
+  resourceNamespace?: string;
+};
+
+// mutateResource issues a mutating request against a resource's action endpoint — the shared core of
+// scale/restart/delete, so each only differs by its path suffix and request init.
+function mutateResource(target: ResourceAction, suffix: string, init: RequestInit): Promise<void> {
+  return request<void>(
+    resourcePath(
+      target.namespace,
+      target.name,
+      target.kind,
+      target.resourceName,
+      target.resourceNamespace,
+      suffix,
+    ),
+    init,
+  );
+}
+
 // scaleResource sets the replica count of a scalable workload.
-export function scaleResource(
-  namespace: string,
-  name: string,
-  kind: string,
-  resourceName: string,
-  replicas: number,
-  resourceNamespace?: string,
-): Promise<void> {
-  return request<void>(resourcePath(namespace, name, kind, resourceName, resourceNamespace, "/scale"), {
+export function scaleResource(target: ResourceAction, replicas: number): Promise<void> {
+  return mutateResource(target, "/scale", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ replicas }),
@@ -447,30 +494,18 @@ export function scaleResource(
 }
 
 // restartResource triggers a rolling restart of a workload.
-export function restartResource(
-  namespace: string,
-  name: string,
-  kind: string,
-  resourceName: string,
-  resourceNamespace?: string,
-): Promise<void> {
-  return request<void>(
-    resourcePath(namespace, name, kind, resourceName, resourceNamespace, "/restart"),
-    { method: "POST" },
-  );
+export function restartResource(target: ResourceAction): Promise<void> {
+  return mutateResource(target, "/restart", { method: "POST" });
+}
+
+// reconcileResource triggers an immediate GitOps reconcile (Flux/ArgoCD) of a resource.
+export function reconcileResource(target: ResourceAction): Promise<void> {
+  return mutateResource(target, "/reconcile", { method: "POST" });
 }
 
 // deleteResource deletes a resource.
-export function deleteResource(
-  namespace: string,
-  name: string,
-  kind: string,
-  resourceName: string,
-  resourceNamespace?: string,
-): Promise<void> {
-  return request<void>(resourcePath(namespace, name, kind, resourceName, resourceNamespace, ""), {
-    method: "DELETE",
-  });
+export function deleteResource(target: ResourceAction): Promise<void> {
+  return mutateResource(target, "", { method: "DELETE" });
 }
 
 // SECRET_FORMATS are the SOPS store formats the cipher view offers.
@@ -482,11 +517,7 @@ export function cipherRecipients(): Promise<{ recipients: string[] }> {
 }
 
 // encryptSecret SOPS-encrypts plaintext for the given age recipient (empty = the local default).
-export function encryptSecret(
-  plaintext: string,
-  recipient: string,
-  format: string,
-): Promise<{ encrypted: string }> {
+export function encryptSecret(plaintext: string, recipient: string, format: string): Promise<{ encrypted: string }> {
   return request<{ encrypted: string }>("/api/v1/secrets/encrypt", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -501,4 +532,26 @@ export function decryptSecret(encrypted: string, format: string): Promise<{ plai
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ encrypted, format }),
   });
+}
+
+// execWebSocketURL builds the same-origin WebSocket URL for an exec session into a pod container.
+// (In the Wails desktop, a loopback listener provides a ws:// origin; the browser surfaces are
+// same-origin off window.location.)
+export function execWebSocketURL(
+  namespace: string,
+  name: string,
+  podNamespace: string,
+  pod: string,
+  container: string,
+): string {
+  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+  const params = new URLSearchParams({ pod });
+  if (podNamespace) {
+    params.set("namespace", podNamespace);
+  }
+  if (container) {
+    params.set("container", container);
+  }
+
+  return `${protocol}//${window.location.host}/api/v1/clusters/${namespace}/${name}/exec?${params.toString()}`;
 }

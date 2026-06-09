@@ -12,6 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 )
 
@@ -60,6 +61,24 @@ func contextForCluster(kubeconfigPath, clusterName string) (string, error) {
 	}
 
 	return "", fmt.Errorf("%w: no kubeconfig context for cluster %q", api.ErrNotFound, clusterName)
+}
+
+// restConfigForCluster resolves the cluster's kubeconfig context by name and builds a *rest.Config —
+// the shared preamble for the apply (dynamic + RESTMapper) and exec (clientset) client builders.
+func restConfigForCluster(clusterName string) (*rest.Config, error) {
+	kubeconfigPath := k8s.DefaultKubeconfigPath()
+
+	contextName, err := contextForCluster(kubeconfigPath, clusterName)
+	if err != nil {
+		return nil, err
+	}
+
+	restConfig, err := k8s.BuildRESTConfig(kubeconfigPath, contextName)
+	if err != nil {
+		return nil, fmt.Errorf("build rest config for %q: %w", clusterName, err)
+	}
+
+	return restConfig, nil
 }
 
 // resolveKindAndClient resolves an allowlisted kind to its GVR mapping and builds a dynamic client
@@ -204,6 +223,35 @@ func (s *Service) mergePatch(
 	}
 
 	return nil
+}
+
+// ReconcileResource triggers an immediate GitOps reconcile by stamping the engine-specific
+// annotation — the same mechanism `flux reconcile` / an ArgoCD refresh use. Flux watches
+// reconcile.fluxcd.io/requestedAt (nanosecond stamp so repeats differ); ArgoCD watches
+// argocd.argoproj.io/refresh.
+func (s *Service) ReconcileResource(
+	ctx context.Context,
+	_, name string,
+	ref api.ResourceRef,
+) error {
+	if !api.ResourceKindReconcilable(ref.Kind) {
+		return fmt.Errorf("%w: %q does not support reconcile", api.ErrInvalid, ref.Kind)
+	}
+
+	key, value := reconcileAnnotation(ref.Kind)
+	patch := fmt.Appendf(nil, `{"metadata":{"annotations":{%q:%q}}}`, key, value)
+
+	return s.mergePatch(ctx, name, "reconcile", ref, patch)
+}
+
+// reconcileAnnotation returns the metadata annotation (key, value) that triggers a reconcile for the
+// kind's GitOps engine.
+func reconcileAnnotation(kind string) (string, string) {
+	if kind == "Application" {
+		return "argocd.argoproj.io/refresh", "normal"
+	}
+
+	return "reconcile.fluxcd.io/requestedAt", time.Now().Format(time.RFC3339Nano)
 }
 
 // DeleteResource deletes a namespaced allowlisted resource. Cluster-scoped kinds (Node, Namespace)

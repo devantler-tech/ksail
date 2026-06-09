@@ -79,6 +79,14 @@ type Capabilities struct {
 	// age keys — true exactly when the serving ClusterService implements CipherService. The SPA shows
 	// the Secrets view only then (local backend only; the operator has no local keys).
 	SecretsCipher bool `json:"secretsCipher"`
+	// WorkloadLogs reports whether the backend can stream a pod container's logs (the in-browser log
+	// viewer) — true exactly when the serving ClusterService implements LogService. Logs are
+	// read-only, so the SPA shows the action regardless of readOnly (unlike the write actions).
+	WorkloadLogs bool `json:"workloadLogs"`
+	// WorkloadExec reports whether the backend can exec into a pod container (the in-browser
+	// terminal) — true exactly when the serving ClusterService implements ExecService. The SPA
+	// combines it with !readOnly before showing the terminal (exec can run arbitrary commands).
+	WorkloadExec bool `json:"workloadExec"`
 }
 
 // KubeconfigProvider is an optional interface a ClusterService may implement to export a portable,

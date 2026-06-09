@@ -77,6 +77,10 @@ func (w errWriterStub) DeleteResource(context.Context, string, string, api.Resou
 	return w.err
 }
 
+func (w errWriterStub) ReconcileResource(context.Context, string, string, api.ResourceRef) error {
+	return w.err
+}
+
 func TestListClustersBackendErrorReturns500(t *testing.T) {
 	t.Parallel()
 
