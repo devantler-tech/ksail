@@ -568,6 +568,66 @@ func TestEnsureAutoscalerSecretIfNeeded_NoopWhenNilBundle(t *testing.T) {
 	require.NoError(t, err)
 }
 
+// TestDetectAutoscalerTemplateDrift_NoopWhenNotHetzner verifies detection is a
+// no-op (no change, no error) when the provider is not Hetzner (acceptance d).
+func TestDetectAutoscalerTemplateDrift_NoopWhenNotHetzner(t *testing.T) {
+	t.Parallel()
+
+	provisioner := talosprovisioner.NewProvisioner(nil, nil).WithLogWriter(io.Discard)
+
+	changes, err := provisioner.DetectAutoscalerTemplateDriftForTest(context.Background())
+	require.NoError(t, err)
+	assert.Empty(t, changes)
+}
+
+// TestDetectAutoscalerTemplateDrift_NoopWhenAutoscalerDisabled verifies detection
+// is a no-op when the autoscaler is disabled on Hetzner (acceptance d).
+func TestDetectAutoscalerTemplateDrift_NoopWhenAutoscalerDisabled(t *testing.T) {
+	t.Parallel()
+
+	provisioner := talosprovisioner.NewProvisioner(nil, nil).
+		WithHetznerOptions(v1alpha1.OptionsHetzner{NodeAutoscalerEnabled: false}).
+		WithLogWriter(io.Discard)
+
+	changes, err := provisioner.DetectAutoscalerTemplateDriftForTest(context.Background())
+	require.NoError(t, err)
+	assert.Empty(t, changes)
+}
+
+// TestDetectAutoscalerTemplateDrift_NoopWhenNilTalosConfigs verifies detection is a
+// no-op when talosConfigs is nil, even with the autoscaler enabled on Hetzner.
+func TestDetectAutoscalerTemplateDrift_NoopWhenNilTalosConfigs(t *testing.T) {
+	t.Parallel()
+
+	provisioner := talosprovisioner.NewProvisioner(nil, nil).
+		WithHetznerOptions(v1alpha1.OptionsHetzner{NodeAutoscalerEnabled: true}).
+		WithLogWriter(io.Discard)
+
+	changes, err := provisioner.DetectAutoscalerTemplateDriftForTest(context.Background())
+	require.NoError(t, err)
+	assert.Empty(t, changes)
+}
+
+// TestDetectAutoscalerTemplateDrift_NonFatalWhenNoKubeClient verifies that an
+// unreachable cluster / absent kube client is non-fatal: detection warns and
+// reports no drift rather than turning DiffConfig into an error (which would drop
+// the spec-level diff). Here the provisioner has the autoscaler enabled and real
+// configs but no kubeconfig path, so the secret read fails.
+func TestDetectAutoscalerTemplateDrift_NonFatalWhenNoKubeClient(t *testing.T) {
+	t.Parallel()
+
+	configs, err := talosconfigmanager.NewDefaultConfigs()
+	require.NoError(t, err)
+
+	provisioner := talosprovisioner.NewProvisioner(configs, nil).
+		WithHetznerOptions(v1alpha1.OptionsHetzner{NodeAutoscalerEnabled: true}).
+		WithLogWriter(io.Discard)
+
+	changes, err := provisioner.DetectAutoscalerTemplateDriftForTest(context.Background())
+	require.NoError(t, err, "an absent kube client must be non-fatal")
+	assert.Empty(t, changes)
+}
+
 // TestNeedsSecretSync_AutoscalerEnabled verifies that needsSecretSync returns
 // true when the node autoscaler is enabled on Hetzner, even without node count
 // changes. The autoscaler config secret embeds a worker config that must use

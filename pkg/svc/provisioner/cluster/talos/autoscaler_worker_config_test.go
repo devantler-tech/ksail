@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	clusterautoscalerinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/clusterautoscaler"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	talosprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/talos"
 	"github.com/siderolabs/talos/pkg/machinery/config/configloader"
 	taloscontainer "github.com/siderolabs/talos/pkg/machinery/config/container"
@@ -644,4 +645,193 @@ func TestApplyAutoscalerConfigSecret_RejectsOversizedConfig(t *testing.T) {
 		context.Background(), "cluster-autoscaler-config", metav1.GetOptions{},
 	)
 	assert.True(t, apierrors.IsNotFound(getErr))
+}
+
+// --- autoscalerTemplateDrift (worker bootstrap template drift detection, #5194) ---
+
+// autoscalerPoolFor builds a single-pool AutoscalerPoolConfig whose
+// WorkerConfigYAML is a real, loadable autoscaler worker config (the shape
+// buildAutoscalerPoolConfigs produces), so drift detection can fingerprint it.
+func autoscalerPoolFor(
+	t *testing.T,
+	name string,
+	provider *taloscontainer.Container,
+	labels map[string]string,
+) talosprovisioner.AutoscalerPoolConfig {
+	t.Helper()
+
+	workerYAML, err := talosprovisioner.GenerateAutoscalerWorkerConfig(provider, labels, nil)
+	require.NoError(t, err)
+
+	return talosprovisioner.AutoscalerPoolConfig{
+		Name:             name,
+		WorkerConfigYAML: workerYAML,
+		Labels:           labels,
+	}
+}
+
+// autoscalerSecretFor renders pools into a real cluster-autoscaler-config Secret
+// via the production apply path, so drift checks run against the exact bytes the
+// apply path stores.
+func autoscalerSecretFor(
+	t *testing.T,
+	snapshotID string,
+	pools []talosprovisioner.AutoscalerPoolConfig,
+) *corev1.Secret {
+	t.Helper()
+
+	clientset := fake.NewClientset()
+
+	_, err := talosprovisioner.ApplyAutoscalerConfigSecret(
+		context.Background(), clientset, snapshotID, pools,
+	)
+	require.NoError(t, err)
+
+	secret, err := clientset.CoreV1().Secrets(autoscalerNamespace).Get(
+		context.Background(), "cluster-autoscaler-config", metav1.GetOptions{},
+	)
+	require.NoError(t, err)
+
+	return secret
+}
+
+// workerProviderWithToken builds a minimal worker provider carrying a (secret)
+// machine token, so two providers can differ ONLY in redacted PKI.
+func workerProviderWithToken(token string) *taloscontainer.Container {
+	falseVal := false
+
+	return taloscontainer.NewV1Alpha1(&v1alpha1.Config{
+		ConfigVersion: "v1alpha1",
+		MachineConfig: &v1alpha1.MachineConfig{
+			MachineToken:      token,
+			MachineInstall:    &v1alpha1.InstallConfig{InstallWipe: &falseVal},
+			MachineNodeLabels: map[string]string{"keep-this-label": "value"},
+		},
+	})
+}
+
+// Acceptance (b): an idempotent re-run — the rendered template already matches the
+// Secret — must report no drift, so `cluster update` stays "No changes detected".
+func TestAutoscalerTemplateDrift_NoneWhenSecretMatches(t *testing.T) {
+	t.Parallel()
+
+	pools := []talosprovisioner.AutoscalerPoolConfig{
+		autoscalerPoolFor(t, "pool1", newTestWorkerProvider(), map[string]string{"workload": "a"}),
+	}
+	secret := autoscalerSecretFor(t, "123456789", pools)
+
+	changes, err := talosprovisioner.AutoscalerTemplateDriftForTest(secret, pools)
+	require.NoError(t, err)
+	assert.Empty(t, changes, "an identical worker template must not report drift")
+}
+
+// Acceptance (a): a worker-config change (here a node label, baked into the worker
+// config) must surface as drift even though the pool set is unchanged.
+func TestAutoscalerTemplateDrift_DetectsWorkerConfigChange(t *testing.T) {
+	t.Parallel()
+
+	oldPools := []talosprovisioner.AutoscalerPoolConfig{
+		autoscalerPoolFor(t, "pool1", newTestWorkerProvider(), map[string]string{"workload": "a"}),
+	}
+	secret := autoscalerSecretFor(t, "123456789", oldPools)
+
+	// Same pool name, different node label => a different worker machine config.
+	newPools := []talosprovisioner.AutoscalerPoolConfig{
+		autoscalerPoolFor(t, "pool1", newTestWorkerProvider(), map[string]string{"workload": "b"}),
+	}
+
+	changes, err := talosprovisioner.AutoscalerTemplateDriftForTest(secret, newPools)
+	require.NoError(t, err)
+	require.Len(t, changes, 1, "a changed worker template must report drift")
+	assert.Equal(t, talosprovisioner.AutoscalerWorkerTemplateField, changes[0].Field)
+	assert.Equal(t, clusterupdate.ChangeCategoryInPlace, changes[0].Category)
+}
+
+// Acceptance (c): an absent Secret while the autoscaler is enabled must report
+// drift so the apply path creates it (adjacent #4606 facet).
+func TestAutoscalerTemplateDrift_ReportsDriftWhenSecretAbsent(t *testing.T) {
+	t.Parallel()
+
+	pools := []talosprovisioner.AutoscalerPoolConfig{
+		autoscalerPoolFor(t, "pool1", newTestWorkerProvider(), nil),
+	}
+
+	changes, err := talosprovisioner.AutoscalerTemplateDriftForTest(nil, pools)
+	require.NoError(t, err)
+	require.Len(t, changes, 1, "an absent secret must report drift")
+	assert.Equal(t, talosprovisioner.AutoscalerWorkerTemplateField, changes[0].Field)
+	assert.Equal(t, "<absent>", changes[0].OldValue)
+}
+
+// A Secret that exists but predates the HCLOUD_CLUSTER_CONFIG key (legacy
+// migration) must report drift so the apply path adds the key.
+func TestAutoscalerTemplateDrift_ReportsDriftWhenKeyMissing(t *testing.T) {
+	t.Parallel()
+
+	legacy := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "cluster-autoscaler-config",
+			Namespace: autoscalerNamespace,
+		},
+		Data: map[string][]byte{"hcloud_cloud_init": []byte("legacy")},
+	}
+	pools := []talosprovisioner.AutoscalerPoolConfig{
+		autoscalerPoolFor(t, "pool1", newTestWorkerProvider(), nil),
+	}
+
+	changes, err := talosprovisioner.AutoscalerTemplateDriftForTest(legacy, pools)
+	require.NoError(t, err)
+	require.Len(t, changes, 1, "a secret missing the cluster-config key must report drift")
+	assert.Equal(t, "<absent>", changes[0].OldValue, "no existing template to fingerprint")
+}
+
+// The comparison redacts secrets (PKI), so a template that differs ONLY in PKI —
+// which syncSecretsFromCluster legitimately realigns during apply (#4963) — must
+// NOT report drift, or every run would falsely show "changes detected".
+func TestAutoscalerTemplateDrift_IgnoresPKIOnlyDifference(t *testing.T) {
+	t.Parallel()
+
+	secret := autoscalerSecretFor(t, "1", []talosprovisioner.AutoscalerPoolConfig{
+		autoscalerPoolFor(t, "pool1", workerProviderWithToken("aaaaaaaa.aaaaaaaaaaaaaaaa"), nil),
+	})
+	desired := []talosprovisioner.AutoscalerPoolConfig{
+		autoscalerPoolFor(t, "pool1", workerProviderWithToken("bbbbbbbb.bbbbbbbbbbbbbbbb"), nil),
+	}
+
+	changes, err := talosprovisioner.AutoscalerTemplateDriftForTest(secret, desired)
+	require.NoError(t, err)
+	assert.Empty(t, changes, "a PKI-only difference must be redacted away, not reported as drift")
+}
+
+// Adding a pool must surface as drift (the new pool has no template in the Secret).
+func TestAutoscalerTemplateDrift_DetectsAddedPool(t *testing.T) {
+	t.Parallel()
+
+	base := []talosprovisioner.AutoscalerPoolConfig{
+		autoscalerPoolFor(t, "pool1", newTestWorkerProvider(), nil),
+	}
+	secret := autoscalerSecretFor(t, "1", base)
+
+	expanded := []talosprovisioner.AutoscalerPoolConfig{
+		base[0],
+		autoscalerPoolFor(t, "pool2", newTestWorkerProvider(), map[string]string{"x": "y"}),
+	}
+
+	changes, err := talosprovisioner.AutoscalerTemplateDriftForTest(secret, expanded)
+	require.NoError(t, err)
+	require.Len(t, changes, 1, "adding a pool must report drift")
+}
+
+// A worker config whose compressed cloud-init overflows Hetzner's 32 KiB user_data
+// limit (#5015) must surface ErrAutoscalerUserDataTooLarge from change detection
+// rather than being silently dropped.
+func TestAutoscalerTemplateDrift_SurfacesOversizedConfig(t *testing.T) {
+	t.Parallel()
+
+	incompressible := make([]byte, 40000)
+	_, err := rand.Read(incompressible)
+	require.NoError(t, err)
+
+	_, err = talosprovisioner.AutoscalerTemplateDriftForTest(nil, singlePoolConfig(incompressible))
+	require.ErrorIs(t, err, talosprovisioner.ErrAutoscalerUserDataTooLarge)
 }

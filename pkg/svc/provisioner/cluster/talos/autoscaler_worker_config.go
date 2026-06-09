@@ -4,14 +4,21 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"maps"
+	"sort"
+	"strings"
 
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	clusterautoscalerinstaller "github.com/devantler-tech/ksail/v7/pkg/svc/installer/clusterautoscaler"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
+	"github.com/siderolabs/talos/pkg/machinery/config/configloader"
 	"github.com/siderolabs/talos/pkg/machinery/config/types/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -428,4 +435,280 @@ func updateAutoscalerSecretIfNeeded(
 	}
 
 	return updated, nil
+}
+
+// AutoscalerWorkerTemplateField is the change field `cluster update` reports when
+// the rendered worker bootstrap template (the per-pool Talos worker config packed
+// into the cluster-autoscaler-config Secret) differs from, or is missing from,
+// what the Secret currently holds. The spec-level diff and the running-node
+// machine-config drift both miss this — the patch may already be live on static
+// workers (patched out-of-band) or there may be no worker node to compare
+// against — yet every node the autoscaler subsequently provisions boots from this
+// Secret's template, so a stale template silently mints broken nodes (#5194).
+const AutoscalerWorkerTemplateField = "autoscalerWorkerTemplate"
+
+const (
+	autoscalerTemplateDriftReason = "Talos worker machine config (patches/labels/taints) differs " +
+		"from the cluster-autoscaler-config secret; the worker bootstrap template is regenerated so " +
+		"new autoscaler nodes match the current talos/ patches"
+	autoscalerTemplateAbsentReason = "cluster-autoscaler-config secret is missing while the node " +
+		"autoscaler is enabled; the worker bootstrap template is created so new autoscaler nodes " +
+		"boot from the current talos/ patches"
+	// autoscalerTemplateAbsentDigest is the OldValue/NewValue placeholder shown in
+	// the change summary when no template (Secret/key) is present to fingerprint.
+	autoscalerTemplateAbsentDigest = "<absent>"
+)
+
+// detectAutoscalerTemplateDrift reports whether the rendered worker bootstrap
+// template differs from (or is missing from) the cluster-autoscaler-config
+// Secret, returning a single in-place Change (or none) so `cluster update` no
+// longer reports "No changes detected" for a worker-only talos/ patch change
+// (#5194). The actual Secret regeneration is left to the already-idempotent apply
+// path (ensureAutoscalerSecretIfNeeded); this only makes the change visible so
+// that path runs. It returns a slice to mirror detectInPlaceMachineConfigDrift,
+// so callers can append uniformly.
+//
+// Environmental failures (absent kube client, unreachable cluster) are non-fatal:
+// they warn and report no drift, exactly like machine-config drift detection
+// (appendInPlaceMachineConfigDrift), so a detection failure never turns
+// DiffConfig into an error and drops the spec-level diff. A deterministic render
+// failure — notably ErrAutoscalerUserDataTooLarge (#5015) — is surfaced instead,
+// so an oversize worker config fails the update loudly rather than silently
+// shipping a broken template to future autoscaler nodes.
+func (p *Provisioner) detectAutoscalerTemplateDrift(
+	ctx context.Context,
+) ([]clusterupdate.Change, error) {
+	if !p.autoscalerSecretApplicable() {
+		return nil, nil
+	}
+
+	configBundle := p.talosConfigs.Bundle()
+	if configBundle == nil {
+		return nil, nil
+	}
+
+	pools, err := p.buildAutoscalerPoolConfigs(configBundle)
+	if err != nil {
+		return nil, fmt.Errorf("rendering autoscaler worker template for drift detection: %w", err)
+	}
+
+	existing, readErr := p.readAutoscalerConfigSecret(ctx)
+	if readErr != nil {
+		_, _ = fmt.Fprintf(
+			p.logWriter,
+			"  ⚠ Failed to read cluster-autoscaler-config secret for drift detection: %v\n",
+			readErr,
+		)
+
+		return nil, nil
+	}
+
+	return autoscalerTemplateDrift(existing, pools)
+}
+
+// readAutoscalerConfigSecret fetches the cluster-autoscaler-config Secret. It
+// returns (secret, nil) when present, (nil, nil) when the Secret does not exist —
+// a definite "absent" signal callers treat as drift, not an error — and a non-nil
+// error only for environmental failures (no kube client, unreachable API) that
+// callers must treat as non-fatal.
+func (p *Provisioner) readAutoscalerConfigSecret(
+	ctx context.Context,
+) (*corev1.Secret, error) {
+	kubeclient, err := p.newSecretKubeclient("autoscaler template drift")
+	if err != nil {
+		return nil, err
+	}
+
+	secret, err := kubeclient.CoreV1().
+		Secrets(autoscalerConfigSecretNamespace).
+		Get(ctx, autoscalerConfigSecretName, metav1.GetOptions{})
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil, nil //nolint:nilnil // absent secret is a "drift" signal, not an error
+		}
+
+		return nil, fmt.Errorf("get cluster-autoscaler-config secret: %w", err)
+	}
+
+	return secret, nil
+}
+
+// autoscalerTemplateDrift compares the desired per-pool worker bootstrap templates
+// against what the cluster-autoscaler-config Secret holds and returns a single
+// in-place Change (or none) when they differ, the Secret/key is absent, or a pool
+// was added/removed.
+//
+// The comparison is over each pool's SECRETS-REDACTED worker config fingerprint —
+// not the raw Secret bytes — for the same reason machine-config drift redacts
+// (configFingerprint): the cloud-init embeds the full worker config including PKI,
+// and the local bundle's PKI legitimately differs from the running cluster's
+// (syncSecretsFromCluster realigns secrets/endpoint during apply, #4963). Comparing
+// raw bytes would report PKI-only drift on every run; redacting isolates the
+// comparison to the machine-config patches, labels, and taints this bug is about,
+// keeping idempotent re-runs at "No changes detected".
+func autoscalerTemplateDrift(
+	existing *corev1.Secret,
+	pools []AutoscalerPoolConfig,
+) ([]clusterupdate.Change, error) {
+	desired, err := desiredWorkerTemplateFingerprints(pools)
+	if err != nil {
+		return nil, err
+	}
+
+	current := existingWorkerTemplateFingerprints(existing)
+
+	if maps.Equal(desired, current) {
+		return nil, nil
+	}
+
+	reason := autoscalerTemplateDriftReason
+	if existing == nil {
+		reason = autoscalerTemplateAbsentReason
+	}
+
+	return []clusterupdate.Change{{
+		Field:    AutoscalerWorkerTemplateField,
+		OldValue: autoscalerTemplateDigest(current),
+		NewValue: autoscalerTemplateDigest(desired),
+		Category: clusterupdate.ChangeCategoryInPlace,
+		Reason:   reason,
+	}}, nil
+}
+
+// desiredWorkerTemplateFingerprints maps each pool name to a secrets-redacted
+// fingerprint of the worker config that would be packed into the Secret. It also
+// size-checks each pool's compressed cloud-init so an oversize worker config
+// surfaces ErrAutoscalerUserDataTooLarge here (#5015) rather than being silently
+// dropped from change detection.
+func desiredWorkerTemplateFingerprints(
+	pools []AutoscalerPoolConfig,
+) (map[string]string, error) {
+	out := make(map[string]string, len(pools))
+
+	for _, pool := range pools {
+		// Compress to enforce the 32 KiB user_data ceiling; the value is discarded
+		// (the apply path recomputes it) but the error must surface.
+		_, err := compressWorkerConfigToUserData(pool.WorkerConfigYAML)
+		if err != nil {
+			return nil, err
+		}
+
+		fingerprint, err := redactedWorkerConfigFingerprint(pool.WorkerConfigYAML)
+		if err != nil {
+			return nil, fmt.Errorf(
+				"fingerprinting autoscaler worker template for pool %q: %w", pool.Name, err,
+			)
+		}
+
+		out[pool.Name] = fingerprint
+	}
+
+	return out, nil
+}
+
+// existingWorkerTemplateFingerprints maps each pool name in the
+// cluster-autoscaler-config Secret to a secrets-redacted fingerprint of the worker
+// config it carries, decoding each pool's gzip+base64 cloud-init the way the
+// autoscaler and Talos do. A nil/absent Secret, missing key, or unreadable value
+// yields an empty (or partial) map so the caller reports drift and the apply path
+// regenerates the Secret.
+func existingWorkerTemplateFingerprints(secret *corev1.Secret) map[string]string {
+	out := map[string]string{}
+	if secret == nil {
+		return out
+	}
+
+	raw := secret.Data[clusterautoscalerinstaller.AutoscalerConfigHcloudClusterConfigKey]
+	if len(raw) == 0 {
+		return out
+	}
+
+	jsonBytes, err := base64.StdEncoding.DecodeString(string(raw))
+	if err != nil {
+		return out
+	}
+
+	var clusterConfig hcloudClusterConfig
+	if json.Unmarshal(jsonBytes, &clusterConfig) != nil {
+		return out
+	}
+
+	for name, node := range clusterConfig.NodeConfigs {
+		workerYAML, decodeErr := decodeAutoscalerCloudInit(node.CloudInit)
+		if decodeErr != nil {
+			continue
+		}
+
+		fingerprint, fpErr := redactedWorkerConfigFingerprint(workerYAML)
+		if fpErr != nil {
+			continue
+		}
+
+		out[name] = fingerprint
+	}
+
+	return out
+}
+
+// decodeAutoscalerCloudInit reverses compressWorkerConfigToUserData: it
+// base64-decodes then gunzips a pool's cloud-init back to the worker config bytes.
+func decodeAutoscalerCloudInit(cloudInit string) ([]byte, error) {
+	compressed, err := base64.StdEncoding.DecodeString(cloudInit)
+	if err != nil {
+		return nil, fmt.Errorf("base64-decode cloud-init: %w", err)
+	}
+
+	gzipReader, err := gzip.NewReader(bytes.NewReader(compressed))
+	if err != nil {
+		return nil, fmt.Errorf("open gzip cloud-init: %w", err)
+	}
+	defer func() { _ = gzipReader.Close() }()
+
+	decompressed, err := io.ReadAll(gzipReader)
+	if err != nil {
+		return nil, fmt.Errorf("gunzip cloud-init: %w", err)
+	}
+
+	return decompressed, nil
+}
+
+// redactedWorkerConfigFingerprint returns a short, stable fingerprint of a worker
+// config's secrets-redacted, canonical encoding (the same normalisation
+// configFingerprint uses), so two configs that differ only in PKI fingerprint
+// identically.
+func redactedWorkerConfigFingerprint(workerYAML []byte) (string, error) {
+	provider, err := configloader.NewFromBytes(workerYAML)
+	if err != nil {
+		return "", fmt.Errorf("load worker config for fingerprint: %w", err)
+	}
+
+	return configFingerprint(provider), nil
+}
+
+// autoscalerTemplateDigest renders a poolName→fingerprint map into a single short,
+// stable digest for the change summary. An empty map (no template present) renders
+// as the absent placeholder.
+func autoscalerTemplateDigest(fingerprints map[string]string) string {
+	if len(fingerprints) == 0 {
+		return autoscalerTemplateAbsentDigest
+	}
+
+	names := make([]string, 0, len(fingerprints))
+	for name := range fingerprints {
+		names = append(names, name)
+	}
+
+	sort.Strings(names)
+
+	var builder strings.Builder
+	for _, name := range names {
+		builder.WriteString(name)
+		builder.WriteByte('=')
+		builder.WriteString(fingerprints[name])
+		builder.WriteByte(';')
+	}
+
+	sum := sha256.Sum256([]byte(builder.String()))
+
+	return hex.EncodeToString(sum[:])[:fingerprintLength]
 }
