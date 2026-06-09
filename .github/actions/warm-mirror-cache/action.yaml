@@ -400,34 +400,41 @@ runs:
       shell: bash
       run: |
         echo "💾 Exporting mirror registry volumes..."
+        # Pull the tar-utility busybox via mirror.gcr.io (Google's anonymous
+        # pull-through cache), not Docker Hub: the runner is logged in to Docker
+        # Hub, so a direct pull counts against the authenticated rate limit and
+        # leaks the session's dckr_jti token into error logs when throttled.
+        # mirror.gcr.io is anonymous and not rate-limited. It re-serializes
+        # manifests, so the upstream digest can't be pinned through it — we pin
+        # by tag, exactly like registry:3 in pull-registry-image.sh.
         mkdir -p /tmp/mirror-cache
 
         # Export docker.io mirror volume
         docker run --rm \
           -v docker.io:/volume:ro \
           -v /tmp/mirror-cache:/backup \
-          busybox:1.37@sha256:b3255e7dfbcd10cb367af0d409747d511aeb66dfac98cf30e97e87e4207dd76f \
+          mirror.gcr.io/library/busybox:1.37 \
           tar -cf /backup/docker.io.tar -C /volume . || echo "⚠️ Failed to export docker.io mirror"
 
         # Export ghcr.io mirror volume
         docker run --rm \
           -v ghcr.io:/volume:ro \
           -v /tmp/mirror-cache:/backup \
-          busybox:1.37@sha256:b3255e7dfbcd10cb367af0d409747d511aeb66dfac98cf30e97e87e4207dd76f \
+          mirror.gcr.io/library/busybox:1.37 \
           tar -cf /backup/ghcr.io.tar -C /volume . || echo "⚠️ Failed to export ghcr.io mirror"
 
         # Export quay.io mirror volume
         docker run --rm \
           -v quay.io:/volume:ro \
           -v /tmp/mirror-cache:/backup \
-          busybox:1.37@sha256:b3255e7dfbcd10cb367af0d409747d511aeb66dfac98cf30e97e87e4207dd76f \
+          mirror.gcr.io/library/busybox:1.37 \
           tar -cf /backup/quay.io.tar -C /volume . || echo "⚠️ Failed to export quay.io mirror"
 
         # Export registry.k8s.io mirror volume
         docker run --rm \
           -v registry.k8s.io:/volume:ro \
           -v /tmp/mirror-cache:/backup \
-          busybox:1.37@sha256:b3255e7dfbcd10cb367af0d409747d511aeb66dfac98cf30e97e87e4207dd76f \
+          mirror.gcr.io/library/busybox:1.37 \
           tar -cf /backup/registry.k8s.io.tar -C /volume . || echo "⚠️ Failed to export registry.k8s.io mirror"
 
         # Show cache size

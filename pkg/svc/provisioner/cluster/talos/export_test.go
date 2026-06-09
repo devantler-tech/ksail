@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/netip"
+	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
@@ -17,6 +18,7 @@ import (
 	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
+	kubedrain "k8s.io/kubectl/pkg/drain"
 )
 
 // NodeWithRoleForTest is the exported alias of nodeWithRole for testing.
@@ -376,11 +378,40 @@ func (p *Provisioner) PreBootChecksCountForTest() int {
 }
 
 // EnsureAutoscalerSecretIfNeededForTest exposes ensureAutoscalerSecretIfNeeded for unit testing.
+// diff and result default to a nil diff and a fresh result when callers exercise the
+// guard/no-op paths; pass explicit values to cover the recycle-vs-in-place branch.
 func (p *Provisioner) EnsureAutoscalerSecretIfNeededForTest(
 	ctx context.Context,
 	clusterName string,
 ) error {
-	return p.ensureAutoscalerSecretIfNeeded(ctx, clusterName)
+	return p.ensureAutoscalerSecretIfNeeded(
+		ctx, clusterName, nil, clusterupdate.NewEmptyUpdateResult(),
+	)
+}
+
+// AutoscalerRecycleRequiredForTest exposes autoscalerRecycleRequired for unit testing.
+func AutoscalerRecycleRequiredForTest(diff *clusterupdate.UpdateResult, imageChanged bool) bool {
+	return autoscalerRecycleRequired(diff, imageChanged)
+}
+
+// SnapshotImageIDFromSecretForTest exposes snapshotImageIDFromSecret for unit testing.
+func SnapshotImageIDFromSecretForTest(secret *corev1.Secret) string {
+	return snapshotImageIDFromSecret(secret)
+}
+
+// CurrentAutoscalerSnapshotImageIDForTest exposes currentAutoscalerSnapshotImageID
+// for unit testing.
+func (p *Provisioner) CurrentAutoscalerSnapshotImageIDForTest(ctx context.Context) string {
+	return p.currentAutoscalerSnapshotImageID(ctx)
+}
+
+// ApplyInPlaceToAutoscalerNodesForTest exposes applyInPlaceToAutoscalerNodes for unit testing.
+func (p *Provisioner) ApplyInPlaceToAutoscalerNodesForTest(
+	ctx context.Context,
+	clusterName string,
+	result *clusterupdate.UpdateResult,
+) error {
+	return p.applyInPlaceToAutoscalerNodes(ctx, clusterName, result)
 }
 
 // RestartAutoscalerAfterConfigChangeForTest exposes restartAutoscalerAfterConfigChange
@@ -420,6 +451,36 @@ func (p *Provisioner) DrainResolvedNodeForTest(
 	nodeIP string,
 ) (string, error) {
 	return p.drainResolvedNode(ctx, clientset, nodeIP)
+}
+
+// CordonAndDrainForTest exposes cordonAndDrain for unit testing.
+func (p *Provisioner) CordonAndDrainForTest(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	nodeName string,
+) error {
+	return p.cordonAndDrain(ctx, clientset, nodeName)
+}
+
+// DrainTimeoutForTest exposes drainTimeout for unit testing.
+func (p *Provisioner) DrainTimeoutForTest() time.Duration {
+	return p.drainTimeout()
+}
+
+// SetDrainForceForTest sets the request-scoped drainForce flag for unit testing.
+func (p *Provisioner) SetDrainForceForTest(force bool) {
+	p.drainForce = force
+}
+
+// NewDrainHelperForTest exposes newDrainHelper for unit testing.
+func NewDrainHelperForTest(
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	timeout time.Duration,
+	disableEviction bool,
+	logWriter io.Writer,
+) *kubedrain.Helper {
+	return newDrainHelper(ctx, clientset, timeout, disableEviction, logWriter)
 }
 
 // WithTalosOptsForTest sets talosOpts on the provisioner for unit testing.
@@ -515,6 +576,16 @@ func (p *Provisioner) BuildDesiredNodeConfigForTest(
 	role string,
 ) (talosconfig.Provider, error) {
 	return p.buildDesiredNodeConfig(running, secretsSource, role)
+}
+
+// DetectRoleMachineConfigDriftForTest exposes detectRoleMachineConfigDrift for
+// unit testing per-role (control-plane vs worker) patch drift detection.
+func (p *Provisioner) DetectRoleMachineConfigDriftForTest(
+	running talosconfig.Provider,
+	secretsSource talosconfig.Provider,
+	role string,
+) ([]clusterupdate.Change, error) {
+	return p.detectRoleMachineConfigDrift(running, secretsSource, role)
 }
 
 // WithNodeConfigFetcherForTest overrides the running-config fetcher so unit tests

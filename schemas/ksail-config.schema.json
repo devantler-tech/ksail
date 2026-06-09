@@ -432,6 +432,10 @@
                     "Enabled",
                     "Disabled"
                   ]
+                },
+                "drainTimeout": {
+                  "type": "string",
+                  "pattern": "^[0-9]+(ns|us|µs|ms|s|m|h)$"
                 }
               },
               "additionalProperties": false,

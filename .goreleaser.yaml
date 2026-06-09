@@ -90,6 +90,24 @@ dockers_v2:
       "org.opencontainers.image.source": "{{.GitURL}}"
       "org.opencontainers.image.licenses": "PolyForm-Shield-1.0.0"
 
+# Keyless cosign signature for the published container image (the same
+# `ghcr.io/devantler-tech/ksail` image the ksail-operator runs). Signing it
+# lets downstream consumers verify provenance at the pull layer — e.g. a Talos
+# ImageVerificationConfig rule over ghcr.io/devantler-tech/*, which otherwise
+# blocks the operator with "no valid signature found" because the image is
+# unsigned. Keyless uses the GitHub Actions OIDC identity (cd.yaml grants
+# `id-token: write` and installs cosign); the signature is pushed to GHCR
+# next to the image. Signs by digest to avoid races; `artifacts: all` covers
+# the dockers_v2 image.
+docker_signs:
+  - artifacts: all
+    cmd: cosign
+    args:
+      - "sign"
+      - "${artifact}@${digest}"
+      - "--yes"
+    output: true
+
 changelog:
   sort: asc
   filters:
