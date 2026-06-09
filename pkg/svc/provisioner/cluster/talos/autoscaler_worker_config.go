@@ -662,6 +662,7 @@ func decodeAutoscalerCloudInit(cloudInit string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open gzip cloud-init: %w", err)
 	}
+
 	defer func() { _ = gzipReader.Close() }()
 
 	decompressed, err := io.ReadAll(gzipReader)
