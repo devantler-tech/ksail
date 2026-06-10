@@ -55,7 +55,7 @@ export function SortHeader<K extends string>({
       <button
         type="button"
         onClick={() => onSort(sortKey)}
-        className="group inline-flex items-center gap-1 uppercase tracking-wide hover:text-slate-700 dark:hover:text-slate-200"
+        className="group inline-flex items-center gap-1 rounded uppercase tracking-wide hover:text-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 dark:hover:text-slate-200"
       >
         {label}
         <Indicator
@@ -86,6 +86,7 @@ export function DataStates({
   empty,
   emptyTitle,
   emptyDescription,
+  emptyIcon,
   onRetry,
   children,
 }: {
@@ -94,6 +95,8 @@ export function DataStates({
   empty: boolean;
   emptyTitle: string;
   emptyDescription: string;
+  // emptyIcon lets the view match the empty state to its subject (events, resources, …).
+  emptyIcon?: ReactNode;
   onRetry: () => void;
   children: ReactNode;
 }) {
@@ -104,7 +107,7 @@ export function DataStates({
     return <TableSkeleton />;
   }
   if (empty) {
-    return <EmptyState title={emptyTitle} description={emptyDescription} />;
+    return <EmptyState title={emptyTitle} description={emptyDescription} icon={emptyIcon} />;
   }
 
   return <>{children}</>;

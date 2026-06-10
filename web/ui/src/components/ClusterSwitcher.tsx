@@ -42,8 +42,11 @@ export function ClusterSwitcher({
         </span>
         <ChevronsUpDown className="size-4 shrink-0 text-slate-400" aria-hidden />
       </MenuButton>
-      <MenuItems className="absolute z-30 mt-1 w-full origin-top overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg focus:outline-none dark:border-slate-700 dark:bg-slate-800">
-        <div className="max-h-72 overflow-y-auto p-1">
+      <MenuItems
+        transition
+        className="absolute z-30 mt-1 w-full origin-top overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg transition duration-100 ease-out focus:outline-none data-[closed]:scale-95 data-[closed]:opacity-0 dark:border-slate-700 dark:bg-slate-800"
+      >
+        <div className="max-h-72 overflow-y-auto overscroll-contain p-1">
           {clusters.map((cluster) => {
             const key = clusterKey(cluster);
 

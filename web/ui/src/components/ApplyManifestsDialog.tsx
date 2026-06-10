@@ -28,7 +28,9 @@ export function ApplyManifestsDialog({
   const [manifests, setManifests] = useState("");
   const [results, setResults] = useState<ApplyResult[] | null>(null);
   const [lastDryRun, setLastDryRun] = useState(false);
-  const [busy, setBusy] = useState(false);
+  // busy tracks WHICH action is running (null = idle) so only the clicked button shows its spinner
+  // while both stay disabled.
+  const [busy, setBusy] = useState<"validate" | "apply" | null>(null);
   // A hidden file input drives the "Load from file…" button. In the desktop webview (WKWebView /
   // WebView2 / WebKitGTK) this opens the OS-native file picker; in a browser it opens the browser's —
   // so manifests can be loaded from disk on every surface with no Wails-specific binding.
@@ -70,7 +72,7 @@ export function ApplyManifestsDialog({
       return;
     }
 
-    setBusy(true);
+    setBusy(dryRun ? "validate" : "apply");
     setResults(null);
     applyManifests(clusterNamespace, clusterName, manifests, dryRun)
       .then((response) => {
@@ -92,7 +94,7 @@ export function ApplyManifestsDialog({
         }
       })
       .catch((err: unknown) => toast.error(errorMessage(err)))
-      .finally(() => setBusy(false));
+      .finally(() => setBusy(null));
   }
 
   return (
@@ -108,6 +110,7 @@ export function ApplyManifestsDialog({
           onChange={(event) => setManifests(event.target.value)}
           placeholder={PLACEHOLDER}
           spellCheck={false}
+          aria-label="Kubernetes manifests (multi-document YAML)"
           rows={16}
           className="w-full rounded-lg border border-slate-300 bg-white p-3 font-mono text-xs text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
         />
@@ -127,13 +130,18 @@ export function ApplyManifestsDialog({
           }}
         />
         <div className="flex items-center gap-2">
-          <Button variant="secondary" onClick={() => fileInputRef.current?.click()}>
+          <Button variant="secondary" onClick={() => fileInputRef.current?.click()} disabled={busy !== null}>
             Load from file…
           </Button>
-          <Button variant="secondary" onClick={() => run(true)} loading={busy}>
+          <Button
+            variant="secondary"
+            onClick={() => run(true)}
+            loading={busy === "validate"}
+            disabled={busy !== null}
+          >
             Validate (dry run)
           </Button>
-          <Button onClick={() => run(false)} loading={busy}>
+          <Button onClick={() => run(false)} loading={busy === "apply"} disabled={busy !== null}>
             Apply
           </Button>
         </div>

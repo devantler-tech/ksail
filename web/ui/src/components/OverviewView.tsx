@@ -49,6 +49,15 @@ interface LiveHealth {
 
 const MAX_WARNINGS = 8;
 
+// WORKLOAD_PLACEHOLDERS keeps the Workloads card's layout stable while live health is still loading
+// (counts render as an em dash instead of a blank card).
+const WORKLOAD_PLACEHOLDERS: { label: string; count?: number }[] = [
+  { label: "Deployments" },
+  { label: "StatefulSets" },
+  { label: "DaemonSets" },
+  { label: "Pods" },
+];
+
 function categorizePods(pods: K8sObject[]): PodSegment[] {
   const counts = { running: 0, notReady: 0, pending: 0, succeeded: 0, failed: 0, other: 0 };
 
@@ -168,7 +177,7 @@ function CopyableEndpoint({ endpoint }: { endpoint: string }) {
         navigator.clipboard
           ?.writeText(endpoint)
           .then(() => toast.success("Endpoint copied"))
-          .catch(() => undefined);
+          .catch(() => toast.error("Copy failed"));
       }}
       className="group inline-flex max-w-full items-center gap-1.5"
     >
@@ -331,7 +340,10 @@ export function OverviewView({
             </div>
             <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
               <div
-                className={cx("h-full rounded-full", nodesHealthy ? "bg-emerald-500" : "bg-amber-500")}
+                className={cx(
+                  "h-full rounded-full transition-[width] duration-500",
+                  nodesHealthy ? "bg-emerald-500" : "bg-amber-500",
+                )}
                 style={{
                   width: health && health.nodesTotal > 0 ? `${(health.nodesReady / health.nodesTotal) * 100}%` : "0%",
                 }}
@@ -340,15 +352,21 @@ export function OverviewView({
           </Card>
 
           <Card title="Pod health" icon={<Activity className="size-3.5" aria-hidden />}>
-            <PodHealth segments={health?.segments ?? []} total={health?.podsTotal ?? 0} />
+            {health ? (
+              <PodHealth segments={health.segments} total={health.podsTotal} />
+            ) : (
+              <p className="text-sm text-slate-500 dark:text-slate-400">Loading…</p>
+            )}
           </Card>
 
           <Card title="Workloads" icon={<Layers className="size-3.5" aria-hidden />}>
             <dl className="grid grid-cols-2 gap-3">
-              {(health?.workloads ?? []).map((workload) => (
+              {(health?.workloads ?? WORKLOAD_PLACEHOLDERS).map((workload) => (
                 <div key={workload.label}>
                   <dt className="text-xs text-slate-500 dark:text-slate-400">{workload.label}</dt>
-                  <dd className="text-xl font-semibold tabular-nums text-slate-900 dark:text-white">{workload.count}</dd>
+                  <dd className="text-xl font-semibold tabular-nums text-slate-900 dark:text-white">
+                    {workload.count ?? "—"}
+                  </dd>
                 </div>
               ))}
             </dl>
@@ -454,7 +472,11 @@ function PodHealth({ segments, total }: { segments: PodSegment[]; total: number 
     <div>
       <div className="flex h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
         {visible.map((segment) => (
-          <div key={segment.key} className={segment.bar} style={{ width: `${(segment.count / total) * 100}%` }} />
+          <div
+            key={segment.key}
+            className={cx(segment.bar, "transition-[width] duration-500")}
+            style={{ width: `${(segment.count / total) * 100}%` }}
+          />
         ))}
       </div>
       <ul className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-xs">

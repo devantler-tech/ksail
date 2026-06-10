@@ -1,4 +1,4 @@
-import { RotateCw } from "lucide-react";
+import { Activity, RotateCw } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { Cluster } from "../api.ts";
 import { useResourceList } from "../hooks/useResourceList.ts";
@@ -56,7 +56,8 @@ export function EventsView({ cluster }: { cluster: Cluster | null }) {
         </SelectField>
         <TextField
           label="Search"
-          placeholder="reason, object, message"
+          type="search"
+          placeholder="reason, object, message…"
           value={search}
           onChange={(event) => setSearch(event.target.value)}
           className="min-w-52"
@@ -73,6 +74,7 @@ export function EventsView({ cluster }: { cluster: Cluster | null }) {
         empty={rows.length === 0}
         emptyTitle="No events"
         emptyDescription="Nothing to show for this selection."
+        emptyIcon={<Activity className="size-6" aria-hidden />}
         onRetry={refresh}
       >
         <TableCard>

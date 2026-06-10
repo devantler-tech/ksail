@@ -16,11 +16,11 @@ const VARIANT: Record<Variant, string> = {
   primary:
     "bg-blue-600 text-white hover:bg-blue-500 focus-visible:outline-blue-600 disabled:opacity-60",
   secondary:
-    "bg-white text-slate-700 ring-1 ring-inset ring-slate-300 hover:bg-slate-50 dark:bg-slate-800 dark:text-slate-200 dark:ring-slate-700 dark:hover:bg-slate-700",
+    "bg-white text-slate-700 ring-1 ring-inset ring-slate-300 hover:bg-slate-50 focus-visible:outline-blue-600 disabled:opacity-60 dark:bg-slate-800 dark:text-slate-200 dark:ring-slate-700 dark:hover:bg-slate-700",
   danger:
     "bg-red-600 text-white hover:bg-red-500 focus-visible:outline-red-600 disabled:opacity-60",
   ghost:
-    "text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white",
+    "text-slate-600 hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-blue-600 disabled:opacity-60 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white",
 };
 
 const SIZE: Record<Size, string> = {
@@ -52,6 +52,7 @@ export function Button({
         className,
       )}
       disabled={disabled || loading}
+      aria-busy={loading || undefined}
       {...props}
     >
       {loading ? <LoaderCircle className="size-4 animate-spin" aria-hidden /> : null}
@@ -134,7 +135,7 @@ export function Modal({
             {/* Cap the panel at the viewport height and scroll the body so tall forms stay usable on
                 small screens, while the footer (Cancel/Save) remains pinned and reachable. */}
             <DialogPanel className="flex max-h-[calc(100dvh-2rem)] w-full max-w-md flex-col rounded-xl bg-white shadow-2xl ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800">
-              <div className="overflow-y-auto p-5">
+              <div className="overflow-y-auto overscroll-contain p-5">
                 <div className="flex items-start gap-3">
                   {icon}
                   <div className="min-w-0 flex-1">
@@ -208,7 +209,7 @@ export function SlideOver({
                     <X className="size-5" />
                   </IconButton>
                 </div>
-                <div className="flex-1 overflow-y-auto px-5 py-4">{children}</div>
+                <div className="flex-1 overflow-y-auto overscroll-contain px-5 py-4">{children}</div>
               </DialogPanel>
             </TransitionChild>
           </div>

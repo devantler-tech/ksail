@@ -138,7 +138,7 @@ function createDefaults(
     name: "",
     namespace: "default",
     distribution,
-    provider: preferredProvider(availableProviders(meta.providers[distribution] ?? [], providerStatus)),
+    provider: preferredProvider(availableProviders(meta.providers[distribution] ?? [], providerStatus), providerStatus),
     controlPlanes: "1",
     workers: "0",
     cni: defaults.cni ?? "",
@@ -244,7 +244,7 @@ export function ClusterFormDialog({
     setValues((current) => ({
       ...current,
       distribution: value,
-      provider: preferredProvider(availableProviders(meta.providers[value] ?? [], providerStatus)),
+      provider: preferredProvider(availableProviders(meta.providers[value] ?? [], providerStatus), providerStatus),
     }));
   }
 
@@ -255,7 +255,10 @@ export function ClusterFormDialog({
     setValues({
       ...base,
       distribution: template.distribution,
-      provider: preferredProvider(availableProviders(meta.providers[template.distribution] ?? [], providerStatus)),
+      provider: preferredProvider(
+        availableProviders(meta.providers[template.distribution] ?? [], providerStatus),
+        providerStatus,
+      ),
       ...template.overrides,
     });
   }
@@ -352,38 +355,26 @@ export function ClusterFormDialog({
         {yamlEnabled ? (
           <div className="flex justify-end">
             <div className="inline-flex overflow-hidden rounded-md ring-1 ring-inset ring-slate-300 dark:ring-slate-700">
-              <button
-                type="button"
-                onClick={() => {
-                  if (view !== "form") {
-                    showForm();
-                  }
-                }}
-                className={cx(
-                  "px-3 py-1 text-xs font-medium",
-                  view === "form"
-                    ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900"
-                    : "bg-white text-slate-600 dark:bg-slate-800 dark:text-slate-300",
-                )}
-              >
-                Form
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  if (view !== "yaml") {
-                    showYaml();
-                  }
-                }}
-                className={cx(
-                  "px-3 py-1 text-xs font-medium",
-                  view === "yaml"
-                    ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900"
-                    : "bg-white text-slate-600 dark:bg-slate-800 dark:text-slate-300",
-                )}
-              >
-                YAML
-              </button>
+              {(["form", "yaml"] as const).map((target) => (
+                <button
+                  key={target}
+                  type="button"
+                  aria-pressed={view === target}
+                  onClick={() => {
+                    if (view !== target) {
+                      (target === "form" ? showForm : showYaml)();
+                    }
+                  }}
+                  className={cx(
+                    "px-3 py-1 text-xs font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-blue-600",
+                    view === target
+                      ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900"
+                      : "bg-white text-slate-600 hover:bg-slate-50 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700",
+                  )}
+                >
+                  {target === "form" ? "Form" : "YAML"}
+                </button>
+              ))}
             </div>
           </div>
         ) : null}
@@ -427,17 +418,28 @@ export function ClusterFormDialog({
             ) : null}
             <TextField
               label="Name"
+              name="cluster-name"
               value={values.name}
               autoFocus={!isEdit}
               disabled={isEdit}
+              required={!isEdit}
+              // RFC 1123 DNS label, like the API enforces — surfaces as inline native validation
+              // instead of a silent no-op submit.
+              pattern="[a-z0-9]([-a-z0-9]*[a-z0-9])?"
+              title="Lowercase letters, digits, and hyphens; must start and end with a letter or digit"
+              autoComplete="off"
+              spellCheck={false}
               placeholder="my-cluster"
               onChange={(event) => setField("name", event.target.value)}
             />
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <TextField
                 label="Namespace"
+                name="cluster-namespace"
                 value={values.namespace}
                 disabled={isEdit}
+                autoComplete="off"
+                spellCheck={false}
                 onChange={(event) => setField("namespace", event.target.value)}
               />
               <SelectField
@@ -493,6 +495,7 @@ export function ClusterFormDialog({
                       label="Control planes"
                       type="number"
                       min={0}
+                      inputMode="numeric"
                       value={values.controlPlanes}
                       onChange={(event) => setField("controlPlanes", event.target.value)}
                     />
@@ -500,6 +503,7 @@ export function ClusterFormDialog({
                       label="Workers"
                       type="number"
                       min={0}
+                      inputMode="numeric"
                       value={values.workers}
                       onChange={(event) => setField("workers", event.target.value)}
                     />
