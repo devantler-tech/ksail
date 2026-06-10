@@ -209,6 +209,26 @@ func TestResourceKindForGitOps(t *testing.T) {
 	assert.Equal(t, "v1alpha1", app.GVR.Version)
 }
 
+func TestResourceKindForMetrics(t *testing.T) {
+	t.Parallel()
+
+	// Metrics kinds resolve at metrics.k8s.io/v1beta1 (the served version); NodeMetrics is
+	// cluster-scoped and PodMetrics is namespaced, mirroring their Node/Pod counterparts.
+	nodeMetrics, err := api.ResourceKindFor("NodeMetrics")
+	require.NoError(t, err)
+	assert.Equal(t, "metrics.k8s.io", nodeMetrics.GVR.Group)
+	assert.Equal(t, "v1beta1", nodeMetrics.GVR.Version)
+	assert.Equal(t, "nodes", nodeMetrics.GVR.Resource)
+	assert.False(t, nodeMetrics.Namespaced)
+
+	podMetrics, err := api.ResourceKindFor("PodMetrics")
+	require.NoError(t, err)
+	assert.Equal(t, "metrics.k8s.io", podMetrics.GVR.Group)
+	assert.Equal(t, "v1beta1", podMetrics.GVR.Version)
+	assert.Equal(t, "pods", podMetrics.GVR.Resource)
+	assert.True(t, podMetrics.Namespaced)
+}
+
 func TestConfigReportsWorkloadReadForResourceService(t *testing.T) {
 	t.Parallel()
 

@@ -66,18 +66,58 @@ export function eventLastSeenMs(fields: EventFields): number {
   return epochMs(fields.lastSeen);
 }
 
-// nodeReady reports whether a Node's Ready condition is True.
-export function nodeReady(node: K8sObject): boolean {
+// nodeConditions returns a Node's status conditions as loose records.
+function nodeConditions(node: K8sObject): Record<string, unknown>[] {
   const status = record(node.status);
   const conditions = Array.isArray(status?.conditions) ? status.conditions : [];
-  for (const condition of conditions) {
-    const cond = record(condition);
-    if (cond && cond.type === "Ready") {
-      return cond.status === "True";
-    }
-  }
 
-  return false;
+  return conditions.map(record).filter((cond) => cond !== undefined);
+}
+
+// nodeReady reports whether a Node's Ready condition is True.
+export function nodeReady(node: K8sObject): boolean {
+  return nodeConditions(node).some((cond) => cond.type === "Ready" && cond.status === "True");
+}
+
+// NodeProblem is a Node condition signalling trouble (e.g. MemoryPressure/DiskPressure True), kept
+// with its node so the Overview can synthesize health conditions from live state.
+export interface NodeProblem {
+  node: string;
+  type: string;
+  message: string;
+  lastTransitionTime?: string;
+}
+
+// nodeProblems returns the Node's abnormal conditions: Ready is a problem when not True, every other
+// condition (the kubelet's pressure/availability signals) is a problem when True.
+export function nodeProblems(node: K8sObject): NodeProblem[] {
+  const name = str(node.metadata?.name);
+
+  return nodeConditions(node)
+    .filter((cond) => (cond.type === "Ready" ? cond.status !== "True" : cond.status === "True"))
+    .map((cond) => ({
+      node: name,
+      type: str(cond.type),
+      message: str(cond.message) || str(cond.reason),
+      lastTransitionTime: str(cond.lastTransitionTime) || undefined,
+    }));
+}
+
+// nodeIsControlPlane reports whether a Node carries a control-plane role label (including the legacy
+// master label Talos/older clusters still use).
+export function nodeIsControlPlane(node: K8sObject): boolean {
+  const labels = node.metadata?.labels;
+  const map = record(labels) ?? {};
+
+  return "node-role.kubernetes.io/control-plane" in map || "node-role.kubernetes.io/master" in map;
+}
+
+// nodeSystemInfo extracts the kubelet version and OS image from a Node's status.nodeInfo ("" when
+// absent), surfacing the cluster's actual Kubernetes version and OS in the Overview.
+export function nodeSystemInfo(node: K8sObject): { kubeletVersion: string; osImage: string } {
+  const info = record(record(node.status)?.nodeInfo);
+
+  return { kubeletVersion: str(info?.kubeletVersion), osImage: str(info?.osImage) };
 }
 
 // podPhase returns a Pod's status.phase (e.g. "Running", "Pending"), or "Unknown" when absent.

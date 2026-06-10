@@ -52,6 +52,9 @@ func NewTestService(factory FactoryFunc) *Service {
 	service := NewService()
 	service.newFactory = factory
 	service.discoverProviders = []v1alpha1.Provider{v1alpha1.ProviderDocker}
+	// Point the kubeconfig at nowhere by default so List's endpoint enrichment never reads the
+	// developer's real kubeconfig; tests that need one inject it via SetKubeconfigPathForTest.
+	service.kubeconfigPath = func() string { return "" }
 
 	return service
 }

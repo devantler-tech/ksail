@@ -90,6 +90,15 @@ func namespacedKindVersion(group, version, resource string) ResourceKind {
 	}
 }
 
+// clusterScopedKindVersion builds a cluster-scoped ResourceKind at an explicit API version — used
+// for the metrics API (metrics.k8s.io v1beta1), which is not served at v1.
+func clusterScopedKindVersion(group, version, resource string) ResourceKind {
+	return ResourceKind{
+		GVR:        schema.GroupVersionResource{Group: group, Version: version, Resource: resource},
+		Namespaced: false,
+	}
+}
+
 // resourceKindTable is the curated allowlist of resource types the read-only workload browser
 // exposes. It deliberately EXCLUDES Secrets: their values are sensitive and a redaction-aware secrets
 // view is a separate feature. New browsable kinds are added here. It is a function (not a package
@@ -122,6 +131,11 @@ func resourceKindTable() map[string]ResourceKind {
 		"GitRepository": namespacedKindVersion("source.toolkit.fluxcd.io", "v1", "gitrepositories"),
 		"OCIRepository": namespacedKindVersion("source.toolkit.fluxcd.io", "v1", "ocirepositories"),
 		"Application":   namespacedKindVersion("argoproj.io", "v1alpha1", "applications"),
+		// Live usage from the metrics API (metrics.k8s.io, served by a metrics-server). These power the
+		// Overview's resource-usage monitoring; on a cluster without a metrics-server the list fails
+		// like any other absent API and the UI degrades to capacity/requests only.
+		"NodeMetrics": clusterScopedKindVersion("metrics.k8s.io", "v1beta1", "nodes"),
+		"PodMetrics":  namespacedKindVersion("metrics.k8s.io", "v1beta1", "pods"),
 	}
 }
 
