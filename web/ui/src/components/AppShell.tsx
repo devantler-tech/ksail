@@ -1,7 +1,6 @@
 import { Dialog, DialogPanel, Transition, TransitionChild } from "@headlessui/react";
 import {
   Activity,
-  Boxes,
   KeyRound,
   Layers,
   LayoutDashboard,
@@ -18,7 +17,12 @@ import { Fragment, useState, type ReactNode } from "react";
 import type { Cluster, User } from "../api.ts";
 import type { Theme } from "../hooks/useTheme.ts";
 import { ClusterSwitcher } from "./ClusterSwitcher.tsx";
+import { KSailMark } from "./Logo.tsx";
 import { IconButton } from "./ui.tsx";
+
+// isMacLike picks the platform-appropriate shortcut hint for the search button (the handler accepts
+// both ⌘K and Ctrl+K regardless; this only affects the displayed kbd).
+const isMacLike = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
 
 // View is the top-level SPA section. Cluster-scoped views (overview/resources/events) operate on the
 // active cluster; the rest are global. Routing is view-state (no router dependency).
@@ -77,7 +81,7 @@ function SectionLabel({ children }: { children: ReactNode }) {
 function Brand() {
   return (
     <div className="flex h-14 items-center gap-2 border-b border-slate-200 px-5 dark:border-slate-800">
-      <Boxes className="size-6 text-blue-600 dark:text-blue-500" aria-hidden />
+      <KSailMark className="size-6" />
       <span className="text-lg font-semibold tracking-tight text-slate-900 dark:text-white">KSail</span>
     </div>
   );
@@ -153,7 +157,7 @@ export function AppShell({
   // navContent renders the two zones — the cluster workspace (switcher + scoped nav, only when a
   // cluster is active) above the always-present global zone. onPick lets the drawer close on navigate.
   const navContent = (onPick: (next: View) => void) => (
-    <nav className="flex flex-1 flex-col gap-1 overflow-y-auto p-3">
+    <nav className="flex flex-1 flex-col gap-1 overflow-y-auto overscroll-contain p-3">
       {activeClusterKey ? (
         <>
           <div className="pb-1">
@@ -174,6 +178,13 @@ export function AppShell({
 
   return (
     <div className="flex h-full">
+      {/* Keyboard users can jump straight past the chrome to the active view's content. */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[80] focus:rounded-md focus:bg-blue-600 focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-white"
+      >
+        Skip to content
+      </a>
       {/* Persistent sidebar at md+; replaced by the drawer below md. */}
       <aside className="hidden w-64 shrink-0 flex-col border-r border-slate-200 bg-white md:flex dark:border-slate-800 dark:bg-slate-900">
         <Brand />
@@ -245,7 +256,7 @@ export function AppShell({
                 <Search className="size-4" aria-hidden />
                 <span className="hidden lg:inline">Search</span>
                 <kbd className="hidden rounded border border-slate-300 px-1 font-sans text-[10px] text-slate-400 sm:inline dark:border-slate-600">
-                  ⌘K
+                  {isMacLike ? "⌘K" : "Ctrl K"}
                 </kbd>
               </button>
             ) : null}
@@ -269,7 +280,7 @@ export function AppShell({
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto p-4 md:p-6">{children}</main>
+        <main id="main-content" className="flex-1 overflow-y-auto p-4 md:p-6">{children}</main>
       </div>
     </div>
   );

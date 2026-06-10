@@ -154,7 +154,7 @@ export function ClustersTable({
                           event.stopPropagation();
                           onEdit(cluster);
                         }}
-                        className="rounded-md p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-700 dark:hover:text-slate-200"
+                        className="rounded-md p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-blue-600 dark:hover:bg-slate-700 dark:hover:text-slate-200"
                       >
                         <Pencil className="size-4" />
                       </button>
@@ -167,7 +167,7 @@ export function ClustersTable({
                           event.stopPropagation();
                           onDelete(cluster);
                         }}
-                        className="rounded-md p-1.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10 dark:hover:text-red-400"
+                        className="rounded-md p-1.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-red-600 dark:hover:bg-red-500/10 dark:hover:text-red-400"
                       >
                         <Trash2 className="size-4" />
                       </button>

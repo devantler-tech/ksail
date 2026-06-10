@@ -1,4 +1,4 @@
-import { Copy, FileCode, RotateCw, ScrollText, SquareTerminal } from "lucide-react";
+import { Copy, FileCode, Layers, RotateCw, ScrollText, SquareTerminal } from "lucide-react";
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import yaml from "js-yaml";
 import {
@@ -306,6 +306,17 @@ export function ResourcesView({
     }
   }, [selected]);
 
+  // Switching the active cluster (sidebar switcher) keeps this view mounted, so close anything still
+  // targeting the previous cluster — a detail panel, log stream, exec session, or confirm dialog —
+  // rather than letting it operate on (or stream from) the wrong cluster.
+  useEffect(() => {
+    setSelected(null);
+    setLogPod(null);
+    setExecPod(null);
+    setDeleteOpen(false);
+    setApplyOpen(false);
+  }, [clusterId]);
+
   // Fetch the events targeting the selected resource (its own namespace, matched by involvedObject),
   // for the detail panel's "Related events" section. Skipped for Events themselves and unnamed
   // objects. Best-effort: a failure just yields no related events.
@@ -453,6 +464,7 @@ export function ResourcesView({
         empty={filtered.length === 0}
         emptyTitle={`No ${kind} resources`}
         emptyDescription="Nothing to show for this selection."
+        emptyIcon={<Layers className="size-6" aria-hidden />}
         onRetry={refresh}
       >
         <TableCard>
@@ -540,14 +552,17 @@ export function ResourcesView({
                       );
                     }}
                   >
-                    <span className="text-xs text-slate-500 dark:text-slate-400">Replicas</span>
-                    <input
-                      type="number"
-                      min={0}
-                      value={scaleValue}
-                      onChange={(event) => setScaleValue(event.target.value)}
-                      className="w-20 rounded-md border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
-                    />
+                    <label className="flex items-center gap-1.5">
+                      <span className="text-xs text-slate-500 dark:text-slate-400">Replicas</span>
+                      <input
+                        type="number"
+                        min={0}
+                        inputMode="numeric"
+                        value={scaleValue}
+                        onChange={(event) => setScaleValue(event.target.value)}
+                        className="w-20 rounded-md border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                      />
+                    </label>
                     <Button type="submit" size="sm" variant="secondary" loading={actionBusy}>
                       Scale
                     </Button>
@@ -644,7 +659,7 @@ export function ResourcesView({
                       onClick={() => setDetailFormat(format)}
                       aria-pressed={detailFormat === format}
                       className={cx(
-                        "px-2.5 py-1 text-xs font-medium transition-colors",
+                        "px-2.5 py-1 text-xs font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-blue-600",
                         detailFormat === format
                           ? "bg-blue-600 text-white"
                           : "bg-white text-slate-600 hover:bg-slate-50 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700",

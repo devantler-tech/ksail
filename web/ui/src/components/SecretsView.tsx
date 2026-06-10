@@ -123,7 +123,7 @@ export function SecretsView() {
   return (
     <div className="mx-auto max-w-5xl space-y-5">
       <div className="grid gap-6 lg:grid-cols-2">
-        <section className="space-y-3 rounded-xl border border-slate-200 p-4 dark:border-slate-800">
+        <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <h2 className="text-sm font-semibold text-slate-900 dark:text-white">Encrypt</h2>
           <FormatSelect value={encryptFormat} onChange={setEncryptFormat} />
           <SelectField
@@ -143,6 +143,7 @@ export function SecretsView() {
             onChange={(event) => setPlaintext(event.target.value)}
             placeholder={"password: s3cret\napiKey: abc123"}
             spellCheck={false}
+            aria-label="Plaintext document to encrypt"
             rows={10}
             className={textareaClass}
           />
@@ -152,7 +153,7 @@ export function SecretsView() {
           <OutputBlock label="Encrypted (SOPS)" value={encrypted} />
         </section>
 
-        <section className="space-y-3 rounded-xl border border-slate-200 p-4 dark:border-slate-800">
+        <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <h2 className="text-sm font-semibold text-slate-900 dark:text-white">Decrypt</h2>
           <FormatSelect value={decryptFormat} onChange={setDecryptFormat} />
           <textarea
@@ -160,6 +161,7 @@ export function SecretsView() {
             onChange={(event) => setEncryptedInput(event.target.value)}
             placeholder="Paste a SOPS-encrypted document…"
             spellCheck={false}
+            aria-label="SOPS-encrypted document to decrypt"
             rows={10}
             className={textareaClass}
           />

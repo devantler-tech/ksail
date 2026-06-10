@@ -26,12 +26,17 @@ export const COMPONENT_LABELS: Record<string, string> = {
   gitOpsEngine: "GitOps Engine",
 };
 
-// preferredProvider picks the provider to pre-select for a distribution in the create form. The
-// operator runs in-cluster, so the Kubernetes (nested) provider is the zero-config choice when a
-// distribution supports it; otherwise fall back to the first provider the server lists. This is a
-// UX default only — the full set of valid providers still comes from the /meta matrix.
-export function preferredProvider(providers: string[]): string {
-  return providers.includes("Kubernetes") ? "Kubernetes" : (providers[0] ?? "");
+// preferredProvider picks the provider to pre-select for a distribution in the create form. Which
+// provider is the zero-config choice depends on the surface: the local `ksail ui`/desktop backend
+// (recognizable by its per-provider availability report) is Docker-first — Docker is KSail's only
+// required local dependency — while the operator (no gating report) runs in-cluster, so the
+// Kubernetes (nested) provider is its zero-config choice. Falls back to the first provider the
+// server lists. This is a UX default only — the full set of valid providers still comes from the
+// /meta matrix.
+export function preferredProvider(providers: string[], status?: ProviderInfo[] | null): string {
+  const preferred = status ? "Docker" : "Kubernetes";
+
+  return providers.includes(preferred) ? preferred : (providers[0] ?? "");
 }
 
 // availableProviders narrows the providers valid for a distribution (from /api/v1/meta) to those the

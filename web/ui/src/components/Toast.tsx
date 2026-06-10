@@ -70,8 +70,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           return (
             <div
               key={toast.id}
-              role="status"
-              className="pointer-events-auto flex items-start gap-3 rounded-lg border border-slate-200 bg-white p-3 shadow-lg dark:border-slate-700 dark:bg-slate-800"
+              // Errors interrupt (assertive); success/info announce politely.
+              role={toast.kind === "error" ? "alert" : "status"}
+              className="pointer-events-auto flex animate-[toast-in_150ms_ease-out] items-start gap-3 rounded-lg border border-slate-200 bg-white p-3 shadow-lg dark:border-slate-700 dark:bg-slate-800"
             >
               <Icon className={cx("mt-0.5 size-5 shrink-0", accent)} aria-hidden />
               <p className="flex-1 break-words text-sm text-slate-700 dark:text-slate-200">

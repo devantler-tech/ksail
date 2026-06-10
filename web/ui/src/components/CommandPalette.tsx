@@ -86,13 +86,16 @@ export function CommandPalette({
                   <Search className="size-4 shrink-0 text-slate-400" aria-hidden />
                   <ComboboxInput
                     autoFocus
+                    aria-label="Search commands and clusters"
+                    autoComplete="off"
+                    spellCheck={false}
                     className="w-full bg-transparent py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none dark:text-white"
                     placeholder="Search commands and clusters…"
                     displayValue={() => ""}
                     onChange={(event) => setQuery(event.target.value)}
                   />
                 </div>
-                <ComboboxOptions static className="max-h-80 overflow-y-auto p-2">
+                <ComboboxOptions static className="max-h-80 overflow-y-auto overscroll-contain p-2">
                   {filtered.length === 0 ? (
                     <div className="px-3 py-6 text-center text-sm text-slate-500 dark:text-slate-400">No matches</div>
                   ) : (
