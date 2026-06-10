@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"path/filepath"
 	"slices"
 	"sync"
 	"testing"
@@ -22,6 +23,9 @@ import (
 const (
 	eventuallyTimeout = 2 * time.Second
 	eventuallyTick    = 10 * time.Millisecond
+
+	// devClusterName is the discovered-cluster name shared by the List tests.
+	devClusterName = "dev"
 )
 
 // Static sentinel errors used to drive provisioner failures in tests (err113 forbids inline
@@ -173,7 +177,7 @@ func TestListMapsExistingClusters(t *testing.T) {
 	t.Parallel()
 
 	service := newTestService(map[v1alpha1.Distribution]*fakeProvisioner{
-		v1alpha1.DistributionVanilla: {clusters: []string{"dev"}},
+		v1alpha1.DistributionVanilla: {clusters: []string{devClusterName}},
 	})
 
 	list, err := service.List(context.Background())
@@ -181,11 +185,60 @@ func TestListMapsExistingClusters(t *testing.T) {
 	require.Len(t, list.Items, 1)
 
 	got := list.Items[0]
-	assert.Equal(t, "dev", got.Name)
+	assert.Equal(t, devClusterName, got.Name)
 	assert.Equal(t, "default", got.Namespace)
 	assert.Equal(t, v1alpha1.DistributionVanilla, got.Spec.Cluster.Distribution)
 	assert.Equal(t, v1alpha1.ProviderDocker, got.Spec.Cluster.Provider)
 	assert.Equal(t, v1alpha1.ClusterPhaseReady, got.Status.Phase)
+}
+
+// TestListReportsEndpointFromKubeconfig guards the local status enrichment: a discovered cluster
+// whose kubeconfig context is detectable by name must report that context's API server URL as
+// status.endpoint, so the web UI's Status card shows a real endpoint on the local surface.
+func TestListReportsEndpointFromKubeconfig(t *testing.T) {
+	t.Parallel()
+
+	service := newTestService(map[v1alpha1.Distribution]*fakeProvisioner{
+		v1alpha1.DistributionVanilla: {clusters: []string{devClusterName}},
+	})
+
+	kubeconfig := filepath.Join(t.TempDir(), "config")
+	require.NoError(t, os.WriteFile(kubeconfig, []byte(`apiVersion: v1
+kind: Config
+clusters:
+- name: kind-dev
+  cluster:
+    server: https://127.0.0.1:6443
+contexts:
+- name: kind-dev
+  context:
+    cluster: kind-dev
+    user: kind-dev
+users:
+- name: kind-dev
+  user: {}
+`), 0o600))
+	service.SetKubeconfigPathForTest(kubeconfig)
+
+	list, err := service.List(context.Background())
+	require.NoError(t, err)
+	require.Len(t, list.Items, 1)
+	assert.Equal(t, "https://127.0.0.1:6443", list.Items[0].Status.Endpoint)
+}
+
+// TestListWithoutKubeconfigLeavesEndpointEmpty covers the best-effort path: no kubeconfig means no
+// endpoint, never an error.
+func TestListWithoutKubeconfigLeavesEndpointEmpty(t *testing.T) {
+	t.Parallel()
+
+	service := newTestService(map[v1alpha1.Distribution]*fakeProvisioner{
+		v1alpha1.DistributionVanilla: {clusters: []string{devClusterName}},
+	})
+
+	list, err := service.List(context.Background())
+	require.NoError(t, err)
+	require.Len(t, list.Items, 1)
+	assert.Empty(t, list.Items[0].Status.Endpoint)
 }
 
 func TestListEmptyReturnsNonNilItems(t *testing.T) {

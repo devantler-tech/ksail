@@ -218,10 +218,15 @@ func (s *Service) List(ctx context.Context) (*v1alpha1.ClusterList, error) {
 
 	sort.Strings(names)
 
+	// Endpoints come from the kubeconfig's contexts (no cluster round-trips), so the UI can show a
+	// real API server URL for clusters that have one instead of an empty status field.
+	endpoints := s.clusterEndpoints()
+
 	items := make([]v1alpha1.Cluster, 0, len(names))
 	for _, name := range names {
 		entry := merged[name]
 		cluster := newCluster(name, entry.distribution, entry.provider, entry.phase)
+		cluster.Status.Endpoint = endpoints[name]
 
 		condition, ok := jobConditionFor(entry.phase, entry.message, entry.since)
 		if ok {

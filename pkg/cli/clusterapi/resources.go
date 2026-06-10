@@ -60,6 +60,38 @@ func contextForCluster(kubeconfigPath, clusterName string) (string, error) {
 	return "", fmt.Errorf("%w: no kubeconfig context for cluster %q", api.ErrNotFound, clusterName)
 }
 
+// clusterEndpoints maps every cluster name detectable from the kubeconfig's contexts to its API
+// server URL, so List can report a real endpoint for local/discovered clusters (the operator surface
+// observes it during reconciliation instead). Best-effort and offline (one file read, no cluster
+// round-trips): an unreadable kubeconfig yields no endpoints. The first context detected for a name
+// wins, matching contextForCluster.
+func (s *Service) clusterEndpoints() map[string]string {
+	config, err := clientcmd.LoadFromFile(s.kubeconfigPath())
+	if err != nil {
+		return nil
+	}
+
+	endpoints := make(map[string]string, len(config.Contexts))
+
+	for contextName, kubeContext := range config.Contexts {
+		_, name, detectErr := clusterdetector.DetectDistributionFromContext(contextName)
+		if detectErr != nil {
+			continue
+		}
+
+		cluster, ok := config.Clusters[kubeContext.Cluster]
+		if !ok || cluster.Server == "" {
+			continue
+		}
+
+		if _, exists := endpoints[name]; !exists {
+			endpoints[name] = cluster.Server
+		}
+	}
+
+	return endpoints
+}
+
 // restConfigForCluster resolves the cluster's kubeconfig context by name and builds a *rest.Config —
 // the shared preamble for the apply (dynamic + RESTMapper) and exec (clientset) client builders.
 func restConfigForCluster(clusterName string) (*rest.Config, error) {

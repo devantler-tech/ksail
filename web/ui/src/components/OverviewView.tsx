@@ -13,7 +13,7 @@ import {
   Trash2,
   TriangleAlert,
 } from "lucide-react";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState } from "react";
 import { downloadKubeconfig, errorMessage, listResources, type Cluster, type Condition, type K8sObject } from "../api.ts";
 import { cx } from "../lib/cx.ts";
 import { formatTimestamp, relativeAge } from "../lib/format.ts";
@@ -21,14 +21,20 @@ import {
   clusterKey,
   eventFields,
   eventLastSeenMs,
+  nodeIsControlPlane,
+  nodeProblems,
   nodeReady,
+  nodeSystemInfo,
   podPhase,
   podReady,
   splitClusterKey,
   type EventFields,
 } from "../lib/k8s.ts";
 import { COMPONENT_LABELS, useMeta } from "../lib/meta.ts";
+import { buildClusterUsage, buildPodConsumption, type ClusterUsage, type PodConsumption } from "../lib/usage.ts";
+import { Card, Field } from "./Card.tsx";
 import { EventList } from "./EventList.tsx";
+import { ResourceUsagePanel } from "./ResourceUsage.tsx";
 import { StatusBadge } from "./StatusBadge.tsx";
 import { EmptyState } from "./states.tsx";
 import { Button } from "./ui.tsx";
@@ -37,14 +43,23 @@ import { useToast } from "./Toast.tsx";
 // PodSegment is one slice of the pod-health bar: a label, a count, and its bar/dot colour classes.
 type PodSegment = { key: string; label: string; count: number; bar: string; dot: string };
 
-// LiveHealth is the at-a-glance cluster health derived from the read-only resource endpoints.
+// LiveHealth is the at-a-glance cluster state derived from the read-only resource endpoints: node and
+// pod health, workload counts, live facts (version, OS, creation time) the cluster object itself does
+// not carry on the local surface, resource usage, and recent warnings.
 interface LiveHealth {
   nodesReady: number;
   nodesTotal: number;
+  controlPlanes: number;
+  kubernetesVersion: string;
+  osImage: string;
+  createdAt?: string;
   segments: PodSegment[];
   podsTotal: number;
   workloads: { label: string; count: number }[];
   warnings: EventFields[];
+  derivedConditions: Condition[];
+  usage: ClusterUsage;
+  topPods: PodConsumption[];
 }
 
 const MAX_WARNINGS = 8;
@@ -98,15 +113,105 @@ async function listKind(namespace: string, name: string, kind: string): Promise<
   }
 }
 
+// distinctSummary collapses per-node values into one display string: the value every node shares, or
+// the first plus how many differ ("v1.33.0 +2 more" on a mid-upgrade cluster).
+function distinctSummary(values: string[]): string {
+  const distinct = [...new Set(values.filter((value) => value !== ""))];
+  if (distinct.length === 0) {
+    return "";
+  }
+
+  return distinct.length === 1 ? distinct[0] : `${distinct[0]} +${distinct.length - 1} more`;
+}
+
+// clusterCreatedAt approximates the cluster's creation time as the kube-system namespace's creation
+// timestamp (it exists from first boot), falling back to the oldest namespace.
+function clusterCreatedAt(namespaces: K8sObject[]): string | undefined {
+  const stamps = namespaces
+    .map((ns) => ({ name: ns.metadata?.name, at: ns.metadata?.creationTimestamp ?? "" }))
+    .filter((entry) => entry.at !== "");
+
+  const kubeSystem = stamps.find((entry) => entry.name === "kube-system");
+  if (kubeSystem) {
+    return kubeSystem.at;
+  }
+
+  return stamps.map((entry) => entry.at).sort().at(0);
+}
+
+// segmentCount reads one segment's pod count by key.
+function segmentCount(segments: PodSegment[], key: string): number {
+  return segments.find((segment) => segment.key === key)?.count ?? 0;
+}
+
+// deriveHealthConditions synthesizes health checks from live cluster state for clusters whose backend
+// reports no status conditions (the local surface): node readiness, pod health, and the kubelets'
+// pressure/availability signals. Status follows the Kubernetes convention that True is healthy.
+function deriveHealthConditions(
+  nodes: K8sObject[],
+  segments: PodSegment[],
+  nodesReady: number,
+  podsTotal: number,
+): Condition[] {
+  const conditions: Condition[] = [];
+
+  if (nodes.length > 0) {
+    const allReady = nodesReady === nodes.length;
+    conditions.push({
+      type: "NodesReady",
+      status: allReady ? "True" : "False",
+      reason: allReady ? "AllNodesReady" : "NodesNotReady",
+      message: `${nodesReady} of ${nodes.length} nodes are ready.`,
+    });
+
+    const problems = nodes.flatMap(nodeProblems);
+    conditions.push({
+      type: "NodeConditions",
+      status: problems.length === 0 ? "True" : "False",
+      reason: problems.length === 0 ? "NoProblemsDetected" : "NodeProblems",
+      message:
+        problems.length === 0
+          ? "No node pressure or availability problems."
+          : problems.map((p) => `${p.node}: ${p.type}${p.message ? ` — ${p.message}` : ""}`).join("; "),
+      lastTransitionTime: problems.map((p) => p.lastTransitionTime ?? "").sort().at(-1) || undefined,
+    });
+  }
+
+  if (podsTotal > 0) {
+    const unhealthy = segmentCount(segments, "failed") + segmentCount(segments, "notReady");
+    const detail = [
+      { count: segmentCount(segments, "failed"), label: "failed" },
+      { count: segmentCount(segments, "notReady"), label: "not ready" },
+      { count: segmentCount(segments, "pending"), label: "pending" },
+    ]
+      .filter((entry) => entry.count > 0)
+      .map((entry) => `${entry.count} ${entry.label}`)
+      .join(", ");
+
+    conditions.push({
+      type: "PodsHealthy",
+      status: unhealthy === 0 ? "True" : "False",
+      reason: unhealthy === 0 ? "AllPodsHealthy" : "UnhealthyPods",
+      message: detail === "" ? `All ${segmentCount(segments, "running")} running pods are healthy.` : `${detail} of ${podsTotal} pods.`,
+    });
+  }
+
+  return conditions;
+}
+
 async function loadHealth(namespace: string, name: string): Promise<LiveHealth> {
-  const [nodes, pods, deployments, statefulSets, daemonSets, events] = await Promise.all([
-    listKind(namespace, name, "Node"),
-    listKind(namespace, name, "Pod"),
-    listKind(namespace, name, "Deployment"),
-    listKind(namespace, name, "StatefulSet"),
-    listKind(namespace, name, "DaemonSet"),
-    listKind(namespace, name, "Event"),
-  ]);
+  const [nodes, pods, deployments, statefulSets, daemonSets, events, namespaces, nodeMetrics, podMetrics] =
+    await Promise.all([
+      listKind(namespace, name, "Node"),
+      listKind(namespace, name, "Pod"),
+      listKind(namespace, name, "Deployment"),
+      listKind(namespace, name, "StatefulSet"),
+      listKind(namespace, name, "DaemonSet"),
+      listKind(namespace, name, "Event"),
+      listKind(namespace, name, "Namespace"),
+      listKind(namespace, name, "NodeMetrics"),
+      listKind(namespace, name, "PodMetrics"),
+    ]);
 
   const warnings = events
     .map(eventFields)
@@ -114,10 +219,18 @@ async function loadHealth(namespace: string, name: string): Promise<LiveHealth> 
     .sort((a, b) => eventLastSeenMs(b) - eventLastSeenMs(a))
     .slice(0, MAX_WARNINGS);
 
+  const segments = categorizePods(pods);
+  const nodesReady = nodes.filter(nodeReady).length;
+  const systemInfos = nodes.map(nodeSystemInfo);
+
   return {
-    nodesReady: nodes.filter(nodeReady).length,
+    nodesReady,
     nodesTotal: nodes.length,
-    segments: categorizePods(pods),
+    controlPlanes: nodes.filter(nodeIsControlPlane).length,
+    kubernetesVersion: distinctSummary(systemInfos.map((info) => info.kubeletVersion)),
+    osImage: distinctSummary(systemInfos.map((info) => info.osImage)),
+    createdAt: clusterCreatedAt(namespaces),
+    segments,
     podsTotal: pods.length,
     workloads: [
       { label: "Deployments", count: deployments.length },
@@ -126,44 +239,10 @@ async function loadHealth(namespace: string, name: string): Promise<LiveHealth> 
       { label: "Pods", count: pods.length },
     ],
     warnings,
+    derivedConditions: deriveHealthConditions(nodes, segments, nodesReady, pods.length),
+    usage: buildClusterUsage(nodes, pods, nodeMetrics),
+    topPods: buildPodConsumption(podMetrics),
   };
-}
-
-function Card({
-  title,
-  icon,
-  children,
-  className,
-}: {
-  title: string;
-  icon: ReactNode;
-  children: ReactNode;
-  className?: string;
-}) {
-  return (
-    <div
-      className={cx(
-        "rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900",
-        className,
-      )}
-    >
-      <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-        {icon}
-        {title}
-      </div>
-      {children}
-    </div>
-  );
-}
-
-// Field renders a label/value row in the Spec and Status cards.
-function Field({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="flex items-baseline justify-between gap-3 py-1.5">
-      <dt className="shrink-0 text-xs text-slate-500 dark:text-slate-400">{label}</dt>
-      <dd className="min-w-0 truncate text-right text-sm text-slate-700 dark:text-slate-200">{children}</dd>
-    </div>
-  );
 }
 
 function CopyableEndpoint({ endpoint }: { endpoint: string }) {
@@ -192,10 +271,10 @@ function conditionIcon(status: Condition["status"]) {
     return <CircleCheck className="size-4 shrink-0 text-emerald-500" aria-hidden />;
   }
   if (status === "False") {
-    return <CircleAlert className="size-4 shrink-0 text-slate-400" aria-hidden />;
+    return <CircleAlert className="size-4 shrink-0 text-amber-500" aria-hidden />;
   }
 
-  return <CircleHelp className="size-4 shrink-0 text-amber-500" aria-hidden />;
+  return <CircleHelp className="size-4 shrink-0 text-slate-400" aria-hidden />;
 }
 
 // OverviewView is the cluster home: the cluster's spec, status, and conditions (formerly the cluster
@@ -269,8 +348,23 @@ export function OverviewView({
   const distribution = spec?.distribution || meta.distributions[0] || "—";
   const provider = spec?.provider || meta.providers[distribution]?.[0] || "—";
   const secret = status?.kubeconfigSecretRef;
-  const conditions = status?.conditions ?? [];
   const nodesHealthy = health ? health.nodesTotal > 0 && health.nodesReady === health.nodesTotal : false;
+
+  // The local surface discovers clusters and only knows their distribution/provider; a spec carrying
+  // node counts or component choices is a managed one (operator CR or form submission) whose
+  // component defaults are meaningful. For discovered clusters, live node facts fill the gaps and
+  // fabricated component defaults are not shown.
+  const specManaged =
+    spec !== undefined &&
+    (spec.controlPlanes !== undefined || spec.workers !== undefined || meta.components.some((component) => spec[component.key]));
+  const liveWorkers = health ? health.nodesTotal - health.controlPlanes : undefined;
+
+  const crConditions = status?.conditions ?? [];
+  const shownConditions = crConditions.length > 0 ? crConditions : (health?.derivedConditions ?? []);
+
+  // The backend's creation timestamp when it tracks one (operator CRs), else the live cluster's own
+  // age (kube-system's creation time).
+  const createdAt = cluster.metadata.creationTimestamp ?? health?.createdAt;
 
   return (
     <div className="mx-auto max-w-6xl space-y-5">
@@ -374,19 +468,31 @@ export function OverviewView({
         </div>
       ) : null}
 
+      {/* Resource usage: cluster-wide gauges, per-node utilisation, top consumers. */}
+      {canBrowse ? (
+        <ResourceUsagePanel usage={health?.usage ?? null} topPods={health?.topPods ?? null} loading={loading && !health} />
+      ) : null}
+
       {/* Cluster spec, status, conditions, and (when available) recent warnings. */}
       <div className="grid gap-4 lg:grid-cols-3">
         <Card title="Spec" icon={<Server className="size-3.5" aria-hidden />}>
           <dl className="divide-y divide-slate-100 dark:divide-slate-800">
             <Field label="Distribution">{distribution}</Field>
             <Field label="Provider">{provider}</Field>
-            <Field label="Control planes">{spec?.controlPlanes ?? 1}</Field>
-            <Field label="Workers">{spec?.workers ?? 0}</Field>
-            {meta.components.map((component) => (
-              <Field key={component.key} label={COMPONENT_LABELS[component.key] ?? component.key}>
-                {spec?.[component.key] || component.default}
-              </Field>
-            ))}
+            <Field label="Control planes">{spec?.controlPlanes ?? health?.controlPlanes ?? "—"}</Field>
+            <Field label="Workers">{spec?.workers ?? liveWorkers ?? "—"}</Field>
+            {specManaged ? (
+              meta.components.map((component) => (
+                <Field key={component.key} label={COMPONENT_LABELS[component.key] ?? component.key}>
+                  {spec?.[component.key] || component.default}
+                </Field>
+              ))
+            ) : (
+              <p className="pt-2 text-xs text-slate-400 dark:text-slate-500">
+                Component configuration is not tracked for discovered clusters — browse Resources to see what runs
+                here.
+              </p>
+            )}
           </dl>
         </Card>
 
@@ -394,54 +500,65 @@ export function OverviewView({
           <dl className="divide-y divide-slate-100 dark:divide-slate-800">
             <Field label="Phase">{status?.phase ?? "—"}</Field>
             <Field label="Endpoint">{status?.endpoint ? <CopyableEndpoint endpoint={status.endpoint} /> : "—"}</Field>
+            <Field label="Kubernetes">{health?.kubernetesVersion || "—"}</Field>
+            <Field label="OS">{health?.osImage || "—"}</Field>
             <Field label="Nodes">
-              {status?.nodesTotal === undefined ? "—" : `${status.nodesReady ?? 0} / ${status.nodesTotal} ready`}
-            </Field>
-            <Field label="Kubeconfig">
-              {secret ? (
-                <span className="font-mono text-xs">{(secret.namespace ? `${secret.namespace}/` : "") + secret.name}</span>
-              ) : (
-                "—"
-              )}
+              {status?.nodesTotal !== undefined
+                ? `${status.nodesReady ?? 0} / ${status.nodesTotal} ready`
+                : health
+                  ? `${health.nodesReady} / ${health.nodesTotal} ready`
+                  : "—"}
             </Field>
             <Field label="Created">
-              <span title={formatTimestamp(cluster.metadata.creationTimestamp)}>
-                {relativeAge(cluster.metadata.creationTimestamp)}
-              </span>
+              <span title={formatTimestamp(createdAt)}>{relativeAge(createdAt)}</span>
             </Field>
-            <Field label="Last reconcile">
-              <span title={formatTimestamp(status?.lastReconcileTime)}>
-                {status?.lastReconcileTime ? relativeAge(status.lastReconcileTime) : "—"}
-              </span>
-            </Field>
+            {status?.lastReconcileTime ? (
+              <Field label="Last reconcile">
+                <span title={formatTimestamp(status.lastReconcileTime)}>{relativeAge(status.lastReconcileTime)}</span>
+              </Field>
+            ) : null}
+            {secret ? (
+              <Field label="Kubeconfig">
+                <span className="font-mono text-xs">{(secret.namespace ? `${secret.namespace}/` : "") + secret.name}</span>
+              </Field>
+            ) : null}
           </dl>
         </Card>
 
         <Card title="Conditions" icon={<CircleCheck className="size-3.5" aria-hidden />}>
-          {conditions.length === 0 ? (
+          {shownConditions.length === 0 ? (
             <p className="text-sm text-slate-500 dark:text-slate-400">No conditions reported.</p>
           ) : (
-            <ul className="space-y-2">
-              {conditions.map((condition) => (
-                <li key={condition.type} className="flex items-start gap-2">
-                  {conditionIcon(condition.status)}
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-sm font-medium text-slate-800 dark:text-slate-100">{condition.type}</span>
-                      <span className="shrink-0 text-xs tabular-nums text-slate-400">
-                        {relativeAge(condition.lastTransitionTime)}
-                      </span>
+            <>
+              {crConditions.length === 0 ? (
+                <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                  Live health checks
+                </p>
+              ) : null}
+              <ul className="space-y-2">
+                {shownConditions.map((condition) => (
+                  <li key={condition.type} className="flex items-start gap-2">
+                    {conditionIcon(condition.status)}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-sm font-medium text-slate-800 dark:text-slate-100">{condition.type}</span>
+                        {condition.lastTransitionTime ? (
+                          <span className="shrink-0 text-xs tabular-nums text-slate-400">
+                            {relativeAge(condition.lastTransitionTime)}
+                          </span>
+                        ) : null}
+                      </div>
+                      {condition.reason ? (
+                        <p className="text-xs text-slate-500 dark:text-slate-400">{condition.reason}</p>
+                      ) : null}
+                      {condition.message ? (
+                        <p className="text-xs text-slate-500 dark:text-slate-400">{condition.message}</p>
+                      ) : null}
                     </div>
-                    {condition.reason ? (
-                      <p className="text-xs text-slate-500 dark:text-slate-400">{condition.reason}</p>
-                    ) : null}
-                    {condition.message ? (
-                      <p className="text-xs text-slate-500 dark:text-slate-400">{condition.message}</p>
-                    ) : null}
-                  </div>
-                </li>
-              ))}
-            </ul>
+                  </li>
+                ))}
+              </ul>
+            </>
           )}
         </Card>
 
