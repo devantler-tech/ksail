@@ -305,7 +305,7 @@ body {
   box-shadow: var(--ksail-glow);
 }
 
-.sl-link-card a {
+.sl-link-card .title {
   font-family: var(--ksail-font-display);
   letter-spacing: -0.01em;
 }
