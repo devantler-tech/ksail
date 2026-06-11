@@ -5,6 +5,11 @@ import starlightGithubAlerts from "starlight-github-alerts";
 
 export default defineConfig({
   site: "https://ksail.devantler.tech",
+  // GFM (tables, strikethrough, autolinks) is on by default, but on Astro 6.4.x
+  // the implicit default is lost when integrations use the deprecated
+  // markdown.remarkPlugins hook — leaving every table rendered as literal pipe
+  // text. Pin it explicitly so the site never silently loses table rendering.
+  markdown: { gfm: true },
   redirects: {
     "/getting-started/vanilla/": "/distributions/vanilla/",
     "/getting-started/k3s/": "/distributions/k3s/",
@@ -85,6 +90,7 @@ export default defineConfig({
           items: [
             { label: "Overview", link: "/features/" },
             { label: "Cluster Provisioning", link: "/features/cluster-provisioning/" },
+            { label: "Day-2 Operations", link: "/features/day-2-operations/" },
             { label: "Ephemeral Clusters (--ttl)", link: "/features/ephemeral-clusters/" },
             { label: "Workload Management", link: "/features/workload-management/" },
             { label: "GitOps Workflows", link: "/features/gitops-workflows/" },
@@ -93,6 +99,8 @@ export default defineConfig({
             { label: "Secret Management", link: "/features/secret-management/" },
             { label: "Backup & Restore", link: "/features/backup-restore/" },
             { label: "CI/CD Integration", link: "/features/cicd-integration/" },
+            { label: "Web UI & Desktop App", link: "/features/web-ui/", badge: { text: "New", variant: "tip" } },
+            { label: "Kubernetes Operator", link: "/features/operator/", badge: { text: "New", variant: "tip" } },
           ],
         },
         { label: "Concepts", link: "/concepts/" },
