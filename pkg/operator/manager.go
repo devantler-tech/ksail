@@ -34,6 +34,10 @@ type Options struct {
 	ReadOnly bool
 	// OIDC configures app-driven OIDC authentication for the REST API (disabled when empty).
 	OIDC api.OIDCConfig
+	// HostCluster self-registers the cluster the operator runs on as a Cluster resource (named
+	// "host", labelled ksail.io/host-cluster) so the hub itself appears in the cluster list and can
+	// be browsed through the operator's own credentials.
+	HostCluster bool
 	// LeaderElection enables leader election to ensure a single active operator.
 	LeaderElection bool
 	// LeaderElectionID overrides the leader election lease name (optional).
@@ -100,6 +104,7 @@ func setupManager(mgr ctrl.Manager, opts Options) error {
 		Scheme:            mgr.GetScheme(),
 		NewProvisioner:    BuildProvisioner,
 		ObserveStatus:     ObserveVClusterStatus,
+		ObserveHostStatus: NewHostStatusObserver(mgr.GetConfig()),
 		InstallComponents: InstallComponents,
 		APIReader:         mgr.GetAPIReader(),
 	}
@@ -107,6 +112,13 @@ func setupManager(mgr ctrl.Manager, opts Options) error {
 	reconcilerErr := reconciler.SetupWithManager(mgr)
 	if reconcilerErr != nil {
 		return fmt.Errorf("set up cluster reconciler: %w", reconcilerErr)
+	}
+
+	if opts.HostCluster {
+		hostErr := AddHostClusterRegistration(mgr, HostClusterNamespace())
+		if hostErr != nil {
+			return hostErr
+		}
 	}
 
 	healthErr := mgr.AddHealthzCheck("healthz", healthz.Ping)
@@ -120,30 +132,48 @@ func setupManager(mgr ctrl.Manager, opts Options) error {
 	}
 
 	if opts.APIBindAddress != "" {
-		hub := mgr.GetClient()
-		// Resolve a dynamic client for a cluster's managed (vcluster) child cluster, so the dashboard's
-		// resource browser works against the operator backend too — not just the local `ksail ui`.
-		newChildClient := func(ctx context.Context, cluster *v1alpha1.Cluster) (dynamic.Interface, error) {
-			return childClusterDynamicClient(ctx, hub, cluster)
+		return setupAPIServer(mgr, opts)
+	}
+
+	return nil
+}
+
+// setupAPIServer registers the REST API server (and embedded dashboard) with the manager.
+func setupAPIServer(mgr ctrl.Manager, opts Options) error {
+	hub := mgr.GetClient()
+	// Resolve a dynamic client for a cluster's managed (vcluster) child cluster, so the dashboard's
+	// resource browser works against the operator backend too — not just the local `ksail ui`. The
+	// self-registered host cluster is browsed through the operator's own credentials instead of a
+	// published kubeconfig Secret.
+	newChildClient := func(ctx context.Context, cluster *v1alpha1.Cluster) (dynamic.Interface, error) {
+		if cluster.IsHostCluster() {
+			dyn, err := dynamic.NewForConfig(mgr.GetConfig())
+			if err != nil {
+				return nil, fmt.Errorf("build host cluster dynamic client: %w", err)
+			}
+
+			return dyn, nil
 		}
 
-		server := &api.Server{
-			Service:     api.NewCRClusterServiceWithResources(hub, newChildClient),
-			ReadOnly:    opts.ReadOnly,
-			BindAddress: opts.APIBindAddress,
-			OIDC:        opts.OIDC,
-			Mode:        api.ModeOperator,
-		}
+		return childClusterDynamicClient(ctx, hub, cluster)
+	}
 
-		// Serve the dashboard from the operator itself (same origin as the API, no reverse proxy).
-		// webui.Assets always returns a filesystem; when the SPA was not built into pkg/webui/dist,
-		// it holds only a placeholder and the server renders a "UI not built" page.
-		server.StaticFS = webui.Assets()
+	server := &api.Server{
+		Service:     api.NewCRClusterServiceWithResources(hub, newChildClient),
+		ReadOnly:    opts.ReadOnly,
+		BindAddress: opts.APIBindAddress,
+		OIDC:        opts.OIDC,
+		Mode:        api.ModeOperator,
+	}
 
-		apiErr := mgr.Add(server)
-		if apiErr != nil {
-			return fmt.Errorf("add API server: %w", apiErr)
-		}
+	// Serve the dashboard from the operator itself (same origin as the API, no reverse proxy).
+	// webui.Assets always returns a filesystem; when the SPA was not built into pkg/webui/dist,
+	// it holds only a placeholder and the server renders a "UI not built" page.
+	server.StaticFS = webui.Assets()
+
+	apiErr := mgr.Add(server)
+	if apiErr != nil {
+		return fmt.Errorf("add API server: %w", apiErr)
 	}
 
 	return nil

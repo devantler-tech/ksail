@@ -39,14 +39,20 @@ spec:
             {{- if .Values.ui.readOnly }}
             - --read-only
             {{- end }}
+            - --host-cluster={{ .Values.hostCluster.enabled }}
             {{- if .Values.auth.oidc.enabled }}
             - --oidc-issuer-url={{ .Values.auth.oidc.issuerURL }}
             - --oidc-client-id={{ .Values.auth.oidc.clientID }}
             - --oidc-redirect-url={{ include "ksail-operator.oidc.redirectURL" . }}
             - --oidc-scopes={{ .Values.auth.oidc.scopes }}
             {{- end }}
-          {{- if .Values.auth.oidc.enabled }}
           env:
+            # POD_NAMESPACE tells the operator which namespace to register the host cluster in.
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            {{- if .Values.auth.oidc.enabled }}
             - name: KSAIL_OPERATOR_OIDC_CLIENT_SECRET
               valueFrom:
                 secretKeyRef:
@@ -57,7 +63,7 @@ spec:
                 secretKeyRef:
                   name: {{ include "ksail-operator.oidc.secretName" . }}
                   key: session-secret
-          {{- end }}
+            {{- end }}
           ports:
             {{- if .Values.api.bindPort }}
             - name: api

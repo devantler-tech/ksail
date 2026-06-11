@@ -32,6 +32,15 @@ api:
   # Port the operator REST API listens on (consumed by the UI). Set to 0 to disable the API.
   bindPort: 8080
 
+# hostCluster self-registers the cluster the operator runs on as a Cluster resource (named "host",
+# labelled ksail.io/host-cluster, in the release namespace), so the hub itself appears in the
+# cluster list and its workloads can be browsed through the operator's ServiceAccount — like
+# Rancher's "local" cluster or Argo CD's "in-cluster" destination. The operator never provisions,
+# updates, or deletes the underlying cluster for this entry, and the API rejects lifecycle
+# mutations on it (kubectl-deleting the resource merely deregisters it until the next restart).
+hostCluster:
+  enabled: true
+
 # ui is the web dashboard. It is embedded in the operator binary and served by the operator itself
 # on the API port (api.bindPort) — same origin as the REST API, so there is no separate UI
 # container and no reverse proxy. Reach it via the ingress below or by port-forwarding the operator

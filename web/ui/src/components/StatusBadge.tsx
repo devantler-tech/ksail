@@ -1,4 +1,4 @@
-import { Circle, CircleAlert, CircleCheck, Clock, LoaderCircle, type LucideIcon } from "lucide-react";
+import { Circle, CircleAlert, CircleCheck, Clock, House, LoaderCircle, type LucideIcon } from "lucide-react";
 import { cx } from "../lib/cx.ts";
 
 type PhaseMeta = {
@@ -73,6 +73,21 @@ export function phaseMeta(phase?: string): PhaseMeta {
   }
 
   return PHASES[phase] ?? { ...FALLBACK, label: phase };
+}
+
+// HostBadge marks the operator's self-registered host cluster — the cluster the operator runs on
+// (see HOST_CLUSTER_LABEL in lib/k8s.ts). Rendered next to the cluster name wherever lifecycle
+// actions are hidden for it, so the missing edit/delete affordances are self-explanatory.
+export function HostBadge() {
+  return (
+    <span
+      className="inline-flex items-center gap-1.5 rounded-full bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-700 ring-1 ring-inset ring-sky-600/20 dark:bg-sky-500/10 dark:text-sky-400 dark:ring-sky-500/30"
+      title="The cluster the KSail operator runs on"
+    >
+      <House className="size-3.5" aria-hidden />
+      Host
+    </span>
+  );
 }
 
 export function StatusBadge({ phase }: { phase?: string }) {

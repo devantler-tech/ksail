@@ -949,6 +949,8 @@ func clientErrorStatus(err error) int {
 		return http.StatusUnprocessableEntity
 	case errors.Is(err, ErrNotSupported):
 		return http.StatusNotImplemented
+	case errors.Is(err, ErrHostClusterProtected):
+		return http.StatusForbidden
 	case apierrors.IsBadRequest(err):
 		return http.StatusBadRequest
 	case apierrors.IsUnauthorized(err):
