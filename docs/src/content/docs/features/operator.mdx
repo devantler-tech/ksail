@@ -1,0 +1,115 @@
+---
+title: Kubernetes Operator
+description: Manage KSail clusters declaratively from inside Kubernetes — the operator reconciles Cluster custom resources, with an optional web UI and OIDC-protected REST API.
+---
+
+import { Steps } from "@astrojs/starlight/components";
+
+The KSail operator brings declarative cluster management *into* Kubernetes. It reconciles `Cluster` custom resources (`ksail.io/v1alpha1`), so you can provision and manage KSail-supported distributions with `kubectl apply` — or let your GitOps engine do it for you. An optional [web UI](/features/web-ui/) and OIDC-authenticated REST API are included.
+
+## What the Chart Deploys
+
+| Component | Description | Toggle |
+|-----------|-------------|--------|
+| Operator | Controller that reconciles `Cluster` custom resources | `operator.enabled` (default `true`) |
+| `Cluster` CRD | Installed automatically from the chart's `crds/` directory | — |
+| RBAC | ServiceAccount plus the (Cluster)Role and binding the operator needs | `serviceAccount.create` |
+| REST API | Served by the operator, consumed by the UI | `api.bindPort` (`0` disables) |
+| Web UI | Dashboard that talks to the REST API | `ui.enabled` (default `false`) |
+| OIDC auth | App-driven login protecting the REST API and UI | `auth.oidc.enabled` (default `false`) |
+
+> [!WARNING]
+> The REST API is unauthenticated by default. Enable OIDC (`auth.oidc.enabled=true`) to require sign-in, or set `api.bindPort=0` to disable the API entirely when you don't need the UI.
+
+## Getting Started
+
+Requires Kubernetes 1.27+ and Helm 3.8+.
+
+<Steps>
+
+1. **Install the chart.** Each KSail release publishes it as an OCI artifact to GHCR — pin a [release version](https://github.com/devantler-tech/ksail/releases):
+
+   ```bash
+   helm install ksail-operator oci://ghcr.io/devantler-tech/charts/ksail-operator \
+     --version <version> --namespace ksail-system --create-namespace
+   ```
+
+2. **Apply a `Cluster` resource.** The operator picks it up and provisions the cluster:
+
+   ```yaml
+   apiVersion: ksail.io/v1alpha1
+   kind: Cluster
+   metadata:
+     name: my-cluster
+     namespace: ksail-system
+   spec:
+     cluster:
+       distribution: VCluster
+   ```
+
+3. **Watch it reconcile:**
+
+   ```bash
+   kubectl get clusters -n ksail-system -w
+   ```
+
+</Steps>
+
+Distributions that run nested inside the host cluster (VCluster, K3s) work out of the box. Docker-based distributions (Vanilla/Kind, K3d) need the host Docker socket mounted via `operator.dockerSocket.enabled=true` — this is privileged and single-node, so prefer nested distributions in-cluster. See the [Kubernetes (Nested) provider](/providers/kubernetes/) for how nested clusters run as pods.
+
+## Enabling the Web UI
+
+```bash
+helm upgrade --install ksail-operator oci://ghcr.io/devantler-tech/charts/ksail-operator \
+  --version <version> --namespace ksail-system --create-namespace \
+  --set ui.enabled=true
+```
+
+Without an Ingress, port-forward to reach it (the Service is named `<release-name>-ksail-operator-ui`):
+
+```bash
+kubectl port-forward -n ksail-system svc/ksail-operator-ksail-operator-ui 8080:80
+```
+
+Set `ui.readOnly=true` in GitOps-enforced environments so the Git repository stays the single source of truth — the operator enforces read-only mode server-side, not just in the frontend.
+
+## Securing with OIDC
+
+OIDC closes the otherwise-unauthenticated REST API. The API owns the login/callback flow as a confidential client, so the client secret stays server-side. The provider must reach the API's callback at a stable URL — typically through an Ingress:
+
+```bash
+helm upgrade --install ksail-operator oci://ghcr.io/devantler-tech/charts/ksail-operator \
+  --version <version> --namespace ksail-system --create-namespace \
+  --set ui.enabled=true \
+  --set ui.ingress.enabled=true \
+  --set ui.ingress.hosts[0].host=ksail.example.com \
+  --set auth.oidc.enabled=true \
+  --set auth.oidc.issuerURL=https://dex.example.com \
+  --set auth.oidc.clientID=ksail \
+  --set-string auth.oidc.clientSecret=CLIENT_SECRET \
+  --set auth.oidc.redirectURL=https://ksail.example.com/api/v1/auth/callback
+```
+
+Register the redirect URL with your provider. To keep secrets out of `--set` and values files, pre-create a Secret with keys `client-secret` and `session-secret` and reference it via `auth.oidc.existingSecret`.
+
+## Uninstalling
+
+```bash
+helm uninstall ksail-operator --namespace ksail-system
+```
+
+Helm does **not** remove CRDs installed from `crds/`. Delete the `Cluster` CRD manually if you no longer need it — this also deletes all `Cluster` resources:
+
+```bash
+kubectl delete crd clusters.ksail.io
+```
+
+## Configuration Reference
+
+The full values reference — images, replicas, leader election, resources, Ingress, and OIDC — lives in the [chart README](https://github.com/devantler-tech/ksail/tree/main/charts/ksail-operator).
+
+## Related
+
+- [Web UI & Desktop App](/features/web-ui/) — the same UI, running locally instead of in-cluster
+- [Kubernetes (Nested) provider](/providers/kubernetes/) — how nested clusters run as pods inside a host cluster
+- [GitOps Workflows](/features/gitops-workflows/) — drive `Cluster` resources from Git with Flux or ArgoCD

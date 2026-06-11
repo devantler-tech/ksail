@@ -1,0 +1,87 @@
+---
+title: Web UI & Desktop App
+description: Provision and manage clusters visually — in your browser with ksail ui, as a native desktop app, or served in-cluster by the KSail operator.
+---
+
+import { TabItem, Tabs } from "@astrojs/starlight/components";
+
+KSail ships one web UI that runs in three places: locally in your browser, as a native desktop window, or inside a cluster served by the [KSail operator](/features/operator/). All three talk to the same REST API, so the experience is identical — pick the surface that fits how you work.
+
+```mermaid
+flowchart LR
+    UI["🖥️ KSail Web UI"]
+
+    UI --- Local["ksail ui<br/>local server · 127.0.0.1"]
+    UI --- Desktop["ksail desktop<br/>native window"]
+    UI --- Operator["KSail operator<br/>in-cluster · OIDC optional"]
+
+    Local -->|"REST API"| Docker["🐳 Local clusters via Docker"]
+    Desktop -->|"REST API"| Docker
+    Operator -->|"REST API"| CRs["☸️ Cluster custom resources"]
+
+    style UI fill:#2ec4e622,stroke:#2ec4e6
+    style Local fill:#10b98122,stroke:#10b981
+    style Desktop fill:#10b98122,stroke:#10b981
+    style Operator fill:#7c3aed22,stroke:#7c3aed
+```
+
+## Choosing a Surface
+
+| Surface | Command | Best for |
+|---------|---------|----------|
+| Browser | `ksail ui` | Quick visual management of local clusters without installing anything extra |
+| Desktop app | `ksail desktop` | A dedicated window outside the browser, launchable from your dock |
+| In-cluster | Helm chart with `ui.enabled=true` | Team-shared dashboards over [operator-managed clusters](/features/operator/), with optional OIDC sign-in |
+
+## Running Locally
+
+<Tabs>
+  <TabItem label="Browser (ksail ui)">
+    `ksail ui` starts a small local web server and opens the UI in your browser. The server binds to `127.0.0.1` only — it is never exposed to your network — and serves both the UI and a REST API backed by your local cluster lifecycle. It runs until you press <kbd>Ctrl</kbd>+<kbd>C</kbd>.
+
+    ```bash
+    ksail ui              # pick a free port and open the browser
+    ksail ui --port 8080  # serve on a fixed port
+    ksail ui --no-browser # start the server without opening a browser
+    ```
+
+    This is the same UI the KSail operator serves in-cluster, but here it provisions and manages clusters locally via Docker.
+  </TabItem>
+  <TabItem label="Desktop app (ksail desktop)">
+    The desktop app wraps the web UI in a native window — no browser required. It ships as a separate download from the [releases page](https://github.com/devantler-tech/ksail/releases), or build it from source with `make desktop`.
+
+    ```bash
+    ksail desktop
+    ```
+
+    `ksail desktop` launches the app from, in order: a `ksail-desktop` binary next to the `ksail` executable, the same binary on your `PATH`, or (on macOS) an installed **KSail** app.
+  </TabItem>
+  <TabItem label="In-cluster (operator)">
+    Enable the UI when installing the [KSail operator](/features/operator/) Helm chart:
+
+    ```bash
+    helm upgrade --install ksail-operator oci://ghcr.io/devantler-tech/charts/ksail-operator \
+      --namespace ksail-system --create-namespace \
+      --set ui.enabled=true
+    ```
+
+    The in-cluster UI manages `Cluster` custom resources instead of local Docker containers, and supports OIDC authentication and a server-enforced read-only mode. See [Kubernetes Operator](/features/operator/) for the full setup.
+  </TabItem>
+</Tabs>
+
+## Read-Only Mode for GitOps
+
+In GitOps-enforced environments the Git repository should stay the single source of truth. Deploy the in-cluster UI with `ui.readOnly=true` to lock it to inspection: the restriction is enforced server-side by the REST API, not just hidden in the frontend.
+
+> [!NOTE]
+> The operator's REST API is unauthenticated by default. Enable OIDC (`auth.oidc.enabled=true`) to require sign-in, or set `api.bindPort=0` to disable the API entirely when you don't need the UI. The local `ksail ui` server avoids this concern by binding to `127.0.0.1` only.
+
+## CLI Reference
+
+[`ksail ui`](/cli-flags/ui/ui-root/), [`ksail desktop`](/cli-flags/desktop/desktop-root/)
+
+## Related
+
+- [Kubernetes Operator](/features/operator/) — deploy the UI in-cluster with OIDC and read-only mode
+- [OIDC Authentication](/guides/oidc-authentication/) — KSail's native OIDC support for cluster access
+- [VSCode Extension](/vscode-extension/) — manage clusters from your editor instead
