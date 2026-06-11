@@ -138,8 +138,8 @@ Register the redirect URL with your provider, and point `ksail.local` at your In
 
 ### Host cluster
 
-| Key                   | Description                                                                                                             | Default |
-|-----------------------|-------------------------------------------------------------------------------------------------------------------------|---------|
+| Key                   | Description                                                                                                            | Default |
+|-----------------------|------------------------------------------------------------------------------------------------------------------------|---------|
 | `hostCluster.enabled` | Self-register the cluster the operator runs on as a `Cluster` resource named `host` so it appears in the cluster list. | `true`  |
 
 ### Web UI
