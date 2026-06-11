@@ -1,9 +1,11 @@
 ---
 title: CI/CD Integration
-description: Provision KSail clusters in GitHub Actions with the official composite action.
+description: Provision KSail clusters in GitHub Actions with the official composite action — installation, caching, GitOps push, security scanning, and cleanup built in.
 ---
 
-Provision KSail clusters in GitHub Actions with the official `ksail-cluster` composite action. It handles installation, Helm chart caching, mirror registry caching, and image pre-pulling automatically.
+import { TabItem, Tabs } from "@astrojs/starlight/components";
+
+Provision real Kubernetes clusters inside GitHub Actions with the official `ksail-cluster` composite action. One step installs KSail from releases, scaffolds and creates the cluster, and wires up caching — Helm charts and mirror registry volumes persist between runs, so repeat builds skip the slow image pulls entirely.
 
 ```yaml
 - uses: devantler-tech/ksail/.github/actions/ksail-cluster@v7.2.2
@@ -11,7 +13,92 @@ Provision KSail clusters in GitHub Actions with the official `ksail-cluster` com
     distribution: K3s
 ```
 
+The action outputs `kubeconfig` — the path to the kubeconfig for the provisioned cluster — so follow-up steps can talk to the cluster with any tool.
+
+## Common Recipes
+
+<Tabs>
+  <TabItem label="Integration tests">
+    ```yaml
+    jobs:
+      integration:
+        runs-on: ubuntu-latest
+        steps:
+          - uses: actions/checkout@v4
+          - uses: devantler-tech/ksail/.github/actions/ksail-cluster@v7.2.2
+            id: cluster
+            with:
+              distribution: Vanilla
+          - name: Run tests against the cluster
+            env:
+              KUBECONFIG: ${{ steps.cluster.outputs.kubeconfig }}
+            run: go test ./... -tags=integration
+    ```
+  </TabItem>
+  <TabItem label="Full GitOps pipeline">
+    Validate manifests, create the cluster, push manifests to the local registry, and wait for the GitOps engine to reconcile — all from inputs:
+
+    ```yaml
+    - uses: devantler-tech/ksail/.github/actions/ksail-cluster@v7.2.2
+      with:
+        distribution: K3s
+        validate: "true"     # ksail workload validate before create
+        push: "true"         # ksail workload push after create
+        reconcile: "true"    # ksail workload reconcile and wait
+        sops-age-key: ${{ secrets.SOPS_AGE_KEY }}
+    ```
+  </TabItem>
+  <TabItem label="Security scanning">
+    Run [Kubescape](https://kubescape.io) against your manifests and upload results to GitHub Code Scanning:
+
+    ```yaml
+    - uses: devantler-tech/ksail/.github/actions/ksail-cluster@v7.2.2
+      with:
+        distribution: Vanilla
+        scan: "true"
+        scan-framework: nsa,mitre
+        scan-format: sarif
+        scan-output: results.sarif
+    - uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: results.sarif
+    ```
+  </TabItem>
+</Tabs>
+
+## Key Inputs
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `distribution` | `Vanilla` | Distribution to provision (Vanilla, K3s, Talos, VCluster) |
+| `provider` | `Docker` | Infrastructure provider; cloud providers need credentials via env vars (`HCLOUD_TOKEN`, `OMNI_SERVICE_ACCOUNT_KEY`) |
+| `ksail-version` | `latest` | Pin a released KSail version for reproducible pipelines |
+| `args` | — | Extra CLI arguments passed to `cluster init` |
+| `config` | — | Use an existing `ksail.yaml` instead of scaffolding (`init: "false"` skips init entirely) |
+| `cache` | `true` | Cache Helm charts and mirror registry volumes between runs |
+| `sops-age-key` | — | SOPS Age key for decrypting secrets during Flux setup |
+| `validate` / `scan` | `false` | Pre-create manifest validation and Kubescape scanning |
+| `push` / `reconcile` | `false` | GitOps push and reconcile after create |
+| `delete` | `false` | Tear the cluster down at the end (runs even on failure) |
+
+See the [action source](https://github.com/devantler-tech/ksail/tree/main/.github/actions/ksail-cluster) for the complete input list, including scan thresholds and host customization.
+
+> [!TIP]
+> On hosted runners the cluster disappears with the VM, so `delete` defaults to `false`. Set `delete: "true"` on self-hosted runners — and always for cloud providers like Hetzner, where leaked clusters cost real money.
+
+## Beyond GitHub Actions
+
+The composite action is a convenience, not a requirement — KSail is a single static binary, so any CI system works. [Install it](/installation/) on the runner image and run the same two commands:
+
+```bash
+ksail cluster init --distribution K3s
+ksail cluster create
+```
+
+Combine with [`--ttl`](/features/ephemeral-clusters/) so clusters self-destruct even when a job is cancelled mid-run.
+
 ## Related
 
 - [PR Preview Clusters](/guides/pr-preview-clusters/) — end-to-end guide for per-PR ephemeral clusters in GitHub Actions
+- [Ephemeral Clusters](/features/ephemeral-clusters/) — TTL-based auto-destruction for CI safety nets
 - [Testing in CI/CD](/use-cases/#testing-in-cicd) — integration test patterns

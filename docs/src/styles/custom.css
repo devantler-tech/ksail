@@ -222,6 +222,10 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .hero img { animation: none; }
   html { scroll-behavior: auto; }
+
+  .card,
+  .sl-link-card,
+  .sl-link-button { transition: none; }
 }
 
 /* ----------------------------------------------------------------------- */
@@ -285,6 +289,36 @@ body {
 .card .title {
   font-family: var(--ksail-font-display);
   letter-spacing: -0.01em;
+}
+
+/* LinkCards (feature overview) share the Card surface treatment. */
+.sl-link-card {
+  border: 1px solid var(--ksail-border);
+  border-radius: 1rem;
+  background: color-mix(in oklab, var(--ksail-surface) 75%, transparent);
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.sl-link-card:hover {
+  transform: translateY(-3px);
+  border-color: color-mix(in oklab, var(--ksail-cyan) 55%, var(--ksail-border));
+  box-shadow: var(--ksail-glow);
+}
+
+.sl-link-card a {
+  font-family: var(--ksail-font-display);
+  letter-spacing: -0.01em;
+}
+
+/* Keyboard keys in prose (e.g. Ctrl+C). */
+.sl-markdown-content kbd {
+  padding: 0.1em 0.45em;
+  font-family: var(--sl-font-mono);
+  font-size: 0.8em;
+  border: 1px solid var(--ksail-border);
+  border-bottom-width: 2px;
+  border-radius: 0.35rem;
+  background: var(--sl-color-bg-inline-code);
 }
 
 /* ----------------------------------------------------------------------- */

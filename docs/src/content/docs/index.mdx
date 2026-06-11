@@ -39,7 +39,7 @@ From nothing to a running Kubernetes cluster, a deployed workload, and a clean t
 
 export const features = [
   { icon: "📦", title: "One Binary", body: "Embeds cluster provisioning, GitOps engines, and deployment tooling. No tool sprawl." },
-  { icon: "☸️", title: "Simple Clusters", body: "Spin up Vanilla, K3s, Talos, VCluster, KWOK, or EKS clusters with one command. Same workflow across distributions." },
+  { icon: "☸️", title: "Simple Clusters", body: "Spin up Vanilla, K3s, Talos, VCluster, or KWOK clusters with one command — EKS scaffolding included. Same workflow across distributions." },
   { icon: "🔓", title: "No Lock-In", body: "Uses native configs (<code>kind.yaml</code>, <code>k3d.yaml</code>, Talos patches, <code>vcluster.yaml</code>, <code>kwok/</code>). Run clusters with or without KSail." },
   { icon: "📥", title: "Mirror Registries", body: "Avoid rate limits, and store images once. Same mirrors used by different clusters." },
   { icon: "📄", title: "Everything as Code", body: "Cluster settings, distribution configs, and workloads in version-controlled files." },
@@ -48,6 +48,9 @@ export const features = [
   { icon: "⚙️", title: "Customizable Stack", body: "Select your CNI, CSI, policy engine, cert-manager, and mirror registries." },
   { icon: "🔐", title: "SOPS Built In", body: "Encrypt, decrypt, and edit secrets with integrated cipher commands." },
   { icon: "💾", title: "Backup & Restore", body: "Export cluster resources to a compressed archive and restore to any cluster with provenance labels." },
+  { icon: "🩺", title: "Built-In Diagnostics", body: "Health-scored cluster diagnostics with remediation hints via <code>ksail cluster diagnose</code>." },
+  { icon: "🖥️", title: "Web UI & Desktop", body: "Manage clusters visually with <code>ksail ui</code> in the browser or the native desktop app." },
+  { icon: "⚓", title: "Kubernetes Operator", body: "Reconcile <code>Cluster</code> custom resources in-cluster, with an optional OIDC-protected dashboard." },
   { icon: "🤖", title: "AI Assistant", body: "Interactive chat powered by GitHub Copilot for configuration and troubleshooting." },
   { icon: "💻", title: "VS Code Extension", body: "Manage clusters from VS Code via the Kubernetes extension (Cloud Explorer and Cluster Explorer), wizards, and command palette." },
 ];
@@ -259,6 +262,9 @@ flowchart TD
   </Card>
   <Card title="MCP Server" icon="puzzle">
     Expose KSail as an MCP server for AI assistants and automation tools. [Learn more →](/mcp/)
+  </Card>
+  <Card title="AI Assistant Plugins" icon="add-document">
+    Install the KSail plugin for GitHub Copilot CLI or Claude Code — MCP server and skill included. [Learn more →](/ai-plugins/)
   </Card>
 </CardGrid>
 
