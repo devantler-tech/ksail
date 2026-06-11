@@ -3,8 +3,8 @@ import { useMemo } from "react";
 import type { Cluster } from "../api.ts";
 import { cx } from "../lib/cx.ts";
 import { epochMs, relativeAge } from "../lib/format.ts";
-import { clusterKey } from "../lib/k8s.ts";
-import { StatusBadge } from "./StatusBadge.tsx";
+import { clusterKey, isHostCluster } from "../lib/k8s.ts";
+import { HostBadge, StatusBadge } from "./StatusBadge.tsx";
 import { SortHeader, td, th, useSort } from "./table.tsx";
 
 type SortKey = "name" | "namespace" | "distribution" | "provider" | "status" | "nodes" | "age";
@@ -124,7 +124,10 @@ export function ClustersTable({
                 className="cursor-pointer transition-colors hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 dark:hover:bg-slate-800/50"
               >
                 <td className={cx(td, "font-medium text-slate-900 dark:text-white")}>
-                  {cluster.metadata.name}
+                  <span className="inline-flex items-center gap-2">
+                    {cluster.metadata.name}
+                    {isHostCluster(cluster) ? <HostBadge /> : null}
+                  </span>
                 </td>
                 <td className={cx(td, "text-sm text-slate-600 dark:text-slate-300")}>
                   {cluster.metadata.namespace ?? "default"}
@@ -145,8 +148,10 @@ export function ClustersTable({
                   {relativeAge(cluster.metadata.creationTimestamp)}
                 </td>
                 <td className={cx(td, "text-right")}>
+                  {/* Lifecycle actions are hidden for the host cluster (the cluster the operator
+                      runs on); the API rejects them server-side anyway. */}
                   <div className="flex items-center justify-end gap-1">
-                    {canEdit ? (
+                    {canEdit && !isHostCluster(cluster) ? (
                       <button
                         type="button"
                         aria-label={`Edit ${cluster.metadata.name}`}
@@ -159,7 +164,7 @@ export function ClustersTable({
                         <Pencil className="size-4" />
                       </button>
                     ) : null}
-                    {!readOnly ? (
+                    {!readOnly && !isHostCluster(cluster) ? (
                       <button
                         type="button"
                         aria-label={`Delete ${cluster.metadata.name}`}

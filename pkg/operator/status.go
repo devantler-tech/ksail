@@ -102,6 +102,12 @@ func countNodes(
 		return 0, 0, fmt.Errorf("build clientset: %w", err)
 	}
 
+	return countReadyNodes(ctx, clientset)
+}
+
+// countReadyNodes returns the number of Ready and total nodes reported by the clientset. Shared by
+// the vcluster status observer and the host cluster status observer.
+func countReadyNodes(ctx context.Context, clientset kubernetes.Interface) (int32, int32, error) {
 	nodes, err := clientset.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return 0, 0, fmt.Errorf("list nodes: %w", err)

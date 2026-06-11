@@ -68,6 +68,15 @@ func (s *crClusterService) Create(
 	ctx context.Context,
 	cluster *v1alpha1.Cluster,
 ) (*v1alpha1.Cluster, error) {
+	// The host-cluster label is reserved for the operator's self-registration; a client-created
+	// cluster carrying it would just alias the hub and bypass the reconciler.
+	if cluster.IsHostCluster() {
+		return nil, fmt.Errorf(
+			"%w: the %s label is reserved for the operator",
+			ErrHostClusterProtected, v1alpha1.HostClusterLabel,
+		)
+	}
+
 	sanitized := sanitizeForWrite(cluster)
 	if sanitized.Namespace == "" {
 		sanitized.Namespace = defaultNamespace
@@ -105,6 +114,12 @@ func (s *crClusterService) Update(
 		return nil, fmt.Errorf("get cluster: %w", err)
 	}
 
+	// The host cluster's spec is not reconciled (the operator does not manage the hub's lifecycle),
+	// so spec edits through the API would only mislead.
+	if existing.IsHostCluster() {
+		return nil, ErrHostClusterProtected
+	}
+
 	existing.Spec = cluster.Spec
 
 	updateErr := s.client.Update(ctx, &existing)
@@ -119,6 +134,16 @@ func (s *crClusterService) Delete(ctx context.Context, namespace, name string) e
 	cluster := &v1alpha1.Cluster{}
 	cluster.Namespace = namespace
 	cluster.Name = name
+
+	// Deleting the host registration through the API is blocked (like Rancher's "local" cluster):
+	// "delete" reads as destroying the cluster, and the hub hosting the operator must never be a
+	// one-click casualty. kubectl remains the escape hatch — CR deletion only deregisters.
+	var existing v1alpha1.Cluster
+
+	getErr := s.client.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, &existing)
+	if getErr == nil && existing.IsHostCluster() {
+		return ErrHostClusterProtected
+	}
 
 	err := s.client.Delete(ctx, cluster)
 	if err != nil {

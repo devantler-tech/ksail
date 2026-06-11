@@ -114,11 +114,23 @@ func bindOperatorFlags(cmd *cobra.Command, opts *operatorsvc.Options, oidc *oidc
 		"Run the REST API in read-only mode, rejecting all mutating requests",
 	)
 	cmd.Flags().BoolVar(
+		&opts.HostCluster,
+		"host-cluster",
+		true,
+		"Register the cluster the operator runs on as a Cluster resource (named \"host\") "+
+			"so it appears in the cluster list",
+	)
+	cmd.Flags().BoolVar(
 		&opts.DevLogging,
 		"dev-logging",
 		false,
 		"Emit human-readable console logs instead of structured JSON (for local development)",
 	)
+	bindOIDCFlags(cmd, oidc)
+}
+
+// bindOIDCFlags registers the OIDC flags onto cmd (split from bindOperatorFlags for length).
+func bindOIDCFlags(cmd *cobra.Command, oidc *oidcFlags) {
 	cmd.Flags().StringVar(
 		&oidc.issuerURL,
 		"oidc-issuer-url",

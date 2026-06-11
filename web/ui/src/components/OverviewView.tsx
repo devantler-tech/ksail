@@ -21,6 +21,7 @@ import {
   clusterKey,
   eventFields,
   eventLastSeenMs,
+  isHostCluster,
   nodeIsControlPlane,
   nodeProblems,
   nodeReady,
@@ -35,7 +36,7 @@ import { buildClusterUsage, buildPodConsumption, type ClusterUsage, type PodCons
 import { Card, Field } from "./Card.tsx";
 import { EventList } from "./EventList.tsx";
 import { ResourceUsagePanel } from "./ResourceUsage.tsx";
-import { StatusBadge } from "./StatusBadge.tsx";
+import { HostBadge, StatusBadge } from "./StatusBadge.tsx";
 import { EmptyState } from "./states.tsx";
 import { Button } from "./ui.tsx";
 import { useToast } from "./Toast.tsx";
@@ -345,8 +346,11 @@ export function OverviewView({
   const status = cluster.status;
   const spec = cluster.spec?.cluster;
   const namespace = cluster.metadata.namespace ?? "default";
-  const distribution = spec?.distribution || meta.distributions[0] || "—";
-  const provider = spec?.provider || meta.providers[distribution]?.[0] || "—";
+  // The host cluster's registration carries an empty spec on purpose (the operator does not manage
+  // the hub's lifecycle), so the create-form defaults would mislabel it — show "—" instead.
+  const hostCluster = isHostCluster(cluster);
+  const distribution = spec?.distribution || (hostCluster ? "—" : meta.distributions[0] || "—");
+  const provider = spec?.provider || (hostCluster ? "—" : meta.providers[distribution]?.[0] || "—");
   const secret = status?.kubeconfigSecretRef;
   const nodesHealthy = health ? health.nodesTotal > 0 && health.nodesReady === health.nodesTotal : false;
 
@@ -374,6 +378,7 @@ export function OverviewView({
           <div className="flex items-center gap-2.5">
             <h2 className="truncate text-xl font-semibold text-slate-900 dark:text-white">{cluster.metadata.name}</h2>
             <StatusBadge phase={status?.phase} />
+            {hostCluster ? <HostBadge /> : null}
           </div>
           <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">
             {distribution} · {provider} · namespace {namespace}
@@ -402,13 +407,15 @@ export function OverviewView({
               Kubeconfig
             </Button>
           ) : null}
-          {canEdit ? (
+          {/* Lifecycle actions are hidden for the host cluster (the cluster the operator runs on);
+              the API rejects them server-side anyway. */}
+          {canEdit && !hostCluster ? (
             <Button variant="secondary" size="sm" onClick={() => onEdit(cluster)}>
               <Pencil className="size-3.5" aria-hidden />
               Edit
             </Button>
           ) : null}
-          {canDelete ? (
+          {canDelete && !hostCluster ? (
             <Button variant="danger" size="sm" onClick={() => onDelete(cluster)}>
               <Trash2 className="size-3.5" aria-hidden />
               Delete
@@ -489,8 +496,8 @@ export function OverviewView({
               ))
             ) : (
               <p className="pt-2 text-xs text-slate-400 dark:text-slate-500">
-                Component configuration is not tracked for discovered clusters — browse Resources to see what runs
-                here.
+                Component configuration is not tracked for {hostCluster ? "the host cluster" : "discovered clusters"} —
+                browse Resources to see what runs here.
               </p>
             )}
           </dl>

@@ -13,6 +13,15 @@ export function splitClusterKey(key: string): [string, string] {
   return [key.slice(0, slash), key.slice(slash + 1)];
 }
 
+// HOST_CLUSTER_LABEL marks the Cluster resource the operator self-registers for the cluster it
+// runs ON (the hub). The UI badges it and hides the lifecycle actions (edit/delete), which the API
+// rejects server-side anyway — the hub hosting the operator is not the operator's to destroy.
+export const HOST_CLUSTER_LABEL = "ksail.io/host-cluster";
+
+export function isHostCluster(cluster: Cluster): boolean {
+  return cluster.metadata.labels?.[HOST_CLUSTER_LABEL] === "true";
+}
+
 // str safely reads a string field from an unstructured value (the backend returns native Kubernetes
 // JSON, typed loosely as K8sObject), returning "" for anything that is not a string.
 function str(value: unknown): string {

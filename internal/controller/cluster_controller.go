@@ -135,6 +135,11 @@ type ClusterReconciler struct {
 	// disables runtime status reporting (endpoint/nodes stay empty).
 	ObserveStatus StatusObserver
 
+	// ObserveHostStatus gathers runtime status for the self-registered host cluster (the cluster the
+	// operator runs on) through the operator's own credentials. Optional; nil disables runtime status
+	// reporting for the host cluster.
+	ObserveHostStatus StatusObserver
+
 	// InstallComponents installs the cluster's components into the provisioned child cluster.
 	// Optional; nil disables component installation.
 	InstallComponents ComponentInstaller
@@ -171,6 +176,14 @@ func (r *ClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 	if !cluster.DeletionTimestamp.IsZero() {
 		return r.reconcileDelete(ctx, &cluster)
+	}
+
+	// The host cluster (the operator's self-registration of the cluster it runs on) is never
+	// provisioned or torn down, so it gets no finalizer and a status-only reconcile.
+	if cluster.IsHostCluster() {
+		log.Info("reconciling host cluster")
+
+		return r.reconcileHost(ctx, &cluster)
 	}
 
 	if controllerutil.AddFinalizer(&cluster, FinalizerName) {
@@ -264,6 +277,37 @@ func (r *ClusterReconciler) reconcileNormal(
 	return ctrl.Result{RequeueAfter: r.readyRequeue()}, nil
 }
 
+// reconcileHost reconciles the self-registered host cluster. The underlying cluster — the one the
+// operator runs on — already exists and is owned by whoever provisioned it, so there is nothing to
+// create, update, or delete: reconciliation only observes runtime status (node readiness, endpoint)
+// through the operator's own credentials and reports it. Component installation is intentionally
+// skipped; the host cluster's components are not the operator's to manage.
+func (r *ClusterReconciler) reconcileHost(
+	ctx context.Context,
+	cluster *v1alpha1.Cluster,
+) (ctrl.Result, error) {
+	before := cluster.Status.DeepCopy()
+
+	r.observeStatusWith(ctx, r.ObserveHostStatus, cluster)
+
+	apimeta.SetStatusCondition(&cluster.Status.Conditions, metav1.Condition{
+		Type:               v1alpha1.ConditionComponentsReady,
+		Status:             metav1.ConditionUnknown,
+		ObservedGeneration: cluster.Generation,
+		Reason:             "HostCluster",
+		Message:            "components on the host cluster are not managed by the operator",
+	})
+
+	r.markReady(cluster)
+
+	statusErr := r.updateStatusIfChanged(ctx, cluster, before)
+	if statusErr != nil {
+		return ctrl.Result{}, statusErr
+	}
+
+	return ctrl.Result{RequeueAfter: r.readyRequeue()}, nil
+}
+
 // reconcileComponents installs the cluster's components when they are not already reconciled for the
 // current generation, recording the outcome in the ComponentsReady condition. Best-effort: failures
 // are reported via the condition (not the reconcile error) and return false so the reconcile
@@ -335,14 +379,25 @@ func componentsUpToDate(cluster *v1alpha1.Cluster) bool {
 // optional StatusObserver. It is best-effort: observation errors are logged and partial results
 // applied, since a not-yet-reachable child cluster is expected shortly after provisioning.
 func (r *ClusterReconciler) observeStatus(ctx context.Context, cluster *v1alpha1.Cluster) {
-	if r.ObserveStatus == nil {
+	r.observeStatusWith(ctx, r.ObserveStatus, cluster)
+}
+
+// observeStatusWith applies the given observer's results to the cluster status. Shared by the
+// child-cluster path (ObserveStatus) and the host-cluster path (ObserveHostStatus); a nil observer
+// disables observation.
+func (r *ClusterReconciler) observeStatusWith(
+	ctx context.Context,
+	observer StatusObserver,
+	cluster *v1alpha1.Cluster,
+) {
+	if observer == nil {
 		return
 	}
 
-	observed, err := r.ObserveStatus(ctx, r.reader(), cluster)
+	observed, err := observer(ctx, r.reader(), cluster)
 	if err != nil {
 		logf.FromContext(ctx).
-			Info("observe child cluster status (best-effort)", "error", err.Error())
+			Info("observe cluster status (best-effort)", "error", err.Error())
 	}
 
 	if observed.Endpoint != "" {
@@ -365,6 +420,21 @@ func (r *ClusterReconciler) reconcileDelete(
 	cluster *v1alpha1.Cluster,
 ) (ctrl.Result, error) {
 	if !controllerutil.ContainsFinalizer(cluster, FinalizerName) {
+		return ctrl.Result{}, nil
+	}
+
+	// Deleting the host registration must never destroy anything: the underlying cluster is the one
+	// the operator runs on. The host path adds no finalizer, but a user may have labelled a cluster
+	// that already carried one — remove it without invoking the provisioner (conservative: the
+	// underlying cluster is orphaned, not destroyed).
+	if cluster.IsHostCluster() {
+		controllerutil.RemoveFinalizer(cluster, FinalizerName)
+
+		err := r.Update(ctx, cluster)
+		if err != nil {
+			return ctrl.Result{}, fmt.Errorf("remove finalizer: %w", err)
+		}
+
 		return ctrl.Result{}, nil
 	}
 

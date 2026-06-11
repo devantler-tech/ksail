@@ -12,6 +12,7 @@ The operator reconciles `Cluster` resources (`ksail.io/v1alpha1`) so you can pro
 - **REST API** — served by the operator and consumed by the UI (toggle with `api.bindPort`).
 - **Web UI** _(optional)_ — a dashboard that talks to the REST API (`ui.enabled`).
 - **OIDC auth** _(optional)_ — app-driven OIDC login that protects the REST API and UI (`auth.oidc.enabled`).
+- **Host cluster registration** — the operator self-registers the cluster it runs on as a `Cluster` resource named `host` (labelled `ksail.io/host-cluster`) in the release namespace, so the hub itself appears in the cluster list and its workloads can be browsed in the UI — like Rancher's `local` cluster or Argo CD's `in-cluster` destination. The operator never provisions, updates, or deletes the underlying cluster for this entry, and the API rejects lifecycle mutations on it. Disable with `hostCluster.enabled=false`.
 
 > **Note:** The REST API is unauthenticated by default. Enable OIDC (`auth.oidc.enabled=true`) to require sign-in, or set `api.bindPort=0` to disable the API entirely when you don't need the UI.
 
@@ -134,6 +135,12 @@ Register the redirect URL with your provider, and point `ksail.local` at your In
 | Key            | Description                                                                                | Default |
 |----------------|--------------------------------------------------------------------------------------------|---------|
 | `api.bindPort` | Port the operator REST API listens on (consumed by the UI). Set to `0` to disable the API. | `8080`  |
+
+### Host cluster
+
+| Key                   | Description                                                                                                            | Default |
+|-----------------------|------------------------------------------------------------------------------------------------------------------------|---------|
+| `hostCluster.enabled` | Self-register the cluster the operator runs on as a `Cluster` resource named `host` so it appears in the cluster list. | `true`  |
 
 ### Web UI
 

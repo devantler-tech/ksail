@@ -14,4 +14,6 @@ var (
 	ResolveProvider = resolveProvider
 	// RunInstallers exposes runInstallers for testing.
 	RunInstallers = runInstallers
+	// CountReadyNodes exposes countReadyNodes for testing.
+	CountReadyNodes = countReadyNodes
 )

@@ -19,6 +19,13 @@ var (
 	ErrInvalid = errors.New("invalid cluster")
 	// ErrNotSupported indicates the backend does not support the requested operation (HTTP 501).
 	ErrNotSupported = errors.New("operation not supported")
+	// ErrHostClusterProtected indicates the request targets the operator's self-registered host
+	// cluster — the cluster the operator runs on — whose registration cannot be created, modified,
+	// or deleted through the API (HTTP 403). Disable it via the operator's host-cluster option
+	// instead.
+	ErrHostClusterProtected = errors.New(
+		"the host cluster registration cannot be modified through the API",
+	)
 )
 
 // ClusterService is the backend the REST handlers delegate to. It is expressed in the
