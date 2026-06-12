@@ -11,13 +11,13 @@ kept in-tree.
 
 ## What the Benchmarks Cover
 
-| Benchmark | What it measures |
-| --- | --- |
-| `BenchmarkCluster_MarshalYAML` | Custom `MarshalYAML()` across minimal, basic, CNI, GitOps, and full production configurations (default pruning + reflection-based struct-to-map conversion) |
-| `BenchmarkCluster_MarshalJSON` | Custom `MarshalJSON()` (used internally by the YAML encoder) across minimal, basic, and full configurations |
-| `BenchmarkYAMLEncode` | Full end-to-end `yaml.Marshal()` pipeline including YAML library overhead |
-| `BenchmarkJSONEncode` | Standard `json.Marshal()` performance as a comparison baseline |
-| `BenchmarkPruneClusterDefaults` | Default pruning in isolation across mostly-default, mixed, and all-custom configurations |
+| Benchmark                       | What it measures                                                                                                                                            |
+|---------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `BenchmarkCluster_MarshalYAML`  | Custom `MarshalYAML()` across minimal, basic, CNI, GitOps, and full production configurations (default pruning + reflection-based struct-to-map conversion) |
+| `BenchmarkCluster_MarshalJSON`  | Custom `MarshalJSON()` (used internally by the YAML encoder) across minimal, basic, and full configurations                                                 |
+| `BenchmarkYAMLEncode`           | Full end-to-end `yaml.Marshal()` pipeline including YAML library overhead                                                                                   |
+| `BenchmarkJSONEncode`           | Standard `json.Marshal()` performance as a comparison baseline                                                                                              |
+| `BenchmarkPruneClusterDefaults` | Default pruning in isolation across mostly-default, mixed, and all-custom configurations                                                                    |
 
 ## Running the Benchmarks
 

@@ -164,12 +164,12 @@ The UI is embedded in the operator binary and served on `api.bindPort` — it ha
 
 ### ServiceAccount & RBAC
 
-| Key                          | Description                                                                                                          | Default |
-|------------------------------|----------------------------------------------------------------------------------------------------------------------|---------|
-| `serviceAccount.create`      | Create a ServiceAccount.                                                                                             | `true`  |
-| `serviceAccount.name`        | ServiceAccount name override.                                                                                        | `""`    |
-| `serviceAccount.annotations` | ServiceAccount annotations.                                                                                          | `{}`    |
-| `rbac.create`                | Create RBAC resources.                                                                                               | `true`  |
+| Key                          | Description                                                                                                                                                                         | Default |
+|------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------|
+| `serviceAccount.create`      | Create a ServiceAccount.                                                                                                                                                            | `true`  |
+| `serviceAccount.name`        | ServiceAccount name override.                                                                                                                                                       | `""`    |
+| `serviceAccount.annotations` | ServiceAccount annotations.                                                                                                                                                         | `{}`    |
+| `rbac.create`                | Create RBAC resources.                                                                                                                                                              | `true`  |
 | `rbac.clusterAdmin`          | Grant a full wildcard ClusterRole (cluster-admin) instead of the least-privilege default. Opt in only when a distribution/component set needs resources the default does not cover. | `false` |
 
 ### Scheduling
