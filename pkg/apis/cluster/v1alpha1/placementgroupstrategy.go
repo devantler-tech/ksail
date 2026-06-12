@@ -1,10 +1,5 @@
 package v1alpha1
 
-import (
-	"fmt"
-	"strings"
-)
-
 // PlacementGroupStrategy defines the placement group strategy for Hetzner Cloud servers.
 type PlacementGroupStrategy string
 
@@ -19,23 +14,14 @@ const (
 	PlacementGroupStrategySpread PlacementGroupStrategy = "Spread"
 )
 
+// ValidPlacementGroupStrategies returns supported placement group strategy values.
+func ValidPlacementGroupStrategies() []PlacementGroupStrategy {
+	return []PlacementGroupStrategy{PlacementGroupStrategyNone, PlacementGroupStrategySpread}
+}
+
 // Set for PlacementGroupStrategy (pflag.Value interface).
 func (p *PlacementGroupStrategy) Set(value string) error {
-	for _, strategy := range ValidPlacementGroupStrategies() {
-		if strings.EqualFold(value, string(strategy)) {
-			*p = strategy
-
-			return nil
-		}
-	}
-
-	return fmt.Errorf(
-		"%w: %s (valid options: %s, %s)",
-		ErrInvalidPlacementGroupStrategy,
-		value,
-		PlacementGroupStrategyNone,
-		PlacementGroupStrategySpread,
-	)
+	return setEnum(p, value, ValidPlacementGroupStrategies(), ErrInvalidPlacementGroupStrategy)
 }
 
 // String returns the string representation of the PlacementGroupStrategy.
@@ -55,5 +41,5 @@ func (p *PlacementGroupStrategy) Default() any {
 
 // ValidValues returns all valid PlacementGroupStrategy values as strings.
 func (p *PlacementGroupStrategy) ValidValues() []string {
-	return []string{string(PlacementGroupStrategyNone), string(PlacementGroupStrategySpread)}
+	return validValueStrings(ValidPlacementGroupStrategies())
 }

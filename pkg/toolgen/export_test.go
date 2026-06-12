@@ -30,3 +30,12 @@ var ExecuteTool = executeTool
 
 // TruncateDescription exposes truncateDescription for testing.
 var TruncateDescription = truncateDescription
+
+// NormalizeHomePath exposes normalizeHomePath for testing.
+var NormalizeHomePath = normalizeHomePath
+
+// ResolveCommand exposes resolveCommand for testing.
+var ResolveCommand = resolveCommand
+
+// NeutralMergedFlagDescription exposes neutralMergedFlagDescription for testing.
+const NeutralMergedFlagDescription = neutralMergedFlagDescription

@@ -1,10 +1,6 @@
 package v1alpha1
 
-import (
-	"fmt"
-	"slices"
-	"strings"
-)
+import "slices"
 
 // Distribution defines the distribution options for a KSail cluster.
 type Distribution string
@@ -26,40 +22,34 @@ const (
 	DistributionEKS Distribution = "EKS"
 )
 
+// ValidDistributions returns supported distribution values.
+func ValidDistributions() []Distribution {
+	return []Distribution{
+		DistributionVanilla,
+		DistributionK3s,
+		DistributionTalos,
+		DistributionVCluster,
+		DistributionKWOK,
+		DistributionEKS,
+	}
+}
+
 // ProvidesCDIByDefault returns true if the distribution enables CDI by default.
 // Talos 1.13+ enables CDI (Container Device Interface) by default via machine.features.enableCDI.
 // Vanilla, K3s, and VCluster do not enable CDI by default.
 func (d *Distribution) ProvidesCDIByDefault() bool {
-	switch *d {
-	case DistributionTalos:
-		return true
-	case DistributionVanilla,
-		DistributionK3s,
-		DistributionVCluster,
-		DistributionKWOK,
-		DistributionEKS:
-		return false
-	default:
-		return false
-	}
+	meta, _ := distributionMetaFor(*d)
+
+	return meta.providesCDI
 }
 
 // ProvidesMetricsServerByDefault returns true if the distribution includes metrics-server by default.
 // K3s includes metrics-server.
 // Vanilla, Talos, VCluster, KWOK, and EKS do not.
 func (d *Distribution) ProvidesMetricsServerByDefault() bool {
-	switch *d {
-	case DistributionK3s:
-		return true
-	case DistributionVanilla,
-		DistributionTalos,
-		DistributionVCluster,
-		DistributionKWOK,
-		DistributionEKS:
-		return false
-	default:
-		return false
-	}
+	meta, _ := distributionMetaFor(*d)
+
+	return meta.providesMetricsServer
 }
 
 // ProvidesStorageByDefault returns true if the distribution includes a storage provisioner by default.
@@ -67,37 +57,20 @@ func (d *Distribution) ProvidesMetricsServerByDefault() bool {
 // when scaffolded via eksctl.
 // Vanilla, Talos, VCluster (Vind with Distro: k8s), and KWOK do not have a default storage class.
 func (d *Distribution) ProvidesStorageByDefault() bool {
-	switch *d {
-	case DistributionK3s, DistributionEKS:
-		return true
-	case DistributionVanilla, DistributionTalos, DistributionVCluster, DistributionKWOK:
-		return false
-	default:
-		return false
-	}
+	meta, _ := distributionMetaFor(*d)
+
+	return meta.providesStorage
 }
 
 // ProvidesCSIByDefault returns true if the distribution × provider combination includes CSI by default.
 // - K3s includes local-path-provisioner by default (regardless of provider)
 // - Talos × Hetzner uses Hetzner CSI driver by default
+// - EKS × AWS scaffolds the Amazon EBS CSI driver as an eksctl addon
 // - Vanilla, VCluster (Vind with Distro: k8s), and Talos × Docker do not have a default CSI.
 func (d *Distribution) ProvidesCSIByDefault(provider Provider) bool {
-	switch *d {
-	case DistributionK3s:
-		// K3s always includes local-path-provisioner
-		return true
-	case DistributionTalos:
-		// Talos × Hetzner provides Hetzner CSI by default
-		return provider == ProviderHetzner
-	case DistributionEKS:
-		// EKS × AWS: Amazon EBS CSI driver is scaffolded as an eksctl addon
-		return provider == ProviderAWS
-	case DistributionVanilla, DistributionVCluster, DistributionKWOK:
-		// Vanilla (Kind), VCluster (Vind with Distro: k8s), and KWOK do not provide CSI by default
-		return false
-	default:
-		return false
-	}
+	meta, _ := distributionMetaFor(*d)
+
+	return meta.csiByDefault.has(provider)
 }
 
 // ProvidesLoadBalancerByDefault returns true if the distribution × provider combination
@@ -107,48 +80,17 @@ func (d *Distribution) ProvidesCSIByDefault(provider Provider) bool {
 //     support, but it is not pre-installed — KSail installs it when LoadBalancer
 //     is Default or Enabled (see NeedsLoadBalancerInstall special case)
 //   - VCluster delegates LoadBalancer to the host cluster
+//   - EKS × AWS: AWS Load Balancer Controller + native ELB Service integration
 //   - Vanilla and Talos × Docker do not have default LoadBalancer support.
 func (d *Distribution) ProvidesLoadBalancerByDefault(provider Provider) bool {
-	switch *d {
-	case DistributionK3s, DistributionVCluster:
-		// K3s always includes ServiceLB (Klipper-LB)
-		// VCluster delegates LoadBalancer to the host cluster
-		return true
-	case DistributionTalos:
-		// Talos × Hetzner: hcloud-ccm provides LB support (installed by KSail)
-		return provider == ProviderHetzner
-	case DistributionEKS:
-		// EKS × AWS: AWS Load Balancer Controller + native ELB Service integration
-		return provider == ProviderAWS
-	case DistributionVanilla, DistributionKWOK:
-		// Vanilla (Kind) and KWOK do not provide LoadBalancer by default
-		return false
-	default:
-		return false
-	}
+	meta, _ := distributionMetaFor(*d)
+
+	return meta.loadBalancerByDefault.has(provider)
 }
 
 // Set for Distribution (pflag.Value interface).
 func (d *Distribution) Set(value string) error {
-	for _, dist := range ValidDistributions() {
-		if strings.EqualFold(value, string(dist)) {
-			*d = dist
-
-			return nil
-		}
-	}
-
-	return fmt.Errorf(
-		"%w: %s (valid options: %s, %s, %s, %s, %s, %s)",
-		ErrInvalidDistribution,
-		value,
-		DistributionVanilla,
-		DistributionK3s,
-		DistributionTalos,
-		DistributionVCluster,
-		DistributionKWOK,
-		DistributionEKS,
-	)
+	return setEnum(d, value, ValidDistributions(), ErrInvalidDistribution)
 }
 
 // IsValid checks if the distribution value is supported.
@@ -173,14 +115,7 @@ func (d *Distribution) Default() any {
 
 // ValidValues returns all valid Distribution values as strings.
 func (d *Distribution) ValidValues() []string {
-	return []string{
-		string(DistributionVanilla),
-		string(DistributionK3s),
-		string(DistributionTalos),
-		string(DistributionVCluster),
-		string(DistributionKWOK),
-		string(DistributionEKS),
-	}
+	return validValueStrings(ValidDistributions())
 }
 
 // ContextName returns the kubeconfig context name for a given cluster name.
@@ -188,32 +123,25 @@ func (d *Distribution) ValidValues() []string {
 //   - Vanilla: kind-<name>
 //   - K3s: k3d-<name>
 //   - Talos: admin@<name>
+//   - VCluster: vcluster-docker_<name>
+//   - KWOK: kwok-<name>
+//   - EKS: <name>.eksctl.io — eksctl writes kubeconfig contexts as
+//     <iam-user-or-role>@<cluster>.<region>.eksctl.io; the IAM identity is unknown at
+//     scaffold time, so only the suffix is returned. Callers that need the full
+//     context should query the kubeconfig after cluster creation.
 //
-// Returns empty string if name is empty.
+// Returns empty string if name is empty or the distribution is unknown.
 func (d *Distribution) ContextName(clusterName string) string {
 	if clusterName == "" {
 		return ""
 	}
 
-	switch *d {
-	case DistributionVanilla:
-		return "kind-" + clusterName
-	case DistributionK3s:
-		return "k3d-" + clusterName
-	case DistributionTalos:
-		return "admin@" + clusterName
-	case DistributionVCluster:
-		return "vcluster-docker_" + clusterName
-	case DistributionKWOK:
-		return "kwok-" + clusterName
-	case DistributionEKS:
-		// eksctl writes kubeconfig contexts as <iam-user-or-role>@<cluster>.<region>.eksctl.io
-		// We cannot know the IAM identity at scaffold time, so we return the suffix only.
-		// Callers that need the full context should query the kubeconfig after cluster creation.
-		return clusterName + ".eksctl.io"
-	default:
+	meta, found := distributionMetaFor(*d)
+	if !found {
 		return ""
 	}
+
+	return meta.contextPrefix + clusterName + meta.contextSuffix
 }
 
 // DefaultClusterName returns the default cluster name for a distribution.
@@ -224,20 +152,10 @@ func (d *Distribution) ContextName(clusterName string) string {
 //
 // Returns "kind" for unknown distributions.
 func (d *Distribution) DefaultClusterName() string {
-	switch *d {
-	case DistributionVanilla:
-		return "kind"
-	case DistributionK3s:
-		return "k3d-default"
-	case DistributionTalos:
-		return "talos-default"
-	case DistributionVCluster:
-		return "vcluster-default"
-	case DistributionKWOK:
-		return "kwok-default"
-	case DistributionEKS:
-		return "eks-default"
-	default:
+	meta, found := distributionMetaFor(*d)
+	if !found {
 		return "kind"
 	}
+
+	return meta.defaultClusterName
 }

@@ -150,7 +150,7 @@ func TestCLIFlagsPagesHaveFrontmatter(t *testing.T) {
 	}
 }
 
-func TestIndexMDXPreserved(t *testing.T) {
+func TestIndexMDXContent(t *testing.T) {
 	t.Parallel()
 
 	text := readOrSkip(t, "src/content/docs/cli-flags/index.mdx")

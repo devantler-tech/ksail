@@ -838,7 +838,7 @@ func handleChatRunE(cmd *cobra.Command) error {
 		})
 	}
 
-	sections := chatsvc.BuildSystemSections()
+	sections := chatsvc.BuildSystemSections(cmd.Root())
 
 	sessionConfig := buildSessionConfig(
 		flags.model,
@@ -1384,47 +1384,49 @@ func getToolArgs(event copilot.SessionEvent) string {
 	return " (" + formatted + ")"
 }
 
-// injectForceFlag injects a "force" argument into the tool invocation.
-// This skips interactive confirmation prompts when the tool supports --force.
-// Only call this after verifying the tool supports force via toolSupportsForce.
-func injectForceFlag(invocation copilot.ToolInvocation) copilot.ToolInvocation {
+// injectConfirmFlags sets each confirmation-skip flag to true in the
+// invocation arguments. Only flags carrying the ai.toolgen.confirm-flag
+// annotation reach here, so flags with other semantics (kubectl's destructive
+// --force, init's force=overwrite) are never injected.
+func injectConfirmFlags(
+	invocation copilot.ToolInvocation,
+	flagNames []string,
+) copilot.ToolInvocation {
+	if len(flagNames) == 0 {
+		return invocation
+	}
+
 	args, ok := invocation.Arguments.(map[string]any)
 	if !ok || args == nil {
 		args = map[string]any{}
 	}
 
-	args["force"] = true
+	for _, name := range flagNames {
+		args[name] = true
+	}
+
 	invocation.Arguments = args
 
 	return invocation
 }
 
-// toolSupportsForce reports whether the tool's parameter schema defines a "force" property.
-// This prevents injecting --force into tools that don't accept it, which would cause
-// runtime failures for non-consolidated tools that pass all parameters as CLI flags.
-func toolSupportsForce(metadata map[string]toolgen.ToolDefinition, toolName string) bool {
-	if metadata == nil {
-		return false
-	}
-
+// confirmFlagsForInvocation resolves which confirmation-skip flags apply to a
+// tool invocation: flags carrying the ai.toolgen.confirm-flag annotation,
+// resolved per-subcommand for consolidated tools (e.g. cluster_write
+// command="delete" yields force, while command="init" yields none).
+func confirmFlagsForInvocation(
+	metadata map[string]toolgen.ToolDefinition,
+	toolName string,
+	invocation copilot.ToolInvocation,
+) []string {
 	meta, metaExists := metadata[toolName]
-	if !metaExists || meta.Parameters == nil {
-		return false
+	if !metaExists {
+		return nil
 	}
 
-	propertiesVal, propsExists := meta.Parameters["properties"]
-	if !propsExists {
-		return false
-	}
+	args, _ := invocation.Arguments.(map[string]any)
 
-	properties, propsIsMap := propertiesVal.(map[string]any)
-	if !propsIsMap {
-		return false
-	}
-
-	_, hasForce := properties["force"]
-
-	return hasForce
+	return meta.ConfirmFlagsFor(args)
 }
 
 // pathArgKeys returns the argument keys that SDK-managed file tools use for paths.
@@ -1485,9 +1487,13 @@ func validatePathAccess(
 	return nil, nil //nolint:nilnil // nil omits "output" key from JSON-RPC response
 }
 
-// WrapToolsWithForceInjection wraps write tools to inject the --force flag after
-// SDK-native permission approval. Permission handling is delegated entirely to the
-// SDK's OnPermissionRequest handler — this wrapper only handles force-flag injection.
+// WrapToolsWithForceInjection wraps tools to inject confirmation-skip flags
+// (flags annotated with ai.toolgen.confirm-flag, e.g. cluster update/delete
+// --force) after SDK-native permission approval, so approved write operations
+// don't block on KSail's own interactive prompts. Permission handling is
+// delegated entirely to the SDK's OnPermissionRequest handler — this wrapper
+// only handles confirm-flag injection, resolved per-subcommand for
+// consolidated tools.
 func WrapToolsWithForceInjection(
 	tools []copilot.Tool,
 	toolMetadata map[string]toolgen.ToolDefinition,
@@ -1510,18 +1516,17 @@ func WrapToolsWithForceInjection(
 	return wrappedTools
 }
 
-// invokeWithOptionalForce injects the force flag if the tool supports it, then calls the handler.
+// invokeWithOptionalForce injects the applicable confirmation-skip flags
+// (if any), then calls the handler.
 func invokeWithOptionalForce(
 	invocation copilot.ToolInvocation,
 	toolMetadata map[string]toolgen.ToolDefinition,
 	toolName string,
 	handler func(copilot.ToolInvocation) (copilot.ToolResult, error),
 ) (copilot.ToolResult, error) {
-	if toolSupportsForce(toolMetadata, toolName) {
-		invocation = injectForceFlag(invocation)
-	}
+	confirmFlags := confirmFlagsForInvocation(toolMetadata, toolName, invocation)
 
-	return handler(invocation)
+	return handler(injectConfirmFlags(invocation, confirmFlags))
 }
 
 // startOutputForwarder forwards tool output chunks to the TUI event channel.

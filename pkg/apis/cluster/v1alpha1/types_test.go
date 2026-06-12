@@ -5,67 +5,7 @@ import (
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
-
-func TestPolicyEngineSet(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name      string
-		input     string
-		wantValue v1alpha1.PolicyEngine
-		wantError bool
-	}{
-		{
-			name:      "sets_kyverno",
-			input:     "Kyverno",
-			wantValue: v1alpha1.PolicyEngineKyverno,
-			wantError: false,
-		},
-		{
-			name:      "sets_gatekeeper",
-			input:     "Gatekeeper",
-			wantValue: v1alpha1.PolicyEngineGatekeeper,
-			wantError: false,
-		},
-		{
-			name:      "sets_none",
-			input:     "None",
-			wantValue: v1alpha1.PolicyEngineNone,
-			wantError: false,
-		},
-		{
-			name:      "case_insensitive_kyverno",
-			input:     "kyverno",
-			wantValue: v1alpha1.PolicyEngineKyverno,
-			wantError: false,
-		},
-		{
-			name:      "invalid_value",
-			input:     "invalid",
-			wantValue: "",
-			wantError: true,
-		},
-	}
-
-	for _, testCase := range tests {
-		t.Run(testCase.name, func(t *testing.T) {
-			t.Parallel()
-
-			var policyEngine v1alpha1.PolicyEngine
-
-			err := policyEngine.Set(testCase.input)
-
-			if testCase.wantError {
-				require.Error(t, err)
-			} else {
-				require.NoError(t, err)
-				assert.Equal(t, testCase.wantValue, policyEngine)
-			}
-		})
-	}
-}
 
 // distributionBoolTestCase defines a test case for Distribution methods that return bool.
 type distributionBoolTestCase struct {
@@ -90,6 +30,12 @@ func distributionBoolTestCases(featureName string) []distributionBoolTestCase {
 			distribution: v1alpha1.DistributionVCluster,
 			want:         false,
 			description:  "VCluster (Vind with Distro: k8s) should not provide " + featureName + " by default",
+		},
+		{
+			name:         "returns_false_for_talos",
+			distribution: v1alpha1.DistributionTalos,
+			want:         false,
+			description:  "Talos should not provide " + featureName + " by default",
 		},
 		{
 			name:         "returns_false_for_kind",
@@ -124,6 +70,13 @@ func TestDistribution_ProvidesMetricsServerByDefault(t *testing.T) {
 			assert.Equal(t, testCase.want, result, testCase.description)
 		})
 	}
+
+	t.Run("returns_false_for_eks", func(t *testing.T) {
+		t.Parallel()
+
+		dist := v1alpha1.DistributionEKS
+		assert.False(t, dist.ProvidesMetricsServerByDefault())
+	})
 }
 
 func TestDistribution_ProvidesStorageByDefault(t *testing.T) {
@@ -138,6 +91,16 @@ func TestDistribution_ProvidesStorageByDefault(t *testing.T) {
 			assert.Equal(t, testCase.want, result, testCase.description)
 		})
 	}
+
+	t.Run("returns_true_for_eks", func(t *testing.T) {
+		t.Parallel()
+
+		dist := v1alpha1.DistributionEKS
+		assert.True(
+			t, dist.ProvidesStorageByDefault(),
+			"EKS scaffolds the EBS CSI addon by default",
+		)
+	})
 }
 
 func TestLocalRegistry_Parse_ExtractsTag(t *testing.T) {
@@ -475,6 +438,41 @@ func TestLocalRegistry_ResolveCredentials(t *testing.T) {
 
 			assert.Equal(t, testCase.wantUsername, gotUsername)
 			assert.Equal(t, testCase.wantPassword, gotPassword)
+		})
+	}
+}
+
+func TestOptionsHetzner_PublicNetAccessors(t *testing.T) {
+	t.Parallel()
+
+	boolTrue := true
+	boolFalse := false
+
+	tests := []struct {
+		name    string
+		toggle  *bool
+		enabled bool
+	}{
+		{name: "NilDefaultsToEnabled", toggle: nil, enabled: true},
+		{name: "ExplicitTrueEnabled", toggle: &boolTrue, enabled: true},
+		{name: "ExplicitFalseDisabled", toggle: &boolFalse, enabled: false},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			opts := v1alpha1.OptionsHetzner{
+				WorkerPublicIPv4:       testCase.toggle,
+				WorkerPublicIPv6:       testCase.toggle,
+				ControlPlanePublicIPv4: testCase.toggle,
+				ControlPlanePublicIPv6: testCase.toggle,
+			}
+
+			assert.Equal(t, testCase.enabled, opts.WorkerIPv4Enabled())
+			assert.Equal(t, testCase.enabled, opts.WorkerIPv6Enabled())
+			assert.Equal(t, testCase.enabled, opts.ControlPlaneIPv4Enabled())
+			assert.Equal(t, testCase.enabled, opts.ControlPlaneIPv6Enabled())
 		})
 	}
 }

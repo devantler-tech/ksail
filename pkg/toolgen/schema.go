@@ -2,10 +2,12 @@ package toolgen
 
 import (
 	"fmt"
+	"os"
 	"slices"
 	"strconv"
 	"strings"
 
+	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -153,9 +155,37 @@ func convertDefaultValue(jsonSchemaType string, defaultStr string) any {
 	case jsonSchemaTypeArray:
 		return convertArrayDefault(defaultStr)
 	default:
-		// For strings and other types, return as-is
-		return defaultStr
+		// For strings and other types, normalize machine-specific home-dir
+		// prefixes so generated schemas are portable, then return as-is.
+		return normalizeHomePath(defaultStr)
 	}
+}
+
+// normalizeHomePath rewrites a default value under the current user's home
+// directory to a portable "~/..." form. Some embedded tools (e.g. kubectl)
+// compute path defaults from the live home directory at flag registration,
+// which would otherwise leak machine-specific absolute paths into the
+// generated tool schemas.
+func normalizeHomePath(value string) string {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return value
+	}
+
+	rest, found := strings.CutPrefix(value, home)
+	if !found {
+		return value
+	}
+
+	if rest == "" {
+		return "~"
+	}
+
+	if rest[0] == '/' || rest[0] == '\\' {
+		return "~" + rest
+	}
+
+	return value
 }
 
 // convertArrayDefault parses pflag's bracket-enclosed array format "[val1,val2,...]" into a typed []any.
@@ -259,11 +289,36 @@ func extractFlags(cmd *cobra.Command) map[string]*FlagDef {
 			Description: flag.Usage,
 			Required:    required,
 			Default:     flag.DefValue,
+			ConfirmFlag: isConfirmFlag(flag),
 			// AppliesToSubcommands will be populated during schema building
 		}
 	})
 
 	return flags
+}
+
+// isConfirmFlag reports whether the flag carries the ai.toolgen.confirm-flag
+// annotation, i.e. it is a confirmation-prompt skip the chat assistant may
+// auto-inject after permission approval.
+func isConfirmFlag(flag *pflag.Flag) bool {
+	return slices.Contains(flag.Annotations[annotations.AnnotationConfirmFlag], annotationValueTrue)
+}
+
+// confirmFlagNames returns the sorted names of flags on cmd carrying the
+// ai.toolgen.confirm-flag annotation. Used for non-consolidated tools;
+// consolidated tools track the marker per-subcommand via FlagDef.ConfirmFlag.
+func confirmFlagNames(cmd *cobra.Command) []string {
+	var names []string
+
+	cmd.Flags().VisitAll(func(flag *pflag.Flag) {
+		if flag.Name != helpFlagName && isConfirmFlag(flag) {
+			names = append(names, flag.Name)
+		}
+	})
+
+	slices.Sort(names)
+
+	return names
 }
 
 // buildConsolidatedParameterSchema builds a dynamic JSON schema for consolidated tools.
@@ -317,18 +372,26 @@ func buildSubcommandEnumProperty(subcommands map[string]*SubcommandDef) map[stri
 	}
 }
 
+// neutralMergedFlagDescription replaces the description of a merged flag whose
+// usage text differs across subcommands. A single subcommand's text would
+// misdocument the others (e.g. "timeout" or "force" mean different things per
+// subcommand), so a neutral description is emitted instead of first-wins.
+const neutralMergedFlagDescription = "Behavior depends on the selected subcommand; " +
+	"see the matching CLI subcommand's --help for details"
+
 // mergeSubcommandFlags collects all flags from subcommands, tracking which subcommands each applies to.
 // excludeFlags lists flags to omit from the merged result (schema-level exclusion); these flags
 // remain in each SubcommandDef.Flags so handleConsolidatedTool can forward them at runtime.
-// When multiple subcommands have the same flag name, the flag definition (type, description, etc.)
+// When multiple subcommands have the same flag name, the flag definition (type, default, etc.)
 // is taken from the first subcommand encountered (alphabetically by key), while AppliesToSubcommands
-// tracks all subcommands that use this flag. For consistent behavior, flags with the same name should
-// have the same type and description across subcommands.
+// tracks all subcommands that use this flag. Descriptions are kept only when identical across
+// subcommands; differing usage strings collapse to neutralMergedFlagDescription.
 func mergeSubcommandFlags(
 	subcommands map[string]*SubcommandDef,
 	excludeFlags []string,
 ) map[string]*FlagDef {
 	allFlags := make(map[string]*FlagDef)
+	conflictingDescriptions := make(map[string]bool)
 
 	// Sort keys for deterministic output — first alphabetical key wins when the same flag
 	// name appears in multiple subcommands.
@@ -350,6 +413,10 @@ func mergeSubcommandFlags(
 
 			if existing, exists := allFlags[flagName]; exists {
 				existing.AppliesToSubcommands = append(existing.AppliesToSubcommands, subCmdName)
+
+				if existing.Description != flagDef.Description {
+					conflictingDescriptions[flagName] = true
+				}
 			} else {
 				allFlags[flagName] = &FlagDef{
 					Name:                 flagDef.Name,
@@ -364,9 +431,14 @@ func mergeSubcommandFlags(
 		}
 	}
 
-	// Sort AppliesToSubcommands for each flag to ensure deterministic schema output.
-	for _, flagDef := range allFlags {
+	// Sort AppliesToSubcommands for deterministic schema output and neutralize
+	// descriptions that differ between subcommands.
+	for flagName, flagDef := range allFlags {
 		slices.Sort(flagDef.AppliesToSubcommands)
+
+		if conflictingDescriptions[flagName] {
+			flagDef.Description = neutralMergedFlagDescription
+		}
 	}
 
 	return allFlags

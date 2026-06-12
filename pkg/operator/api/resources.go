@@ -14,6 +14,10 @@ import (
 
 const groupApps = "apps"
 
+// groupMetrics is the metrics API group (metrics.k8s.io); its kinds are allowlisted for reads but
+// not browsable (see resourceKindBrowsable).
+const groupMetrics = "metrics.k8s.io"
+
 // Workload kind names referenced in both the allowlist and the scalable/restartable predicates.
 const (
 	kindDeployment  = "Deployment"
@@ -21,6 +25,10 @@ const (
 	kindDaemonSet   = "DaemonSet"
 	kindReplicaSet  = "ReplicaSet"
 )
+
+// kindApplication is the ArgoCD Application kind, referenced in the allowlist, the reconcilable
+// predicate, and the reconcile-annotation selection.
+const kindApplication = "Application"
 
 // ResourceQuery selects a set of resources to list from a target cluster.
 type ResourceQuery struct {
@@ -99,44 +107,103 @@ func clusterScopedKindVersion(group, version, resource string) ResourceKind {
 	}
 }
 
-// resourceKindTable is the curated allowlist of resource types the read-only workload browser
+// resourceKindEntry pairs an allowlisted kind name with its GVR mapping. The allowlist is ordered:
+// the /api/v1/meta resourceKinds payload preserves entry order, which is the order the SPA's kind
+// selector presents (workloads first, then config/network/cluster scope, then the GitOps CRs, then
+// the non-browsable metrics kinds).
+type resourceKindEntry struct {
+	name string
+	kind ResourceKind
+}
+
+// resourceKindEntries is the curated allowlist of resource types the read-only workload browser
 // exposes. It deliberately EXCLUDES Secrets: their values are sensitive and a redaction-aware secrets
-// view is a separate feature. New browsable kinds are added here. It is a function (not a package
+// view is a separate feature. New browsable kinds are added here (and only here: the lookup table and
+// the /api/v1/meta resourceKinds payload both derive from this list). It is a function (not a package
 // global) to keep the allowlist in one place while satisfying the no-globals lint.
-func resourceKindTable() map[string]ResourceKind {
-	return map[string]ResourceKind{
-		"Pod":                   namespacedKind("", "pods"),
-		"Service":               namespacedKind("", "services"),
-		"ConfigMap":             namespacedKind("", "configmaps"),
-		"PersistentVolumeClaim": namespacedKind("", "persistentvolumeclaims"),
-		"Event":                 namespacedKind("", "events"),
-		"Node":                  clusterScopedKind("", "nodes"),
-		"Namespace":             clusterScopedKind("", "namespaces"),
-		kindDeployment:          namespacedKind(groupApps, "deployments"),
-		kindStatefulSet:         namespacedKind(groupApps, "statefulsets"),
-		kindDaemonSet:           namespacedKind(groupApps, "daemonsets"),
-		kindReplicaSet:          namespacedKind(groupApps, "replicasets"),
-		"Job":                   namespacedKind("batch", "jobs"),
-		"CronJob":               namespacedKind("batch", "cronjobs"),
-		"Ingress":               namespacedKind("networking.k8s.io", "ingresses"),
-		// GitOps CRs (Flux + ArgoCD), browsable read-only so the reconciliation status (status
-		// conditions) is visible. A kind whose CRD is not installed lists with an error, surfaced as a
-		// normal error in the browser. Versions are the cluster-served ones, not all v1.
-		"Kustomization": namespacedKindVersion(
-			"kustomize.toolkit.fluxcd.io",
-			"v1",
-			"kustomizations",
-		),
-		"HelmRelease":   namespacedKindVersion("helm.toolkit.fluxcd.io", "v2", "helmreleases"),
-		"GitRepository": namespacedKindVersion("source.toolkit.fluxcd.io", "v1", "gitrepositories"),
-		"OCIRepository": namespacedKindVersion("source.toolkit.fluxcd.io", "v1", "ocirepositories"),
-		"Application":   namespacedKindVersion("argoproj.io", "v1alpha1", "applications"),
-		// Live usage from the metrics API (metrics.k8s.io, served by a metrics-server). These power the
-		// Overview's resource-usage monitoring; on a cluster without a metrics-server the list fails
-		// like any other absent API and the UI degrades to capacity/requests only.
-		"NodeMetrics": clusterScopedKindVersion("metrics.k8s.io", "v1beta1", "nodes"),
-		"PodMetrics":  namespacedKindVersion("metrics.k8s.io", "v1beta1", "pods"),
+func resourceKindEntries() []resourceKindEntry {
+	entries := builtinKindEntries()
+	entries = append(entries, gitOpsKindEntries()...)
+	entries = append(entries, metricsKindEntries()...)
+
+	return entries
+}
+
+// builtinKindEntries lists the built-in API kinds (core, apps, batch, networking), all served at v1.
+func builtinKindEntries() []resourceKindEntry {
+	return []resourceKindEntry{
+		{name: "Pod", kind: namespacedKind("", "pods")},
+		{name: kindDeployment, kind: namespacedKind(groupApps, "deployments")},
+		{name: kindStatefulSet, kind: namespacedKind(groupApps, "statefulsets")},
+		{name: kindDaemonSet, kind: namespacedKind(groupApps, "daemonsets")},
+		{name: kindReplicaSet, kind: namespacedKind(groupApps, "replicasets")},
+		{name: "Job", kind: namespacedKind("batch", "jobs")},
+		{name: "CronJob", kind: namespacedKind("batch", "cronjobs")},
+		{name: "Service", kind: namespacedKind("", "services")},
+		{name: "Ingress", kind: namespacedKind("networking.k8s.io", "ingresses")},
+		{name: "ConfigMap", kind: namespacedKind("", "configmaps")},
+		{name: "PersistentVolumeClaim", kind: namespacedKind("", "persistentvolumeclaims")},
+		{name: "Event", kind: namespacedKind("", "events")},
+		{name: "Node", kind: clusterScopedKind("", "nodes")},
+		{name: "Namespace", kind: clusterScopedKind("", "namespaces")},
 	}
+}
+
+// gitOpsKindEntries lists the GitOps CRs (Flux + ArgoCD), browsable read-only so the reconciliation
+// status (status conditions) is visible. A kind whose CRD is not installed lists with an error,
+// surfaced as a normal error in the browser. Versions are the cluster-served ones, not all v1.
+func gitOpsKindEntries() []resourceKindEntry {
+	return []resourceKindEntry{
+		{
+			name: "Kustomization",
+			kind: namespacedKindVersion("kustomize.toolkit.fluxcd.io", "v1", "kustomizations"),
+		},
+		{
+			name: "HelmRelease",
+			kind: namespacedKindVersion("helm.toolkit.fluxcd.io", "v2", "helmreleases"),
+		},
+		{
+			name: "GitRepository",
+			kind: namespacedKindVersion("source.toolkit.fluxcd.io", "v1", "gitrepositories"),
+		},
+		{
+			name: "OCIRepository",
+			kind: namespacedKindVersion("source.toolkit.fluxcd.io", "v1", "ocirepositories"),
+		},
+		{
+			name: kindApplication,
+			kind: namespacedKindVersion("argoproj.io", "v1alpha1", "applications"),
+		},
+	}
+}
+
+// metricsKindEntries lists the live-usage kinds from the metrics API (metrics.k8s.io, served by a
+// metrics-server). These power the Overview's resource-usage monitoring; on a cluster without a
+// metrics-server the list fails like any other absent API and the UI degrades to capacity/requests
+// only. They are allowlisted for reads but not browsable (see resourceKindBrowsable).
+func metricsKindEntries() []resourceKindEntry {
+	return []resourceKindEntry{
+		{
+			name: "NodeMetrics",
+			kind: clusterScopedKindVersion(groupMetrics, "v1beta1", "nodes"),
+		},
+		{
+			name: "PodMetrics",
+			kind: namespacedKindVersion(groupMetrics, "v1beta1", "pods"),
+		},
+	}
+}
+
+// resourceKindTable indexes the allowlist by kind name for validation lookups (see ResourceKindFor).
+func resourceKindTable() map[string]ResourceKind {
+	entries := resourceKindEntries()
+	table := make(map[string]ResourceKind, len(entries))
+
+	for _, entry := range entries {
+		table[entry.name] = entry.kind
+	}
+
+	return table
 }
 
 // ResourceKindFor returns the GVR mapping for a browsable kind, or an ErrInvalid-wrapped error (→ 422)
@@ -246,11 +313,19 @@ func ResourceKindRestartable(kind string) bool {
 // argocd.argoproj.io/refresh). Drives the SPA's Reconcile affordance and validates requests.
 func ResourceKindReconcilable(kind string) bool {
 	switch kind {
-	case "Kustomization", "HelmRelease", "GitRepository", "OCIRepository", "Application":
+	case "Kustomization", "HelmRelease", "GitRepository", "OCIRepository", kindApplication:
 		return true
 	default:
 		return false
 	}
+}
+
+// resourceKindBrowsable reports whether an allowlisted kind belongs in the SPA's kind selector. The
+// metrics-API kinds (NodeMetrics/PodMetrics) are deliberately allowlisted for reads — they power the
+// Overview's resource-usage monitoring — but they are derived live-usage data, not browsable
+// workloads, so the selector hides them. Surfaced to the SPA via /api/v1/meta's resourceKinds.
+func resourceKindBrowsable(kind ResourceKind) bool {
+	return kind.GVR.Group != groupMetrics
 }
 
 // requireNamespace returns an ErrInvalid-wrapped error (→ 422) when a namespaced kind is addressed
@@ -351,7 +426,7 @@ func ReconcileResourceWith(ctx context.Context, dyn dynamic.Interface, ref Resou
 // reconcileAnnotation returns the metadata annotation (key, value) that triggers a reconcile for the
 // kind's GitOps engine.
 func reconcileAnnotation(kind string) (string, string) {
-	if kind == "Application" {
+	if kind == kindApplication {
 		return "argocd.argoproj.io/refresh", "normal"
 	}
 

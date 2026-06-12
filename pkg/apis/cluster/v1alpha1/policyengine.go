@@ -1,10 +1,5 @@
 package v1alpha1
 
-import (
-	"fmt"
-	"strings"
-)
-
 // PolicyEngine defines the policy engine options for a KSail cluster.
 type PolicyEngine string
 
@@ -17,24 +12,18 @@ const (
 	PolicyEngineGatekeeper PolicyEngine = "Gatekeeper"
 )
 
-// Set for PolicyEngine (pflag.Value interface).
-func (p *PolicyEngine) Set(value string) error {
-	for _, pe := range ValidPolicyEngines() {
-		if strings.EqualFold(value, string(pe)) {
-			*p = pe
-
-			return nil
-		}
-	}
-
-	return fmt.Errorf(
-		"%w: %s (valid options: %s, %s, %s)",
-		ErrInvalidPolicyEngine,
-		value,
+// ValidPolicyEngines returns supported policy engine values.
+func ValidPolicyEngines() []PolicyEngine {
+	return []PolicyEngine{
 		PolicyEngineNone,
 		PolicyEngineKyverno,
 		PolicyEngineGatekeeper,
-	)
+	}
+}
+
+// Set for PolicyEngine (pflag.Value interface).
+func (p *PolicyEngine) Set(value string) error {
+	return setEnum(p, value, ValidPolicyEngines(), ErrInvalidPolicyEngine)
 }
 
 // String returns the string representation of the PolicyEngine.
@@ -54,9 +43,5 @@ func (p *PolicyEngine) Default() any {
 
 // ValidValues returns all valid PolicyEngine values as strings.
 func (p *PolicyEngine) ValidValues() []string {
-	return []string{
-		string(PolicyEngineNone),
-		string(PolicyEngineKyverno),
-		string(PolicyEngineGatekeeper),
-	}
+	return validValueStrings(ValidPolicyEngines())
 }

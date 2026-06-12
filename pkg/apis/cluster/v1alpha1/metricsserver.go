@@ -1,10 +1,5 @@
 package v1alpha1
 
-import (
-	"fmt"
-	"strings"
-)
-
 // MetricsServer defines the Metrics Server options for a KSail cluster.
 type MetricsServer string
 
@@ -17,24 +12,18 @@ const (
 	MetricsServerDisabled MetricsServer = "Disabled"
 )
 
-// Set for MetricsServer (pflag.Value interface).
-func (m *MetricsServer) Set(value string) error {
-	for _, ms := range ValidMetricsServers() {
-		if strings.EqualFold(value, string(ms)) {
-			*m = ms
-
-			return nil
-		}
-	}
-
-	return fmt.Errorf(
-		"%w: %s (valid options: %s, %s, %s)",
-		ErrInvalidMetricsServer,
-		value,
+// ValidMetricsServers returns supported metrics server values.
+func ValidMetricsServers() []MetricsServer {
+	return []MetricsServer{
 		MetricsServerDefault,
 		MetricsServerEnabled,
 		MetricsServerDisabled,
-	)
+	}
+}
+
+// Set for MetricsServer (pflag.Value interface).
+func (m *MetricsServer) Set(value string) error {
+	return setEnum(m, value, ValidMetricsServers(), ErrInvalidMetricsServer)
 }
 
 // String returns the string representation of the MetricsServer.
@@ -54,25 +43,5 @@ func (m *MetricsServer) Default() any {
 
 // ValidValues returns all valid MetricsServer values as strings.
 func (m *MetricsServer) ValidValues() []string {
-	return []string{
-		string(MetricsServerDefault),
-		string(MetricsServerEnabled),
-		string(MetricsServerDisabled),
-	}
-}
-
-// EffectiveValue resolves Default to its concrete meaning for the given
-// distribution. Enabled and Disabled pass through unchanged. For
-// distributions that bundle metrics-server (e.g. K3s), Default resolves
-// to Enabled; otherwise it resolves to Disabled.
-func (m *MetricsServer) EffectiveValue(distribution Distribution) MetricsServer {
-	if *m != MetricsServerDefault && *m != "" {
-		return *m
-	}
-
-	if distribution.ProvidesMetricsServerByDefault() {
-		return MetricsServerEnabled
-	}
-
-	return MetricsServerDisabled
+	return validValueStrings(ValidMetricsServers())
 }
