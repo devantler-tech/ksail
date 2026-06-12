@@ -155,7 +155,7 @@ func InstallMetricsServerSilent(
 		return err
 	}
 
-	msInstaller := metricsserverinstaller.NewInstallerWithDistribution(
+	msInstaller := metricsserverinstaller.NewInstaller(
 		helmClient,
 		timeout,
 		clusterCfg.Spec.Cluster.Distribution,

@@ -3,6 +3,7 @@ package dockerutil
 import (
 	"fmt"
 
+	dockerclient "github.com/devantler-tech/ksail/v7/pkg/client/docker"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
 	"github.com/docker/docker/client"
 	"github.com/spf13/cobra"
@@ -15,12 +16,9 @@ import (
 //
 // Returns an error if client creation fails or if the operation function returns an error.
 func WithDockerClient(cmd *cobra.Command, operation func(client.APIClient) error) error {
-	dockerClient, err := client.NewClientWithOpts(
-		client.FromEnv,
-		client.WithAPIVersionNegotiation(),
-	)
+	dockerClient, err := dockerclient.GetDockerClient()
 	if err != nil {
-		return fmt.Errorf("failed to create docker client: %w", err)
+		return fmt.Errorf("get docker client: %w", err)
 	}
 
 	return WithDockerClientInstance(cmd, dockerClient, operation)

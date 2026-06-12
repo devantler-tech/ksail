@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import {
-  ApiError,
+  errorMessage,
   getSettings,
   updateSettings,
   type CredentialSetting,
@@ -14,13 +14,6 @@ interface Draft {
   envVar: string;
   value: string;
   clear: boolean;
-}
-
-function errorMessage(err: unknown): string {
-  if (err instanceof ApiError) {
-    return err.message;
-  }
-  return err instanceof Error ? err.message : String(err);
 }
 
 function initDrafts(credentials: CredentialSetting[]): Record<string, Draft> {

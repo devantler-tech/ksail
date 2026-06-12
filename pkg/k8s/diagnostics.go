@@ -104,9 +104,8 @@ func lookupRemediation(reason string) string {
 	return ""
 }
 
-// DiagnoseReport is the structured result of DiagnoseClusterReport. It is
-// the JSON-serialisable form of the cluster health snapshot produced by
-// DiagnoseCluster. The HealthScore field (0–100) gives AI assistants and
+// DiagnoseReport is the structured, JSON-serialisable result of
+// DiagnoseClusterReport. The HealthScore field (0–100) gives AI assistants and
 // automation a single numeric signal; Findings carry the details.
 type DiagnoseReport struct {
 	// ClusterName is the name of the inspected cluster.
@@ -118,11 +117,14 @@ type DiagnoseReport struct {
 	Findings []DiagnoseFinding `json:"findings"`
 }
 
-// DiagnoseClusterReport is the structured equivalent of DiagnoseCluster. It
-// returns a DiagnoseReport suitable for JSON serialisation and AI consumption
-// via the cluster_read MCP tool. The CLI uses this structured result for both
-// text and JSON output, while DiagnoseCluster preserves the legacy plain-text
-// API for callers that need a combined string report.
+// DiagnoseClusterReport scans the cluster for unhealthy nodes, pods, and
+// PersistentVolumeClaims and returns a DiagnoseReport suitable for JSON
+// serialisation and AI consumption via the cluster_read MCP tool. The CLI
+// uses this structured result for both text and JSON output.
+//
+// The diagnostic is intentionally distribution-agnostic — it only relies on
+// the Kubernetes API and therefore works for Vanilla, K3s, Talos, and
+// VCluster alike.
 func DiagnoseClusterReport(
 	ctx context.Context,
 	clientset kubernetes.Interface,
@@ -260,56 +262,6 @@ func diagnoseComputeScore(findings []DiagnoseFinding) int {
 	return score
 }
 
-// DiagnoseCluster produces a combined human-readable diagnostic report for
-// a running Kubernetes cluster. It enumerates every namespace, surfaces any
-// failing pods via DiagnosePodFailures, reports any nodes that are not
-// Ready, and lists PersistentVolumeClaims stuck in Pending phase via
-// DiagnosePVCPending. When everything appears healthy, the returned string
-// is empty.
-//
-// The diagnostic is intentionally distribution-agnostic — it only relies on
-// the Kubernetes API and therefore works for Vanilla, K3s, Talos, and
-// VCluster alike. It is preserved for callers that want a combined
-// human-readable string, while the `ksail cluster diagnose` command and
-// Copilot chat/MCP tooling use DiagnoseClusterReport.
-func DiagnoseCluster(ctx context.Context, clientset kubernetes.Interface) (string, error) {
-	var builder strings.Builder
-
-	nodeReport, err := diagnoseNodes(ctx, clientset)
-	if err != nil {
-		return "", err
-	}
-
-	if nodeReport != "" {
-		builder.WriteString(nodeReport)
-	}
-
-	namespaces, err := listNamespaceNames(ctx, clientset)
-	if err != nil {
-		return "", err
-	}
-
-	podReport := DiagnosePodFailures(ctx, clientset, namespaces)
-	if podReport != "" {
-		if builder.Len() > 0 {
-			builder.WriteString("\n")
-		}
-
-		builder.WriteString(podReport)
-	}
-
-	pvcReport := DiagnosePVCPending(ctx, clientset, namespaces)
-	if pvcReport != "" {
-		if builder.Len() > 0 {
-			builder.WriteString("\n")
-		}
-
-		builder.WriteString(pvcReport)
-	}
-
-	return strings.Trim(builder.String(), "\n"), nil
-}
-
 // listNamespaceNames returns the names of every namespace in the cluster.
 func listNamespaceNames(
 	ctx context.Context,
@@ -326,31 +278,6 @@ func listNamespaceNames(
 	}
 
 	return names, nil
-}
-
-// diagnoseNodes returns a human-readable summary of any nodes that are not
-// Ready. Returns an empty string when all nodes are Ready.
-func diagnoseNodes(ctx context.Context, clientset kubernetes.Interface) (string, error) {
-	nodes, err := clientset.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
-	if err != nil {
-		return "", fmt.Errorf("list nodes: %w", err)
-	}
-
-	var builder strings.Builder
-
-	for i := range nodes.Items {
-		node := &nodes.Items[i]
-		if reason := describeNotReadyNode(node); reason != "" {
-			if builder.Len() == 0 {
-				builder.WriteString("Not-Ready nodes:")
-			}
-
-			builder.WriteString("\n  ")
-			builder.WriteString(reason)
-		}
-	}
-
-	return builder.String(), nil
 }
 
 // describeNotReadyNode returns a one-line description when a node's Ready
@@ -404,49 +331,6 @@ func DiagnosePodFailures(
 		for _, f := range failures {
 			builder.WriteString("\n  ")
 			builder.WriteString(f)
-		}
-	}
-
-	return builder.String()
-}
-
-// DiagnosePVCPending checks PersistentVolumeClaims in the given namespaces
-// and returns a human-readable summary of any PVCs stuck in Pending phase.
-// If no PVCs are pending, it returns an empty string.
-func DiagnosePVCPending(
-	ctx context.Context,
-	clientset kubernetes.Interface,
-	namespaces []string,
-) string {
-	var builder strings.Builder
-
-	for _, namespace := range namespaces {
-		pvcs, err := clientset.CoreV1().
-			PersistentVolumeClaims(namespace).
-			List(ctx, metav1.ListOptions{})
-		if err != nil {
-			fmt.Fprintf(&builder, "\n  (failed to list PVCs in %s: %v)", namespace, err)
-
-			continue
-		}
-
-		var pending []string
-
-		for i := range pvcs.Items {
-			if pvcs.Items[i].Status.Phase == corev1.ClaimPending {
-				pending = append(pending, pvcs.Items[i].Name)
-			}
-		}
-
-		if len(pending) == 0 {
-			continue
-		}
-
-		fmt.Fprintf(&builder, "\nPending PVCs in %s namespace:", namespace)
-
-		for _, name := range pending {
-			builder.WriteString("\n  ")
-			builder.WriteString(name)
 		}
 	}
 

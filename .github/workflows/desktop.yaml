@@ -14,6 +14,8 @@ on:
       - "go.sum"
       - ".goreleaser.desktop.yaml"
       - ".github/workflows/desktop.yaml"
+      - ".github/actions/setup-desktop-build/**"
+      - "scripts/stage-webui.sh"
   push:
     branches: [main]
     paths:
@@ -25,6 +27,8 @@ on:
       - "go.sum"
       - ".goreleaser.desktop.yaml"
       - ".github/workflows/desktop.yaml"
+      - ".github/actions/setup-desktop-build/**"
+      - "scripts/stage-webui.sh"
 
 permissions:
   contents: read
@@ -42,31 +46,8 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: ⚙️ Setup Go
-        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
-        with:
-          go-version-file: go.mod
-          cache: false
-
-      - name: ⚙️ Setup Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0 # zizmor: ignore[cache-poisoning]
-        with:
-          node-version: "24"
-
-      - name: 🐧 Install Linux webview dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libgtk-4-dev libwebkitgtk-6.0-dev
-
-      - name: 🏗️ Build and stage web UI
-        shell: bash
-        run: |
-          npm --prefix web/ui ci
-          npm --prefix web/ui run build
-          rm -rf pkg/webui/dist
-          mkdir -p pkg/webui/dist
-          touch pkg/webui/dist/.gitkeep
-          cp -R web/ui/dist/. pkg/webui/dist/
+      - name: 🛠️ Setup desktop build (Go, Node.js, webview deps, staged web UI)
+        uses: ./.github/actions/setup-desktop-build
 
       # The desktop app is a SEPARATE Go module that vendors the main module via `replace => ../`, so
       # its go.mod/go.sum must independently track the main module's dependency graph. The main repo's
@@ -74,13 +55,25 @@ jobs:
       # leave desktop/go.{mod,sum} stale and break this build with a cryptic "updates to go.mod
       # needed" / "missing go.sum entry". Fail fast with a clear, actionable message instead: run
       # `go -C desktop mod tidy` and commit the result.
+      #
+      # Same-repo PRs are exempt: ci.yaml's verify-desktop-tidy job self-heals them (it commits the
+      # tidy diff back to the PR branch via the auto-commit job), so hard-failing here would only add
+      # a transient red X that the auto-commit push then re-runs. Keep the hard gate for pushes to
+      # main and for fork PRs, which the self-heal cannot push to.
       - name: 🧹 Verify desktop module is tidy
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
         working-directory: desktop
         run: go mod tidy -diff
 
       - name: 🏗️ Build desktop app
         working-directory: desktop
         run: go build -o ksail-desktop .
+
+      # The desktop module's tests are not covered by the main repo's test suite (separate module),
+      # so run them here — this is the only CI leg with the CGO webview toolchain they compile against.
+      - name: 🧪 Test desktop module
+        working-directory: desktop
+        run: go test ./...
 
   # Validate the full macOS desktop release pipeline (build into KSail.app, archive, cask
   # generation) without publishing. --snapshot needs no secrets, so this runs on fork PRs too.

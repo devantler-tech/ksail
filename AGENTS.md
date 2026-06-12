@@ -138,7 +138,9 @@ go run main.go --help
 /
 ├── main.go                 # Main entry point
 ├── internal/               # Internal (import-restricted/private) packages
-│   └── buildmeta/          # Build-time version metadata (Version, Commit, Date) injected via ldflags
+│   ├── buildmeta/          # Build-time version metadata (Version, Commit, Date) injected via ldflags
+│   ├── controller/         # controller-runtime reconcilers for the KSail operator (Cluster CRs)
+│   └── testutil/           # Shared test utilities (home-env isolation, root checks, snapshot helpers)
 ├── pkg/                    # Core packages
 │   ├── toolgen/            # Tool generation for AI assistants
 │   ├── apis/               # API types and schemas
@@ -152,14 +154,17 @@ go run main.go --help
 │   │   ├── lifecycle/      # Cluster lifecycle orchestration
 │   │   ├── setup/          # Component setup (CNI, mirror registries, etc.)
 │   │   └── ui/             # Terminal UI (ASCII art, chat TUI, confirmations)
-│   ├── client/             # Embedded tool clients (kubectl, helm, flux, vcluster, etc.)
+│   ├── client/             # Tool clients (kubectl, helm, flux, argocd, sops, etc.; eksctl is a binary shim)
 │   ├── di/                 # Dependency injection
 │   ├── envvar/             # Environment variable utilities
 │   ├── fsutil/             # Filesystem utilities (includes configmanager)
 │   ├── k8s/                # Kubernetes helpers/templates
 │   ├── notify/             # CLI notifications and progress display
+│   ├── operator/           # Kubernetes operator manager and REST API server (reconcilers in internal/controller)
 │   ├── runner/             # Cobra command execution helpers
+│   ├── strutil/            # String utilities
 │   ├── timer/              # Command timing and performance tracking
+│   ├── webui/              # Embedded web UI assets (built from web/ui, served by `ksail ui` and the operator)
 │   └── svc/                # Services (installers, managers, etc.)
 │       ├── chat/           # AI chat integration (GitHub Copilot SDK)
 │       ├── detector/       # Detects installed Kubernetes components (Helm releases, K8s API)
@@ -171,9 +176,15 @@ go run main.go --help
 │       ├── installer/      # Component installers (CNI, CSI, metrics-server, etc.)
 │       ├── mcp/            # Model Context Protocol server
 │       ├── provider/       # Infrastructure providers (docker, hetzner, omni)
-│       ├── provisioner/    # Distribution provisioners (Vanilla, K3s, Talos, VCluster)
+│       ├── provisioner/    # Distribution provisioners (Vanilla, K3s, Talos, VCluster, KWOK, EKS)
 │       ├── registryresolver/ # OCI registry detection, credential resolution, and artifact push
 │       └── state/          # Cluster state persistence for distributions without introspection
+├── charts/                 # Helm charts
+│   └── ksail-operator/     # Operator + embedded web UI chart (keep README.md in sync with values.yaml)
+├── copilot-plugin/         # KSail plugin for GitHub Copilot CLI / Claude Code (MCP server + skill)
+├── desktop/                # Native desktop app (separate Go module wrapping the web UI)
+├── web/                    # Web UI source
+│   └── ui/                 # Vite/React SPA, embedded into the binary via pkg/webui
 ├── docs/                   # Astro documentation source
 │   ├── dist/               # Generated site (after npm run build)
 │   └── package.json        # Node.js dependencies for documentation
@@ -196,48 +207,19 @@ go run main.go --help
 
 ### CLI Commands Reference
 
-All CLI commands only require Docker to be installed:
+Use `ksail --help` and the generated CLI reference (`docs/src/content/docs/cli-flags/`) as the
+source of truth for the full command and flag inventory. Top-level command groups:
 
-```bash
-ksail cluster init [options]           # Initialize new KSail project
-ksail cluster create                   # Create and start cluster
-ksail cluster update                   # Update cluster to match configuration
-ksail cluster delete                   # Destroy cluster and resources
-ksail cluster start                    # Start existing cluster
-ksail cluster stop                     # Stop running cluster
-ksail cluster info                     # Show cluster status
-ksail cluster diagnose                 # Report failing pods and NotReady nodes
-ksail cluster list [--provider <provider>]  # List clusters (optionally filter by provider)
-ksail cluster connect                  # Connect to cluster with K9s
-ksail cluster switch [cluster-name]    # Switch active kubeconfig context (interactive picker if no arg)
-ksail cluster backup                   # Backup cluster resources to .tar.gz
-ksail cluster restore                  # Restore cluster resources from .tar.gz
-ksail workload apply                   # Apply manifests to cluster
-ksail workload create                  # Create resources imperatively
-ksail workload edit                    # Edit a resource in-place
-ksail workload get                     # Get resources
-ksail workload describe                # Describe resources in detail
-ksail workload explain                 # Get API documentation for a resource
-ksail workload delete                  # Delete Kubernetes resources
-ksail workload logs                    # View container logs
-ksail workload exec                    # Execute command in container
-ksail workload expose                  # Expose a resource as a service
-ksail workload gen <resource>          # Generate Kubernetes manifests
-ksail workload validate                # Validate manifests against schemas
-ksail workload install                 # Install Helm charts
-ksail workload scale                   # Scale deployments
-ksail workload rollout                 # Manage rollouts
-ksail workload wait                    # Wait for conditions
-ksail workload images                  # List required container images
-ksail workload export                  # Export container images to a tar archive
-ksail workload import                  # Import container images from a tar archive
-ksail workload watch [--path <dir>]    # Watch directory and auto-apply on change
-ksail workload push                    # Package and push manifests to registry
-ksail workload reconcile               # Trigger GitOps sync and wait
-ksail cipher <command>                 # Manage secrets with SOPS
-ksail chat                             # AI chat powered by GitHub Copilot
-ksail mcp                              # Start MCP server for AI assistants
-```
+- `ksail cluster` — cluster lifecycle and operations (init, create, update, delete, diagnose, backup/restore, …); see `ksail cluster --help`
+- `ksail workload` — workload operations against a cluster (apply, get, logs, gen, push, reconcile, …); see `ksail workload --help`
+- `ksail cipher` — secret management with SOPS; see `ksail cipher --help`
+- `ksail tenant` — multi-tenancy onboarding (RBAC isolation, GitOps sync resources, tenant repo scaffolding); see `ksail tenant --help`
+- `ksail oidc` — OIDC authentication utilities (kubeconfig exec credential plugin); see `ksail oidc --help`
+- `ksail ui` — open the local web UI (local web server + browser); see `ksail ui --help`
+- `ksail desktop` — open the native desktop app; see `ksail desktop --help`
+- `ksail operator` — run the Kubernetes operator (normally deployed via the Helm chart); see `ksail operator --help`
+- `ksail chat` — AI chat powered by GitHub Copilot
+- `ksail mcp` — start the MCP server for AI assistants
 
 ### Init Command Options
 
@@ -296,7 +278,7 @@ npm run dev                            # Test locally (if needed)
 ### Important Notes
 
 - The project uses **Go 1.26.1+** (see `go.mod`)
-- All Kubernetes tools are embedded as Go libraries - only Docker is required externally
+- Kubernetes tools are embedded as Go libraries - only Docker is required externally for local clusters (the EKS distribution is the exception: it shells out to an external `eksctl` binary)
 - Unit tests run quickly and should generally pass
 - System tests in CI cover extensive scenarios with multiple tool combinations
 - Documentation is built with Astro and uses the Starlight theme
@@ -323,7 +305,7 @@ For a deeper dive into KSail's design and internals, refer to:
   - `TalosProvisioner` (`pkg/svc/provisioner/cluster/talos/`): Uses Talos SDK for immutable Talos Linux clusters
   - `VClusterProvisioner` (`pkg/svc/provisioner/cluster/vcluster/`): Uses vCluster Go SDK (Vind Docker driver) for virtual Kubernetes clusters
   - `KWOKProvisioner` (`pkg/svc/provisioner/cluster/kwok/`): Uses kwokctl for simulated Kubernetes clusters (lightweight, no real workloads)
-  - `EKSProvisioner` (`pkg/svc/provisioner/cluster/eks/`): Uses embedded eksctl Go libraries for managed EKS clusters on AWS
+  - `EKSProvisioner` (`pkg/svc/provisioner/cluster/eks/`): Shells out to an external `eksctl` binary (via `pkg/client/eksctl`) for managed EKS clusters on AWS — the one tool KSail does not embed
 
 **Distribution Names (user-facing):**
 
@@ -340,7 +322,7 @@ For a deeper dive into KSail's design and internals, refer to:
 
 - `pkg/toolgen/`: AI tool generation — auto-generates tools from the Cobra command tree for both the MCP server and the Copilot chat assistant. All runnable CLI commands (except excluded meta commands: `chat`, `mcp`, `completion`, `help`, root — see `toolgen.DefaultOptions()` and `ai.toolgen.exclude`) are automatically exposed as tools; do NOT manually register individual tool handlers. Parent commands annotated with `ai.toolgen.consolidate` group their subcommands into a single tool, then `ai.toolgen.permission` splits them into read/write pairs (e.g., `cluster_read`, `cluster_write`). Adding a new CLI command under a consolidated parent automatically makes it available as an MCP tool and a chat tool — no separate tool registration is needed
 - `pkg/apis/`: API types, schemas, and enums; each enum type lives in its own file under `pkg/apis/cluster/v1alpha1/` (e.g., `distribution.go`, `cni.go`, `csi.go`, `loadbalancer.go`, `gitopsengine.go`, etc.); the `EnumValuer` interface is in `enum.go`; API-level validation errors (e.g., `ErrInvalidDistribution`, `ErrInvalidGitOpsEngine`, `ErrClusterNameTooLong`, `ErrInvalidDistributionProviderCombination`) are centralized in `errors.go`
-- `pkg/client/`: Embedded tool clients (kubectl, helm, flux, argocd, docker, k9s, kubeconform, kustomize, oci, netretry); distribution tools like kind, k3d, and vcluster are used directly via their SDKs in provisioners, not wrapped in `pkg/client/`.
+- `pkg/client/`: Tool clients (argocd, docker, eksctl, flux, helm, k9s, klogutil, kubeconform, kubectl, kubescape, kustomize, netretry, oci, reconciler, sops) — all embedded as Go libraries except eksctl, which shells out to an external `eksctl` binary; distribution tools like kind, k3d, and vcluster are used directly via their SDKs in provisioners, not wrapped in `pkg/client/`.
 - `pkg/svc/`: Services including installers, providers, and provisioners
   - `pkg/svc/chat/`: AI chat integration using GitHub Copilot SDK with embedded CLI documentation; `sandbox.go` exports `IsPathWithinDirectory` which uses `fsutil.EvalCanonicalPath` for path containment checks
   - `pkg/svc/detector/`: Detects installed Kubernetes components by querying Helm release history and the Kubernetes API; used by the update command to build accurate baseline state
@@ -351,7 +333,7 @@ For a deeper dive into KSail's design and internals, refer to:
   - `pkg/svc/installer/`: Component installers (CNI, CSI, metrics-server, etc.); `internal/hetzner/` holds shared utilities for the Hetzner installers—`hcloudccm.Installer` is a type alias for `hetzner.Installer`, while `hetznercsi.Installer` is a thin wrapper that embeds `*hetzner.Installer` and adds a pre-install gate waiting for `hcloud-ccm` to label all nodes with `instance.hetzner.cloud/provided-by` (preventing a CSI topology registration race); both share a single `EnsureSecret` implementation; `flux/Dockerfile.distribution` tracks Flux distribution controller images (updated by Dependabot) that are deployed by the Flux operator when creating a FluxInstance but are not part of the Helm chart — included in `Images()` output for mirror cache warming
   - `pkg/svc/mcp/`: Model Context Protocol server for Claude and other AI assistants; tools are auto-generated from root Cobra commands via `pkg/toolgen/` (not manually registered) — all operational cluster/workload/tenant/cipher commands (both read and write) are consolidated into 6 tools via `ai.toolgen.consolidate` + `ai.toolgen.permission`: `cluster_read`, `cluster_write`, `workload_read`, `workload_write`, `tenant_write`, `cipher_write`
   - `pkg/svc/provider/`: Infrastructure providers (docker, hetzner, omni)
-  - `pkg/svc/provisioner/`: Distribution provisioners (Vanilla, K3s, Talos, VCluster)
+  - `pkg/svc/provisioner/`: Distribution provisioners (Vanilla, K3s, Talos, VCluster, KWOK, EKS)
   - `pkg/svc/registryresolver/`: OCI registry detection, resolution, credential merging from cluster secrets (Flux dockerconfigjson / ArgoCD repo secret), and artifact push utilities; `ErrExternalRegistryCredentialsIncomplete` is returned when a username is set (e.g. `GITHUB_ACTOR`) but the password/token is missing
   - `pkg/svc/state/`: Cluster state persistence for distributions that cannot introspect running configuration (Kind, K3d); stores spec as JSON in `~/.ksail/clusters/<name>/spec.json`
 - `pkg/client/reconciler/`: Common base for GitOps reconciliation clients (Flux and ArgoCD)
@@ -372,7 +354,7 @@ When changing `-count` in the `go test -bench` command in CI, always update the 
 
 - Go 1.26.1+ (see `go.mod`)
 - Embedded Kubernetes tools (kubectl, helm, kind, k3d, vcluster, flux, argocd) as Go libraries
-- Docker as the only external dependency
+- Docker as the only external dependency for local clusters (EKS additionally shells out to `eksctl`)
 - Astro with Starlight for documentation (Node.js-based)
 
 ## Maintenance (autonomous AI assistant)

@@ -9,6 +9,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/ui/asciiart"
 	copilot "github.com/github/copilot-sdk/go"
 )
 
@@ -153,20 +154,13 @@ type SystemContextConfig struct {
 const (
 	defaultLogoHeight = 6
 
-	defaultLogo = "██╗  ██╗███████╗ █████╗ ██╗██╗\n" +
-		"██║ ██╔╝██╔════╝██╔══██╗██║██║\n" +
-		"█████╔╝ ███████╗███████║██║██║\n" +
-		"██╔═██╗ ╚════██║██╔══██║██║██║\n" +
-		"██║  ██╗███████║██║  ██║██║███████╗\n" +
-		"╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═╝╚══════╝"
-
 	defaultTagline = "AI-Powered Kubernetes Assistant"
 )
 
 // DefaultThemeConfig returns the default theme configuration with KSail branding.
 func DefaultThemeConfig() ThemeConfig {
 	return ThemeConfig{
-		Logo:           func() string { return defaultLogo },
+		Logo:           asciiart.Logo,
 		Tagline:        func() string { return defaultTagline },
 		LogoHeight:     defaultLogoHeight,
 		AssistantLabel: "▶ KSail",

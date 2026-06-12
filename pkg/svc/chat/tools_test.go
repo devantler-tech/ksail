@@ -9,27 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestGetKSailTools(t *testing.T) {
-	t.Parallel()
-
-	// Create a minimal root command for testing
-	rootCmd := &cobra.Command{
-		Use:   "ksail",
-		Short: "KSail CLI",
-	}
-	subCmd := &cobra.Command{
-		Use:   "test",
-		Short: "Test command",
-		Run:   func(_ *cobra.Command, _ []string) {},
-	}
-	rootCmd.AddCommand(subCmd)
-
-	tools := chat.GetKSailTools(rootCmd, nil, nil)
-
-	require.NotNil(t, tools)
-	assert.NotEmpty(t, tools)
-}
-
 func TestGetKSailToolMetadata(t *testing.T) {
 	t.Parallel()
 

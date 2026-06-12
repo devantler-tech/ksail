@@ -133,17 +133,17 @@ func TestUpdateCommandPicker_CaseInsensitive(t *testing.T) {
 	assert.Len(t, chat.ExportFilteredCommands(model), 2)
 }
 
-// --- commandPickerExtraHeight tests ---
+// --- pickerExtraHeight tests ---
 
-func TestCommandPickerExtraHeight_WhenHidden(t *testing.T) {
+func TestPickerExtraHeight_WhenHidden(t *testing.T) {
 	t.Parallel()
 
 	model := chat.NewModel(newCommandPickerTestParams())
 
-	assert.Equal(t, 0, chat.ExportCommandPickerExtraHeight(model))
+	assert.Equal(t, 0, chat.ExportPickerExtraHeight(model))
 }
 
-func TestCommandPickerExtraHeight_WhenShown(t *testing.T) {
+func TestPickerExtraHeight_WhenShown(t *testing.T) {
 	t.Parallel()
 
 	model := chat.NewModel(newCommandPickerTestParams())
@@ -153,7 +153,7 @@ func TestCommandPickerExtraHeight_WhenShown(t *testing.T) {
 	chat.ExportUpdateCommandPicker(model)
 
 	// 6 commands + 2 for border
-	assert.Equal(t, 8, chat.ExportCommandPickerExtraHeight(model))
+	assert.Equal(t, 8, chat.ExportPickerExtraHeight(model))
 }
 
 // --- helpers ---

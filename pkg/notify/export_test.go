@@ -17,7 +17,6 @@ var (
 	//nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
 	TaskFailedForTest = taskFailed
 	//nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
-	AppendSlotsForTest      = appendSlots
 	GetMessageConfigForTest = getMessageConfig
 	//nolint:gochecknoglobals // export_test.go pattern exposes internal helpers as globals.
 	IndentMultilineContentForTest = indentMultilineContent
@@ -48,33 +47,12 @@ func (t *ProgressGroupForTest) FitName(name string, state TaskState) string {
 	return t.fitName(name, state)
 }
 
-// CompactWindowHeight exposes compactWindowHeight for testing.
-func (t *ProgressGroupForTest) CompactWindowHeight() int {
-	return t.compactWindowHeight()
-}
-
-// CountPending exposes countPending for testing.
-func (t *ProgressGroupForTest) CountPending() int {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-
-	return t.countPending()
-}
-
 // GetDisplayOrder exposes getDisplayOrder for testing.
 func (t *ProgressGroupForTest) GetDisplayOrder() []string {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
 	return t.getDisplayOrder()
-}
-
-// GetVisibleTasks exposes getVisibleTasks for testing.
-func (t *ProgressGroupForTest) GetVisibleTasks() []string {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-
-	return t.getVisibleTasks()
 }
 
 // FormatTaskLine exposes formatTaskLine for testing.
@@ -109,14 +87,6 @@ func (t *ProgressGroupForTest) AddTaskStartOrderForTest(name string) {
 	t.taskStartOrder = append(t.taskStartOrder, name)
 }
 
-// SetMaxVisibleForTest sets maxVisible for testing.
-func (t *ProgressGroupForTest) SetMaxVisibleForTest(n int) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-
-	t.maxVisible = n
-}
-
 // SetTermWidthForTest sets termWidth for testing.
 func (t *ProgressGroupForTest) SetTermWidthForTest(w int) {
 	t.mu.Lock()
@@ -147,31 +117,6 @@ func (t *ProgressGroupForTest) FormatSummaryForTest() string {
 	defer t.mu.Unlock()
 
 	return t.formatSummary()
-}
-
-// BuildCompactWindowForTest exposes buildCompactWindow for testing.
-// Returns the buffer contents and the number of content lines.
-func (t *ProgressGroupForTest) BuildCompactWindowForTest() (string, int) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-
-	var buf bytes.Buffer
-
-	lines := t.buildCompactWindow(&buf)
-
-	return buf.String(), lines
-}
-
-// WriteSummaryLineForTest exposes writeSummaryLine for testing.
-func (t *ProgressGroupForTest) WriteSummaryLineForTest() string {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-
-	var buf bytes.Buffer
-
-	t.writeSummaryLine(&buf)
-
-	return buf.String()
 }
 
 // EmitCompletedForTest exposes emitCompleted for testing.

@@ -14,6 +14,9 @@ import (
 
 const requiredCiliumArgs = 2
 
+// cniFieldPath is the ksail.yaml field path reported for CNI alignment errors.
+const cniFieldPath = "spec.cluster.cni"
+
 // Validator validates KSail cluster configurations for semantic correctness and cross-configuration consistency.
 type Validator struct {
 	kindConfig     *kindv1alpha4.Cluster
@@ -110,8 +113,10 @@ func (v *Validator) Validate(config *v1alpha1.Cluster) *validator.ValidationResu
 	return result
 }
 
-// validateContextName validates the context name pattern matches the distribution and cluster name.
-// Only validates when a distribution config is provided to the validator.
+// validateContextName warns when the context name does not match the pattern derived
+// from the distribution and cluster name. A non-matching context is treated as a
+// deliberate override rather than an error, since the only "valid" value is one KSail
+// can compute itself. Only checked when a distribution config is provided to the validator.
 func (v *Validator) validateContextName(
 	config *v1alpha1.Cluster,
 	result *validator.ValidationResult,
@@ -128,7 +133,7 @@ func (v *Validator) validateContextName(
 	}
 
 	if config.Spec.Cluster.Connection.Context != expectedContext {
-		result.AddError(validator.ValidationError{
+		result.AddWarning(validator.ValidationError{
 			Field:         "spec.cluster.connection.context",
 			Message:       "context name does not match expected pattern for distribution",
 			CurrentValue:  config.Spec.Cluster.Connection.Context,
@@ -153,19 +158,21 @@ func (v *Validator) validateDistribution(
 	if distribution == "" || !distribution.IsValid() {
 		var message, fixSuggestion string
 
+		validValues := strings.Join(distribution.ValidValues(), ", ")
+
 		if distribution == "" {
 			message = "distribution is required"
 			fixSuggestion = "Set spec.cluster.distribution to a supported distribution type"
 		} else {
 			message = "invalid distribution value"
-			fixSuggestion = "Use a supported distribution: Vanilla, K3s, Talos, VCluster, or KWOK"
+			fixSuggestion = "Use a supported distribution: " + validValues
 		}
 
 		result.AddError(validator.ValidationError{
 			Field:         "spec.cluster.distribution",
 			Message:       message,
 			CurrentValue:  distribution,
-			ExpectedValue: "one of: Vanilla, K3s, Talos, VCluster, KWOK, EKS",
+			ExpectedValue: "one of: " + validValues,
 			FixSuggestion: fixSuggestion,
 		})
 	}
@@ -373,7 +380,7 @@ func (v *Validator) validateKindCiliumCNIAlignment(result *validator.ValidationR
 
 	if !v.kindConfig.Networking.DisableDefaultCNI {
 		result.AddError(validator.ValidationError{
-			Field:         "spec.cni",
+			Field:         cniFieldPath,
 			Message:       "Cilium CNI requires disableDefaultCNI to be true in Kind configuration",
 			FixSuggestion: "Add 'networking.disableDefaultCNI: true' to your kind.yaml configuration file",
 		})
@@ -389,7 +396,7 @@ func (v *Validator) validateKindDefaultCNIAlignment(result *validator.Validation
 
 	if v.kindConfig.Networking.DisableDefaultCNI {
 		result.AddError(validator.ValidationError{
-			Field:         "spec.cni",
+			Field:         cniFieldPath,
 			Message:       "Default CNI requires disableDefaultCNI to be false in Kind configuration",
 			CurrentValue:  "disableDefaultCNI: true",
 			ExpectedValue: "disableDefaultCNI: false (or omit the field)",
@@ -442,7 +449,7 @@ func (v *Validator) validateK3dCiliumCNIAlignment(result *validator.ValidationRe
 	}
 
 	result.AddError(validator.ValidationError{
-		Field: "spec.cni",
+		Field: cniFieldPath,
 		Message: fmt.Sprintf(
 			"Cilium CNI requires %s in K3d configuration",
 			strings.Join(missingArgs, " and "),
@@ -477,7 +484,7 @@ func (v *Validator) validateK3dDefaultCNIAlignment(result *validator.ValidationR
 	}
 
 	result.AddError(validator.ValidationError{
-		Field: "spec.cni",
+		Field: cniFieldPath,
 		Message: fmt.Sprintf(
 			"Default CNI requires Flannel to be enabled, but found %s in K3d configuration",
 			strings.Join(problematicArgs, " and "),
@@ -498,7 +505,7 @@ func (v *Validator) validateTalosCiliumCNIAlignment(result *validator.Validation
 
 	if !v.talosConfig.IsCNIDisabled() {
 		result.AddError(validator.ValidationError{
-			Field:   "spec.cni",
+			Field:   cniFieldPath,
 			Message: "Cilium CNI requires cluster.network.cni.name to be 'none' in Talos configuration",
 			FixSuggestion: "Add a disable-default-cni.yaml patch to your talos/cluster directory with " +
 				"'cluster.network.cni.name: none', or run 'ksail cluster init --cni Cilium'",
@@ -516,7 +523,7 @@ func (v *Validator) validateTalosDefaultCNIAlignment(result *validator.Validatio
 
 	if v.talosConfig.IsCNIDisabled() {
 		result.AddError(validator.ValidationError{
-			Field:   "spec.cni",
+			Field:   cniFieldPath,
 			Message: "Default CNI requires Flannel to be enabled, but Talos configuration has CNI disabled",
 			FixSuggestion: "Remove the disable-default-cni.yaml patch from your talos/cluster directory, " +
 				"or set CNI to Cilium in your ksail.yaml",
@@ -538,11 +545,11 @@ func (v *Validator) validateGitOpsEngine(
 		return
 	default:
 		result.AddError(validator.ValidationError{
-			Field:         "spec.gitOpsEngine",
+			Field:         "spec.cluster.gitOpsEngine",
 			Message:       "invalid GitOps engine value",
 			CurrentValue:  config.Spec.Cluster.GitOpsEngine,
 			ExpectedValue: "one of: None, Flux, ArgoCD",
-			FixSuggestion: "Set spec.gitOpsEngine to a supported value (None, Flux, or ArgoCD)",
+			FixSuggestion: "Set spec.cluster.gitOpsEngine to a supported value (None, Flux, or ArgoCD)",
 		})
 	}
 }

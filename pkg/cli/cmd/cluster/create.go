@@ -92,16 +92,9 @@ func handleCreateRunE(
 
 	applyClusterMutationFlags(cmd, ctx.ClusterCfg)
 
-	// Re-validate OIDC after merging CLI scope flags which can change ExtraScopes
-	err = v1alpha1.ValidateOIDCConfig(&ctx.ClusterCfg.Spec.Cluster.OIDC)
+	err = validatePostMutationFlags(ctx)
 	if err != nil {
-		return fmt.Errorf("OIDC configuration: %w", err)
-	}
-
-	// Validate allowed CIDRs after merging CLI flags
-	err = v1alpha1.ValidateAllowedCIDRs(ctx.ClusterCfg.Spec.Provider.Hetzner.AllowedCIDRs)
-	if err != nil {
-		return fmt.Errorf("allowed CIDRs configuration: %w", err)
+		return err
 	}
 
 	err = runClusterCreationWorkflow(cmd, cfgManager, ctx, deps)
@@ -120,6 +113,9 @@ func handleCreateRunE(
 }
 
 // newProvisionerFactory returns the cluster provisioner factory, using any test override if set.
+// It is the single construction point for the default factory: every command path that needs a
+// provisioner (create, update, diff, recreate) must go through it so the distribution config
+// stays complete for all distributions.
 func newProvisionerFactory(ctx *localregistry.Context) clusterprovisioner.Factory {
 	clusterProvisionerFactoryMu.RLock()
 
@@ -131,6 +127,13 @@ func newProvisionerFactory(ctx *localregistry.Context) clusterprovisioner.Factor
 		return factoryOverride
 	}
 
+	return defaultProvisionerFactory(ctx)
+}
+
+// defaultProvisionerFactory builds the default cluster provisioner factory from the
+// pre-loaded distribution configs on the context. Every distribution config field must
+// be populated here — omitting one breaks provisioner creation for that distribution.
+func defaultProvisionerFactory(ctx *localregistry.Context) clusterprovisioner.DefaultFactory {
 	return clusterprovisioner.DefaultFactory{
 		DistributionConfig: &clusterprovisioner.DistributionConfig{
 			Kind:        ctx.KindConfig,
@@ -422,10 +425,8 @@ func maybeDisableK3dFeature(
 		return
 	}
 
-	for _, arg := range k3dConfig.Options.K3sOptions.ExtraArgs {
-		if arg.Arg == flag {
-			return
-		}
+	if hasK3sArg(k3dConfig, flag) {
+		return
 	}
 
 	k3dConfig.Options.K3sOptions.ExtraArgs = append(
@@ -480,7 +481,9 @@ func setupK3dCNI(clusterCfg *v1alpha1.Cluster, k3dConfig *v1alpha5.SimpleConfig)
 	}
 }
 
-// hasK3sArg checks whether a K3s arg flag is already present in the K3d config.
+// hasK3sArg checks whether a K3s arg flag is already present in the K3d config,
+// regardless of the entry's node filters. Use hasK3sArgForServers when the
+// pre-existing entry must cover all server nodes.
 func hasK3sArg(k3dConfig *v1alpha5.SimpleConfig, flag string) bool {
 	for _, arg := range k3dConfig.Options.K3sOptions.ExtraArgs {
 		if arg.Arg == flag {
@@ -632,10 +635,8 @@ func importCachedImages(
 
 	notify.WriteMessage(notify.Message{
 		Type:    notify.ActivityType,
-		Emoji:   "📥",
 		Content: "importing cached images from %s",
 		Args:    []any{importPath},
-		Timer:   outputTimer,
 		Writer:  cmd.OutOrStdout(),
 	})
 

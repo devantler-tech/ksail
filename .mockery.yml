@@ -36,7 +36,6 @@ packages:
       pkgname: clusterprovisioner
     interfaces:
       Provisioner:
-      Factory:
   github.com/devantler-tech/ksail/v7/pkg/fsutil/validator:
     config:
       recursive: false
@@ -52,7 +51,6 @@ packages:
       filename: mocks.go
       pkgname: docker
     interfaces:
-      ContainerAPIClient:
       APIClient:
   github.com/devantler-tech/ksail/v7/pkg/timer:
     config:
@@ -85,15 +83,7 @@ packages:
       filename: mocks.go
       pkgname: kindprovisioner
     interfaces:
-      KindProvider:
-  github.com/devantler-tech/ksail/v7/pkg/di:
-    config:
-      recursive: false
-      dir: pkg/di
-      filename: mocks.go
-      pkgname: di
-    interfaces:
-      Injector:
+      Provider:
   github.com/devantler-tech/ksail/v7/pkg/fsutil/marshaller:
     config:
       recursive: false

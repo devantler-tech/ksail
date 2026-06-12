@@ -46,19 +46,6 @@ const (
 	oidcFileName = "oidc.yaml"
 )
 
-// KubeletServingCertApproverManifestURL is the URL for the kubelet-serving-cert-approver manifest.
-// This is installed during Talos bootstrap to automatically approve kubelet serving certificate CSRs.
-// Note: We use alex1989hu/kubelet-serving-cert-approver for Talos because it provides a single
-// manifest URL suitable for extraManifests. For non-Talos distributions, we use
-// postfinance/kubelet-csr-approver via Helm which offers more features and configurability.
-// See: https://docs.siderolabs.com/kubernetes-guides/monitoring-and-observability/deploy-metrics-server/
-//
-// Deprecated: Use csrapprover.Manifest() with inlineManifests instead of this URL.
-// This constant is retained for backward compatibility with existing patch files.
-//
-//nolint:lll // URL cannot be shortened
-const KubeletServingCertApproverManifestURL = "https://raw.githubusercontent.com/alex1989hu/kubelet-serving-cert-approver/main/deploy/standalone-install.yaml"
-
 // DisableDefaultCNIPatchYAML is the Talos machine config patch YAML that disables the
 // default CNI (Flannel). This is the single source of truth for the patch content,
 // shared between the generator (file-based scaffolding) and the runtime config manager

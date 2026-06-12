@@ -428,15 +428,21 @@ export async function updateCluster(
 
 /**
  * Get cluster info
+ *
+ * `ksail cluster info` accepts --name/--provider (not --context).
  */
 export async function clusterInfo(
-  contextName?: string,
+  name?: string,
+  provider?: string,
   outputChannel?: vscode.OutputChannel
 ): Promise<string> {
   const args = ["cluster", "info"];
 
-  if (contextName) {
-    args.push("--context", contextName);
+  if (name) {
+    args.push("--name", name);
+  }
+  if (provider) {
+    args.push("--provider", provider);
   }
 
   const result = await runKsailCommand(args, undefined, outputChannel);

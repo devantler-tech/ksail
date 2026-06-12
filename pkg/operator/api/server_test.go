@@ -199,6 +199,11 @@ func TestCreateClusterWhenWritable(t *testing.T) {
 	assert.Equal(t, http.StatusCreated, recorder.Code)
 }
 
+// readOnlyBody is the exact 403 read-only rejection body — a wire contract: the SPA parses the
+// "reason" key (web/ui/src/api.ts detailFromBody), so every read-only rejection (the middleware
+// guard and the exec handler's self-check) must emit it byte-identically.
+const readOnlyBody = `{"readOnly":true,"reason":"UI is configured read-only (GitOps-enforced)"}`
+
 func TestReadOnlyRejectsCreate(t *testing.T) {
 	t.Parallel()
 
@@ -208,7 +213,8 @@ func TestReadOnlyRejectsCreate(t *testing.T) {
 	recorder := doRequest(server.Handler(), http.MethodPost, "/api/v1/clusters", body)
 
 	assert.Equal(t, http.StatusForbidden, recorder.Code)
-	assert.Contains(t, recorder.Body.String(), "readOnly")
+	//nolint:testifylint // assert the exact bytes: the body is a wire contract, JSON-equivalence is too weak
+	assert.Equal(t, readOnlyBody, recorder.Body.String())
 }
 
 func TestReadOnlyRejectsDelete(t *testing.T) {

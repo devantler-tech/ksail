@@ -6,8 +6,6 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
 	"github.com/devantler-tech/ksail/v7/pkg/di"
-	"github.com/devantler-tech/ksail/v7/pkg/svc/repairer"
-	talosconfigrepair "github.com/devantler-tech/ksail/v7/pkg/svc/repairer/talosconfig"
 	"github.com/spf13/cobra"
 )
 
@@ -101,8 +99,7 @@ func NewClusterCmd(runtimeContainer *di.Runtime) *cobra.Command {
 	cmd.AddCommand(NewBackupCmd(runtimeContainer))
 	cmd.AddCommand(NewRestoreCmd(runtimeContainer))
 	cmd.AddCommand(NewSwitchCmd(runtimeContainer))
-	talosconfigrepair.RegisterDefault(repairer.Default())
-	cmd.AddCommand(NewRepairCmd(runtimeContainer, repairer.Default()))
+	cmd.AddCommand(NewRepairCmd(runtimeContainer, nil))
 
 	return cmd
 }

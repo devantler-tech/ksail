@@ -166,6 +166,8 @@ func (p *Provider) DeleteNodes(_ context.Context, _ string) error {
 
 // GetClusterStatus aggregates nodegroup statuses into a provider.ClusterStatus.
 // Returns provider.ErrClusterNotFound when the cluster does not exist in EKS.
+// A cluster that exists but has no managed nodegroups yields a zero-node
+// "stopped" status rather than a nil status.
 func (p *Provider) GetClusterStatus(
 	ctx context.Context,
 	clusterName string,
@@ -184,7 +186,16 @@ func (p *Provider) GetClusterStatus(
 		return nil, fmt.Errorf("get cluster status: %w", err)
 	}
 
-	return provider.BuildClusterStatus(nodes, NodegroupStatusActive), nil
+	status := provider.BuildClusterStatus(nodes, NodegroupStatusActive)
+	if status == nil {
+		// BuildClusterStatus returns nil for an empty node list, but the
+		// cluster exists (GetCluster succeeded above) — only its nodegroups
+		// are absent. Return a zero-node status so callers can rely on the
+		// (status, err) contract: status is non-nil whenever err is nil.
+		status = &provider.ClusterStatus{Phase: "stopped", Nodes: nodes}
+	}
+
+	return status, nil
 }
 
 // Region returns the AWS region this provider was configured with.

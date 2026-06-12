@@ -1,16 +1,15 @@
 # ksail-operator
 
-The KSail Kubernetes operator and optional web UI for declarative cluster management.
+The KSail Kubernetes operator and embedded web UI for declarative cluster management.
 
-The operator reconciles `Cluster` resources (`ksail.io/v1alpha1`) so you can provision and manage KSail-supported distributions from inside a Kubernetes cluster. An optional web UI and OIDC-authenticated REST API are included.
+The operator reconciles `Cluster` resources (`ksail.io/v1alpha1`) so you can provision and manage KSail-supported distributions from inside a Kubernetes cluster. A web UI and OIDC-authenticated REST API are embedded in the operator binary.
 
 ## What it deploys
 
 - **Operator** — a controller that reconciles `Cluster` custom resources.
 - **`Cluster` CRD** — installed from the chart's `crds/` directory.
 - **RBAC** — a `ServiceAccount` plus the (Cluster)Role and binding the operator needs.
-- **REST API** — served by the operator and consumed by the UI (toggle with `api.bindPort`).
-- **Web UI** _(optional)_ — a dashboard that talks to the REST API (`ui.enabled`).
+- **REST API & Web UI** — both embedded in the operator binary and served on the same port (`api.bindPort`; set to `0` to disable both). There is no separate UI container, Deployment, or Service.
 - **OIDC auth** _(optional)_ — app-driven OIDC login that protects the REST API and UI (`auth.oidc.enabled`).
 - **Host cluster registration** — the operator self-registers the cluster it runs on as a `Cluster` resource named `host` (labelled `ksail.io/host-cluster`) in the release namespace, so the hub itself appears in the cluster list and its workloads can be browsed in the UI — like Rancher's `local` cluster or Argo CD's `in-cluster` destination. The operator never provisions, updates, or deletes the underlying cluster for this entry, and the API rejects lifecycle mutations on it. Disable with `hostCluster.enabled=false`.
 
@@ -71,18 +70,14 @@ EOF
 kubectl get clusters -n ksail-system -w
 ```
 
-### Enable the web UI
+### Reach the web UI
+
+The web UI is embedded in the operator binary and served by the operator itself on the API port (`api.bindPort`, default `8080`) — same origin as the REST API. It is available whenever the API is enabled; no extra `--set` flags are needed.
+
+Set `ui.readOnly=true` for GitOps-enforced environments so the Git repository stays the single source of truth; the operator enforces read-only server-side. When `ui.ingress.enabled` is `false`, port-forward the operator Service to reach the UI. The Service is named `<release-name>-ksail-operator` (unless you set `fullnameOverride`), so for the install above:
 
 ```sh
-helm upgrade --install ksail-operator charts/ksail-operator \
-  --namespace ksail-system --create-namespace \
-  --set ui.enabled=true
-```
-
-Set `ui.readOnly=true` for GitOps-enforced environments so the Git repository stays the single source of truth; the operator enforces read-only server-side. When `ui.ingress.enabled` is `false`, port-forward to reach the UI. The UI Service is named `<release-name>-ksail-operator-ui` (unless you set `fullnameOverride`), so for the install above:
-
-```sh
-kubectl port-forward -n ksail-system svc/ksail-operator-ksail-operator-ui 8080:80
+kubectl port-forward -n ksail-system svc/ksail-operator-ksail-operator 8080:8080
 ```
 
 Then open <http://localhost:8080>.
@@ -94,7 +89,6 @@ OIDC closes the otherwise-unauthenticated REST API: the API owns the login/callb
 ```sh
 helm upgrade --install ksail-operator charts/ksail-operator \
   --namespace ksail-system --create-namespace \
-  --set ui.enabled=true \
   --set ui.ingress.enabled=true \
   --set ui.ingress.hosts[0].host=ksail.local \
   --set auth.oidc.enabled=true \
@@ -144,22 +138,16 @@ Register the redirect URL with your provider, and point `ksail.local` at your In
 
 ### Web UI
 
+The UI is embedded in the operator binary and served on `api.bindPort` — it has no image, replica, Service, or resource settings of its own.
+
 | Key                      | Description                                                               | Default                                                       |
 |--------------------------|---------------------------------------------------------------------------|---------------------------------------------------------------|
-| `ui.enabled`             | Deploy the optional web UI.                                               | `false`                                                       |
 | `ui.readOnly`            | Lock the deployment to read-only mode (enforced server-side via the API). | `false`                                                       |
-| `ui.image.repository`    | UI image repository.                                                      | `ghcr.io/devantler-tech/ksail/web-ui`                         |
-| `ui.image.tag`           | UI image tag. Defaults to the chart `appVersion` when empty.              | `""`                                                          |
-| `ui.image.pullPolicy`    | UI image pull policy.                                                     | `IfNotPresent`                                                |
-| `ui.replicas`            | Number of UI replicas.                                                    | `1`                                                           |
-| `ui.service.type`        | UI Service type.                                                          | `ClusterIP`                                                   |
-| `ui.service.port`        | UI Service port.                                                          | `80`                                                          |
 | `ui.ingress.enabled`     | Create an Ingress for the UI.                                             | `false`                                                       |
 | `ui.ingress.className`   | Ingress class name.                                                       | `""`                                                          |
 | `ui.ingress.annotations` | Ingress annotations.                                                      | `{}`                                                          |
 | `ui.ingress.hosts`       | Ingress host/path rules.                                                  | `[{host: ksail.local, paths: [{path: /, pathType: Prefix}]}]` |
 | `ui.ingress.tls`         | Ingress TLS configuration.                                                | `[]`                                                          |
-| `ui.resources`           | UI resource requests/limits.                                              | requests `50m`/`64Mi`, limits `128Mi`                         |
 
 ### OIDC authentication
 
@@ -176,12 +164,13 @@ Register the redirect URL with your provider, and point `ksail.local` at your In
 
 ### ServiceAccount & RBAC
 
-| Key                          | Description                   | Default |
-|------------------------------|-------------------------------|---------|
-| `serviceAccount.create`      | Create a ServiceAccount.      | `true`  |
-| `serviceAccount.name`        | ServiceAccount name override. | `""`    |
-| `serviceAccount.annotations` | ServiceAccount annotations.   | `{}`    |
-| `rbac.create`                | Create RBAC resources.        | `true`  |
+| Key                          | Description                                                                                                          | Default |
+|------------------------------|----------------------------------------------------------------------------------------------------------------------|---------|
+| `serviceAccount.create`      | Create a ServiceAccount.                                                                                             | `true`  |
+| `serviceAccount.name`        | ServiceAccount name override.                                                                                        | `""`    |
+| `serviceAccount.annotations` | ServiceAccount annotations.                                                                                          | `{}`    |
+| `rbac.create`                | Create RBAC resources.                                                                                               | `true`  |
+| `rbac.clusterAdmin`          | Grant a full wildcard ClusterRole (cluster-admin) instead of the least-privilege default. Opt in only when a distribution/component set needs resources the default does not cover. | `false` |
 
 ### Scheduling
 

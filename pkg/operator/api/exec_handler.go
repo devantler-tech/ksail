@@ -72,13 +72,10 @@ func (s *Server) handleExec(writer http.ResponseWriter, request *http.Request) {
 	}
 
 	// Exec runs arbitrary commands in a workload, so it is refused in read-only mode. The read-only
-	// guard does not catch it (the WebSocket upgrade is a GET), so the check lives here — mirroring the
-	// guard's response shape so the SPA recognizes it.
+	// guard does not catch it (the WebSocket upgrade is a GET), so the check lives here — sharing the
+	// guard's response body so the SPA recognizes it.
 	if s.ReadOnly {
-		writeJSON(writer, http.StatusForbidden, map[string]any{
-			"readOnly": true,
-			"reason":   "UI is configured read-only (GitOps-enforced)",
-		})
+		writeReadOnlyError(writer)
 
 		return
 	}

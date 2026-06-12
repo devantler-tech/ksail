@@ -82,8 +82,42 @@ export function IconButton({ label, className, children, ...props }: IconButtonP
   );
 }
 
-export function Spinner({ className }: { className?: string }) {
-  return <LoaderCircle className={cx("size-4 animate-spin", className)} aria-hidden />;
+// SegmentedControl is a small toggle between a fixed set of options (e.g. YAML/JSON or Form/YAML)
+// rendered as adjoining segments with one active. onChange only fires when a different segment is
+// picked, so callers can run conversions on switch without guarding against re-clicks.
+export function SegmentedControl<T extends string>({
+  options,
+  value,
+  onChange,
+}: {
+  options: readonly { value: T; label: string }[];
+  value: T;
+  onChange: (value: T) => void;
+}) {
+  return (
+    <div className="inline-flex overflow-hidden rounded-md ring-1 ring-inset ring-slate-300 dark:ring-slate-700">
+      {options.map((option) => (
+        <button
+          key={option.value}
+          type="button"
+          aria-pressed={value === option.value}
+          onClick={() => {
+            if (value !== option.value) {
+              onChange(option.value);
+            }
+          }}
+          className={cx(
+            "px-2.5 py-1 text-xs font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-blue-600",
+            value === option.value
+              ? "bg-blue-600 text-white"
+              : "bg-white text-slate-600 hover:bg-slate-50 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700",
+          )}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  );
 }
 
 const backdrop = (

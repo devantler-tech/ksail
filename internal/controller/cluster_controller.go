@@ -290,13 +290,13 @@ func (r *ClusterReconciler) reconcileHost(
 
 	r.observeStatusWith(ctx, r.ObserveHostStatus, cluster)
 
-	apimeta.SetStatusCondition(&cluster.Status.Conditions, metav1.Condition{
-		Type:               v1alpha1.ConditionComponentsReady,
-		Status:             metav1.ConditionUnknown,
-		ObservedGeneration: cluster.Generation,
-		Reason:             "HostCluster",
-		Message:            "components on the host cluster are not managed by the operator",
-	})
+	setCondition(
+		cluster,
+		v1alpha1.ConditionComponentsReady,
+		metav1.ConditionUnknown,
+		"HostCluster",
+		"components on the host cluster are not managed by the operator",
+	)
 
 	r.markReady(cluster)
 
@@ -324,13 +324,13 @@ func (r *ClusterReconciler) reconcileComponents(
 	applied, err := r.InstallComponents(ctx, provisioner, cluster)
 	if err != nil {
 		logf.FromContext(ctx).Info("install components (best-effort)", "error", err.Error())
-		apimeta.SetStatusCondition(&cluster.Status.Conditions, metav1.Condition{
-			Type:               v1alpha1.ConditionComponentsReady,
-			Status:             metav1.ConditionFalse,
-			ObservedGeneration: cluster.Generation,
-			Reason:             "ComponentsFailed",
-			Message:            err.Error(),
-		})
+		setCondition(
+			cluster,
+			v1alpha1.ConditionComponentsReady,
+			metav1.ConditionFalse,
+			"ComponentsFailed",
+			err.Error(),
+		)
 
 		return false
 	}
@@ -338,24 +338,24 @@ func (r *ClusterReconciler) reconcileComponents(
 	if !applied {
 		// Component installation is not supported for this cluster (e.g. the provisioner exposes no
 		// operator-reachable kubeconfig). Report Unknown rather than a misleading Ready=True.
-		apimeta.SetStatusCondition(&cluster.Status.Conditions, metav1.Condition{
-			Type:               v1alpha1.ConditionComponentsReady,
-			Status:             metav1.ConditionUnknown,
-			ObservedGeneration: cluster.Generation,
-			Reason:             "NotSupported",
-			Message:            "component installation is not supported for this distribution/provider",
-		})
+		setCondition(
+			cluster,
+			v1alpha1.ConditionComponentsReady,
+			metav1.ConditionUnknown,
+			"NotSupported",
+			"component installation is not supported for this distribution/provider",
+		)
 
 		return true
 	}
 
-	apimeta.SetStatusCondition(&cluster.Status.Conditions, metav1.Condition{
-		Type:               v1alpha1.ConditionComponentsReady,
-		Status:             metav1.ConditionTrue,
-		ObservedGeneration: cluster.Generation,
-		Reason:             reasonReconciled,
-		Message:            "Components installed and reconciled",
-	})
+	setCondition(
+		cluster,
+		v1alpha1.ConditionComponentsReady,
+		metav1.ConditionTrue,
+		reasonReconciled,
+		"Components installed and reconciled",
+	)
 
 	return true
 }
@@ -662,6 +662,23 @@ func (r *ClusterReconciler) reader() client.Reader {
 	return r.Client
 }
 
+// setCondition records a condition of the given type on the cluster status, observed at the
+// cluster's current generation.
+func setCondition(
+	cluster *v1alpha1.Cluster,
+	conditionType string,
+	status metav1.ConditionStatus,
+	reason, message string,
+) {
+	apimeta.SetStatusCondition(&cluster.Status.Conditions, metav1.Condition{
+		Type:               conditionType,
+		Status:             status,
+		ObservedGeneration: cluster.Generation,
+		Reason:             reason,
+		Message:            message,
+	})
+}
+
 // fail records a failure on the cluster status and returns a requeue so reconciliation retries.
 func (r *ClusterReconciler) fail(
 	ctx context.Context,
@@ -674,28 +691,11 @@ func (r *ClusterReconciler) fail(
 	cluster.Status.Phase = v1alpha1.ClusterPhaseFailed
 	cluster.Status.ObservedGeneration = cluster.Generation
 
-	apimeta.SetStatusCondition(&cluster.Status.Conditions, metav1.Condition{
-		Type:               v1alpha1.ConditionReady,
-		Status:             metav1.ConditionFalse,
-		ObservedGeneration: cluster.Generation,
-		Reason:             reason,
-		Message:            cause.Error(),
-	})
-	apimeta.SetStatusCondition(&cluster.Status.Conditions, metav1.Condition{
-		Type:               v1alpha1.ConditionDegraded,
-		Status:             metav1.ConditionTrue,
-		ObservedGeneration: cluster.Generation,
-		Reason:             reason,
-		Message:            cause.Error(),
-	})
+	message := cause.Error()
+	setCondition(cluster, v1alpha1.ConditionReady, metav1.ConditionFalse, reason, message)
+	setCondition(cluster, v1alpha1.ConditionDegraded, metav1.ConditionTrue, reason, message)
 	// Clear Progressing so a previously-Progressing cluster does not stay Progressing while Failed.
-	apimeta.SetStatusCondition(&cluster.Status.Conditions, metav1.Condition{
-		Type:               v1alpha1.ConditionProgressing,
-		Status:             metav1.ConditionFalse,
-		ObservedGeneration: cluster.Generation,
-		Reason:             reason,
-		Message:            cause.Error(),
-	})
+	setCondition(cluster, v1alpha1.ConditionProgressing, metav1.ConditionFalse, reason, message)
 
 	statusErr := r.updateStatusIfChanged(ctx, cluster, before)
 	if statusErr != nil {
@@ -712,13 +712,7 @@ func (r *ClusterReconciler) markProgressing(
 	reason, message string,
 ) {
 	cluster.Status.Phase = phase
-	apimeta.SetStatusCondition(&cluster.Status.Conditions, metav1.Condition{
-		Type:               v1alpha1.ConditionProgressing,
-		Status:             metav1.ConditionTrue,
-		ObservedGeneration: cluster.Generation,
-		Reason:             reason,
-		Message:            message,
-	})
+	setCondition(cluster, v1alpha1.ConditionProgressing, metav1.ConditionTrue, reason, message)
 }
 
 // markReady records a successful reconciliation. LastReconcileTime is set by
@@ -729,27 +723,21 @@ func (r *ClusterReconciler) markReady(cluster *v1alpha1.Cluster) {
 
 	const message = "Cluster is reconciled and ready"
 
-	apimeta.SetStatusCondition(&cluster.Status.Conditions, metav1.Condition{
-		Type:               v1alpha1.ConditionReady,
-		Status:             metav1.ConditionTrue,
-		ObservedGeneration: cluster.Generation,
-		Reason:             reasonReconciled,
-		Message:            message,
-	})
-	apimeta.SetStatusCondition(&cluster.Status.Conditions, metav1.Condition{
-		Type:               v1alpha1.ConditionProgressing,
-		Status:             metav1.ConditionFalse,
-		ObservedGeneration: cluster.Generation,
-		Reason:             reasonReconciled,
-		Message:            message,
-	})
-	apimeta.SetStatusCondition(&cluster.Status.Conditions, metav1.Condition{
-		Type:               v1alpha1.ConditionDegraded,
-		Status:             metav1.ConditionFalse,
-		ObservedGeneration: cluster.Generation,
-		Reason:             reasonReconciled,
-		Message:            message,
-	})
+	setCondition(cluster, v1alpha1.ConditionReady, metav1.ConditionTrue, reasonReconciled, message)
+	setCondition(
+		cluster,
+		v1alpha1.ConditionProgressing,
+		metav1.ConditionFalse,
+		reasonReconciled,
+		message,
+	)
+	setCondition(
+		cluster,
+		v1alpha1.ConditionDegraded,
+		metav1.ConditionFalse,
+		reasonReconciled,
+		message,
+	)
 }
 
 // provisionAndRecord creates the underlying cluster and records the applied spec baseline.

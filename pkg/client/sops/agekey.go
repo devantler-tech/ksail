@@ -27,9 +27,9 @@ func GetAgeKeyPath() (string, error) {
 	return p, nil
 }
 
-// ValidateAgeKey performs basic validation on an age private key string.
+// validateAgeKey performs basic validation on an age private key string.
 // The input must start with "AGE-SECRET-KEY-" and meet minimum length requirements.
-func ValidateAgeKey(privateKey string) error {
+func validateAgeKey(privateKey string) error {
 	privateKey = strings.TrimSpace(privateKey)
 
 	if privateKey == "" {
@@ -65,8 +65,8 @@ func DerivePublicKey(privateKey string) (string, error) {
 	return recipient.String(), nil
 }
 
-// FormatAgeKeyWithMetadata formats an age private key with metadata comments.
-func FormatAgeKeyWithMetadata(privateKey, publicKey string) string {
+// formatAgeKeyWithMetadata formats an age private key with metadata comments.
+func formatAgeKeyWithMetadata(privateKey, publicKey string) string {
 	var builder strings.Builder
 
 	// Add creation timestamp
@@ -92,18 +92,18 @@ func FormatAgeKeyWithMetadata(privateKey, publicKey string) string {
 	return builder.String()
 }
 
-// WriteKeyToFile writes the formatted key to the target path, either creating a new file or appending to existing one.
-func WriteKeyToFile(targetPath, formattedKey string) error {
+// writeKeyToFile writes the formatted key to the target path, either creating a new file or appending to existing one.
+func writeKeyToFile(targetPath, formattedKey string) error {
 	_, statErr := os.Stat(targetPath)
 	if statErr != nil {
-		return HandleNewFile(targetPath, formattedKey, statErr)
+		return handleNewFile(targetPath, formattedKey, statErr)
 	}
 
-	return AppendToExistingFile(targetPath, formattedKey)
+	return appendToExistingFile(targetPath, formattedKey)
 }
 
-// HandleNewFile creates a new file with the formatted key or returns an error if stat failed for other reasons.
-func HandleNewFile(targetPath, formattedKey string, statErr error) error {
+// handleNewFile creates a new file with the formatted key or returns an error if stat failed for other reasons.
+func handleNewFile(targetPath, formattedKey string, statErr error) error {
 	if errors.Is(statErr, os.ErrNotExist) {
 		// File does not exist yet; create it
 		err := os.WriteFile(targetPath, []byte(formattedKey), AgeKeyFilePermissions)
@@ -118,8 +118,8 @@ func HandleNewFile(targetPath, formattedKey string, statErr error) error {
 	return fmt.Errorf("%w to %s: %w", ErrFailedToWriteKey, targetPath, statErr)
 }
 
-// AppendToExistingFile appends the formatted key to an existing file.
-func AppendToExistingFile(targetPath, formattedKey string) error {
+// appendToExistingFile appends the formatted key to an existing file.
+func appendToExistingFile(targetPath, formattedKey string) error {
 	//#nosec G304 -- targetPath comes from GetAgeKeyPath
 	file, openErr := os.OpenFile(
 		targetPath,
@@ -150,7 +150,7 @@ func AppendToExistingFile(targetPath, formattedKey string) error {
 // ImportKey imports an age private key and automatically derives the public key.
 func ImportKey(privateKey string) error {
 	// Validate the private key
-	err := ValidateAgeKey(privateKey)
+	err := validateAgeKey(privateKey)
 	if err != nil {
 		return err
 	}
@@ -176,8 +176,8 @@ func ImportKey(privateKey string) error {
 	}
 
 	// Format key with metadata
-	formattedKey := FormatAgeKeyWithMetadata(privateKey, publicKey)
+	formattedKey := formatAgeKeyWithMetadata(privateKey, publicKey)
 
 	// Write or append key to file
-	return WriteKeyToFile(targetPath, formattedKey)
+	return writeKeyToFile(targetPath, formattedKey)
 }

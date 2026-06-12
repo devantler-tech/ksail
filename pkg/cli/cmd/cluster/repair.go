@@ -11,23 +11,22 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// NewRepairCmd creates the `ksail cluster repair` command, backed by
-// the supplied [repairer.Registry]. Pass [repairer.Default] for normal
-// operation; tests can pass an isolated registry from
-// [repairer.NewRegistry] to avoid cross-package contention.
+// NewRepairCmd creates the `ksail cluster repair` command, running the
+// supplied repairs. Pass nil for normal operation (defaults to
+// [talosconfigrepair.DefaultRepairs]); tests can pass their own slice to
+// avoid cross-package contention.
 //
-// The command runs every [repairer.Repair] registered with the
-// supplied registry, printing one status line per repair. It is
-// idempotent and safe to run repeatedly. The first registered repair
-// fixes a known single-byte corruption in Talos talosconfig CA bytes
-// that produces:
+// The command runs every supplied [repairer.Repair], printing one status
+// line per repair. It is idempotent and safe to run repeatedly. The first
+// default repair fixes a known single-byte corruption in Talos talosconfig
+// CA bytes that produces:
 //
 //	failed to append CA certificate to RootCAs pool
 //
 // during `ksail cluster update`.
-func NewRepairCmd(_ *di.Runtime, registry *repairer.Registry) *cobra.Command {
-	if registry == nil {
-		registry = repairer.Default()
+func NewRepairCmd(_ *di.Runtime, repairs []repairer.Repair) *cobra.Command {
+	if repairs == nil {
+		repairs = talosconfigrepair.DefaultRepairs()
 	}
 
 	var talosconfigPath string
@@ -46,7 +45,7 @@ Each repair is idempotent and writes a timestamped backup of any file
 it modifies.`,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runRepair(cmd.Context(), cmd, registry, talosconfigPath)
+			return runRepair(cmd.Context(), cmd, repairs, talosconfigPath)
 		},
 	}
 
@@ -63,12 +62,11 @@ it modifies.`,
 func runRepair(
 	ctx context.Context,
 	cmd *cobra.Command,
-	registry *repairer.Registry,
+	repairs []repairer.Repair,
 	talosconfigPath string,
 ) error {
 	out := cmd.OutOrStdout()
 
-	repairs := registry.All()
 	configurePerRepairOptions(repairs, talosconfigPath)
 
 	if len(repairs) == 0 {

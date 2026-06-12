@@ -8,7 +8,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -198,13 +197,6 @@ type message struct {
 	chatMode    ChatMode         // the chat mode when this message was sent (for user messages)
 }
 
-// permissionResponse records a user's response to a permission request.
-type permissionResponse struct {
-	toolName string
-	command  string
-	allowed  bool
-}
-
 // pendingPrompt represents a prompt that has been queued but not yet sent.
 // It captures the full state at the time of queuing so that mode changes
 // after queuing don't affect the prompt's execution.
@@ -259,25 +251,17 @@ type Model struct {
 	unsubscribeMu   sync.Mutex // protects unsubscribe access
 
 	// Token usage tracking (updated via AssistantUsage events)
-	lastUsageModel   string  // model used in the last usage event
-	lastInputTokens  float64 // input tokens from the last usage event
-	lastOutputTokens float64 // output tokens from the last usage event
-	lastCost         float64 // cost from the last usage event
+	lastUsageModel string // model used in the last usage event
 
 	// Quota tracking (updated via QuotaSnapshots in AssistantUsage events)
 	lastQuotaSnapshots map[string]quotaSnapshot // keyed by quota category (e.g., "premium")
-
-	// Compaction state (updated via SessionCompaction events)
-	isCompacting bool // true while context compaction is in progress
 
 	// Dimensions
 	width  int
 	height int
 
 	// Help system
-	help            help.Model // bubbles/help model for rendering help
-	keys            KeyMap     // structured keybindings
-	showHelpOverlay bool       // true when help overlay is visible
+	showHelpOverlay bool // true when help overlay is visible
 
 	// Copilot session and model switching
 	session       *copilot.Session
@@ -301,7 +285,6 @@ type Model struct {
 
 	// Permission request handling
 	pendingPermission *permissionRequestMsg // current permission request awaiting user response
-	permissionHistory []permissionResponse  // history of permission decisions
 
 	// Elicitation request handling
 	pendingElicitation *pendingElicitation // current elicitation request awaiting user response
@@ -393,8 +376,6 @@ func NewModel(params Params) *Model {
 		textarea:         textArea,
 		spinner:          spin,
 		renderer:         mdRenderer,
-		help:             createHelpModel(styles),
-		keys:             DefaultKeyMap(),
 		messages:         make([]message, 0),
 		session:          params.Session,
 		client:           params.Client,
@@ -489,8 +470,7 @@ func (m *Model) Update(
 		return m.handleUserSubmit(msg)
 
 	case streamChunkMsg, assistantMessageMsg, toolStartMsg, toolEndMsg,
-		toolOutputChunkMsg, ToolOutputChunkMsg, permissionRequestMsg,
-		PermissionRequestMsg, elicitationRequestMsg,
+		ToolOutputChunkMsg, permissionRequestMsg, elicitationRequestMsg,
 		streamEndMsg, turnStartMsg, turnEndMsg,
 		reasoningMsg, abortMsg, snapshotRewindMsg, streamErrMsg,
 		usageMsg, compactionStartMsg, compactionCompleteMsg,
@@ -636,23 +616,11 @@ func (m *Model) handleStreamEvent(
 	case toolEndMsg:
 		return m.handleToolEnd(msg)
 
-	case toolOutputChunkMsg:
-		return m.handleToolOutputChunk(msg.toolID, msg.chunk)
-
 	case ToolOutputChunkMsg:
 		return m.handleToolOutputChunk(msg.ToolID, msg.Chunk)
 
 	case permissionRequestMsg:
 		return m.handlePermissionRequest(&msg)
-
-	case PermissionRequestMsg:
-		return m.handlePermissionRequest(&permissionRequestMsg{
-			toolCallID: msg.ToolCallID,
-			toolName:   msg.ToolName,
-			command:    msg.Command,
-			arguments:  msg.Arguments,
-			response:   msg.Response,
-		})
 
 	case elicitationRequestMsg:
 		return m.handleElicitationRequest(msg)

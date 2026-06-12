@@ -10,6 +10,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const cipherOperationParam = "cipher_operation"
+
 func TestToolParametersFromJSON(t *testing.T) {
 	t.Parallel()
 
@@ -185,7 +187,7 @@ func TestConsolidatedToolExecution_WithPositionalArgs(t *testing.T) {
 		CommandPath:     "ksail cipher",
 		CommandParts:    []string{"ksail", "cipher"},
 		IsConsolidated:  true,
-		SubcommandParam: "cipher_operation",
+		SubcommandParam: cipherOperationParam,
 		Subcommands: map[string]*toolgen.SubcommandDef{
 			"encrypt": {
 				Name:         "encrypt",
@@ -208,8 +210,8 @@ func TestConsolidatedToolExecution_WithPositionalArgs(t *testing.T) {
 		t.Parallel()
 
 		args, err := toolgen.BuildCommandArgs(tool, map[string]any{
-			"cipher_operation": "encrypt",
-			"args":             []any{"secrets.yaml"},
+			cipherOperationParam: "encrypt",
+			"args":               []any{"secrets.yaml"},
 		})
 
 		require.NoError(t, err)
@@ -222,8 +224,8 @@ func TestConsolidatedToolExecution_WithPositionalArgs(t *testing.T) {
 		t.Parallel()
 
 		_, err := toolgen.BuildCommandArgs(tool, map[string]any{
-			"cipher_operation": "list",
-			"args":             []any{"extra-arg"},
+			cipherOperationParam: "list",
+			"args":               []any{"extra-arg"},
 		})
 
 		require.ErrorIs(t, err, toolgen.ErrArgsNotAccepted)

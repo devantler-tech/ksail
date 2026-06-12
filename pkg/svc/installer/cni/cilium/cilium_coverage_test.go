@@ -17,7 +17,7 @@ func TestInstaller_Install_TalosDistribution(t *testing.T) {
 	t.Parallel()
 
 	client := helm.NewMockInterface(t)
-	installer := ciliuminstaller.NewInstallerWithDistribution(
+	installer := ciliuminstaller.NewInstaller(
 		client,
 		"/path/to/kubeconfig",
 		"test-context",
@@ -67,7 +67,7 @@ func TestInstaller_Install_HetznerProvider(t *testing.T) {
 	t.Parallel()
 
 	client := helm.NewMockInterface(t)
-	installer := ciliuminstaller.NewInstallerWithDistribution(
+	installer := ciliuminstaller.NewInstaller(
 		client,
 		"/path/to/kubeconfig",
 		"test-context",
@@ -117,7 +117,7 @@ func TestInstaller_Install_TalosDockerWithLoadBalancer(t *testing.T) {
 	t.Parallel()
 
 	client := helm.NewMockInterface(t)
-	installer := ciliuminstaller.NewInstallerWithDistribution(
+	installer := ciliuminstaller.NewInstaller(
 		client,
 		"/path/to/kubeconfig",
 		"test-context",
@@ -167,7 +167,7 @@ func TestInstaller_Images_Success(t *testing.T) {
 	t.Parallel()
 
 	client := helm.NewMockInterface(t)
-	installer := ciliuminstaller.NewInstallerWithDistribution(
+	installer := ciliuminstaller.NewInstaller(
 		client,
 		"/path/to/kubeconfig",
 		"test-context",
@@ -204,7 +204,7 @@ spec:
 func TestInstaller_Images_NilClient(t *testing.T) {
 	t.Parallel()
 
-	installer := ciliuminstaller.NewInstallerWithDistribution(
+	installer := ciliuminstaller.NewInstaller(
 		nil,
 		"/path/to/kubeconfig",
 		"test-context",
@@ -226,7 +226,7 @@ func TestInstaller_Uninstall_ContextCanceled(t *testing.T) {
 	t.Parallel()
 
 	client := helm.NewMockInterface(t)
-	installer := ciliuminstaller.NewInstallerWithDistribution(
+	installer := ciliuminstaller.NewInstaller(
 		client,
 		"/path/to/kubeconfig",
 		"test-context",

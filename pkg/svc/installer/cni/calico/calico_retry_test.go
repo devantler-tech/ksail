@@ -29,7 +29,7 @@ func TestInstaller_Install_TalosDistribution_Values(t *testing.T) {
 	t.Parallel()
 
 	client := helm.NewMockInterface(t)
-	installer := calicoinstaller.NewInstallerWithDistribution(
+	installer := calicoinstaller.NewInstaller(
 		client,
 		"/path/to/kubeconfig",
 		"test-context",
@@ -57,7 +57,7 @@ func TestInstaller_Install_APIDiscoveryErrorRetry(t *testing.T) {
 	t.Parallel()
 
 	client := helm.NewMockInterface(t)
-	installer := calicoinstaller.NewInstallerWithDistribution(
+	installer := calicoinstaller.NewInstaller(
 		client,
 		"/path/to/kubeconfig",
 		"test-context",
@@ -101,7 +101,7 @@ func TestInstaller_Install_APIDiscoveryErrorRetryExhausted(t *testing.T) {
 	t.Parallel()
 
 	client := helm.NewMockInterface(t)
-	installer := calicoinstaller.NewInstallerWithDistribution(
+	installer := calicoinstaller.NewInstaller(
 		client,
 		"/path/to/kubeconfig",
 		"test-context",
@@ -139,7 +139,7 @@ func TestInstaller_Install_ContextCanceled_Vanilla(t *testing.T) {
 	t.Parallel()
 
 	client := helm.NewMockInterface(t)
-	installer := calicoinstaller.NewInstallerWithDistribution(
+	installer := calicoinstaller.NewInstaller(
 		client,
 		"/path/to/kubeconfig",
 		"test-context",
@@ -172,7 +172,7 @@ func TestInstaller_Install_K3s_APIServerUnavailableRetrySucceeds(t *testing.T) {
 	t.Parallel()
 
 	client := helm.NewMockInterface(t)
-	installer := calicoinstaller.NewInstallerWithDistribution(
+	installer := calicoinstaller.NewInstaller(
 		client,
 		"/path/to/kubeconfig",
 		"test-context",
@@ -210,7 +210,7 @@ func TestInstaller_Install_K3s_APIServerUnavailableRetryExhausted(t *testing.T) 
 	t.Parallel()
 
 	client := helm.NewMockInterface(t)
-	installer := calicoinstaller.NewInstallerWithDistribution(
+	installer := calicoinstaller.NewInstaller(
 		client,
 		"/path/to/kubeconfig",
 		"test-context",
@@ -248,7 +248,7 @@ func TestInstaller_Install_Vanilla_NoRetryOnAPIServerUnavailable(t *testing.T) {
 	t.Parallel()
 
 	client := helm.NewMockInterface(t)
-	installer := calicoinstaller.NewInstallerWithDistribution(
+	installer := calicoinstaller.NewInstaller(
 		client,
 		"/path/to/kubeconfig",
 		"test-context",

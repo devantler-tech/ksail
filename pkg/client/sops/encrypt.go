@@ -17,7 +17,7 @@ import (
 // encryption keys using the configured key services, encrypts the data,
 // and returns the encrypted file content.
 func Encrypt(opts EncryptOpts) ([]byte, error) {
-	fileBytes, err := LoadFile(opts)
+	fileBytes, err := loadFile(opts)
 	if err != nil {
 		return nil, err
 	}
@@ -37,12 +37,12 @@ func Encrypt(opts EncryptOpts) ([]byte, error) {
 		)
 	}
 
-	err = EnsureNoMetadata(opts, branches[0])
+	err = ensureNoMetadata(opts, branches[0])
 	if err != nil {
 		return nil, common.NewExitError(err, codes.FileAlreadyEncrypted)
 	}
 
-	tree, err := CreateSOPSTree(branches, opts.EncryptConfig, opts.InputPath)
+	tree, err := createSOPSTree(branches, opts.EncryptConfig, opts.InputPath)
 	if err != nil {
 		return nil, err
 	}
@@ -52,12 +52,12 @@ func Encrypt(opts EncryptOpts) ([]byte, error) {
 		return nil, fmt.Errorf("%w: %s", ErrCouldNotGenerateDataKey, errs)
 	}
 
-	return EncryptTreeAndEmit(tree, dataKey, opts.Cipher, opts.OutputStore)
+	return encryptTreeAndEmit(tree, dataKey, opts.Cipher, opts.OutputStore)
 }
 
-// LoadFile reads file content either from stdin or from a file path.
+// loadFile reads file content either from stdin or from a file path.
 // The source is determined by the ReadFromStdin option.
-func LoadFile(opts EncryptOpts) ([]byte, error) {
+func loadFile(opts EncryptOpts) ([]byte, error) {
 	var fileBytes []byte
 
 	var err error
@@ -83,9 +83,9 @@ func LoadFile(opts EncryptOpts) ([]byte, error) {
 	return fileBytes, nil
 }
 
-// EnsureNoMetadata checks whether a file already contains SOPS metadata.
+// ensureNoMetadata checks whether a file already contains SOPS metadata.
 // This prevents re-encryption of already encrypted files, which would corrupt them.
-func EnsureNoMetadata(opts EncryptOpts, branch sops.TreeBranch) error {
+func ensureNoMetadata(opts EncryptOpts, branch sops.TreeBranch) error {
 	if opts.OutputStore.HasSopsTopLevelKey(branch) {
 		return &FileAlreadyEncryptedError{}
 	}
@@ -93,10 +93,10 @@ func EnsureNoMetadata(opts EncryptOpts, branch sops.TreeBranch) error {
 	return nil
 }
 
-// MetadataFromEncryptionConfig creates SOPS metadata from the encryption configuration.
+// metadataFromEncryptionConfig creates SOPS metadata from the encryption configuration.
 // It converts the EncryptConfig fields into a sops.Metadata structure that will be
 // stored in the encrypted file.
-func MetadataFromEncryptionConfig(config EncryptConfig) sops.Metadata {
+func metadataFromEncryptionConfig(config EncryptConfig) sops.Metadata {
 	return sops.Metadata{
 		KeyGroups:               config.KeyGroups,
 		UnencryptedSuffix:       config.UnencryptedSuffix,
@@ -111,8 +111,8 @@ func MetadataFromEncryptionConfig(config EncryptConfig) sops.Metadata {
 	}
 }
 
-// CreateSOPSTree creates a SOPS tree with the given branches, metadata config, and input path.
-func CreateSOPSTree(
+// createSOPSTree creates a SOPS tree with the given branches, metadata config, and input path.
+func createSOPSTree(
 	branches sops.TreeBranches,
 	config EncryptConfig,
 	inputPath string,
@@ -124,16 +124,16 @@ func CreateSOPSTree(
 
 	tree := &sops.Tree{
 		Branches: branches,
-		Metadata: MetadataFromEncryptionConfig(config),
+		Metadata: metadataFromEncryptionConfig(config),
 		FilePath: path,
 	}
 
 	return tree, nil
 }
 
-// EncryptTreeAndEmit encrypts a tree and emits the encrypted file content.
+// encryptTreeAndEmit encrypts a tree and emits the encrypted file content.
 // This is a common helper shared by encrypt and edit operations.
-func EncryptTreeAndEmit(
+func encryptTreeAndEmit(
 	tree *sops.Tree,
 	dataKey []byte,
 	cipher sops.Cipher,

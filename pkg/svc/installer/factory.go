@@ -147,12 +147,12 @@ func (f *Factory) addCNIInstaller(
 ) {
 	switch spec.CNI {
 	case v1alpha1.CNICilium:
-		installers["cilium"] = ciliuminstaller.NewInstallerWithDistribution(
+		installers["cilium"] = ciliuminstaller.NewInstaller(
 			f.helmClient, f.kubeconfig, f.kubecontext, f.timeout,
 			f.distribution, spec.Provider, spec.LoadBalancer, haEnabled,
 		)
 	case v1alpha1.CNICalico:
-		installers["calico"] = calicoinstaller.NewInstallerWithDistribution(
+		installers["calico"] = calicoinstaller.NewInstaller(
 			f.helmClient, f.kubeconfig, f.kubecontext,
 			max(f.timeout, CalicoInstallTimeout), f.distribution, haEnabled,
 		)
@@ -208,7 +208,7 @@ func (f *Factory) addMetricsServerInstaller(
 	if spec.MetricsServer == v1alpha1.MetricsServerEnabled ||
 		(spec.MetricsServer == v1alpha1.MetricsServerDefault &&
 			!spec.Distribution.ProvidesMetricsServerByDefault()) {
-		installers["metrics-server"] = metricsserverinstaller.NewInstallerWithDistribution(
+		installers["metrics-server"] = metricsserverinstaller.NewInstaller(
 			f.helmClient, f.timeout, f.distribution, haEnabled,
 		)
 	}

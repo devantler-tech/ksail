@@ -84,11 +84,13 @@ type Repair struct {
 	Now func() time.Time
 }
 
-// RegisterDefault appends the standard talosconfig CA repair (using
-// [DefaultPath]) to the supplied registry. Call once during command
-// wiring; safe to call with [repairer.Default()].
-func RegisterDefault(reg *repairer.Registry) {
-	reg.Register(&Repair{})
+// DefaultRepairs returns the standard set of repairs run by
+// `ksail cluster repair`: currently just the talosconfig CA repair
+// (using [DefaultPath]). It lives in this package rather than the
+// parent repairer package because the parent cannot import this
+// package without an import cycle.
+func DefaultRepairs() []repairer.Repair {
+	return []repairer.Repair{&Repair{}}
 }
 
 // Name returns the stable identifier "talosconfig-ca".

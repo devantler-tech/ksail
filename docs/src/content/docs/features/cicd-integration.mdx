@@ -8,12 +8,15 @@ import { TabItem, Tabs } from "@astrojs/starlight/components";
 Provision real Kubernetes clusters inside GitHub Actions with the official `ksail-cluster` composite action. One step installs KSail from releases, scaffolds and creates the cluster, and wires up caching — Helm charts and mirror registry volumes persist between runs, so repeat builds skip the slow image pulls entirely.
 
 ```yaml
-- uses: devantler-tech/ksail/.github/actions/ksail-cluster@v7.2.2
+- uses: devantler-tech/ksail/.github/actions/ksail-cluster@main
   with:
     distribution: K3s
 ```
 
 The action outputs `kubeconfig` — the path to the kubeconfig for the provisioned cluster — so follow-up steps can talk to the cluster with any tool.
+
+> [!NOTE]
+> Examples reference the action at `@main` for brevity. For reproducible pipelines, pin to a release tag (e.g. `@v7.56.0`) or a commit SHA — there is currently no floating major tag like `@v7`.
 
 ## Common Recipes
 
@@ -25,7 +28,7 @@ The action outputs `kubeconfig` — the path to the kubeconfig for the provision
         runs-on: ubuntu-latest
         steps:
           - uses: actions/checkout@v4
-          - uses: devantler-tech/ksail/.github/actions/ksail-cluster@v7.2.2
+          - uses: devantler-tech/ksail/.github/actions/ksail-cluster@main
             id: cluster
             with:
               distribution: Vanilla
@@ -39,7 +42,7 @@ The action outputs `kubeconfig` — the path to the kubeconfig for the provision
     Validate manifests, create the cluster, push manifests to the local registry, and wait for the GitOps engine to reconcile — all from inputs:
 
     ```yaml
-    - uses: devantler-tech/ksail/.github/actions/ksail-cluster@v7.2.2
+    - uses: devantler-tech/ksail/.github/actions/ksail-cluster@main
       with:
         distribution: K3s
         validate: "true"     # ksail workload validate before create
@@ -52,7 +55,7 @@ The action outputs `kubeconfig` — the path to the kubeconfig for the provision
     Run [Kubescape](https://kubescape.io) against your manifests and upload results to GitHub Code Scanning:
 
     ```yaml
-    - uses: devantler-tech/ksail/.github/actions/ksail-cluster@v7.2.2
+    - uses: devantler-tech/ksail/.github/actions/ksail-cluster@main
       with:
         distribution: Vanilla
         scan: "true"

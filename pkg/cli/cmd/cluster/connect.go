@@ -28,14 +28,14 @@ The editor is determined by (in order of precedence):
   3. EDITOR or VISUAL environment variables
   4. Fallback to vim, nano, or vi
 
-All k9s flags and arguments are passed through unchanged, allowing you to use
-any k9s functionality. Examples:
+k9s flags and arguments placed after a "--" separator are passed through to
+k9s unchanged, allowing you to use any k9s functionality. Examples:
 
   ksail cluster connect
   ksail cluster connect --editor "code --wait"
-  ksail cluster connect --namespace default
-  ksail cluster connect --context my-context
-  ksail cluster connect --readonly`,
+  ksail cluster connect -- --namespace default
+  ksail cluster connect -- --context my-context
+  ksail cluster connect -- --readonly`,
 		SilenceUsage: true,
 	}
 

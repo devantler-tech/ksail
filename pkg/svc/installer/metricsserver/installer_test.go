@@ -22,20 +22,6 @@ func TestNewInstaller(t *testing.T) {
 	installer := metricsserverinstaller.NewInstaller(
 		client,
 		timeout,
-	)
-
-	assert.NotNil(t, installer)
-}
-
-func TestNewInstallerWithDistribution(t *testing.T) {
-	t.Parallel()
-
-	timeout := 5 * time.Minute
-
-	client := helm.NewMockInterface(t)
-	installer := metricsserverinstaller.NewInstallerWithDistribution(
-		client,
-		timeout,
 		v1alpha1.DistributionVCluster,
 		false,
 	)
@@ -43,13 +29,13 @@ func TestNewInstallerWithDistribution(t *testing.T) {
 	assert.NotNil(t, installer)
 }
 
-func TestNewInstallerWithDistributionNonVCluster(t *testing.T) {
+func TestNewInstallerNonVCluster(t *testing.T) {
 	t.Parallel()
 
 	timeout := 5 * time.Minute
 
 	client := helm.NewMockInterface(t)
-	installer := metricsserverinstaller.NewInstallerWithDistribution(
+	installer := metricsserverinstaller.NewInstaller(
 		client,
 		timeout,
 		v1alpha1.DistributionVanilla,
@@ -143,13 +129,13 @@ func TestBuildValuesYaml_HADisabled(t *testing.T) {
 	assert.NotContains(t, yaml, "topologySpreadConstraints")
 }
 
-func TestNewInstallerWithDistribution_HAEnabled(t *testing.T) {
+func TestNewInstaller_HAEnabled(t *testing.T) {
 	t.Parallel()
 
 	timeout := 5 * time.Minute
 
 	client := helm.NewMockInterface(t)
-	inst := metricsserverinstaller.NewInstallerWithDistribution(
+	inst := metricsserverinstaller.NewInstaller(
 		client,
 		timeout,
 		v1alpha1.DistributionVanilla,
@@ -181,6 +167,8 @@ func newMetricsServerInstallerWithDefaults(
 	installer := metricsserverinstaller.NewInstaller(
 		client,
 		timeout,
+		"",
+		false,
 	)
 
 	return installer, client
@@ -195,7 +183,7 @@ func newMetricsServerInstallerWithDistribution(
 	timeout := 5 * time.Second
 
 	client := helm.NewMockInterface(t)
-	installer := metricsserverinstaller.NewInstallerWithDistribution(
+	installer := metricsserverinstaller.NewInstaller(
 		client,
 		timeout,
 		distribution,

@@ -47,11 +47,9 @@ type userSubmitMsg struct {
 
 // toolStartMsg signals the start of a tool execution.
 type toolStartMsg struct {
-	toolID        string
-	toolName      string
-	command       string // The actual command being executed (e.g., "ksail cluster list --all")
-	mcpServerName string // MCP server name (if tool is from MCP server, empty otherwise)
-	mcpToolName   string // MCP tool name (if tool is from MCP server, empty otherwise)
+	toolID   string
+	toolName string
+	command  string // The actual command being executed (e.g., "ksail cluster list --all")
 }
 
 // toolEndMsg signals the completion of a tool execution with its output.
@@ -62,13 +60,8 @@ type toolEndMsg struct {
 	success  bool
 }
 
-// toolOutputChunkMsg carries a chunk of output from a running tool.
-type toolOutputChunkMsg struct {
-	toolID string
-	chunk  string
-}
-
-// ToolOutputChunkMsg is the exported version of toolOutputChunkMsg for external use.
+// ToolOutputChunkMsg carries a chunk of output from a running tool.
+// Exported so the OnEvent handler in cmd/chat can create instances.
 type ToolOutputChunkMsg struct {
 	ToolID string
 	Chunk  string
@@ -82,15 +75,6 @@ type permissionRequestMsg struct {
 	command    string      // the actual command or action being requested
 	arguments  string      // formatted arguments for display
 	response   chan<- bool // channel to send user response (true=allow, false=deny)
-}
-
-// PermissionRequestMsg is the exported version of permissionRequestMsg for external use.
-type PermissionRequestMsg struct {
-	ToolCallID string
-	ToolName   string
-	Command    string
-	Arguments  string
-	Response   chan<- bool
 }
 
 // copyFeedbackClearMsg signals that the copy feedback should be hidden.

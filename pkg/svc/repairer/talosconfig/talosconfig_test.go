@@ -363,20 +363,17 @@ contexts:
 	}
 }
 
-func TestRegisterDefault(t *testing.T) {
+func TestDefaultRepairs(t *testing.T) {
 	t.Parallel()
 
-	// RegisterDefault wires the talosconfig CA repair into the supplied
-	// registry. We use an isolated registry (not [repairer.Default]) so
-	// the test does not depend on global state.
-	reg := repairer.NewRegistry()
-	talosconfigrepair.RegisterDefault(reg)
-
-	for _, r := range reg.All() {
-		if r.Name() == "talosconfig-ca" {
-			return
-		}
+	// DefaultRepairs is the wiring point for `ksail cluster repair`; it
+	// must contain exactly the talosconfig CA repair.
+	repairs := talosconfigrepair.DefaultRepairs()
+	if len(repairs) != 1 {
+		t.Fatalf("expected exactly 1 default repair, got %d", len(repairs))
 	}
 
-	t.Fatal("RegisterDefault did not register talosconfig-ca")
+	if repairs[0].Name() != "talosconfig-ca" {
+		t.Fatalf("expected talosconfig-ca, got %q", repairs[0].Name())
+	}
 }

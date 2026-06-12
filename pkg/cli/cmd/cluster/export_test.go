@@ -46,6 +46,22 @@ func ExportResolveClusterNameFromContext(ctx *localregistry.Context) string {
 	return resolveClusterNameFromContext(ctx)
 }
 
+// ExportDefaultProvisionerFactory exports defaultProvisionerFactory for testing.
+func ExportDefaultProvisionerFactory(
+	ctx *localregistry.Context,
+) clusterprovisioner.DefaultFactory {
+	return defaultProvisionerFactory(ctx)
+}
+
+// ExportCreateAndVerifyProvisioner exports createAndVerifyProvisioner for testing.
+func ExportCreateAndVerifyProvisioner(
+	cmd *cobra.Command,
+	ctx *localregistry.Context,
+	clusterName string,
+) (clusterprovisioner.Provisioner, error) {
+	return createAndVerifyProvisioner(cmd, ctx, clusterName)
+}
+
 // ExportResolveClusterContext exports resolveClusterContext for testing.
 func ExportResolveClusterContext(kubeconfigPath, clusterName string) (string, error) {
 	return resolveClusterContext(kubeconfigPath, clusterName)
@@ -479,11 +495,6 @@ func ExportResolveContextName(contextNames []string, clusterName string) (string
 // ExportIsEmptyYAML exports isEmptyYAML for testing.
 func ExportIsEmptyYAML(path string) bool {
 	return isEmptyYAML(path)
-}
-
-// ExportHasK3sArg exports hasK3sArg for testing.
-func ExportHasK3sArg(k3dConfig *v1alpha5.SimpleConfig, flag string) bool {
-	return hasK3sArg(k3dConfig, flag)
 }
 
 // ExportValidateOutputFormat exports validateOutputFormat for testing.

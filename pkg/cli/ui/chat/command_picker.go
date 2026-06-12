@@ -407,13 +407,6 @@ func (m *Model) pickerExtraHeight() int {
 	return 0
 }
 
-// commandPickerExtraHeight returns the extra height consumed by the command picker popup.
-//
-// Deprecated: Use pickerExtraHeight instead, which handles both pickers.
-func (m *Model) commandPickerExtraHeight() int {
-	return m.pickerExtraHeight()
-}
-
 // overlayBottom composites the popup string over the bottom lines of the base string.
 // The popup replaces the last N lines of base, where N is the popup's line count.
 func overlayBottom(base, popup string) string {

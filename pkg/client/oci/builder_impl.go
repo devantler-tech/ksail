@@ -50,15 +50,20 @@ type pushFn func(ref name.Reference, img v1.Image, options ...remote.Option) err
 
 // Builder implementation.
 
-// NewWorkloadArtifactBuilder returns a concrete implementation backed by go-containerregistry.
+// Builder packages Kubernetes manifests into OCI artifacts and pushes them to a registry.
+//
+// It validates build options, collects manifest files from the source directory,
+// packages them into an OCI-compliant image layer, and pushes the resulting artifact
+// to the specified registry endpoint.
+type Builder struct{}
+
+// NewWorkloadArtifactBuilder returns a workload artifact builder backed by go-containerregistry.
 //
 // The returned builder uses the go-containerregistry library to package manifests
 // into OCI artifacts and push them to container registries.
-func NewWorkloadArtifactBuilder() WorkloadArtifactBuilder {
-	return &builder{}
+func NewWorkloadArtifactBuilder() *Builder {
+	return &Builder{}
 }
-
-type builder struct{}
 
 // parseOCIReference creates an OCI reference from endpoint, repository, and version.
 func parseOCIReference(endpoint, repository, version string) (name.Reference, error) {
@@ -154,7 +159,7 @@ func pushWithRetry(
 //  7. Returns artifact metadata on success
 //
 // Returns BuildResult with complete artifact metadata, or an error if any step fails.
-func (b *builder) Build(ctx context.Context, opts BuildOptions) (BuildResult, error) {
+func (b *Builder) Build(ctx context.Context, opts BuildOptions) (BuildResult, error) {
 	validated, err := opts.Validate()
 	if err != nil {
 		return BuildResult{}, err
@@ -191,7 +196,7 @@ func (b *builder) Build(ctx context.Context, opts BuildOptions) (BuildResult, er
 // BuildEmpty pushes an OCI artifact with an empty kustomization.yaml to the registry.
 // This creates a minimal valid Kustomize structure that Flux can reconcile,
 // useful when no source directory exists but a valid artifact reference is required.
-func (b *builder) BuildEmpty(ctx context.Context, opts EmptyBuildOptions) (BuildResult, error) {
+func (b *Builder) BuildEmpty(ctx context.Context, opts EmptyBuildOptions) (BuildResult, error) {
 	validated, err := opts.Validate()
 	if err != nil {
 		return BuildResult{}, err

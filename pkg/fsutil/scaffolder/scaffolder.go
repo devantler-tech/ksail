@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil/generator"
 	k3dgenerator "github.com/devantler-tech/ksail/v7/pkg/fsutil/generator/k3d"
 	kindgenerator "github.com/devantler-tech/ksail/v7/pkg/fsutil/generator/kind"
@@ -34,6 +35,11 @@ const (
 
 	// TalosConfigDir is the default directory for Talos distribution configuration (Talos patches).
 	TalosConfigDir = "talos"
+
+	// SchemaHeader is the yaml-language-server directive prepended to generated ksail.yaml
+	// files so editors validate them against the published KSail configuration schema.
+	SchemaHeader = "# yaml-language-server: $schema=" +
+		"https://raw.githubusercontent.com/devantler-tech/ksail/main/schemas/ksail-config.schema.json"
 )
 
 const (
@@ -76,8 +82,9 @@ func NewScaffolder(cfg v1alpha1.Cluster, writer io.Writer, mirrorRegistries []st
 }
 
 // WithClusterName sets an explicit cluster name override for the scaffolder.
-// When set, this name is used for distribution configs (kind.yaml Name, k3d.yaml metadata.name),
-// Talos cluster patches, and to derive the kubeconfig context in ksail.yaml.
+// When set, this name is used for ksail.yaml metadata.name and distribution configs
+// (kind.yaml Name, k3d.yaml metadata.name, Talos cluster patches). The kubeconfig
+// context is derived from the name at runtime and is not scaffolded.
 func (s *Scaffolder) WithClusterName(name string) *Scaffolder {
 	s.ClusterName = name
 
@@ -132,42 +139,24 @@ func (s *Scaffolder) Scaffold(output string, force bool) error {
 		return err
 	}
 
-	// Generate GitOps CR manifests if a GitOps engine is configured
-	err = s.generateGitOpsConfig(output, force)
-	if err != nil {
-		return err
-	}
-
 	return s.generateKustomizationConfig(output, force)
 }
 
 // Configuration defaults and helpers.
 
 // applyKSailConfigDefaults applies distribution-specific defaults to the KSail configuration.
-// This ensures the generated ksail.yaml has consistent context and distributionConfig values
-// that match the distribution-specific configuration files being generated.
+// This ensures the generated ksail.yaml has a distributionConfig value that matches the
+// distribution-specific configuration files being generated.
+//
+// The kubeconfig context (spec.cluster.connection.context) is deliberately NOT scaffolded:
+// it is fully derived from the distribution and cluster name at runtime, so writing it to
+// ksail.yaml would only duplicate metadata.name and go stale on rename.
 func (s *Scaffolder) applyKSailConfigDefaults() v1alpha1.Cluster {
 	config := s.KSailConfig
 
 	// Set metadata.name if a cluster name override was provided
 	if s.ClusterName != "" {
 		config.Name = s.ClusterName
-	}
-
-	// Set the expected context if it's empty, based on the distribution and cluster name
-	if config.Spec.Cluster.Connection.Context == "" {
-		var expectedContext string
-		if s.ClusterName != "" {
-			// Use custom cluster name to derive context
-			expectedContext = s.contextNameForDistribution(config.Spec.Cluster.Distribution)
-		} else {
-			// Use default context name
-			expectedContext = v1alpha1.ExpectedContextName(config.Spec.Cluster.Distribution)
-		}
-
-		if expectedContext != "" {
-			config.Spec.Cluster.Connection.Context = expectedContext
-		}
 	}
 
 	// Set the expected distribution config filename if it's empty or set to default
@@ -180,12 +169,6 @@ func (s *Scaffolder) applyKSailConfigDefaults() v1alpha1.Cluster {
 	}
 
 	return config
-}
-
-// contextNameForDistribution returns the kubeconfig context name for a given distribution
-// using the scaffolder's ClusterName. Returns empty string if ClusterName is not set.
-func (s *Scaffolder) contextNameForDistribution(distribution v1alpha1.Distribution) string {
-	return distribution.ContextName(s.ClusterName)
 }
 
 // File handling helpers.
@@ -319,6 +302,40 @@ func (s *Scaffolder) notifyFileAction(displayName string, overwritten bool) {
 
 // Configuration file generators.
 
+// schemaHeaderGenerator wraps a KSail YAML generator and prepends SchemaHeader to its
+// output so editors with YAML language-server support validate ksail.yaml out of the box.
+type schemaHeaderGenerator struct {
+	inner generator.Generator[v1alpha1.Cluster, yamlgenerator.Options]
+}
+
+// Generate renders the model via the wrapped generator, prepends the schema header,
+// and writes the result to opts.Output when set.
+func (g *schemaHeaderGenerator) Generate(
+	model v1alpha1.Cluster,
+	opts yamlgenerator.Options,
+) (string, error) {
+	contentOpts := opts
+	contentOpts.Output = ""
+
+	body, err := g.inner.Generate(model, contentOpts)
+	if err != nil {
+		return "", fmt.Errorf("failed to generate ksail.yaml content: %w", err)
+	}
+
+	content := SchemaHeader + "\n" + body
+
+	if opts.Output == "" {
+		return content, nil
+	}
+
+	result, err := fsutil.TryWriteFile(content, opts.Output, opts.Force)
+	if err != nil {
+		return "", fmt.Errorf("failed to write YAML to file: %w", err)
+	}
+
+	return result, nil
+}
+
 // generateKSailConfig generates the ksail.yaml configuration file.
 func (s *Scaffolder) generateKSailConfig(output string, force bool) error {
 	// Apply distribution-specific defaults to ensure consistency with generated files
@@ -332,7 +349,7 @@ func (s *Scaffolder) generateKSailConfig(output string, force bool) error {
 	return generateWithFileHandling(
 		s,
 		GenerationParams[v1alpha1.Cluster]{
-			Gen:         s.KSailYAMLGenerator,
+			Gen:         &schemaHeaderGenerator{inner: s.KSailYAMLGenerator},
 			Model:       config,
 			Opts:        opts,
 			DisplayName: "ksail.yaml",
@@ -411,19 +428,6 @@ func (s *Scaffolder) removeFormerDistributionConfig(output, previous string) err
 	return nil
 }
 
-// generateGitOpsConfig is a no-op placeholder for GitOps configuration generation.
-// GitOps resources (FluxInstance, ArgoCD Application) are NOT scaffolded as YAML files.
-// Instead, they are created via Kubernetes API during cluster creation, which ensures:
-// - FluxInstance has all required fields (Distribution.Artifact, Sync.Provider, etc.)
-// - ArgoCD Application is properly configured with server-side defaults
-// - No conflicts between scaffolded YAML and API-created resources
-// Users can overtake the source-of-truth via GitOps if they wish after cluster creation.
-func (s *Scaffolder) generateGitOpsConfig(_ string, _ bool) error {
-	// All GitOps engines (Flux, ArgoCD) create their resources server-side during cluster creation.
-	// This simplifies scaffolding and ensures proper configuration.
-	return nil
-}
-
 // generateKustomizationConfig generates the kustomization.yaml file.
 // When kustomizationFile is set to a subdirectory, the kustomization.yaml is generated
 // at that subdirectory rather than at the root of the source directory.
@@ -433,10 +437,10 @@ func (s *Scaffolder) generateKustomizationConfig(output string, force bool) erro
 		return err
 	}
 
+	// GitOps resources (FluxInstance, ArgoCD Application) are created server-side
+	// via the Kubernetes API during cluster creation, not scaffolded, so the
+	// kustomization starts empty (the generator normalizes resources to []).
 	kustomization := ktypes.Kustomization{}
-
-	// Add GitOps resources if a GitOps engine is configured
-	kustomization.Resources = s.getKustomizationResources()
 
 	opts := yamlgenerator.Options{
 		Output: filepath.Join(
@@ -534,10 +538,3 @@ func isWindowsDriveLetter(slashPath string) bool {
 }
 
 // jscpd:ignore-end
-
-// getKustomizationResources returns the resources to include in the kustomization.
-// GitOps resources (FluxInstance, ArgoCD Application) are created server-side via Kubernetes API,
-// not scaffolded, so this returns an empty slice.
-func (s *Scaffolder) getKustomizationResources() []string {
-	return []string{}
-}

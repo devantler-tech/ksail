@@ -67,15 +67,10 @@ func resolveSourceDir(cfg *v1alpha1.Cluster, pathFlag string) string {
 }
 
 // writeActivityNotification writes an activity notification message.
-func writeActivityNotification(
-	content string,
-	outputTimer timer.Timer,
-	writer io.Writer,
-) {
+func writeActivityNotification(content string, writer io.Writer) {
 	notify.WriteMessage(notify.Message{
 		Type:    notify.ActivityType,
 		Content: content,
-		Timer:   outputTimer,
 		Writer:  writer,
 	})
 }
@@ -223,7 +218,7 @@ func resolveGitOpsEngine(cfg *v1alpha1.Cluster) v1alpha1.GitOpsEngine {
 var errGitOpsEngineRequired = errors.New(
 	"A GitOps engine must be enabled to reconcile workloads; " +
 		"enable it with '--gitops-engine Flux|ArgoCD' during cluster init or " +
-		"set 'spec.gitOpsEngine: Flux|ArgoCD' in ksail.yaml",
+		"set 'spec.cluster.gitOpsEngine: Flux|ArgoCD' in ksail.yaml",
 )
 
 // Sentinels wrapping the per-resource progress-group failures. These are the

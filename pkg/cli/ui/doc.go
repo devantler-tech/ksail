@@ -2,22 +2,25 @@
 //
 // This package contains subpackages for terminal-based user interaction:
 //
-//   - asciiart: ASCII art rendering with color formatting for logos and graphics
+//   - asciiart: the KSail ASCII art logo for terminal display
+//   - chat: the AI chat TUI built on Bubbletea
+//   - confirm: deletion previews and confirmation prompts
 //   - errorhandler: Cobra command execution with error formatting and normalization
+//   - picker: a reusable interactive list picker
 //
-// Related packages for user interaction (located in pkg/utils):
+// Related packages for user interaction:
 //
-//   - pkg/utils/notify: Formatted message display with symbols, colors, and timing information
-//   - pkg/utils/timer: Execution time tracking for single-stage and multi-stage operations
+//   - pkg/notify: formatted message display with symbols, colors, and timing information
+//   - pkg/timer: execution time tracking for single-stage and multi-stage operations
 //
-// The ui package components work together with the utils packages to provide a consistent,
+// The ui package components work together with those packages to provide a consistent,
 // user-friendly command-line interface experience with colorized output, timing information,
 // and proper error handling.
 //
 // Example usage:
 //
-//	// Display ASCII logo
-//	asciiart.PrintKSailLogo(os.Stdout)
+//	// Display the ASCII logo
+//	fmt.Println(asciiart.Logo())
 //
 //	// Track command execution time
 //	timer := timer.New()

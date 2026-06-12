@@ -101,6 +101,154 @@ func (_c *MockInterface_AddRepository_Call) RunAndReturn(run func(ctx context.Co
 	return _c
 }
 
+// GetReleaseStorageLabels provides a mock function for the type MockInterface
+func (_mock *MockInterface) GetReleaseStorageLabels(ctx context.Context, releaseName string, namespace string) (map[string]string, error) {
+	ret := _mock.Called(ctx, releaseName, namespace)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetReleaseStorageLabels")
+	}
+
+	var r0 map[string]string
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) (map[string]string, error)); ok {
+		return returnFunc(ctx, releaseName, namespace)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) map[string]string); ok {
+		r0 = returnFunc(ctx, releaseName, namespace)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(map[string]string)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string) error); ok {
+		r1 = returnFunc(ctx, releaseName, namespace)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockInterface_GetReleaseStorageLabels_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetReleaseStorageLabels'
+type MockInterface_GetReleaseStorageLabels_Call struct {
+	*mock.Call
+}
+
+// GetReleaseStorageLabels is a helper method to define mock.On call
+//   - ctx context.Context
+//   - releaseName string
+//   - namespace string
+func (_e *MockInterface_Expecter) GetReleaseStorageLabels(ctx interface{}, releaseName interface{}, namespace interface{}) *MockInterface_GetReleaseStorageLabels_Call {
+	return &MockInterface_GetReleaseStorageLabels_Call{Call: _e.mock.On("GetReleaseStorageLabels", ctx, releaseName, namespace)}
+}
+
+func (_c *MockInterface_GetReleaseStorageLabels_Call) Run(run func(ctx context.Context, releaseName string, namespace string)) *MockInterface_GetReleaseStorageLabels_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockInterface_GetReleaseStorageLabels_Call) Return(stringToString map[string]string, err error) *MockInterface_GetReleaseStorageLabels_Call {
+	_c.Call.Return(stringToString, err)
+	return _c
+}
+
+func (_c *MockInterface_GetReleaseStorageLabels_Call) RunAndReturn(run func(ctx context.Context, releaseName string, namespace string) (map[string]string, error)) *MockInterface_GetReleaseStorageLabels_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// GetReleaseValues provides a mock function for the type MockInterface
+func (_mock *MockInterface) GetReleaseValues(ctx context.Context, releaseName string, namespace string) (map[string]any, error) {
+	ret := _mock.Called(ctx, releaseName, namespace)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetReleaseValues")
+	}
+
+	var r0 map[string]any
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) (map[string]any, error)); ok {
+		return returnFunc(ctx, releaseName, namespace)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) map[string]any); ok {
+		r0 = returnFunc(ctx, releaseName, namespace)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(map[string]any)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string) error); ok {
+		r1 = returnFunc(ctx, releaseName, namespace)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockInterface_GetReleaseValues_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetReleaseValues'
+type MockInterface_GetReleaseValues_Call struct {
+	*mock.Call
+}
+
+// GetReleaseValues is a helper method to define mock.On call
+//   - ctx context.Context
+//   - releaseName string
+//   - namespace string
+func (_e *MockInterface_Expecter) GetReleaseValues(ctx interface{}, releaseName interface{}, namespace interface{}) *MockInterface_GetReleaseValues_Call {
+	return &MockInterface_GetReleaseValues_Call{Call: _e.mock.On("GetReleaseValues", ctx, releaseName, namespace)}
+}
+
+func (_c *MockInterface_GetReleaseValues_Call) Run(run func(ctx context.Context, releaseName string, namespace string)) *MockInterface_GetReleaseValues_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockInterface_GetReleaseValues_Call) Return(stringToV map[string]any, err error) *MockInterface_GetReleaseValues_Call {
+	_c.Call.Return(stringToV, err)
+	return _c
+}
+
+func (_c *MockInterface_GetReleaseValues_Call) RunAndReturn(run func(ctx context.Context, releaseName string, namespace string) (map[string]any, error)) *MockInterface_GetReleaseValues_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // InstallChart provides a mock function for the type MockInterface
 func (_mock *MockInterface) InstallChart(ctx context.Context, spec *ChartSpec) (*ReleaseInfo, error) {
 	ret := _mock.Called(ctx, spec)
@@ -165,78 +313,6 @@ func (_c *MockInterface_InstallChart_Call) Return(releaseInfo *ReleaseInfo, err 
 }
 
 func (_c *MockInterface_InstallChart_Call) RunAndReturn(run func(ctx context.Context, spec *ChartSpec) (*ReleaseInfo, error)) *MockInterface_InstallChart_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
-// ReleaseExists provides a mock function for the type MockInterface
-func (_mock *MockInterface) ReleaseExists(ctx context.Context, releaseName string, namespace string) (bool, error) {
-	ret := _mock.Called(ctx, releaseName, namespace)
-
-	if len(ret) == 0 {
-		panic("no return value specified for ReleaseExists")
-	}
-
-	var r0 bool
-	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) (bool, error)); ok {
-		return returnFunc(ctx, releaseName, namespace)
-	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) bool); ok {
-		r0 = returnFunc(ctx, releaseName, namespace)
-	} else {
-		r0 = ret.Get(0).(bool)
-	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string) error); ok {
-		r1 = returnFunc(ctx, releaseName, namespace)
-	} else {
-		r1 = ret.Error(1)
-	}
-	return r0, r1
-}
-
-// MockInterface_ReleaseExists_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ReleaseExists'
-type MockInterface_ReleaseExists_Call struct {
-	*mock.Call
-}
-
-// ReleaseExists is a helper method to define mock.On call
-//   - ctx context.Context
-//   - releaseName string
-//   - namespace string
-func (_e *MockInterface_Expecter) ReleaseExists(ctx interface{}, releaseName interface{}, namespace interface{}) *MockInterface_ReleaseExists_Call {
-	return &MockInterface_ReleaseExists_Call{Call: _e.mock.On("ReleaseExists", ctx, releaseName, namespace)}
-}
-
-func (_c *MockInterface_ReleaseExists_Call) Run(run func(ctx context.Context, releaseName string, namespace string)) *MockInterface_ReleaseExists_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 context.Context
-		if args[0] != nil {
-			arg0 = args[0].(context.Context)
-		}
-		var arg1 string
-		if args[1] != nil {
-			arg1 = args[1].(string)
-		}
-		var arg2 string
-		if args[2] != nil {
-			arg2 = args[2].(string)
-		}
-		run(
-			arg0,
-			arg1,
-			arg2,
-		)
-	})
-	return _c
-}
-
-func (_c *MockInterface_ReleaseExists_Call) Return(exists bool, err error) *MockInterface_ReleaseExists_Call {
-	_c.Call.Return(exists, err)
-	return _c
-}
-
-func (_c *MockInterface_ReleaseExists_Call) RunAndReturn(run func(ctx context.Context, releaseName string, namespace string) (bool, error)) *MockInterface_ReleaseExists_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -309,6 +385,184 @@ func (_c *MockInterface_InstallOrUpgradeChart_Call) RunAndReturn(run func(ctx co
 	return _c
 }
 
+// ListReleases provides a mock function for the type MockInterface
+func (_mock *MockInterface) ListReleases(ctx context.Context) ([]ReleaseInfo, error) {
+	ret := _mock.Called(ctx)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ListReleases")
+	}
+
+	var r0 []ReleaseInfo
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context) ([]ReleaseInfo, error)); ok {
+		return returnFunc(ctx)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context) []ReleaseInfo); ok {
+		r0 = returnFunc(ctx)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]ReleaseInfo)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context) error); ok {
+		r1 = returnFunc(ctx)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockInterface_ListReleases_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListReleases'
+type MockInterface_ListReleases_Call struct {
+	*mock.Call
+}
+
+// ListReleases is a helper method to define mock.On call
+//   - ctx context.Context
+func (_e *MockInterface_Expecter) ListReleases(ctx interface{}) *MockInterface_ListReleases_Call {
+	return &MockInterface_ListReleases_Call{Call: _e.mock.On("ListReleases", ctx)}
+}
+
+func (_c *MockInterface_ListReleases_Call) Run(run func(ctx context.Context)) *MockInterface_ListReleases_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		run(
+			arg0,
+		)
+	})
+	return _c
+}
+
+func (_c *MockInterface_ListReleases_Call) Return(releaseInfos []ReleaseInfo, err error) *MockInterface_ListReleases_Call {
+	_c.Call.Return(releaseInfos, err)
+	return _c
+}
+
+func (_c *MockInterface_ListReleases_Call) RunAndReturn(run func(ctx context.Context) ([]ReleaseInfo, error)) *MockInterface_ListReleases_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// RefreshDiscovery provides a mock function for the type MockInterface
+func (_mock *MockInterface) RefreshDiscovery() error {
+	ret := _mock.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for RefreshDiscovery")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func() error); ok {
+		r0 = returnFunc()
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockInterface_RefreshDiscovery_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'RefreshDiscovery'
+type MockInterface_RefreshDiscovery_Call struct {
+	*mock.Call
+}
+
+// RefreshDiscovery is a helper method to define mock.On call
+func (_e *MockInterface_Expecter) RefreshDiscovery() *MockInterface_RefreshDiscovery_Call {
+	return &MockInterface_RefreshDiscovery_Call{Call: _e.mock.On("RefreshDiscovery")}
+}
+
+func (_c *MockInterface_RefreshDiscovery_Call) Run(run func()) *MockInterface_RefreshDiscovery_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *MockInterface_RefreshDiscovery_Call) Return(err error) *MockInterface_RefreshDiscovery_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockInterface_RefreshDiscovery_Call) RunAndReturn(run func() error) *MockInterface_RefreshDiscovery_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// ReleaseExists provides a mock function for the type MockInterface
+func (_mock *MockInterface) ReleaseExists(ctx context.Context, releaseName string, namespace string) (bool, error) {
+	ret := _mock.Called(ctx, releaseName, namespace)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ReleaseExists")
+	}
+
+	var r0 bool
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) (bool, error)); ok {
+		return returnFunc(ctx, releaseName, namespace)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) bool); ok {
+		r0 = returnFunc(ctx, releaseName, namespace)
+	} else {
+		r0 = ret.Get(0).(bool)
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string) error); ok {
+		r1 = returnFunc(ctx, releaseName, namespace)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockInterface_ReleaseExists_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ReleaseExists'
+type MockInterface_ReleaseExists_Call struct {
+	*mock.Call
+}
+
+// ReleaseExists is a helper method to define mock.On call
+//   - ctx context.Context
+//   - releaseName string
+//   - namespace string
+func (_e *MockInterface_Expecter) ReleaseExists(ctx interface{}, releaseName interface{}, namespace interface{}) *MockInterface_ReleaseExists_Call {
+	return &MockInterface_ReleaseExists_Call{Call: _e.mock.On("ReleaseExists", ctx, releaseName, namespace)}
+}
+
+func (_c *MockInterface_ReleaseExists_Call) Run(run func(ctx context.Context, releaseName string, namespace string)) *MockInterface_ReleaseExists_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockInterface_ReleaseExists_Call) Return(b bool, err error) *MockInterface_ReleaseExists_Call {
+	_c.Call.Return(b, err)
+	return _c
+}
+
+func (_c *MockInterface_ReleaseExists_Call) RunAndReturn(run func(ctx context.Context, releaseName string, namespace string) (bool, error)) *MockInterface_ReleaseExists_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // TemplateChart provides a mock function for the type MockInterface
 func (_mock *MockInterface) TemplateChart(ctx context.Context, spec *ChartSpec) (string, error) {
 	ret := _mock.Called(ctx, spec)
@@ -375,66 +629,6 @@ func (_c *MockInterface_TemplateChart_Call) RunAndReturn(run func(ctx context.Co
 	return _c
 }
 
-// ListReleases provides a mock function for the type MockInterface
-func (_mock *MockInterface) ListReleases(ctx context.Context) ([]ReleaseInfo, error) {
-	ret := _mock.Called(ctx)
-
-	if len(ret) == 0 {
-		panic("no return value specified for ListReleases")
-	}
-
-	var r0 []ReleaseInfo
-	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context) ([]ReleaseInfo, error)); ok {
-		return returnFunc(ctx)
-	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context) []ReleaseInfo); ok {
-		r0 = returnFunc(ctx)
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]ReleaseInfo)
-		}
-	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context) error); ok {
-		r1 = returnFunc(ctx)
-	} else {
-		r1 = ret.Error(1)
-	}
-	return r0, r1
-}
-
-// MockInterface_ListReleases_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListReleases'
-type MockInterface_ListReleases_Call struct {
-	*mock.Call
-}
-
-// ListReleases is a helper method to define mock.On call
-//   - ctx context.Context
-func (_e *MockInterface_Expecter) ListReleases(ctx interface{}) *MockInterface_ListReleases_Call {
-	return &MockInterface_ListReleases_Call{Call: _e.mock.On("ListReleases", ctx)}
-}
-
-func (_c *MockInterface_ListReleases_Call) Run(run func(ctx context.Context)) *MockInterface_ListReleases_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 context.Context
-		if args[0] != nil {
-			arg0 = args[0].(context.Context)
-		}
-		run(arg0)
-	})
-	return _c
-}
-
-func (_c *MockInterface_ListReleases_Call) Return(releases []ReleaseInfo, err error) *MockInterface_ListReleases_Call {
-	_c.Call.Return(releases, err)
-	return _c
-}
-
-func (_c *MockInterface_ListReleases_Call) RunAndReturn(run func(ctx context.Context) ([]ReleaseInfo, error)) *MockInterface_ListReleases_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
 // UninstallRelease provides a mock function for the type MockInterface
 func (_mock *MockInterface) UninstallRelease(ctx context.Context, releaseName string, namespace string) error {
 	ret := _mock.Called(ctx, releaseName, namespace)
@@ -494,198 +688,6 @@ func (_c *MockInterface_UninstallRelease_Call) Return(err error) *MockInterface_
 }
 
 func (_c *MockInterface_UninstallRelease_Call) RunAndReturn(run func(ctx context.Context, releaseName string, namespace string) error) *MockInterface_UninstallRelease_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
-// RefreshDiscovery provides a mock function for the type MockInterface
-func (_mock *MockInterface) RefreshDiscovery() error {
-	ret := _mock.Called()
-
-	if len(ret) == 0 {
-		panic("no return value specified for RefreshDiscovery")
-	}
-
-	var r0 error
-	if returnFunc, ok := ret.Get(0).(func() error); ok {
-		r0 = returnFunc()
-	} else {
-		r0 = ret.Error(0)
-	}
-	return r0
-}
-
-// MockInterface_RefreshDiscovery_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'RefreshDiscovery'
-type MockInterface_RefreshDiscovery_Call struct {
-	*mock.Call
-}
-
-// RefreshDiscovery is a helper method to define mock.On call
-func (_e *MockInterface_Expecter) RefreshDiscovery() *MockInterface_RefreshDiscovery_Call {
-	return &MockInterface_RefreshDiscovery_Call{Call: _e.mock.On("RefreshDiscovery")}
-}
-
-func (_c *MockInterface_RefreshDiscovery_Call) Run(run func()) *MockInterface_RefreshDiscovery_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run()
-	})
-	return _c
-}
-
-func (_c *MockInterface_RefreshDiscovery_Call) Return(err error) *MockInterface_RefreshDiscovery_Call {
-	_c.Call.Return(err)
-	return _c
-}
-
-func (_c *MockInterface_RefreshDiscovery_Call) RunAndReturn(run func() error) *MockInterface_RefreshDiscovery_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
-// GetReleaseStorageLabels provides a mock function for the type MockInterface
-func (_mock *MockInterface) GetReleaseStorageLabels(ctx context.Context, releaseName string, namespace string) (map[string]string, error) {
-	ret := _mock.Called(ctx, releaseName, namespace)
-
-	if len(ret) == 0 {
-		panic("no return value specified for GetReleaseStorageLabels")
-	}
-
-	var r0 map[string]string
-	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) (map[string]string, error)); ok {
-		return returnFunc(ctx, releaseName, namespace)
-	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) map[string]string); ok {
-		r0 = returnFunc(ctx, releaseName, namespace)
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(map[string]string)
-		}
-	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string) error); ok {
-		r1 = returnFunc(ctx, releaseName, namespace)
-	} else {
-		r1 = ret.Error(1)
-	}
-	return r0, r1
-}
-
-// MockInterface_GetReleaseStorageLabels_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetReleaseStorageLabels'
-type MockInterface_GetReleaseStorageLabels_Call struct {
-	*mock.Call
-}
-
-// GetReleaseStorageLabels is a helper method to define mock.On call
-//   - ctx context.Context
-//   - releaseName string
-//   - namespace string
-func (_e *MockInterface_Expecter) GetReleaseStorageLabels(ctx interface{}, releaseName interface{}, namespace interface{}) *MockInterface_GetReleaseStorageLabels_Call {
-	return &MockInterface_GetReleaseStorageLabels_Call{Call: _e.mock.On("GetReleaseStorageLabels", ctx, releaseName, namespace)}
-}
-
-func (_c *MockInterface_GetReleaseStorageLabels_Call) Run(run func(ctx context.Context, releaseName string, namespace string)) *MockInterface_GetReleaseStorageLabels_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 context.Context
-		if args[0] != nil {
-			arg0 = args[0].(context.Context)
-		}
-		var arg1 string
-		if args[1] != nil {
-			arg1 = args[1].(string)
-		}
-		var arg2 string
-		if args[2] != nil {
-			arg2 = args[2].(string)
-		}
-		run(
-			arg0,
-			arg1,
-			arg2,
-		)
-	})
-	return _c
-}
-
-func (_c *MockInterface_GetReleaseStorageLabels_Call) Return(labels map[string]string, err error) *MockInterface_GetReleaseStorageLabels_Call {
-	_c.Call.Return(labels, err)
-	return _c
-}
-
-func (_c *MockInterface_GetReleaseStorageLabels_Call) RunAndReturn(run func(ctx context.Context, releaseName string, namespace string) (map[string]string, error)) *MockInterface_GetReleaseStorageLabels_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
-// GetReleaseValues provides a mock function for the type MockInterface
-func (_mock *MockInterface) GetReleaseValues(ctx context.Context, releaseName string, namespace string) (map[string]interface{}, error) {
-	ret := _mock.Called(ctx, releaseName, namespace)
-
-	if len(ret) == 0 {
-		panic("no return value specified for GetReleaseValues")
-	}
-
-	var r0 map[string]interface{}
-	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) (map[string]interface{}, error)); ok {
-		return returnFunc(ctx, releaseName, namespace)
-	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) map[string]interface{}); ok {
-		r0 = returnFunc(ctx, releaseName, namespace)
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(map[string]interface{})
-		}
-	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string) error); ok {
-		r1 = returnFunc(ctx, releaseName, namespace)
-	} else {
-		r1 = ret.Error(1)
-	}
-	return r0, r1
-}
-
-// MockInterface_GetReleaseValues_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetReleaseValues'
-type MockInterface_GetReleaseValues_Call struct {
-	*mock.Call
-}
-
-// GetReleaseValues is a helper method to define mock.On call
-//   - ctx context.Context
-//   - releaseName string
-//   - namespace string
-func (_e *MockInterface_Expecter) GetReleaseValues(ctx interface{}, releaseName interface{}, namespace interface{}) *MockInterface_GetReleaseValues_Call {
-	return &MockInterface_GetReleaseValues_Call{Call: _e.mock.On("GetReleaseValues", ctx, releaseName, namespace)}
-}
-
-func (_c *MockInterface_GetReleaseValues_Call) Run(run func(ctx context.Context, releaseName string, namespace string)) *MockInterface_GetReleaseValues_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 context.Context
-		if args[0] != nil {
-			arg0 = args[0].(context.Context)
-		}
-		var arg1 string
-		if args[1] != nil {
-			arg1 = args[1].(string)
-		}
-		var arg2 string
-		if args[2] != nil {
-			arg2 = args[2].(string)
-		}
-		run(
-			arg0,
-			arg1,
-			arg2,
-		)
-	})
-	return _c
-}
-
-func (_c *MockInterface_GetReleaseValues_Call) Return(values map[string]interface{}, err error) *MockInterface_GetReleaseValues_Call {
-	_c.Call.Return(values, err)
-	return _c
-}
-
-func (_c *MockInterface_GetReleaseValues_Call) RunAndReturn(run func(ctx context.Context, releaseName string, namespace string) (map[string]interface{}, error)) *MockInterface_GetReleaseValues_Call {
 	_c.Call.Return(run)
 	return _c
 }

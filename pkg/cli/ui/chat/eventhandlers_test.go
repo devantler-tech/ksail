@@ -46,11 +46,11 @@ func TestHandleStreamEvent_DispatchesAllEventTypes(t *testing.T) {
 			},
 		},
 		{
-			name: "compactionStartMsg sets compacting",
+			name: "compactionStartMsg keeps streaming",
 			msg:  chat.ExportNewCompactionStartMsg(),
 			check: func(t *testing.T, m *chat.Model) {
 				t.Helper()
-				assert.True(t, chat.ExportGetIsCompacting(m))
+				assert.True(t, chat.ExportGetStreaming(m))
 			},
 		},
 		{
@@ -110,20 +110,20 @@ func TestHandleStreamEvent_ToolOutputChunkMsg_Exported(t *testing.T) {
 	assert.Contains(t, tools["t1"].Output(), "exported chunk")
 }
 
-func TestHandleStreamEvent_PermissionRequestMsg_Exported(t *testing.T) {
+func TestHandleStreamEvent_PermissionRequestMsg(t *testing.T) {
 	t.Parallel()
 
 	model := chat.NewModel(newTestParams())
 	chat.ExportSetStreaming(model, true)
 
 	resp := make(chan bool, 1)
-	updated, _ := model.Update(chat.PermissionRequestMsg{
-		ToolCallID: "call-1",
-		ToolName:   "bash",
-		Command:    "rm -rf /tmp/test",
-		Arguments:  `{"path": "/tmp/test"}`,
-		Response:   resp,
-	})
+	updated, _ := model.Update(chat.ExportNewPermissionRequestMsg(
+		"call-1",
+		"bash",
+		"rm -rf /tmp/test",
+		`{"path": "/tmp/test"}`,
+		resp,
+	))
 	m, ok := updated.(*chat.Model)
 	require.True(t, ok)
 

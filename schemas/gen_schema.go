@@ -77,7 +77,10 @@ func customizeSchema(schema *jsonschema.Schema) {
 
 	// Walk schema tree once, applying all transformations.
 	walkSchema(schema, func(s *jsonschema.Schema) {
-		// Clear required (all fields use omitzero).
+		// Clear required everywhere (all fields use omitzero). The root spec is
+		// deliberately NOT required: the runtime treats an absent spec as
+		// all-defaults, and `ksail cluster init` scaffolds a ksail.yaml without
+		// a spec key, so the published schema must accept that output.
 		s.Required = nil
 
 		// Mark empty objects as alpha placeholders.
@@ -87,9 +90,6 @@ func customizeSchema(schema *jsonschema.Schema) {
 			}
 		}
 	})
-
-	// Restore root-level spec requirement.
-	schema.Required = []string{"spec"}
 
 	// The Cluster type carries a Status subresource for the operator, but ksail.yaml never
 	// contains status, so it is omitted from the configuration schema.

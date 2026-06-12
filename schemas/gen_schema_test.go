@@ -78,9 +78,11 @@ func TestGeneratedSchema(t *testing.T) {
 			t.Errorf("additionalProperties = %v, want false", got)
 		}
 
-		req, ok := schema["required"].([]any)
-		if !ok || len(req) != 1 || req[0] != "spec" {
-			t.Errorf("required = %v, want [spec]", schema["required"])
+		// The root must not require spec: the runtime treats an absent spec as
+		// all-defaults and the scaffolder emits ksail.yaml without a spec key,
+		// so the published schema has to accept the scaffolder's own output.
+		if schema["required"] != nil {
+			t.Errorf("required = %v, want no required fields at root", schema["required"])
 		}
 	})
 
