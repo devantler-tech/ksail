@@ -35,4 +35,13 @@
 //	cmd.Annotations = map[string]string{
 //	    annotations.AnnotationConsolidate: "resource_type", // or "action", "operation"
 //	}
+//
+// AnnotationConfirmFlag: Unlike the command annotations above, this is a flag
+// annotation. Set it to "true" on boolean flags whose only effect is to skip
+// KSail's own interactive confirmation prompt; the chat assistant injects those
+// flags automatically after permission approval. Never set it on flags with
+// other semantics (kubectl's destructive --force, init's overwrite --force).
+//
+//	cmd.Flags().Bool("force", false, "Skip confirmation prompt")
+//	_ = cmd.Flags().SetAnnotation("force", annotations.AnnotationConfirmFlag, []string{"true"})
 package annotations

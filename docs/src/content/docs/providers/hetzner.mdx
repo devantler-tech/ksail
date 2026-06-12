@@ -100,26 +100,10 @@ spec:
       # serverLimit: 10
 ```
 
-| Field | Type | Default | Description |
-| --- | --- | --- | --- |
-| `hetzner.controlPlaneServerType` | string | `cx23` | Hetzner server type for control-plane nodes |
-| `hetzner.workerServerType` | string | `cx23` | Hetzner server type for worker nodes |
-| `hetzner.location` | string | `fsn1` | Datacenter location (`fsn1`, `nbg1`, `hel1`) |
-| `hetzner.networkName` | string | `<cluster>-network` | Private network name |
-| `hetzner.networkCidr` | string | `10.0.0.0/16` | Network CIDR block |
-| `hetzner.sshKeyName` | string | _(empty)_ | SSH key for server access (optional) |
-| `hetzner.tokenEnvVar` | string | `HCLOUD_TOKEN` | Environment variable containing the API token |
-| `hetzner.placementGroupStrategy` | string | `Spread` | `Spread` (HA) or `None` (no placement group) |
-| `hetzner.placementGroup` | string | `<cluster>-placement` | Placement group name |
-| `hetzner.fallbackLocations` | list | `["nbg1", "hel1"]` | Alternative locations if primary is unavailable |
-| `hetzner.placementGroupFallbackToNone` | bool | `false` | Fall back to no placement group on capacity issues |
-| `hetzner.ingressFirewall` | string | `Enabled` | Talos OS-level ingress firewall (`Enabled` or `Disabled`). Generates `NetworkDefaultActionConfig` + `NetworkRuleConfig` patches as defense-in-depth alongside the Hetzner Cloud Firewall. |
-| `hetzner.allowedCidrs` | list | _(empty)_ | CIDR blocks allowed to access the Kubernetes API (6443) and Talos API (50000) on control-plane nodes. When empty, both APIs are open to `0.0.0.0/0` and `::/0`. Applied to both the Hetzner Cloud Firewall and the Talos OS-level ingress firewall for defense-in-depth. Example: `["203.0.113.0/24", "2001:db8::/32"]` |
-| `hetzner.workerPublicIPv4` | bool | `true` | Assign a public IPv4 to worker nodes. Set `false` for IPv4-less workers reached over the private network. See [IPv4-less nodes](#ipv4-less-nodes). |
-| `hetzner.workerPublicIPv6` | bool | `true` | Assign a public IPv6 to worker nodes (IPv6 is free on Hetzner). |
-| `hetzner.controlPlanePublicIPv4` | bool | `true` | Assign a public IPv4 to control-plane nodes. Set `false` for IPv4-less control planes; the kube/talos endpoint then resolves to the private-network IP (cluster reachable only from inside the private network). |
-| `hetzner.controlPlanePublicIPv6` | bool | `true` | Assign a public IPv6 to control-plane nodes. |
-| `hetzner.serverLimit` | int | `10` | Maximum total Hetzner servers for this cluster (your project quota). Validated only when Hetzner node autoscaling is enabled — KSail rejects configs whose **reachable total** exceeds it, where the reachable total is `control-planes + workers + sum(pool.max)`, clamped to `autoscaler.node.maxNodesTotal` when that global cap is set. Set to `0` to use the default of 10. |
+The full `spec.provider.hetzner` field reference — every option with its type, default, and
+description — is generated from the API types: see
+[spec.provider.hetzner (OptionsHetzner)](/configuration/declarative-configuration/#specproviderhetzner-optionshetzner)
+in the Declarative Configuration reference.
 
 ### IPv4-less Nodes
 
@@ -208,21 +192,12 @@ spec:
       serverLimit: 20              # project quota; must be ≥ the reachable total (controlPlanes + workers + sum(pool.max), capped by maxNodesTotal)
 ```
 
-| Field | Type | Default | Description |
-| --- | --- | --- | --- |
-| `autoscaler.node.enabled` | bool | `false` | `true` — defer node scaling to an external autoscaler; `false` — KSail manages node counts directly |
-| `autoscaler.node.expander` | string | `LeastWaste` | Expander strategy: `LeastWaste`, `LeastNodes`, `Random`. (`Price` is rejected by KSail with a validation error for the Hetzner provider, because the Hetzner cloud provider does not implement the pricing API.) |
-| `autoscaler.node.maxNodesTotal` | int | `0` | Maximum total nodes in the **whole cluster** (control-planes + workers + autoscaler nodes), passed to the cluster-autoscaler `--max-nodes-total` flag — not an autoscaler-only budget. `0` disables the global cap. Should be ≤ `serverLimit`. |
-| `autoscaler.node.scaleDownUnneededTime` | string | `10m` | How long a node must be unneeded before it is eligible for scale-down (e.g. `10m`) |
-| `autoscaler.node.pools[].name` | string | — | Unique pool name (DNS-1123 label, max 63 chars) |
-| `autoscaler.node.pools[].serverType` | string | — | Hetzner server type for this pool (e.g. `cx23`, `cax11`) |
-| `autoscaler.node.pools[].location` | string | — | Hetzner datacenter location for this pool (e.g. `fsn1`) |
-| `autoscaler.node.pools[].min` | int | — | Minimum nodes in this pool |
-| `autoscaler.node.pools[].max` | int | — | Maximum nodes in this pool |
-| `autoscaler.node.pools[].labels` | map | _(none)_ | Kubernetes node labels applied to every node in this pool (see [Per-pool labels and taints](#per-pool-labels-and-taints)). Keys must be valid Kubernetes label keys. |
-| `autoscaler.node.pools[].taints[]` | list | _(none)_ | Kubernetes node taints applied to every node in this pool. Each entry has `key` (required), `value` (optional), and `effect` (`NoSchedule`, `PreferNoSchedule`, or `NoExecute`). |
-| `autoscaler.pod.horizontal` | string | `Disabled` | `Enabled` activates HPA support. Metrics-server is a prerequisite — configure it separately via `spec.cluster.metricsServer`. |
-| `autoscaler.pod.vertical` | string | `Disabled` | Reserved for future VPA support; not yet implemented. |
+The full autoscaler field reference (`spec.cluster.autoscaler`, including node pools and per-pool
+labels/taints) is generated from the API types: see
+[spec.cluster.autoscaler (AutoscalerConfig)](/configuration/declarative-configuration/#specclusterautoscaler-autoscalerconfig)
+in the Declarative Configuration reference. Note that the `Price` expander is rejected by KSail
+with a validation error for the Hetzner provider, because the Hetzner cloud provider does not
+implement the pricing API.
 
 > [!NOTE]
 > `spec.provider.hetzner.serverLimit` guards against exceeding your Hetzner Cloud project quota. KSail rejects configurations where the **reachable total** exceeds `serverLimit`, where the reachable total is `controlPlanes + workers + sum(pool.max)`, clamped to `autoscaler.node.maxNodesTotal` when that global cap is set. Because `maxNodesTotal` is the whole-cluster ceiling (the value passed to the autoscaler's `--max-nodes-total`), set it ≤ `serverLimit`. Raise `serverLimit` to match your actual Hetzner project quota.

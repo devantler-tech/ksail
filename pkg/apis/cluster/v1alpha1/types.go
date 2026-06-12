@@ -49,40 +49,84 @@ type ClusterList struct {
 
 // Spec defines the desired state of a KSail cluster.
 type Spec struct {
-	Editor   string       `json:"editor,omitzero"   jsonschema:"description=Editor command for interactive workflows (e.g. code --wait)"` //nolint:lll
-	Cluster  ClusterSpec  `json:"cluster,omitzero"`
+	// Editor is the editor command launched for interactive workflows (e.g. "code --wait").
+	Editor string `json:"editor,omitzero" jsonschema:"description=Editor command for interactive workflows (e.g. code --wait)"` //nolint:lll
+	// Cluster configures the Kubernetes cluster KSail manages: distribution,
+	// provider, components, and connection settings.
+	Cluster ClusterSpec `json:"cluster,omitzero"`
+	// Provider holds infrastructure-provider-specific options
+	// (Hetzner, Omni, AWS, and the Kubernetes provider for nested clusters).
 	Provider ProviderSpec `json:"provider,omitzero"`
+	// Workload configures workload management: the manifest source directory,
+	// OCI push and validation settings, and GitOps bootstrap options.
 	Workload WorkloadSpec `json:"workload,omitzero"`
-	Chat     ChatSpec     `json:"chat,omitzero"`
+	// Chat configures the KSail AI chat assistant.
+	Chat ChatSpec `json:"chat,omitzero"`
 }
 
 // ProviderSpec defines provider-specific configuration for infrastructure providers.
 // This separates infrastructure provider concerns (Hetzner servers, Omni SaaS) from
 // cluster/distribution concerns in ClusterSpec.
 type ProviderSpec struct {
-	Hetzner    OptionsHetzner    `json:"hetzner,omitzero"`
-	Omni       OptionsOmni       `json:"omni,omitzero"`
-	AWS        OptionsAWS        `json:"aws,omitzero"`
+	// Hetzner holds options for the Hetzner Cloud provider.
+	Hetzner OptionsHetzner `json:"hetzner,omitzero"`
+	// Omni holds options for the Sidero Omni provider.
+	Omni OptionsOmni `json:"omni,omitzero"`
+	// AWS holds options for the AWS provider used by the EKS distribution.
+	AWS OptionsAWS `json:"aws,omitzero"`
+	// Kubernetes holds options for the Kubernetes provider, which runs nested
+	// clusters as pods inside an existing host cluster.
 	Kubernetes OptionsKubernetes `json:"kubernetes,omitzero"`
 }
 
 // ClusterSpec defines cluster-related configuration.
 type ClusterSpec struct {
-	DistributionConfig string          `json:"distributionConfig,omitzero"`
-	Connection         Connection      `json:"connection,omitzero"`
-	Distribution       Distribution    `json:"distribution,omitzero"`
-	Provider           Provider        `json:"provider,omitzero"`
-	CNI                CNI             `json:"cni,omitzero"`
-	CSI                CSI             `json:"csi,omitzero"`
-	CDI                CDI             `json:"cdi,omitzero"`
-	MetricsServer      MetricsServer   `json:"metricsServer,omitzero"`
-	LoadBalancer       LoadBalancer    `json:"loadBalancer,omitzero"`
-	CertManager        CertManager     `json:"certManager,omitzero"`
-	PolicyEngine       PolicyEngine    `json:"policyEngine,omitzero"`
-	LocalRegistry      LocalRegistry   `json:"localRegistry,omitzero"`
-	GitOpsEngine       GitOpsEngine    `json:"gitOpsEngine,omitzero"`
-	SOPS               SOPS            `json:"sops,omitzero"`
-	NodeAutoscaling    NodeAutoscaling `json:"nodeAutoscaling,omitzero"    jsonschema:"description=Deprecated. Use autoscaler.node.enabled instead. Do not set both nodeAutoscaling and autoscaler."` //nolint:lll
+	// DistributionConfig is the path to the distribution's own configuration file
+	// (kind.yaml, k3d.yaml, vcluster.yaml, eks.yaml, or the talos directory).
+	// When empty, KSail uses the distribution's default file name.
+	DistributionConfig string `json:"distributionConfig,omitzero"`
+	// Connection defines how KSail connects to the cluster: the kubeconfig path,
+	// context name, and operation timeout.
+	Connection Connection `json:"connection,omitzero"`
+	// Distribution selects the Kubernetes distribution to provision: Vanilla (Kind),
+	// K3s (K3d), Talos, VCluster, KWOK (simulated), or EKS (AWS).
+	Distribution Distribution `json:"distribution,omitzero"`
+	// Provider selects the infrastructure that runs the cluster nodes: Docker,
+	// Hetzner, Omni, AWS, or Kubernetes (nested clusters inside an existing
+	// cluster). Each distribution supports a subset of providers; when empty,
+	// KSail uses the distribution's default provider.
+	Provider Provider `json:"provider,omitzero"`
+	// CNI selects the Container Network Interface plugin. Default keeps the
+	// distribution's built-in CNI; Cilium or Calico install that CNI instead.
+	CNI CNI `json:"cni,omitzero"`
+	// CSI controls Container Storage Interface support. Default keeps the
+	// distribution's behavior; Enabled installs a CSI driver
+	// (local-path-provisioner, or Hetzner CSI on Hetzner); Disabled installs none.
+	CSI CSI `json:"csi,omitzero"`
+	// CDI controls Container Device Interface support in the container runtime
+	// (Default, Enabled, or Disabled).
+	CDI CDI `json:"cdi,omitzero"`
+	// MetricsServer controls metrics-server installation. Default keeps the
+	// distribution's behavior; Enabled or Disabled override it.
+	MetricsServer MetricsServer `json:"metricsServer,omitzero"`
+	// LoadBalancer controls load-balancer support. Default keeps the
+	// distribution and provider behavior; Enabled or Disabled override it.
+	LoadBalancer LoadBalancer `json:"loadBalancer,omitzero"`
+	// CertManager controls whether cert-manager is installed (Enabled or Disabled).
+	CertManager CertManager `json:"certManager,omitzero"`
+	// PolicyEngine selects the policy engine to install: None, Kyverno, or Gatekeeper.
+	PolicyEngine PolicyEngine `json:"policyEngine,omitzero"`
+	// LocalRegistry configures the host-local OCI registry (or an external
+	// registry for cloud providers) used by GitOps workflows.
+	LocalRegistry LocalRegistry `json:"localRegistry,omitzero"`
+	// GitOpsEngine selects the GitOps engine KSail bootstraps: None, Flux, or ArgoCD.
+	GitOpsEngine GitOpsEngine `json:"gitOpsEngine,omitzero"`
+	// SOPS configures automatic creation of the SOPS Age secret used to decrypt
+	// encrypted manifests in the cluster.
+	SOPS SOPS `json:"sops,omitzero"`
+	// NodeAutoscaling is a deprecated alias for spec.cluster.autoscaler.node.enabled
+	// and is migrated on load. Do not set both nodeAutoscaling and autoscaler.
+	NodeAutoscaling NodeAutoscaling `json:"nodeAutoscaling,omitzero" jsonschema:"description=Deprecated. Use autoscaler.node.enabled instead. Do not set both nodeAutoscaling and autoscaler."` //nolint:lll
 	// Autoscaler defines pod and node autoscaling configuration.
 	// Supersedes spec.cluster.nodeAutoscaling (deprecated; aliased on load).
 	Autoscaler   AutoscalerConfig `json:"autoscaler,omitzero"   jsonschema:"description=Pod and node autoscaling configuration (supersedes deprecated nodeAutoscaling)"`                               //nolint:lll // Long description required for JSON schema
@@ -121,8 +165,11 @@ type ClusterSpec struct {
 	OIDC OIDCSpec `json:"oidc,omitzero" jsonschema:"description=OIDC authentication configuration for the API server and kubeconfig"` //nolint:lll
 
 	// Distribution-specific options
+
+	// Vanilla holds options specific to the Vanilla (Kind) distribution.
 	Vanilla OptionsVanilla `json:"vanilla,omitzero"`
-	Talos   OptionsTalos   `json:"talos,omitzero"`
+	// Talos holds options specific to the Talos distribution.
+	Talos OptionsTalos `json:"talos,omitzero"`
 }
 
 // TotalNodeCount returns the total number of nodes (control-plane + workers).
@@ -190,7 +237,13 @@ type ChatSpec struct {
 
 // Connection defines connection options for a KSail cluster.
 type Connection struct {
-	Kubeconfig string          `default:"~/.kube/config" json:"kubeconfig,omitzero"`
-	Context    string          `                         json:"context,omitzero"`
-	Timeout    metav1.Duration `                         json:"timeout,omitzero"`
+	// Kubeconfig is the path to the kubeconfig file KSail reads and writes.
+	// Defaults to "~/.kube/config".
+	Kubeconfig string `default:"~/.kube/config" json:"kubeconfig,omitzero"`
+	// Context is the kubeconfig context for the cluster. When empty, KSail derives
+	// it from the distribution and cluster name (e.g. "kind-kind").
+	Context string `json:"context,omitzero"`
+	// Timeout is the maximum time KSail waits for cluster operations to complete
+	// (e.g. "5m").
+	Timeout metav1.Duration `json:"timeout,omitzero"`
 }

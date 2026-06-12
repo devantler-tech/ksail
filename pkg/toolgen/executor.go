@@ -7,13 +7,15 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
+	"slices"
 	"strings"
 	"sync"
 )
 
 // executeTool executes a tool definition with the given parameters.
 // It sends output chunks via the opts.OutputChan if set.
-// Returns the combined stdout/stderr output and any error.
+// Returns the combined stdout/stderr output (with warnings about ignored
+// parameters appended) and any error.
 func executeTool(
 	ctx context.Context,
 	tool ToolDefinition,
@@ -21,28 +23,83 @@ func executeTool(
 	opts ToolOptions,
 ) (string, error) {
 	// Build command line arguments
-	args, err := BuildCommandArgs(tool, params)
+	args, warnings, err := buildCommandArgsAndWarnings(tool, params)
 	if err != nil {
 		return "", fmt.Errorf("building command args: %w", err)
 	}
 
 	// Execute command with tool name for output correlation
-	return executeCommand(ctx, tool.CommandParts[0], args, tool.Name, opts)
+	output, err := executeCommand(ctx, resolveCommand(opts, tool), args, tool.Name, opts)
+
+	return appendWarnings(output, warnings), err
+}
+
+// resolveCommand returns the executable to run for a tool invocation:
+// opts.ExecutablePath when set (DefaultOptions resolves it to the running
+// binary via os.Executable, removing any PATH dependence), otherwise the
+// tool's recorded root command name as a PATH-lookup fallback.
+func resolveCommand(opts ToolOptions, tool ToolDefinition) string {
+	if opts.ExecutablePath != "" {
+		return opts.ExecutablePath
+	}
+
+	return tool.CommandParts[0]
+}
+
+// appendWarnings appends warning lines to command output so MCP/chat clients
+// see them alongside the command result.
+func appendWarnings(output string, warnings []string) string {
+	if len(warnings) == 0 {
+		return output
+	}
+
+	var builder strings.Builder
+
+	builder.WriteString(output)
+
+	if output != "" && !strings.HasSuffix(output, "\n") {
+		builder.WriteString("\n")
+	}
+
+	for _, warning := range warnings {
+		builder.WriteString("Warning: ")
+		builder.WriteString(warning)
+		builder.WriteString("\n")
+	}
+
+	return builder.String()
 }
 
 // BuildCommandArgs constructs command-line arguments from parameters.
 func BuildCommandArgs(tool ToolDefinition, params map[string]any) ([]string, error) {
+	args, _, err := buildCommandArgsAndWarnings(tool, params)
+
+	return args, err
+}
+
+// buildCommandArgsAndWarnings constructs command-line arguments from parameters.
+// The returned warnings describe parameters that were ignored (e.g. flags not
+// applicable to the selected subcommand of a consolidated tool).
+func buildCommandArgsAndWarnings(
+	tool ToolDefinition,
+	params map[string]any,
+) ([]string, []string, error) {
 	args := make([]string, 0)
+
+	var warnings []string
 
 	// Handle consolidated tools
 	if tool.IsConsolidated {
-		processedArgs, filteredParams, err := handleConsolidatedTool(tool, params)
+		processedArgs, filteredParams, consolidatedWarnings, err := handleConsolidatedTool(
+			tool, params,
+		)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		args = append(args, processedArgs...)
 		params = filteredParams
+		warnings = consolidatedWarnings
 	} else if len(tool.CommandParts) > 1 {
 		// Add subcommands (skip the root command name)
 		args = append(args, tool.CommandParts[1:]...)
@@ -54,7 +111,7 @@ func BuildCommandArgs(tool ToolDefinition, params map[string]any) ([]string, err
 		if name == argsKey {
 			positionalArgs, ok := value.([]any)
 			if !ok {
-				return nil, ErrArgsNotArray
+				return nil, nil, ErrArgsNotArray
 			}
 
 			for _, arg := range positionalArgs {
@@ -69,18 +126,19 @@ func BuildCommandArgs(tool ToolDefinition, params map[string]any) ([]string, err
 		args = append(args, flagArgs...)
 	}
 
-	return args, nil
+	return args, warnings, nil
 }
 
-// handleConsolidatedTool extracts subcommand info and returns processed args and filtered params.
+// handleConsolidatedTool extracts subcommand info and returns processed args,
+// filtered params, and warnings describing ignored parameters.
 func handleConsolidatedTool(
 	tool ToolDefinition,
 	params map[string]any,
-) ([]string, map[string]any, error) {
+) ([]string, map[string]any, []string, error) {
 	// Extract subcommand parameter
 	subcommandName, ok := params[tool.SubcommandParam].(string)
 	if !ok {
-		return nil, nil, fmt.Errorf("%w: %s", ErrMissingSubcommandParam, tool.SubcommandParam)
+		return nil, nil, nil, fmt.Errorf("%w: %s", ErrMissingSubcommandParam, tool.SubcommandParam)
 	}
 
 	// Look up subcommand definition
@@ -91,7 +149,7 @@ func handleConsolidatedTool(
 			validSubcommands = append(validSubcommands, name)
 		}
 
-		return nil, nil, fmt.Errorf(
+		return nil, nil, nil, fmt.Errorf(
 			"%w: %s=%s (valid options: %s)",
 			ErrInvalidSubcommand,
 			tool.SubcommandParam,
@@ -106,10 +164,31 @@ func handleConsolidatedTool(
 		args = subcommandDef.CommandParts[1:]
 	}
 
-	// Filter params to only include flags that apply to this subcommand.
-	// This prevents "unknown flag" errors when MCP clients pass default values
-	// for flags that belong to other subcommands in the consolidated tool.
+	filteredParams, warnings, err := filterConsolidatedParams(
+		tool, subcommandDef, subcommandName, params,
+	)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	return args, filteredParams, warnings, nil
+}
+
+// filterConsolidatedParams filters params to only the flags that apply to the
+// selected subcommand. This prevents "unknown flag" errors when MCP clients
+// pass default values for flags that belong to other subcommands in the
+// consolidated tool's union schema. Ignored flags are reported as a warning
+// (appended to the tool output) instead of being dropped silently, so clients
+// don't believe an inapplicable parameter took effect.
+func filterConsolidatedParams(
+	tool ToolDefinition,
+	subcommandDef *SubcommandDef,
+	subcommandName string,
+	params map[string]any,
+) (map[string]any, []string, error) {
 	filteredParams := make(map[string]any)
+
+	var ignored []string
 
 	for key, val := range params {
 		// Skip the subcommand selector parameter
@@ -135,10 +214,23 @@ func handleConsolidatedTool(
 		// Only include flags that exist in the selected subcommand's flag definitions
 		if _, appliesToSubcommand := subcommandDef.Flags[key]; appliesToSubcommand {
 			filteredParams[key] = val
+		} else {
+			ignored = append(ignored, key)
 		}
 	}
 
-	return args, filteredParams, nil
+	var warnings []string
+
+	if len(ignored) > 0 {
+		slices.Sort(ignored)
+		warnings = append(warnings, fmt.Sprintf(
+			"ignored parameters not applicable to subcommand %q: %s",
+			subcommandName,
+			strings.Join(ignored, ", "),
+		))
+	}
+
+	return filteredParams, warnings, nil
 }
 
 // formatFlagArg formats a single flag into command-line arguments.

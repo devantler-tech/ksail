@@ -38,6 +38,10 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
+// forceFlagName is the name of the confirmation-skip --force flag shared by
+// the cluster lifecycle commands.
+const forceFlagName = "force"
+
 // NewUpdateCmd creates the cluster update command.
 // The update command applies configuration changes to a running cluster.
 // It supports in-place updates where possible and falls back to recreation when necessary.
@@ -79,6 +83,10 @@ Use --output json to emit a machine-readable diff for CI/MCP consumption.`,
 			"drains delete pods directly, bypassing PodDisruptionBudgets, so a rolling "+
 			"reboot/recreate completes even when a budget would block graceful eviction "+
 			"(may cause workload disruption or data loss)")
+	_ = cmd.Flags().SetAnnotation(
+		forceFlagName, annotations.AnnotationConfirmFlag,
+		[]string{annotations.AnnotationValueTrue},
+	)
 	_ = cfgManager.Viper.BindPFlag("force", cmd.Flags().Lookup("force"))
 
 	cmd.Flags().BoolP("yes", "y", false,

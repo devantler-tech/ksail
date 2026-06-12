@@ -26,26 +26,20 @@ const (
 	ProviderKubernetes Provider = "Kubernetes"
 )
 
-// Set for Provider (pflag.Value interface).
-func (p *Provider) Set(value string) error {
-	for _, prov := range ValidProviders() {
-		if strings.EqualFold(value, string(prov)) {
-			*p = prov
-
-			return nil
-		}
-	}
-
-	return fmt.Errorf(
-		"%w: %s (valid options: %s, %s, %s, %s, %s)",
-		ErrInvalidProvider,
-		value,
+// ValidProviders returns supported provider values.
+func ValidProviders() []Provider {
+	return []Provider{
 		ProviderDocker,
 		ProviderHetzner,
 		ProviderOmni,
 		ProviderAWS,
 		ProviderKubernetes,
-	)
+	}
+}
+
+// Set for Provider (pflag.Value interface).
+func (p *Provider) Set(value string) error {
+	return setEnum(p, value, ValidProviders(), ErrInvalidProvider)
 }
 
 // String returns the string representation of the Provider.
@@ -65,31 +59,17 @@ func (p *Provider) Default() any {
 
 // ValidValues returns all valid Provider values as strings.
 func (p *Provider) ValidValues() []string {
-	return []string{
-		string(ProviderDocker),
-		string(ProviderHetzner),
-		string(ProviderOmni),
-		string(ProviderAWS),
-		string(ProviderKubernetes),
-	}
+	return validValueStrings(ValidProviders())
 }
 
 // supportedProviders returns the valid providers for a given distribution.
 // The Kubernetes provider is supported by Vanilla, K3s, Talos, VCluster, and KWOK distributions,
 // allowing them to run as nested clusters in pod form within an existing host Kubernetes cluster.
+// Returns nil for unknown distributions.
 func supportedProviders(distribution Distribution) []Provider {
-	switch distribution {
-	case DistributionVanilla, DistributionK3s, DistributionVCluster:
-		return []Provider{ProviderDocker, ProviderKubernetes}
-	case DistributionKWOK:
-		return []Provider{ProviderDocker, ProviderKubernetes}
-	case DistributionTalos:
-		return []Provider{ProviderDocker, ProviderHetzner, ProviderOmni, ProviderKubernetes}
-	case DistributionEKS:
-		return []Provider{ProviderAWS}
-	default:
-		return nil
-	}
+	meta, _ := distributionMetaFor(distribution)
+
+	return slices.Clone(meta.supportedProviders)
 }
 
 // DefaultProviderForDistribution returns the conventional default provider for a distribution: the

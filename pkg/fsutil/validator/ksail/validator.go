@@ -217,27 +217,12 @@ func (v *Validator) getExpectedContextName(config *v1alpha1.Cluster) string {
 }
 
 // formatExpectedContextName returns the canonical kubeconfig context name used
-// by a given distribution's tooling.
+// by a given distribution's tooling, delegating to the single source in pkg/apis.
 func formatExpectedContextName(
 	distribution v1alpha1.Distribution,
 	distributionName string,
 ) string {
-	prefixes := map[v1alpha1.Distribution]string{
-		v1alpha1.DistributionVanilla:  "kind-",
-		v1alpha1.DistributionK3s:      "k3d-",
-		v1alpha1.DistributionTalos:    "admin@",
-		v1alpha1.DistributionVCluster: "vcluster-docker_",
-		v1alpha1.DistributionKWOK:     "kwok-",
-	}
-	if prefix, ok := prefixes[distribution]; ok {
-		return prefix + distributionName
-	}
-
-	if distribution == v1alpha1.DistributionEKS {
-		return distributionName + ".eksctl.io"
-	}
-
-	return ""
+	return distribution.ContextName(distributionName)
 }
 
 // getDistributionConfigName extracts the cluster name from the distribution configuration.

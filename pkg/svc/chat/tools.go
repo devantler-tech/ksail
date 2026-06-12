@@ -20,6 +20,9 @@ func GetKSailToolMetadata(
 	opts := toolgen.DefaultOptions()
 	opts.OutputChan = outputChan
 	opts.SessionLog = sessionLog
+	// Run tools via the running binary instead of a PATH lookup of "ksail",
+	// so chat tool calls work regardless of how ksail was launched.
+	opts.ExecutablePath = toolgen.DefaultExecutablePath()
 
 	// Get SDK-agnostic tool definitions
 	toolDefs := toolgen.GenerateTools(rootCmd, opts)
