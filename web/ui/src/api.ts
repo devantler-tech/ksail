@@ -33,8 +33,9 @@ export interface ClusterStatus {
 
 // ClusterSpec is the spec.cluster shape, derived from the Go API types via the JSON schema
 // (web/ui's `gen:types` script generates ./generated/ksail-config.ts from schemas/). There is no
-// hand-written mirror: adding a field or enum value in Go surfaces here after regeneration.
-export type ClusterSpec = NonNullable<KSailClusterConfiguration["spec"]["cluster"]>;
+// hand-written mirror: adding a field or enum value in Go surfaces here after regeneration. Both
+// levels are optional in the schema (spec is no longer required), hence the nested NonNullable.
+export type ClusterSpec = NonNullable<NonNullable<KSailClusterConfiguration["spec"]>["cluster"]>;
 
 // ComponentKey is the set of spec.cluster fields the UI surfaces as component selectors. The valid
 // values and defaults for each come from the /api/v1/meta endpoint, not from this list.

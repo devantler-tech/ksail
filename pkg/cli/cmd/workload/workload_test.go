@@ -29,9 +29,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-//nolint:gochecknoglobals // Serializes t.Chdir-based config discovery tests in this package.
 const workloadCommandName = "workload"
 
+//nolint:gochecknoglobals // Serializes t.Chdir-based config discovery tests in this package.
 var workloadConfigDiscoveryMu sync.Mutex
 
 func TestNewImagesCmdHasCorrectDefaults(t *testing.T) {
