@@ -11,5 +11,5 @@ description: Dependabot version pin for the metrics-server Helm chart (not a dep
 version: 0.0.0
 dependencies:
   - name: metrics-server
-    version: 3.13.0
+    version: 3.13.1
     repository: https://kubernetes-sigs.github.io/metrics-server/
