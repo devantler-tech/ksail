@@ -4,6 +4,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
 	"github.com/devantler-tech/ksail/v7/pkg/strutil"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -48,7 +49,8 @@ func generateToolsRecursive(cmd *cobra.Command, tools *[]ToolDefinition, opts To
 
 // hasExcludeAnnotation checks if a command has the explicit exclude annotation.
 func hasExcludeAnnotation(cmd *cobra.Command) bool {
-	return cmd.Annotations != nil && cmd.Annotations[AnnotationExclude] == annotationValueTrue
+	return cmd.Annotations != nil &&
+		cmd.Annotations[annotations.AnnotationExclude] == annotationValueTrue
 }
 
 // processCommandAndChildren traverses children and adds the command as a tool if applicable.
@@ -157,8 +159,8 @@ func commandToToolDefinition(cmd *cobra.Command, excludeFlags []string) ToolDefi
 
 	// Get description from annotation or Short
 	description := cmd.Short
-	if cmd.Annotations != nil && cmd.Annotations[AnnotationDescription] != "" {
-		description = cmd.Annotations[AnnotationDescription]
+	if cmd.Annotations != nil && cmd.Annotations[annotations.AnnotationDescription] != "" {
+		description = cmd.Annotations[annotations.AnnotationDescription]
 	}
 
 	// Build JSON schema from flags
@@ -166,7 +168,7 @@ func commandToToolDefinition(cmd *cobra.Command, excludeFlags []string) ToolDefi
 
 	// Check if permission is required
 	requiresPermission := cmd.Annotations != nil &&
-		cmd.Annotations[AnnotationPermission] == permissionWrite
+		cmd.Annotations[annotations.AnnotationPermission] == permissionWrite
 
 	// Split command path into parts
 	cmdParts := strings.Fields(cmdPath)

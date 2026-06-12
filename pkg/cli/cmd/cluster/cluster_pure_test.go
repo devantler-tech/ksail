@@ -17,7 +17,6 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
-	v1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -331,70 +330,6 @@ func TestIsEmptyYAML_NonexistentFile(t *testing.T) {
 
 	got := cluster.ExportIsEmptyYAML("/nonexistent/path/file.yaml")
 	assert.False(t, got)
-}
-
-// ===========================================================================
-// hasK3sArg — K3d config argument detection
-// ===========================================================================
-
-func TestHasK3sArg(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name string
-		args []v1alpha5.K3sArgWithNodeFilters
-		flag string
-		want bool
-	}{
-		{
-			name: "flag present",
-			args: []v1alpha5.K3sArgWithNodeFilters{
-				{Arg: "--disable=traefik"},
-				{Arg: "--disable=local-storage"},
-			},
-			flag: "--disable=local-storage",
-			want: true,
-		},
-		{
-			name: "flag absent",
-			args: []v1alpha5.K3sArgWithNodeFilters{
-				{Arg: "--disable=traefik"},
-			},
-			flag: "--disable=local-storage",
-			want: false,
-		},
-		{
-			name: "empty args",
-			args: nil,
-			flag: "--disable=traefik",
-			want: false,
-		},
-		{
-			name: "partial match is not a match",
-			args: []v1alpha5.K3sArgWithNodeFilters{
-				{Arg: "--disable=traefik-extra"},
-			},
-			flag: "--disable=traefik",
-			want: false,
-		},
-	}
-
-	for _, testCase := range tests {
-		t.Run(testCase.name, func(t *testing.T) {
-			t.Parallel()
-
-			config := &v1alpha5.SimpleConfig{
-				Options: v1alpha5.SimpleConfigOptions{
-					K3sOptions: v1alpha5.SimpleConfigOptionsK3s{
-						ExtraArgs: testCase.args,
-					},
-				},
-			}
-
-			got := cluster.ExportHasK3sArg(config, testCase.flag)
-			assert.Equal(t, testCase.want, got)
-		})
-	}
 }
 
 // ===========================================================================

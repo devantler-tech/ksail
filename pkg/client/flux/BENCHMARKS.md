@@ -21,12 +21,11 @@ go test -bench=. -benchmem ./pkg/client/flux/...
 # Run specific benchmark
 go test -bench=BenchmarkGitRepository_Creation -benchmem ./pkg/client/flux/...
 
-# Save results for comparison
-go test -bench=. -benchmem ./pkg/client/flux/... > baseline.txt
-
-# Compare before/after changes
+# Compare before/after changes locally
+go test -bench=. -benchmem ./pkg/client/flux/... > old.txt
+# ...make changes...
 go test -bench=. -benchmem ./pkg/client/flux/... > new.txt
-benchstat baseline.txt new.txt
+benchstat old.txt new.txt
 ```
 
 ## Benchmark Scenarios
@@ -186,17 +185,9 @@ Despite meeting all performance targets, future optimization opportunities inclu
 
 ## Integration with CI/CD
 
-To track performance regression in CI:
-
-```yaml
-- name: Run Flux client benchmarks
-  run: |
-    go test -bench=. -benchmem ./pkg/client/flux/... > flux-bench-new.txt
-    
-- name: Compare with baseline
-  run: |
-    benchstat pkg/client/flux/baseline.txt flux-bench-new.txt
-```
+Regression gating happens in CI via `github-action-benchmark` against its own
+stored history (see `docs/BENCHMARK-REGRESSION.md`); no baseline files are
+kept in-tree.
 
 ## Profiling
 

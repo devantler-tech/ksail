@@ -3,6 +3,7 @@ package toolgen_test
 import (
 	"testing"
 
+	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
 	"github.com/devantler-tech/ksail/v7/pkg/toolgen"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
@@ -138,7 +139,7 @@ func TestCollectAllSubcommands_Empty(t *testing.T) {
 	assert.Empty(t, subcommands)
 }
 
-func TestCollectAllSubcommandsWithPrefix(t *testing.T) {
+func TestWalkSubcommands_Prefix(t *testing.T) {
 	t.Parallel()
 
 	parent := &cobra.Command{
@@ -152,14 +153,13 @@ func TestCollectAllSubcommandsWithPrefix(t *testing.T) {
 	}
 	parent.AddCommand(child)
 
-	subcommands := make(map[string]*toolgen.SubcommandDef)
-	toolgen.CollectAllSubcommandsWithPrefix(parent, &subcommands, "myprefix")
+	subcommands := collectWithWalk(parent, "myprefix")
 
 	require.Len(t, subcommands, 1)
 	assert.Contains(t, subcommands, "myprefix_child")
 }
 
-func TestCollectAllSubcommandsWithPrefix_EmptyPrefix(t *testing.T) {
+func TestWalkSubcommands_EmptyPrefix(t *testing.T) {
 	t.Parallel()
 
 	parent := &cobra.Command{
@@ -173,11 +173,26 @@ func TestCollectAllSubcommandsWithPrefix_EmptyPrefix(t *testing.T) {
 	}
 	parent.AddCommand(child)
 
-	subcommands := make(map[string]*toolgen.SubcommandDef)
-	toolgen.CollectAllSubcommandsWithPrefix(parent, &subcommands, "")
+	subcommands := collectWithWalk(parent, "")
 
 	require.Len(t, subcommands, 1)
 	assert.Contains(t, subcommands, "child")
+}
+
+// collectWithWalk runs the unified walker with a map-populating sink.
+func collectWithWalk(parent *cobra.Command, prefix string) map[string]*toolgen.SubcommandDef {
+	subcommands := make(map[string]*toolgen.SubcommandDef)
+
+	toolgen.WalkSubcommands(
+		parent,
+		prefix,
+		false,
+		func(def *toolgen.SubcommandDef, key string, _ bool) {
+			subcommands[key] = def
+		},
+	)
+
+	return subcommands
 }
 
 func TestCollectAllSubcommands_AcceptsPositionalArgs(t *testing.T) {
@@ -269,8 +284,8 @@ func TestGenerateTools_ConsolidateWithParentPermission(t *testing.T) {
 		Use:   "cipher",
 		Short: "Manage encrypted files with SOPS",
 		Annotations: map[string]string{
-			toolgen.AnnotationConsolidate: "cipher_operation",
-			toolgen.AnnotationPermission:  "write",
+			annotations.AnnotationConsolidate: cipherOperationParam,
+			annotations.AnnotationPermission:  "write",
 		},
 	}
 	encryptCmd := &cobra.Command{

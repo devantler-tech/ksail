@@ -553,7 +553,6 @@ func TestHandlePermissionKey_YApproves(t *testing.T) {
 	require.True(t, ok)
 
 	assert.False(t, chat.ExportHasPendingPermission(m))
-	assert.True(t, chat.ExportGetPermissionHistoryLastAllowed(m))
 
 	// Check the channel response
 	require.Len(t, resp, 1)

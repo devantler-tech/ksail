@@ -46,19 +46,10 @@ const (
 	calicoChartsRepoURL = "https://docs.tigera.io/calico/charts"
 )
 
-// NewInstaller creates a new Calico installer instance.
-func NewInstaller(
-	client helm.Interface,
-	kubeconfig, kubeContext string,
-	timeout time.Duration,
-) *Installer {
-	return NewInstallerWithDistribution(client, kubeconfig, kubeContext, timeout, "", false)
-}
-
-// NewInstallerWithDistribution creates a new Calico installer with distribution-specific configuration.
+// NewInstaller creates a new Calico installer with distribution-specific configuration.
 // When haEnabled is true the chart is configured with HA defaults
 // for the Typha control plane (controlPlaneReplicas).
-func NewInstallerWithDistribution(
+func NewInstaller(
 	client helm.Interface,
 	kubeconfig, kubeContext string,
 	timeout time.Duration,

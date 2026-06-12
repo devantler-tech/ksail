@@ -215,7 +215,7 @@ func RotateFile(path string, opts RotateOpts) error {
 		return fmt.Errorf("%w for %q: %v", ErrCouldNotGenerateDataKey, absPath, errs)
 	}
 
-	output, err := EncryptTreeAndEmit(tree, dataKey, aes.NewCipher(), outputStore)
+	output, err := encryptTreeAndEmit(tree, dataKey, aes.NewCipher(), outputStore)
 	if err != nil {
 		return fmt.Errorf("re-encrypting %q: %w", absPath, err)
 	}

@@ -46,11 +46,6 @@ func (m *Model) handlePermissionKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // allowPermission approves the pending permission request.
 func (m *Model) allowPermission() (tea.Model, tea.Cmd) {
-	m.permissionHistory = append(m.permissionHistory, permissionResponse{
-		toolName: m.pendingPermission.toolName,
-		command:  m.pendingPermission.command,
-		allowed:  true,
-	})
 	m.pendingPermission.response <- true
 
 	m.pendingPermission = nil
@@ -75,11 +70,6 @@ func (m *Model) allowAlwaysPermission() (tea.Model, tea.Cmd) {
 
 // denyPermission denies the pending permission request.
 func (m *Model) denyPermission() (tea.Model, tea.Cmd) {
-	m.permissionHistory = append(m.permissionHistory, permissionResponse{
-		toolName: m.pendingPermission.toolName,
-		command:  m.pendingPermission.command,
-		allowed:  false,
-	})
 	m.pendingPermission.response <- false
 
 	m.pendingPermission = nil

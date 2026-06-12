@@ -250,6 +250,25 @@ func TestGetClusterStatus_NotFound(t *testing.T) {
 	require.ErrorIs(t, err, provider.ErrClusterNotFound)
 }
 
+func TestGetClusterStatus_ZeroNodegroups(t *testing.T) {
+	t.Parallel()
+
+	prov, _ := newProvider(t, map[string][]response{
+		"get cluster": {
+			{stdout: []byte(`[{"Name":"demo","Region":"us-east-1","EksctlCreated":"True"}]`)},
+		},
+		"get nodegroup": {{stdout: []byte(`[]`)}},
+	})
+
+	status, err := prov.GetClusterStatus(t.Context(), "demo")
+	require.NoError(t, err)
+	require.NotNil(t, status, "existing cluster with zero nodegroups must yield a non-nil status")
+	assert.Equal(t, 0, status.NodesTotal)
+	assert.Equal(t, 0, status.NodesReady)
+	assert.False(t, status.Ready)
+	assert.Equal(t, "stopped", status.Phase)
+}
+
 func TestGetClusterStatus_AggregatesNodegroupStatus(t *testing.T) {
 	t.Parallel()
 

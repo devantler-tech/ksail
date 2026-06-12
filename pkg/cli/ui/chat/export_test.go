@@ -54,20 +54,6 @@ var ExportSetPendingPermission = func(m *Model, toolName, command, arguments str
 	}
 }
 
-// ExportGetPermissionHistoryLen returns the length of Model.permissionHistory for testing.
-var ExportGetPermissionHistoryLen = func(m *Model) int {
-	return len(m.permissionHistory)
-}
-
-// ExportGetPermissionHistoryLastAllowed returns whether the last permission was allowed.
-var ExportGetPermissionHistoryLastAllowed = func(m *Model) bool {
-	if len(m.permissionHistory) == 0 {
-		return false
-	}
-
-	return m.permissionHistory[len(m.permissionHistory)-1].allowed
-}
-
 // ExportHasPendingPermission returns whether Model.pendingPermission is set.
 var ExportHasPendingPermission = func(m *Model) bool {
 	return m.pendingPermission != nil
@@ -517,8 +503,8 @@ type ToolStartMsgForTest = toolStartMsg
 // ToolEndMsgForTest is an exported alias for toolEndMsg.
 type ToolEndMsgForTest = toolEndMsg
 
-// ToolOutputChunkMsgForTest is an exported alias for toolOutputChunkMsg.
-type ToolOutputChunkMsgForTest = toolOutputChunkMsg
+// ToolOutputChunkMsgForTest is an exported alias for ToolOutputChunkMsg.
+type ToolOutputChunkMsgForTest = ToolOutputChunkMsg
 
 // StreamEndMsgForTest is an exported alias for streamEndMsg.
 type StreamEndMsgForTest = streamEndMsg
@@ -596,11 +582,30 @@ var ExportNewToolEndMsg = func(toolID, toolName, output string, success bool) To
 	return toolEndMsg{toolID: toolID, toolName: toolName, output: output, success: success}
 }
 
-// ExportNewToolOutputChunkMsg creates a toolOutputChunkMsg for testing.
+// ExportNewToolOutputChunkMsg creates a ToolOutputChunkMsg for testing.
 //
 
 var ExportNewToolOutputChunkMsg = func(toolID, chunk string) ToolOutputChunkMsgForTest {
-	return toolOutputChunkMsg{toolID: toolID, chunk: chunk}
+	return ToolOutputChunkMsg{ToolID: toolID, Chunk: chunk}
+}
+
+// PermissionRequestMsgForTest is an exported alias for permissionRequestMsg.
+type PermissionRequestMsgForTest = permissionRequestMsg
+
+// ExportNewPermissionRequestMsg creates a permissionRequestMsg for testing.
+//
+
+var ExportNewPermissionRequestMsg = func(
+	toolCallID, toolName, command, arguments string,
+	response chan<- bool,
+) PermissionRequestMsgForTest {
+	return permissionRequestMsg{
+		toolCallID: toolCallID,
+		toolName:   toolName,
+		command:    command,
+		arguments:  arguments,
+		response:   response,
+	}
 }
 
 // ExportNewStreamEndMsg creates a streamEndMsg for testing.
@@ -744,13 +749,6 @@ var ExportGetCurrentModel = func(m *Model) string {
 
 var ExportGetErr = func(m *Model) error {
 	return m.err
-}
-
-// ExportGetIsCompacting returns Model.isCompacting for testing.
-//
-
-var ExportGetIsCompacting = func(m *Model) bool {
-	return m.isCompacting
 }
 
 // ExportGetLastUsageModel returns Model.lastUsageModel for testing.
@@ -957,11 +955,6 @@ var ExportSetCommandPickerIndex = func(m *Model, idx int) {
 // ExportGetSessionConfig returns the session config for testing.
 var ExportGetSessionConfig = func(m *Model) *copilot.SessionConfig {
 	return m.sessionConfig
-}
-
-// ExportCommandPickerExtraHeight exposes commandPickerExtraHeight for testing.
-var ExportCommandPickerExtraHeight = func(m *Model) int {
-	return m.commandPickerExtraHeight()
 }
 
 // --- Option picker test exports ---

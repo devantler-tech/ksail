@@ -165,7 +165,6 @@ func validateManifests(cmd *cobra.Command, sourceDir string, outputTimer timer.T
 	notify.WriteMessage(notify.Message{
 		Type:    notify.ActivityType,
 		Content: "validating manifests",
-		Timer:   outputTimer,
 		Writer:  cmd.OutOrStdout(),
 	})
 
@@ -201,7 +200,6 @@ func buildAndPushArtifact(
 	notify.WriteMessage(notify.Message{
 		Type:    notify.ActivityType,
 		Content: "building oci artifact",
-		Timer:   outputTimer,
 		Writer:  cmd.OutOrStdout(),
 	})
 
@@ -211,7 +209,6 @@ func buildAndPushArtifact(
 		Type:    notify.ActivityType,
 		Content: "pushing to %s",
 		Args:    []any{registryDisplay},
-		Timer:   outputTimer,
 		Writer:  cmd.OutOrStdout(),
 	})
 
@@ -291,7 +288,7 @@ func resolvePushParams(
 		return newPushParamsFromOCIRef(cfg, ociRef, pathFlag)
 	}
 
-	registryInfo, err := detectRegistry(cmd, cfg, viperInstance, tmr, outputTimer)
+	registryInfo, err := detectRegistry(cmd, cfg, viperInstance, tmr)
 	if err != nil {
 		return nil, err
 	}
@@ -351,7 +348,6 @@ func detectRegistry(
 	cfg *v1alpha1.Cluster,
 	viperInstance *viper.Viper,
 	tmr timer.Timer,
-	outputTimer timer.Timer,
 ) (*registryhelpers.Info, error) {
 	cmd.Println()
 	notify.WriteMessage(notify.Message{
@@ -366,7 +362,6 @@ func detectRegistry(
 	notify.WriteMessage(notify.Message{
 		Type:    notify.ActivityType,
 		Content: "resolving registry configuration",
-		Timer:   outputTimer,
 		Writer:  cmd.OutOrStdout(),
 	})
 

@@ -3,6 +3,7 @@ package chat_test
 import (
 	"testing"
 
+	chatui "github.com/devantler-tech/ksail/v7/pkg/cli/ui/chat"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/chat"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -11,7 +12,7 @@ import (
 func TestBuildSystemContext(t *testing.T) {
 	t.Parallel()
 
-	ctx, err := chat.BuildSystemContext()
+	ctx, err := chatui.BuildSystemContext(chat.DefaultSystemContextConfig())
 	require.NoError(t, err)
 	assert.NotEmpty(t, ctx)
 	assert.Contains(t, ctx, "<identity>")

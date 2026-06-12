@@ -482,7 +482,10 @@ func (c scaffoldContextCase) run(t *testing.T) {
 	require.Equal(t, c.expected, capturedContext)
 }
 
-func TestScaffoldAppliesContextDefaults(t *testing.T) {
+// TestScaffoldDoesNotApplyContextDefaults verifies the scaffolder never injects a derived
+// kubeconfig context into ksail.yaml: the context is computed from the distribution and
+// cluster name at runtime, so scaffolding it would duplicate metadata.name and go stale.
+func TestScaffoldDoesNotApplyContextDefaults(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
@@ -490,31 +493,31 @@ func TestScaffoldAppliesContextDefaults(t *testing.T) {
 		scenario scaffoldContextCase
 	}{
 		{
-			name: "KindDefaultContext",
+			name: "KindNoContext",
 			scenario: scaffoldContextCase{
 				distribution: v1alpha1.DistributionVanilla,
-				expected:     v1alpha1.ExpectedContextName(v1alpha1.DistributionVanilla),
+				expected:     "",
 			},
 		},
 		{
-			name: "K3dDefaultContext",
+			name: "K3dNoContext",
 			scenario: scaffoldContextCase{
 				distribution: v1alpha1.DistributionK3s,
-				expected:     v1alpha1.ExpectedContextName(v1alpha1.DistributionK3s),
+				expected:     "",
 			},
 		},
 		{
-			name: "TalosDefaultContext",
+			name: "TalosNoContext",
 			scenario: scaffoldContextCase{
 				distribution: v1alpha1.DistributionTalos,
-				expected:     v1alpha1.ExpectedContextName(v1alpha1.DistributionTalos),
+				expected:     "",
 			},
 		},
 		{
-			name: "VClusterDefaultContext",
+			name: "VClusterNoContext",
 			scenario: scaffoldContextCase{
 				distribution: v1alpha1.DistributionVCluster,
-				expected:     v1alpha1.ExpectedContextName(v1alpha1.DistributionVCluster),
+				expected:     "",
 			},
 		},
 		{
@@ -1859,44 +1862,46 @@ func TestWithClusterName(t *testing.T) {
 	require.Equal(t, "custom-cluster", scaffolderInstance.ClusterName)
 }
 
-func TestWithClusterName_AppliesContextToKSailConfig(t *testing.T) {
+// TestWithClusterName_DoesNotScaffoldContext verifies that a custom cluster name lands in
+// metadata.name only: the kubeconfig context is derived at runtime and never scaffolded.
+func TestWithClusterName_DoesNotScaffoldContext(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name            string
-		distribution    v1alpha1.Distribution
-		clusterName     string
-		expectedContext string
+		name           string
+		distribution   v1alpha1.Distribution
+		clusterName    string
+		derivedContext string
 	}{
 		{
-			name:            "vanilla_sets_kind_context",
-			distribution:    v1alpha1.DistributionVanilla,
-			clusterName:     "my-cluster",
-			expectedContext: "kind-my-cluster",
+			name:           "vanilla_omits_kind_context",
+			distribution:   v1alpha1.DistributionVanilla,
+			clusterName:    "my-cluster",
+			derivedContext: "kind-my-cluster",
 		},
 		{
-			name:            "k3s_sets_k3d_context",
-			distribution:    v1alpha1.DistributionK3s,
-			clusterName:     "test-cluster",
-			expectedContext: "k3d-test-cluster",
+			name:           "k3s_omits_k3d_context",
+			distribution:   v1alpha1.DistributionK3s,
+			clusterName:    "test-cluster",
+			derivedContext: "k3d-test-cluster",
 		},
 		{
-			name:            "talos_sets_admin_context",
-			distribution:    v1alpha1.DistributionTalos,
-			clusterName:     "prod-cluster",
-			expectedContext: "admin@prod-cluster",
+			name:           "talos_omits_admin_context",
+			distribution:   v1alpha1.DistributionTalos,
+			clusterName:    "prod-cluster",
+			derivedContext: "admin@prod-cluster",
 		},
 		{
-			name:            "vcluster_sets_vcluster_context",
-			distribution:    v1alpha1.DistributionVCluster,
-			clusterName:     "dev-cluster",
-			expectedContext: "vcluster-docker_dev-cluster",
+			name:           "vcluster_omits_vcluster_context",
+			distribution:   v1alpha1.DistributionVCluster,
+			clusterName:    "dev-cluster",
+			derivedContext: "vcluster-docker_dev-cluster",
 		},
 		{
-			name:            "kwok_sets_kwok_context",
-			distribution:    v1alpha1.DistributionKWOK,
-			clusterName:     "test-cluster",
-			expectedContext: "kwok-test-cluster",
+			name:           "kwok_omits_kwok_context",
+			distribution:   v1alpha1.DistributionKWOK,
+			clusterName:    "test-cluster",
+			derivedContext: "kwok-test-cluster",
 		},
 	}
 
@@ -1913,13 +1918,36 @@ func TestWithClusterName_AppliesContextToKSailConfig(t *testing.T) {
 			err := scaffolderInstance.Scaffold(tempDir, true)
 			require.NoError(t, err)
 
-			// Read and verify ksail.yaml has the correct context
+			// The custom name is scaffolded; the derived context is not.
 			ksailPath := filepath.Join(tempDir, "ksail.yaml")
 			content, err := os.ReadFile(ksailPath) //nolint:gosec // G304: Test file path is safe
 			require.NoError(t, err)
-			assert.Contains(t, string(content), testCase.expectedContext)
+			assert.Contains(t, string(content), "name: "+testCase.clusterName)
+			assert.NotContains(t, string(content), testCase.derivedContext)
 		})
 	}
+}
+
+// TestScaffoldPrependsSchemaHeader verifies the generated ksail.yaml starts with the
+// yaml-language-server directive pointing at the published KSail configuration schema.
+func TestScaffoldPrependsSchemaHeader(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	cluster := createTestCluster("schema-header-test")
+	scaffolderInstance := scaffolder.NewScaffolder(cluster, io.Discard, nil)
+
+	err := scaffolderInstance.Scaffold(tempDir, false)
+	require.NoError(t, err)
+
+	ksailPath := filepath.Join(tempDir, "ksail.yaml")
+	content, err := os.ReadFile(ksailPath) //nolint:gosec // G304: Test file path is safe
+	require.NoError(t, err)
+
+	lines := strings.SplitN(string(content), "\n", 2)
+	require.NotEmpty(t, lines)
+	assert.Equal(t, scaffolder.SchemaHeader, lines[0],
+		"ksail.yaml must start with the yaml-language-server schema directive")
 }
 
 func TestResolveKustomizationDir_ValidPaths(t *testing.T) {

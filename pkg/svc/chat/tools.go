@@ -6,28 +6,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// GetKSailTools returns the tools available to the chat assistant.
-// It auto-generates tools from Cobra commands using the toolgen package.
-// The rootCmd parameter should be the root Cobra command for the CLI.
-// The outputChan parameter enables real-time output streaming (can be nil).
-// The sessionLog parameter enables SDK-native session logging from tool handlers (can be nil).
-func GetKSailTools(
-	rootCmd *cobra.Command,
-	outputChan chan<- toolgen.OutputChunk,
-	sessionLog *toolgen.SessionLogRef,
-) []copilot.Tool {
-	// Generate tools from the Cobra command tree
-	opts := toolgen.DefaultOptions()
-	opts.OutputChan = outputChan
-	opts.SessionLog = sessionLog
-
-	// Get SDK-agnostic tool definitions from Cobra command tree
-	toolDefs := toolgen.GenerateTools(rootCmd, opts)
-
-	// Convert SDK-agnostic definitions to Copilot SDK format
-	return toolgen.ToCopilotTools(toolDefs, opts)
-}
-
 // GetKSailToolMetadata returns both the Copilot tools and their metadata.
 // This allows callers to access RequiresPermission and other metadata.
 // The sessionLog parameter enables SDK-native session logging from tool handlers (can be nil).

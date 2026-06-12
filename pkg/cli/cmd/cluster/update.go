@@ -123,16 +123,9 @@ func handleUpdateRunE(
 
 	applyClusterMutationFlags(cmd, ctx.ClusterCfg)
 
-	// Re-validate OIDC after merging CLI scope flags which can change ExtraScopes
-	err = v1alpha1.ValidateOIDCConfig(&ctx.ClusterCfg.Spec.Cluster.OIDC)
+	err = validatePostMutationFlags(ctx)
 	if err != nil {
-		return fmt.Errorf("OIDC configuration: %w", err)
-	}
-
-	// Validate allowed CIDRs after merging CLI flags
-	err = v1alpha1.ValidateAllowedCIDRs(ctx.ClusterCfg.Spec.Provider.Hetzner.AllowedCIDRs)
-	if err != nil {
-		return fmt.Errorf("allowed CIDRs configuration: %w", err)
+		return err
 	}
 
 	force := resolveForce(cfgManager.Viper.GetBool("force"), cmd.Flags().Lookup("yes"))
@@ -280,8 +273,9 @@ func reconcileDistributionVersion(
 	force, dryRun bool,
 ) (bool, error) {
 	if pin := upgrader.PinnedDistributionVersion(); pin != "" {
-		return executePinnedDistributionUpgrade(
-			cmd, cfgManager, ctx, deps, upgrader, clusterName, pin,
+		return executePinnedUpgrade(
+			cmd, cfgManager, ctx, deps, upgrader, clusterName,
+			"distribution", "distribution", upgrader.UpgradeDistribution, pin,
 			currentVersions.DistributionVersion, force, dryRun,
 		)
 	}
@@ -317,8 +311,9 @@ func reconcileKubernetesVersion(
 	}
 
 	if pin != "" {
-		return executePinnedKubernetesUpgrade(
-			cmd, cfgManager, ctx, deps, upgrader, clusterName, pin,
+		return executePinnedUpgrade(
+			cmd, cfgManager, ctx, deps, upgrader, clusterName,
+			"Kubernetes", "Kubernetes", upgrader.UpgradeKubernetes, pin,
 			currentVersions.KubernetesVersion, force, dryRun,
 		)
 	}
@@ -363,7 +358,6 @@ func executeVersionUpgrade(
 
 	notify.WriteMessage(notify.Message{
 		Type:    notify.ActivityType,
-		Emoji:   "🔍",
 		Content: fmt.Sprintf("discovering available %s versions from %s", upgradeType, imageRef),
 		Writer:  cmd.OutOrStdout(),
 	})
@@ -384,8 +378,7 @@ func executeVersionUpgrade(
 
 	// Display upgrade path
 	notify.WriteMessage(notify.Message{
-		Type:  notify.InfoType,
-		Emoji: "📋",
+		Type: notify.InfoType,
 		Content: fmt.Sprintf("%s upgrade path: %s → %s (%d step(s))",
 			upgradeType, currentVersion, path[len(path)-1].Version.Original, len(path)),
 		Writer: cmd.OutOrStdout(),
@@ -438,8 +431,7 @@ func executeVersionUpgrade(
 	}
 
 	notify.WriteMessage(notify.Message{
-		Type:  notify.SuccessType,
-		Emoji: "⬆️",
+		Type: notify.SuccessType,
 		Content: fmt.Sprintf("%s upgraded: step 1/%d → %s",
 			upgradeType, len(path), path[0].Version.Original),
 		Writer: cmd.OutOrStdout(),
@@ -450,8 +442,7 @@ func executeVersionUpgrade(
 		prevVersion := path[stepIdx-1].Version.Original
 
 		notify.WriteMessage(notify.Message{
-			Type:  notify.ActivityType,
-			Emoji: "⬆️",
+			Type: notify.ActivityType,
 			Content: fmt.Sprintf("upgrading %s: step %d/%d (%s → %s)",
 				upgradeType, stepIdx+1, len(path), prevVersion, step.Version.Original),
 			Writer: cmd.OutOrStdout(),
@@ -473,8 +464,7 @@ func executeVersionUpgrade(
 		}
 
 		notify.WriteMessage(notify.Message{
-			Type:  notify.SuccessType,
-			Emoji: "⬆️",
+			Type: notify.SuccessType,
 			Content: fmt.Sprintf("%s upgraded: step %d/%d → %s",
 				upgradeType, stepIdx+1, len(path), step.Version.Original),
 			Writer: cmd.OutOrStdout(),
@@ -507,8 +497,7 @@ func handleRecreationUpgrade(
 	force bool,
 ) error {
 	notify.WriteMessage(notify.Message{
-		Type:  notify.InfoType,
-		Emoji: "🔄",
+		Type: notify.InfoType,
 		Content: fmt.Sprintf(
 			"%s upgrade from %s to %s requires cluster recreation",
 			upgradeType, currentVersion, targetVersion,
@@ -558,8 +547,7 @@ func reportPinnedUpgradePreamble(
 	}
 
 	notify.WriteMessage(notify.Message{
-		Type:  notify.InfoType,
-		Emoji: "📌",
+		Type: notify.InfoType,
 		Content: fmt.Sprintf("%s upgrade capped at pinned version %s (current: %s)",
 			label, pinnedVersion, currentVersion),
 		Writer: cmd.OutOrStdout(),
@@ -575,166 +563,91 @@ func reportPinnedUpgradePreamble(
 	return pinnedVersion, true, nil
 }
 
-// executePinnedDistributionUpgrade handles Talos distribution upgrades when a version pin is set.
-// It reconciles the distribution toward the pinned version, guarding against downgrades and
-// honoring dry-run via reportPinnedUpgradePreamble. The bool return reports whether the cluster
-// was recreated (Docker-provider Talos reaches a new version by recreation, not in-place upgrade).
-func executePinnedDistributionUpgrade(
+// executePinnedUpgrade reconciles one version dimension (distribution or
+// Kubernetes) toward an explicit pin, guarding against downgrades and honoring
+// dry-run via reportPinnedUpgradePreamble. label names the dimension in user
+// output, dimension is the PrepareConfigForVersion key, and applyFn is the
+// upgrader method for the dimension. The bool return reports whether the
+// cluster was recreated (distributions that cannot upgrade in place — e.g.
+// Docker-provider Talos OS upgrades or Kind/K3d/VCluster Kubernetes upgrades —
+// reach the pinned version by recreation).
+func executePinnedUpgrade(
 	cmd *cobra.Command,
 	cfgManager *ksailconfigmanager.ConfigManager,
 	ctx *localregistry.Context,
 	deps lifecycle.Deps,
 	upgrader clusterupdate.Upgrader,
 	clusterName string,
+	label, dimension string,
+	applyFn upgradeFunc,
 	rawPinnedVersion string,
 	currentVersion string,
 	force, dryRun bool,
 ) (bool, error) {
 	pinnedVersion, proceed, err := reportPinnedUpgradePreamble(
-		cmd, "distribution", rawPinnedVersion, currentVersion, dryRun,
+		cmd, label, rawPinnedVersion, currentVersion, dryRun,
 	)
 	if err != nil || !proceed {
 		return false, err
 	}
 
-	upgradeErr := upgrader.UpgradeDistribution(
-		cmd.Context(), clusterName, currentVersion, pinnedVersion,
-	)
+	upgradeErr := applyFn(cmd.Context(), clusterName, currentVersion, pinnedVersion)
 	if upgradeErr != nil {
-		return handlePinnedDistributionUpgradeError(
+		return handlePinnedUpgradeError(
 			cmd, cfgManager, ctx, deps, upgrader,
-			clusterName, pinnedVersion, currentVersion, force, upgradeErr,
+			clusterName, label, dimension, pinnedVersion, currentVersion, force, upgradeErr,
 		)
 	}
 
 	notify.WriteMessage(notify.Message{
 		Type:    notify.SuccessType,
-		Content: "distribution upgraded to pinned version " + pinnedVersion,
+		Content: label + " upgraded to pinned version " + pinnedVersion,
 		Writer:  cmd.OutOrStdout(),
 	})
 
 	return false, nil
 }
 
-// handlePinnedDistributionUpgradeError maps an UpgradeDistribution error to the
-// right outcome: a skipped upgrade is informational, a recreation-required result
-// recreates the cluster at the pinned version (Docker-provider Talos cannot
-// upgrade its OS in place — it is changed by recreation), and any other error is
-// surfaced. Mirrors handlePinnedKubernetesUpgradeError.
-func handlePinnedDistributionUpgradeError(
+// handlePinnedUpgradeError maps an upgrade error for one version dimension to
+// the right outcome: a skipped upgrade is informational, a recreation-required
+// result prepares the config at the pinned version and recreates the cluster
+// (recreation-based distributions reach the pinned version by recreating at
+// it — e.g. Docker-provider Talos for the OS, Kind/K3d/VCluster for
+// Kubernetes), and any other error is surfaced.
+func handlePinnedUpgradeError(
 	cmd *cobra.Command,
 	cfgManager *ksailconfigmanager.ConfigManager,
 	ctx *localregistry.Context,
 	deps lifecycle.Deps,
 	upgrader clusterupdate.Upgrader,
-	clusterName, pinnedVersion, currentVersion string,
+	clusterName, label, dimension, pinnedVersion, currentVersion string,
 	force bool,
 	upgradeErr error,
 ) (bool, error) {
 	if errors.Is(upgradeErr, clustererr.ErrUpgradeSkipped) {
-		notify.Infof(cmd.OutOrStdout(), "distribution upgrade skipped: %v", upgradeErr)
+		notify.Infof(cmd.OutOrStdout(), "%s upgrade skipped: %v", label, upgradeErr)
 
 		return false, nil
 	}
 
 	if errors.Is(upgradeErr, clustererr.ErrRecreationRequired) {
-		prepErr := upgrader.PrepareConfigForVersion("distribution", pinnedVersion)
+		prepErr := upgrader.PrepareConfigForVersion(dimension, pinnedVersion)
 		if prepErr != nil {
 			return false, fmt.Errorf(
-				"failed to prepare config for distribution %s: %w", pinnedVersion, prepErr,
+				"failed to prepare config for %s %s: %w", dimension, pinnedVersion, prepErr,
 			)
 		}
 
 		return true, handleRecreationUpgrade(
 			cmd, cfgManager, ctx, deps, clusterName,
-			"distribution", currentVersion, pinnedVersion, force,
+			dimension, currentVersion, pinnedVersion, force,
 		)
 	}
 
-	return false, fmt.Errorf("distribution upgrade to pinned version %s failed: %w",
-		pinnedVersion, upgradeErr)
-}
-
-// executePinnedKubernetesUpgrade reconciles the Kubernetes version toward an
-// explicit pin (spec.cluster.kubernetesVersion), guarding against downgrades and
-// honoring dry-run via reportPinnedUpgradePreamble. Recreation-based distributions
-// recreate at the pinned version; the bool return reports whether a recreation
-// happened.
-func executePinnedKubernetesUpgrade(
-	cmd *cobra.Command,
-	cfgManager *ksailconfigmanager.ConfigManager,
-	ctx *localregistry.Context,
-	deps lifecycle.Deps,
-	upgrader clusterupdate.Upgrader,
-	clusterName string,
-	rawPinnedVersion string,
-	currentVersion string,
-	force, dryRun bool,
-) (bool, error) {
-	pinnedVersion, proceed, err := reportPinnedUpgradePreamble(
-		cmd, "Kubernetes", rawPinnedVersion, currentVersion, dryRun,
-	)
-	if err != nil || !proceed {
-		return false, err
-	}
-
-	upgradeErr := upgrader.UpgradeKubernetes(
-		cmd.Context(), clusterName, currentVersion, pinnedVersion,
-	)
-	if upgradeErr != nil {
-		return handlePinnedKubernetesUpgradeError(
-			cmd, cfgManager, ctx, deps, upgrader,
-			clusterName, pinnedVersion, currentVersion, force, upgradeErr,
-		)
-	}
-
-	notify.WriteMessage(notify.Message{
-		Type:    notify.SuccessType,
-		Content: "Kubernetes upgraded to pinned version " + pinnedVersion,
-		Writer:  cmd.OutOrStdout(),
-	})
-
-	return false, nil
-}
-
-// handlePinnedKubernetesUpgradeError maps an UpgradeKubernetes error to the right
-// outcome: a skipped upgrade is informational, a recreation-required result
-// prepares the config at the pinned version and recreates the cluster, and any
-// other error is surfaced.
-func handlePinnedKubernetesUpgradeError(
-	cmd *cobra.Command,
-	cfgManager *ksailconfigmanager.ConfigManager,
-	ctx *localregistry.Context,
-	deps lifecycle.Deps,
-	upgrader clusterupdate.Upgrader,
-	clusterName, pinnedVersion, currentVersion string,
-	force bool,
-	upgradeErr error,
-) (bool, error) {
-	if errors.Is(upgradeErr, clustererr.ErrUpgradeSkipped) {
-		notify.Infof(cmd.OutOrStdout(), "Kubernetes upgrade skipped: %v", upgradeErr)
-
-		return false, nil
-	}
-
-	// Recreation-based distributions (Kind/K3d/VCluster) reach the pinned
-	// Kubernetes version by recreating the cluster at that version.
-	if errors.Is(upgradeErr, clustererr.ErrRecreationRequired) {
-		prepErr := upgrader.PrepareConfigForVersion("Kubernetes", pinnedVersion)
-		if prepErr != nil {
-			return false, fmt.Errorf(
-				"failed to prepare config for Kubernetes %s: %w", pinnedVersion, prepErr,
-			)
-		}
-
-		return true, handleRecreationUpgrade(
-			cmd, cfgManager, ctx, deps, clusterName,
-			"Kubernetes", currentVersion, pinnedVersion, force,
-		)
-	}
-
-	return false, fmt.Errorf("kubernetes upgrade to pinned version %s failed: %w",
-		pinnedVersion, upgradeErr)
+	// Error strings start lowercase by convention, so the label is lowered
+	// ("Kubernetes" → "kubernetes"); the pre-consolidation messages did the same.
+	return false, fmt.Errorf("%s upgrade to pinned version %s failed: %w",
+		strings.ToLower(label), pinnedVersion, upgradeErr)
 }
 
 // normalizePinnedVersion validates and normalizes a pinned Talos version.
@@ -799,15 +712,7 @@ func createAndVerifyProvisioner(
 	// The detector requires a kubeconfig, which may not exist yet for
 	// remote providers (Omni). We build the detector after refreshing
 	// the kubeconfig below.
-	factory := clusterprovisioner.DefaultFactory{
-		DistributionConfig: &clusterprovisioner.DistributionConfig{
-			Kind:     ctx.KindConfig,
-			K3d:      ctx.K3dConfig,
-			Talos:    ctx.TalosConfig,
-			VCluster: ctx.VClusterConfig,
-			KWOK:     ctx.KWOKConfig,
-		},
-	}
+	factory := newProvisionerFactory(ctx)
 
 	provisioner, _, err := factory.Create(cmd.Context(), ctx.ClusterCfg)
 	if err != nil {
@@ -1079,14 +984,7 @@ func computeSpecOnlyDiff(
 			// "Unknown" rather than a confident diff against default values.
 			clusterupdate.MarkComponentsUnknown(currentSpec)
 		} else {
-			currentSpec.CNI = detected.CNI
-			currentSpec.CSI = detected.CSI
-			currentSpec.MetricsServer = detected.MetricsServer
-			currentSpec.LoadBalancer = detected.LoadBalancer
-			currentSpec.CertManager = detected.CertManager
-			currentSpec.PolicyEngine = detected.PolicyEngine
-			currentSpec.GitOpsEngine = detected.GitOpsEngine
-			currentSpec.Autoscaler.Node = detected.Autoscaler.Node
+			clusterupdate.ApplyDetectedComponents(currentSpec, detected)
 		}
 	}
 
@@ -1853,9 +1751,7 @@ func executeRecreateFlow(
 	// Execute delete
 	notify.WriteMessage(notify.Message{
 		Type:    notify.ActivityType,
-		Emoji:   "🗑️",
 		Content: "deleting existing cluster",
-		Timer:   outputTimer,
 		Writer:  cmd.OutOrStdout(),
 	})
 

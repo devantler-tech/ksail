@@ -23,19 +23,6 @@ func TestMain(m *testing.M) {
 func TestNewInstaller(t *testing.T) {
 	t.Parallel()
 
-	installer := calicoinstaller.NewInstaller(
-		nil,
-		"/path/to/kubeconfig",
-		"test-context",
-		5*time.Minute,
-	)
-
-	require.NotNil(t, installer, "expected installer to be created")
-}
-
-func TestNewInstallerWithDistribution(t *testing.T) {
-	t.Parallel()
-
 	testCases := []struct {
 		name         string
 		distribution v1alpha1.Distribution
@@ -63,7 +50,7 @@ func TestNewInstallerWithDistribution(t *testing.T) {
 			t.Parallel()
 
 			client := helm.NewMockInterface(t)
-			installer := calicoinstaller.NewInstallerWithDistribution(
+			installer := calicoinstaller.NewInstaller(
 				client,
 				"/path/to/kubeconfig",
 				"test-context",
@@ -75,56 +62,6 @@ func TestNewInstallerWithDistribution(t *testing.T) {
 			require.NotNil(t, installer, "expected installer to be created")
 		})
 	}
-}
-
-func TestNewInstaller_WithDifferentTimeout(t *testing.T) {
-	t.Parallel()
-
-	testCases := []struct {
-		name    string
-		timeout time.Duration
-	}{
-		{
-			name:    "1 minute timeout",
-			timeout: 1 * time.Minute,
-		},
-		{
-			name:    "5 minute timeout",
-			timeout: 5 * time.Minute,
-		},
-		{
-			name:    "10 minute timeout",
-			timeout: 10 * time.Minute,
-		},
-	}
-
-	for _, testCase := range testCases {
-		t.Run(testCase.name, func(t *testing.T) {
-			t.Parallel()
-
-			installer := calicoinstaller.NewInstaller(
-				nil,
-				"/path/to/kubeconfig",
-				"test-context",
-				testCase.timeout,
-			)
-
-			require.NotNil(t, installer, "expected installer to be created")
-		})
-	}
-}
-
-func TestNewInstaller_WithEmptyParams(t *testing.T) {
-	t.Parallel()
-
-	installer := calicoinstaller.NewInstaller(
-		nil,
-		"",
-		"",
-		0,
-	)
-
-	require.NotNil(t, installer, "expected installer to be created even with empty params")
 }
 
 func TestInstaller_Install_VanillaDistribution(t *testing.T) {
@@ -194,7 +131,7 @@ func TestInstaller_Install_ChartError(t *testing.T) {
 func TestInstaller_Install_NilClient(t *testing.T) {
 	t.Parallel()
 
-	installer := calicoinstaller.NewInstallerWithDistribution(
+	installer := calicoinstaller.NewInstaller(
 		nil, // nil client
 		"/path/to/kubeconfig",
 		"test-context",
@@ -263,7 +200,7 @@ func TestInstaller_Uninstall_Error(t *testing.T) {
 func TestInstaller_Uninstall_NilClient(t *testing.T) {
 	t.Parallel()
 
-	installer := calicoinstaller.NewInstallerWithDistribution(
+	installer := calicoinstaller.NewInstaller(
 		nil, // nil client
 		"/path/to/kubeconfig",
 		"test-context",
@@ -287,7 +224,7 @@ func newInstallerWithDistribution(
 	t.Helper()
 
 	client := helm.NewMockInterface(t)
-	installer := calicoinstaller.NewInstallerWithDistribution(
+	installer := calicoinstaller.NewInstaller(
 		client,
 		"/path/to/kubeconfig",
 		"test-context",

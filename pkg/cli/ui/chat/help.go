@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -60,25 +59,6 @@ const (
 	roleUser        = "user"
 	roleAssistant   = "assistant"
 )
-
-// createHelpModel creates a configured help model.
-func createHelpModel(styles uiStyles) help.Model {
-	helpModel := help.New()
-	helpModel.ShortSeparator = helpSep
-	helpModel.FullSeparator = "   "
-	helpModel.Ellipsis = "…"
-	helpModel.Styles = help.Styles{
-		ShortKey:       styles.helpKey,
-		ShortDesc:      styles.helpDesc,
-		ShortSeparator: styles.help,
-		Ellipsis:       styles.help,
-		FullKey:        styles.helpKey,
-		FullDesc:       styles.helpDesc,
-		FullSeparator:  styles.help,
-	}
-
-	return helpModel
-}
 
 // renderHelpOverlay renders the full help overlay modal matching the input area size.
 func (m *Model) renderHelpOverlay() string {
@@ -206,7 +186,7 @@ func flowHelpParts(parts []string, maxWidth, maxLines int) string {
 	return strings.Join(lines, "\n")
 }
 
-// renderShortHelp renders the context-aware footer help text using the KeyMap.
+// renderShortHelp renders the context-aware footer help text.
 // It intelligently truncates to fit available width while always showing "F1 help".
 func (m *Model) renderShortHelp() string {
 	availWidth := max(m.width-contentPadding, minHelpWidth) // Account for padding

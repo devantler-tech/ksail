@@ -409,66 +409,7 @@ func objectsToRuntimeObjects(pods []corev1.Pod) []runtime.Object {
 	return objects
 }
 
-func TestDiagnoseCluster_HealthyClusterReturnsEmpty(t *testing.T) {
-	t.Parallel()
-
-	clientset := k8sfake.NewClientset(
-		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
-		&corev1.Node{
-			ObjectMeta: metav1.ObjectMeta{Name: "node-1"},
-			Status: corev1.NodeStatus{Conditions: []corev1.NodeCondition{
-				{Type: corev1.NodeReady, Status: corev1.ConditionTrue},
-			}},
-		},
-		&corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{Name: "healthy", Namespace: "default"},
-			Status: corev1.PodStatus{
-				Phase:             corev1.PodRunning,
-				ContainerStatuses: []corev1.ContainerStatus{{Ready: true}},
-			},
-		},
-	)
-
-	report, err := k8s.DiagnoseCluster(context.Background(), clientset)
-
-	require.NoError(t, err)
-	assert.Empty(t, report)
-}
-
-func TestDiagnoseCluster_ReportsNotReadyNodesAndFailingPods(t *testing.T) {
-	t.Parallel()
-
-	clientset := k8sfake.NewClientset(
-		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
-		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "kube-system"}},
-		&corev1.Node{
-			ObjectMeta: metav1.ObjectMeta{Name: "node-broken"},
-			Status: corev1.NodeStatus{Conditions: []corev1.NodeCondition{
-				{
-					Type:    corev1.NodeReady,
-					Status:  corev1.ConditionFalse,
-					Reason:  "KubeletNotReady",
-					Message: "container runtime not ready",
-				},
-			}},
-		},
-		&corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{Name: "boom", Namespace: "default"},
-			Status:     corev1.PodStatus{Phase: corev1.PodFailed},
-		},
-	)
-
-	report, err := k8s.DiagnoseCluster(context.Background(), clientset)
-
-	require.NoError(t, err)
-	assert.Contains(t, report, "Not-Ready nodes:")
-	assert.Contains(t, report, "node-broken")
-	assert.Contains(t, report, "container runtime not ready")
-	assert.Contains(t, report, "Failing pods in default")
-	assert.Contains(t, report, "boom")
-}
-
-func TestDiagnoseCluster_NamespaceListErrorIsSurfaced(t *testing.T) {
+func TestDiagnoseClusterReport_NamespaceListErrorIsSurfaced(t *testing.T) {
 	t.Parallel()
 
 	clientset := k8sfake.NewClientset()
@@ -480,28 +421,10 @@ func TestDiagnoseCluster_NamespaceListErrorIsSurfaced(t *testing.T) {
 		},
 	)
 
-	_, err := k8s.DiagnoseCluster(context.Background(), clientset)
+	_, err := k8s.DiagnoseClusterReport(context.Background(), clientset, "test")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "list namespaces")
-}
-
-func TestDiagnoseCluster_NodeListErrorIsSurfaced(t *testing.T) {
-	t.Parallel()
-
-	clientset := k8sfake.NewClientset()
-	clientset.PrependReactor(
-		"list",
-		"nodes",
-		func(_ k8stesting.Action) (bool, runtime.Object, error) {
-			return true, nil, errConnectionRefused
-		},
-	)
-
-	_, err := k8s.DiagnoseCluster(context.Background(), clientset)
-
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "list nodes")
 }
 
 func TestDiagnoseClusterReport_HealthyClusterReturns100(t *testing.T) {
@@ -642,6 +565,30 @@ func TestDiagnoseClusterReport_PodListErrorCreatesWarningFinding(t *testing.T) {
 	assert.Equal(t, k8s.DiagnoseSeverityWarning, report.Findings[0].Severity)
 	assert.Equal(t, "namespace/broken-ns", report.Findings[0].Resource)
 	assert.Contains(t, report.Findings[0].Reason, "failed to list pods")
+	assert.Equal(t, 90, report.HealthScore)
+}
+
+func TestDiagnoseClusterReport_PVCListErrorCreatesWarningFinding(t *testing.T) {
+	t.Parallel()
+
+	clientset := k8sfake.NewClientset(
+		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "broken-ns"}},
+	)
+	clientset.PrependReactor(
+		"list",
+		"persistentvolumeclaims",
+		func(_ k8stesting.Action) (bool, runtime.Object, error) {
+			return true, nil, errConnectionRefused
+		},
+	)
+
+	report, err := k8s.DiagnoseClusterReport(context.Background(), clientset, "test")
+
+	require.NoError(t, err)
+	require.Len(t, report.Findings, 1)
+	assert.Equal(t, k8s.DiagnoseSeverityWarning, report.Findings[0].Severity)
+	assert.Equal(t, "namespace/broken-ns", report.Findings[0].Resource)
+	assert.Contains(t, report.Findings[0].Reason, "failed to list PVCs")
 	assert.Equal(t, 90, report.HealthScore)
 }
 
@@ -857,53 +804,4 @@ func TestDiagnoseClusterReport_MixedFindingsComputeCorrectScore(t *testing.T) {
 	// 100 - 25 (node critical) - 25 (pod critical) - 10 (pvc warning) = 40
 	assert.Equal(t, 40, report.HealthScore)
 	assert.Len(t, report.Findings, 3)
-}
-
-func TestDiagnosePVCPending_NoPendingPVCsReturnsEmpty(t *testing.T) {
-	t.Parallel()
-
-	clientset := k8sfake.NewClientset(
-		&corev1.PersistentVolumeClaim{
-			ObjectMeta: metav1.ObjectMeta{Name: "bound-pvc", Namespace: "default"},
-			Status:     corev1.PersistentVolumeClaimStatus{Phase: corev1.ClaimBound},
-		},
-	)
-
-	result := k8s.DiagnosePVCPending(context.Background(), clientset, []string{"default"})
-
-	assert.Empty(t, result)
-}
-
-func TestDiagnosePVCPending_PendingPVCIsReported(t *testing.T) {
-	t.Parallel()
-
-	clientset := k8sfake.NewClientset(
-		&corev1.PersistentVolumeClaim{
-			ObjectMeta: metav1.ObjectMeta{Name: "my-data", Namespace: "default"},
-			Status:     corev1.PersistentVolumeClaimStatus{Phase: corev1.ClaimPending},
-		},
-	)
-
-	result := k8s.DiagnosePVCPending(context.Background(), clientset, []string{"default"})
-
-	assert.Contains(t, result, "my-data")
-	assert.Contains(t, result, "Pending PVCs in default")
-}
-
-func TestDiagnosePVCPending_ListErrorIsReported(t *testing.T) {
-	t.Parallel()
-
-	clientset := k8sfake.NewClientset()
-	clientset.PrependReactor(
-		"list",
-		"persistentvolumeclaims",
-		func(_ k8stesting.Action) (bool, runtime.Object, error) {
-			return true, nil, errConnectionRefused
-		},
-	)
-
-	result := k8s.DiagnosePVCPending(context.Background(), clientset, []string{"default"})
-
-	assert.Contains(t, result, "failed to list PVCs")
-	assert.Contains(t, result, "connection refused")
 }

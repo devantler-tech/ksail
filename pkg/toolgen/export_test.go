@@ -22,8 +22,8 @@ var FormatPositionalArgs = formatPositionalArgs
 // CollectAllSubcommands exposes collectAllSubcommands for testing.
 var CollectAllSubcommands = collectAllSubcommands
 
-// CollectAllSubcommandsWithPrefix exposes collectAllSubcommandsWithPrefix for testing.
-var CollectAllSubcommandsWithPrefix = collectAllSubcommandsWithPrefix
+// WalkSubcommands exposes walkSubcommands for testing.
+var WalkSubcommands = walkSubcommands
 
 // ExecuteTool exposes executeTool for testing.
 var ExecuteTool = executeTool

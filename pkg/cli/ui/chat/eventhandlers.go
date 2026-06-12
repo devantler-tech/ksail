@@ -161,23 +161,12 @@ func (d *sessionEventDispatcher) handleToolStart(event copilot.SessionEvent) {
 	d.toolNames[toolID] = toolName
 	d.mu.Unlock()
 
-	var mcpServerName, mcpToolName string
-	if data.McpServerName != nil {
-		mcpServerName = *data.McpServerName
-	}
-
-	if data.McpToolName != nil {
-		mcpToolName = *data.McpToolName
-	}
-
 	command := extractCommandFromArgs(toolName, data.Arguments, d.commandBuilders)
 
 	d.eventChan <- toolStartMsg{
-		toolID:        toolID,
-		toolName:      toolName,
-		command:       command,
-		mcpServerName: mcpServerName,
-		mcpToolName:   mcpToolName,
+		toolID:   toolID,
+		toolName: toolName,
+		command:  command,
 	}
 }
 

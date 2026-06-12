@@ -1304,3 +1304,272 @@ func TestIngressFirewall_StringAndType(t *testing.T) {
 	assert.Equal(t, "Enabled", ingressFirewall.String())
 	assert.Equal(t, "IngressFirewall", ingressFirewall.Type())
 }
+
+// Set(), IsValid(), and String()/Type() tests below were migrated from
+// constructors_test.go when the zero-value constructor chain was deleted.
+
+// defaultEnumValue is the canonical "Default" enum value shared by the
+// CNI, CSI, and MetricsServer Set() tests below.
+const defaultEnumValue = "Default"
+
+func TestDistribution_Set(t *testing.T) {
+	t.Parallel()
+
+	validCases := []struct{ input, expected string }{
+		{"Vanilla", "Vanilla"},
+		{"k3s", "K3s"},
+	}
+	for _, validCase := range validCases {
+		var dist v1alpha1.Distribution
+
+		require.NoError(t, dist.Set(validCase.input))
+	}
+
+	err := func() error {
+		var dist v1alpha1.Distribution
+
+		return dist.Set("invalid")
+	}()
+	assertErrWrappedContains(
+		t,
+		err,
+		v1alpha1.ErrInvalidDistribution,
+		"invalid",
+		"Set(invalid)",
+	)
+}
+
+func TestDistribution_IsValid(t *testing.T) {
+	t.Parallel()
+
+	validCases := []v1alpha1.Distribution{
+		v1alpha1.DistributionVanilla,
+		v1alpha1.DistributionK3s,
+	}
+
+	for _, dist := range validCases {
+		assert.True(t, dist.IsValid(), "Distribution %s should be valid", dist)
+	}
+
+	invalidCases := []v1alpha1.Distribution{
+		"",
+		"invalid",
+		"docker",
+		"kubernetes",
+	}
+
+	for _, dist := range invalidCases {
+		assert.False(t, dist.IsValid(), "Distribution %s should be invalid", dist)
+	}
+}
+
+func TestGitOpsEngine_Set(t *testing.T) {
+	t.Parallel()
+
+	validCases := []struct {
+		name     string
+		input    string
+		expected v1alpha1.GitOpsEngine
+	}{
+		{name: "legacy none", input: "None", expected: v1alpha1.GitOpsEngineNone},
+		{name: "mixed case none", input: "nOnE", expected: v1alpha1.GitOpsEngineNone},
+		{name: "flux", input: "Flux", expected: v1alpha1.GitOpsEngineFlux},
+		{name: "flux lowercase", input: "flux", expected: v1alpha1.GitOpsEngineFlux},
+	}
+
+	for _, testCase := range validCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			var tool v1alpha1.GitOpsEngine
+			require.NoError(t, tool.Set(testCase.input))
+			assert.Equal(t, testCase.expected, tool)
+		})
+	}
+
+	err := func() error {
+		var tool v1alpha1.GitOpsEngine
+
+		return tool.Set("invalid")
+	}()
+	assertErrWrappedContains(
+		t,
+		err,
+		v1alpha1.ErrInvalidGitOpsEngine,
+		"invalid",
+		"Set(invalid)",
+	)
+}
+
+func TestCNI_Set(t *testing.T) {
+	t.Parallel()
+
+	validCases := []struct{ input, expected string }{
+		{defaultEnumValue, defaultEnumValue},
+		{"cilium", "Cilium"},
+		{"CILIUM", "Cilium"},
+	}
+	for _, validCase := range validCases {
+		var cni v1alpha1.CNI
+
+		require.NoError(t, cni.Set(validCase.input))
+	}
+
+	err := func() error {
+		var cni v1alpha1.CNI
+
+		return cni.Set("invalid")
+	}()
+	assertErrWrappedContains(
+		t,
+		err,
+		v1alpha1.ErrInvalidCNI,
+		"invalid",
+		"Set(invalid)",
+	)
+}
+
+func TestCSI_Set(t *testing.T) {
+	t.Parallel()
+
+	validCases := []struct{ input, expected string }{
+		{defaultEnumValue, defaultEnumValue},
+		{"enabled", "Enabled"},
+		{"ENABLED", "Enabled"},
+		{"disabled", "Disabled"},
+		{"DISABLED", "Disabled"},
+	}
+	for _, validCase := range validCases {
+		var csi v1alpha1.CSI
+
+		require.NoError(t, csi.Set(validCase.input))
+	}
+
+	err := func() error {
+		var csi v1alpha1.CSI
+
+		return csi.Set("invalid")
+	}()
+	assertErrWrappedContains(
+		t,
+		err,
+		v1alpha1.ErrInvalidCSI,
+		"invalid",
+		"Set(invalid)",
+	)
+}
+
+func TestMetricsServer_Set(t *testing.T) {
+	t.Parallel()
+
+	validCases := []struct{ input, expected string }{
+		{defaultEnumValue, defaultEnumValue},
+		{"default", defaultEnumValue},
+		{"DEFAULT", defaultEnumValue},
+		{"Enabled", "Enabled"},
+		{"enabled", "Enabled"},
+		{"ENABLED", "Enabled"},
+		{"Disabled", "Disabled"},
+		{"disabled", "Disabled"},
+		{"DISABLED", "Disabled"},
+	}
+	for _, validCase := range validCases {
+		var ms v1alpha1.MetricsServer
+
+		require.NoError(t, ms.Set(validCase.input))
+		assert.Equal(t, validCase.expected, string(ms))
+	}
+
+	err := func() error {
+		var ms v1alpha1.MetricsServer
+
+		return ms.Set("invalid")
+	}()
+	assertErrWrappedContains(
+		t,
+		err,
+		v1alpha1.ErrInvalidMetricsServer,
+		"invalid",
+		"Set(invalid)",
+	)
+}
+
+func TestCertManager_Set(t *testing.T) {
+	t.Parallel()
+
+	validCases := []struct{ input, expected string }{
+		{"Enabled", "Enabled"},
+		{"enabled", "Enabled"},
+		{"ENABLED", "Enabled"},
+		{"Disabled", "Disabled"},
+		{"disabled", "Disabled"},
+		{"DISABLED", "Disabled"},
+	}
+	for _, validCase := range validCases {
+		var cm v1alpha1.CertManager
+
+		require.NoError(t, cm.Set(validCase.input))
+		assert.Equal(t, validCase.expected, string(cm))
+	}
+
+	err := func() error {
+		var cm v1alpha1.CertManager
+
+		return cm.Set("invalid")
+	}()
+	assertErrWrappedContains(
+		t,
+		err,
+		v1alpha1.ErrInvalidCertManager,
+		"invalid",
+		"Set(invalid)",
+	)
+}
+
+//nolint:unparam // contains always receives "invalid" which is intentional for Set() error tests
+func assertErrWrappedContains(t *testing.T, got error, want error, contains string, ctx string) {
+	t.Helper()
+
+	if want != nil {
+		require.ErrorIs(t, got, want, ctx)
+	} else {
+		require.Error(t, got, ctx)
+	}
+
+	if contains != "" {
+		assert.ErrorContains(t, got, contains, ctx)
+	}
+}
+
+func TestStringAndTypeMethods(t *testing.T) {
+	t.Parallel()
+
+	// Test String() and Type() methods for pflags interface
+	dist := v1alpha1.DistributionVanilla
+	assert.Equal(t, "Vanilla", dist.String())
+	assert.Equal(t, "Distribution", dist.Type())
+
+	tool := v1alpha1.GitOpsEngineNone
+	assert.Equal(t, "None", tool.String())
+	assert.Equal(t, "GitOpsEngine", tool.Type())
+
+	cni := v1alpha1.CNIDefault
+	assert.Equal(t, defaultEnumValue, cni.String())
+	assert.Equal(t, "CNI", cni.Type())
+
+	csi := v1alpha1.CSIDefault
+	assert.Equal(t, defaultEnumValue, csi.String())
+	assert.Equal(t, "CSI", csi.Type())
+
+	ms := v1alpha1.MetricsServerEnabled
+	assert.Equal(t, "Enabled", ms.String())
+	assert.Equal(t, "MetricsServer", ms.Type())
+
+	msDisabled := v1alpha1.MetricsServerDisabled
+	assert.Equal(t, "Disabled", msDisabled.String())
+	assert.Equal(t, "MetricsServer", msDisabled.Type())
+
+	cm := v1alpha1.CertManagerDisabled
+	assert.Equal(t, "Disabled", cm.String())
+	assert.Equal(t, "CertManager", cm.Type())
+}

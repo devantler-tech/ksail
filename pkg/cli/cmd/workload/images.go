@@ -147,13 +147,12 @@ func runImagesCommand(
 	}
 }
 
-func outputPlain(cmd *cobra.Command, images []string, tmr timer.Timer) error {
+func outputPlain(cmd *cobra.Command, images []string, _ timer.Timer) error {
 	if len(images) == 0 {
 		// Write warning to stderr to keep stdout clean for scripting (e.g., xargs docker pull)
 		notify.WriteMessage(notify.Message{
 			Type:    notify.WarningType,
 			Content: "no images required for current configuration",
-			Timer:   tmr,
 			Writer:  cmd.ErrOrStderr(),
 		})
 

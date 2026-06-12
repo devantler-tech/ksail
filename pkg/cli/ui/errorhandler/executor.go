@@ -10,13 +10,11 @@ import (
 // Executor type.
 
 // Executor coordinates Cobra execution, capturing stderr output and surfacing aggregated errors.
-type Executor struct {
-	normalizer DefaultNormalizer
-}
+type Executor struct{}
 
 // NewExecutor constructs an Executor.
 func NewExecutor() *Executor {
-	return &Executor{normalizer: DefaultNormalizer{}}
+	return &Executor{}
 }
 
 // Execute runs the provided command while intercepting Cobra's error stream.
@@ -42,7 +40,7 @@ func (e *Executor) Execute(cmd *cobra.Command) error {
 		return nil
 	}
 
-	message := e.normalizer.Normalize(errBuf.String())
+	message := normalize(errBuf.String())
 
 	return &CommandError{
 		message: message,
@@ -85,13 +83,8 @@ func (e *CommandError) Unwrap() error {
 	return e.cause
 }
 
-// DefaultNormalizer implementation.
-
-// DefaultNormalizer implements Normalizer with the same semantics previously embedded in root.go.
-type DefaultNormalizer struct{}
-
-// Normalize trims whitespace, removes redundant "Error:" prefixes, and preserves multi-line usage hints.
-func (DefaultNormalizer) Normalize(raw string) string {
+// normalize trims whitespace, removes redundant "Error:" prefixes, and preserves multi-line usage hints.
+func normalize(raw string) string {
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {
 		return ""

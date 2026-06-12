@@ -3,6 +3,7 @@ package chat_test
 import (
 	"testing"
 
+	chatui "github.com/devantler-tech/ksail/v7/pkg/cli/ui/chat"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/chat"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -32,7 +33,7 @@ func TestBuildSystemSections(t *testing.T) {
 func TestBuildSystemContext_ContainsIdentity(t *testing.T) {
 	t.Parallel()
 
-	ctx, err := chat.BuildSystemContext()
+	ctx, err := chatui.BuildSystemContext(chat.DefaultSystemContextConfig())
 	require.NoError(t, err)
 
 	assert.Contains(t, ctx, "KSail Assistant")
@@ -43,7 +44,7 @@ func TestBuildSystemContext_ContainsIdentity(t *testing.T) {
 func TestBuildSystemContext_ContainsInstructions(t *testing.T) {
 	t.Parallel()
 
-	ctx, err := chat.BuildSystemContext()
+	ctx, err := chatui.BuildSystemContext(chat.DefaultSystemContextConfig())
 	require.NoError(t, err)
 
 	assert.Contains(t, ctx, "<instructions>")

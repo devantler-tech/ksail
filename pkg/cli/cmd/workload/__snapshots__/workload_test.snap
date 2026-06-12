@@ -144,6 +144,35 @@ Flags:
 
 ---
 
+[TestScanCmdShowsHelp - 1]
+Run security scans on Kubernetes manifests using Kubescape.
+
+This command scans manifests in the specified path against security frameworks
+such as NSA-CISA, MITRE ATT&CK, and CIS Benchmarks.
+
+If no path is provided, the path is resolved in order:
+  1. spec.workload.sourceDirectory from ksail.yaml (if a config file is found and the field is set)
+  2. The default source directory when spec.workload.sourceDirectory is unset ("k8s" directory)
+  3. The current directory (fallback when no ksail.yaml config file is found)
+
+Available frameworks: nsa, mitre, cis, pss (and any other framework supported by Kubescape)
+Available output formats: pretty-printer, json, sarif, junit (and any other format supported by Kubescape)
+
+For more information, see https://github.com/kubescape/kubescape
+
+Usage:
+  scan [PATH] [flags]
+
+Flags:
+      --compliance-threshold float32   Fail if compliance score is below this threshold (0-100)
+      --format string                  Output format (pretty-printer, json, sarif, junit) (default "pretty-printer")
+      --framework strings              Security frameworks to scan against (e.g. nsa, mitre, cis, pss) (default [nsa])
+  -h, --help                           help for scan
+  -o, --output string                  Output file path (stdout if empty)
+      --verbose                        Show all resources in output, not just failed ones
+
+---
+
 [TestValidateCmdShowsHelp - 1]
 Validate Kubernetes manifest files and kustomizations using kubeconform.
 
@@ -325,6 +354,108 @@ Use "ksail workload apply [command] --help" for more information about a command
 
 ---
 
+[TestWorkloadHelpSnapshots/apply_edit-last-applied - 1]
+Edit the latest last-applied-configuration annotations of resources from the default editor.
+
+ The edit-last-applied command allows you to directly edit any API resource you can retrieve via the command-line tools. It will open the editor defined by your KUBE_EDITOR, or EDITOR environment variables, or fall back to 'vi' for Linux or 'notepad' for Windows. You can edit multiple objects, although changes are applied one at a time. The command accepts file names as well as command-line arguments, although the files you point to must be previously saved versions of resources.
+
+ The default format is YAML. To edit in JSON, specify "-o json".
+
+ The flag --windows-line-endings can be used to force Windows line endings, otherwise the default for your operating system will be used.
+
+ In the event an error occurs while updating, a temporary file will be created on disk that contains your unapplied changes. The most common error when updating a resource is another editor changing the resource on the server. When this occurs, you will have to apply your changes to the newer version of the resource, or update your temporary saved copy to include the latest resource version.
+
+Usage:
+  ksail workload apply edit-last-applied (RESOURCE/NAME | -f FILENAME)
+
+Examples:
+  # Edit the last-applied-configuration annotations by type/name in YAML
+  kubectl apply edit-last-applied deployment/nginx
+  
+  # Edit the last-applied-configuration annotations by file in JSON
+  kubectl apply edit-last-applied -f deploy.yaml -o json
+
+Flags:
+      --allow-missing-template-keys   If true, ignore any errors in templates when a field or map key is missing in the template. Only applies to golang and jsonpath output formats. (default true)
+      --field-manager string          Name of the manager used to track field ownership. (default "kubectl-client-side-apply")
+  -f, --filename strings              Filename, directory, or URL to files to use to edit the resource
+  -h, --help                          help for edit-last-applied
+  -k, --kustomize string              Process the kustomization directory. This flag can't be used together with -f or -R.
+  -o, --output string                 Output format. One of: (json, yaml, kyaml, name, go-template, go-template-file, template, templatefile, jsonpath, jsonpath-as-json, jsonpath-file).
+  -R, --recursive                     Process the directory used in -f, --filename recursively. Useful when you want to manage related manifests organized within the same directory.
+      --show-managed-fields           If true, keep the managedFields when printing objects in JSON or YAML format.
+      --template string               Template string or path to template file to use when -o=go-template, -o=go-template-file. The template format is golang templates [http://golang.org/pkg/text/template/#pkg-overview].
+      --validate string[="strict"]    Must be one of: strict (or true), warn, ignore (or false). "true" or "strict" will use a schema to validate the input and fail the request if invalid. It will perform server side validation if ServerSideFieldValidation is enabled on the api-server, but will fall back to less reliable client-side validation if not. "warn" will warn about unknown or duplicate fields without blocking the request if server-side field validation is enabled on the API server, and behave as "ignore" otherwise. "false" or "ignore" will not perform any schema validation, silently dropping any unknown or duplicate fields. (default "strict")
+      --windows-line-endings          Defaults to the line ending native to your platform.
+
+Global Flags:
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
+
+---
+
+[TestWorkloadHelpSnapshots/apply_set-last-applied - 1]
+Set the latest last-applied-configuration annotations by setting it to match the contents of a file. This results in the last-applied-configuration being updated as though 'kubectl apply -f<file> ' was run, without updating any other parts of the object.
+
+Usage:
+  ksail workload apply set-last-applied -f FILENAME
+
+Examples:
+  # Set the last-applied-configuration of a resource to match the contents of a file
+  kubectl apply set-last-applied -f deploy.yaml
+  
+  # Execute set-last-applied against each configuration file in a directory
+  kubectl apply set-last-applied -f path/
+  
+  # Set the last-applied-configuration of a resource to match the contents of a file; will create the annotation if it does not already exist
+  kubectl apply set-last-applied -f deploy.yaml --create-annotation=true
+
+Flags:
+      --allow-missing-template-keys    If true, ignore any errors in templates when a field or map key is missing in the template. Only applies to golang and jsonpath output formats. (default true)
+      --create-annotation              Will create 'last-applied-configuration' annotations if current objects doesn't have one
+      --dry-run string[="unchanged"]   Must be "none", "server", or "client". If client strategy, only print the object that would be sent, without sending it. If server strategy, submit server-side request without persisting the resource. (default "none")
+  -f, --filename strings               Filename, directory, or URL to files that contains the last-applied-configuration annotations
+  -h, --help                           help for set-last-applied
+  -o, --output string                  Output format. One of: (json, yaml, kyaml, name, go-template, go-template-file, template, templatefile, jsonpath, jsonpath-as-json, jsonpath-file).
+      --show-managed-fields            If true, keep the managedFields when printing objects in JSON or YAML format.
+      --template string                Template string or path to template file to use when -o=go-template, -o=go-template-file. The template format is golang templates [http://golang.org/pkg/text/template/#pkg-overview].
+
+Global Flags:
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
+
+---
+
+[TestWorkloadHelpSnapshots/apply_view-last-applied - 1]
+View the latest last-applied-configuration annotations by type/name or file.
+
+ The default output will be printed to stdout in YAML format. You can use the -o option to change the output format.
+
+Usage:
+  ksail workload apply view-last-applied (TYPE [NAME | -l label] | TYPE/NAME | -f FILENAME)
+
+Examples:
+  # View the last-applied-configuration annotations by type/name in YAML
+  kubectl apply view-last-applied deployment/nginx
+  
+  # View the last-applied-configuration annotations by file in JSON
+  kubectl apply view-last-applied -f deploy.yaml -o json
+
+Flags:
+      --all                Select all resources in the namespace of the specified resource types
+  -f, --filename strings   Filename, directory, or URL to files that contains the last-applied-configuration annotations
+  -h, --help               help for view-last-applied
+  -k, --kustomize string   Process the kustomization directory. This flag can't be used together with -f or -R.
+  -o, --output string      Output format. Must be one of (yaml, json) (default "yaml")
+  -R, --recursive          Process the directory used in -f, --filename recursively. Useful when you want to manage related manifests organized within the same directory.
+  -l, --selector string    Selector (label query) to filter on, supports '=', '==', '!=', 'in', 'notin'.(e.g. -l key1=value1,key2=value2,key3 in (value3)). Matching objects must satisfy all of the specified label constraints.
+
+Global Flags:
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
+
+---
+
 [TestWorkloadHelpSnapshots/create - 1]
 Create Kubernetes resources from files or stdin.
 
@@ -409,6 +540,358 @@ Use "ksail workload create [command] --help" for more information about a comman
 
 ---
 
+[TestWorkloadHelpSnapshots/create_clusterrole - 1]
+Create a cluster role.
+
+Usage:
+  ksail workload create clusterrole NAME --verb=verb --resource=resource.group [--resource-name=resourcename] [--dry-run=server|client|none]
+
+Examples:
+  # Create a cluster role named "pod-reader" that allows user to perform "get", "watch" and "list" on pods
+  kubectl create clusterrole pod-reader --verb=get,list,watch --resource=pods
+  
+  # Create a cluster role named "pod-reader" with ResourceName specified
+  kubectl create clusterrole pod-reader --verb=get --resource=pods --resource-name=readablepod --resource-name=anotherpod
+  
+  # Create a cluster role named "foo" with API Group specified
+  kubectl create clusterrole foo --verb=get,list,watch --resource=rs.apps
+  
+  # Create a cluster role named "foo" with SubResource specified
+  kubectl create clusterrole foo --verb=get,list,watch --resource=pods,pods/status
+  
+  # Create a cluster role name "foo" with NonResourceURL specified
+  kubectl create clusterrole "foo" --verb=get --non-resource-url=/logs/*
+  
+  # Create a cluster role name "monitoring" with AggregationRule specified
+  kubectl create clusterrole monitoring --aggregation-rule="rbac.example.com/aggregate-to-monitoring=true"
+
+Flags:
+      --aggregation-rule mapStringString   An aggregation label selector for combining ClusterRoles.
+      --allow-missing-template-keys        If true, ignore any errors in templates when a field or map key is missing in the template. Only applies to golang and jsonpath output formats. (default true)
+      --dry-run string[="unchanged"]       Must be "none", "server", or "client". If client strategy, only print the object that would be sent, without sending it. If server strategy, submit server-side request without persisting the resource. (default "none")
+      --field-manager string               Name of the manager used to track field ownership. (default "kubectl-create")
+  -h, --help                               help for clusterrole
+      --non-resource-url strings           A partial url that user should have access to.
+  -o, --output string                      Output format. One of: (json, yaml, kyaml, name, go-template, go-template-file, template, templatefile, jsonpath, jsonpath-as-json, jsonpath-file).
+      --resource strings                   Resource that the rule applies to
+      --resource-name stringArray          Resource in the white list that the rule applies to, repeat this flag for multiple items
+      --save-config                        If true, the configuration of current object will be saved in its annotation. Otherwise, the annotation will be unchanged. This flag is useful when you want to perform kubectl apply on this object in the future.
+      --show-managed-fields                If true, keep the managedFields when printing objects in JSON or YAML format.
+      --template string                    Template string or path to template file to use when -o=go-template, -o=go-template-file. The template format is golang templates [http://golang.org/pkg/text/template/#pkg-overview].
+      --validate string[="strict"]         Must be one of: strict (or true), warn, ignore (or false). "true" or "strict" will use a schema to validate the input and fail the request if invalid. It will perform server side validation if ServerSideFieldValidation is enabled on the api-server, but will fall back to less reliable client-side validation if not. "warn" will warn about unknown or duplicate fields without blocking the request if server-side field validation is enabled on the API server, and behave as "ignore" otherwise. "false" or "ignore" will not perform any schema validation, silently dropping any unknown or duplicate fields. (default "strict")
+      --verb strings                       Verb that applies to the resources contained in the rule
+
+Global Flags:
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
+
+---
+
+[TestWorkloadHelpSnapshots/create_clusterrolebinding - 1]
+Create a cluster role binding for a particular cluster role.
+
+Usage:
+  ksail workload create clusterrolebinding NAME --clusterrole=NAME [--user=username] [--group=groupname] [--serviceaccount=namespace:serviceaccountname] [--dry-run=server|client|none]
+
+Examples:
+  # Create a cluster role binding for user1, user2, and group1 using the cluster-admin cluster role
+  kubectl create clusterrolebinding cluster-admin --clusterrole=cluster-admin --user=user1 --user=user2 --group=group1
+
+Flags:
+      --allow-missing-template-keys    If true, ignore any errors in templates when a field or map key is missing in the template. Only applies to golang and jsonpath output formats. (default true)
+      --clusterrole string             ClusterRole this ClusterRoleBinding should reference
+      --dry-run string[="unchanged"]   Must be "none", "server", or "client". If client strategy, only print the object that would be sent, without sending it. If server strategy, submit server-side request without persisting the resource. (default "none")
+      --field-manager string           Name of the manager used to track field ownership. (default "kubectl-create")
+      --group stringArray              Groups to bind to the clusterrole. The flag can be repeated to add multiple groups.
+  -h, --help                           help for clusterrolebinding
+  -o, --output string                  Output format. One of: (json, yaml, kyaml, name, go-template, go-template-file, template, templatefile, jsonpath, jsonpath-as-json, jsonpath-file).
+      --save-config                    If true, the configuration of current object will be saved in its annotation. Otherwise, the annotation will be unchanged. This flag is useful when you want to perform kubectl apply on this object in the future.
+      --serviceaccount stringArray     Service accounts to bind to the clusterrole, in the format <namespace>:<name>. The flag can be repeated to add multiple service accounts.
+      --show-managed-fields            If true, keep the managedFields when printing objects in JSON or YAML format.
+      --template string                Template string or path to template file to use when -o=go-template, -o=go-template-file. The template format is golang templates [http://golang.org/pkg/text/template/#pkg-overview].
+      --user stringArray               Usernames to bind to the clusterrole. The flag can be repeated to add multiple users.
+      --validate string[="strict"]     Must be one of: strict (or true), warn, ignore (or false). "true" or "strict" will use a schema to validate the input and fail the request if invalid. It will perform server side validation if ServerSideFieldValidation is enabled on the api-server, but will fall back to less reliable client-side validation if not. "warn" will warn about unknown or duplicate fields without blocking the request if server-side field validation is enabled on the API server, and behave as "ignore" otherwise. "false" or "ignore" will not perform any schema validation, silently dropping any unknown or duplicate fields. (default "strict")
+
+Global Flags:
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
+
+---
+
+[TestWorkloadHelpSnapshots/create_configmap - 1]
+Create a config map based on a file, directory, or specified literal value.
+
+ A single config map may package one or more key/value pairs.
+
+ When creating a config map based on a file, the key will default to the basename of the file, and the value will default to the file content.  If the basename is an invalid key, you may specify an alternate key.
+
+ When creating a config map based on a directory, each file whose basename is a valid key in the directory will be packaged into the config map.  Any directory entries except regular files are ignored (e.g. subdirectories, symlinks, devices, pipes, etc).
+
+Usage:
+  ksail workload create configmap NAME [--from-file=[key=]source] [--from-literal=key1=value1] [--dry-run=server|client|none]
+
+Aliases:
+  configmap, cm
+
+Examples:
+  # Create a new config map named my-config based on folder bar
+  kubectl create configmap my-config --from-file=path/to/bar
+  
+  # Create a new config map named my-config with specified keys instead of file basenames on disk
+  kubectl create configmap my-config --from-file=key1=/path/to/bar/file1.txt --from-file=key2=/path/to/bar/file2.txt
+  
+  # Create a new config map named my-config with key1=config1 and key2=config2
+  kubectl create configmap my-config --from-literal=key1=config1 --from-literal=key2=config2
+  
+  # Create a new config map named my-config with key=value pairs from an env file
+  kubectl create configmap my-config --from-env-file=path/to/bar.env
+
+Flags:
+      --allow-missing-template-keys    If true, ignore any errors in templates when a field or map key is missing in the template. Only applies to golang and jsonpath output formats. (default true)
+      --append-hash                    Append a hash of the configmap to its name.
+      --dry-run string[="unchanged"]   Must be "none", "server", or "client". If client strategy, only print the object that would be sent, without sending it. If server strategy, submit server-side request without persisting the resource. (default "none")
+      --field-manager string           Name of the manager used to track field ownership. (default "kubectl-create")
+      --from-env-file strings          Specify the path to a file to read lines of key=val pairs to create a configmap.
+      --from-file strings              Key file can be specified using its file path, in which case file basename will be used as configmap key, or optionally with a key and file path, in which case the given key will be used.  Specifying a directory will iterate each named file in the directory whose basename is a valid configmap key.
+      --from-literal stringArray       Specify a key and literal value to insert in configmap (i.e. mykey=somevalue)
+  -h, --help                           help for configmap
+  -o, --output string                  Output format. One of: (json, yaml, kyaml, name, go-template, go-template-file, template, templatefile, jsonpath, jsonpath-as-json, jsonpath-file).
+      --save-config                    If true, the configuration of current object will be saved in its annotation. Otherwise, the annotation will be unchanged. This flag is useful when you want to perform kubectl apply on this object in the future.
+      --show-managed-fields            If true, keep the managedFields when printing objects in JSON or YAML format.
+      --template string                Template string or path to template file to use when -o=go-template, -o=go-template-file. The template format is golang templates [http://golang.org/pkg/text/template/#pkg-overview].
+      --validate string[="strict"]     Must be one of: strict (or true), warn, ignore (or false). "true" or "strict" will use a schema to validate the input and fail the request if invalid. It will perform server side validation if ServerSideFieldValidation is enabled on the api-server, but will fall back to less reliable client-side validation if not. "warn" will warn about unknown or duplicate fields without blocking the request if server-side field validation is enabled on the API server, and behave as "ignore" otherwise. "false" or "ignore" will not perform any schema validation, silently dropping any unknown or duplicate fields. (default "strict")
+
+Global Flags:
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
+
+---
+
+[TestWorkloadHelpSnapshots/create_cronjob - 1]
+Create a cron job with the specified name.
+
+Usage:
+  ksail workload create cronjob NAME --image=image --schedule='0/5 * * * ?' -- [COMMAND] [args...] [flags]
+
+Aliases:
+  cronjob, cj
+
+Examples:
+  # Create a cron job
+  kubectl create cronjob my-job --image=busybox --schedule="*/1 * * * *"
+  
+  # Create a cron job with a command
+  kubectl create cronjob my-job --image=busybox --schedule="*/1 * * * *" -- date
+
+Flags:
+      --allow-missing-template-keys    If true, ignore any errors in templates when a field or map key is missing in the template. Only applies to golang and jsonpath output formats. (default true)
+      --dry-run string[="unchanged"]   Must be "none", "server", or "client". If client strategy, only print the object that would be sent, without sending it. If server strategy, submit server-side request without persisting the resource. (default "none")
+      --field-manager string           Name of the manager used to track field ownership. (default "kubectl-create")
+  -h, --help                           help for cronjob
+      --image string                   Image name to run.
+  -o, --output string                  Output format. One of: (json, yaml, kyaml, name, go-template, go-template-file, template, templatefile, jsonpath, jsonpath-as-json, jsonpath-file).
+      --restart string                 job's restart policy. supported values: OnFailure, Never
+      --save-config                    If true, the configuration of current object will be saved in its annotation. Otherwise, the annotation will be unchanged. This flag is useful when you want to perform kubectl apply on this object in the future.
+      --schedule string                A schedule in the Cron format the job should be run with.
+      --show-managed-fields            If true, keep the managedFields when printing objects in JSON or YAML format.
+      --template string                Template string or path to template file to use when -o=go-template, -o=go-template-file. The template format is golang templates [http://golang.org/pkg/text/template/#pkg-overview].
+      --validate string[="strict"]     Must be one of: strict (or true), warn, ignore (or false). "true" or "strict" will use a schema to validate the input and fail the request if invalid. It will perform server side validation if ServerSideFieldValidation is enabled on the api-server, but will fall back to less reliable client-side validation if not. "warn" will warn about unknown or duplicate fields without blocking the request if server-side field validation is enabled on the API server, and behave as "ignore" otherwise. "false" or "ignore" will not perform any schema validation, silently dropping any unknown or duplicate fields. (default "strict")
+
+Global Flags:
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
+
+---
+
+[TestWorkloadHelpSnapshots/create_deployment - 1]
+Create a deployment with the specified name.
+
+Usage:
+  ksail workload create deployment NAME --image=image -- [COMMAND] [args...]
+
+Aliases:
+  deployment, deploy
+
+Examples:
+  # Create a deployment named my-dep that runs the busybox image
+  kubectl create deployment my-dep --image=busybox
+  
+  # Create a deployment with a command
+  kubectl create deployment my-dep --image=busybox -- date
+  
+  # Create a deployment named my-dep that runs the nginx image with 3 replicas
+  kubectl create deployment my-dep --image=nginx --replicas=3
+  
+  # Create a deployment named my-dep that runs the busybox image and expose port 5701
+  kubectl create deployment my-dep --image=busybox --port=5701
+  
+  # Create a deployment named my-dep that runs multiple containers
+  kubectl create deployment my-dep --image=busybox:latest --image=ubuntu:latest --image=nginx
+
+Flags:
+      --allow-missing-template-keys    If true, ignore any errors in templates when a field or map key is missing in the template. Only applies to golang and jsonpath output formats. (default true)
+      --dry-run string[="unchanged"]   Must be "none", "server", or "client". If client strategy, only print the object that would be sent, without sending it. If server strategy, submit server-side request without persisting the resource. (default "none")
+      --field-manager string           Name of the manager used to track field ownership. (default "kubectl-create")
+  -h, --help                           help for deployment
+      --image strings                  Image names to run. A deployment can have multiple images set for multi-container pod.
+  -o, --output string                  Output format. One of: (json, yaml, kyaml, name, go-template, go-template-file, template, templatefile, jsonpath, jsonpath-as-json, jsonpath-file).
+      --port int32                     The containerPort that this deployment exposes. (default -1)
+  -r, --replicas int32                 Number of replicas to create. Default is 1. (default 1)
+      --save-config                    If true, the configuration of current object will be saved in its annotation. Otherwise, the annotation will be unchanged. This flag is useful when you want to perform kubectl apply on this object in the future.
+      --show-managed-fields            If true, keep the managedFields when printing objects in JSON or YAML format.
+      --template string                Template string or path to template file to use when -o=go-template, -o=go-template-file. The template format is golang templates [http://golang.org/pkg/text/template/#pkg-overview].
+      --validate string[="strict"]     Must be one of: strict (or true), warn, ignore (or false). "true" or "strict" will use a schema to validate the input and fail the request if invalid. It will perform server side validation if ServerSideFieldValidation is enabled on the api-server, but will fall back to less reliable client-side validation if not. "warn" will warn about unknown or duplicate fields without blocking the request if server-side field validation is enabled on the API server, and behave as "ignore" otherwise. "false" or "ignore" will not perform any schema validation, silently dropping any unknown or duplicate fields. (default "strict")
+
+Global Flags:
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
+
+---
+
+[TestWorkloadHelpSnapshots/create_helmrelease - 1]
+Create or update a HelmRelease resource using Flux APIs
+
+Usage:
+  ksail workload create helmrelease [name] [flags]
+
+Aliases:
+  helmrelease, hr
+
+Examples:
+  # Create a HelmRelease with a chart from a HelmRepository source
+  ksail workload create helmrelease podinfo \
+    --source=HelmRepository/podinfo \
+    --chart=podinfo \
+    --chart-version=6.6.2 \
+    --namespace=flux-system
+
+  # Create a HelmRelease targeting a different namespace
+  ksail workload create helmrelease podinfo \
+    --source=HelmRepository/podinfo \
+    --chart=podinfo \
+    --target-namespace=production \
+    --create-target-namespace=true
+
+Flags:
+      --chart string              Helm chart name or path
+      --chart-version string      Helm chart version
+      --create-target-namespace   create the target namespace if it doesn't exist
+      --depends-on strings        HelmRelease that must be ready before this one
+      --export                    export in YAML format to stdout
+  -h, --help                      help for helmrelease
+      --interval duration         reconciliation interval (default 1m0s)
+      --source string             source name in format 'Kind/name' or 'Kind/name.namespace'
+      --source-kind string        source kind (HelmRepository, GitRepository, Bucket) (default "HelmRepository")
+      --target-namespace string   namespace to install the Helm release
+
+Global Flags:
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
+
+---
+
+[TestWorkloadHelpSnapshots/create_ingress - 1]
+Create an ingress with the specified name.
+
+Usage:
+  ksail workload create ingress NAME --rule=host/path=service:port[,tls[=secret]] 
+
+Aliases:
+  ingress, ing
+
+Examples:
+  # Create a single ingress called 'simple' that directs requests to foo.com/bar to svc
+  # svc1:8080 with a TLS secret "my-cert"
+  kubectl create ingress simple --rule="foo.com/bar=svc1:8080,tls=my-cert"
+  
+  # Create a catch all ingress of "/path" pointing to service svc:port and Ingress Class as "otheringress"
+  kubectl create ingress catch-all --class=otheringress --rule="/path=svc:port"
+  
+  # Create an ingress with two annotations: ingress.annotation1 and ingress.annotations2
+  kubectl create ingress annotated --class=default --rule="foo.com/bar=svc:port" \
+  --annotation ingress.annotation1=foo \
+  --annotation ingress.annotation2=bla
+  
+  # Create an ingress with the same host and multiple paths
+  kubectl create ingress multipath --class=default \
+  --rule="foo.com/=svc:port" \
+  --rule="foo.com/admin/=svcadmin:portadmin"
+  
+  # Create an ingress with multiple hosts and the pathType as Prefix
+  kubectl create ingress ingress1 --class=default \
+  --rule="foo.com/path*=svc:8080" \
+  --rule="bar.com/admin*=svc2:http"
+  
+  # Create an ingress with TLS enabled using the default ingress certificate and different path types
+  kubectl create ingress ingtls --class=default \
+  --rule="foo.com/=svc:https,tls" \
+  --rule="foo.com/path/subpath*=othersvc:8080"
+  
+  # Create an ingress with TLS enabled using a specific secret and pathType as Prefix
+  kubectl create ingress ingsecret --class=default \
+  --rule="foo.com/*=svc:8080,tls=secret1"
+  
+  # Create an ingress with a default backend
+  kubectl create ingress ingdefault --class=default \
+  --default-backend=defaultsvc:http \
+  --rule="foo.com/*=svc:8080,tls=secret1"
+
+Flags:
+      --allow-missing-template-keys    If true, ignore any errors in templates when a field or map key is missing in the template. Only applies to golang and jsonpath output formats. (default true)
+      --annotation stringArray         Annotation to insert in the ingress object, in the format annotation=value
+      --class string                   Ingress Class to be used
+      --default-backend string         Default service for backend, in format of svcname:port
+      --dry-run string[="unchanged"]   Must be "none", "server", or "client". If client strategy, only print the object that would be sent, without sending it. If server strategy, submit server-side request without persisting the resource. (default "none")
+      --field-manager string           Name of the manager used to track field ownership. (default "kubectl-create")
+  -h, --help                           help for ingress
+  -o, --output string                  Output format. One of: (json, yaml, kyaml, name, go-template, go-template-file, template, templatefile, jsonpath, jsonpath-as-json, jsonpath-file).
+      --rule stringArray               Rule in format host/path=service:port[,tls=secretname]. Paths containing the leading character '*' are considered pathType=Prefix. tls argument is optional.
+      --save-config                    If true, the configuration of current object will be saved in its annotation. Otherwise, the annotation will be unchanged. This flag is useful when you want to perform kubectl apply on this object in the future.
+      --show-managed-fields            If true, keep the managedFields when printing objects in JSON or YAML format.
+      --template string                Template string or path to template file to use when -o=go-template, -o=go-template-file. The template format is golang templates [http://golang.org/pkg/text/template/#pkg-overview].
+      --validate string[="strict"]     Must be one of: strict (or true), warn, ignore (or false). "true" or "strict" will use a schema to validate the input and fail the request if invalid. It will perform server side validation if ServerSideFieldValidation is enabled on the api-server, but will fall back to less reliable client-side validation if not. "warn" will warn about unknown or duplicate fields without blocking the request if server-side field validation is enabled on the API server, and behave as "ignore" otherwise. "false" or "ignore" will not perform any schema validation, silently dropping any unknown or duplicate fields. (default "strict")
+
+Global Flags:
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
+
+---
+
+[TestWorkloadHelpSnapshots/create_job - 1]
+Create a job with the specified name.
+
+Usage:
+  ksail workload create job NAME --image=image [--from=cronjob/name] -- [COMMAND] [args...]
+
+Examples:
+  # Create a job
+  kubectl create job my-job --image=busybox
+  
+  # Create a job with a command
+  kubectl create job my-job --image=busybox -- date
+  
+  # Create a job from a cron job named "a-cronjob"
+  kubectl create job test-job --from=cronjob/a-cronjob
+
+Flags:
+      --allow-missing-template-keys    If true, ignore any errors in templates when a field or map key is missing in the template. Only applies to golang and jsonpath output formats. (default true)
+      --dry-run string[="unchanged"]   Must be "none", "server", or "client". If client strategy, only print the object that would be sent, without sending it. If server strategy, submit server-side request without persisting the resource. (default "none")
+      --field-manager string           Name of the manager used to track field ownership. (default "kubectl-create")
+      --from string                    The name of the resource to create a Job from (only CronJob is supported).
+  -h, --help                           help for job
+      --image string                   Image name to run.
+  -o, --output string                  Output format. One of: (json, yaml, kyaml, name, go-template, go-template-file, template, templatefile, jsonpath, jsonpath-as-json, jsonpath-file).
+      --save-config                    If true, the configuration of current object will be saved in its annotation. Otherwise, the annotation will be unchanged. This flag is useful when you want to perform kubectl apply on this object in the future.
+      --show-managed-fields            If true, keep the managedFields when printing objects in JSON or YAML format.
+      --template string                Template string or path to template file to use when -o=go-template, -o=go-template-file. The template format is golang templates [http://golang.org/pkg/text/template/#pkg-overview].
+      --validate string[="strict"]     Must be one of: strict (or true), warn, ignore (or false). "true" or "strict" will use a schema to validate the input and fail the request if invalid. It will perform server side validation if ServerSideFieldValidation is enabled on the api-server, but will fall back to less reliable client-side validation if not. "warn" will warn about unknown or duplicate fields without blocking the request if server-side field validation is enabled on the API server, and behave as "ignore" otherwise. "false" or "ignore" will not perform any schema validation, silently dropping any unknown or duplicate fields. (default "strict")
+
+Global Flags:
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
+
+---
+
 [TestWorkloadHelpSnapshots/create_kustomization - 1]
 Create or update a Kustomization resource using Flux APIs
 
@@ -448,6 +931,558 @@ Global Flags:
 
 ---
 
+[TestWorkloadHelpSnapshots/create_namespace - 1]
+Create a namespace with the specified name.
+
+Usage:
+  ksail workload create namespace NAME [--dry-run=server|client|none]
+
+Aliases:
+  namespace, ns
+
+Examples:
+  # Create a new namespace named my-namespace
+  kubectl create namespace my-namespace
+
+Flags:
+      --allow-missing-template-keys    If true, ignore any errors in templates when a field or map key is missing in the template. Only applies to golang and jsonpath output formats. (default true)
+      --dry-run string[="unchanged"]   Must be "none", "server", or "client". If client strategy, only print the object that would be sent, without sending it. If server strategy, submit server-side request without persisting the resource. (default "none")
+      --field-manager string           Name of the manager used to track field ownership. (default "kubectl-create")
+  -h, --help                           help for namespace
+  -o, --output string                  Output format. One of: (json, yaml, kyaml, name, go-template, go-template-file, template, templatefile, jsonpath, jsonpath-as-json, jsonpath-file).
+      --save-config                    If true, the configuration of current object will be saved in its annotation. Otherwise, the annotation will be unchanged. This flag is useful when you want to perform kubectl apply on this object in the future.
+      --show-managed-fields            If true, keep the managedFields when printing objects in JSON or YAML format.
+      --template string                Template string or path to template file to use when -o=go-template, -o=go-template-file. The template format is golang templates [http://golang.org/pkg/text/template/#pkg-overview].
+      --validate string[="strict"]     Must be one of: strict (or true), warn, ignore (or false). "true" or "strict" will use a schema to validate the input and fail the request if invalid. It will perform server side validation if ServerSideFieldValidation is enabled on the api-server, but will fall back to less reliable client-side validation if not. "warn" will warn about unknown or duplicate fields without blocking the request if server-side field validation is enabled on the API server, and behave as "ignore" otherwise. "false" or "ignore" will not perform any schema validation, silently dropping any unknown or duplicate fields. (default "strict")
+
+Global Flags:
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
+
+---
+
+[TestWorkloadHelpSnapshots/create_poddisruptionbudget - 1]
+Create a pod disruption budget with the specified name, selector, and desired minimum available pods.
+
+Usage:
+  ksail workload create poddisruptionbudget NAME --selector=SELECTOR --min-available=N [--dry-run=server|client|none]
+
+Aliases:
+  poddisruptionbudget, pdb
+
+Examples:
+  # Create a pod disruption budget named my-pdb that will select all pods with the app=rails label
+  # and require at least one of them being available at any point in time
+  kubectl create poddisruptionbudget my-pdb --selector=app=rails --min-available=1
+  
+  # Create a pod disruption budget named my-pdb that will select all pods with the app=nginx label
+  # and require at least half of the pods selected to be available at any point in time
+  kubectl create pdb my-pdb --selector=app=nginx --min-available=50%
+
+Flags:
+      --allow-missing-template-keys    If true, ignore any errors in templates when a field or map key is missing in the template. Only applies to golang and jsonpath output formats. (default true)
+      --dry-run string[="unchanged"]   Must be "none", "server", or "client". If client strategy, only print the object that would be sent, without sending it. If server strategy, submit server-side request without persisting the resource. (default "none")
+      --field-manager string           Name of the manager used to track field ownership. (default "kubectl-create")
+  -h, --help                           help for poddisruptionbudget
+      --max-unavailable string         The maximum number or percentage of unavailable pods this budget requires.
+      --min-available string           The minimum number or percentage of available pods this budget requires.
+  -o, --output string                  Output format. One of: (json, yaml, kyaml, name, go-template, go-template-file, template, templatefile, jsonpath, jsonpath-as-json, jsonpath-file).
+      --save-config                    If true, the configuration of current object will be saved in its annotation. Otherwise, the annotation will be unchanged. This flag is useful when you want to perform kubectl apply on this object in the future.
+      --selector string                A label selector to use for this budget. Only equality-based selector requirements are supported.
+      --show-managed-fields            If true, keep the managedFields when printing objects in JSON or YAML format.
+      --template string                Template string or path to template file to use when -o=go-template, -o=go-template-file. The template format is golang templates [http://golang.org/pkg/text/template/#pkg-overview].
+      --validate string[="strict"]     Must be one of: strict (or true), warn, ignore (or false). "true" or "strict" will use a schema to validate the input and fail the request if invalid. It will perform server side validation if ServerSideFieldValidation is enabled on the api-server, but will fall back to less reliable client-side validation if not. "warn" will warn about unknown or duplicate fields without blocking the request if server-side field validation is enabled on the API server, and behave as "ignore" otherwise. "false" or "ignore" will not perform any schema validation, silently dropping any unknown or duplicate fields. (default "strict")
+
+Global Flags:
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
+
+---
+
+[TestWorkloadHelpSnapshots/create_priorityclass - 1]
+Create a priority class with the specified name, value, globalDefault and description.
+
+Usage:
+  ksail workload create priorityclass NAME --value=VALUE --global-default=BOOL [--dry-run=server|client|none]
+
+Aliases:
+  priorityclass, pc
+
+Examples:
+  # Create a priority class named high-priority
+  kubectl create priorityclass high-priority --value=1000 --description="high priority"
+  
+  # Create a priority class named default-priority that is considered as the global default priority
+  kubectl create priorityclass default-priority --value=1000 --global-default=true --description="default priority"
+  
+  # Create a priority class named high-priority that cannot preempt pods with lower priority
+  kubectl create priorityclass high-priority --value=1000 --description="high priority" --preemption-policy="Never"
+
+Flags:
+      --allow-missing-template-keys    If true, ignore any errors in templates when a field or map key is missing in the template. Only applies to golang and jsonpath output formats. (default true)
+      --description string             description is an arbitrary string that usually provides guidelines on when this priority class should be used.
+      --dry-run string[="unchanged"]   Must be "none", "server", or "client". If client strategy, only print the object that would be sent, without sending it. If server strategy, submit server-side request without persisting the resource. (default "none")
+      --field-manager string           Name of the manager used to track field ownership. (default "kubectl-create")
+      --global-default                 global-default specifies whether this PriorityClass should be considered as the default priority.
+  -h, --help                           help for priorityclass
+  -o, --output string                  Output format. One of: (json, yaml, kyaml, name, go-template, go-template-file, template, templatefile, jsonpath, jsonpath-as-json, jsonpath-file).
+      --preemption-policy string       preemption-policy is the policy for preempting pods with lower priority. (default "PreemptLowerPriority")
+      --save-config                    If true, the configuration of current object will be saved in its annotation. Otherwise, the annotation will be unchanged. This flag is useful when you want to perform kubectl apply on this object in the future.
+      --show-managed-fields            If true, keep the managedFields when printing objects in JSON or YAML format.
+      --template string                Template string or path to template file to use when -o=go-template, -o=go-template-file. The template format is golang templates [http://golang.org/pkg/text/template/#pkg-overview].
+      --validate string[="strict"]     Must be one of: strict (or true), warn, ignore (or false). "true" or "strict" will use a schema to validate the input and fail the request if invalid. It will perform server side validation if ServerSideFieldValidation is enabled on the api-server, but will fall back to less reliable client-side validation if not. "warn" will warn about unknown or duplicate fields without blocking the request if server-side field validation is enabled on the API server, and behave as "ignore" otherwise. "false" or "ignore" will not perform any schema validation, silently dropping any unknown or duplicate fields. (default "strict")
+      --value int32                    the value of this priority class.
+
+Global Flags:
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
+
+---
+
+[TestWorkloadHelpSnapshots/create_quota - 1]
+Create a resource quota with the specified name, hard limits, and optional scopes.
+
+Usage:
+  ksail workload create quota NAME [--hard=key1=value1,key2=value2] [--scopes=Scope1,Scope2] [--dry-run=server|client|none]
+
+Aliases:
+  quota, resourcequota
+
+Examples:
+  # Create a new resource quota named my-quota
+  kubectl create quota my-quota --hard=cpu=1,memory=1G,pods=2,services=3,replicationcontrollers=2,resourcequotas=1,secrets=5,persistentvolumeclaims=10
+  
+  # Create a new resource quota named best-effort
+  kubectl create quota best-effort --hard=pods=100 --scopes=BestEffort
+
+Flags:
+      --allow-missing-template-keys    If true, ignore any errors in templates when a field or map key is missing in the template. Only applies to golang and jsonpath output formats. (default true)
+      --dry-run string[="unchanged"]   Must be "none", "server", or "client". If client strategy, only print the object that would be sent, without sending it. If server strategy, submit server-side request without persisting the resource. (default "none")
+      --field-manager string           Name of the manager used to track field ownership. (default "kubectl-create")
+      --hard string                    A comma-delimited set of resource=quantity pairs that define a hard limit.
+  -h, --help                           help for quota
+  -o, --output string                  Output format. One of: (json, yaml, kyaml, name, go-template, go-template-file, template, templatefile, jsonpath, jsonpath-as-json, jsonpath-file).
+      --save-config                    If true, the configuration of current object will be saved in its annotation. Otherwise, the annotation will be unchanged. This flag is useful when you want to perform kubectl apply on this object in the future.
+      --scopes string                  A comma-delimited set of quota scopes that must all match each object tracked by the quota.
+      --show-managed-fields            If true, keep the managedFields when printing objects in JSON or YAML format.
+      --template string                Template string or path to template file to use when -o=go-template, -o=go-template-file. The template format is golang templates [http://golang.org/pkg/text/template/#pkg-overview].
+      --validate string[="strict"]     Must be one of: strict (or true), warn, ignore (or false). "true" or "strict" will use a schema to validate the input and fail the request if invalid. It will perform server side validation if ServerSideFieldValidation is enabled on the api-server, but will fall back to less reliable client-side validation if not. "warn" will warn about unknown or duplicate fields without blocking the request if server-side field validation is enabled on the API server, and behave as "ignore" otherwise. "false" or "ignore" will not perform any schema validation, silently dropping any unknown or duplicate fields. (default "strict")
+
+Global Flags:
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
+
+---
+
+[TestWorkloadHelpSnapshots/create_role - 1]
+Create a role with single rule.
+
+Usage:
+  ksail workload create role NAME --verb=verb --resource=resource.group/subresource [--resource-name=resourcename] [--dry-run=server|client|none]
+
+Examples:
+  # Create a role named "pod-reader" that allows user to perform "get", "watch" and "list" on pods
+  kubectl create role pod-reader --verb=get --verb=list --verb=watch --resource=pods
+  
+  # Create a role named "pod-reader" with ResourceName specified
+  kubectl create role pod-reader --verb=get --resource=pods --resource-name=readablepod --resource-name=anotherpod
+  
+  # Create a role named "foo" with API Group specified
+  kubectl create role foo --verb=get,list,watch --resource=rs.apps
+  
+  # Create a role named "foo" with SubResource specified
+  kubectl create role foo --verb=get,list,watch --resource=pods,pods/status
+
+Flags:
+      --allow-missing-template-keys    If true, ignore any errors in templates when a field or map key is missing in the template. Only applies to golang and jsonpath output formats. (default true)
+      --dry-run string[="unchanged"]   Must be "none", "server", or "client". If client strategy, only print the object that would be sent, without sending it. If server strategy, submit server-side request without persisting the resource. (default "none")
+      --field-manager string           Name of the manager used to track field ownership. (default "kubectl-create")
+  -h, --help                           help for role
+  -o, --output string                  Output format. One of: (json, yaml, kyaml, name, go-template, go-template-file, template, templatefile, jsonpath, jsonpath-as-json, jsonpath-file).
+      --resource strings               Resource that the rule applies to
+      --resource-name stringArray      Resource in the white list that the rule applies to, repeat this flag for multiple items
+      --save-config                    If true, the configuration of current object will be saved in its annotation. Otherwise, the annotation will be unchanged. This flag is useful when you want to perform kubectl apply on this object in the future.
+      --show-managed-fields            If true, keep the managedFields when printing objects in JSON or YAML format.
+      --template string                Template string or path to template file to use when -o=go-template, -o=go-template-file. The template format is golang templates [http://golang.org/pkg/text/template/#pkg-overview].
+      --validate string[="strict"]     Must be one of: strict (or true), warn, ignore (or false). "true" or "strict" will use a schema to validate the input and fail the request if invalid. It will perform server side validation if ServerSideFieldValidation is enabled on the api-server, but will fall back to less reliable client-side validation if not. "warn" will warn about unknown or duplicate fields without blocking the request if server-side field validation is enabled on the API server, and behave as "ignore" otherwise. "false" or "ignore" will not perform any schema validation, silently dropping any unknown or duplicate fields. (default "strict")
+      --verb strings                   Verb that applies to the resources contained in the rule
+
+Global Flags:
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
+
+---
+
+[TestWorkloadHelpSnapshots/create_rolebinding - 1]
+Create a role binding for a particular role or cluster role.
+
+Usage:
+  ksail workload create rolebinding NAME --clusterrole=NAME|--role=NAME [--user=username] [--group=groupname] [--serviceaccount=namespace:serviceaccountname] [--dry-run=server|client|none]
+
+Examples:
+  # Create a role binding for user1, user2, and group1 using the admin cluster role
+  kubectl create rolebinding admin --clusterrole=admin --user=user1 --user=user2 --group=group1
+  
+  # Create a role binding for service account monitoring:sa-dev using the admin role
+  kubectl create rolebinding admin-binding --role=admin --serviceaccount=monitoring:sa-dev
+
+Flags:
+      --allow-missing-template-keys    If true, ignore any errors in templates when a field or map key is missing in the template. Only applies to golang and jsonpath output formats. (default true)
+      --clusterrole string             ClusterRole this RoleBinding should reference
+      --dry-run string[="unchanged"]   Must be "none", "server", or "client". If client strategy, only print the object that would be sent, without sending it. If server strategy, submit server-side request without persisting the resource. (default "none")
+      --field-manager string           Name of the manager used to track field ownership. (default "kubectl-create")
+      --group stringArray              Groups to bind to the role. The flag can be repeated to add multiple groups.
+  -h, --help                           help for rolebinding
+  -o, --output string                  Output format. One of: (json, yaml, kyaml, name, go-template, go-template-file, template, templatefile, jsonpath, jsonpath-as-json, jsonpath-file).
+      --role string                    Role this RoleBinding should reference
+      --save-config                    If true, the configuration of current object will be saved in its annotation. Otherwise, the annotation will be unchanged. This flag is useful when you want to perform kubectl apply on this object in the future.
+      --serviceaccount stringArray     Service accounts to bind to the role, in the format <namespace>:<name>. The flag can be repeated to add multiple service accounts.
+      --show-managed-fields            If true, keep the managedFields when printing objects in JSON or YAML format.
+      --template string                Template string or path to template file to use when -o=go-template, -o=go-template-file. The template format is golang templates [http://golang.org/pkg/text/template/#pkg-overview].
+      --user stringArray               Usernames to bind to the role. The flag can be repeated to add multiple users.
+      --validate string[="strict"]     Must be one of: strict (or true), warn, ignore (or false). "true" or "strict" will use a schema to validate the input and fail the request if invalid. It will perform server side validation if ServerSideFieldValidation is enabled on the api-server, but will fall back to less reliable client-side validation if not. "warn" will warn about unknown or duplicate fields without blocking the request if server-side field validation is enabled on the API server, and behave as "ignore" otherwise. "false" or "ignore" will not perform any schema validation, silently dropping any unknown or duplicate fields. (default "strict")
+
+Global Flags:
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
+
+---
+
+[TestWorkloadHelpSnapshots/create_secret - 1]
+Create a secret with specified type.
+
+ A docker-registry type secret is for accessing a container registry.
+
+ A generic type secret indicate an Opaque secret type.
+
+ A tls type secret holds TLS certificate and its associated key.
+
+Usage:
+  ksail workload create secret (docker-registry | generic | tls)
+  ksail workload create secret [command]
+
+Available Commands:
+  docker-registry Create a secret for use with a Docker registry
+  generic         Create a secret from a local file, directory, or literal value
+  tls             Create a TLS secret
+
+Flags:
+  -h, --help   help for secret
+
+Global Flags:
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
+
+Use "ksail workload create secret [command] --help" for more information about a command.
+
+---
+
+[TestWorkloadHelpSnapshots/create_secret_docker-registry - 1]
+Create a new secret for use with Docker registries.
+        
+        Dockercfg secrets are used to authenticate against Docker registries.
+        
+        When using the Docker command line to push images, you can authenticate to a given registry by running:
+        '$ docker login DOCKER_REGISTRY_SERVER --username=DOCKER_USER --password=DOCKER_PASSWORD --email=DOCKER_EMAIL'.
+        
+ That produces a ~/.dockercfg file that is used by subsequent 'docker push' and 'docker pull' commands to authenticate to the registry. The email address is optional.
+
+        When creating applications, you may have a Docker registry that requires authentication.  In order for the
+        nodes to pull images on your behalf, they must have the credentials.  You can provide this information
+        by creating a dockercfg secret and attaching it to your service account.
+
+Usage:
+  ksail workload create secret docker-registry NAME --docker-username=user --docker-password=password --docker-email=email [--docker-server=string] [--from-file=[key=]source] [--dry-run=server|client|none]
+
+Examples:
+  # If you do not already have a .dockercfg file, create a dockercfg secret directly
+  kubectl create secret docker-registry my-secret --docker-server=DOCKER_REGISTRY_SERVER --docker-username=DOCKER_USER --docker-password=DOCKER_PASSWORD --docker-email=DOCKER_EMAIL
+  
+  # Create a new secret named my-secret from ~/.docker/config.json
+  kubectl create secret docker-registry my-secret --from-file=path/to/.docker/config.json
+
+Flags:
+      --allow-missing-template-keys    If true, ignore any errors in templates when a field or map key is missing in the template. Only applies to golang and jsonpath output formats. (default true)
+      --append-hash                    Append a hash of the secret to its name.
+      --docker-email string            Email for Docker registry
+      --docker-password string         Password for Docker registry authentication
+      --docker-server string           Server location for Docker registry (default "https://index.docker.io/v1/")
+      --docker-username string         Username for Docker registry authentication
+      --dry-run string[="unchanged"]   Must be "none", "server", or "client". If client strategy, only print the object that would be sent, without sending it. If server strategy, submit server-side request without persisting the resource. (default "none")
+      --field-manager string           Name of the manager used to track field ownership. (default "kubectl-create")
+      --from-file strings              Key files can be specified using their file path, in which case a default name of .dockerconfigjson will be given to them, or optionally with a name and file path, in which case the given name will be used. Specifying a directory will iterate each named file in the directory that is a valid secret key. For this command, the key should always be .dockerconfigjson.
+  -h, --help                           help for docker-registry
+  -o, --output string                  Output format. One of: (json, yaml, kyaml, name, go-template, go-template-file, template, templatefile, jsonpath, jsonpath-as-json, jsonpath-file).
+      --save-config                    If true, the configuration of current object will be saved in its annotation. Otherwise, the annotation will be unchanged. This flag is useful when you want to perform kubectl apply on this object in the future.
+      --show-managed-fields            If true, keep the managedFields when printing objects in JSON or YAML format.
+      --template string                Template string or path to template file to use when -o=go-template, -o=go-template-file. The template format is golang templates [http://golang.org/pkg/text/template/#pkg-overview].
+      --validate string[="strict"]     Must be one of: strict (or true), warn, ignore (or false). "true" or "strict" will use a schema to validate the input and fail the request if invalid. It will perform server side validation if ServerSideFieldValidation is enabled on the api-server, but will fall back to less reliable client-side validation if not. "warn" will warn about unknown or duplicate fields without blocking the request if server-side field validation is enabled on the API server, and behave as "ignore" otherwise. "false" or "ignore" will not perform any schema validation, silently dropping any unknown or duplicate fields. (default "strict")
+
+Global Flags:
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
+
+---
+
+[TestWorkloadHelpSnapshots/create_secret_generic - 1]
+Create a secret based on a file, directory, or specified literal value.
+
+ A single secret may package one or more key/value pairs.
+
+ When creating a secret based on a file, the key will default to the basename of the file, and the value will default to the file content. If the basename is an invalid key or you wish to chose your own, you may specify an alternate key.
+
+ When creating a secret based on a directory, each file whose basename is a valid key in the directory will be packaged into the secret. Any directory entries except regular files are ignored (e.g. subdirectories, symlinks, devices, pipes, etc).
+
+Usage:
+  ksail workload create secret generic NAME [--type=string] [--from-file=[key=]source] [--from-literal=key1=value1] [--dry-run=server|client|none]
+
+Examples:
+  # Create a new secret named my-secret with keys for each file in folder bar
+  kubectl create secret generic my-secret --from-file=path/to/bar
+  
+  # Create a new secret named my-secret with specified keys instead of names on disk
+  kubectl create secret generic my-secret --from-file=ssh-privatekey=path/to/id_rsa --from-file=ssh-publickey=path/to/id_rsa.pub
+  
+  # Create a new secret named my-secret with key1=supersecret and key2=topsecret
+  kubectl create secret generic my-secret --from-literal=key1=supersecret --from-literal=key2=topsecret
+  
+  # Create a new secret named my-secret using a combination of a file and a literal
+  kubectl create secret generic my-secret --from-file=ssh-privatekey=path/to/id_rsa --from-literal=passphrase=topsecret
+  
+  # Create a new secret named my-secret from env files
+  kubectl create secret generic my-secret --from-env-file=path/to/foo.env --from-env-file=path/to/bar.env
+
+Flags:
+      --allow-missing-template-keys    If true, ignore any errors in templates when a field or map key is missing in the template. Only applies to golang and jsonpath output formats. (default true)
+      --append-hash                    Append a hash of the secret to its name.
+      --dry-run string[="unchanged"]   Must be "none", "server", or "client". If client strategy, only print the object that would be sent, without sending it. If server strategy, submit server-side request without persisting the resource. (default "none")
+      --field-manager string           Name of the manager used to track field ownership. (default "kubectl-create")
+      --from-env-file strings          Specify the path to a file to read lines of key=val pairs to create a secret.
+      --from-file strings              Key files can be specified using their file path, in which case a default name will be given to them, or optionally with a name and file path, in which case the given name will be used.  Specifying a directory will iterate each named file in the directory that is a valid secret key.
+      --from-literal stringArray       Specify a key and literal value to insert in secret (i.e. mykey=somevalue)
+  -h, --help                           help for generic
+  -o, --output string                  Output format. One of: (json, yaml, kyaml, name, go-template, go-template-file, template, templatefile, jsonpath, jsonpath-as-json, jsonpath-file).
+      --save-config                    If true, the configuration of current object will be saved in its annotation. Otherwise, the annotation will be unchanged. This flag is useful when you want to perform kubectl apply on this object in the future.
+      --show-managed-fields            If true, keep the managedFields when printing objects in JSON or YAML format.
+      --template string                Template string or path to template file to use when -o=go-template, -o=go-template-file. The template format is golang templates [http://golang.org/pkg/text/template/#pkg-overview].
+      --type string                    The type of secret to create
+      --validate string[="strict"]     Must be one of: strict (or true), warn, ignore (or false). "true" or "strict" will use a schema to validate the input and fail the request if invalid. It will perform server side validation if ServerSideFieldValidation is enabled on the api-server, but will fall back to less reliable client-side validation if not. "warn" will warn about unknown or duplicate fields without blocking the request if server-side field validation is enabled on the API server, and behave as "ignore" otherwise. "false" or "ignore" will not perform any schema validation, silently dropping any unknown or duplicate fields. (default "strict")
+
+Global Flags:
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
+
+---
+
+[TestWorkloadHelpSnapshots/create_secret_tls - 1]
+Create a TLS secret from the given public/private key pair.
+
+ The public/private key pair must exist beforehand. The public key certificate must be .PEM encoded and match the given private key.
+
+Usage:
+  ksail workload create secret tls NAME --cert=path/to/cert/file --key=path/to/key/file [--dry-run=server|client|none]
+
+Examples:
+  # Create a new TLS secret named tls-secret with the given key pair
+  kubectl create secret tls tls-secret --cert=path/to/tls.crt --key=path/to/tls.key
+
+Flags:
+      --allow-missing-template-keys    If true, ignore any errors in templates when a field or map key is missing in the template. Only applies to golang and jsonpath output formats. (default true)
+      --append-hash                    Append a hash of the secret to its name.
+      --cert string                    Path to PEM encoded public key certificate.
+      --dry-run string[="unchanged"]   Must be "none", "server", or "client". If client strategy, only print the object that would be sent, without sending it. If server strategy, submit server-side request without persisting the resource. (default "none")
+      --field-manager string           Name of the manager used to track field ownership. (default "kubectl-create")
+  -h, --help                           help for tls
+      --key string                     Path to private key associated with given certificate.
+  -o, --output string                  Output format. One of: (json, yaml, kyaml, name, go-template, go-template-file, template, templatefile, jsonpath, jsonpath-as-json, jsonpath-file).
+      --save-config                    If true, the configuration of current object will be saved in its annotation. Otherwise, the annotation will be unchanged. This flag is useful when you want to perform kubectl apply on this object in the future.
+      --show-managed-fields            If true, keep the managedFields when printing objects in JSON or YAML format.
+      --template string                Template string or path to template file to use when -o=go-template, -o=go-template-file. The template format is golang templates [http://golang.org/pkg/text/template/#pkg-overview].
+      --validate string[="strict"]     Must be one of: strict (or true), warn, ignore (or false). "true" or "strict" will use a schema to validate the input and fail the request if invalid. It will perform server side validation if ServerSideFieldValidation is enabled on the api-server, but will fall back to less reliable client-side validation if not. "warn" will warn about unknown or duplicate fields without blocking the request if server-side field validation is enabled on the API server, and behave as "ignore" otherwise. "false" or "ignore" will not perform any schema validation, silently dropping any unknown or duplicate fields. (default "strict")
+
+Global Flags:
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
+
+---
+
+[TestWorkloadHelpSnapshots/create_service - 1]
+Create a service using a specified subcommand.
+
+Usage:
+  ksail workload create service [flags]
+  ksail workload create service [command]
+
+Aliases:
+  service, svc
+
+Available Commands:
+  clusterip    Create a ClusterIP service
+  externalname Create an ExternalName service
+  loadbalancer Create a LoadBalancer service
+  nodeport     Create a NodePort service
+
+Flags:
+  -h, --help   help for service
+
+Global Flags:
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
+
+Use "ksail workload create service [command] --help" for more information about a command.
+
+---
+
+[TestWorkloadHelpSnapshots/create_service_clusterip - 1]
+Create a ClusterIP service with the specified name.
+
+Usage:
+  ksail workload create service clusterip NAME [--tcp=<port>:<targetPort>] [--dry-run=server|client|none]
+
+Examples:
+  # Create a new ClusterIP service named my-cs
+  kubectl create service clusterip my-cs --tcp=5678:8080
+  
+  # Create a new ClusterIP service named my-cs (in headless mode)
+  kubectl create service clusterip my-cs --clusterip="None"
+
+Flags:
+      --allow-missing-template-keys    If true, ignore any errors in templates when a field or map key is missing in the template. Only applies to golang and jsonpath output formats. (default true)
+      --clusterip string               Assign your own ClusterIP or set to 'None' for a 'headless' service (no loadbalancing).
+      --dry-run string[="unchanged"]   Must be "none", "server", or "client". If client strategy, only print the object that would be sent, without sending it. If server strategy, submit server-side request without persisting the resource. (default "none")
+      --field-manager string           Name of the manager used to track field ownership. (default "kubectl-create")
+  -h, --help                           help for clusterip
+  -o, --output string                  Output format. One of: (json, yaml, kyaml, name, go-template, go-template-file, template, templatefile, jsonpath, jsonpath-as-json, jsonpath-file).
+      --save-config                    If true, the configuration of current object will be saved in its annotation. Otherwise, the annotation will be unchanged. This flag is useful when you want to perform kubectl apply on this object in the future.
+      --show-managed-fields            If true, keep the managedFields when printing objects in JSON or YAML format.
+      --tcp strings                    Port pairs can be specified as '<port>:<targetPort>'.
+      --template string                Template string or path to template file to use when -o=go-template, -o=go-template-file. The template format is golang templates [http://golang.org/pkg/text/template/#pkg-overview].
+      --validate string[="strict"]     Must be one of: strict (or true), warn, ignore (or false). "true" or "strict" will use a schema to validate the input and fail the request if invalid. It will perform server side validation if ServerSideFieldValidation is enabled on the api-server, but will fall back to less reliable client-side validation if not. "warn" will warn about unknown or duplicate fields without blocking the request if server-side field validation is enabled on the API server, and behave as "ignore" otherwise. "false" or "ignore" will not perform any schema validation, silently dropping any unknown or duplicate fields. (default "strict")
+
+Global Flags:
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
+
+---
+
+[TestWorkloadHelpSnapshots/create_service_externalname - 1]
+Create an ExternalName service with the specified name.
+
+ ExternalName service references to an external DNS address instead of only pods, which will allow application authors to reference services that exist off platform, on other clusters, or locally.
+
+Usage:
+  ksail workload create service externalname NAME --external-name external.name [--dry-run=server|client|none]
+
+Examples:
+  # Create a new ExternalName service named my-ns
+  kubectl create service externalname my-ns --external-name bar.com
+
+Flags:
+      --allow-missing-template-keys    If true, ignore any errors in templates when a field or map key is missing in the template. Only applies to golang and jsonpath output formats. (default true)
+      --dry-run string[="unchanged"]   Must be "none", "server", or "client". If client strategy, only print the object that would be sent, without sending it. If server strategy, submit server-side request without persisting the resource. (default "none")
+      --external-name string           External name of service
+      --field-manager string           Name of the manager used to track field ownership. (default "kubectl-create")
+  -h, --help                           help for externalname
+  -o, --output string                  Output format. One of: (json, yaml, kyaml, name, go-template, go-template-file, template, templatefile, jsonpath, jsonpath-as-json, jsonpath-file).
+      --save-config                    If true, the configuration of current object will be saved in its annotation. Otherwise, the annotation will be unchanged. This flag is useful when you want to perform kubectl apply on this object in the future.
+      --show-managed-fields            If true, keep the managedFields when printing objects in JSON or YAML format.
+      --tcp strings                    Port pairs can be specified as '<port>:<targetPort>'.
+      --template string                Template string or path to template file to use when -o=go-template, -o=go-template-file. The template format is golang templates [http://golang.org/pkg/text/template/#pkg-overview].
+      --validate string[="strict"]     Must be one of: strict (or true), warn, ignore (or false). "true" or "strict" will use a schema to validate the input and fail the request if invalid. It will perform server side validation if ServerSideFieldValidation is enabled on the api-server, but will fall back to less reliable client-side validation if not. "warn" will warn about unknown or duplicate fields without blocking the request if server-side field validation is enabled on the API server, and behave as "ignore" otherwise. "false" or "ignore" will not perform any schema validation, silently dropping any unknown or duplicate fields. (default "strict")
+
+Global Flags:
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
+
+---
+
+[TestWorkloadHelpSnapshots/create_service_loadbalancer - 1]
+Create a LoadBalancer service with the specified name.
+
+Usage:
+  ksail workload create service loadbalancer NAME [--tcp=port:targetPort] [--dry-run=server|client|none]
+
+Examples:
+  # Create a new LoadBalancer service named my-lbs
+  kubectl create service loadbalancer my-lbs --tcp=5678:8080
+
+Flags:
+      --allow-missing-template-keys    If true, ignore any errors in templates when a field or map key is missing in the template. Only applies to golang and jsonpath output formats. (default true)
+      --dry-run string[="unchanged"]   Must be "none", "server", or "client". If client strategy, only print the object that would be sent, without sending it. If server strategy, submit server-side request without persisting the resource. (default "none")
+      --field-manager string           Name of the manager used to track field ownership. (default "kubectl-create")
+  -h, --help                           help for loadbalancer
+  -o, --output string                  Output format. One of: (json, yaml, kyaml, name, go-template, go-template-file, template, templatefile, jsonpath, jsonpath-as-json, jsonpath-file).
+      --save-config                    If true, the configuration of current object will be saved in its annotation. Otherwise, the annotation will be unchanged. This flag is useful when you want to perform kubectl apply on this object in the future.
+      --show-managed-fields            If true, keep the managedFields when printing objects in JSON or YAML format.
+      --tcp strings                    Port pairs can be specified as '<port>:<targetPort>'.
+      --template string                Template string or path to template file to use when -o=go-template, -o=go-template-file. The template format is golang templates [http://golang.org/pkg/text/template/#pkg-overview].
+      --validate string[="strict"]     Must be one of: strict (or true), warn, ignore (or false). "true" or "strict" will use a schema to validate the input and fail the request if invalid. It will perform server side validation if ServerSideFieldValidation is enabled on the api-server, but will fall back to less reliable client-side validation if not. "warn" will warn about unknown or duplicate fields without blocking the request if server-side field validation is enabled on the API server, and behave as "ignore" otherwise. "false" or "ignore" will not perform any schema validation, silently dropping any unknown or duplicate fields. (default "strict")
+
+Global Flags:
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
+
+---
+
+[TestWorkloadHelpSnapshots/create_service_nodeport - 1]
+Create a NodePort service with the specified name.
+
+Usage:
+  ksail workload create service nodeport NAME [--tcp=port:targetPort] [--dry-run=server|client|none]
+
+Examples:
+  # Create a new NodePort service named my-ns
+  kubectl create service nodeport my-ns --tcp=5678:8080
+
+Flags:
+      --allow-missing-template-keys    If true, ignore any errors in templates when a field or map key is missing in the template. Only applies to golang and jsonpath output formats. (default true)
+      --dry-run string[="unchanged"]   Must be "none", "server", or "client". If client strategy, only print the object that would be sent, without sending it. If server strategy, submit server-side request without persisting the resource. (default "none")
+      --field-manager string           Name of the manager used to track field ownership. (default "kubectl-create")
+  -h, --help                           help for nodeport
+      --node-port int                  Port used to expose the service on each node in a cluster.
+  -o, --output string                  Output format. One of: (json, yaml, kyaml, name, go-template, go-template-file, template, templatefile, jsonpath, jsonpath-as-json, jsonpath-file).
+      --save-config                    If true, the configuration of current object will be saved in its annotation. Otherwise, the annotation will be unchanged. This flag is useful when you want to perform kubectl apply on this object in the future.
+      --show-managed-fields            If true, keep the managedFields when printing objects in JSON or YAML format.
+      --tcp strings                    Port pairs can be specified as '<port>:<targetPort>'.
+      --template string                Template string or path to template file to use when -o=go-template, -o=go-template-file. The template format is golang templates [http://golang.org/pkg/text/template/#pkg-overview].
+      --validate string[="strict"]     Must be one of: strict (or true), warn, ignore (or false). "true" or "strict" will use a schema to validate the input and fail the request if invalid. It will perform server side validation if ServerSideFieldValidation is enabled on the api-server, but will fall back to less reliable client-side validation if not. "warn" will warn about unknown or duplicate fields without blocking the request if server-side field validation is enabled on the API server, and behave as "ignore" otherwise. "false" or "ignore" will not perform any schema validation, silently dropping any unknown or duplicate fields. (default "strict")
+
+Global Flags:
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
+
+---
+
+[TestWorkloadHelpSnapshots/create_serviceaccount - 1]
+Create a service account with the specified name.
+
+Usage:
+  ksail workload create serviceaccount NAME [--dry-run=server|client|none]
+
+Aliases:
+  serviceaccount, sa
+
+Examples:
+  # Create a new service account named my-service-account
+  kubectl create serviceaccount my-service-account
+
+Flags:
+      --allow-missing-template-keys    If true, ignore any errors in templates when a field or map key is missing in the template. Only applies to golang and jsonpath output formats. (default true)
+      --dry-run string[="unchanged"]   Must be "none", "server", or "client". If client strategy, only print the object that would be sent, without sending it. If server strategy, submit server-side request without persisting the resource. (default "none")
+      --field-manager string           Name of the manager used to track field ownership. (default "kubectl-create")
+  -h, --help                           help for serviceaccount
+  -o, --output string                  Output format. One of: (json, yaml, kyaml, name, go-template, go-template-file, template, templatefile, jsonpath, jsonpath-as-json, jsonpath-file).
+      --save-config                    If true, the configuration of current object will be saved in its annotation. Otherwise, the annotation will be unchanged. This flag is useful when you want to perform kubectl apply on this object in the future.
+      --show-managed-fields            If true, keep the managedFields when printing objects in JSON or YAML format.
+      --template string                Template string or path to template file to use when -o=go-template, -o=go-template-file. The template format is golang templates [http://golang.org/pkg/text/template/#pkg-overview].
+      --validate string[="strict"]     Must be one of: strict (or true), warn, ignore (or false). "true" or "strict" will use a schema to validate the input and fail the request if invalid. It will perform server side validation if ServerSideFieldValidation is enabled on the api-server, but will fall back to less reliable client-side validation if not. "warn" will warn about unknown or duplicate fields without blocking the request if server-side field validation is enabled on the API server, and behave as "ignore" otherwise. "false" or "ignore" will not perform any schema validation, silently dropping any unknown or duplicate fields. (default "strict")
+
+Global Flags:
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
+
+---
+
 [TestWorkloadHelpSnapshots/create_source - 1]
 Create or update Flux sources
 
@@ -467,6 +1502,244 @@ Global Flags:
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
 
 Use "ksail workload create source [command] --help" for more information about a command.
+
+---
+
+[TestWorkloadHelpSnapshots/create_source_git - 1]
+Create or update a GitRepository source using Flux APIs
+
+Usage:
+  ksail workload create source git [name] [flags]
+
+Examples:
+  # Create a source from a public Git repository master branch
+  ksail workload create source git podinfo \
+    --url=https://github.com/stefanprodan/podinfo \
+    --branch=master
+
+  # Create a source for a Git repository pinned to specific git tag
+  ksail workload create source git podinfo \
+    --url=https://github.com/stefanprodan/podinfo \
+    --tag="3.2.3"
+
+  # Create a source from a Git repository using SSH authentication
+  ksail workload create source git podinfo \
+    --url=ssh://git@github.com/stefanprodan/podinfo \
+    --branch=master \
+    --secret-ref=git-credentials
+
+Flags:
+      --branch string       git branch
+      --commit string       git commit
+      --export              export in YAML format to stdout
+  -h, --help                help for git
+      --interval duration   source sync interval (default 1m0s)
+      --secret-ref string   the name of an existing secret containing SSH or basic credentials
+      --tag string          git tag
+      --tag-semver string   git tag semver range
+      --url string          git address, e.g. ssh://git@host/org/repository
+
+Global Flags:
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
+
+---
+
+[TestWorkloadHelpSnapshots/create_source_helm - 1]
+Create or update a HelmRepository source using Flux APIs
+
+Usage:
+  ksail workload create source helm [name] [flags]
+
+Examples:
+  # Create a source from an HTTPS Helm repository
+  ksail workload create source helm podinfo \
+    --url=https://stefanprodan.github.io/podinfo
+
+  # Create a source for an OCI Helm repository
+  ksail workload create source helm podinfo \
+    --url=oci://ghcr.io/stefanprodan/charts/podinfo \
+    --secret-ref=docker-config
+
+Flags:
+      --export                export in YAML format to stdout
+  -h, --help                  help for helm
+      --interval duration     source sync interval (default 1m0s)
+      --oci-provider string   OCI provider for authentication
+      --pass-credentials      pass credentials to all domains
+      --secret-ref string     the name of an existing secret containing credentials
+      --url string            Helm repository address
+
+Global Flags:
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
+
+---
+
+[TestWorkloadHelpSnapshots/create_source_oci - 1]
+Create or update an OCIRepository source using Flux APIs
+
+Usage:
+  ksail workload create source oci [name] [flags]
+
+Examples:
+  # Create a source for an OCI artifact
+  ksail workload create source oci podinfo \
+    --url=oci://ghcr.io/stefanprodan/manifests/podinfo \
+    --tag=6.6.2 \
+    --namespace=flux-system
+
+  # Create a source with semver range
+  ksail workload create source oci podinfo \
+    --url=oci://ghcr.io/stefanprodan/manifests/podinfo \
+    --tag-semver=">=6.6.0 <7.0.0"
+
+Flags:
+      --digest string       OCI artifact digest
+      --export              export in YAML format to stdout
+  -h, --help                help for oci
+      --insecure            allow insecure connections
+      --interval duration   source sync interval (default 1m0s)
+      --provider string     OCI provider (default "generic")
+      --secret-ref string   the name of an existing secret containing credentials
+      --tag string          OCI artifact tag
+      --tag-semver string   OCI artifact tag semver range
+      --url string          OCI repository URL
+
+Global Flags:
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
+
+---
+
+[TestWorkloadHelpSnapshots/create_token - 1]
+Request a service account token.
+
+Usage:
+  ksail workload create token SERVICE_ACCOUNT_NAME
+
+Examples:
+  # Request a token to authenticate to the kube-apiserver as the service account "myapp" in the current namespace
+  kubectl create token myapp
+  
+  # Request a token for a service account in a custom namespace
+  kubectl create token myapp --namespace myns
+  
+  # Request a token with a custom expiration
+  kubectl create token myapp --duration 10m
+  
+  # Request a token with a custom audience
+  kubectl create token myapp --audience https://example.com
+  
+  # Request a token bound to an instance of a Secret object
+  kubectl create token myapp --bound-object-kind Secret --bound-object-name mysecret
+  
+  # Request a token bound to an instance of a Secret object with a specific UID
+  kubectl create token myapp --bound-object-kind Secret --bound-object-name mysecret --bound-object-uid 0d4691ed-659b-4935-a832-355f77ee47cc
+
+Flags:
+      --allow-missing-template-keys   If true, ignore any errors in templates when a field or map key is missing in the template. Only applies to golang and jsonpath output formats. (default true)
+      --audience stringArray          Audience of the requested token. If unset, defaults to requesting a token for use with the Kubernetes API server. May be repeated to request a token valid for multiple audiences.
+      --bound-object-kind string      Kind of an object to bind the token to. Supported kinds are Node, Pod, Secret. If set, --bound-object-name must be provided.
+      --bound-object-name string      Name of an object to bind the token to. The token will expire when the object is deleted. Requires --bound-object-kind.
+      --bound-object-uid string       UID of an object to bind the token to. Requires --bound-object-kind and --bound-object-name. If unset, the UID of the existing object is used.
+      --duration duration             Requested lifetime of the issued token. If not set or if set to 0, the lifetime will be determined by the server automatically. The server may return a token with a longer or shorter lifetime.
+  -h, --help                          help for token
+  -o, --output string                 Output format. One of: (json, yaml, kyaml, name, go-template, go-template-file, template, templatefile, jsonpath, jsonpath-as-json, jsonpath-file).
+      --show-managed-fields           If true, keep the managedFields when printing objects in JSON or YAML format.
+      --template string               Template string or path to template file to use when -o=go-template, -o=go-template-file. The template format is golang templates [http://golang.org/pkg/text/template/#pkg-overview].
+
+Global Flags:
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
+
+---
+
+[TestWorkloadHelpSnapshots/debug - 1]
+Create debugging sessions for troubleshooting workloads and nodes.
+
+Debug containers allow you to interactively troubleshoot running pods, create copies of pods with modified configuration, or attach a debug container to a node.
+
+Usage:
+  ksail workload debug
+
+Examples:
+  # Create an interactive debugging session in pod mypod and immediately attach to it.
+  ksail workload debug mypod -it --image=busybox
+  
+  # Create an interactive debugging session for the pod in the file pod.yaml and immediately attach to it.
+  # (requires the EphemeralContainers feature to be enabled in the cluster)
+  ksail workload debug -f pod.yaml -it --image=busybox
+  
+  # Create a debug container named debugger using a custom automated debugging image.
+  ksail workload debug --image=myproj/debug-tools -c debugger mypod
+  
+  # Create a copy of mypod adding a debug container and attach to it
+  ksail workload debug mypod -it --image=busybox --copy-to=my-debugger
+  
+  # Create a copy of mypod changing the command of mycontainer
+  ksail workload debug mypod -it --copy-to=my-debugger --container=mycontainer -- sh
+  
+  # Create a copy of mypod changing all container images to busybox
+  ksail workload debug mypod --copy-to=my-debugger --set-image=*=busybox
+  
+  # Create a copy of mypod adding a debug container and changing container images
+  ksail workload debug mypod -it --copy-to=my-debugger --image=debian --set-image=app=app:debug,sidecar=sidecar:debug
+  
+  # Create an interactive debugging session on a node and immediately attach to it.
+  # The container will run in the host namespaces and the host's filesystem will be mounted at /host
+  ksail workload debug node/mynode -it --image=busybox
+
+Flags:
+      --arguments-only                 If specified, everything after -- will be passed to the new container as Args instead of Command.
+      --as string                      Username to impersonate for the operation. User could be a regular user or a service account in a namespace.
+      --as-group stringArray           Group to impersonate for the operation, this flag can be repeated to specify multiple groups.
+      --as-uid string                  UID to impersonate for the operation.
+      --as-user-extra stringArray      User extras to impersonate for the operation, this flag can be repeated to specify multiple values for the same key.
+      --attach                         If true, wait for the container to start running, and then attach as if 'kubectl attach ...' were called.  Default false, unless '-i/--stdin' is set, in which case the default is true.
+      --cache-dir string               Default cache directory (default "$HOME/.kube/cache")
+      --certificate-authority string   Path to a cert file for the certificate authority
+      --client-certificate string      Path to a client certificate file for TLS
+      --client-key string              Path to a client key file for TLS
+      --cluster string                 The name of the kubeconfig cluster to use
+  -c, --container string               Container name to use for debug container.
+      --context string                 The name of the kubeconfig context to use
+      --copy-to string                 Create a copy of the target Pod with this name.
+      --custom string                  Path to a JSON or YAML file containing a partial container spec to customize built-in debug profiles.
+      --disable-compression            If true, opt-out of response compression for all requests to the server
+      --env stringToString             Environment variables to set in the container. (default [])
+  -f, --filename strings               identifying the resource to debug
+  -h, --help                           help for debug
+      --host string                    Node name for host-level debugging (bypasses Kubernetes, targets the infrastructure node directly)
+      --image string                   Container image to use for debug container.
+      --image-pull-policy string       The image pull policy for the container. If left empty, this value will not be specified by the client and defaulted by the server.
+      --insecure-skip-tls-verify       If true, the server's certificate will not be checked for validity. This will make your HTTPS connections insecure
+      --keep-annotations               If true, keep the original pod annotations.(This flag only works when used with '--copy-to')
+      --keep-init-containers           Run the init containers for the pod. Defaults to true.(This flag only works when used with '--copy-to') (default true)
+      --keep-labels                    If true, keep the original pod labels.(This flag only works when used with '--copy-to')
+      --keep-liveness                  If true, keep the original pod liveness probes.(This flag only works when used with '--copy-to')
+      --keep-readiness                 If true, keep the original pod readiness probes.(This flag only works when used with '--copy-to')
+      --keep-startup                   If true, keep the original startup probes.(This flag only works when used with '--copy-to')
+      --kubeconfig string              Path to the kubeconfig file to use for CLI requests. (default "$HOME/.kube/config")
+  -n, --namespace string               If present, the namespace scope for this CLI request
+      --profile string                 Options are "general", "baseline", "restricted", "netadmin" or "sysadmin". Defaults to "general" (default "general")
+  -q, --quiet                          If true, suppress informational messages.
+      --replace                        When used with '--copy-to', delete the original Pod.
+      --request-timeout string         The length of time to wait before giving up on a single server request. Non-zero values should contain a corresponding time unit (e.g. 1s, 2m, 3h). A value of zero means don't timeout requests. (default "0")
+      --same-node                      When used with '--copy-to', schedule the copy of target Pod on the same node.
+  -s, --server string                  The address and port of the Kubernetes API server
+      --set-image stringToString       When used with '--copy-to', a list of name=image pairs for changing container images, similar to how 'kubectl set image' works. (default [])
+      --share-processes                When used with '--copy-to', enable process namespace sharing in the copy. (default true)
+  -i, --stdin                          Keep stdin open on the container(s) in the pod, even if nothing is attached.
+      --target string                  When using an ephemeral container, target processes in this container name.
+      --tls-server-name string         Server name to use for server certificate validation. If it is not provided, the hostname used to contact the server is used
+      --token string                   Bearer token for authentication to the API server
+  -t, --tty                            Allocate a TTY for the debugging container.
+      --user string                    The name of the kubeconfig user to use
+
+Global Flags:
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
 
 ---
 
@@ -872,6 +2145,285 @@ Global Flags:
 
 ---
 
+[TestWorkloadHelpSnapshots/forward - 1]
+Forward one or more local ports to a pod.
+
+Use resource type/name such as deployment/mydeployment to select a pod. Resource type defaults to 'pod' if omitted.
+
+If there are multiple pods matching the criteria, a pod will be selected automatically. The forwarding session ends when the selected pod terminates, and a rerun of the command is needed to resume forwarding.
+
+Usage:
+  ksail workload forward
+
+Examples:
+  # Listen on ports 5000 and 6000 locally, forwarding data to/from ports 5000 and 6000 in the pod
+  ksail workload forward pod/mypod 5000 6000
+  
+  # Listen on ports 5000 and 6000 locally, forwarding data to/from ports 5000 and 6000 in a pod selected by the deployment
+  ksail workload forward deployment/mydeployment 5000 6000
+  
+  # Listen on port 8443 locally, forwarding to the targetPort of the service's port named "https" in a pod selected by the service
+  ksail workload forward service/myservice 8443:https
+  
+  # Listen on port 8888 locally, forwarding to 5000 in the pod
+  ksail workload forward pod/mypod 8888:5000
+  
+  # Listen on port 8888 on all addresses, forwarding to 5000 in the pod
+  ksail workload forward --address 0.0.0.0 pod/mypod 8888:5000
+  
+  # Listen on port 8888 on localhost and selected IP, forwarding to 5000 in the pod
+  ksail workload forward --address localhost,10.19.21.23 pod/mypod 8888:5000
+  
+  # Listen on a random port locally, forwarding to 5000 in the pod
+  ksail workload forward pod/mypod :5000
+
+Flags:
+      --address strings                Addresses to listen on (comma separated). Only accepts IP addresses or localhost as a value. When localhost is supplied, kubectl will try to bind on both 127.0.0.1 and ::1 and will fail if neither of these addresses are available to bind. (default [localhost])
+      --as string                      Username to impersonate for the operation. User could be a regular user or a service account in a namespace.
+      --as-group stringArray           Group to impersonate for the operation, this flag can be repeated to specify multiple groups.
+      --as-uid string                  UID to impersonate for the operation.
+      --as-user-extra stringArray      User extras to impersonate for the operation, this flag can be repeated to specify multiple values for the same key.
+      --cache-dir string               Default cache directory (default "$HOME/.kube/cache")
+      --certificate-authority string   Path to a cert file for the certificate authority
+      --client-certificate string      Path to a client certificate file for TLS
+      --client-key string              Path to a client key file for TLS
+      --cluster string                 The name of the kubeconfig cluster to use
+      --context string                 The name of the kubeconfig context to use
+      --disable-compression            If true, opt-out of response compression for all requests to the server
+  -h, --help                           help for forward
+      --insecure-skip-tls-verify       If true, the server's certificate will not be checked for validity. This will make your HTTPS connections insecure
+      --kubeconfig string              Path to the kubeconfig file to use for CLI requests. (default "$HOME/.kube/config")
+  -n, --namespace string               If present, the namespace scope for this CLI request
+      --pod-running-timeout duration   The length of time (like 5s, 2m, or 3h, higher than zero) to wait until at least one pod is running (default 1m0s)
+      --request-timeout string         The length of time to wait before giving up on a single server request. Non-zero values should contain a corresponding time unit (e.g. 1s, 2m, 3h). A value of zero means don't timeout requests. (default "0")
+  -s, --server string                  The address and port of the Kubernetes API server
+      --tls-server-name string         Server name to use for server certificate validation. If it is not provided, the hostname used to contact the server is used
+      --token string                   Bearer token for authentication to the API server
+      --user string                    The name of the kubeconfig user to use
+
+Global Flags:
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
+
+---
+
+[TestWorkloadHelpSnapshots/gen - 1]
+Generate Kubernetes resource manifests using kubectl create with --dry-run=client -o yaml. The generated YAML is printed to stdout and can be redirected to a file using shell redirection (> file.yaml).
+
+Usage:
+  ksail workload gen [flags]
+  ksail workload gen [command]
+
+Available Commands:
+  clusterrole         Create a cluster role
+  clusterrolebinding  Create a cluster role binding for a particular cluster role
+  configmap           Create a config map from a local file, directory or literal value
+  cronjob             Create a cron job with the specified name
+  deployment          Create a deployment with the specified name
+  helmrelease         Generate a HelmRelease resource
+  ingress             Create an ingress with the specified name
+  job                 Create a job with the specified name
+  namespace           Create a namespace with the specified name
+  poddisruptionbudget Create a pod disruption budget with the specified name
+  priorityclass       Create a priority class with the specified name
+  quota               Create a quota with the specified name
+  role                Create a role with single rule
+  rolebinding         Create a role binding for a particular role or cluster role
+  secret              Create a secret using a specified subcommand
+  service             Create a service using a specified subcommand
+  serviceaccount      Create a service account with the specified name
+
+Flags:
+  -h, --help   help for gen
+
+Global Flags:
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
+
+Use "ksail workload gen [command] --help" for more information about a command.
+
+---
+
+[TestWorkloadHelpSnapshots/gen_clusterrole - 1]
+
+---
+
+[TestWorkloadHelpSnapshots/gen_clusterrolebinding - 1]
+
+---
+
+[TestWorkloadHelpSnapshots/gen_configmap - 1]
+
+---
+
+[TestWorkloadHelpSnapshots/gen_cronjob - 1]
+
+---
+
+[TestWorkloadHelpSnapshots/gen_deployment - 1]
+
+---
+
+[TestWorkloadHelpSnapshots/gen_helmrelease - 1]
+Generate a HelmRelease resource for a given HelmRepository, GitRepository, Bucket, or chart reference source.
+
+Usage:
+  ksail workload gen helmrelease [NAME] [flags]
+
+Aliases:
+  helmrelease, hr
+
+Examples:
+  # Generate a HelmRelease with a chart from a HelmRepository source
+  ksail workload gen helmrelease podinfo \
+    --interval=10m \
+    --source=HelmRepository/podinfo \
+    --chart=podinfo \
+    --chart-version=">4.0.0" \
+    --export
+
+  # Generate a HelmRelease with a chart from a GitRepository source
+  ksail workload gen helmrelease podinfo \
+    --interval=10m \
+    --source=GitRepository/podinfo \
+    --chart=./charts/podinfo \
+    --export
+
+  # Generate a HelmRelease with values from local YAML files
+  ksail workload gen helmrelease podinfo \
+    --source=HelmRepository/podinfo \
+    --chart=podinfo \
+    --values=./my-values1.yaml \
+    --values=./my-values2.yaml \
+    --export
+
+  # Generate a HelmRelease with values from a Kubernetes secret
+  ksail workload gen helmrelease podinfo \
+    --source=HelmRepository/podinfo \
+    --chart=podinfo \
+    --values-from=Secret/my-secret-values \
+    --export
+
+  # Generate a HelmRelease with a custom release name
+  ksail workload gen helmrelease podinfo \
+    --release-name=podinfo-dev \
+    --source=HelmRepository/podinfo \
+    --chart=podinfo \
+    --export
+
+  # Generate a HelmRelease targeting another namespace
+  ksail workload gen helmrelease podinfo \
+    --target-namespace=test \
+    --create-target-namespace=true \
+    --source=HelmRepository/podinfo \
+    --chart=podinfo \
+    --export
+
+  # Generate a HelmRelease using a chart reference
+  ksail workload gen helmrelease podinfo \
+    --namespace=default \
+    --chart-ref=HelmChart/podinfo.flux-system \
+    --export
+
+Flags:
+      --chart string                   Helm chart name or path
+      --chart-ref string               Helm chart reference (HelmChart/name, OCIRepository/name)
+      --chart-version string           Helm chart version, accepts a semver range
+      --crds string                    CRDs policy (Create, CreateReplace, Skip)
+      --create-target-namespace        create the target namespace if not present
+      --depends-on strings             HelmReleases that must be ready before this release
+      --export                         export in YAML format to stdout
+  -h, --help                           help for helmrelease
+      --interval duration              reconciliation interval (default 1m0s)
+      --kubeconfig-secret-ref string   KubeConfig secret reference for remote reconciliation
+  -n, --namespace string               namespace scope for the HelmRelease (default "default")
+      --release-name string            name used for the Helm release
+      --service-account string         service account name to impersonate
+      --source string                  source that contains the chart (HelmRepository/name, GitRepository/name, Bucket/name)
+      --storage-namespace string       namespace for Helm storage
+      --target-namespace string        namespace to target when performing operations
+      --timeout duration               timeout for any individual Kubernetes operation (default 5m0s)
+      --values strings                 local values YAML files
+      --values-from strings            values from ConfigMap or Secret
+
+Global Flags:
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
+
+---
+
+[TestWorkloadHelpSnapshots/gen_ingress - 1]
+
+---
+
+[TestWorkloadHelpSnapshots/gen_job - 1]
+
+---
+
+[TestWorkloadHelpSnapshots/gen_namespace - 1]
+
+---
+
+[TestWorkloadHelpSnapshots/gen_poddisruptionbudget - 1]
+
+---
+
+[TestWorkloadHelpSnapshots/gen_priorityclass - 1]
+
+---
+
+[TestWorkloadHelpSnapshots/gen_quota - 1]
+
+---
+
+[TestWorkloadHelpSnapshots/gen_role - 1]
+
+---
+
+[TestWorkloadHelpSnapshots/gen_rolebinding - 1]
+
+---
+
+[TestWorkloadHelpSnapshots/gen_secret - 1]
+
+---
+
+[TestWorkloadHelpSnapshots/gen_secret_docker-registry - 1]
+
+---
+
+[TestWorkloadHelpSnapshots/gen_secret_generic - 1]
+
+---
+
+[TestWorkloadHelpSnapshots/gen_secret_tls - 1]
+
+---
+
+[TestWorkloadHelpSnapshots/gen_service - 1]
+
+---
+
+[TestWorkloadHelpSnapshots/gen_service_clusterip - 1]
+
+---
+
+[TestWorkloadHelpSnapshots/gen_service_externalname - 1]
+
+---
+
+[TestWorkloadHelpSnapshots/gen_service_loadbalancer - 1]
+
+---
+
+[TestWorkloadHelpSnapshots/gen_service_nodeport - 1]
+
+---
+
+[TestWorkloadHelpSnapshots/gen_serviceaccount - 1]
+
+---
+
 [TestWorkloadHelpSnapshots/get - 1]
 Display one or many Kubernetes resources from your cluster. Use -o json for structured output that includes status conditions and health. Use -o wide for additional columns. Use --all-namespaces or -A to query across all namespaces. Supports comma-separated resource types (e.g. deployments,services). For GitOps diagnostics, query Flux resources (kustomization, helmrelease, gitrepository, ocirepository) or ArgoCD resources (application) to check reconciliation status and errors.
 
@@ -1179,66 +2731,6 @@ Global Flags:
 
 ---
 
-[TestWorkloadHelpSnapshots/namespace - 1]
-Manage workload operations including resource inspection, GitOps reconciliation, and lifecycle management.
-
-Read operations:
-  get       - List resources with optional -o json for structured output including status/conditions
-  describe  - Show detailed resource info including events, conditions, and error details
-  logs      - Print container logs (use --tail=N, --previous for crash diagnostics)
-  explain   - Show API documentation for a resource kind
-  forward   - Forward one or more local ports to a pod
-  images    - List container images required by cluster components
-  scan      - Run security scans on Kubernetes manifests using Kubescape
-  wait      - Wait for a specific condition on resources
-
-Write operations:
-  apply, create, debug, delete, edit, exec, export, expose, import, install, push, reconcile, rollout, scale, watch
-
-GitOps diagnostics: Use 'get' with Flux resources (kustomization, helmrelease, ocirepository -A -o json) or ArgoCD resources (application -A -o json) to check reconciliation status, health, and errors in a single call.
-
-Usage:
-  ksail workload [flags]
-  ksail workload [command]
-
-Available Commands:
-  apply       Apply manifests
-  create      Create resources
-  debug       Create debugging sessions for troubleshooting workloads and nodes
-  delete      Delete resources
-  describe    Describe resources
-  edit        Edit a resource
-  exec        Execute a command in a container
-  explain     Get documentation for a resource
-  export      Export container images from the cluster
-  expose      Expose a resource as a service
-  forward     Forward one or more local ports to a pod
-  gen         Generate Kubernetes resource manifests
-  get         Get resources
-  images      List container images required by cluster components
-  import      Import container images to the cluster
-  install     Install Helm charts
-  logs        Print container logs
-  push        Package and push an OCI artifact to a registry
-  reconcile   Trigger reconciliation for GitOps workloads
-  rollout     Manage the rollout of a resource
-  scale       Scale resources
-  scan        Run security scans on Kubernetes manifests
-  validate    Validate Kubernetes manifests and kustomizations
-  wait        Wait for a specific condition on one or many resources
-  watch       Watch for file changes and auto-apply workloads
-
-Flags:
-  -h, --help   help for workload
-
-Global Flags:
-      --benchmark       Show per-activity benchmark output
-      --config string   Path to config file (default: ksail.yaml found via directory traversal)
-
-Use "ksail workload [command] --help" for more information about a command.
-
----
-
 [TestWorkloadHelpSnapshots/push - 1]
 Build and push local workloads as an OCI artifact to a registry.
 
@@ -1358,6 +2850,201 @@ Use "ksail workload rollout [command] --help" for more information about a comma
 
 ---
 
+[TestWorkloadHelpSnapshots/rollout_history - 1]
+View previous rollout revisions and configurations.
+
+Usage:
+  ksail workload rollout history (TYPE NAME | TYPE/NAME) [flags]
+
+Examples:
+  # View the rollout history of a deployment
+  kubectl rollout history deployment/abc
+  
+  # View the details of daemonset revision 3
+  kubectl rollout history daemonset/abc --revision=3
+
+Flags:
+      --allow-missing-template-keys   If true, ignore any errors in templates when a field or map key is missing in the template. Only applies to golang and jsonpath output formats. (default true)
+  -f, --filename strings              Filename, directory, or URL to files identifying the resource to get from a server.
+  -h, --help                          help for history
+  -k, --kustomize string              Process the kustomization directory. This flag can't be used together with -f or -R.
+  -o, --output string                 Output format. One of: (json, yaml, kyaml, name, go-template, go-template-file, template, templatefile, jsonpath, jsonpath-as-json, jsonpath-file).
+  -R, --recursive                     Process the directory used in -f, --filename recursively. Useful when you want to manage related manifests organized within the same directory.
+      --revision int                  See the details, including podTemplate of the revision specified
+  -l, --selector string               Selector (label query) to filter on, supports '=', '==', '!=', 'in', 'notin'.(e.g. -l key1=value1,key2=value2,key3 in (value3)). Matching objects must satisfy all of the specified label constraints.
+      --show-managed-fields           If true, keep the managedFields when printing objects in JSON or YAML format.
+      --template string               Template string or path to template file to use when -o=go-template, -o=go-template-file. The template format is golang templates [http://golang.org/pkg/text/template/#pkg-overview].
+
+Global Flags:
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
+
+---
+
+[TestWorkloadHelpSnapshots/rollout_pause - 1]
+Mark the provided resource as paused.
+
+ Paused resources will not be reconciled by a controller. Use "kubectl rollout resume" to resume a paused resource. Currently only deployments support being paused.
+
+Usage:
+  ksail workload rollout pause RESOURCE
+
+Examples:
+  # Mark the nginx deployment as paused
+  # Any current state of the deployment will continue its function; new updates
+  # to the deployment will not have an effect as long as the deployment is paused
+  kubectl rollout pause deployment/nginx
+
+Flags:
+      --allow-missing-template-keys   If true, ignore any errors in templates when a field or map key is missing in the template. Only applies to golang and jsonpath output formats. (default true)
+      --field-manager string          Name of the manager used to track field ownership. (default "kubectl-rollout")
+  -f, --filename strings              Filename, directory, or URL to files identifying the resource to get from a server.
+  -h, --help                          help for pause
+  -k, --kustomize string              Process the kustomization directory. This flag can't be used together with -f or -R.
+  -o, --output string                 Output format. One of: (json, yaml, kyaml, name, go-template, go-template-file, template, templatefile, jsonpath, jsonpath-as-json, jsonpath-file).
+  -R, --recursive                     Process the directory used in -f, --filename recursively. Useful when you want to manage related manifests organized within the same directory.
+  -l, --selector string               Selector (label query) to filter on, supports '=', '==', '!=', 'in', 'notin'.(e.g. -l key1=value1,key2=value2,key3 in (value3)). Matching objects must satisfy all of the specified label constraints.
+      --show-managed-fields           If true, keep the managedFields when printing objects in JSON or YAML format.
+      --template string               Template string or path to template file to use when -o=go-template, -o=go-template-file. The template format is golang templates [http://golang.org/pkg/text/template/#pkg-overview].
+
+Global Flags:
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
+
+---
+
+[TestWorkloadHelpSnapshots/rollout_restart - 1]
+Restart a resource.
+
+        Resource rollout will be restarted.
+
+Usage:
+  ksail workload rollout restart RESOURCE
+
+Examples:
+  # Restart all deployments in the test-namespace namespace
+  kubectl rollout restart deployment -n test-namespace
+  
+  # Restart a deployment
+  kubectl rollout restart deployment/nginx
+  
+  # Restart a daemon set
+  kubectl rollout restart daemonset/abc
+  
+  # Restart deployments with the app=nginx label
+  kubectl rollout restart deployment --selector=app=nginx
+
+Flags:
+      --allow-missing-template-keys   If true, ignore any errors in templates when a field or map key is missing in the template. Only applies to golang and jsonpath output formats. (default true)
+      --field-manager string          Name of the manager used to track field ownership. (default "kubectl-rollout")
+  -f, --filename strings              Filename, directory, or URL to files identifying the resource to get from a server.
+  -h, --help                          help for restart
+  -k, --kustomize string              Process the kustomization directory. This flag can't be used together with -f or -R.
+  -o, --output string                 Output format. One of: (json, yaml, kyaml, name, go-template, go-template-file, template, templatefile, jsonpath, jsonpath-as-json, jsonpath-file).
+  -R, --recursive                     Process the directory used in -f, --filename recursively. Useful when you want to manage related manifests organized within the same directory.
+  -l, --selector string               Selector (label query) to filter on, supports '=', '==', '!=', 'in', 'notin'.(e.g. -l key1=value1,key2=value2,key3 in (value3)). Matching objects must satisfy all of the specified label constraints.
+      --show-managed-fields           If true, keep the managedFields when printing objects in JSON or YAML format.
+      --template string               Template string or path to template file to use when -o=go-template, -o=go-template-file. The template format is golang templates [http://golang.org/pkg/text/template/#pkg-overview].
+
+Global Flags:
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
+
+---
+
+[TestWorkloadHelpSnapshots/rollout_resume - 1]
+Resume a paused resource.
+
+ Paused resources will not be reconciled by a controller. By resuming a resource, we allow it to be reconciled again. Currently only deployments support being resumed.
+
+Usage:
+  ksail workload rollout resume RESOURCE
+
+Examples:
+  # Resume an already paused deployment
+  kubectl rollout resume deployment/nginx
+
+Flags:
+      --allow-missing-template-keys   If true, ignore any errors in templates when a field or map key is missing in the template. Only applies to golang and jsonpath output formats. (default true)
+      --field-manager string          Name of the manager used to track field ownership. (default "kubectl-rollout")
+  -f, --filename strings              Filename, directory, or URL to files identifying the resource to get from a server.
+  -h, --help                          help for resume
+  -k, --kustomize string              Process the kustomization directory. This flag can't be used together with -f or -R.
+  -o, --output string                 Output format. One of: (json, yaml, kyaml, name, go-template, go-template-file, template, templatefile, jsonpath, jsonpath-as-json, jsonpath-file).
+  -R, --recursive                     Process the directory used in -f, --filename recursively. Useful when you want to manage related manifests organized within the same directory.
+  -l, --selector string               Selector (label query) to filter on, supports '=', '==', '!=', 'in', 'notin'.(e.g. -l key1=value1,key2=value2,key3 in (value3)). Matching objects must satisfy all of the specified label constraints.
+      --show-managed-fields           If true, keep the managedFields when printing objects in JSON or YAML format.
+      --template string               Template string or path to template file to use when -o=go-template, -o=go-template-file. The template format is golang templates [http://golang.org/pkg/text/template/#pkg-overview].
+
+Global Flags:
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
+
+---
+
+[TestWorkloadHelpSnapshots/rollout_status - 1]
+Show the status of the rollout.
+
+ By default 'rollout status' will watch the status of the latest rollout until it's done. If you don't want to wait for the rollout to finish then you can use --watch=false. Note that if a new rollout starts in-between, then 'rollout status' will continue watching the latest revision. If you want to pin to a specific revision and abort if it is rolled over by another revision, use --revision=N where N is the revision you need to watch for.
+
+Usage:
+  ksail workload rollout status (TYPE NAME | TYPE/NAME) [flags]
+
+Examples:
+  # Watch the rollout status of a deployment
+  kubectl rollout status deployment/nginx
+
+Flags:
+  -f, --filename strings   Filename, directory, or URL to files identifying the resource to get from a server.
+  -h, --help               help for status
+  -k, --kustomize string   Process the kustomization directory. This flag can't be used together with -f or -R.
+  -R, --recursive          Process the directory used in -f, --filename recursively. Useful when you want to manage related manifests organized within the same directory.
+      --revision int       Pin to a specific revision for showing its status. Defaults to 0 (last revision).
+  -l, --selector string    Selector (label query) to filter on, supports '=', '==', '!=', 'in', 'notin'.(e.g. -l key1=value1,key2=value2,key3 in (value3)). Matching objects must satisfy all of the specified label constraints.
+      --timeout duration   The length of time to wait before ending watch, zero means never. Any other values should contain a corresponding time unit (e.g. 1s, 2m, 3h).
+  -w, --watch              Watch the status of the rollout until it's done. (default true)
+
+Global Flags:
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
+
+---
+
+[TestWorkloadHelpSnapshots/rollout_undo - 1]
+Roll back to a previous rollout.
+
+Usage:
+  ksail workload rollout undo (TYPE NAME | TYPE/NAME) [flags]
+
+Examples:
+  # Roll back to the previous deployment
+  kubectl rollout undo deployment/abc
+  
+  # Roll back to daemonset revision 3
+  kubectl rollout undo daemonset/abc --to-revision=3
+  
+  # Roll back to the previous deployment with dry-run
+  kubectl rollout undo --dry-run=server deployment/abc
+
+Flags:
+      --allow-missing-template-keys    If true, ignore any errors in templates when a field or map key is missing in the template. Only applies to golang and jsonpath output formats. (default true)
+      --dry-run string[="unchanged"]   Must be "none", "server", or "client". If client strategy, only print the object that would be sent, without sending it. If server strategy, submit server-side request without persisting the resource. (default "none")
+  -f, --filename strings               Filename, directory, or URL to files identifying the resource to get from a server.
+  -h, --help                           help for undo
+  -k, --kustomize string               Process the kustomization directory. This flag can't be used together with -f or -R.
+  -o, --output string                  Output format. One of: (json, yaml, kyaml, name, go-template, go-template-file, template, templatefile, jsonpath, jsonpath-as-json, jsonpath-file).
+  -R, --recursive                      Process the directory used in -f, --filename recursively. Useful when you want to manage related manifests organized within the same directory.
+  -l, --selector string                Selector (label query) to filter on, supports '=', '==', '!=', 'in', 'notin'.(e.g. -l key1=value1,key2=value2,key3 in (value3)). Matching objects must satisfy all of the specified label constraints.
+      --show-managed-fields            If true, keep the managedFields when printing objects in JSON or YAML format.
+      --template string                Template string or path to template file to use when -o=go-template, -o=go-template-file. The template format is golang templates [http://golang.org/pkg/text/template/#pkg-overview].
+      --to-revision int                The revision to rollback to. Default to 0 (last revision).
+
+Global Flags:
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
+
+---
+
 [TestWorkloadHelpSnapshots/scale - 1]
 Set a new size for a deployment, replica set, replication controller, or stateful set.
 
@@ -1415,6 +3102,85 @@ Flags:
       --tls-server-name string         Server name to use for server certificate validation. If it is not provided, the hostname used to contact the server is used
       --token string                   Bearer token for authentication to the API server
       --user string                    The name of the kubeconfig user to use
+
+Global Flags:
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
+
+---
+
+[TestWorkloadHelpSnapshots/scan - 1]
+Run security scans on Kubernetes manifests using Kubescape.
+
+This command scans manifests in the specified path against security frameworks
+such as NSA-CISA, MITRE ATT&CK, and CIS Benchmarks.
+
+If no path is provided, the path is resolved in order:
+  1. spec.workload.sourceDirectory from ksail.yaml (if a config file is found and the field is set)
+  2. The default source directory when spec.workload.sourceDirectory is unset ("k8s" directory)
+  3. The current directory (fallback when no ksail.yaml config file is found)
+
+Available frameworks: nsa, mitre, cis, pss (and any other framework supported by Kubescape)
+Available output formats: pretty-printer, json, sarif, junit (and any other format supported by Kubescape)
+
+For more information, see https://github.com/kubescape/kubescape
+
+Usage:
+  ksail workload scan [PATH] [flags]
+
+Flags:
+      --compliance-threshold float32   Fail if compliance score is below this threshold (0-100)
+      --format string                  Output format (pretty-printer, json, sarif, junit) (default "pretty-printer")
+      --framework strings              Security frameworks to scan against (e.g. nsa, mitre, cis, pss) (default [nsa])
+  -h, --help                           help for scan
+  -o, --output string                  Output file path (stdout if empty)
+      --verbose                        Show all resources in output, not just failed ones
+
+Global Flags:
+      --benchmark       Show per-activity benchmark output
+      --config string   Path to config file (default: ksail.yaml found via directory traversal)
+
+---
+
+[TestWorkloadHelpSnapshots/validate - 1]
+Validate Kubernetes manifest files and kustomizations using kubeconform.
+
+This command validates individual YAML files and kustomizations in the specified path.
+If no path is provided, the path is resolved in order:
+  1. spec.workload.sourceDirectory from ksail.yaml (if a config file is found and the field is set)
+  2. The default source directory when spec.workload.sourceDirectory is unset ("k8s" directory)
+  3. The current directory (fallback when no ksail.yaml config file is found)
+
+The validation process:
+1. Validates individual YAML files (patch files referenced in a kustomization file via patches,
+   patchesStrategicMerge, or patchesJson6902 are excluded — they are not valid standalone
+   Kubernetes resources and are validated as part of the kustomize build output instead)
+2. Validates kustomizations by building them with kustomize and validating the output
+
+    Flux variable substitutions are resolved before validation using type-aware placeholders:
+  - ${VAR} (bare, no default): when a JSON schema type is available, substitutes a typed
+    placeholder derived from the schema for the field ("placeholder" for strings, 0 for
+    integers, true for booleans); when no schema type is available, it falls back to the
+    string value "placeholder"
+  - ${VAR:-default} / ${VAR:=default}: when a schema type is available, uses the default
+    value parsed according to the field schema type (e.g., "3" → int 3 for integer fields);
+    when no schema type is available, the default is parsed using YAML-native type inference
+  - Mixed text (e.g., "prefix.${VAR}"): substitutes "placeholder" in string context
+
+Schema lookups use a local disk cache and require no network access. When no cached
+JSON schema is available, placeholders fall back to strings with YAML-native parsing.
+
+By default, Kubernetes Secrets are skipped to avoid validation failures due to SOPS fields.
+
+Usage:
+  ksail workload validate [PATH] [flags]
+
+Flags:
+  -h, --help                     help for validate
+      --ignore-missing-schemas   Ignore resources with missing schemas (default true)
+      --skip-kinds strings       Additional Kubernetes kinds to skip during validation (merged with spec.workload.validation.skipKinds from ksail.yaml)
+      --skip-secrets             Skip validation of Kubernetes Secrets (default true)
+      --strict                   Enable strict validation mode
 
 Global Flags:
       --benchmark       Show per-activity benchmark output
@@ -1539,93 +3305,62 @@ Global Flags:
 
 ---
 
-[TestWorkloadHelpSnapshots/forward - 1]
-Forward one or more local ports to a pod.
+[TestWorkloadHelpSnapshots/workload - 1]
+Manage workload operations including resource inspection, GitOps reconciliation, and lifecycle management.
 
-Use resource type/name such as deployment/mydeployment to select a pod. Resource type defaults to 'pod' if omitted.
+Read operations:
+  get       - List resources with optional -o json for structured output including status/conditions
+  describe  - Show detailed resource info including events, conditions, and error details
+  logs      - Print container logs (use --tail=N, --previous for crash diagnostics)
+  explain   - Show API documentation for a resource kind
+  forward   - Forward one or more local ports to a pod
+  images    - List container images required by cluster components
+  scan      - Run security scans on Kubernetes manifests using Kubescape
+  wait      - Wait for a specific condition on resources
 
-If there are multiple pods matching the criteria, a pod will be selected automatically. The forwarding session ends when the selected pod terminates, and a rerun of the command is needed to resume forwarding.
+Write operations:
+  apply, create, debug, delete, edit, exec, export, expose, import, install, push, reconcile, rollout, scale, watch
+
+GitOps diagnostics: Use 'get' with Flux resources (kustomization, helmrelease, ocirepository -A -o json) or ArgoCD resources (application -A -o json) to check reconciliation status, health, and errors in a single call.
 
 Usage:
-  ksail workload forward
+  ksail workload [flags]
+  ksail workload [command]
 
-Examples:
-  # Listen on ports 5000 and 6000 locally, forwarding data to/from ports 5000 and 6000 in the pod
-  ksail workload forward pod/mypod 5000 6000
-  
-  # Listen on ports 5000 and 6000 locally, forwarding data to/from ports 5000 and 6000 in a pod selected by the deployment
-  ksail workload forward deployment/mydeployment 5000 6000
-  
-  # Listen on port 8443 locally, forwarding to the targetPort of the service's port named "https" in a pod selected by the service
-  ksail workload forward service/myservice 8443:https
-  
-  # Listen on port 8888 locally, forwarding to 5000 in the pod
-  ksail workload forward pod/mypod 8888:5000
-  
-  # Listen on port 8888 on all addresses, forwarding to 5000 in the pod
-  ksail workload forward --address 0.0.0.0 pod/mypod 8888:5000
-  
-  # Listen on port 8888 on localhost and selected IP, forwarding to 5000 in the pod
-  ksail workload forward --address localhost,10.19.21.23 pod/mypod 8888:5000
-  
-  # Listen on a random port locally, forwarding to 5000 in the pod
-  ksail workload forward pod/mypod :5000
+Available Commands:
+  apply       Apply manifests
+  create      Create resources
+  debug       Create debugging sessions for troubleshooting workloads and nodes
+  delete      Delete resources
+  describe    Describe resources
+  edit        Edit a resource
+  exec        Execute a command in a container
+  explain     Get documentation for a resource
+  export      Export container images from the cluster
+  expose      Expose a resource as a service
+  forward     Forward one or more local ports to a pod
+  gen         Generate Kubernetes resource manifests
+  get         Get resources
+  images      List container images required by cluster components
+  import      Import container images to the cluster
+  install     Install Helm charts
+  logs        Print container logs
+  push        Package and push an OCI artifact to a registry
+  reconcile   Trigger reconciliation for GitOps workloads
+  rollout     Manage the rollout of a resource
+  scale       Scale resources
+  scan        Run security scans on Kubernetes manifests
+  validate    Validate Kubernetes manifests and kustomizations
+  wait        Wait for a specific condition on one or many resources
+  watch       Watch for file changes and auto-apply workloads
 
 Flags:
-      --address strings                Addresses to listen on (comma separated). Only accepts IP addresses or localhost as a value. When localhost is supplied, kubectl will try to bind on both 127.0.0.1 and ::1 and will fail if neither of these addresses are available to bind. (default [localhost])
-      --as string                      Username to impersonate for the operation. User could be a regular user or a service account in a namespace.
-      --as-group stringArray           Group to impersonate for the operation, this flag can be repeated to specify multiple groups.
-      --as-uid string                  UID to impersonate for the operation.
-      --as-user-extra stringArray      User extras to impersonate for the operation, this flag can be repeated to specify multiple values for the same key.
-      --cache-dir string               Default cache directory (default "$HOME/.kube/cache")
-      --certificate-authority string   Path to a cert file for the certificate authority
-      --client-certificate string      Path to a client certificate file for TLS
-      --client-key string              Path to a client key file for TLS
-      --cluster string                 The name of the kubeconfig cluster to use
-      --context string                 The name of the kubeconfig context to use
-      --disable-compression            If true, opt-out of response compression for all requests to the server
-  -h, --help                           help for forward
-      --insecure-skip-tls-verify       If true, the server's certificate will not be checked for validity. This will make your HTTPS connections insecure
-      --kubeconfig string              Path to the kubeconfig file to use for CLI requests. (default "$HOME/.kube/config")
-  -n, --namespace string               If present, the namespace scope for this CLI request
-      --pod-running-timeout duration   The length of time (like 5s, 2m, or 3h, higher than zero) to wait until at least one pod is running (default 1m0s)
-      --request-timeout string         The length of time to wait before giving up on a single server request. Non-zero values should contain a corresponding time unit (e.g. 1s, 2m, 3h). A value of zero means don't timeout requests. (default "0")
-  -s, --server string                  The address and port of the Kubernetes API server
-      --tls-server-name string         Server name to use for server certificate validation. If it is not provided, the hostname used to contact the server is used
-      --token string                   Bearer token for authentication to the API server
-      --user string                    The name of the kubeconfig user to use
+  -h, --help   help for workload
 
 Global Flags:
       --benchmark       Show per-activity benchmark output
       --config string   Path to config file (default: ksail.yaml found via directory traversal)
 
----
-
-[TestScanCmdShowsHelp - 1]
-Run security scans on Kubernetes manifests using Kubescape.
-
-This command scans manifests in the specified path against security frameworks
-such as NSA-CISA, MITRE ATT&CK, and CIS Benchmarks.
-
-If no path is provided, the path is resolved in order:
-  1. spec.workload.sourceDirectory from ksail.yaml (if a config file is found and the field is set)
-  2. The default source directory when spec.workload.sourceDirectory is unset ("k8s" directory)
-  3. The current directory (fallback when no ksail.yaml config file is found)
-
-Available frameworks: nsa, mitre, cis, pss (and any other framework supported by Kubescape)
-Available output formats: pretty-printer, json, sarif, junit (and any other format supported by Kubescape)
-
-For more information, see https://github.com/kubescape/kubescape
-
-Usage:
-  scan [PATH] [flags]
-
-Flags:
-      --compliance-threshold float32   Fail if compliance score is below this threshold (0-100)
-      --format string                  Output format (pretty-printer, json, sarif, junit) (default "pretty-printer")
-      --framework strings              Security frameworks to scan against (e.g. nsa, mitre, cis, pss) (default [nsa])
-  -h, --help                           help for scan
-  -o, --output string                  Output file path (stdout if empty)
-      --verbose                        Show all resources in output, not just failed ones
+Use "ksail workload [command] --help" for more information about a command.
 
 ---

@@ -220,7 +220,6 @@ func autoDetectGitOpsEngine(
 	notify.WriteMessage(notify.Message{
 		Type:    notify.ActivityType,
 		Content: "detecting gitops engine in cluster",
-		Timer:   outputTimer,
 		Writer:  cmd.OutOrStdout(),
 	})
 
@@ -319,7 +318,7 @@ func reconcileFlux(
 	deadline, _ := deadlineCtx.Deadline()
 
 	// Sub-phase 1: OCI source reconciliation
-	writeActivityNotification("reconciling oci source...", outputTimer, writer)
+	writeActivityNotification("reconciling oci source...", writer)
 
 	err = fluxReconciler.TriggerOCIRepositoryReconciliation(deadlineCtx)
 	if err != nil {
@@ -346,10 +345,10 @@ func reconcileFlux(
 	}
 
 	// Sub-phase 1.5: Reset stuck HelmReleases before Kustomization polling.
-	resetStuckHelmReleases(deadlineCtx, fluxReconciler, outputTimer, writer)
+	resetStuckHelmReleases(deadlineCtx, fluxReconciler, writer)
 
 	// Sub-phase 2: Kustomization reconciliation with per-resource tracking
-	writeActivityNotification("reconciling kustomizations...", outputTimer, writer)
+	writeActivityNotification("reconciling kustomizations...", writer)
 
 	err = fluxReconciler.TriggerKustomizationReconciliation(deadlineCtx)
 	if err != nil {
@@ -371,14 +370,13 @@ func reconcileFlux(
 func resetStuckHelmReleases(
 	ctx context.Context,
 	fluxReconciler *flux.Reconciler,
-	outputTimer timer.Timer,
 	writer io.Writer,
 ) {
 	stuckReleases, err := fluxReconciler.ListStuckHelmReleases(ctx)
 	if err != nil {
 		writeActivityNotification(
 			fmt.Sprintf("warning: could not check for stuck helmreleases: %v", err),
-			outputTimer, writer,
+			writer,
 		)
 
 		return
@@ -390,21 +388,21 @@ func resetStuckHelmReleases(
 
 	writeActivityNotification(
 		fmt.Sprintf("resetting %d stuck helmrelease(s)...", len(stuckReleases)),
-		outputTimer, writer,
+		writer,
 	)
 
 	resetCount, resetErr := fluxReconciler.ResetStuckHelmReleases(ctx, stuckReleases)
 	if resetErr != nil {
 		writeActivityNotification(
 			fmt.Sprintf("warning: some helmreleases could not be reset: %v", resetErr),
-			outputTimer, writer,
+			writer,
 		)
 	}
 
 	if resetCount > 0 {
 		writeActivityNotification(
 			fmt.Sprintf("reset %d stuck helmrelease(s)", resetCount),
-			outputTimer, writer,
+			writer,
 		)
 	}
 }
@@ -727,14 +725,14 @@ func reconcileArgoCD(
 	deadlineCtx, deadlineCancel := context.WithTimeout(cmd.Context(), timeout)
 	defer deadlineCancel()
 
-	writeActivityNotification("triggering argocd refresh...", outputTimer, writer)
+	writeActivityNotification("triggering argocd refresh...", writer)
 
 	err = argoReconciler.TriggerRefresh(deadlineCtx, true)
 	if err != nil {
 		return fmt.Errorf("trigger argocd refresh: %w", err)
 	}
 
-	writeActivityNotification("reconciling argocd applications...", outputTimer, writer)
+	writeActivityNotification("reconciling argocd applications...", writer)
 
 	apps, err := argoReconciler.ListApplications(deadlineCtx)
 	if err != nil {

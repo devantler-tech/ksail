@@ -18,8 +18,8 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// EditExample creates and edits an example file when the target file doesn't exist.
-func EditExample(opts EditExampleOpts) ([]byte, error) {
+// editExample creates and edits an example file when the target file doesn't exist.
+func editExample(opts EditExampleOpts) ([]byte, error) {
 	fileBytes := opts.InputStoreWithExample.EmitExample()
 
 	branches, err := opts.InputStoreWithExample.LoadPlainFile(fileBytes)
@@ -30,7 +30,7 @@ func EditExample(opts EditExampleOpts) ([]byte, error) {
 		)
 	}
 
-	tree, err := CreateSOPSTree(branches, opts.EncryptConfig, opts.InputPath)
+	tree, err := createSOPSTree(branches, opts.EncryptConfig, opts.InputPath)
 	if err != nil {
 		return nil, err
 	}
@@ -44,7 +44,7 @@ func EditExample(opts EditExampleOpts) ([]byte, error) {
 		)
 	}
 
-	return EditTree(opts.EditOpts, tree, dataKey)
+	return editTree(opts.EditOpts, tree, dataKey)
 }
 
 // Edit loads, decrypts, and allows editing of an existing encrypted file.
@@ -61,23 +61,23 @@ func Edit(opts EditOpts) ([]byte, error) {
 		DecryptionOrder: opts.DecryptionOrder,
 	}
 
-	tree, dataKey, err := DecryptTreeWithKey(decOpts)
+	tree, dataKey, err := decryptTreeWithKey(decOpts)
 	if err != nil {
 		return nil, err
 	}
 
-	return EditTree(opts, tree, dataKey)
+	return editTree(opts, tree, dataKey)
 }
 
-// EditTree handles the core edit workflow: write to temp file, launch editor, re-encrypt.
-func EditTree(opts EditOpts, tree *sops.Tree, dataKey []byte) ([]byte, error) {
-	tmpfileName, cleanupFn, err := CreateTempFileWithContent(opts, tree)
+// editTree handles the core edit workflow: write to temp file, launch editor, re-encrypt.
+func editTree(opts EditOpts, tree *sops.Tree, dataKey []byte) ([]byte, error) {
+	tmpfileName, cleanupFn, err := createTempFileWithContent(opts, tree)
 	if err != nil {
 		return nil, err
 	}
 	defer cleanupFn()
 
-	origHash, err := HashFile(tmpfileName)
+	origHash, err := hashFile(tmpfileName)
 	if err != nil {
 		return nil, common.NewExitError(
 			fmt.Sprintf("Could not hash file: %s", err),
@@ -87,7 +87,7 @@ func EditTree(opts EditOpts, tree *sops.Tree, dataKey []byte) ([]byte, error) {
 
 	logger := logrus.New()
 
-	err = RunEditorUntilOk(RunEditorUntilOkOpts{
+	err = runEditorUntilOk(RunEditorUntilOkOpts{
 		InputStore:     opts.InputStore,
 		OriginalHash:   origHash,
 		TmpFileName:    tmpfileName,
@@ -99,17 +99,17 @@ func EditTree(opts EditOpts, tree *sops.Tree, dataKey []byte) ([]byte, error) {
 		return nil, err
 	}
 
-	return EncryptAndEmit(opts, tree, dataKey)
+	return encryptAndEmit(opts, tree, dataKey)
 }
 
-// CreateTempFileWithContent creates a temporary file with the tree content.
-func CreateTempFileWithContent(opts EditOpts, tree *sops.Tree) (string, func(), error) {
-	tmpdir, cleanup, err := CreateTempDir()
+// createTempFileWithContent creates a temporary file with the tree content.
+func createTempFileWithContent(opts EditOpts, tree *sops.Tree) (string, func(), error) {
+	tmpdir, cleanup, err := createTempDir()
 	if err != nil {
 		return "", nil, err
 	}
 
-	tmpfileName, err := WriteTempFile(tmpdir, opts, tree, cleanup)
+	tmpfileName, err := writeTempFile(tmpdir, opts, tree, cleanup)
 	if err != nil {
 		return "", nil, err
 	}
@@ -117,8 +117,8 @@ func CreateTempFileWithContent(opts EditOpts, tree *sops.Tree) (string, func(), 
 	return tmpfileName, cleanup, nil
 }
 
-// CreateTempDir creates a temporary directory for editing.
-func CreateTempDir() (string, func(), error) {
+// createTempDir creates a temporary directory for editing.
+func createTempDir() (string, func(), error) {
 	tmpdir, err := os.MkdirTemp("", "")
 	if err != nil {
 		return "", nil, common.NewExitError(
@@ -134,8 +134,8 @@ func CreateTempDir() (string, func(), error) {
 	return tmpdir, cleanup, nil
 }
 
-// WriteTempFile writes the tree content to a temporary file.
-func WriteTempFile(tmpdir string, opts EditOpts, tree *sops.Tree, cleanup func()) (string, error) {
+// writeTempFile writes the tree content to a temporary file.
+func writeTempFile(tmpdir string, opts EditOpts, tree *sops.Tree, cleanup func()) (string, error) {
 	tmpfile, err := os.Create(filepath.Join(tmpdir, filepath.Base(opts.InputPath))) // #nosec G304
 	if err != nil {
 		cleanup()
@@ -163,7 +163,7 @@ func WriteTempFile(tmpdir string, opts EditOpts, tree *sops.Tree, cleanup func()
 		)
 	}
 
-	out, err := EmitTreeContent(opts, tree)
+	out, err := emitTreeContent(opts, tree)
 	if err != nil {
 		cleanup()
 
@@ -183,8 +183,8 @@ func WriteTempFile(tmpdir string, opts EditOpts, tree *sops.Tree, cleanup func()
 	return tmpfile.Name(), nil
 }
 
-// EmitTreeContent emits the tree content for editing.
-func EmitTreeContent(opts EditOpts, tree *sops.Tree) ([]byte, error) {
+// emitTreeContent emits the tree content for editing.
+func emitTreeContent(opts EditOpts, tree *sops.Tree) ([]byte, error) {
 	var out []byte
 
 	var err error
@@ -205,15 +205,15 @@ func EmitTreeContent(opts EditOpts, tree *sops.Tree) ([]byte, error) {
 	return out, nil
 }
 
-// EncryptAndEmit encrypts the tree and emits the encrypted file.
-func EncryptAndEmit(opts EditOpts, tree *sops.Tree, dataKey []byte) ([]byte, error) {
-	return EncryptTreeAndEmit(tree, dataKey, opts.Cipher, opts.OutputStore)
+// encryptAndEmit encrypts the tree and emits the encrypted file.
+func encryptAndEmit(opts EditOpts, tree *sops.Tree, dataKey []byte) ([]byte, error) {
+	return encryptTreeAndEmit(tree, dataKey, opts.Cipher, opts.OutputStore)
 }
 
-// RunEditorUntilOk runs the editor in a loop until the file is valid or user cancels.
-func RunEditorUntilOk(opts RunEditorUntilOkOpts) error {
+// runEditorUntilOk runs the editor in a loop until the file is valid or user cancels.
+func runEditorUntilOk(opts RunEditorUntilOkOpts) error {
 	for {
-		err := RunEditor(opts.TmpFileName)
+		err := runEditor(opts.TmpFileName)
 		if err != nil {
 			return common.NewExitError(
 				fmt.Sprintf("Could not run editor: %s", err),
@@ -221,7 +221,7 @@ func RunEditorUntilOk(opts RunEditorUntilOkOpts) error {
 			)
 		}
 
-		valid, err := ValidateEditedFile(opts)
+		valid, err := validateEditedFile(opts)
 		if err != nil {
 			return err
 		}
@@ -234,9 +234,9 @@ func RunEditorUntilOk(opts RunEditorUntilOkOpts) error {
 	return nil
 }
 
-// ValidateEditedFile validates the edited file and updates the tree.
-func ValidateEditedFile(opts RunEditorUntilOkOpts) (bool, error) {
-	newHash, err := HashFile(opts.TmpFileName)
+// validateEditedFile validates the edited file and updates the tree.
+func validateEditedFile(opts RunEditorUntilOkOpts) (bool, error) {
+	newHash, err := hashFile(opts.TmpFileName)
 	if err != nil {
 		return false, common.NewExitError(
 			fmt.Sprintf("Could not hash file: %s", err),
@@ -259,13 +259,13 @@ func ValidateEditedFile(opts RunEditorUntilOkOpts) (bool, error) {
 		)
 	}
 
-	return ProcessEditedContent(opts, edited)
+	return processEditedContent(opts, edited)
 }
 
-// ProcessEditedContent processes the edited content and updates the tree.
+// processEditedContent processes the edited content and updates the tree.
 //
 //nolint:nilerr // Returns (false, nil) intentionally to continue editor loop on validation errors
-func ProcessEditedContent(opts RunEditorUntilOkOpts, edited []byte) (bool, error) {
+func processEditedContent(opts RunEditorUntilOkOpts, edited []byte) (bool, error) {
 	newBranches, err := opts.InputStore.LoadPlainFile(edited)
 	if err != nil {
 		opts.Logger.WithField("error", err).Errorf(
@@ -279,7 +279,7 @@ func ProcessEditedContent(opts RunEditorUntilOkOpts, edited []byte) (bool, error
 	}
 
 	if opts.ShowMasterKeys {
-		err := HandleMasterKeysMode(opts, edited)
+		err := handleMasterKeysMode(opts, edited)
 		if err != nil {
 			return false, nil
 		}
@@ -287,11 +287,11 @@ func ProcessEditedContent(opts RunEditorUntilOkOpts, edited []byte) (bool, error
 
 	opts.Tree.Branches = newBranches
 
-	return ValidateTreeMetadata(opts)
+	return validateTreeMetadata(opts)
 }
 
-// HandleMasterKeysMode handles the show master keys mode validation.
-func HandleMasterKeysMode(opts RunEditorUntilOkOpts, edited []byte) error {
+// handleMasterKeysMode handles the show master keys mode validation.
+func handleMasterKeysMode(opts RunEditorUntilOkOpts, edited []byte) error {
 	loadedTree, err := opts.InputStore.LoadEncryptedFile(edited)
 	if err != nil {
 		opts.Logger.WithField("error", err).Errorf(
@@ -308,8 +308,8 @@ func HandleMasterKeysMode(opts RunEditorUntilOkOpts, edited []byte) error {
 	return nil
 }
 
-// ValidateTreeMetadata validates the tree metadata and updates version if needed.
-func ValidateTreeMetadata(opts RunEditorUntilOkOpts) (bool, error) {
+// validateTreeMetadata validates the tree metadata and updates version if needed.
+func validateTreeMetadata(opts RunEditorUntilOkOpts) (bool, error) {
 	needVersionUpdated, err := version.AIsNewerThanB(version.Version, opts.Tree.Metadata.Version)
 	if err != nil {
 		return false, common.NewExitError(
@@ -349,15 +349,15 @@ func EditNewFile(opts EditOpts, inputStore sops.Store) ([]byte, error) {
 		GroupThreshold: 0,
 	}
 
-	return EditExample(EditExampleOpts{
+	return editExample(EditExampleOpts{
 		EditOpts:              opts,
 		EncryptConfig:         encConfig,
 		InputStoreWithExample: storeWithEx,
 	})
 }
 
-// HashFile computes the SHA256 hash of a file.
-func HashFile(filePath string) ([]byte, error) {
+// hashFile computes the SHA256 hash of a file.
+func hashFile(filePath string) ([]byte, error) {
 	var result []byte
 
 	file, err := os.Open(filePath) // #nosec G304
@@ -379,10 +379,10 @@ func HashFile(filePath string) ([]byte, error) {
 	return hash.Sum(result), nil
 }
 
-// RunEditor launches the editor specified by SOPS_EDITOR or EDITOR environment variables.
+// runEditor launches the editor specified by SOPS_EDITOR or EDITOR environment variables.
 // Falls back to vim, nano, or vi if no editor is configured.
-func RunEditor(path string) error {
-	cmd, err := CreateEditorCommand(path)
+func runEditor(path string) error {
+	cmd, err := createEditorCommand(path)
 	if err != nil {
 		return err
 	}
@@ -399,8 +399,8 @@ func RunEditor(path string) error {
 	return nil
 }
 
-// CreateEditorCommand creates the exec.Cmd for the editor.
-func CreateEditorCommand(path string) (*exec.Cmd, error) {
+// createEditorCommand creates the exec.Cmd for the editor.
+func createEditorCommand(path string) (*exec.Cmd, error) {
 	envVar := "SOPS_EDITOR"
 	editor := os.Getenv(envVar)
 
@@ -410,7 +410,7 @@ func CreateEditorCommand(path string) (*exec.Cmd, error) {
 	}
 
 	if editor == "" {
-		editorPath, err := LookupAnyEditor("vim", "nano", "vi")
+		editorPath, err := lookupAnyEditor("vim", "nano", "vi")
 		if err != nil {
 			return nil, err
 		}
@@ -419,7 +419,7 @@ func CreateEditorCommand(path string) (*exec.Cmd, error) {
 		return exec.Command(editorPath, path), nil // #nosec G204
 	}
 
-	parts, err := ParseEditorCommand(editor, envVar)
+	parts, err := parseEditorCommand(editor, envVar)
 	if err != nil {
 		return nil, err
 	}
@@ -432,8 +432,8 @@ func CreateEditorCommand(path string) (*exec.Cmd, error) {
 		parts[1:]...), nil
 }
 
-// ParseEditorCommand parses the editor command string.
-func ParseEditorCommand(editor, envVar string) ([]string, error) {
+// parseEditorCommand parses the editor command string.
+func parseEditorCommand(editor, envVar string) ([]string, error) {
 	parts := strings.Fields(editor)
 	if len(parts) == 0 {
 		return nil, fmt.Errorf("%w: $%s is empty", ErrInvalidEditor, envVar)
@@ -442,8 +442,8 @@ func ParseEditorCommand(editor, envVar string) ([]string, error) {
 	return parts, nil
 }
 
-// LookupAnyEditor searches for any of the specified editors in PATH.
-func LookupAnyEditor(editorNames ...string) (string, error) {
+// lookupAnyEditor searches for any of the specified editors in PATH.
+func lookupAnyEditor(editorNames ...string) (string, error) {
 	for _, editorName := range editorNames {
 		editorPath, err := exec.LookPath(editorName)
 		if err == nil {

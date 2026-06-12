@@ -33,22 +33,10 @@ type Installer struct {
 	apiServerChecker func(ctx context.Context) error
 }
 
-// NewInstaller creates a new Cilium installer instance.
-func NewInstaller(
-	client helm.Interface,
-	kubeconfig, context string,
-	timeout time.Duration,
-) *Installer {
-	return NewInstallerWithDistribution(
-		client, kubeconfig, context, timeout,
-		"", "", v1alpha1.LoadBalancerDefault, false,
-	)
-}
-
-// NewInstallerWithDistribution creates a new Cilium installer instance
+// NewInstaller creates a new Cilium installer instance
 // with distribution and provider-specific configuration.
 // When haEnabled is true the operator replica count is set to 2.
-func NewInstallerWithDistribution(
+func NewInstaller(
 	client helm.Interface,
 	kubeconfig, context string,
 	timeout time.Duration,

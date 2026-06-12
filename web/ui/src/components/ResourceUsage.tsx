@@ -9,6 +9,7 @@ import {
   type ResourceTotals,
 } from "../lib/usage.ts";
 import { Card } from "./Card.tsx";
+import { StatusDot } from "./StatusBadge.tsx";
 
 // Dimension describes one monitored resource axis, so the cluster gauges, per-node bars, and
 // top-consumer lists all render from the same two descriptors instead of duplicated CPU/memory markup.
@@ -183,8 +184,9 @@ function NodeRow({ node }: { node: NodeUsage }) {
   return (
     <li className={cx(nodeListGrid, "py-2")}>
       <div className="flex min-w-0 items-center gap-2">
-        <span
-          className={cx("size-1.5 shrink-0 rounded-full", node.ready ? "bg-emerald-500" : "bg-red-500")}
+        <StatusDot
+          tone={node.ready ? "ok" : "error"}
+          className="shrink-0"
           title={node.ready ? "Ready" : "Not ready"}
         />
         <span className="truncate font-mono text-xs text-slate-700 dark:text-slate-200" title={node.name}>

@@ -224,6 +224,53 @@ func TestMarkComponentsUnknown_NilIsSafe(t *testing.T) {
 	assert.NotPanics(t, func() { clusterupdate.MarkComponentsUnknown(nil) })
 }
 
+// TestApplyDetectedComponents copies every detector-derived component field
+// from the detected spec onto the baseline spec, leaving other fields intact.
+func TestApplyDetectedComponents(t *testing.T) {
+	t.Parallel()
+
+	dst := clusterupdate.DefaultCurrentSpec(
+		v1alpha1.DistributionTalos,
+		v1alpha1.ProviderHetzner,
+	)
+
+	detected := &v1alpha1.ClusterSpec{
+		CNI:           v1alpha1.CNICilium,
+		CSI:           v1alpha1.CSIEnabled,
+		MetricsServer: v1alpha1.MetricsServerEnabled,
+		LoadBalancer:  v1alpha1.LoadBalancerEnabled,
+		CertManager:   v1alpha1.CertManagerEnabled,
+		PolicyEngine:  v1alpha1.PolicyEngineKyverno,
+		GitOpsEngine:  v1alpha1.GitOpsEngineFlux,
+	}
+	detected.Autoscaler.Node.Enabled = true
+
+	clusterupdate.ApplyDetectedComponents(dst, detected)
+
+	assert.Equal(t, detected.CNI, dst.CNI)
+	assert.Equal(t, detected.CSI, dst.CSI)
+	assert.Equal(t, detected.MetricsServer, dst.MetricsServer)
+	assert.Equal(t, detected.LoadBalancer, dst.LoadBalancer)
+	assert.Equal(t, detected.CertManager, dst.CertManager)
+	assert.Equal(t, detected.PolicyEngine, dst.PolicyEngine)
+	assert.Equal(t, detected.GitOpsEngine, dst.GitOpsEngine)
+	assert.Equal(t, detected.Autoscaler.Node, dst.Autoscaler.Node)
+
+	// Non-detected fields must remain untouched.
+	assert.Equal(t, v1alpha1.DistributionTalos, dst.Distribution)
+	assert.Equal(t, v1alpha1.ProviderHetzner, dst.Provider)
+}
+
+// TestApplyDetectedComponents_NilIsSafe ensures the helper tolerates nil specs.
+func TestApplyDetectedComponents_NilIsSafe(t *testing.T) {
+	t.Parallel()
+
+	assert.NotPanics(t, func() {
+		clusterupdate.ApplyDetectedComponents(nil, &v1alpha1.ClusterSpec{})
+		clusterupdate.ApplyDetectedComponents(&v1alpha1.ClusterSpec{}, nil)
+	})
+}
+
 // TestHasUnknownBaseline reports unknown-baseline entries.
 func TestHasUnknownBaseline(t *testing.T) {
 	t.Parallel()

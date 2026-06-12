@@ -54,13 +54,13 @@ func TestValidate_VClusterContextValidation(t *testing.T) {
 
 	result := v.Validate(config)
 	// Context should match the expected "vcluster-docker_<name>" pattern
-	for _, err := range result.Errors {
-		assert.NotEqual(t, "spec.cluster.connection.context", err.Field,
+	for _, warning := range result.Warnings {
+		assert.NotEqual(t, "spec.cluster.connection.context", warning.Field,
 			"context name should match VCluster pattern")
 	}
 }
 
-// TestValidate_VClusterContextMismatch verifies VCluster context name mismatch is flagged.
+// TestValidate_VClusterContextMismatch verifies VCluster context name mismatch warns.
 //
 //nolint:varnamelen // Short names keep this table-driven test readable.
 func TestValidate_VClusterContextMismatch(t *testing.T) {
@@ -92,13 +92,14 @@ func TestValidate_VClusterContextMismatch(t *testing.T) {
 
 	found := false
 
-	for _, err := range result.Errors {
-		if err.Field == "spec.cluster.connection.context" {
+	for _, warning := range result.Warnings {
+		if warning.Field == "spec.cluster.connection.context" {
 			found = true
 		}
 	}
 
-	assert.True(t, found, "should flag context name mismatch for VCluster")
+	assert.True(t, found, "should warn on context name mismatch for VCluster")
+	assert.True(t, result.Valid, "context name mismatch must not fail validation")
 }
 
 // TestValidate_TalosCiliumCNIAlignment verifies Talos+Cilium CNI alignment.
@@ -131,7 +132,7 @@ func TestValidate_TalosCiliumCNIAlignment(t *testing.T) {
 	found := false
 
 	for _, err := range result.Errors {
-		if err.Field == "spec.cni" {
+		if err.Field == "spec.cluster.cni" {
 			found = true
 		}
 	}
@@ -173,7 +174,7 @@ func TestValidate_TalosDefaultCNIAlignment(t *testing.T) {
 
 	// With nil Talos config, validation should be skipped (no error)
 	for _, err := range result.Errors {
-		assert.NotEqual(t, "spec.cni", err.Field,
+		assert.NotEqual(t, "spec.cluster.cni", err.Field,
 			"should skip Talos CNI validation when no Talos config provided")
 	}
 }
@@ -205,7 +206,7 @@ func TestValidate_VClusterCiliumCNI(t *testing.T) {
 
 	// VCluster + Cilium should not produce CNI alignment errors when no config is provided
 	for _, err := range result.Errors {
-		assert.NotEqual(t, "spec.cni", err.Field,
+		assert.NotEqual(t, "spec.cluster.cni", err.Field,
 			"should not flag CNI error for VCluster without config")
 	}
 }
@@ -300,8 +301,8 @@ func TestValidate_GetVClusterConfigNameEmpty(t *testing.T) {
 
 	result := v.Validate(config)
 	// With empty VCluster name, context validation should be skipped
-	for _, err := range result.Errors {
-		assert.NotEqual(t, "spec.cluster.connection.context", err.Field,
+	for _, warning := range result.Warnings {
+		assert.NotEqual(t, "spec.cluster.connection.context", warning.Field,
 			"should skip context validation when VCluster name is empty")
 	}
 }

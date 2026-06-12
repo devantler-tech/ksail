@@ -15,15 +15,7 @@ type Installer struct {
 	*helmutil.Base
 }
 
-// NewInstaller creates a new metrics-server installer instance.
-func NewInstaller(
-	client helm.Interface,
-	timeout time.Duration,
-) *Installer {
-	return NewInstallerWithDistribution(client, timeout, "", false)
-}
-
-// NewInstallerWithDistribution creates a new metrics-server installer instance
+// NewInstaller creates a new metrics-server installer instance
 // with distribution-specific configuration.
 //
 // VCluster virtualizes the kubelet API with self-signed certificates, so
@@ -35,7 +27,7 @@ func NewInstaller(
 //
 // When haEnabled is true the chart is configured with HA defaults
 // (replicas, PDB, topology spread).
-func NewInstallerWithDistribution(
+func NewInstaller(
 	client helm.Interface,
 	timeout time.Duration,
 	distribution v1alpha1.Distribution,

@@ -6,11 +6,11 @@ package picker
 import (
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/ui"
 )
 
 // ErrCancelled is returned when the user cancels the picker (Esc, q, or Ctrl+C).
@@ -305,7 +305,7 @@ func Run(title string, items []string) (string, error) {
 		return "", fmt.Errorf("%w", ErrNoItems)
 	}
 
-	if !isTTY() {
+	if !ui.StdinIsTTY() {
 		return "", fmt.Errorf("%w", ErrNotInteractive)
 	}
 
@@ -328,14 +328,4 @@ func Run(title string, items []string) (string, error) {
 	}
 
 	return final.selected, nil
-}
-
-// isTTY returns true if stdin is connected to a terminal.
-func isTTY() bool {
-	fileInfo, err := os.Stdin.Stat()
-	if err != nil {
-		return false
-	}
-
-	return (fileInfo.Mode() & os.ModeCharDevice) != 0
 }

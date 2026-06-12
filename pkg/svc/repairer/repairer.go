@@ -3,7 +3,6 @@ package repairer
 import (
 	"context"
 	"io"
-	"sync"
 )
 
 // Status describes the outcome of a single [Repair.Run] invocation.
@@ -66,53 +65,3 @@ type Repair interface {
 	// SHOULD print human-readable progress to logWriter.
 	Run(ctx context.Context, logWriter io.Writer) Result
 }
-
-// Registry holds a collection of [Repair] implementations. It is safe
-// for concurrent use. Tests SHOULD construct an isolated [Registry]
-// via [NewRegistry] rather than mutating [Default] to avoid races
-// between packages that run in parallel under `go test`.
-type Registry struct {
-	mu      sync.RWMutex
-	repairs []Repair
-}
-
-// NewRegistry returns an empty, isolated [Registry] suitable for tests.
-func NewRegistry() *Registry { return &Registry{} }
-
-// Register adds r to this registry. If a repair with the same
-// [Repair.Name] is already present, Register is a no-op so callers may
-// invoke it idempotently (e.g., on every command-tree construction).
-func (reg *Registry) Register(repair Repair) {
-	reg.mu.Lock()
-	defer reg.mu.Unlock()
-
-	name := repair.Name()
-	for _, existing := range reg.repairs {
-		if existing.Name() == name {
-			return
-		}
-	}
-
-	reg.repairs = append(reg.repairs, repair)
-}
-
-// All returns a snapshot of every registered [Repair] in registration
-// order.
-func (reg *Registry) All() []Repair {
-	reg.mu.RLock()
-	defer reg.mu.RUnlock()
-
-	out := make([]Repair, len(reg.repairs))
-	copy(out, reg.repairs)
-
-	return out
-}
-
-// defaultRegistry is the process-wide registry that init() functions in
-// concrete repair packages populate. Production code uses [Default];
-// tests SHOULD prefer [NewRegistry] for isolation.
-var defaultRegistry = &Registry{}
-
-// Default returns the process-wide [Registry] populated by repair
-// packages via [Registry.Register].
-func Default() *Registry { return defaultRegistry }

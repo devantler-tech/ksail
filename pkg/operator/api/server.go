@@ -411,6 +411,17 @@ func isOpenPath(path string) bool {
 	return !strings.HasPrefix(path, "/api/")
 }
 
+// writeReadOnlyError writes the 403 rejection emitted when the server is in read-only mode. The
+// body is a wire contract: the SPA parses the "reason" key (web/ui/src/api.ts detailFromBody), so
+// every read-only rejection — the readOnlyGuard middleware and the exec handler's self-check —
+// must emit this exact shape.
+func writeReadOnlyError(writer http.ResponseWriter) {
+	writeJSON(writer, http.StatusForbidden, map[string]any{
+		"readOnly": true,
+		"reason":   "UI is configured read-only (GitOps-enforced)",
+	})
+}
+
 // readOnlyGuard rejects mutating cluster requests with 403 when the server is in read-only mode.
 // Auth endpoints (e.g. POST /api/v1/auth/logout) are exempt: read-only constrains cluster
 // mutations, not session management, so users must still be able to log out.
@@ -418,10 +429,7 @@ func (s *Server) readOnlyGuard(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		isAuthPath := strings.HasPrefix(request.URL.Path, "/api/v1/auth/")
 		if s.ReadOnly && isMutating(request.Method) && !isAuthPath {
-			writeJSON(writer, http.StatusForbidden, map[string]any{
-				"readOnly": true,
-				"reason":   "UI is configured read-only (GitOps-enforced)",
-			})
+			writeReadOnlyError(writer)
 
 			return
 		}

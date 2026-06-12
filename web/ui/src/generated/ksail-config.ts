@@ -17,7 +17,7 @@ export interface KSailClusterConfiguration {
      */
     name?: string;
   };
-  spec: {
+  spec?: {
     /**
      * Editor command for interactive workflows (e.g. code --wait)
      */

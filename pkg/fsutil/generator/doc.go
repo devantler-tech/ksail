@@ -8,8 +8,6 @@
 //   - Generate: Transform model into string representation
 //
 // Subpackages:
-//   - argocd: ArgoCD configuration generator
-//   - flux: Flux configuration generator
 //   - k3d: K3d YAML configuration generator
 //   - kind: Kind YAML configuration generator
 //   - kustomization: Kustomization YAML generator

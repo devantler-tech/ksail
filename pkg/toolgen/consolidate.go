@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
 	"github.com/spf13/cobra"
 )
 
@@ -28,7 +29,7 @@ func shouldConsolidate(cmd *cobra.Command) bool {
 		return false
 	}
 
-	_, hasAnnotation := cmd.Annotations[AnnotationConsolidate]
+	_, hasAnnotation := cmd.Annotations[annotations.AnnotationConsolidate]
 
 	return hasAnnotation && len(cmd.Commands()) > 0
 }
@@ -38,7 +39,7 @@ func shouldConsolidate(cmd *cobra.Command) bool {
 // If the parent has an explicit permission, all subcommands inherit it and create a single tool.
 func commandToPermissionSplitTools(cmd *cobra.Command, excludeFlags []string) []ToolDefinition {
 	// Get the subcommand parameter name from annotation
-	subcommandParam := cmd.Annotations[AnnotationConsolidate]
+	subcommandParam := cmd.Annotations[annotations.AnnotationConsolidate]
 
 	// Build base name and path
 	cmdPath := cmd.CommandPath()
@@ -47,9 +48,9 @@ func commandToPermissionSplitTools(cmd *cobra.Command, excludeFlags []string) []
 
 	// Check if parent has explicit permission - if so, don't split
 	parentHasPermission := cmd.Annotations != nil &&
-		cmd.Annotations[AnnotationPermission] != ""
+		cmd.Annotations[annotations.AnnotationPermission] != ""
 	parentRequiresWrite := cmd.Annotations != nil &&
-		cmd.Annotations[AnnotationPermission] == permissionWrite
+		cmd.Annotations[annotations.AnnotationPermission] == permissionWrite
 
 	// If parent has explicit permission, create single tool without splitting
 	if parentHasPermission {
@@ -112,56 +113,9 @@ func collectAllSubcommands(
 	parent *cobra.Command,
 	subcommands *map[string]*SubcommandDef,
 ) {
-	collectAllSubcommandsWithPrefix(parent, subcommands, "")
-}
-
-// collectAllSubcommandsWithPrefix recursively collects subcommands with a path prefix.
-func collectAllSubcommandsWithPrefix(
-	cmd *cobra.Command,
-	subcommands *map[string]*SubcommandDef,
-	prefix string,
-) {
-	for _, subCmd := range cmd.Commands() {
-		// Skip hidden subcommands
-		if subCmd.Hidden {
-			continue
-		}
-
-		// Build the relative key: prefix_name or just name if no prefix
-		relativeKey := subCmd.Name()
-		if prefix != "" {
-			relativeKey = prefix + "_" + subCmd.Name()
-		}
-
-		subCmdPath := subCmd.CommandPath()
-		subCmdParts := strings.Fields(subCmdPath)
-		flags := extractFlags(subCmd)
-
-		// If this subcommand has its own children, check if it's also runnable
-		if len(subCmd.Commands()) > 0 {
-			// Include runnable parent commands (have RunE and non-help flags)
-			if isRunnableCommand(subCmd) {
-				(*subcommands)[relativeKey] = &SubcommandDef{
-					Name:         relativeKey,
-					Description:  subCmd.Short,
-					CommandParts: subCmdParts,
-					Flags:        flags,
-					AcceptsArgs:  acceptsPositionalArgs(subCmd),
-				}
-			}
-			// Recursively collect nested subcommands with updated prefix
-			collectAllSubcommandsWithPrefix(subCmd, subcommands, relativeKey)
-		} else {
-			// Leaf command - add it to the map
-			(*subcommands)[relativeKey] = &SubcommandDef{
-				Name:         relativeKey,
-				Description:  subCmd.Short,
-				CommandParts: subCmdParts,
-				Flags:        flags,
-				AcceptsArgs:  acceptsPositionalArgs(subCmd),
-			}
-		}
-	}
+	walkSubcommands(parent, "", false, func(def *SubcommandDef, key string, _ bool) {
+		(*subcommands)[key] = def
+	})
 }
 
 // collectSubcommandsRecursively recursively collects all subcommands and their nested children,
@@ -173,22 +127,27 @@ func collectSubcommandsRecursively(
 	writeSubcommands *map[string]*SubcommandDef,
 	parentRequiresWrite bool,
 ) {
-	collectSubcommandsWithPrefix(
+	walkSubcommands(
 		parent,
-		readSubcommands,
-		writeSubcommands,
 		"",
 		parentRequiresWrite,
+		func(def *SubcommandDef, key string, requiresWrite bool) {
+			addToSubcommandMap(def, key, requiresWrite, readSubcommands, writeSubcommands)
+		},
 	)
 }
 
-// collectSubcommandsWithPrefix recursively collects subcommands with permission splitting and path prefix.
-func collectSubcommandsWithPrefix(
+// walkSubcommands recursively walks visible subcommands of cmd, building prefixed
+// relative keys and routing each collected SubcommandDef through sink.
+// Leaf commands are always collected; parents are collected only when runnable
+// (per isRunnableCommand) and are emitted before their children are visited.
+// Each subcommand's resolved write permission is passed to sink and inherited
+// by its children.
+func walkSubcommands(
 	cmd *cobra.Command,
-	readSubcommands *map[string]*SubcommandDef,
-	writeSubcommands *map[string]*SubcommandDef,
 	prefix string,
 	parentRequiresWrite bool,
+	sink func(def *SubcommandDef, key string, requiresWrite bool),
 ) {
 	for _, subCmd := range cmd.Commands() {
 		// Skip hidden subcommands
@@ -202,17 +161,17 @@ func collectSubcommandsWithPrefix(
 		// Determine if this command requires write permission
 		requiresWrite := determineWritePermission(subCmd, parentRequiresWrite)
 
-		subcommandDef := buildSubcommandDef(subCmd, relativeKey)
+		hasChildren := len(subCmd.Commands()) > 0
 
-		// Process subcommand based on whether it has children
-		processSubcommand(
-			subCmd,
-			subcommandDef,
-			relativeKey,
-			requiresWrite,
-			readSubcommands,
-			writeSubcommands,
-		)
+		// Collect leaf commands and runnable parent commands
+		if !hasChildren || isRunnableCommand(subCmd) {
+			sink(buildSubcommandDef(subCmd, relativeKey), relativeKey, requiresWrite)
+		}
+
+		// Recursively collect nested subcommands with updated prefix
+		if hasChildren {
+			walkSubcommands(subCmd, relativeKey, requiresWrite, sink)
+		}
 	}
 }
 
@@ -227,8 +186,8 @@ func buildRelativeKey(prefix, name string) string {
 
 // determineWritePermission checks if a command requires write permission.
 func determineWritePermission(cmd *cobra.Command, parentRequiresWrite bool) bool {
-	if cmd.Annotations != nil && cmd.Annotations[AnnotationPermission] != "" {
-		return cmd.Annotations[AnnotationPermission] == permissionWrite
+	if cmd.Annotations != nil && cmd.Annotations[annotations.AnnotationPermission] != "" {
+		return cmd.Annotations[annotations.AnnotationPermission] == permissionWrite
 	}
 
 	return parentRequiresWrite
@@ -247,40 +206,6 @@ func buildSubcommandDef(
 		CommandParts: strings.Fields(cmd.CommandPath()),
 		Flags:        extractFlags(cmd),
 		AcceptsArgs:  acceptsPositionalArgs(cmd),
-	}
-}
-
-// processSubcommand processes a subcommand with its children.
-func processSubcommand(
-	subCmd *cobra.Command,
-	subcommandDef *SubcommandDef,
-	relativeKey string,
-	requiresWrite bool,
-	readSubcommands *map[string]*SubcommandDef,
-	writeSubcommands *map[string]*SubcommandDef,
-) {
-	hasChildren := len(subCmd.Commands()) > 0
-
-	// Add to appropriate map if runnable (or if it's a leaf command)
-	if !hasChildren || isRunnableCommand(subCmd) {
-		addToSubcommandMap(
-			subcommandDef,
-			relativeKey,
-			requiresWrite,
-			readSubcommands,
-			writeSubcommands,
-		)
-	}
-
-	// Recursively collect nested subcommands
-	if hasChildren {
-		collectSubcommandsWithPrefix(
-			subCmd,
-			readSubcommands,
-			writeSubcommands,
-			relativeKey,
-			requiresWrite,
-		)
 	}
 }
 
@@ -311,8 +236,8 @@ func buildConsolidatedTool(
 ) ToolDefinition {
 	// Build description
 	description := cmd.Short
-	if cmd.Annotations != nil && cmd.Annotations[AnnotationDescription] != "" {
-		description = cmd.Annotations[AnnotationDescription]
+	if cmd.Annotations != nil && cmd.Annotations[annotations.AnnotationDescription] != "" {
+		description = cmd.Annotations[annotations.AnnotationDescription]
 	}
 
 	// Build dynamic parameter schema

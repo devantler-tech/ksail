@@ -227,7 +227,7 @@ func TestConsolidatedToolGenerationWithPositionalArgs(t *testing.T) {
 		Use:   "cipher",
 		Short: "Manage encrypted files",
 		Annotations: map[string]string{
-			"ai.toolgen.consolidate": "cipher_operation",
+			"ai.toolgen.consolidate": cipherOperationParam,
 		},
 	}
 

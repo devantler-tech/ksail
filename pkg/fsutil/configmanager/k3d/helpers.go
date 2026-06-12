@@ -248,12 +248,7 @@ func ResolveNetworkName(clusterName string) string {
 // MutatingAdmissionPolicy resources). It is idempotent — args already present are
 // not re-added.
 func ApplyAPIServerFeatureGatesArgs(k3dConfig *v1alpha5.SimpleConfig) {
-	args := []string{
-		"--kube-apiserver-arg=feature-gates=MutatingAdmissionPolicy=true",
-		"--kube-apiserver-arg=runtime-config=admissionregistration.k8s.io/v1beta1=true",
-	}
-
-	for _, arg := range args {
+	for _, arg := range APIServerFeatureGatesArgs() {
 		if k3sArgPresent(k3dConfig.Options.K3sOptions.ExtraArgs, arg) {
 			continue
 		}

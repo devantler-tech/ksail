@@ -99,7 +99,6 @@ func executeImport(
 		Type:    notify.ActivityType,
 		Content: "importing images to cluster %s",
 		Args:    []any{ctx.ClusterInfo.ClusterName},
-		Timer:   ctx.OutputTimer,
 		Writer:  cmd.OutOrStdout(),
 	})
 

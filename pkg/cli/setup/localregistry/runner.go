@@ -108,7 +108,7 @@ func runStageFromBuilder(
 		info,
 		buildAction(ctx.ClusterCfg),
 		localDeps,
-		true, false, // checkLocalRegistry=true, isCleanup=false
+		true, // checkLocalRegistry
 	)
 }
 
@@ -134,7 +134,7 @@ func wrapActionWithContext(
 	}
 }
 
-// actionRunner encapsulates shared parameters for runAction and runCleanupAction.
+// actionRunner encapsulates shared parameters for running a registry stage action.
 type actionRunner struct {
 	cmd            *cobra.Command
 	clusterCfg     *v1alpha1.Cluster
@@ -174,30 +174,19 @@ func (r *actionRunner) prepareContext(checkLocalRegistry bool) *registryContext 
 }
 
 // run executes the action with the given checkLocalRegistry flag.
-// If isCleanup is true, uses runCleanupStage; otherwise uses runStage.
-func (r *actionRunner) run(checkLocalRegistry, isCleanup bool) error {
+func (r *actionRunner) run(checkLocalRegistry bool) error {
 	ctx := r.prepareContext(checkLocalRegistry)
 	if ctx == nil {
 		return nil
 	}
 
-	wrappedAction := wrapActionWithContext(*ctx, r.action)
-
-	if isCleanup {
-		return runCleanupStage(
-			r.cmd, r.deps, r.info, ctx.clusterName,
-			wrappedAction, r.localDeps,
-		)
-	}
-
 	return runStage(
-		r.cmd, r.deps, r.info, wrappedAction, r.localDeps,
+		r.cmd, r.deps, r.info, wrapActionWithContext(*ctx, r.action), r.localDeps,
 	)
 }
 
 // runRegistryAction runs a registry action with the given parameters.
 // checkLocalRegistry: if true, skips action when local registry is disabled in config.
-// isCleanup: if true, uses cleanup stage which checks container existence instead.
 func runRegistryAction(
 	cmd *cobra.Command,
 	clusterCfg *v1alpha1.Cluster,
@@ -209,7 +198,7 @@ func runRegistryAction(
 	info setup.StageInfo,
 	action func(context.Context, registry.Service, registryContext) error,
 	localDeps Dependencies,
-	checkLocalRegistry, isCleanup bool,
+	checkLocalRegistry bool,
 ) error {
 	runner := &actionRunner{
 		cmd:            cmd,
@@ -224,7 +213,7 @@ func runRegistryAction(
 		localDeps:      localDeps,
 	}
 
-	return runner.run(checkLocalRegistry, isCleanup)
+	return runner.run(checkLocalRegistry)
 }
 
 // createServiceHandler creates a common handler that initializes the registry service
@@ -245,56 +234,6 @@ func createServiceHandler(
 
 		return handler(ctx, service)
 	}
-}
-
-// runCleanupStage runs a cleanup stage, checking for container existence first.
-// If the container doesn't exist, the stage is silently skipped (no output shown).
-func runCleanupStage(
-	cmd *cobra.Command,
-	deps lifecycle.Deps,
-	info setup.StageInfo,
-	clusterName string,
-	handler func(context.Context, registry.Service) error,
-	localDeps Dependencies,
-) error {
-	// First, check if the local registry container exists before showing any output
-	var containerExists bool
-
-	checkErr := localDeps.DockerInvoker(cmd, func(dockerClient client.APIClient) error {
-		svc, err := localDeps.ServiceFactory(registry.Config{DockerClient: dockerClient})
-		if err != nil {
-			return fmt.Errorf("create registry service: %w", err)
-		}
-
-		registryName := registry.BuildLocalRegistryName(clusterName)
-
-		status, statusErr := svc.Status(cmd.Context(), registry.StatusOptions{Name: registryName})
-		if statusErr != nil {
-			return fmt.Errorf("check registry status: %w", statusErr)
-		}
-
-		// Container exists if status is not "not provisioned"
-		containerExists = status.Status != v1alpha1.OCIRegistryStatusNotProvisioned
-
-		return nil
-	})
-	if checkErr != nil {
-		return fmt.Errorf("check registry existence: %w", checkErr)
-	}
-
-	// If container doesn't exist, silently skip the cleanup stage
-	if !containerExists {
-		return nil
-	}
-
-	// Container exists, proceed with cleanup stage (which will show output)
-	return runDockerStage(
-		cmd,
-		deps,
-		info,
-		createServiceHandler(localDeps, handler),
-		localDeps,
-	)
 }
 
 func runStage(

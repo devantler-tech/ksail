@@ -19,7 +19,7 @@ import (
 const (
 	specDistributionField = "spec.cluster.distribution"
 	specConnectionContext = "spec.cluster.connection.context"
-	specCNIField          = "spec.cni"
+	specCNIField          = "spec.cluster.cni"
 	kindKSailContext      = "kind-ksail"
 )
 
@@ -250,6 +250,39 @@ func testInvalidDistribution(t *testing.T, validator *ksailvalidator.Validator) 
 	assert.True(t, found, "Should find distribution validation error")
 }
 
+// TestKSailValidatorDistributionMessagesBuiltFromValidValues asserts the exact error text
+// for an invalid distribution is derived from Distribution.ValidValues(), so the fix
+// suggestion can never drift from the canonical list again (it previously omitted EKS).
+func TestKSailValidatorDistributionMessagesBuiltFromValidValues(t *testing.T) {
+	t.Parallel()
+
+	validator := ksailvalidator.NewValidator()
+	config := createValidKSailConfig(v1alpha1.DistributionVanilla)
+	config.Spec.Cluster.Distribution = "InvalidDistribution"
+
+	result := validator.Validate(config)
+	require.False(t, result.Valid, "Invalid distribution should fail validation")
+
+	found := false
+
+	for _, err := range result.Errors {
+		if err.Field != specDistributionField {
+			continue
+		}
+
+		found = true
+
+		assert.Equal(
+			t,
+			"Use a supported distribution: Vanilla, K3s, Talos, VCluster, KWOK, EKS",
+			err.FixSuggestion,
+		)
+		assert.Equal(t, "one of: Vanilla, K3s, Talos, VCluster, KWOK, EKS", err.ExpectedValue)
+	}
+
+	assert.True(t, found, "Should find distribution validation error")
+}
+
 // createValidKSailConfig creates a valid KSail configuration with the specified distribution.
 // Uses sample context names that are typical for each distribution.
 func createValidKSailConfig(distribution v1alpha1.Distribution) *v1alpha1.Cluster {
@@ -398,7 +431,7 @@ func validateInvalidGitOpsEngineCase(t *testing.T) {
 
 	result := validator.Validate(config)
 	assert.False(t, result.Valid)
-	validateExpectedErrors(t, []string{"spec.gitOpsEngine"}, result.Errors)
+	validateExpectedErrors(t, []string{"spec.cluster.gitOpsEngine"}, result.Errors)
 }
 
 func validateRegistryPortRequiredCase(t *testing.T) {
@@ -488,28 +521,28 @@ func testInvalidContextPatternWithConfig(t *testing.T) {
 		validator := ksailvalidator.NewValidatorForKind(kindConfig)
 		result := validator.Validate(config)
 
-		assert.False(
+		assert.True(
 			t,
 			result.Valid,
-			"Invalid context should fail validation when distribution config is provided",
+			"Mismatched context is a warning, not an error, so validation should pass",
 		)
-		assert.NotEmpty(t, result.Errors, "Invalid context should have errors")
+		assert.Empty(t, result.Errors, "Mismatched context should not produce errors")
 
-		// Find the context error
+		// Find the context warning
 		found := false
 
-		for _, err := range result.Errors {
-			if err.Field == specConnectionContext {
+		for _, warning := range result.Warnings {
+			if warning.Field == specConnectionContext {
 				found = true
 
-				assert.Contains(t, err.Message, "context name does not match expected pattern")
-				assert.Contains(t, err.FixSuggestion, "kind-my-cluster")
+				assert.Contains(t, warning.Message, "context name does not match expected pattern")
+				assert.Contains(t, warning.FixSuggestion, "kind-my-cluster")
 
 				break
 			}
 		}
 
-		assert.True(t, found, "Should have context validation error")
+		assert.True(t, found, "Should have context validation warning")
 	})
 }
 
@@ -532,6 +565,7 @@ func testContextNotValidatedWithoutConfig(t *testing.T) {
 			"Context should not be validated when no distribution config is provided",
 		)
 		assert.Empty(t, result.Errors, "Should have no errors without distribution config")
+		assert.Empty(t, result.Warnings, "Should have no warnings without distribution config")
 	})
 }
 
@@ -773,7 +807,7 @@ func runCiliumExtraArgsValidationTest(t *testing.T, testCase ciliumExtraArgsTest
 	assert.False(t, result.Valid)
 	require.Len(t, result.Errors, 1)
 	err := result.Errors[0]
-	assert.Equal(t, "spec.cni", err.Field)
+	assert.Equal(t, specCNIField, err.Field)
 
 	for _, snippet := range testCase.expectSnips {
 		assert.Contains(t, err.Message, snippet)
@@ -976,8 +1010,8 @@ func testOmniProviderContextValidationSkipped(t *testing.T) {
 		result := validator.Validate(config)
 
 		// Context validation should be skipped for Omni provider
-		for _, err := range result.Errors {
-			assert.NotEqual(t, specConnectionContext, err.Field,
+		for _, warning := range result.Warnings {
+			assert.NotEqual(t, specConnectionContext, warning.Field,
 				"Omni provider context should not be validated against admin@ pattern")
 		}
 	})
@@ -1018,16 +1052,16 @@ func testNonOmniProviderTalosContextStillValidated(
 		validator := ksailvalidator.NewValidatorForTalos(talosConfigs)
 		result := validator.Validate(config)
 
-		// Context validation should flag the missing admin@ prefix
+		// Context validation should warn about the missing admin@ prefix
 		found := false
 
-		for _, validationErr := range result.Errors {
-			if validationErr.Field == specConnectionContext {
+		for _, validationWarning := range result.Warnings {
+			if validationWarning.Field == specConnectionContext {
 				found = true
 
 				assert.Contains(
 					t,
-					validationErr.Message,
+					validationWarning.Message,
 					"context name does not match expected pattern",
 				)
 
@@ -1546,31 +1580,23 @@ func TestKSailValidatorContextValidationComprehensive(t *testing.T) {
 func testKindContextValidation(t *testing.T) {
 	t.Helper()
 
-	tests := []struct {
-		name        string
-		context     string
-		shouldPass  bool
-		description string
-		useConfig   bool // Whether to provide a Kind config to the validator
-	}{
+	tests := []contextValidationCase{
 		{
 			name:        "kind_with_exact_match",
 			context:     "kind-my-cluster",
-			shouldPass:  true,
 			description: "Kind context should match exactly",
 			useConfig:   true,
 		},
 		{
-			name:        "kind_with_case_mismatch",
-			context:     "KIND-my-cluster",
-			shouldPass:  false,
-			description: "Kind context is case sensitive",
-			useConfig:   true,
+			name:          "kind_with_case_mismatch",
+			context:       "KIND-my-cluster",
+			expectWarning: true,
+			description:   "Kind context is case sensitive",
+			useConfig:     true,
 		},
 		{
 			name:        "kind_without_config_any_context",
 			context:     "any-context",
-			shouldPass:  true,
 			description: "Kind context should not be validated without distribution config",
 			useConfig:   false,
 		},
@@ -1584,16 +1610,37 @@ func testKindContextValidation(t *testing.T) {
 	}
 }
 
-func runKindContextValidationTest(
+// contextValidationCase describes a context-name validation scenario. A mismatched
+// context produces a warning (expectWarning) rather than an error, so validation
+// always passes.
+type contextValidationCase struct {
+	name          string
+	context       string
+	expectWarning bool
+	description   string
+	useConfig     bool // Whether to provide a distribution config to the validator
+}
+
+// assertContextValidationResult asserts the warning-based contract for context
+// validation: mismatches never fail validation, they only warn.
+func assertContextValidationResult(
 	t *testing.T,
-	test struct {
-		name        string
-		context     string
-		shouldPass  bool
-		description string
-		useConfig   bool
-	},
+	result *validator.ValidationResult,
+	test contextValidationCase,
 ) {
+	t.Helper()
+
+	assert.True(t, result.Valid, test.description+" must not fail validation")
+	assert.Empty(t, result.Errors, test.description+" should have no validation errors")
+
+	if test.expectWarning {
+		assert.NotEmpty(t, result.Warnings, test.description+" should produce a context warning")
+	} else {
+		assert.Empty(t, result.Warnings, test.description+" should have no warnings")
+	}
+}
+
+func runKindContextValidationTest(t *testing.T, test contextValidationCase) {
 	t.Helper()
 
 	config := &v1alpha1.Cluster{
@@ -1623,44 +1670,30 @@ func runKindContextValidationTest(
 
 	result := validator.Validate(config)
 
-	if test.shouldPass {
-		assert.True(t, result.Valid, test.description+" should pass validation")
-		assert.Empty(t, result.Errors, test.description+" should have no validation errors")
-	} else {
-		assert.False(t, result.Valid, test.description+" should fail validation")
-		assert.NotEmpty(t, result.Errors, test.description+" should have validation errors")
-	}
+	assertContextValidationResult(t, result, test)
 }
 
 // testK3dContextValidation tests K3d-specific context validation scenarios.
 func testK3dContextValidation(t *testing.T) {
 	t.Helper()
 
-	tests := []struct {
-		name        string
-		context     string
-		shouldPass  bool
-		description string
-		useConfig   bool // Whether to provide a K3d config to the validator
-	}{
+	tests := []contextValidationCase{
 		{
 			name:        "k3d_with_exact_match",
 			context:     "k3d-my-cluster",
-			shouldPass:  true,
 			description: "K3d context should match exactly",
 			useConfig:   true,
 		},
 		{
-			name:        "k3d_with_extra_prefix",
-			context:     "prefix-k3d-my-cluster",
-			shouldPass:  false,
-			description: "K3d context should not have extra prefix",
-			useConfig:   true,
+			name:          "k3d_with_extra_prefix",
+			context:       "prefix-k3d-my-cluster",
+			expectWarning: true,
+			description:   "K3d context should not have extra prefix",
+			useConfig:     true,
 		},
 		{
 			name:        "k3d_without_config_any_context",
 			context:     "any-context",
-			shouldPass:  true,
 			description: "K3d context should not be validated without distribution config",
 			useConfig:   false,
 		},
@@ -1674,16 +1707,7 @@ func testK3dContextValidation(t *testing.T) {
 	}
 }
 
-func runK3dContextValidationTest(
-	t *testing.T,
-	test struct {
-		name        string
-		context     string
-		shouldPass  bool
-		description string
-		useConfig   bool
-	},
-) {
+func runK3dContextValidationTest(t *testing.T, test contextValidationCase) {
 	t.Helper()
 
 	config := &v1alpha1.Cluster{
@@ -1715,13 +1739,7 @@ func runK3dContextValidationTest(
 
 	result := validator.Validate(config)
 
-	if test.shouldPass {
-		assert.True(t, result.Valid, test.description+" should pass validation")
-		assert.Empty(t, result.Errors, test.description+" should have no validation errors")
-	} else {
-		assert.False(t, result.Valid, test.description+" should fail validation")
-		assert.NotEmpty(t, result.Errors, test.description+" should have validation errors")
-	}
+	assertContextValidationResult(t, result, test)
 }
 
 // TestKSailValidatorMultipleDistributionConfigs tests validator with multiple distribution configs.

@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/ui"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
 )
 
@@ -42,11 +43,6 @@ var (
 	stdinReaderMu sync.RWMutex
 	//nolint:gochecknoglobals // dependency injection for tests
 	stdinReaderOverride io.Reader
-
-	//nolint:gochecknoglobals // dependency injection for tests
-	ttyCheckerMu sync.RWMutex
-	//nolint:gochecknoglobals // dependency injection for tests
-	ttyCheckerOverride func() bool
 )
 
 // SetStdinReaderForTests overrides the stdin reader for testing.
@@ -71,20 +67,7 @@ func SetStdinReaderForTests(reader io.Reader) func() {
 // SetTTYCheckerForTests overrides the TTY checker for testing.
 // Returns a restore function that should be called to reset the override.
 func SetTTYCheckerForTests(checker func() bool) func() {
-	ttyCheckerMu.Lock()
-
-	previous := ttyCheckerOverride
-	ttyCheckerOverride = checker
-
-	ttyCheckerMu.Unlock()
-
-	return func() {
-		ttyCheckerMu.Lock()
-
-		ttyCheckerOverride = previous
-
-		ttyCheckerMu.Unlock()
-	}
+	return ui.SetTTYCheckerForTests(checker)
 }
 
 // getStdinReader returns the stdin reader to use, respecting test overrides.
@@ -102,21 +85,7 @@ func getStdinReader() io.Reader {
 // IsTTY returns true if stdin is connected to a terminal.
 // This is used to skip confirmation prompts in non-interactive environments (CI/pipelines).
 func IsTTY() bool {
-	ttyCheckerMu.RLock()
-	defer ttyCheckerMu.RUnlock()
-
-	if ttyCheckerOverride != nil {
-		return ttyCheckerOverride()
-	}
-
-	// Check if stdin is a terminal
-	fileInfo, err := os.Stdin.Stat()
-	if err != nil {
-		return false
-	}
-
-	// If stdin is a character device (terminal), ModeCharDevice will be set
-	return (fileInfo.Mode() & os.ModeCharDevice) != 0
+	return ui.StdinIsTTY()
 }
 
 // ShouldSkipPrompt returns true if the confirmation prompt should be skipped.
@@ -144,11 +113,13 @@ func ShowDeletionPreview(writer io.Writer, preview *DeletionPreview) {
 	case v1alpha1.ProviderHetzner:
 		writeHetznerResources(&previewText, preview)
 	case v1alpha1.ProviderOmni:
-		writeOmniResources(&previewText, preview)
+		writeResourceList(&previewText, "Machines:", preview.Servers)
 	case v1alpha1.ProviderAWS:
-		writeAWSResources(&previewText, preview)
+		// eksctl owns the underlying CloudFormation stacks so we only surface a
+		// human-readable placeholder rather than individual AWS resource names.
+		writeResourceList(&previewText, "EKS Resources:", preview.Servers)
 	case v1alpha1.ProviderKubernetes:
-		writeKubernetesResources(&previewText, preview)
+		writeResourceList(&previewText, "Kubernetes Resources:", preview.Servers)
 	}
 
 	notify.Warningf(writer, "%s", previewText.String())
@@ -157,42 +128,34 @@ func ShowDeletionPreview(writer io.Writer, preview *DeletionPreview) {
 	_, _ = fmt.Fprint(writer, `Type "yes" to confirm deletion: `)
 }
 
+// writeResourceList writes a resource section header followed by one indented
+// list entry per item. Does nothing when items is empty.
+func writeResourceList(previewText *strings.Builder, header string, items []string) {
+	if len(items) == 0 {
+		return
+	}
+
+	previewText.WriteString("\n  " + header)
+
+	for _, item := range items {
+		previewText.WriteString("\n    - " + item)
+	}
+}
+
 // writeDockerResources writes Docker-specific resources to the preview.
 func writeDockerResources(previewText *strings.Builder, preview *DeletionPreview) {
-	if len(preview.Nodes) > 0 {
-		previewText.WriteString("\n  Containers:")
-
-		for _, node := range preview.Nodes {
-			previewText.WriteString("\n    - " + node)
-		}
-	}
-
-	if len(preview.Registries) > 0 {
-		previewText.WriteString("\n  Registries:")
-
-		for _, reg := range preview.Registries {
-			previewText.WriteString("\n    - " + reg)
-		}
-	}
-
-	if len(preview.SharedContainers) > 0 {
-		previewText.WriteString("\n  Shared containers (last Kind cluster):")
-
-		for _, container := range preview.SharedContainers {
-			previewText.WriteString("\n    - " + container)
-		}
-	}
+	writeResourceList(previewText, "Containers:", preview.Nodes)
+	writeResourceList(previewText, "Registries:", preview.Registries)
+	writeResourceList(
+		previewText,
+		"Shared containers (last Kind cluster):",
+		preview.SharedContainers,
+	)
 }
 
 // writeHetznerResources writes Hetzner-specific resources to the preview.
 func writeHetznerResources(previewText *strings.Builder, preview *DeletionPreview) {
-	if len(preview.Servers) > 0 {
-		previewText.WriteString("\n  Servers:")
-
-		for _, server := range preview.Servers {
-			previewText.WriteString("\n    - " + server)
-		}
-	}
+	writeResourceList(previewText, "Servers:", preview.Servers)
 
 	if preview.PlacementGroup != "" {
 		previewText.WriteString("\n  Placement Group: " + preview.PlacementGroup)
@@ -204,41 +167,6 @@ func writeHetznerResources(previewText *strings.Builder, preview *DeletionPrevie
 
 	if preview.Network != "" {
 		previewText.WriteString("\n  Network: " + preview.Network)
-	}
-}
-
-// writeOmniResources writes Omni-specific resources to the preview.
-func writeOmniResources(previewText *strings.Builder, preview *DeletionPreview) {
-	if len(preview.Servers) > 0 {
-		previewText.WriteString("\n  Machines:")
-
-		for _, machine := range preview.Servers {
-			previewText.WriteString("\n    - " + machine)
-		}
-	}
-}
-
-// writeAWSResources writes AWS/EKS-specific resources to the preview.
-// eksctl owns the underlying CloudFormation stacks so we only surface a
-// human-readable placeholder rather than individual AWS resource names.
-func writeAWSResources(previewText *strings.Builder, preview *DeletionPreview) {
-	if len(preview.Servers) > 0 {
-		previewText.WriteString("\n  EKS Resources:")
-
-		for _, resource := range preview.Servers {
-			previewText.WriteString("\n    - " + resource)
-		}
-	}
-}
-
-// writeKubernetesResources writes Kubernetes provider-specific resources to the preview.
-func writeKubernetesResources(previewText *strings.Builder, preview *DeletionPreview) {
-	if len(preview.Servers) > 0 {
-		previewText.WriteString("\n  Kubernetes Resources:")
-
-		for _, resource := range preview.Servers {
-			previewText.WriteString("\n    - " + resource)
-		}
 	}
 }
 
