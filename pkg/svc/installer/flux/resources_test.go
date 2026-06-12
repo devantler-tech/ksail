@@ -1120,4 +1120,3 @@ func TestWaitForFluxReady_DiagnosticsIncludedOnTimeout(t *testing.T) {
 	assert.Contains(t, err.Error(), "source-controller")
 	assert.Contains(t, err.Error(), "CrashLoopBackOff")
 }
-
