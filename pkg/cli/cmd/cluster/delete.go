@@ -91,6 +91,10 @@ func registerDeleteFlags(cmd *cobra.Command, flags *deleteFlags) {
 		"Delete storage volumes when cleaning up (registry volumes for Docker, block storage for Hetzner)")
 	cmd.Flags().BoolVarP(&flags.force, "force", "f", false,
 		"Skip confirmation prompt and delete immediately")
+	_ = cmd.Flags().SetAnnotation(
+		forceFlagName, annotations.AnnotationConfirmFlag,
+		[]string{annotations.AnnotationValueTrue},
+	)
 }
 
 // runDeleteAction executes the cluster deletion with registry cleanup.

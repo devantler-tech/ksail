@@ -30,6 +30,11 @@ type ServerConfig struct {
 	Logger *slog.Logger
 	// WorkingDirectory is the directory to run commands in (defaults to current directory).
 	WorkingDirectory string
+	// ExecutablePath is the executable used to run tool commands.
+	// DefaultConfig resolves it to the running binary so tool calls work even
+	// when the MCP client launches the server with a minimal PATH. When empty,
+	// tool execution falls back to resolving the root command name via PATH.
+	ExecutablePath string
 }
 
 // DefaultConfig returns a default server configuration.
@@ -40,6 +45,7 @@ func DefaultConfig(rootCmd *cobra.Command, version string) ServerConfig {
 		RootCmd:          rootCmd,
 		Logger:           slog.New(slog.NewTextHandler(os.Stderr, nil)),
 		WorkingDirectory: "",
+		ExecutablePath:   toolgen.DefaultExecutablePath(),
 	}
 }
 
@@ -70,6 +76,9 @@ func NewServer(cfg ServerConfig) (*mcpsdk.Server, error) {
 	if cfg.WorkingDirectory != "" {
 		opts.WorkingDirectory = cfg.WorkingDirectory
 	}
+	// Run tools via the configured executable (DefaultConfig resolves the
+	// running binary) instead of relying on a PATH lookup of "ksail".
+	opts.ExecutablePath = cfg.ExecutablePath
 	// Pass logger for debug logging during command execution
 	opts.Logger = cfg.Logger
 

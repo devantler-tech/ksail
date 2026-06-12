@@ -151,121 +151,147 @@ func TestGetToolArgs(t *testing.T) {
 	})
 }
 
-// TestInjectForceFlag verifies force flag injection.
-func TestInjectForceFlag(t *testing.T) {
+// TestInjectConfirmFlags verifies confirmation-skip flag injection.
+func TestInjectConfirmFlags(t *testing.T) {
 	t.Parallel()
 
-	injectForce := chat.GetInjectForceFlag()
+	injectConfirm := chat.GetInjectConfirmFlags()
 
-	t.Run("injects force into existing args", func(t *testing.T) {
+	t.Run("injects flags into existing args", func(t *testing.T) {
 		t.Parallel()
 
 		invocation := copilot.ToolInvocation{
 			Arguments: map[string]any{"name": "test"},
 		}
-		result := injectForce(invocation)
+		result := injectConfirm(invocation, []string{forceFlagName})
 		args, ok := result.Arguments.(map[string]any)
 		require.True(t, ok)
-		assert.Equal(t, true, args["force"])
+		assert.Equal(t, true, args[forceFlagName])
 		assert.Equal(t, "test", args["name"])
 	})
 
-	t.Run("injects force into nil args", func(t *testing.T) {
+	t.Run("injects flags into nil args", func(t *testing.T) {
 		t.Parallel()
 
 		invocation := copilot.ToolInvocation{Arguments: nil}
-		result := injectForce(invocation)
+		result := injectConfirm(invocation, []string{forceFlagName})
 		args, ok := result.Arguments.(map[string]any)
 		require.True(t, ok)
-		assert.Equal(t, true, args["force"])
+		assert.Equal(t, true, args[forceFlagName])
 	})
 
-	t.Run("injects force into non-map args", func(t *testing.T) {
+	t.Run("injects flags into non-map args", func(t *testing.T) {
 		t.Parallel()
 
 		invocation := copilot.ToolInvocation{Arguments: "string"}
-		result := injectForce(invocation)
+		result := injectConfirm(invocation, []string{forceFlagName})
 		args, ok := result.Arguments.(map[string]any)
 		require.True(t, ok)
-		assert.Equal(t, true, args["force"])
+		assert.Equal(t, true, args[forceFlagName])
+	})
+
+	t.Run("no flags leaves invocation untouched", func(t *testing.T) {
+		t.Parallel()
+
+		invocation := copilot.ToolInvocation{
+			Arguments: map[string]any{"name": "test"},
+		}
+		result := injectConfirm(invocation, nil)
+		args, ok := result.Arguments.(map[string]any)
+		require.True(t, ok)
+		assert.NotContains(t, args, forceFlagName)
+		assert.Equal(t, "test", args["name"])
 	})
 }
 
-// TestToolSupportsForce verifies tool force support checking.
+// TestConfirmFlagsForInvocation verifies annotation-based confirm-flag resolution.
 //
 //nolint:funlen // table-driven test
-func TestToolSupportsForce(t *testing.T) {
+func TestConfirmFlagsForInvocation(t *testing.T) {
 	t.Parallel()
 
-	supportsForce := chat.GetToolSupportsForce()
+	confirmFlagsFor := chat.GetConfirmFlagsForInvocation()
+
+	consolidatedTool := toolgen.ToolDefinition{
+		Name:            clusterWriteTool,
+		IsConsolidated:  true,
+		SubcommandParam: clusterCommandParam,
+		Subcommands: map[string]*toolgen.SubcommandDef{
+			deleteSubcommand: {
+				Name: deleteSubcommand,
+				Flags: map[string]*toolgen.FlagDef{
+					forceFlagName: {Name: forceFlagName, Type: booleanTypeName, ConfirmFlag: true},
+				},
+			},
+			initSubcommand: {
+				Name: initSubcommand,
+				Flags: map[string]*toolgen.FlagDef{
+					// init's force means "overwrite files" — not annotated.
+					forceFlagName: {Name: forceFlagName, Type: booleanTypeName},
+				},
+			},
+		},
+	}
 
 	tests := []struct {
 		name     string
 		metadata map[string]toolgen.ToolDefinition
 		toolName string
-		expected bool
+		args     any
+		expected []string
 	}{
 		{
-			name:     "nil metadata returns false",
+			name:     "nil metadata returns none",
 			metadata: nil,
 			toolName: "tool",
-			expected: false,
+			args:     map[string]any{},
+			expected: nil,
 		},
 		{
-			name:     "missing tool returns false",
+			name:     "missing tool returns none",
 			metadata: map[string]toolgen.ToolDefinition{},
 			toolName: "missing",
-			expected: false,
+			args:     map[string]any{},
+			expected: nil,
 		},
 		{
-			name: "nil parameters returns false",
+			name: "non-consolidated tool returns its confirm flags",
 			metadata: map[string]toolgen.ToolDefinition{
-				"tool": {Name: "tool", Parameters: nil},
+				"tool": {Name: "tool", ConfirmFlags: []string{forceFlagName}},
 			},
 			toolName: "tool",
-			expected: false,
+			args:     map[string]any{},
+			expected: []string{forceFlagName},
 		},
 		{
-			name: "no properties key returns false",
+			name: "non-consolidated tool without confirm flags returns none",
 			metadata: map[string]toolgen.ToolDefinition{
-				"tool": {Name: "tool", Parameters: map[string]any{"type": "object"}},
+				"tool": {Name: "tool"},
 			},
 			toolName: "tool",
-			expected: false,
+			args:     map[string]any{},
+			expected: nil,
 		},
 		{
-			name: "properties not a map returns false",
-			metadata: map[string]toolgen.ToolDefinition{
-				"tool": {Name: "tool", Parameters: map[string]any{
-					"properties": "not-a-map",
-				}},
-			},
-			toolName: "tool",
-			expected: false,
+			name:     "consolidated tool resolves per subcommand",
+			metadata: map[string]toolgen.ToolDefinition{clusterWriteTool: consolidatedTool},
+			toolName: clusterWriteTool,
+			args:     map[string]any{clusterCommandParam: deleteSubcommand},
+			expected: []string{forceFlagName},
 		},
 		{
-			name: "no force property returns false",
-			metadata: map[string]toolgen.ToolDefinition{
-				"tool": {Name: "tool", Parameters: map[string]any{
-					"properties": map[string]any{
-						"name": map[string]any{"type": "string"},
-					},
-				}},
-			},
-			toolName: "tool",
-			expected: false,
+			name:     "consolidated tool skips unannotated subcommand flag",
+			metadata: map[string]toolgen.ToolDefinition{clusterWriteTool: consolidatedTool},
+			toolName: clusterWriteTool,
+			args:     map[string]any{clusterCommandParam: initSubcommand},
+			expected: nil,
 		},
 		{
-			name: "force property returns true",
-			metadata: map[string]toolgen.ToolDefinition{
-				"tool": {Name: "tool", Parameters: map[string]any{
-					"properties": map[string]any{
-						"force": map[string]any{"type": "boolean"},
-					},
-				}},
-			},
-			toolName: "tool",
-			expected: true,
+			name:     "consolidated tool without subcommand param returns none",
+			metadata: map[string]toolgen.ToolDefinition{clusterWriteTool: consolidatedTool},
+			toolName: clusterWriteTool,
+			args:     "not-a-map",
+			expected: nil,
 		},
 	}
 
@@ -273,7 +299,8 @@ func TestToolSupportsForce(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			assert.Equal(t, tc.expected, supportsForce(tc.metadata, tc.toolName))
+			invocation := copilot.ToolInvocation{Arguments: tc.args}
+			assert.Equal(t, tc.expected, confirmFlagsFor(tc.metadata, tc.toolName, invocation))
 		})
 	}
 }

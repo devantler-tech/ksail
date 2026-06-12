@@ -21,25 +21,19 @@ const (
 	AutoscalerExpanderRandom AutoscalerExpander = "Random"
 )
 
-// Set for AutoscalerExpander (pflag.Value interface).
-func (a *AutoscalerExpander) Set(value string) error {
-	for _, v := range ValidAutoscalerExpanders() {
-		if strings.EqualFold(value, string(v)) {
-			*a = v
-
-			return nil
-		}
-	}
-
-	return fmt.Errorf(
-		"%w: %s (valid options: %s, %s, %s, %s)",
-		ErrInvalidAutoscalerExpander,
-		value,
+// ValidAutoscalerExpanders returns supported AutoscalerExpander values.
+func ValidAutoscalerExpanders() []AutoscalerExpander {
+	return []AutoscalerExpander{
 		AutoscalerExpanderPrice,
 		AutoscalerExpanderLeastWaste,
 		AutoscalerExpanderLeastNodes,
 		AutoscalerExpanderRandom,
-	)
+	}
+}
+
+// Set for AutoscalerExpander (pflag.Value interface).
+func (a *AutoscalerExpander) Set(value string) error {
+	return setEnum(a, value, ValidAutoscalerExpanders(), ErrInvalidAutoscalerExpander)
 }
 
 // String returns the string representation of the AutoscalerExpander.
@@ -59,12 +53,7 @@ func (a *AutoscalerExpander) Default() any {
 
 // ValidValues returns all valid AutoscalerExpander values as strings.
 func (a *AutoscalerExpander) ValidValues() []string {
-	return []string{
-		string(AutoscalerExpanderPrice),
-		string(AutoscalerExpanderLeastWaste),
-		string(AutoscalerExpanderLeastNodes),
-		string(AutoscalerExpanderRandom),
-	}
+	return validValueStrings(ValidAutoscalerExpanders())
 }
 
 // AutoscalerExpanderList is an ordered priority list of expander strategies for

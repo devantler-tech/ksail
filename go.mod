@@ -75,6 +75,7 @@ require (
 	github.com/loft-sh/vcluster v0.34.1
 	github.com/modelcontextprotocol/go-sdk v1.6.1
 	github.com/rancher/k3k v1.1.0
+	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 	github.com/siderolabs/gen v0.8.6
 	github.com/siderolabs/go-kubernetes v0.2.37
 	github.com/siderolabs/go-retry v0.3.3
@@ -750,7 +751,6 @@ require (
 	github.com/samber/go-type-to-string v1.8.0 // indirect
 	github.com/samber/lo v1.52.0 // indirect
 	github.com/sanposhiho/wastedassign/v2 v2.1.0 // indirect
-	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 // indirect
 	github.com/sasha-s/go-deadlock v0.3.9 // indirect
 	github.com/sashamelentyev/interfacebloat v1.1.0 // indirect
 	github.com/sashamelentyev/usestdlibvars v1.29.0 // indirect

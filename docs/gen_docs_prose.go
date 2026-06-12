@@ -332,16 +332,9 @@ The Kubernetes version is set at the top level (` + bt + `spec.cluster.kubernete
 
 - ` + bt + `kubernetesVersion` + bt + ` – Pin the Kubernetes version (e.g. ` + bt + `v1.32.0` + bt + `). When unset, ` + bt + `cluster update` + bt + ` keeps the version already running (no unrequested upgrade) and new clusters default to one compatible with the pinned ` + bt + `talos.version` + bt + `
 
-**Hetzner options (` + bt + `spec.provider.hetzner` + bt + `):**
+**Provider options (` + bt + `spec.provider` + bt + `):** infrastructure provider options (Hetzner, Omni, AWS, Kubernetes) are documented in the generated [spec.provider (ProviderSpec)](#specprovider-providerspec) sections below.
 
-- ` + bt + `controlPlaneServerType` + bt + ` – Server type for control-plane nodes (default: ` + bt + `cx23` + bt + `)
-- ` + bt + `workerServerType` + bt + ` – Server type for worker nodes (default: ` + bt + `cx23` + bt + `)
-- ` + bt + `location` + bt + ` – Datacenter location: ` + bt + `fsn1` + bt + `, ` + bt + `nbg1` + bt + `, ` + bt + `hel1` + bt + ` (default: ` + bt + `fsn1` + bt + `)
-- ` + bt + `networkName` + bt + ` – Private network name (default: ` + bt + `<cluster>-network` + bt + `)
-- ` + bt + `networkCidr` + bt + ` – Network CIDR block (default: ` + bt + `10.0.0.0/16` + bt + `)
-- ` + bt + `sshKeyName` + bt + ` – SSH key name for server access (optional)
-- ` + bt + `tokenEnvVar` + bt + ` – Environment variable for API token (default: ` + bt + `HCLOUD_TOKEN` + bt + `)
-- ` + bt + `fallbackLocations` + bt + ` – Alternative locations to try when the primary is at capacity (default: ` + bt + `nbg1` + bt + `, ` + bt + `hel1` + bt + `)
+**Autoscaler options (` + bt + `spec.cluster.autoscaler` + bt + `):** pod and node autoscaling options are documented in the generated [spec.cluster.autoscaler (AutoscalerConfig)](#specclusterautoscaler-autoscalerconfig) sections below.
 
 **Vanilla options (` + bt + `spec.cluster.vanilla` + bt + `):**
 

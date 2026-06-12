@@ -1,9 +1,4 @@
-package v1alpha1 //nolint:dupl // enum types follow a consistent pattern by design
-
-import (
-	"fmt"
-	"strings"
-)
+package v1alpha1
 
 // CSI defines the CSI options for a KSail cluster.
 type CSI string
@@ -17,18 +12,14 @@ const (
 	CSIDisabled CSI = "Disabled"
 )
 
+// ValidCSIs returns supported CSI values.
+func ValidCSIs() []CSI {
+	return []CSI{CSIDefault, CSIEnabled, CSIDisabled}
+}
+
 // Set for CSI (pflag.Value interface).
 func (c *CSI) Set(value string) error {
-	for _, csi := range ValidCSIs() {
-		if strings.EqualFold(value, string(csi)) {
-			*c = csi
-
-			return nil
-		}
-	}
-
-	return fmt.Errorf("%w: %s (valid options: %s, %s, %s)",
-		ErrInvalidCSI, value, CSIDefault, CSIEnabled, CSIDisabled)
+	return setEnum(c, value, ValidCSIs(), ErrInvalidCSI)
 }
 
 // String returns the string representation of the CSI.
@@ -48,21 +39,5 @@ func (c *CSI) Default() any {
 
 // ValidValues returns all valid CSI values as strings.
 func (c *CSI) ValidValues() []string {
-	return []string{string(CSIDefault), string(CSIEnabled), string(CSIDisabled)}
-}
-
-// EffectiveValue resolves Default to its concrete meaning for the given
-// distribution × provider combination. Enabled and Disabled pass through
-// unchanged. For distributions that bundle a CSI driver (e.g. K3s),
-// Default resolves to Enabled; otherwise it resolves to Disabled.
-func (c *CSI) EffectiveValue(distribution Distribution, provider Provider) CSI {
-	if *c != CSIDefault && *c != "" {
-		return *c
-	}
-
-	if distribution.ProvidesCSIByDefault(provider) {
-		return CSIEnabled
-	}
-
-	return CSIDisabled
+	return validValueStrings(ValidCSIs())
 }

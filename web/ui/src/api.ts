@@ -55,6 +55,27 @@ export interface ComponentMeta {
   default: string;
 }
 
+// ResourceKindMeta describes one entry of the backend's resource-kind allowlist, served in
+// ClusterMeta.resourceKinds and derived from the Go allowlist + predicates (resourceKindTable() and
+// friends in pkg/operator/api/resources.go). The SPA builds the workload browser's kind selector and
+// action gates from these flags instead of hand-mirroring the Go tables.
+export interface ResourceKindMeta {
+  kind: string;
+  // namespaced is the kind's scope; cluster-scoped kinds list across the whole cluster.
+  namespaced: boolean;
+  // scalable / restartable / reconcilable gate the scale, rollout-restart, and GitOps-reconcile
+  // actions for the kind.
+  scalable: boolean;
+  restartable: boolean;
+  reconcilable: boolean;
+  // deletable is false for the cluster-scoped kinds the backend refuses to delete from the workload
+  // browser (high blast radius — cluster scope is the deny rule).
+  deletable: boolean;
+  // browsable is false for the metrics kinds (NodeMetrics/PodMetrics): allowlisted for the Overview's
+  // usage monitoring, but deliberately hidden from the kind selector.
+  browsable: boolean;
+}
+
 // ClusterMeta is the static cluster-configuration metadata served by /api/v1/meta: the single
 // runtime source of truth for the distribution list, the distribution→provider matrix, and the
 // component option lists. The SPA renders its forms from this instead of hard-coding them.
@@ -62,6 +83,10 @@ export interface ClusterMeta {
   distributions: string[];
   providers: Record<string, string[]>;
   components: ComponentMeta[];
+  // resourceKinds is the workload browser's kind allowlist with per-kind verb flags. Optional on the
+  // wire: absent against an older backend, in which case the SPA falls back to the hand-maintained
+  // constants below (RESOURCE_KINDS and friends) — see lib/meta.ts resourceKindLists.
+  resourceKinds?: ResourceKindMeta[];
 }
 
 export interface ObjectMeta {
@@ -337,8 +362,12 @@ export interface K8sList {
   items?: K8sObject[];
 }
 
-// RESOURCE_KINDS mirrors the backend's curated allowlist (api.ResourceKindNames). The backend rejects
-// anything outside its own allowlist regardless, so this list only drives the kind selector.
+// RESOURCE_KINDS is the older-backend fallback for the workload browser's kind selector. Backends
+// that serve resourceKinds in /api/v1/meta are the source of truth (derived from the Go allowlist —
+// resourceKindTable() in pkg/operator/api/resources.go); this hand-maintained mirror covers backends
+// that predate the field and is retained permanently for that reason (see lib/meta.ts
+// resourceKindLists). The backend rejects anything outside its own allowlist regardless, so this
+// list only drives the kind selector.
 export const RESOURCE_KINDS = [
   "Pod",
   "Deployment",
@@ -382,11 +411,15 @@ export function listResources(
 // SCALABLE_KINDS / RESTARTABLE_KINDS mirror the backend predicates (ResourceKindScalable /
 // ResourceKindRestartable); the backend rejects unsupported kinds regardless.
 // RECONCILABLE_KINDS mirrors ResourceKindReconcilable — the GitOps CRs that support a reconcile.
+// Like RESOURCE_KINDS, these are permanent older-backend fallbacks: current backends serve the same
+// membership via /api/v1/meta's resourceKinds flags (see lib/meta.ts resourceKindLists).
 export const RECONCILABLE_KINDS = ["Kustomization", "HelmRelease", "GitRepository", "OCIRepository", "Application"];
 export const SCALABLE_KINDS = ["Deployment", "StatefulSet", "ReplicaSet"];
 export const RESTARTABLE_KINDS = ["Deployment", "StatefulSet", "DaemonSet"];
 // CLUSTER_SCOPED_KINDS are not deletable from the workload browser — the backend rejects a delete of
 // these high-blast-radius cluster-scoped kinds, so the SPA hides the Delete affordance for them.
+// (Cluster scope IS the backend's deny rule, so the name states the rule.) Fallback like the above:
+// current backends carry the same rule as resourceKinds[].deletable === false.
 export const CLUSTER_SCOPED_KINDS = ["Node", "Namespace"];
 
 // downloadKubeconfig fetches the cluster's portable kubeconfig and triggers a browser download. It

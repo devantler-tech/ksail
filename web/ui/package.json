@@ -6,7 +6,7 @@
   "description": "Web UI for the KSail Kubernetes operator.",
   "scripts": {
     "dev": "vite",
-    "gen:types": "json2ts -i ../../schemas/ksail-config.schema.json -o src/generated/ksail-config.ts",
+    "gen:types": "node scripts/gen-types.mjs",
     "build": "npm run gen:types && tsc && vite build",
     "preview": "vite preview",
     "lint": "npm run gen:types && tsc --noEmit"

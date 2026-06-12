@@ -1,10 +1,5 @@
 package v1alpha1
 
-import (
-	"fmt"
-	"strings"
-)
-
 // PodAutoscalerVertical defines whether Vertical Pod Autoscaling (VPA) is enabled.
 type PodAutoscalerVertical string
 
@@ -15,23 +10,14 @@ const (
 	PodAutoscalerVerticalDisabled PodAutoscalerVertical = "Disabled"
 )
 
+// ValidPodAutoscalerVerticals returns supported PodAutoscalerVertical values.
+func ValidPodAutoscalerVerticals() []PodAutoscalerVertical {
+	return []PodAutoscalerVertical{PodAutoscalerVerticalEnabled, PodAutoscalerVerticalDisabled}
+}
+
 // Set for PodAutoscalerVertical (pflag.Value interface).
 func (p *PodAutoscalerVertical) Set(value string) error {
-	for _, v := range ValidPodAutoscalerVerticals() {
-		if strings.EqualFold(value, string(v)) {
-			*p = v
-
-			return nil
-		}
-	}
-
-	return fmt.Errorf(
-		"%w: %s (valid options: %s, %s)",
-		ErrInvalidPodAutoscalerVertical,
-		value,
-		PodAutoscalerVerticalEnabled,
-		PodAutoscalerVerticalDisabled,
-	)
+	return setEnum(p, value, ValidPodAutoscalerVerticals(), ErrInvalidPodAutoscalerVertical)
 }
 
 // String returns the string representation of the PodAutoscalerVertical.
@@ -51,8 +37,5 @@ func (p *PodAutoscalerVertical) Default() any {
 
 // ValidValues returns all valid PodAutoscalerVertical values as strings.
 func (p *PodAutoscalerVertical) ValidValues() []string {
-	return []string{
-		string(PodAutoscalerVerticalEnabled),
-		string(PodAutoscalerVerticalDisabled),
-	}
+	return validValueStrings(ValidPodAutoscalerVerticals())
 }

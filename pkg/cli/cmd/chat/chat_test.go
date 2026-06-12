@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	clicmd "github.com/devantler-tech/ksail/v7/pkg/cli/cmd"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/chat"
 	chatui "github.com/devantler-tech/ksail/v7/pkg/cli/ui/chat"
 	"github.com/devantler-tech/ksail/v7/pkg/toolgen"
@@ -20,6 +21,18 @@ import (
 const (
 	successResult = "success"
 	failureResult = "failure"
+)
+
+// Shared literals for the confirm-flag injection tests.
+const (
+	forceFlagName       = "force"
+	clusterWriteTool    = "cluster_write"
+	clusterCommandParam = "command"
+	deleteSubcommand    = "delete"
+	initSubcommand      = "init"
+	booleanTypeName     = "boolean"
+	testClusterName     = "my-cluster"
+	clusterNameArgKey   = "name"
 )
 
 var (
@@ -118,52 +131,34 @@ func createTestWriteTool(toolName string, toolCalled *bool) copilot.Tool {
 	}
 }
 
-// createToolMetadata creates metadata for a tool with permission requirements.
-func createToolMetadata(
+// createToolMetadataWithConfirmFlag creates metadata for a tool whose force
+// flag carries the ai.toolgen.confirm-flag annotation.
+func createToolMetadataWithConfirmFlag(
 	toolName string,
 ) map[string]toolgen.ToolDefinition {
 	return map[string]toolgen.ToolDefinition{
 		toolName: {
 			Name:               toolName,
 			RequiresPermission: true,
+			ConfirmFlags:       []string{forceFlagName},
 		},
 	}
 }
 
-// createToolMetadataWithForce creates metadata for a tool with permission and force support.
-func createToolMetadataWithForce(
+// wrapAndInvokeTool wraps a stub tool with the confirm-flag injection wrapper,
+// invokes it with the given arguments, and returns the arguments the handler received.
+func wrapAndInvokeTool(
+	t *testing.T,
 	toolName string,
-) map[string]toolgen.ToolDefinition {
-	return map[string]toolgen.ToolDefinition{
-		toolName: {
-			Name:               toolName,
-			RequiresPermission: true,
-			Parameters: map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"force": map[string]any{
-						"type":        "boolean",
-						"description": "Skip confirmation prompts",
-					},
-					"name": map[string]any{
-						"type":        "string",
-						"description": "Cluster name",
-					},
-				},
-			},
-		},
-	}
-}
-
-// TestForceInjection verifies that the force flag is injected into tool arguments
-// when a tool's schema defines a force parameter.
-func TestForceInjection(t *testing.T) {
-	t.Parallel()
+	metadata map[string]toolgen.ToolDefinition,
+	arguments map[string]any,
+) map[string]any {
+	t.Helper()
 
 	var receivedArgs map[string]any
 
-	writeTool := copilot.Tool{
-		Name:        "test_force_tool",
+	stubTool := copilot.Tool{
+		Name:        toolName,
 		Description: "A write tool",
 		Handler: func(inv copilot.ToolInvocation) (copilot.ToolResult, error) {
 			args, isMap := inv.Arguments.(map[string]any)
@@ -178,26 +173,38 @@ func TestForceInjection(t *testing.T) {
 		},
 	}
 
-	metadata := createToolMetadataWithForce("test_force_tool")
-
 	wrappedTools := chat.WrapToolsWithForceInjection(
-		[]copilot.Tool{writeTool}, metadata,
+		[]copilot.Tool{stubTool}, metadata,
 	)
 
 	_, err := wrappedTools[0].Handler(copilot.ToolInvocation{
-		ToolCallID: "test_force",
-		ToolName:   "test_force_tool",
-		Arguments:  map[string]any{"name": "my-cluster"},
+		ToolCallID: toolName,
+		ToolName:   toolName,
+		Arguments:  arguments,
 	})
 	if err != nil {
 		t.Errorf("Unexpected error: %v", err)
 	}
 
+	return receivedArgs
+}
+
+// TestForceInjection verifies that the force flag is injected into tool arguments
+// when the tool's force flag carries the confirm-flag annotation.
+func TestForceInjection(t *testing.T) {
+	t.Parallel()
+
+	metadata := createToolMetadataWithConfirmFlag("test_force_tool")
+
+	receivedArgs := wrapAndInvokeTool(
+		t, "test_force_tool", metadata, map[string]any{clusterNameArgKey: testClusterName},
+	)
+
 	if receivedArgs == nil {
 		t.Fatal("Expected arguments to be passed to handler")
 	}
 
-	forceVal, forceExists := receivedArgs["force"]
+	forceVal, forceExists := receivedArgs[forceFlagName]
 	if !forceExists {
 		t.Error("Expected 'force' argument to be injected")
 	}
@@ -208,64 +215,155 @@ func TestForceInjection(t *testing.T) {
 	}
 
 	// Verify original args are preserved
-	nameVal, nameExists := receivedArgs["name"]
-	if !nameExists || nameVal != "my-cluster" {
+	nameVal, nameExists := receivedArgs[clusterNameArgKey]
+	if !nameExists || nameVal != testClusterName {
 		t.Errorf("Expected original 'name' arg preserved, got %v", nameVal)
 	}
 }
 
-// TestForceNotInjectedWithoutSchemaSupport verifies that the force flag is NOT injected
-// when the tool's parameter schema does not define a force property.
-func TestForceNotInjectedWithoutSchemaSupport(t *testing.T) {
+// TestForceNotInjectedWithoutConfirmFlagAnnotation verifies that the force flag
+// is NOT injected when the tool defines no confirm-annotated flags — even when
+// its parameter schema happens to contain a force-named property (the old
+// name-based detection that caused kubectl --force collisions).
+func TestForceNotInjectedWithoutConfirmFlagAnnotation(t *testing.T) {
 	t.Parallel()
 
-	var receivedArgs map[string]any
-
-	writeTool := copilot.Tool{
-		Name:        "test_no_force_tool",
-		Description: "A write tool without force support",
-		Handler: func(inv copilot.ToolInvocation) (copilot.ToolResult, error) {
-			args, isMap := inv.Arguments.(map[string]any)
-			if isMap {
-				receivedArgs = args
-			}
-
-			return copilot.ToolResult{
-				TextResultForLLM: "Done",
-				ResultType:       successResult,
-			}, nil
+	// Metadata WITHOUT confirm flags but WITH a force property in the schema.
+	metadata := map[string]toolgen.ToolDefinition{
+		"test_no_force_tool": {
+			Name:               "test_no_force_tool",
+			RequiresPermission: true,
+			Parameters: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					forceFlagName: map[string]any{
+						"type":        booleanTypeName,
+						"description": "If true, immediately remove resources (kubectl semantics)",
+					},
+				},
+			},
 		},
 	}
 
-	// Use metadata WITHOUT force in schema
-	metadata := createToolMetadata("test_no_force_tool")
-
-	wrappedTools := chat.WrapToolsWithForceInjection(
-		[]copilot.Tool{writeTool}, metadata,
+	receivedArgs := wrapAndInvokeTool(
+		t, "test_no_force_tool", metadata, map[string]any{clusterNameArgKey: testClusterName},
 	)
-
-	_, err := wrappedTools[0].Handler(copilot.ToolInvocation{
-		ToolCallID: "test_no_force",
-		ToolName:   "test_no_force_tool",
-		Arguments:  map[string]any{"name": "my-cluster"},
-	})
-	if err != nil {
-		t.Errorf("Unexpected error: %v", err)
-	}
 
 	if receivedArgs == nil {
 		t.Fatal("Expected arguments to be passed to handler")
 	}
 
 	// Verify force was NOT injected
-	if _, forceExists := receivedArgs["force"]; forceExists {
-		t.Error("Expected 'force' NOT to be injected for tool without force in schema")
+	if _, forceExists := receivedArgs[forceFlagName]; forceExists {
+		t.Error("Expected 'force' NOT to be injected without the confirm-flag annotation")
 	}
 
 	// Verify original args are preserved
-	nameVal, nameExists := receivedArgs["name"]
-	if !nameExists || nameVal != "my-cluster" {
+	nameVal, nameExists := receivedArgs[clusterNameArgKey]
+	if !nameExists || nameVal != testClusterName {
 		t.Errorf("Expected original 'name' arg preserved, got %v", nameVal)
+	}
+}
+
+// confirmFlagInjectionCases lists the regression expectations for
+// annotation-based confirm-flag injection against the real tool surface:
+// chat-driven workload apply/delete must never receive kubectl's destructive
+// --force, init/create must not receive force=overwrite, while the
+// prompt-skipping force flags keep being injected.
+func confirmFlagInjectionCases() []struct {
+	name        string
+	toolName    string
+	args        map[string]any
+	expectForce bool
+} {
+	return []struct {
+		name        string
+		toolName    string
+		args        map[string]any
+		expectForce bool
+	}{
+		{
+			name:     "workload_write delete gets no kubectl force",
+			toolName: "workload_write",
+			args:     map[string]any{"workload_command": deleteSubcommand},
+		},
+		{
+			name:     "workload_write apply gets no kubectl force",
+			toolName: "workload_write",
+			args:     map[string]any{"workload_command": "apply"},
+		},
+		{
+			name:        "cluster_write update keeps confirmation force",
+			toolName:    clusterWriteTool,
+			args:        map[string]any{clusterCommandParam: "update"},
+			expectForce: true,
+		},
+		{
+			name:        "cluster_write delete keeps confirmation force",
+			toolName:    clusterWriteTool,
+			args:        map[string]any{clusterCommandParam: deleteSubcommand},
+			expectForce: true,
+		},
+		{
+			name:     "cluster_write init gets no overwrite force",
+			toolName: clusterWriteTool,
+			args:     map[string]any{clusterCommandParam: initSubcommand},
+		},
+		{
+			name:        "tenant_write delete keeps confirmation force",
+			toolName:    "tenant_write",
+			args:        map[string]any{"tenant_command": deleteSubcommand},
+			expectForce: true,
+		},
+		{
+			name:     "tenant_write create gets no overwrite force",
+			toolName: "tenant_write",
+			args:     map[string]any{"tenant_command": "create"},
+		},
+		{
+			name:        "cipher_write rotate keeps confirmation force",
+			toolName:    "cipher_write",
+			args:        map[string]any{"cipher_operation": "rotate"},
+			expectForce: true,
+		},
+	}
+}
+
+// TestConfirmFlagInjection_RealToolSurface is the end-to-end regression gate
+// for annotation-based confirm-flag injection (refactoring item 1.6a), wired
+// through the real root command's generated tool metadata.
+func TestConfirmFlagInjection_RealToolSurface(t *testing.T) {
+	t.Parallel()
+
+	root := clicmd.NewRootCmd("test", "abc123", "2024-01-01")
+	toolDefs := toolgen.GenerateTools(root, toolgen.DefaultOptions())
+
+	metadata := make(map[string]toolgen.ToolDefinition, len(toolDefs))
+	for _, def := range toolDefs {
+		metadata[def.Name] = def
+	}
+
+	for _, testCase := range confirmFlagInjectionCases() {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			if _, exists := metadata[testCase.toolName]; !exists {
+				t.Fatalf("tool %q not found in generated tool surface", testCase.toolName)
+			}
+
+			receivedArgs := wrapAndInvokeTool(t, testCase.toolName, metadata, testCase.args)
+			if receivedArgs == nil {
+				t.Fatal("Expected arguments to be passed to handler")
+			}
+
+			_, hasForce := receivedArgs[forceFlagName]
+			if hasForce != testCase.expectForce {
+				t.Errorf(
+					"force injection for %s %v: got %v, want %v",
+					testCase.toolName, testCase.args, hasForce, testCase.expectForce,
+				)
+			}
+		})
 	}
 }
 

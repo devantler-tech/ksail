@@ -17,7 +17,9 @@
       "properties": {
         "name": {
           "type": "string",
-          "description": "Cluster name (DNS-1123 compliant)"
+          "maxLength": 63,
+          "pattern": "^[a-z][a-z0-9-]*[a-z0-9]$|^[a-z]$",
+          "description": "Cluster name (DNS-1123 compliant: lowercase letters, numbers, and hyphens; must start with a letter and must not end with a hyphen)."
         }
       },
       "additionalProperties": false,
@@ -30,25 +32,165 @@
           "description": "Editor command for interactive workflows (e.g. code --wait)"
         },
         "cluster": {
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "distribution": {
+                    "const": "Vanilla"
+                  }
+                },
+                "required": [
+                  "distribution"
+                ]
+              },
+              "then": {
+                "properties": {
+                  "provider": {
+                    "enum": [
+                      "Docker",
+                      "Kubernetes"
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "distribution": {
+                    "const": "K3s"
+                  }
+                },
+                "required": [
+                  "distribution"
+                ]
+              },
+              "then": {
+                "properties": {
+                  "provider": {
+                    "enum": [
+                      "Docker",
+                      "Kubernetes"
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "distribution": {
+                    "const": "Talos"
+                  }
+                },
+                "required": [
+                  "distribution"
+                ]
+              },
+              "then": {
+                "properties": {
+                  "provider": {
+                    "enum": [
+                      "Docker",
+                      "Hetzner",
+                      "Omni",
+                      "Kubernetes"
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "distribution": {
+                    "const": "VCluster"
+                  }
+                },
+                "required": [
+                  "distribution"
+                ]
+              },
+              "then": {
+                "properties": {
+                  "provider": {
+                    "enum": [
+                      "Docker",
+                      "Kubernetes"
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "distribution": {
+                    "const": "KWOK"
+                  }
+                },
+                "required": [
+                  "distribution"
+                ]
+              },
+              "then": {
+                "properties": {
+                  "provider": {
+                    "enum": [
+                      "Docker",
+                      "Kubernetes"
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "distribution": {
+                    "const": "EKS"
+                  }
+                },
+                "required": [
+                  "distribution"
+                ]
+              },
+              "then": {
+                "properties": {
+                  "provider": {
+                    "enum": [
+                      "AWS"
+                    ]
+                  }
+                }
+              }
+            }
+          ],
           "properties": {
             "distributionConfig": {
-              "type": "string"
+              "type": "string",
+              "description": "DistributionConfig is the path to the distribution's own configuration file\n(kind.yaml, k3d.yaml, vcluster.yaml, eks.yaml, or the talos directory).\nWhen empty, KSail uses the distribution's default file name."
             },
             "connection": {
               "properties": {
                 "kubeconfig": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "Kubeconfig is the path to the kubeconfig file KSail reads and writes.\nDefaults to \"~/.kube/config\"."
                 },
                 "context": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "Context is the kubeconfig context for the cluster. When empty, KSail derives\nit from the distribution and cluster name (e.g. \"kind-kind\")."
                 },
                 "timeout": {
                   "type": "string",
-                  "pattern": "^[0-9]+(ns|us|µs|ms|s|m|h)$"
+                  "pattern": "^[0-9]+(ns|us|µs|ms|s|m|h)$",
+                  "description": "Timeout is the maximum time KSail waits for cluster operations to complete\n(e.g. \"5m\")."
                 }
               },
               "additionalProperties": false,
-              "type": "object"
+              "type": "object",
+              "description": "Connection defines how KSail connects to the cluster: the kubeconfig path,\ncontext name, and operation timeout."
             },
             "distribution": {
               "type": "string",
@@ -59,7 +201,8 @@
                 "VCluster",
                 "KWOK",
                 "EKS"
-              ]
+              ],
+              "description": "Distribution selects the Kubernetes distribution to provision: Vanilla (Kind),\nK3s (K3d), Talos, VCluster, KWOK (simulated), or EKS (AWS)."
             },
             "provider": {
               "type": "string",
@@ -69,7 +212,8 @@
                 "Omni",
                 "AWS",
                 "Kubernetes"
-              ]
+              ],
+              "description": "Provider selects the infrastructure that runs the cluster nodes: Docker,\nHetzner, Omni, AWS, or Kubernetes (nested clusters inside an existing\ncluster). Each distribution supports a subset of providers; when empty,\nKSail uses the distribution's default provider."
             },
             "cni": {
               "type": "string",
@@ -77,7 +221,8 @@
                 "Default",
                 "Cilium",
                 "Calico"
-              ]
+              ],
+              "description": "CNI selects the Container Network Interface plugin. Default keeps the\ndistribution's built-in CNI; Cilium or Calico install that CNI instead."
             },
             "csi": {
               "type": "string",
@@ -85,7 +230,8 @@
                 "Default",
                 "Enabled",
                 "Disabled"
-              ]
+              ],
+              "description": "CSI controls Container Storage Interface support. Default keeps the\ndistribution's behavior; Enabled installs a CSI driver\n(local-path-provisioner, or Hetzner CSI on Hetzner); Disabled installs none."
             },
             "cdi": {
               "type": "string",
@@ -93,7 +239,8 @@
                 "Default",
                 "Enabled",
                 "Disabled"
-              ]
+              ],
+              "description": "CDI controls Container Device Interface support in the container runtime\n(Default, Enabled, or Disabled)."
             },
             "metricsServer": {
               "type": "string",
@@ -101,7 +248,8 @@
                 "Default",
                 "Enabled",
                 "Disabled"
-              ]
+              ],
+              "description": "MetricsServer controls metrics-server installation. Default keeps the\ndistribution's behavior; Enabled or Disabled override it."
             },
             "loadBalancer": {
               "type": "string",
@@ -109,14 +257,16 @@
                 "Default",
                 "Enabled",
                 "Disabled"
-              ]
+              ],
+              "description": "LoadBalancer controls load-balancer support. Default keeps the\ndistribution and provider behavior; Enabled or Disabled override it."
             },
             "certManager": {
               "type": "string",
               "enum": [
                 "Enabled",
                 "Disabled"
-              ]
+              ],
+              "description": "CertManager controls whether cert-manager is installed (Enabled or Disabled)."
             },
             "policyEngine": {
               "type": "string",
@@ -124,16 +274,19 @@
                 "None",
                 "Kyverno",
                 "Gatekeeper"
-              ]
+              ],
+              "description": "PolicyEngine selects the policy engine to install: None, Kyverno, or Gatekeeper."
             },
             "localRegistry": {
               "properties": {
                 "registry": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "Registry is the full registry specification in the format: [user:pass@]host[:port][/path]\nWhen populated, enables registry integration for GitOps workflows.\nExamples:\n  - \"localhost:5050\" (local Docker registry)\n  - \"ghcr.io/myorg/myrepo\" (GitHub Container Registry with path)\n  - \"${USER}:${PASS}@ghcr.io:443/myorg\" (with credentials from env vars)\nCredentials support ${ENV_VAR} placeholders for environment variable expansion."
                 }
               },
               "additionalProperties": false,
-              "type": "object"
+              "type": "object",
+              "description": "LocalRegistry configures the host-local OCI registry (or an external\nregistry for cloud providers) used by GitOps workflows."
             },
             "gitOpsEngine": {
               "type": "string",
@@ -141,43 +294,52 @@
                 "None",
                 "Flux",
                 "ArgoCD"
-              ]
+              ],
+              "description": "GitOpsEngine selects the GitOps engine KSail bootstraps: None, Flux, or ArgoCD."
             },
             "sops": {
               "properties": {
                 "ageKeyEnvVar": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "Deprecated: Use Env.Var instead. AgeKeyEnvVar is the name of the environment\nvariable containing the Age private key. Kept for backward compatibility.\nWhen Env.Var is set, it takes priority over AgeKeyEnvVar."
                 },
                 "enabled": {
-                  "type": "boolean"
+                  "type": "boolean",
+                  "description": "Enabled controls whether the SOPS Age secret is created.\nnil (default) = auto-detect (create if key is found via env var or key file).\ntrue = require key (error if not found).\nfalse = disable entirely (skip secret creation)."
                 },
                 "env": {
                   "properties": {
                     "var": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Var is the name of the environment variable containing the Age private key.\nWhen set, takes priority over SOPS.AgeKeyEnvVar.\nLeave empty to fall back to AgeKeyEnvVar (default: \"SOPS_AGE_KEY\")."
                     }
                   },
                   "additionalProperties": false,
-                  "type": "object"
+                  "type": "object",
+                  "description": "Env configures the environment variable source for the Age private key."
                 },
                 "extract": {
                   "properties": {
                     "file": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "File is the path to the Age key file (absolute or relative to the working directory).\nDefaults to the OS-specific SOPS age key path when empty."
                     },
                     "publicKeys": {
                       "items": {
                         "type": "string"
                       },
-                      "type": "array"
+                      "type": "array",
+                      "description": "PublicKeys is a list of Age public keys (age1...) used to select which\nprivate keys to include in the SOPS secret. For each private key in the\nkey file, its public key is derived and compared against this list.\nOnly matching private keys are included.\nWhen empty (default), all private keys from the file are included."
                     }
                   },
                   "additionalProperties": false,
-                  "type": "object"
+                  "type": "object",
+                  "description": "Extract configures extraction of Age private keys from a key file."
                 }
               },
               "additionalProperties": false,
-              "type": "object"
+              "type": "object",
+              "description": "SOPS configures automatic creation of the SOPS Age secret used to decrypt\nencrypted manifests in the cluster."
             },
             "nodeAutoscaling": {
               "type": "string",
@@ -185,7 +347,8 @@
                 "Enabled",
                 "Disabled"
               ],
-              "description": "Deprecated. Use autoscaler.node.enabled instead. Do not set both nodeAutoscaling and autoscaler."
+              "description": "Deprecated. Use autoscaler.node.enabled instead. Do not set both nodeAutoscaling and autoscaler.",
+              "deprecated": true
             },
             "autoscaler": {
               "properties": {
@@ -196,23 +359,27 @@
                       "enum": [
                         "Enabled",
                         "Disabled"
-                      ]
+                      ],
+                      "description": "Horizontal controls Horizontal Pod Autoscaler (HPA) support."
                     },
                     "vertical": {
                       "type": "string",
                       "enum": [
                         "Enabled",
                         "Disabled"
-                      ]
+                      ],
+                      "description": "Vertical controls Vertical Pod Autoscaler (VPA) support."
                     }
                   },
                   "additionalProperties": false,
-                  "type": "object"
+                  "type": "object",
+                  "description": "Pod configures pod-level autoscaling (horizontal and vertical)."
                 },
                 "node": {
                   "properties": {
                     "enabled": {
-                      "type": "boolean"
+                      "type": "boolean",
+                      "description": "Enabled controls whether the Cluster Autoscaler is installed to manage\nworker node counts dynamically."
                     },
                     "pools": {
                       "items": {
@@ -221,23 +388,28 @@
                             "type": "string",
                             "maxLength": 63,
                             "minLength": 1,
-                            "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+                            "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$",
+                            "description": "Name is the unique identifier for this node pool (DNS-1123 label)."
                           },
                           "serverType": {
                             "type": "string",
-                            "minLength": 1
+                            "minLength": 1,
+                            "description": "ServerType is the Hetzner server type for nodes in this pool (e.g. \"cx23\", \"cax11\")."
                           },
                           "location": {
                             "type": "string",
-                            "minLength": 1
+                            "minLength": 1,
+                            "description": "Location is the Hetzner datacenter location for this pool (e.g. \"fsn1\", \"nbg1\")."
                           },
                           "min": {
                             "type": "integer",
-                            "minimum": 0
+                            "minimum": 0,
+                            "description": "Min is the minimum number of nodes in this pool."
                           },
                           "max": {
                             "type": "integer",
-                            "minimum": 0
+                            "minimum": 0,
+                            "description": "Max is the maximum number of nodes in this pool."
                           },
                           "labels": {
                             "additionalProperties": {
@@ -251,10 +423,12 @@
                               "properties": {
                                 "key": {
                                   "type": "string",
-                                  "minLength": 1
+                                  "minLength": 1,
+                                  "description": "Key is the taint key. Must be a valid Kubernetes label key (an optional\nDNS-subdomain prefix followed by a name segment)."
                                 },
                                 "value": {
-                                  "type": "string"
+                                  "type": "string",
+                                  "description": "Value is the optional taint value."
                                 },
                                 "effect": {
                                   "type": "string",
@@ -262,20 +436,24 @@
                                     "NoSchedule",
                                     "PreferNoSchedule",
                                     "NoExecute"
-                                  ]
+                                  ],
+                                  "description": "Effect is the scheduling effect: NoSchedule, PreferNoSchedule, or NoExecute."
                                 }
                               },
                               "additionalProperties": false,
-                              "type": "object"
+                              "type": "object",
+                              "description": "NodePoolTaint defines a Kubernetes node taint applied to every node in an autoscaler node pool."
                             },
                             "type": "array",
                             "description": "Kubernetes node taints applied to every node in this pool (via Talos machine.nodeTaints and the autoscaler scale-from-zero template)."
                           }
                         },
                         "additionalProperties": false,
-                        "type": "object"
+                        "type": "object",
+                        "description": "NodePool defines a Hetzner node pool managed by the cluster autoscaler."
                       },
-                      "type": "array"
+                      "type": "array",
+                      "description": "Pools defines the node pools the Cluster Autoscaler may scale (Hetzner only)."
                     },
                     "maxNodesTotal": {
                       "type": "integer",
@@ -283,30 +461,14 @@
                       "description": "Maximum total number of nodes in the cluster (control-planes + workers + autoscaler nodes). Passed verbatim to the cluster-autoscaler --max-nodes-total flag — the autoscaler evaluates it against the count of ALL nodes so this is the whole-cluster ceiling and not an autoscaler-only budget. Set to 0 to disable the global cap; growth is then bounded only by the per-pool max values and serverLimit. Should be \u003c= serverLimit"
                     },
                     "expander": {
-                      "oneOf": [
-                        {
-                          "type": "string",
-                          "enum": [
-                            "Price",
-                            "LeastWaste",
-                            "LeastNodes",
-                            "Random"
-                          ]
-                        },
-                        {
-                          "items": {
-                            "type": "string",
-                            "enum": [
-                              "Price",
-                              "LeastWaste",
-                              "LeastNodes",
-                              "Random"
-                            ]
-                          },
-                          "type": "array"
-                        }
+                      "type": "string",
+                      "enum": [
+                        "Price",
+                        "LeastWaste",
+                        "LeastNodes",
+                        "Random"
                       ],
-                      "description": "Node expander strategy for the cluster autoscaler. Accepts either a single value (e.g. LeastWaste) or an ordered priority list (e.g. [LeastNodes"
+                      "description": "Expander selects the Cluster Autoscaler expander strategy used to pick\nwhich pool to grow: Price, LeastWaste, LeastNodes, or Random."
                     },
                     "scaleDownUnneededTime": {
                       "type": "string",
@@ -314,7 +476,8 @@
                     }
                   },
                   "additionalProperties": false,
-                  "type": "object"
+                  "type": "object",
+                  "description": "Node configures node-level autoscaling via the Cluster Autoscaler."
                 }
               },
               "additionalProperties": false,
@@ -384,50 +547,61 @@
             "vanilla": {
               "properties": {
                 "mirrorsDir": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "MirrorsDir is the directory for containerd host mirror configuration.\nDefaults to \"kind/mirrors\" if not specified."
                 }
               },
               "additionalProperties": false,
-              "type": "object"
+              "type": "object",
+              "description": "Vanilla holds options specific to the Vanilla (Kind) distribution."
             },
             "talos": {
               "properties": {
                 "version": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "Version pins the Talos OS (distribution) version used for cluster creation and\nupgrades. When set, KSail uses this version as the Docker container image tag\nand `cluster update` reconciles the cluster toward it (skipping downgrades).\nAccepts values with or without the \"v\" prefix (e.g., \"v1.11.2\" or \"1.11.2\").\nWhen empty, `cluster create` uses KSail's built-in default version and\n`cluster update` follows the latest stable version available in the OCI\nregistry. Override per invocation with the --distribution-version flag\n(precedence: flag \u003e env \u003e config \u003e default)."
                 },
                 "controlPlanes": {
                   "type": "integer",
                   "minimum": 0,
-                  "description": "DEPRECATED: use spec.cluster.controlPlanes instead"
+                  "description": "DEPRECATED: use spec.cluster.controlPlanes instead",
+                  "deprecated": true
                 },
                 "workers": {
                   "type": "integer",
                   "minimum": 0,
-                  "description": "DEPRECATED: use spec.cluster.workers instead"
+                  "description": "DEPRECATED: use spec.cluster.workers instead",
+                  "deprecated": true
                 },
                 "config": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "Config is the path to the talosconfig file.\nDefaults to \"~/.talos/config\"."
                 },
                 "iso": {
-                  "type": "integer"
+                  "type": "integer",
+                  "description": "ISO is the cloud provider's ISO/image ID for booting Talos Linux.\nOnly used when targeting cloud providers (e.g., Hetzner Cloud).\nFor Hetzner: See https://docs.hetzner.cloud/changelog for available Talos ISOs.\nDefaults to 125127 (Talos Linux 1.12.4 x86). The prior default 122630\n(Talos 1.11.2) was removed from Hetzner on 2026-03-18. For ARM, look up the\nmatching Talos ISO ID in the Hetzner Cloud Console (Images → ISOs).\nWhen SchematicID is set, ISO is ignored in favour of a pre-built snapshot."
                 },
                 "schematicId": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "SchematicID is the Talos factory schematic ID used to build a Hetzner snapshot image.\nWhen set, KSail uploads a Talos OS disk snapshot using this schematic ID and Version\ninstead of booting from the cloud ISO specified in ISO.\nObtain a schematic ID from https://factory.talos.dev.\nOnly used when targeting cloud providers (e.g., Hetzner Cloud)."
                 },
                 "extensions": {
                   "items": {
                     "type": "string"
                   },
-                  "type": "array"
+                  "type": "array",
+                  "description": "Extensions lists Talos Image Factory official system extension names to include in the\nnode image. KSail automatically computes the Image Factory schematic ID from this list\nand sets machine.install.image to factory.talos.dev/installer/{schematicID}:{version},\nwhere {version} is derived from the Talos config bundle's existing install image tag.\nFor Hetzner, the schematic is also used for snapshot building.\nExtension names follow the Image Factory convention (e.g., \"siderolabs/iscsi-tools\").\nThe Image Factory resolves extension versions automatically per Talos release.\nWhen SchematicID is also set, it takes precedence over Extensions."
                 },
                 "extraPortMappings": {
                   "items": {
                     "properties": {
                       "containerPort": {
-                        "type": "integer"
+                        "type": "integer",
+                        "description": "ContainerPort is the port inside the container."
                       },
                       "hostPort": {
-                        "type": "integer"
+                        "type": "integer",
+                        "description": "HostPort is the port on the host. If 0, Docker assigns a random port."
                       },
                       "protocol": {
                         "type": "string",
@@ -435,67 +609,83 @@
                           "TCP",
                           "UDP"
                         ],
+                        "description": "Protocol is the network protocol (TCP or UDP). Defaults to TCP.",
                         "default": "TCP"
                       }
                     },
                     "additionalProperties": false,
-                    "type": "object"
+                    "type": "object",
+                    "description": "PortMapping defines a mapping between a container port and a host port."
                   },
-                  "type": "array"
+                  "type": "array",
+                  "description": "ExtraPortMappings defines additional port mappings from Docker containers to the host.\nOnly used with the Docker provider. Useful on macOS where MetalLB virtual IPs\nare not accessible from the host because Docker runs in a Linux VM.\nPorts are exposed on the first control-plane node (when multiple control-planes are configured)."
                 },
                 "imageVerification": {
                   "type": "string",
                   "enum": [
                     "Enabled",
                     "Disabled"
-                  ]
+                  ],
+                  "description": "ImageVerification enables scaffolding of a Talos ImageVerificationConfig document\nduring cluster init. When Enabled, generates an image-verification.yaml template\nin the Talos patches directory with commented-out examples for keyless (Cosign/OIDC)\nand public key verification rules. Requires Talos 1.13+."
                 },
                 "drainTimeout": {
                   "type": "string",
-                  "pattern": "^[0-9]+(ns|us|µs|ms|s|m|h)$"
+                  "pattern": "^[0-9]+(ns|us|µs|ms|s|m|h)$",
+                  "description": "DrainTimeout is the per-node pod-eviction budget for rolling node drains during\n`cluster update` (rolling reboot and Hetzner server-type rolling-recreate). When\nunset, KSail uses 10m. Increase it for clusters whose stateful workloads need\nlonger to evict gracefully — e.g. Longhorn volume rebuilds or database failovers\ngated by PodDisruptionBudgets. A drain that exceeds this budget aborts the update;\nre-run with --force to delete pods bypassing PodDisruptionBudgets instead.\nOverride per invocation with --drain-timeout. Example: \"15m\"."
                 }
               },
               "additionalProperties": false,
-              "type": "object"
+              "type": "object",
+              "description": "Talos holds options specific to the Talos distribution."
             }
           },
           "additionalProperties": false,
-          "type": "object"
+          "type": "object",
+          "description": "Cluster configures the Kubernetes cluster KSail manages: distribution,\nprovider, components, and connection settings."
         },
         "provider": {
           "properties": {
             "hetzner": {
               "properties": {
                 "controlPlaneServerType": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "ControlPlaneServerType is the Hetzner server type for control-plane nodes.\nExamples: \"cx23\" (x86), \"cax11\" (ARM), \"cpx21\" (AMD). Defaults to \"cx23\"."
                 },
                 "workerServerType": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "WorkerServerType is the Hetzner server type for worker nodes.\nExamples: \"cx23\" (x86), \"cax11\" (ARM), \"cpx21\" (AMD). Defaults to \"cx23\"."
                 },
                 "location": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "Location is the Hetzner datacenter location.\nExamples: \"fsn1\" (Falkenstein), \"nbg1\" (Nuremberg), \"hel1\" (Helsinki).\nDefaults to \"fsn1\"."
                 },
                 "networkName": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "NetworkName is the name of the private network to create or use.\nIf empty, a network named \"\u003ccluster-name\u003e-network\" will be created."
                 },
                 "networkCidr": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "NetworkCIDR is the CIDR block for the private network.\nDefaults to \"10.0.0.0/16\"."
                 },
                 "sshKeyName": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "SSHKeyName is the name of the SSH key to use for server access.\nThe key must already exist in the Hetzner Cloud project.\nIf empty, no SSH key is attached (only Talos API access)."
                 },
                 "tokenEnvVar": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "TokenEnvVar is the environment variable containing the Hetzner API token.\nDefaults to \"HCLOUD_TOKEN\"."
                 },
                 "placementGroupStrategy": {
                   "type": "string",
                   "enum": [
                     "None",
                     "Spread"
-                  ]
+                  ],
+                  "description": "PlacementGroupStrategy controls whether and how placement groups are used.\n\"Spread\" (default) distributes servers across different physical hosts for HA.\n\"None\" disables placement groups, useful when Hetzner resources are constrained.\nNote: Spread groups are limited to 10 servers per datacenter."
                 },
                 "placementGroup": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "PlacementGroup is the name of the placement group for server distribution.\nIf empty, a placement group named \"\u003ccluster-name\u003e-placement\" will be created.\nOnly used when PlacementGroupStrategy is \"Spread\"."
                 },
                 "fallbackLocations": {
                   "items": {
@@ -505,14 +695,16 @@
                   "description": "Alternative datacenter locations to try when server creation in the primary location fails due to resource unavailability. When empty defaults to nbg1 and hel1 (both in the eu-central network zone matching the default fsn1 primary location)."
                 },
                 "placementGroupFallbackToNone": {
-                  "type": "boolean"
+                  "type": "boolean",
+                  "description": "PlacementGroupFallbackToNone allows automatic fallback to no placement group\nwhen spread placement constraints cannot be satisfied (e.g., due to datacenter capacity).\nWhen true and placement fails, retries server creation without a placement group.\nDefaults to false to preserve HA guarantees; set to true for best-effort provisioning."
                 },
                 "ingressFirewall": {
                   "type": "string",
                   "enum": [
                     "Enabled",
                     "Disabled"
-                  ]
+                  ],
+                  "description": "IngressFirewall controls the Talos OS-level ingress firewall configuration.\nWhen Enabled (default), KSail generates NetworkDefaultActionConfig and NetworkRuleConfig\ndocuments as Talos machine config patches, providing defense-in-depth at the node level\nindependent of the Hetzner Cloud Firewall.\nSee: https://www.talos.dev/latest/talos-guides/network/ingress-firewall/"
                 },
                 "serverLimit": {
                   "type": "integer",
@@ -546,108 +738,137 @@
                   "items": {
                     "type": "string"
                   },
-                  "type": "array"
+                  "type": "array",
+                  "description": "AutoscalerNodePoolNames lists the node-group names configured in the\nKubernetes Cluster Autoscaler for this cluster. When non-empty, KSail\ndeletes servers labelled with hcloud/node-group=\u003cname\u003e during cluster\ndeletion so that autoscaler-managed nodes are cleaned up alongside\nKSail-managed nodes."
                 }
               },
               "additionalProperties": false,
-              "type": "object"
+              "type": "object",
+              "description": "Hetzner holds options for the Hetzner Cloud provider."
             },
             "omni": {
               "properties": {
                 "endpoint": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "Endpoint is the Omni API endpoint URL.\nExample: \"https://\u003caccount\u003e.omni.siderolabs.io:443\"."
                 },
                 "endpointEnvVar": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "EndpointEnvVar is the environment variable containing the Omni API endpoint URL.\nWhen set, the value of this environment variable takes precedence over Endpoint.\nDefaults to \"OMNI_ENDPOINT\"."
                 },
                 "serviceAccountKeyEnvVar": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "ServiceAccountKeyEnvVar is the environment variable containing the\nbase64-encoded Omni service account key.\nDefaults to \"OMNI_SERVICE_ACCOUNT_KEY\"."
                 },
                 "talosVersion": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "TalosVersion is the Talos version to use for the cluster in Omni.\nAccepts values with or without the \"v\" prefix (e.g., \"v1.11.2\" or \"1.11.2\").\nGenerated templates normalize the value to include the \"v\" prefix.\nThis determines the Talos Linux version that Omni will deploy to machines."
                 },
                 "kubernetesVersion": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "KubernetesVersion is the Kubernetes version to use for the cluster in Omni.\nAccepts values with or without the \"v\" prefix (e.g., \"v1.32.0\" or \"1.32.0\").\nGenerated templates normalize the value to include the \"v\" prefix.\nThis determines the Kubernetes version that Omni will deploy."
                 },
                 "machineClass": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "MachineClass is the Omni machine class name to use for dynamic node allocation.\nMachine classes are user-defined in the Omni dashboard and match machines\nby labels (e.g., CPU, region, role). The specified class must exist in\nthe Omni account before cluster creation. The number of machines allocated\nis derived from the controlPlanes and workers count in the cluster spec.\nMutually exclusive with Machines — set one or the other.\nWhen neither MachineClass nor Machines is set, KSail automatically discovers\navailable (unallocated) machines in Omni and uses them for node allocation."
                 },
                 "machines": {
                   "items": {
                     "type": "string"
                   },
-                  "type": "array"
+                  "type": "array",
+                  "description": "Machines is a list of Omni machine UUIDs to use for static node allocation.\nThe first N machines are assigned as control planes (where N = controlPlanes count),\nand the remaining machines are assigned as workers.\nMutually exclusive with MachineClass — set one or the other.\nWhen neither MachineClass nor Machines is set, KSail automatically discovers\navailable (unallocated) machines in Omni and uses them for node allocation."
                 }
               },
               "additionalProperties": false,
-              "type": "object"
+              "type": "object",
+              "description": "Omni holds options for the Sidero Omni provider."
             },
             "aws": {
               "properties": {
                 "profileEnvVar": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "ProfileEnvVar is the environment variable containing the AWS shared-config profile name.\nDefaults to \"AWS_PROFILE\"."
                 },
                 "regionEnvVar": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "RegionEnvVar is the environment variable containing the AWS region.\nWhen set, it overrides the region declared in eks.yaml.\nDefaults to \"AWS_REGION\"."
                 },
                 "accessKeyIdEnvVar": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "AccessKeyIDEnvVar is the environment variable containing a static AWS access key ID.\nDefaults to \"AWS_ACCESS_KEY_ID\"."
                 },
                 "secretAccessKeyEnvVar": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "SecretAccessKeyEnvVar is the environment variable containing a static AWS secret access key.\nDefaults to \"AWS_SECRET_ACCESS_KEY\"."
                 },
                 "sessionTokenEnvVar": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "SessionTokenEnvVar is the environment variable containing an AWS session token\n(used with temporary credentials from STS).\nDefaults to \"AWS_SESSION_TOKEN\"."
                 }
               },
               "additionalProperties": false,
-              "type": "object"
+              "type": "object",
+              "description": "AWS holds options for the AWS provider used by the EKS distribution."
             },
             "kubernetes": {
               "properties": {
                 "kubeconfig": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "Kubeconfig is the path to the kubeconfig for the host cluster.\nDefaults to \"~/.kube/config\"."
                 },
                 "kubeconfigEnvVar": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "KubeconfigEnvVar is the environment variable containing the host kubeconfig path.\nDefaults to \"KSAIL_HOST_KUBECONFIG\"."
                 },
                 "context": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "Context is the kubeconfig context for the host cluster.\nWhen empty, uses the current context."
                 },
                 "contextEnvVar": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "ContextEnvVar is the environment variable containing the host kubeconfig context.\nDefaults to \"KSAIL_HOST_CONTEXT\"."
                 },
                 "gatewayClassName": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "GatewayClassName is the GatewayClass to use for exposing the nested API server.\nMust reference a GatewayClass that exists on the host cluster.\nWhen empty, the API is exposed via ClusterIP Service only (no external Gateway)."
                 },
                 "podCidr": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "PodCIDR is the pod CIDR for the nested cluster.\nMust not overlap with the host cluster's pod or service CIDRs.\nDefaults to \"10.64.0.0/16\"."
                 },
                 "serviceCidr": {
-                  "type": "string"
+                  "type": "string",
+                  "description": "ServiceCIDR is the service CIDR for the nested cluster.\nMust not overlap with the host cluster's pod or service CIDRs.\nDefaults to \"10.128.0.0/16\"."
                 },
                 "persistence": {
                   "properties": {
                     "enabled": {
-                      "type": "boolean"
+                      "type": "boolean",
+                      "description": "Enabled controls whether a PVC is used for the nested cluster's data directory.\nWhen false (default), emptyDir is used and the cluster is ephemeral."
                     },
                     "storageClassName": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "StorageClassName is the StorageClass to use for the PVC.\nWhen empty, the cluster's default StorageClass is used."
                     },
                     "size": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Size is the storage request size for the PVC.\nDefaults to \"20Gi\"."
                     }
                   },
                   "additionalProperties": false,
-                  "type": "object"
+                  "type": "object",
+                  "description": "Persistence defines storage persistence for the nested cluster's data directory."
                 }
               },
               "additionalProperties": false,
-              "type": "object"
+              "type": "object",
+              "description": "Kubernetes holds options for the Kubernetes provider, which runs nested\nclusters as pods inside an existing host cluster."
             }
           },
           "additionalProperties": false,
-          "type": "object"
+          "type": "object",
+          "description": "Provider holds infrastructure-provider-specific options\n(Hetzner, Omni, AWS, and the Kubernetes provider for nested clusters)."
         },
         "workload": {
           "properties": {
@@ -711,7 +932,8 @@
                           }
                         },
                         "additionalProperties": false,
-                        "type": "object"
+                        "type": "object",
+                        "description": "FluxVerifyOIDCIdentity is a cosign keyless identity matcher."
                       },
                       "type": "array",
                       "description": "Identity matchers for cosign keyless verification. The artifact is accepted if any matcher matches the signing identity in the Fulcio certificate."
@@ -756,7 +978,8 @@
             }
           },
           "additionalProperties": false,
-          "type": "object"
+          "type": "object",
+          "description": "Workload configures workload management: the manifest source directory,\nOCI push and validation settings, and GitOps bootstrap options."
         },
         "chat": {
           "properties": {
@@ -775,7 +998,8 @@
             }
           },
           "additionalProperties": false,
-          "type": "object"
+          "type": "object",
+          "description": "Chat configures the KSail AI chat assistant."
         }
       },
       "additionalProperties": false,
