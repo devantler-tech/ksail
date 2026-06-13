@@ -11,7 +11,6 @@ import (
 	dockerclient "github.com/devantler-tech/ksail/v7/pkg/client/docker"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
 	"github.com/devantler-tech/ksail/v7/pkg/timer"
-	"github.com/docker/docker/client"
 	"github.com/spf13/cobra"
 )
 
@@ -20,7 +19,7 @@ var ErrNoRegistriesFound = errors.New("no registries found on network")
 
 // CleanupDependencies holds dependencies for mirror registry cleanup operations.
 type CleanupDependencies struct {
-	DockerInvoker     func(*cobra.Command, func(client.APIClient) error) error
+	DockerInvoker     func(*cobra.Command, func(dockerclient.Client) error) error
 	LocalRegistryDeps localregistry.Dependencies
 }
 
@@ -119,7 +118,7 @@ func deleteRegistriesByInfoCore(
 ) ([]string, error) {
 	var deletedNames []string
 
-	err := cleanupDeps.DockerInvoker(cmd, func(dockerClient client.APIClient) error {
+	err := cleanupDeps.DockerInvoker(cmd, func(dockerClient dockerclient.Client) error {
 		registryMgr, mgrErr := dockerclient.NewRegistryManager(dockerClient)
 		if mgrErr != nil {
 			return fmt.Errorf("failed to create registry manager: %w", mgrErr)
@@ -156,7 +155,7 @@ func deleteRegistriesOnNetworkCore(
 
 	found := false
 
-	err := cleanupDeps.DockerInvoker(cmd, func(dockerClient client.APIClient) error {
+	err := cleanupDeps.DockerInvoker(cmd, func(dockerClient dockerclient.Client) error {
 		registryMgr, mgrErr := dockerclient.NewRegistryManager(dockerClient)
 		if mgrErr != nil {
 			return fmt.Errorf("failed to create registry manager: %w", mgrErr)

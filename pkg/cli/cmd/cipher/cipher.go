@@ -11,7 +11,6 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/cli/editor"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/ui/confirm"
 	sopsclient "github.com/devantler-tech/ksail/v7/pkg/client/sops"
-	"github.com/devantler-tech/ksail/v7/pkg/di"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
 	"github.com/getsops/sops/v3"
@@ -27,7 +26,7 @@ var (
 )
 
 // NewCipherCmd creates the cipher command that integrates with SOPS.
-func NewCipherCmd(_ *di.Runtime) *cobra.Command {
+func NewCipherCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "cipher",
 		Short: "Manage encrypted files with SOPS",

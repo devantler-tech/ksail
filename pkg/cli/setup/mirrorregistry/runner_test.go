@@ -7,8 +7,8 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/setup"
+	dockerclient "github.com/devantler-tech/ksail/v7/pkg/client/docker"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/registry"
-	"github.com/docker/docker/client"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -25,7 +25,7 @@ func TestNewRegistryHandlers(t *testing.T) {
 
 	var mirrorSpecs []registry.MirrorSpec
 
-	noop := func(_ context.Context, _ client.APIClient) error { return nil }
+	noop := func(_ context.Context, _ dockerclient.Client) error { return nil }
 
 	handlers := newRegistryHandlers(
 		clusterCfg,
@@ -64,7 +64,7 @@ func TestK3dPostClusterConnect_Skipped(t *testing.T) {
 	t.Parallel()
 
 	clusterCfg := &v1alpha1.Cluster{}
-	noop := func(_ context.Context, _ client.APIClient) error { return nil }
+	noop := func(_ context.Context, _ dockerclient.Client) error { return nil }
 
 	handlers := newRegistryHandlers(
 		clusterCfg,
@@ -194,7 +194,7 @@ func TestRunStage_UnknownDistribution(t *testing.T) {
 		},
 	}
 
-	noop := func(_ context.Context, _ client.APIClient) error { return nil }
+	noop := func(_ context.Context, _ dockerclient.Client) error { return nil }
 
 	// Call newRegistryHandlers and verify unsupported distribution is not present
 	handlers := newRegistryHandlers(

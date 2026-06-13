@@ -42,7 +42,7 @@ func (b *syncBuffer) String() string {
 func TestNewUICmdFlagsAndAnnotations(t *testing.T) {
 	t.Parallel()
 
-	cmd := ui.NewUICmd(nil)
+	cmd := ui.NewUICmd()
 
 	assert.Equal(t, "ui", cmd.Name())
 	assert.Equal(t, "true", cmd.Annotations[annotations.AnnotationExclude])
@@ -67,7 +67,7 @@ func TestUICmdServesOpensBrowserAndShutsDown(t *testing.T) {
 
 	defer restore()
 
-	cmd := ui.NewUICmd(nil)
+	cmd := ui.NewUICmd()
 
 	output := &syncBuffer{}
 	cmd.SetOut(output)
@@ -115,7 +115,7 @@ func TestUICmdNoBrowserSkipsOpen(t *testing.T) {
 
 	defer restore()
 
-	cmd := ui.NewUICmd(nil)
+	cmd := ui.NewUICmd()
 
 	output := &syncBuffer{}
 	cmd.SetOut(output)

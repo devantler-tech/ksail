@@ -3,7 +3,6 @@ package workload
 import (
 	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/workload/gen"
-	"github.com/devantler-tech/ksail/v7/pkg/di"
 	"github.com/spf13/cobra"
 )
 
@@ -12,7 +11,7 @@ import (
 const permissionWrite = "write"
 
 // NewWorkloadCmd creates and returns the workload command group namespace.
-func NewWorkloadCmd(runtimeContainer *di.Runtime) *cobra.Command {
+func NewWorkloadCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "workload",
 		Short: "Manage workload operations",
@@ -46,24 +45,24 @@ func NewWorkloadCmd(runtimeContainer *di.Runtime) *cobra.Command {
 		},
 	}
 
-	cmd.AddCommand(NewReconcileCmd(runtimeContainer))
-	cmd.AddCommand(NewPushCmd(runtimeContainer))
+	cmd.AddCommand(NewReconcileCmd())
+	cmd.AddCommand(NewPushCmd())
 	cmd.AddCommand(NewApplyCmd())
-	cmd.AddCommand(NewCreateCmd(runtimeContainer))
+	cmd.AddCommand(NewCreateCmd())
 	cmd.AddCommand(NewDebugCmd())
 	cmd.AddCommand(NewDeleteCmd())
 	cmd.AddCommand(NewDescribeCmd())
 	cmd.AddCommand(NewEditCmd())
 	cmd.AddCommand(NewExecCmd())
 	cmd.AddCommand(NewExplainCmd())
-	cmd.AddCommand(NewExportCmd(runtimeContainer))
+	cmd.AddCommand(NewExportCmd())
 	cmd.AddCommand(NewExposeCmd())
 	cmd.AddCommand(NewForwardCmd())
 	cmd.AddCommand(NewGetCmd())
-	cmd.AddCommand(gen.NewGenCmd(runtimeContainer))
+	cmd.AddCommand(gen.NewGenCmd())
 	cmd.AddCommand(NewImagesCmd())
-	cmd.AddCommand(NewImportCmd(runtimeContainer))
-	cmd.AddCommand(NewInstallCmd(runtimeContainer))
+	cmd.AddCommand(NewImportCmd())
+	cmd.AddCommand(NewInstallCmd())
 	cmd.AddCommand(NewLogsCmd())
 	cmd.AddCommand(NewRolloutCmd())
 	cmd.AddCommand(NewScaleCmd())

@@ -2,8 +2,11 @@
 //
 // Key functionality:
 //   - File reading: ReadFileSafe, FindFile
-//   - File writing: TryWriteFile
-//   - Path operations: ExpandHomePath
+//   - File writing: TryWriteFile, AtomicWriteFile
+//   - Path operations: ExpandHomePath, EvalCanonicalPath
+//   - Path containment: IsPathWithinDirectory (the single symlink-escape guard)
+//   - YAML helpers: SplitYAMLDocuments (lossy, read-only callers), IsYAMLFile
+//   - Kubeconfig: UpdateKubeconfigFile (load-mutate-write with explicit options)
 //
 // Subpackages:
 //   - configmanager: Configuration loading and management

@@ -11,6 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/apimachinery/pkg/util/wait"
 )
 
 const (
@@ -105,63 +106,96 @@ func (p *Provider) CreateDinDPod(
 // is most pronounced right after a cluster restart, when the controller is still reconciling.
 func (p *Provider) WaitForDefaultServiceAccount(ctx context.Context, clusterName string) error {
 	namespace := NamespaceName(clusterName)
-	deadline := time.Now().Add(dindReadyTimeout)
 
-	for {
-		_, err := p.client.CoreV1().
-			ServiceAccounts(namespace).
-			Get(ctx, "default", metav1.GetOptions{})
-		if err == nil {
-			return nil
-		}
+	var condErr error
 
-		if !errors.IsNotFound(err) {
-			return fmt.Errorf("get default service account in %s: %w", namespace, err)
-		}
+	err := wait.PollUntilContextTimeout(
+		ctx,
+		dindReadyPollInterval,
+		dindReadyTimeout,
+		true, // check before the first wait, matching the legacy deadline loop.
+		func(ctx context.Context) (bool, error) {
+			_, getErr := p.client.CoreV1().
+				ServiceAccounts(namespace).
+				Get(ctx, "default", metav1.GetOptions{})
+			if getErr == nil {
+				return true, nil
+			}
 
-		if time.Now().After(deadline) {
-			return fmt.Errorf("%w: %s/default", ErrDefaultServiceAccountNotReady, namespace)
-		}
+			// NotFound is the not-ready condition: the SA controller is still
+			// provisioning it. Any other error is fatal.
+			if !errors.IsNotFound(getErr) {
+				condErr = fmt.Errorf("get default service account in %s: %w", namespace, getErr)
 
-		select {
-		case <-ctx.Done():
-			return fmt.Errorf("waiting for default service account: %w", ctx.Err())
-		case <-time.After(dindReadyPollInterval):
-		}
+				return false, condErr
+			}
+
+			return false, nil
+		},
+	)
+	if err == nil {
+		return nil
 	}
+
+	return mapWaitError(
+		err,
+		condErr,
+		"waiting for default service account",
+		fmt.Errorf("%w: %s/default", ErrDefaultServiceAccountNotReady, namespace),
+	)
 }
 
 // WaitForDinD waits until the Docker daemon inside the DinD pod is ready to accept connections.
 func (p *Provider) WaitForDinD(ctx context.Context, clusterName string) error {
 	namespace := NamespaceName(clusterName)
 
-	// Wait for pod to be Running first
-	deadline := time.Now().Add(dindReadyTimeout)
+	var condErr error
 
-	for time.Now().Before(deadline) {
-		pod, err := p.client.CoreV1().Pods(namespace).Get(ctx, DinDPodName, metav1.GetOptions{})
-		if err != nil {
-			return fmt.Errorf("get DinD pod: %w", err)
-		}
+	err := wait.PollUntilContextTimeout(
+		ctx,
+		dindReadyPollInterval,
+		dindReadyTimeout,
+		true, // check before the first wait, matching the legacy deadline loop.
+		func(ctx context.Context) (bool, error) {
+			pod, getErr := p.client.CoreV1().
+				Pods(namespace).
+				Get(ctx, DinDPodName, metav1.GetOptions{})
+			if getErr != nil {
+				condErr = fmt.Errorf("get DinD pod: %w", getErr)
 
-		if pod.Status.Phase == corev1.PodRunning {
-			// Check if container is ready
-			for i := range pod.Status.ContainerStatuses {
-				if pod.Status.ContainerStatuses[i].Name == DinDContainerName &&
-					pod.Status.ContainerStatuses[i].Ready {
-					return nil
-				}
+				return false, condErr
 			}
-		}
 
-		select {
-		case <-ctx.Done():
-			return fmt.Errorf("waiting for DinD: %w", ctx.Err())
-		case <-time.After(dindReadyPollInterval):
+			return dindContainerReady(pod), nil
+		},
+	)
+	if err == nil {
+		return nil
+	}
+
+	return mapWaitError(
+		err,
+		condErr,
+		"waiting for DinD",
+		fmt.Errorf("%w: %v", ErrDinDNotReady, dindReadyTimeout),
+	)
+}
+
+// dindContainerReady reports whether the DinD pod is Running and its DinD
+// container has reported Ready.
+func dindContainerReady(pod *corev1.Pod) bool {
+	if pod.Status.Phase != corev1.PodRunning {
+		return false
+	}
+
+	for i := range pod.Status.ContainerStatuses {
+		if pod.Status.ContainerStatuses[i].Name == DinDContainerName &&
+			pod.Status.ContainerStatuses[i].Ready {
+			return true
 		}
 	}
 
-	return fmt.Errorf("%w: %v", ErrDinDNotReady, dindReadyTimeout)
+	return false
 }
 
 // DeleteDinD removes the DinD pod and service.

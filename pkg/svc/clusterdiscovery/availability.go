@@ -9,7 +9,6 @@ import (
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	dockerclient "github.com/devantler-tech/ksail/v7/pkg/client/docker"
-	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/credentials"
 )
@@ -160,12 +159,7 @@ func (d *Discoverer) awsAvailability() Availability {
 // file is present. It does not connect (that would be too costly for the config endpoint); an
 // unreachable host simply yields no clusters during discovery.
 func kubernetesAvailability() Availability {
-	kubeconfigPath := os.Getenv("KSAIL_HOST_KUBECONFIG")
-	if kubeconfigPath == "" {
-		kubeconfigPath = k8s.DefaultKubeconfigPath()
-	}
-
-	expandedPath, err := fsutil.ExpandHomePath(kubeconfigPath)
+	expandedPath, err := k8s.HostKubeconfigPath()
 	if err != nil {
 		return Availability{
 			Provider:  v1alpha1.ProviderKubernetes,
@@ -174,7 +168,6 @@ func kubernetesAvailability() Availability {
 		}
 	}
 
-	//nolint:gosec // path is the user's kubeconfig; only its existence is checked.
 	_, statErr := os.Stat(expandedPath)
 	if statErr != nil {
 		return Availability{

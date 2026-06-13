@@ -6,7 +6,6 @@ import (
 	"sync"
 
 	dockerclient "github.com/devantler-tech/ksail/v7/pkg/client/docker"
-	"github.com/docker/docker/client"
 )
 
 // Backend defines the minimal registry operations required by both mirror and local registry flows.
@@ -26,10 +25,10 @@ type Backend interface {
 
 // BackendFactory creates a Backend from a Docker API client.
 // This abstraction allows tests to inject mock backends without creating real Docker containers.
-type BackendFactory func(client.APIClient) (Backend, error)
+type BackendFactory func(dockerclient.Client) (Backend, error)
 
 // DefaultBackendFactory creates a real RegistryManager that interacts with Docker.
-func DefaultBackendFactory(dockerClient client.APIClient) (Backend, error) {
+func DefaultBackendFactory(dockerClient dockerclient.Client) (Backend, error) {
 	backend, err := dockerclient.NewRegistryManager(dockerClient)
 	if err != nil {
 		return nil, fmt.Errorf("creating registry manager: %w", err)

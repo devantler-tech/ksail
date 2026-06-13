@@ -120,6 +120,7 @@ linters:
             - github.com/coreos/go-oidc
             - github.com/cosi-project
             - github.com/docker
+            - github.com/opencontainers/image-spec
             - github.com/fatih/color
             - github.com/fsnotify/fsnotify
             - github.com/fluxcd

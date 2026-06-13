@@ -5,7 +5,6 @@ import (
 
 	dockerclient "github.com/devantler-tech/ksail/v7/pkg/client/docker"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
-	"github.com/docker/docker/client"
 	"github.com/spf13/cobra"
 )
 
@@ -15,7 +14,7 @@ import (
 // This function is suitable for production use. For testing with mock clients, use WithDockerClientInstance instead.
 //
 // Returns an error if client creation fails or if the operation function returns an error.
-func WithDockerClient(cmd *cobra.Command, operation func(client.APIClient) error) error {
+func WithDockerClient(cmd *cobra.Command, operation func(dockerclient.Client) error) error {
 	dockerClient, err := dockerclient.GetDockerClient()
 	if err != nil {
 		return fmt.Errorf("get docker client: %w", err)
@@ -32,8 +31,8 @@ func WithDockerClient(cmd *cobra.Command, operation func(client.APIClient) error
 // the function to return an error if the operation itself succeeded.
 func WithDockerClientInstance(
 	cmd *cobra.Command,
-	dockerClient client.APIClient,
-	operation func(client.APIClient) error,
+	dockerClient dockerclient.Client,
+	operation func(dockerclient.Client) error,
 ) error {
 	defer func() {
 		closeErr := dockerClient.Close()

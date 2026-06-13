@@ -6,7 +6,6 @@ import (
 	"net"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
@@ -392,8 +391,16 @@ func parseCIDRsToIPNets(cidrs []string) []net.IPNet {
 
 // deleteInfrastructure cleans up infrastructure resources for a cluster.
 func (p *Provider) deleteInfrastructure(ctx context.Context, clusterName string) error {
-	// Small delay to ensure server deletions are fully processed
-	time.Sleep(DefaultPreDeleteDelay)
+	// Small delay to ensure server deletions are fully processed. The wait is
+	// ctx-aware so Ctrl-C during cluster delete is honored instead of blocking.
+	waitErr := waitForBackoff(
+		ctx,
+		"context cancelled before infrastructure deletion",
+		DefaultPreDeleteDelay,
+	)
+	if waitErr != nil {
+		return waitErr
+	}
 
 	err := p.deletePlacementGroup(ctx, clusterName)
 	if err != nil {
@@ -458,48 +465,57 @@ func (p *Provider) deletePlacementGroup(ctx context.Context, clusterName string)
 func (p *Provider) deleteFirewallWithRetry(ctx context.Context, clusterName string) error {
 	firewallName := clusterName + FirewallSuffix
 
-	for attempt := range MaxDeleteRetries {
-		firewall, err := retryTransientHetznerOperation(
-			ctx,
-			DefaultTransientRetryCount,
-			p.calculateRetryDelay,
-			func() (*hcloud.Firewall, error) {
-				firewall, _, err := p.client.Firewall.GetByName(ctx, firewallName)
-				if err != nil {
-					return nil, fmt.Errorf("failed to get firewall %s: %w", firewallName, err)
-				}
-
-				return firewall, nil
-			},
-		)
-		if err != nil {
-			return nil //nolint:nilerr // Ignoring lookup error - resource may not exist
-		}
-
-		if firewall == nil {
-			return nil
-		}
-
-		_, err = p.client.Firewall.Delete(ctx, firewall)
-		if err == nil {
-			return nil // Successfully deleted
-		}
-
-		// If this is the last attempt, return the error
-		if attempt == MaxDeleteRetries-1 {
+	return retryDelete(
+		ctx,
+		MaxDeleteRetries,
+		DefaultDeleteRetryDelay,
+		"context cancelled while retrying firewall deletion",
+		func() (bool, error) {
+			return p.attemptFirewallDelete(ctx, firewallName)
+		},
+		func(lastErr error) error {
 			return fmt.Errorf(
 				"failed to delete firewall %s after %d attempts: %w",
 				firewallName,
 				MaxDeleteRetries,
-				err,
+				lastErr,
 			)
-		}
+		},
+	)
+}
 
-		// Wait before retrying
-		time.Sleep(DefaultDeleteRetryDelay)
+// attemptFirewallDelete performs one firewall lookup-and-delete attempt. It
+// returns done=true on success or when the firewall is absent / its lookup
+// fails (best-effort: the resource may not exist), and (false, err) when the
+// delete call itself fails and should be retried.
+func (p *Provider) attemptFirewallDelete(
+	ctx context.Context,
+	firewallName string,
+) (bool, error) {
+	firewall, err := retryTransientHetznerOperation(
+		ctx,
+		DefaultTransientRetryCount,
+		p.calculateRetryDelay,
+		func() (*hcloud.Firewall, error) {
+			firewall, _, getErr := p.client.Firewall.GetByName(ctx, firewallName)
+			if getErr != nil {
+				return nil, fmt.Errorf("failed to get firewall %s: %w", firewallName, getErr)
+			}
+
+			return firewall, nil
+		},
+	)
+	if err != nil || firewall == nil {
+		//nolint:nilerr // Ignoring lookup error - resource may not exist.
+		return true, nil // Resource may not exist; treat as done.
 	}
 
-	return nil
+	_, delErr := p.client.Firewall.Delete(ctx, firewall)
+	if delErr == nil {
+		return true, nil // Successfully deleted.
+	}
+
+	return false, delErr //nolint:wrapcheck // identity preserved
 }
 
 // getNetworkByClusterName looks up the cluster's private network with
@@ -597,36 +613,32 @@ func (p *Provider) deleteLoadBalancerWithRetry(
 	ctx context.Context,
 	loadBalancer *hcloud.LoadBalancer,
 ) error {
-	for attempt := range MaxDeleteRetries {
-		_, err := p.client.LoadBalancer.Delete(ctx, loadBalancer)
-		if err == nil {
-			return nil
-		}
+	return retryDelete(
+		ctx,
+		MaxDeleteRetries,
+		DefaultDeleteRetryDelay,
+		"context cancelled while retrying load balancer deletion",
+		func() (bool, error) {
+			_, err := p.client.LoadBalancer.Delete(ctx, loadBalancer)
+			if err == nil {
+				return true, nil
+			}
 
-		// The LB may have been deleted between list and delete (or is already
-		// being removed). Treat not-found as success for idempotency.
-		if hcloud.IsError(err, hcloud.ErrorCodeNotFound) {
-			return nil
-		}
+			// The LB may have been deleted between list and delete (or is already
+			// being removed). Treat not-found as success for idempotency.
+			if hcloud.IsError(err, hcloud.ErrorCodeNotFound) {
+				return true, nil
+			}
 
-		if attempt == MaxDeleteRetries-1 {
+			return false, err //nolint:wrapcheck // identity preserved
+		},
+		func(lastErr error) error {
 			return fmt.Errorf(
 				"failed to delete load balancer %s (ID %d) after %d attempts: %w",
-				loadBalancer.Name, loadBalancer.ID, MaxDeleteRetries, err,
+				loadBalancer.Name, loadBalancer.ID, MaxDeleteRetries, lastErr,
 			)
-		}
-
-		select {
-		case <-ctx.Done():
-			return fmt.Errorf(
-				"context cancelled while retrying load balancer deletion: %w",
-				ctx.Err(),
-			)
-		case <-time.After(DefaultDeleteRetryDelay):
-		}
-	}
-
-	return nil
+		},
+	)
 }
 
 // lbInNetwork reports whether the given load balancer is attached to the named

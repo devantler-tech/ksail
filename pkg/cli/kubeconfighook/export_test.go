@@ -1,6 +1,7 @@
 package kubeconfighook
 
 import (
+	"github.com/devantler-tech/ksail/v7/pkg/cli/lifecycle"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 )
@@ -10,10 +11,12 @@ import (
 //nolint:gochecknoglobals // export_test.go pattern requires global variables to expose internal functions.
 var ResolveClusterNameForTest = resolveClusterName
 
-// ClusterNameFromDistConfigForTest exports clusterNameFromDistConfig for testing.
+// ClusterNameFromDistConfigForTest exports the shared distribution-config name
+// extraction (now owned by lifecycle.ClusterNameFromDistributionConfig) that the
+// Omni hook delegates to, for testing.
 //
 //nolint:gochecknoglobals // export_test.go pattern requires global variables to expose internal functions.
-var ClusterNameFromDistConfigForTest = clusterNameFromDistConfig
+var ClusterNameFromDistConfigForTest = lifecycle.ClusterNameFromDistributionConfig
 
 // ClusterNameFromKubeconfigForTest exports clusterNameFromKubeconfig for testing.
 //

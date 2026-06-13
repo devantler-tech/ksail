@@ -22,7 +22,6 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
 	chatui "github.com/devantler-tech/ksail/v7/pkg/cli/ui/chat"
 	"github.com/devantler-tech/ksail/v7/pkg/client/netretry"
-	"github.com/devantler-tech/ksail/v7/pkg/di"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
 	chatsvc "github.com/devantler-tech/ksail/v7/pkg/svc/chat"
 	"github.com/devantler-tech/ksail/v7/pkg/toolgen"
@@ -754,7 +753,7 @@ func buildSessionConfig(
 }
 
 // NewChatCmd creates and returns the chat command.
-func NewChatCmd(_ *di.Runtime) *cobra.Command {
+func NewChatCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "chat",
 		Short: "Start an AI-assisted chat session",

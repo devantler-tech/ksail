@@ -25,7 +25,6 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/cli/setup/localregistry"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/ui/confirm"
 	dockerpkg "github.com/devantler-tech/ksail/v7/pkg/client/docker"
-	"github.com/devantler-tech/ksail/v7/pkg/di"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/ksail"
 	clusterdetector "github.com/devantler-tech/ksail/v7/pkg/svc/detector/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/installer"
@@ -37,11 +36,9 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/timer"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/network"
-	"github.com/docker/docker/client"
 	"github.com/gkampitakis/go-snaps/snaps"
 	"github.com/k3d-io/k3d/v5/pkg/config/types"
 	v1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
-	"github.com/samber/do/v2"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
@@ -1488,7 +1485,7 @@ func setupMockRegistryBackend(t *testing.T) {
 	mockBackend.EXPECT().WaitForRegistriesReady(mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	t.Cleanup(registry.SetBackendFactoryForTests(
-		func(_ client.APIClient) (registry.Backend, error) {
+		func(_ dockerpkg.Client) (registry.Backend, error) {
 			return mockBackend, nil
 		},
 	))
@@ -1496,7 +1493,7 @@ func setupMockRegistryBackend(t *testing.T) {
 	// Mock the Docker client invoker to use a mock Docker API client.
 	// This calls the callback with a mock client so stages execute and print output.
 	t.Cleanup(cluster.SetDockerClientInvokerForTests(
-		func(_ *cobra.Command, fn func(client.APIClient) error) error {
+		func(_ *cobra.Command, fn func(dockerpkg.Client) error) error {
 			mockClient := newMockDockerClient(t)
 
 			return fn(mockClient)
@@ -1506,7 +1503,7 @@ func setupMockRegistryBackend(t *testing.T) {
 	// Override the cluster stability check to be a no-op.
 	// Tests use a fake kubeconfig without a real cluster, so the real
 	// stability check would time out waiting for API server connectivity.
-	t.Cleanup(setup.SetClusterStabilityCheckForTests(
+	t.Cleanup(cluster.SetClusterStabilityCheckForTests(
 		func(_ context.Context, _ *v1alpha1.Cluster, _ bool) error {
 			return nil
 		},
@@ -1558,27 +1555,6 @@ spec:
 	)
 }
 
-func newTestRuntimeContainer(t *testing.T) *di.Runtime {
-	t.Helper()
-
-	return di.New(
-		func(i di.Injector) error {
-			do.Provide(i, func(di.Injector) (timer.Timer, error) {
-				return timer.New(), nil
-			})
-
-			return nil
-		},
-		func(i di.Injector) error {
-			do.Provide(i, func(di.Injector) (clusterprovisioner.Factory, error) {
-				return fakeFactory{}, nil
-			})
-
-			return nil
-		},
-	)
-}
-
 // trimTrailingNewline removes a single trailing newline from snapshot output.
 // This produces cleaner snapshot comparisons.
 func trimTrailingNewline(s string) string {
@@ -1605,9 +1581,7 @@ func TestCreate_EnabledCertManager_PrintsInstallStage(t *testing.T) {
 	)
 	defer restore()
 
-	testRuntime := newTestRuntimeContainer(t)
-
-	cmd := cluster.NewCreateCmd(testRuntime)
+	cmd := cluster.NewCreateCmd()
 
 	var out bytes.Buffer
 	cmd.SetOut(&out)
@@ -1650,7 +1624,7 @@ func TestCreate_DefaultCertManager_DoesNotInstall(t *testing.T) {
 	)
 	defer restore()
 
-	cmd := cluster.NewCreateCmd(newTestRuntimeContainer(t))
+	cmd := cluster.NewCreateCmd()
 
 	var out bytes.Buffer
 	cmd.SetOut(&out)
@@ -1776,9 +1750,7 @@ func TestCreate_GitOps_PrintsInstallStage(t *testing.T) {
 
 			fake, ensureCalled := setupGitOpsTestMocks(t, testCase.engine)
 
-			testRuntime := newTestRuntimeContainer(t)
-
-			cmd := cluster.NewCreateCmd(testRuntime)
+			cmd := cluster.NewCreateCmd()
 
 			var out bytes.Buffer
 			cmd.SetOut(&out)
@@ -1849,7 +1821,7 @@ spec:
 
 	setupMockRegistryBackend(t)
 
-	cmd := cluster.NewCreateCmd(newTestRuntimeContainer(t))
+	cmd := cluster.NewCreateCmd()
 
 	var out bytes.Buffer
 	cmd.SetOut(&out)
@@ -1880,7 +1852,7 @@ func TestCreate_DefaultCSI_DoesNotInstall(t *testing.T) {
 	restoreFactory := cluster.SetProvisionerFactoryForTests(fakeFactory{})
 	defer restoreFactory()
 
-	cmd := cluster.NewCreateCmd(newTestRuntimeContainer(t))
+	cmd := cluster.NewCreateCmd()
 
 	var out bytes.Buffer
 	cmd.SetOut(&out)
@@ -1911,7 +1883,7 @@ func TestCreate_Minimal_PrintsOnlyClusterLifecycle(t *testing.T) {
 	restoreFactory := cluster.SetProvisionerFactoryForTests(fakeFactory{})
 	defer restoreFactory()
 
-	cmd := cluster.NewCreateCmd(newTestRuntimeContainer(t))
+	cmd := cluster.NewCreateCmd()
 
 	var out bytes.Buffer
 	cmd.SetOut(&out)
@@ -1959,7 +1931,7 @@ func TestCreate_NoConfigFile_FlagsOnly(t *testing.T) {
 	restoreFactory := cluster.SetProvisionerFactoryForTests(fakeFactory{})
 	defer restoreFactory()
 
-	cmd := cluster.NewCreateCmd(newTestRuntimeContainer(t))
+	cmd := cluster.NewCreateCmd()
 
 	var out bytes.Buffer
 	cmd.SetOut(&out)
@@ -2014,7 +1986,7 @@ func TestCreate_NoConfigFile_WithComponentFlags(t *testing.T) {
 	restoreFactory := cluster.SetProvisionerFactoryForTests(fakeFactory{})
 	defer restoreFactory()
 
-	cmd := cluster.NewCreateCmd(newTestRuntimeContainer(t))
+	cmd := cluster.NewCreateCmd()
 
 	var out bytes.Buffer
 	cmd.SetOut(&out)
@@ -2080,7 +2052,7 @@ spec:
 
 	setupMockRegistryBackend(t)
 
-	cmd := cluster.NewCreateCmd(newTestRuntimeContainer(t))
+	cmd := cluster.NewCreateCmd()
 
 	var out bytes.Buffer
 	cmd.SetOut(&out)
@@ -2957,20 +2929,6 @@ users:
 	return kubeconfigPath
 }
 
-func newDeleteTestRuntimeContainer(t *testing.T) *di.Runtime {
-	t.Helper()
-
-	return di.New(
-		func(i di.Injector) error {
-			do.Provide(i, func(di.Injector) (timer.Timer, error) {
-				return timer.New(), nil
-			})
-
-			return nil
-		},
-	)
-}
-
 // trimTrailingNewlineDelete removes a single trailing newline from snapshot output.
 func trimTrailingNewlineDelete(s string) string {
 	if len(s) > 0 && s[len(s)-1] == '\n' {
@@ -2987,7 +2945,7 @@ func setupContextBasedTest(
 	contextName string,
 	existsResult bool,
 	deleteErr error,
-) (*di.Runtime, func()) {
+) func() {
 	t.Helper()
 
 	workingDir := t.TempDir()
@@ -3002,7 +2960,7 @@ func setupContextBasedTest(
 
 	// Override Docker client to skip cleanup (no Docker in tests)
 	restoreDocker := cluster.SetDockerClientInvokerForTests(
-		func(_ *cobra.Command, _ func(client.APIClient) error) error {
+		func(_ *cobra.Command, _ func(dockerpkg.Client) error) error {
 			return nil // Skip Docker operations in tests
 		},
 	)
@@ -3011,15 +2969,13 @@ func setupContextBasedTest(
 	// This ensures existing tests don't prompt for confirmation
 	restoreTTY := confirm.SetTTYCheckerForTests(func() bool { return false })
 
-	testRuntime := newDeleteTestRuntimeContainer(t)
-
 	cleanup := func() {
 		restoreTTY()
 		restoreDocker()
 		restoreFactory()
 	}
 
-	return testRuntime, cleanup
+	return cleanup
 }
 
 // TestDelete_ContextBasedDetection_DeletesCluster tests that delete can detect
@@ -3039,10 +2995,10 @@ func TestDelete_ContextBasedDetection_DeletesCluster(t *testing.T) {
 	for _, testCase := range testCases {
 		//nolint:paralleltest // Cannot use t.Parallel() with t.Chdir()
 		t.Run(testCase.name, func(t *testing.T) {
-			testRuntime, cleanup := setupContextBasedTest(t, testCase.context, true, nil)
+			cleanup := setupContextBasedTest(t, testCase.context, true, nil)
 			defer cleanup()
 
-			cmd := cluster.NewDeleteCmd(testRuntime)
+			cmd := cluster.NewDeleteCmd()
 
 			var out bytes.Buffer
 			cmd.SetOut(&out)
@@ -3065,7 +3021,7 @@ func TestDelete_ContextBasedDetection_DeletesCluster(t *testing.T) {
 //
 //nolint:paralleltest // Cannot use t.Parallel() with t.Chdir() and t.Setenv() in helper
 func TestDelete_ContextBasedDetection_ClusterNotFound(t *testing.T) {
-	testRuntime, cleanup := setupContextBasedTest(
+	cleanup := setupContextBasedTest(
 		t,
 		"kind-nonexistent",
 		false,
@@ -3073,7 +3029,7 @@ func TestDelete_ContextBasedDetection_ClusterNotFound(t *testing.T) {
 	)
 	defer cleanup()
 
-	cmd := cluster.NewDeleteCmd(testRuntime)
+	cmd := cluster.NewDeleteCmd()
 
 	var out bytes.Buffer
 	cmd.SetOut(&out)
@@ -3098,15 +3054,13 @@ func TestDelete_ContextBasedDetection_UnknownContextPattern(t *testing.T) {
 
 	// Override Docker client to skip cleanup (no Docker in tests)
 	restoreDocker := cluster.SetDockerClientInvokerForTests(
-		func(_ *cobra.Command, _ func(client.APIClient) error) error {
+		func(_ *cobra.Command, _ func(dockerpkg.Client) error) error {
 			return nil // Skip Docker operations in tests
 		},
 	)
 	defer restoreDocker()
 
-	testRuntime := newDeleteTestRuntimeContainer(t)
-
-	cmd := cluster.NewDeleteCmd(testRuntime)
+	cmd := cluster.NewDeleteCmd()
 
 	var out bytes.Buffer
 	cmd.SetOut(&out)
@@ -3123,8 +3077,7 @@ func TestDelete_ContextBasedDetection_UnknownContextPattern(t *testing.T) {
 func TestDelete_CommandFlags(t *testing.T) {
 	t.Parallel()
 
-	testRuntime := newDeleteTestRuntimeContainer(t)
-	cmd := cluster.NewDeleteCmd(testRuntime)
+	cmd := cluster.NewDeleteCmd()
 
 	// Verify expected new flags exist
 	nameFlag := cmd.Flags().Lookup("name")
@@ -3157,7 +3110,7 @@ func TestDelete_CommandFlags(t *testing.T) {
 func TestConnect_CommandFlags(t *testing.T) {
 	t.Parallel()
 
-	cmd := cluster.NewConnectCmd(nil)
+	cmd := cluster.NewConnectCmd()
 
 	// Verify expected flags exist
 	contextFlag := cmd.Flags().Lookup("context")
@@ -3193,7 +3146,7 @@ func TestConnect_CommandFlags(t *testing.T) {
 //
 //nolint:paralleltest // Cannot use t.Parallel() with t.Chdir() and t.Setenv() in helper
 func TestDelete_Confirmation_Accepted(t *testing.T) {
-	testRuntime, cleanup := setupContextBasedTest(t, "kind-my-cluster", true, nil)
+	cleanup := setupContextBasedTest(t, "kind-my-cluster", true, nil)
 	defer cleanup()
 
 	// Mock stdin to return "yes"
@@ -3206,7 +3159,7 @@ func TestDelete_Confirmation_Accepted(t *testing.T) {
 	restoreTTY := confirm.SetTTYCheckerForTests(func() bool { return true })
 	defer restoreTTY()
 
-	cmd := cluster.NewDeleteCmd(testRuntime)
+	cmd := cluster.NewDeleteCmd()
 
 	var out bytes.Buffer
 	cmd.SetOut(&out)
@@ -3227,7 +3180,7 @@ func TestDelete_Confirmation_Accepted(t *testing.T) {
 //
 //nolint:paralleltest // Cannot use t.Parallel() with t.Chdir() and t.Setenv() in helper
 func TestDelete_Confirmation_Denied(t *testing.T) {
-	testRuntime, cleanup := setupContextBasedTest(t, "kind-my-cluster", true, nil)
+	cleanup := setupContextBasedTest(t, "kind-my-cluster", true, nil)
 	defer cleanup()
 
 	// Mock stdin to return "no"
@@ -3240,7 +3193,7 @@ func TestDelete_Confirmation_Denied(t *testing.T) {
 	restoreTTY := confirm.SetTTYCheckerForTests(func() bool { return true })
 	defer restoreTTY()
 
-	cmd := cluster.NewDeleteCmd(testRuntime)
+	cmd := cluster.NewDeleteCmd()
 
 	var out bytes.Buffer
 	cmd.SetOut(&out)
@@ -3262,7 +3215,7 @@ func TestDelete_Confirmation_Denied(t *testing.T) {
 //
 //nolint:paralleltest // Cannot use t.Parallel() with t.Chdir() and t.Setenv() in helper
 func TestDelete_ForceFlag_SkipsConfirmation(t *testing.T) {
-	testRuntime, cleanup := setupContextBasedTest(t, "kind-my-cluster", true, nil)
+	cleanup := setupContextBasedTest(t, "kind-my-cluster", true, nil)
 	defer cleanup()
 
 	// Mock TTY check to return true (simulates interactive terminal)
@@ -3270,7 +3223,7 @@ func TestDelete_ForceFlag_SkipsConfirmation(t *testing.T) {
 	restoreTTY := confirm.SetTTYCheckerForTests(func() bool { return true })
 	defer restoreTTY()
 
-	cmd := cluster.NewDeleteCmd(testRuntime)
+	cmd := cluster.NewDeleteCmd()
 	cmd.SetArgs([]string{"--force"})
 
 	var out bytes.Buffer
@@ -3293,14 +3246,14 @@ func TestDelete_ForceFlag_SkipsConfirmation(t *testing.T) {
 //
 //nolint:paralleltest // Cannot use t.Parallel() with t.Chdir() and t.Setenv() in helper
 func TestDelete_NonTTY_SkipsConfirmation(t *testing.T) {
-	testRuntime, cleanup := setupContextBasedTest(t, "kind-my-cluster", true, nil)
+	cleanup := setupContextBasedTest(t, "kind-my-cluster", true, nil)
 	defer cleanup()
 
 	// Mock TTY check to return false (simulates CI/pipeline environment)
 	restoreTTY := confirm.SetTTYCheckerForTests(func() bool { return false })
 	defer restoreTTY()
 
-	cmd := cluster.NewDeleteCmd(testRuntime)
+	cmd := cluster.NewDeleteCmd()
 
 	var out bytes.Buffer
 	cmd.SetOut(&out)
@@ -4681,7 +4634,7 @@ func TestNewRestoreCmd_FlagsExistWithCorrectDefaults(t *testing.T) {
 		t.Run(flagTest.flagName, func(t *testing.T) {
 			t.Parallel()
 
-			restoreCmd := cluster.NewRestoreCmd(nil)
+			restoreCmd := cluster.NewRestoreCmd()
 			require.NotNil(t, restoreCmd)
 
 			flag := restoreCmd.Flags().Lookup(flagTest.flagName)
@@ -4701,7 +4654,7 @@ func TestNewRestoreCmd_FlagsExistWithCorrectDefaults(t *testing.T) {
 func TestNewRestoreCmd_InputFlagIsRequired(t *testing.T) {
 	t.Parallel()
 
-	restoreCmd := cluster.NewRestoreCmd(nil)
+	restoreCmd := cluster.NewRestoreCmd()
 	require.NotNil(t, restoreCmd)
 
 	restoreCmd.SetOut(io.Discard)
@@ -4735,7 +4688,7 @@ func TestRestoreCmd_InvalidResourcePolicy(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			restoreCmd := cluster.NewRestoreCmd(nil)
+			restoreCmd := cluster.NewRestoreCmd()
 			restoreCmd.SetOut(io.Discard)
 			restoreCmd.SetErr(io.Discard)
 			restoreCmd.SetArgs([]string{
@@ -4773,7 +4726,7 @@ func TestRestoreCmd_ValidPoliciesPassValidation(t *testing.T) {
 
 			nonexistentArchive := filepath.Join(t.TempDir(), "nonexistent.tar.gz")
 
-			restoreCmd := cluster.NewRestoreCmd(nil)
+			restoreCmd := cluster.NewRestoreCmd()
 			restoreCmd.SetOut(io.Discard)
 			restoreCmd.SetErr(io.Discard)
 			restoreCmd.SetArgs([]string{
@@ -4798,7 +4751,7 @@ func TestRestoreCmd_ValidPoliciesPassValidation(t *testing.T) {
 func TestRestoreCmd_Metadata(t *testing.T) {
 	t.Parallel()
 
-	restoreCmd := cluster.NewRestoreCmd(nil)
+	restoreCmd := cluster.NewRestoreCmd()
 	require.NotNil(t, restoreCmd)
 
 	assert.Equal(t, "restore", restoreCmd.Use)
@@ -6363,8 +6316,7 @@ func BenchmarkFormatDiffTable_WideValues(b *testing.B) {
 func TestNewUpdateCmd(t *testing.T) { //nolint:cyclop // flag assertion test
 	t.Parallel()
 
-	runtimeContainer := &di.Runtime{}
-	cmd := cluster.NewUpdateCmd(runtimeContainer)
+	cmd := cluster.NewUpdateCmd()
 
 	// Verify command basics
 	if cmd.Use != "update" {
@@ -6450,8 +6402,7 @@ func TestResolveForce(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			runtimeContainer := &di.Runtime{}
-			cmd := cluster.NewUpdateCmd(runtimeContainer)
+			cmd := cluster.NewUpdateCmd()
 
 			if testCase.yesValue != "" {
 				_ = cmd.Flags().Set("yes", testCase.yesValue)
@@ -6666,8 +6617,7 @@ func TestDisplayChangesSummary_SeverityOrder(t *testing.T) {
 func TestNewUpdateCmd_HasOutputFlag(t *testing.T) {
 	t.Parallel()
 
-	runtimeContainer := &di.Runtime{}
-	cmd := cluster.NewUpdateCmd(runtimeContainer)
+	cmd := cluster.NewUpdateCmd()
 
 	outputFlag := cmd.Flags().Lookup("output")
 	if outputFlag == nil {
@@ -6899,7 +6849,7 @@ func TestEnsureLocalRegistriesReady_CloudProviders(t *testing.T) {
 			// Set up a docker invoker that errors on any call.
 			// If Docker infra stages are incorrectly executed for cloud providers,
 			// this invoker will cause the test to fail.
-			errDockerInvoker := func(_ *cobra.Command, _ func(client.APIClient) error) error {
+			errDockerInvoker := func(_ *cobra.Command, _ func(dockerpkg.Client) error) error {
 				t.Errorf("Docker should not be called for cloud provider %s", provider)
 
 				return nil
@@ -7221,7 +7171,7 @@ func TestClassifyRestoreError_FallbackToErrMsg(t *testing.T) {
 func TestNewDiagnoseCmd(t *testing.T) {
 	t.Parallel()
 
-	diagnoseCmd := cluster.NewDiagnoseCmd(nil)
+	diagnoseCmd := cluster.NewDiagnoseCmd()
 	require.NotNil(t, diagnoseCmd)
 
 	assert.Equal(t, "diagnose", diagnoseCmd.Name())
@@ -7262,7 +7212,7 @@ func TestDiagnoseCmd_InvalidFormatRejectsEarly(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			diagnoseCmd := cluster.NewDiagnoseCmd(nil)
+			diagnoseCmd := cluster.NewDiagnoseCmd()
 			diagnoseCmd.SetOut(io.Discard)
 			diagnoseCmd.SetErr(io.Discard)
 			diagnoseCmd.SetArgs([]string{"--output", testCase.format})
@@ -7352,7 +7302,7 @@ users:
 func TestClusterCmd_RegistersDiagnoseSubcommand(t *testing.T) {
 	t.Parallel()
 
-	clusterCmd := cluster.NewClusterCmd(nil)
+	clusterCmd := cluster.NewClusterCmd()
 	require.NotNil(t, clusterCmd)
 
 	var diagnoseCmd *cobra.Command
@@ -7373,9 +7323,7 @@ func TestClusterCmd_RegistersDiagnoseSubcommand(t *testing.T) {
 func TestNewDiffCmd(t *testing.T) {
 	t.Parallel()
 
-	runtimeContainer := &di.Runtime{}
-
-	cmd := cluster.NewDiffCmd(runtimeContainer)
+	cmd := cluster.NewDiffCmd()
 	require.NotNil(t, cmd)
 
 	assert.Equal(t, "diff", cmd.Name())
@@ -7415,7 +7363,7 @@ func TestDiffCmd_InvalidFormatRejectsEarly(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			diffCmd := cluster.NewDiffCmd(&di.Runtime{})
+			diffCmd := cluster.NewDiffCmd()
 			diffCmd.SetOut(io.Discard)
 			diffCmd.SetErr(io.Discard)
 			diffCmd.SetArgs([]string{"--output", testCase.format})
@@ -7437,7 +7385,7 @@ func TestDiffCmd_InvalidFormatRejectsEarly(t *testing.T) {
 func TestClusterCmd_RegistersDiffSubcommand(t *testing.T) {
 	t.Parallel()
 
-	clusterCmd := cluster.NewClusterCmd(nil)
+	clusterCmd := cluster.NewClusterCmd()
 	require.NotNil(t, clusterCmd)
 
 	var diffCmd *cobra.Command
@@ -7458,7 +7406,7 @@ func TestClusterCmd_RegistersDiffSubcommand(t *testing.T) {
 func TestDiffCmd_HasNoWriteAnnotation(t *testing.T) {
 	t.Parallel()
 
-	cmd := cluster.NewDiffCmd(&di.Runtime{})
+	cmd := cluster.NewDiffCmd()
 	require.NotNil(t, cmd)
 
 	// The diff command is read-only and must NOT have a "write" permission annotation.

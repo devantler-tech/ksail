@@ -13,7 +13,6 @@ import (
 	k3dconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/k3d"
 	k3dprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/k3d"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/registry"
-	"github.com/docker/docker/client"
 	"github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 )
 
@@ -22,35 +21,35 @@ type k3dRegistryActionFn func(
 	context.Context,
 	*v1alpha5.SimpleConfig,
 	string,
-	client.APIClient,
+	dockerclient.Client,
 	io.Writer,
 ) error
 
 // K3dRegistryAction returns the action function for K3d registry creation.
-func K3dRegistryAction(ctx *Context) func(context.Context, client.APIClient) error {
-	return func(execCtx context.Context, dockerClient client.APIClient) error {
+func K3dRegistryAction(ctx *Context) func(context.Context, dockerclient.Client) error {
+	return func(execCtx context.Context, dockerClient dockerclient.Client) error {
 		return runK3dRegistryAction(execCtx, ctx, dockerClient)
 	}
 }
 
 // K3dNetworkAction returns the action function for K3d network creation.
-func K3dNetworkAction(ctx *Context) func(context.Context, client.APIClient) error {
-	return func(execCtx context.Context, dockerClient client.APIClient) error {
+func K3dNetworkAction(ctx *Context) func(context.Context, dockerclient.Client) error {
+	return func(execCtx context.Context, dockerClient dockerclient.Client) error {
 		return runK3dNetworkAction(execCtx, ctx, dockerClient)
 	}
 }
 
 // K3dConnectAction returns the action function for K3d registry connection.
-func K3dConnectAction(ctx *Context) func(context.Context, client.APIClient) error {
-	return func(execCtx context.Context, dockerClient client.APIClient) error {
+func K3dConnectAction(ctx *Context) func(context.Context, dockerclient.Client) error {
+	return func(execCtx context.Context, dockerClient dockerclient.Client) error {
 		return runK3dConnectAction(execCtx, ctx, dockerClient)
 	}
 }
 
 // K3dPostClusterConnectAction returns the action function for post-cluster registry configuration.
 // For K3d, this is a no-op since registry mirrors are configured via k3d config before cluster creation.
-func K3dPostClusterConnectAction(_ *Context) func(context.Context, client.APIClient) error {
-	return func(_ context.Context, _ client.APIClient) error {
+func K3dPostClusterConnectAction(_ *Context) func(context.Context, dockerclient.Client) error {
+	return func(_ context.Context, _ dockerclient.Client) error {
 		return nil
 	}
 }
@@ -59,7 +58,7 @@ func K3dPostClusterConnectAction(_ *Context) func(context.Context, client.APICli
 func runK3dRegistryAction(
 	execCtx context.Context,
 	ctx *Context,
-	dockerClient client.APIClient,
+	dockerClient dockerclient.Client,
 ) error {
 	// Setup registries
 	err := runK3DRegistrySetup(
@@ -88,7 +87,7 @@ func runK3dRegistryAction(
 func runK3dNetworkAction(
 	execCtx context.Context,
 	ctx *Context,
-	dockerClient client.APIClient,
+	dockerClient dockerclient.Client,
 ) error {
 	clusterName := k3dconfigmanager.ResolveClusterName(ctx.ClusterCfg, ctx.K3dConfig)
 	networkName := k3dconfigmanager.ResolveNetworkName(clusterName)
@@ -102,7 +101,7 @@ func runK3dNetworkAction(
 func runK3dConnectAction(
 	execCtx context.Context,
 	ctx *Context,
-	dockerClient client.APIClient,
+	dockerClient dockerclient.Client,
 ) error {
 	return runK3DRegistrySetup(
 		execCtx,
@@ -116,7 +115,7 @@ func runK3dConnectAction(
 func runK3DRegistrySetup(
 	execCtx context.Context,
 	ctx *Context,
-	dockerClient client.APIClient,
+	dockerClient dockerclient.Client,
 	description string,
 	action k3dRegistryActionFn,
 ) error {

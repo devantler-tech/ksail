@@ -4,7 +4,6 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/lifecycle"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/setup/localregistry"
-	"github.com/devantler-tech/ksail/v7/pkg/di"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/ksail"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
 	specdiff "github.com/devantler-tech/ksail/v7/pkg/svc/diff"
@@ -35,7 +34,7 @@ Use --exit-code to return exit code 2 when drift is detected (useful for
 CI gates and monitoring scripts).`
 
 // NewDiffCmd creates the cluster diff command.
-func NewDiffCmd(runtimeContainer *di.Runtime) *cobra.Command {
+func NewDiffCmd() *cobra.Command {
 	var exitCodeFlag bool
 
 	cmd := &cobra.Command{
@@ -80,7 +79,6 @@ func NewDiffCmd(runtimeContainer *di.Runtime) *cobra.Command {
 		format := getOutputFormat(cmd)
 
 		handler := lifecycle.WrapHandler(
-			runtimeContainer,
 			cfgManager,
 			func(cmd *cobra.Command, cfgManager *ksailconfigmanager.ConfigManager, deps lifecycle.Deps) error {
 				return handleDiffRunE(cmd, cfgManager, deps, exitCodeFlag, format)

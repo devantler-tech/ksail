@@ -19,17 +19,18 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/workload"
 	"github.com/devantler-tech/ksail/v7/pkg/client/flux"
-	"github.com/devantler-tech/ksail/v7/pkg/di"
-	"github.com/devantler-tech/ksail/v7/pkg/timer"
 	"github.com/fsnotify/fsnotify"
 	"github.com/gkampitakis/go-snaps/snaps"
-	"github.com/samber/do/v2"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-const workloadCommandName = "workload"
+const (
+	workloadCommandName  = "workload"
+	pushCommandName      = "push"
+	reconcileCommandName = "reconcile"
+)
 
 //nolint:gochecknoglobals // Serializes t.Chdir-based config discovery tests in this package.
 var workloadConfigDiscoveryMu sync.Mutex
@@ -158,7 +159,7 @@ func TestErrUnknownOutputFormatIsSentinelError(t *testing.T) {
 func TestNewInstallCmdRequiresMinimumArgs(t *testing.T) {
 	t.Parallel()
 
-	cmd := workload.NewInstallCmd(di.NewRuntime())
+	cmd := workload.NewInstallCmd()
 	cmd.SetOut(&bytes.Buffer{})
 	cmd.SetErr(&bytes.Buffer{})
 
@@ -206,7 +207,7 @@ func TestInstallCommandHonorsFlags(t *testing.T) {
 func runInstallCmd(t *testing.T, args ...string) error {
 	t.Helper()
 
-	cmd := workload.NewInstallCmd(di.NewRuntime())
+	cmd := workload.NewInstallCmd()
 
 	var output bytes.Buffer
 	cmd.SetOut(&output)
@@ -239,16 +240,16 @@ func TestWriteWorkloadCommandsHaveWritePermission(t *testing.T) {
 		cmd  *cobra.Command
 	}{
 		{name: "apply", cmd: workload.NewApplyCmd()},
-		{name: "create", cmd: workload.NewCreateCmd(di.New(nil))},
+		{name: "create", cmd: workload.NewCreateCmd()},
 		{name: "debug", cmd: workload.NewDebugCmd()},
 		{name: "delete", cmd: workload.NewDeleteCmd()},
 		{name: "edit", cmd: workload.NewEditCmd()},
 		{name: "exec", cmd: workload.NewExecCmd()},
 		{name: "expose", cmd: workload.NewExposeCmd()},
-		{name: "import", cmd: workload.NewImportCmd(di.New(nil))},
-		{name: "install", cmd: workload.NewInstallCmd(di.New(nil))},
-		{name: "push", cmd: workload.NewPushCmd(di.New(nil))},
-		{name: "reconcile", cmd: workload.NewReconcileCmd(di.New(nil))},
+		{name: "import", cmd: workload.NewImportCmd()},
+		{name: "install", cmd: workload.NewInstallCmd()},
+		{name: pushCommandName, cmd: workload.NewPushCmd()},
+		{name: reconcileCommandName, cmd: workload.NewReconcileCmd()},
 		{name: "rollout", cmd: workload.NewRolloutCmd()},
 		{name: "scale", cmd: workload.NewScaleCmd()},
 		{name: "watch", cmd: workload.NewWatchCmd()},
@@ -291,7 +292,7 @@ func TestReadWorkloadCommandsDoNotHaveWritePermission(t *testing.T) {
 	}{
 		{name: "describe", cmd: workload.NewDescribeCmd()},
 		{name: "explain", cmd: workload.NewExplainCmd()},
-		{name: "export", cmd: workload.NewExportCmd(di.New(nil))},
+		{name: "export", cmd: workload.NewExportCmd()},
 		{name: "forward", cmd: workload.NewForwardCmd()},
 		{name: "get", cmd: workload.NewGetCmd()},
 		{name: "images", cmd: workload.NewImagesCmd()},
@@ -318,7 +319,7 @@ func TestReadWorkloadCommandsDoNotHaveWritePermission(t *testing.T) {
 func TestNewPushCmdHasValidateFlag(t *testing.T) {
 	t.Parallel()
 
-	cmd := workload.NewPushCmd(di.New(nil))
+	cmd := workload.NewPushCmd()
 
 	// Check if --validate flag exists
 	validateFlag := cmd.Flags().Lookup("validate")
@@ -348,7 +349,7 @@ func TestNewPushCmdHasValidateFlag(t *testing.T) {
 func TestPushCmdShowsValidateFlagInHelp(t *testing.T) {
 	t.Parallel()
 
-	cmd := workload.NewPushCmd(di.New(nil))
+	cmd := workload.NewPushCmd()
 
 	var output bytes.Buffer
 	cmd.SetOut(&output)
@@ -397,7 +398,7 @@ func TestPushCmdAcceptsValidateFlag(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			cmd := workload.NewPushCmd(di.New(nil))
+			cmd := workload.NewPushCmd()
 			cmd.SetArgs(testCase.args)
 
 			// Parse flags without executing the command
@@ -3003,14 +3004,18 @@ func TestWorkloadCommandsLoadConfigOnly(t *testing.T) {
 		writeConfig   func(t *testing.T, dir string)
 	}{
 		{
-			name:          "reconcile",
-			args:          []string{workloadCommandName, "reconcile", "--timeout=1ms"},
+			name:          reconcileCommandName,
+			args:          []string{workloadCommandName, reconcileCommandName, "--timeout=1ms"},
 			expectedError: "create flux reconciler",
 			writeConfig:   writeFluxReconcileKsailConfig,
 		},
 		{
-			name:          "push",
-			args:          []string{workloadCommandName, "push", "oci://example.com:5000/test:dev"},
+			name: pushCommandName,
+			args: []string{
+				workloadCommandName,
+				pushCommandName,
+				"oci://example.com:5000/test:dev",
+			},
 			expectedError: "no manifest files found in source directory",
 			writeConfig:   writeValidKsailConfig,
 		},
@@ -3054,17 +3059,9 @@ func TestWorkloadCommandsLoadConfigOnly(t *testing.T) {
 func TestNewWorkloadCmdRunETriggersHelp(t *testing.T) {
 	t.Parallel()
 
-	runtimeContainer := di.New(func(injector do.Injector) error {
-		do.Provide(injector, func(do.Injector) (timer.Timer, error) {
-			return timer.New(), nil
-		})
-
-		return nil
-	})
-
 	var out bytes.Buffer
 
-	command := workload.NewWorkloadCmd(runtimeContainer)
+	command := workload.NewWorkloadCmd()
 	command.SetOut(&out)
 	command.SetErr(&out)
 

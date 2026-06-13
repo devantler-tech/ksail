@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"io"
 
+	dockerclient "github.com/devantler-tech/ksail/v7/pkg/client/docker"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/registry"
-	"github.com/docker/docker/client"
 )
 
 // DefaultNetworkMTU is the default MTU for Docker bridge networks.
@@ -20,7 +20,7 @@ const DefaultNetworkMTU = registry.DefaultNetworkMTU
 // and CIDR before registry containers are connected.
 func EnsureDockerNetworkExists(
 	ctx context.Context,
-	dockerClient client.APIClient,
+	dockerClient dockerclient.Client,
 	networkName string,
 	networkCIDR string,
 	writer io.Writer,

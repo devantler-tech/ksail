@@ -116,12 +116,7 @@ func (p *Provider) waitForAvailabilityRetry(
 		delay,
 	)
 
-	select {
-	case <-ctx.Done():
-		return fmt.Errorf("context cancelled during availability retry: %w", ctx.Err())
-	case <-time.After(delay):
-		return nil
-	}
+	return waitForBackoff(ctx, "context cancelled during availability retry", delay)
 }
 
 // isRetryableAvailabilityError reports whether an availability-check failure is

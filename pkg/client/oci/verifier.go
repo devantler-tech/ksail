@@ -347,38 +347,28 @@ func verifyWithRetry(
 	opts VerifyOptions,
 	timeout time.Duration,
 ) error {
-	var lastErr error
+	err := netretry.Do(
+		ctx,
+		verifyMaxAttempts,
+		verifyRetryBaseWait,
+		verifyRetryMaxWait,
+		func() error {
+			verifyCtx, cancel := context.WithTimeout(ctx, timeout)
+			defer cancel()
 
-	for attempt := 1; attempt <= verifyMaxAttempts; attempt++ {
-		verifyCtx, cancel := context.WithTimeout(ctx, timeout)
-
-		err := registryVerifier.VerifyAccess(verifyCtx, opts)
-
-		cancel()
-
-		if err == nil {
-			return nil
-		}
-
-		lastErr = err
-
-		if !netretry.IsRetryable(lastErr) || attempt == verifyMaxAttempts {
-			break
-		}
-
-		delay := netretry.ExponentialDelay(attempt, verifyRetryBaseWait, verifyRetryMaxWait)
-
-		timer := time.NewTimer(delay)
-		select {
-		case <-ctx.Done():
-			if !timer.Stop() {
-				<-timer.C
-			}
-
-			return fmt.Errorf("registry access verification cancelled: %w", ctx.Err())
-		case <-timer.C:
-		}
+			return registryVerifier.VerifyAccess(verifyCtx, opts)
+		},
+		netretry.WithCancelError(func(ctxErr error) error {
+			return fmt.Errorf("registry access verification cancelled: %w", ctxErr)
+		}),
+	)
+	if err == nil {
+		return nil
 	}
 
-	return fmt.Errorf("registry access verification failed: %w", lastErr)
+	if netretry.IsCancelled(err) {
+		return err //nolint:wrapcheck // return the netretry cancellation error unwrapped (already context-tagged)
+	}
+
+	return fmt.Errorf("registry access verification failed: %w", err)
 }

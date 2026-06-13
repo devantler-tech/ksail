@@ -6,10 +6,10 @@ import (
 	"io"
 	"strings"
 
+	dockerclient "github.com/devantler-tech/ksail/v7/pkg/client/docker"
 	kindconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/kind"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/registry"
 	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/client"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
 
@@ -26,7 +26,7 @@ func ConfigureContainerdRegistryMirrors(
 	ctx context.Context,
 	kindConfig *v1alpha4.Cluster,
 	mirrorSpecs []registry.MirrorSpec,
-	dockerClient client.APIClient,
+	dockerClient dockerclient.Client,
 	_ io.Writer,
 ) error {
 	entriesToInject := getEntriesToInject(kindConfig, mirrorSpecs)
@@ -82,7 +82,7 @@ func getEntriesToInject(
 // getKindNodesForCluster returns the list of Kind nodes for the given cluster configuration.
 func getKindNodesForCluster(
 	ctx context.Context,
-	dockerClient client.APIClient,
+	dockerClient dockerclient.Client,
 	kindConfig *v1alpha4.Cluster,
 ) ([]string, error) {
 	clusterName := "kind"
@@ -136,7 +136,7 @@ func buildMountedHostsSet(kindConfig *v1alpha4.Cluster) map[string]bool {
 // listKindNodes returns the container IDs/names of Kind nodes for the given cluster.
 func listKindNodes(
 	ctx context.Context,
-	dockerClient client.APIClient,
+	dockerClient dockerclient.Client,
 	clusterName string,
 ) ([]string, error) {
 	containers, err := dockerClient.ContainerList(ctx, container.ListOptions{
@@ -178,7 +178,7 @@ func SetupRegistries(
 	ctx context.Context,
 	_ *v1alpha4.Cluster,
 	clusterName string,
-	dockerClient client.APIClient,
+	dockerClient dockerclient.Client,
 	mirrorSpecs []registry.MirrorSpec,
 	writer io.Writer,
 ) error {
@@ -199,7 +199,7 @@ func ConnectRegistriesToNetwork(
 	ctx context.Context,
 	mirrorSpecs []registry.MirrorSpec,
 	clusterName string,
-	dockerClient client.APIClient,
+	dockerClient dockerclient.Client,
 	writer io.Writer,
 ) error {
 	errConnect := registry.ConnectMirrorSpecsToNetwork(
@@ -218,7 +218,7 @@ func CleanupRegistries(
 	ctx context.Context,
 	mirrorSpecs []registry.MirrorSpec,
 	clusterName string,
-	dockerClient client.APIClient,
+	dockerClient dockerclient.Client,
 	deleteVolumes bool,
 ) error {
 	err := registry.CleanupMirrorSpecRegistries(

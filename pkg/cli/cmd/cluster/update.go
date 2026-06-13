@@ -18,7 +18,6 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/cli/ui/confirm"
 	argocdclient "github.com/devantler-tech/ksail/v7/pkg/client/argocd"
 	docker "github.com/devantler-tech/ksail/v7/pkg/client/docker"
-	"github.com/devantler-tech/ksail/v7/pkg/di"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/ksail"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
@@ -45,7 +44,7 @@ const forceFlagName = "force"
 // NewUpdateCmd creates the cluster update command.
 // The update command applies configuration changes to a running cluster.
 // It supports in-place updates where possible and falls back to recreation when necessary.
-func NewUpdateCmd(runtimeContainer *di.Runtime) *cobra.Command {
+func NewUpdateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "update",
 		Short: "Update a cluster configuration",
@@ -99,7 +98,7 @@ Use --output json to emit a machine-readable diff for CI/MCP consumption.`,
 	cmd.Flags().String("output", outputFormatText,
 		"Output format: text (default) or json (machine-readable, for CI/MCP)")
 
-	cmd.RunE = lifecycle.WrapHandler(runtimeContainer, cfgManager, handleUpdateRunE)
+	cmd.RunE = lifecycle.WrapHandler(cfgManager, handleUpdateRunE)
 
 	return cmd
 }

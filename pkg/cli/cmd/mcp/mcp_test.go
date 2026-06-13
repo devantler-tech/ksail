@@ -8,7 +8,6 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
 	mcpcmd "github.com/devantler-tech/ksail/v7/pkg/cli/cmd/mcp"
-	"github.com/devantler-tech/ksail/v7/pkg/di"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/assert"
@@ -20,14 +19,12 @@ func TestNewMCPCmd(t *testing.T) {
 
 	tests := []struct {
 		name                 string
-		runtime              *di.Runtime
 		expectedUse          string
 		expectedShort        string
 		expectedExcludeAnnot bool
 	}{
 		{
 			name:                 "creates mcp command with correct properties",
-			runtime:              &di.Runtime{},
 			expectedUse:          "mcp",
 			expectedShort:        "Start an MCP server",
 			expectedExcludeAnnot: true,
@@ -39,7 +36,7 @@ func TestNewMCPCmd(t *testing.T) {
 		t.Run(currentTest.name, func(t *testing.T) {
 			t.Parallel()
 
-			cmd := mcpcmd.NewMCPCmd(currentTest.runtime)
+			cmd := mcpcmd.NewMCPCmd()
 
 			require.NotNil(t, cmd, "NewMCPCmd should return non-nil command")
 			assert.Equal(t, currentTest.expectedUse, cmd.Use, "Use field mismatch")
@@ -63,8 +60,7 @@ func TestNewMCPCmd(t *testing.T) {
 func TestNewMCPCmd_LongDescription(t *testing.T) {
 	t.Parallel()
 
-	runtime := &di.Runtime{}
-	cmd := mcpcmd.NewMCPCmd(runtime)
+	cmd := mcpcmd.NewMCPCmd()
 
 	// Verify long description contains key information
 	expectedSubstrings := []string{
@@ -80,24 +76,10 @@ func TestNewMCPCmd_LongDescription(t *testing.T) {
 	}
 }
 
-func TestNewMCPCmd_NilRuntime(t *testing.T) {
-	t.Parallel()
-
-	// Verify command creation works even with nil runtime
-	cmd := mcpcmd.NewMCPCmd(nil)
-
-	require.NotNil(t, cmd, "NewMCPCmd should handle nil runtime")
-	assert.Equal(t, "mcp", cmd.Use)
-	assert.NotNil(t, cmd.RunE, "RunE should be set")
-	assert.NotEmpty(t, cmd.Short)
-	assert.NotEmpty(t, cmd.Long)
-}
-
 func TestNewMCPCmd_Annotations(t *testing.T) {
 	t.Parallel()
 
-	runtime := &di.Runtime{}
-	cmd := mcpcmd.NewMCPCmd(runtime)
+	cmd := mcpcmd.NewMCPCmd()
 
 	require.NotNil(t, cmd.Annotations, "Annotations should not be nil")
 
@@ -119,8 +101,7 @@ func TestNewMCPCmd_RootCommandIntegration(t *testing.T) {
 		},
 	}
 
-	runtime := &di.Runtime{}
-	mcpCmd := mcpcmd.NewMCPCmd(runtime)
+	mcpCmd := mcpcmd.NewMCPCmd()
 
 	rootCmd.AddCommand(mcpCmd)
 
@@ -135,8 +116,7 @@ func TestNewMCPCmd_ExecuteWithoutServer(t *testing.T) {
 	// This test verifies command structure without actually running the server
 	// since the MCP server requires stdio interaction which is hard to test
 
-	runtime := &di.Runtime{}
-	cmd := mcpcmd.NewMCPCmd(runtime)
+	cmd := mcpcmd.NewMCPCmd()
 
 	// Verify command can be created and inspected
 	require.NotNil(t, cmd)
@@ -149,8 +129,7 @@ func TestNewMCPCmd_ExecuteWithoutServer(t *testing.T) {
 func TestNewMCPCmd_CommandStructure(t *testing.T) {
 	t.Parallel()
 
-	runtime := &di.Runtime{}
-	cmd := mcpcmd.NewMCPCmd(runtime)
+	cmd := mcpcmd.NewMCPCmd()
 
 	// Verify no subcommands (mcp is a leaf command)
 	assert.Empty(t, cmd.Commands(), "MCP command should have no subcommands")
@@ -168,8 +147,7 @@ func TestNewMCPCmd_OutputBuffer(t *testing.T) {
 	t.Parallel()
 
 	// Test that command can use custom output buffers
-	runtime := &di.Runtime{}
-	cmd := mcpcmd.NewMCPCmd(runtime)
+	cmd := mcpcmd.NewMCPCmd()
 
 	var outBuf, errBuf bytes.Buffer
 
@@ -194,8 +172,7 @@ func TestNewMCPCmd_ContextPropagation(t *testing.T) {
 	t.Parallel()
 
 	// Verify that command can have context attached
-	runtime := &di.Runtime{}
-	cmd := mcpcmd.NewMCPCmd(runtime)
+	cmd := mcpcmd.NewMCPCmd()
 
 	ctx := context.Background()
 	cmd.SetContext(ctx)
@@ -209,8 +186,7 @@ func TestNewMCPCmd_ContextPropagation(t *testing.T) {
 func TestNewMCPCmd_HelpOutput(t *testing.T) {
 	t.Parallel()
 
-	runtime := &di.Runtime{}
-	cmd := mcpcmd.NewMCPCmd(runtime)
+	cmd := mcpcmd.NewMCPCmd()
 
 	// Capture help output
 	var buf bytes.Buffer
@@ -235,8 +211,7 @@ func TestNewMCPCmd_ExcludeFromToolGeneration(t *testing.T) {
 	// This is important because the MCP server itself shouldn't expose
 	// itself as a tool to AI assistants
 
-	runtime := &di.Runtime{}
-	cmd := mcpcmd.NewMCPCmd(runtime)
+	cmd := mcpcmd.NewMCPCmd()
 
 	require.NotNil(t, cmd.Annotations, "Annotations should exist")
 
@@ -250,8 +225,7 @@ func TestNewMCPCmd_StdioUsage(t *testing.T) {
 	t.Parallel()
 
 	// Verify command documentation mentions stdio
-	runtime := &di.Runtime{}
-	cmd := mcpcmd.NewMCPCmd(runtime)
+	cmd := mcpcmd.NewMCPCmd()
 
 	assert.Contains(t, strings.ToLower(cmd.Long), "stdio",
 		"Documentation should mention stdio communication")
@@ -261,8 +235,7 @@ func TestNewMCPCmd_MCPClientReferences(t *testing.T) {
 	t.Parallel()
 
 	// Verify command documentation mentions MCP clients
-	runtime := &di.Runtime{}
-	cmd := mcpcmd.NewMCPCmd(runtime)
+	cmd := mcpcmd.NewMCPCmd()
 
 	longLower := strings.ToLower(cmd.Long)
 
@@ -290,8 +263,7 @@ func TestNewMCPCmd_ExampleUsage(t *testing.T) {
 	t.Parallel()
 
 	// Verify command documentation includes example usage
-	runtime := &di.Runtime{}
-	cmd := mcpcmd.NewMCPCmd(runtime)
+	cmd := mcpcmd.NewMCPCmd()
 
 	assert.Contains(t, cmd.Long, "ksail mcp",
 		"Documentation should include example command usage")
@@ -301,8 +273,7 @@ func TestNewMCPCmd_ServerLifecycle(t *testing.T) {
 	t.Parallel()
 
 	// Verify command documentation describes server lifecycle
-	runtime := &di.Runtime{}
-	cmd := mcpcmd.NewMCPCmd(runtime)
+	cmd := mcpcmd.NewMCPCmd()
 
 	longLower := strings.ToLower(cmd.Long)
 

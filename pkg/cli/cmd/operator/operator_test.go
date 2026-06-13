@@ -5,7 +5,6 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/operator"
-	"github.com/devantler-tech/ksail/v7/pkg/di"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -13,7 +12,7 @@ import (
 func TestNewOperatorCmd(t *testing.T) {
 	t.Parallel()
 
-	cmd := operator.NewOperatorCmd(di.NewRuntime())
+	cmd := operator.NewOperatorCmd()
 
 	assert.Equal(t, "operator", cmd.Use)
 	assert.True(t, cmd.Hidden, "operator command should be hidden")

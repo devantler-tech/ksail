@@ -37,16 +37,73 @@ func DefaultKubeconfigPath() string {
 }
 
 // ResolveKubeconfigPath returns a usable kubeconfig path from the given input.
-// If path is empty, the default kubeconfig path is returned.
-// Otherwise path is expanded (tilde → home directory, relative → absolute) via fsutil.ExpandHomePath.
+//
+// Resolution order:
+//  1. An explicit, non-empty path (expanded: tilde → home, relative → absolute).
+//  2. The first entry of the KUBECONFIG environment variable, when set.
+//  3. The default kubeconfig path (~/.kube/config).
+//
+// This is the single owner of kubeconfig-path resolution: the detector package
+// aliases this function. Honoring KUBECONFIG (step 2) means that when no
+// explicit path is given but KUBECONFIG is set, the env path is used — callers
+// that previously fell straight through to the default for an empty path now
+// resolve to KUBECONFIG instead.
 func ResolveKubeconfigPath(path string) (string, error) {
-	if path == "" {
-		return DefaultKubeconfigPath(), nil
+	if path != "" {
+		expanded, err := fsutil.ExpandHomePath(path)
+		if err != nil {
+			return "", fmt.Errorf("expand kubeconfig path: %w", err)
+		}
+
+		return expanded, nil
 	}
 
-	expanded, err := fsutil.ExpandHomePath(path)
+	if envPath := firstKubeconfigEnvPath(); envPath != "" {
+		expanded, err := fsutil.ExpandHomePath(envPath)
+		if err != nil {
+			return "", fmt.Errorf("expand kubeconfig path from env: %w", err)
+		}
+
+		return expanded, nil
+	}
+
+	return DefaultKubeconfigPath(), nil
+}
+
+// firstKubeconfigEnvPath returns the first path in the KUBECONFIG environment
+// variable, or an empty string when KUBECONFIG is unset or its first entry is
+// empty (e.g. a leading path-list separator).
+func firstKubeconfigEnvPath() string {
+	envValue := os.Getenv("KUBECONFIG")
+	if envValue == "" {
+		return ""
+	}
+
+	paths := strings.Split(envValue, string(os.PathListSeparator))
+	if len(paths) == 0 {
+		return ""
+	}
+
+	return paths[0]
+}
+
+// HostKubeconfigPath resolves the kubeconfig path for the host cluster used by
+// nested-Kubernetes discovery. It honors the KSAIL_HOST_KUBECONFIG environment
+// variable (so a dedicated host kubeconfig can be pointed at independently of
+// the active KUBECONFIG), falling back to the default kubeconfig path. The
+// returned path has tilde and relative components expanded.
+//
+// It is the single owner of the host-kubeconfig resolution previously
+// duplicated across clusterdiscovery.
+func HostKubeconfigPath() (string, error) {
+	kubeconfigPath := os.Getenv("KSAIL_HOST_KUBECONFIG")
+	if kubeconfigPath == "" {
+		kubeconfigPath = DefaultKubeconfigPath()
+	}
+
+	expanded, err := fsutil.ExpandHomePath(kubeconfigPath)
 	if err != nil {
-		return "", fmt.Errorf("expand kubeconfig path: %w", err)
+		return "", fmt.Errorf("expand host kubeconfig path: %w", err)
 	}
 
 	return expanded, nil

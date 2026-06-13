@@ -18,6 +18,7 @@ import (
 	"github.com/siderolabs/omni/client/pkg/client/management"
 	omnires "github.com/siderolabs/omni/client/pkg/omni/resources/omni"
 	"github.com/siderolabs/omni/client/pkg/template/operations"
+	"k8s.io/apimachinery/pkg/util/wait"
 )
 
 // Provider implements provider.Provider for Sidero Omni managed Talos clusters.
@@ -591,39 +592,42 @@ func (p *Provider) waitForCluster(
 		return provider.ErrProviderUnavailable
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
+	var condErr error
 
-	ticker := time.NewTicker(clusterStatusPollInterval)
-	defer ticker.Stop()
+	err := wait.PollUntilContextTimeout(
+		ctx,
+		clusterStatusPollInterval,
+		timeout,
+		true, // check before the first wait, matching the legacy ordering.
+		func(ctx context.Context) (bool, error) {
+			ok, checkErr := check(ctx, p.st, clusterName)
+			condErr = checkErr
 
-	for {
-		ok, err := check(ctx, p.st, clusterName)
-		if err != nil {
-			return err
-		}
-
-		if ok {
-			return nil
-		}
-
-		select {
-		case <-ctx.Done():
-			ctxErr := ctx.Err()
-			if errors.Is(ctxErr, context.Canceled) {
-				return fmt.Errorf(
-					"cancelled waiting for cluster %q to %s: %w",
-					clusterName, conditionLabel, ctxErr,
-				)
-			}
-
-			return fmt.Errorf(
-				"timed out waiting for cluster %q to %s: %w",
-				clusterName, conditionLabel, ctxErr,
-			)
-		case <-ticker.C:
-		}
+			return ok, checkErr
+		},
+	)
+	if err == nil {
+		return nil
 	}
+
+	// A condition error propagates unwrapped (even when it wraps a context
+	// error); only the poller's own cancellation/timeout maps to the legacy
+	// messages, preserving the cancelled-vs-timed-out distinction.
+	if condErr != nil && errors.Is(err, condErr) {
+		return condErr
+	}
+
+	if errors.Is(err, context.Canceled) {
+		return fmt.Errorf(
+			"cancelled waiting for cluster %q to %s: %w",
+			clusterName, conditionLabel, err,
+		)
+	}
+
+	return fmt.Errorf(
+		"timed out waiting for cluster %q to %s: %w",
+		clusterName, conditionLabel, err,
+	)
 }
 
 // clusterStatusPredicate evaluates a condition on a ClusterStatusSpec.

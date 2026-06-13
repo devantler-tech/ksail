@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	dockerpkg "github.com/devantler-tech/ksail/v7/pkg/client/docker"
 	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	kubernetesprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/kubernetes"
@@ -471,7 +472,7 @@ func (p *KubernetesProvisioner) discoverMappedPorts(
 // mirror specs are configured.
 func (p *KubernetesProvisioner) setupDinDMirrors(
 	ctx context.Context,
-	dindClient dockerclient.APIClient,
+	dindClient dockerpkg.Client,
 	clusterName string,
 ) error {
 	if len(p.mirrorSpecs) == 0 {
@@ -572,7 +573,7 @@ const nestedDebugEnvVar = "KSAIL_NESTED_DEBUG"
 // only returns the bootstrap error without streaming logs.
 func (p *KubernetesProvisioner) dumpNestedDiagnostics(
 	ctx context.Context,
-	dindClient dockerclient.APIClient,
+	dindClient dockerpkg.Client,
 	clusterName string,
 ) {
 	if os.Getenv(nestedDebugEnvVar) == "" {

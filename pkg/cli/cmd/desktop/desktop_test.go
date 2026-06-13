@@ -45,7 +45,7 @@ func fixedExecutable() func() (string, error) {
 func TestNewDesktopCmd(t *testing.T) {
 	t.Parallel()
 
-	cmd := desktop.NewDesktopCmd(nil)
+	cmd := desktop.NewDesktopCmd()
 
 	assert.Equal(t, "desktop", cmd.Name())
 	assert.Equal(t, "true", cmd.Annotations[annotations.AnnotationExclude])

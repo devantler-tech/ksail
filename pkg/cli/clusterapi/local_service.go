@@ -17,7 +17,6 @@ import (
 	"path/filepath"
 	"slices"
 	"sort"
-	"strings"
 	"sync"
 	"time"
 
@@ -714,7 +713,9 @@ func writeEKSConfig(name, region string) (string, error) {
 }
 
 // canonicalClusterDir canonicalizes ~/.ksail/clusters/<name> (resolving symlinks) and confirms it
-// remains within the canonical clusters root, rejecting any path that escapes it.
+// remains within the canonical clusters root, rejecting any path that escapes it. The containment
+// check is delegated to fsutil.IsPathWithinDirectory so it cannot drift from the other callers of
+// the shared symlink-escape guard.
 func canonicalClusterDir(clustersRoot, name string) (string, error) {
 	canonicalRoot, err := fsutil.EvalCanonicalPath(clustersRoot)
 	if err != nil {
@@ -726,8 +727,7 @@ func canonicalClusterDir(clustersRoot, name string) (string, error) {
 		return "", fmt.Errorf("canonicalize eks config directory: %w", err)
 	}
 
-	rel, err := filepath.Rel(canonicalRoot, canonicalDir)
-	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+	if !fsutil.IsPathWithinDirectory(canonicalDir, canonicalRoot) {
 		return "", fmt.Errorf("%w: eks config path escapes %s", api.ErrInvalid, canonicalRoot)
 	}
 

@@ -9,8 +9,8 @@ import (
 	"fmt"
 	"strings"
 
+	dockerclient "github.com/devantler-tech/ksail/v7/pkg/client/docker"
 	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
 )
 
@@ -25,7 +25,7 @@ var ErrExecFailed = errors.New("exec failed")
 // This is the shared implementation used by Kind and VCluster provisioners.
 func InjectHostsTomlIntoNodes(
 	ctx context.Context,
-	dockerClient client.APIClient,
+	dockerClient dockerclient.Client,
 	nodes []string,
 	entries []MirrorEntry,
 ) error {
@@ -52,7 +52,7 @@ func InjectHostsTomlIntoNodes(
 // using docker exec. It generates a random heredoc delimiter to prevent injection attacks.
 func InjectHostsToml(
 	ctx context.Context,
-	dockerClient client.APIClient,
+	dockerClient dockerclient.Client,
 	nodeName string,
 	registryHost string,
 	hostsTomlContent string,
@@ -137,7 +137,7 @@ func PrepareRegistryManagerFromSpecs(
 	ctx context.Context,
 	mirrorSpecs []MirrorSpec,
 	clusterName string,
-	dockerClient client.APIClient,
+	dockerClient dockerclient.Client,
 ) (Backend, []Info, error) {
 	if len(mirrorSpecs) == 0 {
 		return nil, nil, nil

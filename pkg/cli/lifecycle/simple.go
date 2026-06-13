@@ -211,7 +211,7 @@ func resolveFromConfig(
 	}
 
 	if *clusterName == "" {
-		*clusterName = clusterNameFromDistConfig(distCfg)
+		*clusterName = ClusterNameFromDistributionConfig(distCfg)
 	}
 
 	if *provider == "" && cfg.Spec.Cluster.Provider != "" {
@@ -224,35 +224,6 @@ func resolveFromConfig(
 
 	*omniOpts = cfg.Spec.Provider.Omni
 	*kubernetesOpts = cfg.Spec.Provider.Kubernetes
-}
-
-// clusterNameFromDistConfig extracts the cluster name from distribution-specific config.
-func clusterNameFromDistConfig(distCfg *clusterprovisioner.DistributionConfig) string {
-	if distCfg == nil {
-		return ""
-	}
-
-	if distCfg.Kind != nil {
-		return distCfg.Kind.Name
-	}
-
-	if distCfg.K3d != nil {
-		return distCfg.K3d.Name
-	}
-
-	if distCfg.Talos != nil {
-		return distCfg.Talos.GetClusterName()
-	}
-
-	if distCfg.VCluster != nil {
-		return distCfg.VCluster.Name
-	}
-
-	if distCfg.KWOK != nil {
-		return distCfg.KWOK.Name
-	}
-
-	return ""
 }
 
 // resolveFromKubecontext fills missing cluster info from the current kubeconfig context.

@@ -35,6 +35,9 @@ var FirstNodeAddressForTest = firstNodeAddress //nolint:gochecknoglobals
 // ToAnyMapForTest exposes toAnyMap for unit testing.
 var ToAnyMapForTest = toAnyMap //nolint:gochecknoglobals
 
+// MapWaitErrorForTest exposes mapWaitError for unit testing.
+var MapWaitErrorForTest = mapWaitError //nolint:gochecknoglobals
+
 // NewLocalListenerForTest exposes newLocalListener for unit testing. It returns the
 // bound port and a close function.
 func NewLocalListenerForTest(ctx context.Context, localPort int) (int, func() error, error) {

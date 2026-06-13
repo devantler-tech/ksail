@@ -4,12 +4,11 @@ import (
 	"fmt"
 
 	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
-	"github.com/devantler-tech/ksail/v7/pkg/di"
 	"github.com/spf13/cobra"
 )
 
 // NewTenantCmd creates the parent tenant command and wires subcommands beneath it.
-func NewTenantCmd(runtimeContainer *di.Runtime) *cobra.Command {
+func NewTenantCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "tenant",
 		Short: "Manage tenant lifecycle",
@@ -23,8 +22,8 @@ func NewTenantCmd(runtimeContainer *di.Runtime) *cobra.Command {
 		},
 	}
 
-	cmd.AddCommand(NewCreateCmd(runtimeContainer))
-	cmd.AddCommand(NewDeleteCmd(runtimeContainer))
+	cmd.AddCommand(NewCreateCmd())
+	cmd.AddCommand(NewDeleteCmd())
 
 	return cmd
 }

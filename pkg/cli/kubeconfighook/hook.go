@@ -14,6 +14,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/kubeconfig"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/lifecycle"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	configmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
@@ -240,32 +241,37 @@ func isKubeconfigFlagExplicit(cmd *cobra.Command) bool {
 
 // resolveClusterName determines the Omni cluster name from available sources.
 // Priority: distribution config → kubeconfig current context.
+//
+// This delegates to the shared lifecycle.ResolveClusterName resolver, encoding
+// the Omni-specific distconfig-over-kubeconfig priority via
+// WithDistConfigPriority (so the Talos distribution config name wins and
+// metadata.name / connection.context are not consulted) and the
+// kubeconfig-current-context fallback via WithClusterNameFallback.
 func resolveClusterName(
 	distCfg *clusterprovisioner.DistributionConfig,
 	kubeconfigPath string,
 ) string {
-	if distCfg != nil {
-		name := clusterNameFromDistConfig(distCfg)
-		if name != "" {
-			return name
-		}
+	var talosCfg any
+	if distCfg != nil && distCfg.Talos != nil {
+		talosCfg = distCfg.Talos
 	}
 
-	// Omni kubeconfig uses the cluster name as the context name.
-	return clusterNameFromKubeconfig(kubeconfigPath)
-}
-
-// clusterNameFromDistConfig extracts the cluster name from distribution-specific config.
-func clusterNameFromDistConfig(distCfg *clusterprovisioner.DistributionConfig) string {
-	if distCfg == nil {
+	// Errors cannot occur on this option path (fallback always provided), but
+	// the resolver returns one in its signature; treat any as "no name".
+	name, err := lifecycle.ResolveClusterName(
+		nil,
+		talosCfg,
+		lifecycle.WithDistConfigPriority(),
+		// Omni kubeconfig uses the cluster name as the context name.
+		lifecycle.WithClusterNameFallback(func() string {
+			return clusterNameFromKubeconfig(kubeconfigPath)
+		}),
+	)
+	if err != nil {
 		return ""
 	}
 
-	if distCfg.Talos != nil {
-		return distCfg.Talos.GetClusterName()
-	}
-
-	return ""
+	return name
 }
 
 // clusterNameFromKubeconfig extracts the cluster name from the kubeconfig file.

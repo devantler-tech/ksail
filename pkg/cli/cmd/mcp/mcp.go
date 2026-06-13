@@ -6,13 +6,12 @@ import (
 	"os"
 
 	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
-	"github.com/devantler-tech/ksail/v7/pkg/di"
 	mcpsvc "github.com/devantler-tech/ksail/v7/pkg/svc/mcp"
 	"github.com/spf13/cobra"
 )
 
 // NewMCPCmd creates and returns the mcp command.
-func NewMCPCmd(_ *di.Runtime) *cobra.Command {
+func NewMCPCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "mcp",
 		Short: "Start an MCP server",
