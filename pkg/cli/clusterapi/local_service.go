@@ -63,7 +63,15 @@ func (j *job) message() string {
 // implement api.ClusterUpdater: a local cluster's configuration is managed through its config files
 // and `ksail cluster update`, not the API, so the SPA hides the edit affordance (capabilities.
 // clusterUpdate=false) rather than offering a button that returns 501.
-var _ api.ClusterService = (*Service)(nil)
+//
+// It DOES implement api.ClusterLifecycleController (start/stop a Docker cluster without recreating it)
+// and api.ComponentInstaller (reporting componentsInstall=false until the local create flow reuses the
+// shared component pipeline), so the SPA gates those affordances on the advertised capabilities.
+var (
+	_ api.ClusterService             = (*Service)(nil)
+	_ api.ClusterLifecycleController = (*Service)(nil)
+	_ api.ComponentInstaller         = (*Service)(nil)
+)
 
 // Service implements api.ClusterService over the local provider/provisioner lifecycle.
 type Service struct {
@@ -163,6 +171,10 @@ type listEntry struct {
 	phase        v1alpha1.ClusterPhase
 	message      string
 	since        time.Time
+	// runState is the discovered cluster's coarse running/stopped state (Docker only). A stopped
+	// cluster is reported with no Ready phase so the web UI does not render it green; instead List
+	// attaches a Ready=False/reason=Stopped condition. RunStateUnknown leaves the cluster Ready.
+	runState clusterdiscovery.RunState
 }
 
 // List returns the union of clusters discovered across providers and clusters tracked in the job
@@ -176,7 +188,8 @@ func (s *Service) List(ctx context.Context) (*v1alpha1.ClusterList, error) {
 		merged[name] = listEntry{
 			distribution: cluster.Distribution,
 			provider:     cluster.Provider,
-			phase:        v1alpha1.ClusterPhaseReady,
+			phase:        discoveredPhase(cluster.RunState),
+			runState:     cluster.RunState,
 		}
 	}
 
@@ -218,7 +231,7 @@ func (s *Service) List(ctx context.Context) (*v1alpha1.ClusterList, error) {
 		cluster := newCluster(name, entry.distribution, entry.provider, entry.phase)
 		cluster.Status.Endpoint = endpoints[name]
 
-		condition, ok := jobConditionFor(entry.phase, entry.message, entry.since)
+		condition, ok := listEntryCondition(entry)
 		if ok {
 			cluster.Status.Conditions = []metav1.Condition{condition}
 		}
@@ -321,29 +334,40 @@ func (s *Service) Create(
 // Delete starts deleting a cluster and returns immediately, marking it Deleting. The deletion runs
 // in a background goroutine.
 func (s *Service) Delete(ctx context.Context, _, name string) error {
-	distribution, provider, ok := s.resolveCluster(ctx, name)
-	if !ok {
-		return fmt.Errorf("%w: %q", api.ErrNotFound, name)
-	}
-
-	s.mu.Lock()
-	s.jobs[name] = &job{
-		distribution: distribution,
-		provider:     provider,
-		phase:        v1alpha1.ClusterPhaseDeleting,
-		startedAt:    time.Now(),
-	}
-	s.mu.Unlock()
-
-	// Reconstruct the spec the provisioner needs to target the right provider. Provider options
-	// (server types, etc.) are irrelevant for deletion, so distribution + provider suffice.
-	spec := v1alpha1.Spec{
-		Cluster: v1alpha1.ClusterSpec{Distribution: distribution, Provider: provider},
+	spec, err := s.startJob(ctx, name, v1alpha1.ClusterPhaseDeleting)
+	if err != nil {
+		return err
 	}
 
 	go s.runDelete(context.WithoutCancel(ctx), name, spec)
 
 	return nil
+}
+
+// Start brings a stopped cluster's nodes back up. It implements api.ClusterLifecycleController so the
+// web UI can power a Docker-stopped cluster back on without recreating it. Like Create/Delete it runs
+// asynchronously: the cluster is marked Updating and the provisioner's Start runs in the background.
+func (s *Service) Start(ctx context.Context, _, name string) error {
+	return s.runLifecycle(ctx, name, func(p clusterprovisioner.Provisioner) error {
+		return p.Start(ctx, name)
+	})
+}
+
+// Stop powers a running cluster's nodes down without deleting it (api.ClusterLifecycleController). It
+// runs asynchronously like Start: the cluster is marked Updating while the provisioner's Stop runs.
+func (s *Service) Stop(ctx context.Context, _, name string) error {
+	return s.runLifecycle(ctx, name, func(p clusterprovisioner.Provisioner) error {
+		return p.Stop(ctx, name)
+	})
+}
+
+// InstallsComponents reports whether this backend installs the declared cluster components. The local
+// backend only provisions the cluster today (it does not run the component pipeline that CLI create
+// and the operator reconciler do), so it returns false — the web UI then hides the create form's
+// component selectors rather than offering options this backend silently drops. It flips to true once
+// the local create flow reuses the shared installer pipeline.
+func (s *Service) InstallsComponents() bool {
+	return false
 }
 
 // Availability reports per-provider availability across the providers this service discovers. The
@@ -399,6 +423,85 @@ func (s *Service) dockerFactory(
 	distribution v1alpha1.Distribution,
 ) (clusterprovisioner.Factory, error) {
 	return s.newFactory(distribution, "")
+}
+
+// startJob resolves a cluster, records an in-flight job for it at the given phase, and returns the
+// minimal Spec a background provisioner action needs (distribution + provider — provider options like
+// server types are irrelevant for delete/start/stop). Returns api.ErrNotFound when the cluster is
+// unknown. Shared by Delete and the Start/Stop lifecycle path so the resolve+register handshake lives
+// in one place.
+func (s *Service) startJob(
+	ctx context.Context,
+	name string,
+	phase v1alpha1.ClusterPhase,
+) (v1alpha1.Spec, error) {
+	distribution, provider, ok := s.resolveCluster(ctx, name)
+	if !ok {
+		return v1alpha1.Spec{}, fmt.Errorf("%w: %q", api.ErrNotFound, name)
+	}
+
+	s.mu.Lock()
+	s.jobs[name] = &job{
+		distribution: distribution,
+		provider:     provider,
+		phase:        phase,
+		startedAt:    time.Now(),
+	}
+	s.mu.Unlock()
+
+	return v1alpha1.Spec{
+		Cluster: v1alpha1.ClusterSpec{Distribution: distribution, Provider: provider},
+	}, nil
+}
+
+// runLifecycle marks a resolved cluster Updating, then runs the supplied provisioner action (Start or
+// Stop) in the background, clearing the job on success and recording the failure otherwise — the same
+// async pattern Create/Delete use so the web UI's list reflects progress without a UI change.
+func (s *Service) runLifecycle(
+	ctx context.Context,
+	name string,
+	action func(clusterprovisioner.Provisioner) error,
+) error {
+	spec, err := s.startJob(ctx, name, v1alpha1.ClusterPhaseUpdating)
+	if err != nil {
+		return err
+	}
+
+	go s.runLifecycleAction(context.WithoutCancel(ctx), name, spec, action)
+
+	return nil
+}
+
+// runLifecycleAction runs a Start/Stop action against a freshly built provisioner and records the
+// outcome: the job is cleared on success (the next discovery poll reflects the new run-state) and
+// pinned Failed with the error otherwise, so the UI can surface why a start/stop did not take.
+func (s *Service) runLifecycleAction(
+	ctx context.Context,
+	name string,
+	spec v1alpha1.Spec,
+	action func(clusterprovisioner.Provisioner) error,
+) {
+	err := s.runProvisioner(ctx, name, spec, action)
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	current := s.jobs[name]
+	if current == nil {
+		return
+	}
+
+	if err != nil {
+		slog.Error("cluster lifecycle action failed",
+			"cluster", name, "distribution", spec.Cluster.Distribution, "error", err)
+
+		current.phase = v1alpha1.ClusterPhaseFailed
+		current.err = err
+
+		return
+	}
+
+	delete(s.jobs, name)
 }
 
 func (s *Service) runCreate(ctx context.Context, name string, spec v1alpha1.Spec) {
@@ -539,6 +642,40 @@ func newCluster(
 	cluster.Status.Phase = phase
 
 	return cluster
+}
+
+// discoveredPhase maps a discovered cluster's run-state to the phase the list reports. A running (or
+// run-state-unknown, e.g. cloud) cluster is Ready; a stopped Docker cluster reports no phase so the
+// web UI does not render it green — List attaches a Ready=False/reason=Stopped condition instead (the
+// "Stopped" phase value itself is a breaking apis change reserved for a later phase).
+func discoveredPhase(runState clusterdiscovery.RunState) v1alpha1.ClusterPhase {
+	if runState == clusterdiscovery.RunStateStopped {
+		return ""
+	}
+
+	return v1alpha1.ClusterPhaseReady
+}
+
+// listEntryCondition returns the single status condition a list entry carries, if any: the Stopped
+// condition for a discovered-but-stopped cluster, otherwise the in-flight/failed job condition.
+func listEntryCondition(entry listEntry) (metav1.Condition, bool) {
+	if entry.runState == clusterdiscovery.RunStateStopped {
+		return stoppedCondition(), true
+	}
+
+	return jobConditionFor(entry.phase, entry.message, entry.since)
+}
+
+// stoppedCondition is the Ready=False/reason=Stopped condition a discovered Docker cluster carries
+// when its containers exist but are not running. The conventional Ready type lets the existing UI
+// render it, and the reason lets the SPA present a "Stopped" state without a new ClusterPhase value.
+func stoppedCondition() metav1.Condition {
+	return metav1.Condition{
+		Type:    "Ready",
+		Status:  metav1.ConditionFalse,
+		Reason:  "Stopped",
+		Message: "Cluster is stopped",
+	}
 }
 
 // jobConditionFor builds the status condition describing an in-flight or failed local operation, so

@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/clusterdiscovery"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
@@ -53,6 +54,15 @@ func (s *Service) SetApplyClientForTest(
 	build func(ctx context.Context, clusterName string) (dynamic.Interface, meta.RESTMapper, error),
 ) {
 	s.newApplyClient = build
+}
+
+// SetDockerStatusForTest overrides discovery's Docker run-state probe so a test can drive a cluster's
+// running/stopped state without a real Docker daemon, exercising the local backend's stopped-cluster
+// rendering (no Ready phase + a Ready=False/reason=Stopped condition).
+func (s *Service) SetDockerStatusForTest(
+	probe func(ctx context.Context, distribution v1alpha1.Distribution, name string) clusterdiscovery.RunState,
+) {
+	s.discoverer.DockerStatus = probe
 }
 
 // NewTestService returns a Service whose provisioner factory is overridden, so black-box tests can

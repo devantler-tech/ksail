@@ -216,6 +216,21 @@ func ExportMaybeWaitForTTL(
 	return maybeWaitForTTL(cmd, clusterName, clusterCfg)
 }
 
+// ExportNormalizeVersionTag exposes normalizeVersionTag for testing.
+func ExportNormalizeVersionTag(tag string) string {
+	return normalizeVersionTag(tag)
+}
+
+// ExportVersionsEqual exposes versionsEqual for testing.
+func ExportVersionsEqual(current, target string) bool {
+	return versionsEqual(current, target)
+}
+
+// ExportIsDowngrade exposes isDowngrade for testing.
+func ExportIsDowngrade(current, target string) bool {
+	return isDowngrade(current, target)
+}
+
 // ErrMetricsServerDisableUnsupported exports the sentinel error for testing.
 var ErrMetricsServerDisableUnsupported = errMetricsServerDisableUnsupported
 

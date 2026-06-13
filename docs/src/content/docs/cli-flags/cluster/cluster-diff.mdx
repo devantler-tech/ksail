@@ -26,15 +26,22 @@ Use --output json for machine-readable output suitable for CI pipelines.
 Use --exit-code to return exit code 2 when drift is detected (useful for
 CI gates and monitoring scripts).
 
+Use --include-version-drift to also report the distribution/Kubernetes version
+reconciliation 'ksail cluster update' applies on every run (matching
+'update --dry-run'). It is off by default: resolving the latest available
+version performs OCI registry lookups, so enabling it makes diff
+network-dependent and may report drift whenever upstream cuts a release.
+
 Usage:
   ksail cluster diff [flags]
 
 Flags:
-  -c, --context string      Kubernetes context of cluster
-      --exit-code           Return exit code 2 when drift is detected (for CI gates)
-  -k, --kubeconfig string   Path to kubeconfig file (default "~/.kube/config")
-  -n, --name string         Cluster name used for container names, registry names, and kubeconfig context
-      --output string       Output format: text or json. Use json for machine-readable structured output. (default "text")
+  -c, --context string          Kubernetes context of cluster
+      --exit-code               Return exit code 2 when drift is detected (for CI gates)
+      --include-version-drift   Also report distribution/Kubernetes version drift the next 'cluster update' would reconcile (performs OCI registry lookups; off by default)
+  -k, --kubeconfig string       Path to kubeconfig file (default "~/.kube/config")
+  -n, --name string             Cluster name used for container names, registry names, and kubeconfig context
+      --output string           Output format: text or json. Use json for machine-readable structured output. (default "text")
 
 Global Flags:
       --benchmark       Show per-activity benchmark output

@@ -36,6 +36,10 @@ var (
 	_ ResourceService        = (*crConnectedClusterService)(nil)
 	_ ResourceWriter         = (*crConnectedClusterService)(nil)
 	_ ResourceClientProvider = (*crConnectedClusterService)(nil)
+	// Inherited from the embedded *crClusterService: in-place update and component-install advertising
+	// (componentsInstall=true) carry through to the connected operator backend.
+	_ ClusterUpdater     = (*crConnectedClusterService)(nil)
+	_ ComponentInstaller = (*crConnectedClusterService)(nil)
 )
 
 // NewCRClusterServiceWithResources returns an operator ClusterService that can also browse resources in

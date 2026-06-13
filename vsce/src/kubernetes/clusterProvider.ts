@@ -8,21 +8,7 @@
 
 import * as vscode from "vscode";
 import { ClusterProviderV1 } from "vscode-kubernetes-tools-api";
-import { createCluster } from "../ksail/index.js";
-import { getSchemaEnumValues as resolveSchemaEnumValues } from "../mcp/index.js";
-
-/**
- * Fallback enum values when MCP schema is unavailable.
- * First value in each array is the CLI default.
- */
-const FALLBACK_VALUES: Record<string, string[]> = {
-  distribution: ["Vanilla", "K3s", "Talos", "VCluster"],
-  provider: ["Docker", "Hetzner", "Omni"],
-  cni: ["Default", "Cilium", "Calico"],
-  "gitops-engine": ["None", "Flux", "ArgoCD"],
-};
-
-const CLUSTER_INIT_TOOL = "cluster_init";
+import { createCluster, getEnumValues } from "../ksail/index.js";
 
 /**
  * Step identifiers for the wizard flow
@@ -31,13 +17,6 @@ const STEPS = {
   CONFIGURE: "ksail-configure",
   CREATING: "ksail-creating",
 } as const;
-
-/**
- * Get enum values from MCP schema with fallback for cluster init properties
- */
-function getSchemaEnumValues(propertyName: string): Promise<string[]> {
-  return resolveSchemaEnumValues(CLUSTER_INIT_TOOL, propertyName, FALLBACK_VALUES);
-}
 
 /**
  * Generate VS Code themed CSS for the wizard HTML pages
@@ -161,15 +140,16 @@ function buildSelect(name: string, values: string[], defaultIndex = 0): string {
 }
 
 /**
- * Generate the configuration form HTML page
+ * Generate the configuration form HTML page.
+ *
+ * Enum values come from the static ENUM_CATALOG (single-sourced against the Go
+ * enums), so no async schema query is needed.
  */
-async function buildConfigurePage(): Promise<string> {
-  const [distributions, providers, cniValues, gitopsValues] = await Promise.all([
-    getSchemaEnumValues("distribution"),
-    getSchemaEnumValues("provider"),
-    getSchemaEnumValues("cni"),
-    getSchemaEnumValues("gitops-engine"),
-  ]);
+function buildConfigurePage(): string {
+  const distributions = getEnumValues("distribution");
+  const providers = getEnumValues("provider");
+  const cniValues = getEnumValues("cni");
+  const gitopsValues = getEnumValues("gitops-engine");
 
   return `
     ${getWizardStyles()}
@@ -285,8 +265,7 @@ export function createKSailClusterProvider(
 
       if (sendingStep === ClusterProviderV1.SELECT_CLUSTER_TYPE_STEP_ID) {
         // First call — show the configuration form
-        const pagePromise = buildConfigurePage();
-        wizard.showPage(pagePromise);
+        wizard.showPage(buildConfigurePage());
         return;
       }
 

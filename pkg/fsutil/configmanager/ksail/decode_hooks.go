@@ -19,6 +19,7 @@ import (
 var clusterDecodeHook = mapstructure.ComposeDecodeHookFunc(
 	metav1DurationDecodeHook(),
 	autoscalerExpanderListDecodeHook(),
+	toggleBoolAliasDecodeHook(),
 )
 
 // autoscalerExpanderListDecodeHook normalises a scalar autoscaler expander value
@@ -42,6 +43,33 @@ func autoscalerExpanderListDecodeHook() mapstructure.DecodeHookFuncType {
 		}
 
 		return v1alpha1.SplitAutoscalerExpanders(raw), nil
+	}
+}
+
+// toggleBoolAliasDecodeHook coerces a YAML/JSON boolean landing in a toggle-enum
+// field (CertManager, CSI, MetricsServer, …) into its canonical "Enabled" /
+// "Disabled" string before the enum's own validation runs. The config loader
+// uses viper+mapstructure rather than sigs.k8s.io/yaml, so the enum's
+// UnmarshalJSON never fires on this path; this hook is what lets `certManager:
+// true` be accepted as a non-breaking alias for `certManager: Enabled`. The
+// long-standing string spelling keeps working unchanged because non-bool sources
+// pass through untouched.
+func toggleBoolAliasDecodeHook() mapstructure.DecodeHookFuncType {
+	return func(fromType reflect.Type, toType reflect.Type, data any) (any, error) {
+		if fromType.Kind() != reflect.Bool {
+			return data, nil
+		}
+
+		if !v1alpha1.IsToggleEnumType(toType) {
+			return data, nil
+		}
+
+		enabled, ok := data.(bool)
+		if !ok {
+			return data, nil
+		}
+
+		return v1alpha1.BoolToToggleValue(enabled), nil
 	}
 }
 

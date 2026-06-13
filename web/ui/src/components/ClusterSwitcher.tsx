@@ -2,12 +2,13 @@ import { Menu, MenuButton, MenuItem, MenuItems } from "@headlessui/react";
 import { Check, ChevronsUpDown } from "lucide-react";
 import type { Cluster } from "../api.ts";
 import { cx } from "../lib/cx.ts";
-import { clusterKey } from "../lib/k8s.ts";
+import { clusterKey, clusterPhase } from "../lib/k8s.ts";
 import { phaseMeta, StatusDot } from "./StatusBadge.tsx";
 
 // Dot is a small status-coloured dot derived from a cluster's phase (reuses the StatusBadge palette).
-function Dot({ phase }: { phase?: string }) {
-  return <StatusDot tone={phaseMeta(phase).dot} size="md" className="shrink-0" />;
+// It reads the display phase via clusterPhase so a stopped cluster shows the muted tone, not green.
+function Dot({ cluster }: { cluster: Cluster }) {
+  return <StatusDot tone={phaseMeta(clusterPhase(cluster)).dot} size="md" className="shrink-0" />;
 }
 
 // ClusterSwitcher is the single control for choosing the active cluster: a card showing the current
@@ -32,7 +33,7 @@ export function ClusterSwitcher({
   return (
     <Menu as="div" className="relative">
       <MenuButton className="flex w-full items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-left transition-colors hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 dark:border-slate-700 dark:bg-slate-800/60 dark:hover:bg-slate-800">
-        <Dot phase={active.status?.phase} />
+        <Dot cluster={active} />
         <span className="min-w-0 flex-1">
           <span className="block truncate text-sm font-semibold text-slate-900 dark:text-white">{active.metadata.name}</span>
           <span className="block truncate text-xs text-slate-500 dark:text-slate-400">
@@ -61,7 +62,7 @@ export function ClusterSwitcher({
                       focus ? "bg-slate-100 dark:bg-slate-700/60" : "",
                     )}
                   >
-                    <Dot phase={cluster.status?.phase} />
+                    <Dot cluster={cluster} />
                     <span className="min-w-0 flex-1 truncate text-slate-700 dark:text-slate-200">{cluster.metadata.name}</span>
                     {key === activeKey ? <Check className="size-4 shrink-0 text-blue-600 dark:text-blue-400" aria-hidden /> : null}
                   </button>

@@ -6,7 +6,6 @@ import (
 	"io"
 
 	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
-	"github.com/devantler-tech/ksail/v7/pkg/cli/kubeconfig"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	backupsvc "github.com/devantler-tech/ksail/v7/pkg/svc/backup"
 	"github.com/spf13/cobra"
@@ -39,6 +38,7 @@ type restoreFlags struct {
 	inputPath              string
 	existingResourcePolicy string
 	dryRun                 bool
+	name                   string
 }
 
 // NewRestoreCmd creates the cluster restore command.
@@ -83,6 +83,11 @@ Example:
 		&flags.dryRun, "dry-run", false,
 		"Print what would be restored without applying",
 	)
+	cmd.Flags().StringVar(
+		&flags.name, "name", "",
+		"Name of the cluster to restore into (resolves the kubeconfig like the other "+
+			"cluster commands; defaults to the current kubeconfig context when unset)",
+	)
 
 	cobra.CheckErr(cmd.MarkFlagRequired("input"))
 
@@ -94,6 +99,7 @@ func runRestore(
 	cmd *cobra.Command,
 	flags *restoreFlags,
 ) error {
+	//nolint:contextcheck // buildRestorer→resolveTargetKubeconfig derives ctx from cmd (cluster-cmd convention)
 	restorer, err := buildRestorer(cmd, flags)
 	if err != nil {
 		return err
@@ -145,9 +151,9 @@ func buildRestorer(
 
 	flags.inputPath = canonInput
 
-	kubeconfigPath := kubeconfig.GetKubeconfigPathSilently(cmd)
-	if kubeconfigPath == "" {
-		return nil, ErrKubeconfigNotFound
+	kubeconfigPath, err := resolveTargetKubeconfig(cmd, flags.name)
+	if err != nil {
+		return nil, err
 	}
 
 	return backupsvc.NewRestorer(backupsvc.RestoreOptions{

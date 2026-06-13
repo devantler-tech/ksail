@@ -35,6 +35,12 @@ with other cluster commands:
   ksail cluster delete --name <cluster> --provider <provider>
   ksail cluster stop --name <cluster> --provider <provider>
 
+Use --output json for machine-readable output. The JSON is an array of objects:
+  [
+    {"name": "dev", "provider": "docker", "distribution": "Vanilla", "ttl": "2h 30m"}
+  ]
+The "ttl" field is null when no TTL is set and "EXPIRED" once the TTL has elapsed.
+
 Examples:
   # List all clusters
   ksail cluster list
@@ -46,7 +52,10 @@ Examples:
   ksail cluster list --provider Hetzner
 
   # List only Omni clusters
-  ksail cluster list --provider Omni`
+  ksail cluster list --provider Omni
+
+  # Machine-readable JSON (name/provider/distribution/ttl)
+  ksail cluster list --output json`
 
 // NewListCmd creates the list command for clusters.
 func NewListCmd() *cobra.Command {
@@ -58,6 +67,11 @@ func NewListCmd() *cobra.Command {
 		Long:         listLongDesc,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			err := validateOutputFormat(cmd)
+			if err != nil {
+				return err
+			}
+
 			return HandleListRunE(cmd, providerFilter, ListDeps{})
 		},
 	}
@@ -69,6 +83,10 @@ func NewListCmd() *cobra.Command {
 		fmt.Sprintf("Filter by provider (%s). If not specified, lists all providers.",
 			strings.Join(providerFilter.ValidValues(), ", ")),
 	)
+
+	cmd.Flags().String("output", outputFormatText,
+		"Output format: text or json. Use json for machine-readable structured output "+
+			"(array of {name, provider, distribution, ttl}).")
 
 	return cmd
 }
@@ -135,6 +153,10 @@ func HandleListRunE(
 			ClusterName:  cluster.Name,
 			TTL:          ttl,
 		})
+	}
+
+	if getOutputFormat(cmd) == outputFormatJSON {
+		return emitListJSON(cmd.OutOrStdout(), providers, allResults)
 	}
 
 	displayListResults(cmd.OutOrStdout(), providers, allResults)

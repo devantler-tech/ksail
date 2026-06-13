@@ -9,10 +9,7 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/operator/api"
-
-	//nolint:depguard // wails services are the desktop app's UI runtime; the CLI allowlist does not apply here.
 	"github.com/wailsapp/wails/v3/pkg/services/dock"
-	//nolint:depguard // wails services are the desktop app's UI runtime; the CLI allowlist does not apply here.
 	"github.com/wailsapp/wails/v3/pkg/services/notifications"
 )
 
@@ -50,7 +47,7 @@ func clusterTransitions(prev, curr map[string]clusterSnapshot) []clusterTransiti
 		}
 
 		if notableTerminalPhase(now.Phase) {
-			transitions = append(transitions, clusterTransition{Name: now.Name, Phase: now.Phase})
+			transitions = append(transitions, clusterTransition(now))
 		}
 	}
 
@@ -92,7 +89,10 @@ func transitionNotification(transition clusterTransition) notifications.Notifica
 // snapshotClusters lists clusters and reduces them to the watcher's snapshot map. The bool is false
 // when the list call fails, so the caller keeps the previous snapshot rather than treating a transient
 // error as "every cluster vanished" (which would mis-fire transitions on recovery).
-func snapshotClusters(ctx context.Context, service api.ClusterService) (map[string]clusterSnapshot, bool) {
+func snapshotClusters(
+	ctx context.Context,
+	service api.ClusterService,
+) (map[string]clusterSnapshot, bool) {
 	list, err := service.List(ctx)
 	if err != nil {
 		slog.Debug("cluster status poll failed", "error", err)

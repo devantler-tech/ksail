@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 
 	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
-	"github.com/devantler-tech/ksail/v7/pkg/cli/kubeconfig"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	backupsvc "github.com/devantler-tech/ksail/v7/pkg/svc/backup"
 	"github.com/spf13/cobra"
@@ -25,6 +24,7 @@ type backupFlags struct {
 	namespaces       []string
 	excludeTypes     []string
 	compressionLevel int
+	name             string
 }
 
 // NewBackupCmd creates the cluster backup command.
@@ -74,6 +74,13 @@ Example:
 		&flags.compressionLevel, "compression", defaultCompressionLevel,
 		"Compression level (-1..9, -1 = gzip default)",
 	)
+	// --name is long-only here: backup keeps -n for --namespaces (the -n=--name
+	// reservation across the cluster group is a separate breaking change).
+	cmd.Flags().StringVar(
+		&flags.name, "name", "",
+		"Name of the cluster to back up (resolves the kubeconfig like the other cluster "+
+			"commands; defaults to the current kubeconfig context when unset)",
+	)
 
 	cobra.CheckErr(cmd.MarkFlagRequired("output"))
 
@@ -110,9 +117,10 @@ func runBackup(ctx context.Context, cmd *cobra.Command, flags *backupFlags) erro
 		)
 	}
 
-	kubeconfigPath := kubeconfig.GetKubeconfigPathSilently(cmd)
-	if kubeconfigPath == "" {
-		return ErrKubeconfigNotFound
+	//nolint:contextcheck // resolveTargetKubeconfig→ResolveClusterInfo derives ctx from cmd (cluster-cmd convention)
+	kubeconfigPath, err := resolveTargetKubeconfig(cmd, flags.name)
+	if err != nil {
+		return err
 	}
 
 	writer := cmd.OutOrStdout()

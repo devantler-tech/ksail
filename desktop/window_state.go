@@ -8,7 +8,6 @@ import (
 	"sync"
 	"time"
 
-	//nolint:depguard // wails is the desktop app's UI runtime; the CLI module's allowlist does not apply here.
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 

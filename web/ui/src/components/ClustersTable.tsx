@@ -3,7 +3,7 @@ import { useMemo } from "react";
 import type { Cluster } from "../api.ts";
 import { cx } from "../lib/cx.ts";
 import { epochMs, relativeAge } from "../lib/format.ts";
-import { clusterKey, isHostCluster } from "../lib/k8s.ts";
+import { clusterKey, clusterPhase, isHostCluster } from "../lib/k8s.ts";
 import { HostBadge, StatusBadge } from "./StatusBadge.tsx";
 import { SortHeader, td, th, useSort } from "./table.tsx";
 
@@ -21,7 +21,7 @@ function compareBySortKey(a: Cluster, b: Cluster, key: SortKey): number {
     case "provider":
       return (a.spec?.cluster?.provider ?? "").localeCompare(b.spec?.cluster?.provider ?? "");
     case "status":
-      return (a.status?.phase ?? "").localeCompare(b.status?.phase ?? "");
+      return clusterPhase(a).localeCompare(clusterPhase(b));
     case "nodes":
       return (a.status?.nodesReady ?? -1) - (b.status?.nodesReady ?? -1);
     case "age":
@@ -139,7 +139,7 @@ export function ClustersTable({
                   {cluster.spec?.cluster?.provider ?? "—"}
                 </td>
                 <td className={td}>
-                  <StatusBadge phase={cluster.status?.phase} />
+                  <StatusBadge phase={clusterPhase(cluster)} />
                 </td>
                 <td className={cx(td, "text-sm")}>
                   <NodeCount cluster={cluster} />

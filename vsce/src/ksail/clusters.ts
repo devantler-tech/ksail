@@ -6,23 +6,9 @@
 
 import * as vscode from "vscode";
 import { runKsailCommand } from "./binary.js";
+import { parseClusterListJson, type ClusterInfo, type ClusterStatus } from "./clusterList.js";
 
-/**
- * Cluster status
- */
-export type ClusterStatus = "running" | "stopped" | "unknown";
-
-/**
- * Cluster information
- *
- * Note: The CLI `cluster list` command only returns name and provider.
- * Status is detected separately for each cluster.
- */
-export interface ClusterInfo {
-  name: string;
-  provider: string;
-  status?: ClusterStatus;
-}
+export type { ClusterInfo, ClusterStatus } from "./clusterList.js";
 
 /**
  * Common cluster options shared between create and init
@@ -100,16 +86,17 @@ function addCommonClusterArgs(args: string[], options: CommonClusterOptions): vo
 }
 
 /**
- * List all clusters
+ * List all clusters.
  *
- * The CLI outputs text format: "docker: local, test"
- * or "No clusters found." when empty.
+ * Consumes `ksail cluster list --output json` (a JSON array of
+ * { name, provider, distribution, ttl }) — the human table format is
+ * shape-unstable (the TTL column is conditional) and is never parsed here.
  */
 export async function listClusters(
   outputChannel?: vscode.OutputChannel
 ): Promise<ClusterInfo[]> {
   const result = await runKsailCommand(
-    ["cluster", "list"],
+    ["cluster", "list", "--output", "json"],
     undefined,
     outputChannel
   );
@@ -118,63 +105,14 @@ export async function listClusters(
     throw new Error(`Failed to list clusters: ${result.stderr}`);
   }
 
-  return parseClusterListOutput(result.stdout);
+  return parseClusterListJson(result.stdout);
 }
 
 /**
- * Parse cluster list text output
+ * Helper to spawn Docker and collect output.
  *
- * Format: "docker: cluster1, cluster2"
- * Each line starts with provider name followed by colon, then comma-separated cluster names.
- */
-function parseClusterListOutput(output: string): ClusterInfo[] {
-  const clusters: ClusterInfo[] = [];
-  const trimmed = output.trim();
-
-  // Handle empty or "no clusters" output
-  if (!trimmed || trimmed.toLowerCase().includes("no clusters found")) {
-    return [];
-  }
-
-  // Split by lines in case multiple provider lines exist
-  const lines = trimmed.split("\n").filter((line) => line.trim());
-
-  for (const line of lines) {
-    // Split on colon to separate provider from cluster names
-    const colonIndex = line.indexOf(":");
-    if (colonIndex === -1) {
-      continue; // Skip lines without colon separator
-    }
-
-    const provider = line.substring(0, colonIndex).trim();
-    const clustersPart = line.substring(colonIndex + 1).trim();
-
-    if (!clustersPart) {
-      continue; // No clusters for this provider
-    }
-
-    // Split cluster names by comma and trim each
-    const clusterNames = clustersPart.split(",").map((n) => n.trim()).filter((n) => n);
-
-    for (const name of clusterNames) {
-      clusters.push({
-        name: name,
-        provider: provider,
-        status: "unknown",
-      });
-    }
-  }
-
-  return clusters;
-}
-
-/**
- * Distribution type for Docker-based clusters
- */
-export type Distribution = "kind" | "k3d" | "talos" | "vcluster" | "unknown";
-
-/**
- * Helper to spawn Docker and collect output
+ * Retained for status sniffing (detectClusterStatus) only; `cluster list` does
+ * not yet emit a status field (planned for Phase 5).
  */
 async function spawnDocker(
   args: string[],
@@ -201,75 +139,6 @@ async function spawnDocker(
     });
   } catch {
     return defaultValue;
-  }
-}
-
-/**
- * Detect cluster distribution by checking Docker container names.
- * Kind uses pattern: {name}-control-plane, {name}-worker
- * K3d uses pattern: k3d-{name}-server-0, k3d-{name}-agent-0
- * VCluster uses pattern: vcluster-{name}-0
- */
-export async function detectDistribution(
-  clusterName: string,
-  provider: string
-): Promise<Distribution> {
-  const lowerProvider = provider.toLowerCase();
-
-  // Hetzner and Omni providers always use Talos
-  if (lowerProvider === "hetzner" || lowerProvider === "omni") {
-    return "talos";
-  }
-
-  // Only check Docker containers for Docker provider
-  if (lowerProvider !== "docker") {
-    return "unknown";
-  }
-
-  const output = await spawnDocker(
-    ["ps", "-a", "--filter", `name=${clusterName}`, "--format", "{{.Names}}"],
-    ""
-  );
-
-  const containers = output.split("\n").filter(Boolean);
-  if (containers.length === 0) {
-    return "unknown";
-  }
-  if (containers.some((name) => name.startsWith("k3d-"))) {
-    return "k3d";
-  }
-  if (containers.some((name) => name.includes("-control-plane") || name.includes("-worker"))) {
-    return "kind";
-  }
-  if (containers.some((name) => name.startsWith("vcluster-"))) {
-    return "vcluster";
-  }
-  return "unknown";
-}
-
-/**
- * Get the Kubernetes context name for a cluster.
- * Kind: kind-{name}
- * K3d: k3d-{name}
- * Talos: admin@{name}
- * VCluster: vcluster-docker_{name}
- */
-export function getContextName(
-  clusterName: string,
-  distribution: Distribution
-): string {
-  switch (distribution) {
-    case "kind":
-      return `kind-${clusterName}`;
-    case "k3d":
-      return `k3d-${clusterName}`;
-    case "talos":
-      return `admin@${clusterName}`;
-    case "vcluster":
-      return `vcluster-docker_${clusterName}`;
-    default:
-      // Fallback: try the cluster name directly
-      return clusterName;
   }
 }
 

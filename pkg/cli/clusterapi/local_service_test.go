@@ -13,6 +13,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/clusterapi"
 	"github.com/devantler-tech/ksail/v7/pkg/operator/api"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/clusterdiscovery"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
 	"github.com/stretchr/testify/assert"
@@ -45,8 +46,12 @@ type fakeProvisioner struct {
 	deleteGate chan struct{}
 	createErr  error
 	deleteErr  error
+	startErr   error
+	stopErr    error
 	created    []string
 	deleted    []string
+	started    []string
+	stopped    []string
 }
 
 func (f *fakeProvisioner) Create(_ context.Context, name string) error {
@@ -102,14 +107,43 @@ func (f *fakeProvisioner) List(_ context.Context) ([]string, error) {
 	return slices.Clone(f.clusters), nil
 }
 
-func (f *fakeProvisioner) Start(_ context.Context, _ string) error { return nil }
-func (f *fakeProvisioner) Stop(_ context.Context, _ string) error  { return nil }
+func (f *fakeProvisioner) Start(_ context.Context, name string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	f.started = append(f.started, name)
+
+	return f.startErr
+}
+
+func (f *fakeProvisioner) Stop(_ context.Context, name string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	f.stopped = append(f.stopped, name)
+
+	return f.stopErr
+}
 
 func (f *fakeProvisioner) Exists(_ context.Context, name string) (bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
 	return slices.Contains(f.clusters, name), nil
+}
+
+func (f *fakeProvisioner) startedNames() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	return slices.Clone(f.started)
+}
+
+func (f *fakeProvisioner) stoppedNames() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	return slices.Clone(f.stopped)
 }
 
 func (f *fakeProvisioner) createdNames() []string {
@@ -190,6 +224,58 @@ func TestListMapsExistingClusters(t *testing.T) {
 	assert.Equal(t, v1alpha1.DistributionVanilla, got.Spec.Cluster.Distribution)
 	assert.Equal(t, v1alpha1.ProviderDocker, got.Spec.Cluster.Provider)
 	assert.Equal(t, v1alpha1.ClusterPhaseReady, got.Status.Phase)
+}
+
+// TestListReportsStoppedClusterAsNotReady guards 4.4c: a discovered Docker cluster whose run-state is
+// Stopped must NOT report ClusterPhaseReady (so the web UI does not render it green); instead it
+// carries a Ready=False/reason=Stopped condition the SPA can surface.
+func TestListReportsStoppedClusterAsNotReady(t *testing.T) {
+	t.Parallel()
+
+	service := newTestService(map[v1alpha1.Distribution]*fakeProvisioner{
+		v1alpha1.DistributionVanilla: {clusters: []string{devClusterName}},
+	})
+	service.SetDockerStatusForTest(func(
+		context.Context, v1alpha1.Distribution, string,
+	) clusterdiscovery.RunState {
+		return clusterdiscovery.RunStateStopped
+	})
+
+	list, err := service.List(context.Background())
+	require.NoError(t, err)
+	require.Len(t, list.Items, 1)
+
+	got := list.Items[0]
+	assert.NotEqual(t, v1alpha1.ClusterPhaseReady, got.Status.Phase,
+		"a stopped cluster must not render as Ready")
+
+	conditions := conditionsOf(list, devClusterName)
+	require.Len(t, conditions, 1)
+	assert.Equal(t, "Ready", conditions[0].Type)
+	assert.Equal(t, metav1.ConditionFalse, conditions[0].Status)
+	assert.Equal(t, "Stopped", conditions[0].Reason)
+}
+
+// TestListReportsRunningClusterAsReady pins that an explicitly-running run-state keeps the cluster
+// Ready with no synthetic condition (the common case must be unchanged by the stopped handling).
+func TestListReportsRunningClusterAsReady(t *testing.T) {
+	t.Parallel()
+
+	service := newTestService(map[v1alpha1.Distribution]*fakeProvisioner{
+		v1alpha1.DistributionVanilla: {clusters: []string{devClusterName}},
+	})
+	service.SetDockerStatusForTest(func(
+		context.Context, v1alpha1.Distribution, string,
+	) clusterdiscovery.RunState {
+		return clusterdiscovery.RunStateRunning
+	})
+
+	list, err := service.List(context.Background())
+	require.NoError(t, err)
+	require.Len(t, list.Items, 1)
+
+	assert.Equal(t, v1alpha1.ClusterPhaseReady, list.Items[0].Status.Phase)
+	assert.Empty(t, conditionsOf(list, devClusterName))
 }
 
 // TestListReportsEndpointFromKubeconfig guards the local status enrichment: a discovered cluster
@@ -513,6 +599,108 @@ func TestLocalServiceDoesNotImplementClusterUpdater(t *testing.T) {
 
 	_, ok := any(service).(api.ClusterUpdater)
 	assert.False(t, ok, "the local backend must not advertise in-place cluster update")
+}
+
+// TestLocalServiceReportsComponentsInstallFalse documents 4.4a: the local backend implements
+// api.ComponentInstaller but reports false (it does not yet run the component pipeline), so the
+// server advertises componentsInstall=false and the SPA hides the create form's component selectors
+// rather than offering options this backend drops.
+func TestLocalServiceReportsComponentsInstallFalse(t *testing.T) {
+	t.Parallel()
+
+	service := newTestService(nil)
+
+	installer, ok := any(service).(api.ComponentInstaller)
+	require.True(t, ok, "the local backend must advertise the ComponentInstaller capability marker")
+	assert.False(t, installer.InstallsComponents(),
+		"the local backend does not install components yet, so it must report false")
+}
+
+// TestStartIsAsyncAndInvokesProvisioner covers 4.4c's start endpoint: Start marks the cluster
+// Updating, runs the provisioner's Start in the background, and clears the job on success.
+func TestStartIsAsyncAndInvokesProvisioner(t *testing.T) {
+	t.Parallel()
+
+	provisioner := &fakeProvisioner{clusters: []string{"stopped"}}
+	service := newTestService(map[v1alpha1.Distribution]*fakeProvisioner{
+		v1alpha1.DistributionVanilla: provisioner,
+	})
+
+	require.NoError(t, service.Start(context.Background(), "default", "stopped"))
+
+	require.Eventually(t, func() bool {
+		return len(provisioner.startedNames()) == 1
+	}, eventuallyTimeout, eventuallyTick)
+
+	assert.Equal(t, []string{"stopped"}, provisioner.startedNames())
+}
+
+// TestStopIsAsyncAndInvokesProvisioner covers 4.4c's stop endpoint: Stop runs the provisioner's Stop
+// for the targeted cluster.
+func TestStopIsAsyncAndInvokesProvisioner(t *testing.T) {
+	t.Parallel()
+
+	provisioner := &fakeProvisioner{clusters: []string{"running"}}
+	service := newTestService(map[v1alpha1.Distribution]*fakeProvisioner{
+		v1alpha1.DistributionVanilla: provisioner,
+	})
+
+	require.NoError(t, service.Stop(context.Background(), "default", "running"))
+
+	require.Eventually(t, func() bool {
+		return len(provisioner.stoppedNames()) == 1
+	}, eventuallyTimeout, eventuallyTick)
+
+	assert.Equal(t, []string{"running"}, provisioner.stoppedNames())
+}
+
+// TestStartUnknownClusterReturnsNotFound pins that start/stop of a cluster the backend cannot resolve
+// is a not-found error, never a silent no-op.
+func TestStartUnknownClusterReturnsNotFound(t *testing.T) {
+	t.Parallel()
+
+	service := newTestService(nil)
+
+	require.ErrorIs(t,
+		service.Start(context.Background(), "default", "ghost"), api.ErrNotFound)
+	require.ErrorIs(t,
+		service.Stop(context.Background(), "default", "ghost"), api.ErrNotFound)
+}
+
+// TestStopFailureSurfacesReasonInCondition pins that a failed stop pins the cluster Failed and
+// surfaces the provisioner's error on the condition, like create/delete failures do.
+func TestStopFailureSurfacesReasonInCondition(t *testing.T) {
+	t.Parallel()
+
+	provisioner := &fakeProvisioner{
+		clusters: []string{"jammed"},
+		stopErr:  errSimulatedDeleteFailure,
+	}
+	service := newTestService(map[v1alpha1.Distribution]*fakeProvisioner{
+		v1alpha1.DistributionVanilla: provisioner,
+	})
+
+	require.NoError(t, service.Stop(context.Background(), "default", "jammed"))
+
+	var conditions []metav1.Condition
+
+	require.Eventually(t, func() bool {
+		list, listErr := service.List(context.Background())
+		require.NoError(t, listErr)
+
+		phase, ok := phaseOf(list, "jammed")
+		if !ok || phase != v1alpha1.ClusterPhaseFailed {
+			return false
+		}
+
+		conditions = conditionsOf(list, "jammed")
+
+		return len(conditions) > 0
+	}, eventuallyTimeout, eventuallyTick)
+
+	require.Len(t, conditions, 1)
+	assert.Equal(t, "Error", conditions[0].Reason)
+	assert.Contains(t, conditions[0].Message, errSimulatedDeleteFailure.Error())
 }
 
 func TestGetIgnoresNamespaceAndReturnsNotFound(t *testing.T) {

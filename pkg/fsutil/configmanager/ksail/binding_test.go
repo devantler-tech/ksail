@@ -13,36 +13,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// flagNameTestCase represents a test case for flag name generation.
-type flagNameTestCase struct {
-	name     string
-	fieldPtr any
-	expected string
-}
-
 type fieldTestCase struct {
 	name          string
 	fieldSelector configmanager.FieldSelector[v1alpha1.Cluster]
 	expectedFlag  string
 	expectedType  string
-}
-
-// runFlagNameGenerationTests is a helper function to run multiple flag name generation test cases.
-func runFlagNameGenerationTests(
-	t *testing.T,
-	manager *configmanager.ConfigManager,
-	tests []flagNameTestCase,
-) {
-	t.Helper()
-	t.Helper()
-
-	for _, testCase := range tests {
-		t.Run(testCase.name, func(t *testing.T) {
-			t.Parallel()
-
-			testFlagNameGeneration(t, manager, testCase.fieldPtr, testCase.expected)
-		})
-	}
 }
 
 // setupFlagBindingTest creates a command for testing flag binding.
@@ -70,6 +45,7 @@ func newDistributionFieldTest() fieldTestCase {
 	return fieldTestCase{
 		name: "Distribution field",
 		fieldSelector: newFieldSelector(
+			"distribution",
 			func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.Distribution },
 			v1alpha1.DistributionVanilla,
 			"Kubernetes distribution",
@@ -83,6 +59,7 @@ func newSourceDirectoryFieldTest() fieldTestCase {
 	return fieldTestCase{
 		name: "SourceDirectory field",
 		fieldSelector: newFieldSelector(
+			"source-directory",
 			func(c *v1alpha1.Cluster) any { return &c.Spec.Workload.SourceDirectory },
 			"k8s",
 			"Source directory",
@@ -96,6 +73,7 @@ func newGitOpsEngineFieldTest() fieldTestCase {
 	return fieldTestCase{
 		name: "GitOpsEngine field",
 		fieldSelector: newFieldSelector(
+			"gitops-engine",
 			func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.GitOpsEngine },
 			v1alpha1.GitOpsEngineNone,
 			"GitOps engine",
@@ -109,6 +87,7 @@ func newLocalRegistryFieldTest() fieldTestCase {
 	return fieldTestCase{
 		name: "LocalRegistry.Registry field",
 		fieldSelector: newFieldSelector(
+			"local-registry",
 			func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.LocalRegistry.Registry },
 			"",
 			"Local registry",
@@ -148,6 +127,7 @@ func getConnectionFieldTests() []fieldTestCase {
 		{
 			name: "Context field",
 			fieldSelector: newFieldSelector(
+				"context",
 				func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.Connection.Context },
 				"",
 				"Kubernetes context",
@@ -158,6 +138,7 @@ func getConnectionFieldTests() []fieldTestCase {
 		{
 			name: "Timeout field",
 			fieldSelector: newFieldSelector(
+				"timeout",
 				func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.Connection.Timeout },
 				metav1.Duration{Duration: 5 * time.Minute},
 				"Connection timeout",
@@ -174,6 +155,7 @@ func getNetworkingFieldTests() []fieldTestCase {
 		{
 			name: "CNI field",
 			fieldSelector: newFieldSelector(
+				"cni",
 				func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.CNI },
 				v1alpha1.CNICilium,
 				"CNI plugin",
@@ -184,6 +166,7 @@ func getNetworkingFieldTests() []fieldTestCase {
 		{
 			name: "CSI field",
 			fieldSelector: newFieldSelector(
+				"csi",
 				func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.CSI },
 				v1alpha1.CSIEnabled,
 				"CSI driver",
@@ -194,6 +177,7 @@ func getNetworkingFieldTests() []fieldTestCase {
 		{
 			name: "MetricsServer field",
 			fieldSelector: newFieldSelector(
+				"metrics-server",
 				func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.MetricsServer },
 				v1alpha1.MetricsServerEnabled,
 				"Metrics Server configuration",
@@ -204,6 +188,7 @@ func getNetworkingFieldTests() []fieldTestCase {
 		{
 			name: "LoadBalancer field",
 			fieldSelector: newFieldSelector(
+				"load-balancer",
 				func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.LoadBalancer },
 				v1alpha1.LoadBalancerDefault,
 				"LoadBalancer configuration",
@@ -214,6 +199,7 @@ func getNetworkingFieldTests() []fieldTestCase {
 		{
 			name: "CertManager field",
 			fieldSelector: newFieldSelector(
+				"cert-manager",
 				func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.CertManager },
 				v1alpha1.CertManagerDisabled,
 				"Cert-Manager configuration",
@@ -243,6 +229,7 @@ func testAddFlagFromFieldErrorHandling(t *testing.T) {
 		{
 			name: "Valid field selector",
 			fieldSelector: newFieldSelector(
+				"distribution",
 				func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.Distribution },
 				"test",
 				"Test field",
@@ -290,140 +277,123 @@ func testAddFlagFromFieldCases(t *testing.T, tests []fieldTestCase,
 	}
 }
 
-// TestGenerateFlagName tests flag name generation for various field types.
-func TestGenerateFlagName(t *testing.T) {
+// TestFieldSelectorFlagMetadata pins the FlagName/Shorthand carried by the
+// representative Default* field-selector constructors. The flag name and
+// shorthand now live on the FieldSelector itself (replacing the deleted
+// pointer-identity GenerateFlagName/GenerateShorthand maps), so registration is
+// byte-identical to the previous behavior.
+func TestFieldSelectorFlagMetadata(t *testing.T) {
 	t.Parallel()
-
-	manager := configmanager.NewConfigManager(io.Discard, "")
-
-	tests := []flagNameTestCase{
-		{"Distribution field", &manager.Config.Spec.Cluster.Distribution, "distribution"},
-		{
-			"DistributionConfig field",
-			&manager.Config.Spec.Cluster.DistributionConfig,
-			"distribution-config",
-		},
-		{
-			"SourceDirectory field",
-			&manager.Config.Spec.Workload.SourceDirectory,
-			"source-directory",
-		},
-		{
-			"GitOpsEngine field",
-			&manager.Config.Spec.Cluster.GitOpsEngine,
-			"gitops-engine",
-		},
-		{"Context field", &manager.Config.Spec.Cluster.Connection.Context, "context"},
-		{"Kubeconfig field", &manager.Config.Spec.Cluster.Connection.Kubeconfig, "kubeconfig"},
-		{"Timeout field", &manager.Config.Spec.Cluster.Connection.Timeout, "timeout"},
-		{
-			"DrainTimeout field",
-			&manager.Config.Spec.Cluster.Talos.DrainTimeout,
-			"drain-timeout",
-		},
-		{"CNI field", &manager.Config.Spec.Cluster.CNI, "cni"},
-		{"CSI field", &manager.Config.Spec.Cluster.CSI, "csi"},
-		{"CDI field", &manager.Config.Spec.Cluster.CDI, "cdi"},
-		{
-			"MetricsServer field",
-			&manager.Config.Spec.Cluster.MetricsServer,
-			"metrics-server",
-		},
-		{
-			"LoadBalancer field",
-			&manager.Config.Spec.Cluster.LoadBalancer,
-			"load-balancer",
-		},
-		{
-			"LocalRegistry.Registry field",
-			&manager.Config.Spec.Cluster.LocalRegistry.Registry,
-			"local-registry",
-		},
-		{
-			"NodeAutoscaling field",
-			&manager.Config.Spec.Cluster.NodeAutoscaling,
-			"node-autoscaling",
-		},
-	}
-
-	runFlagNameGenerationTests(t, manager, tests)
-}
-
-// testFlagNameGeneration is a helper function to test flag name generation.
-func testFlagNameGeneration(
-	t *testing.T,
-	manager *configmanager.ConfigManager,
-	fieldPtr any,
-	expected string,
-) {
-	t.Helper()
-
-	result := manager.GenerateFlagName(fieldPtr)
-	assert.Equal(t, expected, result)
-}
-
-// TestManager_GenerateShorthand tests the GenerateShorthand method.
-func TestGenerateShorthand(t *testing.T) {
-	t.Parallel()
-
-	manager := configmanager.NewConfigManager(io.Discard, "")
 
 	tests := []struct {
-		name     string
-		flagName string
-		expected string
+		name      string
+		selector  configmanager.FieldSelector[v1alpha1.Cluster]
+		flagName  string
+		shorthand string
 	}{
+		{"distribution", configmanager.DefaultDistributionFieldSelector(), "distribution", "d"},
+		// DefaultProviderFieldSelector carries no shorthand; the mutation commands
+		// add -p via WithProviderShorthand (asserted separately below).
+		{"provider", configmanager.DefaultProviderFieldSelector(), "provider", ""},
 		{
-			name:     "distribution flag",
-			flagName: "distribution",
-			expected: "d",
+			"provider-with-shorthand",
+			configmanager.WithProviderShorthand(configmanager.DefaultProviderFieldSelector()),
+			"provider",
+			"p",
 		},
+		{"context", configmanager.DefaultContextFieldSelector(), "context", "c"},
+		{"kubeconfig", configmanager.DefaultKubeconfigFieldSelector(), "kubeconfig", "k"},
 		{
-			name:     "context flag",
-			flagName: "context",
-			expected: "c",
+			"source-directory",
+			configmanager.StandardSourceDirectoryFieldSelector(),
+			"source-directory",
+			"s",
 		},
+		{"gitops-engine", configmanager.DefaultGitOpsEngineFieldSelector(), "gitops-engine", "g"},
 		{
-			name:     "kubeconfig flag",
-			flagName: "kubeconfig",
-			expected: "k",
+			"distribution-config",
+			configmanager.DefaultDistributionConfigFieldSelector(),
+			"distribution-config",
+			"",
 		},
-		{
-			name:     "timeout flag",
-			flagName: "timeout",
-			expected: "t",
-		},
-		{
-			name:     "source-directory flag",
-			flagName: "source-directory",
-			expected: "s",
-		},
-		{
-			name:     "gitops-engine flag",
-			flagName: "gitops-engine",
-			expected: "g",
-		},
-		{
-			name:     "distribution-config flag (no shorthand)",
-			flagName: "distribution-config",
-			expected: "",
-		},
-		{
-			name:     "unknown flag (no shorthand)",
-			flagName: "unknown-flag",
-			expected: "",
-		},
+		{"cni", configmanager.DefaultCNIFieldSelector(), "cni", ""},
+		{"local-registry", configmanager.DefaultLocalRegistryFieldSelector(), "local-registry", ""},
+		{"drain-timeout", configmanager.DrainTimeoutFieldSelector(), "drain-timeout", ""},
 	}
 
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 
-			// Call the public method directly
-			result := manager.GenerateShorthand(testCase.flagName)
-			assert.Equal(t, testCase.expected, result)
+			assert.Equal(t, testCase.flagName, testCase.selector.FlagName)
+			assert.Equal(t, testCase.shorthand, testCase.selector.Shorthand)
 		})
 	}
+}
+
+// TestAddFlagsFromFields_PanicsOnMissingFlagName asserts that registering a
+// field selector without a FlagName is a programming error caught at init time —
+// it can no longer silently register a flag literally named "unknown".
+func TestAddFlagsFromFields_PanicsOnMissingFlagName(t *testing.T) {
+	t.Parallel()
+
+	manager := configmanager.NewConfigManager(
+		io.Discard,
+		"",
+		configmanager.FieldSelector[v1alpha1.Cluster]{
+			Selector:    func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.Distribution },
+			Description: "missing flag name",
+		},
+	)
+	cmd := &cobra.Command{Use: "test"}
+
+	assert.PanicsWithError(t, configmanager.ErrFieldSelectorMissingFlagName.Error()+
+		` (description: "missing flag name")`, func() {
+		manager.AddFlagsFromFields(cmd)
+	})
+}
+
+// TestAllClusterFieldSelectorsHaveFlagName guards against a future constructor
+// forgetting to set FlagName: registering every selector used by the mutation
+// commands must not panic.
+func TestAllClusterFieldSelectorsHaveFlagName(t *testing.T) {
+	t.Parallel()
+
+	selectors := []configmanager.FieldSelector[v1alpha1.Cluster]{
+		configmanager.DefaultProviderFieldSelector(),
+		configmanager.DefaultCNIFieldSelector(),
+		configmanager.DefaultMetricsServerFieldSelector(),
+		configmanager.DefaultLoadBalancerFieldSelector(),
+		configmanager.DefaultCertManagerFieldSelector(),
+		configmanager.DefaultPolicyEngineFieldSelector(),
+		configmanager.DefaultCSIFieldSelector(),
+		configmanager.DefaultCDIFieldSelector(),
+		configmanager.DefaultImportImagesFieldSelector(),
+		configmanager.KubernetesVersionFieldSelector(),
+		configmanager.DistributionVersionFieldSelector(),
+		configmanager.DrainTimeoutFieldSelector(),
+		configmanager.ControlPlanesFieldSelector(),
+		configmanager.WorkersFieldSelector(),
+		configmanager.NodeAutoscalerEnabledFieldSelector(),
+		configmanager.ImageVerificationFieldSelector(),
+		configmanager.OIDCIssuerURLFieldSelector(),
+		configmanager.OIDCClientIDFieldSelector(),
+		configmanager.OIDCUsernameClaimFieldSelector(),
+		configmanager.OIDCUsernamePrefixFieldSelector(),
+		configmanager.OIDCGroupsClaimFieldSelector(),
+		configmanager.OIDCGroupsPrefixFieldSelector(),
+		configmanager.OIDCCAFileFieldSelector(),
+	}
+
+	for _, selector := range selectors {
+		assert.NotEmpty(t, selector.FlagName, "every field selector must set FlagName")
+	}
+
+	allClusterSelectors := append(configmanager.DefaultClusterFieldSelectors(), selectors...)
+	manager := configmanager.NewConfigManager(io.Discard, "", allClusterSelectors...)
+	cmd := &cobra.Command{Use: "test"}
+
+	assert.NotPanics(t, func() { manager.AddFlagsFromFields(cmd) })
 }
 
 func TestAddFlagsFromFields_GitOpsEngineAcceptsArgoCD(t *testing.T) {
@@ -472,6 +442,7 @@ func TestAddFlagsFromFields_BoolField(t *testing.T) {
 			t.Parallel()
 
 			selector := newFieldSelector(
+				"test-bool",
 				func(c *v1alpha1.Cluster) any {
 					return &c.Spec.Provider.Hetzner.PlacementGroupFallbackToNone
 				},
@@ -479,13 +450,13 @@ func TestAddFlagsFromFields_BoolField(t *testing.T) {
 				"test bool field",
 			)
 
-			assertFlagRegistered(t, selector, "unknown", "bool", testCase.setValue)
+			assertFlagRegistered(t, selector, "test-bool", "bool", testCase.setValue)
 
 			manager := configmanager.NewConfigManager(io.Discard, "", selector)
 			cmd := &cobra.Command{Use: "test"}
 			manager.AddFlagsFromFields(cmd)
 
-			require.NoError(t, cmd.Flags().Set("unknown", testCase.setValue))
+			require.NoError(t, cmd.Flags().Set("test-bool", testCase.setValue))
 			assert.Equal(
 				t, testCase.expected,
 				manager.Config.Spec.Provider.Hetzner.PlacementGroupFallbackToNone,
@@ -522,6 +493,7 @@ func TestAddFlagsFromFields_Int32Field(t *testing.T) {
 			t.Parallel()
 
 			selector := newFieldSelector(
+				"control-planes",
 				func(c *v1alpha1.Cluster) any {
 					return &c.Spec.Cluster.ControlPlanes
 				},

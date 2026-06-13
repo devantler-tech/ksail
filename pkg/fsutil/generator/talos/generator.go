@@ -78,6 +78,40 @@ machine:
       cloud-provider: external
 `
 
+// imageVerificationTemplate is the Talos ImageVerificationConfig document body
+// (Talos 1.13+). Placed in cluster/ alongside other patches; Talos configpatcher
+// recognizes it as a registered config document (kind: ImageVerificationConfig)
+// and StrategicMerge appends it to the bundle rather than overwriting the
+// MachineConfig.
+// See: https://docs.siderolabs.com/talos/v1.13/security/verifying-image-signatures
+const imageVerificationTemplate = `# Talos ImageVerificationConfig (Talos 1.13+)
+# This document enables machine-wide container image signature verification.
+# Rules are evaluated in order; the first matching rule applies.
+# See: https://www.talos.dev/v1.13/talos-guides/configuration/image-verification/
+apiVersion: v1alpha1
+kind: ImageVerificationConfig
+rules:
+  # Default: skip verification for all images.
+  # Remove or modify this rule and add specific verification rules below.
+  - image: "*"
+    skip: true
+  # Example: Verify registry.k8s.io images using keyless (Cosign/OIDC) verification
+  # - image: "registry.k8s.io/*"
+  #   keyless:
+  #     issuer: "https://accounts.google.com"
+  #     subject: "krel-trust@k8s-releng-prod.iam.gserviceaccount.com"
+  # Example: Verify images from a private registry using a public key
+  # - image: "my-registry.example.com/*"
+  #   publicKey:
+  #     certificate: |
+  #       -----BEGIN CERTIFICATE-----
+  #       <your PEM-encoded certificate here>
+  #       -----END CERTIFICATE-----
+  # Example: Deny all images from an untrusted registry
+  # - image: "untrusted-registry.example.com/*"
+  #   deny: true
+`
+
 // ErrConfigRequired is returned when a nil config is provided.
 var ErrConfigRequired = errors.New("talos config is required")
 
@@ -185,6 +219,16 @@ func (g *Generator) Generate(
 
 	rootPath := filepath.Join(baseDir, patchesDir)
 
+	// Validate (and normalize) the ingress firewall model once up front when it is
+	// enabled, since the per-file content functions in the patchSpecs table assume
+	// NetworkCIDR/CNIPort are present and valid.
+	if model.EnableIngressFirewall {
+		err := validateIngressFirewallModel(model)
+		if err != nil {
+			return "", err
+		}
+	}
+
 	// Determine which subdirectories will have patches generated
 	dirsWithPatches := g.getDirectoriesWithPatches(model)
 
@@ -203,135 +247,43 @@ func (g *Generator) Generate(
 	return rootPath, nil
 }
 
-// getDirectoriesWithPatches returns a set of subdirectory names that will have patches generated.
-//
-//nolint:cyclop // One condition per patch type; each is simple and independent.
+// getDirectoriesWithPatches returns a set of subdirectory names that will have
+// patches generated, derived from the single patchSpecs table so it can never
+// drift from the patches actually written.
 func (g *Generator) getDirectoriesWithPatches(
 	model *Config,
 ) map[string]bool {
 	dirs := make(map[string]bool)
 
-	// Mirror registries patch goes to cluster/
-	if len(model.MirrorRegistries) > 0 {
-		dirs["cluster"] = true
-	}
-
-	// Allow scheduling patch goes to cluster/
-	if model.WorkerNodes == 0 {
-		dirs["cluster"] = true
-	}
-
-	// Disable CNI patch goes to cluster/
-	if model.DisableDefaultCNI {
-		dirs["cluster"] = true
-	}
-
-	// Kubelet cert rotation patch goes to cluster/
-	if model.EnableKubeletCertRotation {
-		dirs["cluster"] = true
-	}
-
-	// Cluster name patch goes to cluster/
-	if model.ClusterName != "" {
-		dirs["cluster"] = true
-	}
-
-	// Image verification config document goes to cluster/ —
-	// Talos configpatcher.LoadPatch correctly recognizes it as an ImageVerificationConfig
-	// document and StrategicMerge appends it to the config bundle (it does NOT overwrite
-	// the MachineConfig since it has a different kind).
-	if model.EnableImageVerification {
-		dirs["cluster"] = true
-	}
-
-	// Disable CDI patch goes to cluster/
-	if model.DisableCDI {
-		dirs["cluster"] = true
-	}
-
-	// External cloud provider patch goes to cluster/
-	if model.EnableExternalCloudProvider {
-		dirs["cluster"] = true
-	}
-
-	// Ingress firewall patches go to cluster/, control-planes/, and workers/
-	if model.EnableIngressFirewall {
-		dirs["cluster"] = true
-		dirs["control-planes"] = true
-		dirs["workers"] = true
-	}
-
-	// OIDC API server patch goes to cluster/
-	if model.EnableOIDC {
-		dirs["cluster"] = true
+	for _, spec := range patchSpecs() {
+		if spec.when(model) {
+			dirs[spec.subdir] = true
+		}
 	}
 
 	return dirs
 }
 
-// generateConditionalPatches generates optional patches based on the configuration.
-// Each entry pairs a condition on the model with the generator to run when that
-// condition holds; generators run in declaration order and the first error aborts.
+// generateConditionalPatches generates optional patches from the single
+// patchSpecs table. Specs run in declaration order and the first error aborts;
+// each enabled spec's content is written via the shared writePatchFile helper
+// (empty content and already-existing files without --force are skipped).
 func (g *Generator) generateConditionalPatches(
 	rootPath string,
 	model *Config,
 	force bool,
 ) error {
-	patches := []struct {
-		when     bool
-		generate func() error
-	}{
-		{len(model.MirrorRegistries) > 0, func() error {
-			return g.generateMirrorRegistriesPatch(rootPath, model.MirrorRegistries, force)
-		}},
-		// Allow scheduling on control planes when no workers are configured.
-		{model.WorkerNodes == 0, func() error {
-			return g.generateAllowSchedulingPatch(rootPath, force)
-		}},
-		// Disable the default CNI when an alternative CNI is requested.
-		{model.DisableDefaultCNI, func() error {
-			return g.generateDisableCNIPatch(rootPath, force)
-		}},
-		// Kubelet cert rotation enables secure metrics-server TLS; the csr-approver
-		// (installed via inlineManifests during bootstrap) signs the rotated certs.
-		// Both patches share the one condition and are emitted together (rotation
-		// first, then approver) so the pair can never drift out of sync.
-		{model.EnableKubeletCertRotation, func() error {
-			err := g.generateKubeletCertRotationPatch(rootPath, force)
-			if err != nil {
-				return err
-			}
-
-			return g.generateKubeletCSRApproverPatch(rootPath, force)
-		}},
-		// Cluster-name patch when a custom cluster name is specified.
-		{model.ClusterName != "", func() error {
-			return g.generateClusterNamePatch(rootPath, model.ClusterName, force)
-		}},
-		{model.EnableImageVerification, func() error {
-			return g.generateImageVerificationPatch(rootPath, force)
-		}},
-		{model.DisableCDI, func() error {
-			return g.generateDisableCDIPatch(rootPath, force)
-		}},
-		{model.EnableExternalCloudProvider, func() error {
-			return g.generateExternalCloudProviderPatch(rootPath, force)
-		}},
-		// Ingress firewall documents when enabled (Hetzner defense-in-depth).
-		{model.EnableIngressFirewall, func() error {
-			return g.generateIngressFirewallPatches(rootPath, model, force)
-		}},
-		{model.EnableOIDC, func() error {
-			return g.generateOIDCPatch(rootPath, model, force)
-		}},
-	}
-
-	for _, patch := range patches {
-		if !patch.when {
+	for _, spec := range patchSpecs() {
+		if !spec.when(model) {
 			continue
 		}
 
-		err := patch.generate()
+		content, err := spec.content(model)
+		if err != nil {
+			return err
+		}
+
+		err = writePatchFile(rootPath, spec, content, force)
 		if err != nil {
 			return err
 		}
@@ -348,9 +300,9 @@ func (g *Generator) createSubdirectories(
 	force bool,
 ) error {
 	subdirs := []string{
-		"cluster",
-		"control-planes",
-		"workers",
+		subdirCluster,
+		subdirControlPlanes,
+		subdirWorkers,
 	}
 
 	for _, subdir := range subdirs {
@@ -378,41 +330,6 @@ func (g *Generator) createSubdirectories(
 		if err != nil {
 			return fmt.Errorf("failed to create .gitkeep in %s: %w", dirPath, err)
 		}
-	}
-
-	return nil
-}
-
-// generateMirrorRegistriesPatch creates a Talos patch file for registry mirrors.
-func (g *Generator) generateMirrorRegistriesPatch(
-	rootPath string,
-	mirrorRegistries []string,
-	force bool,
-) error {
-	// Parse mirror specs
-	specs := registry.ParseMirrorSpecs(mirrorRegistries)
-	if len(specs) == 0 {
-		return nil
-	}
-
-	// Generate YAML content
-	patchContent := generateMirrorPatchYAML(specs)
-	if patchContent == "" {
-		return nil
-	}
-
-	// Write to cluster patches directory
-	patchPath := filepath.Join(rootPath, "cluster", mirrorRegistriesFileName)
-
-	// Check if file already exists
-	_, statErr := os.Stat(patchPath)
-	if statErr == nil && !force {
-		return nil
-	}
-
-	err := os.WriteFile(patchPath, []byte(patchContent), filePerm)
-	if err != nil {
-		return fmt.Errorf("failed to create mirror registries patch: %w", err)
 	}
 
 	return nil
@@ -454,117 +371,6 @@ func generateMirrorPatchYAML(specs []registry.MirrorSpec) string {
 	return result.String()
 }
 
-// generateAllowSchedulingPatch creates a Talos patch file to allow scheduling on control-plane nodes.
-// This is required for single-node clusters or clusters with only control-plane nodes.
-func (g *Generator) generateAllowSchedulingPatch(
-	rootPath string,
-	force bool,
-) error {
-	patchPath := filepath.Join(rootPath, "cluster", allowSchedulingFileName)
-
-	// Check if file already exists
-	_, statErr := os.Stat(patchPath)
-	if statErr == nil && !force {
-		return nil
-	}
-
-	patchContent := `cluster:
-  allowSchedulingOnControlPlanes: true
-`
-
-	err := os.WriteFile(patchPath, []byte(patchContent), filePerm)
-	if err != nil {
-		return fmt.Errorf("failed to create allow-scheduling-on-control-planes patch: %w", err)
-	}
-
-	return nil
-}
-
-// generateDisableCNIPatch creates a Talos patch file to disable the default CNI (Flannel).
-// This is required when using an alternative CNI like Cilium.
-// The patch sets cluster.network.cni.name to "none" as per Talos documentation:
-// https://docs.siderolabs.com/kubernetes-guides/cni/deploying-cilium
-func (g *Generator) generateDisableCNIPatch(
-	rootPath string,
-	force bool,
-) error {
-	patchPath := filepath.Join(rootPath, "cluster", disableCNIFileName)
-
-	// Check if file already exists
-	_, statErr := os.Stat(patchPath)
-	if statErr == nil && !force {
-		return nil
-	}
-
-	err := os.WriteFile(patchPath, []byte(DisableDefaultCNIPatchYAML), filePerm)
-	if err != nil {
-		return fmt.Errorf("failed to create disable-default-cni patch: %w", err)
-	}
-
-	return nil
-}
-
-// generateKubeletCertRotationPatch creates a Talos patch file to enable kubelet serving certificate rotation.
-// This is required for secure metrics-server communication using TLS.
-// The patch sets machine.kubelet.extraArgs.rotate-server-certificates to "true" as per Talos documentation:
-// https://www.talos.dev/v1.9/kubernetes-guides/configuration/deploy-metrics-server/
-func (g *Generator) generateKubeletCertRotationPatch(
-	rootPath string,
-	force bool,
-) error {
-	patchPath := filepath.Join(rootPath, "cluster", kubeletCertRotationFileName)
-
-	// Check if file already exists
-	_, statErr := os.Stat(patchPath)
-	if statErr == nil && !force {
-		return nil
-	}
-
-	patchContent := `machine:
-  kubelet:
-    extraArgs:
-      rotate-server-certificates: "true"
-`
-
-	err := os.WriteFile(patchPath, []byte(patchContent), filePerm)
-	if err != nil {
-		return fmt.Errorf("failed to create kubelet-cert-rotation patch: %w", err)
-	}
-
-	return nil
-}
-
-// generateKubeletCSRApproverPatch creates a Talos patch file to install the kubelet-serving-cert-approver
-// during cluster bootstrap. This is required when rotate-server-certificates is enabled because:
-// 1. The kubelet generates a CSR (Certificate Signing Request) for its serving certificate
-// 2. The CSR must be approved before the kubelet can serve its API (including to metrics-server)
-// 3. Without an approver, the cluster bootstrap times out waiting for static pods
-//
-// This patch uses cluster.inlineManifests to embed the manifest content directly,
-// eliminating the external URL dependency that was previously required with extraManifests.
-// See: https://docs.siderolabs.com/kubernetes-guides/monitoring-and-observability/deploy-metrics-server/
-func (g *Generator) generateKubeletCSRApproverPatch(
-	rootPath string,
-	force bool,
-) error {
-	patchPath := filepath.Join(rootPath, "cluster", kubeletCSRApproverFileName)
-
-	// Check if file already exists
-	_, statErr := os.Stat(patchPath)
-	if statErr == nil && !force {
-		return nil
-	}
-
-	patchContent := KubeletCSRApproverInlineManifestPatchYAML()
-
-	err := os.WriteFile(patchPath, []byte(patchContent), filePerm)
-	if err != nil {
-		return fmt.Errorf("failed to create kubelet-csr-approver patch: %w", err)
-	}
-
-	return nil
-}
-
 // KubeletCSRApproverInlineManifestPatchYAML returns the Talos machine config patch YAML
 // that installs the kubelet-serving-cert-approver via cluster.inlineManifests.
 // The manifest uses the upstream-recommended :main image tag.
@@ -590,151 +396,6 @@ func indentManifest(manifest, indent string) string {
 	}
 
 	return strings.Join(indented, "\n")
-}
-
-// generateClusterNamePatch creates a Talos patch file to set a custom cluster name.
-// The cluster name is used in the kubeconfig context (admin@<name>) and for
-// container naming conventions.
-// Note: The cluster name is expected to be pre-validated as DNS-1123 compliant
-// (lowercase alphanumeric and hyphens only), which makes direct template
-// construction safe from injection attacks.
-func (g *Generator) generateClusterNamePatch(
-	rootPath string,
-	clusterName string,
-	force bool,
-) error {
-	patchPath := filepath.Join(rootPath, "cluster", clusterNameFileName)
-
-	// Check if file already exists
-	_, statErr := os.Stat(patchPath)
-	if statErr == nil && !force {
-		return nil
-	}
-
-	// Use simple template format matching other Talos patches.
-	// The cluster name is validated as DNS-1123 before reaching this point,
-	// so it contains only [a-z0-9-] characters, making this safe.
-	patchContent := fmt.Sprintf(`cluster:
-  clusterName: %s
-`, clusterName)
-
-	err := os.WriteFile(patchPath, []byte(patchContent), filePerm)
-	if err != nil {
-		return fmt.Errorf("failed to create cluster-name patch: %w", err)
-	}
-
-	return nil
-}
-
-// generateImageVerificationPatch creates a Talos ImageVerificationConfig document.
-// The document is placed in cluster/ alongside other patches. Talos configpatcher recognizes
-// it as a registered config document (kind: ImageVerificationConfig) and StrategicMerge
-// appends it to the config bundle — it does NOT overwrite the MachineConfig.
-// See: https://docs.siderolabs.com/talos/v1.13/security/verifying-image-signatures
-func (g *Generator) generateImageVerificationPatch(
-	rootPath string,
-	force bool,
-) error {
-	patchPath := filepath.Join(rootPath, "cluster", imageVerificationFileName)
-
-	// Check if file already exists
-	_, statErr := os.Stat(patchPath)
-	if statErr == nil && !force {
-		return nil
-	}
-
-	patchContent := `# Talos ImageVerificationConfig (Talos 1.13+)
-# This document enables machine-wide container image signature verification.
-# Rules are evaluated in order; the first matching rule applies.
-# See: https://www.talos.dev/v1.13/talos-guides/configuration/image-verification/
-apiVersion: v1alpha1
-kind: ImageVerificationConfig
-rules:
-  # Default: skip verification for all images.
-  # Remove or modify this rule and add specific verification rules below.
-  - image: "*"
-    skip: true
-  # Example: Verify registry.k8s.io images using keyless (Cosign/OIDC) verification
-  # - image: "registry.k8s.io/*"
-  #   keyless:
-  #     issuer: "https://accounts.google.com"
-  #     subject: "krel-trust@k8s-releng-prod.iam.gserviceaccount.com"
-  # Example: Verify images from a private registry using a public key
-  # - image: "my-registry.example.com/*"
-  #   publicKey:
-  #     certificate: |
-  #       -----BEGIN CERTIFICATE-----
-  #       <your PEM-encoded certificate here>
-  #       -----END CERTIFICATE-----
-  # Example: Deny all images from an untrusted registry
-  # - image: "untrusted-registry.example.com/*"
-  #   deny: true
-`
-
-	err := os.WriteFile(patchPath, []byte(patchContent), filePerm)
-	if err != nil {
-		return fmt.Errorf("failed to create image-verification config: %w", err)
-	}
-
-	return nil
-}
-
-// generateDisableCDIPatch creates a Talos patch file to disable CDI.
-// Talos 1.13+ enables CDI (Container Device Interface) by default via machine.features.
-// This patch explicitly disables CDI when the user sets CDI to Disabled.
-func (g *Generator) generateDisableCDIPatch(
-	rootPath string,
-	force bool,
-) error {
-	patchPath := filepath.Join(rootPath, "cluster", disableCDIFileName)
-
-	// Check if file already exists
-	_, statErr := os.Stat(patchPath)
-	if statErr == nil && !force {
-		return nil
-	}
-
-	patchContent := `machine:
-  features:
-    enableCDI: false
-`
-
-	err := os.WriteFile(patchPath, []byte(patchContent), filePerm)
-	if err != nil {
-		return fmt.Errorf("failed to create disable-cdi patch: %w", err)
-	}
-
-	return nil
-}
-
-// generateExternalCloudProviderPatch creates a Talos patch file to enable the external
-// cloud provider. This is required for cloud providers like Hetzner Cloud so that the
-// Cloud Controller Manager (CCM) can:
-//  1. Initialize nodes with a providerID (spec.providerID)
-//  2. Write node labels that the CSI DaemonSet requires for scheduling
-//
-// Without this patch, nodes come up Ready but without providerID, and CSI pods never
-// schedule because their node affinity depends on labels written by CCM.
-//
-// See: https://www.talos.dev/latest/kubernetes-guides/configuration/cloud-provider/
-func (g *Generator) generateExternalCloudProviderPatch(
-	rootPath string,
-	force bool,
-) error {
-	patchPath := filepath.Join(rootPath, "cluster", externalCloudProviderFileName)
-
-	// Check if file already exists
-	_, statErr := os.Stat(patchPath)
-	if statErr == nil && !force {
-		return nil
-	}
-
-	err := os.WriteFile(patchPath, []byte(ExternalCloudProviderPatchYAML), filePerm)
-	if err != nil {
-		return fmt.Errorf("failed to create external-cloud-provider patch: %w", err)
-	}
-
-	return nil
 }
 
 // IngressFirewallDefaultActionYAML is the Talos NetworkDefaultActionConfig document
@@ -908,109 +569,6 @@ func validateIngressFirewallModel(model *Config) error {
 
 	if model.CNIPort < 1 || model.CNIPort > 65535 {
 		return fmt.Errorf("%w: got %d", errInvalidCNIPort, model.CNIPort)
-	}
-
-	return nil
-}
-
-// writeFirewallFile writes content to path if the file does not already exist,
-// or if force is true. Skips the write when the file already exists and force is false.
-// Unexpected stat errors (e.g. permissions) are propagated when force is false.
-func writeFirewallFile(path string, content []byte, force bool) error {
-	if !force {
-		_, statErr := os.Stat(path)
-		if statErr == nil {
-			return nil
-		}
-
-		if !os.IsNotExist(statErr) {
-			return fmt.Errorf("failed to stat %s: %w", filepath.Base(path), statErr)
-		}
-	}
-
-	err := os.WriteFile(path, content, filePerm)
-	if err != nil {
-		return fmt.Errorf("failed to write %s: %w", filepath.Base(path), err)
-	}
-
-	return nil
-}
-
-// generateIngressFirewallPatches creates the Talos ingress firewall config documents.
-// This generates three files:
-//   - cluster/ingress-firewall-default-action.yaml — blocks all ingress by default
-//   - control-planes/ingress-firewall-rules.yaml — allows required CP ports
-//   - workers/ingress-firewall-rules.yaml — allows required worker ports
-//
-// See: https://www.talos.dev/latest/talos-guides/network/ingress-firewall/
-func (g *Generator) generateIngressFirewallPatches(
-	rootPath string,
-	model *Config,
-	force bool,
-) error {
-	err := validateIngressFirewallModel(model)
-	if err != nil {
-		return err
-	}
-
-	defaultActionPath := filepath.Join(rootPath, "cluster", ingressFirewallDefaultActionFileName)
-
-	err = writeFirewallFile(defaultActionPath, []byte(IngressFirewallDefaultActionYAML), force)
-	if err != nil {
-		return fmt.Errorf("failed to create ingress firewall default action: %w", err)
-	}
-
-	cpRulesPath := filepath.Join(rootPath, "control-planes", ingressFirewallRulesFileName)
-
-	err = writeFirewallFile(
-		cpRulesPath,
-		[]byte(IngressFirewallCPRulesYAML(model.NetworkCIDR, model.CNIPort, model.AllowedCIDRs)),
-		force,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to create ingress firewall CP rules: %w", err)
-	}
-
-	workerRulesPath := filepath.Join(rootPath, "workers", ingressFirewallRulesFileName)
-	workerContent := []byte(IngressFirewallWorkerRulesYAML(model.NetworkCIDR, model.CNIPort))
-
-	err = writeFirewallFile(workerRulesPath, workerContent, force)
-	if err != nil {
-		return fmt.Errorf("failed to create ingress firewall worker rules: %w", err)
-	}
-
-	return nil
-}
-
-// generateOIDCPatch creates a Talos patch file to configure the API server with OIDC flags.
-// When a CA file is configured, its content is embedded via machine.files so it is available
-// on the node at OIDCCAContainerPath, and the API server arg references that node-local path.
-func (g *Generator) generateOIDCPatch(
-	rootPath string,
-	model *Config,
-	force bool,
-) error {
-	patchPath := filepath.Join(rootPath, "cluster", oidcFileName)
-
-	_, statErr := os.Stat(patchPath)
-	if statErr == nil && !force {
-		return nil
-	}
-
-	var builder strings.Builder
-
-	if model.OIDCCAFile != "" {
-		err := writeOIDCCAMachineFiles(&builder, model.OIDCCAFile)
-		if err != nil {
-			return err
-		}
-	}
-
-	writeOIDCAPIServerArgs(&builder, model)
-
-	err := os.WriteFile(patchPath, []byte(builder.String()), filePerm)
-	if err != nil {
-		return fmt.Errorf("failed to create OIDC patch: %w", err)
 	}
 
 	return nil
