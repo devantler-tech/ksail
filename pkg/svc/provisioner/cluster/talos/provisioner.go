@@ -160,6 +160,9 @@ type Provisioner struct {
 	// imagePullRetry controls retry behavior for Docker image pulls.
 	// Tests can override this via WithImagePullRetryConfig to use near-zero delays.
 	imagePullRetry imagePullRetryConfig
+	// talosAPIRetry controls retry behavior for transient per-node Talos API failures.
+	// Tests can override this via WithTalosAPIRetryConfig to use near-zero delays.
+	talosAPIRetry talosAPIRetryConfig
 	// snapshotManager manages Talos snapshot images on Hetzner Cloud.
 	// Set when the Hetzner provider is configured and schematic-based snapshots are used.
 	snapshotManager *hetzner.SnapshotManager
@@ -189,6 +192,7 @@ func NewProvisioner(
 		kernelModuleLoader: kernelmod.EnsureBrNetfilter,
 		logWriter:          os.Stdout,
 		imagePullRetry:     defaultImagePullRetryConfig(),
+		talosAPIRetry:      defaultTalosAPIRetryConfig(),
 	}
 
 	prov.talosClientFactory = func(ctx context.Context, ip string) (kubeconfigFetcher, error) {
@@ -266,6 +270,21 @@ func (p *Provisioner) WithImagePullRetryConfig(
 		maxRetries: maxRetries,
 		baseWait:   baseWait,
 		maxWait:    maxWait,
+	}
+
+	return p
+}
+
+// WithTalosAPIRetryConfig overrides the retry parameters for transient
+// per-node Talos API failures. Useful in tests to use near-zero delays.
+func (p *Provisioner) WithTalosAPIRetryConfig(
+	maxAttempts int,
+	baseWait, maxWait time.Duration,
+) *Provisioner {
+	p.talosAPIRetry = talosAPIRetryConfig{
+		maxAttempts: maxAttempts,
+		baseWait:    baseWait,
+		maxWait:     maxWait,
 	}
 
 	return p

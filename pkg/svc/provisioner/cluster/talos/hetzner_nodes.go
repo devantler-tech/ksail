@@ -3,14 +3,11 @@ package talosprovisioner
 import (
 	"context"
 	"crypto/tls"
-	"errors"
 	"fmt"
 	"net"
 	"strconv"
 	"strings"
-	"time"
 
-	"github.com/devantler-tech/ksail/v7/pkg/client/netretry"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/hetzner"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"github.com/siderolabs/go-retry/retry"
@@ -24,20 +21,6 @@ import (
 // maxConcurrentHetznerOps caps the number of Hetzner API operations executed in parallel.
 // A value of 3 balances throughput and API rate-limit headroom.
 const maxConcurrentHetznerOps = 3
-
-// Apply-configuration retry defaults for transient Talos API handshake races.
-const (
-	talosApplyConfigMaxAttempts   = 3
-	talosApplyConfigRetryBaseWait = 5 * time.Second
-	talosApplyConfigRetryMaxWait  = 20 * time.Second
-
-	// grpcUnavailable is the numeric gRPC status code for Unavailable (14).
-	// Using the raw constant avoids importing google.golang.org/grpc directly.
-	grpcUnavailable = 14
-)
-
-// errRetriesExhausted is returned when all retry attempts for config apply have been used.
-var errRetriesExhausted = errors.New("retries exhausted")
 
 // hetznerNodeCreationResult holds the outcome of a single Hetzner server creation attempt.
 type hetznerNodeCreationResult struct {
@@ -427,50 +410,17 @@ func (p *Provisioner) applyConfigToNode(
 		return fmt.Errorf("failed to marshal config: %w", err)
 	}
 
-	var lastErr error
-
-	for attempt := 1; attempt <= talosApplyConfigMaxAttempts; attempt++ {
-		lastErr = attemptApplyConfig(ctx, serverIP, cfgBytes)
-		if lastErr == nil {
-			p.logf("  ✓ Config applied to %s\n", server.Name)
-
-			return nil
-		}
-
-		if !isRetryableTalosApplyConfigError(lastErr) {
-			return fmt.Errorf("failed to apply configuration: %w", lastErr)
-		}
-
-		if attempt == talosApplyConfigMaxAttempts {
-			break
-		}
-
-		delay := netretry.ExponentialDelay(
-			attempt,
-			talosApplyConfigRetryBaseWait,
-			talosApplyConfigRetryMaxWait,
-		)
-
-		p.logf(
-			"  Config apply attempt %d/%d failed on %s (retrying in %s): %v\n",
-			attempt,
-			talosApplyConfigMaxAttempts,
-			server.Name,
-			delay,
-			lastErr,
-		)
-
-		lastErr = sleepWithContext(ctx, delay)
-		if lastErr != nil {
-			return fmt.Errorf("retry backoff interrupted: %w", lastErr)
-		}
+	err = p.retryTransientTalosAPICall(ctx, server.Name, "Config apply",
+		func(ctx context.Context) error {
+			return attemptApplyConfig(ctx, serverIP, cfgBytes)
+		})
+	if err != nil {
+		return fmt.Errorf("failed to apply configuration for %s: %w", server.Name, err)
 	}
 
-	return fmt.Errorf(
-		"failed to apply configuration for %s: %w",
-		server.Name,
-		errors.Join(errRetriesExhausted, lastErr),
-	)
+	p.logf("  ✓ Config applied to %s\n", server.Name)
+
+	return nil
 }
 
 // attemptApplyConfig creates a single-use insecure Talos client and attempts to
@@ -497,34 +447,4 @@ func attemptApplyConfig(ctx context.Context, serverIP string, cfgBytes []byte) e
 	}
 
 	return nil
-}
-
-// sleepWithContext waits for d to elapse, returning ctx.Err() early if the context is cancelled.
-func sleepWithContext(ctx context.Context, d time.Duration) error {
-	timer := time.NewTimer(d)
-	select {
-	case <-ctx.Done():
-		if !timer.Stop() {
-			<-timer.C
-		}
-
-		return fmt.Errorf("%w", ctx.Err())
-	case <-timer.C:
-		return nil
-	}
-}
-
-func isRetryableTalosApplyConfigError(err error) bool {
-	if err == nil {
-		return false
-	}
-
-	if talosclient.StatusCode(err) == grpcUnavailable {
-		return true
-	}
-
-	errMsg := strings.ToLower(err.Error())
-
-	return strings.Contains(errMsg, "rpc error: code = unavailable") ||
-		strings.Contains(errMsg, "authentication handshake failed")
 }

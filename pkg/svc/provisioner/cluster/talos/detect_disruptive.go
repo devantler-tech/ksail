@@ -72,20 +72,34 @@ func (p *Provisioner) detectDisruptiveConfigChanges(
 		return nil, nil
 	}
 
-	talosClient, err := p.createTalosClient(ctx, cpIP)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create Talos client for config comparison: %w", err)
-	}
+	var machineConfig *talosresconfig.MachineConfig
 
-	defer talosClient.Close() //nolint:errcheck
+	// Retried: a transient gRPC failure (e.g. a stalled TLS handshake to apid)
+	// must not abort disruptive-change detection for the whole update.
+	err = p.retryTransientTalosAPICall(ctx, cpIP, "Running config fetch",
+		func(ctx context.Context) error {
+			talosClient, clientErr := p.createTalosClient(ctx, cpIP)
+			if clientErr != nil {
+				return fmt.Errorf("failed to create Talos client for config comparison: %w", clientErr)
+			}
 
-	machineConfig, err := safe.StateGet[*talosresconfig.MachineConfig](
-		ctx,
-		talosClient.COSI,
-		talosresconfig.NewMachineConfig(nil).Metadata(),
-	)
+			defer talosClient.Close() //nolint:errcheck
+
+			fetched, fetchErr := safe.StateGet[*talosresconfig.MachineConfig](
+				ctx,
+				talosClient.COSI,
+				talosresconfig.NewMachineConfig(nil).Metadata(),
+			)
+			if fetchErr != nil {
+				return fmt.Errorf("failed to fetch running machine config from %s: %w", cpIP, fetchErr)
+			}
+
+			machineConfig = fetched
+
+			return nil
+		})
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch running machine config from %s: %w", cpIP, err)
+		return nil, err
 	}
 
 	runningConfig := machineConfig.Config()

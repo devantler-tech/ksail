@@ -369,6 +369,8 @@ func (p *Provisioner) applyRebootRequiredChanges(
 }
 
 // applyConfigWithMode applies configuration to a single node with the specified mode.
+// Transient gRPC failures (e.g. a flaky TLS handshake to apid) are retried with
+// a fresh client per attempt so one dropped flow doesn't fail the node.
 func (p *Provisioner) applyConfigWithMode(
 	ctx context.Context,
 	nodeIP string,
@@ -384,6 +386,20 @@ func (p *Provisioner) applyConfigWithMode(
 		return fmt.Errorf("failed to marshal config: %w", err)
 	}
 
+	return p.retryTransientTalosAPICall(ctx, nodeIP, "Config apply",
+		func(ctx context.Context) error {
+			return p.applyConfigOnce(ctx, nodeIP, cfgBytes, mode)
+		})
+}
+
+// applyConfigOnce performs a single ApplyConfiguration attempt against nodeIP
+// using a freshly created Talos client.
+func (p *Provisioner) applyConfigOnce(
+	ctx context.Context,
+	nodeIP string,
+	cfgBytes []byte,
+	mode machineapi.ApplyConfigurationRequest_Mode,
+) error {
 	talosClient, err := p.createTalosClient(ctx, nodeIP)
 	if err != nil {
 		return err
@@ -664,20 +680,34 @@ func (p *Provisioner) fetchClusterSecretsAndEndpoint(
 	ctx context.Context,
 	cpIP string,
 ) (*secrets.Bundle, string, error) {
-	talosClient, err := p.createTalosClient(ctx, cpIP)
-	if err != nil {
-		return nil, "", fmt.Errorf("failed to create Talos client for secret sync: %w", err)
-	}
+	var machineConfig *talosresconfig.MachineConfig
 
-	defer talosClient.Close() //nolint:errcheck
+	// Retried: the fetch shares the same transient failure modes as config
+	// apply (flaky TLS handshakes to apid on public IPs).
+	err := p.retryTransientTalosAPICall(ctx, cpIP, "Machine config fetch",
+		func(ctx context.Context) error {
+			talosClient, clientErr := p.createTalosClient(ctx, cpIP)
+			if clientErr != nil {
+				return fmt.Errorf("failed to create Talos client for secret sync: %w", clientErr)
+			}
 
-	machineConfig, err := safe.StateGet[*talosresconfig.MachineConfig](
-		ctx,
-		talosClient.COSI,
-		talosresconfig.NewMachineConfig(nil).Metadata(),
-	)
+			defer talosClient.Close() //nolint:errcheck
+
+			fetched, fetchErr := safe.StateGet[*talosresconfig.MachineConfig](
+				ctx,
+				talosClient.COSI,
+				talosresconfig.NewMachineConfig(nil).Metadata(),
+			)
+			if fetchErr != nil {
+				return fmt.Errorf("failed to fetch machine config from %s: %w", cpIP, fetchErr)
+			}
+
+			machineConfig = fetched
+
+			return nil
+		})
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to fetch machine config from %s: %w", cpIP, err)
+		return nil, "", err
 	}
 
 	runningConfig := machineConfig.Config()
