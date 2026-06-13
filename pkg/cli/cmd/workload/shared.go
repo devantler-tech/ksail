@@ -206,7 +206,7 @@ func wrapWithKubeconfigResolution(cmd *cobra.Command) {
 // never see an empty engine. This matches how reconcile.go treats "" as None.
 func resolveGitOpsEngine(cfg *v1alpha1.Cluster) v1alpha1.GitOpsEngine {
 	engine := cfg.Spec.Cluster.GitOpsEngine
-	if engine == "" || engine == v1alpha1.GitOpsEngineNone {
+	if engine.IsNone() {
 		return v1alpha1.GitOpsEngineNone
 	}
 

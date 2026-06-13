@@ -1,6 +1,7 @@
 package configmanager
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
 	"time"
@@ -8,6 +9,14 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/spf13/cobra"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
+
+// ErrFieldSelectorMissingFlagName is returned (via panic) when a field selector
+// is registered without a FlagName. Every selector must carry its flag name so
+// the flag registration and override paths can resolve it; an empty name would
+// previously register a flag literally called "unknown".
+var ErrFieldSelectorMissingFlagName = errors.New(
+	"field selector is missing a FlagName: every FieldSelector must set FlagName",
 )
 
 // AddFlagsFromFields adds CLI flags for all configured field selectors.
@@ -54,6 +63,10 @@ func (m *ConfigManager) handleInt32Flag(
 }
 
 // addFlagFromField adds a CLI flag for a specific field using type assertion and reflection.
+//
+// The flag name and shorthand come straight from the FieldSelector metadata
+// (FlagName/Shorthand). A selector without a FlagName is a programming error and
+// panics at init time rather than silently registering a flag named "unknown".
 func (m *ConfigManager) addFlagFromField(
 	cmd *cobra.Command,
 	fieldSelector FieldSelector[v1alpha1.Cluster],
@@ -63,8 +76,18 @@ func (m *ConfigManager) addFlagFromField(
 		return
 	}
 
-	flagName := m.GenerateFlagName(fieldPtr)
-	shorthand := m.GenerateShorthand(flagName)
+	if fieldSelector.FlagName == "" {
+		panic(
+			fmt.Errorf(
+				"%w (description: %q)",
+				ErrFieldSelectorMissingFlagName,
+				fieldSelector.Description,
+			),
+		)
+	}
+
+	flagName := fieldSelector.FlagName
+	shorthand := fieldSelector.Shorthand
 
 	// Try to handle as pflag.Value interface first (for enum types)
 	if !m.handlePflagValue(cmd, fieldPtr, fieldSelector, flagName, shorthand) {
@@ -167,87 +190,6 @@ func (m *ConfigManager) handleDurationFlag(
 		defaultDuration,
 		fieldSelector.Description,
 	)
-}
-
-// fieldMappings is a map for efficient field-to-flag-name lookup.
-// We initialize this map once and reuse it for better performance.
-func (m *ConfigManager) getFieldMappings() map[any]string {
-	return map[any]string{
-		&m.Config.Spec.Cluster.Distribution:           "distribution",
-		&m.Config.Spec.Cluster.Provider:               "provider",
-		&m.Config.Spec.Cluster.DistributionConfig:     "distribution-config",
-		&m.Config.Spec.Workload.SourceDirectory:       "source-directory",
-		&m.Config.Spec.Workload.KustomizationFile:     "kustomization-file",
-		&m.Config.Spec.Cluster.Connection.Context:     "context",
-		&m.Config.Spec.Cluster.Connection.Kubeconfig:  "kubeconfig",
-		&m.Config.Spec.Cluster.Connection.Timeout:     "timeout",
-		&m.Config.Spec.Cluster.GitOpsEngine:           "gitops-engine",
-		&m.Config.Spec.Cluster.CNI:                    "cni",
-		&m.Config.Spec.Cluster.CSI:                    "csi",
-		&m.Config.Spec.Cluster.CDI:                    "cdi",
-		&m.Config.Spec.Cluster.MetricsServer:          "metrics-server",
-		&m.Config.Spec.Cluster.LoadBalancer:           "load-balancer",
-		&m.Config.Spec.Cluster.CertManager:            "cert-manager",
-		&m.Config.Spec.Cluster.PolicyEngine:           "policy-engine",
-		&m.Config.Spec.Cluster.LocalRegistry.Registry: "local-registry",
-		&m.Config.Spec.Cluster.ImportImages:           "import-images",
-
-		// Cluster-level node counts (apply across distributions).
-		&m.Config.Spec.Cluster.ControlPlanes:           "control-planes",
-		&m.Config.Spec.Cluster.Workers:                 "workers",
-		&m.Config.Spec.Cluster.Talos.ImageVerification: "image-verification",
-		&m.Config.Spec.Cluster.Talos.DrainTimeout:      "drain-timeout",
-
-		// Declarative version fields (unset = follow latest, set = pin).
-		&m.Config.Spec.Cluster.KubernetesVersion: "kubernetes-version",
-		&m.Config.Spec.Cluster.Talos.Version:     "distribution-version",
-
-		// Cross-distribution options
-		&m.Config.Spec.Cluster.NodeAutoscaling:         "node-autoscaling",
-		&m.Config.Spec.Cluster.Autoscaler.Node.Enabled: "node-autoscaler-enabled",
-
-		// OIDC authentication
-		&m.Config.Spec.Cluster.OIDC.IssuerURL:      "oidc-issuer-url",
-		&m.Config.Spec.Cluster.OIDC.ClientID:       "oidc-client-id",
-		&m.Config.Spec.Cluster.OIDC.UsernameClaim:  "oidc-username-claim",
-		&m.Config.Spec.Cluster.OIDC.UsernamePrefix: "oidc-username-prefix",
-		&m.Config.Spec.Cluster.OIDC.GroupsClaim:    "oidc-groups-claim",
-		&m.Config.Spec.Cluster.OIDC.GroupsPrefix:   "oidc-groups-prefix",
-		&m.Config.Spec.Cluster.OIDC.CAFile:         "oidc-ca-file",
-	}
-}
-
-// GenerateFlagName generates a user-friendly flag name from a field pointer.
-func (m *ConfigManager) GenerateFlagName(fieldPtr any) string {
-	fieldMappings := m.getFieldMappings()
-	if flagName, exists := fieldMappings[fieldPtr]; exists {
-		return flagName
-	}
-
-	return "unknown"
-}
-
-// GenerateShorthand generates a shorthand flag from the flag name.
-func (m *ConfigManager) GenerateShorthand(flagName string) string {
-	switch flagName {
-	case "distribution":
-		return "d"
-	case "context":
-		return "c"
-	case "kubeconfig":
-		return "k"
-	case "timeout":
-		return "t"
-	case "source-directory":
-		return "s"
-	case "gitops-engine":
-		return "g"
-	case "distribution-config":
-		return ""
-	default:
-		// For other flags, don't provide shorthand to avoid conflicts
-		return ""
-	}
 }
 
 // setFieldValue sets a field value using reflection.

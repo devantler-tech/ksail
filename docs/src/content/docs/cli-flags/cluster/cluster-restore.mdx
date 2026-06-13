@@ -23,6 +23,7 @@ Flags:
       --dry-run                           Print what would be restored without applying
       --existing-resource-policy string   Policy for existing resources: none (skip) or update (patch) (default "none")
   -i, --input string                      Input backup archive path (required)
+      --name string                       Name of the cluster to restore into (resolves the kubeconfig like the other cluster commands; defaults to the current kubeconfig context when unset)
 
 Global Flags:
       --benchmark       Show per-activity benchmark output

@@ -65,7 +65,7 @@ func (e *Engine) CheckWorkloadTag(
 	gitOpsEngine v1alpha1.GitOpsEngine,
 	result *clusterupdate.UpdateResult,
 ) {
-	if gitOpsEngine == v1alpha1.GitOpsEngineNone || gitOpsEngine == "" {
+	if gitOpsEngine.IsNone() {
 		return
 	}
 

@@ -9,19 +9,19 @@ description: "Destroy a cluster"
 Destroy a cluster.
 
 The cluster is resolved in the following priority order:
-  1. From --name flag
-  2. From ksail.yaml config file (if present)
-  3. From current kubeconfig context
+  1. From the --name flag
+  2. From metadata.name in the ksail.yaml config file (if present)
+  3. From the current kubeconfig context
 
 The provider is resolved in the following priority order:
-  1. From --provider flag
-  2. From ksail.yaml config file (if present)
+  1. From the --provider flag
+  2. From the ksail.yaml config file (if present)
   3. Defaults to Docker
 
 The kubeconfig is resolved in the following priority order:
-  1. From --kubeconfig flag
-  2. From KUBECONFIG environment variable
-  3. From ksail.yaml config file (if present)
+  1. From the --kubeconfig flag
+  2. From the KUBECONFIG environment variable
+  3. From the ksail.yaml config file (if present)
   4. Defaults to ~/.kube/config
 
 Usage:

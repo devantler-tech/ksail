@@ -26,6 +26,12 @@ with other cluster commands:
   ksail cluster delete --name <cluster> --provider <provider>
   ksail cluster stop --name <cluster> --provider <provider>
 
+Use --output json for machine-readable output. The JSON is an array of objects:
+  [
+    {"name": "dev", "provider": "docker", "distribution": "Vanilla", "ttl": "2h 30m"}
+  ]
+The "ttl" field is null when no TTL is set and "EXPIRED" once the TTL has elapsed.
+
 Examples:
   # List all clusters
   ksail cluster list
@@ -39,10 +45,14 @@ Examples:
   # List only Omni clusters
   ksail cluster list --provider Omni
 
+  # Machine-readable JSON (name/provider/distribution/ttl)
+  ksail cluster list --output json
+
 Usage:
   ksail cluster list [flags]
 
 Flags:
+      --output string       Output format: text or json. Use json for machine-readable structured output (array of {name, provider, distribution, ttl}). (default "text")
   -p, --provider Provider   Filter by provider (Docker, Hetzner, Omni, AWS, Kubernetes). If not specified, lists all providers.
 
 Global Flags:

@@ -22,6 +22,30 @@ export function isHostCluster(cluster: Cluster): boolean {
   return cluster.metadata.labels?.[HOST_CLUSTER_LABEL] === "true";
 }
 
+// CLUSTER_PHASE_STOPPED is the display-only phase the SPA derives for a cluster the backend reports as
+// stopped (its infrastructure exists but is not running). The backend does not emit it as a phase
+// value — that would be a breaking API enum change — it leaves status.phase unset and attaches a
+// Ready=False/reason=Stopped condition; clusterPhase folds that back into this presentational phase so
+// StatusBadge renders "Stopped" instead of a falsely green "Ready" or a bare "Unknown".
+export const CLUSTER_PHASE_STOPPED = "Stopped";
+
+// clusterPhase returns the phase to display for a cluster: its reported status.phase when set,
+// otherwise CLUSTER_PHASE_STOPPED when the backend signalled a stopped cluster via a
+// Ready=False/reason=Stopped condition, otherwise "" (which StatusBadge renders as Unknown). This is
+// the single place the stopped-condition convention is decoded, so every status surface agrees.
+export function clusterPhase(cluster: Cluster): string {
+  const phase = cluster.status?.phase ?? "";
+  if (phase !== "") {
+    return phase;
+  }
+
+  const stopped = (cluster.status?.conditions ?? []).some(
+    (condition) => condition.type === "Ready" && condition.status === "False" && condition.reason === "Stopped",
+  );
+
+  return stopped ? CLUSTER_PHASE_STOPPED : "";
+}
+
 // str safely reads a string field from an unstructured value (the backend returns native Kubernetes
 // JSON, typed loosely as K8sObject), returning "" for anything that is not a string.
 function str(value: unknown): string {

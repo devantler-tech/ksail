@@ -66,7 +66,7 @@ func runReconcile(cmd *cobra.Command) error {
 
 	// Determine GitOps engine - use config if set, otherwise auto-detect
 	gitOpsEngine := clusterCfg.Spec.Cluster.GitOpsEngine
-	if gitOpsEngine == v1alpha1.GitOpsEngineNone || gitOpsEngine == "" {
+	if gitOpsEngine.IsNone() {
 		detected, detectErr := autoDetectGitOpsEngine(cmd, clusterCfg, tmr, outputTimer)
 		if detectErr != nil {
 			return detectErr

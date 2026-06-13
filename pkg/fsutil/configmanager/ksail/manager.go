@@ -484,7 +484,7 @@ func (m *ConfigManager) applyFlagOverrides(overrides map[string]string) error {
 			continue
 		}
 
-		flagName := m.GenerateFlagName(fieldPtr)
+		flagName := selector.FlagName
 
 		value, ok := overrides[flagName]
 		if !ok {

@@ -17,10 +17,31 @@ const (
 	DefaultEKSDistributionConfig = "eks.yaml"
 	// DefaultSourceDirectory is the default directory for Kubernetes manifests.
 	DefaultSourceDirectory = "k8s"
-	// DefaultKubeconfigPath is the default path to the kubeconfig file.
+	// DefaultKubeconfigPath is the default path to the kubeconfig file
+	// (matches `default:"~/.kube/config"` on Connection.Kubeconfig and
+	// OptionsKubernetes.Kubeconfig struct tags).
 	DefaultKubeconfigPath = "~/.kube/config"
 	// DefaultLocalRegistryPort is the default port for the local registry.
 	DefaultLocalRegistryPort int32 = 5050
+)
+
+// OIDC default values — canonical source for OIDCSpec struct tag defaults.
+// FieldSelector defaults reference these consts instead of restating the
+// literals; the table-driven test in defaults_test.go asserts each const
+// equals its `default:` struct tag so the two stay in sync.
+const (
+	// DefaultOIDCUsernameClaim is the default JWT claim mapped to the
+	// Kubernetes username (matches `default:"email"` on OIDCSpec.UsernameClaim).
+	DefaultOIDCUsernameClaim = "email"
+	// DefaultOIDCGroupsClaim is the default JWT claim mapped to Kubernetes
+	// group membership (matches `default:"groups"` on OIDCSpec.GroupsClaim).
+	DefaultOIDCGroupsClaim = "groups"
+	// DefaultOIDCUsernamePrefix is the default prefix prepended to OIDC
+	// usernames (matches `default:"oidc:"` on OIDCSpec.UsernamePrefix).
+	DefaultOIDCUsernamePrefix = "oidc:"
+	// DefaultOIDCGroupsPrefix is the default prefix prepended to OIDC groups
+	// (matches `default:"oidc:"` on OIDCSpec.GroupsPrefix).
+	DefaultOIDCGroupsPrefix = "oidc:"
 )
 
 // SOPS default values — canonical source for SOPS struct tag defaults.

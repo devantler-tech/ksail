@@ -71,12 +71,12 @@ func ApplyGitOpsLocalRegistryDefault(spec *v1alpha1.ClusterSpec) {
 		return
 	}
 
-	switch spec.GitOpsEngine {
-	case v1alpha1.GitOpsEngineFlux, v1alpha1.GitOpsEngineArgoCD:
-		spec.LocalRegistry.Registry = DefaultLocalRegistryAddress
-	case v1alpha1.GitOpsEngineNone, "":
+	if spec.GitOpsEngine.IsNone() {
 		// No GitOps engine — no default registry needed.
+		return
 	}
+
+	spec.LocalRegistry.Registry = DefaultLocalRegistryAddress
 }
 
 // DefaultCurrentSpec returns a ClusterSpec populated with the default values

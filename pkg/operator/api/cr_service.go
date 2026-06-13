@@ -22,8 +22,21 @@ type crClusterService struct {
 }
 
 // The operator backend supports in-place cluster update (it patches the Cluster CR), so it implements
-// the optional ClusterUpdater interface — that is what advertises capabilities.clusterUpdate=true.
-var _ ClusterUpdater = (*crClusterService)(nil)
+// the optional ClusterUpdater interface — that is what advertises capabilities.clusterUpdate=true. It
+// also implements ComponentInstaller (its reconciler installs the declared components when a
+// provisioner exposes a Connector), so the create form offers the component selectors.
+var (
+	_ ClusterUpdater     = (*crClusterService)(nil)
+	_ ComponentInstaller = (*crClusterService)(nil)
+)
+
+// InstallsComponents reports true: the operator's reconciler installs the cluster components declared
+// in the spec (CNI, CSI, metrics-server, …) when the provisioner exposes child access, recording the
+// outcome in the ComponentsReady condition. The capability lets the create form offer the component
+// selectors knowing they are honored.
+func (s *crClusterService) InstallsComponents() bool {
+	return true
+}
 
 // NewCRClusterService returns a ClusterService backed by the controller-runtime client.
 func NewCRClusterService(kubeClient client.Client) ClusterService {

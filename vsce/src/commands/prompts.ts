@@ -1,36 +1,22 @@
 /**
  * Interactive Prompts
  *
- * Dynamic input helpers that query MCP tool schemas for valid values.
- * This ensures the extension stays in sync with CLI capabilities automatically.
+ * Multi-step QuickPick wizards for cluster scaffolding. Enum values and their
+ * descriptions come from the single static ENUM_CATALOG (src/ksail/enums.ts),
+ * single-sourced against the Go enums — no MCP schema query (that path was
+ * removed in Phase 4.3b for hanging ~10s per step).
  *
  * Uses VSCode's multi-step QuickPick pattern with step indicators.
  */
 
 import * as vscode from "vscode";
-import type { ClusterInfo, CommonClusterOptions, CreateClusterOptions } from "../ksail/index.js";
-import { getSchemaEnumValues as resolveSchemaEnumValues } from "../mcp/index.js";
-
-/**
- * MCP tool name for cluster init command
- */
-const CLUSTER_INIT_TOOL = "cluster_init";
-
-/**
- * Fallback enum values when MCP schema is unavailable
- * First value in each array is the CLI default
- */
-const FALLBACK_VALUES: Record<string, string[]> = {
-  distribution: ["Vanilla", "K3s", "Talos", "VCluster"],
-  provider: ["Docker", "Hetzner", "Omni"],
-  profile: ["Default"],
-  cni: ["Default", "Cilium", "Calico"],
-  csi: ["Default", "Enabled", "Disabled"],
-  "metrics-server": ["Default", "Enabled", "Disabled"],
-  "cert-manager": ["Disabled", "Enabled"],
-  "policy-engine": ["None", "Kyverno", "Gatekeeper"],
-  "gitops-engine": ["None", "Flux", "ArgoCD"],
-};
+import {
+  describerFor,
+  getEnumValues,
+  type ClusterInfo,
+  type CommonClusterOptions,
+  type CreateClusterOptions,
+} from "../ksail/index.js";
 
 // ============================================================================
 // Multi-Step Input Helper
@@ -126,19 +112,12 @@ async function showMultiStepInputBox(options: {
 }
 
 // ============================================================================
-// Schema-Driven Helpers
+// Enum-Step Helper
 // ============================================================================
 
 /**
- * Get enum values from MCP schema with fallback for cluster init properties
- */
-function getSchemaEnumValues(propertyName: string): Promise<string[]> {
-  return resolveSchemaEnumValues(CLUSTER_INIT_TOOL, propertyName, FALLBACK_VALUES);
-}
-
-/**
- * Create QuickPick items from enum values with descriptions
- * First item is marked as default
+ * Create QuickPick items from enum values with descriptions.
+ * First item is marked as the default.
  */
 function createEnumQuickPickItems(
   values: string[],
@@ -150,6 +129,21 @@ function createEnumQuickPickItems(
     value: v,
     picked: i === 0,
   }));
+}
+
+/**
+ * Run a single enum selection step backed by ENUM_CATALOG.
+ *
+ * Collapses the repeated "values → QuickPick items → showMultiStepQuickPick →
+ * cancel-check" block that the init and customization wizards previously copied
+ * for every field.
+ */
+function enumStep(
+  field: string,
+  options: { title: string; step: number; totalSteps: number; placeholder: string }
+): Promise<string | undefined> {
+  const items = createEnumQuickPickItems(getEnumValues(field), describerFor(field));
+  return showMultiStepQuickPick(items, options);
 }
 
 // ============================================================================
@@ -200,9 +194,7 @@ export async function runClusterInitWizard(): Promise<ClusterInitOptions | undef
   if (!name) { return undefined; }
 
   // Step 3: Distribution (first value is default)
-  const distributionValues = await getSchemaEnumValues("distribution");
-  const distributionItems = createEnumQuickPickItems(distributionValues, getDistributionDescription);
-  const distribution = await showMultiStepQuickPick(distributionItems, {
+  const distribution = await enumStep("distribution", {
     title,
     step: 3,
     totalSteps,
@@ -211,9 +203,7 @@ export async function runClusterInitWizard(): Promise<ClusterInitOptions | undef
   if (!distribution) { return undefined; }
 
   // Step 4: Provider (first value is default)
-  const providerValues = await getSchemaEnumValues("provider");
-  const providerItems = createEnumQuickPickItems(providerValues, getProviderDescription);
-  const provider = await showMultiStepQuickPick(providerItems, {
+  const provider = await enumStep("provider", {
     title,
     step: 4,
     totalSteps,
@@ -222,9 +212,7 @@ export async function runClusterInitWizard(): Promise<ClusterInitOptions | undef
   if (!provider) { return undefined; }
 
   // Step 5: CNI (first value is default)
-  const cniValues = await getSchemaEnumValues("cni");
-  const cniItems = createEnumQuickPickItems(cniValues, getCniDescription);
-  const cni = await showMultiStepQuickPick(cniItems, {
+  const cni = await enumStep("cni", {
     title,
     step: 5,
     totalSteps,
@@ -233,9 +221,7 @@ export async function runClusterInitWizard(): Promise<ClusterInitOptions | undef
   if (!cni) { return undefined; }
 
   // Step 6: GitOps Engine (first value is default)
-  const gitopsValues = await getSchemaEnumValues("gitops-engine");
-  const gitopsItems = createEnumQuickPickItems(gitopsValues, getGitopsDescription);
-  const gitopsEngine = await showMultiStepQuickPick(gitopsItems, {
+  const gitopsEngine = await enumStep("gitops-engine", {
     title,
     step: 6,
     totalSteps,
@@ -377,13 +363,7 @@ export async function runClusterCreateWizard(): Promise<CreateClusterOptions | u
     name = await vscode.window.showInputBox({
       prompt: "Enter cluster name",
       placeHolder: "my-cluster",
-      validateInput: (value) => {
-        if (!value) { return "Cluster name is required"; }
-        if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(value)) {
-          return "Must be lowercase alphanumeric, may contain hyphens";
-        }
-        return undefined;
-      },
+      validateInput: (value) => validateClusterName(value),
     });
     if (!name) { return undefined; }
   }
@@ -436,90 +416,50 @@ async function runFullCustomizationWizard(
   let step = startStep;
 
   // Distribution
-  const distributionValues = await getSchemaEnumValues("distribution");
-  const distributionItems = createEnumQuickPickItems(distributionValues, getDistributionDescription);
-  const distribution = await showMultiStepQuickPick(distributionItems, {
-    title,
-    step: step++,
-    totalSteps,
-    placeholder: "Select Kubernetes distribution",
+  const distribution = await enumStep("distribution", {
+    title, step: step++, totalSteps, placeholder: "Select Kubernetes distribution",
   });
   if (!distribution) { return undefined; }
 
   // Provider
-  const providerValues = await getSchemaEnumValues("provider");
-  const providerItems = createEnumQuickPickItems(providerValues, getProviderDescription);
-  const provider = await showMultiStepQuickPick(providerItems, {
-    title,
-    step: step++,
-    totalSteps,
-    placeholder: "Select infrastructure provider",
+  const provider = await enumStep("provider", {
+    title, step: step++, totalSteps, placeholder: "Select infrastructure provider",
   });
   if (!provider) { return undefined; }
 
   // CNI
-  const cniValues = await getSchemaEnumValues("cni");
-  const cniItems = createEnumQuickPickItems(cniValues, getCniDescription);
-  const cni = await showMultiStepQuickPick(cniItems, {
-    title,
-    step: step++,
-    totalSteps,
-    placeholder: "Select Container Network Interface (CNI)",
+  const cni = await enumStep("cni", {
+    title, step: step++, totalSteps, placeholder: "Select Container Network Interface (CNI)",
   });
   if (!cni) { return undefined; }
 
   // CSI
-  const csiValues = await getSchemaEnumValues("csi");
-  const csiItems = createEnumQuickPickItems(csiValues, getCsiDescription);
-  const csi = await showMultiStepQuickPick(csiItems, {
-    title,
-    step: step++,
-    totalSteps,
-    placeholder: "Select Container Storage Interface (CSI)",
+  const csi = await enumStep("csi", {
+    title, step: step++, totalSteps, placeholder: "Select Container Storage Interface (CSI)",
   });
   if (!csi) { return undefined; }
 
   // Metrics Server
-  const metricsValues = await getSchemaEnumValues("metrics-server");
-  const metricsItems = createEnumQuickPickItems(metricsValues, () => "");
-  const metricsServer = await showMultiStepQuickPick(metricsItems, {
-    title,
-    step: step++,
-    totalSteps,
-    placeholder: "Select Metrics Server option",
+  const metricsServer = await enumStep("metrics-server", {
+    title, step: step++, totalSteps, placeholder: "Select Metrics Server option",
   });
   if (!metricsServer) { return undefined; }
 
   // Cert Manager
-  const certValues = await getSchemaEnumValues("cert-manager");
-  const certItems = createEnumQuickPickItems(certValues, () => "");
-  const certManager = await showMultiStepQuickPick(certItems, {
-    title,
-    step: step++,
-    totalSteps,
-    placeholder: "Select Cert-Manager option",
+  const certManager = await enumStep("cert-manager", {
+    title, step: step++, totalSteps, placeholder: "Select Cert-Manager option",
   });
   if (!certManager) { return undefined; }
 
   // Policy Engine
-  const policyValues = await getSchemaEnumValues("policy-engine");
-  const policyItems = createEnumQuickPickItems(policyValues, getPolicyDescription);
-  const policyEngine = await showMultiStepQuickPick(policyItems, {
-    title,
-    step: step++,
-    totalSteps,
-    placeholder: "Select Policy Engine",
+  const policyEngine = await enumStep("policy-engine", {
+    title, step: step++, totalSteps, placeholder: "Select Policy Engine",
   });
   if (!policyEngine) { return undefined; }
 
   // GitOps Engine
-  const gitopsValues = await getSchemaEnumValues("gitops-engine");
-  const gitopsItems = createEnumQuickPickItems(gitopsValues, getGitopsDescription);
-  const gitopsEngine = await showMultiStepQuickPick(gitopsItems, {
-    title,
-    step: step,
-    totalSteps,
-    placeholder: "Select GitOps engine",
+  const gitopsEngine = await enumStep("gitops-engine", {
+    title, step: step, totalSteps, placeholder: "Select GitOps engine",
   });
   if (!gitopsEngine) { return undefined; }
 
@@ -555,77 +495,6 @@ async function runFullCustomizationWizard(
     controlPlanes,
     workers,
   };
-}
-
-/**
- * Get description for distribution options
- */
-function getDistributionDescription(distribution: string): string {
-  const descriptions: Record<string, string> = {
-    Vanilla: "Standard upstream Kubernetes via Kind",
-    K3s: "Lightweight Kubernetes via K3d",
-    Talos: "Immutable Talos Linux Kubernetes",
-  };
-  return descriptions[distribution] || "";
-}
-
-/**
- * Get description for provider options
- */
-function getProviderDescription(provider: string): string {
-  const descriptions: Record<string, string> = {
-    Docker: "Run cluster nodes as Docker containers",
-    Hetzner: "Run cluster on Hetzner Cloud servers",
-  };
-  return descriptions[provider] || "";
-}
-
-/**
- * Get description for CNI options
- */
-function getCniDescription(cni: string): string {
-  const descriptions: Record<string, string> = {
-    Default: "Use the distribution's default CNI",
-    Cilium: "eBPF-based networking with advanced features",
-    Calico: "Flexible networking and network policy",
-  };
-  return descriptions[cni] || "";
-}
-
-/**
- * Get description for CSI options
- */
-function getCsiDescription(csi: string): string {
-  const descriptions: Record<string, string> = {
-    Default: "Use the distribution's default CSI",
-    Enabled: "Enable local path provisioner",
-    Disabled: "No CSI provisioner",
-  };
-  return descriptions[csi] || "";
-}
-
-/**
- * Get description for policy options
- */
-function getPolicyDescription(policy: string): string {
-  const descriptions: Record<string, string> = {
-    None: "No policy engine",
-    Kyverno: "Kubernetes native policy management",
-    Gatekeeper: "OPA-based policy controller",
-  };
-  return descriptions[policy] || "";
-}
-
-/**
- * Get description for GitOps options
- */
-function getGitopsDescription(gitops: string): string {
-  const descriptions: Record<string, string> = {
-    Flux: "Flux CD - GitOps toolkit for Kubernetes",
-    ArgoCD: "Argo CD - Declarative GitOps for Kubernetes",
-    None: "No GitOps engine installed",
-  };
-  return descriptions[gitops] || "";
 }
 
 // ============================================================================

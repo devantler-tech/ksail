@@ -18,7 +18,10 @@ func defaultClusterMutationFieldSelectors() []ksailconfigmanager.FieldSelector[v
 
 	return append(
 		selectors,
-		ksailconfigmanager.DefaultProviderFieldSelector(),
+		// create/update/init expose -p=--provider (matching their lifecycle
+		// siblings); shared read-only consumers of DefaultProviderFieldSelector
+		// (e.g. workload images) keep the long flag only.
+		ksailconfigmanager.WithProviderShorthand(ksailconfigmanager.DefaultProviderFieldSelector()),
 		ksailconfigmanager.DefaultCNIFieldSelector(),
 		ksailconfigmanager.DefaultMetricsServerFieldSelector(),
 		ksailconfigmanager.DefaultLoadBalancerFieldSelector(),
@@ -59,6 +62,20 @@ func registerNameFlag(cmd *cobra.Command, cfgManager *ksailconfigmanager.ConfigM
 	cmd.Flags().StringP("name", "n", "",
 		"Cluster name used for container names, registry names, and kubeconfig context")
 	_ = cfgManager.Viper.BindPFlag("name", cmd.Flags().Lookup("name"))
+}
+
+// hideConfigOnlyFlags hides the config-loading flags that a command needs for
+// defaults and validation but does not expose in its help (distribution,
+// distribution-config, gitops-engine, local-registry). Shared by connect and
+// diff so the hidden-flag list cannot drift between them.
+func hideConfigOnlyFlags(cmd *cobra.Command) {
+	for _, flagName := range []string{
+		"distribution", "distribution-config", "gitops-engine", "local-registry",
+	} {
+		if f := cmd.Flags().Lookup(flagName); f != nil {
+			f.Hidden = true
+		}
+	}
 }
 
 // registerOIDCExtraScopeFlag adds the --oidc-extra-scope flag to a command.

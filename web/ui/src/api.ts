@@ -147,12 +147,23 @@ export interface Capabilities {
   // workloadExec is true when the backend can exec into a pod container (the in-browser terminal).
   // The SPA combines it with !readOnly before showing the Exec action.
   workloadExec: boolean;
+  // clusterStartStop is true when the backend can start/stop an existing cluster's infrastructure
+  // without deleting it (the local backend, for Docker clusters). The SPA combines it with !readOnly
+  // before showing the start/stop actions; the operator omits it (its clusters are reconciled).
+  clusterStartStop: boolean;
+  // componentsInstall is true when the backend installs the cluster components (CNI, CSI, …) the
+  // create form offers. The SPA gates the create form's component selectors on it so it does not
+  // offer options a backend silently drops. The operator installs components; the local backend does
+  // not yet, so it reports false and the component selectors are hidden there.
+  componentsInstall: boolean;
 }
 
 // fullCapabilities mirrors the backend's default for a service that does not report capabilities.
-// clusterUpdate defaults true (assume a working action rather than hiding it); the workload +
-// kubeconfig + apply + cipher + exec flags default false because their endpoints may not exist on an
-// older backend.
+// clusterUpdate and componentsInstall default true (the operator — the original backend — supports
+// both, so an older backend that omits the flags keeps offering the edit affordance and the create
+// form's component selectors rather than hiding working options); the workload + kubeconfig + apply +
+// cipher + exec + startStop flags default false because their endpoints may not exist on an older
+// backend.
 export const fullCapabilities: Capabilities = {
   clusterUpdate: true,
   workloadRead: false,
@@ -162,6 +173,8 @@ export const fullCapabilities: Capabilities = {
   secretsCipher: false,
   workloadLogs: false,
   workloadExec: false,
+  clusterStartStop: false,
+  componentsInstall: true,
 };
 
 // logsEventSourceURL builds the same-origin SSE URL for streaming a pod container's logs. EventSource
