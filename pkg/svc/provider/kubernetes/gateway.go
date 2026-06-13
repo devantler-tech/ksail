@@ -16,6 +16,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/dynamic"
 )
 
@@ -436,62 +437,86 @@ func (p *Provider) WaitForGateway(
 	dynamicClient dynamic.Interface,
 	namespace string,
 ) (string, int32, error) {
-	deadline := time.Now().Add(gatewayReadyTimeout)
+	var (
+		addr    string
+		port    int32
+		condErr error
+	)
 
-	for time.Now().Before(deadline) {
-		gateway, err := dynamicClient.Resource(gatewayGVR()).Namespace(namespace).Get(
-			ctx, GatewayName, metav1.GetOptions{},
-		)
-		if err != nil {
-			return "", 0, fmt.Errorf("get Gateway: %w", err)
-		}
+	err := wait.PollUntilContextTimeout(
+		ctx,
+		gatewayReadyPollInterval,
+		gatewayReadyTimeout,
+		true, // check before the first wait, matching the legacy deadline loop.
+		func(ctx context.Context) (bool, error) {
+			gateway, getErr := dynamicClient.Resource(gatewayGVR()).Namespace(namespace).Get(
+				ctx, GatewayName, metav1.GetOptions{},
+			)
+			if getErr != nil {
+				condErr = fmt.Errorf("get Gateway: %w", getErr)
 
-		addr, port, found := extractGatewayAddress(gateway)
-		if found {
-			return addr, port, nil
-		}
+				return false, condErr
+			}
 
-		select {
-		case <-ctx.Done():
-			return "", 0, fmt.Errorf("waiting for Gateway: %w", ctx.Err())
-		case <-time.After(gatewayReadyPollInterval):
-		}
+			var found bool
+
+			addr, port, found = extractGatewayAddress(gateway)
+
+			return found, nil
+		},
+	)
+	if err == nil {
+		return addr, port, nil
 	}
 
-	return "", 0, ErrGatewayNotReady
+	return "", 0, mapWaitError(err, condErr, "waiting for Gateway", ErrGatewayNotReady)
 }
 
 // waitForLoadBalancer waits for the API server LoadBalancer Service to be assigned an ingress
 // address (IP or hostname).
 func (p *Provider) waitForLoadBalancer(ctx context.Context, namespace string) (string, error) {
-	deadline := time.Now().Add(lbReadyTimeout)
+	var (
+		address string
+		condErr error
+	)
 
-	for time.Now().Before(deadline) {
-		svc, err := p.client.CoreV1().
-			Services(namespace).
-			Get(ctx, APIServiceName, metav1.GetOptions{})
-		if err != nil {
-			return "", fmt.Errorf("get LoadBalancer service: %w", err)
-		}
+	err := wait.PollUntilContextTimeout(
+		ctx,
+		lbReadyPollInterval,
+		lbReadyTimeout,
+		true, // check before the first wait, matching the legacy deadline loop.
+		func(ctx context.Context) (bool, error) {
+			svc, getErr := p.client.CoreV1().
+				Services(namespace).
+				Get(ctx, APIServiceName, metav1.GetOptions{})
+			if getErr != nil {
+				condErr = fmt.Errorf("get LoadBalancer service: %w", getErr)
 
-		for _, ingress := range svc.Status.LoadBalancer.Ingress {
-			if ingress.IP != "" {
-				return ingress.IP, nil
+				return false, condErr
 			}
 
-			if ingress.Hostname != "" {
-				return ingress.Hostname, nil
-			}
-		}
+			for _, ingress := range svc.Status.LoadBalancer.Ingress {
+				if ingress.IP != "" {
+					address = ingress.IP
 
-		select {
-		case <-ctx.Done():
-			return "", fmt.Errorf("waiting for LoadBalancer: %w", ctx.Err())
-		case <-time.After(lbReadyPollInterval):
-		}
+					return true, nil
+				}
+
+				if ingress.Hostname != "" {
+					address = ingress.Hostname
+
+					return true, nil
+				}
+			}
+
+			return false, nil
+		},
+	)
+	if err == nil {
+		return address, nil
 	}
 
-	return "", ErrLoadBalancerNotReady
+	return "", mapWaitError(err, condErr, "waiting for LoadBalancer", ErrLoadBalancerNotReady)
 }
 
 // pickNodeAddress chooses a host-reachable node address for NodePort exposure.

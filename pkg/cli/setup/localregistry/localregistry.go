@@ -17,7 +17,6 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/registry"
-	"github.com/docker/docker/client"
 	k3dv1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/spf13/cobra"
 	kindv1alpha4 "sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
@@ -37,7 +36,7 @@ type ServiceFactoryFunc func(cfg registry.Config) (registry.Service, error)
 // Dependencies holds injectable dependencies for local registry operations.
 type Dependencies struct {
 	ServiceFactory ServiceFactoryFunc
-	DockerInvoker  func(*cobra.Command, func(client.APIClient) error) error
+	DockerInvoker  func(*cobra.Command, func(dockerclient.Client) error) error
 }
 
 // DefaultDependencies returns the default production dependencies.
@@ -67,7 +66,7 @@ func WithServiceFactory(factory func(cfg registry.Config) (registry.Service, err
 }
 
 // WithDockerInvoker sets a custom Docker client invoker.
-func WithDockerInvoker(invoker func(*cobra.Command, func(client.APIClient) error) error) Option {
+func WithDockerInvoker(invoker func(*cobra.Command, func(dockerclient.Client) error) error) Option {
 	return func(d *Dependencies) {
 		d.DockerInvoker = invoker
 	}
@@ -251,7 +250,7 @@ func WaitForK3dLocalRegistryReady(
 	cmd *cobra.Command,
 	clusterCfg *v1alpha1.Cluster,
 	k3dConfig *k3dv1alpha5.SimpleConfig,
-	dockerInvoker func(*cobra.Command, func(client.APIClient) error) error,
+	dockerInvoker func(*cobra.Command, func(dockerclient.Client) error) error,
 ) error {
 	// Only wait for K3d with local registry enabled
 	if clusterCfg.Spec.Cluster.Distribution != v1alpha1.DistributionK3s {
@@ -265,7 +264,7 @@ func WaitForK3dLocalRegistryReady(
 	clusterName := k3dconfigmanager.ResolveClusterName(clusterCfg, k3dConfig)
 	registryName := registry.BuildLocalRegistryName(clusterName)
 
-	return dockerInvoker(cmd, func(dockerClient client.APIClient) error {
+	return dockerInvoker(cmd, func(dockerClient dockerclient.Client) error {
 		registryMgr, err := dockerclient.NewRegistryManager(dockerClient)
 		if err != nil {
 			return fmt.Errorf("failed to create registry manager: %w", err)

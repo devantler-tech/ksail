@@ -4,14 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/flags"
-	"github.com/devantler-tech/ksail/v7/pkg/di"
 	configmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/ksail"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
+	clusterdetector "github.com/devantler-tech/ksail/v7/pkg/svc/detector/cluster"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/timer"
 	"github.com/spf13/cobra"
@@ -50,28 +49,59 @@ type Deps struct {
 	Factory clusterprovisioner.Factory
 }
 
+// Option customizes how a lifecycle handler constructs its dependencies.
+// Options are primarily a test seam for injecting a deterministic timer.
+type Option func(*handlerConfig)
+
+// handlerConfig holds the resolved configuration for a wrapped lifecycle handler.
+type handlerConfig struct {
+	newTimer func() timer.Timer
+}
+
+// WithTimerFactory overrides the timer constructor used by WrapHandler.
+// It is exposed for tests that need to inject a deterministic or mock timer;
+// production code relies on the default timer.New().
+func WithTimerFactory(newTimer func() timer.Timer) Option {
+	return func(cfg *handlerConfig) {
+		cfg.newTimer = newTimer
+	}
+}
+
+// resolveHandlerConfig applies the supplied options over the defaults.
+func resolveHandlerConfig(opts ...Option) handlerConfig {
+	cfg := handlerConfig{
+		newTimer: func() timer.Timer { return timer.New() },
+	}
+
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+
+	return cfg
+}
+
 // NewStandardRunE creates a standard RunE handler for simple lifecycle commands.
-// It handles dependency injection from the runtime container and delegates to HandleRunE
-// with the provided lifecycle configuration.
+// It constructs the lifecycle dependencies and delegates to handleRunE with the
+// provided lifecycle configuration.
 //
 // This is the recommended way to create lifecycle command handlers for standard operations like
 // start, stop, and delete. The returned function can be assigned directly to a cobra.Command's RunE field.
 func NewStandardRunE(
-	runtimeContainer *di.Runtime,
 	cfgManager *ksailconfigmanager.ConfigManager,
 	config Config,
+	opts ...Option,
 ) func(*cobra.Command, []string) error {
 	return WrapHandler(
-		runtimeContainer,
 		cfgManager,
 		func(cmd *cobra.Command, manager *ksailconfigmanager.ConfigManager, deps Deps) error {
 			return handleRunE(cmd, manager, deps, config)
 		},
+		opts...,
 	)
 }
 
-// WrapHandler resolves lifecycle dependencies from the runtime container
-// and invokes the provided handler function with those dependencies.
+// WrapHandler constructs lifecycle dependencies and invokes the provided handler
+// function with those dependencies.
 //
 // This function loads the cluster configuration first, then creates a factory
 // using the cached distribution config from the config manager. This ensures
@@ -81,44 +111,40 @@ func NewStandardRunE(
 // blank lines between CLI stages for better readability.
 //
 // This function is used internally by NewStandardRunE but can also be used
-// directly for custom lifecycle handlers that need dependency injection but require
-// custom logic beyond the standard HandleRunE flow.
+// directly for custom lifecycle handlers that require custom logic beyond the
+// standard handleRunE flow.
 func WrapHandler(
-	runtimeContainer *di.Runtime,
 	cfgManager *ksailconfigmanager.ConfigManager,
 	handler func(*cobra.Command, *ksailconfigmanager.ConfigManager, Deps) error,
+	opts ...Option,
 ) func(*cobra.Command, []string) error {
-	return di.RunEWithRuntime(
-		runtimeContainer,
-		di.WithTimer(
-			func(cmd *cobra.Command, _ di.Injector, tmr timer.Timer) error {
-				// Wrap output with StageSeparatingWriter for automatic stage separation
-				stageWriter := notify.NewStageSeparatingWriter(cmd.OutOrStdout())
-				cmd.SetOut(stageWriter)
+	cfg := resolveHandlerConfig(opts...)
 
-				// Start timer and load config first to get distribution config
-				if tmr != nil {
-					tmr.Start()
-				}
+	return func(cmd *cobra.Command, _ []string) error {
+		// Wrap output with StageSeparatingWriter for automatic stage separation
+		stageWriter := notify.NewStageSeparatingWriter(cmd.OutOrStdout())
+		cmd.SetOut(stageWriter)
 
-				outputTimer := flags.MaybeTimer(cmd, tmr)
+		// Start timer and load config first to get distribution config
+		tmr := cfg.newTimer()
+		tmr.Start()
 
-				_, err := cfgManager.Load(configmanager.LoadOptions{Timer: outputTimer})
-				if err != nil {
-					return fmt.Errorf("failed to load cluster configuration: %w", err)
-				}
+		outputTimer := flags.MaybeTimer(cmd, tmr)
 
-				// Create factory with the cached distribution config
-				factory := clusterprovisioner.DefaultFactory{
-					DistributionConfig: cfgManager.DistributionConfig,
-				}
+		_, err := cfgManager.Load(configmanager.LoadOptions{Timer: outputTimer})
+		if err != nil {
+			return fmt.Errorf("failed to load cluster configuration: %w", err)
+		}
 
-				deps := Deps{Timer: tmr, Factory: factory}
+		// Create factory with the cached distribution config
+		factory := clusterprovisioner.DefaultFactory{
+			DistributionConfig: cfgManager.DistributionConfig,
+		}
 
-				return handler(cmd, cfgManager, deps)
-			},
-		),
-	)
+		deps := Deps{Timer: tmr, Factory: factory}
+
+		return handler(cmd, cfgManager, deps)
+	}
 }
 
 // handleRunE orchestrates the standard lifecycle workflow.
@@ -137,9 +163,7 @@ func handleRunE(
 	// Config is already loaded by WrapHandler, so we use the cached config
 	clusterCfg := cfgManager.Config
 
-	if deps.Timer != nil {
-		deps.Timer.NewStage()
-	}
+	deps.Timer.NewStage()
 
 	return RunWithConfig(cmd, deps, config, clusterCfg)
 }
@@ -160,30 +184,12 @@ func showTitle(cmd *cobra.Command, emoji, content string) {
 // getClusterNameFromConfigOrContext extracts the cluster name, preferring the context if set.
 // When a context is explicitly provided (e.g., "kind-my-cluster"), it derives the cluster name
 // from it (e.g., "my-cluster"). Otherwise, it checks metadata.name, then falls back to
-// the distribution config name.
+// the distribution config name. It delegates to the shared ResolveClusterName resolver.
 func getClusterNameFromConfigOrContext(
 	distributionConfig any,
 	clusterCfg *v1alpha1.Cluster,
 ) (string, error) {
-	// If context is explicitly set, derive cluster name from it
-	if clusterName := extractClusterNameFromContext(clusterCfg); clusterName != "" {
-		return clusterName, nil
-	}
-
-	// Check metadata.name (skip if invalid, fall through to other sources)
-	if clusterCfg != nil && clusterCfg.Name != "" {
-		if v1alpha1.ValidateClusterName(clusterCfg.Name) == nil {
-			return clusterCfg.Name, nil
-		}
-	}
-
-	// Fall back to distribution config name
-	clusterName, err := configmanager.GetClusterName(distributionConfig)
-	if err != nil {
-		return "", fmt.Errorf("failed to get cluster name from distribution config: %w", err)
-	}
-
-	return clusterName, nil
+	return ResolveClusterName(clusterCfg, distributionConfig)
 }
 
 // extractClusterNameFromContext extracts cluster name from context if set.
@@ -204,36 +210,12 @@ func extractClusterNameFromContext(clusterCfg *v1alpha1.Cluster) string {
 // For k3d clusters, contexts follow the pattern "k3d-<cluster-name>".
 // K3s on the Kubernetes provider (k3k) instead writes "k3k-<cluster-name>".
 // Returns empty string if the context doesn't match the expected pattern.
+//
+// The prefix conventions (including the k3k alias) are owned by
+// clusterdetector.StripContextPrefixForDistribution; this thin wrapper is kept
+// for the existing lifecycle/command call sites.
 func ExtractClusterNameFromContext(context string, distribution v1alpha1.Distribution) string {
-	prefix, ok := distributionContextPrefixes[distribution]
-	if !ok {
-		return ""
-	}
-
-	if clusterName, found := strings.CutPrefix(context, prefix); found {
-		return clusterName
-	}
-
-	// K3s run via the k3k operator (Kubernetes provider) uses a "k3k-" context rather
-	// than the standalone "k3d-". Accept it so name resolution works for nested K3s
-	// (must mirror resolveCreatedContextName, which sets this context on create).
-	if distribution == v1alpha1.DistributionK3s {
-		if clusterName, found := strings.CutPrefix(context, "k3k-"); found {
-			return clusterName
-		}
-	}
-
-	return ""
-}
-
-// distributionContextPrefixes maps each distribution to the kubeconfig context
-// prefix it uses.
-var distributionContextPrefixes = map[v1alpha1.Distribution]string{ //nolint:gochecknoglobals // static lookup table
-	v1alpha1.DistributionVanilla:  "kind-",
-	v1alpha1.DistributionK3s:      "k3d-",
-	v1alpha1.DistributionTalos:    "admin@",
-	v1alpha1.DistributionVCluster: "vcluster-docker_",
-	v1alpha1.DistributionKWOK:     "kwok-",
+	return clusterdetector.StripContextPrefixForDistribution(context, distribution)
 }
 
 // GetClusterNameFromConfig extracts the cluster name from the KSail cluster configuration.
@@ -249,30 +231,22 @@ func GetClusterNameFromConfig(
 		return "", ErrClusterConfigRequired
 	}
 
-	// If context is explicitly set, derive cluster name from it
-	if clusterName := extractClusterNameFromContext(clusterCfg); clusterName != "" {
-		return clusterName, nil
+	// Resolve context/metadata.name first; only load the distribution config via
+	// the factory if those sources don't yield a name.
+	if name := extractClusterNameFromContext(clusterCfg); name != "" {
+		return name, nil
 	}
 
-	// Check metadata.name (skip if invalid, fall through to other sources)
-	if clusterCfg.Name != "" {
-		if v1alpha1.ValidateClusterName(clusterCfg.Name) == nil {
-			return clusterCfg.Name, nil
-		}
+	if clusterCfg.Name != "" && v1alpha1.ValidateClusterName(clusterCfg.Name) == nil {
+		return clusterCfg.Name, nil
 	}
 
-	// Fall back to distribution config name
 	_, distributionConfig, err := factory.Create(context.Background(), clusterCfg)
 	if err != nil {
 		return "", fmt.Errorf("failed to load distribution config: %w", err)
 	}
 
-	clusterName, err := configmanager.GetClusterName(distributionConfig)
-	if err != nil {
-		return "", fmt.Errorf("failed to get cluster name from distribution config: %w", err)
-	}
-
-	return clusterName, nil
+	return ResolveClusterName(clusterCfg, distributionConfig)
 }
 
 // RunWithConfig executes a lifecycle command using a pre-loaded cluster configuration.

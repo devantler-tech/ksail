@@ -2,14 +2,12 @@ package docker
 
 import (
 	"fmt"
-
-	"github.com/docker/docker/client"
 )
 
 // Resources holds Docker client and registry manager for cleanup.
 // Use NewResources to create an instance.
 type Resources struct {
-	Client          client.APIClient
+	Client          Client
 	RegistryManager *RegistryManager
 }
 

@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/cli/flags"
-	"github.com/devantler-tech/ksail/v7/pkg/di"
 	yamlgenerator "github.com/devantler-tech/ksail/v7/pkg/fsutil/generator/yaml"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
 	"github.com/devantler-tech/ksail/v7/pkg/timer"
@@ -192,7 +191,7 @@ func parseDependency(dep string) (*helmv2.DependencyReference, error) {
 }
 
 // NewHelmReleaseCmd creates the workload gen helmrelease command.
-func NewHelmReleaseCmd(_ *di.Runtime) *cobra.Command {
+func NewHelmReleaseCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "helmrelease [NAME]",
 		Aliases: []string{"hr"},

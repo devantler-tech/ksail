@@ -12,7 +12,6 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/cli/kubeconfig"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/setup"
 	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
-	"github.com/devantler-tech/ksail/v7/pkg/di"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/clusterdiscovery"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/installer"
@@ -57,7 +56,7 @@ Examples:
   ksail cluster list --provider Omni`
 
 // NewListCmd creates the list command for clusters.
-func NewListCmd(runtimeContainer *di.Runtime) *cobra.Command {
+func NewListCmd() *cobra.Command {
 	var providerFilter v1alpha1.Provider
 
 	cmd := &cobra.Command{
@@ -66,11 +65,7 @@ func NewListCmd(runtimeContainer *di.Runtime) *cobra.Command {
 		Long:         listLongDesc,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runtimeContainer.Invoke(func(_ di.Injector) error {
-				deps := ListDeps{}
-
-				return HandleListRunE(cmd, providerFilter, deps)
-			})
+			return HandleListRunE(cmd, providerFilter, ListDeps{})
 		},
 	}
 

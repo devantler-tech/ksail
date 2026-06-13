@@ -5,16 +5,16 @@ import (
 	"fmt"
 	"io"
 
+	dockerclient "github.com/devantler-tech/ksail/v7/pkg/client/docker"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/registry"
-	"github.com/docker/docker/client"
 )
 
 // WaitForRegistriesReady waits for mirror registries to become ready.
 // This is a shared helper used by Kind, K3d, and Talos registry stages.
 func WaitForRegistriesReady(
 	ctx context.Context,
-	dockerAPIClient client.APIClient,
+	dockerAPIClient dockerclient.Client,
 	registryInfos []registry.Info,
 	writer io.Writer,
 ) error {

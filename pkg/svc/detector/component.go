@@ -9,10 +9,10 @@ import (
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	dockerclient "github.com/devantler-tech/ksail/v7/pkg/client/docker"
 	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
-	dockerclient "github.com/docker/docker/client"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 )
@@ -34,7 +34,7 @@ const (
 type ComponentDetector struct {
 	helmClient   helm.Interface
 	k8sClientset kubernetes.Interface
-	dockerClient dockerclient.APIClient
+	dockerClient dockerclient.Client
 	retryDelay   time.Duration
 }
 
@@ -43,7 +43,7 @@ type ComponentDetector struct {
 func NewComponentDetector(
 	helmClient helm.Interface,
 	k8sClientset kubernetes.Interface,
-	dockerClient dockerclient.APIClient,
+	dockerClient dockerclient.Client,
 ) *ComponentDetector {
 	return &ComponentDetector{
 		helmClient:   helmClient,

@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
+	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/hetzner"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"k8s.io/client-go/tools/clientcmd"
@@ -152,19 +152,6 @@ func DetectInfo(kubeconfigPath, contextName string) (*Info, error) {
 	}, nil
 }
 
-// contextPatterns maps distribution context prefixes to their distributions.
-// Used by DetectDistributionFromContext to detect the distribution.
-var contextPatterns = []struct { //nolint:gochecknoglobals // static lookup table
-	prefix       string
-	distribution v1alpha1.Distribution
-}{
-	{"kind-", v1alpha1.DistributionVanilla},
-	{"k3d-", v1alpha1.DistributionK3s},
-	{"admin@", v1alpha1.DistributionTalos},
-	{"vcluster-docker_", v1alpha1.DistributionVCluster},
-	{"kwok-", v1alpha1.DistributionKWOK},
-}
-
 // DetectDistributionFromContext detects the Kubernetes distribution and cluster name
 // from the kubeconfig context name pattern.
 // Returns the distribution, cluster name, and any error.
@@ -176,17 +163,24 @@ var contextPatterns = []struct { //nolint:gochecknoglobals // static lookup tabl
 //   - vcluster-docker_<cluster-name> → VCluster
 //   - kwok-<cluster-name> → KWOK
 //
+// The standard per-distribution prefixes are single-sourced through
+// standardContextPrefixes (derived from v1alpha1.Distribution.ContextName). The
+// nested-on-Kubernetes "k3k-" alias is intentionally NOT recognized here:
+// provider detection would mislabel a k3k cluster, and the callers of this
+// function only need the standalone-distribution conventions. The k3k alias is
+// handled by StripContextPrefix for the name-resolution call sites that need it.
+//
 // Returns an error if the pattern is unrecognized or if the extracted cluster name is empty.
 func DetectDistributionFromContext(contextName string) (v1alpha1.Distribution, string, error) {
-	for _, pattern := range contextPatterns {
-		if clusterName, ok := strings.CutPrefix(contextName, pattern.prefix); ok {
+	for _, entry := range standardContextPrefixes() {
+		if clusterName, ok := strings.CutPrefix(contextName, entry.prefix); ok {
 			if clusterName == "" {
 				return "", "", fmt.Errorf(
 					"%w: context %q has empty cluster name", ErrEmptyClusterName, contextName,
 				)
 			}
 
-			return pattern.distribution, clusterName, nil
+			return entry.distribution, clusterName, nil
 		}
 	}
 
@@ -405,32 +399,13 @@ func serverHasIP(server *hcloud.Server, ipAddress string) bool {
 }
 
 // ResolveKubeconfigPath returns the kubeconfig path, resolving defaults if empty
-// and expanding ~ to the home directory.
+// and expanding ~ to the home directory. It honors the KUBECONFIG environment
+// variable (first entry) when no explicit path is given.
+//
+// This is an alias for k8s.ResolveKubeconfigPath, which is the single owner of
+// kubeconfig-path resolution. It is retained for the detector-package call
+// sites that import this package.
 func ResolveKubeconfigPath(kubeconfigPath string) (string, error) {
-	// If path is provided, expand ~ and return it
-	if kubeconfigPath != "" {
-		expanded, err := fsutil.ExpandHomePath(kubeconfigPath)
-		if err != nil {
-			return "", fmt.Errorf("expand kubeconfig path: %w", err)
-		}
-
-		return expanded, nil
-	}
-
-	// Check KUBECONFIG env var
-	if envPath := os.Getenv("KUBECONFIG"); envPath != "" {
-		// Use first path if multiple are specified
-		paths := strings.Split(envPath, string(os.PathListSeparator))
-		if len(paths) > 0 && paths[0] != "" {
-			expanded, err := fsutil.ExpandHomePath(paths[0])
-			if err != nil {
-				return "", fmt.Errorf("expand kubeconfig path from env: %w", err)
-			}
-
-			return expanded, nil
-		}
-	}
-
-	// Default to ~/.kube/config
-	return clientcmd.RecommendedHomeFile, nil
+	//nolint:wrapcheck // pure alias: preserve k8s.ResolveKubeconfigPath's error verbatim.
+	return k8s.ResolveKubeconfigPath(kubeconfigPath)
 }

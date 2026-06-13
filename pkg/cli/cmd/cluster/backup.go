@@ -18,7 +18,6 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/kubeconfig"
 	"github.com/devantler-tech/ksail/v7/pkg/client/kubectl"
-	"github.com/devantler-tech/ksail/v7/pkg/di"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	clusterdetector "github.com/devantler-tech/ksail/v7/pkg/svc/detector/cluster"
 	"github.com/spf13/cobra"
@@ -49,7 +48,7 @@ type backupFlags struct {
 }
 
 // NewBackupCmd creates the cluster backup command.
-func NewBackupCmd(_ *di.Runtime) *cobra.Command {
+func NewBackupCmd() *cobra.Command {
 	flags := &backupFlags{
 		compressionLevel: defaultCompressionLevel,
 	}

@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
-	"github.com/devantler-tech/ksail/v7/pkg/di"
 	operatorsvc "github.com/devantler-tech/ksail/v7/pkg/operator"
 	"github.com/devantler-tech/ksail/v7/pkg/operator/api"
 	"github.com/spf13/cobra"
@@ -45,7 +44,7 @@ func (f *oidcFlags) config() api.OIDCConfig {
 }
 
 // NewOperatorCmd creates the `ksail operator` command.
-func NewOperatorCmd(_ *di.Runtime) *cobra.Command {
+func NewOperatorCmd() *cobra.Command {
 	var (
 		opts operatorsvc.Options
 		oidc oidcFlags

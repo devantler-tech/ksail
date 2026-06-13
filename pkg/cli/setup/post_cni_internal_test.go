@@ -39,8 +39,8 @@ func TestRunGitOpsPhase_AlwaysChecksClusterStabilityBeforeInstallingGitOps(t *te
 		order            []string
 	)
 
-	t.Cleanup(SetClusterStabilityCheckForTests(
-		func(_ context.Context, _ *v1alpha1.Cluster, cniInstalled bool) error {
+	factories := &InstallerFactories{
+		ClusterStabilityCheck: func(_ context.Context, _ *v1alpha1.Cluster, cniInstalled bool) error {
 			stabilityChecked = true
 			cniInstalledArg = cniInstalled
 
@@ -48,7 +48,7 @@ func TestRunGitOpsPhase_AlwaysChecksClusterStabilityBeforeInstallingGitOps(t *te
 
 			return nil
 		},
-	))
+	}
 
 	gitopsTasks := []notify.ProgressTask{
 		{
@@ -70,6 +70,7 @@ func TestRunGitOpsPhase_AlwaysChecksClusterStabilityBeforeInstallingGitOps(t *te
 		io.Discard,
 		notify.InstallingLabels(),
 		tmr,
+		factories,
 		nil,
 		gitopsTasks,
 	)
@@ -91,11 +92,11 @@ func TestRunGitOpsPhase_ReturnsErrorBeforeGitOpsInstallWhenStabilityCheckFails(t
 
 	var taskRan bool
 
-	t.Cleanup(SetClusterStabilityCheckForTests(
-		func(context.Context, *v1alpha1.Cluster, bool) error {
+	factories := &InstallerFactories{
+		ClusterStabilityCheck: func(context.Context, *v1alpha1.Cluster, bool) error {
 			return errNotStable
 		},
-	))
+	}
 
 	gitopsTasks := []notify.ProgressTask{
 		{
@@ -115,6 +116,7 @@ func TestRunGitOpsPhase_ReturnsErrorBeforeGitOpsInstallWhenStabilityCheckFails(t
 		io.Discard,
 		notify.InstallingLabels(),
 		tmr,
+		factories,
 		nil,
 		gitopsTasks,
 	)
@@ -139,21 +141,18 @@ func TestRunInfraPhase_WaitsForCSRApproverBeforeInfraTasks(t *testing.T) {
 		order              []string
 	)
 
-	t.Cleanup(SetClusterStabilityCheckForTests(
-		func(context.Context, *v1alpha1.Cluster, bool) error {
+	factories := &InstallerFactories{
+		ClusterStabilityCheck: func(context.Context, *v1alpha1.Cluster, bool) error {
 			return nil
 		},
-	))
-
-	t.Cleanup(SetCSRApproverWaitForTests(
-		func(_ context.Context, _ *v1alpha1.Cluster) error {
+		WaitForCSRApprover: func(_ context.Context, _ *v1alpha1.Cluster) error {
 			approverWaitCalled = true
 
 			order = append(order, "csr-approver-wait")
 
 			return nil
 		},
-	))
+	}
 
 	infraTasks := []notify.ProgressTask{
 		{
@@ -175,6 +174,7 @@ func TestRunInfraPhase_WaitsForCSRApproverBeforeInfraTasks(t *testing.T) {
 		io.Discard,
 		notify.InstallingLabels(),
 		tmr,
+		factories,
 		infraTasks,
 		false,
 		true,
@@ -198,17 +198,14 @@ func TestRunInfraPhase_ReturnsErrorWhenCSRApproverWaitFails(t *testing.T) {
 
 	var taskRan bool
 
-	t.Cleanup(SetClusterStabilityCheckForTests(
-		func(context.Context, *v1alpha1.Cluster, bool) error {
+	factories := &InstallerFactories{
+		ClusterStabilityCheck: func(context.Context, *v1alpha1.Cluster, bool) error {
 			return nil
 		},
-	))
-
-	t.Cleanup(SetCSRApproverWaitForTests(
-		func(context.Context, *v1alpha1.Cluster) error {
+		WaitForCSRApprover: func(context.Context, *v1alpha1.Cluster) error {
 			return errApproverNotReady
 		},
-	))
+	}
 
 	infraTasks := []notify.ProgressTask{
 		{
@@ -228,6 +225,7 @@ func TestRunInfraPhase_ReturnsErrorWhenCSRApproverWaitFails(t *testing.T) {
 		io.Discard,
 		notify.InstallingLabels(),
 		tmr,
+		factories,
 		infraTasks,
 		false,
 		true,
@@ -249,19 +247,16 @@ func TestRunInfraPhase_SkipsCSRApproverWaitWhenNotNeeded(t *testing.T) {
 
 	var approverWaitCalled bool
 
-	t.Cleanup(SetClusterStabilityCheckForTests(
-		func(context.Context, *v1alpha1.Cluster, bool) error {
+	factories := &InstallerFactories{
+		ClusterStabilityCheck: func(context.Context, *v1alpha1.Cluster, bool) error {
 			return nil
 		},
-	))
-
-	t.Cleanup(SetCSRApproverWaitForTests(
-		func(context.Context, *v1alpha1.Cluster) error {
+		WaitForCSRApprover: func(context.Context, *v1alpha1.Cluster) error {
 			approverWaitCalled = true
 
 			return nil
 		},
-	))
+	}
 
 	infraTasks := []notify.ProgressTask{
 		{
@@ -277,6 +272,7 @@ func TestRunInfraPhase_SkipsCSRApproverWaitWhenNotNeeded(t *testing.T) {
 		io.Discard,
 		notify.InstallingLabels(),
 		tmr,
+		factories,
 		infraTasks,
 		false,
 		false,
@@ -340,18 +336,15 @@ func TestInstallComponentsInPhases_CertManagerRunsBeforePolicyEngine(t *testing.
 		}
 	}
 
-	t.Cleanup(SetClusterStabilityCheckForTests(
-		func(context.Context, *v1alpha1.Cluster, bool) error {
-			return nil
-		},
-	))
-
 	cmd := &cobra.Command{Use: "test"}
 	cmd.SetOut(io.Discard)
 
 	factories := &InstallerFactories{
 		CertManager:  makeInstaller("cert-manager"),
 		PolicyEngine: makeInstaller("policy-engine"),
+		ClusterStabilityCheck: func(context.Context, *v1alpha1.Cluster, bool) error {
+			return nil
+		},
 	}
 
 	reqs := ComponentRequirements{
@@ -414,28 +407,23 @@ func TestInstallComponentsInPhases_HetznerCCMRunsBeforeCertManager(t *testing.T)
 		}
 	}
 
-	t.Cleanup(SetClusterStabilityCheckForTests(
-		func(context.Context, *v1alpha1.Cluster, bool) error { return nil },
-	))
-
-	t.Cleanup(SetNodeSchedulabilityWaitForTests(
-		func(context.Context, *v1alpha1.Cluster) error { return nil },
-	))
-
-	t.Cleanup(SetCloudProviderInitInstallForTests(
-		func(_ context.Context, _ *v1alpha1.Cluster, _ *InstallerFactories) error {
-			record("load-balancer")
-
-			return nil
-		},
-	))
-
 	cmd := &cobra.Command{Use: "test"}
 	cmd.SetOut(io.Discard)
 
 	factories := &InstallerFactories{
 		CertManager:  makeInstaller("cert-manager"),
 		PolicyEngine: makeInstaller("policy-engine"),
+		ClusterStabilityCheck: func(context.Context, *v1alpha1.Cluster, bool) error {
+			return nil
+		},
+		NodeSchedulabilityWait: func(context.Context, *v1alpha1.Cluster) error { return nil },
+		CloudProviderInitInstall: func(
+			_ context.Context, _ *v1alpha1.Cluster, _ *InstallerFactories,
+		) error {
+			record("load-balancer")
+
+			return nil
+		},
 	}
 
 	reqs := GetComponentRequirements(clusterCfg)
@@ -558,31 +546,25 @@ func TestRunCloudProviderInitPhase_WaitsForNodeSchedulability(t *testing.T) {
 
 	var order []string
 
-	t.Cleanup(SetClusterStabilityCheckForTests(
-		func(context.Context, *v1alpha1.Cluster, bool) error {
+	factories := &InstallerFactories{
+		ClusterStabilityCheck: func(context.Context, *v1alpha1.Cluster, bool) error {
 			order = append(order, "stability-check")
 
 			return nil
 		},
-	))
-
-	t.Cleanup(SetCloudProviderInitInstallForTests(
-		func(context.Context, *v1alpha1.Cluster, *InstallerFactories) error {
+		CloudProviderInitInstall: func(
+			context.Context, *v1alpha1.Cluster, *InstallerFactories,
+		) error {
 			order = append(order, "load-balancer-install")
 
 			return nil
 		},
-	))
-
-	t.Cleanup(SetNodeSchedulabilityWaitForTests(
-		func(context.Context, *v1alpha1.Cluster) error {
+		NodeSchedulabilityWait: func(context.Context, *v1alpha1.Cluster) error {
 			order = append(order, "node-schedulability-wait")
 
 			return nil
 		},
-	))
-
-	factories := &InstallerFactories{}
+	}
 	tmr := timer.New()
 
 	err := runCloudProviderInitPhase(
@@ -610,21 +592,17 @@ func TestRunCloudProviderInitPhase_ReturnsErrorWhenNodeSchedulabilityFails(t *te
 		},
 	}
 
-	t.Cleanup(SetClusterStabilityCheckForTests(
-		func(context.Context, *v1alpha1.Cluster, bool) error { return nil },
-	))
-
-	t.Cleanup(SetCloudProviderInitInstallForTests(
-		func(context.Context, *v1alpha1.Cluster, *InstallerFactories) error { return nil },
-	))
-
-	t.Cleanup(SetNodeSchedulabilityWaitForTests(
-		func(context.Context, *v1alpha1.Cluster) error {
+	factories := &InstallerFactories{
+		ClusterStabilityCheck: func(context.Context, *v1alpha1.Cluster, bool) error { return nil },
+		CloudProviderInitInstall: func(
+			context.Context, *v1alpha1.Cluster, *InstallerFactories,
+		) error {
+			return nil
+		},
+		NodeSchedulabilityWait: func(context.Context, *v1alpha1.Cluster) error {
 			return errNodesNotReady
 		},
-	))
-
-	factories := &InstallerFactories{}
+	}
 	tmr := timer.New()
 
 	err := runCloudProviderInitPhase(
@@ -652,22 +630,6 @@ func TestInstallComponentsInPhases_HetznerCCMPrePhaseExcludesFromParallelPhase(t
 
 	var lbCallCount int
 
-	t.Cleanup(SetClusterStabilityCheckForTests(
-		func(context.Context, *v1alpha1.Cluster, bool) error { return nil },
-	))
-
-	t.Cleanup(SetNodeSchedulabilityWaitForTests(
-		func(context.Context, *v1alpha1.Cluster) error { return nil },
-	))
-
-	t.Cleanup(SetCloudProviderInitInstallForTests(
-		func(context.Context, *v1alpha1.Cluster, *InstallerFactories) error {
-			lbCallCount++
-
-			return nil
-		},
-	))
-
 	cmd := &cobra.Command{Use: "test"}
 	cmd.SetOut(io.Discard)
 
@@ -681,6 +643,17 @@ func TestInstallComponentsInPhases_HetznerCCMPrePhaseExcludesFromParallelPhase(t
 			t.Fatal("HelmClientFactory called — load-balancer leaked into parallel phase")
 
 			return nil, "", nil
+		},
+		ClusterStabilityCheck: func(context.Context, *v1alpha1.Cluster, bool) error {
+			return nil
+		},
+		NodeSchedulabilityWait: func(context.Context, *v1alpha1.Cluster) error { return nil },
+		CloudProviderInitInstall: func(
+			context.Context, *v1alpha1.Cluster, *InstallerFactories,
+		) error {
+			lbCallCount++
+
+			return nil
 		},
 	}
 

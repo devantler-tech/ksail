@@ -44,14 +44,16 @@ packages:
       pkgname: validator
     interfaces:
       Validator:
-  github.com/docker/docker/client:
+  github.com/devantler-tech/ksail/v7/pkg/client/docker:
     config:
       recursive: false
       dir: pkg/client/docker
       filename: mocks.go
       pkgname: docker
     interfaces:
-      APIClient:
+      Client:
+        config:
+          structname: MockAPIClient
   github.com/devantler-tech/ksail/v7/pkg/timer:
     config:
       recursive: false

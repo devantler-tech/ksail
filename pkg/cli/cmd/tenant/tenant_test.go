@@ -19,7 +19,7 @@ func TestMain(m *testing.M) {
 func TestTenantCmd_ShowsHelp(t *testing.T) {
 	t.Parallel()
 
-	cmd := tenantpkg.NewTenantCmd(nil)
+	cmd := tenantpkg.NewTenantCmd()
 
 	var buf bytes.Buffer
 	cmd.SetOut(&buf)
@@ -38,14 +38,14 @@ func TestTenantCmd_ShowsHelp(t *testing.T) {
 func TestTenantCmd_HasConsolidateAnnotation(t *testing.T) {
 	t.Parallel()
 
-	cmd := tenantpkg.NewTenantCmd(nil)
+	cmd := tenantpkg.NewTenantCmd()
 	require.Equal(t, "tenant_command", cmd.Annotations[annotations.AnnotationConsolidate])
 }
 
 func TestTenantCmd_RejectsArgs(t *testing.T) {
 	t.Parallel()
 
-	cmd := tenantpkg.NewTenantCmd(nil)
+	cmd := tenantpkg.NewTenantCmd()
 
 	var buf bytes.Buffer
 	cmd.SetOut(&buf)

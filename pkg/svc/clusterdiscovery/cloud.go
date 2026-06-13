@@ -193,18 +193,12 @@ func (d *Discoverer) eksctlAvailable() bool {
 // kubeconfig is present so the caller skips Kubernetes discovery silently. Mirrors the resolution
 // `ksail cluster list` used before this logic was centralized here.
 func kubernetesProviderFromConfig() (*kubernetesprovider.Provider, error) {
-	kubeconfigPath := os.Getenv("KSAIL_HOST_KUBECONFIG")
-	if kubeconfigPath == "" {
-		kubeconfigPath = k8s.DefaultKubeconfigPath()
-	}
-
-	expandedPath, err := fsutil.ExpandHomePath(kubeconfigPath)
+	expandedPath, err := k8s.HostKubeconfigPath()
 	if err != nil {
 		return nil, fmt.Errorf("expand kubeconfig path: %w", err)
 	}
 
 	// Skip silently when the kubeconfig file does not exist.
-	//nolint:gosec // path is the user's kubeconfig, canonicalized below before use.
 	_, statErr := os.Stat(expandedPath)
 	if os.IsNotExist(statErr) {
 		return nil, nil //nolint:nilnil // "no host kubeconfig" is a skip, not an error.

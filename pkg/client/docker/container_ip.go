@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-
-	"github.com/docker/docker/client"
 )
 
 // Errors for container IP resolution.
@@ -24,7 +22,7 @@ var (
 // within Kubernetes CoreDNS).
 func ResolveContainerIPOnNetwork(
 	ctx context.Context,
-	dockerClient client.APIClient,
+	dockerClient Client,
 	containerName string,
 	networkName string,
 ) (string, error) {

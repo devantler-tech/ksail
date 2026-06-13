@@ -76,35 +76,27 @@ func InstallChartWithRetry(
 	spec *ChartSpec,
 	repoName string,
 ) error {
-	var lastErr error
+	err := netretry.Do(
+		ctx,
+		chartInstallMaxRetries,
+		chartInstallRetryBaseWait,
+		chartInstallRetryMaxWait,
+		func() error {
+			_, opErr := client.InstallOrUpgradeChart(ctx, spec)
 
-	for attempt := 1; attempt <= chartInstallMaxRetries; attempt++ {
-		_, lastErr = client.InstallOrUpgradeChart(ctx, spec)
-		if lastErr == nil {
-			return nil
-		}
-
-		if !netretry.IsRetryable(lastErr) || attempt == chartInstallMaxRetries {
-			break
-		}
-
-		delay := netretry.ExponentialDelay(
-			attempt,
-			chartInstallRetryBaseWait,
-			chartInstallRetryMaxWait,
-		)
-
-		timer := time.NewTimer(delay)
-		select {
-		case <-ctx.Done():
-			if !timer.Stop() {
-				<-timer.C
-			}
-
-			return fmt.Errorf("chart install retry cancelled: %w", ctx.Err())
-		case <-timer.C:
-		}
+			return opErr //nolint:wrapcheck // return the chart operation error unwrapped from inside the retry closure
+		},
+		netretry.WithCancelError(func(ctxErr error) error {
+			return fmt.Errorf("chart install retry cancelled: %w", ctxErr)
+		}),
+	)
+	if err == nil {
+		return nil
 	}
 
-	return fmt.Errorf("failed to install %s chart: %w", repoName, lastErr)
+	if netretry.IsCancelled(err) {
+		return err //nolint:wrapcheck // identity preserved
+	}
+
+	return fmt.Errorf("failed to install %s chart: %w", repoName, err)
 }

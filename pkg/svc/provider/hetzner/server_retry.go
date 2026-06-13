@@ -137,10 +137,6 @@ func (p *Provider) attemptServerCreationInLocation(
 	return nil, fmt.Errorf("%w in location %s", ErrAllRetriesExhausted, location)
 }
 
-func (p *Provider) calculateRetryDelay(attempt int) time.Duration {
-	return min(DefaultRetryBaseDelay*time.Duration(1<<(attempt-1)), DefaultRetryMaxDelay)
-}
-
 func (p *Provider) logLocationFallback(
 	logWriter io.Writer,
 	currentLocation string,
@@ -219,12 +215,7 @@ func (p *Provider) waitForRetryDelay(
 	delay := p.calculateRetryDelay(attempt)
 	p.logRetryAttempt(logWriter, attempt, serverName, location, err, delay)
 
-	select {
-	case <-ctx.Done():
-		return fmt.Errorf("context cancelled during retry: %w", ctx.Err())
-	case <-time.After(delay):
-		return nil
-	}
+	return waitForBackoff(ctx, "context cancelled during retry", delay)
 }
 
 // shouldDisablePlacement checks if placement group should be disabled after an error.

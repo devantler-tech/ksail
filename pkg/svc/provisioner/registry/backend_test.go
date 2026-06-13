@@ -3,8 +3,8 @@ package registry_test
 import (
 	"testing"
 
+	dockerclient "github.com/devantler-tech/ksail/v7/pkg/client/docker"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/registry"
-	"github.com/docker/docker/client"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -19,7 +19,7 @@ func TestGetBackendFactory_ReturnsDefaultWhenNoOverride(t *testing.T) {
 //nolint:paralleltest // mutates shared backendFactoryOverride global
 func TestSetBackendFactoryForTests_OverridesFactory(t *testing.T) {
 	called := false
-	mockFactory := func(_ client.APIClient) (registry.Backend, error) {
+	mockFactory := func(_ dockerclient.Client) (registry.Backend, error) {
 		called = true
 
 		return registry.NewMockBackend(t), nil
@@ -40,7 +40,7 @@ func TestSetBackendFactoryForTests_OverridesFactory(t *testing.T) {
 func TestSetBackendFactoryForTests_CleanupRestoresOriginal(t *testing.T) {
 	originalFactory := registry.GetBackendFactory()
 
-	mockFactory := func(_ client.APIClient) (registry.Backend, error) {
+	mockFactory := func(_ dockerclient.Client) (registry.Backend, error) {
 		return registry.NewMockBackend(t), nil
 	}
 
@@ -68,13 +68,13 @@ func TestSetBackendFactoryForTests_NestedOverrides(t *testing.T) {
 	firstCalled := false
 	secondCalled := false
 
-	firstFactory := func(_ client.APIClient) (registry.Backend, error) {
+	firstFactory := func(_ dockerclient.Client) (registry.Backend, error) {
 		firstCalled = true
 
 		return registry.NewMockBackend(t), nil
 	}
 
-	secondFactory := func(_ client.APIClient) (registry.Backend, error) {
+	secondFactory := func(_ dockerclient.Client) (registry.Backend, error) {
 		secondCalled = true
 
 		return registry.NewMockBackend(t), nil

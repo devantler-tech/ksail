@@ -15,7 +15,6 @@ import (
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/api/types/network"
-	"github.com/docker/docker/client"
 )
 
 var (
@@ -151,12 +150,12 @@ func (o StatusOptions) Validate() error {
 
 // Config controls how the registry service interacts with the container engine.
 type Config struct {
-	DockerClient    client.APIClient
+	DockerClient    dockerclient.Client
 	RegistryManager Backend
 }
 
 type service struct {
-	docker   client.APIClient
+	docker   dockerclient.Client
 	registry Backend
 	manager  *Manager
 }

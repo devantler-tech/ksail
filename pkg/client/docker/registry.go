@@ -3,8 +3,6 @@ package docker
 import (
 	"errors"
 	"time"
-
-	"github.com/docker/docker/client"
 )
 
 // Registry error definitions.
@@ -93,11 +91,11 @@ const (
 
 // RegistryManager manages Docker registry containers for mirror/pull-through caching.
 type RegistryManager struct {
-	client client.APIClient
+	client Client
 }
 
 // NewRegistryManager creates a new RegistryManager.
-func NewRegistryManager(apiClient client.APIClient) (*RegistryManager, error) {
+func NewRegistryManager(apiClient Client) (*RegistryManager, error) {
 	if apiClient == nil {
 		return nil, ErrAPIClientNil
 	}

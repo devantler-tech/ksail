@@ -8,7 +8,6 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/flags"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/setup/mirrorregistry"
-	"github.com/devantler-tech/ksail/v7/pkg/di"
 	configmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/ksail"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil/scaffolder"
@@ -21,7 +20,7 @@ import (
 )
 
 // NewInitCmd creates and returns the init command.
-func NewInitCmd(runtimeContainer *di.Runtime) *cobra.Command {
+func NewInitCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:          "init",
 		Short:        "Initialize a new project",
@@ -38,14 +37,11 @@ func NewInitCmd(runtimeContainer *di.Runtime) *cobra.Command {
 	// here avoids polluting the generic config manager with scaffolding concerns.
 	bindInitLocalFlags(cmd, cfgManager)
 
-	cmd.RunE = di.RunEWithRuntime(
-		runtimeContainer,
-		di.WithTimer(func(cmd *cobra.Command, _ di.Injector, tmr timer.Timer) error {
-			deps := InitDeps{Timer: tmr}
+	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
+		deps := InitDeps{Timer: timer.New()}
 
-			return HandleInitRunE(cmd, cfgManager, deps)
-		}),
-	)
+		return HandleInitRunE(cmd, cfgManager, deps)
+	}
 
 	return cmd
 }

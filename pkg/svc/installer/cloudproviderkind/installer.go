@@ -6,12 +6,12 @@ import (
 	"io"
 	"strings"
 
+	dockerclient "github.com/devantler-tech/ksail/v7/pkg/client/docker"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/api/types/network"
-	"github.com/docker/docker/client"
 )
 
 const (
@@ -33,11 +33,11 @@ const (
 
 // Installer manages the cloud-provider-kind controller as a Docker container.
 type Installer struct {
-	dockerClient client.APIClient
+	dockerClient dockerclient.Client
 }
 
 // NewInstaller creates a new Cloud Provider KIND installer instance.
-func NewInstaller(dockerClient client.APIClient) *Installer {
+func NewInstaller(dockerClient dockerclient.Client) *Installer {
 	return &Installer{
 		dockerClient: dockerClient,
 	}

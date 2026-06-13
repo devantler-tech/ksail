@@ -17,14 +17,11 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/cli/kubeconfighook"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/ui/asciiart"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/ui/errorhandler"
-	"github.com/devantler-tech/ksail/v7/pkg/di"
 	"github.com/spf13/cobra"
 )
 
 // NewRootCmd creates and returns the root command with version info and subcommands.
 func NewRootCmd(version, commit, date string) *cobra.Command {
-	runtimeContainer := di.NewRuntime()
-
 	// Create the command using the helper (no field selectors needed for root command)
 	cmd := &cobra.Command{
 		Use:          "ksail",
@@ -60,16 +57,16 @@ func NewRootCmd(version, commit, date string) *cobra.Command {
 	}
 
 	// Add all subcommands
-	cmd.AddCommand(cluster.NewClusterCmd(runtimeContainer))
-	cmd.AddCommand(workload.NewWorkloadCmd(runtimeContainer))
-	cmd.AddCommand(cipher.NewCipherCmd(runtimeContainer))
-	cmd.AddCommand(chat.NewChatCmd(runtimeContainer))
-	cmd.AddCommand(mcp.NewMCPCmd(runtimeContainer))
-	cmd.AddCommand(operator.NewOperatorCmd(runtimeContainer))
-	cmd.AddCommand(tenant.NewTenantCmd(runtimeContainer))
+	cmd.AddCommand(cluster.NewClusterCmd())
+	cmd.AddCommand(workload.NewWorkloadCmd())
+	cmd.AddCommand(cipher.NewCipherCmd())
+	cmd.AddCommand(chat.NewChatCmd())
+	cmd.AddCommand(mcp.NewMCPCmd())
+	cmd.AddCommand(operator.NewOperatorCmd())
+	cmd.AddCommand(tenant.NewTenantCmd())
 	cmd.AddCommand(oidc.NewOIDCCmd())
-	cmd.AddCommand(ui.NewUICmd(runtimeContainer))
-	cmd.AddCommand(desktop.NewDesktopCmd(runtimeContainer))
+	cmd.AddCommand(ui.NewUICmd())
+	cmd.AddCommand(desktop.NewDesktopCmd())
 
 	return cmd
 }

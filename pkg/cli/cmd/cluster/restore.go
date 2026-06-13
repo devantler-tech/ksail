@@ -17,7 +17,6 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/kubeconfig"
 	"github.com/devantler-tech/ksail/v7/pkg/client/kubectl"
-	"github.com/devantler-tech/ksail/v7/pkg/di"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	"github.com/spf13/cobra"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -58,7 +57,7 @@ type restoreFlags struct {
 }
 
 // NewRestoreCmd creates the cluster restore command.
-func NewRestoreCmd(_ *di.Runtime) *cobra.Command {
+func NewRestoreCmd() *cobra.Command {
 	flags := &restoreFlags{
 		existingResourcePolicy: resourcePolicyNone,
 	}

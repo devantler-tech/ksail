@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/client/netretry"
 	"github.com/devantler-tech/ksail/v7/pkg/envvar"
@@ -227,35 +226,27 @@ func (rm *RegistryManager) ensureRegistryImage(ctx context.Context) error {
 		return nil
 	}
 
-	var lastErr error
-
-	for attempt := 1; attempt <= imagePullMaxRetries; attempt++ {
-		pullErr := rm.pullRegistryImage(ctx)
-		if pullErr == nil {
-			return nil
-		}
-
-		lastErr = pullErr
-		if !netretry.IsRetryable(lastErr) || attempt == imagePullMaxRetries {
-			break
-		}
-
-		// Calculate delay with exponential backoff
-		delay := netretry.ExponentialDelay(attempt, imagePullRetryBaseWait, imagePullRetryMaxWait)
-
-		timer := time.NewTimer(delay)
-		select {
-		case <-ctx.Done():
-			if !timer.Stop() {
-				<-timer.C
-			}
-
-			return fmt.Errorf("registry image pull cancelled: %w", ctx.Err())
-		case <-timer.C:
-		}
+	pullErr := netretry.Do(
+		ctx,
+		imagePullMaxRetries,
+		imagePullRetryBaseWait,
+		imagePullRetryMaxWait,
+		func() error {
+			return rm.pullRegistryImage(ctx)
+		},
+		netretry.WithCancelError(func(ctxErr error) error {
+			return fmt.Errorf("registry image pull cancelled: %w", ctxErr)
+		}),
+	)
+	if pullErr == nil {
+		return nil
 	}
 
-	return fmt.Errorf("failed to pull registry image: %w", lastErr)
+	if netretry.IsCancelled(pullErr) {
+		return pullErr //nolint:wrapcheck // return the netretry cancellation error unwrapped (already context-tagged)
+	}
+
+	return fmt.Errorf("failed to pull registry image: %w", pullErr)
 }
 
 // pullRegistryImage performs a single attempt to pull the registry image.

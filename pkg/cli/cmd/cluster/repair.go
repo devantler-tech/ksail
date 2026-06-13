@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 
-	"github.com/devantler-tech/ksail/v7/pkg/di"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/repairer"
 	talosconfigrepair "github.com/devantler-tech/ksail/v7/pkg/svc/repairer/talosconfig"
@@ -24,7 +23,7 @@ import (
 //	failed to append CA certificate to RootCAs pool
 //
 // during `ksail cluster update`.
-func NewRepairCmd(_ *di.Runtime, repairs []repairer.Repair) *cobra.Command {
+func NewRepairCmd(repairs []repairer.Repair) *cobra.Command {
 	if repairs == nil {
 		repairs = talosconfigrepair.DefaultRepairs()
 	}

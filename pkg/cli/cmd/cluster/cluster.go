@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
-	"github.com/devantler-tech/ksail/v7/pkg/di"
 	"github.com/spf13/cobra"
 )
 
@@ -71,7 +70,7 @@ func (e *DriftExitError) KSailExitCode() int {
 }
 
 // NewClusterCmd creates the parent cluster command and wires lifecycle subcommands beneath it.
-func NewClusterCmd(runtimeContainer *di.Runtime) *cobra.Command {
+func NewClusterCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "cluster",
 		Short: "Manage cluster lifecycle",
@@ -85,21 +84,21 @@ func NewClusterCmd(runtimeContainer *di.Runtime) *cobra.Command {
 		},
 	}
 
-	cmd.AddCommand(NewInitCmd(runtimeContainer))
-	cmd.AddCommand(NewCreateCmd(runtimeContainer))
-	cmd.AddCommand(NewUpdateCmd(runtimeContainer))
-	cmd.AddCommand(NewDeleteCmd(runtimeContainer))
-	cmd.AddCommand(NewStartCmd(runtimeContainer))
-	cmd.AddCommand(NewStopCmd(runtimeContainer))
-	cmd.AddCommand(NewListCmd(runtimeContainer))
-	cmd.AddCommand(NewInfoCmd(runtimeContainer))
-	cmd.AddCommand(NewDiagnoseCmd(runtimeContainer))
-	cmd.AddCommand(NewDiffCmd(runtimeContainer))
-	cmd.AddCommand(NewConnectCmd(runtimeContainer))
-	cmd.AddCommand(NewBackupCmd(runtimeContainer))
-	cmd.AddCommand(NewRestoreCmd(runtimeContainer))
-	cmd.AddCommand(NewSwitchCmd(runtimeContainer))
-	cmd.AddCommand(NewRepairCmd(runtimeContainer, nil))
+	cmd.AddCommand(NewInitCmd())
+	cmd.AddCommand(NewCreateCmd())
+	cmd.AddCommand(NewUpdateCmd())
+	cmd.AddCommand(NewDeleteCmd())
+	cmd.AddCommand(NewStartCmd())
+	cmd.AddCommand(NewStopCmd())
+	cmd.AddCommand(NewListCmd())
+	cmd.AddCommand(NewInfoCmd())
+	cmd.AddCommand(NewDiagnoseCmd())
+	cmd.AddCommand(NewDiffCmd())
+	cmd.AddCommand(NewConnectCmd())
+	cmd.AddCommand(NewBackupCmd())
+	cmd.AddCommand(NewRestoreCmd())
+	cmd.AddCommand(NewSwitchCmd())
+	cmd.AddCommand(NewRepairCmd(nil))
 
 	return cmd
 }

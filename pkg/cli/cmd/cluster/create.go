@@ -15,7 +15,6 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/cli/setup/localregistry"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/setup/mirrorregistry"
 	docker "github.com/devantler-tech/ksail/v7/pkg/client/docker"
-	"github.com/devantler-tech/ksail/v7/pkg/di"
 	configmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager"
 	k3dconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/k3d"
 	kindconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/kind"
@@ -55,8 +54,8 @@ func newCreateLifecycleConfig() lifecycle.Config {
 	}
 }
 
-// NewCreateCmd wires the cluster create command using the shared runtime container.
-func NewCreateCmd(runtimeContainer *di.Runtime) *cobra.Command {
+// NewCreateCmd wires the cluster create command.
+func NewCreateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:          "create",
 		Short:        "Create a cluster",
@@ -72,7 +71,7 @@ func NewCreateCmd(runtimeContainer *di.Runtime) *cobra.Command {
 	cmd.Flags().String("ttl", "",
 		"Auto-destroy cluster after duration (e.g. 1h, 30m, 2h30m). If not set, cluster persists indefinitely.")
 
-	cmd.RunE = lifecycle.WrapHandler(runtimeContainer, cfgManager, handleCreateRunE)
+	cmd.RunE = lifecycle.WrapHandler(cfgManager, handleCreateRunE)
 
 	return cmd
 }

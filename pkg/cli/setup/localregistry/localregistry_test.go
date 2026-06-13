@@ -6,9 +6,9 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/setup/localregistry"
+	dockerclient "github.com/devantler-tech/ksail/v7/pkg/client/docker"
 	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/registry"
-	"github.com/docker/docker/client"
 	k3dv1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
@@ -45,7 +45,7 @@ func TestNewDependencies_WithDockerInvoker(t *testing.T) {
 	t.Parallel()
 
 	invokerCalled := false
-	customInvoker := func(_ *cobra.Command, _ func(client.APIClient) error) error {
+	customInvoker := func(_ *cobra.Command, _ func(dockerclient.Client) error) error {
 		invokerCalled = true
 
 		return nil

@@ -11,7 +11,6 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/browser"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/uiserver"
-	"github.com/devantler-tech/ksail/v7/pkg/di"
 	"github.com/spf13/cobra"
 )
 
@@ -34,7 +33,7 @@ Examples:
   ksail ui --no-browser`
 
 // NewUICmd creates the `ksail ui` command.
-func NewUICmd(_ *di.Runtime) *cobra.Command {
+func NewUICmd() *cobra.Command {
 	var (
 		portFlag  int
 		noBrowser bool
