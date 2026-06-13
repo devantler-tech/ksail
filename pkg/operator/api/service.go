@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 )
@@ -28,6 +29,14 @@ var (
 	)
 )
 
+// errClusterUpdateNotSupported is the 501 a backend without ClusterUpdater (the local `ksail ui`
+// backend) returns from PUT /api/v1/clusters/{namespace}/{name}. It preserves the message detail the
+// former local Update stub carried, wrapping ErrNotSupported so clientErrorStatus maps it to 501.
+var errClusterUpdateNotSupported = fmt.Errorf(
+	"%w: updating clusters is not supported locally",
+	ErrNotSupported,
+)
+
 // ClusterService is the backend the REST handlers delegate to. It is expressed in the
 // Kubernetes-shaped wire types the web UI already consumes (v1alpha1.Cluster / v1alpha1.ClusterList)
 // so a single HTTP layer can be served by two implementations: the operator's controller-runtime
@@ -44,14 +53,24 @@ type ClusterService interface {
 	Get(ctx context.Context, namespace, name string) (*v1alpha1.Cluster, error)
 	// Create provisions a new cluster from client-supplied input and returns the created object.
 	Create(ctx context.Context, cluster *v1alpha1.Cluster) (*v1alpha1.Cluster, error)
+	// Delete removes a cluster.
+	Delete(ctx context.Context, namespace, name string) error
+}
+
+// ClusterUpdater is an optional interface a ClusterService may implement to apply spec changes to an
+// existing cluster (PUT /api/v1/clusters/{namespace}/{name}). It mirrors the other optional
+// capability interfaces (ResourceService, ApplyService, …): a backend that implements it advertises
+// capabilities.clusterUpdate=true and the PUT route succeeds; a backend that does not (the local
+// `ksail ui` backend, which manages cluster configuration via files and `ksail cluster update`)
+// leaves the capability false and the PUT returns 501, so the SPA hides the edit affordance rather
+// than offering an action that fails.
+type ClusterUpdater interface {
 	// Update applies the client-supplied spec to an existing cluster and returns the updated object.
 	Update(
 		ctx context.Context,
 		namespace, name string,
 		cluster *v1alpha1.Cluster,
 	) (*v1alpha1.Cluster, error)
-	// Delete removes a cluster.
-	Delete(ctx context.Context, namespace, name string) error
 }
 
 // Capabilities reports which optional operations a backend supports, so the SPA can hide affordances
@@ -60,9 +79,11 @@ type ClusterService interface {
 // (e.g. workload reads, log streaming, exec), and each backend reports the subset it implements.
 type Capabilities struct {
 	// ClusterUpdate reports whether the backend can apply spec changes to an existing cluster
-	// (PUT /api/v1/clusters/{namespace}/{name}). The operator patches the Cluster custom resource and
-	// supports it; the local CLI backend manages cluster configuration via files and does not, so the
-	// SPA hides the edit affordance there rather than offering an action that returns 501.
+	// (PUT /api/v1/clusters/{namespace}/{name}) — true exactly when the serving ClusterService
+	// implements ClusterUpdater. The operator patches the Cluster custom resource and supports it; the
+	// local CLI backend manages cluster configuration via files and does not, so the SPA hides the edit
+	// affordance there rather than offering an action that returns 501. Derived from the interface in
+	// handleConfig like the other flags, so it cannot drift from whether the PUT actually succeeds.
 	ClusterUpdate bool `json:"clusterUpdate"`
 	// WorkloadRead reports whether the backend can read live Kubernetes resources from a target
 	// cluster (the read-only workload browser). It is true exactly when the serving ClusterService
@@ -101,27 +122,4 @@ type Capabilities struct {
 // returned bytes are a complete kubeconfig YAML scoped to just the named cluster's context.
 type KubeconfigProvider interface {
 	Kubeconfig(ctx context.Context, namespace, name string) ([]byte, error)
-}
-
-// CapabilityReporter is an optional interface a ClusterService may implement to advertise which
-// operations it supports. A ClusterService that does not implement it is assumed to support the full
-// surface (see fullCapabilities) — the operator's controller-runtime backend relies on this default.
-type CapabilityReporter interface {
-	Capabilities() Capabilities
-}
-
-// fullCapabilities is the capability set assumed for a ClusterService that does not implement
-// CapabilityReporter: every operation is supported.
-func fullCapabilities() Capabilities {
-	return Capabilities{ClusterUpdate: true}
-}
-
-// serviceCapabilities returns the capabilities a ClusterService advertises, defaulting to the full
-// surface when it does not implement CapabilityReporter.
-func serviceCapabilities(service ClusterService) Capabilities {
-	if reporter, ok := service.(CapabilityReporter); ok {
-		return reporter.Capabilities()
-	}
-
-	return fullCapabilities()
 }

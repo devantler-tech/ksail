@@ -188,11 +188,11 @@ The `spec` field is a `Spec` object that defines editor, cluster, and workload c
 
 | Field | Type | Default | Description |
 | ----- | ---- | ------- | ----------- |
-| `editor` | string | – | Editor command for interactive workflows (e.g. code --wait) |
+| `editor` | string | – | Editor command for interactive workflows (e.g. code --wait). CLI-only; ignored by the operator. |
 | `cluster` | ClusterSpec | – | Cluster configures the Kubernetes cluster KSail manages: distribution, provider, components, and connection settings. |
 | `provider` | ProviderSpec | – | Provider holds infrastructure-provider-specific options (Hetzner, Omni, AWS, and the Kubernetes provider for nested clusters). |
 | `workload` | WorkloadSpec | – | Workload configures workload management: the manifest source directory, OCI push and validation settings, and GitOps bootstrap options. |
-| `chat` | ChatSpec | – | Chat configures the KSail AI chat assistant. |
+| `chat` | ChatSpec | – | Chat configures the KSail AI chat assistant. CLI-only; ignored by the operator (the Cluster CRD shares this type but never reads it). |
 
 ### spec.editor
 
@@ -202,8 +202,8 @@ Editor command for interactive workflows (e.g., `code --wait`, `vim`). Falls bac
 
 | Field | Type | Default | Description |
 | ----- | ---- | ------- | ----------- |
-| `distributionConfig` | string | – | DistributionConfig is the path to the distribution's own configuration file (kind.yaml, k3d.yaml, vcluster.yaml, eks.yaml, or the talos directory). When empty, KSail uses the distribution's default file name. |
-| `connection` | Connection | – | Connection defines how KSail connects to the cluster: the kubeconfig path, context name, and operation timeout. |
+| `distributionConfig` | string | – | Path to the distribution's own configuration file (kind.yaml |
+| `connection` | Connection | – | Connection defines how KSail connects to the cluster: the kubeconfig path, context name, and operation timeout. CLI-only (local kubeconfig path/context); ignored by the operator. |
 | `distribution` | enum | – | Distribution selects the Kubernetes distribution to provision: Vanilla (Kind), K3s (K3d), Talos, VCluster, KWOK (simulated), or EKS (AWS). |
 | `provider` | enum | – | Provider selects the infrastructure that runs the cluster nodes: Docker, Hetzner, Omni, AWS, or Kubernetes (nested clusters inside an existing cluster). Each distribution supports a subset of providers; when empty, KSail uses the distribution's default provider. |
 | `cni` | enum | – | CNI selects the Container Network Interface plugin. Default keeps the distribution's built-in CNI; Cilium or Calico install that CNI instead. |

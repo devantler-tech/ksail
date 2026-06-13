@@ -70,15 +70,23 @@ func (k *Provisioner) DiffConfig(
 
 // GetCurrentConfig retrieves the current cluster configuration by probing the
 // running cluster via Helm releases, Kubernetes Deployments, and Docker
-// containers. Falls back to static defaults when no detector is available.
+// containers. Falls back to static defaults when no detector is available. The
+// clusterName is used to merge non-introspectable persisted state (e.g.
+// vanilla.mirrorsDir) so a configured value does not read as a false
+// recreate-required diff on every update.
 //
 // jscpd:ignore-start
 func (k *Provisioner) GetCurrentConfig(
 	ctx context.Context,
-	_ string,
+	clusterName string,
 ) (*v1alpha1.ClusterSpec, *v1alpha1.ProviderSpec, error) {
+	spec := clusterupdate.DefaultCurrentSpec(
+		v1alpha1.DistributionVanilla,
+		v1alpha1.ProviderDocker,
+	)
+
 	if k.componentDetector != nil {
-		spec, err := k.componentDetector.DetectComponents(
+		detected, err := k.componentDetector.DetectComponents(
 			ctx,
 			v1alpha1.DistributionVanilla,
 			v1alpha1.ProviderDocker,
@@ -87,13 +95,15 @@ func (k *Provisioner) GetCurrentConfig(
 			return nil, nil, fmt.Errorf("detect components: %w", err)
 		}
 
-		return spec, nil, nil
+		spec = detected
 	}
 
 	// jscpd:ignore-end
 
-	return clusterupdate.DefaultCurrentSpec(
-		v1alpha1.DistributionVanilla,
-		v1alpha1.ProviderDocker,
-	), nil, nil
+	err := clusterupdate.MergePersistedState(spec, clusterName)
+	if err != nil {
+		return nil, nil, fmt.Errorf("merge persisted state: %w", err)
+	}
+
+	return spec, nil, nil
 }

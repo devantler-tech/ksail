@@ -123,10 +123,11 @@ func initImageCommandContext(
 
 // detectClusterInfo detects the cluster info after printing the header.
 // This should be called after initImageCommandContext and after printing the title.
-func (ctx *imageCommandContext) detectClusterInfo() error {
+func (ctx *imageCommandContext) detectClusterInfo(cmdCtx context.Context) error {
 	ctx.Timer.NewStage()
 
 	clusterInfo, err := clusterdetector.DetectInfo(
+		cmdCtx,
 		ctx.ClusterCfg.Spec.Cluster.Connection.Kubeconfig,
 		ctx.ClusterCfg.Spec.Cluster.Connection.Context,
 	)

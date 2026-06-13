@@ -7,10 +7,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
-	"github.com/devantler-tech/ksail/v7/pkg/k8s/readiness"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/installer/internal/webhookwait"
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -37,11 +36,17 @@ var errNoTimeRemaining = errors.New("no time remaining for webhook readiness che
 //nolint:gochecknoglobals // allows overriding in tests via export_test.go
 var webhookReadinessTimeout = 5 * time.Minute
 
-// newClientsetFn is the factory used to create a Kubernetes clientset.
+// newClientsetFn is the factory used to create a Kubernetes clientset. The
+// kubeconfig path is canonicalised (symlinks resolved) before use.
 //
 //nolint:gochecknoglobals // allows overriding in tests
 var newClientsetFn = func(kubeconfig, kubecontext string) (kubernetes.Interface, error) {
-	return k8s.NewClientset(kubeconfig, kubecontext)
+	canonical, err := fsutil.EvalCanonicalPath(kubeconfig)
+	if err != nil {
+		return nil, fmt.Errorf("canonicalize kubeconfig path: %w", err)
+	}
+
+	return k8s.NewClientset(canonical, kubecontext)
 }
 
 // waitForWebhookReady polls the Kyverno MutatingWebhookConfiguration until every
@@ -69,9 +74,14 @@ func (i *Installer) waitForWebhookReady(ctx context.Context) error {
 		return fmt.Errorf("creating clientset for Kyverno webhook readiness check: %w", err)
 	}
 
-	err = readiness.PollForReadiness(ctx, remaining, func(ctx context.Context) (bool, error) {
-		return webhookCABundlesReady(ctx, clientset)
-	})
+	err = webhookwait.Poll(
+		ctx,
+		clientset,
+		webhookwait.Mutating,
+		kyvernoResourceWebhookName,
+		"polling Kyverno webhook readiness",
+		remaining,
+	)
 	if err != nil {
 		// The webhook readiness wait is best-effort: callers treat a deadline timeout as
 		// non-fatal because the webhook uses failurePolicy: Ignore. When the poll runs out
@@ -84,44 +94,10 @@ func (i *Installer) waitForWebhookReady(ctx context.Context) error {
 			return fmt.Errorf("polling Kyverno webhook readiness: %w", context.DeadlineExceeded)
 		}
 
-		return fmt.Errorf("polling Kyverno webhook readiness: %w", err)
+		return err //nolint:wrapcheck // webhookwait.Poll already wraps with the readiness description
 	}
 
 	return nil
-}
-
-// webhookCABundlesReady reports whether the Kyverno resource MutatingWebhookConfiguration
-// exists and every webhook entry has a non-empty caBundle. A not-yet-created config or an
-// empty caBundle means the admission controller has not finished initialising its TLS
-// certificate, so the poll should continue.
-func webhookCABundlesReady(ctx context.Context, clientset kubernetes.Interface) (bool, error) {
-	webhook, err := clientset.AdmissionregistrationV1().
-		MutatingWebhookConfigurations().
-		Get(ctx, kyvernoResourceWebhookName, metav1.GetOptions{})
-	if err != nil {
-		if apierrors.IsNotFound(err) {
-			// Not yet created — keep polling
-			return false, nil
-		}
-
-		return false, fmt.Errorf(
-			"getting MutatingWebhookConfiguration %q: %w",
-			kyvernoResourceWebhookName,
-			err,
-		)
-	}
-
-	if len(webhook.Webhooks) == 0 {
-		return false, nil
-	}
-
-	for _, wh := range webhook.Webhooks {
-		if len(wh.ClientConfig.CABundle) == 0 {
-			return false, nil
-		}
-	}
-
-	return true, nil
 }
 
 // isDeadlineError reports whether err represents the webhook-readiness deadline being

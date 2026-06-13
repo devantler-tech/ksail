@@ -25,35 +25,6 @@ type k3dRegistryActionFn func(
 	io.Writer,
 ) error
 
-// K3dRegistryAction returns the action function for K3d registry creation.
-func K3dRegistryAction(ctx *Context) func(context.Context, dockerclient.Client) error {
-	return func(execCtx context.Context, dockerClient dockerclient.Client) error {
-		return runK3dRegistryAction(execCtx, ctx, dockerClient)
-	}
-}
-
-// K3dNetworkAction returns the action function for K3d network creation.
-func K3dNetworkAction(ctx *Context) func(context.Context, dockerclient.Client) error {
-	return func(execCtx context.Context, dockerClient dockerclient.Client) error {
-		return runK3dNetworkAction(execCtx, ctx, dockerClient)
-	}
-}
-
-// K3dConnectAction returns the action function for K3d registry connection.
-func K3dConnectAction(ctx *Context) func(context.Context, dockerclient.Client) error {
-	return func(execCtx context.Context, dockerClient dockerclient.Client) error {
-		return runK3dConnectAction(execCtx, ctx, dockerClient)
-	}
-}
-
-// K3dPostClusterConnectAction returns the action function for post-cluster registry configuration.
-// For K3d, this is a no-op since registry mirrors are configured via k3d config before cluster creation.
-func K3dPostClusterConnectAction(_ *Context) func(context.Context, dockerclient.Client) error {
-	return func(_ context.Context, _ dockerclient.Client) error {
-		return nil
-	}
-}
-
 // runK3dRegistryAction creates and configures registry containers.
 func runK3dRegistryAction(
 	execCtx context.Context,

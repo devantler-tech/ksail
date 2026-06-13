@@ -1,11 +1,8 @@
 package cluster
 
 import (
-	"archive/tar"
-	"compress/gzip"
 	"context"
 	"io"
-	"os"
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -22,7 +19,6 @@ import (
 	v1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
 
@@ -84,77 +80,6 @@ func ExportResolveCreatedContextName(
 	clusterName string,
 ) string {
 	return resolveCreatedContextName(distribution, provider, clusterName)
-}
-
-// ExportWriteMetadata exports writeMetadata for testing.
-func ExportWriteMetadata(metadata *BackupMetadata, path string) error {
-	return writeMetadata(metadata, path)
-}
-
-// ExportCreateTarball exports createTarball for testing.
-func ExportCreateTarball(sourceDir, targetPath string, compressionLevel int) error {
-	return createTarball(sourceDir, targetPath, compressionLevel)
-}
-
-// ExportCountYAMLDocuments exports countYAMLDocuments for testing.
-func ExportCountYAMLDocuments(content string) int {
-	return countYAMLDocuments(content)
-}
-
-// ExportFilterExcludedTypes exports filterExcludedTypes for testing.
-func ExportFilterExcludedTypes(resourceTypes, excludeTypes []string) []string {
-	return filterExcludedTypes(resourceTypes, excludeTypes)
-}
-
-// ExportExtractBackupArchive exports extractBackupArchive for testing.
-func ExportExtractBackupArchive(inputPath string) (string, *BackupMetadata, error) {
-	return extractBackupArchive(inputPath)
-}
-
-// ExportSanitizeYAMLOutput exports sanitizeYAMLOutput for testing.
-func ExportSanitizeYAMLOutput(output string) (string, error) {
-	return sanitizeYAMLOutput(output)
-}
-
-// ExportDirPerm exports dirPerm for testing.
-const ExportDirPerm = dirPerm
-
-// ExportFilePerm exports filePerm for testing.
-const ExportFilePerm = filePerm
-
-// ExportValidateTarEntry exports validateTarEntry for testing.
-func ExportValidateTarEntry(header *tar.Header, destDir string) (string, error) {
-	return validateTarEntry(header, destDir)
-}
-
-// ExportAllLinesContain exports allLinesContain for testing.
-func ExportAllLinesContain(output, substr string) bool {
-	return allLinesContain(output, substr)
-}
-
-// ExportDeriveBackupName exports deriveBackupName for testing.
-func ExportDeriveBackupName(inputPath string) string {
-	return deriveBackupName(inputPath)
-}
-
-// ExportAddLabelsToDocument exports addLabelsToDocument for testing.
-func ExportAddLabelsToDocument(doc, backupName, restoreName string) (string, error) {
-	return addLabelsToDocument(doc, backupName, restoreName)
-}
-
-// ExportSplitYAMLDocuments exports splitYAMLDocuments for testing.
-func ExportSplitYAMLDocuments(content string) []string {
-	return splitYAMLDocuments(content)
-}
-
-// ExportInjectRestoreLabels exports injectRestoreLabels for testing.
-func ExportInjectRestoreLabels(filePath, backupName, restoreName string) (string, error) {
-	return injectRestoreLabels(filePath, backupName, restoreName)
-}
-
-// ExportIsHelmReleaseSecret exports isHelmReleaseSecret for testing.
-func ExportIsHelmReleaseSecret(obj *unstructured.Unstructured) bool {
-	return isHelmReleaseSecret(obj)
 }
 
 // ExportResolveForce exports resolveForce for testing.
@@ -426,16 +351,6 @@ func ExportPrintRestoreMetadata(writer io.Writer, metadata *BackupMetadata) {
 	printRestoreMetadata(writer, metadata)
 }
 
-// ExportReadBackupMetadata exposes readBackupMetadata for testing.
-func ExportReadBackupMetadata(tmpDir string) (*BackupMetadata, error) {
-	return readBackupMetadata(tmpDir)
-}
-
-// ExportBackupResourceTypes exposes backupResourceTypes for testing.
-func ExportBackupResourceTypes() []string {
-	return backupResourceTypes()
-}
-
 // ExportEnsureLocalRegistriesReady exports ensureLocalRegistriesReady for testing.
 func ExportEnsureLocalRegistriesReady(
 	cmd *cobra.Command,
@@ -467,15 +382,6 @@ func ExportDisplayComponents(writer io.Writer, clusterName string) {
 	displayComponents(writer, clusterName)
 }
 
-// ExportClassifyRestoreError exports classifyRestoreError for testing.
-func ExportClassifyRestoreError(err error, stderr, policy string) error {
-	flags := &restoreFlags{
-		existingResourcePolicy: policy,
-	}
-
-	return classifyRestoreError(err, stderr, flags)
-}
-
 // ExportStripDistributionPrefix exports stripDistributionPrefix for testing.
 func ExportStripDistributionPrefix(contextName string) string {
 	return stripDistributionPrefix(contextName)
@@ -488,7 +394,7 @@ func ExportStripDistributionPrefix(contextName string) string {
 func ExportDetectClusterDistribution(
 	clusterName, kubeconfigPath string,
 ) *clusterdetector.Info {
-	return detectClusterDistribution(&lifecycle.ResolvedClusterInfo{
+	return detectClusterDistribution(context.Background(), &lifecycle.ResolvedClusterInfo{
 		ClusterName:    clusterName,
 		Provider:       v1alpha1.ProviderDocker,
 		KubeconfigPath: kubeconfigPath,
@@ -506,11 +412,6 @@ func ExportResolveContextName(contextNames []string, clusterName string) (string
 	return resolveContextName(config, clusterName)
 }
 
-// ExportIsEmptyYAML exports isEmptyYAML for testing.
-func ExportIsEmptyYAML(path string) bool {
-	return isEmptyYAML(path)
-}
-
 // ExportValidateOutputFormat exports validateOutputFormat for testing.
 func ExportValidateOutputFormat(cmd *cobra.Command) error {
 	return validateOutputFormat(cmd)
@@ -526,34 +427,9 @@ func ExportPrintBackupSummary(writer io.Writer, outputPath string) {
 	printBackupSummary(writer, outputPath)
 }
 
-// ExportClusterScopedResourceTypes exports clusterScopedResourceTypes for testing.
-func ExportClusterScopedResourceTypes() map[string]bool {
-	return clusterScopedResourceTypes()
-}
-
-// ExportRemoveAutoGeneratedJobLabels exports removeAutoGeneratedJobLabels for testing.
-func ExportRemoveAutoGeneratedJobLabels(obj *unstructured.Unstructured, fields ...string) {
-	removeAutoGeneratedJobLabels(obj, fields...)
-}
-
-// ExportRemoveServiceClusterIPs exports removeServiceClusterIPs for testing.
-func ExportRemoveServiceClusterIPs(obj *unstructured.Unstructured) {
-	removeServiceClusterIPs(obj)
-}
-
 // ExportCategoryIcon exports categoryIcon for testing.
 func ExportCategoryIcon(cat clusterupdate.ChangeCategory) string {
 	return categoryIcon(cat)
-}
-
-// ExportCommitTarball exports commitTarball for testing.
-func ExportCommitTarball(
-	tarWriter *tar.Writer,
-	gzipWriter *gzip.Writer,
-	outFile *os.File,
-	tmpPath, targetPath string,
-) error {
-	return commitTarball(tarWriter, gzipWriter, outFile, tmpPath, targetPath)
 }
 
 // ExportAllDistributions exports allDistributions for testing.

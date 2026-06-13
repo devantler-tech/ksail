@@ -1,9 +1,7 @@
 package talosprovisioner
 
 import (
-	"errors"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -19,9 +17,6 @@ import (
 
 // ErrUnsupportedProvider re-exports the shared error for backward compatibility.
 var ErrUnsupportedProvider = clustererr.ErrUnsupportedProvider
-
-// ErrMissingHetznerToken is returned when the Hetzner API token is not set.
-var ErrMissingHetznerToken = errors.New("hetzner API token not set")
 
 // CreateProvisioner creates a Provisioner from a pre-loaded configuration.
 // The Talos config should be loaded via the configmanager before calling this function,
@@ -195,29 +190,17 @@ func configureInfraProvider(
 }
 
 // createHetznerProvider creates a Hetzner provider and returns the underlying hcloud client.
+// It delegates to the shared hetzner.NewProviderFromOptions for credential resolution so the
+// configurable tokenEnvVar is honored consistently across all construction sites.
 func createHetznerProvider(
 	opts v1alpha1.OptionsHetzner,
 ) (*hetzner.Provider, *hcloud.Client, error) {
-	// Determine the token environment variable name
-	tokenEnvVar := opts.TokenEnvVar
-	if tokenEnvVar == "" {
-		tokenEnvVar = v1alpha1.DefaultHetznerTokenEnvVar
+	prov, client, err := hetzner.NewProviderFromOptions(opts)
+	if err != nil {
+		return nil, nil, fmt.Errorf("create Hetzner provider: %w", err)
 	}
 
-	// Get the token from the environment
-	token := os.Getenv(tokenEnvVar)
-	if token == "" {
-		return nil, nil, fmt.Errorf(
-			"%w: environment variable %s is not set",
-			ErrMissingHetznerToken,
-			tokenEnvVar,
-		)
-	}
-
-	// Create the Hetzner client and provider
-	client := hcloud.NewClient(hcloud.WithToken(token))
-
-	return hetzner.NewProvider(client), client, nil
+	return prov, client, nil
 }
 
 // applyTalosDefaults applies default values to Talos options.

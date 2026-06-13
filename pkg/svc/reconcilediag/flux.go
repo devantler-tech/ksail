@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/devantler-tech/ksail/v7/pkg/client/flux"
+	"github.com/devantler-tech/ksail/v7/pkg/client/reconciler"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -18,27 +20,6 @@ import (
 )
 
 const fluxNamespace = "flux-system"
-
-// fluxGVRKustomizations returns the GVR for Flux Kustomizations.
-func fluxGVRKustomizations() schema.GroupVersionResource {
-	return schema.GroupVersionResource{
-		Group: "kustomize.toolkit.fluxcd.io", Version: "v1", Resource: "kustomizations",
-	}
-}
-
-// fluxGVRHelmReleases returns the GVR for Flux HelmReleases.
-func fluxGVRHelmReleases() schema.GroupVersionResource {
-	return schema.GroupVersionResource{
-		Group: "helm.toolkit.fluxcd.io", Version: "v2", Resource: "helmreleases",
-	}
-}
-
-// fluxGVROCIRepositories returns the GVR for Flux OCIRepositories.
-func fluxGVROCIRepositories() schema.GroupVersionResource {
-	return schema.GroupVersionResource{
-		Group: "source.toolkit.fluxcd.io", Version: "v1", Resource: "ocirepositories",
-	}
-}
 
 // FluxCollector gathers diagnostics for Flux reconciliation failures.
 type FluxCollector struct {
@@ -57,12 +38,12 @@ func (c *FluxCollector) Collect(ctx context.Context) *Report {
 
 	report.Sections = append(
 		report.Sections,
-		c.collectFailingCRs(ctx, "Kustomizations", fluxGVRKustomizations(), fluxNamespace),
-		c.collectFailingCRs(ctx, "HelmReleases", fluxGVRHelmReleases(), ""),
+		c.collectFailingCRs(ctx, "Kustomizations", flux.KustomizationGVR(), fluxNamespace),
+		c.collectFailingCRs(ctx, "HelmReleases", flux.HelmReleaseGVR(), ""),
 		c.collectFailingCRs(
 			ctx,
 			"OCIRepositories",
-			fluxGVROCIRepositories(),
+			flux.OCIRepositoryGVR(),
 			fluxNamespace,
 		),
 	)
@@ -161,27 +142,12 @@ func safeCollectCRs(
 
 // extractReadyCondition finds the Ready condition and returns (ready, reason, message).
 func extractReadyCondition(obj *unstructured.Unstructured) (bool, string, string) {
-	conditions, found, _ := unstructured.NestedSlice(obj.Object, "status", "conditions")
-	if !found {
-		return false, "", ""
-	}
-
-	for _, cond := range conditions {
-		condMap, ok := cond.(map[string]any)
-		if !ok {
+	for _, cond := range reconciler.ParseConditions(obj) {
+		if cond.Type != "Ready" {
 			continue
 		}
 
-		condType, _, _ := unstructured.NestedString(condMap, "type")
-		if condType != "Ready" {
-			continue
-		}
-
-		condStatus, _, _ := unstructured.NestedString(condMap, "status")
-		reason, _, _ := unstructured.NestedString(condMap, "reason")
-		message, _, _ := unstructured.NestedString(condMap, "message")
-
-		return condStatus == "True", reason, message
+		return cond.Status == "True", cond.Reason, cond.Message
 	}
 
 	return false, "", ""

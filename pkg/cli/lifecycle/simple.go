@@ -141,7 +141,7 @@ func ResolveClusterInfo(
 
 	// Fall back to kubeconfig context detection
 	if clusterName == "" {
-		resolveFromKubecontext(&clusterName, &provider, kubeconfigPath)
+		resolveFromKubecontext(commandContext(cmd), &clusterName, &provider, kubeconfigPath)
 	}
 
 	if clusterName == "" {
@@ -226,13 +226,24 @@ func resolveFromConfig(
 	*kubernetesOpts = cfg.Spec.Provider.Kubernetes
 }
 
+// commandContext returns cmd's context, falling back to context.Background()
+// when cmd is nil (ResolveClusterInfo tolerates a nil command).
+func commandContext(cmd *cobra.Command) context.Context {
+	if cmd == nil {
+		return context.Background()
+	}
+
+	return cmd.Context()
+}
+
 // resolveFromKubecontext fills missing cluster info from the current kubeconfig context.
 func resolveFromKubecontext(
+	ctx context.Context,
 	clusterName *string,
 	provider *v1alpha1.Provider,
 	kubeconfigPath string,
 ) {
-	clusterInfo, err := clusterdetector.DetectInfo(kubeconfigPath, "")
+	clusterInfo, err := clusterdetector.DetectInfo(ctx, kubeconfigPath, "")
 	if err != nil || clusterInfo == nil {
 		return
 	}

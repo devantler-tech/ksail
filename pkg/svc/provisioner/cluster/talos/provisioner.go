@@ -12,14 +12,11 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	dockerclient "github.com/devantler-tech/ksail/v7/pkg/client/docker"
 	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
-	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/detector"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
 	dockerprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/docker"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/hetzner"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/kernelmod"
-	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/filters"
 	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
 	"github.com/siderolabs/talos/pkg/provision"
 	"github.com/siderolabs/talos/pkg/provision/providers"
@@ -28,12 +25,14 @@ import (
 // TalosProviderName is the name used by the Talos SDK for Docker provisioner.
 const TalosProviderName = "docker"
 
-// Docker label keys used by Talos provisioner.
+// Docker label keys used by Talos provisioner. These are re-exported from the
+// Docker provider package, which owns the canonical Talos label scheme, so the
+// two never drift.
 const (
 	// LabelTalosOwned marks a container as owned by Talos provisioner.
-	LabelTalosOwned = "talos.owned"
+	LabelTalosOwned = dockerprovider.LabelTalosOwned
 	// LabelTalosClusterName identifies which cluster a container belongs to.
-	LabelTalosClusterName = "talos.cluster.name"
+	LabelTalosClusterName = dockerprovider.LabelTalosClusterName
 )
 
 // Node role constants.
@@ -433,95 +432,71 @@ func (p *Provisioner) Exists(ctx context.Context, name string) (bool, error) {
 		return exists, nil
 	}
 
-	// Docker-based check (default)
-	if p.dockerClient == nil {
-		return false, ErrDockerNotAvailable
-	}
-
-	containers, err := p.listTalosContainers(ctx, clusterName)
+	// Docker-based check (default): route through the Docker provider so the
+	// Talos provisioner does not duplicate container-listing logic.
+	dockerProv, err := p.dockerNodeProvider()
 	if err != nil {
-		return false, fmt.Errorf("failed to list containers: %w", err)
+		return false, err
 	}
 
-	return len(containers) > 0, nil
+	exists, err := dockerProv.NodesExist(ctx, clusterName)
+	if err != nil {
+		return false, fmt.Errorf("failed to check if cluster exists: %w", err)
+	}
+
+	return exists, nil
 }
 
 // List lists all Talos-in-Docker clusters.
 // Returns unique cluster names from containers with Talos labels.
+// It routes through the Docker provider's ListAllClusters so the Talos
+// provisioner does not duplicate the container-scanning logic.
 func (p *Provisioner) List(ctx context.Context) ([]string, error) {
-	if p.dockerClient == nil {
-		return nil, ErrDockerNotAvailable
-	}
-
-	// Find all containers owned by Talos provisioner
-	containers, err := p.dockerClient.ContainerList(ctx, container.ListOptions{
-		All: true, // Include stopped containers
-		Filters: filters.NewArgs(
-			filters.Arg("label", LabelTalosOwned+"=true"),
-		),
-	})
+	dockerProv, err := p.dockerNodeProvider()
 	if err != nil {
-		return nil, fmt.Errorf("failed to list containers: %w", err)
+		return nil, err
 	}
 
-	return k8s.UniqueLabelValues(
-		containers,
-		LabelTalosClusterName,
-		func(c container.Summary) map[string]string {
-			return c.Labels
-		},
-	), nil
+	clusters, err := dockerProv.ListAllClusters(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list clusters: %w", err)
+	}
+
+	return clusters, nil
 }
 
 // Start starts a stopped Talos-in-Docker cluster.
 // If name is non-empty, it overrides the configured cluster name.
-// Uses the infrastructure provider if set, otherwise falls back to Docker client.
+// Node start is delegated to the infrastructure provider; readiness waiting is
+// then specialized per provider type.
 func (p *Provisioner) Start(ctx context.Context, name string) error {
 	clusterName := p.resolveClusterName(name)
 
-	// Use infrastructure provider if available
-	if p.infraProvider != nil {
-		_, _ = fmt.Fprintf(p.logWriter, "Starting Talos cluster %q...\n", clusterName)
-
-		err := p.infraProvider.StartNodes(ctx, clusterName)
-		if err != nil {
-			return fmt.Errorf("failed to start cluster %q: %w", clusterName, err)
-		}
-
-		// Wait for cluster to be ready based on provider type
-		switch p.infraProvider.(type) {
-		case *hetzner.Provider:
-			// Hetzner requires special readiness checks with server discovery
-			err = p.waitForHetznerClusterReadyAfterStart(ctx, clusterName)
-			if err != nil {
-				return fmt.Errorf("cluster started but not ready: %w", err)
-			}
-		case *dockerprovider.Provider:
-			// Docker containers start quickly, but Talos API needs time to initialize
-			err = p.waitForDockerClusterReadyAfterStart(ctx, clusterName)
-			if err != nil {
-				return fmt.Errorf("cluster started but not ready: %w", err)
-			}
-		}
-
-		_, _ = fmt.Fprintf(p.logWriter, "Successfully started Talos cluster %q\n", clusterName)
-
-		return nil
-	}
-
-	// Fall back to Docker client for backwards compatibility
-	clusterName, containers, err := p.getClusterContainers(ctx, name)
+	infraProvider, err := p.nodeLifecycleProvider()
 	if err != nil {
 		return err
 	}
 
 	_, _ = fmt.Fprintf(p.logWriter, "Starting Talos cluster %q...\n", clusterName)
 
-	// Start each container
-	for _, c := range containers {
-		err = p.dockerClient.ContainerStart(ctx, c.ID, container.StartOptions{})
+	err = infraProvider.StartNodes(ctx, clusterName)
+	if err != nil {
+		return fmt.Errorf("failed to start cluster %q: %w", clusterName, err)
+	}
+
+	// Wait for cluster to be ready based on provider type
+	switch infraProvider.(type) {
+	case *hetzner.Provider:
+		// Hetzner requires special readiness checks with server discovery
+		err = p.waitForHetznerClusterReadyAfterStart(ctx, clusterName)
 		if err != nil {
-			return fmt.Errorf("failed to start container %s: %w", c.Names[0], err)
+			return fmt.Errorf("cluster started but not ready: %w", err)
+		}
+	case *dockerprovider.Provider:
+		// Docker containers start quickly, but Talos API needs time to initialize
+		err = p.waitForDockerClusterReadyAfterStart(ctx, clusterName)
+		if err != nil {
+			return fmt.Errorf("cluster started but not ready: %w", err)
 		}
 	}
 
@@ -530,49 +505,40 @@ func (p *Provisioner) Start(ctx context.Context, name string) error {
 	return nil
 }
 
-// containerStopTimeout is the timeout for stopping a container gracefully.
-const containerStopTimeout = 30
-
 // Stop stops a running Talos-in-Docker cluster.
 // If name is non-empty, it overrides the configured cluster name.
-// Uses the infrastructure provider if set, otherwise falls back to Docker client.
+// Node stop is delegated to the infrastructure provider.
 func (p *Provisioner) Stop(ctx context.Context, name string) error {
 	clusterName := p.resolveClusterName(name)
 
-	// Use infrastructure provider if available
-	if p.infraProvider != nil {
-		_, _ = fmt.Fprintf(p.logWriter, "Stopping Talos cluster %q...\n", clusterName)
-
-		err := p.infraProvider.StopNodes(ctx, clusterName)
-		if err != nil {
-			return fmt.Errorf("failed to stop cluster %q: %w", clusterName, err)
-		}
-
-		_, _ = fmt.Fprintf(p.logWriter, "Successfully stopped Talos cluster %q\n", clusterName)
-
-		return nil
-	}
-
-	// Fall back to Docker client for backwards compatibility
-	clusterName, containers, err := p.getClusterContainers(ctx, name)
+	infraProvider, err := p.nodeLifecycleProvider()
 	if err != nil {
 		return err
 	}
 
 	_, _ = fmt.Fprintf(p.logWriter, "Stopping Talos cluster %q...\n", clusterName)
 
-	// Stop each container with a graceful timeout
-	timeout := containerStopTimeout
-	for _, c := range containers {
-		err = p.dockerClient.ContainerStop(ctx, c.ID, container.StopOptions{Timeout: &timeout})
-		if err != nil {
-			return fmt.Errorf("failed to stop container %s: %w", c.Names[0], err)
-		}
+	err = infraProvider.StopNodes(ctx, clusterName)
+	if err != nil {
+		return fmt.Errorf("failed to stop cluster %q: %w", clusterName, err)
 	}
 
 	_, _ = fmt.Fprintf(p.logWriter, "Successfully stopped Talos cluster %q\n", clusterName)
 
 	return nil
+}
+
+// nodeLifecycleProvider returns the infrastructure provider used for node
+// start/stop operations. When no provider was injected (Docker-only
+// construction, e.g. tests), it builds a Docker provider on the canonical Talos
+// scheme from the Docker client, returning ErrDockerNotAvailable when neither is
+// available.
+func (p *Provisioner) nodeLifecycleProvider() (provider.Provider, error) {
+	if p.infraProvider != nil {
+		return p.infraProvider, nil
+	}
+
+	return p.dockerNodeProvider()
 }
 
 // refreshKubeconfigFromTalosAPI discovers a control-plane node, connects to its

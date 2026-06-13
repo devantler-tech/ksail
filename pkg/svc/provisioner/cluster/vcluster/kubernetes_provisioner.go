@@ -6,11 +6,11 @@ import (
 	"os"
 	"time"
 
-	"github.com/devantler-tech/ksail/v7/pkg/envvar"
 	vclusterconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/vcluster"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	kubernetesprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/kubernetes"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/internal/nested"
 	loftlog "github.com/loft-sh/log"
 	"github.com/loft-sh/vcluster/pkg/cli"
 	cliconfig "github.com/loft-sh/vcluster/pkg/cli/config"
@@ -20,7 +20,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -29,34 +28,15 @@ import (
 )
 
 const (
-	// vclusterNamespacePrefix is the namespace prefix for vCluster instances on Kubernetes.
-	vclusterNamespacePrefix = "vcluster-"
-	// vclusterSecretPrefix is the prefix for vCluster kubeconfig secrets ("vc-<name>").
-	vclusterSecretPrefix = "vc-"
-	// vclusterKubeconfigKey is the key within the kubeconfig Secret.
-	vclusterKubeconfigKey = "config"
 	// vclusterAPIServerPort is the API server port exposed by the vCluster pod.
 	vclusterAPIServerPort = 8443
-	// vclusterServiceAPIPort is the port the vCluster API Service exposes inside the host cluster.
-	vclusterServiceAPIPort = 443
-	// vclusterInClusterServerName is the TLS server name on the vCluster API server certificate. The
-	// in-cluster Service DNS name is not a SAN, so the served certificate is verified against this
-	// name (with the kubeconfig's CA) while connecting to the Service address.
-	vclusterInClusterServerName = "kubernetes"
 	// vclusterWaitTimeout is the default maximum time to wait for vCluster readiness.
 	// Overridable via the KSAIL_NESTED_READY_TIMEOUT environment variable (see
-	// nestedReadyTimeoutEnvVar / vclusterReadyTimeout) so CI can grant a slow-but-healthy
+	// nested.ReadyTimeoutEnvVar / vclusterReadyTimeout) so CI can grant a slow-but-healthy
 	// nested cluster more headroom under runner contention without changing the default.
 	vclusterWaitTimeout = 10 * time.Minute
 	// vclusterWaitInterval is the polling interval when waiting for the cluster.
 	vclusterWaitInterval = 5 * time.Second
-	// nestedDebugEnvVar gates opt-in nested-cluster diagnostics (matches the value the
-	// CI workflow sets to capture why a nested vCluster fails to come up on a given host).
-	nestedDebugEnvVar = "KSAIL_NESTED_DEBUG"
-	// nestedReadyTimeoutEnvVar overrides vclusterWaitTimeout with a Go duration (e.g. "15m").
-	// Matches the value the CI nested-provider action exports; lets a slow-but-healthy
-	// nested cluster under runner contention avoid a premature context-deadline failure.
-	nestedReadyTimeoutEnvVar = "KSAIL_NESTED_READY_TIMEOUT"
 )
 
 // KubernetesProvisioner provisions vCluster instances on a host Kubernetes cluster
@@ -139,7 +119,7 @@ func (p *KubernetesProvisioner) Create(
 		clusterName = name
 	}
 
-	namespace := vclusterNamespacePrefix + clusterName
+	namespace := NamespacePrefix + clusterName
 
 	// Preserve the host kubeconfig's current-context (which MergeKubeconfig would otherwise
 	// overwrite with the nested cluster) when the host is resolved from current-context. With an
@@ -268,7 +248,7 @@ func (p *KubernetesProvisioner) Delete(ctx context.Context, name string) error {
 		clusterName = name
 	}
 
-	namespace := vclusterNamespacePrefix + clusterName
+	namespace := NamespacePrefix + clusterName
 
 	deleteOpts := &cli.DeleteOptions{
 		DeleteNamespace: true,
@@ -308,15 +288,15 @@ func (p *KubernetesProvisioner) Exists(ctx context.Context, name string) (bool, 
 		clusterName = name
 	}
 
-	namespace := vclusterNamespacePrefix + clusterName
+	namespace := NamespacePrefix + clusterName
 
-	_, err := p.hostClientset.CoreV1().Namespaces().Get(ctx, namespace, metav1.GetOptions{})
-	if apierrors.IsNotFound(err) {
-		return false, nil
+	nsExists, err := nested.NamespaceExists(ctx, p.hostClientset, namespace)
+	if err != nil {
+		return false, fmt.Errorf("check namespace: %w", err)
 	}
 
-	if err != nil {
-		return false, fmt.Errorf("check namespace %s: %w", namespace, err)
+	if !nsExists {
+		return false, nil
 	}
 
 	// Also check that the vCluster release exists in the namespace
@@ -348,12 +328,11 @@ func (p *KubernetesProvisioner) Kubeconfig(ctx context.Context, name string) ([]
 		return nil, fmt.Errorf("%w: vcluster name not set", clustererr.ErrConfigNil)
 	}
 
-	namespace := vclusterNamespacePrefix + clusterName
-	secretName := vclusterSecretPrefix + clusterName
+	conn := ConnectionFor(clusterName)
 
 	secret, err := p.hostClientset.CoreV1().
-		Secrets(namespace).
-		Get(ctx, secretName, metav1.GetOptions{})
+		Secrets(conn.Namespace).
+		Get(ctx, conn.SecretName, metav1.GetOptions{})
 	if apierrors.IsNotFound(err) {
 		return nil, clustererr.ErrKubeconfigNotReady
 	}
@@ -361,13 +340,13 @@ func (p *KubernetesProvisioner) Kubeconfig(ctx context.Context, name string) ([]
 	if err != nil {
 		return nil, fmt.Errorf(
 			"get vcluster kubeconfig secret %s/%s: %w",
-			namespace,
-			secretName,
+			conn.Namespace,
+			conn.SecretName,
 			err,
 		)
 	}
 
-	raw := secret.Data[vclusterKubeconfigKey]
+	raw := secret.Data[KubeconfigSecretKey]
 	if len(raw) == 0 {
 		return nil, clustererr.ErrKubeconfigNotReady
 	}
@@ -377,10 +356,9 @@ func (p *KubernetesProvisioner) Kubeconfig(ctx context.Context, name string) ([]
 		return nil, fmt.Errorf("parse vcluster kubeconfig: %w", err)
 	}
 
-	endpoint := fmt.Sprintf("https://%s.%s.svc:%d", clusterName, namespace, vclusterServiceAPIPort)
 	for _, cluster := range config.Clusters {
-		cluster.Server = endpoint
-		cluster.TLSServerName = vclusterInClusterServerName
+		cluster.Server = conn.Endpoint
+		cluster.TLSServerName = InClusterServerName
 	}
 
 	out, err := clientcmd.Write(*config)
@@ -430,18 +408,14 @@ func (p *KubernetesProvisioner) dumpNestedVClusterFailureDiagnostics(
 	ctx context.Context,
 	namespace string,
 ) {
-	if os.Getenv(nestedDebugEnvVar) == "" {
-		return
-	}
-
-	_, _ = fmt.Fprint(os.Stdout, k8s.DumpNamespaceDiagnostics(ctx, p.hostClientset, namespace))
+	nested.DumpFailureDiagnostics(ctx, p.hostClientset, namespace)
 }
 
 // vclusterReadyTimeout returns the readiness wait budget for nested vCluster
 // instances, honoring the KSAIL_NESTED_READY_TIMEOUT override and falling back
 // to vclusterWaitTimeout.
 func vclusterReadyTimeout() time.Duration {
-	return envvar.Duration(nestedReadyTimeoutEnvVar, vclusterWaitTimeout)
+	return nested.ReadyTimeout(vclusterWaitTimeout)
 }
 
 // waitForKubeconfigSecret polls for the vc-<name> Secret until it contains
@@ -449,39 +423,13 @@ func vclusterReadyTimeout() time.Duration {
 func (p *KubernetesProvisioner) waitForKubeconfigSecret(
 	ctx context.Context, clusterName, namespace string,
 ) ([]byte, error) {
-	secretName := vclusterSecretPrefix + clusterName
+	secretName := SecretPrefix + clusterName
 
-	var kubeconfigData []byte
-
-	err := wait.PollUntilContextTimeout(
-		ctx, vclusterWaitInterval, vclusterReadyTimeout(), true,
-		func(ctx context.Context) (bool, error) {
-			secret, err := p.hostClientset.CoreV1().Secrets(namespace).Get(
-				ctx, secretName, metav1.GetOptions{},
-			)
-			if apierrors.IsNotFound(err) {
-				return false, nil
-			}
-
-			if err != nil {
-				return false, fmt.Errorf("get kubeconfig secret: %w", err)
-			}
-
-			data, ok := secret.Data[vclusterKubeconfigKey]
-			if !ok || len(data) == 0 {
-				return false, nil
-			}
-
-			kubeconfigData = data
-
-			return true, nil
-		},
+	//nolint:wrapcheck // helper already wraps with "wait for kubeconfig secret" context
+	return nested.WaitForKubeconfigSecret(
+		ctx, p.hostClientset, namespace, secretName, KubeconfigSecretKey,
+		vclusterWaitInterval, vclusterReadyTimeout(),
 	)
-	if err != nil {
-		return nil, fmt.Errorf("wait for kubeconfig secret: %w", err)
-	}
-
-	return kubeconfigData, nil
 }
 
 // rewriteVClusterKubeconfig parses the vCluster-generated kubeconfig, rewrites the

@@ -12,19 +12,18 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-const (
-	// defaultNamespace is used when a create request does not specify a namespace.
-	defaultNamespace = "default"
-	// lastAppliedSpecAnnotation is the operator-managed drift baseline annotation
-	// (controller.LastAppliedSpecAnnotation); the API strips it from client input.
-	lastAppliedSpecAnnotation = "ksail.io/last-applied-spec"
-)
+// defaultNamespace is used when a create request does not specify a namespace.
+const defaultNamespace = "default"
 
 // crClusterService backs the REST API with the controller-runtime client, CRUDing Cluster custom
 // resources. This is the operator's backend; the API runs with the operator's RBAC.
 type crClusterService struct {
 	client client.Client
 }
+
+// The operator backend supports in-place cluster update (it patches the Cluster CR), so it implements
+// the optional ClusterUpdater interface — that is what advertises capabilities.clusterUpdate=true.
+var _ ClusterUpdater = (*crClusterService)(nil)
 
 // NewCRClusterService returns a ClusterService backed by the controller-runtime client.
 func NewCRClusterService(kubeClient client.Client) ClusterService {
@@ -198,7 +197,7 @@ func sanitizeForWrite(cluster *v1alpha1.Cluster) *v1alpha1.Cluster {
 		annotations := make(map[string]string, len(cluster.Annotations))
 
 		for key, value := range cluster.Annotations {
-			if key == lastAppliedSpecAnnotation {
+			if key == v1alpha1.LastAppliedSpecAnnotation {
 				continue
 			}
 

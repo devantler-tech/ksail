@@ -6,6 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	chatsvc "github.com/devantler-tech/ksail/v7/pkg/svc/chat"
 	copilot "github.com/github/copilot-sdk/go"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
@@ -193,7 +194,7 @@ func CreateTUIPermissionHandler(
 		}
 
 		// Auto-approve read operations to avoid excessive prompting.
-		if IsReadOperation(request.Kind) {
+		if chatsvc.IsReadOperation(request.Kind) {
 			return copilot.PermissionRequestResult{
 				Kind: copilot.PermissionRequestResultKindApproved,
 			}, nil
@@ -297,22 +298,4 @@ func formatPermissionKind(kind copilot.PermissionRequestKind) string {
 	caser := cases.Title(language.English)
 
 	return caser.String(formatted)
-}
-
-// IsReadOperation determines if a permission request is for a read-only operation.
-// This is shared by both TUI and non-TUI permission handlers.
-func IsReadOperation(kind copilot.PermissionRequestKind) bool {
-	switch kind {
-	case copilot.PermissionRequestKindRead, copilot.PermissionRequestKindURL:
-		return true
-	case copilot.PermissionRequestKindCustomTool,
-		copilot.PermissionRequestKindShell,
-		copilot.PermissionRequestKindMcp,
-		copilot.PermissionRequestKindMemory,
-		copilot.PermissionRequestKindWrite,
-		copilot.PermissionRequestKindHook:
-		return false
-	default:
-		return false
-	}
 }

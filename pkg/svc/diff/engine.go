@@ -42,15 +42,8 @@ func (e *Engine) ComputeDiff(
 		return result
 	}
 
-	// Fall back to a local rule table in case Engine was constructed without
-	// NewEngine. Avoid mutating e.rules here so ComputeDiff remains safe for
-	// concurrent callers even on incorrectly constructed Engine values.
-	rules := e.rules
-	if rules == nil {
-		rules = e.scalarFieldRules()
-	}
-
-	e.applyFieldRules(oldSpec, newSpec, result, rules)
+	// e.rules is always populated by NewEngine, the sole constructor.
+	e.applyFieldRules(oldSpec, newSpec, result, e.rules)
 
 	// Check complex / distribution-specific changes
 	e.checkLocalRegistryChange(oldSpec, newSpec, result)

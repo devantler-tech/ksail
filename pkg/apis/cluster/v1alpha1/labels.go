@@ -13,6 +13,18 @@ const ManagedNamespaceLabel = "ksail.io/managed-namespace"
 // mutations on it.
 const HostClusterLabel = "ksail.io/host-cluster"
 
+// FinalizerName is added to Cluster resources so the operator can tear down the underlying cluster
+// before the custom resource is removed from the API server. It lives here, beside the other
+// ksail.io/* wire identifiers, so the controller and the REST API share one definition.
+const FinalizerName = "ksail.io/finalizer"
+
+// LastAppliedSpecAnnotation stores the JSON of the cluster spec the operator last provisioned, used
+// as the drift-detection baseline on subsequent reconciles. It lives here, beside the other
+// reserved ksail.io/* identifiers, so the controller (which writes it) and the REST API (which
+// strips it from client-submitted objects, preventing users from forging the reconciler's baseline)
+// share one definition and can never silently desync on a rename.
+const LastAppliedSpecAnnotation = "ksail.io/last-applied-spec"
+
 // IsHostCluster reports whether this Cluster resource is the operator's self-registration of the
 // cluster it runs on (see HostClusterLabel).
 func (c *Cluster) IsHostCluster() bool {

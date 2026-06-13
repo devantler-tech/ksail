@@ -67,7 +67,7 @@ func runReconcile(cmd *cobra.Command) error {
 	// Determine GitOps engine - use config if set, otherwise auto-detect
 	gitOpsEngine := clusterCfg.Spec.Cluster.GitOpsEngine
 	if gitOpsEngine == v1alpha1.GitOpsEngineNone || gitOpsEngine == "" {
-		detected, detectErr := autoDetectGitOpsEngine(cmd, tmr, outputTimer)
+		detected, detectErr := autoDetectGitOpsEngine(cmd, clusterCfg, tmr, outputTimer)
 		if detectErr != nil {
 			return detectErr
 		}
@@ -200,9 +200,11 @@ func (e *reconcileSummaryError) Error() string { return e.summary }
 // Unwrap exposes the underlying reconciliation error chain.
 func (e *reconcileSummaryError) Unwrap() error { return e.cause }
 
-// autoDetectGitOpsEngine detects the GitOps engine from the cluster.
+// autoDetectGitOpsEngine detects the GitOps engine from the cluster, honoring
+// the kubeconfig/context resolved from the cluster config.
 func autoDetectGitOpsEngine(
 	cmd *cobra.Command,
+	clusterCfg *v1alpha1.Cluster,
 	tmr timer.Timer,
 	outputTimer timer.Timer,
 ) (v1alpha1.GitOpsEngine, error) {
@@ -222,7 +224,10 @@ func autoDetectGitOpsEngine(
 		Writer:  cmd.OutOrStdout(),
 	})
 
-	engine, err := registryhelpers.DetectGitOpsEngine(cmd.Context())
+	engine, err := registryhelpers.DetectGitOpsEngine(cmd.Context(), &registryhelpers.Clients{
+		Kubeconfig: clusterCfg.Spec.Cluster.Connection.Kubeconfig,
+		Context:    clusterCfg.Spec.Cluster.Connection.Context,
+	})
 	if err != nil {
 		return v1alpha1.GitOpsEngineNone, fmt.Errorf("detect gitops engine: %w", err)
 	}
@@ -272,7 +277,7 @@ func executeReconciliation(
 	// is never overridden by kubeconfig-based detection.
 	dist := clusterCfg.Spec.Cluster.Distribution
 	if dist == "" {
-		info, detectErr := clusterdetector.DetectInfo(kubeconfigPath, "")
+		info, detectErr := clusterdetector.DetectInfo(cmd.Context(), kubeconfigPath, "")
 		if detectErr == nil {
 			dist = info.Distribution
 		}

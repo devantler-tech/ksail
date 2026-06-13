@@ -224,8 +224,10 @@ func TestUpdateWrapsGetError(t *testing.T) {
 			return errBoom
 		},
 	}))
+	updater, ok := service.(api.ClusterUpdater)
+	require.True(t, ok, "operator backend must implement ClusterUpdater")
 
-	_, err := service.Update(context.Background(), defaultNS, "c1", sampleCluster())
+	_, err := updater.Update(context.Background(), defaultNS, "c1", sampleCluster())
 	require.ErrorIs(t, err, errBoom)
 	assert.Contains(t, err.Error(), "get cluster")
 }
@@ -239,8 +241,10 @@ func TestUpdateWrapsUpdateError(t *testing.T) {
 			return errBoom
 		},
 	}, sampleCluster()))
+	updater, ok := service.(api.ClusterUpdater)
+	require.True(t, ok, "operator backend must implement ClusterUpdater")
 
-	_, err := service.Update(context.Background(), defaultNS, "c1", sampleCluster())
+	_, err := updater.Update(context.Background(), defaultNS, "c1", sampleCluster())
 	require.ErrorIs(t, err, errBoom)
 	assert.Contains(t, err.Error(), "update cluster")
 }

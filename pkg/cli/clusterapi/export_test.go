@@ -7,6 +7,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 )
 
 // SetDynamicClientForTest overrides the dynamic-client builder so resource-browser tests can inject a
@@ -30,10 +31,20 @@ func ContextForCluster(kubeconfigPath, clusterName string) (string, error) {
 	return contextForCluster(kubeconfigPath, clusterName)
 }
 
-// SetKubeconfigPathForTest overrides the kubeconfig path the resource browser / kubeconfig export
-// read from, so tests can point at a temp kubeconfig instead of the user's real one.
+// SetKubeconfigPathForTest overrides the kubeconfig path every cluster client (and the resource
+// browser / kubeconfig export) reads from via the restConfigForCluster seam, so tests can point at a
+// temp kubeconfig instead of the user's real one.
 func (s *Service) SetKubeconfigPathForTest(path string) {
 	s.kubeconfigPath = func() string { return path }
+}
+
+// SetRESTConfigForClusterForTest overrides the single kubeconfig seam, so a test can drive every
+// derived client builder (dynamic, apply, log, exec) from one fake/synthetic rest.Config instead of
+// injecting four separate fakes.
+func (s *Service) SetRESTConfigForClusterForTest(
+	build func(clusterName string) (*rest.Config, error),
+) {
+	s.restConfigForCluster = build
 }
 
 // SetApplyClientForTest overrides the apply-client builder so manifest-apply tests can inject a fake

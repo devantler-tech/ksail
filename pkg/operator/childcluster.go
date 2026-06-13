@@ -7,6 +7,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/internal/controller"
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/operator/api"
+	vclusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/vcluster"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
@@ -15,24 +16,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// vclusterConnection holds the in-hub coordinates for a Cluster's managed vcluster: the namespace and
-// kubeconfig Secret the provisioner publishes, and the in-cluster API endpoint.
-type vclusterConnection struct {
-	namespace  string
-	secretName string
-	endpoint   string
-}
-
-// vclusterConnectionFor derives the in-hub vcluster connection coordinates for a Cluster.
-func vclusterConnectionFor(cluster *v1alpha1.Cluster) vclusterConnection {
-	name := controller.ProvisionedName(cluster)
-	namespace := vclusterNamespacePrefix + name
-
-	return vclusterConnection{
-		namespace:  namespace,
-		secretName: vclusterSecretPrefix + name,
-		endpoint:   fmt.Sprintf("https://%s.%s.svc:%d", name, namespace, vclusterAPIPort),
-	}
+// vclusterConnectionFor derives the in-hub vcluster connection coordinates for a Cluster. The
+// coordinates (namespace/secret/endpoint) come from the vcluster provisioner package, the single
+// source of truth for the naming contract, so a naming change there can never silently desync the
+// operator's status observation or resource browsing.
+func vclusterConnectionFor(cluster *v1alpha1.Cluster) vclusterprovisioner.Connection {
+	return vclusterprovisioner.ConnectionFor(controller.ProvisionedName(cluster))
 }
 
 // restConfigForChild parses a child cluster's kubeconfig and points it at the given in-cluster endpoint,
@@ -49,7 +38,7 @@ func restConfigForChild(kubeconfig []byte, endpoint string) (*rest.Config, error
 	}
 
 	restConfig.Host = endpoint
-	restConfig.ServerName = vclusterServerName
+	restConfig.ServerName = vclusterprovisioner.InClusterServerName
 
 	return restConfig, nil
 }
@@ -73,14 +62,14 @@ func childClusterRESTConfig(
 
 	var secret corev1.Secret
 
-	key := types.NamespacedName{Namespace: conn.namespace, Name: conn.secretName}
+	key := types.NamespacedName{Namespace: conn.Namespace, Name: conn.SecretName}
 
 	err := hub.Get(ctx, key, &secret)
 	if err != nil {
 		return nil, fmt.Errorf("get vcluster kubeconfig secret: %w", err)
 	}
 
-	return restConfigForChild(secret.Data[vclusterKubeconfigKey], conn.endpoint)
+	return restConfigForChild(secret.Data[vclusterprovisioner.KubeconfigSecretKey], conn.Endpoint)
 }
 
 // childClusterDynamicClient builds a dynamic client for a Cluster's managed vcluster. It is wired into
