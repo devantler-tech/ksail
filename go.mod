@@ -76,7 +76,7 @@ require (
 	github.com/modelcontextprotocol/go-sdk v1.6.1
 	github.com/rancher/k3k v1.1.0
 	github.com/siderolabs/gen v0.8.6
-	github.com/siderolabs/go-kubernetes v0.2.37
+	github.com/siderolabs/go-kubernetes v0.2.38
 	github.com/siderolabs/go-retry v0.3.3
 	github.com/siderolabs/image-factory v1.3.3
 	github.com/siderolabs/omni/client v1.8.1
