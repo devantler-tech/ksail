@@ -7,8 +7,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cosi-project/runtime/pkg/safe"
 	"github.com/devantler-tech/ksail/v7/pkg/client/netretry"
 	talosclient "github.com/siderolabs/talos/pkg/machinery/client"
+	talosresconfig "github.com/siderolabs/talos/pkg/machinery/resources/config"
 )
 
 // Retry defaults for transient per-node Talos API failures. A single TLS
@@ -24,8 +26,9 @@ const (
 	defaultTalosAPIRetryMaxWait     = 20 * time.Second
 
 	// grpcUnavailable and grpcDeadlineExceeded are the numeric gRPC status
-	// codes for Unavailable (14) and DeadlineExceeded (4). Using the raw
-	// constants avoids importing google.golang.org/grpc directly.
+	// codes for Unavailable (14) and DeadlineExceeded (4). The raw constants
+	// are used because depguard forbids importing google.golang.org/grpc from
+	// production code; talosclient.StatusCode returns an equivalent codes.Code.
 	grpcUnavailable      = 14
 	grpcDeadlineExceeded = 4
 )
@@ -51,17 +54,18 @@ func defaultTalosAPIRetryConfig() talosAPIRetryConfig {
 	}
 }
 
-// retryTransientTalosAPICall runs op with bounded retries and exponential
-// backoff for transient gRPC failures (Unavailable, DeadlineExceeded). Each
-// attempt must create its own Talos client inside op so a fresh connection is
-// dialed. Non-transient errors and parent-context cancellation fail
+// retryTransientTalosAPICall runs operation with bounded retries and
+// exponential backoff for transient gRPC failures (Unavailable,
+// DeadlineExceeded). Each attempt must create its own Talos client inside
+// operation so a fresh connection is dialed. Non-transient errors and
+// parent-context cancellation fail
 // immediately; once attempts are exhausted the last error is returned wrapped
 // in errRetriesExhausted. target names the node and description the operation
 // for retry log lines.
 func (p *Provisioner) retryTransientTalosAPICall(
 	ctx context.Context,
 	target, description string,
-	op func(ctx context.Context) error,
+	operation func(ctx context.Context) error,
 ) error {
 	cfg := p.talosAPIRetry
 	if cfg.maxAttempts <= 0 {
@@ -71,7 +75,7 @@ func (p *Provisioner) retryTransientTalosAPICall(
 	var lastErr error
 
 	for attempt := 1; attempt <= cfg.maxAttempts; attempt++ {
-		lastErr = op(ctx)
+		lastErr = operation(ctx)
 		if lastErr == nil {
 			return nil
 		}
@@ -103,6 +107,49 @@ func (p *Provisioner) retryTransientTalosAPICall(
 	}
 
 	return fmt.Errorf("%w: %w", errRetriesExhausted, lastErr)
+}
+
+// fetchRunningMachineConfig connects to the node at nodeIP and returns its
+// running Talos MachineConfig resource. A fresh client is dialed per attempt
+// and the fetch is retried for transient gRPC failures. description labels the
+// operation in retry log lines (e.g. "Machine config fetch").
+func (p *Provisioner) fetchRunningMachineConfig(
+	ctx context.Context,
+	nodeIP, description string,
+) (*talosresconfig.MachineConfig, error) {
+	var machineConfig *talosresconfig.MachineConfig
+
+	err := p.retryTransientTalosAPICall(ctx, nodeIP, description,
+		func(ctx context.Context) error {
+			talosClient, clientErr := p.createTalosClient(ctx, nodeIP)
+			if clientErr != nil {
+				return fmt.Errorf("failed to create Talos client for %s: %w", nodeIP, clientErr)
+			}
+
+			defer talosClient.Close() //nolint:errcheck
+
+			fetched, fetchErr := safe.StateGet[*talosresconfig.MachineConfig](
+				ctx,
+				talosClient.COSI,
+				talosresconfig.NewMachineConfig(nil).Metadata(),
+			)
+			if fetchErr != nil {
+				return fmt.Errorf(
+					"failed to fetch running machine config from %s: %w",
+					nodeIP,
+					fetchErr,
+				)
+			}
+
+			machineConfig = fetched
+
+			return nil
+		})
+	if err != nil {
+		return nil, err
+	}
+
+	return machineConfig, nil
 }
 
 // sleepWithContext waits for d to elapse, returning ctx.Err() early if the context is cancelled.

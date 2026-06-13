@@ -5,11 +5,9 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/cosi-project/runtime/pkg/safe"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	talosconfigtypes "github.com/siderolabs/talos/pkg/machinery/config/config"
 	"github.com/siderolabs/talos/pkg/machinery/constants"
-	talosresconfig "github.com/siderolabs/talos/pkg/machinery/resources/config"
 )
 
 const (
@@ -72,32 +70,9 @@ func (p *Provisioner) detectDisruptiveConfigChanges(
 		return nil, nil
 	}
 
-	var machineConfig *talosresconfig.MachineConfig
-
 	// Retried: a transient gRPC failure (e.g. a stalled TLS handshake to apid)
 	// must not abort disruptive-change detection for the whole update.
-	err = p.retryTransientTalosAPICall(ctx, cpIP, "Running config fetch",
-		func(ctx context.Context) error {
-			talosClient, clientErr := p.createTalosClient(ctx, cpIP)
-			if clientErr != nil {
-				return fmt.Errorf("failed to create Talos client for config comparison: %w", clientErr)
-			}
-
-			defer talosClient.Close() //nolint:errcheck
-
-			fetched, fetchErr := safe.StateGet[*talosresconfig.MachineConfig](
-				ctx,
-				talosClient.COSI,
-				talosresconfig.NewMachineConfig(nil).Metadata(),
-			)
-			if fetchErr != nil {
-				return fmt.Errorf("failed to fetch running machine config from %s: %w", cpIP, fetchErr)
-			}
-
-			machineConfig = fetched
-
-			return nil
-		})
+	machineConfig, err := p.fetchRunningMachineConfig(ctx, cpIP, "Running config fetch")
 	if err != nil {
 		return nil, err
 	}

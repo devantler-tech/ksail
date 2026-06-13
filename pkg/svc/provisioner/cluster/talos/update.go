@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cosi-project/runtime/pkg/safe"
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	svcprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider"
@@ -23,7 +22,6 @@ import (
 	clientconfig "github.com/siderolabs/talos/pkg/machinery/client/config"
 	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
 	"github.com/siderolabs/talos/pkg/machinery/config/generate/secrets"
-	talosresconfig "github.com/siderolabs/talos/pkg/machinery/resources/config"
 )
 
 // Update applies configuration changes to all nodes in a running Talos cluster.
@@ -680,32 +678,9 @@ func (p *Provisioner) fetchClusterSecretsAndEndpoint(
 	ctx context.Context,
 	cpIP string,
 ) (*secrets.Bundle, string, error) {
-	var machineConfig *talosresconfig.MachineConfig
-
 	// Retried: the fetch shares the same transient failure modes as config
 	// apply (flaky TLS handshakes to apid on public IPs).
-	err := p.retryTransientTalosAPICall(ctx, cpIP, "Machine config fetch",
-		func(ctx context.Context) error {
-			talosClient, clientErr := p.createTalosClient(ctx, cpIP)
-			if clientErr != nil {
-				return fmt.Errorf("failed to create Talos client for secret sync: %w", clientErr)
-			}
-
-			defer talosClient.Close() //nolint:errcheck
-
-			fetched, fetchErr := safe.StateGet[*talosresconfig.MachineConfig](
-				ctx,
-				talosClient.COSI,
-				talosresconfig.NewMachineConfig(nil).Metadata(),
-			)
-			if fetchErr != nil {
-				return fmt.Errorf("failed to fetch machine config from %s: %w", cpIP, fetchErr)
-			}
-
-			machineConfig = fetched
-
-			return nil
-		})
+	machineConfig, err := p.fetchRunningMachineConfig(ctx, cpIP, "Machine config fetch")
 	if err != nil {
 		return nil, "", err
 	}
