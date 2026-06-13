@@ -6,7 +6,6 @@ import (
 )
 
 const (
-	argoCDNamespace = "argocd"
 	//nolint:gosec // G101: false positive - this is a Kubernetes secret name, not a credential
 	repositorySecretName = "ksail-local-registry-repo"
 )
@@ -42,7 +41,7 @@ func buildRepositorySecret(opts repositorySecretOptions) *corev1.Secret {
 	return &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      repositorySecretName,
-			Namespace: argoCDNamespace,
+			Namespace: DefaultNamespace,
 			Labels:    map[string]string{"argocd.argoproj.io/secret-type": "repository"},
 		},
 		StringData: data,

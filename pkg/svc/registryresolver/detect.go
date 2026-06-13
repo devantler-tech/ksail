@@ -6,13 +6,11 @@ import (
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	dockerclient "github.com/devantler-tech/ksail/v7/pkg/client/docker"
-	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	registrypkg "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/registry"
 	"github.com/spf13/viper"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/client-go/dynamic"
 )
 
 // DetectRegistryFromViper checks for registry configuration from a Viper instance.
@@ -69,19 +67,17 @@ type gitOpsResourceSpec struct {
 	sourceName string
 }
 
-// fetchGitOpsResource retrieves the unstructured object from the cluster.
+// fetchGitOpsResource retrieves the unstructured object from the cluster using
+// the dynamic client from the supplied Clients bundle, so the kubeconfig/context
+// the CLI resolved is honored.
 func fetchGitOpsResource(
 	ctx context.Context,
+	clients *Clients,
 	spec gitOpsResourceSpec,
 ) (*unstructured.Unstructured, error) {
-	restConfig, err := k8s.GetRESTConfig()
+	dynClient, err := clients.dynamicClient()
 	if err != nil {
-		return nil, fmt.Errorf("get REST config: %w", err)
-	}
-
-	dynClient, err := dynamic.NewForConfig(restConfig)
-	if err != nil {
-		return nil, fmt.Errorf("create dynamic client: %w", err)
+		return nil, err
 	}
 
 	obj, err := dynClient.Resource(spec.gvr).
@@ -95,8 +91,12 @@ func fetchGitOpsResource(
 }
 
 // detectRegistryFromGitOps fetches registry info from a GitOps resource.
-func detectRegistryFromGitOps(ctx context.Context, spec gitOpsResourceSpec) (*Info, error) {
-	obj, err := fetchGitOpsResource(ctx, spec)
+func detectRegistryFromGitOps(
+	ctx context.Context,
+	clients *Clients,
+	spec gitOpsResourceSpec,
+) (*Info, error) {
+	obj, err := fetchGitOpsResource(ctx, clients, spec)
 	if err != nil {
 		return nil, err
 	}
@@ -131,8 +131,8 @@ func detectRegistryFromGitOps(ctx context.Context, spec gitOpsResourceSpec) (*In
 }
 
 // DetectRegistryFromFlux tries to get registry URL from FluxInstance sync configuration.
-func DetectRegistryFromFlux(ctx context.Context) (*Info, error) {
-	return detectRegistryFromGitOps(ctx, gitOpsResourceSpec{
+func DetectRegistryFromFlux(ctx context.Context, clients *Clients) (*Info, error) {
+	return detectRegistryFromGitOps(ctx, clients, gitOpsResourceSpec{
 		gvr: schema.GroupVersionResource{
 			Group:    "fluxcd.controlplane.io",
 			Version:  "v1",
@@ -148,8 +148,8 @@ func DetectRegistryFromFlux(ctx context.Context) (*Info, error) {
 }
 
 // DetectRegistryFromArgoCD tries to get registry URL from ArgoCD Application source.
-func DetectRegistryFromArgoCD(ctx context.Context) (*Info, error) {
-	return detectRegistryFromGitOps(ctx, gitOpsResourceSpec{
+func DetectRegistryFromArgoCD(ctx context.Context, clients *Clients) (*Info, error) {
+	return detectRegistryFromGitOps(ctx, clients, gitOpsResourceSpec{
 		gvr: schema.GroupVersionResource{
 			Group:    "argoproj.io",
 			Version:  "v1alpha1",

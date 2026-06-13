@@ -12,9 +12,7 @@ import (
 	ksailconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/ksail"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil/scaffolder"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
-	"github.com/devantler-tech/ksail/v7/pkg/svc/clusterdiscovery"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
-	"github.com/devantler-tech/ksail/v7/pkg/svc/state"
 	"github.com/devantler-tech/ksail/v7/pkg/timer"
 	"github.com/spf13/cobra"
 )
@@ -273,26 +271,3 @@ func resolveInitTargetPath(cfgManager *ksailconfigmanager.ConfigManager) (string
 
 // ErrUnsupportedProvider re-exports the shared error for backward compatibility.
 var ErrUnsupportedProvider = clustererr.ErrUnsupportedProvider
-
-// allDistributions returns the Docker-based distributions enumerated when listing local clusters.
-// It delegates to clusterdiscovery so the CLI and the web UI share one source of truth.
-func allDistributions() []v1alpha1.Distribution {
-	return clusterdiscovery.LocalDistributions()
-}
-
-// allProviders returns the providers `ksail cluster list` queries by default (Docker, Hetzner,
-// Omni). It delegates to clusterdiscovery.DefaultProviders.
-func allProviders() []v1alpha1.Provider {
-	return clusterdiscovery.DefaultProviders()
-}
-
-// listResult holds a cluster name with its provider and distribution for display purposes.
-type listResult struct {
-	Provider     v1alpha1.Provider
-	Distribution v1alpha1.Distribution
-	ClusterName  string
-	TTL          *state.TTLInfo // nil if no TTL has been set for this cluster
-}
-
-// tableColumnGap is the minimum gap between columns in table output.
-const tableColumnGap = 3

@@ -502,28 +502,17 @@ func TestCreateRejectsExistingCluster(t *testing.T) {
 	require.ErrorIs(t, err, api.ErrAlreadyExists)
 }
 
-func TestUpdateIsNotSupported(t *testing.T) {
+// TestLocalServiceDoesNotImplementClusterUpdater documents that the local backend deliberately does
+// NOT implement api.ClusterUpdater: a local cluster's configuration is managed via the CLI/files, not
+// the API. The server derives capabilities.clusterUpdate=false from this and returns 501 for a PUT
+// (asserted at the HTTP layer in the api package), so the SPA hides the edit affordance.
+func TestLocalServiceDoesNotImplementClusterUpdater(t *testing.T) {
 	t.Parallel()
 
 	service := newTestService(nil)
 
-	_, err := service.Update(
-		context.Background(),
-		"default",
-		"x",
-		clusterFor("x", v1alpha1.DistributionVCluster),
-	)
-	require.ErrorIs(t, err, api.ErrNotSupported)
-}
-
-func TestCapabilitiesReportsNoClusterUpdate(t *testing.T) {
-	t.Parallel()
-
-	// The local backend cannot update in place (see TestUpdateIsNotSupported); it must report that
-	// via CapabilityReporter so the SPA hides the edit affordance rather than offering a 501.
-	service := newTestService(nil)
-
-	assert.False(t, service.Capabilities().ClusterUpdate)
+	_, ok := any(service).(api.ClusterUpdater)
+	assert.False(t, ok, "the local backend must not advertise in-place cluster update")
 }
 
 func TestGetIgnoresNamespaceAndReturnsNotFound(t *testing.T) {

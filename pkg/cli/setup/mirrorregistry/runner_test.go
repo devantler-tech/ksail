@@ -8,37 +8,36 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/setup"
 	dockerclient "github.com/devantler-tech/ksail/v7/pkg/client/docker"
-	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/registry"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
 
+// noopActionMap returns an Actions table with a no-op action for every
+// supported distribution, for tests that only exercise handler construction.
+func noopActionMap() map[v1alpha1.Distribution]ActionFunc {
+	noop := func(_ context.Context, _ *Context, _ dockerclient.Client) error { return nil }
+
+	return map[v1alpha1.Distribution]ActionFunc{
+		v1alpha1.DistributionVanilla:  noop,
+		v1alpha1.DistributionK3s:      noop,
+		v1alpha1.DistributionTalos:    noop,
+		v1alpha1.DistributionVCluster: noop,
+	}
+}
+
 // TestNewRegistryHandlers verifies that newRegistryHandlers creates a handler
 // for every supported distribution.
 func TestNewRegistryHandlers(t *testing.T) {
 	t.Parallel()
 
-	clusterCfg := &v1alpha1.Cluster{}
-	kindConfig := &v1alpha4.Cluster{}
+	stageCtx := &Context{
+		ClusterCfg: &v1alpha1.Cluster{},
+		KindConfig: &v1alpha4.Cluster{},
+	}
 
-	var mirrorSpecs []registry.MirrorSpec
-
-	noop := func(_ context.Context, _ dockerclient.Client) error { return nil }
-
-	handlers := newRegistryHandlers(
-		clusterCfg,
-		kindConfig,
-		nil, // k3dConfig
-		nil, // talosConfig
-		mirrorSpecs,
-		RoleRegistry,
-		noop,
-		noop,
-		noop,
-		noop,
-	)
+	handlers := newRegistryHandlers(stageCtx, RoleRegistry, noopActionMap())
 
 	// Should have entries for all 4 distributions
 	assert.Len(t, handlers, 4)
@@ -63,16 +62,9 @@ func TestNewRegistryHandlers(t *testing.T) {
 func TestK3dPostClusterConnect_Skipped(t *testing.T) {
 	t.Parallel()
 
-	clusterCfg := &v1alpha1.Cluster{}
-	noop := func(_ context.Context, _ dockerclient.Client) error { return nil }
+	stageCtx := &Context{ClusterCfg: &v1alpha1.Cluster{}}
 
-	handlers := newRegistryHandlers(
-		clusterCfg,
-		nil, nil, nil,
-		nil,
-		RolePostClusterConnect,
-		noop, noop, noop, noop,
-	)
+	handlers := newRegistryHandlers(stageCtx, RolePostClusterConnect, noopActionMap())
 
 	k3dHandler := handlers[v1alpha1.DistributionK3s]
 	assert.False(t, k3dHandler.Prepare(), "K3d should skip PostClusterConnect stage")
@@ -107,14 +99,23 @@ func TestStageDefinitions_AllRolesMapped(t *testing.T) {
 		RolePostClusterConnect,
 	}
 
+	supportedDistributions := []v1alpha1.Distribution{
+		v1alpha1.DistributionVanilla,
+		v1alpha1.DistributionK3s,
+		v1alpha1.DistributionTalos,
+		v1alpha1.DistributionVCluster,
+	}
+
 	for _, role := range roles {
 		def, exists := StageDefinitions[role]
 		assert.True(t, exists, "StageDefinitions should contain role %d", role)
 		assert.NotEmpty(t, def.Info.Title, "Title should not be empty for role %d", role)
-		assert.NotNil(t, def.KindAction, "KindAction should not be nil for role %d", role)
-		assert.NotNil(t, def.K3dAction, "K3dAction should not be nil for role %d", role)
-		assert.NotNil(t, def.TalosAction, "TalosAction should not be nil for role %d", role)
-		assert.NotNil(t, def.VClusterAction, "VClusterAction should not be nil for role %d", role)
+
+		for _, dist := range supportedDistributions {
+			action, ok := def.Actions[dist]
+			assert.True(t, ok, "role %d should have an action for %v", role, dist)
+			assert.NotNil(t, action, "action should not be nil for role %d, %v", role, dist)
+		}
 	}
 }
 
@@ -186,21 +187,18 @@ func TestRunStage_UnknownDistribution(t *testing.T) {
 
 	// newRegistryHandlers only creates handlers for Vanilla, K3s, Talos, VCluster.
 	// An unsupported distribution should cause handler lookup to return false.
-	clusterCfg := &v1alpha1.Cluster{
-		Spec: v1alpha1.Spec{
-			Cluster: v1alpha1.ClusterSpec{
-				Distribution: v1alpha1.Distribution("unsupported"),
+	stageCtx := &Context{
+		ClusterCfg: &v1alpha1.Cluster{
+			Spec: v1alpha1.Spec{
+				Cluster: v1alpha1.ClusterSpec{
+					Distribution: v1alpha1.Distribution("unsupported"),
+				},
 			},
 		},
 	}
 
-	noop := func(_ context.Context, _ dockerclient.Client) error { return nil }
-
 	// Call newRegistryHandlers and verify unsupported distribution is not present
-	handlers := newRegistryHandlers(
-		clusterCfg, nil, nil, nil, nil, RoleRegistry,
-		noop, noop, noop, noop,
-	)
+	handlers := newRegistryHandlers(stageCtx, RoleRegistry, noopActionMap())
 
 	_, found := handlers[v1alpha1.Distribution("unsupported")]
 	assert.False(t, found, "unsupported distribution should not have a handler")

@@ -48,6 +48,11 @@ func (s *Server) eventsInterval() time.Duration {
 // the connection and any intermediary proxy stay alive. The stream ends when the client disconnects
 // (request context cancelled) or the server shuts down.
 //
+// Provider discovery is shared: this handler subscribes to the Server's single cluster broker (see
+// sse_broker.go) rather than running its own List loop, so N open connections share ONE
+// provider-discovery loop instead of each driving its own. Per-connection concerns stay here: the
+// initial snapshot, change-only emission, the heartbeat, and the per-tick session re-validation.
+//
 // GET is non-mutating, so the read-only guard permits it; the path is under /api/, so the auth guard
 // requires a session when OIDC is enabled. Cookies (the OIDC session) flow on the EventSource
 // connection automatically, so no extra wiring is needed. Because the connection is long-lived, the
@@ -68,30 +73,55 @@ func (s *Server) handleEvents(writer http.ResponseWriter, request *http.Request)
 
 	ctx := request.Context()
 
+	broker := s.clusterBrokerInstance()
+
+	ticks := broker.subscribe(ctx)
+	defer broker.unsubscribe(ticks)
+
 	// Emit an initial snapshot immediately so the client renders without waiting a full interval.
 	last := s.writeClusterEvent(ctx, writer, "")
 
 	flusher.Flush()
 
-	ticker := time.NewTicker(s.eventsInterval())
-	defer ticker.Stop()
-
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-ticker.C:
+		case tick := <-ticks:
 			// Stop streaming once the session expires; the client's EventSource reconnects and is
-			// forced back through authGuard, which returns 401 and surfaces the login screen.
+			// forced back through authGuard, which returns 401 and surfaces the login screen. Checked
+			// every tick so a long-lived connection honours expiry mid-stream.
 			if !s.sessionValid(request) {
 				return
 			}
 
-			last = s.writeClusterEvent(ctx, writer, last)
+			last = writeBrokerTick(writer, tick, last)
 
 			flusher.Flush()
 		}
 	}
+}
+
+// writeBrokerTick writes a single broker tick to the connection, preserving the pre-broker wire
+// behaviour: a stream-error event on a failed discovery tick (last unchanged), a "clusters" event when
+// the serialized list differs from last, or a heartbeat comment when it matches. It returns the latest
+// payload observed so the caller can detect changes across ticks.
+func writeBrokerTick(writer io.Writer, tick brokerTick, last string) string {
+	if tick.errEvent != "" {
+		writeSSEEvent(writer, streamErrorEvent, tick.errEvent)
+
+		return last
+	}
+
+	if tick.payload == "" || tick.payload == last {
+		writeSSEComment(writer, heartbeatComment)
+
+		return last
+	}
+
+	writeSSEEvent(writer, clustersEvent, tick.payload)
+
+	return tick.payload
 }
 
 // sessionValid reports whether the request still carries a valid (unexpired) session. With auth

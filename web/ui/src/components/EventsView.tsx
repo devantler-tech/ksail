@@ -4,7 +4,7 @@ import type { Cluster } from "../api.ts";
 import { useResourceList } from "../hooks/useResourceList.ts";
 import { cx } from "../lib/cx.ts";
 import { relativeAge } from "../lib/format.ts";
-import { clusterKey, eventFields, eventLastSeenMs } from "../lib/k8s.ts";
+import { clusterKey, recentEvents } from "../lib/k8s.ts";
 import { EventTypeBadge } from "./EventList.tsx";
 import { EmptyState } from "./states.tsx";
 import { DataStates, TableCard, td, th } from "./table.tsx";
@@ -26,15 +26,13 @@ export function EventsView({ cluster }: { cluster: Cluster | null }) {
   const rows = useMemo(() => {
     const needle = search.trim().toLowerCase();
 
-    return items
-      .map(eventFields)
-      .filter((event) => (typeFilter === "all" ? true : event.type === typeFilter))
-      .filter((event) =>
+    return recentEvents(items, {
+      type: typeFilter === "all" ? undefined : typeFilter,
+      matches: (event) =>
         needle === ""
           ? true
           : `${event.reason} ${event.objectKind} ${event.objectName} ${event.message}`.toLowerCase().includes(needle),
-      )
-      .sort((a, b) => eventLastSeenMs(b) - eventLastSeenMs(a));
+    });
   }, [items, typeFilter, search]);
 
   if (!cluster) {

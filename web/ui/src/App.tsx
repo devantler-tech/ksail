@@ -1,16 +1,5 @@
-import {
-  Activity,
-  KeyRound,
-  Layers,
-  LayoutDashboard,
-  Moon,
-  Plus,
-  RotateCw,
-  Server,
-  Settings,
-  Sun,
-} from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Moon, Plus, RotateCw, Server, Sun } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ApiError,
   createCluster,
@@ -22,16 +11,17 @@ import {
   listClusters,
   logout,
   updateCluster,
+  type Capabilities,
   type Cluster,
   type ClusterMeta,
   type Config,
-  type ProviderInfo,
   type User,
 } from "./api.ts";
 import { MetaContext } from "./lib/meta.ts";
 import { surfaceLabel } from "./lib/surface.ts";
 import { clusterKey } from "./lib/k8s.ts";
-import { AppShell, CLUSTER_VIEWS, type View } from "./components/AppShell.tsx";
+import { CLUSTER_VIEW_IDS, isViewAvailable, VIEWS, type View, type ViewGates } from "./lib/views.tsx";
+import { AppShell } from "./components/AppShell.tsx";
 import { SettingsPage } from "./components/SettingsPage.tsx";
 import { ResourcesView } from "./components/ResourcesView.tsx";
 import { OverviewView } from "./components/OverviewView.tsx";
@@ -62,38 +52,25 @@ import { useToast } from "./components/Toast.tsx";
 // provider matrix and component options for whatever is selected still come from /api/v1/meta.
 const DEFAULT_DISTRIBUTIONS = ["VCluster"];
 
+// capability reads one capability flag from a (possibly null/partial) Config, defaulting to
+// fullCapabilities — the value assumed for a backend that does not report capabilities (see api.ts).
+// Centralizes the `config.capabilities?.x ?? fullCapabilities.x` projection so adding a capability is
+// one Config/Capabilities field plus the one gate that consumes it, not a state slice + setter too.
+function capability(config: Config | null, key: keyof Capabilities): boolean {
+  return config?.capabilities?.[key] ?? fullCapabilities[key];
+}
+
 export function App() {
   const { theme, toggle } = useTheme();
   const toast = useToast();
 
-  const [readOnly, setReadOnly] = useState(false);
-  // canUpdate reflects the backend's clusterUpdate capability. The local UI/desktop backend cannot
-  // update a cluster in place, so the edit affordance is hidden there; the operator can, so it shows.
-  const [canUpdate, setCanUpdate] = useState(fullCapabilities.clusterUpdate);
-  // canBrowse reflects the backend's workloadRead capability: whether the read-only resource browser
-  // endpoints exist. The Resources view + nav item are shown only when true.
-  const [canBrowse, setCanBrowse] = useState(fullCapabilities.workloadRead);
-  // canManage reflects the backend's workloadWrite capability (scale/restart/delete). Combined with
-  // !readOnly before the action UI is shown.
-  const [canManage, setCanManage] = useState(fullCapabilities.workloadWrite);
-  // canKubeconfig reflects the backend's kubeconfigDownload capability (the local backend).
-  const [canKubeconfig, setCanKubeconfig] = useState(fullCapabilities.kubeconfigDownload);
-  // canApply reflects the backend's applyManifests capability.
-  const [canApply, setCanApply] = useState(fullCapabilities.applyManifests);
-  // canCipher reflects the backend's secretsCipher capability (local SOPS).
-  const [canCipher, setCanCipher] = useState(fullCapabilities.secretsCipher);
-  // canLogs reflects the backend's workloadLogs capability (the in-browser log viewer).
-  const [canLogs, setCanLogs] = useState(fullCapabilities.workloadLogs);
-  // canExecCap reflects the backend's workloadExec capability (the in-browser terminal).
-  const [canExecCap, setCanExecCap] = useState(fullCapabilities.workloadExec);
+  // config is the single source for every capability/option projection below. null until the initial
+  // /api/v1/config load resolves; the derived consts fall back to the no-config defaults until then.
+  // The slices it replaced only ever changed together on (re)load, so one state is behavior-identical.
+  const [config, setConfig] = useState<Config | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [needsLogin, setNeedsLogin] = useState(false);
   const [meta, setMeta] = useState<ClusterMeta | null>(null);
-  const [distributions, setDistributions] = useState<string[]>(DEFAULT_DISTRIBUTIONS);
-  // providerStatus gates the create form's provider options. null = backend does not gate (operator).
-  const [providerStatus, setProviderStatus] = useState<ProviderInfo[] | null>(null);
-  const [settingsEnabled, setSettingsEnabled] = useState(false);
-  const [mode, setMode] = useState<Config["mode"]>(undefined);
   const [view, setView] = useState<View>("clusters");
   // paletteOpen controls the ⌘K command palette overlay.
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -121,6 +98,26 @@ export function App() {
     [clusters, activeClusterKey],
   );
 
+  // Derived deployment consts: every capability gate and create-form option is a projection of the
+  // single config state (no per-flag slice/setter). The fallbacks match the no-config defaults the
+  // replaced useState slices used.
+  const readOnly = config?.readOnly ?? false;
+  // canUpdate reflects clusterUpdate: the local UI/desktop backend cannot update a cluster in place
+  // (edit affordance hidden); the operator can. The rest mirror their capability flags 1:1.
+  const canUpdate = capability(config, "clusterUpdate");
+  const canBrowse = capability(config, "workloadRead");
+  const canManage = capability(config, "workloadWrite");
+  const canKubeconfig = capability(config, "kubeconfigDownload");
+  const canApply = capability(config, "applyManifests");
+  const canCipher = capability(config, "secretsCipher");
+  const canLogs = capability(config, "workloadLogs");
+  const canExecCap = capability(config, "workloadExec");
+  const distributions = config?.distributions ?? DEFAULT_DISTRIBUTIONS;
+  // providerStatus gates the create form's provider options. null = backend does not gate (operator).
+  const providerStatus = config?.providers ?? null;
+  const settingsEnabled = config?.settingsEnabled ?? false;
+  const mode = config?.mode;
+
   // enterCluster drills into a cluster's workspace, landing on its Overview. Used by the Clusters list,
   // deep links, and the command palette.
   const enterCluster = useCallback((key: string) => {
@@ -133,7 +130,7 @@ export function App() {
   // Overview.
   const selectCluster = useCallback((key: string) => {
     setActiveClusterKey(key);
-    setView((current) => (CLUSTER_VIEWS.includes(current) ? current : "overview"));
+    setView((current) => (CLUSTER_VIEW_IDS.includes(current) ? current : "overview"));
   }, []);
 
   // Clear the cluster context when the active cluster disappears from the live list (e.g. deleted),
@@ -145,7 +142,7 @@ export function App() {
   }, [clusters, activeClusterKey]);
 
   useEffect(() => {
-    if (!activeClusterKey && CLUSTER_VIEWS.includes(view)) {
+    if (!activeClusterKey && CLUSTER_VIEW_IDS.includes(view)) {
       setView("clusters");
     }
   }, [activeClusterKey, view]);
@@ -185,39 +182,20 @@ export function App() {
     return true;
   }, []);
 
-  // applyConfig maps the deployment config onto UI state: read-only, the capability gates, and the
-  // create-form options. Shared by the initial load and reloadConfig so the (growing) capability list
-  // lives in one place. The state setters are stable, so this is safe to memoize with no deps.
-  const applyConfig = useCallback((config: Config) => {
-    setReadOnly(config.readOnly);
-    setCanUpdate(config.capabilities?.clusterUpdate ?? fullCapabilities.clusterUpdate);
-    setCanBrowse(config.capabilities?.workloadRead ?? fullCapabilities.workloadRead);
-    setCanManage(config.capabilities?.workloadWrite ?? fullCapabilities.workloadWrite);
-    setCanKubeconfig(config.capabilities?.kubeconfigDownload ?? fullCapabilities.kubeconfigDownload);
-    setCanApply(config.capabilities?.applyManifests ?? fullCapabilities.applyManifests);
-    setCanCipher(config.capabilities?.secretsCipher ?? fullCapabilities.secretsCipher);
-    setCanLogs(config.capabilities?.workloadLogs ?? fullCapabilities.workloadLogs);
-    setCanExecCap(config.capabilities?.workloadExec ?? fullCapabilities.workloadExec);
-    setDistributions(config.distributions ?? DEFAULT_DISTRIBUTIONS);
-    setProviderStatus(config.providers ?? null);
-    setSettingsEnabled(config.settingsEnabled ?? false);
-    setMode(config.mode);
-  }, []);
-
   // reloadConfig re-fetches deployment config after a change that can affect it (e.g. saving
-  // credential settings flips provider availability), so the create form's gating stays current
-  // without a full page reload.
+  // credential settings flips provider availability), so the create form's gating (all derived from
+  // the single config state) stays current without a full page reload.
   const reloadConfig = useCallback(async () => {
     try {
-      const config = await getConfig();
+      const next = await getConfig();
       if (!mounted.current) {
         return;
       }
-      applyConfig(config);
+      setConfig(next);
     } catch {
       // Non-fatal: keep the current config if the refresh fails.
     }
-  }, [applyConfig]);
+  }, []);
 
   // Navigate in response to a ksail:// deep link from the desktop shell (no-op in the browser). A
   // cluster target drills into that cluster (active + Overview); otherwise it switches the view.
@@ -272,9 +250,9 @@ export function App() {
     mounted.current = true;
 
     async function init() {
-      let config;
+      let loaded;
       try {
-        config = await getConfig();
+        loaded = await getConfig();
       } catch (err) {
         if (mounted.current) {
           setError(errorMessage(err));
@@ -287,10 +265,10 @@ export function App() {
         return;
       }
 
-      applyConfig(config);
-      setUser(config.user ?? null);
+      setConfig(loaded);
+      setUser(loaded.user ?? null);
 
-      if (config.authEnabled && !config.user) {
+      if (loaded.authEnabled && !loaded.user) {
         setNeedsLogin(true);
         setLoading(false);
         return;
@@ -444,30 +422,35 @@ export function App() {
       </>
     ) : null;
 
-  // navTo builds a "Go to <view>" palette command. Centralizes the shared label/run/hint shape.
-  const navTo = (target: View, label: string, icon: ReactNode): Command => ({
-    id: `nav-${target}`,
-    label: `Go to ${label}`,
-    hint: "Navigate",
-    icon,
-    run: () => setView(target),
+  // viewGates feeds the registry's availability predicates. The palette spans both scopes, so the
+  // cluster-scope gate (activeCluster) decides whether the cluster-scoped views appear.
+  const viewGates: ViewGates = {
+    activeCluster: activeClusterKey !== null,
+    workloadEnabled: canBrowse,
+    secretsEnabled: canCipher,
+    settingsEnabled,
+  };
+
+  // navCommands derives the palette's "Go to <view>" entries from the same view registry the sidebar
+  // nav uses, so labels, icons, and gates can never drift between the two. The cluster-scoped views
+  // require an active cluster (isViewAvailable enforces it); choosing a cluster entry below drills in.
+  const navCommands: Command[] = VIEWS.filter((entry) => isViewAvailable(entry, viewGates)).map((entry) => {
+    const Icon = entry.icon;
+
+    return {
+      id: `nav-${entry.id}`,
+      label: `Go to ${entry.title}`,
+      hint: "Navigate",
+      icon: <Icon className="size-4" aria-hidden />,
+      run: () => setView(entry.id),
+    };
   });
 
-  // Command palette entries: navigation, common actions, and jump-to-cluster. Built each render
-  // (cheap) from the live clusters list and the capability gates, so it stays in sync with the nav.
-  // The cluster-scoped views require an active cluster (same gate as the sidebar); choosing a cluster
-  // entry drills in.
+  // Command palette entries: navigation (from the registry), common actions, and jump-to-cluster.
+  // Built each render (cheap) from the live clusters list and the capability gates, so it stays in
+  // sync with the nav. Choosing a cluster entry drills into that cluster.
   const commands: Command[] = [
-    navTo("clusters", "Clusters", <Server className="size-4" aria-hidden />),
-    ...(activeClusterKey ? [navTo("overview", "Overview", <LayoutDashboard className="size-4" aria-hidden />)] : []),
-    ...(activeClusterKey && canBrowse
-      ? [
-          navTo("resources", "Resources", <Layers className="size-4" aria-hidden />),
-          navTo("events", "Events", <Activity className="size-4" aria-hidden />),
-        ]
-      : []),
-    ...(canCipher ? [navTo("secrets", "Secrets", <KeyRound className="size-4" aria-hidden />)] : []),
-    ...(settingsEnabled ? [navTo("settings", "Settings", <Settings className="size-4" aria-hidden />)] : []),
+    ...navCommands,
     {
       id: "action-refresh",
       label: "Refresh clusters",

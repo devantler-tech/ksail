@@ -75,6 +75,30 @@ export function eventLastSeenMs(fields: EventFields): number {
   return epochMs(fields.lastSeen);
 }
 
+// RecentEventsOptions tunes recentEvents for each call site: restrict to a Warning/Normal type,
+// keep only events satisfying a predicate (e.g. targeting a resource, or matching a free-text
+// search), and/or cap the result. All are optional; an unset filter keeps every event.
+export interface RecentEventsOptions {
+  type?: EventFields["type"];
+  matches?: (event: EventFields) => boolean;
+  limit?: number;
+}
+
+// recentEvents normalizes a list of raw Event objects, applies the optional type/predicate filters,
+// sorts newest-first by last-seen time, and caps to `limit` when given. Centralizes the
+// map(eventFields)→filter→sort-desc(→slice) pipeline shared by the Overview, Resources, and Events
+// views so the normalize/sort idiom lives in one place.
+export function recentEvents(objects: K8sObject[], options: RecentEventsOptions = {}): EventFields[] {
+  const { type, matches, limit } = options;
+
+  const events = objects
+    .map(eventFields)
+    .filter((event) => (type === undefined || event.type === type) && (matches === undefined || matches(event)))
+    .sort((a, b) => eventLastSeenMs(b) - eventLastSeenMs(a));
+
+  return limit === undefined ? events : events.slice(0, limit);
+}
+
 // nodeConditions returns a Node's status conditions as loose records.
 function nodeConditions(node: K8sObject): Record<string, unknown>[] {
   const status = record(node.status);

@@ -64,6 +64,11 @@ linters:
         text: "var-naming: avoid meaningless package names"
         path: pkg/utils/doc.go
   settings:
+    goconst:
+      # Repeated string literals in table-driven tests (distribution names, config
+      # field paths, fixture cluster names) are idiomatic and clearer inline than
+      # behind shared constants; only flag duplicated literals in production code.
+      ignore-tests: true
     recvcheck:
       # Some methods have their receiver style dictated by an external contract, not by choice:
       # controller-gen emits DeepCopy* methods and json.Unmarshaler requires a pointer receiver for

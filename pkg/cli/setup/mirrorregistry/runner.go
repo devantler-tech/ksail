@@ -18,37 +18,49 @@ import (
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
 
-// StageDefinitions maps stage roles to their definitions.
+// StageDefinitions maps stage roles to their definitions. Each definition's
+// Actions table is keyed by distribution and references the run*Action
+// implementation directly (or noopAction for cells with nothing to do, e.g.
+// K3d/Talos PostClusterConnect, since those distributions configure mirrors
+// before cluster creation).
 //
 //nolint:gochecknoglobals // Registry stage definitions are constant configuration.
 var StageDefinitions = map[Role]Definition{
 	RoleRegistry: {
-		Info:           RegistryInfo,
-		KindAction:     KindRegistryAction,
-		K3dAction:      K3dRegistryAction,
-		TalosAction:    TalosRegistryAction,
-		VClusterAction: VClusterRegistryAction,
+		Info: RegistryInfo,
+		Actions: map[v1alpha1.Distribution]ActionFunc{
+			v1alpha1.DistributionVanilla:  runKindRegistryAction,
+			v1alpha1.DistributionK3s:      runK3dRegistryAction,
+			v1alpha1.DistributionTalos:    runTalosRegistryAction,
+			v1alpha1.DistributionVCluster: runVClusterRegistryAction,
+		},
 	},
 	RoleNetwork: {
-		Info:           NetworkInfo,
-		KindAction:     KindNetworkAction,
-		K3dAction:      K3dNetworkAction,
-		TalosAction:    TalosNetworkAction,
-		VClusterAction: VClusterNetworkAction,
+		Info: NetworkInfo,
+		Actions: map[v1alpha1.Distribution]ActionFunc{
+			v1alpha1.DistributionVanilla:  runKindNetworkAction,
+			v1alpha1.DistributionK3s:      runK3dNetworkAction,
+			v1alpha1.DistributionTalos:    runTalosNetworkAction,
+			v1alpha1.DistributionVCluster: runVClusterNetworkAction,
+		},
 	},
 	RoleConnect: {
-		Info:           ConnectInfo,
-		KindAction:     KindConnectAction,
-		K3dAction:      K3dConnectAction,
-		TalosAction:    TalosConnectAction,
-		VClusterAction: VClusterConnectAction,
+		Info: ConnectInfo,
+		Actions: map[v1alpha1.Distribution]ActionFunc{
+			v1alpha1.DistributionVanilla:  runKindConnectAction,
+			v1alpha1.DistributionK3s:      runK3dConnectAction,
+			v1alpha1.DistributionTalos:    runTalosConnectAction,
+			v1alpha1.DistributionVCluster: runVClusterConnectAction,
+		},
 	},
 	RolePostClusterConnect: {
-		Info:           PostClusterConnectInfo,
-		KindAction:     KindPostClusterConnectAction,
-		K3dAction:      K3dPostClusterConnectAction,
-		TalosAction:    TalosPostClusterConnectAction,
-		VClusterAction: VClusterPostClusterConnectAction,
+		Info: PostClusterConnectInfo,
+		Actions: map[v1alpha1.Distribution]ActionFunc{
+			v1alpha1.DistributionVanilla:  runKindPostClusterConnectAction,
+			v1alpha1.DistributionK3s:      noopAction,
+			v1alpha1.DistributionTalos:    noopAction,
+			v1alpha1.DistributionVCluster: runVClusterPostClusterConnectAction,
+		},
 	},
 }
 
@@ -62,20 +74,16 @@ type DockerClientInvoker = setup.DockerClientInvoker
 //nolint:gochecknoglobals // Provides default implementation with test override capability.
 var DefaultDockerClientInvoker DockerClientInvoker = dockerutil.WithDockerClient
 
-// RunStage executes the registry stage for the given role.
-func RunStage(
-	cmd *cobra.Command,
-	clusterCfg *v1alpha1.Cluster,
-	deps lifecycle.Deps,
-	cfgManager *ksailconfigmanager.ConfigManager,
-	kindConfig *v1alpha4.Cluster,
-	k3dConfig *v1alpha5.SimpleConfig,
-	talosConfig *talosconfigmanager.Configs,
-	vclusterConfig *clusterprovisioner.VClusterConfig,
-	role Role,
-	dockerInvoker DockerClientInvoker,
-) error {
-	mirrorSpecs, err := resolveMirrorSpecs(cmd, cfgManager, clusterCfg, talosConfig)
+// RunStage executes the registry stage identified by role for the cluster
+// described in params. It resolves the merged mirror specs, looks up the stage
+// definition and the per-distribution handler, and runs the stage's prepare +
+// action under the shared Docker-stage runner.
+func RunStage(params StageParams, role Role) error {
+	clusterCfg := params.ClusterCfg
+
+	mirrorSpecs, err := resolveMirrorSpecs(
+		params.Cmd, params.CfgManager, clusterCfg, params.TalosConfig,
+	)
 	if err != nil {
 		return err
 	}
@@ -86,27 +94,16 @@ func RunStage(
 	}
 
 	stageCtx := &Context{
-		Cmd:            cmd,
+		Cmd:            params.Cmd,
 		ClusterCfg:     clusterCfg,
-		KindConfig:     kindConfig,
-		K3dConfig:      k3dConfig,
-		TalosConfig:    talosConfig,
-		VClusterConfig: vclusterConfig,
+		KindConfig:     params.KindConfig,
+		K3dConfig:      params.K3dConfig,
+		TalosConfig:    params.TalosConfig,
+		VClusterConfig: params.VClusterConfig,
 		MirrorSpecs:    mirrorSpecs,
 	}
 
-	handlers := newRegistryHandlers(
-		clusterCfg,
-		kindConfig,
-		k3dConfig,
-		talosConfig,
-		mirrorSpecs,
-		role,
-		definition.KindAction(stageCtx),
-		definition.K3dAction(stageCtx),
-		definition.TalosAction(stageCtx),
-		definition.VClusterAction(stageCtx),
-	)
+	handlers := newRegistryHandlers(stageCtx, role, definition.Actions)
 
 	handler, ok := handlers[clusterCfg.Spec.Cluster.Distribution]
 	if !ok {
@@ -114,12 +111,12 @@ func RunStage(
 	}
 
 	return executeRegistryStage(
-		cmd,
-		deps,
+		params.Cmd,
+		params.Deps,
 		definition.Info,
 		handler.Prepare,
 		handler.Action,
-		dockerInvoker,
+		params.DockerInvoker,
 	)
 }
 
@@ -189,22 +186,35 @@ func collectExistingMirrorSpecs(
 	return existingSpecs, nil
 }
 
+// newRegistryHandlers builds the per-distribution Handler map for a stage,
+// binding each distribution's [ActionFunc] (from the stage definition's Actions
+// table) to the resolved stage Context and pairing it with the distribution's
+// Prepare gate. Distributions absent from actions get a Prepare that returns
+// false so the stage is skipped for them.
 func newRegistryHandlers(
-	clusterCfg *v1alpha1.Cluster,
-	kindConfig *v1alpha4.Cluster,
-	k3dConfig *v1alpha5.SimpleConfig,
-	talosConfig *talosconfigmanager.Configs,
-	mirrorSpecs []registry.MirrorSpec,
+	stageCtx *Context,
 	role Role,
-	kindAction func(context.Context, dockerclient.Client) error,
-	k3dAction func(context.Context, dockerclient.Client) error,
-	talosAction func(context.Context, dockerclient.Client) error,
-	vclusterAction func(context.Context, dockerclient.Client) error,
+	actions map[v1alpha1.Distribution]ActionFunc,
 ) map[v1alpha1.Distribution]Handler {
+	clusterCfg := stageCtx.ClusterCfg
+	mirrorSpecs := stageCtx.MirrorSpecs
+
+	bind := func(action ActionFunc) func(context.Context, dockerclient.Client) error {
+		if action == nil {
+			return nil
+		}
+
+		return func(execCtx context.Context, dockerClient dockerclient.Client) error {
+			return action(execCtx, stageCtx, dockerClient)
+		}
+	}
+
 	return map[v1alpha1.Distribution]Handler{
 		v1alpha1.DistributionVanilla: {
-			Prepare: func() bool { return PrepareKindConfigWithMirrors(clusterCfg, kindConfig, mirrorSpecs) },
-			Action:  kindAction,
+			Prepare: func() bool {
+				return PrepareKindConfigWithMirrors(clusterCfg, stageCtx.KindConfig, mirrorSpecs)
+			},
+			Action: bind(actions[v1alpha1.DistributionVanilla]),
 		},
 		v1alpha1.DistributionK3s: {
 			// K3d configures registry mirrors BEFORE cluster creation via k3d config,
@@ -214,26 +224,26 @@ func newRegistryHandlers(
 					return false
 				}
 
-				return PrepareK3dConfigWithMirrors(clusterCfg, k3dConfig, mirrorSpecs)
+				return PrepareK3dConfigWithMirrors(clusterCfg, stageCtx.K3dConfig, mirrorSpecs)
 			},
-			Action: k3dAction,
+			Action: bind(actions[v1alpha1.DistributionK3s]),
 		},
 		v1alpha1.DistributionTalos: {
 			Prepare: func() bool {
 				return PrepareTalosConfigWithMirrors(
 					clusterCfg,
-					talosConfig,
+					stageCtx.TalosConfig,
 					mirrorSpecs,
-					talosconfigmanager.ResolveClusterName(clusterCfg, talosConfig),
+					talosconfigmanager.ResolveClusterName(clusterCfg, stageCtx.TalosConfig),
 				)
 			},
-			Action: talosAction,
+			Action: bind(actions[v1alpha1.DistributionTalos]),
 		},
 		v1alpha1.DistributionVCluster: {
 			Prepare: func() bool {
 				return PrepareVClusterConfigWithMirrors(clusterCfg, mirrorSpecs)
 			},
-			Action: vclusterAction,
+			Action: bind(actions[v1alpha1.DistributionVCluster]),
 		},
 	}
 }
@@ -295,36 +305,20 @@ type StageParams struct {
 
 // SetupRegistries creates and configures registry containers before cluster creation.
 func SetupRegistries(params StageParams) error {
-	return runStageWithParams(params, RoleRegistry)
+	return RunStage(params, RoleRegistry)
 }
 
 // CreateNetwork creates the Docker network for the cluster.
 func CreateNetwork(params StageParams) error {
-	return runStageWithParams(params, RoleNetwork)
+	return RunStage(params, RoleNetwork)
 }
 
 // ConnectRegistriesToNetwork connects registries to the Docker network before cluster creation.
 func ConnectRegistriesToNetwork(params StageParams) error {
-	return runStageWithParams(params, RoleConnect)
+	return RunStage(params, RoleConnect)
 }
 
 // ConfigureRegistryMirrorsInCluster configures containerd inside cluster nodes after cluster creation.
 func ConfigureRegistryMirrorsInCluster(params StageParams) error {
-	return runStageWithParams(params, RolePostClusterConnect)
-}
-
-// runStageWithParams is the shared implementation for registry stage execution.
-func runStageWithParams(params StageParams, role Role) error {
-	return RunStage(
-		params.Cmd,
-		params.ClusterCfg,
-		params.Deps,
-		params.CfgManager,
-		params.KindConfig,
-		params.K3dConfig,
-		params.TalosConfig,
-		params.VClusterConfig,
-		role,
-		params.DockerInvoker,
-	)
+	return RunStage(params, RolePostClusterConnect)
 }

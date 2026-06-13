@@ -2,32 +2,24 @@ package kindprovisioner
 
 import (
 	"context"
-	"fmt"
 
 	kindconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/kind"
-	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 )
 
 // Compile-time interface compliance check.
 var _ clusterupdate.Upgrader = (*Provisioner)(nil)
 
-// UpgradeKubernetes returns ErrRecreationRequired because Kind does not support
-// in-place Kubernetes version changes. The orchestrator handles recreation.
-func (k *Provisioner) UpgradeKubernetes(_ context.Context, _ string, _, _ string) error {
-	return fmt.Errorf(
-		"kind: in-place Kubernetes upgrade not supported: %w",
-		clustererr.ErrRecreationRequired,
-	)
-}
-
-// UpgradeDistribution returns ErrRecreationRequired because Kind does not support
-// in-place distribution version changes. The orchestrator handles recreation.
-func (k *Provisioner) UpgradeDistribution(_ context.Context, _ string, _, _ string) error {
-	return fmt.Errorf(
-		"kind: in-place distribution upgrade not supported: %w",
-		clustererr.ErrRecreationRequired,
-	)
+// newRecreationUpgrader returns the shared recreation-based Upgrader behavior for
+// Kind. Kind has no distribution version separate from its Kubernetes version, so
+// its pins and distribution image ref are empty and it uses plain semver tags.
+// The embed supplies UpgradeKubernetes/UpgradeDistribution (both recreate) and the
+// five metadata accessors; GetCurrentVersions and PrepareConfigForVersion below
+// carry the genuine per-distribution logic.
+func newRecreationUpgrader() clusterupdate.RecreationRequiredUpgrader {
+	return clusterupdate.NewRecreationRequiredUpgrader("kind", clusterupdate.UpgraderMetadata{
+		KubernetesImageRef: "kindest/node",
+	})
 }
 
 // GetCurrentVersions returns the Kubernetes and distribution versions for the cluster.
@@ -42,37 +34,6 @@ func (k *Provisioner) GetCurrentVersions(
 		KubernetesVersion:   tag,
 		DistributionVersion: tag,
 	}, nil
-}
-
-// KubernetesImageRef returns the OCI image repository for Kind node images.
-func (k *Provisioner) KubernetesImageRef() string {
-	return "kindest/node"
-}
-
-// DistributionImageRef returns an empty string because Kind's distribution
-// version is the same as the Kubernetes version — there is no separate
-// distribution image. Distribution-version reconciliation is therefore a no-op
-// for Kind; the Kubernetes-version reconciliation upgrades both together.
-func (k *Provisioner) DistributionImageRef() string {
-	return ""
-}
-
-// PinnedDistributionVersion always returns "" because Kind has no distribution
-// version separate from Kubernetes; pin it via spec.cluster.kubernetesVersion.
-func (k *Provisioner) PinnedDistributionVersion() string {
-	return ""
-}
-
-// PinnedKubernetesVersion returns "" because Kind follows the OCI-discovered
-// Kubernetes version (or spec.cluster.kubernetesVersion when set); recreation can
-// legitimately reach the discovered node-image version.
-func (k *Provisioner) PinnedKubernetesVersion() string {
-	return ""
-}
-
-// VersionSuffix returns an empty string because Kind uses plain semver tags.
-func (k *Provisioner) VersionSuffix() string {
-	return ""
 }
 
 // PrepareConfigForVersion updates the Kind configuration to use the specified

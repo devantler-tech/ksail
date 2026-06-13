@@ -31,7 +31,8 @@
 //     }
 //
 //  4. Use the shared helper functions for Helm operations:
-//     - helm.InstallOrUpgradeChart() (from pkg/client/helm) for chart installation
+//     - helm.InstallChartWithRetry() (from pkg/client/helm) for chart installation,
+//     with Atomic/Silent/Wait flags set on the helm.ChartSpec
 //
 //  5. Add comprehensive unit tests following the patterns in existing CNI implementations
 //

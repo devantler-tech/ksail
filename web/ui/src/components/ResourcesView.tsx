@@ -1,114 +1,29 @@
-import { Copy, FileCode, Layers, RotateCw, ScrollText, SquareTerminal } from "lucide-react";
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
-import yaml from "js-yaml";
-import {
-  deleteResource,
-  errorMessage,
-  listResources,
-  reconcileResource,
-  restartResource,
-  scaleResource,
-  type Cluster,
-  type K8sObject,
-} from "../api.ts";
+import { FileCode, Layers, RotateCw } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { deleteResource, errorMessage, listResources, type Cluster, type K8sObject } from "../api.ts";
 import { cx } from "../lib/cx.ts";
 import { useResourceKinds } from "../lib/meta.ts";
-import { epochMs, relativeAge } from "../lib/format.ts";
-import { clusterKey, eventFields, eventLastSeenMs, splitClusterKey, type EventFields } from "../lib/k8s.ts";
+import { relativeAge } from "../lib/format.ts";
+import { clusterKey, recentEvents, splitClusterKey, type EventFields } from "../lib/k8s.ts";
+import {
+  buildResourceTarget,
+  compareResources,
+  currentReplicas,
+  objectKey,
+  podContainers,
+  resourceStatus,
+  type SortKey,
+} from "../lib/resources.ts";
 import { ApplyManifestsDialog } from "./ApplyManifestsDialog.tsx";
-import { EventList } from "./EventList.tsx";
-import { LogViewer } from "./LogViewer.tsx";
 import { ConfirmDialog } from "./ConfirmDialog.tsx";
-
-// ExecTerminal pulls in xterm.js (~250 kB), so it is code-split: the chunk loads only when a terminal
-// is actually opened, keeping it out of the initial bundle.
-const ExecTerminal = lazy(() =>
-  import("./ExecTerminal.tsx").then((module) => ({ default: module.ExecTerminal })),
-);
+import { ResourceDetailPanel } from "./ResourceDetailPanel.tsx";
+import { PodExec, PodLogs } from "./PodSession.tsx";
 import { useResourceList } from "../hooks/useResourceList.ts";
 import { EmptyState } from "./states.tsx";
 import { DataStates, SortHeader, TableCard, td, useSort } from "./table.tsx";
 import { StatusDot } from "./StatusBadge.tsx";
 import { useToast } from "./Toast.tsx";
-import { Button, SegmentedControl, SelectField, SlideOver, TextField } from "./ui.tsx";
-
-function objectKey(obj: K8sObject, index: number): string {
-  const meta = obj.metadata;
-
-  return `${meta?.namespace ?? ""}/${meta?.name ?? index}`;
-}
-
-type SortKey = "name" | "namespace" | "status" | "age";
-
-// currentReplicas reads spec.replicas from an unstructured object, defaulting to 0.
-function currentReplicas(obj: K8sObject): number {
-  const spec = obj.spec as { replicas?: number } | undefined;
-
-  return spec?.replicas ?? 0;
-}
-
-// podContainers reads spec.containers[].name from a Pod object (for the logs/exec container picker).
-function podContainers(obj: K8sObject): string[] {
-  const spec = obj.spec as { containers?: { name?: string }[] } | undefined;
-
-  return (spec?.containers ?? []).map((container) => container.name ?? "").filter((name) => name !== "");
-}
-
-// ContainerPicker renders a container selector for a multi-container Pod (nothing for single-container
-// Pods). Shared by the Logs and Exec slide-overs so the picker markup lives in one place.
-function ContainerPicker({
-  pod,
-  value,
-  onChange,
-}: {
-  pod: K8sObject;
-  value: string;
-  onChange: (value: string) => void;
-}) {
-  const containers = podContainers(pod);
-  if (containers.length <= 1) {
-    return null;
-  }
-
-  return (
-    <SelectField label="Container" value={value} onChange={(event) => onChange(event.target.value)}>
-      {containers.map((name) => (
-        <option key={name} value={name}>
-          {name}
-        </option>
-      ))}
-    </SelectField>
-  );
-}
-
-// resourceStatus derives an at-a-glance health/reconcile status for the table: a Ready condition
-// (Flux/ArgoCD GitOps CRs and many others expose one), else a phase (Pods, PVCs, …). Returns null when
-// the object carries no recognizable status.
-function resourceStatus(obj: K8sObject): { label: string; ok: boolean } | null {
-  const status = obj.status as
-    | { conditions?: { type?: string; status?: string; reason?: string }[]; phase?: string }
-    | undefined;
-  if (!status) {
-    return null;
-  }
-
-  const ready = status.conditions?.find((condition) => condition.type === "Ready");
-  if (ready) {
-    if (ready.status === "True") {
-      return { label: "Ready", ok: true };
-    }
-
-    return { label: ready.reason ? `Not Ready: ${ready.reason}` : "Not Ready", ok: false };
-  }
-
-  if (typeof status.phase === "string" && status.phase !== "") {
-    const healthy = ["Running", "Active", "Succeeded", "Bound", "Available"].includes(status.phase);
-
-    return { label: status.phase, ok: healthy };
-  }
-
-  return null;
-}
+import { Button, SelectField, TextField } from "./ui.tsx";
 
 // ResourceStatusBadge renders a resource's derived status with a colour dot (green = ok, amber =
 // not). Distinct from StatusBadge.tsx's cluster-phase pill, hence the longer name.
@@ -128,120 +43,11 @@ function ResourceStatusBadge({ obj }: { obj: K8sObject }) {
   );
 }
 
-// compareResources orders two objects for the active sort column. Status sorts by the derived status
-// label so equal-health rows group together.
-function compareResources(a: K8sObject, b: K8sObject, key: SortKey): number {
-  switch (key) {
-    case "name":
-      return (a.metadata?.name ?? "").localeCompare(b.metadata?.name ?? "");
-    case "namespace":
-      return (a.metadata?.namespace ?? "").localeCompare(b.metadata?.namespace ?? "");
-    case "status":
-      return (resourceStatus(a)?.label ?? "").localeCompare(resourceStatus(b)?.label ?? "");
-    case "age":
-      return epochMs(a.metadata?.creationTimestamp) - epochMs(b.metadata?.creationTimestamp);
-    default:
-      return 0;
-  }
-}
-
-// toYaml serializes an object to YAML for the detail view, falling back to pretty JSON if the object
-// somehow cannot be represented as YAML (never expected for Kubernetes objects).
-function toYaml(obj: unknown): string {
-  try {
-    return yaml.dump(obj, { noRefs: true, sortKeys: false });
-  } catch {
-    return JSON.stringify(obj, null, 2);
-  }
-}
-
-// ObjectCondition is the normalized status condition rendered in the detail view's Conditions table.
-type ObjectCondition = { type: string; status: string; reason: string; message: string };
-
-// objectConditions reads status.conditions from an unstructured object (Deployments, Pods, GitOps CRs,
-// and many others expose them), returning [] when absent.
-function objectConditions(obj: K8sObject): ObjectCondition[] {
-  const status = obj.status as { conditions?: unknown } | undefined;
-  const conditions = Array.isArray(status?.conditions) ? status.conditions : [];
-
-  return conditions
-    .map((entry) => {
-      const cond = (entry ?? {}) as Record<string, unknown>;
-
-      return {
-        type: typeof cond.type === "string" ? cond.type : "",
-        status: typeof cond.status === "string" ? cond.status : "",
-        reason: typeof cond.reason === "string" ? cond.reason : "",
-        message: typeof cond.message === "string" ? cond.message : "",
-      };
-    })
-    .filter((cond) => cond.type !== "");
-}
-
-// ConditionsTable renders an object's status conditions; nothing when the object has none.
-function ConditionsTable({ obj }: { obj: K8sObject }) {
-  const conditions = objectConditions(obj);
-  if (conditions.length === 0) {
-    return null;
-  }
-
-  return (
-    <section>
-      <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Conditions</h4>
-      <div className="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800">
-        <table className="min-w-full divide-y divide-slate-200 text-sm dark:divide-slate-800">
-          <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-            {conditions.map((cond) => (
-              <tr key={cond.type}>
-                <td className="px-3 py-2 font-medium text-slate-700 dark:text-slate-200">{cond.type}</td>
-                <td className="px-3 py-2">
-                  <span
-                    className={cx(
-                      "inline-flex items-center gap-1.5",
-                      cond.status === "True"
-                        ? "text-emerald-600 dark:text-emerald-400"
-                        : cond.status === "False"
-                          ? "text-amber-600 dark:text-amber-400"
-                          : "text-slate-500 dark:text-slate-400",
-                    )}
-                  >
-                    <StatusDot tone={cond.status === "True" ? "ok" : cond.status === "False" ? "warn" : "muted"} />
-                    {cond.status || "—"}
-                  </span>
-                </td>
-                <td className="px-3 py-2 text-slate-600 dark:text-slate-300">
-                  <div className="font-medium">{cond.reason || "—"}</div>
-                  {cond.message ? <div className="text-xs text-slate-500 dark:text-slate-400">{cond.message}</div> : null}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </section>
-  );
-}
-
-// RelatedEvents renders the recent events that target the selected resource; nothing when there are
-// none (or while loading produced none).
-function RelatedEvents({ events }: { events: EventFields[] }) {
-  if (events.length === 0) {
-    return null;
-  }
-
-  return (
-    <section>
-      <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-        Related events
-      </h4>
-      <EventList events={events} />
-    </section>
-  );
-}
-
 // ResourcesView is the read-only workload browser: pick a cluster + resource kind, optionally filter
 // by namespace (client-side), and inspect any object's raw manifest. Backed by the ResourceService
-// endpoints; shown only when the backend advertises capabilities.workloadRead.
+// endpoints; shown only when the backend advertises capabilities.workloadRead. The detail slide-over,
+// pod logs/exec panels, and the per-action wiring live in ResourceDetailPanel / PodSession; this
+// component owns the kind/filter/list state and the write-action orchestration (runAction).
 export function ResourcesView({
   cluster,
   canWrite,
@@ -331,12 +137,12 @@ export function ResourcesView({
         if (cancelled) {
           return;
         }
-        const related = (list.items ?? [])
-          .map(eventFields)
-          .filter((event) => event.objectName === name && (event.objectKind === "" || event.objectKind === kind))
-          .sort((a, b) => eventLastSeenMs(b) - eventLastSeenMs(a))
-          .slice(0, 10);
-        setRelatedEvents(related);
+        setRelatedEvents(
+          recentEvents(list.items ?? [], {
+            matches: (event) => event.objectName === name && (event.objectKind === "" || event.objectKind === kind),
+            limit: 10,
+          }),
+        );
       })
       .catch(() => {
         if (!cancelled) {
@@ -349,21 +155,34 @@ export function ResourcesView({
     };
   }, [selected, kind, clusterId]);
 
-  // runAction performs a write action on the selected resource, then toasts the outcome, closes the
-  // detail panel, and refetches the list so it reflects the change.
-  function runAction(verb: string, perform: () => Promise<void>) {
+  // runAction performs a write action on the selected resource, toasts the outcome, closes the detail
+  // panel + delete dialog, and refetches the list. It rethrows on failure so an awaiting caller (the
+  // delete ConfirmDialog) keeps its dialog open and clears its spinner; the fire-and-forget callers
+  // (the action-bar buttons) go through runActionFireAndForget below, which swallows the rejection.
+  function runAction(verb: string, perform: () => Promise<void>): Promise<void> {
     const targetName = selected?.metadata?.name ?? "resource";
 
     setActionBusy(true);
-    perform()
+
+    return perform()
       .then(() => {
         toast.success(`${verb} ${targetName}`);
         setSelected(null);
         setDeleteOpen(false);
         refresh();
       })
-      .catch((err: unknown) => toast.error(errorMessage(err)))
+      .catch((err: unknown) => {
+        toast.error(errorMessage(err));
+        throw err;
+      })
       .finally(() => setActionBusy(false));
+  }
+
+  // runActionFireAndForget runs a write action without awaiting it (the action-bar buttons), letting
+  // runAction toast both outcomes; the trailing catch only prevents an unhandled-rejection warning
+  // from the rethrow runAction does for the delete path.
+  function runActionFireAndForget(verb: string, perform: () => Promise<void>) {
+    void runAction(verb, perform).catch(() => undefined);
   }
 
   // Apply the namespace + name filters (client-side) and sort by the active column with a stable
@@ -388,34 +207,25 @@ export function ResourcesView({
     });
   }, [items, namespaceFilter, nameFilter, sortKey, sortDir]);
 
-  // The selected resource serialized for the detail panel, in the chosen format.
-  const manifestText = useMemo(() => {
-    if (!selected) {
-      return "";
-    }
-
-    return detailFormat === "yaml" ? toYaml(selected) : JSON.stringify(selected, null, 2);
-  }, [selected, detailFormat]);
-
-  // copyManifest copies the serialized manifest to the clipboard and toasts the outcome.
-  function copyManifest() {
-    if (!navigator.clipboard) {
-      toast.error("Clipboard unavailable");
-
-      return;
-    }
-
-    navigator.clipboard
-      .writeText(manifestText)
-      .then(() => toast.success("Copied to clipboard"))
-      .catch(() => toast.error("Copy failed"));
-  }
-
   if (!cluster) {
     return <EmptyState title="No cluster selected" description="Choose a cluster to browse its resources." />;
   }
 
   const [selectedNamespace, selectedName] = splitClusterKey(clusterId);
+
+  // openLogs/openExec switch the detail panel for the chosen pod's logs/exec session, seeding the
+  // container picker with the pod's first container.
+  function openLogs(pod: K8sObject) {
+    setLogContainer(podContainers(pod)[0] ?? "");
+    setLogPod(pod);
+    setSelected(null);
+  }
+
+  function openExec(pod: K8sObject) {
+    setExecContainer(podContainers(pod)[0] ?? "");
+    setExecPod(pod);
+    setSelected(null);
+  }
 
   return (
     <div className="mx-auto max-w-6xl space-y-4">
@@ -464,208 +274,71 @@ export function ResourcesView({
       >
         <TableCard>
           <thead className="bg-slate-50 dark:bg-slate-800/50">
-                <tr>
-                  <SortHeader label="Name" sortKey="name" activeKey={sortKey} dir={sortDir} onSort={toggleSort} />
-                  <SortHeader
-                    label="Namespace"
-                    sortKey="namespace"
-                    activeKey={sortKey}
-                    dir={sortDir}
-                    onSort={toggleSort}
-                    className="hidden sm:table-cell"
-                  />
-                  <SortHeader label="Status" sortKey="status" activeKey={sortKey} dir={sortDir} onSort={toggleSort} />
-                  <SortHeader label="Age" sortKey="age" activeKey={sortKey} dir={sortDir} onSort={toggleSort} />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {filtered.map((item, index) => (
-                  <tr
-                    key={objectKey(item, index)}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => setSelected(item)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" || event.key === " ") {
-                        event.preventDefault();
-                        setSelected(item);
-                      }
-                    }}
-                    className="cursor-pointer transition-colors hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 dark:hover:bg-slate-800/50"
-                  >
-                    <td className={cx(td, "font-medium text-slate-900 dark:text-white")}>
-                      {item.metadata?.name ?? "—"}
-                    </td>
-                    <td className={cx(td, "hidden text-sm text-slate-600 sm:table-cell dark:text-slate-300")}>
-                      {item.metadata?.namespace ?? "—"}
-                    </td>
-                    <td className={cx(td, "text-sm")}>
-                      <ResourceStatusBadge obj={item} />
-                    </td>
-                    <td className={cx(td, "text-sm text-slate-500 tabular-nums dark:text-slate-400")}>
-                      {relativeAge(item.metadata?.creationTimestamp)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
+            <tr>
+              <SortHeader label="Name" sortKey="name" activeKey={sortKey} dir={sortDir} onSort={toggleSort} />
+              <SortHeader
+                label="Namespace"
+                sortKey="namespace"
+                activeKey={sortKey}
+                dir={sortDir}
+                onSort={toggleSort}
+                className="hidden sm:table-cell"
+              />
+              <SortHeader label="Status" sortKey="status" activeKey={sortKey} dir={sortDir} onSort={toggleSort} />
+              <SortHeader label="Age" sortKey="age" activeKey={sortKey} dir={sortDir} onSort={toggleSort} />
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+            {filtered.map((item, index) => (
+              <tr
+                key={objectKey(item, index)}
+                role="button"
+                tabIndex={0}
+                onClick={() => setSelected(item)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    setSelected(item);
+                  }
+                }}
+                className="cursor-pointer transition-colors hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 dark:hover:bg-slate-800/50"
+              >
+                <td className={cx(td, "font-medium text-slate-900 dark:text-white")}>{item.metadata?.name ?? "—"}</td>
+                <td className={cx(td, "hidden text-sm text-slate-600 sm:table-cell dark:text-slate-300")}>
+                  {item.metadata?.namespace ?? "—"}
+                </td>
+                <td className={cx(td, "text-sm")}>
+                  <ResourceStatusBadge obj={item} />
+                </td>
+                <td className={cx(td, "text-sm text-slate-500 tabular-nums dark:text-slate-400")}>
+                  {relativeAge(item.metadata?.creationTimestamp)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
         </TableCard>
       </DataStates>
 
-      <SlideOver
-        open={selected !== null}
+      <ResourceDetailPanel
+        selected={selected}
+        kind={kind}
+        clusterId={clusterId}
+        kindLists={kindLists}
+        canWrite={canWrite}
+        canLogs={canLogs}
+        canExec={canExec}
+        actionBusy={actionBusy}
+        runAction={runActionFireAndForget}
+        scaleValue={scaleValue}
+        onScaleChange={setScaleValue}
+        detailFormat={detailFormat}
+        onDetailFormatChange={setDetailFormat}
+        relatedEvents={relatedEvents}
         onClose={() => setSelected(null)}
-        title={selected?.metadata?.name ?? ""}
-        subtitle={`${kind}${selected?.metadata?.namespace ? ` · ${selected.metadata.namespace}` : ""}`}
-      >
-        {selected ? (
-          <div className="space-y-3">
-            {canWrite || ((canLogs || canExec) && kind === "Pod") ? (
-              <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-3 dark:border-slate-800">
-                {canWrite && kindLists.scalable.includes(kind) ? (
-                  <form
-                    className="flex items-center gap-1.5"
-                    onSubmit={(event) => {
-                      event.preventDefault();
-                      const replicas = scaleValue.trim() === "" ? Number.NaN : Number(scaleValue);
-                      if (!Number.isInteger(replicas) || replicas < 0) {
-                        toast.error("Enter a non-negative whole number of replicas");
-
-                        return;
-                      }
-                      const [namespace, clusterName] = splitClusterKey(clusterId);
-                      runAction("Scaled", () =>
-                        scaleResource(
-                          {
-                            namespace,
-                            name: clusterName,
-                            kind,
-                            resourceName: selected.metadata?.name ?? "",
-                            resourceNamespace: selected.metadata?.namespace,
-                          },
-                          replicas,
-                        ),
-                      );
-                    }}
-                  >
-                    <label className="flex items-center gap-1.5">
-                      <span className="text-xs text-slate-500 dark:text-slate-400">Replicas</span>
-                      <input
-                        type="number"
-                        min={0}
-                        inputMode="numeric"
-                        value={scaleValue}
-                        onChange={(event) => setScaleValue(event.target.value)}
-                        className="w-20 rounded-md border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
-                      />
-                    </label>
-                    <Button type="submit" size="sm" variant="secondary" loading={actionBusy}>
-                      Scale
-                    </Button>
-                  </form>
-                ) : null}
-                {canWrite && kindLists.restartable.includes(kind) ? (
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    loading={actionBusy}
-                    onClick={() => {
-                      const [namespace, clusterName] = splitClusterKey(clusterId);
-                      runAction("Restarted", () =>
-                        restartResource({
-                          namespace,
-                          name: clusterName,
-                          kind,
-                          resourceName: selected.metadata?.name ?? "",
-                          resourceNamespace: selected.metadata?.namespace,
-                        }),
-                      );
-                    }}
-                  >
-                    Restart
-                  </Button>
-                ) : null}
-                {canWrite && kindLists.reconcilable.includes(kind) ? (
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    loading={actionBusy}
-                    onClick={() => {
-                      const [namespace, clusterName] = splitClusterKey(clusterId);
-                      runAction("Reconciling", () =>
-                        reconcileResource({
-                          namespace,
-                          name: clusterName,
-                          kind,
-                          resourceName: selected.metadata?.name ?? "",
-                          resourceNamespace: selected.metadata?.namespace,
-                        }),
-                      );
-                    }}
-                  >
-                    Reconcile
-                  </Button>
-                ) : null}
-                {canLogs && kind === "Pod" ? (
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => {
-                      const containers = podContainers(selected);
-                      setLogContainer(containers[0] ?? "");
-                      setLogPod(selected);
-                      setSelected(null);
-                    }}
-                  >
-                    <ScrollText className="size-3.5" aria-hidden />
-                    Logs
-                  </Button>
-                ) : null}
-                {canExec && kind === "Pod" ? (
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => {
-                      const containers = podContainers(selected);
-                      setExecContainer(containers[0] ?? "");
-                      setExecPod(selected);
-                      setSelected(null);
-                    }}
-                  >
-                    <SquareTerminal className="size-3.5" aria-hidden />
-                    Exec
-                  </Button>
-                ) : null}
-                {canWrite && !kindLists.deleteDenied.includes(kind) ? (
-                  <Button size="sm" variant="danger" disabled={actionBusy} onClick={() => setDeleteOpen(true)}>
-                    Delete
-                  </Button>
-                ) : null}
-              </div>
-            ) : null}
-            <ConditionsTable obj={selected} />
-            <RelatedEvents events={relatedEvents} />
-            <section>
-              <div className="mb-2 flex items-center justify-between">
-                <SegmentedControl
-                  options={[
-                    { value: "yaml", label: "YAML" },
-                    { value: "json", label: "JSON" },
-                  ]}
-                  value={detailFormat}
-                  onChange={setDetailFormat}
-                />
-                <Button variant="ghost" size="sm" onClick={copyManifest}>
-                  <Copy className="size-3.5" aria-hidden />
-                  Copy
-                </Button>
-              </div>
-              <pre className="overflow-x-auto rounded-lg bg-slate-50 p-3 text-xs leading-relaxed text-slate-800 dark:bg-slate-800/50 dark:text-slate-200">
-                {manifestText}
-              </pre>
-            </section>
-          </div>
-        ) : null}
-      </SlideOver>
+        onOpenLogs={openLogs}
+        onOpenExec={openExec}
+        onRequestDelete={() => setDeleteOpen(true)}
+      />
 
       <ConfirmDialog
         open={deleteOpen}
@@ -683,25 +356,11 @@ export function ResourcesView({
           )
         }
         confirmLabel="Delete"
-        onConfirm={async () => {
-          const [namespace, clusterName] = splitClusterKey(clusterId);
-          const targetName = selected?.metadata?.name ?? "";
-          try {
-            await deleteResource({
-              namespace,
-              name: clusterName,
-              kind,
-              resourceName: targetName,
-              resourceNamespace: selected?.metadata?.namespace,
-            });
-            toast.success(`Deleted ${targetName}`);
-            setSelected(null);
-            refresh();
-          } catch (err) {
-            toast.error(errorMessage(err));
-            throw err;
-          }
-        }}
+        onConfirm={() =>
+          selected
+            ? runAction("Deleted", () => deleteResource(buildResourceTarget(clusterId, kind, selected)))
+            : Promise.resolve()
+        }
         onClose={() => setDeleteOpen(false)}
       />
 
@@ -713,49 +372,21 @@ export function ResourcesView({
         onApplied={() => refresh()}
       />
 
-      <SlideOver
-        open={logPod !== null}
+      <PodLogs
+        pod={logPod}
+        container={logContainer}
+        onContainerChange={setLogContainer}
         onClose={() => setLogPod(null)}
-        title={`Logs · ${logPod?.metadata?.name ?? ""}`}
-        subtitle={logPod?.metadata?.namespace ? `namespace: ${logPod.metadata.namespace}` : ""}
-      >
-        {logPod ? (
-          <div className="space-y-3">
-            <ContainerPicker pod={logPod} value={logContainer} onChange={setLogContainer} />
-            <LogViewer
-              clusterNamespace={selectedNamespace}
-              clusterName={selectedName}
-              podNamespace={logPod.metadata?.namespace ?? ""}
-              pod={logPod.metadata?.name ?? ""}
-              container={logContainer}
-            />
-          </div>
-        ) : null}
-      </SlideOver>
+        target={{ clusterNamespace: selectedNamespace, clusterName: selectedName }}
+      />
 
-      <SlideOver
-        open={execPod !== null}
+      <PodExec
+        pod={execPod}
+        container={execContainer}
+        onContainerChange={setExecContainer}
         onClose={() => setExecPod(null)}
-        title={`Exec · ${execPod?.metadata?.name ?? ""}`}
-        subtitle={execPod?.metadata?.namespace ? `namespace: ${execPod.metadata.namespace}` : ""}
-      >
-        {execPod ? (
-          <div className="space-y-3">
-            <ContainerPicker pod={execPod} value={execContainer} onChange={setExecContainer} />
-            <Suspense
-              fallback={<div className="text-sm text-slate-500 dark:text-slate-400">Loading terminal…</div>}
-            >
-              <ExecTerminal
-                clusterNamespace={selectedNamespace}
-                clusterName={selectedName}
-                podNamespace={execPod.metadata?.namespace ?? ""}
-                pod={execPod.metadata?.name ?? ""}
-                container={execContainer}
-              />
-            </Suspense>
-          </div>
-        ) : null}
-      </SlideOver>
+        target={{ clusterNamespace: selectedNamespace, clusterName: selectedName }}
+      />
     </div>
   );
 }

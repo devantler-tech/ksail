@@ -13,18 +13,12 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"os"
-	"path/filepath"
 	"slices"
 	"sort"
 	"sync"
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
-	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
-	kindconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/kind"
-	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
-	"github.com/devantler-tech/ksail/v7/pkg/fsutil/scaffolder"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	"github.com/devantler-tech/ksail/v7/pkg/operator/api"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/clusterdiscovery"
@@ -32,19 +26,12 @@ import (
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
 
 // localNamespace is the synthetic namespace reported for local clusters. KSail has no namespace
 // concept locally, but the web UI keys rows on namespace/name and builds delete paths from it, so a
 // stable value is reported and the namespace path segment is otherwise ignored.
 const localNamespace = "default"
-
-// File modes for the generated EKS config under ~/.ksail/clusters/<name>.
-const (
-	eksConfigDirMode  = 0o700
-	eksConfigFileMode = 0o600
-)
 
 // FactoryFunc builds a provisioner factory for a distribution. The name is used by distributions
 // whose provisioner reads the cluster name from its config (VCluster, KWOK). It is injectable so
@@ -72,15 +59,20 @@ func (j *job) message() string {
 	return ""
 }
 
-// Ensure Service satisfies the operator REST API's backend contract, including the optional
-// capability reporter the SPA uses to gate edit affordances.
-var (
-	_ api.ClusterService     = (*Service)(nil)
-	_ api.CapabilityReporter = (*Service)(nil)
-)
+// Ensure Service satisfies the operator REST API's backend contract. It deliberately does NOT
+// implement api.ClusterUpdater: a local cluster's configuration is managed through its config files
+// and `ksail cluster update`, not the API, so the SPA hides the edit affordance (capabilities.
+// clusterUpdate=false) rather than offering a button that returns 501.
+var _ api.ClusterService = (*Service)(nil)
 
 // Service implements api.ClusterService over the local provider/provisioner lifecycle.
 type Service struct {
+	// ResourceAdapter provides the ResourceService + ResourceWriter methods (list/get/scale/restart/
+	// reconcile/delete) from the Service's ResourceClient method, so the workload-browser surface is
+	// shared with the operator backend rather than reimplemented. Wired to point at the Service in
+	// NewService.
+	api.ResourceAdapter
+
 	newFactory FactoryFunc
 
 	// discoverer enumerates existing clusters across providers for List/Get; discoverProviders is
@@ -89,21 +81,30 @@ type Service struct {
 	discoverer        *clusterdiscovery.Discoverer
 	discoverProviders []v1alpha1.Provider
 
+	// restConfigForCluster is the single kubeconfig seam: it resolves a *rest.Config for a named
+	// cluster (honouring kubeconfigPath), and the four default client builders below derive from it. A
+	// test that points it at one fake kubeconfig redirects every derived client. Injectable directly so
+	// a test can also substitute a fully synthetic rest.Config.
+	restConfigForCluster restConfigForClusterFunc
+
 	// newDynamicClient builds a dynamic client for a named cluster (the read-only resource browser).
-	// Injectable so tests can substitute a fake client instead of resolving a real kubeconfig context.
+	// Injectable so tests can substitute a fake client; the default derives from restConfigForCluster.
 	newDynamicClient dynamicClientFunc
 
 	// newApplyClient builds a dynamic client + REST mapper for a named cluster (manifest apply, which
-	// needs GVK→resource resolution). Injectable for tests (fake client + static mapper).
+	// needs GVK→resource resolution). Injectable for tests; the default derives from restConfigForCluster.
 	newApplyClient applyClientFunc
 
-	// newLogClient builds a clientset for a named cluster (pod log streaming). Injectable for tests.
+	// newLogClient builds a clientset for a named cluster (pod log streaming). Injectable for tests;
+	// the default derives from restConfigForCluster.
 	newLogClient logClientFunc
-	// newExecClient builds a clientset + rest.Config for a named cluster (pod exec). Injectable.
+	// newExecClient builds a clientset + rest.Config for a named cluster (pod exec). Injectable; the
+	// default derives from restConfigForCluster.
 	newExecClient execClientFunc
 
-	// kubeconfigPath resolves the kubeconfig file the resource browser / kubeconfig export read from.
-	// Injectable so tests can point at a temp kubeconfig instead of the user's real one.
+	// kubeconfigPath resolves the kubeconfig file every cluster client (and the resource browser /
+	// kubeconfig export) reads from, via restConfigForCluster. Injectable so tests can point at a temp
+	// kubeconfig instead of the user's real one.
 	kubeconfigPath func() string
 
 	mu   sync.Mutex
@@ -115,24 +116,14 @@ func NewService() *Service {
 	service := &Service{
 		newFactory:        defaultFactory,
 		discoverProviders: clusterdiscovery.AllProviders(),
-		newDynamicClient:  defaultDynamicClient,
-		newApplyClient:    defaultApplyClient,
-		newLogClient:      defaultLogClient,
-		newExecClient:     defaultExecClient,
 		kubeconfigPath:    k8s.DefaultKubeconfigPath,
 		jobs:              map[string]*job{},
 	}
 	service.discoverer = &clusterdiscovery.Discoverer{DockerFactory: service.dockerFactory}
+	service.ResourceAdapter = api.ResourceAdapter{Provider: service}
+	service.useDefaultClients()
 
 	return service
-}
-
-// Capabilities reports the operations the local backend supports. In-place cluster update is not
-// supported locally — a local cluster's configuration is managed through its config files and
-// `ksail cluster update`, not the API (see Update) — so the SPA hides the edit affordance rather
-// than offering a button that returns 501.
-func (s *Service) Capabilities() api.Capabilities {
-	return api.Capabilities{ClusterUpdate: false}
 }
 
 // CreatableDistributions returns the distributions the local UI can provision. It feeds the
@@ -327,15 +318,6 @@ func (s *Service) Create(
 	return &created, nil
 }
 
-// Update is not supported for local clusters; their configuration is managed via the CLI/files.
-func (s *Service) Update(
-	_ context.Context,
-	_, _ string,
-	_ *v1alpha1.Cluster,
-) (*v1alpha1.Cluster, error) {
-	return nil, fmt.Errorf("%w: updating clusters is not supported locally", api.ErrNotSupported)
-}
-
 // Delete starts deleting a cluster and returns immediately, marking it Deleting. The deletion runs
 // in a background goroutine.
 func (s *Service) Delete(ctx context.Context, _, name string) error {
@@ -376,6 +358,17 @@ func (s *Service) Availability(ctx context.Context) []clusterdiscovery.Availabil
 // environment under their default variable names.
 func (s *Service) UseCredentials(resolver credentials.Resolver) {
 	s.discoverer.Resolver = resolver
+}
+
+// useDefaultClients points the single restConfigForCluster seam at the real kubeconfig resolver and
+// derives the four client builders from it, so every cluster client resolves through one path that
+// honours kubeconfigPath.
+func (s *Service) useDefaultClients() {
+	s.restConfigForCluster = s.defaultRESTConfigForCluster
+	s.newDynamicClient = s.defaultDynamicClient
+	s.newApplyClient = s.defaultApplyClient
+	s.newLogClient = s.defaultLogClient
+	s.newExecClient = s.defaultExecClient
 }
 
 // resolveCluster finds the distribution and provider of an existing cluster, checking live
@@ -602,142 +595,4 @@ func defaultFactory(
 	}
 
 	return clusterprovisioner.DefaultFactory{DistributionConfig: config}, nil
-}
-
-func distributionConfig(
-	distribution v1alpha1.Distribution,
-	name string,
-) (*clusterprovisioner.DistributionConfig, error) {
-	//nolint:exhaustive // K3s/VCluster/KWOK go through SimpleDistributionConfig (default case).
-	switch distribution {
-	case v1alpha1.DistributionVanilla:
-		// NewKindCluster sets the TypeMeta; SetDefaultsCluster adds the default control-plane node.
-		// An empty v1alpha4.Cluster{} is rejected by Kind with "unknown apiVersion".
-		kindCluster := kindconfigmanager.NewKindCluster(name, "", "")
-		v1alpha4.SetDefaultsCluster(kindCluster)
-
-		return &clusterprovisioner.DistributionConfig{Kind: kindCluster}, nil
-	case v1alpha1.DistributionTalos:
-		return talosDistributionConfig(name)
-	case v1alpha1.DistributionEKS:
-		return eksDistributionConfig(name)
-	default:
-		// K3s, VCluster, KWOK need only the name (shared with the operator backend).
-		config := clusterprovisioner.SimpleDistributionConfig(distribution, name)
-		if config != nil {
-			return config, nil
-		}
-
-		return nil, errDistributionUnavailable(distribution)
-	}
-}
-
-// talosDistributionConfig builds a fully-initialized Talos config bundle named after the cluster
-// (PKI is baked in at name time and cannot change later), via the same shared helper the operator
-// uses. The bundle works for Talos on Docker, Hetzner, or Omni; the factory selects the provider
-// from the cluster spec.
-func talosDistributionConfig(
-	name string,
-) (*clusterprovisioner.DistributionConfig, error) {
-	configs, err := talosconfigmanager.NewDefaultConfigsWithName(name)
-	if err != nil {
-		return nil, fmt.Errorf("talos distribution config: %w", err)
-	}
-
-	return &clusterprovisioner.DistributionConfig{Talos: configs}, nil
-}
-
-// eksDistributionConfig renders an eksctl ClusterConfig (region from the AWS_REGION environment,
-// which the credential overlay populates from Settings) and writes it under ~/.ksail/clusters/<name>
-// so the EKS provisioner has the on-disk config it requires to create the cluster.
-func eksDistributionConfig(
-	name string,
-) (*clusterprovisioner.DistributionConfig, error) {
-	region := os.Getenv(credentials.DefaultEnvVar(credentials.AWSRegion))
-
-	configPath, err := writeEKSConfig(name, region)
-	if err != nil {
-		return nil, err
-	}
-
-	return &clusterprovisioner.DistributionConfig{
-		EKS: &clusterprovisioner.EKSConfig{Name: name, Region: region, ConfigPath: configPath},
-	}, nil
-}
-
-// writeEKSConfig renders and writes the eks.yaml for a cluster, returning its path. The name must be
-// a single path segment, and the resolved directory is verified to stay under ~/.ksail/clusters even
-// after symlink resolution, so neither a crafted name nor a symlinked cluster directory can redirect
-// the write outside the intended tree.
-func writeEKSConfig(name, region string) (string, error) {
-	// The name becomes exactly one directory under ~/.ksail/clusters, so it must be a single path
-	// segment. filepath.IsLocal alone is insufficient — it still permits multi-segment names like
-	// "foo/bar" and ".", which would redirect the write into an unintended nested directory — so also
-	// require the name to equal its own base element and reject the "." / ".." specials.
-	if !filepath.IsLocal(name) || name != filepath.Base(name) || name == "." || name == ".." {
-		return "", fmt.Errorf(
-			"%w: cluster name %q must be a single path segment",
-			api.ErrInvalid,
-			name,
-		)
-	}
-
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("resolve home directory: %w", err)
-	}
-
-	clustersRoot := filepath.Join(home, ".ksail", "clusters")
-
-	mkErr := os.MkdirAll(filepath.Join(clustersRoot, name), eksConfigDirMode)
-	if mkErr != nil {
-		return "", fmt.Errorf("create eks config directory: %w", mkErr)
-	}
-
-	dir, err := canonicalClusterDir(clustersRoot, name)
-	if err != nil {
-		return "", err
-	}
-
-	configPath := filepath.Join(dir, scaffolder.EKSConfigFile)
-	content := scaffolder.RenderEKSConfig(scaffolder.DefaultEKSConfigParams(name, region))
-
-	// dir is canonicalized and verified within ~/.ksail/clusters by canonicalClusterDir above.
-	//nolint:gosec // configPath is contained within ~/.ksail/clusters (see canonicalClusterDir)
-	writeErr := os.WriteFile(configPath, content, eksConfigFileMode)
-	if writeErr != nil {
-		return "", fmt.Errorf("write eks config: %w", writeErr)
-	}
-
-	return configPath, nil
-}
-
-// canonicalClusterDir canonicalizes ~/.ksail/clusters/<name> (resolving symlinks) and confirms it
-// remains within the canonical clusters root, rejecting any path that escapes it. The containment
-// check is delegated to fsutil.IsPathWithinDirectory so it cannot drift from the other callers of
-// the shared symlink-escape guard.
-func canonicalClusterDir(clustersRoot, name string) (string, error) {
-	canonicalRoot, err := fsutil.EvalCanonicalPath(clustersRoot)
-	if err != nil {
-		return "", fmt.Errorf("canonicalize clusters directory: %w", err)
-	}
-
-	canonicalDir, err := fsutil.EvalCanonicalPath(filepath.Join(clustersRoot, name))
-	if err != nil {
-		return "", fmt.Errorf("canonicalize eks config directory: %w", err)
-	}
-
-	if !fsutil.IsPathWithinDirectory(canonicalDir, canonicalRoot) {
-		return "", fmt.Errorf("%w: eks config path escapes %s", api.ErrInvalid, canonicalRoot)
-	}
-
-	return canonicalDir, nil
-}
-
-func errDistributionUnavailable(distribution v1alpha1.Distribution) error {
-	return fmt.Errorf(
-		"%w: distribution %q is not available locally",
-		api.ErrNotSupported,
-		distribution,
-	)
 }

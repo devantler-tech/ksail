@@ -3,7 +3,6 @@ package chat_test
 import (
 	"testing"
 
-	chatui "github.com/devantler-tech/ksail/v7/pkg/cli/ui/chat"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/chat"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
@@ -23,7 +22,7 @@ func newTestRootCmd() *cobra.Command {
 func TestBuildSystemContext(t *testing.T) {
 	t.Parallel()
 
-	ctx, err := chatui.BuildSystemContext(chat.DefaultSystemContextConfig(newTestRootCmd()))
+	ctx, err := chat.BuildSystemContext(chat.DefaultSystemContextConfig(newTestRootCmd()))
 	require.NoError(t, err)
 	assert.NotEmpty(t, ctx)
 	assert.Contains(t, ctx, "<identity>")

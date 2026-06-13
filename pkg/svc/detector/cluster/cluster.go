@@ -8,13 +8,20 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/credentials"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/hetzner"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"k8s.io/client-go/tools/clientcmd"
 )
+
+// hetznerProbeTimeout bounds the cloud-provider ownership probe so DetectInfo
+// cannot make an unbounded series of Hetzner API roundtrips (list all cluster
+// nodes, then a GET per node) when an external context carries no deadline.
+const hetznerProbeTimeout = 15 * time.Second
 
 // Detection errors.
 var (
@@ -112,7 +119,23 @@ func loadKubeContext(kubeconfigPath, contextName string) (*kubeContext, error) {
 // DetectInfo detects the distribution and provider from the kubeconfig context.
 // It reads the kubeconfig, determines the distribution from the context name pattern,
 // and detects the provider by analyzing the server endpoint.
-func DetectInfo(kubeconfigPath, contextName string) (*Info, error) {
+//
+// Cloud-provider credentials are resolved from the process environment via
+// credentials.EnvResolver. Use DetectInfoWithResolver to supply a different
+// resolver (e.g. the UI's secure-store-backed Manager, or a fake in tests).
+func DetectInfo(ctx context.Context, kubeconfigPath, contextName string) (*Info, error) {
+	return DetectInfoWithResolver(ctx, kubeconfigPath, contextName, credentials.EnvResolver{})
+}
+
+// DetectInfoWithResolver is DetectInfo with an explicit credentials.Resolver,
+// so the Hetzner ownership probe honors a configured token override (the UI
+// secure-store path) and can be driven by a fake in tests without mutating the
+// process environment.
+func DetectInfoWithResolver(
+	ctx context.Context,
+	kubeconfigPath, contextName string,
+	resolver credentials.Resolver,
+) (*Info, error) {
 	resolved, err := loadKubeContext(kubeconfigPath, contextName)
 	if err != nil {
 		return nil, err
@@ -137,7 +160,9 @@ func DetectInfo(kubeconfigPath, contextName string) (*Info, error) {
 	}
 
 	// Detect provider from server endpoint
-	provider, err := detectProviderFromEndpoint(distribution, resolved.serverURL, clusterName)
+	provider, err := detectProviderFromEndpoint(
+		ctx, resolver, distribution, resolved.serverURL, clusterName,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -229,6 +254,8 @@ func detectFromServerURL(
 // For localhost endpoints, returns ProviderDocker.
 // For public IPs, queries cloud provider APIs to verify ownership.
 func detectProviderFromEndpoint(
+	ctx context.Context,
+	resolver credentials.Resolver,
 	distribution v1alpha1.Distribution,
 	serverURL string,
 	clusterName string,
@@ -258,7 +285,7 @@ func detectProviderFromEndpoint(
 	}
 
 	// Public IP detected - query cloud providers to verify ownership
-	return detectCloudProvider(host, clusterName)
+	return detectCloudProvider(ctx, resolver, host, clusterName)
 }
 
 // extractHostFromURL extracts the host (IP or hostname) from a URL.
@@ -303,32 +330,36 @@ func isLocalhost(host string) bool {
 }
 
 // detectCloudProvider queries cloud provider APIs to find which provider owns the IP.
-// It checks each provider that has credentials available.
-func detectCloudProvider(ipAddress, clusterName string) (v1alpha1.Provider, error) {
-	ctx := context.Background()
-
+// It checks each provider that has credentials available, resolving them through
+// the supplied credentials.Resolver (which honors a UI secure-store override of
+// the token env-var name). The probe is bounded by hetznerProbeTimeout so it
+// cannot hang on slow or unreachable cloud APIs.
+func detectCloudProvider(
+	ctx context.Context,
+	resolver credentials.Resolver,
+	ipAddress, clusterName string,
+) (v1alpha1.Provider, error) {
 	// Check Hetzner
-	hetznerToken := os.Getenv("HCLOUD_TOKEN")
+	hetznerToken := resolver.Value(credentials.HetznerToken)
 	if hetznerToken != "" {
-		found, err := checkHetznerOwnership(ctx, hetznerToken, ipAddress, clusterName)
+		probeCtx, cancel := context.WithTimeout(ctx, hetznerProbeTimeout)
+		found, err := checkHetznerOwnership(probeCtx, hetznerToken, ipAddress, clusterName)
+
+		cancel()
+
 		if err == nil && found {
 			return v1alpha1.ProviderHetzner, nil
 		}
 		// Continue checking other providers if not found
 	}
 
-	// Add more cloud providers here as they are implemented.
-	// Example:
-	// if awsCredentialsAvailable() {
-	//     found, err := checkAWSOwnership(ctx, ipAddress, clusterName)
-	//     if err == nil && found {
-	//         return v1alpha1.ProviderAWS, nil
-	//     }
-	// }
-
 	// No provider found
 	if hetznerToken == "" {
-		return "", fmt.Errorf("%w: set HCLOUD_TOKEN for Hetzner", ErrNoCloudCredentials)
+		return "", fmt.Errorf(
+			"%w: set %s for Hetzner",
+			ErrNoCloudCredentials,
+			resolver.EnvVar(credentials.HetznerToken),
+		)
 	}
 
 	return "", fmt.Errorf(

@@ -12,35 +12,6 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/registry"
 )
 
-// TalosRegistryAction returns the action function for Talos registry creation.
-func TalosRegistryAction(ctx *Context) func(context.Context, dockerclient.Client) error {
-	return func(execCtx context.Context, dockerClient dockerclient.Client) error {
-		return runTalosRegistryAction(execCtx, ctx, dockerClient)
-	}
-}
-
-// TalosNetworkAction returns the action function for Talos network creation.
-func TalosNetworkAction(ctx *Context) func(context.Context, dockerclient.Client) error {
-	return func(execCtx context.Context, dockerClient dockerclient.Client) error {
-		return runTalosNetworkAction(execCtx, ctx, dockerClient)
-	}
-}
-
-// TalosConnectAction returns the action function for Talos registry connection.
-func TalosConnectAction(ctx *Context) func(context.Context, dockerclient.Client) error {
-	return func(execCtx context.Context, dockerClient dockerclient.Client) error {
-		return runTalosConnectAction(execCtx, ctx, dockerClient)
-	}
-}
-
-// TalosPostClusterConnectAction returns the action function for post-cluster registry configuration.
-// For Talos, this is a no-op since registry mirrors are configured via machine config before boot.
-func TalosPostClusterConnectAction(_ *Context) func(context.Context, dockerclient.Client) error {
-	return func(_ context.Context, _ dockerclient.Client) error {
-		return nil
-	}
-}
-
 // resolveTalosRegistries resolves the cluster name and builds registry infos from the context.
 // Returns empty slice if no mirror specs are provided.
 // The usedPorts parameter allows avoiding port conflicts with existing containers.

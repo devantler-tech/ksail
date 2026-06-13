@@ -2,10 +2,8 @@ package vclusterprovisioner
 
 import (
 	"context"
-	"fmt"
 
 	vclusterconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/vcluster"
-	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 )
 
@@ -20,21 +18,17 @@ const (
 	distributionImageRepository = "ghcr.io/loft-sh/vcluster-pro"
 )
 
-// UpgradeKubernetes returns ErrRecreationRequired because VCluster does not
-// support in-place Kubernetes version upgrades.
-func (p *Provisioner) UpgradeKubernetes(_ context.Context, _ string, _, _ string) error {
-	return fmt.Errorf(
-		"vcluster: in-place Kubernetes upgrade not supported: %w", clustererr.ErrRecreationRequired,
-	)
-}
-
-// UpgradeDistribution returns ErrRecreationRequired because VCluster does not
-// support in-place distribution version upgrades.
-func (p *Provisioner) UpgradeDistribution(_ context.Context, _ string, _, _ string) error {
-	return fmt.Errorf(
-		"vcluster: in-place distribution upgrade not supported: %w",
-		clustererr.ErrRecreationRequired,
-	)
+// newRecreationUpgrader returns the shared recreation-based Upgrader behavior for
+// VCluster. The static image refs and (empty) version suffix are supplied here;
+// the two pin accessors are overridden on the Provisioner because VCluster reads
+// them from the embedded SDK chart at call time. The embed supplies
+// UpgradeKubernetes/UpgradeDistribution (both recreate); GetCurrentVersions and
+// PrepareConfigForVersion below carry the genuine per-distribution logic.
+func newRecreationUpgrader() clusterupdate.RecreationRequiredUpgrader {
+	return clusterupdate.NewRecreationRequiredUpgrader("vcluster", clusterupdate.UpgraderMetadata{
+		KubernetesImageRef:   kubernetesImageRepository,
+		DistributionImageRef: distributionImageRepository,
+	})
 }
 
 // GetCurrentVersions returns the configured Kubernetes and VCluster chart versions.
@@ -48,22 +42,14 @@ func (p *Provisioner) GetCurrentVersions(
 	}, nil
 }
 
-// KubernetesImageRef returns the OCI repository for VCluster Kubernetes images.
-func (p *Provisioner) KubernetesImageRef() string {
-	return kubernetesImageRepository
-}
-
-// DistributionImageRef returns the OCI repository for the VCluster distribution image.
-func (p *Provisioner) DistributionImageRef() string {
-	return distributionImageRepository
-}
-
 // PinnedDistributionVersion returns the embedded VCluster chart version
 // (ChartVersion). VCluster's deployable version is baked into the SDK/Dockerfile
 // and cannot be changed by cluster recreation, so the update flow must cap the
 // distribution target at this pin rather than OCI-discovering the latest tag —
 // otherwise it phantom-upgrades to a newer upstream release it cannot deliver and
-// triggers a destructive no-op recreation that breaks update idempotency.
+// triggers a destructive no-op recreation that breaks update idempotency. It is
+// computed per call rather than baked into the embed metadata so the value always
+// reflects the current SDK chart.
 func (p *Provisioner) PinnedDistributionVersion() string {
 	return vclusterconfigmanager.ChartVersion()
 }
@@ -74,11 +60,6 @@ func (p *Provisioner) PinnedDistributionVersion() string {
 // `ksail cluster update` idempotent across upstream Kubernetes releases.
 func (p *Provisioner) PinnedKubernetesVersion() string {
 	return vclusterconfigmanager.DefaultKubernetesVersion
-}
-
-// VersionSuffix returns an empty string since VCluster uses plain semver tags.
-func (p *Provisioner) VersionSuffix() string {
-	return ""
 }
 
 // PrepareConfigForVersion is a no-op for VCluster because versions are

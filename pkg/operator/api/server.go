@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"path"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -83,6 +84,12 @@ type Server struct {
 
 	// auth is built from OIDC at Start; nil means authentication is disabled.
 	auth *authenticator
+
+	// brokerOnce lazily builds the shared SSE cluster broker on the first events subscription, so a
+	// Server used without ever opening the events stream (e.g. the operator) pays nothing for it.
+	brokerOnce sync.Once
+	// broker fans one shared cluster-discovery loop out to all SSE connections (see sse_broker.go).
+	broker *clusterBroker
 }
 
 // Deployment modes reported to the SPA via /api/v1/config (the "mode" field) so it can label the
@@ -442,8 +449,24 @@ func (s *Server) handleHealth(writer http.ResponseWriter, _ *http.Request) {
 	writeJSON(writer, http.StatusOK, map[string]string{"status": "ok"})
 }
 
+// clusterBrokerInstance returns the Server's shared SSE broker, building it once on first use. The
+// broker itself starts its discovery loop only when a connection subscribes and stops it when the last
+// one leaves, so this lazy construction never starts background work on its own.
+func (s *Server) clusterBrokerInstance() *clusterBroker {
+	s.brokerOnce.Do(func() {
+		s.broker = newClusterBroker(s)
+	})
+
+	return s.broker
+}
+
 func (s *Server) handleConfig(writer http.ResponseWriter, request *http.Request) {
-	capabilities := serviceCapabilities(s.Service)
+	var capabilities Capabilities
+	// Every capability flag is derived from whether the backend implements the matching optional
+	// interface, so the SPA's gates can never diverge from whether the routes/handlers actually
+	// succeed. clusterUpdate (ClusterUpdater) is uniform with the rest rather than reported through a
+	// separate mechanism.
+	_, capabilities.ClusterUpdate = s.Service.(ClusterUpdater)
 	// workloadRead is true exactly when the resource endpoints are registered (the backend implements
 	// ResourceService), so the SPA's gate can never diverge from whether the routes exist.
 	_, capabilities.WorkloadRead = s.Service.(ResourceService)
@@ -526,6 +549,15 @@ func (s *Server) handleCreateCluster(writer http.ResponseWriter, request *http.R
 }
 
 func (s *Server) handleUpdateCluster(writer http.ResponseWriter, request *http.Request) {
+	updater, ok := s.Service.(ClusterUpdater)
+	if !ok {
+		// A backend without in-place update (the local `ksail ui` backend) returns 501, preserving the
+		// message detail the deleted local stub carried so the SPA's error matches the prior behaviour.
+		writeClientError(writer, errClusterUpdateNotSupported)
+
+		return
+	}
+
 	decoded, err := decodeCluster(writer, request)
 	if err != nil {
 		writeDecodeError(writer, err)
@@ -533,7 +565,7 @@ func (s *Server) handleUpdateCluster(writer http.ResponseWriter, request *http.R
 		return
 	}
 
-	updated, updateErr := s.Service.Update(
+	updated, updateErr := updater.Update(
 		request.Context(),
 		request.PathValue("namespace"),
 		request.PathValue("name"),

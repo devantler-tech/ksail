@@ -114,6 +114,11 @@ func (c *Installer) Images(ctx context.Context) ([]string, error) {
 	return images, nil
 }
 
+// chartSpec returns the unified Cilium chart specification used by both Install
+// and Images. It carries the install-semantics flags (Atomic/Silent/UpgradeCRDs/
+// Wait/WaitForJobs=true) so that the install path applies the same wait and
+// rollback behavior that the previously-used helm.InstallOrUpgradeChart injected.
+// These flags do not affect Images() chart templating.
 func (c *Installer) chartSpec() *helm.ChartSpec {
 	return &helm.ChartSpec{
 		ReleaseName:     "cilium",
@@ -122,6 +127,11 @@ func (c *Installer) chartSpec() *helm.ChartSpec {
 		Version:         chartVersion(),
 		RepoURL:         "https://helm.cilium.io",
 		CreateNamespace: false,
+		Atomic:          true,
+		Silent:          true,
+		UpgradeCRDs:     true,
+		Wait:            true,
+		WaitForJobs:     true,
 		SetJSONVals:     c.getCiliumValues(),
 		Timeout:         c.GetTimeout(),
 	}
@@ -144,28 +154,34 @@ func (c *Installer) helmInstallOrUpgradeCilium(ctx context.Context) error {
 		return fmt.Errorf("get helm client: %w", err)
 	}
 
-	repoConfig := helm.RepoConfig{
-		Name:     "cilium",
-		URL:      "https://helm.cilium.io",
-		RepoName: "cilium",
-	}
-
-	chartConfig := helm.ChartConfig{
-		ReleaseName:     "cilium",
-		ChartName:       "cilium/cilium",
-		Namespace:       "kube-system",
-		Version:         chartVersion(),
-		RepoURL:         "https://helm.cilium.io",
-		CreateNamespace: false,
-		SetJSONVals:     c.getCiliumValues(),
-	}
-
-	err = helm.InstallOrUpgradeChart(ctx, client, repoConfig, chartConfig, c.GetTimeout())
+	err = c.installCiliumChart(ctx, client)
 	if err != nil {
 		return fmt.Errorf("install or upgrade cilium: %w", err)
 	}
 
 	return nil
+}
+
+// installCiliumChart adds the Cilium Helm repository and installs/upgrades the
+// chart with retry, mirroring the behavior of the retired
+// helm.InstallOrUpgradeChart helper (add repo, then InstallChartWithRetry under
+// a context extended by helm.ContextTimeoutBuffer for Helm's kstatus wait).
+func (c *Installer) installCiliumChart(ctx context.Context, client helm.Interface) error {
+	spec := c.chartSpec()
+
+	addErr := client.AddRepository(ctx, &helm.RepositoryEntry{
+		Name: "cilium",
+		URL:  "https://helm.cilium.io",
+	}, c.GetTimeout())
+	if addErr != nil {
+		return fmt.Errorf("failed to add cilium repository: %w", addErr)
+	}
+
+	installCtx, cancel := context.WithTimeout(ctx, c.GetTimeout()+helm.ContextTimeoutBuffer)
+	defer cancel()
+
+	//nolint:wrapcheck // identity-preserving error from the helm retry helper
+	return helm.InstallChartWithRetry(installCtx, client, spec, "cilium")
 }
 
 // getCiliumValues returns the Helm values for Cilium based on the distribution and provider.

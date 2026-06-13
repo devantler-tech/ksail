@@ -8,6 +8,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	kubernetesprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/kubernetes"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/internal/nested"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
@@ -172,74 +173,48 @@ func (p *KubernetesProvisioner) Create(
 }
 
 // Delete deletes the Kind cluster inside DinD and cleans up host cluster resources.
+// The inner Kind SDK delete uses the resolved target name (unlike KWOK, which uses
+// the raw name).
 func (p *KubernetesProvisioner) Delete(ctx context.Context, name string) error {
 	target := setName(name, p.kindConfig.Name)
 
-	// jscpd:ignore-start
-	// Best-effort: delete Kind cluster inside DinD via SDK
-	dockerPF, pfErr := p.k8sProvider.StartExecTunnel(
-		ctx, p.restConfig, target,
-		kubernetesprovider.DinDPodName, kubernetesprovider.DinDContainerName,
-		kubernetesprovider.DinDDockerPort,
-	)
-	if pfErr == nil {
-		defer dockerPF.Close()
-
-		_ = kubernetesprovider.WithRemoteDockerHost(dockerPF, func() error {
-			return p.Provisioner.Delete(ctx, target)
-		})
-	}
-
-	// Clean up API exposure, DinD, and namespace
-	err := p.k8sProvider.TeardownDinD(ctx, p.dynamicClient, target)
-	if err != nil {
-		return fmt.Errorf("teardown DinD: %w", err)
-	}
-
-	// Clean up kubeconfig entries
-	contextName := "kind-" + target
-
-	err = k8s.CleanupKubeconfig(p.kubeconfigPath, contextName, contextName, contextName, os.Stdout)
-	if err != nil {
-		return fmt.Errorf("cleanup kubeconfig: %w", err)
-	}
-
-	return nil
+	//nolint:wrapcheck // DinDLifecycle.Delete already wraps with teardown/cleanup context
+	return p.dindLifecycle().Delete(ctx, target, "kind-"+target, func() error {
+		return p.Provisioner.Delete(ctx, target)
+	})
 }
 
 // Exists checks if the Kind-on-Kubernetes cluster exists by checking for the DinD pod.
 func (p *KubernetesProvisioner) Exists(ctx context.Context, name string) (bool, error) {
 	target := setName(name, p.kindConfig.Name)
 
-	exists, err := p.k8sProvider.NodesExist(ctx, target)
-	if err != nil {
-		return false, fmt.Errorf("check nodes: %w", err)
-	}
-
-	return exists, nil
+	//nolint:wrapcheck // DinDLifecycle.Exists already wraps with "check nodes" context
+	return p.dindLifecycle().Exists(ctx, target)
 }
 
 // List returns cluster names found by namespace.
 func (p *KubernetesProvisioner) List(ctx context.Context) ([]string, error) {
-	clusters, err := p.k8sProvider.ListAllClusters(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("list clusters: %w", err)
-	}
-
-	return clusters, nil
+	//nolint:wrapcheck // DinDLifecycle.List already wraps with "list clusters" context
+	return p.dindLifecycle().List(ctx)
 }
 
 // setupDinD creates the namespace and DinD pod, then waits for readiness.
 func (p *KubernetesProvisioner) setupDinD(ctx context.Context, clusterName string) error {
-	err := p.k8sProvider.SetupDinD(ctx, clusterName, p.distribution, p.persistence)
-	if err != nil {
-		return fmt.Errorf("setup DinD: %w", err)
-	}
-
-	return nil
+	//nolint:wrapcheck // DinDLifecycle.SetupDinD already wraps with "setup DinD" context
+	return p.dindLifecycle().SetupDinD(ctx, clusterName, p.distribution, p.persistence)
 }
 
-// jscpd:ignore-end
+// dindLifecycle bundles the shared DinD delete/exists/list/setup flow for this
+// Kind-on-Kubernetes provisioner.
+func (p *KubernetesProvisioner) dindLifecycle() nested.DinDLifecycle {
+	return nested.DinDLifecycle{
+		Provider:       p.k8sProvider,
+		DynamicClient:  p.dynamicClient,
+		RestConfig:     p.restConfig,
+		KubeconfigPath: p.kubeconfigPath,
+		LogWriter:      os.Stdout,
+	}
+}
 
 // rewriteKindKubeconfig rewrites the Kind kubeconfig server URL to the stable exposure address.
 // Kind writes kubeconfig with context "kind-<name>" and cluster entry "kind-<name>".

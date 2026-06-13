@@ -6,7 +6,10 @@ import (
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/client/flux"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/fluxsubst"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/hostdebug"
 	dockerprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/docker"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/workloadwatch"
 	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/cobra"
 )
@@ -16,26 +19,28 @@ import (
 // source/Flux path resolution and formatting. They are only compiled during
 // testing and should be changed together with the tests that depend on them.
 
+// The Flux-substitution engine now lives in pkg/svc/fluxsubst; these shims
+// delegate to its exported API so existing command-package tests keep working.
 var (
-	ExportExpandFluxSubstitutions = expandFluxSubstitutions //nolint:gochecknoglobals // test export
-	ExportGetSchemaTypeAtPath     = getSchemaTypeAtPath     //nolint:gochecknoglobals // test export
-	ExportSchemaURLs              = schemaURLs              //nolint:gochecknoglobals // test export
-	ExportSplitAPIVersion         = splitAPIVersion         //nolint:gochecknoglobals // test export
-	ExportTypedPlaceholderValue   = typedPlaceholderValue   //nolint:gochecknoglobals // test export
+	ExportExpandFluxSubstitutions = fluxsubst.ExpandFluxSubstitutions //nolint:gochecknoglobals // test export
+	ExportGetSchemaTypeAtPath     = fluxsubst.GetSchemaTypeAtPath     //nolint:gochecknoglobals // test export
+	ExportSchemaURLs              = fluxsubst.SchemaURLs              //nolint:gochecknoglobals // test export
+	ExportSplitAPIVersion         = fluxsubst.SplitAPIVersion         //nolint:gochecknoglobals // test export
+	ExportTypedPlaceholderValue   = fluxsubst.TypedPlaceholderValue   //nolint:gochecknoglobals // test export
 )
 
-// ExportDebounceState is an exported type alias for the unexported debounceState
-// struct. It lets test code in package workload_test hold an opaque handle and
-// pass it to the exported test helpers below without accessing unexported fields
-// directly.
-type ExportDebounceState = debounceState
+// ExportDebounceState is an exported type alias for the workloadwatch debounce
+// state. The debounce/poll machinery moved to pkg/svc/workloadwatch; the shims
+// below delegate to its exported API so existing command-package tests keep
+// working.
+type ExportDebounceState = workloadwatch.DebounceState
 
-// ExportDebounceInterval exposes the debounceInterval constant for testing.
-const ExportDebounceInterval = debounceInterval
+// ExportDebounceInterval exposes the debounce interval constant for testing.
+const ExportDebounceInterval = workloadwatch.DebounceInterval
 
-// ExportIsRelevantEvent exposes isRelevantEvent for testing.
+// ExportIsRelevantEvent exposes the engine's IsRelevantEvent for testing.
 func ExportIsRelevantEvent(event fsnotify.Event) bool {
-	return isRelevantEvent(event)
+	return workloadwatch.IsRelevantEvent(event)
 }
 
 // ExportResolveSourceDir exposes resolveSourceDir for testing.
@@ -43,82 +48,72 @@ func ExportResolveSourceDir(cfg *v1alpha1.Cluster, pathFlag string) string {
 	return resolveSourceDir(cfg, pathFlag)
 }
 
-// ExportAddRecursive exposes addRecursive for testing.
+// ExportAddRecursive exposes the engine's AddRecursive for testing.
 func ExportAddRecursive(watcher *fsnotify.Watcher, root string) error {
-	return addRecursive(watcher, root)
+	return workloadwatch.AddRecursive(watcher, root) //nolint:wrapcheck // test shim, verbatim error
 }
 
-// ExportNewDebounceState creates a new zero-value debounceState for testing.
+// ExportNewDebounceState creates a new zero-value debounce state for testing.
 func ExportNewDebounceState() *ExportDebounceState {
 	return &ExportDebounceState{}
 }
 
 // ExportSetDebounceState sets the generation and lastFile fields under a mutex.
 func ExportSetDebounceState(state *ExportDebounceState, generation uint64, lastFile string) {
-	state.mutex.Lock()
-	defer state.mutex.Unlock()
-
-	state.generation = generation
-	state.lastFile = lastFile
+	state.Set(generation, lastFile)
 }
 
 // ExportGetGeneration returns the current generation counter.
 func ExportGetGeneration(state *ExportDebounceState) uint64 {
-	state.mutex.Lock()
-	defer state.mutex.Unlock()
-
-	return state.generation
+	return state.Generation()
 }
 
 // ExportGetLastFile returns the current lastFile value.
 func ExportGetLastFile(state *ExportDebounceState) string {
-	state.mutex.Lock()
-	defer state.mutex.Unlock()
-
-	return state.lastFile
+	return state.LastFile()
 }
 
-// ExportCancelPendingDebounce exposes cancelPendingDebounce for testing.
+// ExportCancelPendingDebounce exposes the engine's CancelPendingDebounce for testing.
 func ExportCancelPendingDebounce(state *ExportDebounceState) {
-	cancelPendingDebounce(state)
+	workloadwatch.CancelPendingDebounce(state)
 }
 
-// ExportScheduleApply exposes scheduleApply for testing.
+// ExportScheduleApply exposes the engine's ScheduleApply for testing.
 func ExportScheduleApply(state *ExportDebounceState, file string, applyCh chan string) {
-	scheduleApply(state, file, applyCh)
+	workloadwatch.ScheduleApply(state, file, applyCh)
 }
 
-// ExportEnqueueIfCurrent exposes enqueueIfCurrent for testing.
+// ExportEnqueueIfCurrent exposes the engine's EnqueueIfCurrent for testing.
 func ExportEnqueueIfCurrent(state *ExportDebounceState, expectedGen uint64, applyCh chan string) {
-	enqueueIfCurrent(state, expectedGen, applyCh)
+	workloadwatch.EnqueueIfCurrent(state, expectedGen, applyCh)
 }
 
-// ExportTryAddDirectory exposes tryAddDirectory for testing.
+// ExportTryAddDirectory exposes the engine's TryAddDirectory for testing.
 func ExportTryAddDirectory(watcher *fsnotify.Watcher, path string, cmd *cobra.Command) {
-	tryAddDirectory(watcher, path, cmd)
+	workloadwatch.TryAddDirectory(watcher, path, cmd.ErrOrStderr())
 }
 
-// ExportFindKustomizationDir exposes findKustomizationDir for testing.
+// ExportFindKustomizationDir exposes the engine's FindKustomizationDir for testing.
 func ExportFindKustomizationDir(changedFile, rootDir string) string {
-	return findKustomizationDir(changedFile, rootDir)
+	return workloadwatch.FindKustomizationDir(changedFile, rootDir, hasKustomizationFile)
 }
 
-// ExportMatchFluxKustomizations exposes matchFluxKustomizations for testing.
+// ExportMatchFluxKustomizations exposes the engine's MatchFluxKustomizations for testing.
 func ExportMatchFluxKustomizations(
 	changedDir, rootDir string,
 	kustomizations []flux.KustomizationInfo,
 ) []string {
-	return matchFluxKustomizations(changedDir, rootDir, kustomizations)
+	return workloadwatch.MatchFluxKustomizations(changedDir, rootDir, kustomizations)
 }
 
-// ExportNormalizeFluxPath exposes normalizeFluxPath for testing.
+// ExportNormalizeFluxPath exposes the engine's NormalizeFluxPath for testing.
 func ExportNormalizeFluxPath(p string) string {
-	return normalizeFluxPath(p)
+	return workloadwatch.NormalizeFluxPath(p)
 }
 
-// ExportFormatElapsed exposes formatElapsed for testing.
+// ExportFormatElapsed exposes the engine's FormatElapsed for testing.
 func ExportFormatElapsed(d time.Duration) string {
-	return formatElapsed(d)
+	return workloadwatch.FormatElapsed(d)
 }
 
 // ExportHasKustomizationFile exposes hasKustomizationFile for testing.
@@ -126,20 +121,20 @@ func ExportHasKustomizationFile(dir string) bool {
 	return hasKustomizationFile(dir)
 }
 
-// ExportPollInterval exposes the pollInterval constant for testing.
-const ExportPollInterval = pollInterval
+// ExportPollInterval exposes the engine's poll interval constant for testing.
+const ExportPollInterval = workloadwatch.PollInterval
 
-// ExportFileSnapshot is an exported type alias for the unexported fileSnapshot.
-type ExportFileSnapshot = fileSnapshot
+// ExportFileSnapshot is an exported type alias for the workloadwatch file snapshot.
+type ExportFileSnapshot = workloadwatch.FileSnapshot
 
-// ExportBuildFileSnapshot exposes buildFileSnapshot for testing.
+// ExportBuildFileSnapshot exposes the engine's BuildFileSnapshot for testing.
 func ExportBuildFileSnapshot(dir string) ExportFileSnapshot {
-	return buildFileSnapshot(dir)
+	return workloadwatch.BuildFileSnapshot(dir)
 }
 
-// ExportDetectChangedFile exposes detectChangedFile for testing.
+// ExportDetectChangedFile exposes the engine's DetectChangedFile for testing.
 func ExportDetectChangedFile(dir string, snapshot ExportFileSnapshot) string {
-	return detectChangedFile(dir, snapshot)
+	return workloadwatch.DetectChangedFile(dir, snapshot)
 }
 
 // ExportTopologicalSortKustomizations exposes topologicalSortKustomizations for testing.
@@ -149,71 +144,72 @@ func ExportTopologicalSortKustomizations(
 	return topologicalSortKustomizations(kustomizations)
 }
 
-// ExportParseInteger exposes parseInteger for testing.
+// ExportParseInteger exposes the engine's parseInteger for testing.
 func ExportParseInteger(trimmed, defaultVal string) any {
-	return parseInteger(trimmed, defaultVal)
+	return fluxsubst.ParseInteger(trimmed, defaultVal)
 }
 
-// ExportParseNumber exposes parseNumber for testing.
+// ExportParseNumber exposes the engine's parseNumber for testing.
 func ExportParseNumber(trimmed, defaultVal string) any {
-	return parseNumber(trimmed, defaultVal)
+	return fluxsubst.ParseNumber(trimmed, defaultVal)
 }
 
-// ExportParseBoolean exposes parseBoolean for testing.
+// ExportParseBoolean exposes the engine's parseBoolean for testing.
 func ExportParseBoolean(trimmed, defaultVal string) any {
-	return parseBoolean(trimmed, defaultVal)
+	return fluxsubst.ParseBoolean(trimmed, defaultVal)
 }
 
-// ExportInferYAMLType exposes inferYAMLType for testing.
+// ExportInferYAMLType exposes the engine's inferYAMLType for testing.
 func ExportInferYAMLType(trimmed, defaultVal string) any {
-	return inferYAMLType(trimmed, defaultVal)
+	return fluxsubst.InferYAMLType(trimmed, defaultVal)
 }
 
-// ExportSchemaNodeType exposes schemaNodeType for testing.
+// ExportSchemaNodeType exposes the engine's schemaNodeType for testing.
 func ExportSchemaNodeType(schema map[string]any) string {
-	return schemaNodeType(schema)
+	return fluxsubst.SchemaNodeType(schema)
 }
 
-// ExportIsNumericIndex exposes isNumericIndex for testing.
+// ExportIsNumericIndex exposes the engine's isNumericIndex for testing.
 func ExportIsNumericIndex(str string) bool {
-	return isNumericIndex(str)
+	return fluxsubst.IsNumericIndex(str)
 }
 
-// ExportParseJSONSchema exposes parseJSONSchema for testing.
+// ExportParseJSONSchema exposes the engine's parseJSONSchema for testing.
 func ExportParseJSONSchema(data []byte) map[string]any {
-	return parseJSONSchema(data)
+	return fluxsubst.ParseJSONSchema(data)
 }
 
-// ExportResolveFromProperties exposes resolveFromProperties for testing.
+// ExportResolveFromProperties exposes the engine's resolveFromProperties for testing.
 func ExportResolveFromProperties(schema map[string]any, key string) map[string]any {
-	return resolveFromProperties(schema, key)
+	return fluxsubst.ResolveFromProperties(schema, key)
 }
 
-// ExportResolveFromItems exposes resolveFromItems for testing.
+// ExportResolveFromItems exposes the engine's resolveFromItems for testing.
 func ExportResolveFromItems(schema map[string]any, key string) map[string]any {
-	return resolveFromItems(schema, key)
+	return fluxsubst.ResolveFromItems(schema, key)
 }
 
-// ExportResolveFromCombiners exposes resolveFromCombiners for testing.
+// ExportResolveFromCombiners exposes the engine's resolveFromCombiners for testing.
 func ExportResolveFromCombiners(schema map[string]any, key string) map[string]any {
-	return resolveFromCombiners(schema, key)
+	return fluxsubst.ResolveFromCombiners(schema, key)
 }
 
-// ExportSchemaCacheDir exposes schemaCacheDir for testing.
+// ExportSchemaCacheDir exposes the engine's schemaCacheDir for testing.
 func ExportSchemaCacheDir() string {
-	return schemaCacheDir()
+	return fluxsubst.SchemaCacheDir()
 }
 
-// ExportSchemaCacheFileName exposes schemaCacheFileName for testing.
+// ExportSchemaCacheFileName exposes the engine's schemaCacheFileName for testing.
 func ExportSchemaCacheFileName(schemaURL string) string {
-	return schemaCacheFileName(schemaURL)
+	return fluxsubst.SchemaCacheFileName(schemaURL)
 }
 
-// ExportDistributionToLabelScheme exposes distributionToLabelScheme for testing.
+// ExportDistributionToLabelScheme exposes the hostdebug engine's
+// DistributionToLabelScheme for testing (the mapping moved to pkg/svc/hostdebug).
 func ExportDistributionToLabelScheme(
 	distribution v1alpha1.Distribution,
 ) dockerprovider.LabelScheme {
-	return distributionToLabelScheme(distribution)
+	return hostdebug.DistributionToLabelScheme(distribution)
 }
 
 // ExportOutputPlain exposes outputPlain for testing.

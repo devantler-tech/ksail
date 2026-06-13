@@ -1,6 +1,13 @@
 //nolint:gochecknoglobals // export_test.go pattern requires global variables to expose internal functions
 package cluster
 
+import "github.com/devantler-tech/ksail/v7/pkg/svc/credentials"
+
+// EnvResolver is the default environment-backed credentials resolver, exposed so
+// white-box tests can drive detectCloudProvider/detectProviderFromEndpoint
+// without importing the credentials package themselves.
+var EnvResolver credentials.Resolver = credentials.EnvResolver{}
+
 // ExtractHostFromURL exports extractHostFromURL for testing.
 var ExtractHostFromURL = extractHostFromURL
 

@@ -16,6 +16,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/detector"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 	"sigs.k8s.io/kind/pkg/cluster"
 	kindcmd "sigs.k8s.io/kind/pkg/cmd"
@@ -107,6 +108,11 @@ type Provider interface {
 // It uses kind's Cobra commands where available (create, delete, list) and delegates
 // infrastructure operations (start, stop) to the injected Provider.
 type Provisioner struct {
+	// RecreationRequiredUpgrader supplies the recreation-based Upgrader behavior and
+	// metadata accessors shared with K3d/VCluster. Kind keeps its own
+	// GetCurrentVersions and PrepareConfigForVersion (see upgrader.go).
+	clusterupdate.RecreationRequiredUpgrader
+
 	kubeConfig        string
 	kindConfig        *v1alpha4.Cluster
 	kindSDKProvider   Provider
@@ -146,12 +152,13 @@ func NewProvisionerWithRunner(
 	runner runner.CommandRunner,
 ) *Provisioner {
 	return &Provisioner{
-		kubeConfig:      kubeConfig,
-		kindConfig:      kindConfig,
-		kindSDKProvider: kindSDKProvider,
-		infraProvider:   infraProvider,
-		runner:          runner,
-		waitForReady:    k8s.WaitForClusterReady,
+		RecreationRequiredUpgrader: newRecreationUpgrader(),
+		kubeConfig:                 kubeConfig,
+		kindConfig:                 kindConfig,
+		kindSDKProvider:            kindSDKProvider,
+		infraProvider:              infraProvider,
+		runner:                     runner,
+		waitForReady:               k8s.WaitForClusterReady,
 	}
 }
 
