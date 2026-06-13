@@ -3,23 +3,22 @@ package chat
 import (
 	"strings"
 
-	chatui "github.com/devantler-tech/ksail/v7/pkg/cli/ui/chat"
 	copilot "github.com/github/copilot-sdk/go"
 	"github.com/spf13/cobra"
 )
 
 // BuildSystemSections builds system prompt section overrides for the "customize" mode.
-// It delegates to the generic chatui.BuildSystemSections with KSail-specific defaults.
+// It delegates to the generic BuildSystemSectionsFromConfig with KSail-specific defaults.
 // The root command supplies the CLI help text in-process.
 func BuildSystemSections(rootCmd *cobra.Command) map[string]copilot.SectionOverride {
-	return chatui.BuildSystemSections(DefaultSystemContextConfig(rootCmd))
+	return BuildSystemSectionsFromConfig(DefaultSystemContextConfig(rootCmd))
 }
 
 // DefaultSystemContextConfig returns the default KSail system context configuration.
 // The CLI help section is rendered from the in-process root command instead of
 // spawning a ksail subprocess, so it works regardless of PATH or install location.
-func DefaultSystemContextConfig(rootCmd *cobra.Command) chatui.SystemContextConfig {
-	return chatui.SystemContextConfig{
+func DefaultSystemContextConfig(rootCmd *cobra.Command) SystemContextConfig {
+	return SystemContextConfig{
 		Identity: "You are KSail Assistant, an AI helper for KSail - " +
 			"a CLI tool for creating and managing local Kubernetes clusters.\n" +
 			"You help users configure, troubleshoot, and operate Kubernetes clusters using KSail.",

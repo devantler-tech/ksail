@@ -67,6 +67,17 @@ const (
 	RolePostClusterConnect
 )
 
+// ActionFunc executes a registry stage action for one distribution. It receives
+// the execution context, the resolved stage [Context], and a Docker client.
+type ActionFunc func(context.Context, *Context, dockerclient.Client) error
+
+// noopAction is the shared no-op action used for distribution×role cells that
+// have nothing to do (e.g. Talos and K3d configure mirrors before cluster
+// creation, so their PostClusterConnect stage is a no-op).
+func noopAction(_ context.Context, _ *Context, _ dockerclient.Client) error {
+	return nil
+}
+
 // Handler contains the prepare and action functions for a registry stage.
 type Handler struct {
 	Prepare func() bool
@@ -84,13 +95,12 @@ type Context struct {
 	MirrorSpecs    []registry.MirrorSpec
 }
 
-// Definition maps a stage role to its info and distribution-specific actions.
+// Definition pairs a stage's display info with the per-distribution action
+// table for that stage. Actions is keyed by distribution; an absent key means
+// the stage does not apply to that distribution.
 type Definition struct {
-	Info           setup.StageInfo
-	KindAction     func(*Context) func(context.Context, dockerclient.Client) error
-	K3dAction      func(*Context) func(context.Context, dockerclient.Client) error
-	TalosAction    func(*Context) func(context.Context, dockerclient.Client) error
-	VClusterAction func(*Context) func(context.Context, dockerclient.Client) error
+	Info    setup.StageInfo
+	Actions map[v1alpha1.Distribution]ActionFunc
 }
 
 // RegistryInfo returns the stage info for registry creation.

@@ -9,6 +9,7 @@ import (
 
 	docker "github.com/devantler-tech/ksail/v7/pkg/client/docker"
 	"github.com/devantler-tech/ksail/v7/pkg/client/netretry"
+	dockerprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/docker"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
@@ -190,6 +191,22 @@ func (p *Provisioner) cleanupConfigFiles(clusterName string) {
 	}
 }
 
+// containerStopTimeout is the timeout (in seconds) for stopping a container gracefully.
+const containerStopTimeout = 30
+
+// dockerNodeProvider returns a Docker provider on the canonical Talos label
+// scheme, backed by the provisioner's Docker client. It is the single seam for
+// Docker-based node listing/existence so the Talos provisioner no longer
+// duplicates docker.Provider's container queries. Returns ErrDockerNotAvailable
+// when no Docker client is configured.
+func (p *Provisioner) dockerNodeProvider() (*dockerprovider.Provider, error) {
+	if p.dockerClient == nil {
+		return nil, ErrDockerNotAvailable
+	}
+
+	return dockerprovider.NewProvider(p.dockerClient, dockerprovider.LabelSchemeTalos), nil
+}
+
 // listTalosContainers lists all containers for a specific Talos cluster.
 func (p *Provisioner) listTalosContainers(
 	ctx context.Context,
@@ -288,25 +305,6 @@ func (p *Provisioner) validateClusterOperation(
 	}
 
 	return clusterName, nil
-}
-
-// getClusterContainers validates the operation and returns the cluster's containers.
-// This combines validation with container listing for Start/Stop operations.
-func (p *Provisioner) getClusterContainers(
-	ctx context.Context,
-	name string,
-) (string, []container.Summary, error) {
-	clusterName, err := p.validateClusterOperation(ctx, name)
-	if err != nil {
-		return "", nil, err
-	}
-
-	containers, err := p.listTalosContainers(ctx, clusterName)
-	if err != nil {
-		return "", nil, fmt.Errorf("failed to list containers: %w", err)
-	}
-
-	return clusterName, containers, nil
 }
 
 // bootstrapAndSaveKubeconfig bootstraps the cluster and saves the kubeconfig.

@@ -56,8 +56,10 @@ type Updater interface {
 
 	// GetCurrentConfig retrieves the current cluster configuration from the running cluster.
 	// Used to compare against the desired configuration for computing diffs.
-	// The clusterName parameter is used to load persisted state for fields that cannot
-	// be introspected from the live cluster (e.g., Talos ISO, local registry settings).
+	// The clusterName parameter is used to merge persisted state for fields that cannot
+	// be introspected from the live cluster (e.g., Talos ISO, local registry settings,
+	// containerd mirrors directory) via clusterupdate.MergePersistedState — Kind, K3d, and
+	// Talos all do this so a configured value never reads as a false recreate-required diff.
 	// Returns the cluster spec and an optional provider spec (non-nil for provider-aware provisioners).
 	GetCurrentConfig(
 		ctx context.Context,

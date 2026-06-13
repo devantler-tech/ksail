@@ -54,6 +54,17 @@ var ErrInvalidCookie = errInvalidCookie
 // backend-error → status-code contract (CLI sentinels + Kubernetes apierrors) can be pinned directly.
 func ClientErrorStatus(err error) int { return clientErrorStatus(err) }
 
+// BrokerSubscriberCount reports how many SSE connections currently subscribe to the shared cluster
+// broker, or 0 when no broker has been built yet. Black-box tests use it to assert the broker idles
+// (drops to zero subscribers, stopping its single discovery loop) once every connection disconnects.
+func (s *Server) BrokerSubscriberCount() int {
+	if s.broker == nil {
+		return 0
+	}
+
+	return s.broker.subscriberCount()
+}
+
 // SignValue HMAC-signs a payload, exposing the unexported helper to black-box tests.
 func SignValue(secret, payload []byte) string { return signValue(secret, payload) }
 

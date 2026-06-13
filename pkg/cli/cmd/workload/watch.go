@@ -4,11 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"strings"
-	"sync"
 	"syscall"
 	"time"
 
@@ -18,6 +18,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/client/kubectl"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/workloadwatch"
 	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/cobra"
 	"k8s.io/cli-runtime/pkg/genericiooptions"
@@ -65,88 +66,6 @@ Examples:
 
   # Chain multiple hooks
   ksail workload watch --hook "make generate" --hook "docker build -t myapp ."`
-
-// debounceInterval is the time to wait after the last file event before
-// triggering an apply. This prevents redundant reconciles during batch saves.
-const debounceInterval = 500 * time.Millisecond
-
-// pollInterval is the time between file modification time scans. Acts as a
-// safety net for environments where inotify may miss events (CI runners under
-// high I/O load, editors using atomic save via create+rename, etc.).
-const pollInterval = 3 * time.Second
-
-// fileSnapshot maps file paths to their last-known modification time.
-// Used by the polling fallback to detect changes missed by fsnotify.
-type fileSnapshot map[string]time.Time
-
-// debounceState holds the mutable state shared between the event loop and
-// debounce timer callbacks.
-type debounceState struct {
-	timer      *time.Timer
-	mutex      sync.Mutex
-	lastFile   string
-	generation uint64
-}
-
-// cancelPendingDebounce increments the generation counter to invalidate any
-// pending timer callback and stops the timer if active.
-func cancelPendingDebounce(state *debounceState) {
-	state.mutex.Lock()
-	defer state.mutex.Unlock()
-
-	state.generation++
-
-	if state.timer != nil {
-		state.timer.Stop()
-	}
-}
-
-// scheduleApply updates the debounce state and (re)starts the timer.
-func scheduleApply(state *debounceState, file string, applyCh chan string) {
-	state.mutex.Lock()
-	defer state.mutex.Unlock()
-
-	state.lastFile = file
-	state.generation++
-
-	currentGen := state.generation
-
-	if state.timer != nil {
-		state.timer.Stop()
-	}
-
-	state.timer = time.AfterFunc(debounceInterval, func() {
-		enqueueIfCurrent(state, currentGen, applyCh)
-	})
-}
-
-// enqueueIfCurrent checks whether the generation is still current and, if so,
-// coalesces any stale pending apply and enqueues the latest file.
-func enqueueIfCurrent(state *debounceState, expectedGen uint64, applyCh chan string) {
-	state.mutex.Lock()
-
-	if expectedGen != state.generation {
-		state.mutex.Unlock()
-
-		return
-	}
-
-	file := state.lastFile
-	state.mutex.Unlock()
-
-	// Coalesce: drain any stale pending apply, then enqueue latest.
-	// NOTE: safe because the generation guard above ensures only one
-	// timer callback is active at any time (single sender).
-	select {
-	case <-applyCh:
-	default:
-	}
-
-	select {
-	case applyCh <- file:
-	default:
-	}
-}
 
 // NewWatchCmd creates the workload watch command.
 func NewWatchCmd() *cobra.Command {
@@ -308,9 +227,9 @@ func watchLoop(
 	defer func() { _ = watcher.Close() }()
 
 	// Add all directories recursively.
-	err = addRecursive(watcher, dir)
+	err = workloadwatch.AddRecursive(watcher, dir)
 	if err != nil {
-		return err
+		return fmt.Errorf("watch directory tree: %w", err)
 	}
 
 	// Set up signal handling for graceful shutdown.
@@ -348,7 +267,7 @@ func eventLoop(
 	debug bool,
 	hooks []string,
 ) error {
-	state := &debounceState{}
+	state := &workloadwatch.DebounceState{}
 
 	// applyCh serializes applies.  Capacity 1 ensures at most one apply is
 	// pending at any time; coalescing replaces a queued entry with the latest.
@@ -361,11 +280,20 @@ func eventLoop(
 	// catch events missed by fsnotify (CI runners, atomic-save editors).
 	// Runs independently from the fsnotify debounce state so that fsnotify
 	// events cannot invalidate polling-detected changes.
-	go pollForChanges(ctx, dir, applyCh, debug)
+	go workloadwatch.PollForChanges(ctx, dir, applyCh, debugWriter(debug))
 
-	defer cancelPendingDebounce(state)
+	defer workloadwatch.CancelPendingDebounce(state)
 
 	return dispatchEvents(ctx, cmd, watcher, state, applyCh, debug)
+}
+
+// debugWriter returns os.Stderr when debug output is enabled, or nil otherwise.
+func debugWriter(debug bool) io.Writer {
+	if debug {
+		return os.Stderr
+	}
+
+	return nil
 }
 
 // applyWorker runs applies one at a time, stopping when ctx is cancelled.
@@ -401,7 +329,7 @@ func dispatchEvents(
 	ctx context.Context,
 	cmd *cobra.Command,
 	watcher *fsnotify.Watcher,
-	state *debounceState,
+	state *workloadwatch.DebounceState,
 	applyCh chan string,
 	debug bool,
 ) error {
@@ -435,11 +363,11 @@ func handleFileEvent(
 	event fsnotify.Event,
 	watcher *fsnotify.Watcher,
 	cmd *cobra.Command,
-	state *debounceState,
+	state *workloadwatch.DebounceState,
 	applyCh chan string,
 	debug bool,
 ) {
-	if !isRelevantEvent(event) {
+	if !workloadwatch.IsRelevantEvent(event) {
 		return
 	}
 
@@ -449,10 +377,10 @@ func handleFileEvent(
 
 	// If a new directory was created, watch it too.
 	if event.Has(fsnotify.Create) {
-		tryAddDirectory(watcher, event.Name, cmd)
+		workloadwatch.TryAddDirectory(watcher, event.Name, cmd.ErrOrStderr())
 	}
 
-	scheduleApply(state, event.Name, applyCh)
+	workloadwatch.ScheduleApply(state, event.Name, applyCh)
 }
 
 // executeAndReportApply runs pre-apply hooks and kubectl apply against the
@@ -487,7 +415,7 @@ func executeAndReportApply(
 			cmd.PrintErrf(
 				"[%s] ✗ hook failed, apply skipped (%s): %v\n\n",
 				timestamp,
-				formatElapsed(elapsed),
+				workloadwatch.FormatElapsed(elapsed),
 				hookErr,
 			)
 
@@ -504,11 +432,15 @@ func executeAndReportApply(
 		cmd.PrintErrf(
 			"[%s] ✗ apply failed (%s): %v\n\n",
 			timestamp,
-			formatElapsed(elapsed),
+			workloadwatch.FormatElapsed(elapsed),
 			applyErr,
 		)
 	} else {
-		cmd.PrintErrf("[%s] ✓ apply succeeded (%s)\n\n", timestamp, formatElapsed(elapsed))
+		cmd.PrintErrf(
+			"[%s] ✓ apply succeeded (%s)\n\n",
+			timestamp,
+			workloadwatch.FormatElapsed(elapsed),
+		)
 	}
 }
 
@@ -543,7 +475,7 @@ func applyAndReport(
 
 	cmd.PrintErrf("[%s] change detected: %s\n", timestamp, relFile)
 
-	applyDir := findKustomizationDir(changedFile, dir)
+	applyDir := workloadwatch.FindKustomizationDir(changedFile, dir, hasKustomizationFile)
 
 	label := "reconciling"
 
@@ -561,61 +493,6 @@ func applyAndReport(
 	reconcileFluxSelectively(ctx, cmd, fluxReconciler, applyDir, dir, cachedKustomizations)
 }
 
-// formatElapsed formats a duration as a compact human-readable string
-// (e.g. "0.3s", "1.2s", "45.0s").
-func formatElapsed(d time.Duration) string {
-	return fmt.Sprintf("%.1fs", d.Seconds())
-}
-
-// findKustomizationDir walks up from the changed path to find the nearest
-// directory containing a kustomization file recognized by kubectl
-// (kustomization.yaml, kustomization.yml, or Kustomization). Both changedFile
-// and rootDir are normalized to absolute paths before comparison so that mixed
-// relative / absolute inputs are handled correctly. If the nearest match is
-// the root watch directory or no match is found, rootDir is returned
-// (triggering a full reconcile). When changedFile is itself a directory the
-// search starts there instead of at its parent.
-func findKustomizationDir(changedFile, rootDir string) string {
-	absRoot, err := filepath.Abs(rootDir)
-	if err != nil {
-		return rootDir
-	}
-
-	absChanged, err := filepath.Abs(changedFile)
-	if err != nil {
-		return absRoot
-	}
-
-	// When the changed path is a directory, start the search there;
-	// otherwise start at its parent directory.
-	dir := filepath.Dir(absChanged)
-
-	info, statErr := os.Stat(absChanged)
-	if statErr == nil && info.IsDir() {
-		dir = absChanged
-	}
-
-	for {
-		if hasKustomizationFile(dir) {
-			return dir
-		}
-
-		// Reached the root watch directory without finding a nested kustomization.
-		if dir == absRoot {
-			return absRoot
-		}
-
-		parent := filepath.Dir(dir)
-
-		// Reached the filesystem root without finding anything.
-		if parent == dir {
-			return absRoot
-		}
-
-		dir = parent
-	}
-}
-
 // tryCreateFluxReconciler attempts to create a Flux reconciler using the
 // current kubeconfig. Returns nil if the reconciler cannot be created
 // (e.g., no kubeconfig, cluster unreachable). The caller should treat
@@ -626,12 +503,12 @@ func tryCreateFluxReconciler() *flux.Reconciler {
 		return nil
 	}
 
-	r, err := flux.NewReconciler(kubeconfigPath)
+	reconciler, err := flux.NewReconciler(kubeconfigPath)
 	if err != nil {
 		return nil
 	}
 
-	return r
+	return reconciler
 }
 
 // reconcileFluxSelectively triggers Flux Kustomization CR reconciliation
@@ -656,7 +533,7 @@ func reconcileFluxSelectively(
 
 	// Populate cache on first call or refresh on previous list error.
 	if len(*cachedKustomizations) == 0 {
-		kustomizations, err := reconciler.ListKustomizationPaths(ctx)
+		kustomizations, err := reconciler.ListKustomizations(ctx)
 		if err != nil || len(kustomizations) == 0 {
 			return
 		}
@@ -671,7 +548,7 @@ func reconcileFluxSelectively(
 		return
 	}
 
-	matches := matchFluxKustomizations(applyDir, rootDir, *cachedKustomizations)
+	matches := workloadwatch.MatchFluxKustomizations(applyDir, rootDir, *cachedKustomizations)
 
 	if len(matches) == 0 {
 		reconcileRootKustomization(ctx, cmd, reconciler, "root fallback")
@@ -725,57 +602,6 @@ func reconcileMatchedKustomizations(
 			cmd.PrintErrf("[%s] ↻ flux: reconciled kustomization %q\n", timestamp, name)
 		}
 	}
-}
-
-// matchFluxKustomizations maps a changed directory (absolute path) to the
-// Flux Kustomization CR(s) whose spec.path matches. A match occurs when
-// the normalized relative path of the changed directory equals or is a
-// parent/child of the CR's spec.path. Returns nil when no CRs match.
-func matchFluxKustomizations(
-	changedDir, rootDir string,
-	kustomizations []flux.KustomizationInfo,
-) []string {
-	relDir, err := filepath.Rel(rootDir, changedDir)
-	if err != nil {
-		return nil
-	}
-
-	relDir = normalizeFluxPath(relDir)
-	if relDir == "" {
-		return nil
-	}
-
-	var matches []string
-
-	for _, kustomization := range kustomizations {
-		ksPath := normalizeFluxPath(kustomization.Path)
-		if ksPath == "" {
-			continue
-		}
-
-		if ksPath == relDir ||
-			strings.HasPrefix(ksPath, relDir+"/") ||
-			strings.HasPrefix(relDir, ksPath+"/") {
-			matches = append(matches, kustomization.Name)
-		}
-	}
-
-	return matches
-}
-
-// normalizeFluxPath strips leading "./" and cleans the path, converting
-// OS-specific separators to forward slashes so prefix checks work
-// consistently across platforms. Returns "" for paths that resolve to "."
-// (root-level).
-func normalizeFluxPath(path string) string {
-	path = strings.TrimPrefix(path, "./")
-	path = filepath.ToSlash(filepath.Clean(path))
-
-	if path == "." {
-		return ""
-	}
-
-	return path
 }
 
 // hasKustomizationFile reports whether dir contains a regular kustomization
@@ -841,267 +667,4 @@ func runKubectlApply(ctx context.Context, cmd *cobra.Command, dir string) error 
 	}
 
 	return nil
-}
-
-// isRelevantEvent returns true for write, create, remove, and rename events.
-func isRelevantEvent(event fsnotify.Event) bool {
-	return event.Has(fsnotify.Write) ||
-		event.Has(fsnotify.Create) ||
-		event.Has(fsnotify.Remove) ||
-		event.Has(fsnotify.Rename)
-}
-
-// addRecursive walks the directory tree and adds all directories to the watcher.
-func addRecursive(watcher *fsnotify.Watcher, root string) error {
-	err := filepath.WalkDir(root, func(path string, d os.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-
-		if d.IsDir() {
-			watchErr := watcher.Add(path)
-			if watchErr != nil {
-				return fmt.Errorf("watch %q: %w", path, watchErr)
-			}
-		}
-
-		return nil
-	})
-	if err != nil {
-		return fmt.Errorf("walk directory %q: %w", root, err)
-	}
-
-	return nil
-}
-
-// tryAddDirectory attempts to add a path to the watcher if it is a directory.
-func tryAddDirectory(watcher *fsnotify.Watcher, path string, cmd *cobra.Command) {
-	info, err := os.Stat(path)
-	if err != nil {
-		return
-	}
-
-	if info.IsDir() {
-		addErr := addRecursive(watcher, path)
-		if addErr != nil {
-			cmd.PrintErrf("⚠️  failed to watch new directory %s: %v\n", path, addErr)
-		}
-	}
-}
-
-// buildFileSnapshot walks the directory tree and records modification times
-// for all regular files. Uses os.Stat instead of d.Info() to avoid stale
-// cached stat data when files are replaced via rename (e.g. sed -i).
-func buildFileSnapshot(dir string) fileSnapshot {
-	snap := make(fileSnapshot)
-
-	_ = filepath.WalkDir(dir, func(path string, d os.DirEntry, walkErr error) error {
-		if walkErr != nil || d.IsDir() {
-			return nil //nolint:nilerr // skip inaccessible entries
-		}
-
-		info, statErr := os.Stat(path)
-		if statErr != nil || !info.Mode().IsRegular() {
-			return nil //nolint:nilerr // skip non-regular entries and stat errors
-		}
-
-		snap[path] = info.ModTime()
-
-		return nil
-	})
-
-	return snap
-}
-
-// detectChangedFile scans the directory for a file whose modification time
-// differs from the snapshot. Returns the first changed file path found and
-// updates the snapshot in place. Returns "" if no changes are detected.
-func detectChangedFile(dir string, snapshot fileSnapshot) string {
-	changed := scanForModifiedFiles(dir, snapshot)
-	deleted := scanForDeletedFiles(snapshot)
-
-	if changed != "" {
-		return changed
-	}
-
-	return deleted
-}
-
-// scanForModifiedFiles walks the directory tree and returns the first file
-// whose modification time differs from the snapshot. Updates the snapshot
-// in place for all changed files encountered during the walk.
-func scanForModifiedFiles(dir string, snapshot fileSnapshot) string {
-	var changed string
-
-	_ = filepath.WalkDir(dir, func(path string, d os.DirEntry, walkErr error) error {
-		if walkErr != nil || d.IsDir() {
-			return nil //nolint:nilerr // skip inaccessible entries
-		}
-
-		info, statErr := os.Stat(path)
-		if statErr != nil || !info.Mode().IsRegular() {
-			return nil //nolint:nilerr // skip non-regular entries and stat errors
-		}
-
-		modTime := info.ModTime()
-		if prev, ok := snapshot[path]; !ok || !modTime.Equal(prev) {
-			snapshot[path] = modTime
-
-			if changed == "" {
-				changed = path
-			}
-		}
-
-		return nil
-	})
-
-	return changed
-}
-
-// scanForDeletedFiles checks all snapshot entries and removes any whose
-// path is missing or is no longer a regular file. Returns the first
-// deleted path found, or "".
-func scanForDeletedFiles(snapshot fileSnapshot) string {
-	var changed string
-
-	for path := range snapshot {
-		info, statErr := os.Lstat(path)
-
-		if statErr != nil || !info.Mode().IsRegular() {
-			delete(snapshot, path)
-
-			if changed == "" {
-				changed = path
-			}
-		}
-	}
-
-	return changed
-}
-
-// pollForChanges periodically scans the watched directory for modified files
-// and enqueues applies directly on applyCh. This provides a fallback for
-// environments where fsnotify events may be lost (CI runners, atomic-save
-// editors using create+rename).
-//
-// Unlike the fsnotify path, polling bypasses the shared debounce state
-// entirely. The polling interval (3s) already provides natural debouncing,
-// and a blocking send guarantees at least one apply runs for the detected
-// change. A later fsnotify event may still coalesce with it before it is
-// applied (enqueueIfCurrent drains applyCh and the apply reflects the
-// newest state), so the guarantee is "an apply will happen", not
-// one-for-one delivery of each individual poll event.
-func pollForChanges(ctx context.Context, dir string, applyCh chan string, debug bool) {
-	snapshot := buildFileSnapshot(dir)
-
-	logPollSnapshot(dir, snapshot, debug)
-
-	ticker := time.NewTicker(pollInterval)
-	defer ticker.Stop()
-
-	tickCount := 0
-
-	for {
-		select {
-		case <-ctx.Done():
-			if debug {
-				fmt.Fprintf(os.Stderr, "  poll: stopped after %d ticks\n", tickCount)
-			}
-
-			return
-		case <-ticker.C:
-			tickCount++
-
-			if tickCount%5 == 1 {
-				logPollTick(tickCount, dir, snapshot, debug)
-			}
-
-			if !pollHandleChange(ctx, dir, snapshot, applyCh, tickCount, debug) {
-				return
-			}
-		}
-	}
-}
-
-// pollHandleChange detects and enqueues a changed file for the apply worker.
-// Returns false if the context was cancelled during the blocking send.
-func pollHandleChange(
-	ctx context.Context,
-	dir string,
-	snapshot fileSnapshot,
-	applyCh chan string,
-	tickCount int,
-	debug bool,
-) bool {
-	changed := detectChangedFile(dir, snapshot)
-	if changed == "" {
-		return true
-	}
-
-	if debug {
-		fmt.Fprintf(os.Stderr, "  poll: change on tick %d: %s\n", tickCount, changed)
-	}
-
-	// Blocking send: guaranteed delivery to the apply worker.
-	select {
-	case applyCh <- changed:
-		if debug {
-			fmt.Fprintf(os.Stderr, "  poll: enqueued for apply\n")
-		}
-
-		return true
-	case <-ctx.Done():
-		return false
-	}
-}
-
-// logPollSnapshot logs the initial snapshot contents (temporary diagnostics).
-func logPollSnapshot(dir string, snapshot fileSnapshot, debug bool) {
-	if !debug {
-		return
-	}
-
-	fmt.Fprintf(os.Stderr, "  poll: started, %d files in snapshot\n", len(snapshot))
-
-	for path, modTime := range snapshot {
-		rel, _ := filepath.Rel(dir, path)
-		fmt.Fprintf(os.Stderr, "  poll:   %s (mod=%s)\n", rel, modTime.Format(time.RFC3339Nano))
-	}
-}
-
-// logPollTick logs file modTimes vs snapshot on periodic ticks (temporary diagnostics).
-func logPollTick(tick int, dir string, snapshot fileSnapshot, debug bool) {
-	if !debug {
-		return
-	}
-
-	fmt.Fprintf(os.Stderr, "  poll: tick %d, scanning %s\n", tick, dir)
-
-	_ = filepath.WalkDir(dir, func(path string, d os.DirEntry, walkErr error) error {
-		if walkErr != nil || d.IsDir() {
-			return nil //nolint:nilerr // skip inaccessible entries and directories
-		}
-
-		info, statErr := os.Stat(path)
-		if statErr != nil {
-			return nil //nolint:nilerr // skip files that can't be stat'd
-		}
-
-		rel, _ := filepath.Rel(dir, path)
-		cur := info.ModTime()
-		prev, inSnap := snapshot[path]
-
-		switch {
-		case !inSnap:
-			fmt.Fprintf(os.Stderr, "  poll:   %s NEW mod=%s\n", rel, cur.Format(time.RFC3339Nano))
-		case !cur.Equal(prev):
-			fmt.Fprintf(os.Stderr, "  poll:   %s CHANGED snap=%s cur=%s\n",
-				rel, prev.Format(time.RFC3339Nano), cur.Format(time.RFC3339Nano))
-		default:
-			fmt.Fprintf(os.Stderr, "  poll:   %s unchanged mod=%s\n",
-				rel, cur.Format(time.RFC3339Nano))
-		}
-
-		return nil
-	})
 }

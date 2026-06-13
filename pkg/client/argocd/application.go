@@ -17,7 +17,8 @@ const (
 	argoCDHardRefreshAnnotation = "hard"
 )
 
-func applicationGVR() schema.GroupVersionResource {
+// ApplicationGVR returns the GroupVersionResource for ArgoCD Applications.
+func ApplicationGVR() schema.GroupVersionResource {
 	return schema.GroupVersionResource{
 		Group:    "argoproj.io",
 		Version:  "v1alpha1",
@@ -41,7 +42,7 @@ func buildApplication(opts EnsureOptions) *unstructured.Unstructured {
 		"kind":       "Application",
 		"metadata": map[string]any{
 			"name":      name,
-			"namespace": argoCDNamespace,
+			"namespace": DefaultNamespace,
 		},
 		"spec": map[string]any{
 			"project": defaultProject,

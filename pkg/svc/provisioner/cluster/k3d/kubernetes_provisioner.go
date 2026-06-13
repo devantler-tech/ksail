@@ -9,10 +9,10 @@ import (
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
-	"github.com/devantler-tech/ksail/v7/pkg/envvar"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	kubernetesprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/kubernetes"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/internal/nested"
 	k3kv1beta1 "github.com/rancher/k3k/pkg/apis/k3k.io/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -42,7 +42,7 @@ const (
 	k3kKubeconfigKey = "kubeconfig.yaml"
 	// k3kWaitTimeout is the default maximum time to wait for the k3k cluster to become
 	// ready. Overridable via the KSAIL_NESTED_READY_TIMEOUT environment variable (see
-	// nestedReadyTimeoutEnvVar / k3kReadyTimeout) so CI can grant a slow-but-healthy
+	// nested.ReadyTimeoutEnvVar / k3kReadyTimeout) so CI can grant a slow-but-healthy
 	// nested cluster more headroom under runner contention without changing the default.
 	k3kWaitTimeout = 10 * time.Minute
 	// k3kWaitInterval is the polling interval when waiting for the cluster.
@@ -54,14 +54,6 @@ const (
 	// k3kAPIServerPFTimeout bounds how long Create waits for a server pod to become
 	// port-forwardable when wiring the in-session nested API endpoint.
 	k3kAPIServerPFTimeout = 2 * time.Minute
-
-	// nestedDebugEnvVar gates opt-in nested-cluster diagnostics (matches the value the
-	// CI nested-provider test sets and the Talos provisioner checks).
-	nestedDebugEnvVar = "KSAIL_NESTED_DEBUG"
-	// nestedReadyTimeoutEnvVar overrides k3kWaitTimeout with a Go duration (e.g. "15m").
-	// Matches the value the CI nested-provider action exports; lets a slow-but-healthy
-	// nested cluster under runner contention avoid a premature context-deadline failure.
-	nestedReadyTimeoutEnvVar = "KSAIL_NESTED_READY_TIMEOUT"
 )
 
 // errNoRunningServerPod is recorded while polling for a port-forwardable k3k server
@@ -267,8 +259,6 @@ func (p *K3kProvisioner) Delete(ctx context.Context, name string) error {
 }
 
 // Exists checks whether the k3k cluster namespace exists.
-//
-// jscpd:ignore-start
 func (p *K3kProvisioner) Exists(ctx context.Context, name string) (bool, error) {
 	clusterName := p.clusterName
 	if clusterName == "" {
@@ -277,19 +267,9 @@ func (p *K3kProvisioner) Exists(ctx context.Context, name string) (bool, error) 
 
 	namespace := k3kNamespacePrefix + clusterName
 
-	_, err := p.hostClientset.CoreV1().Namespaces().Get(ctx, namespace, metav1.GetOptions{})
-	if apierrors.IsNotFound(err) {
-		return false, nil
-	}
-
-	if err != nil {
-		return false, fmt.Errorf("check namespace %s: %w", namespace, err)
-	}
-
-	return true, nil
+	//nolint:wrapcheck // helper already wraps with "check namespace" context
+	return nested.NamespaceExists(ctx, p.hostClientset, namespace)
 }
-
-// jscpd:ignore-end
 
 // Start is not supported for k3k clusters (pods are always running).
 func (p *K3kProvisioner) Start(_ context.Context, _ string) error {
@@ -441,7 +421,7 @@ func (p *K3kProvisioner) dumpNestedK3sDiagnostics(
 	ctx context.Context,
 	clusterName, namespace string,
 ) {
-	if os.Getenv(nestedDebugEnvVar) == "" {
+	if !nested.DebugEnabled() {
 		return
 	}
 
@@ -567,14 +547,7 @@ func (p *K3kProvisioner) setupCluster(
 // reveals why the embedded k3s server fails to start on a given host (image pull, scheduling,
 // or crash). No-op unless the env var is set.
 func (p *K3kProvisioner) dumpNestedK3sFailureDiagnostics(ctx context.Context, namespace string) {
-	if os.Getenv(nestedDebugEnvVar) == "" {
-		return
-	}
-
-	_, _ = fmt.Fprint(
-		os.Stdout,
-		k8s.DumpNamespaceDiagnostics(ctx, p.hostClientset, namespace, k3kSystemNamespace),
-	)
+	nested.DumpFailureDiagnostics(ctx, p.hostClientset, namespace, k3kSystemNamespace)
 }
 
 // ensureK3kOperator installs the k3k Helm chart if it isn't already present.
@@ -747,7 +720,7 @@ func (p *K3kProvisioner) createClusterCR(
 // k3kReadyTimeout returns the readiness wait budget for nested k3k clusters,
 // honoring the KSAIL_NESTED_READY_TIMEOUT override and falling back to k3kWaitTimeout.
 func k3kReadyTimeout() time.Duration {
-	return envvar.Duration(nestedReadyTimeoutEnvVar, k3kWaitTimeout)
+	return nested.ReadyTimeout(k3kWaitTimeout)
 }
 
 // waitForClusterReady polls the k3k Cluster status until it reports Ready.
@@ -827,7 +800,6 @@ func (p *K3kProvisioner) buildK3kRESTClient() (*rest.RESTClient, runtime.Paramet
 	return restClient, paramCodec, nil
 }
 
-// jscpd:ignore-start
 // waitForKubeconfigSecret polls for the kubeconfig Secret created by the k3k operator.
 func (p *K3kProvisioner) waitForKubeconfigSecret(
 	ctx context.Context,
@@ -836,40 +808,12 @@ func (p *K3kProvisioner) waitForKubeconfigSecret(
 	// k3k names the kubeconfig secret as k3k-<clusterName>-kubeconfig
 	secretName := fmt.Sprintf("k3k-%s-%s", clusterName, k3kKubeconfigSecretSuffix)
 
-	var kubeconfigData []byte
-
-	err := wait.PollUntilContextTimeout(
-		ctx, k3kWaitInterval, k3kReadyTimeout(), true,
-		func(ctx context.Context) (bool, error) {
-			secret, err := p.hostClientset.CoreV1().Secrets(namespace).Get(
-				ctx, secretName, metav1.GetOptions{},
-			)
-			if apierrors.IsNotFound(err) {
-				return false, nil
-			}
-
-			if err != nil {
-				return false, fmt.Errorf("get kubeconfig secret: %w", err)
-			}
-
-			data, ok := secret.Data[k3kKubeconfigKey]
-			if !ok || len(data) == 0 {
-				return false, nil
-			}
-
-			kubeconfigData = data
-
-			return true, nil
-		},
+	//nolint:wrapcheck // helper already wraps with "wait for kubeconfig secret" context
+	return nested.WaitForKubeconfigSecret(
+		ctx, p.hostClientset, namespace, secretName, k3kKubeconfigKey,
+		k3kWaitInterval, k3kReadyTimeout(),
 	)
-	if err != nil {
-		return nil, fmt.Errorf("wait for kubeconfig secret: %w", err)
-	}
-
-	return kubeconfigData, nil
 }
-
-// jscpd:ignore-end
 
 // rewriteK3kKubeconfig rewrites the k3k-generated kubeconfig to use the stable exposure
 // address and renames context/cluster/user entries for uniqueness.

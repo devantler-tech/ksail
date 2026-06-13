@@ -1,10 +1,14 @@
 package helmutil_test
 
 import (
+	"context"
 	"testing"
 
+	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/installer/internal/helmutil"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 )
 
 func TestIsGitOpsManaged(t *testing.T) {
@@ -106,4 +110,65 @@ func testIsGitOpsManagedFluxPrecedence(t *testing.T) {
 
 	assert.Equal(t, "Flux", controller)
 	assert.True(t, managed)
+}
+
+func TestSkipIfGitOpsManaged(t *testing.T) {
+	t.Parallel()
+
+	t.Run("not managed proceeds", func(t *testing.T) {
+		t.Parallel()
+
+		client := helm.NewMockInterface(t)
+		client.EXPECT().
+			GetReleaseStorageLabels(mock.Anything, "rel", "ns").
+			Return(map[string]string{"owner": "helm"}, nil)
+
+		skip, err := helmutil.SkipIfGitOpsManaged(context.Background(), client, "comp", "rel", "ns")
+
+		require.NoError(t, err)
+		assert.False(t, skip)
+	})
+
+	t.Run("no release storage proceeds", func(t *testing.T) {
+		t.Parallel()
+
+		client := helm.NewMockInterface(t)
+		client.EXPECT().
+			GetReleaseStorageLabels(mock.Anything, "rel", "ns").
+			Return(nil, helm.ErrNoReleaseStorage)
+
+		skip, err := helmutil.SkipIfGitOpsManaged(context.Background(), client, "comp", "rel", "ns")
+
+		require.NoError(t, err)
+		assert.False(t, skip)
+	})
+
+	t.Run("flux managed skips", func(t *testing.T) {
+		t.Parallel()
+
+		client := helm.NewMockInterface(t)
+		client.EXPECT().
+			GetReleaseStorageLabels(mock.Anything, "rel", "ns").
+			Return(map[string]string{"helm.toolkit.fluxcd.io/name": "rel"}, nil)
+
+		skip, err := helmutil.SkipIfGitOpsManaged(context.Background(), client, "comp", "rel", "ns")
+
+		require.NoError(t, err)
+		assert.True(t, skip)
+	})
+
+	t.Run("ownership error wrapped with component name", func(t *testing.T) {
+		t.Parallel()
+
+		client := helm.NewMockInterface(t)
+		client.EXPECT().
+			GetReleaseStorageLabels(mock.Anything, "rel", "ns").
+			Return(nil, assert.AnError)
+
+		skip, err := helmutil.SkipIfGitOpsManaged(context.Background(), client, "comp", "rel", "ns")
+
+		require.Error(t, err)
+		assert.False(t, skip)
+		assert.Contains(t, err.Error(), "check release ownership for comp")
+	})
 }

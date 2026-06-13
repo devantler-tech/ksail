@@ -10,9 +10,8 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/client/reconciler"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
-	"k8s.io/client-go/util/retry"
 )
 
 // Reconciler errors.
@@ -63,37 +62,30 @@ type ReconcileOptions struct {
 }
 
 // TriggerRefresh triggers an ArgoCD application refresh.
-// Uses retry logic to handle optimistic concurrency conflicts when the Application
-// is modified by ArgoCD controllers between GET and UPDATE operations.
+//
+// A JSON merge patch is used instead of the traditional Get+Update approach.
+// Patches are applied atomically server-side, so they never produce 409 Conflict
+// errors even when ArgoCD controllers are concurrently updating the Application,
+// which removes the need for an optimistic-concurrency retry loop.
 func (r *Reconciler) TriggerRefresh(ctx context.Context, hardRefresh bool) error {
-	appClient := r.applicationClient()
+	refreshValue := "normal"
+	if hardRefresh {
+		refreshValue = argoCDHardRefreshAnnotation
+	}
 
-	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		app, err := appClient.Get(ctx, rootApplicationName, metav1.GetOptions{})
-		if err != nil {
-			return fmt.Errorf("get argocd application: %w", err)
-		}
+	patch := fmt.Appendf(nil,
+		`{"metadata":{"annotations":{%q:%q}}}`,
+		argoCDRefreshAnnotationKey,
+		refreshValue,
+	)
 
-		annotations := app.GetAnnotations()
-		if annotations == nil {
-			annotations = make(map[string]string)
-		}
-
-		if hardRefresh {
-			annotations[argoCDRefreshAnnotationKey] = argoCDHardRefreshAnnotation
-		} else {
-			annotations[argoCDRefreshAnnotationKey] = "normal"
-		}
-
-		app.SetAnnotations(annotations)
-
-		_, err = appClient.Update(ctx, app, metav1.UpdateOptions{})
-		if err != nil {
-			return fmt.Errorf("trigger argocd refresh: %w", err)
-		}
-
-		return nil
-	})
+	_, err := r.applicationClient().Patch(
+		ctx,
+		rootApplicationName,
+		types.MergePatchType,
+		patch,
+		metav1.PatchOptions{},
+	)
 	if err != nil {
 		return fmt.Errorf("failed to trigger argocd refresh: %w", err)
 	}
@@ -155,13 +147,7 @@ func (r *Reconciler) CheckNamedApplicationReady(
 
 // applicationClient returns a dynamic client for ArgoCD Applications.
 func (r *Reconciler) applicationClient() dynamic.ResourceInterface {
-	gvr := schema.GroupVersionResource{
-		Group:    "argoproj.io",
-		Version:  "v1alpha1",
-		Resource: "applications",
-	}
-
-	return r.Dynamic.Resource(gvr).Namespace(DefaultNamespace)
+	return r.Dynamic.Resource(ApplicationGVR()).Namespace(DefaultNamespace)
 }
 
 // checkOperationState checks if there's an operation in progress or failed.
@@ -188,24 +174,11 @@ func (r *Reconciler) checkOperationState(app *unstructured.Unstructured) error {
 
 // checkConditions checks for error conditions.
 func (r *Reconciler) checkConditions(app *unstructured.Unstructured) error {
-	conditions, found, _ := unstructured.NestedSlice(app.Object, "status", "conditions")
-	if !found {
-		return nil
-	}
-
-	for _, condition := range conditions {
-		condMap, ok := condition.(map[string]any)
-		if !ok {
-			continue
-		}
-
-		condType, _, _ := unstructured.NestedString(condMap, "type")
-		condMessage, _, _ := unstructured.NestedString(condMap, "message")
-
+	for _, cond := range reconciler.ParseConditions(app) {
 		// Look for error conditions
-		if condType == "ComparisonError" || condType == "SyncError" {
-			if isSourceRelatedError(condMessage) {
-				return fmt.Errorf("%w: %s", ErrSourceNotAvailable, condMessage)
+		if cond.Type == "ComparisonError" || cond.Type == "SyncError" {
+			if isSourceRelatedError(cond.Message) {
+				return fmt.Errorf("%w: %s", ErrSourceNotAvailable, cond.Message)
 			}
 		}
 	}

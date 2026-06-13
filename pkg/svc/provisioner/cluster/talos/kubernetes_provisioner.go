@@ -14,6 +14,7 @@ import (
 	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	kubernetesprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/kubernetes"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/internal/nested"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/registry"
 	"github.com/docker/docker/api/types/container"
 	dockerclient "github.com/docker/docker/client"
@@ -155,29 +156,23 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 
 	p.portForwards = append(p.portForwards, dockerPF)
 
-	// Step 3: Set DOCKER_HOST and create a Docker client for DinD
-	dockerHost := fmt.Sprintf("tcp://127.0.0.1:%d", dockerPF.LocalPort)
+	// Step 3: Point DOCKER_HOST at the DinD daemon for the remainder of Create (the
+	// Talos SDK reads DOCKER_HOST across the sequential provisioning steps below, so
+	// the env var stays set until Create returns) and create a Docker client for DinD.
+	_, _ = fmt.Fprintf(
+		os.Stdout,
+		"► creating Talos cluster via SDK (DOCKER_HOST=tcp://127.0.0.1:%d)\n",
+		dockerPF.LocalPort,
+	)
 
-	// jscpd:ignore-start
-	_, _ = fmt.Fprintf(os.Stdout, "► creating Talos cluster via SDK (DOCKER_HOST=%s)\n", dockerHost)
-
-	origHost := os.Getenv("DOCKER_HOST")
-
-	err = os.Setenv("DOCKER_HOST", dockerHost)
+	restoreDockerHost, err := nested.SetDockerHost(dockerPF.LocalPort)
 	if err != nil {
-		return fmt.Errorf("set DOCKER_HOST: %w", err)
+		return err //nolint:wrapcheck // helper already wraps with "set DOCKER_HOST" context
 	}
 
-	defer func() {
-		if origHost == "" {
-			_ = os.Unsetenv("DOCKER_HOST")
-		} else {
-			_ = os.Setenv("DOCKER_HOST", origHost)
-		}
-	}()
+	defer restoreDockerHost()
 
 	// Create a Docker client pointing at DinD and inject it into the inner provisioner
-	// jscpd:ignore-end
 	dindClient, err := dockerclient.NewClientWithOpts(
 		dockerclient.FromEnv,
 		dockerclient.WithAPIVersionNegotiation(),
@@ -330,40 +325,24 @@ func (p *KubernetesProvisioner) Delete(ctx context.Context, name string) error {
 
 	p.portForwards = nil
 
-	// jscpd:ignore-start
-	// Best-effort: delete Talos cluster inside DinD via SDK
-	dockerPF, pfErr := p.k8sProvider.StartExecTunnel(
-		ctx, p.restConfig, clusterName,
-		kubernetesprovider.DinDPodName, kubernetesprovider.DinDContainerName,
-		kubernetesprovider.DinDDockerPort,
-	)
-	if pfErr == nil {
-		defer dockerPF.Close()
+	// The in-DinD delete needs a Docker client pointed at the DinD daemon, created
+	// inside the DOCKER_HOST scope the shared helper establishes.
+	//nolint:wrapcheck // DinDLifecycle.Delete already wraps with "teardown DinD" context
+	return p.dindLifecycle().Delete(ctx, clusterName, "", func() error {
+		dindClient, clientErr := dockerclient.NewClientWithOpts(
+			dockerclient.FromEnv,
+			dockerclient.WithAPIVersionNegotiation(),
+		)
+		if clientErr != nil {
+			return fmt.Errorf("create Docker client: %w", clientErr)
+		}
 
-		_ = kubernetesprovider.WithRemoteDockerHost(dockerPF, func() error {
-			dindClient, clientErr := dockerclient.NewClientWithOpts(
-				dockerclient.FromEnv,
-				dockerclient.WithAPIVersionNegotiation(),
-			)
-			if clientErr != nil {
-				return fmt.Errorf("create Docker client: %w", clientErr)
-			}
+		defer func() { _ = dindClient.Close() }()
 
-			defer func() { _ = dindClient.Close() }()
+		p.inner.WithDockerClient(dindClient)
 
-			p.inner.WithDockerClient(dindClient)
-
-			return p.inner.deleteDockerCluster(ctx, clusterName)
-		})
-	}
-
-	// Clean up API exposure, DinD, and namespace
-	err := p.k8sProvider.TeardownDinD(ctx, p.dynamicClient, clusterName)
-	if err != nil {
-		return fmt.Errorf("teardown DinD: %w", err)
-	}
-
-	return nil
+		return p.inner.deleteDockerCluster(ctx, clusterName)
+	})
 }
 
 // Exists checks if the Talos cluster exists by checking for the DinD pod.
@@ -373,22 +352,14 @@ func (p *KubernetesProvisioner) Exists(ctx context.Context, name string) (bool, 
 		clusterName = p.clusterName
 	}
 
-	exists, err := p.k8sProvider.NodesExist(ctx, clusterName)
-	if err != nil {
-		return false, fmt.Errorf("check nodes: %w", err)
-	}
-
-	return exists, nil
+	//nolint:wrapcheck // DinDLifecycle.Exists already wraps with "check nodes" context
+	return p.dindLifecycle().Exists(ctx, clusterName)
 }
 
 // List returns cluster names found by namespace.
 func (p *KubernetesProvisioner) List(ctx context.Context) ([]string, error) {
-	clusters, err := p.k8sProvider.ListAllClusters(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("list clusters: %w", err)
-	}
-
-	return clusters, nil
+	//nolint:wrapcheck // DinDLifecycle.List already wraps with "list clusters" context
+	return p.dindLifecycle().List(ctx)
 }
 
 // Start is not supported for Talos-on-Kubernetes.
@@ -629,15 +600,20 @@ func (p *KubernetesProvisioner) dumpNestedDiagnostics(
 
 // setupDinD creates the namespace and DinD pod, then waits for readiness.
 func (p *KubernetesProvisioner) setupDinD(ctx context.Context, clusterName string) error {
-	err := p.k8sProvider.SetupDinD(ctx, clusterName, p.distribution, p.persistence)
-	if err != nil {
-		return fmt.Errorf("setup DinD: %w", err)
-	}
-
-	return nil
+	//nolint:wrapcheck // DinDLifecycle.SetupDinD already wraps with "setup DinD" context
+	return p.dindLifecycle().SetupDinD(ctx, clusterName, p.distribution, p.persistence)
 }
 
-// jscpd:ignore-end
+// dindLifecycle bundles the shared DinD delete/exists/list/setup flow for this
+// Talos-on-Kubernetes provisioner. Talos has no host-kubeconfig cleanup on Delete
+// (KubeconfigPath is left empty so the shared Delete skips it).
+func (p *KubernetesProvisioner) dindLifecycle() nested.DinDLifecycle {
+	return nested.DinDLifecycle{
+		Provider:      p.k8sProvider,
+		DynamicClient: p.dynamicClient,
+		RestConfig:    p.restConfig,
+	}
+}
 
 // parsePort extracts the port number from a "host:port" endpoint string.
 // Returns a value in the valid TCP port range [1, 65535].

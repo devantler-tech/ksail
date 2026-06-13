@@ -34,11 +34,13 @@ func TestUpdateRejectsHostCluster(t *testing.T) {
 	t.Parallel()
 
 	service := api.NewCRClusterService(newClient(t, hostCluster()))
+	updater, ok := service.(api.ClusterUpdater)
+	require.True(t, ok, "operator backend must implement ClusterUpdater")
 
 	updated := hostCluster()
 	updated.Spec.Cluster.Distribution = v1alpha1.DistributionVCluster
 
-	_, err := service.Update(context.Background(), defaultNS, "host", updated)
+	_, err := updater.Update(context.Background(), defaultNS, "host", updated)
 	require.ErrorIs(t, err, api.ErrHostClusterProtected)
 }
 

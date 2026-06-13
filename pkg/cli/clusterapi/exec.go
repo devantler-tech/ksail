@@ -19,12 +19,13 @@ var _ api.ExecService = (*Service)(nil)
 // clientset to build the exec request URL, and the rest.Config for the SPDY executor). Injectable.
 type execClientFunc func(ctx context.Context, clusterName string) (kubernetes.Interface, *rest.Config, error)
 
-// defaultExecClient resolves the cluster's kubeconfig context and builds a clientset + rest.Config.
-func defaultExecClient(
+// defaultExecClient resolves the cluster's kubeconfig context (via the single restConfigForCluster
+// seam) and builds a clientset + rest.Config.
+func (s *Service) defaultExecClient(
 	_ context.Context,
 	clusterName string,
 ) (kubernetes.Interface, *rest.Config, error) {
-	restConfig, err := restConfigForCluster(clusterName)
+	restConfig, err := s.restConfigForCluster(clusterName)
 	if err != nil {
 		return nil, nil, err
 	}

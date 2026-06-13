@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
+	"k8s.io/cli-runtime/pkg/genericiooptions"
 	"k8s.io/client-go/rest"
 	"k8s.io/kubectl/pkg/cmd/apply"
 	"k8s.io/kubectl/pkg/cmd/clusterinfo"
@@ -26,231 +27,220 @@ import (
 	"k8s.io/kubectl/pkg/cmd/wait"
 )
 
-// CreateApplyCommand creates a kubectl apply command with all its flags and behavior.
-func (c *Client) CreateApplyCommand(kubeConfigPath string) *cobra.Command {
+// commandSpec describes one uniform kubectl wrapper command. The build function
+// constructs the upstream kubectl command from a factory and IO streams; use,
+// short, and long carry the KSail-facing help strings; postCustomize, when set,
+// runs after customizeCommand to apply per-command tweaks.
+type commandSpec struct {
+	use   string
+	short string
+	long  string
+
+	build         func(cmdutil.Factory, genericiooptions.IOStreams) *cobra.Command
+	postCustomize func(*cobra.Command)
+}
+
+// newWrappedCommand builds a kubectl command from the spec, applying the shared
+// lock, factory, and customization uniformly. The fatalMu read lock guards
+// against data races with withSafeFatal's writes to kubectl's global
+// fatalErrHandler.
+func (c *Client) newWrappedCommand(spec commandSpec, kubeConfigPath string) *cobra.Command {
 	fatalMu.RLock()
 	defer fatalMu.RUnlock()
 
 	factory, configFlags := c.createFactory(kubeConfigPath)
-	applyCmd := apply.NewCmdApply("ksail workload", factory, c.ioStreams)
+	cmd := spec.build(factory, c.ioStreams)
 
-	c.customizeCommand(
-		applyCmd,
-		"apply",
-		"Apply manifests",
-		"Apply local Kubernetes manifests to your cluster.",
-		configFlags,
-	)
+	c.customizeCommand(cmd, spec.use, spec.short, spec.long, configFlags)
 
-	return applyCmd
+	if spec.postCustomize != nil {
+		spec.postCustomize(cmd)
+	}
+
+	return cmd
+}
+
+// CreateApplyCommand creates a kubectl apply command with all its flags and behavior.
+func (c *Client) CreateApplyCommand(kubeConfigPath string) *cobra.Command {
+	return c.newWrappedCommand(commandSpec{
+		use:   "apply",
+		short: "Apply manifests",
+		long:  "Apply local Kubernetes manifests to your cluster.",
+		build: func(f cmdutil.Factory, s genericiooptions.IOStreams) *cobra.Command {
+			return apply.NewCmdApply("ksail workload", f, s)
+		},
+	}, kubeConfigPath)
 }
 
 // CreateCreateCommand creates a kubectl create command with all its flags and behavior.
 func (c *Client) CreateCreateCommand(kubeConfigPath string) *cobra.Command {
-	fatalMu.RLock()
-	defer fatalMu.RUnlock()
-
-	factory, configFlags := c.createFactory(kubeConfigPath)
-	createCmd := create.NewCmdCreate(factory, c.ioStreams)
-
-	c.customizeCommand(
-		createCmd,
-		"create",
-		"Create resources",
-		"Create Kubernetes resources from files or stdin.",
-		configFlags,
-	)
-
-	return createCmd
+	return c.newWrappedCommand(commandSpec{
+		use:   "create",
+		short: "Create resources",
+		long:  "Create Kubernetes resources from files or stdin.",
+		build: create.NewCmdCreate,
+	}, kubeConfigPath)
 }
 
 // CreateEditCommand creates a kubectl edit command with all its flags and behavior.
 func (c *Client) CreateEditCommand(kubeConfigPath string) *cobra.Command {
-	fatalMu.RLock()
-	defer fatalMu.RUnlock()
-
-	factory, configFlags := c.createFactory(kubeConfigPath)
-	editCmd := edit.NewCmdEdit(factory, c.ioStreams)
-
-	c.customizeCommand(
-		editCmd,
-		"edit",
-		"Edit a resource",
-		"Edit a Kubernetes resource from the default editor.",
-		configFlags,
-	)
-
-	return editCmd
+	return c.newWrappedCommand(commandSpec{
+		use:   "edit",
+		short: "Edit a resource",
+		long:  "Edit a Kubernetes resource from the default editor.",
+		build: edit.NewCmdEdit,
+	}, kubeConfigPath)
 }
 
 // CreateDeleteCommand creates a kubectl delete command with all its flags and behavior.
 func (c *Client) CreateDeleteCommand(kubeConfigPath string) *cobra.Command {
-	fatalMu.RLock()
-	defer fatalMu.RUnlock()
-
-	factory, configFlags := c.createFactory(kubeConfigPath)
-	deleteCmd := delete.NewCmdDelete(factory, c.ioStreams)
-
-	c.customizeCommand(
-		deleteCmd,
-		"delete",
-		"Delete resources",
-		"Delete Kubernetes resources by file names, stdin, resources and names, or by resources and label selector.",
-		configFlags,
-	)
-
-	return deleteCmd
+	return c.newWrappedCommand(commandSpec{
+		use:   "delete",
+		short: "Delete resources",
+		long:  "Delete Kubernetes resources by file names, stdin, resources and names, or by resources and label selector.",
+		build: delete.NewCmdDelete,
+	}, kubeConfigPath)
 }
 
 // CreateDescribeCommand creates a kubectl describe command with all its flags and behavior.
 func (c *Client) CreateDescribeCommand(kubeConfigPath string) *cobra.Command {
-	fatalMu.RLock()
-	defer fatalMu.RUnlock()
-
-	factory, configFlags := c.createFactory(kubeConfigPath)
-	describeCmd := describe.NewCmdDescribe("ksail workload", factory, c.ioStreams)
-
-	c.customizeCommand(
-		describeCmd,
-		"describe",
-		"Describe resources",
-		"Show details of a specific resource or group of resources, "+
-			"including metadata, status conditions, events, and container info. "+
-			"Useful for diagnosing why a resource is not ready — check the Events "+
-			"and Conditions sections. "+
-			"For Flux resources (kustomization, helmrelease), shows reconciliation "+
-			"status and last error. "+
+	return c.newWrappedCommand(commandSpec{
+		use:   "describe",
+		short: "Describe resources",
+		long: "Show details of a specific resource or group of resources, " +
+			"including metadata, status conditions, events, and container info. " +
+			"Useful for diagnosing why a resource is not ready — check the Events " +
+			"and Conditions sections. " +
+			"For Flux resources (kustomization, helmrelease), shows reconciliation " +
+			"status and last error. " +
 			"For ArgoCD resources (application), shows sync status and health.",
-		configFlags,
-	)
-
-	return describeCmd
+		build: func(f cmdutil.Factory, s genericiooptions.IOStreams) *cobra.Command {
+			return describe.NewCmdDescribe("ksail workload", f, s)
+		},
+	}, kubeConfigPath)
 }
 
 // CreateExplainCommand creates a kubectl explain command with all its flags and behavior.
 func (c *Client) CreateExplainCommand(kubeConfigPath string) *cobra.Command {
-	fatalMu.RLock()
-	defer fatalMu.RUnlock()
-
-	factory, configFlags := c.createFactory(kubeConfigPath)
-	explainCmd := explain.NewCmdExplain("ksail workload", factory, c.ioStreams)
-
-	c.customizeCommand(
-		explainCmd,
-		"explain",
-		"Get documentation for a resource",
-		"Get documentation for Kubernetes resources, including field descriptions and structure.",
-		configFlags,
-	)
-
-	return explainCmd
+	return c.newWrappedCommand(commandSpec{
+		use:   "explain",
+		short: "Get documentation for a resource",
+		long:  "Get documentation for Kubernetes resources, including field descriptions and structure.",
+		build: func(f cmdutil.Factory, s genericiooptions.IOStreams) *cobra.Command {
+			return explain.NewCmdExplain("ksail workload", f, s)
+		},
+	}, kubeConfigPath)
 }
 
 // CreateGetCommand creates a kubectl get command with all its flags and behavior.
 func (c *Client) CreateGetCommand(kubeConfigPath string) *cobra.Command {
-	fatalMu.RLock()
-	defer fatalMu.RUnlock()
-
-	factory, configFlags := c.createFactory(kubeConfigPath)
-	getCmd := get.NewCmdGet("ksail workload", factory, c.ioStreams)
-
-	c.customizeCommand(
-		getCmd,
-		"get",
-		"Get resources",
-		"Display one or many Kubernetes resources from your cluster. "+
-			"Use -o json for structured output that includes status conditions and health. "+
-			"Use -o wide for additional columns. "+
-			"Use --all-namespaces or -A to query across all namespaces. "+
-			"Supports comma-separated resource types (e.g. deployments,services). "+
-			"For GitOps diagnostics, query Flux resources (kustomization, helmrelease, gitrepository, ocirepository) "+
+	return c.newWrappedCommand(commandSpec{
+		use:   "get",
+		short: "Get resources",
+		long: "Display one or many Kubernetes resources from your cluster. " +
+			"Use -o json for structured output that includes status conditions and health. " +
+			"Use -o wide for additional columns. " +
+			"Use --all-namespaces or -A to query across all namespaces. " +
+			"Supports comma-separated resource types (e.g. deployments,services). " +
+			"For GitOps diagnostics, query Flux resources (kustomization, helmrelease, gitrepository, ocirepository) " +
 			"or ArgoCD resources (application) to check reconciliation status and errors.",
-		configFlags,
-	)
-
-	return getCmd
+		build: func(f cmdutil.Factory, s genericiooptions.IOStreams) *cobra.Command {
+			return get.NewCmdGet("ksail workload", f, s)
+		},
+	}, kubeConfigPath)
 }
 
 // CreateLogsCommand creates a kubectl logs command with all its flags and behavior.
 func (c *Client) CreateLogsCommand(kubeConfigPath string) *cobra.Command {
-	fatalMu.RLock()
-	defer fatalMu.RUnlock()
-
-	factory, configFlags := c.createFactory(kubeConfigPath)
-	logsCmd := logs.NewCmdLogs(factory, c.ioStreams)
-
-	c.customizeCommand(
-		logsCmd,
-		"logs",
-		"Print container logs",
-		"Print the logs for a container in a pod or specified resource. "+
-			"If the pod has only one container, the container name is optional. "+
-			"Use --tail=N to limit output to the last N lines. "+
-			"Use --previous to get logs from a previous container instance (useful for crash-loop diagnostics). "+
-			"Use --all-containers to get logs from all containers in a pod. "+
-			"For GitOps controller logs, query the controller pods directly "+
+	return c.newWrappedCommand(commandSpec{
+		use:   "logs",
+		short: "Print container logs",
+		long: "Print the logs for a container in a pod or specified resource. " +
+			"If the pod has only one container, the container name is optional. " +
+			"Use --tail=N to limit output to the last N lines. " +
+			"Use --previous to get logs from a previous container instance (useful for crash-loop diagnostics). " +
+			"Use --all-containers to get logs from all containers in a pod. " +
+			"For GitOps controller logs, query the controller pods directly " +
 			"(e.g. in flux-system or argocd namespace).",
-		configFlags,
-	)
-
-	return logsCmd
+		build: logs.NewCmdLogs,
+	}, kubeConfigPath)
 }
 
 // CreateRolloutCommand creates a kubectl rollout command with all its flags and behavior.
 func (c *Client) CreateRolloutCommand(kubeConfigPath string) *cobra.Command {
-	fatalMu.RLock()
-	defer fatalMu.RUnlock()
-
-	factory, configFlags := c.createFactory(kubeConfigPath)
-	rolloutCmd := rollout.NewCmdRollout("ksail workload", factory, c.ioStreams)
-
-	c.customizeCommand(
-		rolloutCmd,
-		"rollout",
-		"Manage the rollout of a resource",
-		"Manage the rollout of one or many resources.",
-		configFlags,
-	)
-
-	return rolloutCmd
+	return c.newWrappedCommand(commandSpec{
+		use:   "rollout",
+		short: "Manage the rollout of a resource",
+		long:  "Manage the rollout of one or many resources.",
+		build: func(f cmdutil.Factory, s genericiooptions.IOStreams) *cobra.Command {
+			return rollout.NewCmdRollout("ksail workload", f, s)
+		},
+	}, kubeConfigPath)
 }
 
 // CreateScaleCommand creates a kubectl scale command with all its flags and behavior.
 func (c *Client) CreateScaleCommand(kubeConfigPath string) *cobra.Command {
-	fatalMu.RLock()
-	defer fatalMu.RUnlock()
-
-	factory, configFlags := c.createFactory(kubeConfigPath)
-	scaleCmd := scale.NewCmdScale(factory, c.ioStreams)
-
-	c.customizeCommand(
-		scaleCmd,
-		"scale",
-		"Scale resources",
-		"Set a new size for a deployment, replica set, replication controller, or stateful set.",
-		configFlags,
-	)
-
-	return scaleCmd
+	return c.newWrappedCommand(commandSpec{
+		use:   "scale",
+		short: "Scale resources",
+		long:  "Set a new size for a deployment, replica set, replication controller, or stateful set.",
+		build: scale.NewCmdScale,
+	}, kubeConfigPath)
 }
 
 // CreateExposeCommand creates a kubectl expose command with all its flags and behavior.
 func (c *Client) CreateExposeCommand(kubeConfigPath string) *cobra.Command {
-	fatalMu.RLock()
-	defer fatalMu.RUnlock()
+	return c.newWrappedCommand(commandSpec{
+		use:   "expose",
+		short: "Expose a resource as a service",
+		long:  "Expose a resource as a new Kubernetes service.",
+		build: expose.NewCmdExposeService,
+	}, kubeConfigPath)
+}
 
-	factory, configFlags := c.createFactory(kubeConfigPath)
-	exposeCmd := expose.NewCmdExposeService(factory, c.ioStreams)
+// CreateDebugCommand creates a kubectl debug command with all its flags and behavior.
+func (c *Client) CreateDebugCommand(kubeConfigPath string) *cobra.Command {
+	return c.newWrappedCommand(commandSpec{
+		use:   "debug",
+		short: "Create debugging sessions for troubleshooting workloads and nodes",
+		long: "Create debugging sessions for troubleshooting workloads and nodes.\n\n" +
+			"Debug containers allow you to interactively troubleshoot running pods, " +
+			"create copies of pods with modified configuration, or attach a debug " +
+			"container to a node.",
+		build: func(f cmdutil.Factory, s genericiooptions.IOStreams) *cobra.Command {
+			return debug.NewCmdDebug(f, s)
+		},
+	}, kubeConfigPath)
+}
 
-	c.customizeCommand(
-		exposeCmd,
-		"expose",
-		"Expose a resource as a service",
-		"Expose a resource as a new Kubernetes service.",
-		configFlags,
-	)
+// CreateExecCommand creates a kubectl exec command with all its flags and behavior.
+func (c *Client) CreateExecCommand(kubeConfigPath string) *cobra.Command {
+	return c.newWrappedCommand(commandSpec{
+		use:   "exec",
+		short: "Execute a command in a container",
+		long:  "Execute a command in a container in a pod.",
+		build: exec.NewCmdExec,
+	}, kubeConfigPath)
+}
 
-	return exposeCmd
+// CreatePortForwardCommand creates a kubectl port-forward command with all its flags and behavior.
+func (c *Client) CreatePortForwardCommand(kubeConfigPath string) *cobra.Command {
+	return c.newWrappedCommand(commandSpec{
+		use:   "forward",
+		short: "Forward one or more local ports to a pod",
+		long: "Forward one or more local ports to a pod.\n\n" +
+			"Use resource type/name such as deployment/mydeployment to select a pod. " +
+			"Resource type defaults to 'pod' if omitted.\n\n" +
+			"If there are multiple pods matching the criteria, a pod will be selected automatically. " +
+			"The forwarding session ends when the selected pod terminates, and a rerun of the " +
+			"command is needed to resume forwarding.",
+		build: portforward.NewCmdPortForward,
+		// The upstream examples use "port-forward" which customizeCommand turns into
+		// "ksail workload port-forward". Fix to match the renamed "forward" subcommand.
+		postCustomize: func(cmd *cobra.Command) {
+			cmd.Example = strings.ReplaceAll(cmd.Example, "port-forward", "forward")
+		},
+	}, kubeConfigPath)
 }
 
 // CreateClusterInfoCommand wires kubectl's cluster-info with minimal guarding.
@@ -294,75 +284,6 @@ func (c *Client) CreateClusterInfoCommand(kubeConfigPath, contextName string) *c
 	clusterInfoCmd.AddCommand(clusterinfo.NewCmdClusterInfoDump(restClientGetter, c.ioStreams))
 
 	return clusterInfoCmd
-}
-
-// CreateDebugCommand creates a kubectl debug command with all its flags and behavior.
-func (c *Client) CreateDebugCommand(kubeConfigPath string) *cobra.Command {
-	fatalMu.RLock()
-	defer fatalMu.RUnlock()
-
-	factory, configFlags := c.createFactory(kubeConfigPath)
-	debugCmd := debug.NewCmdDebug(factory, c.ioStreams)
-
-	c.customizeCommand(
-		debugCmd,
-		"debug",
-		"Create debugging sessions for troubleshooting workloads and nodes",
-		"Create debugging sessions for troubleshooting workloads and nodes.\n\n"+
-			"Debug containers allow you to interactively troubleshoot running pods, "+
-			"create copies of pods with modified configuration, or attach a debug "+
-			"container to a node.",
-		configFlags,
-	)
-
-	return debugCmd
-}
-
-// CreateExecCommand creates a kubectl exec command with all its flags and behavior.
-func (c *Client) CreateExecCommand(kubeConfigPath string) *cobra.Command {
-	fatalMu.RLock()
-	defer fatalMu.RUnlock()
-
-	factory, configFlags := c.createFactory(kubeConfigPath)
-	execCmd := exec.NewCmdExec(factory, c.ioStreams)
-
-	c.customizeCommand(
-		execCmd,
-		"exec",
-		"Execute a command in a container",
-		"Execute a command in a container in a pod.",
-		configFlags,
-	)
-
-	return execCmd
-}
-
-// CreatePortForwardCommand creates a kubectl port-forward command with all its flags and behavior.
-func (c *Client) CreatePortForwardCommand(kubeConfigPath string) *cobra.Command {
-	fatalMu.RLock()
-	defer fatalMu.RUnlock()
-
-	factory, configFlags := c.createFactory(kubeConfigPath)
-	forwardCmd := portforward.NewCmdPortForward(factory, c.ioStreams)
-
-	c.customizeCommand(
-		forwardCmd,
-		"forward",
-		"Forward one or more local ports to a pod",
-		"Forward one or more local ports to a pod.\n\n"+
-			"Use resource type/name such as deployment/mydeployment to select a pod. "+
-			"Resource type defaults to 'pod' if omitted.\n\n"+
-			"If there are multiple pods matching the criteria, a pod will be selected automatically. "+
-			"The forwarding session ends when the selected pod terminates, and a rerun of the "+
-			"command is needed to resume forwarding.",
-		configFlags,
-	)
-
-	// The upstream examples use "port-forward" which customizeCommand turns into
-	// "ksail workload port-forward". Fix to match the renamed "forward" subcommand.
-	forwardCmd.Example = strings.ReplaceAll(forwardCmd.Example, "port-forward", "forward")
-
-	return forwardCmd
 }
 
 // CreateWaitCommand creates a kubectl wait command with all its flags and behavior.

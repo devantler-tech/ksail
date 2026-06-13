@@ -13,6 +13,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil/scaffolder"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	kubernetesprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/kubernetes"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/internal/nested"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -76,7 +77,6 @@ func NewKubernetesProvisioner(cfg KubernetesProvisionerConfig) (*KubernetesProvi
 		cfg.K8sProvider,
 	)
 
-	// jscpd:ignore-start
 	return &KubernetesProvisioner{
 		Provisioner:      innerProvisioner,
 		k8sProvider:      cfg.K8sProvider,
@@ -88,7 +88,6 @@ func NewKubernetesProvisioner(cfg KubernetesProvisionerConfig) (*KubernetesProvi
 		kubeconfigPath:   kubeconfigPath,
 		persistence:      cfg.Persistence,
 	}, nil
-	// jscpd:ignore-end
 }
 
 // kwokContainerNames returns the Docker container names kwokctl creates inside DinD.
@@ -252,74 +251,48 @@ func (p *KubernetesProvisioner) Create(ctx context.Context, name string) error {
 }
 
 // Delete deletes the KWOK cluster inside DinD and cleans up host cluster resources.
+// The inner kwokctl SDK delete uses the raw name (unlike Kind, which uses the
+// resolved target).
 func (p *KubernetesProvisioner) Delete(ctx context.Context, name string) error {
 	target := p.resolveName(name)
 
-	// jscpd:ignore-start
-	// Best-effort: delete KWOK cluster inside DinD via SDK
-	dockerPF, pfErr := p.k8sProvider.StartExecTunnel(
-		ctx, p.restConfig, target,
-		kubernetesprovider.DinDPodName, kubernetesprovider.DinDContainerName,
-		kubernetesprovider.DinDDockerPort,
-	)
-	if pfErr == nil {
-		defer dockerPF.Close()
-
-		_ = kubernetesprovider.WithRemoteDockerHost(dockerPF, func() error {
-			return p.Provisioner.Delete(ctx, name)
-		})
-	}
-
-	// Clean up API exposure, DinD, and namespace
-	err := p.k8sProvider.TeardownDinD(ctx, p.dynamicClient, target)
-	if err != nil {
-		return fmt.Errorf("teardown DinD: %w", err)
-	}
-
-	// Clean up kubeconfig entries
-	contextName := "kwok-" + target
-
-	err = k8s.CleanupKubeconfig(p.kubeconfigPath, contextName, contextName, contextName, os.Stdout)
-	if err != nil {
-		return fmt.Errorf("cleanup kubeconfig: %w", err)
-	}
-
-	return nil
+	//nolint:wrapcheck // DinDLifecycle.Delete already wraps with teardown/cleanup context
+	return p.dindLifecycle().Delete(ctx, target, "kwok-"+target, func() error {
+		return p.Provisioner.Delete(ctx, name)
+	})
 }
 
 // Exists checks if the KWOK-on-Kubernetes cluster exists by checking for the DinD pod.
 func (p *KubernetesProvisioner) Exists(ctx context.Context, name string) (bool, error) {
 	target := p.resolveName(name)
 
-	exists, err := p.k8sProvider.NodesExist(ctx, target)
-	if err != nil {
-		return false, fmt.Errorf("check nodes: %w", err)
-	}
-
-	return exists, nil
+	//nolint:wrapcheck // DinDLifecycle.Exists already wraps with "check nodes" context
+	return p.dindLifecycle().Exists(ctx, target)
 }
 
 // List returns cluster names found by namespace.
 func (p *KubernetesProvisioner) List(ctx context.Context) ([]string, error) {
-	clusters, err := p.k8sProvider.ListAllClusters(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("list all clusters: %w", err)
-	}
-
-	return clusters, nil
+	//nolint:wrapcheck // DinDLifecycle.List already wraps with "list clusters" context
+	return p.dindLifecycle().List(ctx)
 }
 
 // setupDinD creates the namespace and DinD pod, then waits for readiness.
 func (p *KubernetesProvisioner) setupDinD(ctx context.Context, clusterName string) error {
-	err := p.k8sProvider.SetupDinD(ctx, clusterName, p.distribution, p.persistence)
-	if err != nil {
-		return fmt.Errorf("setup dinD: %w", err)
-	}
-
-	return nil
+	//nolint:wrapcheck // DinDLifecycle.SetupDinD already wraps with "setup DinD" context
+	return p.dindLifecycle().SetupDinD(ctx, clusterName, p.distribution, p.persistence)
 }
 
-// jscpd:ignore-end
+// dindLifecycle bundles the shared DinD delete/exists/list/setup flow for this
+// KWOK-on-Kubernetes provisioner.
+func (p *KubernetesProvisioner) dindLifecycle() nested.DinDLifecycle {
+	return nested.DinDLifecycle{
+		Provider:       p.k8sProvider,
+		DynamicClient:  p.dynamicClient,
+		RestConfig:     p.restConfig,
+		KubeconfigPath: p.kubeconfigPath,
+		LogWriter:      os.Stdout,
+	}
+}
 
 // discoverAPIServerPort reads the kubeconfig that kwokctl wrote and extracts
 // the API server port from the cluster entry. kwokctl (docker compose runtime)

@@ -2,9 +2,7 @@ package fluxinstaller
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
@@ -45,19 +43,14 @@ func NewInstaller(
 func (b *Installer) Install(ctx context.Context) error {
 	spec := b.chartSpec()
 
-	labels, err := b.client.GetReleaseStorageLabels(ctx, spec.ReleaseName, spec.Namespace)
-	if err != nil && !errors.Is(err, helm.ErrNoReleaseStorage) {
-		return fmt.Errorf("check flux-operator release ownership: %w", err)
+	skip, err := helmutil.SkipIfGitOpsManaged(
+		ctx, b.client, "flux-operator", spec.ReleaseName, spec.Namespace,
+	)
+	if err != nil {
+		return err //nolint:wrapcheck // helmutil already wraps with the component name
 	}
 
-	if controller, managed := helmutil.IsGitOpsManaged(labels); managed {
-		fmt.Fprintf(
-			os.Stderr,
-			"flux-operator: skipping install — release %q is managed by %s\n",
-			spec.ReleaseName,
-			controller,
-		)
-
+	if skip {
 		return nil
 	}
 

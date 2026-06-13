@@ -17,6 +17,3 @@ var CheckHelmReleaseStuck = checkHelmReleaseStuck
 
 // CheckHelmReleaseStuckFunc is the function signature for checkHelmReleaseStuck.
 type CheckHelmReleaseStuckFunc = func(hr *unstructured.Unstructured) *StuckHelmRelease
-
-// HelmReleaseGVR exports helmReleaseGVR for testing.
-var HelmReleaseGVR = helmReleaseGVR

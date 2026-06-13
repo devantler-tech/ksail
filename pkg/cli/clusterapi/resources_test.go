@@ -2,6 +2,7 @@ package clusterapi_test
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -18,6 +19,7 @@ import (
 	"k8s.io/client-go/dynamic"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/rest"
 )
 
 const (
@@ -330,6 +332,28 @@ users:
   - name: kind-prod
     user: {}
 `
+
+// errRESTConfig is the sentinel a fake restConfigForCluster seam returns to prove every derived
+// client builder funnels through that single seam.
+var errRESTConfig = errors.New("rest config unavailable")
+
+// TestRESTConfigSeamFeedsEveryDefaultClient asserts the single restConfigForCluster seam is the source
+// of all four default client builders: when the seam fails, the dynamic read path surfaces exactly
+// that error rather than reaching a real kubeconfig.
+func TestRESTConfigSeamFeedsEveryDefaultClient(t *testing.T) {
+	t.Parallel()
+
+	service := newTestService(nil)
+	service.SetRESTConfigForClusterForTest(func(string) (*rest.Config, error) {
+		return nil, errRESTConfig
+	})
+
+	_, err := service.ListResources(
+		context.Background(), "default", "c1", api.ResourceQuery{Kind: kindPod},
+	)
+	require.ErrorIs(t, err, errRESTConfig,
+		"the default dynamic client must derive from the single restConfigForCluster seam")
+}
 
 func TestContextForCluster(t *testing.T) {
 	t.Parallel()

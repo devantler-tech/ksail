@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	"github.com/devantler-tech/ksail/v7/pkg/operator/api"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
@@ -18,16 +17,18 @@ var _ api.LogService = (*Service)(nil)
 // Injectable so tests can substitute a fake clientset instead of resolving a real kubeconfig context.
 type logClientFunc func(ctx context.Context, clusterName string) (kubernetes.Interface, error)
 
-// defaultLogClient resolves the cluster's kubeconfig context by name and builds a clientset.
-func defaultLogClient(_ context.Context, clusterName string) (kubernetes.Interface, error) {
-	kubeconfigPath := k8s.DefaultKubeconfigPath()
-
-	contextName, err := contextForCluster(kubeconfigPath, clusterName)
+// defaultLogClient builds a clientset for a local cluster from the single restConfigForCluster seam
+// (rest.Config + kubernetes.NewForConfig — identical to the former k8s.NewClientset path).
+func (s *Service) defaultLogClient(
+	_ context.Context,
+	clusterName string,
+) (kubernetes.Interface, error) {
+	restConfig, err := s.restConfigForCluster(clusterName)
 	if err != nil {
 		return nil, err
 	}
 
-	clientset, err := k8s.NewClientset(kubeconfigPath, contextName)
+	clientset, err := kubernetes.NewForConfig(restConfig)
 	if err != nil {
 		return nil, fmt.Errorf("build clientset for %q: %w", clusterName, err)
 	}

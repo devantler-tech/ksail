@@ -2,9 +2,7 @@ package helmutil
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/client/helm"
@@ -53,20 +51,12 @@ func NewBase(
 // (Flux or ArgoCD), the install is skipped to avoid overwriting externally
 // managed values.
 func (b *Base) Install(ctx context.Context) error {
-	labels, err := b.client.GetReleaseStorageLabels(ctx, b.spec.ReleaseName, b.spec.Namespace)
-	if err != nil && !errors.Is(err, helm.ErrNoReleaseStorage) {
-		return fmt.Errorf("check release ownership for %s: %w", b.name, err)
+	skip, err := SkipIfGitOpsManaged(ctx, b.client, b.name, b.spec.ReleaseName, b.spec.Namespace)
+	if err != nil {
+		return err
 	}
 
-	if controller, managed := IsGitOpsManaged(labels); managed {
-		fmt.Fprintf(
-			os.Stderr,
-			"%s: skipping install — release %q is managed by %s\n",
-			b.name,
-			b.spec.ReleaseName,
-			controller,
-		)
-
+	if skip {
 		return nil
 	}
 

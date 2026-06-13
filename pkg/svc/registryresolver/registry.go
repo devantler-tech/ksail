@@ -191,6 +191,27 @@ type ResolveRegistryOptions struct {
 	ClusterConfig *v1alpha1.Cluster
 	// ClusterName is the name of the cluster (used for Docker container lookup)
 	ClusterName string
+	// Clients carries the kubeconfig/context used for in-cluster GitOps-resource
+	// lookups and credential merging. When nil, a default bundle is derived from
+	// ClusterConfig's Connection settings (falling back to default loading rules).
+	Clients *Clients
+}
+
+// clientsForOptions returns the explicit Clients bundle when provided, otherwise
+// derives one from the cluster config's connection settings so that registry
+// resolution honors the same kubeconfig/context as the rest of the command.
+func clientsForOptions(opts ResolveRegistryOptions) *Clients {
+	if opts.Clients != nil {
+		return opts.Clients
+	}
+
+	clients := &Clients{}
+	if opts.ClusterConfig != nil {
+		clients.Kubeconfig = opts.ClusterConfig.Spec.Cluster.Connection.Kubeconfig
+		clients.Context = opts.ClusterConfig.Spec.Cluster.Connection.Context
+	}
+
+	return clients
 }
 
 // ResolveRegistry resolves registry configuration using a priority-based approach.
@@ -201,6 +222,8 @@ type ResolveRegistryOptions struct {
 // 4. Docker containers (matching cluster name).
 // 5. Error (no registry found).
 func ResolveRegistry(ctx context.Context, opts ResolveRegistryOptions) (*Info, error) {
+	clients := clientsForOptions(opts)
+
 	// Priority 1: CLI flag or env var via Viper (--registry / KSAIL_REGISTRY)
 	info, err := resolveFromViper(opts.Viper)
 	if err == nil {
@@ -214,7 +237,7 @@ func ResolveRegistry(ctx context.Context, opts ResolveRegistryOptions) (*Info, e
 	}
 
 	// Priority 3: Cluster GitOps resources (FluxInstance or ArgoCD Application)
-	info, err = resolveFromGitOps(ctx, opts.ClusterConfig)
+	info, err = resolveFromGitOps(ctx, clients, opts.ClusterConfig)
 	if err == nil {
 		return info, nil
 	}
@@ -245,16 +268,20 @@ func resolveFromConfig(cfg *v1alpha1.Cluster) (*Info, error) {
 	return DetectRegistryFromConfig(cfg)
 }
 
-func resolveFromGitOps(ctx context.Context, cfg *v1alpha1.Cluster) (*Info, error) {
+func resolveFromGitOps(
+	ctx context.Context,
+	clients *Clients,
+	cfg *v1alpha1.Cluster,
+) (*Info, error) {
 	var info *Info
 
 	var err error
 
 	if cfg != nil {
-		info, err = resolveFromGitOpsWithEngine(ctx, cfg.Spec.Cluster.GitOpsEngine)
+		info, err = resolveFromGitOpsWithEngine(ctx, clients, cfg.Spec.Cluster.GitOpsEngine)
 	} else {
 		// No config, try both GitOps engines
-		info, err = tryBothGitOpsEngines(ctx)
+		info, err = tryBothGitOpsEngines(ctx, clients)
 	}
 
 	if err != nil {
@@ -263,7 +290,7 @@ func resolveFromGitOps(ctx context.Context, cfg *v1alpha1.Cluster) (*Info, error
 
 	// Merge credentials from cluster secrets if needed
 	if info != nil && info.Username == "" && info.IsExternal {
-		mergeCredentialsFromClusterSecrets(ctx, info)
+		mergeCredentialsFromClusterSecrets(ctx, clients, info)
 	}
 
 	return info, nil
@@ -271,27 +298,28 @@ func resolveFromGitOps(ctx context.Context, cfg *v1alpha1.Cluster) (*Info, error
 
 func resolveFromGitOpsWithEngine(
 	ctx context.Context,
+	clients *Clients,
 	engine v1alpha1.GitOpsEngine,
 ) (*Info, error) {
 	switch engine {
 	case v1alpha1.GitOpsEngineFlux:
-		return DetectRegistryFromFlux(ctx)
+		return DetectRegistryFromFlux(ctx, clients)
 	case v1alpha1.GitOpsEngineArgoCD:
-		return DetectRegistryFromArgoCD(ctx)
+		return DetectRegistryFromArgoCD(ctx, clients)
 	case v1alpha1.GitOpsEngineNone:
-		return tryBothGitOpsEngines(ctx)
+		return tryBothGitOpsEngines(ctx, clients)
 	default:
-		return tryBothGitOpsEngines(ctx)
+		return tryBothGitOpsEngines(ctx, clients)
 	}
 }
 
-func tryBothGitOpsEngines(ctx context.Context) (*Info, error) {
-	info, err := DetectRegistryFromFlux(ctx)
+func tryBothGitOpsEngines(ctx context.Context, clients *Clients) (*Info, error) {
+	info, err := DetectRegistryFromFlux(ctx, clients)
 	if err == nil {
 		return info, nil
 	}
 
-	return DetectRegistryFromArgoCD(ctx)
+	return DetectRegistryFromArgoCD(ctx, clients)
 }
 
 func resolveFromDocker(

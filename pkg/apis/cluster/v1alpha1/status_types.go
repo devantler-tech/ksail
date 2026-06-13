@@ -14,6 +14,14 @@ const (
 	// cert-manager, load-balancer, policy-engine, GitOps) are installed and reconciled. It is
 	// independent of ConditionReady (which reports that the cluster itself is provisioned).
 	ConditionComponentsReady = "ComponentsReady"
+	// ConditionIgnoredFields is True when the Cluster resource sets CLI-only spec fields the operator
+	// does not reconcile (e.g. spec.editor, spec.chat, spec.cluster.connection,
+	// spec.cluster.distributionConfig, spec.workload.watch.hooks). The Cluster type is shared between
+	// the ksail.yaml CLI configuration and the operator CRD, so a kubectl user can set fields that
+	// only the CLI honors; this condition surfaces them explicitly (its message lists the fields)
+	// rather than silently accepting and ignoring them. It is purely informational and never affects
+	// ConditionReady.
+	ConditionIgnoredFields = "IgnoredFields"
 )
 
 // ClusterStatus describes the observed state of a Cluster as reconciled by the KSail operator.

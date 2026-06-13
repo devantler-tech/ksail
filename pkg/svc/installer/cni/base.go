@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"time"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
@@ -30,10 +29,11 @@ const (
 // and timeout management. CNI implementations should embed this type as a pointer
 // (*cni.InstallerBase) to inherit these capabilities.
 //
-// Note: Helm chart installation utilities have been moved to pkg/client/helm package
-// (helm.InstallOrUpgradeChart, helm.RepoConfig, helm.ChartConfig). With Helm v4 kstatus
-// wait enabled, all resource readiness checking is handled by Helm's StatusWatcher during
-// installation, eliminating the need for custom wait functions.
+// Note: CNI installers build a helm.ChartSpec directly and install it via
+// helm.InstallChartWithRetry (with Atomic/Silent/Wait flags set on the spec).
+// With Helm v4 kstatus wait enabled, all resource readiness checking is handled
+// by Helm's StatusWatcher during installation, eliminating the need for custom
+// wait functions.
 //
 // Example usage:
 //
@@ -64,13 +64,6 @@ func NewInstallerBase(
 		context:    context,
 		timeout:    timeout,
 	}
-}
-
-// WaitForReadiness is a no-op since Helm v4 kstatus wait (Wait: true) already
-// ensures all resources are fully reconciled during installation.
-// This method exists for interface compatibility with legacy code.
-func (b *InstallerBase) WaitForReadiness(_ context.Context) error {
-	return nil
 }
 
 // BuildRESTConfig builds a Kubernetes REST configuration.
@@ -141,24 +134,12 @@ func (b *InstallerBase) CheckGitOpsOwnership(
 		return false, fmt.Errorf("get helm client: %w", err)
 	}
 
-	labels, err := client.GetReleaseStorageLabels(ctx, releaseName, namespace)
-	if err != nil && !errors.Is(err, helm.ErrNoReleaseStorage) {
-		return false, fmt.Errorf("check release ownership for %s: %w", componentName, err)
+	skip, err := helmutil.SkipIfGitOpsManaged(ctx, client, componentName, releaseName, namespace)
+	if err != nil {
+		return false, err //nolint:wrapcheck // helmutil already wraps with the component name
 	}
 
-	if controller, managed := helmutil.IsGitOpsManaged(labels); managed {
-		fmt.Fprintf(
-			os.Stderr,
-			"%s: skipping install — release %q is managed by %s\n",
-			componentName,
-			releaseName,
-			controller,
-		)
-
-		return true, nil
-	}
-
-	return false, nil
+	return skip, nil
 }
 
 // WaitForAPIServerStability waits for the Kubernetes API server to be stable.

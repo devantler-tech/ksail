@@ -1,0 +1,25 @@
+
+[TestListCmd_NoClusterFound_DockerProvider - 1]
+No clusters found.
+
+---
+
+[TestListCmd_SingleClusterFound_DockerProvider - 1]
+PROVIDER   DISTRIBUTION   CLUSTER
+docker     Vanilla        test-cluster
+
+---
+
+[TestListCmd_MultipleClustersFound_DockerProvider - 1]
+PROVIDER   DISTRIBUTION   CLUSTER
+docker     Vanilla        cluster-1
+docker     Vanilla        cluster-2
+docker     Vanilla        cluster-3
+
+---
+
+[TestListCmd_AllProviders - 1]
+PROVIDER   DISTRIBUTION   CLUSTER
+docker     Vanilla        test-cluster
+
+---

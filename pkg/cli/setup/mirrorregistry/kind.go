@@ -12,34 +12,6 @@ import (
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
 )
 
-// KindRegistryAction returns the action function for Kind registry creation.
-func KindRegistryAction(ctx *Context) func(context.Context, dockerclient.Client) error {
-	return func(execCtx context.Context, dockerClient dockerclient.Client) error {
-		return runKindRegistryAction(execCtx, ctx, dockerClient)
-	}
-}
-
-// KindNetworkAction returns the action function for Kind network creation.
-func KindNetworkAction(ctx *Context) func(context.Context, dockerclient.Client) error {
-	return func(execCtx context.Context, dockerClient dockerclient.Client) error {
-		return runKindNetworkAction(execCtx, ctx, dockerClient)
-	}
-}
-
-// KindConnectAction returns the action function for Kind registry connection.
-func KindConnectAction(ctx *Context) func(context.Context, dockerclient.Client) error {
-	return func(execCtx context.Context, dockerClient dockerclient.Client) error {
-		return runKindConnectAction(execCtx, ctx, dockerClient)
-	}
-}
-
-// KindPostClusterConnectAction returns the action function for post-cluster registry configuration.
-func KindPostClusterConnectAction(ctx *Context) func(context.Context, dockerclient.Client) error {
-	return func(execCtx context.Context, dockerClient dockerclient.Client) error {
-		return runKindPostClusterConnectAction(execCtx, ctx, dockerClient)
-	}
-}
-
 // runKindRegistryAction creates and configures registry containers (without network attachment).
 func runKindRegistryAction(
 	execCtx context.Context,

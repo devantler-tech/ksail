@@ -105,18 +105,15 @@ func buildArgoCDEnsureOptions(
 ) argocdgitops.EnsureOptions {
 	localRegistry := clusterCfg.Spec.Cluster.LocalRegistry
 
-	// Resolve tag: workload tag > registry-embedded tag > default.
-	tag := clusterCfg.Spec.Workload.Tag
-	if tag == "" && localRegistry.IsExternal() {
-		parsed := localRegistry.Parse()
-		if parsed.Tag != "" {
-			tag = parsed.Tag
-		}
+	// Resolve tag: workload tag > registry-embedded tag > default. The
+	// registry-embedded tag only applies to external registries; local
+	// registries have no embedded tag.
+	var registryTag string
+	if localRegistry.IsExternal() {
+		registryTag = localRegistry.Parse().Tag
 	}
 
-	if tag == "" {
-		tag = registry.DefaultLocalArtifactTag
-	}
+	tag := resolveArtifactTag(clusterCfg.Spec.Workload.Tag, registryTag)
 
 	opts := argocdgitops.EnsureOptions{
 		SourcePath:      ".",

@@ -3,21 +3,14 @@ package reconcilediag
 import (
 	"context"
 
+	"github.com/devantler-tech/ksail/v7/pkg/client/argocd"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 )
 
 const argoCDNamespace = "argocd"
-
-// argoCDGVRApplications returns the GVR for ArgoCD Applications.
-func argoCDGVRApplications() schema.GroupVersionResource {
-	return schema.GroupVersionResource{
-		Group: "argoproj.io", Version: "v1alpha1", Resource: "applications",
-	}
-}
 
 // ArgoCDCollector gathers diagnostics for ArgoCD reconciliation failures.
 type ArgoCDCollector struct {
@@ -47,7 +40,7 @@ func (c *ArgoCDCollector) Collect(ctx context.Context) *Report {
 func (c *ArgoCDCollector) collectFailingApplications(ctx context.Context) ResourceSection {
 	section := ResourceSection{Heading: "Applications"}
 
-	apps := safeCollectCRs(ctx, c.Dynamic, argoCDGVRApplications(), argoCDNamespace)
+	apps := safeCollectCRs(ctx, c.Dynamic, argocd.ApplicationGVR(), argoCDNamespace)
 
 	for i := range apps {
 		app := &apps[i]

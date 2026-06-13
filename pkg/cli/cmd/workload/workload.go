@@ -10,6 +10,16 @@ import (
 // command as state-modifying (and therefore requiring user confirmation).
 const permissionWrite = "write"
 
+// Command group IDs used to organize `workload --help` into themed sections.
+// Groups are help-rendering only and do not affect command names, flags, or the
+// AI tool surface.
+const (
+	groupResources = "resources"
+	groupImages    = "images"
+	groupGitOps    = "gitops"
+	groupDevLoop   = "devloop"
+)
+
 // NewWorkloadCmd creates and returns the workload command group namespace.
 func NewWorkloadCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -45,31 +55,55 @@ func NewWorkloadCmd() *cobra.Command {
 		},
 	}
 
-	cmd.AddCommand(NewReconcileCmd())
-	cmd.AddCommand(NewPushCmd())
-	cmd.AddCommand(NewApplyCmd())
-	cmd.AddCommand(NewCreateCmd())
-	cmd.AddCommand(NewDebugCmd())
-	cmd.AddCommand(NewDeleteCmd())
-	cmd.AddCommand(NewDescribeCmd())
-	cmd.AddCommand(NewEditCmd())
-	cmd.AddCommand(NewExecCmd())
-	cmd.AddCommand(NewExplainCmd())
-	cmd.AddCommand(NewExportCmd())
-	cmd.AddCommand(NewExposeCmd())
-	cmd.AddCommand(NewForwardCmd())
-	cmd.AddCommand(NewGetCmd())
-	cmd.AddCommand(gen.NewGenCmd())
-	cmd.AddCommand(NewImagesCmd())
-	cmd.AddCommand(NewImportCmd())
-	cmd.AddCommand(NewInstallCmd())
-	cmd.AddCommand(NewLogsCmd())
-	cmd.AddCommand(NewRolloutCmd())
-	cmd.AddCommand(NewScaleCmd())
-	cmd.AddCommand(NewScanCmd())
-	cmd.AddCommand(NewValidateCmd())
-	cmd.AddCommand(NewWaitCmd())
-	cmd.AddCommand(NewWatchCmd())
+	cmd.AddGroup(
+		&cobra.Group{ID: groupResources, Title: "Resources:"},
+		&cobra.Group{ID: groupImages, Title: "Images:"},
+		&cobra.Group{ID: groupGitOps, Title: "GitOps:"},
+		&cobra.Group{ID: groupDevLoop, Title: "Dev loop:"},
+	)
+
+	addWorkloadSubcommands(cmd)
 
 	return cmd
+}
+
+// addWorkloadSubcommands registers every workload subcommand under its help
+// group. Grouping is help-rendering only and does not affect the AI tool
+// surface (which is driven by command Use/Short/flags, not GroupID).
+func addWorkloadSubcommands(cmd *cobra.Command) {
+	addGroupedCommand(cmd, NewGetCmd(), groupResources)
+	addGroupedCommand(cmd, NewDescribeCmd(), groupResources)
+	addGroupedCommand(cmd, NewExplainCmd(), groupResources)
+	addGroupedCommand(cmd, NewApplyCmd(), groupResources)
+	addGroupedCommand(cmd, NewCreateCmd(), groupResources)
+	addGroupedCommand(cmd, NewDeleteCmd(), groupResources)
+	addGroupedCommand(cmd, NewEditCmd(), groupResources)
+	addGroupedCommand(cmd, NewExposeCmd(), groupResources)
+	addGroupedCommand(cmd, NewScaleCmd(), groupResources)
+	addGroupedCommand(cmd, NewWaitCmd(), groupResources)
+	addGroupedCommand(cmd, gen.NewGenCmd(), groupResources)
+
+	addGroupedCommand(cmd, NewImagesCmd(), groupImages)
+	addGroupedCommand(cmd, NewExportCmd(), groupImages)
+	addGroupedCommand(cmd, NewImportCmd(), groupImages)
+
+	addGroupedCommand(cmd, NewReconcileCmd(), groupGitOps)
+	addGroupedCommand(cmd, NewPushCmd(), groupGitOps)
+	addGroupedCommand(cmd, NewInstallCmd(), groupGitOps)
+	addGroupedCommand(cmd, NewValidateCmd(), groupGitOps)
+	addGroupedCommand(cmd, NewScanCmd(), groupGitOps)
+
+	addGroupedCommand(cmd, NewWatchCmd(), groupDevLoop)
+	addGroupedCommand(cmd, NewDebugCmd(), groupDevLoop)
+	addGroupedCommand(cmd, NewExecCmd(), groupDevLoop)
+	addGroupedCommand(cmd, NewForwardCmd(), groupDevLoop)
+	addGroupedCommand(cmd, NewLogsCmd(), groupDevLoop)
+	addGroupedCommand(cmd, NewRolloutCmd(), groupDevLoop)
+}
+
+// addGroupedCommand assigns child to the given help group and adds it to parent.
+func addGroupedCommand(parent, child *cobra.Command, groupID string) {
+	child.GroupID = groupID
+
+	parent.AddCommand(child)
 }
