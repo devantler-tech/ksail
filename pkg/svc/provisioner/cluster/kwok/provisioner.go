@@ -2,7 +2,6 @@ package kwokprovisioner
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -15,6 +14,7 @@ import (
 	runner "github.com/devantler-tech/ksail/v7/pkg/runner"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/internal/retry"
 	"github.com/spf13/pflag"
 	"sigs.k8s.io/kwok/pkg/config"
 	createcluster "sigs.k8s.io/kwok/pkg/kwokctl/cmd/create/cluster"
@@ -150,82 +150,24 @@ func createWithRetry(
 	create kwokCreateFn,
 	cleanup kwokCleanupFn,
 ) error {
-	var lastErr error
-
-	for attempt := range createMaxAttempts {
-		if attempt > 0 {
-			fmt.Fprintf(os.Stderr,
-				"Retrying KWOK cluster create (attempt %d/%d)...\n",
-				attempt+1, createMaxAttempts,
-			)
-
-			cleanup(ctx)
-
-			select {
-			case <-ctx.Done():
-				return fmt.Errorf("context cancelled during create retry: %w", ctx.Err())
-			case <-time.After(retryDelay):
-			}
-		}
-
-		var timedOut bool
-
-		timedOut, lastErr = runCreateAttempt(ctx, attemptTimeout, create)
-		if lastErr == nil {
-			return nil
-		}
-
-		if timedOut {
-			fmt.Fprintf(
-				os.Stderr,
-				"KWOK cluster create attempt %d/%d timed out after %s (treating as transient): %v\n",
-				attempt+1,
-				createMaxAttempts,
-				attemptTimeout,
-				lastErr,
-			)
-
-			continue
-		}
-
-		if !isTransientCreateError(lastErr) {
-			return lastErr
-		}
-
-		fmt.Fprintf(os.Stderr,
-			"KWOK cluster create attempt %d/%d failed (transient): %v\n",
-			attempt+1, createMaxAttempts, lastErr,
-		)
-	}
-
-	return fmt.Errorf(
-		"failed to create KWOK cluster after %d attempts: %w",
-		createMaxAttempts, lastErr,
-	)
+	return retry.Do(ctx, retry.Config{ //nolint:wrapcheck // identity preserved
+		MaxAttempts:    createMaxAttempts,
+		RetryDelay:     retryDelay,
+		AttemptTimeout: attemptTimeout,
+		Attempt:        create,
+		Cleanup:        func(context.Context) { cleanup(ctx) },
+		IsTransient:    isTransientCreateError,
+		Logf:           stderrLogf,
+		WrapExhausted: func(attempts int, err error) error {
+			return fmt.Errorf("failed to create KWOK cluster after %d attempts: %w", attempts, err)
+		},
+	})
 }
 
-// runCreateAttempt runs a single create attempt under a timeout derived from
-// ctx. It returns whether the attempt was aborted by its own timeout and the
-// create error (if any). A timeout is reported only when the per-attempt
-// deadline fired while the parent context was still alive — a stalled create
-// that should be retried — and not when the parent context itself was
-// cancelled, which must propagate and stop the retry loop.
-func runCreateAttempt(
-	ctx context.Context,
-	attemptTimeout time.Duration,
-	create kwokCreateFn,
-) (bool, error) {
-	attemptCtx, cancel := context.WithTimeout(ctx, attemptTimeout)
-	defer cancel()
-
-	err := create(attemptCtx)
-	if err == nil {
-		return false, nil
-	}
-
-	timedOut := errors.Is(attemptCtx.Err(), context.DeadlineExceeded) && ctx.Err() == nil
-
-	return timedOut, err
+// stderrLogf writes a retry progress line to stderr, matching the previous
+// hand-rolled loop's diagnostics destination.
+func stderrLogf(format string, args ...any) {
+	fmt.Fprintf(os.Stderr, format+"\n", args...)
 }
 
 // globalMu serialises access to process-global state that kwokctl

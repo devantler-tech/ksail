@@ -6,9 +6,9 @@ import (
 	"io"
 	"strings"
 
+	dockerclient "github.com/devantler-tech/ksail/v7/pkg/client/docker"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/registry"
 	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/client"
 )
 
 // ConfigureContainerdRegistryMirrors injects hosts.toml files directly into VCluster
@@ -22,7 +22,7 @@ func ConfigureContainerdRegistryMirrors(
 	ctx context.Context,
 	clusterName string,
 	mirrorSpecs []registry.MirrorSpec,
-	dockerClient client.APIClient,
+	dockerClient dockerclient.Client,
 	_ io.Writer,
 ) error {
 	if len(mirrorSpecs) == 0 {
@@ -57,7 +57,7 @@ func ConfigureContainerdRegistryMirrors(
 // It matches containers by the vcluster.cp.<name> and vcluster.node.<name>.* naming convention.
 func listVClusterNodes(
 	ctx context.Context,
-	dockerClient client.APIClient,
+	dockerClient dockerclient.Client,
 	clusterName string,
 ) ([]string, error) {
 	containers, err := dockerClient.ContainerList(ctx, container.ListOptions{All: true})
@@ -90,7 +90,7 @@ func listVClusterNodes(
 func SetupRegistries(
 	ctx context.Context,
 	clusterName string,
-	dockerClient client.APIClient,
+	dockerClient dockerclient.Client,
 	mirrorSpecs []registry.MirrorSpec,
 	writer io.Writer,
 ) error {
@@ -110,7 +110,7 @@ func ConnectRegistriesToNetwork(
 	ctx context.Context,
 	mirrorSpecs []registry.MirrorSpec,
 	clusterName string,
-	dockerClient client.APIClient,
+	dockerClient dockerclient.Client,
 	writer io.Writer,
 ) error {
 	networkName := vclusterNetworkPrefix + clusterName
@@ -130,7 +130,7 @@ func CleanupRegistries(
 	ctx context.Context,
 	mirrorSpecs []registry.MirrorSpec,
 	clusterName string,
-	dockerClient client.APIClient,
+	dockerClient dockerclient.Client,
 	deleteVolumes bool,
 ) error {
 	networkName := vclusterNetworkPrefix + clusterName

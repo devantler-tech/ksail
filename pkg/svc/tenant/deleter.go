@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/tenant/gitprovider"
 	"k8s.io/apimachinery/pkg/util/validation"
 	"sigs.k8s.io/yaml"
@@ -273,7 +275,7 @@ func findRBACConfigMapFile(dir string) (string, error) {
 		}
 
 		name := entry.Name()
-		if !isYAMLFile(name) {
+		if !fsutil.IsYAMLFile(name) {
 			continue
 		}
 
@@ -292,27 +294,14 @@ func findRBACConfigMapFile(dir string) (string, error) {
 	return "", fmt.Errorf("%w in %q", ErrRBACConfigMapNotFound, dir)
 }
 
-func isYAMLFile(name string) bool {
-	ext := strings.ToLower(filepath.Ext(name))
-
-	return ext == ".yaml" || ext == ".yml"
-}
-
 // contentContainsRBACConfigMap checks whether any YAML document in the given content
 // is a ConfigMap with metadata.name "argocd-rbac-cm".
+//
+// This is a read-only detection caller, so it uses the lossy
+// fsutil.SplitYAMLDocuments. The in-place rewrite path (removeRBACPolicyFromContent)
+// must keep the local round-trip-preserving splitYAMLDocuments instead.
 func contentContainsRBACConfigMap(data []byte) bool {
-	for _, doc := range splitYAMLDocuments(data) {
-		doc = bytes.TrimSpace(doc)
-		if len(doc) == 0 {
-			continue
-		}
-
-		if isRBACConfigMapDoc(doc) {
-			return true
-		}
-	}
-
-	return false
+	return slices.ContainsFunc(fsutil.SplitYAMLDocuments(data), isRBACConfigMapDoc)
 }
 
 // isRBACConfigMapDoc checks if a single YAML document is a ConfigMap

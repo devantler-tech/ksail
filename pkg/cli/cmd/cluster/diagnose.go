@@ -13,8 +13,8 @@ import (
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/lifecycle"
+	dockerclient "github.com/devantler-tech/ksail/v7/pkg/client/docker"
 	"github.com/devantler-tech/ksail/v7/pkg/client/kubectl"
-	"github.com/devantler-tech/ksail/v7/pkg/di"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
@@ -24,7 +24,6 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/hetzner"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/omni"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/state"
-	"github.com/docker/docker/client"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"github.com/spf13/cobra"
 	"k8s.io/cli-runtime/pkg/genericiooptions"
@@ -61,7 +60,7 @@ A non-zero exit code indicates the Kubernetes API could not be queried
 permissions).`
 
 // NewDiagnoseCmd creates the diagnose command for clusters.
-func NewDiagnoseCmd(_ *di.Runtime) *cobra.Command {
+func NewDiagnoseCmd() *cobra.Command {
 	var (
 		nameFlag     string
 		providerFlag v1alpha1.Provider
@@ -365,7 +364,7 @@ func getDockerProviderStatus(
 ) (*provider.ClusterStatus, error) {
 	var result *provider.ClusterStatus
 
-	err := withDockerClient(cmd, func(dockerClient client.APIClient) error {
+	err := withDockerClient(cmd, func(dockerClient dockerclient.Client) error {
 		schemes := []dockerprovider.LabelScheme{
 			dockerprovider.LabelSchemeKind,
 			dockerprovider.LabelSchemeK3d,

@@ -7,16 +7,16 @@ import (
 	"net"
 	"os"
 
+	dockerclient "github.com/devantler-tech/ksail/v7/pkg/client/docker"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
 	"github.com/docker/docker/api/types/network"
-	"github.com/docker/docker/client"
 )
 
 // ConnectRegistriesToNetwork attaches each registry container to the provided network.
 // Any connection failures are logged as warnings but do not abort the operation.
 func ConnectRegistriesToNetwork(
 	ctx context.Context,
-	dockerClient client.APIClient,
+	dockerClient dockerclient.Client,
 	registries []Info,
 	networkName string,
 	writer io.Writer,
@@ -39,7 +39,7 @@ func ConnectRegistriesToNetwork(
 // Returns a map of registry names to their assigned static IPs.
 func ConnectRegistriesToNetworkWithStaticIPs(
 	ctx context.Context,
-	dockerClient client.APIClient,
+	dockerClient dockerclient.Client,
 	registries []Info,
 	networkName string,
 	networkCIDR string,
@@ -77,7 +77,7 @@ func ConnectRegistriesToNetworkWithStaticIPs(
 // Returns the assigned static IP (empty if none was assigned or the connection failed).
 func connectRegistryToNetwork(
 	ctx context.Context,
-	dockerClient client.APIClient,
+	dockerClient dockerclient.Client,
 	reg Info,
 	networkName string,
 	staticIP string,
@@ -181,7 +181,7 @@ func SetupMirrorSpecRegistries(
 	ctx context.Context,
 	mirrorSpecs []MirrorSpec,
 	clusterName string,
-	dockerClient client.APIClient,
+	dockerClient dockerclient.Client,
 	networkName string,
 	writer io.Writer,
 ) error {
@@ -208,7 +208,7 @@ func CleanupMirrorSpecRegistries(
 	ctx context.Context,
 	mirrorSpecs []MirrorSpec,
 	clusterName string,
-	dockerClient client.APIClient,
+	dockerClient dockerclient.Client,
 	deleteVolumes bool,
 	networkName string,
 ) error {
@@ -236,7 +236,7 @@ func ConnectMirrorSpecsToNetwork(
 	mirrorSpecs []MirrorSpec,
 	clusterName string,
 	networkName string,
-	dockerClient client.APIClient,
+	dockerClient dockerclient.Client,
 	writer io.Writer,
 ) error {
 	if len(mirrorSpecs) == 0 {

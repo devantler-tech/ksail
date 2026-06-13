@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	dockerclient "github.com/devantler-tech/ksail/v7/pkg/client/docker"
-	"github.com/docker/docker/client"
 	"github.com/spf13/cobra"
 )
 
@@ -15,7 +14,7 @@ func DisconnectRegistriesFromNetwork(
 	networkName string,
 	cleanupDeps CleanupDependencies,
 ) error {
-	return cleanupDeps.DockerInvoker(cmd, func(dockerClient client.APIClient) error {
+	return cleanupDeps.DockerInvoker(cmd, func(dockerClient dockerclient.Client) error {
 		registryMgr, mgrErr := dockerclient.NewRegistryManager(dockerClient)
 		if mgrErr != nil {
 			return fmt.Errorf("failed to create registry manager: %w", mgrErr)

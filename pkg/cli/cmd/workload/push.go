@@ -6,7 +6,6 @@ import (
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
 	"github.com/devantler-tech/ksail/v7/pkg/client/oci"
-	"github.com/devantler-tech/ksail/v7/pkg/di"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	configmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/ksail"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
@@ -18,7 +17,7 @@ import (
 )
 
 // NewPushCmd creates the workload push command.
-func NewPushCmd(_ *di.Runtime) *cobra.Command {
+func NewPushCmd() *cobra.Command {
 	var (
 		validate bool
 		pathFlag string

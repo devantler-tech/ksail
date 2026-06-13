@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"io"
 
+	dockerclient "github.com/devantler-tech/ksail/v7/pkg/client/docker"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/network"
-	"github.com/docker/docker/client"
 )
 
 // DefaultNetworkMTU is the default MTU for Docker bridge networks.
@@ -31,7 +31,7 @@ const NestedNetworkMTU = "1400"
 // mtu falls back to DefaultNetworkMTU.
 func EnsureNetwork(
 	ctx context.Context,
-	dockerClient client.APIClient,
+	dockerClient dockerclient.Client,
 	networkName string,
 	networkCIDR string,
 	mtu string,
@@ -52,7 +52,7 @@ func EnsureNetwork(
 // networkExists checks if a Docker network with the given name already exists.
 func networkExists(
 	ctx context.Context,
-	dockerClient client.APIClient,
+	dockerClient dockerclient.Client,
 	networkName string,
 	writer io.Writer,
 ) (bool, error) {
@@ -82,7 +82,7 @@ func networkExists(
 // createDockerNetwork creates a Docker network with Talos-compatible configuration.
 func createDockerNetwork(
 	ctx context.Context,
-	dockerClient client.APIClient,
+	dockerClient dockerclient.Client,
 	networkName string,
 	networkCIDR string,
 	mtu string,

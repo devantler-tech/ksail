@@ -8,11 +8,11 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/cli/dockerutil"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/lifecycle"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/setup"
+	dockerclient "github.com/devantler-tech/ksail/v7/pkg/client/docker"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/ksail"
 	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/registry"
-	"github.com/docker/docker/client"
 	"github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"github.com/spf13/cobra"
 	"sigs.k8s.io/kind/pkg/apis/config/v1alpha4"
@@ -196,10 +196,10 @@ func newRegistryHandlers(
 	talosConfig *talosconfigmanager.Configs,
 	mirrorSpecs []registry.MirrorSpec,
 	role Role,
-	kindAction func(context.Context, client.APIClient) error,
-	k3dAction func(context.Context, client.APIClient) error,
-	talosAction func(context.Context, client.APIClient) error,
-	vclusterAction func(context.Context, client.APIClient) error,
+	kindAction func(context.Context, dockerclient.Client) error,
+	k3dAction func(context.Context, dockerclient.Client) error,
+	talosAction func(context.Context, dockerclient.Client) error,
+	vclusterAction func(context.Context, dockerclient.Client) error,
 ) map[v1alpha1.Distribution]Handler {
 	return map[v1alpha1.Distribution]Handler{
 		v1alpha1.DistributionVanilla: {
@@ -243,7 +243,7 @@ func executeRegistryStage(
 	deps lifecycle.Deps,
 	info setup.StageInfo,
 	shouldPrepare func() bool,
-	action func(context.Context, client.APIClient) error,
+	action func(context.Context, dockerclient.Client) error,
 	dockerInvoker DockerClientInvoker,
 ) error {
 	if !shouldPrepare() {
@@ -257,7 +257,7 @@ func runRegistryStage(
 	cmd *cobra.Command,
 	deps lifecycle.Deps,
 	info setup.StageInfo,
-	action func(context.Context, client.APIClient) error,
+	action func(context.Context, dockerclient.Client) error,
 	dockerInvoker DockerClientInvoker,
 ) error {
 	invoker := dockerInvoker

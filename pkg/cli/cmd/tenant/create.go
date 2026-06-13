@@ -9,7 +9,6 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/flags"
-	"github.com/devantler-tech/ksail/v7/pkg/di"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	configmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/ksail"
@@ -20,7 +19,7 @@ import (
 )
 
 // NewCreateCmd creates the tenant create subcommand.
-func NewCreateCmd(_ *di.Runtime) *cobra.Command {
+func NewCreateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:          "create <tenant-name>",
 		Short:        "Create a new tenant",

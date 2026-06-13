@@ -6,37 +6,37 @@ import (
 	"io"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	dockerclient "github.com/devantler-tech/ksail/v7/pkg/client/docker"
 	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/registry"
-	"github.com/docker/docker/client"
 )
 
 // TalosRegistryAction returns the action function for Talos registry creation.
-func TalosRegistryAction(ctx *Context) func(context.Context, client.APIClient) error {
-	return func(execCtx context.Context, dockerClient client.APIClient) error {
+func TalosRegistryAction(ctx *Context) func(context.Context, dockerclient.Client) error {
+	return func(execCtx context.Context, dockerClient dockerclient.Client) error {
 		return runTalosRegistryAction(execCtx, ctx, dockerClient)
 	}
 }
 
 // TalosNetworkAction returns the action function for Talos network creation.
-func TalosNetworkAction(ctx *Context) func(context.Context, client.APIClient) error {
-	return func(execCtx context.Context, dockerClient client.APIClient) error {
+func TalosNetworkAction(ctx *Context) func(context.Context, dockerclient.Client) error {
+	return func(execCtx context.Context, dockerClient dockerclient.Client) error {
 		return runTalosNetworkAction(execCtx, ctx, dockerClient)
 	}
 }
 
 // TalosConnectAction returns the action function for Talos registry connection.
-func TalosConnectAction(ctx *Context) func(context.Context, client.APIClient) error {
-	return func(execCtx context.Context, dockerClient client.APIClient) error {
+func TalosConnectAction(ctx *Context) func(context.Context, dockerclient.Client) error {
+	return func(execCtx context.Context, dockerClient dockerclient.Client) error {
 		return runTalosConnectAction(execCtx, ctx, dockerClient)
 	}
 }
 
 // TalosPostClusterConnectAction returns the action function for post-cluster registry configuration.
 // For Talos, this is a no-op since registry mirrors are configured via machine config before boot.
-func TalosPostClusterConnectAction(_ *Context) func(context.Context, client.APIClient) error {
-	return func(_ context.Context, _ client.APIClient) error {
+func TalosPostClusterConnectAction(_ *Context) func(context.Context, dockerclient.Client) error {
+	return func(_ context.Context, _ dockerclient.Client) error {
 		return nil
 	}
 }
@@ -55,7 +55,7 @@ func resolveTalosRegistries(ctx *Context, usedPorts map[int]struct{}) (string, [
 func runTalosRegistryAction(
 	execCtx context.Context,
 	ctx *Context,
-	dockerAPIClient client.APIClient,
+	dockerAPIClient dockerclient.Client,
 ) error {
 	// Create registry backend using the factory (allows test injection)
 	backend, err := GetBackendFactory()(dockerAPIClient)
@@ -97,7 +97,7 @@ func runTalosRegistryAction(
 func runTalosNetworkAction(
 	execCtx context.Context,
 	ctx *Context,
-	dockerClient client.APIClient,
+	dockerClient dockerclient.Client,
 ) error {
 	if len(ctx.MirrorSpecs) == 0 {
 		return nil
@@ -117,7 +117,7 @@ func runTalosNetworkAction(
 func runTalosConnectAction(
 	execCtx context.Context,
 	ctx *Context,
-	dockerAPIClient client.APIClient,
+	dockerAPIClient dockerclient.Client,
 ) error {
 	// Create registry backend using the factory (allows test injection)
 	backend, err := GetBackendFactory()(dockerAPIClient)

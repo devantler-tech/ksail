@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	dockerclient "github.com/devantler-tech/ksail/v7/pkg/client/docker"
 	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/detector"
@@ -19,7 +20,6 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/kernelmod"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
-	dockerclient "github.com/docker/docker/client"
 	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
 	"github.com/siderolabs/talos/pkg/provision"
 	"github.com/siderolabs/talos/pkg/provision/providers"
@@ -137,7 +137,7 @@ type Provisioner struct {
 	// options holds runtime configuration for provisioning.
 	options *Options
 	// dockerClient is used for Docker-specific operations (volume cleanup, port inspection).
-	dockerClient dockerclient.APIClient
+	dockerClient dockerclient.Client
 	// infraProvider is the infrastructure provider for node operations (start/stop).
 	// If nil, falls back to dockerClient for backwards compatibility.
 	infraProvider provider.Provider
@@ -224,7 +224,7 @@ func NewProvisioner(
 }
 
 // WithDockerClient sets the Docker client for container operations.
-func (p *Provisioner) WithDockerClient(c dockerclient.APIClient) *Provisioner {
+func (p *Provisioner) WithDockerClient(c dockerclient.Client) *Provisioner {
 	p.dockerClient = c
 
 	return p

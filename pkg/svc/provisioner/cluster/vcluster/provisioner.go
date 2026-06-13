@@ -15,6 +15,7 @@ import (
 	vclusterconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/vcluster"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clustererr"
+	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/internal/retry"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/kernelmod"
 	dockercontainer "github.com/docker/docker/api/types/container"
 	dockernetwork "github.com/docker/docker/api/types/network"
@@ -264,57 +265,53 @@ func createWithRetry(
 	cleanup retryCleanupFn,
 	recoverDBus dbusRecoverFn,
 ) error {
-	var lastErr error
-
-	for attempt := range createMaxAttempts {
-		if attempt > 0 {
-			logger.Warnf(
-				"Retrying vCluster create (attempt %d/%d)...",
-				attempt+1, createMaxAttempts,
-			)
-
+	return retry.Do(ctx, retry.Config{ //nolint:wrapcheck // identity preserved
+		MaxAttempts: createMaxAttempts,
+		RetryDelay:  retryDelay,
+		Attempt: func(ctx context.Context) error {
+			return create(ctx, opts, globalFlags, clusterName, logger)
+		},
+		Cleanup: func(ctx context.Context) {
 			cleanup(ctx, globalFlags, clusterName, logger)
+		},
+		IsTransient:    isTransientCreateError,
+		OnSpecialError: dbusSpecialHandler(globalFlags, clusterName, logger, recoverDBus),
+		Logf:           logger.Warnf,
+		WrapNonTransient: func(err error) error {
+			return fmt.Errorf("failed to create vCluster: %w", err)
+		},
+		WrapExhausted: func(attempts int, err error) error {
+			return fmt.Errorf("failed to create vCluster after %d attempts: %w", attempts, err)
+		},
+	})
+}
 
-			select {
-			case <-ctx.Done():
-				return fmt.Errorf("context cancelled during create retry: %w", ctx.Err())
-			case <-time.After(retryDelay):
-			}
+// dbusSpecialHandler returns a retry.OnSpecialError hook that routes the D-Bus
+// startup race: an error containing dbusErrorSubstring first gets an in-place
+// recovery (the container is already running); on success the cluster is up
+// (retry.Recovered), on failure it falls back to a full delete-and-retry
+// (retry.RetryFresh) because a fresh container on the next attempt usually
+// clears the underlying systemd/D-Bus race. All other errors are not special.
+func dbusSpecialHandler(
+	globalFlags *flags.GlobalFlags,
+	clusterName string,
+	logger loftlog.Logger,
+	recoverDBus dbusRecoverFn,
+) func(context.Context, int, error) (retry.SpecialResult, error) {
+	return func(ctx context.Context, attempt int, err error) (retry.SpecialResult, error) {
+		if !strings.Contains(err.Error(), dbusErrorSubstring) {
+			return retry.NotSpecial, nil
 		}
 
-		lastErr = create(ctx, opts, globalFlags, clusterName, logger)
-		if lastErr == nil {
-			return nil
-		}
-
-		if strings.Contains(lastErr.Error(), dbusErrorSubstring) {
-			done, recoverErr := recoverFromDBusRace(
-				ctx, globalFlags, clusterName, logger, recoverDBus, attempt,
-			)
-			if done {
-				return nil
-			}
-
-			lastErr = recoverErr
-
-			continue
-		}
-
-		// Non-transient error — fail immediately.
-		if !isTransientCreateError(lastErr) {
-			return fmt.Errorf("failed to create vCluster: %w", lastErr)
-		}
-
-		logger.Warnf(
-			"vCluster create attempt %d/%d failed (transient): %v",
-			attempt+1, createMaxAttempts, lastErr,
+		done, recoverErr := recoverFromDBusRace(
+			ctx, globalFlags, clusterName, logger, recoverDBus, attempt,
 		)
-	}
+		if done {
+			return retry.Recovered, nil
+		}
 
-	return fmt.Errorf(
-		"failed to create vCluster after %d attempts: %w",
-		createMaxAttempts, lastErr,
-	)
+		return retry.RetryFresh, recoverErr
+	}
 }
 
 // recoverFromDBusRace attempts the fast in-place D-Bus recovery and reports

@@ -8,7 +8,6 @@ import (
 	cerrdefs "github.com/containerd/errdefs"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/mount"
-	"github.com/docker/docker/client"
 )
 
 // NormalizeVolumeName trims registry names and removes distribution prefixes such as kind- or k3d-.
@@ -52,7 +51,7 @@ func deriveRegistryVolumeName(registry container.Summary, fallback string) strin
 // inspectContainer retrieves detailed information about a container.
 func inspectContainer(
 	ctx context.Context,
-	dockerClient client.APIClient,
+	dockerClient Client,
 	containerID string,
 ) (container.InspectResponse, error) {
 	inspect, err := dockerClient.ContainerInspect(ctx, containerID)
@@ -69,7 +68,7 @@ func inspectContainer(
 // disconnectRegistryNetwork disconnects a registry from a network and returns updated inspection data.
 func disconnectRegistryNetwork(
 	ctx context.Context,
-	dockerClient client.APIClient,
+	dockerClient Client,
 	containerID string,
 	name string,
 	network string,
@@ -110,7 +109,7 @@ func isNotConnectedError(err error) bool {
 // cleanupRegistryVolume removes a registry's volume if deletion is requested.
 func cleanupRegistryVolume(
 	ctx context.Context,
-	dockerClient client.APIClient,
+	dockerClient Client,
 	registryContainer container.Summary,
 	explicitVolume string,
 	fallbackName string,
@@ -133,7 +132,7 @@ func cleanupRegistryVolume(
 // cleanupOrphanedRegistryVolume attempts to remove orphaned registry volumes.
 func cleanupOrphanedRegistryVolume(
 	ctx context.Context,
-	dockerClient client.APIClient,
+	dockerClient Client,
 	explicitVolume string,
 	fallbackName string,
 ) error {
@@ -161,7 +160,7 @@ func cleanupOrphanedRegistryVolume(
 // Returns true if the volume was successfully removed, false if it didn't exist.
 func removeRegistryVolume(
 	ctx context.Context,
-	dockerClient client.APIClient,
+	dockerClient Client,
 	volumeName string,
 ) (bool, error) {
 	trimmed := strings.TrimSpace(volumeName)

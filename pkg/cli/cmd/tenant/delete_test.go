@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	tenantcmd "github.com/devantler-tech/ksail/v7/pkg/cli/cmd/tenant"
-	"github.com/devantler-tech/ksail/v7/pkg/di"
 	"github.com/stretchr/testify/require"
 )
 
@@ -17,14 +16,14 @@ func TestDeleteCmd(t *testing.T) {
 	t.Run("has write permission annotation", func(t *testing.T) {
 		t.Parallel()
 
-		cmd := tenantcmd.NewDeleteCmd(nil)
+		cmd := tenantcmd.NewDeleteCmd()
 		require.Equal(t, "write", cmd.Annotations["ai.toolgen.permission"])
 	})
 
 	t.Run("requires exactly one arg", func(t *testing.T) {
 		t.Parallel()
 
-		cmd := tenantcmd.NewDeleteCmd(nil)
+		cmd := tenantcmd.NewDeleteCmd()
 		cmd.SetArgs([]string{})
 
 		var buf bytes.Buffer
@@ -42,7 +41,7 @@ func TestDeleteCmd(t *testing.T) {
 		t.Parallel()
 		tmpDir := t.TempDir()
 
-		cmd := tenantcmd.NewDeleteCmd(&di.Runtime{})
+		cmd := tenantcmd.NewDeleteCmd()
 		cmd.SetArgs([]string{
 			"no-such-tenant",
 			"--output", tmpDir,
@@ -62,7 +61,7 @@ func TestDeleteCmd(t *testing.T) {
 func assertDeleteFlagDefaults(t *testing.T) {
 	t.Parallel()
 
-	cmd := tenantcmd.NewDeleteCmd(nil)
+	cmd := tenantcmd.NewDeleteCmd()
 
 	forceVal, err := cmd.Flags().GetBool("force")
 	require.NoError(t, err)
@@ -92,7 +91,7 @@ func assertDeletesTenantDirectory(t *testing.T) {
 		[]byte("test"), 0o600,
 	))
 
-	cmd := tenantcmd.NewDeleteCmd(&di.Runtime{})
+	cmd := tenantcmd.NewDeleteCmd()
 	cmd.SetArgs([]string{
 		"my-tenant",
 		"--output", tmpDir,

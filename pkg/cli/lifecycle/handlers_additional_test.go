@@ -9,7 +9,6 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/lifecycle"
-	"github.com/devantler-tech/ksail/v7/pkg/di"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/ksail"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	"github.com/spf13/cobra"
@@ -348,7 +347,6 @@ func TestNewStandardRunE(t *testing.T) {
 	t.Run("wraps_handler_correctly", func(t *testing.T) {
 		t.Parallel()
 
-		runtimeContainer := di.NewRuntime()
 		cfgManager := ksailconfigmanager.NewConfigManager(nil, "")
 
 		config := lifecycle.Config{
@@ -361,7 +359,7 @@ func TestNewStandardRunE(t *testing.T) {
 			},
 		}
 
-		runE := lifecycle.NewStandardRunE(runtimeContainer, cfgManager, config)
+		runE := lifecycle.NewStandardRunE(cfgManager, config)
 
 		assert.NotNil(t, runE)
 	})
@@ -374,7 +372,6 @@ func TestWrapHandler(t *testing.T) {
 	t.Run("wraps_handler_and_returns_function", func(t *testing.T) {
 		t.Parallel()
 
-		runtimeContainer := di.NewRuntime()
 		cfgManager := ksailconfigmanager.NewConfigManager(nil, "")
 
 		handlerCalled := false
@@ -384,7 +381,7 @@ func TestWrapHandler(t *testing.T) {
 			return nil
 		}
 
-		wrapped := lifecycle.WrapHandler(runtimeContainer, cfgManager, handler)
+		wrapped := lifecycle.WrapHandler(cfgManager, handler)
 
 		assert.NotNil(t, wrapped)
 		assert.False(t, handlerCalled) // Should not call until executed

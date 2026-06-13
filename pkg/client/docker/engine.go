@@ -17,7 +17,7 @@ var (
 )
 
 // GetDockerClient creates a Docker client using environment configuration.
-func GetDockerClient() (client.APIClient, error) {
+func GetDockerClient() (Client, error) {
 	dockerClient, err := client.NewClientWithOpts(
 		client.FromEnv,
 		client.WithAPIVersionNegotiation(),
@@ -30,7 +30,8 @@ func GetDockerClient() (client.APIClient, error) {
 }
 
 // GetConcreteDockerClient creates a Docker client and returns the concrete *client.Client type.
-// This is useful for callers that need the concrete type rather than the APIClient interface.
+// This is useful for callers that need the concrete type rather than the narrow Client interface
+// (the Kind and VCluster SDK injection points).
 func GetConcreteDockerClient() (*client.Client, error) {
 	dockerClient, err := GetDockerClient()
 	if err != nil {

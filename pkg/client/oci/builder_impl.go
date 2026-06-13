@@ -112,39 +112,31 @@ func pushWithRetry(
 	remoteOpts []remote.Option,
 	push pushFn,
 ) error {
-	var lastErr error
-
-	for attempt := 1; attempt <= pushMaxAttempts; attempt++ {
-		err := push(ref, img, remoteOpts...)
-		if err == nil {
-			return nil
-		}
-
-		lastErr = err
-
-		if !netretry.IsRetryable(lastErr) || attempt == pushMaxAttempts {
-			break
-		}
-
-		delay := netretry.ExponentialDelay(attempt, pushRetryBaseWait, pushRetryMaxWait)
-
-		timer := time.NewTimer(delay)
-		select {
-		case <-ctx.Done():
-			if !timer.Stop() {
-				<-timer.C
-			}
-
-			return fmt.Errorf("push cancelled: %w", ctx.Err())
-		case <-timer.C:
-		}
+	err := netretry.Do(
+		ctx,
+		pushMaxAttempts,
+		pushRetryBaseWait,
+		pushRetryMaxWait,
+		func() error {
+			return push(ref, img, remoteOpts...)
+		},
+		netretry.WithCancelError(func(ctxErr error) error {
+			return fmt.Errorf("push cancelled: %w", ctxErr)
+		}),
+	)
+	if err == nil {
+		return nil
 	}
 
-	if !netretry.IsRetryable(lastErr) {
-		return fmt.Errorf("push failed (non-retryable): %w", lastErr)
+	if netretry.IsCancelled(err) {
+		return err //nolint:wrapcheck // return the netretry cancellation error unwrapped (already context-tagged)
 	}
 
-	return fmt.Errorf("push failed after %d attempts: %w", pushMaxAttempts, lastErr)
+	if !netretry.IsRetryable(err) {
+		return fmt.Errorf("push failed (non-retryable): %w", err)
+	}
+
+	return fmt.Errorf("push failed after %d attempts: %w", pushMaxAttempts, err)
 }
 
 // Build collects manifests from the source path, packages them into an OCI artifact, and pushes it to the registry.

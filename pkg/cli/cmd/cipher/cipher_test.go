@@ -11,7 +11,6 @@ import (
 	"filippo.io/age"
 	snapshottest "github.com/devantler-tech/ksail/v7/internal/testutil/snapshottest"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/cmd/cipher"
-	"github.com/devantler-tech/ksail/v7/pkg/di"
 	"github.com/gkampitakis/go-snaps/snaps"
 	"github.com/spf13/cobra"
 )
@@ -23,8 +22,7 @@ func TestMain(m *testing.M) {
 func TestNewCipherCmd(t *testing.T) {
 	t.Parallel()
 
-	rt := di.NewRuntime()
-	cmd := cipher.NewCipherCmd(rt)
+	cmd := cipher.NewCipherCmd()
 
 	if cmd == nil {
 		t.Fatal("expected non-nil command")
@@ -55,8 +53,7 @@ func TestNewCipherCmd(t *testing.T) {
 func TestCipherCommandHelp(t *testing.T) {
 	t.Parallel()
 
-	rt := di.NewRuntime()
-	cmd := cipher.NewCipherCmd(rt)
+	cmd := cipher.NewCipherCmd()
 
 	var out bytes.Buffer
 	cmd.SetOut(&out)
@@ -100,8 +97,7 @@ func createTestFile(t *testing.T, filename, content string) string {
 func setupCipherCommandTest(t *testing.T, args []string) *cobra.Command {
 	t.Helper()
 
-	rt := di.NewRuntime()
-	cipherCmd := cipher.NewCipherCmd(rt)
+	cipherCmd := cipher.NewCipherCmd()
 
 	var out, errOut bytes.Buffer
 	cipherCmd.SetOut(&out)
@@ -148,8 +144,7 @@ func TestNewDecryptCmd(t *testing.T) {
 func TestDecryptCommandHelp(t *testing.T) {
 	t.Parallel()
 
-	rt := di.NewRuntime()
-	cipherCmd := cipher.NewCipherCmd(rt)
+	cipherCmd := cipher.NewCipherCmd()
 
 	var out bytes.Buffer
 	cipherCmd.SetOut(&out)
@@ -178,8 +173,7 @@ func TestDecryptCommandAcceptsStdin(t *testing.T) {
 func executeDecryptCommand(t *testing.T, args []string) error {
 	t.Helper()
 
-	rt := di.NewRuntime()
-	cipherCmd := cipher.NewCipherCmd(rt)
+	cipherCmd := cipher.NewCipherCmd()
 
 	var out, errOut bytes.Buffer
 	cipherCmd.SetOut(&out)
@@ -195,8 +189,7 @@ func TestDecryptCommandUnsupportedFormat(t *testing.T) {
 
 	testFile := createTestFile(t, "test.txt", "test content")
 
-	rt := di.NewRuntime()
-	cipherCmd := cipher.NewCipherCmd(rt)
+	cipherCmd := cipher.NewCipherCmd()
 
 	var out, errOut bytes.Buffer
 	cipherCmd.SetOut(&out)
@@ -310,8 +303,7 @@ func TestDecryptCommandWithOutputFlag(t *testing.T) {
 func TestCipherCommandHasDecryptSubcommand(t *testing.T) {
 	t.Parallel()
 
-	rt := di.NewRuntime()
-	cmd := cipher.NewCipherCmd(rt)
+	cmd := cipher.NewCipherCmd()
 
 	// Verify decrypt subcommand exists
 	decryptCmd := findSubcommand(cmd, "decrypt")
@@ -341,8 +333,7 @@ func TestNewEditCmd(t *testing.T) {
 func TestEditCommandHelp(t *testing.T) {
 	t.Parallel()
 
-	rt := di.NewRuntime()
-	cipherCmd := cipher.NewCipherCmd(rt)
+	cipherCmd := cipher.NewCipherCmd()
 
 	var out bytes.Buffer
 	cipherCmd.SetOut(&out)
@@ -453,8 +444,7 @@ func TestNewEncryptCmd(t *testing.T) {
 func TestEncryptCommandHelp(t *testing.T) {
 	t.Parallel()
 
-	rt := di.NewRuntime()
-	cipherCmd := cipher.NewCipherCmd(rt)
+	cipherCmd := cipher.NewCipherCmd()
 
 	var out bytes.Buffer
 	cipherCmd.SetOut(&out)
@@ -471,8 +461,7 @@ func TestEncryptCommandHelp(t *testing.T) {
 func TestEncryptCommandRequiresFile(t *testing.T) {
 	t.Parallel()
 
-	rt := di.NewRuntime()
-	cipherCmd := cipher.NewCipherCmd(rt)
+	cipherCmd := cipher.NewCipherCmd()
 
 	var out, errOut bytes.Buffer
 	cipherCmd.SetOut(&out)
@@ -491,8 +480,7 @@ func setupEncryptTest(t *testing.T, filename, content string) error {
 
 	testFile := createTestFile(t, filename, content)
 
-	rt := di.NewRuntime()
-	cipherCmd := cipher.NewCipherCmd(rt)
+	cipherCmd := cipher.NewCipherCmd()
 
 	var out, errOut bytes.Buffer
 	cipherCmd.SetOut(&out)
@@ -676,8 +664,7 @@ func TestNewImportCmd(t *testing.T) {
 func TestImportCommandHelp(t *testing.T) {
 	t.Parallel()
 
-	rt := di.NewRuntime()
-	cipherCmd := cipher.NewCipherCmd(rt)
+	cipherCmd := cipher.NewCipherCmd()
 
 	var out bytes.Buffer
 	cipherCmd.SetOut(&out)
@@ -700,8 +687,7 @@ func TestImportKeyBasic(t *testing.T) {
 	setupTestEnvironment(t, tmpDir)
 
 	// Execute import command with just the private key
-	rt := di.NewRuntime()
-	cipherCmd := cipher.NewCipherCmd(rt)
+	cipherCmd := cipher.NewCipherCmd()
 
 	var out bytes.Buffer
 
@@ -736,8 +722,7 @@ func TestImportKeyWithXDGConfigHome(t *testing.T) {
 	t.Setenv(xdgConfigHomeEnv, xdgConfigDir)
 
 	// Execute import command
-	rt := di.NewRuntime()
-	cipherCmd := cipher.NewCipherCmd(rt)
+	cipherCmd := cipher.NewCipherCmd()
 
 	var out bytes.Buffer
 
@@ -792,8 +777,7 @@ AGE-SECRET-KEY-1EXISTINGKEYFORTEST123456789012345678901234567890ABC
 	}
 
 	// Execute import command with a new key
-	rt := di.NewRuntime()
-	cipherCmd := cipher.NewCipherCmd(rt)
+	cipherCmd := cipher.NewCipherCmd()
 
 	var out bytes.Buffer
 
@@ -872,8 +856,7 @@ func TestImportInvalidKey(t *testing.T) {
 			}
 
 			// Execute import command with invalid key
-			rt := di.NewRuntime()
-			cipherCmd := cipher.NewCipherCmd(rt)
+			cipherCmd := cipher.NewCipherCmd()
 
 			var out bytes.Buffer
 
@@ -895,8 +878,7 @@ func TestImportInvalidKey(t *testing.T) {
 func TestImportRequiresPrivateKey(t *testing.T) {
 	t.Parallel()
 
-	rt := di.NewRuntime()
-	cipherCmd := cipher.NewCipherCmd(rt)
+	cipherCmd := cipher.NewCipherCmd()
 
 	var out bytes.Buffer
 	cipherCmd.SetOut(&out)
@@ -941,8 +923,7 @@ func TestNewRotateCmd(t *testing.T) {
 func TestRotateCommandHelp(t *testing.T) {
 	t.Parallel()
 
-	rt := di.NewRuntime()
-	cipherCmd := cipher.NewCipherCmd(rt)
+	cipherCmd := cipher.NewCipherCmd()
 
 	var out bytes.Buffer
 	cipherCmd.SetOut(&out)
@@ -959,8 +940,7 @@ func TestRotateCommandHelp(t *testing.T) {
 func TestCipherCommandHasRotateSubcommand(t *testing.T) {
 	t.Parallel()
 
-	rt := di.NewRuntime()
-	cmd := cipher.NewCipherCmd(rt)
+	cmd := cipher.NewCipherCmd()
 
 	rotateCmd := findSubcommand(cmd, "rotate")
 	if rotateCmd == nil {
@@ -971,8 +951,7 @@ func TestCipherCommandHasRotateSubcommand(t *testing.T) {
 func TestRotateCommandRequiresArg(t *testing.T) {
 	t.Parallel()
 
-	rt := di.NewRuntime()
-	cipherCmd := cipher.NewCipherCmd(rt)
+	cipherCmd := cipher.NewCipherCmd()
 
 	var out, errOut bytes.Buffer
 	cipherCmd.SetOut(&out)
@@ -988,8 +967,7 @@ func TestRotateCommandRequiresArg(t *testing.T) {
 func TestRotateCommandNonExistentPath(t *testing.T) {
 	t.Parallel()
 
-	rt := di.NewRuntime()
-	cipherCmd := cipher.NewCipherCmd(rt)
+	cipherCmd := cipher.NewCipherCmd()
 
 	var out, errOut bytes.Buffer
 	cipherCmd.SetOut(&out)
@@ -1007,8 +985,7 @@ func TestRotateCommandEmptyDir(t *testing.T) {
 
 	tmpDir := t.TempDir()
 
-	rt := di.NewRuntime()
-	cipherCmd := cipher.NewCipherCmd(rt)
+	cipherCmd := cipher.NewCipherCmd()
 
 	var out bytes.Buffer
 	cipherCmd.SetOut(&out)
@@ -1029,8 +1006,7 @@ func TestRotateCommandDryRunEmptyDir(t *testing.T) {
 
 	tmpDir := t.TempDir()
 
-	rt := di.NewRuntime()
-	cipherCmd := cipher.NewCipherCmd(rt)
+	cipherCmd := cipher.NewCipherCmd()
 
 	var out bytes.Buffer
 	cipherCmd.SetOut(&out)
@@ -1063,8 +1039,7 @@ func TestRotateCommandDryRunWithEncryptedFile(t *testing.T) {
 		t.Fatalf("failed to write test file: %v", err)
 	}
 
-	rt := di.NewRuntime()
-	cipherCmd := cipher.NewCipherCmd(rt)
+	cipherCmd := cipher.NewCipherCmd()
 
 	var out bytes.Buffer
 	cipherCmd.SetOut(&out)

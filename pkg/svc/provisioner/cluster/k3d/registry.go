@@ -11,7 +11,6 @@ import (
 	dockerclient "github.com/devantler-tech/ksail/v7/pkg/client/docker"
 	k3dconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/k3d"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/registry"
-	"github.com/docker/docker/client"
 	k3dv1alpha5 "github.com/k3d-io/k3d/v5/pkg/config/v1alpha5"
 	"sigs.k8s.io/yaml"
 )
@@ -21,7 +20,7 @@ func SetupRegistries(
 	ctx context.Context,
 	simpleCfg *k3dv1alpha5.SimpleConfig,
 	clusterName string,
-	dockerClient client.APIClient,
+	dockerClient dockerclient.Client,
 	writer io.Writer,
 ) error {
 	registryMgr, registryInfos, networkName, err := prepareRegistryContext(
@@ -51,7 +50,7 @@ func ConnectRegistriesToNetwork(
 	ctx context.Context,
 	simpleCfg *k3dv1alpha5.SimpleConfig,
 	clusterName string,
-	dockerClient client.APIClient,
+	dockerClient dockerclient.Client,
 	writer io.Writer,
 ) error {
 	if simpleCfg == nil {
@@ -84,7 +83,7 @@ func CleanupRegistries(
 	ctx context.Context,
 	simpleCfg *k3dv1alpha5.SimpleConfig,
 	clusterName string,
-	dockerClient client.APIClient,
+	dockerClient dockerclient.Client,
 	deleteVolumes bool,
 	writer io.Writer,
 ) error {
@@ -117,7 +116,7 @@ func prepareRegistryContext(
 	ctx context.Context,
 	simpleCfg *k3dv1alpha5.SimpleConfig,
 	clusterName string,
-	dockerClient client.APIClient,
+	dockerClient dockerclient.Client,
 ) (registry.Backend, []registry.Info, string, error) {
 	registryMgr, registryInfos, err := setupRegistryManager(
 		ctx,
@@ -142,7 +141,7 @@ func setupRegistryManager(
 	ctx context.Context,
 	simpleCfg *k3dv1alpha5.SimpleConfig,
 	clusterName string,
-	dockerClient client.APIClient,
+	dockerClient dockerclient.Client,
 ) (registry.Backend, []registry.Info, error) {
 	if simpleCfg == nil {
 		return nil, nil, nil

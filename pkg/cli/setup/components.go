@@ -71,6 +71,25 @@ type InstallerFactories struct {
 	) (bool, error)
 	// HelmClientFactory creates a Helm client for the cluster.
 	HelmClientFactory func(clusterCfg *v1alpha1.Cluster) (*helm.Client, string, error)
+	// ClusterStabilityCheck waits for the API server and kube-system DaemonSets
+	// to stabilize before/between installation phases. The bool argument
+	// indicates whether CNI was just installed (skips the redundant node
+	// readiness check). Set to nil to use the default waitForClusterStability.
+	ClusterStabilityCheck func(ctx context.Context, clusterCfg *v1alpha1.Cluster, cniInstalled bool) error
+	// NodeSchedulabilityWait waits for nodes to become schedulable after the
+	// cloud-provider init pre-phase removes the uninitialized taint. Set to nil
+	// to use the default waitForNodeSchedulability.
+	NodeSchedulabilityWait func(ctx context.Context, clusterCfg *v1alpha1.Cluster) error
+	// WaitForCSRApprover waits for the kubelet-serving-cert-approver deployment
+	// (Talos inlineManifests) to be ready before infrastructure installs. Set to
+	// nil to use the default waitForKubeletCSRApprover.
+	WaitForCSRApprover func(ctx context.Context, clusterCfg *v1alpha1.Cluster) error
+	// CloudProviderInitInstall installs the cloud controller manager
+	// (hcloud-ccm) during the cloud-provider init pre-phase. Set to nil to use
+	// the default InstallLoadBalancerSilent. The override only affects the
+	// pre-phase; the normal parallel infra path uses InstallLoadBalancerSilent
+	// directly.
+	CloudProviderInitInstall silentInstallFunc
 }
 
 // policyEngineFactory creates the policy engine factory function.
@@ -286,6 +305,11 @@ func DefaultInstallerFactories() *InstallerFactories {
 	factories.EnsureArgoCDResources = EnsureArgoCDResources
 	factories.SetupFluxInstance = fluxinstaller.SetupInstance
 	factories.WaitForFluxReady = fluxinstaller.WaitForFluxReady
+
+	factories.ClusterStabilityCheck = waitForClusterStability
+	factories.NodeSchedulabilityWait = waitForNodeSchedulability
+	factories.WaitForCSRApprover = waitForKubeletCSRApprover
+	factories.CloudProviderInitInstall = InstallLoadBalancerSilent
 
 	return factories
 }

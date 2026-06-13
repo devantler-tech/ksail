@@ -133,30 +133,16 @@ func (c *Client) validateData(
 // retry re-fetches only what failed. The returned error is left unwrapped to
 // preserve ErrValidationFailed identity for callers using errors.Is.
 func (c *Client) validateWithRetry(ctx context.Context, validate func() error) error {
-	maxAttempts := max(c.maxRetryAttempts, 1)
-
-	var lastErr error
-
-	for attempt := 1; attempt <= maxAttempts; attempt++ {
-		lastErr = validate()
-		if lastErr == nil {
-			return nil
-		}
-
-		if !netretry.IsRetryable(lastErr) || attempt == maxAttempts {
-			break
-		}
-
-		delay := netretry.ExponentialDelay(attempt, c.retryBaseWait, c.retryMaxWait)
-
-		select {
-		case <-ctx.Done():
-			return fmt.Errorf("%w", ctx.Err())
-		case <-time.After(delay):
-		}
-	}
-
-	return lastErr
+	// netretry.Do returns the last validate() error unwrapped on exhaustion,
+	// preserving ErrValidationFailed identity for callers using errors.Is, and
+	// the context error (cancellation-tagged) when the backoff wait is cancelled.
+	return netretry.Do( //nolint:wrapcheck // identity preserved
+		ctx,
+		max(c.maxRetryAttempts, 1),
+		c.retryBaseWait,
+		c.retryMaxWait,
+		validate,
+	)
 }
 
 // processResults processes validation results and returns an error if validation failed.

@@ -155,36 +155,3 @@ func (_c *MockTimer_Start_Call) RunAndReturn(run func()) *MockTimer_Start_Call {
 	_c.Run(run)
 	return _c
 }
-
-// Stop provides a mock function for the type MockTimer
-func (_mock *MockTimer) Stop() {
-	_mock.Called()
-	return
-}
-
-// MockTimer_Stop_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Stop'
-type MockTimer_Stop_Call struct {
-	*mock.Call
-}
-
-// Stop is a helper method to define mock.On call
-func (_e *MockTimer_Expecter) Stop() *MockTimer_Stop_Call {
-	return &MockTimer_Stop_Call{Call: _e.mock.On("Stop")}
-}
-
-func (_c *MockTimer_Stop_Call) Run(run func()) *MockTimer_Stop_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run()
-	})
-	return _c
-}
-
-func (_c *MockTimer_Stop_Call) Return() *MockTimer_Stop_Call {
-	_c.Call.Return()
-	return _c
-}
-
-func (_c *MockTimer_Stop_Call) RunAndReturn(run func()) *MockTimer_Stop_Call {
-	_c.Run(run)
-	return _c
-}

@@ -6,7 +6,6 @@ import (
 
 	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/ui/confirm"
-	"github.com/devantler-tech/ksail/v7/pkg/di"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/tenant"
@@ -14,7 +13,7 @@ import (
 )
 
 // NewDeleteCmd creates the tenant delete subcommand.
-func NewDeleteCmd(_ *di.Runtime) *cobra.Command {
+func NewDeleteCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "delete <tenant-name>",
 		Short: "Delete a tenant",

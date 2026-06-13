@@ -8,8 +8,8 @@ import (
 	"testing"
 
 	"github.com/devantler-tech/ksail/v7/pkg/cli/setup"
+	dockerclient "github.com/devantler-tech/ksail/v7/pkg/client/docker"
 	"github.com/devantler-tech/ksail/v7/pkg/timer"
-	"github.com/docker/docker/client"
 	"github.com/gkampitakis/go-snaps/snaps"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
@@ -57,7 +57,7 @@ func TestRunDockerStage_Success(t *testing.T) {
 		}
 
 		actionCalled := false
-		mockInvoker := func(_ *cobra.Command, action func(client.APIClient) error) error {
+		mockInvoker := func(_ *cobra.Command, action func(dockerclient.Client) error) error {
 			return action(nil)
 		}
 
@@ -65,7 +65,7 @@ func TestRunDockerStage_Success(t *testing.T) {
 			cmd,
 			tmr,
 			info,
-			func(_ context.Context, _ client.APIClient) error {
+			func(_ context.Context, _ dockerclient.Client) error {
 				actionCalled = true
 
 				return nil
@@ -102,7 +102,7 @@ func TestRunDockerStage_NoActivity(t *testing.T) {
 			FailurePrefix: "failed",
 		}
 
-		mockInvoker := func(_ *cobra.Command, action func(client.APIClient) error) error {
+		mockInvoker := func(_ *cobra.Command, action func(dockerclient.Client) error) error {
 			return action(nil)
 		}
 
@@ -110,7 +110,7 @@ func TestRunDockerStage_NoActivity(t *testing.T) {
 			cmd,
 			tmr,
 			info,
-			func(_ context.Context, _ client.APIClient) error {
+			func(_ context.Context, _ dockerclient.Client) error {
 				return nil
 			},
 			mockInvoker,
@@ -144,7 +144,7 @@ func TestRunDockerStage_ActionError(t *testing.T) {
 			FailurePrefix: "action failed",
 		}
 
-		mockInvoker := func(_ *cobra.Command, action func(client.APIClient) error) error {
+		mockInvoker := func(_ *cobra.Command, action func(dockerclient.Client) error) error {
 			return action(nil)
 		}
 
@@ -152,7 +152,7 @@ func TestRunDockerStage_ActionError(t *testing.T) {
 			cmd,
 			tmr,
 			info,
-			func(_ context.Context, _ client.APIClient) error {
+			func(_ context.Context, _ dockerclient.Client) error {
 				return fmt.Errorf("test action error: %w", errSomethingWentWrong)
 			},
 			mockInvoker,
@@ -187,7 +187,7 @@ func TestRunDockerStage_InvokerError(t *testing.T) {
 			FailurePrefix: "failed",
 		}
 
-		mockInvoker := func(_ *cobra.Command, _ func(client.APIClient) error) error {
+		mockInvoker := func(_ *cobra.Command, _ func(dockerclient.Client) error) error {
 			return fmt.Errorf("invoker error: %w", errInvokerFailed)
 		}
 
@@ -195,7 +195,7 @@ func TestRunDockerStage_InvokerError(t *testing.T) {
 			cmd,
 			tmr,
 			info,
-			func(_ context.Context, _ client.APIClient) error {
+			func(_ context.Context, _ dockerclient.Client) error {
 				return nil
 			},
 			mockInvoker,
@@ -236,9 +236,10 @@ func TestRunDockerStage_NilInvoker(t *testing.T) {
 
 		// This will try to use the real Docker client, which may fail if Docker isn't running
 		// That's acceptable - we're just testing that nil invoker is handled without panic
-		_ = setup.RunDockerStage(cmd, tmr, info, func(_ context.Context, _ client.APIClient) error {
+		noopAction := func(_ context.Context, _ dockerclient.Client) error {
 			return nil
-		}, nil)
+		}
+		_ = setup.RunDockerStage(cmd, tmr, info, noopAction, nil)
 		// We don't assert on error here since Docker may or may not be available
 	})
 }
@@ -266,7 +267,7 @@ func TestRunDockerStage_WithTiming(t *testing.T) {
 			FailurePrefix: "timing failed",
 		}
 
-		mockInvoker := func(_ *cobra.Command, action func(client.APIClient) error) error {
+		mockInvoker := func(_ *cobra.Command, action func(dockerclient.Client) error) error {
 			return action(nil)
 		}
 
@@ -274,7 +275,7 @@ func TestRunDockerStage_WithTiming(t *testing.T) {
 			cmd,
 			tmr,
 			info,
-			func(_ context.Context, _ client.APIClient) error {
+			func(_ context.Context, _ dockerclient.Client) error {
 				return nil
 			},
 			mockInvoker,

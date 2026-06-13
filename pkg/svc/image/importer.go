@@ -12,10 +12,10 @@ import (
 	"sync"
 
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	dockerclient "github.com/devantler-tech/ksail/v7/pkg/client/docker"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
 	dockerprovider "github.com/devantler-tech/ksail/v7/pkg/svc/provider/docker"
 	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/client"
 )
 
 // ImportOptions configures the image import operation.
@@ -27,12 +27,12 @@ type ImportOptions struct {
 
 // Importer handles importing container images to cluster containerd.
 type Importer struct {
-	dockerClient client.APIClient
+	dockerClient dockerclient.Client
 	executor     *ContainerExecutor
 }
 
 // NewImporter creates a new image importer.
-func NewImporter(dockerClient client.APIClient) *Importer {
+func NewImporter(dockerClient dockerclient.Client) *Importer {
 	return &Importer{
 		dockerClient: dockerClient,
 		executor:     NewContainerExecutor(dockerClient),

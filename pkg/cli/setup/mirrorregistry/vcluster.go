@@ -6,18 +6,18 @@ import (
 	"strings"
 
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
+	dockerclient "github.com/devantler-tech/ksail/v7/pkg/client/docker"
 	clusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster"
 	vclusterprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/vcluster"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/registry"
-	"github.com/docker/docker/client"
 )
 
 // vclusterDefaultClusterName is the default cluster name for VCluster.
 const vclusterDefaultClusterName = "vcluster-default"
 
 // VClusterRegistryAction returns the action function for VCluster registry creation.
-func VClusterRegistryAction(ctx *Context) func(context.Context, client.APIClient) error {
-	return func(execCtx context.Context, dockerClient client.APIClient) error {
+func VClusterRegistryAction(ctx *Context) func(context.Context, dockerclient.Client) error {
+	return func(execCtx context.Context, dockerClient dockerclient.Client) error {
 		return runVClusterRegistryAction(execCtx, ctx, dockerClient)
 	}
 }
@@ -28,8 +28,8 @@ const vclusterNetworkPrefix = "vcluster."
 // VClusterNetworkAction returns the action function for VCluster network creation.
 // Pre-creates the Docker network so mirror registries can be connected before
 // cluster creation. The VCluster SDK reuses an existing network with this name.
-func VClusterNetworkAction(ctx *Context) func(context.Context, client.APIClient) error {
-	return func(execCtx context.Context, dockerClient client.APIClient) error {
+func VClusterNetworkAction(ctx *Context) func(context.Context, dockerclient.Client) error {
+	return func(execCtx context.Context, dockerClient dockerclient.Client) error {
 		clusterName := resolveVClusterClusterName(ctx.VClusterConfig)
 		networkName := vclusterNetworkPrefix + clusterName
 		writer := ctx.Cmd.OutOrStdout()
@@ -39,8 +39,8 @@ func VClusterNetworkAction(ctx *Context) func(context.Context, client.APIClient)
 }
 
 // VClusterConnectAction returns the action function for VCluster registry connection.
-func VClusterConnectAction(ctx *Context) func(context.Context, client.APIClient) error {
-	return func(execCtx context.Context, dockerClient client.APIClient) error {
+func VClusterConnectAction(ctx *Context) func(context.Context, dockerclient.Client) error {
+	return func(execCtx context.Context, dockerClient dockerclient.Client) error {
 		return runVClusterConnectAction(execCtx, ctx, dockerClient)
 	}
 }
@@ -48,8 +48,10 @@ func VClusterConnectAction(ctx *Context) func(context.Context, client.APIClient)
 // VClusterPostClusterConnectAction returns the action function for post-cluster
 // registry configuration. This injects hosts.toml files into VCluster nodes via
 // docker exec, the same approach used by Kind.
-func VClusterPostClusterConnectAction(ctx *Context) func(context.Context, client.APIClient) error {
-	return func(execCtx context.Context, dockerClient client.APIClient) error {
+func VClusterPostClusterConnectAction(
+	ctx *Context,
+) func(context.Context, dockerclient.Client) error {
+	return func(execCtx context.Context, dockerClient dockerclient.Client) error {
 		return runVClusterPostClusterConnectAction(execCtx, ctx, dockerClient)
 	}
 }
@@ -70,7 +72,7 @@ func resolveVClusterClusterName(vclusterConfig *clusterprovisioner.VClusterConfi
 func runVClusterRegistryAction(
 	execCtx context.Context,
 	ctx *Context,
-	dockerClient client.APIClient,
+	dockerClient dockerclient.Client,
 ) error {
 	writer := ctx.Cmd.OutOrStdout()
 	clusterName := resolveVClusterClusterName(ctx.VClusterConfig)
@@ -92,7 +94,7 @@ func runVClusterRegistryAction(
 func runVClusterConnectAction(
 	execCtx context.Context,
 	ctx *Context,
-	dockerClient client.APIClient,
+	dockerClient dockerclient.Client,
 ) error {
 	writer := ctx.Cmd.OutOrStdout()
 	clusterName := resolveVClusterClusterName(ctx.VClusterConfig)
@@ -112,7 +114,7 @@ func runVClusterConnectAction(
 func runVClusterPostClusterConnectAction(
 	execCtx context.Context,
 	ctx *Context,
-	dockerClient client.APIClient,
+	dockerClient dockerclient.Client,
 ) error {
 	clusterName := resolveVClusterClusterName(ctx.VClusterConfig)
 

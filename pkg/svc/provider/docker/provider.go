@@ -6,10 +6,10 @@ import (
 	"strings"
 	"time"
 
+	dockerclient "github.com/devantler-tech/ksail/v7/pkg/client/docker"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
-	"github.com/docker/docker/client"
 )
 
 // LabelScheme defines how to identify and filter containers for a distribution.
@@ -54,12 +54,12 @@ const (
 
 // Provider implements provider.Provider for Docker-based clusters.
 type Provider struct {
-	client      client.APIClient
+	client      dockerclient.Client
 	labelScheme LabelScheme
 }
 
 // NewProvider creates a new Docker provider with the specified label scheme.
-func NewProvider(cli client.APIClient, scheme LabelScheme) *Provider {
+func NewProvider(cli dockerclient.Client, scheme LabelScheme) *Provider {
 	return &Provider{
 		client:      cli,
 		labelScheme: scheme,

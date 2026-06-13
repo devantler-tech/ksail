@@ -6,9 +6,9 @@ import (
 
 	dockerhelpers "github.com/devantler-tech/ksail/v7/pkg/cli/dockerutil"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/flags"
+	dockerclient "github.com/devantler-tech/ksail/v7/pkg/client/docker"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
 	"github.com/devantler-tech/ksail/v7/pkg/timer"
-	"github.com/docker/docker/client"
 	"github.com/spf13/cobra"
 )
 
@@ -23,7 +23,7 @@ type StageInfo struct {
 }
 
 // DockerClientInvoker is a function that invokes an operation with a Docker client.
-type DockerClientInvoker func(*cobra.Command, func(client.APIClient) error) error
+type DockerClientInvoker func(*cobra.Command, func(dockerclient.Client) error) error
 
 // DefaultDockerClientInvoker returns the default Docker client invoker.
 func DefaultDockerClientInvoker() DockerClientInvoker {
@@ -48,7 +48,7 @@ func RunDockerStage(
 	cmd *cobra.Command,
 	tmr timer.Timer,
 	info StageInfo,
-	action func(context.Context, client.APIClient) error,
+	action func(context.Context, dockerclient.Client) error,
 	dockerInvoker DockerClientInvoker,
 ) error {
 	tmr.NewStage()
@@ -73,7 +73,7 @@ func RunDockerStage(
 		invoker = dockerhelpers.WithDockerClient
 	}
 
-	err := invoker(cmd, func(dockerClient client.APIClient) error {
+	err := invoker(cmd, func(dockerClient dockerclient.Client) error {
 		actionErr := action(cmd.Context(), dockerClient)
 		if actionErr != nil {
 			return fmt.Errorf("%s: %w", info.FailurePrefix, actionErr)

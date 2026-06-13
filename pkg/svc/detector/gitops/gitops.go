@@ -5,8 +5,8 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"strings"
 
+	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	"sigs.k8s.io/yaml"
 )
 
@@ -109,7 +109,7 @@ func (d *CRDetector) FindFluxInstanceDistribution() (FluxDistribution, error) {
 		return FluxDistribution{}, fmt.Errorf("reading FluxInstance file: %w", err)
 	}
 
-	for _, doc := range splitYAMLDocuments(data) {
+	for _, doc := range fsutil.SplitYAMLDocuments(data) {
 		if len(doc) == 0 {
 			continue
 		}
@@ -177,7 +177,7 @@ func (d *CRDetector) findCR(
 			return nil
 		}
 
-		if !isYAMLFile(path) {
+		if !fsutil.IsYAMLFile(path) {
 			return nil
 		}
 
@@ -213,7 +213,7 @@ func (d *CRDetector) checkFile(
 	}
 
 	// Handle multi-document YAML files
-	docs := splitYAMLDocuments(data)
+	docs := fsutil.SplitYAMLDocuments(data)
 	for _, doc := range docs {
 		if len(doc) == 0 {
 			continue
@@ -267,35 +267,4 @@ func (d *CRDetector) isMatchingCR(
 	}
 
 	return false
-}
-
-// isYAMLFile checks if the file has a YAML extension.
-func isYAMLFile(path string) bool {
-	ext := strings.ToLower(filepath.Ext(path))
-
-	return ext == ".yaml" || ext == ".yml"
-}
-
-// splitYAMLDocuments splits a multi-document YAML file into individual documents.
-func splitYAMLDocuments(data []byte) [][]byte {
-	content := string(data)
-
-	// Handle documents starting with "---" at the beginning of the file
-	// by normalizing to always have a newline before the separator.
-	if strings.HasPrefix(content, "---") {
-		content = "\n" + content
-	}
-
-	// Split on YAML document separator
-	parts := strings.Split(content, "\n---")
-	docs := make([][]byte, 0, len(parts))
-
-	for _, part := range parts {
-		trimmed := strings.TrimSpace(part)
-		if trimmed != "" {
-			docs = append(docs, []byte(trimmed))
-		}
-	}
-
-	return docs
 }

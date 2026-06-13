@@ -14,7 +14,6 @@ import (
 	"runtime"
 
 	"github.com/devantler-tech/ksail/v7/pkg/cli/annotations"
-	"github.com/devantler-tech/ksail/v7/pkg/di"
 	"github.com/spf13/cobra"
 )
 
@@ -38,7 +37,7 @@ This command launches the desktop app from, in order: a "ksail-desktop" binary n
 executable, the same binary on your PATH, or (on macOS) an installed "KSail" app.`
 
 // NewDesktopCmd creates the `ksail desktop` command.
-func NewDesktopCmd(_ *di.Runtime) *cobra.Command {
+func NewDesktopCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:          "desktop",
 		Short:        "Open the KSail desktop application",

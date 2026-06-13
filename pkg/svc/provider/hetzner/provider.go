@@ -9,6 +9,7 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/k8s"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
+	"k8s.io/apimachinery/pkg/util/wait"
 )
 
 // Default timeouts for Hetzner operations.
@@ -117,31 +118,36 @@ func (p *Provider) waitForServersStatus(
 	clusterName string,
 	desiredStatus hcloud.ServerStatus,
 ) error {
-	ctx, cancel := context.WithTimeout(ctx, DefaultActionTimeout)
-	defer cancel()
+	var condErr error
 
-	ticker := time.NewTicker(DefaultPollingInterval)
-	defer ticker.Stop()
+	err := wait.PollUntilContextTimeout(
+		ctx,
+		DefaultPollingInterval,
+		DefaultActionTimeout,
+		false, // match the legacy ticker: wait one interval before the first check.
+		func(ctx context.Context) (bool, error) {
+			ready, checkErr := p.allServersAtStatus(ctx, clusterName, desiredStatus)
+			condErr = checkErr
 
-	for {
-		select {
-		case <-ctx.Done():
-			return fmt.Errorf(
-				"timeout waiting for servers to reach status %s: %w",
-				desiredStatus,
-				ctx.Err(),
-			)
-		case <-ticker.C:
-			allReady, err := p.allServersAtStatus(ctx, clusterName, desiredStatus)
-			if err != nil {
-				return err
-			}
-
-			if allReady {
-				return nil
-			}
-		}
+			return ready, checkErr
+		},
+	)
+	if err == nil {
+		return nil
 	}
+
+	// allServersAtStatus errors propagate unwrapped (even when they wrap a
+	// context error); only the poller's own deadline/cancellation maps to the
+	// legacy timeout message.
+	if condErr != nil && errors.Is(err, condErr) {
+		return condErr
+	}
+
+	return fmt.Errorf(
+		"timeout waiting for servers to reach status %s: %w",
+		desiredStatus,
+		err,
+	)
 }
 
 //nolint:funcorder // Helper for waitForServersStatus, grouped for logical code organization

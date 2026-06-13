@@ -14,7 +14,6 @@ import (
 	"github.com/devantler-tech/ksail/v7/pkg/client/argocd"
 	"github.com/devantler-tech/ksail/v7/pkg/client/flux"
 	reconcilerclient "github.com/devantler-tech/ksail/v7/pkg/client/reconciler"
-	"github.com/devantler-tech/ksail/v7/pkg/di"
 	"github.com/devantler-tech/ksail/v7/pkg/notify"
 	clusterdetector "github.com/devantler-tech/ksail/v7/pkg/svc/detector/cluster"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/reconcilediag"
@@ -24,7 +23,7 @@ import (
 )
 
 // NewReconcileCmd creates the workload reconcile command.
-func NewReconcileCmd(_ *di.Runtime) *cobra.Command {
+func NewReconcileCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:          "reconcile",
 		Short:        "Trigger reconciliation for GitOps workloads",
@@ -571,53 +570,37 @@ func pollUntilKustomizationReady(
 	dependsOn []string,
 	failed *failedKustomizations,
 ) error {
-	ticker := time.NewTicker(fluxKustomizationPollInterval)
-	defer ticker.Stop()
+	return reconcilerclient.PollUntilReady( //nolint:wrapcheck // identity preserved
+		ctx,
+		fluxKustomizationPollInterval,
+		func(ctx context.Context) (reconcilerclient.CheckResult, error) {
+			// Fail-fast: check if any dependency has permanently failed.
+			depErr := failed.checkDependencies(dependsOn)
+			if depErr != nil {
+				// Record cascaded failure so further dependents also fail-fast,
+				// and halt so the error is returned verbatim (not wrapped).
+				failed.record(name, depErr)
 
-	var lastStatus string
+				return reconcilerclient.CheckResult{}, reconcilerclient.Halt(depErr)
+			}
 
-	for {
-		// Fail-fast: check if any dependency has permanently failed.
-		depErr := failed.checkDependencies(dependsOn)
-		if depErr != nil {
-			// Record cascaded failure so further dependents also fail-fast.
-			failed.record(name, depErr)
-
-			return depErr
-		}
-
-		ready, status, err := fluxReconciler.CheckNamedKustomizationReady(ctx, name)
-		if err != nil {
-			if reconcilerclient.IsContextError(err) {
-				if errors.Is(ctx.Err(), context.Canceled) {
-					return ctx.Err() //nolint:wrapcheck // propagate cancellation as-is
+			ready, status, err := fluxReconciler.CheckNamedKustomizationReady(ctx, name)
+			if err != nil {
+				// Record permanent failure so dependents can fail-fast. Context
+				// errors are not permanent, so they are left unrecorded.
+				if !reconcilerclient.IsContextError(err) {
+					failed.record(name, err)
 				}
 
-				return kustomizationReadinessTimeoutError(name, lastStatus)
+				return reconcilerclient.CheckResult{}, err //nolint:wrapcheck // identity preserved
 			}
 
-			// Record permanent failure so dependents can fail-fast.
-			failed.record(name, err)
-
-			return fmt.Errorf("permanent failure: %w", err)
-		}
-
-		if ready {
-			return nil
-		}
-
-		lastStatus = status
-
-		select {
-		case <-ctx.Done():
-			if errors.Is(ctx.Err(), context.Canceled) {
-				return ctx.Err() //nolint:wrapcheck // propagate cancellation as-is
-			}
-
+			return reconcilerclient.CheckResult{Ready: ready, Status: status}, nil
+		},
+		func(lastStatus string) error {
 			return kustomizationReadinessTimeoutError(name, lastStatus)
-		case <-ticker.C:
-		}
-	}
+		},
+	)
 }
 
 // kustomizationReadinessTimeoutError returns an actionable error for a
@@ -782,43 +765,31 @@ func pollUntilApplicationReady(
 	argoReconciler *argocd.Reconciler,
 	name string,
 ) error {
-	ticker := time.NewTicker(argoCDApplicationPollInterval)
-	defer ticker.Stop()
-
-	for {
-		ready, err := argoReconciler.CheckNamedApplicationReady(ctx, name)
-		if err != nil {
-			if reconcilerclient.IsContextError(err) {
-				if errors.Is(ctx.Err(), context.Canceled) {
-					return ctx.Err() //nolint:wrapcheck // propagate cancellation as-is
-				}
-
-				return fmt.Errorf(
-					"%w — "+
-						"run 'ksail workload get applications.argoproj.io %s -n argocd' to inspect",
-					argocd.ErrReconcileTimeout, name,
-				)
+	return reconcilerclient.PollUntilReady( //nolint:wrapcheck // identity preserved
+		ctx,
+		argoCDApplicationPollInterval,
+		func(ctx context.Context) (reconcilerclient.CheckResult, error) {
+			ready, err := argoReconciler.CheckNamedApplicationReady(ctx, name)
+			if err != nil {
+				return reconcilerclient.CheckResult{}, err //nolint:wrapcheck // identity preserved
 			}
 
-			return fmt.Errorf("permanent failure: %w", err)
-		}
+			// ArgoCD exposes no per-poll status, so Status is left empty.
+			return reconcilerclient.CheckResult{Ready: ready}, nil
+		},
+		func(string) error {
+			return applicationReadinessTimeoutError(name)
+		},
+	)
+}
 
-		if ready {
-			return nil
-		}
-
-		select {
-		case <-ctx.Done():
-			if errors.Is(ctx.Err(), context.Canceled) {
-				return ctx.Err() //nolint:wrapcheck // propagate cancellation as-is
-			}
-
-			return fmt.Errorf(
-				"%w — "+
-					"run 'ksail workload get applications.argoproj.io %s -n argocd' to inspect",
-				argocd.ErrReconcileTimeout, name,
-			)
-		case <-ticker.C:
-		}
-	}
+// applicationReadinessTimeoutError returns the actionable error for an ArgoCD
+// Application that did not become ready within the timeout. Hoisted out of the
+// poll loop so the message is defined once instead of duplicated per branch.
+func applicationReadinessTimeoutError(name string) error {
+	return fmt.Errorf(
+		"%w — "+
+			"run 'ksail workload get applications.argoproj.io %s -n argocd' to inspect",
+		argocd.ErrReconcileTimeout, name,
+	)
 }
