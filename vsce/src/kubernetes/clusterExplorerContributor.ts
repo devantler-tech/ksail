@@ -8,8 +8,8 @@
 import * as vscode from "vscode";
 import type { ClusterExplorerV1_1, KubectlV1 } from "vscode-kubernetes-tools-api";
 import { detectClusterStatus, listClusters, type ClusterStatus } from "../ksail/clusters.js";
+import { isKSailContext, parseClusterName } from "../ksail/contexts.js";
 import { getPodLogs } from "../ksail/kubectl.js";
-import { isKSailContext, parseClusterName } from "./contextNames.js";
 
 // ── NodeUICustomizer ─────────────────────────────────────────────────
 

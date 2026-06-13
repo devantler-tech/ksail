@@ -17,7 +17,7 @@ import { useEffect, useState } from "react";
 import { downloadKubeconfig, errorMessage, type Cluster, type Condition } from "../api.ts";
 import { cx } from "../lib/cx.ts";
 import { formatTimestamp, relativeAge } from "../lib/format.ts";
-import { clusterKey, isHostCluster, splitClusterKey } from "../lib/k8s.ts";
+import { clusterKey, clusterPhase, isHostCluster, splitClusterKey } from "../lib/k8s.ts";
 import { loadHealth, type LiveHealth, type PodSegment } from "../lib/health.ts";
 import { COMPONENT_LABELS, useMeta } from "../lib/meta.ts";
 import { Card, Field } from "./Card.tsx";
@@ -168,7 +168,7 @@ export function OverviewView({
         <div className="min-w-0">
           <div className="flex items-center gap-2.5">
             <h2 className="truncate text-xl font-semibold text-slate-900 dark:text-white">{cluster.metadata.name}</h2>
-            <StatusBadge phase={status?.phase} />
+            <StatusBadge phase={clusterPhase(cluster)} />
             {hostCluster ? <HostBadge /> : null}
           </div>
           <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">
@@ -296,7 +296,7 @@ export function OverviewView({
 
         <Card title="Status" icon={<Activity className="size-3.5" aria-hidden />}>
           <dl className="divide-y divide-slate-100 dark:divide-slate-800">
-            <Field label="Phase">{status?.phase ?? "—"}</Field>
+            <Field label="Phase">{clusterPhase(cluster) || "—"}</Field>
             <Field label="Endpoint">{status?.endpoint ? <CopyableEndpoint endpoint={status.endpoint} /> : "—"}</Field>
             <Field label="Kubernetes">{health?.kubernetesVersion || "—"}</Field>
             <Field label="OS">{health?.osImage || "—"}</Field>

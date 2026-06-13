@@ -6,20 +6,16 @@ import (
 	v1alpha1 "github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/editor"
 	"github.com/devantler-tech/ksail/v7/pkg/cli/kubeconfig"
+	"github.com/devantler-tech/ksail/v7/pkg/cli/lifecycle"
 	"github.com/devantler-tech/ksail/v7/pkg/client/k9s"
 	configmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager"
 	ksailconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/ksail"
 	"github.com/spf13/cobra"
 )
 
-// NewConnectCmd creates the connect command for clusters.
-func NewConnectCmd() *cobra.Command {
-	var editorFlag string
-
-	cmd := &cobra.Command{
-		Use:   "connect",
-		Short: "Connect to cluster with k9s",
-		Long: `Launch k9s terminal UI to interactively manage your Kubernetes cluster.
+// connectLead is the command-specific lead paragraph for `cluster connect`; the
+// shared cluster-targeting resolution block is appended via WithClusterTargetingHelp.
+const connectLead = `Launch k9s terminal UI to interactively manage your Kubernetes cluster.
 
 The editor is determined by (in order of precedence):
   1. --editor flag
@@ -31,10 +27,23 @@ k9s flags and arguments placed after a "--" separator are passed through to
 k9s unchanged, allowing you to use any k9s functionality. Examples:
 
   ksail cluster connect
+  ksail cluster connect --name dev-cluster
   ksail cluster connect --editor "code --wait"
   ksail cluster connect -- --namespace default
   ksail cluster connect -- --context my-context
-  ksail cluster connect -- --readonly`,
+  ksail cluster connect -- --readonly`
+
+// NewConnectCmd creates the connect command for clusters.
+func NewConnectCmd() *cobra.Command {
+	var (
+		editorFlag string
+		nameFlag   string
+	)
+
+	cmd := &cobra.Command{
+		Use:          "connect",
+		Short:        "Connect to cluster with k9s",
+		Long:         lifecycle.WithClusterTargetingHelp(connectLead),
 		SilenceUsage: true,
 	}
 
@@ -46,14 +55,10 @@ k9s unchanged, allowing you to use any k9s functionality. Examples:
 	// Hide flags that connect doesn't use but that are needed for config
 	// defaults and validation (distribution, distributionConfig, gitopsEngine,
 	// localRegistry).
-	for _, flagName := range []string{"distribution", "distribution-config", "gitops-engine", "local-registry"} {
-		if f := cmd.Flags().Lookup(flagName); f != nil {
-			f.Hidden = true
-		}
-	}
+	hideConfigOnlyFlags(cmd)
 
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
-		return handleConnectRunE(cmd, cfgManager, args, editorFlag)
+		return handleConnectRunE(cmd, cfgManager, args, editorFlag, nameFlag)
 	}
 
 	cmd.Flags().StringVar(
@@ -61,6 +66,12 @@ k9s unchanged, allowing you to use any k9s functionality. Examples:
 		"editor",
 		"",
 		"editor command to use for k9s edit actions (e.g., 'code --wait', 'vim', 'nano')",
+	)
+	cmd.Flags().StringVarP(
+		&nameFlag,
+		"name", "n", "",
+		"Name of the cluster to connect to (resolved like the other cluster commands; "+
+			"overrides the kubeconfig context derived from ksail.yaml)",
 	)
 
 	return cmd
@@ -72,6 +83,7 @@ func handleConnectRunE(
 	cfgManager *ksailconfigmanager.ConfigManager,
 	args []string,
 	editorFlag string,
+	nameFlag string,
 ) error {
 	// Load configuration
 	cfg, err := cfgManager.Load(configmanager.LoadOptions{Silent: true})
@@ -92,6 +104,27 @@ func handleConnectRunE(
 	// Get context from config
 	context := cfg.Spec.Cluster.Connection.Context
 
+	// When --name is supplied, resolve the targeted cluster (flag > config >
+	// kubeconfig context) and connect k9s to its context. Empty --name keeps the
+	// config-derived context unchanged (existing behavior).
+	if nameFlag != "" {
+		resolved, resolveErr := lifecycle.ResolveClusterInfo(
+			cmd,
+			nameFlag,
+			cfg.Spec.Cluster.Provider,
+			"",
+		)
+		if resolveErr != nil {
+			return fmt.Errorf("resolve cluster info: %w", resolveErr)
+		}
+
+		context = connectContextForCluster(cfg, resolved)
+
+		if resolved.KubeconfigPath != "" {
+			kubeConfigPath = resolved.KubeconfigPath
+		}
+	}
+
 	// Create k9s client and command
 	k9sClient := k9s.NewClient()
 	k9sCmd := k9sClient.CreateConnectCommand(kubeConfigPath, context)
@@ -109,6 +142,23 @@ func handleConnectRunE(
 	}
 
 	return nil
+}
+
+// connectContextForCluster derives the kubeconfig context k9s should target for
+// a --name-resolved cluster. When the resolved name matches the config's cluster
+// name, the configured context is preserved (it may carry a non-default value).
+// Otherwise the standard "<distribution>-<name>" context is derived from the
+// config's distribution so connect targets the requested cluster rather than the
+// config's own.
+func connectContextForCluster(
+	cfg *v1alpha1.Cluster,
+	resolved *lifecycle.ResolvedClusterInfo,
+) string {
+	if cfg.Name != "" && cfg.Name == resolved.ClusterName {
+		return cfg.Spec.Cluster.Connection.Context
+	}
+
+	return cfg.Spec.Cluster.Distribution.ContextName(resolved.ClusterName)
 }
 
 // setupEditorEnv sets up the editor environment variables based on flag and config.

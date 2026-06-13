@@ -10,9 +10,8 @@ import * as vscode from "vscode";
 import type { CloudExplorerV1, KubectlV1 } from "vscode-kubernetes-tools-api";
 import {
   detectClusterStatus,
-  detectDistribution,
-  getContextName,
   listClusters,
+  resolveContext,
   type ClusterStatus,
 } from "../ksail/index.js";
 
@@ -22,6 +21,7 @@ import {
 export interface KSailCloudCluster {
   readonly name: string;
   readonly provider: string;
+  readonly distribution?: string;
   readonly status: ClusterStatus;
 }
 
@@ -56,6 +56,7 @@ export class KSailCloudTreeDataProvider implements vscode.TreeDataProvider<KSail
       this.clusters = clusterList.map((c) => ({
         name: c.name,
         provider: c.provider,
+        distribution: c.distribution,
         status: c.status ?? "unknown",
       }));
       this._onDidChangeTreeData.fire();
@@ -73,6 +74,7 @@ export class KSailCloudTreeDataProvider implements vscode.TreeDataProvider<KSail
       this.clusters = clusterList.map((c, i) => ({
         name: c.name,
         provider: c.provider,
+        distribution: c.distribution,
         status: statuses[i],
       }));
       this._onDidChangeTreeData.fire();
@@ -141,8 +143,7 @@ export function createKSailCloudProvider(
     treeDataProvider,
     async getKubeconfigYaml(cluster: KSailCloudCluster): Promise<string | undefined> {
       try {
-        const distribution = await detectDistribution(cluster.name, cluster.provider);
-        const contextName = getContextName(cluster.name, distribution);
+        const contextName = resolveContext(cluster.name, cluster.distribution);
 
         // Validate context name to prevent command injection
         if (!/^[\w@._-]+$/.test(contextName)) {
@@ -152,51 +153,25 @@ export function createKSailCloudProvider(
           return undefined;
         }
 
-        // Use the Kubernetes extension's KubectlV1 API when available
-        if (kubectlAPI) {
-          const result = await kubectlAPI.invokeCommand(
-            `config view --minify --flatten --context ${contextName}`
-          );
-          if (result && result.code === 0 && result.stdout.trim()) {
-            return result.stdout;
-          }
+        // The Kubernetes extension is a hard extensionDependency (package.json),
+        // so its KubectlV1 API is installed by definition.
+        if (!kubectlAPI) {
           vscode.window.showErrorMessage(
-            `Failed to get kubeconfig for "${cluster.name}": ${result?.stderr || "unknown error"}`
+            `Failed to get kubeconfig for "${cluster.name}": Kubectl API not available`
           );
           return undefined;
         }
 
-        // Fallback: spawn kubectl binary directly
-        const { spawn } = await import("child_process");
-        return new Promise((resolve) => {
-          const proc = spawn("kubectl", [
-            "config", "view", "--minify", "--flatten",
-            "--context", contextName,
-          ]);
-
-          let output = "";
-          let stderr = "";
-          proc.stdout.on("data", (data: Buffer) => { output += data.toString(); });
-          proc.stderr.on("data", (data: Buffer) => { stderr += data.toString(); });
-
-          proc.on("close", (code) => {
-            if (code === 0 && output.trim()) {
-              resolve(output);
-            } else {
-              vscode.window.showErrorMessage(
-                `Failed to get kubeconfig for "${cluster.name}": ${stderr || "unknown error"}`
-              );
-              resolve(undefined);
-            }
-          });
-
-          proc.on("error", (err) => {
-            vscode.window.showErrorMessage(
-              `Failed to get kubeconfig for "${cluster.name}": ${err.message}`
-            );
-            resolve(undefined);
-          });
-        });
+        const result = await kubectlAPI.invokeCommand(
+          `config view --minify --flatten --context ${contextName}`
+        );
+        if (result && result.code === 0 && result.stdout.trim()) {
+          return result.stdout;
+        }
+        vscode.window.showErrorMessage(
+          `Failed to get kubeconfig for "${cluster.name}": ${result?.stderr || "unknown error"}`
+        );
+        return undefined;
       } catch (error) {
         vscode.window.showErrorMessage(
           `Failed to get kubeconfig: ${error instanceof Error ? error.message : String(error)}`

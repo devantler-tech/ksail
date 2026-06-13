@@ -31,11 +31,20 @@ The cluster is resolved in the following priority order:
 
 Use --output json for machine-readable output suitable for CI pipelines.
 Use --exit-code to return exit code 2 when drift is detected (useful for
-CI gates and monitoring scripts).`
+CI gates and monitoring scripts).
+
+Use --include-version-drift to also report the distribution/Kubernetes version
+reconciliation 'ksail cluster update' applies on every run (matching
+'update --dry-run'). It is off by default: resolving the latest available
+version performs OCI registry lookups, so enabling it makes diff
+network-dependent and may report drift whenever upstream cuts a release.`
 
 // NewDiffCmd creates the cluster diff command.
 func NewDiffCmd() *cobra.Command {
-	var exitCodeFlag bool
+	var (
+		exitCodeFlag        bool
+		includeVersionDrift bool
+	)
 
 	cmd := &cobra.Command{
 		Use:   "diff",
@@ -54,17 +63,17 @@ func NewDiffCmd() *cobra.Command {
 
 	// Hide flags that diff doesn't expose in its help but that are needed for
 	// config defaults and validation to work correctly.
-	for _, flagName := range []string{"distribution", "distribution-config", "gitops-engine", "local-registry"} {
-		if f := cmd.Flags().Lookup(flagName); f != nil {
-			f.Hidden = true
-		}
-	}
+	hideConfigOnlyFlags(cmd)
 
 	cmd.Flags().String("output", "text",
 		"Output format: text or json. Use json for machine-readable structured output.")
 
 	cmd.Flags().BoolVar(&exitCodeFlag, "exit-code", false,
 		"Return exit code 2 when drift is detected (for CI gates)")
+
+	cmd.Flags().BoolVar(&includeVersionDrift, "include-version-drift", false,
+		"Also report distribution/Kubernetes version drift the next 'cluster update' "+
+			"would reconcile (performs OCI registry lookups; off by default)")
 
 	registerNameFlag(cmd, cfgManager)
 
@@ -81,7 +90,11 @@ func NewDiffCmd() *cobra.Command {
 		handler := lifecycle.WrapHandler(
 			cfgManager,
 			func(cmd *cobra.Command, cfgManager *ksailconfigmanager.ConfigManager, deps lifecycle.Deps) error {
-				return handleDiffRunE(cmd, cfgManager, deps, exitCodeFlag, format)
+				return handleDiffRunE(cmd, cfgManager, deps, diffOptions{
+					exitCode:            exitCodeFlag,
+					format:              format,
+					includeVersionDrift: includeVersionDrift,
+				})
 			},
 		)
 
@@ -91,13 +104,20 @@ func NewDiffCmd() *cobra.Command {
 	return cmd
 }
 
+// diffOptions bundles the per-invocation diff flags so handleDiffRunE keeps a
+// short signature as options accrue.
+type diffOptions struct {
+	exitCode            bool
+	format              string
+	includeVersionDrift bool
+}
+
 // handleDiffRunE computes the diff between desired and live cluster state.
 func handleDiffRunE(
 	cmd *cobra.Command,
 	cfgManager *ksailconfigmanager.ConfigManager,
 	deps lifecycle.Deps,
-	exitCodeFlag bool,
-	format string,
+	opts diffOptions,
 ) error {
 	ctx, _, err := loadAndValidateClusterConfig(cfgManager, deps)
 	if err != nil {
@@ -110,8 +130,13 @@ func handleDiffRunE(
 	// This adds distribution-specific changes (e.g., node counts, Talos config).
 	mergeProvisionerDiff(cmd, ctx, diff)
 
+	// Opt-in: also report version-reconciliation drift (matches update --dry-run).
+	if opts.includeVersionDrift {
+		mergeVersionDrift(cmd, ctx, diff)
+	}
+
 	if diff.TotalChanges() == 0 && !diff.HasUnknownBaseline() {
-		if format == outputFormatJSON {
+		if opts.format == outputFormatJSON {
 			emitDiffJSON(cmd, diff)
 		} else {
 			notify.Infof(cmd.OutOrStdout(), "No configuration drift detected")
@@ -120,9 +145,9 @@ func handleDiffRunE(
 		return nil
 	}
 
-	displayDiffResult(cmd, diff, format)
+	displayDiffResult(cmd, diff, opts.format)
 
-	if exitCodeFlag {
+	if opts.exitCode {
 		// An unknown baseline is treated as drift: the tool cannot confirm the
 		// cluster matches the desired configuration.
 		return &DriftExitError{Changes: diff.TotalChanges() + len(diff.UnknownBaseline)}

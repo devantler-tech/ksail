@@ -46,3 +46,25 @@ func (g *GitOpsEngine) Default() any {
 func (g *GitOpsEngine) ValidValues() []string {
 	return validValueStrings(ValidGitOpsEngines())
 }
+
+// Normalize collapses the zero value ("") to the canonical GitOpsEngineNone.
+// An unset GitOps engine field and an explicit "None" are semantically
+// identical (both disable managed GitOps), so call sites historically had to
+// test both forms. Normalizing once — ideally at config load — lets every
+// downstream comparison use a single value. All other values are returned
+// unchanged. It uses a pointer receiver to match the rest of the type's
+// method set (recvcheck), but does not mutate the receiver.
+func (g *GitOpsEngine) Normalize() GitOpsEngine {
+	if *g == "" {
+		return GitOpsEngineNone
+	}
+
+	return *g
+}
+
+// IsNone reports whether the engine disables managed GitOps, treating the zero
+// value ("") and GitOpsEngineNone as equivalent. It replaces the repeated
+// `engine == "" || engine == GitOpsEngineNone` idiom with a single predicate.
+func (g *GitOpsEngine) IsNone() bool {
+	return g.Normalize() == GitOpsEngineNone
+}

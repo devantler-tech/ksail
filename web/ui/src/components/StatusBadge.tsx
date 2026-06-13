@@ -1,4 +1,13 @@
-import { Circle, CircleAlert, CircleCheck, Clock, House, LoaderCircle, type LucideIcon } from "lucide-react";
+import {
+  Circle,
+  CircleAlert,
+  CircleCheck,
+  CirclePause,
+  Clock,
+  House,
+  LoaderCircle,
+  type LucideIcon,
+} from "lucide-react";
 import { cx } from "../lib/cx.ts";
 
 // StatusTone is the shared palette for status dots: ok (green), warn (amber), error (red),
@@ -95,6 +104,17 @@ const PHASES: Record<string, PhaseMeta> = {
   Pending: {
     label: "Pending",
     icon: Clock,
+    spin: false,
+    badge:
+      "bg-slate-100 text-slate-600 ring-slate-500/20 dark:bg-slate-700/40 dark:text-slate-300 dark:ring-slate-600/40",
+    dot: "muted",
+  },
+  // Stopped is a display-only phase the SPA derives from a Ready=False/reason=Stopped condition (see
+  // clusterPhase in lib/k8s.ts) for a cluster whose infrastructure exists but is not running. It is a
+  // deliberate state, not an error, so it uses the muted (grey) tone — distinct from a green "Ready".
+  Stopped: {
+    label: "Stopped",
+    icon: CirclePause,
     spin: false,
     badge:
       "bg-slate-100 text-slate-600 ring-slate-500/20 dark:bg-slate-700/40 dark:text-slate-300 dark:ring-slate-600/40",

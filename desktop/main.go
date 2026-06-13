@@ -14,18 +14,14 @@ package main
 import (
 	"context"
 	_ "embed"
+	"fmt"
 	"log"
 	"runtime"
 
 	"github.com/devantler-tech/ksail/v7/pkg/cli/uiserver"
-
-	//nolint:depguard // wails is the desktop app's UI runtime; the CLI module's allowlist does not apply here.
 	"github.com/wailsapp/wails/v3/pkg/application"
-	//nolint:depguard // wails is the desktop app's UI runtime; the CLI module's allowlist does not apply here.
 	"github.com/wailsapp/wails/v3/pkg/events"
-	//nolint:depguard // wails services are the desktop app's UI runtime; the CLI allowlist does not apply here.
 	"github.com/wailsapp/wails/v3/pkg/services/dock"
-	//nolint:depguard // wails services are the desktop app's UI runtime; the CLI allowlist does not apply here.
 	"github.com/wailsapp/wails/v3/pkg/services/notifications"
 )
 
@@ -50,6 +46,18 @@ var trayIcon []byte
 var menuBarIcon []byte
 
 func main() {
+	// run holds every deferred cleanup; main only translates a fatal startup error into a non-zero
+	// exit AFTER run's defers (e.g. the watcher's context cancel) have run — calling log.Fatalf inside
+	// run would skip them (gocritic exitAfterDefer).
+	err := run()
+	if err != nil {
+		log.Fatalf("ksail-desktop: %v", err)
+	}
+}
+
+// run wires up the desktop app and blocks until it shuts down, returning a fatal startup error rather
+// than exiting so its deferred cleanup runs first.
+func run() error {
 	// Import the user's login-shell environment when launched from Finder/Dock/Spotlight (macOS
 	// LaunchServices does not source shell profiles), so cluster providers that read HCLOUD_TOKEN,
 	// OMNI_SERVICE_ACCOUNT_KEY, KUBECONFIG, PATH additions, etc. behave the same as a terminal launch.
@@ -124,11 +132,31 @@ func main() {
 
 	// A menu-bar/system-tray icon for quick access: show/hide the window or quit without going through
 	// the Dock. Must be configured before Run() (which blocks until shutdown).
+	installSystemTray(app, window)
+
+	// Watch local cluster status for the lifetime of the app: a native notification when a cluster
+	// reaches Ready/Failed, and an in-progress count on the dock badge. The context is cancelled when
+	// Run returns (app quit), stopping the poll loop.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go watchClusterStatus(ctx, server.Service, notifSvc, dockSvc)
+
+	err := app.Run()
+	if err != nil {
+		return fmt.Errorf("run desktop app: %w", err)
+	}
+
+	return nil
+}
+
+// installSystemTray adds a menu-bar/system-tray icon with show/hide/quit actions. It picks a platform-
+// appropriate icon: a monochrome template glyph on macOS (auto-inverts for light/dark menu bars) and
+// the full-color icon elsewhere (Windows' SetTemplateIcon is a no-op and Linux trays do not invert, so
+// the alpha-only template would be near-invisible there).
+func installSystemTray(app *application.App, window *application.WebviewWindow) {
 	tray := app.SystemTray.New()
-	// macOS: use a monochrome template image so the glyph auto-inverts for light/dark menu bars (the
-	// native idiom). Elsewhere use the full-color icon: Windows' SetTemplateIcon is a no-op (it would
-	// leave the tray blank) and Linux trays render the image as-is with no auto-inversion, so the
-	// alpha-only template would be near-invisible there.
+
 	if runtime.GOOS == "darwin" {
 		tray.SetTemplateIcon(menuBarIcon)
 	} else {
@@ -141,17 +169,4 @@ func main() {
 	trayMenu.AddSeparator()
 	trayMenu.Add("Quit KSail").OnClick(func(_ *application.Context) { app.Quit() })
 	tray.SetMenu(trayMenu)
-
-	// Watch local cluster status for the lifetime of the app: a native notification when a cluster
-	// reaches Ready/Failed, and an in-progress count on the dock badge. The context is cancelled when
-	// Run returns (app quit), stopping the poll loop.
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	go watchClusterStatus(ctx, server.Service, notifSvc, dockSvc)
-
-	err := app.Run()
-	if err != nil {
-		log.Fatalf("ksail-desktop: %v", err)
-	}
 }

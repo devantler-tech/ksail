@@ -1,7 +1,6 @@
 package main
 
 import (
-	//nolint:depguard // wails is the desktop app's UI runtime; the CLI module's allowlist does not apply here.
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
@@ -9,31 +8,20 @@ import (
 // the navigation deep links). The SPA's useDesktopCommands hook subscribes to it.
 const commandEvent = "ksail:command"
 
-// viewMenuItems map a menu label to the ksail:// deep link the SPA navigates to, with an accelerator.
-// They reuse the exact deep-link bridge already used for ksail:// URLs, so the Go side stays
+// viewMenuItem maps a menu label to the ksail:// deep link the SPA navigates to, with an accelerator.
+// The items reuse the exact deep-link bridge already used for ksail:// URLs, so the Go side stays
 // route-agnostic — the SPA owns navigation.
-var viewMenuItems = []struct {
+type viewMenuItem struct {
 	label       string
 	accelerator string
 	url         string
-}{
-	{"Clusters", "CmdOrCtrl+1", "ksail://clusters"},
-	{"Overview", "CmdOrCtrl+2", "ksail://overview"},
-	{"Resources", "CmdOrCtrl+3", "ksail://resources"},
-	{"Events", "CmdOrCtrl+4", "ksail://events"},
-	{"Secrets", "CmdOrCtrl+5", "ksail://secrets"},
-	{"Settings", "CmdOrCtrl+6", "ksail://settings"},
 }
 
-// commandMenuItems map a menu label to a ksail:command the SPA performs (refresh / create / theme).
-var commandMenuItems = []struct {
+// commandMenuItem maps a menu label to a ksail:command the SPA performs (refresh / create / theme).
+type commandMenuItem struct {
 	label       string
 	accelerator string
 	command     string
-}{
-	{"Refresh", "CmdOrCtrl+R", "refresh"},
-	{"New Cluster", "CmdOrCtrl+N", "new-cluster"},
-	{"Toggle Theme", "CmdOrCtrl+Shift+L", "toggle-theme"},
 }
 
 // installApplicationMenu adds a "View" menu (navigation + common actions) to the standard application
@@ -42,9 +30,23 @@ var commandMenuItems = []struct {
 // url)); action items emit ksail:command — both delivered to the SPA over the existing Wails event
 // bridge. An invalid accelerator is logged and ignored by Wails (the item still works via click).
 func installApplicationMenu(app *application.App, window *application.WebviewWindow) {
-	menu := application.DefaultApplicationMenu()
+	viewMenuItems := []viewMenuItem{
+		{"Clusters", "CmdOrCtrl+1", "ksail://clusters"},
+		{"Overview", "CmdOrCtrl+2", "ksail://overview"},
+		{"Resources", "CmdOrCtrl+3", "ksail://resources"},
+		{"Events", "CmdOrCtrl+4", "ksail://events"},
+		{"Secrets", "CmdOrCtrl+5", "ksail://secrets"},
+		{"Settings", "CmdOrCtrl+6", "ksail://settings"},
+	}
+	commandMenuItems := []commandMenuItem{
+		{"Refresh", "CmdOrCtrl+R", "refresh"},
+		{"New Cluster", "CmdOrCtrl+N", "new-cluster"},
+		{"Toggle Theme", "CmdOrCtrl+Shift+L", "toggle-theme"},
+	}
 
+	menu := application.DefaultApplicationMenu()
 	viewMenu := menu.AddSubmenu("View")
+
 	for _, item := range viewMenuItems {
 		url := item.url
 		viewMenu.Add(item.label).
@@ -53,6 +55,7 @@ func installApplicationMenu(app *application.App, window *application.WebviewWin
 	}
 
 	viewMenu.AddSeparator()
+
 	for _, item := range commandMenuItems {
 		command := item.command
 		viewMenu.Add(item.label).

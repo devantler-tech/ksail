@@ -3,6 +3,7 @@ package cluster_test
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -503,4 +504,99 @@ func TestDisplayComponents_WithState(t *testing.T) {
 	assert.Contains(t, out, string(v1alpha1.CNICilium))
 	assert.Contains(t, out, "(disabled)")
 	assert.Contains(t, out, "(none)")
+}
+
+// jsonListRow mirrors the cluster.ListItemJSON contract for decoding in tests.
+// Keeping a local copy guards against accidental field/tag changes: any rename
+// of the exported shape breaks this decode.
+type jsonListRow struct {
+	Name         string  `json:"name"`
+	Provider     string  `json:"provider"`
+	Distribution string  `json:"distribution"`
+	TTL          *string `json:"ttl"`
+}
+
+// newListCmdWithJSONOutput builds a command wired like NewListCmd for the JSON
+// path: it registers the --output flag and sets it to json.
+func newListCmdWithJSONOutput(t *testing.T) (*cobra.Command, *bytes.Buffer) {
+	t.Helper()
+
+	cmd := &cobra.Command{Use: "list"}
+	cmd.Flags().String("output", "text", "Output format")
+	require.NoError(t, cmd.Flags().Set("output", "json"))
+
+	var buf bytes.Buffer
+
+	cmd.SetOut(&buf)
+	cmd.SetErr(io.Discard)
+	cmd.SetContext(context.Background())
+
+	return cmd, &buf
+}
+
+//nolint:paralleltest // uses isolated HOME state via TestMain
+func TestListCmd_OutputJSON_EmptyIsArray(t *testing.T) {
+	cmd, buf := newListCmdWithJSONOutput(t)
+
+	deps := cluster.ListDeps{
+		DistributionFactoryCreator: func(_ v1alpha1.Distribution) clusterprovisioner.Factory {
+			return fakeFactoryWithClusters{clusters: []string{}}
+		},
+	}
+
+	require.NoError(t, cluster.HandleListRunE(cmd, v1alpha1.ProviderDocker, deps))
+
+	var rows []jsonListRow
+
+	require.NoError(t, json.Unmarshal(buf.Bytes(), &rows))
+	assert.Empty(t, rows)
+	assert.Equal(t, "[]\n", buf.String())
+}
+
+//nolint:paralleltest // uses isolated HOME state via TestMain
+func TestListCmd_OutputJSON_Contract(t *testing.T) {
+	cmd, buf := newListCmdWithJSONOutput(t)
+
+	deps := cluster.ListDeps{
+		DistributionFactoryCreator: func(_ v1alpha1.Distribution) clusterprovisioner.Factory {
+			return fakeFactoryWithClusters{clusters: []string{"json-contract-cluster"}}
+		},
+	}
+
+	require.NoError(t, cluster.HandleListRunE(cmd, v1alpha1.ProviderDocker, deps))
+
+	var rows []jsonListRow
+
+	require.NoError(t, json.Unmarshal(buf.Bytes(), &rows))
+	require.Len(t, rows, 1)
+	assert.Equal(t, "json-contract-cluster", rows[0].Name)
+	assert.Equal(t, "docker", rows[0].Provider)
+	assert.Equal(t, string(v1alpha1.DistributionVanilla), rows[0].Distribution)
+	// No TTL set → null.
+	assert.Nil(t, rows[0].TTL)
+}
+
+//nolint:paralleltest // uses isolated HOME state via TestMain
+func TestListCmd_OutputJSON_TTLIsString(t *testing.T) {
+	clusterName := "json-ttl-cluster"
+	require.NoError(t, state.SaveClusterTTL(clusterName, time.Hour))
+
+	t.Cleanup(func() { _ = state.DeleteClusterState(clusterName) })
+
+	cmd, buf := newListCmdWithJSONOutput(t)
+
+	deps := cluster.ListDeps{
+		DistributionFactoryCreator: func(_ v1alpha1.Distribution) clusterprovisioner.Factory {
+			return fakeFactoryWithClusters{clusters: []string{clusterName}}
+		},
+	}
+
+	require.NoError(t, cluster.HandleListRunE(cmd, v1alpha1.ProviderDocker, deps))
+
+	var rows []jsonListRow
+
+	require.NoError(t, json.Unmarshal(buf.Bytes(), &rows))
+	require.Len(t, rows, 1)
+	require.NotNil(t, rows[0].TTL)
+	assert.NotEmpty(t, *rows[0].TTL)
 }

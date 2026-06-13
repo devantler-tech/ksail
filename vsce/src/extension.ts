@@ -26,7 +26,6 @@ import {
 import {
   createConfigChangeListener,
   createKSailConfigWatcher,
-  initializeSchemaClient,
   initializeServerProvider,
   KSailMcpServerDefinitionProvider,
 } from "./mcp/index.js";
@@ -46,9 +45,8 @@ export async function activate(
 
   outputChannel.appendLine("KSail extension activating...");
 
-  // Initialize schema client with extension version
+  // Initialize the MCP server provider with the extension version
   const extensionVersion = context.extension.packageJSON.version || "0.1.0";
-  initializeSchemaClient(extensionVersion);
   initializeServerProvider(extensionVersion);
 
   // Register MCP server definition provider with VSCode's native MCP infrastructure
@@ -108,9 +106,12 @@ export async function activate(
     );
   }
 
-  // Refresh all KSail-related Kubernetes views (the cloud explorer tree plus the
-  // Kubernetes extension's cloud and cluster explorers) when they are available.
+  // Single, cache-invalidating refresh of all KSail-related Kubernetes views
+  // (the cloud explorer tree plus the Kubernetes extension's cloud and cluster
+  // explorers). Invalidating the NodeUICustomizer cache first fixes the up-to-30s
+  // window where config-event-driven refreshes showed stale running/stopped status.
   const refreshAllViews = (): void => {
+    invalidateClusterCache?.();
     cloudTreeProvider.refresh();
     if (cloudExplorerAPI.available) {
       cloudExplorerAPI.api.refresh();
@@ -136,7 +137,13 @@ export async function activate(
   }
 
   // Register commands (cloud explorer context commands + standalone commands)
-  registerCommands(context, outputChannel, cloudTreeProvider, cloudExplorerAPI, clusterExplorerAPI.available ? clusterExplorerAPI : undefined, invalidateClusterCache);
+  registerCommands({
+    context,
+    outputChannel,
+    cloudExplorerAPI,
+    clusterExplorerAPI: clusterExplorerAPI.available ? clusterExplorerAPI : undefined,
+    refreshAllViews,
+  });
 
   // ── Kubernetes Extension: ConfigurationV1_1 (reactive events) ──
   const configAPI = await k8s.extension.configuration.v1_1;

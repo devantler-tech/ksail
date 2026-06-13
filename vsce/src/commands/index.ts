@@ -14,19 +14,18 @@ import {
   clusterInfo,
   createCluster,
   deleteCluster,
-  detectDistribution,
   getBinaryPath,
-  getContextName,
   initCluster,
   listClusters,
+  parseClusterName,
+  resolveContext,
   restoreCluster,
   startCluster,
   stopCluster,
   switchCluster,
   updateCluster,
 } from "../ksail/index.js";
-import type { KSailCloudCluster, KSailCloudTreeDataProvider } from "../kubernetes/index.js";
-import { parseClusterName } from "../kubernetes/contextNames.js";
+import type { KSailCloudCluster } from "../kubernetes/index.js";
 import {
   promptClusterSelection,
   promptYesNo,
@@ -70,27 +69,26 @@ function resolveClusterExplorerTarget(
 }
 
 /**
+ * Dependencies for command registration.
+ *
+ * `context` is retained so command registrations land in `context.subscriptions`.
+ * `refreshAllViews` is the single shared, cache-invalidating refresh function
+ * (built once in extension.ts) — there is no second copy here.
+ */
+export interface CommandDeps {
+  context: vscode.ExtensionContext;
+  outputChannel: vscode.OutputChannel;
+  cloudExplorerAPI: API<CloudExplorerV1>;
+  clusterExplorerAPI?: API<ClusterExplorerV1_1>;
+  /** Invalidate cached status and refresh all explorer views. */
+  refreshAllViews: () => void;
+}
+
+/**
  * Register all extension commands
  */
-export function registerCommands(
-  context: vscode.ExtensionContext,
-  outputChannel: vscode.OutputChannel,
-  cloudTreeProvider: KSailCloudTreeDataProvider,
-  cloudExplorerAPI: API<CloudExplorerV1>,
-  clusterExplorerAPI?: API<ClusterExplorerV1_1>,
-  invalidateClusterCache?: () => void
-): void {
-  /** Invalidate cached status and refresh all explorer views */
-  function refreshAllViews(): void {
-    invalidateClusterCache?.();
-    cloudTreeProvider.refresh();
-    if (cloudExplorerAPI.available) {
-      cloudExplorerAPI.api.refresh();
-    }
-    if (clusterExplorerAPI?.available) {
-      clusterExplorerAPI.api.refresh();
-    }
-  }
+export function registerCommands(deps: CommandDeps): void {
+  const { context, outputChannel, cloudExplorerAPI, clusterExplorerAPI, refreshAllViews } = deps;
 
   /**
    * Resolve a cluster name from a command target (Cloud Explorer or Cluster Explorer)
@@ -109,6 +107,40 @@ export function registerCommands(
     const clusters = await listClusters();
     const selected = await promptClusterSelection(clusters, promptMessage);
     return selected?.name;
+  }
+
+  /**
+   * Resolve the kubeconfig context name for a cluster.
+   *
+   * Prefers a distribution already known (e.g. from a Cloud Explorer target);
+   * otherwise looks it up in `cluster list` output. `resolveContext` builds the
+   * context name from the distribution (no `docker ps` sniffing).
+   */
+  async function resolveContextForCluster(
+    clusterName: string,
+    knownDistribution?: string
+  ): Promise<string> {
+    let distribution = knownDistribution;
+    if (!distribution) {
+      const clusters = await listClusters();
+      distribution = clusters.find((c) => c.name === clusterName)?.distribution;
+    }
+    return resolveContext(clusterName, distribution);
+  }
+
+  /**
+   * Resolve a cluster's provider, falling back to a `cluster list` lookup when
+   * it is not already known from the command target.
+   */
+  async function resolveProviderForCluster(
+    clusterName: string,
+    knownProvider?: string
+  ): Promise<string | undefined> {
+    if (knownProvider) {
+      return knownProvider;
+    }
+    const clusters = await listClusters();
+    return clusters.find((c) => c.name === clusterName)?.provider;
   }
 
   // Refresh command
@@ -302,24 +334,19 @@ export function registerCommands(
           let contextName: string | undefined;
           let clusterName: string | undefined;
 
-          // If from cloud explorer, derive context from cluster info
+          // If from cloud explorer, build context from the cluster's distribution
           const cloud = resolveCloudTarget(cloudExplorerAPI, target);
           if (cloud) {
             clusterName = cloud.name;
-            const provider = cloud.provider;
-            const distribution = await detectDistribution(clusterName, provider);
-            contextName = getContextName(clusterName, distribution);
+            contextName = await resolveContextForCluster(clusterName, cloud.distribution);
           }
 
-          // If from cluster explorer, resolve provider from cluster list
+          // If from cluster explorer, resolve distribution from cluster list
           if (!clusterName) {
             const clusterExplorerName = resolveClusterExplorerTarget(clusterExplorerAPI, target);
             if (clusterExplorerName) {
               clusterName = clusterExplorerName;
-              const clusters = await listClusters();
-              const matchedCluster = clusters.find((c) => c.name === clusterName);
-              const distribution = await detectDistribution(clusterName, matchedCluster?.provider ?? "docker");
-              contextName = getContextName(clusterName, distribution);
+              contextName = await resolveContextForCluster(clusterName);
             }
           }
 
@@ -336,8 +363,7 @@ export function registerCommands(
               const selected = await promptClusterSelection(clusters, "Select cluster to connect to");
               if (!selected) { return; }
               clusterName = selected.name;
-              const distribution = await detectDistribution(clusterName, selected.provider);
-              contextName = getContextName(clusterName, distribution);
+              contextName = resolveContext(clusterName, selected.distribution);
             }
             // If ksail.yaml exists and no cluster selected, CLI will use default context
           }
@@ -390,13 +416,7 @@ export function registerCommands(
           }
 
           await executeWithProgress("Getting cluster info...", async () => {
-            // Resolve provider from cluster list when not available from cloud target
-            let resolvedProvider = provider;
-            if (!resolvedProvider) {
-              const clusters = await listClusters();
-              const matchedCluster = clusters.find((c) => c.name === clusterName);
-              resolvedProvider = matchedCluster?.provider;
-            }
+            const resolvedProvider = await resolveProviderForCluster(clusterName, provider);
             const info = await clusterInfo(clusterName, resolvedProvider, outputChannel);
             clusterInfoChannel.clear();
             clusterInfoChannel.appendLine(`── Cluster: ${clusterName} ──`);

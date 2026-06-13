@@ -94,12 +94,14 @@ func newManagerWithDefaultSelectors() *configmanager.ConfigManager {
 }
 
 func newFieldSelector(
+	flagName string,
 	selector func(*v1alpha1.Cluster) any,
 	defaultValue any,
 	description string,
 ) configmanager.FieldSelector[v1alpha1.Cluster] {
 	return configmanager.FieldSelector[v1alpha1.Cluster]{
 		Selector:     selector,
+		FlagName:     flagName,
 		Description:  description,
 		DefaultValue: defaultValue,
 	}
@@ -109,26 +111,31 @@ func newFieldSelector(
 func createStandardFieldSelectors() []configmanager.FieldSelector[v1alpha1.Cluster] {
 	return []configmanager.FieldSelector[v1alpha1.Cluster]{
 		newFieldSelector(
+			"distribution",
 			func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.Distribution },
 			v1alpha1.DistributionVanilla,
 			"Kubernetes distribution",
 		),
 		newFieldSelector(
+			"distribution-config",
 			func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.DistributionConfig },
 			"",
 			"Distribution config",
 		),
 		newFieldSelector(
+			"source-directory",
 			func(c *v1alpha1.Cluster) any { return &c.Spec.Workload.SourceDirectory },
 			"k8s",
 			"Source directory",
 		),
 		newFieldSelector(
+			"context",
 			func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.Connection.Context },
 			"",
 			"Kubernetes context",
 		),
 		newFieldSelector(
+			"timeout",
 			func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.Connection.Timeout },
 			metav1.Duration{Duration: 5 * time.Minute},
 			"Connection timeout",
@@ -330,6 +337,7 @@ func createFieldSelectorsWithName() []configmanager.FieldSelector[v1alpha1.Clust
 	standardSelectors := createStandardFieldSelectors()
 	selectors := make([]configmanager.FieldSelector[v1alpha1.Cluster], 0, len(standardSelectors))
 	selectors = append(selectors, newFieldSelector(
+		"distribution",
 		func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.Distribution },
 		v1alpha1.Distribution(""), // Empty distribution for testing defaults
 		"Kubernetes distribution",
@@ -691,14 +699,14 @@ func testLoadConfigCase(
 }
 
 // TestManager_AddFlagsFromFields tests the AddFlagsFromFields method.
-func TestAddFlagsFromFields(t *testing.T) {
-	t.Parallel()
+type addFlagsFromFieldsCase struct {
+	name           string
+	fieldSelectors []configmanager.FieldSelector[v1alpha1.Cluster]
+	expectedFlags  []string
+}
 
-	tests := []struct {
-		name           string
-		fieldSelectors []configmanager.FieldSelector[v1alpha1.Cluster]
-		expectedFlags  []string
-	}{
+func addFlagsFromFieldsCases() []addFlagsFromFieldsCase {
+	return []addFlagsFromFieldsCase{
 		{
 			name:           "AddFlagsFromFields with no selectors",
 			fieldSelectors: []configmanager.FieldSelector[v1alpha1.Cluster]{},
@@ -708,6 +716,7 @@ func TestAddFlagsFromFields(t *testing.T) {
 			name: "AddFlagsFromFields with distribution selector",
 			fieldSelectors: []configmanager.FieldSelector[v1alpha1.Cluster]{
 				newFieldSelector(
+					"distribution",
 					func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.Distribution },
 					v1alpha1.DistributionVanilla,
 					"Kubernetes distribution",
@@ -727,8 +736,12 @@ func TestAddFlagsFromFields(t *testing.T) {
 			},
 		},
 	}
+}
 
-	for _, testCase := range tests {
+func TestAddFlagsFromFields(t *testing.T) {
+	t.Parallel()
+
+	for _, testCase := range addFlagsFromFieldsCases() {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 

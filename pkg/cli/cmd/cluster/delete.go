@@ -25,31 +25,15 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const deleteLongDesc = `Destroy a cluster.
-
-The cluster is resolved in the following priority order:
-  1. From --name flag
-  2. From ksail.yaml config file (if present)
-  3. From current kubeconfig context
-
-The provider is resolved in the following priority order:
-  1. From --provider flag
-  2. From ksail.yaml config file (if present)
-  3. Defaults to Docker
-
-The kubeconfig is resolved in the following priority order:
-  1. From --kubeconfig flag
-  2. From KUBECONFIG environment variable
-  3. From ksail.yaml config file (if present)
-  4. Defaults to ~/.kube/config`
-
-// deleteFlags holds all the flags for the delete command.
+// deleteFlags holds all the flags for the delete command. The shared
+// cluster-targeting flags (--name/--provider/--kubeconfig) are embedded via
+// lifecycle.ClusterTargetFlags so delete registers them identically to the rest
+// of the cluster group.
 type deleteFlags struct {
-	name       string
-	provider   v1alpha1.Provider
-	kubeconfig string
-	storage    bool
-	force      bool
+	lifecycle.ClusterTargetFlags
+
+	storage bool
+	force   bool
 }
 
 // NewDeleteCmd creates and returns the delete command.
@@ -60,7 +44,7 @@ func NewDeleteCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:           "delete",
 		Short:         "Destroy a cluster",
-		Long:          deleteLongDesc,
+		Long:          lifecycle.WithClusterTargetingHelp("Destroy a cluster."),
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		Annotations: map[string]string{
@@ -78,11 +62,11 @@ func NewDeleteCmd() *cobra.Command {
 
 // registerDeleteFlags registers all flags for the delete command.
 func registerDeleteFlags(cmd *cobra.Command, flags *deleteFlags) {
-	cmd.Flags().StringVarP(&flags.name, "name", "n", "", "Name of the cluster to delete")
-	cmd.Flags().VarP(&flags.provider, "provider", "p",
-		fmt.Sprintf("Provider to use (%s)", strings.Join(flags.provider.ValidValues(), ", ")))
-	cmd.Flags().StringVarP(&flags.kubeconfig, "kubeconfig", "k", "",
-		"Path to kubeconfig file for context cleanup")
+	lifecycle.RegisterClusterTargetFlags(
+		cmd, &flags.ClusterTargetFlags,
+		"Name of the cluster to delete",
+		"Path to kubeconfig file for context cleanup",
+	)
 	cmd.Flags().BoolVar(&flags.storage, "delete-storage", false,
 		"Delete storage volumes when cleaning up (registry volumes for Docker, block storage for Hetzner)")
 	cmd.Flags().BoolVarP(&flags.force, "force", "f", false,
@@ -106,7 +90,7 @@ func runDeleteAction(
 	tmr.Start()
 
 	// Resolve cluster info from flags, config, or kubeconfig
-	resolved, err := lifecycle.ResolveClusterInfo(cmd, flags.name, flags.provider, flags.kubeconfig)
+	resolved, err := lifecycle.ResolveClusterInfo(cmd, flags.Name, flags.Provider, flags.Kubeconfig)
 	if err != nil {
 		return fmt.Errorf("failed to resolve cluster info: %w", err)
 	}

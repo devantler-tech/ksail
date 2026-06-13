@@ -13,5 +13,5 @@ export {
   type KSailNodeUICustomizerResult
 } from "./clusterExplorerContributor.js";
 
-export { isKSailContext, parseClusterName } from "./contextNames.js";
+export { isKSailContext, parseClusterName } from "../ksail/contexts.js";
 

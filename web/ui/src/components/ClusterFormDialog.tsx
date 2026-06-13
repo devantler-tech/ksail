@@ -174,12 +174,27 @@ function valuesFromCluster(cluster: Cluster, meta: ClusterMeta, distributions: s
   };
 }
 
+// dialogDescription returns the modal's sub-title, worded for the serving surface: the operator
+// reconciles a Cluster custom resource, while the local backend provisions the cluster directly. The
+// previous copy hardcoded the operator wording even on the local `ksail ui`/desktop surface.
+function dialogDescription(isEdit: boolean, isOperator: boolean): string {
+  if (isEdit) {
+    return isOperator
+      ? "Update the cluster's configuration. The operator reconciles changes."
+      : "Update the cluster's configuration.";
+  }
+
+  return isOperator ? "Provision a new cluster managed by the operator." : "Provision a new cluster.";
+}
+
 export function ClusterFormDialog({
   open,
   mode,
   initial,
   distributions,
   providerStatus,
+  componentsInstall = true,
+  isOperator = false,
   onSubmit,
   onSubmitRaw,
   onClose,
@@ -193,6 +208,13 @@ export function ClusterFormDialog({
   // providerStatus gates which providers are offered (backend-advertised via config.providers).
   // null/undefined means no gating (the operator), so every valid provider is offered.
   providerStatus?: ProviderInfo[] | null;
+  // componentsInstall gates the create form's component selectors: when false (the local backend,
+  // which provisions the cluster but does not yet install components) they are hidden with a note,
+  // so the form does not offer options the backend silently drops. Defaults true (operator).
+  componentsInstall?: boolean;
+  // isOperator labels the dialog copy for the serving surface (the operator reconciles changes; the
+  // local backend provisions directly). Defaults false (local).
+  isOperator?: boolean;
   onSubmit: (values: ClusterFormValues) => Promise<void>;
   // onSubmitRaw creates a cluster from a YAML-authored Cluster (lossless full-spec), used by the
   // create dialog's YAML mode. Omit it (e.g. edit mode) to disable YAML authoring.
@@ -329,11 +351,7 @@ export function ClusterFormDialog({
       open={open}
       onClose={submitting ? () => undefined : onClose}
       title={isEdit ? "Edit cluster" : "Create cluster"}
-      description={
-        isEdit
-          ? "Update the cluster's configuration. The operator reconciles changes."
-          : "Provision a new cluster managed by the operator."
-      }
+      description={dialogDescription(isEdit, isOperator)}
       footer={
         <>
           <Button variant="secondary" onClick={onClose} disabled={submitting}>
@@ -493,22 +511,30 @@ export function ClusterFormDialog({
                       onChange={(event) => setField("workers", event.target.value)}
                     />
                   </div>
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    {meta.components.map((component) => (
-                      <SelectField
-                        key={component.key}
-                        label={COMPONENT_LABELS[component.key] ?? component.key}
-                        value={values[component.key]}
-                        onChange={(event) => setField(component.key, event.target.value)}
-                      >
-                        {component.values.map((option) => (
-                          <option key={option} value={option}>
-                            {option}
-                          </option>
-                        ))}
-                      </SelectField>
-                    ))}
-                  </div>
+                  {componentsInstall ? (
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      {meta.components.map((component) => (
+                        <SelectField
+                          key={component.key}
+                          label={COMPONENT_LABELS[component.key] ?? component.key}
+                          value={values[component.key]}
+                          onChange={(event) => setField(component.key, event.target.value)}
+                        >
+                          {component.values.map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </SelectField>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      This backend provisions the cluster without installing components (CNI, CSI, and so on).
+                      Install them afterwards with <code>ksail cluster update</code> or by editing the cluster's
+                      configuration.
+                    </p>
+                  )}
                 </div>
               ) : null}
             </div>

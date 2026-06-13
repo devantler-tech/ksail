@@ -10,6 +10,8 @@ const defaultDistributionConfigPath = ""
 // FieldSelector defines a field and its metadata for configuration management.
 type FieldSelector[T any] struct {
 	Selector     func(*T) any // Function that returns a pointer to the field
+	FlagName     string       // CLI flag name (e.g. "distribution"); required for flag registration
+	Shorthand    string       // Optional single-character CLI shorthand (e.g. "d"); "" for none
 	Description  string       // Human-readable description for CLI flags
 	DefaultValue any          // Default value for the field
 }
@@ -18,26 +20,49 @@ type FieldSelector[T any] struct {
 func DefaultDistributionFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	return FieldSelector[v1alpha1.Cluster]{
 		Selector:     func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.Distribution },
+		FlagName:     "distribution",
+		Shorthand:    "d",
 		Description:  "Kubernetes distribution to use",
 		DefaultValue: v1alpha1.DistributionVanilla,
 	}
 }
 
 // DefaultProviderFieldSelector creates a standard field selector for infrastructure provider.
+//
+// It intentionally carries no shorthand: the "-p"=--provider shorthand is added
+// only by the mutation commands (create/update/init) via
+// WithProviderShorthand, matching their lifecycle siblings (delete/list/start/
+// stop/info/diagnose) without flipping it on for read-only consumers like
+// `workload images` that share this selector.
 func DefaultProviderFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	return FieldSelector[v1alpha1.Cluster]{
 		Selector:     func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.Provider },
+		FlagName:     "provider",
 		Description:  "Infrastructure provider backend (e.g., Docker)",
 		DefaultValue: v1alpha1.ProviderDocker,
 	}
+}
+
+// WithProviderShorthand returns a copy of the given provider field selector with
+// the "-p" shorthand set. The mutation commands use it so create/update/init
+// expose -p=--provider like their lifecycle siblings, while shared read-only
+// consumers of DefaultProviderFieldSelector keep the long flag only.
+func WithProviderShorthand(
+	selector FieldSelector[v1alpha1.Cluster],
+) FieldSelector[v1alpha1.Cluster] {
+	selector.Shorthand = "p"
+
+	return selector
 }
 
 // StandardSourceDirectoryFieldSelector creates a standard field selector for source directory.
 func StandardSourceDirectoryFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	return FieldSelector[v1alpha1.Cluster]{
 		Selector:     func(c *v1alpha1.Cluster) any { return &c.Spec.Workload.SourceDirectory },
+		FlagName:     "source-directory",
+		Shorthand:    "s",
 		Description:  "Directory containing workloads to deploy",
-		DefaultValue: "k8s",
+		DefaultValue: v1alpha1.DefaultSourceDirectory,
 	}
 }
 
@@ -46,6 +71,7 @@ func StandardSourceDirectoryFieldSelector() FieldSelector[v1alpha1.Cluster] {
 func StandardKustomizationFileFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	return FieldSelector[v1alpha1.Cluster]{
 		Selector:     func(c *v1alpha1.Cluster) any { return &c.Spec.Workload.KustomizationFile },
+		FlagName:     "kustomization-file",
 		Description:  "Relative directory within sourceDirectory used as the kustomize entry point (e.g., clusters/local)",
 		DefaultValue: "",
 	}
@@ -55,6 +81,7 @@ func StandardKustomizationFileFieldSelector() FieldSelector[v1alpha1.Cluster] {
 func DefaultDistributionConfigFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	return FieldSelector[v1alpha1.Cluster]{
 		Selector:     func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.DistributionConfig },
+		FlagName:     "distribution-config",
 		Description:  "Configuration file for the distribution",
 		DefaultValue: defaultDistributionConfigPath,
 	}
@@ -66,6 +93,8 @@ func DefaultDistributionConfigFieldSelector() FieldSelector[v1alpha1.Cluster] {
 func DefaultContextFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	return FieldSelector[v1alpha1.Cluster]{
 		Selector:    func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.Connection.Context },
+		FlagName:    "context",
+		Shorthand:   "c",
 		Description: "Kubernetes context of cluster",
 	}
 }
@@ -74,6 +103,7 @@ func DefaultContextFieldSelector() FieldSelector[v1alpha1.Cluster] {
 func DefaultCNIFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	return FieldSelector[v1alpha1.Cluster]{
 		Selector:     func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.CNI },
+		FlagName:     "cni",
 		Description:  "Container Network Interface (CNI) to use",
 		DefaultValue: v1alpha1.CNIDefault,
 	}
@@ -83,6 +113,8 @@ func DefaultCNIFieldSelector() FieldSelector[v1alpha1.Cluster] {
 func DefaultGitOpsEngineFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	return FieldSelector[v1alpha1.Cluster]{
 		Selector:     func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.GitOpsEngine },
+		FlagName:     "gitops-engine",
+		Shorthand:    "g",
 		Description:  "GitOps engine to use (None disables GitOps, Flux installs Flux controllers, ArgoCD installs Argo CD)",
 		DefaultValue: v1alpha1.GitOpsEngineNone,
 	}
@@ -95,6 +127,7 @@ func DefaultLocalRegistryFieldSelector() FieldSelector[v1alpha1.Cluster] {
 		Selector: func(c *v1alpha1.Cluster) any {
 			return &c.Spec.Cluster.LocalRegistry.Registry
 		},
+		FlagName: "local-registry",
 		Description: "Local registry specification: [user:pass@]host[:port][/path] " +
 			"(e.g., localhost:5050, ghcr.io/myorg, ${USER}:${PASS}@ghcr.io:443/org)",
 		DefaultValue: "",
@@ -105,6 +138,7 @@ func DefaultLocalRegistryFieldSelector() FieldSelector[v1alpha1.Cluster] {
 func DefaultMetricsServerFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	return FieldSelector[v1alpha1.Cluster]{
 		Selector:     func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.MetricsServer },
+		FlagName:     "metrics-server",
 		Description:  "Metrics Server (Default: use distribution, Enabled: install, Disabled: uninstall)",
 		DefaultValue: v1alpha1.MetricsServerDefault,
 	}
@@ -114,6 +148,7 @@ func DefaultMetricsServerFieldSelector() FieldSelector[v1alpha1.Cluster] {
 func DefaultLoadBalancerFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	return FieldSelector[v1alpha1.Cluster]{
 		Selector:     func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.LoadBalancer },
+		FlagName:     "load-balancer",
 		Description:  "LoadBalancer support (Default: use distribution × provider, Enabled: install, Disabled: uninstall)",
 		DefaultValue: v1alpha1.LoadBalancerDefault,
 	}
@@ -123,6 +158,7 @@ func DefaultLoadBalancerFieldSelector() FieldSelector[v1alpha1.Cluster] {
 func DefaultCertManagerFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	return FieldSelector[v1alpha1.Cluster]{
 		Selector:     func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.CertManager },
+		FlagName:     "cert-manager",
 		Description:  "Cert-Manager configuration (Enabled: install, Disabled: skip)",
 		DefaultValue: v1alpha1.CertManagerDisabled,
 	}
@@ -132,6 +168,7 @@ func DefaultCertManagerFieldSelector() FieldSelector[v1alpha1.Cluster] {
 func DefaultPolicyEngineFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	return FieldSelector[v1alpha1.Cluster]{
 		Selector:     func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.PolicyEngine },
+		FlagName:     "policy-engine",
 		Description:  "Policy engine (None: skip, Kyverno: install Kyverno, Gatekeeper: install Gatekeeper)",
 		DefaultValue: v1alpha1.PolicyEngineNone,
 	}
@@ -141,6 +178,7 @@ func DefaultPolicyEngineFieldSelector() FieldSelector[v1alpha1.Cluster] {
 func DefaultCSIFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	return FieldSelector[v1alpha1.Cluster]{
 		Selector:     func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.CSI },
+		FlagName:     "csi",
 		Description:  "Container Storage Interface (Default: use distribution, Enabled: install CSI, Disabled: skip CSI)",
 		DefaultValue: v1alpha1.CSIDefault,
 	}
@@ -150,6 +188,7 @@ func DefaultCSIFieldSelector() FieldSelector[v1alpha1.Cluster] {
 func DefaultCDIFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	return FieldSelector[v1alpha1.Cluster]{
 		Selector:     func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.CDI },
+		FlagName:     "cdi",
 		Description:  "Container Device Interface (Default: use distribution, Enabled: enable CDI, Disabled: disable CDI)",
 		DefaultValue: v1alpha1.CDIDefault,
 	}
@@ -159,8 +198,10 @@ func DefaultCDIFieldSelector() FieldSelector[v1alpha1.Cluster] {
 func DefaultKubeconfigFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	return FieldSelector[v1alpha1.Cluster]{
 		Selector:     func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.Connection.Kubeconfig },
+		FlagName:     "kubeconfig",
+		Shorthand:    "k",
 		Description:  "Path to kubeconfig file",
-		DefaultValue: "~/.kube/config",
+		DefaultValue: v1alpha1.DefaultKubeconfigPath,
 	}
 }
 
@@ -184,6 +225,7 @@ func ControlPlanesFieldSelector() FieldSelector[v1alpha1.Cluster] {
 		Selector: func(c *v1alpha1.Cluster) any {
 			return &c.Spec.Cluster.ControlPlanes
 		},
+		FlagName:     "control-planes",
 		Description:  "Number of control-plane nodes",
 		DefaultValue: int32(1),
 	}
@@ -197,6 +239,7 @@ func WorkersFieldSelector() FieldSelector[v1alpha1.Cluster] {
 		Selector: func(c *v1alpha1.Cluster) any {
 			return &c.Spec.Cluster.Workers
 		},
+		FlagName:     "workers",
 		Description:  "Number of worker nodes",
 		DefaultValue: int32(0),
 	}
@@ -212,6 +255,7 @@ func WorkersFieldSelector() FieldSelector[v1alpha1.Cluster] {
 func KubernetesVersionFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	return FieldSelector[v1alpha1.Cluster]{
 		Selector: func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.KubernetesVersion },
+		FlagName: "kubernetes-version",
 		Description: "Kubernetes version to deploy and reconcile toward. When unset KSail follows " +
 			"the latest supported version; set it to pin a specific version. Honored by the Talos " +
 			"distribution; Kind/K3d/EKS carry the version in their distribution config instead.",
@@ -227,6 +271,7 @@ func KubernetesVersionFieldSelector() FieldSelector[v1alpha1.Cluster] {
 func DistributionVersionFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	return FieldSelector[v1alpha1.Cluster]{
 		Selector: func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.Talos.Version },
+		FlagName: "distribution-version",
 		Description: "Distribution version to deploy and reconcile toward (Talos OS version). When " +
 			"unset KSail follows the latest supported version; set it to pin a specific version. " +
 			"Other distributions carry their version in the distribution config.",
@@ -243,6 +288,7 @@ func DistributionVersionFieldSelector() FieldSelector[v1alpha1.Cluster] {
 func DrainTimeoutFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	return FieldSelector[v1alpha1.Cluster]{
 		Selector: func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.Talos.DrainTimeout },
+		FlagName: "drain-timeout",
 		Description: "Per-node pod-eviction budget for rolling node drains during cluster update " +
 			"(default 10m when unset). Increase it for stateful workloads that need longer to evict " +
 			"gracefully (e.g. Longhorn rebuilds, database failovers). On timeout the update aborts; " +
@@ -254,6 +300,7 @@ func DrainTimeoutFieldSelector() FieldSelector[v1alpha1.Cluster] {
 func DefaultImportImagesFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	return FieldSelector[v1alpha1.Cluster]{
 		Selector: func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.ImportImages },
+		FlagName: "import-images",
 		Description: "Path to tar archive with container images to import after cluster creation " +
 			"but before component installation",
 		DefaultValue: "",
@@ -266,6 +313,7 @@ func ImageVerificationFieldSelector() FieldSelector[v1alpha1.Cluster] {
 		Selector: func(c *v1alpha1.Cluster) any {
 			return &c.Spec.Cluster.Talos.ImageVerification
 		},
+		FlagName: "image-verification",
 		Description: "Image verification (Talos: scaffold ImageVerificationConfig template; " +
 			"Vanilla/Kind: inject containerd verifier plugin patch; requires verifier binaries " +
 			"and typically policy to be present in the node image bin_dir; " +
@@ -291,6 +339,7 @@ func NodeAutoscalingFieldSelector() FieldSelector[v1alpha1.Cluster] {
 		Selector: func(c *v1alpha1.Cluster) any {
 			return &c.Spec.Cluster.NodeAutoscaling
 		},
+		FlagName: "node-autoscaling",
 		Description: "[Deprecated: use autoscaler.node.enabled instead] Node autoscaling " +
 			"(Talos: Enabled defers worker and control-plane scaling to an external autoscaler, " +
 			"Disabled lets KSail manage node counts; other distributions currently ignore this setting)",
@@ -303,6 +352,7 @@ func NodeAutoscalerEnabledFieldSelector() FieldSelector[v1alpha1.Cluster] {
 		Selector: func(c *v1alpha1.Cluster) any {
 			return &c.Spec.Cluster.Autoscaler.Node.Enabled
 		},
+		FlagName: "node-autoscaler-enabled",
 		Description: "Node autoscaling " +
 			"(Talos: true defers worker and control-plane scaling to an external autoscaler, " +
 			"false lets KSail manage node counts; other distributions currently ignore this setting)",
@@ -314,6 +364,7 @@ func NodeAutoscalerEnabledFieldSelector() FieldSelector[v1alpha1.Cluster] {
 func OIDCIssuerURLFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	return FieldSelector[v1alpha1.Cluster]{
 		Selector:     func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.OIDC.IssuerURL },
+		FlagName:     "oidc-issuer-url",
 		Description:  "OIDC provider issuer URL (e.g. https://dex.example.com)",
 		DefaultValue: "",
 	}
@@ -323,6 +374,7 @@ func OIDCIssuerURLFieldSelector() FieldSelector[v1alpha1.Cluster] {
 func OIDCClientIDFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	return FieldSelector[v1alpha1.Cluster]{
 		Selector:     func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.OIDC.ClientID },
+		FlagName:     "oidc-client-id",
 		Description:  "OIDC client ID for kubectl authentication",
 		DefaultValue: "",
 	}
@@ -332,8 +384,9 @@ func OIDCClientIDFieldSelector() FieldSelector[v1alpha1.Cluster] {
 func OIDCUsernameClaimFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	return FieldSelector[v1alpha1.Cluster]{
 		Selector:     func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.OIDC.UsernameClaim },
+		FlagName:     "oidc-username-claim",
 		Description:  "JWT claim for Kubernetes username",
-		DefaultValue: "email",
+		DefaultValue: v1alpha1.DefaultOIDCUsernameClaim,
 	}
 }
 
@@ -341,8 +394,9 @@ func OIDCUsernameClaimFieldSelector() FieldSelector[v1alpha1.Cluster] {
 func OIDCGroupsClaimFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	return FieldSelector[v1alpha1.Cluster]{
 		Selector:     func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.OIDC.GroupsClaim },
+		FlagName:     "oidc-groups-claim",
 		Description:  "JWT claim for Kubernetes groups",
-		DefaultValue: "groups",
+		DefaultValue: v1alpha1.DefaultOIDCGroupsClaim,
 	}
 }
 
@@ -350,6 +404,7 @@ func OIDCGroupsClaimFieldSelector() FieldSelector[v1alpha1.Cluster] {
 func OIDCCAFileFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	return FieldSelector[v1alpha1.Cluster]{
 		Selector:     func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.OIDC.CAFile },
+		FlagName:     "oidc-ca-file",
 		Description:  "Path to CA certificate for self-signed OIDC providers",
 		DefaultValue: "",
 	}
@@ -359,8 +414,9 @@ func OIDCCAFileFieldSelector() FieldSelector[v1alpha1.Cluster] {
 func OIDCUsernamePrefixFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	return FieldSelector[v1alpha1.Cluster]{
 		Selector:     func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.OIDC.UsernamePrefix },
+		FlagName:     "oidc-username-prefix",
 		Description:  "Prefix for OIDC usernames in Kubernetes",
-		DefaultValue: "oidc:",
+		DefaultValue: v1alpha1.DefaultOIDCUsernamePrefix,
 	}
 }
 
@@ -368,7 +424,8 @@ func OIDCUsernamePrefixFieldSelector() FieldSelector[v1alpha1.Cluster] {
 func OIDCGroupsPrefixFieldSelector() FieldSelector[v1alpha1.Cluster] {
 	return FieldSelector[v1alpha1.Cluster]{
 		Selector:     func(c *v1alpha1.Cluster) any { return &c.Spec.Cluster.OIDC.GroupsPrefix },
+		FlagName:     "oidc-groups-prefix",
 		Description:  "Prefix for OIDC groups in Kubernetes",
-		DefaultValue: "oidc:",
+		DefaultValue: v1alpha1.DefaultOIDCGroupsPrefix,
 	}
 }

@@ -264,6 +264,39 @@ func TestDiscover_PreservesProviderOrder(t *testing.T) {
 	assert.Equal(t, v1alpha1.ProviderHetzner, clusters[1].Provider)
 }
 
+func TestDiscover_DockerReportsRunStateFromSeam(t *testing.T) {
+	t.Parallel()
+
+	discoverer := &clusterdiscovery.Discoverer{
+		DockerFactory: dockerFactoryFor(map[v1alpha1.Distribution][]string{
+			v1alpha1.DistributionVanilla: {"running-one", "stopped-one"},
+		}),
+		DockerStatus: func(
+			_ context.Context, _ v1alpha1.Distribution, name string,
+		) clusterdiscovery.RunState {
+			if name == "stopped-one" {
+				return clusterdiscovery.RunStateStopped
+			}
+
+			return clusterdiscovery.RunStateRunning
+		},
+	}
+
+	clusters, failures := discoverer.Discover(context.Background(),
+		[]v1alpha1.Provider{v1alpha1.ProviderDocker})
+
+	require.Empty(t, failures)
+	require.Len(t, clusters, 2)
+
+	byName := map[string]clusterdiscovery.RunState{}
+	for _, cluster := range clusters {
+		byName[cluster.Name] = cluster.RunState
+	}
+
+	assert.Equal(t, clusterdiscovery.RunStateRunning, byName["running-one"])
+	assert.Equal(t, clusterdiscovery.RunStateStopped, byName["stopped-one"])
+}
+
 func TestProviderSets(t *testing.T) {
 	t.Parallel()
 
