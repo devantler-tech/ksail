@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cosi-project/runtime/pkg/safe"
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
@@ -24,7 +23,6 @@ import (
 	clientconfig "github.com/siderolabs/talos/pkg/machinery/client/config"
 	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
 	"github.com/siderolabs/talos/pkg/machinery/config/generate/secrets"
-	talosresconfig "github.com/siderolabs/talos/pkg/machinery/resources/config"
 )
 
 // Update applies configuration changes to all nodes in a running Talos cluster.
@@ -595,6 +593,8 @@ func (p *Provisioner) applyRebootRequiredChanges(
 }
 
 // applyConfigWithMode applies configuration to a single node with the specified mode.
+// Transient gRPC failures (e.g. a flaky TLS handshake to apid) are retried with
+// a fresh client per attempt so one dropped flow doesn't fail the node.
 func (p *Provisioner) applyConfigWithMode(
 	ctx context.Context,
 	nodeIP string,
@@ -610,6 +610,20 @@ func (p *Provisioner) applyConfigWithMode(
 		return fmt.Errorf("failed to marshal config: %w", err)
 	}
 
+	return p.retryTransientTalosAPICall(ctx, nodeIP, "Config apply",
+		func(ctx context.Context) error {
+			return p.applyConfigOnce(ctx, nodeIP, cfgBytes, mode)
+		})
+}
+
+// applyConfigOnce performs a single ApplyConfiguration attempt against nodeIP
+// using a freshly created Talos client.
+func (p *Provisioner) applyConfigOnce(
+	ctx context.Context,
+	nodeIP string,
+	cfgBytes []byte,
+	mode machineapi.ApplyConfigurationRequest_Mode,
+) error {
 	talosClient, err := p.createTalosClient(ctx, nodeIP)
 	if err != nil {
 		return err
@@ -898,23 +912,12 @@ func (p *Provisioner) fetchClusterSecretsAndEndpoint(
 	ctx context.Context,
 	cpIP string,
 ) (*secrets.Bundle, string, error) {
-	talosClient, err := p.createTalosClient(ctx, cpIP)
+	// fetchNodeConfig retries transient gRPC failures (flaky TLS handshakes to
+	// apid on public IPs). The returned Provider satisfies config.Config.
+	runningConfig, err := p.fetchNodeConfig(ctx, cpIP)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to create Talos client for secret sync: %w", err)
+		return nil, "", err
 	}
-
-	defer talosClient.Close() //nolint:errcheck
-
-	machineConfig, err := safe.StateGet[*talosresconfig.MachineConfig](
-		ctx,
-		talosClient.COSI,
-		talosresconfig.NewMachineConfig(nil).Metadata(),
-	)
-	if err != nil {
-		return nil, "", fmt.Errorf("failed to fetch machine config from %s: %w", cpIP, err)
-	}
-
-	runningConfig := machineConfig.Config()
 
 	existingSecrets, err := secrets.NewBundleFromConfig(
 		secrets.NewFixedClock(time.Now()),
