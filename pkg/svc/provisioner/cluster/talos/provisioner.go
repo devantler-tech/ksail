@@ -173,11 +173,8 @@ type Provisioner struct {
 	// imagePullRetry controls retry behavior for Docker image pulls.
 	// Tests can override this via WithImagePullRetryConfig to use near-zero delays.
 	imagePullRetry imagePullRetryConfig
-	// talosAPIRetry controls bounded retry of transient per-node Talos gRPC calls
-	// (apid handshake races, Unavailable, DeadlineExceeded). It is the default for
-	// every authenticated per-node call via withTalosClient/dialTalosClientWithRetry
-	// (see api_retry.go). Tests override it via WithTalosAPIRetryConfig to use
-	// near-zero delays.
+	// talosAPIRetry controls retry behavior for transient per-node Talos API failures.
+	// Tests can override this via WithTalosAPIRetryConfig to use near-zero delays.
 	talosAPIRetry talosAPIRetryConfig
 	// snapshotManager manages Talos snapshot images on Hetzner Cloud.
 	// Set when the Hetzner provider is configured and schematic-based snapshots are used.
@@ -303,8 +300,8 @@ func (p *Provisioner) WithImagePullRetryConfig(
 	return p
 }
 
-// WithTalosAPIRetryConfig overrides the bounded-retry parameters for transient
-// per-node Talos gRPC calls. Useful in tests to use near-zero delays.
+// WithTalosAPIRetryConfig overrides the retry parameters for transient
+// per-node Talos API failures. Useful in tests to use near-zero delays.
 func (p *Provisioner) WithTalosAPIRetryConfig(
 	maxAttempts int,
 	baseWait, maxWait time.Duration,
@@ -656,28 +653,29 @@ func (p *Provisioner) fetchAndWriteKubeconfigForCP(
 	talosEndpoint, k8sEndpoint string,
 ) error {
 	// Fetching the kubeconfig is an idempotent read, so the whole create+fetch is
-	// retried on transient apid failures (a fresh client per attempt). The fetch
-	// goes through talosClientFactory rather than withTalosClient so tests can
-	// inject a mock fetcher.
+	// retried on transient apid failures with a fresh client per attempt. It goes
+	// through talosClientFactory (rather than createTalosClient directly) so tests
+	// can inject a mock fetcher.
 	var kubeconfig []byte
 
-	err := p.retryTransientTalosAPICall(ctx, talosEndpoint, "fetch kubeconfig", func() error {
-		talosClient, createErr := p.talosClientFactory(ctx, talosEndpoint)
-		if createErr != nil {
-			return createErr
-		}
+	err := p.retryTransientTalosAPICall(ctx, talosEndpoint, "Kubeconfig fetch",
+		func(ctx context.Context) error {
+			talosClient, createErr := p.talosClientFactory(ctx, talosEndpoint)
+			if createErr != nil {
+				return createErr
+			}
 
-		defer talosClient.Close() //nolint:errcheck
+			defer talosClient.Close() //nolint:errcheck
 
-		fetched, fetchErr := talosClient.Kubeconfig(ctx)
-		if fetchErr != nil {
-			return fmt.Errorf("kubeconfig request: %w", fetchErr)
-		}
+			fetched, fetchErr := talosClient.Kubeconfig(ctx)
+			if fetchErr != nil {
+				return fmt.Errorf("kubeconfig request: %w", fetchErr)
+			}
 
-		kubeconfig = fetched
+			kubeconfig = fetched
 
-		return nil
-	})
+			return nil
+		})
 	if err != nil {
 		return fmt.Errorf("failed to fetch kubeconfig from Talos API: %w", err)
 	}

@@ -12,7 +12,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/devantler-tech/ksail/v7/pkg/client/netretry"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provider/hetzner"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"github.com/siderolabs/go-retry/retry"
@@ -59,16 +58,6 @@ func hetznerNodeName(clusterName, role string, index int) (string, error) {
 
 	return name, nil
 }
-
-// Apply-configuration retry defaults for transient Talos API handshake races.
-const (
-	talosApplyConfigMaxAttempts   = 3
-	talosApplyConfigRetryBaseWait = 5 * time.Second
-	talosApplyConfigRetryMaxWait  = 20 * time.Second
-)
-
-// errRetriesExhausted is returned when all retry attempts for config apply have been used.
-var errRetriesExhausted = errors.New("retries exhausted")
 
 // hetznerNodeCreationResult holds the outcome of a single Hetzner server creation attempt.
 type hetznerNodeCreationResult struct {
@@ -528,50 +517,17 @@ func (p *Provisioner) applyConfigToNode(
 		return err
 	}
 
-	var lastErr error
-
-	for attempt := 1; attempt <= talosApplyConfigMaxAttempts; attempt++ {
-		lastErr = attemptApplyConfig(ctx, serverIP, cfgBytes)
-		if lastErr == nil {
-			p.logf("  ✓ Config applied to %s\n", server.Name)
-
-			return nil
-		}
-
-		if !isRetryableTalosApplyConfigError(lastErr) {
-			return fmt.Errorf("failed to apply configuration: %w", lastErr)
-		}
-
-		if attempt == talosApplyConfigMaxAttempts {
-			break
-		}
-
-		delay := netretry.ExponentialDelay(
-			attempt,
-			talosApplyConfigRetryBaseWait,
-			talosApplyConfigRetryMaxWait,
-		)
-
-		p.logf(
-			"  Config apply attempt %d/%d failed on %s (retrying in %s): %v\n",
-			attempt,
-			talosApplyConfigMaxAttempts,
-			server.Name,
-			delay,
-			lastErr,
-		)
-
-		lastErr = sleepWithContext(ctx, delay)
-		if lastErr != nil {
-			return fmt.Errorf("retry backoff interrupted: %w", lastErr)
-		}
+	err = p.retryTransientTalosAPICall(ctx, server.Name, "Config apply",
+		func(ctx context.Context) error {
+			return attemptApplyConfig(ctx, serverIP, cfgBytes)
+		})
+	if err != nil {
+		return fmt.Errorf("failed to apply configuration for %s: %w", server.Name, err)
 	}
 
-	return fmt.Errorf(
-		"failed to apply configuration for %s: %w",
-		server.Name,
-		errors.Join(errRetriesExhausted, lastErr),
-	)
+	p.logf("  ✓ Config applied to %s\n", server.Name)
+
+	return nil
 }
 
 // marshalConfigWithHostname marshals the role config to bytes and overlays the
@@ -773,28 +729,4 @@ func attemptApplyConfig(ctx context.Context, serverIP string, cfgBytes []byte) e
 	}
 
 	return nil
-}
-
-// sleepWithContext waits for d to elapse, returning ctx.Err() early if the context is cancelled.
-func sleepWithContext(ctx context.Context, d time.Duration) error {
-	timer := time.NewTimer(d)
-	select {
-	case <-ctx.Done():
-		if !timer.Stop() {
-			<-timer.C
-		}
-
-		return fmt.Errorf("%w", ctx.Err())
-	case <-timer.C:
-		return nil
-	}
-}
-
-// isRetryableTalosApplyConfigError reports whether a maintenance-mode
-// apply-config failure is a transient apid handshake race worth retrying. It
-// delegates to the shared transient predicate so the insecure apply path and the
-// authenticated per-node calls (see api_retry.go) classify transient errors
-// identically.
-func isRetryableTalosApplyConfigError(err error) bool {
-	return isRetryableTransientTalosError(err)
 }

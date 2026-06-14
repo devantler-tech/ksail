@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cosi-project/runtime/pkg/safe"
 	"github.com/devantler-tech/ksail/v7/pkg/apis/cluster/v1alpha1"
 	"github.com/devantler-tech/ksail/v7/pkg/fsutil"
 	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
@@ -24,7 +23,6 @@ import (
 	clientconfig "github.com/siderolabs/talos/pkg/machinery/client/config"
 	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
 	"github.com/siderolabs/talos/pkg/machinery/config/generate/secrets"
-	talosresconfig "github.com/siderolabs/talos/pkg/machinery/resources/config"
 )
 
 // Update applies configuration changes to all nodes in a running Talos cluster.
@@ -595,6 +593,8 @@ func (p *Provisioner) applyRebootRequiredChanges(
 }
 
 // applyConfigWithMode applies configuration to a single node with the specified mode.
+// Transient gRPC failures (e.g. a flaky TLS handshake to apid) are retried with
+// a fresh client per attempt so one dropped flow doesn't fail the node.
 func (p *Provisioner) applyConfigWithMode(
 	ctx context.Context,
 	nodeIP string,
@@ -610,27 +610,36 @@ func (p *Provisioner) applyConfigWithMode(
 		return fmt.Errorf("failed to marshal config: %w", err)
 	}
 
-	// Apply is declarative (NO_REBOOT/STAGED only here), so re-running it after a
-	// transient apid failure is harmless — a fresh client per attempt re-dials.
-	return p.withTalosClient(
-		ctx,
-		nodeIP,
-		"apply config",
-		func(talosClient *talosclient.Client) error {
-			_, applyErr := talosClient.ApplyConfiguration(
-				ctx,
-				&machineapi.ApplyConfigurationRequest{
-					Data: cfgBytes,
-					Mode: mode,
-				},
-			)
-			if applyErr != nil {
-				return fmt.Errorf("failed to apply configuration: %w", applyErr)
-			}
+	return p.retryTransientTalosAPICall(ctx, nodeIP, "Config apply",
+		func(ctx context.Context) error {
+			return p.applyConfigOnce(ctx, nodeIP, cfgBytes, mode)
+		})
+}
 
-			return nil
-		},
-	)
+// applyConfigOnce performs a single ApplyConfiguration attempt against nodeIP
+// using a freshly created Talos client.
+func (p *Provisioner) applyConfigOnce(
+	ctx context.Context,
+	nodeIP string,
+	cfgBytes []byte,
+	mode machineapi.ApplyConfigurationRequest_Mode,
+) error {
+	talosClient, err := p.createTalosClient(ctx, nodeIP)
+	if err != nil {
+		return err
+	}
+
+	defer talosClient.Close() //nolint:errcheck
+
+	_, err = talosClient.ApplyConfiguration(ctx, &machineapi.ApplyConfigurationRequest{
+		Data: cfgBytes,
+		Mode: mode,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to apply configuration: %w", err)
+	}
+
+	return nil
 }
 
 // errSavedTalosconfigUnavailable signals that the on-disk talosconfig
@@ -903,52 +912,28 @@ func (p *Provisioner) fetchClusterSecretsAndEndpoint(
 	ctx context.Context,
 	cpIP string,
 ) (*secrets.Bundle, string, error) {
-	var (
-		existingSecrets *secrets.Bundle
-		endpointIP      string
-	)
-
-	err := p.withTalosClient(
-		ctx,
-		cpIP,
-		"fetch cluster secrets",
-		func(talosClient *talosclient.Client) error {
-			machineConfig, getErr := safe.StateGet[*talosresconfig.MachineConfig](
-				ctx,
-				talosClient.COSI,
-				talosresconfig.NewMachineConfig(nil).Metadata(),
-			)
-			if getErr != nil {
-				return fmt.Errorf("failed to fetch machine config from %s: %w", cpIP, getErr)
-			}
-
-			runningConfig := machineConfig.Config()
-
-			bundle, bundleErr := secrets.NewBundleFromConfig(
-				secrets.NewFixedClock(time.Now()),
-				runningConfig,
-			)
-			if bundleErr != nil {
-				return fmt.Errorf("extracting secrets bundle from running config: %w", bundleErr)
-			}
-
-			// Read the endpoint from the running cluster's config rather than deriving
-			// it from node IPs. This avoids non-deterministic ordering in HA clusters
-			// where getNodesByRole may return a different first CP node between updates.
-			// Falls back to cpIP if the running config has no endpoint set.
-			endpoint := runningConfig.Cluster().Endpoint().Hostname()
-			if endpoint == "" {
-				endpoint = cpIP
-			}
-
-			existingSecrets = bundle
-			endpointIP = endpoint
-
-			return nil
-		},
-	)
+	// fetchNodeConfig retries transient gRPC failures (flaky TLS handshakes to
+	// apid on public IPs). The returned Provider satisfies config.Config.
+	runningConfig, err := p.fetchNodeConfig(ctx, cpIP)
 	if err != nil {
 		return nil, "", err
+	}
+
+	existingSecrets, err := secrets.NewBundleFromConfig(
+		secrets.NewFixedClock(time.Now()),
+		runningConfig,
+	)
+	if err != nil {
+		return nil, "", fmt.Errorf("extracting secrets bundle from running config: %w", err)
+	}
+
+	// Read the endpoint from the running cluster's config rather than deriving
+	// it from node IPs. This avoids non-deterministic ordering in HA clusters
+	// where getNodesByRole may return a different first CP node between updates.
+	// Falls back to cpIP if the running config has no endpoint set.
+	endpointIP := runningConfig.Cluster().Endpoint().Hostname()
+	if endpointIP == "" {
+		endpointIP = cpIP
 	}
 
 	return existingSecrets, endpointIP, nil

@@ -12,7 +12,6 @@ import (
 	"github.com/cosi-project/runtime/pkg/safe"
 	talosconfigmanager "github.com/devantler-tech/ksail/v7/pkg/fsutil/configmanager/talos"
 	"github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/clusterupdate"
-	talosclient "github.com/siderolabs/talos/pkg/machinery/client"
 	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
 	"github.com/siderolabs/talos/pkg/machinery/config/configdiff"
 	"github.com/siderolabs/talos/pkg/machinery/config/configloader"
@@ -526,36 +525,41 @@ func (p *Provisioner) fetchNodeConfigForRole(
 }
 
 // fetchNodeConfig fetches the running Talos machine config provider from a single
-// node by IP.
+// node by IP. A fresh client is dialed per attempt and the fetch is retried for
+// transient gRPC failures (e.g. a flaky TLS handshake to apid) so one dropped
+// flow doesn't abort the operation.
 func (p *Provisioner) fetchNodeConfig(
 	ctx context.Context,
 	nodeIP string,
 ) (talosconfig.Provider, error) {
 	var provider talosconfig.Provider
 
-	err := p.withTalosClient(
-		ctx,
-		nodeIP,
-		"fetch machine config",
-		func(talosClient *talosclient.Client) error {
-			machineConfig, getErr := safe.StateGet[*talosresconfig.MachineConfig](
+	err := p.retryTransientTalosAPICall(ctx, nodeIP, "Machine config fetch",
+		func(ctx context.Context) error {
+			talosClient, clientErr := p.createTalosClient(ctx, nodeIP)
+			if clientErr != nil {
+				return fmt.Errorf("failed to create Talos client for %s: %w", nodeIP, clientErr)
+			}
+
+			defer talosClient.Close() //nolint:errcheck
+
+			machineConfig, fetchErr := safe.StateGet[*talosresconfig.MachineConfig](
 				ctx,
 				talosClient.COSI,
 				talosresconfig.NewMachineConfig(nil).Metadata(),
 			)
-			if getErr != nil {
+			if fetchErr != nil {
 				return fmt.Errorf(
 					"failed to fetch running machine config from %s: %w",
 					nodeIP,
-					getErr,
+					fetchErr,
 				)
 			}
 
 			provider = machineConfig.Provider()
 
 			return nil
-		},
-	)
+		})
 	if err != nil {
 		return nil, err
 	}

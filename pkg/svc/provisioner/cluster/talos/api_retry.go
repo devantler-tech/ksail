@@ -11,55 +11,123 @@ import (
 	talosclient "github.com/siderolabs/talos/pkg/machinery/client"
 )
 
-// gRPC status codes for the transient per-node Talos (apid) failures KSail
-// retries. The raw numeric values are used instead of importing
-// google.golang.org/grpc/codes: depguard forbids depending on
-// google.golang.org/grpc in production code, and talosclient.StatusCode returns
-// a value comparable to these. This file is the single home for the
-// transient-retry policy, so the constants live here.
+// Retry defaults for transient per-node Talos API failures. A single TLS
+// handshake to apid (:50000) can stall transiently (e.g. a per-flow network
+// drop between a CI runner and a cloud node's public IP) and fail with
+// "authentication handshake failed: context deadline exceeded" after gRPC's
+// ~20s connect timeout, even though the node is healthy. Bounded retries with
+// a fresh client per attempt prevent one flaky handshake from failing a whole
+// cluster operation.
 const (
-	// grpcUnavailable is the numeric gRPC status code for Unavailable (codes.Unavailable).
-	grpcUnavailable = 14
-	// grpcDeadlineExceeded is the numeric gRPC status code for DeadlineExceeded (codes.DeadlineExceeded).
+	defaultTalosAPIRetryMaxAttempts = 3
+	defaultTalosAPIRetryBaseWait    = 5 * time.Second
+	defaultTalosAPIRetryMaxWait     = 20 * time.Second
+
+	// grpcUnavailable and grpcDeadlineExceeded are the numeric gRPC status
+	// codes for Unavailable (14) and DeadlineExceeded (4). The raw constants
+	// are used because depguard forbids importing google.golang.org/grpc from
+	// production code; talosclient.StatusCode returns an equivalent codes.Code.
+	grpcUnavailable      = 14
 	grpcDeadlineExceeded = 4
 )
 
-// Default bounded-retry policy for transient per-node Talos API calls. A freshly
-// reachable node's apid (:50000) often drops the first TLS handshake; it
-// typically clears within a few seconds, so a small number of attempts with
-// exponential backoff is sufficient. These mirror the apply-config retry
-// defaults so all per-node Talos retries behave consistently.
-const (
-	defaultTalosAPIMaxAttempts   = 3
-	defaultTalosAPIRetryBaseWait = 5 * time.Second
-	defaultTalosAPIRetryMaxWait  = 20 * time.Second
-)
+// errRetriesExhausted is returned when all retry attempts for a Talos API call
+// have been used.
+var errRetriesExhausted = errors.New("retries exhausted")
 
-// talosAPIRetryConfig holds the bounded-retry parameters for transient per-node
-// Talos gRPC calls. Tests override it via WithTalosAPIRetryConfig to use
-// near-zero delays.
+// talosAPIRetryConfig holds retry parameters for per-node Talos API calls.
 type talosAPIRetryConfig struct {
 	maxAttempts int
 	baseWait    time.Duration
 	maxWait     time.Duration
 }
 
-// defaultTalosAPIRetryConfig returns the default transient-retry policy.
+// defaultTalosAPIRetryConfig returns the default retry configuration for
+// per-node Talos API calls.
 func defaultTalosAPIRetryConfig() talosAPIRetryConfig {
 	return talosAPIRetryConfig{
-		maxAttempts: defaultTalosAPIMaxAttempts,
+		maxAttempts: defaultTalosAPIRetryMaxAttempts,
 		baseWait:    defaultTalosAPIRetryBaseWait,
 		maxWait:     defaultTalosAPIRetryMaxWait,
 	}
 }
 
-// isRetryableTransientTalosError reports whether err is a transient per-node
-// Talos API failure worth retrying: a gRPC Unavailable or DeadlineExceeded
-// status, or the apid TLS "authentication handshake failed" race that surfaces
-// on the first RPC over a freshly established connection. Configuration and
-// authorization errors are not transient and fall through to the caller
-// unchanged.
-func isRetryableTransientTalosError(err error) bool {
+// retryTransientTalosAPICall runs operation with bounded retries and
+// exponential backoff for transient gRPC failures (Unavailable,
+// DeadlineExceeded). Each attempt must create its own Talos client inside
+// operation so a fresh connection is dialed. Non-transient errors and
+// parent-context cancellation fail
+// immediately; once attempts are exhausted the last error is returned wrapped
+// in errRetriesExhausted. target names the node and description the operation
+// for retry log lines.
+func (p *Provisioner) retryTransientTalosAPICall(
+	ctx context.Context,
+	target, description string,
+	operation func(ctx context.Context) error,
+) error {
+	cfg := p.talosAPIRetry
+	if cfg.maxAttempts <= 0 {
+		cfg = defaultTalosAPIRetryConfig()
+	}
+
+	var lastErr error
+
+	for attempt := 1; attempt <= cfg.maxAttempts; attempt++ {
+		lastErr = operation(ctx)
+		if lastErr == nil {
+			return nil
+		}
+
+		if !isTransientTalosAPIError(lastErr) || ctx.Err() != nil {
+			return lastErr
+		}
+
+		if attempt == cfg.maxAttempts {
+			break
+		}
+
+		delay := netretry.ExponentialDelay(attempt, cfg.baseWait, cfg.maxWait)
+
+		p.logf(
+			"  %s attempt %d/%d failed on %s (retrying in %s): %v\n",
+			description,
+			attempt,
+			cfg.maxAttempts,
+			target,
+			delay,
+			lastErr,
+		)
+
+		sleepErr := sleepWithContext(ctx, delay)
+		if sleepErr != nil {
+			return fmt.Errorf("retry backoff interrupted: %w", sleepErr)
+		}
+	}
+
+	return fmt.Errorf("%w: %w", errRetriesExhausted, lastErr)
+}
+
+// sleepWithContext waits for d to elapse, returning ctx.Err() early if the context is cancelled.
+func sleepWithContext(ctx context.Context, d time.Duration) error {
+	timer := time.NewTimer(d)
+	select {
+	case <-ctx.Done():
+		if !timer.Stop() {
+			<-timer.C
+		}
+
+		return fmt.Errorf("%w", ctx.Err())
+	case <-timer.C:
+		return nil
+	}
+}
+
+// isTransientTalosAPIError reports whether err indicates a transient Talos API
+// failure worth retrying: gRPC Unavailable/DeadlineExceeded, or text markers of
+// connection-level handshake/timeout failures. Callers must still stop retrying
+// when their own context is done, since a parent-context deadline also surfaces
+// as "context deadline exceeded".
+func isTransientTalosAPIError(err error) bool {
 	if err == nil {
 		return false
 	}
@@ -73,90 +141,8 @@ func isRetryableTransientTalosError(err error) bool {
 
 	return strings.Contains(errMsg, "rpc error: code = unavailable") ||
 		strings.Contains(errMsg, "rpc error: code = deadlineexceeded") ||
-		strings.Contains(errMsg, "authentication handshake failed")
-}
-
-// retryTransientTalosAPICall runs operation, retrying it on transient per-node
-// Talos API failures (see isRetryableTransientTalosError) with bounded
-// exponential backoff per p.talosAPIRetry. target (a node IP or endpoint) and
-// description supply log and error context only. Non-retryable errors are
-// returned unchanged so callers' errors.Is checks keep working; when every
-// attempt is exhausted the last error is wrapped with errRetriesExhausted.
-//
-// operation MUST be safe to run more than once. Callers performing a
-// non-idempotent RPC (reboot, etcd leave, partition reset) should instead use
-// dialTalosClientWithRetry, which absorbs the handshake race with an idempotent
-// probe and then issues the real RPC exactly once.
-func (p *Provisioner) retryTransientTalosAPICall(
-	ctx context.Context,
-	target string,
-	description string,
-	operation func() error,
-) error {
-	cfg := p.talosAPIRetry
-	if cfg.maxAttempts < 1 {
-		cfg.maxAttempts = 1
-	}
-
-	var lastErr error
-
-	for attempt := 1; attempt <= cfg.maxAttempts; attempt++ {
-		lastErr = operation()
-		if lastErr == nil {
-			return nil
-		}
-
-		if !isRetryableTransientTalosError(lastErr) {
-			return lastErr
-		}
-
-		if attempt == cfg.maxAttempts {
-			break
-		}
-
-		delay := netretry.ExponentialDelay(attempt, cfg.baseWait, cfg.maxWait)
-
-		p.logf(
-			"  %s attempt %d/%d failed on %s (retrying in %s): %v\n",
-			description, attempt, cfg.maxAttempts, target, delay, lastErr,
-		)
-
-		sleepErr := sleepWithContext(ctx, delay)
-		if sleepErr != nil {
-			return fmt.Errorf("retry backoff interrupted: %w", sleepErr)
-		}
-	}
-
-	return fmt.Errorf(
-		"%s on %s: %w",
-		description, target, errors.Join(errRetriesExhausted, lastErr),
-	)
-}
-
-// withTalosClient creates an authenticated Talos client for nodeIP, runs fn, and
-// closes the client — retrying the whole sequence (a fresh client per attempt)
-// on transient apid failures. A fresh client is required because a stale client
-// will not re-dial after a dropped connection.
-//
-// Use this for IDEMPOTENT operations (reads and declarative config applies),
-// where re-running fn after a transient failure is harmless. For non-idempotent
-// RPCs use dialTalosClientWithRetry instead.
-func (p *Provisioner) withTalosClient(
-	ctx context.Context,
-	nodeIP string,
-	description string,
-	operation func(*talosclient.Client) error,
-) error {
-	return p.retryTransientTalosAPICall(ctx, nodeIP, description, func() error {
-		client, err := p.createTalosClient(ctx, nodeIP)
-		if err != nil {
-			return err
-		}
-
-		defer client.Close() //nolint:errcheck
-
-		return operation(client)
-	})
+		strings.Contains(errMsg, "authentication handshake failed") ||
+		strings.Contains(errMsg, "context deadline exceeded")
 }
 
 // dialTalosClientWithRetry returns an authenticated Talos client for nodeIP
@@ -164,17 +150,21 @@ func (p *Provisioner) withTalosClient(
 // create+probe on transient apid failures (a fresh client per attempt). gRPC
 // dials lazily, so the flaky apid TLS handshake surfaces on the first RPC rather
 // than on client creation; the idempotent Version probe absorbs that race here
-// so the caller can issue a NON-IDEMPOTENT RPC (reboot, etcd leave, partition
-// reset, or a multi-step upgrade workflow) exactly once over a connection
-// already proven healthy. The caller owns the returned client and must Close it.
+// so the caller can then issue a NON-IDEMPOTENT RPC (reboot, etcd leave,
+// partition reset, or a multi-step upgrade workflow) exactly once over a
+// connection already proven healthy. The caller owns the returned client and
+// must Close it.
+//
+// Idempotent reads and declarative applies should instead pass their own
+// create-and-run closure to retryTransientTalosAPICall, which is free to re-run
+// the whole operation on each attempt.
 func (p *Provisioner) dialTalosClientWithRetry(
 	ctx context.Context,
-	nodeIP string,
-	description string,
+	nodeIP, description string,
 ) (*talosclient.Client, error) {
 	var client *talosclient.Client
 
-	err := p.retryTransientTalosAPICall(ctx, nodeIP, description, func() error {
+	err := p.retryTransientTalosAPICall(ctx, nodeIP, description, func(ctx context.Context) error {
 		candidate, createErr := p.createTalosClient(ctx, nodeIP)
 		if createErr != nil {
 			return createErr
@@ -182,7 +172,7 @@ func (p *Provisioner) dialTalosClientWithRetry(
 
 		_, probeErr := candidate.Version(ctx)
 		if probeErr != nil {
-			_ = candidate.Close()
+			_ = candidate.Close() //nolint:errcheck
 
 			return fmt.Errorf("talos api warm-up probe failed: %w", probeErr)
 		}
