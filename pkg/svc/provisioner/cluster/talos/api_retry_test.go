@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"io"
+	"path/filepath"
 	"testing"
 	"time"
 
 	talosprovisioner "github.com/devantler-tech/ksail/v7/pkg/svc/provisioner/cluster/talos"
+	talosclient "github.com/siderolabs/talos/pkg/machinery/client"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -19,6 +21,23 @@ func newRetryProvisioner(maxAttempts int) *talosprovisioner.Provisioner {
 	return talosprovisioner.NewProvisioner(nil, talosprovisioner.NewOptions()).
 		WithLogWriter(io.Discard).
 		WithTalosAPIRetryConfig(maxAttempts, time.Millisecond, time.Millisecond)
+}
+
+// newClientErrProvisioner builds a provisioner whose createTalosClient fails
+// deterministically and offline: no in-memory talosConfigs bundle and a
+// talosconfig path that does not exist, so client creation returns a
+// non-transient error before any network I/O.
+func newClientErrProvisioner(t *testing.T) *talosprovisioner.Provisioner {
+	t.Helper()
+
+	missingPath := filepath.Join(t.TempDir(), "missing-talosconfig")
+
+	return talosprovisioner.NewProvisioner(
+		nil,
+		talosprovisioner.NewOptions().WithTalosconfigPath(missingPath),
+	).
+		WithLogWriter(io.Discard).
+		WithTalosAPIRetryConfig(3, time.Millisecond, time.Millisecond)
 }
 
 func TestRetryTransientTalosAPICall_SucceedsFirstAttempt(t *testing.T) {
@@ -176,6 +195,54 @@ func TestRetryTransientTalosAPICall_ZeroMaxAttemptsRunsOnce(t *testing.T) {
 
 	if calls != 1 {
 		t.Fatalf("operation called %d times, want 1", calls)
+	}
+}
+
+func TestWithTalosClient_ClientCreationErrorShortCircuits(t *testing.T) {
+	t.Parallel()
+
+	prov := newClientErrProvisioner(t)
+	operationCalls := 0
+
+	err := prov.WithTalosClientForTest(
+		context.Background(), "1.2.3.4", "probe",
+		func(*talosclient.Client) error {
+			operationCalls++
+
+			return nil
+		},
+	)
+	if err == nil {
+		t.Fatal("WithTalosClientForTest() = nil, want a client-creation error")
+	}
+
+	if operationCalls != 0 {
+		t.Fatalf("operation invoked %d times, want 0 (client creation failed)", operationCalls)
+	}
+
+	// A client-creation/config error is not transient, so it must not be retried
+	// to exhaustion — it should surface immediately.
+	if errors.Is(err, talosprovisioner.ErrRetriesExhausted) {
+		t.Fatal("non-retryable client-creation error must not be wrapped with ErrRetriesExhausted")
+	}
+}
+
+func TestDialTalosClientWithRetry_ClientCreationErrorShortCircuits(t *testing.T) {
+	t.Parallel()
+
+	prov := newClientErrProvisioner(t)
+
+	client, err := prov.DialTalosClientWithRetryForTest(context.Background(), "1.2.3.4", "probe")
+	if err == nil {
+		t.Fatal("DialTalosClientWithRetryForTest() err = nil, want a client-creation error")
+	}
+
+	if client != nil {
+		t.Fatalf("DialTalosClientWithRetryForTest() client = %v, want nil", client)
+	}
+
+	if errors.Is(err, talosprovisioner.ErrRetriesExhausted) {
+		t.Fatal("non-retryable client-creation error must not be wrapped with ErrRetriesExhausted")
 	}
 }
 

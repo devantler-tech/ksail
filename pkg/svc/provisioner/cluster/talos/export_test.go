@@ -15,6 +15,7 @@ import (
 	"github.com/docker/docker/api/types/container"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	check "github.com/siderolabs/talos/pkg/cluster/check"
+	talosclient "github.com/siderolabs/talos/pkg/machinery/client"
 	talosconfig "github.com/siderolabs/talos/pkg/machinery/config"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
@@ -732,3 +733,22 @@ var IsRetryableTransientTalosError = isRetryableTransientTalosError
 //
 
 var ErrRetriesExhausted = errRetriesExhausted
+
+// WithTalosClientForTest exposes withTalosClient so unit tests can verify how it
+// composes client creation with the retry loop (e.g. that a non-retryable
+// client-creation error short-circuits without invoking the operation).
+func (p *Provisioner) WithTalosClientForTest(
+	ctx context.Context,
+	nodeIP, description string,
+	operation func(*talosclient.Client) error,
+) error {
+	return p.withTalosClient(ctx, nodeIP, description, operation)
+}
+
+// DialTalosClientWithRetryForTest exposes dialTalosClientWithRetry for unit testing.
+func (p *Provisioner) DialTalosClientWithRetryForTest(
+	ctx context.Context,
+	nodeIP, description string,
+) (*talosclient.Client, error) {
+	return p.dialTalosClientWithRetry(ctx, nodeIP, description)
+}
