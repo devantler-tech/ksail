@@ -54,7 +54,11 @@ func (p *Provisioner) upgradeNodeTalosVersion(
 	ctx context.Context,
 	nodeIP, installerImage, desiredTag string,
 ) error {
-	talosClient, err := p.createTalosClient(ctx, nodeIP)
+	// The upgrade issues non-idempotent RPCs (LifecycleService.Upgrade / legacy
+	// MachineService.Upgrade + Reboot) on this one client, so the transient apid
+	// handshake race is absorbed by the Version probe inside
+	// dialTalosClientWithRetry and the upgrade itself runs exactly once.
+	talosClient, err := p.dialTalosClientWithRetry(ctx, nodeIP, "upgrade connect")
 	if err != nil {
 		return fmt.Errorf("creating talos client for node %s: %w", nodeIP, err)
 	}

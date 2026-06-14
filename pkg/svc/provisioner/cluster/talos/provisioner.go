@@ -652,14 +652,30 @@ func (p *Provisioner) fetchAndWriteKubeconfigForCP(
 	ctx context.Context,
 	talosEndpoint, k8sEndpoint string,
 ) error {
-	talosClient, err := p.talosClientFactory(ctx, talosEndpoint)
-	if err != nil {
-		return fmt.Errorf("failed to create Talos client for kubeconfig refresh: %w", err)
-	}
+	// Fetching the kubeconfig is an idempotent read, so the whole create+fetch is
+	// retried on transient apid failures with a fresh client per attempt. It goes
+	// through talosClientFactory (rather than createTalosClient directly) so tests
+	// can inject a mock fetcher.
+	var kubeconfig []byte
 
-	defer talosClient.Close() //nolint:errcheck
+	err := p.retryTransientTalosAPICall(ctx, talosEndpoint, "Kubeconfig fetch",
+		func(ctx context.Context) error {
+			talosClient, createErr := p.talosClientFactory(ctx, talosEndpoint)
+			if createErr != nil {
+				return createErr
+			}
 
-	kubeconfig, err := talosClient.Kubeconfig(ctx)
+			defer talosClient.Close() //nolint:errcheck
+
+			fetched, fetchErr := talosClient.Kubeconfig(ctx)
+			if fetchErr != nil {
+				return fmt.Errorf("kubeconfig request: %w", fetchErr)
+			}
+
+			kubeconfig = fetched
+
+			return nil
+		})
 	if err != nil {
 		return fmt.Errorf("failed to fetch kubeconfig from Talos API: %w", err)
 	}

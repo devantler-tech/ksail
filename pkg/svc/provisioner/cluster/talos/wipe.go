@@ -27,7 +27,10 @@ func (p *Provisioner) resetNode(
 	systemLabelsToWipe []string,
 	reboot bool,
 ) error {
-	talosClient, err := p.createTalosClient(ctx, nodeIP)
+	// ResetGeneric wipes partitions and is not idempotent, so the transient apid
+	// handshake race is absorbed by the Version probe inside
+	// dialTalosClientWithRetry and the reset RPC itself is issued exactly once.
+	talosClient, err := p.dialTalosClientWithRetry(ctx, nodeIP, "reset connect")
 	if err != nil {
 		return fmt.Errorf("failed to create Talos client for reset: %w", err)
 	}

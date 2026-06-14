@@ -144,3 +144,46 @@ func isTransientTalosAPIError(err error) bool {
 		strings.Contains(errMsg, "authentication handshake failed") ||
 		strings.Contains(errMsg, "context deadline exceeded")
 }
+
+// dialTalosClientWithRetry returns an authenticated Talos client for nodeIP
+// whose connection has been warmed by a successful Version probe, retrying the
+// create+probe on transient apid failures (a fresh client per attempt). gRPC
+// dials lazily, so the flaky apid TLS handshake surfaces on the first RPC rather
+// than on client creation; the idempotent Version probe absorbs that race here
+// so the caller can then issue a NON-IDEMPOTENT RPC (reboot, etcd leave,
+// partition reset, or a multi-step upgrade workflow) exactly once over a
+// connection already proven healthy. The caller owns the returned client and
+// must Close it.
+//
+// Idempotent reads and declarative applies should instead pass their own
+// create-and-run closure to retryTransientTalosAPICall, which is free to re-run
+// the whole operation on each attempt.
+func (p *Provisioner) dialTalosClientWithRetry(
+	ctx context.Context,
+	nodeIP, description string,
+) (*talosclient.Client, error) {
+	var client *talosclient.Client
+
+	err := p.retryTransientTalosAPICall(ctx, nodeIP, description, func(ctx context.Context) error {
+		candidate, createErr := p.createTalosClient(ctx, nodeIP)
+		if createErr != nil {
+			return createErr
+		}
+
+		_, probeErr := candidate.Version(ctx)
+		if probeErr != nil {
+			_ = candidate.Close()
+
+			return fmt.Errorf("talos api warm-up probe failed: %w", probeErr)
+		}
+
+		client = candidate
+
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return client, nil
+}

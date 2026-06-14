@@ -1,6 +1,10 @@
 package talosprovisioner
 
-import "context"
+import (
+	"context"
+
+	talosclient "github.com/siderolabs/talos/pkg/machinery/client"
+)
 
 // IsTransientTalosAPIError exposes the unexported helper for tests in
 // the talosprovisioner_test package.
@@ -19,4 +23,12 @@ func (p *Provisioner) RetryTransientTalosAPICallForTest(
 	operation func(ctx context.Context) error,
 ) error {
 	return p.retryTransientTalosAPICall(ctx, target, description, operation)
+}
+
+// DialTalosClientWithRetryForTest exposes dialTalosClientWithRetry for unit testing.
+func (p *Provisioner) DialTalosClientWithRetryForTest(
+	ctx context.Context,
+	nodeIP, description string,
+) (*talosclient.Client, error) {
+	return p.dialTalosClientWithRetry(ctx, nodeIP, description)
 }

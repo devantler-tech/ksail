@@ -127,18 +127,32 @@ func (p *Provisioner) resolveInstallerImage(toVersion string) string {
 	return installerImageFromTag(toVersion)
 }
 
-// getRunningTalosVersion queries a Talos node for its running version tag.
+// getRunningTalosVersion queries a Talos node for its running version tag. The
+// version read is idempotent, so a transient apid failure retries the whole
+// create-and-read with a fresh client per attempt.
 func (p *Provisioner) getRunningTalosVersion(ctx context.Context, nodeIP string) (string, error) {
-	talosClient, err := p.createTalosClient(ctx, nodeIP)
+	var tag string
+
+	err := p.retryTransientTalosAPICall(ctx, nodeIP, "Version check",
+		func(ctx context.Context) error {
+			talosClient, clientErr := p.createTalosClient(ctx, nodeIP)
+			if clientErr != nil {
+				return clientErr
+			}
+
+			defer talosClient.Close() //nolint:errcheck
+
+			version, verErr := versionTagFromClient(ctx, talosClient)
+			if verErr != nil {
+				return fmt.Errorf("node %s: %w", nodeIP, verErr)
+			}
+
+			tag = version
+
+			return nil
+		})
 	if err != nil {
 		return "", fmt.Errorf("version check for node %s: %w", nodeIP, err)
-	}
-
-	defer talosClient.Close() //nolint:errcheck
-
-	tag, err := versionTagFromClient(ctx, talosClient)
-	if err != nil {
-		return "", fmt.Errorf("node %s: %w", nodeIP, err)
 	}
 
 	return tag, nil

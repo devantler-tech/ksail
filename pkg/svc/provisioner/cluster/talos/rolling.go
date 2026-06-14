@@ -178,9 +178,12 @@ func (p *Provisioner) drainNode(
 	return nil
 }
 
-// rebootNode sends a reboot request to a Talos node via the Talos API.
+// rebootNode sends a reboot request to a Talos node via the Talos API. Reboot is
+// not idempotent (a lost ack must not trigger a second reboot), so the transient
+// apid handshake race is absorbed by the Version probe inside
+// dialTalosClientWithRetry and the Reboot RPC itself is issued exactly once.
 func (p *Provisioner) rebootNode(ctx context.Context, nodeIP string) error {
-	talosClient, err := p.createTalosClient(ctx, nodeIP)
+	talosClient, err := p.dialTalosClientWithRetry(ctx, nodeIP, "reboot connect")
 	if err != nil {
 		return fmt.Errorf("create talos client for reboot %s: %w", nodeIP, err)
 	}

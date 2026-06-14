@@ -139,8 +139,11 @@ func (p *Provisioner) UpgradeKubernetes(
 		return fmt.Errorf("%w: %s", clustererr.ErrNoControlPlaneNodes, clusterName)
 	}
 
-	// Build the Talos client.
-	talosClient, err := p.createTalosClient(ctx, cpNodeIP)
+	// Build the Talos client. The client is held across the multi-step K8s upgrade
+	// workflow (static-pod upgrades, kubelet rollout), which cannot be safely
+	// re-run wholesale, so the transient apid handshake race is absorbed by the
+	// Version probe inside dialTalosClientWithRetry rather than retrying the flow.
+	talosClient, err := p.dialTalosClientWithRetry(ctx, cpNodeIP, "kubernetes upgrade connect")
 	if err != nil {
 		return fmt.Errorf("creating Talos client for K8s upgrade: %w", err)
 	}
